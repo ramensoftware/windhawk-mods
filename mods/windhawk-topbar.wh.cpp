@@ -3,23 +3,43 @@
 // @name            TopBar for Windows
 // @donateUrl       https://www.patreon.com/WasiXGamer/join
 // @description     A working TopBar with Flyouts for Windows through Windhawk.
-// @version         1.2.0
+// @version         1.3.0
 // @author          WasiXGamer
 // @github          https://github.com/wasixgamer
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -ladvapi32 -luser32 -lshcore -lcomctl32 -lpdh -lpsapi -ldxgi -lwinhttp -ld2d1
+// @compilerOptions -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -ladvapi32 -luser32 -lshcore -lcomctl32 -lpdh -lpsapi -ldxgi -lwinhttp -ld2d1 -lshlwapi -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # TopBar For Windhawk
 ## Note: 
-### Settings for this mod were shifted to a separate settings app. It can be accessed either by settings icon in the topbar, OR from the context menus. 
-![TopBar screenshot](https://i.imgur.com/4vheIy6.png)
-![Flyouts screenshot](https://i.imgur.com/Ihjh1bC.png)
-Adds a **TopBar** at top of your screen with multiple customizations, hosted by a
-dedicated explorer.exe tool process.
+### Settings(Except Themes) for this mod can be accessed either by settings icon in the topbar, OR from the context menus. 
+![TopBar screenshot](https://i.imgur.com/BgmSodU.png)
+![Flyouts screenshot](https://i.imgur.com/MVUKR21.jpeg)
+Adds a fully customizable **TopBar** at the top of your screen — task list,
+control-centre flyouts, media player, resource monitor, Start menu and
+Spotlight-style search — hosted in a dedicated `explorer.exe` tool process.
+
+## Settings
+
+Settings live in a dedicated settings window. Open it from the ⚙ button on
+the topbar, from any right-click context menu, or via the **TopBar settings…**
+entry. Pages:
+
+- **Appearance** — bar height, corner radius, global tint color & opacity,
+  global blur amount, icon color, font family / size / color / weight, clock
+  & date format.
+- **Customizations** — app-title button mode (application name / task list /
+  none), task button size & content, media player options, resource monitor
+  metrics & labels, weather units, default Start / Search menu toggles,
+  TopBar Start/Search button actions.
+- **UI Alignment** — move any button between the Left, Center and Right panels.
+- **Buttons** — per-button visibility toggles.
+- **Import / Export** — save or restore the entire configuration as JSON, or
+  copy / paste it via the clipboard.
+- **About** — version info and links.
 
 # Support my Work:
 [![Patreon](https://i.imgur.com/JJ0TluA.png)](https://www.patreon.com/WasiXGamer/join)
@@ -29,19 +49,40 @@ Themes are collections of styles that can be selected from the **Theme** dropdow
 
 | Theme | Preview |
 |-------|---------|
-| [GreenBar](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar) | [![GreenBar](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/GreenBar/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar) |
-| [NoIslands](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands) | [![NoIslands](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/NoIslands/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands) |
-| [OS27 GoldenGate](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/OS27%20GoldenGate) | [![OS27 GoldenGate](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/OS27%20GoldenGate/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/OS27%20GoldenGate) |
+| [GreenBar](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar) | [![GreenBar](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/HEAD/Themes/GreenBar/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar) |
+| [NoIslands](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands) | [![NoIslands](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/HEAD/Themes/NoIslands/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands) |
+| [OS27 GoldenGate](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/OS27%20GoldenGate) | [![OS27 GoldenGate](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/dec72b4c5382da44b83c63b74f195fc4353493c6/Themes/OS27%20GoldenGate/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/OS27%20GoldenGate) |
+| [Midnight Neon](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/Midnight%20Neon) | [![Midnight Neon](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/Midnight%20Neon/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/Midnight%20Neon) |
 
 More themes, stylings, etc can be found and contributed from:
 **[Windhawk TopBar Styling Guide](https://github.com/wasixgamer/windhawk-topbar-styling-guide)**
 
 ## Features
 
-- **Task list** — window icons, titles, click-to-activate, double-click maximize
-- **Control centre** — Display (brightness, Dark Mode), Sound (volume, per-app mixer, device picker, media controls), Wi-Fi (scan/connect), Bluetooth (connect/disconnect), Battery, Weather, Recycle Bin, Resource Monitor (CPU/RAM/GPU)
-- **Full styling** via Control styles
-- **Background translucency** tinting for TopBar, BlurBehind for Flyouts and context menus.
+- **Task list / Application name** — window icons, titles, click-to-activate,
+  double-click maximize, per-window right-click menu. Or swap it for a single
+  button that shows the current foreground application's name.
+- **Control centre** — Display (brightness, per-monitor sliders, dark mode),
+  Sound (volume, per-app mixer, output device picker, mute), Wi-Fi
+  (scan / connect / disconnect / password entry), Bluetooth (scan, pair,
+  connect, battery level), Battery (percentage, health, power saving),
+  Weather (current conditions, hourly forecast, location search), Recycle
+  Bin (size, item count, empty with confirm), Resource Monitor (CPU / RAM /
+  GPU tabs with live graph, GPU selector, detailed info), Media Player
+  (album art, artist, title, transport controls, live progress bar,
+  audio-reactive visualizer).
+- **Start menu replacement** — custom Start with account panel, power menu,
+  search box and a 5-column all-apps grid (Win32 shortcuts + UWP apps).
+  Optional: make it the default for Win key and taskbar Start.
+- **Search replacement** — Spotlight-style search across apps, files,
+  Windows Settings pages and Control Panel items. Optional: make it the
+  default for Win+S / Win+Q and the taskbar search box.
+- **Full styling** via Control styles (see below).
+- **Translucency & blur** — WindhawkBlur tinting on the TopBar, flyouts and
+  context menus. Live-wallpaper aware — the bar composites over whatever is
+  on the desktop, including Wallpaper Engine, Lively, etc.
+- **Import / Export** — save or restore the entire configuration as JSON,
+  via file or clipboard.
 
 ## Weather data
 
@@ -91,44 +132,38 @@ Run **[UWPSpy](https://github.com/m417z/UWPSpy/releases/)** on the TopBar's
 | `TopBarRoot` | Root `Grid` spanning the whole bar |
 | `LeftPanel` | Left strip holding Start and Search |
 | `StartButton` / `StartIcon` | Start button and its logo |
-| `SearchButton` / `SearchIcon` | Search button (opens native Search) |
+| `SearchButton` / `SearchIcon` | Search button (opens TopBar Search by default) |
 | `TaskListPanel` / `TaskButton` | Task strip, and every task button |
 | `TaskButtonIcon` / `TaskButtonText` | Icon and label inside a task button |
 | `DisplayButton` `SoundButton` `WifiButton` `BluetoothButton`  `BatteryButton` | ControlCenter buttons |
+| `ControlCenterButton` | Button to open Control Center |
 | `ClockButton` / `ClockText` | Date/time |
-| `ResourceButton` | Battery button |
-| `WeatherButton` | Weather button and its temperature label |
+| `ResourceButton` | CPU / RAM / GPU button |
+| `WeatherButton` / `WeatherButtonContent` | Weather button and its inline content |
 | `RecycleBinButton` / `RecycleBinIcon` | Recycle Bin button and its glyph |
-
-### Keyboard shortcuts
-
-Enable **Enable keyboard shortcuts** in the mod settings to register the
-following global hotkeys. They're mostly useful for opening a flyout while
-inspecting it with UWPSpy in Sticky mode.
-
-| Hotkey | Action |
-|--------|--------|
-| Ctrl+Alt+0 | Toggle Resource Monitor flyout |
-| Ctrl+Alt+1 | Toggle Display flyout |
-| Ctrl+Alt+2 | Toggle Sound flyout |
-| Ctrl+Alt+3 | Toggle Wi-Fi flyout |
-| Ctrl+Alt+4 | Toggle Bluetooth flyout |
-| Ctrl+Alt+5 | Toggle Battery flyout |
-| Ctrl+Alt+6 | Show Start button context menu |
-| Ctrl+Alt+7 | Show Task list context menu |
-| Ctrl+Alt+8 | Toggle Weather flyout |
-| Ctrl+Alt+9 | Toggle Recycle Bin flyout |
+| `MediaButton` / `MediaTransportButton` | Media Player button and its transport buttons |
+| `SettingsButton` | Settings gear |
+| `AppTitleButton` / `AppTitleText` | Foreground application-name button |
+| `FlyoutBlurHost` | The blur host border inside every control flyout |
+| `FlyoutListRow` | List rows inside flyouts (Wi-Fi networks, devices, etc.) |
+| `WifiHeaderToggle` / `BluetoothHeaderToggle` | Header toggles in those flyouts |
 
 ## Global transparency, Tint, and Blur
 
-The tint color is configured in **Global background color** and Tint Opacity is configured in: **Global Tint opacity**.
+The tint color and opacity are configured in the TopBar settings window under **Appearance** (`Global Background Tint` / `Global Tint Opacity`).
 It is applied on the top bar, flyouts, and all context menus. 
-Any style rule that sets `Background:=<WindhawkBlur .../>` on one of those elements overrides the one configured in Mod Settings.
+Any style rule that sets `Background:=<WindhawkBlur .../>` on one of those elements overrides the one configured in the settings window.
 
-## Known limitations
+## Never auto-close flyouts
 
-- Live Wallpapers are NOT supported and topbar background will use default windows wallpaper instead of live wallpaper.
+Enable **Never auto-close flyouts** to keep a flyout open when you click
+outside of it. Useful for inspecting flyouts with UWPSpy in Sticky mode.
+Clicks that land on the TopBar itself, or on another TopBar flyout, still
+dismiss the open flyout — only clicks going to other applications or the
+desktop are ignored.
 
+## Known Limitations
+- Some Font Families can misalign the text in topbar buttons, and some can also compress or stretch the ui of flyouts. 
 
 */
 // ==/WindhawkModReadme==
@@ -142,6 +177,7 @@ Any style rule that sets `Background:=<WindhawkBlur .../>` on one of those eleme
   - GreenBar: GreenBar
   - NoIslands: NoIslands
   - OS27 GoldenGate: OS27 GoldenGate
+  - Midnight Neon: Midnight Neon
   $description: >-
     Select a TopBar theme.
 - monitorIndex: 0
@@ -158,11 +194,10 @@ Any style rule that sets `Background:=<WindhawkBlur .../>` on one of those eleme
 - styleConstants: [""]
   $name: Style constants
   $description: name=value pairs referenced in styles as $name.
-- enableHotkeys: false
-  $name: Enable keyboard shortcuts
+- disableFlyoutAutoClose: false
+  $name: Never auto-close flyouts
   $description: >-
-    Register Ctrl+Alt+0..9 as global hotkeys for opening flyouts and context
-    menus. Off by default; Ctrl+Alt+digit is a common app binding.
+    When turned on, flyouts, Start menu, Search panel, or context menus do NOT close when clicking on desktop or a app window. It closes only when pressing on topbar's grid. Useful for inspecting flyouts with UWPSpy.
 */
 // ==/WindhawkModSettings==
 
@@ -171,6 +206,7 @@ Any style rule that sets `Background:=<WindhawkBlur .../>` on one of those eleme
 #include <windows.h>
 #include <windowsx.h>
 #include <commctrl.h>
+#include <commoncontrols.h>
 #include <shellapi.h>
 #include <dwmapi.h>
 
@@ -178,6 +214,7 @@ Any style rule that sets `Background:=<WindhawkBlur .../>` on one of those eleme
 #include <objbase.h>
 #include <shlobj.h>
 #include <shobjidl.h>
+#include <shlwapi.h>
 
 
 #undef GetCurrentTime
@@ -202,6 +239,7 @@ Any style rule that sets `Background:=<WindhawkBlur .../>` on one of those eleme
 
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Documents.h>
 #include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.Graphics.Effects.h>
 #include <windows.graphics.effects.h>
@@ -210,6 +248,7 @@ Any style rule that sets `Background:=<WindhawkBlur .../>` on one of those eleme
 #include <d2d1effects.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.Media.Animation.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
@@ -230,29 +269,30 @@ Any style rule that sets `Background:=<WindhawkBlur .../>` on one of those eleme
 #include <winrt/Windows.Data.Json.h>
 #include <windows.ui.xaml.hosting.desktopwindowxamlsource.h>
 
-#if __has_include(<winrt/Windows.Media.Control.h>)
 #define TOPBAR_HAS_MEDIA_CONTROL 1
 #include <winrt/Windows.Media.Control.h>
-#else
-#define TOPBAR_HAS_MEDIA_CONTROL 0
-#endif
 
-#if __has_include(<winrt/Windows.Devices.Radios.h>)
 #define TOPBAR_HAS_RADIOS 1
 #include <winrt/Windows.Devices.Radios.h>
-#else
-#define TOPBAR_HAS_RADIOS 0
-#endif
 
-#if __has_include(<winrt/Windows.Devices.Bluetooth.h>)
+#define TOPBAR_HAS_NETWORK_OPERATORS 1
+#include <winrt/Windows.Networking.NetworkOperators.h>
+#include <winrt/Windows.Networking.Connectivity.h>
+
 #define TOPBAR_HAS_BLUETOOTH_LE 1
 #include <winrt/Windows.Devices.Bluetooth.h>
 #include <winrt/Windows.Devices.Bluetooth.GenericAttributeProfile.h>
 #include <winrt/Windows.Devices.Enumeration.h>
 #include <winrt/Windows.Foundation.Collections.h>
-#else
-#define TOPBAR_HAS_BLUETOOTH_LE 0
-#endif
+
+#define TOPBAR_HAS_STORAGE_SEARCH 1
+#include <winrt/Windows.Storage.h>
+#include <winrt/Windows.Storage.Search.h>
+
+#define TOPBAR_HAS_PACKAGE_MANAGER 1
+#include <winrt/Windows.Management.Deployment.h>
+#include <winrt/Windows.ApplicationModel.h>
+#include <winrt/Windows.ApplicationModel.Core.h>
 
 #include <algorithm>
 #include <chrono>
@@ -270,6 +310,7 @@ Any style rule that sets `Background:=<WindhawkBlur .../>` on one of those eleme
 #include <vector>
 #include <deque>
 #include <limits>
+#include <condition_variable>
 
 using namespace winrt::Windows::UI::Xaml;
 
@@ -278,6 +319,7 @@ using namespace winrt::Windows::UI::Xaml;
 namespace wuxh = winrt::Windows::UI::Xaml::Hosting;
 namespace wuxc = winrt::Windows::UI::Xaml::Controls;
 namespace wuxm = winrt::Windows::UI::Xaml::Media;
+namespace wuxa = winrt::Windows::UI::Xaml::Media::Animation;
 namespace wf = winrt::Windows::Foundation;
 namespace wui = winrt::Windows::UI;
 
@@ -959,7 +1001,21 @@ wui::Color GetSystemAccentColor() {
 void RefreshTaskList(bool forceIconRegeneration);
 void RefreshApplicationButtons();
 void RunOnUiThread(std::function<void()> work);
+void RunInBackground(std::function<void()> work);
+RECT GetBarMonitorRect();
+void HideOrphanXamlPopups();
+void InstallLightDismissGuard(wuxc::Primitives::FlyoutBase const& fb);
+bool CloseAnyOpenChildFlyout();
+LRESULT CALLBACK ChildFlyoutPopupProc(HWND, UINT, WPARAM, LPARAM, UINT_PTR);
 
+extern UINT g_shellHookMessage;
+extern HHOOK g_searchKeyHook;
+void ScheduleTaskListRefresh();
+void InstallShellHook(HWND hwnd);
+void UninstallShellHook(HWND hwnd);
+
+extern wuxc::Flyout g_startMenuFlyout;
+extern wuxc::Flyout g_searchFlyout;
 
 void ApplyAllControlStyles();
 void ApplyVisibilitySettings();
@@ -977,21 +1033,52 @@ void PopulateWifiPanel();
 void PopulateBluetoothPanel();
 void RefreshBluetoothRadioState();
 void PopulateBatteryPanel();
+void PopulateControlCenterPanel();
 void PopulateWeatherPanel();
 void RefreshWeatherButtonContent();
 void PopulateRecycleBinPanel();
 void PopulateSettingsPanel();
-void ApplyBlurToAllOpenPopups();
+void PopulateMediaPanel();
+void RefreshMediaButtonState();
+void ApplyBlurToAllOpenPopups(); 
+void ForceTopMostChildXamlPopups();
+void ApplyFlyoutBlurBrush(wuxc::Border const& border);
 void StripInheritedIslandBackgrounds();
 void ApplyWindowBackdrop(HWND hwnd);
 void ApplyModernWindowChrome(HWND hwnd);
+void ForceDisableWindowsTransparency(HWND hwnd); 
+void ForceXamlPopupToTop(HWND hwnd);
 std::wstring ReadTrayOrder();
+void SetTopBarContent(FrameworkElement content);
+void RepositionTopBarPopup();
+void EnsureTopBarPopupShown();
+void ReloadTopBarFully();
+void PromoteChildFlyoutPopups();
+HWND FindOpenChildFlyoutHwnd();
+void CenterChildFlyoutPopup(double matchedWidthDip, double matchedHeightDip);
+void EnsureWideFlyoutCenterTimer();
+void StripFlyoutPopupBackgrounds(wuxc::Primitives::FlyoutBase const& fb);
+void SnapOpenChildFlyoutTo(int screenX, int screenY);
+void SetAnchorScreenPosition(FrameworkElement const& anchor, double xDip, double yDip);
+void RegisterChildPopupTarget(HWND hwnd, RECT target);
+void RefreshXamlPopupInputSites();
 
 void LoadSettings();
 double GetBarDpiScale();
 void UpdateResourceButton();
+void InvalidateStartAndSearchFlyouts();
 void OpenTopBarSettingsWindow();
 void CloseTopBarSettingsWindow();
+void CloseNativeStartMenuIfOpen();
+void CloseNativeSearchIfOpen();
+void ScheduleNativeStartMenuClose();
+void KillNativeShellHostIfOursOpen(HWND hwnd);
+void HideAllNativeShellHostWindows();
+void ScheduleForceShowXamlPopup();
+void ForceShowNewestXamlPopup();
+void SyncSearchKeyHook();
+void RestoreNativeShellHostWindows(bool restoreStart, bool restoreSearch);
+void KillStaleShellHosts(bool killStart, bool killSearch);
 
 // ============================================================================
 // Settings
@@ -1003,6 +1090,8 @@ struct ControlStyleRule {
 };
 
 struct {
+    int topBarScale = 100;
+    std::wstring topBarScaleMode = L"auto";
     int barHeightDip = 40;
     std::wstring topBarBackgroundColor = L"#000000";
     int topBarBackgroundOpacity = 25;
@@ -1019,22 +1108,43 @@ struct {
     bool showWifiButton = true;
     bool showBluetoothButton = true;
     bool showBatteryButton = true;
+    bool showControlCenterButton = true;
     bool showSettingsButton = true;
     bool showWeatherButton = true;
+    bool showRecycleBinButton = true;
 
     std::wstring leftItems = L"StartButton,SearchButton";
-    std::wstring centerItems = L"ResourceButton,WeatherButton,SettingsButton";
-    std::wstring rightItems = L"DisplayButton,SoundButton,WifiButton,BluetoothButton,BatteryButton,RecycleBinButton,ClockButton";
+    std::wstring centerItems = L"MediaButton,ResourceButton,WeatherButton,SettingsButton";
+    std::wstring rightItems = L"DisplayButton,SoundButton,WifiButton,BluetoothButton,BatteryButton,RecycleBinButton,ControlCenterButton,ClockButton";
 
     bool showCpuUsage = true;
     bool showRamUsage = true;
     bool showGpuUsage = true;
+    bool showMediaButton = true;
+    bool showMediaVisualizer = true;
+    bool mediaButtonShowIcon = true;
+    bool mediaButtonShowName = true;
+    bool mediaButtonShowControls = true;
+    bool mediaButtonShowVisualizer = true;
+    std::wstring labelCpu = L"CPU:";
+    std::wstring labelRam = L"RAM:";
+    std::wstring labelGpu = L"GPU:";
     bool enableHotkeys = false;
+    bool disableFlyoutAutoClose = false;
+    bool defaultStartMenu = false;
+    bool defaultSearch    = false;
+    std::wstring startButtonAction  = L"topbar";
+    std::wstring searchButtonAction = L"topbar";
+    bool remapWinKey      = true;   // sub-options; only active when master is on
+    bool remapTaskbarStart= true;
+    bool remapWinSearch   = true;
+    bool remapTaskbarSearch = true;
     bool showClock = true;
     std::wstring timeFormat = L"🕑hh:mm tt";
     bool showDate = true;
     std::wstring dateFormat = L"📅ddd, MMM dd";
     std::wstring iconColor = L"#FFFFFF";
+    std::wstring fontColor = L"#FFFFFF";
     std::wstring fontFamily;
     bool fontBold = false;
     int globalBlurAmount = 6;
@@ -1043,7 +1153,18 @@ struct {
     std::wstring weatherLocationName;
     std::wstring weatherLatitude;
     std::wstring weatherLongitude;
+    std::wstring weatherUnit = L"C";
 } g_settings;
+
+// Tracks the previous state of defaultStartMenu/defaultSearch so the
+// in-app settings reload path can detect the on to off transition and
+// kill any hidden shell host process. Without this, toggling the option
+// off from the TopBar settings window left StartMenuExperienceHost in a
+// hidden state that blocked the native Start menu from appearing.
+bool g_prevDefaultStartMenu = true;
+bool g_prevDefaultSearch = true;
+std::wstring g_prevStartButtonAction = L"topbar";
+int g_prevMonitorIndex = 0;
 
 struct WeatherState {
     bool valid = false;
@@ -1086,8 +1207,8 @@ RecycleBinState g_recycleBinState;
 std::vector<std::wstring> g_trayOrder;
 const std::vector<std::wstring> kDefaultTrayOrder = {
     L"WeatherButton", L"DisplayButton", L"SoundButton", L"WifiButton",
-    L"BluetoothButton", L"BatteryButton", L"ResourceButton",
-    L"RecycleBinButton", L"ClockButton"};
+    L"BluetoothButton", L"BatteryButton", L"ControlCenterButton", L"ResourceButton",
+    L"RecycleBinButton", L"ClockButton", L"MediaButton"};
 
 // Every element the UI Alignment page / leftItems-centerItems-rightItems
 // storage keys can move between panels. Superset of kDefaultTrayOrder —
@@ -1096,8 +1217,8 @@ const std::vector<std::wstring> kDefaultTrayOrder = {
 const std::vector<std::wstring> kMovableItems = {
     L"StartButton", L"SearchButton", L"SettingsButton",
     L"WeatherButton", L"DisplayButton", L"SoundButton", L"WifiButton",
-    L"BluetoothButton", L"BatteryButton", L"ResourceButton",
-    L"RecycleBinButton", L"ClockButton"};
+    L"BluetoothButton", L"BatteryButton", L"ControlCenterButton", L"ResourceButton",
+    L"RecycleBinButton", L"ClockButton", L"MediaButton"};
 
 [[clang::no_destroy]] wuxc::StackPanel g_trayPanel{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_centerPanel{nullptr};
@@ -1118,7 +1239,7 @@ const std::vector<ControlStyleRule>& BuiltInStyles() {
         {L"SearchIcon", {L"Width=20", L"Height=20"}},
         {L"TaskButton",
          {L"Background:=#15ffffff", L"Margin=3,4,3,4", L"Foreground=white"}},
-        {L"ClockText", {L"Foreground=white", L"FontSize=14"}},
+        {L"ClockText", {L"FontSize=14"}},
         {L"ClockButton", {L"Background:=#15ffffff", L"Margin=3,4,6,4"}},
         {L"DisplayButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"SoundButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
@@ -1130,6 +1251,10 @@ const std::vector<ControlStyleRule>& BuiltInStyles() {
         {L"RecycleBinButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"SettingsButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"AppTitleButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
+        {L"MediaButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
+        {L"ControlCenterButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
+        {L"MediaTransportButton", {L"Background:=#30ffffff"}},
+
         {L"WifiHeaderToggle", {L"Width=50"}},
         {L"BluetoothHeaderToggle", {L"Width=50"}},
     };
@@ -1150,12 +1275,15 @@ const std::vector<ControlStyleRule> g_themeGreenBarStyles = {
     {L"WifiButton", {L"Background:=#27403C"}},
     {L"BluetoothButton", {L"Background:=#27403C"}},
     {L"ResourceButton", {L"Background:=#27403C"}},
-    {L"BatteryButton", {L"Background:=#27403C"}},
+    {L"BatteryButton", {L"Background:=#27403C"}}, 
+    {L"ControlCenterButton", {L"Background:=#27403C"}},
     {L"TaskButton", {L"Background:=#27403C"}},
     {L"AppTitleButton", {L"Background:=#27403C"}},
+    {L"MediaButton", {L"Background:=#27403C"}},
+    {L"MediaTransportButton", {L"Background:=#1B2E2B"}},
     {L"Canvas > FlyoutPresenter > Grid > Border#PART_BackgroundBorder",
      {L"IconColor=#7FD1C4", L"Background:=#1B2E2B"}},
-    {L"FlyoutBlurHost", {L"Background:=transparent"}},
+    {L"FlyoutBlurHost", {L"Background:=#1B2E2B"}},
     {L"Canvas > MenuFlyoutPresenter > Grid > Border#PART_BackgroundBorder",
      {L"Background:=#1B2E2B"}},
 };
@@ -1172,10 +1300,13 @@ const std::vector<ControlStyleRule> g_themeNoIslandsStyles = {
     {L"SoundButton", {L"Background:=transparent"}},
     {L"WifiButton", {L"Background:=transparent"}},
     {L"BluetoothButton", {L"Background:=transparent"}},
-    {L"BatteryButton", {L"Background:=transparent"}},
+    {L"BatteryButton", {L"Background:=transparent"}}, 
+    {L"ControlCenterButton", {L"Background:=transparent"}},
     {L"ResourceButton", {L"Background:=transparent"}},
     {L"TaskButton", {L"Background:=transparent"}},
     {L"AppTitleButton", {L"Background:=transparent"}},
+    {L"MediaButton", {L"Background:=transparent"}},
+    {L"MediaTransportButton", {L"Background:=transparent"}},
 };
 
 const std::vector<ControlStyleRule> g_themeOS27GoldenGateStyles = {
@@ -1184,15 +1315,21 @@ const std::vector<ControlStyleRule> g_themeOS27GoldenGateStyles = {
         L"BorderThickness=1",
         L"CornerRadius=14",
         L"Margin=6,4,6,0"}},
-    {L"Canvas > FlyoutPresenter > Grid > Border#PART_BackgroundBorder", {
+    {L"FlyoutPresenter", {
+        L"CornerRadius=20"}},
+    {L"FlyoutPresenter > Border#PART_BackgroundBorder", {
         L"CornerRadius=20",
         L"BorderThickness=1"}},
-    {L"FlyoutBlurHost", {
-        L"Background:=<WindhawkBlur BlurAmount=\"3\" />"}},
-    {L"Canvas > MenuFlyoutPresenter > Grid > Border#PART_BackgroundBorder", {
+    {L"FlyoutPresenter > Border#PART_BackgroundBorder > ContentPresenter", {
+        L"CornerRadius=20"}},
+    {L"MenuFlyoutPresenter", {
+        L"CornerRadius=20"}},
+    {L"MenuFlyoutPresenter > Border#PART_BackgroundBorder", {
         L"CornerRadius=20",
         L"Background:=<WindhawkBlur BlurAmount=\"3\" />",
         L"BorderThickness=1"}},
+    {L"FlyoutBlurHost", {
+        L"Background:=<WindhawkBlur BlurAmount=\"3\" />"}},
     {L"StartButton, SearchButton", {
         L"Background:=<WindhawkBlur BlurAmount=\"16\" TintColor=\"#20FFFFFF\" TintOpacity=\"0.2\" />",
         L"BorderBrush:=<LinearGradientBrush StartPoint=\"0.50,1.17\" EndPoint=\"0.50,-0.17\"><GradientStop Offset=\"0.09\" Color=\"#C9FFFFFF\"/><GradientStop Offset=\"0.46\" Color=\"#001C1C1C\"/><GradientStop Offset=\"0.49\" Color=\"#001C1C1C\"/><GradientStop Offset=\"0.91\" Color=\"#A8FFFFFF\"/></LinearGradientBrush>",
@@ -1211,7 +1348,7 @@ const std::vector<ControlStyleRule> g_themeOS27GoldenGateStyles = {
         L"BorderThickness=1",
         L"CornerRadius=10",
         L"Margin=3,3,3,3"}},
-    {L"DisplayButton, SoundButton, WifiButton, BluetoothButton, ResourceButton, BatteryButton, WeatherButton, RecycleBinButton, SettingsButton", {
+    {L"DisplayButton, SoundButton, WifiButton, BluetoothButton, ResourceButton, BatteryButton, WeatherButton, RecycleBinButton, SettingsButton, ControlCenterButton", {
         L"Background:=<WindhawkBlur BlurAmount=\"16\" TintColor=\"#20FFFFFF\" TintOpacity=\"0.2\" />",
         L"BorderBrush:=<LinearGradientBrush StartPoint=\"0.50,1.17\" EndPoint=\"0.50,-0.17\"><GradientStop Offset=\"0.09\" Color=\"#C9FFFFFF\"/><GradientStop Offset=\"0.46\" Color=\"#001C1C1C\"/><GradientStop Offset=\"0.49\" Color=\"#001C1C1C\"/><GradientStop Offset=\"0.91\" Color=\"#A8FFFFFF\"/></LinearGradientBrush>",
         L"BorderThickness=1",
@@ -1223,6 +1360,141 @@ const std::vector<ControlStyleRule> g_themeOS27GoldenGateStyles = {
         L"BorderThickness=1",
         L"CornerRadius=10",
         L"Margin=3,3,3,3"}},
+    {L"MediaButton", {
+        L"Background:=<WindhawkBlur BlurAmount=\"16\" TintColor=\"#20FFFFFF\" TintOpacity=\"0.2\" />",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0.50,1.17\" EndPoint=\"0.50,-0.17\"><GradientStop Offset=\"0.09\" Color=\"#C9FFFFFF\"/><GradientStop Offset=\"0.46\" Color=\"#001C1C1C\"/><GradientStop Offset=\"0.49\" Color=\"#001C1C1C\"/><GradientStop Offset=\"0.91\" Color=\"#A8FFFFFF\"/></LinearGradientBrush>",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"Margin=3,3,3,3"}},
+    {L"MediaTransportButton", {
+        L"Background:=<WindhawkBlur BlurAmount=\"16\" TintColor=\"#20FFFFFF\" TintOpacity=\"0.2\" />",
+        L"BorderThickness=1",
+        L"CornerRadius=10"}},
+};
+
+const std::vector<ControlStyleRule> g_themeMidnightNeonStyles = {
+    {L"TopBarRoot", {
+        L"Width=Auto",
+        L"Background:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,0\"><GradientStop Offset=\"0\" Color=\"#0A1628\"/><GradientStop Offset=\"0.5\" Color=\"#12203A\"/><GradientStop Offset=\"1\" Color=\"#0E1B33\"/></LinearGradientBrush>",
+        L"IconColor=#8FD9F0",
+        L"CornerRadius=12"}},
+    {L"StartButton", {
+        L"Background:=#182038",
+        L"BorderBrush:=#55A78BFA",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#B8A5FF"}},
+    {L"SearchButton", {
+        L"Background:=#182038",
+        L"BorderBrush:=#556EE7F9",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#8FD9F0"}},
+    {L"ResourceButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#4434D399",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#7FE0BC"}},
+    {L"WeatherButton", {
+        L"Background:=#182038",
+        L"BorderBrush:=#44FBBF24",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#F5CE6B"}},
+    {L"SettingsButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#448FD9F0",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#8FD9F0"}},
+    {L"MediaButton", {
+        L"Background:=#1E1E38",
+        L"BorderBrush:=#44F472B6",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#E8A5C8"}},
+    {L"MediaTransportButton", { 
+        L"Background:=#252540",
+        L"BorderBrush:=#44F472B6",
+        L"BorderThickness=1",
+        L"Resource:ButtonBackgroundPointerOver:=#3A3A5C",
+        L"Resource:ButtonBackgroundPressed:=#4A4A70",
+        L"Resource:ButtonBorderBrushPointerOver:=#66F472B6",
+        L"Resource:ButtonBorderBrushPressed:=#88F472B6",
+        L"Resource:ButtonBorderBrushDisabled:=#22F472B6",
+        L"CornerRadius=8"}},
+    {L"DisplayButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#33FBBF24",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#E8C784"}},
+    {L"SoundButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#338FD9F0",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#8FD9F0"}},
+    {L"WifiButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#338FBBE8",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#8FBBE8"}},
+    {L"BluetoothButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#33B8A5FF",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#B8A5FF"}},
+    {L"BatteryButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#3334D399",
+        L"BorderThickness=1",
+        L"CornerRadius=10"}},
+    {L"RecycleBinButton", {
+        L"Background:=#1E1E38",
+        L"BorderBrush:=#33E8A5C8",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#E8A5C8"}},
+    {L"ControlCenterButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#338FD9F0",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#8FD9F0"}},
+    {L"ClockButton", { 
+        L"Background:=#16243A",
+        L"BorderBrush:=#338FD9F0",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"Margin=4,4,6,4"}},
+    {L"ClockText", {
+        L"Foreground=#B8DCEA",
+        L"FontSize=14"}},
+    {L"TaskButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#2A3552",
+        L"BorderThickness=1",
+        L"CornerRadius=10"}},
+    {L"AppTitleButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#448FD9F0",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#8FD9F0"}},
+    {L"FlyoutBlurHost", {
+        L"Background:=<WindhawkBlur BlurAmount=\"16\" TintColor=\"#0E1B33\" TintOpacity=\"0.65\" />",
+        L"CornerRadius=14"}},
+    {L"FlyoutPresenter", {
+        L"CornerRadius=14"}},
+    {L"MenuFlyoutPresenter", {
+        L"CornerRadius=14"}},
+    {L"Canvas > FlyoutPresenter > Grid > Border#PART_BackgroundBorder", {
+        L"Background:=<WindhawkBlur BlurAmount=\"16\" TintColor=\"#0E1B33\" TintOpacity=\"0.7\" />",
+        L"CornerRadius=14"}},
 };
 
 // Global variable to hold the currently selected theme's styles
@@ -1238,9 +1510,28 @@ DWORD g_topBarThreadId;
 HANDLE g_stopEvent = nullptr;  // Stop event for clean shutdown
 HMODULE g_modModule = nullptr;
 
+ULONGLONG g_barStartTick = 0;
+int g_bootRefreshAttempts = 0;
+
 HWND g_topBarHwnd;
 HWND g_islandHwnd;
-[[clang::no_destroy]] wuxc::Grid g_wallpaperLayer{nullptr};  // Store the wallpaper layer for updates
+HWND g_settingsWindowHwnd = nullptr;
+
+static bool IsXamlPopupOwnedBySettingsWindow(HWND hwnd) {
+    HWND settings = g_settingsWindowHwnd;
+    if (!settings || !IsWindow(settings)) return false;
+    if (hwnd == settings) return false;
+    HWND cur = hwnd;
+    for (int i = 0; i < 8 && cur; i++) {
+        HWND owner = GetWindow(cur, GW_OWNER);
+        if (!owner) break;
+        if (owner == settings) return true;
+        cur = owner;
+    }
+    if (GetAncestor(hwnd, GA_ROOTOWNER) == settings) return true;
+    if (GetAncestor(hwnd, GA_ROOT) == settings) return true;
+    return false;
+}
 
 int g_barHeightPx = 40;
 double g_dpiScale = 1.0;
@@ -1248,6 +1539,213 @@ double g_dpiScale = 1.0;
 [[clang::no_destroy]] wuxh::WindowsXamlManager g_xamlManager{nullptr};
 [[clang::no_destroy]] wuxh::DesktopWindowXamlSource g_desktopSource{nullptr};
 [[clang::no_destroy]] winrt::Windows::System::DispatcherQueue g_uiDispatcherQueue{nullptr};
+[[clang::no_destroy]] wuxc::Flyout g_topBarPopup{nullptr};
+[[clang::no_destroy]] wuxc::Canvas g_topBarPopupCanvas{nullptr};
+[[clang::no_destroy]] wuxc::Grid g_topBarPopupAnchor{nullptr};
+[[clang::no_destroy]] DispatcherTimer g_topBarPopupRetryTimer{nullptr};
+static bool g_topBarAllowClose = false;
+static bool g_topBarPopupShowAtCalled = false;
+static HWND g_topBarPopupHwnd = nullptr;
+static int g_topBarPopupPinTicks = 0;
+static HWND g_subclassedPopupHwnd = nullptr;
+static std::atomic<bool> g_anyChildFlyoutOpen{false};
+static std::atomic<ULONGLONG> g_lastForeignClickTick{0};
+static std::atomic<bool> g_forceClosingFlyouts{false};
+
+static HHOOK g_childFlyoutMouseHook = nullptr;
+static bool g_forcePopupPosition = false;
+static bool g_forceShowAt = false;
+static int  g_replaceAttempts = 0;
+static std::atomic<bool> g_suppressPopupPositionLock{false};
+static int  g_wideFlyoutTargetX = -1;
+static int  g_wideFlyoutTargetY = -1;
+static std::atomic<ULONGLONG> g_lastPromoteTick{0};
+
+// Every open flyout / context menu is registered here so that
+// CloseAnyOpenChildFlyout can dismiss all of them, and so the topbar's
+// topmost re-assertion can back off while any of them is open. Without
+// this the reorder flyouts and MenuFlyouts were invisible to the dismissal
+// logic and left the topbar in a half-active state.
+static std::mutex g_openPopupMutex;
+static std::vector<wuxc::Primitives::FlyoutBase> g_openPopups;
+
+// Non-zero once the mod starts tearing down; background workers check it before
+// touching XAML or dispatching back to the UI thread.
+volatile LONG g_shuttingDown = 0; 
+
+void PromoteChildFlyoutPopups();
+
+// Runs while any child flyout is open and forces DWM's Mica/Acrylic
+// backdrop off every XAML popup HWND this process owns. DWM applies the
+// backdrop to a fresh popup HWND the moment XAML creates it, and the
+// periodic transparency kill in PinTopBarFlyoutHwnd only runs once a
+// second -- far too late to hide the ~1 s window where the tint sits above
+// the flyout content. This timer runs at 30 ms intervals, so the backdrop
+// is removed before the user sees it. It stops itself once the last flyout
+// closes, so it costs nothing when no flyout is open.
+void RegisterOpenPopup(wuxc::Primitives::FlyoutBase const& fb) {
+    if (!fb) return;
+    std::lock_guard<std::mutex> lock(g_openPopupMutex);
+    for (auto const& existing : g_openPopups) {
+        if (existing == fb) return;
+    }
+    g_openPopups.push_back(fb);
+    g_anyChildFlyoutOpen = true;
+    static std::set<void*> s_closingGuardInstalled;
+    if (s_closingGuardInstalled.insert(winrt::get_abi(fb)).second) {
+        try {
+            fb.Closing([](wuxc::Primitives::FlyoutBase const&,
+                          wuxc::Primitives::FlyoutBaseClosingEventArgs const& args) {
+                if (g_forceClosingFlyouts.load()) return;
+                if (!g_settings.disableFlyoutAutoClose) return;
+                if ((GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0) return;
+                ULONGLONG lastForeign = g_lastForeignClickTick.load();
+                if (lastForeign != 0 &&
+                    GetTickCount64() - lastForeign < 800) {
+                    args.Cancel(true);
+                    return;
+                }
+                HWND fg = GetForegroundWindow();
+                DWORD fgPid = 0;
+                if (fg) GetWindowThreadProcessId(fg, &fgPid);
+                if (fgPid != GetCurrentProcessId()) {
+                    args.Cancel(true);
+                }
+            });
+        } catch (...) {}
+    }
+    // PopupRoot sits above the presenter and is only present once XAML has
+    // finished laying out the popup tree, so this runs a turn later. The
+    // z-order promotion runs on the same ticks so the flyout reaches the
+    // topmost band as soon as its HWND is visible — without it the popup
+    // sits behind other windows for up to a second, waiting for the next
+    // restore-timer tick.
+    RunOnUiThread([fb] {
+        try { StripFlyoutPopupBackgrounds(fb); } catch (...) {}
+        try { PromoteChildFlyoutPopups(); } catch (...) {}
+        RunOnUiThread([fb] {
+            try { StripFlyoutPopupBackgrounds(fb); } catch (...) {}
+            try { PromoteChildFlyoutPopups(); } catch (...) {}
+        });
+    });
+}
+
+void HideOrphanXamlPopups() {
+    if (g_anyChildFlyoutOpen.load()) return;
+    HWND topBarPopup = g_topBarPopupHwnd;
+    if (topBarPopup && !IsWindow(topBarPopup)) topBarPopup = nullptr;
+    EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+        HWND topBarPopup = reinterpret_cast<HWND>(lp);
+        if (hwnd == g_islandHwnd) return TRUE;
+        if (hwnd == g_topBarHwnd) return TRUE;
+        if (topBarPopup && hwnd == topBarPopup) return TRUE;
+        if (IsXamlPopupOwnedBySettingsWindow(hwnd)) return TRUE;
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid != GetCurrentProcessId()) return TRUE;
+        if (!IsWindowVisible(hwnd)) return TRUE;
+        wchar_t cls[256]{};
+        if (!GetClassName(hwnd, cls, ARRAYSIZE(cls))) return TRUE;
+        if (!(wcsstr(cls, L"Xaml") && wcsstr(cls, L"Popup"))) return TRUE;
+        RECT r{};
+        if (GetWindowRect(hwnd, &r)) {
+            RECT mr = GetBarMonitorRect();
+            LONG w = r.right - r.left;
+            LONG h = r.bottom - r.top;
+            if (r.left == mr.left && r.top == mr.top &&
+                h <= g_barHeightPx + 4 &&
+                w >= (mr.right - mr.left) - 4) {
+                return TRUE;
+            }
+        }
+        ShowWindow(hwnd, SW_HIDE);
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(topBarPopup));
+}
+
+// Force-hides any visible XAML popup HWND owned by this process when no
+// registered flyout is actually open. XAML occasionally leaves a popup
+// HWND visible (but empty / fully transparent) after the Start menu or
+// Search flyout closes, and that invisible window keeps hit-testing
+// every click, blocking the desktop and any window behind it.
+void SweepStaleXamlPopups() {
+    if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) return;
+
+    bool anyOpen = false;
+    {
+        std::lock_guard<std::mutex> lock(g_openPopupMutex);
+        auto it = g_openPopups.begin();
+        while (it != g_openPopups.end()) {
+            bool alive = false;
+            if (*it) {
+                try { alive = (*it).IsOpen(); } catch (...) { alive = false; }
+            }
+            if (!alive) {
+                it = g_openPopups.erase(it);
+            } else {
+                anyOpen = true;
+                ++it;
+            }
+        }
+        g_anyChildFlyoutOpen = anyOpen;
+    }
+    if (anyOpen) return;
+
+    struct Ctx { HWND topBarPopup; RECT mr; };
+    Ctx ctx{ g_topBarPopupHwnd, GetBarMonitorRect() };
+    if (ctx.topBarPopup && !IsWindow(ctx.topBarPopup)) ctx.topBarPopup = nullptr;
+
+    EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+        auto* c = reinterpret_cast<Ctx*>(lp);
+        if (hwnd == g_islandHwnd) return TRUE;
+        if (hwnd == g_topBarHwnd) return TRUE;
+        if (c->topBarPopup && hwnd == c->topBarPopup) return TRUE;
+        if (IsXamlPopupOwnedBySettingsWindow(hwnd)) return TRUE;
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid != GetCurrentProcessId()) return TRUE;
+        if (!IsWindowVisible(hwnd)) return TRUE;
+        wchar_t cls[256]{};
+        if (!GetClassName(hwnd, cls, ARRAYSIZE(cls))) return TRUE;
+        if (!(wcsstr(cls, L"Xaml") && wcsstr(cls, L"Popup"))) return TRUE;
+        RECT r{};
+        if (GetWindowRect(hwnd, &r)) {
+            LONG w = r.right - r.left;
+            LONG h = r.bottom - r.top;
+            if (r.left == c->mr.left && r.top == c->mr.top &&
+                h <= g_barHeightPx + 4 &&
+                w >= (c->mr.right - c->mr.left) - 4) {
+                return TRUE;
+            }
+        }
+        ShowWindow(hwnd, SW_HIDE);
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&ctx));
+}
+
+void UnregisterOpenPopup(wuxc::Primitives::FlyoutBase const& fb) {
+    if (!fb) return;
+    std::lock_guard<std::mutex> lock(g_openPopupMutex);
+    g_openPopups.erase(
+        std::remove_if(g_openPopups.begin(), g_openPopups.end(),
+                       [&](auto const& e) { return e == fb; }),
+        g_openPopups.end());
+    g_anyChildFlyoutOpen = !g_openPopups.empty();
+    // When the last child flyout closes, clear the position locks so a
+    // re-opened flyout can be repositioned freely by XAML on the next
+    // ShowAt — otherwise the subclass would force the previous open's
+    // coordinates onto the fresh popup.
+    if (g_openPopups.empty()) {
+        extern void ClearChildPopupTargets();
+        ClearChildPopupTargets();
+        RunOnUiThread([] {
+            try { HideOrphanXamlPopups(); } catch (...) {}
+            RunOnUiThread([] {
+                try { HideOrphanXamlPopups(); } catch (...) {}
+            });
+        });
+    }
+}
 
 [[clang::no_destroy]] DispatcherTimer g_clockTimer{nullptr};
 [[clang::no_destroy]] DispatcherTimer g_blurRefreshTimer{nullptr};
@@ -1294,6 +1792,7 @@ HWND g_taskClickPendingHwnd = nullptr;
 std::vector<std::wstring> g_gpuNames;
 int g_selectedGpuIndex = 0;
 bool g_selectedGpuIndexLoaded = false;
+std::atomic<bool> g_resourceComboOpen{false};
 std::deque<float> g_cpuHistory;
 std::deque<float> g_ramHistory;
 std::map<int, std::deque<float>> g_gpuHistory;
@@ -1321,12 +1820,30 @@ void AdjustTaskButtonWidths() {
     double availableWidth = 0.0;
     if (g_rootElement) {
         double rootWidth = g_rootElement.ActualWidth();
-        double leftWidth = 0.0, rightWidth = 0.0;
+        double leftWidth = 0.0, rightWidth = 0.0, clockWidth = 0.0, centerWidth = 0.0;
         auto leftIt = g_namedElements.find(L"LeftPanel");
         if (leftIt != g_namedElements.end()) leftWidth = leftIt->second.ActualWidth();
         auto rightIt = g_namedElements.find(L"TrayPanel");
         if (rightIt != g_namedElements.end()) rightWidth = rightIt->second.ActualWidth();
-        availableWidth = rootWidth - leftWidth - rightWidth;
+        auto clockIt = g_namedElements.find(L"ClockPanel");
+        if (clockIt != g_namedElements.end()) clockWidth = clockIt->second.ActualWidth();
+        auto centerIt = g_namedElements.find(L"CenterPanel");
+        if (centerIt != g_namedElements.end()) {
+            auto centerFe = centerIt->second;
+            if (centerFe && centerFe.Visibility() == Visibility::Visible &&
+                centerFe.ActualWidth() > 0) {
+                centerWidth = centerFe.ActualWidth();
+            }
+        }
+        double columnRight = rootWidth - rightWidth - clockWidth;
+        double availableRight = columnRight;
+        if (centerWidth > 0) {
+            double centerLeft = (rootWidth - centerWidth) / 2.0;
+            if (centerLeft < columnRight) {
+                availableRight = centerLeft;
+            }
+        }
+        availableWidth = availableRight - leftWidth;
     } else {
         availableWidth = g_taskListPanel.ActualWidth(); // fallback
     }
@@ -1399,6 +1916,7 @@ bool g_allowHide = false;
 wui::Color g_iconTintColor{0, 255, 255, 255};
 double g_iconTintOpacity = 0.0;
 std::optional<wui::Color> g_iconColorOverride;
+std::map<std::wstring, std::wstring> g_namedElementIconColorHex;
 
 constexpr UINT WM_APPBAR_CALLBACK = WM_APP + 0x137;
 constexpr UINT_PTR kAppBarInitTimerId = 1;
@@ -1451,13 +1969,21 @@ static const std::map<std::wstring, int>& IntDefaults() {
         { L"showWifiButton", 1 },
         { L"showBluetoothButton", 1 },
         { L"showBatteryButton", 1 },
+        { L"showControlCenterButton", 1 },
         { L"showSettingsButton", 1 },
         { L"showWeatherButton", 1 },
+        { L"showRecycleBinButton", 1 },
         { L"showClock", 1 },
         { L"showDate", 1 },
         { L"showCpuUsage", 1 },
         { L"showRamUsage", 1 },
         { L"showGpuUsage", 1 },
+        { L"showMediaButton", 1 },
+        { L"showMediaVisualizer", 1 },
+        { L"mediaButtonShowIcon", 1 },
+        { L"mediaButtonShowName", 1 },
+        { L"mediaButtonShowControls", 1 },
+        { L"mediaButtonShowVisualizer", 1 },
         { L"fontBold", 0 },
     };
     return kDefaults;
@@ -1469,6 +1995,9 @@ static const std::map<std::wstring, std::wstring>& StringDefaults() {
         { L"iconColor", L"#FFFFFF" },
         { L"timeFormat", L"\U0001F551hh:mm tt" },
         { L"dateFormat", L"\U0001F4C5ddd, MMM dd" },
+        { L"labelCpu", L"CPU:" },
+        { L"labelRam", L"RAM:" },
+        { L"labelGpu", L"GPU:" },
     };
     return kDefaults;
 }
@@ -1720,6 +2249,19 @@ bool TestTreeMatcher(FrameworkElement const& element, TreeElementMatcher const& 
 
     if (m.bareIdentifier) {
         if (!m.name.empty() && elementName == m.name) return true;
+        static const wchar_t* kSharedSuffixes[] = {
+            L"FlyoutBlurHost", L"FlyoutScroller", L"FlyoutListRow",
+            L"FlyoutTitle", L"FlyoutDivider",
+        };
+        for (auto* sfx : kSharedSuffixes) {
+            if (m.name == sfx) {
+                size_t sl = wcslen(sfx);
+                if (elementName.size() > sl &&
+                    elementName.compare(elementName.size() - sl, sl, sfx) == 0) {
+                    return true;
+                }
+            }
+        }
         return shortName == m.name || std::wstring(className) == m.name;
     }
 
@@ -1739,7 +2281,44 @@ bool TestTreeMatcher(FrameworkElement const& element, TreeElementMatcher const& 
             if (std::wstring(className) != want && shortName != want) return false;
         }
     }
-    if (!m.name.empty() && elementName != m.name) return false;
+    if (!m.name.empty() && elementName != m.name) {
+        static const wchar_t* kSharedSuffixes[] = {
+            L"FlyoutBlurHost", L"FlyoutScroller", L"FlyoutListRow",
+            L"FlyoutTitle", L"FlyoutDivider",
+        };
+        bool suffixMatch = false;
+        for (auto* sfx : kSharedSuffixes) {
+            if (m.name == sfx) {
+                size_t sl = wcslen(sfx);
+                if (elementName.size() > sl &&
+                    elementName.compare(elementName.size() - sl, sl, sfx) == 0) {
+                    suffixMatch = true;
+                    break;
+                }
+            }
+        }
+        if (!suffixMatch) return false;
+    }
+
+    if (!m.visualStateGroupName.empty()) {
+        bool matched = false;
+        try {
+            auto groups = VisualStateManager::GetVisualStateGroups(element);
+            for (auto const& g : groups) {
+                if (!g) continue;
+                if (std::wstring(g.Name()) == m.visualStateGroupName) {
+                    matched = true;
+                    break;
+                }
+                auto cur = g.CurrentState();
+                if (cur && std::wstring(cur.Name()) == m.visualStateGroupName) {
+                    matched = true;
+                    break;
+                }
+            }
+        } catch (...) {}
+        if (!matched) return false;
+    }
 
     if (m.oneBasedIndex > 0) {
         auto parent = wuxm::VisualTreeHelper::GetParent(element);
@@ -1911,6 +2490,94 @@ bool TryParseNumberInvariant(std::wstring_view s, double* out);
 std::wstring GetStyleCaptureKey(winrt::Windows::UI::Xaml::XamlRoot const& root);
 std::wstring ExpandStyleVariables(std::wstring_view input, XamlRoot const& root);
 
+void ApplyStateResourceOverrides(FrameworkElement element,
+                                 const std::wstring& propName,
+                                 wf::IInspectable const& value) {
+    if (!value || !element) return;
+    if (value == DependencyProperty::UnsetValue()) return;
+    std::wstring baseProp = propName;
+    auto atPos = baseProp.find(L'@');
+    if (atPos != std::wstring::npos) {
+        baseProp = TrimWs(baseProp.substr(0, atPos));
+    }
+    if (baseProp != L"Background" && baseProp != L"BorderBrush") return;
+
+    std::vector<PCWSTR> keys;
+    if (baseProp == L"Background") {
+        keys = {
+            L"ButtonBackground", L"ButtonBackgroundPointerOver",
+            L"ButtonBackgroundPressed", L"ButtonBackgroundDisabled",
+            L"ToggleButtonBackground", L"ToggleButtonBackgroundPointerOver",
+            L"ToggleButtonBackgroundPressed", L"ToggleButtonBackgroundDisabled",
+            L"ToggleButtonBackgroundChecked",
+            L"ToggleButtonBackgroundCheckedPointerOver",
+            L"ToggleButtonBackgroundCheckedPressed",
+            L"ToggleButtonBackgroundCheckedDisabled",
+            L"ToggleButtonBackgroundIndeterminate",
+            L"ToggleButtonBackgroundIndeterminatePointerOver",
+            L"ToggleButtonBackgroundIndeterminatePressed",
+            L"ToggleButtonBackgroundIndeterminateDisabled",
+            L"RepeatButtonBackground", L"RepeatButtonBackgroundPointerOver",
+            L"RepeatButtonBackgroundPressed", L"RepeatButtonBackgroundDisabled"
+        };
+    } else {
+        keys = {
+            L"ButtonBorderBrush", L"ButtonBorderBrushPointerOver",
+            L"ButtonBorderBrushPressed", L"ButtonBorderBrushDisabled",
+            L"ToggleButtonBorderBrush", L"ToggleButtonBorderBrushPointerOver",
+            L"ToggleButtonBorderBrushPressed", L"ToggleButtonBorderBrushDisabled",
+            L"ToggleButtonBorderBrushChecked",
+            L"ToggleButtonBorderBrushCheckedPointerOver",
+            L"ToggleButtonBorderBrushCheckedPressed",
+            L"ToggleButtonBorderBrushCheckedDisabled",
+            L"ToggleButtonBorderBrushIndeterminate",
+            L"ToggleButtonBorderBrushIndeterminatePointerOver",
+            L"ToggleButtonBorderBrushIndeterminatePressed",
+            L"ToggleButtonBorderBrushIndeterminateDisabled",
+            L"RepeatButtonBorderBrush", L"RepeatButtonBorderBrushPointerOver",
+            L"RepeatButtonBorderBrushPressed", L"RepeatButtonBorderBrushDisabled"
+        };
+    }
+    std::vector<FrameworkElement> targets;
+    targets.push_back(element);
+    {
+        DependencyObject cur = element;
+        for (int i = 0; i < 8 && cur; i++) {
+            DependencyObject parent{nullptr};
+            try { parent = wuxm::VisualTreeHelper::GetParent(cur); } catch (...) { break; }
+            if (!parent) break;
+            if (auto fe = parent.try_as<FrameworkElement>()) {
+                bool isButtonLike = false;
+                try {
+                    if (fe.try_as<wuxc::Button>() ||
+                        fe.try_as<wuxc::HyperlinkButton>() ||
+                        fe.try_as<wuxc::Primitives::RepeatButton>() ||
+                        fe.try_as<wuxc::Primitives::ToggleButton>()) {
+                        isButtonLike = true;
+                    }
+                } catch (...) {}
+                if (isButtonLike) {
+                    targets.push_back(fe);
+                }
+            }
+            cur = parent;
+        }
+    }
+
+    for (auto& target : targets) {
+        try {
+            auto res = target.Resources();
+            for (PCWSTR k : keys) {
+                auto boxedKey = winrt::box_value(winrt::hstring(k));
+                if (res.HasKey(boxedKey)) {
+                    res.Remove(boxedKey);
+                }
+                res.Insert(boxedKey, value);
+            }
+        } catch (...) {}
+    }
+}
+
 void ApplySingleStyleToElement(FrameworkElement element, const std::wstring& rule) {
     std::wstring ruleWithConstants = ApplyStyleConstants(rule);
     std::wstring trimmedRule = TrimWs(ruleWithConstants);
@@ -1926,6 +2593,57 @@ void ApplySingleStyleToElement(FrameworkElement element, const std::wstring& rul
 
     std::wstring propPart = trimmedRule.substr(0, eqPos);
     std::wstring valuePart = TrimWs(trimmedRule.substr(eqPos + 1));
+
+    if (propPart.starts_with(L"Resource:")) {
+        std::wstring key = TrimWs(propPart.substr(9));
+        if (!key.empty() && key.back() == L':') {
+            key.pop_back();
+            key = TrimWs(key);
+        }
+        if (key.empty()) {
+            Wh_Log(L"Bad Resource syntax (empty key): %s", trimmedRule.c_str());
+            return;
+        }
+        auto fe = element.try_as<FrameworkElement>();
+        if (!fe) {
+            return;
+        }
+        wf::IInspectable resourceValue{nullptr};
+        if (valuePart.starts_with(L"<WindhawkBlur")) {
+            if (auto blur = ParseWindhawkBlurValue(valuePart)) {
+                if (auto ui = element.try_as<UIElement>()) {
+                    resourceValue = CreateWindhawkBlurBrush(ui, *blur);
+                }
+            }
+        } else {
+            std::wstring setterXaml =
+                L"<ResourceDictionary "
+                L"xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
+                L"xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\">"
+                L"<Style TargetType=\"Border\">"
+                L"<Setter Property=\"Background\">" + valuePart + L"</Setter>"
+                L"</Style></ResourceDictionary>";
+            try {
+                auto dict = Markup::XamlReader::Load(setterXaml).as<ResourceDictionary>();
+                auto style = dict.First().Current().Value().as<Style>();
+                resourceValue = style.Setters().GetAt(0).as<Setter>().Value();
+            } catch (winrt::hresult_error const& ex) {
+                Wh_Log(L"Resource value parse failed (%s): %08X",
+                       trimmedRule.c_str(),
+                       static_cast<unsigned int>(ex.code().value));
+                return;
+            }
+        }
+        if (resourceValue) {
+            auto res = fe.Resources();
+            auto boxedKey = winrt::box_value(winrt::hstring(key));
+            if (res.HasKey(boxedKey)) {
+                res.Remove(boxedKey);
+            }
+            res.Insert(boxedKey, resourceValue);
+        }
+        return;
+    }
 
     if (!valuePart.empty() && valuePart.front() == L'>') {
         std::wstring varName = TrimWs(valuePart.substr(1));
@@ -2026,6 +2744,7 @@ void ApplySingleStyleToElement(FrameworkElement element, const std::wstring& rul
                     auto setter = style.Setters().GetAt(0).as<Setter>();
                     auto brush = CreateWindhawkBlurBrush(ui, *blur);
                     element.SetValue(setter.Property(), brush);
+                    ApplyStateResourceOverrides(element, trimmedProp, brush);
                     return;
                 } catch (winrt::hresult_error const& ex) {
                     Wh_Log(L"WindhawkBlur apply failed: %08X",
@@ -2048,8 +2767,14 @@ void ApplySingleStyleToElement(FrameworkElement element, const std::wstring& rul
     if (!isXamlValue && trimmedProp == L"IconColor") {
         wui::Color parsed{};
         if (TryParseHexColor(valuePart, &parsed) || TryParseNamedColor(valuePart, &parsed)) {
-            if (std::wstring_view(element.Name()) == L"TopBarRoot") {
+            std::wstring elemName(element.Name());
+            if (elemName == L"TopBarRoot") {
                 g_iconColorOverride = parsed;
+            } else if (!elemName.empty()) {
+                wchar_t buf[16];
+                swprintf_s(buf, L"#%02X%02X%02X",
+                           parsed.R, parsed.G, parsed.B);
+                g_namedElementIconColorHex[elemName] = buf;
             }
         }
         ApplyIconColorToElement(element, valuePart);
@@ -2076,6 +2801,7 @@ void ApplySingleStyleToElement(FrameworkElement element, const std::wstring& rul
                         auto set = st.Setters().GetAt(0).as<Setter>();
                         auto brush = CreateWindhawkBlurBrush(ui, *blur);
                         element.SetValue(set.Property(), brush);
+                        ApplyStateResourceOverrides(element, trimmedProp, brush);
                         return;
                     } catch (winrt::hresult_error const& ex) {
                         Wh_Log(L"WindhawkBlur apply failed: %08X",
@@ -2112,6 +2838,7 @@ void ApplySingleStyleToElement(FrameworkElement element, const std::wstring& rul
             element.ClearValue(setter.Property());
         } else {
             element.SetValue(setter.Property(), value);
+            ApplyStateResourceOverrides(element, trimmedProp, value);
         }
     } catch (winrt::hresult_error const& ex) {
         Wh_Log(L"Style apply failed (%s): %08X", trimmedRule.c_str(),
@@ -2392,26 +3119,31 @@ void ApplyRuleList(const std::vector<ControlStyleRule>& rules) {
             std::wstring name = TrimWs(ruleTarget.substr(
                 start, comma == std::wstring::npos ? std::wstring::npos : comma - start));
             if (!name.empty()) {
-                auto it = g_namedElements.find(name);
+                bool simpleName = name.find_first_of(L" >.#[@") == std::wstring::npos;
                 bool applied = false;
-                if (it != g_namedElements.end()) {
-                    for (const auto& style : rule.styles) {
-                        ApplySingleStyleToElement(it->second, style);
+                if (simpleName) {
+                    auto it = g_namedElements.find(name);
+                    if (it != g_namedElements.end() && it->second) {
+                        for (const auto& style : rule.styles) {
+                            ApplySingleStyleToElement(it->second, style);
+                        }
+                        applied = true;
                     }
-                    applied = true;
-                }
-                auto matches = ResolveGeneralTarget(name);
-                for (auto& element : matches) {
-                    if (applied && it != g_namedElements.end() && element == it->second) {
-                        continue;
-                    }
-                    for (const auto& style : rule.styles) {
-                        ApplySingleStyleToElement(element, style);
-                    }
-                    applied = true;
                 }
                 if (!applied) {
-                    Wh_Log(L"Unknown control style target: %s", name.c_str());
+                    auto matches = ResolveGeneralTarget(name);
+                    for (auto& element : matches) {
+                        for (const auto& style : rule.styles) {
+                            ApplySingleStyleToElement(element, style);
+                        }
+                        applied = true;
+                    }
+                }
+                if (!applied) {
+                    static std::set<std::wstring> s_loggedOnce;
+                    if (s_loggedOnce.insert(name).second) {
+                        Wh_Log(L"Unknown control style target: %s", name.c_str());
+                    }
                 }
             }
             if (comma == std::wstring::npos) {
@@ -2420,6 +3152,45 @@ void ApplyRuleList(const std::vector<ControlStyleRule>& rules) {
             start = comma + 1;
         }
     }
+}
+
+void ApplyCompositionShadow(FrameworkElement const& element) {
+    if (!element) return;
+    try {
+        auto visual = wuxh::ElementCompositionPreview::GetElementVisual(element);
+        if (!visual) return;
+        auto compositor = visual.Compositor();
+        if (!compositor) return;
+        auto shadow = compositor.CreateDropShadow();
+        shadow.BlurRadius(7.0f);
+        shadow.Opacity(0.85f);
+        shadow.Color(wui::ColorHelper::FromArgb(0xFF, 0, 0, 0));
+        shadow.Offset(winrt::Windows::Foundation::Numerics::float3{0.0f, 1.0f, 0.0f});
+        if (auto sprite = visual.try_as<winrt::Windows::UI::Composition::SpriteVisual>()) {
+            if (!sprite.Shadow()) sprite.Shadow(shadow);
+        }
+    } catch (...) {}
+}
+
+void ApplyShadowTree(FrameworkElement const& root) {
+    if (!root) return;
+    std::function<void(DependencyObject)> walk = [&](DependencyObject node) {
+        if (!node) return;
+        try {
+            if (node.try_as<wuxc::TextBlock>() ||
+                node.try_as<wuxc::Viewbox>() ||
+                node.try_as<wuxc::FontIcon>()) {
+                if (auto fe = node.try_as<FrameworkElement>()) {
+                    ApplyCompositionShadow(fe);
+                }
+            }
+            int n = wuxm::VisualTreeHelper::GetChildrenCount(node);
+            for (int i = 0; i < n; i++) {
+                walk(wuxm::VisualTreeHelper::GetChild(node, i));
+            }
+        } catch (...) {}
+    };
+    walk(root);
 }
 
 void ApplyAllControlStyles() {
@@ -2437,11 +3208,22 @@ void ApplyAllControlStyles() {
     const wui::Color previousTintColor = g_iconTintColor;
     const double previousTintOpacity = g_iconTintOpacity;
 
+    g_namedElementIconColorHex.clear();
+
     // Built-ins always applied.
     ApplyRuleList(BuiltInStyles());
     // Theme styles applied after built-ins, before user custom styles.
     ApplyRuleList(g_themeStyleRules);
     ApplyRuleList(g_controlStyleRules);
+
+    try {
+        if (g_rootElement) {
+            ApplyShadowTree(g_rootElement);
+        }
+        for (auto& root : g_detachedStyleRoots) {
+            if (root) ApplyShadowTree(root);
+        }
+    } catch (...) {}
 
     bool tintChanged = previousTintColor.A != g_iconTintColor.A ||
                        previousTintColor.R != g_iconTintColor.R ||
@@ -2454,7 +3236,10 @@ void ApplyAllControlStyles() {
     }
 }
 
-void ApplyVisibilitySettings() {
+extern bool g_mediaPlaying; 
+extern bool g_mediaSessionExists;
+
+void ApplyVisibilitySettings() { 
     auto setVis = [](PCWSTR name, bool visible) {
         auto it = g_namedElements.find(name);
         if (it != g_namedElements.end()) {
@@ -2470,15 +3255,43 @@ void ApplyVisibilitySettings() {
     setVis(L"BluetoothButton", g_settings.showBluetoothButton);
     
     setVis(L"BatteryButton", g_settings.showBatteryButton);
+    setVis(L"ControlCenterButton", g_settings.showControlCenterButton);
+    setVis(L"RecycleBinButton", g_settings.showRecycleBinButton);
     setVis(L"SettingsButton", g_settings.showSettingsButton);
     setVis(L"WeatherButton", g_settings.showWeatherButton);
     setVis(L"ResourceButton", (g_settings.showCpuUsage || g_settings.showRamUsage || g_settings.showGpuUsage));
     setVis(L"ClockButton", g_settings.showClock || g_settings.showDate);
+    setVis(L"MediaButton", g_settings.showMediaButton && g_mediaSessionExists);
 }
 
 // Uses Windows' own native date/time format-picture tokens, so token
 // substitution, locale awareness, and pass-through of anything that isn't a
 // recognized format letter -- including emoji -- all come for free.
+std::wstring ForceTextPresentation(std::wstring s) {
+    std::wstring out;
+    out.reserve(s.size() + 8);
+    for (size_t i = 0; i < s.size(); i++) {
+        wchar_t c = s[i];
+        if (c == 0xFE0F) {
+            out.push_back(0xFE0E);
+            continue;
+        }
+        out.push_back(c);
+        if (c >= 0xD800 && c <= 0xDBFF && i + 1 < s.size() &&
+            s[i + 1] >= 0xDC00 && s[i + 1] <= 0xDFFF) {
+            out.push_back(s[i + 1]);
+            i++;
+            if (i + 1 < s.size() && (s[i + 1] == 0xFE0E || s[i + 1] == 0xFE0F)) {
+                out.push_back(0xFE0E);
+                i++;
+            } else {
+                out.push_back(0xFE0E);
+            }
+        }
+    }
+    return out;
+}
+
 std::wstring FormatClockText() {
     SYSTEMTIME st;
     GetLocalTime(&st);
@@ -2501,7 +3314,112 @@ std::wstring FormatClockText() {
             result += buf;
         }
     }
+    return ForceTextPresentation(result);
+}
+
+std::wstring GetEffectiveIconColorString();
+wuxm::SolidColorBrush MakeBrush(uint8_t a, uint8_t r, uint8_t g, uint8_t b);
+
+bool IsEmojiCodepoint(uint32_t cp) {
+    return (cp >= 0x1F000 && cp <= 0x1FAFF) ||
+           (cp >= 0x2600 && cp <= 0x26FF) ||
+           (cp >= 0x2700 && cp <= 0x27BF) ||
+           (cp >= 0x2B00 && cp <= 0x2BFF);
+}
+
+uint32_t ReadUtf16Codepoint(const std::wstring& s, size_t& i) {
+    wchar_t c = s[i];
+    if (c >= 0xD800 && c <= 0xDBFF && i + 1 < s.size() &&
+        s[i + 1] >= 0xDC00 && s[i + 1] <= 0xDFFF) {
+        uint32_t cp = 0x10000 + ((static_cast<uint32_t>(c) - 0xD800) << 10) +
+                      (static_cast<uint32_t>(s[i + 1]) - 0xDC00);
+        i += 2;
+        return cp;
+    }
+    i++;
+    return static_cast<uint32_t>(c);
+}
+
+struct ClockSegment {
+    std::wstring text;
+    bool isEmoji = false;
+};
+
+std::vector<ClockSegment> SegmentClockText(const std::wstring& s) {
+    std::vector<ClockSegment> result;
+    if (s.empty()) {
+        return result;
+    }
+    size_t start = 0;
+    size_t i = 0;
+    bool currentIsEmoji = false;
+    bool first = true;
+    while (i < s.size()) {
+        size_t segStart = i;
+        uint32_t cp = ReadUtf16Codepoint(s, i);
+        bool isEmoji = IsEmojiCodepoint(cp);
+        while (i < s.size()) {
+            size_t save = i;
+            uint32_t peek = ReadUtf16Codepoint(s, i);
+            if (peek == 0xFE0E || peek == 0xFE0F) {
+                continue;
+            }
+            if (peek == 0x200D && i < s.size()) {
+                ReadUtf16Codepoint(s, i);
+                continue;
+            }
+            i = save;
+            break;
+        }
+        if (first) {
+            currentIsEmoji = isEmoji;
+            start = segStart;
+            first = false;
+        } else if (isEmoji != currentIsEmoji) {
+            ClockSegment seg;
+            seg.text = s.substr(start, segStart - start);
+            seg.isEmoji = currentIsEmoji;
+            result.push_back(seg);
+            start = segStart;
+            currentIsEmoji = isEmoji;
+        }
+    }
+    if (!first) {
+        ClockSegment seg;
+        seg.text = s.substr(start);
+        seg.isEmoji = currentIsEmoji;
+        result.push_back(seg);
+    }
     return result;
+}
+
+void ApplyClockInlines(wuxc::TextBlock const& text, const std::wstring& content) {
+    text.Inlines().Clear();
+
+    wui::Color emojiColor{};
+    const std::wstring emojiHex = GetEffectiveIconColorString();
+    if (!TryParseHexColor(emojiHex, &emojiColor) &&
+        !TryParseNamedColor(emojiHex, &emojiColor)) {
+        emojiColor = wui::ColorHelper::FromArgb(255, 255, 255, 255);
+    }
+
+    wui::Color textColor{};
+    if (!TryParseHexColor(g_settings.fontColor, &textColor) &&
+        !TryParseNamedColor(g_settings.fontColor, &textColor)) {
+        textColor = wui::ColorHelper::FromArgb(255, 255, 255, 255);
+    }
+
+    for (const auto& seg : SegmentClockText(content)) {
+        winrt::Windows::UI::Xaml::Documents::Run run;
+        run.Text(winrt::hstring(seg.text));
+        wui::Color c = seg.isEmoji ? emojiColor : textColor;
+        run.Foreground(MakeBrush(c.A, c.R, c.G, c.B));
+        if (seg.isEmoji) {
+            run.FontFamily(wuxm::FontFamily(L"Segoe UI Emoji"));
+            run.FontWeight(winrt::Windows::UI::Text::FontWeights::Normal());
+        }
+        text.Inlines().Append(run);
+    }
 }
 
 // ============================================================================
@@ -2620,20 +3538,41 @@ constexpr PCWSTR kGpuCardStroke =
     L"M8 11 A2.5 2.5 0 1 1 13 11 A2.5 2.5 0 1 1 8 11 Z "
     L"M15 11 A2.5 2.5 0 1 1 20 11 A2.5 2.5 0 1 1 15 11 Z";
 constexpr PCWSTR kCheckStroke = L"M5 12.5 L10 17.5 L19 6.5";
+constexpr PCWSTR kRewindStroke =
+    L"M11 12 L3 7 L3 17 Z "
+    L"M20 12 L12 7 L12 17 Z";
+constexpr PCWSTR kMusicNoteFill =
+    L"M9 5 L19 3 L19 16 L17 16 L17 5.3 L11 6.4 L11 18 L9 18 Z "
+    L"M9 18 A2 2 0 1 0 5 18 A2 2 0 1 0 9 18 Z "
+    L"M19 16 A2 2 0 1 0 15 16 A2 2 0 1 0 19 16 Z";
+
+constexpr PCWSTR kControlCenterStroke =
+    L"M4.5 8 L19.5 8 M4.5 16 L19.5 16 "
+    L"M9.5 5.5 L9.5 10.5 M15 13.5 L15 18.5";
 
 }  // namespace icons
-// Windows 11 Start logo
+// Windows 11 Start logo — four rounded squares drawn as a single Path so
+// styling just needs to target one Shape (set Fill on #StartIcon) instead
+// of walking four separate Rectangles.
 FrameworkElement BuildWindows11StartIcon(double displaySize) {
     std::wstring brush = GetEffectiveIconColorString();
+
+    constexpr PCWSTR kStartLogoPath =
+        L"F1 "
+        L"M3,1 L9,1 A2,2 0 0 1 11,3 L11,9 A2,2 0 0 1 9,11 L3,11 "
+        L"A2,2 0 0 1 1,9 L1,3 A2,2 0 0 1 3,1 Z "
+        L"M15,1 L21,1 A2,2 0 0 1 23,3 L23,9 A2,2 0 0 1 21,11 L15,11 "
+        L"A2,2 0 0 1 13,9 L13,3 A2,2 0 0 1 15,1 Z "
+        L"M3,13 L9,13 A2,2 0 0 1 11,15 L11,21 A2,2 0 0 1 9,23 L3,23 "
+        L"A2,2 0 0 1 1,21 L1,15 A2,2 0 0 1 3,13 Z "
+        L"M15,13 L21,13 A2,2 0 0 1 23,15 L23,21 A2,2 0 0 1 21,23 L15,23 "
+        L"A2,2 0 0 1 13,21 L13,15 A2,2 0 0 1 15,13 Z";
+
     std::wstring xaml =
         L"<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
         L"Stretch=\"Uniform\" Width=\"" + std::to_wstring(displaySize) + L"\" Height=\"" + std::to_wstring(displaySize) + L"\">"
-        L"<Grid Width=\"24\" Height=\"24\">"
-        L"<Rectangle Width=\"10\" Height=\"10\" RadiusX=\"2\" RadiusY=\"2\" Fill=\"" + brush + L"\" HorizontalAlignment=\"Left\" VerticalAlignment=\"Top\" Margin=\"1,1,0,0\"/>"
-        L"<Rectangle Width=\"10\" Height=\"10\" RadiusX=\"2\" RadiusY=\"2\" Fill=\"" + brush + L"\" HorizontalAlignment=\"Right\" VerticalAlignment=\"Top\" Margin=\"0,1,1,0\"/>"
-        L"<Rectangle Width=\"10\" Height=\"10\" RadiusX=\"2\" RadiusY=\"2\" Fill=\"" + brush + L"\" HorizontalAlignment=\"Left\" VerticalAlignment=\"Bottom\" Margin=\"1,0,0,1\"/>"
-        L"<Rectangle Width=\"10\" Height=\"10\" RadiusX=\"2\" RadiusY=\"2\" Fill=\"" + brush + L"\" HorizontalAlignment=\"Right\" VerticalAlignment=\"Bottom\" Margin=\"0,0,1,1\"/>"
-        L"</Grid></Viewbox>";
+        L"<Path Data=\"" + std::wstring(kStartLogoPath) + L"\" Fill=\"" + brush + L"\"/>"
+        L"</Viewbox>";
 
     try {
         auto element = Markup::XamlReader::Load(xaml).as<FrameworkElement>();
@@ -2839,11 +3778,89 @@ FrameworkElement BuildBatteryIcon(double displaySize, int percentage, bool charg
     }
 }
 
+FrameworkElement BuildRecycleBinIcon(double displaySize) {
+    std::wstring brush = GetEffectiveIconColorString();
+    std::wstring data =
+        L"F0 "
+        L"M3,5 L21,5 L21,7 L3,7 Z "
+        L"M9,3 L15,3 L15,5 L9,5 Z "
+        L"M5,8 L19,8 L17.6,21 L6.4,21 Z "
+        L"M8.6,10.6 L9.9,10.6 L10.8,18.6 L9.5,18.6 Z "
+        L"M11.35,10.6 L12.65,10.6 L12.65,18.6 L11.35,18.6 Z "
+        L"M14.1,10.6 L15.4,10.6 L14.5,18.6 L13.2,18.6 Z";
+    std::wstring xaml =
+        L"<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
+        L"Stretch=\"Uniform\" Width=\"" + std::to_wstring(displaySize) + L"\" Height=\"" +
+        std::to_wstring(displaySize) + L"\">"
+        L"<Grid Width=\"24\" Height=\"24\">"
+        L"<Path Data=\"" + data + L"\" Fill=\"" + brush + L"\"/>"
+        L"</Grid></Viewbox>";
+    try {
+        auto element = Markup::XamlReader::Load(xaml).as<FrameworkElement>();
+        element.Name(L"RecycleBinIcon");
+        return element;
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Failed to build recycle bin icon: %08X",
+               static_cast<unsigned int>(ex.code().value));
+        return nullptr;
+    }
+}
+
 // ============================================================================
 // Shared WinUI-flavoured building blocks
 // ============================================================================
 wuxm::SolidColorBrush MakeBrush(uint8_t a, uint8_t r, uint8_t g, uint8_t b) {
     return wuxm::SolidColorBrush(wui::ColorHelper::FromArgb(a, r, g, b));
+}
+
+
+
+// Single source of truth for the user's chosen font colour. Everything that
+// renders text — labels, flyout rows, menu items, search box text, the
+// reorder buttons — pulls from here, so a colour change reaches every
+// surface without each call site having to remember to read g_settings.
+wuxm::SolidColorBrush FontColorBrush(uint8_t alpha = 0xFF) {
+    wui::Color c{};
+    if (!g_settings.fontColor.empty()) {
+        if (TryParseHexColor(g_settings.fontColor, &c) ||
+            TryParseNamedColor(g_settings.fontColor, &c)) {
+            return MakeBrush(alpha, c.R, c.G, c.B);
+        }
+    }
+    return MakeBrush(alpha, 0xFF, 0xFF, 0xFF);
+}
+
+wuxm::SolidColorBrush FontColorBrushDimmed() {
+    wui::Color c{};
+    if (!g_settings.fontColor.empty()) {
+        if (TryParseHexColor(g_settings.fontColor, &c) ||
+            TryParseNamedColor(g_settings.fontColor, &c)) {
+            return MakeBrush(0xAA, c.R, c.G, c.B);
+        }
+    }
+    return MakeBrush(0xAA, 0xFF, 0xFF, 0xFF);
+}
+
+// The user's IconColor as a brush, for FontIcons and any Shape that isn't
+// rebuilt through BuildVectorIcon (which reads the same setting via
+// GetEffectiveIconColorString). Style overrides on TopBarRoot already win
+// through g_iconColorOverride, so this only needs to fall back to the
+// setting, then to plain white.
+wuxm::SolidColorBrush IconColorBrush(uint8_t alpha = 0xFF) {
+    if (g_iconColorOverride) {
+        return MakeBrush(alpha,
+                         g_iconColorOverride->R,
+                         g_iconColorOverride->G,
+                         g_iconColorOverride->B);
+    }
+    wui::Color c{};
+    if (!g_settings.iconColor.empty()) {
+        if (TryParseHexColor(g_settings.iconColor, &c) ||
+            TryParseNamedColor(g_settings.iconColor, &c)) {
+            return MakeBrush(alpha, c.R, c.G, c.B);
+        }
+    }
+    return MakeBrush(alpha, 0xFF, 0xFF, 0xFF);
 }
 
 CornerRadius MakeCorner(double radius) {
@@ -2876,7 +3893,6 @@ wuxc::TextBlock MakeText(PCWSTR name, std::wstring_view text, double size, bool 
     block.Text(winrt::hstring(text));
     block.FontSize(size);
 
-    // Global font family / weight chosen in the settings window.
     if (!g_settings.fontFamily.empty()) {
         try {
             block.FontFamily(wuxm::FontFamily(winrt::hstring(g_settings.fontFamily)));
@@ -2884,6 +3900,13 @@ wuxc::TextBlock MakeText(PCWSTR name, std::wstring_view text, double size, bool 
     }
     if (bold || g_settings.fontBold) {
         block.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+    }
+    if (!g_settings.fontColor.empty()) {
+        wui::Color fontColor{};
+        if (TryParseHexColor(g_settings.fontColor, &fontColor) ||
+            TryParseNamedColor(g_settings.fontColor, &fontColor)) {
+            block.Foreground(MakeBrush(fontColor.A, fontColor.R, fontColor.G, fontColor.B));
+        }
     }
     block.Opacity(opacity);
     block.VerticalAlignment(VerticalAlignment::Center);
@@ -3043,14 +4066,13 @@ wuxm::Imaging::BitmapImage HIconToBitmapImage(HICON hIcon, UINT size) {
         }
     }
 
-    // Tint priority: a global IconColor override wins over everything, then
-    // the per-task IconTint* styles, then no tint.
+    // Bitmap icons (task buttons, Start menu tiles, search results) keep
+    // their native colours. IconColor applies to vector glyphs only, through
+    // ApplyIconColorToElement. Only per-task IconTint* styles tint bitmaps,
+    // via g_iconTintOpacity.
     double tintOpacity = 0.0;
     wui::Color tintColor = g_iconTintColor;
-    if (g_iconColorOverride) {
-        tintColor = *g_iconColorOverride;
-        tintOpacity = 1.0;
-    } else if (g_iconTintOpacity > 0.0) {
+    if (g_iconTintOpacity > 0.0) {
         tintOpacity = std::clamp(g_iconTintOpacity, 0.0, 1.0);
     }
 
@@ -3067,14 +4089,24 @@ wuxm::Imaging::BitmapImage HIconToBitmapImage(HICON hIcon, UINT size) {
         }
     }
 
-    BITMAPFILEHEADER fileHeader{};
-    fileHeader.bfType = 0x4D42;  // "BM"
-    fileHeader.bfSize = static_cast<DWORD>(sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) +
-                                           dataSize);
-    fileHeader.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
+    BITMAPV5HEADER infoHeader{};
+    infoHeader.bV5Size = sizeof(BITMAPV5HEADER);
+    infoHeader.bV5Width = static_cast<LONG>(size);
+    infoHeader.bV5Height = -static_cast<LONG>(size);
+    infoHeader.bV5Planes = 1;
+    infoHeader.bV5BitCount = 32;
+    infoHeader.bV5Compression = BI_BITFIELDS;
+    infoHeader.bV5RedMask = 0x00FF0000;
+    infoHeader.bV5GreenMask = 0x0000FF00;
+    infoHeader.bV5BlueMask = 0x000000FF;
+    infoHeader.bV5AlphaMask = 0xFF000000;
+    infoHeader.bV5CSType = LCS_sRGB;
+    infoHeader.bV5SizeImage = dataSize;
 
-    BITMAPINFOHEADER infoHeader = bmi.bmiHeader;
-    infoHeader.biSizeImage = dataSize;
+    BITMAPFILEHEADER fileHeader{};
+    fileHeader.bfType = 0x4D42;
+    fileHeader.bfSize = static_cast<DWORD>(sizeof(BITMAPFILEHEADER) + sizeof(BITMAPV5HEADER) + dataSize);
+    fileHeader.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPV5HEADER);
 
     try {
         winrt::Windows::Storage::Streams::InMemoryRandomAccessStream stream;
@@ -3089,8 +4121,6 @@ wuxm::Imaging::BitmapImage HIconToBitmapImage(HICON hIcon, UINT size) {
         stream.Seek(0);
 
         wuxm::Imaging::BitmapImage bitmapImage;
-        // Fire-and-forget: blocking on .get() here would risk this UI thread
-        // waiting on its own dispatcher to pump the completion.
         bitmapImage.SetSourceAsync(stream);
         return bitmapImage;
     } catch (winrt::hresult_error const& ex) {
@@ -3101,7 +4131,7 @@ wuxm::Imaging::BitmapImage HIconToBitmapImage(HICON hIcon, UINT size) {
     }
 }
 
-wuxm::Imaging::BitmapImage GetWindowIconBitmap(HWND hwnd, UINT physicalSize) {
+wuxm::Imaging::BitmapImage GetWindowIconBitmap(HWND hwnd, UINT physicalSize) { 
     HICON icon = ExtractCrispWindowIcon(hwnd, physicalSize);
     if (!icon) {
         return nullptr;
@@ -3109,6 +4139,40 @@ wuxm::Imaging::BitmapImage GetWindowIconBitmap(HWND hwnd, UINT physicalSize) {
     auto bitmap = HIconToBitmapImage(icon, physicalSize);
     DestroyIcon(icon);
     return bitmap;
+}
+
+// Resolves any shell parsing name (a .lnk path, an .exe path, or a
+// shell:AppsFolder\<AUMID> UWP identity) to a bitmap at the requested
+// physical size. SHGetFileInfoW cannot handle shell: names, which is why
+// UWP rows in the search results were rendering with no icon; going through
+// IShellItemImageFactory fixes every case in one path.
+wuxm::Imaging::BitmapImage GetShellItemIconBitmap(const std::wstring& parsingPath,
+                                                 UINT sizePx) {
+    if (parsingPath.empty() || sizePx == 0) {
+        return nullptr;
+    }
+    winrt::com_ptr<IShellItemImageFactory> factory;
+    if (SUCCEEDED(SHCreateItemFromParsingName(parsingPath.c_str(), nullptr,
+                                              IID_PPV_ARGS(factory.put()))) &&
+        factory) {
+        HBITMAP bmp = nullptr;
+        SIZE sz{ static_cast<LONG>(sizePx), static_cast<LONG>(sizePx) };
+        if (SUCCEEDED(factory->GetImage(sz, SIIGBF_ICONONLY, &bmp)) && bmp) {
+            ICONINFO ii{};
+            ii.fIcon = TRUE;
+            ii.hbmColor = bmp;
+            ii.hbmMask = CreateBitmap(sz.cx, sz.cy, 1, 1, nullptr);
+            HICON icon = CreateIconIndirect(&ii);
+            if (ii.hbmMask) DeleteObject(ii.hbmMask);
+            DeleteObject(bmp);
+            if (icon) {
+                auto result = HIconToBitmapImage(icon, sizePx);
+                DestroyIcon(icon);
+                return result;
+            }
+        }
+    }
+    return nullptr;
 }
 
 // ============================================================================
@@ -3214,6 +4278,322 @@ void ForceForegroundWindow(HWND hwnd) {
 }
 
 
+// Brings the topbar's XAML island into the foreground so that keystrokes
+// reach our message loop, where DesktopWindowXamlSourceNative2::PreTranslateMessage
+// routes them into the XAML tree. Without this, clicking a text box inside
+// a flyout gives it XAML-level focus but no keyboard input arrives, because
+// the topbar HWND was shown with SW_SHOWNOACTIVATE and never becomes the
+// foreground window. Called from text-input GotFocus handlers only, so it
+// doesn't steal focus from the user's app on every topbar interaction.
+void EnsureTopBarHasKeyboardFocus() {
+    static std::atomic<bool> s_inProgress{false};
+    bool expected = false;
+    if (!s_inProgress.compare_exchange_strong(expected, true)) {
+        return;
+    }
+    struct Guard { std::atomic<bool>* f; ~Guard() { f->store(false); } } guard{&s_inProgress};
+
+    static std::atomic<ULONGLONG> s_lastAttempt{0};
+    ULONGLONG nowTick = GetTickCount64();
+    ULONGLONG lastTick = s_lastAttempt.load();
+    if (nowTick - lastTick < 300) {
+        return;
+    }
+    s_lastAttempt.store(nowTick);
+
+    // (Removed) the aggressive global WS_EX_NOACTIVATE strip. It was
+    // mutating every XAML popup in the process, which destabilised the
+    // WiFi / Weather password views. The strip now only touches the
+    // specific target window just before we try to activate it.
+
+    if (!g_topBarHwnd || !IsWindow(g_topBarHwnd)) {
+        Wh_Log(L"Focus: no topbar hwnd");
+        return;
+    }
+
+    HWND fg = GetForegroundWindow();
+    DWORD fgThread = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
+    DWORD ourThread = GetCurrentThreadId();
+
+    // If a window belonging to this process already owns the foreground
+    // (the topbar popup, the start menu popup, the search popup, or the
+    // settings window), XAML owns the internal activation chain for its
+    // popups. Any SetForegroundWindow / SetActiveWindow call here moves
+    // the active window to a different popup in the same process, which
+    // XAML treats as the open child flyout losing activation and light-
+    // dismisses it. Keystrokes still reach the focused XAML element
+    // through PreTranslateMessage, so nothing needs stealing in this case.
+    if (fg) {
+        DWORD fgPid = 0;
+        GetWindowThreadProcessId(fg, &fgPid);
+        if (fgPid == GetCurrentProcessId()) {
+            Wh_Log(L"Focus: our process already owns foreground (fg=%p), skipping", fg);
+            return;
+        }
+    }
+
+    // Activate our own topbar popup, NOT a child flyout. Child XAML flyout
+    // popups are created on a XAML-internal thread, so SetActiveWindow on
+    // them silently no-ops (log shows sw returning a different HWND). The
+    // failed activation leaves our thread not-foreground, and XAML then
+    // light-dismisses the child flyout it just opened — the "IsOpen=1 but
+    // nothing appears" bug. Activating the topbar popup, which we created
+    // on our UI thread, succeeds; PreTranslateMessage on the topbar island
+    // then routes keys to whichever XAML element has XAML-level focus (the
+    // search box). This is exactly how the WiFi password box works.
+    // Prefer the topmost currently-open XAML child flyout (search, start
+    // menu, a control flyout) as the activation target. When a child flyout
+    // is open, that popup is what XAML considers the current active surface.
+    // Stealing foreground to the parent topbar popup instead tells XAML the
+    // child just lost OS activation, and it responds by light-dismissing it
+    // — the exact close that fires ~8 ms after this function in the log.
+    // Targeting the child keeps XAML's active popup unchanged, so no light-
+    // dismiss occurs while the app behind us still stops receiving keys.
+    HWND target = FindOpenChildFlyoutHwnd();
+    if (!target || !IsWindow(target)) {
+        target = g_topBarPopupHwnd;
+    }
+    if (!target || !IsWindow(target)) {
+        target = g_topBarHwnd;
+    }
+    if (!target || !IsWindow(target)) {
+        Wh_Log(L"Focus: no popup found, leaving foreground alone");
+        return;
+    }
+    Wh_Log(L"Focus: using popup hwnd %p", target);
+
+    // Only skip if we're ALREADY foreground on the right window. Being
+    // foreground on the topbar isn't enough when the popup is the one
+    // that needs to receive keystrokes.
+    if (fg == target) {
+        Wh_Log(L"Focus: already foreground on target, skipping");
+        return;
+    }
+
+    // Do NOT touch the target HWND's style bits — mutating WS_EX_NOACTIVATE
+    // on a XAML popup forces XAML to rebuild its internal activation state,
+    // and every child view (WiFi password box, Weather picker) that XAML
+    // recreates during that rebuild can crash. Stripping the flag is not
+    // required for SetForegroundWindow to succeed; the earlier sfw=0
+    // failures were caused by the wrong target HWND being chosen, not by
+    // this flag.
+
+    DWORD targetThread = GetWindowThreadProcessId(target, nullptr);
+    bool attachedFg = (fgThread && fgThread != ourThread)
+        ? (AttachThreadInput(ourThread, fgThread, TRUE) != FALSE) : false;
+    bool attachedTgt = (targetThread && targetThread != ourThread &&
+                        targetThread != fgThread)
+        ? (AttachThreadInput(ourThread, targetThread, TRUE) != FALSE) : false;
+
+    // Posting WM_NULL to the current foreground thread's queue clears
+    // Windows' "no foreground steal" lock. Without this, the second and
+    // every later activation fails because the lock sees our own popup as
+    // the current owner and refuses to let us hand off to another one.
+    // (Removed) the WM_NULL nudge and the synthetic Alt keypress. Both
+    // disturbed XAML's internal state and caused WiFi / Weather password
+    // views to crash. WiFi and Weather already work because the user
+    // physically clicks into their text fields before we attempt the
+    // activation — Windows' "user just interacted" rule is satisfied by
+    // the click itself, no synthetic input required.
+
+    BOOL sfw = SetForegroundWindow(target);
+
+
+
+    HWND  sw  = nullptr;
+    HWND  sf  = nullptr;
+    if (sfw) {
+        // Only complete the activation change when the foreground steal
+        // succeeded. SetActiveWindow / SetFocus on their own still change
+        // the thread's active-window chain, which XAML reads as "the popup
+        // it currently owns lost activation" and responds to by light-
+        // dismissing the open child flyout — that is what closed the
+        // search flyout 10 ms after ShowAt when sfw=0 in the log.
+        sw = SetActiveWindow(target);
+        sf = SetFocus(target);
+    }
+    Wh_Log(L"Focus: target=%p sfw=%d sw=%p sf=%p fg_before=%p",
+           target, sfw, sw, sf, fg);
+
+    if (attachedTgt) AttachThreadInput(ourThread, targetThread, FALSE);
+    if (attachedFg)  AttachThreadInput(ourThread, fgThread, FALSE);
+
+    // No retry. Activating a specific child flyout popup would itself
+    // change activation and light-dismiss whichever flyout is open. When
+    // the initial steal fails (Windows' ~1 s foreground-lock window after
+    // a previous activation change), the LL keyboard hook remains the
+    // input path so the flyout still receives keystrokes — the worst case
+    // is a harmless extra second of the underlying app seeing the keys.
+}
+
+bool IsWindowFullscreenOnMonitor(HWND hwnd, HMONITOR monitor) {
+    if (!hwnd || !IsWindow(hwnd)) return false;
+
+    wchar_t cls[256]{};
+    if (!GetClassName(hwnd, cls, ARRAYSIZE(cls))) return false;
+    if (wcscmp(cls, L"Progman") == 0 ||
+        wcscmp(cls, L"WorkerW") == 0 ||
+        wcscmp(cls, L"Shell_TrayWnd") == 0 ||
+        wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0 ||
+        wcscmp(cls, L"XamlExplorerHostIslandWindow") == 0 ||
+        wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
+        return false;
+    }
+
+    HWND root = GetAncestor(hwnd, GA_ROOT);
+    if (root && root != hwnd && IsWindow(root)) {
+        if (IsWindowFullscreenOnMonitor(root, monitor)) return true;
+    }
+
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+    if (!GetMonitorInfo(monitor, &mi)) return false;
+
+    RECT r{};
+    HRESULT hr = DwmGetWindowAttribute(
+        hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &r, sizeof(r));
+    if (FAILED(hr)) {
+        if (!GetWindowRect(hwnd, &r)) return false;
+    }
+
+    RECT r2{};
+    if (GetWindowRect(hwnd, &r2)) {
+        r.left   = (std::min)(r.left,   r2.left);
+        r.top    = (std::min)(r.top,    r2.top);
+        r.right  = (std::max)(r.right,  r2.right);
+        r.bottom = (std::max)(r.bottom, r2.bottom);
+    }
+
+    const LONG tol = 16;
+    return r.left   <= mi.rcMonitor.left   + tol &&
+           r.top    <= mi.rcMonitor.top    + tol &&
+           r.right  >= mi.rcMonitor.right  - tol &&
+           r.bottom >= mi.rcMonitor.bottom - tol;
+}
+
+
+// Instead of hiding the bar for fullscreen, push it to the bottom of the
+// z-order. The fullscreen app paints over it, the bar stays live, and there
+// is no hide/show cycle to race against the popup retry timer, DWM
+// composition state, or XAML's own popup re-placement.
+void DemoteTopBarForFullscreen() {
+    // Just drop topmost and push to the bottom of the non-topmost band.
+    // The fullscreen app paints over the bar naturally, so no SW_HIDE and
+    // no DWM cloak are needed. HWND_BOTTOM alone is not enough: if the
+    // fullscreen window is not topmost, the bar would keep its topmost
+    // flag and paint over it — HWND_NOTOPMOST explicitly drops the flag
+    // first, then HWND_BOTTOM places it under everything.
+    if (g_topBarHwnd && IsWindow(g_topBarHwnd)) {
+        SetWindowPos(g_topBarHwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        SetWindowPos(g_topBarHwnd, HWND_BOTTOM, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+    if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+        g_suppressPopupPositionLock = true;
+        SetWindowPos(g_topBarPopupHwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        SetWindowPos(g_topBarPopupHwnd, HWND_BOTTOM, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        g_suppressPopupPositionLock = false;
+    }
+    if (g_islandHwnd && IsWindow(g_islandHwnd)) {
+        SetWindowPos(g_islandHwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        SetWindowPos(g_islandHwnd, HWND_BOTTOM, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+}
+
+void RestoreTopBarZOrder() {
+    BOOL cloakOff = FALSE;
+    if (g_islandHwnd && IsWindow(g_islandHwnd)) {
+        DwmSetWindowAttribute(g_islandHwnd, DWMWA_CLOAK, &cloakOff, sizeof(cloakOff));
+    }
+    if (g_topBarHwnd && IsWindow(g_topBarHwnd)) {
+        DwmSetWindowAttribute(g_topBarHwnd, DWMWA_CLOAK, &cloakOff, sizeof(cloakOff));
+        if (!IsWindowVisible(g_topBarHwnd)) {
+            ShowWindow(g_topBarHwnd, SW_SHOWNOACTIVATE);
+        }
+        SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    }
+    if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+        DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK, &cloakOff, sizeof(cloakOff));
+        if (!IsWindowVisible(g_topBarPopupHwnd)) {
+            ShowWindow(g_topBarPopupHwnd, SW_SHOWNOACTIVATE);
+        }
+        g_suppressPopupPositionLock = true;
+        SetWindowPos(g_topBarPopupHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        g_suppressPopupPositionLock = false;
+    }
+}
+
+bool IsAnyFullscreenActive() {
+    static const ULONGLONG kBootGraceMs = 30000;
+    if (g_barStartTick != 0 &&
+        (GetTickCount64() - g_barStartTick) < kBootGraceMs) {
+        return false;
+    }
+
+    QUERY_USER_NOTIFICATION_STATE state = QUNS_ACCEPTS_NOTIFICATIONS;
+    if (SUCCEEDED(SHQueryUserNotificationState(&state))) {
+        if (state == QUNS_RUNNING_D3D_FULL_SCREEN ||
+            state == QUNS_PRESENTATION_MODE) {
+            return true;
+        }
+    }
+
+    HWND fg = GetForegroundWindow();
+    if (!fg) return false;
+    if (fg == g_topBarHwnd || fg == g_topBarPopupHwnd || fg == g_islandHwnd) {
+        return false;
+    }
+    wchar_t cls[256]{};
+    if (GetClassName(fg, cls, ARRAYSIZE(cls))) {
+        if (wcscmp(cls, L"Progman") == 0 || wcscmp(cls, L"WorkerW") == 0 ||
+            wcscmp(cls, L"Shell_TrayWnd") == 0 ||
+            wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0 ||
+            wcscmp(cls, L"XamlExplorerHostIslandWindow") == 0 ||
+            wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0 ||
+            wcscmp(cls, L"LogonUI") == 0 ||
+            wcscmp(cls, L"LockApp") == 0) {
+            return false;
+        }
+    }
+
+    // Process-name exclusion. LogonUI.exe, LockApp.exe and winlogon.exe own
+    // the monitor-sized surfaces the user sees before logging in and while
+    // the session is locked; the geometry check alone cannot tell them apart
+    // from a real fullscreen app.
+    DWORD pid = 0;
+    GetWindowThreadProcessId(fg, &pid);
+    if (pid) {
+        HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (proc) {
+            wchar_t path[MAX_PATH]{};
+            DWORD size = ARRAYSIZE(path);
+            bool ok = QueryFullProcessImageNameW(proc, 0, path, &size) != FALSE;
+            CloseHandle(proc);
+            if (ok) {
+                std::wstring exe = path;
+                size_t slash = exe.find_last_of(L"\\/");
+                if (slash != std::wstring::npos) exe.erase(0, slash + 1);
+                std::wstring exeLower = ToLowerCopy(exe);
+                if (exeLower == L"logonui.exe" ||
+                    exeLower == L"lockapp.exe" ||
+                    exeLower == L"winlogon.exe") {
+                    return false;
+                }
+            }
+        }
+    }
+
+    HMONITOR mon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+    return IsWindowFullscreenOnMonitor(fg, mon);
+}
+
 void CALLBACK ForegroundEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
                                   LONG idChild, DWORD, DWORD) {
     if (event != EVENT_SYSTEM_FOREGROUND || idObject != OBJID_WINDOW ||
@@ -3225,7 +4605,47 @@ void CALLBACK ForegroundEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG id
     if (pid == GetCurrentProcessId()) {
         return;
     }
+
+    // The shell's Start menu / Search windows become foreground windows
+    // when they open, and EVENT_SYSTEM_FOREGROUND fires reliably for that
+    // even on builds where the shell's XAML host does not emit
+    // EVENT_OBJECT_SHOW for the same window. Run the same process-name
+    // check here as a second kill path.
+    try { KillNativeShellHostIfOursOpen(hwnd); } catch (...) {}
+
     g_lastForegroundHwnd = hwnd;
+
+    if (g_anyChildFlyoutOpen.load()) {
+        try { PromoteChildFlyoutPopups(); } catch (...) {}
+        bool isTypingSurfaceOpen = false;
+        try {
+            if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) isTypingSurfaceOpen = true;
+            if (g_searchFlyout && g_searchFlyout.IsOpen()) isTypingSurfaceOpen = true;
+        } catch (...) {}
+        if (!isTypingSurfaceOpen && !g_settings.disableFlyoutAutoClose) { 
+            ULONGLONG lastForeign = g_lastForeignClickTick.load();
+            ULONGLONG now = GetTickCount64();
+            if (lastForeign != 0 && (now - lastForeign) < 1000) {
+                RunOnUiThread([] {
+                    try { CloseAnyOpenChildFlyout(); } catch (...) {}
+                });
+            }
+        }
+    }
+
+    // Instant fullscreen detection. The restore timer also handles this
+    // every tick, but hooking the foreground-change event here gives a
+    // snappy hide the instant a fullscreen app comes up.
+    try {
+        if (IsAnyFullscreenActive()) {
+            RunOnUiThread([] {
+                try {
+                    g_fullScreenAppActive = true;
+                    DemoteTopBarForFullscreen();
+                } catch (...) {}
+            });
+        }
+    } catch (...) {}
 
     if (g_settings.centerContent == L"applicationButtons") {
         RunOnUiThread([] {
@@ -3250,7 +4670,8 @@ void CALLBACK ForegroundEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG id
                 }
                 BOOL cloaked = FALSE;
                 if (SUCCEEDED(DwmGetWindowAttribute(g_topBarHwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked) {
-                    DwmSetWindowAttribute(g_topBarHwnd, DWMWA_CLOAK, FALSE, sizeof(BOOL));
+                    BOOL cloakOff = FALSE;
+                    DwmSetWindowAttribute(g_topBarHwnd, DWMWA_CLOAK, &cloakOff, sizeof(cloakOff));
                 }
                 // Force topmost so the desktop can't cover the bar
                 SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
@@ -3357,6 +4778,9 @@ void ActivateTaskWindow(HWND hwnd) {
 
 wuxc::Button CreateTaskButton(HWND hwnd, const std::wstring& title) {
     auto button = MakeGhostButton(L"TaskButton", g_settings.cornerRadius);
+    // See BuildTopBarContent for why topbar-level buttons are removed
+    // from tab navigation.
+    button.IsTabStop(false);
     button.Content(BuildTaskButtonContent(hwnd, title));
     button.MaxWidth(g_settings.taskButtonWidth);  // max width from settings
     button.ClearValue(FrameworkElement::WidthProperty()); // auto width by default
@@ -3435,14 +4859,19 @@ wuxc::Button CreateTaskButton(HWND hwnd, const std::wstring& title) {
                 if (!IsWindow(hwnd)) {
                     return;
                 }
-                ToggleMaximizeWindow(hwnd);
+                // See the equivalent handler in BuildTopBarContent for why
+                // this is deferred to a background thread.
+                RunInBackground([hwnd] {
+                    try { ToggleMaximizeWindow(hwnd); } catch (...) {}
+                });
             } catch (...) {
             }
         });
 
     button.RightTapped(
-        [](wf::IInspectable const& sender, Input::RightTappedRoutedEventArgs const&) {
+        [](wf::IInspectable const& sender, Input::RightTappedRoutedEventArgs const& args) {
             try {
+                args.Handled(true);
                 if (!g_taskContextMenu) {
                     return;
                 }
@@ -3759,6 +5188,7 @@ void RefreshApplicationButtons() {
     g_taskListPanel.Children().Clear();
 
     auto titleBtn = MakeGhostButton(L"AppTitleButton", g_settings.cornerRadius);
+    titleBtn.IsTabStop(false);
     titleBtn.VerticalAlignment(VerticalAlignment::Stretch);
     titleBtn.Margin(Thickness{3, 4, 3, 4});
     titleBtn.Padding(Thickness{10, 0, 10, 0});
@@ -4253,6 +5683,203 @@ std::vector<SessionInfo> EnumerateSessions() {
 }  // namespace audio
 
 // ============================================================================
+// Audio visualizer (WASAPI loopback + FFT)
+// Captures the default render endpoint in loopback mode, runs a 1024-point
+// FFT on each frame, folds the magnitudes into 24 log-spaced bands. Feeds
+// both the flyout visualizer and the optional topbar-button mini visualizer.
+// ============================================================================
+
+namespace visualizer {
+
+constexpr int kFFT_N = 1024;
+constexpr int kBandCount = 24;
+
+void FFT(float* re, float* im, int n) {
+    for (int i = 1, j = 0; i < n; i++) {
+        int bit = n >> 1;
+        for (; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if (i < j) { std::swap(re[i], re[j]); std::swap(im[i], im[j]); }
+    }
+    for (int len = 2; len <= n; len <<= 1) {
+        double ang = -2.0 * 3.14159265358979323846 / len;
+        float wRe = (float)cos(ang), wIm = (float)sin(ang);
+        for (int i = 0; i < n; i += len) {
+            float cRe = 1, cIm = 0;
+            for (int j = 0; j < len / 2; j++) {
+                float uRe = re[i + j], uIm = im[i + j];
+                float vRe = re[i + j + len/2] * cRe - im[i + j + len/2] * cIm;
+                float vIm = re[i + j + len/2] * cIm + im[i + j + len/2] * cRe;
+                re[i + j] = uRe + vRe; im[i + j] = uIm + vIm;
+                re[i + j + len/2] = uRe - vRe; im[i + j + len/2] = uIm - vIm;
+                float nRe = cRe * wRe - cIm * wIm;
+                cIm = cRe * wIm + cIm * wRe;
+                cRe = nRe;
+            }
+        }
+    }
+}
+
+std::atomic<bool> g_captureRunning{false};
+std::atomic<bool> g_stopCapture{false};
+HANDLE g_captureThread = nullptr;
+DWORD  g_captureThreadId = 0;
+HANDLE g_captureWake = nullptr;
+std::mutex g_bandsMutex;
+float g_bands[kBandCount] = {0};
+
+void ComputeBands(const float* samples, int n, float* outBands) {
+    float re[kFFT_N] = {0}, im[kFFT_N] = {0};
+    for (int i = 0; i < n; i++) {
+        float w = 0.5f * (1.0f - cosf(2.0f * 3.14159265f * i / (n - 1)));
+        re[i] = samples[i] * w;
+    }
+    FFT(re, im, kFFT_N);
+    const float sr = 48000.0f;
+    const float minF = 50.0f;
+    const float maxF = 16000.0f;
+    for (int b = 0; b < kBandCount; b++) {
+        float f0 = minF * powf(maxF / minF, (float)b / kBandCount);
+        float f1 = minF * powf(maxF / minF, (float)(b + 1) / kBandCount);
+        int i0 = (int)(f0 * kFFT_N / sr);
+        int i1 = (int)(f1 * kFFT_N / sr);
+        if (i0 < 1) i0 = 1;
+        if (i1 <= i0) i1 = i0 + 1;
+        if (i1 > kFFT_N / 2) i1 = kFFT_N / 2;
+        float sum = 0;
+        for (int i = i0; i < i1; i++) sum += sqrtf(re[i] * re[i] + im[i] * im[i]);
+        float avg = sum / (i1 - i0);
+        float val = avg * 0.05f * (1.0f + b * 0.08f);
+        if (val > 1.0f) val = 1.0f;
+        outBands[b] = val;
+    }
+}
+
+DWORD WINAPI CaptureThreadProc(LPVOID) {
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    winrt::com_ptr<IMMDeviceEnumerator> enumerator;
+    winrt::com_ptr<IMMDevice> device;
+    winrt::com_ptr<IAudioClient> client;
+    winrt::com_ptr<IAudioCaptureClient> capture;
+    WAVEFORMATEX* mixFormat = nullptr;
+    int channels = 2;
+    HANDLE wake = nullptr;
+    bool ok = false;
+    do {
+        if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                    IID_PPV_ARGS(enumerator.put())))) break;
+        if (FAILED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole, device.put()))) break;
+        if (FAILED(device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr,
+                                    client.put_void()))) break;
+        if (FAILED(client->GetMixFormat(&mixFormat)) || !mixFormat) break;
+        if (mixFormat->nChannels >= 1) channels = mixFormat->nChannels;
+        if (FAILED(client->Initialize(AUDCLNT_SHAREMODE_SHARED,
+                                      AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+                                      10000000, 0, mixFormat, nullptr))) {
+            CoTaskMemFree(mixFormat); mixFormat = nullptr; break;
+        }
+        CoTaskMemFree(mixFormat); mixFormat = nullptr;
+        if (FAILED(client->GetService(IID_PPV_ARGS(capture.put())))) break;
+        wake = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        if (!wake) break;
+        if (FAILED(client->SetEventHandle(wake))) break;
+        if (FAILED(client->Start())) break;
+        g_captureWake = wake;
+        ok = true;
+    } while (false);
+    if (mixFormat) CoTaskMemFree(mixFormat);
+
+    if (!ok) {
+        if (wake) CloseHandle(wake);
+        g_captureWake = nullptr;
+        capture = nullptr;
+        client = nullptr;
+        device = nullptr;
+        enumerator = nullptr;
+        g_captureRunning = false;
+        CoUninitialize();
+        return 1;
+    }
+
+    float sampleBuf[kFFT_N];
+    int sampleCount = 0;
+
+    while (!g_stopCapture.load()) {
+        DWORD wr = WaitForSingleObject(wake, 100);
+        if (wr != WAIT_OBJECT_0) continue;
+        UINT32 packet = 0;
+        if (FAILED(capture->GetNextPacketSize(&packet))) break;
+        while (packet > 0 && !g_stopCapture.load()) {
+            BYTE* data = nullptr;
+            UINT32 frames = 0;
+            DWORD flags = 0;
+            if (FAILED(capture->GetBuffer(&data, &frames, &flags, nullptr, nullptr))) break;
+            if (frames > 0 && data && !(flags & AUDCLNT_BUFFERFLAGS_SILENT)) {
+                float* f = (float*)data;
+                for (UINT32 i = 0; i < frames; i++) {
+                    float s = f[i * channels];
+                    sampleBuf[sampleCount++] = s;
+                    if (sampleCount >= kFFT_N) {
+                        float bands[kBandCount];
+                        ComputeBands(sampleBuf, kFFT_N, bands);
+                        {
+                            std::lock_guard<std::mutex> lk(g_bandsMutex);
+                            for (int b = 0; b < kBandCount; b++) g_bands[b] = bands[b];
+                        }
+                        sampleCount = 0;
+                    }
+                }
+            }
+            capture->ReleaseBuffer(frames);
+            if (FAILED(capture->GetNextPacketSize(&packet))) break;
+        }
+    }
+
+    if (client) {
+        try { client->Stop(); } catch (...) {}
+    }
+    if (wake) CloseHandle(wake);
+    g_captureWake = nullptr;
+    capture = nullptr;
+    client = nullptr;
+    device = nullptr;
+    enumerator = nullptr;
+    g_captureRunning = false;
+    CoUninitialize();
+    return 0;
+}
+
+void Start() {
+    if (g_captureRunning.exchange(true)) return;
+    g_stopCapture = false;
+    if (g_captureThread) {
+        WaitForSingleObject(g_captureThread, 100);
+        CloseHandle(g_captureThread);
+        g_captureThread = nullptr;
+    }
+    g_captureThread = CreateThread(nullptr, 0, CaptureThreadProc, nullptr, 0, &g_captureThreadId);
+    if (!g_captureThread) g_captureRunning = false;
+}
+
+void Stop() {
+    if (!g_captureRunning.exchange(false)) return;
+    g_stopCapture = true;
+    if (g_captureWake) SetEvent(g_captureWake);
+    if (g_captureThread) {
+        WaitForSingleObject(g_captureThread, 2000);
+        CloseHandle(g_captureThread);
+        g_captureThread = nullptr;
+    }
+}
+
+void GetBands(float* out, int count) {
+    std::lock_guard<std::mutex> lk(g_bandsMutex);
+    for (int i = 0; i < count && i < kBandCount; i++) out[i] = g_bands[i];
+}
+
+}  // namespace visualizer
+
+// ============================================================================
 // Brightness subsystem
 //
 // Internal laptop panels answer to WMI (root\WMI, WmiSetBrightness); external
@@ -4576,6 +6203,197 @@ bool Available() {
     return g_backend != Backend::None;
 }
 
+struct MonitorEntry {
+    HMONITOR hmonitor = nullptr;
+    std::wstring name;
+    RECT rect{};
+    int percent = 50;
+    bool controllable = false;
+    DWORD vcpMax = 100;
+};
+
+std::map<std::wstring, std::wstring> QueryWmiMonitorNames() {
+    std::map<std::wstring, std::wstring> names;
+    winrt::com_ptr<IWbemLocator> locator;
+    if (FAILED(CoCreateInstance(kCLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER,
+                                kIID_IWbemLocator, locator.put_void()))) {
+        return names;
+    }
+    BSTR ns = SysAllocString(L"root\\WMI");
+    winrt::com_ptr<IWbemServices> services;
+    HRESULT hr = locator->ConnectServer(ns, nullptr, nullptr, nullptr, 0,
+                                        nullptr, nullptr, services.put());
+    SysFreeString(ns);
+    if (FAILED(hr) || !services) {
+        return names;
+    }
+    CoSetProxyBlanket(services.get(), RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
+                      RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
+    BSTR lang = SysAllocString(L"WQL");
+    BSTR query = SysAllocString(L"SELECT InstanceName, UserFriendlyName FROM WmiMonitorID");
+    winrt::com_ptr<IEnumWbemClassObject> enumerator;
+    if (SUCCEEDED(services->ExecQuery(lang, query,
+            WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr, enumerator.put()))) {
+        IWbemClassObject* obj = nullptr;
+        ULONG returned = 0;
+        while (SUCCEEDED(enumerator->Next(2000, 1, &obj, &returned)) && returned && obj) {
+            std::wstring inst;
+            VARIANT vInst;
+            VariantInit(&vInst);
+            if (SUCCEEDED(obj->Get(L"InstanceName", 0, &vInst, nullptr, nullptr)) &&
+                vInst.vt == VT_BSTR && vInst.bstrVal) {
+                inst = vInst.bstrVal;
+            }
+            VariantClear(&vInst);
+
+            std::wstring friendly;
+            VARIANT vName;
+            VariantInit(&vName);
+            if (SUCCEEDED(obj->Get(L"UserFriendlyName", 0, &vName, nullptr, nullptr)) &&
+                (vName.vt & VT_ARRAY) && vName.parray) {
+                SAFEARRAY* sa = vName.parray;
+                VARTYPE elem = static_cast<VARTYPE>(vName.vt & VT_TYPEMASK);
+                LONG lb = 0, ub = -1;
+                SafeArrayGetLBound(sa, 1, &lb);
+                SafeArrayGetUBound(sa, 1, &ub);
+                for (LONG i = lb; i <= ub; ++i) {
+                    LONG ch = 0;
+                    if (elem == VT_UI1) {
+                        BYTE b = 0;
+                        if (FAILED(SafeArrayGetElement(sa, &i, &b))) break;
+                        ch = b;
+                    } else if (elem == VT_I2 || elem == VT_UI2) {
+                        SHORT w = 0;
+                        if (FAILED(SafeArrayGetElement(sa, &i, &w))) break;
+                        ch = static_cast<unsigned short>(w);
+                    } else {
+                        if (FAILED(SafeArrayGetElement(sa, &i, &ch))) break;
+                    }
+                    if (ch == 0) break;
+                    friendly.push_back(static_cast<wchar_t>(ch));
+                }
+            }
+            VariantClear(&vName);
+
+            if (!inst.empty() && !friendly.empty()) {
+                std::wstring key = inst;
+                if (key.size() > 2 && key.compare(key.size() - 2, 2, L"_0") == 0) {
+                    key.erase(key.size() - 2);
+                }
+                std::transform(key.begin(), key.end(), key.begin(),
+                    [](wchar_t c) { return static_cast<wchar_t>(towlower(c)); });
+                names.emplace(std::move(key), std::move(friendly));
+            }
+            obj->Release();
+        }
+    }
+    SysFreeString(lang);
+    SysFreeString(query);
+    return names;
+}
+
+std::wstring NormaliseEdidPath(std::wstring s) {
+    if (s.rfind(L"\\\\?\\", 0) == 0) s.erase(0, 4);
+    size_t hash = s.rfind(L'#');
+    if (hash != std::wstring::npos) s.erase(hash);
+    std::replace(s.begin(), s.end(), L'#', L'\\');
+    std::transform(s.begin(), s.end(), s.begin(),
+        [](wchar_t c) { return static_cast<wchar_t>(towlower(c)); });
+    return s;
+}
+
+std::vector<MonitorEntry> EnumerateMonitorsForFlyout() {
+    std::vector<MonitorEntry> out;
+    const Dxva2& api = GetDxva2();
+    std::map<std::wstring, std::wstring> wmiNames = QueryWmiMonitorNames();
+
+    std::vector<HMONITOR> handles;
+    EnumDisplayMonitors(nullptr, nullptr,
+        [](HMONITOR h, HDC, LPRECT, LPARAM lp) -> BOOL {
+            reinterpret_cast<std::vector<HMONITOR>*>(lp)->push_back(h);
+            return TRUE;
+        }, reinterpret_cast<LPARAM>(&handles));
+
+    for (HMONITOR h : handles) {
+        MONITORINFOEXW mi{};
+        mi.cbSize = sizeof(mi);
+        if (!GetMonitorInfoW(h, &mi)) continue;
+
+        MonitorEntry e;
+        e.hmonitor = h;
+        e.rect = mi.rcMonitor;
+
+        DISPLAY_DEVICEW dd{};
+        dd.cb = sizeof(dd);
+        std::wstring edidPath;
+        if (EnumDisplayDevicesW(mi.szDevice, 0, &dd, EDD_GET_DEVICE_INTERFACE_NAME)) {
+            edidPath = dd.DeviceID;
+        }
+        auto nm = wmiNames.find(NormaliseEdidPath(edidPath));
+        if (nm != wmiNames.end()) e.name = nm->second;
+
+        if (e.name.empty()) {
+            DISPLAY_DEVICEW dd2{};
+            dd2.cb = sizeof(dd2);
+            if (EnumDisplayDevicesW(mi.szDevice, 0, &dd2, 0) && dd2.DeviceString[0]) {
+                e.name = dd2.DeviceString;
+            }
+        }
+        if (e.name.empty()) e.name = mi.szDevice;
+
+        if (api.valid()) {
+            DWORD count = 0;
+            if (api.getCount(h, &count) && count > 0) {
+                std::vector<PHYSICAL_MONITOR> physical(count);
+                if (api.getMonitors(h, count, physical.data())) {
+                    for (DWORD i = 0; i < count; ++i) {
+                        DWORD minimum = 0, current = 0, maximum = 0;
+                        if (api.get(physical[i].hPhysicalMonitor, &minimum, &current, &maximum) &&
+                            maximum > minimum) {
+                            e.percent = static_cast<int>(
+                                (current - minimum) * 100 / (maximum - minimum));
+                            e.vcpMax = maximum - minimum;
+                            e.controllable = true;
+                            break;
+                        }
+                    }
+                    api.destroy(count, physical.data());
+                }
+            }
+        }
+
+        out.push_back(std::move(e));
+    }
+
+    std::sort(out.begin(), out.end(),
+              [](const MonitorEntry& a, const MonitorEntry& b) {
+                  if (a.rect.left != b.rect.left) return a.rect.left < b.rect.left;
+                  return a.rect.top < b.rect.top;
+              });
+    return out;
+}
+
+void SetMonitorBrightnessPercent(HMONITOR monitor, int percent) {
+    if (!monitor) return;
+    const Dxva2& api = GetDxva2();
+    if (!api.valid()) return;
+    DWORD count = 0;
+    if (!api.getCount(monitor, &count) || count == 0) return;
+    std::vector<PHYSICAL_MONITOR> physical(count);
+    if (!api.getMonitors(monitor, count, physical.data())) return;
+    for (DWORD i = 0; i < count; ++i) {
+        DWORD minimum = 0, current = 0, maximum = 0;
+        if (api.get(physical[i].hPhysicalMonitor, &minimum, &current, &maximum) &&
+            maximum > minimum) {
+            DWORD target = minimum + (maximum - minimum) *
+                           static_cast<DWORD>(std::clamp(percent, 0, 100)) / 100;
+            api.set(physical[i].hPhysicalMonitor, target);
+            break;
+        }
+    }
+    api.destroy(count, physical.data());
+}
+
 }  // namespace brightness
 
 // ============================================================================
@@ -4607,12 +6425,12 @@ void SetAppsDarkMode(bool dark) {
     RegSetValueEx(key, L"SystemUsesLightTheme", 0, REG_DWORD,
                   reinterpret_cast<const BYTE*>(&value), sizeof(value));
     RegCloseKey(key);
-    // Broadcast so already-running apps repaint, the same notification the
-    // Settings app sends.
-    DWORD_PTR result = 0;
-    SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
-                       reinterpret_cast<LPARAM>(L"ImmersiveColorSet"), SMTO_ABORTIFHUNG, 200,
-                       &result);
+    RunInBackground([] {
+        DWORD_PTR result = 0;
+        SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
+                           reinterpret_cast<LPARAM>(L"ImmersiveColorSet"),
+                           SMTO_ABORTIFHUNG, 200, &result);
+    });
 }
 
 
@@ -5503,6 +7321,411 @@ bool SetConnected(const BLUETOOTH_ADDRESS& address, bool connect) {
 
 }  // namespace bluetooth
 
+wuxm::Imaging::BitmapImage CaptureScreenRect(const RECT& bounds);
+winrt::com_ptr<IUIAutomation> GetCachedUIA();
+
+namespace systray {
+
+struct TrayEntry {
+    std::wstring name;
+    RECT screenRect{};
+    wuxm::Imaging::BitmapImage image{nullptr};
+    winrt::com_ptr<IUIAutomationElement> element{nullptr};
+};
+
+struct NamedCondition {
+    winrt::com_ptr<IUIAutomationCondition> cond;
+    VARIANT var{};
+
+    NamedCondition(IUIAutomation* uia, int propId, const wchar_t* value) {
+        VariantInit(&var);
+        var.vt = VT_BSTR;
+        var.bstrVal = SysAllocString(value);
+        if (uia) uia->CreatePropertyCondition(propId, var, cond.put());
+    }
+
+    ~NamedCondition() { VariantClear(&var); }
+
+    NamedCondition(const NamedCondition&) = delete;
+    NamedCondition& operator=(const NamedCondition&) = delete;
+
+    IUIAutomationCondition* get() const { return cond.get(); }
+};
+
+winrt::com_ptr<IUIAutomationElement> GetDesktopRoot() {
+    auto uia = GetCachedUIA();
+    if (!uia) return nullptr;
+    winrt::com_ptr<IUIAutomationElement> root;
+    uia->GetRootElement(root.put());
+    return root;
+}
+
+std::vector<HWND> FindAllTaskbarWindows() {
+    std::vector<HWND> result;
+    HWND primary = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (primary) result.push_back(primary);
+
+    HWND secondary = nullptr;
+    do {
+        secondary = FindWindowExW(nullptr, secondary, L"Shell_SecondaryTrayWnd",
+                                  nullptr);
+        if (secondary) result.push_back(secondary);
+    } while (secondary);
+    return result;
+}
+
+std::vector<TrayEntry> EnumerateFromElement(
+        IUIAutomation* uia, IUIAutomationElement* rootEl,
+        const std::wstring& tag) {
+    std::vector<TrayEntry> entries;
+    if (!uia || !rootEl) return entries;
+
+    winrt::com_ptr<IUIAutomationElementArray> children;
+
+    {
+        VARIANT idVar;
+        VariantInit(&idVar);
+        idVar.vt = VT_BSTR;
+        idVar.bstrVal = SysAllocString(L"NotifyItemIcon");
+        winrt::com_ptr<IUIAutomationCondition> cond;
+        uia->CreatePropertyCondition(UIA_AutomationIdPropertyId, idVar, cond.put());
+        VariantClear(&idVar);
+        if (cond) {
+            rootEl->FindAll(TreeScope_Descendants, cond.get(), children.put());
+        }
+    }
+
+    if (!children || (children && [&] {
+            int c = 0;
+            children->get_Length(&c);
+            return c == 0;
+        }())) {
+        children = nullptr;
+        VARIANT clsVar;
+        VariantInit(&clsVar);
+        clsVar.vt = VT_BSTR;
+        clsVar.bstrVal = SysAllocString(L"SystemTray.NotifyIconView");
+        winrt::com_ptr<IUIAutomationCondition> cond;
+        uia->CreatePropertyCondition(UIA_ClassNamePropertyId, clsVar, cond.put());
+        VariantClear(&clsVar);
+        if (cond) {
+            rootEl->FindAll(TreeScope_Descendants, cond.get(), children.put());
+        }
+    }
+
+    if (!children || (children && [&] {
+            int c = 0;
+            children->get_Length(&c);
+            return c == 0;
+        }())) {
+        children = nullptr;
+        VARIANT idVar;
+        VariantInit(&idVar);
+        idVar.vt = VT_BSTR;
+        idVar.bstrVal = SysAllocString(L"NotificationAreaIcons");
+        winrt::com_ptr<IUIAutomationCondition> containerCond;
+        uia->CreatePropertyCondition(UIA_AutomationIdPropertyId, idVar, containerCond.put());
+        VariantClear(&idVar);
+        if (containerCond) {
+            winrt::com_ptr<IUIAutomationElement> container;
+            if (SUCCEEDED(rootEl->FindFirst(TreeScope_Descendants,
+                                            containerCond.get(),
+                                            container.put())) && container) {
+                VARIANT iconIdVar;
+                VariantInit(&iconIdVar);
+                iconIdVar.vt = VT_BSTR;
+                iconIdVar.bstrVal = SysAllocString(L"NotifyItemIcon");
+                winrt::com_ptr<IUIAutomationCondition> iconCond;
+                uia->CreatePropertyCondition(UIA_AutomationIdPropertyId,
+                                             iconIdVar, iconCond.put());
+                VariantClear(&iconIdVar);
+                if (iconCond) {
+                    container->FindAll(TreeScope_Descendants,
+                                       iconCond.get(), children.put());
+                }
+            }
+        }
+    }
+
+    if (!children) {
+        VARIANT btnVar;
+        VariantInit(&btnVar);
+        btnVar.vt = VT_I4;
+        btnVar.lVal = UIA_ButtonControlTypeId;
+        winrt::com_ptr<IUIAutomationCondition> btnCond;
+        uia->CreatePropertyCondition(UIA_ControlTypePropertyId, btnVar,
+                                     btnCond.put());
+        VariantClear(&btnVar);
+        if (btnCond) {
+            rootEl->FindAll(TreeScope_Descendants, btnCond.get(),
+                            children.put());
+        }
+    }
+
+    if (!children) {
+        Wh_Log(L"tray[%s]: no children array", tag.c_str());
+        return entries;
+    }
+
+    int count = 0;
+    if (FAILED(children->get_Length(&count)) || count <= 0) {
+        Wh_Log(L"tray[%s]: 0 candidates", tag.c_str());
+        return entries;
+    }
+    Wh_Log(L"tray[%s]: %d candidates", tag.c_str(), count);
+
+    RECT monitorRect = GetBarMonitorRect();
+
+    for (int i = 0; i < count; i++) {
+        winrt::com_ptr<IUIAutomationElement> child;
+        if (FAILED(children->GetElement(i, child.put())) || !child) continue;
+
+        BSTR nameRaw = nullptr;
+        child->get_CurrentName(&nameRaw);
+        std::wstring name = nameRaw ? nameRaw : L"";
+        if (nameRaw) SysFreeString(nameRaw);
+
+        BSTR clsRaw = nullptr;
+        child->get_CurrentClassName(&clsRaw);
+        std::wstring cls = clsRaw ? clsRaw : L"";
+        if (clsRaw) SysFreeString(clsRaw);
+
+        BSTR idRaw = nullptr;
+        child->get_CurrentAutomationId(&idRaw);
+        std::wstring aid = idRaw ? idRaw : L"";
+        if (idRaw) SysFreeString(idRaw);
+
+        RECT rect{};
+        if (FAILED(child->get_CurrentBoundingRectangle(&rect))) continue;
+        if (rect.right <= rect.left || rect.bottom <= rect.top) continue;
+        int w = rect.right - rect.left;
+        int h = rect.bottom - rect.top;
+        if (w > 200 || h > 200) continue;
+        if (w < 4 || h < 4) continue;
+        if (rect.left < monitorRect.left || rect.right > monitorRect.right ||
+            rect.top < monitorRect.top || rect.bottom > monitorRect.bottom) {
+            continue;
+        }
+
+        Wh_Log(L"tray[%s]: icon cls=%s aid=%s name=%s rect=%ld,%ld,%ld,%ld",
+               tag.c_str(), cls.c_str(), aid.c_str(), name.c_str(),
+               rect.left, rect.top, rect.right, rect.bottom);
+
+        TrayEntry entry;
+        entry.name = name.empty() ? cls : name;
+        entry.screenRect = rect;
+        entry.element = child;
+        try {
+            entry.image = CaptureScreenRect(rect);
+        } catch (...) {}
+        entries.push_back(std::move(entry));
+    }
+
+    return entries;
+}
+
+std::vector<TrayEntry> EnumerateFromRoot(IUIAutomation* uia) {
+    std::vector<TrayEntry> entries;
+    if (!uia) return entries;
+
+    winrt::com_ptr<IUIAutomationElement> root;
+    if (FAILED(uia->GetRootElement(root.put())) || !root) {
+        Wh_Log(L"tray[root]: GetRootElement failed");
+        return entries;
+    }
+
+    RECT monitorRect = GetBarMonitorRect();
+    UINT iconPx = static_cast<UINT>(16.0 * GetBarDpiScale() + 0.5);
+    if (iconPx < 16) iconPx = 16;
+
+    // The tray icons on Windows 11 live inside a ToolBar named
+    // "User Promoted Notification Area" (or occasionally
+    // "System Promoted Notification Area"). We find that ToolBar by
+    // name and then enumerate its child Buttons.
+    const wchar_t* kNotificationAreaNames[] = {
+        L"User Promoted Notification Area",
+        L"System Promoted Notification Area",
+    };
+
+    for (const wchar_t* areaName : kNotificationAreaNames) {
+        VARIANT nv; VariantInit(&nv); nv.vt = VT_BSTR;
+        nv.bstrVal = SysAllocString(areaName);
+        winrt::com_ptr<IUIAutomationCondition> nameCond;
+        uia->CreatePropertyCondition(UIA_NamePropertyId, nv, nameCond.put());
+        VariantClear(&nv);
+
+        winrt::com_ptr<IUIAutomationElement> areaEl;
+        if (FAILED(root->FindFirst(TreeScope_Descendants, nameCond.get(),
+                                   areaEl.put())) || !areaEl) {
+            Wh_Log(L"tray[root]: '%s' not found", areaName);
+            continue;
+        }
+        Wh_Log(L"tray[root]: found '%s'", areaName);
+
+        VARIANT btnVar; VariantInit(&btnVar); btnVar.vt = VT_I4;
+        btnVar.lVal = UIA_ButtonControlTypeId;
+        winrt::com_ptr<IUIAutomationCondition> btnCond;
+        uia->CreatePropertyCondition(UIA_ControlTypePropertyId, btnVar,
+                                     btnCond.put());
+        VariantClear(&btnVar);
+
+        winrt::com_ptr<IUIAutomationElementArray> arr;
+        if (FAILED(areaEl->FindAll(TreeScope_Descendants, btnCond.get(),
+                                   arr.put())) || !arr) {
+            continue;
+        }
+        int count = 0;
+        if (FAILED(arr->get_Length(&count)) || count <= 0) {
+            Wh_Log(L"tray[root/%s]: 0 buttons", areaName);
+            continue;
+        }
+        Wh_Log(L"tray[root/%s]: %d buttons", areaName, count);
+
+        for (int i = 0; i < count; i++) {
+            winrt::com_ptr<IUIAutomationElement> child;
+            if (FAILED(arr->GetElement(i, child.put())) || !child) continue;
+
+            BSTR nameRaw = nullptr;
+            child->get_CurrentName(&nameRaw);
+            std::wstring name = nameRaw ? nameRaw : L"";
+            if (nameRaw) SysFreeString(nameRaw);
+
+            BSTR clsRaw = nullptr;
+            child->get_CurrentClassName(&clsRaw);
+            std::wstring cls = clsRaw ? clsRaw : L"";
+            if (clsRaw) SysFreeString(clsRaw);
+
+            BSTR idRaw = nullptr;
+            child->get_CurrentAutomationId(&idRaw);
+            std::wstring aid = idRaw ? idRaw : L"";
+            if (idRaw) SysFreeString(idRaw);
+
+            RECT rect{};
+            if (FAILED(child->get_CurrentBoundingRectangle(&rect))) continue;
+            if (rect.right <= rect.left || rect.bottom <= rect.top) continue;
+            int w = rect.right - rect.left;
+            int h = rect.bottom - rect.top;
+            if (w > 200 || h > 200) continue;
+            if (w < 4 || h < 4) continue;
+            if (rect.left < monitorRect.left || rect.right > monitorRect.right ||
+                rect.top < monitorRect.top || rect.bottom > monitorRect.bottom) {
+                continue;
+            }
+
+            bool duplicate = false;
+            for (auto& existing : entries) {
+                if (existing.screenRect.left == rect.left &&
+                    existing.screenRect.top == rect.top) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (duplicate) continue;
+
+            Wh_Log(L"tray[root/%s]: cls=%s aid=%s name=%s rect=%ld,%ld,%ld,%ld",
+                   areaName, cls.c_str(), aid.c_str(), name.c_str(),
+                   rect.left, rect.top, rect.right, rect.bottom);
+
+            TrayEntry entry;
+            entry.name = name.empty() ? cls : name;
+            entry.screenRect = rect;
+            entry.element = child;
+            try { entry.image = CaptureScreenRect(rect); } catch (...) {}
+            entries.push_back(std::move(entry));
+        }
+    }
+
+    return entries;
+}
+
+std::vector<TrayEntry> Enumerate() {
+    std::vector<TrayEntry> entries;
+    auto uia = GetCachedUIA();
+    if (!uia) {
+        Wh_Log(L"tray: GetCachedUIA returned null");
+        return entries;
+    }
+
+    auto rootEntries = EnumerateFromRoot(uia.get());
+    for (auto& e : rootEntries) entries.push_back(std::move(e));
+
+    if (entries.empty()) {
+        auto taskbars = FindAllTaskbarWindows();
+        Wh_Log(L"tray: root gave 0, falling back to %zu taskbar(s)",
+               taskbars.size());
+        for (size_t ti = 0; ti < taskbars.size(); ti++) {
+            winrt::com_ptr<IUIAutomationElement> trayEl;
+            if (FAILED(uia->ElementFromHandle(taskbars[ti], trayEl.put())) ||
+                !trayEl) {
+                continue;
+            }
+            std::wstring tag = L"tb" + std::to_wstring(ti);
+            auto found = EnumerateFromElement(uia.get(), trayEl.get(), tag);
+            for (auto& e : found) entries.push_back(std::move(e));
+        }
+    }
+
+    Wh_Log(L"tray: returning %zu entries (Windows 11 25H2 typically returns 0 due to UIAutomation lockdown)",
+           entries.size());
+    return entries;
+}
+
+void Invoke(const TrayEntry& entry) {
+    if (!entry.element) return;
+    try {
+        winrt::com_ptr<IUIAutomationInvokePattern> pattern;
+        if (SUCCEEDED(entry.element->GetCurrentPatternAs(
+                UIA_InvokePatternId,
+                __uuidof(IUIAutomationInvokePattern),
+                pattern.put_void())) && pattern) {
+            pattern->Invoke();
+            return;
+        }
+    } catch (...) {}
+
+    POINT pt{
+        entry.screenRect.left + (entry.screenRect.right - entry.screenRect.left) / 2,
+        entry.screenRect.top + (entry.screenRect.bottom - entry.screenRect.top) / 2,
+    };
+    POINT saved{};
+    GetCursorPos(&saved);
+    SetCursorPos(pt.x, pt.y);
+    INPUT in[2]{};
+    in[0].type = INPUT_MOUSE;
+    in[0].mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+    in[1].type = INPUT_MOUSE;
+    in[1].mi.dwFlags = MOUSEEVENTF_LEFTUP;
+    SendInput(2, in, sizeof(INPUT));
+    SetCursorPos(saved.x, saved.y);
+}
+
+void OpenOverflow() {
+    auto uia = GetCachedUIA();
+    if (!uia) return;
+    HWND trayWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (!trayWnd) return;
+    winrt::com_ptr<IUIAutomationElement> trayEl;
+    if (FAILED(uia->ElementFromHandle(trayWnd, trayEl.put())) || !trayEl) return;
+
+    NamedCondition c(uia.get(), UIA_AutomationIdPropertyId, L"SystemTrayIcon");
+    winrt::com_ptr<IUIAutomationElement> chevron;
+    if (SUCCEEDED(trayEl->FindFirst(TreeScope_Descendants, c.get(),
+                                    chevron.put())) && chevron) {
+            try {
+                winrt::com_ptr<IUIAutomationInvokePattern> pattern;
+                if (SUCCEEDED(chevron->GetCurrentPatternAs(
+                        UIA_InvokePatternId,
+                        __uuidof(IUIAutomationInvokePattern),
+                        pattern.put_void())) && pattern) {
+                    pattern->Invoke();
+                    return;
+                }
+            } catch (...) {}
+    }
+}
+
+}  // namespace systray
+
 // ============================================================================
 // WindhawkBlur: XAML composition blur brush
 // ============================================================================
@@ -5781,11 +8004,12 @@ std::vector<winrt::weak_ref<wuxm::XamlCompositionBrushBase>> g_liveBlurBrushes;
 class XamlBlurBrush : public wuxm::XamlCompositionBrushBaseT<XamlBlurBrush> {
    public:
     XamlBlurBrush(UIElement element, float blurAmount, wui::Color tint,
-                  uint8_t tintOpacity)
+                  uint8_t tintOpacity, bool rebuildable = true)
         : m_compositor(wuxh::ElementCompositionPreview::GetElementVisual(element)
                            .Compositor()),
           m_blurAmount(blurAmount),
-          m_tint(tint) {
+          m_tint(tint),
+          m_rebuildable(rebuildable) {
         m_tint.A = tintOpacity;
         try {
             wuxm::XamlCompositionBrushBase base = *this;
@@ -5795,6 +8019,8 @@ class XamlBlurBrush : public wuxm::XamlCompositionBrushBaseT<XamlBlurBrush> {
     }
 
     ~XamlBlurBrush() {}
+
+    bool IsRebuildable() const { return m_rebuildable; }
 
     void OnConnected() {
         if (!CompositionBrush()) {
@@ -5812,6 +8038,13 @@ class XamlBlurBrush : public wuxm::XamlCompositionBrushBaseT<XamlBlurBrush> {
     void Rebuild() {
         OnDisconnected();
         OnConnected();
+    }
+
+    void UpdateParams(float blurAmount, wui::Color tint, uint8_t tintOpacity) {
+        m_blurAmount = blurAmount;
+        m_tint = tint;
+        m_tint.A = tintOpacity;
+        Rebuild();
     }
 
    private:
@@ -5841,6 +8074,7 @@ class XamlBlurBrush : public wuxm::XamlCompositionBrushBaseT<XamlBlurBrush> {
     wuc::Compositor m_compositor;
     float m_blurAmount;
     wui::Color m_tint;
+    bool m_rebuildable = true;
 };
 
 std::optional<WindhawkBlurParams> ParseWindhawkBlurValue(std::wstring_view value) {
@@ -5888,7 +8122,28 @@ wuxm::XamlCompositionBrushBase CreateWindhawkBlurBrush(
     bool tintRequested = params.tintOpacity.has_value() || params.tint.A != 0 ||
                          params.tint.R != 0 || params.tint.G != 0 || params.tint.B != 0;
     uint8_t alpha = tintRequested ? params.tintOpacity.value_or(params.tint.A) : 0;
-    return winrt::make<XamlBlurBrush>(element, params.blurAmount, params.tint, alpha);
+    return winrt::make<XamlBlurBrush>(element, params.blurAmount, params.tint, alpha, false);
+}
+
+void RebuildAllLiveBlurBrushes() {
+    try {
+        wui::Color tintColor;
+        if (!ParseBarColor(g_settings.topBarBackgroundColor,
+                           g_settings.topBarBackgroundOpacity,
+                           &tintColor)) {
+            tintColor = wui::ColorHelper::FromArgb(128, 0, 0, 0);
+        }
+        float blur = static_cast<float>(g_settings.globalBlurAmount);
+        uint8_t alpha = tintColor.A;
+        for (auto& ref : g_liveBlurBrushes) {
+            if (auto base = ref.get()) {
+                if (auto brush = base.try_as<XamlBlurBrush>()) {
+                    if (!brush->IsRebuildable()) continue;
+                    brush->UpdateParams(blur, tintColor, alpha);
+                }
+            }
+        }
+    } catch (...) {}
 }
 
 bool ElementIsInVisualState(FrameworkElement const& element, std::wstring const& stateName) {
@@ -5938,9 +8193,6 @@ void ApplyIconColorToElement(FrameworkElement element, const std::wstring& value
             } else if (auto fi = node.try_as<wuxc::FontIcon>()) {
                 fi.Foreground(brush);
             } else if (auto text = node.try_as<wuxc::TextBlock>()) {
-                // FontIcon's template renders the glyph through an internal
-                // TextBlock. Only recolor that one -- a standalone TextBlock
-                // is a label and follows the text color, not the icon color.
                 if (text.Parent().try_as<wuxc::FontIcon>()) {
                     text.Foreground(brush);
                 }
@@ -5995,16 +8247,18 @@ void ToggleFlyout(wuxc::Flyout const& flyout, wuxc::Button const& button) {
 [[clang::no_destroy]] wuxc::Button g_batteryButton{nullptr};
 [[clang::no_destroy]] wuxc::Flyout g_batteryFlyout{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_batteryPanel{nullptr};
+[[clang::no_destroy]] wuxc::Button g_systemTrayButton{nullptr};
+[[clang::no_destroy]] wuxc::Flyout g_systemTrayFlyout{nullptr};
+[[clang::no_destroy]] wuxc::StackPanel g_systemTrayPanel{nullptr};
+[[clang::no_destroy]] wuxc::Button g_controlCenterButton{nullptr};
+[[clang::no_destroy]] wuxc::Flyout g_controlCenterFlyout{nullptr};
+[[clang::no_destroy]] wuxc::StackPanel g_controlCenterPanel{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_weatherPanel{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_recycleBinPanel{nullptr};
 // Set while a panel is writing its own controls, so the ValueChanged /Toggled
 // handlers that XAML raises during construction don't get mistaken for the user
 // actually moving something.
 bool g_populatingPanel = false;
-
-// Non-zero once the mod starts tearing down; background workers check it before
-// touching XAML or dispatching back to the UI thread.
-volatile LONG g_shuttingDown = 0;
 
 
 
@@ -6016,6 +8270,7 @@ volatile LONG g_shuttingDown = 0;
 // the panels are rebuilt wholesale on every refresh.
 bool g_appMixerExpanded = false;
 bool g_outputDevicesExpanded = false;
+bool g_displayMonitorsExpanded = false;
 
 // Wi-Fi password entry state: when set, the Wi-Fi panel draws the password view
 // for this network instead of the network list.
@@ -6175,6 +8430,77 @@ void SetBrightnessCoalesced(int value) {
     });
 }
 
+std::mutex g_monitorBrightnessCoalesceMutex;
+std::map<HMONITOR, int> g_pendingMonitorBrightness;
+bool g_monitorBrightnessWorkerRunning = false;
+
+void SetMonitorBrightnessCoalesced(HMONITOR monitor, int value) {
+    if (!monitor) {
+        return;
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_monitorBrightnessCoalesceMutex);
+        g_pendingMonitorBrightness[monitor] = value;
+        if (g_monitorBrightnessWorkerRunning) {
+            return;
+        }
+        g_monitorBrightnessWorkerRunning = true;
+    }
+    RunInBackground([] {
+        for (;;) {
+            std::map<HMONITOR, int> batch;
+            {
+                std::lock_guard<std::mutex> lock(g_monitorBrightnessCoalesceMutex);
+                if (g_pendingMonitorBrightness.empty()) {
+                    g_monitorBrightnessWorkerRunning = false;
+                    return;
+                }
+                batch.swap(g_pendingMonitorBrightness);
+            }
+            for (const auto& entry : batch) {
+                brightness::SetMonitorBrightnessPercent(entry.first, entry.second);
+            }
+        }
+    });
+}
+
+// Monitor enumeration is a WMI connect plus a DDC/CI round trip per display,
+// so it must not run on the UI thread. The list is cached and warmed on a
+// worker; PopulateDisplayPanel reads the cache and repopulates itself once the
+// worker finishes.
+std::mutex g_monitorCacheMutex;
+std::vector<brightness::MonitorEntry> g_monitorCache;
+std::atomic<bool> g_monitorCacheWarming{false};
+
+void WarmMonitorCacheAsync() {
+    static std::atomic<ULONGLONG> s_lastWarmTick{0};
+    ULONGLONG now = GetTickCount64();
+    ULONGLONG last = s_lastWarmTick.load();
+    if (last != 0 && now - last < 5000) {
+        return;
+    }
+    s_lastWarmTick.store(now);
+    if (g_monitorCacheWarming.exchange(true)) {
+        return;
+    }
+    RunInBackground([] {
+        auto list = brightness::EnumerateMonitorsForFlyout();
+        {
+            std::lock_guard<std::mutex> lock(g_monitorCacheMutex);
+            g_monitorCache = std::move(list);
+        }
+        g_monitorCacheWarming = false;
+        RunOnUiThread([] {
+            try { PopulateDisplayPanel(); } catch (...) {}
+        });
+    });
+}
+
+std::vector<brightness::MonitorEntry> GetCachedMonitors() {
+    std::lock_guard<std::mutex> lock(g_monitorCacheMutex);
+    return g_monitorCache;
+}
+
 // Panels tear themselves down from inside their own click handlers, which would
 // destroy the very button that is still dispatching. Rebuilding on the next
 // dispatcher turn avoids that.
@@ -6195,44 +8521,30 @@ wuxc::ControlTemplate BuildFlyoutShellTemplate(bool isMenu) {
 <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  TargetType="FlyoutPresenter">
-  <Grid Background="Transparent">
-    <Grid.ChildrenTransitions>
-      <TransitionCollection>
-        <PopupThemeTransition/>
-      </TransitionCollection>
-    </Grid.ChildrenTransitions>
-    <Border x:Name="PART_BackgroundBorder"
-            Background="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Background}"
-            BorderBrush="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=BorderBrush}"
-            BorderThickness="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=BorderThickness}"
-            CornerRadius="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=CornerRadius}">
-      <ContentPresenter Content="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Content}"
-                        ContentTemplate="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=ContentTemplate}"
-                        ContentTransitions="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=ContentTransitions}"
-                        Padding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Padding}"
-                        HorizontalContentAlignment="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=HorizontalContentAlignment}"
-                        VerticalContentAlignment="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=VerticalContentAlignment}"/>
-    </Border>
-  </Grid>
+  <Border x:Name="PART_BackgroundBorder"
+          Background="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Background}"
+          BorderBrush="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=BorderBrush}"
+          BorderThickness="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=BorderThickness}"
+          CornerRadius="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=CornerRadius}">
+    <ContentPresenter Content="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Content}"
+                      ContentTemplate="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=ContentTemplate}"
+                      ContentTransitions="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=ContentTransitions}"
+                      Padding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Padding}"
+                      HorizontalContentAlignment="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=HorizontalContentAlignment}"
+                      VerticalContentAlignment="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=VerticalContentAlignment}"/>
+  </Border>
 </ControlTemplate>)XAML";
     static const wchar_t* kMenuShell = LR"XAML(
 <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  TargetType="MenuFlyoutPresenter">
-  <Grid Background="Transparent">
-    <Grid.ChildrenTransitions>
-      <TransitionCollection>
-        <PopupThemeTransition/>
-      </TransitionCollection>
-    </Grid.ChildrenTransitions>
-    <Border x:Name="PART_BackgroundBorder"
-            Background="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Background}"
-            BorderBrush="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=BorderBrush}"
-            BorderThickness="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=BorderThickness}"
-            CornerRadius="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=CornerRadius}">
-      <ItemsPresenter Padding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Padding}"/>
-    </Border>
-  </Grid>
+  <Border x:Name="PART_BackgroundBorder"
+          Background="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Background}"
+          BorderBrush="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=BorderBrush}"
+          BorderThickness="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=BorderThickness}"
+          CornerRadius="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=CornerRadius}">
+    <ItemsPresenter Padding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Padding}"/>
+  </Border>
 </ControlTemplate>)XAML";
     try {
         return Markup::XamlReader::Load(isMenu ? kMenuShell : kFlyoutShell)
@@ -6265,14 +8577,55 @@ Style MakeFlyoutPresenterStyle(double width) {
                           winrt::box_value(MakeCorner(kFlyoutCorner))));
     setters.Append(
         Setter(wuxc::Control::PaddingProperty(), winrt::box_value(Thickness{0, 0, 0, 0})));
+    setters.Append(Setter(wuxc::Control::HorizontalContentAlignmentProperty(),
+                          winrt::box_value(HorizontalAlignment::Stretch)));
+    setters.Append(Setter(wuxc::Control::VerticalContentAlignmentProperty(),
+                          winrt::box_value(VerticalAlignment::Stretch)));
     setters.Append(Setter(FrameworkElement::MinWidthProperty(), winrt::box_value(width)));
     setters.Append(Setter(FrameworkElement::MaxWidthProperty(), winrt::box_value(width)));
     setters.Append(Setter(wuxc::ScrollViewer::HorizontalScrollBarVisibilityProperty(),
                           winrt::box_value(wuxc::ScrollBarVisibility::Disabled)));
+    {
+        wuxa::TransitionCollection transitions;
+        wuxa::EntranceThemeTransition entrance;
+        entrance.FromVerticalOffset(12.0);
+        entrance.FromHorizontalOffset(0.0);
+        entrance.IsStaggeringEnabled(false);
+        transitions.Append(entrance);
+        setters.Append(Setter(UIElement::TransitionsProperty(),
+                              winrt::box_value(transitions)));
+    }
     if (auto tmpl = BuildFlyoutShellTemplate(false)) {
         setters.Append(Setter(wuxc::Control::TemplateProperty(), winrt::box_value(tmpl)));
     }
     return style;
+}
+
+void ForceTopMostChildXamlPopups() {
+    if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) return;
+    struct Ctx { DWORD pid; HWND topBar; HWND island; HWND topbarPopup; };
+    Ctx ctx{ GetCurrentProcessId(), g_topBarHwnd, g_islandHwnd, g_topBarPopupHwnd };
+    EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+        auto* c = reinterpret_cast<Ctx*>(lp);
+        if (hwnd == c->topBar || hwnd == c->island || hwnd == c->topbarPopup) return TRUE;
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid != c->pid) return TRUE;
+        if (!IsWindowVisible(hwnd)) return TRUE;
+        wchar_t cls[256]{};
+        if (!GetClassName(hwnd, cls, ARRAYSIZE(cls))) return TRUE;
+        if (!(wcsstr(cls, L"Xaml") && wcsstr(cls, L"Popup"))) return TRUE;
+        RECT r{};
+        if (!GetWindowRect(hwnd, &r)) return TRUE;
+        if (r.right - r.left <= 0 || r.bottom - r.top <= 0) return TRUE;
+        ForceDisableWindowsTransparency(hwnd);
+        BOOL cloakOff = FALSE;
+        DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, &cloakOff, sizeof(cloakOff));
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&ctx));
+    DwmFlush();
 }
 
 // The panel body is wrapped in a ScrollViewer so a long network or tray list
@@ -6280,7 +8633,8 @@ Style MakeFlyoutPresenterStyle(double width) {
 wuxc::Flyout MakeControlFlyout(PCWSTR name, wuxc::StackPanel& contentOut) {
     wuxc::StackPanel panel;
     panel.Name(name);
-    panel.Spacing(2);
+    panel.Spacing(1);
+    panel.Background(MakeBrush(0, 0, 0, 0));
     contentOut = panel;
     g_detachedStyleRoots.push_back(panel);  // Register panel so tree targets can find it
 
@@ -6288,6 +8642,7 @@ wuxc::Flyout MakeControlFlyout(PCWSTR name, wuxc::StackPanel& contentOut) {
     scroller.Content(panel);
     scroller.VerticalScrollBarVisibility(wuxc::ScrollBarVisibility::Auto);
     scroller.HorizontalScrollBarVisibility(wuxc::ScrollBarVisibility::Disabled);
+    scroller.Background(MakeBrush(0, 0, 0, 0));
     scroller.MaxHeight(560);
 
     wuxc::Border blurHost;
@@ -6301,11 +8656,21 @@ wuxc::Flyout MakeControlFlyout(PCWSTR name, wuxc::StackPanel& contentOut) {
     wuxc::Flyout flyout;
     flyout.Content(blurHost);
     flyout.Placement(wuxc::Primitives::FlyoutPlacementMode::Bottom);
+    flyout.LightDismissOverlayMode(wuxc::LightDismissOverlayMode::Off);
     flyout.FlyoutPresenterStyle(MakeFlyoutPresenterStyle(kPanelWidth));
 
     // Without this the panel is clipped to the bar-height island. (Credit: the
     // user's fix.)
     flyout.ShouldConstrainToRootBounds(false);
+
+    // Register in the global popup list so the dismissal logic can find us.
+    flyout.Opened([](auto&& sender, auto&&) {
+        RegisterOpenPopup(sender.template as<wuxc::Primitives::FlyoutBase>());
+    });
+    flyout.Closed([](auto&& sender, auto&&) {
+        UnregisterOpenPopup(sender.template as<wuxc::Primitives::FlyoutBase>());
+    });
+    InstallLightDismissGuard(flyout);
 
     // When the flyout opens, register the topmost visual root (like FlyoutPresenter)
     // so targets like `FlyoutPresenter` or `FlyoutPresenter > Grid` also match.
@@ -6408,6 +8773,15 @@ wuxc::Flyout MakeControlFlyout(PCWSTR name, wuxc::StackPanel& contentOut) {
                     };
                     std::function<void(DependencyObject)> clearInner =
                         [&](DependencyObject node) {
+                            if (node.try_as<wuxc::Slider>() ||
+                                node.try_as<wuxc::ToggleSwitch>() ||
+                                node.try_as<wuxc::ProgressBar>() ||
+                                node.try_as<wuxc::ProgressRing>() ||
+                                node.try_as<wuxc::ComboBox>() ||
+                                node.try_as<wuxc::Button>() ||
+                                node.try_as<wuxc::Primitives::ScrollBar>()) {
+                                return;
+                            }
                             if (auto panel = node.try_as<wuxc::Panel>()) {
                                 if (panel.Background() &&
                                     !isOurBlur(panel.Background())) {
@@ -6430,7 +8804,6 @@ wuxc::Flyout MakeControlFlyout(PCWSTR name, wuxc::StackPanel& contentOut) {
                                     ctrl.Background(MakeBrush(0, 0, 0, 0));
                                 }
                             }
-                            if (node.try_as<wuxc::ScrollViewer>()) return;
                             int childCount =
                                 wuxm::VisualTreeHelper::GetChildrenCount(node);
                             for (int i = 0; i < childCount; i++) {
@@ -6454,6 +8827,7 @@ wuxc::Flyout MakeControlFlyout(PCWSTR name, wuxc::StackPanel& contentOut) {
             }
             ApplyBlurToAllOpenPopups();
             ApplyAllControlStyles();
+            try { PromoteChildFlyoutPopups(); } catch (...) {}
         } catch (...) {
         }
     });
@@ -6520,8 +8894,9 @@ wuxc::Button MakeListRow(FrameworkElement leading,
                          std::wstring_view primary,
                          std::wstring_view secondary,
                          FrameworkElement trailing,
-                         std::function<void()> onClick) {
-    auto button = MakeGhostButton(L"FlyoutListRow", kRowCorner);
+                         std::function<void()> onClick,
+                         PCWSTR rowName = L"FlyoutListRow") {
+    auto button = MakeGhostButton(rowName, kRowCorner);
     button.HorizontalAlignment(HorizontalAlignment::Stretch);
     button.Padding(Thickness{10, 8, 10, 8});
     button.Content(MakeRowContent(leading, primary, secondary, trailing));
@@ -6568,10 +8943,34 @@ wuxc::Grid MakeSliderRow(FrameworkElement icon,
     slider.Value(value);
     slider.StepFrequency(1);
     slider.VerticalAlignment(VerticalAlignment::Center);
+    slider.HorizontalAlignment(HorizontalAlignment::Stretch);
     slider.Margin(Thickness{0, 0, 0, 0});
     // The default tooltip repeats what the readout already shows, and it draws
     // outside the island where it can't be clipped correctly.
     slider.ThumbToolTipValueConverter(nullptr);
+    {
+        wui::Color accent = GetSystemAccentColor();
+        auto fillBrush = MakeBrush(0xFF, accent.R, accent.G, accent.B);
+        auto trackBrush = MakeBrush(0x55, 0xFF, 0xFF, 0xFF);
+        slider.Foreground(fillBrush);
+        slider.Background(trackBrush);
+        slider.Resources().Insert(
+            winrt::box_value(winrt::hstring(L"SliderTrackFill")), trackBrush);
+        slider.Resources().Insert(
+            winrt::box_value(winrt::hstring(L"SliderTrackValueFill")), fillBrush);
+        slider.Resources().Insert(
+            winrt::box_value(winrt::hstring(L"SliderTrackFillPointerOver")), trackBrush);
+        slider.Resources().Insert(
+            winrt::box_value(winrt::hstring(L"SliderTrackValueFillPointerOver")), fillBrush);
+        slider.Resources().Insert(
+            winrt::box_value(winrt::hstring(L"SliderTrackFillPressed")), trackBrush);
+        slider.Resources().Insert(
+            winrt::box_value(winrt::hstring(L"SliderTrackValueFillPressed")), fillBrush);
+        slider.Resources().Insert(
+            winrt::box_value(winrt::hstring(L"SliderTrackFillDisabled")), trackBrush);
+        slider.Resources().Insert(
+            winrt::box_value(winrt::hstring(L"SliderTrackValueFillDisabled")), fillBrush);
+    }
     slider.ValueChanged([onChanged = std::move(onChanged), readout](auto&&, auto&& args) {
         int newValue = static_cast<int>(args.NewValue() + 0.5);
         readout.Text(winrt::hstring(std::to_wstring(newValue)));
@@ -7088,6 +9487,11 @@ wuxc::Button MakeSettingsLink(std::wstring_view label, PCWSTR uri) {
 // Display panel
 // ============================================================================
 
+namespace nightlight {
+    bool Get();
+    bool Set(bool enable);
+}
+
 void PopulateDisplayPanel() {
     if (!g_displayPanel) {
         return;
@@ -7109,6 +9513,54 @@ void PopulateDisplayPanel() {
                                       [](int value) { SetBrightnessCoalesced(value); }));
     } else {
         children.Append(MakeStatusText(L"Brightness control isn't available on this display."));
+    }
+
+    {
+        auto monitors = GetCachedMonitors();
+        std::wstring subtitle;
+        if (!monitors.empty()) {
+            subtitle = monitors.size() == 1
+                ? std::wstring(L"1 display")
+                : std::to_wstring(monitors.size()) + L" displays";
+        } else if (g_monitorCacheWarming) {
+            subtitle = L"Scanning…";
+        } else {
+            subtitle = L"None detected";
+        }
+
+        auto expander = MakeExpander(L"All monitors", subtitle,
+                                     &g_displayMonitorsExpanded,
+                                     [] { RepopulateLater(PopulateDisplayPanel); });
+
+        if (monitors.empty()) {
+            expander.body.Children().Append(MakeStatusText(
+                g_monitorCacheWarming
+                    ? L"Scanning for monitors…"
+                    : L"No monitors were detected."));
+        }
+
+        for (const auto& m : monitors) {
+            wuxc::StackPanel row;
+            row.Spacing(0);
+            row.Margin(Thickness{10, 4, 10, 4});
+            row.Children().Append(MakeText(nullptr, m.name, 12, false, 0.85));
+
+            if (!m.controllable) {
+                row.Children().Append(MakeText(
+                    nullptr, L"Brightness control not supported",
+                    11, false, 0.55));
+                expander.body.Children().Append(row);
+                continue;
+            }
+
+            auto icon = BuildVectorIcon(nullptr, L"",
+                                        icons::kBrightnessStroke, 24, 15, 1.5);
+            HMONITOR hmon = m.hmonitor;
+            row.Children().Append(MakeSliderRow(icon, m.percent,
+                [hmon](int value) { SetMonitorBrightnessCoalesced(hmon, value); }));
+            expander.body.Children().Append(row);
+        }
+        children.Append(expander.root);
     }
 
     children.Append(MakeDivider());
@@ -7134,8 +9586,44 @@ void PopulateDisplayPanel() {
         RepopulateLater(PopulateDisplayPanel);
     });
 
-    // Put them side-by-side (2 columns)
     children.Append(darkTile);
+
+    bool nightLightOn = false;
+    try { nightLightOn = nightlight::Get(); } catch (...) {}
+
+    auto nightTile = MakeGhostButton(L"QuickToggleTile", kTileCorner);
+    nightTile.HorizontalAlignment(HorizontalAlignment::Stretch);
+    nightTile.Padding(Thickness{8, 6, 8, 6});
+    nightTile.Margin(Thickness{0, 6, 0, 0});
+    nightTile.Background(nightLightOn
+        ? MakeBrush(0xFF, GetSystemAccentColor().R,
+                    GetSystemAccentColor().G, GetSystemAccentColor().B)
+        : MakeBrush(0x18, 0xFF, 0xFF, 0xFF));
+
+    wuxc::StackPanel nightStack; 
+    nightStack.Orientation(wuxc::Orientation::Horizontal);
+    nightStack.Spacing(8);
+    {
+        wuxc::FontIcon nlIcon;
+        nlIcon.Glyph(L"\uE708");
+        nlIcon.FontSize(16);
+        nlIcon.Foreground(MakeBrush(0xFF, 0xFF, 0xFF, 0xFF));
+        nlIcon.VerticalAlignment(VerticalAlignment::Center);
+        nightStack.Children().Append(nlIcon);
+    }
+    nightStack.Children().Append(MakeText(nullptr, L"Night light", 12));
+    nightTile.Content(nightStack);
+    nightTile.Click([nightLightOn](auto&&, auto&&) {
+        bool target = !nightLightOn;
+        RunInBackground([target] {
+            try { nightlight::Set(target); } catch (...) {}
+            RunOnUiThread([] {
+                try { RepopulateLater(PopulateDisplayPanel); } catch (...) {}
+            });
+        });
+    });
+
+    children.Append(nightTile);
 
     children.Append(MakeDivider());
     children.Append(MakeSettingsLink(L"Display settings", L"ms-settings:display"));
@@ -7179,6 +9667,24 @@ void RefreshSoundButtonIcon() {
 
 [[clang::no_destroy]] wuxc::StackPanel g_mediaContainer{nullptr};
 
+[[clang::no_destroy]] wuxc::Button g_mediaButton{nullptr};
+[[clang::no_destroy]] wuxc::Flyout g_mediaFlyout{nullptr};
+[[clang::no_destroy]] wuxc::StackPanel g_mediaPanel{nullptr};
+[[clang::no_destroy]] std::vector<winrt::Windows::UI::Xaml::Shapes::Rectangle> g_visualizerBars;
+[[clang::no_destroy]] std::vector<winrt::Windows::UI::Xaml::Shapes::Rectangle> g_mediaButtonBars;
+[[clang::no_destroy]] DispatcherTimer g_mediaVisualizerTimer{nullptr};
+[[clang::no_destroy]] DispatcherTimer g_mediaStateTimer{nullptr};
+[[clang::no_destroy]] DispatcherTimer g_mediaProgressTimer{nullptr};
+[[clang::no_destroy]] wuxm::Imaging::BitmapImage g_mediaThumbnailCache{nullptr};
+[[clang::no_destroy]] std::vector<uint8_t> g_mediaThumbnailCacheBytes;
+[[clang::no_destroy]] std::wstring g_lastGoodThumbnailTitle;
+[[clang::no_destroy]] std::vector<uint8_t> g_lastGoodThumbnailBytes;
+[[clang::no_destroy]] wuxm::Imaging::BitmapImage g_mediaFlyoutArt{nullptr};
+[[clang::no_destroy]] std::vector<uint8_t> g_mediaFlyoutArtBytes;
+double g_visualizerPhase = 0.0;
+bool g_mediaPlaying = false;
+bool g_mediaSessionExists = false;
+
 #if TOPBAR_HAS_MEDIA_CONTROL
 
 namespace media {
@@ -7192,6 +9698,12 @@ struct Snapshot {
     bool playing = false;
     bool canGoPrevious = false;
     bool canGoNext = false;
+    std::vector<uint8_t> thumbnailBytes;
+    int64_t positionTicks = 0;
+    int64_t endTicks = 0;
+    int64_t lastUpdated = 0;
+    bool shuffleActive = false;
+    bool repeatActive = false;
 };
 
 Snapshot Read() {
@@ -7211,6 +9723,23 @@ Snapshot Read() {
         if (properties) {
             snapshot.title = properties.Title();
             snapshot.artist = properties.Artist();
+            try {
+                auto thumbRef = properties.Thumbnail();
+                if (thumbRef) {
+                    auto stream = thumbRef.OpenReadAsync().get();
+                    if (stream) {
+                        uint64_t size = stream.Size();
+                        if (size > 0 && size < 4 * 1024 * 1024) {
+                            winrt::Windows::Storage::Streams::DataReader reader(
+                                stream.GetInputStreamAt(0));
+                            reader.LoadAsync(static_cast<uint32_t>(size)).get();
+                            snapshot.thumbnailBytes.resize(static_cast<size_t>(size));
+                            reader.ReadBytes(snapshot.thumbnailBytes);
+                            reader.Close();
+                        }
+                    }
+                }
+            } catch (...) {}
         }
 
         auto info = session.GetPlaybackInfo();
@@ -7221,7 +9750,27 @@ Snapshot Read() {
                 snapshot.canGoPrevious = controls.IsPreviousEnabled();
                 snapshot.canGoNext = controls.IsNextEnabled();
             }
+            if (auto shuffle = info.IsShuffleActive()) {
+                snapshot.shuffleActive = shuffle.Value();
+            }
+            if (auto repeat = info.AutoRepeatMode()) {
+                snapshot.repeatActive =
+                    repeat.Value() !=
+                    winrt::Windows::Media::MediaPlaybackAutoRepeatMode::None;
+            }
         }
+
+        try {
+            auto timeline = session.GetTimelineProperties();
+            if (timeline) {
+                snapshot.positionTicks = timeline.Position().count();
+                snapshot.endTicks = timeline.EndTime().count();
+                try {
+                    snapshot.lastUpdated =
+                        timeline.LastUpdatedTime().time_since_epoch().count();
+                } catch (...) {}
+            }
+        } catch (...) {}
 
         snapshot.valid = !snapshot.title.empty();
     } catch (...) {
@@ -7229,7 +9778,7 @@ Snapshot Read() {
     return snapshot;
 }
 
-enum class Command { PlayPause, Previous, Next };
+enum class Command { PlayPause, Previous, Next, Rewind, FastForward, Shuffle, Repeat };
 
 void Send(Command command) {
     RunInBackground([command] {
@@ -7253,13 +9802,90 @@ void Send(Command command) {
                 case Command::Next:
                     session.TrySkipNextAsync().get();
                     break;
+                case Command::Rewind: {
+                    auto info = session.GetTimelineProperties();
+                    if (info) {
+                        const int64_t tenSecondsInTicks = 10LL * 10000000LL;
+                        int64_t target = info.Position().count() - tenSecondsInTicks;
+                        if (target < 0) target = 0;
+                        session.TryChangePlaybackPositionAsync(target).get();
+                    }
+                    break;
+                }
+                case Command::FastForward: {
+                    auto info = session.GetTimelineProperties();
+                    if (info) {
+                        const int64_t tenSecondsInTicks = 10LL * 10000000LL;
+                        int64_t target = info.Position().count() + tenSecondsInTicks;
+                        int64_t end = info.EndTime().count();
+                        if (end > 0 && target > end) target = end;
+                        session.TryChangePlaybackPositionAsync(target).get();
+                    }
+                    break;
+                }
+                case Command::Shuffle: {
+                    auto info = session.GetPlaybackInfo();
+                    if (info) {
+                        bool active = false;
+                        if (auto s = info.IsShuffleActive()) active = s.Value();
+                        session.TryChangeShuffleActiveAsync(!active).get();
+                    }
+                    break;
+                }
+                case Command::Repeat: {
+                    auto info = session.GetPlaybackInfo();
+                    if (info) {
+                        using ModeT = winrt::Windows::Media::MediaPlaybackAutoRepeatMode;
+                        ModeT next = ModeT::List;
+                        if (auto cur = info.AutoRepeatMode()) {
+                            next = (cur.Value() == ModeT::None) ? ModeT::List : ModeT::None;
+                        }
+                        session.TryChangeAutoRepeatModeAsync(next).get();
+                    }
+                    break;
+                }
             }
         } catch (...) {
         }
     });
 }
 
+struct Position {
+    int64_t pos = 0;
+    int64_t end = 0;
+    int64_t lastUpdated = 0;
+    bool playing = false;
+    bool valid = false;
+};
+Position ReadPosition() {
+    Position p;
+    try {
+        auto manager =
+            GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
+        if (!manager) return p;
+        auto session = manager.GetCurrentSession();
+        if (!session) return p;
+        if (auto info = session.GetPlaybackInfo()) {
+            p.playing = info.PlaybackStatus() ==
+                GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
+        }
+        auto timeline = session.GetTimelineProperties();
+        if (timeline) {
+            p.pos = timeline.Position().count();
+            p.end = timeline.EndTime().count();
+            try {
+                p.lastUpdated =
+                    timeline.LastUpdatedTime().time_since_epoch().count();
+            } catch (...) {}
+            p.valid = true;
+        }
+    } catch (...) {}
+    return p;
+}
+
 }  // namespace media
+
+[[clang::no_destroy]] std::optional<media::Snapshot> g_cachedMediaSnapshot;
 
 wuxc::Button MakeTransportButton(std::wstring_view glyph, bool enabled,
                                  std::function<void()> onClick) {
@@ -7320,9 +9946,730 @@ void RefreshMediaCard() {
     });
 }
 
+static void FormatMediaTimeStr(int64_t ticks, wchar_t* buf, size_t bufSize) {
+    if (ticks <= 0) { swprintf_s(buf, bufSize, L"0:00"); return; }
+    int64_t totalSec = ticks / 10000000LL;
+    if (totalSec < 0) totalSec = 0;
+    int mins = static_cast<int>(totalSec / 60);
+    int secs = static_cast<int>(totalSec % 60);
+    swprintf_s(buf, bufSize, L"%d:%02d", mins, secs);
+}
+
+void UpdateMediaFlyoutProgress() {
+    if (!g_mediaPanel) return;
+#if TOPBAR_HAS_MEDIA_CONTROL
+    RunInBackground([] {
+        auto p = media::ReadPosition();
+        if (!p.valid) return;
+
+        // Most media apps only push TimelineProperties on state changes,
+        // so Position can sit frozen between play/pause and seek events.
+        // LastUpdatedTime tells us when the source captured its Position;
+        // adding the elapsed time since then gives a live-moving bar even
+        // while the visible snapshot is stale.
+        if (p.playing && p.lastUpdated > 0) {
+            int64_t nowTicks =
+                winrt::clock::now().time_since_epoch().count();
+            int64_t elapsed = nowTicks - p.lastUpdated;
+            if (elapsed > 0) {
+                p.pos += elapsed;
+                if (p.end > 0 && p.pos > p.end) p.pos = p.end;
+            }
+        }
+
+        RunOnUiThread([p] {
+            try {
+                auto progIt = g_namedElements.find(L"MediaProgressBar");
+                if (progIt != g_namedElements.end()) {
+                    if (auto bar = progIt->second.try_as<wuxc::ProgressBar>()) {
+                        double pct = 0.0;
+                        if (p.end > 0) {
+                            pct = static_cast<double>(p.pos) /
+                                  static_cast<double>(p.end) * 100.0;
+                            if (pct < 0) pct = 0;
+                            if (pct > 100) pct = 100;
+                        }
+                        bar.Value(pct);
+                    }
+                }
+                auto posIt = g_namedElements.find(L"MediaPositionText");
+                if (posIt != g_namedElements.end()) {
+                    if (auto tb = posIt->second.try_as<wuxc::TextBlock>()) {
+                        wchar_t buf[16];
+                        FormatMediaTimeStr(p.pos, buf, ARRAYSIZE(buf));
+                        tb.Text(winrt::hstring(buf));
+                    }
+                }
+                auto endIt = g_namedElements.find(L"MediaEndText");
+                if (endIt != g_namedElements.end()) {
+                    if (auto tb = endIt->second.try_as<wuxc::TextBlock>()) {
+                        wchar_t buf[16];
+                        FormatMediaTimeStr(p.end, buf, ARRAYSIZE(buf));
+                        tb.Text(winrt::hstring(buf));
+                    }
+                }
+            } catch (...) {}
+        });
+    });
+#endif
+}
+
+void StartMediaProgressTimer() {
+    if (!g_mediaProgressTimer) {
+        g_mediaProgressTimer = DispatcherTimer();
+        g_mediaProgressTimer.Interval(std::chrono::milliseconds(80));
+        g_mediaProgressTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+            try {
+                g_mediaProgressTimer.Interval(std::chrono::seconds(1));
+                if (!g_mediaFlyout || !g_mediaFlyout.IsOpen()) {
+                    return;
+                }
+                UpdateMediaFlyoutProgress();
+            } catch (...) {}
+        });
+    }
+    g_mediaProgressTimer.Interval(std::chrono::milliseconds(80));
+    g_mediaProgressTimer.Stop();
+    g_mediaProgressTimer.Start();
+}
+
+// ---------------------------------------------------------------------------
+// Media Player button + flyout
+// ---------------------------------------------------------------------------
+
+wuxm::Imaging::BitmapImage BytesToBitmapImage(const std::vector<uint8_t>& bytes,
+                                              int decodeSize = 0) {
+    if (bytes.empty()) return nullptr;
+    try {
+        winrt::Windows::Storage::Streams::InMemoryRandomAccessStream stream;
+        winrt::Windows::Storage::Streams::DataWriter writer(stream);
+        writer.WriteBytes(bytes);
+        writer.StoreAsync().get();
+        writer.DetachStream();
+        stream.Seek(0);
+        wuxm::Imaging::BitmapImage bmp;
+        if (decodeSize > 0) {
+            bmp.DecodePixelWidth(decodeSize);
+            bmp.DecodePixelHeight(decodeSize);
+        }
+        bmp.SetSource(stream);
+        return bmp;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void ApplyMediaSnapshot(const media::Snapshot& snapshot);
+void PopulateMediaPanel();
+
+void UpdateMediaVisualizerTick() {
+    if (g_visualizerBars.empty() && g_mediaButtonBars.empty()) return;
+    float bands[24] = {0};
+    visualizer::GetBands(bands, 24);
+
+    static float s_smoothFlyout[24] = {0};
+    if (!g_visualizerBars.empty()) {
+        size_t nFly = g_visualizerBars.size();
+        const double maxH = 44.0;
+        for (size_t i = 0; i < nFly && i < 24; i++) {
+            float v = 0;
+            int from = (int)(i * 24 / nFly);
+            int to   = (int)((i + 1) * 24 / nFly);
+            if (to <= from) to = from + 1;
+            for (int k = from; k < to && k < 24; k++) v = (std::max)(v, bands[k]);
+            s_smoothFlyout[i] = s_smoothFlyout[i] * 0.72f + v * 0.28f;
+            double h = 4.0 + s_smoothFlyout[i] * maxH;
+            try { g_visualizerBars[i].Height(h); } catch (...) {}
+        }
+    }
+
+    static float s_smoothButton[8] = {0};
+    if (!g_mediaButtonBars.empty()) {
+        // Collapse 24 bands down to the mini visualizer's bar count.
+        size_t nBtn = g_mediaButtonBars.size();
+        const double maxH = 14.0;
+        for (size_t i = 0; i < nBtn; i++) {
+            float v = 0;
+            int from = (int)(i * 24 / nBtn);
+            int to   = (int)((i + 1) * 24 / nBtn);
+            if (to <= from) to = from + 1;
+            for (int k = from; k < to && k < 24; k++) v = (std::max)(v, bands[k]);
+            s_smoothButton[i] = s_smoothButton[i] * 0.7f + v * 0.3f;
+            double h = 3.0 + s_smoothButton[i] * maxH;
+            try { g_mediaButtonBars[i].Height(h); } catch (...) {}
+        }
+    }
+}
+
+void StopMediaVisualizer() {
+    if (g_mediaVisualizerTimer) {
+        g_mediaVisualizerTimer.Stop();
+    }
+    visualizer::Stop();
+}
+
+void StartMediaVisualizer() {
+    if (!g_settings.showMediaVisualizer && !g_settings.mediaButtonShowVisualizer) return;
+    visualizer::Start();
+    if (!g_mediaVisualizerTimer) {
+        g_mediaVisualizerTimer = DispatcherTimer();
+        g_mediaVisualizerTimer.Interval(std::chrono::milliseconds(50));
+        g_mediaVisualizerTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+            try { UpdateMediaVisualizerTick(); } catch (...) {}
+        });
+    }
+    g_mediaVisualizerTimer.Start();
+}
+
+void BuildMediaVisualizerGrid(wuxc::Grid const& target) {
+    try {
+        target.ColumnDefinitions().Clear();
+        target.Children().Clear();
+        g_visualizerBars.clear();
+        constexpr int kBarCount = 24;
+        wui::Color accent{};
+        if (!TryParseHexColor(GetEffectiveIconColorString(), &accent)) {
+            accent = wui::ColorHelper::FromArgb(255, 255, 255, 255);
+        }
+        for (int i = 0; i < kBarCount; i++) {
+            wuxc::ColumnDefinition cd;
+            cd.Width(GridLength{1, GridUnitType::Star});
+            target.ColumnDefinitions().Append(cd);
+
+            winrt::Windows::UI::Xaml::Shapes::Rectangle bar;
+            bar.Width(4);
+            bar.RadiusX(2);
+            bar.RadiusY(2);
+            bar.VerticalAlignment(VerticalAlignment::Bottom);
+            bar.HorizontalAlignment(HorizontalAlignment::Center);
+            bar.Height(4);
+            bar.Fill(MakeBrush(0xFF, accent.R, accent.G, accent.B));
+            wuxc::Grid::SetColumn(bar, i);
+            target.Children().Append(bar);
+            g_visualizerBars.push_back(bar);
+        }
+    } catch (...) {}
+}
+
+FrameworkElement BuildMediaButtonContent(const media::Snapshot& snapshot) {
+    wuxc::StackPanel row;
+    row.Orientation(wuxc::Orientation::Horizontal);
+    row.Spacing(6);
+    row.VerticalAlignment(VerticalAlignment::Center);
+    row.HorizontalAlignment(HorizontalAlignment::Center);
+
+    std::wstring mediaIconColorHex = GetEffectiveIconColorString();
+    {
+        auto mapIt = g_namedElementIconColorHex.find(L"MediaButton");
+        if (mapIt != g_namedElementIconColorHex.end()) {
+            mediaIconColorHex = mapIt->second;
+        }
+    }
+
+    if (g_settings.mediaButtonShowIcon) {
+        if (g_mediaThumbnailCache) {
+            wuxc::Image img;
+            img.Source(g_mediaThumbnailCache);
+            img.Width(16);
+            img.Height(16);
+            img.Stretch(wuxm::Stretch::Uniform);
+            img.VerticalAlignment(VerticalAlignment::Center);
+            row.Children().Append(img);
+        } else {
+            if (auto icon = BuildVectorIcon(
+                    nullptr, icons::kMusicNoteFill, L"", 24, 16, 1.5,
+                    mediaIconColorHex.c_str())) {
+                icon.VerticalAlignment(VerticalAlignment::Center);
+                row.Children().Append(icon);
+            }
+        }
+    }
+
+    if (g_settings.mediaButtonShowName) {
+        auto tb = MakeText(nullptr,
+            snapshot.title.empty() ? L"Unknown" : snapshot.title, 12);
+        tb.MaxWidth(150);
+        tb.TextTrimming(TextTrimming::CharacterEllipsis);
+        tb.VerticalAlignment(VerticalAlignment::Center);
+        row.Children().Append(tb);
+    }
+
+    if (g_settings.mediaButtonShowControls) {
+        auto makeCtrl = [mediaIconColorHex](std::wstring_view fillIcon, std::function<void()> onClick) {
+            auto hit = wuxc::Button();
+            hit.Width(22);
+            hit.Height(22);
+            hit.MinWidth(22);
+            hit.MinHeight(22);
+            hit.Padding(Thickness{0, 0, 0, 0});
+            hit.Background(MakeBrush(1, 0, 0, 0));
+            hit.BorderThickness(Thickness{0, 0, 0, 0});
+            hit.CornerRadius(MakeCorner(4));
+            hit.HorizontalAlignment(HorizontalAlignment::Center);
+            hit.VerticalAlignment(VerticalAlignment::Center);
+            hit.HorizontalContentAlignment(HorizontalAlignment::Center);
+            hit.VerticalContentAlignment(VerticalAlignment::Center);
+            if (auto icon = BuildVectorIcon(nullptr, fillIcon, L"", 24, 13, 1.4,
+                                            mediaIconColorHex.c_str())) {
+                icon.IsHitTestVisible(false);
+                hit.Content(icon);
+            }
+            hit.Click([onClick](auto&&, auto&&) {
+                if (onClick) onClick();
+            });
+            return hit;
+        };
+        auto refreshSoon = [] {
+            RunInBackground([] {
+                Sleep(400);
+                auto s = media::Read();
+                RunOnUiThread([s] { try { ApplyMediaSnapshot(s); } catch (...) {} });
+            });
+        };
+        row.Children().Append(makeCtrl(icons::kPrevFill, [refreshSoon] {
+            media::Send(media::Command::Previous); refreshSoon();
+        }));
+        row.Children().Append(makeCtrl(
+            snapshot.playing ? icons::kPauseFill : icons::kPlayFill,
+            [refreshSoon] {
+                media::Send(media::Command::PlayPause); refreshSoon();
+            }));
+        row.Children().Append(makeCtrl(icons::kNextFill, [refreshSoon] {
+            media::Send(media::Command::Next); refreshSoon();
+        }));
+    }
+
+    if (g_settings.mediaButtonShowVisualizer) {
+        wuxc::StackPanel viz;
+        viz.Orientation(wuxc::Orientation::Horizontal);
+        viz.Spacing(1);
+        viz.VerticalAlignment(VerticalAlignment::Center);
+        viz.Height(18);
+        wui::Color accent{};
+        if (!TryParseHexColor(mediaIconColorHex, &accent)) {
+            accent = wui::ColorHelper::FromArgb(255, 255, 255, 255);
+        }
+        g_mediaButtonBars.clear();
+        constexpr int kBars = 5;
+        for (int i = 0; i < kBars; i++) {
+            winrt::Windows::UI::Xaml::Shapes::Rectangle bar;
+            bar.Width(2);
+            bar.RadiusX(1);
+            bar.RadiusY(1);
+            bar.Height(3);
+            bar.VerticalAlignment(VerticalAlignment::Bottom);
+            bar.Fill(MakeBrush(0xFF, accent.R, accent.G, accent.B));
+            viz.Children().Append(bar);
+            g_mediaButtonBars.push_back(bar);
+        }
+        row.Children().Append(viz);
+        if (snapshot.playing) {
+            StartMediaVisualizer();
+        }
+    } else {
+        g_mediaButtonBars.clear();
+    }
+
+    return row;
+}
+
+void ApplyMediaSnapshot(const media::Snapshot& snapshot) {
+    bool playing = snapshot.valid && snapshot.playing;
+    bool sessionExists = snapshot.valid;
+    bool wasPlaying = g_mediaPlaying;
+    bool wasSessionExists = g_mediaSessionExists;
+    g_mediaPlaying = playing;
+    g_mediaSessionExists = sessionExists;
+    if (playing) g_cachedMediaSnapshot = snapshot;
+    if (!playing && wasPlaying) {
+        StopMediaVisualizer();
+    }
+
+    if (sessionExists && !snapshot.thumbnailBytes.empty() && !snapshot.title.empty()) {
+        g_lastGoodThumbnailTitle = snapshot.title;
+        g_lastGoodThumbnailBytes = snapshot.thumbnailBytes;
+    }
+
+    if (sessionExists && g_settings.showMediaButton && g_mediaButton) {
+        if (!snapshot.thumbnailBytes.empty() &&
+            snapshot.thumbnailBytes != g_mediaThumbnailCacheBytes) {
+            g_mediaThumbnailCacheBytes = snapshot.thumbnailBytes;
+            g_mediaThumbnailCache = BytesToBitmapImage(snapshot.thumbnailBytes);
+        }
+        g_mediaButton.Content(BuildMediaButtonContent(snapshot));
+    }
+
+    if (playing != wasPlaying || sessionExists != wasSessionExists) {
+        ApplyVisibilitySettings();
+        ApplyAllControlStyles();
+        if (g_mediaFlyout && g_mediaFlyout.IsOpen()) {
+            PopulateMediaPanel();
+        }
+    }
+}
+
+void PopulateMediaPanel() {
+    if (!g_mediaPanel) return;
+    RunInBackground([] {
+        auto snapshot = media::Read();
+        if (snapshot.valid && snapshot.playing && snapshot.lastUpdated > 0) {
+            int64_t nowTicks = winrt::clock::now().time_since_epoch().count();
+            int64_t elapsed = nowTicks - snapshot.lastUpdated;
+            if (elapsed > 0) {
+                snapshot.positionTicks += elapsed;
+                if (snapshot.endTicks > 0 &&
+                    snapshot.positionTicks > snapshot.endTicks) {
+                    snapshot.positionTicks = snapshot.endTicks;
+                }
+            }
+        }
+        RunOnUiThread([snapshot] {
+            if (!g_mediaPanel) return;
+            g_populatingPanel = true;
+            struct Guard { ~Guard() { g_populatingPanel = false; } } guard;
+            auto ch = g_mediaPanel.Children();
+            ch.Clear();
+
+            if (!snapshot.valid) {
+                ch.Append(MakeStatusText(L"Nothing is playing right now."));
+                return;
+            }
+
+            auto fmtTime = [](int64_t ticks) -> std::wstring {
+                if (ticks <= 0) return L"0:00";
+                int64_t totalSec = ticks / 10000000LL;
+                if (totalSec < 0) totalSec = 0;
+                int mins = static_cast<int>(totalSec / 60);
+                int secs = static_cast<int>(totalSec % 60);
+                wchar_t buf[16];
+                swprintf_s(buf, L"%d:%02d", mins, secs);
+                return buf;
+            };
+
+            wuxc::Border card;
+            card.CornerRadius(MakeCorner(16));
+            card.Background(MakeBrush(0, 0, 0, 0));
+            card.BorderBrush(MakeBrush(0, 0, 0, 0));
+            card.BorderThickness(Thickness{ 0, 0, 0, 0 });
+            card.Padding(Thickness{ 16, 16, 16, 16 });
+            card.HorizontalAlignment(HorizontalAlignment::Stretch);
+            card.Margin(Thickness{ 4, 4, 4, 4 });
+
+            wuxc::StackPanel body;
+            body.Spacing(14);
+            body.HorizontalAlignment(HorizontalAlignment::Stretch);
+
+            wuxc::Grid header;
+            header.ColumnSpacing(14);
+            {
+                wuxc::ColumnDefinition c0;
+                c0.Width(GridLength{ 0, GridUnitType::Auto });
+                header.ColumnDefinitions().Append(c0);
+                wuxc::ColumnDefinition c1;
+                c1.Width(GridLength{ 1, GridUnitType::Star });
+                header.ColumnDefinitions().Append(c1);
+                wuxc::ColumnDefinition c2;
+                c2.Width(GridLength{ 0, GridUnitType::Auto });
+                header.ColumnDefinitions().Append(c2);
+            }
+
+            wuxc::Border artFrame;
+            artFrame.Width(60);
+            artFrame.Height(60);
+            artFrame.CornerRadius(MakeCorner(10));
+            artFrame.VerticalAlignment(VerticalAlignment::Center);
+            {
+                wuxm::RectangleGeometry artClip;
+                artClip.Rect(winrt::Windows::Foundation::Rect{0.0f, 0.0f, 60.0f, 60.0f});
+                artFrame.Clip(artClip);
+            }
+            if (!snapshot.thumbnailBytes.empty() && !snapshot.title.empty()) {
+                g_lastGoodThumbnailTitle = snapshot.title;
+                g_lastGoodThumbnailBytes = snapshot.thumbnailBytes;
+            }
+            std::vector<uint8_t> thumbBytes = snapshot.thumbnailBytes;
+            if (thumbBytes.empty() && !snapshot.title.empty() &&
+                snapshot.title == g_lastGoodThumbnailTitle &&
+                !g_lastGoodThumbnailBytes.empty()) {
+                thumbBytes = g_lastGoodThumbnailBytes;
+            }
+            bool artSet = false;
+            if (!thumbBytes.empty()) {
+                if (thumbBytes != g_mediaFlyoutArtBytes || !g_mediaFlyoutArt) {
+                    g_mediaFlyoutArtBytes = thumbBytes;
+                    g_mediaFlyoutArt = BytesToBitmapImage(thumbBytes, 120);
+                }
+                if (g_mediaFlyoutArt) {
+                    wuxc::Image artImg;
+                    artImg.Source(g_mediaFlyoutArt);
+                    artImg.Width(60);
+                    artImg.Height(60);
+                    artImg.Stretch(wuxm::Stretch::UniformToFill);
+                    artFrame.Background(MakeBrush(0x30, 0xFF, 0xFF, 0xFF));
+                    artFrame.Child(artImg);
+                    artSet = true;
+                }
+            }
+            if (!artSet) {
+                artFrame.Background(MakeBrush(0x30, 0xFF, 0xFF, 0xFF));
+                if (auto icon = BuildVectorIcon(
+                        nullptr, icons::kMusicNoteFill, L"", 24, 28, 1.5)) {
+                    icon.HorizontalAlignment(HorizontalAlignment::Center);
+                    icon.VerticalAlignment(VerticalAlignment::Center);
+                    artFrame.Child(icon);
+                }
+            }
+            wuxc::Grid::SetColumn(artFrame, 0);
+            header.Children().Append(artFrame);
+
+            wuxc::StackPanel titleStack;
+            titleStack.VerticalAlignment(VerticalAlignment::Center);
+            titleStack.Spacing(3);
+            auto titleTb = MakeText(nullptr,
+                snapshot.title.empty() ? L"Unknown" : snapshot.title, 15, true);
+            titleTb.TextWrapping(TextWrapping::Wrap);
+            titleTb.MaxLines(2);
+            titleStack.Children().Append(titleTb);
+            if (!snapshot.artist.empty()) {
+                auto artistTb = MakeText(nullptr, snapshot.artist, 12, false, 0.7);
+                artistTb.TextWrapping(TextWrapping::Wrap);
+                artistTb.MaxLines(1);
+                titleStack.Children().Append(artistTb);
+            }
+            wuxc::Grid::SetColumn(titleStack, 1);
+            header.Children().Append(titleStack);
+
+            if (g_settings.showMediaVisualizer) {
+                wuxc::Grid viz;
+                viz.Width(30);
+                viz.Height(50);
+                viz.VerticalAlignment(VerticalAlignment::Center);
+                wui::Color accent{};
+                if (!TryParseHexColor(GetEffectiveIconColorString(), &accent)) {
+                    accent = wui::ColorHelper::FromArgb(255, 255, 255, 255);
+                }
+                g_visualizerBars.clear();
+                constexpr int kBars = 5;
+                for (int i = 0; i < kBars; i++) {
+                    wuxc::ColumnDefinition cd;
+                    cd.Width(GridLength{ 1, GridUnitType::Star });
+                    viz.ColumnDefinitions().Append(cd);
+                }
+                for (int i = 0; i < kBars; i++) {
+                    winrt::Windows::UI::Xaml::Shapes::Rectangle bar;
+                    bar.Width(3);
+                    bar.RadiusX(2);
+                    bar.RadiusY(2);
+                    bar.Height(4);
+                    bar.VerticalAlignment(VerticalAlignment::Bottom);
+                    bar.HorizontalAlignment(HorizontalAlignment::Center);
+                    bar.Fill(MakeBrush(0xFF, accent.R, accent.G, accent.B));
+                    wuxc::Grid::SetColumn(bar, i);
+                    viz.Children().Append(bar);
+                    g_visualizerBars.push_back(bar);
+                }
+                auto clipGeom = wuxm::RectangleGeometry();
+                clipGeom.Rect(winrt::Windows::Foundation::Rect{ 0.0f, 0.0f, 30.0f, 50.0f });
+                viz.Clip(clipGeom);
+                wuxc::Grid::SetColumn(viz, 2);
+                header.Children().Append(viz);
+                if (snapshot.playing) {
+                    StartMediaVisualizer();
+                }
+            } else {
+                g_visualizerBars.clear();
+            }
+
+            body.Children().Append(header);
+
+            {
+                wuxc::Grid progressRow;
+                progressRow.ColumnSpacing(10);
+                {
+                    wuxc::ColumnDefinition c0;
+                    c0.Width(GridLength{ 0, GridUnitType::Auto });
+                    progressRow.ColumnDefinitions().Append(c0);
+                    wuxc::ColumnDefinition c1;
+                    c1.Width(GridLength{ 1, GridUnitType::Star });
+                    progressRow.ColumnDefinitions().Append(c1);
+                    wuxc::ColumnDefinition c2;
+                    c2.Width(GridLength{ 0, GridUnitType::Auto });
+                    progressRow.ColumnDefinitions().Append(c2);
+                }
+
+                auto posTb = MakeText(L"MediaPositionText", fmtTime(snapshot.positionTicks), 11, false, 0.7);
+                posTb.VerticalAlignment(VerticalAlignment::Center);
+                posTb.MinWidth(36);
+                wuxc::Grid::SetColumn(posTb, 0);
+                progressRow.Children().Append(posTb);
+                g_namedElements.insert_or_assign(L"MediaPositionText", posTb);
+
+                wuxc::ProgressBar progress;
+                progress.Name(L"MediaProgressBar");
+                progress.Minimum(0);
+                progress.Maximum(100);
+                double pct = 0.0;
+                if (snapshot.endTicks > 0) {
+                    pct = static_cast<double>(snapshot.positionTicks) /
+                          static_cast<double>(snapshot.endTicks) * 100.0;
+                    if (pct < 0.0) pct = 0.0;
+                    if (pct > 100.0) pct = 100.0;
+                }
+                progress.Value(pct);
+                progress.VerticalAlignment(VerticalAlignment::Center);
+                progress.Height(4);
+                progress.Foreground(MakeBrush(0xCC, 0xFF, 0xFF, 0xFF));
+                progress.Background(MakeBrush(0x30, 0xFF, 0xFF, 0xFF));
+                progress.BorderThickness(Thickness{ 0, 0, 0, 0 });
+                g_namedElements.insert_or_assign(L"MediaProgressBar", progress);
+                wuxc::Grid::SetColumn(progress, 1);
+                progressRow.Children().Append(progress);
+
+                auto endTb = MakeText(L"MediaEndText", fmtTime(snapshot.endTicks), 11, false, 0.7);
+                endTb.VerticalAlignment(VerticalAlignment::Center);
+                endTb.MinWidth(36);
+                endTb.TextAlignment(TextAlignment::Right);
+                wuxc::Grid::SetColumn(endTb, 2);
+                progressRow.Children().Append(endTb);
+                g_namedElements.insert_or_assign(L"MediaEndText", endTb);
+
+                body.Children().Append(progressRow);
+            }
+
+            {
+                wuxc::StackPanel controls;
+                controls.Orientation(wuxc::Orientation::Horizontal);
+                controls.Spacing(14);
+                controls.HorizontalAlignment(HorizontalAlignment::Center);
+                controls.VerticalAlignment(VerticalAlignment::Center);
+                controls.Margin(Thickness{ 0, 4, 0, 0 });
+
+                auto makeIconBtn = [](std::wstring_view iconFill, bool active,
+                                      std::function<void()> onClick) {
+                    auto b = MakeGhostButton(nullptr, 8);
+                    b.Width(36);
+                    b.Height(36);
+                    b.MinWidth(36);
+                    b.Padding(Thickness{ 0, 0, 0, 0 });
+                    b.Background(MakeBrush(0, 0, 0, 0));
+                    b.BorderThickness(Thickness{ 0, 0, 0, 0 });
+                    b.HorizontalContentAlignment(HorizontalAlignment::Center);
+                    b.VerticalContentAlignment(VerticalAlignment::Center);
+                    const wchar_t* iconColor = active ? L"#FFFFFF" : L"#99FFFFFF";
+                    if (auto icon = BuildVectorIcon(nullptr, iconFill, L"", 24, 18, 1.7, iconColor)) {
+                        icon.HorizontalAlignment(HorizontalAlignment::Center);
+                        icon.VerticalAlignment(VerticalAlignment::Center);
+                        wuxc::Border wrapper;
+                        wrapper.Background(MakeBrush(0x22, 0xFF, 0xFF, 0xFF));
+                        wrapper.CornerRadius(MakeCorner(8));
+                        wrapper.Child(icon);
+                        b.Content(wrapper);
+                    }
+                    b.Click([onClick](auto&&, auto&&) { if (onClick) onClick(); });
+                    return b;
+                };
+
+                auto refreshSoon = [] {
+                    RunInBackground([] {
+                        Sleep(300);
+                        auto s = media::Read();
+                        RunOnUiThread([s] {
+                            try { ApplyMediaSnapshot(s); } catch (...) {}
+                            try { PopulateMediaPanel(); } catch (...) {}
+                        });
+                    });
+                };
+
+                controls.Children().Append(makeIconBtn(icons::kPrevFill, true,
+                    [refreshSoon] { media::Send(media::Command::Previous); refreshSoon(); }));
+
+                auto playBtn = MakeGhostButton(nullptr, 28);
+                playBtn.Width(56);
+                playBtn.Height(56);
+                playBtn.MinWidth(56);
+                playBtn.Padding(Thickness{ 0, 0, 0, 0 });
+                auto accent = GetSystemAccentColor();
+                auto accentBrush = MakeBrush(0xFF, accent.R, accent.G, accent.B);
+                playBtn.Background(accentBrush);
+                playBtn.BorderBrush(accentBrush);
+                playBtn.BorderThickness(Thickness{ 0, 0, 0, 0 });
+                playBtn.HorizontalContentAlignment(HorizontalAlignment::Center);
+                playBtn.VerticalContentAlignment(VerticalAlignment::Center);
+                playBtn.Resources().Insert(
+                    winrt::box_value(winrt::hstring(L"ButtonBackground")), accentBrush);
+                playBtn.Resources().Insert(
+                    winrt::box_value(winrt::hstring(L"ButtonBackgroundPointerOver")), accentBrush);
+                playBtn.Resources().Insert(
+                    winrt::box_value(winrt::hstring(L"ButtonBackgroundPressed")), accentBrush);
+                playBtn.Resources().Insert(
+                    winrt::box_value(winrt::hstring(L"ButtonBorderBrush")), accentBrush);
+                playBtn.Resources().Insert(
+                    winrt::box_value(winrt::hstring(L"ButtonBorderBrushPointerOver")), accentBrush);
+                playBtn.Resources().Insert(
+                    winrt::box_value(winrt::hstring(L"ButtonBorderBrushPressed")), accentBrush);
+                playBtn.Content(BuildVectorIcon(nullptr,
+                    snapshot.playing ? icons::kPauseFill : icons::kPlayFill,
+                    L"", 24, 22, 1.7, L"#FFFFFF"));
+                playBtn.Click([](auto&&, auto&&) {
+                    media::Send(media::Command::PlayPause);
+                    RunInBackground([] {
+                        Sleep(300);
+                        auto refreshed = media::Read();
+                        RunOnUiThread([refreshed] {
+                            ApplyMediaSnapshot(refreshed);
+                            PopulateMediaPanel();
+                        });
+                    });
+                });
+                controls.Children().Append(playBtn);
+
+                controls.Children().Append(makeIconBtn(icons::kNextFill, true,
+                    [refreshSoon] { media::Send(media::Command::Next); refreshSoon(); }));
+
+                body.Children().Append(controls);
+            }
+
+            card.Child(body);
+            ch.Append(card);
+            StartMediaProgressTimer();
+            RunOnUiThread([] {
+                try { UpdateMediaFlyoutProgress(); } catch (...) {}
+            });
+            auto scheduleRefresh = [](int delayMs) {
+                RunInBackground([delayMs] {
+                    Sleep(delayMs);
+                    RunOnUiThread([] {
+                        try { UpdateMediaFlyoutProgress(); } catch (...) {}
+                    });
+                });
+            };
+            scheduleRefresh(150);
+            scheduleRefresh(500);
+            scheduleRefresh(1200);
+        });
+    });
+}
+
+void RefreshMediaButtonState() {
+    if (!g_settings.showMediaButton) {
+        g_mediaPlaying = false;
+        g_mediaSessionExists = false;
+        ApplyVisibilitySettings();
+        return;
+    }
+    RunInBackground([] {
+        auto snapshot = media::Read();
+        RunOnUiThread([snapshot] { ApplyMediaSnapshot(snapshot); });
+    });
+}
+
 #else
 
 void RefreshMediaCard() {}
+void PopulateMediaPanel() {}
+void RefreshMediaButtonState() {}
+void StartMediaVisualizer() {}
+void StopMediaVisualizer() {}
 
 #endif  // TOPBAR_HAS_MEDIA_CONTROL
 
@@ -7341,13 +10688,16 @@ void PopulateSoundPanel() {
 
     children.Append(MakePanelTitle(L"Sound"));
 
-    // Starts collapsed and empty; the worker fills it in and reveals it only if
-    // something is actually playing.
-    g_mediaContainer = wuxc::StackPanel();
-    g_mediaContainer.Name(L"MediaCard");
-    g_mediaContainer.Visibility(Visibility::Collapsed);
-    children.Append(g_mediaContainer);
-    RefreshMediaCard();
+    // Only render the legacy now-playing card in the Sound flyout when the
+    // dedicated Media Player button is turned off — otherwise the two would
+    // duplicate each other's transport.
+    if (!g_settings.showMediaButton) {
+        g_mediaContainer = wuxc::StackPanel();
+        g_mediaContainer.Name(L"MediaCard");
+        g_mediaContainer.Visibility(Visibility::Collapsed);
+        children.Append(g_mediaContainer);
+        RefreshMediaCard();
+    }
 
     int masterVolume = audio::GetMasterVolume();
     bool masterMuted = audio::GetMasterMute();
@@ -7405,7 +10755,7 @@ void PopulateSoundPanel() {
                     }
                     RefreshSoundButtonIcon();
                     RepopulateLater(PopulateSoundPanel);
-                }));
+                }, L"OutputDeviceRow"));
         }
         children.Append(expander.root);
     }
@@ -7463,25 +10813,36 @@ void PopulateSoundPanel() {
 
 // Four-bar signal glyph, drawn by dropping arcs off the top of the full icon.
 FrameworkElement BuildWifiIcon(double size, int signal, bool connected) {
-    (void)signal; // unused now
-    (void)connected; // unused now
+    int level = 0;
+    if (connected) {
+        if (signal >= 75) level = 3;
+        else if (signal >= 50) level = 2;
+        else if (signal >= 25) level = 1;
+    }
 
-    // Corrected path (scientific notation replaced with decimal)
-    std::wstring wifiPath =
+    std::wstring outerPath =
         L"M61.5917 17.7222C79.4636 17.723 96.6521 24.3489 109.605 36.2305C110.58 37.1478 112.139 37.1362 113.1 36.2045"
         L"L122.423 27.1255C122.909 26.653 123.181 26.0129 123.177 25.3469C123.173 24.6809 122.894 24.0439 122.402 23.5769"
         L"C88.4054 -7.85896 34.7726 -7.85896 0.776469 23.5769C0.284012 24.0436 0.00459724 24.6804 0.0000562216 25.3463"
         L"C-0.00448479 26.0123 0.266222 26.6526 0.752273 27.1255L10.0785 36.2045C11.0385 37.1376 12.5987 37.1492 13.5734 36.2305"
-        L"C26.5276 24.3481 43.7181 17.7222 61.5917 17.7222Z"
+        L"C26.5276 24.3481 43.7181 17.7222 61.5917 17.7222Z";
+    std::wstring middlePath =
         L"M61.5676 48.0483C71.321 48.0477 80.7264 51.7249 87.9562 58.3656C88.934 59.308 90.4744 59.2876 91.4276 58.3195"
         L"L100.678 48.8392C101.165 48.342 101.435 47.6674 101.428 46.9664C101.421 46.2654 101.137 45.5965 100.64 45.1094"
         L"C78.6243 24.3363 44.5296 24.3363 22.5135 45.1094C22.0162 45.5965 21.7324 46.2657 21.7259 46.9669"
         L"C21.7194 47.6681 21.9906 48.3427 22.4788 48.8392L31.7262 58.3195C32.6795 59.2876 34.2198 59.308 35.1977 58.3656"
-        L"C42.4227 51.7293 51.8206 48.0524 61.5676 48.0483Z"
+        L"C42.4227 51.7293 51.8206 48.0524 61.5676 48.0483Z";
+    std::wstring bottomPath =
         L"M79.7076 68.1222C79.7214 68.8792 79.4551 69.6091 78.9715 70.1395L63.3304 87.7786C62.8719 88.297 62.2468 88.5888 61.5946 88.5888"
         L"C60.9423 88.5888 60.3172 88.297 59.8587 87.7786L44.215 70.1395C43.7317 69.6087 43.4659 68.8786 43.4802 68.1216"
         L"C43.4946 67.3645 43.7878 66.6477 44.2907 66.1402C54.2797 56.6989 68.9094 56.6989 78.8984 66.1402"
         L"C79.401 66.6481 79.6938 67.3652 79.7076 68.1222Z";
+
+    const wchar_t* dimOp = L"0.3";
+    const wchar_t* fullOp = L"1.0";
+    const wchar_t* outerOp = (level >= 3) ? fullOp : dimOp;
+    const wchar_t* middleOp = (level >= 2) ? fullOp : dimOp;
+    const wchar_t* bottomOp = connected ? fullOp : dimOp;
 
     std::wstring brush = GetEffectiveIconColorString();
 
@@ -7489,7 +10850,9 @@ FrameworkElement BuildWifiIcon(double size, int signal, bool connected) {
         L"<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
         L"Stretch=\"Uniform\" Width=\"" + std::to_wstring(size) + L"\" Height=\"" + std::to_wstring(size) + L"\">"
         L"<Grid Width=\"124\" Height=\"89\">"
-        L"<Path Data=\"" + EscapeXmlAttr(wifiPath) + L"\" Fill=\"" + brush + L"\"/>"
+        L"<Path Data=\"" + EscapeXmlAttr(outerPath) + L"\" Fill=\"" + brush + L"\" Opacity=\"" + outerOp + L"\"/>"
+        L"<Path Data=\"" + EscapeXmlAttr(middlePath) + L"\" Fill=\"" + brush + L"\" Opacity=\"" + middleOp + L"\"/>"
+        L"<Path Data=\"" + EscapeXmlAttr(bottomPath) + L"\" Fill=\"" + brush + L"\" Opacity=\"" + bottomOp + L"\"/>"
         L"</Grid></Viewbox>";
 
     try {
@@ -7642,9 +11005,26 @@ void BuildWifiPasswordView(const wf::Collections::IVector<UIElement>& children) 
 
     children.Append(buttons);
 
-    // Focus can only be taken once the box is actually in the tree.
-    passwordBox.Loaded([passwordBox](auto&&, auto&&) {
-        passwordBox.Focus(FocusState::Programmatic);
+    // Focus can only be taken once the box is actually in the tree. Retry
+    // across a few dispatcher ticks because the presenter's layout pass
+    // may replace the TextBox's inner focusable element on the first tick.
+    auto refocus = [passwordBox] {
+        try { passwordBox.Focus(FocusState::Programmatic); } catch (...) {}
+    };
+    passwordBox.Loaded([refocus](auto&&, auto&&) {
+        refocus();
+        RunOnUiThread([refocus] {
+            refocus();
+            RunOnUiThread([refocus] { refocus(); });
+        });
+    });
+
+    // Same rationale as the weather search box: defer the activation so it
+    // doesn't re-enter XAML while the flyout is still opening.
+    passwordBox.GotFocus([](auto&&, auto&&) {
+        RunOnUiThread([] {
+            try { EnsureTopBarHasKeyboardFocus(); } catch (...) {}
+        });
     });
 }
 
@@ -7670,6 +11050,7 @@ void PopulateWifiPanel() {
 
     // 2-Column Header: Left (Title + Spinner) | Right (Refresh + Toggle)
     wuxc::Grid headerGrid;
+    headerGrid.Name(L"WifiHeaderGrid");
     headerGrid.Margin(Thickness{4, 2, 0, 6});
     headerGrid.HorizontalAlignment(HorizontalAlignment::Stretch);
 
@@ -7685,6 +11066,7 @@ void PopulateWifiPanel() {
 
     // Left stack: title + spinner
     wuxc::StackPanel leftStack;
+    leftStack.Name(L"WifiHeaderLeftStack");
     leftStack.Orientation(wuxc::Orientation::Horizontal);
     leftStack.Spacing(8);
     leftStack.VerticalAlignment(VerticalAlignment::Center);
@@ -7707,6 +11089,7 @@ void PopulateWifiPanel() {
 
     // Right stack: refresh button + toggle
     wuxc::StackPanel rightStack;
+    rightStack.Name(L"WifiHeaderRightStack");
     rightStack.Orientation(wuxc::Orientation::Horizontal);
     rightStack.Spacing(4);
     rightStack.VerticalAlignment(VerticalAlignment::Center);
@@ -7828,7 +11211,7 @@ void PopulateWifiPanel() {
             RepopulateLater(PopulateWifiPanel); // Show "Connecting..."
             
             ConnectToWifi(captured, L"");
-        }));
+        }, L"WifiNetworkRow"));
     }
 
     children.Append(MakeDivider());
@@ -7933,6 +11316,7 @@ void PopulateBluetoothPanel() {
 
     // 2-Column Header: Left (Title + Spinner) | Right (Toggle)
     wuxc::Grid headerGrid;
+    headerGrid.Name(L"BluetoothHeaderGrid");
     headerGrid.Margin(Thickness{4, 2, 0, 6});
     headerGrid.HorizontalAlignment(HorizontalAlignment::Stretch);
 
@@ -7948,6 +11332,7 @@ void PopulateBluetoothPanel() {
 
     // Left stack: title + spinner
     wuxc::StackPanel leftStack;
+    leftStack.Name(L"BluetoothHeaderLeftStack");
     leftStack.Orientation(wuxc::Orientation::Horizontal);
     leftStack.Spacing(8);
     leftStack.VerticalAlignment(VerticalAlignment::Center);
@@ -7970,6 +11355,7 @@ void PopulateBluetoothPanel() {
 
     // Right side: refresh button + toggle (stacked horizontally)
     wuxc::StackPanel rightStack;
+    rightStack.Name(L"BluetoothHeaderRightStack");
     rightStack.Orientation(wuxc::Orientation::Horizontal);
     rightStack.Spacing(4);
     rightStack.VerticalAlignment(VerticalAlignment::Center);
@@ -8120,7 +11506,7 @@ void PopulateBluetoothPanel() {
                     PopulateBluetoothPanel();
                 });
             });
-        }));
+        }, L"BluetoothDeviceRow"));
     }
 
     // (Scan button removed – scanning is now automatic or via header button)
@@ -8130,6 +11516,165 @@ void PopulateBluetoothPanel() {
     // Apply any styles for dynamically created elements (like the Bluetooth toggle).
     ApplyAllControlStyles();
 }
+
+
+
+// Shows the native Windows tray overflow panel by invoking the chevron
+// button through UIAutomation. The chevron lives in a XAML island whose
+// UIA subtree is bridged to the desktop root, NOT under Shell_TrayWnd,
+// which is why we search from the root rather than from the taskbar
+// window.
+//
+// This function never touches the overflow window directly. The shell's
+// XAML state machine owns its visibility and treats external ShowWindow
+// calls as tampering -- attempting them crashes the topbar on 25H2.
+// Invoking the chevron via its Invoke pattern is the same code path the
+// mouse uses, so the shell handles everything correctly.
+[[maybe_unused]] void ShowNativeTrayOverflow() {
+
+    // the overflow panel a few frames after Invoke() returns; the
+    // repositioner polls for the panel to become visible and moves it
+    // below the topbar as soon as it does. If the invoke fails and the
+    // panel never appears, the loop is a harmless no-op.
+    //
+    // SetWindowPos on an already-visible window from another process is
+    // safe. The crash in earlier attempts came from ShowWindow /
+    // SetForegroundWindow, which the shell's XAML state machine treats
+    // as tampering.
+    {
+        HWND overflow = FindWindowW(L"TopLevelWindowForOverflowXamlIsland", nullptr);
+        if (!overflow) overflow = FindWindowW(L"NotifyIconOverflowWindow", nullptr);
+        if (overflow) {
+            POINT cursor{};
+            GetCursorPos(&cursor);
+            RECT mr = GetBarMonitorRect();
+            int barBottom = mr.top + g_barHeightPx;
+            RunInBackground([overflow, cursor, mr, barBottom] {
+                for (int i = 0; i < 60; i++) {
+                    Sleep(20);
+                    if (!IsWindow(overflow)) break;
+                    if (!IsWindowVisible(overflow)) continue;
+                    RECT r{};
+                    if (!GetWindowRect(overflow, &r)) break;
+                    int w = r.right - r.left;
+                    int h = r.bottom - r.top;
+                    if (w <= 0 || h <= 0) continue;
+                    int targetX = cursor.x - w / 2;
+                    int targetY = barBottom + 4;
+                    if (targetX < mr.left) targetX = mr.left;
+                    if (targetX + w > mr.right) targetX = mr.right - w;
+                    if (targetY + h > mr.bottom) targetY = mr.bottom - h;
+                    if (targetY < mr.top) targetY = mr.top;
+                    if (r.left != targetX || r.top != targetY) {
+                        SetWindowPos(overflow, nullptr, targetX, targetY, 0, 0,
+                                     SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER);
+                    }
+                }
+            });
+        }
+    }
+
+    auto uia = GetCachedUIA();
+    if (!uia) {
+        Wh_Log(L"TrayOverflow: UIAutomation unavailable");
+        return;
+    }
+
+    // Cache the chevron element across invocations. Re-searching the
+    // desktop UIAutomation tree on every click was the source of the
+    // multi-second latency -- FindAll(Descendants) from the root walks
+    // every UI element of every app on the desktop, whereas
+    // ElementFromPoint only walks the hit-test path and is orders of
+    // magnitude faster.
+    static winrt::com_ptr<IUIAutomationElement> s_chevron;
+
+    auto isAlive = [](winrt::com_ptr<IUIAutomationElement> const& el) -> bool {
+        if (!el) return false;
+        BSTR id = nullptr;
+        HRESULT hr = el->get_CurrentAutomationId(&id);
+        if (id) SysFreeString(id);
+        return SUCCEEDED(hr);
+    };
+
+    auto findChevronFast = [&]() -> winrt::com_ptr<IUIAutomationElement> {
+        HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+        if (!taskbar) return nullptr;
+        RECT tb{};
+        if (!GetWindowRect(taskbar, &tb)) return nullptr;
+
+        // The chevron sits on the right side of the taskbar, just left
+        // of the clock. Scan a strip along the right edge and return
+        // the first element whose AutomationId is "SystemTrayIcon".
+        int cy = (tb.top + tb.bottom) / 2;
+        for (int cx = tb.right - 4; cx > tb.right - 500; cx -= 4) {
+            POINT pt{ cx, cy };
+            winrt::com_ptr<IUIAutomationElement> el;
+            if (FAILED(uia->ElementFromPoint(pt, el.put())) || !el) continue;
+            BSTR aidRaw = nullptr;
+            el->get_CurrentAutomationId(&aidRaw);
+            std::wstring aid = aidRaw ? aidRaw : L"";
+            if (aidRaw) SysFreeString(aidRaw);
+            if (aid == L"SystemTrayIcon") return el;
+        }
+        return nullptr;
+    };
+
+    if (!isAlive(s_chevron)) {
+        s_chevron = findChevronFast();
+    }
+    if (!s_chevron) {
+        Wh_Log(L"TrayOverflow: chevron not found");
+        return;
+    }
+
+    // The chevron's UIA Invoke pattern does not open the panel on Windows
+    // 11 25H2 -- it only focuses the element. The shell gates the panel
+    // behind its own mouse input handler, so the only reliable trigger is
+    // a real synthesized click at the chevron's centre.
+    RECT chevronRect{};
+    if (FAILED(s_chevron->get_CurrentBoundingRectangle(&chevronRect)) ||
+        chevronRect.right <= chevronRect.left ||
+        chevronRect.bottom <= chevronRect.top) {
+        Wh_Log(L"TrayOverflow: chevron has no valid rect, invalidating cache");
+        s_chevron = nullptr;
+        return;
+    }
+
+    int clickX = (chevronRect.left + chevronRect.right) / 2;
+    int clickY = (chevronRect.top + chevronRect.bottom) / 2;
+
+    POINT saved{};
+    GetCursorPos(&saved);
+
+    // Move the cursor onto the chevron, click, restore. The click must go
+    // through SendInput rather than PostMessage because the chevron is a
+    // XAML element inside a shared island HWND; WM_LBUTTONDOWN posted to
+    // the island does not reach the individual element.
+    SetCursorPos(clickX, clickY);
+    Sleep(30);
+
+    INPUT in[2]{};
+    in[0].type = INPUT_MOUSE;
+    in[0].mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+    in[1].type = INPUT_MOUSE;
+    in[1].mi.dwFlags = MOUSEEVENTF_LEFTUP;
+    SendInput(2, in, sizeof(INPUT));
+
+    // Restore the cursor after the shell has had a moment to process the
+    // click. Doing this synchronously would race the shell's input hook.
+    RunInBackground([saved] {
+        Sleep(120);
+        SetCursorPos(saved.x, saved.y);
+    });
+
+    Wh_Log(L"TrayOverflow: synthesized click at (%d,%d)", clickX, clickY);
+}
+
+// Finds and shows the native Windows tray overflow panel (the popup that
+// appears when you click the chevron ^ on the taskbar). Positions it
+// directly below the cursor position, which is where the Tray button was
+// clicked. Clicking the Tray button again hides it.
+
 
 // ============================================================================
 // Tray panel
@@ -8143,19 +11688,23 @@ wuxm::Imaging::BitmapImage Bgra32ToBitmapImage(const std::vector<uint8_t>& pixel
         return nullptr;
     }
 
-    BITMAPINFOHEADER infoHeader{};
-    infoHeader.biSize = sizeof(BITMAPINFOHEADER);
-    infoHeader.biWidth = width;
-    infoHeader.biHeight = -height;  // top-down
-    infoHeader.biPlanes = 1;
-    infoHeader.biBitCount = 32;
-    infoHeader.biCompression = BI_RGB;
-    infoHeader.biSizeImage = static_cast<DWORD>(pixels.size());
+    BITMAPV5HEADER infoHeader{};
+    infoHeader.bV5Size = sizeof(BITMAPV5HEADER);
+    infoHeader.bV5Width = width;
+    infoHeader.bV5Height = -height;
+    infoHeader.bV5Planes = 1;
+    infoHeader.bV5BitCount = 32;
+    infoHeader.bV5Compression = BI_BITFIELDS;
+    infoHeader.bV5RedMask = 0x00FF0000;
+    infoHeader.bV5GreenMask = 0x0000FF00;
+    infoHeader.bV5BlueMask = 0x000000FF;
+    infoHeader.bV5AlphaMask = 0xFF000000;
+    infoHeader.bV5CSType = LCS_sRGB;
+    infoHeader.bV5SizeImage = static_cast<DWORD>(pixels.size());
 
     BITMAPFILEHEADER fileHeader{};
-    fileHeader.bfType = 0x4D42;  // "BM"
-    fileHeader.bfSize = static_cast<DWORD>(sizeof(fileHeader) + sizeof(infoHeader) +
-                                           pixels.size());
+    fileHeader.bfType = 0x4D42;
+    fileHeader.bfSize = static_cast<DWORD>(sizeof(fileHeader) + sizeof(infoHeader) + pixels.size());
     fileHeader.bfOffBits = sizeof(fileHeader) + sizeof(infoHeader);
 
     try {
@@ -8448,19 +11997,66 @@ BatteryInfo GetBatteryInfo() {
     }
 
     info.powerSaving = false;
-    HKEY key = nullptr;
-    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Power\\SystemSettings",
-                     0, KEY_READ, &key) == ERROR_SUCCESS) {
-        DWORD value = 0, size = sizeof(value);
-        if (RegQueryValueEx(key, L"PowerSavingMode", nullptr, nullptr, (BYTE*)&value, &size) == ERROR_SUCCESS)
-            info.powerSaving = value != 0;
-        RegCloseKey(key);
+    {
+        HKEY key = nullptr;
+        if (RegOpenKeyEx(HKEY_LOCAL_MACHINE,
+                         L"SYSTEM\\CurrentControlSet\\Control\\Power",
+                         0, KEY_READ, &key) == ERROR_SUCCESS) {
+            DWORD value = 0, size = sizeof(value);
+            if (RegQueryValueEx(key, L"EcoModeState", nullptr, nullptr,
+                                reinterpret_cast<BYTE*>(&value),
+                                &size) == ERROR_SUCCESS) {
+                info.powerSaving = value != 0;
+            }
+            RegCloseKey(key);
+        }
     }
 
     if (info.present) {
         info.health = QueryBatteryHealth();
     }
     return info;
+}
+
+std::mutex g_nightLightCoalesceMutex;
+int g_nightLightPendingValue = -1;
+bool g_nightLightWorkerRunning = false;
+std::atomic<int> g_nightLightCachedState{-1};
+
+void SetNightLightState(bool enable) {
+    g_nightLightCachedState.store(enable ? 1 : 0);
+    {
+        std::lock_guard<std::mutex> lock(g_nightLightCoalesceMutex);
+        g_nightLightPendingValue = enable ? 1 : 0;
+        if (g_nightLightWorkerRunning) return;
+        g_nightLightWorkerRunning = true;
+    }
+    RunInBackground([] {
+        for (;;) {
+            int v;
+            {
+                std::lock_guard<std::mutex> lock(g_nightLightCoalesceMutex);
+                if (g_nightLightPendingValue < 0) {
+                    g_nightLightWorkerRunning = false;
+                    return;
+                }
+                v = g_nightLightPendingValue;
+                g_nightLightPendingValue = -1;
+            }
+            try { nightlight::Set(v != 0); } catch (...) {}
+        }
+    });
+}
+
+bool GetNightLightState() {
+    int v = g_nightLightCachedState.load();
+    if (v < 0) {
+        bool actual = false;
+        try { actual = nightlight::Get(); } catch (...) {}
+        v = actual ? 1 : 0;
+        g_nightLightCachedState.store(v);
+    }
+    return v != 0;
 }
 
 void UpdateBatteryButton() {
@@ -8476,7 +12072,7 @@ void UpdateBatteryButton() {
     s_lastPercentage = info.percentage;
     s_lastCharging = info.charging;
     s_initialized = true;
-    auto batteryIcon = BuildBatteryIcon(20, info.percentage, info.charging);
+    auto batteryIcon = BuildBatteryIcon(18, info.percentage, info.charging);
     if (batteryIcon) {
         batteryIcon.VerticalAlignment(VerticalAlignment::Center);
         g_batteryButton.Content(batteryIcon);
@@ -8515,16 +12111,20 @@ void ApplyResourceUsageToButton(const resource::Usage& usage) {
     };
 
     if (g_settings.showCpuUsage) {
-        std::wstring label = L"CPU: ";
+        std::wstring label = g_settings.labelCpu;
+        if (!label.empty() && label.back() != L' ') label += L" ";
         label += usage.cpuAvailable ? (std::to_wstring(usage.cpu) + L"%") : L"-";
         appendMetric(icons::kCpuChipStroke, label);
     }
     if (g_settings.showRamUsage) {
-        appendMetric(icons::kRamStickStroke,
-                     L"RAM: " + std::to_wstring(usage.ram) + L"%");
+        std::wstring label = g_settings.labelRam;
+        if (!label.empty() && label.back() != L' ') label += L" ";
+        label += std::to_wstring(usage.ram) + L"%";
+        appendMetric(icons::kRamStickStroke, label);
     }
     if (g_settings.showGpuUsage) {
-        std::wstring label = L"GPU: ";
+        std::wstring label = g_settings.labelGpu;
+        if (!label.empty() && label.back() != L' ') label += L" ";
         label += usage.gpuAvailable ? (std::to_wstring(usage.gpu) + L"%") : L"-";
         appendMetric(icons::kGpuCardStroke, label);
     }
@@ -8824,23 +12424,26 @@ void PopulateResourceFlyout() {
 
     // Tab buttons
     wuxc::StackPanel tabPanel;
+    tabPanel.Name(L"ResourceTabPanel");
     tabPanel.Orientation(wuxc::Orientation::Horizontal);
     tabPanel.Spacing(4);
-    tabPanel.Margin(Thickness{0, 0, 0, 8});
+    tabPanel.Margin(Thickness{0, 0, 0, 4});
 
-    auto makeTabButton = [&](PCWSTR name, int tabIndex,
+    auto makeTabButton = [&](PCWSTR name, PCWSTR displayText, int tabIndex,
                              PCWSTR iconStroke) -> wuxc::Button {
         auto btn = MakeGhostButton(name, kRowCorner);
+        std::wstring baseName(name);
         wuxc::StackPanel content;
+        content.Name(winrt::hstring(baseName + L"Content"));
         content.Orientation(wuxc::Orientation::Horizontal);
         content.Spacing(6);
         content.HorizontalAlignment(HorizontalAlignment::Center);
         content.VerticalAlignment(VerticalAlignment::Center);
-        if (auto icon = BuildVectorIcon(nullptr, L"", iconStroke, 24, 20, 1.8)) {
+        if (auto icon = BuildVectorIcon((baseName + L"Icon").c_str(), L"", iconStroke, 24, 20, 1.8)) {
             icon.VerticalAlignment(VerticalAlignment::Center);
             content.Children().Append(icon);
         }
-        auto text = MakeText(nullptr, name, 14);
+        auto text = MakeText((baseName + L"Text").c_str(), displayText, 14);
         text.VerticalAlignment(VerticalAlignment::Center);
         content.Children().Append(text);
         btn.Content(content);
@@ -8854,9 +12457,9 @@ void PopulateResourceFlyout() {
         return btn;
     };
 
-    auto cpuTab = makeTabButton(L"CPU", 0, icons::kCpuChipStroke);
-    auto ramTab = makeTabButton(L"RAM", 1, icons::kRamStickStroke);
-    auto gpuTab = makeTabButton(L"GPU", 2, icons::kGpuCardStroke);
+    auto cpuTab = makeTabButton(L"ResourceCpuTab", L"CPU", 0, icons::kCpuChipStroke);
+    auto ramTab = makeTabButton(L"ResourceRamTab", L"RAM", 1, icons::kRamStickStroke);
+    auto gpuTab = makeTabButton(L"ResourceGpuTab", L"GPU", 2, icons::kGpuCardStroke);
     tabPanel.Children().Append(cpuTab);
     tabPanel.Children().Append(ramTab);
     tabPanel.Children().Append(gpuTab);
@@ -8875,8 +12478,8 @@ void PopulateResourceFlyout() {
     infoIsland.CornerRadius(MakeCorner(6));
     infoIsland.BorderBrush(MakeBrush(0x20, 0xFF, 0xFF, 0xFF));
     infoIsland.BorderThickness(Thickness{1, 1, 1, 1});
-    infoIsland.Margin(Thickness{0, 0, 0, 8});
-    infoIsland.Padding(Thickness{10, 8, 10, 8});
+    infoIsland.Margin(Thickness{0, 0, 0, 4});
+    infoIsland.Padding(Thickness{8, 6, 8, 6});
     infoIsland.HorizontalAlignment(HorizontalAlignment::Stretch);
     infoIsland.VerticalAlignment(VerticalAlignment::Top); // Prevent it from stretching to fill the ScrollViewer
 
@@ -8885,19 +12488,19 @@ void PopulateResourceFlyout() {
     infoStack.VerticalAlignment(VerticalAlignment::Center); // Centers the text inside the Border
 
     // CPU Name
-    g_infoCpuLabel = MakeText(nullptr, L"CPU", 10, false, 0.6);
-    g_infoCpuName = MakeText(nullptr, L"Loading...", 13, true);
+    g_infoCpuLabel = MakeText(L"InfoCpuLabel", L"CPU", 10, false, 0.6);
+    g_infoCpuName = MakeText(L"InfoCpuName", L"Loading...", 13, true);
     infoStack.Children().Append(g_infoCpuLabel);
     infoStack.Children().Append(g_infoCpuName);
 
     // RAM Name
-    g_infoRamLabel = MakeText(nullptr, L"Memory", 10, false, 0.6);
-    g_infoRamName = MakeText(nullptr, L"Loading...", 13, true);
+    g_infoRamLabel = MakeText(L"InfoRamLabel", L"Memory", 10, false, 0.6);
+    g_infoRamName = MakeText(L"InfoRamName", L"Loading...", 13, true);
     infoStack.Children().Append(g_infoRamLabel);
     infoStack.Children().Append(g_infoRamName);
 
     // GPU Combo
-    g_infoGpuLabel = MakeText(nullptr, L"GPU", 10, false, 0.6);
+    g_infoGpuLabel = MakeText(L"InfoGpuLabel", L"GPU", 10, false, 0.6);
     g_infoGpuCombo = wuxc::ComboBox();
     g_infoGpuCombo.Name(L"GpuSelector");
     g_infoGpuCombo.HorizontalAlignment(HorizontalAlignment::Stretch);
@@ -8918,6 +12521,22 @@ void PopulateResourceFlyout() {
             UpdateResourceFlyoutContent();
         }
     });
+    g_infoGpuCombo.DropDownOpened([](auto&&, auto&&) { 
+        g_resourceComboOpen = true;
+        auto promote = [] {
+            try { PromoteChildFlyoutPopups(); } catch (...) {}
+        };
+        RunOnUiThread([promote] { promote(); });
+        RunInBackground([promote] {
+            Sleep(80);
+            RunOnUiThread([promote] { promote(); });
+            Sleep(80);
+            RunOnUiThread([promote] { promote(); });
+        });
+    });
+    g_infoGpuCombo.DropDownClosed([](auto&&, auto&&) {
+        g_resourceComboOpen = false;
+    });
 
     infoStack.Children().Append(g_infoGpuLabel);
     infoStack.Children().Append(g_infoGpuCombo);
@@ -8927,14 +12546,17 @@ void PopulateResourceFlyout() {
 
     // Content area: graph + stats
     wuxc::Grid contentGrid;
+    contentGrid.Name(L"ResourceContentGrid");
     contentGrid.RowDefinitions().Append(wuxc::RowDefinition()); // graph row
     contentGrid.RowDefinitions().Append(wuxc::RowDefinition()); // stats row
 
     // Graph Canvas (wrapped in Border for rounded corners)
     wuxc::Canvas graphCanvas;
+    graphCanvas.Name(L"ResourceGraphCanvas");
     graphCanvas.Height(150);
     graphCanvas.HorizontalAlignment(HorizontalAlignment::Stretch);
     wuxc::Border graphBorder;
+    graphBorder.Name(L"ResourceGraphBorder");
     graphBorder.Height(150);
     graphBorder.Background(MakeBrush(0x10, 0xFF, 0xFF, 0xFF));
     graphBorder.CornerRadius(MakeCorner(6));
@@ -8959,11 +12581,12 @@ void PopulateResourceFlyout() {
 
     // Stats grid (2x2, Task Manager style)
     wuxc::Grid statsGrid;
-    statsGrid.Margin(Thickness{10, 8, 10, 8});
+    statsGrid.Name(L"ResourceStatsGrid");
+    statsGrid.Margin(Thickness{8, 4, 8, 4});
     statsGrid.HorizontalAlignment(HorizontalAlignment::Stretch);
     statsGrid.VerticalAlignment(VerticalAlignment::Stretch);
-    statsGrid.RowSpacing(8);
-    statsGrid.ColumnSpacing(12);
+    statsGrid.RowSpacing(4);
+    statsGrid.ColumnSpacing(8);
     
     for (int i = 0; i < 2; i++) {
         statsGrid.RowDefinitions().Append(wuxc::RowDefinition());
@@ -8971,14 +12594,14 @@ void PopulateResourceFlyout() {
     }
 
     // Helper to create a stat cell (centered)
-    auto makeStatCell = [&](int row, int col, PCWSTR labelText, wuxc::TextBlock& labelOut, wuxc::TextBlock& valueOut, wuxc::StackPanel& cellOut) {
+    auto makeStatCell = [&](int row, int col, PCWSTR labelText, PCWSTR labelName, PCWSTR valueName, wuxc::TextBlock& labelOut, wuxc::TextBlock& valueOut, wuxc::StackPanel& cellOut) {
         wuxc::StackPanel cell;
         cell.Spacing(2);
         cell.HorizontalAlignment(HorizontalAlignment::Center);
-        auto label = MakeText(nullptr, labelText, 11, false, 0.6);
+        auto label = MakeText(labelName, labelText, 11, false, 0.6);
         label.HorizontalAlignment(HorizontalAlignment::Center);
         label.TextAlignment(TextAlignment::Center);
-        auto value = MakeText(nullptr, L"-", 20, true);
+        auto value = MakeText(valueName, L"-", 20, true);
         value.HorizontalAlignment(HorizontalAlignment::Center);
         value.TextAlignment(TextAlignment::Center);
         labelOut = label;
@@ -8992,10 +12615,10 @@ void PopulateResourceFlyout() {
         cellOut = cell; // Store the cell container
     };
 
-    makeStatCell(0, 0, L"CPU Usage", g_statLabel0, g_statValue0, g_statCell0);
-    makeStatCell(0, 1, L"Clock Speed", g_statLabel1, g_statValue1, g_statCell1);
-    makeStatCell(1, 0, L"Cores", g_statLabel2, g_statValue2, g_statCell2);
-    makeStatCell(1, 1, L"Threads", g_statLabel3, g_statValue3, g_statCell3);
+    makeStatCell(0, 0, L"CPU Usage",   L"StatLabel0", L"StatValue0", g_statLabel0, g_statValue0, g_statCell0);
+    makeStatCell(0, 1, L"Clock Speed", L"StatLabel1", L"StatValue1", g_statLabel1, g_statValue1, g_statCell1);
+    makeStatCell(1, 0, L"Cores",       L"StatLabel2", L"StatValue2", g_statLabel2, g_statValue2, g_statCell2);
+    makeStatCell(1, 1, L"Threads",     L"StatLabel3", L"StatValue3", g_statLabel3, g_statValue3, g_statCell3);
 
     contentGrid.Children().Append(statsGrid);
     wuxc::Grid::SetRow(statsGrid, 1);
@@ -9018,6 +12641,19 @@ void PopulateResourceFlyout() {
 }
 
 void PopulateWeatherPanel();
+
+static double WeatherConvertCtoDisplay(double celsius) {
+    if (g_settings.weatherUnit == L"F") {
+        return celsius * 9.0 / 5.0 + 32.0;
+    }
+    return celsius;
+}
+static const wchar_t* WeatherUnitSuffix() {
+    return g_settings.weatherUnit == L"F" ? L"\u00B0F" : L"\u00B0C";
+}
+static const wchar_t* WeatherUnitLetter() {
+    return g_settings.weatherUnit == L"F" ? L"\u00B0" : L"\u00B0";
+}
 
 // Rebuilds the tray button's content: [icon] [status] [temp°C]
 void RefreshWeatherButtonContent() {
@@ -9048,9 +12684,10 @@ void RefreshWeatherButtonContent() {
 
     wchar_t buf[32];
     if (g_weatherState.valid) {
-        swprintf_s(buf, L"%.0f°C", g_weatherState.temperature);
+        swprintf_s(buf, L"%.0f%s", WeatherConvertCtoDisplay(g_weatherState.temperature),
+                   WeatherUnitSuffix());
     } else {
-        wcscpy_s(buf, L"--°C");
+        wcscpy_s(buf, L"--");
     }
     stack.Children().Append(MakeText(nullptr, buf, 12, true));
 }
@@ -9107,7 +12744,7 @@ void RebuildWeatherSearchResultsPanel() {
                             PopulateWeatherPanel();
                         });
                     });
-                }));
+                }, L"WeatherCityRow"));
         }
     }
 
@@ -9212,6 +12849,17 @@ void BuildWeatherLocationPicker(const wf::Collections::IVector<UIElement>& child
     searchBox.Loaded([searchBox](auto&&, auto&&) {
         searchBox.Focus(FocusState::Programmatic);
     });
+
+    // Without this the Weather search box receives XAML-level focus but no
+    // OS-level keyboard input, because the topbar island HWND was shown with
+    // SW_SHOWNOACTIVATE and is not the foreground window. Same rationale as
+    // the Wi-Fi password box: defer the activation off the XAML event, one
+    // dispatcher turn is enough for the presenter to finish.
+    searchBox.GotFocus([](auto&&, auto&&) {
+        RunOnUiThread([] {
+            try { EnsureTopBarHasKeyboardFocus(); } catch (...) {}
+        });
+    });
 }
 
 void BuildWeatherView(const wf::Collections::IVector<UIElement>& children) {
@@ -9235,7 +12883,9 @@ void BuildWeatherView(const wf::Collections::IVector<UIElement>& children) {
     leftStack.Children().Append(cityText);
 
     wchar_t tempBuf[32];
-    swprintf_s(tempBuf, L"%.0f°", g_weatherState.temperature);
+    swprintf_s(tempBuf, L"%.0f%s",
+               WeatherConvertCtoDisplay(g_weatherState.temperature),
+               WeatherUnitLetter());
     auto tempText = MakeText(L"WeatherCurrentTemp", tempBuf, 40, true);
     tempText.Margin(Thickness{0, 0, 0, 0});
     leftStack.Children().Append(tempText);
@@ -9268,8 +12918,9 @@ void BuildWeatherView(const wf::Collections::IVector<UIElement>& children) {
     rightTextStack.Children().Append(cond);
 
     wchar_t minMaxBuf[64];
-    swprintf_s(minMaxBuf, L"Min: %.0f°C  Max: %.0f°C",
-               g_weatherState.tempMin, g_weatherState.tempMax);
+    swprintf_s(minMaxBuf, L"Min: %.0f%s  Max: %.0f%s",
+               WeatherConvertCtoDisplay(g_weatherState.tempMin), WeatherUnitLetter(),
+               WeatherConvertCtoDisplay(g_weatherState.tempMax), WeatherUnitLetter());
     auto minMax = MakeText(L"WeatherMinMax", minMaxBuf, 11, false, 0.65);
     minMax.HorizontalAlignment(HorizontalAlignment::Left);
     rightTextStack.Children().Append(minMax);
@@ -9314,7 +12965,9 @@ void BuildWeatherView(const wf::Collections::IVector<UIElement>& children) {
         }
 
         wchar_t tBuf[16];
-        swprintf_s(tBuf, L"%.0f°", g_weatherState.hourlyTemps[i].second);
+        swprintf_s(tBuf, L"%.0f%s",
+                   WeatherConvertCtoDisplay(g_weatherState.hourlyTemps[i].second),
+                   WeatherUnitLetter());
         auto tv = MakeText(nullptr, tBuf, 14, true);
         tv.HorizontalAlignment(HorizontalAlignment::Center);
         cell.Children().Append(tv);
@@ -9363,7 +13016,8 @@ void BuildWeatherView(const wf::Collections::IVector<UIElement>& children) {
     // for the row.
     scrollLeft.VerticalAlignment(VerticalAlignment::Stretch);
     scrollLeft.Content(BuildVectorIcon(nullptr, L"", icons::kChevronLeft, 24, 14, 1.8));
-    scrollLeft.Click([hourlyScroller, hourlyRow](auto&&, auto&&) {
+    scrollLeft.Click([hourlyScroller, hourlyRow](auto&&, auto&&) { 
+        if (hourlyRow.Children().Size() == 0) return;
         constexpr double kCellStep = 52.0;
         double current = hourlyScroller.HorizontalOffset();
         int currentIndex = static_cast<int>(std::round(current / kCellStep));
@@ -9387,12 +13041,13 @@ void BuildWeatherView(const wf::Collections::IVector<UIElement>& children) {
     scrollRight.VerticalContentAlignment(VerticalAlignment::Center);
     scrollRight.VerticalAlignment(VerticalAlignment::Stretch);
     scrollRight.Content(BuildVectorIcon(nullptr, L"", icons::kChevronRight, 24, 14, 1.8));
-    scrollRight.Click([hourlyScroller, hourlyRow](auto&&, auto&&) {
+    scrollRight.Click([hourlyScroller, hourlyRow](auto&&, auto&&) { 
+        int childCount = static_cast<int>(hourlyRow.Children().Size());
+        if (childCount <= 0) return;
         constexpr double kCellStep = 52.0;
         double current = hourlyScroller.HorizontalOffset();
         int currentIndex = static_cast<int>(std::round(current / kCellStep));
         int targetIndex = currentIndex + 5;
-        int childCount = static_cast<int>(hourlyRow.Children().Size());
         if (targetIndex >= childCount) {
             targetIndex = childCount - 1;
         }
@@ -9566,6 +13221,1096 @@ void PopulateRecycleBinPanel() {
                                      L"ms-settings:storagesense"));
 }
 
+namespace nightlight {
+    constexpr PCWSTR kStatePath =
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\CloudStore\\Store\\"
+        L"DefaultAccount\\Current\\"
+        L"default$windows.data.bluelightreduction.bluelightreductionstate\\"
+        L"windows.data.bluelightreduction.bluelightreductionstate";
+
+    inline bool Get() {
+        HKEY key = nullptr;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, kStatePath, 0, KEY_READ, &key) != ERROR_SUCCESS) return false;
+        BYTE buf[512]{}; DWORD sz = sizeof(buf); DWORD type = 0;
+        bool on = false;
+        if (RegQueryValueExW(key, L"Data", nullptr, &type, buf, &sz) == ERROR_SUCCESS &&
+            type == REG_BINARY && sz >= 19) {
+            on = (buf[18] == 0x15);
+        }
+        RegCloseKey(key);
+        return on;
+    }
+
+    inline void AppendVarint(std::vector<BYTE>& out, uint64_t value) {
+        do {
+            BYTE b = static_cast<BYTE>(value & 0x7F);
+            value >>= 7;
+            if (value) b |= 0x80;
+            out.push_back(b);
+        } while (value);
+    }
+
+    inline uint64_t CurrentFiletime() {
+        FILETIME ft;
+        GetSystemTimeAsFileTime(&ft);
+        ULARGE_INTEGER uli;
+        uli.LowPart = ft.dwLowDateTime;
+        uli.HighPart = ft.dwHighDateTime;
+        return uli.QuadPart;
+    }
+
+    inline uint32_t CurrentUnixSeconds() {
+        FILETIME ft;
+        GetSystemTimeAsFileTime(&ft);
+        ULARGE_INTEGER uli;
+        uli.LowPart = ft.dwLowDateTime;
+        uli.HighPart = ft.dwHighDateTime;
+        return static_cast<uint32_t>(
+            (uli.QuadPart - 116444736000000000ULL) / 10000000ULL);
+    }
+
+    inline bool Set(bool enable) {
+        HKEY key = nullptr;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, kStatePath, 0,
+                          KEY_READ | KEY_WRITE, &key) != ERROR_SUCCESS) {
+            return false;
+        }
+
+        BYTE buf[512]{}; DWORD sz = sizeof(buf); DWORD type = 0;
+        if (RegQueryValueExW(key, L"Data", nullptr, &type, buf, &sz) ==
+                ERROR_SUCCESS &&
+            type == REG_BINARY && sz >= 19) {
+            bool curOn = (buf[18] == 0x15);
+            if (curOn == enable) { RegCloseKey(key); return true; }
+        }
+
+        std::vector<BYTE> inner;
+        inner.push_back(0x43); inner.push_back(0x42);
+        inner.push_back(0x01); inner.push_back(0x00);
+        if (enable) {
+            inner.push_back(0x10);
+            inner.push_back(0x00);
+        }
+        inner.push_back(0xD0); inner.push_back(0x0A);
+        inner.push_back(0x02);
+        inner.push_back(0xC6); inner.push_back(0x14);
+        AppendVarint(inner, CurrentFiletime());
+        inner.push_back(0x00);
+
+        std::vector<BYTE> data;
+        data.push_back(0x43); data.push_back(0x42);
+        data.push_back(0x01); data.push_back(0x00);
+        data.push_back(0x0A); data.push_back(0x02);
+        data.push_back(0x01); data.push_back(0x00);
+        data.push_back(0x2A);
+        data.push_back(0x06);
+        AppendVarint(data, CurrentUnixSeconds());
+        data.push_back(0x2A);
+        data.push_back(0x2B);
+        data.push_back(0x0E);
+        AppendVarint(data, inner.size());
+        data.insert(data.end(), inner.begin(), inner.end());
+        data.push_back(0x00);
+        data.push_back(0x00);
+        data.push_back(0x00);
+
+        bool ok = RegSetValueExW(key, L"Data", 0, REG_BINARY,
+                                 data.data(),
+                                 static_cast<DWORD>(data.size())) == ERROR_SUCCESS;
+        if (ok) {
+            RegFlushKey(key);
+            Wh_Log(L"NightLight: wrote sz=%zu bytes (enable=%d)",
+                   data.size(), enable ? 1 : 0);
+        } else {
+            Wh_Log(L"NightLight: RegSetValueExW failed: %u", GetLastError());
+        }
+        RegCloseKey(key);
+        return ok;
+    }
+}
+
+namespace ccd {
+    inline std::vector<std::wstring> AllItems() {
+        return {L"WiFi", L"Bluetooth", L"AirplaneMode", L"MobileHotspot",
+                L"NightLight", L"DarkMode",
+                L"Battery", L"Power", L"Display", L"Sound"};
+    }
+    inline bool IsSlider(const std::wstring& id) {
+        return id == L"Display" || id == L"Sound";
+    }
+    inline std::wstring Ser(const std::vector<std::wstring>& v) {
+        std::wstring s; for (size_t i = 0; i < v.size(); i++) { if (i) s += L","; s += v[i]; }
+        return s;
+    }
+    inline std::vector<std::wstring> Rd(PCWSTR k) {
+        std::wstring csv = GetStringSettingCopy(k);
+        std::vector<std::wstring> out;
+        size_t pos = 0;
+        while (pos <= csv.size()) {
+            size_t comma = csv.find(L',', pos);
+            std::wstring tok = TrimWs(csv.substr(
+                pos, comma == std::wstring::npos ? std::wstring::npos : comma - pos));
+            if (!tok.empty()) out.push_back(tok);
+            if (comma == std::wstring::npos) break;
+            pos = comma + 1;
+        }
+        return out;
+    }
+    inline void Prune(std::vector<std::wstring>& v) {
+        auto all = AllItems();
+        v.erase(std::remove_if(v.begin(), v.end(), [&](const std::wstring& s) {
+            return std::find(all.begin(), all.end(), s) == all.end(); }), v.end());
+    }
+}
+
+static bool s_ccCustomize = false;
+
+[[clang::no_destroy]] DispatcherTimer g_ccDelayedOpenTimer{nullptr};
+static std::wstring g_ccDelayedOpenTarget;
+
+// Airplane mode and mobile hotspot state are refreshed on a worker thread.
+// The Control Center tiles used to call Radio::GetRadiosAsync().get() and
+// NetworkOperatorTetheringManager::TetheringOperationalState() on the XAML
+// UI thread every time they were built. C++/WinRT asserts against .get() in
+// an STA because the blocking wait can deadlock; in release builds it just
+// freezes the bar until the radio service answers. Cache the results on a
+// worker and re-render through the dispatcher.
+std::atomic<bool> g_airplaneModeOn{false};
+std::atomic<bool> g_hotspotOn{false};
+std::atomic<bool> g_airplaneHotspotRefreshing{false};
+
+void RefreshAirplaneHotspotStateAsync() {
+    bool expected = false;
+    if (!g_airplaneHotspotRefreshing.compare_exchange_strong(expected, true)) {
+        return;
+    }
+    RunInBackground([] {
+        bool airplaneOn = false;
+        bool hotspotOn = false;
+#if TOPBAR_HAS_RADIOS
+        try {
+            using namespace winrt::Windows::Devices::Radios;
+            auto radios = Radio::GetRadiosAsync().get();
+            bool anyRadio = false;
+            bool anyOn = false;
+            for (auto&& radio : radios) {
+                if (radio.Kind() == RadioKind::WiFi ||
+                    radio.Kind() == RadioKind::Bluetooth ||
+                    radio.Kind() == RadioKind::MobileBroadband) {
+                    anyRadio = true;
+                    if (radio.State() == RadioState::On) { anyOn = true; break; }
+                }
+            }
+            airplaneOn = anyRadio && !anyOn;
+        } catch (...) {}
+#endif
+#if TOPBAR_HAS_NETWORK_OPERATORS
+        try {
+            using namespace winrt::Windows::Networking::NetworkOperators;
+            using namespace winrt::Windows::Networking::Connectivity;
+            auto profile = NetworkInformation::GetInternetConnectionProfile();
+            if (profile) {
+                auto mgr = NetworkOperatorTetheringManager::CreateFromConnectionProfile(profile);
+                if (mgr) {
+                    hotspotOn = (mgr.TetheringOperationalState() == TetheringOperationalState::On);
+                }
+            }
+        } catch (...) {}
+#endif
+        g_airplaneModeOn.store(airplaneOn);
+        g_hotspotOn.store(hotspotOn);
+        g_airplaneHotspotRefreshing.store(false);
+        RunOnUiThread([] {
+            try {
+                if (g_controlCenterFlyout && g_controlCenterFlyout.IsOpen()) {
+                    PopulateControlCenterPanel();
+                }
+            } catch (...) {}
+        });
+    });
+}
+
+void CCRequestFlyoutOpen(const std::wstring& target) {
+    if (!g_ccDelayedOpenTimer) {
+        g_ccDelayedOpenTimer = DispatcherTimer();
+        g_ccDelayedOpenTimer.Interval(std::chrono::milliseconds(250));
+        g_ccDelayedOpenTimer.Tick([](auto&&, auto&&) {
+            g_ccDelayedOpenTimer.Stop();
+            try {
+                auto hasVisibleAnchor = [](wuxc::Button const& btn) -> bool {
+                    if (!btn) return false;
+                    try {
+                        return btn.ActualWidth() > 0.0 &&
+                               btn.Visibility() == Visibility::Visible;
+                    } catch (...) { return false; }
+                };
+                if (g_ccDelayedOpenTarget == L"wifi") {
+                    if (g_wifiFlyout && !g_wifiFlyout.IsOpen()) {
+                        if (hasVisibleAnchor(g_wifiButton))
+                            g_wifiFlyout.ShowAt(g_wifiButton);
+                        else if (hasVisibleAnchor(g_controlCenterButton))
+                            g_wifiFlyout.ShowAt(g_controlCenterButton);
+                    }
+                } else if (g_ccDelayedOpenTarget == L"bluetooth") {
+                    if (g_bluetoothFlyout && !g_bluetoothFlyout.IsOpen()) {
+                        if (hasVisibleAnchor(g_bluetoothButton))
+                            g_bluetoothFlyout.ShowAt(g_bluetoothButton);
+                        else if (hasVisibleAnchor(g_controlCenterButton))
+                            g_bluetoothFlyout.ShowAt(g_controlCenterButton);
+                    }
+                } else if (g_ccDelayedOpenTarget == L"display") {
+                    if (g_displayFlyout && !g_displayFlyout.IsOpen()) {
+                        if (hasVisibleAnchor(g_displayButton))
+                            g_displayFlyout.ShowAt(g_displayButton);
+                        else if (hasVisibleAnchor(g_controlCenterButton))
+                            g_displayFlyout.ShowAt(g_controlCenterButton);
+                    }
+                } else if (g_ccDelayedOpenTarget == L"sound") {
+                    if (g_soundFlyout && !g_soundFlyout.IsOpen()) {
+                        if (hasVisibleAnchor(g_soundButton))
+                            g_soundFlyout.ShowAt(g_soundButton);
+                        else if (hasVisibleAnchor(g_controlCenterButton))
+                            g_soundFlyout.ShowAt(g_controlCenterButton);
+                    }
+                } else if (g_ccDelayedOpenTarget == L"battery") {
+                    if (g_batteryFlyout && !g_batteryFlyout.IsOpen()) {
+                        if (hasVisibleAnchor(g_batteryButton))
+                            g_batteryFlyout.ShowAt(g_batteryButton);
+                        else if (hasVisibleAnchor(g_controlCenterButton))
+                            g_batteryFlyout.ShowAt(g_controlCenterButton);
+                    }
+                }
+                g_ccDelayedOpenTarget.clear();
+                try { ScheduleForceShowXamlPopup(); } catch (...) {}
+            } catch (...) {}
+        });
+    }
+    g_ccDelayedOpenTarget = target;
+    g_ccDelayedOpenTimer.Stop();
+    g_ccDelayedOpenTimer.Start();
+}
+
+void PopulateControlCenterPanel_New() {
+    if (!g_controlCenterPanel) return;
+    g_populatingPanel = true;
+    struct Guard { ~Guard() { g_populatingPanel = false; } } guard;
+
+    auto children = g_controlCenterPanel.Children();
+    children.Clear();
+    children.Append(MakePanelTitle(L"Control Center"));
+
+    auto layout = ccd::Rd(L"controlCenterLayout");
+    auto hidden = ccd::Rd(L"controlCenterHidden");
+    ccd::Prune(layout);
+    ccd::Prune(hidden);
+    bool firstRun = layout.empty() && hidden.empty();
+    if (firstRun) layout = ccd::AllItems();
+    for (auto& id : ccd::AllItems()) {
+        if (std::find(layout.begin(), layout.end(), id) == layout.end() &&
+            std::find(hidden.begin(), hidden.end(), id) == hidden.end()) {
+            layout.push_back(id);
+        }
+    }
+    if (firstRun) {
+        Wh_SetStringValue(L"controlCenterLayout", ccd::Ser(layout).c_str());
+        Wh_SetStringValue(L"controlCenterHidden", L"");
+    }
+
+    auto layoutRef = std::make_shared<std::vector<std::wstring>>(layout);
+    auto hiddenRef = std::make_shared<std::vector<std::wstring>>(hidden);
+    auto commit = [layoutRef, hiddenRef] {
+        Wh_SetStringValue(L"controlCenterLayout", ccd::Ser(*layoutRef).c_str());
+        Wh_SetStringValue(L"controlCenterHidden", ccd::Ser(*hiddenRef).c_str());
+    };
+    auto rerender = [] {
+        RunOnUiThread([] { try { PopulateControlCenterPanel_New(); } catch (...) {} });
+    };
+
+    auto tileBg      = MakeBrush(0x30, 0xFF, 0xFF, 0xFF);
+    auto tileHover   = MakeBrush(0x42, 0xFF, 0xFF, 0xFF);
+    auto tilePressed = MakeBrush(0x54, 0xFF, 0xFF, 0xFF);
+    auto circleOn    = MakeBrush(0xFF, 0xFF, 0xFF, 0xFF);
+    auto circleOff   = MakeBrush(0x1E, 0xFF, 0xFF, 0xFF);
+
+    constexpr double kGap = 8.0;
+    constexpr double kTileH = 54.0;
+    constexpr double kTileRadius = 14.0;
+    constexpr double kCircle = 28.0;
+    constexpr double kContainerW = 300.0;
+    constexpr double kColUnit = (kContainerW + kGap) / 4.0;
+
+    auto styleTileButton = [&](wuxc::Button const& b) {
+        b.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackground")), tileBg);
+        b.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPointerOver")), tileHover);
+        b.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPressed")), tilePressed);
+        b.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundDisabled")), tileBg);
+        auto t = MakeBrush(0, 0, 0, 0);
+        b.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBorderBrush")), t);
+        b.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBorderBrushPointerOver")), t);
+        b.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBorderBrushPressed")), t);
+        b.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBorderBrushDisabled")), t);
+    };
+
+    auto iconColorFor = [](bool on) -> PCWSTR { return on ? L"#000000" : L"#FFFFFF"; };
+
+    auto makeCircle = [&](FrameworkElement icon, bool on) -> wuxc::Border {
+        wuxc::Border c;
+        c.Width(kCircle); c.Height(kCircle);
+        c.CornerRadius(CornerRadius{kCircle/2, kCircle/2, kCircle/2, kCircle/2});
+        c.Background(on ? circleOn : circleOff);
+        c.HorizontalAlignment(HorizontalAlignment::Center);
+        c.VerticalAlignment(VerticalAlignment::Center);
+        if (icon) {
+            icon.Width(16); icon.Height(16);
+            icon.HorizontalAlignment(HorizontalAlignment::Center);
+            icon.VerticalAlignment(VerticalAlignment::Center);
+            c.Child(icon);
+        }
+        return c;
+    };
+
+    auto makeLabels = [&](const std::wstring& l, const std::wstring& s) {
+        wuxc::StackPanel sp;
+        sp.Spacing(1);
+        sp.VerticalAlignment(VerticalAlignment::Center);
+        sp.Children().Append(MakeText(nullptr, l, 11, true));
+        if (!s.empty()) {
+            auto st = MakeText(nullptr, s, 9, false, 0.7);
+            st.TextTrimming(TextTrimming::CharacterEllipsis);
+            st.MaxWidth(110);
+            sp.Children().Append(st);
+        }
+        return sp;
+    };
+
+    auto makeToggleTile = [&](FrameworkElement icon, const std::wstring& l,
+                              const std::wstring& s, bool on,
+                              std::function<void()> onCircle,
+                              std::function<void()> onBody) -> wuxc::Button {
+        auto btn = MakeGhostButton(nullptr, kTileRadius);
+        btn.HorizontalAlignment(HorizontalAlignment::Stretch);
+        btn.VerticalAlignment(VerticalAlignment::Stretch);
+        btn.BorderThickness(Thickness{0, 0, 0, 0});
+        btn.HorizontalContentAlignment(HorizontalAlignment::Left);
+        btn.VerticalContentAlignment(VerticalAlignment::Center);
+        btn.Padding(Thickness{8, 0, 10, 0});
+        btn.Background(tileBg);
+        styleTileButton(btn);
+        auto circle = makeCircle(icon, on);
+        auto labels = makeLabels(l, s);
+        wuxc::StackPanel st;
+        st.Orientation(wuxc::Orientation::Horizontal);
+        st.Spacing(8);
+        st.VerticalAlignment(VerticalAlignment::Center);
+        st.Children().Append(circle);
+        st.Children().Append(labels);
+        btn.Content(st);
+        btn.Tapped([circle, onCircle, onBody](wf::IInspectable const& sender,
+                                              Input::TappedRoutedEventArgs const& args) {
+            try {
+                args.Handled(true);
+                if (s_ccCustomize) return;
+                auto b = sender.as<wuxc::Button>();
+                auto pt = args.GetPosition(b);
+                if (!circle || circle.ActualWidth() <= 0) { if (onBody) onBody(); return; }
+                auto t = circle.TransformToVisual(b);
+                auto o = t.TransformPoint(wf::Point{0.0f, 0.0f});
+                bool inside = pt.X >= o.X && pt.X <= o.X + circle.ActualWidth() &&
+                              pt.Y >= o.Y && pt.Y <= o.Y + circle.ActualHeight();
+                if (inside) { if (onCircle) onCircle(); } else { if (onBody) onBody(); }
+            } catch (...) {}
+        });
+        return btn;
+    };
+
+    auto makeSimpleTile = [&](FrameworkElement icon, const std::wstring& l,
+                              const std::wstring& s, bool on,
+                              std::function<void()> onClick) -> wuxc::Button {
+        auto btn = MakeGhostButton(nullptr, kTileRadius);
+        btn.HorizontalAlignment(HorizontalAlignment::Stretch);
+        btn.VerticalAlignment(VerticalAlignment::Stretch);
+        btn.BorderThickness(Thickness{0, 0, 0, 0});
+        btn.HorizontalContentAlignment(HorizontalAlignment::Left);
+        btn.VerticalContentAlignment(VerticalAlignment::Center);
+        btn.Padding(Thickness{8, 0, 10, 0});
+        btn.Background(tileBg);
+        styleTileButton(btn);
+        auto circle = makeCircle(icon, on);
+        wuxc::StackPanel st;
+        st.Orientation(wuxc::Orientation::Horizontal);
+        st.Spacing(8);
+        st.VerticalAlignment(VerticalAlignment::Center);
+        st.Children().Append(circle);
+        st.Children().Append(makeLabels(l, s));
+        btn.Content(st);
+        auto onBrush = circleOn;
+        auto offBrush = circleOff;
+        auto stateRef = std::make_shared<bool>(on);
+        btn.Click([onClick, circle, onBrush, offBrush, stateRef](auto&&, auto&&) {
+            if (s_ccCustomize) return;
+            *stateRef = !*stateRef;
+            try { circle.Background(*stateRef ? onBrush : offBrush); } catch (...) {}
+            if (onClick) onClick();
+        });
+        return btn;
+    };
+
+    auto makeSliderCard = [&](FrameworkElement icon,
+                              int value, std::function<void(int)> onChanged,
+                              std::function<void()> chevronClick = nullptr) -> wuxc::Border {
+        auto card = wuxc::Border();
+        card.CornerRadius(CornerRadius{kTileRadius, kTileRadius, kTileRadius, kTileRadius});
+        card.Background(tileBg);
+        card.Padding(Thickness{12, 8, 12, 8});
+        card.HorizontalAlignment(HorizontalAlignment::Stretch);
+        card.VerticalAlignment(VerticalAlignment::Stretch);
+        wuxc::StackPanel st; 
+        st.Spacing(4);
+        FrameworkElement sliderRow = MakeSliderRow(icon, value, onChanged);
+        if (chevronClick) {
+            auto rowGrid = wuxc::Grid();
+            wuxc::ColumnDefinition cc1;
+            cc1.Width(GridLength{1, GridUnitType::Star});
+            wuxc::ColumnDefinition cc2;
+            cc2.Width(GridLength{0, GridUnitType::Auto});
+            rowGrid.ColumnDefinitions().Append(cc1);
+            rowGrid.ColumnDefinitions().Append(cc2);
+            sliderRow.Margin(Thickness{0, 0, 6, 0});
+            wuxc::Grid::SetColumn(sliderRow, 0);
+            rowGrid.Children().Append(sliderRow);
+
+            auto chevronBtn = MakeGhostButton(nullptr, 6);
+            chevronBtn.Width(28);
+            chevronBtn.Height(28);
+            chevronBtn.MinWidth(28);
+            chevronBtn.Padding(Thickness{0, 0, 0, 0});
+            chevronBtn.Background(MakeBrush(0x18, 0xFF, 0xFF, 0xFF));
+            chevronBtn.BorderThickness(Thickness{0, 0, 0, 0});
+            chevronBtn.VerticalAlignment(VerticalAlignment::Center);
+            chevronBtn.HorizontalContentAlignment(HorizontalAlignment::Center);
+            chevronBtn.VerticalContentAlignment(VerticalAlignment::Center);
+            if (auto chev = BuildVectorIcon(nullptr, L"", icons::kChevronRight, 24, 14, 1.8)) {
+                chev.HorizontalAlignment(HorizontalAlignment::Center);
+                chev.VerticalAlignment(VerticalAlignment::Center);
+                chevronBtn.Content(chev);
+            }
+            chevronBtn.Click([chevronClick](auto&&, auto&&) {
+                if (chevronClick) chevronClick();
+            });
+            wuxc::Grid::SetColumn(chevronBtn, 1);
+            rowGrid.Children().Append(chevronBtn);
+            st.Children().Append(rowGrid);
+        } else {
+            st.Children().Append(sliderRow);
+        }
+        card.Child(st);
+        return card;
+    };
+
+    auto buildInner = [&](const std::wstring& id) -> FrameworkElement {
+        if (id == L"WiFi") {
+            auto s = wifi::GetStatus();
+            bool on = s.radioOn && s.connected;
+            std::wstring sub = !s.radioOn ? L"Off"
+                : (s.connected ? (s.ssid.empty() ? L"Connected" : s.ssid) : L"Not connected");
+            auto ic = BuildWifiIcon(16, s.signal, true);
+            if (ic) ApplyIconColorToElement(ic, iconColorFor(on));
+            return makeToggleTile(ic, L"Wi-Fi", sub, on,
+                [] {
+                    bool t = !wifi::GetStatus().radioOn;
+                    RunInBackground([t] {
+                        if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) return;
+                        wifi::SetRadio(t);
+                        WaitForSingleObject(g_stopEvent, 700);
+                        RunOnUiThread([] { try { RefreshWifiButtonIcon(); PopulateControlCenterPanel_New(); } catch (...) {} });
+                    });
+                },
+                [] { RunOnUiThread([] { try {
+                    if (!g_wifiButton || !g_wifiFlyout) return;
+                    if (g_wifiFlyout.IsOpen()) { g_wifiFlyout.Hide(); return; }
+                    CloseAnyOpenChildFlyout();
+                    CCRequestFlyoutOpen(L"wifi");
+                } catch (...) {} }); });
+        }
+        if (id == L"Bluetooth") {
+            bool on = bluetooth::IsRadioOn();
+            std::wstring sub = on ? L"On" : L"Off";
+            if (on) {
+                for (const auto& d : g_bluetoothDevices) {
+                    if (d.connected && !d.name.empty()) { sub = d.name; break; }
+                }
+            }
+            auto ic = BuildVectorIcon(nullptr, L"", icons::kBluetoothStroke, 24, 16, 2.0, iconColorFor(on));
+            return makeToggleTile(ic, L"Bluetooth", sub, on,
+                [] {
+                    bool t = !bluetooth::IsRadioOn();
+                    RunInBackground([t] {
+                        if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) return;
+                        bluetooth::SetRadio(t);
+                        WaitForSingleObject(g_stopEvent, 800);
+                        RunOnUiThread([] { try {
+                            RefreshBluetoothRadioState(); RefreshBluetoothButtonIcon();
+                            PopulateControlCenterPanel_New(); } catch (...) {} });
+                    });
+                },
+                [] { RunOnUiThread([] { try {
+                    if (!g_bluetoothButton || !g_bluetoothFlyout) return;
+                    if (g_bluetoothFlyout.IsOpen()) { g_bluetoothFlyout.Hide(); return; }
+                    CloseAnyOpenChildFlyout();
+                    CCRequestFlyoutOpen(L"bluetooth");
+                } catch (...) {} }); });
+        }
+        if (id == L"NightLight") {
+            bool on = GetNightLightState();
+            wuxc::FontIcon nlIcon;
+            nlIcon.Glyph(on ? L"\uE708" : L"\uE706");
+            nlIcon.FontSize(16);
+            nlIcon.Foreground(on ? MakeBrush(0xFF, 0, 0, 0)
+                                 : MakeBrush(0xFF, 0xFF, 0xFF, 0xFF));
+            return makeSimpleTile(nlIcon, L"Night Light", on ? L"On" : L"Off", on,
+                [] {
+                    bool t = !GetNightLightState();
+                    SetNightLightState(t);
+                    RunOnUiThread([] {
+                        try { PopulateControlCenterPanel_New(); } catch (...) {}
+                    });
+                });
+        }
+        if (id == L"DarkMode") {
+            bool on = IsAppsDarkMode();
+            auto ic = BuildVectorIcon(nullptr, icons::kMoonFill, L"", 24, 16, 1.7, iconColorFor(on));
+            return makeSimpleTile(ic, L"Dark mode", on ? L"On" : L"Off", on,
+                [] {
+                    bool t = !IsAppsDarkMode();
+                    SetAppsDarkMode(t);
+                    RunOnUiThread([] { try { PopulateControlCenterPanel_New(); } catch (...) {} });
+                });
+        }
+        if (id == L"AirplaneMode") {
+            bool on = g_airplaneModeOn.load();
+            wuxc::FontIcon apIcon;
+            apIcon.Glyph(L"\uE709");
+            apIcon.FontSize(16);
+            apIcon.Foreground(on ? MakeBrush(0xFF, 0, 0, 0)
+                                 : MakeBrush(0xFF, 0xFF, 0xFF, 0xFF));
+            return makeSimpleTile(apIcon, L"Airplane mode", on ? L"On" : L"Off", on,
+                [] {
+#if TOPBAR_HAS_RADIOS
+                    RunInBackground([] {
+                        try {
+                            using namespace winrt::Windows::Devices::Radios;
+                            auto access = Radio::RequestAccessAsync().get();
+                            if (access != RadioAccessStatus::Allowed) return;
+                            auto radios = Radio::GetRadiosAsync().get();
+                            bool anyOn = false;
+                            for (auto&& radio : radios) {
+                                if (radio.Kind() == RadioKind::WiFi ||
+                                    radio.Kind() == RadioKind::Bluetooth ||
+                                    radio.Kind() == RadioKind::MobileBroadband) {
+                                    if (radio.State() == RadioState::On) { anyOn = true; break; }
+                                }
+                            }
+                            bool target = !anyOn;
+                            std::vector<winrt::Windows::Foundation::IAsyncOperation<RadioAccessStatus>> pending;
+                            for (auto&& radio : radios) {
+                                if (radio.Kind() == RadioKind::WiFi ||
+                                    radio.Kind() == RadioKind::Bluetooth ||
+                                    radio.Kind() == RadioKind::MobileBroadband) {
+                                    pending.push_back(radio.SetStateAsync(
+                                        target ? RadioState::On : RadioState::Off));
+                                }
+                            }
+                            for (auto& op : pending) {
+                                try { op.get(); } catch (...) {}
+                            }
+                        } catch (...) {}
+                        RefreshAirplaneHotspotStateAsync();
+                        RunOnUiThread([] {
+                            try { RefreshWifiButtonIcon(); } catch (...) {}
+                            try { RefreshBluetoothRadioState(); } catch (...) {}
+                            try { PopulateControlCenterPanel_New(); } catch (...) {}
+                        });
+                    });
+#endif
+                });
+        }
+        if (id == L"MobileHotspot") {
+            bool on = g_hotspotOn.load();
+            std::wstring sub = on ? L"On" : L"Off";
+            wuxc::FontIcon hsIcon;
+            hsIcon.Glyph(L"\uE704");
+            hsIcon.FontSize(16);
+            hsIcon.Foreground(on ? MakeBrush(0xFF, 0, 0, 0)
+                                 : MakeBrush(0xFF, 0xFF, 0xFF, 0xFF));
+            return makeSimpleTile(hsIcon, L"Mobile hotspot", sub, on,
+                [] {
+#if TOPBAR_HAS_NETWORK_OPERATORS
+                    RunInBackground([] {
+                        try {
+                            using namespace winrt::Windows::Networking::NetworkOperators;
+                            using namespace winrt::Windows::Networking::Connectivity;
+                            auto profile = NetworkInformation::GetInternetConnectionProfile();
+                            if (!profile) return;
+                            auto mgr = NetworkOperatorTetheringManager::CreateFromConnectionProfile(profile);
+                            if (!mgr) return;
+                            auto state = mgr.TetheringOperationalState();
+                            if (state == TetheringOperationalState::On) {
+                                mgr.StopTetheringAsync().get();
+                            } else {
+                                mgr.StartTetheringAsync().get();
+                            }
+                        } catch (...) {}
+                        WaitForSingleObject(g_stopEvent, 1200);
+                        RefreshAirplaneHotspotStateAsync();
+                        RunOnUiThread([] {
+                            try { PopulateControlCenterPanel_New(); } catch (...) {}
+                        });
+                    });
+#endif
+                });
+        }
+        if (id == L"Battery") {
+            BatteryInfo info = GetBatteryInfo();
+            std::wstring sub = std::to_wstring(info.percentage) + L"%";
+            if (info.charging) sub += L" \u00B7 Chg";
+            auto ic = BuildBatteryIcon(16, info.percentage, info.charging);
+            return makeSimpleTile(ic, L"Battery", sub, false,
+                [] { RunOnUiThread([] { try {
+                    if (!g_batteryButton || !g_batteryFlyout) return;
+                    if (g_batteryFlyout.IsOpen()) { g_batteryFlyout.Hide(); return; }
+                    CloseAnyOpenChildFlyout();
+                    CCRequestFlyoutOpen(L"battery");
+                } catch (...) {} }); });
+        }
+        if (id == L"Power") {
+            BatteryInfo info = GetBatteryInfo();
+            bool on = info.powerSaving;
+            auto ic = BuildVectorIcon(nullptr, L"M12 2 L5 13 L10 13 L10 22 L19 11 L14 11 Z",
+                                      L"", 24, 16, 1.8, iconColorFor(on));
+            return makeSimpleTile(ic, L"Power saving", on ? L"On" : L"Off", on,
+                [] {
+                    RunOnUiThread([] {
+                        try {
+                            if (g_controlCenterFlyout && g_controlCenterFlyout.IsOpen()) {
+                                g_controlCenterFlyout.Hide();
+                            }
+                        } catch (...) {}
+                        ShellExecuteW(nullptr, L"open", L"ms-settings:batterysaver",
+                                      nullptr, nullptr, SW_SHOWNORMAL);
+                    });
+                });
+        }
+        if (id == L"Display") {
+            auto ic = BuildVectorIcon(nullptr, L"", icons::kBrightnessStroke, 24, 16, 1.6);
+            return makeSliderCard(ic, brightness::GetFast(),
+                                  [](int v) { SetBrightnessCoalesced(v); },
+                                  [] { RunOnUiThread([] { try {
+                                      if (!g_displayButton || !g_displayFlyout) return;
+                                      if (g_displayFlyout.IsOpen()) { g_displayFlyout.Hide(); return; }
+                                      CloseAnyOpenChildFlyout();
+                                      CCRequestFlyoutOpen(L"display");
+                                  } catch (...) {} }); });
+        }
+        if (id == L"Sound") {
+            auto ic = BuildSpeakerIcon(16, audio::GetMasterVolume(), audio::GetMasterMute());
+            return makeSliderCard(ic, audio::GetMasterVolume(),
+                                  [](int v) { SetMasterVolumeCoalesced(v);
+                                              RunOnUiThread([] { RefreshSoundButtonIcon(); }); },
+                                  [] { RunOnUiThread([] { try {
+                                      if (!g_soundButton || !g_soundFlyout) return;
+                                      if (g_soundFlyout.IsOpen()) { g_soundFlyout.Hide(); return; }
+                                      CloseAnyOpenChildFlyout();
+                                      CCRequestFlyoutOpen(L"sound");
+                                  } catch (...) {} }); });
+        }
+        return nullptr;
+    };
+
+    auto slotsFor = [&](const std::vector<std::wstring>& list) {
+        std::vector<std::pair<int,int>> out;
+        int r = 0, c = 0;
+        for (auto& id : list) {
+            int span = ccd::IsSlider(id) ? 4 : 2;
+            if (c + span > 4) { r++; c = 0; }
+            out.push_back({r, c});
+            c += span;
+        }
+        return out;
+    };
+
+    struct DragState {
+        bool active = false;
+        std::wstring id;
+        wuxc::Grid wrapper{nullptr};
+        double grabX = 0, grabY = 0;
+        double baseX = 0, baseY = 0;
+        int grabScreenX = 0, grabScreenY = 0;
+        int lastCol = -1, lastRow = -1;
+        std::vector<std::wstring> preview;
+    };
+    static auto dragState = std::make_shared<DragState>();
+    auto wrappersRef = std::make_shared<std::map<std::wstring, wuxc::Grid>>();
+    auto transformsRef = std::make_shared<std::map<std::wstring, wuxm::TranslateTransform>>();
+
+    auto setTilePos = [](wuxc::Grid const& w, double x, double y) {
+        try {
+            auto vis = wuxh::ElementCompositionPreview::GetElementVisual(w);
+            vis.Offset(winrt::Windows::Foundation::Numerics::float3{
+                static_cast<float>(x), static_cast<float>(y), 0.0f});
+        } catch (...) {}
+    };
+    auto animateTilePos = [](wuxc::Grid const& w, double x, double y, int ms) {
+        try {
+            auto vis = wuxh::ElementCompositionPreview::GetElementVisual(w);
+            auto compositor = vis.Compositor();
+            auto anim = compositor.CreateVector3KeyFrameAnimation();
+            anim.Duration(std::chrono::milliseconds(ms));
+            anim.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{
+                static_cast<float>(x), static_cast<float>(y), 0.0f});
+            vis.StartAnimation(L"Offset", anim);
+        } catch (...) {}
+    };
+    auto applyPreview = [wrappersRef, slotsFor, setTilePos, animateTilePos](const std::vector<std::wstring>& prev, const std::wstring& dragged,
+                            double dX, double dY) {
+        auto slots = slotsFor(prev);
+        for (size_t i = 0; i < prev.size(); i++) {
+            auto wIt = wrappersRef->find(prev[i]);
+            if (wIt == wrappersRef->end()) continue;
+            auto w = wIt->second;
+            if (!w) continue;
+            double tx = slots[i].second * kColUnit;
+            double ty = slots[i].first * (kTileH + kGap);
+            if (prev[i] == dragged) { setTilePos(w, dX, dY); }
+            else { animateTilePos(w, tx, ty, 550); }
+        }
+    };
+
+    auto buildWrapper = [&](const std::wstring& id) -> wuxc::Grid {
+        auto wrapper = wuxc::Grid();
+        wrapper.Background(MakeBrush(0, 0, 0, 0));
+        wrapper.HorizontalAlignment(HorizontalAlignment::Left);
+        wrapper.VerticalAlignment(VerticalAlignment::Top);
+        wrapper.RenderTransformOrigin(wf::Point{0.0, 0.0});
+
+        FrameworkElement inner = buildInner(id);
+        if (inner) {
+            if (s_ccCustomize) {
+                try { inner.IsHitTestVisible(false); } catch (...) {}
+            }
+            wrapper.Children().Append(inner);
+        }
+
+        if (s_ccCustomize) { 
+            auto dragSurface = wuxc::Border();
+            dragSurface.Background(MakeBrush(1, 0, 0, 0));
+            dragSurface.Margin(Thickness{0, 0, 26, 0});
+            dragSurface.HorizontalAlignment(HorizontalAlignment::Stretch);
+            dragSurface.VerticalAlignment(VerticalAlignment::Stretch);
+
+            auto badge = wuxc::Button();
+            badge.Width(22); badge.Height(22);
+            badge.MinWidth(22); badge.MinHeight(22);
+            badge.Padding(Thickness{0, 0, 0, 0});
+            badge.CornerRadius(CornerRadius{11, 11, 11, 11});
+            badge.BorderThickness(Thickness{0, 0, 0, 0});
+            badge.HorizontalAlignment(HorizontalAlignment::Right);
+            badge.VerticalAlignment(VerticalAlignment::Top);
+            badge.Margin(Thickness{0, 2, 2, 0});
+            auto bb  = MakeBrush(0xFF, 0xD0, 0x30, 0x30);
+            auto bbH = MakeBrush(0xFF, 0xE0, 0x40, 0x40);
+            auto bbP = MakeBrush(0xFF, 0xB0, 0x20, 0x20);
+            badge.Background(bb);
+            badge.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackground")), bb);
+            badge.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPointerOver")), bbH);
+            badge.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPressed")), bbP);
+            badge.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundDisabled")), bb);
+            auto z = MakeBrush(0, 0, 0, 0);
+            badge.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBorderBrush")), z);
+            badge.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBorderBrushPointerOver")), z);
+            badge.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBorderBrushPressed")), z);
+            wuxc::FontIcon mi; mi.Glyph(L"\uE738"); mi.FontSize(11);
+            mi.Foreground(MakeBrush(0xFF, 0xFF, 0xFF, 0xFF));
+            badge.Content(mi);
+            badge.Click([id, layoutRef, hiddenRef, commit, rerender](auto&&, auto&&) {
+                auto& L = *layoutRef; auto& H = *hiddenRef;
+                L.erase(std::remove(L.begin(), L.end(), id), L.end());
+                if (std::find(H.begin(), H.end(), id) == H.end()) H.push_back(id);
+                commit(); rerender();
+            });
+
+            wrapper.Children().Append(dragSurface);
+            wrapper.Children().Append(badge);
+
+            std::weak_ptr<DragState> wd = dragState;
+            dragSurface.AddHandler(UIElement::PointerPressedEvent(),
+                winrt::box_value(Input::PointerEventHandler(
+                    [wd, id, wrapper, layoutRef, dragSurface]
+                    (wf::IInspectable const&, Input::PointerRoutedEventArgs const& args) {
+                        auto ds = wd.lock();
+                        if (!ds) return;
+                        if (auto tt = wrapper.RenderTransform().try_as<wuxm::TranslateTransform>()) {
+                            ds->baseX = tt.X(); ds->baseY = tt.Y();
+                        } else { ds->baseX = 0; ds->baseY = 0; }
+                        auto pt = args.GetCurrentPoint(wrapper);
+                        ds->grabX = pt.Position().X;
+                        ds->grabY = pt.Position().Y;
+                        POINT sp{};
+                        GetCursorPos(&sp);
+                        ds->grabScreenX = sp.x;
+                        ds->grabScreenY = sp.y;
+                        ds->lastCol = -1;
+                        ds->lastRow = -1;
+                        ds->active = true;
+                        ds->id = id;
+                        ds->wrapper = wrapper;
+                        ds->preview = *layoutRef;
+                        try { dragSurface.CapturePointer(args.Pointer()); } catch (...) {}
+                        try { wrapper.CapturePointer(args.Pointer()); } catch (...) {}
+                        args.Handled(true);
+                    })), true);
+
+            dragSurface.AddHandler(UIElement::PointerMovedEvent(),
+                winrt::box_value(Input::PointerEventHandler(
+                    [wd, id, applyPreview]
+                    (wf::IInspectable const&, Input::PointerRoutedEventArgs const& args) {
+                        auto ds = wd.lock();
+                        if (!ds || !ds->active || ds->id != id) return;
+                        auto w = ds->wrapper; if (!w) return;
+                        wuxc::Canvas parentCanvas{nullptr};
+                        try {
+                            parentCanvas = wuxm::VisualTreeHelper::GetParent(w).try_as<wuxc::Canvas>();
+                        } catch (...) {}
+                        if (!parentCanvas) return;
+                        auto pt = args.GetCurrentPoint(parentCanvas);
+                        double cursorX = pt.Position().X;
+                        double cursorY = pt.Position().Y;
+                        int tCol = static_cast<int>(cursorX / kColUnit);
+                        if (tCol < 0) tCol = 0;
+                        if (tCol > 3) tCol = 3;
+                        int tRow = static_cast<int>(cursorY / (kTileH + kGap));
+                        if (tRow < 0) tRow = 0;
+
+                        if (tCol == ds->lastCol && tRow == ds->lastRow) return;
+                        ds->lastCol = tCol;
+                        ds->lastRow = tRow;
+
+                        double snapX = tCol * kColUnit;
+                        double snapY = tRow * (kTileH + kGap);
+
+                        auto& lst = ds->preview;
+                        int hover = -1, r = 0, c = 0;
+                        for (size_t i = 0; i < lst.size(); i++) {
+                            int span = ccd::IsSlider(lst[i]) ? 4 : 2;
+                            if (c + span > 4) { r++; c = 0; }
+                            if (r == tRow && tCol >= c && tCol < c + span) { hover = static_cast<int>(i); break; }
+                            c += span;
+                        }
+            auto it = std::find(lst.begin(), lst.end(), id);
+            if (it == lst.end()) return;
+            int cur = static_cast<int>(it - lst.begin());
+                        if (hover >= 0) {
+                            if (cur != hover) {
+                                std::swap(lst[cur], lst[hover]);
+                            }
+                        } else {
+                int insertAt = static_cast<int>(lst.size());
+                int rr = 0, cc = 0;
+                for (size_t i = 0; i < lst.size(); i++) {
+                    int span = ccd::IsSlider(lst[i]) ? 4 : 2;
+                    if (cc + span > 4) { rr++; cc = 0; }
+                    if (static_cast<int>(i) != cur) {
+                        bool atOrAfter = (rr > tRow) || (rr == tRow && cc >= tCol);
+                        if (atOrAfter) { insertAt = static_cast<int>(i); break; }
+                    }
+                    cc += span;
+                }
+                int adjusted = (insertAt > cur) ? (insertAt - 1) : insertAt;
+                if (adjusted < 0) adjusted = 0;
+                if (adjusted > static_cast<int>(lst.size())) {
+                    adjusted = static_cast<int>(lst.size());
+                }
+                if (adjusted != cur) {
+                    std::wstring moved = lst[cur];
+                    lst.erase(lst.begin() + cur);
+                    lst.insert(lst.begin() + adjusted, moved);
+                }
+            }
+            applyPreview(lst, id, snapX, snapY);
+                    })), true);
+
+            auto finish = [wd, id, layoutRef, commit, rerender]
+                          (wf::IInspectable const& sender, Input::PointerRoutedEventArgs const& args) {
+                auto ds = wd.lock();
+                if (!ds || !ds->active || ds->id != id) return;
+                if (!ds->preview.empty()) *layoutRef = ds->preview;
+                auto w = ds->wrapper;
+                ds->active = false; ds->id.clear(); ds->wrapper = nullptr; ds->preview.clear();
+                try {
+                    if (sender) {
+                        if (auto fe = sender.try_as<UIElement>()) {
+                            fe.ReleasePointerCapture(args.Pointer());
+                        }
+                    }
+                } catch (...) {}
+                try {
+                    if (w) {
+                        if (auto we = w.try_as<UIElement>()) {
+                            we.ReleasePointerCapture(args.Pointer());
+                        }
+                    }
+                } catch (...) {}
+                commit(); rerender();
+            };
+            dragSurface.AddHandler(UIElement::PointerReleasedEvent(),
+                winrt::box_value(Input::PointerEventHandler(finish)), true);
+
+            dragSurface.AddHandler(UIElement::PointerCaptureLostEvent(),
+                winrt::box_value(Input::PointerEventHandler(
+                    [wd, id, layoutRef, commit, rerender]
+                    (wf::IInspectable const&, Input::PointerRoutedEventArgs const&) {
+                        auto ds = wd.lock();
+                        if (!ds || !ds->active || ds->id != id) return;
+                        if (!ds->preview.empty()) *layoutRef = ds->preview;
+                        ds->active = false; ds->id.clear(); ds->wrapper = nullptr; ds->preview.clear();
+                        commit(); rerender();
+                    })), true);
+        }
+        return wrapper;
+    };
+
+    wuxc::Canvas canvas;
+    canvas.Width(kContainerW);
+    canvas.HorizontalAlignment(HorizontalAlignment::Stretch);
+    canvas.VerticalAlignment(VerticalAlignment::Top);
+
+    auto slots = slotsFor(*layoutRef);
+    int maxRow = 0;
+    for (size_t i = 0; i < layoutRef->size(); i++) {
+        const std::wstring& id = (*layoutRef)[i];
+        auto w = buildWrapper(id);
+        int span = ccd::IsSlider(id) ? 4 : 2;
+        double wid = span * kColUnit - kGap;
+        double x = slots[i].second * kColUnit;
+        double y = slots[i].first * (kTileH + kGap);
+        w.Width(wid); w.Height(kTileH);
+        setTilePos(w, x, y);
+        (*wrappersRef)[id] = w;
+        if (slots[i].first > maxRow) maxRow = slots[i].first;
+        canvas.Children().Append(w);
+    }
+    canvas.Loaded([](wf::IInspectable const& sender, RoutedEventArgs const&) {
+        try {
+            auto fe = sender.try_as<FrameworkElement>();
+            if (!fe) return;
+            DependencyObject node = fe;
+            while (node) {
+                if (auto sv = node.try_as<wuxc::ScrollViewer>()) {
+                    sv.VerticalScrollMode(s_ccCustomize ? wuxc::ScrollMode::Disabled
+                                                        : wuxc::ScrollMode::Enabled);
+                    sv.HorizontalScrollMode(wuxc::ScrollMode::Disabled);
+                    break;
+                }
+                node = wuxm::VisualTreeHelper::GetParent(node);
+            }
+        } catch (...) {}
+    });
+    canvas.Height((maxRow + 1) * (kTileH + kGap));
+    children.Append(canvas);
+
+    if (s_ccCustomize) {
+        auto ht = MakeText(nullptr, L"Hidden", 11, true);
+        ht.Margin(Thickness{2, 14, 0, 4});
+        children.Append(ht);
+
+        if (hiddenRef->empty()) {
+            auto hint = MakeText(nullptr, L"Nothing hidden. Press the red badge on a tile.",
+                                 10, false, 0.55);
+            hint.TextWrapping(TextWrapping::Wrap);
+            hint.Margin(Thickness{2, 0, 0, 6});
+            children.Append(hint);
+        } else {
+            wuxc::Canvas hc;
+            hc.Width(kContainerW);
+            hc.HorizontalAlignment(HorizontalAlignment::Stretch);
+            int hrows = (static_cast<int>(hiddenRef->size()) + 1) / 2;
+            if (hrows < 1) hrows = 1;
+            hc.Height(hrows * (kTileH + kGap));
+            for (size_t i = 0; i < hiddenRef->size(); i++) {
+                const std::wstring& id = (*hiddenRef)[i];
+                auto w = wuxc::Grid();
+                w.Background(MakeBrush(0, 0, 0, 0));
+                w.Opacity(0.62);
+                FrameworkElement inner = buildInner(id);
+                if (inner) { inner.IsHitTestVisible(false); w.Children().Append(inner); }
+
+                auto badge = wuxc::Button();
+                badge.Width(22); badge.Height(22);
+                badge.MinWidth(22); badge.MinHeight(22);
+                badge.Padding(Thickness{0, 0, 0, 0});
+                badge.CornerRadius(CornerRadius{11, 11, 11, 11});
+                badge.BorderThickness(Thickness{0, 0, 0, 0});
+                badge.HorizontalAlignment(HorizontalAlignment::Right);
+                badge.VerticalAlignment(VerticalAlignment::Top);
+                badge.Margin(Thickness{0, 2, 2, 0});
+                auto bb  = MakeBrush(0xFF, 0x2E, 0xA0, 0x43);
+                auto bbH = MakeBrush(0xFF, 0x38, 0xB8, 0x50);
+                auto bbP = MakeBrush(0xFF, 0x24, 0x88, 0x38);
+                badge.Background(bb);
+                badge.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackground")), bb);
+                badge.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPointerOver")), bbH);
+                badge.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPressed")), bbP);
+                badge.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundDisabled")), bb);
+                auto z = MakeBrush(0, 0, 0, 0);
+                badge.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBorderBrush")), z);
+                badge.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBorderBrushPointerOver")), z);
+                badge.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBorderBrushPressed")), z);
+                wuxc::FontIcon pi; pi.Glyph(L"\uE710"); pi.FontSize(11);
+                pi.Foreground(MakeBrush(0xFF, 0xFF, 0xFF, 0xFF));
+                badge.Content(pi);
+                badge.Click([id, layoutRef, hiddenRef, commit, rerender](auto&&, auto&&) {
+                    auto& L = *layoutRef; auto& H = *hiddenRef;
+                    H.erase(std::remove(H.begin(), H.end(), id), H.end());
+                    if (std::find(L.begin(), L.end(), id) == L.end()) L.push_back(id);
+                    commit(); rerender();
+                });
+                w.Children().Append(badge);
+
+                double wid = 2 * kColUnit - kGap;
+                double x = (i % 2) * 2 * kColUnit;
+                double y = (i / 2) * (kTileH + kGap);
+                w.Width(wid); w.Height(kTileH);
+                wuxm::TranslateTransform tt; tt.X(x); tt.Y(y);
+                w.RenderTransform(tt);
+                hc.Children().Append(w);
+            }
+            children.Append(hc);
+        }
+    }
+
+    {
+        auto bottomRow = wuxc::Grid();
+        bottomRow.HorizontalAlignment(HorizontalAlignment::Center);
+        bottomRow.Margin(Thickness{0, 14, 0, 4});
+        auto cb = MakeGhostButton(nullptr, kTileRadius);
+        cb.Padding(Thickness{20, 8, 20, 8});
+        cb.BorderThickness(Thickness{0, 0, 0, 0});
+        cb.Background(tileBg);
+        styleTileButton(cb);
+        cb.Content(MakeText(nullptr, s_ccCustomize ? L"Done" : L"Customize Control Center", 11, true));
+        cb.Click([](auto&&, auto&&) {
+            s_ccCustomize = !s_ccCustomize;
+            RunOnUiThread([] { try { PopulateControlCenterPanel_New(); } catch (...) {} });
+        });
+        bottomRow.Children().Append(cb);
+        children.Append(bottomRow);
+    }
+
+}
+
+void PopulateControlCenterPanel() {
+    PopulateControlCenterPanel_New();
+}
+
 void PopulateBatteryPanel() {
     if (!g_batteryPanel) return;
 
@@ -9655,6 +14400,46 @@ void InstallGlobalMenuResources() {
         set(L"MenuFlyoutSubItemBackgroundPointerOver", hover);
         set(L"MenuFlyoutSubItemBackgroundPressed", pressed);
         set(L"MenuFlyoutSubItemBackgroundSubMenuOpened", hover);
+
+        auto themeKillBrush = FlyoutBackgroundBrush();
+        auto themeKillBorder = MakeBrush(0, 0, 0, 0);
+
+        set(L"SystemControlTransientBackground", themeKillBrush);
+        set(L"SystemControlTransientBackgroundAlt", themeKillBrush);
+        set(L"SystemControlTransientBorderBrush", themeKillBorder);
+        set(L"SystemControlTransientBorderBrushAlt", themeKillBorder);
+        set(L"SystemControlBackgroundAltHighBrush", themeKillBrush);
+        set(L"SystemControlBackgroundChromeMediumLowBrush", themeKillBrush);
+        set(L"SystemControlBackgroundListLowBrush", themeKillBrush);
+        set(L"SystemControlBackgroundListMediumBrush", themeKillBrush);
+        set(L"FlyoutBackground", themeKillBrush);
+        set(L"FlyoutBorderThemeBrush", themeKillBorder);
+        set(L"MenuFlyoutBackground", themeKillBrush);
+        set(L"ToolTipBackground", themeKillBrush);
+        set(L"ContentDialogBackground", themeKillBrush);
+        set(L"ContentDialogTopOverlay", themeKillBrush);
+        set(L"ApplicationPageBackgroundThemeBrush", themeKillBrush);
+        set(L"SolidBackgroundFillColorBase", themeKillBrush);
+        set(L"SolidBackgroundFillColorBaseAlt", themeKillBrush);
+        set(L"SolidBackgroundFillColorSecondary", themeKillBrush);
+        set(L"SolidBackgroundFillColorTertiary", themeKillBrush);
+        set(L"SolidBackgroundFillColorQuarternary", themeKillBrush);
+        set(L"LayerFillColorDefaultBrush", themeKillBrush);
+        set(L"CardBackgroundFillColorDefaultBrush", themeKillBrush);
+        // WinUI 2/3 acrylic brushes the FlyoutPresenter and MenuFlyoutPresenter
+        // templates still bind to on some builds. Overriding them here stops
+        // the presenter from painting an acrylic sheet over the DWM blur.
+        set(L"AcrylicBackgroundFillColorDefaultBrush", themeKillBrush);
+        set(L"AcrylicBackgroundFillColorBaseBrush", themeKillBrush);
+        set(L"AcrylicBackgroundFillColorDefault", themeKillBrush);
+        set(L"AcrylicBackgroundFillColorBase", themeKillBrush);
+        set(L"AcrylicInAppFillColorDefaultBrush", themeKillBrush);
+        set(L"AcrylicInAppFillColorDefault", themeKillBrush);
+        set(L"SystemControlAcrylicWindowBrush", themeKillBrush);
+        set(L"SystemControlAcrylicElementBrush", themeKillBrush);
+        set(L"SystemControlAcrylicElementMediumBrush", themeKillBrush);
+        set(L"SystemControlAcrylicBackground", themeKillBrush);
+        set(L"SystemControlAcrylicBackgroundBrush", themeKillBrush);
     } catch (winrt::hresult_error const& ex) {
         Wh_Log(L"Could not install menu resources: %08X",
                static_cast<unsigned int>(ex.code().value));
@@ -9691,7 +14476,6 @@ Style MakeMenuPresenterStyle() {
     }
     return style;
 }
-
 // Per-item overrides as well as the global ones: an item's own resource
 // dictionary is checked first, so this holds even if a future Windows build
 // renames or re-scopes the theme resources.
@@ -9712,19 +14496,108 @@ void ApplyMenuItemLook(wuxc::MenuFlyoutItemBase const& item) {
         set(L"MenuFlyoutSubItemBackgroundPointerOver", hover);
         set(L"MenuFlyoutSubItemBackgroundPressed", pressed);
         set(L"MenuFlyoutSubItemBackgroundSubMenuOpened", hover);
+
+        auto themeKillBrush = FlyoutBackgroundBrush();
+        auto themeKillBorder = MakeBrush(0, 0, 0, 0);
+
+        set(L"SystemControlTransientBackground", themeKillBrush);
+        set(L"SystemControlTransientBackgroundAlt", themeKillBrush);
+        set(L"SystemControlTransientBorderBrush", themeKillBorder);
+        set(L"SystemControlTransientBorderBrushAlt", themeKillBorder);
+        set(L"SystemControlBackgroundAltHighBrush", themeKillBrush);
+        set(L"SystemControlBackgroundChromeMediumLowBrush", themeKillBrush);
+        set(L"SystemControlBackgroundListLowBrush", themeKillBrush);
+        set(L"SystemControlBackgroundListMediumBrush", themeKillBrush);
+        set(L"FlyoutBackground", themeKillBrush);
+        set(L"FlyoutBorderThemeBrush", themeKillBorder);
+        set(L"MenuFlyoutBackground", themeKillBrush);
+        set(L"ToolTipBackground", themeKillBrush);
+        set(L"ContentDialogBackground", themeKillBrush);
+        set(L"ContentDialogTopOverlay", themeKillBrush);
+        set(L"ApplicationPageBackgroundThemeBrush", themeKillBrush);
+        set(L"SolidBackgroundFillColorBase", themeKillBrush);
+        set(L"SolidBackgroundFillColorBaseAlt", themeKillBrush);
+        set(L"SolidBackgroundFillColorSecondary", themeKillBrush);
+        set(L"SolidBackgroundFillColorTertiary", themeKillBrush);
+        set(L"SolidBackgroundFillColorQuarternary", themeKillBrush);
+        set(L"LayerFillColorDefaultBrush", themeKillBrush);
+        set(L"CardBackgroundFillColorDefaultBrush", themeKillBrush);
+        set(L"AcrylicBackgroundFillColorDefaultBrush", themeKillBrush);
+        set(L"AcrylicBackgroundFillColorBaseBrush", themeKillBrush);
+        set(L"AcrylicBackgroundFillColorDefault", themeKillBrush);
+        set(L"AcrylicBackgroundFillColorBase", themeKillBrush);
+        set(L"AcrylicInAppFillColorDefaultBrush", themeKillBrush);
+        set(L"AcrylicInAppFillColorDefault", themeKillBrush);
+        set(L"SystemControlAcrylicWindowBrush", themeKillBrush);
+        set(L"SystemControlAcrylicElementBrush", themeKillBrush);
+        set(L"SystemControlAcrylicElementMediumBrush", themeKillBrush);
+        set(L"SystemControlAcrylicBackground", themeKillBrush);
+        set(L"SystemControlAcrylicBackgroundBrush", themeKillBrush);
         set(L"OverlayCornerRadius", winrt::box_value(MakeCorner(kMenuCorner)));
+
+        // Global font colour for menu items. Covers every pointer state so
+        // hovering or pressing a menu entry doesn't flash back to the
+        // system default (which is the light-theme black on this dark
+        // themed popup and is unreadable).
+        if (!g_settings.fontColor.empty()) {
+            wui::Color fc{};
+            if (TryParseHexColor(g_settings.fontColor, &fc) ||
+                TryParseNamedColor(g_settings.fontColor, &fc)) {
+                auto fgBrush = MakeBrush(fc.A, fc.R, fc.G, fc.B);
+                set(L"MenuFlyoutItemForeground", fgBrush);
+                set(L"MenuFlyoutItemForegroundPointerOver", fgBrush);
+                set(L"MenuFlyoutItemForegroundPressed", fgBrush);
+                set(L"MenuFlyoutItemForegroundDisabled", fgBrush);
+                set(L"MenuFlyoutSubItemForeground", fgBrush);
+                set(L"MenuFlyoutSubItemForegroundPointerOver", fgBrush);
+                set(L"MenuFlyoutSubItemForegroundPressed", fgBrush);
+                set(L"MenuFlyoutSubItemForegroundDisabled", fgBrush);
+            }
+        }
 
         if (auto control = item.try_as<wuxc::Control>()) {
             control.CornerRadius(MakeCorner(kMenuItemCorner));
             control.Padding(Thickness{12, 7, 12, 7});
         }
+
+        item.Loaded([](wf::IInspectable const& sender, RoutedEventArgs const&) {
+            if (g_settings.fontColor.empty()) return;
+            wui::Color fc{};
+            if (!TryParseHexColor(g_settings.fontColor, &fc) &&
+                !TryParseNamedColor(g_settings.fontColor, &fc)) {
+                return;
+            }
+            auto fgBrush = MakeBrush(fc.A, fc.R, fc.G, fc.B);
+            auto fe = sender.as<FrameworkElement>();
+            std::function<void(DependencyObject)> paint =
+                [&](DependencyObject node) {
+                    if (!node) return;
+                    try {
+                        if (auto tb = node.try_as<wuxc::TextBlock>()) {
+                            tb.Foreground(fgBrush);
+                        }
+                        int n = wuxm::VisualTreeHelper::GetChildrenCount(node);
+                        for (int i = 0; i < n; i++) {
+                            paint(wuxm::VisualTreeHelper::GetChild(node, i));
+                        }
+                    } catch (...) {}
+                };
+            paint(fe);
+        });
     } catch (...) {
     }
 }
 
-wuxc::MenuFlyoutItem MakeMenuItem(std::wstring_view text, std::function<void()> onClick) {
+wuxc::MenuFlyoutItem MakeMenuItem(std::wstring_view text, std::function<void()> onClick,
+                                  const wchar_t* glyph = nullptr) {
     wuxc::MenuFlyoutItem item;
     item.Text(winrt::hstring(text));
+    if (glyph && *glyph) {
+        wuxc::FontIcon icon;
+        icon.Glyph(glyph);
+        icon.FontSize(14);
+        item.Icon(icon);
+    }
     if (!g_settings.fontFamily.empty()) {
         try {
             item.FontFamily(wuxm::FontFamily(winrt::hstring(g_settings.fontFamily)));
@@ -9732,6 +14605,13 @@ wuxc::MenuFlyoutItem MakeMenuItem(std::wstring_view text, std::function<void()> 
     }
     if (g_settings.fontBold) {
         item.FontWeight(winrt::Windows::UI::Text::FontWeights::Bold());
+    }
+    if (!g_settings.fontColor.empty()) {
+        wui::Color fc{};
+        if (TryParseHexColor(g_settings.fontColor, &fc) ||
+            TryParseNamedColor(g_settings.fontColor, &fc)) {
+            item.Foreground(MakeBrush(fc.A, fc.R, fc.G, fc.B));
+        }
     }
     ApplyMenuItemLook(item);
     if (onClick) {
@@ -9792,9 +14672,16 @@ wuxc::MenuFlyoutItem MakeMenuItem(std::wstring_view text, std::function<void()> 
     return item;
 }
 
-wuxc::MenuFlyoutSubItem MakeMenuSubItem(std::wstring_view text) {
+wuxc::MenuFlyoutSubItem MakeMenuSubItem(std::wstring_view text,
+                                        const wchar_t* glyph = nullptr) {
     wuxc::MenuFlyoutSubItem item;
     item.Text(winrt::hstring(text));
+    if (glyph && *glyph) {
+        wuxc::FontIcon icon;
+        icon.Glyph(glyph);
+        icon.FontSize(14);
+        item.Icon(icon);
+    }
     if (!g_settings.fontFamily.empty()) {
         try {
             item.FontFamily(wuxm::FontFamily(winrt::hstring(g_settings.fontFamily)));
@@ -9802,6 +14689,13 @@ wuxc::MenuFlyoutSubItem MakeMenuSubItem(std::wstring_view text) {
     }
     if (g_settings.fontBold) {
         item.FontWeight(winrt::Windows::UI::Text::FontWeights::Bold());
+    }
+    if (!g_settings.fontColor.empty()) {
+        wui::Color fc{};
+        if (TryParseHexColor(g_settings.fontColor, &fc) ||
+            TryParseNamedColor(g_settings.fontColor, &fc)) {
+            item.Foreground(MakeBrush(fc.A, fc.R, fc.G, fc.B));
+        }
     }
     ApplyMenuItemLook(item);
     item.PointerEntered([](auto&&, auto&&) {
@@ -9864,11 +14758,40 @@ wuxc::MenuFlyoutSeparator MakeMenuSeparator() {
 
 void StyleMenuFlyout(wuxc::MenuFlyout const& menu) {
     menu.MenuFlyoutPresenterStyle(MakeMenuPresenterStyle());
+    menu.LightDismissOverlayMode(wuxc::LightDismissOverlayMode::Off);
     // Same reason as the control flyouts: the XAML root is bar-height, so a menu
     // constrained to it would be clipped away entirely.
     menu.ShouldConstrainToRootBounds(false);
-    menu.Opened([](auto&&, auto&&) {
+    menu.Opened([](auto&& sender, auto&&) {
+        RegisterOpenPopup(sender.template as<wuxc::Primitives::FlyoutBase>());
         ApplyBlurToAllOpenPopups();
+    });
+    menu.Closed([](auto&& sender, auto&&) {
+        UnregisterOpenPopup(sender.template as<wuxc::Primitives::FlyoutBase>());
+        // XAML restores focus to a MenuFlyout's opener when it closes.
+        // For menus opened from a start-menu tile or a search result
+        // row, that puts focus on the tile button / result row instead
+        // of the search box, so typing after dismissing a context menu
+        // went nowhere useful. Refocus whichever host flyout is open.
+        RunOnUiThread([] {
+            try {
+                if (g_searchFlyout && g_searchFlyout.IsOpen()) {
+                    auto it = g_namedElements.find(L"SpotlightSearchBox");
+                    if (it != g_namedElements.end()) {
+                        if (auto box = it->second.try_as<wuxc::TextBox>()) {
+                            try { box.Focus(FocusState::Programmatic); } catch (...) {}
+                        }
+                    }
+                } else if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) {
+                    auto it = g_namedElements.find(L"StartMenuSearchBox");
+                    if (it != g_namedElements.end()) {
+                        if (auto box = it->second.try_as<wuxc::TextBox>()) {
+                            try { box.Focus(FocusState::Programmatic); } catch (...) {}
+                        }
+                    }
+                }
+            } catch (...) {}
+        });
     });
 }
 
@@ -9907,6 +14830,63 @@ void ShowDesktop() {
     SendWinKeyChord('D');
 }
 
+// Opens the containing folder of the given .lnk and selects it in Explorer.
+// shell:AppsFolder UWP identities have no file on disk to reveal, so the
+// call is a no-op for those — the caller should not offer the option.
+void RevealShortcutInExplorer(const std::wstring& lnkPath) {
+    if (lnkPath.empty()) return;
+    if (lnkPath.rfind(L"shell:", 0) == 0) return;
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    if (SUCCEEDED(SHParseDisplayName(lnkPath.c_str(), nullptr, &pidl, 0, nullptr)) && pidl) {
+        SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
+        CoTaskMemFree(pidl);
+    }
+}
+
+// Launches the target through the "runas" verb, which triggers UAC
+// elevation. UWP AppsFolder identities cannot be elevated this way and the
+// ShellExecuteEx call simply fails — the caller sees no visible effect,
+// which is the correct behaviour for a UWP app.
+void LaunchTargetElevated(const std::wstring& target, const std::wstring& args) {
+    if (target.empty()) return;
+    std::wstring file = target;
+    std::wstring parameters = args;
+    if (target.find(L'!') != std::wstring::npos &&
+        target.find(L'\\') == std::wstring::npos) {
+        file = L"shell:AppsFolder\\" + target;
+        parameters.clear();
+    }
+    SHELLEXECUTEINFOW sei{};
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+    sei.lpVerb = L"runas";
+    sei.lpFile = file.c_str();
+    sei.lpParameters = parameters.empty() ? nullptr : parameters.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    ShellExecuteExW(&sei);
+}
+
+// Tries the shell's own "Uninstall" verb on the given .lnk. Apps that
+// registered an uninstall command open their own uninstaller; everything
+// else has no such verb, so we fall back to the Apps & Features settings
+// page.
+void TryUninstallShortcut(const std::wstring& lnkPath) {
+    bool invoked = false;
+    if (!lnkPath.empty() && lnkPath.rfind(L"shell:", 0) != 0) {
+        SHELLEXECUTEINFOW sei{};
+        sei.cbSize = sizeof(sei);
+        sei.fMask = SEE_MASK_INVOKEIDLIST | SEE_MASK_FLAG_NO_UI;
+        sei.lpVerb = L"Uninstall";
+        sei.lpFile = lnkPath.c_str();
+        sei.nShow = SW_SHOWNORMAL;
+        invoked = ShellExecuteExW(&sei) != FALSE;
+    }
+    if (!invoked) {
+        ShellExecute(nullptr, L"open", L"ms-settings:appsfeatures",
+                     nullptr, nullptr, SW_SHOWNORMAL);
+    }
+}
+
 void SuspendSystem() {
     using SetSuspendState_t = BOOLEAN(WINAPI*)(BOOLEAN, BOOLEAN, BOOLEAN);
     HMODULE module = LoadLibraryEx(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -9921,34 +14901,2799 @@ void SuspendSystem() {
     FreeLibrary(module);
 }
 
+void RestartExplorerShell() {
+    HWND tray = FindWindow(L"Shell_TrayWnd", nullptr);
+    DWORD shellPid = 0;
+    if (tray) {
+        GetWindowThreadProcessId(tray, &shellPid);
+    }
+
+    if (shellPid) {
+        HANDLE proc = OpenProcess(PROCESS_TERMINATE, FALSE, shellPid);
+        if (proc) {
+            TerminateProcess(proc, 0);
+            CloseHandle(proc);
+        }
+    }
+
+    RunInBackground([] {
+        for (int i = 0; i < 30; i++) {
+            if (WaitForSingleObject(g_stopEvent, 100) == WAIT_OBJECT_0) return;
+            if (!FindWindow(L"Shell_TrayWnd", nullptr)) break;
+        }
+        ShellExecute(nullptr, L"open", L"explorer.exe", nullptr, nullptr, SW_SHOWNORMAL);
+    });
+}
+
+RECT GetBarMonitorRect();
+
+namespace startmenu {
+
+struct AppEntry {
+    std::wstring name;
+    std::wstring target;
+    std::wstring args;
+    std::wstring lnkPath;
+    std::vector<uint8_t> logoBytes;
+};
+
+std::vector<AppEntry>& GetCachedApps() {
+    static std::vector<AppEntry> s_apps;
+    static std::mutex s_mutex;
+    static bool s_loaded = false;
+    std::lock_guard<std::mutex> lock(s_mutex);
+    if (s_loaded) return s_apps;
+    s_loaded = true;
+
+    static const GUID kProgramsFolder =
+        {0xA77F5D77, 0x2E2B, 0x44C3, {0xA6, 0xA2, 0xAB, 0xA6, 0x01, 0x05, 0x4A, 0x51}};
+    static const GUID kCommonProgramsFolder =
+        {0x0139D44E, 0x6AFE, 0x49F2, {0x86, 0x90, 0x3D, 0xAF, 0xCA, 0xE6, 0xFF, 0xB8}};
+
+    std::vector<std::wstring> roots;
+    for (const GUID* id : { &kProgramsFolder, &kCommonProgramsFolder }) {
+        PWSTR folder = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderPath(*id, 0, nullptr, &folder))) {
+            roots.push_back(folder);
+            CoTaskMemFree(folder);
+        }
+    }
+
+    std::set<std::wstring> seenNames;
+
+    for (const auto& root : roots) {
+        std::vector<std::wstring> stack;
+        stack.push_back(root);
+
+        while (!stack.empty()) {
+            std::wstring dir = stack.back();
+            stack.pop_back();
+
+            WIN32_FIND_DATAW fd{};
+            HANDLE find = FindFirstFileW((dir + L"\\*").c_str(), &fd);
+            if (find == INVALID_HANDLE_VALUE) continue;
+            do {
+                if (wcscmp(fd.cFileName, L".") == 0 ||
+                    wcscmp(fd.cFileName, L"..") == 0) continue;
+                std::wstring full = dir + L"\\" + fd.cFileName;
+                if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                    stack.push_back(full);
+                    continue;
+                }
+                std::wstring fname = fd.cFileName;
+                if (fname.size() <= 4) continue;
+
+                std::wstring ext = fname.substr(fname.size() - 4);
+                bool isLnk = _wcsicmp(ext.c_str(), L".lnk") == 0;
+                bool isUrl = _wcsicmp(ext.c_str(), L".url") == 0;
+                bool isAppref = fname.size() > 10 &&
+                                _wcsicmp(fname.c_str() + fname.size() - 10,
+                                         L".appref-ms") == 0;
+                if (!isLnk && !isUrl && !isAppref) continue;
+
+                std::wstring display;
+                if (isAppref) {
+                    display = fname.substr(0, fname.size() - 10);
+                } else {
+                    display = fname.substr(0, fname.size() - 4);
+                }
+                std::wstring lower = ToLowerCopy(display);
+                if (lower.find(L"uninstall") != std::wstring::npos) continue;
+                if (lower.find(L"readme") != std::wstring::npos) continue;
+                if (lower.find(L"website") != std::wstring::npos) continue;
+                if (lower.find(L"homepage") != std::wstring::npos) continue;
+                if (seenNames.count(lower)) continue;
+                seenNames.insert(lower);
+
+                if (isUrl || isAppref) {
+                    AppEntry entry;
+                    entry.name = display;
+                    entry.target = full;
+                    entry.args.clear();
+                    entry.lnkPath = full;
+                    s_apps.push_back(std::move(entry));
+                    continue;
+                }
+
+                winrt::com_ptr<IShellLinkW> link;
+                if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
+                                            IID_PPV_ARGS(link.put())))) continue;
+                winrt::com_ptr<IPersistFile> pf;
+                if (FAILED(link->QueryInterface(IID_PPV_ARGS(pf.put())))) continue;
+                if (FAILED(pf->Load(full.c_str(), STGM_READ))) continue;
+
+                wchar_t target[MAX_PATH]{};
+                if (FAILED(link->GetPath(target, ARRAYSIZE(target), nullptr,
+                                         SLGP_UNCPRIORITY))) continue;
+                if (!target[0]) continue;
+
+                wchar_t args[512]{};
+                link->GetArguments(args, ARRAYSIZE(args));
+
+                AppEntry entry;
+                entry.name = display;
+                entry.target = target;
+                entry.args = args;
+                entry.lnkPath = full;
+                s_apps.push_back(std::move(entry));
+            } while (FindNextFileW(find, &fd));
+            FindClose(find);
+        }
+    }
+
+#if TOPBAR_HAS_PACKAGE_MANAGER
+    try {
+        using namespace winrt::Windows::Management::Deployment;
+        using namespace winrt::Windows::ApplicationModel;
+
+        PackageManager pm;
+        auto packages = pm.FindPackagesForUser(L"");
+        for (auto const& pkg : packages) {
+            try {
+                auto isFramework = pkg.IsFramework();
+                if (isFramework) continue;
+            } catch (...) {}
+
+            try {
+                auto entries = pkg.GetAppListEntriesAsync().get();
+                for (auto const& appEntry : entries) {
+                    std::wstring display;
+                    try { display = std::wstring(appEntry.DisplayInfo().DisplayName()); } catch (...) {}
+                    std::wstring aumid;
+                    try { aumid = std::wstring(appEntry.AppUserModelId()); } catch (...) {}
+                    if (display.empty() || aumid.empty()) continue;
+
+                    std::wstring lower = ToLowerCopy(display);
+                    if (lower.find(L"uninstall") != std::wstring::npos) continue;
+                    if (lower.find(L"readme") != std::wstring::npos) continue;
+                    if (seenNames.count(lower)) continue;
+                    seenNames.insert(lower);
+
+                    AppEntry entry;
+                    entry.name = display;
+                    entry.target = L"shell:AppsFolder\\" + aumid;
+                    entry.args.clear();
+                    entry.lnkPath = entry.target;
+                    try {
+                        auto logoRef = appEntry.DisplayInfo().GetLogo(
+                            winrt::Windows::Foundation::Size{256.0f, 256.0f});
+                        if (logoRef) {
+                            auto stream = logoRef.OpenReadAsync().get();
+                            if (stream) {
+                                uint64_t size = stream.Size();
+                                if (size > 0 && size < 1024 * 1024) {
+                                    winrt::Windows::Storage::Streams::DataReader reader(
+                                        stream.GetInputStreamAt(0));
+                                    reader.LoadAsync(static_cast<uint32_t>(size)).get();
+                                    entry.logoBytes.resize(static_cast<size_t>(size));
+                                    reader.ReadBytes(entry.logoBytes);
+                                    reader.Close();
+                                }
+                            }
+                        }
+                    } catch (...) {}
+                    s_apps.push_back(std::move(entry));
+                }
+            } catch (...) {}
+        }
+    } catch (...) {
+    }
+#endif
+
+    std::sort(s_apps.begin(), s_apps.end(),
+              [](const AppEntry& a, const AppEntry& b) {
+                  return ToLowerCopy(a.name) < ToLowerCopy(b.name);
+              });
+
+    return s_apps;
+}
+
+}  // namespace startmenu
+
+// ============================================================================
+// Spotlight-style search
+// ============================================================================
+
+namespace search {
+
+struct Result {
+    enum class Kind { App, File, Setting, ControlPanel };
+    Kind kind = Kind::App;
+    std::wstring title;
+    std::wstring subtitle;
+    std::wstring target;
+    std::wstring args;
+    std::wstring lnkPath;
+};
+
+struct SettingsPage {
+    const wchar_t* title;
+    const wchar_t* uri;
+    const wchar_t* keywords;
+};
+
+const SettingsPage kSettingsPages[] = {
+    { L"Display",            L"ms-settings:display",                 L"display monitor brightness resolution" },
+    { L"Sound",              L"ms-settings:sound",                   L"sound audio volume output speaker" },
+    { L"Notifications",      L"ms-settings:notifications",           L"notifications alerts focus assist" },
+    { L"Power & battery",    L"ms-settings:powersleep",              L"power battery sleep hibernate" },
+    { L"Storage",            L"ms-settings:storagesense",            L"storage disk space cleanup" },
+    { L"Multitasking",       L"ms-settings:multitasking",            L"multitasking snap windows" },
+    { L"Projecting",         L"ms-settings:project",                 L"project display duplicate extend" },
+    { L"Bluetooth",          L"ms-settings:bluetooth",               L"bluetooth device pair" },
+    { L"Network & internet", L"ms-settings:network",                 L"network wifi ethernet internet" },
+    { L"Wi-Fi",              L"ms-settings:network-wifi",            L"wifi wireless network" },
+    { L"VPN",                L"ms-settings:network-vpn",             L"vpn virtual private network" },
+    { L"Personalization",    L"ms-settings:personalization",         L"personalization theme colors wallpaper" },
+    { L"Background",         L"ms-settings:personalization-background", L"wallpaper background theme" },
+    { L"Colors",             L"ms-settings:personalization-colors",  L"colors accent dark mode" },
+    { L"Themes",             L"ms-settings:themes",                  L"themes dark light mode" },
+    { L"Lock screen",        L"ms-settings:lockscreen",              L"lock screen wallpaper login" },
+    { L"Start",              L"ms-settings:personalization-start",   L"start menu tiles" },
+    { L"Taskbar",            L"ms-settings:taskbar",                 L"taskbar tray icons" },
+    { L"Fonts",              L"ms-settings:fonts",                   L"fonts install text" },
+    { L"Accounts",           L"ms-settings:yourinfo",                L"accounts sign in microsoft" },
+    { L"Sign-in options",    L"ms-settings:signinoptions",           L"sign in pin password face fingerprint" },
+    { L"Time & language",    L"ms-settings:dateandtime",             L"time language date region" },
+    { L"Date & time",        L"ms-settings:dateandtime",             L"date time clock timezone" },
+    { L"Language & region",  L"ms-settings:regionlanguage",          L"language region locale keyboard" },
+    { L"Gaming",             L"ms-settings:gaming-gamebar",          L"gaming game bar overlay" },
+    { L"Accessibility",      L"ms-settings:easeofaccess",            L"accessibility ease of access narrator magnifier" },
+    { L"Privacy",            L"ms-settings:privacy",                 L"privacy permissions camera microphone" },
+    { L"Update & security",  L"ms-settings:windowsupdate",           L"update windows security" },
+    { L"Windows Update",     L"ms-settings:windowsupdate",           L"windows update patch" },
+    { L"Recovery",           L"ms-settings:recovery",                L"recovery reset restore" },
+    { L"About",              L"ms-settings:about",                   L"about system info specs" },
+    { L"Apps & features",    L"ms-settings:appsfeatures",            L"apps features uninstall programs" },
+    { L"Default apps",       L"ms-settings:defaultapps",             L"default apps file association" },
+    { L"Startup apps",       L"ms-settings:startupapps",             L"startup boot apps" },
+    { L"Mouse",              L"ms-settings:mousetouchpad",           L"mouse touchpad pointer" },
+    { L"Keyboard",           L"ms-settings:keyboard",                L"keyboard input shortcuts" },
+    { L"Printers & scanners",L"ms-settings:printers",                L"printers scanners print" },
+    { L"Control Panel",      L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}", L"control panel legacy applets system classic" },
+};
+
+bool IsSearchStopWord(const std::wstring& w) {
+    static const wchar_t* kStop[] = {
+        L"a", L"an", L"the", L"or", L"and", L"to", L"of", L"for",
+        L"with", L"my", L"me", L"i", L"is", L"in", L"on", L"at",
+        L"by", L"it", L"its", L"how", L"do", L"does", L"can",
+        L"change", L"set", L"open", L"show", L"make", L"get",
+        L"please", L"want", L"need", L"where", L"what", L"when",
+        L"about", L"into", L"from", L"that", L"this", L"these",
+    };
+    for (auto* s : kStop) {
+        if (w == s) return true;
+    }
+    return false;
+}
+
+std::vector<std::wstring> TokenizeQuery(const std::wstring& q) {
+    std::vector<std::wstring> tokens;
+    std::wstring cur;
+    for (wchar_t c : ToLowerCopy(q)) {
+        if (iswspace(c)) {
+            if (!cur.empty()) { tokens.push_back(cur); cur.clear(); }
+        } else {
+            cur.push_back(c);
+        }
+    }
+    if (!cur.empty()) tokens.push_back(cur);
+
+    std::vector<std::wstring> filtered;
+    for (auto& t : tokens) {
+        if (!IsSearchStopWord(t)) filtered.push_back(t);
+    }
+    if (filtered.empty()) return tokens;
+    return filtered;
+}
+
+bool AllTokensMatch(const std::vector<std::wstring>& tokens,
+                    const std::wstring& haystackLower) {
+    for (const auto& t : tokens) {
+        if (haystackLower.find(t) == std::wstring::npos) return false;
+    }
+    return true;
+}
+
+std::vector<Result> QueryApps(const std::wstring& q, size_t max) {
+    std::vector<Result> out;
+    std::wstring lowerQ = ToLowerCopy(q);
+    for (auto const& a : startmenu::GetCachedApps()) {
+        if (out.size() >= max) break;
+        if (ToLowerCopy(a.name).find(lowerQ) == std::wstring::npos) continue;
+        Result r;
+        r.kind = Result::Kind::App;
+        r.title = a.name;
+        r.subtitle = L"App";
+        r.target = a.target;
+        r.args = a.args;
+        r.lnkPath = a.lnkPath;
+        out.push_back(std::move(r));
+    }
+    return out;
+}
+
+std::vector<Result> QueryFiles(const std::wstring& q, size_t max) {
+    std::vector<Result> out;
+#if TOPBAR_HAS_STORAGE_SEARCH
+    try {
+        using namespace winrt::Windows::Storage;
+        using namespace winrt::Windows::Storage::Search;
+
+        auto options = QueryOptions(CommonFileQuery::OrderBySearchRank, { L"*" });
+        options.IndexerOption(IndexerOption::UseIndexerWhenAvailable);
+        options.UserSearchFilter(q);
+        options.SetPropertyPrefetch(
+            winrt::Windows::Storage::FileProperties::PropertyPrefetchOptions::BasicProperties,
+            nullptr);
+
+        std::vector<StorageFolder> roots;
+        try { roots.push_back(KnownFolders::DocumentsLibrary()); } catch (...) {}
+        try { roots.push_back(KnownFolders::PicturesLibrary()); } catch (...) {}
+        try { roots.push_back(KnownFolders::MusicLibrary()); } catch (...) {}
+        try { roots.push_back(KnownFolders::VideosLibrary()); } catch (...) {}
+
+        static const GUID kFolderDesktop =
+            {0xB4BFCC3A, 0xDB2C, 0x424C, {0xB0, 0x29, 0x7F, 0xE9, 0x9A, 0x87, 0xC6, 0x41}};
+        static const GUID kFolderDownloads =
+            {0x374DE290, 0x123F, 0x4565, {0x91, 0x64, 0x39, 0xC4, 0x92, 0x5E, 0x46, 0x7B}};
+
+        PWSTR path = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderPath(kFolderDesktop, 0, nullptr, &path))) {
+            try { roots.push_back(StorageFolder::GetFolderFromPathAsync(path).get()); } catch (...) {}
+            CoTaskMemFree(path);
+        }
+        path = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderPath(kFolderDownloads, 0, nullptr, &path))) {
+            try { roots.push_back(StorageFolder::GetFolderFromPathAsync(path).get()); } catch (...) {}
+            CoTaskMemFree(path);
+        }
+
+        for (auto const& root : roots) {
+            if (out.size() >= max) break;
+            try {
+                auto query = root.CreateFileQueryWithOptions(options);
+                auto files = query.GetFilesAsync(0, static_cast<uint32_t>(max - out.size())).get();
+                for (auto const& f : files) {
+                    if (out.size() >= max) break;
+                    Result r;
+                    r.kind = Result::Kind::File;
+                    r.title = f.Name();
+                    r.subtitle = f.Path();
+                    r.target = f.Path();
+                    r.lnkPath = f.Path();
+                    out.push_back(std::move(r));
+                }
+            } catch (...) {}
+        }
+    } catch (...) {}
+#endif
+    return out;
+}
+
+std::vector<Result> QuerySettings(const std::wstring& q, size_t max) {
+    std::vector<Result> out;
+    auto tokens = TokenizeQuery(q);
+    if (tokens.empty()) return out;
+    for (auto const& page : kSettingsPages) {
+        if (out.size() >= max) break;
+        std::wstring haystack = ToLowerCopy(page.title);
+        haystack += L" ";
+        haystack += ToLowerCopy(page.keywords);
+        if (!AllTokensMatch(tokens, haystack)) continue;
+        Result r;
+        r.kind = Result::Kind::Setting;
+        r.title = page.title;
+        r.subtitle = L"Settings";
+        r.target = page.uri;
+        out.push_back(std::move(r));
+    }
+    return out;
+}
+
+// Control Panel items live in System32 as .cpl files with terse filenames
+// ("desk.cpl" is Display, "main.cpl" is Mouse). LoadLibrary-ing each one to
+// read its string resources is unreliable across builds, so the friendly
+// names and search keywords come from this hardcoded table. Anything whose
+// file isn't present on the current system is skipped during enumeration.
+struct ControlPanelEntry {
+    std::wstring display;
+    std::wstring path;
+    std::wstring keywords;
+};
+
+const std::vector<ControlPanelEntry>& GetCachedControlPanelItems() {
+    static std::vector<ControlPanelEntry> s_items;
+    static std::once_flag s_once;
+    std::call_once(s_once, [] {
+        struct CplName {
+            const wchar_t* filename;
+            const wchar_t* display;
+            const wchar_t* keywords;
+        };
+        static const CplName kKnown[] = {
+            { L"appwiz.cpl",   L"Programs and Features",      L"programs features uninstall apps change remove software" },
+            { L"bthprops.cpl", L"Bluetooth Devices",          L"bluetooth device pair wireless" },
+            { L"colorcpl.exe", L"Color Management",           L"color colour management profiles icc monitor display advanced" },
+            { L"desk.cpl",     L"Display",                    L"display monitor brightness resolution screen personalization advanced" },
+            { L"firewall.cpl", L"Windows Defender Firewall",  L"firewall defender security network advanced inbound outbound rules" },
+            { L"hdwwiz.cpl",   L"Add Hardware",               L"add hardware device driver wizard" },
+            { L"inetcpl.cpl",  L"Internet Properties",        L"internet properties proxy connection privacy advanced" },
+            { L"intl.cpl",     L"Region",                     L"region language format locale advanced" },
+            { L"irprops.cpl",  L"Infrared",                   L"infrared irda" },
+            { L"joy.cpl",      L"Game Controllers",           L"game controllers joystick gamepad" },
+            { L"main.cpl",     L"Mouse Properties",           L"mouse pointer cursor buttons wheel scroll speed click drag change pointer scheme cursor theme" },
+            { L"mmsys.cpl",    L"Sound",                      L"sound audio playback recording speaker microphone device advanced" },
+            { L"ncpa.cpl",     L"Network Connections",        L"network connections adapter ethernet wifi advanced adapter settings" },
+            { L"powercfg.cpl", L"Power Options",              L"power options sleep hibernate battery plan scheme advanced power settings" },
+            { L"sapi.cpl",     L"Speech Recognition",         L"speech recognition voice text to speech" },
+            { L"sysdm.cpl",    L"System Properties",          L"system properties computer name advanced performance environment variables remote hardware device manager rename pc" },
+            { L"tabletpc.cpl", L"Tablet PC Settings",         L"tablet pen touch calibration screen" },
+            { L"telephon.cpl", L"Phone and Modem",            L"phone modem dialing" },
+            { L"timedate.cpl", L"Date and Time",              L"date time clock timezone calendar internet time change date" },
+            { L"wscui.cpl",    L"Security and Maintenance",   L"security maintenance action center" },
+            { L"systempropertiesadvanced.exe", L"Advanced System Properties", L"advanced system properties performance environment variables virtual memory" },
+            { L"systempropertiesperformance.exe", L"Performance Options", L"performance options visual effects processor memory advanced" },
+            { L"systempropertiesprotection.exe", L"System Protection", L"system protection restore point" },
+            { L"systempropertiesremote.exe", L"Remote",       L"remote desktop assistance" },
+            { L"systempropertiescomputername.exe", L"Computer Name", L"computer name domain workgroup rename pc" },
+            { L"devmgmt.msc",  L"Device Manager",             L"device manager hardware drivers advanced update" },
+            { L"diskmgmt.msc", L"Disk Management",            L"disk management partition volume drive format advanced" },
+            { L"services.msc", L"Services",                   L"services windows background advanced" },
+            { L"eventvwr.msc", L"Event Viewer",               L"event viewer logs" },
+            { L"taskschd.msc", L"Task Scheduler",             L"task scheduler automation advanced" },
+            { L"compmgmt.msc", L"Computer Management",        L"computer management system tools advanced" },
+            { L"certmgr.msc",  L"Certificates",               L"certificates security advanced" },
+            { L"perfmon.msc",  L"Performance Monitor",        L"performance monitor advanced" },
+            { L"lusrmgr.msc",  L"Local Users and Groups",     L"local users groups accounts advanced" },
+            { L"wf.msc",       L"Windows Firewall with Advanced Security", L"windows firewall advanced security inbound outbound rules" },
+            { L"printmanagement.msc", L"Print Management",    L"print printers management advanced" },
+            { L"fsmgmt.msc",   L"Shared Folders",             L"shared folders shares" },
+            { L"gpedit.msc",   L"Group Policy Editor",        L"group policy editor advanced policies" },
+            { L"msconfig.exe", L"System Configuration",       L"system configuration boot startup services advanced" },
+            { L"regedit.exe",  L"Registry Editor",            L"registry editor advanced" },
+            { L"resmon.exe",   L"Resource Monitor",           L"resource monitor cpu ram disk network" },
+            { L"cleanmgr.exe", L"Disk Cleanup",               L"disk cleanup temporary files" },
+            { L"taskmgr.exe",  L"Task Manager",               L"task manager processes performance startup advanced" },
+            { L"msinfo32.exe", L"System Information",         L"system information msinfo hardware software components advanced" },
+            { L"dxdiag.exe",   L"DirectX Diagnostic Tool",    L"directx dxdiag graphics audio" },
+            { L"optionalfeatures.exe", L"Windows Features",   L"windows features turn on off optional" },
+            { L"dfrgui.exe",   L"Defragment and Optimize Drives", L"defragment optimize drives disk" },
+            { L"sndvol.exe",   L"Volume Mixer",               L"volume mixer sound audio" },
+            { L"charmap.exe",  L"Character Map",              L"character map unicode symbols" },
+            { L"mstsc.exe",    L"Remote Desktop Connection",  L"remote desktop connection rdp" },
+            { L"quickassist.exe", L"Quick Assist",            L"quick assist remote help" },
+            { L"winver.exe",   L"About Windows",              L"about windows version winver" },
+            { L"osk.exe",      L"On-Screen Keyboard",         L"on screen keyboard accessibility" },
+            { L"magnify.exe",  L"Magnifier",                  L"magnifier accessibility" },
+            { L"narrator.exe", L"Narrator",                   L"narrator accessibility" },
+            { L"utilman.exe",  L"Ease of Access",             L"ease of access accessibility" },
+            { L"displayswitch.exe", L"Project",               L"project display duplicate extend second monitor" },
+        };
+
+        wchar_t sysDir[MAX_PATH]{};
+        UINT len = GetSystemDirectoryW(sysDir, ARRAYSIZE(sysDir));
+        if (len == 0 || len >= ARRAYSIZE(sysDir)) return;
+
+        for (const auto& e : kKnown) {
+            std::wstring p = std::wstring(sysDir) + L"\\" + e.filename;
+            if (GetFileAttributesW(p.c_str()) == INVALID_FILE_ATTRIBUTES) continue;
+            ControlPanelEntry item;
+            item.display = e.display;
+            item.path = p;
+            item.keywords = e.keywords;
+            s_items.push_back(std::move(item));
+        }
+    });
+    return s_items;
+}
+
+std::vector<Result> QueryControlPanel(const std::wstring& q, size_t max) {
+    std::vector<Result> out;
+    auto tokens = TokenizeQuery(q);
+    if (tokens.empty()) return out;
+    for (const auto& item : GetCachedControlPanelItems()) {
+        if (out.size() >= max) break;
+        std::wstring haystack = ToLowerCopy(item.display);
+        haystack += L" ";
+        haystack += ToLowerCopy(item.keywords);
+        if (!AllTokensMatch(tokens, haystack)) continue;
+        Result r;
+        r.kind = Result::Kind::ControlPanel;
+        r.title = item.display;
+        r.subtitle = L"Control Panel";
+        r.target = item.path;
+        r.lnkPath = item.path;
+        out.push_back(std::move(r));
+    }
+    return out;
+}
+
+std::vector<Result> QueryAll(const std::wstring& q, size_t max) {
+    std::vector<Result> out;
+    if (q.empty()) return out;
+    auto apps = QueryApps(q, max);
+    auto settings = QuerySettings(q, max);
+    auto controlPanel = QueryControlPanel(q, max);
+    auto files = QueryFiles(q, max);
+
+    out.reserve(settings.size() + controlPanel.size() + apps.size() + files.size());
+    for (auto& r : settings)     { if (!r.title.empty()) out.push_back(std::move(r)); }
+    for (auto& r : controlPanel) { if (!r.title.empty()) out.push_back(std::move(r)); }
+    for (auto& r : apps)         { if (!r.title.empty()) out.push_back(std::move(r)); }
+    for (auto& r : files)        { if (!r.title.empty()) out.push_back(std::move(r)); }
+
+    if (out.size() > max) out.resize(max);
+    return out;
+}
+
+void Launch(const Result& r) {
+    try {
+        switch (r.kind) {
+            case Result::Kind::App:
+                ShellExecute(nullptr, L"open", r.target.c_str(),
+                             r.args.empty() ? nullptr : r.args.c_str(),
+                             nullptr, SW_SHOWNORMAL);
+                break;
+            case Result::Kind::File:
+                ShellExecute(nullptr, L"open", r.target.c_str(),
+                             nullptr, nullptr, SW_SHOWNORMAL);
+                break;
+            case Result::Kind::Setting:
+                ShellExecute(nullptr, L"open", r.target.c_str(),
+                             nullptr, nullptr, SW_SHOWNORMAL);
+                break;
+            case Result::Kind::ControlPanel:
+                {
+                    // .cpl files cannot be launched directly on Windows 11;
+                    // they must go through control.exe with the file as
+                    // an argument.
+                    ShellExecuteW(nullptr, L"open", L"control.exe",
+                                  r.target.c_str(), nullptr, SW_SHOWNORMAL);
+                }
+                break;
+        }
+    } catch (...) {}
+}
+
+}  // namespace search
+
+
+
+
+
+[[clang::no_destroy]] wuxc::Flyout g_startMenuFlyout{nullptr};
+[[clang::no_destroy]] wuxc::MenuFlyout g_startPowerMenu{nullptr};
+[[clang::no_destroy]] wuxc::MenuFlyout g_startTileMenu{nullptr};
+[[clang::no_destroy]] wuxc::Flyout g_searchFlyout{nullptr};
+[[clang::no_destroy]] wuxc::Flyout g_startAccountFlyout{nullptr};
+[[clang::no_destroy]] wuxc::MenuFlyout g_searchResultMenu{nullptr};
+static std::atomic<bool> g_searchKeyboardActive{false};
+static double g_searchFlyoutMargin = 0.0;
+static std::atomic<bool> g_startMenuKeyboardActive{false};
+static std::atomic<bool> g_winKeyDown{false};
+static std::atomic<bool> g_winOtherSeen{false};
+static std::atomic<bool> g_winReplayed{false};
+static std::atomic<LONG> g_winChordConsumed{0};
+static std::atomic<DWORD> g_winVkDown{0};
+static std::atomic<ULONGLONG> g_winDownTick{0};
+static std::atomic<bool> g_taskbarClickConsumed{false};
+static std::atomic<ULONGLONG> g_taskbarClickTick{0};
+[[clang::no_destroy]] wuxc::StackPanel g_searchResultsPanel{nullptr};
+[[clang::no_destroy]] DispatcherTimer g_searchDebounceTimer{nullptr};
+std::wstring g_searchQuery;
+std::vector<search::Result> g_searchResults;
+std::atomic<int> g_searchToken{0};
+ULONGLONG s_searchOpenTick = 0;
+
+
+void RebuildSearchResultsPanel();
+void ShowSearchFlyout();
+void EnsureSearchFlyoutCreated();
+void LaunchFirstSearchResult();
+
+
+void BuildSearchFlyoutContent() { 
+    if (!g_searchFlyout) return;
+
+    wuxc::Grid layout;
+    layout.Padding(Thickness{ 14, 14, 14, 14 });
+    layout.RowSpacing(10);
+    layout.RequestedTheme(ElementTheme::Dark);
+
+    wuxc::RowDefinition searchRow;
+    searchRow.Height(GridLength{ 0, GridUnitType::Auto });
+    wuxc::RowDefinition resultsRow;
+    resultsRow.Height(GridLength{ 1, GridUnitType::Star });
+    layout.RowDefinitions().Append(searchRow);
+    layout.RowDefinitions().Append(resultsRow);
+
+    wuxc::Border searchBar;
+    searchBar.CornerRadius(CornerRadius{ 10, 10, 10, 10 });
+    searchBar.Background(MakeBrush(0x2E, 0xFF, 0xFF, 0xFF));
+    searchBar.BorderBrush(MakeBrush(0x40, 0xFF, 0xFF, 0xFF));
+    searchBar.BorderThickness(Thickness{ 1, 1, 1, 1 });
+    searchBar.Height(52);
+    searchBar.VerticalAlignment(VerticalAlignment::Top);
+
+    wuxc::Grid searchInner;
+    searchInner.ColumnSpacing(12);
+    searchInner.Padding(Thickness{ 16, 0, 14, 0 });
+    {
+        wuxc::ColumnDefinition iconCol;
+        iconCol.Width(GridLength{ 0, GridUnitType::Auto });
+        wuxc::ColumnDefinition boxCol;
+        boxCol.Width(GridLength{ 1, GridUnitType::Star });
+        wuxc::ColumnDefinition glyphCol;
+        glyphCol.Width(GridLength{ 0, GridUnitType::Auto });
+        searchInner.ColumnDefinitions().Append(iconCol);
+        searchInner.ColumnDefinitions().Append(boxCol);
+        searchInner.ColumnDefinitions().Append(glyphCol);
+    }
+
+    if (auto glyph = BuildVectorIcon(
+            nullptr, L"",
+            L"M4 10.5 A6.5 6.5 0 1 1 17 10.5 A6.5 6.5 0 1 1 4 10.5 Z M15.5 15.5 L21 21",
+            24, 18, 1.7, GetEffectiveIconColorString().c_str())) {
+        glyph.VerticalAlignment(VerticalAlignment::Center);
+        wuxc::Grid::SetRow(glyph, 0);
+        wuxc::Grid::SetColumn(glyph, 0);
+        searchInner.Children().Append(glyph);
+    }
+
+    wuxc::TextBox searchBox;
+    searchBox.Name(L"SpotlightSearchBox");
+    searchBox.PlaceholderText(L"Search applications, files and settings\u2026");
+    searchBox.IsTabStop(true);
+    searchBox.FontSize(17);
+    searchBox.Height(34);
+    searchBox.VerticalAlignment(VerticalAlignment::Center);
+    searchBox.HorizontalAlignment(HorizontalAlignment::Stretch);
+    searchBox.VerticalContentAlignment(VerticalAlignment::Center);
+    searchBox.HorizontalContentAlignment(HorizontalAlignment::Left);
+    searchBox.BorderThickness(Thickness{ 0, 0, 0, 0 });
+    searchBox.CornerRadius(CornerRadius{ 0, 0, 0, 0 });
+    searchBox.Padding(Thickness{ 0, 4, 0, 4 });
+    searchBox.Foreground(FontColorBrush());
+    searchBox.PlaceholderForeground(FontColorBrushDimmed());
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlThemeMinHeight")),
+                                 winrt::box_value(0.0));
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlBackground")),
+                                 MakeBrush(0x00, 0, 0, 0));
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlBackgroundPointerOver")),
+                                 MakeBrush(0x00, 0, 0, 0));
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlBackgroundFocused")),
+                                 MakeBrush(0x00, 0, 0, 0));
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlBorderBrush")),
+                                 MakeBrush(0x00, 0, 0, 0));
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlBorderBrushPointerOver")),
+                                 MakeBrush(0x00, 0, 0, 0));
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlBorderBrushFocused")),
+                                 MakeBrush(0x00, 0, 0, 0));
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlForeground")),
+                                 FontColorBrush());
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlForegroundPointerOver")),
+                                 FontColorBrush());
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlForegroundFocused")),
+                                 FontColorBrush());
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlPlaceholderForeground")),
+                                 FontColorBrushDimmed());
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlPlaceholderForegroundPointerOver")),
+                                 FontColorBrushDimmed());
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlPlaceholderForegroundFocused")),
+                                 FontColorBrushDimmed());
+    searchBox.Text(g_searchQuery);
+    if (!g_searchQuery.empty()) {
+        try { searchBox.SelectionStart(g_searchQuery.size()); } catch (...) {}
+    }
+    wuxc::Grid::SetRow(searchBox, 0);
+    wuxc::Grid::SetColumn(searchBox, 1);
+    searchInner.Children().Append(searchBox);
+    g_namedElements.insert_or_assign(L"SpotlightSearchBox", searchBox);
+
+    {
+        auto enterBtn = MakeGhostButton(L"SearchEnterButton", 6);
+        enterBtn.Width(28);
+        enterBtn.Height(28);
+        enterBtn.MinWidth(28);
+        enterBtn.Padding(Thickness{ 0, 0, 0, 0 });
+        enterBtn.Background(MakeBrush(0x00, 0, 0, 0));
+        enterBtn.BorderThickness(Thickness{ 0, 0, 0, 0 });
+        enterBtn.HorizontalContentAlignment(HorizontalAlignment::Center);
+        enterBtn.VerticalContentAlignment(VerticalAlignment::Center);
+        wuxc::FontIcon enterGlyph;
+        enterGlyph.Glyph(L"\uE751");
+        enterGlyph.FontSize(16);
+        enterGlyph.Foreground(IconColorBrush());
+        enterGlyph.HorizontalAlignment(HorizontalAlignment::Center);
+        enterGlyph.VerticalAlignment(VerticalAlignment::Center);
+        enterBtn.Content(enterGlyph);
+        enterBtn.Click([](auto&&, auto&&) {
+            try { LaunchFirstSearchResult(); } catch (...) {}
+        });
+        wuxc::Grid::SetRow(enterBtn, 0);
+        wuxc::Grid::SetColumn(enterBtn, 2);
+        searchInner.Children().Append(enterBtn);
+    }
+
+    searchBar.Child(searchInner);
+    wuxc::Grid::SetRow(searchBar, 0);
+    layout.Children().Append(searchBar);
+
+    wuxc::ScrollViewer scroller;
+    scroller.VerticalScrollBarVisibility(wuxc::ScrollBarVisibility::Auto);
+    scroller.HorizontalScrollBarVisibility(wuxc::ScrollBarVisibility::Disabled);
+    scroller.HorizontalScrollMode(wuxc::ScrollMode::Disabled);
+    scroller.MaxHeight(382.0);
+    wuxc::Grid::SetRow(scroller, 1);
+
+    g_searchResultsPanel = wuxc::StackPanel();
+    g_searchResultsPanel.Spacing(2);
+    scroller.Content(g_searchResultsPanel);
+    layout.Children().Append(scroller);
+
+    layout.AddHandler(
+        UIElement::PointerPressedEvent(),
+        winrt::box_value(Input::PointerEventHandler(
+            [](wf::IInspectable const&, Input::PointerRoutedEventArgs const&) {
+                try {
+                    if (g_searchResultMenu && g_searchResultMenu.IsOpen()) {
+                        g_searchResultMenu.Hide();
+                    }
+                } catch (...) {}
+            })),
+        true);
+
+    RebuildSearchResultsPanel();
+
+    searchBox.TextChanged([](auto&& sender, auto&&) {
+        try {
+            auto box = sender.template as<wuxc::TextBox>();
+            g_searchQuery = std::wstring(box.Text());
+            g_searchToken.fetch_add(1);
+            if (g_searchQuery.size() < 2) {
+                g_searchResults.clear();
+                RebuildSearchResultsPanel();
+                return;
+            }
+
+            std::vector<search::Result> instant;
+            for (auto& r : search::QuerySettings(g_searchQuery, 20))
+                instant.push_back(std::move(r));
+            for (auto& r : search::QueryControlPanel(g_searchQuery, 20))
+                instant.push_back(std::move(r));
+            for (auto& r : search::QueryApps(g_searchQuery, 20))
+                instant.push_back(std::move(r));
+            g_searchResults = std::move(instant);
+            RebuildSearchResultsPanel();
+
+            if (!g_searchDebounceTimer) {
+                g_searchDebounceTimer = DispatcherTimer();
+                g_searchDebounceTimer.Interval(std::chrono::milliseconds(60));
+                g_searchDebounceTimer.Tick(
+                    [](wf::IInspectable const&, wf::IInspectable const&) {
+                        g_searchDebounceTimer.Stop();
+                        std::wstring q = g_searchQuery;
+                        if (q.size() < 2) return;
+                        int token = g_searchToken.load();
+                        RunInBackground([q, token] {
+                            auto files = search::QueryFiles(q, 15);
+                            if (files.empty()) return;
+                            RunOnUiThread([files = std::move(files), token]() mutable {
+                                if (g_searchToken.load() != token) return;
+                                for (auto& r : files) {
+                                    g_searchResults.push_back(std::move(r));
+                                }
+                                RebuildSearchResultsPanel();
+                            });
+                        });
+                    });
+            }
+            g_searchDebounceTimer.Stop();
+            g_searchDebounceTimer.Start();
+        } catch (...) {}
+    });
+
+    searchBox.Loaded([searchBox](auto&&, auto&&) {
+        try { searchBox.Focus(FocusState::Programmatic); } catch (...) {}
+        RunOnUiThread([searchBox] {
+            try { searchBox.Focus(FocusState::Programmatic); } catch (...) {}
+        });
+    });
+    searchBox.PointerPressed([](auto&& sender, auto&&) {
+        try {
+            sender.template as<wuxc::TextBox>().Focus(FocusState::Programmatic);
+        } catch (...) {}
+    });
+    searchBox.KeyDown([](auto&& sender, Input::KeyRoutedEventArgs const& args) {
+        if (args.Key() == winrt::Windows::System::VirtualKey::Enter) {
+            args.Handled(true);
+            try { LaunchFirstSearchResult(); } catch (...) {}
+        } else if (args.Key() == winrt::Windows::System::VirtualKey::Escape) {
+            args.Handled(true);
+            if (g_searchFlyout) g_searchFlyout.Hide();
+        }
+    });
+
+    wuxc::Border blurHost;
+    blurHost.Name(L"SearchBlurHost");
+    blurHost.CornerRadius(MakeCorner(12));
+    blurHost.HorizontalAlignment(HorizontalAlignment::Stretch);
+    blurHost.VerticalAlignment(VerticalAlignment::Top);
+    blurHost.Padding(Thickness{ 0, 0, 0, 0 });
+    blurHost.Width(720);
+    blurHost.Height(84.0);
+    {
+        wuxa::TransitionCollection transitions;
+        wuxa::EntranceThemeTransition entrance;
+        entrance.FromVerticalOffset(24.0);
+        entrance.FromHorizontalOffset(0.0);
+        entrance.IsStaggeringEnabled(false);
+        transitions.Append(entrance);
+        blurHost.Transitions(transitions);
+    }
+    blurHost.Child(layout);
+    g_namedElements.insert_or_assign(L"SearchBlurHost", blurHost);
+
+    blurHost.Loaded([](wf::IInspectable const& sender, RoutedEventArgs const&) {
+        try {
+            auto border = sender.template as<wuxc::Border>();
+            if (!border) return;
+            ApplyFlyoutBlurBrush(border);
+        } catch (...) {}
+    });
+
+    g_searchFlyout.Content(blurHost);
+}
+
+static void RecenterSearchPopup() {
+    HWND h = FindOpenChildFlyoutHwnd();
+    if (!h || !IsWindow(h)) return;
+    RECT r{};
+    if (!GetWindowRect(h, &r)) return;
+    int w = r.right - r.left;
+    if (w <= 0) return;
+    RECT mr = GetBarMonitorRect();
+    int sx = mr.left + ((mr.right - mr.left) - w) / 2;
+    // Anchor the top edge at a fixed Y that corresponds to a
+    // fully-expanded results panel (480 DIP) being vertically centred.
+    // As the panel grows and shrinks, only the bottom edge moves.
+    double dpi = GetBarDpiScale();
+    if (dpi <= 0.0) dpi = 1.0;
+    int anchorH = static_cast<int>(480.0 * dpi);
+    int sy = mr.top + ((mr.bottom - mr.top) - anchorH) / 2;
+    SnapOpenChildFlyoutTo(sx, sy);
+}
+
+static void AnimateSearchPopupHeight(double targetHeight) {
+    auto it = g_namedElements.find(L"SearchBlurHost");
+    if (it == g_namedElements.end()) return;
+    auto host = it->second.try_as<wuxc::Border>();
+    if (!host) return;
+
+    constexpr double kMinHeight = 84.0;
+    constexpr double kMaxHeight = 480.0;
+    if (targetHeight < kMinHeight) targetHeight = kMinHeight;
+    if (targetHeight > kMaxHeight) targetHeight = kMaxHeight;
+
+    // Instant — animation on Height requires EnableDependentAnimation and
+    // runs on the UI thread, which visibly stutters under keystroke load.
+    // The popup snapping to the results height is imperceptible because
+    // the query debounce (180 ms) already provides an animation-like beat.
+    try { host.Height(targetHeight); } catch (...) {}
+
+    // Any height change makes XAML re-run its placement pass for the
+    // popup HWND, and because the topbar island is only bar-height tall,
+    // XAML's bounds-aware placement always re-places the popup toward the
+    // top of the screen. Recenter against the popup's CURRENT height, not
+    // against the initial 520 DIP assumption -- otherwise a compact
+    // results panel (few hits, or the "No results" placeholder) is
+    // positioned as if it were full-height and lands well above the
+    // vertical centre.
+    auto recenter = [] {
+        try { RecenterSearchPopup(); } catch (...) {}
+    };
+    RunOnUiThread([recenter] { recenter(); });
+    RunOnUiThread([recenter] {
+        recenter();
+        RunOnUiThread([recenter] { recenter(); });
+    });
+}
+
+// Measures the results panel after layout and resizes the popup to exactly
+// fit it, capped at 480. Called from a dispatcher turn so XAML has already
+// computed DesiredSize for the panel's children.
+static void FitSearchPopupToContent() {
+    auto hostIt = g_namedElements.find(L"SearchBlurHost");
+    if (hostIt == g_namedElements.end()) return;
+    auto host = hostIt->second.try_as<wuxc::Border>();
+    if (!host) return;
+
+    if (g_searchQuery.empty()) {
+        AnimateSearchPopupHeight(84.0);
+        return;
+    }
+
+    if (!g_searchResultsPanel) return;
+    try {
+        // Measure against an infinite constraint so DesiredSize reflects
+        // the natural content height, not the size the panel currently
+        // occupies inside the ScrollViewer's Star-sized row. Without this,
+        // once the flyout grows tall the panel's ActualHeight stays matched
+        // to the stretched size, and the fitter never shrinks the flyout
+        // back down when fewer results are returned.
+        g_searchResultsPanel.Measure(winrt::Windows::Foundation::Size{
+            std::numeric_limits<float>::infinity(),
+            std::numeric_limits<float>::infinity()});
+        double contentH = g_searchResultsPanel.DesiredSize().Height;
+        if (contentH <= 0) return;
+        // 84 = search bar (52) + outer padding (14+14) + row spacing.
+        double target = contentH + 84.0;
+        AnimateSearchPopupHeight(target);
+    } catch (...) {}
+}
+
+[[clang::no_destroy]] static std::map<std::wstring, wuxm::Imaging::BitmapImage> g_searchIconCache;
+
+void RebuildSearchResultsPanel() {
+    if (!g_searchResultsPanel) return;
+    g_searchResultsPanel.Children().Clear();
+
+    constexpr double kIconBoxPx = 40.0;
+    constexpr double kIconImagePx = 26.0;
+
+    auto buildResultIcon = [](const search::Result& r) -> FrameworkElement {
+        UINT physical = static_cast<UINT>(
+            std::lround(kIconImagePx * std::max(1.0, g_dpiScale)));
+
+        std::wstring cacheKey;
+        if (r.kind == search::Result::Kind::Setting) cacheKey = L"__search_setting__";
+        else if (r.kind == search::Result::Kind::ControlPanel) cacheKey = L"__search_cpl__";
+        else cacheKey = !r.lnkPath.empty() ? r.lnkPath : r.target;
+        if (cacheKey.empty()) cacheKey = L"__search_empty__";
+
+        wuxm::Imaging::BitmapImage bmp;
+        bool cacheHit = false;
+        auto cacheIt = g_searchIconCache.find(cacheKey);
+        if (cacheIt != g_searchIconCache.end()) {
+            bmp = cacheIt->second;
+            cacheHit = true;
+        }
+        if (!cacheHit) {
+
+        // Settings pages carry an "ms-settings:" URI as their target, which
+        // is not a shell parsing name — SHCreateItemFromParsingName either
+        // fails outright or returns a stub item whose GetImage gives a blank
+        // or generic browser icon. Fetch the real Windows Settings app icon
+        // via its AUMID instead, and don't touch the shell-item path below
+        // for these results.
+        if (r.kind == search::Result::Kind::Setting) {
+            constexpr PCWSTR kSettingsAumid =
+                L"shell:AppsFolder\\windows.immersivecontrolpanel_cw5n1h2txyewy"
+                L"!microsoft.windows.immersivecontrolpanel";
+            winrt::com_ptr<IShellItemImageFactory> factory;
+            if (SUCCEEDED(SHCreateItemFromParsingName(kSettingsAumid, nullptr,
+                                                      IID_PPV_ARGS(factory.put()))) &&
+                factory) {
+                HBITMAP hbm = nullptr;
+                SIZE sz{ static_cast<LONG>(physical), static_cast<LONG>(physical) };
+                if (SUCCEEDED(factory->GetImage(sz, SIIGBF_ICONONLY, &hbm)) && hbm) {
+                    ICONINFO ii{};
+                    ii.fIcon = TRUE;
+                    ii.hbmColor = hbm;
+                    ii.hbmMask = CreateBitmap(sz.cx, sz.cy, 1, 1, nullptr);
+                    HICON icon = CreateIconIndirect(&ii);
+                    if (ii.hbmMask) DeleteObject(ii.hbmMask);
+                    DeleteObject(hbm);
+                    if (icon) {
+                        bmp = HIconToBitmapImage(icon, physical);
+                        DestroyIcon(icon);
+                    }
+                }
+            }
+        } else if (r.kind == search::Result::Kind::ControlPanel) {
+            // Resolve the .cpl file's own icon. The shell namespace GUID
+            // (shell:::{26EE0668-...}) is redirected to the modern Settings
+            // app on Windows 11, so every Control Panel result was showing
+            // the Settings gear. Using the actual .cpl path gives each
+            // applet its real icon.
+            if (!r.target.empty()) {
+                bmp = GetShellItemIconBitmap(r.target, physical);
+            }
+        } else {
+            if (!r.lnkPath.empty()) {
+                bmp = GetShellItemIconBitmap(r.lnkPath, physical);
+            }
+            if (!bmp && !r.target.empty() && r.target != r.lnkPath) {
+                bmp = GetShellItemIconBitmap(r.target, physical);
+            }
+        }
+
+        g_searchIconCache.emplace(cacheKey, bmp);
+        }
+
+        wuxc::Border frame;
+        frame.Width(kIconBoxPx);
+        frame.Height(kIconBoxPx);
+        frame.CornerRadius(CornerRadius{ 8, 8, 8, 8 });
+        frame.Background(MakeBrush(0x14, 0xFF, 0xFF, 0xFF));
+        frame.VerticalAlignment(VerticalAlignment::Center);
+
+        if (bmp) {
+            wuxc::Image img;
+            img.Source(bmp);
+            img.Width(kIconImagePx);
+            img.Height(kIconImagePx);
+            img.Stretch(wuxm::Stretch::Uniform);
+            img.HorizontalAlignment(HorizontalAlignment::Center);
+            img.VerticalAlignment(VerticalAlignment::Center);
+            frame.Child(img);
+        } else {
+            wuxc::FontIcon fi;
+            fi.FontSize(kIconImagePx - 6);
+            fi.Foreground(MakeBrush(0xFF, 0xFF, 0xFF, 0xFF));
+            if (r.kind == search::Result::Kind::Setting) {
+                fi.Glyph(L"\uE713");
+            } else if (r.kind == search::Result::Kind::File) {
+                fi.Glyph(L"\uE8A5");
+            } else {
+                fi.Glyph(L"\uE71D");
+            }
+            fi.HorizontalAlignment(HorizontalAlignment::Center);
+            fi.VerticalAlignment(VerticalAlignment::Center);
+            frame.Child(fi);
+        }
+        return frame;
+    };
+
+    // Empty query → popup collapses to just the search bar. No tiles, no
+    // placeholder list — YASB behaviour.
+    if (g_searchQuery.empty()) {
+        AnimateSearchPopupHeight(84.0);
+        return;
+    }
+
+    if (g_searchResults.empty()) {
+        auto empty = MakeText(nullptr, L"No results.", 13, false, 0.55);
+        empty.Margin(Thickness{ 8, 12, 8, 8 });
+        g_searchResultsPanel.Children().Append(empty);
+        RunOnUiThread([] { FitSearchPopupToContent(); });
+        return;
+    }
+
+    for (auto const& r : g_searchResults) {
+        FrameworkElement iconElem = buildResultIcon(r);
+
+        auto row = MakeGhostButton(L"SearchResultRow", 8);
+        row.HorizontalAlignment(HorizontalAlignment::Stretch);
+        row.Padding(Thickness{ 12, 6, 12, 6 });
+        row.Margin(Thickness{ 0, 1, 0, 1 });
+        row.Background(MakeBrush(0x00, 0, 0, 0));
+
+        wuxc::Grid g;
+        g.ColumnSpacing(14);
+        {
+            wuxc::ColumnDefinition c1;
+            c1.Width(GridLength{ 0, GridUnitType::Auto });
+            wuxc::ColumnDefinition c2;
+            c2.Width(GridLength{ 1, GridUnitType::Star });
+            g.ColumnDefinitions().Append(c1);
+            g.ColumnDefinitions().Append(c2);
+        }
+
+        iconElem.VerticalAlignment(VerticalAlignment::Center);
+        wuxc::Grid::SetColumn(iconElem, 0);
+        g.Children().Append(iconElem);
+
+        wuxc::StackPanel textStack;
+        textStack.VerticalAlignment(VerticalAlignment::Center);
+        textStack.Spacing(2);
+
+        auto title = MakeText(nullptr, r.title, 15, true);
+        textStack.Children().Append(title);
+
+        if (!r.subtitle.empty()) {
+            auto sub = MakeText(nullptr, r.subtitle, 12, false, 1.0);
+            sub.Foreground(FontColorBrushDimmed());
+            textStack.Children().Append(sub);
+        }
+        wuxc::Grid::SetColumn(textStack, 1);
+        g.Children().Append(textStack);
+
+        row.Content(g);
+
+        auto captured = r;
+        row.Click([captured](auto&&, auto&&) {
+            search::Launch(captured);
+            if (g_searchFlyout) {
+                try { g_searchFlyout.Hide(); } catch (...) {}
+            }
+        });
+        row.RightTapped([captured](wf::IInspectable const& sender,
+                                   Input::RightTappedRoutedEventArgs const& args) {
+            try {
+                args.Handled(true);
+                if (g_searchResultMenu) {
+                    try { g_searchResultMenu.Hide(); } catch (...) {}
+                }
+                auto menu = wuxc::MenuFlyout();
+                StyleMenuFlyout(menu);
+                g_searchResultMenu = menu;
+
+                bool isUwp = captured.target.find(L'!') != std::wstring::npos &&
+                             captured.target.find(L'\\') == std::wstring::npos;
+
+                menu.Items().Append(MakeMenuItem(L"Open", [captured] {
+                    search::Launch(captured);
+                    if (g_searchFlyout) {
+                        try { g_searchFlyout.Hide(); } catch (...) {}
+                    }
+                }, L"\uE8E5"));
+
+                if (captured.kind == search::Result::Kind::App ||
+                    captured.kind == search::Result::Kind::ControlPanel) {
+                    menu.Items().Append(MakeMenuItem(L"Run as administrator",
+                        [captured] {
+                            LaunchTargetElevated(captured.target, captured.args);
+                        }, L"\uE7EF"));
+                }
+
+                if (!isUwp && !captured.lnkPath.empty() &&
+                    captured.lnkPath.rfind(L"shell:", 0) != 0) {
+                    menu.Items().Append(MakeMenuItem(L"Open file location",
+                        [captured] {
+                            RevealShortcutInExplorer(captured.lnkPath);
+                        }, L"\uE838"));
+                }
+
+                menu.Items().Append(MakeMenuSeparator());
+
+                if (captured.kind == search::Result::Kind::App &&
+                    !captured.lnkPath.empty()) {
+                    menu.Items().Append(MakeMenuItem(L"Uninstall",
+                        [captured] {
+                            TryUninstallShortcut(captured.lnkPath);
+                        }, L"\uE74D"));
+                }
+
+                menu.Items().Append(MakeMenuItem(L"Copy path", [captured] {
+                    if (!OpenClipboard(nullptr)) return;
+                    EmptyClipboard();
+                    size_t bytes =
+                        (captured.target.size() + 1) * sizeof(wchar_t);
+                    HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, bytes);
+                    if (mem) {
+                        void* dst = GlobalLock(mem);
+                        if (dst) {
+                            memcpy(dst, captured.target.c_str(), bytes);
+                            GlobalUnlock(mem);
+                            if (!SetClipboardData(CF_UNICODETEXT, mem)) {
+                                GlobalFree(mem);
+                            }
+                        } else {
+                            GlobalFree(mem);
+                        }
+                    }
+                    CloseClipboard();
+                }, L"\uE8C8"));
+
+                auto fe = sender.as<FrameworkElement>();
+                menu.ShowAt(fe, args.GetPosition(fe));
+            } catch (...) {}
+        });
+        g_searchResultsPanel.Children().Append(row);
+    }
+
+    RunOnUiThread([] { FitSearchPopupToContent(); });
+}
+
+void LaunchFirstSearchResult() {
+    if (g_searchResults.empty()) return;
+    auto result = g_searchResults[0];
+    auto it = g_namedElements.find(L"SpotlightSearchBox");
+    if (it != g_namedElements.end()) {
+        if (auto box = it->second.try_as<wuxc::TextBox>()) {
+            try {
+                box.Text(winrt::hstring(result.title));
+                box.SelectionStart(static_cast<int32_t>(result.title.size()));
+                box.SelectionLength(0);
+            } catch (...) {}
+        }
+    }
+    RunInBackground([result] {
+        Sleep(200);
+        RunOnUiThread([result] {
+            search::Launch(result);
+            if (g_searchFlyout) {
+                try { g_searchFlyout.Hide(); } catch (...) {}
+            }
+        });
+    });
+}
+
+void EnsureSearchFlyoutCreated() {
+    try {
+        if (g_searchFlyout) return;
+        {
+            g_searchFlyout = wuxc::Flyout();
+            g_searchFlyout.ShouldConstrainToRootBounds(false);
+            g_searchFlyout.Placement(wuxc::Primitives::FlyoutPlacementMode::Bottom);
+            g_searchFlyout.LightDismissOverlayMode(wuxc::LightDismissOverlayMode::Off);
+
+            Style presenterStyle(winrt::xaml_typename<wuxc::FlyoutPresenter>());
+            presenterStyle.Setters().Append(Setter(wuxc::Control::BackgroundProperty(),
+                winrt::box_value(MakeBrush(0, 0, 0, 0))));
+            presenterStyle.Setters().Append(Setter(wuxc::Control::BorderThicknessProperty(),
+                winrt::box_value(Thickness{ 0, 0, 0, 0 })));
+            presenterStyle.Setters().Append(Setter(wuxc::Control::PaddingProperty(),
+                winrt::box_value(Thickness{ 0, 0, 0, 0 })));
+            presenterStyle.Setters().Append(Setter(FrameworkElement::MinWidthProperty(),
+                winrt::box_value(0.0)));
+            presenterStyle.Setters().Append(Setter(FrameworkElement::MinHeightProperty(),
+                winrt::box_value(0.0)));
+            presenterStyle.Setters().Append(Setter(FrameworkElement::MaxWidthProperty(),
+                winrt::box_value(1600.0)));
+            presenterStyle.Setters().Append(Setter(FrameworkElement::MaxHeightProperty(),
+                winrt::box_value(1600.0)));
+            if (auto tmpl = BuildFlyoutShellTemplate(false)) {
+                presenterStyle.Setters().Append(Setter(wuxc::Control::TemplateProperty(),
+                    winrt::box_value(tmpl)));
+            }
+            g_searchFlyout.FlyoutPresenterStyle(presenterStyle);
+
+            // Build the content ONCE here, not inside an Opening handler.
+            // When a flyout is attached via button.Flyout(flyout), XAML
+            // measures and places the presenter BEFORE it fires Opening —
+            // so any content set in that handler arrives too late, the
+            // presenter measures to zero size, and the flyout opens
+            // invisibly. WiFi/Weather don't have this problem because
+            // MakeControlFlyout sets their content immediately at
+            // construction. Do the same here.
+            BuildSearchFlyoutContent();
+
+            g_searchFlyout.Opened([](auto&& sender, auto&&) {
+                RegisterOpenPopup(sender.template as<wuxc::Primitives::FlyoutBase>());
+                s_searchOpenTick = GetTickCount64();
+                g_searchKeyboardActive = true;
+                try {
+                    if (g_searchFlyout) {
+                        if (auto border = g_searchFlyout.Content().try_as<wuxc::Border>()) {
+                            ApplyFlyoutBlurBrush(border);
+                            wuxa::TransitionCollection tc;
+                            wuxa::EntranceThemeTransition e;
+                            e.FromVerticalOffset(24.0);
+                            e.FromHorizontalOffset(0.0);
+                            e.IsStaggeringEnabled(false);
+                            tc.Append(e);
+                            border.Transitions(tc);
+                        }
+                    }
+                } catch (...) {}
+                auto focusBox = [] {
+                    auto it = g_namedElements.find(L"SpotlightSearchBox");
+                    if (it == g_namedElements.end()) return;
+                    if (auto box = it->second.try_as<wuxc::TextBox>()) {
+                        try { box.Focus(FocusState::Programmatic); } catch (...) {}
+                    }
+                };
+                RunOnUiThread([focusBox] {
+                    focusBox();
+                    RunOnUiThread([focusBox] { focusBox(); });
+                });
+            });
+            InstallLightDismissGuard(g_searchFlyout);
+            g_searchFlyout.Closed([](auto&& sender, auto&&) {
+                Wh_Log(L"[Search] flyout Closed fired");
+                g_searchKeyboardActive = false;
+                UnregisterOpenPopup(sender.template as<wuxc::Primitives::FlyoutBase>());
+                if (auto it = g_namedElements.find(L"SearchAnchor"); it != g_namedElements.end()) {
+                    if (auto fe = it->second.try_as<FrameworkElement>()) {
+                        try {
+                            fe.RenderTransform(wuxm::TranslateTransform());
+                        } catch (...) {}
+                    }
+                }
+
+                // Stop the debounce first so the TextChanged that fires when
+                // we clear the box below doesn't restart it and re-populate
+                // the results panel with the previous query.
+                if (g_searchDebounceTimer) g_searchDebounceTimer.Stop();
+                g_searchToken.fetch_add(1);
+
+                g_searchResults.clear();
+                g_searchQuery.clear();
+
+                auto boxIt = g_namedElements.find(L"SpotlightSearchBox");
+                if (boxIt != g_namedElements.end()) {
+                    if (auto box = boxIt->second.try_as<wuxc::TextBox>()) {
+                        try { box.Text(L""); } catch (...) {}
+                        try { box.SelectionStart(0); } catch (...) {}
+                    }
+                }
+                if (g_searchResultMenu) {
+                    try { g_searchResultMenu.Hide(); } catch (...) {}
+                }
+                RebuildSearchResultsPanel();
+            });
+        }
+    } catch (...) {}
+}
+
+// XAML's popup manager, on the first Flyout.ShowAt of a
+// DesktopWindowXamlSource, can leave the newly-created popup HWND in a
+// hidden or DWM-cloaked state. XAML still reports IsOpen==1 and the
+// content tree builds (Loaded / GotFocus fire), but nothing paints —
+// the "first open invisible, second open works" bug. The next XAML
+// open reuses the same popup HWND and it renders correctly, which is
+// why only the very first open of a given flyout is affected.
+void ForceShowNewestXamlPopup() {
+    if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) return;
+    if (g_fullScreenAppActive) return;
+    HWND fgCheck = GetForegroundWindow();
+    if (fgCheck && fgCheck != g_topBarHwnd && fgCheck != g_islandHwnd &&
+        fgCheck != g_topBarPopupHwnd) {
+        HMONITOR mon = MonitorFromWindow(fgCheck, MONITOR_DEFAULTTONEAREST);
+        if (IsWindowFullscreenOnMonitor(fgCheck, mon)) {
+            g_fullScreenAppActive = true;
+            return;
+        }
+    }
+    struct Ctx { HWND result; RECT rect{}; };
+    Ctx ctx{nullptr, {}};
+    EnumWindows([](HWND h, LPARAM lp) -> BOOL {
+        auto* c = reinterpret_cast<Ctx*>(lp);
+        if (h == g_islandHwnd) return TRUE;
+        if (h == g_topBarHwnd) return TRUE;
+        if (h == g_topBarPopupHwnd) return TRUE;
+        DWORD pid = 0;
+        GetWindowThreadProcessId(h, &pid);
+        if (pid != GetCurrentProcessId()) return TRUE;
+        wchar_t cls[256]{};
+        if (!GetClassName(h, cls, ARRAYSIZE(cls))) return TRUE;
+        if (!(wcsstr(cls, L"Xaml") && wcsstr(cls, L"Popup"))) return TRUE;
+        GetWindowRect(h, &c->rect);
+        c->result = h;
+        return FALSE;
+    }, reinterpret_cast<LPARAM>(&ctx));
+
+    if (!ctx.result) {
+        Wh_Log(L"ForceShow: no XAML popup HWND found");
+        return;
+    }
+
+    // Re-apply the snap target position recorded by SnapOpenChildFlyoutTo.
+    // XAML re-places the popup on its own layout pass after the first ShowAt,
+    // and the single Snap call from ShowSearchFlyout often runs before the
+    // popup HWND exists -- so the first open landed at XAML's default
+    // position and later opens landed at the previous open's snap. Doing
+    // this here re-asserts the position on every 40 ms tick of the
+    // ScheduleForceShowXamlPopup timer, so both first and subsequent opens
+    // settle on the same coordinates.
+    if (g_wideFlyoutTargetX >= 0 && g_wideFlyoutTargetY >= 0) {
+        RECT r{};
+        if (GetWindowRect(ctx.result, &r)) {
+            int w = r.right - r.left;
+            int hh = r.bottom - r.top;
+            if (std::abs(r.left - g_wideFlyoutTargetX) > 4 ||
+                std::abs(r.top - g_wideFlyoutTargetY) > 4) {
+                RECT target{ g_wideFlyoutTargetX, g_wideFlyoutTargetY,
+                             g_wideFlyoutTargetX + w, g_wideFlyoutTargetY + hh };
+                RegisterChildPopupTarget(ctx.result, target);
+            }
+        }
+    }
+
+    // If the search flyout is the current top-level popup, keep it
+    // centred on its actual size while XAML finishes realising it.
+    // The initial ShowAt path only knows the requested 720x520 box;
+    // the popup's real height arrives a frame or two later.
+    if (g_searchFlyout) {
+        try {
+            if (g_searchFlyout.IsOpen()) {
+                RecenterSearchPopup();
+            }
+        } catch (...) {}
+    }
+
+    // Uncloak first — DWM cloaking makes ShowWindow a visual no-op.
+    BOOL cloakOff = FALSE;
+    DwmSetWindowAttribute(ctx.result, DWMWA_CLOAK, &cloakOff, sizeof(cloakOff));
+
+    ShowWindow(ctx.result, SW_SHOWNOACTIVATE);
+    SetWindowPos(ctx.result, nullptr, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
+
+    Wh_Log(L"ForceShow: popup %p rect=(%ld,%ld)-(%ld,%ld) size=%ldx%ld visible=%d",
+           ctx.result, ctx.rect.left, ctx.rect.top,
+           ctx.rect.right, ctx.rect.bottom,
+           ctx.rect.right - ctx.rect.left,
+           ctx.rect.bottom - ctx.rect.top,
+           IsWindowVisible(ctx.result) ? 1 : 0);
+}
+
+[[clang::no_destroy]] DispatcherTimer g_forceShowTimer{nullptr};
+int g_forceShowTicks = 0;
+
+// Runs ForceShowNewestXamlPopup every 40 ms for a short window after a
+// flyout opens. XAML realises the popup HWND asynchronously, so a single
+// next-tick call often fires before it exists; retrying a few times
+// catches the popup as soon as it appears.
+void ScheduleForceShowXamlPopup() {
+    g_forceShowTicks = 12;
+    if (!g_forceShowTimer) {
+        g_forceShowTimer = DispatcherTimer();
+        g_forceShowTimer.Interval(std::chrono::milliseconds(40));
+        g_forceShowTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+            try { ForceShowNewestXamlPopup(); } catch (...) {}
+            if (--g_forceShowTicks <= 0) {
+                g_forceShowTimer.Stop();
+            }
+        });
+    }
+    g_forceShowTimer.Stop();
+    g_forceShowTimer.Start();
+}
+
+void ShowSearchFlyout() {
+    try {
+        EnsureSearchFlyoutCreated();
+        if (!g_searchFlyout) return;
+
+        if (g_searchFlyout.IsOpen()) {
+            g_searchFlyout.Hide();
+            return;
+        }
+
+        // If the start menu is open, hide it first — XAML refuses to show
+        // two top-level flyouts simultaneously, and ShowAt on the second
+        // one silently succeeds with IsOpen()==0. Then defer the actual
+        // show to the next dispatcher tick so XAML has time to tear down
+        // the start menu's popup before we ask for a new one.
+        if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) {
+            try { g_startMenuFlyout.Hide(); } catch (...) {}
+            RunOnUiThread([] {
+                try { ShowSearchFlyout(); } catch (...) {}
+            });
+            return;
+        }
+
+        auto anchorIt = g_namedElements.find(L"SearchAnchor");
+        if (anchorIt == g_namedElements.end()) {
+            Wh_Log(L"[Search] SearchAnchor not registered");
+            return;
+        }
+        auto anchor = anchorIt->second.try_as<FrameworkElement>();
+        if (!anchor) {
+            Wh_Log(L"[Search] SearchAnchor not a FrameworkElement");
+            return;
+        }
+
+        double d = GetBarDpiScale();
+        if (d <= 0.0) d = 1.0;
+        RECT mrBar = GetBarMonitorRect();
+        double monW = (mrBar.right - mrBar.left) / d;
+        double monH = (mrBar.bottom - mrBar.top) / d;
+        double px = (monW - 720.0) / 2.0;
+        double py = (monH - 520.0) / 2.0 + 6.0;
+        if (px < 0) px = 0;
+        if (py < 0) py = 0;
+
+        SetAnchorScreenPosition(anchor, px, py);
+
+        // Take OS foreground BEFORE opening the flyout. Doing this after
+        // ShowAt is what produced the "first open closes immediately"
+        // pattern: XAML activates the popup, our focus steal then changes
+        // OS activation underneath it, and XAML's popup state machine
+        // light-dismisses the flyout it just opened. Stealing first means
+        // XAML opens the flyout while our process already owns foreground,
+        // matching the state the working "second open" was in.
+        try { EnsureTopBarHasKeyboardFocus(); } catch (...) {}
+
+        wuxc::Primitives::FlyoutShowOptions opts;
+        opts.Placement(wuxc::Primitives::FlyoutPlacementMode::TopEdgeAlignedLeft);
+        try {
+            g_searchFlyout.ShowAt(anchor, opts);
+            Wh_Log(L"[Search] shown, IsOpen=%d", g_searchFlyout.IsOpen() ? 1 : 0);
+            // Recenter against the popup's actual size, not against the
+            // 720x520 assumption. Right after ShowAt the popup HWND may
+            // not exist yet, so retry a few dispatcher turns later -- by
+            // then XAML has realised the popup and its initial layout
+            // pass has run.
+            auto recenter = [] {
+                try { RecenterSearchPopup(); } catch (...) {}
+            };
+            recenter();
+            RunOnUiThread([recenter] {
+                recenter();
+                RunOnUiThread([recenter] {
+                    recenter();
+                    RunOnUiThread([recenter] { recenter(); });
+                });
+            });
+            try { ScheduleForceShowXamlPopup(); } catch (...) {}
+            RunOnUiThread([] {
+                try { ForceShowNewestXamlPopup(); } catch (...) {}
+            });
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"[Search] ShowAt hresult %08X %s",
+                   static_cast<unsigned>(ex.code().value), ex.message().c_str());
+            try { g_searchFlyout.ShowAt(anchor); } catch (...) {}
+        }
+        RunInBackground([] {
+            if (WaitForSingleObject(g_stopEvent, 600) == WAIT_OBJECT_0) return;
+            RunOnUiThread([] {
+                try {
+                    if (g_searchFlyout && g_searchFlyout.IsOpen()) {
+                        CloseNativeSearchIfOpen();
+                    }
+                } catch (...) {}
+            });
+        });
+    } catch (...) {}
+}
+
+// The old body of ShowSearchFlyout is now dead code. The block below
+// (starting with the original lazy creation) must be removed.
+void ShowSearchFlyout_Unused() {
+    try {
+        if (!g_searchFlyout) {
+            g_searchFlyout = wuxc::Flyout();
+            g_searchFlyout.ShouldConstrainToRootBounds(false);
+            g_searchFlyout.Placement(wuxc::Primitives::FlyoutPlacementMode::Bottom);
+
+            Style presenterStyle(winrt::xaml_typename<wuxc::FlyoutPresenter>());
+            presenterStyle.Setters().Append(Setter(wuxc::Control::BackgroundProperty(),
+                winrt::box_value(MakeBrush(0, 0, 0, 0))));
+            presenterStyle.Setters().Append(Setter(wuxc::Control::BorderThicknessProperty(),
+                winrt::box_value(Thickness{ 0, 0, 0, 0 })));
+            presenterStyle.Setters().Append(Setter(wuxc::Control::PaddingProperty(),
+                winrt::box_value(Thickness{ 0, 0, 0, 0 })));
+            presenterStyle.Setters().Append(Setter(FrameworkElement::MinWidthProperty(),
+                winrt::box_value(0.0)));
+            presenterStyle.Setters().Append(Setter(FrameworkElement::MinHeightProperty(),
+                winrt::box_value(0.0)));
+            presenterStyle.Setters().Append(Setter(FrameworkElement::MaxWidthProperty(),
+                winrt::box_value(1600.0)));
+            presenterStyle.Setters().Append(Setter(FrameworkElement::MaxHeightProperty(),
+                winrt::box_value(1600.0)));
+            if (auto tmpl = BuildFlyoutShellTemplate(false)) {
+                presenterStyle.Setters().Append(Setter(wuxc::Control::TemplateProperty(),
+                    winrt::box_value(tmpl)));
+            }
+            g_searchFlyout.FlyoutPresenterStyle(presenterStyle);
+
+            g_searchFlyout.Opened([](auto&& sender, auto&&) {
+                RegisterOpenPopup(sender.template as<wuxc::Primitives::FlyoutBase>());
+                s_searchOpenTick = GetTickCount64();
+                auto focusBox = [] {
+                    auto it = g_namedElements.find(L"SpotlightSearchBox");
+                    if (it == g_namedElements.end()) return;
+                    if (auto box = it->second.try_as<wuxc::TextBox>()) {
+                        try { box.Focus(FocusState::Programmatic); } catch (...) {}
+                    }
+                };
+                RunOnUiThread([focusBox] {
+                    focusBox();
+                    RunOnUiThread([focusBox] {
+                        focusBox();
+                        RunOnUiThread([focusBox] { focusBox(); });
+                    });
+                });
+            });
+            g_searchFlyout.Closed([](auto&& sender, auto&&) {
+                UnregisterOpenPopup(sender.template as<wuxc::Primitives::FlyoutBase>());
+                g_searchResults.clear();
+                g_searchQuery.clear();
+                g_searchToken.fetch_add(1);
+                if (g_searchDebounceTimer) g_searchDebounceTimer.Stop();
+
+                // The content tree is now built once and reused, so reset
+                // the search box and results visually on every close;
+                // otherwise the previous query lingers on the next open.
+                auto boxIt = g_namedElements.find(L"SpotlightSearchBox");
+                if (boxIt != g_namedElements.end()) {
+                    if (auto box = boxIt->second.try_as<wuxc::TextBox>()) {
+                        try { box.Text(L""); } catch (...) {}
+                    }
+                }
+                RebuildSearchResultsPanel();
+            });
+        }
+
+        auto anchorIt = g_namedElements.find(L"SearchAnchor");
+        if (anchorIt == g_namedElements.end()) {
+            Wh_Log(L"[Search] SearchAnchor not registered");
+            return;
+        }
+        auto anchor = anchorIt->second.try_as<FrameworkElement>();
+        if (!anchor) {
+            Wh_Log(L"[Search] SearchAnchor not a FrameworkElement");
+            return;
+        }
+
+        BuildSearchFlyoutContent();
+
+        double d = GetBarDpiScale();
+        if (d <= 0.0) d = 1.0;
+        RECT mrBar = GetBarMonitorRect();
+        double monW = (mrBar.right - mrBar.left) / d;
+        double monH = (mrBar.bottom - mrBar.top) / d;
+        double px = (monW - 720.0) / 2.0;
+        double py = (monH - 520.0) / 2.0 + 6.0;
+        if (px < 0) px = 0;
+        if (py < 0) py = 0;
+
+        SetAnchorScreenPosition(anchor, px, py);
+
+        // Take OS foreground BEFORE opening the flyout. Doing this after
+        // ShowAt is what produced the "first open closes immediately"
+        // pattern: XAML activates the popup, our focus steal then changes
+        // OS activation underneath it, and XAML's popup state machine
+        // light-dismisses the flyout it just opened. Stealing first means
+        // XAML opens the flyout while our process already owns foreground,
+        // matching the state the working "second open" was in.
+        try { EnsureTopBarHasKeyboardFocus(); } catch (...) {}
+
+        wuxc::Primitives::FlyoutShowOptions opts;
+        opts.Placement(wuxc::Primitives::FlyoutPlacementMode::TopEdgeAlignedLeft);
+        try {
+            g_searchFlyout.ShowAt(anchor, opts);
+            Wh_Log(L"[Search] shown, IsOpen=%d", g_searchFlyout.IsOpen() ? 1 : 0);
+            // Same first-open fix as the Start menu.
+            try { ScheduleForceShowXamlPopup(); } catch (...) {}
+            // Same first-open fix as the Start menu.
+            RunOnUiThread([] {
+                try { ForceShowNewestXamlPopup(); } catch (...) {}
+            });
+            {
+                double dd = GetBarDpiScale();
+                if (dd <= 0.0) dd = 1.0;
+                RECT mr2 = GetBarMonitorRect();
+                int tW = static_cast<int>(720.0 * dd);
+                int tH = static_cast<int>(520.0 * dd);
+                int sx = mr2.left + (mr2.right - mr2.left - tW) / 2;
+                int sy = mr2.top + (mr2.bottom - mr2.top - tH) / 2 + static_cast<int>(6.0 * dd);
+                SnapOpenChildFlyoutTo(sx, sy);
+                RunOnUiThread([sx, sy] {
+                    try { SnapOpenChildFlyoutTo(sx, sy); } catch (...) {}
+                });
+            }
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"[Search] ShowAt hresult %08X %s",
+                   static_cast<unsigned>(ex.code().value), ex.message().c_str());
+            try { g_searchFlyout.ShowAt(anchor); } catch (...) {}
+        } catch (...) {
+            Wh_Log(L"[Search] ShowAt unknown failure");
+        }
+
+        RunOnUiThread([] {
+            try { EnsureTopBarHasKeyboardFocus(); } catch (...) {}
+            auto it = g_namedElements.find(L"SpotlightSearchBox");
+            if (it == g_namedElements.end()) return;
+            if (auto box = it->second.try_as<wuxc::TextBox>()) {
+                try { box.Focus(FocusState::Programmatic); } catch (...) {}
+            }
+        });
+    } catch (...) {}
+}
+
+static std::wstring GetCurrentUserDisplayName() {
+    std::wstring result;
+    HMODULE sec = LoadLibraryExW(L"secur32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (sec) {
+        using GetUserNameExW_t = BOOL(WINAPI*)(int, LPWSTR, PULONG);
+        auto pGetUserNameExW = reinterpret_cast<GetUserNameExW_t>(
+            GetProcAddress(sec, "GetUserNameExW"));
+        if (pGetUserNameExW) {
+            wchar_t buf[256] = {};
+            ULONG size = ARRAYSIZE(buf);
+            if (pGetUserNameExW(3 /*NameDisplay*/, buf, &size) && buf[0]) {
+                result = buf;
+            }
+        }
+        FreeLibrary(sec);
+    }
+    if (result.empty()) {
+        wchar_t buf[256] = {};
+        DWORD size = ARRAYSIZE(buf);
+        if (GetUserNameW(buf, &size) && buf[0]) result = buf;
+    }
+    return result.empty() ? L"User" : result;
+}
+
+static bool IsMicrosoftAccount() {
+    HMODULE sec = LoadLibraryExW(L"secur32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!sec) return false;
+    using GetUserNameExW_t = BOOL(WINAPI*)(int, LPWSTR, PULONG);
+    auto pGetUserNameExW = reinterpret_cast<GetUserNameExW_t>(
+        GetProcAddress(sec, "GetUserNameExW"));
+    bool isMs = false;
+    if (pGetUserNameExW) {
+        wchar_t buf[512] = {};
+        ULONG size = ARRAYSIZE(buf);
+        if (pGetUserNameExW(2 /*NameSamCompatible*/, buf, &size)) {
+            std::wstring sam = buf;
+            isMs = sam.find(L'@') != std::wstring::npos;
+        }
+    }
+    FreeLibrary(sec);
+    return isMs;
+}
+
+[[clang::no_destroy]] static std::map<std::wstring, wuxm::Imaging::BitmapImage> g_startAppIconCache;
+static std::mutex g_startAppIconCacheMutex;
+
+wuxm::Imaging::BitmapImage BytesToBitmapImage(const std::vector<uint8_t>& bytes,
+                                              int decodeSize);
+
+static const startmenu::AppEntry* FindAppEntryByLnkPath(const std::wstring& lnkPath) {
+    for (const auto& a : startmenu::GetCachedApps()) {
+        if (a.lnkPath == lnkPath) return &a;
+    }
+    return nullptr;
+}
+
+wuxm::Imaging::BitmapImage GetOrBuildStartAppIcon(const std::wstring& lnkPath, UINT iconPx) {
+    if (lnkPath.empty() || iconPx == 0) return nullptr;
+
+    // Cache key includes the pixel size so a pre-warm at one DPI does not
+    // poison the cache for a later request at a different DPI.
+    std::wstring cacheKey = lnkPath;
+    cacheKey += L'|';
+    cacheKey += std::to_wstring(iconPx);
+
+    {
+        std::lock_guard<std::mutex> lock(g_startAppIconCacheMutex);
+        auto it = g_startAppIconCache.find(cacheKey);
+        if (it != g_startAppIconCache.end() && it->second) return it->second;
+    }
+
+    wuxm::Imaging::BitmapImage bmp;
+
+    // 1. UWP apps carry their logo as raw PNG bytes on the AppEntry.
+    //    Decode at the icon size and let the Image control scale the
+    //    result; pinning only the width preserves the source aspect ratio
+    //    (setting both DecodePixelWidth and DecodePixelHeight forces a
+    //    square stretch and distorts non-square logos).
+    if (auto* entry = FindAppEntryByLnkPath(lnkPath)) {
+        if (!entry->logoBytes.empty()) {
+            try {
+                winrt::Windows::Storage::Streams::InMemoryRandomAccessStream stream;
+                winrt::Windows::Storage::Streams::DataWriter writer(stream);
+                writer.WriteBytes(entry->logoBytes);
+                writer.StoreAsync().get();
+                writer.DetachStream();
+                stream.Seek(0);
+                wuxm::Imaging::BitmapImage bi;
+                bi.DecodePixelWidth(static_cast<int32_t>(iconPx));
+                bi.SetSource(stream);
+                bmp = bi;
+            } catch (...) {}
+            if (bmp) {
+                std::lock_guard<std::mutex> lock(g_startAppIconCacheMutex);
+                g_startAppIconCache.insert_or_assign(cacheKey, bmp);
+                return bmp;
+            }
+        }
+    }
+
+    // 2. Primary Win32 path: SHGetFileInfoW with SHGFI_LARGEICON. This is
+    //    the original working extraction path and it handles every Win32
+    //    app whose exe ships an embedded icon at any size. The shell
+    //    returns an icon already sized to the system large-icon metric
+    //    (32x32 at 100% DPI, 48x48 at 150%, 64x64 at 200%), so
+    //    DrawIconEx only does a same-size copy or a mild downscale into
+    //    the target DIB, which preserves the alpha channel perfectly.
+    //
+    //    The earlier attempt at using SHGetImageList was built on a
+    //    broken premise: SHGetFileInfoW without SHGFI_LARGEICON populates
+    //    iIcon from the *small* (16x16) image list index, and feeding
+    //    that index to SHIL_JUMBO returns a garbage or blank entry for
+    //    almost every item. Passing the flags correctly lets us try the
+    //    same trick safely, but only after this direct call has already
+    //    failed -- which keeps the working path working.
+    if (!bmp) {
+        SHFILEINFOW sfi{};
+        if (SHGetFileInfoW(lnkPath.c_str(), 0, &sfi, sizeof(sfi),
+                           SHGFI_ICON | SHGFI_LARGEICON) && sfi.hIcon) {
+            bmp = HIconToBitmapImage(sfi.hIcon, iconPx);
+            DestroyIcon(sfi.hIcon);
+        }
+    }
+
+    // 2b. Secondary shell path: ask the shell image list for a larger
+    //     cached version of the same icon. Only attempted when the direct
+    //     LARGEICON call above produced nothing usable *and* we can get a
+    //     valid iIcon from a query that asks for the LARGE icon (not the
+    //     small one) -- that is what makes this safe to run. Apps that
+    //     ship only a 16x16 frame in their exe get their jumbo-size shell
+    //     cache entry (Character Map, Calculator, File Explorer, Event
+    //     Viewer), while every other app is already handled by 2.
+    if (!bmp) {
+        SHFILEINFOW sfi{};
+        if (SHGetFileInfoW(lnkPath.c_str(), 0, &sfi, sizeof(sfi),
+                           SHGFI_SYSICONINDEX | SHGFI_LARGEICON) &&
+            sfi.iIcon != 0) {
+            const int kSizes[] = { SHIL_JUMBO, SHIL_EXTRALARGE, SHIL_LARGE };
+            for (int sizeFlag : kSizes) {
+                if (bmp) break;
+                winrt::com_ptr<IImageList> imageList;
+                if (FAILED(SHGetImageList(sizeFlag, IID_PPV_ARGS(imageList.put()))) ||
+                    !imageList) {
+                    continue;
+                }
+                HICON ico = nullptr;
+                if (SUCCEEDED(imageList->GetIcon(sfi.iIcon, ILD_TRANSPARENT, &ico)) &&
+                    ico) {
+                    bmp = HIconToBitmapImage(ico, iconPx);
+                    DestroyIcon(ico);
+                }
+            }
+        }
+    }
+
+    // 2c. Last-resort Win32 extraction: PrivateExtractIcons on the
+    //     resolved exe target. Only reached for shortcuts that neither
+    //     the direct shell lookup nor the shell image list could resolve.
+    //     Kept at 256x256 so apps that genuinely ship a modern multi-res
+    //     ICO still get their sharp frame.
+    if (!bmp && lnkPath.size() >= 4 &&
+        _wcsicmp(lnkPath.c_str() + lnkPath.size() - 4, L".lnk") == 0) {
+        std::wstring target = ResolveShortcutTarget(lnkPath);
+        if (!target.empty()) {
+            if (auto extract = GetPrivateExtractIcons()) {
+                HICON ico = nullptr;
+                UINT iconId = 0;
+                if (extract(target.c_str(), 0, 256, 256, &ico, &iconId, 1, 0) == 1 &&
+                    ico) {
+                    bmp = HIconToBitmapImage(ico, iconPx);
+                    DestroyIcon(ico);
+                }
+            }
+        }
+    }
+
+    // 4. Last resort: IShellItemImageFactory — the only path that resolves
+    //    shell:AppsFolder\<AUMID> identities the SHGetFileInfoW pass above
+    //    could not handle.
+    if (!bmp) {
+        winrt::com_ptr<IShellItemImageFactory> factory;
+        if (SUCCEEDED(SHCreateItemFromParsingName(lnkPath.c_str(), nullptr,
+                                                  IID_PPV_ARGS(factory.put()))) &&
+            factory) {
+            HBITMAP hbm = nullptr;
+            SIZE sz{ static_cast<LONG>(iconPx), static_cast<LONG>(iconPx) };
+            if (SUCCEEDED(factory->GetImage(sz, SIIGBF_ICONONLY, &hbm)) && hbm) {
+                ICONINFO ii{};
+                ii.fIcon = TRUE;
+                ii.hbmColor = hbm;
+                ii.hbmMask = CreateBitmap(sz.cx, sz.cy, 1, 1, nullptr);
+                HICON ico = CreateIconIndirect(&ii);
+                if (ii.hbmMask) DeleteObject(ii.hbmMask);
+                DeleteObject(hbm);
+                if (ico) {
+                    bmp = HIconToBitmapImage(ico, iconPx);
+                    DestroyIcon(ico);
+                }
+            }
+        }
+    }
+
+    if (!bmp) {
+        Wh_Log(L"[StartMenu] No icon extracted for %s at %u px",
+               lnkPath.c_str(), iconPx);
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_startAppIconCacheMutex);
+        if (bmp) {
+            g_startAppIconCache.insert_or_assign(cacheKey, bmp);
+        }
+    }
+    return bmp;
+}
+
+void BuildStartMenuFlyoutContent() {
+    if (!g_startMenuFlyout) return;
+    if (g_startMenuFlyout.Content() != nullptr) return;
+
+    wuxc::Grid layout;
+    layout.Background(MakeBrush(0, 0, 0, 0));
+    layout.Padding(Thickness{ 20, 20, 20, 20 });
+
+    wuxc::RowDefinition searchRow;
+    searchRow.Height(GridLength{ 0, GridUnitType::Auto });
+    wuxc::RowDefinition titleRow;
+    titleRow.Height(GridLength{ 0, GridUnitType::Auto });
+    wuxc::RowDefinition gridRow;
+    gridRow.Height(GridLength{ 1, GridUnitType::Star });
+    layout.RowDefinitions().Append(searchRow);
+    layout.RowDefinitions().Append(titleRow);
+    layout.RowDefinitions().Append(gridRow);
+
+    auto titleBarTransparent = MakeBrush(0x00, 0, 0, 0);
+    layout.Resources().Insert(
+        winrt::box_value(winrt::hstring(L"ApplicationPageBackgroundThemeBrush")),
+        titleBarTransparent);
+    layout.Resources().Insert(
+        winrt::box_value(winrt::hstring(L"SolidBackgroundFillColorBase")),
+        titleBarTransparent);
+
+    wuxc::Border searchBoxWrap;
+    searchBoxWrap.Height(34);
+    searchBoxWrap.MinHeight(34);
+    searchBoxWrap.MaxHeight(34);
+    searchBoxWrap.CornerRadius(CornerRadius{ 6, 6, 6, 6 });
+    searchBoxWrap.Background(MakeBrush(0x33, 0xFF, 0xFF, 0xFF));
+    searchBoxWrap.BorderBrush(MakeBrush(0x40, 0xFF, 0xFF, 0xFF));
+    searchBoxWrap.BorderThickness(Thickness{ 1, 1, 1, 1 });
+    searchBoxWrap.VerticalAlignment(VerticalAlignment::Center);
+
+    wuxc::TextBox searchBox;
+    searchBox.Name(L"StartMenuSearchBox");
+    searchBox.PlaceholderText(L"Search applications, files and settings...");
+    searchBox.IsTabStop(true);
+    searchBox.VerticalAlignment(VerticalAlignment::Stretch);
+    searchBox.HorizontalAlignment(HorizontalAlignment::Stretch);
+    searchBox.BorderThickness(Thickness{ 0, 0, 0, 0 });
+    searchBox.CornerRadius(CornerRadius{ 6, 6, 6, 6 });
+    searchBox.Padding(Thickness{ 12, 8, 12, 6 });
+    searchBox.VerticalContentAlignment(VerticalAlignment::Center);
+    searchBox.PlaceholderForeground(FontColorBrushDimmed());
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlBackground")),
+                                 MakeBrush(0x00, 0, 0, 0));
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlBackgroundPointerOver")),
+                                 MakeBrush(0x00, 0, 0, 0));
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlBackgroundFocused")),
+                                 MakeBrush(0x00, 0, 0, 0));
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlForeground")),
+                                 FontColorBrush());
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlForegroundPointerOver")),
+                                 FontColorBrush());
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlForegroundFocused")),
+                                 FontColorBrush());
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlBorderBrush")),
+                                 MakeBrush(0x00, 0, 0, 0));
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlBorderBrushPointerOver")),
+                                 MakeBrush(0x00, 0, 0, 0));
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlBorderBrushFocused")),
+                                 MakeBrush(0x00, 0, 0, 0));
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlPlaceholderForeground")),
+                                 FontColorBrushDimmed());
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlPlaceholderForegroundPointerOver")),
+                                 FontColorBrushDimmed());
+    searchBox.Resources().Insert(winrt::box_value(winrt::hstring(L"TextControlPlaceholderForegroundFocused")),
+                                 FontColorBrushDimmed());
+    searchBoxWrap.Child(searchBox);
+
+    g_namedElements.insert_or_assign(L"StartMenuSearchBox", searchBox);
+
+    searchBox.Loaded([searchBox](auto&&, auto&&) {
+        Wh_Log(L"StartMenu: search box Loaded");
+        try { searchBox.Focus(FocusState::Programmatic); } catch (...) {}
+        RunOnUiThread([searchBox] {
+            try { searchBox.Focus(FocusState::Programmatic); } catch (...) {}
+        });
+    });
+
+    auto powerBtn = MakeGhostButton(L"StartMenuPowerButton", 6);
+    powerBtn.Width(44);
+    powerBtn.Height(34);
+    powerBtn.MinWidth(44);
+    powerBtn.MinHeight(34);
+    powerBtn.Padding(Thickness{ 0, 0, 0, 0 });
+    powerBtn.Background(MakeBrush(0x00, 0, 0, 0));
+    powerBtn.BorderThickness(Thickness{ 0, 0, 0, 0 });
+    powerBtn.HorizontalContentAlignment(HorizontalAlignment::Center);
+    powerBtn.VerticalContentAlignment(VerticalAlignment::Center);
+    powerBtn.VerticalAlignment(VerticalAlignment::Center);
+    {
+        wuxc::Border powerBg;
+        powerBg.Width(44);
+        powerBg.Height(34);
+        powerBg.CornerRadius(CornerRadius{ 6, 6, 6, 6 });
+        powerBg.Background(MakeBrush(0x33, 0xFF, 0xFF, 0xFF));
+        powerBg.BorderBrush(MakeBrush(0x40, 0xFF, 0xFF, 0xFF));
+        powerBg.BorderThickness(Thickness{ 1, 1, 1, 1 });
+        wuxc::FontIcon picon;
+        picon.Glyph(L"\uE7E8");
+        picon.FontSize(16);
+        picon.Foreground(IconColorBrush());
+        picon.HorizontalAlignment(HorizontalAlignment::Center);
+        picon.VerticalAlignment(VerticalAlignment::Center);
+        powerBg.Child(picon);
+        powerBtn.Content(powerBg);
+    }
+    {
+        auto powerMenu = wuxc::MenuFlyout();
+        StyleMenuFlyout(powerMenu);
+        powerMenu.Items().Append(MakeMenuItem(L"Sleep",
+            [] { SuspendSystem(); }, L"\uE708"));
+        powerMenu.Items().Append(MakeMenuItem(L"Shut down",
+            [] { RunShellCommand(L"shutdown.exe", L"/s /t 0", true); }, L"\uE7E8"));
+        powerMenu.Items().Append(MakeMenuItem(L"Restart",
+            [] { RunShellCommand(L"shutdown.exe", L"/r /t 0", true); }, L"\uE72C"));
+        powerMenu.Items().Append(MakeMenuSeparator());
+        powerMenu.Items().Append(MakeMenuItem(L"Sign out",
+            [] { RunShellCommand(L"shutdown.exe", L"/l", true); }, L"\uF3B1"));
+        powerMenu.Items().Append(MakeMenuItem(L"Lock",
+            [] { LockWorkStation(); }, L"\uE72E"));
+        powerBtn.Flyout(powerMenu);
+        g_startPowerMenu = powerMenu;
+    }
+
+    auto accountBtn = MakeGhostButton(L"StartMenuAccountButton", 6);
+    accountBtn.Width(44);
+    accountBtn.Height(34);
+    accountBtn.MinWidth(44);
+    accountBtn.MinHeight(34);
+    accountBtn.Padding(Thickness{ 0, 0, 0, 0 });
+    accountBtn.Background(MakeBrush(0x33, 0xFF, 0xFF, 0xFF));
+    accountBtn.BorderBrush(MakeBrush(0x40, 0xFF, 0xFF, 0xFF));
+    accountBtn.BorderThickness(Thickness{ 1, 1, 1, 1 });
+    accountBtn.HorizontalContentAlignment(HorizontalAlignment::Center);
+    accountBtn.VerticalContentAlignment(VerticalAlignment::Center);
+    accountBtn.VerticalAlignment(VerticalAlignment::Center);
+    {
+        wuxc::Border avatarBorder;
+        avatarBorder.Width(24);
+        avatarBorder.Height(24);
+        avatarBorder.CornerRadius(CornerRadius{ 12, 12, 12, 12 });
+        avatarBorder.Background(MakeBrush(0xFF, 0x4A, 0x5F, 0x8A));
+        wuxc::FontIcon avatarIcon;
+        avatarIcon.Glyph(L"\uE77B");
+        avatarIcon.FontSize(14);
+        avatarIcon.Foreground(IconColorBrush());
+        avatarIcon.HorizontalAlignment(HorizontalAlignment::Center);
+        avatarIcon.VerticalAlignment(VerticalAlignment::Center);
+        avatarBorder.Child(avatarIcon);
+        accountBtn.Content(avatarBorder);
+    }
+    {
+        std::wstring displayName = GetCurrentUserDisplayName();
+        bool isMs = IsMicrosoftAccount();
+
+        wuxc::StackPanel accountPanel;
+        accountPanel.Spacing(6);
+        accountPanel.Padding(Thickness{ 16, 16, 16, 12 });
+        accountPanel.Width(300);
+
+        wuxc::StackPanel headerStack;
+        headerStack.Orientation(wuxc::Orientation::Horizontal);
+        headerStack.Spacing(12);
+        headerStack.VerticalAlignment(VerticalAlignment::Center);
+        {
+            wuxc::Border avatarBig;
+            avatarBig.Width(48);
+            avatarBig.Height(48);
+            avatarBig.CornerRadius(CornerRadius{ 24, 24, 24, 24 });
+            avatarBig.Background(MakeBrush(0xFF, 0x4A, 0x5F, 0x8A));
+            wuxc::FontIcon ic;
+            ic.Glyph(L"\uE77B");
+            ic.FontSize(24);
+            ic.Foreground(IconColorBrush());
+            ic.HorizontalAlignment(HorizontalAlignment::Center);
+            ic.VerticalAlignment(VerticalAlignment::Center);
+            avatarBig.Child(ic);
+            headerStack.Children().Append(avatarBig);
+        }
+        {
+            wuxc::StackPanel nameStack;
+            nameStack.VerticalAlignment(VerticalAlignment::Center);
+            nameStack.Spacing(2);
+            auto nameTb = MakeText(nullptr, displayName, 15, true);
+            nameTb.Foreground(MakeBrush(0xFF, 0xFF, 0xFF, 0xFF));
+            nameStack.Children().Append(nameTb);
+            auto subTb = MakeText(nullptr,
+                isMs ? L"Microsoft account" : L"Local account",
+                11, false, 0.65);
+            nameStack.Children().Append(subTb);
+            headerStack.Children().Append(nameStack);
+        }
+        accountPanel.Children().Append(headerStack);
+        accountPanel.Children().Append(MakeDivider());
+
+        auto mkRow = [](const wchar_t* glyph, const std::wstring& label,
+                        std::function<void()> onClick) {
+            auto b = MakeGhostButton(nullptr, 6);
+            b.HorizontalAlignment(HorizontalAlignment::Stretch);
+            b.Padding(Thickness{ 10, 8, 10, 8 });
+            b.HorizontalContentAlignment(HorizontalAlignment::Left);
+            wuxc::StackPanel row;
+            row.Orientation(wuxc::Orientation::Horizontal);
+            row.Spacing(12);
+            row.VerticalAlignment(VerticalAlignment::Center);
+            wuxc::FontIcon ic;
+            ic.Glyph(glyph);
+            ic.FontSize(15);
+            ic.Foreground(IconColorBrush());
+            ic.VerticalAlignment(VerticalAlignment::Center);
+            row.Children().Append(ic);
+            auto t = MakeText(nullptr, label, 13);
+            t.Foreground(MakeBrush(0xFF, 0xFF, 0xFF, 0xFF));
+            t.VerticalAlignment(VerticalAlignment::Center);
+            row.Children().Append(t);
+            b.Content(row);
+            b.Click([onClick](auto&&, auto&&) { onClick(); });
+            return b;
+        };
+
+        accountPanel.Children().Append(mkRow(L"\uE77B", L"Change account settings",
+            [] { RunShellCommand(L"ms-settings:yourinfo"); }));
+        accountPanel.Children().Append(mkRow(L"\uE72E", L"Lock",
+            [] { LockWorkStation(); }));
+        accountPanel.Children().Append(mkRow(L"\uF3B1", L"Sign out",
+            [] { RunShellCommand(L"shutdown.exe", L"/l", true); }));
+
+        g_startAccountFlyout = wuxc::Flyout();
+        g_startAccountFlyout.Content(accountPanel);
+        g_startAccountFlyout.ShouldConstrainToRootBounds(false);
+        {
+            Style fpStyle(winrt::xaml_typename<wuxc::FlyoutPresenter>());
+            fpStyle.Setters().Append(Setter(wuxc::Control::BackgroundProperty(),
+                winrt::box_value(MakeBrush(0xFF, 0x20, 0x20, 0x20))));
+            fpStyle.Setters().Append(Setter(wuxc::Control::BorderBrushProperty(),
+                winrt::box_value(MakeBrush(0x30, 0xFF, 0xFF, 0xFF))));
+            fpStyle.Setters().Append(Setter(wuxc::Control::BorderThicknessProperty(),
+                winrt::box_value(Thickness{ 1, 1, 1, 1 })));
+            fpStyle.Setters().Append(Setter(wuxc::Control::CornerRadiusProperty(),
+                winrt::box_value(MakeCorner(12))));
+            fpStyle.Setters().Append(Setter(wuxc::Control::PaddingProperty(),
+                winrt::box_value(Thickness{ 0, 0, 0, 0 })));
+            g_startAccountFlyout.FlyoutPresenterStyle(fpStyle);
+        }
+        g_startAccountFlyout.Opened([](auto&& sender, auto&&) {
+            RegisterOpenPopup(sender.template as<wuxc::Primitives::FlyoutBase>());
+        });
+        g_startAccountFlyout.Closed([](auto&& sender, auto&&) {
+            UnregisterOpenPopup(sender.template as<wuxc::Primitives::FlyoutBase>());
+        });
+        accountBtn.Flyout(g_startAccountFlyout);
+    }
+
+    layout.AddHandler(
+        UIElement::PointerPressedEvent(),
+        winrt::box_value(Input::PointerEventHandler(
+            [](wf::IInspectable const&, Input::PointerRoutedEventArgs const& args) {
+                try {
+                    // Identify which Flyout-anchored button (if any) the
+                    // click landed on. Those anchors toggle their own
+                    // flyout via XAML, so we must not hide the matching
+                    // flyout here or the toggle cancels itself.
+                    std::wstring anchorName;
+                    DependencyObject cur =
+                        args.OriginalSource().try_as<DependencyObject>();
+                    while (cur) {
+                        if (auto fe = cur.try_as<FrameworkElement>()) {
+                            std::wstring n(fe.Name());
+                            if (n == L"StartMenuPowerButton" ||
+                                n == L"StartMenuAccountButton") {
+                                anchorName = n;
+                                break;
+                            }
+                        }
+                        cur = wuxm::VisualTreeHelper::GetParent(cur);
+                    }
+
+                    if (anchorName != L"StartMenuPowerButton" &&
+                        g_startPowerMenu && g_startPowerMenu.IsOpen()) {
+                        try { g_startPowerMenu.Hide(); } catch (...) {}
+                    }
+                    if (anchorName != L"StartMenuAccountButton" &&
+                        g_startAccountFlyout && g_startAccountFlyout.IsOpen()) {
+                        try { g_startAccountFlyout.Hide(); } catch (...) {}
+                    }
+                    if (g_startTileMenu && g_startTileMenu.IsOpen()) {
+                        try { g_startTileMenu.Hide(); } catch (...) {}
+                    }
+                } catch (...) {}
+            })),
+        true);
+
+    wuxc::Grid topRow;
+    topRow.ColumnSpacing(8);
+    topRow.Margin(Thickness{ 0, 0, 0, 14 });
+    {
+        wuxc::ColumnDefinition c0;
+        c0.Width(GridLength{ 0, GridUnitType::Auto });
+        wuxc::ColumnDefinition c1;
+        c1.Width(GridLength{ 1, GridUnitType::Star });
+        wuxc::ColumnDefinition c2;
+        c2.Width(GridLength{ 0, GridUnitType::Auto });
+        topRow.ColumnDefinitions().Append(c0);
+        topRow.ColumnDefinitions().Append(c1);
+        topRow.ColumnDefinitions().Append(c2);
+    }
+    wuxc::Grid::SetColumn(accountBtn, 0);
+    wuxc::Grid::SetColumn(searchBoxWrap, 1);
+    wuxc::Grid::SetColumn(powerBtn, 2);
+    topRow.Children().Append(accountBtn);
+    topRow.Children().Append(searchBoxWrap);
+    topRow.Children().Append(powerBtn);
+
+    wuxc::Grid::SetRow(topRow, 0);
+    layout.Children().Append(topRow);
+
+    auto title = MakeText(nullptr, L"All apps", 20, true);
+    title.Margin(Thickness{ 6, 0, 6, 12 });
+    wuxc::Grid::SetRow(title, 1);
+    layout.Children().Append(title);
+
+    wuxc::ScrollViewer scroller;
+    scroller.VerticalScrollBarVisibility(wuxc::ScrollBarVisibility::Auto);
+    scroller.HorizontalScrollBarVisibility(wuxc::ScrollBarVisibility::Disabled);
+    scroller.HorizontalScrollMode(wuxc::ScrollMode::Disabled);
+    scroller.VerticalScrollMode(wuxc::ScrollMode::Enabled);
+    scroller.HorizontalContentAlignment(HorizontalAlignment::Center);
+    wuxc::Grid::SetRow(scroller, 2);
+    layout.Children().Append(scroller);
+
+    auto itemsGrid = std::make_shared<wuxc::Grid>();
+    itemsGrid->HorizontalAlignment(HorizontalAlignment::Center);
+
+    double dpi = GetBarDpiScale();
+    if (dpi <= 0.0) dpi = 1.0;
+
+    auto rebuildGrid = std::make_shared<std::function<void(const std::wstring&)>>();
+    *rebuildGrid = [itemsGrid, dpi](const std::wstring& filter) {
+        itemsGrid->Children().Clear();
+        itemsGrid->RowDefinitions().Clear();
+        itemsGrid->ColumnDefinitions().Clear();
+
+        std::wstring q = ToLowerCopy(filter);
+        std::vector<const startmenu::AppEntry*> filtered;
+        for (auto& a : startmenu::GetCachedApps()) {
+            if (q.empty() || ToLowerCopy(a.name).find(q) != std::wstring::npos) {
+                filtered.push_back(&a);
+            }
+        }
+
+        constexpr int columns = 5;
+        int rows = (static_cast<int>(filtered.size()) + columns - 1) / columns;
+        if (rows < 1) rows = 1;
+
+        for (int c = 0; c < columns; c++) {
+            wuxc::ColumnDefinition cd;
+            cd.Width(GridLength{ 0, GridUnitType::Auto });
+            itemsGrid->ColumnDefinitions().Append(cd);
+        }
+        for (int r = 0; r < rows; r++) {
+            wuxc::RowDefinition rd;
+            rd.Height(GridLength{ 0, GridUnitType::Auto });
+            itemsGrid->RowDefinitions().Append(rd);
+        }
+
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < columns; c++) {
+                size_t idx = static_cast<size_t>(r) * columns + c;
+
+                wuxc::Border cell;
+                cell.Width(104);
+                cell.Height(104);
+                cell.Margin(Thickness{ 4, 4, 4, 4 });
+                cell.Background(MakeBrush(0, 0, 0, 0));
+
+                if (idx < filtered.size()) {
+                    auto& app = *filtered[idx];
+                    auto tile = MakeGhostButton(nullptr, 8);
+                    tile.Width(104);
+                    tile.Height(104);
+                    tile.MinWidth(104);
+                    tile.MinHeight(104);
+                    tile.Padding(Thickness{ 4, 4, 4, 4 });
+                    tile.Margin(Thickness{ 0, 0, 0, 0 });
+                    tile.Background(MakeBrush(0x22, 0xFF, 0xFF, 0xFF));
+
+                    wuxc::StackPanel content;
+                    content.Spacing(6);
+                    content.HorizontalAlignment(HorizontalAlignment::Center);
+                    content.VerticalAlignment(VerticalAlignment::Center);
+
+                    UINT iconPx = static_cast<UINT>(std::lround(32.0 * std::max(1.0, dpi)));
+                    bool iconAdded = false;
+                    // IShellItemImageFactory with SIIGBF_ICONONLY is the
+                    // primary source. It returns the shell-resolved icon
+                    // for the item and explicitly strips the shortcut
+                    // overlay, so .lnk entries no longer display the
+                    // little arrow badge on the bottom-left of their tile.
+                    {
+                        winrt::com_ptr<IShellItemImageFactory> factory;
+                        if (SUCCEEDED(SHCreateItemFromParsingName(
+                                app.lnkPath.c_str(), nullptr,
+                                IID_PPV_ARGS(factory.put())))) {
+                            HBITMAP hbm = nullptr;
+                            SIZE sz{ static_cast<LONG>(iconPx), static_cast<LONG>(iconPx) };
+                            if (SUCCEEDED(factory->GetImage(sz, SIIGBF_ICONONLY, &hbm)) && hbm) {
+                                ICONINFO ii{};
+                                ii.fIcon = TRUE;
+                                ii.hbmColor = hbm;
+                                ii.hbmMask = CreateBitmap(sz.cx, sz.cy, 1, 1, nullptr);
+                                HICON ico = CreateIconIndirect(&ii);
+                                if (ii.hbmMask) DeleteObject(ii.hbmMask);
+                                DeleteObject(hbm);
+                                if (ico) {
+                                    if (auto bmp = HIconToBitmapImage(ico, iconPx)) {
+                                        wuxc::Image img;
+                                        img.Source(bmp);
+                                        img.Width(32);
+                                        img.Height(32);
+                                        img.Stretch(wuxm::Stretch::Uniform);
+                                        img.HorizontalAlignment(HorizontalAlignment::Center);
+                                        content.Children().Append(img);
+                                        iconAdded = true;
+                                    }
+                                    DestroyIcon(ico);
+                                }
+                            }
+                        }
+                    }
+                    if (!iconAdded) {
+                        SHFILEINFOW sfi{};
+                        if (SHGetFileInfoW(app.lnkPath.c_str(), 0, &sfi, sizeof(sfi),
+                                           SHGFI_ICON | SHGFI_LARGEICON) && sfi.hIcon) {
+                            if (auto bmp = HIconToBitmapImage(sfi.hIcon, iconPx)) {
+                                wuxc::Image img;
+                                img.Source(bmp);
+                                img.Width(32);
+                                img.Height(32);
+                                img.Stretch(wuxm::Stretch::Uniform);
+                                img.HorizontalAlignment(HorizontalAlignment::Center);
+                                content.Children().Append(img);
+                                iconAdded = true;
+                            }
+                            DestroyIcon(sfi.hIcon);
+                        }
+                    }
+                    if (!iconAdded) {
+                        wuxc::FontIcon icon;
+                        icon.FontSize(28);
+                        icon.Glyph(L"\uE71D");
+                        icon.Foreground(MakeBrush(0xFF, 0xFF, 0xFF, 0xFF));
+                        icon.HorizontalAlignment(HorizontalAlignment::Center);
+                        content.Children().Append(icon);
+                    }
+
+                    auto label = MakeText(nullptr, app.name, 11);
+                    label.TextWrapping(TextWrapping::Wrap);
+                    label.TextAlignment(TextAlignment::Center);
+                    label.MaxWidth(92);
+                    label.MaxLines(2);
+                    content.Children().Append(label);
+
+                    tile.Content(content);
+
+                    std::wstring target = app.target;
+                    std::wstring args = app.args;
+                    tile.Click([target, args](auto&&, auto&&) {
+                        if (target.find(L'!') != std::wstring::npos &&
+                            target.find(L'\\') == std::wstring::npos) {
+                            std::wstring shellPath = L"shell:AppsFolder\\" + target;
+                            ShellExecute(nullptr, L"open", shellPath.c_str(),
+                                         nullptr, nullptr, SW_SHOWNORMAL);
+                        } else {
+                            ShellExecute(nullptr, L"open", target.c_str(),
+                                         args.empty() ? nullptr : args.c_str(),
+                                         nullptr, SW_SHOWNORMAL);
+                        }
+                        if (g_startMenuFlyout) g_startMenuFlyout.Hide();
+                    });
+
+                    // Copy the entry rather than capturing the reference —
+                    // the underlying vector is what the grid is rebuilt
+                    // from and stays alive, but taking a copy here removes
+                    // any chance of a dangling reference if the cache is
+                    // refreshed while the menu is still open.
+                    startmenu::AppEntry captured = app;
+                    tile.RightTapped([captured](wf::IInspectable const& sender,
+                                                Input::RightTappedRoutedEventArgs const& rtArgs) {
+                        try {
+                            rtArgs.Handled(true);
+                            auto menu = wuxc::MenuFlyout();
+                            StyleMenuFlyout(menu);
+                            g_startTileMenu = menu;
+
+                            bool isUwp = captured.target.find(L'!') != std::wstring::npos &&
+                                         captured.target.find(L'\\') == std::wstring::npos;
+
+                            menu.Items().Append(MakeMenuItem(
+                                L"Run as administrator",
+                                [captured] {
+                                    LaunchTargetElevated(captured.target, captured.args);
+                                },
+                                L"\uE7EF"));
+
+                            if (!isUwp) {
+                                menu.Items().Append(MakeMenuItem(
+                                    L"Open file location",
+                                    [captured] {
+                                        RevealShortcutInExplorer(captured.lnkPath);
+                                    },
+                                    L"\uE838"));
+                            }
+
+                            menu.Items().Append(MakeMenuSeparator());
+
+                            menu.Items().Append(MakeMenuItem(
+                                L"Uninstall",
+                                [captured] {
+                                    TryUninstallShortcut(captured.lnkPath);
+                                },
+                                L"\uE74D"));
+
+                            auto tileFe = sender.as<FrameworkElement>();
+                            menu.ShowAt(tileFe, rtArgs.GetPosition(tileFe));
+                        } catch (...) {}
+                    });
+
+                    cell.Child(tile);
+                }
+
+                wuxc::Grid::SetRow(cell, r);
+                wuxc::Grid::SetColumn(cell, c);
+                itemsGrid->Children().Append(cell);
+            }
+        }
+    };
+
+    (*rebuildGrid)(L"");
+    scroller.Content(*itemsGrid);
+
+    // The search box is a visual placeholder. Typing is routed through the
+    // LL keyboard hook (see StartMenuSearchRedirect in the hook body),
+    // which is deterministic and doesn't depend on XAML's async popup
+    // teardown order the way a TextChanged → Hide → ShowSearchFlyout
+    // chain did. The grid is still filtered locally so the start menu
+    // remains responsive if the hook is blocked by another mod.
+    searchBox.TextChanged([rebuildGrid](auto&& sender, auto&&) {
+        auto box = sender.template as<wuxc::TextBox>();
+        std::wstring text(box.Text());
+        if (text.empty()) {
+            (*rebuildGrid)(L"");
+            return;
+        }
+        g_searchQuery = text;
+        try { box.Text(L""); } catch (...) {}
+        try { if (g_startMenuFlyout) g_startMenuFlyout.Hide(); } catch (...) {}
+        RunOnUiThread([text] {
+            try { ShowSearchFlyout(); } catch (...) {}
+            RunOnUiThread([text] {
+                RunOnUiThread([text] {
+                    try {
+                        auto it = g_namedElements.find(L"SpotlightSearchBox");
+                        if (it == g_namedElements.end()) return;
+                        if (auto sbox = it->second.try_as<wuxc::TextBox>()) {
+                            sbox.Focus(FocusState::Programmatic);
+                            sbox.Text(winrt::hstring(text));
+                            sbox.SelectionStart(static_cast<int32_t>(text.size()));
+                        }
+                    } catch (...) {}
+                });
+            });
+        });
+    });
+
+    searchBox.GotFocus([](auto&&, auto&&) {
+        Wh_Log(L"StartMenu: search box GotFocus");
+    });
+
+    searchBox.PointerPressed([](auto&&, auto&&) {
+        Wh_Log(L"StartMenu: search box PointerPressed");
+        RunOnUiThread([] {
+            try { EnsureTopBarHasKeyboardFocus(); } catch (...) {}
+        });
+    });
+
+    searchBox.KeyDown([](auto&&, auto&&) {
+        Wh_Log(L"StartMenu: search box KeyDown");
+    });
+
+    wuxc::Border blurHost;
+    blurHost.CornerRadius(MakeCorner(12));
+    blurHost.HorizontalAlignment(HorizontalAlignment::Stretch);
+    blurHost.VerticalAlignment(VerticalAlignment::Stretch);
+    blurHost.Padding(Thickness{ 0, 0, 0, 0 });
+    blurHost.Width(720);
+    blurHost.Height(520);
+    {
+        wuxa::TransitionCollection transitions;
+        wuxa::EntranceThemeTransition entrance;
+        entrance.FromVerticalOffset(24.0);
+        entrance.FromHorizontalOffset(0.0);
+        entrance.IsStaggeringEnabled(false);
+        transitions.Append(entrance);
+        blurHost.Transitions(transitions);
+    }
+    blurHost.Child(layout);
+
+    blurHost.Loaded([](wf::IInspectable const& sender, RoutedEventArgs const&) {
+        try {
+            auto border = sender.template as<wuxc::Border>();
+            if (!border) return;
+            ApplyFlyoutBlurBrush(border);
+        } catch (...) {}
+    });
+
+    // Wrap the blur host in a Grid with a transparent top spacer row. The
+    // spacer keeps the popup tall (so XAML places it lower on the screen)
+    // while the blur brush only covers the content-sized Border beneath it.
+    g_startMenuFlyout.Content(blurHost);
+}
+
+void ShowStartMenuFlyout() {
+    // Debounce rapid toggles. A burst of signals (Win key auto-repeat,
+    // duplicated hook callbacks, mouse events racing the keyboard) can
+    // call this function many times per second and leave the menu
+    // cycling open/closed.
+    static std::atomic<ULONGLONG> s_lastToggleTick{0};
+    ULONGLONG now = GetTickCount64();
+    ULONGLONG last = s_lastToggleTick.load();
+    if (now - last < 400) return;
+    s_lastToggleTick.store(now);
+
+    try {
+        if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) {
+            g_startMenuFlyout.Hide();
+            return;
+        }
+        if (!g_startMenuFlyout) {
+            g_startMenuFlyout = wuxc::Flyout();
+            g_startMenuFlyout.ShouldConstrainToRootBounds(false);
+            g_startMenuFlyout.Placement(wuxc::Primitives::FlyoutPlacementMode::Bottom);
+            g_startMenuFlyout.LightDismissOverlayMode(wuxc::LightDismissOverlayMode::Off);
+
+            Style presenterStyle(winrt::xaml_typename<wuxc::FlyoutPresenter>());
+            presenterStyle.Setters().Append(Setter(wuxc::Control::BackgroundProperty(),
+                winrt::box_value(MakeBrush(0, 0, 0, 0))));
+            presenterStyle.Setters().Append(Setter(wuxc::Control::BorderThicknessProperty(),
+                winrt::box_value(Thickness{ 0, 0, 0, 0 })));
+            presenterStyle.Setters().Append(Setter(wuxc::Control::PaddingProperty(),
+                winrt::box_value(Thickness{ 0, 0, 0, 0 })));
+            presenterStyle.Setters().Append(Setter(FrameworkElement::MinWidthProperty(),
+                winrt::box_value(0.0)));
+            presenterStyle.Setters().Append(Setter(FrameworkElement::MinHeightProperty(),
+                winrt::box_value(0.0)));
+            presenterStyle.Setters().Append(Setter(FrameworkElement::MaxWidthProperty(),
+                winrt::box_value(1600.0)));
+            presenterStyle.Setters().Append(Setter(FrameworkElement::MaxHeightProperty(),
+                winrt::box_value(1600.0)));
+            if (auto tmpl = BuildFlyoutShellTemplate(false)) {
+                presenterStyle.Setters().Append(Setter(wuxc::Control::TemplateProperty(),
+                    winrt::box_value(tmpl)));
+            }
+            g_startMenuFlyout.FlyoutPresenterStyle(presenterStyle);
+
+            g_startMenuFlyout.Opened([](auto&& sender, auto&&) {
+                RegisterOpenPopup(sender.template as<wuxc::Primitives::FlyoutBase>());
+                g_startMenuKeyboardActive = true;
+                try {
+                    if (g_startMenuFlyout) {
+                        if (auto border = g_startMenuFlyout.Content().try_as<wuxc::Border>()) {
+                            ApplyFlyoutBlurBrush(border);
+                            wuxa::TransitionCollection tc;
+                            wuxa::EntranceThemeTransition e;
+                            e.FromVerticalOffset(24.0);
+                            e.FromHorizontalOffset(0.0);
+                            e.IsStaggeringEnabled(false);
+                            tc.Append(e);
+                            border.Transitions(tc);
+                        }
+                    }
+                } catch (...) {}
+            });
+            InstallLightDismissGuard(g_startMenuFlyout);
+            g_startMenuFlyout.Closed([](auto&& sender, auto&&) {
+                UnregisterOpenPopup(sender.template as<wuxc::Primitives::FlyoutBase>());
+                g_startMenuKeyboardActive = false;
+                if (g_startTileMenu) {
+                    try { g_startTileMenu.Hide(); } catch (...) {}
+                    g_startTileMenu = nullptr;
+                }
+                if (auto it = g_namedElements.find(L"StartMenuAnchor"); it != g_namedElements.end()) {
+                    if (auto fe = it->second.try_as<FrameworkElement>()) {
+                        try {
+                            fe.RenderTransform(wuxm::TranslateTransform());
+                        } catch (...) {}
+                    }
+                }
+                RunOnUiThread([] {
+                    try { SweepStaleXamlPopups(); } catch (...) {}
+                    RunOnUiThread([] {
+                        try { SweepStaleXamlPopups(); } catch (...) {}
+                    });
+                });
+            });
+        }
+
+        auto anchorIt = g_namedElements.find(L"StartMenuAnchor");
+        if (anchorIt == g_namedElements.end()) {
+            Wh_Log(L"StartMenu: StartMenuAnchor not registered");
+            return;
+        }
+        auto anchor = anchorIt->second.try_as<FrameworkElement>();
+        if (!anchor) {
+            Wh_Log(L"StartMenu: StartMenuAnchor not a FrameworkElement");
+            return;
+        }
+
+        BuildStartMenuFlyoutContent();
+
+        RECT mr = GetBarMonitorRect();
+        double dpi = GetBarDpiScale();
+        if (dpi <= 0.0) dpi = 1.0;
+        double mW = (mr.right - mr.left) / dpi;
+        double mH = (mr.bottom - mr.top) / dpi;
+        constexpr double fW = 720;
+        constexpr double fH = 520;
+        double px = (mW - fW) / 2.0;
+        double py = (mH - fH) / 2.0;
+        if (px < 0) px = 0;
+        if (py < 0) py = 0;
+
+        SetAnchorScreenPosition(anchor, px, py);
+
+        wuxc::Primitives::FlyoutShowOptions opts;
+        opts.Placement(wuxc::Primitives::FlyoutPlacementMode::TopEdgeAlignedLeft);
+
+        // Same rationale as ShowSearchFlyout: take OS foreground before
+        // opening, not after, so XAML opens the flyout while our process
+        // already owns foreground and doesn't light-dismiss it.
+        try { EnsureTopBarHasKeyboardFocus(); } catch (...) {}
+        // Begin polling for the native Start menu window. Covers both the
+        // Win-key path (where the shell opens its own menu behind our
+        // back) and any other entry into this function.
+        try { ScheduleNativeStartMenuClose(); } catch (...) {}
+        try {
+            g_startMenuFlyout.ShowAt(anchor, opts);
+            Wh_Log(L"StartMenu: shown at DIP (%.1f, %.1f) isOpen=%d",
+                   px, py, g_startMenuFlyout.IsOpen() ? 1 : 0);
+            // First-open fix: retry force-showing the popup HWND until
+            // XAML has realised it.
+            try { ScheduleForceShowXamlPopup(); } catch (...) {}
+            // First-open fix: XAML may have left the popup HWND hidden /
+            // cloaked. Force it visible on the next dispatcher tick.
+            RunOnUiThread([] {
+                try { ForceShowNewestXamlPopup(); } catch (...) {}
+            });
+            {
+                double dd = GetBarDpiScale();
+                if (dd <= 0.0) dd = 1.0;
+                RECT mr2 = GetBarMonitorRect();
+                int tW = static_cast<int>(720.0 * dd);
+                int tH = static_cast<int>(520.0 * dd);
+                int sx = mr2.left + (mr2.right - mr2.left - tW) / 2;
+                int sy = mr2.top + (mr2.bottom - mr2.top - tH) / 2;
+                SnapOpenChildFlyoutTo(sx, sy);
+                RunOnUiThread([sx, sy] {
+                    try { SnapOpenChildFlyoutTo(sx, sy); } catch (...) {}
+                });
+            }
+            EnsureWideFlyoutCenterTimer();
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"StartMenu: ShowAt hresult %08X %s",
+                   static_cast<unsigned>(ex.code().value),
+                   ex.message().c_str());
+            try {
+                g_startMenuFlyout.ShowAt(anchor);
+                Wh_Log(L"StartMenu: fallback ShowAt succeeded");
+            } catch (winrt::hresult_error const& ex2) {
+                Wh_Log(L"StartMenu: fallback hresult %08X %s",
+                       static_cast<unsigned>(ex2.code().value),
+                       ex2.message().c_str());
+            } catch (...) {}
+        }
+
+
+
+        RunOnUiThread([] {
+            RunOnUiThread([] {
+                try {
+                    struct Ctx { HWND result; LONG bestArea; };
+                    Ctx ctx{ nullptr, 0 };
+                    EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+                        auto* c = reinterpret_cast<Ctx*>(lp);
+                        if (hwnd == g_topBarHwnd) return TRUE;
+                        if (hwnd == g_islandHwnd) return TRUE;
+                        DWORD pid = 0;
+                        GetWindowThreadProcessId(hwnd, &pid);
+                        if (pid != GetCurrentProcessId()) return TRUE;
+                        if (!IsWindowVisible(hwnd)) return TRUE;
+                        wchar_t cls[256]{};
+                        if (!GetClassName(hwnd, cls, ARRAYSIZE(cls))) return TRUE;
+                        if (!(wcsstr(cls, L"Xaml") && wcsstr(cls, L"Popup"))) return TRUE;
+                        RECT r{};
+                        if (!GetWindowRect(hwnd, &r)) return TRUE;
+                        LONG w = r.right - r.left;
+                        LONG h = r.bottom - r.top;
+                        if (w < 300 || h < 200) return TRUE;
+                        LONG area = w * h;
+                        if (area > c->bestArea) {
+                            c->bestArea = area;
+                            c->result = hwnd;
+                        }
+                        return TRUE;
+                    }, reinterpret_cast<LPARAM>(&ctx));
+
+                    if (!ctx.result) return;
+                    LONG_PTR ex = 0;
+                    if (ex & WS_EX_NOACTIVATE) {
+                        SetWindowLongPtr(ctx.result, GWL_EXSTYLE, ex & ~WS_EX_NOACTIVATE);
+                        SetWindowPos(ctx.result, nullptr, 0, 0, 0, 0,
+                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+                        Wh_Log(L"StartMenu: stripped WS_EX_NOACTIVATE");
+                    }
+                } catch (...) {}
+            });
+        });
+
+
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"StartMenu: outer hresult %08X %s",
+               static_cast<unsigned>(ex.code().value),
+               ex.message().c_str());
+    } catch (...) {
+        Wh_Log(L"StartMenu: outer unknown failure");
+    }
+}
+
+
 void BuildStartContextMenu() {
     wuxc::MenuFlyout menu;
     StyleMenuFlyout(menu);
 
     auto items = menu.Items();
-    items.Append(MakeMenuItem(L"TopBar settings…", [] { OpenTopBarSettingsWindow(); }));
+    items.Append(MakeMenuItem(L"TopBar settings…", [] { OpenTopBarSettingsWindow(); },
+                              L"\uE713"));
     items.Append(MakeMenuSeparator());
-    items.Append(MakeMenuItem(L"Task Manager", [] { RunShellCommand(L"taskmgr.exe"); }));
-    items.Append(MakeMenuItem(L"Settings", [] { RunShellCommand(L"ms-settings:"); }));
-    items.Append(MakeMenuItem(L"File Explorer", [] { RunShellCommand(L"explorer.exe"); }));
-    items.Append(MakeMenuItem(L"Search", [] { SendWinKeyChord('S'); }));
-    items.Append(MakeMenuItem(L"Run", [] { SendWinKeyChord('R'); }));
+    items.Append(MakeMenuItem(L"Task Manager", [] { RunShellCommand(L"taskmgr.exe"); },
+                              L"\uE9F9"));
+    items.Append(MakeMenuItem(L"Settings", [] { RunShellCommand(L"ms-settings:"); },
+                              L"\uE713"));
+    items.Append(MakeMenuItem(L"File Explorer", [] { RunShellCommand(L"explorer.exe"); },
+                              L"\uE8B7"));
+    items.Append(MakeMenuItem(L"Search", [] { SendWinKeyChord('S'); }, L"\uE721"));
+    items.Append(MakeMenuItem(L"Run", [] { SendWinKeyChord('R'); }, L"\uE756"));
+    items.Append(MakeMenuItem(L"Restart Explorer",
+                              [] { RestartExplorerShell(); }, L"\uE72C"));
 
     items.Append(MakeMenuSeparator());
 
-    auto powerItem = MakeMenuSubItem(L"Shut down or sign out");
+    auto powerItem = MakeMenuSubItem(L"Shut down or sign out", L"\uE7E8");
     auto powerItems = powerItem.Items();
-    powerItems.Append(
-        MakeMenuItem(L"Sign out", [] { RunShellCommand(L"shutdown.exe", L"/l", true); }));
-    powerItems.Append(MakeMenuItem(L"Sleep", [] { SuspendSystem(); }));
     powerItems.Append(MakeMenuItem(
-        L"Shut down", [] { RunShellCommand(L"shutdown.exe", L"/s /t 0", true); }));
-    powerItems.Append(
-        MakeMenuItem(L"Restart", [] { RunShellCommand(L"shutdown.exe", L"/r /t 0", true); }));
+        L"Sign out", [] { RunShellCommand(L"shutdown.exe", L"/l", true); }, L"\uF3B1"));
+    powerItems.Append(MakeMenuItem(L"Sleep", [] { SuspendSystem(); }, L"\uE708"));
+    powerItems.Append(MakeMenuItem(
+        L"Shut down", [] { RunShellCommand(L"shutdown.exe", L"/s /t 0", true); },
+        L"\uE7E8"));
+    powerItems.Append(MakeMenuItem(
+        L"Restart", [] { RunShellCommand(L"shutdown.exe", L"/r /t 0", true); },
+        L"\uE72C"));
     items.Append(powerItem);
 
     items.Append(MakeMenuSeparator());
-    items.Append(MakeMenuItem(L"Desktop", [] { ShowDesktop(); }));
+    items.Append(MakeMenuItem(L"Desktop", [] { ShowDesktop(); }, L"\uE8FC"));
 
     g_startContextMenu = menu;
 }
@@ -10015,42 +17760,40 @@ void BuildTaskContextMenu() {
         if (g_contextMenuTargetHwnd) {
             ToggleMaximizeWindow(g_contextMenuTargetHwnd);
         }
-    });
+    }, L"\uE740");
     items.Append(g_taskMenuToggleItem);
 
     items.Append(MakeMenuItem(L"Minimize", [] {
         if (g_contextMenuTargetHwnd) {
             ShowWindow(g_contextMenuTargetHwnd, SW_MINIMIZE);
         }
-    }));
-
-    items.Append(MakeMenuItem(L"Bring to front", [] {
-        if (g_contextMenuTargetHwnd) {
-            ForceForegroundWindow(g_contextMenuTargetHwnd);
-        }
-    }));
-
-    items.Append(MakeMenuSeparator());
-
-    items.Append(MakeMenuItem(L"Open file location", [] {
-        if (g_contextMenuTargetHwnd) {
-            OpenFileLocationForApp(g_contextMenuTargetHwnd);
-        }
-    }));
-
-    items.Append(MakeMenuItem(L"Properties", [] {
-        if (g_contextMenuTargetHwnd) {
-            ShowFilePropertiesForApp(g_contextMenuTargetHwnd);
-        }
-    }));
-
-    items.Append(MakeMenuSeparator());
+    }, L"\uE921"));
 
     items.Append(MakeMenuItem(L"Close", [] {
         if (g_contextMenuTargetHwnd) {
             CloseWindowGracefully(g_contextMenuTargetHwnd);
         }
-    }));
+    }, L"\uE8BB"));
+
+    items.Append(MakeMenuSeparator());
+
+    items.Append(MakeMenuItem(L"Bring to front", [] {
+        if (g_contextMenuTargetHwnd) {
+            ForceForegroundWindow(g_contextMenuTargetHwnd);
+        }
+    }, L"\uE8A7"));
+
+    items.Append(MakeMenuItem(L"Open file location", [] {
+        if (g_contextMenuTargetHwnd) {
+            OpenFileLocationForApp(g_contextMenuTargetHwnd);
+        }
+    }, L"\uE838"));
+
+    items.Append(MakeMenuItem(L"Properties", [] {
+        if (g_contextMenuTargetHwnd) {
+            ShowFilePropertiesForApp(g_contextMenuTargetHwnd);
+        }
+    }, L"\uE713"));
 
     g_taskContextMenu = menu;
 }
@@ -10061,17 +17804,37 @@ void BuildAppTitleContextMenu() {
 
     auto items = menu.Items();
 
+    items.Append(MakeMenuItem(L"Minimize", [] {
+        if (g_appTitleContextTarget) {
+            ShowWindow(g_appTitleContextTarget, SW_MINIMIZE);
+        }
+    }, L"\uE921"));
+
+    items.Append(MakeMenuItem(L"Maximize", [] {
+        if (g_appTitleContextTarget) {
+            ToggleMaximizeWindow(g_appTitleContextTarget);
+        }
+    }, L"\uE740"));
+
+    items.Append(MakeMenuItem(L"Close", [] {
+        if (g_appTitleContextTarget) {
+            CloseWindowGracefully(g_appTitleContextTarget);
+        }
+    }, L"\uE8BB"));
+
+    items.Append(MakeMenuSeparator());
+
     items.Append(MakeMenuItem(L"Open file location", [] {
         if (g_appTitleContextTarget) {
             OpenFileLocationForApp(g_appTitleContextTarget);
         }
-    }));
+    }, L"\uE838"));
 
     items.Append(MakeMenuItem(L"Properties", [] {
         if (g_appTitleContextTarget) {
             ShowFilePropertiesForApp(g_appTitleContextTarget);
         }
-    }));
+    }, L"\uE713"));
 
     g_appTitleContextMenu = menu;
 }
@@ -10087,58 +17850,7 @@ void RegisterNamed(PCWSTR name, FrameworkElement const& element) {
         g_namedElements.insert_or_assign(name, element);
     }
 }
-// Gets the current desktop wallpaper and returns an ImageBrush from it.
-// Returns an empty brush if wallpaper is missing or fails to load.
-wuxm::ImageBrush GetWallpaperBrush() {
-    wuxm::ImageBrush brush;
 
-    wchar_t wallpaperPath[MAX_PATH] = {0};
-    if (SystemParametersInfo(SPI_GETDESKWALLPAPER, MAX_PATH, wallpaperPath, 0) && wallpaperPath[0]) {
-        std::wstring uriPath = wallpaperPath;
-        std::replace(uriPath.begin(), uriPath.end(), L'\\', L'/');
-        // Cache-busting query so WinRT re-decodes when the file content changes
-        // at the same path (e.g. TranscodedWallpaper).
-        wchar_t suffix[32];
-        swprintf_s(suffix, L"?v=%llu", static_cast<unsigned long long>(GetTickCount64()));
-        uriPath = L"file:///" + uriPath + suffix;
-
-        try {
-            wuxm::Imaging::BitmapImage bitmap;
-            bitmap.UriSource(wf::Uri(winrt::hstring(uriPath)));
-            brush.ImageSource(bitmap);
-            brush.Stretch(wuxm::Stretch::UniformToFill);
-            brush.AlignmentX(wuxm::AlignmentX::Left);
-            brush.AlignmentY(wuxm::AlignmentY::Top);
-        } catch (...) {
-        }
-    }
-    return brush;
-}
-
-// Checks if the wallpaper has changed and updates the background
-void UpdateWallpaperIfChanged() {
-    if (!g_wallpaperLayer) return;
-
-    wchar_t wallpaperPath[MAX_PATH] = {0};
-    if (!SystemParametersInfo(SPI_GETDESKWALLPAPER, MAX_PATH, wallpaperPath, 0) || !wallpaperPath[0]) {
-        return;
-    }
-    std::wstring currentPath = wallpaperPath;
-    unsigned long long stamp = 0;
-    WIN32_FILE_ATTRIBUTE_DATA fad{};
-    if (GetFileAttributesExW(currentPath.c_str(), GetFileExInfoStandard, &fad)) {
-        stamp = (static_cast<unsigned long long>(fad.ftLastWriteTime.dwHighDateTime) << 32) |
-                fad.ftLastWriteTime.dwLowDateTime;
-    }
-    static std::wstring s_lastPath;
-    static unsigned long long s_lastStamp = 0;
-    if (currentPath != s_lastPath || stamp != s_lastStamp) {
-        s_lastPath = currentPath;
-        s_lastStamp = stamp;
-        g_wallpaperLayer.Background(GetWallpaperBrush());
-        Wh_Log(L"TopBar: Wallpaper updated: %s", currentPath.c_str());
-    }
-}
 // Wheel over the Display and Sound buttons adjusts brightness and volume in
 // place. Both read through the cached fast path so a fast scroll doesn't queue
 // up a WMI query or a device activation per notch.
@@ -10393,10 +18105,9 @@ void MoveItemWithinPanels(const std::wstring& item, int direction) {
     RunOnUiThread([] {
         if (!g_topBarHwnd) return;
         LoadSettings();
-        g_dpiScale = GetBarDpiScale();
+        g_dpiScale = g_settings.topBarScale / 100.0;
         g_barHeightPx = static_cast<int>(g_settings.barHeightDip * g_dpiScale + 0.5);
-        auto content = BuildTopBarContent();
-        g_desktopSource.Content(content);
+        SetTopBarContent(BuildTopBarContent());
         BuildStartContextMenu();
         BuildTaskContextMenu();
         ApplyAllControlStyles();
@@ -10433,15 +18144,15 @@ void AttachTrayReorderMenu(wuxc::Button const& button, std::wstring name) {
 
                 if (isLeft) {
                     wuxc::FontIcon fi; fi.Glyph(L"\uE76B"); fi.FontSize(14);
-                    fi.Foreground(MakeBrush(0xFF, 0xFF, 0xFF, 0xFF));
+                    fi.Foreground(FontColorBrush());
                     c.Children().Append(fi);
                 }
                 auto t = MakeText(nullptr, isLeft ? L"Left" : L"Right", 13);
-                t.Foreground(MakeBrush(0xFF, 0xFF, 0xFF, 0xFF));
+                t.Foreground(FontColorBrush());
                 c.Children().Append(t);
                 if (!isLeft) {
                     wuxc::FontIcon fi; fi.Glyph(L"\uE76C"); fi.FontSize(14);
-                    fi.Foreground(MakeBrush(0xFF, 0xFF, 0xFF, 0xFF));
+                    fi.Foreground(FontColorBrush());
                     c.Children().Append(fi);
                 }
                 b.Content(c);
@@ -10475,6 +18186,12 @@ void AttachTrayReorderMenu(wuxc::Button const& button, std::wstring name) {
             auto flyout = wuxc::Flyout();
             flyout.Content(wrap);
             flyout.ShouldConstrainToRootBounds(false);
+            flyout.Opened([](auto&& sender, auto&&) {
+                RegisterOpenPopup(sender.template as<wuxc::Primitives::FlyoutBase>());
+            });
+            flyout.Closed([](auto&& sender, auto&&) {
+                UnregisterOpenPopup(sender.template as<wuxc::Primitives::FlyoutBase>());
+            });
             {
                 Style fpStyle(winrt::xaml_typename<wuxc::FlyoutPresenter>());
                 fpStyle.Setters().Append(Setter(wuxc::Control::BackgroundProperty(),
@@ -10642,7 +18359,7 @@ static int CanonicalItemRank(const std::wstring& item) {
         L"ResourceButton", L"WeatherButton",
         L"DisplayButton", L"SoundButton", L"WifiButton",
         L"BluetoothButton", L"BatteryButton", L"RecycleBinButton",
-        L"ClockButton", L"SettingsButton",
+        L"ClockButton", L"SettingsButton", L"MediaButton",
     };
     for (size_t i = 0; i < ARRAYSIZE(kOrder); i++) {
         if (item == kOrder[i]) return static_cast<int>(i);
@@ -10684,6 +18401,42 @@ void MoveItemToSection(const std::wstring& item, const std::wstring& section) {
     Wh_SetStringValue(L"rightItems", g_settings.rightItems.c_str());
 }
 
+void InvalidateStartAndSearchFlyouts() {
+    // These two are the only flyouts whose content tree is built once and
+    // cached for the process lifetime, so a font or icon colour change made
+    // from the settings window wouldn't reach them until the mod was
+    // toggled. Dropping the pointers here forces the next Show to rebuild
+    // the tree against the current settings.
+    if (g_startMenuFlyout) {
+        try { if (g_startMenuFlyout.IsOpen()) g_startMenuFlyout.Hide(); } catch (...) {}
+        try { UnregisterOpenPopup(g_startMenuFlyout); } catch (...) {}
+        g_startMenuFlyout = nullptr;
+    }
+    if (g_searchFlyout) {
+        try { if (g_searchFlyout.IsOpen()) g_searchFlyout.Hide(); } catch (...) {}
+        try { UnregisterOpenPopup(g_searchFlyout); } catch (...) {}
+        g_searchFlyout = nullptr;
+    }
+    if (g_startPowerMenu)   { try { g_startPowerMenu.Hide();   } catch (...) {} g_startPowerMenu = nullptr; }
+    if (g_startAccountFlyout){try { g_startAccountFlyout.Hide();}catch (...) {} g_startAccountFlyout = nullptr; }
+    if (g_startTileMenu)    { try { g_startTileMenu.Hide();    } catch (...) {} g_startTileMenu = nullptr; }
+    if (g_searchResultMenu) { try { g_searchResultMenu.Hide(); } catch (...) {} g_searchResultMenu = nullptr; }
+
+    // Stale named-element entries from the old trees would otherwise be
+    // handed back to lookups in the interval before the next build, which
+    // makes Focus / Text setters silently no-op on detached elements.
+    for (const auto& name : { L"StartMenuSearchBox", L"SpotlightSearchBox",
+                              L"StartMenuPowerButton", L"StartMenuAccountButton",
+                              L"SearchBlurHost", L"SearchResultsPanel" }) {
+        g_namedElements.erase(name);
+    }
+    g_searchResultsPanel = nullptr;
+    g_searchQuery.clear();
+    g_searchResults.clear();
+    g_searchKeyboardActive = false;
+    g_startMenuKeyboardActive = false;
+}
+
 void PopulateSettingsPanel() {
     if (!g_settingsPanel) return;
 
@@ -10712,6 +18465,7 @@ void PopulateSettingsPanel() {
                              L"BluetoothButton", L"BatteryButton",
                              L"RecycleBinButton", L"SettingsButton"}},
         {L"Clock",          {L"ClockButton"}},
+        {L"Media Player",   {L"MediaButton"}},
     };
 
     auto allInSection = [](const std::vector<std::wstring>& members,
@@ -10786,8 +18540,7 @@ void PopulateSettingsPanel() {
     applyBtn.Padding(Thickness{10, 8, 10, 8});
     applyBtn.Content(MakeText(nullptr, L"Apply layout now", 12));
     applyBtn.Click([](auto&&, auto&&) {
-        auto content = BuildTopBarContent();
-        g_desktopSource.Content(content);
+        SetTopBarContent(BuildTopBarContent());
         ApplyAllControlStyles();
         ApplyVisibilitySettings();
         StripInheritedIslandBackgrounds();
@@ -10801,15 +18554,14 @@ void PopulateSettingsPanel() {
     resetBtn.Content(MakeText(nullptr, L"Reset to defaults", 12));
     resetBtn.Click([](auto&&, auto&&) {
         g_settings.leftItems   = L"StartButton,SearchButton";
-        g_settings.centerItems = L"ResourceButton,WeatherButton,SettingsButton";
+        g_settings.centerItems = L"MediaButton,ResourceButton,WeatherButton,SettingsButton";
         g_settings.rightItems  = L"DisplayButton,SoundButton,WifiButton,BluetoothButton,"
-                                 L"BatteryButton,RecycleBinButton,ClockButton";
+                                 L"BatteryButton,RecycleBinButton,ControlCenterButton,ClockButton";
         Wh_SetStringValue(L"leftItems",   g_settings.leftItems.c_str());
         Wh_SetStringValue(L"centerItems", g_settings.centerItems.c_str());
         Wh_SetStringValue(L"rightItems",  g_settings.rightItems.c_str());
 
-        auto content = BuildTopBarContent();
-        g_desktopSource.Content(content);
+        SetTopBarContent(BuildTopBarContent());
         ApplyAllControlStyles();
         ApplyVisibilitySettings();
         StripInheritedIslandBackgrounds();
@@ -10830,6 +18582,7 @@ namespace wut  = winrt::Windows::UI::Text;
 
 static HWND s_hwnd = nullptr;
 static HWND s_islandHwnd = nullptr;
+static std::shared_ptr<wuxc::ContentDialog> s_activeColorDialog;
 [[clang::no_destroy]] static wuxh::DesktopWindowXamlSource s_xamlSource{ nullptr };
 [[clang::no_destroy]] static winrt::com_ptr<IDesktopWindowXamlSourceNative2> s_native2;
 [[clang::no_destroy]] static wuxc::StackPanel s_contentPanel{ nullptr };
@@ -10858,11 +18611,33 @@ void ScheduleReload() {
             s_applyTimer.Stop();
             if (!g_topBarHwnd || !g_desktopSource) return;
             LoadSettings();
-            g_dpiScale = GetBarDpiScale();
+            bool turnedOffStart =
+                g_prevDefaultStartMenu && !g_settings.defaultStartMenu;
+            bool turnedOffSearch =
+                g_prevDefaultSearch && !g_settings.defaultSearch;
+            bool startActionSwitchedToWindows =
+                g_prevStartButtonAction != L"windows" &&
+                g_settings.startButtonAction == L"windows";
+            g_prevDefaultStartMenu = g_settings.defaultStartMenu;
+            g_prevDefaultSearch = g_settings.defaultSearch;
+            g_prevStartButtonAction = g_settings.startButtonAction;
+            g_winKeyDown = false;
+            g_winOtherSeen = false;
+            g_winReplayed = false;
+            g_winChordConsumed = 0;
+            g_winVkDown = 0;
+            SyncSearchKeyHook();
+            if (turnedOffStart || turnedOffSearch) {
+                try {
+                    RestoreNativeShellHostWindows(turnedOffStart, turnedOffSearch);
+                } catch (...) {}
+            }
+            (void)startActionSwitchedToWindows;
+            g_dpiScale = g_settings.topBarScale / 100.0;
             g_barHeightPx = static_cast<int>(g_settings.barHeightDip * g_dpiScale + 0.5);
             InstallGlobalMenuResources();
-            auto content = BuildTopBarContent();
-            g_desktopSource.Content(content);
+            InvalidateStartAndSearchFlyouts();
+            SetTopBarContent(BuildTopBarContent());
             BuildStartContextMenu();
             BuildTaskContextMenu();
             ApplyAllControlStyles();
@@ -10934,6 +18709,7 @@ static void StyleLightComboBox(wuxc::ComboBox const& cb);
 // the user releases the button.
 static std::atomic<int> g_openColorPickers{0};
 static std::atomic<bool> g_pendingColorReload{false};
+static std::atomic<bool> g_colorDialogOpen{false};
 
 static void RequestColorReload() {
     if (g_openColorPickers.load() > 0) {
@@ -10959,6 +18735,316 @@ static void ApplyTopBarBackgroundNow() {
     if (auto grid = it->second.try_as<wuxc::Grid>()) {
         grid.Background(wuxm::SolidColorBrush(tintColor));
     }
+}
+
+struct CompactColorPicker {
+    wuxc::Border Root{nullptr};
+    std::function<wui::Color()> GetColor;
+    std::function<void(wui::Color)> SetColor;
+};
+
+CompactColorPicker BuildCompactColorPicker(wui::Color initial,
+                                           std::function<void(wui::Color)> onChanged) {
+    auto rgbToHsv = [](wui::Color c, double& h, double& s, double& v) {
+        double r = c.R / 255.0, g = c.G / 255.0, b = c.B / 255.0;
+        double mx = (std::max)({r, g, b});
+        double mn = (std::min)({r, g, b});
+        double d = mx - mn;
+        v = mx;
+        s = mx > 0.0 ? d / mx : 0.0;
+        h = 0.0;
+        if (d > 1e-9) {
+            if (mx == r) h = 60.0 * std::fmod((g - b) / d, 6.0);
+            else if (mx == g) h = 60.0 * ((b - r) / d + 2.0);
+            else h = 60.0 * ((r - g) / d + 4.0);
+            if (h < 0.0) h += 360.0;
+        }
+    };
+
+    auto hsvToRgb = [](double hh, double ss, double vv) -> wui::Color {
+        hh = std::fmod(hh, 360.0);
+        if (hh < 0.0) hh += 360.0;
+        double c = vv * ss;
+        double x = c * (1.0 - std::abs(std::fmod(hh / 60.0, 2.0) - 1.0));
+        double m = vv - c;
+        double rr = 0, gg = 0, bb = 0;
+        if (hh < 60) { rr = c; gg = x; bb = 0; }
+        else if (hh < 120) { rr = x; gg = c; bb = 0; }
+        else if (hh < 180) { rr = 0; gg = c; bb = x; }
+        else if (hh < 240) { rr = 0; gg = x; bb = c; }
+        else if (hh < 300) { rr = x; gg = 0; bb = c; }
+        else { rr = c; gg = 0; bb = x; }
+        return wui::ColorHelper::FromArgb(
+            255,
+            static_cast<uint8_t>(std::round((rr + m) * 255.0)),
+            static_cast<uint8_t>(std::round((gg + m) * 255.0)),
+            static_cast<uint8_t>(std::round((bb + m) * 255.0)));
+    };
+
+    constexpr double kSpectrum = 150.0;
+    constexpr double kHueWidth = 16.0;
+    constexpr double kRadius = 8.0;
+
+    double h0, s0, v0;
+    rgbToHsv(initial, h0, s0, v0);
+
+    auto hRef = std::make_shared<double>(h0);
+    auto sRef = std::make_shared<double>(s0);
+    auto vRef = std::make_shared<double>(v0);
+
+    winrt::Windows::UI::Xaml::Shapes::Rectangle hueLayer;
+    hueLayer.Fill(wuxm::SolidColorBrush(hsvToRgb(h0, 1.0, 1.0)));
+
+    winrt::Windows::UI::Xaml::Shapes::Rectangle satLayer;
+    {
+        wuxm::LinearGradientBrush brush;
+        brush.StartPoint({0.0, 0.5});
+        brush.EndPoint({1.0, 0.5});
+        wuxm::GradientStop g0;
+        g0.Offset(0.0);
+        g0.Color(wui::ColorHelper::FromArgb(255, 255, 255, 255));
+        wuxm::GradientStop g1;
+        g1.Offset(1.0);
+        g1.Color(wui::ColorHelper::FromArgb(0, 255, 255, 255));
+        brush.GradientStops().Append(g0);
+        brush.GradientStops().Append(g1);
+        satLayer.Fill(brush);
+    }
+
+    winrt::Windows::UI::Xaml::Shapes::Rectangle valLayer;
+    {
+        wuxm::LinearGradientBrush brush;
+        brush.StartPoint({0.5, 0.0});
+        brush.EndPoint({0.5, 1.0});
+        wuxm::GradientStop g0;
+        g0.Offset(0.0);
+        g0.Color(wui::ColorHelper::FromArgb(0, 0, 0, 0));
+        wuxm::GradientStop g1;
+        g1.Offset(1.0);
+        g1.Color(wui::ColorHelper::FromArgb(255, 0, 0, 0));
+        brush.GradientStops().Append(g0);
+        brush.GradientStops().Append(g1);
+        valLayer.Fill(brush);
+    }
+
+    wuxc::Grid spectrumStack;
+    spectrumStack.Width(kSpectrum);
+    spectrumStack.Height(kSpectrum);
+    spectrumStack.Children().Append(hueLayer);
+    spectrumStack.Children().Append(satLayer);
+    spectrumStack.Children().Append(valLayer);
+
+    winrt::Windows::UI::Xaml::Shapes::Ellipse crosshair;
+    crosshair.Width(12);
+    crosshair.Height(12);
+    crosshair.Stroke(wuxm::SolidColorBrush(wui::ColorHelper::FromArgb(255, 255, 255, 255)));
+    crosshair.StrokeThickness(2);
+    crosshair.IsHitTestVisible(false);
+
+    wuxc::Canvas spectrumCanvas;
+    spectrumCanvas.Width(kSpectrum);
+    spectrumCanvas.Height(kSpectrum);
+    spectrumCanvas.Children().Append(spectrumStack);
+    spectrumCanvas.Children().Append(crosshair);
+
+    auto positionCrosshair = [crosshair, sRef, vRef]() {
+        double x = (*sRef) * kSpectrum;
+        double y = (1.0 - (*vRef)) * kSpectrum;
+        wuxc::Canvas::SetLeft(crosshair, x - 6.0);
+        wuxc::Canvas::SetTop(crosshair, y - 6.0);
+    };
+    positionCrosshair();
+
+    wuxc::Border spectrumBorder;
+    spectrumBorder.Width(kSpectrum);
+    spectrumBorder.Height(kSpectrum);
+    spectrumBorder.CornerRadius(CornerRadius{kRadius, kRadius, kRadius, kRadius});
+    spectrumBorder.Background(MakeSolid(0xFF, 0x00, 0x00, 0x00));
+    spectrumBorder.Child(spectrumCanvas);
+
+    winrt::Windows::UI::Xaml::Shapes::Rectangle hueBar;
+    {
+        wuxm::LinearGradientBrush brush;
+        brush.StartPoint({0.5, 0.0});
+        brush.EndPoint({0.5, 1.0});
+        struct HS { double off; uint8_t r, g, b; };
+        const HS stops[] = {
+            {0.0 / 6.0, 255, 0, 0},
+            {1.0 / 6.0, 255, 255, 0},
+            {2.0 / 6.0, 0, 255, 0},
+            {3.0 / 6.0, 0, 255, 255},
+            {4.0 / 6.0, 0, 0, 255},
+            {5.0 / 6.0, 255, 0, 255},
+            {6.0 / 6.0, 255, 0, 0},
+        };
+        for (auto& st : stops) {
+            wuxm::GradientStop gs;
+            gs.Offset(st.off);
+            gs.Color(wui::ColorHelper::FromArgb(255, st.r, st.g, st.b));
+            brush.GradientStops().Append(gs);
+        }
+        hueBar.Fill(brush);
+    }
+    hueBar.Width(kHueWidth);
+    hueBar.Height(kSpectrum);
+
+    wuxc::Border hueMarker;
+    hueMarker.Width(kHueWidth + 8);
+    hueMarker.Height(12);
+    hueMarker.CornerRadius(CornerRadius{ 6, 6, 6, 6 });
+    hueMarker.Background(wuxm::SolidColorBrush(wui::ColorHelper::FromArgb(255, 255, 255, 255)));
+    hueMarker.BorderBrush(wuxm::SolidColorBrush(wui::ColorHelper::FromArgb(255, 40, 40, 40)));
+    hueMarker.BorderThickness(Thickness{ 1, 1, 1, 1 });
+    hueMarker.IsHitTestVisible(false);
+
+    wuxc::Canvas hueCanvas;
+    hueCanvas.Width(kHueWidth);
+    hueCanvas.Height(kSpectrum);
+    hueCanvas.Children().Append(hueBar);
+    hueCanvas.Children().Append(hueMarker);
+
+    auto positionHueMarker = [hueMarker, hRef]() {
+        double y = ((*hRef) / 360.0) * kSpectrum;
+        constexpr double kMarkerW = kHueWidth + 8;
+        constexpr double kMarkerH = 12;
+        wuxc::Canvas::SetLeft(hueMarker, (kHueWidth - kMarkerW) / 2.0);
+        wuxc::Canvas::SetTop(hueMarker, y - kMarkerH / 2.0);
+    };
+    positionHueMarker();
+
+    wuxc::Border hueBorder;
+    hueBorder.Width(kHueWidth);
+    hueBorder.Height(kSpectrum);
+    hueBorder.CornerRadius(CornerRadius{kRadius, kRadius, kRadius, kRadius});
+    hueBorder.Background(MakeSolid(0xFF, 0x00, 0x00, 0x00));
+    hueBorder.Child(hueCanvas);
+
+    wuxc::Grid layout;
+    layout.ColumnSpacing(6);
+    wuxc::ColumnDefinition col1;
+    col1.Width(GridLength{0, GridUnitType::Auto});
+    wuxc::ColumnDefinition col2;
+    col2.Width(GridLength{0, GridUnitType::Auto});
+    layout.ColumnDefinitions().Append(col1);
+    layout.ColumnDefinitions().Append(col2);
+    wuxc::Grid::SetColumn(spectrumBorder, 0);
+    wuxc::Grid::SetColumn(hueBorder, 1);
+    layout.Children().Append(spectrumBorder);
+    layout.Children().Append(hueBorder);
+
+    auto emit = [hRef, sRef, vRef, hsvToRgb, onChanged]() {
+        if (onChanged) {
+            onChanged(hsvToRgb(*hRef, *sRef, *vRef));
+        }
+    };
+
+    spectrumCanvas.AddHandler(
+        UIElement::PointerPressedEvent(),
+        winrt::box_value(wux::Input::PointerEventHandler(
+            [spectrumCanvas, sRef, vRef, positionCrosshair, emit](
+                auto&&, wux::Input::PointerRoutedEventArgs const& e) {
+                try {
+                    auto pt = e.GetCurrentPoint(spectrumCanvas);
+                    *sRef = std::clamp(pt.Position().X / kSpectrum, 0.0, 1.0);
+                    *vRef = std::clamp(1.0 - pt.Position().Y / kSpectrum, 0.0, 1.0);
+                    positionCrosshair();
+                    emit();
+                    spectrumCanvas.CapturePointer(e.Pointer());
+                    e.Handled(true);
+                } catch (...) {}
+            })),
+        true);
+
+    spectrumCanvas.AddHandler(
+        UIElement::PointerMovedEvent(),
+        winrt::box_value(wux::Input::PointerEventHandler(
+            [spectrumCanvas, sRef, vRef, positionCrosshair, emit](
+                auto&&, wux::Input::PointerRoutedEventArgs const& e) {
+                try {
+                    auto pt = e.GetCurrentPoint(spectrumCanvas);
+                    if (!pt.Properties().IsLeftButtonPressed()) return;
+                    *sRef = std::clamp(pt.Position().X / kSpectrum, 0.0, 1.0);
+                    *vRef = std::clamp(1.0 - pt.Position().Y / kSpectrum, 0.0, 1.0);
+                    positionCrosshair();
+                    emit();
+                    e.Handled(true);
+                } catch (...) {}
+            })),
+        true);
+
+    spectrumCanvas.AddHandler(
+        UIElement::PointerReleasedEvent(),
+        winrt::box_value(wux::Input::PointerEventHandler(
+            [spectrumCanvas](auto&&, wux::Input::PointerRoutedEventArgs const& e) {
+                try { spectrumCanvas.ReleasePointerCapture(e.Pointer()); } catch (...) {}
+            })),
+        true);
+
+    hueCanvas.AddHandler(
+        UIElement::PointerPressedEvent(),
+        winrt::box_value(wux::Input::PointerEventHandler(
+            [hueCanvas, hRef, hueLayer, positionHueMarker, emit, hsvToRgb](
+                auto&&, wux::Input::PointerRoutedEventArgs const& e) {
+                try {
+                    auto pt = e.GetCurrentPoint(hueCanvas);
+                    *hRef = std::clamp(pt.Position().Y / kSpectrum, 0.0, 1.0) * 360.0;
+                    hueLayer.Fill(wuxm::SolidColorBrush(hsvToRgb(*hRef, 1.0, 1.0)));
+                    positionHueMarker();
+                    emit();
+                    hueCanvas.CapturePointer(e.Pointer());
+                    e.Handled(true);
+                } catch (...) {}
+            })),
+        true);
+
+    hueCanvas.AddHandler(
+        UIElement::PointerMovedEvent(),
+        winrt::box_value(wux::Input::PointerEventHandler(
+            [hueCanvas, hRef, hueLayer, positionHueMarker, emit, hsvToRgb](
+                auto&&, wux::Input::PointerRoutedEventArgs const& e) {
+                try {
+                    auto pt = e.GetCurrentPoint(hueCanvas);
+                    if (!pt.Properties().IsLeftButtonPressed()) return;
+                    *hRef = std::clamp(pt.Position().Y / kSpectrum, 0.0, 1.0) * 360.0;
+                    hueLayer.Fill(wuxm::SolidColorBrush(hsvToRgb(*hRef, 1.0, 1.0)));
+                    positionHueMarker();
+                    emit();
+                    e.Handled(true);
+                } catch (...) {}
+            })),
+        true);
+
+    hueCanvas.AddHandler(
+        UIElement::PointerReleasedEvent(),
+        winrt::box_value(wux::Input::PointerEventHandler(
+            [hueCanvas](auto&&, wux::Input::PointerRoutedEventArgs const& e) {
+                try { hueCanvas.ReleasePointerCapture(e.Pointer()); } catch (...) {}
+            })),
+        true);
+
+    wuxc::Border wrapper;
+    wrapper.CornerRadius(CornerRadius{12, 12, 12, 12});
+    wrapper.Padding(Thickness{10, 10, 10, 10});
+    wrapper.Background(MakeSolid(0xFF, 0x1B, 0x1B, 0x1B));
+    wrapper.Child(layout);
+
+    CompactColorPicker result;
+    result.Root = wrapper;
+    result.GetColor = [hRef, sRef, vRef, hsvToRgb]() {
+        return hsvToRgb(*hRef, *sRef, *vRef);
+    };
+    result.SetColor = [hRef, sRef, vRef, hueLayer, positionCrosshair,
+                       positionHueMarker, hsvToRgb, rgbToHsv](wui::Color c) {
+        double hh, ss, vv;
+        rgbToHsv(c, hh, ss, vv);
+        *hRef = hh;
+        *sRef = ss;
+        *vRef = vv;
+        hueLayer.Fill(wuxm::SolidColorBrush(hsvToRgb(hh, 1.0, 1.0)));
+        positionCrosshair();
+        positionHueMarker();
+    };
+    return result;
 }
 
 void AddColorRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key,
@@ -11011,76 +19097,19 @@ void AddColorRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key,
         RequestColorReload();
     };
 
-    // --- Compact dark ColorPicker ----------------------------------------
-    // Wheel only (no RGB channel inputs, no built-in value slider — we add
-    // our own lightness slider below, which handles both directions).
-    wuxc::ColorPicker picker;
-    picker.IsAlphaEnabled(false);
-    picker.IsAlphaSliderVisible(false);
-    picker.IsAlphaTextInputVisible(false);
-    // The picker's main square is Hue × Saturation — it can only go toward
-    // white. Darkness is a SEPARATE Value slider; keep it visible or black
-    // is unreachable.
-    picker.IsColorSliderVisible(true);
-    picker.IsColorChannelTextInputVisible(false);
-    picker.IsHexInputVisible(true);
-    picker.IsMoreButtonVisible(false);
-    picker.RequestedTheme(wux::ElementTheme::Dark);
-    picker.Width(280);
-    picker.Color(current);
+    CompactColorPicker picker = BuildCompactColorPicker(current,
+        [curColor, commitColor](wui::Color c) {
+            if (c == *curColor) return;
+            commitColor(c);
+        });
 
-    // Recursively release every pointer capture held anywhere in a subtree.
-    // Called when the picker's internal slider got a PointerPressed but its
-    // PointerReleased was delivered to the wrong HWND (cursor released
-    // outside the popup) — without this the slider keeps tracking the
-    // cursor forever.
-    auto releaseCapturesRecursive = std::make_shared<std::function<void(wux::UIElement const&)>>();
-    *releaseCapturesRecursive = [releaseCapturesRecursive](wux::UIElement const& node) {
-        if (!node) return;
-        try { node.ReleasePointerCaptures(); } catch (...) {}
-        try {
-            int n = wuxm::VisualTreeHelper::GetChildrenCount(node);
-            for (int i = 0; i < n; i++) {
-                if (auto child = wuxm::VisualTreeHelper::GetChild(node, i).try_as<wux::UIElement>()) {
-                    (*releaseCapturesRecursive)(child);
-                }
-            }
-        } catch (...) {}
-    };
-
-    // Picker → commit. Value comparison, not a guard flag, so a single stray
-    // event doesn't drop a real update.
-    picker.ColorChanged([picker, curColor, commitColor, releaseCapturesRecursive](auto&&, auto&&) {
-        wui::Color c = picker.Color();
-        if (c == *curColor) return;
-        commitColor(c);
-        // If the physical button is no longer held, no capture should be
-        // outstanding. Release any that survived a release-outside-the-popup.
-        if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0) {
-            (*releaseCapturesRecursive)(picker);
-        }
-    });
-
-    // Same cleanup on any pointer movement over the picker — fires even when
-    // the child slider is not receiving events because its capture is stuck.
-    picker.PointerMoved([picker, releaseCapturesRecursive](
-        auto&&, wux::Input::PointerRoutedEventArgs const& e) {
-        try {
-            auto pp = e.GetCurrentPoint(picker);
-            if (!pp.Properties().IsLeftButtonPressed()) {
-                (*releaseCapturesRecursive)(picker);
-            }
-        } catch (...) {}
-    });
-
-    // Textbox → picker + commit.
     auto commitHex = [picker, curColor, commitColor](const std::wstring& v) {
         wui::Color c{ 255, 0, 0, 0 };
         if (!TryParseHexColor(v, &c)) {
             if (!TryParseNamedColor(v, &c)) return;
         }
         if (c == *curColor) return;
-        if (picker.Color() != c) picker.Color(c);
+        if (picker.GetColor() != c) picker.SetColor(c);
         commitColor(c);
     };
     tb.LostFocus([commitHex](auto&& sender, auto&&) {
@@ -11095,30 +19124,19 @@ void AddColorRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key,
     wuxc::StackPanel pickerColumn;
     pickerColumn.Orientation(wuxc::Orientation::Vertical);
     pickerColumn.Spacing(6);
-    pickerColumn.Children().Append(picker);
+    pickerColumn.Children().Append(picker.Root);
 
     wuxc::Border wrap;
-    wrap.Background(MakeSolid(0xFF, 0x1F, 0x1F, 0x1F));
-    wrap.BorderBrush(MakeSolid(0xFF, 0x40, 0x40, 0x40));
-    wrap.BorderThickness(Thickness{ 1, 1, 1, 1 });
-    wrap.CornerRadius(CornerRadius{ 8, 8, 8, 8 });
-    wrap.Padding(Thickness{ 10, 10, 10, 10 });
-    wrap.RequestedTheme(wux::ElementTheme::Dark);
+    wrap.CornerRadius(CornerRadius{ 12, 12, 12, 12 });
+    wrap.Padding(Thickness{ 0, 0, 0, 0 });
+    wrap.Margin(Thickness{ 0, 6, 0, 0 });
     wrap.Child(pickerColumn);
+    wrap.Visibility(Visibility::Collapsed);
 
-    wuxc::Flyout flyout;
-    flyout.Content(wrap);
-    flyout.ShouldConstrainToRootBounds(false);
-    {
-        Style fpStyle(winrt::xaml_typename<wuxc::FlyoutPresenter>());
-        fpStyle.Setters().Append(Setter(wuxc::Control::BackgroundProperty(),
-            winrt::box_value(MakeSolid(0x00, 0, 0, 0))));
-        fpStyle.Setters().Append(Setter(wuxc::Control::BorderThicknessProperty(),
-            winrt::box_value(Thickness{ 0, 0, 0, 0 })));
-        fpStyle.Setters().Append(Setter(wuxc::Control::PaddingProperty(),
-            winrt::box_value(Thickness{ 0, 0, 0, 0 })));
-        flyout.FlyoutPresenterStyle(fpStyle);
-    }
+    // No Popup/Flyout object here. The picker content (`wrap`) is passed
+    // to a ContentDialog on swatch click. A raw Popup attached to the
+    // settings window's separate XamlRoot does not reliably render on
+    // this XAML-Islands host, whereas ContentDialog always does.
     // Track whether a pointer button is currently held inside the picker.
     // Any attempt to close the flyout while this is true is cancelled: a
     // light-dismissal that fires mid-drag orphans the internal slider's OS
@@ -11127,33 +19145,199 @@ void AddColorRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key,
     auto pickerDragging = std::make_shared<bool>(false);
     auto markDown = [pickerDragging](auto&&, auto&&) { *pickerDragging = true;  };
     auto markUp   = [pickerDragging](auto&&, auto&&) { *pickerDragging = false; };
-    picker.AddHandler(wux::UIElement::PointerPressedEvent(),
+    picker.Root.AddHandler(wux::UIElement::PointerPressedEvent(),
         winrt::box_value(wux::Input::PointerEventHandler(markDown)), true);
-    picker.AddHandler(wux::UIElement::PointerReleasedEvent(),
+    picker.Root.AddHandler(wux::UIElement::PointerReleasedEvent(),
         winrt::box_value(wux::Input::PointerEventHandler(markUp)), true);
-    picker.AddHandler(wux::UIElement::PointerCaptureLostEvent(),
+    picker.Root.AddHandler(wux::UIElement::PointerCaptureLostEvent(),
         winrt::box_value(wux::Input::PointerEventHandler(markUp)), true);
 
-    flyout.Opened([](auto&&, auto&&) {
-        g_openColorPickers.fetch_add(1);
-        ApplyBlurToAllOpenPopups();
-    });
-    flyout.Closing([pickerDragging](
-        wuxc::Primitives::FlyoutBase const&,
-        wuxc::Primitives::FlyoutBaseClosingEventArgs const& e) {
-        // Light-dismiss while a slider is being dragged would kill its
-        // capture — refuse to close until the button is released.
-        if (*pickerDragging) e.Cancel(true);
-    });
-    flyout.Closed([](auto&&, auto&&) {
-        // Only reload once the last open picker closes, so a mid-drag
-        // rebuild can't destroy the popup whose slider is still captured.
-        if (g_openColorPickers.fetch_sub(1) == 1 &&
-            g_pendingColorReload.exchange(false)) {
-            ScheduleReload();
+    // Picker lifecycle is tracked inside the swatch click handler.
+    wrap.Visibility(Visibility::Visible);
+    wrap.Margin(Thickness{ 0, 0, 0, 0 });
+
+    wrap.Visibility(Visibility::Visible);
+    swatch.Click([wrap, swatch, curColor, commitColor](wf::IInspectable const&, RoutedEventArgs const&) {
+        try {
+            auto xamlRoot = swatch.XamlRoot();
+            if (!xamlRoot) return;
+
+            if (g_openColorPickers.load() <= 0) {
+                g_colorDialogOpen = false;
+                g_openColorPickers.store(0);
+            }
+            if (g_colorDialogOpen.exchange(true)) return;
+
+            wui::Color original = *curColor;
+
+            auto closeBtn = MakeGhostButton(nullptr, 15);
+            closeBtn.Width(30); closeBtn.Height(30); closeBtn.MinWidth(30);
+            closeBtn.CornerRadius(CornerRadius{15,15,15,15});
+            closeBtn.Padding(Thickness{0, 0, 0, 0});
+            closeBtn.Background(MakeSolid(0x18, 0xFF, 0xFF, 0xFF));
+            closeBtn.BorderThickness(Thickness{0, 0, 0, 0});
+            closeBtn.HorizontalContentAlignment(HorizontalAlignment::Center);
+            closeBtn.VerticalContentAlignment(VerticalAlignment::Center);
+            {
+                wuxc::FontIcon ic; ic.Glyph(L"\uE711"); ic.FontSize(13);
+                ic.Foreground(MakeSolid(0xFF, 0xFF, 0xFF, 0xFF));
+                closeBtn.Content(ic);
+            }
+
+            auto doneBtn = MakeGhostButton(nullptr, 15);
+            doneBtn.Width(30); doneBtn.Height(30); doneBtn.MinWidth(30);
+            doneBtn.CornerRadius(CornerRadius{15,15,15,15});
+            doneBtn.Padding(Thickness{0, 0, 0, 0});
+            doneBtn.Background(MakeSolid(0xFF, 0x00, 0x78, 0xD4));
+            doneBtn.BorderThickness(Thickness{0, 0, 0, 0});
+            doneBtn.HorizontalContentAlignment(HorizontalAlignment::Center);
+            doneBtn.VerticalContentAlignment(VerticalAlignment::Center);
+            {
+                wuxc::FontIcon ic; ic.Glyph(L"\uE73E"); ic.FontSize(13);
+                ic.Foreground(MakeSolid(0xFF, 0xFF, 0xFF, 0xFF));
+                doneBtn.Content(ic);
+            }
+
+            auto header = wuxc::Grid();
+            header.HorizontalAlignment(HorizontalAlignment::Right);
+            header.VerticalAlignment(VerticalAlignment::Top);
+            header.Margin(Thickness{0, 0, 0, 0});
+            auto c0Col = wuxc::ColumnDefinition(); c0Col.Width(GridLength{0, GridUnitType::Auto});
+            auto c1Col = wuxc::ColumnDefinition(); c1Col.Width(GridLength{0, GridUnitType::Auto});
+            header.ColumnDefinitions().Append(c0Col);
+            header.ColumnDefinitions().Append(c1Col);
+            header.ColumnSpacing(6);
+            wuxc::Grid::SetColumn(closeBtn, 0);
+            wuxc::Grid::SetColumn(doneBtn, 1);
+            header.Children().Append(closeBtn);
+            header.Children().Append(doneBtn);
+
+            try {
+                if (auto oldP = wrap.Parent()) {
+                    if (auto p = oldP.try_as<wuxc::Panel>()) {
+                        uint32_t idx;
+                        if (p.Children().IndexOf(wrap, idx)) p.Children().RemoveAt(idx);
+                    } else if (auto b = oldP.try_as<wuxc::Border>()) {
+                        if (b.Child() == wrap) b.Child(nullptr);
+                    } else if (auto cc = oldP.try_as<wuxc::ContentControl>()) {
+                        if (cc.Content() == wrap) cc.Content(nullptr);
+                    }
+                }
+            } catch (...) {}
+
+            auto card = wuxc::Border();
+            card.Background(MakeSolid(0xFF, 0x2B, 0x2B, 0x2B));
+            card.BorderBrush(MakeSolid(0x00, 0x00, 0x00, 0x00));
+            card.BorderThickness(Thickness{0, 0, 0, 0});
+            card.CornerRadius(CornerRadius{12, 12, 12, 12});
+            card.Padding(Thickness{12, 8, 12, 12});
+
+            auto cardContent = wuxc::Grid();
+            cardContent.Children().Append(wrap);
+            cardContent.Children().Append(header);
+            card.Child(cardContent);
+
+            auto dlg = std::make_shared<wuxc::ContentDialog>();
+            s_activeColorDialog = dlg;
+            dlg->XamlRoot(xamlRoot);
+            dlg->RequestedTheme(wux::ElementTheme::Dark);
+            dlg->Content(card);
+            dlg->Title(nullptr);
+            dlg->PrimaryButtonText(L"");
+            dlg->SecondaryButtonText(L"");
+            dlg->CloseButtonText(L"");
+            dlg->Background(MakeSolid(0x00, 0, 0, 0));
+            dlg->BorderBrush(MakeSolid(0x00, 0, 0, 0));
+            dlg->BorderThickness(Thickness{0, 0, 0, 0});
+            dlg->CornerRadius(CornerRadius{12, 12, 12, 12});
+            dlg->Padding(Thickness{0, 0, 0, 0});
+            try { dlg->IsTabStop(false); } catch (...) {}
+            try { dlg->UseSystemFocusVisuals(false); } catch (...) {}
+
+            try {
+                auto dlgRes = dlg->Resources();
+                auto setDlgRes = [&dlgRes](PCWSTR k, wf::IInspectable const& v) {
+                    auto key = winrt::box_value(winrt::hstring(k));
+                    if (dlgRes.HasKey(key)) dlgRes.Remove(key);
+                    dlgRes.Insert(key, v);
+                };
+                auto transparentBrush = MakeSolid(0x00, 0, 0, 0);
+                auto zero = winrt::box_value(Thickness{0, 0, 0, 0});
+                setDlgRes(L"ContentDialogBackground", transparentBrush);
+                setDlgRes(L"ContentDialogBorderBrush", transparentBrush);
+                setDlgRes(L"ContentDialogTopOverlay", transparentBrush);
+                setDlgRes(L"ContentDialogSeparatorBorderBrush", transparentBrush);
+                setDlgRes(L"ContentDialogBorderThickness", zero);
+                setDlgRes(L"FocusVisualPrimaryBrush", transparentBrush);
+                setDlgRes(L"FocusVisualSecondaryBrush", transparentBrush);
+                setDlgRes(L"FocusVisualPrimaryThickness", zero);
+                setDlgRes(L"FocusVisualSecondaryThickness", zero);
+                setDlgRes(L"SurfaceStrokeColorDefaultBrush", transparentBrush);
+                setDlgRes(L"CardStrokeColorDefaultBrush", transparentBrush);
+                setDlgRes(L"ControlStrokeColorDefaultBrush", transparentBrush);
+                setDlgRes(L"ControlStrokeColorSecondaryBrush", transparentBrush);
+                setDlgRes(L"DividerStrokeColorDefaultBrush", transparentBrush);
+                setDlgRes(L"FocusStrokeColorOuterBrush", transparentBrush);
+                setDlgRes(L"FocusStrokeColorInnerBrush", transparentBrush);
+                setDlgRes(L"SystemControlHighlightAccentBrush", transparentBrush);
+                setDlgRes(L"SystemControlHighlightAltAccentBrush", transparentBrush);
+                setDlgRes(L"SystemControlHighlightListAccentHighBrush", transparentBrush);
+                setDlgRes(L"SystemControlHighlightListAccentLowBrush", transparentBrush);
+                setDlgRes(L"SystemControlHighlightListAccentMediumBrush", transparentBrush);
+                setDlgRes(L"SystemControlForegroundAccentBrush", transparentBrush);
+                setDlgRes(L"SystemControlBackgroundAccentBrush", transparentBrush);
+                setDlgRes(L"SystemControlHighlightBaseHighBrush", transparentBrush);
+                setDlgRes(L"SystemControlHighlightBaseMediumBrush", transparentBrush);
+                setDlgRes(L"AccentFillColorDefaultBrush", transparentBrush);
+                setDlgRes(L"AccentFillColorSecondaryBrush", transparentBrush);
+                setDlgRes(L"AccentFillColorTertiaryBrush", transparentBrush);
+                setDlgRes(L"AccentFillColorDisabledBrush", transparentBrush);
+                setDlgRes(L"ContentDialogCornerRadius",
+                          winrt::box_value(CornerRadius{12, 12, 12, 12}));
+                setDlgRes(L"ContentDialogMaxWidth", winrt::box_value(400.0));
+                setDlgRes(L"ContentDialogMinWidth", winrt::box_value(360.0));
+            } catch (...) {}
+
+            auto committed = std::make_shared<bool>(false);
+            std::weak_ptr<wuxc::ContentDialog> weakDlg = dlg;
+            closeBtn.Click([weakDlg](auto&&, auto&&) {
+                if (auto d = weakDlg.lock()) {
+                    try { d->Hide(); } catch (...) {}
+                }
+            });
+            doneBtn.Click([weakDlg, committed](auto&&, auto&&) {
+                *committed = true;
+                if (auto d = weakDlg.lock()) {
+                    try { d->Hide(); } catch (...) {}
+                }
+            });
+
+            g_openColorPickers.fetch_add(1);
+            dlg->Closed([committed, original, commitColor](
+                    wuxc::ContentDialog const&,
+                    wuxc::ContentDialogClosedEventArgs const&) {
+                if (!*committed) {
+                    try { commitColor(original); } catch (...) {}
+                }
+                if (g_openColorPickers.fetch_sub(1) == 1 &&
+                    g_pendingColorReload.exchange(false)) {
+                    ScheduleReload();
+                }
+                g_colorDialogOpen = false;
+                s_activeColorDialog.reset();
+            });
+
+            auto asyncOp = dlg->ShowAsync();
+            asyncOp.Completed([](auto&&, auto&& status) {
+                if (status != winrt::Windows::Foundation::AsyncStatus::Completed) {
+                    g_openColorPickers.fetch_sub(1);
+                    g_colorDialogOpen = false;
+                }
+            });
+        } catch (...) {
+            g_colorDialogOpen = false;
         }
     });
-    swatch.Flyout(flyout);
 
     // [■ swatch]  [ hex textbox ]
     wuxc::StackPanel inline_;
@@ -11163,14 +19347,19 @@ void AddColorRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key,
     inline_.Children().Append(swatch);
     inline_.Children().Append(tb);
 
+    wuxc::StackPanel rowContainer;
+    rowContainer.Spacing(0);
+    rowContainer.Children().Append(MakeRowShell(label, inline_, desc));
+
     auto card = MakeCard();
-    card.Child(MakeRowShell(label, inline_, desc));
+    card.Child(rowContainer);
     panel.Children().Append(card);
 }
 
 // Shared styling for every text-style input in this window: light surface,
 // dark text — matches the topbar's own flyout textboxes.
 static void StyleLightTextBox(wuxc::TextBox const& tb) {
+    try { tb.CornerRadius(CornerRadius{ 8, 8, 8, 8 }); } catch (...) {}
     auto bg   = MakeSolid(0xFF, 0x2D, 0x2D, 0x2D);
     auto bgH  = MakeSolid(0xFF, 0x33, 0x33, 0x33);
     auto bgF  = MakeSolid(0xFF, 0x1F, 0x1F, 0x1F);
@@ -11197,6 +19386,7 @@ static void StyleLightTextBox(wuxc::TextBox const& tb) {
 }
 
 static void StyleLightComboBox(wuxc::ComboBox const& cb) {
+    try { cb.CornerRadius(CornerRadius{ 8, 8, 8, 8 }); } catch (...) {}
     auto bg   = MakeSolid(0xFF, 0x2D, 0x2D, 0x2D);
     auto bgH  = MakeSolid(0xFF, 0x33, 0x33, 0x33);
     auto fg   = MakeSolid(0xFF, 0xFF, 0xFF, 0xFF);
@@ -11263,7 +19453,8 @@ void AddIntRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key,
 }
 
 void AddSliderRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key,
-                  int lo, int hi, const std::wstring& desc = L"") {
+                  int lo, int hi, const std::wstring& desc = L"",
+                  int step = 1) {
     int current = std::clamp(ReadIntSetting(key), lo, hi);
     wuxc::StackPanel wrap;
     wrap.Orientation(wuxc::Orientation::Horizontal);
@@ -11274,7 +19465,7 @@ void AddSliderRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key
     s.Minimum(lo);
     s.Maximum(hi);
     s.Value(current);
-    s.StepFrequency(1);
+    s.StepFrequency(step);
     s.Width(200);
     s.VerticalAlignment(VerticalAlignment::Center);
 
@@ -11352,7 +19543,8 @@ void AddSliderRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key
 }
 
 void AddBoolRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key,
-                const std::wstring& desc = L"") {
+                const std::wstring& desc = L"",
+                std::function<void()> onChanged = nullptr) {
     bool current = ReadIntSetting(key) != 0;
     wuxc::ToggleSwitch t;
     t.OnContent(winrt::box_value(L""));
@@ -11361,21 +19553,129 @@ void AddBoolRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key,
     t.MinWidth(0);
     t.Width(50);
     std::wstring k = key;
-    t.Toggled([k](auto&& sender, auto&&) {
+    t.Toggled([k, onChanged](auto&& sender, auto&&) {
         auto ts = sender.template as<wuxc::ToggleSwitch>();
         WriteInt(k.c_str(), ts.IsOn() ? 1 : 0);
+        if (onChanged) {
+            try { onChanged(); } catch (...) {}
+        }
     });
     auto card = MakeCard();
     card.Child(MakeRowShell(label, t, desc));
     panel.Children().Append(card);
 }
 
+// Same as AddBoolRow but renders indented, for sub-options that only
+// appear when their master toggle is enabled.
+void AddSubBoolRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key,
+                   const std::wstring& desc = L"") {
+    auto card = MakeCard();
+    auto grid = MakeRowShell(label, nullptr, desc);
+    grid.Padding(Thickness{ 28, 10, 14, 10 });   // indent
+
+    bool current = ReadIntSetting(key) != 0;
+    wuxc::ToggleSwitch t;
+    t.OnContent(winrt::box_value(L""));
+    t.OffContent(winrt::box_value(L""));
+    t.IsOn(current);
+    t.MinWidth(0);
+    t.Width(50);
+    t.VerticalAlignment(VerticalAlignment::Center);
+    std::wstring k = key;
+    t.Toggled([k](auto&& sender, auto&&) {
+        auto ts = sender.template as<wuxc::ToggleSwitch>();
+        WriteInt(k.c_str(), ts.IsOn() ? 1 : 0);
+    });
+    // MakeRowShell already appended the label; overlay the toggle on the
+    // right column by adding it as a second child in that column. Grid
+    // allows multiple children per cell.
+    wuxc::Grid::SetColumn(t, 1);
+    grid.Children().Append(t);
+
+    card.Child(grid);
+    panel.Children().Append(card);
+}
+
+// A boolean toggle that owns a set of nested sub-toggles. The sub-rows live
+// inside the same card as the master, indented, and collapse when the
+// master is off. Used for the Default Menus section so the sub-options sit
+// visually inside their parent the way the color picker sits inside its
+// own card.
+struct SubToggleDef {
+    const wchar_t* label;
+    const wchar_t* key;
+    const wchar_t* desc;
+};
+
+void AddBoolRowWithSubs(wuxc::StackPanel& panel, const std::wstring& label,
+                        PCWSTR key, const std::wstring& desc,
+                        const std::vector<SubToggleDef>& subs) {
+    bool current = ReadIntSetting(key) != 0;
+
+    auto master = wuxc::ToggleSwitch();
+    master.OnContent(winrt::box_value(L""));
+    master.OffContent(winrt::box_value(L""));
+    master.IsOn(current);
+    master.MinWidth(0);
+    master.Width(50);
+    master.VerticalAlignment(VerticalAlignment::Center);
+
+    auto subsPanel = wuxc::StackPanel();
+    subsPanel.Spacing(0);
+    subsPanel.Visibility(current ? Visibility::Visible : Visibility::Collapsed);
+
+    std::vector<wuxc::ToggleSwitch> subToggles;
+
+    for (const auto& sub : subs) {
+        bool subCurrent = ReadIntSetting(sub.key) != 0;
+        auto subToggle = wuxc::ToggleSwitch();
+        subToggle.OnContent(winrt::box_value(L""));
+        subToggle.OffContent(winrt::box_value(L""));
+        subToggle.IsOn(subCurrent);
+        subToggle.MinWidth(0);
+        subToggle.Width(50);
+        subToggle.VerticalAlignment(VerticalAlignment::Center);
+        std::wstring subKey = sub.key;
+        subToggle.Toggled([subKey](auto&& sender, auto&&) {
+            auto ts = sender.template as<wuxc::ToggleSwitch>();
+            WriteInt(subKey.c_str(), ts.IsOn() ? 1 : 0);
+        });
+        subToggles.push_back(subToggle);
+
+        auto subRow = MakeRowShell(sub.label, subToggle, sub.desc);
+        subRow.Padding(Thickness{ 28, 8, 14, 8 });
+        subsPanel.Children().Append(subRow);
+    }
+
+    std::wstring masterKey = key;
+    master.Toggled([masterKey, subsPanel, subToggles](auto&& sender, auto&&) {
+        auto ts = sender.template as<wuxc::ToggleSwitch>();
+        bool on = ts.IsOn();
+        WriteInt(masterKey.c_str(), on ? 1 : 0);
+        subsPanel.Visibility(on ? Visibility::Visible : Visibility::Collapsed);
+        for (size_t i = 0; i < subToggles.size(); i++) {
+            try { subToggles[i].IsOn(on); } catch (...) {}
+        }
+    });
+
+    wuxc::StackPanel container;
+    container.Spacing(0);
+    container.Children().Append(MakeRowShell(label, master, desc));
+    container.Children().Append(subsPanel);
+
+    auto card = MakeCard();
+    card.Child(container);
+    panel.Children().Append(card);
+}
+
 void AddComboRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key,
                  const std::vector<std::pair<std::wstring, std::wstring>>& options,
-                 const std::wstring& desc = L"") {
+                 const std::wstring& desc = L"",
+                 std::function<void()> onChanged = nullptr) {
     std::wstring current = GetStringSettingCopy(key);
     wuxc::ComboBox cb;
     cb.MinWidth(230);
+    cb.MaxWidth(340);
     StyleLightComboBox(cb);
     int selected = 0;
     for (size_t i = 0; i < options.size(); i++) {
@@ -11387,27 +19687,87 @@ void AddComboRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key,
     cb.SelectedIndex(selected);
     std::wstring k = key;
     auto opts = options;
-    cb.SelectionChanged([k, opts](auto&& sender, auto&&) {
+    cb.SelectionChanged([k, opts, onChanged](auto&& sender, auto&&) {
         auto c = sender.template as<wuxc::ComboBox>();
         int idx = c.SelectedIndex();
-        if (idx >= 0 && idx < static_cast<int>(opts.size()))
+        if (idx >= 0 && idx < static_cast<int>(opts.size())) {
             WriteStr(k.c_str(), opts[idx].first);
+            if (onChanged) {
+                try { onChanged(); } catch (...) {}
+            }
+        }
     });
     auto card = MakeCard();
     card.Child(MakeRowShell(label, cb, desc));
     panel.Children().Append(card);
 }
 
-wuxc::TextBlock MakeHeading(const std::wstring& text, double size = 16) {
+wuxc::TextBlock MakeHeading(const std::wstring& text, double size = 16) { 
     auto tb = MakeLabel(text, size, true);
     tb.Margin(Thickness{ 0, 14, 0, 6 });
     return tb;
 }
 
+struct FontEnumCtx {
+    std::vector<std::wstring>* families;
+    std::set<std::wstring>* seen;
+};
+
+std::vector<std::wstring> EnumerateInstalledFontFamilies() {
+    std::vector<std::wstring> families;
+    std::set<std::wstring> seen;
+    FontEnumCtx ctx{ &families, &seen };
+
+    HDC hdc = GetDC(nullptr);
+    if (!hdc) return families;
+
+    LOGFONTW lf{};
+    lf.lfCharSet = DEFAULT_CHARSET;
+
+    EnumFontFamiliesExW(hdc, &lf,
+        [](const LOGFONTW* lpelfe, const TEXTMETRICW*, DWORD, LPARAM lParam) -> int {
+            auto* c = reinterpret_cast<FontEnumCtx*>(lParam);
+            std::wstring name = lpelfe->lfFaceName;
+            if (name.empty() || name[0] == L'@') return 1;
+            if (_wcsicmp(name.c_str(), L"Sans Serif Collection") == 0) return 1;
+            if (c->seen->insert(name).second) {
+                c->families->push_back(name);
+            }
+            return 1;
+        },
+        reinterpret_cast<LPARAM>(&ctx),
+        0);
+
+    ReleaseDC(nullptr, hdc);
+    std::sort(families.begin(), families.end(),
+              [](const std::wstring& a, const std::wstring& b) {
+                  return _wcsicmp(a.c_str(), b.c_str()) < 0;
+              });
+    return families;
+}
+
+void ShowPage(int idx);
+
 void BuildAppearancePage(wuxc::StackPanel& p) {
-    p.Children().Append(MakeHeading(L"Appearance", 22));
+    p.Children().Append(MakeHeading(L"Appearance", 22)); 
 
     p.Children().Append(MakeHeading(L"Bar"));
+
+    std::wstring scaleMode = GetStringSettingCopy(L"topBarScaleMode");
+    if (scaleMode != L"custom") scaleMode = L"auto";
+
+    AddComboRow(p, L"Display scaling mode", L"topBarScaleMode", {
+        { L"auto",   L"Auto" },
+        { L"custom", L"Custom" },
+    }, L"Auto picks a scale from your screen width. Custom lets you set it manually.",
+    [] { ShowPage(s_currentPage); });
+
+    if (scaleMode == L"custom") {
+        AddSliderRow(p, L"TopBar scale (%)", L"topBarScale", 50, 150,
+                     L"Custom scale for the topbar, independent of the Windows display scale.",
+                     10);
+    }
+
     AddSliderRow(p, L"TopBar height (px)", L"barHeight", 20, 120);
     AddSliderRow(p, L"Corner radius", L"cornerRadius", 0, 30);
     AddColorRow(p,  L"Global Background Tint", L"topBarBackgroundColor",
@@ -11418,45 +19778,96 @@ void BuildAppearancePage(wuxc::StackPanel& p) {
     AddSliderRow(p, L"Global Blur Amount", L"globalBlurAmount", 1, 50,
                  L"Strength of the Windhawk blur behind the bar background.");
 
-    p.Children().Append(MakeHeading(L"Font"));
-    AddComboRow(p, L"Font family", L"fontFamily", {
-        { L"",                  L"(Default)" },
-        { L"Segoe UI Variable", L"Segoe UI Variable" },
-        { L"Segoe UI",          L"Segoe UI" },
-        { L"Arial",             L"Arial" },
-        { L"Calibri",           L"Calibri" },
-        { L"Consolas",          L"Consolas" },
-        { L"Tahoma",            L"Tahoma" },
-        { L"Verdana",           L"Verdana" },
-    }, L"Applies to every label and icon in the topbar.");
+    p.Children().Append(MakeHeading(L"Font")); 
+    {
+        std::vector<std::pair<std::wstring, std::wstring>> fontOptions;
+        fontOptions.push_back({ L"", L"(Default)" });
+        for (const auto& name : EnumerateInstalledFontFamilies()) {
+            fontOptions.push_back({ name, name });
+        }
+        AddComboRow(p, L"Font family", L"fontFamily", fontOptions,
+                    L"Applies to every label and icon in the topbar.");
+    }
     AddBoolRow(p, L"Bold text", L"fontBold");
+    AddColorRow(p, L"Font color", L"fontColor",
+                L"Foreground color for every label in the topbar and flyouts.");
 
     p.Children().Append(MakeHeading(L"Clock & Date"));
     AddTextRow(p, L"Time format", L"timeFormat",
                L"Windows tokens: h, hh, H, HH, m, mm, s, ss, t, tt.");
     AddTextRow(p, L"Date format", L"dateFormat",
                L"Windows tokens: d, dd, ddd, dddd, M, MM, MMM, MMMM, y, yy, yyyy.");
+
 }
 
-void BuildLayoutPage(wuxc::StackPanel& p) {
-    p.Children().Append(MakeHeading(L"Layout", 22));
+void ShowPage(int idx);   // forward decl (definition lives further down)
 
-    // Top of the page: how the center strip is filled
-    AddComboRow(p, L"Center content", L"centerContent", {
+void BuildLayoutPage(wuxc::StackPanel& p) {
+    p.Children().Append(MakeHeading(L"Customizations", 22));
+
+    p.Children().Append(MakeHeading(L"App Title Button"));
+    AddComboRow(p, L"Mode", L"centerContent", {
         { L"applicationButtons", L"Application name" },
         { L"taskList",           L"Task list" },
         { L"none",               L"None" },
-    });
+    }, L"What the bar's middle section displays.");
 
     p.Children().Append(MakeHeading(L"Task Buttons"));
-    AddSliderRow(p, L"Task button width (DIP)", L"taskButtonWidth", 40, 250);
-    AddSliderRow(p, L"Task icon size (DIP)",    L"taskIconSize",    12, 40);
-    AddComboRow(p, L"Task button content", L"taskButtonContent", {
+    AddSliderRow(p, L"Button width (DIP)", L"taskButtonWidth", 40, 250);
+    AddSliderRow(p, L"Icon size (DIP)",    L"taskIconSize",    12, 40);
+    AddComboRow(p, L"Button content", L"taskButtonContent", {
         { L"iconAndText", L"Icon and text" },
         { L"iconOnly",    L"Icon only" },
         { L"textOnly",    L"Text only" },
-    });
+    }, L"Controls the tasklist-mode buttons (Application name / Task list).");
 
+    p.Children().Append(MakeHeading(L"Media Player"));
+    AddBoolRow(p, L"Show media visualizer in flyout", L"showMediaVisualizer",
+               L"Real-time audio-reactive bars inside the Media Player flyout.");
+
+    p.Children().Append(MakeHeading(L"Media Player Button"));
+    AddBoolRow(p, L"Show thumbnail",         L"mediaButtonShowIcon",
+               L"Album art (falls back to a music note).");
+    AddBoolRow(p, L"Show song name",         L"mediaButtonShowName");
+    AddBoolRow(p, L"Show playback controls", L"mediaButtonShowControls",
+               L"Previous / play-pause / next inside the button.");
+    AddBoolRow(p, L"Show mini visualizer",   L"mediaButtonShowVisualizer",
+               L"Small 5-bar audio-reactive visualizer next to the name.");
+
+    p.Children().Append(MakeHeading(L"Resource Monitor Button"));
+    AddBoolRow(p, L"Show CPU usage", L"showCpuUsage");
+    AddBoolRow(p, L"Show RAM usage", L"showRamUsage");
+    AddBoolRow(p, L"Show GPU usage", L"showGpuUsage");
+    AddTextRow(p, L"CPU label", L"labelCpu",
+               L"Text before the CPU percentage.");
+    AddTextRow(p, L"RAM label", L"labelRam",
+               L"Text before the RAM percentage.");
+    AddTextRow(p, L"GPU label", L"labelGpu",
+               L"Text before the GPU percentage.");
+
+    p.Children().Append(MakeHeading(L"Weather"));
+    AddComboRow(p, L"Temperature unit", L"weatherUnit", {
+        { L"C", L"Celsius (\u00B0C)" },
+        { L"F", L"Fahrenheit (\u00B0F)" },
+    }, L"Affects the topbar weather widget and flyout.");
+
+    p.Children().Append(MakeHeading(L"Default menus"));
+    AddBoolRow(p, L"Make TopBar Start menu the default", L"defaultStartMenu",
+               L"When on: Windows key and taskbar Start open the TopBar menu. "
+               L"When off: both open the native Windows Start menu.");
+    AddBoolRow(p, L"Make TopBar search the default", L"defaultSearch",
+               L"When on: Win+S / Win+Q and the taskbar search box open the "
+               L"TopBar search flyout. When off: native Windows Search.");
+
+    p.Children().Append(MakeHeading(L"TopBar Button Actions"));
+    AddComboRow(p, L"TopBar Start button function", L"startButtonAction", {
+        { L"topbar",  L"TopBar Start menu" },
+        { L"windows", L"Windows Start menu" },
+    }, L"What the TopBar's own Start button opens.");
+    AddComboRow(p, L"TopBar Search button function", L"searchButtonAction", {
+        { L"topbar",  L"TopBar Search" },
+        { L"windows", L"Windows Search" },
+    }, L"What the TopBar's own Search button opens.");
 }
 
 void BuildButtonsPage(wuxc::StackPanel& p) {
@@ -11466,23 +19877,26 @@ void BuildButtonsPage(wuxc::StackPanel& p) {
     AddBoolRow(p, L"Show Start button",  L"showStartButton");
     AddBoolRow(p, L"Show Search button", L"showSearchButton");
 
+
+
     p.Children().Append(MakeHeading(L"Control Center"));
-    AddBoolRow(p, L"Show Display button",   L"showDisplayButton");
-    AddBoolRow(p, L"Show Sound button",     L"showSoundButton");
-    AddBoolRow(p, L"Show Wi-Fi button",     L"showWifiButton");
-    AddBoolRow(p, L"Show Bluetooth button", L"showBluetoothButton");
-    AddBoolRow(p, L"Show Battery button",   L"showBatteryButton");
-    AddBoolRow(p, L"Show Settings button",  L"showSettingsButton");
-    AddBoolRow(p, L"Show Weather button",   L"showWeatherButton");
+    AddBoolRow(p, L"Show Display button",     L"showDisplayButton");
+    AddBoolRow(p, L"Show Sound button",       L"showSoundButton");
+    AddBoolRow(p, L"Show Wi-Fi button",       L"showWifiButton");
+    AddBoolRow(p, L"Show Bluetooth button",   L"showBluetoothButton");
+    AddBoolRow(p, L"Show Battery button",     L"showBatteryButton");
+    AddBoolRow(p, L"Show Control Center button", L"showControlCenterButton");
+    AddBoolRow(p, L"Show Recycle Bin button", L"showRecycleBinButton");
+    AddBoolRow(p, L"Show Settings button",    L"showSettingsButton");
+    AddBoolRow(p, L"Show Weather button",     L"showWeatherButton");
 
     p.Children().Append(MakeHeading(L"Clock & Date"));
     AddBoolRow(p, L"Show clock", L"showClock");
     AddBoolRow(p, L"Show date",  L"showDate");
 
-    p.Children().Append(MakeHeading(L"Resource Monitor"));
-    AddBoolRow(p, L"Show CPU usage", L"showCpuUsage");
-    AddBoolRow(p, L"Show RAM usage", L"showRamUsage");
-    AddBoolRow(p, L"Show GPU usage", L"showGpuUsage");
+    p.Children().Append(MakeHeading(L"Media Player"));
+    AddBoolRow(p, L"Show Media Player button", L"showMediaButton",
+               L"Only appears while media is actively playing.");
 }
 
 static std::wstring BuildSettingsJson() {
@@ -11501,6 +19915,7 @@ static std::wstring BuildSettingsJson() {
     addStr(L"topBarBackgroundColor");
     addInt(L"topBarBackgroundOpacity");
     addStr(L"iconColor");
+    addStr(L"fontColor");
     addStr(L"fontFamily");
     addInt(L"fontBold");
     addStr(L"timeFormat");
@@ -11521,10 +19936,26 @@ static std::wstring BuildSettingsJson() {
     addInt(L"showWifiButton");
     addInt(L"showBluetoothButton");
     addInt(L"showBatteryButton");
+    addInt(L"showControlCenterButton");
     addInt(L"showWeatherButton");
+    addInt(L"defaultStartMenu");
+    addInt(L"defaultSearch");
+    addStr(L"startButtonAction");
+    addStr(L"searchButtonAction");
+    addInt(L"showRecycleBinButton");
     addInt(L"showCpuUsage");
     addInt(L"showRamUsage");
     addInt(L"showGpuUsage");
+    addStr(L"labelCpu");
+    addStr(L"labelRam");
+    addStr(L"labelGpu");
+    addInt(L"showMediaButton");
+    addInt(L"showMediaVisualizer");
+    addInt(L"mediaButtonShowIcon");
+    addInt(L"mediaButtonShowName");
+    addInt(L"mediaButtonShowControls");
+    addInt(L"mediaButtonShowVisualizer");
+    addStr(L"weatherUnit");
 
     return std::wstring(obj.Stringify());
 }
@@ -11533,9 +19964,9 @@ static std::wstring BuildSettingsJson() {
 
 void BuildAboutPage(wuxc::StackPanel& p) {
     p.Children().Append(MakeHeading(L"TopBar for Windows", 22));
-    p.Children().Append(MakeLabel(L"Version 1.2.0", 13, false, 0.65));
+    p.Children().Append(MakeLabel(L"Version 1.3.0", 13, false, 0.65));
     auto info = MakeLabel(
-        L"Mod Created By WasiXGamer. Settings App inspired by Taskbar Fluent Media Player mod by Slayts, Windhawk Blur imported from Windows 11 Taskbar Styler by m417z.",
+        L"Mod Created By WasiXGamer. Settings App inspired by Taskbar Fluent Media Player mod by Salyts, Windhawk Blur imported from Windows 11 Taskbar Styler by m417z.",
         12, false, 0.8);
     info.TextWrapping(TextWrapping::Wrap);
     info.MaxWidth(420);
@@ -11578,6 +20009,8 @@ void BuildUiAlignmentPage(wuxc::StackPanel& p) {
         { L"Weather",   { L"WeatherButton" } },
         { L"Clock",     { L"ClockButton" } },
         { L"Settings",  { L"SettingsButton" } },
+        { L"Media Player", { L"MediaButton" } },
+        { L"Control Center", { L"ControlCenterButton" } },
         { L"Control Panel buttons",
           { L"DisplayButton", L"SoundButton", L"WifiButton",
             L"BluetoothButton", L"BatteryButton", L"RecycleBinButton" } },
@@ -11698,8 +20131,79 @@ static bool ParseSettingsJson(
 
 static void ApplySettingsPairs(
         const std::vector<std::pair<std::wstring, std::wstring>>& pairs) {
-    for (auto& kv : pairs) {
-        Wh_SetStringValue(kv.first.c_str(), kv.second.c_str());
+    static const std::set<std::wstring> kAllowedKeys = {
+        L"topBarScaleMode", L"topBarScale", L"barHeight", L"cornerRadius",
+        L"topBarBackgroundColor", L"topBarBackgroundOpacity",
+        L"iconColor", L"fontColor", L"fontFamily", L"fontBold",
+        L"globalBlurAmount", L"showStartButton", L"showSearchButton",
+        L"centerContent", L"taskButtonWidth", L"taskIconSize",
+        L"taskButtonContent", L"showDisplayButton", L"showSoundButton",
+        L"showWifiButton", L"showBluetoothButton", L"showBatteryButton",
+        L"showControlCenterButton",
+        L"showSettingsButton", L"showWeatherButton", L"showRecycleBinButton",
+        L"leftItems", L"centerItems", L"rightItems",
+        L"showCpuUsage", L"showRamUsage", L"showGpuUsage",
+        L"labelCpu", L"labelRam", L"labelGpu",
+        L"showMediaButton", L"showMediaVisualizer",
+        L"mediaButtonShowIcon", L"mediaButtonShowName",
+        L"mediaButtonShowControls", L"mediaButtonShowVisualizer",
+        L"defaultStartMenu", L"defaultSearch",
+        L"startButtonAction", L"searchButtonAction",
+        L"showClock", L"timeFormat", L"showDate", L"dateFormat",
+        L"weatherLocationName", L"weatherLatitude", L"weatherLongitude",
+        L"weatherUnit",
+    };
+    static const std::map<std::wstring, std::pair<int, int>> kIntRanges = {
+        { L"topBarScale",               {  50, 150 } },
+        { L"barHeight",                 {  20, 120 } },
+        { L"cornerRadius",              {   0,  30 } },
+        { L"topBarBackgroundOpacity",   {   0, 100 } },
+        { L"globalBlurAmount",          {   1,  50 } },
+        { L"taskButtonWidth",           {  40, 250 } },
+        { L"taskIconSize",              {  12,  40 } },
+        { L"showStartButton",           {   0,   1 } },
+        { L"showSearchButton",          {   0,   1 } },
+        { L"showDisplayButton",         {   0,   1 } },
+        { L"showSoundButton",           {   0,   1 } },
+        { L"showWifiButton",            {   0,   1 } },
+        { L"showBluetoothButton",       {   0,   1 } },
+        { L"showBatteryButton",         {   0,   1 } },
+        { L"showControlCenterButton",   {   0,   1 } },
+        { L"showSettingsButton",        {   0,   1 } },
+        { L"showWeatherButton",         {   0,   1 } },
+        { L"showRecycleBinButton",      {   0,   1 } },
+        { L"showCpuUsage",              {   0,   1 } },
+        { L"showRamUsage",              {   0,   1 } },
+        { L"showGpuUsage",              {   0,   1 } },
+        { L"showMediaButton",           {   0,   1 } },
+        { L"showMediaVisualizer",       {   0,   1 } },
+        { L"mediaButtonShowIcon",       {   0,   1 } },
+        { L"mediaButtonShowName",       {   0,   1 } },
+        { L"mediaButtonShowControls",   {   0,   1 } },
+        { L"mediaButtonShowVisualizer", {   0,   1 } },
+        { L"defaultStartMenu",          {   0,   1 } },
+        { L"defaultSearch",             {   0,   1 } },
+        { L"showClock",                 {   0,   1 } },
+        { L"showDate",                  {   0,   1 } },
+        { L"fontBold",                  {   0,   1 } },
+    };
+    for (const auto& kv : pairs) {
+        if (kAllowedKeys.find(kv.first) == kAllowedKeys.end()) {
+            Wh_Log(L"ApplySettingsPairs: skipping unknown key %s", kv.first.c_str());
+            continue;
+        }
+        std::wstring value = kv.second;
+        auto rangeIt = kIntRanges.find(kv.first);
+        if (rangeIt != kIntRanges.end()) {
+            try {
+                int v = std::stoi(kv.second);
+                v = std::clamp(v, rangeIt->second.first, rangeIt->second.second);
+                value = std::to_wstring(v);
+            } catch (...) {
+                continue;
+            }
+        }
+        Wh_SetStringValue(kv.first.c_str(), value.c_str());
     }
     ScheduleReload();
 }
@@ -12014,7 +20518,7 @@ struct PageDef {
 };
 static const PageDef kPages[] = {
     { L"Appearance",          L"\uE790", BuildAppearancePage },       // Color
-    { L"Layout",              L"\uE8A9", BuildLayoutPage },           // ViewAll
+    { L"Customizations",      L"\uE8A9", BuildLayoutPage },           // ViewAll
     { L"UI Alignment",        L"\uE71D", BuildUiAlignmentPage },      // GridView
     { L"Buttons",             L"\uE7C4", BuildButtonsPage },          // Button
     { L"Import / Export",     L"\uE8B5", BuildImportExportPage },     // Save
@@ -12056,6 +20560,16 @@ wuxc::Grid BuildWindowContent() {
                            MakeSolid(0x00, 0x00, 0x00, 0x00));
     nav.Resources().Insert(winrt::box_value(winrt::hstring(L"NavigationViewContentGridBorderThickness")),
                            winrt::box_value(Thickness{ 0, 0, 0, 0 }));
+
+    // Fluent 8px radius propagates to every control that binds the
+    // standard theme corner-radius resource: TextBox, ComboBox, Button,
+    // ToggleSwitch, NavigationViewItem, Expander, etc.
+    nav.Resources().Insert(winrt::box_value(winrt::hstring(L"ControlCornerRadius")),
+                           winrt::box_value(CornerRadius{ 8, 8, 8, 8 }));
+    nav.Resources().Insert(winrt::box_value(winrt::hstring(L"OverlayCornerRadius")),
+                           winrt::box_value(CornerRadius{ 8, 8, 8, 8 }));
+    nav.Resources().Insert(winrt::box_value(winrt::hstring(L"NavigationViewItemCornerRadius")),
+                           winrt::box_value(CornerRadius{ 8, 8, 8, 8 }));
 
     for (int i = 0; i < kPageCount; i++) {
         wuxc::NavigationViewItem item;
@@ -12120,15 +20634,23 @@ wuxc::Grid BuildWindowContent() {
                     MB_YESNO | MB_ICONWARNING) != IDYES) return;
             const wchar_t* keys[] = {
                 L"barHeight", L"cornerRadius", L"topBarBackgroundColor",
-                L"topBarBackgroundOpacity", L"iconColor", L"fontFamily", L"fontBold",
+                L"topBarBackgroundOpacity", L"iconColor", L"fontColor", L"fontFamily", L"fontBold",
                 L"timeFormat", L"dateFormat", L"showClock", L"showDate",
                 L"leftItems", L"centerItems", L"rightItems",
                 L"taskButtonWidth", L"taskIconSize", L"taskButtonContent",
                 L"centerContent", L"showStartButton", L"showSearchButton",
                 L"showDisplayButton", L"showSoundButton", L"showWifiButton",
                 L"showBluetoothButton", L"showBatteryButton",
-                L"showWeatherButton",
+                L"showControlCenterButton",
+                L"showWeatherButton", L"showRecycleBinButton",
+                L"defaultStartMenu", L"defaultSearch",
+                L"startButtonAction", L"searchButtonAction",
                 L"showCpuUsage", L"showRamUsage", L"showGpuUsage",
+                L"labelCpu", L"labelRam", L"labelGpu",
+                L"showMediaButton", L"showMediaVisualizer",
+                L"mediaButtonShowIcon", L"mediaButtonShowName",
+                L"mediaButtonShowControls", L"mediaButtonShowVisualizer",
+                L"weatherUnit",
             };
             for (auto* k : keys) Wh_SetStringValue(k, L"");
             ScheduleReload();
@@ -12229,7 +20751,7 @@ wuxc::Grid BuildWindowContent() {
             row.VerticalAlignment(VerticalAlignment::Center);
             row.HorizontalAlignment(HorizontalAlignment::Center);
 
-            if (auto icon = BuildVectorIcon(nullptr, fillPath, L"", 24, 16, 1.5)) {
+            if (auto icon = BuildVectorIcon(nullptr, fillPath, L"", 24, 16, 1.5, L"#FFFFFF")) {
                 icon.VerticalAlignment(VerticalAlignment::Center);
                 row.Children().Append(icon);
             }
@@ -12292,6 +20814,7 @@ LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             s_islandHwnd = nullptr;
             s_contentPanel = nullptr;
             s_hwnd = nullptr;
+            g_settingsWindowHwnd = nullptr;
             // Intentionally NOT PostQuitMessage — the topbar thread owns the loop.
             return 0;
     }
@@ -12403,6 +20926,7 @@ void CreateWindowOnCurrentThread() {
         Wh_Log(L"TopBar Settings: CreateWindowEx failed: %u", GetLastError());
         return;
     }
+    g_settingsWindowHwnd = s_hwnd;
 
     // The window class is registered only once, so its icons won't be
     // re-read on a second open. Setting them per window keeps the taskbar
@@ -12470,6 +20994,7 @@ void DestroySettingsWindowNow() {
         s_applyTimer.Stop();
         s_applyTimer = nullptr;
     }
+    s_activeColorDialog.reset();
     if (s_hwnd && IsWindow(s_hwnd)) {
         DestroyWindow(s_hwnd);
     }
@@ -12503,25 +21028,13 @@ FrameworkElement BuildTopBarContent() {
     g_lastAppTitleTarget = nullptr;
     g_lastAppTitleText.clear();
 
-    // Outer root grid that holds everything (background + interactive bar)
+    // Outer root grid that holds the interactive bar. Kept so existing
+    // styles that target Grid#BarRoot > Grid#TopBarRoot still resolve.
     wuxc::Grid barRoot;
     barRoot.Name(L"BarRoot");
     barRoot.HorizontalAlignment(HorizontalAlignment::Stretch);
     barRoot.VerticalAlignment(VerticalAlignment::Stretch);
     barRoot.Background(nullptr); // Transparent so the blur shows through
-    // Wallpaper layer (added first so it's behind everything)
-    wuxm::ImageBrush wallpaperBrush = GetWallpaperBrush();
-    {
-        wuxc::Grid wallpaperLayer;
-        wallpaperLayer.Name(L"WallpaperLayer");
-        wallpaperLayer.Background(wallpaperBrush);
-        wallpaperLayer.IsHitTestVisible(false); // don't block clicks
-        wallpaperLayer.HorizontalAlignment(HorizontalAlignment::Stretch);
-        wallpaperLayer.VerticalAlignment(VerticalAlignment::Stretch);
-        wallpaperLayer.Opacity(1.0);
-        barRoot.Children().Append(wallpaperLayer);
-        g_wallpaperLayer = wallpaperLayer; // Save reference
-    }
     // Interactive content grid (This is TopBarRoot and gets the blur)
     wuxc::Grid root;
     root.Name(L"TopBarRoot");
@@ -12538,6 +21051,12 @@ FrameworkElement BuildTopBarContent() {
     }
 
     root.Loaded([root, tintColor](wf::IInspectable const&, RoutedEventArgs const&) {
+        // Re-run the ancestor walk now that we are actually attached to the
+        // live tree. When the strip runs from TopBarThreadProc the popup has
+        // not been shown yet, so g_rootElement has no visual parent and the
+        // walk visits 0 ancestors — which is why XAML's PopupRoot / presenter
+        // backgrounds were never cleared and the flyout appeared tinted.
+        try { StripInheritedIslandBackgrounds(); } catch (...) {}
         if (root.Background() != nullptr) {
             return;
         }
@@ -12565,8 +21084,18 @@ FrameworkElement BuildTopBarContent() {
     // instead.
     root.DoubleTapped([](auto&&, Input::DoubleTappedRoutedEventArgs const& args) {
         args.Handled(true);
-        if (g_lastForegroundHwnd && IsWindow(g_lastForegroundHwnd)) {
-            ToggleMaximizeWindow(g_lastForegroundHwnd);
+        HWND target = g_lastForegroundHwnd;
+        if (target && IsWindow(target)) {
+            // Defer to a background thread. ToggleMaximizeWindow uses
+            // AttachThreadInput to force the target to foreground, which
+            // briefly synchronizes our thread's input queue with the
+            // target's. Doing that on the UI thread makes the mouse cursor
+            // stutter: WM_MOUSEMOVE messages queue up during the attach
+            // and flush all at once when it releases. A background thread
+            // has no UI input queue, so the attach costs nothing visible.
+            RunInBackground([target] {
+                try { ToggleMaximizeWindow(target); } catch (...) {}
+            });
         }
     });
 
@@ -12580,9 +21109,16 @@ FrameworkElement BuildTopBarContent() {
                             auto groups = VisualStateManager::GetVisualStateGroups(fe);
                             for (auto const& g : groups) {
                                 if (g) {
-                                    g.CurrentStateChanged([](auto&&, auto&&) {
-                                        ApplyAllControlStyles();
+                                g.CurrentStateChanged([](auto&&, auto&&) {
+                                    static std::atomic<ULONGLONG> s_lastApply{0};
+                                    ULONGLONG now = GetTickCount64();
+                                    ULONGLONG last = s_lastApply.load();
+                                    if (now - last < 100) return;
+                                    s_lastApply.store(now);
+                                    RunOnUiThread([] {
+                                        try { ApplyAllControlStyles(); } catch (...) {}
                                     });
+                                });
                                 }
                             }
                         }
@@ -12603,25 +21139,15 @@ FrameworkElement BuildTopBarContent() {
         StyleMenuFlyout(menu);
         menu.Items().Append(MakeMenuItem(L"TopBar settings…", [] {
             OpenTopBarSettingsWindow();
-        }));
+        }, L"\uE713"));
         menu.Items().Append(MakeMenuItem(L"Reload TopBar", [] {
             RunOnUiThread([] {
-                if (!g_topBarHwnd) return;
-                LoadSettings();
-                g_dpiScale = GetBarDpiScale();
-                g_barHeightPx = static_cast<int>(g_settings.barHeightDip * g_dpiScale + 0.5);
-                auto content = BuildTopBarContent();
-                g_desktopSource.Content(content);
-                BuildStartContextMenu();
-                BuildTaskContextMenu();
-                ApplyAllControlStyles();
-                ApplyVisibilitySettings();
-                UpdateResourceButton();
-                StripInheritedIslandBackgrounds();
-                PositionAppBar(g_topBarHwnd, g_barHeightPx);
-                RefreshTaskList(true);
+                try { ReloadTopBarFully(); } catch (...) {}
             });
-        }));
+        }, L"\uE895"));
+        menu.Items().Append(MakeMenuItem(L"Restart Explorer", [] {
+            RestartExplorerShell();
+        }, L"\uE72C"));
         auto fe = sender.as<FrameworkElement>();
         auto pt = args.GetPosition(fe);
         menu.ShowAt(fe, pt);   // anchor at the cursor, not the element's corner
@@ -12643,7 +21169,21 @@ FrameworkElement BuildTopBarContent() {
           startButton.Content(icon);
           RegisterNamed(L"StartIcon", icon);
     }
-        startButton.Click([](auto&&, auto&&) { SendWinKeyChord(VK_LWIN); });
+        startButton.Click([](auto&&, auto&&) {
+            if (g_settings.startButtonAction == L"windows") {
+                RunInBackground([] {
+                    INPUT in = {};
+                    in.type = INPUT_KEYBOARD;
+                    in.ki.wVk = VK_LWIN;
+                    SendInput(1, &in, sizeof(INPUT));
+                    Sleep(50);
+                    in.ki.dwFlags = KEYEVENTF_KEYUP;
+                    SendInput(1, &in, sizeof(INPUT));
+                });
+            } else {
+                ShowStartMenuFlyout();
+            }
+        });
         startButton.RightTapped(
             [](wf::IInspectable const& sender, Input::RightTappedRoutedEventArgs const& args) {
                 args.Handled(true);
@@ -12667,7 +21207,27 @@ FrameworkElement BuildTopBarContent() {
             searchButton.Content(icon);
             RegisterNamed(L"SearchIcon", icon);
         }
-        searchButton.Click([](auto&&, auto&&) { SendWinKeyChord('S'); });
+        EnsureSearchFlyoutCreated();
+        searchButton.Click([](auto&&, auto&&) {
+            if (g_settings.searchButtonAction == L"windows") {
+                RunInBackground([] {
+                    INPUT in = {};
+                    in.type = INPUT_KEYBOARD;
+                    in.ki.wVk = VK_LWIN;
+                    SendInput(1, &in, sizeof(INPUT));
+                    Sleep(30);
+                    in.ki.wVk = 'S';
+                    SendInput(1, &in, sizeof(INPUT));
+                    Sleep(30);
+                    in.ki.dwFlags = KEYEVENTF_KEYUP;
+                    SendInput(1, &in, sizeof(INPUT));
+                    in.ki.wVk = VK_LWIN;
+                    SendInput(1, &in, sizeof(INPUT));
+                });
+            } else {
+                ShowSearchFlyout();
+            }
+        });
         RegisterNamed(L"SearchButton", searchButton);
         leftPanel.Children().Append(searchButton);
     }
@@ -12748,53 +21308,18 @@ g_taskListPanel.SizeChanged([](auto&&, auto&&) {
                 children.Append(MakeStatusText(L"Loading…"));
                 g_populatingPanel = false;
             }
-            // Fetch brightness in background
+            // Warm the brightness caches on a background thread, then let
+            // PopulateDisplayPanel build the panel on the UI thread.
             RunInBackground([] {
-                bool available = brightness::Available();
-                int brightnessValue = brightness::Get();
-                bool darkMode = IsAppsDarkMode();
-                RunOnUiThread([available, brightnessValue, darkMode]() {
-                    if (!g_displayPanel) return;
-                    g_populatingPanel = true;
-                    auto children = g_displayPanel.Children();
-                    children.Clear();
-                    children.Append(MakePanelTitle(L"Display"));
-
-                    if (available) {
-                        auto icon = BuildVectorIcon(nullptr, L"", icons::kBrightnessStroke, 24, 18, 1.6);
-                        children.Append(MakeSliderRow(icon, brightnessValue,
-                            [](int value) { SetBrightnessCoalesced(value); }));
-                    } else {
-                        children.Append(MakeStatusText(L"Brightness control isn't available on this display."));
-                    }
-
-                    children.Append(MakeDivider());
-
-                    auto darkTile = MakeGhostButton(L"QuickToggleTile", kTileCorner);
-                    darkTile.HorizontalAlignment(HorizontalAlignment::Stretch);
-                    darkTile.Padding(Thickness{8, 6, 8, 6});
-                    darkTile.Background(darkMode ? MakeBrush(0xFF, GetSystemAccentColor().R, GetSystemAccentColor().G, GetSystemAccentColor().B)
-                                                 : MakeBrush(0x18, 0xFF, 0xFF, 0xFF));
-                    wuxc::StackPanel darkStack;
-                    darkStack.Orientation(wuxc::Orientation::Horizontal);
-                    darkStack.Spacing(8);
-                    if (auto icon = BuildVectorIcon(nullptr, icons::kMoonFill, L"", 24, 16, 1.7, L"#FFFFFF")) {
-                        icon.VerticalAlignment(VerticalAlignment::Center);
-                        darkStack.Children().Append(icon);
-                    }
-                    darkStack.Children().Append(MakeText(nullptr, L"Dark mode", 12));
-                    darkTile.Content(darkStack);
-                    darkTile.Click([darkMode](auto&&, auto&&) {
-                        SetAppsDarkMode(!darkMode);
-                        RepopulateLater(PopulateDisplayPanel);
-                    });
-                    children.Append(darkTile);
-
-                    children.Append(MakeDivider());
-                    children.Append(MakeSettingsLink(L"Display settings", L"ms-settings:display"));
-                    g_populatingPanel = false;
+                brightness::Available();
+                brightness::Get();
+                RunOnUiThread([] {
+                    try { PopulateDisplayPanel(); } catch (...) {}
                 });
             });
+            // Kick the monitor-list scan off alongside, so the expander has
+            // data by the time the user taps it open.
+            WarmMonitorCacheAsync();
         });
 
     AttachWheelHandler(g_displayButton, false);
@@ -12875,13 +21400,51 @@ RunOnUiThread([status, networks = std::move(networks)]() mutable {
     // text label is added next to it.
     {
         BatteryInfo info = GetBatteryInfo();
-        auto batteryIcon = BuildBatteryIcon(20, info.percentage, info.charging);
+        auto batteryIcon = BuildBatteryIcon(18, info.percentage, info.charging);
         if (batteryIcon) {
             batteryIcon.VerticalAlignment(VerticalAlignment::Center);
         }
         g_batteryButton = MakeControlButton(L"BatteryButton", batteryIcon, g_batteryFlyout,
                                             [] { PopulateBatteryPanel(); });
         rightPanel.Children().Append(g_batteryButton);
+    }
+
+    {
+        auto ccIcon = BuildVectorIcon(nullptr, L"", icons::kControlCenterStroke,
+                                      24, 18, 1.7);
+        g_controlCenterFlyout = MakeControlFlyout(L"ControlCenterFlyoutRoot",
+                                                  g_controlCenterPanel);
+        g_controlCenterFlyout.Opened([](auto&&, auto&&) {
+            g_nightLightCachedState.store(-1);
+            try { RefreshAirplaneHotspotStateAsync(); } catch (...) {}
+            RunOnUiThread([] {
+                try {
+                    PopulateControlCenterPanel();
+                    ApplyAllControlStyles();
+                } catch (...) {}
+                bool needDeviceRefresh = g_bluetoothDevices.empty();
+                RunInBackground([needDeviceRefresh] {
+                    try { RefreshBluetoothRadioState(); } catch (...) {}
+                    if (!needDeviceRefresh) return;
+                    try {
+                        auto devices = bluetooth::Enumerate(false);
+                        RunOnUiThread([devices = std::move(devices)]() mutable {
+                            g_bluetoothDevices = std::move(devices);
+                            try {
+                                if (g_controlCenterFlyout && g_controlCenterFlyout.IsOpen())
+                                    PopulateControlCenterPanel();
+                            } catch (...) {}
+                        });
+                    } catch (...) {}
+                });
+            });
+        });
+        g_controlCenterButton = MakeControlButton(
+            L"ControlCenterButton",
+            ccIcon,
+            g_controlCenterFlyout,
+            nullptr);
+        rightPanel.Children().Append(g_controlCenterButton);
     }
 
     // Resource usage button (CPU/RAM/GPU)
@@ -12896,7 +21459,10 @@ RunOnUiThread([status, networks = std::move(networks)]() mutable {
                           (g_settings.showRamUsage ? 1 : 0) +
                           (g_settings.showGpuUsage ? 1 : 0);
             if (metrics < 1) metrics = 1;
-            resourceButton.Width(metrics * 84.0 + 10.0);
+            (void)metrics;
+            resourceButton.ClearValue(FrameworkElement::WidthProperty());
+            resourceButton.ClearValue(FrameworkElement::MinWidthProperty());
+            resourceButton.MaxWidth(std::numeric_limits<double>::infinity());
         }
         // Placeholder text; will be updated periodically
         resourceButton.Content(MakeText(nullptr, L"CPU: 0% RAM: 0% GPU: 0%", 12));
@@ -12925,7 +21491,17 @@ g_resourceFlyout.Opening([](auto&&, auto&&) {
     }
 });
 
+        g_resourceFlyout.Closing([](auto&&, auto&& args) {
+            if (g_resourceComboOpen.load()) {
+                args.Cancel(true);
+                return;
+            }
+            if (g_infoGpuCombo && g_infoGpuCombo.IsDropDownOpen()) {
+                args.Cancel(true);
+            }
+        });
         g_resourceFlyout.Closed([](auto&&, auto&&) {
+            g_resourceComboOpen = false;
             if (g_resourceFlyoutTimer) g_resourceFlyoutTimer.Stop();
         });
 resourceButton.Flyout(g_resourceFlyout);
@@ -12949,9 +21525,11 @@ g_centerPanel.Children().Append(resourceButton);
         clockButton.Padding(Thickness{10, 0, 10, 0});
         clockButton.HorizontalContentAlignment(HorizontalAlignment::Center);
 
-        auto clockText = MakeText(L"ClockText", FormatClockText(), 14);
+        auto clockText = MakeText(L"ClockText", L"", 14);
         clockText.TextAlignment(TextAlignment::Center);
         clockText.LineHeight(15);
+        clockText.IsColorFontEnabled(false);
+        ApplyClockInlines(clockText, FormatClockText());
         clockButton.Content(clockText);
         clockButton.Click([](auto&&, auto&&) {
             RunShellCommand(L"ms-actioncenter:");
@@ -12983,12 +21561,39 @@ g_centerPanel.Children().Append(resourceButton);
 
         wuxc::Flyout weatherFlyout;
         weatherFlyout = MakeControlFlyout(L"WeatherFlyoutRoot", g_weatherPanel);
+        weatherFlyout.Opened([](auto&& sender, auto&&) {
+            RegisterOpenPopup(sender.template as<wuxc::Primitives::FlyoutBase>());
+        });
+        weatherFlyout.Closed([](auto&& sender, auto&&) {
+            UnregisterOpenPopup(sender.template as<wuxc::Primitives::FlyoutBase>());
+        });
         weatherFlyout.Opening([](auto&&, auto&&) {
             PopulateWeatherPanel();
             if (!g_settings.weatherLatitude.empty() &&
                 !g_settings.weatherLongitude.empty()) {
                 weather::EnsureFresh();
             }
+            // The TextBox's own Loaded handler runs only once per instance.
+            // If the flyout is closed and reopened, the picker is rebuilt
+            // but focus isn't taken. Re-take it on every open, with a few
+            // retries because the presenter's layout pass may run a tick
+            // or two after Opening fires.
+            auto focusBox = [] {
+                try {
+                    auto it = g_namedElements.find(L"WeatherSearchBox");
+                    if (it == g_namedElements.end()) return;
+                    if (auto box = it->second.try_as<wuxc::TextBox>()) {
+                        box.Focus(FocusState::Programmatic);
+                    }
+                } catch (...) {}
+            };
+            RunOnUiThread([focusBox] {
+                focusBox();
+                RunOnUiThread([focusBox] {
+                    focusBox();
+                    RunOnUiThread([focusBox] { focusBox(); });
+                });
+            });
         });
         weatherFlyout.Closed([](auto&&, auto&&) {
             // Reset picker state so the flyout reopens on the weather card.
@@ -13010,11 +21615,11 @@ g_centerPanel.Children().Append(resourceButton);
         }
     }
 
+
+
     // ---- Recycle bin button ----------------------------------------------
     {
-        auto binIcon = BuildVectorIcon(L"RecycleBinIcon",
-                                       icons::kRecycleBinBody,
-                                       icons::kRecycleBinLid, 24, 18, 1.6);
+        auto binIcon = BuildRecycleBinIcon(18);
         auto binButton = MakeControlButton(
             L"RecycleBinButton", binIcon, wuxc::Flyout{nullptr},
             nullptr);
@@ -13026,6 +21631,43 @@ g_centerPanel.Children().Append(resourceButton);
             g_recycleBinConfirming = false;
         });
         rightPanel.Children().Append(binButton);
+    }
+
+    {
+        g_mediaFlyout = MakeControlFlyout(L"MediaFlyoutRoot", g_mediaPanel);
+        g_mediaFlyout.Opening([](auto&&, auto&&) {
+            PopulateMediaPanel();
+            RunOnUiThread([] {
+                RunOnUiThread([] {
+                    try { PopulateMediaPanel(); } catch (...) {}
+                });
+            });
+        });
+        g_mediaFlyout.Closed([](auto&&, auto&&) {
+            StopMediaVisualizer();
+            if (g_mediaProgressTimer) g_mediaProgressTimer.Stop();
+        });
+
+        FrameworkElement mediaInitialContent = BuildVectorIcon(
+            nullptr, icons::kMusicNoteFill, L"", 24, 18, 1.6);
+        if (mediaInitialContent) {
+            mediaInitialContent.HorizontalAlignment(HorizontalAlignment::Center);
+            mediaInitialContent.VerticalAlignment(VerticalAlignment::Center);
+        }
+#if TOPBAR_HAS_MEDIA_CONTROL
+        if (g_cachedMediaSnapshot && g_cachedMediaSnapshot->valid &&
+            g_cachedMediaSnapshot->playing) {
+            try {
+                mediaInitialContent = BuildMediaButtonContent(*g_cachedMediaSnapshot);
+            } catch (...) {}
+        }
+#endif
+        g_mediaButton = MakeControlButton(
+            L"MediaButton",
+            mediaInitialContent,
+            g_mediaFlyout,
+            [] { PopulateMediaPanel(); });
+        rightPanel.Children().Append(g_mediaButton);
     }
 
     {
@@ -13125,6 +21767,59 @@ g_centerPanel.Children().Append(resourceButton);
     RegisterNamed(L"TrayPanel", rightPanel);
     RegisterNamed(L"TopBarRoot", root);
 
+    {
+        auto startMenuAnchor = wuxc::Grid();
+        startMenuAnchor.Name(L"StartMenuAnchorGrid");
+        startMenuAnchor.Width(0);
+        startMenuAnchor.Height(0);
+        startMenuAnchor.HorizontalAlignment(HorizontalAlignment::Left);
+        startMenuAnchor.VerticalAlignment(VerticalAlignment::Top);
+        startMenuAnchor.IsHitTestVisible(false);
+        wuxc::Grid::SetColumnSpan(startMenuAnchor, 4);
+        root.Children().Append(startMenuAnchor);
+        RegisterNamed(L"StartMenuAnchor", startMenuAnchor);
+    }
+
+    {
+        auto searchAnchor = wuxc::Grid();
+        searchAnchor.Name(L"SearchAnchorGrid");
+        searchAnchor.Width(0);
+        searchAnchor.Height(0);
+        searchAnchor.HorizontalAlignment(HorizontalAlignment::Left);
+        searchAnchor.VerticalAlignment(VerticalAlignment::Top);
+        searchAnchor.IsHitTestVisible(false);
+        wuxc::Grid::SetColumnSpan(searchAnchor, 4);
+        root.Children().Append(searchAnchor);
+        RegisterNamed(L"SearchAnchor", searchAnchor);
+    }
+
+    // Prevent the topbar's own buttons from showing focus visuals. XAML
+    // auto-focuses the first focusable element when the bar popup opens,
+    // which paints a white outline on the Start button; and every time a
+    // child flyout closes, XAML restores focus to whichever button opened
+    // it, which repaints the same outline. Taking these buttons out of
+    // tab navigation stops both. Flyout content is unaffected: it is
+    // created separately and keeps its own IsTabStop.
+    for (auto const& name : { L"StartButton", L"SearchButton",
+                              L"DisplayButton", L"SoundButton", L"WifiButton",
+                              L"BluetoothButton", L"BatteryButton",
+                              L"ControlCenterButton",
+                              L"ResourceButton", L"WeatherButton",
+                              L"RecycleBinButton", L"SettingsButton",
+                              L"ClockButton", L"MediaButton" }) {
+        auto it = g_namedElements.find(name);
+        if (it == g_namedElements.end()) continue;
+        if (auto btn = it->second.try_as<wuxc::Button>()) {
+            try { btn.IsTabStop(false); } catch (...) {}
+        }
+    }
+    // Task buttons are dynamically created per window and stored in a map
+    // rather than g_namedElements; disable tab-stop on them too so they
+    // don't inherit the same focus outline.
+    for (auto& entry : g_taskButtonsByHwnd) {
+        try { entry.second.IsTabStop(false); } catch (...) {}
+    }
+
     g_rootElement = barRoot;   // Outer root includes wallpaper
     return barRoot;
 }
@@ -13150,7 +21845,7 @@ BOOL CALLBACK MonitorEnumProc(HMONITOR monitor, HDC, LPRECT, LPARAM lParam) {
 }
 
 HMONITOR GetBarMonitor() {
-    if (g_settings.monitorIndex > 0) {
+    if (g_settings.monitorIndex > 1) {
         MonitorEnumState state;
         state.wanted = g_settings.monitorIndex;
         EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc,
@@ -13177,6 +21872,3226 @@ RECT GetBarMonitorRect() {
     }
     RECT fallback{0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)};
     return fallback;
+}
+
+int GetAutoTopBarScale() {
+    RECT mr = GetBarMonitorRect();
+    int width = mr.right - mr.left;
+    if (width <= 0) return 100;
+    int raw = 100 - (1920 - width) / 30;
+    if (raw < 50) raw = 50;
+    if (raw > 150) raw = 150;
+    raw = ((raw + 5) / 10) * 10;
+    return raw;
+}
+
+HWND FindTopBarFlyoutHwnd() {
+    // Prefer a bar-shaped popup (monitor width, bar height), but fall back
+    // to whatever XAML popup this process owns when no bar-shaped candidate
+    // exists. XAML places the freshly created topbar popup at
+    // (0, -barHeight) on its first layout pass — the geometry-aware filter
+    // alone rejects that, g_topBarPopupHwnd stays null, and
+    // EnsureTopBarPopupShown's retry timer loops in the ShowAt branch,
+    // destroying and rebuilding the popup every ~180 ms (each ShowAt makes
+    // XAML throw away the current popup and create a fresh one). At the
+    // point this is called the topbar flyout is the only XAML popup open,
+    // so the fallback cannot pick up a control flyout or a menu.
+    struct SearchCtx {
+        DWORD pid;
+        int minWidth;
+        int maxHeight;
+        HWND barShaped;
+        HWND anyPopup;
+    };
+    RECT mr = GetBarMonitorRect();
+    SearchCtx ctx{
+        GetCurrentProcessId(),
+        (mr.right - mr.left) - 4,
+        g_barHeightPx + 8,
+        nullptr,
+        nullptr
+    };
+    EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+        auto* c = reinterpret_cast<SearchCtx*>(lp);
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid != c->pid) return TRUE;
+        if (hwnd == g_topBarHwnd || hwnd == g_islandHwnd) return TRUE;
+        wchar_t cls[256]{};
+        if (!GetClassName(hwnd, cls, ARRAYSIZE(cls))) return TRUE;
+        if (!(wcsstr(cls, L"Xaml") && wcsstr(cls, L"Popup"))) return TRUE;
+        if (!c->anyPopup) c->anyPopup = hwnd;
+        RECT r{};
+        if (!GetWindowRect(hwnd, &r)) return TRUE;
+        int w = r.right - r.left;
+        int h = r.bottom - r.top;
+        if (w < c->minWidth) return TRUE;
+        if (h <= 0 || h > c->maxHeight) return TRUE;
+        c->barShaped = hwnd;
+        return FALSE;
+    }, reinterpret_cast<LPARAM>(&ctx));
+    if (ctx.barShaped) return ctx.barShaped;
+    return ctx.anyPopup;
+}
+
+void ClipIslandHwndToEmpty() {
+    if (!g_islandHwnd) return;
+    HRGN empty = CreateRectRgn(0, 0, 0, 0);
+    if (empty) {
+        SetWindowRgn(g_islandHwnd, empty, TRUE);
+    }
+}
+
+void EnsureTopBarPopupShown();
+
+// XAML caches its monitor DPI scale against the DesktopWindowXamlSource /
+// WindowsXamlManager for the whole UI thread, not per popup. Nudging a popup
+// HWND with WM_DPICHANGED does nothing because XAML never re-reads the
+// source-level DPI. When the OS display scale changes we therefore have to
+// detach the content, drop the current XAML source, create a new one on the
+// topbar HWND (which by now lives on a monitor with the new DPI), and
+// rebuild every piece of UI against it. This is the only reliable way to
+// reset XAML's cached rasterization scale without restarting the thread.
+void RebuildXamlForDpiChange() {
+    if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) return;
+    if (!g_topBarHwnd || !IsWindow(g_topBarHwnd)) return;
+
+    Wh_Log(L"RebuildXamlForDpiChange: rebuilding XAML stack for new DPI");
+
+    // Hide every flyout so XAML tears them down before the source goes away.
+    try { if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) g_startMenuFlyout.Hide(); } catch (...) {}
+    try { if (g_searchFlyout && g_searchFlyout.IsOpen()) g_searchFlyout.Hide(); } catch (...) {}
+    try { if (g_displayFlyout) g_displayFlyout.Hide(); } catch (...) {}
+    try { if (g_soundFlyout) g_soundFlyout.Hide(); } catch (...) {}
+    try { if (g_wifiFlyout) g_wifiFlyout.Hide(); } catch (...) {}
+    try { if (g_bluetoothFlyout) g_bluetoothFlyout.Hide(); } catch (...) {}
+    try { if (g_batteryFlyout) g_batteryFlyout.Hide(); } catch (...) {}
+    try { if (g_resourceFlyout) g_resourceFlyout.Hide(); } catch (...) {}
+    try { if (g_mediaFlyout) g_mediaFlyout.Hide(); } catch (...) {}
+    try { if (g_settingsFlyout) g_settingsFlyout.Hide(); } catch (...) {}
+    try { if (g_startContextMenu) g_startContextMenu.Hide(); } catch (...) {}
+    try { if (g_taskContextMenu) g_taskContextMenu.Hide(); } catch (...) {}
+    try { if (g_appTitleContextMenu) g_appTitleContextMenu.Hide(); } catch (...) {}
+    try { if (g_startPowerMenu) g_startPowerMenu.Hide(); } catch (...) {}
+    try { if (g_startAccountFlyout) g_startAccountFlyout.Hide(); } catch (...) {}
+    try { if (g_startTileMenu) g_startTileMenu.Hide(); } catch (...) {}
+    try { if (g_searchResultMenu) g_searchResultMenu.Hide(); } catch (...) {}
+
+    // Tear down the topbar popup and its references.
+    g_topBarAllowClose = true;
+    try { if (g_topBarPopup) g_topBarPopup.Hide(); } catch (...) {}
+    g_topBarAllowClose = false;
+
+    g_topBarPopup = nullptr;
+    g_topBarPopupHwnd = nullptr;
+    g_topBarPopupCanvas = nullptr;
+    g_topBarPopupAnchor = nullptr;
+    g_subclassedPopupHwnd = nullptr;
+
+    // Drop every XAML reference — the entire tree is about to be destroyed.
+    g_startMenuFlyout = nullptr;
+    g_searchFlyout = nullptr;
+    g_startPowerMenu = nullptr;
+    g_startAccountFlyout = nullptr;
+    g_startTileMenu = nullptr;
+    g_searchResultMenu = nullptr;
+    g_displayFlyout = nullptr;
+    g_soundFlyout = nullptr;
+    g_wifiFlyout = nullptr;
+    g_bluetoothFlyout = nullptr;
+    g_batteryFlyout = nullptr;
+    g_resourceFlyout = nullptr;
+    g_mediaFlyout = nullptr;
+    g_settingsFlyout = nullptr;
+    g_startContextMenu = nullptr;
+    g_taskContextMenu = nullptr;
+    g_appTitleContextMenu = nullptr;
+
+    g_namedElements.clear();
+    g_detachedStyleRoots.clear();
+    g_rootElement = nullptr;
+    g_taskListPanel = nullptr;
+    g_leftPanel = nullptr;
+    g_centerPanel = nullptr;
+    g_clockPanel = nullptr;
+    g_trayPanel = nullptr;
+    g_settingsButton = nullptr;
+
+    {
+        std::lock_guard<std::mutex> lock(g_openPopupMutex);
+        g_openPopups.clear();
+        g_anyChildFlyoutOpen = false;
+    }
+
+    // Detach content from the current source and destroy it. Only the
+    // DesktopWindowXamlSource is recreated here — the WindowsXamlManager
+    // (per-thread XAML host) is left alone; recreating the source itself is
+    // what resets the cached DPI for the new island.
+    try { if (g_desktopSource) g_desktopSource.Content(nullptr); } catch (...) {}
+    g_desktopSource = nullptr;
+    g_islandHwnd = nullptr;
+
+    try {
+        g_desktopSource = wuxh::DesktopWindowXamlSource();
+        auto native = g_desktopSource.as<IDesktopWindowXamlSourceNative>();
+        winrt::check_hresult(native->AttachToWindow(g_topBarHwnd));
+        winrt::check_hresult(native->get_WindowHandle(&g_islandHwnd));
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"RebuildXamlForDpiChange: attach failed: %08X %s",
+               static_cast<unsigned>(ex.code().value), ex.message().c_str());
+        return;
+    }
+
+    // Size the new island to the new bar geometry at the new DPI.
+    RECT mr = GetBarMonitorRect();
+    SetWindowPos(g_islandHwnd, nullptr, 0, 0,
+                 mr.right - mr.left, g_barHeightPx,
+                 SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+
+    // Rebuild the whole UI against the fresh source.
+    InstallGlobalMenuResources();
+    SetTopBarContent(BuildTopBarContent());
+    BuildStartContextMenu();
+    BuildTaskContextMenu();
+    BuildAppTitleContextMenu();
+    ApplyAllControlStyles();
+    ApplyVisibilitySettings();
+    UpdateResourceButton();
+    StripInheritedIslandBackgrounds();
+    PositionAppBar(g_topBarHwnd, g_barHeightPx);
+    RefreshTaskList(true);
+
+    Wh_Log(L"RebuildXamlForDpiChange: complete");
+}
+
+// Closes whichever control flyout is currently open. Called from the popup
+// subclass on a mouse-down so that a click on the topbar while a child
+// flyout is open dismisses the flyout instead of being swallowed by XAML's
+// light-dismiss routing.
+// Places every XAML popup HWND in our process (the open child flyouts and
+// context menus) directly above the topbar popup in the topmost band. The
+// topbar popup itself is left at HWND_TOPMOST but the child popups are
+// inserted above it, so DWM composites them on top instead of letting the
+// topbar's translucent content dim them.
+void PromoteChildFlyoutPopups() {
+    HWND topBar = g_topBarPopupHwnd;
+    if (!topBar || !IsWindow(topBar)) return;
+
+    std::vector<HWND> popups;
+    EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+        auto* list = reinterpret_cast<std::vector<HWND>*>(lp);
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid != GetCurrentProcessId()) return TRUE;
+        if (hwnd == g_islandHwnd) return TRUE;
+        if (hwnd == g_topBarHwnd) return TRUE;
+        if (hwnd == g_topBarPopupHwnd) return TRUE;
+        if (!IsWindowVisible(hwnd)) return TRUE;
+        wchar_t cls[256]{};
+        if (!GetClassName(hwnd, cls, ARRAYSIZE(cls))) return TRUE;
+        if (!(wcsstr(cls, L"Xaml") && wcsstr(cls, L"Popup"))) return TRUE;
+        list->push_back(hwnd);
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&popups));
+
+    if (popups.empty()) return;
+
+    // Keep the topbar popup itself topmost.
+    SetWindowPos(topBar, HWND_TOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+
+    // EnumWindows returns windows top-to-bottom in z-order, so popups[0] is
+    // currently the highest child. Re-assert every child as HWND_TOPMOST in
+    // reverse (bottom-most first) — the last one processed ends up on top of
+    // the topmost band, preserving XAML's relative order (e.g. the power menu
+    // stays above the start menu, a submenu stays above its parent).
+    for (auto it = popups.rbegin(); it != popups.rend(); ++it) {
+        SetWindowPos(*it, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+    }
+}
+
+// Finds an open XAML popup HWND that is NOT the topbar's own popup. This is
+// the HWND that hosts an open child flyout (Display/Sound/Wi-Fi/etc. or a
+// reorder menu). Activating it is safe: XAML already considers it the current
+// popup, so making it OS-foreground doesn't trigger any teardown.
+HWND FindOpenChildFlyoutHwnd() {
+    HWND topBar = g_topBarPopupHwnd;
+    struct Ctx { HWND topBar; HWND result; };
+    Ctx ctx{ topBar, nullptr };
+    EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+        auto* c = reinterpret_cast<Ctx*>(lp);
+        if (hwnd == c->topBar) return TRUE;
+        if (hwnd == g_islandHwnd) return TRUE;
+        if (hwnd == g_topBarHwnd) return TRUE;
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid != GetCurrentProcessId()) return TRUE;
+        wchar_t cls[256]{};
+        if (!GetClassName(hwnd, cls, ARRAYSIZE(cls))) return TRUE;
+        if (!(wcsstr(cls, L"Xaml") && wcsstr(cls, L"Popup"))) return TRUE;
+        RECT r{};
+        if (!GetWindowRect(hwnd, &r)) return TRUE;
+        if (r.right - r.left <= 0 || r.bottom - r.top <= 0) return TRUE;
+        c->result = hwnd;
+        return FALSE;
+    }, reinterpret_cast<LPARAM>(&ctx));
+    return ctx.result;
+}
+
+static std::mutex g_childPopupMutex;
+static std::map<HWND, RECT> g_childPopupTargets;
+static std::set<HWND> g_childPopupSubclassed;
+
+LRESULT CALLBACK ChildFlyoutPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
+    if (msg == WM_WINDOWPOSCHANGING) {
+        RECT target{};
+        bool haveTarget = false;
+        {
+            std::lock_guard<std::mutex> lock(g_childPopupMutex);
+            auto it = g_childPopupTargets.find(hwnd);
+            if (it != g_childPopupTargets.end()) {
+                target = it->second;
+                haveTarget = (target.right > target.left && target.bottom > target.top);
+            }
+        }
+        if (haveTarget) {
+            auto* wp = reinterpret_cast<WINDOWPOS*>(lParam);
+            wp->x = target.left;
+            wp->y = target.top;
+            wp->flags &= ~SWP_NOMOVE;
+        }
+    }
+
+    if (msg == WM_NCDESTROY) {
+        {
+            std::lock_guard<std::mutex> lock(g_childPopupMutex);
+            g_childPopupTargets.erase(hwnd);
+            g_childPopupSubclassed.erase(hwnd);
+        }
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, ChildFlyoutPopupProc);
+        return DefSubclassProc(hwnd, msg, wParam, lParam);
+    }
+
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
+}
+
+void ClearChildPopupTargets() {
+    std::lock_guard<std::mutex> lock(g_childPopupMutex);
+    g_childPopupTargets.clear();
+    // Also drop the "wide flyout" target coords, so the next open starts
+    // fresh instead of inheriting the previous open's snap position for a
+    // few 40 ms ticks before the new SnapOpenChildFlyoutTo call overwrites
+    // it. Without this the popup visibly twitches through the old position
+    // on every reopen.
+    g_wideFlyoutTargetX = -1;
+    g_wideFlyoutTargetY = -1;
+}
+
+void RegisterChildPopupTarget(HWND hwnd, RECT target) {
+    if (!hwnd || !IsWindow(hwnd)) return;
+    bool needSubclass = false;
+    {
+        std::lock_guard<std::mutex> lock(g_childPopupMutex);
+        g_childPopupTargets[hwnd] = target;
+        if (g_childPopupSubclassed.find(hwnd) == g_childPopupSubclassed.end()) {
+            needSubclass = true;
+            g_childPopupSubclassed.insert(hwnd);
+        }
+    }
+    if (needSubclass) {
+        WindhawkUtils::SetWindowSubclassFromAnyThread(
+            hwnd, ChildFlyoutPopupProc, 0);
+    }
+    SetWindowPos(hwnd, nullptr, target.left, target.top,
+                 target.right - target.left, target.bottom - target.top,
+                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+}
+
+void RefreshXamlPopupInputSites() {
+    std::vector<wuxc::Primitives::FlyoutBase> snapshot;
+    {
+        std::lock_guard<std::mutex> lock(g_openPopupMutex);
+        snapshot = g_openPopups;
+    }
+    for (auto const& fb : snapshot) {
+        try {
+            auto flyout = fb.try_as<wuxc::Flyout>();
+            if (!flyout) continue;
+            auto fe = flyout.Content().try_as<FrameworkElement>();
+            if (!fe) continue;
+            if (auto xr = fe.XamlRoot()) {
+                if (auto root = xr.Content()) {
+                    root.UpdateLayout();
+                }
+            }
+            fe.UpdateLayout();
+        } catch (...) {}
+    }
+}
+
+void SetAnchorScreenPosition(FrameworkElement const& anchor, double xDip, double yDip) {
+    if (!anchor) return;
+    try {
+        wuxm::TranslateTransform tt;
+        tt.X(xDip);
+        tt.Y(yDip);
+        anchor.RenderTransform(tt);
+        anchor.UpdateLayout();
+    } catch (...) {}
+}
+
+void SnapOpenChildFlyoutTo(int screenX, int screenY) {
+    g_wideFlyoutTargetX = screenX;
+    g_wideFlyoutTargetY = screenY;
+    HWND h = FindOpenChildFlyoutHwnd();
+    if (!h || !IsWindow(h)) return;
+    RECT r{};
+    if (!GetWindowRect(h, &r)) return;
+    int w = r.right - r.left;
+    int hh = r.bottom - r.top;
+    // If XAML already placed the popup within tolerance of the target, do
+    // nothing. Moving an already-correctly-placed HWND would desync XAML's
+    // input site and break mouse hover.
+    if (std::abs(r.left - screenX) <= 4 && std::abs(r.top - screenY) <= 4) {
+        return;
+    }
+    RECT target{ screenX, screenY, screenX + w, screenY + hh };
+    RegisterChildPopupTarget(h, target);
+    RunOnUiThread([] {
+        try { RefreshXamlPopupInputSites(); } catch (...) {}
+    });
+}
+
+[[clang::no_destroy]] DispatcherTimer g_wideFlyoutCenterTimer{nullptr};
+
+void EnforceWideFlyoutCentering() {
+    return;
+    if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) return;
+
+    struct Ctx { DWORD pid; };
+    Ctx ctx{ GetCurrentProcessId() };
+
+    EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+        auto* c = reinterpret_cast<Ctx*>(lp);
+        if (hwnd == g_topBarHwnd || hwnd == g_islandHwnd) return TRUE;
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid != c->pid) return TRUE;
+        if (!IsWindowVisible(hwnd)) return TRUE;
+        wchar_t cls[256]{};
+        if (!GetClassName(hwnd, cls, ARRAYSIZE(cls))) return TRUE;
+        if (!(wcsstr(cls, L"Xaml") && wcsstr(cls, L"Popup"))) return TRUE;
+        RECT r{};
+        if (!GetWindowRect(hwnd, &r)) return TRUE;
+        if (r.right - r.left < 100) return TRUE;
+
+        // If this wide popup isn't currently position-locked and we have a
+        // stored target from a SnapOpenChildFlyoutTo call, re-register the
+        // lock — this recovers from XAML destroying and re-creating the
+        // popup HWND (which happens when the flyout's content size changes).
+        if (g_wideFlyoutTargetX >= 0 && g_wideFlyoutTargetY >= 0) {
+            double dpi = GetBarDpiScale();
+            if (dpi <= 0.0) dpi = 1.0;
+            if (r.right - r.left >= static_cast<int>(600.0 * dpi)) {
+                bool haveTarget = false;
+                {
+                    std::lock_guard<std::mutex> lock(g_childPopupMutex);
+                    haveTarget = g_childPopupTargets.find(hwnd) !=
+                                 g_childPopupTargets.end();
+                }
+                if (!haveTarget) {
+                    RECT target{ g_wideFlyoutTargetX, g_wideFlyoutTargetY,
+                                 g_wideFlyoutTargetX + (r.right - r.left),
+                                 g_wideFlyoutTargetY + (r.bottom - r.top) };
+                    RegisterChildPopupTarget(hwnd, target);
+                    RunOnUiThread([] {
+                        try { RefreshXamlPopupInputSites(); } catch (...) {}
+                    });
+                }
+            }
+        }
+
+        ForceDisableWindowsTransparency(hwnd);
+
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&ctx));
+}
+
+// Walks up from the flyout's presenter to the popup root, clearing every
+// non-blur Background it finds. This reaches XAML's PopupRoot, which draws
+// the opaque theme-colored backdrop above the presenter's own Background —
+// no amount of styling the presenter or its children can hide it.
+void StripFlyoutPopupBackgrounds(wuxc::Primitives::FlyoutBase const& fb) {
+    if (!fb) return;
+    auto flyout = fb.try_as<wuxc::Flyout>();
+    if (!flyout) return;
+    auto content = flyout.Content().try_as<DependencyObject>();
+    if (!content) return;
+
+    wuxc::FlyoutPresenter presenter{nullptr};
+    DependencyObject current = content;
+    while (auto parent = wuxm::VisualTreeHelper::GetParent(current)) {
+        if (auto p = parent.try_as<wuxc::FlyoutPresenter>()) {
+            presenter = p;
+            break;
+        }
+        current = parent;
+    }
+    if (!presenter) return;
+
+    auto isOurBlur = [](wf::IInspectable const& obj) {
+        return obj && obj.try_as<wuxm::XamlCompositionBrushBase>() != nullptr;
+    };
+    auto transparent = MakeBrush(0, 0, 0, 0);
+
+    DependencyObject node = presenter;
+    while (node) {
+        try {
+            if (auto panel = node.try_as<wuxc::Panel>()) {
+                if (panel.Background() && !isOurBlur(panel.Background())) {
+                    panel.Background(transparent);
+                }
+            } else if (auto b = node.try_as<wuxc::Border>()) {
+                if (b.Background() && !isOurBlur(b.Background())) {
+                    b.Background(transparent);
+                }
+            } else if (auto cp = node.try_as<wuxc::ContentPresenter>()) {
+                if (cp.Background() && !isOurBlur(cp.Background())) {
+                    cp.Background(transparent);
+                }
+            } else if (auto ctrl = node.try_as<wuxc::Control>()) {
+                if (ctrl.Background() && !isOurBlur(ctrl.Background())) {
+                    ctrl.Background(transparent);
+                }
+            }
+        } catch (...) {}
+        try {
+            node = wuxm::VisualTreeHelper::GetParent(node);
+        } catch (...) { break; }
+    }
+}
+
+void EnsureWideFlyoutCenterTimer() {
+}
+
+// Repositions an open child XAML flyout popup so that it's vertically and
+// horizontally centered on the topbar's monitor. matchedWidthDip and
+// matchedHeightDip are used to identify the correct popup among possibly
+// several open ones in this process.
+void CenterChildFlyoutPopup(double matchedWidthDip, double matchedHeightDip) {
+    double dpi = GetBarDpiScale();
+    if (dpi <= 0.0) dpi = 1.0;
+    int matchW = static_cast<int>(matchedWidthDip * dpi + 0.5);
+    int matchH = static_cast<int>(matchedHeightDip * dpi + 0.5);
+
+    struct Ctx {
+        DWORD pid;
+        int matchW, matchH;
+        HWND result;
+    } ctx{ GetCurrentProcessId(), matchW, matchH, nullptr };
+
+    EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+        auto* c = reinterpret_cast<Ctx*>(lp);
+        if (hwnd == g_topBarHwnd || hwnd == g_islandHwnd) return TRUE;
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid != c->pid) return TRUE;
+        if (!IsWindowVisible(hwnd)) return TRUE;
+        wchar_t cls[256]{};
+        if (!GetClassName(hwnd, cls, ARRAYSIZE(cls))) return TRUE;
+        if (!(wcsstr(cls, L"Xaml") && wcsstr(cls, L"Popup"))) return TRUE;
+        RECT r{};
+        if (!GetWindowRect(hwnd, &r)) return TRUE;
+        if (r.right - r.left < 100) return TRUE;
+        int w = r.right - r.left;
+        int h = r.bottom - r.top;
+        if (std::abs(w - c->matchW) > 60) return TRUE;
+        if (std::abs(h - c->matchH) > 60) return TRUE;
+        c->result = hwnd;
+        return FALSE;
+    }, reinterpret_cast<LPARAM>(&ctx));
+
+    if (!ctx.result) return;
+    RECT r{};
+    if (!GetWindowRect(ctx.result, &r)) return;
+    int w = r.right - r.left;
+    int h = r.bottom - r.top;
+    RECT mr = GetBarMonitorRect();
+    int x = mr.left + ((mr.right - mr.left) - w) / 2;
+    int y = mr.top + ((mr.bottom - mr.top) - h) / 2;
+    RECT target{ x, y, x + w, y + h };
+    RegisterChildPopupTarget(ctx.result, target);
+    EnsureWideFlyoutCenterTimer();
+}
+
+void ResetTopBarPointerState() {
+    // XAML's hover state can get stuck after a popup is forcibly closed.
+    // Replaying a WM_MOUSEMOVE at the current cursor position forces
+    // XAML to re-run its hit-test and re-establish hover.
+    HWND hwnd = g_topBarPopupHwnd;
+    if (!hwnd || !IsWindow(hwnd)) return;
+    POINT pt{};
+    if (!GetCursorPos(&pt)) return;
+    if (!ScreenToClient(hwnd, &pt)) return;
+    PostMessage(hwnd, WM_MOUSEMOVE, 0, MAKELPARAM(pt.x, pt.y));
+}
+
+void InstallLightDismissGuard(wuxc::Primitives::FlyoutBase const& fb) {
+    if (!fb) return;
+    fb.Closing([](wuxc::Primitives::FlyoutBase const&,
+                  wuxc::Primitives::FlyoutBaseClosingEventArgs const& args) {
+        if (g_forceClosingFlyouts.load()) return;
+        if (!g_settings.disableFlyoutAutoClose) return;
+        if ((GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0) return;
+        ULONGLONG lastForeign = g_lastForeignClickTick.load();
+        if (lastForeign == 0) return;
+        ULONGLONG now = GetTickCount64();
+        if (now - lastForeign > 800) return;
+        args.Cancel(true);
+    });
+}
+
+bool CloseAnyOpenChildFlyout() {
+    std::vector<wuxc::Primitives::FlyoutBase> snapshot;
+    {
+        std::lock_guard<std::mutex> lock(g_openPopupMutex);
+        snapshot = g_openPopups;
+    }
+    g_forceClosingFlyouts = true;
+    bool any = false;
+    for (auto const& fb : snapshot) {
+        try {
+            if (fb && fb.IsOpen()) {
+                fb.Hide();
+                any = true;
+            }
+        } catch (...) {}
+    }
+    g_forceClosingFlyouts = false;
+    return any;
+}
+
+// Global WH_MOUSE_LL hook that fires for every mouse click, everywhere.
+// XAML's own light-dismiss doesn't work in this setup because the topbar
+// popup is kept topmost and never loses activation, so clicks outside the
+// child flyout never reach XAML's routing. This hook catches them and
+// dismisses the flyout.
+// CLSID/IID for the UIAutomation root object. Declared by hand because the
+// toolchain doesn't link uuid.lib (same reason other CLSIDs are hand-written
+// elsewhere in this file).
+static const CLSID kCLSID_CUIAutomation = {
+    0xff48dba4, 0x60ef, 0x4201, {0xaa, 0x87, 0x54, 0x10, 0x3e, 0xef, 0x59, 0x4e}};
+static const IID kIID_IUIAutomation = {
+    0x30cbe57d, 0xd9d0, 0x452a, {0xab, 0x13, 0x7a, 0xc5, 0xac, 0x48, 0x25, 0xee}};
+
+static HWND GetShellTrayWnd() {
+    static HWND s_cached = nullptr;
+    if (s_cached && IsWindow(s_cached)) return s_cached;
+    s_cached = FindWindowW(L"Shell_TrayWnd", nullptr);
+    return s_cached;
+}
+
+winrt::com_ptr<IUIAutomation> GetCachedUIA() {
+    static std::once_flag s_once;
+    static winrt::com_ptr<IUIAutomation> s_uia;
+    std::call_once(s_once, [] {
+        HRESULT hr = CoCreateInstance(kCLSID_CUIAutomation, nullptr,
+                                      CLSCTX_INPROC_SERVER,
+                                      kIID_IUIAutomation, s_uia.put_void());
+        if (FAILED(hr)) {
+            Wh_Log(L"GetCachedUIA: CoCreateInstance failed hr=0x%08X", hr);
+        }
+    });
+    return s_uia;
+}
+
+// Returns true if the click was on the Start or Search button and was
+// consumed. Called from the mouse hook on left-down.
+std::mutex g_taskbarButtonRectMutex;
+RECT g_startButtonScreenRect{};
+RECT g_searchButtonScreenRect{};
+std::vector<RECT> g_taskbarScreenRects;
+std::atomic<bool> g_taskbarButtonRectsValid{false};
+std::atomic<bool> g_taskbarRectRefreshRunning{false};
+std::atomic<ULONGLONG> g_taskbarRectLastRefreshTick{0};
+UINT_PTR g_taskbarRectDebounceTimer = 0;
+
+void RefreshTaskbarButtonRectsAsync() {
+    bool expected = false;
+    if (!g_taskbarRectRefreshRunning.compare_exchange_strong(expected, true)) {
+        return;
+    }
+    g_taskbarRectLastRefreshTick.store(GetTickCount64());
+    RunInBackground([] {
+        struct FlagGuard {
+            ~FlagGuard() { g_taskbarRectRefreshRunning = false; }
+        } flagGuard;
+        RECT startRect{};
+        RECT searchRect{};
+        bool foundStart = false;
+        bool foundSearch = false;
+        std::vector<RECT> taskbarRects;
+        try {
+            auto uia = GetCachedUIA();
+            HWND tray = GetShellTrayWnd();
+            if (uia && tray) {
+                winrt::com_ptr<IUIAutomationElement> trayEl;
+                if (SUCCEEDED(uia->ElementFromHandle(tray, trayEl.put())) && trayEl) {
+                    auto findById = [&](PCWSTR id, RECT* out) -> bool {
+                        VARIANT v;
+                        VariantInit(&v);
+                        v.vt = VT_BSTR;
+                        v.bstrVal = SysAllocString(id);
+                        winrt::com_ptr<IUIAutomationCondition> cond;
+                        HRESULT hr = uia->CreatePropertyCondition(
+                            UIA_AutomationIdPropertyId, v, cond.put());
+                        VariantClear(&v);
+                        if (FAILED(hr) || !cond) return false;
+                        winrt::com_ptr<IUIAutomationElement> el;
+                        if (FAILED(trayEl->FindFirst(TreeScope_Descendants,
+                                                     cond.get(), el.put())) || !el) {
+                            return false;
+                        }
+                        RECT r{};
+                        if (FAILED(el->get_CurrentBoundingRectangle(&r))) return false;
+                        if (r.right <= r.left || r.bottom <= r.top) return false;
+                        *out = r;
+                        return true;
+                    };
+                    foundStart  = findById(L"StartButton",  &startRect);
+                    foundSearch = findById(L"SearchButton", &searchRect);
+                    if (!foundSearch) {
+                        foundSearch = findById(L"SearchBox", &searchRect);
+                    }
+                }
+            }
+        } catch (...) {}
+
+        // Cache every taskbar's screen rect so TaskbarClickRemap can cheaply
+        // test membership without an EnumWindows pass on every click. The
+        // per-click EnumWindows for secondary taskbars used to run inside
+        // the WH_MOUSE_LL hook, which is a stall on all system mouse input.
+        try {
+            HWND primary = FindWindowW(L"Shell_TrayWnd", nullptr);
+            if (primary) {
+                RECT r{};
+                if (GetWindowRect(primary, &r) && r.right > r.left && r.bottom > r.top) {
+                    taskbarRects.push_back(r);
+                }
+            }
+            struct SecCtx { std::vector<RECT>* out; };
+            SecCtx sc{ &taskbarRects };
+            EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+                auto* c = reinterpret_cast<SecCtx*>(lp);
+                wchar_t cls[64]{};
+                if (!GetClassNameW(hwnd, cls, 64)) return TRUE;
+                if (_wcsicmp(cls, L"Shell_SecondaryTrayWnd") != 0) return TRUE;
+                RECT r{};
+                if (!GetWindowRect(hwnd, &r)) return TRUE;
+                if (r.right > r.left && r.bottom > r.top) c->out->push_back(r);
+                return TRUE;
+            }, reinterpret_cast<LPARAM>(&sc));
+        } catch (...) {}
+
+        size_t taskbarCount = 0;
+        {
+            std::lock_guard<std::mutex> lock(g_taskbarButtonRectMutex);
+            if (foundStart)  g_startButtonScreenRect  = startRect;
+            if (foundSearch) g_searchButtonScreenRect = searchRect;
+            g_taskbarScreenRects = std::move(taskbarRects);
+            taskbarCount = g_taskbarScreenRects.size();
+            g_taskbarButtonRectsValid = foundStart || foundSearch;
+        }
+        Wh_Log(L"Taskbar rect cache: start=%d search=%d taskbars=%zu (tray=%p)",
+               foundStart ? 1 : 0, foundSearch ? 1 : 0, taskbarCount,
+               reinterpret_cast<void*>(GetShellTrayWnd()));
+    });
+}
+
+void ScheduleTaskbarRectCacheRefresh() {
+    if (!g_topBarHwnd || !IsWindow(g_topBarHwnd)) return;
+    if (g_taskbarRectDebounceTimer) {
+        KillTimer(g_topBarHwnd, g_taskbarRectDebounceTimer);
+        g_taskbarRectDebounceTimer = 0;
+    }
+    g_taskbarRectDebounceTimer = SetTimer(g_topBarHwnd, 0, 500,
+        [](HWND, UINT, UINT_PTR timerId, DWORD) {
+            KillTimer(g_topBarHwnd, timerId);
+            g_taskbarRectDebounceTimer = 0;
+            RefreshTaskbarButtonRectsAsync();
+        });
+}
+
+void ScheduleTaskbarRectRefreshRetries() {
+    if (!g_topBarHwnd || !IsWindow(g_topBarHwnd)) return;
+    static std::vector<UINT_PTR> s_retryTimers;
+    for (UINT_PTR id : s_retryTimers) {
+        KillTimer(g_topBarHwnd, id);
+    }
+    s_retryTimers.clear();
+    const UINT delays[] = { 500, 1500, 3000, 6000 };
+    for (UINT delay : delays) {
+        UINT_PTR id = SetTimer(g_topBarHwnd, 0, delay,
+            [](HWND, UINT msg, UINT_PTR timerId, DWORD) {
+                KillTimer(g_topBarHwnd, timerId);
+                if (g_taskbarButtonRectsValid.load()) return;
+                RefreshTaskbarButtonRectsAsync();
+            });
+        if (id) s_retryTimers.push_back(id);
+    }
+}
+
+static bool TaskbarClickRemap(POINT pt) {
+    // Win10 fast path: the Start and Search buttons are distinct HWNDs, so
+    // WindowFromPoint identifies them without any cached geometry.
+    HWND hit = WindowFromPoint(pt);
+    if (hit) {
+        wchar_t cls[64]{};
+        GetClassNameW(hit, cls, 64);
+        if (_wcsicmp(cls, L"Start") == 0 && g_settings.defaultStartMenu && g_settings.remapTaskbarStart) {
+            RunOnUiThread([] {
+                try {
+                    CloseNativeStartMenuIfOpen();
+                    if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) {
+                        g_startMenuFlyout.Hide();
+                    } else {
+                        ShowStartMenuFlyout();
+                    }
+                } catch (...) {}
+            });
+            return true;
+        }
+        if (_wcsicmp(cls, L"SearchBox") == 0 && g_settings.defaultSearch && g_settings.remapTaskbarSearch) {
+            RunOnUiThread([] {
+                try {
+                    if (g_searchFlyout && g_searchFlyout.IsOpen()) {
+                        g_searchFlyout.Hide();
+                    } else {
+                        ShowSearchFlyout();
+                    }
+                } catch (...) {}
+            });
+            return true;
+        }
+    }
+
+    // Win11 path: the taskbar buttons live inside a XAML island, so
+    // WindowFromPoint gives the island HWND and UIA is the only accurate
+    // hit-test. UIA ElementFromPoint is a cross-process COM call and
+    // running it inside the WH_MOUSE_LL callback stalls all system mouse
+    // input; if Explorer is busy enough to exceed LowLevelHooksTimeout,
+    // Windows silently removes the hook and the remap stops working until
+    // the mod restarts. Use cached button rects instead.
+
+    // Cache check #1: is the click even on a taskbar? g_taskbarScreenRects
+    // is filled by every refresh, even if the button IDs aren't found, so
+    // clicks elsewhere on the system exit here without ever touching the
+    // refresh path.
+    bool inAnyTaskbar = false;
+    bool screenRectsEmpty = false;
+    {
+        std::lock_guard<std::mutex> lock(g_taskbarButtonRectMutex);
+        screenRectsEmpty = g_taskbarScreenRects.empty();
+        if (!screenRectsEmpty) {
+            for (const auto& r : g_taskbarScreenRects) {
+                if (PtInRect(&r, pt)) { inAnyTaskbar = true; break; }
+            }
+        }
+    }
+
+    // Empty screen-rect cache: the very first refresh hasn't landed yet, or
+    // every refresh so far failed to find any taskbar. Kick one off (rate-
+    // limited) and bail out so the click falls through to the native path.
+    if (screenRectsEmpty) {
+        ULONGLONG now = GetTickCount64();
+        ULONGLONG last = g_taskbarRectLastRefreshTick.load();
+        if (now - last > 3000) {
+            RefreshTaskbarButtonRectsAsync();
+        }
+        return false;
+    }
+
+    if (!inAnyTaskbar) return false;
+
+    // Cache check #2: the button rects. If they aren't valid, kick off a
+    // refresh but rate-limit it. On systems where the AutomationIds never
+    // resolve (Windows 10 taskbar, taskbar replacements), the cache stays
+    // invalid forever and a per-click refresh would spawn a UIA search
+    // thread on every left click on the system.
+    if (!g_taskbarButtonRectsValid.load()) {
+        ULONGLONG now = GetTickCount64();
+        ULONGLONG last = g_taskbarRectLastRefreshTick.load();
+        if (now - last > 3000) {
+            RefreshTaskbarButtonRectsAsync();
+        }
+        return false;
+    }
+
+    RECT sr{};
+    RECT qr{};
+    {
+        std::lock_guard<std::mutex> lock(g_taskbarButtonRectMutex);
+        sr = g_startButtonScreenRect;
+        qr = g_searchButtonScreenRect;
+    }
+    if (g_settings.defaultStartMenu && g_settings.remapTaskbarStart &&
+        sr.right > sr.left && sr.bottom > sr.top && PtInRect(&sr, pt)) {
+        RunOnUiThread([] {
+            try {
+                CloseNativeStartMenuIfOpen();
+                if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) {
+                    g_startMenuFlyout.Hide();
+                } else {
+                    ShowStartMenuFlyout();
+                }
+            } catch (...) {}
+        });
+        return true;
+    }
+    if (g_settings.defaultSearch && g_settings.remapTaskbarSearch &&
+        qr.right > qr.left && qr.bottom > qr.top && PtInRect(&qr, pt)) {
+        RunOnUiThread([] {
+            try {
+                if (g_searchFlyout && g_searchFlyout.IsOpen()) {
+                    g_searchFlyout.Hide();
+                } else {
+                    ShowSearchFlyout();
+                }
+            } catch (...) {}
+        });
+        return true;
+    }
+    return false;
+}
+
+LRESULT CALLBACK ChildFlyoutMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    // ABSOLUTE FAST-PATH. No remap active, no flyout open, no consumed
+    // click waiting for release — hand the event straight to Windows.
+    if (nCode == HC_ACTION && !g_anyChildFlyoutOpen.load() &&
+        !g_taskbarClickConsumed.load() &&
+        !(g_settings.defaultStartMenu && g_settings.remapTaskbarStart) &&
+        !(g_settings.defaultSearch && g_settings.remapTaskbarSearch)) {
+        return CallNextHookEx(g_childFlyoutMouseHook, nCode, wParam, lParam);
+    }
+    // Bail out when nothing is being remapped and no flyout is open, so
+    // Windows sees every click untouched and the native taskbar buttons
+    // work exactly as they normally would.
+    if (nCode == HC_ACTION) {
+        bool anyRemap =
+            (g_settings.defaultStartMenu && g_settings.remapTaskbarStart) ||
+            (g_settings.defaultSearch && g_settings.remapTaskbarSearch);
+        bool anyFlyoutOpen = g_anyChildFlyoutOpen.load();
+        if (!anyRemap && !anyFlyoutOpen && !g_taskbarClickConsumed.load()) {
+            return CallNextHookEx(g_childFlyoutMouseHook, nCode, wParam, lParam);
+        }
+    }
+
+    if (nCode == HC_ACTION) {
+        auto* info = reinterpret_cast<MSLLHOOKSTRUCT*>(lParam);
+        POINT pt = info->pt;
+
+        // Taskbar button remap runs before the child-flyout dismissal so a
+        // click on the taskbar Start button opens our menu rather than
+        // being eaten by the "dismiss flyout" path.
+        // If a down was consumed more than 5 s ago with no matching up,
+        // assume the up was lost (drag cancelled, focus lost, Explorer
+        // restart) and clear the flag. Otherwise the next arbitrary
+        // LButtonUp anywhere on the system would be swallowed.
+        if (g_taskbarClickConsumed.load() &&
+            (GetTickCount64() - g_taskbarClickTick.load()) > 5000) {
+            g_taskbarClickConsumed = false;
+        }
+
+        if (wParam == WM_LBUTTONDOWN &&
+            ((g_settings.defaultStartMenu && g_settings.remapTaskbarStart) ||
+             (g_settings.defaultSearch && g_settings.remapTaskbarSearch))) {
+            bool consumed = false;
+            try {
+                consumed = TaskbarClickRemap(pt);
+            } catch (...) {
+                consumed = false;
+            }
+            if (consumed) {
+                Wh_Log(L"TopBar: taskbar click consumed by remap");
+                g_taskbarClickConsumed = true;
+                g_taskbarClickTick = GetTickCount64();
+                return 1;
+            }
+        }
+        // Deliver the matching up for a click we consumed.
+        if (wParam == WM_LBUTTONUP && g_taskbarClickConsumed.load()) {
+            g_taskbarClickConsumed = false;
+            return 1;
+        }
+    }
+
+    if (nCode == HC_ACTION && g_anyChildFlyoutOpen.load() &&
+        (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN)) {
+        auto* info = reinterpret_cast<MSLLHOOKSTRUCT*>(lParam);
+        POINT pt = info->pt;
+
+        // Deliberately no EnumWindows, no DWM calls — both are too slow
+        // inside a WH_MOUSE_LL callback and Windows silently unhooks the
+        // hook when it runs long. Everything below is O(1) or a single
+        // WindowFromPoint + GetClassName.
+        HWND hit = WindowFromPoint(pt);
+        bool isOurXamlPopup = false;
+        if (hit) {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(hit, &pid);
+            if (pid == GetCurrentProcessId()) {
+                wchar_t cls[256]{};
+                GetClassName(hit, cls, ARRAYSIZE(cls));
+                if (wcsstr(cls, L"Xaml") && wcsstr(cls, L"Popup")) {
+                    isOurXamlPopup = true;
+                }
+            }
+        }
+        if (!isOurXamlPopup) {
+            g_lastForeignClickTick.store(GetTickCount64());
+            if (!g_settings.disableFlyoutAutoClose) {
+                RunOnUiThread([] {
+                    try { CloseAnyOpenChildFlyout(); } catch (...) {}
+                });
+            }
+        }
+
+        {
+            // Click landed on one of our own XAML popups. The UIA
+            // hit-test runs on a background thread because the very first
+            // UIA call after the mod loads has to spin up the UIAutomation
+            // COM server and build a control-view outline of the desktop.
+            // Doing that on the UI thread blocks XAML's dispatcher for
+            // hundreds of milliseconds, which is what made the cursor
+            // stutter and the start-menu host time out and drop the island
+            // on the first menu close after compile.
+            RunInBackground([pt] {
+                bool onMenuItem = false;
+                try {
+                    auto uia = GetCachedUIA();
+                    if (uia) {
+                        winrt::com_ptr<IUIAutomationElement> el;
+                        if (SUCCEEDED(uia->ElementFromPoint(pt, el.put())) && el) {
+                            winrt::com_ptr<IUIAutomationTreeWalker> walker;
+                            if (SUCCEEDED(uia->get_ControlViewWalker(walker.put()))) {
+                                winrt::com_ptr<IUIAutomationElement> cur = el;
+                                for (int i = 0; i < 12 && cur; i++) {
+                                    CONTROLTYPEID ct = 0;
+                                    if (SUCCEEDED(cur->get_CurrentControlType(&ct))) {
+                                        // UIA_MenuItemControlTypeId = 50011.
+                                        // Class-name matching was wrong here:
+                                        // the popup's own presenter is named
+                                        // "MenuFlyoutPresenter", so matching
+                                        // "MenuFlyout" flagged every empty
+                                        // space click as a menu-item hit and
+                                        // the menu never closed.
+                                        if (ct == 50011) {
+                                            onMenuItem = true;
+                                            break;
+                                        }
+                                    }
+                                    winrt::com_ptr<IUIAutomationElement> par;
+                                    if (FAILED(walker->GetParentElement(cur.get(), par.put()))) break;
+                                    cur = par;
+                                }
+                            }
+                        }
+                    }
+                } catch (...) {}
+
+                if (onMenuItem) return;
+
+                RunOnUiThread([] {
+                    std::vector<wuxc::Primitives::FlyoutBase> snapshot;
+                    {
+                        std::lock_guard<std::mutex> lock(g_openPopupMutex);
+                        snapshot = g_openPopups;
+                    }
+                    for (auto const& fb : snapshot) {
+                        try {
+                            if (fb && fb.IsOpen() && fb.try_as<wuxc::MenuFlyout>()) {
+                                fb.Hide();
+                            }
+                        } catch (...) {}
+                    }
+                });
+            });
+        }
+    }
+    return CallNextHookEx(g_childFlyoutMouseHook, nCode, wParam, lParam);
+}
+
+LRESULT CALLBACK SearchKeyHookProc(int nCode, WPARAM wParam, LPARAM lParam);
+
+HANDLE g_hookThread = nullptr;
+DWORD  g_hookThreadId = 0;
+
+constexpr UINT WM_HOOK_THREAD_INSTALL_MOUSE = WM_APP + 0x500;
+constexpr UINT WM_HOOK_THREAD_REMOVE_MOUSE  = WM_APP + 0x501;
+constexpr UINT WM_HOOK_THREAD_INSTALL_KB    = WM_APP + 0x502;
+constexpr UINT WM_HOOK_THREAD_REMOVE_KB     = WM_APP + 0x503;
+
+DWORD WINAPI HookThreadProc(LPVOID) {
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    HMODULE hMod = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                       GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&HookThreadProc), &hMod);
+
+    MSG msg;
+    while (GetMessage(&msg, nullptr, 0, 0)) {
+        switch (msg.message) {
+            case WM_HOOK_THREAD_INSTALL_MOUSE:
+                if (!g_childFlyoutMouseHook) {
+                    g_childFlyoutMouseHook = SetWindowsHookExW(
+                        WH_MOUSE_LL, ChildFlyoutMouseHookProc, hMod, 0);
+                    if (!g_childFlyoutMouseHook) {
+                        Wh_Log(L"HookThread: WH_MOUSE_LL install failed: %u",
+                               GetLastError());
+                    }
+                }
+                break;
+            case WM_HOOK_THREAD_REMOVE_MOUSE:
+                if (g_childFlyoutMouseHook) {
+                    UnhookWindowsHookEx(g_childFlyoutMouseHook);
+                    g_childFlyoutMouseHook = nullptr;
+                }
+                break;
+            case WM_HOOK_THREAD_INSTALL_KB:
+                if (!g_searchKeyHook) {
+                    g_searchKeyHook = SetWindowsHookExW(
+                        WH_KEYBOARD_LL, SearchKeyHookProc, hMod, 0);
+                    if (!g_searchKeyHook) {
+                        Wh_Log(L"HookThread: WH_KEYBOARD_LL install failed: %u",
+                               GetLastError());
+                    }
+                }
+                break;
+            case WM_HOOK_THREAD_REMOVE_KB:
+                if (g_searchKeyHook) {
+                    UnhookWindowsHookEx(g_searchKeyHook);
+                    g_searchKeyHook = nullptr;
+                }
+                break;
+        }
+    }
+
+    if (g_childFlyoutMouseHook) {
+        UnhookWindowsHookEx(g_childFlyoutMouseHook);
+        g_childFlyoutMouseHook = nullptr;
+    }
+    if (g_searchKeyHook) {
+        UnhookWindowsHookEx(g_searchKeyHook);
+        g_searchKeyHook = nullptr;
+    }
+    CoUninitialize();
+    return 0;
+}
+
+void StartHookThread() {
+    if (g_hookThread) return;
+    g_hookThread = CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, &g_hookThreadId);
+    if (!g_hookThread) {
+        Wh_Log(L"StartHookThread: CreateThread failed: %u", GetLastError());
+    }
+}
+
+void StopHookThread() {
+    if (!g_hookThread) return;
+    if (g_hookThreadId) {
+        PostThreadMessage(g_hookThreadId, WM_QUIT, 0, 0);
+    }
+    WaitForSingleObject(g_hookThread, 5000);
+    CloseHandle(g_hookThread);
+    g_hookThread = nullptr;
+    g_hookThreadId = 0;
+}
+
+void InstallChildFlyoutMouseHook() {
+    if (!g_hookThreadId) return;
+    for (int i = 0; i < 100; i++) {
+        if (PostThreadMessage(g_hookThreadId, WM_HOOK_THREAD_INSTALL_MOUSE, 0, 0)) {
+            return;
+        }
+        Sleep(20);
+    }
+}
+
+
+
+// ---------------------------------------------------------------------------
+// Search flyout keyboard input
+//
+// The search flyout is a XAML popup on a child HWND. XAML light-dismisses
+// any flyout whose popup loses OS activation — so we cannot steal foreground
+// to our topbar popup the way WiFi's password field does (WiFi only steals
+// after the user has physically clicked, which satisfies Windows' user-
+// interaction requirement and keeps the flyout open). The search box is
+// auto-focused from XAML, so no user click has occurred when we'd want to
+// steal focus, and stealing focus kills the flyout.
+//
+// Instead: a low-level keyboard hook captures keystrokes while the search
+// flyout is open, and injects them directly into the search box via XAML.
+// The box still shows the caret (XAML focus), and the TextChanged handler
+// fires normally — the search runs exactly as if the user had typed into it.
+// ---------------------------------------------------------------------------
+
+HHOOK g_searchKeyHook = nullptr;
+
+static wchar_t SearchKeyVkToChar(DWORD vk) {
+    bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    bool caps = (GetKeyState(VK_CAPITAL) & 1) != 0;
+
+    if (vk >= 'A' && vk <= 'Z') {
+        wchar_t c = static_cast<wchar_t>(vk);
+        return (shift ^ caps) ? c : static_cast<wchar_t>(c - 'A' + 'a');
+    }
+    if (vk >= '0' && vk <= '9') {
+        if (!shift) return static_cast<wchar_t>(vk);
+        static const wchar_t shifted[] = L")!@#$%^&*(";
+        return shifted[vk - '0'];
+    }
+    switch (vk) {
+        case VK_SPACE:      return L' ';
+        case VK_OEM_PERIOD: return shift ? L'>' : L'.';
+        case VK_OEM_COMMA:  return shift ? L'<' : L',';
+        case VK_OEM_1:      return shift ? L':' : L';';
+        case VK_OEM_2:      return shift ? L'?' : L'/';
+        case VK_OEM_3:      return shift ? L'~' : L'`';
+        case VK_OEM_4:      return shift ? L'{' : L'[';
+        case VK_OEM_5:      return shift ? L'|' : L'\\';
+        case VK_OEM_6:      return shift ? L'}' : L']';
+        case VK_OEM_7:      return shift ? L'"' : L'\'';
+        case VK_OEM_MINUS:  return shift ? L'_' : L'-';
+        case VK_OEM_PLUS:   return shift ? L'+' : L'=';
+    }
+    return 0;
+}
+
+static void SearchBoxAppendChar(wchar_t ch) {
+    auto it = g_namedElements.find(L"SpotlightSearchBox");
+    if (it == g_namedElements.end()) {
+        Wh_Log(L"[Search] AppendChar: box not registered");
+        return;
+    }
+    auto box = it->second.try_as<wuxc::TextBox>();
+    if (!box) {
+        Wh_Log(L"[Search] AppendChar: not a TextBox");
+        return;
+    }
+    try {
+        std::wstring text(box.Text());
+        int32_t selStart = box.SelectionStart();
+        int32_t selLen = box.SelectionLength();
+        int32_t start = std::clamp<int32_t>(selStart, 0,
+                                            static_cast<int32_t>(text.size()));
+        int32_t end = std::clamp<int32_t>(selStart + selLen, start,
+                                          static_cast<int32_t>(text.size()));
+        text.replace(static_cast<size_t>(start),
+                     static_cast<size_t>(end - start), 1, ch);
+        box.Text(winrt::hstring(text));
+        box.SelectionStart(start + 1);
+        box.SelectionLength(0);
+        Wh_Log(L"[Search] AppendChar '%c' -> '%s'", ch, text.c_str());
+    } catch (...) {}
+}
+
+static void SearchBoxBackspace() {
+    auto it = g_namedElements.find(L"SpotlightSearchBox");
+    if (it == g_namedElements.end()) return;
+    auto box = it->second.try_as<wuxc::TextBox>();
+    if (!box) return;
+    try {
+        std::wstring text(box.Text());
+        int32_t selStart = box.SelectionStart();
+        int32_t selLen = box.SelectionLength();
+
+        // If a Ctrl+A-style selection is present, delete the whole thing
+        // in one go. Otherwise fall back to removing the last character
+        // and placing the caret at the new end.
+        if (selLen > 0) {
+            int32_t start = std::clamp<int32_t>(selStart, 0,
+                                                static_cast<int32_t>(text.size()));
+            int32_t end = std::clamp<int32_t>(selStart + selLen, start,
+                                              static_cast<int32_t>(text.size()));
+            text.erase(static_cast<size_t>(start),
+                       static_cast<size_t>(end - start));
+            box.Text(winrt::hstring(text));
+            box.SelectionStart(start);
+            return;
+        }
+
+        if (!text.empty()) {
+            text.pop_back();
+            box.Text(winrt::hstring(text));
+            box.SelectionStart(static_cast<int32_t>(text.size()));
+        }
+    } catch (...) {}
+}
+
+LRESULT CALLBACK SearchKeyHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    // ABSOLUTE FAST-PATH. If neither default is enabled and no topbar
+    // flyout is showing, get out of the way entirely so the shell sees
+    // every keystroke — native Win, Win+S, Win+Q all work.
+    if (nCode == HC_ACTION && !g_searchKeyboardActive.load() &&
+        !g_startMenuKeyboardActive.load() && !g_settings.defaultStartMenu &&
+        !g_settings.defaultSearch) {
+        return CallNextHookEx(g_searchKeyHook, nCode, wParam, lParam);
+    }
+    // Bail immediately when no remap is active and no topbar flyout is
+    // open. Windows receives every keystroke untouched, so the native Win
+    // key, Win+S, Win+Q, and any other system shortcut behaves normally.
+    if (nCode == HC_ACTION) {
+        bool anyRemap =
+            (g_settings.defaultStartMenu &&
+             (g_settings.remapWinKey || g_settings.remapTaskbarStart)) ||
+            (g_settings.defaultSearch &&
+             (g_settings.remapWinSearch || g_settings.remapTaskbarSearch));
+        bool anyFlyoutOpen = g_searchKeyboardActive.load() ||
+                             g_startMenuKeyboardActive.load();
+        if (!anyRemap && !anyFlyoutOpen) {
+            return CallNextHookEx(g_searchKeyHook, nCode, wParam, lParam);
+        }
+    }
+    // Accept either our own flag or XAML's IsOpen() — the flag survives the
+    // flyout's open transition, IsOpen() survives the flag being cleared
+    // early by an unexpected Closed event. Between the two, keys are always
+    // intercepted while the flyout is visible on screen.
+    bool searchMode = g_searchKeyboardActive.load();
+    if (!searchMode && g_searchFlyout) {
+        try { searchMode = g_searchFlyout.IsOpen(); } catch (...) {}
+    }
+
+    // Start menu redirect: if the start menu is open but the search flyout
+    // is not, the first printable keystroke dismisses the start menu,
+    // opens the search flyout, and forwards the character into the search
+    // box. Subsequent keystrokes then go through the normal search path
+    // because g_searchKeyboardActive has been set by the search flyout's
+    // Opened handler.
+    // OS-level interception: Win key opens our start menu, Win+S/Win+Q
+    // opens our search flyout. Only fires when both the search flyout and
+    // start menu are closed so we don't fight our own popups.
+    // Win key handling.
+    //
+    // Windows opens its own Start menu on the Win *up*, and treats any key
+    // pressed while Win is held as a chord (Win+E, Win+S, …). Passing Win
+    // down through to Windows while swallowing the up leaves Windows with
+    // an orphan Win-down — after that, every key Windows sees is treated
+    // as a Win+key chord, which is why typing produced functions instead
+    // of characters and the taskbar Start button stayed visually pressed.
+    //
+    // Correct handling: swallow BOTH Win down and up. Windows never sees
+    // the modifier at all. If a real chord arrives that we don't remap,
+    // replay Win down via SendInput just before the second key so Windows
+    // can process that chord normally. Injected events bypass this hook
+    // (LLKHF_INJECTED) so the replay doesn't recurse.
+    if (nCode == HC_ACTION &&
+        g_settings.defaultStartMenu && g_settings.remapWinKey) {
+        auto* kb = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
+
+        // Never process our own injected events.
+        if (kb->flags & LLKHF_INJECTED) {
+            return CallNextHookEx(g_searchKeyHook, nCode, wParam, lParam);
+        }
+
+        bool isWin = (kb->vkCode == VK_LWIN || kb->vkCode == VK_RWIN);
+        bool isDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
+        bool isUp   = (wParam == WM_KEYUP   || wParam == WM_SYSKEYUP);
+
+        // Swallow the matching key-up for a chord we consumed (S or Q).
+        if (isUp && !isWin) {
+            LONG consumed = g_winChordConsumed.load();
+            if (consumed != 0 && consumed == static_cast<LONG>(kb->vkCode)) {
+                return 1;
+            }
+        }
+
+        static ULONGLONG s_lastWinLogTick = 0;
+        if (isWin && (isDown || isUp)) {
+            ULONGLONG t = GetTickCount64();
+            if (t - s_lastWinLogTick > 250) {
+                s_lastWinLogTick = t;
+                Wh_Log(L"TopBar: Win %s vk=0x%02X",
+                       isDown ? L"down" : L"up", kb->vkCode);
+            }
+        }
+
+        // Win down: swallow. Windows never knows Win is held.
+        // Only reset the chord state on the *first* Win down. Auto-repeat
+        // re-fires this branch every ~30 ms while the key is held, and
+        // clearing the flags each time wipes an in-progress chord's state
+        // — which caused Win+S to be re-evaluated as a fresh chord on
+        // every repeat, toggling the search flyout closed and open in a
+        // tight loop.
+        if (isWin && isDown) {
+            if (!g_winKeyDown.load()) {
+                g_winOtherSeen = false;
+                g_winReplayed = false;
+                g_winChordConsumed = 0;
+                g_winVkDown = kb->vkCode;
+                g_winDownTick = GetTickCount64();
+                // Kick off the native Start menu close immediately on Win
+                // down, not just on Win up. On some Windows 11 builds the
+                // shell opens its own Start menu in response to the Win
+                // key at a layer below LL hooks, and calling the close
+                // only on Win up left a ~1 s window in which the native
+                // menu was on screen — that is what made both menus flash
+                // and the foreign window keep focus.
+                RunOnUiThread([] {
+                    try { CloseNativeStartMenuIfOpen(); } catch (...) {}
+                });
+            }
+            g_winKeyDown = true;
+            return 1;
+        }
+
+        // Non-Win key while our Win flag is set: either a chord we remap
+        // (Win+S/Q) or a chord Windows should own (Win+E, Win+D, …).
+        if (isDown && !isWin && g_winKeyDown.load()) {
+            // Watchdog: if Win has been recorded as "held" for more than
+            // 5 s, we missed the matching up. Reset and treat this key as
+            // ordinary input. GetAsyncKeyState must NOT be used here —
+            // because this hook swallows the Win down before Windows ever
+            // sees it, the OS's own key state is never updated, and
+            // GetAsyncKeyState(VK_LWIN) always returns 0 while our chord
+            // logic is active. Trusting the OS state meant every chord
+            // (Win+S, Win+Q) was discarded and the key leaked through.
+            ULONGLONG winHeldFor = GetTickCount64() - g_winDownTick.load();
+            if (winHeldFor > 5000) {
+                g_winKeyDown = false;
+                g_winOtherSeen = false;
+                g_winReplayed = false;
+                g_winChordConsumed = 0;
+                g_winVkDown = 0;
+                return CallNextHookEx(g_searchKeyHook, nCode, wParam, lParam);
+            }
+
+            if (g_settings.defaultSearch && g_settings.remapWinSearch &&
+                (GetAsyncKeyState(VK_SHIFT) & 0x8000) == 0 &&
+                (kb->vkCode == 'S' || kb->vkCode == 'Q')) {
+                g_winChordConsumed = static_cast<LONG>(kb->vkCode);
+                RunOnUiThread([] {
+                    try {
+                        if (g_searchFlyout && g_searchFlyout.IsOpen()) {
+                            g_searchFlyout.Hide();
+                        } else {
+                            CloseNativeSearchIfOpen();
+                            ShowSearchFlyout();
+                        }
+                    } catch (...) {}
+                });
+                return 1;
+            }
+
+            // Real chord Windows should handle. Replay Win down exactly
+            // once per Win press — a second replay would put Windows in a
+            // state with two Win-downs and one Win-up, leaving the
+            // modifier stuck after the sequence ends.
+            g_winOtherSeen = true;
+            bool expected = false;
+            if (g_winReplayed.compare_exchange_strong(expected, true)) {
+                DWORD winVk = g_winVkDown.load();
+                if (winVk) {
+                    INPUT in[1] = {};
+                    in[0].type = INPUT_KEYBOARD;
+                    in[0].ki.wVk = static_cast<WORD>(winVk);
+                    if (SendInput(1, in, sizeof(INPUT)) == 0) {
+                        // SendInput refused (rare, e.g. queue full).
+                        // Clear our flag so the Win-up below falls through
+                        // and Windows releases whatever state it holds.
+                        g_winReplayed = false;
+                        g_winOtherSeen = false;
+                    }
+                }
+            }
+            return CallNextHookEx(g_searchKeyHook, nCode, wParam, lParam);
+        }
+
+        // Win up: decide whether Windows owns the up (chord already
+        // delivered) or we do (bare tap or consumed S/Q chord).
+        if (isWin && isUp && g_winKeyDown.load()) {
+            bool other = g_winOtherSeen.load();
+            bool consumed = (g_winChordConsumed.load() != 0);
+            g_winKeyDown = false;
+            g_winOtherSeen = false;
+            g_winReplayed = false;
+            g_winChordConsumed = 0;
+            g_winVkDown = 0;
+
+            if (other) {
+                // Windows has its own Win down from the replay — pass
+                // the up through so it releases the modifier cleanly.
+                return CallNextHookEx(g_searchKeyHook, nCode, wParam, lParam);
+            }
+
+            // Bare Win tap (or S/Q chord we consumed): swallow the up.
+            if (!consumed) {
+                RunOnUiThread([] {
+                    try {
+                        if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) {
+                            g_startMenuFlyout.Hide();
+                        } else {
+                            if (g_searchFlyout && g_searchFlyout.IsOpen()) {
+                                g_searchFlyout.Hide();
+                            }
+                            CloseNativeStartMenuIfOpen();
+                            ShowStartMenuFlyout();
+                        }
+                    } catch (...) {}
+                });
+            }
+            return 1;
+        }
+    }
+
+
+    if (nCode == HC_ACTION && !searchMode && !g_startMenuKeyboardActive.load() &&
+        wParam == WM_KEYDOWN && g_settings.defaultSearch && g_settings.remapWinSearch) {
+        auto* kb = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
+        bool winHeld = g_winKeyDown.load() ||
+                       ((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0) ||
+                       ((GetAsyncKeyState(VK_RWIN) & 0x8000) != 0);
+        if ((kb->vkCode == 'S' || kb->vkCode == 'Q') && winHeld &&
+            (GetAsyncKeyState(VK_SHIFT) & 0x8000) == 0) {
+            g_winChordConsumed = static_cast<LONG>(kb->vkCode);
+            RunOnUiThread([] {
+                try {
+                    if (g_searchFlyout && g_searchFlyout.IsOpen()) {
+                        g_searchFlyout.Hide();
+                    } else {
+                        CloseNativeSearchIfOpen();
+                        ShowSearchFlyout();
+                    }
+                } catch (...) {}
+            });
+            return 1;
+        }
+    }
+
+    bool startMenuMode = !searchMode && g_startMenuKeyboardActive.load() &&
+                         g_settings.defaultStartMenu;
+    if (nCode == HC_ACTION && startMenuMode && wParam == WM_KEYDOWN) {
+        auto* kb = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
+        bool ctrlDown = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+        bool altDown  = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+        bool winDown  = ((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0) ||
+                        ((GetAsyncKeyState(VK_RWIN) & 0x8000) != 0);
+        if (!ctrlDown && !altDown && !winDown) {
+            wchar_t ch = SearchKeyVkToChar(kb->vkCode);
+            if (ch) {
+                RunOnUiThread([ch] {
+                    g_searchQuery.clear();
+                    if (g_startMenuFlyout) {
+                        try { g_startMenuFlyout.Hide(); } catch (...) {}
+                    }
+                    // Wait one tick after hiding the start menu so XAML has
+                    // finished tearing down its popup before we open the
+                    // search flyout.
+                    RunOnUiThread([ch] {
+                        ShowSearchFlyout();
+                        RunOnUiThread([ch] { SearchBoxAppendChar(ch); });
+                    });
+                });
+                return 1;
+            }
+        }
+    }
+
+    if (nCode == HC_ACTION && searchMode && g_settings.defaultSearch &&
+        g_settings.remapWinSearch) {
+        auto* kb = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
+        bool isWin = (kb->vkCode == VK_LWIN || kb->vkCode == VK_RWIN);
+        bool isDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
+        bool isUp = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
+
+        if (isWin && isDown) {
+            g_winKeyDown = true;
+            g_winChordConsumed = 0;
+            return 1;
+        }
+        if (isWin && isUp && g_winKeyDown.load()) {
+            bool consumed = (g_winChordConsumed.load() != 0);
+            g_winKeyDown = false;
+            g_winChordConsumed = 0;
+            if (!consumed) {
+                RunOnUiThread([] {
+                    try {
+                        if (g_searchFlyout && g_searchFlyout.IsOpen()) {
+                            g_searchFlyout.Hide();
+                        }
+                    } catch (...) {}
+                });
+            }
+            return 1;
+        }
+        if (isDown && !isWin && g_winKeyDown.load() &&
+            (kb->vkCode == 'S' || kb->vkCode == 'Q')) {
+            g_winChordConsumed = static_cast<LONG>(kb->vkCode);
+            RunOnUiThread([] {
+                try {
+                    if (g_searchFlyout && g_searchFlyout.IsOpen()) {
+                        g_searchFlyout.Hide();
+                    }
+                } catch (...) {}
+            });
+            return 1;
+        }
+    }
+
+    if (nCode == HC_ACTION && searchMode && g_settings.defaultSearch &&
+        g_settings.remapWinSearch) {
+        auto* kb = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
+        bool isWin = (kb->vkCode == VK_LWIN || kb->vkCode == VK_RWIN);
+        bool isDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
+        bool isUp = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
+
+        if (isWin && isDown) {
+            g_winKeyDown = true;
+            g_winChordConsumed = 0;
+            return 1;
+        }
+        if (isWin && isUp && g_winKeyDown.load()) {
+            bool consumed = (g_winChordConsumed.load() != 0);
+            g_winKeyDown = false;
+            g_winChordConsumed = 0;
+            if (!consumed) {
+                RunOnUiThread([] {
+                    try {
+                        if (g_searchFlyout && g_searchFlyout.IsOpen()) {
+                            g_searchFlyout.Hide();
+                        }
+                    } catch (...) {}
+                });
+            }
+            return 1;
+        }
+        if (isDown && !isWin && g_winKeyDown.load() &&
+            (kb->vkCode == 'S' || kb->vkCode == 'Q')) {
+            g_winChordConsumed = static_cast<LONG>(kb->vkCode);
+            RunOnUiThread([] {
+                try {
+                    if (g_searchFlyout && g_searchFlyout.IsOpen()) {
+                        g_searchFlyout.Hide();
+                    }
+                } catch (...) {}
+            });
+            return 1;
+        }
+    }
+
+    if (nCode == HC_ACTION && searchMode) {
+        auto* kb = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
+        bool isDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
+
+        // If our own process already owns the OS foreground, the keystroke
+        // will reach the search box through XAML's PreTranslateMessage
+        // routing — the same path every other XAML TextBox uses. Let the
+        // hook return it untouched, otherwise the character is inserted
+        // once by SearchBoxAppendChar and again by the TextBox itself.
+        HWND fg = GetForegroundWindow();
+        if (fg) {
+            DWORD fgPid = 0;
+            GetWindowThreadProcessId(fg, &fgPid);
+            if (fgPid == GetCurrentProcessId()) {
+                return CallNextHookEx(g_searchKeyHook, nCode, wParam, lParam);
+            }
+        }
+
+        static bool s_loggedFirstKey = false;
+        if (!s_loggedFirstKey && isDown) {
+            s_loggedFirstKey = true;
+            Wh_Log(L"TopBar: search key hook first fire, vk=0x%02X", kb->vkCode);
+        }
+
+        if (isDown) {
+            bool ctrlDown = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+            bool altDown  = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+            bool winDown  = ((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0) ||
+                            ((GetAsyncKeyState(VK_RWIN) & 0x8000) != 0);
+
+            // Any Win-combination is a system shortcut (screenshot, snap,
+            // Explorer, Run, etc.) and must reach Windows untouched. Also
+            // pass through anything with Alt held, and anything with both
+            // Ctrl and Alt so no OS-level chord gets captured.
+            if (winDown || altDown) {
+                return CallNextHookEx(g_searchKeyHook, nCode, wParam, lParam);
+            }
+
+            if (ctrlDown && !altDown) {
+                switch (kb->vkCode) {
+                    case 'A':
+                        RunOnUiThread([] {
+                            auto it = g_namedElements.find(L"SpotlightSearchBox");
+                            if (it == g_namedElements.end()) return;
+                            auto box = it->second.try_as<wuxc::TextBox>();
+                            if (!box) return;
+                            try {
+                                box.SelectAll();
+                            } catch (...) {}
+                        });
+                        return 1;
+                    case 'C':
+                    case 'X':
+                    case 'V':
+                        // Let the search box handle clipboard ops natively.
+                        // Returning 0 lets Windows deliver the key to the
+                        // focused XAML element, which routes through the
+                        // topbar island's PreTranslateMessage.
+                        return 0;
+                }
+                // Any other Ctrl+key: pass through untouched so shortcuts
+                // like Ctrl+W still go to whatever app was foreground.
+                return 0;
+            }
+            if (!ctrlDown && !altDown) {
+                switch (kb->vkCode) {
+                    case VK_BACK:
+                        RunOnUiThread([] { SearchBoxBackspace(); });
+                        return 1;
+                    case VK_DELETE:
+                        RunOnUiThread([] {
+                            auto it = g_namedElements.find(L"SpotlightSearchBox");
+                            if (it == g_namedElements.end()) return;
+                            auto box = it->second.try_as<wuxc::TextBox>();
+                            if (!box) return;
+                            try {
+                                std::wstring text(box.Text());
+                                int32_t s = box.SelectionStart();
+                                int32_t l = box.SelectionLength();
+                                if (l > 0) {
+                                    text.erase(s, l);
+                                } else if (s < (int32_t)text.size()) {
+                                    text.erase(s, 1);
+                                }
+                                box.Text(winrt::hstring(text));
+                                box.SelectionStart(s);
+                                box.SelectionLength(0);
+                            } catch (...) {}
+                        });
+                        return 1;
+                    case VK_LEFT:
+                        RunOnUiThread([] {
+                            auto it = g_namedElements.find(L"SpotlightSearchBox");
+                            if (it == g_namedElements.end()) return;
+                            auto box = it->second.try_as<wuxc::TextBox>();
+                            if (!box) return;
+                            try {
+                                int32_t s = box.SelectionStart();
+                                int32_t l = box.SelectionLength();
+                                // Collapse to left edge of selection if any,
+                                // otherwise step back one char.
+                                box.SelectionStart(l > 0 ? s : std::max(0, s - 1));
+                                box.SelectionLength(0);
+                            } catch (...) {}
+                        });
+                        return 1;
+                    case VK_RIGHT:
+                        RunOnUiThread([] {
+                            auto it = g_namedElements.find(L"SpotlightSearchBox");
+                            if (it == g_namedElements.end()) return;
+                            auto box = it->second.try_as<wuxc::TextBox>();
+                            if (!box) return;
+                            try {
+                                std::wstring text(box.Text());
+                                int32_t s = box.SelectionStart();
+                                int32_t l = box.SelectionLength();
+                                int32_t target = (l > 0)
+                                    ? (s + l)
+                                    : std::min<int32_t>(s + 1,
+                                                        static_cast<int32_t>(text.size()));
+                                box.SelectionStart(target);
+                                box.SelectionLength(0);
+                            } catch (...) {}
+                        });
+                        return 1;
+                    case VK_HOME:
+                        RunOnUiThread([] {
+                            auto it = g_namedElements.find(L"SpotlightSearchBox");
+                            if (it == g_namedElements.end()) return;
+                            auto box = it->second.try_as<wuxc::TextBox>();
+                            if (!box) return;
+                            try {
+                                box.SelectionStart(0);
+                                box.SelectionLength(0);
+                            } catch (...) {}
+                        });
+                        return 1;
+                    case VK_END:
+                        RunOnUiThread([] {
+                            auto it = g_namedElements.find(L"SpotlightSearchBox");
+                            if (it == g_namedElements.end()) return;
+                            auto box = it->second.try_as<wuxc::TextBox>();
+                            if (!box) return;
+                            try {
+                                std::wstring text(box.Text());
+                                box.SelectionStart(static_cast<int32_t>(text.size()));
+                                box.SelectionLength(0);
+                            } catch (...) {}
+                        });
+                        return 1;
+                    case VK_ESCAPE:
+                        RunOnUiThread([] {
+                            try {
+                                if (g_searchFlyout) g_searchFlyout.Hide();
+                            } catch (...) {}
+                        });
+                        return 1;
+                    case VK_RETURN:
+                        RunOnUiThread([] {
+                            try { LaunchFirstSearchResult(); } catch (...) {}
+                        });
+                        return 1;
+                }
+                wchar_t ch = SearchKeyVkToChar(kb->vkCode);
+                if (ch) {
+                    RunOnUiThread([ch] { SearchBoxAppendChar(ch); });
+                    return 1;
+                }
+            }
+        } else {
+            bool ctrlDown = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+            bool altDown  = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+            bool winDown  = ((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0) ||
+                            ((GetAsyncKeyState(VK_RWIN) & 0x8000) != 0);
+            if (!ctrlDown && !altDown && !winDown) {
+                switch (kb->vkCode) {
+                    case VK_BACK:
+                    case VK_ESCAPE:
+                    case VK_RETURN:
+                        return 1;
+                }
+            }
+        }
+    }
+    return CallNextHookEx(g_searchKeyHook, nCode, wParam, lParam);
+}
+
+// The native Start menu (StartMenuExperienceHost.exe) can open from a Win
+// tap that leaked through before our hook was fully installed, or from a
+// mouse click on the taskbar Start button when the taskbar remap toggle
+// is off. Find it and close it before we show our own start menu.
+void CloseNativeStartMenuIfOpen() {
+    struct Ctx { HWND result; } ctx{ nullptr };
+    EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+        auto* c = reinterpret_cast<Ctx*>(lp);
+        if (!IsWindowVisible(hwnd)) return TRUE;
+        BOOL cloak = FALSE;
+        if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloak,
+                                            sizeof(cloak))) && cloak) {
+            return TRUE;
+        }
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (!pid) return TRUE;
+        HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (!proc) return TRUE;
+        wchar_t path[MAX_PATH]{};
+        DWORD size = ARRAYSIZE(path);
+        bool ok = QueryFullProcessImageNameW(proc, 0, path, &size) != FALSE;
+        CloseHandle(proc);
+        if (!ok) return TRUE;
+        std::wstring exe = path;
+        size_t slash = exe.find_last_of(L"\\/");
+        if (slash != std::wstring::npos) exe.erase(0, slash + 1);
+        if (_wcsicmp(exe.c_str(), L"StartMenuExperienceHost.exe") != 0) return TRUE;
+        c->result = hwnd;
+        return FALSE;
+    }, reinterpret_cast<LPARAM>(&ctx));
+    if (ctx.result) {
+        // Send synchronously so the native window is actually torn down
+        // before this returns. PostMessage let ShowStartMenuFlyout race
+        // ahead of the native menu's destruction, which is what put the
+        // two menus on screen together for the ~40 ms it takes Windows'
+        // shell to process the WM_CLOSE.
+        DWORD_PTR result = 0;
+        SendMessageTimeout(ctx.result, WM_CLOSE, 0, 0,
+                           SMTO_ABORTIFHUNG | SMTO_BLOCK, 500, &result);
+    }
+}
+
+[[clang::no_destroy]] DispatcherTimer g_nativeSmCloseTimer{nullptr};
+int g_nativeSmCloseTicks = 0;
+
+// Called for every EVENT_OBJECT_CREATE/SHOW the WinEvent hook delivers.
+// Cheap early-outs: only runs the process lookup when one of our top-level
+// flyouts is currently on screen. Kills StartMenuExperienceHost /
+// SearchHost windows on sight, which is the only reliable way to stop the
+// shell from racing its own menu on top of ours — the shell opens its menu
+// through a RawInput path the LL keyboard hook cannot block.
+// Hide the shell's own Start menu / Search top-level windows rather than
+// terminating the process. The shell respawns its SM/Search host with a new
+// PID within a few hundred ms of any terminate, so killing produced a
+// permanent kill loop that never settled and that the per-PID cooldown
+// couldn't suppress (each respawn had a new PID). Hiding leaves the host
+// alive — no respawn to defeat — and the off-screen move keeps the window
+// out of sight even if the shell flips WS_VISIBLE back on.
+std::mutex g_hiddenShellWindowsMutex;
+std::map<HWND, std::pair<bool, bool>> g_hiddenShellWindows;
+
+// Serialize the currently-hidden HWNDs to Wh storage so a crash between
+// hide and restore can be recovered on the next startup. Dead HWNDs are
+// pruned here so the persisted list doesn't grow over the process lifetime.
+void PersistHiddenShellHosts() {
+    std::wstring serialized;
+    {
+        std::lock_guard<std::mutex> lock(g_hiddenShellWindowsMutex);
+        for (auto it = g_hiddenShellWindows.begin();
+             it != g_hiddenShellWindows.end();) {
+            if (!IsWindow(it->first)) {
+                it = g_hiddenShellWindows.erase(it);
+                continue;
+            }
+            if (!serialized.empty()) serialized += L",";
+            wchar_t buf[32];
+            swprintf_s(buf, L"%llX", static_cast<unsigned long long>(
+                reinterpret_cast<uintptr_t>(it->first)));
+            serialized += buf;
+            ++it;
+        }
+    }
+    Wh_SetStringValue(L"topbarHiddenShellHosts", serialized.c_str());
+}
+
+void HideNativeShellHostWindow(HWND hwnd, const wchar_t* exeName, bool isStart, bool isSearch) {
+    if (!hwnd || !IsWindow(hwnd)) return;
+
+    static std::mutex s_logMutex;
+    static std::set<HWND> s_logged;
+    {
+        std::lock_guard<std::mutex> lock(s_logMutex);
+        if (s_logged.insert(hwnd).second) {
+            Wh_Log(L"NativeShellHide: hiding %s (%p)", exeName, hwnd);
+        }
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_hiddenShellWindowsMutex);
+        g_hiddenShellWindows[hwnd] = { isStart, isSearch };
+    }
+    ShowWindow(hwnd, SW_HIDE);
+    PersistHiddenShellHosts();
+}
+
+bool IsShellHostExe(std::wstring_view exeLower, bool* isStart, bool* isSearch) {
+    *isStart  = (exeLower == L"startmenuexperiencehost.exe");
+    *isSearch = (exeLower == L"searchhost.exe") ||
+                (exeLower == L"searchapp.exe") ||
+                (exeLower == L"searchui.exe");
+    return *isStart || *isSearch;
+}
+
+void KillNativeShellHostIfOursOpen(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) return;
+
+    bool replaceStart  = g_settings.defaultStartMenu;
+    bool replaceSearch = g_settings.defaultSearch;
+    if (!replaceStart && !replaceSearch) return;
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (!pid || pid == GetCurrentProcessId()) return;
+
+    HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!proc) return;
+    wchar_t path[MAX_PATH]{};
+    DWORD size = ARRAYSIZE(path);
+    bool ok = QueryFullProcessImageNameW(proc, 0, path, &size) != FALSE;
+    CloseHandle(proc);
+    if (!ok) return;
+
+    std::wstring exe = path;
+    size_t slash = exe.find_last_of(L"\\/");
+    if (slash != std::wstring::npos) exe.erase(0, slash + 1);
+    std::wstring exeLower = ToLowerCopy(exe);
+
+    bool isStart = false, isSearch = false;
+    if (!IsShellHostExe(exeLower, &isStart, &isSearch)) return;
+    if (isStart  && !replaceStart)  return;
+    if (isSearch && !replaceSearch) return;
+
+    HideNativeShellHostWindow(hwnd, exe.c_str(), isStart, isSearch);
+}
+
+void HideAllNativeShellHostWindows() {
+    bool replaceStart  = g_settings.defaultStartMenu;
+    bool replaceSearch = g_settings.defaultSearch;
+    if (!replaceStart && !replaceSearch) return;
+
+    struct Ctx { bool rs; bool rp; };
+    Ctx ctx{ replaceStart, replaceSearch };
+
+    EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+        auto* c = reinterpret_cast<Ctx*>(lp);
+        if (!IsWindow(hwnd)) return TRUE;
+        if (GetWindow(hwnd, GW_OWNER) != nullptr) return TRUE;
+        if (!IsWindowVisible(hwnd)) return TRUE;
+
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (!pid || pid == GetCurrentProcessId()) return TRUE;
+
+        HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (!proc) return TRUE;
+        wchar_t path[MAX_PATH]{};
+        DWORD size = ARRAYSIZE(path);
+        bool ok = QueryFullProcessImageNameW(proc, 0, path, &size) != FALSE;
+        CloseHandle(proc);
+        if (!ok) return TRUE;
+
+        std::wstring exe = path;
+        size_t slash = exe.find_last_of(L"\\/");
+        if (slash != std::wstring::npos) exe.erase(0, slash + 1);
+        std::wstring exeLower = ToLowerCopy(exe);
+
+        bool isStart = false, isSearch = false;
+        if (!IsShellHostExe(exeLower, &isStart, &isSearch)) return TRUE;
+        if (isStart  && !c->rs) return TRUE;
+        if (isSearch && !c->rp) return TRUE;
+
+        HideNativeShellHostWindow(hwnd, exe.c_str(), isStart, isSearch);
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&ctx));
+}
+
+
+
+void RestoreNativeShellHostWindows(bool restoreStart, bool restoreSearch) {
+    std::vector<std::pair<HWND, std::pair<bool, bool>>> pending;
+    {
+        std::lock_guard<std::mutex> lock(g_hiddenShellWindowsMutex);
+        for (auto const& entry : g_hiddenShellWindows) {
+            bool isStart = entry.second.first;
+            bool isSearch = entry.second.second;
+            if ((isStart && restoreStart) || (isSearch && restoreSearch)) {
+                pending.push_back(entry);
+            }
+        }
+        for (auto const& entry : pending) {
+            g_hiddenShellWindows.erase(entry.first);
+        }
+    }
+    for (auto const& entry : pending) {
+        HWND h = entry.first;
+        if (!IsWindow(h)) continue;
+        RECT r{};
+        if (!GetWindowRect(h, &r)) continue;
+        HMONITOR mon = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi{};
+        mi.cbSize = sizeof(mi);
+        if (!GetMonitorInfo(mon, &mi)) continue;
+        int w = r.right - r.left;
+        int hh = r.bottom - r.top;
+        if (w <= 0 || hh <= 0) continue;
+        int x = mi.rcMonitor.left + ((mi.rcMonitor.right - mi.rcMonitor.left) - w) / 2;
+        int y = mi.rcMonitor.top + ((mi.rcMonitor.bottom - mi.rcMonitor.top) - hh) / 2;
+        SetWindowPos(h, nullptr, x, y, w, hh,
+                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW |
+                     SWP_ASYNCWINDOWPOS);
+        ShowWindowAsync(h, SW_SHOWNOACTIVATE);
+    }
+    PersistHiddenShellHosts();
+}
+
+void RestorePersistedShellHosts() {
+    // Crash recovery for a previous run that hid shell host windows and
+    // then died before restoring them. The HWNDs were persisted by
+    // PersistHiddenShellHosts. Re-show any that still exist and still
+    // belong to one of the shell host executables, whatever the current
+    // remap settings are.
+    std::wstring serialized = GetStringSettingCopy(L"topbarHiddenShellHosts");
+    if (serialized.empty()) return;
+
+    std::vector<HWND> toRestore;
+    size_t pos = 0;
+    while (pos <= serialized.size()) {
+        size_t comma = serialized.find(L',', pos);
+        std::wstring token = serialized.substr(
+            pos, comma == std::wstring::npos ? std::wstring::npos : comma - pos);
+        if (!token.empty()) {
+            try {
+                uintptr_t val = std::stoull(token, nullptr, 16);
+                HWND h = reinterpret_cast<HWND>(val);
+                if (h && IsWindow(h)) {
+                    DWORD pid = 0;
+                    GetWindowThreadProcessId(h, &pid);
+                    if (pid && pid != GetCurrentProcessId()) {
+                        HANDLE proc = OpenProcess(
+                            PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+                        if (proc) {
+                            wchar_t path[MAX_PATH]{};
+                            DWORD size = ARRAYSIZE(path);
+                            bool ok = QueryFullProcessImageNameW(
+                                proc, 0, path, &size) != FALSE;
+                            CloseHandle(proc);
+                            if (ok) {
+                                std::wstring exe = path;
+                                size_t slash = exe.find_last_of(L"\\/");
+                                if (slash != std::wstring::npos) {
+                                    exe.erase(0, slash + 1);
+                                }
+                                std::wstring exeLower = ToLowerCopy(exe);
+                                bool isStart = false, isSearch = false;
+                                if (IsShellHostExe(exeLower, &isStart, &isSearch)) {
+                                    toRestore.push_back(h);
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (...) {}
+        }
+        if (comma == std::wstring::npos) break;
+        pos = comma + 1;
+    }
+
+    for (HWND h : toRestore) {
+        if (!IsWindow(h)) continue;
+        // Only touch windows we (or the shell) hid. If it's already visible,
+        // the shell recovered on its own and we must not reposition it.
+        if (IsWindowVisible(h)) continue;
+        RECT r{};
+        if (!GetWindowRect(h, &r)) continue;
+        int w = r.right - r.left;
+        int hh = r.bottom - r.top;
+        if (w <= 0 || hh <= 0) continue;
+        HMONITOR mon = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi{};
+        mi.cbSize = sizeof(mi);
+        if (!GetMonitorInfo(mon, &mi)) continue;
+        int x = mi.rcMonitor.left +
+                ((mi.rcMonitor.right - mi.rcMonitor.left) - w) / 2;
+        int y = mi.rcMonitor.top +
+                ((mi.rcMonitor.bottom - mi.rcMonitor.top) - hh) / 2;
+        SetWindowPos(h, nullptr, x, y, w, hh,
+                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW |
+                     SWP_ASYNCWINDOWPOS);
+        ShowWindowAsync(h, SW_SHOWNOACTIVATE);
+    }
+
+    Wh_Log(L"RestorePersistedShellHosts: restored %zu window(s)",
+           toRestore.size());
+    Wh_SetStringValue(L"topbarHiddenShellHosts", L"");
+}
+
+void ScheduleNativeStartMenuClose() {
+    // The shell opens its own Start menu in response to the Win key at a
+    // layer the LL keyboard hook cannot block, and it does so a moment
+    // after our close attempt has already run — so a one-shot check right
+    // before ShowAt finds nothing. Polling for ~1.5 s starting the moment
+    // we open our own flyout catches the native window within 100 ms of
+    // its appearance and closes it before the user sees two menus.
+    g_nativeSmCloseTicks = 100;
+    if (!g_nativeSmCloseTimer) {
+        g_nativeSmCloseTimer = DispatcherTimer();
+        g_nativeSmCloseTimer.Interval(std::chrono::milliseconds(50));
+        g_nativeSmCloseTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+            // Enumerate every top-level window owned by the shell's
+            // Start / Search hosts and hide them. Enumerating is more
+            // thorough than checking only the foreground HWND — the host
+            // often owns several top-level windows (main panel, tooltip,
+            // suggestion popup) and hiding just one leaves the others to
+            // re-appear.
+            try { HideAllNativeShellHostWindows(); } catch (...) {}
+            if (--g_nativeSmCloseTicks <= 0) {
+                g_nativeSmCloseTimer.Stop();
+            }
+        });
+    }
+    g_nativeSmCloseTimer.Stop();
+    g_nativeSmCloseTimer.Start();
+}
+
+// Closes the native Windows Search window (SearchHost.exe on Win11,
+// SearchApp.exe / SearchUI.exe on Win10). Called shortly after we open
+// our own search flyout so the two don't stack when the shell opens its
+// own in parallel.
+void CloseNativeSearchIfOpen() {
+    static const wchar_t* kSearchExes[] = {
+        L"SearchHost.exe", L"SearchApp.exe", L"SearchUI.exe"
+    };
+    struct Ctx { HWND result; } ctx{ nullptr };
+    EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+        auto* c = reinterpret_cast<Ctx*>(lp);
+        if (!IsWindowVisible(hwnd)) return TRUE;
+        BOOL cloak = FALSE;
+        if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloak,
+                                            sizeof(cloak))) && cloak) {
+            return TRUE;
+        }
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (!pid) return TRUE;
+        HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (!proc) return TRUE;
+        wchar_t path[MAX_PATH]{};
+        DWORD size = ARRAYSIZE(path);
+        bool ok = QueryFullProcessImageNameW(proc, 0, path, &size) != FALSE;
+        CloseHandle(proc);
+        if (!ok) return TRUE;
+        std::wstring exe = path;
+        size_t slash = exe.find_last_of(L"\\/");
+        if (slash != std::wstring::npos) exe.erase(0, slash + 1);
+        for (const wchar_t* name : kSearchExes) {
+            if (_wcsicmp(exe.c_str(), name) == 0) {
+                c->result = hwnd;
+                return FALSE;
+            }
+        }
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&ctx));
+    if (ctx.result) {
+        DWORD_PTR result = 0;
+        SendMessageTimeout(ctx.result, WM_CLOSE, 0, 0,
+                           SMTO_ABORTIFHUNG | SMTO_BLOCK, 500, &result);
+    }
+}
+
+void InstallSearchKeyHook() {
+    if (!g_hookThreadId) return;
+    PostThreadMessage(g_hookThreadId, WM_HOOK_THREAD_INSTALL_KB, 0, 0);
+}
+
+void SyncSearchKeyHook() {
+    bool wantHook = g_settings.defaultStartMenu || g_settings.defaultSearch;
+    Wh_Log(L"TopBar: SyncSearchKeyHook defaultStart=%d defaultSearch=%d want=%d",
+           g_settings.defaultStartMenu ? 1 : 0,
+           g_settings.defaultSearch ? 1 : 0,
+           wantHook ? 1 : 0);
+    if (!g_hookThreadId) return;
+    PostThreadMessage(g_hookThreadId,
+                      wantHook ? WM_HOOK_THREAD_INSTALL_KB
+                               : WM_HOOK_THREAD_REMOVE_KB,
+                      0, 0);
+}
+
+LRESULT CALLBACK TopBarPopupSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
+    // Re-stamp the transparency kill on every message DWM or the theme
+    // engine can use to re-apply a Mica/Acrylic sheet. WM_SETTINGCHANGE
+    // fires when the user flips the Windows "Transparency effects" toggle,
+    // WM_THEMECHANGED on theme switches, WM_DWMCOMPOSITIONCHANGED on
+    // composition mode changes, and the position/size/show messages on
+    // every reposition XAML performs.
+    switch (msg) {
+        case WM_WINDOWPOSCHANGED:
+        case WM_WINDOWPOSCHANGING:
+        case WM_SHOWWINDOW:
+        case WM_DWMCOMPOSITIONCHANGED:
+        case WM_SETTINGCHANGE:
+        case WM_THEMECHANGED:
+        case WM_NCACTIVATE:
+        case WM_ACTIVATE:
+        case WM_SETFOCUS:
+            ForceDisableWindowsTransparency(hwnd);
+            break;
+    }
+    if (msg == WM_WINDOWPOSCHANGING && g_forcePopupPosition &&
+        !g_suppressPopupPositionLock.load()) {
+        auto* wp = reinterpret_cast<WINDOWPOS*>(lParam);
+        RECT mr = GetBarMonitorRect();
+        wp->x = mr.left;
+        wp->y = mr.top;
+        wp->cx = mr.right - mr.left;
+        wp->cy = g_barHeightPx;
+        wp->flags &= ~SWP_HIDEWINDOW;
+        wp->flags |= SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOZORDER;
+        return 0;
+    }
+    if (msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN) {
+        bool typingOpen = false;
+        try {
+            if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) typingOpen = true;
+            if (g_searchFlyout && g_searchFlyout.IsOpen()) typingOpen = true;
+        } catch (...) {}
+        if (g_anyChildFlyoutOpen.load() && !typingOpen) {
+            // A click on the topbar popup while a child flyout is open. The
+            // child flyout lives in a separate XAML popup; XAML classifies
+            // this click as "outside the flyout" and drops it, leaving the
+            // flyout stuck open. Close the flyout ourselves.
+            //
+            // Critically: do NOT call Flyout::Hide() from inside this
+            // WndProc. XAML is mid-dispatch and reentering it corrupts its
+            // pointer state, which is what caused the topbar to freeze and
+            // stop tracking hover. Defer the close to a dispatcher turn.
+            RunOnUiThread([] {
+                try { CloseAnyOpenChildFlyout(); } catch (...) {}
+            });
+            // Swallow only this one click, so the button under the cursor
+            // doesn't fire on the same gesture that dismissed the flyout.
+            return 0;
+        }
+    }
+    if (msg == WM_NCDESTROY) {
+        if (g_subclassedPopupHwnd == hwnd) {
+            g_subclassedPopupHwnd = nullptr;
+        }
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TopBarPopupSubclassProc);
+        return DefSubclassProc(hwnd, msg, wParam, lParam);
+    }
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
+}
+
+void InstallPopupSubclass(HWND hwnd) {
+    if (!hwnd || hwnd == g_subclassedPopupHwnd) return;
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, TopBarPopupSubclassProc, 0)) {
+        g_subclassedPopupHwnd = hwnd;
+        Wh_Log(L"TopBar: popup HWND subclassed: %p", hwnd);
+    }
+}
+
+void PinTopBarFlyoutHwnd() {
+    if (g_fullScreenAppActive) {
+        DemoteTopBarForFullscreen();
+        return;
+    }
+    if (IsAnyFullscreenActive()) {
+        g_fullScreenAppActive = true;
+        DemoteTopBarForFullscreen();
+        return;
+    }
+
+    // Adopt the newest popup HWND every tick. XAML creates a fresh popup
+    // HWND one frame to a second after a topbar reload, and our previous
+    // reference goes stale: it points at a popup XAML no longer owns, the
+    // new popup is never repositioned, and the bar appears either missing
+    // (new popup off the top of the screen) or wrong. FindTopBarFlyoutHwnd
+    // returns the topmost XAML popup owned by this process, which after a
+    // reload is the new one.
+    {
+        HWND newest = FindTopBarFlyoutHwnd();
+        if (newest && newest != g_topBarPopupHwnd) {
+            Wh_Log(L"PinTopBarFlyoutHwnd: popup HWND changed %p -> %p",
+                   g_topBarPopupHwnd, newest);
+            g_topBarPopupHwnd = newest;
+            g_forcePopupPosition = false;
+            g_replaceAttempts = 0;
+        }
+    }
+    // Adopt the newest XAML popup HWND owned by this process on every tick.
+    // XAML destroys and recreates the popup HWND roughly one second after
+    // every reload; without this our reference points at a popup that no
+    // longer exists and position-forcing is a no-op.
+    {
+        HWND newest = FindTopBarFlyoutHwnd();
+        if (newest && newest != g_topBarPopupHwnd) {
+            Wh_Log(L"PinTopBarFlyoutHwnd: adopting popup HWND %p -> %p",
+                   g_topBarPopupHwnd, newest);
+            g_topBarPopupHwnd = newest;
+            g_forcePopupPosition = false;
+            g_replaceAttempts = 0;
+        }
+    }
+    if (!g_topBarPopupHwnd || !IsWindow(g_topBarPopupHwnd)) {
+        g_topBarPopupHwnd = FindTopBarFlyoutHwnd();
+    }
+    if (!g_topBarPopupHwnd) return;
+
+    // Install the click-close subclass the first time we see the popup HWND.
+    // This does NOT fight XAML's placement — it only intercepts mouse-down
+    // to dismiss a child flyout that XAML has otherwise frozen on. XAML
+    // still owns the popup's position.
+    InstallPopupSubclass(g_topBarPopupHwnd);
+
+    // Strip Windows' own Mica/Acrylic backdrop off the popup so the XAML
+    // blur brush is what actually renders. Without this the DWM surface can
+    // hide the tint after a cold boot.
+    ForceDisableWindowsTransparency(g_topBarPopupHwnd);
+
+    // Re-assert topmost, uncloak, and show. On a cold boot DWM sometimes
+    // cloaks the popup until its first frame is committed and never
+    // uncloaks on its own — that is the "bar doesn't appear until I change
+    // a setting" symptom.
+    if (!IsWindowVisible(g_topBarPopupHwnd)) {
+        ShowWindow(g_topBarPopupHwnd, SW_SHOWNOACTIVATE);
+    }
+    BOOL cloakOff = FALSE;
+    DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK, &cloakOff, sizeof(cloakOff));
+
+    // Force the popup into the reserved strip whenever it is off-position.
+    // This is what catches the fresh popup XAML creates after a reload:
+    // EnsureTopBarPopupShown's forced-position branch settles to a 5 s
+    // retry cadence once the bar is stable, so between a reload and the
+    // next tick the new popup would sit off-screen. PinTopBarFlyoutHwnd
+    // runs every second from the restore timer, so adopting the new HWND
+    // above and then forcing it here gets the bar on screen within one
+    // tick of the reload.
+    {
+        RECT mr = GetBarMonitorRect();
+        RECT actual{};
+        bool offPosition = false;
+        if (GetWindowRect(g_topBarPopupHwnd, &actual)) {
+            offPosition = (actual.left != mr.left || actual.top != mr.top);
+        }
+        if (g_forcePopupPosition || offPosition) {
+            SetWindowPos(g_topBarPopupHwnd, HWND_TOPMOST,
+                         mr.left, mr.top,
+                         mr.right - mr.left, g_barHeightPx,
+                         SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+            if (!g_forcePopupPosition) {
+                g_forcePopupPosition = true;
+                Wh_Log(L"PinTopBarFlyoutHwnd: popup was off-position, forcing to (%ld,%ld)-(%ld,%ld)",
+                       mr.left, mr.top, mr.right, mr.bottom);
+            }
+        } else {
+            SetWindowPos(g_topBarPopupHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        }
+    }
+
+    if (g_anyChildFlyoutOpen.load()) {
+        PromoteChildFlyoutPopups();
+    }
+
+    ClipIslandHwndToEmpty();
+}
+
+void RepositionTopBarPopup() {
+    if (!g_topBarPopup) return;
+    RECT monitorRect = GetBarMonitorRect();
+    double dpiScale = g_settings.topBarScale / 100.0;
+    double widthDip = (monitorRect.right - monitorRect.left) / dpiScale;
+    double heightDip = static_cast<double>(g_settings.barHeightDip);
+    if (g_topBarPopupCanvas) {
+        g_topBarPopupCanvas.Width(widthDip);
+        g_topBarPopupCanvas.Height(heightDip);
+    }
+    // g_topBarPopup.Content() is the TopBarScaler Viewbox. Sizing the
+    // Viewbox itself to widthDip x heightDip makes its scale 1 (child is
+    // already that size), which defeats the point of the Viewbox and
+    // brings back the bottom input dead-zone at high OS DPI. Size the
+    // Viewbox's child instead; the Viewbox keeps stretch-filling the
+    // popup and scales the canonical content down.
+    if (auto child = g_topBarPopup.Content()) {
+        if (auto vb = child.try_as<wuxc::Viewbox>()) {
+            if (auto inner = vb.Child().try_as<FrameworkElement>()) {
+                inner.Width(widthDip);
+                inner.Height(heightDip);
+            }
+        } else if (auto fe = child.try_as<FrameworkElement>()) {
+            fe.Width(widthDip);
+            fe.Height(heightDip);
+        }
+    }
+    // Pin immediately; the retry timer already running from
+    // EnsureTopBarPopupShown will keep re-pinning after any XAML re-place pass
+    // triggered by the size change.
+    PinTopBarFlyoutHwnd();
+}
+
+// XAML registers an input-site rectangle for every popup HWND the moment it
+// creates one, and it never re-evaluates that rectangle on its own. Moving
+// the popup with SetWindowPos, or changing the monitor DPI, both leave the
+// input-site stale: clicks still work (Windows hit-tests the real HWND) but
+// hover is routed through XAML's old rectangle, so it lands offset or dies.
+//
+// The only way to recompute it is to let XAML itself destroy and recreate
+// the popup HWND — a Hide() followed by ShowAt() on the next dispatcher
+// turn. A plain Win32 ShowWindow cycle does not touch it.
+static std::atomic<bool> g_reShowPending{false};
+
+// XAML records the DPI scale against the popup HWND the moment it creates
+// it and never re-queries on its own. When the OS display scale changes and
+// we rebuild the popup, XAML reuses the DPI it captured against the previous
+// popup — so content laid out at 45 DIP is rendered at 1 px/DIP instead of
+// 1.25 px/DIP, and the whole bar comes out 36 px tall instead of 45. Opening
+// the Start menu forces a fresh layout pass that happens to re-query the
+// correct DPI, which is why the bar snaps back to the right size only after
+// that.
+//
+// Sending WM_DPICHANGED to the popup HWND directly is the only way to make
+// XAML's popup manager re-read the monitor DPI without tearing the entire
+// XamlIsland down.
+static void ForcePopupDpiRecalc(HWND popupHwnd) {
+    if (!popupHwnd || !IsWindow(popupHwnd)) return;
+    HMONITOR mon = MonitorFromWindow(popupHwnd, MONITOR_DEFAULTTONEAREST);
+    UINT dpiX = 96, dpiY = 96;
+    if (FAILED(GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dpiX, &dpiY))) return;
+    RECT r{};
+    if (!GetWindowRect(popupHwnd, &r)) return;
+    RECT suggested = r;
+    DWORD_PTR res = 0;
+    SendMessageTimeout(popupHwnd, WM_DPICHANGED,
+                       MAKEWPARAM(dpiX, dpiY),
+                       reinterpret_cast<LPARAM>(&suggested),
+                       SMTO_ABORTIFHUNG, 500, &res);
+    Wh_Log(L"ForcePopupDpiRecalc: sent WM_DPICHANGED dpi=%u to popup %p",
+           dpiX, popupHwnd);
+}
+
+static void FinishReShowTopBarPopup() {
+    // The flyout's HWND survives Hide() (XAML reuses it), so
+    // EnsureTopBarPopupShown's "correct == true" fast path would only
+    // re-ShowWindow the stale HWND — XAML has already torn the flyout's
+    // visual tree down, so nothing would ever be painted into it again.
+    // Dropping the cached references forces the rebuild branch that calls
+    // ShowAt against the current tree.
+    g_topBarPopupHwnd = nullptr;
+    g_subclassedPopupHwnd = nullptr;
+
+    // Run deferred — calling ShowAt synchronously from inside the Closed
+    // handler would re-enter XAML while it is still unwinding the old
+    // flyout's state.
+    RunOnUiThread([] {
+        try { EnsureTopBarPopupShown(); } catch (...) {}
+        RunOnUiThread([] {
+            try { EnsureTopBarPopupShown(); } catch (...) {}
+        });
+    });
+}
+
+void ReShowTopBarPopupViaXaml() {
+    if (!g_topBarPopup) return;
+
+    auto anchorIt = g_namedElements.find(L"StartMenuAnchor");
+    if (anchorIt == g_namedElements.end()) {
+        Wh_Log(L"ReShowTopBarPopupViaXaml: no anchor registered");
+        return;
+    }
+
+    Wh_Log(L"ReShowTopBarPopupViaXaml: performing XAML-level re-show");
+
+    // The flyout can be recreated between calls (ReloadTopBarFully does a full
+    // XAML rebuild, and every scale/monitor change runs it), so a one-shot
+    // "already installed" flag would leave every flyout after the first
+    // without a Closed handler. Attach a fresh handler to whichever flyout
+    // is current — old flyout instances are destroyed along with their
+    // handlers when the tree is rebuilt.
+    try {
+        g_topBarPopup.Closed([](auto&&, auto&&) {
+            if (!g_reShowPending.exchange(false)) return;
+            Wh_Log(L"ReShowTopBarPopupViaXaml: Closed fired, re-showing");
+            g_topBarAllowClose = false;
+            FinishReShowTopBarPopup();
+        });
+    } catch (...) {
+        return;
+    }
+
+    g_topBarAllowClose = true;
+    g_reShowPending = true;
+
+    try { g_topBarPopup.Hide(); } catch (...) {}
+
+    // Safety net: if Closed never fires (Hide() no-ops on a flyout XAML
+    // already considers closed), reset the guard and re-show manually.
+    // 800 ms is long enough that a genuine Closed has definitely fired.
+    RunInBackground([] {
+        if (WaitForSingleObject(g_stopEvent, 800) == WAIT_OBJECT_0) return;
+        RunOnUiThread([] {
+            if (g_reShowPending.exchange(false)) {
+                Wh_Log(L"ReShowTopBarPopupViaXaml: safety net fired");
+                g_topBarAllowClose = false;
+                FinishReShowTopBarPopup();
+            }
+        });
+    });
+}
+
+static bool s_everShown = false;
+static bool s_startupFlagCleared = false;
+
+// Last monitor rect the bar content was laid out against. The restore timer
+// polls GetBarMonitorRect() and, when the rect changes (resolution switch,
+// monitor swap, scaling change), rebuilds the content so the DIP layout and
+// the scaler's RenderTransform are recomputed. WM_DISPLAYCHANGE is not
+// delivered reliably to WS_POPUP | WS_EX_TOOLWINDOW windows on all Windows
+// builds, so the poll is what actually catches the change.
+static RECT g_lastBarMonitorRect{};
+static bool g_lastBarMonitorRectValid = false;
+static double g_lastOsScale = -1.0;
+
+// Renders the popup HWND via PrintWindow with PW_RENDERFULLCONTENT and
+// checks whether any pixels vary. A popup whose XAML composition layer
+// never got bound to DWM returns a uniform bitmap (all the same colour,
+// usually black/blank). A popup that is actually being presented returns
+// varied pixels because the blur brush paints the desktop backdrop and
+// the bar's icons/labels are drawn on top of it.
+//
+// Returns true only when we're confident the popup is genuinely being
+// presented. Returns false when PrintWindow itself failed too — the
+// caller should treat that as "unknown, don't rebuild" rather than
+// "broken, rebuild", so a detection failure can never cause a working
+// bar to be restarted.
+static bool PopupRenderingState(HWND hwnd, bool* outRendering) {
+    *outRendering = false;
+    if (!hwnd || !IsWindow(hwnd)) return false;
+    RECT r{};
+    if (!GetWindowRect(hwnd, &r)) return false;
+    int w = r.right - r.left;
+    int h = r.bottom - r.top;
+    if (w <= 0 || h <= 0 || w > 4096 || h > 4096) return false;
+
+    HDC screen = GetDC(nullptr);
+    if (!screen) return false;
+    HDC mem = CreateCompatibleDC(screen);
+    if (!mem) { ReleaseDC(nullptr, screen); return false; }
+    HBITMAP bmp = CreateCompatibleBitmap(screen, w, h);
+    if (!bmp) { DeleteDC(mem); ReleaseDC(nullptr, screen); return false; }
+    HGDIOBJ old = SelectObject(mem, bmp);
+
+    BOOL ok = PrintWindow(hwnd, mem, PW_RENDERFULLCONTENT);
+    if (!ok) ok = PrintWindow(hwnd, mem, 0);
+
+    if (!ok) {
+        SelectObject(mem, old);
+        DeleteObject(bmp);
+        DeleteDC(mem);
+        ReleaseDC(nullptr, screen);
+        return false;
+    }
+
+    BITMAPINFO bmi{};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = w;
+    bmi.bmiHeader.biHeight = -h;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    std::vector<BYTE> pixels(static_cast<size_t>(w) * h * 4);
+    bool got = GetDIBits(mem, bmp, 0, h, pixels.data(), &bmi, DIB_RGB_COLORS) != FALSE;
+
+    SelectObject(mem, old);
+    DeleteObject(bmp);
+    DeleteDC(mem);
+    ReleaseDC(nullptr, screen);
+
+    if (!got) return false;
+
+    uint32_t first = 0;
+    bool haveFirst = false;
+    int different = 0;
+    for (int y = 0; y < h; y += 2) {
+        for (int x = 0; x < w; x += 2) {
+            size_t idx = (static_cast<size_t>(y) * w + x) * 4;
+            uint32_t p = pixels[idx] |
+                         (static_cast<uint32_t>(pixels[idx + 1]) << 8) |
+                         (static_cast<uint32_t>(pixels[idx + 2]) << 16);
+            if (!haveFirst) { first = p; haveFirst = true; continue; }
+            if (p != first) {
+                different++;
+                if (different > 40) break;
+            }
+        }
+        if (different > 40) break;
+    }
+    *outRendering = (different > 40);
+    return true;
+}
+
+// True only when the machine itself booted very recently. Uses system
+// uptime (GetTickCount64, which is since OS boot, not since this thread
+// started) so a mod re-enable on a machine that's been running for hours
+// doesn't get treated as a cold boot. Without this the boot-rebuild and
+// the forced composition reset both fire on every mod enable, each one
+// hide/show'ing the popup and making the bar visibly blink.
+static bool IsRecentColdBoot() { 
+    // Process age, not system uptime. This is called from
+    // WaitForShellReadyIfColdBoot on every topbar thread start. On a
+    // genuine cold boot the process was just spawned by the shell, so
+    // process age is small and we wait for the shell to come up. On a
+    // scale-change thread restart the process has been running for
+    // minutes already, so we return immediately and the bar rebuilds
+    // without an artificial 3-second gap.
+    static ULONGLONG s_processStartTick = 0;
+    if (s_processStartTick == 0) {
+        s_processStartTick = GetTickCount64();
+    }
+    return (GetTickCount64() - s_processStartTick) < 60ULL * 1000ULL;
+}
+
+void EnsureTopBarPopupShown() {
+    {
+        static std::atomic<ULONGLONG> s_lastCallLog{0};
+        ULONGLONG now = GetTickCount64();
+        if (now - s_lastCallLog.load() > 800) {
+            s_lastCallLog = now;
+            Wh_Log(L"EnsureTopBarPopupShown CALLED: popup=%p anchor=%p topbar=%p visible=%d island=%p",
+                   g_topBarPopup ? winrt::get_abi(g_topBarPopup) : nullptr,
+                   g_topBarPopupAnchor ? winrt::get_abi(g_topBarPopupAnchor) : nullptr,
+                   g_topBarHwnd,
+                   g_topBarHwnd && IsWindowVisible(g_topBarHwnd) ? 1 : 0,
+                   g_islandHwnd);
+        }
+    }
+    if (!g_topBarPopup || !g_topBarPopupAnchor) return;
+
+    // If a live popup HWND already exists, we have already called ShowAt on
+    // the flyout successfully. Calling ShowAt again makes XAML destroy the
+    // existing popup and create a fresh one — a fresh HWND, a fresh XAML
+    // input-site, a fresh layout pass — and the bar visibly jumps or
+    // disappears each time. That is the cycle the retry timer was stuck in:
+    // ~180 ms per ShowAt, popup replaced on every tick, position never
+    // settling. Force the geometry on the existing HWND instead; it is
+    // synchronous and does not touch XAML's popup lifecycle.
+    if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+        RECT mr = GetBarMonitorRect();
+        RECT actual{};
+        if (GetWindowRect(g_topBarPopupHwnd, &actual)) {
+            bool wrongPos  = (actual.left != mr.left || actual.top != mr.top);
+            bool wrongSize = ((actual.right - actual.left) != (mr.right - mr.left)) ||
+                             ((actual.bottom - actual.top) != g_barHeightPx);
+            if (wrongPos || wrongSize) {
+                g_suppressPopupPositionLock = true;
+                SetWindowPos(g_topBarPopupHwnd, HWND_TOPMOST,
+                             mr.left, mr.top,
+                             mr.right - mr.left, g_barHeightPx,
+                             SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+                g_suppressPopupPositionLock = false;
+            }
+        }
+        if (!IsWindowVisible(g_topBarPopupHwnd)) {
+            ShowWindow(g_topBarPopupHwnd, SW_SHOWNOACTIVATE);
+        }
+        BOOL cloakOff = FALSE;
+        DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK,
+                              &cloakOff, sizeof(cloakOff));
+        ForceDisableWindowsTransparency(g_topBarPopupHwnd);
+        if (g_anyChildFlyoutOpen.load()) {
+            try { PromoteChildFlyoutPopups(); } catch (...) {}
+        }
+        ClipIslandHwndToEmpty();
+
+        // Poll slowly — just enough to notice if XAML ever destroys the
+        // popup (e.g. after a display mode change). The old 150 / 200 ms
+        // interval existed only to spam ShowAt, which we no longer do.
+        if (!g_topBarPopupRetryTimer) {
+            g_topBarPopupRetryTimer = DispatcherTimer();
+            g_topBarPopupRetryTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+                try { EnsureTopBarPopupShown(); } catch (...) {}
+            });
+        }
+        g_topBarPopupRetryTimer.Interval(std::chrono::milliseconds(500));
+        g_topBarPopupRetryTimer.Stop();
+        g_topBarPopupRetryTimer.Start();
+        return;
+    }
+
+    static int s_stableTicks = 0;
+
+    // If a live popup HWND already exists, we have already called ShowAt on
+    // the flyout successfully. Calling ShowAt again makes XAML destroy the
+    // existing popup and create a fresh one — a fresh HWND, a fresh XAML
+    // input-site, a fresh layout pass — and the bar visibly jumps or
+    // disappears each time. That is the cycle the retry timer was stuck in:
+    // ~180 ms per ShowAt, popup replaced on every tick, position never
+    // settling. Force the geometry on the existing HWND instead; it is
+    // synchronous and does not touch XAML's popup lifecycle.
+    if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+        RECT mr = GetBarMonitorRect();
+        RECT actual{};
+        if (GetWindowRect(g_topBarPopupHwnd, &actual)) {
+            bool wrongPos  = (actual.left != mr.left || actual.top != mr.top);
+            bool wrongSize = ((actual.right - actual.left) != (mr.right - mr.left)) ||
+                             ((actual.bottom - actual.top) != g_barHeightPx);
+            if (wrongPos || wrongSize) {
+                g_suppressPopupPositionLock = true;
+                SetWindowPos(g_topBarPopupHwnd, HWND_TOPMOST,
+                             mr.left, mr.top,
+                             mr.right - mr.left, g_barHeightPx,
+                             SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+                g_suppressPopupPositionLock = false;
+            }
+        }
+        if (!IsWindowVisible(g_topBarPopupHwnd)) {
+            ShowWindow(g_topBarPopupHwnd, SW_SHOWNOACTIVATE);
+        }
+        BOOL cloakOff = FALSE;
+        DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK,
+                              &cloakOff, sizeof(cloakOff));
+        ForceDisableWindowsTransparency(g_topBarPopupHwnd);
+        if (g_anyChildFlyoutOpen.load()) {
+            try { PromoteChildFlyoutPopups(); } catch (...) {}
+        }
+        ClipIslandHwndToEmpty();
+
+        if (!g_topBarPopupRetryTimer) {
+            g_topBarPopupRetryTimer = DispatcherTimer();
+            g_topBarPopupRetryTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+                try { EnsureTopBarPopupShown(); } catch (...) {}
+            });
+        }
+        g_topBarPopupRetryTimer.Interval(std::chrono::milliseconds(500));
+        g_topBarPopupRetryTimer.Stop();
+        g_topBarPopupRetryTimer.Start();
+        return;
+    }
+
+    // While a fullscreen app owns the screen, never re-show or re-position
+    // the popup. Without this early-out, the retry timer fires every
+    // 150-5000 ms, hits the g_forcePopupPosition branch, and calls
+    // SetWindowPos with SWP_SHOWWINDOW, re-showing the popup that the
+    // restore timer just hid. Keep the timer alive so placement resumes
+    // the moment fullscreen exits.
+    if (g_fullScreenAppActive) {
+        if (!s_everShown && !s_startupFlagCleared && g_barStartTick != 0 &&
+            (GetTickCount64() - g_barStartTick) > 30000) {
+            s_startupFlagCleared = true;
+            g_fullScreenAppActive = false;
+        } else {
+        DemoteTopBarForFullscreen();
+        if (!g_topBarPopupRetryTimer) {
+            g_topBarPopupRetryTimer = DispatcherTimer();
+            g_topBarPopupRetryTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+                try { EnsureTopBarPopupShown(); } catch (...) {}
+            });
+        }
+        g_topBarPopupRetryTimer.Interval(std::chrono::milliseconds(200));
+        g_topBarPopupRetryTimer.Stop();
+        g_topBarPopupRetryTimer.Start();
+        return;
+        }
+    }
+
+    // Only proceed once the topbar HWND is visible and the island HWND
+    // has been sized. On cold boot XAML's compositor can lag several
+    // hundred milliseconds behind process start; ShowAt before that
+    // produces a popup that either renders wrong or doesn't render at all.
+    bool windowReady = false;
+    if (g_topBarHwnd && IsWindowVisible(g_topBarHwnd)) {
+        if (g_islandHwnd && IsWindow(g_islandHwnd)) {
+            RECT r{};
+            if (GetWindowRect(g_islandHwnd, &r) &&
+                r.right > r.left && r.bottom > r.top) {
+                windowReady = true;
+            }
+        }
+    }
+
+    // Drop a stale cached HWND if the popup has been destroyed.
+    if (g_topBarPopupHwnd && !IsWindow(g_topBarPopupHwnd)) {
+        g_topBarPopupHwnd = nullptr;
+    }
+
+    // Evaluate the current popup state.
+    RECT mr = GetBarMonitorRect();
+    bool havePopup = (g_topBarPopupHwnd != nullptr);
+    bool correct = false;
+    if (havePopup) {
+        RECT actual{};
+        if (GetWindowRect(g_topBarPopupHwnd, &actual)) {
+            correct = (actual.left == mr.left && actual.top == mr.top);
+        }
+    }
+
+    if (correct) {
+        BOOL cloakNow = FALSE;
+        bool wasCloaked = false;
+        if (SUCCEEDED(DwmGetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAKED,
+                                            &cloakNow, sizeof(cloakNow))) && cloakNow) {
+            wasCloaked = true;
+            BOOL cloakOff = FALSE;
+            DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK, &cloakOff, sizeof(cloakOff));
+        }
+        if (!IsWindowVisible(g_topBarPopupHwnd)) {
+            ShowWindow(g_topBarPopupHwnd, SW_SHOWNOACTIVATE);
+        }
+        RECT popupRectNow{};
+        if (GetWindowRect(g_topBarPopupHwnd, &popupRectNow)) {
+            LONG wantW = mr.right - mr.left;
+            LONG wantH = g_barHeightPx;
+            if ((popupRectNow.right - popupRectNow.left) != wantW ||
+                (popupRectNow.bottom - popupRectNow.top) != wantH) {
+                g_suppressPopupPositionLock = true;
+                SetWindowPos(g_topBarPopupHwnd, HWND_TOPMOST,
+                             mr.left, mr.top, wantW, wantH,
+                             SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                g_suppressPopupPositionLock = false;
+            }
+        }
+        SetWindowPos(g_topBarPopupHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        ForceDisableWindowsTransparency(g_topBarPopupHwnd);
+        if (g_anyChildFlyoutOpen.load()) {
+            PromoteChildFlyoutPopups();
+        }
+        // DWM can present a popup HWND that's at the right position,
+        // reports visible, has a sized root, but has no committed frame.
+        // The cold-start sequence only flushes the frame once, at the
+        // moment the position is first forced -- and if XAML's compositor
+        // commits its first real frame *after* that point, the bar stays
+        // blank until the popup is rebuilt. Force a synchronous redraw on
+        // every retry tick until the surface has been stable for a while.
+        if (s_stableTicks < 30) {
+            try {
+                if (g_rootElement) g_rootElement.UpdateLayout();
+            } catch (...) {}
+            RedrawWindow(g_topBarPopupHwnd, nullptr, nullptr,
+                         RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+            DwmFlush();
+            UpdateWindow(g_topBarPopupHwnd);
+            if (g_islandHwnd && IsWindow(g_islandHwnd)) {
+                RedrawWindow(g_islandHwnd, nullptr, nullptr,
+                             RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+            }
+            DwmFlush();
+
+        }
+        g_replaceAttempts = 0;
+        // Do NOT release the position override. XAML's own re-placement
+        // passes keep trying to move the popup back to (0,-barHeight)
+        // because the topbar island is only bar-height tall — that's the
+        // "forcing popup position after XAML mis-placement" line that
+        // appears ~4 s after startup, once we've cleared the flag. Keeping
+        // the override on is what stops the popup drifting off-screen
+        // between retry ticks.
+    } else if (windowReady) {
+        // If the popup HWND already exists and is valid, DO NOT tear it
+        // down. XAML's Flyout.Hide() is asynchronous; calling ShowAt in the
+        // same tick (which is what the retry timer used to do, ~180 ms
+        // apart) races XAML's teardown, produces an orphaned popup HWND,
+        // and leaves g_topBarPopupHwnd pointing at a window that IsWindow()
+        // reports as dead — so the boot rebuild's "popup not created yet"
+        // retry loop never settles and the bar never stays up. Forcing the
+        // position of the existing HWND with SetWindowPos is synchronous
+        // and does not restart XAML's popup lifecycle.
+        if (havePopup && IsWindow(g_topBarPopupHwnd)) {
+            g_forcePopupPosition = true;
+            SetWindowPos(g_topBarPopupHwnd, HWND_TOPMOST,
+                         mr.left, mr.top,
+                         mr.right - mr.left, g_barHeightPx,
+                         SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+            BOOL cloakOff = FALSE;
+            DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK,
+                                  &cloakOff, sizeof(cloakOff));
+            ForceDisableWindowsTransparency(g_topBarPopupHwnd);
+            try { if (g_rootElement) g_rootElement.UpdateLayout(); } catch (...) {}
+            RedrawWindow(g_topBarPopupHwnd, nullptr, nullptr,
+                         RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+            DwmFlush();
+        } else {
+        // Popup missing (or the cached HWND is dead). Build it fresh.
+        if (havePopup) {
+            try {
+                g_topBarAllowClose = true;
+                g_topBarPopup.Hide();
+                g_topBarAllowClose = false;
+            } catch (...) { g_topBarAllowClose = false; }
+            g_topBarPopupHwnd = nullptr;
+        }
+
+        // Stamp the kill against the popup HWND as soon as it exists, so
+        // any Mica DWM applies between ShowAt and our next tick is undone
+        // before XAML's first frame commits.
+        if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+            ForceDisableWindowsTransparency(g_topBarPopupHwnd);
+        }
+
+        // The anchor must be genuinely in the visual tree, not just have
+        // a XamlRoot.
+        bool anchorReady = false;
+        try {
+            if (g_topBarPopupCanvas && g_topBarPopupCanvas.XamlRoot()) {
+                auto parent = wuxm::VisualTreeHelper::GetParent(g_topBarPopupAnchor);
+                anchorReady = (parent != nullptr);
+            }
+        } catch (...) {}
+
+        if (anchorReady) {
+            Wh_Log(L"EnsureTopBarPopupShown: calling ShowAt on anchor");
+            // Force layout so the anchor's position is committed before
+            // placement reads it.
+            try { if (g_rootElement) g_rootElement.UpdateLayout(); } catch (...) {}
+            try { g_topBarPopupCanvas.UpdateLayout(); } catch (...) {}
+
+            try {
+                wuxc::Primitives::FlyoutShowOptions opts;
+                opts.Position(wf::Point{0, 0});
+                opts.Placement(wuxc::Primitives::FlyoutPlacementMode::TopEdgeAlignedLeft);
+                g_topBarPopup.ShowAt(g_topBarPopupAnchor, opts);
+            } catch (winrt::hresult_error const& ex) {
+                static bool s_loggedShowAtErr = false;
+                if (!s_loggedShowAtErr) {
+                    s_loggedShowAtErr = true;
+                    Wh_Log(L"TopBar ShowAt failed: 0x%08X %s",
+                           static_cast<unsigned>(ex.code().value),
+                           ex.message().c_str());
+                }
+            } catch (...) {}
+
+            if (!g_topBarPopupHwnd || !IsWindow(g_topBarPopupHwnd)) {
+                g_topBarPopupHwnd = FindTopBarFlyoutHwnd();
+            }
+
+            // Nudge XAML to re-read the monitor DPI on the new popup HWND.
+            // Without this, the bar renders at the wrong physical size after
+            // any OS display-scale change, and stays wrong until some other
+            // event forces a XAML layout pass.
+            if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+                ForcePopupDpiRecalc(g_topBarPopupHwnd);
+            }
+
+            // Immediately kill Mica on the freshly created popup. This has
+            // to happen before the popup's first compositor frame.
+            if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+                ForceDisableWindowsTransparency(g_topBarPopupHwnd);
+            }
+
+            // Verify the popup actually landed at the reserved slot. If
+            // not, count the failure and eventually force the position.
+            if (g_topBarPopupHwnd) {
+                RECT actual{};
+                if (GetWindowRect(g_topBarPopupHwnd, &actual)) {
+                    if (actual.left == mr.left && actual.top == mr.top) {
+                        g_replaceAttempts = 0;
+                    } else {
+                        g_replaceAttempts++;
+                        static bool s_loggedWrongPos = false;
+                        if (!s_loggedWrongPos) {
+                            s_loggedWrongPos = true;
+                            Wh_Log(L"TopBar: popup at (%ld,%ld), wanted (%ld,%ld), attempt %d",
+                                   actual.left, actual.top,
+                                   mr.left, mr.top,
+                                   g_replaceAttempts);
+                        }
+                        // Force on the very first mis-placement. XAML cannot
+                        // place this popup correctly — the topbar island is
+                        // only bar-height tall, so the placement algorithm
+                        // flips TopEdgeAlignedLeft to BottomEdgeAlignedLeft
+                        // and drops the popup at Y=-barHeight. Waiting for
+                        // retries just delays first paint by ~600ms.
+                        if (!g_forcePopupPosition) {
+                            g_forcePopupPosition = true;
+                            Wh_Log(L"TopBar: forcing popup position after XAML mis-placement");
+                        }
+                    }
+                }
+            }
+        }
+        }   // closes the "popup is dead, build fresh" else
+    }
+    // else: not ready yet, wait for the next tick.
+
+    // If XAML has repeatedly mis-placed the popup, take over positioning
+    // directly. The subclass proc blocks XAML's own SetWindowPos calls
+    // whenever g_forcePopupPosition is set, so this is stable.
+    if (g_forcePopupPosition && g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+        SetWindowPos(g_topBarPopupHwnd, HWND_TOPMOST,
+                     mr.left, mr.top,
+                     mr.right - mr.left, g_barHeightPx,
+                     SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+
+        // DWM cloaks windows whose content hasn't been committed yet. Explicit
+        // uncloak, followed by a synchronous frame flush, is what actually
+        // makes the XAML content composite — RedrawWindow alone was not
+        // enough because DWM was treating the surface as not-ready.
+        BOOL cloakOff = FALSE;
+        DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK, &cloakOff,
+                              sizeof(cloakOff));
+
+        // Force XAML to run its layout pass on the popup's content. Without
+        // this the popup HWND exists at the right coordinates with
+        // visible=1, but the tree inside it is zero-sized for the first few
+        // seconds — that's the "topbar doesn't appear until I re-enable the
+        // mod" symptom.
+        try {
+            if (g_rootElement) g_rootElement.UpdateLayout();
+        } catch (...) {}
+
+        RedrawWindow(g_topBarPopupHwnd, nullptr, nullptr,
+                     RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+        DwmFlush();
+        UpdateWindow(g_topBarPopupHwnd);
+        // The popup HWND is "shown" the moment SetWindowPos returns, but
+        // DWM composites the XAML content a few frames later — which is
+        // why the bar takes a few seconds to appear on first mod load.
+        // RedrawWindow(RDW_UPDATENOW) forces an immediate synchronous
+        // paint of the popup and all child HWNDs. DwmFlush then blocks
+        // until that frame is committed to the compositor, so the very
+        // next line we run is guaranteed the bar is on-screen.
+        RedrawWindow(g_topBarPopupHwnd, nullptr, nullptr,
+                     RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+        DwmFlush();
+        if (g_islandHwnd && IsWindow(g_islandHwnd)) {
+            RedrawWindow(g_islandHwnd, nullptr, nullptr,
+                         RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+        }
+        s_everShown = true;
+        {
+            static bool& s_everShownRef = [] () -> bool& {
+                static bool s = false;
+                return s;
+            }();
+            s_everShownRef = true;
+        }
+        static bool s_loggedForce = false;
+        if (!s_loggedForce) {
+            s_loggedForce = true;
+            RECT after{};
+            if (GetWindowRect(g_topBarPopupHwnd, &after)) {
+                LONG_PTR style = GetWindowLongPtr(g_topBarPopupHwnd, GWL_STYLE);
+                LONG_PTR exStyle = GetWindowLongPtr(g_topBarPopupHwnd, GWL_EXSTYLE);
+                BOOL visible = IsWindowVisible(g_topBarPopupHwnd);
+                double rw = 0.0, rh = 0.0;
+                try {
+                    if (g_rootElement) {
+                        rw = g_rootElement.ActualWidth();
+                        rh = g_rootElement.ActualHeight();
+                    }
+                } catch (...) {}
+                Wh_Log(L"TopBar: forced popup to (%ld,%ld)-(%ld,%ld) [want (%ld,%ld)-(%ld,%ld)] style=0x%08X ex=0x%08X visible=%d root=%.0fx%.0f",
+                       after.left, after.top, after.right, after.bottom,
+                       mr.left, mr.top,
+                       mr.left + (mr.right - mr.left), mr.top + g_barHeightPx,
+                       static_cast<unsigned>(style),
+                       static_cast<unsigned>(exStyle),
+                       visible ? 1 : 0, rw, rh);
+            }
+        }
+    }
+
+    ClipIslandHwndToEmpty();
+
+    if (!g_topBarPopupRetryTimer) {
+        g_topBarPopupRetryTimer = DispatcherTimer();
+        g_topBarPopupRetryTimer.Interval(std::chrono::milliseconds(200));
+        g_topBarPopupRetryTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+            try { EnsureTopBarPopupShown(); } catch (...) {}
+        });
+    }
+    bool contentOk = g_rootElement &&
+                     g_rootElement.ActualWidth() > 1.0 &&
+                     g_rootElement.ActualHeight() > 1.0;
+    bool popupOk = g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd);
+    bool popupReallyVisible = popupOk && IsWindowVisible(g_topBarPopupHwnd);
+    if (popupReallyVisible && popupOk) {
+        BOOL cloaked = FALSE;
+        if (SUCCEEDED(DwmGetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAKED,
+                                            &cloaked, sizeof(cloaked))) && cloaked) {
+            popupReallyVisible = false;
+        }
+    }
+    if (popupReallyVisible && contentOk) {
+        s_stableTicks++;
+    } else {
+        s_stableTicks = 0;
+    }
+    if (s_stableTicks > 2) {
+        g_topBarPopupRetryTimer.Interval(std::chrono::seconds(5));
+    } else {
+        g_topBarPopupRetryTimer.Interval(std::chrono::milliseconds(150));
+    }
+    g_topBarPopupRetryTimer.Stop();
+    g_topBarPopupRetryTimer.Start();
+}
+
+void SetTopBarContent(FrameworkElement content) {
+    RECT monitorRect = GetBarMonitorRect();
+    double userScale = g_settings.topBarScale / 100.0;
+    double osScale = GetBarDpiScale();
+    if (osScale <= 0.0) osScale = 1.0;
+    if (userScale <= 0.0) userScale = 1.0;
+
+    // The content is laid out at these canonical DIP dimensions, and a
+    // Viewbox (below) shrinks it by visualScale to fit the popup's actual
+    // DIP dimensions. UserScale=100% means "render at the same physical
+    // size a 100% DPI system would produce", independent of OS DPI.
+    double widthDip = (monitorRect.right - monitorRect.left) / userScale;
+    double heightDip = static_cast<double>(g_settings.barHeightDip);
+    double visualScale = userScale / osScale;
+    if (visualScale <= 0.0) visualScale = 1.0;
+
+    Wh_Log(L"SetTopBarContent: userScale=%.3f osScale=%.3f visualScale=%.3f dip=%.1fx%.1f",
+           userScale, osScale, visualScale, widthDip, heightDip);
+    g_replaceAttempts = 0;
+    g_forceShowAt = false;
+
+    if (!g_topBarPopup) {
+        g_topBarPopupCanvas = wuxc::Canvas();
+        g_topBarPopupCanvas.HorizontalAlignment(HorizontalAlignment::Stretch);
+        g_topBarPopupCanvas.VerticalAlignment(VerticalAlignment::Stretch);
+
+        g_topBarPopupAnchor = wuxc::Grid();
+        g_topBarPopupAnchor.Width(0);
+        g_topBarPopupAnchor.Height(0);
+        g_topBarPopupAnchor.HorizontalAlignment(HorizontalAlignment::Left);
+        g_topBarPopupAnchor.VerticalAlignment(VerticalAlignment::Top);
+        wuxc::Canvas::SetLeft(g_topBarPopupAnchor, 0);
+        wuxc::Canvas::SetTop(g_topBarPopupAnchor, 0);
+        g_topBarPopupCanvas.Children().Append(g_topBarPopupAnchor);
+
+        g_topBarPopup = wuxc::Flyout();
+        g_topBarPopup.ShouldConstrainToRootBounds(false);
+        g_topBarPopup.AllowFocusOnInteraction(false);
+        g_topBarPopup.AllowFocusWhenDisabled(false);
+        g_topBarPopup.Closing([](wuxc::Primitives::FlyoutBase const&,
+                                 wuxc::Primitives::FlyoutBaseClosingEventArgs const& args) {
+            if (!g_topBarAllowClose) {
+                args.Cancel(true);
+            }
+        });
+
+        Style presenterStyle(winrt::xaml_typename<wuxc::FlyoutPresenter>());
+        presenterStyle.Setters().Append(Setter(wuxc::Control::BackgroundProperty(),
+            winrt::box_value(MakeBrush(0, 0, 0, 0))));
+        presenterStyle.Setters().Append(Setter(wuxc::Control::BorderBrushProperty(),
+            winrt::box_value(MakeBrush(0, 0, 0, 0))));
+        presenterStyle.Setters().Append(Setter(wuxc::Control::BorderThicknessProperty(),
+            winrt::box_value(Thickness{0, 0, 0, 0})));
+        presenterStyle.Setters().Append(Setter(wuxc::Control::PaddingProperty(),
+            winrt::box_value(Thickness{0, 0, 0, 0})));
+        presenterStyle.Setters().Append(Setter(FrameworkElement::MinWidthProperty(),
+            winrt::box_value(0.0)));
+        presenterStyle.Setters().Append(Setter(FrameworkElement::MinHeightProperty(),
+            winrt::box_value(0.0)));
+        presenterStyle.Setters().Append(Setter(FrameworkElement::MaxWidthProperty(),
+            winrt::box_value(std::numeric_limits<double>::infinity())));
+        if (auto tmpl = BuildFlyoutShellTemplate(false)) {
+            presenterStyle.Setters().Append(Setter(wuxc::Control::TemplateProperty(),
+                winrt::box_value(tmpl)));
+        }
+        g_topBarPopup.FlyoutPresenterStyle(presenterStyle);
+
+        g_desktopSource.Content(g_topBarPopupCanvas);
+    }
+
+    content.Width(widthDip);
+    content.Height(heightDip);
+    try {
+        content.HorizontalAlignment(HorizontalAlignment::Stretch);
+        content.VerticalAlignment(VerticalAlignment::Stretch);
+        content.ClearValue(UIElement::RenderTransformProperty());
+    } catch (...) {}
+
+    // Remember which monitor rect this layout was built for, so the
+    // restore timer can detect a later change and trigger a rebuild.
+    g_lastBarMonitorRect = monitorRect;
+    g_lastBarMonitorRectValid = true;
+    g_lastOsScale = osScale;
+
+    // Wrap the content in a Grid so the scale is applied to a child element
+    // of the flyout root rather than to the flyout root itself. XAML
+    // special-cases a flyout's direct content: RenderTransform on that root
+    // is applied to rendering only, and pointer hit-testing tests against
+    // the untransformed layout slot — which is why clicks in the lower part
+    // of the bar missed at any OS DPI above 100%. A RenderTransform on an
+    // ordinary child element goes through XAML's normal input transform
+    // walk and is honoured by hit-testing.
+    // Viewbox instead of a RenderTransform Grid. XAML ignores the
+    // RenderTransform on a flyout's direct content for hit-testing, so
+    // the untransformed layout box got clipped to the popup's actual DIP
+    // height and the bottom of the bar was dead to clicks (the dead strip
+    // grew with OS DPI as 1 - 1/osScale of the bar height). Viewbox does a
+    // layout-level scale, which XAML honours for both rendering and
+    // hit-testing.
+    //
+    // No explicit Width/Height on the Viewbox. During a resolution change
+    // GetDpiForMonitor can briefly return a stale value, and an explicitly-
+    // sized Viewbox built from that value gets clipped on the right. Letting
+    // it stretch-fill the popup means the popup's physical size (which
+    // EnsureTopBarPopupShown forces correctly) is what drives the layout.
+    wuxc::Viewbox scaler;
+    scaler.Name(L"TopBarScaler");
+    scaler.Stretch(wuxm::Stretch::Uniform);
+    scaler.StretchDirection(wuxc::StretchDirection::Both);
+    scaler.HorizontalAlignment(HorizontalAlignment::Stretch);
+    scaler.VerticalAlignment(VerticalAlignment::Stretch);
+    scaler.Child(content);
+
+    g_topBarPopup.Content(scaler);
+
+    RunOnUiThread([] { EnsureTopBarPopupShown(); });
+    RunOnUiThread([] {
+        try { RefreshMediaButtonState(); } catch (...) {}
+    });
 }
 
 double GetBarDpiScale() {
@@ -13213,6 +25128,74 @@ void PositionAppBar(HWND hwnd, int heightPx) {
     if (g_islandHwnd) {
         SetWindowPos(g_islandHwnd, nullptr, 0, 0, data.rc.right - data.rc.left,
                      data.rc.bottom - data.rc.top, SWP_NOZORDER | SWP_SHOWWINDOW);
+    }
+}
+
+void ReloadTopBarFully() {
+    if (!g_topBarHwnd || !IsWindow(g_topBarHwnd)) return;
+    if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) return;
+
+    LoadSettings();
+    g_dpiScale = g_settings.topBarScale / 100.0;
+    g_barHeightPx = static_cast<int>(g_settings.barHeightDip * g_dpiScale + 0.5);
+
+    // A XAML popup evaluates its DIP-to-physical factor once when its
+    // window is created, and does not reliably re-evaluate it when the
+    // hosting monitor's DPI changes: after a live scale switch the popup
+    // keeps rendering against the old factor, which shows up as the bar
+    // being either tiny (popup thinks DPI is lower than the monitor) or
+    // zoomed-in (popup thinks DPI is higher). Hiding the current popup and
+    // dropping every reference to it forces XAML to build a fresh popup
+    // against the current monitor DPI the next time EnsureTopBarPopupShown
+    // calls ShowAt. This reproduces exactly what toggling the mod off and
+    // on does.
+    try {
+        g_topBarAllowClose = true;
+        if (g_topBarPopup) g_topBarPopup.Hide();
+    } catch (...) {}
+    g_topBarAllowClose = false;
+    g_topBarPopup = nullptr;
+    g_topBarPopupHwnd = nullptr;
+    g_topBarPopupCanvas = nullptr;
+    g_topBarPopupAnchor = nullptr;
+    g_subclassedPopupHwnd = nullptr;
+    g_forcePopupPosition = false;
+    g_replaceAttempts = 0;
+    g_suppressPopupPositionLock = false;
+    g_wideFlyoutTargetX = -1;
+    g_wideFlyoutTargetY = -1;
+    ClearChildPopupTargets();
+
+    g_lastBarMonitorRect = GetBarMonitorRect();
+    g_lastBarMonitorRectValid = true;
+    g_lastOsScale = GetBarDpiScale();
+
+    InvalidateStartAndSearchFlyouts();
+    SetTopBarContent(BuildTopBarContent());
+    BuildStartContextMenu();
+    BuildTaskContextMenu();
+    BuildAppTitleContextMenu();
+    ApplyAllControlStyles();
+    ApplyVisibilitySettings();
+    UpdateResourceButton();
+    StripInheritedIslandBackgrounds();
+    PositionAppBar(g_topBarHwnd, g_barHeightPx);
+    RefreshTaskList(true);
+
+    // XAML creates a fresh popup HWND roughly one second after a reload,
+    // and its bounds-aware placement puts that popup above the monitor's
+    // top edge because the island is only bar-height tall. The one-second
+    // restore timer would eventually catch it, but this leaves the bar off-
+    // screen for up to a second after every reload. Force the popup into
+    // the reserved strip on a few quick follow-up ticks so it appears
+    // immediately regardless of when XAML realises the new HWND.
+    for (int delayMs : {100, 300, 600, 1200, 2000}) {
+        RunInBackground([delayMs] {
+            if (WaitForSingleObject(g_stopEvent, delayMs) == WAIT_OBJECT_0) return;
+            RunOnUiThread([] {
+                try { PinTopBarFlyoutHwnd(); } catch (...) {}
+            });
+        });
     }
 }
 
@@ -13290,6 +25273,83 @@ SetWindowCompositionAttribute_t GetSetWindowCompositionAttribute() {
 
 
 
+std::mutex g_transparencyKilledMutex;
+std::map<HWND, ULONGLONG> g_transparencyKilledAt;
+
+void ForceDisableWindowsTransparency(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) return;
+
+    {
+        std::lock_guard<std::mutex> lock(g_transparencyKilledMutex);
+        ULONGLONG now = GetTickCount64();
+        auto it = g_transparencyKilledAt.find(hwnd);
+        if (it != g_transparencyKilledAt.end() && (now - it->second) < 3000) {
+            return;
+        }
+        g_transparencyKilledAt[hwnd] = now;
+        if (g_transparencyKilledAt.size() > 64) {
+            for (auto pit = g_transparencyKilledAt.begin(); pit != g_transparencyKilledAt.end();) {
+                if (!IsWindow(pit->first)) pit = g_transparencyKilledAt.erase(pit);
+                else ++pit;
+            }
+        }
+    }
+
+    // Master switch: DWMWA_SYSTEMBACKDROP_TYPE = DWMSBT_NONE (1).
+    DWORD backdropNone = 1;
+    DwmSetWindowAttribute(hwnd, 38, &backdropNone, sizeof(backdropNone));
+
+    // DWMWA_USE_HOSTBACKDROPBRUSH (17). FALSE = do NOT let DWM draw the
+    // host backdrop brush behind this window. TRUE = the opposite, which
+    // is what enables the Mica sheet you're seeing on top of the bar.
+    BOOL hostBackdropOff = FALSE;
+    DwmSetWindowAttribute(hwnd, 17, &hostBackdropOff, sizeof(hostBackdropOff));
+
+    // Undocumented legacy Mica toggle. FALSE on every build that honours it.
+    BOOL micaOff = FALSE;
+    DwmSetWindowAttribute(hwnd, 1029, &micaOff, sizeof(micaOff));
+
+    BOOL ncreOff = FALSE;
+    DwmSetWindowAttribute(hwnd, 1, &ncreOff, sizeof(ncreOff));
+
+    DWORD ncrpDisabled = 1;
+    DwmSetWindowAttribute(hwnd, 2, &ncrpDisabled, sizeof(ncrpDisabled));
+
+    DWORD cornerDoNotRound = 1;
+    DwmSetWindowAttribute(hwnd, 33, &cornerDoNotRound, sizeof(cornerDoNotRound));
+
+    MARGINS margins{-1, -1, -1, -1};
+    DwmExtendFrameIntoClientArea(hwnd, &margins);
+
+    // Legacy accent policy: ACCENT_DISABLED removes anything an earlier
+    // ACCENT_ENABLE_* call left behind (including the Windows 10 fallback
+    // acrylic / blur-behind that some XAML Islands paths still set).
+    if (auto swca = GetSetWindowCompositionAttribute()) {
+        struct { int AccentState; DWORD AccentFlags; DWORD GradientColor; DWORD AnimationId; } policy{};
+        policy.AccentState = 0;
+        WINDOWCOMPOSITIONATTRIBDATA data{};
+        data.Attrib = WCA_ACCENT_POLICY;
+        data.pvData = &policy;
+        data.cbData = sizeof(policy);
+        swca(hwnd, &data);
+    }
+
+    // Strip visual styles off the HWND. On some Windows 11 builds the
+    // default window theme reapplies the Mica backdrop through the theme
+    // engine even after the DWM attributes are cleared; killing the theme
+    // stops it at the source. Resolved dynamically so the mod doesn't need
+    // to link uxtheme.lib.
+    static auto s_setWindowTheme = []() -> HRESULT (WINAPI*)(HWND, LPCWSTR, LPCWSTR) {
+        HMODULE m = LoadLibraryExW(L"uxtheme.dll", nullptr,
+                                   LOAD_LIBRARY_SEARCH_SYSTEM32);
+        return m ? reinterpret_cast<HRESULT (WINAPI*)(HWND, LPCWSTR, LPCWSTR)>(
+                       GetProcAddress(m, "SetWindowTheme")) : nullptr;
+    }();
+    if (s_setWindowTheme) {
+        s_setWindowTheme(hwnd, L"", L"");
+    }
+}
+
 void ApplyBlurToWindow(HWND hwnd) {
     (void)hwnd;
 }
@@ -13339,6 +25399,41 @@ void ApplyModernWindowChrome(HWND hwnd) {
 // vanish. Setting it a single time keeps the blur and stops the flicker.
 std::set<HWND> g_blurredPopupHwnds;
 
+void ApplyFlyoutBlurBrush(wuxc::Border const& border) {
+    if (!border) return;
+    wui::Color tintColor;
+    if (!ParseBarColor(g_settings.topBarBackgroundColor,
+                       g_settings.topBarBackgroundOpacity,
+                       &tintColor)) {
+        tintColor = wui::ColorHelper::FromArgb(128, 0, 0, 0);
+    }
+    auto blurBrush = winrt::make<XamlBlurBrush>(
+        border.as<UIElement>(),
+        static_cast<float>(g_settings.globalBlurAmount),
+        tintColor,
+        tintColor.A);
+    border.Background(blurBrush);
+}
+
+void ForceXamlPopupToTop(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) return;
+    BOOL cloakOff = FALSE;
+    DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, &cloakOff, sizeof(cloakOff));
+    if (!IsWindowVisible(hwnd)) {
+        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+    }
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                 SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+    RedrawWindow(hwnd, nullptr, nullptr,
+                 RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW | RDW_FRAME);
+    DwmFlush();
+}
+
+void InstallChildPopupSubclassForTintKill(HWND hwnd) {
+    (void)hwnd;
+}
+
 void ApplyBlurToAllOpenPopups() {
     // Drop dead HWNDs so the set doesn't grow unbounded across flyout rebuilds.
     for (auto it = g_blurredPopupHwnds.begin(); it != g_blurredPopupHwnds.end();) {
@@ -13353,6 +25448,9 @@ void ApplyBlurToAllOpenPopups() {
         DWORD pid = 0;
         GetWindowThreadProcessId(hwnd, &pid);
         if (pid != GetCurrentProcessId() || hwnd == g_topBarHwnd) {
+            return TRUE;
+        }
+        if (hwnd == g_topBarPopupHwnd || hwnd == g_islandHwnd) {
             return TRUE;
         }
         // Never touch the settings window or any of its child HWNDs — the
@@ -13442,6 +25540,11 @@ void StripInheritedIslandBackgrounds() {
 
 void CALLBACK WindowEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD, DWORD) {
     if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
+    // No kill call here. EVENT_OBJECT_CREATE / SHOW fire for every XAML
+    // helper window the shell's host processes own, so wiring the killer
+    // into this handler produced a storm of terminate calls per second.
+    // The foreground-event handler and the polling timer cover the same
+    // ground with far lower noise.
     if (event == EVENT_OBJECT_CREATE || event == EVENT_OBJECT_DESTROY ||
         event == EVENT_OBJECT_NAMECHANGE || event == EVENT_OBJECT_SHOW || event == EVENT_OBJECT_HIDE) {
         RunOnUiThread([] {
@@ -13465,16 +25568,40 @@ void UpdateClockText() {
         return;
     }
     if (auto text = it->second.try_as<wuxc::TextBlock>()) {
-        text.Text(winrt::hstring(FormatClockText()));
+        ApplyClockInlines(text, FormatClockText());
     }
 }
 
 LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    if (g_shellHookMessage != 0 && message == g_shellHookMessage) {
+        switch (wParam) {
+            case HSHELL_WINDOWCREATED:
+            case HSHELL_WINDOWDESTROYED:
+            case HSHELL_WINDOWACTIVATED:
+            case HSHELL_RUDEAPPACTIVATED:
+            case HSHELL_REDRAW:
+                ScheduleTaskListRefresh();
+                if (wParam == HSHELL_WINDOWCREATED ||
+                    wParam == HSHELL_WINDOWDESTROYED) {
+                    // Taskbar button layout shifts when apps open, close or
+                    // are pinned. Invalidate the cached Start/Search rects
+                    // and re-query on a debounce so the next click lands on
+                    // the right button.
+                    g_taskbarButtonRectsValid = false;
+                    ScheduleTaskbarRectCacheRefresh();
+                }
+                break;
+        }
+        return 0;
+    }
     if (message == g_taskbarCreatedMsg && g_taskbarCreatedMsg != 0) {
         // Explorer restarted and dropped every AppBar registration with it.
         g_appBarRegistered = false;
         RegisterAppBar(hwnd);
         PositionAppBar(hwnd, g_barHeightPx);
+        g_taskbarButtonRectsValid = false;
+        RefreshTaskbarButtonRectsAsync();
+        ScheduleTaskbarRectRefreshRetries();
         return 0;
     }
 
@@ -13483,6 +25610,9 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             // Never let DefWindowProc paint the class brush; that plate is
             // exactly the black rectangle behind the bar.
             return 1;
+
+        // (WM_NCHITTEST deliberately not handled — the popup HWND will be
+        // moved to (0,0) and will be the topmost window at that point.)
 
         case WM_APPBAR_CALLBACK:
             switch (wParam) {
@@ -13494,40 +25624,40 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                         // lParam carries TRUE when a full-screen app is opening
                         // and FALSE when it is closing. Win+D (Show Desktop)
                         // makes the shell incorrectly report TRUE even though
-                        // it's really the desktop being shown. Verify the
-                        // foreground window is actually a fullscreen app
-                        // covering the whole monitor.
+                        // it's really the desktop being shown — filter that
+                        // case by checking the foreground window's class,
+                        // but otherwise trust the shell's verdict so real
+                        // fullscreen apps (including those with a small
+                        // invisible border that the old rect check rejected)
+                        // always get demoted.
                         bool isFullscreen = (lParam != 0);
                         if (isFullscreen) {
                             HWND fg = GetForegroundWindow();
-                            bool verified = false;
                             if (fg) {
                                 wchar_t cls[256] = {0};
                                 GetClassName(fg, cls, ARRAYSIZE(cls));
-                                if (wcscmp(cls, L"Progman") != 0 &&
-                                    wcscmp(cls, L"WorkerW") != 0) {
-                                    RECT fgRect{};
-                                    HMONITOR mon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
-                                    MONITORINFO mi{};
-                                    mi.cbSize = sizeof(mi);
-                                    if (GetWindowRect(fg, &fgRect) &&
-                                        GetMonitorInfo(mon, &mi)) {
-                                        if (fgRect.left <= mi.rcMonitor.left &&
-                                            fgRect.top <= mi.rcMonitor.top &&
-                                            fgRect.right >= mi.rcMonitor.right &&
-                                            fgRect.bottom >= mi.rcMonitor.bottom) {
-                                            verified = true;
-                                        }
-                                    }
+                                if (wcscmp(cls, L"Progman") == 0 ||
+                                    wcscmp(cls, L"WorkerW") == 0) {
+                                    isFullscreen = false;
                                 }
                             }
-                            isFullscreen = verified;
                         }
                         g_fullScreenAppActive = isFullscreen;
-                        SetWindowPos(hwnd,
-                                     isFullscreen ? HWND_NOTOPMOST : HWND_TOPMOST,
-                                     0, 0, 0, 0,
-                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                        if (isFullscreen) {
+                            // Demote instead of hide so the fullscreen app
+                            // paints over the bar without a visibility
+                            // cycle. The AppBar reservation is independent
+                            // of z-order and stays in place, so maximized
+                            // windows still respect the strip after the
+                            // app exits.
+                            DemoteTopBarForFullscreen();
+                            try { RebuildAllLiveBlurBrushes(); } catch (...) {}
+                            DwmFlush();
+                        } else {
+                            RestoreTopBarZOrder();
+                            try { RebuildAllLiveBlurBrushes(); } catch (...) {}
+                            DwmFlush();
+                        }
                     }
                     break;
             }
@@ -13545,15 +25675,19 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                 SetWindowPos(g_islandHwnd, nullptr, 0, 0, LOWORD(lParam), HIWORD(lParam),
                              SWP_NOZORDER | SWP_SHOWWINDOW);
             }
+            RepositionTopBarPopup();
             return 0;
 
         case WM_DISPLAYCHANGE:
         case WM_DPICHANGED:
-            g_dpiScale = GetBarDpiScale();
-            g_barHeightPx = static_cast<int>(g_settings.barHeightDip * g_dpiScale + 0.5);
-            PositionAppBar(hwnd, g_barHeightPx);
-            RefreshTaskList(true);
-        RefreshBluetoothRadioState(); // initial radio state
+            // The restore timer already detects monitor and OS-scale
+            // changes and runs a full reload. WM_DISPLAYCHANGE is not
+            // delivered reliably to WS_POPUP | WS_EX_TOOLWINDOW windows,
+            // so relying on this message alone left the bar clipped after
+            // a resolution switch. The timer is authoritative; this case
+            // just needs to not fight it.
+            g_taskbarButtonRectsValid = false;
+            RefreshTaskbarButtonRectsAsync();
             return 0;
 
         case WM_SETTINGCHANGE:
@@ -13561,18 +25695,12 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             // like; the panels rebuild themselves when next opened, so only the
             // clock needs touching here.
             UpdateClockText();
-
-            // Reload the wallpaper when Windows tells us the wallpaper changed.
-            // The lParam will be "Wallpaper" (case-sensitive? usually it's "Wallpaper").
-            if (lParam && wcscmp(reinterpret_cast<PCWSTR>(lParam), L"Wallpaper") == 0) {
-                if (g_wallpaperLayer) {
-                    g_wallpaperLayer.Background(GetWallpaperBrush());
-                    Wh_Log(L"TopBar: Wallpaper background updated.");
-                }
-            }
             return 0;
 
         case WM_HOTKEY:
+            if (!g_rootElement) {
+                return 0;
+            }
             switch (wParam) {
                 case HOTKEY_ID_DISPLAY:
                     ToggleFlyout(g_displayFlyout, g_displayButton);
@@ -13650,8 +25778,20 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
 
         case WM_SHOWWINDOW:
             if (wParam == FALSE && !g_allowHide && !g_fullScreenAppActive) {
+                HWND fg = GetForegroundWindow();
+                bool fgIsFullscreen = false;
+                if (fg && fg != hwnd && fg != g_islandHwnd &&
+                    fg != g_topBarPopupHwnd) {
+                    HMONITOR mon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+                    fgIsFullscreen = IsWindowFullscreenOnMonitor(fg, mon);
+                }
+                if (fgIsFullscreen) {
+                    g_fullScreenAppActive = true;
+                    break;
+                }
                 ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-                DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, FALSE, sizeof(BOOL));
+                BOOL cloakOff = FALSE;
+                DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, &cloakOff, sizeof(cloakOff));
                 // Immediately reapply topmost
                 SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                              SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -13677,9 +25817,10 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
         case WM_WINDOWPOSCHANGING:
             {
                 WINDOWPOS* wp = reinterpret_cast<WINDOWPOS*>(lParam);
-                // Block hide whenever not shutting down. Fullscreen apps should
-                // cover the bar via z-order, never hide it.
-                if ((wp->flags & SWP_HIDEWINDOW) && !g_allowHide) {
+                // Block hide whenever not shutting down, not fullscreen,
+                // and autohide isn't the one asking for the hide.
+                if ((wp->flags & SWP_HIDEWINDOW) && !g_allowHide &&
+                    !g_fullScreenAppActive) {
                     wp->flags &= ~SWP_HIDEWINDOW; // cancel the hide
                 }
             }
@@ -13688,6 +25829,54 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
 
     return DefWindowProc(hwnd, message, wParam, lParam);
 }
+
+UINT g_shellHookMessage = 0;
+
+void InstallShellHook(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) return;
+    if (g_shellHookMessage == 0) {
+        g_shellHookMessage = RegisterWindowMessageW(L"SHELLHOOK");
+        if (g_shellHookMessage == 0) {
+            Wh_Log(L"RegisterWindowMessage(SHELLHOOK) failed");
+            return;
+        }
+    }
+    if (!RegisterShellHookWindow(hwnd)) {
+        Wh_Log(L"RegisterShellHookWindow failed: %u", GetLastError());
+    }
+}
+
+void UninstallShellHook(HWND hwnd) {
+    if (g_shellHookMessage != 0 && hwnd && IsWindow(hwnd)) {
+        DeregisterShellHookWindow(hwnd);
+    }
+    g_shellHookMessage = 0;
+}
+
+void ScheduleTaskListRefresh() {
+    if (!g_taskRefreshTimer) {
+        g_taskRefreshTimer = DispatcherTimer();
+        g_taskRefreshTimer.Interval(std::chrono::milliseconds(200));
+        g_taskRefreshTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+            g_taskRefreshTimer.Stop();
+            try { RefreshTaskList(false); } catch (...) {}
+        });
+    }
+    g_taskRefreshTimer.Stop();
+    g_taskRefreshTimer.Start();
+}
+
+void CALLBACK SelfProcessWindowEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD, DWORD) {
+    if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF || !hwnd) return;
+    if (event != EVENT_OBJECT_CREATE && event != EVENT_OBJECT_SHOW) return;
+    if (hwnd == g_topBarHwnd || hwnd == g_islandHwnd || hwnd == g_topBarPopupHwnd) return;
+    wchar_t cls[256]{};
+    if (!GetClassName(hwnd, cls, ARRAYSIZE(cls))) return;
+    if (!(wcsstr(cls, L"Xaml") && wcsstr(cls, L"Popup"))) return;
+    InstallChildPopupSubclassForTintKill(hwnd);
+}
+
+HWINEVENTHOOK g_selfProcessWindowHook = nullptr;
 
 void ForegroundEventProcInstall() {
     if (g_foregroundHook) {
@@ -13699,14 +25888,6 @@ void ForegroundEventProcInstall() {
     if (!g_foregroundHook) {
         Wh_Log(L"SetWinEventHook failed; click-to-minimize will not work");
     }
-
-    // Additional hook for window creation/destruction/rename to refresh task list
-    g_windowEventHook = SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE,
-                                        nullptr, WindowEventProc, 0, 0,
-                                        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-    g_windowEventNameHook = SetWinEventHook(EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_NAMECHANGE,
-                                            nullptr, WindowEventProc, 0, 0,
-                                            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 }
 
 void ShowElementTargetUnderCursor() {
@@ -13789,10 +25970,121 @@ void ShowElementTargetUnderCursor() {
     } catch (...) {}
 }
 
+// XAML caches its rasterization scale (monitor DPI) inside the UI thread's
+// WindowsXamlManager / DesktopWindowXamlSource. It is never re-read when the
+// OS display scale changes. Any attempt to reset it in place — detach and
+// reattach the source, nudge the popup HWND with WM_DPICHANGED, re-ShowAt
+// the flyout — leaves stale state somewhere: a bar rendered at the wrong
+// physical size, or, worse, an orphaned island HWND whose composition target
+// still holds the previous frame and produces a non-interactive artifact on
+// the desktop.
+//
+// The only reliable reset is a full restart of the topbar thread, which
+// destroys and rebuilds every XAML object against a monitor that already
+// reports the new DPI. That is the same path toggling the mod off and on
+// takes, and the same path the boot-rebuild timer uses.
+static std::atomic<bool> g_scaleRestartPending{false};
+
+DWORD WINAPI TopBarThreadProc(LPVOID);
+
+void RestartTopBarThreadForScaleChange() {
+    bool expected = false;
+    if (!g_scaleRestartPending.compare_exchange_strong(expected, true)) {
+        Wh_Log(L"RestartTopBarThreadForScaleChange: restart already pending");
+        return;
+    }
+    if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) {
+        g_scaleRestartPending = false;
+        return;
+    }
+    if (!g_topBarThread || !g_topBarHwnd) {
+        g_scaleRestartPending = false;
+        return;
+    }
+
+    Wh_Log(L"RestartTopBarThreadForScaleChange: restarting topbar thread");
+
+    // Close every flyout while the old XAML manager is still alive so their
+    // popup HWNDs are torn down cleanly. Orphaned topmost popups from the
+    // old thread would otherwise interfere with the new thread's flyouts.
+    try { if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) g_startMenuFlyout.Hide(); } catch (...) {}
+    try { if (g_searchFlyout && g_searchFlyout.IsOpen()) g_searchFlyout.Hide(); } catch (...) {}
+    try { if (g_displayFlyout) g_displayFlyout.Hide(); } catch (...) {}
+    try { if (g_soundFlyout) g_soundFlyout.Hide(); } catch (...) {}
+    try { if (g_wifiFlyout) g_wifiFlyout.Hide(); } catch (...) {}
+    try { if (g_bluetoothFlyout) g_bluetoothFlyout.Hide(); } catch (...) {}
+    try { if (g_batteryFlyout) g_batteryFlyout.Hide(); } catch (...) {}
+    try { if (g_resourceFlyout) g_resourceFlyout.Hide(); } catch (...) {}
+    try { if (g_mediaFlyout) g_mediaFlyout.Hide(); } catch (...) {}
+    try { if (g_settingsFlyout) g_settingsFlyout.Hide(); } catch (...) {}
+    try { if (g_startContextMenu) g_startContextMenu.Hide(); } catch (...) {}
+    try { if (g_taskContextMenu) g_taskContextMenu.Hide(); } catch (...) {}
+    try { if (g_appTitleContextMenu) g_appTitleContextMenu.Hide(); } catch (...) {}
+    try { if (g_startPowerMenu) g_startPowerMenu.Hide(); } catch (...) {}
+    try { if (g_startAccountFlyout) g_startAccountFlyout.Hide(); } catch (...) {}
+    try { if (g_startTileMenu) g_startTileMenu.Hide(); } catch (...) {}
+    try { if (g_searchResultMenu) g_searchResultMenu.Hide(); } catch (...) {}
+
+    HANDLE oldThread = g_topBarThread;
+    DWORD oldThreadId = g_topBarThreadId;
+
+    RunInBackground([oldThread] {
+        WaitForSingleObject(oldThread, 15000);
+        CloseHandle(oldThread);
+        if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) {
+            g_scaleRestartPending = false;
+            return;
+        }
+        DWORD newThreadId = 0;
+        HANDLE newThread = CreateThread(nullptr, 0, TopBarThreadProc,
+                                        nullptr, 0, &newThreadId);
+        if (newThread) {
+            g_topBarThread = newThread;
+            g_topBarThreadId = newThreadId;
+            Wh_Log(L"RestartTopBarThreadForScaleChange: restarted");
+        } else {
+            Wh_Log(L"RestartTopBarThreadForScaleChange: failed: %u", GetLastError());
+        }
+        g_scaleRestartPending = false;
+    });
+
+    if (oldThreadId) PostThreadMessage(oldThreadId, WM_QUIT, 0, 0);
+    if (g_topBarHwnd) PostMessage(g_topBarHwnd, WM_CLOSE, 0, 0);
+}
+
+void WaitForShellReadyIfColdBoot() {
+    // On a genuine cold boot, Windhawk spawns the tool-mod process the
+    // moment the shell starts. WindowsXamlManager::InitializeForCurrentThread
+    // can then run before Explorer has finished bringing its input stack
+    // up, and the popup input-site that XAML registers at that point is
+    // derived from an inconsistent snapshot. The bar renders fine but every
+    // mouse message is silently dropped -- hover dead, clicks dropped,
+    // Start menu hit-testing offset. Only a fresh XAML input dispatcher
+    // (process restart) or a properly-timed init avoids it.
+    //
+    // Fire only on the very first thread of a fresh process. On scale-change
+    // thread restarts, the process has been running for minutes, so
+    // IsRecentColdBoot returns false and the new thread starts immediately
+    // without an artificial shell-ready wait.
+    if (!IsRecentColdBoot()) return;
+
+    // Wait for the taskbar to exist (shell is up), then a short grace period
+    // for DWM composition and the input stack.
+    for (int i = 0; i < 300; i++) {
+        if (FindWindowW(L"Shell_TrayWnd", nullptr)) break;
+        if (WaitForSingleObject(g_stopEvent, 100) == WAIT_OBJECT_0) return;
+    }
+    for (int i = 0; i < 20; i++) {
+        if (WaitForSingleObject(g_stopEvent, 100) == WAIT_OBJECT_0) return;
+    }
+}
+
 DWORD WINAPI TopBarThreadProc(LPVOID) {
     Wh_Log(L"TopBar: TopBarThreadProc started.");
     try {
-        // No delay – start immediately.
+        g_barStartTick = GetTickCount64();
+
+        WaitForShellReadyIfColdBoot();
 
         winrt::init_apartment(winrt::apartment_type::single_threaded);
 
@@ -13817,7 +26109,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 
         (void)RegisterClassEx(&windowClass);
 
-        g_dpiScale = GetBarDpiScale();
+        g_dpiScale = g_settings.topBarScale / 100.0;
         g_barHeightPx = static_cast<int>(g_settings.barHeightDip * g_dpiScale + 0.5);
         RECT monitorRect = GetBarMonitorRect();
 
@@ -13877,21 +26169,94 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         SetWindowPos(g_islandHwnd, nullptr, 0, 0, monitorRect.right - monitorRect.left,
                      g_barHeightPx, SWP_NOZORDER | SWP_SHOWWINDOW);
 
+        // Show the bar window before building the XAML tree, so the popup
+        // placement retry logic completes on its first tick instead of
+        // thrashing through several rounds of SetWindowPos + XAML relayout.
+        ShowWindow(g_topBarHwnd, SW_SHOWNOACTIVATE);
+        SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+
         // Menu resources first: the flyouts and menus built below pick them up as
         // they are created.
         InstallGlobalMenuResources();
 
-        auto content = BuildTopBarContent();
-        g_desktopSource.Content(content);
+        SetTopBarContent(BuildTopBarContent());
+
+        // Follow-up build. XAML occasionally commits the first content tree
+        // without attaching it to the live visual tree on a fresh process
+        // start; the popup HWND ends up at the correct position and size
+        // with visible=1, but no frames are presented and the bar never
+        // appears. Running the content build a second time forces XAML to
+        // re-attach the tree, which is the same effect that a resolution
+        // change (and therefore a reload) has. Observed on the re-enable
+        // path; the compile path was unaffected.
+        RunInBackground([] {
+            if (WaitForSingleObject(g_stopEvent, 500) == WAIT_OBJECT_0) return;
+            RunOnUiThread([] {
+                // Same full reload that resolution changes use. A bare
+                // SetTopBarContent replaces the content tree but leaves
+                // XAML's FlyoutService pointing at the previous tree as
+                // the coordinate root for control flyouts, so subsequent
+                // Flyout.ShowAt(button) calls computed the button's
+                // position against a stale root and opened the flyout at
+                // the top-left of the monitor. ReloadTopBarFully destroys
+                // the popup HWND, which forces XAML to rebuild that cache
+                // alongside the tree.
+                try { ReloadTopBarFully(); } catch (...) {}
+            });
+        });
         
         // Make the XAML island background transparent so the system blur shows through.
-        auto xamlSourceUnknown = g_desktopSource.as<::IUnknown>();
-        winrt::com_ptr<IXamlSourceTransparency> transparency;
-        const IID kIID_IXamlSourceTransparency = {0x06636c29, 0x5a17, 0x458d, {0x8e, 0xa2, 0x24, 0x22, 0xd9, 0x97, 0xa9, 0x22}};
-        if (SUCCEEDED(xamlSourceUnknown->QueryInterface(kIID_IXamlSourceTransparency, transparency.put_void())) && transparency) {
-            transparency->put_IsBackgroundTransparent(TRUE);
-        } else {
-            Wh_Log(L"Failed to set IXamlSourceTransparency.IsBackgroundTransparent");
+        //
+        // IXamlSourceTransparency is implemented on the WinRT DesktopWindowXamlSource,
+        // but some Windows 11 builds do not expose it through the projected wrapper at
+        // all (the QI returns E_NOINTERFACE). Because the island's default backdrop
+        // is opaque, a failed QI makes the whole popup host paint an opaque layer
+        // above the XAML content, which is exactly the "tint over the content" bug.
+        //
+        // Try three different QI paths — raw ABI pointer, get_unknown, and the
+        // projected as<IUnknown>() — and retry once on the next dispatcher turn in
+        // case the interface is only published after XAML's first composition pass.
+        static const IID kIID_XamlSourceTransparency =
+            {0x06636c29, 0x5a17, 0x458d, {0x8e, 0xa2, 0x24, 0x22, 0xd9, 0x97, 0xa9, 0x22}};
+        bool islandTransparentSet = false;
+        try {
+            winrt::com_ptr<::IUnknown> unk = g_desktopSource.as<::IUnknown>();
+            if (unk) {
+                winrt::com_ptr<IXamlSourceTransparency> t;
+                if (SUCCEEDED(unk->QueryInterface(kIID_XamlSourceTransparency, t.put_void())) && t) {
+                    t->put_IsBackgroundTransparent(TRUE);
+                    islandTransparentSet = true;
+                }
+            }
+        } catch (...) {}
+        if (!islandTransparentSet) {
+            try {
+                auto* rawAbi = reinterpret_cast<::IUnknown*>(winrt::get_abi(g_desktopSource));
+                if (rawAbi) {
+                    winrt::com_ptr<IXamlSourceTransparency> t;
+                    if (SUCCEEDED(rawAbi->QueryInterface(kIID_XamlSourceTransparency, t.put_void())) && t) {
+                        t->put_IsBackgroundTransparent(TRUE);
+                        islandTransparentSet = true;
+                    }
+                }
+            } catch (...) {}
+        }
+        if (!islandTransparentSet) {
+            Wh_Log(L"Failed to set IXamlSourceTransparency.IsBackgroundTransparent; scheduling retry");
+            RunOnUiThread([] {
+                if (!g_desktopSource) return;
+                try {
+                    winrt::com_ptr<::IUnknown> unk = g_desktopSource.as<::IUnknown>();
+                    if (unk) {
+                        winrt::com_ptr<IXamlSourceTransparency> t;
+                        if (SUCCEEDED(unk->QueryInterface(kIID_XamlSourceTransparency, t.put_void())) && t) {
+                            t->put_IsBackgroundTransparent(TRUE);
+                            Wh_Log(L"Island transparency set on deferred retry");
+                        }
+                    }
+                } catch (...) {}
+            });
         }
 
         // After BuildTopBarContent, which clears g_namedElements -- building the
@@ -13922,29 +26287,120 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         UpdateWindow(g_topBarHwnd);
+        InstallShellHook(g_topBarHwnd);
+        RefreshTaskbarButtonRectsAsync();
+        ScheduleTaskbarRectRefreshRetries();
         // Re-apply backdrop after window becomes visible (fixes blur on top bar)
         ApplyWindowBackdrop(g_topBarHwnd);
-    // Register global hotkeys (Ctrl+Alt+1..5) to open control flyouts.
-        // Hotkeys are disabled by default. Ctrl+Alt+digit is a common app binding.
-        // Uncomment the lines below to re-enable them.
-        if (g_settings.enableHotkeys) {
-            RegisterHotKey(g_topBarHwnd, HOTKEY_ID_DISPLAY, MOD_CONTROL | MOD_ALT, '1');
-            RegisterHotKey(g_topBarHwnd, HOTKEY_ID_SOUND, MOD_CONTROL | MOD_ALT, '2');
-            RegisterHotKey(g_topBarHwnd, HOTKEY_ID_WIFI, MOD_CONTROL | MOD_ALT, '3');
-            RegisterHotKey(g_topBarHwnd, HOTKEY_ID_BLUETOOTH, MOD_CONTROL | MOD_ALT, '4');
-            RegisterHotKey(g_topBarHwnd, HOTKEY_ID_RESOURCE, MOD_CONTROL | MOD_ALT, '0');
-            RegisterHotKey(g_topBarHwnd, HOTKEY_ID_BATTERY, MOD_CONTROL | MOD_ALT, '5');
-            RegisterHotKey(g_topBarHwnd, HOTKEY_ID_START_MENU, MOD_CONTROL | MOD_ALT, '6');
-            RegisterHotKey(g_topBarHwnd, HOTKEY_ID_TASK_MENU, MOD_CONTROL | MOD_ALT, '7');
-            RegisterHotKey(g_topBarHwnd, HOTKEY_ID_WEATHER, MOD_CONTROL | MOD_ALT, '8');
-            RegisterHotKey(g_topBarHwnd, HOTKEY_ID_RECYCLEBIN, MOD_CONTROL | MOD_ALT, '9');
-        }
         RegisterAppBar(g_topBarHwnd);
         // A moment later, so the shell has finished its own start-up layout pass
         // and doesn't immediately overwrite our reservation.
         SetTimer(g_topBarHwnd, kAppBarInitTimerId, 800, nullptr);
 
+        InstallChildFlyoutMouseHook();
+        SyncSearchKeyHook();
+
+        if (!g_settings.defaultStartMenu) {
+            try { RestoreNativeShellHostWindows(true, false); } catch (...) {}
+        }
+        if (!g_settings.defaultSearch) {
+            try { RestoreNativeShellHostWindows(false, true); } catch (...) {}
+        }
+
         ForegroundEventProcInstall();
+
+        if (!g_selfProcessWindowHook) {
+            g_selfProcessWindowHook = SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_SHOW,
+                                                      nullptr, SelfProcessWindowEventProc,
+                                                      GetCurrentProcessId(), 0,
+                                                      WINEVENT_OUTOFCONTEXT);
+        }
+
+        RunOnUiThread([] {
+            try { InstallChildFlyoutMouseHook(); } catch (...) {}
+        });
+
+        RunInBackground([] {
+            if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) return;
+
+            // Wait 3 seconds before hammering the shell icon cache. This
+            // work takes the shell's global icon-cache mutex on every one
+            // of its SHGetFileInfoW calls, and the main thread's
+            // RefreshTaskList(true) — which runs immediately after the
+            // topbar is placed — takes the same mutex via PrivateExtractIconsW
+            // for every open window. Running both at once means the UI
+            // thread blocks on the pre-warm's lock, XAML can't compose a
+            // frame during the block, and the topbar stays invisible for
+            // several seconds after the popup is already positioned. The
+            // delay costs nothing in practice: the user rarely opens the
+            // Start menu within three seconds of the bar appearing.
+            WaitForSingleObject(g_stopEvent, 3000);
+            if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) return;
+
+            auto& apps = startmenu::GetCachedApps();
+            Wh_Log(L"[StartMenu] Pre-warmed %zu apps", apps.size());
+            for (const auto& a : apps) {
+                if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) return;
+                SHFILEINFOW sfi{};
+                if (SHGetFileInfoW(a.lnkPath.c_str(), 0, &sfi, sizeof(sfi),
+                                   SHGFI_ICON | SHGFI_LARGEICON) && sfi.hIcon) {
+                    DestroyIcon(sfi.hIcon);
+                }
+            }
+            Wh_Log(L"[StartMenu] Icon cache pre-warm complete");
+        });
+
+        // Boot diagnostic: after the bar has had time to appear, ask
+        // Windows what window is actually at a click point inside the bar.
+        // If it is the popup HWND, the popup is on top and XAML is the
+        // problem; if it is anything else (the island, the topbar HWND,
+        // another XAML popup, some shell window), then something is
+        // physically blocking clicks and we know exactly which class to
+        // filter out or re-stack.
+        RunInBackground([] {
+            if (WaitForSingleObject(g_stopEvent, 8000) == WAIT_OBJECT_0) return;
+            RunOnUiThread([] {
+                POINT pt{ 100, 20 };
+                HWND at = WindowFromPoint(pt);
+                wchar_t cls[256]{};
+                if (at) GetClassName(at, cls, ARRAYSIZE(cls));
+                DWORD pid = 0;
+                if (at) GetWindowThreadProcessId(at, &pid);
+                Wh_Log(L"Boot diagnostic: window at (100,20)=%p class=%s pid=%u (our pid=%u) popup=%p topbar=%p island=%p",
+                       at, cls, pid, GetCurrentProcessId(),
+                       g_topBarPopupHwnd, g_topBarHwnd, g_islandHwnd);
+
+                // Also log every top-level window visible at that point,
+                // walking downward, so we can see the full stack.
+                HWND walker = at;
+                int depth = 0;
+                while (walker && depth < 6) {
+                    wchar_t c2[256]{};
+                    GetClassName(walker, c2, ARRAYSIZE(c2));
+                    DWORD p2 = 0;
+                    GetWindowThreadProcessId(walker, &p2);
+                    Wh_Log(L"Boot diagnostic:   stack[%d] hwnd=%p class=%s pid=%u",
+                           depth, walker, c2, p2);
+                    walker = GetWindow(walker, GW_HWNDNEXT);
+                    depth++;
+                }
+            });
+        });
+
+        RunInBackground([] {
+            if (WaitForSingleObject(g_stopEvent, 8000) == WAIT_OBJECT_0) return;
+            RunOnUiThread([] {
+                POINT pt{ 100, 20 };
+                HWND under = WindowFromPoint(pt);
+                wchar_t cls[128]{};
+                if (under) GetClassName(under, cls, ARRAYSIZE(cls));
+                DWORD underPid = 0;
+                if (under) GetWindowThreadProcessId(under, &underPid);
+                Wh_Log(L"BootProbe: under(100,20)=%p class=%s pid=%u ourpid=%u popup=%p island=%p",
+                       under, cls, underPid, GetCurrentProcessId(),
+                       g_topBarPopupHwnd, g_islandHwnd);
+            });
+        });
 
         g_clockTimer = DispatcherTimer();
         g_clockTimer.Interval(std::chrono::seconds(1));
@@ -13952,7 +26408,6 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
             try {
                 UpdateClockText();
                 UpdateBatteryButton();
-                UpdateWallpaperIfChanged();
             } catch (...) {
             }
         });
@@ -13969,13 +26424,6 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                                        return !ref.get();
                                    }),
                     g_liveBlurBrushes.end());
-                for (auto& ref : g_liveBlurBrushes) {
-                    if (auto base = ref.get()) {
-                        if (auto brush = base.try_as<XamlBlurBrush>()) {
-                            brush->Rebuild();
-                        }
-                    }
-                }
             } catch (...) {
             }
         });
@@ -13993,14 +26441,35 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 
         // Resource usage timer (updates every 1 second)
         g_resourceTimer = DispatcherTimer();
-        g_resourceTimer.Interval(std::chrono::seconds(1));
+        g_resourceTimer.Interval(std::chrono::seconds(2));
         g_resourceTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
             try {
+                if (!g_settings.showCpuUsage && !g_settings.showRamUsage &&
+                    !g_settings.showGpuUsage) {
+                    return;
+                }
+                if (!g_resourceButton ||
+                    g_resourceButton.Visibility() != Visibility::Visible) {
+                    return;
+                }
                 UpdateResourceButton();
             } catch (...) {
             }
         });
         g_resourceTimer.Start();
+
+        g_mediaStateTimer = DispatcherTimer();
+        g_mediaStateTimer.Interval(std::chrono::seconds(5));
+        g_mediaStateTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+            try {
+                if (!g_settings.showMediaButton) return;
+                RefreshMediaButtonState();
+            } catch (...) {}
+        });
+        g_mediaStateTimer.Start();
+        RunOnUiThread([] {
+            try { RefreshMediaButtonState(); } catch (...) {}
+        });
 
         // Timer to restore the top bar if it gets minimized/hidden/cloaked by Show Desktop
         // Timer to restore the top bar if it gets minimized/hidden/cloaked by Show Desktop
@@ -14013,77 +26482,343 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                     return;
                 }
 
-                // Always ensure visible.
-                if (IsIconic(g_topBarHwnd)) {
-                    ShowWindow(g_topBarHwnd, SW_RESTORE);
+                // Only ensure-visible while not in fullscreen. The flag
+                // reflects the previous tick's classification, which is
+                // what keeps us from fighting the fullscreen app for one
+                // tick after it takes over.
+                if (!g_fullScreenAppActive) {
+                    if (IsIconic(g_topBarHwnd)) {
+                        ShowWindow(g_topBarHwnd, SW_RESTORE);
+                    }
+                    BOOL cloaked = FALSE;
+                    if (SUCCEEDED(DwmGetWindowAttribute(g_topBarHwnd, DWMWA_CLOAKED,
+                                                        &cloaked, sizeof(cloaked))) &&
+                        cloaked) {
+                        BOOL cloakOff = FALSE;
+                        DwmSetWindowAttribute(g_topBarHwnd, DWMWA_CLOAK,
+                                              &cloakOff, sizeof(cloakOff));
+                    }
+                    if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+                        BOOL popupCloaked = FALSE;
+                        if (SUCCEEDED(DwmGetWindowAttribute(g_topBarPopupHwnd,
+                                                            DWMWA_CLOAKED,
+                                                            &popupCloaked,
+                                                            sizeof(popupCloaked))) &&
+                            popupCloaked) {
+                            BOOL cloakOff = FALSE;
+                            DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK,
+                                                  &cloakOff, sizeof(cloakOff));
+                            DwmFlush();
+                        }
+                    }
+                    if (!IsWindowVisible(g_topBarHwnd)) {
+                        ShowWindow(g_topBarHwnd, SW_SHOWNOACTIVATE);
+                    }
+                    if (!g_anyChildFlyoutOpen.load()) {
+                        SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                        if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+                            SetWindowPos(g_topBarPopupHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                        }
+                    }
                 }
-                BOOL cloaked = FALSE;
-                if (SUCCEEDED(DwmGetWindowAttribute(g_topBarHwnd, DWMWA_CLOAKED,
-                                                    &cloaked, sizeof(cloaked))) &&
-                    cloaked) {
-                    DwmSetWindowAttribute(g_topBarHwnd, DWMWA_CLOAK, FALSE, sizeof(BOOL));
-                }
-                if (!IsWindowVisible(g_topBarHwnd)) {
-                    ShowWindow(g_topBarHwnd, SW_SHOWNOACTIVATE);
+
+                {
+                    HWND shell = GetShellWindow();
+                    HWND fgNow = GetForegroundWindow();
+                    if (!g_fullScreenAppActive &&
+                        (fgNow == shell || fgNow == GetDesktopWindow())) {
+                        if (g_topBarHwnd && IsWindow(g_topBarHwnd) &&
+                            !IsWindowVisible(g_topBarHwnd)) {
+                            ShowWindow(g_topBarHwnd, SW_SHOWNOACTIVATE);
+                        }
+                        if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd) &&
+                            !IsWindowVisible(g_topBarPopupHwnd)) {
+                            ShowWindow(g_topBarPopupHwnd, SW_SHOWNOACTIVATE);
+                        }
+                        if (g_topBarHwnd && IsWindow(g_topBarHwnd)) {
+                            SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                                         SWP_SHOWWINDOW);
+                        }
+                        if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+                            SetWindowPos(g_topBarPopupHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                                         SWP_SHOWWINDOW);
+                        }
+                    }
                 }
 
                 // Classify the current foreground window.
                 HWND fg = GetForegroundWindow();
                 bool desktopFg = false;
-                bool fullscreenFg = false;
-                if (fg && fg != g_topBarHwnd) {
-                    wchar_t cls[256] = {0};
-                    GetClassName(fg, cls, ARRAYSIZE(cls));
-                    desktopFg = (wcscmp(cls, L"Progman") == 0 ||
-                                 wcscmp(cls, L"WorkerW") == 0);
-                    if (!desktopFg) {
-                        RECT r{};
-                        HMONITOR mon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
-                        MONITORINFO mi{};
-                        mi.cbSize = sizeof(mi);
-                        if (GetWindowRect(fg, &r) && GetMonitorInfo(mon, &mi)) {
-                            if (r.left   <= mi.rcMonitor.left &&
-                                r.top    <= mi.rcMonitor.top &&
-                                r.right  >= mi.rcMonitor.right &&
-                                r.bottom >= mi.rcMonitor.bottom) {
-                                fullscreenFg = true;
-                            }
+                if (fg && fg != g_topBarHwnd && fg != g_topBarPopupHwnd &&
+                    fg != g_islandHwnd) {
+                    HWND shell = GetShellWindow();
+                    HWND desktop = GetDesktopWindow();
+                    if (fg == shell || fg == desktop) {
+                        desktopFg = true;
+                    } else {
+                        wchar_t cls[256] = {0};
+                        GetClassName(fg, cls, ARRAYSIZE(cls));
+                        if (wcscmp(cls, L"Progman") == 0 ||
+                            wcscmp(cls, L"WorkerW") == 0 ||
+                            wcscmp(cls, L"Shell_TrayWnd") == 0 ||
+                            wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0 ||
+                            wcscmp(cls, L"XamlExplorerHostIslandWindow") == 0 ||
+                            wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
+                            desktopFg = true;
                         }
                     }
                 }
+                bool fullscreenFg = !desktopFg && IsAnyFullscreenActive();
 
-                // Only touch z-order when the classification actually changed:
-                // calling SetWindowPos once a second while a full-screen game
-                // is foreground can kick it out of exclusive full-screen.
+                // Fullscreen handling. The rect check above flags any
+                // foreground window that covers the whole monitor — this
+                // catches YouTube / F11 fullscreen / games that don't
+                // register an AppBar fullscreen notification. We hide the
+                // topbar and its popup on ENTRY, and keep them hidden on
+                // every tick while fullscreen persists, because other
+                // paths (PinTopBarFlyoutHwnd in particular) can re-show
+                // them between ticks. Exiting fullscreen is detected by
+                // comparing against the previous tick's state — the
+                // classChanged gate alone misses it because the same
+                // browser window stays foreground throughout.
+                static bool s_wasFullscreen = false;
+                bool enteringFullscreen = fullscreenFg && !s_wasFullscreen;
+                bool exitingFullscreen  = !fullscreenFg && s_wasFullscreen;
+                s_wasFullscreen = fullscreenFg;
+
+                if (enteringFullscreen) {
+                    Wh_Log(L"Restore: entered fullscreen, hiding topbar");
+                    g_fullScreenAppActive = true;
+                    // DWM changes its composition mode when a fullscreen
+                    // window takes over. Live XamlBlurBrush instances hold
+                    // a backdrop sample bound to the previous mode, which
+                    // renders as a stale / dim surface until a mouse event
+                    // forces DWM to re-evaluate the layer. Rebuild them
+                    // here, the same way the exitingFullscreen branch does.
+                    try { RebuildAllLiveBlurBrushes(); } catch (...) {}
+                    DwmFlush();
+                }
+
+                if (fullscreenFg) {
+                    // Demote every topbar surface to the bottom of the
+                    // z-order and re-assert on every tick. The fullscreen
+                    // app paints over the bar, and anything that tries to
+                    // re-topmost a topbar HWND between ticks is undone
+                    // here. No SW_HIDE, no DWM cloaking — those were
+                    // racy against the popup retry timer and left the bar
+                    // in a half-hidden state on some composition paths.
+                    DemoteTopBarForFullscreen();
+                    return;
+                }
+
                 static HWND s_lastRestoreFg = nullptr;
-                static int s_lastRestoreClass = -1; // 0 normal, 1 desktop, 2 fullscreen
-                int currentClass = fullscreenFg ? 2 : (desktopFg ? 1 : 0);
+                static int s_lastRestoreClass = -1; // 0 normal, 1 desktop
+                int currentClass = desktopFg ? 1 : 0;
                 bool classChanged =
+                    exitingFullscreen ||
                     (fg != s_lastRestoreFg || currentClass != s_lastRestoreClass);
                 s_lastRestoreFg = fg;
                 s_lastRestoreClass = currentClass;
 
+                if (exitingFullscreen) {
+                    Wh_Log(L"Restore: exited fullscreen, restoring topbar z-order");
+                    g_fullScreenAppActive = false;
+                    RestoreTopBarZOrder();
+                    if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+                        ForceDisableWindowsTransparency(g_topBarPopupHwnd);
+                    }
+                    // DWM's composition mode changes when a D3D-exclusive
+                    // fullscreen app took over; rebuild every live blur
+                    // brush so the host-backdrop sample is recreated
+                    // against the current desktop rather than a stale
+                    // placeholder surface.
+                    RebuildAllLiveBlurBrushes();
+                    DwmFlush();
+                }
+
+                HWND flyoutHwnd = FindTopBarFlyoutHwnd();
+                if (flyoutHwnd) {
+                    HWND insertAfter = desktopFg ? HWND_TOPMOST : HWND_TOPMOST;
+                    SetWindowPos(flyoutHwnd, insertAfter, 0, 0, 0, 0,
+                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                                 SWP_NOOWNERZORDER);
+                }
                 if (classChanged) {
-                    if (fullscreenFg) {
-                        // Place the bar DIRECTLY BEHIND the fullscreen window.
-                        // Works whether the fullscreen app is topmost or not.
-                        g_fullScreenAppActive = true;
-                        SetWindowPos(g_topBarHwnd, fg, 0, 0, 0, 0,
-                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
-                                     SWP_NOOWNERZORDER);
-                    } else if (desktopFg) {
-                        // Win+D: re-stack above the desktop (which is itself topmost).
+                    if (desktopFg) {
+                        // Win+D: re-stack above the desktop.
                         g_fullScreenAppActive = false;
+                        ShowWindow(g_topBarHwnd, SW_SHOWNOACTIVATE);
+                        if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+                            ShowWindow(g_topBarPopupHwnd, SW_SHOWNOACTIVATE);
+                        }
                         SetWindowPos(g_topBarHwnd, HWND_BOTTOM, 0, 0, 0, 0,
                                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                         SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
                                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
                     } else {
-                        // Normal window foreground: keep ourselves above it.
                         g_fullScreenAppActive = false;
+                        ShowWindow(g_topBarHwnd, SW_SHOWNOACTIVATE);
+                        if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+                            ShowWindow(g_topBarPopupHwnd, SW_SHOWNOACTIVATE);
+                        }
                         SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
                                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                        RebuildAllLiveBlurBrushes();
                     }
+                    RepositionTopBarPopup();
+                }
+
+                // Re-clip the island — safe to run every tick.
+                ClipIslandHwndToEmpty();
+                // Periodic safety sweep: a XAML popup HWND owned by this
+                // process can survive a Flyout's Closed event by a few
+                // hundred ms (XAML tears its popup tree down asynchronously),
+                // which is how the Start menu occasionally leaves an empty
+                // grid behind that keeps hit-testing. The sweep runs again
+                // here every tick while no flyout is registered as open, so
+                // a stray popup gets hidden within 1 second regardless of
+                // when the Closed handler fired relative to the teardown.
+                if (!g_anyChildFlyoutOpen.load()) {
+                    try { SweepStaleXamlPopups(); } catch (...) {}
+                } else {
+                    // A flyout is open. XAML re-applies its popup-root backdrop
+                    // on several layout passes (first layout, resize, content
+                    // change). Without this re-strip the flyout slowly picks up
+                    // the default tint layer again and appears dim.
+                    std::vector<wuxc::Primitives::FlyoutBase> openSnapshot;
+                    {
+                        std::lock_guard<std::mutex> lock(g_openPopupMutex);
+                        openSnapshot = g_openPopups;
+                    }
+                    for (auto const& fb : openSnapshot) {
+                        try { StripFlyoutPopupBackgrounds(fb); } catch (...) {}
+                    }
+                }
+                // Only pin when NOT fullscreen. PinTopBarFlyoutHwnd contains
+                // a ShowWindow that would otherwise re-show the bar right
+                // after we hid it.
+                if (!g_fullScreenAppActive) {
+                    PinTopBarFlyoutHwnd();
+                }
+                // Re-stamp the transparency kill on the popup and the
+                // island every tick. DWM can reapply the Mica sheet minutes
+                // after the last stamp if any of its internal triggers fire.
+                if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+                    ForceDisableWindowsTransparency(g_topBarPopupHwnd);
+                }
+                if (g_islandHwnd && IsWindow(g_islandHwnd)) {
+                    ForceDisableWindowsTransparency(g_islandHwnd);
+                }
+
+                // If our Start menu or Search flyout is open but a foreign
+                // window currently owns the OS foreground, steal it back.
+                // Apps that reclaim foreground without emitting an
+                // EVENT_SYSTEM_FOREGROUND the LL hook can see, or that read
+                // input via RawInput RIDEV_INPUTSINK so focus doesn't
+                // matter, leave the flyout visible but keystroke-starved.
+                // The periodic check here closes that gap.
+                if (!g_settings.disableFlyoutAutoClose) {
+                    bool oursOpen = false;
+                    try {
+                        if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) oursOpen = true;
+                        if (g_searchFlyout && g_searchFlyout.IsOpen()) oursOpen = true;
+                    } catch (...) {}
+                    if (oursOpen) {
+                        HWND fgNow = GetForegroundWindow();
+                        DWORD fgPid = 0;
+                        if (fgNow) GetWindowThreadProcessId(fgNow, &fgPid);
+                        if (fgPid != GetCurrentProcessId()) {
+                            RunOnUiThread([] {
+                                try {
+                                    if (g_startMenuFlyout && g_startMenuFlyout.IsOpen())
+                                        g_startMenuFlyout.Hide();
+                                    if (g_searchFlyout && g_searchFlyout.IsOpen())
+                                        g_searchFlyout.Hide();
+                                } catch (...) {}
+                            });
+                        }
+                    }
+                }
+
+                // Detect a monitor rect change (physical resolution switch
+                // or monitor swap) OR an OS display-scale change. Either
+                // one invalidates the XAML layout: the popup HWND is
+                // resized by EnsureTopBarPopupShown on its own retry timer,
+                // but the content inside keeps its previous DIP dimensions
+                // and the scaler keeps its previous RenderTransform, which
+                // is why the bar was permanently clipped after a resolution
+                // switch until the mod was re-enabled.
+                //
+                // The OS display-scale change is not visible as a monitor
+                // rect change (physical resolution is unchanged), so it is
+                // tracked separately. This is also what gives the same
+                // "detect and restore" behaviour as MyDockFinder, without
+                // depending on WM_DISPLAYCHANGE reaching a WS_POPUP window.
+                {
+                    RECT currentMonitor = GetBarMonitorRect();
+                    double currentOsScale = GetBarDpiScale();
+                    bool monitorChanged = 
+                        g_lastBarMonitorRectValid &&
+                        (currentMonitor.left != g_lastBarMonitorRect.left ||
+                         currentMonitor.top != g_lastBarMonitorRect.top ||
+                         currentMonitor.right != g_lastBarMonitorRect.right ||
+                         currentMonitor.bottom != g_lastBarMonitorRect.bottom);
+                    bool scaleChanged =
+                        g_lastOsScale > 0.0 &&
+                        std::abs(currentOsScale - g_lastOsScale) > 0.001;
+                    if (scaleChanged) {
+                        // Handled by the OS-scale branch below (thread
+                        // restart). Running ReloadTopBarFully here would
+                        // build a new popup HWND on the thread that's
+                        // about to be killed, orphaning it and leaving a
+                        // visible gap while the new thread initialises
+                        // XAML from scratch.
+                    } else if (monitorChanged) {
+                        Wh_Log(L"Restore: monitor rect changed (rect %ld,%ld-%ld,%ld -> %ld,%ld-%ld,%ld), reloading topbar",
+                               g_lastBarMonitorRect.left, g_lastBarMonitorRect.top,
+                               g_lastBarMonitorRect.right, g_lastBarMonitorRect.bottom,
+                               currentMonitor.left, currentMonitor.top,
+                               currentMonitor.right, currentMonitor.bottom);
+                        ReloadTopBarFully();
+                        g_taskbarButtonRectsValid = false;
+                        RefreshTaskbarButtonRectsAsync();
+                    }
+                }
+
+                // Detect an OS display-scale change and rebuild the popup
+                // through XAML. WM_DPICHANGED is not delivered reliably to
+                // WS_POPUP | WS_EX_TOOLWINDOW windows, and even when it is,
+                // XAML's input-site is keyed to the DPI value that was
+                // current when the popup was created — it never recomputes
+                // on its own. The visible symptom is a bar that gets small
+                // (up-scale) or misaligns / disappears (down-scale) until
+                // some other event forces a rebuild, and a hover target
+                // that is offset by a few pixels per percent of scale.
+                // A XAML-level Hide + ShowAt is the only thing that makes
+                // XAML re-register its input-site against the new DPI.
+                {
+                    static double s_lastOsScale = -1.0;
+                    double curScale = GetBarDpiScale();
+                    if (s_lastOsScale > 0.0 &&
+                        std::abs(curScale - s_lastOsScale) > 0.001) {
+                        Wh_Log(L"Restore: OS scale changed %.3f -> %.3f, restarting topbar thread",
+                               s_lastOsScale, curScale);
+                        // Full thread restart — see RestartTopBarThreadForScaleChange.
+                        // In-place attempts to reset XAML's cached DPI all
+                        // leave stale state, and some of them (detaching and
+                        // reattaching the DesktopWindowXamlSource) produce a
+                        // non-interactive artifact on the desktop because the
+                        // old island's composition target still holds the
+                        // last frame it painted.
+                        RunOnUiThread([] {
+                            try { RestartTopBarThreadForScaleChange(); } catch (...) {}
+                        });
+                    }
+                    s_lastOsScale = curScale;
                 }
 
                 // Reposition if drifted.
@@ -14105,6 +26840,29 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 
         RefreshTaskList(true);
 
+        // Cold boot occasionally leaves the topbar popup's DWM composition
+        // target in a bound-but-not-visible state: the HWND is at the right
+        // position, reports visible, has a sized XAML root, but the
+        // compositor never presents its content. Toggling the mod off/on
+        // fixes it because that destroys the Flyout and its popup HWND and
+        // rebuilds them from scratch — the popup gets a fresh DComp target
+        // that DWM does composite. This timer performs the same rebuild
+        // automatically a few seconds after boot, so the bar reliably
+        // appears without user intervention.
+        // On any process start, the XAML Islands WindowsXamlManager can
+        // occasionally initialize against a DWM that isn't quite ready,
+        // producing a popup HWND with a valid root but no presentable
+        // DComp target — a blank bar with the correct geometry. Recreating
+        // just the popup doesn't help because every popup from the same
+        // DesktopWindowXamlSource inherits the broken layer. Toggling the
+        // mod fixes it because the whole XAML stack is reinitialized on a
+        // fresh thread. This timer reproduces that, once per mod process:
+        // it posts WM_QUIT to the topbar thread, waits for it to exit
+        // cleanly, then starts a fresh TopBarThreadProc.
+        //
+        // The one-shot flag prevents the restarted thread from re-arming
+        // the timer and looping forever.
+
         // PreTranslateMessage is what gives the island keyboard input -- without it
         // the Wi-Fi password box would never see a keystroke.
         winrt::com_ptr<IDesktopWindowXamlSourceNative2> native2;
@@ -14122,6 +26880,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
             if (!processed && topbar_settings_window::PreTranslateSettingsMessage(&message)) {
                 processed = TRUE;
             }
+
             if (!processed) {
                 TranslateMessage(&message);
                 DispatchMessage(&message);
@@ -14131,6 +26890,11 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         // Message loop ended — tear the settings window down on this same thread
         // (its WndProc runs here too, so this is safe and synchronous).
         topbar_settings_window::DestroySettingsWindowNow();
+        UninstallShellHook(g_topBarHwnd);
+        if (g_startMenuFlyout) {
+            try { g_startMenuFlyout.Hide(); } catch (...) {}
+            g_startMenuFlyout = nullptr;
+        }
 
         // The topbar has been closed. Stop the foreground hook first (same thread).
         if (g_foregroundHook) {
@@ -14145,6 +26909,10 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
             UnhookWinEvent(g_windowEventNameHook);
             g_windowEventNameHook = nullptr;
         }
+        if (g_selfProcessWindowHook) {
+            UnhookWinEvent(g_selfProcessWindowHook);
+            g_selfProcessWindowHook = nullptr;
+        }
 
         // The topbar has been closed. Stop all timers before the DLL unloads.
         if (g_clockTimer) g_clockTimer.Stop();
@@ -14158,6 +26926,9 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         if (g_brightnessRevertTimer) g_brightnessRevertTimer.Stop();
         if (g_resourceTimer) g_resourceTimer.Stop();
         if (g_resourceFlyoutTimer) g_resourceFlyoutTimer.Stop();
+        if (g_mediaStateTimer) g_mediaStateTimer.Stop();
+        if (g_mediaVisualizerTimer) g_mediaVisualizerTimer.Stop();
+        visualizer::Stop();
         if (g_restoreTimer) g_restoreTimer.Stop();
         if (g_restoreTimer) g_restoreTimer = nullptr;
         g_allowHide = true;  // allow hiding during final teardown
@@ -14176,19 +26947,33 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         if (g_brightnessRevertTimer) g_brightnessRevertTimer = nullptr;
         if (g_resourceTimer) g_resourceTimer = nullptr;
         if (g_resourceFlyoutTimer) g_resourceFlyoutTimer = nullptr;
+        if (g_mediaStateTimer) g_mediaStateTimer = nullptr;
+        if (g_mediaVisualizerTimer) g_mediaVisualizerTimer = nullptr;
         if (g_weatherSearchDebounceTimer) {
             g_weatherSearchDebounceTimer.Stop();
             g_weatherSearchDebounceTimer = nullptr;
         }
-        if (g_weatherSearchDebounceTimer) {
-            g_weatherSearchDebounceTimer.Stop();
-            g_weatherSearchDebounceTimer = nullptr;
+        if (g_searchDebounceTimer) {
+            g_searchDebounceTimer.Stop();
+            g_searchDebounceTimer = nullptr;
         }
+        if (g_wideFlyoutCenterTimer) {
+            g_wideFlyoutCenterTimer.Stop();
+            g_wideFlyoutCenterTimer = nullptr;
+        }
+        if (g_searchFlyout) {
+            try { g_searchFlyout.Hide(); } catch (...) {}
+            g_searchFlyout = nullptr;
+        }
+        g_searchResultsPanel = nullptr;
 
-        // Release wallpaper layer and other no_destroy globals
-        if (g_wallpaperLayer) g_wallpaperLayer = nullptr;
+        // Release no_destroy globals
         if (g_displayFlyout) g_displayFlyout = nullptr;
-                if (g_resourceFlyout) g_resourceFlyout = nullptr;
+        if (g_resourceFlyout) g_resourceFlyout = nullptr;
+        if (g_startMenuFlyout) {
+            try { g_startMenuFlyout.Hide(); } catch (...) {}
+            g_startMenuFlyout = nullptr;
+        }
         if (g_displayButton) g_displayButton = nullptr;
         
         if (g_resourceButton) g_resourceButton = nullptr;
@@ -14201,6 +26986,22 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                 g_rootElement = nullptr;
             } catch (...) {}
         }
+        if (g_topBarPopupRetryTimer) {
+            g_topBarPopupRetryTimer.Stop();
+            g_topBarPopupRetryTimer = nullptr;
+        }
+        g_topBarPopupShowAtCalled = false;
+        g_topBarPopupHwnd = nullptr;
+        g_subclassedPopupHwnd = nullptr;
+        if (g_topBarPopup) {
+            try {
+                g_topBarAllowClose = true;
+                g_topBarPopup.Hide();
+            } catch (...) {}
+            g_topBarPopup = nullptr;
+        }
+        g_topBarPopupCanvas = nullptr;
+        g_topBarPopupAnchor = nullptr;
         if (g_desktopSource) {
             try {
                 g_desktopSource.Content(nullptr);
@@ -14220,6 +27021,12 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         g_startContextMenu = nullptr;
         g_taskMenuToggleItem = nullptr;
         g_mediaContainer = nullptr;
+        g_mediaButton = nullptr;
+        g_mediaFlyout = nullptr;
+        g_mediaPanel = nullptr;
+        g_visualizerBars.clear();
+        g_mediaThumbnailCache = nullptr;
+        g_mediaThumbnailCacheBytes.clear();
         g_tabButtons.clear();
 
         // Release COM pointers
@@ -14248,6 +27055,18 @@ void LoadSettings() {
     // Strings: GetStringSettingCopy is already storage-first.
     // Ints: ReadIntSetting is now storage-first with an explicit fallback
     // matching what the old schema used to declare.
+    g_settings.topBarScaleMode = GetStringSettingCopy(L"topBarScaleMode");
+    if (g_settings.topBarScaleMode != L"custom") {
+        g_settings.topBarScaleMode = L"auto";
+    }
+    if (g_settings.topBarScaleMode == L"auto") {
+        g_settings.topBarScale = GetAutoTopBarScale();
+    } else {
+        g_settings.topBarScale = ReadIntSetting(L"topBarScale", 0);
+        if (g_settings.topBarScale < 50 || g_settings.topBarScale > 150) {
+            g_settings.topBarScale = GetAutoTopBarScale();
+        }
+    }
     g_settings.barHeightDip = ReadIntSetting(L"barHeight", 40);
     if (g_settings.barHeightDip < 20) {
         g_settings.barHeightDip = 40;
@@ -14285,20 +27104,57 @@ void LoadSettings() {
     g_settings.showWifiButton = ReadIntSetting(L"showWifiButton", 1) != 0;
     g_settings.showBluetoothButton = ReadIntSetting(L"showBluetoothButton", 1) != 0;
     g_settings.showBatteryButton = ReadIntSetting(L"showBatteryButton", 1) != 0;
+    g_settings.showControlCenterButton = ReadIntSetting(L"showControlCenterButton", 1) != 0;
     g_settings.showSettingsButton = ReadIntSetting(L"showSettingsButton", 1) != 0;
     g_settings.showWeatherButton = ReadIntSetting(L"showWeatherButton", 1) != 0;
+    g_settings.showRecycleBinButton = ReadIntSetting(L"showRecycleBinButton", 1) != 0;
 
     g_settings.leftItems = GetStringSettingCopy(L"leftItems");
     g_settings.centerItems = GetStringSettingCopy(L"centerItems");
     g_settings.rightItems = GetStringSettingCopy(L"rightItems");
-    if (g_settings.leftItems.empty()) g_settings.leftItems = L"StartButton,SearchButton";
-    if (g_settings.centerItems.empty()) g_settings.centerItems = L"ResourceButton,WeatherButton,SettingsButton";
-    if (g_settings.rightItems.empty()) g_settings.rightItems = L"DisplayButton,SoundButton,WifiButton,BluetoothButton,BatteryButton,RecycleBinButton,ClockButton";
+    if (g_settings.leftItems.empty() && g_settings.centerItems.empty() &&
+        g_settings.rightItems.empty()) {
+        g_settings.leftItems = L"StartButton,SearchButton";
+        g_settings.centerItems = L"MediaButton,ResourceButton,WeatherButton,SettingsButton";
+        g_settings.rightItems = L"DisplayButton,SoundButton,WifiButton,BluetoothButton,BatteryButton,RecycleBinButton,ControlCenterButton,ClockButton";
+        Wh_SetStringValue(L"leftItems", g_settings.leftItems.c_str());
+        Wh_SetStringValue(L"centerItems", g_settings.centerItems.c_str());
+        Wh_SetStringValue(L"rightItems", g_settings.rightItems.c_str());
+    }
 
     g_settings.showCpuUsage = ReadIntSetting(L"showCpuUsage", 1) != 0;
     g_settings.showRamUsage = ReadIntSetting(L"showRamUsage", 1) != 0;
     g_settings.showGpuUsage = ReadIntSetting(L"showGpuUsage", 1) != 0;
+    g_settings.showMediaButton = ReadIntSetting(L"showMediaButton", 1) != 0;
+    g_settings.showMediaVisualizer = ReadIntSetting(L"showMediaVisualizer", 1) != 0;
+    g_settings.mediaButtonShowIcon = ReadIntSetting(L"mediaButtonShowIcon", 1) != 0;
+    g_settings.mediaButtonShowName = ReadIntSetting(L"mediaButtonShowName", 1) != 0;
+    g_settings.mediaButtonShowControls = ReadIntSetting(L"mediaButtonShowControls", 1) != 0;
+    g_settings.mediaButtonShowVisualizer = ReadIntSetting(L"mediaButtonShowVisualizer", 1) != 0;
+    g_settings.labelCpu = GetStringSettingCopy(L"labelCpu");
+    if (g_settings.labelCpu.empty()) g_settings.labelCpu = L"CPU:";
+    g_settings.labelRam = GetStringSettingCopy(L"labelRam");
+    if (g_settings.labelRam.empty()) g_settings.labelRam = L"RAM:";
+    g_settings.labelGpu = GetStringSettingCopy(L"labelGpu");
+    if (g_settings.labelGpu.empty()) g_settings.labelGpu = L"GPU:";
     g_settings.enableHotkeys = Wh_GetIntSetting(L"enableHotkeys") != 0;
+    g_settings.disableFlyoutAutoClose = Wh_GetIntSetting(L"disableFlyoutAutoClose") != 0;
+    g_settings.defaultStartMenu = ReadIntSetting(L"defaultStartMenu", 0) != 0;
+    g_settings.defaultSearch    = ReadIntSetting(L"defaultSearch", 0) != 0;
+    g_settings.startButtonAction = GetStringSettingCopy(L"startButtonAction");
+    if (g_settings.startButtonAction != L"windows") {
+        g_settings.startButtonAction = L"topbar";
+    }
+    g_settings.searchButtonAction = GetStringSettingCopy(L"searchButtonAction");
+    if (g_settings.searchButtonAction != L"windows") {
+        g_settings.searchButtonAction = L"topbar";
+    }
+    // The 4 sub-remap flags are forced ON — the in-app settings no longer
+    // expose them. The two master toggles are the only control surface.
+    g_settings.remapWinKey        = true;
+    g_settings.remapTaskbarStart  = true;
+    g_settings.remapWinSearch     = true;
+    g_settings.remapTaskbarSearch = true;
     g_settings.showClock = ReadIntSetting(L"showClock", 1) != 0;
     g_settings.timeFormat = GetStringSettingCopy(L"timeFormat");
     if (g_settings.timeFormat.empty()) {
@@ -14312,6 +27168,10 @@ void LoadSettings() {
     g_settings.iconColor = GetStringSettingCopy(L"iconColor");
     if (g_settings.iconColor.empty()) {
         g_settings.iconColor = L"#FFFFFF";
+    }
+    g_settings.fontColor = GetStringSettingCopy(L"fontColor");
+    if (g_settings.fontColor.empty()) {
+        g_settings.fontColor = L"#FFFFFF";
     }
     g_iconColorOverride.reset();
     g_settings.fontFamily = GetStringSettingCopy(L"fontFamily");
@@ -14334,6 +27194,10 @@ void LoadSettings() {
         std::vector<wchar_t> buf(64);
         size_t len = Wh_GetStringValue(L"weatherLongitude", buf.data(), buf.size());
         g_settings.weatherLongitude.assign(buf.data(), len);
+    }
+    g_settings.weatherUnit = GetStringSettingCopy(L"weatherUnit");
+    if (g_settings.weatherUnit != L"F") {
+        g_settings.weatherUnit = L"C";
     }
 
     g_settings.trayOrder = ReadTrayOrder();
@@ -14408,6 +27272,8 @@ void LoadSettings() {
         g_themeStyleRules = g_themeNoIslandsStyles;
     } else if (theme == L"OS27 GoldenGate") {
         g_themeStyleRules = g_themeOS27GoldenGateStyles;
+    } else if (theme == L"Midnight Neon") {
+        g_themeStyleRules = g_themeMidnightNeonStyles;
     }
 }
 
@@ -14423,11 +27289,70 @@ void LoadSettings() {
 
 
 
+void KillStaleShellHosts(bool hideStart, bool hideSearch) {
+    if (!hideStart && !hideSearch) return;
+
+    // Hide — do not terminate — the shell's Start / Search host top-level
+    // windows. TerminateProcess on system shell processes was heavy-handed:
+    // it killed the host mid-shutdown, and the shell respawned it on the
+    // next Win press anyway. The mod already hides these windows on sight
+    // via HideAllNativeShellHostWindows on the restore timer, so this call
+    // is really just crash recovery for a previous run that hid them and
+    // then died without restoring.
+    struct Hit { HWND hwnd; bool isStart; bool isSearch; };
+    std::vector<Hit> hits;
+    EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+        auto* v = reinterpret_cast<std::vector<Hit>*>(lp);
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (!pid || pid == GetCurrentProcessId()) return TRUE;
+        HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (!proc) return TRUE;
+        wchar_t path[MAX_PATH]{};
+        DWORD size = ARRAYSIZE(path);
+        bool ok = QueryFullProcessImageNameW(proc, 0, path, &size) != FALSE;
+        CloseHandle(proc);
+        if (!ok) return TRUE;
+        std::wstring exe = path;
+        size_t slash = exe.find_last_of(L"\\/");
+        if (slash != std::wstring::npos) exe.erase(0, slash + 1);
+        bool isStart = _wcsicmp(exe.c_str(),
+                                L"StartMenuExperienceHost.exe") == 0;
+        bool isSearch = !isStart && (
+            _wcsicmp(exe.c_str(), L"SearchHost.exe") == 0 ||
+            _wcsicmp(exe.c_str(), L"SearchApp.exe") == 0 ||
+            _wcsicmp(exe.c_str(), L"SearchUI.exe") == 0);
+        if (isStart || isSearch) {
+            v->push_back({ hwnd, isStart, isSearch });
+        }
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&hits));
+
+    Wh_Log(L"HideStaleShellHosts: %zu candidate(s)", hits.size());
+
+    for (auto const& hit : hits) {
+        if ((hit.isStart && !hideStart) || (hit.isSearch && !hideSearch)) {
+            continue;
+        }
+        if (!IsWindow(hit.hwnd)) continue;
+        HideNativeShellHostWindow(hit.hwnd,
+            hit.isStart ? L"StartMenuExperienceHost.exe" : L"SearchHost.exe",
+            hit.isStart, hit.isSearch);
+    }
+}
+
 BOOL WhTool_ModInit() {
     Wh_Log(L"TopBar: WhTool_ModInit called.");
     LoadSettings();
+    g_prevDefaultStartMenu = g_settings.defaultStartMenu;
+    g_prevDefaultSearch = g_settings.defaultSearch;
+    g_prevStartButtonAction = g_settings.startButtonAction;
+
+    RestorePersistedShellHosts();
 
     g_taskbarCreatedMsg = RegisterWindowMessage(L"TaskbarCreated");
+
+    StartHookThread();
 
     // Create the stop event for clean shutdown
     g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
@@ -14447,19 +27372,57 @@ void WhTool_ModSettingsChanged() {
         // Settings will be loaded on next start.
         return;
     }
-    RunOnUiThread([] {
+    bool prevStart = g_settings.defaultStartMenu;
+    bool prevSearch = g_settings.defaultSearch;
+    std::wstring prevStartAction = g_settings.startButtonAction;
+    int prevMonitorIndex = g_prevMonitorIndex;
+    RunOnUiThread([prevStart, prevSearch, prevStartAction, prevMonitorIndex] {
         LoadSettings();
+        g_prevDefaultStartMenu = g_settings.defaultStartMenu;
+        g_prevDefaultSearch = g_settings.defaultSearch;
+        g_prevStartButtonAction = g_settings.startButtonAction;
+        bool monitorChanged = (prevMonitorIndex != g_settings.monitorIndex);
+        g_prevMonitorIndex = g_settings.monitorIndex;
+        if (monitorChanged && g_topBarHwnd && IsWindow(g_topBarHwnd)) {
+            UnregisterAppBar(g_topBarHwnd);
+            RegisterAppBar(g_topBarHwnd);
+            SetTimer(g_topBarHwnd, kAppBarInitTimerId, 200, nullptr);
+            g_forcePopupPosition = false;
+            g_replaceAttempts = 0;
+            g_wideFlyoutTargetX = -1;
+            g_wideFlyoutTargetY = -1;
+            ClearChildPopupTargets();
+        }
+        bool turnedOffStart = prevStart && !g_settings.defaultStartMenu;
+        bool turnedOffSearch = prevSearch && !g_settings.defaultSearch;
+        bool startActionSwitchedToWindows =
+            prevStartAction != L"windows" &&
+            g_settings.startButtonAction == L"windows";
+        g_winKeyDown = false;
+        g_winOtherSeen = false;
+        g_winReplayed = false;
+        g_winChordConsumed = 0;
+        g_winVkDown = 0;
+        SyncSearchKeyHook();
+        if (turnedOffStart || turnedOffSearch) {
+            if (g_nativeSmCloseTimer) g_nativeSmCloseTimer.Stop();
+            g_nativeSmCloseTicks = 0;
+            try {
+                RestoreNativeShellHostWindows(turnedOffStart, turnedOffSearch);
+            } catch (...) {}
+        }
+        (void)startActionSwitchedToWindows;
         if (!g_topBarHwnd) {
             return;
         }
-        g_dpiScale = GetBarDpiScale();
+        g_dpiScale = g_settings.topBarScale / 100.0;
         g_barHeightPx = static_cast<int>(g_settings.barHeightDip * g_dpiScale + 0.5);
 
         // The whole tree is rebuilt: corner radius, icon colour and the task
         // button layout are all baked in at construction time.
         InstallGlobalMenuResources();
-        auto content = BuildTopBarContent();
-        g_desktopSource.Content(content);
+        InvalidateStartAndSearchFlyouts();
+        SetTopBarContent(BuildTopBarContent());
         BuildStartContextMenu();
         BuildTaskContextMenu();
         BuildAppTitleContextMenu();
@@ -14482,18 +27445,11 @@ void WhTool_ModSettingsChanged() {
             UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_TASK_MENU);
             UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_WEATHER);
             UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_RECYCLEBIN);
-            if (g_settings.enableHotkeys) {
-                RegisterHotKey(g_topBarHwnd, HOTKEY_ID_DISPLAY, MOD_CONTROL | MOD_ALT, '1');
-                RegisterHotKey(g_topBarHwnd, HOTKEY_ID_SOUND, MOD_CONTROL | MOD_ALT, '2');
-                RegisterHotKey(g_topBarHwnd, HOTKEY_ID_WIFI, MOD_CONTROL | MOD_ALT, '3');
-                RegisterHotKey(g_topBarHwnd, HOTKEY_ID_BLUETOOTH, MOD_CONTROL | MOD_ALT, '4');
-                RegisterHotKey(g_topBarHwnd, HOTKEY_ID_RESOURCE, MOD_CONTROL | MOD_ALT, '0');
-                RegisterHotKey(g_topBarHwnd, HOTKEY_ID_BATTERY, MOD_CONTROL | MOD_ALT, '5');
-                RegisterHotKey(g_topBarHwnd, HOTKEY_ID_START_MENU, MOD_CONTROL | MOD_ALT, '6');
-                RegisterHotKey(g_topBarHwnd, HOTKEY_ID_TASK_MENU, MOD_CONTROL | MOD_ALT, '7');
-                RegisterHotKey(g_topBarHwnd, HOTKEY_ID_WEATHER, MOD_CONTROL | MOD_ALT, '8');
-                RegisterHotKey(g_topBarHwnd, HOTKEY_ID_RECYCLEBIN, MOD_CONTROL | MOD_ALT, '9');
+            if (!g_appBarRegistered) {
+                RegisterAppBar(g_topBarHwnd);
+                SetTimer(g_topBarHwnd, kAppBarInitTimerId, 200, nullptr);
             }
+            PositionAppBar(g_topBarHwnd, g_barHeightPx);
         }
         RefreshTaskList(true);
     });
@@ -14502,6 +27458,8 @@ void WhTool_ModSettingsChanged() {
 void WhTool_ModUninit() {
     InterlockedExchange(&g_shuttingDown, 1);
     g_allowHide = true;   // allow the bar to hide during shutdown
+
+    try { RestoreNativeShellHostWindows(true, true); } catch (...) {}
 
     // Close the settings window (if open) before the topbar's message loop
     // exits, so its DestroyWindow runs on the correct thread.
@@ -14537,14 +27495,29 @@ void WhTool_ModUninit() {
     for (HANDLE h : handles) {
         CloseHandle(h);
     }
-    g_workerThreads.clear();
+    {
+        std::lock_guard<std::mutex> lock(g_workerThreadsMutex);
+        g_workerThreads.clear();
+    }
 
-    // Wait for the main UI thread to exit.
+    // Wait for the main UI thread to exit, but never forever. If the
+    // topbar thread is stuck inside a XAML call, an infinite wait here
+    // keeps this tool-mod process alive, its tool-mod mutex held, and the
+    // next enable exits immediately with "already running" -- which is
+    // exactly the state where the bar never comes back after a mod
+    // toggle. Bail out after 5 seconds and force the process to exit; the
+    // OS releases the mutex on process termination.
     if (g_topBarThread) {
-        WaitForSingleObject(g_topBarThread, INFINITE);
+        DWORD threadWait = WaitForSingleObject(g_topBarThread, 5000);
+        if (threadWait != WAIT_OBJECT_0) {
+            Wh_Log(L"WhTool_ModUninit: topbar thread did not exit within 5 s; forcing process exit");
+            ExitProcess(0);
+        }
         CloseHandle(g_topBarThread);
         g_topBarThread = nullptr;
     }
+
+    StopHookThread();
 
     // Now it's safe to close the stop event (all workers have exited).
     if (g_stopEvent) {
@@ -14552,6 +27525,8 @@ void WhTool_ModUninit() {
         g_stopEvent = nullptr;
     }
 }
+
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
