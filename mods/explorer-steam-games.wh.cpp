@@ -93,7 +93,7 @@ Other languages use English.
 
 ## How it works
 The mod runs in its own Windhawk process (it doesn't inject into Explorer).
-It creates a real folder with the shortcuts and a hidden `.dati` folder, then
+It creates a real folder with the shortcuts and a hidden `.data` folder, then
 pins it to the navigation pane. By default the folder is in the mod's own
 Windhawk storage (one subfolder per Windows user), so Windhawk deletes it when
 the mod is removed; you can choose another location in the settings. When the mod is disabled or removed, the navigation entries
@@ -175,6 +175,7 @@ Explorer once.
 #include <shlwapi.h>
 #include <shobjidl.h>
 #include <wincodec.h>
+#include <windhawk_utils.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -212,29 +213,15 @@ const wchar_t kNameSpaceKey[] =
 const wchar_t kHideIconsKey[] =
     L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\HideDesktopIcons\\NewStartPanel";
 
-// Registry keys and files of older versions, removed on start.
-const wchar_t* const kLegacyKeys[] = {
-    L"Software\\Classes\\InternetShortcut\\shell\\WhSteamOpenInstallDir",
-    L"Software\\Classes\\*\\shell\\WhSteamOpenInstallDir",
-    L"Software\\Classes\\*\\shell\\WhSteamMenu",
-    L"Software\\Classes\\WhSteamGames.Menu",
-    L"Software\\Classes\\.whsteam",
-    L"Software\\Classes\\WhSteamGame",
-};
-const char kMarkerV1[] = "[WindhawkSteamGames]";
-const wchar_t kLegacyFolder[] = L"%LOCALAPPDATA%\\SteamGamesExplorer";
-// Default folder of pre-release 3.x builds (before the mod storage folder).
-const wchar_t kLegacyFolder3[] = L"%LOCALAPPDATA%\\GamesExplorer";
-
-const wchar_t kDataFolder[] = L".dati";
+const wchar_t kDataFolder[] = L".data";
 const wchar_t kSmartPrefix[] = L"\x2605 ";  // "★ "
 const wchar_t kDesktopIniMarker[] = L"[WhGamesExplorer]";
 
-// Companion files next to each game's "gioco.<ext>" target.
-const wchar_t kFolderSuffix[] = L".cartella.lnk";
-const wchar_t kSavesSuffix[] = L".salvataggi.lnk";
-const wchar_t kShotsSuffix[] = L".screenshot.lnk";
-const wchar_t kInstallSuffix[] = L".installa.url";
+// Companion files next to each game's "game.<ext>" target.
+const wchar_t kFolderSuffix[] = L".folder.lnk";
+const wchar_t kSavesSuffix[] = L".saves.lnk";
+const wchar_t kShotsSuffix[] = L".screenshots.lnk";
+const wchar_t kInstallSuffix[] = L".install.url";
 
 // Not installed Steam games use their own file type.
 const wchar_t kLibExt[] = L".whsteamlib";
@@ -356,13 +343,13 @@ struct ActionDef {
     StrId label;
 };
 const std::vector<ActionDef> kSteamActions = {
-    {L".libreria.url", S_LIBRARY},
+    {L".library.url", S_LIBRARY},
     {L".store.url", S_STORE},
     {L".community.url", S_COMMUNITY},
-    {L".guide.url", S_GUIDES},
-    {L".obiettivi.url", S_ACHIEVEMENTS},
-    {L".verifica.url", S_VERIFY},
-    {L".disinstalla.url", S_UNINSTALL},
+    {L".guides.url", S_GUIDES},
+    {L".achievements.url", S_ACHIEVEMENTS},
+    {L".verify.url", S_VERIFY},
+    {L".uninstall.url", S_UNINSTALL},
 };
 const std::vector<ActionDef> kGogActions = {
     {L".galaxy.url", S_GALAXY},
@@ -849,7 +836,7 @@ const std::vector<ActionDef>& ActionsFor(int p) {
 }
 
 std::wstring LaunchSuffix(int p) {
-    return kPlatforms[p].launchIsUrl ? L".avvia.url" : L".avvia.lnk";
+    return kPlatforms[p].launchIsUrl ? L".play.url" : L".play.lnk";
 }
 
 // File types whose verbs make up the context menu of each game.
@@ -874,7 +861,7 @@ void RegisterLibraryType() {
     };
     const Verb verbs[] = {
         {L"1store", L".store.url", S_STORE},
-        {L"2library", L".libreria.url", S_LIBRARY},
+        {L"2library", L".library.url", S_LIBRARY},
         {L"3community", L".community.url", S_COMMUNITY},
     };
     for (const auto& v : verbs) {
@@ -887,9 +874,6 @@ void RegisterLibraryType() {
 // Returns true if anything changed in the registry.
 bool RegisterFileTypes() {
     g_regChanged = false;
-    for (auto key : kLegacyKeys) {
-        RegDeleteKeyTree(key);
-    }
     bool galaxy = !GalaxyExe().empty();
     auto command = [](const std::wstring& suffix) {
         return L"\"%SystemRoot%\\explorer.exe\" \"%1" + suffix + L"\"";
@@ -986,9 +970,6 @@ void UnregisterAll() {
         }
     }
     UnregisterNode(kClsidAll);
-    for (auto key : kLegacyKeys) {
-        RegDeleteTreeW(HKEY_CURRENT_USER, key);
-    }
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
 }
 
@@ -1472,16 +1453,16 @@ void ScanSteam(const Settings& s, std::vector<Game>& games) {
                 std::wstring shots = userDir + L"\\760\\remote\\" + g.id + L"\\screenshots";
                 if (DirExists(shots)) g.shotsDir = shots;
             }
-            g.actionUrls[L".libreria.url"] = "steam://nav/games/details/" + appId;
+            g.actionUrls[L".library.url"] = "steam://nav/games/details/" + appId;
             g.actionUrls[L".store.url"] = "steam://store/" + appId;
             g.actionUrls[L".community.url"] =
                 WebUrl(s, "https://steamcommunity.com/app/" + appId);
-            g.actionUrls[L".guide.url"] =
+            g.actionUrls[L".guides.url"] =
                 WebUrl(s, "https://steamcommunity.com/app/" + appId + "/guides/");
-            g.actionUrls[L".obiettivi.url"] =
+            g.actionUrls[L".achievements.url"] =
                 WebUrl(s, "https://steamcommunity.com/stats/" + appId + "/achievements/");
-            g.actionUrls[L".verifica.url"] = "steam://validate/" + appId;
-            g.actionUrls[L".disinstalla.url"] = "steam://uninstall/" + appId;
+            g.actionUrls[L".verify.url"] = "steam://validate/" + appId;
+            g.actionUrls[L".uninstall.url"] = "steam://uninstall/" + appId;
             games.push_back(std::move(g));
         } while (FindNextFileW(f, &fd));
         FindClose(f);
@@ -1752,7 +1733,7 @@ void ScanSteamLibrary(const Settings& s, std::vector<Game>& games) {
         std::string appId = WideToUtf8(g.id);
         g.actionUrls[kInstallSuffix] = "steam://install/" + appId;
         g.actionUrls[L".store.url"] = "steam://store/" + appId;
-        g.actionUrls[L".libreria.url"] = "steam://nav/games/details/" + appId;
+        g.actionUrls[L".library.url"] = "steam://nav/games/details/" + appId;
         g.actionUrls[L".community.url"] =
             WebUrl(s, "https://steamcommunity.com/app/" + appId);
         games.push_back(std::move(g));
@@ -2385,7 +2366,7 @@ struct SyncCache {
     bool firstRun = true;
 };
 
-// Link signatures are saved in .dati\links.sig ("hash<TAB>path" per line),
+// Link signatures are saved in .data\links.sig ("hash<TAB>path" per line),
 // so shortcuts are not all rewritten every time Explorer starts.
 void LoadLinkSigs(SyncCache& cache, const std::wstring& file) {
     cache.linkSigs.clear();
@@ -2413,43 +2394,6 @@ void SaveLinkSigs(SyncCache& cache) {
         data += WideToUtf8(e.second) + "\t" + WideToUtf8(e.first) + "\n";
     }
     if (WriteFileBytes(cache.linkSigsFile, data)) cache.linkSigsDirty = false;
-}
-
-// Files and folders left by versions 1.x and 2.x in a folder's top level.
-void CleanupLegacy(const std::wstring& folder) {
-    std::vector<std::wstring> files, dirs;
-    std::set<std::wstring> dirNames, hiddenFiles;
-    WIN32_FIND_DATAW fd;
-    HANDLE h = FindFirstFileW((folder + L"\\*").c_str(), &fd);
-    if (h == INVALID_HANDLE_VALUE) return;
-    do {
-        std::wstring n = fd.cFileName;
-        if (n == L"." || n == L"..") continue;
-        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-            dirs.push_back(n);
-            dirNames.insert(Lower(n));
-        } else {
-            files.push_back(n);
-            if (fd.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN) hiddenFiles.insert(Lower(n));
-        }
-    } while (FindNextFileW(h, &fd));
-    FindClose(h);
-    for (const auto& n : files) {
-        std::wstring ln = Lower(n), full = folder + L"\\" + n;
-        bool ours = (EndsWith(ln, L".url.lnk") && hiddenFiles.count(ln)) ||
-                    (EndsWith(ln, L".lnk") && dirNames.count(ln + L".wh"));
-        if (!ours && EndsWith(ln, L".url")) {
-            std::string data;
-            ours = ReadFileBytes(full, data) && data.find(kMarkerV1) != std::string::npos;
-        }
-        if (ours) {
-            SetFileAttributesW(full.c_str(), FILE_ATTRIBUTE_NORMAL);
-            DeleteFileW(full.c_str());
-        }
-    }
-    for (const auto& n : dirs) {
-        if (EndsWith(Lower(n), L".lnk.wh")) DeleteDirWithFiles(folder + L"\\" + n);
-    }
 }
 
 // Data folders are named "<platform>-<id>" or "steamlib-<id>".
@@ -2561,17 +2505,6 @@ void Sync(SyncCache& cache) {
     SHCreateDirectoryExW(nullptr, dataDir.c_str(), nullptr);
     SetFileAttributesW(dataDir.c_str(), FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM);
 
-    if (cache.firstRun) {
-        // Only the default folder of versions 1.x/2.x, never a user folder.
-        std::wstring legacy = NormalizePath(ExpandEnv(kLegacyFolder));
-        if (DirExists(legacy)) {
-            CleanupLegacy(legacy);
-            if (Lower(legacy) != Lower(root)) RemoveDirectoryW(legacy.c_str());
-        }
-        std::wstring legacy3 = NormalizePath(ExpandEnv(kLegacyFolder3));
-        if (Lower(legacy3) != Lower(root)) CleanupRoot(legacy3);
-    }
-
     std::vector<Game> games;
     if (s.enabled[P_STEAM]) ScanSteam(s, games);
     if (s.enabled[P_EPIC]) ScanEpic(games);
@@ -2665,7 +2598,7 @@ void Sync(SyncCache& cache) {
                 GetFileAttributesExW(g.coverImage.c_str(), GetFileExInfoStandard, &a)
                     ? FileTimeValue(a.ftLastWriteTime)
                     : 0;
-            coverIcon = gameData + L"\\copertina-" +
+            coverIcon = gameData + L"\\cover-" +
                         HashString(g.coverImage + std::to_wstring(stamp)) + L".ico";
         }
         std::wstring exeIcon = g.iconExe;
@@ -2679,7 +2612,7 @@ void Sync(SyncCache& cache) {
             }
         }
 
-        std::wstring target = gameData + L"\\gioco" + TargetExt(g);
+        std::wstring target = gameData + L"\\game" + TargetExt(g);
         std::wstring dataSig = target + L"|" + Utf8ToWide(g.launchUrl) + L"|" +
                                g.launchExe + L"|" + g.launchArgs + L"|" + g.dir + L"|" +
                                g.savesDir + L"|" + g.shotsDir + L"|" + coverIcon;
@@ -2966,7 +2899,7 @@ DWORD WINAPI Worker(LPVOID) {
                 if (GetTickCount() - start > 30000) break;
             }
         } else if (r == WAIT_FAILED) {
-            Sleep(5000);
+            WaitForSingleObject(g_stopEvent, 5000);
         }
         w.Close();
     }
@@ -2979,11 +2912,8 @@ DWORD WINAPI Worker(LPVOID) {
     return 0;
 }
 
-std::wstring StringSetting(const wchar_t* name) {
-    PCWSTR v = Wh_GetStringSetting(name);
-    std::wstring s = v ? v : L"";
-    Wh_FreeStringSetting(v);
-    return s;
+std::wstring StringSetting(PCWSTR name) {
+    return WindhawkUtils::StringSetting::make(name).get();
 }
 
 void LoadSettings() {
