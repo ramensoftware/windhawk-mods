@@ -18,9 +18,10 @@
 Hides pinned taskbar icons whose app is not running. Icons hide and unhide in
 place, so pinned order is never touched.
 
-![Demo](https://i.imgur.com/jgDv8Su.gif)
+![Demo](https://i.imgur.com/jgDv8Su.gif)W
 
-*Hovering effect not included. Check out "Taskbar Dock Animation" by Ph0en1x-dev!
+*Hovering effect not included. Check out **Taskbar Dock Animation** by **Ph0en1x-dev**!
+**Same goes for the icon sizing and spacing. **Taskbar height and icon size** made by the OG, **m417z**.
 
 Running state is read straight from the taskbar's own buttons, so detection
 is exact and language-independent, and the mod reacts the moment an app opens
@@ -166,7 +167,8 @@ void ApplyOnThisThreadNow();
 void WakeAllFramesAsync(bool skipCurrentThread = false);
 void StartHotkeyThread();
 void NudgeTaskbarsForDiscovery();
-bool PostApply(winrt::Windows::UI::Core::CoreDispatcher const& dispatcher);
+bool PostApply(winrt::Windows::UI::Core::CoreDispatcher const& dispatcher,
+               DWORD threadId);
 
 constexpr double kSpeedSampleStaleMs = 150.0;
 
@@ -261,8 +263,9 @@ Point g_lastQualifiedFramePt = {};
 // Each bump forces one instant, unanimated apply.
 std::atomic<uint64_t> g_instantApplyGen = 0;
 
-// Wakes queued but not yet run; unload drains this to zero.
-std::atomic<int> g_pendingWakes = 0;
+// Wakes queued but not yet run, per target thread; unload drains these.
+std::mutex g_wakesMutex;
+std::unordered_map<DWORD, int> g_pendingWakes;
 
 // Sink callbacks in flight; teardown waits for zero (Unadvise does not fence).
 std::atomic<int> g_sinkCallbacks = 0;
@@ -387,6 +390,7 @@ double NowMs() {
 
 // ---------------------------------------------------------------- visual tree
 
+// Adapted from taskbar-labels (m417z).
 FrameworkElement EnumChildElements(
     FrameworkElement element,
     std::function<bool(FrameworkElement)> const& enumCallback) {
@@ -427,7 +431,8 @@ void CollectTaskListButtons(FrameworkElement root,
     });
 }
 
-// Mandatory symbol: a build missing it refuses to load rather than mis-hide.
+// Adapted from taskbar-labels (m417z). Mandatory symbol: a build missing it
+// refuses to load rather than mis-hide.
 using TaskListButton_get_IsRunning_t = HRESULT(__cdecl*)(void* pThis,
                                                          bool* running);
 TaskListButton_get_IsRunning_t TaskListButton_get_IsRunning_Original;
@@ -530,7 +535,9 @@ bool CursorOverAnyTaskbar() {
     return false;
 }
 
-void DeanimateButton(FrameContext& ctx, FrameworkElement button) {
+void DeanimateButton(FrameContext& ctx,
+                     FrameworkElement button,
+                     PCWSTR where) {
     // Every pass, not strip-once: one stripped too early slides forever.
     DeanimatedButton* known = nullptr;
     for (size_t i = 0; i < ctx.deanimated.size();) {
@@ -562,6 +569,14 @@ void DeanimateButton(FrameContext& ctx, FrameworkElement button) {
         if (implicit_ && !known->originalImplicit) {
             known->originalImplicit = implicit_;
         }
+        if (transitions || (visual && implicit_)) {
+            try {
+                Wh_Log(L"re-armed T=%d I=%d at %s: %s", transitions ? 1 : 0,
+                       (visual && implicit_) ? 1 : 0, where,
+                       winrt::Windows::UI::Xaml::Automation::AutomationProperties::GetName(button).c_str());
+            } catch (winrt::hresult_error const&) {
+            }
+        }
     }
 
     if (transitions) {
@@ -575,14 +590,15 @@ void DeanimateButton(FrameContext& ctx, FrameworkElement button) {
 // Only the reversible pair (Transitions, ImplicitAnimations); the implicit
 // show/hide channel has no getter and must stay Windows'.
 void DeanimateRunSet(FrameContext& ctx,
-                     std::vector<FrameworkElement> const& buttons) {
+                     std::vector<FrameworkElement> const& buttons,
+                     PCWSTR where) {
     for (auto const& button : buttons) {
-        DeanimateButton(ctx, button);
+        DeanimateButton(ctx, button, where);
     }
     // Start and search recentre with the row, so they go still too.
     if (auto repeater = ctx.repeater.get()) {
         EnumChildElements(repeater, [&](FrameworkElement child) {
-            DeanimateButton(ctx, child);
+            DeanimateButton(ctx, child, where);
             return false;
         });
     }
@@ -595,10 +611,13 @@ void ReanimateButtons(FrameContext& ctx) {
             continue;
         }
 
-        button.Transitions(entry.originalTransitions);
-        if (auto visual =
-                Hosting::ElementCompositionPreview::GetElementVisual(button)) {
-            visual.ImplicitAnimations(entry.originalImplicit);
+        try {
+            button.Transitions(entry.originalTransitions);
+            if (auto visual = Hosting::ElementCompositionPreview::
+                    GetElementVisual(button)) {
+                visual.ImplicitAnimations(entry.originalImplicit);
+            }
+        } catch (winrt::hresult_error const&) {
         }
     }
     ctx.deanimated.clear();
@@ -778,45 +797,45 @@ void SetCollapseState(
     int deferred = 0;
     int shown = 0;
     for (auto const& button : buttons) {
-        bool weHidIt = TakeFromHiddenSet(ctx.hiddenByUs, button, false);
-        bool running = TaskListButton_IsRunning(button);
-        bool shouldHide = collapse && !running;
+        try {
+            bool weHidIt = TakeFromHiddenSet(ctx.hiddenByUs, button, false);
+            bool running = TaskListButton_IsRunning(button);
+            bool shouldHide = collapse && !running;
 
-        if (shouldHide && IsParkedOffBar(ctx, button)) {
-            continue;
-        }
-
-        if (shouldHide) {
-            // Windows' own hides stay unrecorded; recorded ones re-assert.
-            if (button.Visibility() == Visibility::Visible) {
-                if (deferHide) {
-                    deferHide->emplace_back(button, button.Opacity());
-                    button.Opacity(0);
-                    deferred++;
-                } else {
-                    button.Visibility(Visibility::Collapsed);
-                    if (!weHidIt) {
-                        ctx.hiddenByUs.push_back(winrt::make_weak(button));
-                    }
-                    hid++;
-                }
+            if (shouldHide && IsParkedOffBar(ctx, button)) {
+                continue;
             }
-        } else if (weHidIt) {
-            // A retired container: shown, it draws its leftover plate over the
-            // icon now in that slot. Kept hidden until it runs.
-            if (!running && !HasVisibleIcon(button, 3)) {
-                if (!collapse && ctx.appliedCollapse == 1) {
-                    try {
+
+            if (shouldHide) {
+                // Windows' own hides stay unrecorded; recorded ones re-assert.
+                if (button.Visibility() == Visibility::Visible) {
+                    if (deferHide) {
+                        deferHide->emplace_back(button, button.Opacity());
+                        button.Opacity(0);
+                        deferred++;
+                    } else {
+                        button.Visibility(Visibility::Collapsed);
+                        if (!weHidIt) {
+                            ctx.hiddenByUs.push_back(winrt::make_weak(button));
+                        }
+                        hid++;
+                    }
+                }
+            } else if (weHidIt) {
+                // A retired container: shown, it draws its leftover plate over
+                // the icon now in that slot. Kept hidden until it runs.
+                if (!running && !HasVisibleIcon(button, 3)) {
+                    if (!collapse && ctx.appliedCollapse == 1) {
                         Wh_Log(L"Kept hidden (no icon): %s",
                                winrt::Windows::UI::Xaml::Automation::AutomationProperties::GetName(button).c_str());
-                    } catch (winrt::hresult_error const&) {
                     }
+                } else {
+                    button.Visibility(Visibility::Visible);
+                    TakeFromHiddenSet(ctx.hiddenByUs, button, true);
+                    shown++;
                 }
-            } else {
-                button.Visibility(Visibility::Visible);
-                TakeFromHiddenSet(ctx.hiddenByUs, button, true);
-                shown++;
             }
+        } catch (winrt::hresult_error const&) {
         }
     }
     if (hid || deferred || shown) {
@@ -849,8 +868,12 @@ void UnhookRendering(FrameContext& ctx) {
     if (!ctx.renderingHooked) {
         return;
     }
-    Media::CompositionTarget::Rendering(ctx.renderingToken);
+    // Flag first: a revoke that throws has nothing left to retry.
     ctx.renderingHooked = false;
+    try {
+        Media::CompositionTarget::Rendering(ctx.renderingToken);
+    } catch (winrt::hresult_error const&) {
+    }
 }
 
 void CollapseDeferredHides(
@@ -1190,26 +1213,28 @@ bool BuildAnimPlan(FrameContext& ctx,
     fill(true);
     fill(false);
 
-    auto countOnBar = [&](bool beforePhase) {
-        int count = 0;
+    // Synthesis derives motion from the row's own icons; when none of them
+    // moves (none on the bar, or the running ones are the first pins in
+    // order), every one-sided entry lands in place. Fan them from the right
+    // edge of what stays instead.
+    auto rowMoves = [&]() {
         for (auto& entry : ctx.animPlan) {
-            bool visible =
-                beforePhase ? entry.visibleBefore : entry.visibleAfter;
-            if (!visible || !entry.animate) {
+            if (!entry.animate || !entry.visibleBefore ||
+                !entry.visibleAfter) {
                 continue;
             }
             for (auto const& button : ctx.animButtons) {
                 if (button == entry.element) {
-                    count++;
+                    if (std::abs(entry.finalX - entry.startX) > 0.5) {
+                        return true;
+                    }
                     break;
                 }
             }
         }
-        return count;
+        return false;
     };
 
-    // With no icons on one side, synthesis has no neighbour and they would pop
-    // in place; fan them from the right edge of what stays, which is Start.
     auto anchorToVisible = [&](bool beforePhase) {
         double anchor = 0;
         bool have = false;
@@ -1245,10 +1270,8 @@ bool BuildAnimPlan(FrameContext& ctx,
             }
         }
     };
-    if (countOnBar(true) == 0) {
+    if (!rowMoves()) {
         anchorToVisible(true);
-    }
-    if (countOnBar(false) == 0) {
         anchorToVisible(false);
     }
 
@@ -1296,7 +1319,7 @@ bool BuildAnimPlan(FrameContext& ctx,
 
     // The flips above make Windows re-arm its reposition animations in this
     // same pass; strip again last, or the commit animates.
-    DeanimateRunSet(ctx, ctx.animButtons);
+    DeanimateRunSet(ctx, ctx.animButtons, L"plan");
 
     return !ctx.animPlan.empty();
 }
@@ -1487,7 +1510,7 @@ void FinalizeCollapseRun(FrameContext& ctx) {
     // strip them again, or the layout flip glides or strands the survivors.
     for (auto& entry : ctx.animPlan) {
         try {
-            DeanimateButton(ctx, entry.element);
+            DeanimateButton(ctx, entry.element, L"finalize-pre");
         } catch (winrt::hresult_error const&) {
         }
     }
@@ -1517,7 +1540,7 @@ void FinalizeCollapseRun(FrameContext& ctx) {
         } catch (winrt::hresult_error const&) {
         }
     }
-    DeanimateRunSet(ctx, buttons);
+    DeanimateRunSet(ctx, buttons, L"finalize");
     StopAnimation(ctx);
     // From the frame, not the cached row: the cached container can be stale.
     if (auto frame = ctx.frame.get()) {
@@ -1528,7 +1551,7 @@ void FinalizeCollapseRun(FrameContext& ctx) {
             HidePhantomButtons(ctx, repeater, frame, L"finalize");
         }
     }
-    PostApply(ctx.dispatcher);
+    PostApply(ctx.dispatcher, ctx.threadId);
 }
 
 void StartAnimation(FrameContext& ctx,
@@ -1576,6 +1599,7 @@ void MeasureGapOffsets(FrameContext& ctx, FrameworkElement frame) {
         return;
     }
 
+    DeanimateRunSet(ctx, ctx.animButtons, L"gap-prelayout");
     frame.UpdateLayout();
 
     // A re-show inside that layout pass reads as gaps already closed; repair
@@ -1666,7 +1690,7 @@ void StartGapCloseAnimation(
     Wh_Log(L"gapclose survivors=%d maxOffset=%.1f", (int)ctx.animButtons.size(),
            maxOffset);
     // The hide and freeze re-armed Windows' animations mid-pass; strip last.
-    DeanimateRunSet(ctx, ctx.animButtons);
+    DeanimateRunSet(ctx, ctx.animButtons, L"gap-last");
     HookRendering(ctx, ctx.key);
 }
 
@@ -1729,7 +1753,7 @@ bool ApplyToFrame(FrameContext& ctx, bool collapse, bool instantRequested) {
             ReanimateButtons(ctx);
             DetachSlides(ctx);
         } else {
-            DeanimateRunSet(ctx, buttons);
+            DeanimateRunSet(ctx, buttons, L"apply");
         }
     }
 
@@ -1747,6 +1771,12 @@ bool ApplyToFrame(FrameContext& ctx, bool collapse, bool instantRequested) {
     std::vector<std::pair<FrameworkElement, double>> deferHide;
     SetCollapseState(ctx, buttons, collapse,
                      animateGaps ? &deferHide : nullptr);
+    // Reanimating in the same pass as the shows would play Windows' show
+    // transitions from stale spots; the next apply does it.
+    if (!g_collapseEnabled && ctx.hiddenByUs.empty() &&
+        !ctx.deanimated.empty()) {
+        PostApply(ctx.dispatcher, ctx.threadId);
+    }
     if (!deferHide.empty()) {
         StartGapCloseAnimation(ctx, buttons, std::move(deferHide));
     } else if (!ctx.animActive) {
@@ -1905,7 +1935,7 @@ void OnRenderingTick(void* key) {
         std::vector<FrameworkElement> buttons = ctx->animButtons;
         for (auto& entry : ctx->animPlan) {
             try {
-                DeanimateButton(*ctx, entry.element);
+                DeanimateButton(*ctx, entry.element, L"diverge");
             } catch (winrt::hresult_error const&) {
             }
         }
@@ -1945,7 +1975,7 @@ void OnRenderingTick(void* key) {
         }
         // The flip can prompt fresh animations while the tick is paused.
         for (auto& button : ctx->animButtons) {
-            DeanimateButton(*ctx, button);
+            DeanimateButton(*ctx, button, L"apex");
         }
     }
 
@@ -1954,7 +1984,7 @@ void OnRenderingTick(void* key) {
             // Land the layout off the render clock, in the next dispatcher pass.
             ctx->animFinalizePending = true;
             UnhookRendering(*ctx);
-            PostApply(ctx->dispatcher);
+            PostApply(ctx->dispatcher, ctx->threadId);
             return;
         }
         StopAnimation(*ctx);
@@ -1992,13 +2022,19 @@ void RestoreFrame(FrameContext& ctx) {
 
     for (auto& weak : ctx.hiddenByUs) {
         if (auto button = weak.get()) {
-            button.Visibility(Visibility::Visible);
+            try {
+                button.Visibility(Visibility::Visible);
+            } catch (winrt::hresult_error const&) {
+            }
         }
     }
     ctx.hiddenByUs.clear();
     for (auto& weak : ctx.phantomHidden) {
         if (auto button = weak.get()) {
-            button.Visibility(Visibility::Visible);
+            try {
+                button.Visibility(Visibility::Visible);
+            } catch (winrt::hresult_error const&) {
+            }
         }
     }
     ctx.phantomHidden.clear();
@@ -2166,12 +2202,22 @@ void OnTimerTick(void* key) {
     }
 }
 
-// The decrement is tied to the delegate's LIFETIME, so a dropped wake still
-// counts down. Increment first: a throwing ctor calls the deleter.
-bool PostApply(winrt::Windows::UI::Core::CoreDispatcher const& dispatcher) {
-    g_pendingWakes++;
-    auto pending =
-        std::shared_ptr<void>(nullptr, [](void*) { g_pendingWakes--; });
+// Counted per target thread, so unload can tell a wake a dead thread will
+// never run from one still coming. The decrement is tied to the delegate's
+// LIFETIME, so a dropped wake still counts down. Increment first: a throwing
+// ctor calls the deleter.
+bool PostApply(winrt::Windows::UI::Core::CoreDispatcher const& dispatcher,
+               DWORD threadId) {
+    {
+        std::lock_guard<std::mutex> guard(g_wakesMutex);
+        g_pendingWakes[threadId]++;
+    }
+    auto pending = std::shared_ptr<void>(nullptr, [threadId](void*) {
+        std::lock_guard<std::mutex> guard(g_wakesMutex);
+        if (--g_pendingWakes[threadId] == 0) {
+            g_pendingWakes.erase(threadId);
+        }
+    });
     // The count must never rise after unload's drain saw zero.
     if (g_unloading) {
         return false;
@@ -2237,7 +2283,7 @@ void RegisterFrame(void* key, FrameworkElement frame) {
         g_frames->insert_or_assign(key, std::move(ctx));
     }
     // Outside the lock: the one COM call this function makes.
-    if (!PostApply(dispatcher)) {
+    if (!PostApply(dispatcher, GetCurrentThreadId())) {
         std::lock_guard<std::mutex> guard(g_framesMutex);
         auto it = g_frames->find(key);
         if (it != g_frames->end()) {
@@ -2299,7 +2345,8 @@ void WakeAllFramesAsync(bool skipCurrentThread) {
     PersistRevealState();
 
     DWORD threadId = GetCurrentThreadId();
-    std::vector<winrt::Windows::UI::Core::CoreDispatcher> dispatchers;
+    std::vector<std::pair<winrt::Windows::UI::Core::CoreDispatcher, DWORD>>
+        targets;
     {
         std::lock_guard<std::mutex> guard(g_framesMutex);
         for (auto& [key, ctx] : *g_frames) {
@@ -2308,13 +2355,13 @@ void WakeAllFramesAsync(bool skipCurrentThread) {
                 continue;
             }
             if (ctx.dispatcher) {
-                dispatchers.push_back(ctx.dispatcher);
+                targets.emplace_back(ctx.dispatcher, ctx.threadId);
             }
         }
     }
 
-    for (auto& dispatcher : dispatchers) {
-        PostApply(dispatcher);
+    for (auto& [dispatcher, target] : targets) {
+        PostApply(dispatcher, target);
     }
 }
 
@@ -2835,7 +2882,7 @@ void __cdecl TaskListButton_UpdateVisualStates_Hook(void* pThis) {
                 }
             }
         }
-        if (dispatcher && !PostApply(dispatcher)) {
+        if (dispatcher && !PostApply(dispatcher, threadId)) {
             // Failed post: un-latch, or this thread goes deaf to events.
             std::lock_guard<std::mutex> guard(g_framesMutex);
             for (auto& [key, ctx] : *g_frames) {
@@ -3057,16 +3104,18 @@ DWORD WINAPI HotkeyThreadProc(LPVOID param) {
     winrt::com_ptr<IAppVisibility> appVisibility;
     DWORD adviseCookie = 0;
     StartVisibilitySink* sink = nullptr;
-    if (SUCCEEDED(CoCreateInstance(__uuidof(AppVisibility), nullptr,
-                                   CLSCTX_ALL,
-                                   IID_PPV_ARGS(appVisibility.put())))) {
-        sink = new StartVisibilitySink();
-        if (FAILED(appVisibility->Advise(sink, &adviseCookie))) {
-            adviseCookie = 0;
-            Wh_Log(L"IAppVisibility::Advise failed");
+    if (g_settings.revealOnStart) {
+        if (SUCCEEDED(CoCreateInstance(__uuidof(AppVisibility), nullptr,
+                                       CLSCTX_ALL,
+                                       IID_PPV_ARGS(appVisibility.put())))) {
+            sink = new StartVisibilitySink();
+            if (FAILED(appVisibility->Advise(sink, &adviseCookie))) {
+                adviseCookie = 0;
+                Wh_Log(L"IAppVisibility::Advise failed");
+            }
+        } else {
+            Wh_Log(L"AppVisibility unavailable, start menu reveal inactive");
         }
-    } else {
-        Wh_Log(L"AppVisibility unavailable, start menu reveal inactive");
     }
 
     MSG msg;
@@ -3615,8 +3664,33 @@ void Wh_ModBeforeUninit() {
         CloseHandle(hThread);
     }
 
-    // Lifetime-tied counter: a dropped wake still counts down. Unbounded.
-    while (g_pendingWakes.load() > 0) {
+    // Unbounded while any thread still owing a wake is alive: a dropped wake
+    // still counts down, and a dead thread's wakes can never run mod code.
+    for (;;) {
+        std::vector<DWORD> owing;
+        {
+            std::lock_guard<std::mutex> guard(g_wakesMutex);
+            for (auto& [threadId, count] : g_pendingWakes) {
+                if (count > 0) {
+                    owing.push_back(threadId);
+                }
+            }
+        }
+        bool anyAlive = false;
+        for (DWORD threadId : owing) {
+            HANDLE hThread = OpenThread(SYNCHRONIZE, FALSE, threadId);
+            if (!hThread) {
+                continue;
+            }
+            anyAlive = WaitForSingleObject(hThread, 0) == WAIT_TIMEOUT;
+            CloseHandle(hThread);
+            if (anyAlive) {
+                break;
+            }
+        }
+        if (!anyAlive) {
+            break;
+        }
         Sleep(10);
     }
 
