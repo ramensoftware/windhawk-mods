@@ -17,6 +17,8 @@
 
 A lightweight, robust Windhawk mod that embeds customizable dynamic text directly into the bottom-left corner of the Windows 11 taskbar as an interactive native child window.
 
+![Taskbar Left Custom Text Preview](https://raw.githubusercontent.com/anhducad1111/windhawk-mods/assets/screenshot_taskbar.png)
+
 ## Features
 - **Native Taskbar Integration**:
   - Embedded as a direct child window of the current process's `Shell_TrayWnd`.
@@ -111,7 +113,6 @@ The widget docks to the left edge of the primary taskbar. On taskbars with left-
 // ==/WindhawkModSettings==
 
 #include <windows.h>
-#include <windowsx.h>
 #include <windhawk_utils.h>
 #include <algorithm>
 #include <string>
@@ -152,7 +153,7 @@ struct ModSettings {
 // Global synchronization & state
 static SRWLOCK g_settingsLock = SRWLOCK_INIT;
 static ModSettings g_settings;
-static HWND g_hWndWidget = nullptr;
+static std::atomic<HWND> g_hWndWidget{ nullptr };
 static HWND g_hTaskbarWnd = nullptr;
 static HANDLE g_hWorkerThread = nullptr;
 static HANDLE g_hStopEvent = nullptr;
@@ -160,7 +161,6 @@ static HANDLE g_hRefreshEvent = nullptr;
 static std::wstring g_currentText = L"";
 static bool g_bHovered = false;
 static bool g_bManualRefreshing = false;
-static int g_lastPillWidth = 120;
 
 // Cached GDI resources to prevent per-paint recreation
 static HFONT g_hCachedFont = nullptr;
@@ -346,7 +346,7 @@ std::wstring ExecuteCommand(const std::wstring& cmd) {
         NULL,
         NULL,
         TRUE,
-        CREATE_NO_WINDOW,
+        CREATE_SUSPENDED | CREATE_NO_WINDOW,
         NULL,
         NULL,
         &si,
@@ -367,6 +367,8 @@ std::wstring ExecuteCommand(const std::wstring& cmd) {
         SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli));
         AssignProcessToJobObject(hJob, pi.hProcess);
     }
+
+    ResumeThread(pi.hThread);
 
     std::string output;
     char buffer[1024];
@@ -614,6 +616,7 @@ LRESULT CALLBACK ChildWidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         case WM_APP_SETTINGS_CHANGED: {
             LoadSettings();
             RepositionChildWidget(hwnd);
+            TriggerManualRefresh();
             InvalidateRect(hwnd, NULL, TRUE);
             return 0;
         }
@@ -691,7 +694,6 @@ LRESULT CALLBACK ChildWidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             int paddingX = DipToPx(10, dpi);
             int pillWidth = maxLineWidth + paddingX * 2;
             if (pillWidth > rc.right) pillWidth = rc.right;
-            g_lastPillWidth = pillWidth;
 
             RECT rcPill = { 0, 1, pillWidth, rc.bottom - 1 };
 
@@ -754,7 +756,7 @@ LRESULT CALLBACK ChildWidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 DeleteObject(g_hCachedFont);
                 g_hCachedFont = nullptr;
             }
-            g_hWndWidget = nullptr;
+            g_hWndWidget.store(nullptr);
             return 0;
         }
     }
@@ -795,6 +797,8 @@ void WINAPI CreateWidgetOnTaskbarThread(PVOID pTaskbar) {
     HWND hTaskbar = reinterpret_cast<HWND>(pTaskbar);
     if (!hTaskbar || !IsWindow(hTaskbar)) return;
 
+    LoadSettings();
+
     WNDCLASSEXW wc = { sizeof(wc) };
     wc.lpfnWndProc = ChildWidgetWndProc;
     wc.hInstance = HINST_THISCOMPONENT;
@@ -802,7 +806,10 @@ void WINAPI CreateWidgetOnTaskbarThread(PVOID pTaskbar) {
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
 
     if (!RegisterClassExW(&wc)) {
-        return;
+        DWORD err = GetLastError();
+        if (err != ERROR_CLASS_ALREADY_EXISTS) {
+            return;
+        }
     }
 
     int dpi = GetDpiForHwnd(hTaskbar);
@@ -810,7 +817,7 @@ void WINAPI CreateWidgetOnTaskbarThread(PVOID pTaskbar) {
     int targetHeight = DipToPx(g_settings.height, dpi);
     int offsetLeftPx = DipToPx(g_settings.offsetLeft, dpi);
 
-    g_hWndWidget = CreateWindowExW(
+    HWND hWnd = CreateWindowExW(
         WS_EX_LAYERED,
         WIDGET_CLASS_NAME,
         L"WindhawkTaskbarLeftWidget",
@@ -825,16 +832,17 @@ void WINAPI CreateWidgetOnTaskbarThread(PVOID pTaskbar) {
         NULL
     );
 
-    if (g_hWndWidget) {
-        SetLayeredWindowAttributes(g_hWndWidget, COLORKEY_BG, 0, LWA_COLORKEY);
-        RepositionChildWidget(g_hWndWidget);
+    if (hWnd) {
+        g_hWndWidget.store(hWnd);
+        SetLayeredWindowAttributes(hWnd, COLORKEY_BG, 0, LWA_COLORKEY);
+        RepositionChildWidget(hWnd);
     }
 }
 
 void WINAPI DestroyWidgetOnTaskbarThread(PVOID) {
-    if (g_hWndWidget && IsWindow(g_hWndWidget)) {
-        DestroyWindow(g_hWndWidget);
-        g_hWndWidget = nullptr;
+    HWND hWnd = g_hWndWidget.exchange(nullptr);
+    if (hWnd && IsWindow(hWnd)) {
+        DestroyWindow(hWnd);
     }
 }
 
@@ -859,6 +867,17 @@ DWORD WINAPI BackgroundWorkerThreadProc(LPVOID) {
     HANDLE waitHandles[2] = { g_hStopEvent, g_hRefreshEvent };
 
     while (true) {
+        // Ensure widget is still alive if taskbar was recreated
+        HWND currentTaskbar = g_hTaskbarWnd;
+        HWND currentWidget = g_hWndWidget.load();
+        if (!currentTaskbar || !IsWindow(currentTaskbar) || !currentWidget || !IsWindow(currentWidget)) {
+            HWND hNewTaskbar = FindCurrentProcessTaskbarWnd();
+            if (hNewTaskbar) {
+                g_hTaskbarWnd = hNewTaskbar;
+                RunFromWindowThread(hNewTaskbar, CreateWidgetOnTaskbarThread, hNewTaskbar);
+            }
+        }
+
         // Perform data fetch
         AcquireSRWLockShared(&g_settingsLock);
         ModSettings currentSettings = g_settings;
@@ -866,9 +885,12 @@ DWORD WINAPI BackgroundWorkerThreadProc(LPVOID) {
 
         std::wstring fetched = FetchLatestText(currentSettings);
 
-        if (g_hWndWidget && IsWindow(g_hWndWidget)) {
+        HWND targetHwnd = g_hWndWidget.load();
+        if (targetHwnd && IsWindow(targetHwnd)) {
             std::wstring* pText = new std::wstring(fetched);
-            PostMessageW(g_hWndWidget, WM_APP_UPDATE_TEXT, 0, reinterpret_cast<LPARAM>(pText));
+            if (!PostMessageW(targetHwnd, WM_APP_UPDATE_TEXT, 0, reinterpret_cast<LPARAM>(pText))) {
+                delete pText;
+            }
         }
 
         DWORD interval = (DWORD)std::max(1000, currentSettings.refreshIntervalMs);
@@ -878,8 +900,7 @@ DWORD WINAPI BackgroundWorkerThreadProc(LPVOID) {
             // Stop event signaled -> exit thread cleanly
             break;
         } else if (waitRes == WAIT_OBJECT_0 + 1) {
-            // Manual refresh event signaled -> loop immediately
-            ResetEvent(g_hRefreshEvent);
+            // Manual refresh event signaled -> loop immediately (auto-reset event resets automatically)
         }
     }
 
@@ -889,8 +910,9 @@ DWORD WINAPI BackgroundWorkerThreadProc(LPVOID) {
 void TriggerManualRefresh() {
     if (!g_bManualRefreshing) {
         g_bManualRefreshing = true;
-        if (g_hWndWidget && IsWindow(g_hWndWidget)) {
-            InvalidateRect(g_hWndWidget, NULL, TRUE);
+        HWND targetHwnd = g_hWndWidget.load();
+        if (targetHwnd && IsWindow(targetHwnd)) {
+            InvalidateRect(targetHwnd, NULL, TRUE);
         }
     }
     if (g_hRefreshEvent) {
@@ -929,7 +951,7 @@ void LoadSettings() {
 
     g_settings.refreshIntervalMs = Wh_GetIntSetting(L"refreshIntervalMs");
     if (g_settings.refreshIntervalMs < 1000) {
-        g_settings.refreshIntervalMs = 15000;
+        g_settings.refreshIntervalMs = 1000;
     }
 
     g_settings.offsetLeft = Wh_GetIntSetting(L"offsetLeft");
@@ -1026,8 +1048,11 @@ void Wh_ModUninit() {
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Taskbar Left Custom Text: Settings changed");
-    if (g_hWndWidget && IsWindow(g_hWndWidget)) {
-        PostMessageW(g_hWndWidget, WM_APP_SETTINGS_CHANGED, 0, 0);
+    HWND hWnd = g_hWndWidget.load();
+    if (hWnd && IsWindow(hWnd)) {
+        PostMessageW(hWnd, WM_APP_SETTINGS_CHANGED, 0, 0);
+    } else {
+        LoadSettings();
+        TriggerManualRefresh();
     }
-    TriggerManualRefresh();
 }
