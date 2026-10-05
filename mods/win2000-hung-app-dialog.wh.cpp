@@ -4,12 +4,12 @@
 // @description     Replaces the Windows 11 "not responding" dialog with the End Program dialog of Windows 2000, in English or Russian
 // @name:ru         Окно «Завершение программы» из Windows 2000
 // @description:ru  Заменяет окно Windows 11 о зависшей программе окном «Завершение программы» из Windows 2000 - на русском или английском
-// @version         1.4.1
+// @version         1.6.0
 // @author          appEW
 // @github          https://github.com/appEW
-// @include         explorer.exe
+// @include         windhawk.exe
 // @include         WerFault.exe
-// @compilerOptions -ldwmapi -ladvapi32
+// @compilerOptions -ldwmapi -ladvapi32 -lshell32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -37,6 +37,8 @@ The original WER dialog stays alive. End Now forwards WER's Close button;
 Cancel, Escape and the title-bar close button forward WER's Wait button.
 Windows performs these actions; the mod never terminates the hung process
 directly. End Now can still lose unsaved data, just as the original button can.
+After Cancel, a later close attempt can show the replacement again even when
+WER reuses the same native dialog. An acknowledged Wait is not timed out.
 
 A broker thread owns the replacement windows, accessibility notifications and
 fallback timers. Public ShowWindow/SetWindowPos hooks try to cloak the original
@@ -47,27 +49,28 @@ dialog that is still alive before the DLL can unload.
 Windhawk can inject into WER after its window is already visible. In that case
 a brief appearance of the modern dialog is possible.
 
-## Optional WerSvc pre-warm
+## Optional pre-warming
 
 **Keep Windows Error Reporting service running** is off by default. Enabling
-it starts a worker only in the main Explorer shell. It sends WerSvc's configured
-ETW start trigger once a minute to keep the demand-start service available.
-This can improve the chance of early Windhawk injection and avoid the modern
-dialog's flash, but cannot guarantee it on every system or immediately after
-enabling the setting.
+it runs the pre-warm worker in a dedicated Windhawk tool host, not in Explorer,
+WerFault, the hung application or the main Windhawk UI process. The same mod
+handles the dialog in WerFault and hosts pre-warming separately; only this one
+mod needs to be installed. The host is bundled with Windhawk (1.7.3 or later),
+so no extra helper download is needed. Do not also enable the separate
+`wer-service-prewarm` mod: that would run two independent heartbeats.
 
-This option deliberately keeps a system service resident and can increase
-background memory use. It uses Windows service/ETW APIs, not Windhawk's private
-scan events or semaphores. It does not modify service startup settings, registry
-policies or system files. Turning it off stops the heartbeat; Windows decides
-when to stop an idle service. No extra download or helper executable is needed.
+The worker reads WerSvc's existing custom start-trigger GUID from SCM and
+writes its ETW event immediately, then once per minute. Disabling the option
+stops and joins the worker and ends only its dedicated host. No service startup
+type, registry policy, system file or event-log setting is changed; WerSvc is
+never forcibly stopped. Windows decides when the shared service can idle out.
 
-The ETW event matches WER's own trigger manifest, not a public WER contract;
-future Windows changes can break this opt-in feature. If the trigger provider's
-event-log channel is enabled, the heartbeat can log about 1,440 events per day.
-The mod does not enable that channel or change any logging settings. With the
-option off, the mod does not stay loaded in Explorer; a later setting change
-lets Windhawk load it again.
+This opt-in feature keeps the service and a tool host in memory. The event
+descriptor matches WER's private trigger manifest, not a public WER contract,
+and may break after Windows updates. If its event-log channel is enabled, the
+heartbeat can generate about 1,440 entries per day; this mod never enables it.
+Errors are retried only at the ordinary minute interval. Pre-warming can reduce
+late injection but does not guarantee flash-free behavior on every system.
 
 ## По-русски
 
@@ -84,27 +87,41 @@ lets Windhawk load it again.
 «Завершить сейчас» нажимает штатную кнопку закрытия WER. «Отмена», Escape
 и крестик означают ожидание отклика. Мод сам не завершает зависший процесс,
 но при выборе завершения несохранённые данные могут потеряться.
+После «Отмена» повторная попытка закрытия снова показывает замену, даже если
+WER использует то же штатное окно. Принятое ожидание не отменяется по таймауту.
 При отключении мода живое штатное окно возвращается, а DLL выгружается.
 
 Опция **«Поддерживать службу отчётов об ошибках Windows активной»** по умолчанию
-выключена. Если её включить, основной Проводник раз в минуту посылает службе
-WerSvc её системный ETW-триггер запуска. Это помогает раннему внедрению Windhawk
-и может убрать вспышку современного окна, но не гарантирует её отсутствие
-на любой конфигурации или сразу после включения опции. Служба остаётся в памяти.
-Внутренние события и семафоры Windhawk не используются; настройки службы,
-системные файлы и политики не меняются. После отключения прогрева служба
-останавливается по обычным правилам Windows, а не принудительно.
+выключена. Прогрев выполняется в отдельном tool-host Windhawk, а не в Проводнике,
+WerFault, зависшем приложении или основном процессе интерфейса Windhawk.
+Устанавливается только один мод; EXE-хост уже входит в Windhawk 1.7.3 или новее.
+Не включайте одновременно отдельный `wer-service-prewarm`, иначе будет два
+независимых прогрева.
 
-Событие ETW соответствует манифесту самого WER, а не публичному контракту WER;
-после обновления Windows этот опциональный механизм может перестать работать.
-Если включён канал журнала событий этого провайдера, прогрев может записывать
-около 1 440 событий в сутки. Мод не включает канал и не меняет настройки журнала.
-При выключенной опции DLL не остаётся в Проводнике; изменение настройки
-позволяет Windhawk загрузить её снова.
+Мод читает существующий GUID триггера WerSvc из SCM и посылает ETW-событие сразу,
+затем раз в минуту. Отключение опции останавливает поток и только собственный
+tool-host. Тип запуска службы, политики, системные файлы и настройки журнала не
+меняются; WerSvc не останавливается принудительно. Прогрев оставляет службу и
+хост в памяти. Дескриптор события соответствует частному манифесту WER и может
+измениться после обновления Windows. Если включён канал провайдера, возможно
+около 1 440 записей в сутки; мод сам канал не включает. Ошибки повторяются не
+чаще раза в минуту. Опция может уменьшить вспышку при позднем внедрении, но не
+гарантирует её отсутствие на любой системе.
 
 **Проверено на Windows 11 24H2 (сборка 26100).** Другие версии не проверены.
 При позднем внедрении возможно краткое появление современного окна.
 Дополнительные файлы или загрузки для мода не нужны.
+
+## Changes in 1.6.0 / Изменения 1.6.0
+
+- One install combines WER replacement and optional dedicated-host pre-warming;
+  Explorer is no longer targeted. / Замена и необязательный прогрев объединены
+  в одном моде; внедрение в Проводник больше не требуется.
+- Fixed replacement reuse after Cancel and timeout of an acknowledged Wait.
+  / Исправлены повторное появление после «Отмена» и таймаут принятого ожидания.
+- Fixed broker shutdown during rapid reloads and unnecessary warm-host reload
+  on language changes. / Исправлены остановка broker при быстрых перезагрузках
+  и ненужный перезапуск хоста прогрева при смене языка.
 */
 // ==/WindhawkModReadme==
 
@@ -132,23 +149,25 @@ WerSvc её системный ETW-триггер запуска. Это пом�
   $name: Keep Windows Error Reporting service running
   $name:ru: Поддерживать службу отчётов об ошибках Windows активной
   $description: >-
-    Opt in to a WerSvc heartbeat in the main Explorer shell (one ETW event
-    per minute). Can prevent a flash caused by late injection, but keeps
-    the service in memory. No service settings are changed.
+    Opt in to permanent pre-warming in a separate Windhawk tool host (one
+    ETW trigger per minute). Keeps the service and host in memory; can
+    reduce the modern-dialog flash, but does not guarantee its absence.
   $description:ru: >-
-    Включает прогрев WerSvc в основном Проводнике (одно ETW-событие в минуту).
-    Может убрать вспышку при позднем внедрении, но оставляет службу в памяти.
-    Настройки службы не меняются.
+    Постоянный прогрев в отдельном tool-host Windhawk (одно ETW-событие
+    в минуту). Оставляет службу и хост в памяти; может уменьшить вспышку
+    современного окна, но не гарантирует её отсутствие.
 */
 // ==/WindhawkModSettings==
 
 #include <commctrl.h>
 #include <dwmapi.h>
 #include <evntprov.h>
+#include <shellapi.h>
 #include <windhawk_utils.h>
 #include <windows.h>
 
 #include <atomic>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
@@ -166,6 +185,7 @@ constexpr UINT_PTR kDiscoveryTimerId = 2;
 constexpr UINT_PTR kPendingCloakTimerId = 3;
 constexpr UINT kActionPollMs = 250;
 constexpr UINT kDiscoveryPollMs = 100;
+constexpr DWORD kBrokerStopFallbackMs = 1000;
 constexpr UINT kEarlyCloakFallbackMs = 1500;
 constexpr ULONGLONG kDiscoveryLifetimeMs = 10000;
 constexpr ULONGLONG kActionTimeoutMs = 15000;
@@ -177,6 +197,7 @@ constexpr UINT kBrokerCandidateMessage = WM_APP + 1;
 constexpr UINT kBrokerStockDestroyedMessage = WM_APP + 2;
 constexpr UINT kBrokerFinalizeMessage = WM_APP + 3;
 constexpr UINT kBrokerPrepareMessage = WM_APP + 4;
+constexpr UINT kBrokerStockHiddenMessage = WM_APP + 5;
 
 constexpr wchar_t kBrokerWindowClass[] = L"Win2000HungAppDialogBrokerWindow";
 constexpr wchar_t kReleasedDialogProperty[] =
@@ -194,22 +215,6 @@ constexpr wchar_t kDefaultNotResponding[] = L"This program is not responding.";
 constexpr wchar_t kDefaultEnding[] = L"Ending Program...Please wait";
 constexpr wchar_t kDefaultAppName[] = L"Program";
 constexpr wchar_t kRussianAppName[] = L"Программа";
-
-// Windows SDK layouts for SERVICE_TRIGGER[_INFO]. The MinGW headers shipped
-// with some Windhawk versions have the config constants but not these types.
-struct ServiceTrigger {
-    DWORD dwTriggerType;
-    DWORD dwAction;
-    GUID* pTriggerSubtype;
-    DWORD cDataItems;
-    void* pDataItems;
-};
-
-struct ServiceTriggerInfo {
-    DWORD cTriggers;
-    ServiceTrigger* pTriggers;
-    BYTE* pReserved;
-};
 
 // The original 16x16 four-bit Windows 2000 warning overlay. The bytes are
 // the RT_ICON payload, so the mod stays a single self-contained source file.
@@ -263,6 +268,9 @@ struct Session {
     bool stockCloakedByUs = false;
     bool stockHiddenByUs = false;
     bool selectionSent = false;
+    int selectionButtonId = 0;
+    DWORD selectionTick = 0;
+    bool waitAcknowledged = false;
     bool closing = false;
     bool initialized = false;
     ULONGLONG actionDeadline = 0;
@@ -299,13 +307,6 @@ HINSTANCE g_windowClassInstance = nullptr;
 bool g_windowClassRegistered = false;
 ULONGLONG g_discoveryDeadline = 0;
 
-std::wstring Lowercase(std::wstring value) {
-    if (!value.empty()) {
-        CharLowerBuffW(value.data(), static_cast<DWORD>(value.size()));
-    }
-    return value;
-}
-
 void Trim(std::wstring& value) {
     constexpr wchar_t kWhitespace[] = L" \t\r\n";
     const size_t first = value.find_first_not_of(kWhitespace);
@@ -329,22 +330,6 @@ std::wstring ProcessPath(DWORD processId) {
     const BOOL ok = QueryFullProcessImageNameW(process, 0, path, &length);
     CloseHandle(process);
     return ok ? std::wstring(path, length) : std::wstring{};
-}
-
-std::wstring CurrentProcessBaseName() {
-    wchar_t path[32768] = {};
-    const DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
-    if (!length || length >= ARRAYSIZE(path)) {
-        return {};
-    }
-
-    const wchar_t* baseName = path;
-    for (const wchar_t* cursor = path; *cursor; ++cursor) {
-        if (*cursor == L'\\' || *cursor == L'/') {
-            baseName = cursor + 1;
-        }
-    }
-    return Lowercase(baseName);
 }
 
 std::wstring JoinPath(const wchar_t* directory, const wchar_t* fileName) {
@@ -768,6 +753,14 @@ void RequestFinalize(Session* session, bool restoreStock) {
     }
 }
 
+void AcknowledgeWait(Session* session) {
+    session->waitAcknowledged = true;
+    session->actionDeadline = 0;
+    // WER can retain the same hidden dialog after Wait. Its hide acknowledges
+    // the action; do not time it out or suppress replacement of a later SHOW.
+    KillTimer(session->classicDialog, kActionTimerId);
+}
+
 void SendSelection(Session* session, int buttonId, bool hideClassicDialog) {
     if (!session || session->selectionSent) {
         return;
@@ -780,6 +773,9 @@ void SendSelection(Session* session, int buttonId, bool hideClassicDialog) {
     }
 
     session->selectionSent = true;
+    session->selectionButtonId = buttonId;
+    session->selectionTick = GetTickCount();
+    session->waitAcknowledged = false;
     EnableWindow(GetDlgItem(session->classicDialog, kEndNowButtonId), FALSE);
     EnableWindow(GetDlgItem(session->classicDialog, IDCANCEL), FALSE);
 
@@ -797,6 +793,7 @@ void SendSelection(Session* session, int buttonId, bool hideClassicDialog) {
         Wh_Log(L"Failed to create the WER action timer, GLE=%u",
                GetLastError());
         session->selectionSent = false;
+        session->selectionButtonId = 0;
         EnableWindow(GetDlgItem(session->classicDialog, kEndNowButtonId), TRUE);
         EnableWindow(GetDlgItem(session->classicDialog, IDCANCEL), TRUE);
         SetDlgItemTextW(session->classicDialog, kStatusControlId,
@@ -926,6 +923,15 @@ INT_PTR CALLBACK ClassicDialogProc(HWND dialog,
                     return TRUE;
                 }
 
+                if (session->waitAcknowledged) {
+                    return TRUE;  // A queued timer can outlive KillTimer.
+                }
+                if (session->selectionButtonId == kWerWaitButtonId &&
+                    !IsWindowVisible(session->stockDialog)) {
+                    AcknowledgeWait(session);
+                    return TRUE;
+                }
+
                 if (GetTickCount64() >= session->actionDeadline) {
                     KillTimer(dialog, kActionTimerId);
                     Wh_Log(
@@ -997,7 +1003,33 @@ void StartSessionImpl(HWND stockDialog) {
     }
     const auto existingSession = g_sessions.find(stockDialog);
     if (existingSession != g_sessions.end()) {
-        HideStockDialog(existingSession->second.get());
+        Session* session = existingSession->second.get();
+        if (!IsSameStockWindow(session) || !HideStockDialog(session)) {
+            CloseSession(stockDialog, true);
+            return;
+        }
+        if (session->selectionSent && session->waitAcknowledged &&
+            session->selectionButtonId == kWerWaitButtonId &&
+            IsWindowVisible(stockDialog)) {
+            if (!IsWindow(session->classicDialog) ||
+                !HasInitialWerConsentTree(stockDialog)) {
+                CloseSession(stockDialog, true);  // Unexpected page: fail open.
+                return;
+            }
+            KillTimer(session->classicDialog, kActionTimerId);
+            session->selectionSent = false;
+            session->selectionButtonId = 0;
+            session->waitAcknowledged = false;
+            session->actionDeadline = 0;
+            EnableWindow(GetDlgItem(session->classicDialog, kEndNowButtonId), TRUE);
+            EnableWindow(GetDlgItem(session->classicDialog, IDCANCEL), TRUE);
+            SetDlgItemTextW(session->classicDialog, kStatusControlId,
+                            g_notResponding.c_str());
+            CenterDialog(session->classicDialog, session->ghostOwner);
+            ShowWindow(session->classicDialog, SW_SHOW);
+            SetForegroundWindow(session->classicDialog);
+            SetActiveWindow(session->classicDialog);
+        }
         return;
     }
 
@@ -1088,7 +1120,7 @@ void CALLBACK WinEventProc(HWINEVENTHOOK,
                            LONG objectId,
                            LONG childId,
                            DWORD,
-                           DWORD) {
+                           DWORD eventTime) {
     if (!g_active.load() || !window || objectId != OBJID_WINDOW ||
         childId != CHILDID_SELF) {
         return;
@@ -1105,6 +1137,9 @@ void CALLBACK WinEventProc(HWINEVENTHOOK,
         PostMessageW(broker, kBrokerCandidateMessage,
                      reinterpret_cast<WPARAM>(rootWindow ? rootWindow : window),
                      0);
+    } else if (event == EVENT_OBJECT_HIDE) {
+        PostMessageW(broker, kBrokerStockHiddenMessage,
+                     reinterpret_cast<WPARAM>(window), eventTime);
     } else if (event == EVENT_OBJECT_DESTROY) {
         PostMessageW(broker, kBrokerStockDestroyedMessage,
                      reinterpret_cast<WPARAM>(window), 0);
@@ -1155,6 +1190,27 @@ LRESULT CALLBACK BrokerWindowProc(HWND window,
             ReleasePendingCloak(reinterpret_cast<HWND>(wParam), false);
             return 0;
 
+        case kBrokerStockHiddenMessage: {
+            const auto iterator = g_sessions.find(reinterpret_cast<HWND>(wParam));
+            if (iterator != g_sessions.end()) {
+                Session* session = iterator->second.get();
+                // Ignore delayed hides from before this action. DWORD tick
+                // subtraction is valid across rollover within the 15s bound.
+                if (session->selectionSent && !session->waitAcknowledged &&
+                    session->selectionButtonId == kWerWaitButtonId &&
+                    static_cast<LONG>(static_cast<DWORD>(lParam) -
+                                      session->selectionTick) >= 0 &&
+                    IsSameStockWindow(session)) {
+                    AcknowledgeWait(session);
+                    // A rapid SHOW may precede delivery of this HIDE event.
+                    if (IsWindowVisible(session->stockDialog)) {
+                        StartSession(session->stockDialog);
+                    }
+                }
+            }
+            return 0;
+        }
+
         case kBrokerFinalizeMessage:
             CloseSession(reinterpret_cast<HWND>(wParam), lParam != 0);
             return 0;
@@ -1179,108 +1235,6 @@ void CloseAllSessions(bool restoreStock) {
     while (!g_sessions.empty()) {
         CloseSession(g_sessions.begin()->first, restoreStock);
     }
-}
-
-bool QueryWerServiceTrigger(GUID* providerId) {
-    SC_HANDLE manager = OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
-    if (!manager) {
-        return false;
-    }
-    SC_HANDLE service = OpenServiceW(manager, L"WerSvc", SERVICE_QUERY_CONFIG);
-    CloseServiceHandle(manager);
-    if (!service) {
-        return false;
-    }
-
-    bool found = false;
-    try {
-        DWORD size = 0;
-        QueryServiceConfig2W(service, SERVICE_CONFIG_TRIGGER_INFO, nullptr, 0,
-                             &size);
-        if (size >= sizeof(ServiceTriggerInfo) && size <= 65536) {
-            std::vector<BYTE> data(size);
-            if (QueryServiceConfig2W(service, SERVICE_CONFIG_TRIGGER_INFO,
-                                     data.data(), size, &size)) {
-                const auto* info =
-                    reinterpret_cast<const ServiceTriggerInfo*>(data.data());
-                for (DWORD i = 0; i < info->cTriggers; ++i) {
-                    const ServiceTrigger& trigger = info->pTriggers[i];
-                    if (trigger.dwTriggerType == SERVICE_TRIGGER_TYPE_CUSTOM &&
-                        trigger.dwAction ==
-                            1 &&  // SERVICE_TRIGGER_ACTION_SERVICE_START
-                        trigger.pTriggerSubtype &&
-                        trigger.cDataItems == 0) {
-                        *providerId = *trigger.pTriggerSubtype;
-                        found = true;
-                        break;
-                    }
-                }
-            }
-        }
-    } catch (...) {
-        // Failure to pre-warm must never affect Explorer or WER's normal path.
-    }
-    CloseServiceHandle(service);
-    return found;
-}
-
-DWORD WINAPI WerServicePrewarmThreadProc(void*) {
-    // A slow sign-in may create the desktop long after Explorer is injected.
-    // Keep this stop-aware wait inexpensive instead of silently giving up.
-    while (WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
-        const HWND shellWindow = GetShellWindow();
-        if (shellWindow) {
-            DWORD shellProcessId = 0;
-            GetWindowThreadProcessId(shellWindow, &shellProcessId);
-            if (shellProcessId) {
-                if (shellProcessId != GetCurrentProcessId()) {
-                    return 0;  // No heartbeat from secondary Explorer processes.
-                }
-                break;
-            }
-        }
-        if (WaitForSingleObject(g_stopEvent, 1000) != WAIT_TIMEOUT) {
-            return 0;
-        }
-    }
-    if (WaitForSingleObject(g_stopEvent, 0) != WAIT_TIMEOUT) {
-        return 0;
-    }
-
-    // Read the service's existing custom start trigger. Never change its
-    // configuration, and never poke Windhawk's private named objects.
-    GUID providerId = {};
-    if (!QueryWerServiceTrigger(&providerId)) {
-        Wh_Log(L"WerSvc has no supported start trigger; pre-warm skipped");
-        return 0;
-    }
-    REGHANDLE provider = 0;
-    if (EventRegister(&providerId, nullptr, nullptr, &provider) !=
-        ERROR_SUCCESS) {
-        Wh_Log(L"WerSvc trigger provider could not be registered");
-        return 0;
-    }
-
-    // WER's trigger-event manifest is a component-private contract. Its channel
-    // can also log each heartbeat when enabled; the mod never enables it.
-    EVENT_DESCRIPTOR event = {};
-    event.Channel = 16;
-    event.Level = 4;
-    event.Task = 1;
-    event.Keyword = 0x8000000000000001ULL;
-    Wh_Log(L"Opt-in WerSvc heartbeat started (once per minute)");
-    while (WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
-        const ULONG result = EventWrite(provider, &event, 0, nullptr);
-        if (result != ERROR_SUCCESS) {
-            Wh_Log(L"WerSvc heartbeat failed, error=%u", result);
-            break;
-        }
-        if (WaitForSingleObject(g_stopEvent, 60000) != WAIT_TIMEOUT) {
-            break;
-        }
-    }
-    EventUnregister(provider);
-    return 0;
 }
 
 BOOL CALLBACK RemoveReleasedProperty(HWND window, LPARAM) {
@@ -1317,7 +1271,7 @@ DWORD WINAPI BrokerThreadProc(void*) {
     g_brokerWindow.store(broker);
 
     g_winEventHook = SetWinEventHook(
-        EVENT_OBJECT_DESTROY, EVENT_OBJECT_SHOW, nullptr, WinEventProc,
+        EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, nullptr, WinEventProc,
         GetCurrentProcessId(), 0, WINEVENT_OUTOFCONTEXT);
     if (!g_winEventHook) {
         g_brokerWindow.store(nullptr);
@@ -1336,11 +1290,18 @@ DWORD WINAPI BrokerThreadProc(void*) {
     SetTimer(broker, kDiscoveryTimerId, kDiscoveryPollMs, nullptr);
 
     bool stop = false;
-    while (!stop) {
-        const DWORD waitResult = MsgWaitForMultipleObjects(
-            1, &g_stopEvent, FALSE, INFINITE, QS_ALLINPUT);
+    while (!stop && WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
+        // Check stop independently of the input queue, including immediately
+        // after startup. A bounded message wait is a fallback for a missed
+        // queue wake during quick reload; it does not permit early DLL unload.
+        const DWORD waitResult = MsgWaitForMultipleObjectsEx(
+            1, &g_stopEvent, kBrokerStopFallbackMs, QS_ALLINPUT,
+            MWMO_INPUTAVAILABLE);
         if (waitResult == WAIT_OBJECT_0) {
             break;
+        }
+        if (waitResult == WAIT_TIMEOUT) {
+            continue;
         }
         if (waitResult != WAIT_OBJECT_0 + 1) {
             break;
@@ -1489,33 +1450,8 @@ void CleanupInitializationObjects() {
 
 }  // namespace
 
-BOOL Wh_ModInit() {
+static BOOL InitializeWerDialog() {
     Wh_Log(L"Init " WH_MOD_ID L" version " WH_MOD_VERSION);
-
-    if (CurrentProcessBaseName() == L"explorer.exe") {
-        // Windhawk retries a failed initialization after a settings change.
-        // Avoid keeping an unused DLL loaded in every Explorer process.
-        if (!Wh_GetIntSetting(L"keepWerSvcRunning")) {
-            return FALSE;
-        }
-        if (const HWND shellWindow = GetShellWindow()) {
-            DWORD shellProcessId = 0;
-            GetWindowThreadProcessId(shellWindow, &shellProcessId);
-            if (shellProcessId && shellProcessId != GetCurrentProcessId()) {
-                return FALSE;
-            }
-        }
-        g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        if (g_stopEvent) {
-            g_brokerThread = CreateThread(
-                nullptr, 0, WerServicePrewarmThreadProc, nullptr, 0, nullptr);
-        }
-        if (!g_brokerThread) {
-            CleanupInitializationObjects();
-            return FALSE;
-        }
-        return TRUE;
-    }
 
     if (!IsSystemWerProcess(GetCurrentProcessId()) || !GetCurrentModModule() ||
         !LoadWindows2000DialogResource()) {
@@ -1555,12 +1491,12 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModBeforeUninit() {
+static void PrepareWerDialogForUninit() {
     // Stop new cloak requests before Windhawk disables the function hooks.
     g_active.store(false);
 }
 
-void Wh_ModUninit() {
+static void UninitializeWerDialog() {
     Wh_Log(L"Uninit");
     g_active.store(false);
 
@@ -1580,7 +1516,320 @@ void Wh_ModUninit() {
     CleanupInitializationObjects();
 }
 
+namespace PrewarmTool {
+enum class Role { None, WerDialog, Launcher, Host };
+Role role = Role::None;
+HANDLE stopEvent = nullptr;
+HANDLE worker = nullptr;
+HANDLE instanceMutex = nullptr;
+REGHANDLE provider = 0;
+
+// Some bundled MinGW headers omit these service-trigger layouts.
+struct ServiceTrigger {
+    DWORD type;
+    DWORD action;
+    GUID* subtype;
+    DWORD dataCount;
+    void* dataItems;
+};
+struct ServiceTriggerInfo {
+    DWORD count;
+    ServiceTrigger* triggers;
+    BYTE* reserved;
+};
+
+bool QueryServiceTrigger(GUID* providerId) {
+    SC_HANDLE manager = OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
+    if (!manager) return false;
+    SC_HANDLE service = OpenServiceW(manager, L"WerSvc", SERVICE_QUERY_CONFIG);
+    CloseServiceHandle(manager);
+    if (!service) return false;
+    bool found = false;
+    try {
+        DWORD size = 0;
+        QueryServiceConfig2W(service, SERVICE_CONFIG_TRIGGER_INFO, nullptr, 0,
+                             &size);
+        if (size >= sizeof(ServiceTriggerInfo) && size <= 65536) {
+            std::vector<BYTE> data(size);
+            if (QueryServiceConfig2W(service, SERVICE_CONFIG_TRIGGER_INFO,
+                                     data.data(), size, &size)) {
+                const auto contains = [&data](const void* pointer, size_t bytes) {
+                    const auto base = reinterpret_cast<std::uintptr_t>(data.data());
+                    const auto address = reinterpret_cast<std::uintptr_t>(pointer);
+                    return address >= base && address - base <= data.size() &&
+                           bytes <= data.size() - (address - base);
+                };
+                const auto* info =
+                    reinterpret_cast<const ServiceTriggerInfo*>(data.data());
+                if (info->count <= data.size() / sizeof(ServiceTrigger) &&
+                    contains(info->triggers, info->count * sizeof(ServiceTrigger))) {
+                    for (DWORD i = 0; i < info->count; ++i) {
+                        const ServiceTrigger& trigger = info->triggers[i];
+                        if (trigger.type == SERVICE_TRIGGER_TYPE_CUSTOM &&
+                            trigger.action == 1 && // SERVICE_TRIGGER_ACTION_SERVICE_START
+                            trigger.dataCount == 0 &&
+                            contains(trigger.subtype, sizeof(GUID))) {
+                            *providerId = *trigger.subtype;
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    } catch (...) {
+        // Optional pre-warming must fail harmlessly on SCM/allocation failure.
+    }
+    CloseServiceHandle(service);
+    return found;
+}
+
+DWORD WINAPI Worker(void*) {
+    // Component-private WER manifest contract; see the README caveats.
+    EVENT_DESCRIPTOR event{};
+    event.Channel = 16;
+    event.Level = 4;
+    event.Task = 1;
+    event.Keyword = 0x8000000000000001ULL;
+    ULONG previousError = ERROR_SUCCESS;
+    Wh_Log(L"WerSvc heartbeat started (once per minute, dedicated tool host)");
+    while (WaitForSingleObject(stopEvent, 0) == WAIT_TIMEOUT) {
+        const ULONG error = EventWrite(provider, &event, 0, nullptr);
+        if (error != ERROR_SUCCESS && error != previousError) {
+            Wh_Log(L"WerSvc heartbeat failed: %u; retry in one minute", error);
+        }
+        previousError = error;
+        if (WaitForSingleObject(stopEvent, 60000) != WAIT_TIMEOUT) break;
+    }
+    return 0;
+}
+
+void Cleanup() {
+    if (worker) {
+        SetEvent(stopEvent);
+        WaitForSingleObject(worker, INFINITE);
+        CloseHandle(worker);
+        worker = nullptr;
+    }
+    if (provider) {
+        EventUnregister(provider);
+        provider = 0;
+    }
+    if (stopEvent) {
+        CloseHandle(stopEvent);
+        stopEvent = nullptr;
+    }
+    if (instanceMutex) {
+        ReleaseMutex(instanceMutex);
+        CloseHandle(instanceMutex);
+        instanceMutex = nullptr;
+    }
+}
+
+Role IdentifyWindhawkRole() {
+    wchar_t path[32768]{};
+    const DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
+    if (!length || length >= ARRAYSIZE(path)) return Role::None;
+    const wchar_t* name = wcsrchr(path, L'\\');
+    name = name ? name + 1 : path;
+    const bool isApp = _wcsicmp(name, L"windhawk.exe") == 0;
+    const bool isNativeHost = _wcsicmp(name, L"windhawk-mod.exe") == 0;
+    if (!isApp && !isNativeHost) return Role::None;
+
+    DWORD session = 0;
+    if (!ProcessIdToSessionId(GetCurrentProcessId(), &session) || !session)
+        return Role::None;
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv) return Role::None;
+    bool excluded = false;
+    bool hasToolId = false;
+    for (int i = 1; i < argc; ++i) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            excluded = true;
+        }
+        if (wcscmp(argv[i], L"-tool-mod") == 0 ||
+            wcscmp(argv[i], L"-windhawk-tool-mod") == 0) {
+            if (i + 1 >= argc || wcscmp(argv[i + 1], WH_MOD_ID) != 0) {
+                excluded = true;
+                break;
+            }
+            hasToolId = true;
+            ++i;
+        }
+    }
+    LocalFree(argv);
+    if (excluded) return Role::None;
+    if (hasToolId) return Role::Host;
+    return isApp ? Role::Launcher : Role::None;
+}
+
+// Called only after exact executable/session/command-line validation. Never
+// terminate WerFault, Explorer, the ordinary Windhawk UI or a foreign host.
+void EndOwnHost(UINT code) {
+    Cleanup();
+    if (role == Role::Host) ExitProcess(code);
+}
+
+void WINAPI EntryPointHook() {
+    // The legacy 1.7.3 launcher (also supported by 2.0) keeps only our worker.
+    if (role == Role::Host) ExitThread(0);
+}
+
+void LaunchHost() {
+    if (role != Role::Launcher || !Wh_GetIntSetting(L"keepWerSvcRunning"))
+        return;
+    wchar_t path[32768]{};
+    const DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
+    if (!length || length >= ARRAYSIZE(path)) return;
+    std::wstring command = L"\"";
+    command += path;
+    command += L"\" -tool-mod \"" WH_MOD_ID L"\"";
+    HMODULE kernel = GetModuleHandleW(L"kernelbase.dll");
+    if (!kernel) kernel = GetModuleHandleW(L"kernel32.dll");
+    if (!kernel) return;
+    // Standard Windhawk 1.7.3 tool launcher; no external helper executable.
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES,
+        BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION,
+        PHANDLE);
+    const auto spawn = reinterpret_cast<CreateProcessInternalW_t>(
+        GetProcAddress(kernel, "CreateProcessInternalW"));
+    if (!spawn) {
+        Wh_Log(L"No CreateProcessInternalW; pre-warming not started");
+        return;
+    }
+    STARTUPINFOW startup{};
+    startup.cb = sizeof(startup);
+    startup.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    PROCESS_INFORMATION process{};
+    if (!spawn(nullptr, path, command.data(), nullptr, nullptr, FALSE,
+               NORMAL_PRIORITY_CLASS, nullptr, nullptr, &startup, &process,
+               nullptr)) {
+        Wh_Log(L"Tool host launch failed: %u", GetLastError());
+        return;
+    }
+    CloseHandle(process.hProcess);
+    CloseHandle(process.hThread);
+}
+} // namespace PrewarmTool
+
+// WhTool_ModInit is also the legacy marker recognized by Windhawk 2.0. That
+// engine hosts this role itself but still injects the ordinary role in WerFault.
+BOOL WhTool_ModInit() {
+    using namespace PrewarmTool;
+    if (role != Role::Host || !Wh_GetIntSetting(L"keepWerSvcRunning"))
+        return FALSE;
+    instanceMutex = CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+    if (!instanceMutex) return FALSE;
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        CloseHandle(instanceMutex);
+        instanceMutex = nullptr;
+        return FALSE;
+    }
+    GUID providerId{};
+    if (!QueryServiceTrigger(&providerId)) {
+        Wh_Log(L"WerSvc has no supported start trigger");
+        Cleanup();
+        return FALSE;
+    }
+    stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!stopEvent) {
+        Cleanup();
+        return FALSE;
+    }
+    const ULONG error = EventRegister(&providerId, nullptr, nullptr, &provider);
+    if (error != ERROR_SUCCESS) {
+        Wh_Log(L"EventRegister failed: %u", error);
+        Cleanup();
+        return FALSE;
+    }
+    worker = CreateThread(nullptr, 0, Worker, nullptr, 0, nullptr);
+    if (!worker) {
+        Cleanup();
+        return FALSE;
+    }
+    return TRUE;
+}
+
+void WhTool_ModUninit() {
+    PrewarmTool::Cleanup();
+}
+
+void WhTool_ModSettingsChanged() {
+    // The lifecycle dispatcher below handles our opt-in setting.
+}
+
+BOOL Wh_ModInit() {
+    using namespace PrewarmTool;
+    // Check the ordinary WER role first: even an unexpected tool flag cannot
+    // make a real system WerFault execute the host's entry-point/exit path.
+    if (IsSystemWerProcess(GetCurrentProcessId())) {
+        role = Role::WerDialog;
+        const BOOL result = InitializeWerDialog();
+        if (!result) role = Role::None;
+        return result;
+    }
+    role = IdentifyWindhawkRole();
+    if (role == Role::Launcher) {
+        if (!Wh_GetIntSetting(L"keepWerSvcRunning")) {
+            role = Role::None;
+            return FALSE;
+        }
+        return TRUE;
+    }
+    if (role != Role::Host) return FALSE;
+    if (!Wh_GetIntSetting(L"keepWerSvcRunning")) {
+        EndOwnHost(0);
+        return FALSE;
+    }
+    if (!WhTool_ModInit()) {
+        EndOwnHost(1);
+        return FALSE;
+    }
+    auto* image = reinterpret_cast<BYTE*>(GetModuleHandleW(nullptr));
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(image);
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(image + dos->e_lfanew);
+    void* entry = image + nt->OptionalHeader.AddressOfEntryPoint;
+    if (!Wh_SetFunctionHook(entry, reinterpret_cast<void*>(EntryPointHook), nullptr)) {
+        Wh_Log(L"Tool entry-point hook failed");
+        EndOwnHost(1);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    PrewarmTool::LaunchHost();
+}
+
+void Wh_ModBeforeUninit() {
+    if (PrewarmTool::role == PrewarmTool::Role::WerDialog) {
+        PrepareWerDialogForUninit();
+    } else if (PrewarmTool::role == PrewarmTool::Role::Host &&
+               PrewarmTool::stopEvent) {
+        SetEvent(PrewarmTool::stopEvent);
+    }
+}
+
+void Wh_ModUninit() {
+    using namespace PrewarmTool;
+    if (role == Role::WerDialog) {
+        UninitializeWerDialog();
+    } else if (role == Role::Host) {
+        EndOwnHost(0);
+    }
+    role = Role::None;
+}
+
 BOOL Wh_ModSettingsChanged(BOOL* reload) {
-    *reload = TRUE;
+    // Language changes need only the WER role to reload. Restarting both the
+    // launcher and host while pre-warming stays enabled races the instance
+    // mutex: a new host could exit before the old one releases it.
+    using namespace PrewarmTool;
+    *reload = (role != Role::Launcher && role != Role::Host) ||
+              !Wh_GetIntSetting(L"keepWerSvcRunning");
     return TRUE;
 }
