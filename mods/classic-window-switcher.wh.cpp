@@ -12,7 +12,7 @@
 // @include         windhawk.exe
 // @include         explorer.exe
 // @license         gpl-2.0
-// @compilerOptions -ldwmapi -lcomctl32 -lgdiplus -lshcore -luxtheme -lgdi32 -lole32
+// @compilerOptions -ldwmapi -lcomctl32 -lgdiplus -lshcore -luxtheme -lgdi32 -lole32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -186,6 +186,140 @@ DEFINE_GUID(LiveSetting_Property_GUID, 0xc12bcd8e, 0x2a8e, 0x4950, 0x8a, 0xe7, 0
 
 #define SWS_WINDOWSWITCHERLAYOUT_DEFAULT_GRID_COLUMNS 7
 #define SWS_WINDOWSWITCHERLAYOUT_DEFAULT_GRID_ROWS 3
+
+DEFINE_GUID(sws_CLSID_InputSwitchControl,
+    0xB9BC2A50,
+    0x43C3, 0x41AA, 0xa0, 0x86,
+    0x5D, 0xB1, 0x4e, 0x18, 0x4b, 0xae
+);
+
+DEFINE_GUID(sws_IID_InputSwitchControl,
+    0xB9BC2A50,
+    0x43C3, 0x41AA, 0xa0, 0x82,
+    0x5D, 0xB1, 0x4e, 0x18, 0x4b, 0xae
+);
+
+DEFINE_GUID(sws_IID_IInputSwitchCallback,
+    0xB9BC2A50,
+    0x43C3, 0x41AA, 0xa0, 0x83,
+    0x5D, 0xB1, 0x4e, 0x18, 0x4b, 0xae
+);
+
+typedef struct IInputSwitchCallbackUpdateData
+{
+    DWORD dwID; // OK
+    DWORD dw0; // always 0
+    LPCWSTR pwszLangShort; // OK ("ENG")
+    LPCWSTR pwszLang; // OK ("English (United States)")
+    LPCWSTR pwszKbShort; // OK ("US")
+    LPCWSTR pwszKb; // OK ("US keyboard")
+    LPCWSTR pwszUnknown5;
+    LPCWSTR pwszUnknown6;
+    LPCWSTR pwszLocale; // OK ("en-US")
+    LPCWSTR pwszUnknown8;
+    LPCWSTR pwszUnknown9;
+    LPCWSTR pwszUnknown10;
+    LPCWSTR pwszUnknown11;
+    LPCWSTR pwszUnknown12;
+    LPCWSTR pwszUnknown13;
+    LPCWSTR pwszUnknown14;
+    LPCWSTR pwszUnknown15;
+    LPCWSTR pwszUnknown16;
+    LPCWSTR pwszUnknown17;
+    DWORD dwUnknown18;
+    DWORD dwUnknown19;
+    DWORD dwNumber; // ???
+} IInputSwitchCallbackUpdateData;
+
+typedef interface sws_IInputSwitchControl sws_IInputSwitchControl;
+
+typedef interface sws_IInputSwitchCallback sws_IInputSwitchCallback;
+
+typedef struct sws_IInputSwitchControlVtbl
+{
+    BEGIN_INTERFACE
+
+    HRESULT(STDMETHODCALLTYPE* QueryInterface)(
+        sws_IInputSwitchControl* This,
+        /* [in] */ REFIID riid,
+        /* [annotation][iid_is][out] */
+        _COM_Outptr_  void** ppvObject);
+
+    ULONG(STDMETHODCALLTYPE* AddRef)(
+        sws_IInputSwitchControl* This);
+
+    ULONG(STDMETHODCALLTYPE* Release)(
+        sws_IInputSwitchControl* This);
+
+    HRESULT(STDMETHODCALLTYPE* Init)(
+        sws_IInputSwitchControl* This,
+        /* [in] */ unsigned int clientType);
+
+    HRESULT(STDMETHODCALLTYPE* SetCallback)(
+        sws_IInputSwitchControl* This,
+        /* [in] */ sws_IInputSwitchCallback* pInputSwitchCallback);
+
+    END_INTERFACE
+} sws_IInputSwitchControlVtbl;
+
+interface sws_IInputSwitchControl
+{
+    CONST_VTBL struct sws_IInputSwitchControlVtbl* lpVtbl;
+};
+
+typedef struct sws_IInputSwitchCallbackVtbl
+{
+    BEGIN_INTERFACE
+
+    HRESULT(STDMETHODCALLTYPE* QueryInterface)(
+        sws_IInputSwitchCallback* This,
+        /* [in] */ REFIID riid,
+        /* [annotation][iid_is][out] */
+        _COM_Outptr_  void** ppvObject);
+
+    ULONG(STDMETHODCALLTYPE* AddRef)(
+        sws_IInputSwitchCallback* This);
+
+    ULONG(STDMETHODCALLTYPE* Release)(
+        sws_IInputSwitchCallback* This);
+
+    HRESULT(STDMETHODCALLTYPE* OnUpdateProfile)(
+        sws_IInputSwitchCallback* This,
+        /* [in] */ IInputSwitchCallbackUpdateData* ud);
+
+    HRESULT(STDMETHODCALLTYPE* OnUpdateTsfFloatingFlags)(
+        sws_IInputSwitchCallback* This);
+
+    HRESULT(STDMETHODCALLTYPE* OnProfileCountChange)(
+        sws_IInputSwitchCallback* This,
+        /* [in] */ int a2,
+        /* [in] */ int a3);
+
+    HRESULT(STDMETHODCALLTYPE* OnShowHide)(
+        sws_IInputSwitchCallback* This,
+        /* [in] */ int dwShowStatus);
+
+    HRESULT(STDMETHODCALLTYPE* OnImeModeItemUpdate)(
+        sws_IInputSwitchCallback* This,
+        /* [in] */ void* ime);
+
+    HRESULT(STDMETHODCALLTYPE* OnModalitySelected)(
+        sws_IInputSwitchCallback* This);
+
+    HRESULT(STDMETHODCALLTYPE* OnContextFlagsChange)(
+        sws_IInputSwitchCallback* This,
+        /* [in] */ char flags);
+
+    HRESULT(STDMETHODCALLTYPE* OnTouchKeyboardManualInvoke)(
+        sws_IInputSwitchCallback* This);
+
+    END_INTERFACE
+} sws_IInputSwitchCallbackVtbl;
+
+interface sws_IInputSwitchCallback
+{
+    CONST_VTBL struct sws_IInputSwitchCallbackVtbl* lpVtbl;
+};
 
 inline double sws_linear(double percent, double start, double end)
 {
@@ -516,6 +650,8 @@ typedef struct _sws_WindowSwitcher
     HWINEVENTHOOK hookCreateDestroy;
     DWORD dwShowDelay;
     BOOL bPrimaryOnly;
+    sws_IInputSwitchCallback InputSwitchCallback;
+    sws_IInputSwitchControl* pInputSwitchControl;
     UINT vkTilde;
     HANDLE hShowThread;
     HANDLE hShowSignal;
@@ -2144,10 +2280,124 @@ static void _sws_WindowSwitcher_UpdateAccessibleText(sws_WindowSwitcher* _this)
 
 static int CALLBACK _sws_WindowSwitcher_free_stub(void* p, void* pData)
 {
-    // This enables correct reporting of DPAs being freed in Debug builds
     free(p);
     return 1;
 }
+
+static HRESULT STDMETHODCALLTYPE _sws_WindowsSwitcher_IInputSwitchCallback_OnUpdateProfile(sws_IInputSwitchCallback* _this, IInputSwitchCallbackUpdateData* ud)
+{
+    // useful info: https://referencesource.microsoft.com/#system.windows.forms/winforms/Managed/System/WinForms/InputLanguage.cs,a01e59da9681988c
+
+    wchar_t pwszKLID[9];
+
+    uint16_t language = ud->dwID & 0xffff;
+    uint16_t device = (ud->dwID >> 16) & 0x0fff;
+    Wh_Log(L"OnUpdateProfile %d %d:", language, device);
+    if (device == language)
+    {
+        swprintf_s(pwszKLID, 9, L"%08x", language);
+        PostMessageW(FindWindowW(SWS_WINDOWSWITCHER_CLASSNAME, NULL), WM_INPUTLANGCHANGE, 0, device == 0 ? 0 : (LPARAM)LoadKeyboardLayoutW(pwszKLID, KLF_ACTIVATE));
+    }
+    else
+    {
+        wchar_t pwszLanguage[5];
+        swprintf_s(pwszLanguage, 5, L"%04x", language);
+        wchar_t pwszDevice[5];
+        swprintf_s(pwszDevice, 5, L"%04x", device);
+        HKEY hKey = NULL;
+        RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Keyboard Layouts", 0, KEY_READ, &hKey);
+        if (hKey)
+        {
+            DWORD cSubKeys = 0;
+            RegQueryInfoKeyW(hKey, NULL, NULL, NULL, &cSubKeys, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+            if (cSubKeys)
+            {
+                for (unsigned int i = 0; i < cSubKeys; ++i)
+                {
+                    wchar_t name[9];
+                    ZeroMemory(name, 9 * sizeof(wchar_t));
+                    DWORD name_size = 9;
+                    RegEnumKeyExW(hKey, i, name, &name_size, NULL, NULL, NULL, NULL);
+                    if (name[0] && name_size == 8)
+                    {
+                        if (!wcsncmp(name + 4, pwszLanguage, 4))
+                        {
+                            wchar_t layoutId[5];
+                            ZeroMemory(layoutId, 5 * sizeof(wchar_t));
+                            DWORD layoutId_size = 5 * sizeof(wchar_t);
+                            RegGetValueW(hKey, name, L"Layout Id", RRF_RT_REG_SZ, NULL, layoutId, &layoutId_size);
+                            if (layoutId[0] && layoutId_size == 5 * sizeof(wchar_t))
+                            {
+                                if (!wcsncmp(layoutId, pwszDevice, 4))
+                                {
+                                    PostMessageW(FindWindowW(SWS_WINDOWSWITCHER_CLASSNAME, NULL), WM_INPUTLANGCHANGE, 0, (LPARAM)LoadKeyboardLayoutW(name, KLF_ACTIVATE));
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            RegCloseKey(hKey);
+        }
+    }
+    return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE _sws_WindowsSwitcher_IInputSwitchCallback_QueryInterface(sws_IInputSwitchCallback* _this, REFIID riid, void** ppvObject)
+{
+    if (!IsEqualIID(riid, sws_IID_IInputSwitchCallback) && !IsEqualIID(riid, IID_IUnknown))
+    {
+        *ppvObject = NULL;
+        return E_NOINTERFACE;
+    }
+    *ppvObject = _this;
+    return S_OK;
+}
+
+static ULONG STDMETHODCALLTYPE _sws_WindowsSwitcher_IInputSwitchCallback_AddRefRelease(sws_IInputSwitchCallback* _this)
+{
+    return 1;
+}
+
+static HRESULT STDMETHODCALLTYPE _sws_WindowsSwitcher_IInputSwitchCallback_Stub(sws_IInputSwitchCallback* _this)
+{
+    return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE _sws_WindowsSwitcher_IInputSwitchCallback_Stub2(sws_IInputSwitchCallback* _this, int)
+{
+    return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE _sws_WindowsSwitcher_IInputSwitchCallback_Stub2_2(sws_IInputSwitchCallback* _this, void*)
+{
+    return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE _sws_WindowsSwitcher_IInputSwitchCallback_Stub2_3(sws_IInputSwitchCallback* _this, char)
+{
+    return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE _sws_WindowsSwitcher_IInputSwitchCallback_Stub3(sws_IInputSwitchCallback* _this, int, int)
+{
+    return S_OK;
+}
+
+static const sws_IInputSwitchCallbackVtbl _sws_WindowSwitcher_InputSwitchCallbackVtbl = {
+    _sws_WindowsSwitcher_IInputSwitchCallback_QueryInterface,
+    _sws_WindowsSwitcher_IInputSwitchCallback_AddRefRelease,
+    _sws_WindowsSwitcher_IInputSwitchCallback_AddRefRelease,
+    _sws_WindowsSwitcher_IInputSwitchCallback_OnUpdateProfile,
+    _sws_WindowsSwitcher_IInputSwitchCallback_Stub,
+    _sws_WindowsSwitcher_IInputSwitchCallback_Stub3,
+    _sws_WindowsSwitcher_IInputSwitchCallback_Stub2,
+    _sws_WindowsSwitcher_IInputSwitchCallback_Stub2_2,
+    _sws_WindowsSwitcher_IInputSwitchCallback_Stub,
+    _sws_WindowsSwitcher_IInputSwitchCallback_Stub2_3,
+    _sws_WindowsSwitcher_IInputSwitchCallback_Stub
+};
 
 void CALLBACK _sws_WindowSwitcher_Wineventproc(
     HWINEVENTHOOK hWinEventHook,
@@ -3273,7 +3523,7 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
     {
         sws_WindowSwitcher_LoadSettings(_this);
         sws_WindowSwitcher_UnregisterHotkeys(_this);
-        sws_WindowSwitcher_RegisterHotkeys(_this, (HKL)lParam);
+        sws_WindowSwitcher_RegisterHotkeys(_this, NULL);
     }
     else if (uMsg == WM_ERASEBKGND)
     {
@@ -3281,6 +3531,26 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
     }
     else if (_this && uMsg == _this->msgShellHook && lParam)
     {
+        // Fallback for those who renamed InputSwitch.dll
+        if (wParam == HSHELL_WINDOWACTIVATED || wParam == HSHELL_RUDEAPPACTIVATED) {
+            HWND foreground = GetForegroundWindow();
+            if (foreground && foreground != _this->hWnd)
+            {
+                DWORD tid = GetWindowThreadProcessId(foreground, NULL);
+                if (tid)
+                {
+                    HKL hkl = GetKeyboardLayout(tid);
+                    UINT vk = MapVirtualKeyExW(0x29, MAPVK_VSC_TO_VK_EX, hkl);
+
+                    if (vk && vk != _this->vkTilde)
+                    {
+                        Wh_Log(L"Layout changed");
+                        sws_WindowSwitcher_UnregisterHotkeys(_this);
+                        sws_WindowSwitcher_RegisterHotkeys(_this, hkl);
+                    }
+                }
+            }
+        }
         if (wParam == HSHELL_WINDOWCREATED || wParam == HSHELL_WINDOWACTIVATED || wParam == HSHELL_RUDEAPPACTIVATED || wParam == HSHELL_FLASH || wParam == HSHELL_REDRAW)
         {
             sws_tshwnd* tshWnd;
@@ -4091,6 +4361,10 @@ void sws_WindowSwitcher_Clear(sws_WindowSwitcher* _this)
             DestroyWindow(_this->hWndAccessible);
             _this->hWndAccessible = NULL;
         }
+        if (_this->pInputSwitchControl)
+        {
+            _this->pInputSwitchControl->lpVtbl->Release(_this->pInputSwitchControl);
+        }
         if (_this->hdcWindow)
         {
             EndBufferedPaint(_this->hBufferedPaint, FALSE);
@@ -4343,6 +4617,24 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
         if (_this->hWnd && !RegisterShellHookWindow(_this->hWnd))
         {
             rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
+        }
+    }
+    if (!rv)
+    {
+        rv = CoCreateInstance(sws_CLSID_InputSwitchControl, NULL, CLSCTX_INPROC_SERVER, sws_IID_InputSwitchControl, (void**)&(_this->pInputSwitchControl));
+        if (!rv)
+        {
+            rv = _this->pInputSwitchControl->lpVtbl->Init(_this->pInputSwitchControl, 100);
+        }
+        if (!rv)
+        {
+            _this->InputSwitchCallback.lpVtbl = (sws_IInputSwitchCallbackVtbl*)&_sws_WindowSwitcher_InputSwitchCallbackVtbl;
+            rv = _this->pInputSwitchControl->lpVtbl->SetCallback(_this->pInputSwitchControl, &(_this->InputSwitchCallback));
+        }
+        if (rv)
+        {
+            // Make missing InputSwitch.dll not a critical error
+            rv = 0;
         }
     }
     if (!rv)
