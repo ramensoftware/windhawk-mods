@@ -1309,51 +1309,106 @@ static Settings g_settings;
 // g_hBackdropWnd is declared above, near the other switcher window handles.
 static bool g_backdropClassRegistered = false;
 static Gdiplus::Bitmap* g_backdropBitmap = NULL; // blurred backdrop, dim veil baked in
+static HDC g_backdropPaintDC = NULL;
+static HBITMAP g_backdropPaintBitmap = NULL;
+static HBITMAP g_backdropPaintOldBitmap = NULL;
+static SIZE g_backdropPaintSize = {};
 
-// Layered-window fade. The backdrop is applied at full opacity *before* the switcher is
-// presented (see ShowBackdropBlur), so the blur is always fully in place first and
-// nothing waits on a timer. Exit uses the switcher's capped presentation timeline,
-// including partial reversal, rather than an independent wall-clock fade.
+// The plate is fully applied before the switcher reveal. Its independent
+// 83 ms exit fade starts only after every switcher surface has been hidden.
 static float g_backdropFadeAlpha = 0.0f;
-static float g_backdropFadeFrom = 0.0f;
-static float g_backdropExitStartAlpha = 1.0f;
+static OpacityMotionTrack g_backdropOpacity;
 static bool g_backdropExitFadeActive = false;
 
 static bool AreAnimationsGloballyEnabled(); // defined further down
 static bool IsWin11OrGreater();             // defined further down
+static void StartOpacityMotion(OpacityMotionTrack& track, float current, float target);
+static bool StepOpacityMotion(OpacityMotionTrack& track, float& current, float dt);
 
 static bool BackdropBlurEnabled() { return wcscmp(g_settings.backdropBlurEffect, L"off") != 0; }
 static bool BackdropBlurUsesWallpaper() { return wcscmp(g_settings.backdropBlurEffect, L"acrylicWallpaper") == 0; }
 
 static void BackdropFreeBitmap() {
+    if (g_backdropPaintDC && g_backdropPaintOldBitmap) {
+        SelectObject(g_backdropPaintDC, g_backdropPaintOldBitmap);
+    }
+    if (g_backdropPaintBitmap) DeleteObject(g_backdropPaintBitmap);
+    if (g_backdropPaintDC) DeleteDC(g_backdropPaintDC);
+    g_backdropPaintDC = NULL;
+    g_backdropPaintBitmap = g_backdropPaintOldBitmap = NULL;
+    g_backdropPaintSize = {};
     if (g_backdropBitmap) { delete g_backdropBitmap; g_backdropBitmap = NULL; }
 }
 
+// Resample once while the switcher is still hidden. A full-desktop bicubic
+// DrawImage inside WM_PAINT can occupy several reveal frames, especially on
+// high-resolution/multi-monitor desktops and on the repaint queued by show.
+static bool PrepareBackdropSurface(int w, int h) {
+    if (!g_backdropBitmap || w <= 0 || h <= 0) return false;
+    g_backdropPaintDC = CreateCompatibleDC(NULL);
+    if (!g_backdropPaintDC) {
+        BackdropFreeBitmap();
+        return false;
+    }
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = w;
+    bmi.bmiHeader.biHeight = -h;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    void* bits = NULL;
+    g_backdropPaintBitmap = CreateDIBSection(g_backdropPaintDC, &bmi,
+                                            DIB_RGB_COLORS, &bits, NULL, 0);
+    if (!g_backdropPaintBitmap || !bits) {
+        BackdropFreeBitmap();
+        return false;
+    }
+    HGDIOBJ oldBitmap = SelectObject(g_backdropPaintDC, g_backdropPaintBitmap);
+    if (!oldBitmap || oldBitmap == HGDI_ERROR) {
+        BackdropFreeBitmap();
+        return false;
+    }
+    g_backdropPaintOldBitmap = (HBITMAP)oldBitmap;
+    PatBlt(g_backdropPaintDC, 0, 0, w, h, BLACKNESS);
+    GdiFlush();
+    Gdiplus::Status status;
+    {
+        Gdiplus::Graphics graphics(g_backdropPaintDC);
+        graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+        status = graphics.DrawImage(g_backdropBitmap, 0, 0, w, h);
+    }
+    if (status != Gdiplus::Ok) {
+        BackdropFreeBitmap();
+        return false;
+    }
+    g_backdropPaintSize = { w, h };
+    return true;
+}
+
 static void BackdropApplyAlpha(HWND hWnd, float alpha) {
+    if (!hWnd || !IsWindow(hWnd)) return;
     g_backdropFadeAlpha = alpha;
     SetLayeredWindowAttributes(hWnd, 0, (BYTE)(alpha * 255.0f + 0.5f), LWA_ALPHA);
 }
 
 static void BackdropStopFade() {
     g_backdropExitFadeActive = false;
+    g_backdropOpacity = {};
 }
 
-static void BackdropStartExitFade(HWND hWnd, float timelineAlpha) {
+static void BackdropStartExitFade(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd)) return;
-    g_backdropFadeFrom = g_backdropFadeAlpha;
-    g_backdropExitStartAlpha = timelineAlpha;
+    StartOpacityMotion(g_backdropOpacity, g_backdropFadeAlpha, 0.0f);
     g_backdropExitFadeActive = true;
 }
 
-static void BackdropFadeTick(float timelineAlpha) {
-    if (!g_backdropExitFadeActive || !g_hBackdropWnd || !IsWindow(g_hBackdropWnd)) return;
-    // The plate starts fully applied even during entrance. Normalize E(p) by
-    // E(p_start) to preserve that opacity at reversal and reach zero with p.
-    float remaining = g_backdropExitStartAlpha > 0.0f
-        ? timelineAlpha / g_backdropExitStartAlpha : 0.0f;
-    remaining = (std::clamp)(remaining, 0.0f, 1.0f);
-    BackdropApplyAlpha(g_hBackdropWnd, g_backdropFadeFrom * remaining);
-    // HideSwitcher owns hiding/freeing the plate together with all surfaces.
+static bool BackdropFadeTick(float dt) {
+    if (!g_backdropExitFadeActive || !g_hBackdropWnd ||
+        !IsWindowVisible(g_hBackdropWnd)) return false;
+    bool active = StepOpacityMotion(g_backdropOpacity, g_backdropFadeAlpha, dt);
+    BackdropApplyAlpha(g_hBackdropWnd, g_backdropFadeAlpha);
+    return active;
 }
 
 static LRESULT CALLBACK BackdropWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -1365,11 +1420,11 @@ static LRESULT CALLBACK BackdropWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         case WM_PAINT: {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hWnd, &ps);
-            if (g_backdropBitmap) {
-                RECT rc; GetClientRect(hWnd, &rc);
-                Gdiplus::Graphics g(hdc);
-                g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-                g.DrawImage(g_backdropBitmap, 0, 0, rc.right - rc.left, rc.bottom - rc.top);
+            if (g_backdropPaintDC) {
+                const RECT& dirty = ps.rcPaint;
+                BitBlt(hdc, dirty.left, dirty.top,
+                       dirty.right - dirty.left, dirty.bottom - dirty.top,
+                       g_backdropPaintDC, dirty.left, dirty.top, SRCCOPY);
             }
             // No bitmap (build failed): paint nothing, the window stays transparent
             // and the real desktop shows through.
@@ -1543,7 +1598,7 @@ static BOOL CALLBACK BackdropMonitorEnumProc(HMONITOR hMon, HDC, LPRECT, LPARAM)
 
 // Build the blurred wallpaper bitmap once per show ("wallpaper" mode).
 static void BuildBackdropWallpaper(int w, int h) {
-    if (g_backdropBitmap) { delete g_backdropBitmap; g_backdropBitmap = NULL; }
+    BackdropFreeBitmap();
     if (w <= 0 || h <= 0) return;
     WCHAR wp[MAX_PATH] = L"";
     if (!SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, wp, 0) || !wp[0]) return;
@@ -1630,15 +1685,16 @@ static void BuildBackdropSnapshot(int w, int h) {
 static void ShowBackdropBlur() {
     if (!BackdropBlurEnabled()) return;
     EnsureBackdropWindow();
-    if (!g_hBackdropWnd || !g_backdropBitmap) return; // nothing to show: leave the desktop
+    if (!g_hBackdropWnd || !g_backdropBitmap || !g_backdropPaintDC) return;
 
     int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
     int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
     int w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
     int h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    if (g_backdropPaintSize.cx != w || g_backdropPaintSize.cy != h) return;
 
-    // Fully applied before the switcher is presented (the caller presents it right
-    // after): the blur is in place first and no timer stands between the two.
+    // Native switcher materials are visible even at frame-zero. Finish the
+    // backdrop first, so their reveal cannot get ahead of the desktop blur.
     BackdropStopFade();
     BackdropApplyAlpha(g_hBackdropWnd, 1.0f);
     InvalidateRect(g_hBackdropWnd, NULL, FALSE);
@@ -1646,15 +1702,20 @@ static void ShowBackdropBlur() {
     // Directly below the switcher: the switcher sits in the shell's system-tools band,
     // so this is above every app window yet still behind the switcher.
     SetWindowPos(g_hBackdropWnd, g_hSwitcher ? g_hSwitcher : HWND_TOPMOST, vx, vy, w, h,
-                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    UpdateWindow(g_hBackdropWnd); // paint the finished plate before it appears
+                 SWP_NOACTIVATE);
+    UpdateWindow(g_hBackdropWnd);
+    ShowWindow(g_hBackdropWnd, SW_SHOWNA);
+    // Showing a layered HWND can invalidate it again. Drain that initial
+    // cached paint before PresentSwitcherWindows starts the reveal clocks.
+    UpdateWindow(g_hBackdropWnd);
 }
 
-// The sampled shared exit alpha is independent of the theme's alpha policy.
-static void FadeOutBackdropBlur(float timelineAlpha) {
-    if (!g_hBackdropWnd || !IsWindowVisible(g_hBackdropWnd)) return;
-    if (!AreAnimationsGloballyEnabled()) return;
-    BackdropStartExitFade(g_hBackdropWnd, timelineAlpha);
+// Called only after the switcher exit has retired its visible surfaces.
+static bool FadeOutBackdropBlur() {
+    if (!g_hBackdropWnd || !IsWindowVisible(g_hBackdropWnd) ||
+        !AreAnimationsGloballyEnabled() || g_backdropFadeAlpha <= 0.0f) return false;
+    BackdropStartExitFade(g_hBackdropWnd);
+    return g_backdropExitFadeActive;
 }
 
 static void HideBackdropBlur() {
@@ -1701,6 +1762,7 @@ static void PrepareBackdropBlur() {
     } else {
         BuildBackdropSnapshot(w, h);
     }
+    PrepareBackdropSurface(w, h);
 }
 
 static void DestroyBackdropWindow() {
@@ -1936,6 +1998,7 @@ static void SWS_RegisterHotkeys();
 static void SWS_UnregisterHotkeys();
 static void ApplySwitcherRegion();
 static void ApplyThemeToWindow(HWND hWnd);
+static void ApplyAcrylicWindowRegion(HWND hWnd);
 static void CreateMirrorSwitchers();
 static void ShowMirrorSwitchers();
 static void HideSwitcher();
@@ -1947,6 +2010,8 @@ static void PaintSwitcherOverlay();
 static INT GetCornerPref();
 static int GetWindowCornerRadiusPx();
 static void DrawSwitcherStaticContent(HDC hdc, bool fillBg, HWND hWnd);
+static void FillSwitcherBackground(HDC hdc, const RECT& rect, bool fillBg);
+static void DrawScrollTransitionFrame(HDC hdc, int w, int h, bool includeSelection);
 static void PreRenderScrollCanvases();
 static void UpdateThumbnailAnimations();
 static void UpdateDockThumbnailDwm();
@@ -2277,6 +2342,7 @@ static LARGE_INTEGER g_animPerfFreq = {};
 static LARGE_INTEGER g_animLastTickTime = {};
 static double g_animNextFrameDeadline = 0.0;
 static bool g_animTickInProgress = false;
+static bool g_animFrameSampleActive = false;
 static bool g_animEntranceFrameZeroPending = false;
 static bool g_animEntranceClockPending = false;
 static void StartMotionTrack(float& progress, float initial = 0.0f);
@@ -2290,30 +2356,68 @@ static bool g_animExitActive = false;
 static float g_animExitProgress = 1.0f;
 static float g_animExitDuration = SWS_PRESENTATION_ANIMATION_MS / 1000.0f;
 static float g_animExitCurrentAlpha = 1.0f;
-static bool g_animExitActivateSelected = false;
-static HWND g_animExitTargetWindow = NULL;
-static std::vector<HWND> g_animExitRestoreWindows;
 
 // Monitor timing is cached across track starts. DWM timing is a session-wide
 // fallback, not a per-monitor measurement; 60 Hz is the final explicit fallback.
 static double s_animTargetIntervalMs = 1000.0 / 60.0;
 static HMONITOR s_animTimingMonitor = NULL;
 static bool s_animTimingValid = false;
+static LARGE_INTEGER s_animTimingLastQuery = {};
+
+static double GetMonitorRefreshRate(const WCHAR* deviceName) {
+    // CCD preserves fractional rates (e.g. 60000/1001) that DEVMODE rounds to
+    // integers. Query only active paths and match the switcher's monitor source.
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        UINT32 pathCount = 0, modeCount = 0;
+        if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) != ERROR_SUCCESS ||
+            !pathCount || !modeCount) return 0.0;
+        std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
+        std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
+        LONG result = QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(),
+                                         &modeCount, modes.data(), nullptr);
+        if (result == ERROR_INSUFFICIENT_BUFFER) continue;
+        if (result != ERROR_SUCCESS) return 0.0;
+        for (UINT32 i = 0; i < pathCount; ++i) {
+            const auto& path = paths[i];
+            DISPLAYCONFIG_SOURCE_DEVICE_NAME source = {};
+            source.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+            source.header.size = sizeof(source);
+            source.header.adapterId = path.sourceInfo.adapterId;
+            source.header.id = path.sourceInfo.id;
+            if (DisplayConfigGetDeviceInfo(&source.header) != ERROR_SUCCESS ||
+                _wcsicmp(source.viewGdiDeviceName, deviceName) != 0) continue;
+            const auto& rate = path.targetInfo.refreshRate;
+            if (!rate.Denominator) continue;
+            double hz = (double)rate.Numerator / rate.Denominator;
+            if (hz >= 24.0 && hz <= 1000.0) return hz;
+        }
+        return 0.0;
+    }
+    return 0.0;
+}
 
 static void UpdateRefreshRateTiming(bool force = false) {
     HWND targetWnd = g_hSwitcher ? g_hSwitcher : GetDesktopWindow();
     HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor :
                     MonitorFromWindow(targetWnd, MONITOR_DEFAULTTONEAREST);
-    if (!force && s_animTimingValid && hMon == s_animTimingMonitor) return;
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    // Invocation/display-change boundaries maintain this cache. Animation
+    // frames and track restarts never query drivers or restart motion clocks.
+    if (!force && s_animTimingValid && hMon == s_animTimingMonitor &&
+        (g_animPerfFreq.QuadPart <= 0 ||
+         now.QuadPart - s_animTimingLastQuery.QuadPart < g_animPerfFreq.QuadPart / 2)) return;
+    s_animTimingLastQuery = now;
     s_animTimingMonitor = hMon;
     s_animTimingValid = true;
     double hz = 0.0;
     MONITORINFOEXW mi = {};
     mi.cbSize = sizeof(mi);
     if (GetMonitorInfoW(hMon, &mi)) {
+        hz = GetMonitorRefreshRate(mi.szDevice);
         DEVMODEW dm = {};
         dm.dmSize = sizeof(dm);
-        if (EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm) &&
+        if (hz <= 0.0 && EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm) &&
             dm.dmDisplayFrequency >= 24 && dm.dmDisplayFrequency <= 1000) {
             hz = (double)dm.dmDisplayFrequency;
         }
@@ -2434,6 +2538,11 @@ static void PositionPresentationWindow(HWND hWnd,
         !(flags & (SWP_FRAMECHANGED | SWP_SHOWWINDOW))) return;
     SetWindowPos(hWnd, HWND_TOPMOST, target.left, target.top,
                  target.right - target.left, target.bottom - target.top, flags);
+    if (hWnd != g_hCloseBtnWnd &&
+        (actual.right - actual.left != target.right - target.left ||
+         actual.bottom - actual.top != target.bottom - target.top)) {
+        ApplyAcrylicWindowRegion(hWnd);
+    }
 }
 
 static void SetPresentationWindowLayout(HWND hWnd, int x, int y, int w, int h,
@@ -2465,6 +2574,18 @@ static void ApplyPresentationWindowOffset() {
     }
     AnchorPresentationOverlay();
     PositionPresentationWindow(g_hCloseBtnWnd);
+}
+
+static void HideSwitcherPresentationWindows() {
+    if (g_hCloseBtnWnd && IsWindowVisible(g_hCloseBtnWnd)) {
+        ShowWindow(g_hCloseBtnWnd, SW_HIDE);
+    }
+    for (HWND hMirror : g_hMirrorSwitchers) {
+        if (IsWindow(hMirror)) ShowWindow(hMirror, SW_HIDE);
+    }
+    if (g_hSwitcher && IsWindowVisible(g_hSwitcher)) {
+        ShowWindow(g_hSwitcher, SW_HIDE);
+    }
 }
 
 static void ResetPresentationAnimation() {
@@ -2510,7 +2631,7 @@ static void StartEntranceAnimation() {
 // expensive; including that preparation in the animation timeline makes the
 // reveal appear to skip or complete before the user sees it.
 static void BeginEntranceAnimationClock() {
-    if (!g_animEntranceClockPending) return;
+    if (!g_animEntranceClockPending || g_animEntranceFrameZeroPending) return;
     StartMotionTrack(g_animEntranceProgress, 0.0f);
     StartMotionTrack(g_presentationOpacity.progress, g_presentationOpacity.clock, 0.0f);
     g_animEntranceClockPending = false;
@@ -2525,7 +2646,6 @@ static void AdvancePresentationAnimation(float dt) {
     if (g_animExitActive) {
         StepMotionTrack(g_animExitProgress, -g_animExitDuration, dt);
         g_animExitCurrentAlpha = g_easeEntrance.Solve(g_animExitProgress);
-        BackdropFadeTick(g_animExitCurrentAlpha);
     }
     StepOpacityMotion(g_presentationOpacity, g_presentationOpacityCurrent, dt);
 }
@@ -2693,6 +2813,7 @@ static DockPreviewSlideTransition g_dockPreviewSlide;
 
 static bool g_calculatingLayoutTargets = false;
 static void StartAnimationTicker();
+static void TriggerSelectionAnimation(int prevSelected);
 static void RegisterThumbnailsEarly();
 static void ComputeLayout(HMONITOR hMon);
 static void GetSwitcherPosition(const RECT& workArea, int* outX, int* outY,
@@ -2701,6 +2822,67 @@ static void StartMotionTrack(float& progress, MotionTrackClock& clock, float ini
 static bool StepMotionTrack(float& progress, MotionTrackClock& clock, float duration, float dt);
 static void StartOpacityMotion(OpacityMotionTrack& track, float current, float target);
 static bool StepOpacityMotion(OpacityMotionTrack& track, float& current, float dt);
+
+static RectF SelectionRectWithViewport() {
+    if (g_selectedIndex < 0 || g_selectedIndex >= (int)g_windows.size()) return {};
+    RectF rect = (g_animSelectionActive && AreAnimationsGloballyEnabled() &&
+                  g_settings.enableSelectionAnimation)
+                     ? g_animSelectionCurrent
+                     : ToRectF(g_windows[g_selectedIndex].rcCell);
+    rect.left += roundf(g_scrollTransition.offsetCurrentX);
+    rect.right += roundf(g_scrollTransition.offsetCurrentX);
+    rect.top += roundf(g_scrollTransition.offsetCurrentY);
+    rect.bottom += roundf(g_scrollTransition.offsetCurrentY);
+    return rect;
+}
+
+// Reflow changes the selected cell's local coordinates while the selection
+// animation remains an independent 167 ms track. Carry all four edges by the
+// target delta instead of restarting or letting layout ownership teleport it.
+static void SyncSelectionAnimationToLayout() {
+    if (g_selectedIndex < 0 || g_selectedIndex >= (int)g_windows.size()) return;
+    RectF target = ToRectF(g_windows[g_selectedIndex].rcCell);
+    if (!g_animSelectionActive) {
+        if (g_animSelectionCurrent.left != target.left ||
+            g_animSelectionCurrent.top != target.top ||
+            g_animSelectionCurrent.right != target.right ||
+            g_animSelectionCurrent.bottom != target.bottom) {
+            SnapSelectionTo(target);
+        }
+        return;
+    }
+    RectF delta = {
+        target.left - g_animSelectionTarget.left,
+        target.top - g_animSelectionTarget.top,
+        target.right - g_animSelectionTarget.right,
+        target.bottom - g_animSelectionTarget.bottom,
+    };
+    auto shift = [&delta](RectF& rect) {
+        rect.left += delta.left;
+        rect.top += delta.top;
+        rect.right += delta.right;
+        rect.bottom += delta.bottom;
+    };
+    shift(g_animSelectionStart);
+    shift(g_animSelectionCurrent);
+    g_animSelectionTarget = target;
+}
+
+static void RetargetSelectionFromPresented(const RectF& presented) {
+    if (g_selectedIndex < 0 || g_selectedIndex >= (int)g_windows.size()) return;
+    RectF local = presented;
+    local.left -= roundf(g_scrollTransition.offsetCurrentX);
+    local.right -= roundf(g_scrollTransition.offsetCurrentX);
+    local.top -= roundf(g_scrollTransition.offsetCurrentY);
+    local.bottom -= roundf(g_scrollTransition.offsetCurrentY);
+    if (!AreAnimationsGloballyEnabled() || !g_settings.enableSelectionAnimation) {
+        SnapSelectionTo(ToRectF(g_windows[g_selectedIndex].rcCell));
+        return;
+    }
+    g_animSelectionCurrent = local;
+    g_animSelectionStart = local;
+    TriggerSelectionAnimation(-1);
+}
 
 static bool IsItemTransitionActive(const ItemTransitionMotion& motion) {
     return motion.opacity.progress < 1.0f || motion.scaleProgress < 1.0f;
@@ -3006,7 +3188,7 @@ static void CommitLayoutTransition(HMONITOR monitor, bool scrollReflow = false) 
         g_layoutTransition.departingItems.clear();
     }
     if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
-        SnapSelectionTo(ToRectF(g_windows[g_selectedIndex].rcCell));
+        SyncSelectionAnimationToLayout();
     }
     InvalidateStaticCache();
     UpdateThumbnailAnimations();
@@ -3043,10 +3225,6 @@ static bool AdvanceItemTransitions(float dt) {
         }
     }
     if (changed) {
-        if (g_layoutTransition.active && g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
-            g_animSelectionCurrent = ToRectF(g_windows[g_selectedIndex].rcCell);
-            g_animSelectionTarget = g_animSelectionStart = g_animSelectionCurrent;
-        }
         if (g_layoutTransition.active && g_hoverThumbIndex >= 0 && g_hoverThumbIndex < (int)g_windows.size() &&
             HasLayoutRect(g_windows[g_hoverThumbIndex].rcThumbActual)) {
             g_animHoverCurrent = ToRectF(g_windows[g_hoverThumbIndex].rcThumbActual);
@@ -3054,7 +3232,7 @@ static bool AdvanceItemTransitions(float dt) {
         }
         InvalidateStaticCache();
         // Include the terminal sample even when the layout track is inactive.
-        UpdateThumbnailAnimations();
+        if (!g_animFrameSampleActive) UpdateThumbnailAnimations();
     }
     return anyActive;
 }
@@ -3079,9 +3257,16 @@ static MotionTrackClock& GetMotionTrackClock(float& progress) {
     std::terminate();
 }
 
+static LARGE_INTEGER GetMotionSampleTime() {
+    if (g_animFrameSampleActive) return g_animLastTickTime;
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    return now;
+}
+
 static void StartMotionTrack(float& progress, MotionTrackClock& clock, float initial = 0.0f) {
     if (g_animPerfFreq.QuadPart == 0) QueryPerformanceFrequency(&g_animPerfFreq);
-    QueryPerformanceCounter(&clock.origin);
+    clock.origin = GetMotionSampleTime();
     progress = initial;
     clock.initial = initial;
     clock.lastProgress = initial;
@@ -3104,8 +3289,7 @@ static bool StepMotionTrack(float& progress, MotionTrackClock& clock, float dura
     }
     double elapsed;
     if (g_animPerfFreq.QuadPart > 0) {
-        LARGE_INTEGER now;
-        QueryPerformanceCounter(&now);
+        LARGE_INTEGER now = GetMotionSampleTime();
         elapsed = (std::max)(0.0, (double)(now.QuadPart - clock.origin.QuadPart) /
                                    (double)g_animPerfFreq.QuadPart);
     } else {
@@ -3341,6 +3525,7 @@ static void RefreshScrollIconCanvas() {
     if (s_cachedScrollToBits)
         memset(s_cachedScrollToBits, 0, (size_t)s_cachedScrollToW * s_cachedScrollToH * sizeof(DWORD));
     SelectClipRgn(s_cachedScrollToDC,
+                  ThemeIs(L"none") ? NULL :
                   GetCachedRoundRectRgn(s_cachedScrollToW, s_cachedScrollToH, GetWindowCornerRadiusPx()));
     DrawSwitcherStaticContent(s_cachedScrollToDC, ShouldFillBackground(), g_hSwitcher);
 }
@@ -3448,9 +3633,14 @@ static bool AreAnimationsGloballyEnabled() {
 
 static void StartAnimationTicker() {
     if (!g_hSwitcher) return;
+    // Entrance clocks belong to the presentation boundary. A pending-show
+    // navigation may already have started the ticker, so this must run even
+    // when another animation keeps g_animActive set.
+    BeginEntranceAnimationClock();
     if (!g_animActive) {
-        BeginEntranceAnimationClock();
-        UpdateRefreshRateTiming(true);
+        // Use the cached interval on the animation-critical path. Refresh-rate
+        // maintenance is performed at invocation/display-change boundaries,
+        // never as a synchronous restart cost.
         if (g_animPerfFreq.QuadPart == 0) {
             QueryPerformanceFrequency(&g_animPerfFreq);
         }
@@ -3538,9 +3728,6 @@ static void FinishAnimations() {
         g_windows[i].hoverScaleDuration = 0.167f;
         g_windows[i].hoverScaleClock = {};
     }
-    g_animExitActivateSelected = false;
-    g_animExitTargetWindow = NULL;
-    g_animExitRestoreWindows.clear();
     g_hoverOpacity = {};
     g_chevronHoverPrev = {};
     g_chevronHoverNext = {};
@@ -3549,19 +3736,13 @@ static void FinishAnimations() {
 
 static void CompleteExitAnimation() {
     if (!g_animExitActive) return;
-    // Save the accepted decision before HideSwitcher/FinishAnimations clear it.
-    // Both normal completion and accessibility interruption use this handoff.
-    bool activate = g_animExitActivateSelected;
-    HWND hTarget = g_animExitTargetWindow;
-    std::vector<HWND> restoreWindows = std::move(g_animExitRestoreWindows);
-    g_animExitActive = false;
+    // Selection was committed at release. Completion only retires the visuals,
+    // including when accessibility settings interrupt the exit.
     g_animExitProgress = 0.0f;
     g_animExitCurrentAlpha = 0.0f;
-    g_animExitActivateSelected = false;
-    g_animExitTargetWindow = NULL;
-    BackdropFadeTick(0.0f);
+    HideSwitcherPresentationWindows();
+    BackdropApplyAlpha(g_hBackdropWnd, 0.0f);
     HideSwitcher();
-    if (activate) ActivateExitedWindow(hTarget, restoreWindows);
 }
 
 static void CaptureOutgoingSnapshot() {
@@ -3574,27 +3755,12 @@ static void CaptureOutgoingSnapshot() {
         if (w > 0 && h > 0 && s_cachedStaticDC && s_cachedStaticW == w && s_cachedStaticH == h) {
             if (g_scrollTransition.active && s_cachedScrollToDC && s_cachedScrollToW == w && s_cachedScrollToH == h) {
                 if (s_cachedStaticBits) memset(s_cachedStaticBits, 0, (size_t)w * h * sizeof(DWORD));
-                int offsetX = (int)roundf(g_scrollTransition.offsetCurrentX);
-                int offsetY = (int)roundf(g_scrollTransition.offsetCurrentY);
-                if (DockLayoutActive()) {
-                    BitBlt(s_cachedStaticDC, 0, 0, w, h, s_cachedScrollToDC, 0, 0, SRCCOPY);
-                    HRGN strip = CreateRectRgn(g_rcDockIconStrip.left, g_rcDockIconStrip.top,
-                                              g_rcDockIconStrip.right, g_rcDockIconStrip.bottom);
-                    SelectClipRgn(s_cachedStaticDC, strip);
-                    DeleteObject(strip);
-                }
-                if (s_cachedScrollFromDC) {
-                    BitBlt(s_cachedStaticDC, offsetX - g_scrollTransition.travelDistanceX,
-                           offsetY - g_scrollTransition.travelDistanceY, w, h,
-                           s_cachedScrollFromDC, 0, 0, SRCCOPY);
-                }
-                BitBlt(s_cachedStaticDC, offsetX, offsetY, w, h, s_cachedScrollToDC, 0, 0, SRCCOPY);
-                SelectClipRgn(s_cachedStaticDC, NULL);
+                DrawScrollTransitionFrame(s_cachedStaticDC, w, h, false);
                 g_staticContentDirty = false;
             } else {
                 int radius = GetWindowCornerRadiusPx();
                 if (s_cachedStaticBits) memset(s_cachedStaticBits, 0, (size_t)w * h * sizeof(DWORD));
-                HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
+                HRGN hClip = ThemeIs(L"none") ? NULL : GetCachedRoundRectRgn(w, h, radius);
                 SelectClipRgn(s_cachedStaticDC, hClip);
                 DrawSwitcherStaticContent(s_cachedStaticDC, ShouldFillBackground(), g_hSwitcher);
                 g_staticContentDirty = false;
@@ -3702,14 +3868,16 @@ static void PreRenderScrollCanvases() {
         BitBlt(s_cachedScrollFromDC, 0, 0, w, h, s_cachedStaticDC, 0, 0, SRCCOPY);
     } else {
         if (s_cachedScrollFromBits) memset(s_cachedScrollFromBits, 0, (size_t)w * h * sizeof(DWORD));
-        HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
+        HRGN hClip = ThemeIs(L"none") ? NULL : GetCachedRoundRectRgn(w, h, radius);
         SelectClipRgn(s_cachedScrollFromDC, hClip);
         DrawSwitcherStaticContent(s_cachedScrollFromDC, ShouldFillBackground(), g_hSwitcher);
     }
 
     // 2. Pre-render Incoming Canvas: render incoming layout at rest (offset 0,0)
     if (s_cachedScrollToBits) memset(s_cachedScrollToBits, 0, (size_t)w * h * sizeof(DWORD));
-    HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
+    // Layered canvases keep a rectangular background. Only the final presented
+    // frame is rounded; moving an already-rounded canvas exposes alpha holes.
+    HRGN hClip = ThemeIs(L"none") ? NULL : GetCachedRoundRectRgn(w, h, radius);
     SelectClipRgn(s_cachedScrollToDC, hClip);
     s_scrollIconCanvasDirty = false;
     DrawSwitcherStaticContent(s_cachedScrollToDC, ShouldFillBackground(), g_hSwitcher);
@@ -3764,11 +3932,9 @@ static void TriggerScrollAnimationEx(int dir, ScrollNavType type) {
             if (idx != -1 && !IsWindowTruncated(idx)) {
                 const auto& cur = g_windows[idx];
                 int diffX = snap.rcCell.left - cur.rcCell.left;
-                if (diffX != 0) {
-                    deltaX = (float)diffX;
-                    computedFromShared = true;
-                    break;
-                }
+                deltaX = (float)diffX;
+                computedFromShared = true;
+                break;
             }
         }
         if (!computedFromShared) {
@@ -3790,11 +3956,11 @@ static void TriggerScrollAnimationEx(int dir, ScrollNavType type) {
                 const auto& cur = g_windows[idx];
                 int diffX = snap.rcCell.left - cur.rcCell.left;
                 int diffY = snap.rcCell.top - cur.rcCell.top;
-                if (vertical && diffX != 0) {
+                if (vertical && (diffX != 0 || diffY == 0)) {
                     deltaX = (float)diffX;
                     computedFromShared = true;
                     break;
-                } else if (!vertical && diffY != 0) {
+                } else if (!vertical && (diffY != 0 || diffX == 0)) {
                     deltaY = (float)diffY;
                     computedFromShared = true;
                     break;
@@ -4135,7 +4301,6 @@ static void UpdateThumbnailAnimations() {
 
 static void OnAnimationTick() {
     if (!g_animActive) return;
-
     LARGE_INTEGER now;
     QueryPerformanceCounter(&now);
     float dt = (float)(s_animTargetIntervalMs / 1000.0);
@@ -4151,33 +4316,28 @@ static void OnAnimationTick() {
     // settle on the next available frame, without discarding elapsed time.
     if (dt < 0.0f) dt = 0.0f;
     struct TickScope {
-        TickScope() { g_animTickInProgress = true; }
-        ~TickScope() { g_animTickInProgress = false; }
+        TickScope() { g_animTickInProgress = g_animFrameSampleActive = true; }
+        ~TickScope() { g_animTickInProgress = g_animFrameSampleActive = false; }
     } tickScope;
+    // The switcher is already hidden during the final backdrop-only phase.
+    // Keep the exit guard and ticker alive without painting it back on screen.
+    if (g_backdropExitFadeActive) {
+        if (!BackdropFadeTick(dt)) CompleteExitAnimation();
+        return;
+    }
     UpdateMicrointeractionTargets();
 
     bool anyActive = false;
     bool hadThumbMotion = (g_animEntranceActive || g_scrollTransition.active || g_animExitActive || g_layoutTransition.active || g_dockPreviewSlide.active || g_animHoverScaleActive);
-    bool hadScrollOrEntrance = hadThumbMotion;
+    bool hadItemMotion = !g_layoutTransition.departingItems.empty() ||
+        std::any_of(g_windows.begin(), g_windows.end(),
+                    [](const WindowEntry& entry) { return entry.isNewEntry; });
 
     // 1. Shared entrance/exit timeline
     AdvancePresentationAnimation(dt);
-    if (g_animEntranceActive) anyActive = true;
+    if (g_animEntranceActive || g_presentationOpacity.progress < 1.0f) anyActive = true;
 
-    // 2. Selection focus: 167 ms existing-element point-to-point motion.
-    if (g_animSelectionActive && !g_layoutTransition.active) {
-        if (StepMotionTrack(g_animSelectionProgress, g_animSelectionDuration, dt)) {
-            g_animSelectionProgress = 1.0f;
-            g_animSelectionActive = false;
-            g_animSelectionCurrent = g_animSelectionTarget;
-        } else {
-            anyActive = true;
-            float e = g_easeSelection.Solve(g_animSelectionProgress);
-            g_animSelectionCurrent = LerpRect(g_animSelectionStart, g_animSelectionTarget, e);
-        }
-    }
-
-    // 3. Scroll / Page Slide animation
+    // 2. Scroll / Page Slide animation
     if (g_scrollTransition.active) {
         if (StepMotionTrack(g_scrollTransition.progress, g_scrollTransition.duration, dt)) {
             g_scrollTransition.progress = 1.0f;
@@ -4210,9 +4370,6 @@ static void OnAnimationTick() {
             }
             g_scrollTransition.outgoingItems.clear();
             g_scrollTransition.preservingThumbnails = false;
-            if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
-                SnapSelectionTo(ToRectF(g_windows[g_selectedIndex].rcCell));
-            }
             if (g_hoverThumbIndex >= 0 && g_hoverThumbIndex < (int)g_windows.size() && !IsWindowTruncated(g_hoverThumbIndex)) {
                 SnapHoverTo(ToRectF(g_windows[g_hoverThumbIndex].rcThumbActual));
             }
@@ -4226,7 +4383,7 @@ static void OnAnimationTick() {
         }
     }
 
-    // 4. Hover animation
+    // 3. Hover animation
     if (g_animHoverActive) {
         bool opacityActive = StepOpacityMotion(g_hoverOpacity, g_animHoverAlphaCurrent, dt);
         if (StepMotionTrack(g_animHoverProgress, g_animHoverDuration, dt) && !opacityActive) {
@@ -4283,12 +4440,14 @@ static void OnAnimationTick() {
         s_hadHoverScaleMotion = false; // final tick IPC flush complete
     }
 
-    // 5. Exit retraces the entrance timeline at the same speed. Remaining
+    // 4. Exit retraces the entrance timeline at the same speed. Remaining
     // duration is 167ms * p. A full reverse is the documented gentle-exit curve
     // (1,0,1,1), permitted for native material motion-only presentation.
     if (g_animExitActive) {
         if (g_animExitProgress <= 0.0f &&
             (!ThemeIs(L"none") || g_presentationOpacity.progress >= 1.0f)) {
+            HideSwitcherPresentationWindows();
+            if (FadeOutBackdropBlur()) return;
             CompleteExitAnimation();
             return;
         } else {
@@ -4296,7 +4455,7 @@ static void OnAnimationTick() {
         }
     }
 
-    // 6. Chevron reveal / fade animation with cubic-bezier easing & spatial glide
+    // 5. Chevron reveal / fade animation with cubic-bezier easing & spatial glide
     if (g_animChevronProgressPrev < 1.0f) {
         if (StepMotionTrack(g_animChevronProgressPrev, g_animChevronDuration, dt)) {
             g_animChevronProgressPrev = 1.0f;
@@ -4333,7 +4492,7 @@ static void OnAnimationTick() {
     if (StepOpacityMotion(g_chevronHoverPrev, g_animChevronHoverAlphaPrev, dt)) anyActive = true;
     if (StepOpacityMotion(g_chevronHoverNext, g_animChevronHoverAlphaNext, dt)) anyActive = true;
 
-    // 7. Dynamic Layout Transition (Window resize + Card rearrange + Add/Remove animation)
+    // 6. Dynamic Layout Transition (Window resize + Card rearrange + Add/Remove animation)
     if (g_layoutTransition.active) {
         if (StepMotionTrack(g_layoutTransition.progress, g_layoutTransition.duration, dt)) {
             g_layoutTransition.progress = 1.0f;
@@ -4346,12 +4505,6 @@ static void OnAnimationTick() {
                 ApplyEntryPresentationGeometry(w);
             }
 
-            if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
-                g_animSelectionCurrent = ToRectF(g_windows[g_selectedIndex].rcCell);
-                g_animSelectionTarget = g_animSelectionCurrent;
-                g_animSelectionStart = g_animSelectionCurrent;
-                g_animSelectionActive = false;
-            }
             if (g_hoverThumbIndex >= 0 && g_hoverThumbIndex < (int)g_windows.size() && !IsWindowTruncated(g_hoverThumbIndex)) {
                 g_animHoverCurrent = ToRectF(g_windows[g_hoverThumbIndex].rcThumbActual);
                 g_animHoverTarget = g_animHoverCurrent;
@@ -4409,12 +4562,6 @@ static void OnAnimationTick() {
                 ApplyEntryLayoutGeometry(w, t);
             }
 
-            if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
-                g_animSelectionCurrent = ToRectF(g_windows[g_selectedIndex].rcCell);
-                g_animSelectionTarget = g_animSelectionCurrent;
-                g_animSelectionStart = g_animSelectionCurrent;
-                g_animSelectionActive = false;
-            }
             if (g_hoverThumbIndex >= 0 && g_hoverThumbIndex < (int)g_windows.size() && !IsWindowTruncated(g_hoverThumbIndex)) {
                 g_animHoverCurrent = ToRectF(g_windows[g_hoverThumbIndex].rcThumbActual);
                 g_animHoverTarget = g_animHoverCurrent;
@@ -4426,11 +4573,27 @@ static void OnAnimationTick() {
         }
     }
 
-    // 7a. Owned child opacity (83 ms linear) and scale (167 ms), independent
+    // 6a. Owned child opacity (83 ms linear) and scale (167 ms), independent
     // of the 250 ms repositioning and of every other child's original clock.
     if (AdvanceItemTransitions(dt)) anyActive = true;
 
-    // 7b. Dock Layout Central Preview Directional Slide Transition (Window close)
+    // Selection owns its 167 ms track independently of the 250 ms layout and
+    // 167/250 ms viewport tracks. Rebase it to the current selected cell after
+    // those owners have sampled their geometry, then sample it once this frame.
+    SyncSelectionAnimationToLayout();
+    if (g_animSelectionActive) {
+        if (StepMotionTrack(g_animSelectionProgress, g_animSelectionDuration, dt)) {
+            g_animSelectionProgress = 1.0f;
+            g_animSelectionActive = false;
+            g_animSelectionCurrent = g_animSelectionTarget;
+        } else {
+            anyActive = true;
+            float e = g_easeSelection.Solve(g_animSelectionProgress);
+            g_animSelectionCurrent = LerpRect(g_animSelectionStart, g_animSelectionTarget, e);
+        }
+    }
+
+    // 6b. Dock Layout Central Preview Directional Slide Transition (Window close)
     if (g_dockPreviewSlide.active) {
         if (StepMotionTrack(g_dockPreviewSlide.progress, g_dockPreviewSlide.duration, dt)) {
             g_dockPreviewSlide.progress = 1.0f;
@@ -4449,7 +4612,7 @@ static void OnAnimationTick() {
         }
     }
 
-    // 8. Close buttons: independent 83 ms linear fades and 167 ms entrance /
+    // 7. Close buttons: independent 83 ms linear fades and 167 ms entrance /
     // gentle-exit scale transforms, including each invisible terminal sample.
     bool closeBtnAnimActive = false;
     for (int i = 0; i < (int)g_windows.size(); i++) {
@@ -4461,7 +4624,7 @@ static void OnAnimationTick() {
 
     if (StepOpacityMotion(g_closeBtnHover, g_animCloseBtnHoverAlpha, dt)) anyActive = true;
 
-    if (g_settings.showThumbnails && (hadThumbMotion || g_animHoverScaleActive || hadScrollOrEntrance || g_animEntranceActive || g_scrollTransition.active || g_animExitActive || g_layoutTransition.active)) {
+    if (g_settings.showThumbnails && (hadThumbMotion || hadItemMotion || g_animHoverScaleActive || g_animEntranceActive || g_scrollTransition.active || g_animExitActive || g_layoutTransition.active)) {
         UpdateThumbnailAnimations();
     }
 
@@ -4604,10 +4767,6 @@ static int GetWindowCornerRadiusPx() {
     GetResolvedCornerRadiiDIP(&stdDIP, &smallDIP);
     if (stdDIP <= 0) return 0;
 
-    // On Windows 10 without layered window, Acrylic blur is physically 90° rectangular
-    if (!IsWin11OrGreater() && !ThemeIs(L"none")) {
-        return 0;
-    }
     return MulDiv(stdDIP, g_dpiX, 96);
 }
 
@@ -8133,7 +8292,7 @@ static void DrawContourF(HDC hdc, const RectF& rc, float contourSize, int direct
 
         Gdiplus::Graphics graphics(hdc);
         graphics.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
-        graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeNone);
+        graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
 
         Gdiplus::REAL left = drawRc.left + penWidth * 0.5f;
         Gdiplus::REAL top = drawRc.top + penWidth * 0.5f;
@@ -8248,7 +8407,7 @@ static void DrawSelectionFillF(HDC hdc, const RectF& rc) {
     Gdiplus::SolidBrush brush(Gdiplus::Color(fillAlpha, r, g, b));
     graphics.FillRectangle(&brush, snapLeft, snapTop, snapW, snapH);
     Gdiplus::Pen strokePen(Gdiplus::Color(strokeAlpha, r, g, b), 1.0f);
-    graphics.DrawRectangle(&strokePen, snapLeft, snapTop, snapW, snapH);
+    graphics.DrawRectangle(&strokePen, snapLeft, snapTop, snapW - 1, snapH - 1);
 }
 
 static RECT GetHeaderContentRectForEntry(const RECT& rcCell, const RECT& rcThumbActual, const RECT& rcThumbSlot) {
@@ -8349,7 +8508,7 @@ static RECT GetCloseButtonRect(const RECT& rcCell, const RECT& rcThumbActual, co
         if (availableW < 0) availableW = 0;
 
         int iconX = contentLeft;
-        int iconY = rcCell.top + padTop + (rowTitleH - iconSz) / 2;
+        int iconY = rcCell.top + padTop + (rcCell.bottom - rcCell.top - 2 * padTop - iconSz) / 2;
 
         if (g_settings.centerTaskContent && iconSz < availableW) {
             iconX = contentLeft + (availableW - iconSz) / 2;
@@ -8714,7 +8873,9 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int r
 
     int headerTop = GetHeaderTopForEntry(e);
     int iconX = contentLeft;
-    int iconY = headerTop + (rowTitleH - iconSz) / 2;
+    int iconY = isIconOnly ? rcHeaderContent.top +
+        (rcHeaderContent.bottom - rcHeaderContent.top - iconSz) / 2 :
+        headerTop + (rowTitleH - iconSz) / 2;
 
     if (!HeaderIsVertical() && g_settings.showTitle && g_settings.showIcon) {
         int shift = (g_dpiY - 96) / 24;
@@ -8849,20 +9010,33 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int r
     }
 }
 
+static void FillSwitcherBackground(HDC hdc, const RECT& rect, bool fillBg) {
+    if (rect.right <= rect.left || rect.bottom <= rect.top) return;
+    RGBQUAD pixel = {};
+    if (fillBg && ThemeIs(L"none")) {
+        BYTE alpha = (BYTE)(std::max)(1, g_settings.opacity * 255 / 100);
+        COLORREF color = GetBgColor();
+        pixel = { (BYTE)(GetBValue(color) * alpha / 255),
+                  (BYTE)(GetGValue(color) * alpha / 255),
+                  (BYTE)(GetRValue(color) * alpha / 255), alpha };
+    }
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = bmi.bmiHeader.biHeight = 1;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    StretchDIBits(hdc, rect.left, rect.top, rect.right - rect.left,
+                  rect.bottom - rect.top, 0, 0, 1, 1, &pixel, &bmi,
+                  DIB_RGB_COLORS, SRCCOPY);
+}
+
 static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSelectionFill) {
     RECT rcClient; GetClientRect(g_hSwitcher, &rcClient);
-    int w = rcClient.right, h = rcClient.bottom;
+    int w = rcClient.right;
 
     if (fillBg && ThemeIs(L"none")) {
-        BYTE bgA = (BYTE)(g_settings.opacity * 255 / 100);
-        if (bgA == 0) bgA = 1; // Prevent full transparency click-through
-        COLORREF bgC = GetBgColor();
-        BYTE bgR = GetRValue(bgC), bgG = GetGValue(bgC), bgB = GetBValue(bgC);
-        RGBQUAD bgPx = { (BYTE)(bgB*bgA/255), (BYTE)(bgG*bgA/255), (BYTE)(bgR*bgA/255), bgA };
-        BITMAPINFO bgBi = {}; bgBi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        bgBi.bmiHeader.biWidth = 1; bgBi.bmiHeader.biHeight = 1;
-        bgBi.bmiHeader.biPlanes = 1; bgBi.bmiHeader.biBitCount = 32; bgBi.bmiHeader.biCompression = BI_RGB;
-        StretchDIBits(hdc, 0, 0, w, h, 0, 0, 1, 1, &bgPx, &bgBi, DIB_RGB_COLORS, SRCCOPY);
+        FillSwitcherBackground(hdc, rcClient, true);
     }
 
     HFONT hOldFont = (HFONT)SelectObject(hdc, g_hFont);
@@ -8871,7 +9045,7 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
     // 1. Draw animated selection background fill (underneath icons in the strip)
     if (includeSelectionFill && g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
         if (HighlightHasFill()) {
-            DrawSelectionFillF(hdc, g_animSelectionCurrent);
+            DrawSelectionFillF(hdc, SelectionRectWithViewport());
         }
     }
 
@@ -8929,10 +9103,8 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
 
         int cellW = e.rcCell.right - e.rcCell.left;
         int cellH = e.rcCell.bottom - e.rcCell.top;
-        if ((cellW - iconSz) % 2 != 0) { e.rcCell.right++; cellW++; }
-        if ((cellH - iconSz) % 2 != 0) { e.rcCell.bottom++; cellH++; }
-        int iconX = e.rcCell.left + (cellW - iconSz) / 2;
-        int iconY = e.rcCell.top + (cellH - iconSz) / 2;
+        int iconX = (int)roundf(e.rcCell.left + (cellW - iconSz) / 2.0f);
+        int iconY = (int)roundf(e.rcCell.top + (cellH - iconSz) / 2.0f);
 
         e.drawnIconX = iconX;
         e.drawnIconY = iconY;
@@ -8997,8 +9169,8 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
             int cellW = dep.rcCellCurrent.right - dep.rcCellCurrent.left;
             int cellH = dep.rcCellCurrent.bottom - dep.rcCellCurrent.top;
             if (cellW <= 0 || cellH <= 0) continue;
-            int iconX = dep.rcCellCurrent.left + (cellW - iconSz) / 2;
-            int iconY = dep.rcCellCurrent.top + (cellH - iconSz) / 2;
+            int iconX = (int)roundf(dep.rcCellCurrent.left + (cellW - iconSz) / 2.0f);
+            int iconY = (int)roundf(dep.rcCellCurrent.top + (cellH - iconSz) / 2.0f);
 
             DrawIconWithAlpha(hdc, iconX, iconY, dep.hIcon, iconSz, dep.alpha);
         }
@@ -9061,15 +9233,7 @@ static void DrawSwitcherContentInner(HDC hdc, bool fillBg, HWND hWnd, bool inclu
     int w = rcClient.right, h = rcClient.bottom;
 
     if (fillBg && ThemeIs(L"none")) {
-        BYTE bgA = (BYTE)(g_settings.opacity * 255 / 100);
-        if (bgA == 0) bgA = 1; // Prevent full transparency click-through
-        COLORREF bgC = GetBgColor();
-        BYTE bgR = GetRValue(bgC), bgG = GetGValue(bgC), bgB = GetBValue(bgC);
-        RGBQUAD bgPx = { (BYTE)(bgB*bgA/255), (BYTE)(bgG*bgA/255), (BYTE)(bgR*bgA/255), bgA };
-        BITMAPINFO bgBi = {}; bgBi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        bgBi.bmiHeader.biWidth = 1; bgBi.bmiHeader.biHeight = 1;
-        bgBi.bmiHeader.biPlanes = 1; bgBi.bmiHeader.biBitCount = 32; bgBi.bmiHeader.biCompression = BI_RGB;
-        StretchDIBits(hdc, 0, 0, w, h, 0, 0, 1, 1, &bgPx, &bgBi, DIB_RGB_COLORS, SRCCOPY);
+        FillSwitcherBackground(hdc, rcClient, true);
     }
 
     HFONT hOldFont = (HFONT)SelectObject(hdc, g_hFont);
@@ -9078,7 +9242,7 @@ static void DrawSwitcherContentInner(HDC hdc, bool fillBg, HWND hWnd, bool inclu
     // Draw animated selection background fill (underneath thumbnails)
     if (includeSelectionFill && g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
         if (HighlightHasFill()) {
-            DrawSelectionFillF(hdc, g_animSelectionCurrent);
+            DrawSelectionFillF(hdc, SelectionRectWithViewport());
         }
     }
 
@@ -9194,6 +9358,7 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
 
     Gdiplus::Graphics gfx(hdc);
     gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
 
     if (g_settings.showBadgeIconBackground) {
         int bgSize = iconSz + badgePad * 2;
@@ -9655,15 +9820,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
     // 4. Active selection focus border (rendered on top of DWM thumbnails)
     if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size() && !IsWindowTruncated(g_selectedIndex)) {
         if (HighlightHasBorder()) {
-            RectF selRc = (g_animSelectionActive && AreAnimationsGloballyEnabled() && g_settings.enableSelectionAnimation)
-                          ? g_animSelectionCurrent
-                          : ToRectF(g_windows[g_selectedIndex].rcCell);
-            if (offX != 0 || offY != 0) {
-                selRc.left += (float)offX;
-                selRc.right += (float)offX;
-                selRc.top += (float)offY;
-                selRc.bottom += (float)offY;
-            }
+            RectF selRc = SelectionRectWithViewport();
             DrawContourF(hdc, selRc, (float)SWS_CONTOUR_SIZE, 1, (float)GetTaskUiCornerRadiusPx());
         }
     }
@@ -10003,9 +10160,7 @@ static void DrawSwitcherOverlayDynamicContent(HDC hdc, HWND hWnd) {
     // 4. Active selection focus border (rendered on top of DWM thumbnails)
     if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size() && !IsWindowTruncated(g_selectedIndex)) {
         if (HighlightHasBorder()) {
-            RectF selRc = (g_animSelectionActive && AreAnimationsGloballyEnabled() && g_settings.enableSelectionAnimation)
-                          ? g_animSelectionCurrent
-                          : ToRectF(g_windows[g_selectedIndex].rcCell);
+            RectF selRc = SelectionRectWithViewport();
             DrawContourF(hdc, selRc, (float)SWS_CONTOUR_SIZE, 1, (float)GetTaskUiCornerRadiusPx());
         }
     }
@@ -10110,7 +10265,7 @@ static void DrawSwitcherOverlayDynamicContent(HDC hdc, HWND hWnd) {
 }
 
 static void PaintSwitcherOverlay() {
-    if (!g_hCloseBtnWnd || !g_isVisible) return;
+    if (!g_hCloseBtnWnd || !g_isVisible || g_backdropExitFadeActive) return;
     if (g_animActive && !g_animTickInProgress && !g_animEntranceFrameZeroPending) return;
     AnchorPresentationOverlay();
     PositionPresentationWindow(g_hCloseBtnWnd);
@@ -10201,8 +10356,62 @@ static void PaintSwitcherOverlay() {
     ReleaseDC(NULL, hdcScreen);
 }
 
+// One compositor for layered/native presentation and interrupted-scroll capture.
+// The background is stationary; only the padded content viewport moves. Do not
+// round source canvases: their translated corner alpha would flicker in the UI.
+static void DrawScrollTransitionFrame(HDC hdc, int w, int h, bool includeSelection) {
+    int saved = SaveDC(hdc);
+    SelectClipRgn(hdc, NULL);
+    RECT full = { 0, 0, w, h };
+    FillSwitcherBackground(hdc, full, ShouldFillBackground());
+    bool dock = DockLayoutActive();
+    if (dock && s_cachedScrollToDC) {
+        BitBlt(hdc, 0, 0, w, h, s_cachedScrollToDC, 0, 0, SRCCOPY);
+        if (includeSelection && g_settings.showThumbnailShadow && DockShowPreview() &&
+            (g_layoutTransition.active || g_dockPreviewSlide.active)) {
+            RECT shadow = g_rcCentralPreview;
+            float alpha = 1.0f;
+            if (g_dockPreviewSlide.active) {
+                OffsetRect(&shadow, (int)roundf(g_dockPreviewSlide.currentOffset), 0);
+                alpha = g_dockPreviewSlide.currentAlpha;
+            }
+            DrawThumbnailShadow(hdc, shadow, GetThumbnailCornerRadiusPx(), alpha);
+        }
+    }
+    int padX = DpiScale(g_settings.switcherPadding, g_dpiX);
+    int padY = DpiScale(g_settings.switcherPadding, g_dpiY);
+    RECT content = dock ? g_rcDockIconStrip : RECT{ padX, padY, w - padX, h - padY };
+    IntersectClipRect(hdc, content.left, content.top, content.right, content.bottom);
+    if (dock) FillSwitcherBackground(hdc, content, ShouldFillBackground());
+
+    int offX = (int)roundf(g_scrollTransition.offsetCurrentX);
+    int offY = dock ? 0 : (int)roundf(g_scrollTransition.offsetCurrentY);
+    if (s_cachedScrollFromDC) {
+        BitBlt(hdc, offX - g_scrollTransition.travelDistanceX,
+               offY - (dock ? 0 : g_scrollTransition.travelDistanceY),
+               w, h, s_cachedScrollFromDC, 0, 0, SRCCOPY);
+    }
+    if (s_cachedScrollToDC) {
+        BitBlt(hdc, offX, offY, w, h, s_cachedScrollToDC, 0, 0, SRCCOPY);
+    }
+    if (includeSelection && HighlightHasFill() && g_selectedIndex >= 0 &&
+        g_selectedIndex < (int)g_windows.size()) {
+        RectF selection = SelectionRectWithViewport();
+        DrawSelectionFillF(hdc, selection);
+        if (dock && !IsWindowTruncated(g_selectedIndex)) {
+            auto& entry = g_windows[g_selectedIndex];
+            int size = entry.drawnIconSz > 0 ? entry.drawnIconSz :
+                DpiScale(g_settings.dockIconSize > 0 ? g_settings.dockIconSize : 48, g_dpiX);
+            int x = (int)roundf(selection.left + (selection.right - selection.left - size) / 2.0f);
+            int y = (int)roundf(selection.top + (selection.bottom - selection.top - size) / 2.0f);
+            DrawDockIconWithAlpha(hdc, entry, x, y, size);
+        }
+    }
+    RestoreDC(hdc, saved);
+}
+
 static void PaintSwitcher() {
-    if (!g_hSwitcher || !g_isVisible) return;
+    if (!g_hSwitcher || !g_isVisible || g_backdropExitFadeActive) return;
     // Input handlers publish state immediately; an active ticker presents it at
     // the next deadline. Keep the initial entrance paint before first visibility.
     if (g_animActive && !g_animTickInProgress && !g_animEntranceFrameZeroPending) return;
@@ -10242,6 +10451,9 @@ static void PaintSwitcher() {
 
         int radius = GetWindowCornerRadiusPx();
 
+        // The final alpha mask owns rounding. A retained GDI region here would
+        // clip settled frames differently from scroll frames at the corners.
+        SelectClipRgn(s_cachedMemDC, NULL);
         if (!g_scrollTransition.active) {
             if (!s_cachedStaticDC || s_cachedStaticW != w || s_cachedStaticH != h) {
                 if (s_cachedStaticDC) {
@@ -10266,8 +10478,7 @@ static void PaintSwitcher() {
                 if (s_cachedStaticBits) {
                     memset(s_cachedStaticBits, 0, (size_t)w * h * sizeof(DWORD));
                 }
-                HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
-                SelectClipRgn(s_cachedStaticDC, hClip);
+                SelectClipRgn(s_cachedStaticDC, NULL);
                 DrawSwitcherStaticContent(s_cachedStaticDC, true, g_hSwitcher);
                 g_staticContentDirty = false;
             }
@@ -10314,12 +10525,8 @@ static void PaintSwitcher() {
             }
 
             // Draw moving selection highlight fill on top of background
-            HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
-            SelectClipRgn(s_cachedMemDC, hClip);
             if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size() && HighlightHasFill()) {
-                RectF fillRc = (g_animSelectionActive && AreAnimationsGloballyEnabled() && g_settings.enableSelectionAnimation)
-                               ? g_animSelectionCurrent
-                               : ToRectF(g_windows[g_selectedIndex].rcCell);
+                RectF fillRc = SelectionRectWithViewport();
                 DrawSelectionFillF(s_cachedMemDC, fillRc);
                 if (DockLayoutActive()) {
                     auto& e = g_windows[g_selectedIndex];
@@ -10332,112 +10539,11 @@ static void PaintSwitcher() {
                 }
             }
         } else {
-            // Active scroll/page transition: ultra-fast BitBlt composite from pre-rendered dual canvases (<0.1ms)
+            // Composite the same stationary background used by settled frames.
             if (s_cachedMemBits) {
                 memset(s_cachedMemBits, 0, (size_t)w * h * sizeof(DWORD));
             }
-            if (DockLayoutActive()) {
-                // 1. In Dock Layout, the switcher background, central preview shadow, divider line,
-                // and window title are stationary and must remain 100% visible throughout the transition.
-                HRGN hWndClip = GetCachedRoundRectRgn(w, h, radius);
-                SelectClipRgn(s_cachedMemDC, hWndClip);
-                if (s_cachedScrollToDC) {
-                    BitBlt(s_cachedMemDC, 0, 0, w, h, s_cachedScrollToDC, 0, 0, SRCCOPY);
-                }
-                if (g_settings.showThumbnailShadow && DockShowPreview() && (g_layoutTransition.active || g_dockPreviewSlide.active)) {
-                    RECT shadowRc = g_rcCentralPreview;
-                    float shadowAlphaMult = 1.0f;
-                    if (g_dockPreviewSlide.active) {
-                        int offX = (int)roundf(g_dockPreviewSlide.currentOffset);
-                        shadowRc.left += offX;
-                        shadowRc.right += offX;
-                        shadowAlphaMult = g_dockPreviewSlide.currentAlpha;
-                    }
-                    DrawThumbnailShadow(s_cachedMemDC, shadowRc, GetThumbnailCornerRadiusPx(), shadowAlphaMult);
-                }
-
-                // 2. Clip strictly to the dock icon strip for sliding the icons
-                HRGN hStripClip = CreateRectRgn(g_rcDockIconStrip.left, g_rcDockIconStrip.top, g_rcDockIconStrip.right, g_rcDockIconStrip.bottom);
-                SelectClipRgn(s_cachedMemDC, hStripClip);
-
-                // Erase dock strip background with bg color so moving icons blend cleanly
-                BYTE bgA = (BYTE)(g_settings.opacity * 255 / 100);
-                if (bgA == 0) bgA = 1;
-                COLORREF bgC = GetBgColor();
-                BYTE bgR = GetRValue(bgC), bgG = GetGValue(bgC), bgB = GetBValue(bgC);
-                RGBQUAD bgPx = { (BYTE)(bgB*bgA/255), (BYTE)(bgG*bgA/255), (BYTE)(bgR*bgA/255), bgA };
-                BITMAPINFO bgBi = {}; bgBi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-                bgBi.bmiHeader.biWidth = 1; bgBi.bmiHeader.biHeight = 1;
-                bgBi.bmiHeader.biPlanes = 1; bgBi.bmiHeader.biBitCount = 32; bgBi.bmiHeader.biCompression = BI_RGB;
-                int stripW = g_rcDockIconStrip.right - g_rcDockIconStrip.left;
-                int stripH = g_rcDockIconStrip.bottom - g_rcDockIconStrip.top;
-                StretchDIBits(s_cachedMemDC, g_rcDockIconStrip.left, g_rcDockIconStrip.top, stripW, stripH,
-                              0, 0, 1, 1, &bgPx, &bgBi, DIB_RGB_COLORS, SRCCOPY);
-
-                int offX = (int)roundf(g_scrollTransition.offsetCurrentX);
-                int outOffX = offX - g_scrollTransition.travelDistanceX;
-
-                if (s_cachedScrollFromDC) {
-                    BitBlt(s_cachedMemDC, outOffX, 0, w, h, s_cachedScrollFromDC, 0, 0, SRCCOPY);
-                }
-                if (s_cachedScrollToDC) {
-                    BitBlt(s_cachedMemDC, offX, 0, w, h, s_cachedScrollToDC, 0, 0, SRCCOPY);
-                }
-
-                if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size() && HighlightHasFill()) {
-                    RectF selRc = (g_animSelectionActive && AreAnimationsGloballyEnabled() && g_settings.enableSelectionAnimation)
-                                  ? g_animSelectionCurrent
-                                  : ToRectF(g_windows[g_selectedIndex].rcCell);
-                    selRc.left += (float)offX;
-                    selRc.right += (float)offX;
-                    DrawSelectionFillF(s_cachedMemDC, selRc);
-                    auto& e = g_windows[g_selectedIndex];
-                    if (!IsWindowTruncated(g_selectedIndex)) {
-                        int iconSz = e.drawnIconSz > 0 ? e.drawnIconSz : DpiScale(g_settings.dockIconSize > 0 ? g_settings.dockIconSize : 48, g_dpiX);
-                        int iconX = (int)roundf(selRc.left + (selRc.right - selRc.left - iconSz) / 2.0f);
-                        int iconY = (int)roundf(selRc.top + (selRc.bottom - selRc.top - iconSz) / 2.0f);
-                        DrawDockIconWithAlpha(s_cachedMemDC, e, iconX, iconY, iconSz);
-                    }
-                }
-
-                SelectClipRgn(s_cachedMemDC, NULL);
-                DeleteObject(hStripClip);
-            } else {
-                int masterPadX = DpiScale(g_settings.switcherPadding, g_dpiX);
-                int masterPadY = DpiScale(g_settings.switcherPadding, g_dpiY);
-                HRGN hContentClip = CreateRectRgn(masterPadX, masterPadY, w - masterPadX, h - masterPadY);
-                if (radius > 0) {
-                    HRGN hWndClip = GetCachedRoundRectRgn(w, h, radius);
-                    CombineRgn(hContentClip, hContentClip, hWndClip, RGN_AND);
-                }
-                SelectClipRgn(s_cachedMemDC, hContentClip);
-
-                int offX = (int)roundf(g_scrollTransition.offsetCurrentX);
-                int offY = (int)roundf(g_scrollTransition.offsetCurrentY);
-                int outOffX = offX - g_scrollTransition.travelDistanceX;
-                int outOffY = offY - g_scrollTransition.travelDistanceY;
-
-                if (s_cachedScrollFromDC) {
-                    BitBlt(s_cachedMemDC, outOffX, outOffY, w, h, s_cachedScrollFromDC, 0, 0, SRCCOPY);
-                }
-                if (s_cachedScrollToDC) {
-                    BitBlt(s_cachedMemDC, offX, offY, w, h, s_cachedScrollToDC, 0, 0, SRCCOPY);
-                }
-
-                if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size() && HighlightHasFill()) {
-                    RectF selRc = (g_animSelectionActive && AreAnimationsGloballyEnabled() && g_settings.enableSelectionAnimation)
-                                  ? g_animSelectionCurrent
-                                  : ToRectF(g_windows[g_selectedIndex].rcCell);
-                    selRc.left += (float)offX;
-                    selRc.right += (float)offX;
-                    selRc.top += (float)offY;
-                    selRc.bottom += (float)offY;
-                    DrawSelectionFillF(s_cachedMemDC, selRc);
-                }
-
-                SelectClipRgn(s_cachedMemDC, NULL);
-                DeleteObject(hContentClip);
-            }
+            DrawScrollTransitionFrame(s_cachedMemDC, w, h, true);
         }
         if (radius > 0) {
             RECT rcFull = { 0, 0, w, h };
@@ -10454,7 +10560,16 @@ static void PaintSwitcher() {
         UpdateLayeredWindow(g_hSwitcher, hdcScreen, &ptDst, &sz, s_cachedMemDC, &ptSrc, 0, &bf, ULW_ALPHA);
         for (HWND hMirror : g_hMirrorSwitchers) {
             if (IsWindow(hMirror)) {
-                DrawSwitcherContent(s_cachedMemDC, true, hMirror);
+                // The compositor's viewport and presentation timeline are
+                // shared. Redrawing a settled mirror during a slide makes its
+                // cards jump to the target page while its thumbnails still move.
+                if (!g_scrollTransition.active) {
+                    DrawSwitcherContent(s_cachedMemDC, true, hMirror);
+                    if (radius > 0) {
+                        RECT full = { 0, 0, w, h };
+                        MaskRectCorners(s_cachedMemDC, full, radius);
+                    }
+                }
                 RECT mwr = {}; GetPresentationWindowRect(hMirror, &mwr);
                 POINT mPtDst = { mwr.left, mwr.top };
                 UpdateLayeredWindow(hMirror, hdcScreen, &mPtDst, &sz, s_cachedMemDC, &ptSrc, 0, &bf, ULW_ALPHA);
@@ -10643,6 +10758,13 @@ static void RevealPendingSwitcher() {
     KillTimer(g_hSwitcher, SWS_SHOW_DELAY_TIMER_ID);
 
     g_isPendingShow = false;
+    // The grace-period HWND may be visible off-screen. Hide it before moving
+    // native materials to their layout rect, which would otherwise reveal the
+    // switcher ahead of ShowBackdropBlur(). No session is visible during this
+    // synchronous staging step, so its focus loss cannot cancel the reveal.
+    if (BackdropBlurEnabled() && IsWindowVisible(g_hSwitcher)) {
+        ShowWindow(g_hSwitcher, SW_HIDE);
+    }
     g_isVisible = true;
     if (!g_hMouseHook) {
         g_hMouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, GetModuleHandle(NULL), 0);
@@ -10791,6 +10913,7 @@ static void ApplyThemeToWindow(HWND hWnd) {
         }
 
         // 7. Flush style and DWM non-client state
+        ApplyAcrylicWindowRegion(hWnd);
         SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
         return;
     }
@@ -10871,6 +10994,7 @@ static void ApplyThemeToWindow(HWND hWnd) {
         DwmSetWindowAttribute(hWnd, 34 /* DWMWA_BORDER_COLOR */, &none, sizeof(none));
     }
 
+    ApplyAcrylicWindowRegion(hWnd);
     SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 }
 
@@ -10950,13 +11074,40 @@ static void ShowMirrorSwitchers() {
 }
 
 
+static void ApplyAcrylicWindowRegion(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd)) return;
+
+    // The legacy Acrylic accent can bypass DWM's corner-preference hint, even
+    // on Windows 11. Clip it to the same resolved system/custom radius as the
+    // border. Mica retains DWM clipping; None uses its final per-pixel mask.
+    int radiusDIP = 0;
+    GetResolvedCornerRadiiDIP(&radiusDIP, nullptr);
+    UINT dpi = QueryWindowDpi(hWnd);
+    int radius = ThemeIs(L"backdrop") ? MulDiv(radiusDIP, dpi ? dpi : g_dpiX, 96) : 0;
+    RECT wr = {};
+    if (!GetWindowRect(hWnd, &wr)) return;
+    int w = wr.right - wr.left;
+    int h = wr.bottom - wr.top;
+    if (radius > 0 && w > 0 && h > 0) {
+        HRGN region = CreateRoundRectRgn(0, 0, w + 1, h + 1,
+                                         radius * 2, radius * 2);
+        if (region && !SetWindowRgn(hWnd, region, TRUE)) {
+            DeleteObject(region);
+        }
+    } else {
+        // Avoid a needless frame change on every None/Mica resize.
+        HRGN existing = CreateRectRgn(0, 0, 0, 0);
+        if (existing) {
+            if (GetWindowRgn(hWnd, existing) != ERROR) SetWindowRgn(hWnd, NULL, TRUE);
+            DeleteObject(existing);
+        }
+    }
+}
+
 static void ApplySwitcherRegion() {
     if (!g_hSwitcher) return;
 
-    // Both Windows 11 (DWM hardware rounding) and Theme: none (per-pixel alpha layered window)
-    // do not need GDI SetWindowRgn. Windows 10 Acrylic blur is a 90° rectangle, where SetWindowRgn
-    // would only conflict with DWM composition. The only effect needed here is clearing the
-    // DWM border color so no 1px system border is drawn around the switcher.
+    ApplyAcrylicWindowRegion(g_hSwitcher);
     if (IsWin11OrGreater()) {
         COLORREF colorNone = 0xFFFFFFFE; // DWMWA_COLOR_NONE
         DwmSetWindowAttribute(g_hSwitcher, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
@@ -11147,6 +11298,9 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
 
     g_isPendingShow = false;
     g_pendingSwitcherRect = { 0, 0, 0, 0 };
+    if (BackdropBlurEnabled() && IsWindowVisible(g_hSwitcher)) {
+        ShowWindow(g_hSwitcher, SW_HIDE);
+    }
     g_isVisible = true;
     RefreshTouchpadGestureKinds();
     if (!g_hMouseHook) {
@@ -11202,18 +11356,12 @@ static void HideSwitcher() {
     if (g_hSwitcher) {
         KillTimer(g_hSwitcher, SWS_DYNAMIC_RESIZE_TIMER_ID);
     }
-    // Hide the backdrop first so it never outlives the switcher on screen.
-    HideBackdropBlur();
     // Hide every switcher window FIRST, before any teardown or WS_EX_LAYERED /
     // DWM attribute juggling below, so DWM can never compose an intermediate
     // (white border / unpainted / half-torn-down) frame on exit.
-    if (g_hCloseBtnWnd && IsWindowVisible(g_hCloseBtnWnd)) {
-        ShowWindow(g_hCloseBtnWnd, SW_HIDE);
-    }
+    HideSwitcherPresentationWindows();
     DestroyMirrorSwitchers();
-    if (g_hSwitcher && IsWindowVisible(g_hSwitcher)) {
-        ShowWindow(g_hSwitcher, SW_HIDE);
-    }
+    HideBackdropBlur();
     StopAnimationTicker();
     FinishAnimations();
     FreeCachedBuffers();
@@ -11359,10 +11507,11 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
         if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID);
         UpdateMruWindow(hTarget);
         s_touchpadCommitActivation = false;
-    } else if (g_hSwitcher && !g_isVisible && !g_isPendingShow) {
+    } else if (g_hSwitcher && ((!g_isVisible && !g_isPendingShow) || g_animExitActive)) {
         // Foreground activation may be denied transiently after the raw input
-        // process releases the switcher. Retry without blocking this message
-        // pump; never attach to or send synchronously to the target thread.
+        // process releases the switcher, or while the visual exit is still
+        // running. Retry without blocking this message pump; never attach to
+        // or send synchronously to the target thread.
         if (!retrying) {
             // The absolute deadline is established once. Resetting it here on
             // each failed attempt made the 600 ms retry run for many seconds.
@@ -11380,14 +11529,13 @@ static void StartExitAnimation(bool activateSelectedWindow) {
     // stroke must not reopen the switcher before all fingers have lifted.
     CancelRawTouchpadStroke();
 
-    g_animExitActivateSelected = activateSelectedWindow;
-    g_animExitTargetWindow = NULL;
-    g_animExitRestoreWindows.clear();
+    HWND hTarget = NULL;
+    std::vector<HWND> restoreWindows;
     if (activateSelectedWindow && g_selectedIndex >= 0 &&
         g_selectedIndex < (int)g_windows.size()) {
-        g_animExitTargetWindow = g_windows[g_selectedIndex].hWnd;
+        hTarget = g_windows[g_selectedIndex].hWnd;
         if (g_settings.showApplications && g_settings.restoreAllWindows) {
-            g_animExitRestoreWindows = g_windows[g_selectedIndex].groupWindows;
+            restoreWindows = g_windows[g_selectedIndex].groupWindows;
         }
     }
 
@@ -11395,13 +11543,11 @@ static void StartExitAnimation(bool activateSelectedWindow) {
     // sessions use the shared exit path below for both cancel and selection.
     if (g_isPendingShow || !AreAnimationsGloballyEnabled() ||
         !g_settings.enableEntranceAnimation) {
-        HWND hTarget = g_animExitTargetWindow;
-        std::vector<HWND> restoreWindows = std::move(g_animExitRestoreWindows);
-        bool activate = g_animExitActivateSelected;
-        g_animExitTargetWindow = NULL;
-        g_animExitActivateSelected = false;
+        // Guard focus-change reentrancy and duplicate release events before
+        // handing off. Activation must precede even non-animated teardown.
+        g_animExitActive = true;
+        if (activateSelectedWindow) ActivateExitedWindow(hTarget, restoreWindows);
         HideSwitcher();
-        if (activate) ActivateExitedWindow(hTarget, restoreWindows);
         return;
     }
 
@@ -11420,7 +11566,6 @@ static void StartExitAnimation(bool activateSelectedWindow) {
     RefreshTouchpadGestureKinds();
     // Decreasing p at the entrance speed gives a remaining duration of 167ms*p.
     g_animExitDuration = g_animEntranceDuration;
-    FadeOutBackdropBlur(g_animExitCurrentAlpha);
 
     // Keep the touchpad controller and early marker ownership through the
     // visible exit animation. HideSwitcher releases them at the real close.
@@ -11436,6 +11581,9 @@ static void StartExitAnimation(bool activateSelectedWindow) {
     }
 
     StartAnimationTicker();
+    // Both release paths hand off before visual teardown. The exit guard and
+    // click-through state are established before external calls can reenter.
+    if (activateSelectedWindow) ActivateExitedWindow(hTarget, restoreWindows);
 }
 
 static void SwitchToSelected() {
@@ -11764,7 +11912,9 @@ static void ToggleAppDrill() {
     else EnterAppGroup();
 }
 
-static void ScrollDockWithDynamicResize(int targetStart, int targetSelected, int dir, ScrollNavType scrollType) {
+static void ScrollDockWithDynamicResize(int targetStart, int targetSelected, int dir,
+                                        ScrollNavType scrollType,
+                                        const RectF& selectionFrom) {
     CaptureOutgoingSnapshot();
 
     CaptureLayoutTransitionStart();
@@ -11778,8 +11928,7 @@ static void ScrollDockWithDynamicResize(int targetStart, int targetSelected, int
         RegisterThumbnails();
         TriggerScrollAnimationEx(dir, scrollType);
         if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
-            RectF r = ToRectF(g_windows[g_selectedIndex].rcCell);
-            SnapSelectionTo(r);
+            RetargetSelectionFromPresented(selectionFrom);
         }
         UpdateChevronAnimationTargets(false);
         InvalidateStaticCache();
@@ -11793,8 +11942,7 @@ static void ScrollDockWithDynamicResize(int targetStart, int targetSelected, int
 
     TriggerScrollAnimationEx(dir, scrollType);
     if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
-        RectF r = ToRectF(g_windows[g_selectedIndex].rcCell);
-        SnapSelectionTo(r);
+        RetargetSelectionFromPresented(selectionFrom);
     }
     UpdateChevronAnimationTargets(false);
     PaintSwitcher();
@@ -11828,6 +11976,7 @@ static void UpdateDockSelectionWithDynamicResize(int prevSelected) {
 // Linear navigation: Tab, Shift+Tab, Left, Right, Hotkeys, Scroll
 static void CycleLinear(int delta) {
     if (g_windows.empty()) return;
+    RectF selectionFrom = SelectionRectWithViewport();
     g_isPaginatedView = false;
     int n = (int)g_windows.size();
     int prevSelected = g_selectedIndex;
@@ -11865,10 +12014,10 @@ static void CycleLinear(int delta) {
 
         if (needsScroll && targetStart != g_layoutStartIndex) {
             int dir = (targetStart > g_layoutStartIndex) ? 1 : -1;
-            ScrollDockWithDynamicResize(targetStart, g_selectedIndex, dir, SCROLL_ROW);
+            ScrollDockWithDynamicResize(targetStart, g_selectedIndex, dir, SCROLL_ROW, selectionFrom);
         } else {
-            TriggerSelectionAnimation(prevSelected);
             UpdateDockSelectionWithDynamicResize(prevSelected);
+            RetargetSelectionFromPresented(selectionFrom);
             UpdateChevronAnimationTargets(false);
             InvalidateStaticCache();
             PaintSwitcher();
@@ -11937,17 +12086,17 @@ static void CycleLinear(int delta) {
         TriggerScrollAnimationEx(dir, SCROLL_ROW);
 
         if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
-            RectF r = ToRectF(g_windows[g_selectedIndex].rcCell);
-            SnapSelectionTo(r);
+            RetargetSelectionFromPresented(selectionFrom);
         }
     } else {
-        TriggerSelectionAnimation(prevSelected);
+        RetargetSelectionFromPresented(selectionFrom);
     }
     PaintSwitcher();
 }
 
 static void CyclePage(int dir) {
     if (g_windows.empty()) return;
+    RectF selectionFrom = SelectionRectWithViewport();
     int n = (int)g_windows.size();
 
     if (DockLayoutActive()) {
@@ -11964,7 +12113,7 @@ static void CyclePage(int dir) {
         if (newStart < 0) newStart = 0;
         if (newStart != g_layoutStartIndex) {
             int targetSelected = (dir > 0) ? newStart : std::min(n - 1, newStart + visibleCount - 1);
-            ScrollDockWithDynamicResize(newStart, targetSelected, dir, SCROLL_PAGE);
+            ScrollDockWithDynamicResize(newStart, targetSelected, dir, SCROLL_PAGE, selectionFrom);
         } else {
             UpdateChevronAnimationTargets(false);
             InvalidateStaticCache();
@@ -12128,8 +12277,7 @@ static void CyclePage(int dir) {
     TriggerScrollAnimationEx(animDir, SCROLL_PAGE);
 
     if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
-        RectF r = ToRectF(g_windows[g_selectedIndex].rcCell);
-        SnapSelectionTo(r);
+        RetargetSelectionFromPresented(selectionFrom);
     }
 
     PaintSwitcher();
@@ -12140,6 +12288,7 @@ static void CyclePage(int dir) {
 // callers retain wrapping; touchpad callers pass wrap=false for hard edges.
 static void CycleDirectional(int vertDelta, bool wrap = true) {
     if (g_windows.empty()) return;
+    RectF selectionFrom = SelectionRectWithViewport();
     if (DockLayoutActive()) {
         if (wrap) {
             CycleLinear(vertDelta);
@@ -12153,7 +12302,6 @@ static void CycleDirectional(int vertDelta, bool wrap = true) {
     int n = (int)g_windows.size();
     if (n <= 1) return;
 
-    int prevSelected = g_selectedIndex;
     bool verticalLayout = LayoutIsVertical();
     HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
 
@@ -12346,14 +12494,7 @@ static void CycleDirectional(int vertDelta, bool wrap = true) {
     }
 
     g_selectedIndex = bestIndex;
-    if (g_scrollTransition.active) {
-        if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
-            RectF r = ToRectF(g_windows[g_selectedIndex].rcCell);
-            SnapSelectionTo(r);
-        }
-    } else {
-        TriggerSelectionAnimation(prevSelected);
-    }
+    RetargetSelectionFromPresented(selectionFrom);
     PaintSwitcher();
 }
 
@@ -13531,8 +13672,7 @@ static void BeginTouchpadGesture(int step) {
     // previous gesture left stale state. Force a clean slate if we are mid-exit.
     if (g_animExitActive) {
         Wh_Log(L"SWS: Touchpad gesture during exit animation -> forcing clean state");
-        FinishAnimations();
-        g_animExitActive = false;
+        HideSwitcher();
     }
     g_isTouchpadGestureActive = true;
     s_lastTouchpadScrollTick = GetTickCount64();
@@ -14310,9 +14450,6 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         // Pass -1 for lParam to prevent DefWindowProc from painting the default border (suppressing the white/gray flash).
         return DefWindowProcW(hWnd, uMsg, TRUE, -1);
     }
-    if (uMsg == WM_MOVE || uMsg == WM_WINDOWPOSCHANGED) {
-        UpdateRefreshRateTiming();
-    }
 
     if (g_WM_SWS_TOUCHPAD_FRAME && uMsg == g_WM_SWS_TOUCHPAD_FRAME) {
         HandleRawTouchpadFrame((ULONG)wParam, (ULONG)lParam);
@@ -14350,7 +14487,8 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
 
         if (wParam == SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID) {
-            if (g_isVisible || g_isPendingShow || !s_touchpadActivationRetryTarget ||
+            if (((g_isVisible || g_isPendingShow) && !g_animExitActive) ||
+                !s_touchpadActivationRetryTarget ||
                 !IsWindow(s_touchpadActivationRetryTarget) ||
                 GetTickCount64() >= s_touchpadActivationRetryDeadline ||
                 ExplicitShellInputDown()) {
@@ -14727,9 +14865,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     }
                 }
                 if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size() && HighlightHasFill()) {
-                    RectF fillRc = (g_animSelectionActive && AreAnimationsGloballyEnabled() && g_settings.enableSelectionAnimation)
-                                   ? g_animSelectionCurrent
-                                   : ToRectF(g_windows[g_selectedIndex].rcCell);
+                    RectF fillRc = SelectionRectWithViewport();
                     DrawSelectionFillF(hdcBuf, fillRc);
                     if (DockLayoutActive()) {
                         auto& e = g_windows[g_selectedIndex];
@@ -14742,115 +14878,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     }
                 }
             } else {
-                int radius = GetWindowCornerRadiusPx();
-                if (DockLayoutActive()) {
-                // 1. In Dock Layout, the switcher background, central preview shadow, divider line,
-                // and window title are stationary and must remain 100% visible throughout the transition.
-                HRGN hWndClip = GetCachedRoundRectRgn(w, h, radius);
-                SelectClipRgn(hdcBuf, hWndClip);
-                if (s_cachedScrollToDC) {
-                    BitBlt(hdcBuf, 0, 0, w, h, s_cachedScrollToDC, 0, 0, SRCCOPY);
-                }
-                if (g_settings.showThumbnailShadow && DockShowPreview() && (g_layoutTransition.active || g_dockPreviewSlide.active)) {
-                    RECT shadowRc = g_rcCentralPreview;
-                    float shadowAlphaMult = 1.0f;
-                    if (g_dockPreviewSlide.active) {
-                        int offX = (int)roundf(g_dockPreviewSlide.currentOffset);
-                        shadowRc.left += offX;
-                        shadowRc.right += offX;
-                        shadowAlphaMult = g_dockPreviewSlide.currentAlpha;
-                    }
-                    DrawThumbnailShadow(hdcBuf, shadowRc, GetThumbnailCornerRadiusPx(), shadowAlphaMult);
-                }
-
-                // 2. Clip strictly to the dock icon strip for sliding the icons
-                HRGN hStripClip = CreateRectRgn(g_rcDockIconStrip.left, g_rcDockIconStrip.top, g_rcDockIconStrip.right, g_rcDockIconStrip.bottom);
-                SelectClipRgn(hdcBuf, hStripClip);
-
-                // Erase dock strip background with bg color so moving icons blend cleanly
-                int stripW = g_rcDockIconStrip.right - g_rcDockIconStrip.left;
-                int stripH = g_rcDockIconStrip.bottom - g_rcDockIconStrip.top;
-                BITMAPINFO bgBi = {}; bgBi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-                bgBi.bmiHeader.biWidth = 1; bgBi.bmiHeader.biHeight = 1;
-                bgBi.bmiHeader.biPlanes = 1; bgBi.bmiHeader.biBitCount = 32; bgBi.bmiHeader.biCompression = BI_RGB;
-                if (ShouldFillBackground()) {
-                    BYTE bgA = (BYTE)(g_settings.opacity * 255 / 100);
-                    if (bgA == 0) bgA = 1;
-                    COLORREF bgC = GetBgColor();
-                    BYTE bgR = GetRValue(bgC), bgG = GetGValue(bgC), bgB = GetBValue(bgC);
-                    RGBQUAD bgPx = { (BYTE)(bgB*bgA/255), (BYTE)(bgG*bgA/255), (BYTE)(bgR*bgA/255), bgA };
-                    StretchDIBits(hdcBuf, g_rcDockIconStrip.left, g_rcDockIconStrip.top, stripW, stripH,
-                                  0, 0, 1, 1, &bgPx, &bgBi, DIB_RGB_COLORS, SRCCOPY);
-                } else {
-                    RGBQUAD zeroPx = { 0, 0, 0, 0 };
-                    StretchDIBits(hdcBuf, g_rcDockIconStrip.left, g_rcDockIconStrip.top, stripW, stripH,
-                                  0, 0, 1, 1, &zeroPx, &bgBi, DIB_RGB_COLORS, SRCCOPY);
-                }
-
-                int offX = (int)roundf(g_scrollTransition.offsetCurrentX);
-                int outOffX = offX - g_scrollTransition.travelDistanceX;
-
-                if (s_cachedScrollFromDC) {
-                    BitBlt(hdcBuf, outOffX, 0, w, h, s_cachedScrollFromDC, 0, 0, SRCCOPY);
-                }
-                if (s_cachedScrollToDC) {
-                    BitBlt(hdcBuf, offX, 0, w, h, s_cachedScrollToDC, 0, 0, SRCCOPY);
-                }
-
-                if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size() && HighlightHasFill()) {
-                    RectF selRc = (g_animSelectionActive && AreAnimationsGloballyEnabled() && g_settings.enableSelectionAnimation)
-                                  ? g_animSelectionCurrent
-                                  : ToRectF(g_windows[g_selectedIndex].rcCell);
-                    selRc.left += (float)offX;
-                    selRc.right += (float)offX;
-                    DrawSelectionFillF(hdcBuf, selRc);
-                    auto& e = g_windows[g_selectedIndex];
-                    if (!IsWindowTruncated(g_selectedIndex)) {
-                        int iconSz = e.drawnIconSz > 0 ? e.drawnIconSz : DpiScale(g_settings.dockIconSize > 0 ? g_settings.dockIconSize : 48, g_dpiX);
-                        int iconX = (int)roundf(selRc.left + (selRc.right - selRc.left - iconSz) / 2.0f);
-                        int iconY = (int)roundf(selRc.top + (selRc.bottom - selRc.top - iconSz) / 2.0f);
-                        DrawDockIconWithAlpha(hdcBuf, e, iconX, iconY, iconSz);
-                    }
-                }
-
-                SelectClipRgn(hdcBuf, NULL);
-                DeleteObject(hStripClip);
-            } else {
-                int masterPadX = DpiScale(g_settings.switcherPadding, g_dpiX);
-                int masterPadY = DpiScale(g_settings.switcherPadding, g_dpiY);
-                HRGN hContentClip = CreateRectRgn(masterPadX, masterPadY, w - masterPadX, h - masterPadY);
-                if (radius > 0) {
-                    HRGN hWndClip = GetCachedRoundRectRgn(w, h, radius);
-                    CombineRgn(hContentClip, hContentClip, hWndClip, RGN_AND);
-                }
-                SelectClipRgn(hdcBuf, hContentClip);
-
-                int offX = (int)roundf(g_scrollTransition.offsetCurrentX);
-                int offY = (int)roundf(g_scrollTransition.offsetCurrentY);
-                int outOffX = offX - g_scrollTransition.travelDistanceX;
-                int outOffY = offY - g_scrollTransition.travelDistanceY;
-
-                if (s_cachedScrollFromDC) {
-                    BitBlt(hdcBuf, outOffX, outOffY, w, h, s_cachedScrollFromDC, 0, 0, SRCCOPY);
-                }
-                if (s_cachedScrollToDC) {
-                    BitBlt(hdcBuf, offX, offY, w, h, s_cachedScrollToDC, 0, 0, SRCCOPY);
-                }
-
-                if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size() && HighlightHasFill()) {
-                    RectF selRc = (g_animSelectionActive && AreAnimationsGloballyEnabled() && g_settings.enableSelectionAnimation)
-                                  ? g_animSelectionCurrent
-                                  : ToRectF(g_windows[g_selectedIndex].rcCell);
-                    selRc.left += (float)offX;
-                    selRc.right += (float)offX;
-                    selRc.top += (float)offY;
-                    selRc.bottom += (float)offY;
-                    DrawSelectionFillF(hdcBuf, selRc);
-                }
-
-                SelectClipRgn(hdcBuf, NULL);
-                DeleteObject(hContentClip);
-            }
+                DrawScrollTransitionFrame(hdcBuf, w, h, true);
             }
             EndBufferedPaint(hBP, TRUE);
         }
@@ -17121,18 +17149,6 @@ thread_exit:
     FinishAnimations();
     StopAnimationTicker();
     FreeCachedBuffers();
-    if (g_hDwmCornerWatchStopEvent) {
-        SetEvent(g_hDwmCornerWatchStopEvent);
-    }
-    if (g_hDwmCornerWatchThread) {
-        WaitForSingleObject(g_hDwmCornerWatchThread, 1000);
-        CloseHandle(g_hDwmCornerWatchThread);
-        g_hDwmCornerWatchThread = NULL;
-    }
-    if (g_hDwmCornerWatchStopEvent) {
-        CloseHandle(g_hDwmCornerWatchStopEvent);
-        g_hDwmCornerWatchStopEvent = NULL;
-    }
     timeEndPeriod(1);
     Wh_Log(L"SwitcherThread exiting");
     return 0;
@@ -17266,6 +17282,10 @@ static void TouchpadReaderSetAvailable(bool available) {
     }
     bool changed = g_touchpadReaderAvailable.exchange(available) != available;
     if (changed || !available) PublishNativeSwipePolicy();
+    if (changed) {
+        Wh_Log(L"SWS touchpad reader: readiness=%d stopping=%d", available,
+               g_touchpadReaderStopping.load());
+    }
     if (changed && g_hSwitcher) {
         PostMessageW(g_hSwitcher, WM_SWS_TOUCHPAD_READER_CHANGED, 0, 0);
     }
@@ -17308,8 +17328,8 @@ static void TouchpadReaderProcessFrame(const TouchpadDevice& dev) {
         s_touchpadReaderStroke = {};
         return;
     }
-    // Registration alone does not prove this device supplies usable reports.
-    // Do not enable takeover until a usable frame arrives.
+    // Descriptor priming normally establishes readiness before this report.
+    // A usable frame also recovers readiness after a device reconnect.
     TouchpadReaderSetAvailable(true);
     ULONG tips = 0;
     double cx = 0.0;
@@ -17520,15 +17540,42 @@ static void TouchpadReaderOnRawInput(HRAWINPUT hRawInput) {
 
 // A handle can be reused by another device, and a device that goes away takes the
 // fingers on it with it.
-static void TouchpadReaderOnDeviceChange(HANDLE hDevice) {
+static void TouchpadReaderOnDeviceChange(HANDLE hDevice, WPARAM change) {
+    Wh_Log(L"SWS touchpad reader: device change=%u device=%p", (UINT)change, hDevice);
+    // WM_INPUT_DEVICE_CHANGE reports both arrivals and removals. An arrival can
+    // occur just after registration (and, on some drivers, when the first
+    // report is enabled). Treating it as a removal erased the primed touchpad
+    // and published available=0 in the gap before that first report.
+    //
+    // Preserve a primed descriptor on arrival. Parse new devices now so their
+    // first swipe need not supply the report that establishes readiness. Retry
+    // a descriptor which was unavailable before the arrival notification.
+    if (change == GIDC_ARRIVAL) {
+        auto device = g_touchpadDevices.find(hDevice);
+        if (device != g_touchpadDevices.end() && !device->second.valid) {
+            g_touchpadDevices.erase(device);
+        }
+        if (TouchpadDeviceFor(hDevice)) {
+            TouchpadReaderSetAvailable(true);
+        } else {
+            auto failed = g_touchpadDevices.find(hDevice);
+            if (failed != g_touchpadDevices.end() && !failed->second.valid) {
+                g_touchpadDevices.erase(failed);
+            }
+        }
+        return;
+    }
+    if (change != GIDC_REMOVAL) return;
+    auto device = g_touchpadDevices.find(hDevice);
+    if (device == g_touchpadDevices.end()) return;
     s_touchpadReaderStroke = {};
     ClearRawSwipeMarkerPropertyFromReader();
-    g_touchpadDevices.erase(hDevice);
+    g_touchpadDevices.erase(device);
     g_touchpadFrame.clear();
     g_touchpadFrameExpected = 0;
     bool anyValid = std::any_of(g_touchpadDevices.begin(), g_touchpadDevices.end(),
         [](const auto& entry) { return entry.second.valid; });
-    if (!anyValid) TouchpadReaderSetAvailable(false);
+    TouchpadReaderSetAvailable(anyValid);
 }
 
 static std::wstring FormatTouchpadInputDiagnostics() {
@@ -17601,7 +17648,7 @@ static LRESULT CALLBACK TouchpadReaderWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
             TouchpadReaderOnRawInput((HRAWINPUT)lParam);
             break;
         case WM_INPUT_DEVICE_CHANGE:
-            TouchpadReaderOnDeviceChange((HANDLE)lParam);
+            TouchpadReaderOnDeviceChange((HANDLE)lParam, wParam);
             return 0;
     }
     return DefWindowProcW(hWnd, uMsg, wParam, lParam);
