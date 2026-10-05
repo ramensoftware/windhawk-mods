@@ -36,6 +36,9 @@ Dropbox and similar filesystem folders can keep a friendly name even when
 opened through their physical path. The mod also supplies the full path to
 Explorer's editable address for these folders, keeping their existing
 navigation route and sidebar selection.
+In the modern Windows 11 address bar, **Copy address as text** also copies
+the filesystem path. This applies to any filesystem folder with a friendly
+editing name, including folders opened through Home, This PC, or a library.
 
 Virtual locations such as Home, This PC, library roots, searches, and ZIP
 views keep their normal behavior. Filesystem folders reached through a
@@ -51,10 +54,15 @@ by other applications are unaffected.
 Open a new Explorer window, click Downloads in the sidebar, and press Ctrl+L.
 Navigate away and back when testing an already-open window.
 
-The original navigation and sidebar behavior was tested on 64-bit Windows
-11 23H2, build 22631.6199. The Dropbox address-text fallback was added in
-version 0.1.5 and still needs runtime confirmation. Other Windows builds
-and Windows on ARM have not been validated.
+Tested on 64-bit Windows 11 23H2, build 22631.6199: version 0.1.5 shows
+Dropbox's filesystem path with Ctrl+L and Copy address as text, while
+preserving sidebar selection and scrolling. Downloads opened through Home
+was also tested with both actions. The original known-folder navigation and
+sidebar behavior was tested on this build. Other Windows builds and Windows
+on ARM have not been validated.
+The address-text fallback applies to the modern Windows 11 address bar.
+Classic address bars, including those restored by other mods, are not
+covered by this fallback.
 The mod needs ExplorerFrame's navigation and sidebar selection symbols. If
 Windhawk cannot resolve them, the mod refuses to initialize.
 The address-text fallback uses an additional optional Shell symbol. If it is
