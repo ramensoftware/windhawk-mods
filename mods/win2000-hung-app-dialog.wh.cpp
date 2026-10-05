@@ -20,6 +20,12 @@
 Replaces the Windows Error Reporting dialog shown when you try to close a
 program that is not responding. It does not change the Windows shutdown screen.
 
+![Windows 2000 End Program dialog in Russian](https://raw.githubusercontent.com/appEW/windhawk-mods/6beb29187942eb1da43a4350405d2b2d62a79b14/media/win2000-end-program-ru.png)
+
+Example with Russian Windows resources and a classic theme. Frame colours
+follow your current theme. / Пример с русскими ресурсами Windows и классической
+темой. Цвета рамки зависят от текущей темы.
+
 The replacement uses the original `DIALOG #10` and messages from the installed
 `winsrv.dll.mui`, with the Windows 2000 warning overlay on the application's
 icon. The layout, font and wording come from Windows, not a recreated dialog.
@@ -56,8 +62,7 @@ it runs the pre-warm worker in a dedicated Windhawk tool host, not in Explorer,
 WerFault, the hung application or the main Windhawk UI process. The same mod
 handles the dialog in WerFault and hosts pre-warming separately; only this one
 mod needs to be installed. The host is bundled with Windhawk (1.7.3 or later),
-so no extra helper download is needed. Do not also enable the separate
-`wer-service-prewarm` mod: that would run two independent heartbeats.
+so no extra helper download is needed.
 
 The worker reads WerSvc's existing custom start-trigger GUID from SCM and
 writes its ETW event immediately, then once per minute. Disabling the option
@@ -95,8 +100,6 @@ WER использует то же штатное окно. Принятое о�
 выключена. Прогрев выполняется в отдельном tool-host Windhawk, а не в Проводнике,
 WerFault, зависшем приложении или основном процессе интерфейса Windhawk.
 Устанавливается только один мод; EXE-хост уже входит в Windhawk 1.7.3 или новее.
-Не включайте одновременно отдельный `wer-service-prewarm`, иначе будет два
-независимых прогрева.
 
 Мод читает существующий GUID триггера WerSvc из SCM и посылает ETW-событие сразу,
 затем раз в минуту. Отключение опции останавливает поток и только собственный
@@ -112,16 +115,6 @@ tool-host. Тип запуска службы, политики, системн�
 При позднем внедрении возможно краткое появление современного окна.
 Дополнительные файлы или загрузки для мода не нужны.
 
-## Changes in 1.6.0 / Изменения 1.6.0
-
-- One install combines WER replacement and optional dedicated-host pre-warming;
-  Explorer is no longer targeted. / Замена и необязательный прогрев объединены
-  в одном моде; внедрение в Проводник больше не требуется.
-- Fixed replacement reuse after Cancel and timeout of an acknowledged Wait.
-  / Исправлены повторное появление после «Отмена» и таймаут принятого ожидания.
-- Fixed broker shutdown during rapid reloads and unnecessary warm-host reload
-  on language changes. / Исправлены остановка broker при быстрых перезагрузках
-  и ненужный перезапуск хоста прогрева при смене языка.
 */
 // ==/WindhawkModReadme==
 
@@ -1517,11 +1510,8 @@ static void UninitializeWerDialog() {
 }
 
 namespace PrewarmTool {
-enum class Role { None, WerDialog, Launcher, Host };
-Role role = Role::None;
 HANDLE stopEvent = nullptr;
 HANDLE worker = nullptr;
-HANDLE instanceMutex = nullptr;
 REGHANDLE provider = 0;
 
 // Some bundled MinGW headers omit these service-trigger layouts.
@@ -1619,100 +1609,6 @@ void Cleanup() {
         CloseHandle(stopEvent);
         stopEvent = nullptr;
     }
-    if (instanceMutex) {
-        ReleaseMutex(instanceMutex);
-        CloseHandle(instanceMutex);
-        instanceMutex = nullptr;
-    }
-}
-
-Role IdentifyWindhawkRole() {
-    wchar_t path[32768]{};
-    const DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
-    if (!length || length >= ARRAYSIZE(path)) return Role::None;
-    const wchar_t* name = wcsrchr(path, L'\\');
-    name = name ? name + 1 : path;
-    const bool isApp = _wcsicmp(name, L"windhawk.exe") == 0;
-    const bool isNativeHost = _wcsicmp(name, L"windhawk-mod.exe") == 0;
-    if (!isApp && !isNativeHost) return Role::None;
-
-    DWORD session = 0;
-    if (!ProcessIdToSessionId(GetCurrentProcessId(), &session) || !session)
-        return Role::None;
-    int argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    if (!argv) return Role::None;
-    bool excluded = false;
-    bool hasToolId = false;
-    for (int i = 1; i < argc; ++i) {
-        if (wcscmp(argv[i], L"-service") == 0 ||
-            wcscmp(argv[i], L"-service-start") == 0 ||
-            wcscmp(argv[i], L"-service-stop") == 0) {
-            excluded = true;
-        }
-        if (wcscmp(argv[i], L"-tool-mod") == 0 ||
-            wcscmp(argv[i], L"-windhawk-tool-mod") == 0) {
-            if (i + 1 >= argc || wcscmp(argv[i + 1], WH_MOD_ID) != 0) {
-                excluded = true;
-                break;
-            }
-            hasToolId = true;
-            ++i;
-        }
-    }
-    LocalFree(argv);
-    if (excluded) return Role::None;
-    if (hasToolId) return Role::Host;
-    return isApp ? Role::Launcher : Role::None;
-}
-
-// Called only after exact executable/session/command-line validation. Never
-// terminate WerFault, Explorer, the ordinary Windhawk UI or a foreign host.
-void EndOwnHost(UINT code) {
-    Cleanup();
-    if (role == Role::Host) ExitProcess(code);
-}
-
-void WINAPI EntryPointHook() {
-    // The legacy 1.7.3 launcher (also supported by 2.0) keeps only our worker.
-    if (role == Role::Host) ExitThread(0);
-}
-
-void LaunchHost() {
-    if (role != Role::Launcher || !Wh_GetIntSetting(L"keepWerSvcRunning"))
-        return;
-    wchar_t path[32768]{};
-    const DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
-    if (!length || length >= ARRAYSIZE(path)) return;
-    std::wstring command = L"\"";
-    command += path;
-    command += L"\" -tool-mod \"" WH_MOD_ID L"\"";
-    HMODULE kernel = GetModuleHandleW(L"kernelbase.dll");
-    if (!kernel) kernel = GetModuleHandleW(L"kernel32.dll");
-    if (!kernel) return;
-    // Standard Windhawk 1.7.3 tool launcher; no external helper executable.
-    using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES,
-        BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION,
-        PHANDLE);
-    const auto spawn = reinterpret_cast<CreateProcessInternalW_t>(
-        GetProcAddress(kernel, "CreateProcessInternalW"));
-    if (!spawn) {
-        Wh_Log(L"No CreateProcessInternalW; pre-warming not started");
-        return;
-    }
-    STARTUPINFOW startup{};
-    startup.cb = sizeof(startup);
-    startup.dwFlags = STARTF_FORCEOFFFEEDBACK;
-    PROCESS_INFORMATION process{};
-    if (!spawn(nullptr, path, command.data(), nullptr, nullptr, FALSE,
-               NORMAL_PRIORITY_CLASS, nullptr, nullptr, &startup, &process,
-               nullptr)) {
-        Wh_Log(L"Tool host launch failed: %u", GetLastError());
-        return;
-    }
-    CloseHandle(process.hProcess);
-    CloseHandle(process.hThread);
 }
 } // namespace PrewarmTool
 
@@ -1720,15 +1616,8 @@ void LaunchHost() {
 // engine hosts this role itself but still injects the ordinary role in WerFault.
 BOOL WhTool_ModInit() {
     using namespace PrewarmTool;
-    if (role != Role::Host || !Wh_GetIntSetting(L"keepWerSvcRunning"))
+    if (!Wh_GetIntSetting(L"keepWerSvcRunning"))
         return FALSE;
-    instanceMutex = CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-    if (!instanceMutex) return FALSE;
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        CloseHandle(instanceMutex);
-        instanceMutex = nullptr;
-        return FALSE;
-    }
     GUID providerId{};
     if (!QueryServiceTrigger(&providerId)) {
         Wh_Log(L"WerSvc has no supported start trigger");
@@ -1762,74 +1651,223 @@ void WhTool_ModSettingsChanged() {
     // The lifecycle dispatcher below handles our opt-in setting.
 }
 
-BOOL Wh_ModInit() {
-    using namespace PrewarmTool;
-    // Check the ordinary WER role first: even an unexpected tool flag cannot
-    // make a real system WerFault execute the host's entry-point/exit path.
-    if (IsSystemWerProcess(GetCurrentProcessId())) {
-        role = Role::WerDialog;
-        const BOOL result = InitializeWerDialog();
-        if (!result) role = Role::None;
-        return result;
-    }
-    role = IdentifyWindhawkRole();
-    if (role == Role::Launcher) {
-        if (!Wh_GetIntSetting(L"keepWerSvcRunning")) {
-            role = Role::None;
-            return FALSE;
-        }
-        return TRUE;
-    }
-    if (role != Role::Host) return FALSE;
-    if (!Wh_GetIntSetting(L"keepWerSvcRunning")) {
-        EndOwnHost(0);
-        return FALSE;
-    }
-    if (!WhTool_ModInit()) {
-        EndOwnHost(1);
-        return FALSE;
-    }
-    auto* image = reinterpret_cast<BYTE*>(GetModuleHandleW(nullptr));
-    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(image);
-    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(image + dos->e_lfanew);
-    void* entry = image + nt->OptionalHeader.AddressOfEntryPoint;
-    if (!Wh_SetFunctionHook(entry, reinterpret_cast<void*>(EntryPointHook), nullptr)) {
-        Wh_Log(L"Tool entry-point hook failed");
-        EndOwnHost(1);
-        return FALSE;
-    }
-    return TRUE;
-}
-
-void Wh_ModAfterInit() {
-    PrewarmTool::LaunchHost();
-}
+// Separate from the standard tool snippet: the WER role must never enter its
+// process-exit or entry-point-hook paths, including failed initialization.
+bool g_isWerDialogProcess;
 
 void Wh_ModBeforeUninit() {
-    if (PrewarmTool::role == PrewarmTool::Role::WerDialog) {
+    if (g_isWerDialogProcess) {
         PrepareWerDialogForUninit();
-    } else if (PrewarmTool::role == PrewarmTool::Role::Host &&
-               PrewarmTool::stopEvent) {
+        return;
+    }
+    if (PrewarmTool::stopEvent) {
         SetEvent(PrewarmTool::stopEvent);
     }
 }
 
-void Wh_ModUninit() {
-    using namespace PrewarmTool;
-    if (role == Role::WerDialog) {
-        UninitializeWerDialog();
-    } else if (role == Role::Host) {
-        EndOwnHost(0);
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    if (IsSystemWerProcess(GetCurrentProcessId())) {
+        g_isWerDialogProcess = true;
+        return InitializeWerDialog();
     }
-    role = Role::None;
+
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    if (!Wh_GetIntSetting(L"keepWerSvcRunning")) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (g_isWerDialogProcess) {
+        return;
+    }
+
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* reload) {
-    // Language changes need only the WER role to reload. Restarting both the
-    // launcher and host while pre-warming stays enabled races the instance
-    // mutex: a new host could exit before the old one releases it.
-    using namespace PrewarmTool;
-    *reload = (role != Role::Launcher && role != Role::Host) ||
-              !Wh_GetIntSetting(L"keepWerSvcRunning");
+    if (g_isWerDialogProcess) {
+        *reload = TRUE;
+        return TRUE;
+    }
+
+    // Preserve an enabled host on language changes to avoid a mutex reload
+    // race. Opt-out still reloads/unloads both the launcher and its own host.
+    *reload = !Wh_GetIntSetting(L"keepWerSvcRunning");
+
+    if (g_isToolModProcessLauncher) {
+        return TRUE;
+    }
+
+    WhTool_ModSettingsChanged();
     return TRUE;
+}
+
+void Wh_ModUninit() {
+    if (g_isWerDialogProcess) {
+        UninitializeWerDialog();
+        return;
+    }
+
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
