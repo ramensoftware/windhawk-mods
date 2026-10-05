@@ -723,6 +723,7 @@ static const ULONGLONG kLaunchAnchorMs = 15000;
 // every line report the helper's own line number.
 //
 // The format strings are wide, so %s takes a wchar_t* and %S a narrow (ASCII) one.
+//
 // "Skipped" logging that includes the window class, so it is obvious which rule
 // rejected which class.
 //
@@ -3393,6 +3394,10 @@ BOOL WINAPI HookedShowWindowAsync(HWND hwnd, int nCmdShow) {
         DiagSkip("ShowWindowAsync", hwnd, reason);
         return pOrigShowWindowAsync(hwnd, nCmdShow);
     }
+
+    // Same maximized pass-through as ShowWindow/SetWindowPlacement: on the real-window path
+    // the style added below would have to be removed again from an already visible window.
+    if (!p.splash && nCmdShow == SW_SHOWMAXIMIZED) return pOrigShowWindowAsync(hwnd, nCmdShow);
 
     // ShowWindowAsync exists so that the caller does not wait for the window's thread:
     // apps call it from a worker thread precisely because the UI thread is blocked, often
