@@ -2,13 +2,20 @@
 // @id              win10-taskbar-context-menu-fix-24h2
 // @name            Windows 10 Taskbar Context Menu Fix for Win11 24H2+
 // @description     Fixes context menu on Windows 10 taskbar running on Windows 11 24H2, 25H2 and later
-// @version         1.7.0
+// @version         1.3
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @architecture    x86-64
 // @include         explorer.exe
 // @compilerOptions -lcomctl32 -ldwmapi
 // ==/WindhawkMod==
+// ==WindhawkModReadme==
+/*
+The taskbar context menu (when clicking on the taskbar empty area) does not appear when
+running the Windows 10 taskbar ob Windows 11 24H2 or Windows 11 25H2.
+This mod restores the menu.
+*/
+// ==/WindhawkModReadme==
 
 #include <windhawk_utils.h>
 #include <windows.h>
