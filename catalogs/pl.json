@@ -3140,13 +3140,13 @@
         "ratingUsers": 5,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791043218000,
+        "updated": 1791205223000,
         "users": 45
       },
       "metadata": {
         "author": "Basti",
         "compilerOptions": "-lgdi32",
-        "description": "Recognizes Mozilla, Chromium and RichEdit cursors and loads replacements on demand",
+        "description": "Recognizes supported cursors by image and hotspot and loads replacements on demand",
         "exclude": [
           "dwm.exe",
           "LogonUI.exe",
@@ -3167,7 +3167,7 @@
         ],
         "license": "MIT",
         "name": "Cursor Override",
-        "version": "1.0.1"
+        "version": "1.1.1"
       }
     },
     "custom-cmd-startup-text": {
