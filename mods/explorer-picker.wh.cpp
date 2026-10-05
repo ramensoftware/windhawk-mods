@@ -4,13 +4,13 @@
 // @description     Replaces the Open, Save As and folder picker dialogs of every program with a real Explorer window that has a File name / Files of type bar at the bottom
 // @name:ru         Проводник вместо окон выбора файла
 // @description:ru  Заменяет окна «Открыть», «Сохранить как» и выбора папки во всех программах настоящим окном Проводника с полями «Имя файла» и «Тип файлов» внизу
-// @version         1.5.2
+// @version         1.5.3
 // @author          appEW
 // @github          https://github.com/appEW
 // @include         *
 // @architecture    x86
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -ladvapi32 -lgdi32
+// @compilerOptions -lcomctl32 -lole32 -lshell32 -lshlwapi -luuid -ladvapi32 -lgdi32
 // ==/WindhawkMod==
 
 // clang-format off
@@ -92,23 +92,6 @@ By default, services, system accounts, critical processes, AppContainer
 processes, Chromium worker processes and Windhawk itself are skipped. Single
 programs can be excluded on the *Advanced* tab.
 
-## Experimental: all processes
-
-The **All processes, including system processes (experimental)** setting is
-**disabled by default**. Enabling it removes the mod's own process filters,
-including the exclusions above. **Use at your own risk:** loading the mod into
-services or critical system processes can cause hangs, crashes, data loss or
-system instability. Processes without access to an interactive Explorer may
-still use native dialogs. Administrator dialogs remain controlled separately
-by **Programs running as administrator**.
-
-Windhawk's own injection rules and Windows process protection still apply.
-For system processes, also allow inclusion-list patterns for critical system
-processes on the mod's *Advanced* tab and permit the relevant processes in
-Windhawk's global advanced settings. Existing process exclusions must be
-removed manually if those processes are intended targets. The mod does not
-change these global settings. See [Windhawk's injection documentation](https://github.com/ramensoftware/windhawk/wiki/Injection-targets-and-critical-system-processes).
-
 The picker is an ordinary Explorer window: its size, navigation history and
 recent locations are handled by Explorer, just like those of other folder windows.
 Disabling the mod cancels active pickers and releases its windows and threads.
@@ -177,24 +160,6 @@ native-панели и предпросмотр, не вызываются об�
 процессы, AppContainer, дочерние процессы Chromium и сам Windhawk.
 Отдельные программы можно исключить на вкладке «Дополнительно».
 
-### Экспериментально: все процессы
-
-Настройка **«Все процессы, включая системные (экспериментально)»**
-**по умолчанию выключена**. При включении снимаются собственные фильтры мода,
-включая перечисленные выше исключения. **Используйте на свой страх и риск:**
-подключение к службам и критическим системным процессам может вызвать
-зависания, аварийное завершение, потерю данных или нестабильность системы.
-Если процесс не имеет доступа к интерактивному Проводнику, могут сохраниться
-штатные диалоги. Замена диалогов с правами администратора включается отдельно
-настройкой **«Программы с правами администратора»**.
-
-Правила внедрения самого Windhawk и защита процессов Windows продолжают
-действовать. Для системных процессов дополнительно разрешите применение
-шаблонов списка включения к критическим системным процессам на вкладке
-«Дополнительно» мода и разрешите нужные процессы в общих расширенных настройках
-Windhawk. Если нужные процессы есть в списках исключений, удалите их вручную.
-Мод не меняет эти общие настройки. Подробнее: [документация Windhawk о внедрении](https://github.com/ramensoftware/windhawk/wiki/Injection-targets-and-critical-system-processes).
-
 Окно выбора является обычным окном Проводника: размер, история переходов
 и недавние папки обрабатываются Проводником как в других окнах папок.
 Отключение мода отменяет открытые окна выбора и освобождает его окна и потоки.
@@ -223,11 +188,6 @@ Windows об изменении настроек стандартные подп
   $name:ru: Программы с правами администратора
   $description: Disabled by default. When enabled, programs running without administrator rights can influence which files an administrator program opens or saves through Explorer.
   $description:ru: По умолчанию отключено. При включении программы без прав администратора могут влиять на выбор файлов для открытия или сохранения программой с правами администратора через Проводник.
-- allProcesses: false
-  $name: All processes, including system processes (experimental)
-  $name:ru: Все процессы, включая системные (экспериментально)
-  $description: Disabled by default. Removes the mod's own process filters, including services, system accounts, critical processes, AppContainer, Chromium workers and Windhawk. Use at your own risk; hangs, crashes, data loss or system instability are possible. Windhawk's injection rules and Windows process protection still apply; see the mod description for the additional Windhawk settings. Administrator dialogs are controlled separately.
-  $description:ru: По умолчанию выключено. Снимает собственные фильтры мода, включая службы, системные учётные записи, критические процессы, AppContainer, дочерние процессы Chromium и Windhawk. Используйте на свой страх и риск; возможны зависания, аварийное завершение, потеря данных или нестабильность системы. Правила внедрения Windhawk и защита процессов Windows сохраняются; дополнительные настройки Windhawk указаны в описании мода. Диалоги с правами администратора включаются отдельно.
 - ignoreAppDialogFeatures: false
   $name: Ignore additional dialog features (risky)
   $name:ru: Игнорировать дополнительные функции диалогов (рискованно)
@@ -269,6 +229,7 @@ Windows об изменении настроек стандартные подп
 #include <memory>
 #include <mutex>
 #include <new>
+#include <optional>
 #include <set>
 #include <string>
 #include <type_traits>
@@ -891,8 +852,9 @@ void TypeChanged(State* s) {
     return;
   DWORD previous = s->request.index;
   s->request.index = static_cast<DWORD>(selected + 1);
-  if (s->request.mode == Picker::Save && previous >= 1 &&
-      previous <= s->request.filters.size() && previous != s->request.index) {
+  if (s->request.mode == Picker::Save && !s->request.extension.empty() &&
+      previous >= 1 && previous <= s->request.filters.size() &&
+      previous != s->request.index) {
     auto before = PreferredExtension(s->request.filters[previous - 1]);
     auto after = PreferredExtension(s->request.filters[s->request.index - 1]);
     std::wstring text = WindowText(s->name);
@@ -2189,7 +2151,8 @@ FrameProc(HWND h, UINT m, WPARAM w, LPARAM l, UINT_PTR, DWORD_PTR data) {
       (w == 0 || reinterpret_cast<HWND>(w) == s->footer)) {
     bool close = l != 0;
     SendCancel(s);
-    Detach(s, false);
+    if (GetState(h) == s)
+      Detach(s, false);
     // The window was opened for this picker only.
     if (close)
       PostMessageW(h, WM_CLOSE, 0, 0);
@@ -2197,7 +2160,10 @@ FrameProc(HWND h, UINT m, WPARAM w, LPARAM l, UINT_PTR, DWORD_PTR data) {
   }
   if (m == WM_NCDESTROY) {
     SendCancel(s);
-    Detach(s, true);
+    // SendCancel pumps incoming sent messages. A nested detach may have
+    // already deleted the state while waiting for the controller.
+    if (GetState(h) == s)
+      Detach(s, true);
     return DefSubclassProc(h, m, w, l);
   }
   if (m == WM_GETMINMAXINFO) {
@@ -2332,15 +2298,9 @@ bool Attach(HWND frame, const Pending& p) {
 bool Matches(const Pending& p, HWND frame, const std::wstring& folder) {
   if (p.taken || !p.launched || p.assigned || p.baseline.count(frame))
     return false;
-  if (Picker::SamePath(folder, p.request.folder))
-    return true;
-  // A junction or a redirected known folder may open under another name;
-  // after a grace period the only new window is accepted.
-  size_t own = 0;
-  for (auto& q : pending)
-    if (!q.assigned && !q.taken)
-      ++own;
-  return own == 1 && GetTickCount64() - p.since > 2500;
+  // A delayed unrelated window is still the user's window. If Explorer
+  // resolves the requested path to another location, retain native fallback.
+  return Picker::SamePath(folder, p.request.folder);
 }
 void Bind(HWND frame, const Pending& chosen, const std::wstring& folder) {
   Wh_Log(L"Host: window %p bound to request %lu (%ls)", frame, chosen.id,
@@ -2350,7 +2310,8 @@ void Bind(HWND frame, const Pending& chosen, const std::wstring& folder) {
     Picker::Writer w;
     w.number(chosen.id);
     Picker::Post(chosen.controller, service, Picker::Failed, w, 1000);
-    PostMessageW(frame, WM_CLOSE, 0, 0);
+    // Matching a folder doesn't prove ownership; don't close a window whose
+    // footer could not be attached.
   }
 }
 void Probe(HWND frame, HWND origin, DWORD id) {
@@ -2418,11 +2379,8 @@ LRESULT WINAPI DispatchHook(const MSG* msg) {
       if (items && msg->message == WM_LBUTTONDOWN &&
           s->request.mode != Picker::Save)
         s->edited = false;
-      if (msg->message == WM_KEYDOWN && msg->wParam == VK_ESCAPE &&
-          !IsChild(s->footer, msg->hwnd)) {
-        SendCancel(s);
-        return 0;
-      }
+      // Outside the footer, Explorer owns Escape (rename/search/address-bar
+      // editing). Footer Escape and the Cancel button cancel the picker.
       if (items &&
           ((msg->message == WM_KEYDOWN && msg->wParam == VK_RETURN) ||
            msg->message == WM_LBUTTONDBLCLK) &&
@@ -2991,7 +2949,10 @@ struct Controller {
     Finish(0);
   }
   std::wstring Extension() const {
-    if (!request.filters.empty() && request.index <= request.filters.size()) {
+    if (request.extension.empty())
+      return {};
+    if (!request.filters.empty() && request.index >= 1 &&
+        request.index <= request.filters.size()) {
       auto pattern = request.filters[request.index - 1].pattern;
       auto semi = pattern.find(L';');
       pattern.resize(semi == std::wstring::npos ? pattern.size() : semi);
@@ -3700,6 +3661,8 @@ int Run(HWND owner,
 }  // namespace Ctl
 
 namespace Bridge {
+// Decision helpers return this only after releasing their sessions/guards.
+constexpr BOOL NativeLegacyDialog = 2;
 std::wstring lastOpenKey, lastSaveKey;
 
 std::wstring Remembered(bool save) {
@@ -3713,7 +3676,7 @@ std::wstring Remembered(bool save) {
              : L"";
 }
 void Remember(bool save, const std::wstring& folder) {
-  if (!g_unloading && !folder.empty())
+  if (!g_unloading && Wh_GetIntSetting(L"rememberFolders") && !folder.empty())
     Wh_SetStringValue((save ? lastSaveKey : lastOpenKey).c_str(),
                       folder.c_str());
 }
@@ -4629,14 +4592,14 @@ class Session final : public Ctl::Target {
       return FALSE;
     startMessage = RegisterWindowMessageW(L"ExplorerPicker.Legacy.Start.V6");
     if (!startMessage)
-      return original(ofn);
+      return Bridge::NativeLegacyDialog;
     Session* previous = pending;
     pending = this;
     activationHook =
         SetWindowsHookExW(WH_CBT, Activation, nullptr, GetCurrentThreadId());
     if (!activationHook) {
       pending = previous;
-      return original(ofn);
+      return Bridge::NativeLegacyDialog;
     }
     auto oldHook = ofn->lpfnHook;
     ofn->lpfnHook = Hook;
@@ -4766,7 +4729,6 @@ thread_local bool overrideError = false;
 thread_local DWORD pickerError = 0;
 // Decision helpers finish their cleanup before a hook enters a native modal
 // dialog. That dialog must return straight to the application after unload.
-constexpr BOOL NativeLegacyDialog = 2;
 DWORD WINAPI ErrorHook() {
   return overrideError ? pickerError : originalError();
 }
@@ -4787,6 +4749,8 @@ BOOL Wide(LPOPENFILENAMEW ofn, bool save) {
       overrideError = true;
       pickerError = session.Error();
     }
+    if (result == NativeLegacyDialog)
+      return result;
     return result != FALSE;
   }
   if (!PickerLegacy::Plain(ofn, save, ignoreFeatures)) {
@@ -6410,24 +6374,34 @@ struct DialogRecord {
   }
 };
 std::mutex dialogLock;
-std::map<void*, std::shared_ptr<DialogRecord>> dialogs;
+// Records own application COM references. Never release them from the
+// exit-time destructor under the loader lock; UninitDialogs releases them on
+// a controlled unload and destroys the complete container.
+[[clang::no_destroy]]
+std::optional<std::map<void*, std::shared_ptr<DialogRecord>>> dialogs{
+    std::in_place};
 std::shared_ptr<DialogRecord> FindDialog(void* object) {
   std::lock_guard lock(dialogLock);
-  auto found = dialogs.find(object);
-  return found == dialogs.end() ? nullptr : found->second;
+  if (!dialogs)
+    return nullptr;
+  auto found = dialogs->find(object);
+  return found == dialogs->end() ? nullptr : found->second;
 }
 void ForgetDialog(const std::shared_ptr<DialogRecord>& record) {
   std::lock_guard lock(dialogLock);
-  for (auto i = dialogs.begin(); i != dialogs.end();) {
+  if (!dialogs)
+    return;
+  for (auto i = dialogs->begin(); i != dialogs->end();) {
     if (i->second == record)
-      i = dialogs.erase(i);
+      i = dialogs->erase(i);
     else
       ++i;
   }
 }
 void AddAlias(void* object, const std::shared_ptr<DialogRecord>& record) {
   std::lock_guard lock(dialogLock);
-  dialogs[object] = record;
+  if (dialogs)
+    (*dialogs)[object] = record;
 }
 bool nativeHooksChanged = false;
 std::map<void*, const void*> nativeHookTargets;
@@ -6927,7 +6901,10 @@ void UninitDialogs() {
   std::map<void*, std::shared_ptr<DialogRecord>> old;
   {
     std::lock_guard lock(dialogLock);
-    old.swap(dialogs);
+    if (dialogs) {
+      old.swap(*dialogs);
+      dialogs.reset();
+    }
   }
   old.clear();
 }
@@ -6937,6 +6914,7 @@ void UninitDialogs() {
 // initialization
 namespace {
 bool g_host = false;
+bool g_explorer = false, g_explorerDialogs = true;
 
 struct TokenHandle {
   HANDLE h = nullptr;
@@ -6978,10 +6956,6 @@ bool InteractiveProcess() {
          !IsWellKnownSid(user->User.Sid, WinNetworkServiceSid);
 }
 bool ShouldInitializeProcess(const wchar_t* name, const wchar_t* command) {
-  // Windhawk's engine must already permit injection. This opt-in only bypasses
-  // this mod's filters; it never modifies engine settings or process tokens.
-  if (Wh_GetIntSetting(L"allProcesses"))
-    return true;
   if (!_wcsicmp(name, L"windhawk.exe") || !InteractiveProcess())
     return false;
   return !command || !wcsstr(command, L" --type=") ||
@@ -7085,14 +7059,15 @@ BOOL Wh_ModInit() {
   const wchar_t* name = PathFindFileNameW(exe);
   if (!ShouldInitializeProcess(name, GetCommandLineW()))
     return FALSE;
+  g_explorer = !_wcsicmp(name, L"explorer.exe");
+  g_explorerDialogs = Wh_GetIntSetting(L"explorerDialogs") != 0;
   if (!Ctl::Init())
     return FALSE;
-  bool explorer = !_wcsicmp(name, L"explorer.exe");
-  if (explorer) {
+  if (g_explorer) {
     g_host = Host::Init();
     if (!g_host)
       Wh_Log(L"Explorer host could not start");
-    if (!Wh_GetIntSetting(L"explorerDialogs")) {
+    if (!g_explorerDialogs) {
       if (!g_host)
         Ctl::Uninit();
       return g_host;
@@ -7104,7 +7079,7 @@ BOOL Wh_ModInit() {
     return g_host;
   }
   Wh_Log(L"Explorer Picker " WH_MOD_VERSION L" %ls %ls",
-         explorer ? L"host+bridge" : L"bridge",
+         g_explorer ? L"host+bridge" : L"bridge",
          sizeof(void*) == 8 ? L"x64" : L"x86");
   return TRUE;
 }
@@ -7128,6 +7103,7 @@ void Wh_ModUninit() {
   g_hookModules.clear();
 }
 BOOL Wh_ModSettingsChanged(BOOL* reload) {
-  *reload = TRUE;
+  *reload = g_explorer &&
+            (Wh_GetIntSetting(L"explorerDialogs") != 0) != g_explorerDialogs;
   return TRUE;
 }
