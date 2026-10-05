@@ -4,7 +4,7 @@
 // @description     Replaces the Open, Save As and folder picker dialogs of every program with a real Explorer window that has a File name / Files of type bar at the bottom
 // @name:ru         Проводник вместо окон выбора файла
 // @description:ru  Заменяет окна «Открыть», «Сохранить как» и выбора папки во всех программах настоящим окном Проводника с полями «Имя файла» и «Тип файлов» внизу
-// @version         1.5.3
+// @version         1.5.4
 // @author          appEW
 // @github          https://github.com/appEW
 // @include         *
@@ -605,6 +605,25 @@ inline bool SamePath(const std::wstring& a, const std::wstring& b) {
     return s;
   };
   return !_wcsicmp(trim(a).c_str(), trim(b).c_str());
+}
+// Resolve once in the calling application, before another process or thread
+// interprets its relative directory. Explorer reports the long absolute path.
+inline std::wstring CanonicalFolder(const std::wstring& path) {
+  if (path.empty())
+    return {};
+  std::wstring full(32768, L'\0');
+  DWORD n = GetFullPathNameW(path.c_str(), static_cast<DWORD>(full.size()),
+                             full.data(), nullptr);
+  if (!n || n >= full.size())
+    return path;
+  full.resize(n);
+  std::wstring longPath(32768, L'\0');
+  n = GetLongPathNameW(full.c_str(), longPath.data(),
+                       static_cast<DWORD>(longPath.size()));
+  if (!n || n >= longPath.size())
+    return full;
+  longPath.resize(n);
+  return longPath;
 }
 // Send a tagged WM_COPYDATA. Pairing by HWND routes replies; it does not
 // authenticate the sender. Elevated replacement therefore requires opt-in.
@@ -3590,6 +3609,7 @@ int Run(HWND owner,
   if (!controller)
     return 2;
   controller->request = request;
+  controller->request.folder = Picker::CanonicalFolder(request.folder);
   controller->receiver = receiver.window;
   controller->allowElevated = Wh_GetIntSetting(L"elevatedApps") != 0;
   HANDLE thread =
@@ -4604,7 +4624,7 @@ class Session final : public Ctl::Target {
     auto oldHook = ofn->lpfnHook;
     ofn->lpfnHook = Hook;
     ofn->Flags |= OFN_ENABLEHOOK;
-    BOOL result = original(ofn);
+    BOOL result = original(ofn) != FALSE;
     // The native wrapper writes its cached filter index on exit. Our visible
     // picker owns that selection; restore the values approved by the hook.
     if (result && approved) {
