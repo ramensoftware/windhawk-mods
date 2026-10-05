@@ -4591,16 +4591,17 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
         rv = CoCreateInstance(sws_CLSID_InputSwitchControl, NULL, CLSCTX_INPROC_SERVER, sws_IID_InputSwitchControl, (void**)&(_this->pInputSwitchControl));
         if (!rv)
         {
-            rv = _this->pInputSwitchControl->lpVtbl->Init(_this->pInputSwitchControl, 100);
+            rv = sws_error_Report(_this->pInputSwitchControl->lpVtbl->Init(_this->pInputSwitchControl, 100));
         }
         if (!rv)
         {
             _this->InputSwitchCallback.lpVtbl = (sws_IInputSwitchCallbackVtbl*)&_sws_WindowSwitcher_InputSwitchCallbackVtbl;
-            rv = _this->pInputSwitchControl->lpVtbl->SetCallback(_this->pInputSwitchControl, &(_this->InputSwitchCallback));
+            rv = sws_error_Report(_this->pInputSwitchControl->lpVtbl->SetCallback(_this->pInputSwitchControl, &(_this->InputSwitchCallback)));
         }
         if (rv)
         {
             // Make missing InputSwitch.dll not a critical error
+            // Because renaming InputSwitch.dll for getting the old language bar in the UAC secure desktop is a quite well-known trick
             rv = 0;
         }
     }
