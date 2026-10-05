@@ -5,14 +5,15 @@
 // @version         1.0
 // @author          HaVeN80
 // @github          https://github.com/haven80
-// @include         explorer.exe
+// @include         windhawk.exe
 // @compilerOptions -lole32 -lshell32 -lshlwapi -luuid -ladvapi32 -lwindowscodecs
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Steam Games in Explorer
-![Steam Game Exploer overview](https://i.imgur.com/xz3s5xn.png)
+
+![Screenshot](https://i.imgur.com/xz3s5xn.png)
 
 Adds your installed **Steam** games to the File Explorer navigation pane, with
 launch, install folder, save and screenshot folders, playtime and automatic
@@ -23,6 +24,20 @@ collections.
 
 Choose between one entry per platform or a single **Games** entry with a
 subfolder per platform.
+
+## ⚠️ Turn on the "Comments" column
+Playtime, last played date, size on disk and pending updates are shown in the
+**Comments** column, which File Explorer hides by default. To see them:
+
+1. Open the **Steam** folder in the navigation pane and switch to
+   **View → Details**.
+2. Right-click any column header (e.g. "Name") and tick **Comments**.
+   If it's not in the list, click **More...**, find **Comments** and tick it.
+
+File Explorer remembers the choice for that folder (repeat it in the ★
+collection folders if they don't pick it up). Without this column the
+mod still works, but you'll only see the information in the tooltip when
+hovering a game.
 
 ## Experimental launchers
 Epic Games, GOG and Xbox / PC Game Pass support is built on the files those
@@ -49,7 +64,8 @@ Inside each platform folder, each one can be turned on or off:
 last played date are only available for Steam).
 
 ## Columns (Details view)
-* **Comments**: playtime, last played, size on disk, pending updates.
+* **Comments** (must be enabled, see above): playtime, last played, size on
+  disk, pending updates.
 * **Date modified** = last played, **Date created** = install date.
 
 ## Not installed games (optional)
@@ -76,9 +92,11 @@ English, Italian, Spanish, French, German, Portuguese, Polish and Russian.
 Other languages use English.
 
 ## How it works
-The mod creates a real folder (by default `%LOCALAPPDATA%\GamesExplorer`)
-with the shortcuts and a hidden `.dati` folder, then pins it to the
-navigation pane. When the mod is disabled or removed, the navigation entries
+The mod runs in its own Windhawk process (it doesn't inject into Explorer).
+It creates a real folder with the shortcuts and a hidden `.dati` folder, then
+pins it to the navigation pane. By default the folder is in the mod's own
+Windhawk storage (one subfolder per Windows user), so Windhawk deletes it when
+the mod is removed; you can choose another location in the settings. When the mod is disabled or removed, the navigation entries
 and menu entries are removed. With "Delete the shortcut folder when the mod is
 disabled or removed" (on by default) the folder is deleted too, together with
 the `desktop.ini` files written in game folders; everything is rebuilt when the
@@ -144,7 +162,7 @@ Explorer once.
   $description: Removes the shortcuts, covers and data created by the mod, and the desktop.ini files written in game folders. Everything is rebuilt when the mod is enabled again.
 - folderPath: ""
   $name: Shortcut folder
-  $description: Leave empty to use %LOCALAPPDATA%\GamesExplorer
+  $description: Leave empty to use the mod's Windhawk storage folder (recommended). If you choose a folder, it is used as is.
 - excludedAppIds: "228980"
   $name: Steam AppIDs to exclude
   $description: Comma separated. 228980 = Steamworks Common Redistributables
@@ -193,7 +211,6 @@ const wchar_t kNameSpaceKey[] =
     L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Desktop\\NameSpace\\";
 const wchar_t kHideIconsKey[] =
     L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\HideDesktopIcons\\NewStartPanel";
-const wchar_t kMutexName[] = L"Local\\Windhawk_SteamGamesExplorer_Owner";
 
 // Registry keys and files of older versions, removed on start.
 const wchar_t* const kLegacyKeys[] = {
@@ -206,6 +223,8 @@ const wchar_t* const kLegacyKeys[] = {
 };
 const char kMarkerV1[] = "[WindhawkSteamGames]";
 const wchar_t kLegacyFolder[] = L"%LOCALAPPDATA%\\SteamGamesExplorer";
+// Default folder of pre-release 3.x builds (before the mod storage folder).
+const wchar_t kLegacyFolder3[] = L"%LOCALAPPDATA%\\GamesExplorer";
 
 const wchar_t kDataFolder[] = L".dati";
 const wchar_t kSmartPrefix[] = L"\x2605 ";  // "★ "
@@ -377,9 +396,7 @@ Settings g_settings;
 SRWLOCK g_settingsLock = SRWLOCK_INIT;
 HANDLE g_stopEvent = nullptr;
 HANDLE g_resyncEvent = nullptr;
-HANDLE g_mutex = nullptr;
 HANDLE g_thread = nullptr;
-bool g_isOwner = false;
 
 // ============================================================ utilities
 
@@ -677,11 +694,19 @@ Settings GetSettings() {
     return s;
 }
 
+// The mod's Windhawk storage folder (deleted by Windhawk when the mod is
+// removed), with a subfolder per Windows user; or the folder from the settings.
+// Empty if neither is available: callers must then do nothing.
 std::wstring RootFolder(const Settings& s) {
-    std::wstring p = s.folderPath.empty()
-                         ? std::wstring(L"%LOCALAPPDATA%\\GamesExplorer")
-                         : s.folderPath;
-    return NormalizePath(ExpandEnv(p));
+    if (!s.folderPath.empty()) return NormalizePath(ExpandEnv(s.folderPath));
+    WCHAR storage[MAX_PATH];
+    WCHAR user[256];
+    DWORD userLen = ARRAYSIZE(user);
+    if (!Wh_GetModStoragePath(storage, ARRAYSIZE(storage)) ||
+        !GetUserNameW(user, &userLen)) {
+        return {};
+    }
+    return std::wstring(storage) + L"\\" + user;
 }
 
 // ============================================================ registry
@@ -2528,6 +2553,10 @@ struct Placement {
 void Sync(SyncCache& cache) {
     Settings s = GetSettings();
     std::wstring root = RootFolder(s);
+    if (root.empty()) {
+        Wh_Log(L"No folder available for the shortcuts");
+        return;
+    }
     std::wstring dataDir = root + L"\\" + kDataFolder;
     SHCreateDirectoryExW(nullptr, dataDir.c_str(), nullptr);
     SetFileAttributesW(dataDir.c_str(), FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM);
@@ -2539,6 +2568,8 @@ void Sync(SyncCache& cache) {
             CleanupLegacy(legacy);
             if (Lower(legacy) != Lower(root)) RemoveDirectoryW(legacy.c_str());
         }
+        std::wstring legacy3 = NormalizePath(ExpandEnv(kLegacyFolder3));
+        if (Lower(legacy3) != Lower(root)) CleanupRoot(legacy3);
     }
 
     std::vector<Game> games;
@@ -2875,14 +2906,9 @@ Watches SetUpWatches(const Settings& s) {
 }
 
 DWORD WINAPI Worker(LPVOID) {
-    // Only one explorer.exe process does the work.
-    HANDLE startWait[2] = {g_stopEvent, g_mutex};
-    DWORD r = WaitForMultipleObjects(2, startWait, FALSE, INFINITE);
-    if (r != WAIT_OBJECT_0 + 1 && r != WAIT_ABANDONED_0 + 1) return 0;
-    g_isOwner = true;
-
-    // Let Explorer finish starting before scanning disks.
+    // Don't compete with Explorer and other startup apps at sign-in.
     WaitForSingleObject(g_stopEvent, 3000);
+    DWORD r = 0;
 
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     SyncCache cache;
@@ -2950,7 +2976,6 @@ DWORD WINAPI Worker(LPVOID) {
         CleanupRoot(RootFolder(finalSettings));
     }
     if (SUCCEEDED(hrCo)) CoUninitialize();
-    ReleaseMutex(g_mutex);
     return 0;
 }
 
@@ -2992,30 +3017,207 @@ void LoadSettings() {
 
 }  // namespace
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     LoadSettings();
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_resyncEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    g_mutex = CreateMutexW(nullptr, FALSE, kMutexName);
-    if (!g_stopEvent || !g_resyncEvent || !g_mutex) return FALSE;
+    if (!g_stopEvent || !g_resyncEvent) return FALSE;
     g_thread = CreateThread(nullptr, 0, Worker, nullptr, 0, nullptr);
     return g_thread != nullptr;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     if (g_thread) {
         SetEvent(g_stopEvent);
         WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
-    if (g_isOwner) UnregisterAll();
-    if (g_mutex) CloseHandle(g_mutex);
+    UnregisterAll();
     if (g_resyncEvent) CloseHandle(g_resyncEvent);
     if (g_stopEvent) CloseHandle(g_stopEvent);
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     LoadSettings();
     SetEvent(g_resyncEvent);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
