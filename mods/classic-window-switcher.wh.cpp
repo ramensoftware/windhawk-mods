@@ -502,6 +502,8 @@ typedef HWND(WINAPI* pHungWindowFromGhostWindow)(HWND);
 extern pHungWindowFromGhostWindow _sws_HungWindowFromGhostWindow;
 typedef HWND(WINAPI* pGhostWindowFromHungWindow)(HWND);
 extern pGhostWindowFromHungWindow _sws_GhostWindowFromHungWindow;
+typedef DWORD_PTR(WINAPI* pForceFocusBasedMouseWheelRouting)(BOOL enabled);
+extern pForceFocusBasedMouseWheelRouting _sws_ForceFocusBasedMouseWheelRouting;
 typedef HWND(WINAPI* pIsCoreWindow)(HWND);
 extern pIsCoreWindow _sws_IsCoreWindow;
 typedef BOOL(WINAPI* pSHWindowsPolicy)(REFGUID riid);
@@ -676,8 +678,6 @@ typedef struct _sws_WindowSwitcher
     DWORD cwOldMask;
     long long lastUpdateTime;
     BOOL bShouldStartFlashTimerWhenShowing;
-    DWORD dwOriginalMouseRouting;
-    DWORD dwOriginalScrollWheelBehavior;
 	BOOL bIsCursorOnSwitcher;
 	BOOL bSkipIfOneWindow;
     BOOL bRegisterHotKey;
@@ -1301,6 +1301,7 @@ HMODULE _sws_ExplorerFrame = 0;
 HMODULE _sws_Explorer = 0;
 pHungWindowFromGhostWindow _sws_HungWindowFromGhostWindow;
 pGhostWindowFromHungWindow _sws_GhostWindowFromHungWindow;
+pForceFocusBasedMouseWheelRouting _sws_ForceFocusBasedMouseWheelRouting;
 pSHWindowsPolicy sws_SHWindowsPolicy;
 
 DEFINE_GUID(POLID_TurnOffSPIAnimations, 0xD7AF00A, 0xB468, 0x4A39, 0xB0, 0x16, 0x33, 0x3E, 0x22, 0x77, 0xAB, 0xED);
@@ -1736,6 +1737,17 @@ sws_error_t sws_WindowHelpers_Initialize()
 		{
 			_sws_GhostWindowFromHungWindow = (pGhostWindowFromHungWindow)GetProcAddress(_sws_hUser32, "GhostWindowFromHungWindow");
 			if (!_sws_GhostWindowFromHungWindow)
+			{
+				rv = SWS_ERROR_FUNCTION_NOT_FOUND;
+			}
+		}
+	}
+	if (!rv)
+	{
+		if (!_sws_ForceFocusBasedMouseWheelRouting)
+		{
+			_sws_ForceFocusBasedMouseWheelRouting = (pForceFocusBasedMouseWheelRouting)GetProcAddress(_sws_hUser32, (LPCSTR)2575);
+			if (!_sws_ForceFocusBasedMouseWheelRouting)
 			{
 				rv = SWS_ERROR_FUNCTION_NOT_FOUND;
 			}
@@ -3802,36 +3814,11 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
         {
             KillTimer(hWnd, SWS_WINDOWSWITCHER_TIMER_ASYNCKEYCHECK);
             _this->lastMiniModehWnd = NULL;
-            if (_this->dwOriginalMouseRouting != DWORD(-1) &&
-                (_this->dwOriginalScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE ||
-                _this->dwOriginalScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_IFCLIENTAREA_GRIDSCROLL ||
-                _this->dwOriginalScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_GRIDSCROLL ||
-				_this->dwOriginalScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_IFNOTCLIENTAREA_GRIDSCROLL)
-                )
-            {
-                SystemParametersInfoW(SPI_SETMOUSEWHEELROUTING, 0, reinterpret_cast<PVOID>(static_cast<ULONG_PTR>(_this->dwOriginalMouseRouting)), 0);
-            }
-            _this->dwOriginalMouseRouting = -1;
-            _this->dwOriginalScrollWheelBehavior = SWS_SCROLLWHEELBEHAVIOR_DISABLED;
+            _sws_ForceFocusBasedMouseWheelRouting(FALSE);
         }
         else
         {
-            _this->dwOriginalScrollWheelBehavior = _this->settings.dwScrollWheelBehavior;
-            if (_this->dwOriginalScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE ||
-                _this->dwOriginalScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_IFCLIENTAREA_GRIDSCROLL ||
-                _this->dwOriginalScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_GRIDSCROLL ||
-                _this->dwOriginalScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_IFNOTCLIENTAREA_GRIDSCROLL
-                )
-            {
-                DWORD dwOriginalMouseRouting = -1;
-                if (SystemParametersInfoW(SPI_GETMOUSEWHEELROUTING, 0, &dwOriginalMouseRouting, 0)) _this->dwOriginalMouseRouting = dwOriginalMouseRouting;
-                if (dwOriginalMouseRouting != DWORD(-1) && dwOriginalMouseRouting != MOUSEWHEEL_ROUTING_FOCUS)
-                {
-                    if (!SystemParametersInfoW(SPI_SETMOUSEWHEELROUTING, 0, MOUSEWHEEL_ROUTING_FOCUS, 0)) _this->dwOriginalMouseRouting = -1;
-                }
-                else _this->dwOriginalMouseRouting = -1;
-            }
-            else _this->dwOriginalMouseRouting = -1;
+            _sws_ForceFocusBasedMouseWheelRouting(TRUE);
         }
         return 0;
     }
@@ -3990,7 +3977,7 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
         _sws_WindowSwitcher_SwitchToSelectedItemAndDismiss(_this);
         return 0;
     }
-    else if (uMsg == WM_HOTKEY || uMsg == WM_KEYDOWN || uMsg == WM_SYSKEYDOWN || (uMsg == WM_MOUSEWHEEL && _this && _this->dwOriginalScrollWheelBehavior != SWS_SCROLLWHEELBEHAVIOR_DISABLED))
+    else if (uMsg == WM_HOTKEY || uMsg == WM_KEYDOWN || uMsg == WM_SYSKEYDOWN || (uMsg == WM_MOUSEWHEEL && _this && _this->settings.dwScrollWheelBehavior != SWS_SCROLLWHEELBEHAVIOR_DISABLED))
     {
         if (uMsg == WM_HOTKEY && (LOWORD(lParam) & MOD_CONTROL))
         {
@@ -4059,10 +4046,10 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
                 BOOL bIsGridScrolling = FALSE;
                 //Wh_Log(L"%d %d %d", _this->layout.pWindowList.cbSize, col * row, _this->layout.pWindowList.cbSize > col * row);
                 if (uMsg == WM_MOUSEWHEEL && _this->layout.pWindowList.cbSize > col * row &&
-                    (_this->dwOriginalScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_ONLYCLIENTAREA_GRIDSCROLL ||
-                        (_this->dwOriginalScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_IFCLIENTAREA_GRIDSCROLL && _this->bIsCursorOnSwitcher) ||
-                        _this->dwOriginalScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_GRIDSCROLL ||
-						(_this->dwOriginalScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_IFNOTCLIENTAREA_GRIDSCROLL && !_this->bIsCursorOnSwitcher))
+                    (_this->settings.dwScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_ONLYCLIENTAREA_GRIDSCROLL ||
+                        (_this->settings.dwScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_IFCLIENTAREA_GRIDSCROLL && _this->bIsCursorOnSwitcher) ||
+                        _this->settings.dwScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_GRIDSCROLL ||
+						(_this->settings.dwScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_IFNOTCLIENTAREA_GRIDSCROLL && !_this->bIsCursorOnSwitcher))
                     )
                 {
                     bIsGridScrolling = TRUE;
@@ -4490,7 +4477,6 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
         _this->hFlashBrush = GetSysColorBrush(COLOR_HIGHLIGHT);
         _this->mode = SWS_WINDOWSWITCHER_LAYOUTMODE_FULL;
         _this->lastMiniModehWnd = NULL;
-        _this->dwOriginalMouseRouting = -1;
         _this->scrollDirection = SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_INITIAL;
     }
     if (!rv)
