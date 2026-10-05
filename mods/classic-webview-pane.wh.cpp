@@ -85,6 +85,26 @@
 - paneTooltips: true
   $name: Link tooltips and status text
   $name:ru: Подсказки ссылок и текст состояния
+- imageViewerExecutable: ''
+  $name: Program for the Separate Window button (empty uses built-in viewer)
+  $name:ru: Программа для кнопки «Отдельное окно» (пусто — встроенный просмотр)
+  $description: Full path to your image viewer's executable. Environment variables such as %ProgramFiles% are supported. Used when Separate image preview window is enabled.
+  $description:ru: Полный путь к exe выбранной программы просмотра изображений. Поддерживаются переменные вроде %ProgramFiles%. Работает при включённом отдельном окне просмотра.
+- imageViewerArguments: '%1'
+  $name: Image viewer arguments
+  $name:ru: Параметры программы просмотра
+  $description: The selected file replaces %1 with automatic quoting. If %1 is absent, the file is appended. Example -new-window %1. Empty passes only the file.
+  $description:ru: Вместо %1 передаётся выбранный файл с автоматическими кавычками. Если %1 нет, файл добавляется в конец. Пример -new-window %1. Пустое поле передаёт только файл.
+- scrollImageDetails: true
+  $name: Scroll image viewer details when space is insufficient
+  $name:ru: Прокручивать сведения при нехватке места в просмотре изображений
+  $description: Add horizontal and vertical scrollbars to the upper details area. The preview and its controls stay in the lower half. Requires Original WebView layout.
+  $description:ru: Добавлять горизонтальную и вертикальную прокрутку верхней области сведений. Предпросмотр и его кнопки остаются в нижней половине. Требуется исходная компоновка WebView.
+- compactImageHeader: false
+  $name: Compact image viewer header (Windows 2000)
+  $name:ru: Компактная шапка просмотра изображений (Windows 2000)
+  $description: Hide the corner artwork and folder icon while the image viewer is active, keeping the folder title and divider. Turn off to retain the full header. Requires Original WebView layout.
+  $description:ru: Убирать верхнюю картинку и значок папки при активном просмотре изображений, сохраняя название папки и разделитель. Отключите для полной шапки. Требуется исходная компоновка WebView.
 - disableFontSmoothing: false
   $name: Disable pane font smoothing
   $name:ru: Отключить сглаживание шрифтов панели
@@ -506,6 +526,20 @@ appearance settings. Ordinary files use Shell thumbnails; Pictures folders and
 folders with an imgview template use the image viewer. Thumbnails and decoding
 run in the background. Unsupported files show the standard preview status.
 
+The **Program for the Separate Window button** setting accepts the full path to
+your image viewer's `.exe`. Leave it empty to use the built-in separate window.
+**Image viewer arguments** accepts optional flags and `%1` for the selected
+image. The image path is quoted automatically; if `%1` is omitted, it is added
+at the end. Environment variables such as `%ProgramFiles%` work in the program
+path. These settings require **Separate image preview window** to be enabled.
+
+**Scroll image viewer details when space is insufficient** keeps long names
+and metadata accessible with horizontal and vertical scrollbars in the upper
+half. The image controls and preview stay below it. Disable it for clipped
+details without scrollbars. **Compact image viewer header (Windows 2000)**
+optionally hides the corner artwork and folder icon while this viewer is
+active, retaining the title and divider. It is off by default.
+
 **Pane language** defaults to the Windows display language: Russian on Russian
 Windows, English otherwise. It can also be chosen manually. In **Custom text
 captions**, enter an original English caption and your replacement. For example:
@@ -554,6 +588,20 @@ layout. A patched shell32 WebView should be disabled to avoid duplicate panes.
 отключении исходной компоновки работают прежние настройки оформления.
 В обычных папках используются миниатюры Shell; в папках рисунков и папках
 с шаблоном imgview — просмотр изображений. Загрузка выполняется в фоне.
+
+В **Программе для кнопки «Отдельное окно»** укажите полный путь к `.exe`
+просмотрщика. Пустое поле сохраняет встроенное отдельное окно.
+**Аргументы программы просмотра** принимают параметры и `%1` для выбранного
+изображения. Путь к изображению автоматически заключается в кавычки; без `%1`
+он добавляется в конец. В пути программы можно использовать `%ProgramFiles%`
+и другие переменные окружения. Включите **Отдельное окно просмотра изображения**.
+
+**Прокручивать сведения при нехватке места в просмотре изображений** добавляет
+горизонтальную и вертикальную прокрутку верхней половины для длинных имён и
+метаданных. Кнопки и изображение остаются ниже. Отключение оставляет обрезанные
+сведения без полос прокрутки. **Компактная шапка просмотра изображений (Windows
+2000)** опционально убирает картинку и значок папки при активном просмотре,
+сохраняя название и разделитель. По умолчанию шапка остаётся полной.
 
 **Язык панели** автоматически следует языку интерфейса Windows: русский
 для русской Windows, английский для остальных. Язык можно выбрать вручную.
@@ -829,6 +877,7 @@ public:
 // their own values; they never read Windhawk settings or touch pane objects.
 struct WebViewOptions {
     bool classicLayout=true, preview=true, imageViewer=true, zoom=true;
+    bool scrollImageDetails=true, compactImageHeader=false;
     bool detached=true, print=true, metadata=true, attributes=true;
     bool multiSelection=true, specialFolders=true, recycleActions=true;
     bool barricades=true, miniBanner=true, printerRefresh=true, tooltips=true;
@@ -836,6 +885,7 @@ struct WebViewOptions {
     bool itemType=true,driveSpace=true,folderDescription=true,seeAlso=true;
     int profile=0; // 0=2000, 1=98, 2=Me
     std::wstring language=L"auto";
+    std::wstring viewerExecutable,viewerArguments;
     std::map<std::wstring,std::wstring> captions;
 };
 class WebViewOptionSnapshot {
@@ -1045,6 +1095,9 @@ static const CaptionTranslation kCaptionTranslations[]={
     {L"Properties",L"Свойства"},
     {L"Hide Contents",L"Скрыть содержимое"},
     {L"Generating preview...",L"Создание предпросмотра..."},
+    {L"Stores and manages pictures.",L"Хранит изображения и управляет ими."},
+    {L"Unable to start the image viewer. Check its executable path and arguments.",L"Не удалось запустить программу просмотра. Проверьте путь к программе и её параметры."},
+    {L"Unable to open the separate preview window.",L"Не удалось открыть отдельное окно просмотра."},
     {L"Dimensions: %dx%d pixels",L"Размеры: %dx%d пикселей"},
     {L"The Add Printer wizard walks you step-by-step through installing a printer. Just follow the instructions on each screen.",L"Мастер установки принтера поможет установить принтер. Следуйте указаниям на каждом экране."},
     {L"The Add Printer wizard gives you step-by-step instructions for installing a printer. To install a new printer, double-click the Add Printer icon.",L"Мастер установки принтера поможет вам установить принтер. Чтобы установить новый принтер, дважды щёлкните значок «Установка принтера»."},
@@ -1109,6 +1162,7 @@ static void LoadWebViewOptions() {
     #define READ_OPTION(member,key) options->member=Wh_GetIntSetting(L##key)!=0
     READ_OPTION(classicLayout,"classicLayout");
     READ_OPTION(preview,"filePreview"); READ_OPTION(imageViewer,"imageViewer");
+    READ_OPTION(scrollImageDetails,"scrollImageDetails"); READ_OPTION(compactImageHeader,"compactImageHeader");
     READ_OPTION(zoom,"imageZoom"); READ_OPTION(detached,"detachedPreview");
     READ_OPTION(print,"imagePrint"); READ_OPTION(metadata,"fileMetadata");
     READ_OPTION(attributes,"fileAttributes"); READ_OPTION(multiSelection,"multiSelectionInfo");
@@ -1125,6 +1179,13 @@ static void LoadWebViewOptions() {
                      wcscmp(profile.get(),L"me")==0 ? 2 : 0;
     auto language=WindhawkUtils::StringSetting::make(L"language");
     options->language=language.get();
+    auto viewer=WindhawkUtils::StringSetting::make(L"imageViewerExecutable");
+    auto viewerArgs=WindhawkUtils::StringSetting::make(L"imageViewerArguments");
+    options->viewerExecutable=std::wstring(viewer.get()).substr(0,16384);
+    const auto viewerStart=options->viewerExecutable.find_first_not_of(L" \t\r\n");
+    options->viewerExecutable=viewerStart==std::wstring::npos ? L"" :
+        options->viewerExecutable.substr(viewerStart,options->viewerExecutable.find_last_not_of(L" \t\r\n")-viewerStart+1);
+    options->viewerArguments=std::wstring(viewerArgs.get()).substr(0,16384);
     for (int i=0;i<64;++i) {
         auto original=WindhawkUtils::StringSetting::make(L"captions[%d].original",i);
         auto replacement=WindhawkUtils::StringSetting::make(L"captions[%d].text",i);
@@ -2564,7 +2625,7 @@ PCWSTR ReferenceCaption(PCWSTR original);
 std::mutex g_referenceCursorMutex;
 HCURSOR g_referenceCursors[4]={};
 HICON g_referenceIcon=nullptr;
-bool g_referenceZoomRegistered=false, g_referenceDetachedRegistered=false;
+bool g_referenceZoomRegistered=false, g_referenceDetachedRegistered=false, g_referenceDetailsRegistered=false;
 bool RegisterReferenceViewerClasses() noexcept;
 
 HCURSOR ReferenceCursor(UINT id) {
@@ -2627,7 +2688,9 @@ void FreeReferenceSharedResources() {
     if(g_referenceIcon) DestroyIcon(std::exchange(g_referenceIcon,nullptr));
     if(g_referenceZoomRegistered) UnregisterClassW(L"ClassicWebViewPane.Reference.ImgViewZoom",ReferenceModule());
     if(g_referenceDetachedRegistered) UnregisterClassW(L"ClassicWebViewPane.Reference.ImgViewDetached",ReferenceModule());
+    if(g_referenceDetailsRegistered) UnregisterClassW(L"ClassicWebViewPane.Reference.ImgViewDetails",ReferenceModule());
     g_referenceZoomRegistered=false; g_referenceDetachedRegistered=false;
+    g_referenceDetailsRegistered=false;
 }
 } }
 
@@ -2673,6 +2736,104 @@ struct ReferenceDivider {
     }
 };
 }
+
+// Query colours on every paint rather than depending on USER's cached brushes.
+namespace ce { namespace win2kwebview {
+static void FillReferenceColour(HDC dc,const RECT& area,COLORREF colour) noexcept {
+    const HBRUSH brush=CreateSolidBrush(colour);
+    if(brush) { FillRect(dc,&area,brush);DeleteObject(brush); }
+}
+static void FillReferenceSystemColour(HDC dc,const RECT& area,int colour) noexcept {
+    FillReferenceColour(dc,area,GetSysColor(colour));
+}
+// Own implementation of the mod's existing imageBlendWhite option. Opaque
+// artwork is multiplied into the selected flat pane colour; real alpha stays
+// on AlphaBlend's path. Work in source pixels so logical DPI mapping is intact.
+static BOOL DrawReferenceWhiteBlend(HDC dc,HBITMAP image,const SIZE& size,
+                                    int x,int y,int width,int height,COLORREF background) noexcept {
+    if(!image || size.cx<=0 || size.cy<=0 || width<=0 || height<=0 ||
+       size.cx>16384 || size.cy>16384 || size.cx>16777216/size.cy) return FALSE;
+    HDC from=CreateCompatibleDC(dc),to=CreateCompatibleDC(dc);
+    BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth=size.cx;info.bmiHeader.biHeight=-size.cy;
+    info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;void* pixels=nullptr;
+    HBITMAP bitmap=to ? CreateDIBSection(to,&info,DIB_RGB_COLORS,&pixels,nullptr,0) : nullptr;
+    BOOL drawn=FALSE;
+    if(from && to && bitmap && pixels) {
+        const auto oldFrom=SelectObject(from,image),oldTo=SelectObject(to,bitmap);
+        if(BitBlt(to,0,0,size.cx,size.cy,from,0,0,SRCCOPY)) {
+            GdiFlush();
+            const BYTE tint[]{GetBValue(background),GetGValue(background),GetRValue(background)};
+            BYTE* data=static_cast<BYTE*>(pixels);
+            const size_t count=static_cast<size_t>(size.cx)*size.cy;
+            for(size_t i=0;i<count;++i) for(size_t channel=0;channel<3;++channel)
+                data[4*i+channel]=static_cast<BYTE>(static_cast<unsigned>(data[4*i+channel])*tint[channel]/255);
+            drawn=StretchBlt(dc,x,y,width,height,to,0,0,size.cx,size.cy,SRCCOPY);
+        }
+        SelectObject(from,oldFrom);SelectObject(to,oldTo);
+    }
+    if(bitmap) DeleteObject(bitmap);if(from) DeleteDC(from);if(to) DeleteDC(to);
+    return drawn;
+}
+} }
+
+// The pre-DLL description followed the native tooltip/status font and colours.
+namespace ce { namespace win2kwebview {
+static int ReferenceDescriptionLineWidth(HDC dc,PCWSTR value,const RECT& text,UINT format) noexcept {
+    TEXTMETRICW metrics{};
+    const int saved=SaveDC(dc);
+    if(!saved || !GetTextMetricsW(dc,&metrics)) { if(saved) RestoreDC(dc,saved);return text.right-text.left; }
+    // Ask the documented formatter which characters belong to each row, then
+    // exclude its consumed wrapping spaces/CRLF from that row's visible width.
+    // An empty clip makes this also work during hidden scrollbar measurement.
+    IntersectClipRect(dc,0,0,0,0);
+    int widest=0;
+    const size_t length=wcslen(value);
+    for(size_t start=0;start<length;) {
+        RECT row{text.left,text.top,text.right,text.top+std::max<LONG>(1,metrics.tmHeight)};
+        DRAWTEXTPARAMS params{sizeof(params)};
+        DrawTextExW(dc,const_cast<LPWSTR>(value+start),static_cast<int>(length-start),&row,format,&params);
+        if(!params.uiLengthDrawn || params.uiLengthDrawn>length-start) {
+            widest=text.right-text.left;break;
+        }
+        const size_t next=start+params.uiLengthDrawn;
+        size_t end=next;
+        while(end>start && (value[end-1]==L' ' || value[end-1]==L'\r' || value[end-1]==L'\n' || value[end-1]==L'\t')) --end;
+        RECT run{text.left,text.top,text.left,text.top};
+        if(end>start) {
+            DrawTextW(dc,value+start,static_cast<int>(end-start),&run,
+                DT_LEFT|DT_NOPREFIX|DT_SINGLELINE|DT_CALCRECT|DT_EDITCONTROL);
+            widest=std::max<int>(widest,run.right-run.left);
+        }
+        start=next;
+    }
+    RestoreDC(dc,saved);return widest;
+}
+static RECT DrawReferenceDescription(HDC dc,HFONT font,PCWSTR value,int x,int y,int width) noexcept {
+    if(!dc || !value || !*value || width<=0) return {x,y,x,y};
+    const int saved=SaveDC(dc);
+    if(!saved) return {x,y,x,y};
+    if(font) SelectObject(dc,font);
+    SetBkMode(dc,TRANSPARENT);SetTextColor(dc,GetSysColor(COLOR_INFOTEXT));
+    RECT text{x+3,y+2,x+std::max(4,width-3),y+2};
+    const UINT format=DT_LEFT|DT_WORDBREAK|DT_NOPREFIX|DT_EDITCONTROL;
+    DrawTextW(dc,value,-1,&text,format|DT_CALCRECT);
+    const int height=text.bottom;
+    text.right=x+std::max(4,width-3);
+    const int measuredWidth=ReferenceDescriptionLineWidth(dc,value,text,format);
+    RECT box{x,y,std::min<LONG>(x+width,text.left+measuredWidth+3),height+2};
+    // Query the colours themselves, as 2.16 did. Classic colour hooks can
+    // replace GetSysColor while USER's cached GetSysColorBrush stays unchanged.
+    HBRUSH background=CreateSolidBrush(GetSysColor(COLOR_INFOBK));
+    HBRUSH border=CreateSolidBrush(GetSysColor(COLOR_3DSHADOW));
+    if(background) { FillRect(dc,&box,background);DeleteObject(background); }
+    if(border) { FrameRect(dc,&box,border);DeleteObject(border); }
+    IntersectClipRect(dc,x+3,y+2,box.right-3,box.bottom-2);
+    DrawTextW(dc,value,-1,&text,format);
+    RestoreDC(dc,saved);
+    return box;
+}
+} }
 
 namespace ce
 {
@@ -2796,10 +2957,7 @@ namespace win2kwebview
 		// #Brand {position: absolute; left: 200px; width: 100%; height: 100%; padding-left: 12px}
 		constexpr int kBrandPadLeft    = 12;
 
-		// imgview.htt is a distinct folder profile. Its panel is fluid up to 300px and the
-		// document must be wider than 400px before the panel is shown at all.
-		constexpr int kImgPanelMaxWidth = 300;
-		constexpr int kImgCollapseAt    = 400;
+// Image folders share the ordinary fixed-width reservation in this mod.
 		constexpr int kImgFolderNameTop = 8;
 		constexpr int kImgLogoLineTop   = 29;
 		constexpr int kImgDetailsTop    = 46;
@@ -3073,6 +3231,14 @@ namespace win2kwebview
 			// Loads the original image bytes embedded in ClassicExplorer.dll as RCDATA. Safe to
 			// call again. The source files remain under Win2KWebView\Assets only as rc.exe inputs.
 			void EnsureResources() noexcept;
+            void SetColours(COLORREF background,COLORREF text,COLORREF heading,COLORREF link) noexcept {
+                m_backgroundColour=background; m_textColour=text; m_headingColour=heading; m_linkColour=link;
+            }
+            COLORREF BackgroundColour() const noexcept { return m_backgroundColour==CLR_INVALID ? GetSysColor(COLOR_WINDOW) : m_backgroundColour; }
+            COLORREF TextColour() const noexcept { return m_textColour==CLR_INVALID ? GetSysColor(COLOR_WINDOWTEXT) : m_textColour; }
+            COLORREF HeadingColour() const noexcept { return m_headingColour==CLR_INVALID ? TextColour() : m_headingColour; }
+            COLORREF LinkColour() const noexcept { return m_linkColour==CLR_INVALID ? GetSysColor(COLOR_HOTLIGHT) : m_linkColour; }
+            void SetPictureWhiteBlend(bool enabled) noexcept { m_pictureWhiteBlend=enabled; }
             void InvalidateFonts() noexcept { ReleaseFonts(); }
             void SetDecoration(HBITMAP corner, SIZE size, int width, bool divider, bool header, bool alpha=false, HICON icon=nullptr) noexcept {
                 m_customCorner=corner; m_customCornerSize=size; m_customCornerWidth=width;
@@ -3087,6 +3253,11 @@ namespace win2kwebview
                 m_divider.Set(image,size,alpha,color,background,gradient);
             }
             void SetDimensionsVisible(bool show) noexcept { m_showDimensions=show; }
+            void SetImgDetailsOptions(bool compactHeader,bool scroll) noexcept {
+                m_compactImgHeader=compactHeader; m_scrollImgDetails=scroll;
+            }
+            SIZE PaintImgDetails(HDC dc,const RECT& viewport,UINT dpi,POINT scroll,int dividerWidth=0) noexcept;
+            void PaintImgFrame(HDC dc,const RECT& paneRect) noexcept { PaintImgPreview(dc,paneRect); }
 
 			// Content for the current folder and selection. Rebuilt per navigation, never cached
 			// across sessions.
@@ -3227,6 +3398,9 @@ namespace win2kwebview
 			void ReleaseFonts() noexcept;
 			void ReleaseResources() noexcept;
 			void PaintImgPreview(HDC dc, const RECT &paneRect) noexcept;
+            void PaintBody(HDC dc,const RECT& paneRect,UINT dpi,bool detailsOnly,int dividerWidth=0) noexcept;
+            SIZE m_imgDetailsExtent{};
+            bool m_compactImgHeader=false, m_scrollImgDetails=true;
 
 			// Windows 98's whole pane. Kept apart from Paint rather than folded into it with
 			// flags: the two share no vertical structure — different margins, a different
@@ -3236,6 +3410,8 @@ namespace win2kwebview
 			void PaintWin98(HDC dc, const RECT &paneRect) noexcept;
 
 			HICON m_customCornerIcon=nullptr;
+            COLORREF m_backgroundColour=CLR_INVALID,m_textColour=CLR_INVALID,m_headingColour=CLR_INVALID,m_linkColour=CLR_INVALID;
+            bool m_pictureWhiteBlend=false;
             HBITMAP m_customCorner=nullptr; // borrowed from the mod cache
             SIZE m_customCornerSize{};
             ReferenceDivider m_divider;
@@ -3256,7 +3432,8 @@ namespace win2kwebview
 			HFONT m_linkFont = nullptr;       // body underlined
 			HFONT m_boldLinkFont = nullptr;   // nethood.htt wraps a UNC anchor in <b>
 			HFONT m_buttonFont = nullptr;     // button {font: 8pt Tahoma}
-			HFONT m_imgStatusFont = nullptr;  // SPI_GETICONTITLELOGFONT, as shimgvw uses
+			HFONT m_descriptionFont=nullptr; // system tooltip/status font
+            HFONT m_imgStatusFont = nullptr;  // SPI_GETICONTITLELOGFONT, as shimgvw uses
 			int m_bodyHeight = 0;
 
 			// The DPI the current fonts were built for. Metrics are per-DPI on Windows 10, so a
@@ -3308,8 +3485,6 @@ namespace win2kwebview
 
 		// The pane's link colour. standard.htt does not restyle anchors, so they are the
 		// browser default, which the reference captures confirm as pure blue with an underline.
-		constexpr COLORREF kLinkColour = RGB(0, 0, 255);
-		constexpr COLORREF kMessageBorderColour = RGB(211, 211, 211); // HTML lightgrey
 		constexpr int kButtonMarginLeft = 12; // button {margin-left: 12px}
 		constexpr int kButtonHeight = 20;     // measured SP4/IE6 Restore button at 96 DPI
 		constexpr int kButtonExtraWidth = 19; // measured 57px box around the 38px Restore text
@@ -3534,7 +3709,7 @@ namespace win2kwebview
 			return LoadImageResource(resourceId, size);
 		}
 
-		void DrawBitmapAt(HDC dc, HBITMAP bitmap, const SIZE &size, int x, int y, int width = -1, int height = -1, bool alpha=true) noexcept
+		void DrawBitmapAt(HDC dc, HBITMAP bitmap, const SIZE &size, int x, int y, int width = -1, int height = -1, bool alpha=true, bool blendWhite=false, COLORREF background=RGB(255,255,255)) noexcept
 		{
 			if (!bitmap || size.cx <= 0 || size.cy <= 0)
 			{
@@ -3550,6 +3725,14 @@ namespace win2kwebview
 			const HGDIOBJ previous = SelectObject(memory, bitmap);
 			const int targetWidth = (width < 0) ? size.cx : width;
             const int targetHeight=(height<0) ? size.cy : height;
+            if(!alpha && blendWhite && background!=RGB(255,255,255)) {
+                // A bitmap can be selected into only one memory DC at a time.
+                SelectObject(memory,previous);
+                if(DrawReferenceWhiteBlend(dc,bitmap,size,x,y,targetWidth,targetHeight,background)) {
+                    DeleteDC(memory);return;
+                }
+                SelectObject(memory,bitmap);
+            }
 
 			// A 32-bit source came from LoadTransparentImageResource and carries real alpha, so it
 			// composites over whatever the caller already filled — which is how Windows Me's
@@ -3691,7 +3874,7 @@ namespace win2kwebview
 			// folder.htt gives the control a 120x120 COLOR_WINDOW surface. The extractor
 			// returns an aspect-fitted bitmap; keep smaller results at their natural size and
 			// centre them rather than stretching them up or cropping them.
-			FillRect(dc, &box, GetSysColorBrush(COLOR_WINDOW));
+			FillReferenceSystemColour(dc,box,COLOR_WINDOW);
 			if (!bitmap)
 			{
 				return;
@@ -3876,7 +4059,8 @@ namespace win2kwebview
 		if (m_boldLinkFont) { DeleteObject(m_boldLinkFont); m_boldLinkFont = nullptr; }
 		if (m_buttonFont) { DeleteObject(m_buttonFont); m_buttonFont = nullptr; }
 		if (m_imgStatusFont) { DeleteObject(m_imgStatusFont); m_imgStatusFont = nullptr; }
-		m_fontDpi = 0;
+		if(m_descriptionFont) DeleteObject(std::exchange(m_descriptionFont,nullptr));
+        m_fontDpi = 0;
 	}
 
 	/*
@@ -3960,7 +4144,10 @@ namespace win2kwebview
 			metrics.lfMenuFont.lfWeight = FW_NORMAL;
 		}
 
-		LOGFONTW body = metrics.lfMenuFont;
+		LOGFONTW description=metrics.lfStatusFont;
+        if(m_fontSmoothingDisabled) description.lfQuality=NONANTIALIASED_QUALITY;
+        m_descriptionFont=CreateFontIndirectW(&description);
+        LOGFONTW body = metrics.lfMenuFont;
 		m_bodyFont = CreateFontIndirectW(&body);
 		m_bodyHeight = abs(metrics.lfMenuFont.lfHeight);
 
@@ -4044,32 +4231,12 @@ namespace win2kwebview
 		m_lines = std::move(lines);
 	}
 
-	int WebViewNativePane::PanelWidthFor(int viewWidth) const noexcept
-	{
-		// Windows 98's panel is a percentage of the client, so it has no fixed width and cannot
-		// go through the NT5 branch below. Checked before the profile test because Windows 98
-		// has no imgview.htt.
-		if (m_visualProfile == WebViewVisualProfile::Windows98)
-		{
-			return win98metrics::PanelWidthFor(viewWidth);
-		}
-
-		if (m_profile != PaneProfile::ImgView)
-		{
-			return VisibleAt(viewWidth) ? panemetrics::kPanelWidth : 0;
-		}
-
-		// imgview.htt:GetPanelWidth(): no pane at 400px or below; otherwise two fifths
-		// of the document width, capped at 300px. Use 64-bit arithmetic so a malformed
-		// geometry observation cannot overflow before the division.
-		if (viewWidth <= panemetrics::kImgCollapseAt)
-		{
-			return 0;
-		}
-		const int fluidWidth = static_cast<int>((static_cast<long long>(viewWidth) * 2) / 5);
-		return fluidWidth < panemetrics::kImgPanelMaxWidth
-			? fluidWidth : panemetrics::kImgPanelMaxWidth;
-	}
+    int WebViewNativePane::PanelWidthFor(int viewWidth) const noexcept {
+        if(m_visualProfile==WebViewVisualProfile::Windows98)
+            return win98metrics::PanelWidthFor(viewWidth);
+        // Preview changes only the contents, not the file list's origin.
+        return VisibleAt(viewWidth) ? panemetrics::kPanelWidth : 0;
+    }
 
 	RECT WebViewNativePane::ImgPreviewRect(const RECT &paneRect) const noexcept
 	{
@@ -4100,12 +4267,12 @@ namespace win2kwebview
 			return;
 		}
 
-		FillRect(dc, &frame, GetSysColorBrush(COLOR_WINDOWFRAME));
+		FillReferenceSystemColour(dc,frame,COLOR_WINDOWFRAME);
 		RECT inner{ frame.left + panemetrics::kImgFrameInset,
 		            frame.top + panemetrics::kImgFrameInset,
 		            frame.right - panemetrics::kImgFrameInset,
 		            frame.bottom - panemetrics::kImgFrameInset };
-		FillRect(dc, &inner, GetSysColorBrush(COLOR_WINDOW));
+		FillReferenceColour(dc,inner,BackgroundColour());
 		RECT canvas = ImgPreviewRect(paneRect);
 
 		if (m_imgPreviewState == ImgPreviewState::Image && m_thumbnail)
@@ -4131,8 +4298,8 @@ namespace win2kwebview
 		{
 			const HFONT statusFont = m_imgStatusFont ? m_imgStatusFont : m_bodyFont;
 			const HGDIOBJ previous = statusFont ? SelectObject(dc, statusFont) : nullptr;
-			SetTextColor(dc, GetSysColor(COLOR_WINDOWTEXT));
-			SetBkColor(dc, GetSysColor(COLOR_WINDOW));
+			SetTextColor(dc, TextColour());
+			SetBkColor(dc,BackgroundColour());
 			DrawTextW(dc, status, -1, &canvas,
 			          DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 			if (previous)
@@ -4158,12 +4325,7 @@ namespace win2kwebview
 			return;
 		}
 
-		// nethood.htt says `background: white`; sysroot.htt says `background: window`. Same rule
-		// as the panel itself: Windows 2000 hardcodes, Windows Me follows the scheme.
-		const bool systemBackground = m_visualProfile != WebViewVisualProfile::Windows2000;
-		FillRect(dc, &brandRect, systemBackground
-			? GetSysColorBrush(COLOR_WINDOW)
-			: static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
+		FillReferenceColour(dc,brandRect,BackgroundColour());
 
 		const HBITMAP art = (m_barricadeArt == BarricadeArt::Logo) ? m_logoBitmap : m_netBitmap;
 		const SIZE artSize = (m_barricadeArt == BarricadeArt::Logo) ? m_logoSize : m_netSize;
@@ -4197,7 +4359,7 @@ namespace win2kwebview
 			return;
 		}
 
-		FillRect(dc, &bannerRect, GetSysColorBrush(COLOR_WINDOW));
+		FillReferenceColour(dc,bannerRect,BackgroundColour());
 		if (m_folderName.empty() || !m_headingFont)
 		{
 			return;
@@ -4205,7 +4367,7 @@ namespace win2kwebview
 
 		const HGDIOBJ previous = SelectObject(dc, m_headingFont);
 		SetBkMode(dc, TRANSPARENT);
-		SetTextColor(dc, GetSysColor(COLOR_WINDOWTEXT));
+		SetTextColor(dc, HeadingColour());
 
 		// The title paragraph lives inside <table><tr><td nowrap>, and in quirks mode the default
 		// table and cell insets add one pixel on each axis on top of the paragraph's own 15px left
@@ -4229,9 +4391,7 @@ namespace win2kwebview
 		// Windows 98 one.
 		namespace w98 = win98metrics;
 
-		// #Panel {background: white URL(wvleft.bmp) no-repeat}. Windows 98 hardcodes white here,
-		// exactly as Windows 2000 does; it is Windows Me that switched to `window`.
-		FillRect(dc, &paneRect, static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
+		FillReferenceColour(dc,paneRect,BackgroundColour());
 		if(m_useProfileCorner) DrawBitmapAt(dc,m_leftBitmap,m_leftSize,paneRect.left,paneRect.top);
                 else if(m_customCornerIcon) DrawIconEx(dc,paneRect.left,paneRect.top,m_customCornerIcon,
                     m_customCornerWidth>0 ? m_customCornerWidth : paneRect.right-paneRect.left,
@@ -4242,7 +4402,7 @@ namespace win2kwebview
                     m_customCornerWidth > 0 ? m_customCornerWidth : paneRect.right-paneRect.left,
                     m_customCornerSize.cx>0 ? MulDiv(m_customCornerSize.cy,
                         m_customCornerWidth>0 ? m_customCornerWidth : paneRect.right-paneRect.left,
-                        m_customCornerSize.cx) : 0,m_customCornerAlpha);
+                        m_customCornerSize.cx) : 0,m_customCornerAlpha,m_pictureWhiteBlend,BackgroundColour());
 
 		SetBkMode(dc, TRANSPARENT);
 
@@ -4266,7 +4426,7 @@ namespace win2kwebview
 		if (m_showHeader && !m_folderName.empty() && m_headingFont)
 		{
 			const HGDIOBJ previous = SelectObject(dc, m_headingFont);
-			SetTextColor(dc, GetSysColor(COLOR_WINDOWTEXT));
+			SetTextColor(dc, HeadingColour());
 
 			y += w98::kTitleTop;
 			RECT text{ contentLeft, y, contentRight, paneRect.bottom };
@@ -4348,9 +4508,9 @@ namespace win2kwebview
 				? (target.bold ? (m_boldLinkFont ? m_boldLinkFont : m_linkFont)
 				               : (m_linkFont ? m_linkFont : m_bodyFont))
 				: (m_boldFont ? m_boldFont : m_bodyFont);
-			const COLORREF plainInk = GetSysColor(COLOR_WINDOWTEXT);
+			const COLORREF plainInk = TextColour();
 			const COLORREF accentInk = linkRun
-				? kLinkColour
+				? LinkColour()
 				: (target.boldColor != CLR_INVALID ? target.boldColor : plainInk);
 
 			const Run runs[3] = {
@@ -4459,9 +4619,9 @@ namespace win2kwebview
 				: (line.bold ? m_boldFont : m_bodyFont));
 			// p.Warning {font-weight: bold; color: red} is the only coloured body run Windows 98
 			// uses, and the system-folder templates open with it.
-			const COLORREF ink = line.link ? kLinkColour
+			const COLORREF ink = line.link ? LinkColour()
 			                   : (line.boldColor != CLR_INVALID ? line.boldColor
-			                                                    : GetSysColor(COLOR_WINDOWTEXT));
+			                                                    : TextColour());
 			SetTextColor(dc, ink);
 
 			int lineX = contentLeft + line.indent;
@@ -4477,7 +4637,7 @@ namespace win2kwebview
 				RECT box{ lineX, y, lineX + w98::kLegendSize, y + w98::kLegendSize };
 				const int fill = (line.swatch == PaneLine::Swatch::Used)
 					? COLOR_3DFACE : COLOR_3DHIGHLIGHT;
-				FillRect(dc, &box, GetSysColorBrush(fill));
+				FillReferenceSystemColour(dc,box,fill);
 				FrameRect(dc, &box, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
 				if (!line.tooltip.empty())
 				{
@@ -4538,7 +4698,7 @@ namespace win2kwebview
 			// one-second setTimeout. #Status {margin-left: 15px}, and it is a div rather than a
 			// paragraph, so it carries no top margin of its own.
 			const HGDIOBJ previous = SelectObject(dc, m_bodyFont);
-			SetTextColor(dc, GetSysColor(COLOR_WINDOWTEXT));
+			SetTextColor(dc, TextColour());
 			RECT status{ contentLeft, y + w98::kParagraphTop, contentRight, paneRect.bottom };
 			DrawTextW(dc, ReferenceCaption(L"Generating preview..."), -1, &status,
 			          DT_LEFT | DT_TOP | DT_NOPREFIX | DT_SINGLELINE);
@@ -4555,9 +4715,10 @@ namespace win2kwebview
 		}
 	}
 
-	void WebViewNativePane::Paint(HDC dc, const RECT &paneRect, UINT dpi) noexcept
+	void WebViewNativePane::PaintBody(HDC dc, const RECT &paneRect, UINT dpi, bool detailsOnly, int dividerWidth) noexcept
 	{
 		EnsureFonts(dpi);
+        if(detailsOnly) m_imgDetailsExtent={paneRect.right-paneRect.left,0};
 
 		// Windows 98 is a separate layout, not a restyled NT5 one; see PaintWin98.
 		if (m_visualProfile == WebViewVisualProfile::Windows98)
@@ -4566,14 +4727,16 @@ namespace win2kwebview
 			return;
 		}
 		const bool imgView = m_profile == PaneProfile::ImgView;
+        const bool compactImg=imgView && m_compactImgHeader;
 
 		// nethood.htt's narrow barricade: ResizeBarricade() stretches #Brand over the whole
 		// client and moves the soft-barrier text into it, so #Panel and everything in it — the
 		// folder icon, the heading and #LogoLine — end up covered rather than laid out.
 		const bool barricadeFull = m_barricade == BarricadeMode::Full;
 		const int paneHeight = paneRect.bottom - paneRect.top;
-		const int contentBottom = imgView
-			? paneRect.top + ((paneHeight + 1) / 2) : paneRect.bottom;
+		const int contentBottom = detailsOnly && m_scrollImgDetails ? paneRect.top+1048576 :
+            imgView ? (detailsOnly ? paneRect.bottom :
+                paneRect.top+((paneHeight+1)/2)) : paneRect.bottom;
 
 		if (barricadeFull)
 		{
@@ -4581,19 +4744,8 @@ namespace win2kwebview
 		}
 		else
 		{
-			// #Panel {background: white URL(wvleft.bmp) no-repeat}
-			// White fill first, then the decoration once at the origin — no-repeat, not tiled.
-			//
-			// Windows 2000 hardcodes white here. Windows Me says `background: window`, so it
-			// follows the colour scheme instead — which is the visible difference on any scheme
-			// that is not the default. imgview.htt already used `window` on both.
-			const bool systemBackground =
-				imgView || m_visualProfile != WebViewVisualProfile::Windows2000;
-			HBRUSH background = systemBackground
-				? GetSysColorBrush(COLOR_WINDOW)
-				: static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH));
-			FillRect(dc, &paneRect, background);
-			if (!imgView)
+			FillReferenceColour(dc,paneRect,BackgroundColour());
+			if (!compactImg && (m_useProfileCorner || m_customCorner || m_customCornerIcon))
 			{
 				if(m_useProfileCorner) DrawBitmapAt(dc,m_leftBitmap,m_leftSize,paneRect.left,paneRect.top);
                 else if(m_customCornerIcon) DrawIconEx(dc,paneRect.left,paneRect.top,m_customCornerIcon,
@@ -4605,13 +4757,13 @@ namespace win2kwebview
                     m_customCornerWidth > 0 ? m_customCornerWidth : paneRect.right-paneRect.left,
                     m_customCornerSize.cx>0 ? MulDiv(m_customCornerSize.cy,
                         m_customCornerWidth>0 ? m_customCornerWidth : paneRect.right-paneRect.left,
-                        m_customCornerSize.cx) : 0,m_customCornerAlpha);
+                        m_customCornerSize.cx) : 0,m_customCornerAlpha,m_pictureWhiteBlend,BackgroundColour());
 			}
 		}
 
 		// imgview.htt clips the upper Panel at 50%. Save the caller's DC so the lower
 		// shimgvw surface can be drawn after restoring the unclipped region.
-		const int upperDc = imgView ? SaveDC(dc) : 0;
+		const int upperDc = imgView && !detailsOnly ? SaveDC(dc) : 0;
 		if (upperDc)
 		{
 			IntersectClipRect(dc, paneRect.left, paneRect.top, paneRect.right, contentBottom);
@@ -4620,13 +4772,13 @@ namespace win2kwebview
 		SetBkMode(dc, TRANSPARENT);
 
 		// #Corner {padding-left: 12px; padding-top: 11px} holds the folder icon.
-		int y = paneRect.top + (imgView ? kImgFolderNameTop : kCornerPadTop);
+		int y = paneRect.top + (compactImg ? kImgFolderNameTop : kCornerPadTop);
 		const int x = paneRect.left + kCornerPadLeft;
 		const int flowRight = imgView ? paneRect.right
 			: (((paneRect.left + kFlowRight) < paneRect.right)
 				? paneRect.left + kFlowRight : paneRect.right);
 
-		if (m_showHeader && !imgView && !barricadeFull && m_folderIcon)
+		if (!compactImg && m_showHeader && !barricadeFull && m_folderIcon)
 		{
 			DrawIconEx(dc, x, y, m_folderIcon, kFolderIconSize, kFolderIconSize, 0, nullptr, DI_NORMAL);
 		}
@@ -4635,12 +4787,12 @@ namespace win2kwebview
 		// 17px per row even though Tahoma's GDI text cell is 21px high, because the template's
 		// explicit 13pt line-height controls the line box. DrawText's built-in word wrapping
 		// advances by tmHeight and is therefore four pixels too tall per additional row here.
-		y = paneRect.top + (imgView ? kImgFolderNameTop : kFolderNameTop);
+		y = paneRect.top + (compactImg ? kImgFolderNameTop : kFolderNameTop);
 		int folderNameLines = 1;
 		if (m_showHeader && !m_folderName.empty() && m_headingFont && !barricadeFull)
 		{
 			const HGDIOBJ previous = SelectObject(dc, m_headingFont);
-			SetTextColor(dc, GetSysColor(COLOR_WINDOWTEXT));
+			SetTextColor(dc, HeadingColour());
 
 			// Keep the measured line box at `y`; GDI's heading glyph ink sits two pixels below
 			// the same Tahoma run in retail SP4/IE6.
@@ -4652,18 +4804,20 @@ namespace win2kwebview
 		const int folderNameShift = (folderNameLines - 1) * kFolderNameLineAdvance;
 
 		// #LogoLine {width: 100%; height: 2px; margin-top: 4px} — wvline.gif stretched across.
-		y = paneRect.top + (imgView ? kImgLogoLineTop : kLogoLineTop) + folderNameShift;
+		y = paneRect.top + (compactImg ? kImgLogoLineTop : kLogoLineTop) + folderNameShift;
 		if (m_showDivider && (m_lineBitmap || m_divider.configured) && !barricadeFull)
 		{
-			if(m_divider.configured) m_divider.Paint(dc,paneRect.left,y,flowRight-paneRect.left,2);
-            else DrawBitmapAt(dc,m_lineBitmap,m_lineSize,paneRect.left,y,flowRight-paneRect.left);
+			// Native scrollbars clip decoration; they do not rescale its colour positions.
+            const int lineWidth=detailsOnly && dividerWidth>0 ? dividerWidth : flowRight-paneRect.left;
+            if(m_divider.configured) m_divider.Paint(dc,paneRect.left,y,lineWidth,2);
+            else DrawBitmapAt(dc,m_lineBitmap,m_lineSize,paneRect.left,y,lineWidth);
 		}
 
 		// #Details {padding-left: 12px; margin-top: 8px}, or #Brand's own
 		// {padding-left: 12px} with no top padding once the barrier text has moved into it.
 		y = barricadeFull
 			? paneRect.top
-			: paneRect.top + (imgView ? kImgDetailsTop : kDetailsTop) + folderNameShift;
+			: paneRect.top + (compactImg ? kImgDetailsTop : kDetailsTop) + folderNameShift;
 		const int detailsX = paneRect.left + (barricadeFull ? kBrandPadLeft : kDetailsPadLeft);
 		const int detailsRight = barricadeFull ? paneRect.right : flowRight;
 
@@ -4673,7 +4827,7 @@ namespace win2kwebview
 			{
 				RestoreDC(dc, upperDc);
 			}
-			if (imgView)
+			if (imgView && !detailsOnly)
 			{
 				PaintImgPreview(dc, paneRect);
 			}
@@ -4730,41 +4884,25 @@ namespace win2kwebview
 			{
 				HFONT linkFont = line.bold ? m_boldLinkFont : m_linkFont;
 				SelectObject(dc, linkFont ? linkFont : (line.bold ? m_boldFont : m_bodyFont));
-				SetTextColor(dc, kLinkColour);
+				SetTextColor(dc, LinkColour());
 			}
 			else
 			{
 				SelectObject(dc, line.heading ? m_headingFont : (line.bold ? m_boldFont : m_bodyFont));
-				SetTextColor(dc, GetSysColor(COLOR_WINDOWTEXT));
+				SetTextColor(dc, TextColour());
 			}
 
-			if (line.message)
-			{
-				RECT outer{ detailsX, y, detailsX + kMessageWidth, y };
-				RECT text{ outer.left + 1, outer.top + 1, outer.right - 1, contentBottom };
-				const UINT format = DT_LEFT | DT_NOPREFIX | DT_WORDBREAK;
-				SetTextColor(dc, GetSysColor(COLOR_INFOTEXT));
-				DrawTextW(dc, line.text.c_str(), -1, &text, format | DT_CALCRECT);
-				outer.bottom = text.bottom + 1;
-
-				FillRect(dc, &outer, GetSysColorBrush(COLOR_INFOBK));
-				HBRUSH border = CreateSolidBrush(kMessageBorderColour);
-				if (border)
-				{
-					FrameRect(dc, &outer, border);
-					DeleteObject(border);
-				}
-				DrawTextW(dc, line.text.c_str(), -1, &text, format);
-
-				line.bounds = outer;
-				y = outer.bottom;
-				continue;
-			}
+            if(line.message) {
+                line.bounds=DrawReferenceDescription(dc,m_descriptionFont ? m_descriptionFont : m_bodyFont,
+                    line.text.c_str(),detailsX,y,std::max(1,std::min(kMessageWidth,detailsRight-detailsX)));
+                y=line.bounds.bottom;
+                continue;
+            }
 
 			if (line.button)
 			{
 				SelectObject(dc, m_buttonFont ? m_buttonFont : m_bodyFont);
-				SetTextColor(dc, RGB(0, 0, 0));
+				SetTextColor(dc,GetSysColor(COLOR_BTNTEXT));
 				const int lineIndex = static_cast<int>(&line - m_lines.data());
 				const bool pressed = m_pressedButton == lineIndex;
 
@@ -4784,7 +4922,7 @@ namespace win2kwebview
 				                 DFCS_BUTTONPUSH | (pressed ? DFCS_PUSHED : 0));
 				RECT face = button;
 				InflateRect(&face, -2, -2);
-				FillRect(dc, &face, static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
+				FillReferenceSystemColour(dc,face,COLOR_3DFACE);
 
 				RECT label = button;
 				if (pressed)
@@ -4815,7 +4953,7 @@ namespace win2kwebview
 				RECT box{ swatchX, y, swatchX + kLegendSize, y + kLegendSize };
 
 				const int fill = (line.swatch == PaneLine::Swatch::Used) ? COLOR_3DFACE : COLOR_3DHIGHLIGHT;
-				FillRect(dc, &box, GetSysColorBrush(fill));
+				FillReferenceSystemColour(dc,box,fill);
 				FrameRect(dc, &box, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
 				if (!line.tooltip.empty())
 				{
@@ -4841,9 +4979,9 @@ namespace win2kwebview
 				const HFONT boldFont = linkRun
 					? (m_linkFont ? m_linkFont : m_bodyFont)
 					: (m_boldFont ? m_boldFont : m_bodyFont);
-				const COLORREF bodyColor = GetSysColor(COLOR_WINDOWTEXT);
+				const COLORREF bodyColor = TextColour();
 				const COLORREF boldColor = linkRun
-					? kLinkColour
+					? LinkColour()
 					: ((line.boldColor == CLR_INVALID) ? bodyColor : line.boldColor);
 				const int firstY = y;
 				int runX = lineX;
@@ -4982,7 +5120,7 @@ namespace win2kwebview
 				SIZE linkSize{};
 
 				SelectObject(dc, m_bodyFont);
-				SetTextColor(dc, GetSysColor(COLOR_WINDOWTEXT));
+				SetTextColor(dc, TextColour());
 				if (!line.linkPrefix.empty())
 				{
 					GetTextExtentPoint32W(dc, line.linkPrefix.c_str(),
@@ -4993,7 +5131,7 @@ namespace win2kwebview
 
 				const int linkX = lineX + prefixSize.cx;
 				SelectObject(dc, m_linkFont ? m_linkFont : m_bodyFont);
-				SetTextColor(dc, kLinkColour);
+				SetTextColor(dc, LinkColour());
 				GetTextExtentPoint32W(dc, line.text.c_str(), static_cast<int>(line.text.size()), &linkSize);
 				TextOutW(dc, linkX, y, line.text.c_str(), static_cast<int>(line.text.size()));
 				line.bounds = RECT{ linkX, y, linkX + linkSize.cx, y + kBodyLineHeight };
@@ -5005,7 +5143,7 @@ namespace win2kwebview
 				if (!line.linkSuffix.empty())
 				{
 					SelectObject(dc, m_bodyFont);
-					SetTextColor(dc, GetSysColor(COLOR_WINDOWTEXT));
+					SetTextColor(dc, TextColour());
 					TextOutW(dc, linkX + linkSize.cx, y, line.linkSuffix.c_str(),
 						static_cast<int>(line.linkSuffix.size()));
 				}
@@ -5015,8 +5153,9 @@ namespace win2kwebview
 			}
 
 			RECT text{ lineX, y, detailsRight, contentBottom };
-			const UINT format = DT_LEFT | DT_NOPREFIX | DT_WORDBREAK;
-			DrawTextW(dc, line.text.c_str(), -1, &text, format | DT_CALCRECT);
+			const UINT format = DT_LEFT | DT_NOPREFIX |
+                ((detailsOnly && m_scrollImgDetails && line.bold) ? DT_SINGLELINE : DT_WORDBREAK);
+            DrawTextW(dc, line.text.c_str(), -1, &text, format | DT_CALCRECT);
 
 			// DT_CALCRECT shrinks `right` to the measured width. Keep that for the hit rectangle
 			// so the pointer only counts as "over the link" across the glyphs, the way an inline
@@ -5046,15 +5185,21 @@ namespace win2kwebview
 				                               m_imgSourceSize.cx, m_imgSourceSize.cy)))
 				{
 					SelectObject(dc, m_bodyFont);
-					SetTextColor(dc, GetSysColor(COLOR_WINDOWTEXT));
+					SetTextColor(dc, TextColour());
 					RECT text{ detailsX, y, detailsRight, contentBottom };
-					DrawTextW(dc, dimensions, -1, &text,
-					          DT_LEFT | DT_NOPREFIX | DT_WORDBREAK);
+const UINT format=DT_LEFT | DT_NOPREFIX | DT_WORDBREAK;
+                    DrawTextW(dc, dimensions, -1, &text,format | DT_CALCRECT);
+                    const int measuredRight=text.right;
+                    text.right=detailsRight;
+                    DrawTextW(dc, dimensions, -1, &text,format);
+                    y=text.bottom;
+                    if(detailsOnly && measuredRight>detailsRight) m_imgDetailsExtent.cx=std::max(m_imgDetailsExtent.cx,
+                        static_cast<LONG>(measuredRight-paneRect.left+12));
 				}
 			}
 		}
 
-		if (imgView)
+		if (imgView && !detailsOnly)
 		{
 			// The overflowed Panel is not interactive below its 50% viewport. Clip the
 			// recorded hit rectangles as well as the pixels so hidden links cannot activate.
@@ -5071,15 +5216,24 @@ namespace win2kwebview
 				}
 			}
 		}
-		SelectObject(dc, previousFont);
+		if(detailsOnly) {
+            // Wrapped text and a description box already fit the viewport.
+            // Only a genuinely overflowing run (such as the single-line filename)
+            // needs horizontal scrolling; do not add a phantom right margin.
+            for(const auto& line:m_lines) if(line.bounds.right>detailsRight)
+                m_imgDetailsExtent.cx=std::max(m_imgDetailsExtent.cx,
+                    static_cast<LONG>(line.bounds.right-paneRect.left+12));
+            m_imgDetailsExtent.cy=std::max(0L,y-paneRect.top+8);
+        }
+        SelectObject(dc, previousFont);
 
-		// Selected-file thumbnails have no later line marker, so they remain after all details.
+        // Selected-file thumbnails have no later line marker, so they remain after all details.
 		paintPreview();
 		if (upperDc)
 		{
 			RestoreDC(dc, upperDc);
 		}
-		if (imgView)
+		if (imgView && !detailsOnly)
 		{
 			PaintImgPreview(dc, paneRect);
 		}
@@ -5181,6 +5335,499 @@ void Draw3dPie(HDC dc,RECT box,DWORD used) noexcept {
 } // namespace win2kwebview
 } // namespace ce
 
+// Independent viewport support: the reference template puts the details and
+// the image viewer in separate halves. Scroll only the upper half and keep the
+// hit rectangles in the parent's coordinates, including clipped/scrolled links.
+namespace ce { namespace win2kwebview {
+void WebViewNativePane::Paint(HDC dc,const RECT& paneRect,UINT dpi) noexcept {
+    PaintBody(dc,paneRect,dpi,false);
+}
+SIZE WebViewNativePane::PaintImgDetails(HDC dc,const RECT& viewport,UINT dpi,POINT scroll,int dividerWidth) noexcept {
+    if(!dc || m_profile!=PaneProfile::ImgView) return {};
+    const int saved=SaveDC(dc);
+    if(!saved) return {};
+    RECT visible=viewport;
+    // The preview boundary is the viewport boundary. End-of-content padding
+    // belongs to the scroll extent, not to a permanently blank clipping strip.
+    IntersectClipRect(dc,visible.left,visible.top,visible.right,visible.bottom);
+    OffsetWindowOrgEx(dc,scroll.x,scroll.y,nullptr);
+    PaintBody(dc,viewport,dpi,true,dividerWidth);
+    RestoreDC(dc,saved);
+    for(auto& line:m_lines) {
+        RECT clipped{};
+        OffsetRect(&line.bounds,-scroll.x,-scroll.y);
+        IntersectRect(&clipped,&line.bounds,&visible); line.bounds=clipped;
+        if(!IsRectEmpty(&line.tooltipBounds)) {
+            OffsetRect(&line.tooltipBounds,-scroll.x,-scroll.y);
+            IntersectRect(&clipped,&line.tooltipBounds,&visible); line.tooltipBounds=clipped;
+        }
+    }
+    return m_imgDetailsExtent;
+}
+} }
+
+// Independent viewer support: viewer-paint-transaction.inc
+// Retain only this mod's child-window frames while Shell callbacks can pump
+// messages. There is no overlay and no visibility/style change to the file list.
+namespace ce { namespace win2kwebview {
+class RetainedViewerFrame {
+    static constexpr PCWSTR kProperty=L"ClassicWebViewPane.RetainedViewerFrame";
+    HWND m_window=nullptr;
+    HDC m_dc=nullptr;
+    HBITMAP m_bitmap=nullptr;
+    HGDIOBJ m_original=nullptr;
+    SIZE m_size{};
+public:
+    RetainedViewerFrame()=default;
+    RetainedViewerFrame(const RetainedViewerFrame&)=delete;
+    RetainedViewerFrame& operator=(const RetainedViewerFrame&)=delete;
+    ~RetainedViewerFrame() { Release(); }
+    void Capture(HWND window) noexcept {
+        if(!window || GetPropW(window,kProperty)) return; // an outer transaction owns it
+        RECT client{};
+        if(!GetClientRect(window,&client) || client.right<=0 || client.bottom<=0) return;
+        HDC screen=GetDC(window);
+        if(!screen) return;
+        m_dc=CreateCompatibleDC(screen);
+        m_bitmap=CreateCompatibleBitmap(screen,client.right,client.bottom);
+        ReleaseDC(window,screen);
+        if(!m_dc || !m_bitmap) { Release();return; }
+        m_original=SelectObject(m_dc,m_bitmap);m_size={client.right,client.bottom};
+        SendMessageW(window,WM_PRINTCLIENT,reinterpret_cast<WPARAM>(m_dc),PRF_CLIENT);
+        if(!IsWindow(window) || !SetPropW(window,kProperty,this)) { Release();return; }
+        m_window=window;
+    }
+    void Release() noexcept {
+        if(m_window && GetPropW(m_window,kProperty)==this) {
+            RemovePropW(m_window,kProperty);
+            RedrawWindow(m_window,nullptr,nullptr,RDW_INVALIDATE|RDW_FRAME|RDW_NOERASE);
+        }
+        m_window=nullptr;
+        if(m_dc && m_original) SelectObject(m_dc,m_original);
+        if(m_bitmap) DeleteObject(m_bitmap);
+        if(m_dc) DeleteDC(m_dc);
+        m_dc=nullptr;m_bitmap=nullptr;m_original=nullptr;m_size={};
+    }
+    static bool PaintMessage(HWND window,UINT message,WPARAM wParam) noexcept {
+        auto* held=static_cast<RetainedViewerFrame*>(GetPropW(window,kProperty));
+        if(!held) return false;
+        if(message==WM_NCPAINT) return true;
+        if(message!=WM_PAINT && message!=WM_PRINTCLIENT && message!=WM_ERASEBKGND) return false;
+        PAINTSTRUCT paint{};
+        HDC target=message==WM_PAINT ? BeginPaint(window,&paint) : reinterpret_cast<HDC>(wParam);
+        if(target && held->m_dc)
+            BitBlt(target,0,0,held->m_size.cx,held->m_size.cy,held->m_dc,0,0,SRCCOPY);
+        if(message==WM_PAINT) EndPaint(window,&paint);
+        return true;
+    }
+};
+class ViewerPaintTransaction {
+    RetainedViewerFrame m_details,m_image,m_toolbar;
+public:
+    ViewerPaintTransaction(HWND details,HWND image,HWND toolbar) noexcept {
+        m_details.Capture(details);m_image.Capture(image);m_toolbar.Capture(toolbar);
+    }
+    void Commit() noexcept { m_details.Release();m_image.Release();m_toolbar.Release(); }
+};
+} }
+
+// Independent viewer support: image-viewer-support.inc
+namespace ce { namespace win2kwebview {
+static std::wstring ViewerArgument(const std::wstring& value) {
+    std::wstring quoted=L"\"";
+    size_t slashes=0;
+    for(const wchar_t ch:value) {
+        if(ch==L'\\') { ++slashes; continue; }
+        quoted.append(ch==L'\"' ? slashes*2+1 : slashes,L'\\');
+        quoted+=ch; slashes=0;
+    }
+    quoted.append(slashes*2,L'\\'); quoted+=L'\"';
+    return quoted;
+}
+static std::wstring ViewerArguments(const std::wstring& pattern,const std::wstring& file) {
+    const auto quoted=ViewerArgument(file);
+    std::wstring result;
+    bool replaced=false;
+    for(size_t i=0;i<pattern.size();) {
+        if(pattern.compare(i,4,L"\"%1\"")==0) {
+            result+=quoted; i+=4; replaced=true;
+        } else if(pattern.compare(i,2,L"%1")==0) {
+            result+=quoted; i+=2; replaced=true;
+        } else result+=pattern[i++];
+    }
+    if(!replaced) { if(!result.empty()) result+=L' '; result+=quoted; }
+    return result;
+}
+static HRESULT LaunchImageViewer(HWND owner,std::wstring executable,const std::wstring& arguments,
+                                 const std::wstring& file) {
+    const auto first=executable.find_first_not_of(L" \t\r\n");
+    if(first==std::wstring::npos || file.empty()) return E_INVALIDARG;
+    executable=executable.substr(first,executable.find_last_not_of(L" \t\r\n")-first+1);
+    if(executable.size()>=2 && executable.front()==L'\"' && executable.back()==L'\"')
+        executable=executable.substr(1,executable.size()-2);
+    const DWORD required=ExpandEnvironmentStringsW(executable.c_str(),nullptr,0);
+    if(!required || required>32767) return E_INVALIDARG;
+    std::vector<wchar_t> expanded(required);
+    if(ExpandEnvironmentStringsW(executable.c_str(),expanded.data(),required)!=required) return E_INVALIDARG;
+    executable=expanded.data();
+    std::wstring command=ViewerArgument(executable)+L" "+ViewerArguments(arguments,file);
+    if(command.size()>=32767) return E_INVALIDARG;
+    STARTUPINFOW startup{sizeof(startup)};
+    // Placement is a hint; applications may retain their own saved window position.
+    MONITORINFO monitor{sizeof(monitor)};
+    if(owner && GetMonitorInfoW(MonitorFromWindow(owner,MONITOR_DEFAULTTONEAREST),&monitor)) {
+        startup.dwFlags=STARTF_USEPOSITION;
+        startup.dwX=monitor.rcWork.left; startup.dwY=monitor.rcWork.top;
+    }
+    PROCESS_INFORMATION process{};
+    if(!CreateProcessW(executable.c_str(),command.data(),nullptr,nullptr,FALSE,CREATE_NO_WINDOW,nullptr,nullptr,&startup,&process))
+        return HRESULT_FROM_WIN32(GetLastError());
+    CloseHandle(process.hThread); CloseHandle(process.hProcess);
+    return S_OK;
+}
+static HBITMAP ToolbarBitmap(HBITMAP original,SIZE source,int width,int height,bool mask) {
+    HDC from=CreateCompatibleDC(nullptr),to=CreateCompatibleDC(nullptr);
+    BITMAPINFO info{}; info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth=width; info.bmiHeader.biHeight=-height;
+    info.bmiHeader.biPlanes=1; info.bmiHeader.biBitCount=24;
+    void* bits=nullptr;
+    HBITMAP bitmap=mask ? CreateBitmap(width,height,1,1,nullptr) :
+        CreateDIBSection(nullptr,&info,DIB_RGB_COLORS,&bits,nullptr,0);
+    if(!from || !to || !bitmap) {
+        if(from) DeleteDC(from); if(to) DeleteDC(to); if(bitmap) DeleteObject(bitmap);
+        return nullptr;
+    }
+    const auto oldFrom=SelectObject(from,original),oldTo=SelectObject(to,bitmap);
+    SetBkColor(from,RGB(255,255,255));
+    SetStretchBltMode(to,mask ? COLORONCOLOR : HALFTONE);
+    const bool drawn=StretchBlt(to,0,0,width,height,from,0,0,source.cx,source.cy,SRCCOPY)!=FALSE;
+    SelectObject(from,oldFrom); SelectObject(to,oldTo); DeleteDC(from); DeleteDC(to);
+    if(!drawn) { DeleteObject(bitmap); return nullptr; }
+    return bitmap;
+}
+static bool CreateReferenceToolbarImages(UINT dpi,HIMAGELIST& normal,HIMAGELIST& hover) {
+    normal=nullptr; hover=nullptr;
+    SIZE coldSize{},hotSize{},maskSize{};
+    HBITMAP cold=LoadImageResource(IDB_WIN2K_IMGVIEW_TOOLBAR,coldSize);
+    HBITMAP hot=LoadImageResource(IDB_WIN2K_IMGVIEW_TOOLBAR_HOT,hotSize);
+    HBITMAP mask=LoadImageResource(IDB_WIN2K_IMGVIEW_TOOLBAR_MASK,maskSize);
+    const bool valid=cold && hot && mask && coldSize.cx>=144 && coldSize.cx%24==0 && coldSize.cy==24 &&
+        hotSize.cx==coldSize.cx && hotSize.cy==24 && maskSize.cx==coldSize.cx && maskSize.cy==24;
+    const int cell=MulDiv(24,dpi ? dpi : 96,96);
+    HBITMAP scaledCold=nullptr,scaledHot=nullptr,scaledMask=nullptr;
+    if(valid && cell>0 && cell<=192) {
+        const int width=cell*(coldSize.cx/24);
+        scaledCold=ToolbarBitmap(cold,coldSize,width,cell,false);
+        scaledHot=ToolbarBitmap(hot,hotSize,width,cell,false);
+        scaledMask=ToolbarBitmap(mask,maskSize,width,cell,true);
+        normal=ImageList_Create(cell,cell,ILC_COLOR24|ILC_MASK,6,1);
+        hover=ImageList_Create(cell,cell,ILC_COLOR24|ILC_MASK,6,1);
+    }
+    const bool added=scaledCold && scaledHot && scaledMask && normal && hover &&
+        ImageList_Add(normal,scaledCold,scaledMask)>=0 && ImageList_Add(hover,scaledHot,scaledMask)>=0;
+    for(auto bitmap:{cold,hot,mask,scaledCold,scaledHot,scaledMask}) if(bitmap) DeleteObject(bitmap);
+    if(!added) {
+        if(normal) ImageList_Destroy(normal); if(hover) ImageList_Destroy(hover);
+        normal=nullptr; hover=nullptr;
+    }
+    return added;
+}
+static void DrawPreviewToolbar(HWND toolbar,HDC dc,const RECT& client) {
+    FillReferenceSystemColour(dc,client,COLOR_3DFACE);
+    const auto normal=reinterpret_cast<HIMAGELIST>(SendMessageW(toolbar,TB_GETIMAGELIST,0,0));
+    const auto hover=reinterpret_cast<HIMAGELIST>(SendMessageW(toolbar,TB_GETHOTIMAGELIST,0,0));
+    int imageWidth=0,imageHeight=0;
+    if(!normal || !ImageList_GetIconSize(normal,&imageWidth,&imageHeight)) return;
+    const int count=static_cast<int>(SendMessageW(toolbar,TB_BUTTONCOUNT,0,0));
+    const int hot=static_cast<int>(SendMessageW(toolbar,TB_GETHOTITEM,0,0));
+    for(int index=0;index<count;++index) {
+        TBBUTTON button{}; RECT rect{};
+        if(!SendMessageW(toolbar,TB_GETBUTTON,index,reinterpret_cast<LPARAM>(&button)) ||
+           (button.fsState&TBSTATE_HIDDEN) ||
+           !SendMessageW(toolbar,TB_GETITEMRECT,index,reinterpret_cast<LPARAM>(&rect))) continue;
+        if(button.fsStyle&BTNS_SEP) {
+            const LONG middle=(rect.left+rect.right)/2;
+            RECT line{middle,rect.top+4,middle+2,rect.bottom-4};
+            DrawEdge(dc,&line,EDGE_ETCHED,BF_LEFT); continue;
+        }
+        const bool enabled=IsWindowEnabled(toolbar) && (button.fsState&TBSTATE_ENABLED);
+        const bool pressed=(button.fsState&(TBSTATE_PRESSED|TBSTATE_CHECKED))!=0;
+        if(enabled && (pressed || hot==index))
+            DrawEdge(dc,&rect,pressed ? EDGE_SUNKEN : EDGE_RAISED,BF_RECT);
+        const int offset=enabled && pressed ? 1 : 0;
+        const int x=rect.left+(rect.right-rect.left-imageWidth)/2+offset;
+        const int y=rect.top+(rect.bottom-rect.top-imageHeight)/2+offset;
+        const auto images=enabled && hot==index && hover ? hover : normal;
+        if(button.iBitmap>=0 && button.iBitmap<ImageList_GetImageCount(images))
+            ImageList_DrawEx(images,button.iBitmap,dc,x,y,0,0,CLR_NONE,
+                            GetSysColor(COLOR_3DFACE),enabled ? ILD_NORMAL : ILD_BLEND50);
+    }
+}
+static void PaintPreviewToolbar(HWND toolbar,HDC target) {
+    RECT client{}; GetClientRect(toolbar,&client);
+    const int width=client.right-client.left,height=client.bottom-client.top;
+    if(!target || width<=0 || height<=0) return;
+    const int saved=SaveDC(target);
+    HDC memory=CreateCompatibleDC(target);
+    HBITMAP buffer=CreateCompatibleBitmap(target,width,height);
+    if(memory && buffer) {
+        const auto old=SelectObject(memory,buffer);
+        DrawPreviewToolbar(toolbar,memory,client);
+        BitBlt(target,0,0,width,height,memory,0,0,SRCCOPY);
+        SelectObject(memory,old);
+    } else DrawPreviewToolbar(toolbar,target,client);
+    if(buffer) DeleteObject(buffer); if(memory) DeleteDC(memory);
+    if(saved) RestoreDC(target,saved);
+}
+static bool PreviewToolbarPaintMessage(HWND toolbar,UINT message,WPARAM wParam) {
+    if(RetainedViewerFrame::PaintMessage(toolbar,message,wParam)) return true;
+    if(message==WM_PRINTCLIENT) {
+        PaintPreviewToolbar(toolbar,reinterpret_cast<HDC>(wParam)); return true;
+    }
+    if(message==WM_PAINT) {
+        PAINTSTRUCT paint{}; HDC dc=BeginPaint(toolbar,&paint);
+        PaintPreviewToolbar(toolbar,dc); EndPaint(toolbar,&paint); return true;
+    }
+    return false;
+}
+} }
+
+// Independent viewer support: image-details-window.inc
+// Independent upper viewport. Native nonclient scrollbars belong to this
+// child, so neither the image toolbar nor the image moves with the details.
+namespace ce { namespace win2kwebview {
+class ImgViewDetailsWindow {
+    static constexpr PCWSTR kClass=L"ClassicWebViewPane.Reference.ImgViewDetails";
+    HWND m_hwnd=nullptr;
+    WebViewNativePane* m_renderer=nullptr; // owned by the containing ReferenceContent
+    RECT m_bounds{};
+    UINT m_dpi=96;
+    bool m_scrollEnabled=true, m_updating=false, m_tracking=false, m_layoutValid=false;
+    POINT m_scroll{}; // physical pixels, matching SCROLLINFO
+    POINT m_wheel{}; // accumulate high-resolution wheel deltas per axis
+    SIZE m_extent{};
+    std::function<SIZE(HDC,const RECT&,POINT,int)> m_painter;
+
+    SIZE Draw(HDC dc,bool measure) noexcept {
+        RECT client{}; GetClientRect(m_hwnd,&client);
+        if(client.right<=0 || client.bottom<=0 || !m_renderer) return {};
+        const int saved=SaveDC(dc);
+        if(!saved) return {};
+        if(measure) IntersectClipRect(dc,0,0,0,0);
+        else {
+            FillReferenceColour(dc,client,m_renderer->BackgroundColour());
+            IntersectClipRect(dc,0,0,client.right,client.bottom);
+        }
+        SetMapMode(dc,MM_ANISOTROPIC);
+        SetWindowExtEx(dc,96,96,nullptr); SetViewportExtEx(dc,m_dpi,m_dpi,nullptr);
+        SetViewportOrgEx(dc,-m_bounds.left,-m_bounds.top,nullptr);
+        RECT logical{MulDiv(m_bounds.left,96,m_dpi),MulDiv(m_bounds.top,96,m_dpi),
+            MulDiv(m_bounds.left+client.right,96,m_dpi),MulDiv(m_bounds.top+client.bottom,96,m_dpi)};
+        POINT scroll{MulDiv(m_scroll.x,96,m_dpi),MulDiv(m_scroll.y,96,m_dpi)};
+        // Include the nonclient scrollbar in the divider's fixed width.
+        // Text still wraps in the smaller client viewport above.
+        const int dividerWidth=std::max(0L,MulDiv(m_bounds.right,96,m_dpi)-logical.left);
+        const SIZE extent=m_painter ? m_painter(dc,logical,scroll,dividerWidth) :
+            m_renderer->PaintImgDetails(dc,logical,96,scroll,dividerWidth);
+        RestoreDC(dc,saved);
+        // A fitting logical width represents this exact native client. A
+        // round trip through logical units can otherwise add a phantom pixel.
+        const LONG extentWidth=extent.cx<=logical.right-logical.left ? client.right : MulDiv(extent.cx,m_dpi,96);
+        return {extentWidth,MulDiv(extent.cy,m_dpi,96)};
+    }
+    void UpdateScrollbars() noexcept {
+        if(!m_hwnd || m_updating) return;
+        m_updating=true;
+        HDC dc=GetDC(m_hwnd);
+        if(dc) {
+            // Adding either bar changes wrapping and can require the other.
+            // Re-measure after each geometry change until both are stable.
+            for(int pass=0;pass<4;++pass) {
+                RECT client{}; GetClientRect(m_hwnd,&client);
+                m_extent=Draw(dc,true);
+                const LONG_PTR style=GetWindowLongPtrW(m_hwnd,GWL_STYLE);
+                const bool horizontal=m_scrollEnabled && m_extent.cx>client.right;
+                const bool vertical=m_scrollEnabled && m_extent.cy>client.bottom;
+                const bool same=horizontal==((style&WS_HSCROLL)!=0) && vertical==((style&WS_VSCROLL)!=0);
+                if(same) break;
+                if(horizontal!=((style&WS_HSCROLL)!=0)) ShowScrollBar(m_hwnd,SB_HORZ,horizontal);
+                if(vertical!=((style&WS_VSCROLL)!=0)) ShowScrollBar(m_hwnd,SB_VERT,vertical);
+            }
+            RECT client{}; GetClientRect(m_hwnd,&client);
+            for(int bar:{SB_HORZ,SB_VERT}) {
+                const int extent=bar==SB_HORZ ? m_extent.cx : m_extent.cy;
+                const int page=bar==SB_HORZ ? client.right : client.bottom;
+                LONG& position=bar==SB_HORZ ? m_scroll.x : m_scroll.y;
+                position=m_scrollEnabled ? std::clamp<LONG>(position,0,std::max(0,extent-page)) : 0;
+                SCROLLINFO info{sizeof(info),SIF_RANGE|SIF_PAGE|SIF_POS};
+                info.nMax=m_scrollEnabled ? std::max(0,extent-1) : 0;
+                info.nPage=static_cast<UINT>(std::max(0,page)); info.nPos=position;
+                SetScrollInfo(m_hwnd,bar,&info,FALSE);
+            }
+            // Clamp/reset can move the text without a WM_PAINT yet. Keep hit
+            // tests current, while measuring with an empty clip region.
+            Draw(dc,true);
+            ReleaseDC(m_hwnd,dc);
+        }
+        m_updating=false;
+    }
+    bool Scroll(int bar,UINT command,int wheel=0) noexcept {
+        if(!m_scrollEnabled || !IsWindowEnabled(m_hwnd)) return false;
+        SCROLLINFO info{sizeof(info),SIF_ALL};
+        if(!GetScrollInfo(m_hwnd,bar,&info)) return false;
+        const int limit=std::max(0,info.nMax-static_cast<int>(info.nPage)+1);
+        const int step=std::max(1,MulDiv(bar==SB_HORZ ? 12 : panemetrics::kBodyLineHeight,m_dpi,96));
+        int next=info.nPos;
+        if(wheel) next-=wheel*step;
+        else switch(command) {
+            case SB_LINEUP:next-=step;break;
+            case SB_LINEDOWN:next+=step;break;
+            case SB_PAGEUP:next-=static_cast<int>(info.nPage);break;
+            case SB_PAGEDOWN:next+=static_cast<int>(info.nPage);break;
+            case SB_THUMBTRACK:case SB_THUMBPOSITION:next=info.nTrackPos;break;
+            case SB_TOP:next=0;break;
+            case SB_BOTTOM:next=limit;break;
+            default:return false;
+        }
+        next=std::clamp(next,0,limit);
+        if(next==info.nPos) return false;
+        if(bar==SB_HORZ) m_scroll.x=next; else m_scroll.y=next;
+        SetScrollPos(m_hwnd,bar,next,TRUE);
+        HDC dc=GetDC(m_hwnd); if(dc) { Draw(dc,true); ReleaseDC(m_hwnd,dc); }
+        SendMessageW(GetParent(m_hwnd),WM_MOUSELEAVE,0,0);
+        InvalidateRect(m_hwnd,nullptr,FALSE);
+        return true;
+    }
+    void Paint(HDC target) noexcept {
+        RECT client{}; GetClientRect(m_hwnd,&client);
+        HDC memory=CreateCompatibleDC(target);
+        HBITMAP bitmap=CreateCompatibleBitmap(target,std::max(1L,client.right),std::max(1L,client.bottom));
+        if(memory && bitmap) {
+            const auto old=SelectObject(memory,bitmap);
+            Draw(memory,false);
+            BitBlt(target,0,0,client.right,client.bottom,memory,0,0,SRCCOPY);
+            SelectObject(memory,old);
+        } else Draw(target,false);
+        if(bitmap) DeleteObject(bitmap); if(memory) DeleteDC(memory);
+    }
+    static LRESULT CALLBACK Proc(HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) {
+        auto* self=reinterpret_cast<ImgViewDetailsWindow*>(GetWindowLongPtrW(hwnd,GWLP_USERDATA));
+        if(message==WM_NCCREATE) {
+            self=static_cast<ImgViewDetailsWindow*>(reinterpret_cast<CREATESTRUCTW*>(lParam)->lpCreateParams);
+            self->m_hwnd=hwnd; SetWindowLongPtrW(hwnd,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(self));
+        }
+        if(!self) return DefWindowProcW(hwnd,message,wParam,lParam);
+        if(RetainedViewerFrame::PaintMessage(hwnd,message,wParam)) return 0;
+        switch(message) {
+            case WM_ERASEBKGND:return TRUE;
+            case WM_PAINT: {
+                PAINTSTRUCT paint{}; HDC dc=BeginPaint(hwnd,&paint);
+                self->Paint(dc); EndPaint(hwnd,&paint);return 0;
+            }
+            case WM_PRINTCLIENT:self->Paint(reinterpret_cast<HDC>(wParam));return 0;
+            case WM_SIZE:
+                self->UpdateScrollbars();
+                RedrawWindow(hwnd,nullptr,nullptr,RDW_INVALIDATE|RDW_FRAME|RDW_NOERASE);
+                return 0;
+            case WM_HSCROLL:case WM_VSCROLL:
+                self->Scroll(message==WM_HSCROLL ? SB_HORZ : SB_VERT,LOWORD(wParam));return 0;
+            case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL: {
+                UINT lines=3; SystemParametersInfoW(SPI_GETWHEELSCROLLLINES,0,&lines,0);
+                const int bar=message==WM_MOUSEHWHEEL || (GET_KEYSTATE_WPARAM(wParam)&MK_SHIFT) ? SB_HORZ : SB_VERT;
+                LONG& pending=bar==SB_HORZ ? self->m_wheel.x : self->m_wheel.y;
+                pending+=GET_WHEEL_DELTA_WPARAM(wParam)*(message==WM_MOUSEHWHEEL ? -1 : 1);
+                const int delta=pending/WHEEL_DELTA;pending%=WHEEL_DELTA;
+                if(!delta || !lines) return 0;
+                if(lines==WHEEL_PAGESCROLL) self->Scroll(bar,delta>0 ? SB_PAGEUP : SB_PAGEDOWN);
+                else self->Scroll(bar,0,delta*static_cast<int>(std::min(lines,100U)));
+                return 0;
+            }
+            case WM_KEYDOWN: {
+                int bar=SB_VERT; UINT command=SB_ENDSCROLL;
+                switch(wParam) {
+                    case VK_LEFT:bar=SB_HORZ;command=SB_LINELEFT;break;
+                    case VK_RIGHT:bar=SB_HORZ;command=SB_LINERIGHT;break;
+                    case VK_UP:command=SB_LINEUP;break;
+                    case VK_DOWN:command=SB_LINEDOWN;break;
+                    case VK_PRIOR:command=SB_PAGEUP;break;
+                    case VK_NEXT:command=SB_PAGEDOWN;break;
+                    case VK_HOME:command=SB_TOP;break;
+                    case VK_END:command=SB_BOTTOM;break;
+                }
+                if(command!=SB_ENDSCROLL) { self->Scroll(bar,command);return 0; }
+                break;
+            }
+            case WM_GETDLGCODE:return DLGC_WANTARROWS;
+            case WM_SETCURSOR:
+                if(LOWORD(lParam)==HTCLIENT) {
+                    POINT point{}; GetCursorPos(&point); ScreenToClient(GetParent(hwnd),&point);
+                    point={MulDiv(point.x,96,self->m_dpi),MulDiv(point.y,96,self->m_dpi)};
+                    SetCursor(LoadCursorW(nullptr,IsWindowEnabled(hwnd) && self->m_renderer &&
+                        self->m_renderer->HitTestLink(point)>=0 ? IDC_HAND : IDC_ARROW));return TRUE;
+                }
+                break;
+            case WM_MOUSEMOVE:case WM_LBUTTONDOWN:case WM_LBUTTONUP:case WM_LBUTTONDBLCLK: {
+                if(!IsWindowEnabled(hwnd)) return 0;
+                if(message==WM_MOUSEMOVE && !self->m_tracking) {
+                    TRACKMOUSEEVENT track{sizeof(track),TME_LEAVE,hwnd,0};
+                    self->m_tracking=TrackMouseEvent(&track)!=FALSE;
+                }
+                if(message==WM_LBUTTONDOWN) SetFocus(hwnd);
+                POINT point{GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)};
+                const HWND parent=GetParent(hwnd); MapWindowPoints(hwnd,parent,&point,1);
+                return SendMessageW(parent,message,wParam,MAKELPARAM(point.x,point.y));
+            }
+            case WM_MOUSELEAVE:
+                self->m_tracking=false;return SendMessageW(GetParent(hwnd),message,wParam,lParam);
+            case WM_NCDESTROY:
+                self->m_hwnd=nullptr; self->m_layoutValid=false;
+                SetWindowLongPtrW(hwnd,GWLP_USERDATA,0);break;
+        }
+        return DefWindowProcW(hwnd,message,wParam,lParam);
+    }
+public:
+    ~ImgViewDetailsWindow() { Destroy(); }
+    static bool Register() noexcept {
+        WNDCLASSEXW cls{sizeof(cls)}; cls.lpfnWndProc=Proc; cls.hInstance=ReferenceModule();
+        cls.lpszClassName=kClass; cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);
+        return RegisterClassExW(&cls)!=0;
+    }
+    bool Create(HWND parent,WebViewNativePane* renderer) noexcept {
+        if(m_hwnd) return true;
+        if(!g_referenceDetailsRegistered || !renderer) return false;
+        m_renderer=renderer;
+        m_hwnd=CreateWindowExW(0,kClass,nullptr,WS_CHILD|WS_CLIPSIBLINGS|WS_TABSTOP,
+            0,0,0,0,parent,nullptr,ReferenceModule(),this);
+        return m_hwnd!=nullptr;
+    }
+    void Destroy() noexcept {
+        if(m_hwnd) DestroyWindow(m_hwnd);
+        m_hwnd=nullptr; m_renderer=nullptr; m_painter={}; m_scroll={}; m_wheel={}; m_extent={}; m_tracking=false;
+        m_layoutValid=false;
+    }
+    HWND Window() const noexcept { return m_hwnd; }
+    POINT ScrollPosition() const noexcept { return m_scroll; }
+    SIZE ContentSize() const noexcept { return m_extent; }
+    void SetPainter(std::function<SIZE(HDC,const RECT&,POINT,int)> painter) { m_painter=std::move(painter); }
+    void ResetScroll() noexcept { m_scroll={}; m_wheel={}; }
+    void Layout(const RECT& bounds,UINT dpi,bool scrolling,bool enabled) noexcept {
+        if(!m_hwnd) return;
+        // Cached geometry belongs to one HWND, not the longer-lived content
+        // object. Re-entering Pictures creates a zero-sized child even when
+        // its requested bounds and DPI are identical to the previous visit.
+        const bool changed=!m_layoutValid || !EqualRect(&m_bounds,&bounds) || m_dpi!=dpi || m_scrollEnabled!=scrolling;
+        m_bounds=bounds; m_dpi=dpi ? dpi : 96; m_scrollEnabled=scrolling;
+        if(changed) m_layoutValid=SetWindowPos(m_hwnd,nullptr,bounds.left,bounds.top,
+            std::max(0L,bounds.right-bounds.left),std::max(0L,bounds.bottom-bounds.top),
+            SWP_NOACTIVATE|SWP_NOZORDER|SWP_NOREDRAW|SWP_NOCOPYBITS)!=FALSE;
+        EnableWindow(m_hwnd,enabled); UpdateScrollbars();
+        // Native bars are nonclient pixels. A client-only invalidation leaves
+        // old tracks/corners behind after a size or scrollbar-style change.
+        RedrawWindow(m_hwnd,nullptr,nullptr,RDW_INVALIDATE|RDW_FRAME|RDW_NOERASE);
+    }
+};
+} }
+
 // Adapted from the matching ClassicExplorer webview source: reference-zoom.inc
 namespace ce
 {
@@ -5208,7 +5855,14 @@ namespace win2kwebview
 			void Destroy() noexcept;
 			HWND Window() const noexcept { return m_hwnd; }
 
-			void SetBitmap(HBITMAP bitmap) noexcept;
+			void SetColours(COLORREF background,COLORREF text) noexcept {
+                if(m_backgroundColour==background && m_textColour==text) return;
+                m_backgroundColour=background;m_textColour=text;
+                if(m_hwnd) InvalidateRect(m_hwnd,nullptr,FALSE);
+            }
+            COLORREF BackgroundColour() const noexcept { return m_backgroundColour==CLR_INVALID ? GetSysColor(COLOR_WINDOW) : m_backgroundColour; }
+            COLORREF TextColour() const noexcept { return m_textColour==CLR_INVALID ? GetSysColor(COLOR_WINDOWTEXT) : m_textColour; }
+            void SetBitmap(HBITMAP bitmap) noexcept;
             void SetInteractionEnabled(bool enabled) noexcept { m_interactionEnabled=enabled; }
 			void SetStatusText(const std::wstring &text) noexcept;
 			bool SetMode(Mode mode) noexcept;
@@ -5241,7 +5895,7 @@ namespace win2kwebview
 			void OnMouseUp() noexcept;
 			void OnScroll(UINT message, WPARAM wParam) noexcept;
 			void OnSize(int width, int height) noexcept;
-			void Paint() noexcept;
+			void Paint(HDC target=nullptr) noexcept;
 			bool EraseBackground(HDC dc) noexcept;
 
 			HWND m_hwnd = nullptr;
@@ -5259,7 +5913,8 @@ namespace win2kwebview
 			Mode m_defaultMode = Mode::ZoomIn;
 			PointSize m_destination;
 			bool m_bestFit = true;
-			bool m_interactionEnabled=true;
+			COLORREF m_backgroundColour=CLR_INVALID,m_textColour=CLR_INVALID;
+            bool m_interactionEnabled=true;
             bool m_panning = false;
 			bool m_controlDown = false;
 			bool m_shiftDown = false;
@@ -5278,7 +5933,8 @@ namespace win2kwebview
 
 			bool Show(HWND owner, HWND commandTarget, HIMAGELIST images, HIMAGELIST hotImages) noexcept;
 			void Destroy() noexcept;
-			void SetBitmap(HBITMAP bitmap) noexcept;
+			void SetColours(COLORREF background,COLORREF text) noexcept { m_zoom.SetColours(background,text); }
+            void SetBitmap(HBITMAP bitmap) noexcept;
 			void SetStatusText(const std::wstring &text) noexcept;
 			void SetSourcePath(const std::wstring &path) noexcept;
 			void SetPrintable(bool printable) noexcept;
@@ -5325,16 +5981,10 @@ namespace win2kwebview
 		constexpr wchar_t kDetachedClassName[] = L"ClassicWebViewPane.Reference.ImgViewDetached";
 		constexpr UINT_PTR kDetachedToolbarSubclassId = 1;
 
-		void FillToolbarBackground(HWND hwnd, HDC dc) noexcept
-		{
-			RECT fill{};
-			GetClientRect(hwnd, &fill);
-			fill.bottom = (fill.bottom > 2) ? fill.bottom - 2 : 0;
-			FillRect(dc, &fill, GetSysColorBrush(COLOR_3DFACE));
-			GetClientRect(hwnd, &fill);
-			fill.top = (fill.bottom > 2) ? fill.bottom - 2 : 0;
-			FillRect(dc, &fill, GetSysColorBrush(COLOR_WINDOW));
-		}
+		void FillToolbarBackground(HWND hwnd,HDC dc) noexcept {
+            RECT fill{}; GetClientRect(hwnd,&fill);
+            FillReferenceSystemColour(dc,fill,COLOR_3DFACE);
+        }
 
 		std::wstring FullScreenTitle(const std::wstring &path)
 		{
@@ -5875,78 +6525,23 @@ namespace win2kwebview
 		if (m_hasAlpha || !m_bitmap)
 		{
 			GetClientRect(m_hwnd, &fill);
-			FillRect(dc, &fill, GetSysColorBrush(COLOR_WINDOW));
+			FillReferenceColour(dc,fill,BackgroundColour());
 			return true;
 		}
 
 		fill = { 0, m_destination.y, m_destination.x, m_destination.y + m_destination.cy };
-		if (fill.right > fill.left) FillRect(dc, &fill, GetSysColorBrush(COLOR_WINDOW));
+		if (fill.right > fill.left) FillReferenceColour(dc,fill,BackgroundColour());
 		fill = { m_destination.x + m_destination.cx, m_destination.y,
 		         m_windowWidth, m_destination.y + m_destination.cy };
-		if (fill.right > fill.left) FillRect(dc, &fill, GetSysColorBrush(COLOR_WINDOW));
+		if (fill.right > fill.left) FillReferenceColour(dc,fill,BackgroundColour());
 		fill = { 0, 0, m_windowWidth, m_destination.y };
-		if (fill.bottom > fill.top) FillRect(dc, &fill, GetSysColorBrush(COLOR_WINDOW));
+		if (fill.bottom > fill.top) FillReferenceColour(dc,fill,BackgroundColour());
 		fill = { 0, m_destination.y + m_destination.cy, m_windowWidth, m_windowHeight };
-		if (fill.bottom > fill.top) FillRect(dc, &fill, GetSysColorBrush(COLOR_WINDOW));
+		if (fill.bottom > fill.top) FillReferenceColour(dc,fill,BackgroundColour());
 		return true;
 	}
 
-	void ImgViewZoomWindow::Paint() noexcept
-	{
-		PAINTSTRUCT paint{};
-		const HDC dc = BeginPaint(m_hwnd, &paint);
-		if (!dc)
-		{
-			return;
-		}
-		SetMapMode(dc, MM_TEXT);
-		SetStretchBltMode(dc, COLORONCOLOR);
-		if (m_bitmap)
-		{
-			const HDC source = CreateCompatibleDC(dc);
-			if (source)
-			{
-				const HGDIOBJ previous = SelectObject(source, m_bitmap);
-				BOOL drawn = FALSE;
-				if (m_hasAlpha)
-				{
-					BLENDFUNCTION blend{ AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-					drawn = AlphaBlend(dc, m_destination.x, m_destination.y,
-					                   m_destination.cx, m_destination.cy, source, 0, 0,
-					                   m_imageWidth, m_imageHeight, blend);
-				}
-				if (!drawn)
-				{
-					StretchBlt(dc, m_destination.x, m_destination.y,
-					           m_destination.cx, m_destination.cy, source, 0, 0,
-					           m_imageWidth, m_imageHeight, SRCCOPY);
-				}
-				SelectObject(source, previous);
-				DeleteDC(source);
-			}
-		}
-		else
-		{
-			RECT client{};
-			GetClientRect(m_hwnd, &client);
-			FillRect(dc, &client, GetSysColorBrush(COLOR_WINDOW));
-			LOGFONTW fontDescription{};
-			HFONT font = nullptr;
-			if (ReferenceIconFont(m_hwnd,fontDescription))
-			{
-				if(g_webOptions.load()->disableSmoothing) fontDescription.lfQuality=NONANTIALIASED_QUALITY;
-                font = CreateFontIndirectW(&fontDescription);
-			}
-			const HGDIOBJ previous = font ? SelectObject(dc, font) : nullptr;
-			SetTextColor(dc, GetSysColor(COLOR_WINDOWTEXT));
-			SetBkColor(dc, GetSysColor(COLOR_WINDOW));
-			DrawTextW(dc, m_statusText.c_str(), -1, &client,
-			          DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-			if (previous) SelectObject(dc, previous);
-			if (font) DeleteObject(font);
-		}
-		EndPaint(m_hwnd, &paint);
-	}
+
 
 	LRESULT CALLBACK ImgViewZoomWindow::WindowProc(HWND hwnd, UINT message, WPARAM wParam,
 	                                                LPARAM lParam) noexcept
@@ -5964,13 +6559,15 @@ namespace win2kwebview
 			return DefWindowProcW(hwnd, message, wParam, lParam);
 		}
 
-		if (!self->m_interactionEnabled && (message==WM_MOUSEWHEEL || message==WM_KEYDOWN ||
+		if(RetainedViewerFrame::PaintMessage(hwnd,message,wParam)) return 0;
+        if (!self->m_interactionEnabled && (message==WM_MOUSEWHEEL || message==WM_KEYDOWN ||
             message==WM_KEYUP || message==WM_LBUTTONDOWN || message==WM_MBUTTONDOWN ||
             message==WM_HSCROLL || message==WM_VSCROLL || message==WM_MOUSEMOVE)) return 0;
         switch (message)
         {
-            case WM_ERASEBKGND: return self->EraseBackground(reinterpret_cast<HDC>(wParam));
+            case WM_ERASEBKGND: return TRUE;
 			case WM_PAINT: self->Paint(); return 0;
+            case WM_PRINTCLIENT: self->Paint(reinterpret_cast<HDC>(wParam)); return 0;
 			case WM_SIZE: self->OnSize(LOWORD(lParam), HIWORD(lParam)); return 0;
 			case WM_LBUTTONDOWN:
 			case WM_MBUTTONDOWN: self->OnMouseDown(message, wParam, lParam); return 0;
@@ -6093,10 +6690,13 @@ namespace win2kwebview
 		if (!m_toolbar) return false;
 		SetWindowTheme(m_toolbar, L"", L"");
 		SendMessageW(m_toolbar, CCM_SETVERSION, 5, 0);
-		SendMessageW(m_toolbar,TB_SETEXTENDEDSTYLE,0,TBSTYLE_EX_MIXEDBUTTONS);
+		SendMessageW(m_toolbar,CCM_SETUNICODEFORMAT,TRUE,0);
+        SendMessageW(m_toolbar,TB_SETEXTENDEDSTYLE,0,TBSTYLE_EX_MIXEDBUTTONS);
         SendMessageW(m_toolbar, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
-		SendMessageW(m_toolbar, TB_SETMAXTEXTROWS, 1, 0);
-		SendMessageW(m_toolbar, TB_SETBITMAPSIZE, 0, MAKELONG(24, 24));
+		SendMessageW(m_toolbar, TB_SETMAXTEXTROWS, 0, 0);
+		int imageWidth=24,imageHeight=24;
+        ImageList_GetIconSize(m_images,&imageWidth,&imageHeight);
+        SendMessageW(m_toolbar, TB_SETBITMAPSIZE, 0, MAKELONG(imageWidth, imageHeight));
 		SendMessageW(m_toolbar, TB_SETIMAGELIST, 0, reinterpret_cast<LPARAM>(m_images));
 		SendMessageW(m_toolbar, TB_SETHOTIMAGELIST, 0, reinterpret_cast<LPARAM>(m_hotImages));
 
@@ -6117,7 +6717,7 @@ namespace win2kwebview
 		if (!g_webOptions.load()->zoom) for (UINT id=ID_WIN2K_IMGVIEW_ZOOMIN;id<=ID_WIN2K_IMGVIEW_BESTFIT;++id)
             SendMessageW(m_toolbar,TB_HIDEBUTTON,id,TRUE);
         if (!g_webOptions.load()->print) SendMessageW(m_toolbar,TB_HIDEBUTTON,ID_WIN2K_IMGVIEW_PRINT,TRUE);
-        SendMessageW(m_toolbar, TB_SETBUTTONWIDTH, 0, MAKELONG(24, 24));
+        SendMessageW(m_toolbar, TB_SETBUTTONWIDTH, 0, MAKELONG(imageWidth, imageWidth));
 		SendMessageW(m_toolbar, TB_AUTOSIZE, 0, 0);
 		if (!SetWindowSubclass(m_toolbar, &ImgViewDetachedPreview::ToolbarSubclassProc,
 		                       kDetachedToolbarSubclassId, reinterpret_cast<DWORD_PTR>(this))) return false;
@@ -6242,7 +6842,8 @@ namespace win2kwebview
 		HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam, UINT_PTR id, DWORD_PTR data) noexcept
 	{
 		auto *self = reinterpret_cast<ImgViewDetachedPreview *>(data);
-		if (message == WM_ERASEBKGND)
+		if(PreviewToolbarPaintMessage(hwnd,message,wParam)) return 0;
+        if (message == WM_ERASEBKGND)
 		{
 			FillToolbarBackground(hwnd, reinterpret_cast<HDC>(wParam));
 			return TRUE;
@@ -6357,10 +6958,63 @@ namespace win2kwebview
 } // namespace win2kwebview
 } // namespace ce
 
+// Independent opaque painter: every paint supplies all margins and image
+// pixels for the current size. No separate erase phase can expose old content.
+namespace ce { namespace win2kwebview {
+void ImgViewZoomWindow::Paint(HDC target) noexcept {
+    PAINTSTRUCT paint{};
+    HDC output=target ? target : BeginPaint(m_hwnd,&paint);
+    if(!output) return;
+    RECT client{}; GetClientRect(m_hwnd,&client);
+    if(client.right>0 && client.bottom>0) {
+        HDC memory=CreateCompatibleDC(output);
+        HBITMAP bitmap=memory ? CreateCompatibleBitmap(output,client.right,client.bottom) : nullptr;
+        HDC dc=memory && bitmap ? memory : output;
+        const auto oldBitmap=bitmap ? SelectObject(memory,bitmap) : nullptr;
+        const int saved=SaveDC(dc);
+        if(saved) {
+            SetMapMode(dc,MM_TEXT);
+            FillReferenceColour(dc,client,BackgroundColour());
+            if(m_bitmap && m_destination.cx>0 && m_destination.cy>0) {
+                HDC source=CreateCompatibleDC(dc);
+                if(source) {
+                    const auto oldSource=SelectObject(source,m_bitmap);
+                    SetStretchBltMode(dc,COLORONCOLOR);
+                    const BLENDFUNCTION blend{AC_SRC_OVER,0,255,AC_SRC_ALPHA};
+                    const bool blended=m_hasAlpha && AlphaBlend(dc,m_destination.x,m_destination.y,
+                        m_destination.cx,m_destination.cy,source,0,0,m_imageWidth,m_imageHeight,blend);
+                    if(!blended) StretchBlt(dc,m_destination.x,m_destination.y,m_destination.cx,m_destination.cy,
+                        source,0,0,m_imageWidth,m_imageHeight,SRCCOPY);
+                    SelectObject(source,oldSource);DeleteDC(source);
+                }
+            } else if(!m_bitmap) {
+                LOGFONTW description{};
+                HFONT font=nullptr;
+                if(ReferenceIconFont(m_hwnd,description)) {
+                    if(g_webOptions.load()->disableSmoothing) description.lfQuality=NONANTIALIASED_QUALITY;
+                    font=CreateFontIndirectW(&description);
+                }
+                const auto oldFont=font ? SelectObject(dc,font) : nullptr;
+                SetTextColor(dc,TextColour());SetBkMode(dc,TRANSPARENT);
+                DrawTextW(dc,m_statusText.c_str(),-1,&client,DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+                if(oldFont) SelectObject(dc,oldFont);if(font) DeleteObject(font);
+            }
+            RestoreDC(dc,saved);
+            if(bitmap) BitBlt(output,0,0,client.right,client.bottom,memory,0,0,SRCCOPY);
+        }
+        if(oldBitmap) SelectObject(memory,oldBitmap);
+        if(bitmap) DeleteObject(bitmap);if(memory) DeleteDC(memory);
+    }
+    if(!target) EndPaint(m_hwnd,&paint);
+}
+} }
+
 namespace ce { namespace win2kwebview {
 bool RegisterReferenceViewerClasses() noexcept {
-    if(g_referenceZoomRegistered || g_referenceDetachedRegistered) return false;
-    if(!ImgViewZoomWindow::EnsureClassRegistered()) return false;
+    if(g_referenceZoomRegistered || g_referenceDetachedRegistered || g_referenceDetailsRegistered) return false;
+    if(!ImgViewDetailsWindow::Register()) return false;
+    g_referenceDetailsRegistered=true;
+    if(!ImgViewZoomWindow::EnsureClassRegistered()) { FreeReferenceSharedResources(); return false; }
     g_referenceZoomRegistered=true;
     if(!ImgViewDetachedPreview::EnsureClassRegistered()) {
         FreeReferenceSharedResources(); return false;
@@ -7248,9 +7902,10 @@ std::wstring ItemSizeText(IShellItem2* properties,FolderItem* item,IShellFolderV
     if(item && SUCCEEDED(item->get_Size(&legacyBytes)) && legacyBytes>=0) return FormatBytes(legacyBytes);
     return DetailOf(view,item,1);
 }
-std::wstring ProfileFolderComment(WebViewVisualProfile era,bool computer,bool documents) noexcept {
+std::wstring ProfileFolderComment(WebViewVisualProfile era,bool computer,bool documents,bool pictures=false) noexcept {
     if(era==WebViewVisualProfile::Windows98) return {};
     if(documents) return ReferenceCaption(L"Stores and manages documents");
+    if(pictures) return ReferenceCaption(L"Stores and manages pictures.");
     if(!computer) return {};
     return era==WebViewVisualProfile::WindowsME ? ReferenceCaption(L"Displays the contents of your computer") :
         ReferenceCaption(L"Displays the files and folders on your computer");
@@ -7678,6 +8333,7 @@ public:
     std::function<HRESULT(PCIDLIST_ABSOLUTE)> navigate;
     std::function<bool(IShellView*)> isActiveView;
     HIMAGELIST images=nullptr,hotImages=nullptr;
+    ImgViewDetailsWindow details;
     ImgViewZoomWindow zoom;
     ImgViewDetachedPreview detached;
     std::shared_ptr<PreviewLifetime> lifetime=std::make_shared<PreviewLifetime>();
@@ -7701,6 +8357,7 @@ public:
     void SuspendView();
     void PreviewStatus(ImgPreviewState state,SIZE size={});
     void EnsureViewer();
+    void UpdateViewerButtons();
     void DestroyViewer();
     void LayoutViewer(const RECT& client,int dpi,bool visible);
     void Command(UINT command,HWND source=nullptr);
@@ -9208,6 +9865,9 @@ namespace ce { namespace win2kwebview {
 			if (selected == 0)
 			{
 				AddBreak(lines, ReferenceCaption(L"Select an item to view its description."));
+                std::wstring comment=FolderCommentOf(view);
+                if(comment.empty()) comment=ProfileFolderComment(m_visualProfile,m_isMyComputer,m_isMyDocuments,m_isMyPictures);
+                AddMessage(lines,std::move(comment));
 
 				PaneLine seeAlso;
 				seeAlso.text = ReferenceCaption(L"See also:");
@@ -10418,7 +11078,7 @@ namespace ce { namespace win2kwebview {
 			// NoneSelected(): the prompt, the folder's description, then the See also list.
 			AddBreak(lines, ReferenceCaption(L"Select an item to view its description."));
 
-            std::wstring comment=ProfileFolderComment(m_visualProfile,m_isMyComputer,m_isMyDocuments);
+            std::wstring comment=ProfileFolderComment(m_visualProfile,m_isMyComputer,m_isMyDocuments,m_isMyPictures);
             if(comment.empty()) comment=FolderCommentOf(view);
 			const bool infoEndsInMessage = !comment.empty();
 			AddMessage(lines, std::move(comment));
@@ -10481,6 +11141,25 @@ static bool IsCsidl(IShellItem* item,int csidl) {
               ILIsEqual(current,expected);
     CoTaskMemFree(current); CoTaskMemFree(expected); return same;
 }
+static bool IsKnownFolderPath(IShellItem* item,REFKNOWNFOLDERID folder) {
+    auto path=DisplayName(item,SIGDN_FILESYSPATH);
+    if(path.empty()) return false;
+    PWSTR value=nullptr;
+    const HRESULT status=SHGetKnownFolderPath(folder,KF_FLAG_DONT_VERIFY,nullptr,&value);
+    std::wstring expected=SUCCEEDED(status) && value ? value : L"";
+    CoTaskMemFree(value);
+    if(expected.empty()) return false;
+    for(auto* text:{&path,&expected}) {
+        std::replace(text->begin(),text->end(),L'/',L'\\');
+        while(text->size()>3 && text->back()==L'\\') text->pop_back();
+    }
+    return SamePath(path.c_str(),expected.c_str());
+}
+static bool IsDocumentsFolder(IShellItem* item) {
+    // The same user folder can have distinct filesystem and namespace PIDLs.
+    // Use the configured path, including redirected Documents directories.
+    return item && (IsCsidl(item,CSIDL_PERSONAL) || IsKnownFolderPath(item,FOLDERID_Documents));
+}
 static bool IsDesktopFolder(IShellItem* item) {
     if(!item) return false;
     if(IsCsidl(item,CSIDL_DESKTOP) || IsCsidl(item,CSIDL_DESKTOPDIRECTORY) ||
@@ -10488,18 +11167,7 @@ static bool IsDesktopFolder(IShellItem* item) {
     // This PC and redirected-folder aliases can use a different PIDL for the
     // same Desktop directory. Recognize the known-folder path before accepting
     // the view's remembered Pictures type.
-    auto path=DisplayName(item,SIGDN_FILESYSPATH);
-    while(path.size()>3 && (path.back()==L'\\' || path.back()==L'/')) path.pop_back();
-    if(path.empty()) return false;
-    for(const KNOWNFOLDERID* folder:{&FOLDERID_Desktop,&FOLDERID_PublicDesktop}) {
-        PWSTR value=nullptr;
-        const HRESULT status=SHGetKnownFolderPath(*folder,KF_FLAG_DONT_VERIFY,nullptr,&value);
-        std::wstring expected=SUCCEEDED(status) && value ? value : L"";
-        CoTaskMemFree(value);
-        while(expected.size()>3 && (expected.back()==L'\\' || expected.back()==L'/')) expected.pop_back();
-        if(!expected.empty() && SamePath(path.c_str(),expected.c_str())) return true;
-    }
-    return false;
+    return IsKnownFolderPath(item,FOLDERID_Desktop) || IsKnownFolderPath(item,FOLDERID_PublicDesktop);
 }
 ReferenceContent::~ReferenceContent() {
     CancelPreview(lifetime,true);
@@ -10518,6 +11186,7 @@ void ReferenceContent::SuspendView() {
     pendingSince=0; printable=false;
     navigate={}; isActiveView={}; m_selection.Release(); m_spView.Release();
     zoom.SetInteractionEnabled(false);
+    if(details.Window()) EnableWindow(details.Window(),FALSE);
     if(toolbar) EnableWindow(toolbar,FALSE);
     detached.Destroy();
 }
@@ -10550,11 +11219,13 @@ void ReferenceContent::PreviewStatus(ImgPreviewState state,SIZE size) {
 }
 void ReferenceContent::Refresh(IShellView* view,IShellItem* folder,HWND hwnd,bool force) {
     if(!view || !folder || !IsWindow(hwnd)) { ResetView(); return; }
+    ViewerPaintTransaction held(details.Window(),zoom.Window(),toolbar);
     viewReady=true;
     window=hwnd;
     { std::lock_guard lock(lifetime->mutex); lifetime->window=hwnd; }
     const auto options=g_webOptions.load();
     const auto key=DisplayName(folder,SIGDN_DESKTOPABSOLUTEPARSING);
+    m_pane.SetImgDetailsOptions(options->compactImageHeader,options->scrollImageDetails);
     const bool navigated=key!=folderKey || m_spView.p!=view;
     if(navigated) CancelPrinterInfo(printerLifetime);
     m_spView=view;
@@ -10581,6 +11252,7 @@ void ReferenceContent::Refresh(IShellView* view,IShellItem* folder,HWND hwnd,boo
         m_pane.SetThumbnailPending(options->preview && pendingSince && now-pendingSince>1000);
         return;
     }
+    if(navigated || identity!=signature) details.ResetScroll();
     forceRefresh=false; signature=std::move(identity); refreshedAt=now;
     if (navigated || force) {
         folderKey=key; ++m_generation;
@@ -10592,7 +11264,7 @@ void ReferenceContent::Refresh(IShellView* view,IShellItem* folder,HWND hwnd,boo
         m_pane.EnsureResources();
         m_isDesktop=IsDesktopFolder(folder);
         m_isMyComputer=options->specialFolders && IsCsidl(folder,CSIDL_DRIVES);
-        m_isMyDocuments=options->specialFolders && IsCsidl(folder,CSIDL_PERSONAL);
+        m_isMyDocuments=options->specialFolders && IsDocumentsFolder(folder);
         m_isMyNetworkPlaces=options->specialFolders && IsCsidl(folder,CSIDL_NETWORK);
         m_isRecycleBin=options->specialFolders && IsCsidl(folder,CSIDL_BITBUCKET);
         m_isPrinters=options->specialFolders && IsCsidl(folder,CSIDL_PRINTERS);
@@ -10669,6 +11341,7 @@ void ReferenceContent::Refresh(IShellView* view,IShellItem* folder,HWND hwnd,boo
               CanonicalVerb(SVGIO_SELECTION,L"print",false)==S_OK;
     detached.SetPrintable(printable); detached.SetSourcePath(previewPath);
     if (toolbar) SendMessageW(toolbar,TB_ENABLEBUTTON,ID_WIN2K_IMGVIEW_PRINT,MAKELONG(printable,0));
+    UpdateViewerButtons();
     InvalidateRect(window,nullptr,FALSE);
 }
 void ReferenceContent::AcceptPreview() {
@@ -10684,6 +11357,7 @@ void ReferenceContent::AcceptPreview() {
     zoom.SetBitmap(ready && fullResolution ? preview->bitmap : nullptr);
     detached.SetBitmap(ready && fullResolution ? preview->bitmap : nullptr);
     PreviewStatus(ready ? ImgPreviewState::Image : ImgPreviewState::Failed,preview->sourceSize);
+    UpdateViewerButtons();
     InvalidateRect(window,nullptr,FALSE);
 }
 bool ReferenceContent::SelectionMatches() const {
@@ -10802,6 +11476,10 @@ void ReferenceContent::Activate(int index) {
 }
 static LRESULT CALLBACK ReferenceToolbarProc(HWND toolbar,UINT message,WPARAM wParam,LPARAM lParam,
                                              UINT_PTR id,DWORD_PTR data) {
+    if(PreviewToolbarPaintMessage(toolbar,message,wParam)) return 0;
+    if(message==WM_ERASEBKGND) {
+        FillToolbarBackground(toolbar,reinterpret_cast<HDC>(wParam)); return TRUE;
+    }
     if(message==WM_NCDESTROY) RemoveWindowSubclass(toolbar,ReferenceToolbarProc,id);
     if(message==WM_KEYDOWN) {
         const UINT command=ImgViewAcceleratorCommand(wParam);
@@ -10812,27 +11490,24 @@ static LRESULT CALLBACK ReferenceToolbarProc(HWND toolbar,UINT message,WPARAM wP
 void ReferenceContent::EnsureViewer() {
     if (toolbar) return;
     const auto options=g_webOptions.load();
-    if (!zoom.Create(window)) return;
+    if (!details.Create(window,&m_pane)) return;
+    if (!zoom.Create(window)) { details.Destroy(); return; }
     toolbar=CreateWindowExW(0,TOOLBARCLASSNAMEW,nullptr,
         WS_CHILD|WS_CLIPSIBLINGS|CCS_NODIVIDER|CCS_NOPARENTALIGN|CCS_NORESIZE|TBSTYLE_FLAT|
             (options->tooltips ? TBSTYLE_TOOLTIPS : 0),
         0,0,0,0,window,nullptr,ReferenceModule(),nullptr);
-    if (!toolbar) { zoom.Destroy(); return; }
+    if (!toolbar) { zoom.Destroy(); details.Destroy(); return; }
     SetWindowSubclass(toolbar,ReferenceToolbarProc,1,reinterpret_cast<DWORD_PTR>(this));
     SetWindowTheme(toolbar,L"",L"");
+    SendMessageW(toolbar,CCM_SETVERSION,5,0);
+    SendMessageW(toolbar,CCM_SETUNICODEFORMAT,TRUE,0);
     SendMessageW(toolbar,TB_BUTTONSTRUCTSIZE,sizeof(TBBUTTON),0);
     SendMessageW(toolbar,TB_SETEXTENDEDSTYLE,0,TBSTYLE_EX_MIXEDBUTTONS);
-    SendMessageW(toolbar,TB_SETBITMAPSIZE,0,MAKELONG(24,24));
-    SIZE size{};
-    HBITMAP cold=LoadImageResource(IDB_WIN2K_IMGVIEW_TOOLBAR,size);
-    HBITMAP hot=LoadImageResource(IDB_WIN2K_IMGVIEW_TOOLBAR_HOT,size);
-    HBITMAP mask=LoadImageResource(IDB_WIN2K_IMGVIEW_TOOLBAR_MASK,size);
-    images=ImageList_Create(24,24,ILC_COLOR32|ILC_MASK,7,1);
-    hotImages=ImageList_Create(24,24,ILC_COLOR32|ILC_MASK,7,1);
-    bool loaded=cold && hot && mask && images && hotImages &&
-                ImageList_Add(images,cold,mask)>=0 && ImageList_Add(hotImages,hot,mask)>=0;
-    if (cold) DeleteObject(cold); if (hot) DeleteObject(hot); if (mask) DeleteObject(mask);
-    if (!loaded) { DestroyViewer(); return; }
+    SendMessageW(toolbar,TB_SETMAXTEXTROWS,0,0);
+    const UINT dpi=GetDpiForWindow(window);
+    const int cell=MulDiv(24,dpi ? dpi : 96,96);
+    SendMessageW(toolbar,TB_SETBITMAPSIZE,0,MAKELONG(cell,cell));
+    if (!CreateReferenceToolbarImages(dpi,images,hotImages)) { DestroyViewer(); return; }
     SendMessageW(toolbar,TB_SETIMAGELIST,0,reinterpret_cast<LPARAM>(images));
     SendMessageW(toolbar,TB_SETHOTIMAGELIST,0,reinterpret_cast<LPARAM>(hotImages));
     auto button=[&](int image,UINT command,PCWSTR label) {
@@ -10849,23 +11524,41 @@ void ReferenceContent::EnsureViewer() {
     }
     if (options->detached) button(4,ID_WIN2K_IMGVIEW_FULLSCREEN,L"Full Screen");
     if (options->print) button(5,ID_WIN2K_IMGVIEW_PRINT,L"Print");
-    SendMessageW(toolbar,TB_SETBUTTONWIDTH,0,MAKELONG(24,24));
+    SendMessageW(toolbar,TB_SETBUTTONWIDTH,0,MAKELONG(cell,cell));
     SendMessageW(toolbar,TB_AUTOSIZE,0,0);
     m_pane.SetImgToolbarHeight(30);
     zoom.SetBitmap(preview ? preview->bitmap : nullptr);
     zoom.SetInteractionEnabled(options->zoom);
     zoom.SetMode(options->zoom ? ImgViewZoomWindow::Mode::ZoomIn : ImgViewZoomWindow::Mode::Pan);
 }
+void ReferenceContent::UpdateViewerButtons() {
+    if(!toolbar) return;
+    const auto options=g_webOptions.load();
+    const bool selected=viewReady && selectedCount==1 && !previewPath.empty();
+    const bool ready=selected && preview && preview->bitmap && fullResolution;
+    for(UINT command=ID_WIN2K_IMGVIEW_ZOOMIN;command<=ID_WIN2K_IMGVIEW_BESTFIT;++command)
+        SendMessageW(toolbar,TB_ENABLEBUTTON,command,MAKELONG(ready && options->zoom,0));
+    SendMessageW(toolbar,TB_ENABLEBUTTON,ID_WIN2K_IMGVIEW_FULLSCREEN,
+        MAKELONG(options->detached && (ready || (selected && !options->viewerExecutable.empty())),0));
+}
 void ReferenceContent::DestroyViewer() {
-    detached.Destroy(); zoom.Destroy();
+    detached.Destroy(); zoom.Destroy(); details.Destroy();
     if (toolbar) DestroyWindow(std::exchange(toolbar,nullptr));
     if (images) ImageList_Destroy(std::exchange(images,nullptr));
     if (hotImages) ImageList_Destroy(std::exchange(hotImages,nullptr));
     m_pane.SetImgToolbarHeight(0);
 }
+static bool PositionReferenceViewerChild(HWND child,const RECT& bounds) {
+    RECT previous{}; GetWindowRect(child,&previous);
+    MapWindowPoints(nullptr,GetParent(child),reinterpret_cast<POINT*>(&previous),2);
+    if(EqualRect(&previous,&bounds)) return false;
+    return SetWindowPos(child,nullptr,bounds.left,bounds.top,std::max(0L,bounds.right-bounds.left),
+        std::max(0L,bounds.bottom-bounds.top),SWP_NOACTIVATE|SWP_NOZORDER|SWP_NOREDRAW|SWP_NOCOPYBITS)!=FALSE;
+}
 void ReferenceContent::LayoutViewer(const RECT& client,int dpi,bool visible) {
     visible=visible && UsesImgViewProfile() && !bannerHeight && CurrentBarricade()==BarricadeMode::None;
     if(!visible || !toolbar) {
+        if(details.Window()) ShowWindow(details.Window(),SW_HIDE);
         if(zoom.Window()) ShowWindow(zoom.Window(),SW_HIDE);
         if(toolbar) ShowWindow(toolbar,SW_HIDE);
         return;
@@ -10876,14 +11569,34 @@ void ReferenceContent::LayoutViewer(const RECT& client,int dpi,bool visible) {
     RECT canvas=m_pane.ImgPreviewRect(logical);
     RECT pixels={MulDiv(canvas.left,dpi,96),MulDiv(canvas.top,dpi,96),
                  MulDiv(canvas.right,dpi,96),MulDiv(canvas.bottom,dpi,96)};
-    SetWindowPos(zoom.Window(),HWND_TOP,pixels.left,pixels.top,max(0L,pixels.right-pixels.left),
-                 max(0L,pixels.bottom-pixels.top),SWP_NOACTIVATE|SWP_NOREDRAW);
-    const int height=MulDiv(30,dpi,96);
-    SetWindowPos(toolbar,HWND_TOP,pixels.left,pixels.top-height,
-        max(0L,pixels.right-pixels.left),height,SWP_NOACTIVATE|SWP_NOREDRAW);
+    pixels.left=std::clamp(pixels.left,client.left,client.right);
+    pixels.right=std::clamp(pixels.right,pixels.left,client.right);
+    pixels.top=std::clamp(pixels.top,client.top,client.bottom);
+    pixels.bottom=std::clamp(pixels.bottom,pixels.top,client.bottom);
+    const int split=logical.top+(logical.bottom-logical.top+1)/2;
+    const int frameTop=MulDiv(split+panemetrics::kImgFrameInset,dpi,96);
+    const int toolbarTop=std::min<int>(pixels.top,std::max(frameTop,static_cast<int>(pixels.top)-MulDiv(30,dpi,96)));
+    const RECT bar{pixels.left,toolbarTop,pixels.right,pixels.top};
+    RECT upper=client;
+    upper.bottom=std::max(upper.top,std::min(upper.bottom,bar.top-MulDiv(1,dpi,96)));
+    RECT previousUpper{}; GetWindowRect(details.Window(),&previousUpper);
+    MapWindowPoints(nullptr,window,reinterpret_cast<POINT*>(&previousUpper),2);
+    const bool upperMoved=!EqualRect(&previousUpper,&upper);
+    const auto oldBars=GetWindowLongPtrW(details.Window(),GWL_STYLE)&(WS_HSCROLL|WS_VSCROLL);
+    // Reposition without copying stale pixels, then invalidate the complete
+    // parent/children (including native bars) once the final geometry is known.
+    const bool zoomMoved=PositionReferenceViewerChild(zoom.Window(),pixels);
+    const bool toolbarMoved=PositionReferenceViewerChild(toolbar,bar);
+    details.Layout(upper,dpi,g_webOptions.load()->scrollImageDetails,viewReady);
+    zoom.SetColours(m_pane.BackgroundColour(),m_pane.TextColour());
+    detached.SetColours(m_pane.BackgroundColour(),m_pane.TextColour());
     zoom.SetInteractionEnabled(viewReady && g_webOptions.load()->zoom);
     EnableWindow(toolbar,viewReady);
+    ShowWindow(details.Window(),SW_SHOWNOACTIVATE);
     ShowWindow(zoom.Window(),SW_SHOWNOACTIVATE); ShowWindow(toolbar,SW_SHOWNOACTIVATE);
+    if(zoomMoved || toolbarMoved || upperMoved || oldBars!=
+        (GetWindowLongPtrW(details.Window(),GWL_STYLE)&(WS_HSCROLL|WS_VSCROLL)))
+        RedrawWindow(window,nullptr,nullptr,RDW_INVALIDATE|RDW_FRAME|RDW_ALLCHILDREN|RDW_NOERASE);
 }
 void ReferenceContent::Command(UINT command,HWND source) {
     if(!viewReady) return;
@@ -10894,9 +11607,23 @@ void ReferenceContent::Command(UINT command,HWND source) {
         return;
     }
     if (command==ID_WIN2K_IMGVIEW_FULLSCREEN) {
-        if (!options->detached || !SelectionMatches() || !preview || !preview->bitmap) return;
+        if (!options->detached || !SelectionMatches()) return;
+        if(!options->viewerExecutable.empty()) {
+            const HWND owner=GetAncestor(window,GA_ROOT);
+            const HRESULT launched=LaunchImageViewer(owner,options->viewerExecutable,options->viewerArguments,previewPath);
+            if(FAILED(launched)) MessageBoxW(owner,
+                ReferenceCaption(L"Unable to start the image viewer. Check its executable path and arguments."),
+                ReferenceCaption(L"Image Preview"),MB_OK|MB_ICONERROR);
+            return;
+        }
+        if (!preview || !preview->bitmap) return;
+        detached.SetColours(m_pane.BackgroundColour(),m_pane.TextColour());
         detached.SetSourcePath(previewPath); detached.SetBitmap(preview->bitmap); detached.SetPrintable(printable);
-        detached.Show(GetAncestor(window,GA_ROOT),window,images,hotImages); return;
+        const HWND owner=GetAncestor(window,GA_ROOT);
+        if(!detached.Show(owner,window,images,hotImages)) MessageBoxW(owner,
+            ReferenceCaption(L"Unable to open the separate preview window."),
+            ReferenceCaption(L"Image Preview"),MB_OK|MB_ICONERROR);
+        return;
     }
     if (!options->zoom) return;
     if (source==detached.ToolbarWindow()) { detached.HandleToolbarCommand(command); return; }
@@ -13680,6 +14407,12 @@ static void OnSyncSpacer(Pane* pane) {
 }
 
 using namespace ce::win2kwebview;
+static bool ReferenceViewHasLayout(Pane* pane) {
+    const HWND viewWindow=GetHostChildOf(pane->host,pane->defView);
+    RECT client{};
+    return viewWindow && IsShown(viewWindow) && IsShown(pane->defView) &&
+        GetClientRect(pane->defView,&client) && client.right>client.left && client.bottom>client.top;
+}
 static void BeginReferenceNavigation(Pane* pane) {
     pane->referencePending=g_webOptions.load()->classicLayout && !pane->suppressed &&
         IsShown(pane->hwnd) && pane->spacerReady && !pane->spacerCollapsed &&
@@ -13697,7 +14430,7 @@ static void RefreshReferencePane(Pane* pane,bool force) {
     CComPtr<IShellBrowser> browser=GetShellBrowser(pane->defView);
     CComPtr<IShellView> view; CComPtr<IShellItem> folder;
     if (browser) browser->QueryActiveShellView(&view);
-    if(IsExplorerFolderView(pane->defView) && ShellViewMatchesWindow(view,pane->defView))
+    if(ReferenceViewHasLayout(pane) && IsExplorerFolderView(pane->defView) && ShellViewMatchesWindow(view,pane->defView))
         folder.Attach(FolderItemFromView(view));
     if (!view || !folder) {
         if(!pane->referencePending) BeginReferenceNavigation(pane);
@@ -13712,6 +14445,8 @@ static void RefreshReferencePane(Pane* pane,bool force) {
     }
     // Shell/property callbacks can run nested message loops. Hold paints and
     // layout until both the new model and its final reservation are ready.
+    const bool suppress=g_settings.skipControlPanel && IsControlPanelFolder(pane->defView);
+    ViewerPaintTransaction held(pane->reference.details.Window(),pane->reference.zoom.Window(),pane->reference.toolbar);
     pane->referenceUpdating=true; pane->referenceLayoutChanged=false;
     pane->referenceRetries=12;
     const auto name=GetItemText(folder,SIGDN_NORMALDISPLAY);
@@ -13745,9 +14480,10 @@ static void RefreshReferencePane(Pane* pane,bool force) {
         SetTimer(pane->hwnd,kPrinterRefreshTimer,5000,nullptr);
     // Existing switches still apply in the faithful layout.
     if (!g_settings.showDriveSpace) pane->reference.m_pane.SetCapacityPie(-1);
-    pane->suppressed=g_settings.skipControlPanel && IsControlPanelFolder(pane->defView);
+    pane->suppressed=suppress;
     pane->referenceLayoutCommitting=true;
     OnSyncSpacer(pane); LayOutPane(pane->hwnd);
+    held.Commit();
     pane->referenceLayoutCommitting=false; pane->referenceUpdating=false;
     if(pane->referenceLayoutChanged) {
         const HWND viewWindow=GetHostChildOf(pane->host,pane->defView);
@@ -13831,6 +14567,36 @@ static RECT ReferencePaneContentRect(const Pane* pane,const RECT& client) {
     }
     return content;
 }
+// Called with g_imageMutex held. Details paints also refresh these borrowed
+// images, so a settings change cannot leave the child using freed cache data.
+static void ConfigureReferenceDecoration(ce::win2kwebview::WebViewNativePane& renderer) {
+    renderer.SetColours(g_settings.background.Get(),g_settings.text.Get(),
+        g_settings.title.Get(),g_settings.link.Get());
+    renderer.SetPictureWhiteBlend(g_settings.imageBlendWhite);
+    const auto* image=EnsureImage(g_picture,g_settings.imagePath);
+    const auto* divider=EnsureImage(g_dividerPicture,g_settings.dividerImagePath);
+    renderer.SetDivider(divider ? divider->bitmap : nullptr,
+        divider ? SIZE{divider->width,divider->height} : SIZE{},divider && divider->alpha,
+        g_settings.divider.Get(),g_settings.background.Get(),g_settings.dividerGradient);
+    renderer.SetDecoration(image ? image->bitmap : nullptr,
+        image ? SIZE{image->width,image->height} : SIZE{},g_settings.imageWidth,
+        true,g_settings.showHeader,image && image->alpha,image ? image->icon : nullptr);
+    if(g_settings.imagePath.starts_with(L"*profile")) renderer.UseProfileDecoration(true,g_settings.showHeader);
+}
+// Run before BeginPaint: its child exclusion region must use the new bounds.
+// Moving children after BitBlt leaves the previously excluded areas unpainted.
+static void PrepareReferenceViewer(Pane* pane) {
+    RECT client{}; GetClientRect(pane->hwnd,&client);
+    auto& reference=pane->reference;
+    reference.m_pane.EnsureResources();
+    reference.details.SetPainter([pane](HDC detailsDc,const RECT& viewport,POINT scroll,int dividerWidth) {
+        LegacySettingsScope settingsReader{g_legacySettings.load()};
+        std::lock_guard lock(g_imageMutex);
+        ConfigureReferenceDecoration(pane->reference.m_pane);
+        return pane->reference.m_pane.PaintImgDetails(detailsDc,viewport,96,scroll,dividerWidth);
+    });
+    reference.LayoutViewer(ReferencePaneContentRect(pane,client),pane->dpi,IsWindowVisible(pane->hwnd));
+}
 static void PaintReferencePane(Pane* pane,HDC target,const RECT& client) {
     const int width=client.right-client.left,height=client.bottom-client.top;
     if (width<=0 || height<=0) return;
@@ -13850,16 +14616,7 @@ static void PaintReferencePane(Pane* pane,HDC target,const RECT& client) {
     reference.m_pane.EnsureResources();
     {
         std::lock_guard lock(g_imageMutex);
-        const auto* image=EnsureImage(g_picture,g_settings.imagePath);
-        const auto* divider=EnsureImage(g_dividerPicture,g_settings.dividerImagePath);
-        reference.m_pane.SetDivider(divider ? divider->bitmap : nullptr,
-            divider ? SIZE{divider->width,divider->height} : SIZE{},divider && divider->alpha,
-            g_settings.divider.Get(),g_settings.background.Get(),g_settings.dividerGradient);
-        reference.m_pane.SetDecoration(image ? image->bitmap : nullptr,
-            image ? SIZE{image->width,image->height} : SIZE{},g_settings.imageWidth,
-            true,g_settings.showHeader,image && image->alpha,image ? image->icon : nullptr);
-        if(g_settings.imagePath.starts_with(L"*profile")) reference.m_pane.UseProfileDecoration(
-            true,g_settings.showHeader);
+        ConfigureReferenceDecoration(reference.m_pane);
         if (reference.bannerHeight) reference.m_pane.PaintWin98MiniBanner(dc,logical);
         else if (reference.CurrentBarricade()!=BarricadeMode::None) {
             const int viewWidth=logical.right;
@@ -13875,7 +14632,9 @@ static void PaintReferencePane(Pane* pane,HDC target,const RECT& client) {
             reference.m_pane.Paint(dc,panel,96);
         } else {
             reference.m_pane.SetBarricade(BarricadeMode::None);
-            reference.m_pane.Paint(dc,logical,96);
+            if(reference.details.Window() && reference.UsesImgViewProfile())
+                reference.m_pane.PaintImgFrame(dc,logical);
+            else reference.m_pane.Paint(dc,logical,96);
         }
     }
     RestoreDC(dc,saved);
@@ -13885,7 +14644,6 @@ static void PaintReferencePane(Pane* pane,HDC target,const RECT& client) {
     }
     BitBlt(target,0,0,width,height,dc,0,0,SRCCOPY);
     SelectObject(dc,old); DeleteObject(buffer); DeleteDC(dc);
-    reference.LayoutViewer(content,pane->dpi,IsWindowVisible(pane->hwnd));
 }
 
 static LRESULT CALLBACK PaneWndProc(HWND hWnd,
@@ -13907,8 +14665,19 @@ static LRESULT CALLBACK PaneWndProc(HWND hWnd,
             break;
         }
 
+        case WM_SIZE:
+            if(pane && g_webOptions.load()->classicLayout && !pane->referenceUpdating)
+                PrepareReferenceViewer(pane);
+            InvalidateRect(hWnd,nullptr,FALSE);
+            return 0;
         case WM_PAINT: {
-            if(pane && pane->referenceUpdating) return 0;
+            if(pane && pane->referenceUpdating) {
+                // Validate nested paints without exposing the partly updated model.
+                // Commit below explicitly invalidates the final complete presentation.
+                PAINTSTRUCT retained{};BeginPaint(hWnd,&retained);EndPaint(hWnd,&retained);
+                return 0;
+            }
+            if(pane && g_webOptions.load()->classicLayout) PrepareReferenceViewer(pane);
             if (pane) {
                 PAINTSTRUCT paint;
                 HDC dc = BeginPaint(hWnd, &paint);
@@ -14427,6 +15196,11 @@ static void LayOutPane(HWND paneWindow) {
         return;
     }
 
+    // The retired view can leave DirectUI before its replacement arrives.
+    // Suspend it here, before its detached bounds can hide the ready panel.
+    if(g_webOptions.load()->classicLayout && pane->reference.viewReady &&
+        !GetHostChildOf(pane->host,pane->defView)) BeginReferenceNavigation(pane);
+
     // Windows come and go with navigation, so this runs every time.
     WatchSiblings(pane->host, paneWindow);
 
@@ -14436,6 +15210,16 @@ static void LayOutPane(HWND paneWindow) {
     }
 
     SyncSpacer(pane);
+
+    if(g_webOptions.load()->classicLayout && pane->referencePending && !pane->reference.viewReady) {
+        // Explorer inserts the replacement view hidden and at 0x0 before
+        // giving it its final bounds. Those bounds cannot place or hide the
+        // last complete panel. Retain its geometry and its overlap above the
+        // list frame until the new model and reservation can be committed.
+        SetWindowPos(paneWindow,HWND_TOP,0,0,0,0,
+            SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE|SWP_NOREDRAW);
+        return;
+    }
 
     if (g_dui.ok && !pane->spacerReady) {
         ShowWindow(paneWindow, SW_HIDE);
