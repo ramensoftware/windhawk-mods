@@ -1,0 +1,14 @@
+{
+  "modId": "explorer-single-window-tabs",
+  "reviews": [
+    {
+      "authorName": "DP",
+      "content": "opening explorer from another program with an argument to open a specific path would end up opening two new tabs of the same path",
+      "id": 37,
+      "modVersion": "0.8",
+      "parentId": null,
+      "timestamp": 1791206598,
+      "votes": 0
+    }
+  ]
+}

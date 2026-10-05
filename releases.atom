@@ -2,12 +2,38 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-05T09:00:07.000Z</updated>
+    <updated>2026-10-05T14:01:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Jump List Volume Control 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-jump-list-volume-control#f845399b58aa0ddc84a43ee6336a4e45532eb464</id>
+        <link href="https://windhawk.net/mods/taskbar-jump-list-volume-control"/>
+        <updated>2026-10-05T14:01:42.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarjumplistvolumecontrol">Taskbar Jump List Volume Control</h1>
+<p>Adds a volume slider and a mute button for the app to the jump list that opens
+when you right-click a taskbar button on Windows 11.</p>
+<p><img src="https://i.imgur.com/eZOdWZv.gif" alt="Demonstration" /></p>
+<ul>
+<li>The slider only appears for apps that have an audio session.</li>
+<li>Scrolling the mouse wheel or a precision touchpad over the slider also
+changes the volume.</li>
+<li>Apps that play audio from child processes (Chrome, Firefox, Discord, etc.)
+are supported.</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<p>The jump list is rendered by <code>ShellExperienceHost.exe</code>, not by <code>explorer.exe</code>,
+so this mod is loaded into both processes. In <code>explorer.exe</code> it finds the app of
+the right-clicked button and its audio sessions, and in <code>ShellExperienceHost.exe</code>
+it inserts the slider into the jump list.</p>]]></content>
+        <author>
+            <name>Ara</name>
+            <uri>https://github.com/ara-hwang</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hyprland Windows 1.1.2]]></title>
         <id>https://windhawk.net/mods/hyprland-windows#63096e4ab291eeae57163f6581741267e1020fb9</id>
@@ -932,35 +958,6 @@ Do not enable both mods in the same applications.</p>
         <author>
             <name>gilnett</name>
             <uri>https://github.com/gilnett</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Thumbnail Stats 1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-thumbnail-stats#75ca8ca0c2b754242492f73b632a79dee9432643</id>
-        <link href="https://windhawk.net/mods/taskbar-thumbnail-stats"/>
-        <updated>2026-09-30T12:03:25.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarthumbnailstats">Taskbar Thumbnail Stats</h1>
-<p>Adds a line with live process information to the Windows 11 taskbar
-thumbnails (the previews shown when hovering an open app), inside the
-thumbnail, over the bottom of the preview image or below it:</p>
-<ul>
-<li><strong>RAM</strong> in use (private working set, like Task Manager)</li>
-<li><strong>CPU</strong> usage in percent, updated every second</li>
-<li><strong>version</strong> of the executable</li>
-</ul>
-<p>Example: <code>RAM 412 MB · CPU 3.4% · v131.0.2</code></p>
-<p><img src="https://i.imgur.com/qxWa9bC.png" alt="Screenshot" /></p>
-<p>For multi-process programs (Firefox, Chrome, Edge, Teams…) the values can
-include the child processes too, to get closer to what Task Manager shows.</p>
-<p>The line can use the Windows accent color, a custom color or no background
-at all, and the font size and text color can be customized.</p>
-<p>Works with the new XAML thumbnails of Windows 11 (tested on 25H2). It does
-not work with taskbar replacements such as StartAllBack or ExplorerPatcher.</p>
-<p>The statistics are collected on a background thread, so the taskbar is never
-slowed down, and only while a thumbnail is actually visible.</p>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
         </author>
     </entry>
 </feed>
