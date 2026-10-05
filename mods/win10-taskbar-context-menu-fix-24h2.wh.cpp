@@ -16,22 +16,11 @@ The taskbar context menu (when clicking on the taskbar empty area) does not appe
 running the Windows 10 taskbar on Windows 11 24H2 or Windows 11 25H2.
 This mod restores the menu.
 
-## Where the labels come from (1.3)
+## Menu labels (1.3)
 
-The menu entries are the Windows 10 ones, and their labels are taken, in order, from:
-
-1. `%ProgramData%\Windhawk\Engine\ModsWritable\LegacyStore\<language>\<module>.mui` -
-   the language folder of the Windows 10 modules downloaded by the Windows 10 taskbar
-   mod (share the same folder: the labels are then the genuine Windows 10 ones);
-2. `%ProgramData%\Windhawk\Engine\ModsWritable\LegacyStore\<module>` - the file itself,
-   for the strings that live in the module and not in its `.mui`;
-3. the module loaded in this process (`shell32.dll`, `bthprops.cpl`,
-   `explorerframe.dll`);
-4. the text in the language detected at runtime (`GetUserDefaultUILanguage`), hardcoded
-   in this file for 15 languages: English, Italian, German, French, Spanish, Portuguese,
-   Russian, Simplified Chinese, Traditional Chinese, Japanese, Korean, Dutch, Polish,
-   Turkish, Czech. English is the fallback for any other language.
-
+Labels are read from the loaded Windows modules where available; otherwise the mod
+uses translations for 15 languages and falls back to English for other languages.
+No files from other mods are required.
 
 The menu prior to this update had four entries; the Windows 10 taskbar menu has three more:
 
@@ -64,8 +53,8 @@ static HMODULE g_explorerframeModule;
 #define IDM_SIDEBYSIDE       0x7C73
 
 #define IDM_ORIG_CASCADE     0x193
-#define IDM_ORIG_SIDEBYSIDE  0x194
-#define IDM_ORIG_STACKED     0x195
+#define IDM_ORIG_STACKED     0x194
+#define IDM_ORIG_SIDEBYSIDE  0x195
 
 #define IDS_SHOWDESKTOP     10113
 #define IDS_TASKMANAGER     24743
@@ -286,7 +275,7 @@ static const wchar_t* GetHardcodedText(HardcodedStringId id) {
 }
 
 // ---------------------------------------------------------------------------
-// Existing label loading (store / live module)
+// Label loading from live modules
 // ---------------------------------------------------------------------------
 
 using LoadMenuW_t = decltype(&LoadMenuW);
@@ -297,81 +286,8 @@ static wchar_t* LoadStr(HMODULE hMod, UINT id, wchar_t* buf, int size) {
     return nullptr;
 }
 
-static const wchar_t kLegacyStore[] =
-    L"%ProgramData%\\Windhawk\\Engine\\ModsWritable\\LegacyStore";
-
-struct DataFileCacheEntry {
-    wchar_t name[64];
-    HMODULE module;
-};
-
-static DataFileCacheEntry g_dataFiles[12] = {};
-static int g_dataFileCount = 0;
-static bool g_storeLogged = false;
-static wchar_t g_localeName[LOCALE_NAME_MAX_LENGTH] = {};
-static wchar_t g_languageName[LOCALE_NAME_MAX_LENGTH] = {};
-
-static void DetectLocaleNames() {
-    if (g_localeName[0]) return;
-    const LANGID langid = GetUserDefaultUILanguage();
-    if (LCIDToLocaleName(MAKELCID(langid, SORT_DEFAULT), g_localeName,
-                         LOCALE_NAME_MAX_LENGTH, 0) == 0)
-        wcscpy_s(g_localeName, LOCALE_NAME_MAX_LENGTH, L"en-US");
-    wcsncpy_s(g_languageName, LOCALE_NAME_MAX_LENGTH, g_localeName, _TRUNCATE);
-    wchar_t* dash = wcschr(g_languageName, L'-');
-    if (dash) *dash = 0;
-}
-
-static HMODULE LoadStoreFile(const wchar_t* fileName) {
-    for (int i = 0; i < g_dataFileCount; i++) {
-        if (_wcsicmp(g_dataFiles[i].name, fileName) == 0) return g_dataFiles[i].module;
-    }
-    if (g_dataFileCount >= (int)(sizeof(g_dataFiles) / sizeof(g_dataFiles[0]))) return nullptr;
-
-    wchar_t expanded[MAX_PATH] = {};
-    if (ExpandEnvironmentStringsW(kLegacyStore, expanded, _countof(expanded)) == 0 ||
-        !expanded[0])
-        return nullptr;
-    if (!g_storeLogged) {
-        g_storeLogged = true;
-        Wh_Log(L"[labels] looking for the Windows 10 labels in %s", expanded);
-    }
-
-    wchar_t path[MAX_PATH] = {};
-    HMODULE module = nullptr;
-    const wchar_t* folders[] = {g_localeName, g_languageName, L""};
-    for (const wchar_t* folder : folders) {
-        if (!folder[0]) {
-            _snwprintf_s(path, _countof(path), _TRUNCATE, L"%s\\%s", expanded, fileName);
-        } else {
-            _snwprintf_s(path, _countof(path), _TRUNCATE, L"%s\\%s\\%s.mui", expanded, folder,
-                         fileName);
-        }
-        module = LoadLibraryExW(path, nullptr,
-                                LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
-        if (module) break;
-
-        if (!folder[0]) continue;
-        _snwprintf_s(path, _countof(path), _TRUNCATE, L"%s\\%s\\%s", expanded, folder, fileName);
-        module = LoadLibraryExW(path, nullptr,
-                                LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
-        if (module) break;
-    }
-
-    DataFileCacheEntry* entry = &g_dataFiles[g_dataFileCount++];
-    wcsncpy_s(entry->name, _countof(entry->name), fileName, _TRUNCATE);
-    entry->module = module;
-    if (module) Wh_Log(L"[labels] %s found in the Windows 10 store", fileName);
-    return module;
-}
-
-static wchar_t* LoadLabel(const wchar_t* storeFileName, HMODULE liveModule, UINT id,
-                          wchar_t* buf, int size, const wchar_t** source) {
-    HMODULE store = LoadStoreFile(storeFileName);
-    if (LoadStr(store, id, buf, size)) {
-        if (source) *source = L"the Windows 10 store";
-        return buf;
-    }
+static wchar_t* LoadLabel(HMODULE liveModule, UINT id, wchar_t* buf, int size,
+                          const wchar_t** source) {
     if (LoadStr(liveModule, id, buf, size)) {
         if (source) *source = L"the module of this process";
         return buf;
@@ -381,36 +297,29 @@ static wchar_t* LoadLabel(const wchar_t* storeFileName, HMODULE liveModule, UINT
 }
 
 static wchar_t* GetLockToolbarsText(wchar_t* buf, int size) {
-    const wchar_t* sources[2] = {L"explorerframe.dll", L"explorerframe.dll"};
-    HMODULE modules[2] = {LoadStoreFile(L"explorerframe.dll"), g_explorerframeModule};
-    for (int s = 0; s < 2; s++) {
-        HMODULE module = modules[s];
-        if (!module || (s == 1 && module == modules[0])) continue;
-        HMENU hMenu = LoadMenuW_Original(module, MAKEINTRESOURCEW(264));
-        if (!hMenu) continue;
-        for (int i = 0; i < GetMenuItemCount(hMenu); i++) {
-            MENUITEMINFOW mii = {};
-            mii.cbSize = sizeof(mii);
-            mii.fMask = MIIM_SUBMENU;
-            if (!GetMenuItemInfoW(hMenu, i, TRUE, &mii) || !mii.hSubMenu) continue;
-            for (int j = 0; j < GetMenuItemCount(mii.hSubMenu); j++) {
-                MENUITEMINFOW subMii = {};
-                subMii.cbSize = sizeof(subMii);
-                subMii.fMask = MIIM_ID | MIIM_STRING;
-                wchar_t text[256] = {};
-                subMii.dwTypeData = text;
-                subMii.cch = 255;
-                if (GetMenuItemInfoW(mii.hSubMenu, j, TRUE, &subMii) &&
-                    subMii.wID == IDM_LOCKTOOLBARS) {
-                    wcsncpy_s(buf, size, text, _TRUNCATE);
-                    DestroyMenu(hMenu);
-                    Wh_Log(L"[labels] \"Lock the toolbars\" read from %s (menu 264)",
-                           sources[s]);
-                    return buf;
+    if (g_explorerframeModule) {
+        HMENU hMenu = LoadMenuW_Original(g_explorerframeModule, MAKEINTRESOURCEW(264));
+        if (hMenu) {
+            for (int i = 0; i < GetMenuItemCount(hMenu); i++) {
+                HMENU popup = GetSubMenu(hMenu, i);
+                if (!popup) continue;
+                for (int j = 0; j < GetMenuItemCount(popup); j++) {
+                    MENUITEMINFOW mii = {};
+                    mii.cbSize = sizeof(mii);
+                    mii.fMask = MIIM_ID | MIIM_STRING;
+                    wchar_t text[256] = {};
+                    mii.dwTypeData = text;
+                    mii.cch = _countof(text) - 1;
+                    if (GetMenuItemInfoW(popup, j, TRUE, &mii) &&
+                        mii.wID == IDM_LOCKTOOLBARS && text[0]) {
+                        wcsncpy_s(buf, size, text, _TRUNCATE);
+                        DestroyMenu(hMenu);
+                        return buf;
+                    }
                 }
             }
+            DestroyMenu(hMenu);
         }
-        DestroyMenu(hMenu);
     }
     Wh_Log(L"[labels] \"Lock the toolbars\": the hardcoded text of this mod is used");
     return nullptr;
@@ -418,48 +327,34 @@ static wchar_t* GetLockToolbarsText(wchar_t* buf, int size) {
 
 static wchar_t* ClassicEntryLabel(UINT originalId, wchar_t* buf, int size,
                                   const wchar_t** source) {
-    HMODULE modules[8] = {};
-    int count = 0;
-    int storeCount = 0;
-    const wchar_t* storeFiles[] = {L"explorer.exe", L"explorer.exe.mui", L"shell32.dll",
-                                   L"shell32.dll.mui"};
-    for (const wchar_t* fileName : storeFiles) {
-        HMODULE module = LoadStoreFile(fileName);
-        if (!module) continue;
-        if (count < (int)(sizeof(modules) / sizeof(modules[0]))) modules[count++] = module;
-        storeCount = count;
-    }
-    if (g_shell32Module && count < (int)(sizeof(modules) / sizeof(modules[0])))
-        modules[count++] = g_shell32Module;
-
-    for (int i = 0; i < count; i++) {
-        HMENU menu = LoadMenuW_Original(modules[i], MAKEINTRESOURCEW(205));
-        if (!menu) continue;
-        wchar_t* found = nullptr;
-        for (int m = 0; m < GetMenuItemCount(menu) && !found; m++) {
-            HMENU popup = GetSubMenu(menu, m);
-            if (!popup) continue;
-            for (int j = 0; j < GetMenuItemCount(popup); j++) {
-                MENUITEMINFOW mii = {};
-                mii.cbSize = sizeof(mii);
-                mii.fMask = MIIM_ID | MIIM_STRING;
-                wchar_t text[256] = {};
-                mii.dwTypeData = text;
-                mii.cch = _countof(text) - 1;
-                if (GetMenuItemInfoW(popup, j, TRUE, &mii) && mii.wID == originalId &&
-                    text[0]) {
-                    wcsncpy_s(buf, size, text, _TRUNCATE);
-                    found = buf;
-                    break;
+    // Windows 11 may not have these classic menu items; use the fallback then.
+    if (g_shell32Module) {
+        HMENU menu = LoadMenuW_Original(g_shell32Module, MAKEINTRESOURCEW(205));
+        if (menu) {
+            bool found = false;
+            for (int m = 0; m < GetMenuItemCount(menu) && !found; m++) {
+                HMENU popup = GetSubMenu(menu, m);
+                if (!popup) continue;
+                for (int j = 0; j < GetMenuItemCount(popup); j++) {
+                    MENUITEMINFOW mii = {};
+                    mii.cbSize = sizeof(mii);
+                    mii.fMask = MIIM_ID | MIIM_STRING;
+                    wchar_t text[256] = {};
+                    mii.dwTypeData = text;
+                    mii.cch = _countof(text) - 1;
+                    if (GetMenuItemInfoW(popup, j, TRUE, &mii) &&
+                        mii.wID == originalId && text[0]) {
+                        wcsncpy_s(buf, size, text, _TRUNCATE);
+                        found = true;
+                        break;
+                    }
                 }
             }
-        }
-        DestroyMenu(menu);
-        if (found) {
-            if (source)
-                *source = (i < storeCount) ? L"the Windows 10 store"
-                                          : L"the module of this process";
-            return found;
+            DestroyMenu(menu);
+            if (found) {
+                if (source) *source = L"the module of this process";
+                return buf;
+            }
         }
     }
     if (source) *source = L"the hardcoded text of this mod";
@@ -487,9 +382,9 @@ static bool RunClassicEntry(UINT id) {
         case IDM_CASCADE:
             return CascadeWindows(nullptr, 0, nullptr, 0, nullptr) != 0;
         case IDM_STACKED:
-            return TileWindows(nullptr, MDITILE_VERTICAL, nullptr, 0, nullptr) != 0;
-        case IDM_SIDEBYSIDE:
             return TileWindows(nullptr, MDITILE_HORIZONTAL, nullptr, 0, nullptr) != 0;
+        case IDM_SIDEBYSIDE:
+            return TileWindows(nullptr, MDITILE_VERTICAL, nullptr, 0, nullptr) != 0;
         default:
             return false;
         }
@@ -516,8 +411,22 @@ static LRESULT CALLBACK TrayCommandSubclassProc(HWND hwnd, UINT msg, WPARAM wPar
 
 static HWND g_trayWindow = nullptr;
 
+static BOOL CALLBACK FindCurrentProcessTaskbarWnd(HWND hwnd, LPARAM result) {
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hwnd, &processId);
+    if (processId != GetCurrentProcessId()) return TRUE;
+    wchar_t className[64] = {};
+    if (GetClassNameW(hwnd, className, _countof(className)) &&
+        wcscmp(className, L"Shell_TrayWnd") == 0) {
+        *reinterpret_cast<HWND*>(result) = hwnd;
+        return FALSE;
+    }
+    return TRUE;
+}
+
 static void EnsureTraySubclass() {
-    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+    HWND tray = nullptr;
+    EnumWindows(FindCurrentProcessTaskbarWnd, reinterpret_cast<LPARAM>(&tray));
     if (!tray || !IsWindow(tray)) return;
     if (g_trayWindow == tray) return;
     if (g_trayWindow && IsWindow(g_trayWindow))
@@ -529,21 +438,6 @@ static void EnsureTraySubclass() {
     }
     g_trayWindow = tray;
     Wh_Log(L"[menu] taskbar subclass ready");
-}
-
-static HANDLE g_stopEvent = nullptr;
-static HANDLE g_servicesThread = nullptr;
-
-static DWORD WINAPI MenuCommandThread(LPVOID) {
-    for (;;) {
-        if (WaitForSingleObject(g_stopEvent, 2000) == WAIT_OBJECT_0) break;
-        try {
-            EnsureTraySubclass();
-        } catch (...) {
-            Wh_Log(L"[menu] exception while arming the taskbar subclass");
-        }
-    }
-    return 0;
 }
 
 static void EnhanceTaskbarMenu(HMENU hMenu) {
@@ -565,7 +459,7 @@ static void EnhanceTaskbarMenu(HMENU hMenu) {
 
     wchar_t buf[256];
     const wchar_t* source = nullptr;
-    wchar_t* str = LoadLabel(L"shell32.dll", g_shell32Module, IDS_SHOWDESKTOP, buf, 256, &source);
+    wchar_t* str = LoadLabel(g_shell32Module, IDS_SHOWDESKTOP, buf, 256, &source);
     if (source) Wh_Log(L"[labels] \"Show the desktop\": %s", source);
     AppendMenuW(hPopup, MF_STRING, IDM_SHOWDESKTOP,
                 str ? str : GetHardcodedText(HSTR_SHOWDESKTOP));
@@ -573,7 +467,7 @@ static void EnhanceTaskbarMenu(HMENU hMenu) {
     AppendMenuW(hPopup, MF_SEPARATOR, 0, nullptr);
 
     source = nullptr;
-    str = LoadLabel(L"shell32.dll", g_shell32Module, IDS_TASKMANAGER, buf, 256, &source);
+    str = LoadLabel(g_shell32Module, IDS_TASKMANAGER, buf, 256, &source);
     if (source) Wh_Log(L"[labels] \"Task Manager\": %s", source);
     AppendMenuW(hPopup, MF_STRING, IDM_TASKMANAGER,
                 str ? str : GetHardcodedText(HSTR_TASKMANAGER));
@@ -586,7 +480,7 @@ static void EnhanceTaskbarMenu(HMENU hMenu) {
                 str ? str : GetHardcodedText(HSTR_LOCKTOOLBARS));
 
     source = nullptr;
-    str = LoadLabel(L"bthprops.cpl", g_bthpropsModule, IDS_SETTINGS, buf, 256, &source);
+    str = LoadLabel(g_bthpropsModule, IDS_SETTINGS, buf, 256, &source);
     if (source) Wh_Log(L"[labels] \"Taskbar settings\": %s", source);
     AppendMenuW(hPopup, MF_STRING, IDM_SETTINGS,
                 str ? str : GetHardcodedText(HSTR_SETTINGS));
@@ -596,6 +490,7 @@ HMENU WINAPI LoadMenuW_Hook(HINSTANCE hInstance, LPCWSTR lpMenuName) {
     if (IS_INTRESOURCE(lpMenuName) && (HMODULE)hInstance == g_explorerModule) {
         UINT menuId = (UINT)(ULONG_PTR)lpMenuName;
         if ((menuId == 205 || menuId == 206) && g_shell32Module) {
+            EnsureTraySubclass();
             HMENU result = LoadMenuW_Original(g_shell32Module, MAKEINTRESOURCEW(205));
             if (result) {
                 EnhanceTaskbarMenu(result);
@@ -608,7 +503,6 @@ HMENU WINAPI LoadMenuW_Hook(HINSTANCE hInstance, LPCWSTR lpMenuName) {
 
 BOOL Wh_ModInit() {
     DetectUserLanguage();
-    DetectLocaleNames();
 
     g_explorerModule = GetModuleHandleW(nullptr);
     g_shell32Module = GetModuleHandleW(L"shell32.dll");
@@ -621,36 +515,13 @@ BOOL Wh_ModInit() {
         return TRUE;
     }
 
-    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_stopEvent) {
-        Wh_Log(L"[menu] the stop event could not be created");
-        return TRUE;
-    }
-    EnsureTraySubclass();
-    g_servicesThread = CreateThread(nullptr, 0, MenuCommandThread, nullptr, 0, nullptr);
-    if (!g_servicesThread)
-        Wh_Log(L"[menu] the command thread could not be created (%lu)", GetLastError());
-
     return TRUE;
 }
 
 void Wh_ModUninit() {
-    if (g_stopEvent) SetEvent(g_stopEvent);
-    if (g_servicesThread) {
-        WaitForSingleObject(g_servicesThread, 3000);
-        CloseHandle(g_servicesThread);
-        g_servicesThread = nullptr;
-    }
-    if (g_stopEvent) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
-    }
     if (g_trayWindow && IsWindow(g_trayWindow))
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_trayWindow, TrayCommandSubclassProc);
     g_trayWindow = nullptr;
 
-    for (int i = 0; i < g_dataFileCount; i++) {
-        if (g_dataFiles[i].module) FreeLibrary(g_dataFiles[i].module);
-    }
     if (g_bthpropsModule) FreeLibrary(g_bthpropsModule);
 }
