@@ -1678,9 +1678,21 @@ static void PrepareBackdropBlur() {
         HideBackdropBlur();
     }
     if (g_hSwitcher && IsWindowVisible(g_hSwitcher)) {
-        // Unexpected state (a switcher window is on screen before the show starts): skip
-        // the blur rather than capture a partial switcher into its own backdrop.
-        return;
+        // Native touchpad foreground handoff briefly shows the switcher at
+        // (-32000, -32000) before this capture. That staging window is outside
+        // the virtual desktop and cannot contaminate the snapshot; only skip
+        // when a visible SWS window actually intersects a display.
+        RECT switcherRect = {}, virtualRect = {
+            GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN),
+            GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
+            GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN)};
+        RECT overlap = {};
+        if (GetWindowRect(g_hSwitcher, &switcherRect) &&
+            IntersectRect(&overlap, &switcherRect, &virtualRect)) {
+            // Unexpected state: skip the blur rather than capture a partial
+            // switcher into its own backdrop.
+            return;
+        }
     }
     int w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
     int h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
@@ -2266,7 +2278,9 @@ static LARGE_INTEGER g_animLastTickTime = {};
 static double g_animNextFrameDeadline = 0.0;
 static bool g_animTickInProgress = false;
 static bool g_animEntranceFrameZeroPending = false;
+static bool g_animEntranceClockPending = false;
 static void StartMotionTrack(float& progress, float initial = 0.0f);
+static void StartMotionTrack(float& progress, MotionTrackClock& clock, float initial);
 static bool StepMotionTrack(float& progress, float duration, float dt);
 static void StartOpacityMotion(OpacityMotionTrack& track, float current, float target);
 static bool StepOpacityMotion(OpacityMotionTrack& track, float& current, float dt);
@@ -2288,7 +2302,8 @@ static bool s_animTimingValid = false;
 
 static void UpdateRefreshRateTiming(bool force = false) {
     HWND targetWnd = g_hSwitcher ? g_hSwitcher : GetDesktopWindow();
-    HMONITOR hMon = MonitorFromWindow(targetWnd, MONITOR_DEFAULTTONEAREST);
+    HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor :
+                    MonitorFromWindow(targetWnd, MONITOR_DEFAULTTONEAREST);
     if (!force && s_animTimingValid && hMon == s_animTimingMonitor) return;
     s_animTimingMonitor = hMon;
     s_animTimingValid = true;
@@ -2454,6 +2469,7 @@ static void ApplyPresentationWindowOffset() {
 
 static void ResetPresentationAnimation() {
     g_animEntranceFrameZeroPending = false;
+    g_animEntranceClockPending = false;
     g_animEntranceActive = false;
     g_animEntranceProgress = 1.0f;
     g_animEntranceCurrentAlpha = 1.0f;
@@ -2478,12 +2494,26 @@ static void StartEntranceAnimation() {
     g_animExitCurrentAlpha = 1.0f;
     g_animEntranceDuration = SWS_PRESENTATION_ANIMATION_MS / 1000.0f;
     g_animEntranceActive = AreAnimationsGloballyEnabled() && g_settings.enableEntranceAnimation;
-    StartMotionTrack(g_animEntranceProgress, g_animEntranceActive ? 0.0f : 1.0f);
+    g_animEntranceProgress = g_animEntranceActive ? 0.0f : 1.0f;
     g_animEntranceCurrentAlpha = g_animEntranceActive ? 0.0f : 1.0f;
     g_animEntranceFrameZeroPending = g_animEntranceActive;
+    g_animEntranceClockPending = g_animEntranceActive;
     g_presentationOpacityCurrent = g_animEntranceActive ? 0.0f : 1.0f;
     g_presentationOpacity = {};
-    StartOpacityMotion(g_presentationOpacity, g_presentationOpacityCurrent, 1.0f);
+    g_presentationOpacity.start = g_presentationOpacityCurrent;
+    g_presentationOpacity.target = 1.0f;
+    g_presentationOpacity.progress = g_animEntranceActive ? 0.0f : 1.0f;
+}
+
+// Start entrance clocks only after frame zero has been painted and the windows
+// are visible. Backdrop capture, thumbnail registration, and icon work can be
+// expensive; including that preparation in the animation timeline makes the
+// reveal appear to skip or complete before the user sees it.
+static void BeginEntranceAnimationClock() {
+    if (!g_animEntranceClockPending) return;
+    StartMotionTrack(g_animEntranceProgress, 0.0f);
+    StartMotionTrack(g_presentationOpacity.progress, g_presentationOpacity.clock, 0.0f);
+    g_animEntranceClockPending = false;
 }
 
 static void AdvancePresentationAnimation(float dt) {
@@ -3419,7 +3449,8 @@ static bool AreAnimationsGloballyEnabled() {
 static void StartAnimationTicker() {
     if (!g_hSwitcher) return;
     if (!g_animActive) {
-        UpdateRefreshRateTiming();
+        BeginEntranceAnimationClock();
+        UpdateRefreshRateTiming(true);
         if (g_animPerfFreq.QuadPart == 0) {
             QueryPerformanceFrequency(&g_animPerfFreq);
         }
@@ -17146,6 +17177,7 @@ static std::vector<TouchpadContact> g_touchpadFrame;
 static ULONG g_touchpadFrameExpected = 0;
 static HANDLE g_hTouchpadReaderThread = NULL;
 static HANDLE g_hTouchpadReaderStopEvent = NULL;
+static HANDLE g_hTouchpadReaderReadyEvent = NULL;
 
 // Some devices declare a maximum which only fits unsigned.
 static double TouchpadLogicalRange(const HIDP_VALUE_CAPS& caps) {
@@ -17236,6 +17268,35 @@ static void TouchpadReaderSetAvailable(bool available) {
     if (changed || !available) PublishNativeSwipePolicy();
     if (changed && g_hSwitcher) {
         PostMessageW(g_hSwitcher, WM_SWS_TOUCHPAD_READER_CHANGED, 0, 0);
+    }
+}
+
+// RegisterRawInputDevices does not guarantee that an already-connected
+// touchpad generates a device-change notification. Prime the HID descriptors
+// immediately after registration so takeover readiness does not wait for the
+// first user gesture.
+static void TouchpadReaderPrimeDevices() {
+    UINT count = 0;
+    if (GetRawInputDeviceList(NULL, &count, sizeof(RAWINPUTDEVICELIST)) == (UINT)-1 || !count) {
+        return;
+    }
+    std::vector<RAWINPUTDEVICELIST> devices(count);
+    UINT actual = GetRawInputDeviceList(devices.data(), &count, sizeof(RAWINPUTDEVICELIST));
+    if (actual == (UINT)-1) return;
+    for (UINT i = 0; i < actual; ++i) {
+        if (devices[i].dwType != RIM_TYPEHID) continue;
+        RID_DEVICE_INFO info = {};
+        info.cbSize = sizeof(info);
+        UINT infoSize = sizeof(info);
+        if (GetRawInputDeviceInfoW(devices[i].hDevice, RIDI_DEVICEINFO, &info, &infoSize) == (UINT)-1 ||
+            info.dwType != RIM_TYPEHID || info.hid.usUsagePage != SWS_HID_PAGE_DIGITIZER ||
+            info.hid.usUsage != SWS_HID_USAGE_TOUCHPAD) {
+            continue;
+        }
+        if (TouchpadDeviceFor(devices[i].hDevice)) {
+            TouchpadReaderSetAvailable(true);
+            Wh_Log(L"SWS touchpad reader: primed device %p before first report", devices[i].hDevice);
+        }
     }
 }
 
@@ -17569,6 +17630,7 @@ static DWORD WINAPI TouchpadReaderThread(LPVOID) {
     wc.lpszClassName = SWS_TOUCHPAD_READER_CLASSNAME;
     if (!RegisterClassExW(&wc)) {
         Wh_Log(L"SWS touchpad reader: RegisterClassEx failed (%u)", GetLastError());
+        if (g_hTouchpadReaderReadyEvent) SetEvent(g_hTouchpadReaderReadyEvent);
         return 0;
     }
 
@@ -17579,6 +17641,7 @@ static DWORD WINAPI TouchpadReaderThread(LPVOID) {
     if (!hReaderWnd) {
         Wh_Log(L"SWS touchpad reader: CreateWindowEx failed (%u)", GetLastError());
         UnregisterClassW(SWS_TOUCHPAD_READER_CLASSNAME, hInstance);
+        if (g_hTouchpadReaderReadyEvent) SetEvent(g_hTouchpadReaderReadyEvent);
         return 0;
     }
 
@@ -17595,9 +17658,14 @@ static DWORD WINAPI TouchpadReaderThread(LPVOID) {
     BOOL registered = RegisterRawInputDevices(&rid, 1, sizeof(rid));
     if (registered) {
         TouchpadReaderLogRegistrations(L"after register");
+        TouchpadReaderPrimeDevices();
     } else {
         Wh_Log(L"SWS touchpad reader: RegisterRawInputDevices failed (%u)", GetLastError());
     }
+    // Signal after registration and descriptor priming, not after the first
+    // physical report. Settings changes can then publish a ready policy before
+    // the next gesture reaches Explorer.
+    if (g_hTouchpadReaderReadyEvent) SetEvent(g_hTouchpadReaderReadyEvent);
     Wh_Log(L"SWS touchpad reader: initial input snapshot %s", FormatTouchpadInputDiagnostics().c_str());
 
     MSG msg;
@@ -17650,13 +17718,24 @@ static void StartTouchpadReader() {
     if (!g_hTouchpadReaderStopEvent) {
         return;
     }
+    g_hTouchpadReaderReadyEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!g_hTouchpadReaderReadyEvent) {
+        CloseHandle(g_hTouchpadReaderStopEvent);
+        g_hTouchpadReaderStopEvent = NULL;
+        return;
+    }
     g_hTouchpadReaderThread = CreateThread(NULL, 0, TouchpadReaderThread, NULL, 0, NULL);
     if (!g_hTouchpadReaderThread) {
+        CloseHandle(g_hTouchpadReaderReadyEvent);
+        g_hTouchpadReaderReadyEvent = NULL;
         CloseHandle(g_hTouchpadReaderStopEvent);
         g_hTouchpadReaderStopEvent = NULL;
         return;
     }
     Wh_Log(L"SWS touchpad reader: started");
+    if (WaitForSingleObject(g_hTouchpadReaderReadyEvent, 1000) == WAIT_TIMEOUT) {
+        Wh_Log(L"SWS touchpad reader: startup readiness timed out; keeping native policy fail-open");
+    }
 }
 
 static void StopTouchpadReader() {
@@ -17670,6 +17749,10 @@ static void StopTouchpadReader() {
     // Reader-owned frame/stroke storage is reset only after its thread stops.
     if (!g_hTouchpadReaderThread) {
         TouchpadReaderSetAvailable(false);
+        if (g_hTouchpadReaderReadyEvent) {
+            CloseHandle(g_hTouchpadReaderReadyEvent);
+            g_hTouchpadReaderReadyEvent = NULL;
+        }
         return;
     }
     Wh_Log(L"SWS touchpad reader: stopping");
@@ -17679,6 +17762,10 @@ static void StopTouchpadReader() {
     g_hTouchpadReaderThread = NULL;
     CloseHandle(g_hTouchpadReaderStopEvent);
     g_hTouchpadReaderStopEvent = NULL;
+    if (g_hTouchpadReaderReadyEvent) {
+        CloseHandle(g_hTouchpadReaderReadyEvent);
+        g_hTouchpadReaderReadyEvent = NULL;
+    }
     Wh_Log(L"SWS touchpad reader: stopped input snapshot %s", FormatTouchpadInputDiagnostics().c_str());
     TouchpadReaderSetAvailable(false);
 }
