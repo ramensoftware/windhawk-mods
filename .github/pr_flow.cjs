@@ -329,22 +329,19 @@ async function getLastReviewedSha({ github, owner, repo, prNumber, botLogin }) {
 }
 
 /**
- * A command is a line of its own, either the first or the last one, so that it
- * can lead a comment or follow the explanation it goes with. The first line wins
- * when both are commands.
+ * A command is the first or the last word of a comment, so that it can lead a
+ * comment or follow the explanation it goes with. The first word wins when both
+ * are commands.
  *
  * @param {string} body
  * @returns {typeof AI_REVIEW_COMMAND | typeof READY_FOR_REVIEWER_COMMAND | null}
  */
 function parseCommand(body) {
-  const lines = body
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line !== '');
+  const words = body.trim().split(/\s+/);
 
-  for (const line of [lines[0], lines[lines.length - 1]]) {
-    if (line === AI_REVIEW_COMMAND || line === READY_FOR_REVIEWER_COMMAND) {
-      return line;
+  for (const word of [words[0], words[words.length - 1]]) {
+    if (word === AI_REVIEW_COMMAND || word === READY_FOR_REVIEWER_COMMAND) {
+      return word;
     }
   }
 
