@@ -2,7 +2,7 @@
 // @id              explorer-real-folder-paths
 // @name            Explorer real folder paths
 // @description     Open filesystem-backed Shell shortcuts through their actual paths
-// @version         0.1.4
+// @version         0.1.5
 // @author          Nerdworld
 // @github          https://github.com/nerdworldDE
 // @include         explorer.exe
@@ -53,11 +53,11 @@ Navigate away and back when testing an already-open window.
 
 The original navigation and sidebar behavior was tested on 64-bit Windows
 11 23H2, build 22631.6199. The Dropbox address-text fallback was added in
-version 0.1.4 and still needs runtime confirmation. Other Windows builds
+version 0.1.5 and still needs runtime confirmation. Other Windows builds
 and Windows on ARM have not been validated.
 The mod needs ExplorerFrame's navigation and sidebar selection symbols. If
 Windhawk cannot resolve them, the mod refuses to initialize.
-The address-text fallback uses additional optional symbols. If these are
+The address-text fallback uses an additional optional Shell symbol. If it is
 unavailable, the existing navigation behavior remains active, and logging
 reports that the fallback could not be enabled.
 
@@ -76,7 +76,6 @@ No folder, pin, or registry setting is changed.
 
 #include <windhawk_utils.h>
 
-#include <commctrl.h>
 #include <shlobj.h>
 #include <shobjidl.h>
 
@@ -97,17 +96,10 @@ SetSelectedItem_t g_originalSetSelectedItemNoExpand = nullptr;
 using QueryInterface_t = HRESULT(WINAPI*)(void*, REFIID, void**);
 QueryInterface_t g_treeQueryInterface = nullptr;
 
-using AddressNavigationComplete_t = HRESULT(WINAPI*)(void*, void*);
-AddressNavigationComplete_t g_addressNavigationComplete = nullptr;
-AddressNavigationComplete_t g_originalAddressNavigationComplete = nullptr;
-
-using GetPidlIcon_t = HRESULT(WINAPI*)(void*, PCIDLIST_ABSOLUTE, int*, int*);
-GetPidlIcon_t g_originalGetPidlIcon = nullptr;
-
-using SendMessageW_t = LRESULT(WINAPI*)(HWND, UINT, WPARAM, LPARAM);
-SendMessageW_t g_originalSendMessageW = nullptr;
-ULONG_PTR g_addressUpdateFunctionBegin = 0;
-ULONG_PTR g_addressUpdateFunctionEnd = 0;
+using ShellItemGetDisplayName_t = HRESULT(WINAPI*)(IShellItem*, SIGDN, PWSTR*);
+ShellItemGetDisplayName_t g_originalShellItemGetDisplayName = nullptr;
+HMODULE g_windowsStorage = nullptr;
+thread_local bool g_insideAddressTextResolution = false;
 
 HMODULE g_explorerFrame = nullptr;
 // These guards are defensive: Shell calls can cross COM/provider boundaries
@@ -133,12 +125,6 @@ struct ComDeleter {
 
 template <typename T>
 using ComAllocation = std::unique_ptr<T, ComDeleter<T>>;
-
-struct AddressUpdateContext {
-    ShellAllocation<wchar_t> path;
-};
-
-thread_local AddressUpdateContext* g_addressUpdateContext = nullptr;
 
 // Only folders converted by this mod qualify for selection preservation.
 // Eligibility is shared, but the selected item is always read from the exact
@@ -264,79 +250,63 @@ ShellAllocation<wchar_t> GetAddressFolderPath(PCIDLIST_ABSOLUTE pidl) {
     return path;
 }
 
-struct AddressUpdateScope {
-    AddressUpdateContext* previousContext = g_addressUpdateContext;
+bool IsModernAddressBarCaller(void* address) {
+    // On Windows 11 23H2, FileExplorerExtensions requests this name form only
+    // for EditModeText and Copy address as text. Look up the loaded module at
+    // call time so Explorer can load its modern UI after the mod initializes.
+    const auto modernUi = GetModuleHandleW(L"FileExplorerExtensions.dll");
+    HMODULE callerModule = nullptr;
+    return modernUi &&
+           GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                  GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                              reinterpret_cast<PCWSTR>(address),
+                              &callerModule) &&
+           callerModule == modernUi;
+}
 
-    explicit AddressUpdateScope(AddressUpdateContext* context) {
-        // Nested updates use their own folder and restore the outer update.
-        g_addressUpdateContext = context;
+struct AddressTextResolutionScope {
+    AddressTextResolutionScope() {
+        g_insideAddressTextResolution = true;
     }
 
-    ~AddressUpdateScope() {
-        g_addressUpdateContext = previousContext;
+    ~AddressTextResolutionScope() {
+        g_insideAddressTextResolution = false;
     }
 };
 
-HRESULT WINAPI AddressNavigationComplete_Hook(void* addressList, void* shellUrl) {
-    AddressUpdateContext context;
-    AddressUpdateScope scope(&context);
-    Wh_Log(L"Address refresh");
-    return g_originalAddressNavigationComplete(addressList, shellUrl);
-}
-
-HRESULT WINAPI GetPidlIcon_Hook(void* addressList,
-                               PCIDLIST_ABSOLUTE pidl,
-                               int* icon,
-                               int* selectedIcon) {
-    if (g_addressUpdateContext) {
-        const auto caller =
-            reinterpret_cast<ULONG_PTR>(__builtin_return_address(0));
-        // NavigationComplete supplies the current folder's absolute PIDL to
-        // its icon helper before sending CBEM_SETITEMW. Observe that argument;
-        // do not access the private IShellUrl vtable or CAddressList fields.
-        if (caller >= g_addressUpdateFunctionBegin &&
-            caller < g_addressUpdateFunctionEnd) {
-            g_addressUpdateContext->path = GetAddressFolderPath(pidl);
-            Wh_Log(L"Address folder: %s",
-                   g_addressUpdateContext->path
-                       ? g_addressUpdateContext->path.get()
-                       : L"<not a filesystem folder>");
-        }
+HRESULT WINAPI ShellItemGetDisplayName_Hook(IShellItem* item,
+                                           SIGDN kind,
+                                           PWSTR* name) {
+    void* caller = __builtin_return_address(0);
+    HRESULT hr = g_originalShellItemGetDisplayName(item, kind, name);
+    if (kind != SIGDN_DESKTOPABSOLUTEEDITING || FAILED(hr) || !name || !*name ||
+        IsAbsoluteFileSystemPath(*name) || g_insideAddressTextResolution) {
+        return hr;
     }
-    return g_originalGetPidlIcon(addressList, pidl, icon, selectedIcon);
-}
-
-LRESULT WINAPI SendMessageW_Hook(HWND window,
-                               UINT message,
-                               WPARAM wParam,
-                               LPARAM lParam) {
-    if (message == CBEM_SETITEMW && g_addressUpdateContext &&
-        g_addressUpdateContext->path && lParam) {
-        const auto caller =
-            reinterpret_cast<ULONG_PTR>(__builtin_return_address(0));
-        // Restrict this shared API hook to the native address-refresh call.
-        // The function range comes from x64 unwind metadata, not fixed offsets.
-        if (caller >= g_addressUpdateFunctionBegin &&
-            caller < g_addressUpdateFunctionEnd) {
-            const auto item = reinterpret_cast<const COMBOBOXEXITEMW*>(lParam);
-            if ((item->mask & CBEIF_TEXT) && item->iItem == -1 &&
-                item->pszText && item->pszText != LPSTR_TEXTCALLBACKW &&
-                item->pszText[0] &&
-                !SamePath(item->pszText,
-                          g_addressUpdateContext->path.get())) {
-                auto replacement = *item;
-                replacement.pszText = g_addressUpdateContext->path.get();
-                Wh_Log(L"Address text: %s -> %s", item->pszText,
-                       replacement.pszText);
-                // The normal control update also updates Explorer's edit cache.
-                // Native focus/selection, dirty-text handling, and icons remain.
-                return g_originalSendMessageW(
-                    window, message, wParam,
-                    reinterpret_cast<LPARAM>(&replacement));
-            }
-        }
+    const bool addressCaller = IsModernAddressBarCaller(caller);
+    Wh_Log(L"Editing-name request: %s; modern address caller=%d", *name,
+           addressCaller);
+    if (!addressCaller) {
+        return hr;
     }
-    return g_originalSendMessageW(window, message, wParam, lParam);
+
+    AddressTextResolutionScope scope;
+    PIDLIST_ABSOLUTE rawPidl = nullptr;
+    HRESULT pidlHr = SHGetIDListFromObject(item, &rawPidl);
+    ShellAllocation<ITEMIDLIST_ABSOLUTE> pidl(rawPidl);
+    auto path = SUCCEEDED(pidlHr) ? GetAddressFolderPath(pidl.get())
+                                 : ShellAllocation<wchar_t>{};
+    if (path) {
+        Wh_Log(L"Address edit text: %s -> %s", *name, path.get());
+        // IShellItem::GetDisplayName returns a CoTaskMem allocation. Transfer
+        // the filesystem-path allocation with the same ownership contract.
+        CoTaskMemFree(*name);
+        *name = path.release();
+    } else {
+        Wh_Log(L"Address edit text: keeping %s (not a filesystem folder)",
+               *name);
+    }
+    return hr;
 }
 
 bool ShouldKeepSidebarSelection(void* tree, IShellItem* target) {
@@ -652,23 +622,6 @@ BOOL Wh_ModInit() {
             },
             &g_treeQueryInterface,
         },
-        {
-            {
-                L"public: virtual long __cdecl CAddressList::NavigationComplete(struct IShellUrl *)",
-            },
-            &g_addressNavigationComplete,
-            nullptr,
-            true,
-        },
-        {
-            {
-                L"protected: long __cdecl CAddressList::_GetPidlIcon(struct _ITEMIDLIST_ABSOLUTE const *,int *,int *)",
-                L"protected: long __cdecl CAddressList::_GetPidlIcon(struct _ITEMIDLIST const *,int *,int *)",
-            },
-            &g_originalGetPidlIcon,
-            GetPidlIcon_Hook,
-            true,
-        },
     };
 
     if (!WindhawkUtils::HookSymbols(g_explorerFrame, explorerFrameDllHooks,
@@ -680,37 +633,36 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // Resolve before hooking so unwind lookup receives the real function
-    // address rather than Windhawk's trampoline. Keep this feature optional.
-    if (g_addressNavigationComplete && g_originalGetPidlIcon) {
-        DWORD64 imageBase = 0;
-        const auto function = RtlLookupFunctionEntry(
-            reinterpret_cast<DWORD64>(g_addressNavigationComplete),
-            &imageBase, nullptr);
-        const auto user32 = GetModuleHandleW(L"user32.dll");
-        const auto sendMessage =
-            user32 ? GetProcAddress(user32, "SendMessageW") : nullptr;
-        if (function && sendMessage) {
-            g_addressUpdateFunctionBegin = imageBase + function->BeginAddress;
-            g_addressUpdateFunctionEnd = imageBase + function->EndAddress;
-            if (Wh_SetFunctionHook(
-                    reinterpret_cast<void*>(sendMessage),
-                    reinterpret_cast<void*>(SendMessageW_Hook),
-                    reinterpret_cast<void**>(&g_originalSendMessageW)) &&
-                Wh_SetFunctionHook(
-                    reinterpret_cast<void*>(g_addressNavigationComplete),
-                    reinterpret_cast<void*>(AddressNavigationComplete_Hook),
-                    reinterpret_cast<void**>(
-                        &g_originalAddressNavigationComplete))) {
-                Wh_Log(L"Filesystem address-text fallback enabled");
-            } else {
-                Wh_Log(L"Could not hook address text; using navigation conversion only");
-            }
+    // The modern address bar calls IShellItem::GetDisplayName directly;
+    // CAddressList's legacy ComboBoxEx update isn't used by this Windows UI.
+    // This optional hook changes only full editing-name requests from the
+    // modern UI. Existing navigation/sidebar behavior survives missing symbols.
+    g_windowsStorage = LoadLibraryExW(L"Windows.Storage.dll", nullptr,
+                                      LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (g_windowsStorage) {
+        // Windows.Storage.dll
+        WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
+            {
+                {
+                    L"public: virtual long __cdecl CShellItem::GetDisplayName(enum _SIGDN,unsigned short * *)",
+                    L"public: virtual long __cdecl CShellItem::GetDisplayName(enum _SIGDN,unsigned short **)",
+                    L"public: virtual long __cdecl CShellItem::GetDisplayName(enum _SIGDN,wchar_t * *)",
+                    L"public: virtual long __cdecl CShellItem::GetDisplayName(enum _SIGDN,wchar_t **)",
+                },
+                &g_originalShellItemGetDisplayName,
+                ShellItemGetDisplayName_Hook,
+                true,
+            },
+        };
+        if (WindhawkUtils::HookSymbols(g_windowsStorage, windowsStorageHooks,
+                                      ARRAYSIZE(windowsStorageHooks)) &&
+            g_originalShellItemGetDisplayName) {
+            Wh_Log(L"Modern filesystem address-text fallback enabled (v0.1.5)");
         } else {
-            Wh_Log(L"Address refresh metadata or SendMessageW unavailable; using navigation conversion only");
+            Wh_Log(L"Shell editing-name symbol unavailable; using navigation conversion only");
         }
     } else {
-        Wh_Log(L"Optional address-text symbols unavailable; using navigation conversion only");
+        Wh_Log(L"Could not load Windows.Storage.dll; using navigation conversion only");
     }
 
     Wh_Log(L"Explorer real folder paths initialized");
@@ -720,5 +672,9 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     // Windhawk has removed our hooks and waited for active hook calls.
     ClearConvertedPaths();
+    if (g_windowsStorage) {
+        FreeLibrary(g_windowsStorage);
+        g_windowsStorage = nullptr;
+    }
     ReleaseExplorerFrame();
 }
