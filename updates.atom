@@ -2,12 +2,52 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-05T10:01:41.000Z</updated>
+    <updated>2026-10-05T12:04:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[TopBar for Windows 1.3.0]]></title>
+        <id>https://windhawk.net/mods/windhawk-topbar#3a25447184fb292f91b386490c355dd55658d2fb</id>
+        <link href="https://windhawk.net/mods/windhawk-topbar"/>
+        <updated>2026-10-05T12:04:08.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="added">Added</h3>
+<ul>
+<li>Added a Media Player widget in TopBar with song name, thumbnail, visualizer, and media controls.</li>
+<li>Added a Control Panel button &amp; flyout to quickly access Wi-Fi, Bluetooth, Battery, Sound, Brightness, and other basic settings.</li>
+<li>Added a Start menu flyout featuring All Apps grid, account settings, and power controls.</li>
+<li>Added a Spotlight style Search flyout supporting Apps, Files, Settings, and Control Panel results.</li>
+<li>Default Start and Search key remapping: Win key and Taskbar Start button map to TopBar Start Menu; Win + S and Taskbar Search icon map to TopBar Spotlight Search (BETA, may have some bugs).</li>
+<li>Added Per-Monitor brightness control in display flyout.</li>
+<li>Added Night Light button in the Display flyout.</li>
+<li>Added a "Restart Explorer" button in the Start and Taskbar context menus to restart windows <code>explorer.exe</code> easily.</li>
+<li>Added Glyphs to all context menu entries.</li>
+<li>Added Font color setting that changes to set custom font color.</li>
+<li>Added Wi-Fi signal-strength indication on the its icon.</li>
+<li>Added Option to customize button Resource Button labels(e.g., "CPU:", "RAM:").</li>
+<li>Added more font family options in the font dropdown <em>(Note: Certain fonts may affect button scaling)</em>.</li>
+<li>Added Midnight Neon theme</li>
+</ul>
+<h3 id="updatesimprovements">Updates &amp; Improvements</h3>
+<ul>
+<li>Added native background blur, removed dependency on the wallpaper layer, and added live wallpaper support.</li>
+<li>Icons now feature transparent backgrounds (previously black) and shrink dynamically when it is out of space.</li>
+<li>Added support for switching between °C and °F units.</li>
+<li>Updated Recycle Bin icon, and reduced Battery icon glyph size.</li>
+<li>Updated the OS27 GoldenGate, NoIslands, and GreenBar themes.</li>
+</ul>
+<h3 id="fixes">Fixes</h3>
+<ul>
+<li>Fixed issue where right-clicking task list buttons showed the incorrect menu.</li>
+<li>Fixed button flashing on hover in the OS27 Golden Gate theme.(made the background be the same on all the CommonStates by if the value is set without any state.</li>
+</ul>]]></content>
+        <author>
+            <name>WasiXGamer</name>
+            <uri>https://github.com/wasixgamer</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[MacOS Minimize Animation 3.1.6]]></title>
         <id>https://windhawk.net/mods/macos-minimize-animation#1cefd9b6c5400916d74378ed90d711adc699f69b</id>
@@ -843,20 +883,6 @@ No folder, pin, or registry setting is changed.</p>]]></content>
         <author>
             <name>Basti</name>
             <uri>https://github.com/sebastianheder01</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[CEF/Spotify Tweaks 1.9]]></title>
-        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#5997afb7892b18563ff67adec4115c9b2744ff77</id>
-        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
-        <updated>2026-10-03T16:00:15.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add support for Spotify 1.2.89 to 1.3.3 (CEF 151)</li>
-<li>Prevent crashing Spotify on mod unload</li>
-</ul>]]></content>
-        <author>
-            <name>Ingan121</name>
-            <uri>https://github.com/Ingan121</uri>
         </author>
     </entry>
 </feed>
