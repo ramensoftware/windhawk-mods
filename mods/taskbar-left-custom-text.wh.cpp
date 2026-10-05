@@ -112,6 +112,8 @@ The widget docks to the left edge of the primary taskbar. On taskbars with left-
 
 #include <windows.h>
 #include <windowsx.h>
+#include <windhawk_utils.h>
+#include <algorithm>
 #include <string>
 #include <vector>
 #include <atomic>
@@ -381,7 +383,7 @@ std::wstring ExecuteCommand(const std::wstring& cmd) {
 
         DWORD bytesAvail = 0;
         if (PeekNamedPipe(hReadPipe, NULL, 0, NULL, &bytesAvail, NULL) && bytesAvail > 0) {
-            if (ReadFile(hReadPipe, buffer, min((DWORD)sizeof(buffer), bytesAvail), &bytesRead, NULL) && bytesRead > 0) {
+            if (ReadFile(hReadPipe, buffer, std::min((DWORD)sizeof(buffer), bytesAvail), &bytesRead, NULL) && bytesRead > 0) {
                 if (output.length() + bytesRead <= 4096) {
                     output.append(buffer, bytesRead);
                 }
@@ -390,7 +392,7 @@ std::wstring ExecuteCommand(const std::wstring& cmd) {
 
         if (waitRes == WAIT_OBJECT_0) {
             while (PeekNamedPipe(hReadPipe, NULL, 0, NULL, &bytesAvail, NULL) && bytesAvail > 0) {
-                if (ReadFile(hReadPipe, buffer, min((DWORD)sizeof(buffer), bytesAvail), &bytesRead, NULL) && bytesRead > 0) {
+                if (ReadFile(hReadPipe, buffer, std::min((DWORD)sizeof(buffer), bytesAvail), &bytesRead, NULL) && bytesRead > 0) {
                     if (output.length() + bytesRead <= 4096) {
                         output.append(buffer, bytesRead);
                     }
@@ -460,36 +462,51 @@ void CopyTextToClipboard(HWND hwnd, const std::wstring& text) {
 
 // ==================== TASKBAR RUNFROMWINDOWTHREAD PATTERN ====================
 
+static BOOL CALLBACK FindTaskbarEnumProc(HWND hWnd, LPARAM lParam) {
+    DWORD dwProcessId = 0;
+    WCHAR className[32];
+    if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+        dwProcessId == GetCurrentProcessId() &&
+        GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+        _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+        *reinterpret_cast<HWND*>(lParam) = hWnd;
+        return FALSE;
+    }
+    return TRUE;
+}
+
 HWND FindCurrentProcessTaskbarWnd() {
     HWND hTaskbarWnd = nullptr;
-    EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL {
-            DWORD dwProcessId = 0;
-            WCHAR className[32];
-            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
-                dwProcessId == GetCurrentProcessId() &&
-                GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
-                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
-                *reinterpret_cast<HWND*>(lParam) = hWnd;
-                return FALSE;
-            }
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&hTaskbarWnd)
-    );
+    EnumWindows(FindTaskbarEnumProc, reinterpret_cast<LPARAM>(&hTaskbarWnd));
     return hTaskbarWnd;
 }
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
 
-bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, PVOID procParam) {
-    static const UINT runFromWindowThreadRegisteredMsg =
-        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+struct RUN_FROM_WINDOW_THREAD_PARAM {
+    RunFromWindowThreadProc_t proc;
+    PVOID procParam;
+};
 
-    struct RUN_FROM_WINDOW_THREAD_PARAM {
-        RunFromWindowThreadProc_t proc;
-        PVOID procParam;
-    };
+static UINT g_runFromWindowThreadRegisteredMsg = 0;
+
+static LRESULT CALLBACK RunFromWindowThreadHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION) {
+        const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+        if (cwp->message == g_runFromWindowThreadRegisteredMsg) {
+            RUN_FROM_WINDOW_THREAD_PARAM* param =
+                (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
+            param->proc(param->procParam);
+        }
+    }
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
+bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, PVOID procParam) {
+    if (!g_runFromWindowThreadRegisteredMsg) {
+        g_runFromWindowThreadRegisteredMsg =
+            RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+    }
 
     DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
     if (dwThreadId == 0) return false;
@@ -501,17 +518,7 @@ bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, PVOID procPa
 
     HHOOK hook = SetWindowsHookExW(
         WH_CALLWNDPROC,
-        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
-            if (nCode == HC_ACTION) {
-                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
-                if (cwp->message == runFromWindowThreadRegisteredMsg) {
-                    RUN_FROM_WINDOW_THREAD_PARAM* param =
-                        (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
-                    param->proc(param->procParam);
-                }
-            }
-            return CallNextHookEx(nullptr, nCode, wParam, lParam);
-        },
+        RunFromWindowThreadHookProc,
         nullptr,
         dwThreadId
     );
@@ -520,7 +527,7 @@ bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, PVOID procPa
     RUN_FROM_WINDOW_THREAD_PARAM param;
     param.proc = proc;
     param.procParam = procParam;
-    SendMessageW(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
+    SendMessageW(hWnd, g_runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
     UnhookWindowsHookEx(hook);
     return true;
 }
@@ -864,7 +871,7 @@ DWORD WINAPI BackgroundWorkerThreadProc(LPVOID) {
             PostMessageW(g_hWndWidget, WM_APP_UPDATE_TEXT, 0, reinterpret_cast<LPARAM>(pText));
         }
 
-        DWORD interval = (DWORD)max(1000, currentSettings.refreshIntervalMs);
+        DWORD interval = (DWORD)std::max(1000, currentSettings.refreshIntervalMs);
         DWORD waitRes = WaitForMultipleObjects(2, waitHandles, FALSE, interval);
 
         if (waitRes == WAIT_OBJECT_0) {
@@ -893,27 +900,32 @@ void TriggerManualRefresh() {
 
 // ==================== SETTINGS MANAGEMENT ====================
 
+static std::wstring GetSafeStringSetting(PCWSTR name) {
+    WindhawkUtils::StringSetting setting = WindhawkUtils::StringSetting::make(name);
+    return (setting.get() != nullptr) ? std::wstring(setting.get()) : std::wstring();
+}
+
 void LoadSettings() {
     AcquireSRWLockExclusive(&g_settingsLock);
 
-    g_settings.textSource = WindhawkUtils::StringSetting::make(L"textSource").get();
+    g_settings.textSource = GetSafeStringSetting(L"textSource");
     if (g_settings.textSource != L"command") {
         g_settings.textSource = L"file";
     }
 
-    g_settings.commandLine = WindhawkUtils::StringSetting::make(L"commandLine").get();
-    g_settings.filePath = WindhawkUtils::StringSetting::make(L"filePath").get();
-    g_settings.lineMode = WindhawkUtils::StringSetting::make(L"lineMode").get();
-    g_settings.delimiter = WindhawkUtils::StringSetting::make(L"delimiter").get();
-    g_settings.fallbackText = WindhawkUtils::StringSetting::make(L"fallbackText").get();
+    g_settings.commandLine = GetSafeStringSetting(L"commandLine");
+    g_settings.filePath = GetSafeStringSetting(L"filePath");
+    g_settings.lineMode = GetSafeStringSetting(L"lineMode");
+    g_settings.delimiter = GetSafeStringSetting(L"delimiter");
+    g_settings.fallbackText = GetSafeStringSetting(L"fallbackText");
 
-    g_settings.fontFamily = WindhawkUtils::StringSetting::make(L"fontFamily").get();
+    g_settings.fontFamily = GetSafeStringSetting(L"fontFamily");
     if (g_settings.fontFamily.empty()) {
         g_settings.fontFamily = L"Segoe UI Variable Small";
     }
 
-    g_settings.fontWeight = WindhawkUtils::StringSetting::make(L"fontWeight").get();
-    g_settings.leftClickAction = WindhawkUtils::StringSetting::make(L"leftClickAction").get();
+    g_settings.fontWeight = GetSafeStringSetting(L"fontWeight");
+    g_settings.leftClickAction = GetSafeStringSetting(L"leftClickAction");
 
     g_settings.refreshIntervalMs = Wh_GetIntSetting(L"refreshIntervalMs");
     if (g_settings.refreshIntervalMs < 1000) {
