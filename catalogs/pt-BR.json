@@ -404,6 +404,36 @@
         "version": "1.2.0"
       }
     },
+    "alt-tab-flip-3d": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791223360000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791223360000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "caliberda",
+        "compilerOptions": "-ld3d11 -ldxgi -ld2d1 -ldcomp -ldwrite -ldwmapi -lole32 -loleaut32 -luuid -lruntimeobject -lwindowscodecs -lshcore -lshell32 -lgdi32",
+        "description": "Substitui o Alt+Tab por uma pilha 3D fluida de janelas ao vivo, no estilo Flip 3D do Windows Vista",
+        "github": "https://github.com/cesarkali",
+        "homepage": "https://caliberda.com.br",
+        "include": [
+          "windhawk.exe",
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Alt+Tab Flip 3D (estilo Vista)",
+        "version": "1.5.3"
+      },
+      "metadataEnglish": {
+        "description": "Replaces Alt+Tab with a fluid, Windows Vista-style Flip 3D stack of live windows",
+        "name": "Alt+Tab Flip 3D (Vista Style)"
+      }
+    },
     "alt-tab-hide-ghost-windows": {
       "details": {
         "defaultSorting": 5880,

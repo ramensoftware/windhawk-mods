@@ -2,12 +2,195 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-05T15:03:19.000Z</updated>
+    <updated>2026-10-05T18:02:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Alt+Tab Flip 3D (Vista Style) 1.5.3]]></title>
+        <id>https://windhawk.net/mods/alt-tab-flip-3d#0d68d720b3eecf432b1b80445a6efb0afcb50de8</id>
+        <link href="https://windhawk.net/mods/alt-tab-flip-3d"/>
+        <updated>2026-10-05T18:02:40.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="alttabflip3dvistastyle">Alt+Tab Flip 3D (Vista Style)</h1>
+<p><img src="https://i.imgur.com/mRzfHq2.gif" alt="Flip 3D style" /></p>
+<p><strong>English</strong> | <a href="#português">Português</a></p>
+<p>Brings back the Windows Vista <strong>Flip 3D</strong> window switcher on Windows 11, with
+smooth, spring-based animations inspired by macOS.</p>
+<p>Press <strong>Alt+Tab</strong> and your windows fly from their real positions into a 3D
+stack, one behind the other, showing their <strong>live content</strong>. Keep Alt held and
+flip through them; release Alt and the chosen window flies back into place.</p>
+<h2 id="animationstyles">Animation styles</h2>
+<p><img src="https://i.imgur.com/ul1d5ca.jpeg" alt="All animation styles" /></p>
+<ul>
+<li><strong>Flip 3D</strong>: the Windows Vista stack, receding up and to the left.</li>
+<li><strong>Cascade</strong>: a deck of windows tilted backwards, receding upwards.</li>
+<li><strong>Cover Flow</strong>: the selected window faces you, the others are turned on
+both sides.</li>
+<li><strong>Carousel</strong>: a 3D ring of windows that rotates around its center.</li>
+<li><strong>Grid</strong>: every window side by side, like Mission Control.</li>
+<li><strong>Helix</strong>: a 3D spiral that turns and rises as you flip.</li>
+<li><strong>Fan</strong>: windows spread like playing cards held in a hand.</li>
+<li><strong>Panorama</strong>: a row of windows on a wall curving around you.</li>
+<li><strong>Tunnel</strong>: windows sinking into a twisting tunnel.</li>
+<li><strong>Rolodex</strong>: a vertical wheel, windows roll over the top and under the
+bottom.</li>
+</ul>
+<p>Simpler 2D styles, for those who want something closer to the default:</p>
+<ul>
+<li><strong>Windows 11 (enhanced)</strong>: the native layout, with windows flying into their
+thumbnails and a selection that slides smoothly.</li>
+<li><strong>Thumbnails with titles below</strong>: squared panel, titles under the
+thumbnails.</li>
+<li><strong>Icons and titles</strong>: a row of large icons with their titles.</li>
+<li><strong>Vertical list</strong>: a compact list of icons and titles.</li>
+<li><strong>Classic (Windows XP)</strong>: the old icon grid with the title in a box below.</li>
+<li><strong>Native Windows Alt+Tab</strong>: the mod leaves Alt+Tab alone.</li>
+</ul>
+<p>The switcher opens on the monitor where the mouse cursor is (or, optionally,
+where the active window is).</p>
+<h2 id="controls">Controls</h2>
+<p>| Key / action              | What it does                                  |
+|---------------------------|-----------------------------------------------|
+| Alt+Tab                   | Open the stack / next window                  |
+| Alt+Shift+Tab             | Previous window                               |
+| Arrow keys, mouse wheel   | Flip forward / backward                       |
+| Release Alt, Enter, Space | Switch to the window in front                 |
+| Click a window            | Switch to that window                         |
+| Esc                       | Cancel and go back to where you were          |</p>
+<p>A quick Alt+Tab tap (shorter than the <em>show delay</em>) switches instantly to the
+previous window without showing the stack, just like the native switcher.</p>
+<h2 id="howitcompareswithsimilarmods">How it compares with similar mods</h2>
+<ul>
+<li><strong><a href="https://windhawk.net/mods/aero-flip3d-recreation">Aero Flip 3D Recreation</a></strong>
+brings Flip 3D back on <strong>Win+Tab</strong>. This mod replaces <strong>Alt+Tab</strong> instead,
+draws the windows with real perspective from their live content, and adds
+nine more 3D layouts. Both can be installed together, since they use
+different shortcuts.</li>
+<li><strong><a href="https://windhawk.net/mods/simple-window-switcher">Simple Window Switcher</a></strong>
+and <strong><a href="https://windhawk.net/mods/legacy-alt-tab">Legacy Alt+Tab dialog</a></strong>
+also replace Alt+Tab. The 2D styles here are close to them, and are included
+so that every style, 3D or 2D, can be picked from one place and share the
+same animations, keys and settings.</li>
+</ul>
+<p><strong>Don't combine this mod with another Alt+Tab replacement</strong>, such as the two
+above. Only one of them can take over Alt+Tab.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Windows 11 only (uses Windows Graphics Capture without the yellow border).</li>
+<li>Ctrl+Alt+Tab and Win+Tab are not changed.</li>
+<li>The switcher runs in its own background process, so a problem in it can't
+affect the taskbar or the desktop. Only the small part that handles the case
+below runs inside explorer.</li>
+<li>Also works when a program running as administrator is in front: the mod
+catches the Alt+Tab hotkey inside explorer before the native switcher opens,
+and hands it to the switcher.</li>
+<li>Minimized windows show their last content, like the taskbar previews (this
+can be turned off). Windows that refuse to be captured are shown as a card
+with the app icon.</li>
+<li>With the <em>Dim only</em> background, the real windows stay visible behind the
+stack. The wallpaper backgrounds hide them, like the original Flip 3D.</li>
+<li>If the switcher can't start (e.g. no GPU device), the native Alt+Tab keeps
+working.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>Mod by <strong>caliberda</strong> (<a href="https://caliberda.com.br">caliberda.com.br</a>,
+Instagram <a href="https://www.instagram.com/cesar.kali">@cesar.kali</a>).</li>
+<li>Inspired by <strong>Windows Flip 3D</strong> from Windows Vista and Windows 7 (Microsoft).</li>
+</ul>
+<hr />
+<h2 id="portugus">Português</h2>
+<p>Traz de volta o alternador de janelas <strong>Flip 3D</strong> do Windows Vista para o
+Windows 11, com animações suaves baseadas em molas, inspiradas no macOS.</p>
+<p>Pressione <strong>Alt+Tab</strong> e suas janelas voam de suas posições reais para uma pilha
+3D, uma atrás da outra, mostrando o <strong>conteúdo ao vivo</strong>. Segure o Alt e vá
+passando por elas; solte o Alt e a janela escolhida volta voando para o lugar.</p>
+<h3 id="estilosdeanimao">Estilos de animação</h3>
+<p><img src="https://i.imgur.com/ul1d5ca.jpeg" alt="Todos os estilos de animação" /></p>
+<ul>
+<li><strong>Flip 3D</strong>: a pilha do Windows Vista, indo para cima e para a esquerda.</li>
+<li><strong>Cascata</strong>: um baralho de janelas inclinado para trás, subindo.</li>
+<li><strong>Cover Flow</strong>: a janela escolhida fica de frente, as outras viradas dos
+dois lados.</li>
+<li><strong>Carrossel</strong>: um anel 3D de janelas que gira em volta do centro.</li>
+<li><strong>Grade</strong>: todas as janelas lado a lado, como o Mission Control.</li>
+<li><strong>Hélice</strong>: uma espiral 3D que gira e sobe enquanto você troca.</li>
+<li><strong>Leque</strong>: janelas abertas como cartas de baralho na mão.</li>
+<li><strong>Panorama</strong>: uma fileira de janelas numa parede curva em volta de você.</li>
+<li><strong>Túnel</strong>: janelas afundando num túnel que gira.</li>
+<li><strong>Rolodex</strong>: uma roda vertical, as janelas rolam por cima e por baixo.</li>
+</ul>
+<p>Estilos 2D mais simples, para quem quer algo mais perto do padrão:</p>
+<ul>
+<li><strong>Windows 11 (aprimorado)</strong>: o layout nativo, com as janelas voando até as
+miniaturas e uma seleção que desliza suave.</li>
+<li><strong>Miniaturas com título embaixo</strong>: painel quadrado, títulos sob as
+miniaturas.</li>
+<li><strong>Ícones e títulos</strong>: uma fileira de ícones grandes com os títulos.</li>
+<li><strong>Lista vertical</strong>: uma lista compacta de ícones e títulos.</li>
+<li><strong>Clássico (Windows XP)</strong>: a grade de ícones antiga com o título numa caixa
+embaixo.</li>
+<li><strong>Alt+Tab nativo do Windows</strong>: o mod deixa o Alt+Tab em paz.</li>
+</ul>
+<p>O alternador abre no monitor onde está o cursor do mouse (ou, se preferir,
+onde está a janela ativa).</p>
+<h3 id="controles">Controles</h3>
+<p>| Tecla / ação                 | O que faz                                  |
+|------------------------------|--------------------------------------------|
+| Alt+Tab                      | Abre a pilha / próxima janela              |
+| Alt+Shift+Tab                | Janela anterior                            |
+| Setas, roda do mouse         | Avança / volta na pilha                    |
+| Soltar Alt, Enter, Espaço    | Muda para a janela da frente               |
+| Clicar numa janela           | Muda para essa janela                      |
+| Esc                          | Cancela e volta para onde você estava      |</p>
+<p>Um toque rápido no Alt+Tab (menor que o <em>atraso para exibir</em>) troca na hora
+para a janela anterior sem mostrar a pilha, igual ao alternador nativo.</p>
+<h3 id="comparaocommodsparecidos">Comparação com mods parecidos</h3>
+<ul>
+<li>O <strong><a href="https://windhawk.net/mods/aero-flip3d-recreation">Aero Flip 3D Recreation</a></strong>
+traz o Flip 3D de volta no <strong>Win+Tab</strong>. Este mod substitui o <strong>Alt+Tab</strong>,
+desenha as janelas com perspectiva real a partir do conteúdo ao vivo e tem
+mais nove layouts 3D. Os dois podem ficar instalados juntos, porque usam
+atalhos diferentes.</li>
+<li>O <strong><a href="https://windhawk.net/mods/simple-window-switcher">Simple Window Switcher</a></strong>
+e o <strong><a href="https://windhawk.net/mods/legacy-alt-tab">Legacy Alt+Tab dialog</a></strong>
+também substituem o Alt+Tab. Os estilos 2D daqui são parecidos com eles e
+estão incluídos para que todos os estilos, 3D ou 2D, possam ser escolhidos
+num lugar só, com as mesmas animações, teclas e configurações.</li>
+</ul>
+<p><strong>Não use este mod junto com outro substituto do Alt+Tab</strong>, como os dois
+acima. Só um deles consegue assumir o Alt+Tab.</p>
+<h3 id="observaes">Observações</h3>
+<ul>
+<li>Somente Windows 11 (usa o Windows Graphics Capture sem a borda amarela).</li>
+<li>Ctrl+Alt+Tab e Win+Tab não são alterados.</li>
+<li>O alternador roda num processo próprio, em segundo plano, então um problema
+nele não afeta a barra de tarefas nem a área de trabalho. Só a pequena parte
+que trata o caso abaixo roda dentro do explorer.</li>
+<li>Funciona também com um programa rodando como administrador na frente: o mod
+pega o atalho Alt+Tab dentro do explorer antes do alternador nativo abrir e
+repassa para o alternador.</li>
+<li>Janelas minimizadas mostram o último conteúdo, como as miniaturas da barra de
+tarefas (dá para desligar). Janelas que bloqueiam captura aparecem como um
+cartão com o ícone do app.</li>
+<li>Com o fundo <em>Apenas escurecer</em>, as janelas reais continuam visíveis atrás da
+pilha. Os fundos com papel de parede as escondem, como no Flip 3D original.</li>
+<li>Se o alternador não conseguir iniciar (ex.: sem dispositivo de GPU), o Alt+Tab
+nativo continua funcionando.</li>
+</ul>
+<h3 id="crditos">Créditos</h3>
+<ul>
+<li>Mod feito por <strong>caliberda</strong> (<a href="https://caliberda.com.br">caliberda.com.br</a>,
+Instagram <a href="https://www.instagram.com/cesar.kali">@cesar.kali</a>).</li>
+<li>Inspirado no <strong>Windows Flip 3D</strong> do Windows Vista e Windows 7 (Microsoft).</li>
+</ul>]]></content>
+        <author>
+            <name>caliberda</name>
+            <uri>https://github.com/cesarkali</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Quick Launch Dock 1.0.0]]></title>
         <id>https://windhawk.net/mods/quick-launch-dock#35684ca5377a3971a573a524841c6922e20eab27</id>
@@ -1016,38 +1199,6 @@ taskbar buttons: Never</em>. Not compatible with <em>Disable grouping on the tas
         <author>
             <name>2ndSky95</name>
             <uri>https://github.com/2ndSky95</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cursor Override 1.0.0]]></title>
-        <id>https://windhawk.net/mods/cursor-override#eee6eb7fba4dc744cef023877595ef32736d411c</id>
-        <link href="https://windhawk.net/mods/cursor-override"/>
-        <updated>2026-10-01T16:01:22.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="cursoroverride">Cursor Override</h1>
-<p>Replaces common additional cursors with custom <code>.cur</code> or <code>.ani</code> files.</p>
-<p><img src="https://raw.githubusercontent.com/sebastianheder01/Galaxy-Cursor/main/preview/comparison-grab.png" alt="Grab cursor before and after" /></p>
-<p><img src="https://raw.githubusercontent.com/sebastianheder01/Galaxy-Cursor/main/preview/comparison-cell.png" alt="Cell cursor before and after" /></p>
-<h2 id="howitworks">How it works</h2>
-<p>Identifies supported Mozilla, Chromium and RichEdit cursors based on their image and hotspot.
-Resource cursors are compared at a fixed size when their source resource is available; known bitmap signatures provide a fallback.
-Recognition can require an update when an application changes its cursor artwork.
-Supports <code>Grab</code>, <code>Grabbing</code>, <code>Cell</code>, <code>Copy</code>, <code>Alias</code>, <code>ZoomIn</code>, <code>ZoomOut</code>, <code>ColResize</code>, <code>RowResize</code>, <code>VerticalText</code> and <code>SelectionBar</code>.
-Standard Windows cursors remain unchanged.</p>
-<h2 id="usage">Usage</h2>
-<p>Under Settings, enter the full local path to each <code>.cur</code> or <code>.ani</code> file you want to change.
-Leave a field empty to keep the original cursor.
-Keep the cursor files in a permanent local folder. Network paths and mapped network drives are not supported.
-If a file cannot be loaded, the original cursor stays active. Check the path and save the settings again to retry.
-Windhawk debug logging reports the affected setting and error code without logging the file path.
-With all fields empty, the mod installs no hooks.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>This mod overlaps with <a href="https://windhawk.net/mods/chromium-cursor-remap">Chromium Cursor Remap</a> for Chromium-based applications and additionally recognizes Mozilla and RichEdit cursors.
-Do not enable both mods in the same applications.</p>
-<h2 id="optionalcursorpack">Optional cursor pack</h2>
-<p>For an optional cursor pack, check out <a href="https://github.com/sebastianheder01/Galaxy-Cursor">Galaxy Cursor</a>.</p>]]></content>
-        <author>
-            <name>Basti</name>
-            <uri>https://github.com/sebastianheder01</uri>
         </author>
     </entry>
 </feed>
