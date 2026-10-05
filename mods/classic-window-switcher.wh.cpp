@@ -3818,7 +3818,14 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
         }
         else
         {
-            _sws_ForceFocusBasedMouseWheelRouting(TRUE);
+            if (_this->settings.dwScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE ||
+                _this->settings.dwScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_IFCLIENTAREA_GRIDSCROLL ||
+                _this->settings.dwScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_GRIDSCROLL ||
+                _this->settings.dwScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_IFNOTCLIENTAREA_GRIDSCROLL
+                )
+            {
+                _sws_ForceFocusBasedMouseWheelRouting(TRUE);
+            }
         }
         return 0;
     }
@@ -3993,6 +4000,14 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
             (uMsg == WM_MOUSEWHEEL)
             )
         {
+            if (uMsg == WM_MOUSEWHEEL && !_this->bIsCursorOnSwitcher &&
+                (_this->settings.dwScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_ONLYCLIENTAREA ||
+                    _this->settings.dwScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_ONLYCLIENTAREA_GRIDSCROLL)
+                )
+            {
+                return 0;
+            }
+
             if (!IsWindowVisible(_this->hWnd))
             {
                 if (uMsg == WM_HOTKEY && (int)wParam < 0)
