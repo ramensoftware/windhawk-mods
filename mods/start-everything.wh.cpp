@@ -25,6 +25,7 @@ A native replacement for Windows 11 Start Menu search, powered by voidtools Ever
 
 - Instant Everything Search: Queries voidtools Everything directly through its IPC interface for fast results across millions of files. The mod keeps no index of its own.
 - Smart Apps and Settings Search: Fuzzy matching across Desktop applications, Microsoft Store / UWP packages, Control Panel applets, and Windows Settings URIs (ms-settings:) with high-resolution shell icons.
+- Learns your favorites: apps you open from here more often move up among results that match equally well. A clearly better match always stays on top.
 - On-Demand Animated Palette: The Start Menu stays completely clean and uncluttered when idle. The search palette slides in with a short ease-out animation the moment you type or click the search box, and collapses when emptied or on Escape.
 - Windows Search Out of the Way: SearchHost keeps running for the shell, but its window is never shown and it cannot launch Edge WebView2, the web view behind its Bing-backed search panel.
 - Inline Calculator: Type /c <expression> (e.g. /c 100 * 5, /c sqrt(144), /c 15% of 200, /c 2^10) to evaluate math expressions instantly. Press Enter to copy the result.
@@ -228,6 +229,8 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Storage.Streams.h>
 #include <shlguid.h>
+#include <exdisp.h>
+#include <shldisp.h>
 #include <shobjidl.h>
 #include <shlobj.h>
 #include <commctrl.h>
@@ -237,7 +240,9 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 #include <limits>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
+#include <functional>
 #include <map>
 #include <optional>
 #include <thread>
@@ -1045,7 +1050,114 @@ inline std::wstring WithExclusions(const std::wstring& query,
 
 namespace icons {
 
-// Copies a bitmap into a top-down 32bpp BGRA buffer.
+// Icons are made at exactly the size they are drawn, in physical pixels, so
+// XAML puts them on screen pixel for pixel. Left to XAML, a 48px icon shown at
+// 24 was resampled on the GPU, and the shell's own resizing is a plain GDI
+// stretch: both left jagged edges. Instead the shell is asked for its nearest
+// frame at or above the size, and Resample shrinks that by averaging, which
+// keeps the edges smooth.
+
+// The sources of one output pixel along one axis, and how much of it each covers.
+struct Tap {
+    int index;
+    float weight;
+};
+
+inline std::vector<std::vector<Tap>> AxisTaps(int from, int to) {
+    std::vector<std::vector<Tap>> taps(to);
+    const double scale = static_cast<double>(from) / to;
+    for (int o = 0; o < to; ++o) {
+        if (to <= from) {
+            // Shrinking: the average of the source pixels the output pixel
+            // covers, the ones at its edges weighted by how much of them.
+            const double begin = o * scale, end = begin + scale;
+            for (int i = static_cast<int>(begin); i < from && i < end; ++i) {
+                const double cover = std::min<double>(i + 1, end) - std::max<double>(i, begin);
+                if (cover > 1e-6) {
+                    taps[o].push_back({i, static_cast<float>(cover / scale)});
+                }
+            }
+        } else {
+            // Growing (an icon with no frame that large): linear between the
+            // two nearest source pixels.
+            const double x = (o + 0.5) * scale - 0.5;
+            const int left = static_cast<int>(std::floor(x));
+            const float t = static_cast<float>(x - left);
+            taps[o].push_back({std::clamp(left, 0, from - 1), 1.0f - t});
+            taps[o].push_back({std::clamp(left + 1, 0, from - 1), t});
+        }
+    }
+    return taps;
+}
+
+// Resizes a square premultiplied BGRA image, one axis at a time.
+inline std::vector<BYTE> Resample(const std::vector<BYTE>& src, int from, int to) {
+    if (from == to) {
+        return src;
+    }
+    const auto taps = AxisTaps(from, to);
+    std::vector<float> rows(static_cast<size_t>(from) * to * 4);
+    for (int y = 0; y < from; ++y) {
+        for (int x = 0; x < to; ++x) {
+            float* d = &rows[(static_cast<size_t>(y) * to + x) * 4];
+            for (const Tap& t : taps[x]) {
+                const BYTE* s = &src[(static_cast<size_t>(y) * from + t.index) * 4];
+                for (int c = 0; c < 4; ++c) {
+                    d[c] += s[c] * t.weight;
+                }
+            }
+        }
+    }
+    std::vector<BYTE> out(static_cast<size_t>(to) * to * 4);
+    for (int y = 0; y < to; ++y) {
+        for (int x = 0; x < to; ++x) {
+            float acc[4] = {};
+            for (const Tap& t : taps[y]) {
+                const float* s = &rows[(static_cast<size_t>(t.index) * to + x) * 4];
+                for (int c = 0; c < 4; ++c) {
+                    acc[c] += s[c] * t.weight;
+                }
+            }
+            BYTE* d = &out[(static_cast<size_t>(y) * to + x) * 4];
+            const BYTE alpha = static_cast<BYTE>(std::clamp(std::lround(acc[3]), 0L, 255L));
+            for (int c = 0; c < 3; ++c) {
+                // A colour above its alpha is not a premultiplied pixel.
+                d[c] = static_cast<BYTE>(std::clamp(std::lround(acc[c]), 0L, static_cast<long>(alpha)));
+            }
+            d[3] = alpha;
+        }
+    }
+    return out;
+}
+
+// Premultiplies an image whose colours are not, which XAML would otherwise
+// draw with bright fringes wherever an edge is partly transparent. The shell
+// hands icons over either way; a colour above its pixel's alpha is the tell.
+// A bitmap with no alpha at all is opaque when the caller says so: the shell's
+// are, while DrawIconEx leaves an old mask-only icon at zero alpha throughout.
+inline void Premultiply(std::vector<BYTE>* pixels, bool opaqueIfNoAlpha) {
+    bool straight = false, anyAlpha = false;
+    for (size_t i = 0; i < pixels->size(); i += 4) {
+        const BYTE* p = &(*pixels)[i];
+        anyAlpha |= p[3] != 0;
+        straight |= p[0] > p[3] || p[1] > p[3] || p[2] > p[3];
+    }
+    for (size_t i = 0; i < pixels->size(); i += 4) {
+        BYTE* p = &(*pixels)[i];
+        if (!anyAlpha) {
+            if (opaqueIfNoAlpha) {
+                p[3] = 255;
+            }
+        } else if (straight) {
+            for (int c = 0; c < 3; ++c) {
+                p[c] = static_cast<BYTE>((p[c] * p[3] + 127) / 255);
+            }
+        }
+    }
+}
+
+// Copies a square bitmap into a top-down 32bpp premultiplied BGRA buffer of
+// size x size pixels.
 inline bool BitmapToBgra(HBITMAP bitmap, int size, std::vector<BYTE>* out) {
     if (!bitmap) {
         return false;
@@ -1054,42 +1166,71 @@ inline bool BitmapToBgra(HBITMAP bitmap, int size, std::vector<BYTE>* out) {
     if (!GetObjectW(bitmap, sizeof(info), &info)) {
         return false;
     }
-    // Rescaling is not this function's job. A mismatch means the caller asked
-    // the shell for one size and got another, and sending a buffer whose
-    // dimensions disagree with its byte count would just be rejected at the
-    // other end.
-    if (info.bmWidth != size || info.bmHeight != size) {
+    const int side = info.bmWidth;
+    if (side <= 0 || side > 1024 || std::abs(info.bmHeight) != side) {
         return false;
     }
 
     BITMAPINFO bi{};
     bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bi.bmiHeader.biWidth = size;
-    bi.bmiHeader.biHeight = -size;  // negative: top-down, matching XAML
+    bi.bmiHeader.biWidth = side;
+    bi.bmiHeader.biHeight = -side;  // negative: top-down, matching XAML
     bi.bmiHeader.biPlanes = 1;
     bi.bmiHeader.biBitCount = 32;
     bi.bmiHeader.biCompression = BI_RGB;
 
-    out->assign(static_cast<size_t>(size) * size * 4, 0);
+    std::vector<BYTE> pixels(static_cast<size_t>(side) * side * 4, 0);
     HDC screen = GetDC(nullptr);
-    int scanned = GetDIBits(screen, bitmap, 0, size, out->data(), &bi,
+    int scanned = GetDIBits(screen, bitmap, 0, side, pixels.data(), &bi,
                             DIB_RGB_COLORS);
     ReleaseDC(nullptr, screen);
-    return scanned == size;
+    if (scanned != side) {
+        return false;
+    }
+    Premultiply(&pixels, true);
+    *out = Resample(pixels, side, size);
+    return true;
 }
 
-// Draws an icon into a 32bpp surface and copies it out. DrawIconEx is used
-// rather than reading the icon's own bitmaps because it handles both modern
-// 32bpp icons and the old mask-plus-colour pairs, and produces straight
-// alpha either way.
+// The size an icon was made at, which DrawIconEx draws it at when given no
+// size of its own.
+inline int IconSideOf(HICON icon) {
+    ICONINFO info{};
+    if (!GetIconInfo(icon, &info)) {
+        return 0;
+    }
+    BITMAP bitmap{};
+    int side = 0;
+    if (info.hbmColor && GetObjectW(info.hbmColor, sizeof(bitmap), &bitmap)) {
+        side = bitmap.bmWidth;
+    } else if (info.hbmMask && GetObjectW(info.hbmMask, sizeof(bitmap), &bitmap)) {
+        side = bitmap.bmWidth;  // a monochrome icon: the mask is twice as high
+    }
+    if (info.hbmColor) {
+        DeleteObject(info.hbmColor);
+    }
+    if (info.hbmMask) {
+        DeleteObject(info.hbmMask);
+    }
+    return side;
+}
+
+// Draws an icon at its own size into a 32bpp surface, copies it out and
+// resizes it to size x size. DrawIconEx is used rather than reading the
+// icon's own bitmaps because it handles both modern 32bpp icons and the old
+// mask-plus-colour pairs.
 inline bool IconToBgra(HICON icon, int size, std::vector<BYTE>* out) {
     if (!icon) {
         return false;
     }
+    int side = IconSideOf(icon);
+    if (side <= 0 || side > 1024) {
+        side = size;
+    }
     BITMAPINFO bi{};
     bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bi.bmiHeader.biWidth = size;
-    bi.bmiHeader.biHeight = -size;
+    bi.bmiHeader.biWidth = side;
+    bi.bmiHeader.biHeight = -side;
     bi.bmiHeader.biPlanes = 1;
     bi.bmiHeader.biBitCount = 32;
     bi.bmiHeader.biCompression = BI_RGB;
@@ -1107,16 +1248,24 @@ inline bool IconToBgra(HICON icon, int size, std::vector<BYTE>* out) {
         return false;
     }
     HGDIOBJ previous = SelectObject(dc, dib);
-    memset(bits, 0, static_cast<size_t>(size) * size * 4);
-    BOOL drawn = DrawIconEx(dc, 0, 0, icon, size, size, 0, nullptr, DI_NORMAL);
+    memset(bits, 0, static_cast<size_t>(side) * side * 4);
+    BOOL drawn = DrawIconEx(dc, 0, 0, icon, side, side, 0, nullptr, DI_NORMAL);
     if (drawn) {
-        out->assign(static_cast<BYTE*>(bits),
-                    static_cast<BYTE*>(bits) + static_cast<size_t>(size) * size * 4);
+        std::vector<BYTE> pixels(static_cast<BYTE*>(bits),
+                                 static_cast<BYTE*>(bits) + static_cast<size_t>(side) * side * 4);
+        Premultiply(&pixels, false);
+        *out = Resample(pixels, side, size);
     }
     SelectObject(dc, previous);
     DeleteObject(dib);
     DeleteDC(dc);
     return drawn != FALSE;
+}
+
+// The side of a square BGRA icon buffer, or 0 if it is not one.
+inline int IconSide(const std::vector<BYTE>& pixels) {
+    const int side = static_cast<int>(std::lround(std::sqrt(pixels.size() / 4.0)));
+    return side > 0 && static_cast<size_t>(side) * side * 4 == pixels.size() ? side : 0;
 }
 
 // Icons for files.
@@ -1135,6 +1284,19 @@ inline bool IconToBgra(HICON icon, int size, std::vector<BYTE>* out) {
 class FileIconCache {
    public:
     explicit FileIconCache(int size) : size_(size) {}
+
+    // A new icon size -- Start is on a display with another scale. Every icon
+    // kept was made for the old one.
+    void SetSize(int size) {
+        if (size == size_) {
+            return;
+        }
+        size_ = size;
+        types_.clear();
+        files_.clear();
+        pending_.clear();
+        late_.clear();
+    }
 
     // Starts a new set of results: files still queued from the last one are
     // no longer on screen.
@@ -1273,30 +1435,31 @@ class FileIconCache {
         std::vector<BYTE> pixels;
         SHFILEINFOW info{};
 
-        // Above 32px, go through the system image list rather than
-        // SHGFI_LARGEICON.
-        //
-        // SHGFI_LARGEICON is 32 and nothing else, so asking it for a 48px
-        // icon gets a 32px one stretched -- visibly soft once the row is
-        // drawn on a scaled display. SHIL_EXTRALARGE is 48 and SHIL_JUMBO is
-        // 256; the shell already has both, so the sharper one costs no more
-        // than the blurry one did.
+        // Through the system image lists: the smallest of their sizes at or
+        // above the one wanted -- SHIL_LARGE is normally 32px, SHIL_EXTRALARGE
+        // 48, SHIL_JUMBO 256 -- shrunk to it by IconToBgra. The shell already
+        // has all three, so the right one costs no more than any other.
         bool got = false;
-        if (size_ > 32) {
-            if (SHGetFileInfoW(probe, attributes, &info, sizeof(info),
-                               flags | SHGFI_SYSICONINDEX)) {
+        if (SHGetFileInfoW(probe, attributes, &info, sizeof(info),
+                           flags | SHGFI_SYSICONINDEX)) {
+            for (int which : {SHIL_LARGE, SHIL_EXTRALARGE, SHIL_JUMBO}) {
                 IImageList* list = nullptr;
-                int which = (size_ > 48) ? SHIL_JUMBO : SHIL_EXTRALARGE;
-                if (SUCCEEDED(SHGetImageList(which, IID_PPV_ARGS(&list))) &&
-                    list) {
+                if (FAILED(SHGetImageList(which, IID_PPV_ARGS(&list))) || !list) {
+                    continue;
+                }
+                int cx = 0, cy = 0;
+                list->GetIconSize(&cx, &cy);
+                const bool fits = cx >= size_ || which == SHIL_JUMBO;
+                if (fits) {
                     HICON icon = nullptr;
-                    if (SUCCEEDED(list->GetIcon(info.iIcon, ILD_TRANSPARENT,
-                                                &icon)) &&
-                        icon) {
+                    if (SUCCEEDED(list->GetIcon(info.iIcon, ILD_TRANSPARENT, &icon)) && icon) {
                         got = IconToBgra(icon, size_, &pixels);
                         DestroyIcon(icon);
                     }
-                    list->Release();
+                }
+                list->Release();
+                if (fits) {
+                    break;
                 }
             }
         }
@@ -1753,7 +1916,74 @@ struct App {
 struct Match {
     const App* app;
     int score;  // lower is better
+    int rank;   // the score less the head start for use (UsageBonus): the order shown
 };
+
+// How often each app was opened from Start, by lowercase name -- names are
+// what identify an entry across index rebuilds. Owned by the search thread,
+// kept in the mod's storage.
+using UsageCounts = std::unordered_map<std::wstring, int>;
+
+constexpr wchar_t kUsageValueName[] = L"appLaunchCounts";
+constexpr size_t kUsageKept = 300;   // most used first; keeps the value small
+constexpr int kUsageCap = 1000;
+
+// A head start, in score points, for apps opened often: enough to put them
+// first among about equally good matches, never past a clearly better one.
+// An exact name scores 0, a name prefix 10, a word prefix 20. 3 points after
+// one launch, 9 at most, from about seven.
+inline int UsageBonus(const UsageCounts* usage, const std::wstring& nameLower) {
+    if (!usage) {
+        return 0;
+    }
+    auto it = usage->find(nameLower);
+    if (it == usage->end() || it->second <= 0) {
+        return 0;
+    }
+    return std::min(9, static_cast<int>(std::lround(3.0 * std::log2(1.0 + it->second))));
+}
+
+// One line per app: count, a tab, the lowercase name.
+inline UsageCounts LoadUsage() {
+    UsageCounts usage;
+    std::vector<wchar_t> buffer(64 * 1024);
+    size_t length = Wh_GetStringValue(kUsageValueName, buffer.data(), buffer.size());
+    std::wstring text(buffer.data(), length);
+    size_t pos = 0;
+    while (pos < text.size()) {
+        size_t end = text.find(L'\n', pos);
+        if (end == std::wstring::npos) {
+            end = text.size();
+        }
+        size_t tab = text.find(L'\t', pos);
+        if (tab != std::wstring::npos && tab < end) {
+            int count = _wtoi(text.substr(pos, tab - pos).c_str());
+            std::wstring name = text.substr(tab + 1, end - tab - 1);
+            if (count > 0 && !name.empty()) {
+                usage[name] = std::min(count, kUsageCap);
+            }
+        }
+        pos = end + 1;
+    }
+    return usage;
+}
+
+inline void SaveUsage(const UsageCounts& usage) {
+    std::vector<std::pair<int, std::wstring>> sorted;
+    sorted.reserve(usage.size());
+    for (const auto& [name, count] : usage) {
+        sorted.emplace_back(count, name);
+    }
+    std::sort(sorted.begin(), sorted.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+    if (sorted.size() > kUsageKept) {
+        sorted.resize(kUsageKept);
+    }
+    std::wstring text;
+    for (const auto& [count, name] : sorted) {
+        text += std::to_wstring(count) + L'\t' + name + L'\n';
+    }
+    Wh_SetStringValue(kUsageValueName, text.c_str());
+}
 
 inline std::wstring ToLower(std::wstring s) {
     std::transform(s.begin(), s.end(), s.begin(),
@@ -2287,7 +2517,7 @@ class Index {
         return apps_.size();
     }
 
-    std::vector<Match> Search(const std::wstring& query, size_t limit) const {
+    std::vector<Match> Search(const std::wstring& query, size_t limit, const UsageCounts* usage) const {
         std::vector<Match> hits;
         if (query.empty()) {
             return hits;
@@ -2298,12 +2528,15 @@ class Index {
         for (const App& a : apps_) {
             int score = ScoreApp(a, q);
             if (score >= 0) {
-                hits.push_back({&a, score});
+                hits.push_back({&a, score, score - UsageBonus(usage, a.nameLower)});
             }
         }
 
         std::stable_sort(hits.begin(), hits.end(),
                          [](const Match& x, const Match& y) {
+                             if (x.rank != y.rank) {
+                                 return x.rank < y.rank;
+                             }
                              if (x.score != y.score) {
                                  return x.score < y.score;
                              }
@@ -2318,14 +2551,21 @@ class Index {
         //  - with a real match (below the fuzzy tiers at 80), no fuzzy ones:
         //    "calc" is Calculator, not Local Computer Policy;
         //  - with only fuzzy or typo matches, just those close to the best.
+        // By the score itself: use reorders what is shown, never what is.
         const int kFuzzy = 80;
-        const int best = hits.empty() ? 0 : hits.front().score;
+        int best = hits.empty() ? 0 : hits.front().score;
+        for (const Match& m : hits) {
+            best = std::min(best, m.score);
+        }
         const int cutoff = best < kFuzzy ? kFuzzy : best + 12;
         std::vector<Match> shown;
         shown.reserve(std::min(limit, hits.size()));
         for (const Match& m : hits) {
-            if (shown.size() >= limit || m.score >= cutoff) {
+            if (shown.size() >= limit) {
                 break;
+            }
+            if (m.score >= cutoff) {
+                continue;
             }
             bool seen = false;
             for (const Match& kept : shown) {
@@ -3312,6 +3552,17 @@ static UINT StartForegroundRequestMessage() {
 
 // Tracked launch threads for clean unload synchronization across processes
 static std::mutex g_launchHandlesMutex;
+// Bumped by every launch once its shell call has returned, started or not
+// (see DismissStartMenuForLaunch).
+static std::atomic<unsigned> g_launchesDone{0};
+// Closed while DismissStartMenuForLaunch makes sure Start holds the foreground,
+// so that is when the program is started; open otherwise. Launches wait at it.
+static HANDLE g_launchGate;
+static void WaitForLaunchGate() {
+    if (g_launchGate) {
+        WaitForSingleObject(g_launchGate, 1000);
+    }
+}
 static std::vector<HANDLE> g_launchHandles;
 
 template <typename F>
@@ -3631,6 +3882,13 @@ static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
                 KillTimer(hWnd, kSearchAloneTimerId);
                 g_searchAloneArmed = false;
             }
+            return 0;
+        }
+        break;
+    case WM_SYSCOMMAND:
+        // It holds the foreground while a program opened from Start starts
+        // (DismissStartMenuForLaunch), so Alt+F4 can reach it.
+        if ((wParam & 0xFFF0) == SC_CLOSE) {
             return 0;
         }
         break;
@@ -4839,7 +5097,11 @@ void TakeForegroundWhenShown() {
 // It toggles, so it is sent only while Start is open and active: the
 // foreground must still be in this process or in SearchHost. Once it has
 // moved elsewhere Start is already closing, and because the cloak lags the
-// foreground change by ~200ms, a toggle in that gap would reopen it.
+// foreground change by ~200ms, a toggle in that gap would reopen it. The one
+// exception is Explorer's helper, given the foreground for a launch
+// (DismissStartMenuForLaunch): a hidden window, which Start does not close for.
+HWND FindExplorerLaunchHolder();
+
 void CloseStartMenu() {
     HWND ours = GetOurCoreWindow();
     if (!ours || !IsWindow(ours) || IsOurWindowCloaked()) {
@@ -4848,7 +5110,7 @@ void CloseStartMenu() {
     HWND fg = GetForegroundWindow();
     DWORD fgPid = 0;
     GetWindowThreadProcessId(fg, &fgPid);
-    if (fgPid != GetCurrentProcessId() && !IsSearchHostWindow(fg)) {
+    if (fgPid != GetCurrentProcessId() && !IsSearchHostWindow(fg) && (!fg || fg != FindExplorerLaunchHolder())) {
         Wh_Log(L"CloseStartMenu: foreground already moved to %p, leaving Start to close", fg);
         return;
     }
@@ -4868,7 +5130,17 @@ void CloseStartMenu() {
 // foreground back instead (TakeForeground asks SearchHost for it). Losing it
 // to anything else -- Escape, another app, a launch -- is left alone; closing
 // Start hands the foreground to the previous app, never to SearchHost.
+// When something was last opened from Start (DismissStartMenuForLaunch). A click
+// in Start hands SearchHost the foreground too, and taking it back right after
+// a launch took it from the program instead: that cancelled its right to come
+// to the front, and it opened behind.
+std::atomic<ULONGLONG> g_launchedAtTick{0};
+constexpr ULONGLONG kLaunchHandoffMs = 2000;
+
 bool SearchHostTookForegroundFromOpenStart() {
+    if (GetTickCount64() - g_launchedAtTick.load() < kLaunchHandoffMs) {
+        return false;  // a launch is taking over; let SearchHost hold it until then
+    }
     return !IsOurWindowCloaked() && IsSearchHostWindow(GetForegroundWindow());
 }
 
@@ -4934,8 +5206,17 @@ void RestoreSwappedOutText() {
     }
 }
 
+// An Enter pressed before the results for the text were in, run when they
+// arrive (RenderResults); dropped once Start closes, or if they take longer
+// than this.
+static bool g_enterWaiting = false;
+static bool g_enterWaitingCtrl = false;
+static ULONGLONG g_enterWaitingTick = 0;
+constexpr ULONGLONG kEnterWaitMs = 3000;
+
 void DismissStartMenu() {
     try {
+        g_enterWaiting = false;
         g_suppressRefocus.store(true);
         if (g_openFocus) {
             g_openFocus.Stop();
@@ -4962,6 +5243,197 @@ void DismissStartMenu() {
         CloseStartMenu();
     } catch (...) {
     }
+}
+
+// Programs opened from Start are started by Explorer, as stock Start's are.
+//
+// ShellExecute in Start is carried out for it by sihost.exe, so a program
+// opened here was never started by the foreground process. All it had towards
+// coming to the front was a grant (AllowSetForegroundWindow), and Windows
+// cancels grants on the next input: the Enter key coming back up, the mouse
+// moving. A program slower to show its window than that -- Office, or one
+// started for the first time -- opened behind the app Start was opened over.
+// Some did not start at all that way: an app entry run through sihost lost
+// what its shortcut passes (SteelSeries GG).
+//
+// A program started by the foreground process keeps its right through any
+// input. Stock Start hands the foreground to Explorer and has Explorer start
+// the program; DismissStartMenuForLaunch does the same with this mod's helper
+// window in Explorer, and the launches run ShellExecute inside Explorer
+// through the desktop's IShellDispatch2, the documented way to have Explorer
+// open something.
+
+// The helper window (ExplorerHelperThreadProc) of the explorer.exe running the
+// taskbar and desktop: the process ShellExecuteInExplorer reaches.
+HWND FindExplorerLaunchHolder() {
+    DWORD shellPid = 0;
+    if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+        GetWindowThreadProcessId(tray, &shellPid);
+    }
+    for (HWND w = FindWindowExW(nullptr, nullptr, kExplorerHelperClassName, kExplorerHelperWindowName); w;
+         w = FindWindowExW(nullptr, w, kExplorerHelperClassName, kExplorerHelperWindowName)) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(w, &pid);
+        if (shellPid && pid == shellPid) {
+            return w;
+        }
+    }
+    return nullptr;
+}
+
+// Runs ShellExecute in Explorer, with the default verb. Returns false when
+// Explorer could not be asked; the caller then opens it here instead. Needs
+// COM on the calling thread.
+bool ShellExecuteInExplorer(const std::wstring& file, const std::wstring& params, const std::wstring& dir) {
+    IShellWindows* windows = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&windows))) ||
+        !windows) {
+        return false;
+    }
+    VARIANT empty{};
+    long hwnd = 0;
+    IDispatch* desktop = nullptr;
+    HRESULT hr = windows->FindWindowSW(&empty, &empty, SWC_DESKTOP, &hwnd, SWFO_NEEDDISPATCH, &desktop);
+    windows->Release();
+    if (hr != S_OK || !desktop) {
+        return false;
+    }
+    IServiceProvider* provider = nullptr;
+    IShellBrowser* browser = nullptr;
+    IShellView* view = nullptr;
+    IDispatch* background = nullptr;
+    IShellFolderViewDual* folderView = nullptr;
+    IDispatch* application = nullptr;
+    IShellDispatch2* shell = nullptr;
+    hr = desktop->QueryInterface(IID_PPV_ARGS(&provider));
+    if (SUCCEEDED(hr)) hr = provider->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&browser));
+    if (SUCCEEDED(hr)) hr = browser->QueryActiveShellView(&view);
+    if (SUCCEEDED(hr)) hr = view->GetItemObject(SVGIO_BACKGROUND, IID_PPV_ARGS(&background));
+    if (SUCCEEDED(hr)) hr = background->QueryInterface(IID_PPV_ARGS(&folderView));
+    if (SUCCEEDED(hr)) hr = folderView->get_Application(&application);
+    if (SUCCEEDED(hr)) hr = application->QueryInterface(IID_PPV_ARGS(&shell));
+    if (SUCCEEDED(hr)) {
+        BSTR fileArg = SysAllocString(file.c_str());
+        VARIANT paramsArg{}, dirArg{}, verbArg{}, showArg{};
+        if (!params.empty()) {
+            paramsArg.vt = VT_BSTR;
+            paramsArg.bstrVal = SysAllocString(params.c_str());
+        }
+        if (!dir.empty()) {
+            dirArg.vt = VT_BSTR;
+            dirArg.bstrVal = SysAllocString(dir.c_str());
+        }
+        showArg.vt = VT_I4;
+        showArg.lVal = SW_SHOWNORMAL;
+        hr = shell->ShellExecute(fileArg, paramsArg, dirArg, verbArg, showArg);
+        SysFreeString(fileArg);
+        VariantClear(&paramsArg);
+        VariantClear(&dirArg);
+    }
+    for (IUnknown* object : std::initializer_list<IUnknown*>{shell, application, folderView, background, view, browser, provider, desktop}) {
+        if (object) {
+            object->Release();
+        }
+    }
+    Wh_Log(L"launch: Explorer opened %ls (%08X)", file.c_str(), static_cast<unsigned>(hr));
+    return SUCCEEDED(hr);
+}
+
+// An app entry as Explorer can open it: shell:AppsFolder and its name there,
+// which keeps what its shortcut passes. Empty if that does not lead back to
+// the same entry.
+std::wstring AppsFolderPath(PCIDLIST_ABSOLUTE pidl) {
+    std::wstring path;
+    IShellItem* item = nullptr;
+    if (SUCCEEDED(SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&item))) && item) {
+        LPWSTR name = nullptr;
+        if (SUCCEEDED(item->GetDisplayName(SIGDN_PARENTRELATIVEPARSING, &name)) && name) {
+            path = std::wstring(L"shell:AppsFolder\\") + name;
+            CoTaskMemFree(name);
+        }
+        item->Release();
+    }
+    PIDLIST_ABSOLUTE parsed = nullptr;
+    bool same = !path.empty() && SUCCEEDED(SHParseDisplayName(path.c_str(), nullptr, &parsed, 0, nullptr)) &&
+                parsed && ILIsEqual(parsed, pidl);
+    if (parsed) {
+        ILFree(parsed);
+    }
+    return same ? path : std::wstring();
+}
+
+// Opens something from Start and closes Start, in the order Windows needs for
+// the program to come to the front. Closing Start hands the foreground back to
+// the app that had it before Start opened, and a program whose window appears
+// after that may take the foreground only if it was started while Start held
+// it (packaged apps get the right through their activation instead). That
+// failed twice over: Start was closed before the launch, and on a click the
+// shell hands SearchHost the foreground a few milliseconds later, before the
+// launch thread got to it.
+//
+// So the launch is requested at once -- the search thread looks the app up
+// while the results are still there -- but waits at g_launchGate: a moment for
+// that hand-over, the foreground taken back from SearchHost if it happened,
+// then handed on to Explorer, which starts the program (ShellExecuteInExplorer
+// explains why), and once it has, Start is closed as usual, animation and all.
+// A grant to any process, made while Start is in front, covers a program that
+// hands off to one already running.
+void DismissStartMenuForLaunch(std::function<void()> launch) {
+    g_launchedAtTick.store(GetTickCount64());
+    g_suppressRefocus.store(true);
+    if (g_openFocus) {
+        g_openFocus.Stop();
+        g_openFocus = nullptr;
+    }
+    if (g_shownFocus) {
+        g_shownFocus.Stop();
+        g_shownFocus = nullptr;
+    }
+    wuc::CoreDispatcher dispatcher{nullptr};
+    try {
+        if (g_ourBox) {
+            dispatcher = g_ourBox.Dispatcher();
+        }
+    } catch (...) {}
+    if (!g_launchGate) {
+        g_launchGate = CreateEventW(nullptr, TRUE, TRUE, nullptr);
+    }
+    if (!dispatcher || !g_launchGate) {
+        launch();
+        DismissStartMenu();
+        return;
+    }
+    ResetEvent(g_launchGate);
+    const unsigned before = g_launchesDone.load();
+    launch();
+    SpawnTrackedLaunch([dispatcher, before] {
+        Sleep(30);
+        HWND ours = GetOurCoreWindow();
+        HWND fg = GetForegroundWindow();
+        if (ours && fg != ours && IsSearchHostWindow(fg)) {
+            DWORD_PTR granted = 0;
+            if (SendMessageTimeoutW(fg, StartForegroundRequestMessage(), 0, 0, SMTO_ABORTIFHUNG, 200, &granted) &&
+                granted && SetForegroundWindow(ours)) {
+                for (int i = 0; i < 20 && GetForegroundWindow() != ours; ++i) {
+                    Sleep(10);
+                }
+            }
+        }
+        AllowSetForegroundWindow(ASFW_ANY);
+        HWND holder = FindExplorerLaunchHolder();
+        const bool handedOver = holder && ours && GetForegroundWindow() == ours && SetForegroundWindow(holder);
+        Wh_Log(L"launch: foreground %ls Explorer", handedOver ? L"handed to" : L"NOT handed to");
+        SetEvent(g_launchGate);
+        for (int i = 0; i < 200 && g_launchesDone.load() == before && !g_quit.load(); ++i) {
+            Sleep(10);
+        }
+        Wh_Log(L"launch: started with Start in front (%ls); closing Start",
+               GetForegroundWindow() == ours ? L"yes" : L"no");
+        if (!g_quit.load()) {
+            dispatcher.RunAsync(wuc::CoreDispatcherPriority::Normal,
+                                wuc::DispatchedHandler{[] { DismissStartMenu(); }});
+        }
+    });
 }
 
 void DisarmScrollTabStops(wux::DependencyObject const& root, int depth = 15) {
@@ -5155,6 +5627,10 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
         if (otherHwnd) GetWindowThreadProcessId(otherHwnd, &otherPid);
 
         if (LOWORD(wParam) != WA_INACTIVE) {
+            if (GetTickCount64() - g_launchedAtTick.load() < kLaunchHandoffMs) {
+                // Taken back from SearchHost to launch (DismissStartMenuForLaunch).
+                return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            }
             g_suppressRefocus.store(false);
             Wh_Log(L"subclass: WM_ACTIVATE (active, prev=%p) -> ready for search", otherHwnd);
             if (g_ourBox && !g_isOverlayVisible.load()) {
@@ -5183,6 +5659,7 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
             }
             StashTextIfSwappedOut();
             g_suppressRefocus.store(true);
+            g_enterWaiting = false;
             Wh_Log(L"subclass: WM_ACTIVATE (inactive, other=%p pid=%lu) -> suppressing refocus", otherHwnd, otherPid);
             if (g_resultsHost) {
                 g_resultsHost.Visibility(wux::Visibility::Visible);
@@ -5448,7 +5925,7 @@ struct Row {
     std::wstring subtitle;
     std::wstring openPath;   // files: what ShellExecute opens
     int appIndex = -1;       // apps: which entry of the index to launch
-    std::vector<BYTE> icon;  // BGRA, kIconSize square, or empty
+    std::vector<BYTE> icon;  // premultiplied BGRA, IconPixels() square, or empty
     bool canRunAsAdmin = true;
     bool isSetting = false;
     bool isFolder = false;
@@ -5466,11 +5943,39 @@ struct Row {
 // stretched to fill it. Asking the shell for 48 and letting XAML scale down
 // stays sharp to 200%, and costs nothing extra: the shell has these sizes
 // already.
-inline constexpr int kIconSize = 48;     // what we ask the shell for
-inline constexpr int kIconDisplay = 24;  // what it occupies in the row
+inline constexpr int kIconDisplay = 24;  // what an icon occupies in the row, in DIPs
+
+// The same in physical pixels on the display Start is on: the size icons are
+// made at (see icons::Resample), so XAML draws them without scaling.
+int IconPixels() {
+    HWND start = GetOurCoreWindow();
+    UINT dpi = start ? GetDpiForWindow(start) : 0;
+    if (!dpi) {
+        dpi = GetDpiForSystem();
+    }
+    return std::clamp(MulDiv(kIconDisplay, static_cast<int>(dpi), 96), 16, 256);
+}
+
+// A row's icon as a bitmap, or null when it has none.
+wuxmi::WriteableBitmap IconBitmap(const std::vector<BYTE>& pixels) {
+    const int side = icons::IconSide(pixels);
+    if (!side) {
+        return nullptr;
+    }
+    wuxmi::WriteableBitmap bitmap{side, side};
+    auto access = bitmap.PixelBuffer().as<::Windows::Storage::Streams::IBufferByteAccess>();
+    BYTE* dest = nullptr;
+    if (FAILED(access->Buffer(&dest)) || !dest) {
+        return nullptr;
+    }
+    memcpy(dest, pixels.data(), pixels.size());
+    bitmap.Invalidate();
+    return bitmap;
+}
 
 std::vector<Row> g_appRows;
 std::vector<Row> g_fileRows;
+std::wstring g_rowsQuery;  // the text g_appRows and g_fileRows are the results for
 
 // Launch requests, posted from the XAML thread back to the search thread,
 // which owns the app index and therefore the PIDLs.
@@ -5491,6 +5996,7 @@ std::atomic<bool> g_launchAsAdmin{false};
 // exactly what the broker could not promise when it ran elevated.
 void OpenResult(std::wstring path, bool asAdmin = false) {
     SpawnTrackedLaunch([path = std::move(path), asAdmin] {
+        WaitForLaunchGate();
         HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         wchar_t userProfile[MAX_PATH] = {};
         if (!GetEnvironmentVariableW(L"USERPROFILE", userProfile, MAX_PATH) || !userProfile[0]) {
@@ -5530,9 +6036,10 @@ void OpenResult(std::wstring path, bool asAdmin = false) {
         }
         info.lpDirectory = workDir;
         info.nShow = SW_SHOWNORMAL;
-        if (!ShellExecuteExW(&info)) {
+        if ((asAdmin || !ShellExecuteInExplorer(path, params, workDir)) && !ShellExecuteExW(&info)) {
             Wh_Log(L"open failed (%lu): %ls (admin=%d)", GetLastError(), path.c_str(), asAdmin ? 1 : 0);
         }
+        g_launchesDone.fetch_add(1);
         if (SUCCEEDED(comHr)) {
             CoUninitialize();
         }
@@ -5699,6 +6206,7 @@ void ShowPropertiesDialog(std::wstring path) {
 
 void LaunchTerminal(const std::wstring& dir, bool isPowerShell, bool asAdmin) {
     SpawnTrackedLaunch([dir, isPowerShell, asAdmin] {
+        WaitForLaunchGate();
         HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         if (isPowerShell) {
             std::wstring psTarget = dir;
@@ -5716,7 +6224,9 @@ void LaunchTerminal(const std::wstring& dir, bool isPowerShell, bool asAdmin) {
             sei.lpParameters = params.c_str();
             sei.lpDirectory = dir.c_str();
             sei.nShow = SW_SHOWNORMAL;
-            ShellExecuteExW(&sei);
+            if (asAdmin || !ShellExecuteInExplorer(sei.lpFile, params, dir)) {
+                ShellExecuteExW(&sei);
+            }
         } else {
             std::wstring cmdTarget = dir;
             if (cmdTarget.size() > 3 && cmdTarget.back() == L'\\') {
@@ -5731,8 +6241,11 @@ void LaunchTerminal(const std::wstring& dir, bool isPowerShell, bool asAdmin) {
             sei.lpParameters = params.c_str();
             sei.lpDirectory = dir.c_str();
             sei.nShow = SW_SHOWNORMAL;
-            ShellExecuteExW(&sei);
+            if (asAdmin || !ShellExecuteInExplorer(sei.lpFile, params, dir)) {
+                ShellExecuteExW(&sei);
+            }
         }
+        g_launchesDone.fetch_add(1);
         if (SUCCEEDED(comHr)) {
             CoUninitialize();
         }
@@ -5955,8 +6468,7 @@ void OpenSelectedFile(int index, bool asAdmin) {
     if (asAdmin && !CanElevatePath(path)) {
         asAdmin = false;
     }
-    DismissStartMenu();
-    OpenResult(path, asAdmin);
+    DismissStartMenuForLaunch([path = path, asAdmin] { OpenResult(path, asAdmin); });
     Wh_Log(L"open file: index %d ('%ls'), asAdmin=%d", index, path.c_str(), asAdmin ? 1 : 0);
 }
 
@@ -6021,24 +6533,43 @@ void LaunchSelectedApp(int index, bool asAdmin) {
         return;
     }
     if (row.openPath.starts_with(L"http:") || row.openPath.starts_with(L"https:")) {
-        DismissStartMenu();
-        OpenResult(row.openPath, false);
+        DismissStartMenuForLaunch([url = row.openPath] { OpenResult(url, false); });
         Wh_Log(L"launch web: '%ls'", row.openPath.c_str());
         return;
     }
     int which = row.appIndex;
     if (which >= 0) {
-        DismissStartMenu();
         if (asAdmin && !row.canRunAsAdmin) {
             asAdmin = false;
         }
-        {
-            std::lock_guard<std::mutex> lock(g_queryMutex);
-            g_launchAsAdmin.store(asAdmin);
-            g_launchRequest.store(which);
-        }
-        g_queryWake.notify_all();
+        DismissStartMenuForLaunch([which, asAdmin] {
+            {
+                std::lock_guard<std::mutex> lock(g_queryMutex);
+                g_launchAsAdmin.store(asAdmin);
+                g_launchRequest.store(which);
+            }
+            g_queryWake.notify_all();
+        });
         Wh_Log(L"launch app: index %d ('%ls'), asAdmin=%d", index, row.title.c_str(), asAdmin ? 1 : 0);
+    }
+}
+
+// The text the rows on screen are the results for (RenderResults).
+std::wstring g_shownQuery;
+
+// Whether the rows on screen are not yet the results for what is typed.
+bool ResultsPending() {
+    std::lock_guard<std::mutex> lock(g_queryMutex);
+    return g_pendingQuery != g_shownQuery;
+}
+
+// What Enter does: opens the selected result.
+void ActivateSelection(bool asAdmin) {
+    const bool haveFiles = g_fileButtonsOpt && !g_fileButtonsOpt->empty();
+    if (g_filesColumnActive && haveFiles) {
+        OpenSelectedFile(g_selectedFile < 0 ? 0 : g_selectedFile, asAdmin);
+    } else if (!g_currentAppRows.empty()) {
+        LaunchSelectedApp(g_selectedApp < 0 ? 0 : g_selectedApp, asAdmin);
     }
 }
 
@@ -6130,10 +6661,16 @@ bool HandleNavigationKey(winrt::Windows::System::VirtualKey key, bool ctrl) {
         case VK::Enter:
             if (GetKeyState(VK_SHIFT) < 0) {
                 OpenSelectedContextMenu();
-            } else if (inFiles) {
-                OpenSelectedFile(g_selectedFile < 0 ? 0 : g_selectedFile, ctrl);
-            } else if (!g_currentAppRows.empty()) {
-                LaunchSelectedApp(g_selectedApp < 0 ? 0 : g_selectedApp, ctrl);
+            } else if (ResultsPending()) {
+                // Typed faster than the search: what is on screen is for
+                // an earlier text, or nothing yet. RenderResults opens the
+                // first result once the ones for this text are in.
+                g_enterWaiting = true;
+                g_enterWaitingCtrl = ctrl;
+                g_enterWaitingTick = now;
+                Wh_Log(L"nav: Enter before the results; waiting for them");
+            } else {
+                ActivateSelection(ctrl);
             }
             break;
         case VK::Tab: {
@@ -6551,10 +7088,12 @@ void RenderResults() try {
         std::lock_guard<std::mutex> lock(g_resultsMutex);
         files = g_fileRows;
         appNames = g_appRows;
+        g_shownQuery = g_rowsQuery;
         total = g_totalMatches.load();
     }
 
     if (files.empty() && appNames.empty() && g_ourBox && g_ourBox.Text().empty()) {
+        g_enterWaiting = false;
         g_currentAppRows.clear();
         g_currentFileRows.clear();
         g_selectedApp = -1;
@@ -6697,24 +7236,16 @@ void RenderResults() try {
         layout.ColumnDefinitions().Append(textCol);
 
         bool hasBitmap = false;
-        if (item.icon.size() == static_cast<size_t>(kIconSize) * kIconSize * 4) {
-            wuxmi::WriteableBitmap bmp{kIconSize, kIconSize};
-            auto buffer = bmp.PixelBuffer();
-            auto access = buffer.as<::Windows::Storage::Streams::IBufferByteAccess>();
-            BYTE* dest = nullptr;
-            if (SUCCEEDED(access->Buffer(&dest)) && dest) {
-                memcpy(dest, item.icon.data(), item.icon.size());
-                bmp.Invalidate();
-                wuxc::Image image;
-                image.Source(bmp);
-                image.Width(kIconDisplay);
-                image.Height(kIconDisplay);
-                image.Margin(wux::ThicknessHelper::FromLengths(0, 0, 10, 0));
-                image.VerticalAlignment(wux::VerticalAlignment::Center);
-                wuxc::Grid::SetColumn(image, 0);
-                layout.Children().Append(image);
-                hasBitmap = true;
-            }
+        if (auto bmp = IconBitmap(item.icon)) {
+            wuxc::Image image;
+            image.Source(bmp);
+            image.Width(kIconDisplay);
+            image.Height(kIconDisplay);
+            image.Margin(wux::ThicknessHelper::FromLengths(0, 0, 10, 0));
+            image.VerticalAlignment(wux::VerticalAlignment::Center);
+            wuxc::Grid::SetColumn(image, 0);
+            layout.Children().Append(image);
+            hasBitmap = true;
         }
 
         if (!hasBitmap) {
@@ -7098,24 +7629,16 @@ void RenderResults() try {
         layout.ColumnDefinitions().Append(textCol);
 
         bool hasBitmap = false;
-        if (item.icon.size() == static_cast<size_t>(kIconSize) * kIconSize * 4) {
-            wuxmi::WriteableBitmap bmp{kIconSize, kIconSize};
-            auto buffer = bmp.PixelBuffer();
-            auto access = buffer.as<::Windows::Storage::Streams::IBufferByteAccess>();
-            BYTE* dest = nullptr;
-            if (SUCCEEDED(access->Buffer(&dest)) && dest) {
-                memcpy(dest, item.icon.data(), item.icon.size());
-                bmp.Invalidate();
-                wuxc::Image image;
-                image.Source(bmp);
-                image.Width(kIconDisplay);
-                image.Height(kIconDisplay);
-                image.Margin(wux::ThicknessHelper::FromLengths(0, 0, 10, 0));
-                image.VerticalAlignment(wux::VerticalAlignment::Center);
-                wuxc::Grid::SetColumn(image, 0);
-                layout.Children().Append(image);
-                hasBitmap = true;
-            }
+        if (auto bmp = IconBitmap(item.icon)) {
+            wuxc::Image image;
+            image.Source(bmp);
+            image.Width(kIconDisplay);
+            image.Height(kIconDisplay);
+            image.Margin(wux::ThicknessHelper::FromLengths(0, 0, 10, 0));
+            image.VerticalAlignment(wux::VerticalAlignment::Center);
+            wuxc::Grid::SetColumn(image, 0);
+            layout.Children().Append(image);
+            hasBitmap = true;
         }
 
         if (!hasBitmap) {
@@ -7208,8 +7731,7 @@ void RenderResults() try {
         if (!item.openPath.empty()) {
             std::wstring target = item.openPath;
             KeepHandler(button, button.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                DismissStartMenu();
-                OpenResult(target);
+                DismissStartMenuForLaunch([target] { OpenResult(target); });
             }));
 
             wuxc::MenuFlyout menu;
@@ -7227,8 +7749,7 @@ void RenderResults() try {
                 openIcon.Glyph(L"\uE8A7");
                 openItem.Icon(openIcon);
                 KeepHandler(openItem, openItem.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    DismissStartMenu();
-                    OpenResult(target);
+                    DismissStartMenuForLaunch([target] { OpenResult(target); });
                 }));
                 flyout.Items().Append(openItem);
 
@@ -7239,8 +7760,7 @@ void RenderResults() try {
                     adminIcon.Glyph(L"\uE7EF");
                     adminItem.Icon(adminIcon);
                     KeepHandler(adminItem, adminItem.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                        DismissStartMenu();
-                        OpenResult(target, true /* asAdmin */);
+                        DismissStartMenuForLaunch([target] { OpenResult(target, true /* asAdmin */); });
                     }));
                     flyout.Items().Append(adminItem);
                 }
@@ -7259,8 +7779,8 @@ void RenderResults() try {
                         icon.Glyph(asAdmin ? L"\uE7EF" : L"\uE756");
                         termItem.Icon(icon);
                         KeepHandler(termItem, termItem.Click(winrt::auto_revoke, [target, isPowerShell, asAdmin](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                            DismissStartMenu();
-                            LaunchTerminal(target, isPowerShell, asAdmin);
+                            DismissStartMenuForLaunch(
+                                [target, isPowerShell, asAdmin] { LaunchTerminal(target, isPowerShell, asAdmin); });
                         }));
                         termSub.Items().Append(termItem);
                     };
@@ -7418,6 +7938,14 @@ void RenderResults() try {
     Wh_Log(L"render: %zu apps, %zu files, host %.0fx%.0f", appNames.size(),
         files.size(), g_resultsHost.ActualWidth(),
         g_resultsHost.ActualHeight());
+
+    if (g_enterWaiting && !ResultsPending()) {
+        g_enterWaiting = false;
+        if (GetTickCount64() - g_enterWaitingTick < kEnterWaitMs) {
+            Wh_Log(L"render: running the Enter that waited for these results");
+            ActivateSelection(g_enterWaitingCtrl);
+        }
+    }
 } catch (...) {
     Wh_Log(L"render failed %08X", static_cast<unsigned>(winrt::to_hresult()));
 }
@@ -7438,7 +7966,8 @@ void ApplyLateFileIcons() try {
     }
     const size_t rows = std::min(g_currentFileRows.size(), g_fileButtonsOpt->size());
     for (const auto& [path, pixels] : late) {
-        if (pixels.size() != static_cast<size_t>(kIconSize) * kIconSize * 4) {
+        auto bmp = IconBitmap(pixels);
+        if (!bmp) {
             continue;
         }
         for (size_t i = 0; i < rows; ++i) {
@@ -7452,14 +7981,7 @@ void ApplyLateFileIcons() try {
             if (!image) {
                 continue;
             }
-            wuxmi::WriteableBitmap bmp{kIconSize, kIconSize};
-            auto access = bmp.PixelBuffer().as<::Windows::Storage::Streams::IBufferByteAccess>();
-            BYTE* dest = nullptr;
-            if (SUCCEEDED(access->Buffer(&dest)) && dest) {
-                memcpy(dest, pixels.data(), pixels.size());
-                bmp.Invalidate();
-                image.Source(bmp);
-            }
+            image.Source(bmp);
         }
     }
 } catch (...) {
@@ -7612,8 +8134,10 @@ void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool
     // 0. If path is a URI (e.g. ms-settings:, http:, https:) or command:
     if (!path.empty()) {
         if (path.starts_with(L"ms-settings:") || path.starts_with(L"http:") || path.starts_with(L"https:")) {
-            HINSTANCE hInst = ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-            if (reinterpret_cast<INT_PTR>(hInst) > 32) {
+            if (ShellExecuteInExplorer(path, L"", L"")) {
+                launched = true;
+            } else if (HINSTANCE hInst = ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                       reinterpret_cast<INT_PTR>(hInst) > 32) {
                 Wh_Log(L"launched URI setting: %ls", path.c_str());
                 launched = true;
             } else {
@@ -7621,8 +8145,10 @@ void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool
             }
         } else if (path.starts_with(L"control ")) {
             std::wstring params = path.substr(8);
-            HINSTANCE hInst = ShellExecuteW(nullptr, asAdmin ? L"runas" : L"open", L"control.exe", params.c_str(), nullptr, SW_SHOWNORMAL);
-            if (reinterpret_cast<INT_PTR>(hInst) > 32) {
+            if (!asAdmin && ShellExecuteInExplorer(L"control.exe", params, L"")) {
+                launched = true;
+            } else if (HINSTANCE hInst = ShellExecuteW(nullptr, asAdmin ? L"runas" : L"open", L"control.exe", params.c_str(), nullptr, SW_SHOWNORMAL);
+                       reinterpret_cast<INT_PTR>(hInst) > 32) {
                 Wh_Log(L"launched control applet: %ls", path.c_str());
                 launched = true;
             }
@@ -7681,7 +8207,7 @@ void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool
         }
         info.lpDirectory = workDir;
         info.nShow = SW_SHOWNORMAL;
-        if (ShellExecuteExW(&info)) {
+        if ((!asAdmin && ShellExecuteInExplorer(path, params, workDir ? workDir : L"")) || ShellExecuteExW(&info)) {
             Wh_Log(L"launched app (by file path): %ls (admin=%d, dir=%ls)", name.c_str(), asAdmin ? 1 : 0, workDir ? workDir : L"(null)");
             launched = true;
         } else {
@@ -7737,6 +8263,13 @@ void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool
         }
         
         // Fallback to normal launch if runas failed or was not requested:
+        if (!launched && !asAdmin) {
+            std::wstring appPath = AppsFolderPath(pidl);
+            if (!appPath.empty() && ShellExecuteInExplorer(appPath, L"", L"")) {
+                Wh_Log(L"launched app (by app entry): %ls", name.c_str());
+                launched = true;
+            }
+        }
         if (!launched) {
             SHELLEXECUTEINFOW info{};
             info.cbSize = sizeof(info);
@@ -7781,6 +8314,7 @@ void SearchThreadMain() {
     HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
     apps::Index appIndex;
+    apps::UsageCounts appUsage = apps::LoadUsage();
     if (appIndex.Rebuild()) {
         g_lastAppIndexRebuildTick.store(GetTickCount64());
         Wh_Log(L"apps: indexed (%zu apps)", appIndex.Count());
@@ -7788,7 +8322,8 @@ void SearchThreadMain() {
         Wh_Log(L"apps: index failed");
     }
 
-    icons::FileIconCache iconCache(kIconSize);
+    int iconPixels = IconPixels();
+    icons::FileIconCache iconCache(iconPixels);
 
     // The apps behind the rows currently on screen, in the same order.
     std::vector<const apps::App*> lastHits;
@@ -7810,7 +8345,7 @@ void SearchThreadMain() {
         }
         std::vector<BYTE> pixels;
         if (!app->isSetting || app->pidl) {
-            FetchAppIcon(app, kIconSize, &pixels);
+            FetchAppIcon(app, iconPixels, &pixels);
         }
         appIconCache.emplace(app->name, std::move(pixels));
     };
@@ -7858,13 +8393,18 @@ void SearchThreadMain() {
                 bool asAdmin = g_launchAsAdmin.exchange(false);
                 if (static_cast<size_t>(wanted) < lastHits.size() && lastHits[wanted]) {
                     const auto* app = lastHits[wanted];
+                    int& uses = appUsage[app->nameLower];
+                    uses = std::min(uses + 1, apps::kUsageCap);
+                    apps::SaveUsage(appUsage);
                     std::wstring name = app->name;
                     std::wstring targetPath = app->targetPath;
                     ITEMIDLIST* pidlClone = app->pidl ? ILClone(app->pidl.get()) : nullptr;
                     lock.unlock();
 
                     SpawnTrackedLaunch([name = std::move(name), targetPath = std::move(targetPath), pidlClone, asAdmin] {
+                        WaitForLaunchGate();
                         LaunchAppAsync(name, targetPath, pidlClone, asAdmin);
+                        g_launchesDone.fetch_add(1);
                         if (pidlClone) {
                             ILFree(pidlClone);
                         }
@@ -7922,6 +8462,14 @@ void SearchThreadMain() {
         }
         last = query;
 
+        // Start may be on a display with another scale by now.
+        if (int pixels = IconPixels(); pixels != iconPixels) {
+            iconPixels = pixels;
+            iconCache.SetSize(pixels);
+            appIconCache.clear();
+            prefetchNext = 0;
+        }
+
         if (query.empty()) {
             lastHits.clear();
             g_launchRequest.store(-1);
@@ -7929,6 +8477,7 @@ void SearchThreadMain() {
                 std::lock_guard<std::mutex> lock(g_resultsMutex);
                 g_appRows.clear();
                 g_fileRows.clear();
+                g_rowsQuery.clear();
                 g_totalMatches.store(0);
             }
             RequestRender();
@@ -8204,7 +8753,7 @@ void SearchThreadMain() {
             webRow.appIndex = -1;
             appRows.push_back(std::move(webRow));
         } else {
-            for (const apps::Match& m : appIndex.Search(query, static_cast<size_t>(maxApps))) {
+            for (const apps::Match& m : appIndex.Search(query, static_cast<size_t>(maxApps), &appUsage)) {
                 if (!m.app) {
                     continue;
                 }
@@ -8245,7 +8794,7 @@ void SearchThreadMain() {
                 if (cached == appIconCache.end()) {
                     std::vector<BYTE> pixels;
                     if (!m.app->isSetting || m.app->pidl) {
-                        FetchAppIcon(m.app, kIconSize, &pixels);
+                        FetchAppIcon(m.app, iconPixels, &pixels);
                     }
                     cached = appIconCache.emplace(m.app->name, std::move(pixels))
                                  .first;
@@ -8313,6 +8862,7 @@ void SearchThreadMain() {
             std::lock_guard<std::mutex> lock(g_resultsMutex);
             g_appRows = appRows;
             g_fileRows = fileRows;
+            g_rowsQuery = query;
             g_totalMatches.store(total);
         }
         RequestRender();
@@ -8509,7 +9059,10 @@ void PlaceOurSearchBox(wux::FrameworkElement const& stockButton) try {
 
                     if (!g_activatedToken) {
                         g_activatedToken = core.Activated([](wuc::CoreWindow const&, wuc::WindowActivatedEventArgs const& args) {
-                            if (args.WindowActivationState() != wuc::CoreWindowActivationState::Deactivated) {
+                            if (args.WindowActivationState() != wuc::CoreWindowActivationState::Deactivated &&
+                                GetTickCount64() - g_launchedAtTick.load() < kLaunchHandoffMs) {
+                                // Taken back from SearchHost to launch (DismissStartMenuForLaunch).
+                            } else if (args.WindowActivationState() != wuc::CoreWindowActivationState::Deactivated) {
                                 g_suppressRefocus.store(false);
                                 if (g_ourBox && !g_isOverlayVisible.load()) {
                                     g_ourBox.Text(L"");
@@ -8570,6 +9123,7 @@ void PlaceOurSearchBox(wux::FrameworkElement const& stockButton) try {
 
 void TeardownStartMenuUi() {
     Wh_Log(L"teardown: tearing down Start Menu UI on XAML thread");
+
 
     // Here rather than in Wh_ModUninit: on the hooked thread, the hook
     // procedure can't be mid-call when it goes.
@@ -8809,6 +9363,10 @@ void Wh_ModUninit() {
         g_searchThread.reset();
     }
     WaitForTrackedLaunches();
+    if (g_launchGate) {
+        CloseHandle(g_launchGate);
+        g_launchGate = nullptr;
+    }
 
     bool tornDown = false;
     // Only the dispatcher: a reference to the box itself would be released
