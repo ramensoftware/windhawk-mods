@@ -338,8 +338,17 @@
 - imageBlendWhite: true
   $name: Let the picture's white background through
   $name:ru: Растворять белый фон картинки
-  $description: "Applies only when Original WebView layout is off. Pictures like the Windows 2000 one are drawn on white, which shows as a white block on a pane that is not white. With this on, a picture without an alpha channel of its own is multiplied into the background instead: white leaves it untouched, everything else tints it. Pictures that do carry alpha are drawn by it either way."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Картинки вроде той, что была в Windows 2000, нарисованы на белом, и на небелой панели белое лезет прямоугольником. Если включено, картинка без своего альфа-канала умножается на фон: белое фон не трогает, остальное его подкрашивает. Картинки с альфа-каналом рисуются по нему в любом случае."
+  $description: >-
+    Pictures like the Windows 2000 one are drawn on white, which shows as a
+    white block on a pane that is not white. With this on, a picture without an
+    alpha channel of its own is multiplied into the background instead: white
+    leaves it untouched, everything else tints it. Pictures that do carry alpha
+    are drawn by it either way.
+  $description:ru: >-
+    Картинки вроде той, что была в Windows 2000, нарисованы на белом, и на
+    небелой панели белое лезет прямоугольником. Если включено, картинка без
+    своего альфа-канала умножается на фон: белое фон не трогает, остальное его
+    подкрашивает. Картинки с альфа-каналом рисуются по нему в любом случае.
 - titleFontSize: 12
   $name: Size of the name
   $name:ru: Размер имени
@@ -412,13 +421,9 @@
   $options:ru:
   - theme: Из темы Windows
   - custom: Собственный цвет
-  $description: "Applies only when Original WebView layout is off."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView."
 - colorTitle: windowtext
   $name: Custom name colour
   $name:ru: Собственный цвет имени
-  $description: "Applies only when Original WebView layout is off."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView."
 - textColorSource: theme
   $name: Text colour source
   $name:ru: Источник цвета текста
@@ -428,13 +433,9 @@
   $options:ru:
   - theme: Из темы Windows
   - custom: Собственный цвет
-  $description: "Applies only when Original WebView layout is off."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView."
 - colorText: windowtext
   $name: Custom text colour
   $name:ru: Собственный цвет текста
-  $description: "Applies only when Original WebView layout is off."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView."
 - linkColorSource: custom
   $name: Link colour source
   $name:ru: Источник цвета ссылок
@@ -444,13 +445,16 @@
   $options:ru:
   - theme: Из темы Windows
   - custom: Собственный цвет
-  $description: "Applies only when Original WebView layout is off."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView."
 - colorLink: '#0000FF'
   $name: Custom link colour
   $name:ru: Собственный цвет ссылок
-  $description: "Applies only when Original WebView layout is off. The blue of a link, as the web view had it. It is a colour of its own rather than the system hotlight colour, which classic colour schemes are free to set to anything and often do."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Синий цвет ссылки, как в веб-виде. Задан отдельным цветом, а не системным hotlight: классические схемы вольны ставить туда что угодно и часто ставят."
+  $description: >-
+    The blue of a link, as the web view had it. It is a colour of its own rather
+    than the system hotlight colour, which classic colour schemes are free to
+    set to anything and often do.
+  $description:ru: >-
+    Синий цвет ссылки, как в веб-виде. Задан отдельным цветом, а не системным
+    hotlight: классические схемы вольны ставить туда что угодно и часто ставят.
 - dividerColorSource: custom
   $name: Divider colour source
   $name:ru: Источник цвета разделителя
