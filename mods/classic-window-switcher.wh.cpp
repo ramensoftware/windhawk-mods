@@ -4571,6 +4571,7 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
             sws_WindowSwitcher_LoadSettings(_this);
         }
     }
+    _this->vkTilde = MapVirtualKeyW(0x29, MAPVK_VSC_TO_VK_EX);
     sws_WindowSwitcher_RegisterHotkeys(_this);
     if (!rv)
     {
@@ -4716,8 +4717,9 @@ LRESULT CALLBACK GetMessageProc(int code, WPARAM wParam, LPARAM lParam) {
             msg->message = WM_NULL; // prevent showing the default switcher
         }
     }
+    LRESULT res = CallNextHookEx(nullptr, code, wParam, lParam);
     g_hookCalls--;
-    return CallNextHookEx(nullptr, code, wParam, lParam);
+    return res;
 }
 
 using RegisterHotKey_t = decltype(&RegisterHotKey);
