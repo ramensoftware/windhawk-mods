@@ -16085,23 +16085,25 @@ static bool TryHookTwinuiAltTab() {
 }
 #else
 static bool QueueTwinuiShellHooks(HMODULE hTwinui) {
-    // Add only unresolved paths, so a retry never hooks a trampoline twice.
+    if (XamlAltTabViewHost_Show_Original && CAltTabViewHost_Show_Original) {
+        return true;
+    }
     // twinui.pcshell.dll
-    WindhawkUtils::SYMBOL_HOOK hooks[2];
-    size_t count = 0;
-    if (!XamlAltTabViewHost_Show_Original) {
-        hooks[count++] = {
+    WindhawkUtils::SYMBOL_HOOK altTabHooks[] = {
+        {
             {LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
             &XamlAltTabViewHost_Show_Original, XamlAltTabViewHost_Show_Hook, true,
-        };
-    }
-    if (!CAltTabViewHost_Show_Original) {
-        hooks[count++] = {
+        },
+        {
             {LR"(public: virtual long __cdecl CAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
             &CAltTabViewHost_Show_Original, CAltTabViewHost_Show_Hook, true,
-        };
-    }
-    return !count || WindhawkUtils::HookSymbols(hTwinui, hooks, count);
+        },
+    };
+    // Submit only unresolved paths, so a retry never hooks a trampoline twice.
+    size_t first = XamlAltTabViewHost_Show_Original ? 1 : 0;
+    size_t count = ARRAYSIZE(altTabHooks) - first -
+                   (CAltTabViewHost_Show_Original ? 1 : 0);
+    return WindhawkUtils::HookSymbols(hTwinui, altTabHooks + first, count);
 }
 
 static bool TryHookTwinuiAltTab() {
@@ -16509,21 +16511,16 @@ static bool TryHookNativeSwipe() {
         HMODULE module = GetModuleHandleW(L"twinui.dll");
         if (!module) return false; // Independent late-module retry, no load/reference leak.
         void* targets[5]{};
-        // HookSymbols uses undecorated names by default. Include the legacy
-        // MS DIA __ptr64 spelling as well; both describe the same verified ABI.
+        // Use the canonical undecorated names returned by Windhawk's symbol
+        // provider. All five targets must resolve before any hook is queued.
         WindhawkUtils::SYMBOL_HOOK twinuiDllHooks[] = {
-            {{L"public: virtual long __cdecl TouchpadGestureHandler::ProcessInteractionContextOutput(struct InteractionContextOutputInfo const *,struct INTERACTION_CONTEXT_OUTPUT const *)",
-              L"public: virtual long __cdecl TouchpadGestureHandler::ProcessInteractionContextOutput(struct InteractionContextOutputInfo const * __ptr64,struct INTERACTION_CONTEXT_OUTPUT const * __ptr64) __ptr64"}, &targets[0], nullptr},
-            {{L"private: void __cdecl TouchpadGestureHandler::_StartGesture(struct InteractionContextOutputInfo const *,int,int)",
-              L"private: void __cdecl TouchpadGestureHandler::_StartGesture(struct InteractionContextOutputInfo const * __ptr64,int,int) __ptr64"}, &targets[1], nullptr},
-            {{L"private: void __cdecl TouchpadGestureHandler::_FinishGesture(struct InteractionContextOutputInfo const *,int,int,int,int)",
-              L"private: void __cdecl TouchpadGestureHandler::_FinishGesture(struct InteractionContextOutputInfo const * __ptr64,int,int,int,int) __ptr64"}, &targets[2], nullptr},
-            {{L"private: void __cdecl TouchpadGestureHandler::_CancelGesture(void)",
-              L"private: void __cdecl TouchpadGestureHandler::_CancelGesture(void) __ptr64"}, &targets[3], nullptr},
+            {{L"public: virtual long __cdecl TouchpadGestureHandler::ProcessInteractionContextOutput(struct InteractionContextOutputInfo const *,struct INTERACTION_CONTEXT_OUTPUT const *)"}, &targets[0], nullptr},
+            {{L"private: void __cdecl TouchpadGestureHandler::_StartGesture(struct InteractionContextOutputInfo const *,int,int)"}, &targets[1], nullptr},
+            {{L"private: void __cdecl TouchpadGestureHandler::_FinishGesture(struct InteractionContextOutputInfo const *,int,int,int,int)"}, &targets[2], nullptr},
+            {{L"private: void __cdecl TouchpadGestureHandler::_CancelGesture(void)"}, &targets[3], nullptr},
             // MSDIA separates the pointer levels as "* *", not "**". Exact
             // matching is required; one missing target disables this whole set.
-            {{L"public: virtual long __cdecl TouchpadSettingsManager::GetGestureTarget(enum TOUCHPAD_GESTURE_TYPE,enum TOUCHPAD_GESTURE_DIRECTION,struct ITouchpadGesture * *)",
-              L"public: virtual long __cdecl TouchpadSettingsManager::GetGestureTarget(enum TOUCHPAD_GESTURE_TYPE,enum TOUCHPAD_GESTURE_DIRECTION,struct ITouchpadGesture * __ptr64 * __ptr64) __ptr64"}, &targets[4], nullptr},
+            {{L"public: virtual long __cdecl TouchpadSettingsManager::GetGestureTarget(enum TOUCHPAD_GESTURE_TYPE,enum TOUCHPAD_GESTURE_DIRECTION,struct ITouchpadGesture * *)"}, &targets[4], nullptr},
         };
         bool resolved = WindhawkUtils::HookSymbols(module, twinuiDllHooks,
                                                   ARRAYSIZE(twinuiDllHooks));
