@@ -2,7 +2,7 @@
 // @id              explorer-real-folder-paths
 // @name            Explorer real folder paths
 // @description     Open filesystem-backed Shell shortcuts through their actual paths
-// @version         0.1.3
+// @version         0.1.4
 // @author          Nerdworld
 // @github          https://github.com/nerdworldDE
 // @include         explorer.exe
@@ -32,6 +32,11 @@ and its scroll position instead of selecting the folder's physical drive.
 Paths are resolved through the Windows Shell. Moved folders, OneDrive folder
 redirection, localized names, and network paths are not hardcoded.
 
+Dropbox and similar filesystem folders can keep a friendly name even when
+opened through their physical path. The mod also supplies the full path to
+Explorer's editable address for these folders, keeping their existing
+navigation route and sidebar selection.
+
 Virtual locations such as Home, This PC, library roots, searches, and ZIP
 views keep their normal behavior. Filesystem folders reached through a
 library, OneDrive, or another Shell alias can open through their physical
@@ -46,11 +51,15 @@ by other applications are unaffected.
 Open a new Explorer window, click Downloads in the sidebar, and press Ctrl+L.
 Navigate away and back when testing an already-open window.
 
-Tested on 64-bit Windows 11 23H2, build 22631.6199: the editable address shows
-the full path, and sidebar clicks retain the selected shortcut and scroll
-position. Other Windows builds and Windows on ARM have not been validated.
+The original navigation and sidebar behavior was tested on 64-bit Windows
+11 23H2, build 22631.6199. The Dropbox address-text fallback was added in
+version 0.1.4 and still needs runtime confirmation. Other Windows builds
+and Windows on ARM have not been validated.
 The mod needs ExplorerFrame's navigation and sidebar selection symbols. If
 Windhawk cannot resolve them, the mod refuses to initialize.
+The address-text fallback uses additional optional symbols. If these are
+unavailable, the existing navigation behavior remains active, and logging
+reports that the fallback could not be enabled.
 
 Sidebar selection follows Windows' normal behavior when navigating to a
 different folder through history or the address bar. The mod preserves a
@@ -67,6 +76,7 @@ No folder, pin, or registry setting is changed.
 
 #include <windhawk_utils.h>
 
+#include <commctrl.h>
 #include <shlobj.h>
 #include <shobjidl.h>
 
@@ -86,6 +96,18 @@ SetSelectedItem_t g_originalSetSelectedItemNoExpand = nullptr;
 
 using QueryInterface_t = HRESULT(WINAPI*)(void*, REFIID, void**);
 QueryInterface_t g_treeQueryInterface = nullptr;
+
+using AddressNavigationComplete_t = HRESULT(WINAPI*)(void*, void*);
+AddressNavigationComplete_t g_addressNavigationComplete = nullptr;
+AddressNavigationComplete_t g_originalAddressNavigationComplete = nullptr;
+
+using GetPidlIcon_t = HRESULT(WINAPI*)(void*, PCIDLIST_ABSOLUTE, int*, int*);
+GetPidlIcon_t g_originalGetPidlIcon = nullptr;
+
+using SendMessageW_t = LRESULT(WINAPI*)(HWND, UINT, WPARAM, LPARAM);
+SendMessageW_t g_originalSendMessageW = nullptr;
+ULONG_PTR g_addressUpdateFunctionBegin = 0;
+ULONG_PTR g_addressUpdateFunctionEnd = 0;
 
 HMODULE g_explorerFrame = nullptr;
 // These guards are defensive: Shell calls can cross COM/provider boundaries
@@ -111,6 +133,12 @@ struct ComDeleter {
 
 template <typename T>
 using ComAllocation = std::unique_ptr<T, ComDeleter<T>>;
+
+struct AddressUpdateContext {
+    ShellAllocation<wchar_t> path;
+};
+
+thread_local AddressUpdateContext* g_addressUpdateContext = nullptr;
 
 // Only folders converted by this mod qualify for selection preservation.
 // Eligibility is shared, but the selected item is always read from the exact
@@ -215,6 +243,95 @@ ShellAllocation<wchar_t> GetFileSystemPath(IShellItem* item) {
         return {};
     }
     return path;
+}
+
+ShellAllocation<wchar_t> GetAddressFolderPath(PCIDLIST_ABSOLUTE pidl) {
+    if (!pidl || pidl->mkid.cb == 0) {
+        return {};
+    }
+
+    IShellItem* rawItem = nullptr;
+    HRESULT hr = SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&rawItem));
+    ComAllocation<IShellItem> item(rawItem);
+    if (FAILED(hr) || !item) {
+        return {};
+    }
+
+    auto path = GetFileSystemPath(item.get());
+    if (!path || !IsFileSystemFolder(item.get())) {
+        return {};
+    }
+    return path;
+}
+
+struct AddressUpdateScope {
+    AddressUpdateContext* previousContext = g_addressUpdateContext;
+
+    explicit AddressUpdateScope(AddressUpdateContext* context) {
+        // Nested updates use their own folder and restore the outer update.
+        g_addressUpdateContext = context;
+    }
+
+    ~AddressUpdateScope() {
+        g_addressUpdateContext = previousContext;
+    }
+};
+
+HRESULT WINAPI AddressNavigationComplete_Hook(void* addressList, void* shellUrl) {
+    AddressUpdateContext context;
+    AddressUpdateScope scope(&context);
+    return g_originalAddressNavigationComplete(addressList, shellUrl);
+}
+
+HRESULT WINAPI GetPidlIcon_Hook(void* addressList,
+                               PCIDLIST_ABSOLUTE pidl,
+                               int* icon,
+                               int* selectedIcon) {
+    if (g_addressUpdateContext) {
+        const auto caller =
+            reinterpret_cast<ULONG_PTR>(__builtin_return_address(0));
+        // NavigationComplete supplies the current folder's absolute PIDL to
+        // its icon helper before sending CBEM_SETITEMW. Observe that argument;
+        // do not access the private IShellUrl vtable or CAddressList fields.
+        if (caller >= g_addressUpdateFunctionBegin &&
+            caller < g_addressUpdateFunctionEnd) {
+            g_addressUpdateContext->path = GetAddressFolderPath(pidl);
+        }
+    }
+    return g_originalGetPidlIcon(addressList, pidl, icon, selectedIcon);
+}
+
+LRESULT WINAPI SendMessageW_Hook(HWND window,
+                               UINT message,
+                               WPARAM wParam,
+                               LPARAM lParam) {
+    if (message == CBEM_SETITEMW && g_addressUpdateContext &&
+        g_addressUpdateContext->path && lParam) {
+        const auto caller =
+            reinterpret_cast<ULONG_PTR>(__builtin_return_address(0));
+        // Restrict this shared API hook to the native address-refresh call.
+        // The function range comes from x64 unwind metadata, not fixed offsets.
+        if (caller >= g_addressUpdateFunctionBegin &&
+            caller < g_addressUpdateFunctionEnd) {
+            const auto item = reinterpret_cast<const COMBOBOXEXITEMW*>(lParam);
+            if ((item->mask & CBEIF_TEXT) && item->iItem == -1 &&
+                item->pszText && item->pszText != LPSTR_TEXTCALLBACKW &&
+                item->pszText[0] &&
+                !SamePath(item->pszText,
+                          g_addressUpdateContext->path.get())) {
+                auto replacement = *item;
+                replacement.pszText = g_addressUpdateContext->path.get();
+                Wh_Log(L"Address text: %s -> %s", item->pszText,
+                       replacement.pszText);
+                // The normal control update also updates Explorer's edit cache.
+                // Native focus/selection, dirty-text handling, and icons remain.
+                return g_originalSendMessageW(
+                    window, message, wParam,
+                    reinterpret_cast<LPARAM>(&replacement));
+            }
+        }
+    }
+    return g_originalSendMessageW(window, message, wParam, lParam);
 }
 
 bool ShouldKeepSidebarSelection(void* tree, IShellItem* target) {
@@ -530,6 +647,23 @@ BOOL Wh_ModInit() {
             },
             &g_treeQueryInterface,
         },
+        {
+            {
+                L"public: virtual long __cdecl CAddressList::NavigationComplete(struct IShellUrl *)",
+            },
+            &g_addressNavigationComplete,
+            nullptr,
+            true,
+        },
+        {
+            {
+                L"protected: long __cdecl CAddressList::_GetPidlIcon(struct _ITEMIDLIST_ABSOLUTE const *,int *,int *)",
+                L"protected: long __cdecl CAddressList::_GetPidlIcon(struct _ITEMIDLIST const *,int *,int *)",
+            },
+            &g_originalGetPidlIcon,
+            GetPidlIcon_Hook,
+            true,
+        },
     };
 
     if (!WindhawkUtils::HookSymbols(g_explorerFrame, explorerFrameDllHooks,
@@ -539,6 +673,39 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Required navigation/sidebar symbols unavailable; this Windows build is unsupported");
         ReleaseExplorerFrame();
         return FALSE;
+    }
+
+    // Resolve before hooking so unwind lookup receives the real function
+    // address rather than Windhawk's trampoline. Keep this feature optional.
+    if (g_addressNavigationComplete && g_originalGetPidlIcon) {
+        DWORD64 imageBase = 0;
+        const auto function = RtlLookupFunctionEntry(
+            reinterpret_cast<DWORD64>(g_addressNavigationComplete),
+            &imageBase, nullptr);
+        const auto user32 = GetModuleHandleW(L"user32.dll");
+        const auto sendMessage =
+            user32 ? GetProcAddress(user32, "SendMessageW") : nullptr;
+        if (function && sendMessage) {
+            g_addressUpdateFunctionBegin = imageBase + function->BeginAddress;
+            g_addressUpdateFunctionEnd = imageBase + function->EndAddress;
+            if (Wh_SetFunctionHook(
+                    reinterpret_cast<void*>(sendMessage),
+                    reinterpret_cast<void*>(SendMessageW_Hook),
+                    reinterpret_cast<void**>(&g_originalSendMessageW)) &&
+                Wh_SetFunctionHook(
+                    reinterpret_cast<void*>(g_addressNavigationComplete),
+                    reinterpret_cast<void*>(AddressNavigationComplete_Hook),
+                    reinterpret_cast<void**>(
+                        &g_originalAddressNavigationComplete))) {
+                Wh_Log(L"Filesystem address-text fallback enabled");
+            } else {
+                Wh_Log(L"Could not hook address text; using navigation conversion only");
+            }
+        } else {
+            Wh_Log(L"Address refresh metadata or SendMessageW unavailable; using navigation conversion only");
+        }
+    } else {
+        Wh_Log(L"Optional address-text symbols unavailable; using navigation conversion only");
     }
 
     Wh_Log(L"Explorer real folder paths initialized");
