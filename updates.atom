@@ -2,12 +2,128 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-05T14:01:42.000Z</updated>
+    <updated>2026-10-05T15:03:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Quick Launch Dock 1.0.0]]></title>
+        <id>https://windhawk.net/mods/quick-launch-dock#35684ca5377a3971a573a524841c6922e20eab27</id>
+        <link href="https://windhawk.net/mods/quick-launch-dock"/>
+        <updated>2026-10-05T15:03:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="quicklaunchdock">Quick Launch Dock</h1>
+<p><img src="https://raw.githubusercontent.com/cheliks1123/Quick-launch-dock/main/quck-lauch-dock.gif" alt="Quick Launch Dock demo - dragging a shortcut onto the dock" /></p>
+<p><em>Drag a shortcut onto the dock and it stays there. Click an icon to launch it.</em></p>
+<p>A slim, smoothly animated dock that lives on the edge of your screen and gives you
+one-click access to your favourite programs, files and folders. Think of it as a
+tiny launcher bar with "+" slots: drop a shortcut onto it, or click "+" and pick a
+program, and it stays there until you remove it.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Add programs your way</strong></li>
+<li>Drag and drop shortcuts, executables, files or folders onto the dock.</li>
+<li>Click the <strong>+</strong> slot to choose a program in a file dialog (shortcuts are kept as shortcuts, so their icons stay correct).</li>
+<li>Right-click the <strong>+</strong> slot to paste a path from the clipboard (quotes and <code>%ENVIRONMENT%</code> variables are handled).</li>
+<li><strong>One-click launch</strong> — click an icon to start it. The working directory is set automatically.</li>
+<li><strong>Right-click menu</strong> on any icon: Open, Run as administrator, Show in folder, Move up / Move down, Remove.</li>
+<li><strong>Persistent list</strong> — your slots are saved by Windhawk and restored after a restart.</li>
+<li><strong>Auto-hide</strong> — the dock collapses into a thin strip and smoothly slides out when you move the mouse to the screen edge.</li>
+<li><strong>Smooth animations</strong> — slide-in/out, hover highlight fade, icon zoom on hover, appear/disappear and re-ordering animations. Frames are synchronized with your monitor's refresh rate, so it stays smooth on 60/144/240 Hz displays.</li>
+<li><strong>High-quality rendering</strong> — anti-aliased rounded corners and high-quality icon scaling (GDI+), per-pixel transparent window, DPI-aware sizes.</li>
+<li><strong>Fullscreen aware</strong> — optionally hides itself while a fullscreen app or game is active.</li>
+<li><strong>Fully themeable</strong> — background, hover, accent (plus sign and handle) and border colors are configurable (<code>#RRGGBB</code>).</li>
+<li><strong>Left or right edge</strong>, adjustable icon size, tooltips with the item name.</li>
+<li>Does not use the taskbar, does not hook any functions and does not modify system files. Disabling the mod removes the dock completely.</li>
+</ul>
+<h2 id="howitdiffersfromexistingmods">How it differs from existing mods</h2>
+<ul>
+<li><strong>Quick Launch & Media Panel</strong> is a collapsible panel at the top of the screen with shortcut pages and media controls. This mod is a minimal vertical dock on the left or right screen edge: a column of icons and a "+" slot, with no pages and no media controls.</li>
+<li><strong>Left Taskbar Quick Pin Dock</strong> is attached to the taskbar next to the Start button. This mod floats on the screen edge independently of the taskbar.</li>
+<li>What is specific to this mod: auto-hide into a thin strip that smoothly slides out on hover, hide-in-fullscreen, per-item "Run as administrator" and "Show in folder", and configurable colors.</li>
+</ul>
+<h2 id="howtouse">How to use</h2>
+<ol>
+<li>Enable the mod. A dock appears at the right edge of the primary monitor (vertically centered).</li>
+<li>Drag a shortcut/program/folder onto it, or click <strong>+</strong>.</li>
+<li>Click an icon to launch. Right-click an icon for more actions.</li>
+<li>With auto-hide enabled, move the cursor to the screen edge to reveal the dock.</li>
+</ol>
+<h2 id="settings">Settings</h2>
+<p>| Setting | Description |
+| --- | --- |
+| Screen side | Right or left edge of the primary monitor. |
+| Icon size | Icon size in pixels at 100% DPI (16–96). Scales with system DPI. |
+| Auto-hide | Collapse to a thin strip until the cursor touches the edge. |
+| Hide when a fullscreen app is active | Hides the dock above fullscreen windows/games. |
+| Animations | Turns all animations on or off. |
+| Background / Hover / Accent / Border color | Colors in <code>#RRGGBB</code> format. Invalid values fall back to the defaults. |</p>
+<h2 id="notesandlimitations">Notes and limitations</h2>
+<ul>
+<li>The mod runs as a standalone tool in its own dedicated process (it is not injected into Explorer and hooks nothing), so a problem in the mod can never affect the Windows shell, and only one instance is ever running.</li>
+<li>Drag and drop from windows running <strong>as administrator</strong> is blocked by Windows (UIPI). Use the <strong>+</strong> button in that case.</li>
+<li>The dock is placed on the <strong>primary</strong> monitor. With auto-hide and another monitor attached on the same side, the cursor may pass the edge too quickly to reveal the dock — disable auto-hide there.</li>
+<li>The number of slots is limited by the screen height.</li>
+<li>Slots are stored as file paths. If a file is moved or deleted, its icon becomes generic until you remove it.</li>
+</ul>
+<hr />
+<h1 id="">Панель быстрого запуска</h1>
+<p>Тонкая плавно анимированная панель у края экрана для быстрого запуска любимых
+программ, файлов и папок. По сути — мини-лаунчер с «плюсиками»: перетащи на него
+ярлык или нажми «+» и выбери программу — она останется на панели, пока ты сам её не уберёшь.</p>
+<h2 id="-1">Возможности</h2>
+<ul>
+<li><strong>Добавление как удобно</strong></li>
+<li>Перетаскивание ярлыков, exe-файлов, файлов и папок прямо на панель.</li>
+<li>Клик по <strong>+</strong> — выбор программы через диалог (ярлыки сохраняются как ярлыки, поэтому иконки остаются правильными).</li>
+<li>ПКМ по <strong>+</strong> — вставить путь из буфера обмена (кавычки и переменные вида <code>%APPDATA%</code> обрабатываются).</li>
+<li><strong>Запуск в один клик</strong> — рабочая папка выставляется автоматически.</li>
+<li><strong>Контекстное меню</strong> на любой иконке: Открыть, Запуск от имени администратора, Показать в папке, Переместить выше / ниже, Удалить.</li>
+<li><strong>Список сохраняется</strong> — слоты хранятся в Windhawk и восстанавливаются после перезагрузки.</li>
+<li><strong>Автоскрытие</strong> — в покое панель сворачивается в тонкую полоску и плавно выезжает, когда подводишь курсор к краю экрана.</li>
+<li><strong>Плавные анимации</strong> — выезд и сворачивание, плавная подсветка, увеличение иконки при наведении, анимации появления, удаления и перестановки. Кадры синхронизированы с частотой монитора, поэтому всё плавно на 60/144/240 Гц.</li>
+<li><strong>Качественная отрисовка</strong> — сглаженные скруглённые углы и качественное масштабирование иконок (GDI+), окно с попиксельной прозрачностью, учёт DPI.</li>
+<li><strong>Полноэкранные приложения</strong> — при желании панель сама прячется, пока открыта полноэкранная программа или игра.</li>
+<li><strong>Настраиваемые цвета</strong> — фон, подсветка, акцент (плюс и полоска) и рамка задаются в формате <code>#RRGGBB</code>.</li>
+<li><strong>Левый или правый край</strong>, размер иконок, подсказки с названием элемента.</li>
+<li>Не использует панель задач, не перехватывает функции и не меняет системные файлы. При отключении мода панель полностью исчезает.</li>
+</ul>
+<h2 id="-2">Чем отличается от существующих модов</h2>
+<ul>
+<li><strong>Quick Launch & Media Panel</strong> — сворачиваемая панель у верхнего края экрана со страницами ярлыков и управлением медиа. Этот мод — минимальная вертикальная панель у левого или правого края экрана: колонка иконок и слот «+», без страниц и без медиа-кнопок.</li>
+<li><strong>Left Taskbar Quick Pin Dock</strong> — панель, прикреплённая к панели задач рядом с кнопкой «Пуск». Этот мод свободно располагается у края экрана и от панели задач не зависит.</li>
+<li>Особенности этого мода: автоскрытие в тонкую полоску с плавным выездом при наведении, скрытие в полноэкранных приложениях, «Запуск от имени администратора» и «Показать в папке» для каждого элемента, настраиваемые цвета.</li>
+</ul>
+<h2 id="-3">Как пользоваться</h2>
+<ol>
+<li>Включи мод. У правого края основного монитора по центру по вертикали появится панель.</li>
+<li>Перетащи на неё ярлык, программу или папку либо нажми <strong>+</strong>.</li>
+<li>Клик по иконке — запуск. ПКМ по иконке — дополнительные действия.</li>
+<li>При включённом автоскрытии подведи курсор к краю экрана, чтобы показать панель.</li>
+</ol>
+<h2 id="-4">Настройки</h2>
+<p>| Настройка | Описание |
+| --- | --- |
+| Сторона экрана | Правый или левый край основного монитора. |
+| Размер иконок | Размер в пикселях при 100% DPI (16–96), масштабируется вместе с DPI системы. |
+| Автоскрытие | Сворачивать в тонкую полоску, пока курсор не коснётся края. |
+| Прятать в полноэкранных приложениях | Скрывает панель поверх полноэкранных окон и игр. |
+| Анимации | Включает и выключает все анимации. |
+| Цвета фона / подсветки / акцента / рамки | Формат <code>#RRGGBB</code>. При неверном значении используется цвет по умолчанию. |</p>
+<h2 id="-5">Примечания и ограничения</h2>
+<ul>
+<li>Мод работает как самостоятельный инструмент в собственном процессе (он не внедряется в проводник и ничего не перехватывает), поэтому сбой мода не может повлиять на оболочку Windows, а одновременно запущена всегда только одна копия.</li>
+<li>Перетаскивание из окон, запущенных <strong>от имени администратора</strong>, блокируется Windows (UIPI). В этом случае используй кнопку <strong>+</strong>.</li>
+<li>Панель располагается на <strong>основном</strong> мониторе. При автоскрытии и втором мониторе с той же стороны курсор может проскакивать край слишком быстро — в таком случае отключи автоскрытие.</li>
+<li>Количество слотов ограничено высотой экрана.</li>
+<li>Слоты хранятся как пути к файлам. Если файл перенесён или удалён, иконка станет стандартной, пока ты не уберёшь слот.</li>
+</ul>]]></content>
+        <author>
+            <name>cheliks1123</name>
+            <uri>https://github.com/cheliks1123</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Jump List Volume Control 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-jump-list-volume-control#f845399b58aa0ddc84a43ee6336a4e45532eb464</id>
@@ -836,35 +952,6 @@ português.</p>]]></content>
         <author>
             <name>gilnett</name>
             <uri>https://github.com/gilnett</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Taskbar Auto-Hide in Context 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-autohide-in-context#c5440eb6ac037ad7e329a7cfca33f28992fe9c2b</id>
-        <link href="https://windhawk.net/mods/taskbar-autohide-in-context"/>
-        <updated>2026-10-03T16:00:25.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows11taskbarautohideincontext">Windows 11 Taskbar Auto-Hide in Context</h1>
-<p>Adds an "Auto-hide Taskbar" toggle to the native Windows 11 empty-taskbar context menu.</p>
-<p><img src="https://i.imgur.com/CRooPg6.gif" alt="Taskbar Auto-Hide demo" /></p>
-<h3 id="features">Features</h3>
-<ul>
-<li><strong>Native UI Integration</strong>: Injects seamlessly into the native Windows 11 XAML <code>MenuFlyout</code>.</li>
-<li><strong>Immediate Auto-Hide</strong>: Automatically releases taskbar focus upon enabling auto-hide, ensuring the taskbar hides immediately.</li>
-<li><strong>Customizable</strong>: Fully customizable label, and choose between classic checkmark or checkbox indicator styles.</li>
-<li><strong>Mod Compatibility</strong>: Fully compatible with the "Taskbar Restart Explorer" mod.</li>
-</ul>
-<h3 id="compatibility">Compatibility</h3>
-<ul>
-<li>Windows 11 (Tested on 26H2).</li>
-</ul>
-<h3 id="credits">Credits</h3>
-<ul>
-<li>Inspired by the menu injection technique from <a href="https://windhawk.net/mods/taskbar-restart-explorer">Taskbar Restart
-Explorer</a> by <strong>Mgrmjp</strong>.</li>
-</ul>]]></content>
-        <author>
-            <name>oyrslyng</name>
-            <uri>https://github.com/oyrslyng</uri>
         </author>
     </entry>
 </feed>
