@@ -8233,7 +8233,7 @@
         "ratingUsers": 997,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1790193771000,
+        "updated": 1791194501000,
         "users": 71407
       },
       "metadata": {
@@ -8246,7 +8246,7 @@
         ],
         "license": "MIT",
         "name": "MacOS Minimize Animation",
-        "version": "3.1.5"
+        "version": "3.1.6"
       }
     },
     "magic-mouse": {

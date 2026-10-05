@@ -1,3 +1,7 @@
+## 3.1.6 ([Oct 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1cefd9b6c5400916d74378ed90d711adc699f69b/mods/macos-minimize-animation.wh.cpp))
+
+* Reverted the v3.1.5 hardware Direct2D render target, which showed a greyed window during the animation on some NVIDIA / external-monitor setups. The genie uses the default render target again, as in v3.1.4.
+
 ## 3.1.5 ([Sep 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5f0fbbaa99e8ed035da6eb58ba701ac7b143e1bc/mods/macos-minimize-animation.wh.cpp))
 
 `D2D1_RENDER_TARGET_TYPE_DEFAULT` on a DC render target resolves to the software rasterizer, so the whole genie mesh is CPU-rendered and read back every frame (reported ~15-19 ms/frame on an Iris Xe despite a working hardware path).

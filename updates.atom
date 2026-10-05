@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-05T09:00:12.000Z</updated>
+    <updated>2026-10-05T10:01:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MacOS Minimize Animation 3.1.6]]></title>
+        <id>https://windhawk.net/mods/macos-minimize-animation#1cefd9b6c5400916d74378ed90d711adc699f69b</id>
+        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
+        <updated>2026-10-05T10:01:41.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Reverted the v3.1.5 hardware Direct2D render target, which showed a greyed window during the animation on some NVIDIA / external-monitor setups. The genie uses the default render target again, as in v3.1.4.</li>
+</ul>]]></content>
+        <author>
+            <name>Abdullah Masood</name>
+            <uri>https://github.com/Abdullah-Masood-05</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Acrylic Color Glows 0.5.0]]></title>
         <id>https://windhawk.net/mods/acrylic-color-glows#318c99c6364375c88fbfd29739e0208da2bc2268</id>
@@ -844,26 +857,6 @@ No folder, pin, or registry setting is changed.</p>]]></content>
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MicroManager 1.2.0]]></title>
-        <id>https://windhawk.net/mods/micromanager#503d101f1c5e6abf8d57e0058bb2d49617237f33</id>
-        <link href="https://windhawk.net/mods/micromanager"/>
-        <updated>2026-10-03T16:00:11.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Live Activity Graphs:</strong> Added a 16-sample history graph to the popup. Click any row or the graph canvas to cycle between live CPU, GPU, and RAM trends.</li>
-<li><strong>Process Tree Termination:</strong> "End Task" now terminates the entire process tree, cleanly closing multi-process apps (Firefox, Chrome, Electron) without leaving orphaned crashed tabs.</li>
-<li><strong>Open File Location:</strong> Added a quick action to reveal and select the top consumer's executable in File Explorer.</li>
-<li><strong>Safety & Identity Protection:</strong> Confirms termination targets, validates process creation times against PID reuse, and blocks critical Windows system processes.</li>
-<li><strong>High-Contrast Readability:</strong> Pure white text across popup labels, graph titles, and context menus for excellent readability with dark and custom themes.</li>
-<li><strong>Top Taskbar Placement:</strong> Automatically detects top-aligned taskbars and flips the popup below the tray icon so it never renders off-screen.</li>
-<li><strong>System Process Display:</strong> Correctly identifies and labels "System Idle Process" and the NT Kernel (PID 4) when they consume resources.</li>
-<li><strong>Tray & Navigation Fixes:</strong> Fixed popup flicker on rapid tray clicks, added keyboard navigation (Up / Down / Esc), and improved reload stability.</li>
-</ul>]]></content>
-        <author>
-            <name>BlackPaw</name>
-            <uri>https://github.com/BlackPaw21</uri>
         </author>
     </entry>
 </feed>
