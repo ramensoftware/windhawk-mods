@@ -2,12 +2,133 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-04T15:02:37.000Z</updated>
+    <updated>2026-10-05T08:04:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Margin 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-margin#a08ccae7c4e480dbdf1e9389d259d23c5d7448fd</id>
+        <link href="https://windhawk.net/mods/taskbar-margin"/>
+        <updated>2026-10-05T08:04:15.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarmargin">Taskbar Margin</h1>
+<p>Shifts the taskbar <strong>content</strong> to the right by a configurable number of pixels, leaving an empty margin on the left. The taskbar background stays full width, and the taskbar context menu follows the content.</p>
+<p>Only the taskbar itself is affected.</p>
+<p><img src="https://raw.githubusercontent.com/loliri/windhawk-taskbar-margin/main/images/before.png" alt="Taskbar without a margin" /><br />
+<em>Before</em></p>
+<p><img src="https://raw.githubusercontent.com/loliri/windhawk-taskbar-margin/main/images/after.png" alt="Taskbar with a left margin" /><br />
+<em>After</em></p>
+<p><img src="https://raw.githubusercontent.com/loliri/windhawk-taskbar-margin/main/images/jumplist.png" alt="Taskbar context menu" /><br />
+<em>The context menu follows the margin</em></p>
+<h2 id="settings">Settings</h2>
+<p>| Setting | Default | Description |
+| --- | --- | --- |
+| Left margin (pixels) | 220 | How much empty space to leave on the left of the taskbar content. |
+| Follow display DPI | on | Scale the margin with the display DPI, so it keeps the same visual size on high-DPI displays. Turn off to keep it at a constant physical pixel size. |
+| Displays | All | Which displays the margin applies to: all, only the primary one, or only the secondary ones. Each display has its own taskbar and its own DPI, so the margin is calculated per display. |</p>
+<h2 id="notes">Notes</h2>
+<p>Requires Windows 11.</p>
+<p>The taskbar must be:</p>
+<ul>
+<li><strong>left-aligned</strong> (Settings → Personalization → Taskbar → Taskbar icon alignment)</li>
+<li><strong>Bottom</strong> or <strong>Top</strong> (New in Windows 11 26H2, Settings → Personalization → Taskbar → Taskbar position)</li>
+</ul>
+<p>The taskbar is not mirrored correctly on right-to-left display languages: the margin is applied to the physical left regardless of the taskbar's flow direction, while the context menu is moved to the right.</p>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li><strong>TranslucentTB</strong> is confirmed compatible and can be used alongside this mod.</li>
+<li><strong>Windows 11 Taskbar Styler</strong> is not an alternative to this mod. It changes the taskbar itself, while this mod changes the position of the elements inside it. A taskbar restyled that way loses the taskbar's effects on the margin area, while this mod keeps them across the whole taskbar, margin included. It also cannot move the context menu (the jump list), which this mod does.</li>
+<li><strong>Taskbar jump list on cursor pos</strong> changes the same anchor point. Both mods offset it, so depending on the hook order the menu can open offset from the cursor. Use one or the other.</li>
+<li>Tested on Windows 11 26H2.</li>
+</ul>
+<h2 id="suggesteduse">Suggested use</h2>
+<p>For example, together with <a href="https://github.com/unchihugo/FluentFlyout">FluentFlyout</a>: enable the taskbar widget there, set its position to the bottom left corner, and turn on the fixed widget width. The taskbar elements then tile linearly instead of overlapping each other.</p>
+<h2 id="implementationnotes">Implementation notes</h2>
+<p>The taskbar context menu (the jump list) is not laid out by XAML. Its anchor point is computed in <code>explorer.exe</code> by <code>CTaskListWnd::_ComputeJumpViewPosition</code> in <code>taskbar.dll</code>, and handed to the process that draws the menu. The point is in physical screen pixels.</p>
+<p>Shifting the taskbar's XAML content therefore does not move the menu on its own, because the menu is not placed relative to it. The mod adjusts the anchor point instead, which is why it hooks that function.</p>
+<h2 id="license">License</h2>
+<p>GPL-3.0. The taskbar XAML access is based on the <a href="https://github.com/m417z/my-windhawk-mods">Start button always on the left</a> mod by m417z, which is also licensed under GPL-3.0.</p>
+<h2 id="feedback">Feedback</h2>
+<p>Bug reports and feature requests are welcome in <a href="https://github.com/loliri/windhawk-taskbar-margin/issues">Issues</a>.</p>]]></content>
+        <author>
+            <name>loliri</name>
+            <uri>https://github.com/loliri</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Force System Cursor 2.0]]></title>
+        <id>https://windhawk.net/mods/force-system-cursor#011c83aa2958e98a6cdf09a10f16c547feebdb2f</id>
+        <link href="https://windhawk.net/mods/force-system-cursor"/>
+        <updated>2026-10-05T08:04:11.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="forcesystemcursor">Force System Cursor</h1>
+<p>Replaces a program's custom cursor with the system default cursor, or with a
+built-in cursor, while letting the program hide the cursor normally.</p>
+<h2 id="choosingthetargetprogram">Choosing the target program</h2>
+<p>The mod targets nothing by default, so it does nothing until you tell it which
+process to apply to. Open the mod in Windhawk, go to the <strong>Advanced</strong> tab, and
+put the executable name of your target in the <strong>Custom process inclusion list</strong>.
+The change applies as soon as you save, and takes effect the next time the
+program starts.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Enable custom cursor</strong>: when on, use the built-in cursor (or the file set
+below); when off, use the system default cursor.</li>
+<li><strong>Custom cursor file path (optional)</strong>: the full path of a <code>.cur</code> file to use
+instead of the built-in cursor. Leave empty to use the built-in one.</li>
+</ul>]]></content>
+        <author>
+            <name>loliri</name>
+            <uri>https://github.com/loliri</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Spoof MachineGuid 1.0]]></title>
+        <id>https://windhawk.net/mods/spoof-machine-guid#502f03cdbbc39d903c44b43dff65cd633dfd6593</id>
+        <link href="https://windhawk.net/mods/spoof-machine-guid"/>
+        <updated>2026-10-05T08:04:06.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="spoofmachineguid">Spoof MachineGuid</h1>
+<p>Replaces the <code>MachineGuid</code> value that registry queries return, for the target
+process only. The real value on the system is left untouched, and other
+processes keep seeing it.</p>
+<h2 id="intendeduse">Intended use</h2>
+<p><code>MachineGuid</code>, stored at
+<code>HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid</code>, is a per-installation
+identifier that is assigned when Windows is installed. Programs commonly read
+it to recognise a particular machine: license activation and trial checks,
+telemetry and device fingerprinting, and some anti-cheat and ban systems.</p>
+<p>This mod is for making a single program see a different value, so it stops
+recognising the machine. Typical reasons are testing software that keys off this
+value, or keeping one specific application from correlating the machine across
+sessions.</p>
+<p>Note that <code>MachineGuid</code> is only one of several identifiers a program can use —
+the SMBIOS UUID, volume serial numbers, MAC addresses and the Windows product ID
+are others. Changing this one value will not make every program see a different
+machine.</p>
+<h2 id="choosingthetargetprocess">Choosing the target process</h2>
+<p>The mod targets nothing by default, so it does nothing until you tell it which
+process to apply to. Open the mod in Windhawk, go to the <strong>Advanced</strong> tab, and
+put the executable name of your target in the <strong>Custom process inclusion list</strong>.
+The change applies as soon as you save, and takes effect the next time the
+program starts.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Fake MachineGuid</strong>: the GUID to return in place of the real one. Both the
+plain <code>11111111-2222-3333-4444-555555555555</code> form and the braced
+<code>{11111111-2222-3333-4444-555555555555}</code> form are accepted. Any other value
+leaves the mod inactive, and a note is written to the log.</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<p>The mod hooks <code>NtQueryValueKey</code> in ntdll, which every Win32 registry read goes
+through, so <code>RegQueryValueExA/W</code> and <code>RegGetValueA/W</code> are all covered. Only a
+<code>REG_SZ</code> value named <code>MachineGuid</code> in the
+<code>\REGISTRY\MACHINE\SOFTWARE\Microsoft\Cryptography</code> key is replaced.</p>]]></content>
+        <author>
+            <name>loliri</name>
+            <uri>https://github.com/loliri</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[OverhauldedWin Alt+Tab 1.2.1]]></title>
         <id>https://windhawk.net/mods/overhaulded-alt-tab#44918b3fcd5111318f1ebf7d663b788826688f95</id>
@@ -787,243 +908,6 @@ change their titlebar colors.</p>
         <author>
             <name>j--m</name>
             <uri>https://github.com/j--m</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic WebView Pane 2.15]]></title>
-        <id>https://windhawk.net/mods/classic-webview-pane#c871a2fda4c89a8f1d224abb4f02eda91cb1a98b</id>
-        <link href="https://windhawk.net/mods/classic-webview-pane"/>
-        <updated>2026-09-30T07:02:42.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicwebviewpane">Classic WebView Pane</h1>
-<blockquote>
-  <p><strong>Tested only on Windows 11 24H2 (build 26100).</strong> It has not been tried on any other version of Windows and may not work there.</p>
-</blockquote>
-<p>Windows 2000 showed a pane on the left of the file list - the <em>WebView</em> - with
-the icon and the name of whatever was selected, a divider line under it, a line
-of text and a short list of <em>See also</em> links. Windows Vista dropped it, and
-Windows 11 has no trace of it left.</p>
-<p>This mod puts it back. The icon and the name follow the selection, and fall
-back to the folder itself when nothing is selected; the links navigate the same
-window the way they used to. On top of that, the pane brings back two things
-Windows 2000 showed there:</p>
-<ul>
-<li>authentic descriptions of the system folders - This PC, Documents, Recycle
-Bin and the others;</li>
-<li>for a drive, its capacity, used and free space and the three-dimensional pie
-chart of how full it is.</li>
-</ul>
-<p><img src="https://raw.githubusercontent.com/appEW/images/main/classic-webview-pane/my-computer.png" alt="This PC, with the description of the folder" /></p>
-<p><img src="https://raw.githubusercontent.com/appEW/images/main/classic-webview-pane/drive.png" alt="A drive, with its capacity and how full it is" /></p>
-<p><img src="https://raw.githubusercontent.com/appEW/images/main/classic-webview-pane/recycle-bin.png" alt="The Recycle Bin" /></p>
-<h2 id="howitworks">How it works</h2>
-<p>The content area of an Explorer window is not a set of child windows, it is a
-DirectUI tree. <code>shell32</code> keeps its layout in <code>UIFILE</code> resources - one per folder
-type - and hands the whole thing to <code>DirectUI::DUIXmlParser::SetXML</code> in
-<code>dui70.dll</code> as one XML document, which is the single place where the layout of
-every Explorer window can be seen and changed.</p>
-<p>The mod hooks that function and inserts one element next to the one that hosts
-the file list:</p>
-<pre><code>&lt;Element layoutpos="Client" layout="shellborderlayout()"&gt;
-  &lt;BannerContainer .../&gt;
-  &lt;Element id="atom(ClassicWebViewPane)" layoutpos="left" .../&gt;   &lt;-- inserted
-  &lt;Element id="atom(ViewHostContainer)" ...&gt;
-  &lt;DetailsContainer layoutpos="right"/&gt;
-</code></pre>
-<p>That element is only a spacer. Everything inside the pane - the icon, the name,
-the divider, the text and the links - is drawn by the mod into a child window
-of its own, which it keeps over the gap the spacer opens up between the folder
-tree and the file list.</p>
-<p>It is done that way because the parts of the shell the pane would otherwise be
-built out of are gone. The Windows 2000 recreations for Windows 10 fill their
-header with <code>PreviewThumbnail</code> and <code>PreviewMetadata</code> elements bound to
-<code>PreviewThumbnailModule</code> and <code>PreviewMetadataModule</code>. On Windows 11 24H2 those
-module names do not appear in <code>shell32</code> at all any more: the element classes
-still exist and still take up space, but nothing ever fills them, so a header
-built that way comes out empty. Drawing it directly also means the pane needs no
-patched <code>shellstyle.dll</code> and looks right on the Classic theme, where the theme
-colour functions the shell's own style sheets use return nothing.</p>
-<p>The contents come from the shell view itself: the mod asks the
-<code>SHELLDLL_DefView</code> window of the folder for its <code>IShellBrowser</code>, and through it
-for the current folder and the selection, refreshing whenever the list reports
-that the selection changed.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li><p>In a narrow window the pane gives way first, as the WebView did in Windows
-2000: once the file list would be left with less than <em>Room kept for the file
-list</em>, the mod collapses the DirectUI spacer to nothing (through the element
-itself - <code>HWNDElement</code> is in the first pointer of the <code>DirectUIHWND</code>'s extra
-bytes, the spacer is found under it by its id) and hides the pane, and gives
-both back when the window is wide enough again. The pane also follows the
-folder tree and the file list whenever DirectUI moves, resizes or hides
-either, and keeps clear of the splitter next to the tree.</p></li>
-<li><p>The pictures of the Windows 2000 web view - the clouds or the coloured
-squares in the corner, and the bar in the colours of the Windows logo under
-the name - are built into the mod, and the clouds and the bar are shown by
-default, so the pane looks right straight after installing. Both can be
-switched off or come from a file of your own instead: BMP, GIF, PNG, JPEG and
-ICO are all read - <code>LoadImage</code> takes the BMPs and icons, the shell takes the
-rest. The picture is stretched across the pane at its own proportions with the
-pixels left alone by default, and it can also be given a width of its own, put
-above the name or at the bottom instead, and smoothed when scaled.</p></li>
-<li><p>Two things in DirectUI markup take the whole window down with them - the file
-list, the folder tree and all - while <code>SetXML</code> still reports success: an
-attribute the element class does not know, and a value the parser cannot
-read. Colours from the settings are checked against the names DirectUI
-actually accepts for that reason.</p></li>
-<li><p>The pane sits between the folder tree and the file list. In Windows 2000 the
-tree and the WebView replaced each other; here they can both be open.</p></li>
-<li><p>If you also inject a WebView pane through patched <code>shell32</code> resources - the
-WinClassic recreation with Resource Redirect, say - turn that off, or you get
-two panes.</p></li>
-<li><p>The texts of the pane follow the Windows display language. The defaults are
-the wording of the English Windows 2000 - <em>Select an item to view its
-description.</em>, <em>See also:</em>, <em>My Documents</em>, <em>Capacity:</em> and so on - and on a
-Russian Windows they are shown in the wording of the Russian Windows 2000
-instead. A text you change yourself is shown exactly as you typed it. The
-short description of a system folder (Documents, This PC, Recycle Bin and the
-others) is written for this mod and is shown in English or Russian the same
-way.</p></li>
-</ul>
-<hr />
-<h2 id="">По-русски</h2>
-<p>Windows 2000 показывала слева от списка файлов панель WebView: значок и имя
-выбранного объекта (или самой папки, если ничего не выделено), линию-разделитель
-под ними, строку описания и короткий список ссылок «Перейти к». В Windows Vista
-её убрали, в Windows 11 от неё не осталось ничего.</p>
-<p>Мод возвращает эту панель. Значок и имя следуют за выделением, а ссылки
-открывают папку в том же окне. Кроме того, панель возвращает то, что Windows
-2000 показывала в ней:</p>
-<ul>
-<li>аутентичные описания системных папок - «Мой компьютер», «Документы»,
-«Корзина» и других;</li>
-<li>для диска - ёмкость, занятое и свободное место и объёмную круговую диаграмму
-его заполненности.</li>
-</ul>
-<p>В узком окне панель, как и в Windows 2000, первой уступает место списку файлов.
-Скриншоты - выше, в английской части.</p>
-<p>Картинки веб-вида Windows 2000 - облака или цветные квадраты в углу и полоска
-в цветах логотипа Windows под именем - встроены в мод; облака и полоска
-включены по умолчанию, так что панель выглядит как надо сразу после установки.
-Вместо них можно указать свои файлы или выключить их.</p>
-<p>Внешний вид настраивается: ширина и сторона панели, размер значка, картинки,
-цвета, подписи и ссылки. Тексты по умолчанию берутся в формулировке
-Windows 2000 на языке интерфейса Windows: в русской Windows - «Выберите объект
-для просмотра его описания.», «Перейти к:», «Мои документы» и так далее.
-Изменённый вами текст показывается как есть.</p>
-<p>Если вы уже добавляете панель WebView через изменённые ресурсы <code>shell32</code>
-(например, WinClassic с Resource Redirect), отключите это, иначе панелей будет
-две.</p>
-<blockquote>
-  <p><strong>Проверено только на Windows 11 24H2 (сборка 26100).</strong> На других версиях Windows мод не проверялся и может не работать.</p>
-</blockquote>]]></content>
-        <author>
-            <name>appEW</name>
-            <uri>https://github.com/appEW</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Folder Bookmarks Bar 0.7.8]]></title>
-        <id>https://windhawk.net/mods/explorer-folder-bookmarks-bar#0c9eded5a005f4645d1e834b11a5fd94fc3159c2</id>
-        <link href="https://windhawk.net/mods/explorer-folder-bookmarks-bar"/>
-        <updated>2026-09-29T10:02:37.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorerfolderbookmarksbar">Explorer Folder Bookmarks Bar</h1>
-<p>For the Windows 11 WinUI File Explorer. A scrollable bookmark bar appears below
-the address bar. Click <strong>+</strong> to bookmark the current filesystem folder. Click a
-bookmark to navigate the active tab to it. Ctrl+click asks Explorer to open it
-in a new tab. Drag a bookmark onto another to reorder the row. Middle-click a
-bookmark to remove it from the bar. Removing a bookmark never deletes its
-target folder.</p>
-<p><img src="https://raw.githubusercontent.com/MaxITService/EXPLORER-bookmarks-bar-windhawk/main/Promo/How-it-works.gif" alt="Explorer Folder Bookmarks Bar in File Explorer" /></p>
-<p>After enabling or updating the mod, open a new File Explorer window to use the
-bar. Windows that were already open may remain unchanged. Opening a new window
-is the supported way to activate the bar without relying on live window updates.</p>
-<p>The bar expands from one to four rows as the window narrows. If bookmarks
-still exceed the fourth row, the bar can pan sideways.
-Left-click <strong>FX</strong>, next to <strong>+</strong>, for the profile (<strong>~</strong>), Desktop, Documents,
-Downloads, and the custom folders listed in this mod's Windhawk settings.
-Custom shortcuts are empty by default. Add a folder path and optional label in
-<strong>Settings → FX custom folders</strong>; blank entries are ignored. Paths must be
-absolute, and <code>%NAME%</code> environment variables are expanded. Local, network
-(UNC or mapped drive) and removable-drive folders all work. A folder missing
-from a local disk is hidden from FX until it exists again. Like bookmarks,
-network and removable entries are shown without being checked; if one is
-unavailable, Explorer reports it when you click it. New settings take effect in
-newly opened Explorer windows. Right-click <strong>FX</strong> for all drives with their
-labels. The list updates each time the menu opens. Ctrl+click a menu entry to
-open it in a new tab.</p>
-<p>Right-click <strong>+</strong> for <strong>Save bookmarks</strong> and <strong>Load bookmarks</strong>. The commands
-open a file dialog so you can choose the JSON backup. The profile folder is
-suggested initially. Loading replaces the current list only after the entire
-UTF-8 JSON file passes validation.</p>
-<p>The bookmark list lives in this mod's Windhawk local storage. This version
-supports up to 32 folders and uses the folder name as the button label. Icons
-come from Windows Shell, including desktop.ini custom folder icons. Hovering a
-bookmark shows its full path. Virtual locations such as Home are ignored by
-<strong>+</strong>. Bookmark removal never touches the target folder or its contents.
-Missing folders on local fixed drives show a yellow warning icon. Icons are
-cached for up to five minutes and refreshed when the bar redraws.</p>
-<p>The XAML insertion point can change in a Windows update. If the bar is not
-visible, disable the mod and check the Windhawk log before trying it again.</p>]]></content>
-        <author>
-            <name>Maxim Fomin</name>
-            <uri>https://github.com/MaxITService</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Shake to Find Cursor 1.3]]></title>
-        <id>https://windhawk.net/mods/shake-to-find-cursor#7cad60cca1a0a2ad2dd405bf9d4a4bea65a941bf</id>
-        <link href="https://windhawk.net/mods/shake-to-find-cursor"/>
-        <updated>2026-09-28T20:01:00.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="shaketofindcursor">Shake to Find Cursor</h1>
-<p><img src="https://raw.githubusercontent.com/Darius-Varnelis/shake-to-find-cursor/main/shake-to-find.gif" alt="Shake to Find Cursor demo" /></p>
-<p>Shake the mouse (or swipe back and forth on the touchpad) and the cursor grows
-so you can spot it instantly. Stop shaking and it shrinks back.</p>
-<h2 id="howitworks">How it works</h2>
-<ul>
-<li>Runs as a <em>tool mod</em> in its own background process, so it never touches
-Explorer.</li>
-<li>Listens to raw mouse input: no polling, no CPU use while the mouse is idle,
-and it can't add input lag the way a low-level mouse hook can.</li>
-<li>A shake means the cursor travelled a long way (<strong>Shake distance</strong>) while
-staying inside a small area (<strong>Back-and-forth ratio</strong>) within the
-<strong>Time window</strong>.</li>
-<li>Enlarging replaces the real system cursors with bigger versions loaded from
-your current cursor scheme's files at the target size. The big cursor <em>is</em>
-the pointer: no overlay window, no trailing, and it keeps your cursor
-style and colour. The normal cursors are restored the same way Control Panel
-applies a scheme.</li>
-<li>Keep shaking and the cursor keeps growing, slower and slower: each further
-step of the same size takes twice as long as the previous one. By default
-it stops at the height of your screen, which takes hours of shaking.</li>
-<li>The grow and shrink animations are time-based and run at your display's
-refresh rate. While animating, only the cursor that's on screen is resized,
-which keeps every frame cheap.</li>
-</ul>
-<h2 id="vsmacosmagnifyingcursor">vs. macOS magnifying cursor</h2>
-<p>The catalog already has <a href="https://windhawk.net/mods/mac-magnifying-cursor">macOS magnifying cursor</a>,
-which does something similar but works differently: it hides the system
-cursors and draws a scaled copy in its own overlay window, polling the cursor
-position every 16-40 ms. This mod instead replaces the real system cursors
-with bigger renders of your own cursor scheme, driven by raw input rather
-than polling. In practice that means no overlay lag or trailing, the enlarged
-cursor keeps your actual cursor style and colour, and there's no CPU cost
-while the mouse is idle. Don't enable both at once - they'll fight over the
-system cursors.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Apps that draw their own custom cursor keep their small one.</li>
-<li>Cursor files contain images of up to 256 px, so past that the cursor is
-upscaled and gets softer.</li>
-<li>If the mod's process is killed while the cursor is big, the normal cursors
-are restored the next time the mod starts (re-applying a pointer scheme in
-Mouse Properties also fixes it).</li>
-<li>Raw input may not reach the mod while an elevated window (Task Manager, a
-UAC prompt, an installer) has focus, depending on Windows version. If so, a
-shake over such a window won't be detected until focus moves elsewhere.</li>
-</ul>]]></content>
-        <author>
-            <name>Darius Varnelis</name>
-            <uri>https://github.com/Darius-Varnelis</uri>
         </author>
     </entry>
 </feed>

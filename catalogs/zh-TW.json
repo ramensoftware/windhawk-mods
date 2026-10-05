@@ -6699,6 +6699,30 @@
         "version": "1.0"
       }
     },
+    "force-system-cursor": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791187451000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791187451000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "loliri",
+        "description": "将游戏的自定义光标替换为系统默认光标或内置光标，同时不影响游戏正常的隐藏光标行为。",
+        "github": "https://github.com/loliri",
+        "license": "MIT",
+        "name": "强制系统光标",
+        "version": "2.0"
+      },
+      "metadataEnglish": {
+        "description": "Replaces game custom cursors with the system default cursor or a built-in custom cursor, while allowing cursor hiding to work normally.",
+        "name": "Force System Cursor"
+      }
+    },
     "force-thick-frames": {
       "details": {
         "defaultSorting": 25176,
@@ -11860,6 +11884,30 @@
         "version": "1.1.0"
       }
     },
+    "spoof-machine-guid": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791187446000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791187446000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "loliri",
+        "description": "替换目标进程查询注册表时返回的 MachineGuid，系统真实值不受影响",
+        "github": "https://github.com/loliri",
+        "license": "MIT",
+        "name": "伪造 MachineGuid",
+        "version": "1.0"
+      },
+      "metadataEnglish": {
+        "description": "Replaces the MachineGuid returned by registry queries, for the target process only",
+        "name": "Spoof MachineGuid"
+      }
+    },
     "standard-title-bar-colors": {
       "details": {
         "defaultSorting": 320,
@@ -13532,6 +13580,36 @@
         "name": "Cycle through taskbar windows on click",
         "twitter": "https://twitter.com/m417z",
         "version": "1.1.4"
+      }
+    },
+    "taskbar-margin": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791187455000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791187455000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "loliri",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshcore",
+        "description": "为任务栏内容添加可调节的边距",
+        "github": "https://github.com/loliri",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "任务栏边距",
+        "version": "1.0"
+      },
+      "metadataEnglish": {
+        "description": "Adds a configurable margin to the taskbar content",
+        "name": "Taskbar Margin"
       }
     },
     "taskbar-multi-tray": {

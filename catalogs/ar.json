@@ -6684,6 +6684,26 @@
         "version": "1.0"
       }
     },
+    "force-system-cursor": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791187451000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791187451000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "loliri",
+        "description": "Replaces game custom cursors with the system default cursor or a built-in custom cursor, while allowing cursor hiding to work normally.",
+        "github": "https://github.com/loliri",
+        "license": "MIT",
+        "name": "Force System Cursor",
+        "version": "2.0"
+      }
+    },
     "force-thick-frames": {
       "details": {
         "defaultSorting": 25176,
@@ -11829,6 +11849,26 @@
         "version": "1.1.0"
       }
     },
+    "spoof-machine-guid": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791187446000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791187446000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "loliri",
+        "description": "Replaces the MachineGuid returned by registry queries, for the target process only",
+        "github": "https://github.com/loliri",
+        "license": "MIT",
+        "name": "Spoof MachineGuid",
+        "version": "1.0"
+      }
+    },
     "standard-title-bar-colors": {
       "details": {
         "defaultSorting": 320,
@@ -13482,6 +13522,32 @@
         "name": "Cycle through taskbar windows on click",
         "twitter": "https://twitter.com/m417z",
         "version": "1.1.4"
+      }
+    },
+    "taskbar-margin": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791187455000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791187455000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "loliri",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshcore",
+        "description": "Adds a configurable margin to the taskbar content",
+        "github": "https://github.com/loliri",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Taskbar Margin",
+        "version": "1.0"
       }
     },
     "taskbar-multi-tray": {

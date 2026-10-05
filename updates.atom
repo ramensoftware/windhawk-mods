@@ -2,12 +2,133 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-04T19:04:37.000Z</updated>
+    <updated>2026-10-05T08:04:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Margin 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-margin#a08ccae7c4e480dbdf1e9389d259d23c5d7448fd</id>
+        <link href="https://windhawk.net/mods/taskbar-margin"/>
+        <updated>2026-10-05T08:04:15.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarmargin">Taskbar Margin</h1>
+<p>Shifts the taskbar <strong>content</strong> to the right by a configurable number of pixels, leaving an empty margin on the left. The taskbar background stays full width, and the taskbar context menu follows the content.</p>
+<p>Only the taskbar itself is affected.</p>
+<p><img src="https://raw.githubusercontent.com/loliri/windhawk-taskbar-margin/main/images/before.png" alt="Taskbar without a margin" /><br />
+<em>Before</em></p>
+<p><img src="https://raw.githubusercontent.com/loliri/windhawk-taskbar-margin/main/images/after.png" alt="Taskbar with a left margin" /><br />
+<em>After</em></p>
+<p><img src="https://raw.githubusercontent.com/loliri/windhawk-taskbar-margin/main/images/jumplist.png" alt="Taskbar context menu" /><br />
+<em>The context menu follows the margin</em></p>
+<h2 id="settings">Settings</h2>
+<p>| Setting | Default | Description |
+| --- | --- | --- |
+| Left margin (pixels) | 220 | How much empty space to leave on the left of the taskbar content. |
+| Follow display DPI | on | Scale the margin with the display DPI, so it keeps the same visual size on high-DPI displays. Turn off to keep it at a constant physical pixel size. |
+| Displays | All | Which displays the margin applies to: all, only the primary one, or only the secondary ones. Each display has its own taskbar and its own DPI, so the margin is calculated per display. |</p>
+<h2 id="notes">Notes</h2>
+<p>Requires Windows 11.</p>
+<p>The taskbar must be:</p>
+<ul>
+<li><strong>left-aligned</strong> (Settings → Personalization → Taskbar → Taskbar icon alignment)</li>
+<li><strong>Bottom</strong> or <strong>Top</strong> (New in Windows 11 26H2, Settings → Personalization → Taskbar → Taskbar position)</li>
+</ul>
+<p>The taskbar is not mirrored correctly on right-to-left display languages: the margin is applied to the physical left regardless of the taskbar's flow direction, while the context menu is moved to the right.</p>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li><strong>TranslucentTB</strong> is confirmed compatible and can be used alongside this mod.</li>
+<li><strong>Windows 11 Taskbar Styler</strong> is not an alternative to this mod. It changes the taskbar itself, while this mod changes the position of the elements inside it. A taskbar restyled that way loses the taskbar's effects on the margin area, while this mod keeps them across the whole taskbar, margin included. It also cannot move the context menu (the jump list), which this mod does.</li>
+<li><strong>Taskbar jump list on cursor pos</strong> changes the same anchor point. Both mods offset it, so depending on the hook order the menu can open offset from the cursor. Use one or the other.</li>
+<li>Tested on Windows 11 26H2.</li>
+</ul>
+<h2 id="suggesteduse">Suggested use</h2>
+<p>For example, together with <a href="https://github.com/unchihugo/FluentFlyout">FluentFlyout</a>: enable the taskbar widget there, set its position to the bottom left corner, and turn on the fixed widget width. The taskbar elements then tile linearly instead of overlapping each other.</p>
+<h2 id="implementationnotes">Implementation notes</h2>
+<p>The taskbar context menu (the jump list) is not laid out by XAML. Its anchor point is computed in <code>explorer.exe</code> by <code>CTaskListWnd::_ComputeJumpViewPosition</code> in <code>taskbar.dll</code>, and handed to the process that draws the menu. The point is in physical screen pixels.</p>
+<p>Shifting the taskbar's XAML content therefore does not move the menu on its own, because the menu is not placed relative to it. The mod adjusts the anchor point instead, which is why it hooks that function.</p>
+<h2 id="license">License</h2>
+<p>GPL-3.0. The taskbar XAML access is based on the <a href="https://github.com/m417z/my-windhawk-mods">Start button always on the left</a> mod by m417z, which is also licensed under GPL-3.0.</p>
+<h2 id="feedback">Feedback</h2>
+<p>Bug reports and feature requests are welcome in <a href="https://github.com/loliri/windhawk-taskbar-margin/issues">Issues</a>.</p>]]></content>
+        <author>
+            <name>loliri</name>
+            <uri>https://github.com/loliri</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Force System Cursor 2.0]]></title>
+        <id>https://windhawk.net/mods/force-system-cursor#011c83aa2958e98a6cdf09a10f16c547feebdb2f</id>
+        <link href="https://windhawk.net/mods/force-system-cursor"/>
+        <updated>2026-10-05T08:04:11.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="forcesystemcursor">Force System Cursor</h1>
+<p>Replaces a program's custom cursor with the system default cursor, or with a
+built-in cursor, while letting the program hide the cursor normally.</p>
+<h2 id="choosingthetargetprogram">Choosing the target program</h2>
+<p>The mod targets nothing by default, so it does nothing until you tell it which
+process to apply to. Open the mod in Windhawk, go to the <strong>Advanced</strong> tab, and
+put the executable name of your target in the <strong>Custom process inclusion list</strong>.
+The change applies as soon as you save, and takes effect the next time the
+program starts.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Enable custom cursor</strong>: when on, use the built-in cursor (or the file set
+below); when off, use the system default cursor.</li>
+<li><strong>Custom cursor file path (optional)</strong>: the full path of a <code>.cur</code> file to use
+instead of the built-in cursor. Leave empty to use the built-in one.</li>
+</ul>]]></content>
+        <author>
+            <name>loliri</name>
+            <uri>https://github.com/loliri</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Spoof MachineGuid 1.0]]></title>
+        <id>https://windhawk.net/mods/spoof-machine-guid#502f03cdbbc39d903c44b43dff65cd633dfd6593</id>
+        <link href="https://windhawk.net/mods/spoof-machine-guid"/>
+        <updated>2026-10-05T08:04:06.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="spoofmachineguid">Spoof MachineGuid</h1>
+<p>Replaces the <code>MachineGuid</code> value that registry queries return, for the target
+process only. The real value on the system is left untouched, and other
+processes keep seeing it.</p>
+<h2 id="intendeduse">Intended use</h2>
+<p><code>MachineGuid</code>, stored at
+<code>HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid</code>, is a per-installation
+identifier that is assigned when Windows is installed. Programs commonly read
+it to recognise a particular machine: license activation and trial checks,
+telemetry and device fingerprinting, and some anti-cheat and ban systems.</p>
+<p>This mod is for making a single program see a different value, so it stops
+recognising the machine. Typical reasons are testing software that keys off this
+value, or keeping one specific application from correlating the machine across
+sessions.</p>
+<p>Note that <code>MachineGuid</code> is only one of several identifiers a program can use —
+the SMBIOS UUID, volume serial numbers, MAC addresses and the Windows product ID
+are others. Changing this one value will not make every program see a different
+machine.</p>
+<h2 id="choosingthetargetprocess">Choosing the target process</h2>
+<p>The mod targets nothing by default, so it does nothing until you tell it which
+process to apply to. Open the mod in Windhawk, go to the <strong>Advanced</strong> tab, and
+put the executable name of your target in the <strong>Custom process inclusion list</strong>.
+The change applies as soon as you save, and takes effect the next time the
+program starts.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Fake MachineGuid</strong>: the GUID to return in place of the real one. Both the
+plain <code>11111111-2222-3333-4444-555555555555</code> form and the braced
+<code>{11111111-2222-3333-4444-555555555555}</code> form are accepted. Any other value
+leaves the mod inactive, and a note is written to the log.</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<p>The mod hooks <code>NtQueryValueKey</code> in ntdll, which every Win32 registry read goes
+through, so <code>RegQueryValueExA/W</code> and <code>RegGetValueA/W</code> are all covered. Only a
+<code>REG_SZ</code> value named <code>MachineGuid</code> in the
+<code>\REGISTRY\MACHINE\SOFTWARE\Microsoft\Cryptography</code> key is replaced.</p>]]></content>
+        <author>
+            <name>loliri</name>
+            <uri>https://github.com/loliri</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[On-Screen Indicator Position 1.4.4]]></title>
         <id>https://windhawk.net/mods/on-screen-indicator-position#bb8f7a130795448ce79edf3fa5d3e199796b95ec</id>
@@ -673,70 +794,6 @@ maximize their own windows through <code>ShowWindow</code> or <code>ShowWindowAs
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Window Cards 1.7]]></title>
-        <id>https://windhawk.net/mods/desktop-window-cards#128938b0170236340ac149a6dddb1a6860e78eee</id>
-        <link href="https://windhawk.net/mods/desktop-window-cards"/>
-        <updated>2026-10-02T18:03:41.000Z</updated>
-        <content type="html"><![CDATA[<h2 id="desktopwindowcards17">Desktop Window Cards 1.7</h2>
-<h3 id="new">New</h3>
-<ul>
-<li><strong>Drag & drop onto cards</strong> – hold a dragged file, text or image over a card and its window opens, ready for the drop, just like taskbar buttons. The app handles the drop natively (copy/move into an Explorer folder, attach to an e-mail, open in an editor…). The delay is adjustable, or 0 to disable it.</li>
-<li><strong>Multi-monitor</strong> – dropping a card on another monitor moves its window there too, centered, while it's still minimized. It opens there however it's restored (card, taskbar, Alt+Tab). In grid layout the card joins that monitor's grid where it's dropped.</li>
-<li><strong>Grid layout (optional)</strong> – a Task View-style grid per monitor, with cards as large as the space allows. Drag cards to reorder them; with "Remember the position of moved cards" they return to their place the next time their window is minimized.</li>
-<li><strong>Hover zoom (optional)</strong> – resting cards grow slightly under the mouse with a springy motion and rise above their neighbors.</li>
-</ul>
-<h3 id="improved">Improved</h3>
-<ul>
-<li><strong>Smoother animations</strong> – on Windows 11, frames are synchronized with the compositor clock (<code>DCompositionWaitForCompositorClock</code>), with the high-resolution timer as fallback. Grid rearrangements use a critically damped spring, so cards that get a new destination mid-motion keep their speed instead of restarting, and falling cards are redirected mid-air without jumps.</li>
-<li><strong>Virtual desktops</strong> – cards follow their window's virtual desktop (windows pinned to all desktops keep their card everywhere). On Ctrl+Win+Arrow switches, cards of the desktop being left are hidden at the key press instead of after the shell's slide animation, so they no longer linger on the new desktop.</li>
-</ul>
-<h3 id="fixed">Fixed</h3>
-<ul>
-<li><strong>Content shift when a card hands over to the restored window</strong> – cards used the system frame metrics to crop the invisible resize borders, which don't match apps that draw their own frame (browsers, WinUI/XAML, Electron…), and assumed the wrong layout for the thumbnail source on recent Windows builds. The mod now measures each window's real borders (window rect vs. <code>DWMWA_EXTENDED_FRAME_BOUNDS</code>) when it's activated, moved or restored, and crops the thumbnail 1:1, so the card lines up with the real window to the pixel.</li>
-<li>If a restored window still doesn't land exactly where the card ended, the smooth-reveal snapshot fades out quickly instead of showing both images side by side, and the mismatch is logged.</li>
-<li>Cards no longer slide underneath other cards while being dragged.</li>
-</ul>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Split: Running Left, Pinned Right 0.3.22]]></title>
-        <id>https://windhawk.net/mods/taskbar-split#9b75f1f18306184fcec90fc1e60f776c1eed9445</id>
-        <link href="https://windhawk.net/mods/taskbar-split"/>
-        <updated>2026-10-02T18:03:37.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix the jump-list menu opening over the old left-side slot when right-clicking closed pinned icons in the right section.</li>
-</ul>]]></content>
-        <author>
-            <name>Arkadiusz</name>
-            <uri>https://github.com/Artllex</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mouse Trail 3.4.5.3]]></title>
-        <id>https://windhawk.net/mods/mouse-trail#8630d6bf9b605f1cd3dff532975d62a8deeec28f</id>
-        <link href="https://windhawk.net/mods/mouse-trail"/>
-        <updated>2026-10-02T18:03:33.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add：4 new color modes with optimizations to existing modes</li>
-<li>Add：3 new trail shape types</li>
-<li>Add：More click feedback effects</li>
-<li>Change：Refactored API abstraction layer for D3D11/D2D fallback, reduced maintenance cost</li>
-<li>Change：Improved particle cursor attraction — particles now follow the trail path toward the cursor</li>
-<li>Change：Improved physics clustering behavior</li>
-<li>Change：Improved performance mode visibility</li>
-<li>Fix：Color overflow issue</li>
-<li>Fix：Trail delay offset error</li>
-<li>Fix：Bezier smoothing not taking effect</li>
-</ul>]]></content>
-        <author>
-            <name>MCheng404</name>
-            <uri>https://github.com/MCheng404</uri>
         </author>
     </entry>
 </feed>
