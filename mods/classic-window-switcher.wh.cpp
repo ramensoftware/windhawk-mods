@@ -4782,6 +4782,10 @@ BOOL Wh_ModInit() {
     g_isExplorer = wcsstr(_wcsupr(exeName), L"\\EXPLORER.EXE") != NULL;
     if (g_isExplorer) {
         HWND hImmersive = FindWindowW(L"ApplicationManager_ImmersiveShellWindow", NULL);
+        if (!hImmersive) {
+            // Try with Win7/8 AltTab.dll window class as well, someone might be running explorer7 or smth
+            hImmersive = FindWindowW(L"TaskSwitcherWnd", NULL);
+        }
         if (hImmersive) {
             DWORD tid, pid, explorerPid = 0;
             tid = GetWindowThreadProcessId(hImmersive, &pid);
