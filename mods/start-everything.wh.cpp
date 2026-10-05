@@ -25,7 +25,7 @@ A native replacement for Windows 11 Start Menu search, powered by voidtools Ever
 
 - Instant Everything Search: Queries voidtools Everything directly through its IPC interface for fast results across millions of files. The mod keeps no index of its own.
 - Smart Apps and Settings Search: Fuzzy matching across Desktop applications, Microsoft Store / UWP packages, Control Panel applets, and Windows Settings URIs (ms-settings:) with sharp shell icons, made at the exact pixel size of your display.
-- Learns your favorites: apps you open from here more often move up among results that match equally well. A clearly better match always stays on top.
+- Learns your favorites: apps you open from here more often move up among results that match equally well. A clearly better match always stays on top. Can be turned off in the settings, which also forgets what was learned.
 - On-Demand Animated Palette: The Start Menu stays completely clean and uncluttered when idle. The search palette slides in with a short ease-out animation the moment you type or click the search box, and collapses when emptied or on Escape.
 - Windows Search Out of the Way: SearchHost keeps running for the shell, but its window is never shown and it cannot launch Edge WebView2, the web view behind its Bing-backed search panel.
 - Inline Calculator: Type /c <expression> (e.g. /c 100 * 5, /c sqrt(144), /c 15% of 200, /c 2^10) to evaluate math expressions instantly. Press Enter to copy the result.
@@ -86,6 +86,9 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 - searchDebounceMs: 0
   $name: Search Debounce Delay (ms)
   $description: Extra delay in milliseconds before searching, to let typing settle (default 0, instant). Rarely needed - while a search runs, new keystrokes already wait and only the latest text is searched.
+- learnFavorites: true
+  $name: Learn Favorite Apps
+  $description: Apps you open from here more often move up among results that match equally well. Turning this off stops counting and forgets the apps learned so far; turn it on again to start over.
 - showKeyHints: true
   $name: Show Keyboard Shortcuts Bar
   $description: Display the keyboard shortcut hints ([Up/Down] Select, [Tab] Next, [Enter] Open, [Ctrl+Enter] Admin, [Shift+Enter] Menu, [Esc] Close) in the bottom bar.
@@ -1436,21 +1439,23 @@ class FileIconCache {
         std::vector<BYTE> pixels;
         SHFILEINFOW info{};
 
-        // Through the system image lists: the smallest of their sizes at or
-        // above the one wanted -- SHIL_LARGE is normally 32px, SHIL_EXTRALARGE
-        // 48, SHIL_JUMBO 256 -- shrunk to it by IconToBgra. The shell already
-        // has all three, so the right one costs no more than any other.
+        // Through the system image lists: the smaller of SHIL_LARGE (normally
+        // 32px) and SHIL_EXTRALARGE (48) that is at least the size wanted,
+        // resized to it by IconToBgra; past 48, the 48 enlarged. Not
+        // SHIL_JUMBO: a type with no 256px image has its 48 in a corner of
+        // it. The shell already has these lists, so the right one costs no
+        // more than any other.
         bool got = false;
         if (SHGetFileInfoW(probe, attributes, &info, sizeof(info),
                            flags | SHGFI_SYSICONINDEX)) {
-            for (int which : {SHIL_LARGE, SHIL_EXTRALARGE, SHIL_JUMBO}) {
+            for (int which : {SHIL_LARGE, SHIL_EXTRALARGE}) {
                 IImageList* list = nullptr;
                 if (FAILED(SHGetImageList(which, IID_PPV_ARGS(&list))) || !list) {
                     continue;
                 }
                 int cx = 0, cy = 0;
                 list->GetIconSize(&cx, &cy);
-                const bool fits = cx >= size_ || which == SHIL_JUMBO;
+                const bool fits = cx >= size_ || which == SHIL_EXTRALARGE;
                 if (fits) {
                     HICON icon = nullptr;
                     if (SUCCEEDED(list->GetIcon(info.iIcon, ILD_TRANSPARENT, &icon)) && icon) {
@@ -1929,10 +1934,10 @@ constexpr wchar_t kUsageValueName[] = L"appLaunchCounts";
 constexpr size_t kUsageKept = 300;   // most used first; keeps the value small
 constexpr int kUsageCap = 1000;
 
-// A head start, in score points, for apps opened often: enough to put them
-// first among about equally good matches, never past a clearly better one.
-// An exact name scores 0, a name prefix 10, a word prefix 20. 3 points after
-// one launch, 9 at most, from about seven.
+// A head start, in score points, for apps opened often, applied only among
+// matches of the same kind (MatchTier): an often opened name prefix moves up
+// past other prefixes, never past an exact match. 3 points after one launch,
+// 9 at most, from about seven.
 inline int UsageBonus(const UsageCounts* usage, const std::wstring& nameLower) {
     if (!usage) {
         return 0;
@@ -1942,6 +1947,12 @@ inline int UsageBonus(const UsageCounts* usage, const std::wstring& nameLower) {
         return 0;
     }
     return std::min(9, static_cast<int>(std::lround(3.0 * std::log2(1.0 + it->second))));
+}
+
+// The kind of match a ScoreApp score stands for: exact (name, program, alias),
+// prefix, acronym or substring, fuzzy, typo.
+inline int MatchTier(int score) {
+    return score < 10 ? 0 : score < 30 ? 1 : score < 80 ? 2 : score < 120 ? 3 : 4;
 }
 
 // One line per app: count, a tab, the lowercase name.
@@ -2535,6 +2546,9 @@ class Index {
 
         std::stable_sort(hits.begin(), hits.end(),
                          [](const Match& x, const Match& y) {
+                             if (MatchTier(x.score) != MatchTier(y.score)) {
+                                 return x.score < y.score;
+                             }
                              if (x.rank != y.rank) {
                                  return x.rank < y.rank;
                              }
@@ -4258,10 +4272,13 @@ struct Settings {
     int searchDebounceMs = 0;
     bool showKeyHints = true;
     bool filterNoisyPaths = true;
+    bool learnFavorites = true;
 };
 
 Settings g_settings;
 std::mutex g_settingsMutex;
+// Set when Learn Favorite Apps is turned off: the search thread drops its counts.
+std::atomic<bool> g_forgetUsage{false};
 std::atomic<DWORD> g_xamlThreadId{0};
 
 void LoadSettings() {
@@ -4369,6 +4386,14 @@ void LoadSettings() {
     g_settings.searchDebounceMs = std::clamp(Wh_GetIntSetting(L"searchDebounceMs"), 0, 1000);
 
     g_settings.showKeyHints = Wh_GetIntSetting(L"showKeyHints") != 0;
+
+    // Off forgets: the stored counts now, the search thread's copy on its next
+    // turn (g_forgetUsage).
+    g_settings.learnFavorites = Wh_GetIntSetting(L"learnFavorites") != 0;
+    if (!g_settings.learnFavorites) {
+        Wh_DeleteValue(apps::kUsageValueName);
+        g_forgetUsage.store(true);
+    }
 
     Wh_Log(L"=== settings: defSearch=%ls shortcuts=%zu maxApps=%d maxFiles=%d debounce=%d hints=%d filterNoise=%d excluded=%zu ===",
         g_settings.defaultSearchUrl.c_str(), g_settings.webShortcuts.size(),
@@ -4896,11 +4921,12 @@ void HideAllOtherSearchBoxes(wux::DependencyObject const& root, int depth) {
     } catch (...) {}
 }
 
-static HWND g_hCoreWindow = nullptr;
+// Read and written by the XAML, search and launch threads.
+static std::atomic<HWND> g_hCoreWindow{nullptr};
 
 HWND GetOurCoreWindow() {
-    if (g_hCoreWindow && IsWindow(g_hCoreWindow)) {
-        return g_hCoreWindow;
+    if (HWND cached = g_hCoreWindow.load(); cached && IsWindow(cached)) {
+        return cached;
     }
     HWND ours = nullptr;
     EnumWindows(
@@ -5377,8 +5403,8 @@ std::wstring AppsFolderPath(PCIDLIST_ABSOLUTE pidl) {
 // that hand-over, the foreground taken back from SearchHost if it happened,
 // then handed on to Explorer, which starts the program (ShellExecuteInExplorer
 // explains why), and once it has, Start is closed as usual, animation and all.
-// A grant to any process, made while Start is in front, covers a program that
-// hands off to one already running.
+// A program that hands off to an instance already running passes its own
+// right on, as single-instance programs do.
 void DismissStartMenuForLaunch(std::function<void()> launch) {
     g_launchedAtTick.store(GetTickCount64());
     g_suppressRefocus.store(true);
@@ -5420,9 +5446,13 @@ void DismissStartMenuForLaunch(std::function<void()> launch) {
                 }
             }
         }
-        AllowSetForegroundWindow(ASFW_ANY);
         HWND holder = FindExplorerLaunchHolder();
         const bool handedOver = holder && ours && GetForegroundWindow() == ours && SetForegroundWindow(holder);
+        if (!handedOver && holder) {
+            DWORD explorerPid = 0;
+            GetWindowThreadProcessId(holder, &explorerPid);
+            AllowSetForegroundWindow(explorerPid);
+        }
         Wh_Log(L"launch: foreground %ls Explorer", handedOver ? L"handed to" : L"NOT handed to");
         SetEvent(g_launchGate);
         for (int i = 0; i < 200 && g_launchesDone.load() == before && !g_quit.load(); ++i) {
@@ -5431,8 +5461,11 @@ void DismissStartMenuForLaunch(std::function<void()> launch) {
         Wh_Log(L"launch: started with Start in front (%ls); closing Start",
                GetForegroundWindow() == ours ? L"yes" : L"no");
         if (!g_quit.load()) {
-            dispatcher.RunAsync(wuc::CoreDispatcherPriority::Normal,
-                                wuc::DispatchedHandler{[] { DismissStartMenu(); }});
+            dispatcher.RunAsync(wuc::CoreDispatcherPriority::Normal, wuc::DispatchedHandler{[] {
+                DismissStartMenu();
+                // Over: a Start opened again from here on is a new one.
+                g_launchedAtTick.store(0);
+            }});
         }
     });
 }
@@ -5936,14 +5969,9 @@ struct Row {
     std::wstring customGlyph; // Segoe Fluent glyph override (e.g. \uE1D0, \uE701, \uE88E)
 };
 
-// Fetched at 48, drawn at 24.
-//
-// These are two different things and conflating them is what made the first
-// attempt look blurry. The draw size is in logical pixels, so on a display at
-// 150% a 24-logical icon is 36 real pixels -- a 24px bitmap has to be
-// stretched to fill it. Asking the shell for 48 and letting XAML scale down
-// stays sharp to 200%, and costs nothing extra: the shell has these sizes
-// already.
+// Icons take 24 logical pixels in a row, which on a display at 150% is 36 real
+// ones. They are made at that real size (IconPixels), so XAML has nothing to
+// scale.
 inline constexpr int kIconDisplay = 24;  // what an icon occupies in the row, in DIPs
 
 // The same in physical pixels on the display Start is on: the size icons are
@@ -6065,9 +6093,8 @@ void AllowExplorerForeground() {
 // by starting explorer.exe /select. Which explorer.exe gets the window is not
 // ours to know -- a started one hands the request on and exits, and the window
 // lands in another it never met -- but the shell's own call reaches that
-// process over COM and hands it our right to the foreground on the way. Called
-// from the click handler, before DismissStartMenu, since that right lasts only
-// while Start still has the click.
+// process over COM and hands it our right to the foreground on the way. Runs
+// on a worker (OpenFileLocationThenDismiss), while Start is still in front.
 void OpenFileLocation(const std::wstring& path) {
     PIDLIST_ABSOLUTE pidl = nullptr;
     HRESULT hr = SHParseDisplayName(path.c_str(), nullptr, &pidl, 0, nullptr);
@@ -8083,14 +8110,15 @@ bool FetchAppIcon(const apps::App* app, int size, std::vector<BYTE>* out) {
     return ok;
 }
 
-// Opens an app by its shell identity.
+// Opens an app.
 //
-// By PIDL rather than by name: apps_index.h explains why -- the parsing names
+// One with no file of its own goes by its shell identity: the parsing names
 // come in several shapes, including AUMIDs and known-folder GUIDs, and
-// rebuilding a path from them fails outright for some. The PIDL works for all
-// of them.
+// rebuilding a path from them fails outright for some, while the PIDL, or the
+// shell:AppsFolder name made from it (AppsFolderPath), works for all of them.
 //
-// Called only on the search thread, which owns the index and therefore the
+// Runs on a launch thread. The index stays with the search thread, so this
+// gets copies of what it needs, the PIDL included.
 void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool asAdmin = false) {
     HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
@@ -8316,6 +8344,14 @@ void SearchThreadMain() {
 
     apps::Index appIndex;
     apps::UsageCounts appUsage = apps::LoadUsage();
+    // The counts to rank by, or null while Learn Favorite Apps is off.
+    auto learnedUsage = [&appUsage]() -> apps::UsageCounts* {
+        if (g_forgetUsage.exchange(false)) {
+            appUsage.clear();
+        }
+        std::lock_guard<std::mutex> lock(g_settingsMutex);
+        return g_settings.learnFavorites ? &appUsage : nullptr;
+    };
     if (appIndex.Rebuild()) {
         g_lastAppIndexRebuildTick.store(GetTickCount64());
         Wh_Log(L"apps: indexed (%zu apps)", appIndex.Count());
@@ -8394,13 +8430,18 @@ void SearchThreadMain() {
                 bool asAdmin = g_launchAsAdmin.exchange(false);
                 if (static_cast<size_t>(wanted) < lastHits.size() && lastHits[wanted]) {
                     const auto* app = lastHits[wanted];
-                    int& uses = appUsage[app->nameLower];
-                    uses = std::min(uses + 1, apps::kUsageCap);
-                    apps::SaveUsage(appUsage);
+                    apps::UsageCounts* usage = learnedUsage();
+                    if (usage) {
+                        int& uses = (*usage)[app->nameLower];
+                        uses = std::min(uses + 1, apps::kUsageCap);
+                    }
                     std::wstring name = app->name;
                     std::wstring targetPath = app->targetPath;
                     ITEMIDLIST* pidlClone = app->pidl ? ILClone(app->pidl.get()) : nullptr;
                     lock.unlock();
+                    if (usage) {
+                        apps::SaveUsage(*usage);  // this thread's own: no lock needed
+                    }
 
                     SpawnTrackedLaunch([name = std::move(name), targetPath = std::move(targetPath), pidlClone, asAdmin] {
                         WaitForLaunchGate();
@@ -8754,7 +8795,7 @@ void SearchThreadMain() {
             webRow.appIndex = -1;
             appRows.push_back(std::move(webRow));
         } else {
-            for (const apps::Match& m : appIndex.Search(query, static_cast<size_t>(maxApps), &appUsage)) {
+            for (const apps::Match& m : appIndex.Search(query, static_cast<size_t>(maxApps), learnedUsage())) {
                 if (!m.app) {
                     continue;
                 }
@@ -9139,8 +9180,8 @@ void TeardownStartMenuUi() {
     } catch (...) {}
 
     try {
-        if (g_hCoreWindow && g_subclassed) {
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_hCoreWindow, StartMenuSubclassProc);
+        if (HWND core = g_hCoreWindow.load(); core && g_subclassed) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(core, StartMenuSubclassProc);
             g_subclassed = false;
         }
     } catch (...) {}
@@ -9314,8 +9355,8 @@ void Wh_ModSettingsChanged() {
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    if (g_hCoreWindow) {
-        RemovePropW(g_hCoreWindow, L"WindhawkStartMenuWindow");
+    if (HWND core = g_hCoreWindow.load()) {
+        RemovePropW(core, L"WindhawkStartMenuWindow");
     }
     HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (tray) {
@@ -9364,10 +9405,6 @@ void Wh_ModUninit() {
         g_searchThread.reset();
     }
     WaitForTrackedLaunches();
-    if (g_launchGate) {
-        CloseHandle(g_launchGate);
-        g_launchGate = nullptr;
-    }
 
     bool tornDown = false;
     // Only the dispatcher: a reference to the box itself would be released
@@ -9409,6 +9446,12 @@ void Wh_ModUninit() {
         try {
             TeardownStartMenuUi();
         } catch (...) {}
+    }
+    // A click before the teardown may have started a launch.
+    WaitForTrackedLaunches();
+    if (g_launchGate) {
+        CloseHandle(g_launchGate);
+        g_launchGate = nullptr;
     }
     Wh_Log(L"uninit: StartMenuExperienceHost teardown complete");
 }
