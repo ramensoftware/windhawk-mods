@@ -2,7 +2,7 @@
 // @id              smooth-desktop-icons-auto-hide
 // @name            Smooth Desktop Icons Auto-Hide
 // @description     Smoothly auto-hide Windows desktop icons with click-to-show, double-click-to-hide, drag reveal and configurable fade animation.
-// @version         0.14.1
+// @version         0.14.2
 // @author          HeyOkay
 // @github           https://github.com/HeyOkay
 // @license          MIT
@@ -2026,13 +2026,17 @@ LRESULT CALLBACK DesktopShellSubclassProc(
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
+// Progman or WorkerW owned by this explorer.exe.
+static bool IsDesktopHostWindow(HWND hwnd) {
+    return hwnd && IsWindowOwnedByCurrentProcess(hwnd) &&
+           (IsClass(hwnd, L"Progman") || IsClass(hwnd, L"WorkerW"));
+}
+
 static bool IsDesktopShellView(HWND shell) {
     // Only the desktop's DefView (under Progman or a WorkerW). File Explorer
     // folder windows and common dialogs create SHELLDLL_DefView too and must
     // be left alone.
-    HWND parent = shell ? GetParent(shell) : nullptr;
-    return parent &&
-           (IsClass(parent, L"Progman") || IsClass(parent, L"WorkerW"));
+    return shell && IsDesktopHostWindow(GetParent(shell));
 }
 
 static void SubclassDesktopShell(
@@ -2065,8 +2069,9 @@ static BOOL CALLBACK EnumWindowsProc(
     HWND hWnd,
     LPARAM) {
 
-    if (!IsClass(hWnd, L"Progman") &&
-        !IsClass(hWnd, L"WorkerW"))
+    // WorkerW is a generic class that other processes create too; only
+    // this Explorer's own desktop windows are of interest.
+    if (!IsDesktopHostWindow(hWnd))
         return TRUE;
 
     HWND shell =
@@ -2174,7 +2179,7 @@ static void Cleanup() {
 
 static HWND FindExistingDesktopList() {
     HWND progman = FindWindowW(L"Progman", nullptr);
-    HWND shell = progman
+    HWND shell = IsDesktopHostWindow(progman)
         ? FindWindowExW(progman, nullptr, L"SHELLDLL_DefView", nullptr)
         : nullptr;
 
@@ -2183,6 +2188,8 @@ static HWND FindExistingDesktopList() {
         worker = FindWindowExW(nullptr, worker, L"WorkerW", nullptr);
         if (!worker)
             break;
+        if (!IsDesktopHostWindow(worker))
+            continue;
         shell = FindWindowExW(worker, nullptr, L"SHELLDLL_DefView", nullptr);
     }
 
