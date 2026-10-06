@@ -86,7 +86,7 @@ previous window without showing the stack, just like the native switcher.
   brings Flip 3D back on **Win+Tab**. This mod replaces **Alt+Tab** instead,
   draws the windows with real perspective from their live content, and adds
   nine more 3D layouts. Both can be installed together, since they use
-  different shortcuts.
+  different shortcuts, unless the *Shortcut* setting here includes Win+Tab.
 * **[Simple Window Switcher](https://windhawk.net/mods/simple-window-switcher)**
   and **[Legacy Alt+Tab dialog](https://windhawk.net/mods/legacy-alt-tab)**
   also replace Alt+Tab. The 2D styles here are close to them, and are included
@@ -193,7 +193,8 @@ para a janela anterior sem mostrar a pilha, igual ao alternador nativo.
   traz o Flip 3D de volta no **Win+Tab**. Este mod substitui o **Alt+Tab**,
   desenha as janelas com perspectiva real a partir do conteúdo ao vivo e tem
   mais nove layouts 3D. Os dois podem ficar instalados juntos, porque usam
-  atalhos diferentes.
+  atalhos diferentes, a menos que a configuração *Atalho* daqui inclua o
+  Win+Tab.
 * O **[Simple Window Switcher](https://windhawk.net/mods/simple-window-switcher)**
   e o **[Legacy Alt+Tab dialog](https://windhawk.net/mods/legacy-alt-tab)**
   também substituem o Alt+Tab. Os estilos 2D daqui são parecidos com eles e
@@ -303,8 +304,8 @@ acima. Só um deles consegue assumir o Alt+Tab.
 - stickyShortcut: true
   $name: Ctrl+Alt+Tab keeps the switcher open
   $name:pt-BR: Ctrl+Alt+Tab mantém o alternador aberto
-  $description: Opens the switcher and keeps it open after the keys are released. Pick a window with the arrows, Tab or the mouse wheel, then press Enter or click it. Esc closes it
-  $description:pt-BR: Abre o alternador e o mantém aberto depois de soltar as teclas. Escolha a janela com as setas, o Tab ou a roda do mouse e aperte Enter ou clique nela. Esc fecha
+  $description: Opens the switcher and keeps it open after the keys are released. Pick a window with the arrows, Tab or the mouse wheel, then press Enter or click it. Esc or a click outside the windows closes it. Only when the shortcut includes Alt+Tab
+  $description:pt-BR: Abre o alternador e o mantém aberto depois de soltar as teclas. Escolha a janela com as setas, o Tab ou a roda do mouse e aperte Enter ou clique nela. Esc ou um clique fora das janelas fecha. Só quando o atalho inclui o Alt+Tab
 - animationDuration: 420
   $name: Open/close animation duration (ms)
   $name:pt-BR: Duração da animação de abrir/fechar (ms)
@@ -546,6 +547,8 @@ constexpr WORD kDummyVk = 0xE8;
 // others slide to their new places.
 constexpr double kCloseAnimationSeconds = 0.22;
 constexpr double kSlideAnimationSeconds = 0.32;
+// Smaller close buttons (on far-away cards) aren't shown.
+constexpr float kMinCloseButtonRadius = 4;
 
 constexpr WCHAR kOverlayClassName[] = L"WindhawkFlip3DSwitcherOverlay";
 constexpr WCHAR kProxyClassName[] = L"WindhawkFlip3DSwitcherProxy";
@@ -656,7 +659,8 @@ Settings LoadSettings() {
     s.altTab = wcscmp(shortcut, L"winTab") != 0;
     s.winTab =
         wcscmp(shortcut, L"winTab") == 0 || wcscmp(shortcut, L"both") == 0;
-    s.stickyShortcut = Wh_GetIntSetting(L"stickyShortcut") != 0;
+    // Part of the Alt+Tab family: native too when only Win+Tab is taken over.
+    s.stickyShortcut = s.altTab && Wh_GetIntSetting(L"stickyShortcut") != 0;
 
     s.animationDurationMs =
         std::clamp(Wh_GetIntSetting(L"animationDuration"), 50, 3000);
@@ -1655,7 +1659,7 @@ struct CloseButton {
     bool Contains(D2D1_POINT_2F point) const {
         const float dx = point.x - center.x;
         const float dy = point.y - center.y;
-        return dx * dx + dy * dy <= radius * radius;
+        return radius > 0 && dx * dx + dy * dy <= radius * radius;
     }
 };
 
@@ -2550,6 +2554,10 @@ void Switcher::OnClick(POINT pt) {
     CloseButton button;
     const int index = HitTest(point, &button);
     if (index < 0) {
+        // In a Ctrl+Alt+Tab session, the mouse alone can dismiss it.
+        if (g_holdKey == HoldKey::None && EndSwitching()) {
+            OnCancel();
+        }
         return;
     }
     if (m_settings.closeButton && button.Contains(point)) {
@@ -2608,6 +2616,10 @@ CloseButton Switcher::CloseButtonForQuad(const Quad& quad) const {
                                     length(quad.p[1], quad.p[2]));
     CloseButton button;
     button.radius = std::min(std::round(13 * m_dpiScale), shortest * 0.12f);
+    if (button.radius < kMinCloseButtonRadius) {
+        // Too small to see or hit: no button.
+        button.radius = 0;
+    }
 
     const D2D1_POINT_2F corner = quad.p[1];
     const float centerX =
@@ -2628,6 +2640,9 @@ CloseButton Switcher::CloseButtonForCell(const D2D1_RECT_F& cell) const {
         std::min(std::round(11 * m_dpiScale),
                  std::min(cell.right - cell.left, cell.bottom - cell.top) *
                      0.16f);
+    if (button.radius < kMinCloseButtonRadius) {
+        button.radius = 0;
+    }
     const float inset = std::round(button.radius * 1.3f);
     button.center = {cell.right - inset, cell.top + inset};
     return button;
@@ -2650,6 +2665,14 @@ void Switcher::CloseItem(int index) {
 }
 
 void Switcher::RemoveClosedItems(double now) {
+    if (!m_items.empty()) {
+        // m_target isn't wrapped, and the item count may change below: wrap
+        // it so that SelectedIndex() keeps pointing to the same item. The
+        // shift is a multiple of the count, so nothing moves on screen.
+        const int selected = SelectedIndex();
+        m_scroll -= (double)(m_target - selected);
+        m_target = selected;
+    }
     bool removed = false;
     for (size_t i = 0; i < m_items.size();) {
         Item& item = *m_items[i];
@@ -2696,12 +2719,12 @@ void Switcher::RemoveClosedItems(double now) {
     m_hoverIndex = -1;
     m_titleIndex = -1;
     m_titleLayout = nullptr;
+    // With nothing left, this also clears the panel cells.
+    ComputeLayout();
     if (m_items.empty()) {
         EndSwitching();
         BeginClose(false);
-        return;
     }
-    ComputeLayout();
 }
 
 // Finds the item under the mouse, which shows the close button.
@@ -2728,7 +2751,7 @@ void Switcher::DrawCloseButton(float t) {
     }
     const CloseButton& button = m_hoverButton;
     const float r = button.radius;
-    if (r < 4) {
+    if (r <= 0) {
         return;
     }
     const D2D1_ELLIPSE circle{button.center, r, r};
@@ -3915,7 +3938,7 @@ void Switcher::DrawLabel(Item& item,
 
 // Icons, titles and the selection border, drawn over the thumbnails.
 void Switcher::DrawPanelFront(float t) {
-    if (m_cells.empty()) {
+    if (m_cells.empty() || m_items.empty()) {
         return;
     }
     const AnimationStyle style = m_settings.style;
