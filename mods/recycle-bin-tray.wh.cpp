@@ -2,18 +2,13 @@
 // @id              recycle-bin-tray
 // @name            Recycle Bin in System Tray
 // @description     Adds a working Recycle Bin icon to the notification area (system tray), next to the clock: live empty/full state, item count and size in the tooltip, double-click to open, right-click for Open / Empty Recycle Bin.
-// @version         1.3
+// @version         2.0
 // @author          Yevhen Veprytskyi
 // @github          https://github.com/YevhenVe
-// @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -lgdi32 -lshell32 -ladvapi32
+// @include         windhawk.exe
+// @compilerOptions -lgdi32 -lshell32 -ladvapi32 -lole32
 // @license         MIT
 // ==/WindhawkMod==
-
-// NOTE FOR THE AUTHOR: before submitting this mod to the Windhawk mods store,
-// replace the @github URL above with your real GitHub profile URL. The store
-// requires it to match the pull request author's profile.
 
 // ==WindhawkModReadme==
 /*
@@ -27,7 +22,8 @@ to the clock.
 * Double-click (or single click, optional) opens the Recycle Bin.
 * Right-click menu: Open, Empty Recycle Bin (with optional confirmation),
   plus a live item-count header.
-* The icon state refreshes every few seconds (configurable).
+* The icon updates instantly when the Recycle Bin changes, and follows
+  Windows theme changes for the taskbar automatically.
 * Custom icons: point the mod at your own .ico or .svg files for the empty
   and full states (see the settings). SVG files are rasterized at runtime,
   so no conversion is needed. Separate icons can be set for a light taskbar;
@@ -38,8 +34,8 @@ Notes:
 * On Windows 11, new tray icons start hidden in the overflow area. Open
   Settings > Personalization > Taskbar and enable the icon so it sits next to
   the clock, then drag it right next to the clock.
-* The mod runs inside explorer.exe but doesn't hook anything: it just adds
-  a tray icon from its own thread, so it can't break the taskbar.
+* The mod runs as a tool in its own dedicated process and doesn't hook
+  anything, so it can't affect Explorer or the taskbar.
 */
 // ==/WindhawkModReadme==
 
@@ -51,9 +47,6 @@ Notes:
 - singleClickToOpen: false
   $name: Open on single click
   $description: Open the Recycle Bin with a single left click instead of a double-click.
-- refreshInterval: 2
-  $name: Refresh interval (seconds)
-  $description: How often the icon state, item count and size are refreshed (1-60 seconds).
 - customEmptyIconPath: ""
   $name: Custom empty icon
   $description: Full path to a custom .ico or .svg file shown when the Recycle Bin is empty. Leave empty to use the system icon.
@@ -75,15 +68,20 @@ Notes:
 
 #include <stdio.h>
 #include <windows.h>
+#include <windowsx.h>
+// Must come before the shell headers: gives storage to the FOLDERID_* GUIDs
+// (DEFINE_KNOWNFOLDER), otherwise the linker can't find them.
+#include <initguid.h>
 #include <shellapi.h>
 #include <shlobj.h>
+#include <knownfolders.h>
 
 #include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
 #include <math.h>
 
-// Embedded NanoSVG (https://github.com/memononen/nanosvg, public domain).
+// Embedded NanoSVG (https://github.com/memononen/nanosvg, zlib-licensed).
 // Lets the mod rasterize plain .svg files at runtime, so custom icons don't
 // have to be converted to .ico beforehand.
 #define NANOSVG_IMPLEMENTATION
@@ -4848,22 +4846,38 @@ namespace {
 
 constexpr UINT kTrayCallbackMsg = WM_APP + 1;
 constexpr UINT kMsgShutdown = WM_APP + 2;
-constexpr UINT kTimerId = 1;
+constexpr UINT kMsgSettingsChanged = WM_APP + 3;
+constexpr UINT kMsgShellChange = WM_APP + 4;
+constexpr UINT_PTR kTimerCoalesce = 1;
+constexpr UINT_PTR kTimerFallback = 2;
+// Slow fallback refresh in case a shell change notification is missed.
+constexpr UINT kFallbackIntervalMs = 60000;
+// Coalesce bursts of shell notifications (a big delete sends many).
+constexpr UINT kCoalesceMs = 300;
+constexpr UINT kThreadReadyTimeoutMs = 5000;
+constexpr UINT kThreadExitTimeoutMs = 5000;
+// Ignore repeated open requests within this window (a double-click in
+// single-click mode produces two WM_LBUTTONUP).
+constexpr DWORD kOpenDebounceMs = 800;
 constexpr UINT kTrayIconId = 1;
 constexpr int kCmdOpen = 100;
 constexpr int kCmdEmpty = 101;
 
 // Stable identity of our tray icon. Windows uses it to remember the icon's
-// notification-area settings and to avoid duplicates.
+// notification-area settings and to avoid duplicates. Regenerated for the
+// tool-mod version because the host process changed.
 constexpr GUID kTrayIconGuid = {
-    0xA7B4C9D2, 0x3E5F, 0x4A6B,
-    {0x8C, 0x1D, 0x9E, 0x2F, 0x5A, 0x6B, 0x7C, 0x8D}};
+    0xc85e4c89, 0xf405, 0x4999,
+    {0x87, 0x1f, 0x27, 0x5a, 0xd8, 0xbf, 0x16, 0xaf}};
 
 constexpr WCHAR kWindowClass[] = L"WindhawkRecycleBinTray";
 
+HINSTANCE g_hInst = nullptr;
 HANDLE g_thread = nullptr;
-volatile bool g_threadRunning = false;
+HANDLE g_readyEvent = nullptr;
 HWND g_hwnd = nullptr;
+UINT g_taskbarCreatedMsg = 0;
+ULONG g_shellNotifyId = 0;
 HICON g_systemEmpty = nullptr;
 HICON g_systemFull = nullptr;
 HICON g_customEmpty = nullptr;
@@ -4872,17 +4886,31 @@ HICON g_customFull = nullptr;
 HICON g_iconEmpty = nullptr;
 HICON g_iconFull = nullptr;
 HICON g_currentIcon = nullptr;
-UINT g_taskbarCreatedMsg = 0;
 // True when Windows uses a light taskbar (then dark icons are used).
 bool g_lightTaskbar = false;
+bool g_confirmBeforeEmpty = true;
+bool g_singleClickToOpen = false;
+DWORD g_lastOpenTick = 0;
 
-int GetRefreshIntervalMs() {
-    int seconds = Wh_GetIntSetting(L"refreshInterval");
-    if (seconds < 1)
-        seconds = 1;
-    if (seconds > 60)
-        seconds = 60;
-    return seconds * 1000;
+// RAII wrapper for Wh_GetStringSetting.
+class StringSetting {
+ public:
+    explicit StringSetting(PCWSTR s) : m_s(s) {}
+    ~StringSetting() {
+        if (m_s)
+            Wh_FreeStringSetting(m_s);
+    }
+    StringSetting(const StringSetting&) = delete;
+    StringSetting& operator=(const StringSetting&) = delete;
+    PCWSTR get() const { return m_s ? m_s : L""; }
+
+ private:
+    PCWSTR m_s;
+};
+
+void LoadSettings() {
+    g_confirmBeforeEmpty = !!Wh_GetIntSetting(L"confirmBeforeEmpty");
+    g_singleClickToOpen = !!Wh_GetIntSetting(L"singleClickToOpen");
 }
 
 void FormatSize(ULONGLONG bytes, PWSTR buffer, size_t bufferChars) {
@@ -4897,6 +4925,11 @@ void FormatSize(ULONGLONG bytes, PWSTR buffer, size_t bufferChars) {
         swprintf_s(buffer, bufferChars, L"%llu %s", bytes, units[unit]);
     else
         swprintf_s(buffer, bufferChars, L"%.1f %s", value, units[unit]);
+}
+
+void FormatCount(ULONGLONG count, PWSTR buffer, size_t bufferChars) {
+    swprintf_s(buffer, bufferChars, L"%llu %s", count,
+               count == 1 ? L"item" : L"items");
 }
 
 struct RecycleBinState {
@@ -5170,6 +5203,7 @@ bool IsLightTaskbar() {
 }
 
 void LoadCustomIcons() {
+    g_lightTaskbar = IsLightTaskbar();
     FreeCustomIcons();
 
     PCWSTR emptySetting = L"customEmptyIconPath";
@@ -5179,24 +5213,20 @@ void LoadCustomIcons() {
         fullSetting = L"customFullIconPathLight";
     }
 
-    PCWSTR emptyPath = Wh_GetStringSetting(emptySetting);
-    PCWSTR fullPath = Wh_GetStringSetting(fullSetting);
-    g_customEmpty = LoadIconFromFile(emptyPath);
-    g_customFull = LoadIconFromFile(fullPath);
-    Wh_FreeStringSetting(emptyPath);
-    Wh_FreeStringSetting(fullPath);
+    StringSetting emptyPath(Wh_GetStringSetting(emptySetting));
+    StringSetting fullPath(Wh_GetStringSetting(fullSetting));
+    g_customEmpty = LoadIconFromFile(emptyPath.get());
+    g_customFull = LoadIconFromFile(fullPath.get());
 
     if (g_lightTaskbar && (!g_customEmpty || !g_customFull)) {
         // Fall back to the main custom icons when light-taskbar ones are
         // not set.
-        PCWSTR emptyPath2 = Wh_GetStringSetting(L"customEmptyIconPath");
-        PCWSTR fullPath2 = Wh_GetStringSetting(L"customFullIconPath");
+        StringSetting emptyPath2(Wh_GetStringSetting(L"customEmptyIconPath"));
+        StringSetting fullPath2(Wh_GetStringSetting(L"customFullIconPath"));
         if (!g_customEmpty)
-            g_customEmpty = LoadIconFromFile(emptyPath2);
+            g_customEmpty = LoadIconFromFile(emptyPath2.get());
         if (!g_customFull)
-            g_customFull = LoadIconFromFile(fullPath2);
-        Wh_FreeStringSetting(emptyPath2);
-        Wh_FreeStringSetting(fullPath2);
+            g_customFull = LoadIconFromFile(fullPath2.get());
     }
 
     ResolveIcons();
@@ -5212,7 +5242,7 @@ void AddTrayIcon() {
     nid.cbSize = sizeof(nid);
     nid.hWnd = g_hwnd;
     nid.uID = kTrayIconId;
-    nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_GUID;
+    nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP | NIF_GUID;
     nid.uCallbackMessage = kTrayCallbackMsg;
     nid.hIcon = g_currentIcon ? g_currentIcon : g_iconEmpty;
     nid.guidItem = kTrayIconGuid;
@@ -5242,7 +5272,7 @@ void UpdateTrayIcon() {
     nid.hWnd = g_hwnd;
     nid.uID = kTrayIconId;
     nid.guidItem = kTrayIconGuid;
-    nid.uFlags = NIF_GUID | NIF_TIP;
+    nid.uFlags = NIF_GUID | NIF_TIP | NIF_SHOWTIP;
 
     if (icon && icon != g_currentIcon) {
         g_currentIcon = icon;
@@ -5253,9 +5283,11 @@ void UpdateTrayIcon() {
     WCHAR tip[128];
     if (state.full) {
         WCHAR sizeText[32];
+        WCHAR countText[32];
         FormatSize(state.size, sizeText, ARRAYSIZE(sizeText));
-        swprintf_s(tip, ARRAYSIZE(tip), L"Recycle Bin\n%llu items (%s)",
-                   state.items, sizeText);
+        FormatCount(state.items, countText, ARRAYSIZE(countText));
+        swprintf_s(tip, ARRAYSIZE(tip), L"Recycle Bin\n%s (%s)", countText,
+                   sizeText);
     } else {
         wcscpy_s(tip, L"Recycle Bin (empty)");
     }
@@ -5280,19 +5312,29 @@ void RemoveTrayIcon() {
 }
 
 void OpenRecycleBin() {
-    ShellExecuteW(nullptr, L"open", L"explorer.exe", L"shell:RecycleBinFolder",
+    // Open the Recycle Bin namespace directly instead of starting an extra
+    // explorer.exe. COM is initialized on this thread.
+    ShellExecuteW(nullptr, L"open", L"shell:RecycleBinFolder", nullptr,
                   nullptr, SW_SHOWNORMAL);
+}
+
+void OpenRecycleBinDebounced() {
+    DWORD now = GetTickCount();
+    if (now - g_lastOpenTick < kOpenDebounceMs)
+        return;
+    g_lastOpenTick = now;
+    OpenRecycleBin();
 }
 
 void EmptyRecycleBin() {
     DWORD flags = SHERB_NOPROGRESSUI | SHERB_NOSOUND;
-    if (!Wh_GetIntSetting(L"confirmBeforeEmpty"))
+    if (!g_confirmBeforeEmpty)
         flags |= SHERB_NOCONFIRMATION;
     if (SUCCEEDED(SHEmptyRecycleBinW(nullptr, nullptr, flags)))
         UpdateTrayIcon();
 }
 
-void ShowContextMenu() {
+void ShowContextMenuAt(POINT pt) {
     RecycleBinState state = QueryRecycleBin();
 
     HMENU menu = CreatePopupMenu();
@@ -5302,9 +5344,10 @@ void ShowContextMenu() {
     WCHAR header[128];
     if (state.full) {
         WCHAR sizeText[32];
+        WCHAR countText[32];
         FormatSize(state.size, sizeText, ARRAYSIZE(sizeText));
-        swprintf_s(header, ARRAYSIZE(header), L"%llu items (%s)", state.items,
-                   sizeText);
+        FormatCount(state.items, countText, ARRAYSIZE(countText));
+        swprintf_s(header, ARRAYSIZE(header), L"%s (%s)", countText, sizeText);
     } else {
         wcscpy_s(header, L"Recycle Bin is empty");
     }
@@ -5313,8 +5356,6 @@ void ShowContextMenu() {
     AppendMenuW(menu, MF_STRING, kCmdOpen, L"Open");
     AppendMenuW(menu, MF_STRING, kCmdEmpty, L"Empty Recycle Bin");
 
-    POINT pt;
-    GetCursorPos(&pt);
     // The standard trick so the menu dismisses correctly.
     SetForegroundWindow(g_hwnd);
     TrackPopupMenu(menu, TPM_RIGHTBUTTON | TPM_BOTTOMALIGN | TPM_RIGHTALIGN,
@@ -5323,12 +5364,61 @@ void ShowContextMenu() {
     DestroyMenu(menu);
 }
 
+// Menu position for keyboard invocation: the center of the icon.
+POINT GetIconAnchorPoint() {
+    POINT pt = {};
+    NOTIFYICONIDENTIFIER nii = {};
+    nii.cbSize = sizeof(nii);
+    nii.hWnd = g_hwnd;
+    nii.uID = kTrayIconId;
+    nii.guidItem = kTrayIconGuid;
+    RECT rc = {};
+    if (SUCCEEDED(Shell_NotifyIconGetRect(&nii, &rc))) {
+        pt.x = (rc.left + rc.right) / 2;
+        pt.y = (rc.top + rc.bottom) / 2;
+    } else {
+        GetCursorPos(&pt);
+    }
+    return pt;
+}
+
+void RegisterRecycleBinNotify() {
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    if (!SUCCEEDED(SHGetKnownFolderIDList(FOLDERID_RecycleBinFolder, 0, nullptr,
+                                          &pidl))) {
+        Wh_Log(L"SHGetKnownFolderIDList(FOLDERID_RecycleBinFolder) failed");
+        return;
+    }
+
+    SHChangeNotifyEntry entry = {pidl, TRUE};
+    g_shellNotifyId = SHChangeNotifyRegister(
+        g_hwnd, SHCNRF_ShellLevel | SHCNRF_InterruptLevel | SHCNRF_NewDelivery,
+        SHCNE_CREATE | SHCNE_DELETE | SHCNE_MKDIR | SHCNE_RMDIR |
+            SHCNE_RENAMEITEM | SHCNE_RENAMEFOLDER | SHCNE_UPDATEDIR |
+            SHCNE_UPDATEITEM | SHCNE_UPDATEIMAGE,
+        kMsgShellChange, 1, &entry);
+    CoTaskMemFree(pidl);
+
+    if (g_shellNotifyId)
+        Wh_Log(L"Shell change notifications registered");
+    else
+        Wh_Log(L"SHChangeNotifyRegister failed");
+}
+
+void UnregisterRecycleBinNotify() {
+    if (g_shellNotifyId) {
+        SHChangeNotifyDeregister(g_shellNotifyId);
+        g_shellNotifyId = 0;
+    }
+}
+
 LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam,
                              LPARAM lParam) {
     if (g_taskbarCreatedMsg && msg == g_taskbarCreatedMsg) {
-        // The taskbar was recreated: re-add the icon.
+        // The taskbar was recreated: re-add the icon. Also reload icons in
+        // case the display scaling changed.
         Wh_Log(L"TaskbarCreated, re-adding the icon");
-        g_currentIcon = nullptr;
+        LoadCustomIcons();
         AddTrayIcon();
         UpdateTrayIcon();
         return 0;
@@ -5336,31 +5426,84 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam,
 
     switch (msg) {
         case WM_TIMER:
-            if (wParam == kTimerId) {
-                // Follow Windows theme changes (light/dark taskbar).
-                bool lightTaskbar = IsLightTaskbar();
-                if (lightTaskbar != g_lightTaskbar) {
-                    Wh_Log(L"Taskbar theme changed, reloading icons");
-                    g_lightTaskbar = lightTaskbar;
-                    LoadCustomIcons();
-                }
+            if (wParam == kTimerCoalesce) {
+                KillTimer(hWnd, kTimerCoalesce);
+                UpdateTrayIcon();
+            } else if (wParam == kTimerFallback) {
                 UpdateTrayIcon();
             }
             return 0;
 
-        case kTrayCallbackMsg:
-            switch (LOWORD(lParam)) {
+        case WM_SETTINGCHANGE:
+            // The taskbar follows the system theme; "ImmersiveColorSet"
+            // broadcasts exactly when it flips.
+            if (lParam && wcscmp((PCWSTR)lParam, L"ImmersiveColorSet") == 0) {
+                bool light = IsLightTaskbar();
+                if (light != g_lightTaskbar) {
+                    Wh_Log(L"Taskbar theme changed, reloading icons");
+                    LoadCustomIcons();
+                    UpdateTrayIcon();
+                }
+            }
+            return 0;
+
+        case WM_DISPLAYCHANGE:
+            // Display scaling may have changed: rebuild icons at the new size.
+            Wh_Log(L"Display change, reloading icons");
+            LoadCustomIcons();
+            UpdateTrayIcon();
+            return 0;
+
+        case WM_CONTEXTMENU:
+            // Keyboard-invoked context menu (Shift+F10 / Menu key).
+            ShowContextMenuAt(GetIconAnchorPoint());
+            return 0;
+
+        case kTrayCallbackMsg: {
+            // NOTIFYICON_VERSION_4: LOWORD(lParam) is the event, wParam
+            // carries the anchor point.
+            UINT event = LOWORD(lParam);
+            switch (event) {
                 case WM_LBUTTONDBLCLK:
-                    OpenRecycleBin();
-                    break;
-                case WM_LBUTTONUP:
-                    if (Wh_GetIntSetting(L"singleClickToOpen"))
+                    if (!g_singleClickToOpen)
                         OpenRecycleBin();
                     break;
+                case WM_LBUTTONUP:
+                    if (g_singleClickToOpen)
+                        OpenRecycleBinDebounced();
+                    break;
                 case WM_RBUTTONUP:
-                    ShowContextMenu();
+                case WM_CONTEXTMENU: {
+                    POINT pt = {GET_X_LPARAM(wParam), GET_Y_LPARAM(wParam)};
+                    ShowContextMenuAt(pt);
+                    break;
+                }
+                case NIN_SELECT:
+                case NIN_KEYSELECT:
+                    // Keyboard activation (Win+B, arrows, Enter).
+                    OpenRecycleBin();
                     break;
             }
+            return 0;
+        }
+
+        case kMsgShellChange: {
+            // Free the notification block, then coalesce bursts of events
+            // with a short one-shot timer before refreshing.
+            PIDLIST_ABSOLUTE* ppidl = nullptr;
+            LONG lEvent = 0;
+            if (SHChangeNotification_Lock((HANDLE)wParam, (DWORD)lParam,
+                                         &ppidl, &lEvent)) {
+                SHChangeNotification_Unlock((HANDLE)wParam);
+            }
+            SetTimer(hWnd, kTimerCoalesce, kCoalesceMs, nullptr);
+            return 0;
+        }
+
+        case kMsgSettingsChanged:
+            LoadSettings();
+            LoadCustomIcons();
+            UpdateTrayIcon();
             return 0;
 
         case WM_COMMAND:
@@ -5376,7 +5519,6 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam,
 
         case kMsgShutdown:
             RemoveTrayIcon();
-            KillTimer(hWnd, kTimerId);
             DestroyWindow(hWnd);
             return 0;
 
@@ -5389,57 +5531,43 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam,
 }
 
 DWORD WINAPI TrayThreadProc(LPVOID) {
-    g_threadRunning = true;
-
-    // Only the explorer.exe process that owns the taskbar shows the icon.
-    // Other explorer.exe processes (e.g. folder windows in separate processes)
-    // exit here so we never get duplicate icons.
-    bool ownsTaskbar = false;
-    for (int i = 0; i < 300; i++) {
-        HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-        if (hTaskbar) {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(hTaskbar, &pid);
-            ownsTaskbar = (pid == GetCurrentProcessId());
-            break;
-        }
-        Sleep(100);
-    }
-    if (!ownsTaskbar) {
-        Wh_Log(L"Not the taskbar owner, exiting");
-        g_threadRunning = false;
-        return 0;
-    }
+    // COM STA: ShellExecuteW may involve shell extensions.
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = TrayWndProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.hInstance = g_hInst;
     wc.lpszClassName = kWindowClass;
     if (!RegisterClassExW(&wc)) {
         Wh_Log(L"RegisterClassExW failed");
-        g_threadRunning = false;
+        CoUninitialize();
         return 1;
     }
 
     g_taskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
 
-    g_hwnd = CreateWindowExW(0, kWindowClass, L"Windhawk Recycle Bin Tray", 0,
-                             0, 0, 0, 0, HWND_MESSAGE, nullptr, wc.hInstance,
-                             nullptr);
+    // A hidden top-level window (not message-only) so it receives the
+    // TaskbarCreated broadcast and WM_SETTINGCHANGE.
+    g_hwnd = CreateWindowExW(WS_EX_TOOLWINDOW, kWindowClass, L"", WS_POPUP, 0,
+                             0, 0, 0, nullptr, nullptr, g_hInst, nullptr);
     if (!g_hwnd) {
         Wh_Log(L"CreateWindowExW failed");
-        UnregisterClassW(kWindowClass, wc.hInstance);
-        g_threadRunning = false;
+        UnregisterClassW(kWindowClass, g_hInst);
+        CoUninitialize();
         return 1;
     }
 
+    LoadSettings();
     LoadSystemIcons();
-    g_lightTaskbar = IsLightTaskbar();
     LoadCustomIcons();
+    RegisterRecycleBinNotify();
     AddTrayIcon();
     UpdateTrayIcon();
-    SetTimer(g_hwnd, kTimerId, GetRefreshIntervalMs(), nullptr);
+    SetTimer(g_hwnd, kTimerFallback, kFallbackIntervalMs, nullptr);
+
+    // The window exists and the icon is up: init can proceed.
+    SetEvent(g_readyEvent);
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0)) {
@@ -5447,6 +5575,9 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
         DispatchMessageW(&msg);
     }
 
+    KillTimer(g_hwnd, kTimerCoalesce);
+    KillTimer(g_hwnd, kTimerFallback);
+    UnregisterRecycleBinNotify();
     FreeCustomIcons();
     if (g_systemEmpty)
         DestroyIcon(g_systemEmpty);
@@ -5454,44 +5585,219 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
         DestroyIcon(g_systemFull);
     g_systemEmpty = g_systemFull = nullptr;
     g_iconEmpty = g_iconFull = g_currentIcon = nullptr;
-    g_hwnd = nullptr;
-    UnregisterClassW(kWindowClass, wc.hInstance);
+    if (g_hwnd) {
+        DestroyWindow(g_hwnd);
+        g_hwnd = nullptr;
+    }
+    UnregisterClassW(kWindowClass, g_hInst);
 
-    g_threadRunning = false;
+    CoUninitialize();
     return 0;
 }
 
 }  // namespace
 
-BOOL Wh_ModInit() {
-    Wh_Log(L"Recycle Bin tray: init");
+BOOL WhTool_ModInit() {
+    Wh_Log(L"Recycle Bin tray: tool init");
+    g_hInst = GetModuleHandleW(nullptr);
+
+    g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_readyEvent) {
+        Wh_Log(L"CreateEvent failed");
+        return FALSE;
+    }
+
     g_thread = CreateThread(nullptr, 0, TrayThreadProc, nullptr, 0, nullptr);
     if (!g_thread) {
         Wh_Log(L"CreateThread failed");
+        CloseHandle(g_readyEvent);
+        g_readyEvent = nullptr;
         return FALSE;
     }
+
+    // Wait until the tray thread created its window, so g_hwnd is always
+    // known from here on.
+    if (WaitForSingleObject(g_readyEvent, kThreadReadyTimeoutMs) !=
+        WAIT_OBJECT_0) {
+        Wh_Log(L"Tray thread did not signal ready in time");
+    }
+    CloseHandle(g_readyEvent);
+    g_readyEvent = nullptr;
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
-    LoadCustomIcons();
-    if (g_hwnd) {
-        KillTimer(g_hwnd, kTimerId);
-        SetTimer(g_hwnd, kTimerId, GetRefreshIntervalMs(), nullptr);
-        UpdateTrayIcon();
-    }
+void WhTool_ModSettingsChanged() {
+    // Do the work on the tray thread: it owns the window, the icons and the
+    // timers.
+    if (g_hwnd)
+        PostMessageW(g_hwnd, kMsgSettingsChanged, 0, 0);
 }
 
-void Wh_ModUninit() {
-    Wh_Log(L"Recycle Bin tray: uninit");
+void WhTool_ModUninit() {
+    Wh_Log(L"Recycle Bin tray: tool uninit");
+    if (g_hwnd)
+        PostMessageW(g_hwnd, kMsgShutdown, 0, 0);
     if (g_thread) {
-        // Give the thread a moment to create its window if it hasn't yet.
-        for (int i = 0; i < 50 && !g_hwnd && g_threadRunning; i++)
-            Sleep(100);
-        if (g_hwnd)
-            PostMessageW(g_hwnd, kMsgShutdown, 0, 0);
-        WaitForSingleObject(g_thread, 10000);
+        if (WaitForSingleObject(g_thread, kThreadExitTimeoutMs) !=
+            WAIT_OBJECT_0) {
+            // Dedicated tool process: ending the process is acceptable here.
+            Wh_Log(L"Tray thread did not exit in time");
+            ExitProcess(1);
+        }
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
+    g_hwnd = nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+    LocalFree(argv);
+    if (isExcluded) {
+        return FALSE;
+    }
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+    if (isToolModProcess) {
+        return FALSE;
+    }
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+    WCHAR commandLine[MAX_PATH + 2 +
+                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) -
+                      1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+    WhTool_ModSettingsChanged();
+}
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
