@@ -2,7 +2,7 @@
 // @id              file-explorer-details-autofit-columns
 // @name            File Explorer Details Auto-Fit Columns
 // @description     Automatically fits all column widths to their content when refreshing in Details view. Has no effect on other view modes.
-// @version         1.2.0
+// @version         1.2.1
 // @author          Armaninyow
 // @github          https://github.com/armaninyow
 // @include         explorer.exe
@@ -2196,21 +2196,30 @@ void Wh_ModUninit() {
 }
 
 void Wh_ModSettingsChanged() {
+    Settings oldSettings = GetCachedSettings();
     LoadSettings();
+    Settings newSettings = GetCachedSettings();
 
-    std::vector<HWND> tabs;
-    EnterCriticalSection(&g_cs);
-    g_tabWidthCache.clear();  // fit mode or scan settings may have changed
-    for (auto& [hwndTab, pSV] : g_tabShellViews)
-        if (pSV) tabs.push_back(hwndTab);
-    LeaveCriticalSection(&g_cs);
+    bool oldUsesScan = oldSettings.fitMode == FitMode::Full || oldSettings.fitMode == FitMode::Elastic;
+    bool newUsesScan = newSettings.fitMode == FitMode::Full || newSettings.fitMode == FitMode::Elastic;
+    bool layoutChanged = oldSettings.fitMode != newSettings.fitMode ||
+                         ((oldUsesScan || newUsesScan) &&
+                          oldSettings.maxScanItems != newSettings.maxScanItems);
 
-    // Otherwise switching Fit Mode (or leaving Elastic) looks like nothing
-    // happened until the next unrelated trigger fires for that tab.
-    for (HWND hwndTab : tabs)
-        ScheduleFit(hwndTab, TriggerKind::Full);
+    if (layoutChanged) {
+        std::vector<HWND> tabs;
+        EnterCriticalSection(&g_cs);
+        g_tabWidthCache.clear();
+        for (auto& [hwndTab, pSV] : g_tabShellViews)
+            if (pSV) tabs.push_back(hwndTab);
+        LeaveCriticalSection(&g_cs);
 
-    Settings s = GetCachedSettings();
+        // Changes that affect column widths should be visible immediately.
+        for (HWND hwndTab : tabs)
+            ScheduleFit(hwndTab, TriggerKind::Full);
+    }
+
     Wh_Log(L"SettingsChanged — passive triggers: %d, delay: %ums, fit mode: %d, max scan items: %d",
-           s.passiveTriggers, s.delayMs, static_cast<int>(s.fitMode), s.maxScanItems);
+           newSettings.passiveTriggers, newSettings.delayMs,
+           static_cast<int>(newSettings.fitMode), newSettings.maxScanItems);
 }
