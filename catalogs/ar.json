@@ -4984,7 +4984,7 @@
         "ratingUsers": 2390,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1781641244000,
+        "updated": 1791312997000,
         "users": 222515
       },
       "featured": true,
@@ -5002,6 +5002,7 @@
           "StartMenuExperienceHost.exe",
           "msedgewebview2.exe",
           "windhawk.exe",
+          "windhawk-ui.exe",
           "*\\UI\\VSCodium.exe"
         ],
         "github": "https://github.com/m417z",
@@ -5011,7 +5012,7 @@
         ],
         "name": "Better file sizes in Explorer details",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.5.1"
+        "version": "1.6"
       }
     },
     "explorer-double-click-up": {
@@ -11925,7 +11926,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 1, 0, 0, 12],
         "ratingUsers": 13,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 0,
         "updated": 1791284501000,
         "users": 145

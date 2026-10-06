@@ -1,0 +1,14 @@
+{
+  "modId": "snap-sentry",
+  "reviews": [
+    {
+      "authorName": "DP",
+      "content": "Love the idea, but it would be more likely to be my daily driver for screenshot management only if the popup dialog was a bit more detailed (having a dark mode (i keep getting flashbanged), showing a preview, path, and name of the image in the dialog aswell). or better yet, acted as the image in the details tab, like a notification with multiple options would be cool!\n\nto rephrase that, it would be very helpful to see it being more customizable. having all of what i said above, plus what you have implemented, individually toggleable (eg: choosing what popup or notification item is preselected or what clicking the notification does).\n\nmy nitpicking aside, im a happy user of this, every so often it comes in handy to reenable <3",
+      "id": 40,
+      "modVersion": "0.21.3",
+      "parentId": null,
+      "timestamp": 1791311718,
+      "votes": 0
+    }
+  ]
+}

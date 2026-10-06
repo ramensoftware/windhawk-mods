@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-06T17:04:19.000Z</updated>
+    <updated>2026-10-06T18:56:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better file sizes in Explorer details 1.6]]></title>
+        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#c89e4f4b2c154f31a7b6f5f80a164b2f24a288f6</id>
+        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
+        <updated>2026-10-06T18:56:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to keep showing file sizes in KBs in newer Windows 11 versions. Starting with update KB5101684, Windows 11 is gradually switching to MB/GB for large files with no option to go back (ViVeTool flag 61014711).</li>
+<li>Fixed compatibility with some new Windows 11 versions (ViVeTool flag 61389601).</li>
+<li>Improved compatibility with conflicting mods such as Explorer Status Bar Metadata and File Explorer Details Auto-Fit Columns.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Everything & Power Tools in the Start Menu 1.0]]></title>
         <id>https://windhawk.net/mods/start-everything#d2f3636c817d15b6a8c61f16b67ad7d9652adeb1</id>
@@ -1074,52 +1089,6 @@ below); when off, use the system default cursor.</li>
 <li><strong>Custom cursor file path (optional)</strong>: the full path of a <code>.cur</code> file to use
 instead of the built-in cursor. Leave empty to use the built-in one.</li>
 </ul>]]></content>
-        <author>
-            <name>loliri</name>
-            <uri>https://github.com/loliri</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Spoof MachineGuid 1.0]]></title>
-        <id>https://windhawk.net/mods/spoof-machine-guid#502f03cdbbc39d903c44b43dff65cd633dfd6593</id>
-        <link href="https://windhawk.net/mods/spoof-machine-guid"/>
-        <updated>2026-10-05T08:04:06.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="spoofmachineguid">Spoof MachineGuid</h1>
-<p>Replaces the <code>MachineGuid</code> value that registry queries return, for the target
-process only. The real value on the system is left untouched, and other
-processes keep seeing it.</p>
-<h2 id="intendeduse">Intended use</h2>
-<p><code>MachineGuid</code>, stored at
-<code>HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid</code>, is a per-installation
-identifier that is assigned when Windows is installed. Programs commonly read
-it to recognise a particular machine: license activation and trial checks,
-telemetry and device fingerprinting, and some anti-cheat and ban systems.</p>
-<p>This mod is for making a single program see a different value, so it stops
-recognising the machine. Typical reasons are testing software that keys off this
-value, or keeping one specific application from correlating the machine across
-sessions.</p>
-<p>Note that <code>MachineGuid</code> is only one of several identifiers a program can use —
-the SMBIOS UUID, volume serial numbers, MAC addresses and the Windows product ID
-are others. Changing this one value will not make every program see a different
-machine.</p>
-<h2 id="choosingthetargetprocess">Choosing the target process</h2>
-<p>The mod targets nothing by default, so it does nothing until you tell it which
-process to apply to. Open the mod in Windhawk, go to the <strong>Advanced</strong> tab, and
-put the executable name of your target in the <strong>Custom process inclusion list</strong>.
-The change applies as soon as you save, and takes effect the next time the
-program starts.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Fake MachineGuid</strong>: the GUID to return in place of the real one. Both the
-plain <code>11111111-2222-3333-4444-555555555555</code> form and the braced
-<code>{11111111-2222-3333-4444-555555555555}</code> form are accepted. Any other value
-leaves the mod inactive, and a note is written to the log.</li>
-</ul>
-<h2 id="howitworks">How it works</h2>
-<p>The mod hooks <code>NtQueryValueKey</code> in ntdll, which every Win32 registry read goes
-through, so <code>RegQueryValueExA/W</code> and <code>RegGetValueA/W</code> are all covered. Only a
-<code>REG_SZ</code> value named <code>MachineGuid</code> in the
-<code>\REGISTRY\MACHINE\SOFTWARE\Microsoft\Cryptography</code> key is replaced.</p>]]></content>
         <author>
             <name>loliri</name>
             <uri>https://github.com/loliri</uri>

@@ -1,3 +1,9 @@
+## 1.6 ([Oct 6, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c89e4f4b2c154f31a7b6f5f80a164b2f24a288f6/mods/explorer-details-better-file-sizes.wh.cpp))
+
+* Added an option to keep showing file sizes in KBs in newer Windows 11 versions. Starting with update KB5101684, Windows 11 is gradually switching to MB/GB for large files with no option to go back (ViVeTool flag 61014711).
+* Fixed compatibility with some new Windows 11 versions (ViVeTool flag 61389601).
+* Improved compatibility with conflicting mods such as Explorer Status Bar Metadata and File Explorer Details Auto-Fit Columns.
+
 ## 1.5.1 ([Jun 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3379f54d9f26eff3b9b09528addff47bf6a87248/mods/explorer-details-better-file-sizes.wh.cpp))
 
 * Fixed the IEC terms option not working in some cases.
