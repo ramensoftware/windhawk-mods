@@ -2,7 +2,7 @@
 // @id              explorer-size-on-disk-column
 // @name            Size on disk column in Explorer details
 // @description     Adds a "Size on disk" column to File Explorer's details view for files and folders
-// @version         0.6.0
+// @version         0.7.0
 // @author          stoilms
 // @github          https://github.com/stoilms
 // @license         GPL-3.0
@@ -54,9 +54,9 @@ The values match the Properties dialog:
 
 ## Notes
 
-* Folder calculation can be slow for large trees, so it never runs on
-  Explorer's window threads. A folder's value appears as soon as its
-  calculation finishes in the background, at low priority. Calculating a
+* Folder calculation can be slow for large trees, so it always runs in the
+  background, at low priority and at most two folders at a time. A folder's
+  value appears as soon as its calculation finishes. Calculating a
   folder also caches its subfolders (all of them, or only the direct ones -
   see **Remember subfolder sizes**), so browsing into them is instant.
   Cached values are shown immediately and refreshed in the background.
@@ -91,7 +91,7 @@ getter with a real size on disk calculation.
 
 // ==WindhawkModSettings==
 /*
-- folderSizes: always
+- folderSizes: exceptSystemFolders
   $name: Show folder sizes
   $description: >-
     Folder sizes are calculated by walking the whole folder tree, which can be
@@ -124,11 +124,12 @@ getter with a real size on disk calculation.
   $description: >-
     Adds the column after Size in Explorer's folder templates. Only affects
     folders without saved view settings - see the mod description.
-- refreshSeconds: 120
+- refreshSeconds: 3600
   $name: Folder refresh interval (seconds)
   $description: >-
     A folder's value is shown from the cache straight away. If it's older than
     this, it's also recalculated in the background and updated if it changed.
+    The default is one hour (3600 seconds).
 - subfolderCache: all
   $name: Remember subfolder sizes
   $description: >-
@@ -799,7 +800,21 @@ bool ShouldCalculateFolder(const std::wstring& path) {
     return true;
 }
 
-std::optional<ItemSize> GetItemSizeOnDisk(const std::wstring& path) {
+// Reads whether an item is a folder from the data Explorer keeps in its pidl,
+// without touching the disk or the network.
+std::optional<bool> IsFolderFromPidl(IShellFolder* shellFolder,
+                                     PCUITEMID_CHILD pidl) {
+    WIN32_FIND_DATAW findData;
+    if (FAILED(SHGetDataFromIDListW(shellFolder, pidl, SHGDFIL_FINDDATA,
+                                    &findData, sizeof(findData)))) {
+        return std::nullopt;
+    }
+    return (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+}
+
+std::optional<ItemSize> GetItemSizeOnDisk(const std::wstring& path,
+                                          IShellFolder* shellFolder,
+                                          PCUITEMID_CHILD pidl) {
     auto cached = LookupCache(path);
     if (cached && cached->fresh) {
         return cached->item;
@@ -817,8 +832,11 @@ std::optional<ItemSize> GetItemSizeOnDisk(const std::wstring& path) {
     // drive takes several round trips, so don't touch network drives at all
     // unless enabled. Network items are then never cached, so checking after
     // the cache lookup lets cached local items skip the drive type check.
+    // The item is shown empty, but is still marked as a file or folder (read
+    // from the pidl, without I/O), so sorting keeps folders together.
     if (!g_settings.networkDrives && IsNetworkPath(path)) {
-        return ItemSize{};  // Shown empty.
+        return ItemSize{std::nullopt,
+                        IsFolderFromPidl(shellFolder, pidl).value_or(false)};
     }
 
     // Reads the attributes and reparse tag without following links, and gives
@@ -826,12 +844,11 @@ std::optional<ItemSize> GetItemSizeOnDisk(const std::wstring& path) {
     auto raw = ReadAllocation(path);
     if (!raw) {
         // Still tell files and folders apart, so sorting keeps them grouped.
-        DWORD attributes = GetFileAttributesW(ToExtendedPath(path).c_str());
-        if (attributes == INVALID_FILE_ATTRIBUTES) {
+        auto isFolder = IsFolderFromPidl(shellFolder, pidl);
+        if (!isFolder) {
             return std::nullopt;
         }
-        return ItemSize{std::nullopt,
-                        (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0};
+        return ItemSize{std::nullopt, *isFolder};
     }
 
     ItemSize item;
@@ -847,17 +864,13 @@ std::optional<ItemSize> GetItemSizeOnDisk(const std::wstring& path) {
         return item;  // Not calculated, and not cached either.
     } else if (IsOnlineOnlyFolder(raw->attributes)) {
         item.size = 0;  // Not listed, so OneDrive isn't asked for anything.
-    } else if (IsGUIThread(FALSE)) {
-        // Never walk a folder tree on a thread that owns windows, as that can
-        // freeze Explorer. Calculate in the background and show it when done.
+    } else {
+        // Folder trees are always walked in the background pool, never on the
+        // thread that asked: on a GUI thread that could freeze Explorer, and
+        // the pool keeps every walk to the same limit and low priority. The
+        // value is shown when it's ready.
         StartFolderJob(path, false);
         return item;
-    } else {
-        std::vector<std::pair<std::wstring, ULONGLONG>> subfolderTotals;
-        item.size = GetFolderSizeOnDisk(path, &subfolderTotals);
-        if (item.size) {
-            StoreSubfolderTotals(subfolderTotals);
-        }
     }
 
     if (item.size) {
@@ -867,14 +880,8 @@ std::optional<ItemSize> GetItemSizeOnDisk(const std::wstring& path) {
     return item;
 }
 
-std::optional<std::wstring> GetItemPath(void* pFolder, PCUITEMID_CHILD pidl) {
-    Microsoft::WRL::ComPtr<IShellFolder> shellFolder;
-    HRESULT hr = static_cast<IUnknown*>(pFolder)->QueryInterface(
-        IID_PPV_ARGS(&shellFolder));
-    if (FAILED(hr) || !shellFolder) {
-        return std::nullopt;
-    }
-
+std::optional<std::wstring> GetItemPath(IShellFolder* shellFolder,
+                                        PCUITEMID_CHILD pidl) {
     STRRET strret;
     if (FAILED(shellFolder->GetDisplayNameOf(pidl, SHGDN_FORPARSING,
                                              &strret))) {
@@ -902,11 +909,18 @@ std::optional<std::wstring> GetItemPath(void* pFolder, PCUITEMID_CHILD pidl) {
 }
 
 std::optional<ItemSize> GetItemSizeOnDisk(void* pFolder, PCUITEMID_CHILD pidl) {
-    auto path = GetItemPath(pFolder, pidl);
+    Microsoft::WRL::ComPtr<IShellFolder> shellFolder;
+    HRESULT hr = static_cast<IUnknown*>(pFolder)->QueryInterface(
+        IID_PPV_ARGS(&shellFolder));
+    if (FAILED(hr) || !shellFolder) {
+        return std::nullopt;
+    }
+
+    auto path = GetItemPath(shellFolder.Get(), pidl);
     if (!path) {
         return std::nullopt;
     }
-    return GetItemSizeOnDisk(*path);
+    return GetItemSizeOnDisk(*path, shellFolder.Get(), pidl);
 }
 
 HRESULT SetStrRet(STRRET* strret, PCWSTR text) {
@@ -1574,9 +1588,9 @@ void HookRegistryFunctions() {
 
 void LoadSettings() {
     auto folderSizes = WindhawkUtils::StringSetting::make(L"folderSizes");
-    g_settings.folderSizes = FolderSizes::always;
-    if (wcscmp(folderSizes, L"exceptSystemFolders") == 0) {
-        g_settings.folderSizes = FolderSizes::exceptSystemFolders;
+    g_settings.folderSizes = FolderSizes::exceptSystemFolders;
+    if (wcscmp(folderSizes, L"always") == 0) {
+        g_settings.folderSizes = FolderSizes::always;
     } else if (wcscmp(folderSizes, L"disabled") == 0) {
         g_settings.folderSizes = FolderSizes::disabled;
     }
@@ -1631,8 +1645,7 @@ BOOL Wh_ModInit() {
         HookRegistryFunctions();
     }
 
-    // If the pool can't be created, folders requested on window threads just
-    // stay empty.
+    // If the pool can't be created, folder sizes just stay empty.
     g_walkPool = CreateThreadpool(nullptr);
     g_walkCleanupGroup = CreateThreadpoolCleanupGroup();
     if (g_walkPool && g_walkCleanupGroup) {
@@ -1662,7 +1675,7 @@ BOOL Wh_ModInit() {
 void Wh_ModBeforeUninit() {
     Wh_Log(L">");
 
-    // Stops folder walks at the next directory.
+    // Stops folder walks at the next file or folder they reach.
     g_stopping = true;
 }
 
