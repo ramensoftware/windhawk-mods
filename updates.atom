@@ -2,12 +2,48 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-06T08:03:27.000Z</updated>
+    <updated>2026-10-06T09:04:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Mute in Background 1.0]]></title>
+        <id>https://windhawk.net/mods/mute-in-background#2a76fdfa5d6ed25e2df73167d7d39f623e0a61d1</id>
+        <link href="https://windhawk.net/mods/mute-in-background"/>
+        <updated>2026-10-06T09:04:15.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="muteinbackground">Mute in Background</h1>
+<p>Mutes the target program automatically while it is in the background, and
+unmutes it when it comes back to the foreground.</p>
+<h2 id="choosingthetargetprogram">Choosing the target program</h2>
+<p>The mod targets nothing by default, so it does nothing until you tell it which
+process to apply to. Open the mod in Windhawk, go to the <strong>Advanced</strong> tab, and
+put the executable name of your target in the <strong>Custom process inclusion list</strong>.
+The mod takes effect as soon as you save.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Mute is used, not the volume level, so a program's volume in the Volume Mixer
+is left as it is.</li>
+<li>Only sessions this mod muted itself are unmuted, so a program you muted by
+hand in the Volume Mixer stays muted. The one exception is the first pass after
+a run that left the program muted: a mute that was already there can't be told
+apart from one the user set, so it is treated as the mod's and undone.</li>
+<li>Windows remembers a program's mute state between launches. If the program is
+closed while it is in the background, it starts muted the next time; the mod
+clears that as soon as it is loaded into the program again. If the mod is
+disabled while the program is closed, the mute has to be cleared by hand in
+the Volume Mixer.</li>
+<li><strong>Don't add multi-process programs</strong> (Chrome, Edge, Discord, Spotify and other
+Chromium/Electron apps). Their audio comes from a child process that never
+owns the foreground window, so the mod would keep them muted the whole time,
+including while they are in the foreground.</li>
+</ul>]]></content>
+        <author>
+            <name>loliri</name>
+            <uri>https://github.com/loliri</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Recent Focus Highlight 0.11.1]]></title>
         <id>https://windhawk.net/mods/taskbar-recent-focus-highlight#5380aa37205a3760e2a49d49c62f23e88561abdd</id>
@@ -1076,58 +1112,6 @@ Native C++ • Windows 11 • Windhawk</p>]]></content>
         <author>
             <name>appEW</name>
             <uri>https://github.com/appEW</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Icon Ticker 0.5]]></title>
-        <id>https://windhawk.net/mods/desktop-icon-ticker#65f2a5c2a42f0f19abf69be7dc0eb5df90478051</id>
-        <link href="https://windhawk.net/mods/desktop-icon-ticker"/>
-        <updated>2026-10-04T00:03:35.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="desktopiconticker">Desktop Icon Ticker</h1>
-<p><img src="https://i.imgur.com/54urXw9.png" alt="Desktop Icon Ticker overview" /></p>
-<p>Draws live text on top of desktop icons: a scrolling ticker inside the
-"This PC" monitor, a badge on the Recycle Bin, free space on a drive
-shortcut, and so on.</p>
-<p><img src="https://i.imgur.com/xrokfYJ.png" alt="Desktop Icon Ticker" />
-<a href="https://i.imgur.com/vqLcdSN.mp4">Watch the overview video in full quality</a></p>
-<p>Each entry in <strong>Icons</strong> targets one desktop icon. Pick a system icon
-(This PC, Recycle Bin, User's Files, Network, Control Panel) and it is
-found automatically in any Windows language, even if it was renamed.
-For any other icon (shortcuts, files, folders) choose "Custom label"
-and type the label exactly as shown on the desktop.</p>
-<h2 id="placeholders">Placeholders</h2>
-<p>| Placeholder   | Shows                                   |
-|---------------|-----------------------------------------|
-| <code>{time}</code>      | Time (hh:mm, system format)             |
-| <code>{timesec}</code>   | Time with seconds                       |
-| <code>{date}</code>      | Short date                              |
-| <code>{datelong}</code>  | Long date                               |
-| <code>{day}</code>       | Day of the week                         |
-| <code>{cpu}</code>       | CPU usage %                             |
-| <code>{ram}</code>       | RAM usage %                             |
-| <code>{ramfree}</code>   | Free RAM                                |
-| <code>{disk:C}</code>    | Free space on drive C (any letter)      |
-| <code>{battery}</code>   | Battery % ("+" when charging, "AC" if none) |
-| <code>{uptime}</code>    | Time since boot                         |
-| <code>{bin}</code>       | Number of items in the Recycle Bin      |
-| <code>{binsize}</code>   | Size of the Recycle Bin                 |</p>
-<p>Example: <code>{time} • CPU {cpu} • C: {disk:C} free</code></p>
-<h2 id="tips">Tips</h2>
-<ul>
-<li>"Text area" decides where the text goes inside the icon. "Monitor
-screen" fits the Windows 11 This PC icon; use "Custom" plus the
-offsets for anything else.</li>
-<li>"Hide when text equals" lets you hide a badge, e.g. <code>0</code> for an empty
-Recycle Bin.</li>
-<li>The text follows the icon if you move it, no need to lock positions.</li>
-<li>Windows 11 hides the This PC icon by default. Enable it in Settings &gt;
-Personalization &gt; Themes &gt; Desktop icon settings.</li>
-<li>Animation pauses automatically while a maximized or full-screen window
-covers the monitor the icon is on, to save CPU and battery.</li>
-</ul>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
         </author>
     </entry>
 </feed>

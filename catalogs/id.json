@@ -8936,6 +8936,27 @@
         "version": "1.13.20"
       }
     },
+    "mute-in-background": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791277455000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791277455000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "loliri",
+        "compilerOptions": "-lole32",
+        "description": "Automatically mutes the program when it goes to the background and restores it when it returns to the foreground.",
+        "github": "https://github.com/loliri",
+        "license": "MIT",
+        "name": "Mute in Background",
+        "version": "1.0"
+      }
+    },
     "mutealert": {
       "details": {
         "defaultSorting": 1500,

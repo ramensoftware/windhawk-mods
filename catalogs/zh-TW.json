@@ -8963,6 +8963,31 @@
         "version": "1.13.20"
       }
     },
+    "mute-in-background": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791277455000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791277455000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "loliri",
+        "compilerOptions": "-lole32",
+        "description": "当程序切换到后台时自动静音，切回前台时恢复",
+        "github": "https://github.com/loliri",
+        "license": "MIT",
+        "name": "后台自动静音",
+        "version": "1.0"
+      },
+      "metadataEnglish": {
+        "description": "Automatically mutes the program when it goes to the background and restores it when it returns to the foreground.",
+        "name": "Mute in Background"
+      }
+    },
     "mutealert": {
       "details": {
         "defaultSorting": 1500,

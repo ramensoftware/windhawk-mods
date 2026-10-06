@@ -2,12 +2,48 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-06T08:03:27.000Z</updated>
+    <updated>2026-10-06T09:04:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Mute in Background 1.0]]></title>
+        <id>https://windhawk.net/mods/mute-in-background#2a76fdfa5d6ed25e2df73167d7d39f623e0a61d1</id>
+        <link href="https://windhawk.net/mods/mute-in-background"/>
+        <updated>2026-10-06T09:04:15.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="muteinbackground">Mute in Background</h1>
+<p>Mutes the target program automatically while it is in the background, and
+unmutes it when it comes back to the foreground.</p>
+<h2 id="choosingthetargetprogram">Choosing the target program</h2>
+<p>The mod targets nothing by default, so it does nothing until you tell it which
+process to apply to. Open the mod in Windhawk, go to the <strong>Advanced</strong> tab, and
+put the executable name of your target in the <strong>Custom process inclusion list</strong>.
+The mod takes effect as soon as you save.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Mute is used, not the volume level, so a program's volume in the Volume Mixer
+is left as it is.</li>
+<li>Only sessions this mod muted itself are unmuted, so a program you muted by
+hand in the Volume Mixer stays muted. The one exception is the first pass after
+a run that left the program muted: a mute that was already there can't be told
+apart from one the user set, so it is treated as the mod's and undone.</li>
+<li>Windows remembers a program's mute state between launches. If the program is
+closed while it is in the background, it starts muted the next time; the mod
+clears that as soon as it is loaded into the program again. If the mod is
+disabled while the program is closed, the mute has to be cleared by hand in
+the Volume Mixer.</li>
+<li><strong>Don't add multi-process programs</strong> (Chrome, Edge, Discord, Spotify and other
+Chromium/Electron apps). Their audio comes from a child process that never
+owns the foreground window, so the mod would keep them muted the whole time,
+including while they are in the foreground.</li>
+</ul>]]></content>
+        <author>
+            <name>loliri</name>
+            <uri>https://github.com/loliri</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Recent Focus Highlight 0.11.1]]></title>
         <id>https://windhawk.net/mods/taskbar-recent-focus-highlight#5380aa37205a3760e2a49d49c62f23e88561abdd</id>
@@ -1272,53 +1308,6 @@ maximize their own windows through <code>ShowWindow</code> or <code>ShowWindowAs
         <author>
             <name>pajs</name>
             <uri>https://github.com/pajs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Top Window Guard 0.6.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-top-window-guard#f1230894d67eeb0fd0ab01dd0a918c43295e8fc3</id>
-        <link href="https://windhawk.net/mods/taskbar-top-window-guard"/>
-        <updated>2026-10-02T08:05:36.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbartopwindowguard">Taskbar Top Window Guard</h1>
-<p>Prevents regular application windows from opening or being restored with their
-title bar hidden behind a taskbar placed at the top of a monitor. It's intended
-for top-taskbar configurations, including the <strong>Taskbar on top for Windows 11</strong>
-Windhawk mod and Windows builds/configurations that place the taskbar at the top.</p>
-<p>The mod preserves the application's requested size and position whenever
-possible. If a window overlaps the protected top taskbar area, it's moved down
-only as far as necessary to keep its top edge accessible.</p>
-<p>Maximized and fullscreen windows are intentionally left untouched. Auto-hidden
-taskbars also don't force windows down while hidden.</p>
-<h2 id="optionalcentering">Optional centering</h2>
-<p>Enable <strong>Center windows when they open</strong> to center normal windows inside the
-usable area of their monitor on their first appearance. A window is remembered
-for the lifetime of its HWND, so minimizing/restoring it, Alt+Tab, switching
-virtual desktops, or hiding/showing it again won't re-center it.</p>
-<p>Always-on-top windows are excluded from centering by default. This keeps
-Picture-in-Picture windows, such as Chrome/Chromium PiP, at the position chosen
-by the user. Owned windows such as dialogs are also left to their application.
-Top-taskbar protection still applies to eligible always-on-top windows.</p>
-<p>This option intentionally overlaps only part of <strong>Center New Windows</strong>. The
-existing mod is the better choice if centering is your main goal. This mod's
-centering is a lightweight companion to the top-taskbar guard: it runs from a
-dedicated Windhawk tool process rather than injecting into every application,
-centers against the taskbar-aware usable area, centers only once per window,
-and skips always-on-top windows by default.</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod is event-driven. It listens for window show, foreground, restore,
-uncloak, location-change, move/size, and destroy events. After a relevant event
-it briefly rechecks only that window, which catches applications that restore a
-saved position shortly after opening without continuously enumerating all
-windows.</p>
-<p>The usable top boundary comes from the monitor work area plus the actual
-<code>Shell_TrayWnd</code> / <code>Shell_SecondaryTrayWnd</code> rectangle when necessary. The
-auto-hide state is cached and refreshed outside per-window checks, avoiding
-synchronous Explorer IPC in the hot path. Window moves are queued
-asynchronously, and unresponsive applications are skipped so a hung app can't
-block the guard.</p>]]></content>
-        <author>
-            <name>Eron Greco Melo</name>
-            <uri>https://github.com/eronGreco</uri>
         </author>
     </entry>
 </feed>
