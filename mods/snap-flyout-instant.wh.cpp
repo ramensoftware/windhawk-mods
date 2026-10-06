@@ -40,8 +40,8 @@ that wait to a value you choose (1 ms by default).
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
 #include <windows.h>
-#include <string>
 
 static int g_delayMs = 1;
 static volatile DWORD g_invokeTid = 0;
@@ -79,21 +79,17 @@ static bool TryHookFlyout() {
     if (g_hooked) return false;
     HMODULE mod = GetModuleHandleW(L"twinui.pcshell.dll");
     if (!mod) return false;
-    WH_FIND_SYMBOL fs;
-    HANDLE h = Wh_FindFirstSymbol(mod, nullptr, &fs);
-    if (!h) return false;
-    bool ok = false;
-    do {
-        std::wstring s = fs.symbol;
-        if (s.rfind(L"public: static void __cdecl SnapFlyoutTelemetry::SnapFlyout_StartInvokeTimer(void)", 0) == 0) {
-            Wh_SetFunctionHook(fs.address, (void*)StartInvoke_Hook, (void**)&StartInvoke_Original);
-            ok = true;
-            break;
-        }
-    } while (Wh_FindNextSymbol(h, &fs));
-    Wh_FindCloseSymbol(h);
-    g_hooked = ok;
-    return ok;
+
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {
+            {L"public: static void __cdecl SnapFlyoutTelemetry::SnapFlyout_StartInvokeTimer(void)"},
+            &StartInvoke_Original,
+            StartInvoke_Hook,
+        },
+    };
+
+    g_hooked = WindhawkUtils::HookSymbols(mod, hooks, ARRAYSIZE(hooks));
+    return g_hooked;
 }
 
 using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
