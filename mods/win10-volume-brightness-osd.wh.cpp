@@ -1,12 +1,12 @@
 // ==WindhawkMod==
 // @id              win10-volume-brightness-osd
-// @name            Windows 10 Volume & Brightness OSD
+// @name            Windows 10 Style Volume & Brightness OSD
 // @description     Replaces the Windows 11 volume/brightness OSD with the classic vertical Windows 10 flyout
-// @version         0.3.0
+// @version         0.3.2
 // @author          AdmXP8
-// @github          https://github.com/AdmXP8
+// @github          https://github.com/AdmxP8
 // @include         explorer.exe
-// @compilerOptions -lole32 -luuid -lgdi32 -luser32 -ldwmapi -ldxva2
+// @compilerOptions -lole32 -luuid -lgdi32 -luser32 -ldwmapi -ldxva2 -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -16,9 +16,26 @@
 Shows the classic vertical Windows 10 flyout (dark panel, grey track, white
 thumb, accent fill) for **volume** and **brightness**.
 
+## Screenshots
+
+### Volume (desktop)
+![volumedesk](https://raw.githubusercontent.com/AdmXP8/assets/main/volosd8desk.png)
+
+### Brightness (desktop)
+![brightnessdesk](https://raw.githubusercontent.com/AdmXP8/assets/main/bgtosd8desk.png)
+
+### Volume
+![volume](https://raw.githubusercontent.com/AdmXP8/assets/main/volosd8.png)
+
+### Brightness
+![brightness](https://raw.githubusercontent.com/AdmXP8/assets/main/bgtosd8.png)
+
 ## Volume
 * The volume keys (up / down / mute) are captured with `RegisterHotKey`, so the
   flyout also appears when the volume is already 0 or 100.
+* A low-level keyboard hook is used as a fallback signal. It makes the flyout
+  appear (and the native OSD be suppressed) when a key does not reach the
+  hotkey.
 * Volume changes from any other source (WASAPI) also show the flyout.
 * When muted, or at volume 0, a cross icon replaces the number.
 
@@ -28,25 +45,33 @@ thumb, accent fill) for **volume** and **brightness**.
 * **Desktop PCs / external monitors:** enable "External monitor hotkeys". The
   mod then uses DDC/CI to change the brightness of the monitor under the mouse
   cursor with **Ctrl+Alt+Up / Ctrl+Alt+Down**.
+* Brightness flyout trigger:
+  * *On every brightness change* - shows the flyout whenever the system reports
+    a new brightness (this includes automatic changes such as the ambient light
+    sensor or an AC/battery switch). When the brightness is already at its
+    minimum or maximum no change is reported, so the native OSD is used as a
+    trigger instead; this needs "Suppress the native OSD" to be on.
+  * *Only when the native OSD appears* - shows the flyout only when Windows
+    would have shown its own OSD. Works at the minimum/maximum and ignores
+    automatic changes. Depends on the native OSD detection described below.
 
-## Screenshots:
+## Mouse
+The flyout can be dragged with the mouse to change the volume, or the
+brightness of an external monitor (DDC/CI).
 
-### Volume(Desktop):
-![volumedesk](https://raw.githubusercontent.com/AdmXP8/assets/main/volosd8desk.png)
+## Native OSD suppression
+The native OSD is hidden with ShowWindow/SetWindowPos hooks in explorer.exe.
+Every small `XamlExplorerHostIslandWindow` is treated as the native OSD, so
+other small Explorer popups of that class (for example the virtual desktop
+switcher shown when hovering the Task View button) can be hidden as well.
+Enable logging in Windhawk to see the class, title, thread description, band
+and size of the windows that are treated as the OSD.
 
-### Brightness(Desktop):
-![brightnessdesk](https://raw.githubusercontent.com/AdmXP8/assets/main/bgtosd8desk.png)
+## Known issues
+* The OSD cannot appear over fullscreen UWP apps.
 
-### Volume:
-![volume](https://raw.githubusercontent.com/AdmXP8/assets/main/volosd8.png)
-
-### Brightness:
-![brightness](https://raw.githubusercontent.com/AdmXP8/assets/main/bgtosd8.png)
-
-
-**issue**:OSD cannot appear over fullscreen UWP apps.
-
-**Special thanks to:** babamohammed2022 for the base version of the mod.
+## Credits
+Special thanks to babamohammed2022 for the base version of the mod.
 */
 // ==/WindhawkModReadme==
 
@@ -56,12 +81,22 @@ thumb, accent fill) for **volume** and **brightness**.
   $name: Display duration (ms)
 - suppressNative: true
   $name: Suppress the native Windows 11 OSD
+- captureVolumeKeys: true
+  $name: Capture the volume keys
+  $description: Shows the flyout even when the volume is already at 0 or 100
 - brightnessEnabled: true
   $name: Enable the brightness flyout
+- brightnessTrigger: change
+  $name: Brightness flyout trigger
+  $options:
+  - change: On every brightness change (also at min/max if the native OSD is suppressed)
+  - nativeOsd: Only when the native Windows OSD appears
 - externalHotkeys: false
   $name: External monitor hotkeys (Ctrl+Alt+Up / Down, DDC/CI)
+- externalStep: 10
+  $name: External monitor step (%)
 - useSystemAccent: false
-  $name: Use the system accent colour for the volume bar
+  $name: Use the system accent colour for the bar
 */
 // ==/WindhawkModSettings==
 
@@ -69,23 +104,24 @@ thumb, accent fill) for **volume** and **brightness**.
 #include <mmdeviceapi.h>
 #include <endpointvolume.h>
 #include <dwmapi.h>
+#include <shellscalingapi.h>
 #include <highlevelmonitorconfigurationapi.h>
 #include <physicalmonitorenumerationapi.h>
 #include <atomic>
 #include <vector>
 
+// ---------------------------------------------------------------------------
 // Settings
+// ---------------------------------------------------------------------------
 struct {
     int  timeoutMs;
-    bool suppress;
+    std::atomic<bool> suppress;        // read from the hooks of other threads
     bool volKeys;
-    bool brightness;
-    bool nativeTrigger;
+    std::atomic<bool> brightness;
+    std::atomic<bool> nativeTrigger;
     bool extKeys;
     int  extStep;
     bool useAccent;
-    bool debug;
-    bool overFullscreen;
 } g_cfg;
 
 void LoadSettings() {
@@ -99,23 +135,26 @@ void LoadSettings() {
     if (g_cfg.extStep < 1)  g_cfg.extStep = 1;
     if (g_cfg.extStep > 50) g_cfg.extStep = 50;
     g_cfg.useAccent  = Wh_GetIntSetting(L"useSystemAccent") != 0;
-    g_cfg.debug      = Wh_GetIntSetting(L"debugLog") != 0;
-    g_cfg.overFullscreen = Wh_GetIntSetting(L"overFullscreen") != 0;
 
     PCWSTR trig = Wh_GetStringSetting(L"brightnessTrigger");
     g_cfg.nativeTrigger = trig && wcscmp(trig, L"nativeOsd") == 0;
     Wh_FreeStringSetting(trig);
 }
 
+// ---------------------------------------------------------------------------
 // Global state
+// ---------------------------------------------------------------------------
 constexpr UINT WM_VOL    = WM_APP + 1;  // wParam = level 0-100, lParam = muted
 constexpr UINT WM_REBIND = WM_APP + 2;  // default audio device changed
 constexpr UINT WM_NATIVE = WM_APP + 3;  // native OSD was detected
 constexpr UINT WM_RELOAD = WM_APP + 4;  // settings changed
+constexpr UINT WM_VOLKEY = WM_APP + 5;  // a volume key was pressed (keyboard hook)
+constexpr UINT WM_EXT_READ = WM_APP + 6; // the DDC/CI worker finished reading a monitor
 
 constexpr UINT_PTR TIMER_HIDE  = 1;
 constexpr UINT_PTR TIMER_FADE  = 2;
 constexpr UINT_PTR TIMER_APPLY = 3;
+constexpr UINT_PTR TIMER_VOLKEY = 4;
 
 enum { HK_VOL_UP = 1, HK_VOL_DOWN, HK_VOL_MUTE, HK_BR_UP, HK_BR_DOWN };
 enum Mode { MODE_VOLUME, MODE_BRIGHTNESS };
@@ -132,11 +171,12 @@ Mode g_mode  = MODE_VOLUME;
 int  g_level = 0;
 bool g_muted = false;
 bool g_dragging = false;
+ULONGLONG g_lastHotkeyTick = 0;   // last time RegisterHotKey handled a volume key
 int  g_dpi   = 96;
 int  g_alpha = 255;
 
 // laptop brightness (power notification)
-int       g_brightness = -1;
+std::atomic<int> g_brightness{-1};
 ULONGLONG g_brArmed    = 0;
 HPOWERNOTIFY g_pn1 = nullptr, g_pn2 = nullptr;
 
@@ -157,7 +197,6 @@ constexpr int BASE_MARGIN = 48;
 static const COLORREF CLR_BG       = RGB(21, 26, 28);
 static const COLORREF CLR_TRACK    = RGB(106, 106, 106);
 static const COLORREF CLR_VOLUME   = RGB(0, 122, 213);
-static const COLORREF CLR_BRIGHT   = RGB(6, 77, 111);
 
 // GUID_VIDEO_CURRENT_MONITOR_BRIGHTNESS
 static const GUID kBrGuid1 = {0x8ffee2c6, 0x2d01, 0x46be,
@@ -166,9 +205,45 @@ static const GUID kBrGuid1 = {0x8ffee2c6, 0x2d01, 0x46be,
 static const GUID kBrGuid2 = {0xaded5e82, 0xb909, 0x4619,
     {0x99, 0x49, 0xf5, 0xd7, 0x1d, 0xac, 0x0b, 0xcb}};
 
+// ---------------------------------------------------------------------------
 // Native OSD detection / suppression
+// ---------------------------------------------------------------------------
+// Logs everything that can help to identify the native OSD window precisely.
+static void LogCandidate(HWND hwnd, PCWSTR cls, int w, int h, bool recent) {
+    WCHAR title[128] = L"";
+    DWORD_PTR len = 0;
+    SendMessageTimeoutW(hwnd, WM_GETTEXT, ARRAYSIZE(title), (LPARAM)title,
+                        SMTO_ABORTIFHUNG | SMTO_BLOCK, 50, &len);
+
+    WCHAR desc[128] = L"";
+    using GetThreadDescription_t = HRESULT(WINAPI*)(HANDLE, PWSTR*);
+    static GetThreadDescription_t pGetThreadDescription =
+        (GetThreadDescription_t)GetProcAddress(
+            GetModuleHandleW(L"kernelbase.dll"), "GetThreadDescription");
+    if (pGetThreadDescription) {
+        DWORD tid = GetWindowThreadProcessId(hwnd, nullptr);
+        if (HANDLE ht = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, tid)) {
+            PWSTR d = nullptr;
+            if (SUCCEEDED(pGetThreadDescription(ht, &d)) && d) {
+                lstrcpynW(desc, d, ARRAYSIZE(desc));
+                LocalFree(d);
+            }
+            CloseHandle(ht);
+        }
+    }
+
+    DWORD band = 0;
+    using GetWindowBand_t = BOOL(WINAPI*)(HWND, PDWORD);
+    static GetWindowBand_t pGetWindowBand = (GetWindowBand_t)GetProcAddress(
+        GetModuleHandleW(L"user32.dll"), "GetWindowBand");
+    if (pGetWindowBand) pGetWindowBand(hwnd, &band);
+
+    Wh_Log(L"OSD candidate: hwnd=%p class=%s title=\"%s\" thread=\"%s\" band=%u size=%dx%d recentEvent=%d",
+           hwnd, cls, title, desc, band, w, h, recent ? 1 : 0);
+}
+
 // w/h = -1 -> use the current window size
-bool IsNativeOsd(HWND hwnd, int w, int h) {
+bool IsNativeOsd(HWND hwnd, int w, int h, bool recent) {
     if (!hwnd || hwnd == g_osd.load()) return false;
 
     WCHAR cls[64];
@@ -182,11 +257,13 @@ bool IsNativeOsd(HWND hwnd, int w, int h) {
         h = rc.bottom - rc.top;
     }
 
-    if (g_cfg.debug)
-        Wh_Log(L"OSD candidate: hwnd=%p class=%s size=%dx%d", hwnd, cls, w, h);
+    // The native OSD is a small window.
+    bool match = w > 0 && h > 0 && w < 700 && h < 250;
 
-    // The native OSD is a small window. Refine for your build if needed.
-    return w > 0 && h > 0 && w < 700 && h < 250;
+    // Only the windows that are really treated as the OSD are logged, so the
+    // (relatively expensive) logging never runs for unrelated windows.
+    if (match) LogCandidate(hwnd, cls, w, h, recent);
+    return match;
 }
 
 // Returns true when the native OSD must be blocked.
@@ -205,8 +282,7 @@ bool NativeOsdSeen(HWND hwnd, int w, int h) {
     // When suppression is enabled, block every matching native OSD. This is
     // more reliable than depending on the order of the volume/brightness
     // notification and the XAML window creation.
-    if (!anyRecent && !trigger && !g_cfg.suppress) return false;
-    if (!IsNativeOsd(hwnd, w, h)) return false;
+    if (!IsNativeOsd(hwnd, w, h, anyRecent)) return false;
 
     // Native OSD without a recent volume event -> assume brightness
     if (g_cfg.brightness && !volRecent && g_brightness >= 0 &&
@@ -241,7 +317,9 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hInsertAfter, int X, int Y,
     return SetWindowPos_Orig(hWnd, hInsertAfter, X, Y, cx, cy, uFlags);
 }
 
+// ---------------------------------------------------------------------------
 // WASAPI: volume callback + default device notification
+// ---------------------------------------------------------------------------
 class VolCallback : public IAudioEndpointVolumeCallback {
     LONG m_ref = 1;
 public:
@@ -338,7 +416,9 @@ void BindEndpoint() {
     g_ep->RegisterControlChangeNotify(g_volCb);
 }
 
+// ---------------------------------------------------------------------------
 // External monitors (DDC/CI)
+// ---------------------------------------------------------------------------
 template <class F>
 bool ForPhysical(HMONITOR mon, F fn) {
     DWORD n = 0;
@@ -351,13 +431,115 @@ bool ForPhysical(HMONITOR mon, F fn) {
     return ok;
 }
 
+// DDC/CI calls can take hundreds of milliseconds, so they never run on the UI
+// thread: the UI thread posts a request, the worker thread executes it and
+// posts WM_EXT_READ back when a monitor was read.
+struct DdcState {
+    SRWLOCK   lock = SRWLOCK_INIT;
+    HANDLE    ev = nullptr;          // auto-reset: "there is work"
+    HANDLE    thread = nullptr;
+    bool      quit = false;
+    bool      doRead = false;  HMONITOR readMon = nullptr;
+    bool      doSet = false;   HMONITOR setMon = nullptr;  DWORD setValue = 0;
+    bool      resOk = false;   HMONITOR resMon = nullptr;
+    DWORD     resMin = 0, resCur = 0, resMax = 0;
+};
+DdcState g_ddc;
+
+DWORD WINAPI DdcThread(LPVOID) {
+    for (;;) {
+        if (WaitForSingleObject(g_ddc.ev, INFINITE) != WAIT_OBJECT_0) break;
+
+        AcquireSRWLockExclusive(&g_ddc.lock);
+        bool quit = g_ddc.quit;
+        bool doRead = g_ddc.doRead;  HMONITOR readMon = g_ddc.readMon;
+        bool doSet = g_ddc.doSet;    HMONITOR setMon = g_ddc.setMon;
+        DWORD setValue = g_ddc.setValue;
+        g_ddc.doRead = false;
+        g_ddc.doSet = false;
+        ReleaseSRWLockExclusive(&g_ddc.lock);
+
+        if (quit) break;
+
+        if (doSet) {
+            ForPhysical(setMon, [&](HANDLE hp) {
+                return SetMonitorBrightness(hp, setValue) != 0;
+            });
+        }
+        if (doRead) {
+            DWORD mn = 0, cur = 0, mx = 0;
+            bool ok = ForPhysical(readMon, [&](HANDLE hp) {
+                return GetMonitorBrightness(hp, &mn, &cur, &mx) && mx > mn;
+            });
+            AcquireSRWLockExclusive(&g_ddc.lock);
+            g_ddc.resOk = ok;  g_ddc.resMon = readMon;
+            g_ddc.resMin = mn; g_ddc.resCur = cur; g_ddc.resMax = mx;
+            ReleaseSRWLockExclusive(&g_ddc.lock);
+            HWND osd = g_osd.load();
+            if (osd) PostMessageW(osd, WM_EXT_READ, 0, 0);
+        }
+    }
+    return 0;
+}
+
+void DdcStart() {
+    g_ddc.quit = false;
+    g_ddc.ev = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (g_ddc.ev)
+        g_ddc.thread = CreateThread(nullptr, 0, DdcThread, nullptr, 0, nullptr);
+}
+
+void DdcStop() {
+    if (g_ddc.thread) {
+        AcquireSRWLockExclusive(&g_ddc.lock);
+        g_ddc.quit = true;
+        ReleaseSRWLockExclusive(&g_ddc.lock);
+        SetEvent(g_ddc.ev);
+        WaitForSingleObject(g_ddc.thread, INFINITE);   // joined before unload
+        CloseHandle(g_ddc.thread);
+        g_ddc.thread = nullptr;
+    }
+    if (g_ddc.ev) { CloseHandle(g_ddc.ev); g_ddc.ev = nullptr; }
+}
+
+static void DdcRequestRead(HMONITOR mon) {
+    AcquireSRWLockExclusive(&g_ddc.lock);
+    g_ddc.readMon = mon;
+    g_ddc.doRead = true;
+    ReleaseSRWLockExclusive(&g_ddc.lock);
+    SetEvent(g_ddc.ev);
+}
+
+// UI-thread state of the external monitor
+bool      g_extReadBusy = false;
+int       g_extPendingDelta = 0;
+HMONITOR  g_extPendingMon = nullptr;
+HMONITOR  g_extFailMon = nullptr;     // monitor without DDC/CI support (cached)
+ULONGLONG g_extFailTick = 0;
+
+// Asks the worker for the current brightness of `mon` (one request at a time;
+// monitors without DDC/CI support are not asked again for a few seconds).
+static void ExtRequestRead(HMONITOR mon) {
+    if (g_extReadBusy) return;
+    if (mon == g_extFailMon && GetTickCount64() - g_extFailTick < 5000) return;
+    g_extReadBusy = true;
+    DdcRequestRead(mon);
+}
+
 void ExtApply() {
     if (!g_extMon || g_extMax <= g_extMin) return;
     DWORD v = g_extMin + (g_extMax - g_extMin) * g_extPct / 100;
-    ForPhysical(g_extMon, [&](HANDLE hp) { return SetMonitorBrightness(hp, v) != 0; });
+    AcquireSRWLockExclusive(&g_ddc.lock);
+    g_ddc.setMon = g_extMon;
+    g_ddc.setValue = v;
+    g_ddc.doSet = true;
+    ReleaseSRWLockExclusive(&g_ddc.lock);
+    SetEvent(g_ddc.ev);
 }
 
+// ---------------------------------------------------------------------------
 // OSD window
+// ---------------------------------------------------------------------------
 COLORREF AccentColor() {
     if (g_cfg.useAccent) {
         DWORD c = 0;
@@ -460,14 +642,17 @@ void ShowOsd(HWND h) {
     MONITORINFO mi{ sizeof(mi) };
     GetMonitorInfoW(mon, &mi);
 
+    // Explorer is per-monitor DPI aware: size the flyout for the target monitor
+    UINT dpiX = 96, dpiY = 96;
+    if (SUCCEEDED(GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)) && dpiX)
+        g_dpi = (int)dpiX;
+
     // top left, like the Windows 10 OSD
-    HWND zOrder = g_cfg.overFullscreen ? HWND_TOPMOST : HWND_TOP;
-    UINT flags = SWP_NOACTIVATE | SWP_SHOWWINDOW;
-    if (g_cfg.overFullscreen) flags |= SWP_NOOWNERZORDER;
-    SetWindowPos(h, zOrder,
+    SetWindowPos(h, HWND_TOPMOST,
                  mi.rcWork.left + S(BASE_MARGIN),
                  mi.rcWork.top + S(BASE_MARGIN),
-                 S(BASE_W), S(BASE_H), flags);
+                 S(BASE_W), S(BASE_H),
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
     InvalidateRect(h, nullptr, FALSE);
     SetTimer(h, TIMER_HIDE, g_cfg.timeoutMs, nullptr);
 }
@@ -479,28 +664,38 @@ void ShowBrightness(HWND h, int level) {
     ShowOsd(h);
 }
 
+// ---------------------------------------------------------------------------
 // Hotkeys
+// ---------------------------------------------------------------------------
 void UnregisterKeys(HWND h) {
     for (int id = HK_VOL_UP; id <= HK_BR_DOWN; id++) UnregisterHotKey(h, id);
+}
+
+static bool RegisterOne(HWND h, int id, UINT mods, UINT vk, PCWSTR name) {
+    if (RegisterHotKey(h, id, mods, vk)) return true;
+    Wh_Log(L"Hotkey %s could not be registered (another app owns it?): %u",
+           name, GetLastError());
+    return false;
 }
 
 void RegisterKeys(HWND h) {
     UnregisterKeys(h);
     if (g_cfg.volKeys) {
-        if (!RegisterHotKey(h, HK_VOL_UP,   0, VK_VOLUME_UP) ||
-            !RegisterHotKey(h, HK_VOL_DOWN, 0, VK_VOLUME_DOWN) ||
-            !RegisterHotKey(h, HK_VOL_MUTE, 0, VK_VOLUME_MUTE))
-            Wh_Log(L"Volume hotkey registration failed (another app owns it?)");
+        bool a = RegisterOne(h, HK_VOL_UP,   0, VK_VOLUME_UP,   L"Volume up");
+        bool b = RegisterOne(h, HK_VOL_DOWN, 0, VK_VOLUME_DOWN, L"Volume down");
+        bool c = RegisterOne(h, HK_VOL_MUTE, 0, VK_VOLUME_MUTE, L"Volume mute");
+        if (a && b && c) Wh_Log(L"Volume hotkeys registered");
     }
     if (g_cfg.extKeys) {
-        if (!RegisterHotKey(h, HK_BR_UP,   MOD_CONTROL | MOD_ALT, VK_UP) ||
-            !RegisterHotKey(h, HK_BR_DOWN, MOD_CONTROL | MOD_ALT, VK_DOWN))
-            Wh_Log(L"Brightness hotkey registration failed");
+        RegisterOne(h, HK_BR_UP,   MOD_CONTROL | MOD_ALT, VK_UP,   L"Ctrl+Alt+Up");
+        RegisterOne(h, HK_BR_DOWN, MOD_CONTROL | MOD_ALT, VK_DOWN, L"Ctrl+Alt+Down");
     }
 }
 
 void VolumeKey(HWND h, int id) {
     g_lastVolTick = GetTickCount64();
+    g_lastHotkeyTick = g_lastVolTick;
+    Wh_Log(L"Volume hotkey fired: id=%d", id);
     if (g_ep) {
         float v = 0; BOOL m = FALSE;
         g_ep->GetMasterVolumeLevelScalar(&v);
@@ -523,36 +718,55 @@ void VolumeKey(HWND h, int id) {
     ShowOsd(h);
 }
 
+// Shows the current volume without changing it (used when the key was pressed
+// but not handled by the hotkey path).
+void ShowVolumeState(HWND h) {
+    if (g_ep) {
+        float v = 0; BOOL m = FALSE;
+        if (SUCCEEDED(g_ep->GetMasterVolumeLevelScalar(&v))) {
+            g_level = (int)(v * 100.0f + 0.5f);
+            g_ep->GetMute(&m);
+            g_muted = m != 0;
+        }
+    }
+    g_mode = MODE_VOLUME;
+    ShowOsd(h);
+}
+
+// Applies a relative change to the cached external brightness and shows it.
+static void ExtStep(HWND h, int delta) {
+    g_extPct += delta;
+    if (g_extPct < 0)   g_extPct = 0;
+    if (g_extPct > 100) g_extPct = 100;
+    g_extLast = GetTickCount64();
+    g_lastBrTick = g_extLast;
+
+    ShowBrightness(h, g_extPct);
+    SetTimer(h, TIMER_APPLY, 60, nullptr);   // coalesce key repeats
+}
+
 void ExternalBrightnessKey(HWND h, int dir) {
     ULONGLONG now = GetTickCount64();
     POINT pt; GetCursorPos(&pt);
     HMONITOR mon = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+    int delta = dir * g_cfg.extStep;
 
-    // (re)read the current value when the monitor changed or the cache is old
-    if (mon != g_extMon || g_extMax <= g_extMin || now - g_extLast > 5000) {
-        DWORD mn = 0, cur = 0, mx = 0;
-        bool ok = ForPhysical(mon, [&](HANDLE hp) {
-            return GetMonitorBrightness(hp, &mn, &cur, &mx) && mx > mn;
-        });
-        if (!ok) {
-            if (g_cfg.debug) Wh_Log(L"DDC/CI not available on this monitor");
-            return;
-        }
-        g_extMon = mon; g_extMin = mn; g_extMax = mx;
-        g_extPct = (int)((cur - mn) * 100 / (mx - mn));
+    if (mon == g_extMon && g_extMax > g_extMin && now - g_extLast <= 5000) {
+        ExtStep(h, delta);
+        return;
     }
 
-    g_extPct += dir * g_cfg.extStep;
-    if (g_extPct < 0)   g_extPct = 0;
-    if (g_extPct > 100) g_extPct = 100;
-    g_extLast = now;
-    g_lastBrTick = now;
-
-    ShowBrightness(h, g_extPct);
-    SetTimer(h, TIMER_APPLY, 60, nullptr);   // DDC/CI is slow: coalesce key repeats
+    // The current value must be read first. Remember the key presses; they are
+    // applied when the worker thread reports the value (WM_EXT_READ).
+    if (g_extPendingMon != mon) g_extPendingDelta = 0;
+    g_extPendingMon = mon;
+    g_extPendingDelta += delta;
+    ExtRequestRead(mon);
 }
 
+// ---------------------------------------------------------------------------
 // Mouse dragging
+// ---------------------------------------------------------------------------
 void SetLevelFromMouse(HWND h, int y) {
     RECT rc;
     GetClientRect(h, &rc);
@@ -565,6 +779,12 @@ void SetLevelFromMouse(HWND h, int y) {
     int level = 100 - MulDiv(y - top - thumb / 2, 100, travel);
     if (level < 0) level = 0;
     if (level > 100) level = 100;
+
+    // keep the flyout visible while it is being dragged
+    KillTimer(h, TIMER_FADE);
+    g_alpha = 255;
+    SetLayeredWindowAttributes(h, 0, 255, LWA_ALPHA);
+    SetTimer(h, TIMER_HIDE, g_cfg.timeoutMs, nullptr);
 
     if (g_mode == MODE_VOLUME) {
         if (!g_ep) return;
@@ -579,13 +799,11 @@ void SetLevelFromMouse(HWND h, int y) {
         GetCursorPos(&pt);
         HMONITOR mon = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
         if (mon != g_extMon || g_extMax <= g_extMin) {
-            DWORD mn = 0, cur = 0, mx = 0;
-            if (!ForPhysical(mon, [&](HANDLE hp) {
-                    return GetMonitorBrightness(hp, &mn, &cur, &mx) && mx > mn;
-                })) return;
-            g_extMon = mon;
-            g_extMin = mn;
-            g_extMax = mx;
+            // read the monitor first (worker thread); the next mouse move applies
+            g_extPendingMon = mon;
+            g_extPendingDelta = 0;
+            ExtRequestRead(mon);
+            return;
         }
         g_extPct = level;
         g_extLast = GetTickCount64();
@@ -595,7 +813,9 @@ void SetLevelFromMouse(HWND h, int y) {
     InvalidateRect(h, nullptr, FALSE);
 }
 
+// ---------------------------------------------------------------------------
 // Window procedure
+// ---------------------------------------------------------------------------
 LRESULT CALLBACK OsdProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     switch (m) {
     case WM_VOL:
@@ -647,6 +867,47 @@ LRESULT CALLBACK OsdProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         RegisterKeys(h);
         return 0;
 
+    case WM_EXT_READ: {
+        bool ok; HMONITOR rmon; DWORD mn, cur, mx;
+        AcquireSRWLockExclusive(&g_ddc.lock);
+        ok = g_ddc.resOk;  rmon = g_ddc.resMon;
+        mn = g_ddc.resMin; cur = g_ddc.resCur; mx = g_ddc.resMax;
+        ReleaseSRWLockExclusive(&g_ddc.lock);
+        g_extReadBusy = false;
+
+        if (!ok || mx <= mn) {
+            Wh_Log(L"DDC/CI not available on this monitor");
+            g_extFailMon = rmon;
+            g_extFailTick = GetTickCount64();
+            g_extPendingDelta = 0;
+            g_extPendingMon = nullptr;
+            return 0;
+        }
+        g_extFailMon = nullptr;
+        if (cur < mn) cur = mn;
+        g_extMon = rmon; g_extMin = mn; g_extMax = mx;
+        g_extPct = (int)((cur - mn) * 100 / (mx - mn));
+        g_extLast = GetTickCount64();
+
+        if (g_extPendingMon && g_extPendingMon != rmon) {
+            ExtRequestRead(g_extPendingMon);       // the cursor moved to another monitor
+        } else if (g_extPendingDelta != 0) {
+            int d = g_extPendingDelta;
+            g_extPendingDelta = 0;
+            g_extPendingMon = nullptr;
+            ExtStep(h, d);
+        } else if (g_mode == MODE_BRIGHTNESS && IsWindowVisible(h)) {
+            g_level = g_extPct;
+            InvalidateRect(h, nullptr, FALSE);
+        }
+        return 0;
+    }
+
+    case WM_VOLKEY:
+        // wait a moment: if the hotkey path handles the key it shows the flyout itself
+        SetTimer(h, TIMER_VOLKEY, 40, nullptr);
+        return 0;
+
     case WM_REBIND:
         BindEndpoint();
         return 0;
@@ -667,6 +928,12 @@ LRESULT CALLBACK OsdProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         } else if (w == TIMER_APPLY) {
             KillTimer(h, TIMER_APPLY);
             ExtApply();
+        } else if (w == TIMER_VOLKEY) {
+            KillTimer(h, TIMER_VOLKEY);
+            if (GetTickCount64() - g_lastHotkeyTick > 250) {
+                Wh_Log(L"Volume key not handled by the hotkey path: showing current level");
+                ShowVolumeState(h);
+            }
         }
         return 0;
 
@@ -716,17 +983,74 @@ LRESULT CALLBACK OsdProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     return DefWindowProcW(h, m, w, l);
 }
 
+// ---------------------------------------------------------------------------
 // UI thread: window + COM + message loop
+// ---------------------------------------------------------------------------
+static HMODULE GetCurrentModuleHandle() {
+    HMODULE module = nullptr;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (PCWSTR)&GetCurrentModuleHandle, &module))
+        return module;
+    return nullptr;
+}
+
+// Low-level keyboard hook: used only as a "volume key pressed" signal. It sees
+// the key even when another app owns the hotkey or the key bypasses
+// RegisterHotKey, so the native OSD is suppressed and our flyout is shown also
+// at 0% and 100%, where no volume change event exists.
+//
+// The hook lives on its own thread and only touches atomics and PostMessage, so
+// it always returns immediately and can never delay typing, even while the UI
+// thread is busy with audio (COM) calls.
+LRESULT CALLBACK KbProc(int code, WPARAM w, LPARAM l) {
+    if (code == HC_ACTION && (w == WM_KEYDOWN || w == WM_SYSKEYDOWN)) {
+        auto* k = (KBDLLHOOKSTRUCT*)l;
+        if (k->vkCode == VK_VOLUME_UP || k->vkCode == VK_VOLUME_DOWN ||
+            k->vkCode == VK_VOLUME_MUTE) {
+            g_lastVolTick = GetTickCount64();
+            HWND osd = g_osd.load();
+            if (osd) PostMessageW(osd, WM_VOLKEY, 0, 0);
+        }
+    }
+    return CallNextHookEx(nullptr, code, w, l);
+}
+
+HANDLE g_kbThread = nullptr;
+DWORD  g_kbThreadId = 0;
+
+DWORD WINAPI KbThread(LPVOID ready) {
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);   // create the queue
+    HHOOK hook = SetWindowsHookExW(WH_KEYBOARD_LL, KbProc, GetCurrentModuleHandle(), 0);
+    if (!hook) Wh_Log(L"Keyboard hook failed: %u", GetLastError());
+    SetEvent((HANDLE)ready);
+
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+    if (hook) UnhookWindowsHookEx(hook);
+    return 0;
+}
+
 DWORD WINAPI UiThread(LPVOID) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     g_dpi = GetDpiForSystem();
 
+    // Register the class under the mod's own module, so it can never refer to
+    // a window procedure of an unloaded copy of the mod.
     WNDCLASSW wc{};
     wc.lpfnWndProc = OsdProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.hInstance = GetCurrentModuleHandle();
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.lpszClassName = L"WhWin10VolumeBrightnessOsd";
-    RegisterClassW(&wc);
+    if (!RegisterClassW(&wc)) {
+        Wh_Log(L"RegisterClassW failed: %u", GetLastError());
+        SetEvent(g_ready);
+        CoUninitialize();
+        return 0;
+    }
 
     HWND hwnd = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
@@ -734,17 +1058,32 @@ DWORD WINAPI UiThread(LPVOID) {
         wc.lpszClassName, L"", WS_POPUP,
         0, 0, S(BASE_W), S(BASE_H),
         nullptr, nullptr, wc.hInstance, nullptr);
-    if (hwnd) SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+    if (!hwnd) {
+        Wh_Log(L"CreateWindowExW failed: %u", GetLastError());
+        UnregisterClassW(wc.lpszClassName, wc.hInstance);
+        SetEvent(g_ready);
+        CoUninitialize();
+        return 0;
+    }
+    SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
     g_osd = hwnd;
 
-    if (hwnd) {
-        RegisterKeys(hwnd);
+    // The thread has a message queue now: a WM_QUIT posted from here on cannot
+    // be lost, so Wh_ModUninit can safely wait for this thread without a timeout.
+    SetEvent(g_ready);
 
-        // The initial notification sent on registration must not show the flyout
-        g_brArmed = GetTickCount64() + 1500;
-        g_pn1 = RegisterPowerSettingNotification(hwnd, &kBrGuid1, DEVICE_NOTIFY_WINDOW_HANDLE);
-        g_pn2 = RegisterPowerSettingNotification(hwnd, &kBrGuid2, DEVICE_NOTIFY_WINDOW_HANDLE);
-    }
+    RegisterKeys(hwnd);
+    DdcStart();
+
+    HANDLE kbReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_kbThread = CreateThread(nullptr, 0, KbThread, kbReady, 0, &g_kbThreadId);
+    if (g_kbThread) WaitForSingleObject(kbReady, INFINITE);
+    CloseHandle(kbReady);
+
+    // The initial notification sent on registration must not show the flyout
+    g_brArmed = GetTickCount64() + 1500;
+    g_pn1 = RegisterPowerSettingNotification(hwnd, &kBrGuid1, DEVICE_NOTIFY_WINDOW_HANDLE);
+    g_pn2 = RegisterPowerSettingNotification(hwnd, &kBrGuid2, DEVICE_NOTIFY_WINDOW_HANDLE);
 
     g_volCb = new VolCallback();
     g_devCb = new DeviceNotify();
@@ -756,8 +1095,6 @@ DWORD WINAPI UiThread(LPVOID) {
         Wh_Log(L"MMDeviceEnumerator creation failed");
     }
 
-    SetEvent(g_ready);
-
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         TranslateMessage(&msg);
@@ -766,6 +1103,13 @@ DWORD WINAPI UiThread(LPVOID) {
 
     // cleanup
     g_osd = nullptr;
+    if (g_kbThread) {
+        PostThreadMessageW(g_kbThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_kbThread, INFINITE);
+        CloseHandle(g_kbThread);
+        g_kbThread = nullptr;
+    }
+    DdcStop();
     if (g_pn1) { UnregisterPowerSettingNotification(g_pn1); g_pn1 = nullptr; }
     if (g_pn2) { UnregisterPowerSettingNotification(g_pn2); g_pn2 = nullptr; }
     if (hwnd) UnregisterKeys(hwnd);
@@ -783,19 +1127,47 @@ DWORD WINAPI UiThread(LPVOID) {
     return 0;
 }
 
+// ---------------------------------------------------------------------------
 // Windhawk entry points
+// ---------------------------------------------------------------------------
 BOOL Wh_ModInit() {
+    // Secondary explorer.exe processes (e.g. "Launch folder windows in a
+    // separate process": explorer.exe /factory,{...} -Embedding) must not get
+    // their own OSD, audio callbacks and hooks.
+    PCWSTR cmdLine = GetCommandLineW();
+    if (cmdLine && (wcsstr(cmdLine, L"/factory") || wcsstr(cmdLine, L"-Embedding"))) {
+        return FALSE;
+    }
+
     LoadSettings();
+
+    // The hooks are only applied after Wh_ModInit returns, so the pointers used
+    // by the hook functions are valid before the UI thread even exists.
+    if (!Wh_SetFunctionHook((void*)ShowWindow,
+                            (void*)ShowWindow_Hook, (void**)&ShowWindow_Orig) ||
+        !Wh_SetFunctionHook((void*)SetWindowPos,
+                            (void*)SetWindowPos_Hook, (void**)&SetWindowPos_Orig)) {
+        Wh_Log(L"Failed to hook ShowWindow/SetWindowPos");
+        return FALSE;
+    }
 
     g_ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_thread = CreateThread(nullptr, 0, UiThread, nullptr, 0, &g_threadId);
-    if (!g_thread) return FALSE;
-    WaitForSingleObject(g_ready, 3000);
+    if (!g_thread) {
+        CloseHandle(g_ready);
+        g_ready = nullptr;
+        return FALSE;
+    }
+    WaitForSingleObject(g_ready, INFINITE);
 
-    Wh_SetFunctionHook((void*)ShowWindow,
-                       (void*)ShowWindow_Hook, (void**)&ShowWindow_Orig);
-    Wh_SetFunctionHook((void*)SetWindowPos,
-                       (void*)SetWindowPos_Hook, (void**)&SetWindowPos_Orig);
+    if (!g_osd.load()) {            // the UI thread failed to create its window
+        WaitForSingleObject(g_thread, INFINITE);
+        CloseHandle(g_thread);
+        g_thread = nullptr;
+        CloseHandle(g_ready);
+        g_ready = nullptr;
+        return FALSE;
+    }
     return TRUE;
 }
 
@@ -811,7 +1183,8 @@ void Wh_ModSettingsChanged() {
 void Wh_ModUninit() {
     if (g_thread) {
         PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_thread, 3000);
+        // The thread must be fully joined before the mod is unloaded
+        WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
