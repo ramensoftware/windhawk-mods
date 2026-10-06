@@ -2,7 +2,7 @@
 // @id              omnibutton-customizer
 // @name            OmniButton Customizer
 // @description     Arrange the Windows 11 OmniButton's network, volume, battery and percentage into any layout you write, hide any of them, and recolor them independently
-// @version         2.0
+// @version         2.1
 // @author          sb4ssman
 // @github          https://github.com/sb4ssman
 // @include         explorer.exe
@@ -17,13 +17,15 @@
 A [Windhawk](https://windhawk.net) mod for Windows 11 that takes the native
 OmniButton — the network / volume / battery cluster that opens Quick Settings —
 and lets you arrange its items into any shape you like, hide the ones you don't
-want, and restyle each one independently.
+want, and restyle each one independently. It works on a taskbar at any edge of
+the screen.
 
 These native icons are compound and a little weird — each is several glyphs
 layered on top of one another, each with its own built-in visual origin — so a
 mathematically correct grid does not necessarily look like one. `auto` gets the
 shape right, but it does not make pleasing arrangements; expect to adjust.
-Every example below is a real arrangement string, nudges and all.
+Where an example below shows its arrangement, that is the real string, nudges
+and all.
 
 ![All four items as a 2×2 block on a single-height taskbar](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-auto.png)
 *Straight out of the box: `Arrangement` left at `auto`, which fits the four
@@ -32,16 +34,21 @@ native items to the taskbar height and settles on a 2×2 block.*
 ## Showcase
 
 ![The same 2×2 block, written by hand](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-arranged-2x2.png)
-*The same shape written out and optically corrected:*
+*The same shape written out and optically corrected. The parentheses matter,
+because `,` binds tighter than `|`:*
 
 ```text
 (network[-6,2] | volume[-2,4]), (battery[1,0] | percent[4,-2])
 ```
 
-*Two rows joined into a column — the parentheses matter, because `,` binds
-tighter than `|`. Every time `auto` runs it logs the arrangement it generated,
-so you can paste that line into the field and start nudging from there; the
-automatic and hand-written paths are the same field and the same syntax.*
+![The four items arranged as a diamond, with the native tooltip showing](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-diamond-adjusted-with-hover.png)
+*A diamond — volume on top, battery below, network and the percentage on the
+sides. No parentheses needed this time. It is still the native button, so the
+tooltip and the click through to Quick Settings work as they always did:*
+
+```text
+network[4,-2] | volume[2,-4], battery[0,4] | percent[0,-2]
+```
 
 ![Network and volume above a centered battery](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-arranged-2-over-1.png)
 *Three items with the percentage left out: two across the top, the battery
@@ -51,39 +58,45 @@ centered below. `Short row or column` decides how a ragged last group lines up.*
 *A single row, in an order you choose rather than the native one.*
 
 ![A tight two-high stack](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-compact-stack.png)
-*Pulled in close with a negative `Size` → `Item spacing`. That is the setting
-that tightens a cluster — horizontal padding only reserves space at the two
-outside edges and can never change the distance between items.*
-
-![The four items arranged as a diamond, with the native tooltip showing](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-diamond-adjusted-with-hover.png)
-*A diamond — volume on top, battery below, network and the percentage on the
-sides:*
-
-```text
-network[4,-2] | volume[2,-4], battery[0,4] | percent[0,-2]
-```
-
-*Nesting one stacked pair between two single items is all it takes; no
-parentheses are needed here because `,` already binds tighter than `|`. It is
-still the native button, so the hover tooltip and the click through to Quick
-Settings behave exactly as they always did.*
+*Pulled in close with a negative `Size` → `Item spacing` — the setting that
+tightens a cluster.*
 
 ![A tight cluster with an enlarged battery percentage](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-stacked-with-percent-emphasis.png)
-*The percentage enlarged with `Surface` → `Battery percentage size`, the one
-size control the mod offers — because the percentage is the one item that is
-really a single piece of text.*
+*The percentage enlarged with `Surface` → `Battery percentage size`.*
 
 ![A recolored battery percentage in a busy tray](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/with-colors.png)
-*Per-item color — the battery percentage recolored here. Network, volume,
-battery, and the percentage each have their own color and opacity setting, and
-an empty color leaves that item exactly as Windows drew it.*
+*Per-item color — here the battery percentage. An empty color leaves an item
+exactly as Windows drew it.*
 
 ![All four items arranged vertically on a double-height taskbar](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/double-height-arranged-vertical.png)
-*All four in a single column on a double-height taskbar, working alongside
-several other tray and taskbar mods in a dense two-row tray:*
+*A single column on a double-height taskbar, alongside several other tray and
+taskbar mods in a dense two-row tray:*
 
 ```text
 network[-2,6], volume[0,2], battery[0,0], percent[2,-6]
+```
+
+![A 2x2 block on a taskbar at the top of the screen](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/top-2x2.png)
+*A taskbar at the top: arrangements work exactly as they do at the bottom.*
+
+![All four items in one evenly spaced row on a left taskbar](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/side-left-single-row.png)
+*A taskbar on the left, with the four items nudged onto evenly spaced points
+across the button:*
+
+```text
+percent[-12,-1] | battery[-3,0] | volume[8,0] | wifi[14,0]
+```
+
+![A three-row arrangement on a left taskbar](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/side-left-stacked.png)
+*Rows stack on a side taskbar too. Windows gives the button a fixed height
+there; the mod grows it to fit.*
+
+![Battery over its percentage between network and volume on a right taskbar](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/side-right-diamond.png)
+*A taskbar on the right: the battery over its percentage, between network and
+volume, with `Adjust` → `Horizontal padding` at 8:*
+
+```text
+wifi[-16,0] | (battery[-1,2], percent) | volume[16,0]
 ```
 
 ## Features
@@ -145,8 +158,13 @@ field that does. Its default value is the word `auto`:
   network | (volume, battery) | percent  a diamond
   ```
 
-  The tokens are `network`, `volume`, `battery`, and `percent`, and they are
-  case-insensitive. `network` is the one native slot whose glyph changes
+  Order of operations: parentheses first, then `,`, then `|` — so
+  `a | b, c | d` is three columns with `b` stacked over `c`, and a 2×2 block
+  is `(a | b), (c | d)` or `a, c | b, d`.
+
+  The tokens are `network` (or `wifi`), `volume`, `battery`, and `percent`,
+  and they are case-insensitive. A name the mod does not know is ignored and
+  logged. `network` is the one native slot whose glyph changes
   between Wi-Fi, Ethernet, disconnected, airplane-mode, and VPN states. A
   separator is always required — `network (volume | battery)` is an error,
   not a shorthand for `network | (volume | battery)`.
@@ -172,6 +190,8 @@ network[+2,-1] | volume | battery   network moves 2px right and 1px up
 Offsets are cosmetic. Nothing else shifts, and the group's overall size does
 not change. To move the whole cluster instead, use `Adjust` → horizontal and
 vertical offset. These replace the eight per-item nudge settings that 1.x had.
+Nudges and offsets are screen pixels on every taskbar edge — see
+[Other taskbar positions](#other-taskbar-positions).
 
 **The percentage arriving late.** An arrangement you write names the items that
 existed when you wrote it. Turn the battery percentage on afterwards and it is
@@ -328,20 +348,32 @@ contradictory anchor order, so this mod offers no placement setting at all.
 
 ## Other taskbar positions
 
-**[Taskbar on top](https://windhawk.net/mods/taskbar-on-top) — supported.**
-Everything here is positioned relative to the taskbar's own layout, never to
-screen coordinates, so a taskbar at the top is the same arrangement in a
-different place.
+Windows 11 can put the taskbar on any edge (Settings → Personalization →
+Taskbar → Taskbar behaviors, on builds that have the setting). This mod reads
+the edge Windows reports and follows a move while it is running. The last four
+screenshots in the [Showcase](#showcase) are the top, left and right edges.
 
-**[Vertical Taskbar](https://windhawk.net/mods/taskbar-vertical) — not
-compatible, and this mod stands down when it detects one.** Both mods reach the
-same OmniButton elements and both position them by writing `RenderTransform`:
-that mod rotates them, this one moves them into a grid. One property, two
-owners — there is no arrangement in which both are correct. Rather than fight
-over it and paint something broken, this mod detects a taskbar that runs down a
-side, leaves the native OmniButton completely untouched, and says so in the
-Windhawk log. Turn the vertical mod off and this one resumes on the next
-Explorer restart.
+**Top — the same as bottom.** Everything is positioned relative to the
+taskbar's own layout, never to screen coordinates, so a taskbar at the top
+gets the same arrangement in a different place. This also covers
+[Taskbar on top](https://windhawk.net/mods/taskbar-on-top).
+
+**Left or right — your arrangement as written.** An arrangement you write is
+laid out exactly as written on every edge: `|` side by side, `,` stacked, and
+`[dx,dy]` always moves an item `dx` right and `dy` down. The horizontal and
+vertical settings in `Adjust` stay horizontal and vertical, and nothing is
+mirrored between left and right. Only `auto` changes: it fits the taskbar's
+width instead of its height. Windows makes the OmniButton a fixed height on a
+side taskbar, so the mod raises its minimum height to fit the arrangement.
+
+**[Vertical Taskbar](https://windhawk.net/mods/taskbar-vertical) — supported
+in its default native mode**, which uses the same native side taskbar. With
+its "Use the native taskbar when possible" option turned off, it rotates a
+horizontal taskbar instead, writing `RenderTransform` on the very OmniButton
+elements this mod moves. One property cannot have two owners, so this mod
+detects that case (the taskbar runs down a side while Windows still reports a
+horizontal edge), leaves the native OmniButton completely untouched, and says
+so in the Windhawk log.
 
 ## Taskbar Styler
 
@@ -398,7 +430,7 @@ each one's exact prior local value when it unloads.
       "auto" fits the available native items to the taskbar height. Anything
       else is an explicit layout: names side by side with "|", stacked with
       ",", and grouped with parentheses - "network, battery | volume, percent"
-      is a 2x2 block. Tokens are network, volume, battery, and percent. Omit a
+      is a 2x2 block. Tokens are network (or wifi), volume, battery, and percent. Omit a
       token to hide that item. Append a pixel offset to nudge one item,
       "network[+2,-1]", or a whole group, "(network, volume)[3,0]". Every time
       "auto" is applied, its generated arrangement is written to the Windhawk
@@ -517,6 +549,8 @@ each one's exact prior local value when it unloads.
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cwchar>
+#include <cwctype>
 #include <exception>
 #include <functional>
 #include <limits>
@@ -580,6 +614,9 @@ inline bool LoadBool(PCWSTR key) {
 //
 // Use a table rather than a chain of comparisons, so the accepted literals and
 // their enum mapping stay adjacent when this mod's settings evolve.
+//
+// Wh_GetStringSetting never returns null - an unset or unreadable setting is
+// L"" - so the value is used as is.
 template <typename T>
 struct Choice {
     wchar_t const* token;
@@ -589,7 +626,7 @@ struct Choice {
 template <typename T, size_t N>
 inline T LoadChoice(PCWSTR key, Choice<T> const (&choices)[N], T fallback) {
     auto setting = WindhawkUtils::StringSetting::make(key);
-    PCWSTR value = setting.get() ? setting.get() : L"";
+    PCWSTR value = setting.get();
     if (!*value) return fallback;
     for (auto const& choice : choices) {
         if (_wcsicmp(value, choice.token) == 0) return choice.value;
@@ -606,10 +643,10 @@ inline T LoadChoice(PCWSTR key, Choice<T> const (&choices)[N], T fallback) {
 // wrapper: it is the same contract, it already ships with Windhawk, and a
 // second copy of it is one more thing for a reader to check.
 template <size_t N>
-inline void LoadString(PCWSTR key, wchar_t (&buffer)[N],
-                       PCWSTR fallback = nullptr) {
+inline void LoadStringSetting(PCWSTR key, wchar_t (&buffer)[N],
+                              PCWSTR fallback = nullptr) {
     auto setting = WindhawkUtils::StringSetting::make(key);
-    PCWSTR value = setting.get() ? setting.get() : L"";
+    PCWSTR value = setting.get();
     if (!*value && fallback) value = fallback;
     wcsncpy_s(buffer, N, value, _TRUNCATE);
 }
@@ -698,52 +735,22 @@ inline Brush ParseBrush(wchar_t const* value,
 
 }  // namespace omni_color_tokens
 
-// -- Arrangement expression (axis-relative) ---------------------------------
+// -- Arrangement expression -------------------------------------------------
 // One user-typed string - names joined by '|' (side by side) and ','
 // (stacked), nested with parentheses, nudged with [dx,dy] - parsed,
-// measured and arranged into concrete placements. This variant also sizes
-// an item RELATIVE TO THE AXIS its group lays out along, which a mod needs
-// when an item's thickness is known but its cross extent should match its
-// neighbours.
+// measured and arranged into concrete placements. Includes the automatic
+// grid shape and the policy for items a written arrangement does not name.
 namespace omni_layout {
 
 enum class Axis { Horizontal, Vertical };  // node orientation, not a setting
 enum class Justify { Start, Center, End };
 enum class FillOrder { Rows, Columns };
 
-// An item is sized either absolutely (width x height) or RELATIVE TO THE AXIS
-// its group happens to lay out along. Axis-relative sizing exists because an
-// item like a Task View button should be "as wide as it needs and as tall as
-// the buttons beside it" when it is a column, and the mirror image when it is
-// a row — and in a hand-written arrangement the mod cannot know which it will
-// be. The parent group knows its own axis, so it resolves this at measure and
-// arrange time:
-//
-//   thickness — extent ALONG the group's axis (its width as a column, its
-//               height as a row)
-//   cross     — extent ACROSS the group's axis; 0 means fill, i.e. match
-//               whatever the rest of the group measures
 struct Size {
     double width = 0.0;
     double height = 0.0;
-    bool axisRelative = false;
-    double thickness = 0.0;
-    double cross = 0.0;
-
-    bool Empty() const {
-        return axisRelative ? thickness <= 0.0
-                            : (width <= 0.0 || height <= 0.0);
-    }
+    bool Empty() const { return width <= 0.0 || height <= 0.0; }
 };
-
-// Size an item against its group's axis. cross = 0 fills the group.
-inline Size AlongAxis(double thickness, double cross = 0.0) {
-    Size size;
-    size.axisRelative = true;
-    size.thickness = thickness;
-    size.cross = cross;
-    return size;
-}
 
 // CONTENT-SIZED ITEMS. A settings-driven item size describes a GLYPH: a box of
 // a chosen width that a character is centered in. It does not describe TEXT.
@@ -753,16 +760,13 @@ inline Size AlongAxis(double thickness, double cross = 0.0) {
 // space, and the overflow is discovered at paint time — as a clipped edge.
 //
 // The SizeResolver is a callback precisely so a mod can answer with something
-// it measured. Measure the live element (native_glyph_surface::MeasureNatural)
-// and pass the result through here: the arrangement then RESERVES the real
-// width, the group's total grows to match, and nothing clips.
-//
-// `minimum` keeps a short value from collapsing below the item size the user
-// chose, so "9%" still lines up with the glyphs above it. Round `measured` up
-// and add a pixel or two of slack, or the item will re-measure every time its
-// text ticks over.
-inline Size ContentAlong(double measured, double minimum, double cross) {
-    return {std::max(measured, minimum), cross};
+// it measured: the arrangement then RESERVES the real width, the group's total
+// grows to match, and nothing clips. `minimum` keeps a short value from
+// collapsing below the item size the user chose, so "9%" still lines up with
+// the glyphs above it. Round `measured` up and add a pixel or two of slack, or
+// the item will re-measure every time its text ticks over.
+inline Size ContentAlong(double measured, double minimum, double height) {
+    return {std::max(measured, minimum), height};
 }
 
 // Cosmetic per-leaf nudge parsed from the expression's "[dx,dy]" suffix.
@@ -829,7 +833,7 @@ private:
     // Measure is memoized, so this is no longer a running-time limit — it is a
     // STACK limit, and it is refused at parse time so the user gets a real
     // error instead of a crash. Nothing legible needs this many levels; the
-    // deepest arrangement in this family's own documentation uses three.
+    // deepest arrangement in this mod's own documentation uses three.
     static constexpr int kMaxNestingDepth = 24;
 
     Node ParseExpr(int depth = 0) {
@@ -917,7 +921,14 @@ private:
             return 0.0;
         }
         position_ += consumed;
-        return value;
+        if (!std::isfinite(value)) {
+            Fail(position_ - consumed, L"a finite number");
+            return 0.0;
+        }
+        // Offsets are cosmetic. Keep expression nudges within the same
+        // user-facing range as Adjust.OffsetX/Y so a typo cannot move an icon
+        // outside its owned group or hand XAML NaN/infinity.
+        return std::clamp(value, -100.0, 100.0);
     }
 
     static bool IsDelimiter(wchar_t c) {
@@ -952,20 +963,9 @@ inline bool Parse(std::wstring const& text, Node& root,
 
 // ---- Token vocabulary -------------------------------------------------------
 //
-// A token is an item's stable IDENTITY, never its displayed label. Labels are
-// not unique, can contain the expression's own delimiters, can be empty or an
+// A token is an item's stable IDENTITY, never its displayed label, compared
+// case-insensitively. Labels are not unique, can be localized, empty, or an
 // emoji, and renaming one would silently break an arrangement the user wrote.
-// Each mod declares its vocabulary and documents it:
-//
-//   fixed set     -> semantic names: wifi, volume, battery, percent, clock
-//   dynamic set   -> 1, 2, 3, ... because the set changes at runtime
-//   either        -> an extra named item such as "master"
-//
-// A dynamic mod may accept a readable alias for a number (desktop2 == 2). Log
-// the token-to-label map next to the arrangement so a user can tell which
-// number is which item without the arrangement depending on the labels.
-//
-// Matching is case-insensitive: someone typing "Wifi" means wifi.
 
 inline bool TokenIs(std::wstring const& token, wchar_t const* name) {
     size_t i = 0;
@@ -973,24 +973,6 @@ inline bool TokenIs(std::wstring const& token, wchar_t const* name) {
         if (towlower(token[i]) != towlower(name[i]))
             return false;
     return i == token.size() && !name[i];
-}
-
-// "desktop2" -> 2 with prefix L"desktop"; 0 when the token does not match.
-inline int TokenIndexWithPrefix(std::wstring const& token,
-                                wchar_t const* prefix) {
-    size_t i = 0;
-    for (; prefix[i]; ++i)
-        if (i >= token.size() || towlower(token[i]) != towlower(prefix[i]))
-            return 0;
-    if (i >= token.size())
-        return 0;
-    int value = 0;
-    for (; i < token.size(); ++i) {
-        if (token[i] < L'0' || token[i] > L'9')
-            return 0;
-        value = value * 10 + (token[i] - L'0');
-    }
-    return value;
 }
 
 using SizeResolver = std::function<Size(std::wstring const&)>;
@@ -1028,10 +1010,8 @@ inline Size MeasureNode(Node const& node, Config const& config,
     if (!node.token.empty())
         return resolve(node.token);
 
-    // The grammar wraps every unit in a group, so most groups have a single
-    // child. Such a group IS its child — pass the size through verbatim, or an
-    // axis-relative child would be flattened into a concrete size by its own
-    // wrapper before the real parent ever sees it.
+    // The grammar wraps every unit in a group, so a single-child group is its
+    // child and introduces no geometry of its own.
     {
         Node const* only = nullptr;
         int visible = 0;
@@ -1048,58 +1028,23 @@ inline Size MeasureNode(Node const& node, Config const& config,
 
     double main = 0.0;
     double cross = 0.0;
-    double fillFallback = 0.0;
     int placed = 0;
     for (auto const& child : node.children) {
         Size size = MeasureCached(child, config, resolve, cache);
         if (size.Empty())
             continue;
-        double childMain, childCross;
-        if (size.axisRelative) {
-            childMain = size.thickness;
-            // A filling item takes its cross extent FROM the group, so it must
-            // not drive the group's cross size — otherwise it would size itself.
-            childCross = size.cross;
-            fillFallback = std::max(fillFallback, size.thickness);
-        } else {
-            childMain =
-                node.axis == Axis::Horizontal ? size.width : size.height;
-            childCross =
-                node.axis == Axis::Horizontal ? size.height : size.width;
-        }
+        double childMain =
+            node.axis == Axis::Horizontal ? size.width : size.height;
+        double childCross =
+            node.axis == Axis::Horizontal ? size.height : size.width;
         main += (placed ? config.spacing : 0.0) + childMain;
         cross = std::max(cross, childCross);
         ++placed;
     }
     if (!placed)
         return {};
-    // Degenerate case: every child fills, so nothing established a cross size.
-    // Fall back to the largest thickness rather than collapsing the group.
-    if (cross <= 0.0)
-        cross = fillFallback;
     return node.axis == Axis::Horizontal ? Size{main, cross}
                                          : Size{cross, main};
-}
-
-// Measure one tree on its own. Prefer Compute(), which shares a single cache
-// across the measure and arrange passes; this overload exists for call sites
-// that measure a tree by itself.
-inline Size Measure(Node const& node, Config const& config,
-                    SizeResolver const& resolve) {
-    MeasureCache cache;
-    return MeasureCached(node, config, resolve, cache);
-}
-
-// Resolve a child's size against its parent group's axis, so an axis-relative
-// item becomes concrete width x height.
-inline Size ConcreteSize(Size const& size, Axis axis, Size const& groupTotal) {
-    if (!size.axisRelative)
-        return size;
-    double groupCross =
-        axis == Axis::Horizontal ? groupTotal.height : groupTotal.width;
-    double cross = size.cross > 0.0 ? size.cross : groupCross;
-    return axis == Axis::Horizontal ? Size{size.thickness, cross}
-                                    : Size{cross, size.thickness};
 }
 
 inline void ArrangeCached(Node const& node, Config const& config,
@@ -1121,8 +1066,7 @@ inline void ArrangeCached(Node const& node, Config const& config,
     x += node.offset.x;
     y += node.offset.y;
 
-    // Single-child group: forward the size the real parent already resolved,
-    // so axis-relative sizing survives the grammar's per-unit wrapper.
+    // A single-child group only carries an optional offset.
     {
         Node const* only = nullptr;
         int visible = 0;
@@ -1134,8 +1078,7 @@ inline void ArrangeCached(Node const& node, Config const& config,
                 break;
         }
         if (visible == 1) {
-            ArrangeCached(*only, config, resolve, x, y, out, cache,
-                          resolvedSize);
+            ArrangeCached(*only, config, resolve, x, y, out, cache);
             return;
         }
     }
@@ -1145,7 +1088,7 @@ inline void ArrangeCached(Node const& node, Config const& config,
         Size measured = MeasureCached(child, config, resolve, cache);
         if (measured.Empty())
             continue;
-        Size size = ConcreteSize(measured, node.axis, total);
+        Size size = measured;
         double unused = node.axis == Axis::Horizontal
                             ? total.height - size.height
                             : total.width - size.width;
@@ -1164,29 +1107,15 @@ inline void ArrangeCached(Node const& node, Config const& config,
     }
 }
 
-// Arrange one tree on its own. Prefer Compute(); this overload exists for call
-// sites that drive the arranger directly.
-inline void Arrange(Node const& node, Config const& config,
-                    SizeResolver const& resolve, double x, double y,
-                    std::vector<Placement>& out,
-                    Size const* resolvedSize = nullptr) {
-    MeasureCache cache;
-    ArrangeCached(node, config, resolve, x, y, out, cache, resolvedSize);
-}
-
-// Parse + measure + arrange in one call. Returns false only on a parse error
-// (unbalanced parentheses, malformed offset, trailing garbage) — the caller
-// should then fall back to the auto expression and log that it did.
-// placements come back in expression order; totalSize is the group's bounding
-// box INCLUDING outer padding. A per-item offset shifts its leaf without
-// changing totalSize or any neighbor.
-inline bool Compute(std::wstring const& text, Config const& config,
-                    SizeResolver const& resolve,
-                    std::vector<Placement>& placements, Size& totalSize,
-                    ParseError* error = nullptr) {
-    Node root;
-    if (!Parse(text, root, error))
-        return false;
+// Measure + arrange a tree that is already parsed. For a mod that rewrites the
+// tree between Parse and layout - hiding an absent item, dropping a duplicate
+// - rather than laying out the text exactly as typed. placements come back in
+// expression order; totalSize is the group's bounding box INCLUDING outer
+// padding. A per-item offset shifts its leaf without changing totalSize or any
+// neighbor.
+inline void ComputeTree(Node const& root, Config const& config,
+                        SizeResolver const& resolve,
+                        std::vector<Placement>& placements, Size& totalSize) {
     // One cache for both passes: Arrange re-measures the same nodes at every
     // level, so sharing it is what keeps the whole call linear in node count.
     MeasureCache cache;
@@ -1195,27 +1124,27 @@ inline bool Compute(std::wstring const& text, Config const& config,
     if (inner.Empty()) {
         // No visible items: an empty group has no padded box either.
         totalSize = {};
-        return true;
-    }
-    if (inner.axisRelative) {
-        // The whole arrangement is one axis-relative item, so there is no group
-        // for it to fill against; square it off on its own thickness.
-        double cross = inner.cross > 0.0 ? inner.cross : inner.thickness;
-        inner = Size{inner.thickness, cross};
+        return;
     }
     ArrangeCached(root, config, resolve, config.padX, config.padY, placements,
                   cache, &inner);
     totalSize = {inner.width + config.padX * 2.0,
                  inner.height + config.padY * 2.0};
-    return true;
 }
 
-// ---- Row capacity -----------------------------------------------------------
-//
-// The caller passes a height ALREADY IN DIPs. A taskbar rect from
-// GetWindowRect is in physical pixels while every XAML size is a DIP, so
-// dividing one by the other silently misreports the row count at any scaling
-// other than 100%; convert before calling.
+// Parse + measure + arrange in one call. Returns false only on a parse error
+// (unbalanced parentheses, malformed offset, trailing garbage) — the caller
+// should then fall back to the auto expression and log that it did.
+inline bool Compute(std::wstring const& text, Config const& config,
+                    SizeResolver const& resolve,
+                    std::vector<Placement>& placements, Size& totalSize,
+                    ParseError* error = nullptr) {
+    Node root;
+    if (!Parse(text, root, error))
+        return false;
+    ComputeTree(root, config, resolve, placements, totalSize);
+    return true;
+}
 
 // How many item rows fit in a height already expressed in DIPs. Pitch is one
 // item plus one gap; the trailing gap of the last row is not required, hence
@@ -1313,18 +1242,28 @@ inline std::wstring BuildGridExpression(int count, int rows, int columns,
     return expr;
 }
 
-inline std::wstring BuildAutoExpression(int count, int maxRows, FillOrder fill,
-                                        TokenNamer const& namer = {}) {
-    Shape shape = ChooseShape(count, maxRows);
+// `maxLines` is how many lines of items fit across the taskbar's THICKNESS:
+// rows on a bottom or top taskbar, and - with `across` - columns on a left or
+// right one, where the width is the limit. The shape rule is the same either
+// way, the fewest lines along the taskbar, and the result is a plain screen
+// expression: '|' side by side and ',' stacked, and FillOrder::Rows still
+// fills left to right, then down.
+inline std::wstring BuildAutoExpression(int count, int maxLines, FillOrder fill,
+                                        TokenNamer const& namer = {},
+                                        bool across = false) {
+    Shape shape = ChooseShape(count, maxLines);
+    if (across)
+        return BuildGridExpression(count, shape.columns, shape.rows, fill,
+                                   namer);
     return BuildGridExpression(count, shape.rows, shape.columns, fill, namer);
 }
 
 // ---- Items the arrangement forgot -------------------------------------------
 //
 // A hand-written arrangement names the items that existed when it was written.
-// When the set is dynamic — a desktop is added, a folder appears — the new item
-// is in no group, resolves to nothing, and silently vanishes from the taskbar.
-// That is a trap, so a mod with a dynamic set offers a policy:
+// When the set changes at runtime, an item that appears later is in no group,
+// resolves to nothing, and silently vanishes from the taskbar. That is a trap,
+// hence Layout.NewItems:
 //
 //   Append (default) — arrange the unlisted items automatically and put that
 //                      block after everything the user wrote, so a new item is
@@ -1332,14 +1271,14 @@ inline std::wstring BuildAutoExpression(int count, int maxRows, FillOrder fill,
 //   Ignore           — the arrangement is the whole truth; unlisted items stay
 //                      off the taskbar until the user adds them.
 //
-// A mod that appends should log that it did, so the user knows to fold the new
-// item into their arrangement when they next edit it.
+// Appending is logged, so the user knows to fold the new item into their
+// arrangement when they next edit it.
 
-// Whether a token the user wrote refers to the same item as one the mod
-// expects. Defaults to a case-insensitive name match, which is WRONG for any
-// mod that accepts aliases: "desktop1" and "1" are the same button, and
-// comparing them as strings makes every aliased item look missing and get
-// appended a second time. A mod with a vocabulary must supply this.
+// Whether a token the user wrote refers to the same item as the one expected.
+// Defaults to a case-insensitive name match, which is WRONG for a vocabulary
+// with aliases: two names for one item compare unequal as strings, so the
+// aliased item looks missing and is appended a second time. A mod with aliases
+// supplies its own identity comparison.
 using TokenMatcher =
     std::function<bool(std::wstring const& placed, std::wstring const& expected)>;
 
@@ -1364,19 +1303,23 @@ inline std::vector<std::wstring> MissingTokens(
     return missing;
 }
 
+// The appended block goes after the written one ALONG the taskbar: to its
+// right on a bottom or top taskbar, below it on a left or right one
+// (`across`), where there is room to grow.
 inline std::wstring AppendMissing(std::wstring const& expression,
                                   std::vector<std::wstring> const& missing,
-                                  int maxRows, FillOrder fill) {
+                                  int maxLines, FillOrder fill,
+                                  bool across = false) {
     if (missing.empty())
         return expression;
     auto namer = [&missing](int index) { return missing[index]; };
-    std::wstring block = BuildAutoExpression((int)missing.size(), maxRows, fill,
-                                             namer);
+    std::wstring block = BuildAutoExpression((int)missing.size(), maxLines,
+                                             fill, namer, across);
     if (block.empty())
         return expression;
     if (expression.empty())
         return block;
-    return L"(" + expression + L") | (" + block + L")";
+    return L"(" + expression + (across ? L"), (" : L") | (") + block + L")";
 }
 
 // ---- The one setting --------------------------------------------------------
@@ -1406,10 +1349,12 @@ inline bool IsAutoSetting(std::wstring const& setting) {
 }
 
 inline Arrangement ResolveArrangement(std::wstring const& setting, int count,
-                                      int maxRows, FillOrder fill,
-                                      TokenNamer const& namer = {}) {
+                                      int maxLines, FillOrder fill,
+                                      TokenNamer const& namer = {},
+                                      bool across = false) {
     if (IsAutoSetting(setting))
-        return {BuildAutoExpression(count, maxRows, fill, namer), true};
+        return {BuildAutoExpression(count, maxLines, fill, namer, across),
+                true};
     return {setting, false};
 }
 
@@ -1875,41 +1820,6 @@ public:
         snapshots_.clear();
     }
 
-    // Put ONE object's properties back and forget them, leaving every other
-    // object's snapshots alone. For the case where a mod discovers that an
-    // element it began borrowing was never actually its business — handing
-    // that element back has to be possible without ending the whole lease.
-    void RestoreObject(DependencyObject const& object,
-                       RestoreErrorFn const& onError = {}) {
-        if (!object) return;
-        for (auto it = snapshots_.rbegin(); it != snapshots_.rend();) {
-            if (it->object != object) {
-                ++it;
-                continue;
-            }
-            try {
-                if (it->localValue == DependencyProperty::UnsetValue())
-                    it->object.ClearValue(it->property);
-                else
-                    it->object.SetValue(it->property, it->localValue);
-            } catch (...) {
-                if (onError) onError();
-            }
-            // Erase through the reverse iterator without invalidating the
-            // traversal: base() points one past the element being erased.
-            it = std::make_reverse_iterator(snapshots_.erase(
-                std::next(it).base()));
-        }
-    }
-
-    // Drop the snapshots WITHOUT restoring. For the case where the elements
-    // are already gone (an Explorer rebuild threw the tree away), so restoring
-    // would only throw. Do not use it to "skip" a restore that could run.
-    void Abandon() { snapshots_.clear(); }
-
-    size_t Count() const { return snapshots_.size(); }
-    bool Empty() const { return snapshots_.empty(); }
-
 private:
     std::vector<Snapshot> snapshots_;
 };
@@ -1922,7 +1832,6 @@ private:
 namespace omni_taskbar_window {
 
 // ---- Window discovery -------------------------------------------------------
-
 
 inline HWND FindCurrentProcessTaskbarWnd() {
     HWND result = nullptr;
@@ -2182,59 +2091,113 @@ inline XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
 
 }  // namespace omni_taskbar_xaml
 
-// -- Taskbar metrics and orientation ----------------------------------------
-// The taskbar's rect in DIPs, and whether a horizontal-layout model applies
-// at all - so a mod stands down on a vertical taskbar instead of arranging
-// into a rotated coordinate space.
+// -- Taskbar metrics, edge and orientation ----------------------------------
+// The taskbar's rect in DIPs, the edge Windows says it is docked to
+// (RootGrid's DockingStates), whether a mod may arrange there (any native
+// edge, never a taskbar another mod is rotating), and a watcher that
+// reports a move or thickness change - which re-lays out the taskbar
+// without rebuilding it.
 namespace omni_taskbar_metrics {
 
-// ---- Taskbar metrics and orientation ----------------------------------------
+// ---- Taskbar metrics, edge and orientation ----------------------------------
 //
 // WHERE THE TASKBAR IS, AND WHETHER THIS MOD CAN WORK THERE.
 //
-// Windows 11 itself only puts the taskbar at the bottom. Two mods by m417z
-// move it, and both are first-class parts of the ecosystem this mod has to
-// live in:
+// Windows 11 builds with the native taskbar position setting (September 2026
+// update) put the taskbar on any edge themselves. On those builds Windows
+// ANNOUNCES the edge, and that announcement is what this component reads:
+// the taskbar root Grid (Taskbar.TaskbarFrame > Grid#RootGrid) sits in a
+// DockingStates visual state — DockedBottom, DockedTop, DockedLeft or
+// DockedRight. It is the same signal m417z's own mods read.
 //
-//   taskbar-on-top       — bottom -> top. FINE here. Everything
-//                          here is positioned relative to the taskbar's own
-//                          XAML tree, never to screen coordinates, so a top
-//                          taskbar is the same tree at a different y.
+// A NATIVE SIDE TASKBAR IS SUPPORTED. The tree is the same tree laid out
+// vertically: every tray anchor keeps its name, order and parent. A written
+// arrangement is laid out exactly as written there; only generated layouts
+// fill across the taskbar's width (the arrangement component's `across`).
 //
-//   taskbar-vertical     — bottom -> left/right. NOT COMPATIBLE, and not for
-//                          a reason cooperation can fix. It walks the very
-//                          same path this mod walks
-//                          (ControlCenterButton > Grid > ContentPresenter >
-//                          ItemsPresenter > StackPanel) and applies a
-//                          RotateTransform to `RenderTransform` on those
-//                          children. Positioning here sets a
-//                          TranslateTransform on the SAME property of the SAME
-//                          elements. One dependency property, two owners, last
-//                          writer wins — the two layouts cannot coexist.
-//
-// So: DETECT AND STAND DOWN, loudly, rather than fight and paint garbage. The
-// detection is the taskbar's own rect aspect, not a check for a specific mod —
-// it is the condition that matters, and it stays true however the taskbar got
-// that way.
+// A ROTATED TASKBAR IS NOT. m417z's Vertical Taskbar, with its native mode
+// turned off (or on a build without the native setting), rotates a horizontal
+// taskbar with RenderTransform on the very tray children this family positions
+// — one property, two owners, last writer wins. Windows still reports a
+// horizontal dock there while the window runs down the side, and that
+// mismatch is how it is recognised. A mod stands down rather than paint
+// garbage.
 //
 // The rect is in PHYSICAL pixels and every XAML size is a DIP, so conversion
 // belongs here instead of being re-derived at each call site.
 
+using winrt::Windows::UI::Xaml::FrameworkElement;
+using winrt::Windows::UI::Xaml::VisualStateManager;
+using winrt::Windows::UI::Xaml::Media::VisualTreeHelper;
+
 enum class Orientation { Horizontal, Vertical };
+enum class Edge { Unknown, Bottom, Top, Left, Right };
 
 struct Metrics {
     bool valid = false;
     RECT rect{};
     UINT dpi = 96;
+    // What the window looks like: taller than wide runs down a side.
     Orientation orientation = Orientation::Horizontal;
+    // What Windows says, when the caller read it (ReadDockedEdge).
+    Edge edge = Edge::Unknown;
+    // Runs down a side while Windows does not say it docked there: another
+    // mod is rotating a horizontal taskbar.
+    bool rotated = false;
     // The extent the arranged group has to fit INTO: the taskbar's height when
     // it runs across the screen, its width when it runs down the side.
     double constrainedDip = 0.0;
-    // The extent it can run ALONG.
-    double alongDip = 0.0;
 };
 
-inline Metrics GetMetrics(HWND taskbarWnd) {
+// The direct child of `parent` with this name, searching at most `levels`
+// generations. The taskbar's top is shallow and fixed:
+//   XamlRoot.Content() Grid > TaskbarFrame#TaskbarFrame > Grid#RootGrid
+inline FrameworkElement FindTaskbarChild(FrameworkElement const& parent,
+                                         wchar_t const* name, int levels) {
+    if (!parent || levels <= 0) return nullptr;
+    int count = VisualTreeHelper::GetChildrenCount(parent);
+    for (int i = 0; i < count; ++i) {
+        auto child =
+            VisualTreeHelper::GetChild(parent, i).try_as<FrameworkElement>();
+        if (child && child.Name() == name) return child;
+    }
+    for (int i = 0; i < count; ++i) {
+        auto child =
+            VisualTreeHelper::GetChild(parent, i).try_as<FrameworkElement>();
+        if (auto found = FindTaskbarChild(child, name, levels - 1)) return found;
+    }
+    return nullptr;
+}
+
+// Windows' own statement of the edge. UI thread only. `taskbarRoot` is the
+// taskbar XamlRoot's Content(). Unknown on builds without the native position
+// setting, or if the tree has changed shape.
+//
+// Read ONLY RootGrid's DockingStates. Per-element OrientationStates further
+// down (task-button IconPanels) were observed stale after a move back to the
+// bottom; RootGrid's state was right on every edge.
+inline Edge ReadDockedEdge(FrameworkElement const& taskbarRoot) {
+    auto frame = FindTaskbarChild(taskbarRoot, L"TaskbarFrame", 2);
+    auto rootGrid = FindTaskbarChild(frame, L"RootGrid", 2);
+    if (!rootGrid) return Edge::Unknown;
+    for (auto const& group : VisualStateManager::GetVisualStateGroups(rootGrid)) {
+        if (group.Name() != L"DockingStates") continue;
+        auto state = group.CurrentState();
+        if (!state) return Edge::Unknown;
+        auto name = state.Name();
+        if (name == L"DockedBottom") return Edge::Bottom;
+        if (name == L"DockedTop") return Edge::Top;
+        if (name == L"DockedLeft") return Edge::Left;
+        if (name == L"DockedRight") return Edge::Right;
+        return Edge::Unknown;
+    }
+    return Edge::Unknown;
+}
+
+// `docked` is ReadDockedEdge's answer when the caller has the taskbar's XAML,
+// Unknown otherwise. Without it a window running down the side is assumed
+// rotated — the safe answer on a build that cannot say otherwise.
+inline Metrics GetMetrics(HWND taskbarWnd, Edge docked = Edge::Unknown) {
     Metrics metrics;
     if (!taskbarWnd || !GetWindowRect(taskbarWnd, &metrics.rect))
         return metrics;
@@ -2247,29 +2210,132 @@ inline Metrics GetMetrics(HWND taskbarWnd) {
     double height = (double)(metrics.rect.bottom - metrics.rect.top);
     double scale = 96.0 / (double)metrics.dpi;
 
-    // Taller than wide means it runs down a side. Nothing else can produce
-    // that shape, so this needs no cooperation from whatever moved it.
     metrics.orientation =
         height > width ? Orientation::Vertical : Orientation::Horizontal;
-    if (metrics.orientation == Orientation::Horizontal) {
-        metrics.constrainedDip = height * scale;
-        metrics.alongDip = width * scale;
-    } else {
-        metrics.constrainedDip = width * scale;
-        metrics.alongDip = height * scale;
-    }
+    metrics.edge = docked;
+    metrics.rotated = metrics.orientation == Orientation::Vertical &&
+                      docked != Edge::Left && docked != Edge::Right;
+    bool horizontal = metrics.orientation == Orientation::Horizontal;
+    metrics.constrainedDip = (horizontal ? height : width) * scale;
     return metrics;
 }
 
-// Whether this mod's layout model applies at all. Checked BEFORE touching
-// anything, so a taskbar it does not describe is left exactly as it was found
-// rather than arranged into a coordinate space someone else is rotating.
-inline bool LayoutModelApplies(Metrics const& metrics) {
-    return metrics.valid && metrics.orientation == Orientation::Horizontal;
+// Whether this mod may arrange here: any edge Windows placed the taskbar on
+// itself, never a taskbar another mod is rotating. Checked BEFORE touching
+// anything, so a taskbar this does not describe is left exactly as found.
+inline bool CanArrange(Metrics const& metrics) {
+    return metrics.valid && !metrics.rotated;
+}
+
+// True on a left or right taskbar, where the WIDTH limits how many items fit
+// side by side: generated layouts ("auto") fill across it. A written
+// arrangement and every nudge are screen-literal on every edge, and top
+// behaves exactly like bottom.
+inline bool RunsDownSide(Metrics const& metrics) {
+    return metrics.orientation == Orientation::Vertical;
 }
 
 inline wchar_t const* OrientationName(Orientation orientation) {
     return orientation == Orientation::Vertical ? L"vertical" : L"horizontal";
+}
+
+inline wchar_t const* EdgeName(Edge edge) {
+    switch (edge) {
+        case Edge::Bottom: return L"bottom";
+        case Edge::Top: return L"top";
+        case Edge::Left: return L"left";
+        case Edge::Right: return L"right";
+        default: return L"unknown";
+    }
+}
+
+// ---- Following a move -------------------------------------------------------
+//
+// MOVING THE TASKBAR IS A RE-LAYOUT, NOT A REBUILD. The same elements survive
+// a move between edges and TrayUI::StartTaskbar never fires, so a mod's
+// rebuild hook will not tell it anything changed. Two signals cover every
+// move:
+//
+//   - TaskbarFrame's size, which changes between a horizontal and a side edge
+//     and whenever the thickness does (Windows' small and default heights,
+//     another mod's side width);
+//   - RootGrid's DockingStates group, which changes on EVERY edge change,
+//     including bottom <-> top and left <-> right, where the size does not.
+//     Those moves still re-template parts of the taskbar (live-observed:
+//     the OmniButton sat low after bottom -> top until a re-apply).
+//
+// The callback runs on the UI thread from inside a layout pass or a state
+// change, and both signals usually fire for one move: schedule the re-apply
+// (wake the retry), never re-arrange synchronously, and expect a repeat.
+//
+// The mod owns the EdgeWatch, and must StopEdgeWatch on the UI thread before
+// unload: both delegates point into the mod's image.
+struct EdgeWatch {
+    winrt::weak_ref<FrameworkElement> frame;
+    winrt::event_token token{};
+    winrt::weak_ref<winrt::Windows::UI::Xaml::VisualStateGroup> docking;
+    winrt::event_token dockingToken{};
+    double width = 0.0;
+    double height = 0.0;
+    void (*onChange)() = nullptr;
+};
+
+inline void StopEdgeWatch(EdgeWatch& watch) {
+    if (watch.token) {
+        if (auto frame = watch.frame.get()) frame.SizeChanged(watch.token);
+    }
+    if (watch.dockingToken) {
+        if (auto group = watch.docking.get())
+            group.CurrentStateChanged(watch.dockingToken);
+    }
+    watch.frame = nullptr;
+    watch.token = {};
+    watch.docking = nullptr;
+    watch.dockingToken = {};
+}
+
+// Idempotent: watching the same TaskbarFrame again is a no-op, and a rebuilt
+// taskbar's new frame replaces the old subscriptions. UI thread only.
+inline bool StartEdgeWatch(EdgeWatch& watch, FrameworkElement const& taskbarRoot,
+                           void (*onChange)()) {
+    auto frame = FindTaskbarChild(taskbarRoot, L"TaskbarFrame", 2);
+    if (!frame) return false;
+    if (watch.token && watch.frame.get() == frame) return true;
+    StopEdgeWatch(watch);
+    watch.frame = winrt::make_weak(frame);
+    watch.width = frame.ActualWidth();
+    watch.height = frame.ActualHeight();
+    watch.onChange = onChange;
+    EdgeWatch* target = &watch;
+    watch.token = frame.SizeChanged(
+        [target](winrt::Windows::Foundation::IInspectable const&,
+                 winrt::Windows::UI::Xaml::SizeChangedEventArgs const& args) {
+            auto size = args.NewSize();
+            if (std::abs(size.Width - target->width) < 0.5 &&
+                std::abs(size.Height - target->height) < 0.5)
+                return;
+            target->width = size.Width;
+            target->height = size.Height;
+            if (target->onChange) target->onChange();
+        });
+
+    // Absent on builds without the native position setting; the size watch
+    // alone is then all there is, and all that is needed.
+    if (auto rootGrid = FindTaskbarChild(frame, L"RootGrid", 2)) {
+        for (auto const& group :
+             VisualStateManager::GetVisualStateGroups(rootGrid)) {
+            if (group.Name() != L"DockingStates") continue;
+            watch.docking = winrt::make_weak(group);
+            watch.dockingToken = group.CurrentStateChanged(
+                [target](winrt::Windows::Foundation::IInspectable const&,
+                         winrt::Windows::UI::Xaml::VisualStateChangedEventArgs
+                             const&) {
+                    if (target->onChange) target->onChange();
+                });
+            break;
+        }
+    }
+    return true;
 }
 
 }  // namespace omni_taskbar_metrics
@@ -2298,9 +2364,10 @@ namespace omni_retry {
 // thread with SendMessage, so a UI-thread caller blocked on the mutex while
 // another thread waited under it could never service that message.
 //
-// Start() itself is not serialized against a concurrent Start(), because both
-// of this mod's callers run on the taskbar's UI thread.
-
+// Start() may be called from Windhawk's thread (init, a settings change) and
+// from the taskbar's UI thread (a rebuild) at once. Two overlapping Start()
+// calls are safe: each publishes its run by exchange and stops whatever run it
+// displaced, so no run is ever left without an owner that will wait for it.
 
 class RetryLoop {
 public:
@@ -2314,7 +2381,57 @@ public:
 
     void Start(AttemptFn attempt, AppliedFn applied,
                std::atomic<bool> const& unloading, int attempts = 5,
-               DWORD intervalMs = 2000, bool forceFirstAttempt = false) {
+               DWORD intervalMs = 2000) {
+        Launch(attempt, applied, unloading, attempts, intervalMs, false);
+    }
+
+    // For a caller that must not wait - the taskbar's UI thread, inside
+    // Explorer's own taskbar construction. A live run is woken instead of
+    // being stopped: it skips its interval, runs an attempt now and gets a
+    // fresh attempt budget. Only when no run is live is a new one started,
+    // and the Stop() inside it then waits on a thread that has already left
+    // the loop, which returns at once.
+    //
+    // Either way the FIRST attempt runs even if `applied` still reports done.
+    // A caller wakes the loop because something changed, and may truthfully
+    // still own live state that the attempt has to restore and reapply - so it
+    // must not have to falsify `applied` just to be heard.
+    void StartOrWake(AttemptFn attempt, AppliedFn applied,
+                     std::atomic<bool> const& unloading, int attempts = 5,
+                     DWORD intervalMs = 2000) {
+        if (unloading) return;
+        std::shared_ptr<Run> run;
+        {
+            std::lock_guard<std::mutex> guard(mutex_);
+            run = run_;
+        }
+        if (run) {
+            std::lock_guard<std::mutex> gate(run->gate);
+            if (!run->finished) {
+                run->woken = true;
+                SetEvent(run->wakeEvent);
+                return;
+            }
+        }
+        Launch(attempt, applied, unloading, attempts, intervalMs, true);
+    }
+
+    void Stop() {
+        std::shared_ptr<Run> run;
+        {
+            std::lock_guard<std::mutex> guard(mutex_);
+            run = run_;  // shared, not moved: a concurrent Stop must wait too
+        }
+        if (!run) return;
+        StopRun(run);
+        std::lock_guard<std::mutex> guard(mutex_);
+        if (run_ == run) run_.reset();
+    }
+
+private:
+    void Launch(AttemptFn attempt, AppliedFn applied,
+                std::atomic<bool> const& unloading, int attempts,
+                DWORD intervalMs, bool forced) {
         Stop();
         if (unloading) return;
 
@@ -2324,9 +2441,11 @@ public:
         run->unloading = &unloading;
         run->attempts = attempts;
         run->intervalMs = intervalMs;
-        run->forceFirstAttempt = forceFirstAttempt;
+        run->woken = forced;
         run->stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        if (!run->stopEvent) return;  // ~Run closes nothing it did not create
+        run->wakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        // ~Run closes only what was created.
+        if (!run->stopEvent || !run->wakeEvent) return;
 
         // The thread carries a reference of its own, so the Run survives until
         // both the loop and the thread are done with it, whichever ends first.
@@ -2358,53 +2477,77 @@ public:
         if (displaced) StopRun(displaced);
     }
 
-    void Stop() {
-        std::shared_ptr<Run> run;
-        {
-            std::lock_guard<std::mutex> guard(mutex_);
-            run = run_;  // shared, not moved: a concurrent Stop must wait too
-        }
-        if (!run) return;
-        StopRun(run);
-        std::lock_guard<std::mutex> guard(mutex_);
-        if (run_ == run) run_.reset();
-    }
-
-private:
     struct Run {
         HANDLE thread = nullptr;
         HANDLE stopEvent = nullptr;
+        HANDLE wakeEvent = nullptr;  // auto-reset
         AttemptFn attempt = nullptr;
         AppliedFn applied = nullptr;
         std::atomic<bool> const* unloading = nullptr;
         int attempts = 5;
         DWORD intervalMs = 2000;
-        bool forceFirstAttempt = false;
+        // Guards woken/finished, so a wake is either seen by the loop or
+        // refused because the loop has already ended - never lost between.
+        std::mutex gate;
+        bool woken = false;
+        bool finished = false;
 
         // Closed exactly once, when the last of the loop and the thread lets
         // go. Both have already stopped using them by then.
         ~Run() {
             if (thread) CloseHandle(thread);
             if (stopEvent) CloseHandle(stopEvent);
+            if (wakeEvent) CloseHandle(wakeEvent);
         }
     };
+
+    // The loop is about to end. A wake that arrived since the last attempt
+    // restarts it instead; otherwise the run is marked finished, so a later
+    // StartOrWake starts a new run rather than waking this dead one.
+    static bool ContinueForWake(Run& run) {
+        std::lock_guard<std::mutex> gate(run.gate);
+        bool stopping = *run.unloading ||
+                        WaitForSingleObject(run.stopEvent, 0) != WAIT_TIMEOUT;
+        if (run.woken && !stopping) return true;
+        run.finished = true;
+        return false;
+    }
+
+    static void MarkFinished(Run& run) {
+        std::lock_guard<std::mutex> gate(run.gate);
+        run.finished = true;
+    }
 
     static DWORD WINAPI ThreadMain(void* parameter) {
         auto* owned = static_cast<std::shared_ptr<Run>*>(parameter);
         std::shared_ptr<Run> run = *owned;
         delete owned;
-        for (int i = 0; i < run->attempts && !*run->unloading; ++i) {
-            // Opt-in, via forceFirstAttempt. A caller that clears its own
-            // "applied" flag before starting does not need it. It exists for
-            // the caller that must run one restore/reapply pass while `applied`
-            // still truthfully reports that it owns live XAML — so that flag
-            // does not have to be falsified just to wake this loop.
-            if (run->applied && !(run->forceFirstAttempt && i == 0) &&
-                run->applied())
-                break;
-            if (i && WaitForSingleObject(run->stopEvent, run->intervalMs) !=
-                         WAIT_TIMEOUT)
-                break;
+        for (int i = 0;; ++i) {
+            bool done = *run->unloading || i >= run->attempts ||
+                        (run->applied && run->applied());
+            if (done) {
+                // A pending wake overrides `applied` and the spent budget: it
+                // earns a fresh budget whose first attempt runs now.
+                if (!ContinueForWake(*run)) break;
+                i = 0;
+            } else if (i) {
+                HANDLE events[] = {run->stopEvent, run->wakeEvent};
+                DWORD result = WaitForMultipleObjects(2, events, FALSE,
+                                                      run->intervalMs);
+                if (result == WAIT_OBJECT_0 + 1) {
+                    i = 0;
+                } else if (result != WAIT_TIMEOUT) {
+                    MarkFinished(*run);
+                    break;
+                }
+            }
+            // This attempt answers every wake that came before it. One that
+            // arrives while it runs sets both again and earns another.
+            {
+                std::lock_guard<std::mutex> gate(run->gate);
+                run->woken = false;
+                ResetEvent(run->wakeEvent);
+            }
             if (run->attempt) run->attempt();
         }
         return 0;
@@ -2532,7 +2675,7 @@ static void LoadSettings() {
 
     // Layout. Table-driven rather than a chain of _wcsicmp: after any option
     // is renamed a stale literal fails silently and the mod quietly falls back.
-    sio::LoadString(L"Layout.Arrangement", g_settings.arrangement, L"auto");
+    sio::LoadStringSetting(L"Layout.Arrangement", g_settings.arrangement, L"auto");
 
     static constexpr sio::Choice<ngl::FillOrder> kFillOrders[] = {
         {L"rows", ngl::FillOrder::Rows},
@@ -2571,13 +2714,13 @@ static void LoadSettings() {
     g_settings.offsetY = sio::LoadInt(L"Adjust.OffsetY", -40, 40);
 
     // Surface
-    sio::LoadString(L"Surface.NetworkColor", g_settings.networkColor);
-    sio::LoadString(L"Surface.VolumeColor", g_settings.volumeColor);
-    sio::LoadString(L"Surface.BatteryColor", g_settings.batteryColor);
-    sio::LoadString(L"Surface.PercentColor", g_settings.percentColor);
+    sio::LoadStringSetting(L"Surface.NetworkColor", g_settings.networkColor);
+    sio::LoadStringSetting(L"Surface.VolumeColor", g_settings.volumeColor);
+    sio::LoadStringSetting(L"Surface.BatteryColor", g_settings.batteryColor);
+    sio::LoadStringSetting(L"Surface.PercentColor", g_settings.percentColor);
 
     g_settings.percentSize = sio::LoadInt(L"Surface.PercentSize", 0, 64);
-    sio::LoadString(L"Surface.PercentFontFamily", g_settings.percentFontFamily);
+    sio::LoadStringSetting(L"Surface.PercentFontFamily", g_settings.percentFontFamily);
 
     g_settings.networkOpacity =
         sio::LoadInt(L"Surface.NetworkOpacity", -1, 100);
@@ -2609,7 +2752,10 @@ static void LoadSettings() {
 
 // ── Cached element references ─────────────────────────────────────────────
 
-[[clang::no_destroy]] static StackPanel       g_omniStackPanel{ nullptr };
+// The OmniButton's items host: a horizontal StackPanel on a bottom or top
+// taskbar, a WrapGrid on a left or right one. Windows swaps it in place when
+// the taskbar moves, without a rebuild.
+[[clang::no_destroy]] static Panel            g_omniItemsHost{ nullptr };
 [[clang::no_destroy]] static FrameworkElement g_omniButton{ nullptr };
 [[clang::no_destroy]] static FrameworkElement g_networkPresenter{ nullptr };
 [[clang::no_destroy]] static FrameworkElement g_volumePresenter{ nullptr };
@@ -2632,7 +2778,7 @@ static void LoadSettings() {
 [[clang::no_destroy]] static ngs::Surface g_batterySurface{};
 [[clang::no_destroy]] static ngs::Surface g_percentSurface{};
 
-[[clang::no_destroy]] static StackPanel g_layoutUpdatedSP{ nullptr };
+[[clang::no_destroy]] static Panel g_layoutUpdatedHost{ nullptr };
 static winrt::event_token g_layoutUpdatedToken{};
 
 static HWND g_taskbarWnd = nullptr;
@@ -2640,22 +2786,17 @@ static std::atomic<bool> g_applied{false};
 static std::atomic<bool> g_reapplyPending{false};
 // Stoppable and WAITED during unload: a detached retry thread that outlives
 // Wh_ModUninit would run mod code out of an unloaded DLL. Wh_ModUninit stops it
-// explicitly, which is what actually makes unload safe.
-//
-// no_destroy is INSURANCE, not a claim that the destructor is dangerous today:
-// RetryLoop declares none, so the implicit one only releases a shared_ptr (at
-// most two CloseHandles) and a std::mutex (a no-op on Windows), and neither
-// blocks nor needs a particular thread. It stays because this object owns a
-// worker thread's lifetime, so a future destructor here would be exactly the
-// kind that must not run at DLL detach under the loader lock.
-[[clang::no_destroy]] static retry_loop::RetryLoop g_retryLoop;
+// explicitly, which is what actually makes unload safe. After that the loop
+// holds nothing, and even at process exit its implicit destructor only closes
+// handles and frees memory, so it needs no no_destroy.
+static retry_loop::RetryLoop g_retryLoop;  // exit-time-safe: heap-only
 
 [[clang::no_destroy]] static std::optional<std::list<FrameworkElement::Loaded_revoker>>
     g_autoRevokerList{std::in_place};
 
 // Optional-backed so Wh_ModUninit can reset() it on the UI thread and free the
 // vector, instead of leaving an exit-time destructor to touch XAML at process
-// teardown. See _templates/property-lease.h.
+// teardown.
 [[clang::no_destroy]] static std::optional<ple::Lease> g_lease{std::in_place};
 
 static void LogCurrentUiException(PCWSTR context) noexcept;
@@ -2685,8 +2826,11 @@ struct OmniLayout {
     bool wasAuto = false;
 };
 
+// "wifi" is accepted for network because that is what most people call the
+// icon - and a name the mod does not know silently hides nothing it should.
 static int OmniItemIndex(std::wstring const& token) {
-    if (ngl::TokenIs(token, L"network")) return 0;
+    if (ngl::TokenIs(token, L"network") || ngl::TokenIs(token, L"wifi"))
+        return 0;
     if (ngl::TokenIs(token, L"volume")) return 1;
     if (ngl::TokenIs(token, L"battery")) return 2;
     if (ngl::TokenIs(token, L"percent")) return 3;
@@ -2783,6 +2927,22 @@ static ngl::Size OmniItemSize(int item) {
     return {width, height};
 }
 
+// The edge Windows last reported for the taskbar (RootGrid's DockingStates),
+// read on every apply. UI thread only.
+static taskbar_metrics::Edge g_dockedEdge = taskbar_metrics::Edge::Unknown;
+
+// Whether the current arrangement was laid out for a left or right taskbar:
+// a written arrangement is laid out exactly as written, while "auto" and the
+// block appended for unnamed items fill across the taskbar's WIDTH there. Set by AvailableOmniRows before the
+// layout is computed. UI thread only.
+static bool g_appliedSide = false;
+
+// Follows a move between edges, which re-lays out the existing taskbar tree
+// rather than rebuilding it. Holds only a weak reference and a token; it is
+// stopped on the UI thread in Wh_ModUninit.
+static taskbar_metrics::EdgeWatch g_edgeWatch;  // exit-time-safe: heap-only
+static void OnTaskbarEdgeChanged();
+
 static ngl::Config OmniLayoutConfig() {
     ngl::Config config;
     config.spacing = (double)g_settings.itemSpacing;
@@ -2799,27 +2959,51 @@ static ngl::Config OmniLayoutConfig() {
 // and a new IconView. OnLayoutUpdatedImpl compares these.
 static double g_appliedConstrainedDip = 0.0;
 static UINT g_appliedDpi = 0;
+// The items host's child count as the last ApplyLayout saw it; -1 when nothing
+// is applied. The LayoutUpdated monitor re-applies when the live count differs.
+static int g_appliedChildCount = -1;
 
-static int AvailableOmniRows(HWND hTaskbarWnd) {
-    auto metrics = taskbar_metrics::GetMetrics(hTaskbarWnd);
+// The widest item that will be arranged. On a side taskbar items line up
+// ACROSS the bar's width, so this is the extent one line needs.
+static double WidestPresentItem(bool const present[4]) {
+    double widest = 0.0;
+    for (int item = 0; item < 4; ++item)
+        if (present[item])
+            widest = std::max(widest, OmniItemSize(item).width);
+    return widest > 0.0 ? widest : kUnmeasuredCellWidth;
+}
+
+// How many lines of items fit across the taskbar's thickness: rows on a
+// bottom or top taskbar, columns across the width of a side one.
+static int AvailableOmniRows(HWND hTaskbarWnd, bool const present[4]) {
+    auto metrics = taskbar_metrics::GetMetrics(hTaskbarWnd, g_dockedEdge);
     if (!metrics.valid) {
         Wh_Log(L"[Layout] No taskbar window - assuming a single row");
+        g_appliedSide = false;
         return 1;
     }
     g_appliedConstrainedDip = metrics.constrainedDip;
     g_appliedDpi = metrics.dpi;
+    g_appliedSide = taskbar_metrics::RunsDownSide(metrics);
 
     // constrainedDip is already the taskbar's own thickness in DIPs, whichever
     // way it runs, so no physical-pixel/DIP conversion happens here — doing it
     // at the call site is how a row count ends up wrong at 125% scaling.
-    double reserved = 2.0 * (double)g_settings.padY;
-    int rows = ngl::RowsInHeight(
-        metrics.constrainedDip - reserved, (double)g_settings.itemHeight,
-        (double)g_settings.itemSpacing);
-    Wh_Log(L"[Layout] %s taskbar, %.0f dip across at %udpi, %.0f reserved "
-           L"-> %d row(s) for OmniButton items",
-           taskbar_metrics::OrientationName(metrics.orientation), metrics.constrainedDip,
-           metrics.dpi, reserved, rows);
+    // Padding is screen padding, so across a side taskbar it is the
+    // horizontal padding that is reserved; an item's extent across a side
+    // taskbar is its width.
+    double reserved = 2.0 * (double)(g_appliedSide ? g_settings.padX
+                                                   : g_settings.padY);
+    double itemAcross = g_appliedSide ? WidestPresentItem(present)
+                                      : (double)g_settings.itemHeight;
+    int rows = ngl::RowsInHeight(metrics.constrainedDip - reserved, itemAcross,
+                                 (double)g_settings.itemSpacing);
+    Wh_Log(L"[Layout] %s taskbar (%s edge), %.0f dip across at %udpi, %.0f "
+           L"reserved -> %d %s for OmniButton items",
+           taskbar_metrics::OrientationName(metrics.orientation),
+           taskbar_metrics::EdgeName(metrics.edge), metrics.constrainedDip,
+           metrics.dpi, reserved, rows,
+           g_appliedSide ? L"column(s)" : L"row(s)");
     return rows;
 }
 
@@ -2827,6 +3011,10 @@ static void NormalizeOmniNode(ngl::Node& node, bool const present[4],
                               bool visible[4], bool seen[4]) {
     if (!node.token.empty()) {
         int item = OmniItemIndex(node.token);
+        if (item < 0 && node.token != L"__omni_hidden")
+            Wh_Log(L"[Layout] \"%s\" is not an item name - use network (or "
+                   L"wifi), volume, battery or percent; it is ignored",
+                   node.token.c_str());
         if (item < 0 || !present[item]) {
             node.token = L"__omni_hidden";
             return;
@@ -2851,21 +3039,7 @@ static bool ComputeOmniNode(ngl::Node const& root,
         int item = OmniItemIndex(token);
         return item >= 0 ? OmniItemSize(item) : ngl::Size{};
     };
-    ngl::Config config = OmniLayoutConfig();
-    ngl::Size inner = ngl::Measure(root, config, resolve);
-    placements.clear();
-    if (inner.Empty()) {
-        total = {};
-        return true;
-    }
-    if (inner.axisRelative) {
-        double cross = inner.cross > 0.0 ? inner.cross : inner.thickness;
-        inner = {inner.thickness, cross};
-    }
-    ngl::Arrange(root, config, resolve, config.padX, config.padY,
-                 placements, &inner);
-    total = {inner.width + config.padX * 2.0,
-             inner.height + config.padY * 2.0};
+    ngl::ComputeTree(root, OmniLayoutConfig(), resolve, placements, total);
     return true;
 }
 
@@ -2898,13 +3072,14 @@ static OmniLayout ResolveOmniLayout(HWND hTaskbarWnd, bool hasNetwork,
         expectedTokens.push_back(L"percent");
     }
 
-    int maxRows = AvailableOmniRows(hTaskbarWnd);
+    int maxRows = AvailableOmniRows(hTaskbarWnd, present);
     auto namer = [&autoTokens](int index) {
         return autoTokens[index];
     };
+    auto fill = g_settings.fillOrder;
     auto arrangement = ngl::ResolveArrangement(
-        g_settings.arrangement, (int)autoTokens.size(), maxRows,
-        g_settings.fillOrder, namer);
+        g_settings.arrangement, (int)autoTokens.size(), maxRows, fill, namer,
+        g_appliedSide);
 
     OmniLayout result;
     result.expression = arrangement.expression;
@@ -2918,8 +3093,8 @@ static OmniLayout ResolveOmniLayout(HWND hTaskbarWnd, bool hasNetwork,
                result.expression.c_str(), error.expected.c_str(),
                (int)error.position + 1);
         arrangement = ngl::ResolveArrangement(
-            L"auto", (int)autoTokens.size(), maxRows,
-            g_settings.fillOrder, namer);
+            L"auto", (int)autoTokens.size(), maxRows, fill, namer,
+            g_appliedSide);
         result.expression = arrangement.expression;
         result.wasAuto = true;
         ngl::Parse(result.expression, root, nullptr);
@@ -2941,8 +3116,7 @@ static OmniLayout ResolveOmniLayout(HWND hTaskbarWnd, bool hasNetwork,
             expectedTokens, writtenPlacements, SameOmniItem);
         if (!missing.empty()) {
             result.expression = ngl::AppendMissing(
-                result.expression, missing, maxRows,
-                g_settings.fillOrder);
+                result.expression, missing, maxRows, fill, g_appliedSide);
             ngl::Parse(result.expression, root, nullptr);
             Wh_Log(L"[Layout] %d enabled item(s) missing from your "
                    L"arrangement were added",
@@ -3163,10 +3337,11 @@ static void ApplyAllItemStyles() {
 
 // ── Internal footprint ────────────────────────────────────────────────────
 // The native ControlCenterButton owns taskbar placement and flyout semantics.
-// Lease only its horizontal size so the complete internal grid isn't clipped;
-// don't alter height or alignment.
+// Lease only its minimum size along the bar so the complete internal grid
+// isn't clipped - MinWidth on a bottom or top taskbar, MinHeight as well on a
+// side one - and don't alter its alignment.
 
-static void ApplyItemsHostFootprint(StackPanel const& sp,
+static void ApplyItemsHostFootprint(Panel const& sp,
                                     OmniLayout const& layout) {
     TrackProperty(sp, FrameworkElement::WidthProperty());
     TrackProperty(sp, FrameworkElement::HeightProperty());
@@ -3183,10 +3358,20 @@ static void ApplyItemsHostFootprint(StackPanel const& sp,
     double footprintWidth = std::max(layout.total.width, kMinimumHitTargetDip);
     double footprintHeight =
         std::max(layout.total.height, kMinimumHitTargetDip);
-    sp.Width(footprintWidth);
-    sp.Height(footprintHeight);
-    sp.HorizontalAlignment(HorizontalAlignment::Center);
-    sp.VerticalAlignment(VerticalAlignment::Center);
+    if (sp.try_as<WrapGrid>()) {
+        // Side taskbar: Windows' own grid keeps its size and its cells. An
+        // explicit size smaller than its native row would clip the slots, so
+        // MinHeight only makes room for an arrangement taller than that row.
+        TrackProperty(sp, FrameworkElement::MinHeightProperty());
+        sp.MinHeight(footprintHeight);
+    } else {
+        sp.Width(footprintWidth);
+        sp.Height(footprintHeight);
+        sp.HorizontalAlignment(HorizontalAlignment::Center);
+        sp.VerticalAlignment(VerticalAlignment::Center);
+    }
+    // Screen pixels on every edge: horizontal is always right, vertical
+    // always down, like every [dx,dy] nudge.
     ApplyOffset(sp, g_settings.offsetX, g_settings.offsetY);
     sp.InvalidateMeasure();
     if (g_omniButton) {
@@ -3213,6 +3398,14 @@ static void ApplyItemsHostFootprint(StackPanel const& sp,
         g_omniButton.Width(std::numeric_limits<double>::quiet_NaN());
         g_omniButton.MinWidth(footprintWidth);
         g_omniButton.MaxWidth(std::numeric_limits<double>::infinity());
+        // On a side taskbar Windows pins the button's Height (38 on
+        // 26300.9550), so an arrangement more than one line deep would be cut
+        // off. MinHeight wins over Height in XAML layout, and Windows never
+        // sets it, so it grows the button without fighting Windows' own value.
+        if (g_appliedSide) {
+            TrackProperty(g_omniButton, FrameworkElement::MinHeightProperty());
+            g_omniButton.MinHeight(footprintHeight);
+        }
         g_omniButton.InvalidateMeasure();
     }
 }
@@ -3223,7 +3416,8 @@ static void ApplyItemsHostFootprint(StackPanel const& sp,
 // defaults, which vary across Windows builds and taskbar templates.
 
 static void ResetElementRefs() {
-    g_omniStackPanel = nullptr; g_omniButton = nullptr;
+    g_appliedChildCount = -1;
+    g_omniItemsHost = nullptr; g_omniButton = nullptr;
     g_networkPresenter = nullptr;  g_volumePresenter = nullptr;
     g_batteryPresenter = nullptr; g_batteryInnerPanel = nullptr;
     g_batteryGlyphFE = nullptr; g_batteryPercentFE = nullptr;
@@ -3235,16 +3429,16 @@ static void ResetElementRefs() {
 }
 
 static void RevokeLayoutUpdated() {
-    if (g_layoutUpdatedSP && g_layoutUpdatedToken.value) {
-        g_layoutUpdatedSP.LayoutUpdated(g_layoutUpdatedToken);
+    if (g_layoutUpdatedHost && g_layoutUpdatedToken.value) {
+        g_layoutUpdatedHost.LayoutUpdated(g_layoutUpdatedToken);
         g_layoutUpdatedToken = {};
     }
-    g_layoutUpdatedSP = nullptr;
+    g_layoutUpdatedHost = nullptr;
 }
 
 static void CleanupAndResetCurrentElements() {
     RevokeLayoutUpdated();
-    auto stackPanel = g_omniStackPanel;
+    auto stackPanel = g_omniItemsHost;
     auto button = g_omniButton;
     RestorePropertySnapshots();
     try {
@@ -3385,12 +3579,118 @@ static void ReadNaturalOrigin(
     }
 }
 
-// Translate an item from its current natural StackPanel Y to an absolute pixel
-// position within the grid footprint. Hidden siblings are collapsed and don't
-// contribute to naturalY.
-static void PositionSlot(FrameworkElement const& fe, double naturalY,
-                         double x, double y) {
-    ApplyOffset(fe, x, -naturalY + y);
+// Translate an item from its natural origin in the items host to an absolute
+// pixel position within the grid footprint.
+static void PositionSlot(FrameworkElement const& fe,
+                         winrt::Windows::Foundation::Point natural, double x,
+                         double y) {
+    ApplyOffset(fe, x - natural.X, y - natural.Y);
+}
+
+// Where each native slot sits in the bottom/top StackPanel with no
+// translation applied. The slots stack, so their origins follow from the slot
+// heights this layout already set; hidden siblings are collapsed and take no
+// height.
+struct SlotOrigins {
+    winrt::Windows::Foundation::Point network{};
+    winrt::Windows::Foundation::Point volume{};
+    winrt::Windows::Foundation::Point battery{};
+};
+
+static SlotOrigins ReadSlotOrigins(OmniLayout const& layout) {
+    SlotOrigins origins;
+    float itemHeight = (float)g_settings.itemHeight;
+    origins.volume.Y = layout.visible[0] ? itemHeight : 0.0f;
+    origins.battery.Y = (layout.visible[0] ? itemHeight : 0.0f) +
+                        (layout.visible[1] ? itemHeight : 0.0f);
+    return origins;
+}
+
+// ── Side-taskbar layout ───────────────────────────────────────────────────
+// On a left or right taskbar Windows hosts the three native slots in a
+// WrapGrid of fixed cells - 53x38, three across, on 26300.9550 - with the
+// battery percentage under its glyph. Reshaping that grid does not work: a
+// slot pushed into a row the grid's height does not cover is not drawn at all
+// (live-observed 2026-10-06 with one footprint cell per row: only the slot
+// left in the first row survived). So the grid is left exactly as Windows
+// built it, every slot keeps its native cell and size, and each item is moved
+// from where it actually renders to its arranged cell by RenderTransform
+// alone. Measured, never derived: Windows pads the first and last cell
+// differently, and the battery's internal layout is a visual state.
+
+// The rendered center of `element` in `relativeTo`'s space.
+static winrt::Windows::Foundation::Point VisualCenter(
+    FrameworkElement const& element, FrameworkElement const& relativeTo) {
+    auto bounds = element.TransformToVisual(relativeTo).TransformBounds(
+        {0.0f, 0.0f, (float)element.ActualWidth(),
+         (float)element.ActualHeight()});
+    return {bounds.X + bounds.Width / 2.0f, bounds.Y + bounds.Height / 2.0f};
+}
+
+// Translate `mover` so that `measured` - the part of it that is actually
+// drawn, such as a glyph inside a slot - is centered on (x, y).
+static void CenterOn(FrameworkElement const& mover,
+                     FrameworkElement const& measured,
+                     FrameworkElement const& host, double x, double y) {
+    if (!mover || !measured) return;
+    try {
+        auto center = VisualCenter(measured, host);
+        ApplyOffset(mover, x - center.X, y - center.Y);
+    } catch (...) {
+        Wh_Log(L"[Layout] Failed to place a side-taskbar item");
+    }
+}
+
+static void ApplySideTaskbarLayout(Panel const& host, OmniLayout const& layout,
+                                   bool hasNetwork, bool hasVolume,
+                                   bool hasBattPres) {
+    FrameworkElement network = hasNetwork ? g_networkPresenter : nullptr;
+    FrameworkElement volume = hasVolume ? g_volumePresenter : nullptr;
+    FrameworkElement glyph = hasBattPres ? g_batteryGlyphFE : nullptr;
+    FrameworkElement percent = hasBattPres ? g_batteryPercentFE : nullptr;
+
+    SetItemVisibility(network, layout.visible[0]);
+    SetItemVisibility(volume, layout.visible[1]);
+    if (hasBattPres)
+        SetItemVisibility(g_batteryPresenter,
+                          layout.visible[2] || layout.visible[3]);
+    SetItemVisibility(glyph, layout.visible[2]);
+    SetItemVisibility(percent, layout.visible[3]);
+
+    // Measure every item where Windows put it, with no translation of ours.
+    for (auto const* item : {&network, &volume, &glyph, &percent})
+        if (*item) ApplyOffset(*item, 0, 0);
+    try {
+        host.UpdateLayout();
+    } catch (...) {
+        Wh_Log(L"[Layout] Failed to update the side-taskbar items host");
+    }
+
+    // The arranged footprint, centered in the host's own box.
+    double originX = (host.ActualWidth() - layout.total.width) / 2.0;
+    double originY =
+        std::max(0.0, (host.ActualHeight() - layout.total.height) / 2.0);
+
+    // Where each item is drawn, which for a glyph stack is its text rather
+    // than the whole 53x38 slot around it.
+    auto drawn = [](ngs::Surface const& surface,
+                    FrameworkElement const& fallback) -> FrameworkElement {
+        if (surface.text) return surface.text;
+        return fallback;
+    };
+    auto place = [&](int item, FrameworkElement const& mover,
+                     FrameworkElement const& measured) {
+        if (!mover || !layout.visible[item] || !layout.hasPlacement[item])
+            return;
+        auto const& cell = layout.placement[item];
+        CenterOn(mover, measured, host,
+                 originX + cell.x + cell.size.width / 2.0,
+                 originY + cell.y + cell.size.height / 2.0);
+    };
+    place(0, network, drawn(g_networkSurface, network));
+    place(1, volume, drawn(g_volumeSurface, volume));
+    place(2, glyph, glyph);
+    place(3, percent, drawn(g_percentSurface, percent));
 }
 
 // Measure one item's natural width for fit-to-content sizing. Returns whether
@@ -3432,20 +3732,27 @@ struct ApplyingScope {
     }
 };
 
-static void ApplyLayout(StackPanel const& sp, HWND hTaskbarWnd) {
+static void ApplyLayout(Panel const& sp, HWND hTaskbarWnd) {
     ApplyingScope applying;
-    if (g_omniStackPanel) return;
+    if (g_omniItemsHost) return;
     if (!sp.IsItemsHost()) return;
 
-    g_omniStackPanel = sp;
-    TrackProperty(sp, StackPanel::OrientationProperty());
+    g_omniItemsHost = sp;
     TrackProperty(sp, FrameworkElement::VerticalAlignmentProperty());
-    TrackProperty(sp, StackPanel::SpacingProperty());
-    sp.Orientation(Orientation::Vertical);
     sp.VerticalAlignment(VerticalAlignment::Top);
-    sp.Spacing(0);
+    if (auto stack = sp.try_as<StackPanel>()) {
+        // Bottom or top taskbar: stack the slots so each has a predictable
+        // natural origin to translate from.
+        TrackProperty(stack, StackPanel::OrientationProperty());
+        TrackProperty(stack, StackPanel::SpacingProperty());
+        stack.Orientation(Orientation::Vertical);
+        stack.Spacing(0);
+    }
+    // A side taskbar's WrapGrid is deliberately left as Windows built it; see
+    // ApplySideTaskbarLayout.
 
     int n = VisualTreeHelper::GetChildrenCount(sp);
+    g_appliedChildCount = n;
 
     // Locate battery slot by class-name substring search.
     int battIdx = -1;
@@ -3570,6 +3877,15 @@ static void ApplyLayout(StackPanel const& sp, HWND hTaskbarWnd) {
 
     ApplyItemsHostFootprint(sp, layout);
 
+    if (sp.try_as<WrapGrid>()) {
+        ApplySideTaskbarLayout(sp, layout, hasNetwork, hasVolume, hasBattPres);
+        Wh_Log(L"[Layout] Applied side-taskbar arrangement (native cells kept, "
+               L"%d slots)", n);
+        return;
+    }
+
+    SlotOrigins origins = ReadSlotOrigins(layout);
+
     // Network (native slot 0). Windows changes this one presenter's glyph
     // between Wi-Fi, Ethernet, disconnected, airplane-mode and VPN states.
     if (hasNetwork) {
@@ -3582,7 +3898,7 @@ static void ApplyLayout(StackPanel const& sp, HWND hTaskbarWnd) {
             if (layout.visible[0] && layout.hasPlacement[0]) {
                 auto const& p = layout.placement[0];
                 PrepareSlot(network, p.size.width, p.size.height);
-                PositionSlot(network, 0, p.x, p.y);
+                PositionSlot(network, origins.network, p.x, p.y);
             }
         }
     }
@@ -3598,9 +3914,7 @@ static void ApplyLayout(StackPanel const& sp, HWND hTaskbarWnd) {
             if (layout.visible[1] && layout.hasPlacement[1]) {
                 auto const& p = layout.placement[1];
                 PrepareSlot(volume, p.size.width, p.size.height);
-                double naturalY =
-                    layout.visible[0] ? g_settings.itemHeight : 0;
-                PositionSlot(volume, naturalY, p.x, p.y);
+                PositionSlot(volume, origins.volume, p.x, p.y);
             }
         }
     }
@@ -3652,13 +3966,11 @@ static void ApplyLayout(StackPanel const& sp, HWND hTaskbarWnd) {
                     VerticalAlignment::Top);
             }
 
-            // Move the presenter to the arrangement origin, accounting for
-            // collapsed network/volume siblings that no longer contribute
-            // natural height.
-            double batteryNaturalY =
-                (layout.visible[0] ? g_settings.itemHeight : 0) +
-                (layout.visible[1] ? g_settings.itemHeight : 0);
-            ApplyOffset(g_batteryPresenter, 0, -batteryNaturalY);
+            // Move the presenter to the arrangement origin from wherever its
+            // slot naturally sits (ReadSlotOrigins accounts for collapsed
+            // network/volume siblings on either items host).
+            ApplyOffset(g_batteryPresenter, -origins.battery.X,
+                        -origins.battery.Y);
 
             if (g_batteryInnerPanel) {
                 TrackProperty(
@@ -3834,22 +4146,65 @@ static void ApplyLayout(StackPanel const& sp, HWND hTaskbarWnd) {
 
 static void OnLayoutUpdated(IInspectable const&, IInspectable const&);
 
-static void RegisterLayoutUpdatedMonitor(StackPanel const& sp) {
+static void RegisterLayoutUpdatedMonitor(Panel const& sp) {
     RevokeLayoutUpdated();
     if (!sp) return;
-    g_layoutUpdatedSP = sp;
+    g_layoutUpdatedHost = sp;
     g_layoutUpdatedToken = sp.LayoutUpdated(OnLayoutUpdated);
 }
 
 static void OnLayoutUpdatedImpl() {
-    auto sp = g_layoutUpdatedSP;
+    auto sp = g_layoutUpdatedHost;
     if (!sp) return;
 
+    // A full re-apply is already scheduled (the taskbar moved, or settings
+    // changed). Re-arranging in place now would work on the elements that
+    // re-apply is about to replace.
+    if (g_reapplyPending) return;
+
+    // THE TASKBAR MOVED BETWEEN A HORIZONTAL AND A SIDE EDGE. Windows swapped
+    // the items host in place (StackPanel <-> WrapGrid) without rebuilding the
+    // taskbar, so the panel held here is detached, or the arrangement was made
+    // for the other orientation. Either way only a fresh apply, which finds
+    // the new host, is right.
+    auto metrics = taskbar_metrics::GetMetrics(
+        taskbar_window::ResolveTaskbarWnd(g_taskbarWnd), g_dockedEdge);
+    if (!VisualTreeHelper::GetParent(sp) ||
+        (g_appliedDpi && metrics.valid && !metrics.rotated &&
+         taskbar_metrics::RunsDownSide(metrics) != g_appliedSide)) {
+        Wh_Log(L"[Layout] Items host replaced or orientation changed - "
+               L"scheduling a fresh apply");
+        OnTaskbarEdgeChanged();
+        return;
+    }
+
+    // A vertical taskbar mod enabled mid-session rotates the very elements
+    // this layout translates. ApplyAllSettings stands down for that, but a
+    // rebuild from here would bypass it and re-arrange into the rotated space,
+    // so stand down here too: hand everything back and stop watching. The next
+    // TrayUI::StartTaskbar re-evaluates, once the vertical mod is off again.
+    if (metrics.valid && !taskbar_metrics::CanArrange(metrics)) {
+        Wh_Log(L"[Layout] Taskbar is being rotated by another mod (%s edge "
+               L"reported) - standing down and restoring the native OmniButton",
+               taskbar_metrics::EdgeName(metrics.edge));
+        ApplyingScope applying;
+        CleanupAndResetCurrentElements();
+        RevokeLayoutUpdated();
+        g_applied = false;
+        return;
+    }
+
+    // Compare against the child count the last apply actually saw, rather than
+    // re-deriving "a slot appeared" from which presenters are set: ApplyLayout
+    // deliberately leaves the network or volume presenter null when the battery
+    // occupies that slot, and inferring from those would report a change on
+    // every pass - a teardown and re-apply per frame. The recorded count also
+    // catches a child REMOVED from the items host, which nothing else notices.
+    // -1 means the last apply bailed before counting; comparing against that
+    // would itself rebuild on every pass.
     bool changed = false;
     int childCount = VisualTreeHelper::GetChildrenCount(sp);
-    if (!g_networkPresenter && childCount >= 1)
-        changed = true;
-    if (!g_volumePresenter && childCount >= 2)
+    if (g_appliedChildCount >= 0 && childCount != g_appliedChildCount)
         changed = true;
 
     if (!g_batteryPresenter) {
@@ -3884,8 +4239,6 @@ static void OnLayoutUpdatedImpl() {
     // window to a display at another scale keeps the old row count until
     // something unrelated forces a re-apply.
     if (!changed && g_appliedDpi) {
-        auto metrics =
-            taskbar_metrics::GetMetrics(taskbar_window::ResolveTaskbarWnd(g_taskbarWnd));
         if (metrics.valid &&
             (metrics.dpi != g_appliedDpi ||
              std::fabs(metrics.constrainedDip - g_appliedConstrainedDip) > 0.5)) {
@@ -4025,7 +4378,7 @@ static bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc,
 
 // ── GetTaskbarXamlRoot ────────────────────────────────────────────────────
 // The CTaskBand walk, the runtime-disassembled FrameworkElement offset, and
-// the taskbar.dll symbol hooks all live in _templates/taskbar-host.h now.
+// the taskbar.dll symbol hooks live in the taskbar XamlRoot component above.
 
 static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
     return taskbar_xaml::GetTaskbarXamlRoot(hTaskbarWnd);
@@ -4058,41 +4411,63 @@ static FrameworkElement FindChildRecursive(
 
 // ── Apply settings ────────────────────────────────────────────────────────
 
-// Logged once per orientation change rather than on every retry.
-static bool g_verticalStandDownLogged = false;
+// Logged once per stand-down rather than on every retry.
+static bool g_rotatedStandDownLogged = false;
+
+// The OmniButton's items host under its ItemsPresenter: a StackPanel on a
+// bottom or top taskbar, a WrapGrid on a left or right one.
+static Panel FindOmniItemsHost(FrameworkElement const& itemsPresenter) {
+    int n = VisualTreeHelper::GetChildrenCount(itemsPresenter);
+    for (int i = 0; i < n; i++) {
+        auto panel =
+            VisualTreeHelper::GetChild(itemsPresenter, i).try_as<Panel>();
+        if (panel && panel.IsItemsHost() &&
+            (panel.try_as<StackPanel>() || panel.try_as<WrapGrid>()))
+            return panel;
+    }
+    return nullptr;
+}
 
 static bool ApplyAllSettings() {
     HWND hWnd = FindCurrentProcessTaskbarWnd();
     if (!hWnd) { Wh_Log(L"[Apply] No taskbar window"); return false; }
     g_taskbarWnd = hWnd;
 
-    // A vertical taskbar (Windhawk's "Vertical Taskbar for Windows 11") walks
-    // the identical ControlCenterButton path this mod walks and owns
-    // RenderTransform on the same children to rotate them. This mod positions
-    // by writing RenderTransform on those same elements, so the two cannot
-    // both be right. Stand down completely and leave the taskbar untouched;
-    // returning true retires the retry loop, and an Explorer rebuild
-    // re-evaluates if the user turns that mod off.
-    auto metrics = taskbar_metrics::GetMetrics(hWnd);
-    if (metrics.valid && !taskbar_metrics::LayoutModelApplies(metrics)) {
-        if (!g_verticalStandDownLogged) {
-            g_verticalStandDownLogged = true;
-            Wh_Log(L"[Apply] Taskbar is %s - standing down. This mod arranges "
-                   L"items with RenderTransform, which a vertical taskbar mod "
-                   L"already owns on the same elements; leaving the native "
-                   L"OmniButton untouched.",
-                   taskbar_metrics::OrientationName(metrics.orientation));
-        }
-        return true;
-    }
-    g_verticalStandDownLogged = false;
-
     try {
         auto xamlRoot = GetTaskbarXamlRoot(hWnd);
         if (!xamlRoot) { Wh_Log(L"[Apply] GetTaskbarXamlRoot failed"); return false; }
         auto content = xamlRoot.Content().try_as<FrameworkElement>();
         if (!content) return false;
-        if (!g_omniStackPanel) {
+
+        // Moving the taskbar re-lays out this same tree instead of rebuilding
+        // it, so watch for it from the first apply on. Idempotent.
+        taskbar_metrics::StartEdgeWatch(g_edgeWatch, content,
+                                        OnTaskbarEdgeChanged);
+
+        // Windows' native left/right taskbar is supported; a taskbar another
+        // mod ROTATES is not. Vertical Taskbar for Windows 11 with its native
+        // mode off walks the identical ControlCenterButton path this mod walks
+        // and owns RenderTransform on the same children to rotate them, so the
+        // two cannot both be right. Stand down completely and leave the
+        // taskbar untouched; returning true retires the retry loop, and a move
+        // or an Explorer rebuild re-evaluates.
+        g_dockedEdge = taskbar_metrics::ReadDockedEdge(content);
+        auto metrics = taskbar_metrics::GetMetrics(hWnd, g_dockedEdge);
+        if (metrics.valid && !taskbar_metrics::CanArrange(metrics)) {
+            if (!g_rotatedStandDownLogged) {
+                g_rotatedStandDownLogged = true;
+                Wh_Log(L"[Apply] Taskbar runs down the side but Windows reports "
+                       L"a %s edge - another mod is rotating it. Standing down: "
+                       L"that mod owns RenderTransform on the elements this "
+                       L"mod arranges, so the native OmniButton is left "
+                       L"untouched.",
+                       taskbar_metrics::EdgeName(metrics.edge));
+            }
+            return true;
+        }
+        g_rotatedStandDownLogged = false;
+
+        if (!g_omniItemsHost) {
             auto omniBtn = FindChildRecursive(content, [](FrameworkElement fe) {
                 return fe.Name() == L"ControlCenterButton"; });
             if (omniBtn) {
@@ -4100,12 +4475,15 @@ static bool ApplyAllSettings() {
                 auto grid = FindChildByClassName(omniBtn, L"Windows.UI.Xaml.Controls.Grid");
                 auto cp   = grid ? FindChildByName(grid, L"ContentPresenter") : nullptr;
                 auto ip   = cp   ? FindChildByClassName(cp, L"Windows.UI.Xaml.Controls.ItemsPresenter") : nullptr;
-                auto sp   = ip   ? FindChildByClassName(ip, L"Windows.UI.Xaml.Controls.StackPanel").try_as<StackPanel>() : nullptr;
-                if (sp && sp.IsItemsHost()) {
-                    ApplyLayout(sp, hWnd);
-                    RegisterLayoutUpdatedMonitor(sp);
-                    Wh_Log(L"[Apply] Monitoring native OmniButton items");
-                } else Wh_Log(L"[Apply] IsItemsHost StackPanel not found");
+                auto host = ip   ? FindOmniItemsHost(ip) : nullptr;
+                if (host) {
+                    ApplyLayout(host, hWnd);
+                    RegisterLayoutUpdatedMonitor(host);
+                    Wh_Log(L"[Apply] Monitoring native OmniButton items (%s "
+                           L"edge, %s host)",
+                           taskbar_metrics::EdgeName(g_dockedEdge),
+                           host.try_as<WrapGrid>() ? L"WrapGrid" : L"StackPanel");
+                } else Wh_Log(L"[Apply] OmniButton items host not found");
             } else Wh_Log(L"[Apply] ControlCenterButton not found");
         } else {
             // Already applied; late template materialization may expose glyph
@@ -4119,7 +4497,7 @@ static bool ApplyAllSettings() {
     // Success means styled, not merely found. Reporting success while a glyph
     // TextBlock is still missing retires the retry thread and the IconView
     // Loaded handler, and the item keeps its native color forever.
-    return g_omniStackPanel != nullptr && AllGlyphsResolved();
+    return g_omniItemsHost != nullptr && AllGlyphsResolved();
 }
 
 static bool ApplyPendingSettings() {
@@ -4244,9 +4622,7 @@ static void ApplyOnTaskbarWindowThread() {
     // Same stale-handle trap as the unload path: if Shell_TrayWnd was recreated
     // the cached handle is dead, and preferring it makes the retry dispatch to
     // a dead window forever instead of re-finding the live one.
-    HWND window = (g_taskbarWnd && IsWindow(g_taskbarWnd))
-                      ? g_taskbarWnd
-                      : FindCurrentProcessTaskbarWnd();
+    HWND window = taskbar_window::ResolveTaskbarWnd(g_taskbarWnd);
     if (!window) return;
     RunFromWindowThread(window, [](void*) {
         if (!g_unloading) g_applied = ApplyPendingSettings();
@@ -4270,7 +4646,24 @@ static void OnTaskbarRebuilt() {
     // new tree gets its own bounded budget of re-measure passes.
     for (double& width : g_itemContentWidth) width = 0.0;
     g_remeasures = 0;
-    StartRetryThread();
+    // On the taskbar's UI thread, inside Explorer's own taskbar construction:
+    // wake a live retry rather than stopping and waiting for it.
+    g_retryLoop.StartOrWake(ApplyOnTaskbarWindowThread,
+                            [] { return g_applied.load(); }, g_unloading);
+}
+
+// The taskbar moved between a horizontal and a side edge, or its thickness
+// changed. Unlike a rebuild the tree survives, but Windows swaps the
+// OmniButton's items host in place, so the arrangement is redone from scratch
+// against whatever host is there now. On the UI thread, from inside a layout
+// pass (TaskbarFrame's SizeChanged, or the LayoutUpdated monitor): schedule,
+// never re-arrange synchronously.
+static void OnTaskbarEdgeChanged() {
+    if (g_unloading) return;
+    g_applied = false;
+    g_reapplyPending = true;
+    g_retryLoop.StartOrWake(ApplyOnTaskbarWindowThread,
+                            [] { return g_applied.load(); }, g_unloading);
 }
 
 static bool HookTaskbarDllSymbols() {
@@ -4356,6 +4749,7 @@ void Wh_ModUninit() {
             // could have happened. Guarding per step is what actually closes
             // the hole; the fallback is only a last resort.
             try { g_autoRevokerList->clear(); } catch (...) {}
+            try { taskbar_metrics::StopEdgeWatch(g_edgeWatch); } catch (...) {}
             try { RevokeLayoutUpdated(); } catch (...) {}
             try { CleanupAndResetCurrentElements(); } catch (...) {}
             try { g_autoRevokerList.reset(); } catch (...) {}
@@ -4383,6 +4777,11 @@ void Wh_ModUninit() {
             // dangerous as an unrevoked IconView Loaded delegate after
             // Windhawk unloads the DLL.
             RevokeLayoutUpdated();
+        } catch (...) {
+        }
+        try {
+            // Same danger: the SizeChanged delegate points into this image.
+            taskbar_metrics::StopEdgeWatch(g_edgeWatch);
         } catch (...) {
         }
         try {
