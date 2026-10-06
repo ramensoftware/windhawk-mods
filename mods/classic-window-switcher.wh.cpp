@@ -397,7 +397,8 @@ inline long long sws_milliseconds_now()
 }
 
 // https://stackoverflow.com/questions/13397571/precise-thread-sleep-needed-max-1ms-error
-inline BOOLEAN sws_nanosleep(LONGLONG ns) {
+inline BOOLEAN sws_nanosleep(LONGLONG ns)
+{
     /* Declarations */
     HANDLE timer;   /* Timer handle */
     LARGE_INTEGER li;   /* Time defintion */
@@ -2027,12 +2028,13 @@ sws_error_t sws_WindowSwitcherLayout_Initialize(
     if (!rv)
     {
         _this->bIncludeWallpaper = settings.bIncludeWallpaper;
-        if (_this->bIncludeWallpaper)
+        HWND hDesktop = GetShellWindow();
+        if (_this->bIncludeWallpaper && hDesktop)
         {
             if (!hWndTarget)
             {
                 sws_WindowSwitcherLayoutWindow swsLayoutWindow;
-                sws_WindowSwitcherLayoutWindow_Initialize(&swsLayoutWindow, GetShellWindow(), NULL);
+                sws_WindowSwitcherLayoutWindow_Initialize(&swsLayoutWindow, hDesktop, NULL);
                 sws_vector_PushBack(&_this->pWindowList, &swsLayoutWindow);
             }
         }
