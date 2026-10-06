@@ -494,52 +494,42 @@ static bool InstallRegistryReadHooks() {
 ////////////////////////////////////////////////////////////////////////////////
 
 // The names of the functions that the mod needs, as they appear in the
-// twinui.pcshell.dll PDB. HookSymbols matches the names as they are and caches
-// the result per binary version, so the potentially slow symbol handling is
-// paid once per build. The undecorated names differ between Windows builds and
-// some builds don't seem to expose the gate at all, so the decorated and the
-// undecorated spellings are both listed and an entry that isn't found isn't an
-// error - what is resolved decides which of the mechanisms can be installed.
+// twinui.pcshell.dll PDB. HookSymbols matches these strings and caches the
+// result per binary version, so the potentially slow symbol handling is paid
+// once per build. Only undecorated names are listed: a mangled name encodes the
+// exact parameter types, so a wrong one would silently ask for a function with
+// a different prototype, while an undecorated name that doesn't match simply
+// doesn't resolve. The parameter list is part of the name, which is why the
+// spelling of the host kind parameter that the builds emit (the enum type and
+// its underlying type) is listed as an alternative, and an entry that isn't
+// found isn't an error - it disables only the mechanism that needs it.
 // twinui.pcshell.dll
 const WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
     {
-        {LR"(?_CreateDCompMTVHost@CMultitaskingViewManager@@AEAAJW4MULTITASKING_VIEW_TYPES@@PEAUIApplicationViewCollection@@AEBU_GUID@@PEAPEAX@Z)",
-         LR"(?_CreateDCompMTVHost@CMultitaskingViewManager@@AEAAJIPEAPEAUIApplicationViewCollection@@AEBU_GUID@@PEAPEAX@Z)",
-         LR"(?_CreateDCompMTVHost@CMultitaskingViewManager@@QEAAJW4MULTITASKING_VIEW_TYPES@@PEAUIApplicationViewCollection@@AEBU_GUID@@PEAPEAX@Z)",
-         LR"(private: long __cdecl CMultitaskingViewManager::_CreateDCompMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))",
-         LR"(private: long __cdecl CMultitaskingViewManager::_CreateDCompMTVHost(unsigned int,struct IApplicationViewCollection *,struct _GUID const &,void * *))",
-         LR"(long __cdecl CMultitaskingViewManager::_CreateDCompMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))"},
+        {LR"(private: long __cdecl CMultitaskingViewManager::_CreateDCompMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))",
+         LR"(private: long __cdecl CMultitaskingViewManager::_CreateDCompMTVHost(unsigned int,struct IApplicationViewCollection *,struct _GUID const &,void * *))"},
         &g_createDcompAddress,
         nullptr,
         true,
     },
     {
-        {LR"(?_CreateXamlMTVHost@CMultitaskingViewManager@@AEAAJW4MULTITASKING_VIEW_TYPES@@PEAUIApplicationViewCollection@@AEBU_GUID@@PEAPEAX@Z)",
-         LR"(?_CreateXamlMTVHost@CMultitaskingViewManager@@AEAAJIPEAPEAUIApplicationViewCollection@@AEBU_GUID@@PEAPEAX@Z)",
-         LR"(?_CreateXamlMTVHost@CMultitaskingViewManager@@QEAAJW4MULTITASKING_VIEW_TYPES@@PEAUIApplicationViewCollection@@AEBU_GUID@@PEAPEAX@Z)",
-         LR"(private: long __cdecl CMultitaskingViewManager::_CreateXamlMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))",
-         LR"(private: long __cdecl CMultitaskingViewManager::_CreateXamlMTVHost(unsigned int,struct IApplicationViewCollection *,struct _GUID const &,void * *))",
-         LR"(long __cdecl CMultitaskingViewManager::_CreateXamlMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))"},
+        {LR"(private: long __cdecl CMultitaskingViewManager::_CreateXamlMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))",
+         LR"(private: long __cdecl CMultitaskingViewManager::_CreateXamlMTVHost(unsigned int,struct IApplicationViewCollection *,struct _GUID const &,void * *))"},
         &g_createXamlAddress,
         nullptr,
         true,
     },
     {
-        {LR"(?IsUndockedAssetAvailable@@YA_JH_J0PEBD@Z)",
-         LR"(?IsUndockedAssetAvailable@@YA_JH_K0PEBD@Z)",
-         LR"(__int64 __cdecl IsUndockedAssetAvailable(int,__int64,__int64,char const *))",
-         LR"(__int64 __cdecl IsUndockedAssetAvailable(int,unsigned __int64,unsigned __int64,char const *))",
-         LR"(IsUndockedAssetAvailable)"},
+        {LR"(__int64 __cdecl IsUndockedAssetAvailable(int,__int64,__int64,char const *))",
+         LR"(__int64 __cdecl IsUndockedAssetAvailable(int,unsigned __int64,unsigned __int64,char const *))"},
         &g_gateAddress,
         nullptr,
         true,
     },
     {
-        // Only used by the E_UNEXPECTED safety net. The decorated name is the
-        // one that the shell keeps for this function; the undecorated spelling
-        // is a fallback for builds that expose it.
-        {LR"(?_CreateMTVHost@CMultitaskingViewManager@@AEAAJW4MULTITASKING_VIEW_TYPES@@PEAUIApplicationViewCollection@@AEBU_GUID@@PEAPEAX@Z)",
-         LR"(private: long __cdecl CMultitaskingViewManager::_CreateMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))"},
+        // Only used by the E_UNEXPECTED safety net.
+        {LR"(private: long __cdecl CMultitaskingViewManager::_CreateMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))",
+         LR"(private: long __cdecl CMultitaskingViewManager::_CreateMTVHost(unsigned int,struct IApplicationViewCollection *,struct _GUID const &,void * *))"},
         &g_createMtvHostAddress,
         nullptr,
         true,
