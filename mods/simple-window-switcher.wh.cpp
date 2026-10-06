@@ -43,6 +43,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
 - Drag to cancel clicks (cancels card selection or close button when cursor is dragged away)
 - Gaming Full Screen Experience ("Xbox Mode") and Tablet Mode support with full window enumeration
 - Precision touchpad sub-notch smoothing (smooth 2-finger panning without overscrolling)
+- Two-finger tap to close the selected window entry while the switcher is active
  - Raw HID three-finger swipes: normal sessions commit on lift; sticky sessions stay open after a swipe and commit with a stationary three-finger tap
 - While the switcher is active, the mod requests ownership of supported three-finger touchpad manipulations and actions; on systems with the documented controller, Windows does not process them while the switcher owns the foreground
 - Highly reliable Explorer restart prompt handling without infinite loops
@@ -80,7 +81,9 @@ commands for opening/dismissing sticky mode or entering/leaving groups.
   Sticky Switcher from Upward Swipe is disabled, Windows owns outside up/down/
   tap actions; horizontal drag invocation remains available. If the API or raw
   reader is unavailable, touchpad takeover is not claimed; keyboard/mouse
-  support remains available.
+  support remains available. While the switcher is active, a stationary two-finger
+  tap closes the selected window entry through the same lazy close path as the
+  keyboard close commands.
 
 ## Screenshots
 
@@ -1250,6 +1253,7 @@ static HHOOK g_hMouseHook = NULL;
 static HWINEVENTHOOK s_hWinEventHook = NULL;
 static HWINEVENTHOOK s_hForegroundEventHook = NULL;
 static void AddWindowEntry(HWND hWnd);
+static void CloseSwitcherEntry(int idx);
 static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime);
 static std::vector<WindowEntry> g_windows;
 static int g_selectedIndex = 0, g_hoverIndex = -1;
@@ -5929,7 +5933,8 @@ static void RequestTouchpadInputDiagnostics(HWND endpoint, UINT event) {
     }
 }
 // Raw-frame gesture state; switcher thread only.
-// Refreshed only by a three-finger stroke and its lift, not ordinary panning.
+// Three-finger strokes and visible-session two-finger taps are classified here;
+// ordinary panning remains outside this state machine.
 static ULONGLONG s_rawTouchpadLastFrameTick = 0;
 static bool s_rawSessionOwned = false;
 static int s_rawGestureTips = 0;
@@ -5951,6 +5956,11 @@ static bool s_rawTouchpadShieldReleasePending = false;
 static bool s_rawSwipeMarkerActive = false;
 // Physical-stroke evidence survives UI cancellation, but never a complete lift.
 static bool s_rawStrokeOwned = false;
+static bool s_rawTwoFingerTapActive = false;
+static bool s_rawTwoFingerTapMoved = false;
+static ULONGLONG s_rawTwoFingerTapStartTick = 0;
+static int s_rawTwoFingerTapOriginX = 0;
+static int s_rawTwoFingerTapOriginY = 0;
 static ULONGLONG s_rawTouchpadShieldFocusStartTick = 0;
 static HWND s_rawShieldRestoreForeground = NULL;
 static HWND s_touchpadActivationRetryTarget = NULL;
@@ -6196,7 +6206,16 @@ static void CancelNativeTouchpadInvocation() {
     ReleaseSRWLockExclusive(&s_rawSwipeMarkerLock);
 }
 
+static void ResetRawTwoFingerTap() {
+    s_rawTwoFingerTapActive = false;
+    s_rawTwoFingerTapMoved = false;
+    s_rawTwoFingerTapStartTick = 0;
+    s_rawTwoFingerTapOriginX = 0;
+    s_rawTwoFingerTapOriginY = 0;
+}
+
 static void CancelRawTouchpadStroke() {
+    ResetRawTwoFingerTap();
     CancelNativeTouchpadInvocation();
     if (!TouchpadHandlingEnabled() ||
         !g_touchpadReaderAvailable.load()) {
@@ -13444,6 +13463,22 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
         return;
     }
 
+    // Shell activation notifications are not guaranteed for every foreground
+    // handoff (especially across integrity boundaries). Reconcile the
+    // foreground event directly so a clicked target is in MRU order before the
+    // next invocation rebuilds the list. MRU history remains valid while the
+    // visual exit is running; live-list mutation still waits for an active
+    // session and never changes the closing frame.
+    if (event == EVENT_SYSTEM_FOREGROUND) {
+        if (!IsSwitcherWindow(hwnd)) {
+            UpdateMruWindow(hwnd);
+            if (!g_animExitActive && (g_isVisible || g_isPendingShow)) {
+                AddWindowEntry(hwnd);
+            }
+        }
+        return;
+    }
+
     if (g_animExitActive || (!g_isVisible && !g_isPendingShow)) return;
 
     LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
@@ -14079,12 +14114,42 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         }
         return;
     }
+
+    const int frameX = (int)(packedPos & 0xFFFF);
+    const int frameY = (int)((packedPos >> 16) & 0xFFFF);
+    bool closeTwoFingerTap = false;
+    if (tips == 0) {
+        closeTwoFingerTap = s_rawTwoFingerTapActive && !s_rawTwoFingerTapMoved &&
+                            now - s_rawTwoFingerTapStartTick <= SWS_RAW_TAP_MAX_MS &&
+                            g_isVisible && !g_animExitActive;
+        ResetRawTwoFingerTap();
+    } else if (s_rawTwoFingerTapActive) {
+        if (tips > 2 ||
+            abs(frameX - s_rawTwoFingerTapOriginX) > SWS_RAW_TAP_SLOP ||
+            abs(frameY - s_rawTwoFingerTapOriginY) > SWS_RAW_TAP_SLOP) {
+            ResetRawTwoFingerTap();
+        } else if (tips == 2 && prevTips == 0) {
+            ResetRawTwoFingerTap();
+        }
+    } else if (tips == 2 && prevTips == 0 && g_isVisible && !g_isPendingShow) {
+        s_rawTwoFingerTapActive = true;
+        s_rawTwoFingerTapMoved = false;
+        s_rawTwoFingerTapStartTick = now;
+        s_rawTwoFingerTapOriginX = frameX;
+        s_rawTwoFingerTapOriginY = frameY;
+    }
+
     if (((s_rawSessionOwned && g_isTouchpadGestureActive) || s_rawTouchpadShieldActive) &&
         g_hSwitcher) {
         SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
     }
 
     if (tips == 0) {
+        if (closeTwoFingerTap && g_selectedIndex >= 0 &&
+            g_selectedIndex < (int)g_windows.size()) {
+            CloseSwitcherEntry(g_selectedIndex);
+            return;
+        }
         const bool hadThree = s_rawGestureSawThree;
         const ULONGLONG held = now - s_rawGestureStartTick;
         const bool isTap = hadThree && s_rawTapEligible && !s_rawGestureMoved &&
