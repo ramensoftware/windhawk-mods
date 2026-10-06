@@ -2,7 +2,7 @@
 // @id              explorer-real-folder-paths
 // @name            Explorer real folder paths
 // @description     Open filesystem-backed Shell shortcuts through their actual paths
-// @version         0.1.3
+// @version         0.1.5
 // @author          Nerdworld
 // @github          https://github.com/nerdworldDE
 // @include         explorer.exe
@@ -32,6 +32,14 @@ and its scroll position instead of selecting the folder's physical drive.
 Paths are resolved through the Windows Shell. Moved folders, OneDrive folder
 redirection, localized names, and network paths are not hardcoded.
 
+Dropbox and similar filesystem folders can keep a friendly name even when
+opened through their physical path. The mod also supplies the full path to
+Explorer's editable address for these folders, keeping their existing
+navigation route and sidebar selection.
+In the modern Windows 11 address bar, **Copy address as text** also copies
+the filesystem path. This applies to any filesystem folder with a friendly
+editing name, including folders opened through Home, This PC, or a library.
+
 Virtual locations such as Home, This PC, library roots, searches, and ZIP
 views keep their normal behavior. Filesystem folders reached through a
 library, OneDrive, or another Shell alias can open through their physical
@@ -46,11 +54,20 @@ by other applications are unaffected.
 Open a new Explorer window, click Downloads in the sidebar, and press Ctrl+L.
 Navigate away and back when testing an already-open window.
 
-Tested on 64-bit Windows 11 23H2, build 22631.6199: the editable address shows
-the full path, and sidebar clicks retain the selected shortcut and scroll
-position. Other Windows builds and Windows on ARM have not been validated.
+Tested on 64-bit Windows 11 23H2, build 22631.6199: version 0.1.5 shows
+Dropbox's filesystem path with Ctrl+L and Copy address as text, while
+preserving sidebar selection and scrolling. Downloads opened through Home
+was also tested with both actions. The original known-folder navigation and
+sidebar behavior was tested on this build. Other Windows builds and Windows
+on ARM have not been validated.
+The address-text fallback applies to the modern Windows 11 address bar.
+Classic address bars, including those restored by other mods, are not
+covered by this fallback.
 The mod needs ExplorerFrame's navigation and sidebar selection symbols. If
 Windhawk cannot resolve them, the mod refuses to initialize.
+The address-text fallback uses an additional optional Shell symbol. If it is
+unavailable, the existing navigation behavior remains active, and logging
+reports that the fallback could not be enabled.
 
 Sidebar selection follows Windows' normal behavior when navigating to a
 different folder through history or the address bar. The mod preserves a
@@ -86,6 +103,11 @@ SetSelectedItem_t g_originalSetSelectedItemNoExpand = nullptr;
 
 using QueryInterface_t = HRESULT(WINAPI*)(void*, REFIID, void**);
 QueryInterface_t g_treeQueryInterface = nullptr;
+
+using ShellItemGetDisplayName_t = HRESULT(WINAPI*)(IShellItem*, SIGDN, PWSTR*);
+ShellItemGetDisplayName_t g_originalShellItemGetDisplayName = nullptr;
+HMODULE g_windowsStorage = nullptr;
+thread_local bool g_insideAddressTextResolution = false;
 
 HMODULE g_explorerFrame = nullptr;
 // These guards are defensive: Shell calls can cross COM/provider boundaries
@@ -215,6 +237,84 @@ ShellAllocation<wchar_t> GetFileSystemPath(IShellItem* item) {
         return {};
     }
     return path;
+}
+
+ShellAllocation<wchar_t> GetAddressFolderPath(PCIDLIST_ABSOLUTE pidl) {
+    if (!pidl || pidl->mkid.cb == 0) {
+        return {};
+    }
+
+    IShellItem* rawItem = nullptr;
+    HRESULT hr = SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&rawItem));
+    ComAllocation<IShellItem> item(rawItem);
+    if (FAILED(hr) || !item) {
+        return {};
+    }
+
+    auto path = GetFileSystemPath(item.get());
+    if (!path || !IsFileSystemFolder(item.get())) {
+        return {};
+    }
+    return path;
+}
+
+bool IsModernAddressBarCaller(void* address) {
+    // On Windows 11 23H2, FileExplorerExtensions requests this name form only
+    // for EditModeText and Copy address as text. Look up the loaded module at
+    // call time so Explorer can load its modern UI after the mod initializes.
+    const auto modernUi = GetModuleHandleW(L"FileExplorerExtensions.dll");
+    HMODULE callerModule = nullptr;
+    return modernUi &&
+           GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                  GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                              reinterpret_cast<PCWSTR>(address),
+                              &callerModule) &&
+           callerModule == modernUi;
+}
+
+struct AddressTextResolutionScope {
+    AddressTextResolutionScope() {
+        g_insideAddressTextResolution = true;
+    }
+
+    ~AddressTextResolutionScope() {
+        g_insideAddressTextResolution = false;
+    }
+};
+
+HRESULT WINAPI ShellItemGetDisplayName_Hook(IShellItem* item,
+                                           SIGDN kind,
+                                           PWSTR* name) {
+    void* caller = __builtin_return_address(0);
+    HRESULT hr = g_originalShellItemGetDisplayName(item, kind, name);
+    if (kind != SIGDN_DESKTOPABSOLUTEEDITING || FAILED(hr) || !name || !*name ||
+        IsAbsoluteFileSystemPath(*name) || g_insideAddressTextResolution) {
+        return hr;
+    }
+    const bool addressCaller = IsModernAddressBarCaller(caller);
+    Wh_Log(L"Editing-name request: %s; modern address caller=%d", *name,
+           addressCaller);
+    if (!addressCaller) {
+        return hr;
+    }
+
+    AddressTextResolutionScope scope;
+    PIDLIST_ABSOLUTE rawPidl = nullptr;
+    HRESULT pidlHr = SHGetIDListFromObject(item, &rawPidl);
+    ShellAllocation<ITEMIDLIST_ABSOLUTE> pidl(rawPidl);
+    auto path = SUCCEEDED(pidlHr) ? GetAddressFolderPath(pidl.get())
+                                 : ShellAllocation<wchar_t>{};
+    if (path) {
+        Wh_Log(L"Address edit text: %s -> %s", *name, path.get());
+        // IShellItem::GetDisplayName returns a CoTaskMem allocation. Transfer
+        // the filesystem-path allocation with the same ownership contract.
+        CoTaskMemFree(*name);
+        *name = path.release();
+    } else {
+        Wh_Log(L"Address edit text: keeping %s (not a filesystem folder)",
+               *name);
+    }
+    return hr;
 }
 
 bool ShouldKeepSidebarSelection(void* tree, IShellItem* target) {
@@ -541,6 +641,38 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    // The modern address bar calls IShellItem::GetDisplayName directly;
+    // CAddressList's legacy ComboBoxEx update isn't used by this Windows UI.
+    // This optional hook changes only full editing-name requests from the
+    // modern UI. Existing navigation/sidebar behavior survives missing symbols.
+    g_windowsStorage = LoadLibraryExW(L"Windows.Storage.dll", nullptr,
+                                      LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (g_windowsStorage) {
+        // Windows.Storage.dll
+        WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
+            {
+                {
+                    L"public: virtual long __cdecl CShellItem::GetDisplayName(enum _SIGDN,unsigned short * *)",
+                    L"public: virtual long __cdecl CShellItem::GetDisplayName(enum _SIGDN,unsigned short **)",
+                    L"public: virtual long __cdecl CShellItem::GetDisplayName(enum _SIGDN,wchar_t * *)",
+                    L"public: virtual long __cdecl CShellItem::GetDisplayName(enum _SIGDN,wchar_t **)",
+                },
+                &g_originalShellItemGetDisplayName,
+                ShellItemGetDisplayName_Hook,
+                true,
+            },
+        };
+        if (WindhawkUtils::HookSymbols(g_windowsStorage, windowsStorageHooks,
+                                      ARRAYSIZE(windowsStorageHooks)) &&
+            g_originalShellItemGetDisplayName) {
+            Wh_Log(L"Modern filesystem address-text fallback enabled (v0.1.5)");
+        } else {
+            Wh_Log(L"Shell editing-name symbol unavailable; using navigation conversion only");
+        }
+    } else {
+        Wh_Log(L"Could not load Windows.Storage.dll; using navigation conversion only");
+    }
+
     Wh_Log(L"Explorer real folder paths initialized");
     return TRUE;
 }
@@ -548,5 +680,9 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     // Windhawk has removed our hooks and waited for active hook calls.
     ClearConvertedPaths();
+    if (g_windowsStorage) {
+        FreeLibrary(g_windowsStorage);
+        g_windowsStorage = nullptr;
+    }
     ReleaseExplorerFrame();
 }
