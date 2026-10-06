@@ -28,10 +28,10 @@ Optionally, it can also hide application window preview thumbnails on hover.
 ## Preview
 
 **Before** (native Windows 11 tooltip on hover):  
-![Before](https://i.imgur.com/dLAXEzl.png)
+![Before](https://i.imgur.com/XW2Ygxq.png)
 
 **After** (tooltip suppressed):  
-![After](https://i.imgur.com/tISQj2F.png)
+![After](https://i.imgur.com/IBPlzQf.png)
 
 ## Settings
 
