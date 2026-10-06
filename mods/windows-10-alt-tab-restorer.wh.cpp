@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              windows-10-alt-tab-restorer
 // @name            Windows 10 Alt+Tab Restorer on Windows 11
-// @description     Restores the native Windows 10 Alt+Tab switcher on Windows 11
+// @description     This mod restores the native Windows 10 Alt+Tab switcher on Windows 11
 // @version         1.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
@@ -14,68 +14,35 @@
 /*
 # Windows 10 Alt+Tab Restorer
 
-Restores the Windows 10 Alt+Tab switcher on Windows 11. The mod was tested on
-Windows 11 24H2; other builds may work as well, but they are untested. If it
-doesn't work, please open an issue so that it can be looked at.
+This mod restores the classic Windows 10 Alt+Tab switcher on Windows 11. This mod has been tested on Windows 11 24H2 and may function on other versions. If not, please open an issue to inform the author about it so that the mod can be enhanced.
 
 ## What it does
 
-* Alt+Tab shows the Windows 10 switcher again: the switcher with the large
-  window previews that steps through the windows while Tab is kept pressed.
-* Both switchers ship with Windows - the mod only decides which of the two the
-  shell uses, and only for Alt+Tab.
-* Nothing is drawn by the mod, no keyboard hook is installed, nothing is written
-  to the registry and no system file is replaced.
+- It restores the native Windows 10 Alt+Tab switcher when you press Alt+Tab.
+- It uses the built-in Windows components, so no custom window or panel is drawn.
+- It does not install a global keyboard hook.
+- It does not write to the registry.
 
-## How it works
+## Requirements
 
-Both switchers live in `twinui.pcshell.dll`, which the shell loads into
-`explorer.exe`. `CMultitaskingViewManager::_CreateMTVHost` creates either the
-XAML host (the Windows 11 switcher) or the DirectComposition host (the Windows 10
-switcher), and `IsUndockedAssetAvailable` is the gate that the shell consults for
-that decision. The mod:
+- Windows 11
+- 64-bit `explorer.exe`.
+- Windhawk installed.
 
-* redirects `CMultitaskingViewManager::_CreateXamlMTVHost` to
-  `CMultitaskingViewManager::_CreateDCompMTVHost` for the Alt+Tab host, and
-* answers the gate with "not available" for the Alt+Tab host, so the code paths
-  that consult it directly also end up on the Windows 10 host.
+## How to use
 
-The two host factories and the gate are resolved with
-`WindhawkUtils::HookSymbols`, which caches the result per `twinui.pcshell.dll`
-version; the names differ between builds, so the decorated spellings are listed
-next to the undecorated ones. On x86-64 the ExplorerPatcher call-site signature
-of `_CreateMTVHost` is the fallback for the factories. The redirect to the
-Windows 10 host is installed only together with the gate that selects it - on
-its own it would leave Alt+Tab without a switcher - and if neither the gate nor
-the host manager could be resolved, the mod stays inactive instead of installing
-half of the mechanism.
-
-The manager owns the host creation, but on some builds it gives up with an error
-before it calls either factory, and then no host is created at all. In that case
-the mod creates the Windows 10 host directly, and after a few failures in a row
-it stops routing for the rest of the session so that the stock Windows 11
-switcher keeps working. The calls to the host factories are counted, so that the
-fallback can tell whether the manager reached a factory before it gave up.
+1. Install the mod in Windhawk and enable it.
+2. Press Alt+Tab. The Windows 10 style switcher should appear.
+3. To remove it, disable or uninstall the mod in Windhawk.
 
 ## Notes
 
-* While the mod is active, every read of
-  `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\AltTabSettings` is
-  answered with a virtual 0, so a leftover value of 1 cannot send Alt+Tab to the
-  legacy Windows XP style dialog and take the Windows 10 host out of the picture.
-  The registry itself is not touched. For the same reason the mod conflicts with
-  the **Legacy Alt+Tab dialog** mod: enable one or the other.
-* Do not combine this mod with another Alt+Tab replacement.
-* Windows can keep using a switcher that was already created. If Alt+Tab doesn't
-  change after enabling the mod - or doesn't change back after disabling it -
-  restart `explorer.exe`.
-* Only `explorer.exe` is affected, and only Alt+Tab. Task View (Win+Tab) and the
-  other multitasking views are left alone.
+- Do not use this mod together with another Alt+Tab replacement mod.
+- The mod only targets `explorer.exe` and only affects the Alt+Tab switcher.
+- While the mod is active it answers reads of `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\AltTabSettings` with 0, so the mod takes precedence over that setting. For the same reason it conflicts with the **Legacy Alt+Tab dialog** mod: enable one or the other.
+- If Alt+Tab does not change, check the Windhawk log for the entries of this mod and open an issue to notify the author of the modification about the problem.
 
-## Credits
-
-The gate hook and the XAML to DirectComposition host redirect are the approach
-used by [ExplorerPatcher](https://github.com/valinet/ExplorerPatcher) by valinet.
+The gate hook and the XAML to DirectComposition host redirect are the approach used by [ExplorerPatcher](https://github.com/valinet/ExplorerPatcher) by valinet.
 */
 // ==/WindhawkModReadme==
 
