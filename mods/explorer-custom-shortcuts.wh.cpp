@@ -479,11 +479,7 @@ int ParseKey(std::wstring keyStr) {
 
 void LoadSettings() {
     Wh_Log(L"Loading mod settings...");
-    PCWSTR enabledStr = Wh_GetStringSetting(L"toasts.enabled");
-    g_showActionToasts = enabledStr ? (_wtoi(enabledStr) != 0) : true;
-    if (enabledStr) {
-        Wh_FreeStringSetting(enabledStr);
-    }
+    g_showActionToasts = Wh_GetIntSetting(L"toasts.enabled") != 0;
 
     int duration = Wh_GetIntSetting(L"toasts.duration");
     if (duration <= 0)
