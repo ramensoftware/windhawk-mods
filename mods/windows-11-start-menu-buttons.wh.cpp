@@ -1,25 +1,25 @@
 // ==WindhawkMod==
-// @id            windows-11-start-menu-buttons
-// @name          Windows 11 Start Menu Buttons
+// @id                  windows-11-start-menu-buttons
+// @name                Windows 11 Start Menu Buttons
 // @description         Customizable buttons for the Windows 11 Start menu.
 // @description:ru-RU   Настраиваемые кнопки для меню «Пуск» Windows 11.
-// @version       2.1
-// @author        Salyts
-// @license       MIT
-// @github        https://github.com/Salyts
-// @include       StartMenuExperienceHost.exe
-// @include       explorer.exe
-// @architecture  x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lshlwapi -lshell32 -luuid -luser32 -lwtsapi32 -lpowrprof -lgdi32 -lgdiplus -lshcore -lcrypt32
+// @version             2.2
+// @author              Salyts
+// @license             MIT
+// @github              https://github.com/Salyts
+// @include             StartMenuExperienceHost.exe
+// @include             explorer.exe
+// @architecture        x86-64
+// @compilerOptions     -lole32 -loleaut32 -lruntimeobject -lshlwapi -lshell32 -luuid -luser32 -lwtsapi32 -lpowrprof -lgdi32 -lgdiplus -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Windows 11 Start Menu Buttons 2.1
+# Windows 11 Start Menu Buttons 2.2
 
-Replaces the default bottom row of the Windows 11 Start menu with fully customizable buttons.
+Replace the Windows 11 Start menu's bottom bar with fully customizable buttons!
 
-❗**There may be issues with mods:** Windows 11 Start Menu Styler, Windows 11 Start Menu Power Buttons.
+Note: There may be conflicts with these mods: Windows 11 Start Menu Styler, Windows 11 Start Menu Power Buttons.
 
 ![img](https://i.imgur.com/J5CC8XP.png)
 
@@ -27,38 +27,83 @@ Replaces the default bottom row of the Windows 11 Start menu with fully customiz
 
 ---
 
+## Visual Configurator
+
+Configure your buttons visually using the **[Start Menu Buttons Configurator](https://salyts.github.io/Windows-11-Start-Menu-Buttons/)** — a web-based tool that lets you:
+
+- Add, remove and reorder buttons with drag & drop
+- Set icons, names and actions visually
+- Build nested submenus (left-click and right-click)
+- Preview your layout in real time
+- Export/import configuration as YAML text
+- Migrate settings from v2.1 to v2.2
+
+👉 **[Open Configurator](https://salyts.github.io/Windows-11-Start-Menu-Buttons/)**
+
+---
+
 ## Quick Start
 
-1. Open Windhawk settings for this mod.
-2. Add buttons using the **Buttons** list.
-3. For each button, pick a **Preset** or set **Preset = Custom** and fill in Name, Icon, Action.
-4. Save — the Start menu updates immediately.
+1. Open Windhawk settings for this mod
+2. Add buttons using the **Buttons** list
+3. Pick a **Preset** (ready-made template) or set **Preset = Custom** for your own button
+4. Configure Name, Icon, and Action
+5. Save - the Start menu updates immediately!
 
 ---
 
-## Button fields
+## Upgrading from v2.1 to v2.2
 
-| Field    | Description |
+If you are upgrading from version 2.1, your buttons will continue to work, but the **Action** field may appear empty in the Windhawk settings UI. This is because v2.2 changed the Action field from a string to an array to support multiple commands.
+
+**Your actions still work** - the mod reads old settings automatically for backward compatibility. However, if you want to edit actions in the UI or add multiple commands, you need to manually re-enter them:
+
+1. Open your mod settings in Windhawk
+2. For each button with an empty Action field that should have a command:
+   - Note the command from your old configuration (it's still working)
+   - Click the Action field and re-enter the command
+   - Click "Add new item" to add more commands if needed
+3. Save the settings
+
+This is a one-time process needed due to Windhawk's settings format change.
+
+---
+
+## Button Fields
+
+| Field | Description |
 |----------|-------------|
-| **Preset** | Ready-made button. Set to `Custom` to define your own. |
-| **Name** | Tooltip shown on hover. Leave empty on presets to use their default name. |
-| **Icon** | [Segoe Fluent Icons](https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-ui-symbol-font) glyph (e.g. `\uE7E8`) **or** full path to an image file (PNG, ICO, JPG, BMP). |
-| **Action** | Used only when Preset = `Custom`. See action formats below. |
-| **Submenu** | Optional list of child items shown in a flyout. If any submenu items are defined, the button opens the flyout instead of running a direct action. |
+| **Preset** | Ready-made button template. Set to `Custom` to define your own. |
+| **Name** | Tooltip shown on hover. Leave empty for presets to use default. |
+| **Icon** | [Segoe Fluent Icons](https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-fluent-icons-font) glyph (e.g. `\uE7E8`), image file path (PNG, ICO, JPG), or .exe/.dll path to extract icon. |
+| **Action** | Action for Custom preset. See formats below. |
+| **Left-click submenu** | Nested menu opened on left-click (up to 3 levels deep). |
+| **Right-click submenu** | Separate menu opened on right-click (up to 3 levels deep). |
 
 ---
 
-## Action formats (Custom preset only)
+## Action Formats (Custom preset only)
 
 | Prefix | Example | Description |
 |--------|---------|-------------|
 | `" "` | `"C:\Program Files\Windhawk\windhawk.exe"` | Opens a file or folder by absolute path. |
-| `~` | `~Downloads` and `~windhawk.exe` | Opens a folder or file by name. |
+| `~` | `~Downloads` or `~windhawk.exe` | Opens a folder or file by name. |
 | `cmd:` | `cmd:control` | Runs a command through `cmd.exe`. |
 | `shell:` | `shell:shutdown /r /f /t 0` | Runs through `powershell.exe`. |
-| `press:` | `press:Win+E` or `press:0x5B;0x45` | Keyboard key press using a [Win32 key code](https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). |
+| `press:` | `press:Win+E` or `press:0x5B;0x45` | Keyboard key press using [Win32 key code](https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). |
 | `web:` | `web:https://windhawk.net/` | Opens a URL in the default browser. |
 | `ms-settings:` | `ms-settings:bluetooth` | Opens a Windows Settings page. |
+
+### Multiple commands
+
+You can execute multiple commands in sequence by adding multiple entries in the **Action** field:
+
+1. In Windhawk settings, click the **Action** field
+2. Add the first command
+3. Click the **"Add new item"** button to add another command
+4. Add as many commands as needed
+
+Commands execute sequentially with a 50ms delay between them.
 
 ### Modifier signs (prepend to any action)
 
@@ -103,15 +148,13 @@ Signs can be combined: `-*cmd:tasklist` runs cmd in a visible window as admin.
 | 16 | `Power Menu` | \uE7E8 | Opens the power options menu. |
 
 ---
+### Credits
+* **[Salyts](https://github.com/Salyts) —** Author of Windows 11 Start Menu Buttons.
+* **[SharkIT-sys](https://github.com/SharkIT-sys) —** Improved code and support for button images.
 
-## Submenus
-
-Fill in the **Submenu** entries for a button. Each submenu item has its own Name, Icon, and Action.
-When at least one submenu item exists, the button opens a flyout menu instead of executing a direct action.
-
----
-
-Thank you so much, [@SharkIT-sys](https://github.com/SharkIT-sys), for helping to improve the mod!
+### Report a Bug
+If you encounter any issues or have a feature suggestion, please open a report on the project's GitHub page:
+👉 **[Report an Issue on GitHub](https://github.com/Salyts/Windows-11-Start-Menu-Buttons/issues)**
 */
 // ==/WindhawkModReadme==
 
@@ -192,19 +235,60 @@ Thank you so much, [@SharkIT-sys](https://github.com/SharkIT-sys), for helping t
         $description: "Tooltip shown on hover. Leave empty on preset buttons to use the preset default."
       - Icon: ""
         $name: Icon
-        $description: "Segoe Fluent glyph (e.g. E7E8 or \\uE7E8), image path (e.g. C:\\Icons\\app.png), or app path (e.g. C:\\Program Files\\app.exe). Leave empty for preset default."
-      - Action: ""
+        $description: "Segoe Fluent glyph (e.g. E7E8 or \\uE7E8), image path (e.g. C:\\Icons\\app.png), or app path (e.g. C:\\Program Files\\app.exe)."
+      - Action: [""]
         $name: Action
-        $description: "Only used when Preset = Custom. See mod description for supported formats."
+        $description: "Only used when Preset = Custom. See mod description for supported formats. If there is a Left-click submenu, this option does not work."
       - submenu:
           - - name: ""
               $name: Item name
             - icon: ""
               $name: Item icon
-            - action: ""
+            - action: [""]
               $name: Item action
-        $name: Submenu items
-        $description: "If any items are added here, the button will open a flyout instead of running the direct action."
+            - submenu:
+              - - name: ""
+                  $name: Item name
+                - icon: ""
+                  $name: Item icon
+                - action: [""]
+                  $name: Item action
+                - submenu:
+                  - - name: ""
+                      $name: Item name
+                    - icon: ""
+                      $name: Item icon
+                    - action: [""]
+                      $name: Item action
+                  $name: Level 3 submenu
+              $name: Level 2 submenu
+        $name: Left-click submenu
+        $description: "Each item can have nested submenus up to 3 levels deep total."
+      - rightClickSubmenu:
+          - - name: ""
+              $name: Item name
+            - icon: ""
+              $name: Item icon
+            - action: [""]
+              $name: Item action
+            - submenu:
+              - - name: ""
+                  $name: Item name
+                - icon: ""
+                  $name: Item icon
+                - action: [""]
+                  $name: Item action
+                - submenu:
+                  - - name: ""
+                      $name: Item name
+                    - icon: ""
+                      $name: Item icon
+                    - action: [""]
+                      $name: Item action
+                  $name: Level 3 submenu
+              $name: Level 2 submenu
+        $name: Right-click submenu
+        $description: "Each item can have nested submenus up to 3 levels deep total."
     - - Preset: settings
     - - Preset: explorer
   $name: Buttons
@@ -226,7 +310,7 @@ Thank you so much, [@SharkIT-sys](https://github.com/SharkIT-sys), for helping t
 #include <shellapi.h>
 #include <shlwapi.h>
 #include <shcore.h>
-#include <wincrypt.h>
+#include <unordered_map>
 
 #undef GetCurrentTime
 
@@ -236,15 +320,19 @@ Thank you so much, [@SharkIT-sys](https://github.com/SharkIT-sys), for helping t
 #include <winrt/Windows.System.h>
 #include <winrt/Windows.UI.h>
 #include <winrt/Windows.UI.Core.h>
+#include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.Storage.h>
 #include <winrt/Windows.Storage.Streams.h>
 
+#ifdef _MSC_VER
 #pragma comment(lib, "gdiplus.lib")
+#endif
 #include <gdiplus.h>
 
 namespace wu   = winrt::Windows::UI;
@@ -270,11 +358,20 @@ static std::atomic<bool> g_monitoringActive{false};
 static std::atomic<bool> g_forceRebuild{false};
 static std::atomic<bool> g_closeStartMenu{true};
 static std::atomic<bool> g_invertIconsSubmenus{false};
+static std::atomic<int>  g_activeActionThreads{0};
+
+struct ActiveThreadGuard {
+    ActiveThreadGuard()  { g_activeActionThreads.fetch_add(1, std::memory_order_relaxed); }
+    ~ActiveThreadGuard() { g_activeActionThreads.fetch_sub(1, std::memory_order_relaxed); }
+};
 
 static std::mutex g_settingsMutex;
 
 static ULONG_PTR g_gdiplusToken = 0;
 static std::mutex g_gdipMutex;
+
+static std::mutex g_iconCacheMutex;
+static std::unordered_map<std::wstring, std::wstring> g_iconPngCache;
 
 enum class AccountButtonMode { Left, Center, Right, Hide };
 
@@ -293,8 +390,9 @@ struct Settings {
 struct ActionItem {
     std::wstring name;
     std::wstring icon;
-    std::wstring action;
+    std::vector<std::wstring> actionArray;
     std::vector<ActionItem> submenu;
+    std::vector<ActionItem> rightClickSubmenu;
 };
 
 static Settings              g_settings;
@@ -413,6 +511,9 @@ static std::wstring DecodeEscapes(const std::wstring& in) {
 static std::wstring NormalizeIconString(const std::wstring& raw) {
     std::wstring s = Trim(raw);
     if (s.empty()) return s;
+
+    s = StripOuterQuotes(s);
+    
     if (IsImagePath(s) || IsExePath(s)) return s;
 
     if (s.size() >= 2 && s[0] == L'/' && s[1] == L'u')
@@ -452,100 +553,6 @@ static HICON LoadIconFromExe(const std::wstring& path, int size) {
         if (hLarge) DestroyIcon(hLarge);
         return hSmall;
     }
-}
-
-static std::wstring CreateDataUriFromIcon(HICON hIcon) {
-    if (!hIcon) return L"";
-
-    ICONINFO info{};
-    if (!GetIconInfo(hIcon, &info)) return L"";
-
-    struct BitmapGuard {
-        HBITMAP color, mask;
-        ~BitmapGuard() {
-            if (color) DeleteObject(color);
-            if (mask)  DeleteObject(mask);
-        }
-    } bmpGuard{ info.hbmColor, info.hbmMask };
-
-    BITMAP bm{};
-    GetObject(info.hbmColor ? info.hbmColor : info.hbmMask, sizeof(bm), &bm);
-
-    HDC screenDC = GetDC(nullptr);
-    HDC memDC    = CreateCompatibleDC(screenDC);
-
-    BITMAPINFO bmi{};
-    bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth       = bm.bmWidth;
-    bmi.bmiHeader.biHeight      = -bm.bmHeight;
-    bmi.bmiHeader.biPlanes      = 1;
-    bmi.bmiHeader.biBitCount    = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-
-    void* bits = nullptr;
-    HBITMAP dib = CreateDIBSection(screenDC, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
-
-    std::wstring result;
-    if (dib && bits) {
-        HBITMAP oldBmp = static_cast<HBITMAP>(SelectObject(memDC, dib));
-        DrawIconEx(memDC, 0, 0, hIcon, bm.bmWidth, bm.bmHeight, 0, nullptr, DI_NORMAL);
-        SelectObject(memDC, oldBmp);
-
-        try {
-            wss::InMemoryRandomAccessStream stream;
-            EnsureGdiplus();
-
-            Gdiplus::Bitmap srcBmp(bm.bmWidth, bm.bmHeight, bm.bmWidth * 4,
-                                   PixelFormat32bppARGB, static_cast<BYTE*>(bits));
-
-            if (srcBmp.GetLastStatus() == Gdiplus::Ok) {
-                IStream* pStream = nullptr;
-                if (SUCCEEDED(CreateStreamOverRandomAccessStream(
-                    winrt::get_unknown(stream), IID_PPV_ARGS(&pStream)))) {
-
-                    CLSID pngClsid;
-                    CLSIDFromString(L"{557CF406-1A04-11D3-9A73-0000F81EF32E}", &pngClsid);
-
-                    if (srcBmp.Save(pStream, &pngClsid, nullptr) == Gdiplus::Ok) {
-                        stream.Seek(0);
-
-                        uint64_t size = stream.Size();
-                        if (size > 0 && size < 10 * 1024 * 1024) {
-                            wss::Buffer buffer(static_cast<uint32_t>(size));
-                            stream.ReadAsync(buffer, static_cast<uint32_t>(size), wss::InputStreamOptions::None).get();
-
-                            auto dataReader = wss::DataReader::FromBuffer(buffer);
-                            std::vector<uint8_t> pngData(static_cast<uint32_t>(size));
-                            dataReader.ReadBytes(pngData);
-
-                            DWORD base64Len = 0;
-                            CryptBinaryToStringW(pngData.data(), static_cast<DWORD>(pngData.size()),
-                                                 CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF,
-                                                 nullptr, &base64Len);
-
-                            if (base64Len > 0) {
-                                std::vector<wchar_t> base64(base64Len);
-                                if (CryptBinaryToStringW(pngData.data(), static_cast<DWORD>(pngData.size()),
-                                                         CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF,
-                                                         base64.data(), &base64Len)) {
-                                    result = L"data:image/png;base64," + std::wstring(base64.data(), base64Len - 1);
-                                }
-                            }
-                        }
-                    }
-                    pStream->Release();
-                }
-            }
-        } catch (...) {
-            Wh_Log(L"Exception creating data URI from icon");
-        }
-
-        DeleteObject(dib);
-    }
-
-    DeleteDC(memDC);
-    ReleaseDC(nullptr, screenDC);
-    return result;
 }
 
 static wuxmi::BitmapSource CreateBitmapSourceFromIcon(HICON hIcon) {
@@ -771,53 +778,64 @@ static wux::UIElement MakeButtonIcon(const std::wstring& iconStr) {
 }
 
 static wuxc::IconElement MakeMenuIcon(const std::wstring& iconStr) {
-    if (IsExePath(iconStr)) {
+    if (IsImagePath(iconStr) && !IsExePath(iconStr)) {
         if (GetFileAttributesW(iconStr.c_str()) != INVALID_FILE_ATTRIBUTES) {
-            HICON hIcon = LoadIconFromExe(iconStr, 16);
-            if (hIcon) {
-                std::wstring dataUri = CreateDataUriFromIcon(hIcon);
-                DestroyIcon(hIcon);
-
-                if (!dataUri.empty()) {
-                    try {
-                        wuxc::BitmapIcon bi;
-                        bi.UriSource(winrt::Windows::Foundation::Uri(dataUri));
-                        bi.ShowAsMonochrome(false);
-                        bi.Width(16); bi.Height(16);
-                        return bi;
-                    } catch (...) {
-                        Wh_Log(L"Exception creating menu icon from data URI: %s", iconStr.c_str());
-                    }
-                }
+            try {
+                wuxc::BitmapIcon bi;
+                bi.UriSource(winrt::Windows::Foundation::Uri(MakeFileUri(iconStr)));
+                bi.ShowAsMonochrome(false);
+                return bi;
+            } catch (...) {
+                Wh_Log(L"Exception creating menu BitmapIcon: %s", iconStr.c_str());
             }
+        } else {
+            Wh_Log(L"Menu icon file not found: %s", iconStr.c_str());
         }
     }
 
-    std::wstring resolved = iconStr;
-    if (!IsExePath(iconStr)) {
-        resolved = ResolveExeIcon(iconStr, 16);
-    }
-
-    if (!resolved.empty() && IsImagePath(resolved)) {
-        if (GetFileAttributesW(resolved.c_str()) != INVALID_FILE_ATTRIBUTES) {
-            try {
-                wuxc::BitmapIcon bi;
-                bi.UriSource(winrt::Windows::Foundation::Uri(MakeFileUri(resolved)));
-                bi.ShowAsMonochrome(false);
-                bi.Width(16); bi.Height(16);
-                return bi;
-            } catch (...) {
-                Wh_Log(L"Exception creating menu image icon: %s", resolved.c_str());
+    if (IsExePath(iconStr)) {
+        if (GetFileAttributesW(iconStr.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            std::wstring pngPath;
+            bool haveCached = false;
+            {
+                std::lock_guard<std::mutex> lk(g_iconCacheMutex);
+                auto it = g_iconPngCache.find(iconStr);
+                if (it != g_iconPngCache.end() &&
+                    GetFileAttributesW(it->second.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                    pngPath = it->second;
+                    haveCached = true;
+                }
             }
-        } else {
-            Wh_Log(L"Menu icon file not found: %s", resolved.c_str());
+
+            if (!haveCached) {
+                HICON hIcon = LoadIconFromExe(iconStr, 16);
+                if (hIcon) {
+                    pngPath = SaveIconToPng(hIcon);
+                    DestroyIcon(hIcon);
+                    if (!pngPath.empty()) {
+                        std::lock_guard<std::mutex> lk(g_iconCacheMutex);
+                        g_iconPngCache[iconStr] = pngPath;
+                    }
+                }
+            }
+
+            if (!pngPath.empty()) {
+                try {
+                    wuxc::BitmapIcon bi;
+                    bi.UriSource(winrt::Windows::Foundation::Uri(MakeFileUri(pngPath)));
+                    bi.ShowAsMonochrome(false);
+                    return bi;
+                } catch (...) {
+                    Wh_Log(L"Exception creating menu icon from exe: %s", iconStr.c_str());
+                }
+            }
         }
     }
 
     wuxc::FontIcon fi;
     fi.FontFamily(wuxm::FontFamily(L"Segoe Fluent Icons"));
     fi.FontSize(16);
-    std::wstring glyph = GlyphOrEmpty(resolved.empty() ? iconStr : resolved);
+    std::wstring glyph = GlyphOrEmpty(iconStr);
     fi.Glyph(!glyph.empty() ? glyph : FALLBACK_ICON);
     return fi;
 }
@@ -1111,72 +1129,95 @@ static bool ExecuteProcess(const std::wstring& cmd, bool useCmdExe, bool showWin
     return true;
 }
 
-static void ExecuteActionText(const std::wstring& raw) {
-    std::wstring a = Trim(raw);
-    if (a.empty()) return;
+static void ExecuteSingleCommand(const std::wstring& cmd) {
+    auto [action, runas, showWindow] = ParseActionSigns(cmd);
+    const LPCWSTR verb = runas ? L"runas" : L"open";
 
-    if (PerformPresetAction(a)) return;
+    if (StartsWithCI(action, L"press:")) {
+        Sleep(150);
+        SendVirtualKeypress(action.substr(6));
+        return;
+    }
 
-    std::thread([a]() {
-        auto [action, runas, showWindow] = ParseActionSigns(a);
-        const LPCWSTR verb = runas ? L"runas" : L"open";
+    if (StartsWithCI(action, L"cmd:")) {
+        std::wstring command = Trim(action.substr(4));
+        if (showWindow)
+            ShellExecuteW(nullptr, verb, L"cmd.exe",
+                          (L"/K " + command).c_str(), nullptr, SW_NORMAL);
+        else
+            ShellExecuteW(nullptr, verb, L"cmd.exe",
+                          (L"/C " + command).c_str(), nullptr, SW_HIDE);
+        return;
+    }
 
-        if (StartsWithCI(action, L"press:")) {
-            Sleep(150);
-            SendVirtualKeypress(action.substr(6));
-            return;
-        }
+    if (StartsWithCI(action, L"shell:")) {
+        std::wstring ps = Trim(action.substr(6));
+        std::wstring args = L"-NoProfile -ExecutionPolicy Bypass -Command " + ps;
+        if (showWindow) args = L"-NoExit " + args;
+        ShellExecuteW(nullptr, verb, L"powershell.exe",
+                      args.c_str(), nullptr, showWindow ? SW_NORMAL : SW_HIDE);
+        return;
+    }
 
-        if (StartsWithCI(action, L"cmd:")) {
-            std::wstring cmd = Trim(action.substr(4));
-            if (showWindow)
-                ShellExecuteW(nullptr, verb, L"cmd.exe",
-                              (L"/K " + cmd).c_str(), nullptr, SW_NORMAL);
-            else
-                ExecuteProcess(cmd, true, false);
-            return;
-        }
+    if (StartsWithCI(action, L"ms-settings:")) {
+        ShellExecuteW(nullptr, verb, action.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        return;
+    }
 
-        if (StartsWithCI(action, L"shell:")) {
-            std::wstring ps = Trim(action.substr(6));
-            std::wstring args = L"-NoProfile -ExecutionPolicy Bypass -Command " + ps;
-            if (showWindow) args = L"-NoExit " + args;
-            ShellExecuteW(nullptr, verb, L"powershell.exe",
-                          args.c_str(), nullptr, showWindow ? SW_NORMAL : SW_HIDE);
-            return;
-        }
+    if (StartsWithCI(action, L"web:")) {
+        ShellExecuteW(nullptr, verb, Trim(action.substr(4)).c_str(),
+                      nullptr, nullptr, SW_SHOWNORMAL);
+        return;
+    }
 
-        if (StartsWithCI(action, L"ms-settings:")) {
-            ShellExecuteW(nullptr, verb, action.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-            return;
-        }
+    if (!action.empty() && action.front() == L'"') {
+        ShellExecuteW(nullptr, verb, StripOuterQuotes(action).c_str(),
+                      nullptr, nullptr, SW_SHOWNORMAL);
+        return;
+    }
 
-        if (StartsWithCI(action, L"web:")) {
-            ShellExecuteW(nullptr, verb, Trim(action.substr(4)).c_str(),
+    if (!action.empty() && action.front() == L'~') {
+        std::wstring tgt = Trim(action.substr(1));
+        if (tgt.empty()) { Wh_Log(L"~search: empty target"); return; }
+        std::wstring resolved;
+        if (GetKnownFolderPath(tgt.c_str(), resolved) ||
+            SearchByName(tgt, resolved))
+            ShellExecuteW(nullptr, verb, resolved.c_str(),
                           nullptr, nullptr, SW_SHOWNORMAL);
-            return;
-        }
+        else
+            Wh_Log(L"~search: '%s' not found", tgt.c_str());
+        return;
+    }
 
-        if (!action.empty() && action.front() == L'"') {
-            ShellExecuteW(nullptr, verb, StripOuterQuotes(action).c_str(),
-                          nullptr, nullptr, SW_SHOWNORMAL);
-            return;
-        }
+    ExecuteProcess(action, false, showWindow);
+}
 
-        if (!action.empty() && action.front() == L'~') {
-            std::wstring tgt = Trim(action.substr(1));
-            if (tgt.empty()) { Wh_Log(L"~search: empty target"); return; }
-            std::wstring resolved;
-            if (GetKnownFolderPath(tgt.c_str(), resolved) ||
-                SearchByName(tgt, resolved))
-                ShellExecuteW(nullptr, verb, resolved.c_str(),
-                              nullptr, nullptr, SW_SHOWNORMAL);
-            else
-                Wh_Log(L"~search: '%s' not found", tgt.c_str());
-            return;
-        }
+static void ExecuteActionText(const std::vector<std::wstring>& commands) {
+    std::vector<std::wstring> cmds;
+    cmds.reserve(commands.size());
+    for (const auto& c : commands) {
+        std::wstring t = Trim(c);
+        if (!t.empty()) cmds.push_back(std::move(t));
+    }
+    if (cmds.empty()) return;
 
-        ExecuteProcess(action, false, showWindow);
+    if (cmds.size() == 1) {
+        if (PerformPresetAction(cmds[0])) return;
+        std::thread([cmd = std::move(cmds[0])]() {
+            ActiveThreadGuard guard;
+            ExecuteSingleCommand(cmd);
+        }).detach();
+        return;
+    }
+
+    std::thread([cmds = std::move(cmds)]() {
+        ActiveThreadGuard guard;
+        for (size_t i = 0; i < cmds.size(); ++i) {
+            if (!PerformPresetAction(cmds[i]))
+                ExecuteSingleCommand(cmds[i]);
+            if (i + 1 < cmds.size())
+                Sleep(50);
+        }
     }).detach();
 }
 
@@ -1190,7 +1231,7 @@ static void SendEscapeKey() {
 
 static void ScheduleEscapeKeypress(DWORD delayMs = 100) {
     auto fire = [delayMs]() {
-        std::thread([delayMs] { Sleep(delayMs); SendEscapeKey(); }).detach();
+        std::thread([delayMs] { ActiveThreadGuard guard; Sleep(delayMs); SendEscapeKey(); }).detach();
     };
     try {
         auto dq = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
@@ -1216,7 +1257,7 @@ static LRESULT CALLBACK ProxyWndProc(HWND hWnd, UINT msg,
             int idx = *static_cast<const int*>(cds->lpData);
             std::lock_guard<std::mutex> lk(g_settingsMutex);
             if (idx >= 0 && idx < static_cast<int>(g_buttons.size()))
-                ExecuteActionText(g_buttons[idx].action);
+                ExecuteActionText(g_buttons[idx].actionArray);
         }
         return 0;
     }
@@ -1275,7 +1316,7 @@ static bool SendActionToProxy(int idx) {
     if (!hw) {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
         if (idx >= 0 && idx < static_cast<int>(g_buttons.size()))
-            ExecuteActionText(g_buttons[idx].action);
+            ExecuteActionText(g_buttons[idx].actionArray);
         return false;
     }
     COPYDATASTRUCT cds{ kCopyDataMagic, sizeof(int), &idx };
@@ -1322,28 +1363,65 @@ static void LoadSettings() {
            static_cast<int>(s.invertIconsSubmenus));
 }
 
-static std::vector<ActionItem> LoadSubmenu(int btnIdx) {
+static std::vector<ActionItem> LoadSubmenuRecursive(const std::wstring& basePath, int depth = 0) {
     std::vector<ActionItem> items;
+    if (depth >= 3) return items;
+
     for (int j = 0; j < 64; ++j) {
-        PCWSTR n  = Wh_GetStringSetting(L"buttons[%d].submenu[%d].name",   btnIdx, j);
-        PCWSTR ic = Wh_GetStringSetting(L"buttons[%d].submenu[%d].icon",   btnIdx, j);
-        PCWSTR ac = Wh_GetStringSetting(L"buttons[%d].submenu[%d].action", btnIdx, j);
+        std::wstring namePath   = basePath + L"[" + std::to_wstring(j) + L"].name";
+        std::wstring iconPath   = basePath + L"[" + std::to_wstring(j) + L"].icon";
+        std::wstring actionPath = basePath + L"[" + std::to_wstring(j) + L"].action";
+
+        PCWSTR n  = Wh_GetStringSetting(namePath.c_str());
+        PCWSTR ic = Wh_GetStringSetting(iconPath.c_str());
 
         std::wstring name   = n ? n : L"";
         std::wstring icon   = DecodeEscapes(NormalizeIconString(ic ? ic : L""));
-        std::wstring action = ac ? ac : L"";
 
-        SafeFreeString(n); SafeFreeString(ic); SafeFreeString(ac);
+        SafeFreeString(n); SafeFreeString(ic);
 
         if (Trim(name).empty()) break;
 
+        std::vector<std::wstring> actionArray;
+        for (int k = 0; k < 64; ++k) {
+            std::wstring cmdPath = actionPath + L"[" + std::to_wstring(k) + L"]";
+            PCWSTR cmd = Wh_GetStringSetting(cmdPath.c_str());
+            if (!cmd || wcslen(cmd) == 0) {
+                SafeFreeString(cmd);
+                break;
+            }
+            std::wstring cmdStr = cmd;
+            SafeFreeString(cmd);
+            cmdStr = Trim(cmdStr);
+            if (cmdStr.empty()) break;
+
+            actionArray.push_back(std::move(cmdStr));
+        }
+
         ActionItem item;
-        item.name   = Trim(name);
-        item.icon   = Trim(icon);
-        item.action = Trim(action);
+        item.name        = Trim(name);
+        item.icon        = Trim(icon);
+        item.actionArray = std::move(actionArray);
+
+        std::wstring submenuPath = basePath + L"[" + std::to_wstring(j) + L"].submenu";
+        item.submenu = LoadSubmenuRecursive(submenuPath, depth + 1);
+
+        std::wstring rightClickPath = basePath + L"[" + std::to_wstring(j) + L"].rightClickSubmenu";
+        item.rightClickSubmenu = LoadSubmenuRecursive(rightClickPath, depth + 1);
+
         items.push_back(std::move(item));
     }
     return items;
+}
+
+static std::vector<ActionItem> LoadSubmenu(int btnIdx) {
+    std::wstring basePath = L"buttons[" + std::to_wstring(btnIdx) + L"].submenu";
+    return LoadSubmenuRecursive(basePath, 0);
+}
+
+static std::vector<ActionItem> LoadRightClickSubmenu(int btnIdx) {
+    std::wstring basePath = L"buttons[" + std::to_wstring(btnIdx) + L"].rightClickSubmenu";
+    return LoadSubmenuRecursive(basePath, 0);
 }
 
 static void BuildButtons() {
@@ -1356,15 +1434,38 @@ static void BuildButtons() {
         PCWSTR presetRaw = Wh_GetStringSetting(L"buttons[%d].Preset", i);
         PCWSTR nRaw      = Wh_GetStringSetting(L"buttons[%d].Name",   i);
         PCWSTR iRaw      = Wh_GetStringSetting(L"buttons[%d].Icon",   i);
-        PCWSTR aRaw      = Wh_GetStringSetting(L"buttons[%d].Action", i);
 
         std::wstring preset    = presetRaw ? presetRaw : L"";
         std::wstring rawName   = nRaw ? nRaw : L"";
         std::wstring rawIcon   = DecodeEscapes(NormalizeIconString(iRaw ? iRaw : L""));
-        std::wstring rawAction = aRaw ? aRaw : L"";
 
         SafeFreeString(presetRaw); SafeFreeString(nRaw);
-        SafeFreeString(iRaw);      SafeFreeString(aRaw);
+        SafeFreeString(iRaw);
+
+        std::vector<std::wstring> actionArray;
+        for (int k = 0; k < 64; ++k) {
+            WCHAR actionPath[128];
+            swprintf_s(actionPath, L"buttons[%d].Action[%d]", i, k);
+            PCWSTR cmd = Wh_GetStringSetting(actionPath);
+            if (!cmd || wcslen(cmd) == 0) {
+                SafeFreeString(cmd);
+                break;
+            }
+            std::wstring cmdStr = cmd;
+            SafeFreeString(cmd);
+            cmdStr = Trim(cmdStr);
+            if (cmdStr.empty()) break;
+            actionArray.push_back(std::move(cmdStr));
+        }
+
+        if (actionArray.empty()) {
+            PCWSTR oldAction = Wh_GetStringSetting(L"buttons[%d].Action", i);
+            if (oldAction && wcslen(oldAction) > 0) {
+                std::wstring old = Trim(oldAction);
+                if (!old.empty()) actionArray.push_back(std::move(old));
+            }
+            SafeFreeString(oldAction);
+        }
 
         std::wstring presetKey = ToLower(Trim(preset));
         bool isCustom = (presetKey == L"custom" || presetKey.empty());
@@ -1372,13 +1473,14 @@ static void BuildButtons() {
         if (isCustom) {
             bool allEmpty = Trim(rawName).empty() &&
                             Trim(rawIcon).empty() &&
-                            Trim(rawAction).empty();
+                            actionArray.empty();
             if (presetKey.empty() && allEmpty) break;
             if (allEmpty) continue;
         }
 
         const PresetDef* pd = FindPreset(preset);
         auto userSub = LoadSubmenu(i);
+        auto userRightSub = LoadRightClickSubmenu(i);
 
         ActionItem item;
 
@@ -1386,26 +1488,25 @@ static void BuildButtons() {
             item.name = Trim(rawName).empty() ? PresetName(*pd, ruLang) : Trim(rawName);
             item.icon = Trim(rawIcon).empty()  ? pd->icon               : Trim(rawIcon);
 
-            if (!userSub.empty()) {
-                item.submenu = std::move(userSub);
-            } else if (pd->action) {
-                item.action = pd->action;
+            if (pd->action) {
+                item.actionArray = { pd->action };
             } else {
                 for (const wchar_t* key : { L"lock", L"sleep", L"shutdown", L"restart" }) {
                     const PresetDef* sp = FindPreset(key);
                     if (!sp) continue;
                     ActionItem si;
-                    si.name   = PresetName(*sp, ruLang);
-                    si.icon   = sp->icon;
-                    si.action = sp->action;
+                    si.name        = PresetName(*sp, ruLang);
+                    si.icon        = sp->icon;
+                    si.actionArray = { sp->action };
                     item.submenu.push_back(std::move(si));
                 }
             }
         } else {
             item.name   = Trim(rawName);
             item.icon   = Trim(rawIcon).empty() ? FALLBACK_ICON : Trim(rawIcon);
-            item.action = Trim(rawAction);
+            item.actionArray = std::move(actionArray);
             if (!userSub.empty()) item.submenu = std::move(userSub);
+            if (!userRightSub.empty()) item.rightClickSubmenu = std::move(userRightSub);
         }
 
         newButtons.push_back(std::move(item));
@@ -1435,25 +1536,75 @@ static wux::FrameworkElement FindByName(wux::DependencyObject root,
     return nullptr;
 }
 
+static void AddSubMenuItems(wuxc::MenuFlyoutSubItem parentItem,
+                            const std::vector<ActionItem>& items,
+                            bool invertIcons);
+
 static void AddMenuItems(wuxc::MenuFlyout flyout,
                          const std::vector<ActionItem>& items,
                          bool invertIcons) {
     for (const auto& item : items) {
-        wuxc::MenuFlyoutItem mi;
-        mi.Text(item.name);
-        mi.Icon(MakeMenuIcon(item.icon.empty() ? std::wstring(FALLBACK_ICON) : item.icon));
-        if (invertIcons)
-            mi.FlowDirection(wux::FlowDirection::RightToLeft);
+        if (!item.submenu.empty()) {
+            wuxc::MenuFlyoutSubItem subItem;
+            subItem.Text(item.name);
+            subItem.Icon(MakeMenuIcon(item.icon.empty() ? std::wstring(FALLBACK_ICON) : item.icon));
+            if (invertIcons)
+                subItem.FlowDirection(wux::FlowDirection::RightToLeft);
 
-        std::wstring act = item.action;
-        mi.Click([act](auto&&, auto&&) {
-            if (StartsWithCI(act, L"press:"))
-                CloseStartMenuForPress();
-            else
-                CloseStartMenuAfterClick();
-            ExecuteActionText(act);
-        });
-        flyout.Items().Append(mi);
+            AddSubMenuItems(subItem, item.submenu, invertIcons);
+            
+            flyout.Items().Append(subItem);
+        } else {
+            wuxc::MenuFlyoutItem mi;
+            mi.Text(item.name);
+            mi.Icon(MakeMenuIcon(item.icon.empty() ? std::wstring(FALLBACK_ICON) : item.icon));
+            if (invertIcons)
+                mi.FlowDirection(wux::FlowDirection::RightToLeft);
+
+            std::vector<std::wstring> act = item.actionArray;
+            mi.Click([act](auto&&, auto&&) {
+                if (!act.empty() && StartsWithCI(act[0], L"press:"))
+                    CloseStartMenuForPress();
+                else
+                    CloseStartMenuAfterClick();
+                ExecuteActionText(act);
+            });
+            flyout.Items().Append(mi);
+        }
+    }
+}
+
+static void AddSubMenuItems(wuxc::MenuFlyoutSubItem parentItem,
+                            const std::vector<ActionItem>& items,
+                            bool invertIcons) {
+    for (const auto& item : items) {
+        if (!item.submenu.empty()) {
+            wuxc::MenuFlyoutSubItem subItem;
+            subItem.Text(item.name);
+            subItem.Icon(MakeMenuIcon(item.icon.empty() ? std::wstring(FALLBACK_ICON) : item.icon));
+            if (invertIcons)
+                subItem.FlowDirection(wux::FlowDirection::RightToLeft);
+
+            AddSubMenuItems(subItem, item.submenu, invertIcons);
+            
+            parentItem.Items().Append(subItem);
+        } else {
+            wuxc::MenuFlyoutItem mi;
+            mi.Text(item.name);
+            mi.Icon(MakeMenuIcon(item.icon.empty() ? std::wstring(FALLBACK_ICON) : item.icon));
+            if (invertIcons)
+                mi.FlowDirection(wux::FlowDirection::RightToLeft);
+
+            std::vector<std::wstring> act = item.actionArray;
+            mi.Click([act](auto&&, auto&&) {
+                if (!act.empty() && StartsWithCI(act[0], L"press:"))
+                    CloseStartMenuForPress();
+                else
+                    CloseStartMenuAfterClick();
+                ExecuteActionText(act);
+            });
+            parentItem.Items().Append(mi);
+        }
     }
 }
 
@@ -1498,14 +1649,18 @@ static void InjectButtons(wuxc::Panel parentPanel,
                         break;
                     case AccountButtonMode::Left:
                         fe.HorizontalAlignment(wux::HorizontalAlignment::Left);
+                        fe.Margin({ static_cast<double>(cur.containerMarginLeft), 0, 0, 0 });
                         fe.Visibility(wux::Visibility::Visible);
                         break;
                     case AccountButtonMode::Center:
                         fe.HorizontalAlignment(wux::HorizontalAlignment::Center);
+                        fe.Margin({ static_cast<double>(cur.containerMarginLeft), 0,
+                                    static_cast<double>(cur.containerMarginRight), 0 });
                         fe.Visibility(wux::Visibility::Visible);
                         break;
                     case AccountButtonMode::Right:
                         fe.HorizontalAlignment(wux::HorizontalAlignment::Right);
+                        fe.Margin({ 0, 0, static_cast<double>(cur.containerMarginRight), 0 });
                         fe.Visibility(wux::Visibility::Visible);
                         break;
                 }
@@ -1574,21 +1729,94 @@ static void InjectButtons(wuxc::Panel parentPanel,
 
             if (!def.submenu.empty()) {
                 auto sub        = def.submenu;
+                auto rightSub   = def.rightClickSubmenu;
                 bool invertIcons = cur.invertIconsSubmenus;
+                
                 btn.Click([sub, btn, invertIcons](auto&&, auto&&) mutable {
                     wuxc::MenuFlyout flyout;
                     AddMenuItems(flyout, sub, invertIcons);
                     flyout.ShowAt(btn);
                 });
+                
+                if (!rightSub.empty()) {
+                    btn.IsRightTapEnabled(false);
+                    btn.IsHoldingEnabled(false);
+                    btn.AllowFocusOnInteraction(false);
+                    
+                    btn.ContextRequested([](auto&&, auto&& args) {
+                        args.Handled(true);
+                    });
+                    
+                    btn.PointerPressed([rightSub, btn, invertIcons](auto&&, auto&& args) mutable {
+                        auto props = args.GetCurrentPoint(nullptr).Properties();
+                        if (props.IsRightButtonPressed()) {
+                            args.Handled(true);
+                            wuxc::MenuFlyout flyout;
+                            AddMenuItems(flyout, rightSub, invertIcons);
+                            flyout.ShowAt(btn);
+                        }
+                    });
+                    
+                    btn.RightTapped([](auto&&, auto&& args) {
+                        args.Handled(true);
+                    });
+                    btn.Holding([](auto&&, auto&& args) {
+                        args.Handled(true);
+                    });
+                    
+                    btn.PointerReleased([](auto&&, auto&& args) {
+                        auto props = args.GetCurrentPoint(nullptr).Properties();
+                        if (props.PointerUpdateKind() == winrt::Windows::UI::Input::PointerUpdateKind::RightButtonReleased) {
+                            args.Handled(true);
+                        }
+                    });
+                }
             } else {
-                std::wstring act = def.action;
+                std::vector<std::wstring> act = def.actionArray;
+                auto rightSub = def.rightClickSubmenu;
+                bool invertIcons = cur.invertIconsSubmenus;
+                
                 btn.Click([act, btnIdx](auto&&, auto&&) {
-                    if (StartsWithCI(act, L"press:"))
+                    if (!act.empty() && StartsWithCI(act[0], L"press:"))
                         CloseStartMenuForPress();
                     else
                         CloseStartMenuAfterClick();
                     SendActionToProxy(btnIdx);
                 });
+                
+                if (!rightSub.empty()) {
+                    btn.IsRightTapEnabled(false);
+                    btn.IsHoldingEnabled(false);
+                    btn.AllowFocusOnInteraction(false);
+                    
+                    btn.ContextRequested([](auto&&, auto&& args) {
+                        args.Handled(true);
+                    });
+                    
+                    btn.PointerPressed([rightSub, btn, invertIcons](auto&&, auto&& args) mutable {
+                        auto props = args.GetCurrentPoint(nullptr).Properties();
+                        if (props.IsRightButtonPressed()) {
+                            args.Handled(true);
+                            wuxc::MenuFlyout flyout;
+                            AddMenuItems(flyout, rightSub, invertIcons);
+                            flyout.ShowAt(btn);
+                        }
+                    });
+                    
+                    btn.RightTapped([](auto&&, auto&& args) {
+                        args.Handled(true);
+                    });
+                    btn.Holding([](auto&&, auto&& args) {
+                        args.Handled(true);
+                    });
+                    
+                    btn.PointerReleased([](auto&&, auto&& args) {
+                        auto props = args.GetCurrentPoint(nullptr).Properties();
+                        if (props.PointerUpdateKind() == winrt::Windows::UI::Input::PointerUpdateKind::RightButtonReleased) {
+                            args.Handled(true);
+                        }
+                    });
+                }
             }
 
             container.Children().Append(btn);
@@ -1832,6 +2060,16 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     Wh_Log(L"Wh_ModUninit");
     g_unloading = true;
+
+    for (int waited = 0; waited < 2000 && g_activeActionThreads.load(std::memory_order_relaxed) > 0; waited += 20)
+        Sleep(20);
+
+    {
+        std::lock_guard<std::mutex> lk(g_iconCacheMutex);
+        for (const auto& [key, pngPath] : g_iconPngCache)
+            DeleteFileW(pngPath.c_str());
+        g_iconPngCache.clear();
+    }
 
     if (IsExplorerProcess()) {
         if (g_proxyWindow)

@@ -2,7 +2,7 @@
 // @id              restore-explorer-exploring-mode
 // @name            Restore Explorer "Exploring" Mode
 // @description     Reintroduces File Explorer's "Exploring" mode from Windows XP and before
-// @version         1.3.0
+// @version         1.4.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -69,11 +69,15 @@ Windows Registry Editor Version 5.00
   $description:
     When enabled, taking the "Open" action on a folder in an open/save dialog will open
     the folder in a new Explorer window (Windows XP and before).
-- dont_store_tree_state: true
-  $name: Don't store tree view state
+- dont_store_tree_state: "1"
+  $name: Tree view initial state mode
   $description:
-    When enabled, the tree view's initial open state will be based on whether the window was opened in
-    explore mode and will not be carried between windows (Windows XP and before).
+    Changes the behavior of the tree view's initial open state to match the selected
+    OS.
+  $options:
+  - 1: Windows 95 - XP
+  - vista: Windows Vista
+  - 0: Windows 7+
 */
 // ==/WindhawkModSettings==
 
@@ -121,9 +125,14 @@ enum EXPLORER_ICON_MODE
     EIM_IE55,
     EIM_IE40,
 } g_explorerIconMode = EIM_VISTA;
+enum TREE_VIEW_MODE
+{
+    TVM_XP = 0,
+    TVM_VISTA,
+    TVM_7,
+} g_treeViewMode = TVM_7;
 WindhawkUtils::StringSetting g_spszExploringText;
 bool g_fOpenInNewWindow = false;
-bool g_fDontStoreTreeState = false;
 
 interface IBrowserEvents : IUnknown
 {
@@ -360,6 +369,37 @@ HRESULT CMemPropStore_Write_hook(
             CShellBrowser__SetIcon_hook(pShellBrowser);
         }
     }
+    else if (g_treeViewMode == TVM_VISTA && !wcscmp(pszPropName, L"ExpandInitialNav"))
+    {
+        if (pVar->boolVal == VARIANT_TRUE)
+        {
+            HKEY hkey;
+            if (ERROR_SUCCESS == RegOpenKeyExW(
+                HKEY_CURRENT_USER,
+                L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Modules\\GlobalSettings\\Sizer",
+                0,
+                KEY_READ | KEY_WRITE,
+                &hkey))
+            {
+                DWORD cbData = 0;
+                if (ERROR_SUCCESS == RegQueryValueExW(hkey, L"PageSpaceControlSizer", nullptr, nullptr, nullptr, &cbData)
+                    && cbData > 4)
+                {
+                    LPBYTE lpData = (LPBYTE)LocalAlloc(LPTR, cbData);
+                    if (lpData)
+                    {
+                        if (ERROR_SUCCESS == RegQueryValueExW(hkey, L"PageSpaceControlSizer", nullptr, nullptr, lpData, &cbData))
+                        {
+                            lpData[4] = 1;
+                            RegSetValueExW(hkey, L"PageSpaceControlSizer", 0, REG_BINARY, lpData, cbData);
+                        }
+                        LocalFree(lpData);
+                    }
+                }
+                RegCloseKey(hkey);
+            }
+        }
+    }
     return hr;
 }
 
@@ -423,7 +463,7 @@ HRESULT CDUISizerElement__WriteVisibleToPropBag_hook(
 
             // If we don't want to store the tree state, open tree based on whether or not we are in
             // explore mode. (XP and before)
-            if (g_fDontStoreTreeState)
+            if (g_treeViewMode == TVM_XP)
             {
                 if (SUCCEEDED(PSPropertyBag_ReadBOOL(ppbBrowser, L"ExpandInitialNav", &fProp)))
                     fValue = fProp;
@@ -706,8 +746,25 @@ void Wh_ModSettingsChanged(void)
     {
         g_explorerIconMode = EIM_IE40;
     }
+    else
+    {
+        g_explorerIconMode = EIM_VISTA;
+    }
     Wh_FreeStringSetting(pszIconMode);
-    g_fDontStoreTreeState = Wh_GetIntSetting(L"dont_store_tree_state");
+    LPCWSTR pszTreeMode = Wh_GetStringSetting(L"dont_store_tree_state");
+    if (!wcscmp(pszTreeMode, L"1"))
+    {
+        g_treeViewMode = TVM_XP;
+    }
+    else if (!wcscmp(pszTreeMode, L"vista"))
+    {
+        g_treeViewMode = TVM_VISTA;
+    }
+    else
+    {
+        g_treeViewMode = TVM_7;
+    }
+    Wh_FreeStringSetting(pszTreeMode);
 #endif
     g_fOpenInNewWindow = Wh_GetIntSetting(L"open_in_new_window");
 }

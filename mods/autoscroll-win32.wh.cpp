@@ -6,7 +6,7 @@
 // @description     Enables browser-style middle-mouse autoscroll in Win32 applications. Compatible with Smooth Scroll Win32.
 // @description:pt  Ativa rolagem automatica com o botao do meio (estilo navegador) em aplicativos Win32. Compativel com Smooth Scroll Win32.
 // @description:es  Activa el desplazamiento automatico con el boton central del raton (estilo navegador) en aplicaciones Win32. Compatible con Smooth Scroll Win32.
-// @version         1.0.1
+// @version         1.0.2
 // @author          crazyboyybs
 // @github          https://github.com/crazyboyybs
 // @include         explorer.exe
@@ -25,13 +25,9 @@
 Simulates browser-style autoscroll (middle mouse button) in Win32 applications
 such as File Explorer, with a WinUI-style visual indicator at the scroll origin.
 
-## Changelog - 1.0.1
-1. Fixed middle-click "open in new tab" so it now works in hold mode
-2. Fixed overscroll without Smooth Scroll Win32 (capped to 1 wheel notch per frame)
-3. Added Toggle Mode -- click to start scrolling, click again to stop
-4. Added: Block Middle Button Release -- suppresses mouse3 release for bound apps
-5. Added per-monitor DPI support for the visual indicator
-6. Improved: scroll thread idles at zero CPU (WaitForSingleObject on event)
+## Changelog - 1.0.2
+1. Fixed possible explorer.exe crash on startup.
+2. Fixed inverted horizontal scrolling.
 
 ### How to use
 
@@ -201,12 +197,19 @@ static const UINT WM_IND_HIDE   = WM_USER + 2;
 static const UINT WM_IND_UPDATE = WM_USER + 3;
 
 // Scroll thread
+// Raw pointer (not a value std::thread): a value std::thread has a
+// non-trivial destructor that calls std::terminate() if still joinable.
+// Windhawk does not call Wh_ModUninit when the host process exits -- the
+// DLL is simply detached -- so a global value std::thread would abort
+// explorer.exe on every shutdown. A raw pointer has a trivial destructor,
+// so nothing runs at CRT shutdown; the (already OS-terminated) thread is
+// harmlessly leaked instead.
 static std::atomic<bool> g_threadRunning{false};
-static std::thread       g_scrollThread;
+static std::thread*      g_scrollThread = nullptr;
 
-// Indicator thread
+// Indicator thread (same rationale as g_scrollThread above)
 static std::atomic<HWND> g_indicatorHwnd{nullptr};
-static std::thread       g_indicatorThread;
+static std::thread*      g_indicatorThread = nullptr;
 
 // Event signaled by StartAutoscroll to wake the scroll thread from idle.
 // Auto-reset: consumed by WaitForSingleObject automatically.
@@ -291,7 +294,12 @@ static void ScrollThreadProc() {
                         (int)(t * t * t * maxNotches * WHEEL_DELTA),
                         (int)WHEEL_DELTA);  // 1 notch max: prevents queue buildup
                     if (delta > 0) {
-                        if (dx > 0) delta = -delta;
+                        // WM_MOUSEHWHEEL is the opposite convention of WM_MOUSEWHEEL:
+                        // positive delta = wheel tilted right = content scrolls right
+                        // (MSDN: "a positive value indicates the wheel was rotated to
+                        // the right"). So a rightward drag (dx > 0) must KEEP delta
+                        // positive; only a leftward drag (dx < 0) negates it.
+                        if (dx < 0) delta = -delta;
                         g_scrolledSinceStart.store(true, std::memory_order_relaxed);
                         PostMessageW(hwnd, WM_MOUSEHWHEEL,
                             MAKEWPARAM(0, (SHORT)delta),
@@ -1109,9 +1117,18 @@ void Wh_ModAfterInit() {
         return;
     }
     g_threadRunning.store(true, std::memory_order_relaxed);
-    g_scrollThread = std::thread(ScrollThreadProc);
+    g_scrollThread = new std::thread(ScrollThreadProc);
     if (g_showIndicator.load(std::memory_order_relaxed))
-        g_indicatorThread = std::thread(IndicatorThreadProc);
+        g_indicatorThread = new std::thread(IndicatorThreadProc);
+}
+
+// Joins (if still joinable) and deletes a heap-allocated thread, then nulls
+// the pointer. Safe to call with p == nullptr.
+static void JoinAndDeleteThread(std::thread*& p) {
+    if (!p) return;
+    if (p->joinable()) p->join();
+    delete p;
+    p = nullptr;
 }
 
 void Wh_ModSettingsChanged() {
@@ -1125,14 +1142,12 @@ void Wh_ModSettingsChanged() {
         // Indicator is running but should be off: close and join the thread.
         // WM_CLOSE → DestroyWindow → PostQuitMessage exits GetMessage quickly.
         PostMessageW(ind, WM_CLOSE, 0, 0);
-        if (g_indicatorThread.joinable())
-            g_indicatorThread.join();
+        JoinAndDeleteThread(g_indicatorThread);
     } else if (show && !ind) {
         // Indicator should be on but thread is not running: start it.
         // Join the previous (already-exited) thread handle before replacing.
-        if (g_indicatorThread.joinable())
-            g_indicatorThread.join();
-        g_indicatorThread = std::thread(IndicatorThreadProc);
+        JoinAndDeleteThread(g_indicatorThread);
+        g_indicatorThread = new std::thread(IndicatorThreadProc);
     }
 }
 
@@ -1146,9 +1161,9 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {
     g_threadRunning.store(false, std::memory_order_relaxed);
     if (g_scrollEvent) SetEvent(g_scrollEvent);  // unblock idle scroll thread
-    if (g_scrollThread.joinable())    g_scrollThread.join();
+    JoinAndDeleteThread(g_scrollThread);
     if (g_scrollEvent) { CloseHandle(g_scrollEvent); g_scrollEvent = nullptr; }
-    if (g_indicatorThread.joinable()) g_indicatorThread.join();
+    JoinAndDeleteThread(g_indicatorThread);
 
     g_origPeekMessageW     = nullptr;
     g_origPeekMessageA     = nullptr;

@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              explorer-details-better-file-sizes
 // @name            Better file sizes in Explorer details
-// @description     Optional improvements: show folder sizes, use MB/GB for large files (by default, all sizes are shown in KBs), use IEC terms (such as KiB instead of KB)
-// @version         1.5
+// @description     Enhances file size display in Explorer details with folder sizes, human-readable units (MB/GB), and optional IEC notation (KiB/MiB)
+// @version         1.5.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -15,6 +15,9 @@
 // @exclude         SearchHost.exe
 // @exclude         ShellExperienceHost.exe
 // @exclude         StartMenuExperienceHost.exe
+// @exclude         msedgewebview2.exe
+// @exclude         windhawk.exe
+// @exclude         *\UI\VSCodium.exe
 // @compilerOptions -lole32 -loleaut32 -lpropsys
 // ==/WindhawkMod==
 
@@ -65,7 +68,7 @@ To show folder sizes via "Everything" integration:
 
 * "Everything" must be running for the integration to work.
 * Both "Everything" 1.4 and [1.5
-  Alpha](https://www.voidtools.com/forum/viewtopic.php?t=9787) are supported.
+  Beta](https://www.voidtools.com/forum/viewtopic.php?t=9787) are supported.
   With version 1.5.0.1384a or newer, the mod uses the new [Everything
   SDK3](https://www.voidtools.com/forum/viewtopic.php?t=15853), which results in
   a much faster folder size query (can be around 20x faster).
@@ -1201,8 +1204,24 @@ std::mutex g_everything4Wh_ThreadMutex;
 std::atomic<HANDLE> g_everything4Wh_Thread;
 HANDLE g_everything4Wh_ThreadReadyEvent;
 
-bool IsUncPath(PCWSTR folderPath) {
-    return folderPath[0] == L'\\' && folderPath[1] == L'\\';
+bool IsNetworkPath(PCWSTR folderPath) {
+    // UNC path, e.g. \\server\share.
+    if (folderPath[0] == L'\\' && folderPath[1] == L'\\') {
+        return true;
+    }
+
+    // Mapped network drive, e.g. Z:\. GetDriveType reads the drive type from
+    // the local mount table without hitting the network, so it's cheap.
+    if (((folderPath[0] >= L'A' && folderPath[0] <= L'Z') ||
+         (folderPath[0] >= L'a' && folderPath[0] <= L'z')) &&
+        folderPath[1] == L':' && folderPath[2] == L'\\') {
+        WCHAR root[] = {folderPath[0], L':', L'\\', L'\0'};
+        if (GetDriveType(root) == DRIVE_REMOTE) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool IsReparse(PCWSTR folderPath) {
@@ -1770,11 +1789,12 @@ HRESULT WINAPI CFSFolder__GetSize_Hook(void* pCFSFolder,
                 // the link itself. Subfolders of reparse points aren't indexed,
                 // so ES_QUERY_NO_INDEX is returned in this case.
                 //
-                // Avoid resolving UNC folders which are not indexed as it can
-                // be slow, and will be done for all folders if the UNC host
-                // isn't indexed.
+                // Avoid resolving network folders (UNC paths and mapped network
+                // drives) which are not indexed as it can be slow, and will be
+                // done for all folders if the network host isn't indexed.
                 if (result == ES_QUERY_ZERO_SIZE_REPARSE_POINT ||
-                    (result == ES_QUERY_NO_INDEX && !IsUncPath(path.c_str()))) {
+                    (result == ES_QUERY_NO_INDEX &&
+                     !IsNetworkPath(path.c_str()))) {
                     Wh_Log(L"Resolving path due to status: %s",
                            g_gsQueryStatus[result]);
 
@@ -2402,6 +2422,45 @@ HRESULT WINAPI PSFormatForDisplay_Hook(const PROPERTYKEY& propkey,
                                        cchText);
 }
 
+using PSStrFormatByteSizeW_t = void*(WINAPI*)(ULONGLONG size,
+                                              LPWSTR pwszText,
+                                              DWORD cchText);
+PSStrFormatByteSizeW_t PSStrFormatByteSizeW_Original;
+void* WINAPI PSStrFormatByteSizeW_Hook(ULONGLONG size,
+                                       LPWSTR pwszText,
+                                       DWORD cchText) {
+    Wh_Log(L">");
+
+    void* ret = PSStrFormatByteSizeW_Original(size, pwszText, cchText);
+
+    if (!pwszText || cchText == 0) {
+        return ret;
+    }
+
+    int len = wcslen(pwszText);
+    if (len < 2 || pwszText[len - 1] != 'B') {
+        return ret;
+    }
+
+    WCHAR sizeUnit = pwszText[len - 2];
+    if (sizeUnit != 'K' && sizeUnit != 'M' && sizeUnit != 'G' &&
+        sizeUnit != 'T' && sizeUnit != 'P' && sizeUnit != 'E') {
+        return ret;
+    }
+
+    if (cchText >= (size_t)len + 2) {
+        pwszText[len - 1] = 'i';
+        pwszText[len] = 'B';
+        pwszText[len + 1] = '\0';
+
+        Wh_Log(L"Appended 'i' to size unit, new string: %s", pwszText);
+    } else {
+        Wh_Log(L"Not enough space to append 'i'");
+    }
+
+    return ret;
+}
+
 using PSStrFormatKBSizeW_t = void*(WINAPI*)(ULONGLONG size,
                                             LPWSTR pwszText,
                                             DWORD cchText);
@@ -2418,14 +2477,19 @@ void* WINAPI PSStrFormatKBSizeW_Hook(ULONGLONG size,
     }
 
     int len = wcslen(pwszText);
-    if (len < 2 || (size_t)len + 1 > cchText - 1 || pwszText[len - 2] != 'K' ||
-        pwszText[len - 1] != 'B') {
+    if (len < 2 || pwszText[len - 2] != 'K' || pwszText[len - 1] != 'B') {
         return ret;
     }
 
-    pwszText[len - 1] = 'i';
-    pwszText[len] = 'B';
-    pwszText[len + 1] = '\0';
+    if (cchText >= (size_t)len + 2) {
+        pwszText[len - 1] = 'i';
+        pwszText[len] = 'B';
+        pwszText[len + 1] = '\0';
+
+        Wh_Log(L"Appended 'i' to size unit, new string: %s", pwszText);
+    } else {
+        Wh_Log(L"Not enough space to append 'i'");
+    }
 
     return ret;
 }
@@ -2464,17 +2528,20 @@ int WINAPI LoadStringW_Hook(HINSTANCE hInstance,
 
     Wh_Log(L"> Overriding string %u: %s", uID, lpBuffer);
 
-    size_t originalStringLen = p - lpBuffer;
+    size_t stringLen = p - lpBuffer;
 
-    // Override "B" to "iB".
-    p[-1] = 'i';
-
-    if ((size_t)cchBufferMax >= originalStringLen + 2) {
+    if ((size_t)cchBufferMax >= stringLen + 2) {
+        p[-1] = 'i';
         p[0] = 'B';
         p[1] = '\0';
+        stringLen++;
+
+        Wh_Log(L"Appended 'i' to size unit, new string: %s", lpBuffer);
+    } else {
+        Wh_Log(L"Not enough space to append 'i'");
     }
 
-    return wcslen(lpBuffer);
+    return stringLen;
 }
 
 bool HookWindowsStorageSymbols() {
@@ -2668,7 +2735,6 @@ bool Init(HMODULE module) {
 
     void** ppCxaThrow = FindImportPtr(module, "libc++.dll", "__cxa_throw");
     if (!ppCxaThrow) {
-        wsprintf(errorMsg, L"No __cxa_throw");
         return false;
     }
 
@@ -2873,13 +2939,17 @@ BOOL Wh_ModInit() {
 
         g_propsysModule = propsysModule;
 
-        if (!g_settings.disableKbOnlySizes) {
-            auto pPSStrFormatKBSizeW =
-                (PSStrFormatKBSizeW_t)GetProcAddress(propsysModule, (PCSTR)422);
-            WindhawkUtils::Wh_SetFunctionHookT(pPSStrFormatKBSizeW,
-                                               PSStrFormatKBSizeW_Hook,
-                                               &PSStrFormatKBSizeW_Original);
-        }
+        auto pPSStrFormatByteSizeW =
+            (PSStrFormatByteSizeW_t)GetProcAddress(propsysModule, (PCSTR)421);
+        WindhawkUtils::Wh_SetFunctionHookT(pPSStrFormatByteSizeW,
+                                           PSStrFormatByteSizeW_Hook,
+                                           &PSStrFormatByteSizeW_Original);
+
+        auto pPSStrFormatKBSizeW =
+            (PSStrFormatKBSizeW_t)GetProcAddress(propsysModule, (PCSTR)422);
+        WindhawkUtils::Wh_SetFunctionHookT(pPSStrFormatKBSizeW,
+                                           PSStrFormatKBSizeW_Hook,
+                                           &PSStrFormatKBSizeW_Original);
 
         HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
         HMODULE kernel32Module = GetModuleHandle(L"kernel32.dll");
