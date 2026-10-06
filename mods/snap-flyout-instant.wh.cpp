@@ -80,6 +80,7 @@ static bool TryHookFlyout() {
     HMODULE mod = GetModuleHandleW(L"twinui.pcshell.dll");
     if (!mod) return false;
 
+    // twinui.pcshell.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {L"public: static void __cdecl SnapFlyoutTelemetry::SnapFlyout_StartInvokeTimer(void)"},
