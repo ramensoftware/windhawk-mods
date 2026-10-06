@@ -2,7 +2,7 @@
 // @id              win10-volume-brightness-osd
 // @name            Windows 10 Style Volume & Brightness OSD
 // @description     Replaces the Windows 11 volume/brightness OSD with the classic vertical Windows 10 flyout
-// @version         0.3.2
+// @version         1.0.0
 // @author          AdmXP8
 // @github          https://github.com/AdmXP8
 // @include         explorer.exe
@@ -61,9 +61,17 @@ brightness of an external monitor (DDC/CI).
 
 ## Native OSD suppression
 The native OSD is hidden with ShowWindow/SetWindowPos hooks in explorer.exe.
-Every small `XamlExplorerHostIslandWindow` is treated as the native OSD, so
-other small Explorer popups of that class (for example the virtual desktop
-switcher shown when hovering the Task View button) can be hidden as well.
+Every small `XamlExplorerHostIslandWindow` is treated as the native OSD, with
+one exception: the virtual desktop switcher shown when hovering the Task View
+button is recognised (band 7 and the thread description `MultitaskingView`, as
+in the taskbar-thumbnails mod) and left alone.
+
+Other small popups of that class, and hardware indicators that share the native
+flyout (for example airplane mode), can still be hidden as well. On a PC that
+reports a brightness value, the brightness flyout then appears in their place,
+because a native OSD without a recent volume event is assumed to be a
+brightness change.
+
 Enable logging in Windhawk to see the class, title, thread description, band
 and size of the windows that are treated as the OSD.
 
@@ -110,9 +118,7 @@ Special thanks to babamohammed2022 for the base version of the mod.
 #include <atomic>
 #include <vector>
 
-// ---------------------------------------------------------------------------
 // Settings
-// ---------------------------------------------------------------------------
 struct {
     int  timeoutMs;
     std::atomic<bool> suppress;        // read from the hooks of other threads
@@ -141,9 +147,7 @@ void LoadSettings() {
     Wh_FreeStringSetting(trig);
 }
 
-// ---------------------------------------------------------------------------
 // Global state
-// ---------------------------------------------------------------------------
 constexpr UINT WM_VOL    = WM_APP + 1;  // wParam = level 0-100, lParam = muted
 constexpr UINT WM_REBIND = WM_APP + 2;  // default audio device changed
 constexpr UINT WM_NATIVE = WM_APP + 3;  // native OSD was detected
@@ -205,9 +209,55 @@ static const GUID kBrGuid1 = {0x8ffee2c6, 0x2d01, 0x46be,
 static const GUID kBrGuid2 = {0xaded5e82, 0xb909, 0x4619,
     {0x99, 0x49, 0xf5, 0xd7, 0x1d, 0xac, 0x0b, 0xcb}};
 
-// ---------------------------------------------------------------------------
 // Native OSD detection / suppression
-// ---------------------------------------------------------------------------
+using GetWindowBand_t = BOOL(WINAPI*)(HWND, PDWORD);
+using GetThreadDescription_t = HRESULT(WINAPI*)(HANDLE, PWSTR*);
+
+// Band of a window (0 if it cannot be queried).
+static DWORD GetBandOf(HWND hwnd) {
+    static GetWindowBand_t fn = (GetWindowBand_t)GetProcAddress(
+        GetModuleHandleW(L"user32.dll"), "GetWindowBand");
+    DWORD band = 0;
+    if (!fn || !fn(hwnd, &band)) return 0;
+    return band;
+}
+
+// Description of the thread that owns the window (empty if unavailable).
+static void GetThreadDescriptionOf(HWND hwnd, WCHAR* out, int cch) {
+    out[0] = 0;
+    static GetThreadDescription_t fn = (GetThreadDescription_t)GetProcAddress(
+        GetModuleHandleW(L"kernelbase.dll"), "GetThreadDescription");
+    if (!fn) return;
+
+    DWORD tid = GetWindowThreadProcessId(hwnd, nullptr);
+    if (!tid) return;
+    HANDLE ht = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, tid);
+    if (!ht) return;
+
+    PWSTR d = nullptr;
+    if (SUCCEEDED(fn(ht, &d)) && d) {
+        lstrcpynW(out, d, cch);
+        LocalFree(d);
+    }
+    CloseHandle(ht);
+}
+
+// Detects the virtual desktop switcher flyout shown when hovering the Task View
+// button. Same criteria as taskbar-thumbnails: band ZBID_IMMERSIVE_EDGY (7) and
+// the thread description "MultitaskingView".
+static bool IsVirtualDesktopSwitcherHoverWindow(HWND hwnd) {
+    DWORD pid = 0;
+    if (!GetWindowThreadProcessId(hwnd, &pid) || pid != GetCurrentProcessId())
+        return false;
+
+    constexpr DWORD ZBID_IMMERSIVE_EDGY = 7;
+    if (GetBandOf(hwnd) != ZBID_IMMERSIVE_EDGY) return false;
+
+    WCHAR desc[64];
+    GetThreadDescriptionOf(hwnd, desc, ARRAYSIZE(desc));
+    return wcscmp(desc, L"MultitaskingView") == 0;
+}
+
 // Logs everything that can help to identify the native OSD window precisely.
 static void LogCandidate(HWND hwnd, PCWSTR cls, int w, int h, bool recent) {
     WCHAR title[128] = L"";
@@ -215,31 +265,11 @@ static void LogCandidate(HWND hwnd, PCWSTR cls, int w, int h, bool recent) {
     SendMessageTimeoutW(hwnd, WM_GETTEXT, ARRAYSIZE(title), (LPARAM)title,
                         SMTO_ABORTIFHUNG | SMTO_BLOCK, 50, &len);
 
-    WCHAR desc[128] = L"";
-    using GetThreadDescription_t = HRESULT(WINAPI*)(HANDLE, PWSTR*);
-    static GetThreadDescription_t pGetThreadDescription =
-        (GetThreadDescription_t)GetProcAddress(
-            GetModuleHandleW(L"kernelbase.dll"), "GetThreadDescription");
-    if (pGetThreadDescription) {
-        DWORD tid = GetWindowThreadProcessId(hwnd, nullptr);
-        if (HANDLE ht = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, tid)) {
-            PWSTR d = nullptr;
-            if (SUCCEEDED(pGetThreadDescription(ht, &d)) && d) {
-                lstrcpynW(desc, d, ARRAYSIZE(desc));
-                LocalFree(d);
-            }
-            CloseHandle(ht);
-        }
-    }
-
-    DWORD band = 0;
-    using GetWindowBand_t = BOOL(WINAPI*)(HWND, PDWORD);
-    static GetWindowBand_t pGetWindowBand = (GetWindowBand_t)GetProcAddress(
-        GetModuleHandleW(L"user32.dll"), "GetWindowBand");
-    if (pGetWindowBand) pGetWindowBand(hwnd, &band);
+    WCHAR desc[128];
+    GetThreadDescriptionOf(hwnd, desc, ARRAYSIZE(desc));
 
     Wh_Log(L"OSD candidate: hwnd=%p class=%s title=\"%s\" thread=\"%s\" band=%u size=%dx%d recentEvent=%d",
-           hwnd, cls, title, desc, band, w, h, recent ? 1 : 0);
+           hwnd, cls, title, desc, GetBandOf(hwnd), w, h, recent ? 1 : 0);
 }
 
 // w/h = -1 -> use the current window size
@@ -259,6 +289,14 @@ bool IsNativeOsd(HWND hwnd, int w, int h, bool recent) {
 
     // The native OSD is a small window.
     bool match = w > 0 && h > 0 && w < 700 && h < 250;
+
+    // The virtual desktop switcher (hover over Task View) is a small window of
+    // the same class, but it is not an OSD: leave it alone, and never replace
+    // it with the brightness flyout.
+    if (match && IsVirtualDesktopSwitcherHoverWindow(hwnd)) {
+        Wh_Log(L"Not an OSD: virtual desktop switcher, hwnd=%p", hwnd);
+        return false;
+    }
 
     // Only the windows that are really treated as the OSD are logged, so the
     // (relatively expensive) logging never runs for unrelated windows.
@@ -317,9 +355,7 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hInsertAfter, int X, int Y,
     return SetWindowPos_Orig(hWnd, hInsertAfter, X, Y, cx, cy, uFlags);
 }
 
-// ---------------------------------------------------------------------------
 // WASAPI: volume callback + default device notification
-// ---------------------------------------------------------------------------
 class VolCallback : public IAudioEndpointVolumeCallback {
     LONG m_ref = 1;
 public:
@@ -416,9 +452,7 @@ void BindEndpoint() {
     g_ep->RegisterControlChangeNotify(g_volCb);
 }
 
-// ---------------------------------------------------------------------------
 // External monitors (DDC/CI)
-// ---------------------------------------------------------------------------
 template <class F>
 bool ForPhysical(HMONITOR mon, F fn) {
     DWORD n = 0;
@@ -664,9 +698,7 @@ void ShowBrightness(HWND h, int level) {
     ShowOsd(h);
 }
 
-// ---------------------------------------------------------------------------
 // Hotkeys
-// ---------------------------------------------------------------------------
 void UnregisterKeys(HWND h) {
     for (int id = HK_VOL_UP; id <= HK_BR_DOWN; id++) UnregisterHotKey(h, id);
 }
@@ -764,9 +796,7 @@ void ExternalBrightnessKey(HWND h, int dir) {
     ExtRequestRead(mon);
 }
 
-// ---------------------------------------------------------------------------
 // Mouse dragging
-// ---------------------------------------------------------------------------
 void SetLevelFromMouse(HWND h, int y) {
     RECT rc;
     GetClientRect(h, &rc);
@@ -813,9 +843,7 @@ void SetLevelFromMouse(HWND h, int y) {
     InvalidateRect(h, nullptr, FALSE);
 }
 
-// ---------------------------------------------------------------------------
 // Window procedure
-// ---------------------------------------------------------------------------
 LRESULT CALLBACK OsdProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     switch (m) {
     case WM_VOL:
@@ -983,9 +1011,7 @@ LRESULT CALLBACK OsdProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     return DefWindowProcW(h, m, w, l);
 }
 
-// ---------------------------------------------------------------------------
 // UI thread: window + COM + message loop
-// ---------------------------------------------------------------------------
 static HMODULE GetCurrentModuleHandle() {
     HMODULE module = nullptr;
     if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -1127,9 +1153,7 @@ DWORD WINAPI UiThread(LPVOID) {
     return 0;
 }
 
-// ---------------------------------------------------------------------------
 // Windhawk entry points
-// ---------------------------------------------------------------------------
 BOOL Wh_ModInit() {
     // Secondary explorer.exe processes (e.g. "Launch folder windows in a
     // separate process": explorer.exe /factory,{...} -Embedding) must not get
