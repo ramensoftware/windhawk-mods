@@ -6,18 +6,22 @@
 // @author          Torsion
 // @github          https://github.com/Torsion1035
 // @license         MIT
-// @include         explorer.exe
-// @compilerOptions -lgdi32 -luser32 -lcomctl32 -lshell32 -lole32 -ldwmapi -limm32
+// @include         windhawk.exe
+// @compilerOptions -lgdi32 -luser32 -lcomctl32 -lshell32 -lole32 -ldwmapi -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Easy Notes
 
-Adds sticky notes to the Windows desktop. The notes sit above the wallpaper
-and desktop icons, but **behind every application window**, like part of the
+Sticky notes for your Windows desktop. The notes sit above the wallpaper and
+desktop icons, but **behind every application window**, like part of the
 wallpaper you can write on. They never take focus by themselves, and they
 never show up in the taskbar or in Alt+Tab.
+
+![Easy Notes: three notes and the Themes panel](https://raw.githubusercontent.com/Torsion1035/easy-notes/main/screenshot.png)
+
+The mod runs in its own process, so it never runs inside Explorer.
 
 ## Modes
 
@@ -42,9 +46,6 @@ Every note has a two-row tool panel at the top:
     you're editing and are faded out otherwise.
   * **Color circle** (right end): drawn in the note's current background
     color, so it previews the note. Click it for the color menu.
-
-Row 2 needs about 220 DIP, so the *Column width* setting goes from 220 to
-600. Older saved values below 220 are raised to 220.
 
 ### "..." menu (title bar)
 
@@ -87,7 +88,6 @@ and Italic work while you're editing and are shown disabled otherwise.
 | Note color | Click the Color circle: *Follow theme*, a preset color, or *Custom (hex from settings)*. Text turns light automatically on dark colors. |
 | Theme | "..." > *Themes...*, the Color circle > *Themes...*, right-click > *Themes...*, or the *Theme* setting. |
 | Height | "..." > *Height* > Small / Medium / Large. |
-| Mode | "..." > *Mode*, or the *Mode* setting. |
 | New / delete | "..." > *New note* / *Delete note* (delete is also in the right-click menu). |
 | Move | Drag the title bar. Horizontal movement only switches columns, and vertical movement is free. A blue outline shows where the note will land. |
 | Scroll | Use the mouse wheel over a note whose text doesn't fit. |
@@ -106,9 +106,8 @@ The panel shows three sections:
 * **Right Now** (2026 trend colors): Kumo, Tsuchi, Moegi, Fuji, Akane
 * **Quiet Hours** (minimal neutrals): **Default**, Shiro, Hai, Kinu, Sumi
 
-**Default** is the solid color from the *Solid color* setting. It's the theme
-on a fresh install, and the fallback for unknown or removed theme ids
-(including the removed `yuzu-ai`, and `jiyu`).
+**Default** is the solid color from the *Solid color* setting, and it's the
+theme on a fresh install.
 
 Each tile shows a miniature note in that theme's real colors (title bar, tool
 strip with icons, two lines of text). Hover a tile to see what the name means.
@@ -123,8 +122,7 @@ outside it.
 
 ## Custom colors
 
-The *Appearance* setting (`appearanceMode`) decides where the note look comes
-from:
+The *Appearance* setting decides where the note look comes from:
 
 * **Theme** (default): the selected theme (see above).
 * **Solid color**: every note uses the *Solid color* hex code as its
@@ -148,81 +146,25 @@ hover highlight in the Themes panel. Leave them empty for automatic colors.
 
 Notes are placed on an automatic column grid on the **primary monitor's work
 area**. The column count is `floor(available width / (column width + gap))`.
-Every note is exactly one column wide, and its height is Small, Medium or
-Large. Notes in a column stack from top to bottom without overlapping. If you
-drop a note above (or onto the upper half of) another note, the notes below
-are pushed down. When the resolution or DPI changes, the grid reflows. If
-there are fewer columns than before, notes from removed columns move into
-the last column.
+The *Column width* setting ranges from 220 to 600. Every note is exactly one
+column wide, and its height is Small, Medium or Large. Notes in a column
+stack from top to bottom without overlapping. If you drop a note above (or
+onto the upper half of) another note, the notes below are pushed down. When
+the resolution or DPI changes, the grid reflows. If there are fewer columns
+than before, notes from removed columns move into the last column.
 
 ## Storage
 
-Notes are saved as JSON in `%APPDATA%\WindhawkStickyNotes\notes.json`, shortly
-after each change. The file is written to a temp file first and then
-renamed, so a crash can't leave it half-written. If the file can't be
-parsed, it's copied to `notes.corrupt.json` before anything new is written.
-
-The file is version 2. Besides the notes, it stores the theme
-(`"appearance": {"theme": "kumo"}`) and the mode chosen on the notes, plus
-the setting values seen last, which is how "whichever changed last wins" is
-decided. Bold and italic are stored per line as `"spans": [[start, length,
-flags]]` (flags: 1 = bold, 2 = italic). Version 1 files load fine.
-
-## Design decisions (choices made where the spec was open)
-
-* **Desktop parenting**: notes are top-level tool windows *owned* by the
-  window that hosts the desktop icons (Progman, or the WorkerW that holds
-  `SHELLDLL_DefView`). They are not `WS_CHILD` windows of it. An owned window
-  always stays above its owner, so the notes sit just above the icons and
-  below all apps. They still get DWM rounded corners, layered opacity and
-  their own input handling, and they don't fight `SHELLDLL_DefView` over
-  painting.
-* **Tool panel layout**: row 1 = title + "...", row 2 = 1., checklist, B, I
-  and the Color circle. The menu spec didn't list a place for the note
-  height, so *Height* was added to the "..." menu after *All lines as
-  checkboxes* rather than dropped.
-* **Formatting**: the editor is a rich edit control. Only bold and italic are
-  kept; other rich edit shortcuts (underline, alignment, line spacing) are
-  ignored, and pasting always inserts plain text.
-* The 15 theme palettes are the mod's own picks based on each theme's name
-  and meaning.
-* Checkbox items are written as `[ ] ` / `[x] ` in edit mode, and shown as
-  real checkboxes otherwise. Numbering skips empty lines.
-* Typing requires keyboard focus, so a note takes focus **only when you
-  click into it to edit, rename or open a menu**. It never takes focus on
-  its own. The Themes panel takes focus only while it's open.
-* New notes go to the column with the most free space at the bottom.
-  Deleting the last remaining note replaces it with an empty note.
-
-## Testing checklist
-
-1. Look at a note: row 1 has the title and "...", row 2 has 1., the checkbox
-   icon, B, I and the Color circle. The circle matches the note's color.
-2. Click "...": the items appear in the order listed above. Try *Mode*,
-   *Auto-numbering*, *All lines as checkboxes*, *New note* (disabled in
-   Single mode), *Delete note* and *About Easy Notes*.
-3. Click the Color circle: *Themes...*, *Follow theme* (checked), the seven
-   swatches and *Custom (hex from settings)*. Pick Blue: only this note's
-   background changes and the circle turns blue. *Follow theme* resets it.
-4. Right-click the body without editing: Cut, Copy, Paste, Bold and Italic are
-   disabled. Click into the body, select a word and use Bold / Italic from
-   the menu, the B / I buttons and Ctrl+B / Ctrl+I. Press Esc: the formatting
-   shows in normal view and survives an Explorer restart.
-5. Open the Themes panel, switch themes, restart Explorer (Task Manager >
-   Windows Explorer > Restart) and confirm the theme is remembered.
-6. Change the *Theme* setting: the notes switch. Then pick another theme in
-   the panel: the panel wins until the setting is changed again.
-7. Set *Appearance* to *Solid color* and then to *Custom (Jiyu builder)*:
-   the notes switch to those colors, and the panel opens dimmed with the
-   matching banner. Clicking a tile there changes nothing visible. Set it
-   back to *Theme* and the stored choice appears.
-8. Set *Column width* to 160: it's treated as 220.
+Notes are saved shortly after each change, in the mod's own storage folder
+(in a subfolder per Windows user). Windhawk removes the folder together with
+the mod. The file is written to a temporary file first and then renamed, so a
+crash can't leave it half-written. If `notes.json` can't be read, nothing is
+overwritten. If it can't be parsed, it's copied to `notes.corrupt.json` before
+anything new is written. Mode, column width, colors, font size and opacity
+live in the mod settings.
 
 ## Known limitations
 
-* **Menus use the standard Windows look.** They don't follow the active
-  theme (strip-colored background, icon-colored text, hover box color);
-  owner-drawn menus were left out to keep the mod robust inside Explorer.
 * Notes only appear on the primary monitor.
 * A column that has more notes than fit vertically runs off the bottom of the
   screen. Use smaller heights or more columns.
@@ -234,8 +176,9 @@ flags]]` (flags: 1 = bold, 2 = italic). Version 1 files load fine.
 * Only bold and italic are supported; no underline, colors, sizes or images.
   Text dragged in from another app may show other formatting while you edit,
   but only bold and italic are kept.
-* If Explorer runs folder windows in a separate process, only the process
-  that owns the desktop shows notes. That's intentional.
+* The menus use the standard Windows look. They don't follow the active theme.
+* If the window just above the desktop belongs to an elevated program, the
+  notes can't be placed relative to it and may stay in front of it.
 
 ## Credits
 
@@ -327,14 +270,19 @@ Licensed under the MIT License.
 #include <windowsx.h>
 #include <commctrl.h>
 #include <dwmapi.h>
-#include <imm.h>
 #include <richedit.h>
+#include <richole.h>
+#include <sddl.h>
 #include <shellapi.h>
-#include <shlobj.h>
+#include <tom.h>
+
+#include <windhawk_utils.h>
 
 #include <algorithm>
+#include <atomic>
 #include <climits>
 #include <cmath>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -477,8 +425,7 @@ constexpr Theme kThemes[] = {
 #undef HEXRGB
 constexpr int kThemeCount = (int)(sizeof(kThemes) / sizeof(kThemes[0]));
 // The "Default" theme: no preset, the note look is derived from the
-// solidColor setting. Also the fallback for unknown or removed ids (such as
-// "yuzu-ai" and "jiyu").
+// solidColor setting. Also the fallback for unknown theme ids.
 constexpr int kDefaultTheme = -1;
 constexpr wchar_t kDefaultThemeId[] = L"default";
 
@@ -642,7 +589,7 @@ struct DragState {
 
 // ============================================================================
 // Globals (all touched only on the UI thread, except the thread handles and
-// g_controller, which is written once before g_readyEvent is signaled).
+// g_controller, which the UI thread writes and Windhawk's thread reads).
 // ============================================================================
 
 HINSTANCE g_hinst = nullptr;
@@ -650,15 +597,15 @@ HANDLE g_thread = nullptr;
 DWORD g_threadId = 0;
 HANDLE g_readyEvent = nullptr;
 bool g_startOk = false;
-HWND g_controller = nullptr;
+std::atomic<HWND> g_controller{nullptr};
 
 bool g_active = false;    // Notes loaded and windows created.
-bool g_idle = false;      // Not the shell process; do nothing.
+bool g_notesLoaded = false;  // notes.json was read (or didn't exist): saving is safe.
 bool g_quitting = false;
 bool g_dirty = false;
 bool g_classNote = false, g_classIndicator = false, g_classController = false;
 
-HWND g_host = nullptr;    // Desktop window that owns our notes.
+HWND g_host = nullptr;    // Desktop window the notes are stacked just above.
 HWND g_indicator = nullptr;
 UINT g_taskbarCreatedMsg = 0;
 
@@ -792,7 +739,7 @@ static int ThemeIndexFromId(const std::wstring& id) {
     for (int i = 0; i < kThemeCount; i++) {
         if (id == kThemes[i].id) return i;
     }
-    return kDefaultTheme;  // "default" and unknown ids ("yuzu-ai", "jiyu").
+    return kDefaultTheme;  // "default" and unknown ids.
 }
 
 static const wchar_t* ThemeId(int i) {
@@ -1092,39 +1039,39 @@ static void JsonString(std::wstring& out, const std::wstring& s) {
 static void LoadSettings() {
     Settings s;
 
-    PCWSTR mode = Wh_GetStringSetting(L"mode");
-    s.modeValue = (mode && wcscmp(mode, L"single") == 0) ? L"single" : L"multiple";
-    Wh_FreeStringSetting(mode);
+    // Wh_GetStringSetting never returns NULL (an unset value is L"").
+    s.modeValue = wcscmp(WindhawkUtils::StringSetting::make(L"mode"), L"single") == 0
+                      ? L"single"
+                      : L"multiple";
 
-    PCWSTR theme = Wh_GetStringSetting(L"theme");
-    s.themeValue = (theme && *theme) ? theme : kDefaultThemeId;
-    Wh_FreeStringSetting(theme);
+    {
+        auto theme = WindhawkUtils::StringSetting::make(L"theme");
+        s.themeValue = *theme.get() ? theme.get() : kDefaultThemeId;
+    }
 
-    // Row 2 of the tool panel needs about 220 DIP, so narrower values saved
-    // by older versions (which allowed 160) are clamped up.
+    // Row 2 of the tool panel needs about 220 DIP.
     int cw = Wh_GetIntSetting(L"columnWidth");
     s.columnWidth = cw <= 0 ? 260 : std::clamp(cw, 220, 600);
-    if (cw > 0 && cw != s.columnWidth) {
-        Wh_Log(L"columnWidth %d is out of range; using %d", cw, s.columnWidth);
+
+    {
+        auto custom = WindhawkUtils::StringSetting::make(L"customColor");
+        s.customValid = ParseUserHex(custom, &s.customColor);
+        if (!s.customValid && *custom.get()) {
+            Wh_Log(L"Custom color \"%s\" is not a valid hex code (use #RRGGBB)", custom.get());
+        }
     }
 
-    PCWSTR custom = Wh_GetStringSetting(L"customColor");
-    s.customValid = ParseUserHex(custom, &s.customColor);
-    if (!s.customValid && custom && *custom) {
-        Wh_Log(L"Custom color \"%s\" is not a valid hex code (use #RRGGBB)", custom);
+    {
+        auto color = WindhawkUtils::StringSetting::make(L"defaultColor");
+        s.defaultHasColor = *color.get() && wcscmp(color, L"theme") != 0;
+        if (wcscmp(color, L"custom") == 0) {
+            // Invalid or empty hex: new notes follow the appearance instead.
+            s.defaultHasColor = s.customValid;
+            s.defaultColor = s.customColor;
+        } else if (s.defaultHasColor) {
+            s.defaultColor = PaletteColor(color);
+        }
     }
-    Wh_FreeStringSetting(custom);
-
-    PCWSTR color = Wh_GetStringSetting(L"defaultColor");
-    s.defaultHasColor = !(color && (!*color || wcscmp(color, L"theme") == 0));
-    if (color && wcscmp(color, L"custom") == 0) {
-        // Invalid or empty hex: new notes follow the appearance instead.
-        s.defaultHasColor = s.customValid;
-        s.defaultColor = s.customColor;
-    } else if (s.defaultHasColor) {
-        s.defaultColor = PaletteColor(color);
-    }
-    Wh_FreeStringSetting(color);
 
     int fs = Wh_GetIntSetting(L"fontSize");
     s.fontSize = fs <= 0 ? 10 : std::clamp(fs, 7, 24);
@@ -1132,23 +1079,23 @@ static void LoadSettings() {
     int op = Wh_GetIntSetting(L"opacity");
     s.opacity = op <= 0 ? 100 : std::clamp(op, 30, 100);
 
-    PCWSTR appearance = Wh_GetStringSetting(L"appearanceMode");
-    if (appearance && wcscmp(appearance, L"solid") == 0) {
-        s.appearance = AppearanceMode::Solid;
-    } else if (appearance && wcscmp(appearance, L"custom") == 0) {
-        s.appearance = AppearanceMode::Custom;
+    {
+        auto appearance = WindhawkUtils::StringSetting::make(L"appearanceMode");
+        if (wcscmp(appearance, L"solid") == 0) {
+            s.appearance = AppearanceMode::Solid;
+        } else if (wcscmp(appearance, L"custom") == 0) {
+            s.appearance = AppearanceMode::Custom;
+        }
     }
-    Wh_FreeStringSetting(appearance);
 
     // Reads a hex color setting. Empty is allowed (means "automatic"); any
     // other unparsable value is logged.
     auto readHex = [](PCWSTR name, COLORREF* out) {
-        PCWSTR v = Wh_GetStringSetting(name);
+        auto v = WindhawkUtils::StringSetting::make(name);
         bool ok = ParseUserHex(v, out);
-        if (!ok && v && *v) {
-            Wh_Log(L"Setting %s = \"%s\" is not a valid hex code (use #RRGGBB)", name, v);
+        if (!ok && *v.get()) {
+            Wh_Log(L"Setting %s = \"%s\" is not a valid hex code (use #RRGGBB)", name, v.get());
         }
-        Wh_FreeStringSetting(v);
         return ok;
     };
     s.solidValid = readHex(L"solidColor", &s.solidColor);
@@ -1187,8 +1134,8 @@ static bool SyncFromSettings() {
         changed = true;
     }
     if (g_seenThemeValue.empty()) {
-        // No record yet (first run, or a file from an older version): keep
-        // whatever theme was loaded and just remember the setting.
+        // No record of the setting yet: keep whatever theme was loaded and
+        // just remember the setting.
         g_seenThemeValue = g_settings.themeValue;
         changed = true;
     } else if (g_seenThemeValue != g_settings.themeValue) {
@@ -1360,39 +1307,69 @@ static void OpenUrl(const std::wstring& url) {
 // Persistence
 // ============================================================================
 
-static bool InitPaths() {
-    wchar_t buf[MAX_PATH];
-    std::wstring base;
-    HRESULT hr = SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr,
-                                  SHGFP_TYPE_CURRENT, buf);
-    if (SUCCEEDED(hr)) {
-        base = buf;
-    } else {
-        Wh_Log(L"SHGetFolderPathW failed, hr=0x%08X; using %%APPDATA%%",
-               (unsigned)hr);
-        DWORD n = GetEnvironmentVariableW(L"APPDATA", buf, MAX_PATH);
-        if (n == 0 || n >= MAX_PATH) {
-            Wh_Log(L"GetEnvironmentVariableW(APPDATA) failed, error %u",
-                   GetLastError());
-            return false;
-        }
-        base = buf;
+static std::wstring CurrentUserSid() {
+    std::wstring result;
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        Wh_Log(L"OpenProcessToken failed, error %u", GetLastError());
+        return result;
     }
-    g_dataDir = base + L"\\WindhawkStickyNotes";
-    g_dataFile = g_dataDir + L"\\notes.json";
-    if (!CreateDirectoryW(g_dataDir.c_str(), nullptr) &&
-        GetLastError() != ERROR_ALREADY_EXISTS) {
-        Wh_Log(L"CreateDirectoryW(%s) failed, error %u", g_dataDir.c_str(),
-               GetLastError());
+    DWORD size = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+    std::vector<BYTE> buf(size);
+    if (size && GetTokenInformation(token, TokenUser, buf.data(), size, &size)) {
+        LPWSTR sid = nullptr;
+        if (ConvertSidToStringSidW(((TOKEN_USER*)buf.data())->User.Sid, &sid)) {
+            result = sid;
+            LocalFree(sid);
+        } else {
+            Wh_Log(L"ConvertSidToStringSidW failed, error %u", GetLastError());
+        }
+    } else {
+        Wh_Log(L"GetTokenInformation failed, error %u", GetLastError());
+    }
+    CloseHandle(token);
+    return result;
+}
+
+static bool EnsureDirectory(const std::wstring& dir) {
+    if (CreateDirectoryW(dir.c_str(), nullptr) || GetLastError() == ERROR_ALREADY_EXISTS) {
+        return true;
+    }
+    Wh_Log(L"CreateDirectoryW(%s) failed, error %u", dir.c_str(), GetLastError());
+    return false;
+}
+
+// The notes live in the mod's own storage folder, which Windhawk removes
+// together with the mod. That folder is shared by all Windows users, so the
+// notes go into a subfolder named after the current user's SID. The paths are
+// only set once the folder exists, so nothing is ever saved to a location
+// that wasn't verified.
+static bool InitPaths() {
+    g_dataDir.clear();
+    g_dataFile.clear();
+    wchar_t buf[MAX_PATH];
+    if (!Wh_GetModStoragePath(buf, ARRAYSIZE(buf))) {
+        Wh_Log(L"Wh_GetModStoragePath failed");
         return false;
     }
+    std::wstring dir = buf;
+    if (!EnsureDirectory(dir)) return false;
+    std::wstring sid = CurrentUserSid();
+    if (!sid.empty()) {
+        dir += L"\\" + sid;
+        if (!EnsureDirectory(dir)) return false;
+    }
+    g_dataDir = dir;
+    g_dataFile = dir + L"\\notes.json";
     return true;
 }
 
 static bool ReadWholeFile(const std::wstring& path, std::string& out,
                           bool* notFound) {
     *notFound = false;
-    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (h == INVALID_HANDLE_VALUE) {
         DWORD e = GetLastError();
@@ -1436,24 +1413,35 @@ static std::unique_ptr<Note> MakeNote() {
     return n;
 }
 
+// Converts a JSON number to int, clamped to [lo, hi]. A plain (int) cast is
+// undefined for NaN and out-of-range values, which a damaged or hand-edited
+// file could contain.
+static int ToIntClamped(double d, int lo, int hi) {
+    if (!(d >= lo)) return lo;  // Also catches NaN.
+    if (d > hi) return hi;
+    return (int)d;
+}
+
 static std::unique_ptr<Note> NoteFromJson(const JValue& j, int* order) {
     if (j.type != JValue::Object) return nullptr;
     auto n = std::make_unique<Note>();
 
-    if (auto v = j.Find(L"id"); v && v->type == JValue::Number) n->id = (int)v->num;
+    if (auto v = j.Find(L"id"); v && v->type == JValue::Number) {
+        n->id = ToIntClamped(v->num, 0, 1000000000);
+    }
     if (auto v = j.Find(L"title"); v && v->type == JValue::String) n->title = v->str;
     // A missing or null color means the note follows the appearance.
     if (auto v = j.Find(L"color"); v && v->type == JValue::String) {
         n->hasColor = HexToColor(v->str, &n->color);
     }
     if (auto v = j.Find(L"column"); v && v->type == JValue::Number) {
-        n->col = std::clamp((int)v->num, 0, 1000);
+        n->col = ToIntClamped(v->num, 0, 1000);
     }
     if (auto v = j.Find(L"y"); v && v->type == JValue::Number) {
-        n->y = std::clamp((int)v->num, 0, 100000);
+        n->y = ToIntClamped(v->num, 0, 100000);
     }
     if (auto v = j.Find(L"order"); v && v->type == JValue::Number) {
-        *order = (int)v->num;
+        *order = ToIntClamped(v->num, 0, 1000000);
     }
     if (auto v = j.Find(L"height")) {
         if (v->type == JValue::String) {
@@ -1461,7 +1449,7 @@ static std::unique_ptr<Note> NoteFromJson(const JValue& j, int* order) {
                 if (v->str == kHeightNames[i]) n->height = i;
             }
         } else if (v->type == JValue::Number) {
-            n->height = std::clamp((int)v->num, 0, 2);
+            n->height = ToIntClamped(v->num, 0, 2);
         }
     }
     if (auto v = j.Find(L"numbering"); v && v->type == JValue::Bool) {
@@ -1491,10 +1479,12 @@ static std::unique_ptr<Note> NoteFromJson(const JValue& j, int* order) {
                         s.arr[2].type != JValue::Number) {
                         continue;
                     }
-                    long long a = (long long)s.arr[0].num, len = (long long)s.arr[1].num;
-                    uint8_t f = (uint8_t)((int)s.arr[2].num & (kFmtBold | kFmtItalic));
-                    for (long long k = std::max(0LL, a);
-                         k < a + len && k < (long long)l.text.size(); k++) {
+                    int textLen = (int)l.text.size();
+                    int a = ToIntClamped(s.arr[0].num, 0, textLen);
+                    int len = ToIntClamped(s.arr[1].num, 0, textLen);
+                    uint8_t f = (uint8_t)(ToIntClamped(s.arr[2].num, 0, 255) &
+                                          (kFmtBold | kFmtItalic));
+                    for (int k = a; k < a + len && k < textLen; k++) {
                         l.fmt[(size_t)k] = f;
                     }
                 }
@@ -1506,7 +1496,11 @@ static std::unique_ptr<Note> NoteFromJson(const JValue& j, int* order) {
     return n;
 }
 
-static void LoadNotes() {
+// Returns false if notes.json exists but couldn't be read or backed up. The
+// caller must then not activate (and nothing is ever saved), because carrying
+// on with an empty set of notes would overwrite the real file at the next
+// autosave. The watchdog retries a moment later.
+static bool LoadNotes() {
     g_notes.clear();
     g_nextId = 1;
 
@@ -1514,7 +1508,13 @@ static void LoadNotes() {
     bool notFound = false;
     std::vector<std::pair<int, std::unique_ptr<Note>>> loaded;
 
-    if (ReadWholeFile(g_dataFile, bytes, &notFound)) {
+    bool haveFile = ReadWholeFile(g_dataFile, bytes, &notFound);
+    if (!haveFile && !notFound) {
+        Wh_Log(L"notes.json exists but couldn't be read; retrying later");
+        return false;
+    }
+
+    if (haveFile) {
         if (bytes.size() >= 3 && (unsigned char)bytes[0] == 0xEF &&
             (unsigned char)bytes[1] == 0xBB && (unsigned char)bytes[2] == 0xBF) {
             bytes.erase(0, 3);
@@ -1525,9 +1525,6 @@ static void LoadNotes() {
         const JValue* arr = nullptr;
         if (parser.Parse(root) && (arr = root.Find(L"notes")) &&
             arr->type == JValue::Array) {
-            // Version 2 adds "appearance" (theme) and "mode", plus the
-            // setting values last seen. Version 1 files have none, so they
-            // get the Default theme, and their notes keep their own colors.
             g_themeIndex = kDefaultTheme;
             if (auto ap = root.Find(L"appearance")) {
                 if (auto t = ap->Find(L"theme"); t && t->type == JValue::String) {
@@ -1556,11 +1553,17 @@ static void LoadNotes() {
             }
         } else {
             // Keep the user's data: back up the broken file before our next
-            // save replaces it.
+            // save replaces it. If the backup fails, don't continue.
             std::wstring bak = g_dataDir + L"\\notes.corrupt.json";
             Wh_Log(L"notes.json could not be parsed; backing it up to %s",
                    bak.c_str());
-            WIN_CHECK(CopyFileW(g_dataFile.c_str(), bak.c_str(), FALSE));
+            if (!CopyFileW(g_dataFile.c_str(), bak.c_str(), FALSE)) {
+                Wh_Log(L"Backup failed, error %u; retrying later", GetLastError());
+                g_notes.clear();
+                return false;
+            }
+            g_notes.clear();
+            g_nextId = 1;
         }
     }
 
@@ -1580,8 +1583,8 @@ static void LoadNotes() {
         g_notes.push_back(std::move(n));
     }
 
-    if (notFound) {
-        // Fresh install: start from the settings for both theme and mode.
+    if (!haveFile) {
+        // No notes.json yet: start from the settings for both theme and mode.
         g_themeIndex = ThemeIndexFromId(g_settings.themeValue);
         g_seenThemeValue = g_settings.themeValue;
         g_multiple = g_settings.modeValue != L"single";
@@ -1590,7 +1593,7 @@ static void LoadNotes() {
 
     if (g_notes.empty()) {
         auto n = MakeNote();
-        if (notFound) {
+        if (!haveFile) {
             // First run: a short self-explaining note.
             n->title = L"Sticky notes";
             n->lines = ParseLines(
@@ -1602,11 +1605,13 @@ static void LoadNotes() {
         }
         g_notes.push_back(std::move(n));
     }
+    g_notesLoaded = true;  // From here on, saving is allowed.
     Wh_Log(L"Loaded %d note(s)", (int)g_notes.size());
+    return true;
 }
 
 static std::wstring SerializeNotes() {
-    std::wstring o = L"{\n  \"version\": 2,\n  \"appearance\": {\"theme\": \"";
+    std::wstring o = L"{\n  \"version\": 1,\n  \"appearance\": {\"theme\": \"";
     o += ThemeId(g_themeIndex);
     o += L"\", \"seenSettingTheme\": ";
     JsonString(o, g_seenThemeValue);
@@ -1667,14 +1672,15 @@ static std::wstring SerializeNotes() {
 // over the real file. A crash at any point leaves either the old or the new
 // file, never a truncated one.
 static void SyncEditorsToModel();
-static bool g_resaveNeeded = false;  // An editor couldn't be read (IME busy).
 static void ScheduleSave();
 
 static bool SaveNow() {
     if (g_controller) {
         KillTimer(g_controller, TIMER_SAVE);  // Fails harmlessly if not set.
     }
-    if (g_dataFile.empty()) return false;
+    // Never write before notes.json has been read (or confirmed missing), or
+    // an unread file would be replaced by an empty set of notes.
+    if (g_dataFile.empty() || !g_notesLoaded) return false;
     SyncEditorsToModel();  // Pull text and formatting out of open editors.
 
     std::string data = WideToUtf8(SerializeNotes());
@@ -1709,12 +1715,6 @@ static bool SaveNow() {
         return false;
     }
     g_dirty = false;
-    if (g_resaveNeeded && g_controller) {
-        // Try again once the IME composition is done. A direct SetTimer (not
-        // ScheduleSave) so a failing timer can't recurse into SaveNow.
-        g_dirty = true;
-        SetTimer(g_controller, TIMER_SAVE, kSaveDelayMs, nullptr);
-    }
     return true;
 }
 
@@ -1859,10 +1859,12 @@ static BOOL CALLBACK FindDefViewWorkerProc(HWND hwnd, LPARAM lParam) {
     return TRUE;
 }
 
-// Returns the top-level window that currently shows the desktop icons. Notes
-// are owned by this window. An owned window always stays above its owner in
-// the Z-order, so the notes end up just above the wallpaper and icons and
-// below every application window.
+// Returns the top-level window that currently shows the desktop icons. The
+// notes are unowned top-level windows that are kept stacked directly above
+// this window (see DesktopInsertAfter), so they sit just above the wallpaper
+// and icons and below every application window. They are deliberately not
+// owned by it: the mod runs in its own process, and an owner relationship
+// across processes would attach the input queues of the two.
 //
 // The hierarchy differs between Windows versions:
 //  * Classic, and Windows 11 24H2+: Progman hosts SHELLDLL_DefView directly.
@@ -1870,8 +1872,8 @@ static BOOL CALLBACK FindDefViewWorkerProc(HWND hwnd, LPARAM lParam) {
 //  * Windows 10 / early 11 after Progman receives message 0x052C (used by
 //    the slideshow, animated wallpapers and wallpaper engines):
 //    SHELLDLL_DefView moves into a separate top-level WorkerW, which then
-//    covers Progman. Owning the notes from Progman would hide them behind
-//    that WorkerW, so the WorkerW must be the owner.
+//    covers Progman. Stacking the notes above Progman would hide them behind
+//    that WorkerW, so the WorkerW is the reference window.
 // Fallbacks: Progman without DefView, then GetShellWindow(). If none exists
 // (the shell is starting), the caller keeps its previous host and retries.
 static HWND FindDesktopHost() {
@@ -1886,14 +1888,78 @@ static HWND FindDesktopHost() {
     return GetShellWindow();
 }
 
-// Places hwnd directly above the desktop host: hwndInsertAfter must be the
-// window that is currently directly above the host. HWND_BOTTOM is avoided
-// because, without an owner, it would drop the note behind the desktop.
+// Integrity level of a token (SECURITY_MANDATORY_*_RID), or 0 on failure.
+static DWORD TokenIntegrity(HANDLE token) {
+    DWORD size = 0;
+    GetTokenInformation(token, TokenIntegrityLevel, nullptr, 0, &size);
+    if (!size) return 0;
+    std::vector<BYTE> buf(size);
+    if (!GetTokenInformation(token, TokenIntegrityLevel, buf.data(), size, &size)) return 0;
+    PSID sid = ((TOKEN_MANDATORY_LABEL*)buf.data())->Label.Sid;
+    UCHAR count = *GetSidSubAuthorityCount(sid);
+    return count ? *GetSidSubAuthority(sid, count - 1) : 0;
+}
+
+// SetWindowPos fails with "access denied" when hwndInsertAfter belongs to a
+// process of higher integrity (UIPI), for example the hidden helper windows of
+// elevated or service processes that can sit right above the desktop. This
+// tells whether a window of process `pid` can be used as an anchor.
+static bool CanAnchorTo(DWORD pid) {
+    if (pid == GetCurrentProcessId()) return true;
+    static DWORD ownLevel = [] {
+        HANDLE token = nullptr;
+        DWORD level = 0;
+        if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+            level = TokenIntegrity(token);
+            CloseHandle(token);
+        }
+        return level;
+    }();
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) return false;
+    bool ok = false;
+    HANDLE token = nullptr;
+    if (OpenProcessToken(process, TOKEN_QUERY, &token)) {
+        DWORD level = TokenIntegrity(token);
+        ok = level != 0 && level <= ownLevel;
+        CloseHandle(token);
+    }
+    CloseHandle(process);
+    return ok;
+}
+
+// Returns the hwndInsertAfter value that puts `hwnd` at desktop level, or
+// nullptr if it already is (or can't be moved). Desktop level means just above
+// the desktop window and below every visible window of other processes.
+// SetWindowPos inserts a window below hwndInsertAfter, so the anchor is the
+// lowest visible window of another process: the notes go directly under it.
+// Hidden windows between it and the desktop don't matter visually, and
+// anchoring to the window directly above the desktop would often fail (see
+// CanAnchorTo). HWND_BOTTOM is avoided because it would drop the note behind
+// the desktop. If the lowest visible window is topmost, no normal window is
+// above the desktop, and HWND_NOTOPMOST is the same place without turning
+// the note topmost.
 static HWND DesktopInsertAfter(HWND hwnd) {
     if (!g_host || !IsWindow(g_host)) return nullptr;
-    HWND prev = GetWindow(g_host, GW_HWNDPREV);
-    if (prev == hwnd) return nullptr;  // Already in place.
-    return prev ? prev : HWND_TOP;
+    const DWORD ownPid = GetCurrentProcessId();
+    for (HWND w = GetWindow(g_host, GW_HWNDPREV); w; w = GetWindow(w, GW_HWNDPREV)) {
+        if (w == hwnd) return nullptr;  // Already below every visible window.
+        DWORD pid = 0;
+        GetWindowThreadProcessId(w, &pid);
+        if (pid == ownPid || !IsWindowVisible(w)) continue;
+        // `w` is the lowest visible window of another process.
+        if (GetWindowLongPtrW(w, GWL_EXSTYLE) & WS_EX_TOPMOST) return HWND_NOTOPMOST;
+        if (CanAnchorTo(pid)) return w;
+        // Can't anchor to it: use the nearest usable window below it instead.
+        for (HWND d = GetWindow(w, GW_HWNDNEXT); d && d != g_host; d = GetWindow(d, GW_HWNDNEXT)) {
+            if (d == hwnd) return nullptr;
+            DWORD dpid = 0;
+            GetWindowThreadProcessId(d, &dpid);
+            if (CanAnchorTo(dpid)) return d;
+        }
+        return nullptr;
+    }
+    return HWND_NOTOPMOST;  // Nothing visible above the desktop.
 }
 
 static void PlaceAboveHost(HWND hwnd) {
@@ -2091,9 +2157,19 @@ static int LayoutBody(Note* n, HDC dc, const RECT& body, bool draw) {
 
     int numW = 0;
     if (n->numbering) {
+        // Gutter wide enough for the largest number: at least two digits,
+        // more for notes with 100+ numbered lines.
+        int numbered = 0;
+        for (const Line& l : n->lines) {
+            if (!l.text.empty() || l.checkbox) ++numbered;
+        }
+        std::wstring widest(std::max<size_t>(2, std::to_wstring(numbered).size()), L'0');
+        widest += L'.';
         SelectObject(dc, g_fonts.body[0]);
         SIZE sz;
-        if (WIN_CHECK(GetTextExtentPoint32W(dc, L"00.", 3, &sz))) numW = sz.cx;
+        if (WIN_CHECK(GetTextExtentPoint32W(dc, widest.c_str(), (int)widest.size(), &sz))) {
+            numW = sz.cx;
+        }
     }
 
     if (n->lines.empty() && draw) {
@@ -2533,6 +2609,11 @@ static void PositionNote(Note* n) {
     WIN_CHECK(SetWindowPos(n->hwnd, nullptr, r.left, r.top, r.right - r.left,
                            r.bottom - r.top,
                            SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW));
+    // Showing a hidden window makes Windows move it toward the top of the
+    // stack even with SWP_NOZORDER, and the Z-order handler skips such calls.
+    // Put it back directly above the desktop (not while it's being edited or
+    // dragged, when it is deliberately raised).
+    if (!n->bodyEdit && !n->titleEdit && g_drag.note != n) PlaceAboveHost(n->hwnd);
     ApplyOpacity(n);
     WIN_CHECK(InvalidateRect(n->hwnd, nullptr, FALSE));
 }
@@ -2629,7 +2710,7 @@ static void EnsureIndicator() {
     if (g_indicator) return;
     g_indicator = CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TRANSPARENT,
-        kIndicatorClass, L"", WS_POPUP, 0, 0, 1, 1, g_host, nullptr, g_hinst, nullptr);
+        kIndicatorClass, L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, g_hinst, nullptr);
     if (!g_indicator) {
         Wh_Log(L"CreateWindowExW(indicator) failed, error %u", GetLastError());
         return;
@@ -2824,59 +2905,72 @@ static std::wstring GetEditorText(HWND e) {
     return s;
 }
 
-// True while an IME is composing text. Moving the selection then would
-// break the composition, so formatting is not read back at that moment.
-static bool ImeComposing(HWND e) {
-    HIMC himc = ImmGetContext(e);
-    if (!himc) return false;
-    LONG len = ImmGetCompositionStringW(himc, GCS_COMPSTR, nullptr, 0);
-    ImmReleaseContext(e, himc);
-    return len > 0;
+// IID of ITextDocument ({8CC497C0-A1DF-11CE-8098-00AA0047BE5D}), defined here
+// because the MinGW import libraries don't provide it.
+static const IID kIidTextDocument = {
+    0x8CC497C0, 0xA1DF, 0x11CE, {0x80, 0x98, 0x00, 0xAA, 0x00, 0x47, 0xBE, 0x5D}};
+
+// Bold/italic of every character, read through the Text Object Model. Unlike
+// probing with EM_EXSETSEL + EM_GETCHARFORMAT, this never touches the user's
+// selection (including its direction) or scroll position. A range whose font
+// is uniform is answered by one query; only mixed ranges are split.
+static bool ReadFormats(HWND e, std::vector<uint8_t>& flags) {
+    IRichEditOle* ole = nullptr;
+    if (!SendMessageW(e, EM_GETOLEINTERFACE, 0, (LPARAM)&ole) || !ole) {
+        Wh_Log(L"EM_GETOLEINTERFACE failed");
+        return false;
+    }
+    ITextDocument* doc = nullptr;
+    HRESULT hr = ole->QueryInterface(kIidTextDocument, (void**)&doc);
+    ole->Release();  // EM_GETOLEINTERFACE adds a reference.
+    if (FAILED(hr) || !doc) {
+        Wh_Log(L"ITextDocument not available, hr=0x%08X", (unsigned)hr);
+        return false;
+    }
+
+    auto query = [&](LONG a, LONG b, LONG* bold, LONG* italic) {
+        ITextRange* range = nullptr;
+        if (FAILED(doc->Range(a, b, &range)) || !range) return false;
+        ITextFont* font = nullptr;
+        bool ok = SUCCEEDED(range->GetFont(&font)) && font &&
+                  SUCCEEDED(font->GetBold(bold)) && SUCCEEDED(font->GetItalic(italic));
+        if (font) font->Release();
+        range->Release();
+        return ok;
+    };
+
+    bool ok = true;
+    auto probe = [&](auto& self, LONG a, LONG b) -> void {
+        LONG bold = tomUndefined, italic = tomUndefined;
+        if (!query(a, b, &bold, &italic)) {
+            ok = false;
+            return;
+        }
+        if ((bold != tomUndefined && italic != tomUndefined) || b - a <= 1) {
+            uint8_t f = (bold == tomTrue ? kFmtBold : 0) | (italic == tomTrue ? kFmtItalic : 0);
+            std::fill(flags.begin() + a, flags.begin() + b, f);
+            return;
+        }
+        LONG mid = a + (b - a) / 2;
+        self(self, a, mid);
+        self(self, mid, b);
+    };
+    if (!flags.empty()) probe(probe, 0, (LONG)flags.size());
+    doc->Release();
+    return ok;
 }
 
-// Reads text and bold/italic back into n->lines. Formatting is found by
-// asking the editor about whole ranges and splitting only ranges that are
-// mixed, so an unformatted note costs a single query.
+// Reads text and bold/italic back into n->lines.
 static bool ReadEditor(Note* n) {
     HWND e = n->bodyEdit;
     if (!e) return true;
-    if (ImeComposing(e)) return false;
 
     std::wstring s = GetEditorText(e);
     std::vector<uint8_t> flags(s.size(), 0);
-    if (!s.empty()) {
-        n->suppressChange = true;
-        SendMessageW(e, WM_SETREDRAW, FALSE, 0);
-        CHARRANGE saved{};
-        SendMessageW(e, EM_EXGETSEL, 0, (LPARAM)&saved);
-        POINT scroll{};
-        SendMessageW(e, EM_GETSCROLLPOS, 0, (LPARAM)&scroll);
-
-        auto probe = [&](auto& self, LONG a, LONG b) -> void {
-            CHARRANGE cr{a, b};
-            SendMessageW(e, EM_EXSETSEL, 0, (LPARAM)&cr);
-            CHARFORMAT2W cf{};
-            cf.cbSize = sizeof(cf);
-            cf.dwMask = CFM_BOLD | CFM_ITALIC;
-            SendMessageW(e, EM_GETCHARFORMAT, SCF_SELECTION, (LPARAM)&cf);
-            bool uniform = (cf.dwMask & (CFM_BOLD | CFM_ITALIC)) == (CFM_BOLD | CFM_ITALIC);
-            if (uniform || b - a <= 1) {
-                uint8_t f = ((cf.dwEffects & CFE_BOLD) ? kFmtBold : 0) |
-                            ((cf.dwEffects & CFE_ITALIC) ? kFmtItalic : 0);
-                std::fill(flags.begin() + a, flags.begin() + b, f);
-                return;
-            }
-            LONG mid = a + (b - a) / 2;
-            self(self, a, mid);
-            self(self, mid, b);
-        };
-        probe(probe, 0, (LONG)s.size());
-
-        SendMessageW(e, EM_EXSETSEL, 0, (LPARAM)&saved);
-        SendMessageW(e, EM_SETSCROLLPOS, 0, (LPARAM)&scroll);
-        SendMessageW(e, WM_SETREDRAW, TRUE, 0);
-        WIN_CHECK(InvalidateRect(e, nullptr, FALSE));
-        n->suppressChange = false;
+    if (!ReadFormats(e, flags)) {
+        // Text is still saved; formatting falls back to plain.
+        Wh_Log(L"Couldn't read bold/italic from the editor; saving plain text");
+        std::fill(flags.begin(), flags.end(), 0);
     }
 
     std::vector<Line> lines;
@@ -2898,18 +2992,11 @@ static bool ReadEditor(Note* n) {
     return true;
 }
 
-// Called before every save. Returns false if an editor couldn't be read
-// right now (IME composition); the caller saves again shortly.
-static bool SyncEditorsToModelImpl() {
-    bool all = true;
-    for (auto& n : g_notes) {
-        if (n->bodyEdit && n->editDirty) all &= ReadEditor(n.get());
-    }
-    return all;
-}
-
+// Called before every save: pulls text and formatting out of open editors.
 static void SyncEditorsToModel() {
-    g_resaveNeeded = !SyncEditorsToModelImpl();
+    for (auto& n : g_notes) {
+        if (n->bodyEdit && n->editDirty) ReadEditor(n.get());
+    }
 }
 
 static uint8_t EditSelectionFmt(Note* n) {
@@ -3003,11 +3090,7 @@ static std::wstring GetEditText(HWND e) {
 static void EndBodyEdit(Note* n) {
     HWND e = n->bodyEdit;
     if (!e) return;
-    // Read while the editor still exists. An unfinished IME composition is
-    // committed by Windows when focus leaves, so this read normally succeeds.
-    if (!ReadEditor(n)) {
-        Wh_Log(L"Editor busy (IME); keeping the last synced text");
-    }
+    ReadEditor(n);  // While the editor still exists.
     n->bodyEdit = nullptr;  // Before destroying, so a queued kill-focus is ignored.
     TrimTrailingEmptyLines(n->lines);
     WIN_CHECK(DestroyWindow(e));
@@ -3074,10 +3157,11 @@ static void EndTitleEdit(Note* n, bool commit) {
 static bool CreateNoteWindow(Note* n) {
     // WS_EX_TOOLWINDOW: no taskbar button and no Alt+Tab entry.
     // WS_EX_NOACTIVATE: clicking the note doesn't take focus.
-    // Owner = desktop host: see FindDesktopHost.
+    // No owner: the window is kept just above the desktop by PlaceAboveHost
+    // and the WM_WINDOWPOSCHANGING handler (see FindDesktopHost).
     HWND hwnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kNoteClass,
                                 L"Sticky note", WS_POPUP | WS_CLIPCHILDREN, 0, 0,
-                                10, 10, g_host, nullptr, g_hinst, n);
+                                10, 10, nullptr, nullptr, g_hinst, n);
     if (!hwnd) {
         Wh_Log(L"CreateWindowExW(note) failed, error %u", GetLastError());
         return false;
@@ -3293,7 +3377,7 @@ static void DeletePanelFonts() {
 
 static void CreatePanelFonts() {
     DeletePanelFonts();
-    // Sizes are pixel heights in DIPs, as specified for the panel.
+    // Sizes are pixel heights in DIPs.
     g_panel.heading = MakeFont(S(15), FW_MEDIUM, false, false);
     g_panel.subtitle = MakeFont(S(12), FW_NORMAL, false, false);
     g_panel.name = MakeFont(S(12), FW_MEDIUM, false, false);
@@ -3957,8 +4041,6 @@ static void ShowDotsMenu(Note* n, POINT screenPt) {
                           L"Auto-numbering"));
     WIN_CHECK(AppendMenuW(menu, MF_STRING | (AllLinesAreCheckboxes(n->lines) ? MF_CHECKED : 0),
                           IDM_CHECKLIST, L"All lines as checkboxes"));
-    // Not in the menu spec, but the note height (S/M/L) had no other
-    // entry point left, so it stays reachable here.
     WIN_CHECK(AppendMenuW(menu, MF_POPUP, (UINT_PTR)heights, L"Height"));
     WIN_CHECK(AppendMenuW(menu, MF_SEPARATOR, 0, nullptr));
     WIN_CHECK(AppendMenuW(menu, MF_STRING | (g_multiple ? 0 : MF_GRAYED), IDM_NEW,
@@ -4111,7 +4193,9 @@ static void OnNoteLeftDown(Note* n, POINT pt, bool dbl) {
             else BeginDragTracking(n);
             break;
         case Zone::Checkbox:
-            if (hit && hit->line < (int)n->lines.size()) {
+            // A double-click arrives as a click plus a double-click message;
+            // only the first toggles, otherwise the box would flip back.
+            if (hit && !dbl && hit->line < (int)n->lines.size()) {
                 n->lines[hit->line].done = !n->lines[hit->line].done;
                 WIN_CHECK(InvalidateRect(n->hwnd, nullptr, FALSE));
                 ScheduleSave();
@@ -4327,8 +4411,8 @@ static LRESULT CALLBACK NoteWndProc(HWND hwnd, UINT msg, WPARAM wParam,
             return 0;
 
         case WM_NCDESTROY:
-            // Also reached when Explorer destroys the owner window, which
-            // destroys owned windows too. The watchdog recreates them.
+            // The watchdog recreates the window if it was destroyed by
+            // anything other than a shutdown.
             if (g_drag.note == n) g_drag = {};
             n->hwnd = nullptr;
             n->bodyEdit = nullptr;
@@ -4343,27 +4427,16 @@ static LRESULT CALLBACK NoteWndProc(HWND hwnd, UINT msg, WPARAM wParam,
 // Activation, re-attaching and the watchdog
 // ============================================================================
 
-// Changes the owner of every window we own to `host`. Despite its name,
-// GWLP_HWNDPARENT sets the *owner* of a top-level window.
-static void AttachToHost(HWND host) {
+// Switches to a new desktop window (Explorer restarted, or the icons moved
+// to another WorkerW) and stacks every note above it again.
+static void RepinToHost(HWND host) {
     g_host = host;
-    auto attach = [&](HWND hwnd) {
-        SetLastError(0);
-        if (!SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, (LONG_PTR)host) && GetLastError()) {
-            Wh_Log(L"SetWindowLongPtrW(GWLP_HWNDPARENT) failed, error %u", GetLastError());
-        }
-        PlaceAboveHost(hwnd);
-    };
     for (auto& n : g_notes) {
-        if (n->hwnd) attach(n->hwnd);
+        if (n->hwnd) PlaceAboveHost(n->hwnd);
     }
-    if (g_indicator) attach(g_indicator);
 }
 
 static void RecreateMissingWindows() {
-    // Creating a window with a destroyed owner fails. Wait until Explorer
-    // has a desktop again.
-    if (g_host && !IsWindow(g_host)) return;
     bool any = false;
     for (auto& n : g_notes) {
         if (!n->hwnd) {
@@ -4373,28 +4446,21 @@ static void RecreateMissingWindows() {
     if (any) Layout();
 }
 
-// Runs once the desktop shell exists, and only in the Explorer process that
-// owns it. Separate folder-window processes stay idle.
+// Runs once the desktop shell exists. If the notes can't be loaded safely
+// (storage folder not ready, notes.json unreadable), it does nothing and the
+// watchdog calls it again 2 seconds later.
 static void TryActivate() {
-    if (g_active || g_idle) return;
-    HWND shell = GetShellWindow();
-    if (!shell) return;  // Shell not up yet; the watchdog retries.
-    DWORD pid = 0;
-    GetWindowThreadProcessId(shell, &pid);
-    if (pid != GetCurrentProcessId()) {
-        Wh_Log(L"This explorer.exe does not own the desktop; staying idle");
-        g_idle = true;
-        KillTimer(g_controller, TIMER_WATCH);
-        return;
-    }
+    if (g_active) return;
+    if (!GetShellWindow()) return;  // Shell not up yet; the watchdog retries.
     if (!InitPaths()) {
-        Wh_Log(L"No data folder available; notes will not be saved");
+        Wh_Log(L"Storage folder not available yet; retrying");
+        return;
     }
     g_host = FindDesktopHost();
     Wh_Log(L"Desktop host: %p", g_host);
     g_geo = ComputeGeo();
     CreateFonts();
-    LoadNotes();
+    if (!LoadNotes()) return;
     // Settings changed while the mod was off win over the stored choice.
     if (SyncFromSettings()) ScheduleSave();
     for (auto& n : g_notes) {
@@ -4410,12 +4476,12 @@ static void Watchdog() {
         TryActivate();
         return;
     }
-    // Re-attach if Explorer recreated the desktop or DefView moved to a
+    // Follow the desktop if Explorer recreated it or DefView moved to a
     // different WorkerW (wallpaper changes, Explorer restarts, Win+D).
     HWND host = FindDesktopHost();
     if (host && host != g_host) {
-        Wh_Log(L"Desktop host changed %p -> %p; re-attaching", g_host, host);
-        AttachToHost(host);
+        Wh_Log(L"Desktop host changed %p -> %p; re-stacking notes", g_host, host);
+        RepinToHost(host);
     }
     RecreateMissingWindows();
     // Covers resolution, work area and DPI changes that weren't broadcast.
@@ -4463,10 +4529,10 @@ static void OnSettingsChanged() {
 static LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                                           LPARAM lParam) {
     if (msg == g_taskbarCreatedMsg && g_taskbarCreatedMsg) {
-        // Explorer recreated its shell windows: re-attach right away.
+        // Explorer recreated its shell windows: re-stack right away.
         if (g_active && !g_quitting) {
-            Wh_Log(L"TaskbarCreated received; re-attaching");
-            if (HWND host = FindDesktopHost()) AttachToHost(host);
+            Wh_Log(L"TaskbarCreated received; re-stacking notes");
+            if (HWND host = FindDesktopHost()) RepinToHost(host);
             RecreateMissingWindows();
             RequestRelayout();
         }
@@ -4502,6 +4568,10 @@ static LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
         case WM_SETTINGCHANGE:
             if (wParam == SPI_SETWORKAREA) RequestRelayout();
             break;
+        case WM_ENDSESSION:
+            // Logoff or shutdown: flush edits made in the last moments.
+            if (wParam && g_dirty) SaveNow();
+            return 0;
         case WM_DESTROY:
             if (g_controller == hwnd) g_controller = nullptr;
             PostQuitMessage(0);
@@ -4575,17 +4645,17 @@ static DWORD WINAPI UiThreadProc(void*) {
             Wh_Log(L"SetThreadDpiAwarenessContext(PMv2) unavailable or failed");
         }
     }
-    g_shcore = LoadLibraryW(L"shcore.dll");
+    g_shcore = LoadLibraryExW(L"shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (g_shcore) {
         g_pGetDpiForMonitor =
             (GetDpiForMonitor_t)GetProcAddress(g_shcore, "GetDpiForMonitor");
     } else {
-        Wh_Log(L"LoadLibraryW(shcore.dll) failed, error %u", GetLastError());
+        Wh_Log(L"LoadLibraryExW(shcore.dll) failed, error %u", GetLastError());
     }
     // Registers the RICHEDIT50W class used by the body editor.
-    g_msftedit = LoadLibraryW(L"Msftedit.dll");
+    g_msftedit = LoadLibraryExW(L"Msftedit.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!g_msftedit) {
-        Wh_Log(L"LoadLibraryW(Msftedit.dll) failed, error %u; editing disabled",
+        Wh_Log(L"LoadLibraryExW(Msftedit.dll) failed, error %u; editing disabled",
                GetLastError());
     }
 
@@ -4612,7 +4682,7 @@ static DWORD WINAPI UiThreadProc(void*) {
 
     if (ok) {
         TryActivate();
-        if (!g_idle && !SetTimer(g_controller, TIMER_WATCH, kWatchIntervalMs, nullptr)) {
+        if (!SetTimer(g_controller, TIMER_WATCH, kWatchIntervalMs, nullptr)) {
             Wh_Log(L"SetTimer(watch) failed, error %u", GetLastError());
         }
         MSG msg;
@@ -4652,10 +4722,13 @@ static DWORD WINAPI UiThreadProc(void*) {
 }
 
 // ============================================================================
-// Windhawk entry points
+// Tool mod entry points
+//
+// The mod runs in its own windhawk.exe process (see the launcher below), so
+// a crash or stall in the notes UI can't take the taskbar or desktop down.
 // ============================================================================
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Init");
 
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -4679,7 +4752,7 @@ BOOL Wh_ModInit() {
     }
 
     // Wait until the controller window exists (or startup failed), so that
-    // Wh_ModUninit and Wh_ModSettingsChanged always have a target.
+    // WhTool_ModUninit and WhTool_ModSettingsChanged always have a target.
     HANDLE handles[] = {g_readyEvent, g_thread};
     DWORD w = WaitForMultipleObjects(2, handles, FALSE, 10000);
     if (w != WAIT_OBJECT_0 || !g_startOk) {
@@ -4696,7 +4769,7 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     Wh_Log(L"Uninit");
     if (g_thread) {
         // Ask the UI thread to destroy its windows, save and quit its loop.
@@ -4721,10 +4794,189 @@ void Wh_ModUninit() {
     }
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     Wh_Log(L"SettingsChanged");
     // Settings are applied on the UI thread, which owns all state.
     if (g_controller && !PostMessageW(g_controller, WM_APP_SETTINGS, 0, 0)) {
         Wh_Log(L"PostMessageW(settings) failed, error %u", GetLastError());
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
