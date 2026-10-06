@@ -80,12 +80,6 @@ library.
 With "Game icons: Cover", Steam and Xbox games use their cover art as icon:
 with "Large icons" view the folder looks like a game library.
 
-## Install folders (optional)
-Writes a `desktop.ini` in Steam, Epic and GOG game folders, so File Explorer
-shows them with the game's name and icon (also in `steamapps\common`).
-Turning the option off removes them. Note: if you uninstall a game while the
-option is on, its folder may be left behind with only the `desktop.ini` inside.
-
 ## Language
 Folder names, menu entries and comments follow the Windows display language:
 English, Italian, Spanish, French, German, Portuguese, Polish and Russian.
@@ -96,13 +90,37 @@ The mod runs in its own Windhawk process (it doesn't inject into Explorer).
 It creates a real folder with the shortcuts and a hidden `.data` folder, then
 pins it to the navigation pane. By default the folder is in the mod's own
 Windhawk storage (one subfolder per Windows user), so Windhawk deletes it when
-the mod is removed; you can choose another location in the settings. When the mod is disabled or removed, the navigation entries
-and menu entries are removed. With "Delete the shortcut folder when the mod is
-disabled or removed" (on by default) the folder is deleted too, together with
-the `desktop.ini` files written in game folders; everything is rebuilt when the
-mod is enabled again (this also happens when the mod is updated). Only files
-created by the mod are deleted. If you change the shortcut folder, the old one
-is cleaned up the same way.
+the mod is removed; you can choose another location in the settings. With
+"Delete the shortcut folder when the mod is disabled or removed" (on by
+default) the folder is deleted when the mod is disabled too; everything is
+rebuilt when the mod is enabled again (this also happens when the mod is
+updated). Only files created by the mod are deleted. If you change the
+shortcut folder, the old one is cleaned up the same way.
+
+The mod never writes into game or launcher folders.
+
+## Registry entries
+The navigation pane entries and the context menu need these keys in the
+current user's registry. All of them are created as **volatile** keys: they
+live in memory only, are removed when the mod is disabled, and disappear at
+sign-out or restart even if the mod was killed or crashed.
+
+* `HKCU\Software\Classes\.whsteam0` … `.whsteam3`, `.whsteamlib`, and
+  `.whepic0…3`, `.whgog0…3`, `.whxbox0…3` for the enabled experimental
+  launchers: file types of the mod's internal target files.
+* `HKCU\Software\Classes\WhGames.*`: the matching ProgIDs, with the menu
+  entries (they run `explorer.exe` on a file inside the mod's folder).
+* `HKCU\Software\Classes\CLSID\{7C3E1B52-9A4D-4F6B-8E21-3D5A6C9B0F47…4B}`
+  and `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Desktop\NameSpace\{…}`:
+  the navigation pane entries (a standard shell folder pointing at the mod's
+  folder).
+
+One non-volatile value is also written, because it lives in an existing
+Windows key: `{…}=1` in
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel`
+(it keeps the entries off the desktop). It is removed with the rest; if the mod
+is killed it stays, but it only refers to a key that no longer exists. If the
+`Desktop\NameSpace` key didn't exist, it is created (empty) as a regular key.
 
 If new menu entries don't show up after updating the mod, restart File
 Explorer once.
@@ -154,12 +172,9 @@ Explorer once.
 - webInSteam: true
   $name: Open community pages in the Steam client
   $description: When off, they open in the default browser
-- gameFolderTweaks: false
-  $name: Name and icon on install folders
-  $description: Writes a desktop.ini in Steam, Epic and GOG game folders. Turning this off removes them.
 - deleteOnDisable: true
   $name: Delete the shortcut folder when the mod is disabled or removed
-  $description: Removes the shortcuts, covers and data created by the mod, and the desktop.ini files written in game folders. Everything is rebuilt when the mod is enabled again.
+  $description: Removes the shortcuts, covers and data created by the mod. Everything is rebuilt when the mod is enabled again.
 - folderPath: ""
   $name: Shortcut folder
   $description: Leave empty to use the mod's Windhawk storage folder (recommended). If you choose a folder, it is used as is.
@@ -215,7 +230,6 @@ const wchar_t kHideIconsKey[] =
 
 const wchar_t kDataFolder[] = L".data";
 const wchar_t kSmartPrefix[] = L"\x2605 ";  // "★ "
-const wchar_t kDesktopIniMarker[] = L"[WhGamesExplorer]";
 
 // Companion files next to each game's "game.<ext>" target.
 const wchar_t kFolderSuffix[] = L".folder.lnk";
@@ -373,7 +387,6 @@ struct Settings {
     int staleMonths = 6;
     int biggestCount = 10;
     bool webInSteam = true;
-    bool folderTweaks = false;
     std::wstring folderPath;
     bool deleteOnDisable = true;
     std::wstring excluded;
@@ -618,19 +631,11 @@ std::wstring SanitizeName(const std::wstring& in) {
     return out;
 }
 
-// Removes control characters (CR/LF would add lines to .url/.ini files).
+// Removes control characters (CR/LF would add lines to .url files).
 std::string NoControlChars(const std::string& in) {
     std::string out;
     for (char c : in) {
         if ((unsigned char)c >= 0x20 && c != 0x7F) out += c;
-    }
-    return out;
-}
-
-std::wstring NoControlChars(const std::wstring& in) {
-    std::wstring out;
-    for (wchar_t c : in) {
-        if (c >= 0x20 && c != 0x7F) out += c;
     }
     return out;
 }
@@ -701,15 +706,48 @@ std::wstring RootFolder(const Settings& s) {
 // Set when a registry write or delete actually changed something.
 bool g_regChanged = false;
 
+// Standard keys that contain the mod's keys. They are created normally if
+// missing (a volatile key can't hold the non-volatile keys other software may
+// add later); everything the mod creates below them is volatile.
+const wchar_t* const kRegContainers[] = {
+    L"Software\\Classes",
+    L"Software\\Classes\\CLSID",
+    L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Desktop\\NameSpace",
+};
+
+// Opens or creates a key of the mod. Keys under kRegContainers are created as
+// volatile (in memory only): they disappear at sign-out even if the mod never
+// gets to remove them.
+bool OpenModKey(const std::wstring& key, HKEY* h, DWORD* disposition) {
+    std::wstring container;
+    for (auto c : kRegContainers) {
+        std::wstring cs = c;
+        if (key.size() > cs.size() && _wcsnicmp(key.c_str(), cs.c_str(), cs.size()) == 0 &&
+            key[cs.size()] == L'\\' && cs.size() > container.size()) {
+            container = cs;
+        }
+    }
+    DWORD options = 0;
+    if (!container.empty()) {
+        HKEY hc;
+        if (RegCreateKeyExW(HKEY_CURRENT_USER, container.c_str(), 0, nullptr, 0, KEY_READ,
+                            nullptr, &hc, nullptr) == ERROR_SUCCESS) {
+            RegCloseKey(hc);
+        }
+        options = REG_OPTION_VOLATILE;
+    }
+    return RegCreateKeyExW(HKEY_CURRENT_USER, key.c_str(), 0, nullptr, options,
+                           KEY_SET_VALUE | KEY_QUERY_VALUE, nullptr, h,
+                           disposition) == ERROR_SUCCESS;
+}
+
 // Writes a value only if it differs, so Explorer's association cache is
 // invalidated only when needed.
 bool RegWrite(const std::wstring& key, const wchar_t* name, DWORD type,
               const void* data, DWORD size) {
     HKEY h;
     DWORD disposition = 0;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, key.c_str(), 0, nullptr, 0,
-                        KEY_SET_VALUE | KEY_QUERY_VALUE, nullptr, &h,
-                        &disposition) != ERROR_SUCCESS) {
+    if (!OpenModKey(key, &h, &disposition)) {
         return false;
     }
     if (disposition == REG_OPENED_EXISTING_KEY) {
@@ -841,7 +879,12 @@ std::wstring LaunchSuffix(int p) {
 
 // File types whose verbs make up the context menu of each game.
 // File type of not installed Steam games: Install and a few store links.
-void RegisterLibraryType() {
+void RegisterLibraryType(bool enable) {
+    if (!enable) {
+        RegDeleteKeyTree(L"Software\\Classes\\" + std::wstring(kLibExt));
+        RegDeleteKeyTree(L"Software\\Classes\\" + std::wstring(kLibProgId));
+        return;
+    }
     auto command = [](const std::wstring& suffix) {
         return L"\"%SystemRoot%\\explorer.exe\" \"%1" + suffix + L"\"";
     };
@@ -871,8 +914,9 @@ void RegisterLibraryType() {
     }
 }
 
+// File types of the enabled platforms (the others are removed).
 // Returns true if anything changed in the registry.
-bool RegisterFileTypes() {
+bool RegisterFileTypes(const Settings& s) {
     g_regChanged = false;
     bool galaxy = !GalaxyExe().empty();
     auto command = [](const std::wstring& suffix) {
@@ -880,6 +924,13 @@ bool RegisterFileTypes() {
     };
 
     for (int p = 0; p < P_COUNT; p++) {
+        if (!s.enabled[p]) {
+            for (int bits = 0; bits < 4; bits++) {
+                RegDeleteKeyTree(L"Software\\Classes\\" + ExtFor(p, bits));
+                RegDeleteKeyTree(L"Software\\Classes\\" + ProgIdFor(p, bits));
+            }
+            continue;
+        }
         std::wstring icon = PlatformIcon(p);
         for (int bits = 0; bits < 4; bits++) {
             std::wstring cls = L"Software\\Classes\\" + ProgIdFor(p, bits);
@@ -928,7 +979,7 @@ bool RegisterFileTypes() {
             }
         }
     }
-    RegisterLibraryType();
+    RegisterLibraryType(s.enabled[P_STEAM] && s.showNotInstalled);
     if (g_regChanged) NotifyAssocChanged();
     return g_regChanged;
 }
@@ -2310,50 +2361,6 @@ std::wstring BuildComment(const Game& g) {
     return out;
 }
 
-// desktop.ini in the install folder: game name and icon in Explorer.
-void ApplyFolderTweak(const Game& g, const std::wstring& icon, bool enable) {
-    if (g.platform == P_XBOX) return;
-    std::wstring ini = g.dir + L"\\desktop.ini";
-    std::string raw;
-    bool exists = ReadFileBytes(ini, raw);
-    std::wstring text;
-    if (exists && raw.size() >= 2 && (unsigned char)raw[0] == 0xFF &&
-        (unsigned char)raw[1] == 0xFE) {
-        text.assign((raw.size() - 2) / 2, L'\0');
-        if (!text.empty()) memcpy(&text[0], raw.data() + 2, text.size() * 2);
-    } else if (exists) {
-        text = Utf8ToWide(raw);
-    }
-    bool ours = exists && text.find(kDesktopIniMarker) != std::wstring::npos;
-
-    if (!enable) {
-        if (ours) {
-            SetFileAttributesW(ini.c_str(), FILE_ATTRIBUTE_NORMAL);
-            DeleteFileW(ini.c_str());
-            PathUnmakeSystemFolderW(g.dir.c_str());
-            SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATHW, g.dir.c_str(), nullptr);
-        }
-        return;
-    }
-    if (exists && !ours) return;  // never touch someone else's desktop.ini
-
-    std::wstring content =
-        L"[.ShellClassInfo]\r\nLocalizedResourceName=" + NoControlChars(g.name) + L"\r\n";
-    if (!icon.empty()) content += L"IconResource=" + icon + L",0\r\n";
-    content += L"InfoTip=" + std::wstring(kPlatforms[g.platform].folder) + L" \x00B7 ID " +
-               NoControlChars(g.id) + L"\r\n";
-    content += std::wstring(kDesktopIniMarker) + L"\r\nOwner=1\r\n";
-    if (ours && text == content) return;
-
-    std::string bytes = "\xFF\xFE";
-    bytes.append((const char*)content.data(), content.size() * sizeof(wchar_t));
-    if (WriteFileBytes(ini, bytes)) {
-        SetFileAttributesW(ini.c_str(), FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM);
-        PathMakeSystemFolderW(g.dir.c_str());
-        SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATHW, g.dir.c_str(), nullptr);
-    }
-}
-
 // ============================================================ sync
 
 struct SyncCache {
@@ -2438,24 +2445,10 @@ bool CleanFolder(const std::wstring& folder, const std::set<std::wstring>& keep,
     return deleted;
 }
 
-// Deletes everything the mod created under "root" (only our files), and the
-// desktop.ini files it wrote in game folders.
+// Deletes everything the mod created under "root" (only our files).
 void CleanupRoot(const std::wstring& root) {
     if (root.empty() || !DirExists(root)) return;
     std::wstring dataDir = root + L"\\" + kDataFolder;
-
-    std::string list;
-    if (ReadFileBytes(dataDir + L"\\tweaked.txt", list)) {
-        size_t pos = 0;
-        while (pos < list.size()) {
-            size_t eol = list.find('\n', pos);
-            if (eol == std::string::npos) eol = list.size();
-            Game g;
-            g.dir = Utf8ToWide(list.substr(pos, eol - pos));
-            if (!g.dir.empty()) ApplyFolderTweak(g, L"", false);
-            pos = eol + 1;
-        }
-    }
 
     std::set<std::wstring> none;
     std::wstring dataLower = Lower(dataDir);
@@ -2479,9 +2472,7 @@ void CleanupRoot(const std::wstring& root) {
             FindClose(h);
         }
         for (const auto& d : dirs) DeleteDirWithFiles(d);
-        for (auto f : {L"links.sig", L"tweaked.txt"}) {
-            DeleteFileW((dataDir + L"\\" + f).c_str());
-        }
+        DeleteFileW((dataDir + L"\\links.sig").c_str());
         SetFileAttributesW(dataDir.c_str(), FILE_ATTRIBUTE_NORMAL);
         RemoveDirectoryW(dataDir.c_str());  // only when empty
     }
@@ -2581,7 +2572,6 @@ void Sync(SyncCache& cache) {
 
     std::set<std::wstring> keepLinks, keepData;
     bool filesChanged = cache.firstRun;
-    std::string tweakedDirs;  // folders with our desktop.ini, one per line
     for (size_t i = 0; i < games.size(); i++) {
         if (Stopping()) return;
         const Game& g = games[i];
@@ -2628,12 +2618,6 @@ void Sync(SyncCache& cache) {
         cache.dataSigs[gameData] = dataHash;
         std::wstring icon = (!coverIcon.empty() && FileExists(coverIcon)) ? coverIcon : exeIcon;
         if (icon.empty()) icon = PlatformIcon(g.platform);
-        if (!g.notInstalled && (s.folderTweaks || cache.firstRun)) {
-            ApplyFolderTweak(g, icon, s.folderTweaks);
-        }
-        if (s.folderTweaks && !g.notInstalled && g.platform != P_XBOX) {
-            tweakedDirs += WideToUtf8(g.dir) + "\n";
-        }
 
         // Where the game appears: its platform folder plus matching collections.
         std::vector<Placement> places;
@@ -2715,11 +2699,6 @@ void Sync(SyncCache& cache) {
         }
     }
     SaveLinkSigs(cache);
-    {
-        std::string old;
-        std::wstring file = dataDir + L"\\tweaked.txt";
-        if (!ReadFileBytes(file, old) || old != tweakedDirs) WriteFileBytes(file, tweakedDirs);
-    }
 
     // Navigation pane nodes: clsid -> {name, icon, target folder}.
     std::map<std::wstring, std::vector<std::wstring>> nodes;
@@ -2847,6 +2826,7 @@ DWORD WINAPI Worker(LPVOID) {
     SyncCache cache;
     bool needRegister = true;
     bool typesChanged = false;
+    bool registeredOnce = false;
     const DWORD kPeriodicResync = 15 * 60 * 1000;
 
     std::wstring lastRoot;
@@ -2860,7 +2840,13 @@ DWORD WINAPI Worker(LPVOID) {
         }
         lastRoot = root;
         if (needRegister) {
-            typesChanged = RegisterFileTypes();
+            if (!registeredOnce) {
+                // Keys left by an unclean exit (or by an older non-volatile
+                // version): delete them so they're recreated as volatile.
+                UnregisterAll();
+                registeredOnce = true;
+            }
+            typesChanged = RegisterFileTypes(GetSettings());
             cache.nodeSigs.clear();
             cache.firstRun = true;
             needRegister = false;
@@ -2935,7 +2921,6 @@ void LoadSettings() {
     s.staleMonths = std::max(1, Wh_GetIntSetting(L"staleMonths"));
     s.biggestCount = std::max(1, Wh_GetIntSetting(L"biggestCount"));
     s.webInSteam = Wh_GetIntSetting(L"webInSteam") != 0;
-    s.folderTweaks = Wh_GetIntSetting(L"gameFolderTweaks") != 0;
     s.folderPath = StringSetting(L"folderPath");
     s.deleteOnDisable = Wh_GetIntSetting(L"deleteOnDisable") != 0;
     s.excluded = StringSetting(L"excludedAppIds");
