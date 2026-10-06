@@ -2,7 +2,7 @@
 // @id              explorer-size-on-disk-column
 // @name            Size on disk column in Explorer details
 // @description     Adds a "Size on disk" column to File Explorer's details view for files and folders
-// @version         0.5.0
+// @version         0.6.0
 // @author          stoilms
 // @github          https://github.com/stoilms
 // @license         GPL-3.0
@@ -49,19 +49,22 @@ The values match the Properties dialog:
   never downloaded.
 * **Folders:** the sum of the size on disk of every file underneath,
   calculated manually by walking the folder tree. Junctions and symbolic links
-  inside the folder are not followed, but OneDrive and other cloud folders
-  are.
+  are not followed: they aren't counted inside a folder, and show no value
+  themselves. OneDrive and other cloud folders are walked.
 
 ## Notes
 
 * Folder calculation can be slow for large trees, so it never runs on
   Explorer's window threads. A folder's value appears as soon as its
   calculation finishes in the background, at low priority. Calculating a
-  folder also caches all of its subfolders, so browsing into them is instant.
+  folder also caches its subfolders (all of them, or only the direct ones -
+  see **Remember subfolder sizes**), so browsing into them is instant.
   Cached values are shown immediately and refreshed in the background.
 * Cloud folders whose contents aren't on this PC yet are counted as 0 bytes
   without being listed, so OneDrive isn't asked to fetch anything.
-* Network folders are skipped by default.
+* Network drives are skipped by default and the column stays empty there,
+  because querying them can make Explorer stop responding on slow
+  connections. Turn on **Calculate sizes on network drives** to include them.
 * Only regular file-system folders are supported. Libraries, search results,
   zip folders and the Recycle Bin are not.
 * Hard links are counted once per link, as the Properties dialog does.
@@ -69,8 +72,10 @@ The values match the Properties dialog:
 ## Showing the column in every folder
 
 With **Add to default folder layouts** enabled, the column is added to
-Explorer's built-in templates for file folders (never to Home, which breaks
-if its layout is changed). Templates only apply to folders that
+Explorer's built-in templates for regular file folders (general items,
+documents, pictures, music, videos, downloads, the user folder and OneDrive).
+Other views, such as Home, Gallery, libraries and search results, are left
+alone. Templates only apply to folders that
 don't have saved view settings, so after enabling it either reset saved views
 (Folder Options > View > **Reset Folders**) or set the column up in one folder
 and use Folder Options > View > **Apply to Folders** for each folder type.
@@ -90,11 +95,12 @@ getter with a real size on disk calculation.
   $name: Show folder sizes
   $description: >-
     Folder sizes are calculated by walking the whole folder tree, which can be
-    slow for large folders. With the Shift option, folder sizes are only
-    calculated if Shift is held when the list is loaded or refreshed.
+    slow for large folders. Excluding system folders skips the Windows,
+    Program Files and ProgramData folders and everything in them, which hold
+    hundreds of thousands of files; they show no value.
   $options:
   - always: Enabled, calculated manually (can be slow)
-  - withShiftKey: Enabled, calculated manually while holding the Shift key
+  - exceptSystemFolders: Enabled, except system folders
   - disabled: Disabled (files only)
 - folderMethod: accurate
   $name: Folder calculation method
@@ -105,8 +111,12 @@ getter with a real size on disk calculation.
   $options:
   - accurate: Accurate (matches Properties)
   - fast: Fast (directory listings)
-- networkFolders: false
-  $name: Calculate folder sizes on network drives
+- networkDrives: false
+  $name: Calculate sizes on network drives
+  $description: >-
+    Files and folders on network drives can be slow to query, and Explorer
+    may stop responding while it waits, for example when sorting by this
+    column. When off, the column stays empty on network drives.
 - mixFoldersWhenSorting: false
   $name: Mix files and folders when sorting by size on disk
 - addToDefaultColumns: true
@@ -114,16 +124,21 @@ getter with a real size on disk calculation.
   $description: >-
     Adds the column after Size in Explorer's folder templates. Only affects
     folders without saved view settings - see the mod description.
-- diagnostics: false
-  $name: Diagnostics
-  $description: >-
-    Logs which code paths Explorer uses for the column. Only needed when
-    troubleshooting.
 - refreshSeconds: 120
   $name: Folder refresh interval (seconds)
   $description: >-
     A folder's value is shown from the cache straight away. If it's older than
     this, it's also recalculated in the background and updated if it changed.
+- subfolderCache: all
+  $name: Remember subfolder sizes
+  $description: >-
+    Calculating a folder also finds the size of every folder inside it.
+    Remembering all of them makes browsing deeper instant, but uses more
+    memory in Explorer (up to about 30 MB). With direct subfolders only,
+    deeper folders are calculated again when you open them.
+  $options:
+  - all: All subfolders
+  - directOnly: Direct subfolders only
 */
 // ==/WindhawkModSettings==
 
@@ -145,7 +160,7 @@ getter with a real size on disk calculation.
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <shobjidl.h>
-#include <shtypes.h>
+#include <wrl/client.h>
 
 #ifndef IO_REPARSE_TAG_WOF
 #define IO_REPARSE_TAG_WOF 0x80000017L
@@ -156,25 +171,22 @@ getter with a real size on disk calculation.
 #ifndef FILE_ATTRIBUTE_RECALL_ON_OPEN
 #define FILE_ATTRIBUTE_RECALL_ON_OPEN 0x00040000
 #endif
-#ifndef FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS
-#define FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS 0x00400000
-#endif
 
 using namespace std::string_view_literals;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Settings and shared state
 
-enum class FolderSizes { always, withShiftKey, disabled };
+enum class FolderSizes { always, exceptSystemFolders, disabled };
 
 struct {
     FolderSizes folderSizes;
     bool accurateFolders;
-    bool networkFolders;
+    bool networkDrives;
     bool mixFoldersWhenSorting;
     bool addToDefaultColumns;
-    bool diagnostics;
     ULONGLONG cacheMs;
+    bool cacheAllSubfolders;
 } g_settings;
 
 constexpr GUID kFmtStorage = {0xB725F130,
@@ -199,38 +211,11 @@ auto HookRefCountScope() {
         &g_hookRefCount, [](auto refCount) { (*refCount)--; }};
 }
 
-// Logs the first few times a code path is reached, to show which hooks
-// Explorer actually uses.
+// Logs only the first few times a code path is reached, so the log shows which
+// hooks Explorer actually uses without being flooded by every call.
 bool FirstHits(std::atomic<int>& counter, int limit = 3) {
-    return g_settings.diagnostics && counter++ < limit;
+    return counter < limit && counter++ < limit;
 }
-
-// Minimal COM smart pointer, to avoid a C++/WinRT dependency.
-template <typename T>
-class ComPtr {
-   public:
-    ComPtr() = default;
-    ComPtr(const ComPtr&) = delete;
-    ComPtr& operator=(const ComPtr&) = delete;
-    ~ComPtr() { Reset(); }
-    void Reset() {
-        if (m_ptr) {
-            m_ptr->Release();
-            m_ptr = nullptr;
-        }
-    }
-    T* Get() const { return m_ptr; }
-    T** Put() {
-        Reset();
-        return &m_ptr;
-    }
-    void** PutVoid() { return reinterpret_cast<void**>(Put()); }
-    T* operator->() const { return m_ptr; }
-    explicit operator bool() const { return m_ptr != nullptr; }
-
-   private:
-    T* m_ptr = nullptr;
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 // Path helpers
@@ -318,8 +303,7 @@ ULONGLONG RoundUp(ULONGLONG value, ULONGLONG granularity) {
 //   what's really on disk.
 // * Everything else: the allocation rounded down to whole clusters. Real
 //   allocations are always whole clusters; anything smaller is a tiny file
-//   stored inside the file table itself, which Properties counts as 0 bytes
-//   (this was the .url file showing 240 bytes).
+//   stored inside the file table itself, which Properties counts as 0 bytes.
 ULONGLONG AdjustAllocationSize(const std::wstring& path,
                                DWORD attributes,
                                DWORD reparseTag,
@@ -419,20 +403,6 @@ std::optional<RawAllocation> ReadAllocationByName(const std::wstring& path) {
 
 std::optional<RawAllocation> ReadAllocation(const std::wstring& path) {
     auto byName = ReadAllocationByName(path);
-
-    // Diagnostics: check the faster by-name method against the handle method
-    // for the first few files.
-    static std::atomic<int> checks;
-    if (FirstHits(checks, 25)) {
-        auto byHandle = ReadAllocationByHandle(path);
-        Wh_Log(L"[diag] check %s: byName=%I64d byHandle=%I64d attr=%08X "
-               L"tag=%08X",
-               path.c_str(), byName ? (LONGLONG)byName->allocationSize : -1,
-               byHandle ? (LONGLONG)byHandle->allocationSize : -1,
-               byHandle ? byHandle->attributes : 0,
-               byHandle ? byHandle->reparseTag : 0);
-    }
-
     return byName ? byName : ReadAllocationByHandle(path);
 }
 
@@ -446,11 +416,36 @@ std::optional<ULONGLONG> GetFileSizeOnDisk(const std::wstring& path,
                                 raw->allocationSize, clusterSize);
 }
 
-// Walks a folder tree. Returns the total, and every subfolder's own total via
-// `subfolderTotals`, so browsing into a subfolder afterwards is instant.
+// Junctions and directory symlinks are never followed.
+bool IsFolderLink(DWORD attributes, DWORD reparseTag) {
+    return (attributes & FILE_ATTRIBUTE_REPARSE_POINT) &&
+           IsReparseTagNameSurrogate(reparseTag);
+}
+
+// Cloud folders whose contents aren't on this PC yet hold 0 bytes locally,
+// and listing them would make OneDrive fetch the listing from the internet.
+bool IsOnlineOnlyFolder(DWORD attributes) {
+    return attributes & FILE_ATTRIBUTE_RECALL_ON_OPEN;
+}
+
+// Walks a folder tree. Returns the total, and the subfolders' own totals via
+// `subfolderTotals` (all of them, or only the direct subfolders, depending on
+// the setting), so browsing into a subfolder afterwards is instant.
 std::optional<ULONGLONG> GetFolderSizeOnDisk(
     const std::wstring& root,
     std::vector<std::pair<std::wstring, ULONGLONG>>* subfolderTotals) {
+    // The folder itself follows the same rules as its subfolders. It's
+    // checked here as well as by the caller, because cached values are
+    // refreshed by walking the folder directly.
+    if (auto raw = ReadAllocation(root)) {
+        if (IsFolderLink(raw->attributes, raw->reparseTag)) {
+            return std::nullopt;
+        }
+        if (IsOnlineOnlyFolder(raw->attributes)) {
+            return 0;
+        }
+    }
+
     ULONGLONG clusterSize = GetClusterSize(root);
 
     // ULONGLONG elements keep the buffer 8-byte aligned, as required.
@@ -486,13 +481,16 @@ std::optional<ULONGLONG> GetFolderSizeOnDisk(
             continue;  // Access denied etc. - skip, as Properties does.
         }
 
+        // Also check the stop flag for every file, so a folder with many files
+        // doesn't delay unloading.
         FILE_INFO_BY_HANDLE_CLASS infoClass = FileFullDirectoryRestartInfo;
-        while (GetFileInformationByHandleEx(handle, infoClass, buffer.data(),
+        while (!g_stopping &&
+               GetFileInformationByHandleEx(handle, infoClass, buffer.data(),
                                             bufferBytes)) {
             infoClass = FileFullDirectoryInfo;
 
             auto* entry = reinterpret_cast<FILE_FULL_DIR_INFO*>(buffer.data());
-            while (true) {
+            while (!g_stopping) {
                 std::wstring_view name(entry->FileName,
                                        entry->FileNameLength / sizeof(WCHAR));
                 DWORD attributes = entry->FileAttributes;
@@ -504,14 +502,9 @@ std::optional<ULONGLONG> GetFolderSizeOnDisk(
 
                 if (name != L"."sv && name != L".."sv) {
                     if (attributes & FILE_ATTRIBUTE_DIRECTORY) {
-                        // Skip junctions and directory symlinks. Also skip
-                        // cloud folders whose contents aren't on this PC yet:
-                        // they hold 0 bytes locally, and listing them would
-                        // make OneDrive fetch the listing from the internet.
-                        if (IsReparseTagNameSurrogate(reparseTag)) {
+                        if (IsFolderLink(attributes, reparseTag)) {
                             // Not counted, not cached.
-                        } else if (attributes &
-                                   FILE_ATTRIBUTE_RECALL_ON_OPEN) {
+                        } else if (IsOnlineOnlyFolder(attributes)) {
                             // Cached as 0 bytes without listing it.
                             nodes.push_back({JoinPath(dir, name), index, 0});
                         } else {
@@ -543,15 +536,24 @@ std::optional<ULONGLONG> GetFolderSizeOnDisk(
         CloseHandle(handle);
     }
 
+    // A walk stopped part-way through has only a partial total.
+    if (g_stopping) {
+        return std::nullopt;
+    }
+
     // Children always come after their parent, so summing from the end rolls
     // every subtree up into its parent.
     for (size_t i = nodes.size() - 1; i > 0; i--) {
         nodes[nodes[i].parent].total += nodes[i].total;
     }
 
+    // The root's direct subfolders always come first, as the root is listed
+    // before any of them.
     if (subfolderTotals) {
-        subfolderTotals->reserve(nodes.size() - 1);
         for (size_t i = 1; i < nodes.size(); i++) {
+            if (!g_settings.cacheAllSubfolders && nodes[i].parent != 0) {
+                break;
+            }
             subfolderTotals->emplace_back(std::move(nodes[i].path),
                                           nodes[i].total);
         }
@@ -584,12 +586,16 @@ struct CacheLookup {
 
 constexpr size_t kMaxCacheEntries = 100000;
 
+// File values are cheap to read again, so they're only reused for a few
+// seconds: long enough for sorting, which asks for every item many times,
+// but short enough that a changed file shows its new size after a refresh.
+constexpr ULONGLONG kFileCacheMs = 5000;
+
 std::mutex g_cacheMutex;
 std::unordered_map<std::wstring, CacheEntry> g_cache;
 
 // Background folder calculations.
 std::atomic<bool> g_stopping;
-std::atomic<int> g_pendingJobs;
 std::mutex g_pendingMutex;
 std::unordered_set<std::wstring> g_pendingPaths;
 
@@ -599,22 +605,35 @@ std::optional<CacheLookup> LookupCache(const std::wstring& path) {
     if (it == g_cache.end()) {
         return std::nullopt;
     }
-    bool fresh = GetTickCount64() - it->second.tick < g_settings.cacheMs;
+    ULONGLONG maxAge =
+        it->second.item.isFolder ? g_settings.cacheMs : kFileCacheMs;
+    bool fresh = GetTickCount64() - it->second.tick < maxAge;
     return CacheLookup{it->second.item, fresh};
 }
 
-// Caller holds g_cacheMutex.
+// Caller holds g_cacheMutex. Makes room by dropping values that are no longer
+// fresh. Fresh values are never dropped, so values shown in other windows
+// aren't lost; while the cache is full of them, new subfolder values just
+// aren't added (see StoreSubfolderTotals).
 void TrimCacheLocked() {
     if (g_cache.size() <= kMaxCacheEntries) {
         return;
     }
+
+    // Each pass looks at every entry, so don't repeat it on every store while
+    // the cache stays full.
+    static ULONGLONG lastTrim;
     ULONGLONG now = GetTickCount64();
-    std::erase_if(g_cache, [now](const auto& entry) {
-        return now - entry.second.tick >= g_settings.cacheMs;
-    });
-    if (g_cache.size() > kMaxCacheEntries) {
-        g_cache.clear();
+    if (lastTrim && now - lastTrim < 1000) {
+        return;
     }
+    lastTrim = now;
+
+    std::erase_if(g_cache, [now](const auto& entry) {
+        ULONGLONG maxAge =
+            entry.second.item.isFolder ? g_settings.cacheMs : kFileCacheMs;
+        return now - entry.second.tick >= maxAge;
+    });
 }
 
 void StoreCache(const std::wstring& path, const ItemSize& item) {
@@ -623,20 +642,38 @@ void StoreCache(const std::wstring& path, const ItemSize& item) {
     TrimCacheLocked();
 }
 
+// Stores a walk's subfolder totals in batches, so Explorer's window threads
+// aren't kept waiting for the lock while a very large walk is stored. Once
+// the cache is full, values for folders not cached yet are skipped. The
+// direct subfolders come first, so they're the ones kept.
 void StoreSubfolderTotals(
     const std::vector<std::pair<std::wstring, ULONGLONG>>& totals) {
+    constexpr size_t kBatchSize = 1000;
     ULONGLONG now = GetTickCount64();
-    std::lock_guard lock(g_cacheMutex);
-    for (const auto& [path, total] : totals) {
-        g_cache[path] = {ItemSize{total, true}, now};
+    for (size_t start = 0; start < totals.size(); start += kBatchSize) {
+        std::lock_guard lock(g_cacheMutex);
+        TrimCacheLocked();
+        size_t end = std::min(start + kBatchSize, totals.size());
+        for (size_t i = start; i < end; i++) {
+            const auto& [path, total] = totals[i];
+            CacheEntry entry{ItemSize{total, true}, now};
+            if (auto it = g_cache.find(path); it != g_cache.end()) {
+                it->second = entry;
+            } else if (g_cache.size() < kMaxCacheEntries) {
+                g_cache.emplace(path, entry);
+            }
+        }
     }
-    TrimCacheLocked();
 }
 
 // At most this many folder walks run at once, at background I/O priority, so
-// they don't slow down Explorer itself.
-constexpr LONG kMaxConcurrentWalks = 2;
-HANDLE g_walkSemaphore;
+// they don't slow down Explorer itself. Walks run in a private thread pool
+// capped at this many threads, so queued walks wait in its queue instead of
+// tying up threads in Explorer's own pool.
+constexpr DWORD kMaxConcurrentWalks = 2;
+PTP_POOL g_walkPool;
+PTP_CLEANUP_GROUP g_walkCleanupGroup;
+TP_CALLBACK_ENVIRON g_walkEnvironment;
 
 struct FolderJobParams {
     std::wstring path;
@@ -645,20 +682,12 @@ struct FolderJobParams {
     bool explorerHasValue;
 };
 
-DWORD WINAPI FolderJob(void* parameter) {
+void CALLBACK FolderJob(PTP_CALLBACK_INSTANCE, void* parameter) {
     std::unique_ptr<FolderJobParams> params(
         static_cast<FolderJobParams*>(parameter));
     const std::wstring* path = &params->path;
 
-    bool acquired = false;
-    while (!g_stopping && g_walkSemaphore) {
-        if (WaitForSingleObject(g_walkSemaphore, 200) == WAIT_OBJECT_0) {
-            acquired = true;
-            break;
-        }
-    }
-
-    if (acquired && !g_stopping) {
+    if (!g_stopping) {
         bool background =
             SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
         ULONGLONG start = GetTickCount64();
@@ -688,21 +717,19 @@ DWORD WINAPI FolderJob(void* parameter) {
                                nullptr);
             }
         }
-
-        ReleaseSemaphore(g_walkSemaphore, 1, nullptr);
-    } else if (acquired) {
-        ReleaseSemaphore(g_walkSemaphore, 1, nullptr);
     }
 
     {
         std::lock_guard lock(g_pendingMutex);
         g_pendingPaths.erase(*path);
     }
-    g_pendingJobs--;
-    return 0;
 }
 
 void StartFolderJob(const std::wstring& path, bool explorerHasValue) {
+    if (g_stopping || !g_walkPool) {
+        return;
+    }
+
     {
         std::lock_guard lock(g_pendingMutex);
         if (!g_pendingPaths.insert(path).second) {
@@ -710,30 +737,66 @@ void StartFolderJob(const std::wstring& path, bool explorerHasValue) {
         }
     }
 
-    g_pendingJobs++;
     auto* parameter = new FolderJobParams{path, explorerHasValue};
-    if (!QueueUserWorkItem(FolderJob, parameter, WT_EXECUTELONGFUNCTION)) {
+    if (!TrySubmitThreadpoolCallback(FolderJob, parameter,
+                                     &g_walkEnvironment)) {
         delete parameter;
         std::lock_guard lock(g_pendingMutex);
         g_pendingPaths.erase(path);
-        g_pendingJobs--;
     }
+}
+
+// Windows, Program Files, Program Files (x86) and ProgramData, read once at
+// start-up from the environment, without trailing backslashes.
+std::vector<std::wstring> g_systemFolders;
+
+void LoadSystemFolders() {
+    g_systemFolders.clear();
+
+    WCHAR buffer[MAX_PATH];
+    UINT length = GetWindowsDirectoryW(buffer, ARRAYSIZE(buffer));
+    if (length && length < ARRAYSIZE(buffer)) {
+        g_systemFolders.emplace_back(buffer, length);
+    }
+
+    for (PCWSTR name : {L"ProgramFiles", L"ProgramFiles(x86)", L"ProgramData"}) {
+        DWORD envLength =
+            GetEnvironmentVariableW(name, buffer, ARRAYSIZE(buffer));
+        if (envLength && envLength < ARRAYSIZE(buffer)) {
+            g_systemFolders.emplace_back(buffer, envLength);
+        }
+    }
+
+    for (auto& folder : g_systemFolders) {
+        while (!folder.empty() && folder.back() == L'\\') {
+            folder.pop_back();
+        }
+    }
+}
+
+// True for a system folder itself or any folder inside one.
+bool IsInSystemFolder(const std::wstring& path) {
+    for (const auto& folder : g_systemFolders) {
+        if (path.size() >= folder.size() &&
+            _wcsnicmp(path.c_str(), folder.c_str(), folder.size()) == 0 &&
+            (path.size() == folder.size() || path[folder.size()] == L'\\')) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool ShouldCalculateFolder(const std::wstring& path) {
     switch (g_settings.folderSizes) {
         case FolderSizes::disabled:
             return false;
-        case FolderSizes::withShiftKey:
-            if (GetAsyncKeyState(VK_SHIFT) >= 0) {
-                return false;
-            }
-            break;
+        case FolderSizes::exceptSystemFolders:
+            return !IsInSystemFolder(path);
         case FolderSizes::always:
             break;
     }
 
-    return g_settings.networkFolders || !IsNetworkPath(path);
+    return true;
 }
 
 std::optional<ItemSize> GetItemSizeOnDisk(const std::wstring& path) {
@@ -750,18 +813,40 @@ std::optional<ItemSize> GetItemSizeOnDisk(const std::wstring& path) {
         return cached->item;
     }
 
-    DWORD attributes = GetFileAttributesW(ToExtendedPath(path).c_str());
-    if (attributes == INVALID_FILE_ATTRIBUTES) {
-        return std::nullopt;
+    // Explorer also asks on its window threads, and each query on a network
+    // drive takes several round trips, so don't touch network drives at all
+    // unless enabled. Network items are then never cached, so checking after
+    // the cache lookup lets cached local items skip the drive type check.
+    if (!g_settings.networkDrives && IsNetworkPath(path)) {
+        return ItemSize{};  // Shown empty.
+    }
+
+    // Reads the attributes and reparse tag without following links, and gives
+    // a file's size in the same call.
+    auto raw = ReadAllocation(path);
+    if (!raw) {
+        // Still tell files and folders apart, so sorting keeps them grouped.
+        DWORD attributes = GetFileAttributesW(ToExtendedPath(path).c_str());
+        if (attributes == INVALID_FILE_ATTRIBUTES) {
+            return std::nullopt;
+        }
+        return ItemSize{std::nullopt,
+                        (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0};
     }
 
     ItemSize item;
-    item.isFolder = attributes & FILE_ATTRIBUTE_DIRECTORY;
+    item.isFolder = raw->attributes & FILE_ATTRIBUTE_DIRECTORY;
 
     if (!item.isFolder) {
-        item.size = GetFileSizeOnDisk(path, GetClusterSize(path));
+        item.size =
+            AdjustAllocationSize(path, raw->attributes, raw->reparseTag,
+                                 raw->allocationSize, GetClusterSize(path));
+    } else if (IsFolderLink(raw->attributes, raw->reparseTag)) {
+        return item;  // Shown empty, as links aren't followed.
     } else if (!ShouldCalculateFolder(path)) {
         return item;  // Not calculated, and not cached either.
+    } else if (IsOnlineOnlyFolder(raw->attributes)) {
+        item.size = 0;  // Not listed, so OneDrive isn't asked for anything.
     } else if (IsGUIThread(FALSE)) {
         // Never walk a folder tree on a thread that owns windows, as that can
         // freeze Explorer. Calculate in the background and show it when done.
@@ -783,9 +868,9 @@ std::optional<ItemSize> GetItemSizeOnDisk(const std::wstring& path) {
 }
 
 std::optional<std::wstring> GetItemPath(void* pFolder, PCUITEMID_CHILD pidl) {
-    ComPtr<IShellFolder> shellFolder;
+    Microsoft::WRL::ComPtr<IShellFolder> shellFolder;
     HRESULT hr = static_cast<IUnknown*>(pFolder)->QueryInterface(
-        IID_IShellFolder, shellFolder.PutVoid());
+        IID_PPV_ARGS(&shellFolder));
     if (FAILED(hr) || !shellFolder) {
         return std::nullopt;
     }
@@ -1081,7 +1166,7 @@ HRESULT WINAPI CRecursiveFolderOperation_Do_Hook(void* pThis) {
 }
 
 // Explorer's own getter for System.FileAllocationSize, which only returns the
-// logical size. Found via the v0.2 diagnostics.
+// logical size.
 using CFSFolder__GetFileAllocationSize_t =
     HRESULT(WINAPI*)(void* pFolder,
                      PCUITEMID_CHILD pidl,
@@ -1130,7 +1215,8 @@ bool HookWindowsStorageSymbols() {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    // windows.storage.dll
+    WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
         {
             {LR"(public: virtual long __cdecl CFSFolder::MapColumnToSCID(unsigned int,struct _tagpropertykey *))"},
             &CFSFolder_MapColumnToSCID_Original,
@@ -1179,7 +1265,8 @@ bool HookWindowsStorageSymbols() {
         },
     };
 
-    return WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    return WindhawkUtils::HookSymbols(module, windowsStorageHooks,
+                                      ARRAYSIZE(windowsStorageHooks));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1228,14 +1315,39 @@ constexpr std::wstring_view kSizeOnDiskCanonicalName =
 // Room for ";" + the Size entry's prefix (flags and width) + our name.
 constexpr DWORD kColumnListExtraBytes = 96 * sizeof(WCHAR);
 
-bool ContainsCaseInsensitive(std::wstring_view haystack,
-                             std::wstring_view needle) {
+size_t FindCaseInsensitive(std::wstring_view haystack,
+                           std::wstring_view needle) {
     auto it = std::search(haystack.begin(), haystack.end(), needle.begin(),
                           needle.end(), [](wchar_t a, wchar_t b) {
                               return std::towlower(a) == std::towlower(b);
                           });
-    return it != haystack.end();
+    return it == haystack.end() ? std::wstring_view::npos
+                                : (size_t)(it - haystack.begin());
 }
+
+bool ContainsCaseInsensitive(std::wstring_view haystack,
+                             std::wstring_view needle) {
+    return FindCaseInsensitive(haystack, needle) != std::wstring_view::npos;
+}
+
+// Folder types whose layouts get the column: the ones used for regular file
+// system folders. Anything else, including special views such as Home and any
+// added by future Windows versions, is left alone.
+constexpr std::wstring_view kFileFolderTypes[] = {
+    L"{5c4f28b5-f869-4e84-8e60-f11db97c5cc7}"sv,  // Generic
+    L"{7d49d726-3c21-4f05-99aa-fdc2c9474656}"sv,  // Documents
+    L"{b3690e58-e961-423b-b687-386ebfd83239}"sv,  // Pictures
+    L"{94d6ddcc-4a68-4175-a374-bd584a510b78}"sv,  // Music
+    L"{5fa96407-7e77-483c-ac93-691d05850de8}"sv,  // Videos
+    L"{885a186e-a440-4ada-812b-db871b942259}"sv,  // Downloads
+    L"{cd0fc69b-71e2-46e5-9690-5bcd9f57aab3}"sv,  // UserFiles
+    L"{69f1e26b-ec64-4280-bc83-f1eb887ec35a}"sv,  // VersionControl
+    L"{4f01ebc5-2385-41f2-a28e-2c5c91fb56e0}"sv,  // StorageProviderGeneric
+    L"{dd61bd66-70e8-48dd-9655-65c5e1aac2d1}"sv,  // StorageProviderDocuments
+    L"{71d642a9-f2b1-42cd-ad92-eb9300c7cc0a}"sv,  // StorageProviderPictures
+    L"{672ecd7e-af04-4399-875c-0290845b6247}"sv,  // StorageProviderMusic
+    L"{51294da1-d7b1-485b-9e9a-17cffe33e187}"sv,  // StorageProviderVideos
+};
 
 std::wstring GetPathFromHKEY(HKEY key) {
     // Predefined keys (HKLM etc.) can't be queried; the caller only needs the
@@ -1279,14 +1391,33 @@ std::wstring GetPathFromHKEY(HKEY key) {
         nameLength / sizeof(WCHAR));
 }
 
+// True for ...\Explorer\FolderTypes\{type}\TopViews\{view} keys whose type is
+// in kFileFolderTypes.
 bool IsFolderTemplateKey(HKEY key, LPCWSTR subKey) {
     std::wstring path = GetPathFromHKEY(key);
     if (subKey && *subKey) {
         path += L'\\';
         path += subKey;
     }
-    return ContainsCaseInsensitive(path, L"\\Explorer\\FolderTypes\\"sv) &&
-           ContainsCaseInsensitive(path, L"\\TopViews\\"sv);
+
+    constexpr auto kFolderTypes = L"\\Explorer\\FolderTypes\\"sv;
+    size_t typeStart = FindCaseInsensitive(path, kFolderTypes);
+    if (typeStart == std::wstring::npos ||
+        !ContainsCaseInsensitive(path, L"\\TopViews\\"sv)) {
+        return false;
+    }
+    typeStart += kFolderTypes.size();
+    size_t typeEnd = path.find(L'\\', typeStart);
+    if (typeEnd == std::wstring::npos) {
+        return false;
+    }
+
+    std::wstring_view type(path.data() + typeStart, typeEnd - typeStart);
+    return std::any_of(std::begin(kFileFolderTypes),
+                       std::end(kFileFolderTypes), [type](auto allowed) {
+                           return type.size() == allowed.size() &&
+                                  ContainsCaseInsensitive(type, allowed);
+                       });
 }
 
 // "prop:0(34)System.ItemNameDisplay;0System.DateModified;0System.Size;..."
@@ -1305,7 +1436,7 @@ std::optional<std::wstring> InjectSizeOnDiskColumn(std::wstring_view value) {
     }
 
     // Leave the Home page's layout alone. Adding a column to it stopped
-    // Explorer windows from opening at all (v0.2 and v0.3).
+    // Explorer windows from opening at all.
     for (auto marker : {L"System.Home."sv, L"System.ActivityInfo"sv,
                         L"System.WebAccountID"sv}) {
         if (ContainsCaseInsensitive(value, marker)) {
@@ -1429,12 +1560,12 @@ void HookRegistryFunctions() {
 
     if (auto p = (RegQueryValueExW_t)GetProcAddress(kernelBase,
                                                     "RegQueryValueExW")) {
-        WindhawkUtils::Wh_SetFunctionHookT(p, RegQueryValueExW_Hook,
-                                           &RegQueryValueExW_Original);
+        WindhawkUtils::SetFunctionHook(p, RegQueryValueExW_Hook,
+                                       &RegQueryValueExW_Original);
     }
     if (auto p = (RegGetValueW_t)GetProcAddress(kernelBase, "RegGetValueW")) {
-        WindhawkUtils::Wh_SetFunctionHookT(p, RegGetValueW_Hook,
-                                           &RegGetValueW_Original);
+        WindhawkUtils::SetFunctionHook(p, RegGetValueW_Hook,
+                                       &RegGetValueW_Original);
     }
 }
 
@@ -1442,30 +1573,30 @@ void HookRegistryFunctions() {
 // Mod lifecycle
 
 void LoadSettings() {
-    PCWSTR folderSizes = Wh_GetStringSetting(L"folderSizes");
+    auto folderSizes = WindhawkUtils::StringSetting::make(L"folderSizes");
     g_settings.folderSizes = FolderSizes::always;
-    if (wcscmp(folderSizes, L"withShiftKey") == 0) {
-        g_settings.folderSizes = FolderSizes::withShiftKey;
+    if (wcscmp(folderSizes, L"exceptSystemFolders") == 0) {
+        g_settings.folderSizes = FolderSizes::exceptSystemFolders;
     } else if (wcscmp(folderSizes, L"disabled") == 0) {
         g_settings.folderSizes = FolderSizes::disabled;
     }
-    Wh_FreeStringSetting(folderSizes);
 
-    PCWSTR method = Wh_GetStringSetting(L"folderMethod");
+    auto method = WindhawkUtils::StringSetting::make(L"folderMethod");
     g_settings.accurateFolders = wcscmp(method, L"fast") != 0;
-    Wh_FreeStringSetting(method);
 
-    g_settings.networkFolders = Wh_GetIntSetting(L"networkFolders");
+    g_settings.networkDrives = Wh_GetIntSetting(L"networkDrives");
     g_settings.mixFoldersWhenSorting =
         Wh_GetIntSetting(L"mixFoldersWhenSorting");
     g_settings.addToDefaultColumns = Wh_GetIntSetting(L"addToDefaultColumns");
-    g_settings.diagnostics = Wh_GetIntSetting(L"diagnostics");
 
     int refreshSeconds = Wh_GetIntSetting(L"refreshSeconds");
     if (refreshSeconds < 0) {
         refreshSeconds = 0;
     }
     g_settings.cacheMs = (ULONGLONG)refreshSeconds * 1000;
+
+    auto subfolderCache = WindhawkUtils::StringSetting::make(L"subfolderCache");
+    g_settings.cacheAllSubfolders = wcscmp(subfolderCache, L"directOnly") != 0;
 }
 
 BOOL Wh_ModInit() {
@@ -1473,6 +1604,7 @@ BOOL Wh_ModInit() {
     ULONGLONG initStart = GetTickCount64();
 
     LoadSettings();
+    LoadSystemFolders();
 
     for (PCWSTR moduleName : {L"kernelbase.dll", L"kernel32.dll"}) {
         HMODULE module = GetModuleHandleW(moduleName);
@@ -1489,20 +1621,36 @@ BOOL Wh_ModInit() {
     }
     ULONGLONG symbolsMs = GetTickCount64() - initStart;
 
-    WindhawkUtils::Wh_SetFunctionHookT(PSFormatForDisplayAlloc,
-                                       PSFormatForDisplayAlloc_Hook,
-                                       &PSFormatForDisplayAlloc_Original);
-    WindhawkUtils::Wh_SetFunctionHookT(PSFormatForDisplay,
-                                       PSFormatForDisplay_Hook,
-                                       &PSFormatForDisplay_Original);
+    WindhawkUtils::SetFunctionHook(PSFormatForDisplayAlloc,
+                                   PSFormatForDisplayAlloc_Hook,
+                                   &PSFormatForDisplayAlloc_Original);
+    WindhawkUtils::SetFunctionHook(PSFormatForDisplay, PSFormatForDisplay_Hook,
+                                   &PSFormatForDisplay_Original);
 
     if (g_settings.addToDefaultColumns) {
         HookRegistryFunctions();
     }
 
-    g_walkSemaphore =
-        CreateSemaphoreW(nullptr, kMaxConcurrentWalks, kMaxConcurrentWalks,
-                         nullptr);
+    // If the pool can't be created, folders requested on window threads just
+    // stay empty.
+    g_walkPool = CreateThreadpool(nullptr);
+    g_walkCleanupGroup = CreateThreadpoolCleanupGroup();
+    if (g_walkPool && g_walkCleanupGroup) {
+        SetThreadpoolThreadMaximum(g_walkPool, kMaxConcurrentWalks);
+        InitializeThreadpoolEnvironment(&g_walkEnvironment);
+        SetThreadpoolCallbackPool(&g_walkEnvironment, g_walkPool);
+        SetThreadpoolCallbackCleanupGroup(&g_walkEnvironment,
+                                          g_walkCleanupGroup, nullptr);
+    } else {
+        if (g_walkCleanupGroup) {
+            CloseThreadpoolCleanupGroup(g_walkCleanupGroup);
+            g_walkCleanupGroup = nullptr;
+        }
+        if (g_walkPool) {
+            CloseThreadpool(g_walkPool);
+            g_walkPool = nullptr;
+        }
+    }
 
     Wh_Log(L"Init took %I64u ms (symbols %I64u ms), fast file queries: %s",
            GetTickCount64() - initStart, symbolsMs,
@@ -1522,13 +1670,22 @@ void Wh_ModUninit() {
     Wh_Log(L">");
 
     g_stopping = true;
-    while (g_hookRefCount > 0 || g_pendingJobs > 0) {
+    // Walks are only queued from hooks, so none can be added after this.
+    while (g_hookRefCount > 0) {
         Sleep(100);
     }
 
-    if (g_walkSemaphore) {
-        CloseHandle(g_walkSemaphore);
-        g_walkSemaphore = nullptr;
+    if (g_walkPool) {
+        // Returns only after every walk callback has returned, so no mod code
+        // is still running on a pool thread once the mod is unloaded. Queued
+        // walks that haven't started yet see g_stopping and return at once.
+        CloseThreadpoolCleanupGroupMembers(g_walkCleanupGroup, FALSE,
+                                           nullptr);
+        CloseThreadpoolCleanupGroup(g_walkCleanupGroup);
+        g_walkCleanupGroup = nullptr;
+        DestroyThreadpoolEnvironment(&g_walkEnvironment);
+        CloseThreadpool(g_walkPool);
+        g_walkPool = nullptr;
     }
 }
 
