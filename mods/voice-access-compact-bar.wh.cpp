@@ -7,7 +7,7 @@
 // @github          https://github.com/jcyrio
 // @include         VoiceAccess.exe
 // @architecture    x86-64
-// @compilerOptions -lshell32
+// @compilerOptions -lshell32 -lcomctl32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -22,16 +22,19 @@ near the top-right corner of the monitor, and removes the reserved strip so
 other windows can use the whole screen again.
 
 Requires Windows 11 with Voice Access. Keep Windhawk running while Voice Access
-is open; the mod attaches a short moment after the bar appears.
+is open. The mod takes effect the moment Voice Access docks its bar, so the
+full-width bar never flashes on screen, and it follows the bar if Voice Access
+recreates it, for example after a display change.
 
 ## Settings
 
 * **Compact placement**: turn the compact window on or off. When it is off,
   the mod leaves Voice Access exactly as Windows positions it.
-* **Window width**: width of the compact window in pixels. The window is kept
-  at least 300 pixels wide and never wider than the monitor.
+* **Window width**: width of the compact window in pixels at 100% display
+  scaling. The value is scaled automatically on high-DPI monitors. The window
+  is kept at least 300 pixels wide and never wider than the monitor.
 * **Distance from top**: how far below the top edge of the monitor the compact
-  window sits, in pixels.
+  window sits, in pixels at 100% display scaling.
 
 Settings take effect immediately. Disabling the mod, or turning compact
 placement off, restores the original full-width bar and its reserved strip.
@@ -41,11 +44,8 @@ placement off, restores the original full-width bar and its reserved strip.
 * The mod resizes the outer Voice Access window only. The contents of the bar
   are laid out by Voice Access itself, so a very narrow width may clip some of
   its controls. Widen the window if that happens.
-* The mod attaches once per Voice Access launch, after the bar has been docked
-  at the top of a monitor. If Voice Access recreates its bar later, for example
-  after a display change, restart Voice Access to re-attach.
-* Enable Windhawk logging for the mod to see the attach step, the window
-  positions it applies, and the result of each work-area change.
+* Enable Windhawk logging for the mod to see when it attaches to the bar, the
+  window positions it applies, and the result of each work-area change.
 */
 // ==/WindhawkModReadme==
 
@@ -56,37 +56,56 @@ placement off, restores the original full-width bar and its reserved strip.
   $description: Show Voice Access as a compact window instead of a full-width docked bar
 - width: 900
   $name: Window width
-  $description: Width of the compact window in pixels (at least 300)
+  $description: Width of the compact window in pixels at 100% scaling (at least 300), scaled automatically on high-DPI monitors
 - top: 100
   $name: Distance from top
-  $description: Gap between the top of the monitor and the compact window, in pixels
+  $description: Gap between the top of the monitor and the compact window, in pixels at 100% scaling
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <shellapi.h>
 #include <windhawk_api.h>
+#include <windhawk_utils.h>
 #include <atomic>
 #include <algorithm>
 
+// The bar window that is currently subclassed, or nullptr.
 static std::atomic<HWND> g_bar{nullptr};
-static std::atomic<bool> g_attached{false};
 static std::atomic<bool> g_stopping{false};
-static HANDLE g_stopEvent = nullptr;
-static HANDLE g_attachThread = nullptr;
-static SRWLOCK g_applyLock = SRWLOCK_INIT;
-static RECT g_original;
-static WNDPROC g_originalProc;
-using AppbarFn = decltype(&SHAppBarMessage);
-static AppbarFn g_originalAppbar;
-static APPBARDATA g_reservation{};
-static bool g_haveReservation = false;
-static std::atomic<bool> g_released{false};
 static std::atomic<bool> g_compact{false};
+// True while the shell holds a zero-height reservation submitted by this mod.
+static std::atomic<bool> g_released{false};
 static std::atomic<int> g_width{900}, g_top{100}, g_logCount{0};
 
-static bool IsBar(HWND window) {
-    if (!g_attached.load() || window != g_bar.load() || !IsWindow(window)) return false;
+// Geometry of the docked bar as Voice Access last requested it. This is both
+// the rectangle to restore and the reservation to give back. Guarded by
+// g_geometryLock, which is only ever held for a copy, never across a call into
+// user32 or the shell.
+static SRWLOCK g_geometryLock = SRWLOCK_INIT;
+static RECT g_docked{};
+static bool g_haveDocked = false;
+
+using SHAppBarMessage_t = decltype(&SHAppBarMessage);
+static SHAppBarMessage_t g_originalAppbar;
+
+static void SetDocked(const RECT& rect) {
+    AcquireSRWLockExclusive(&g_geometryLock);
+    g_docked = rect;
+    g_haveDocked = true;
+    ReleaseSRWLockExclusive(&g_geometryLock);
+}
+
+static bool GetDocked(RECT* rect) {
+    AcquireSRWLockShared(&g_geometryLock);
+    bool have = g_haveDocked;
+    if (have) *rect = g_docked;
+    ReleaseSRWLockShared(&g_geometryLock);
+    return have;
+}
+
+// A top-level "Voice access" window that belongs to this process.
+static bool IsBarClass(HWND window) {
     DWORD pid = 0;
     GetWindowThreadProcessId(window, &pid);
     wchar_t cls[128] = {};
@@ -94,83 +113,117 @@ static bool IsBar(HWND window) {
         GetClassNameW(window, cls, 128) && wcscmp(cls, L"Voice access") == 0;
 }
 
-static RECT DesiredRect(HWND window) {
+static bool IsAttachedBar(HWND window) {
+    return window && window == g_bar.load() && IsWindow(window);
+}
+
+// Compact rectangle at the top-right of the monitor the bar is on. Settings
+// are given at 100% scaling and scaled to the DPI of the bar's monitor.
+static RECT DesiredRect(HWND window, const RECT& docked) {
     MONITORINFO monitor{}; monitor.cbSize = sizeof(monitor);
     if (!GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &monitor))
-        return g_original;
+        return docked;
+    UINT dpi = GetDpiForWindow(window);
+    if (!dpi) dpi = USER_DEFAULT_SCREEN_DPI;
+    auto scale = [dpi](int value) -> LONG {
+        return MulDiv(value, dpi, USER_DEFAULT_SCREEN_DPI);
+    };
     LONG maxWidth = monitor.rcMonitor.right - monitor.rcMonitor.left;
-    LONG minWidth = std::min<LONG>(300, maxWidth);
-    LONG width = std::clamp<LONG>(g_width.load(), minWidth, maxWidth);
-    LONG height = g_original.bottom - g_original.top;
-    LONG left = std::max(monitor.rcMonitor.left, monitor.rcMonitor.right - width - 16);
+    LONG minWidth = std::min<LONG>(scale(300), maxWidth);
+    LONG width = std::clamp<LONG>(scale(g_width.load()), minWidth, maxWidth);
+    LONG height = docked.bottom - docked.top;
+    LONG left = std::max(monitor.rcMonitor.left,
+                         monitor.rcMonitor.right - width - scale(16));
     LONG lowestTop = std::max(monitor.rcMonitor.top, monitor.rcMonitor.bottom - height);
-    LONG top = std::clamp<LONG>(monitor.rcMonitor.top + g_top.load(),
+    LONG top = std::clamp<LONG>(monitor.rcMonitor.top + scale(g_top.load()),
                               monitor.rcMonitor.top, lowestTop);
     return RECT{left, top, left + width, top + height};
 }
 
-static LRESULT CALLBACK BarProcHook(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
-    bool target = IsBar(window) && message == WM_WINDOWPOSCHANGING && lParam;
-    WINDOWPOS before{};
-    if (target) before = *reinterpret_cast<WINDOWPOS*>(lParam);
-    LRESULT result = g_originalProc(window, message, wParam, lParam);
-    if (target) {
-        auto pos = reinterpret_cast<WINDOWPOS*>(lParam);
-        if (g_logCount.fetch_add(1) < 100)
-            Wh_Log(L"WINDOWPOS before=(%d,%d,%d,%d flags=%x) after=(%d,%d,%d,%d flags=%x)",
-                   before.x, before.y, before.cx, before.cy, before.flags,
-                   pos->x, pos->y, pos->cx, pos->cy, pos->flags);
-        if (!g_stopping.load() && g_compact.load()) {
-            RECT desired = DesiredRect(window);
+static LRESULT CALLBACK BarSubclassProc(HWND window, UINT message, WPARAM wParam,
+                                        LPARAM lParam, DWORD_PTR) {
+    // Let Voice Access handle the message first, then override the result.
+    LRESULT result = DefSubclassProc(window, message, wParam, lParam);
+    if (message == WM_WINDOWPOSCHANGING && lParam && !g_stopping.load() && g_compact.load()) {
+        RECT docked{};
+        if (GetDocked(&docked)) {
+            auto pos = reinterpret_cast<WINDOWPOS*>(lParam);
+            RECT desired = DesiredRect(window, docked);
+            if (g_logCount.fetch_add(1) < 100)
+                Wh_Log(L"WINDOWPOS requested=(%d,%d,%d,%d flags=%x) applied=(%ld,%ld,%ld,%ld)",
+                       pos->x, pos->y, pos->cx, pos->cy, pos->flags,
+                       desired.left, desired.top,
+                       desired.right - desired.left, desired.bottom - desired.top);
             pos->x = desired.left;
             pos->y = desired.top;
             pos->cx = desired.right - desired.left;
             pos->cy = desired.bottom - desired.top;
             pos->flags &= ~(SWP_NOMOVE | SWP_NOSIZE);
         }
+    } else if (message == WM_NCDESTROY) {
+        // The subclass itself is removed by WindhawkUtils. Forget the window so
+        // the next ABM_SETPOS from a recreated bar attaches again.
+        HWND expected = window;
+        if (g_bar.compare_exchange_strong(expected, nullptr))
+            Wh_Log(L"Voice Access bar %p destroyed; waiting for a new one", window);
     }
     return result;
 }
 
-struct BarSearch { HWND window = nullptr; bool ambiguous = false; };
-static BOOL CALLBACK FindBar(HWND window, LPARAM context) {
-    auto search = reinterpret_cast<BarSearch*>(context);
-    DWORD pid = 0;
-    GetWindowThreadProcessId(window, &pid);
-    wchar_t cls[128] = {};
-    if (pid == GetCurrentProcessId() && IsWindowVisible(window) &&
-        GetClassNameW(window, cls, 128) && wcscmp(cls, L"Voice access") == 0) {
-        if (search->window) { search->ambiguous = true; return FALSE; }
-        search->window = window;
+// Subclass the bar if it is not attached yet. Returns true when `window` is
+// the attached bar afterwards.
+static bool Attach(HWND window, const RECT& docked) {
+    HWND expected = nullptr;
+    if (!g_bar.compare_exchange_strong(expected, window)) return expected == window;
+    SetDocked(docked);
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(window, BarSubclassProc, 0)) {
+        Wh_Log(L"Failed to subclass Voice Access bar %p; error=%lu", window, GetLastError());
+        g_bar = nullptr;
+        return false;
     }
-    return TRUE;
+    Wh_Log(L"Attached to Voice Access bar %p; docked=(%ld,%ld,%ld,%ld) compact=%d",
+           window, docked.left, docked.top, docked.right, docked.bottom,
+           int(g_compact.load()));
+    return true;
 }
 
-// Preserve the output rectangle Voice Access expects while changing only the
-// rectangle submitted to the shell. Leave registration and callbacks intact.
+// Voice Access docks its bar with ABM_SETPOS. That call is the signal to
+// attach, the source of the docked geometry, and, in compact mode, the place
+// to hand the shell a zero-height reservation. The rectangle returned to Voice
+// Access is left untouched so that it positions the bar as usual; the subclass
+// then moves it to the compact rectangle.
 static UINT_PTR WINAPI AppbarHook(DWORD message, PAPPBARDATA data) {
     if (message == ABM_SETPOS && data && data->cbSize == sizeof(APPBARDATA) &&
-        IsBar(data->hWnd) && data->uEdge == ABE_TOP && g_haveReservation &&
-        !g_stopping.load() && g_compact.load()) {
-        APPBARDATA zero = *data;
-        zero.rc.bottom = zero.rc.top;
-        UINT_PTR result = g_originalAppbar(message, &zero);
-        if (result) g_released = true;
-        Wh_Log(L"ABM_SETPOS compact: requested height=%ld, reserved height=0, result=%llu",
-               data->rc.bottom - data->rc.top, static_cast<unsigned long long>(result));
-        return result;
+        data->uEdge == ABE_TOP && !g_stopping.load() && IsBarClass(data->hWnd) &&
+        Attach(data->hWnd, data->rc)) {
+        SetDocked(data->rc);
+        if (g_compact.load()) {
+            APPBARDATA zero = *data;
+            zero.rc.bottom = zero.rc.top;
+            UINT_PTR result = g_originalAppbar(message, &zero);
+            g_released = true;
+            Wh_Log(L"ABM_SETPOS compact: requested height=%ld, reserved height=0, result=%llu",
+                   data->rc.bottom - data->rc.top, static_cast<unsigned long long>(result));
+            return result;
+        }
     }
     return g_originalAppbar(message, data);
 }
 
+// Release (zero height) or restore the reserved strip of the attached bar.
 static void ChangeReservation(bool release) {
     HWND bar = g_bar.load();
-    if (!g_haveReservation || !IsBar(bar)) return;
-    if (!release && !g_released) return;
-    APPBARDATA data = g_reservation;
+    RECT docked{};
+    if (!IsAttachedBar(bar) || !GetDocked(&docked)) return;
+    if (!release && !g_released.load()) return;
+    APPBARDATA data{};
+    data.cbSize = sizeof(data);
+    data.hWnd = bar;
+    data.uEdge = ABE_TOP;
+    data.rc = docked;
     if (release) data.rc.bottom = data.rc.top;
     UINT_PTR result = g_originalAppbar(ABM_SETPOS, &data);
-    if (result) g_released = release;
+    g_released = release;
     MONITORINFO monitor{}; monitor.cbSize = sizeof(monitor);
     GetMonitorInfoW(MonitorFromWindow(bar, MONITOR_DEFAULTTONEAREST), &monitor);
     Wh_Log(L"Reservation release=%d result=%llu workArea=(%ld,%ld,%ld,%ld)",
@@ -186,7 +239,7 @@ static void ReadSettings() {
 
 static void ApplyRect(RECT rect) {
     HWND bar = g_bar.load();
-    if (!IsBar(bar)) return;
+    if (!IsAttachedBar(bar)) return;
     SetLastError(0);
     BOOL ok = SetWindowPos(bar, nullptr, rect.left, rect.top,
                          rect.right - rect.left, rect.bottom - rect.top,
@@ -199,109 +252,67 @@ static void ApplyRect(RECT rect) {
            actual.right - actual.left, actual.bottom - actual.top);
 }
 
-// Windhawk can load this DLL before Voice Access creates any windows.
-// Do not reject initialization merely because the bar is not present yet.
-static DWORD WINAPI AttachWhenReady(void*) {
-    while (WaitForSingleObject(g_stopEvent, 250) == WAIT_TIMEOUT) {
-        BarSearch search;
-        EnumWindows(FindBar, reinterpret_cast<LPARAM>(&search));
-        if (!search.window || search.ambiguous) continue;
-        RECT original{};
-        MONITORINFO monitor{}; monitor.cbSize = sizeof(monitor);
-        if (!GetWindowRect(search.window, &original) ||
-            !GetMonitorInfoW(MonitorFromWindow(search.window, MONITOR_DEFAULTTONEAREST), &monitor))
-            continue;
-        LONG height = original.bottom - original.top;
-        // Capture the real, initialized docked bar, not a startup placeholder.
-        if (height <= 0 || height >= monitor.rcMonitor.bottom - monitor.rcMonitor.top ||
-            original.left != monitor.rcMonitor.left || original.top != monitor.rcMonitor.top ||
-            original.right != monitor.rcMonitor.right ||
-            monitor.rcWork.top != monitor.rcMonitor.top + height) continue;
-
-        auto proc = reinterpret_cast<void*>(GetWindowLongPtrW(search.window, GWLP_WNDPROC));
-        if (!proc || !Wh_SetFunctionHook(proc, reinterpret_cast<void*>(BarProcHook),
-                                        reinterpret_cast<void**>(&g_originalProc)) ||
-            !Wh_ApplyHookOperations()) {
-            Wh_Log(L"Failed to attach the window-procedure hook of the bar.");
-            return 0;
-        }
-        g_bar = search.window;
-        g_original = original;
-        g_reservation = APPBARDATA{};
-        g_reservation.cbSize = sizeof(g_reservation);
-        g_reservation.hWnd = search.window;
-        g_reservation.uEdge = ABE_TOP;
-        g_reservation.rc = RECT{monitor.rcMonitor.left, monitor.rcMonitor.top,
-                                monitor.rcMonitor.right, monitor.rcWork.top};
-        g_haveReservation = true;
-        // Publish the immutable original rectangle and reservation to the hooks.
-        AcquireSRWLockExclusive(&g_applyLock);
-        g_attached = true;
-        Wh_Log(L"Attached to Voice Access bar %p; compact=%d",
-               search.window, int(g_compact.load()));
-        if (!g_stopping.load() && g_compact.load()) {
-            ApplyRect(DesiredRect(search.window));
-            ChangeReservation(true);
-        }
-        ReleaseSRWLockExclusive(&g_applyLock);
-        return 0;
+struct BarSearch { HWND window = nullptr; bool ambiguous = false; };
+static BOOL CALLBACK FindBar(HWND window, LPARAM context) {
+    auto search = reinterpret_cast<BarSearch*>(context);
+    if (IsWindowVisible(window) && IsBarClass(window)) {
+        if (search->window) { search->ambiguous = true; return FALSE; }
+        search->window = window;
     }
-    return 0;
+    return TRUE;
 }
 
 BOOL Wh_ModInit() {
     g_bar = nullptr;
-    g_attached = false;
     g_stopping = false;
-    g_haveReservation = false;
     g_released = false;
-    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_stopEvent) return FALSE;
-    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(SHAppBarMessage),
-                            reinterpret_cast<void*>(AppbarHook),
-                            reinterpret_cast<void**>(&g_originalAppbar))) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
+    AcquireSRWLockExclusive(&g_geometryLock);
+    g_haveDocked = false;
+    ReleaseSRWLockExclusive(&g_geometryLock);
+    if (!WindhawkUtils::SetFunctionHook(SHAppBarMessage, AppbarHook, &g_originalAppbar)) {
+        Wh_Log(L"Failed to hook SHAppBarMessage");
         return FALSE;
     }
     ReadSettings();
-    Wh_Log(L"Waiting for the Voice Access bar to initialize; compact=%d", int(g_compact.load()));
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    // This callback runs after Windhawk has installed the initial shell API hook.
-    g_attachThread = CreateThread(nullptr, 0, AttachWhenReady, nullptr, 0, nullptr);
-    if (!g_attachThread) Wh_Log(L"Could not start automatic attachment; error=%lu", GetLastError());
+    // Voice Access may already be running with its bar docked, in which case
+    // no ABM_SETPOS is coming. The docked window rectangle is the reservation.
+    BarSearch search;
+    EnumWindows(FindBar, reinterpret_cast<LPARAM>(&search));
+    if (!search.window || search.ambiguous) {
+        Wh_Log(L"No docked bar yet; waiting for Voice Access to dock it");
+        return;
+    }
+    RECT docked{};
+    if (!GetWindowRect(search.window, &docked) || !Attach(search.window, docked)) return;
+    if (!g_stopping.load() && g_compact.load()) {
+        ApplyRect(DesiredRect(search.window, docked));
+        ChangeReservation(true);
+    }
 }
 
 void Wh_ModSettingsChanged() {
-    AcquireSRWLockExclusive(&g_applyLock);
     ReadSettings();
-    if (g_attached.load() && !g_stopping.load()) {
-        ApplyRect(g_compact.load() ? DesiredRect(g_bar.load()) : g_original);
-        ChangeReservation(g_compact.load());
-    }
-    ReleaseSRWLockExclusive(&g_applyLock);
+    if (g_stopping.load()) return;
+    HWND bar = g_bar.load();
+    RECT docked{};
+    if (!IsAttachedBar(bar) || !GetDocked(&docked)) return;
+    ApplyRect(g_compact.load() ? DesiredRect(bar, docked) : docked);
+    ChangeReservation(g_compact.load());
 }
 
 void Wh_ModBeforeUninit() {
     g_stopping = true;
     g_compact = false;
-    if (g_stopEvent) SetEvent(g_stopEvent);
-    // Join our thread before Windhawk removes hooks and unloads this DLL.
-    if (g_attachThread) {
-        WaitForSingleObject(g_attachThread, INFINITE);
-        CloseHandle(g_attachThread);
-        g_attachThread = nullptr;
-    }
-    if (g_attached.load()) {
-        ApplyRect(g_original);
+    HWND bar = g_bar.load();
+    RECT docked{};
+    if (IsAttachedBar(bar) && GetDocked(&docked)) {
         ChangeReservation(false);
+        ApplyRect(docked);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(bar, BarSubclassProc);
     }
-    g_attached = false;
-    if (g_stopEvent) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
-    }
+    g_bar = nullptr;
 }
