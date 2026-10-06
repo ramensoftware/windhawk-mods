@@ -18,7 +18,7 @@
 Hides pinned taskbar icons whose app is not running. Icons hide and unhide in
 place, so pinned order is never touched.
 
-![Demo](https://i.imgur.com/jgDv8Su.gif)W
+![Demo](https://i.imgur.com/jgDv8Su.gif)
 
 *Hovering effect not included. Check out **Taskbar Dock Animation** by **Ph0en1x-dev**!
 **Same goes for the icon sizing and spacing. **Taskbar height and icon size** made by the OG, **m417z**.
@@ -368,6 +368,11 @@ std::mutex g_framesMutex;
 // Never destroyed: CRT shutdown would release XAML from the wrong thread.
 [[clang::no_destroy]] std::optional<std::unordered_map<void*, FrameContext>>
     g_frames{std::in_place};
+
+// Opened by each taskbar thread on itself at registration, held until unload:
+// the open handle keeps the id from being recycled, so an unload wait on it
+// is a wait on that thread and no other. Guarded by g_framesMutex.
+std::unordered_map<DWORD, HANDLE> g_frameThreads;
 
 FrameContext* GetFrameContext(void* key);
 bool HasVisibleIcon(FrameworkElement root, int depth);
@@ -2281,6 +2286,12 @@ void RegisterFrame(void* key, FrameworkElement frame) {
         dispatcher = ctx.dispatcher;
         Wh_Log(L"Registered taskbar frame on thread %u", ctx.threadId);
         g_frames->insert_or_assign(key, std::move(ctx));
+        DWORD threadId = GetCurrentThreadId();
+        if (!g_frameThreads.contains(threadId)) {
+            if (HANDLE hThread = OpenThread(SYNCHRONIZE, FALSE, threadId)) {
+                g_frameThreads.emplace(threadId, hThread);
+            }
+        }
     }
     // Outside the lock: the one COM call this function makes.
     if (!PostApply(dispatcher, GetCurrentThreadId())) {
@@ -2820,8 +2831,13 @@ void __cdecl TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     // pass, early enough to hide it unrendered.
     try {
         if (g_collapseEnabled && !g_revealed) {
-            FrameworkElement element = nullptr;
-            FrameKeyFromThis(pThis, &element);
+            // Adapted from taskbar-labels (m417z): pThis is the implementation
+            // object, not an ABI pointer; its first interface sits three
+            // pointers in.
+            void* unknownAbi = (void**)pThis + 3;
+            winrt::Windows::Foundation::IUnknown unknown;
+            winrt::copy_from_abi(unknown, unknownAbi);
+            FrameworkElement element = unknown.try_as<FrameworkElement>();
             // Several frames can share a thread; the button is judged
             // against its own frame, found by walking up from it.
             FrameContext* ctx = nullptr;
@@ -3605,19 +3621,20 @@ void Wh_ModBeforeUninit() {
         }
     }
 
+    // No handle reads as dead: nothing on that thread can ever run mod code.
+    auto frameThread = [](DWORD threadId) -> HANDLE {
+        std::lock_guard<std::mutex> guard(g_framesMutex);
+        auto it = g_frameThreads.find(threadId);
+        return it == g_frameThreads.end() ? nullptr : it->second;
+    };
+
     for (auto& [dispatcher, threadId] : stragglers) {
-        HANDLE hThread = OpenThread(SYNCHRONIZE, FALSE, threadId);
-        if (!hThread) {
-            continue;
-        }
-        if (WaitForSingleObject(hThread, 0) == WAIT_OBJECT_0) {
-            // Already gone: nothing on that thread can ever run the lambda.
-            CloseHandle(hThread);
+        HANDLE hThread = frameThread(threadId);
+        if (!hThread || WaitForSingleObject(hThread, 0) == WAIT_OBJECT_0) {
             continue;
         }
         HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (!done) {
-            CloseHandle(hThread);
             continue;
         }
         bool queued = false;
@@ -3661,7 +3678,6 @@ void Wh_ModBeforeUninit() {
         } else {
             CloseHandle(done);
         }
-        CloseHandle(hThread);
     }
 
     // Unbounded while any thread still owing a wake is alive: a dropped wake
@@ -3678,13 +3694,9 @@ void Wh_ModBeforeUninit() {
         }
         bool anyAlive = false;
         for (DWORD threadId : owing) {
-            HANDLE hThread = OpenThread(SYNCHRONIZE, FALSE, threadId);
-            if (!hThread) {
-                continue;
-            }
-            anyAlive = WaitForSingleObject(hThread, 0) == WAIT_TIMEOUT;
-            CloseHandle(hThread);
-            if (anyAlive) {
+            HANDLE hThread = frameThread(threadId);
+            if (hThread && WaitForSingleObject(hThread, 0) == WAIT_TIMEOUT) {
+                anyAlive = true;
                 break;
             }
         }
@@ -3701,6 +3713,10 @@ void Wh_ModBeforeUninit() {
         Wh_Log(L"%u taskbar contexts could not be cleaned up",
                (unsigned)g_frames->size());
     }
+    for (auto& [threadId, hThread] : g_frameThreads) {
+        CloseHandle(hThread);
+    }
+    g_frameThreads.clear();
 }
 
 // Hooks are gone, so an empty map can be released here; a non-empty one would
