@@ -11939,7 +11939,7 @@
         "ratingUsers": 13,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1790082454000,
+        "updated": 1791284501000,
         "users": 145
       },
       "metadata": {
@@ -11952,7 +11952,7 @@
         ],
         "license": "GPL-3.0",
         "name": "SnapSentry",
-        "version": "0.21.2"
+        "version": "0.21.3"
       }
     },
     "snipping-tool-pen-text": {

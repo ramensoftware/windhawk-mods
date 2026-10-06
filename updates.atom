@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-06T09:04:15.000Z</updated>
+    <updated>2026-10-06T11:01:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[SnapSentry 0.21.3]]></title>
+        <id>https://windhawk.net/mods/snap-sentry#57d182b9e16e49ebcce006c381dc3331caaded78</id>
+        <link href="https://windhawk.net/mods/snap-sentry"/>
+        <updated>2026-10-06T11:01:41.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>A screenshot taken just as settings change now follows the new settings instead of being skipped.</li>
+<li>A screenshot still waiting when you change the watched folder is now skipped instead of being handled under the new one.</li>
+<li>Turning the notification on while a screenshot is being handled now shows it instead of the dialog.</li>
+<li>A duplicate that was kept is remembered, even if the earlier copy was edited, so a later identical screenshot is still caught.</li>
+<li>The readme now shows renaming, duplicate removal and the Markdown path in action.</li>
+<li>The log now notes when a screenshot can't be checked for duplicates.</li>
+<li>Tightened a few loose ends.</li>
+</ul>]]></content>
+        <author>
+            <name>mario0318</name>
+            <uri>https://github.com/mario0318</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mute in Background 1.0]]></title>
         <id>https://windhawk.net/mods/mute-in-background#2a76fdfa5d6ed25e2df73167d7d39f623e0a61d1</id>
@@ -1097,21 +1116,6 @@ Native C++ • Windows 11 • Windhawk</p>]]></content>
         <author>
             <name>IMiloDev</name>
             <uri>https://github.com/IMiloDev</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic WebView Pane 2.16]]></title>
-        <id>https://windhawk.net/mods/classic-webview-pane#f79c82018ed58eb880450f0b94f74ecfc5083c15</id>
-        <link href="https://windhawk.net/mods/classic-webview-pane"/>
-        <updated>2026-10-04T07:00:33.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix the disk usage pie chart's side wall and outlines.</li>
-<li>Correct the colours of fully empty drives and prevent tiny sectors from rounding into a full pie.</li>
-<li>Keep the WebView pane hidden until its spacer and folder layout are ready, preventing a brief initial appearance in small windows.</li>
-</ul>]]></content>
-        <author>
-            <name>appEW</name>
-            <uri>https://github.com/appEW</uri>
         </author>
     </entry>
 </feed>

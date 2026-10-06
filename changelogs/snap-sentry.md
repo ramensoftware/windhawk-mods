@@ -1,3 +1,13 @@
+## 0.21.3 ([Oct 6, 2026](https://github.com/ramensoftware/windhawk-mods/blob/57d182b9e16e49ebcce006c381dc3331caaded78/mods/snap-sentry.wh.cpp))
+
+* A screenshot taken just as settings change now follows the new settings instead of being skipped.
+* A screenshot still waiting when you change the watched folder is now skipped instead of being handled under the new one.
+* Turning the notification on while a screenshot is being handled now shows it instead of the dialog.
+* A duplicate that was kept is remembered, even if the earlier copy was edited, so a later identical screenshot is still caught.
+* The readme now shows renaming, duplicate removal and the Markdown path in action.
+* The log now notes when a screenshot can't be checked for duplicates.
+* Tightened a few loose ends.
+
 ## 0.21.2 ([Sep 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b69a191a8b6059d3f3a929a4e4e7526c9bc06f45/mods/snap-sentry.wh.cpp))
 
 * Bug reports and feature requests now go to the SnapSentry issues page on GitHub.
