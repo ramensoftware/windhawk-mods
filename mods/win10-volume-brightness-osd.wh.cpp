@@ -4,7 +4,7 @@
 // @description     Replaces the Windows 11 volume/brightness OSD with the classic vertical Windows 10 flyout
 // @version         0.3.2
 // @author          AdmXP8
-// @github          https://github.com/AdmxP8
+// @github          https://github.com/AdmXP8
 // @include         explorer.exe
 // @compilerOptions -lole32 -luuid -lgdi32 -luser32 -ldwmapi -ldxva2 -lshcore
 // ==/WindhawkMod==
