@@ -2326,12 +2326,10 @@ int WINAPI TranslateAcceleratorW_Hook(HWND hWnd,
         (lpMsg->message == WM_KEYDOWN || lpMsg->message == WM_SYSKEYDOWN)) {
         if (!(lpMsg->lParam & 0x40000000)) {
             if (ProcessHotKey(lpMsg->hwnd, lpMsg->wParam)) {
-                // If an Alt-combination was triggered, cycle focus between the
-                // top-level Explorer frame and the inner folder view control.
-                // This triggers an internal WM_KILLFOCUS/WM_SETFOCUS sequence
-                // that cancels the stuck mnemonic/accelerator state, keeping
-                // standalone keys like Delete and Backspace functional.
-                if (GetKeyState(VK_MENU) & 0x8000) {
+                // Only run on true Alt-combinations (WM_SYSKEYDOWN).
+                // Combinations with Ctrl+Alt arrive as WM_KEYDOWN and are
+                // excluded.
+                if (lpMsg->message == WM_SYSKEYDOWN) {
                     HWND hFocus = GetFocus();
                     HWND rootHwnd =
                         GetAncestor(lpMsg->hwnd ? lpMsg->hwnd : hWnd, GA_ROOT);
@@ -2348,7 +2346,6 @@ int WINAPI TranslateAcceleratorW_Hook(HWND hWnd,
                     }
                 }
 
-                lpMsg->message = WM_NULL;
                 return 1;
             }
         }
