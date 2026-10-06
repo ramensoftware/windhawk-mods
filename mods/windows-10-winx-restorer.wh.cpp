@@ -25,6 +25,10 @@ out, Desktop), localized in the same languages as the rebuilt Windows 10 shell m
 
 This mod has been tested on Windows 11 24H2.
 
+## Screenshot 
+
+![winx.png](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/winx.png)
+
 ## How it works
 
 * A dedicated thread owns the low-level input hooks and only pumps messages. Nothing slow
