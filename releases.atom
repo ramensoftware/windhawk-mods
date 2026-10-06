@@ -2,12 +2,101 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-06T09:04:15.000Z</updated>
+    <updated>2026-10-06T13:04:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 2000 End Program Dialog 1.6.0]]></title>
+        <id>https://windhawk.net/mods/win2000-hung-app-dialog#5778210cc1e7397ed3d992c86833a23058a0f6bb</id>
+        <link href="https://windhawk.net/mods/win2000-hung-app-dialog"/>
+        <updated>2026-10-06T13:04:03.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows2000endprogramdialog">Windows 2000 End Program Dialog</h1>
+<p>Replaces the Windows Error Reporting dialog shown when you try to close a
+program that is not responding. It does not change the Windows shutdown screen.</p>
+<p><img src="https://raw.githubusercontent.com/appEW/windhawk-mods/6beb29187942eb1da43a4350405d2b2d62a79b14/media/win2000-end-program-ru.png" alt="Windows 2000 End Program dialog in Russian" /></p>
+<p>Example with Russian Windows resources and a classic theme. Frame colours
+follow your current theme. / Пример с русскими ресурсами Windows и классической
+темой. Цвета рамки зависят от текущей темы.</p>
+<p>The replacement uses the original <code>DIALOG #10</code> and messages from the installed
+<code>winsrv.dll.mui</code>, with the Windows 2000 warning overlay on the application's
+icon. The layout, font and wording come from Windows, not a recreated dialog.
+The display language is selected automatically, with English as a fallback;
+the language setting can also request English or Russian. That language must
+be installed in Windows. The window frame follows your current Windows theme.</p>
+<p><strong>Tested on Windows 11 24H2 (build 26100).</strong> Other Windows versions are not
+verified. If the resources or WER window cannot be validated, the mod leaves
+the original dialog available.</p>
+<h2 id="behaviorandsafety">Behavior and safety</h2>
+<p>The original WER dialog stays alive. End Now forwards WER's Close button;
+Cancel, Escape and the title-bar close button forward WER's Wait button.
+Windows performs these actions; the mod never terminates the hung process
+directly. End Now can still lose unsaved data, just as the original button can.
+After Cancel, a later close attempt can show the replacement again even when
+WER reuses the same native dialog. An acknowledged Wait is not timed out.</p>
+<p>A broker thread owns the replacement windows, accessibility notifications and
+fallback timers. Public ShowWindow/SetWindowPos hooks try to cloak the original
+dialog before display. No TaskDialog callback is replaced, and no DLL is pinned.
+Disabling or updating the mod joins the worker and restores any original
+dialog that is still alive before the DLL can unload.</p>
+<p>Windhawk can inject into WER after its window is already visible. In that case
+a brief appearance of the modern dialog is possible.</p>
+<h2 id="optionalprewarming">Optional pre-warming</h2>
+<p><strong>Keep Windows Error Reporting service running</strong> is off by default. Enabling
+it runs the pre-warm worker in a dedicated Windhawk tool host, not in Explorer,
+WerFault, the hung application or the main Windhawk UI process. The same mod
+handles the dialog in WerFault and hosts pre-warming separately; only this one
+mod needs to be installed. The host is bundled with Windhawk (1.7.3 or later),
+so no extra helper download is needed.</p>
+<p>The worker reads WerSvc's existing custom start-trigger GUID from SCM and
+writes its ETW event immediately, then once per minute. Disabling the option
+stops and joins the worker and ends only its dedicated host. No service startup
+type, registry policy, system file or event-log setting is changed; WerSvc is
+never forcibly stopped. Windows decides when the shared service can idle out.</p>
+<p>This opt-in feature keeps the service and a tool host in memory. The event
+descriptor matches WER's private trigger manifest, not a public WER contract,
+and may break after Windows updates. If its event-log channel is enabled, the
+heartbeat can generate about 1,440 entries per day; this mod never enables it.
+Errors are retried only at the ordinary minute interval. Pre-warming can reduce
+late injection but does not guarantee flash-free behavior on every system.</p>
+<h2 id="">По-русски</h2>
+<p>Заменяет окно Windows о зависшей программе, которое появляется при попытке
+её закрыть. Экран завершения работы Windows мод не меняет.</p>
+<p>Используется оригинальное окно <code>DIALOG #10</code> и тексты из установленного
+<code>winsrv.dll.mui</code>, со знаком предупреждения Windows 2000 поверх значка программы.
+Расположение, шрифт и формулировки берутся из системных ресурсов. Язык
+выбирается автоматически с английским в качестве резервного. В настройках можно
+запросить русский или английский; этот язык должен быть установлен в Windows.
+Оформление рамки зависит от текущей темы Windows.</p>
+<p>«Завершить сейчас» нажимает штатную кнопку закрытия WER. «Отмена», Escape
+и крестик означают ожидание отклика. Мод сам не завершает зависший процесс,
+но при выборе завершения несохранённые данные могут потеряться.
+После «Отмена» повторная попытка закрытия снова показывает замену, даже если
+WER использует то же штатное окно. Принятое ожидание не отменяется по таймауту.
+При отключении мода живое штатное окно возвращается, а DLL выгружается.</p>
+<p>Опция <strong>«Поддерживать службу отчётов об ошибках Windows активной»</strong> по умолчанию
+выключена. Прогрев выполняется в отдельном tool-host Windhawk, а не в Проводнике,
+WerFault, зависшем приложении или основном процессе интерфейса Windhawk.
+Устанавливается только один мод; EXE-хост уже входит в Windhawk 1.7.3 или новее.</p>
+<p>Мод читает существующий GUID триггера WerSvc из SCM и посылает ETW-событие сразу,
+затем раз в минуту. Отключение опции останавливает поток и только собственный
+tool-host. Тип запуска службы, политики, системные файлы и настройки журнала не
+меняются; WerSvc не останавливается принудительно. Прогрев оставляет службу и
+хост в памяти. Дескриптор события соответствует частному манифесту WER и может
+измениться после обновления Windows. Если включён канал провайдера, возможно
+около 1 440 записей в сутки; мод сам канал не включает. Ошибки повторяются не
+чаще раза в минуту. Опция может уменьшить вспышку при позднем внедрении, но не
+гарантирует её отсутствие на любой системе.</p>
+<p><strong>Проверено на Windows 11 24H2 (сборка 26100).</strong> Другие версии не проверены.
+При позднем внедрении возможно краткое появление современного окна.
+Дополнительные файлы или загрузки для мода не нужны.</p>]]></content>
+        <author>
+            <name>appEW</name>
+            <uri>https://github.com/appEW</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mute in Background 1.0]]></title>
         <id>https://windhawk.net/mods/mute-in-background#2a76fdfa5d6ed25e2df73167d7d39f623e0a61d1</id>
@@ -1280,34 +1369,6 @@ No folder, pin, or registry setting is changed.</p>]]></content>
         <author>
             <name>Nerdworld</name>
             <uri>https://github.com/nerdworldDE</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Restore to Snap Position 1.0]]></title>
-        <id>https://windhawk.net/mods/snap-restore-position#fc84bf84018d0f9cb95349fa8c7bf9859c3b9801</id>
-        <link href="https://windhawk.net/mods/snap-restore-position"/>
-        <updated>2026-10-03T16:00:08.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="restoretosnapposition">Restore to Snap Position</h1>
-<p><img src="https://i.imgur.com/XqdsB0w.gif" alt="Demo" /></p>
-<p>In Windows, when a window snapped with Snap (for example, to the left half of
-the screen) is maximized and then restored, it goes back to the position and
-size it had <strong>before</strong> it was snapped.</p>
-<p>With this mod, when a snapped window is maximized, its snapped position
-becomes the window's "normal" position. The <strong>Restore</strong> button, double-clicking
-the title bar and <strong>Win + ↓</strong> then return the window exactly to where it was
-snapped.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>After being restored, the window comes back as a regular window, not as a
-snapped one, so it is no longer part of a Snap Group.</li>
-<li>The size the window had before it was snapped is no longer remembered.</li>
-<li>Works with the maximize button, double-clicking the title bar and the
-window menu (including dialogs and MDI frame windows), and with programs that
-maximize their own windows through <code>ShowWindow</code> or <code>ShowWindowAsync</code>.</li>
-</ul>]]></content>
-        <author>
-            <name>pajs</name>
-            <uri>https://github.com/pajs</uri>
         </author>
     </entry>
 </feed>

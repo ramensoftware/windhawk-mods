@@ -16502,6 +16502,35 @@
         "version": "1.0.1"
       }
     },
+    "win2000-hung-app-dialog": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791291843000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791291843000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "appEW",
+        "compilerOptions": "-ldwmapi -ladvapi32 -lshell32",
+        "description": "Заменяет окно Windows 11 о зависшей программе окном «Завершение программы» из Windows 2000 - на русском или английском",
+        "github": "https://github.com/appEW",
+        "include": [
+          "windhawk.exe",
+          "WerFault.exe"
+        ],
+        "license": "MIT",
+        "name": "Окно «Завершение программы» из Windows 2000",
+        "version": "1.6.0"
+      },
+      "metadataEnglish": {
+        "description": "Replaces the Windows 11 \"not responding\" dialog with the End Program dialog of Windows 2000, in English or Russian",
+        "name": "Windows 2000 End Program Dialog"
+      }
+    },
     "win32-tray-clock-experience": {
       "details": {
         "defaultSorting": 8946,
