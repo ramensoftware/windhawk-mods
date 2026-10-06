@@ -7126,7 +7126,7 @@
         "ratingUsers": 7,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1790586292000,
+        "updated": 1791270116000,
         "users": 42
       },
       "metadata": {
@@ -7138,7 +7138,7 @@
           "windhawk.exe"
         ],
         "name": "Hide Taskbar Only on Desktop",
-        "version": "8.0.0"
+        "version": "8.1.8"
       }
     },
     "hide-taskbar-tooltips": {
@@ -8556,6 +8556,51 @@
         "license": "GPL-3.0",
         "name": "Mix Files and Folders When Sorting in Windows Explorer",
         "version": "1.5"
+      }
+    },
+    "mobile-open-animation": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791270120000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791270120000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Nico6719",
+        "compilerOptions": "-luser32 -lgdi32 -ldwmapi -lshell32 -lwinmm -ladvapi32 -lole32 -loleaut32 -luuid",
+        "description": "App windows zoom open from the icon (cursor position) with a fade, phone-style, using a splash panel with the app icon.",
+        "exclude": [
+          "ShellExperienceHost.exe",
+          "StartMenuExperienceHost.exe",
+          "SearchHost.exe",
+          "LockApp.exe",
+          "SystemSettings.exe",
+          "TextInputHost.exe",
+          "Widgets.exe",
+          "PhoneExperienceHost.exe",
+          "GameBarPresenceWriter.exe",
+          "RuntimeBroker.exe",
+          "dllhost.exe",
+          "sihost.exe",
+          "taskhostw.exe",
+          "ctfmon.exe",
+          "CredentialUIBroker.exe",
+          "backgroundTaskHost.exe",
+          "SecurityHealthSystray.exe",
+          "OneDrive.exe",
+          "msedgewebview2.exe"
+        ],
+        "github": "https://github.com/Nico6719",
+        "include": [
+          "*"
+        ],
+        "license": "MIT",
+        "name": "Mobile Open Animation",
+        "version": "1.0.0"
       }
     },
     "modern-notepad-to-classic-editor": {
