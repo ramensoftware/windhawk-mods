@@ -2554,8 +2554,14 @@ void Switcher::OnClick(POINT pt) {
     CloseButton button;
     const int index = HitTest(point, &button);
     if (index < 0) {
-        // In a Ctrl+Alt+Tab session, the mouse alone can dismiss it.
-        if (g_holdKey == HoldKey::None && EndSwitching()) {
+        // In a Ctrl+Alt+Tab session, the mouse alone can dismiss it. In the
+        // 2D styles, only outside the panel: a click between two thumbnails
+        // is just a near miss.
+        const bool onPanel = IsPanelStyle(m_settings.style) &&
+                             point.x >= m_panel.left &&
+                             point.x < m_panel.right &&
+                             point.y >= m_panel.top && point.y < m_panel.bottom;
+        if (g_holdKey == HoldKey::None && !onPanel && EndSwitching()) {
             OnCancel();
         }
         return;
