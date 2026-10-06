@@ -11576,7 +11576,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 0, 1, 0, 11],
         "ratingUsers": 12,
-        "reviews": 1,
+        "reviews": 2,
         "trendingSorting": 0,
         "updated": 1790005398000,
         "users": 281
@@ -13090,7 +13090,7 @@
         "ratingUsers": 37,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1788112170000,
+        "updated": 1791320634000,
         "users": 1091
       },
       "metadata": {
@@ -13106,7 +13106,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Taskbar Count Badges",
-        "version": "1.1.0"
+        "version": "1.2.0"
       }
     },
     "taskbar-countdown-timer": {

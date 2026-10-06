@@ -1,3 +1,13 @@
+## 1.2.0 ([Oct 6, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9fe62571e50a548b5f23fef91e948b03d74b78af/mods/taskbar-count-badges.wh.cpp))
+
+- Add horizontal and vertical offset settings for dots
+- Add active/inactive indicator styling
+- Dim inactive dots while keeping the active app indicator at full opacity
+- Dim inactive number-badge backgrounds while keeping the badge text readable
+- Add configurable inactive opacity
+- Allow inactive dimming to be disabled
+- Update the embedded mod documentation for version 1.2.0
+
 ## 1.1.0 ([Aug 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e51f6803f01ce956396f9577566cd0d7d28d5aa0/mods/taskbar-count-badges.wh.cpp))
 
 * Added top and bottom dot positions.

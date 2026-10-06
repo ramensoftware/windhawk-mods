@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-06T18:56:37.000Z</updated>
+    <updated>2026-10-06T21:03:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Count Badges 1.2.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-count-badges#9fe62571e50a548b5f23fef91e948b03d74b78af</id>
+        <link href="https://windhawk.net/mods/taskbar-count-badges"/>
+        <updated>2026-10-06T21:03:54.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add horizontal and vertical offset settings for dots</li>
+<li>Add active/inactive indicator styling</li>
+<li>Dim inactive dots while keeping the active app indicator at full opacity</li>
+<li>Dim inactive number-badge backgrounds while keeping the badge text readable</li>
+<li>Add configurable inactive opacity</li>
+<li>Allow inactive dimming to be disabled</li>
+<li>Update the embedded mod documentation for version 1.2.0</li>
+</ul>]]></content>
+        <author>
+            <name>digART</name>
+            <uri>https://github.com/digart11</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better file sizes in Explorer details 1.6]]></title>
         <id>https://windhawk.net/mods/explorer-details-better-file-sizes#c89e4f4b2c154f31a7b6f5f80a164b2f24a288f6</id>
@@ -1063,32 +1082,6 @@ Slick Window Arrangement, turn this mod's magnetic edges off.</li>
 <p>GPL-3.0. The taskbar XAML access is based on the <a href="https://github.com/m417z/my-windhawk-mods">Start button always on the left</a> mod by m417z, which is also licensed under GPL-3.0.</p>
 <h2 id="feedback">Feedback</h2>
 <p>Bug reports and feature requests are welcome in <a href="https://github.com/loliri/windhawk-taskbar-margin/issues">Issues</a>.</p>]]></content>
-        <author>
-            <name>loliri</name>
-            <uri>https://github.com/loliri</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Force System Cursor 2.0]]></title>
-        <id>https://windhawk.net/mods/force-system-cursor#011c83aa2958e98a6cdf09a10f16c547feebdb2f</id>
-        <link href="https://windhawk.net/mods/force-system-cursor"/>
-        <updated>2026-10-05T08:04:11.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="forcesystemcursor">Force System Cursor</h1>
-<p>Replaces a program's custom cursor with the system default cursor, or with a
-built-in cursor, while letting the program hide the cursor normally.</p>
-<h2 id="choosingthetargetprogram">Choosing the target program</h2>
-<p>The mod targets nothing by default, so it does nothing until you tell it which
-process to apply to. Open the mod in Windhawk, go to the <strong>Advanced</strong> tab, and
-put the executable name of your target in the <strong>Custom process inclusion list</strong>.
-The change applies as soon as you save, and takes effect the next time the
-program starts.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Enable custom cursor</strong>: when on, use the built-in cursor (or the file set
-below); when off, use the system default cursor.</li>
-<li><strong>Custom cursor file path (optional)</strong>: the full path of a <code>.cur</code> file to use
-instead of the built-in cursor. Leave empty to use the built-in one.</li>
-</ul>]]></content>
         <author>
             <name>loliri</name>
             <uri>https://github.com/loliri</uri>
