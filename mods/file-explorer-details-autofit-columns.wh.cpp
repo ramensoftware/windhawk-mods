@@ -2,7 +2,7 @@
 // @id              file-explorer-details-autofit-columns
 // @name            File Explorer Details Auto-Fit Columns
 // @description     Automatically fits all column widths to their content when refreshing in Details view. Has no effect on other view modes.
-// @version         1.2.0
+// @version         1.2.1
 // @author          Armaninyow
 // @github          https://github.com/armaninyow
 // @include         explorer.exe
@@ -134,9 +134,9 @@ static constexpr ULONGLONG kScanTimeBudgetMs = 2000;
 static constexpr int kScanChunkItems = 75;
 static constexpr UINT kScanChunkTimerDelayMs = 1;
 
-// Caps how long any single chunk can block the UI thread, independent of how
-// much of the total budget remains -- a slow property handler could otherwise
-// spend the entire remaining budget inside one chunk before yielding.
+// Best-effort chunk budget. The scan checks this before each property read so
+// multiple columns can't accumulate into one long UI-thread stall. A single
+// synchronous shell property handler can still exceed the budget by itself.
 static constexpr ULONGLONG kScanChunkMaxBlockMs = 20;
 
 // g_cs guards all global map access. Settings are three independent atomics
@@ -554,6 +554,7 @@ struct FitContext {
     HGDIOBJ hOldFontScan = nullptr;  // restored into hdcScan before hFontItemScan is deleted
     std::vector<int> scanRunningMax;
     int scanIndex = 0;
+    UINT scanColumnIndex = 0;  // resume point when a chunk yields mid-item
     ULONGLONG scanBudgetRemainingUs = 0;  // counts down (microseconds) by time actually spent scanning, not idle time between chunks
 
     std::vector<int> headerFloor;               // used only as a floor under the measured width
@@ -808,14 +809,29 @@ static void Step_ScanChunk(FitContext* ctx, HWND hwndOwner) {
     ULONGLONG chunkDeadlineUs = chunkStartUs + chunkBlockUs;
 
     int i = ctx->scanIndex;
-    for (; i < end; i++) {
-        if (QpcNowUs() >= chunkDeadlineUs) break;  // yield; this item is picked up again next tick
+    UINT startColumn = ctx->scanColumnIndex;
+    bool yieldedMidItem = false;
+
+    while (i < end) {
+        if (QpcNowUs() >= chunkDeadlineUs) break;
 
         PITEMID_CHILD pidl = nullptr;
-        if (FAILED(ctx->pFV2->Item(i, &pidl)) || !pidl)
+        if (FAILED(ctx->pFV2->Item(i, &pidl)) || !pidl) {
+            i++;
+            startColumn = 0;
             continue;
+        }
 
-        for (UINT c = 0; c < ctx->colCount; c++) {
+        UINT c = startColumn;
+        for (; c < ctx->colCount; c++) {
+            // Check between property reads, not just between items. This can't
+            // preempt one slow GetDetailsEx call, but it prevents the remaining
+            // columns from compounding the stall after the budget is exhausted.
+            if (QpcNowUs() >= chunkDeadlineUs) {
+                yieldedMidItem = true;
+                break;
+            }
+
             int w = MeasureItemColumnWidth(ctx->pFolderScan, pidl, ctx->keys[c],
                                             ctx->hdcScan, dispBuf, ARRAYSIZE(dispBuf));
             if (w > ctx->scanRunningMax[c]) {
@@ -825,11 +841,27 @@ static void Step_ScanChunk(FitContext* ctx, HWND hwndOwner) {
             }
         }
         CoTaskMemFree(pidl);
+
+        if (yieldedMidItem) {
+            ctx->scanIndex = i;
+            ctx->scanColumnIndex = c;
+            break;
+        }
+
+        i++;
+        startColumn = 0;
+        ctx->scanIndex = i;
+        ctx->scanColumnIndex = 0;
+    }
+
+    if (!yieldedMidItem) {
+        ctx->scanIndex = i;
+        if (ctx->scanIndex >= end)
+            ctx->scanColumnIndex = 0;
     }
 
     ULONGLONG elapsedUs = QpcNowUs() - chunkStartUs;
     ctx->scanBudgetRemainingUs = (elapsedUs >= ctx->scanBudgetRemainingUs) ? 0 : ctx->scanBudgetRemainingUs - elapsedUs;
-    ctx->scanIndex = i;
 
     if (ctx->scanBudgetRemainingUs == 0 && ctx->scanIndex < ctx->itemCount) {
         Step_AbortScan(ctx, hwndOwner);
