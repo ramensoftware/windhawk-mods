@@ -42,12 +42,12 @@
   $name: Number of grid columns
   $name:ko-KR: 그리드 열 수
   $description: Must be between 2 and 50.
-  $description:ko-KR: 2와 50 사이어야 합니다.
+  $description:ko-KR: 2와 50 사이여야 합니다.
 - CoolSwitchRows: 3
   $name: Number of grid rows
   $name:ko-KR: 그리드 행 수
-  $description: Must be between 2 and 25. At least 7 items must be able to show in total, otherwise a default size will be used.
-  $description:ko-KR: 2와 25 사이어야 합니다. 총 7개 이상의 항목이 표시될 수 있어야 하며, 그렇지 않으면 기본 크기가 사용됩니다.
+  $description: Must be between 2 and 25. At least 7 items must be able to show in total; otherwise, a default size will be used.
+  $description:ko-KR: 2와 25 사이여야 합니다. 총 7개 이상의 항목이 표시될 수 있어야 하며, 그렇지 않으면 기본 크기가 사용됩니다.
 - ShowDelay: 100
   $name: Show delay (ms)
   $name:ko-KR: 표시 지연 시간 (ms)
@@ -64,45 +64,45 @@
   $description: Show the switcher only on the primary monitor.
   $description:ko-KR: 전환기를 주 모니터에만 표시합니다.
 - PerMonitor: false
-  $name: Only show items in same monitor
+  $name: Only show items on the same monitor
   $name:ko-KR: 같은 모니터의 항목만 표시
   $description: Only show windows located on the switcher's monitor.
   $description:ko-KR: 전환기와 같은 모니터에 위치한 창만 표시합니다.
 - PerApplicationList: false
   $name: Enable per-application list (Alt+`)
   $name:ko-KR: 응용 프로그램별 목록 (Alt+`) 활성화
-  $description: Enable the per-application window switcher, which is shown when Alt+Tilde is pressed.
-  $description:ko-KR: Alt+`를 누르면 표시되는 응용 프로그램별 전환기를 활성화합니다.
+  $description: Enable the per-application window switcher, shown when Alt+Tilde is pressed.
+  $description:ko-KR: Alt+`를 누르면 표시되는 응용 프로그램별 전환기를 사용합니다.
 - SwitcherIsPerApplication: false
   $name: Only show one item per application
-  $name:ko-KR: 응용 프로그램 당 한 항목만 표시
-  $description: Make the switcher only show a single entry per application.
-  $description:ko-KR: 전환기에 응용 프로그램 별로 하나의 항목만 표시되도록 합니다.
+  $name:ko-KR: 응용 프로그램당 한 항목만 표시
+  $description: Make the switcher show a single entry per application.
+  $description:ko-KR: 전환기에 응용 프로그램별로 하나의 항목만 표시되도록 합니다.
 - AlwaysUseWindowTitleAndIcon: false
   $name: Always use the window title and icon
   $name:ko-KR: 항상 창 제목 및 아이콘 사용
   $description: When showing only one item per application, use the title and icon of the most recently focused window in the category, instead of the application name and icon.
-  $description:ko-KR: 응용 프로그램 당 한 항목만 표시 중일 때, 응용 프로그램 이름 및 아이콘 대신 범주 내 가장 최근에 사용한 창의 제목과 아이콘을 사용합니다.
+  $description:ko-KR: 응용 프로그램당 한 항목만 표시 중일 때, 응용 프로그램 이름 및 아이콘 대신 범주 내에서 가장 최근에 사용한 창의 제목과 아이콘을 사용합니다.
 - ScrollWheelBehavior: "4"
   $name: Scroll wheel behavior
   $name:ko-KR: 스크롤 휠 동작
-  $description: Sets the behavior of the mouse scroll wheel when the switcher is open. If there are not enough items to scroll, the behavior falls back to item by item movement.
-  $description:ko-KR: 전환기가 열린 동안 마우스 스크롤 휠의 동작을 설정합니다. 스크롤 하기에 창이 충분히 많지 않으면, 항목 별 이동이 대신 사용됩니다.
+  $description: Sets how the mouse scroll wheel behaves when the switcher is open. If there are not enough items to scroll, it falls back to item-by-item movement.
+  $description:ko-KR: 전환기가 열려 있는 동안 마우스 스크롤 휠의 동작을 설정합니다. 스크롤하기에 창이 충분히 많지 않으면, 항목별 이동이 대신 사용됩니다.
   $options:
   - 0: Disabled
   - 1: Move selection item by item, only when the cursor is over the switcher.
   - 2: Move selection item by item, regardless of cursor position.
-  - 3: Scroll the grid list, only when the cursor is over the switcher.
-  - 4: Scroll the grid list if the cursor is over the switcher, otherwise move selection item by item.
+  - 3: Scroll the grid list only when the cursor is over the switcher.
+  - 4: Scroll the grid list if the cursor is over the switcher; otherwise, move the selection item by item.
   - 5: Scroll the grid list, regardless of cursor position.
-  - 6: Move selection item by item if the cursor is over the switcher, otherwise scroll the grid list.
+  - 6: Move the selection item by item if the cursor is over the switcher; otherwise, scroll the grid list.
   $options:ko-KR:
   - 0: 비활성화
   - 1: 전환기 위에 커서가 있을 시에만 항목 간 이동
-  - 2: 커서 위치와 상관 없이 항목 간 이동
+  - 2: 커서 위치와 상관없이 항목 간 이동
   - 3: 전환기 위에 커서가 있을 시에만 목록 스크롤
   - 4: 전환기 위에 커서가 있을 시 목록 스크롤, 아니면 항목 간 이동
-  - 5: 커서 위치와 상관 없이 목록 스크롤
+  - 5: 커서 위치와 상관없이 목록 스크롤
   - 6: 전환기 위에 커서가 있을 시 항목 간 이동, 아니면 목록 스크롤
 - ScrollWheelInvert: false
   $name: Invert scroll wheel behavior
@@ -116,11 +116,11 @@
   $name: Try registering hotkey directly
   $name:ko-KR: 직접 바로 가기 키 등록 시도
   $description: Enable if your setup involves disabling the default modern window switcher.
-  $description:ko-KR: 현재 시스템 구성 상 기본 창 전환기가 비활성화 된 경우 이 옵션을 켜십시오.
+  $description:ko-KR: 현재 시스템 구성상 기본 창 전환기가 비활성화된 경우 이 옵션을 켜십시오.
 */
 // ==/WindhawkModSettings==
 
-// Source code is published under The GNU General Public License v2.0.
+// Source code is published under the GNU General Public License v2.0.
 // Fork: https://github.com/Ingan121/ClassicWindowSwitcher/blob/master/LICENSE
 // Upstream: https://github.com/valinet/sws/blob/master/LICENSE
 
