@@ -4740,13 +4740,9 @@ BOOL Wh_ModInit() {
             hImmersive = FindWindowW(L"TaskSwitcherWnd", NULL);
         }
         if (hImmersive) {
-            DWORD tid, pid, explorerPid = 0;
+            DWORD tid, pid;
             tid = GetWindowThreadProcessId(hImmersive, &pid);
-            HWND hDesktop = GetShellWindow();
-            if (hDesktop) {
-                GetWindowThreadProcessId(hDesktop, &explorerPid);
-            }
-            if (!explorerPid || pid == explorerPid) {
+            if (pid == GetCurrentProcessId()) {
                 g_hHotKeyHook = SetWindowsHookExW(WH_GETMESSAGE, GetMessageProc, NULL, tid);
                 Wh_Log(L"Set Alt+Tab hook, hook=%p, tid=%d", g_hHotKeyHook, tid);
             }
