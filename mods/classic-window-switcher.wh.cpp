@@ -347,7 +347,7 @@ typedef long long sws_error_t;
 #define SWS_ERROR_LOADLIBRARY_FAILED           0xA0010004 // "The requested library is not available"
 #define SWS_ERROR_FUNCTION_NOT_FOUND           0xA0010005 // "The requested procedure was not found"
 #define SWS_ERROR_INVALID_PARAMETER            0xA0010007 // "One or more of the parameters supplied is invalid"
-#define SWS_ERROR_APPRESOLVER_NOT_AVAILABLE       0xA001000A // "Unable to initialize an instance of IAppResolver8"
+#define SWS_ERROR_APPRESOLVER_NOT_AVAILABLE    0xA001000A // "Unable to initialize an instance of IAppResolver8"
 
 // (always_)inline function still doesn't keep the line and function name in the Wh_Log output
 #define sws_error_Report(errnum) \
