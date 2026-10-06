@@ -4,13 +4,13 @@
 // @name:pt-BR      Ilha e Dock estilo Mac
 // @description     An island at the top of the screen like the macOS menu bar and the iPhone's Dynamic Island (clock, control center, notifications, media, tray icons), and a macOS-like dock instead of the taskbar (or the Windows taskbar, transparent or as it is)
 // @description:pt-BR Uma ilha no topo da tela como a barra de menus do macOS e a Dynamic Island do iPhone (relógio, central de controle, notificações, mídia, ícones da bandeja) e uma dock como a do macOS no lugar da barra de tarefas (ou a barra do Windows, transparente ou como ela é)
-// @version         0.52.1
+// @version         1.0.0
 // @author          caliberda
 // @github          https://github.com/cesarkali
 // @homepage        https://caliberda.com.br
 // @include         windhawk.exe
 // @include         explorer.exe
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -lcomctl32 -lgdi32 -lmsimg32 -ld2d1 -ldwrite -lwlanapi -luuid -lwindowscodecs -lversion -lbthprops -ldxva2 -lshlwapi -lwinhttp -lwinmm
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -lcomctl32 -lgdi32 -lmsimg32 -ld2d1 -ldwrite -lwlanapi -luuid -lwindowscodecs -lversion -lbthprops -ldxva2 -lshlwapi -lwinhttp -lwinmm -liphlpapi
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -73,10 +73,25 @@ the taskbar.
     it, and the others are listed below to add), with shortcuts like dark
     mode, screenshot, lock, emoji, clipboard history, Task Manager,
     Calculator and File Explorer.
-  * The calendar keeps events, with reminders that show in the pill.
+  * The calendar keeps events, with reminders that show in the pill, and,
+    if chosen, the public holidays of the country set in Windows.
   * **Power** (an optional button on the pill): sleep, restart, shut down,
     lock and sign out, like the macOS Apple menu. Restarting, shutting down
     and signing out ask first, and Windows closes the apps as usual.
+  * **Battery** (the battery): only the battery and the power plan (and,
+    with the balanced plan, Windows' power modes).
+  * **More on the pill** (each one optional, off by default, in the gear):
+    how much the processor, the memory and the video memory are used
+    (clicking one shows its graphs and details), a button muting the
+    microphone, a button switching light and dark mode, **notes** (with
+    topics, copied with a click), **tasks** (in progress, and the last ten
+    done below them),
+    **keyboard shortcuts** to remember (recorded by pressing them, or
+    imported from a file like komorebi's whkdrc), the **weather** (now, the
+    next hours and the week, for a city typed in its panel) and **updates**
+    (the apps with a newer version in winget, updated from the panel, and
+    the Windows updates waiting). Notes, tasks and shortcuts also have
+    buttons in the control center.
 * **Colors**: black, graphite, light, the Windows accent color, or glass.
 * **The other apps' tray icons** on the island: the pinned ones always, the
   others opening sideways from the "⋯" button. Clicking, double-clicking and
@@ -91,10 +106,12 @@ the taskbar.
   reply wraps onto more lines (the wheel scrolls it), Shift+Enter starts a
   new line, the arrows move in it and Ctrl+Backspace deletes a word. Under the mouse, a long notification shows
   on up to three lines (in the list too).
-  Closing one with its "x" ignores its app for a minute, like on Android
-  (its notifications still go to the list).
+  Its "x" deletes it (from the pill and the list); its arrow minimizes it,
+  ignoring its app for a minute, like on Android (its notifications still go
+  to the list, and only its icon on the island moves).
 * **Notifications** can be cleared from the island's list (all, or one by
-  one), and "Do not disturb" can be switched there.
+  one); the gear at its top unfolds its switches ("Do not disturb", the
+  banners in the pill, and showing what they say).
 * **Anywhere on the screen**: choose its place in the gear (or turn on
   dragging the pill, which then snaps to the middle and the corners of each
   edge); some apps can have a place of their own (for example, lower, so it
@@ -111,18 +128,18 @@ the taskbar.
 
 ### The island's settings
 
-The gear at the bottom of the control center opens them, in two columns (one
-on small screens, scrolling). Typing anywhere in them searches them
+The gear at the bottom of the control center opens them, in two or three
+columns (one on small screens, scrolling). Typing anywhere in them searches them
 (accents don't matter); Ctrl+Backspace deletes a word, and Esc clears the
 search.
 
 | Section | What it sets |
 | :--- | :--- |
-| Look | The style (pill or bar), the colors and the size. |
-| Place | Where it sits; "Place and icons per app" (a place, icons and a clock of their own for some apps, added from the open apps); moving the pill by dragging it; standing upright on the left and right edges. |
-| On the pill | The order of its items (drag them in the little pill), the clock kept in the middle, and which items it shows: network, volume, battery, the bell and the power button (off by default). |
+| Look | The style (pill or bar), the colors, the size, and panels as wide as the island. |
+| Place | Where it sits; "Place and icons per app" (a place, icons and a clock of their own for some apps, added from the open apps); moving the pill by dragging it; standing upright on the left and right edges; its distance from the screen's edges. |
+| On the pill | The order of its items (drag them in the little pill), the clock kept in the middle, and which items it shows: network, volume, battery, the bell, and (off by default) the power button, light and dark mode, the microphone, notes, tasks, keyboard shortcuts, the weather, updates, and the processor, memory and video memory use. |
 | Tray icons and media | The other apps' tray icons (and keeping their list open), what's playing, and its buttons and cover with the title on the pill. |
-| Clock | Seconds, the day of the week, the day and month, and the year. |
+| Clock | Seconds, the day of the week, the day and month, the year, and the holidays in the calendar (off by default). |
 | Notifications | "The island handles notifications and their sounds" (off by default, see the notes), new notifications in the pill (also while it's minimized), hiding the Windows banners, and downloading pictures from the web (off by default). |
 
 ### Screenshots
@@ -166,6 +183,8 @@ usable), or as it is (all of it, or only its apps).
   the dock is hidden (a new count on its icon, or a flashing button), only its
   icon peeks out from the bottom edge, bounces, and goes away again. Clicking
   it opens the app. The whole dock, or nothing at all, can be chosen instead.
+  On the transparent taskbar, an app asking for attention neither bounces
+  nor brings the taskbar up: its button shows it once the taskbar is up.
 * **Dots under open apps**, instead of the Windows line.
 * **Hidden until you need it**: the taskbar auto-hides, and springs in when
   the mouse reaches the bottom edge of the screen.
@@ -225,27 +244,55 @@ usable), or as it is (all of it, or only its apps).
   * When the island takes a new notification (in the pill, or, with the bar
     style or a panel open, as its app's icon with the red dot and in the
     list), the Windows banner is moved off the screen (it can be kept in the
-    gear); Windows places it again for the next notification. In full
-    screen nothing shows (the notification waits in the list). With the
-    pill's banners off, or minimized without them, the Windows banner stays.
+    gear); Windows places it again for the next notification. Windows 11
+    shows its banners stacked in one window, so it's off the screen only
+    while every banner in it is one the island shows: calls, alarms and
+    reminders keep Windows' banner, with its buttons, and the others in the
+    stack show with them. In full screen nothing shows on the island (the
+    notification waits in the list), and, like with Windows' "Do not
+    disturb", Windows' banners are left alone. With the pill's banners off,
+    or minimized without them, the Windows banner stays.
     Windows shows its banners one after the other, late when many come, and
     plays their sounds then: the option "The island handles notifications
     and their sounds" (off by default) keeps Windows' "Do not disturb" on
     while the island runs, so Windows stays quiet and the island shows each
-    notification and plays its sound (the one it asks for) as it comes
-    (calls, alarms and reminders, which "Do not disturb" lets through by
-    default, keep Windows' own banner, with its buttons, and sound). The
-    island's "Do not disturb" is then its own (the bell's moon), and Windows'
-    is turned back off when the island stops (from explorer if the island's
-    process ends unexpectedly, or at the next start after a crash); it's left
-    alone if it was already on.
+    notification and plays its sound (the one it asks for) as it comes.
+    Calls, alarms and reminders then show in the pill too, ahead of the
+    others (one on the pill gives way and shows again after them, with what
+    was being typed): they stay until closed, with the buttons the island
+    can press (an app's own, and "Dismiss"), and ring until closed, up to a
+    minute. "Do not disturb" lets them through by default, so Windows may
+    show its banner for one too (and plays its sound instead of the
+    island's): the island then reads that banner through UI Automation (the
+    accessibility tree, only that window) and, when it's the one on the
+    pill, takes it over: Windows' banner is hidden while the pill shows it,
+    and the pill's buttons are Windows' own ("Snooze" too), pressed on it
+    when the pill's are. It comes back as soon as the pill stops showing
+    it, or if anything doesn't match. The island's "Do not
+    disturb" is then its own (the bell's moon), and Windows' is turned back
+    off when the island stops (from explorer if the island's process ends
+    unexpectedly, or at the next start after a crash); it's left alone if it
+    was already on. If it's turned off from Windows, it's left off and the
+    island works as usual until the option is turned on again.
   * Replies go to the app the way Windows sends them from its own banners:
     through the notification handler the app registered.
-  * The mod only goes online if "Download pictures from the web" is turned
-    on in the gear (it's off by default): then a notification's picture
-    that's on the web (like WhatsApp's contact photos) is downloaded over
-    https from the address the app put in it, like Windows does, and only
-    for apps allowed to go online. Otherwise the app's icon is shown.
+  * The mod only goes online for what's turned on in the gear (all of it
+    off by default): "Download pictures from the web" (a notification's
+    picture that's on the web, like WhatsApp's contact photos, downloaded
+    over https from the address the app put in it, like Windows does, and
+    only for apps allowed to go online; otherwise the app's icon is shown),
+    the weather ([Open-Meteo](https://open-meteo.com): the city typed, then
+    its forecast every 30 minutes while it's on the pill), the holidays
+    ([Nager.Date](https://date.nager.at): the country set in Windows, once a
+    year) and updates (winget asks its own sources; the Windows updates are
+    read, read-only, through the Windows Update Agent).
+  * Updating an app runs "winget upgrade" for it (hidden and silent, or in
+    a terminal if chosen), only when asked in the panel.
+  * The power modes are read and set with the functions of powrprof.dll
+    that Windows' Settings uses; the power plans with the documented ones.
+  * The GPU's use comes from Windows' performance counters, and its
+    temperature, fan and power from the display driver's own figures (left
+    out when the driver doesn't give them).
   * Sleep, restart, shut down and sign out use the Windows functions for
     them (with "Fast startup", shutting down works like the Start menu's).
     On PCs with Modern Standby, "Sleep" turns the screen off, which is what
@@ -328,10 +375,24 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
     atalhos como modo escuro, captura de tela, bloquear, emojis, histórico da
     área de transferência, Gerenciador de Tarefas, Calculadora e Explorador de
     Arquivos.
-  * O calendário guarda eventos, com lembretes que aparecem na pílula.
+  * O calendário guarda eventos, com lembretes que aparecem na pílula, e,
+    se escolhido, os feriados do país configurado no Windows.
   * **Energia** (um botão opcional na pílula): suspender, reiniciar,
     desligar, bloquear e sair, como o menu Apple do macOS. Reiniciar,
     desligar e sair perguntam antes, e o Windows fecha os apps como sempre.
+  * **Bateria** (a bateria): só a bateria e o plano de energia (e, com o
+    plano equilibrado, os modos de energia do Windows).
+  * **Mais na pílula** (cada um opcional, desligado por padrão, na
+    engrenagem): o uso do processador, da memória e da memória de vídeo
+    (clicar num mostra os gráficos e os detalhes), um botão que silencia o
+    microfone, um botão que troca o modo claro e escuro, **anotações** (com
+    tópicos, copiadas com um clique), **tarefas** (em andamento, e as dez
+    últimas concluídas embaixo), **atalhos do teclado** para lembrar (gravados apertando as
+    teclas, ou importados de um arquivo como o whkdrc do komorebi), o
+    **clima** (agora, as próximas horas e a semana, da cidade digitada no
+    painel) e **atualizações** (os apps com versão nova no winget,
+    atualizados pelo painel, e as atualizações do Windows pendentes).
+    Anotações, tarefas e atalhos também têm botões na central de controle.
 * **Cores**: preto, grafite, claro, a cor de destaque do Windows, ou vidro.
 * **Os ícones dos outros apps na bandeja**, na ilha: os fixados sempre, os
   outros abrindo para o lado pelo botão "⋯". Clicar, clicar duas vezes e
@@ -347,10 +408,12 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
   começa uma linha nova, as setas andam nela e Ctrl+Backspace apaga uma
   palavra. Com o mouse em cima, uma notificação
   longa aparece em até três linhas (na lista também).
-  Fechar uma pelo "x" ignora o app dela por um minuto, como no Android (as
-  notificações dele continuam indo para a lista).
-* **Notificações** podem ser limpas na lista da ilha (todas, ou uma por uma),
-  e o "Não incomodar" pode ser ligado e desligado ali.
+  O "x" apaga a notificação (da pílula e da lista); a setinha a minimiza,
+  ignorando o app dela por um minuto, como no Android (as notificações dele
+  continuam indo para a lista, e só o ícone dele na ilha se mexe).
+* **Notificações** podem ser limpas na lista da ilha (todas, ou uma por uma);
+  a engrenagem no topo dela abre as chaves dela ("Não incomodar", os avisos
+  na pílula e mostrar o conteúdo).
 * **Em qualquer lugar da tela**: escolha a posição na engrenagem (ou ligue
   mover a pílula arrastando; ela gruda no meio e nos cantos de cada borda);
   alguns apps podem ter uma posição só deles (por exemplo, mais abaixo, para
@@ -365,18 +428,18 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
 
 #### As configurações da ilha
 
-A engrenagem no fim da central de controle abre as configurações, em duas
-colunas (uma em telas pequenas, rolando). Digitar em qualquer lugar delas
+A engrenagem no fim da central de controle abre as configurações, em duas ou
+três colunas (uma em telas pequenas, rolando). Digitar em qualquer lugar delas
 faz uma busca (os acentos não importam); Ctrl+Backspace apaga uma
 palavra, e o Esc limpa a busca.
 
 | Seção | O que ela ajusta |
 | :--- | :--- |
-| Aparência | O estilo (pílula ou barra), as cores e o tamanho. |
-| Posição | Onde ela fica; "Posição e ícones por app" (uma posição, ícones e relógio só de alguns apps, escolhidos entre os apps abertos); mover a pílula arrastando; ficar em pé nas laterais. |
-| Na pílula | A ordem dos itens (arraste-os na pilulinha), o relógio no meio, e quais itens ela mostra: rede, volume, bateria, o sino e o botão de desligar (desligado por padrão). |
+| Aparência | O estilo (pílula ou barra), as cores, o tamanho, e painéis na largura da ilha. |
+| Posição | Onde ela fica; "Posição e ícones por app" (uma posição, ícones e relógio só de alguns apps, escolhidos entre os apps abertos); mover a pílula arrastando; ficar em pé nas laterais; a distância dela até as bordas da tela. |
+| Na pílula | A ordem dos itens (arraste-os na pilulinha), o relógio no meio, e quais itens ela mostra: rede, volume, bateria, o sino, e (desligados por padrão) o botão de desligar, o modo claro e escuro, o microfone, anotações, tarefas, atalhos do teclado, o clima, atualizações, e o uso do processador, da memória e da memória de vídeo. |
 | Bandeja e mídia | Os ícones dos outros apps (e manter a lista deles aberta), o que está tocando, e os botões e a capa com o título na pílula. |
-| Relógio | Segundos, o dia da semana, o dia e o mês, e o ano. |
+| Relógio | Segundos, o dia da semana, o dia e o mês, o ano, e os feriados no calendário (desligado por padrão). |
 | Notificações | "A ilha cuida das notificações e dos sons" (desligada por padrão, veja as observações), os avisos na pílula (também com ela minimizada), esconder os avisos do Windows e baixar fotos da internet (desligado por padrão). |
 
 #### Imagens
@@ -420,6 +483,8 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
   escondida (um número novo no ícone, ou o botão piscando), só o ícone dele
   aparece na borda de baixo, pula e some de novo.
   Clicar nele abre o app. Dá para escolher a dock inteira, ou nada, no lugar.
+  Na barra transparente, um app pedindo atenção não pula nem faz a barra
+  aparecer: o botão dele mostra isso quando a barra estiver à vista.
 * **Pontinhos embaixo dos apps abertos**, no lugar do traço do Windows.
 * **Escondida até você precisar**: a barra se oculta sozinha e entra com efeito
   de mola quando o mouse chega na borda de baixo da tela.
@@ -481,27 +546,56 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
   * Quando a ilha pega uma notificação nova (na pílula, ou, no estilo barra ou
     com um painel aberto, como o ícone do app com o pontinho vermelho e na
     lista), o aviso do Windows é tirado da tela (dá para mantê-lo na
-    engrenagem); o Windows o coloca de novo na próxima notificação. Em tela
-    cheia nada aparece (a notificação espera na lista). Com os avisos na
-    pílula desligados, ou minimizada sem eles, o aviso do Windows fica. O
-    Windows mostra os avisos um depois do outro, atrasados quando chegam
-    muitos, e toca os sons nessa hora: a opção "A ilha cuida das
-    notificações e dos sons" (desligada por padrão) mantém o "Não incomodar"
-    do Windows ligado enquanto a ilha roda, então o Windows fica quieto e a
-    ilha mostra cada notificação e toca o som dela (o que ela pede) na hora
-    (chamadas, alarmes e lembretes, que o "Não incomodar" deixa passar por
-    padrão, ficam com o aviso do Windows, com os botões dele, e o som).
-    O "Não incomodar" da ilha passa a ser o dela (a lua do sino), e o do
-    Windows é desligado de novo quando a ilha para (pelo explorer, se o
-    processo da ilha terminar de repente, ou no próximo início depois de um
-    travamento); ele não é mexido se já estava ligado.
+    engrenagem); o Windows o coloca de novo na próxima notificação.
+    O Windows 11 mostra os avisos empilhados numa janela só, então ela sai da
+    tela só enquanto todos os avisos nela são da ilha: chamadas, alarmes e
+    lembretes ficam com o aviso do Windows, com os botões dele, e os outros
+    da pilha aparecem junto. Em tela cheia nada aparece na ilha (a
+    notificação espera na lista) e, como com o "Não incomodar" do Windows, os
+    avisos do Windows não são mexidos. Com os avisos na pílula desligados, ou minimizada sem eles, o
+    aviso do Windows fica. O Windows mostra os avisos um depois do outro,
+    atrasados quando chegam muitos, e toca os sons nessa hora: a opção "A
+    ilha cuida das notificações e dos sons" (desligada por padrão) mantém o
+    "Não incomodar" do Windows ligado enquanto a ilha roda, então o Windows
+    fica quieto e a ilha mostra cada notificação e toca o som dela (o que
+    ela pede) na hora. Chamadas, alarmes e lembretes também aparecem na
+    pílula, na frente das outras (a que estiver na pílula dá lugar e volta
+    depois delas, com o que estava sendo digitado): ficam até serem
+    fechados, com os botões que a ilha consegue apertar (os do próprio app,
+    e "Descartar"), e tocam até serem fechados, por até um minuto. O "Não
+    incomodar" deixa esses passarem por padrão, então o Windows pode mostrar
+    o aviso dele também (e tocar o som dele no lugar do da ilha): a ilha lê
+    esse aviso pela Automação da Interface (a árvore de acessibilidade, só
+    dessa janela) e, quando é o da pílula, assume: o aviso do Windows fica
+    escondido enquanto a pílula o mostra, e os botões da pílula são os do
+    Windows (o "Adiar" também), apertados nele quando os da pílula são. Ele
+    volta assim que a pílula para de mostrá-lo, ou se algo não bater. O "Não incomodar" da ilha passa a ser o
+    dela (a lua do sino), e o do Windows é desligado de novo quando a ilha
+    para (pelo explorer, se o processo da ilha terminar de repente, ou no
+    próximo início depois de um travamento); ele não é mexido se já estava
+    ligado. Se for desligado pelo Windows, ele fica desligado e a ilha
+    funciona como de costume até a opção ser ligada de novo.
   * As respostas chegam ao app do jeito que o Windows as manda pelos avisos
     dele: pelo receptor de notificações que o app registrou.
-  * O mod só acessa a internet se "Baixar fotos da internet" for ligado na
-    engrenagem (vem desligado): aí a imagem de uma notificação que está na
-    internet (como as fotos dos contatos do WhatsApp) é baixada por https do
-    endereço que o app colocou nela, como o Windows faz, e só para apps com
-    permissão de internet. Senão, aparece o ícone do app.
+  * O mod só acessa a internet para o que for ligado na engrenagem (tudo
+    vem desligado): "Baixar fotos da internet" (a imagem de uma notificação
+    que está na internet, como as fotos dos contatos do WhatsApp, baixada
+    por https do endereço que o app colocou nela, como o Windows faz, e só
+    para apps com permissão de internet; senão, aparece o ícone do app), o
+    clima ([Open-Meteo](https://open-meteo.com): a cidade digitada, depois a
+    previsão dela a cada 30 minutos enquanto está na pílula), os feriados
+    ([Nager.Date](https://date.nager.at): o país configurado no Windows, uma
+    vez por ano) e as atualizações (o winget consulta as fontes dele; as
+    atualizações do Windows são lidas, somente leitura, pelo Windows Update
+    Agent).
+  * Atualizar um app roda o "winget upgrade" dele (escondido e silencioso,
+    ou num terminal, se escolhido), só quando pedido no painel.
+  * Os modos de energia são lidos e trocados pelas funções do powrprof.dll
+    que as Configurações do Windows usam; os planos de energia, pelas
+    documentadas.
+  * O uso da GPU vem dos contadores de desempenho do Windows, e a
+    temperatura, a ventoinha e a energia dela, dos números do próprio driver
+    de vídeo (ficam de fora quando o driver não os dá).
   * Suspender, reiniciar, desligar e sair usam as funções do Windows para
     isso (com a "Inicialização rápida", desligar funciona como no menu
     Iniciar). Em PCs com Modern Standby, "Suspender" desliga a tela, que é o
@@ -602,11 +696,6 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
   - bounceOnLaunch: true
     $name: Bounce while an app opens
     $name:pt-BR: Pular enquanto um app abre
-  - bounceOnAttention: true
-    $name: Bounce when an app needs attention
-    $name:pt-BR: Pular quando um app pede atenção
-    $description: For example, a new message in a chat app (3 bounces)
-    $description:pt-BR: Por exemplo, uma mensagem nova num app de conversa (3 pulos)
   - keepOpenOnLaunch: true
     $name: Stay up while a clicked app opens
     $name:pt-BR: Ficar aberta enquanto um app clicado abre
@@ -682,6 +771,19 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
 #include <highlevelmonitorconfigurationapi.h>
 #include <mmdeviceapi.h>
 #include <netlistmgr.h>
+// The network adapters' table (GetIfTable2) needs the Winsock types first;
+// windows.h is already in (Windhawk includes it), which only makes winsock2.h
+// warn about the order (it works: windows.h didn't pull the old winsock.h's
+// definitions in).
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-W#warnings"
+#include <winsock2.h>
+#pragma clang diagnostic pop
+#include <ws2ipdef.h>
+#include <iphlpapi.h>
+#include <dxgi.h>
+#include <pdh.h>
+#include <psapi.h>
 #include <physicalmonitorenumerationapi.h>
 #include <propsys.h>
 #include <wincodec.h>
@@ -691,6 +793,9 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <shobjidl.h>
+#include <tlhelp32.h>
+#include <uiautomation.h>
+#include <wuapi.h>
 
 #include <algorithm>
 #include <array>
@@ -779,16 +884,38 @@ struct {
     // power button (sleep, restart, shut down) on it.
     bool islandClockCenter;
     bool islandPower;
+    // Panels opening out of the pill as wide as it, when it's wider than
+    // them (otherwise they drop out of the clicked item, at their own width).
+    bool islandPanelsFollow;
+    // A button switching Windows between light and dark mode, and how much
+    // the processor, the memory and the video memory are used, on the pill.
+    bool islandThemeButton;
+    bool usageCpu;
+    bool usageRam;
+    bool usageVram;
+    // A button muting the microphone, on the pill.
+    bool islandMicrophone;
+    // Public holidays in the calendar (goes online, see Holiday).
+    bool calendarHolidays;
+    // Notes, tasks and keyboard shortcuts, on the pill.
+    bool islandNotes;
+    bool islandTasks;
+    bool islandShortcuts;
+    // The weather on the pill (goes online, see WeatherThreadProc).
+    bool islandWeather;
+    // Updates (winget and Windows Update) on the pill.
+    bool islandUpdates;
     // The island handles notifications itself (see UpdateWindowsQuiet).
     bool islandOwnsNotifications;
     // The island's size (its text, icons and width), in percent.
     int islandSize;
+    // The room between the island and the screen's edges (px at 100%).
+    int islandGap;
     double magnification;
     double magnificationRange;
     bool bounceOnLaunch;
     bool keepOpenOnLaunch;
     int keepOpenDuration;
-    bool bounceOnAttention;
     bool dotIndicator;
     AttentionMode attentionMode;
 } g_settings;
@@ -1530,10 +1657,12 @@ void WatchFrameWidth(FrameworkElement const& frame) {
             if (g_unloading) {
                 return;
             }
-            auto element = sender.as<FrameworkElement>();
-            if (!std::isnan(element.Width())) {
-                element.Width(std::numeric_limits<double>::quiet_NaN());
-            }
+            Safely(L"Keeping the frame's width", [&] {
+                auto element = sender.as<FrameworkElement>();
+                if (!std::isnan(element.Width())) {
+                    element.Width(std::numeric_limits<double>::quiet_NaN());
+                }
+            });
         });
     g_widthWatches.push_back({winrt::make_weak(frame), token});
 }
@@ -1763,7 +1892,9 @@ void OnRunningStateChanged(winrt::weak_ref<FrameworkElement> weakButton,
 
     if (attention && !icon->attention) {
         RecordAttentionButton(button);
-        if (g_settings.bounceOnAttention) {
+        // (The dock bounces; the transparent taskbar doesn't, see
+        // OnAppFlashed.)
+        if (IsDock()) {
             icon->bounceStart = NowSeconds();
             icon->bounceGroups = kAttentionBounceGroups;
             StartRendering();
@@ -1889,9 +2020,9 @@ void OnAppNotified(FrameworkElement const& button) {
     icon->lastNotified = now;
 
     const std::wstring appId = GetButtonAppId(button);
-    // On the Windows taskbar, the button shows it itself (on the transparent
-    // one, it also bounces while the taskbar is up).
-    if (!AnimatesIcons()) {
+    // On the Windows taskbar (and the transparent one), the button shows it
+    // itself; only the dock bounces.
+    if (!AnimatesIcons() || !IsDock()) {
         return;
     }
     // Not for the app the user is looking at.
@@ -1904,15 +2035,6 @@ void OnAppNotified(FrameworkElement const& button) {
     GetMonitorInfo(MonitorFromWindow(g_dockWnd, MONITOR_DEFAULTTONEAREST),
                    &monitor);
     const bool hidden = IsTaskbarHidden(g_dockWnd, monitor.rcMonitor);
-    if (!IsDock()) {
-        if (!hidden && g_settings.bounceOnAttention) {
-            icon->bounceStart = now;
-            icon->bounceGroups = kAttentionBounceGroups;
-            StartRendering();
-        }
-        return;
-    }
-
     if (hidden && g_settings.attentionMode == AttentionMode::Icon) {
         PostAttentionRequest(nullptr, appId);
         return;
@@ -1920,11 +2042,9 @@ void OnAppNotified(FrameworkElement const& button) {
     if (hidden && g_settings.attentionMode == AttentionMode::None) {
         return;
     }
-    if (g_settings.bounceOnAttention) {
-        icon->bounceStart = now;
-        icon->bounceGroups = kAttentionBounceGroups;
-        StartRendering();
-    }
+    icon->bounceStart = now;
+    icon->bounceGroups = kAttentionBounceGroups;
+    StartRendering();
     if (hidden) {
         ShowDockForNotification();
     }
@@ -2017,7 +2137,8 @@ void WatchBadge(DockIcon& icon,
              element.RegisterPropertyChangedCallback(
                  property, [weakButton](DependencyObject const&,
                                         DependencyProperty const&) {
-                     CheckBadgeOf(weakButton);
+                     Safely(L"Checking a badge",
+                            [&] { CheckBadgeOf(weakButton); });
                  })});
     };
     watch(text, Controls::TextBlock::TextProperty());
@@ -2104,11 +2225,15 @@ void WatchRunningState(FrameworkElement const& button) {
             [weakButton = winrt::make_weak(button)](
                 winrt::Windows::Foundation::IInspectable const&,
                 VisualStateChangedEventArgs const& args) {
-                const auto oldState =
-                    args.OldState() ? args.OldState().Name() : winrt::hstring{};
-                const auto newState =
-                    args.NewState() ? args.NewState().Name() : winrt::hstring{};
-                OnRunningStateChanged(weakButton, oldState, newState);
+                Safely(L"Following an app's state", [&] {
+                    const auto oldState = args.OldState()
+                                              ? args.OldState().Name()
+                                              : winrt::hstring{};
+                    const auto newState = args.NewState()
+                                              ? args.NewState().Name()
+                                              : winrt::hstring{};
+                    OnRunningStateChanged(weakButton, oldState, newState);
+                });
             }));
     }
 }
@@ -3251,9 +3376,10 @@ void WINAPI TrayUI_SlideWindow_Hook(void* pThis,
         return;
     }
     // Unless the whole dock is wanted, the taskbar doesn't show itself when an
-    // app asks for attention: only the app's icon peeks out (or nothing).
-    if (show && !g_unloading && IsDock() &&
-        g_settings.attentionMode != AttentionMode::Dock &&
+    // app asks for attention: only the app's icon peeks out (or nothing). The
+    // transparent taskbar never does (its button shows it, once up).
+    if (show && !g_unloading &&
+        (!IsDock() || g_settings.attentionMode != AttentionMode::Dock) &&
         NowSeconds() - g_lastFlashTime < kAttentionShowWindow &&
         !UserIsReachingForTaskbar(hWnd)) {
         Wh_Log(L"Not showing the taskbar for an app asking for attention");
@@ -4147,6 +4273,29 @@ BOOL WINAPI CTaskListWnd_PermitAutoHide_Hook(void* pThis) {
                     [](const DockIcon& icon) { return icon.attention; })) {
         return TRUE;
     }
+    // On the transparent taskbar, Windows would keep it up as long as a
+    // button asks for attention (until that app is looked at): it hides as
+    // usual, unless the user is on it or in something of the taskbar's (a
+    // jump list, a thumbnail).
+    if (!g_unloading && !IsDock() && g_dockWnd &&
+        std::any_of(g_dockIcons.begin(), g_dockIcons.end(),
+                    [](const DockIcon& icon) { return icon.attention; }) &&
+        !UserIsReachingForTaskbar(g_dockWnd)) {
+        POINT pt;
+        HWND under = GetCursorPos(&pt) ? WindowFromPoint(pt) : nullptr;
+        DWORD underProcess = 0;
+        DWORD foregroundProcess = 0;
+        if (under) {
+            GetWindowThreadProcessId(under, &underProcess);
+        }
+        if (HWND foreground = GetForegroundWindow()) {
+            GetWindowThreadProcessId(foreground, &foregroundProcess);
+        }
+        if (underProcess != GetCurrentProcessId() &&
+            foregroundProcess != GetCurrentProcessId()) {
+            return TRUE;
+        }
+    }
     return CTaskListWnd_PermitAutoHide_Original(pThis);
 }
 
@@ -4411,6 +4560,15 @@ struct ToastReply {
     std::wstring arguments;
     std::wstring activationType;
     std::wstring label;
+    // Its other buttons that the island can press too (shown on a call, an
+    // alarm or a reminder, see IslandToast::urgent, and in the list): the
+    // app's own, a link, or Windows' "Snooze" and "Dismiss".
+    struct Action {
+        std::wstring label;
+        std::wstring arguments;
+        std::wstring activationType;
+    };
+    std::vector<Action> actions;
     bool CanReply() const { return !inputId.empty() && !arguments.empty(); }
 };
 
@@ -4422,6 +4580,9 @@ ToastReply ParseToastReply(const std::wstring& appId,
 // A new notification, for the island to show (see Island::ShowBanner).
 struct IslandToast {
     std::wstring appId;
+    // Its ID in the notification database (0 for the island's own, like a
+    // calendar reminder).
+    long long id = 0;
     std::wstring title;
     std::wstring text;
     // With its own lines (see SplitToastTexts).
@@ -4435,20 +4596,26 @@ struct IslandToast {
     bool imageCircle = false;
     // A picture on the web, downloaded (see islandWebPictures).
     std::vector<BYTE> imageData;
-    // A call, an alarm or a reminder (its scenario): Windows' "Do not
-    // disturb" lets those through by default, with their own buttons, so
-    // with the island's own notifications Windows shows them and plays
-    // their sound itself.
+    // A call, an alarm or a reminder (its scenario). Usually Windows' banner
+    // shows it, with its buttons; with the island's own notifications, the
+    // pill shows it first, ahead of the others (see Island::ShowBanner).
     bool urgent = false;
     // Its sound (its <audio> element): a Windows sound
     // ("ms-winsoundevent:..."), a file in its app's package ("ms-appx:///"),
-    // "silent", or empty for the usual one.
+    // "silent", or empty for the usual one; and whether it repeats (a call
+    // ringing, an alarm).
     std::wstring sound;
+    bool loop = false;
+    // A reply being typed when a call, an alarm or a reminder took the pill:
+    // kept for when it shows again.
+    std::wstring draft;
 };
 SRWLOCK g_islandToastsLock = SRWLOCK_INIT;
 std::vector<IslandToast> g_islandToasts;
 // Tells the island there are new ones.
 constexpr UINT WM_APP_TOAST = WM_APP + 52;
+// Tells the island the notification center changed (some may be gone).
+constexpr UINT WM_APP_TOASTS_CHANGED = WM_APP + 56;
 
 // Defined further down.
 std::vector<std::wstring> ToastTexts(const char* xml, int size);
@@ -4480,6 +4647,7 @@ bool ToastImage(const std::wstring& appId,
 bool DownloadPicture(const std::wstring& url, std::vector<BYTE>* data);
 bool PackageGoesOnline(const std::wstring& appId);
 std::wstring ToastSound(const char* xml, int size);
+bool ToastSoundLoops(const char* xml, int size);
 bool IsUrgentToast(const char* xml, int size);
 std::wstring PackageFolder(const std::wstring& appId);
 
@@ -4520,6 +4688,7 @@ bool ReadNewToasts(Sqlite& sqlite,
                 apps.push_back(app);
             }
             IslandToast toast{app};
+            toast.id = sqlite.column_int64(statement, 0);
             const auto payload = (const char*)sqlite.column_blob(statement, 2);
             const auto texts =
                 payload ? ToastTexts(payload, sqlite.column_bytes(statement, 2))
@@ -4532,6 +4701,8 @@ bool ReadNewToasts(Sqlite& sqlite,
                            &toast.image, &toast.imageCircle);
                 toast.sound =
                     ToastSound(payload, sqlite.column_bytes(statement, 2));
+                toast.loop = ToastSoundLoops(payload,
+                                             sqlite.column_bytes(statement, 2));
                 toast.urgent =
                     IsUrgentToast(payload, sqlite.column_bytes(statement, 2));
                 if (toast.image.starts_with(L"https://") &&
@@ -4656,6 +4827,10 @@ DWORD WINAPI ToastThreadProc(LPVOID) {
         }
         if (stopping) {
             break;
+        }
+        // Some may have gone too (read elsewhere, or a call that ended).
+        if (HWND island = g_islandWnd) {
+            PostMessage(island, WM_APP_TOASTS_CHANGED, 0, 0);
         }
         if (apps.empty()) {
             continue;
@@ -5420,6 +5595,8 @@ enum StatusChange : WPARAM {
     kStatusNetwork,
     kStatusBattery,
     kStatusDoNotDisturb,
+    // Another default microphone.
+    kStatusMicrophoneDevice,
 };
 
 // The bar's messages from the shell, as a registered app bar.
@@ -5462,12 +5639,22 @@ constexpr float kSoundHeight = 92;
 constexpr float kDisplayHeight = 72;
 constexpr float kShortcutHeight = 64;
 constexpr float kBatteryHeight = 50;
+constexpr float kPowerModeHeight = 76;
 constexpr float kFooterHeight = 30;
 
 // Icons from the Segoe Fluent Icons font.
 constexpr WCHAR kGlyphWifi[] = {0xE872, 0xE873, 0xE874, 0xE701};
 constexpr WCHAR kGlyphEthernet = 0xE839;
 constexpr WCHAR kGlyphNoInternet = 0xF384;
+// Connected without internet: Wi-Fi's bars with a warning sign, or the cable
+// with one.
+constexpr WCHAR kGlyphWifiWarning[] = {0xEB60, 0xEB61, 0xEB62, 0xEB63};
+constexpr WCHAR kGlyphEthernetWarning = 0xEB56;
+// Windows checks for the internet this long after connecting (shown as
+// connecting); a Wi-Fi joining for longer than kNetworkConnectingMax counts
+// as not connected.
+constexpr double kNetworkCheckSeconds = 25;
+constexpr double kNetworkConnectingMax = 60;
 constexpr WCHAR kGlyphMute = 0xE74F;
 constexpr WCHAR kGlyphVolume[] = {0xE992, 0xE993, 0xE994, 0xE995};
 constexpr WCHAR kGlyphBell = 0xEA8F;
@@ -5506,11 +5693,15 @@ enum class IslandItem {
     MediaPrevious,
     MediaPlayPause,
     MediaNext,
-    // A new notification shown in the pill, its reply box and "Open".
+    // A new notification shown in the pill, its reply box and "Open", and
+    // a call's, an alarm's or a reminder's buttons (the slot's text is the
+    // button's index).
     Banner,
     BannerReply,
     BannerOpen,
     BannerClose,
+    BannerMinimize,
+    BannerAction,
     // Another app's tray icon (the slot's text is its key), and its pin.
     TrayIcon,
     TrayPin,
@@ -5518,6 +5709,22 @@ enum class IslandItem {
     TraySeparator,
     // Sleep, restart, shut down (see PowerPanel).
     Power,
+    // Windows' light or dark mode, switched.
+    ThemeSwitch,
+    // The microphone, muted or not.
+    Microphone,
+    // The user's notes, tasks and keyboard shortcuts.
+    Notes,
+    Tasks,
+    Shortcuts,
+    // The weather.
+    Weather,
+    // Updates waiting.
+    Updates,
+    // How much the processor, the memory and the video memory are used.
+    UsageCpu,
+    UsageRam,
+    UsageVram,
 };
 
 struct IslandSlot {
@@ -5917,20 +6124,53 @@ bool SetDoNotDisturb(bool on) {
 
 std::atomic<bool> g_islandQuiet;
 bool g_turnedDndOn;
-// Switching it failed (the interface is missing on this build): not tried
-// again on every tick, only when the option is turned on again.
+// When the island turned it on (NowSeconds).
+double g_turnedDndOnAt;
+// Not switched on again until the option is turned on again: switching
+// failed (the interface is missing on this build), or it was turned off
+// from Windows (by the user, or a Focus rule ending).
 bool g_dndSwitchFailed;
+// It was seen on while the island wanted it (turned on by the island, or
+// already on), so it going off is Windows' doing.
+bool g_dndSeenOn;
 
 // In the island's process, on the island's thread (COM is ready there).
 void UpdateWindowsQuiet(bool islandRunning) {
     const bool wanted = islandRunning && g_settings.islandOwnsNotifications &&
                         g_toastWatchReady && !g_unloading;
+    // Not wanted (the island stopping, or the option off): it going off now
+    // is the island's own doing, not Windows'.
+    if (!wanted) {
+        g_dndSeenOn = false;
+    }
+    // Turned off from Windows meanwhile: left off (not fought over), and
+    // the island works as usual meanwhile (see WindowsQuietForIsland).
+    if (wanted && (g_turnedDndOn || g_dndSeenOn)) {
+        if (IsDoNotDisturbOn()) {
+            g_dndSeenOn = true;
+        } else if (!g_turnedDndOn || NowSeconds() - g_turnedDndOnAt > 5) {
+            if (g_turnedDndOn) {
+                g_turnedDndOn = false;
+                Wh_SetIntValue(L"turnedDndOn", 0);
+            }
+            g_dndSeenOn = false;
+            g_dndSwitchFailed = true;
+            Wh_Log(L"\"Do not disturb\" was turned off from Windows: left off");
+            return;
+        }
+    }
     if (wanted && !g_turnedDndOn) {
-        if (g_dndSwitchFailed || IsDoNotDisturbOn()) {
+        if (g_dndSwitchFailed) {
+            return;
+        }
+        // Already on: left alone.
+        if (IsDoNotDisturbOn()) {
+            g_dndSeenOn = true;
             return;
         }
         if (SetDoNotDisturb(true)) {
             g_turnedDndOn = true;
+            g_turnedDndOnAt = NowSeconds();
             Wh_SetIntValue(L"turnedDndOn", 1);
         } else {
             g_dndSwitchFailed = true;
@@ -5941,6 +6181,15 @@ void UpdateWindowsQuiet(bool islandRunning) {
             Wh_SetIntValue(L"turnedDndOn", 0);
         }
     }
+}
+
+// Whether the island has the notifications to itself now: its own
+// notifications, with Windows' "Do not disturb" on (turned on by the island,
+// or already on). If it's off (turned off from Windows, or it couldn't be
+// switched), Windows shows its banners and plays its sounds, so the island
+// works as usual (taking the banners, not playing sounds).
+bool WindowsQuietForIsland() {
+    return g_settings.islandOwnsNotifications && IsDoNotDisturbOn();
 }
 
 // "Do not disturb" as the island shows it and switches it: its own with its
@@ -6103,12 +6352,13 @@ struct PressAnimation {
 constexpr double kBounceDamping = 0.72;
 constexpr double kOpenSeconds = 0.42;
 constexpr double kCloseSeconds = 0.26;
-// A panel opening out of the pill: sideways quick and a bit bouncy, then
-// downwards a moment later, a bit softer. Closing goes back without bouncing.
+// A panel opening out of the pill: sideways quick, then downwards a moment
+// later, a bit softer, straight to its size (no overshoot). Closing goes back
+// the same way. (The banner and the tray list still bounce a little.)
+constexpr double kPanelOpenDamping = 1.0;
 constexpr double kPanelWidthSeconds = 0.55;
 constexpr double kPanelWidthDamping = 0.62;
 constexpr double kPanelHeightSeconds = 0.65;
-constexpr double kPanelHeightDamping = 0.70;
 constexpr double kPanelHeightDelay = 0.05;
 constexpr double kPanelCloseSeconds = 0.42;
 // The island opening out of its dot, and closing back into it.
@@ -6138,6 +6388,24 @@ constexpr UINT kBannerRestoreMs = 1500;
 // much later.
 constexpr UINT_PTR kBannerNextTimerId = 10;
 constexpr UINT kBannerNextMs = 600;
+// A call's, an alarm's or a reminder's sound waits this long for Windows'
+// own (see Island::QueueUrgentSound), and rings at most this long.
+constexpr UINT_PTR kUrgentSoundTimerId = 11;
+constexpr UINT kUrgentSoundWaitMs = 1000;
+constexpr UINT_PTR kUrgentSoundStopTimerId = 12;
+// The weather, measured again.
+constexpr UINT_PTR kWeatherTimerId = 14;
+// The weather asked again soon, when the service didn't answer (offline at
+// startup, for example).
+constexpr UINT_PTR kWeatherRetryTimerId = 16;
+// The network checked again while it's connecting, and its glyph moving
+// meanwhile (a few frames a second, not the whole animation loop).
+constexpr UINT_PTR kNetworkTimerId = 17;
+constexpr UINT_PTR kNetworkFrameTimerId = 18;
+constexpr UINT kNetworkFrameMs = 80;
+// Updates, looked for again.
+constexpr UINT_PTR kUpdatesTimerId = 15;
+constexpr UINT kUrgentSoundMaxMs = 60000;
 constexpr UINT kPinDelayMs = 2000;
 constexpr double kPinGrowSeconds = 0.22;
 // What's playing stays on the pill at least this long, and this long after it
@@ -6149,7 +6417,8 @@ constexpr float kMediaTitleShortWidth = 90;
 constexpr float kMediaTitleMinWidth = 60;
 constexpr float kMediaTitleMaxWidth = 150;
 constexpr double kMediaLinger = 1.5;
-// The uncloaking event (not in older headers).
+// The cloaking and uncloaking events (not in older headers).
+constexpr DWORD kEventObjectCloaked = 0x8017;
 constexpr DWORD kEventObjectUncloaked = 0x8018;
 
 bool PointInRect(POINT pt, const D2D1_RECT_F& rect) {
@@ -6224,6 +6493,8 @@ void DeleteLastWord(std::wstring& text) {
 // shown (for the up and down arrows).
 struct TextEdit {
     size_t caret = 0;
+    // Where the selection starts (it ends at the caret), or npos.
+    size_t anchor = std::wstring::npos;
     float scroll = 0;
     bool follow = true;
     winrt::com_ptr<IDWriteTextLayout> layout;
@@ -6234,11 +6505,49 @@ struct TextEdit {
     float visibleHeight = 0;
     void Reset() {
         caret = 0;
+        anchor = std::wstring::npos;
         scroll = 0;
         follow = true;
         layout = nullptr;
     }
+    bool Selecting() const { return anchor != std::wstring::npos && anchor != caret; }
+    size_t SelectionStart() const { return std::min(anchor, caret); }
+    size_t SelectionEnd() const { return std::max(anchor, caret); }
 };
+
+bool CopyTextToClipboard(HWND owner, const std::wstring& text) {
+    if (!OpenClipboard(owner)) {
+        return false;
+    }
+    EmptyClipboard();
+    bool copied = false;
+    const size_t bytes = (text.size() + 1) * sizeof(WCHAR);
+    if (HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, bytes)) {
+        if (void* data = GlobalLock(memory)) {
+            memcpy(data, text.c_str(), bytes);
+            GlobalUnlock(memory);
+            copied = SetClipboardData(CF_UNICODETEXT, memory) != nullptr;
+        }
+        if (!copied) {
+            GlobalFree(memory);
+        }
+    }
+    CloseClipboard();
+    return copied;
+}
+
+// The selection goes (replaced by what's typed, or deleted).
+void DeleteSelection(std::wstring& text, TextEdit& edit) {
+    if (!edit.Selecting()) {
+        edit.anchor = std::wstring::npos;
+        return;
+    }
+    const size_t start = std::min(edit.SelectionStart(), text.size());
+    const size_t end = std::min(edit.SelectionEnd(), text.size());
+    text.erase(start, end - start);
+    edit.caret = start;
+    edit.anchor = std::wstring::npos;
+}
 
 // A character typed into a reply, at the caret: Shift+Enter (passed as
 // '\n') and Ctrl+Enter a new line, Ctrl+Backspace the word before the caret,
@@ -6250,6 +6559,32 @@ bool EditTextChar(std::wstring& text,
                   HWND owner) {
     edit.caret = std::min(edit.caret, text.size());
     edit.follow = true;
+    // Ctrl+A selects it all; Ctrl+C copies the selection, Ctrl+X cuts it.
+    if (c == 0x01) {
+        edit.anchor = 0;
+        edit.caret = text.size();
+        return true;
+    }
+    if (c == 0x03 || c == 0x18) {
+        if (edit.Selecting()) {
+            const size_t start = std::min(edit.SelectionStart(), text.size());
+            const size_t end = std::min(edit.SelectionEnd(), text.size());
+            CopyTextToClipboard(owner, text.substr(start, end - start));
+            if (c == 0x18) {
+                DeleteSelection(text, edit);
+            }
+        }
+        return true;
+    }
+    // What's typed (or erased) replaces the selection.
+    if (edit.Selecting() &&
+        (c == L'\n' || c == 0x7F || c == L'\b' || c == 0x16 || c >= 0x20)) {
+        DeleteSelection(text, edit);
+        if (c == 0x7F || c == L'\b') {
+            return true;
+        }
+    }
+    edit.anchor = std::wstring::npos;
     auto insert = [&](const std::wstring& part) {
         const size_t room =
             maxLength > text.size() ? maxLength - text.size() : 0;
@@ -6303,7 +6638,39 @@ bool EditTextChar(std::wstring& text,
 bool EditTextKey(std::wstring& text, TextEdit& edit, WPARAM key) {
     edit.caret = std::min(edit.caret, text.size());
     const bool ctrl = GetKeyState(VK_CONTROL) < 0;
+    const bool shift = GetKeyState(VK_SHIFT) < 0;
     size_t& caret = edit.caret;
+    const bool moves = key == VK_LEFT || key == VK_RIGHT || key == VK_HOME ||
+                       key == VK_END || key == VK_UP || key == VK_DOWN ||
+                       key == VK_PRIOR || key == VK_NEXT;
+    // Delete takes the selection; moving with Shift selects, without it the
+    // selection goes.
+    if (key == VK_DELETE && edit.Selecting()) {
+        DeleteSelection(text, edit);
+        edit.follow = true;
+        return true;
+    }
+    if (moves) {
+        if (shift) {
+            if (edit.anchor == std::wstring::npos) {
+                edit.anchor = caret;
+            }
+        } else {
+            edit.anchor = std::wstring::npos;
+        }
+    }
+    // Ctrl+Home / Ctrl+Page Up: the start; Ctrl+End / Ctrl+Page Down: the
+    // end.
+    if (ctrl && (key == VK_HOME || key == VK_PRIOR)) {
+        caret = 0;
+        edit.follow = true;
+        return true;
+    }
+    if (ctrl && (key == VK_END || key == VK_NEXT)) {
+        caret = text.size();
+        edit.follow = true;
+        return true;
+    }
     switch (key) {
         case VK_LEFT:
             if (caret > 0) {
@@ -6396,6 +6763,7 @@ bool EditTextKey(std::wstring& text, TextEdit& edit, WPARAM key) {
 // A click in a reply (`pt` where it was drawn): the caret goes there.
 void EditTextClick(const std::wstring& text, TextEdit& edit, POINT pt) {
     g_lastTyped = NowSeconds();
+    edit.anchor = std::wstring::npos;
     if (!edit.layout || text.empty()) {
         return;
     }
@@ -6478,6 +6846,40 @@ WrappedField LayOutEdit(IDWriteFactory* dwrite,
                              std::max(0.0f, metrics.height - visibleHeight));
     field.scroll = edit.scroll;
     return field;
+}
+
+// The selection of a box, over its text (laid out at `origin`).
+void DrawTextSelection(ID2D1RenderTarget* target,
+                       ID2D1SolidColorBrush* brush,
+                       IDWriteTextLayout* layout,
+                       D2D1_POINT_2F origin,
+                       const TextEdit& edit,
+                       float opacity = 1) {
+    if (!layout || !edit.Selecting()) {
+        return;
+    }
+    const UINT32 start = (UINT32)edit.SelectionStart();
+    const UINT32 length = (UINT32)(edit.SelectionEnd() - edit.SelectionStart());
+    UINT32 count = 0;
+    layout->HitTestTextRange(start, length, origin.x, origin.y, nullptr, 0,
+                             &count);
+    if (!count) {
+        return;
+    }
+    std::vector<DWRITE_HIT_TEST_METRICS> ranges(count);
+    if (FAILED(layout->HitTestTextRange(start, length, origin.x, origin.y,
+                                        ranges.data(), count, &count))) {
+        return;
+    }
+    brush->SetColor(D2D1::ColorF(0.04f, 0.52f, 1.0f, 0.38f * opacity));
+    for (UINT32 i = 0; i < count; i++) {
+        const auto& range = ranges[i];
+        // A line break selected: a little of it shows.
+        const float width = std::max(range.width, 4.0f);
+        target->FillRectangle(
+            {range.left, range.top, range.left + width, range.top + range.height},
+            brush);
+    }
 }
 
 // A layered window drawn with Direct2D into a 32-bit bitmap.
@@ -6582,6 +6984,12 @@ struct NetworkInfo {
     // -1 when not on Wi-Fi.
     int signal = -1;
     std::wstring wifiName;
+    // A Wi-Fi adapter joining a network (looking, associating, signing in).
+    bool wifiConnecting = false;
+    // A physical adapter (a cable, Wi-Fi, a phone's) is connected: virtual
+    // ones (VPNs, Hyper-V's switch) stay connected without any, so the
+    // network list manager alone can't tell a cable pulled out.
+    bool physical = true;
 };
 
 class Island;
@@ -6750,7 +7158,14 @@ class Panel {
     // `source` is the part of the island it grows out of, on the screen, and
     // `anchor` the middle of the panel's top. `fromPill`: the pill becomes the
     // panel (otherwise it drops out of an item of the bar).
-    void Open(POINT anchor, float scale, D2D1_RECT_F source, bool fromPill);
+    // `below`: out of the pill, the middle of the panel's top under it (over
+    // it, growing up) when the pill is wider than the panel (unless panels
+    // follow the island's width).
+    void Open(POINT anchor,
+              float scale,
+              D2D1_RECT_F source,
+              bool fromPill,
+              const POINT* below = nullptr);
     // How the pill looks, drawn shrinking away as it stretches.
     void SetPillSnapshot(const BYTE* bits, int stride, RECT rect);
     void Close();
@@ -6762,9 +7177,15 @@ class Panel {
     // Keeps it above the island, which is put back on top now and then.
     void Raise() {
         if (m_hwnd && (m_open > 0 || m_openX > 0)) {
-            SetWindowPos(m_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+            SetWindowPos(m_hwnd, ZOrderPlace(), 0, 0, 0, 0,
                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         }
+    }
+    // Over everything, or, out from under a wider pill, right under the
+    // island (so it comes out from behind it and goes back behind it).
+    HWND ZOrderPlace() const {
+        HWND island = g_islandWnd;
+        return m_underIsland && island ? island : HWND_TOPMOST;
     }
     bool Animate(double dt);
     void Render();
@@ -6785,6 +7206,10 @@ class Panel {
     virtual bool OnWheel(int) { return false; }
     // Escape closes the panel unless this returns true.
     virtual bool OnKey(WPARAM) { return false; }
+    // A key with Alt (or F10): true if taken (otherwise Windows' own use).
+    virtual bool OnSysKey(WPARAM) { return false; }
+    // A key let go (with Alt too).
+    virtual bool OnKeyUp(WPARAM) { return false; }
     virtual bool OnChar(WCHAR) { return false; }
     // Messages from WM_APP up, posted to the panel's window.
     virtual bool OnAppMessage(UINT, WPARAM, LPARAM) { return false; }
@@ -6811,6 +7236,8 @@ class Panel {
                        ID2D1SolidColorBrush* brush,
                        const D2D1_RECT_F& viewport,
                        const SmoothScroll& scroll);
+    // A dialog of its own is shown (the panel stays open behind it).
+    bool m_dialogShown = false;
     // Set by AnimateContents when only something that never stops moves
     // (scrolling text): drawn at a lower frame rate then, which
     // looks the same and costs much less.
@@ -6853,6 +7280,11 @@ class Panel {
     double m_heightDelay = 0;
     double m_target = 0;
     bool m_fromPill = false;
+    // Out of the pill, joined to it (opening over it, as wide as it at
+    // least), or under it.
+    bool m_joinPill = false;
+    // Out from under a pill wider than it (see Open).
+    bool m_underIsland = false;
     Direction m_direction = Direction::Down;
     // Out of the pill, at least as wide as it.
     float m_minWidth = 0;
@@ -6932,12 +7364,15 @@ winrt::com_ptr<IDWriteTextFormat> Panel::MakeFormat(
 void Panel::Open(POINT anchor,
                  float scale,
                  D2D1_RECT_F source,
-                 bool fromPill) {
+                 bool fromPill,
+                 const POINT* below) {
     if (!m_hwnd) {
         return;
     }
     m_source = source;
     m_fromPill = fromPill;
+    m_joinPill = fromPill;
+    m_underIsland = false;
     m_minWidth = fromPill ? source.right - source.left : 0;
     m_scale = scale;
     // Where it opens, first: its layout depends on the room there.
@@ -6949,6 +7384,20 @@ void Panel::Open(POINT anchor,
     m_workRect = monitor.rcWork;
     Prepare(scale);
     OnOpen();
+    // A pill wider than the panel (as it opens, in its first view): the
+    // panel keeps its own width, stretching out of the pill's body to under
+    // it (or stretched to the pill's width, if chosen).
+    if (fromPill && below && !g_settings.islandPanelsFollow &&
+        source.right - source.left > m_size.cx) {
+        m_joinPill = false;
+        m_minWidth = 0;
+        m_anchor = *below;
+        // Its room depends on where it opens.
+        Prepare(scale);
+        // It grows out of the pill's body from behind the island (its
+        // window right under the island's), and closes back behind it.
+        m_underIsland = true;
+    }
 
     // Closed (not still closing): starts from the island part, at its size.
     if (m_open <= 0.01 && m_openX <= 0.01) {
@@ -6957,14 +7406,19 @@ void Panel::Open(POINT anchor,
         m_shownWidth = std::max((float)m_size.cx, m_minWidth);
         m_shownHeight = m_size.cy;
         m_widthVelocity = m_heightVelocity = 0;
-        m_heightDelay = fromPill ? kPanelHeightDelay : 0;
+        m_heightDelay = m_fromPill ? kPanelHeightDelay : 0;
     }
 
     m_target = 1;
     Render();
-    SetWindowPos(m_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+    SetWindowPos(m_hwnd, ZOrderPlace(), 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
     SetForegroundWindow(m_hwnd);
+    // (Coming to the front put it over the island.)
+    if (m_underIsland) {
+        SetWindowPos(m_hwnd, ZOrderPlace(), 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
     StartIslandAnimation();
 }
 
@@ -6989,6 +7443,10 @@ void Panel::SetPillSnapshot(const BYTE* bits, int stride, RECT rect) {
 void Panel::Close() {
     if (m_target > 0) {
         m_target = 0;
+        // Back behind the island (clicks in it may have brought it over).
+        if (m_underIsland) {
+            Raise();
+        }
         // The pill may have changed (the clock) since it opened.
         if (m_fromPill) {
             CapturePillFor(*this);
@@ -7014,15 +7472,15 @@ bool Panel::Animate(double dt) {
     bool moving;
     if (m_target > 0) {
         const bool sideways =
-            SpringTowards(m_openX, m_velocityX, 1, kPanelWidthSeconds, dt,
-                          kPanelWidthDamping);
+            SpringTowards(m_openX, m_velocityX, 1, kPanelWidthSeconds * 0.9,
+                          dt, kPanelOpenDamping);
         bool downwards = true;
         if (m_heightDelay > 0) {
             m_heightDelay -= dt;
         } else {
             downwards = SpringTowards(m_open, m_velocity, 1,
-                                      kPanelHeightSeconds, dt,
-                                      kPanelHeightDamping);
+                                      kPanelHeightSeconds * 0.9, dt,
+                                      kPanelOpenDamping);
         }
         const bool hoverFading = m_hoverFades.Animate(dt);
         const bool contents =
@@ -7181,7 +7639,7 @@ void Panel::Render() {
         winrt::com_ptr<ID2D1RoundedRectangleGeometry> pillGeometry;
         winrt::com_ptr<ID2D1PathGeometry> joined;
         winrt::com_ptr<ID2D1GeometrySink> sink;
-        if (m_fromPill && panelGeometry &&
+        if (m_fromPill && m_joinPill && panelGeometry &&
             SUCCEEDED(factory->CreateRoundedRectangleGeometry(
                 {{from.left + inset, from.top + inset, from.right - inset,
                   from.bottom - inset},
@@ -7202,7 +7660,7 @@ void Panel::Render() {
     // Opaque out of the pill, so the pill under it doesn't show through.
     winrt::com_ptr<ID2D1SolidColorBrush> brush;
     target->CreateSolidColorBrush(
-        Bg(m_fromPill ? 1.0f : 0.94f), brush.put());
+        Bg(1), brush.put());
     if (auto fill = outline(0)) {
         target->FillGeometry(fill.get(), brush.get());
     }
@@ -7219,7 +7677,8 @@ void Panel::Render() {
     // The pill's contents, shrinking and fading away in the middle of the
     // stretching shape.
     const float pillOpacity = std::clamp(1 - progress * 4, 0.0f, 1.0f);
-    if (m_fromPill && m_snapshot && pillOpacity > 0.01f && clip) {
+    if (m_fromPill && m_joinPill && m_snapshot && pillOpacity > 0.01f &&
+        clip) {
         const float shrink = 1 - 0.15f * progress;
         const float w = m_snapshotSize.cx * shrink;
         const float h = m_snapshotSize.cy * shrink;
@@ -7274,8 +7733,8 @@ LRESULT Panel::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
     bool redraw = false;
     switch (msg) {
         case WM_ACTIVATE:
-            // Clicked somewhere else.
-            if (LOWORD(wParam) == WA_INACTIVE) {
+            // Clicked somewhere else (not a dialog of its own).
+            if (LOWORD(wParam) == WA_INACTIVE && !m_dialogShown) {
                 Close();
             }
             break;
@@ -7291,6 +7750,22 @@ LRESULT Panel::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
         case WM_CHAR:
             g_lastTyped = NowSeconds();
             redraw = OnChar((WCHAR)wParam);
+            break;
+
+        case WM_SYSKEYDOWN:
+            if (!OnSysKey(wParam)) {
+                return DefWindowProc(hWnd, msg, wParam, lParam);
+            }
+            g_lastTyped = NowSeconds();
+            redraw = true;
+            break;
+
+        case WM_KEYUP:
+        case WM_SYSKEYUP:
+            if (!OnKeyUp(wParam)) {
+                return DefWindowProc(hWnd, msg, wParam, lParam);
+            }
+            redraw = true;
             break;
 
         case WM_TIMER:
@@ -7527,6 +8002,238 @@ void SaveEvents() {
     Wh_SetStringValue(L"events", value.c_str());
 }
 
+// Public holidays, in the calendar when chosen in the island's settings (off
+// by default, since it goes online): from the free Nager.Date service
+// (date.nager.at, over 200 countries), for the country of Windows' region,
+// a year at a time, downloaded once and kept (value "holidays"). The lists
+// are touched under the lock: they're filled on a thread of their own.
+struct Holiday {
+    int year;
+    int month;
+    int day;
+    std::wstring name;
+};
+SRWLOCK g_holidaysLock = SRWLOCK_INIT;
+std::vector<Holiday> g_holidays;
+// Their country, and the years known (some with none).
+std::wstring g_holidaysCountry;
+std::vector<int> g_holidayYears;
+bool g_holidaysLoaded;
+// Tells the calendar a year came (wParam: the year).
+constexpr UINT WM_APP_HOLIDAYS = WM_APP + 66;
+
+// The country of Windows' region (two letters), or nothing.
+std::wstring HolidayCountry() {
+    using GetGeoName_t = int(WINAPI*)(LPWSTR, int);
+    auto getGeoName = (GetGeoName_t)GetProcAddress(
+        GetModuleHandle(L"kernel32.dll"), "GetUserDefaultGeoName");
+    WCHAR geo[16] = L"";
+    if (!getGeoName || getGeoName(geo, ARRAYSIZE(geo)) != 3 ||
+        !iswalpha(geo[0]) || !iswalpha(geo[1])) {
+        return {};
+    }
+    return geo;
+}
+
+// From the value: the country on the first line, the years known on the
+// second, then a holiday per line (year, month, day, name; tab-separated).
+// Another country (the region changed): nothing.
+void LoadHolidays() {
+    if (g_holidaysLoaded) {
+        return;
+    }
+    g_holidaysLoaded = true;
+    std::vector<WCHAR> value(32 * 1024);
+    Wh_GetStringValue(L"holidays", value.data(), (size_t)value.size());
+    std::vector<std::wstring> lines;
+    for (PCWSTR line = value.data(); *line;) {
+        PCWSTR end = wcschr(line, L'\n');
+        lines.push_back(end ? std::wstring(line, end) : std::wstring(line));
+        line = end ? end + 1 : line + wcslen(line);
+    }
+    const std::wstring country = HolidayCountry();
+    AcquireSRWLockExclusive(&g_holidaysLock);
+    g_holidaysCountry = country;
+    if (lines.size() >= 2 && lines[0] == country && !country.empty()) {
+        for (PCWSTR p = lines[1].c_str(); *p;) {
+            g_holidayYears.push_back(_wtoi(p));
+            PCWSTR comma = wcschr(p, L',');
+            p = comma ? comma + 1 : p + wcslen(p);
+        }
+        for (size_t i = 2; i < lines.size(); i++) {
+            Holiday holiday{};
+            int at = 0;
+            if (swscanf_s(lines[i].c_str(), L"%d\t%d\t%d\t%n", &holiday.year,
+                          &holiday.month, &holiday.day, &at) == 3 &&
+                at > 0) {
+                holiday.name = lines[i].substr(at);
+                g_holidays.push_back(std::move(holiday));
+            }
+        }
+    }
+    ReleaseSRWLockExclusive(&g_holidaysLock);
+}
+
+void SaveHolidays() {
+    AcquireSRWLockShared(&g_holidaysLock);
+    std::wstring value = g_holidaysCountry + L"\n";
+    for (size_t i = 0; i < g_holidayYears.size(); i++) {
+        value += (i ? L"," : L"") + std::to_wstring(g_holidayYears[i]);
+    }
+    value += L"\n";
+    for (const auto& holiday : g_holidays) {
+        value += std::to_wstring(holiday.year) + L"\t" +
+                 std::to_wstring(holiday.month) + L"\t" +
+                 std::to_wstring(holiday.day) + L"\t" + holiday.name + L"\n";
+    }
+    ReleaseSRWLockShared(&g_holidaysLock);
+    Wh_SetStringValue(L"holidays", value.c_str());
+}
+
+// The holidays of a day (when shown).
+std::vector<std::wstring> HolidaysOn(int year, int month, int day) {
+    std::vector<std::wstring> names;
+    if (!g_settings.calendarHolidays) {
+        return names;
+    }
+    AcquireSRWLockShared(&g_holidaysLock);
+    for (const auto& holiday : g_holidays) {
+        if (holiday.year == year && holiday.month == month &&
+            holiday.day == day &&
+            std::find(names.begin(), names.end(), holiday.name) ==
+                names.end()) {
+            names.push_back(holiday.name);
+        }
+    }
+    ReleaseSRWLockShared(&g_holidaysLock);
+    return names;
+}
+
+// The next `count` holidays from today (when shown).
+std::vector<Holiday> UpcomingHolidays(size_t count) {
+    std::vector<Holiday> upcoming;
+    if (!g_settings.calendarHolidays) {
+        return upcoming;
+    }
+    SYSTEMTIME today;
+    GetLocalTime(&today);
+    const int now = today.wYear * 10000 + today.wMonth * 100 + today.wDay;
+    AcquireSRWLockShared(&g_holidaysLock);
+    for (const auto& holiday : g_holidays) {
+        if (holiday.year * 10000 + holiday.month * 100 + holiday.day >= now) {
+            upcoming.push_back(holiday);
+        }
+    }
+    ReleaseSRWLockShared(&g_holidaysLock);
+    std::sort(upcoming.begin(), upcoming.end(),
+              [](const Holiday& a, const Holiday& b) {
+                  return std::tie(a.year, a.month, a.day) <
+                         std::tie(b.year, b.month, b.day);
+              });
+    // A day with two names counts once.
+    upcoming.erase(std::unique(upcoming.begin(), upcoming.end(),
+                               [](const Holiday& a, const Holiday& b) {
+                                   return a.year == b.year &&
+                                          a.month == b.month && a.day == b.day;
+                               }),
+                   upcoming.end());
+    if (upcoming.size() > count) {
+        upcoming.resize(count);
+    }
+    return upcoming;
+}
+
+// The holidays in the service's answer (a list of objects with "date":
+// "YYYY-MM-DD" and "localName", the name in the country's language).
+std::vector<Holiday> ParseHolidays(const std::wstring& json) {
+    std::vector<Holiday> holidays;
+    size_t at = 0;
+    while ((at = json.find(L"\"date\":\"", at)) != std::wstring::npos) {
+        at += 8;
+        Holiday holiday{};
+        if (swscanf_s(json.c_str() + at, L"%d-%d-%d", &holiday.year,
+                      &holiday.month, &holiday.day) != 3) {
+            continue;
+        }
+        const size_t nameAt = json.find(L"\"localName\":\"", at);
+        const size_t nextDate = json.find(L"\"date\":\"", at);
+        if (nameAt == std::wstring::npos ||
+            (nextDate != std::wstring::npos && nameAt > nextDate)) {
+            continue;
+        }
+        // Only the country's own (not a state's or a region's).
+        const size_t regional = json.find(L"\"global\":false", at);
+        if (regional != std::wstring::npos &&
+            (nextDate == std::wstring::npos || regional < nextDate)) {
+            continue;
+        }
+        // The string, with its escapes.
+        for (size_t i = nameAt + 13; i < json.size() && json[i] != L'"'; i++) {
+            WCHAR c = json[i];
+            if (c == L'\\' && i + 1 < json.size()) {
+                const WCHAR next = json[++i];
+                if (next == L'u' && i + 4 < json.size()) {
+                    c = (WCHAR)wcstoul(json.substr(i + 1, 4).c_str(), nullptr,
+                                       16);
+                    i += 4;
+                } else {
+                    c = next == L'n' || next == L't' ? L' ' : next;
+                }
+            }
+            holiday.name += c;
+        }
+        if (holiday.month >= 1 && holiday.month <= 12 && holiday.day >= 1 &&
+            holiday.day <= 31 && !holiday.name.empty() &&
+            holiday.name.size() < 100) {
+            holidays.push_back(std::move(holiday));
+        }
+    }
+    return holidays;
+}
+
+bool HttpsGet(const std::wstring& url, std::vector<BYTE>* data, size_t maxSize);
+
+struct HolidayRequest {
+    HWND notify;
+    int year;
+    std::wstring country;
+};
+
+DWORD WINAPI HolidayThreadProc(LPVOID parameter) {
+    std::unique_ptr<HolidayRequest> request((HolidayRequest*)parameter);
+    std::vector<BYTE> data;
+    const std::wstring url = L"https://date.nager.at/api/v3/PublicHolidays/" +
+                             std::to_wstring(request->year) + L"/" +
+                             request->country;
+    if (!HttpsGet(url, &data, 256 * 1024)) {
+        PostMessage(request->notify, WM_APP_HOLIDAYS, request->year, 1);
+        return 0;
+    }
+    std::wstring json;
+    const int length = MultiByteToWideChar(CP_UTF8, 0, (const char*)data.data(),
+                                           (int)data.size(), nullptr, 0);
+    if (length > 0) {
+        json.resize(length);
+        MultiByteToWideChar(CP_UTF8, 0, (const char*)data.data(),
+                            (int)data.size(), json.data(), length);
+    }
+    std::vector<Holiday> holidays = ParseHolidays(json);
+    AcquireSRWLockExclusive(&g_holidaysLock);
+    if (g_holidaysCountry == request->country &&
+        std::find(g_holidayYears.begin(), g_holidayYears.end(),
+                  request->year) == g_holidayYears.end()) {
+        g_holidayYears.push_back(request->year);
+        for (auto& holiday : holidays) {
+            if (holiday.year == request->year) {
+                g_holidays.push_back(std::move(holiday));
+            }
+        }
+    }
+    ReleaseSRWLockExclusive(&g_holidaysLock);
+    PostMessage(request->notify, WM_APP_HOLIDAYS, request->year, 0);
+    return 0;
+}
+
 bool HasEvents(int year, int month, int day) {
     return std::any_of(g_events.begin(), g_events.end(),
                        [&](const CalendarEvent& event) {
@@ -7653,6 +8360,18 @@ class CalendarPanel : public Panel {
     void ChangeMonth(int delta);
     void Layout();
     Hit HitTest(POINT pt) const;
+    // The holidays of the year shown, downloaded if chosen and not known
+    // yet (once a session; on a thread, see HolidayThreadProc).
+    void RequestHolidays();
+    bool OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) override;
+    void OnDestroy() override;
+    HANDLE m_holidayThread = nullptr;
+    std::vector<int> m_holidaysAsked;
+    // The chosen day's holidays' rows, over its events.
+    std::vector<D2D1_RECT_F> m_holidayRows;
+    // The next holidays, under it all.
+    std::vector<Holiday> m_upcoming;
+    D2D1_RECT_F m_upcomingHeader{};
     // A month's title and days, moved sideways by `offset` pixels.
     void DrawMonth(ID2D1RenderTarget* target,
                    ID2D1SolidColorBrush* brush,
@@ -7660,6 +8379,7 @@ class CalendarPanel : public Panel {
                    int month,
                    float offset,
                    float opacity);
+    void DrawUpcoming(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush);
     void DrawField(ID2D1RenderTarget* target,
                    ID2D1SolidColorBrush* brush,
                    const D2D1_RECT_F& rect,
@@ -7775,6 +8495,7 @@ void CalendarPanel::OnOpen() {
         m_selectedDay = m_openOn.day;
         m_openOn = {};
     }
+    RequestHolidays();
     m_hover = {};
     m_slide = 0;
     m_slideVelocity = 0;
@@ -7866,6 +8587,63 @@ void CalendarPanel::TypeDigit(int digit) {
     }
 }
 
+void CalendarPanel::RequestHolidays() {
+    if (!g_settings.calendarHolidays || !m_year) {
+        return;
+    }
+    LoadHolidays();
+    AcquireSRWLockShared(&g_holidaysLock);
+    const std::wstring country = g_holidaysCountry;
+    const bool known = std::find(g_holidayYears.begin(), g_holidayYears.end(),
+                                 m_year) != g_holidayYears.end();
+    ReleaseSRWLockShared(&g_holidaysLock);
+    if (country.empty() || known ||
+        std::find(m_holidaysAsked.begin(), m_holidaysAsked.end(), m_year) !=
+            m_holidaysAsked.end()) {
+        return;
+    }
+    // One at a time.
+    if (m_holidayThread) {
+        if (WaitForSingleObject(m_holidayThread, 0) != WAIT_OBJECT_0) {
+            return;
+        }
+        CloseHandle(m_holidayThread);
+        m_holidayThread = nullptr;
+    }
+    m_holidaysAsked.push_back(m_year);
+    auto* request = new HolidayRequest{m_hwnd, m_year, country};
+    m_holidayThread =
+        CreateThread(nullptr, 0, HolidayThreadProc, request, 0, nullptr);
+    if (!m_holidayThread) {
+        delete request;
+    }
+}
+
+bool CalendarPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg != WM_APP_HOLIDAYS) {
+        return false;
+    }
+    // Not downloaded (offline): asked again the next time it's shown.
+    if (lParam) {
+        std::erase(m_holidaysAsked, (int)wParam);
+        return true;
+    }
+    SaveHolidays();
+    Layout();
+    // The next year shown, maybe.
+    RequestHolidays();
+    return true;
+}
+
+void CalendarPanel::OnDestroy() {
+    if (m_holidayThread) {
+        // The download gives up after a few seconds.
+        WaitForSingleObject(m_holidayThread, 15000);
+        CloseHandle(m_holidayThread);
+        m_holidayThread = nullptr;
+    }
+}
+
 void CalendarPanel::ChangeMonth(int delta) {
     // The month shown slides out (from where it is, if still sliding).
     if (m_slide < 0.5) {
@@ -7885,6 +8663,7 @@ void CalendarPanel::ChangeMonth(int delta) {
         m_month -= 12;
         m_year++;
     }
+    RequestHolidays();
     Layout();
 }
 
@@ -7930,11 +8709,19 @@ void CalendarPanel::Layout() {
               gridTop + (index / 7 + 1) * cell}});
     }
 
-    // The chosen day's events, then adding one.
+    // The chosen day's holidays and events, then adding one.
     float y = gridTop + cell * 6 + std::round(6 * scale);
     const float row = std::round(kEventRowHeight * scale);
     m_eventsHeader = {padding, y, width - padding, y + row};
     y += row;
+    m_holidayRows.clear();
+    for (size_t i = 0;
+         i < HolidaysOn(m_selectedYear, m_selectedMonth, m_selectedDay).size() &&
+         i < 2;
+         i++) {
+        m_holidayRows.push_back({padding, y, width - padding, y + row});
+        y += row;
+    }
     m_eventRows.clear();
     const auto events = DayEvents();
     for (size_t i = 0; i < events.size() && (int)i < kEventsShown; i++) {
@@ -7942,7 +8729,7 @@ void CalendarPanel::Layout() {
             {events[i]->id, {padding, y, width - padding, y + row}});
         y += row;
     }
-    if (events.empty()) {
+    if (events.empty() && m_holidayRows.empty()) {
         // "No events".
         y += row;
     }
@@ -7984,6 +8771,14 @@ void CalendarPanel::Layout() {
         m_saveButton = {width - padding - buttonWidth, y, width - padding,
                         y + field};
         y += field;
+    }
+    // The next holidays, from today.
+    m_upcoming = UpcomingHolidays(4);
+    m_upcomingHeader = {};
+    if (!m_upcoming.empty()) {
+        y += std::round(8 * scale);
+        m_upcomingHeader = {padding, y, width - padding, y + row};
+        y += row + m_upcoming.size() * std::round(22 * scale);
     }
     y += padding;
     m_size = {(LONG)width, (LONG)std::ceil(y)};
@@ -8230,8 +9025,28 @@ void CalendarPanel::Draw(ID2D1RenderTarget* target,
     brush->SetColor(Fg(0.6f));
     target->DrawText(header.c_str(), (UINT32)header.size(),
                      m_smallFormat.get(), m_eventsHeader, brush);
+    // Holidays: a green bar and the name.
+    const auto holidays =
+        HolidaysOn(m_selectedYear, m_selectedMonth, m_selectedDay);
+    for (size_t i = 0; i < m_holidayRows.size() && i < holidays.size(); i++) {
+        const D2D1_RECT_F& row = m_holidayRows[i];
+        brush->SetColor(D2D1::ColorF(0.2f, 0.78f, 0.35f, 0.9f));
+        target->FillRoundedRectangle(
+            {{row.left, row.top + std::round(6 * scale),
+              row.left + std::round(3 * scale),
+              row.bottom - std::round(6 * scale)},
+             1.5f,
+             1.5f},
+            brush);
+        brush->SetColor(Fg(0.95f));
+        target->DrawText(holidays[i].c_str(), (UINT32)holidays[i].size(),
+                         m_textFormat.get(),
+                         {row.left + std::round(10 * scale), row.top,
+                          row.right, row.bottom},
+                         brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    }
     const auto events = DayEvents();
-    if (events.empty()) {
+    if (events.empty() && holidays.empty()) {
         PCWSTR none = Tr(L"No events", L"Nenhum evento");
         brush->SetColor(Fg(0.4f));
         target->DrawText(none, (UINT32)wcslen(none), m_textFormat.get(),
@@ -8293,6 +9108,8 @@ void CalendarPanel::Draw(ID2D1RenderTarget* target,
                           row.right, row.bottom},
                          brush);
     }
+
+    DrawUpcoming(target, brush);
 
     // "+ New event", or its fields.
     if (!m_adding) {
@@ -8450,6 +9267,44 @@ void CalendarPanel::Draw(ID2D1RenderTarget* target,
     }
 }
 
+void CalendarPanel::DrawUpcoming(ID2D1RenderTarget* target,
+                                 ID2D1SolidColorBrush* brush) {
+    if (m_upcoming.empty()) {
+        return;
+    }
+    const float scale = m_scale;
+    brush->SetColor(Fg(0.1f));
+    target->FillRectangle({m_upcomingHeader.left, m_upcomingHeader.top,
+                           m_upcomingHeader.right, m_upcomingHeader.top + 1},
+                          brush);
+    PCWSTR header = Tr(L"Upcoming holidays", L"Próximos feriados");
+    brush->SetColor(Fg(0.6f));
+    target->DrawText(header, (UINT32)wcslen(header), m_smallFormat.get(),
+                     m_upcomingHeader, brush);
+    float y = m_upcomingHeader.bottom;
+    const float line = std::round(22 * scale);
+    for (const auto& holiday : m_upcoming) {
+        SYSTEMTIME day{(WORD)holiday.year, (WORD)holiday.month, 0,
+                       (WORD)holiday.day};
+        WCHAR date[32] = L"";
+        GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &day, L"d MMM", date,
+                        ARRAYSIZE(date), nullptr);
+        const float dateWidth = std::round(46 * scale);
+        brush->SetColor(D2D1::ColorF(0.2f, 0.78f, 0.35f, 1));
+        target->DrawText(date, (UINT32)wcslen(date), m_smallFormat.get(),
+                         {m_upcomingHeader.left, y,
+                          m_upcomingHeader.left + dateWidth, y + line},
+                         brush);
+        brush->SetColor(Fg(0.85f));
+        target->DrawText(holiday.name.c_str(), (UINT32)holiday.name.size(),
+                         m_smallFormat.get(),
+                         {m_upcomingHeader.left + dateWidth, y,
+                          m_upcomingHeader.right, y + line},
+                         brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        y += line;
+    }
+}
+
 void CalendarPanel::DrawMonth(ID2D1RenderTarget* target,
                               ID2D1SolidColorBrush* brush,
                               int year,
@@ -8531,9 +9386,13 @@ void CalendarPanel::DrawMonth(ID2D1RenderTarget* target,
             target->DrawEllipse({center, circle, circle}, brush, 1.5f);
         }
         const std::wstring text = std::to_wstring(day);
-        // White on today's red circle; the theme's color elsewhere.
-        brush->SetColor(isToday ? D2D1::ColorF(1, 1, 1, opacity)
-                                : Fg((inMonth ? 0.9f : 0.3f) * opacity));
+        // White on today's red circle; green on a holiday; the theme's color
+        // elsewhere.
+        const bool holiday =
+            inMonth && !isToday && !HolidaysOn(year, month, day).empty();
+        brush->SetColor(isToday   ? D2D1::ColorF(1, 1, 1, opacity)
+                        : holiday ? D2D1::ColorF(0.2f, 0.78f, 0.35f, opacity)
+                                  : Fg((inMonth ? 0.9f : 0.3f) * opacity));
         target->DrawText(text.c_str(), (UINT32)text.size(), m_dayFormat.get(),
                          rect, brush);
         if (inMonth && HasEvents(year, month, day)) {
@@ -8903,6 +9762,13 @@ enum class ControlId {
     Display,
     Sound,
     Battery,
+    PowerMode,
+    Microphone,
+    Notes,
+    Tasks,
+    Shortcuts,
+    Weather,
+    Updates,
 };
 
 enum class ControlKind { Tile, Button, Section };
@@ -8955,12 +9821,26 @@ const ControlInfo kControls[] = {
      L"Calculadora", L"calculator", false},
     {ControlId::Explorer, ControlKind::Button, 0xEC50, L"File Explorer",
      L"Explorador de Arquivos", L"explorer", false},
+    {ControlId::Microphone, ControlKind::Button, 0xE720, L"Microphone",
+     L"Microfone", L"microphone", false},
+    {ControlId::Notes, ControlKind::Button, 0xE70B, L"Notes", L"Anotações",
+     L"notes", false},
+    {ControlId::Tasks, ControlKind::Button, 0xE9D5, L"Tasks", L"Tarefas",
+     L"tasks", false},
+    {ControlId::Shortcuts, ControlKind::Button, 0xE765, L"Shortcuts",
+     L"Atalhos", L"shortcuts", false},
+    {ControlId::Weather, ControlKind::Button, 0xE753, L"Weather", L"Clima",
+     L"weather", false},
+    {ControlId::Updates, ControlKind::Button, 0xE895, L"Updates",
+     L"Atualizações", L"updates", false},
     {ControlId::Display, ControlKind::Section, 0xE706, L"Display brightness",
      L"Brilho da tela", L"display", true},
     {ControlId::Sound, ControlKind::Section, 0xE767, L"Sound", L"Som",
      L"sound", true},
     {ControlId::Battery, ControlKind::Section, 0xE83F, L"Battery",
      L"Bateria", L"battery", true},
+    {ControlId::PowerMode, ControlKind::Section, 0xEC48, L"Power",
+     L"Energia", L"powermode", true},
 };
 
 const ControlInfo& GetControlInfo(ControlId id) {
@@ -9003,6 +9883,18 @@ enum class IslandPref {
     ClockCenter,
     Power,
     OwnNotifications,
+    PanelsFollow,
+    ThemeButton,
+    UsageCpu,
+    UsageRam,
+    UsageVram,
+    Microphone,
+    Holidays,
+    Notes,
+    Tasks,
+    Shortcuts,
+    Weather,
+    Updates,
 };
 
 struct IslandPrefInfo {
@@ -9032,9 +9924,10 @@ const IslandPrefInfo kIslandPrefs[] = {
     {IslandPref::MediaTitle, L"mediaTitle", 0xE93C,
      L"Cover and title on the pill", L"Capa e título na pílula"},
     {IslandPref::Banner, L"bannerEnabled", 0xE8BD,
-     L"New notifications in the pill", L"Avisos na pílula"},
+     L"Banners in the pill", L"Avisos na pílula"},
     {IslandPref::BannerMinimized, L"bannerMinimized", 0xE921,
-     L"Also with the pill minimized", L"Também com a pílula minimizada"},
+     L"Banners even with the pill minimized",
+     L"Avisos mesmo com a pílula minimizada"},
     {IslandPref::HideWindowsBanners, L"hideWindowsBanners", 0xED1A,
      L"Hide the Windows banners", L"Esconder os avisos do Windows"},
     {IslandPref::WebPictures, L"bannerWebPictures", 0xE774,
@@ -9059,6 +9952,32 @@ const IslandPrefInfo kIslandPrefs[] = {
     {IslandPref::OwnNotifications, L"islandOwnsNotifications", 0xE767,
      L"The island handles notifications and their sounds (Windows' stay quiet)",
      L"A ilha cuida das notificações e dos sons (as do Windows ficam quietas)"},
+    {IslandPref::PanelsFollow, L"islandPanelsFollow", 0xE740,
+     L"Panels as wide as the island", L"Painéis na largura da ilha"},
+    {IslandPref::ThemeButton, L"islandThemeButton", 0xE7A1,
+     L"Light and dark mode button", L"Botão de modo claro e escuro"},
+    {IslandPref::UsageCpu, L"usageCpu", 0xE950, L"Processor use (CPU)",
+     L"Uso do processador (CPU)"},
+    {IslandPref::UsageRam, L"usageRam", 0xE964, L"Memory use (RAM)",
+     L"Uso da memória (RAM)"},
+    {IslandPref::UsageVram, L"usageVram", 0xEEA1,
+     L"Video memory in use (VRAM)", L"Memória de vídeo em uso (VRAM)"},
+    {IslandPref::Microphone, L"islandMicrophone", 0xE720,
+     L"Microphone button (mute)", L"Botão do microfone (silenciar)"},
+    {IslandPref::Holidays, L"calendarHolidays", 0xE787,
+     L"Holidays in the calendar (goes online)",
+     L"Feriados no calendário (acessa a internet)"},
+    {IslandPref::Notes, L"islandNotes", 0xE70B, L"Notes button",
+     L"Botão de anotações"},
+    {IslandPref::Tasks, L"islandTasks", 0xE9D5, L"Tasks button",
+     L"Botão de tarefas"},
+    {IslandPref::Shortcuts, L"islandShortcuts", 0xE765,
+     L"Keyboard shortcuts button", L"Botão de atalhos do teclado"},
+    {IslandPref::Weather, L"islandWeather", 0xE753,
+     L"Weather (goes online)", L"Clima (acessa a internet)"},
+    {IslandPref::Updates, L"islandUpdates", 0xE895,
+     L"Updates (winget and Windows Update)",
+     L"Atualizações (winget e Windows Update)"},
 };
 
 // The groups of items on the pill, which can be put in another order in the
@@ -9073,6 +9992,14 @@ enum class PillGroup {
     Bell,
     Media,
     Power,
+    Usage,
+    Theme,
+    Microphone,
+    Notes,
+    Tasks,
+    Shortcuts,
+    Weather,
+    Updates,
     Count
 };
 constexpr int kPillGroups = (int)PillGroup::Count;
@@ -9093,7 +10020,33 @@ const PillGroupInfo kPillGroupInfo[kPillGroups] = {
     {0xEA8F, L"Notifications (bell)", L"Notificações (sino)"},
     {0xE8D6, L"What's playing", L"O que está tocando"},
     {0xE7E8, L"Power button", L"Botão de desligar"},
+    {0xE9D9, L"CPU, RAM and VRAM use", L"Uso de CPU, RAM e VRAM"},
+    {0xE7A1, L"Light and dark mode", L"Modo claro e escuro"},
+    {0xE720, L"Microphone", L"Microfone"},
+    {0xE70B, L"Notes", L"Anotações"},
+    {0xE9D5, L"Tasks", L"Tarefas"},
+    {0xE765, L"Keyboard shortcuts", L"Atalhos do teclado"},
+    {0xE753, L"Weather", L"Clima"},
+    {0xE895, L"Updates", L"Atualizações"},
 };
+
+// Whether any of the processor, memory and video memory use is shown (the
+// usage group has a switch for each).
+bool AnyUsageShown() {
+    return g_settings.usageCpu || g_settings.usageRam || g_settings.usageVram;
+}
+
+int GetIslandPref(IslandPref pref);
+int PillGroupPref(PillGroup group);
+
+// Whether a group is on the pill (for all apps): its option on, or always.
+bool PillGroupOn(PillGroup group) {
+    const int pref = PillGroupPref(group);
+    if (pref >= 0) {
+        return GetIslandPref((IslandPref)pref) != 0;
+    }
+    return group != PillGroup::Usage || AnyUsageShown();
+}
 
 // The option that shows a group, or -1 for the ones always there.
 int PillGroupPref(PillGroup group) {
@@ -9112,6 +10065,20 @@ int PillGroupPref(PillGroup group) {
             return (int)IslandPref::Media;
         case PillGroup::Power:
             return (int)IslandPref::Power;
+        case PillGroup::Theme:
+            return (int)IslandPref::ThemeButton;
+        case PillGroup::Microphone:
+            return (int)IslandPref::Microphone;
+        case PillGroup::Notes:
+            return (int)IslandPref::Notes;
+        case PillGroup::Tasks:
+            return (int)IslandPref::Tasks;
+        case PillGroup::Shortcuts:
+            return (int)IslandPref::Shortcuts;
+        case PillGroup::Weather:
+            return (int)IslandPref::Weather;
+        case PillGroup::Updates:
+            return (int)IslandPref::Updates;
         default:
             return -1;
     }
@@ -9172,6 +10139,10 @@ constexpr int kIslandSizeMin = 70;
 constexpr int kIslandSizeMax = 150;
 constexpr int kIslandSizeDefault = 100;
 constexpr int kIslandSizeStep = 5;
+constexpr int kIslandGapMin = 0;
+constexpr int kIslandGapMax = 48;
+constexpr int kIslandGapDefault = 6;
+constexpr int kIslandGapStep = 2;
 
 // The settings view's sections, in order (see ControlPanel::SettingEntry).
 enum SettingSection {
@@ -9213,6 +10184,7 @@ bool MatchesSearch(const std::wstring& text, const std::wstring& query) {
 int GetIslandPref(IslandPref pref);
 void SetIslandPref(IslandPref pref, int value);
 void SetIslandSize(int percent, bool keep);
+void SetIslandGap(int pixels, bool keep);
 
 // The media buttons on the pill (the setting, switched in the media panel).
 std::atomic<bool> g_mediaButtonsInPill{false};
@@ -9222,9 +10194,12 @@ std::atomic<bool> g_mediaTitleInPill{false};
 // The clock's parts shown for all apps (bits as IslandPlace::clock).
 int GlobalClockParts();
 // The clock's parts in the per-app settings (their index after the
-// groups').
-constexpr int kClockChipFirst = 10;
+// groups', each app's taking kAppChipStride).
+constexpr int kClockChipFirst = 24;
 constexpr int kClockParts = 4;
+constexpr int kAppChipStride = 32;
+static_assert(kPillGroups <= kClockChipFirst &&
+              kClockChipFirst + kClockParts <= kAppChipStride);
 
 // The groups turned off for all apps (bits by PillGroup).
 unsigned GloballyHiddenGroups() {
@@ -9237,6 +10212,9 @@ unsigned GloballyHiddenGroups() {
             continue;
         }
         if (pref >= 0 && !GetIslandPref((IslandPref)pref)) {
+            mask |= 1u << group;
+        }
+        if ((PillGroup)group == PillGroup::Usage && !AnyUsageShown()) {
             mask |= 1u << group;
         }
     }
@@ -9370,6 +10348,144 @@ DWORD WINAPI DarkModeThreadProc(LPVOID parameter) {
                        (LPARAM)L"ImmersiveColorSet", SMTO_ABORTIFHUNG, 500,
                        nullptr);
     return 0;
+}
+
+// Windows' power mode (Settings > Power: best power efficiency, balanced,
+// best performance): an overlay on the balanced power plan, read and set
+// with the functions Settings uses (powrprof.dll, looked up: they aren't
+// documented). With another plan chosen, or without them, there's none.
+constexpr GUID kPowerModes[3] = {
+    {0x961cc777, 0x2547, 0x4f9d, {0x81, 0x74, 0x7d, 0x86, 0x18, 0x1b, 0x8a, 0x7a}},
+    {0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}},
+    {0xded574b5, 0x45a0, 0x4f42, {0x87, 0x37, 0x46, 0x34, 0x5c, 0x09, 0xc2, 0x38}}};
+// The balanced power plan.
+constexpr GUID kBalancedPowerPlan = {
+    0x381b4222, 0xf694, 0x41f0, {0x96, 0x85, 0xff, 0x5b, 0xb2, 0x60, 0xdf, 0x2e}};
+
+// The power mode (0 to 2, 3 for one in between, from Windows 10's slider),
+// or -1 when there's none.
+int GetPowerMode() {
+    HMODULE powrprof =
+        LoadLibraryEx(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!powrprof) {
+        return -1;
+    }
+    using GetActive_t = DWORD(WINAPI*)(HKEY, GUID**);
+    using GetOverlay_t = DWORD(WINAPI*)(GUID*);
+    auto getActive = (GetActive_t)GetProcAddress(powrprof, "PowerGetActiveScheme");
+    auto getOverlay =
+        (GetOverlay_t)GetProcAddress(powrprof, "PowerGetEffectiveOverlayScheme");
+    int mode = -1;
+    GUID* plan = nullptr;
+    if (getActive && getOverlay && getActive(nullptr, &plan) == ERROR_SUCCESS &&
+        plan) {
+        GUID overlay{};
+        if (IsEqualGUID(*plan, kBalancedPowerPlan) &&
+            getOverlay(&overlay) == ERROR_SUCCESS) {
+            mode = 3;
+            for (int i = 0; i < 3; i++) {
+                if (IsEqualGUID(overlay, kPowerModes[i])) {
+                    mode = i;
+                }
+            }
+        }
+    }
+    if (plan) {
+        LocalFree(plan);
+    }
+    FreeLibrary(powrprof);
+    return mode;
+}
+
+// The power plans (Control Panel > Power Options), with their names, and
+// the active one's index (or -1): listed and chosen with powrprof's
+// documented functions (looked up, like the ones above).
+struct PowerPlan {
+    GUID guid;
+    std::wstring name;
+};
+
+std::vector<PowerPlan> GetPowerPlans(int* active) {
+    std::vector<PowerPlan> plans;
+    *active = -1;
+    HMODULE powrprof =
+        LoadLibraryEx(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!powrprof) {
+        return plans;
+    }
+    using Enumerate_t = DWORD(WINAPI*)(HKEY, const GUID*, const GUID*, ULONG,
+                                       ULONG, UCHAR*, DWORD*);
+    using ReadName_t = DWORD(WINAPI*)(HKEY, const GUID*, const GUID*,
+                                      const GUID*, UCHAR*, DWORD*);
+    using GetActive_t = DWORD(WINAPI*)(HKEY, GUID**);
+    auto enumerate = (Enumerate_t)GetProcAddress(powrprof, "PowerEnumerate");
+    auto readName =
+        (ReadName_t)GetProcAddress(powrprof, "PowerReadFriendlyName");
+    auto getActive =
+        (GetActive_t)GetProcAddress(powrprof, "PowerGetActiveScheme");
+    if (enumerate && readName && getActive) {
+        // ACCESS_SCHEME.
+        constexpr ULONG kAccessScheme = 16;
+        for (ULONG i = 0; i < 64; i++) {
+            GUID guid;
+            DWORD size = sizeof(guid);
+            if (enumerate(nullptr, nullptr, nullptr, kAccessScheme, i,
+                          (UCHAR*)&guid, &size) != ERROR_SUCCESS) {
+                break;
+            }
+            WCHAR name[128] = L"";
+            DWORD nameSize = sizeof(name);
+            if (readName(nullptr, &guid, nullptr, nullptr, (UCHAR*)name,
+                         &nameSize) != ERROR_SUCCESS) {
+                continue;
+            }
+            name[ARRAYSIZE(name) - 1] = L'\0';
+            plans.push_back({guid, name});
+        }
+        GUID* current = nullptr;
+        if (getActive(nullptr, &current) == ERROR_SUCCESS && current) {
+            for (size_t i = 0; i < plans.size(); i++) {
+                if (IsEqualGUID(plans[i].guid, *current)) {
+                    *active = (int)i;
+                }
+            }
+            LocalFree(current);
+        }
+    }
+    FreeLibrary(powrprof);
+    return plans;
+}
+
+bool SetPowerPlan(const GUID& guid) {
+    HMODULE powrprof =
+        LoadLibraryEx(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!powrprof) {
+        return false;
+    }
+    using SetActive_t = DWORD(WINAPI*)(HKEY, const GUID*);
+    auto setActive =
+        (SetActive_t)GetProcAddress(powrprof, "PowerSetActiveScheme");
+    const bool set = setActive && setActive(nullptr, &guid) == ERROR_SUCCESS;
+    FreeLibrary(powrprof);
+    return set;
+}
+
+bool SetPowerMode(int mode) {
+    if (mode < 0 || mode > 2) {
+        return false;
+    }
+    HMODULE powrprof =
+        LoadLibraryEx(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!powrprof) {
+        return false;
+    }
+    using SetOverlay_t = DWORD(WINAPI*)(GUID);
+    auto setOverlay =
+        (SetOverlay_t)GetProcAddress(powrprof, "PowerSetActiveOverlayScheme");
+    const bool set =
+        setOverlay && setOverlay(kPowerModes[mode]) == ERROR_SUCCESS;
+    FreeLibrary(powrprof);
+    return set;
 }
 
 constexpr float kHeaderHeight = 40;
@@ -9664,6 +10780,12 @@ class ControlPanel : public Panel {
         WaitForWorkers();
     }
 
+    // Windows' dark mode, switched from the pill's button (on a thread of
+    // the panel's, like its own tile does).
+    void SwitchDarkMode(bool dark) {
+        m_darkMode = dark;
+        StartWorker(DarkModeThreadProc, dark ? (void*)1 : nullptr);
+    }
     // Called while open, to show changes made elsewhere.
     void Refresh() {
         if (IsOpen() && !m_dragging && m_dragId < 0) {
@@ -9672,13 +10794,15 @@ class ControlPanel : public Panel {
             Render();
         }
     }
-    // Only the sound (opened from the volume, like on macOS), or all of it.
-    // Returns whether that changed; while open, it shows the other one.
-    bool SetSoundOnly(bool soundOnly) {
-        if (soundOnly == m_soundOnly) {
+    // Only the sound (opened from the volume, like on macOS), only the
+    // battery and the power mode (from the battery), or all of it. Returns
+    // whether that changed; while open, it shows the other one.
+    enum class Only { All, Sound, Battery };
+    bool SetOnly(Only only) {
+        if (only == m_only) {
             return false;
         }
-        m_soundOnly = soundOnly;
+        m_only = only;
         if (IsOpen()) {
             m_editing = false;
             SetView(View::Main);
@@ -9715,6 +10839,8 @@ class ControlPanel : public Panel {
         Settings,
         // A place for some apps (from the island's settings).
         AppPlaces,
+        // The power plans, to choose one.
+        PowerPlans,
     };
 
     enum class Part {
@@ -9743,6 +10869,9 @@ class ControlPanel : public Panel {
         Connect,
         Shortcut,  // Project, cast, captions, accessibility (index).
         BrightnessSlider,
+        PowerModeSegment,  // A power mode (index).
+        PowerPlanRow,      // A power plan in their list (index).
+        PowerPlan,         // The active power plan (opens their list).
         HotspotToggle,
         AirplaneToggle,
         DndToggle,
@@ -9964,8 +11093,8 @@ class ControlPanel : public Panel {
     float m_preparedScale = 0;
 
     View m_view = View::Main;
-    // Opened from the volume: only the sound (see SetSoundOnly).
-    bool m_soundOnly = false;
+    // Opened from the volume or the battery: only those (see SetOnly).
+    Only m_only = Only::All;
     // Changing views: the new one slides in and fades in (0 to 1).
     double m_viewIn = 1;
     double m_viewInVelocity = 0;
@@ -9980,6 +11109,20 @@ class ControlPanel : public Panel {
     bool m_doNotDisturb = false;
     bool m_hasBattery = false;
     int m_batteryPercent = 0;
+    // The power mode (see GetPowerMode), its section and its three choices.
+    int m_powerMode = -1;
+    // The microphone muted (1), on (0), or missing (-1).
+    int m_microphoneMuted = -1;
+    D2D1_RECT_F m_powerModeRect{};
+    D2D1_RECT_F m_powerModeChoices[3]{};
+    // The power plans, the active one, and its row in the section (which
+    // opens their list).
+    std::vector<PowerPlan> m_powerPlans;
+    int m_activePlan = -1;
+    double m_powerReadAt = 0;
+    D2D1_RECT_F m_powerPlanRow{};
+    void DrawPowerPlans(ID2D1RenderTarget* target,
+                        ID2D1SolidColorBrush* brush);
     bool m_charging = false;
     std::vector<OutputDevice> m_outputs;
     std::vector<MixerApp> m_apps;
@@ -10073,8 +11216,9 @@ class ControlPanel : public Panel {
     // the places per app.
     D2D1_RECT_F m_placeRow{}, m_placeGrid{}, m_appPlacesRow{};
     // The island's size: its row, slider and reset button.
-    D2D1_RECT_F m_sizeRow{}, m_sizeSlider{}, m_sizeReset{};
-    void SetIslandSizeAt(POINT pt, bool keep);
+    // The sliders: the island's size (0) and its room from the edges (1).
+    D2D1_RECT_F m_sizeRow[2]{}, m_sizeSlider[2]{}, m_sizeReset[2]{};
+    void SetIslandSizeAt(int slider, POINT pt, bool keep);
     // The island's settings: each row (an option, or a section's title) is
     // an entry, laid out in two columns (one on a narrow screen) with a line
     // between them, and filtered by what's typed (the search box). The list
@@ -10111,9 +11255,11 @@ class ControlPanel : public Panel {
     SmoothScroll m_settingsScroll;
     D2D1_RECT_F m_searchField{}, m_searchClear{}, m_settingsViewport{};
     bool m_twoColumns = false;
+    int m_columns = 1;
     // The line between the columns (its x, or -1), fading in and out, and
     // "Nothing found".
     float m_columnLine = -1;
+    float m_columnLine2 = -1;
     double m_lineAlpha = 0;
     double m_lineAlphaVelocity = 0;
     bool m_nothingFound = false;
@@ -10157,7 +11303,8 @@ class ControlPanel : public Panel {
     int m_orderStartX = 0;
     float m_orderGrab = 0;
     float m_orderDragLeft = 0;
-    // Each app's icons to show or hide (index: entry * 16 + PillGroup).
+    // Each app's icons to show or hide (index: entry * kAppChipStride +
+    // PillGroup).
     std::vector<std::pair<int, D2D1_RECT_F>> m_appItemChips;
     std::vector<D2D1_RECT_F> m_appPlaceRows;
     std::vector<D2D1_RECT_F> m_appPlaceGrids;
@@ -10209,6 +11356,7 @@ class ControlPanel : public Panel {
     // Dragging the main slider (index -1), an app's (its index), or the
     // brightness.
     static constexpr int kDragBrightness = -2;
+    // The island's sliders: kDragIslandSize minus the slider.
     static constexpr int kDragIslandSize = -3;
     bool m_dragging = false;
     int m_dragIndex = -1;
@@ -10227,6 +11375,15 @@ class NotificationPanel : public Panel {
    public:
     // An app's notifications were seen (it came to the front): cleared here.
     void ClearApp(const std::wstring& appId);
+    // A notification deleted from the pill's banner (its "x"): gone from the
+    // list too (and its app from the island, if nothing else of it is left).
+    void DismissById(long long id) {
+        LoadCleared();
+        if (!m_clearedLoaded || id <= 0) {
+            return;
+        }
+        Remove(id, 1);
+    }
     // The apps with notifications in the Windows notification center now
     // (an app takes its own away, like a message read on the phone).
     // Returns false if the database can't be read.
@@ -10281,6 +11438,11 @@ class NotificationPanel : public Panel {
         std::wstring fullText;
         long long arrival;
         ToastReply reply;
+        // A call's, an alarm's or a reminder's, and its sound (for showing
+        // it again, snoozed).
+        bool urgent = false;
+        std::wstring sound;
+        bool loop = false;
     };
 
     enum class Part {
@@ -10288,11 +11450,13 @@ class NotificationPanel : public Panel {
         Card,
         Dismiss,
         ClearAll,
+        SettingsButton,
         DndToggle,
         ContentToggle,
         BannerToggle,
         MinimizedToggle,
         ReplyButton,  // "Reply" on a card (index).
+        CardAction,   // A card's own button (card * 16 + button).
         ReplyField,   // The box being typed in (index).
         ReplySend,    // Its send button (index).
         Link
@@ -10370,6 +11534,11 @@ class NotificationPanel : public Panel {
     double m_bannerKnobVelocity = 0;
     double m_minimizedKnob = -1;
     double m_minimizedKnobVelocity = 0;
+    // The switches, folded away under the gear by the title (0 to 1).
+    bool m_settingsOpen = false;
+    double m_settingsAmount = 0;
+    double m_settingsVelocity = 0;
+    D2D1_RECT_F m_settingsButton{}, m_settingsSection{};
     // Cards moving: dragged sideways, sliding away (then their room closing),
     // or back.
     struct CardMotion {
@@ -10424,6 +11593,12 @@ class NotificationPanel : public Panel {
                    D2D1_RECT_F* replyButton,
                    D2D1_RECT_F* field,
                    D2D1_RECT_F* send) const;
+    // A card's own buttons (see ToastReply::actions), in the row with
+    // "Reply" (left of it), shown with the card's focus.
+    D2D1_RECT_F CardActionRect(const D2D1_RECT_F& card,
+                               float extra,
+                               const Notification& n,
+                               size_t index) const;
     void DrawSwitchRow(ID2D1RenderTarget* target,
                        ID2D1SolidColorBrush* brush,
                        const D2D1_RECT_F& row,
@@ -10434,7 +11609,8 @@ class NotificationPanel : public Panel {
                        PCWSTR description,
                        double knob,
                        bool hover,
-                       bool enabled = true);
+                       bool enabled = true,
+                       bool ownCard = true);
     std::vector<std::pair<std::wstring, std::wstring>> m_names;
     std::vector<std::pair<std::wstring, winrt::com_ptr<ID2D1Bitmap>>>
         m_bitmaps;
@@ -10844,6 +12020,7 @@ void CALLBACK BannerWinEventProc(HWINEVENTHOOK,
                                  LONG,
                                  DWORD,
                                  DWORD);
+bool IsShellExperienceHost(DWORD processId);
 
 ////////////////////////////////////////////////////////////////////////////////
 // The power button's menu, like the macOS Apple menu: sleep, restart, shut
@@ -11308,6 +12485,5840 @@ void PowerPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
     target->PopAxisAlignedClip();
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Windows' own banners, read and pressed through UI Automation (Windows'
+// accessibility tree), only with the island's own notifications: Windows
+// shows calls, alarms and reminders itself then (its "Do not disturb" lets
+// them through), and the island takes over the one on its pill, hiding
+// Windows' banner and pressing its buttons (its "Snooze" too) when the
+// island's are pressed. On a thread of its own (it's another process).
+
+// A notification in Windows' stack of banners.
+struct WindowsBannerView {
+    std::wstring title;
+    // A call's, an alarm's or a reminder's.
+    bool priority = false;
+    std::vector<std::wstring> buttons;
+    // It has the "x" that moves it to the notification center.
+    bool dismiss = false;
+};
+
+// What a read found (and whether a button was pressed first).
+struct WindowsBannerRead {
+    std::vector<WindowsBannerView> views;
+    bool pressRequested = false;
+    bool pressed = false;
+    // If pressing failed, the island's own button to press instead (the
+    // app's, with the same name).
+    std::wstring fallbackAppId;
+    std::wstring fallbackArguments;
+    std::wstring fallbackActivationType;
+};
+
+SRWLOCK g_windowsBannerReadsLock = SRWLOCK_INIT;
+std::vector<WindowsBannerRead> g_windowsBannerReads;
+// Tells the island a read is done.
+constexpr UINT WM_APP_BANNER_READ = WM_APP + 57;
+
+// How much the processor, the memory and the GPU are used, for the pill and
+// its panel: measured on a thread of its own, only while one of them is
+// shown, every 2 seconds (every second with the panel open). The processor
+// from the system's idle and busy times and its frequency counters; the
+// memory from the memory and performance status; the GPU (the one with the
+// most video memory in use) from the "GPU Adapter Memory" and "GPU Engine"
+// performance counters (pdh.dll, loaded for it), and its total memory,
+// temperature, fan and power from the display driver's own figures
+// (D3DKMTQueryAdapterInfo, documented in the WDK, looked up in gdi32.dll;
+// left out when the driver doesn't give them). -1 when unknown.
+constexpr UINT WM_APP_USAGE = WM_APP + 65;
+// How long a value takes to count to a new one on the pill, in seconds.
+constexpr double kUsageChangeSeconds = 0.8;
+// How many measures the panel's graphs keep.
+constexpr size_t kUsageHistory = 60;
+
+struct UsageDetails {
+    // Percent.
+    int cpu = -1;
+    int cpuMhz = -1;
+    int cpuBaseMhz = -1;
+    int cores = 0;
+    int threads = 0;
+    int ram = -1;
+    ULONGLONG ramUsed = 0;
+    ULONGLONG ramTotal = 0;
+    ULONGLONG ramCached = 0;
+    ULONGLONG ramAvailable = 0;
+    ULONGLONG commitUsed = 0;
+    ULONGLONG commitLimit = 0;
+    std::wstring gpuName;
+    int gpu = -1;
+    long long vramUsed = -1;
+    long long vramTotal = -1;
+    long long sharedUsed = -1;
+    long long sharedTotal = -1;
+    // Tenths of a degree, RPM, tenths of a percent of its power limit.
+    int gpuTemperature = -1;
+    int gpuFan = -1;
+    int gpuPower = -1;
+    // The last measures (oldest first), in percent (the temperature in
+    // degrees), and when the last one came.
+    std::vector<float> history[4];
+    double measuredAt = 0;
+};
+SRWLOCK g_usageLock = SRWLOCK_INIT;
+UsageDetails g_usage;
+// Measured every second (with the panel open), and the GPU's details too.
+std::atomic<bool> g_usageFast{false};
+std::atomic<bool> g_usageGpuWanted{false};
+
+UsageDetails GetUsage() {
+    AcquireSRWLockShared(&g_usageLock);
+    UsageDetails usage = g_usage;
+    ReleaseSRWLockShared(&g_usageLock);
+    return usage;
+}
+
+struct UsageWatch {
+    HWND hwnd;
+    HANDLE stop;
+    // Set to measure right away (the panel opened).
+    HANDLE wake;
+};
+
+// The performance counters' functions, looked up once.
+struct PdhApi {
+    using OpenQuery_t = LONG(WINAPI*)(LPCWSTR, DWORD_PTR, HANDLE*);
+    using AddCounter_t = LONG(WINAPI*)(HANDLE, LPCWSTR, DWORD_PTR, HANDLE*);
+    using Collect_t = LONG(WINAPI*)(HANDLE);
+    using GetValue_t = LONG(WINAPI*)(HANDLE, DWORD, LPDWORD,
+                                     PDH_FMT_COUNTERVALUE*);
+    using GetArray_t = LONG(WINAPI*)(HANDLE, DWORD, LPDWORD, LPDWORD, void*);
+    using CloseQuery_t = LONG(WINAPI*)(HANDLE);
+    HMODULE module = nullptr;
+    OpenQuery_t openQuery = nullptr;
+    AddCounter_t addCounter = nullptr;
+    Collect_t collect = nullptr;
+    GetValue_t getValue = nullptr;
+    GetArray_t getArray = nullptr;
+    CloseQuery_t closeQuery = nullptr;
+    bool tried = false;
+
+    bool Load() {
+        if (tried) {
+            return module != nullptr;
+        }
+        tried = true;
+        module = LoadLibraryEx(L"pdh.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (!module) {
+            return false;
+        }
+        openQuery = (OpenQuery_t)GetProcAddress(module, "PdhOpenQueryW");
+        addCounter =
+            (AddCounter_t)GetProcAddress(module, "PdhAddEnglishCounterW");
+        collect = (Collect_t)GetProcAddress(module, "PdhCollectQueryData");
+        getValue =
+            (GetValue_t)GetProcAddress(module, "PdhGetFormattedCounterValue");
+        getArray = (GetArray_t)GetProcAddress(module,
+                                              "PdhGetFormattedCounterArrayW");
+        closeQuery = (CloseQuery_t)GetProcAddress(module, "PdhCloseQuery");
+        if (!openQuery || !addCounter || !collect || !getValue || !getArray ||
+            !closeQuery) {
+            FreeLibrary(module);
+            module = nullptr;
+        }
+        return module != nullptr;
+    }
+    ~PdhApi() {
+        if (module) {
+            FreeLibrary(module);
+        }
+    }
+};
+
+// A query of a few counters (wildcards allowed), opened once.
+struct PdhQuery {
+    PdhApi* api = nullptr;
+    HANDLE query = nullptr;
+    std::vector<HANDLE> counters;
+    bool failed = false;
+
+    bool Open(PdhApi& pdh, std::initializer_list<PCWSTR> paths) {
+        if (query || failed) {
+            return query != nullptr;
+        }
+        failed = true;
+        if (!pdh.Load() || pdh.openQuery(nullptr, 0, &query) != ERROR_SUCCESS) {
+            query = nullptr;
+            return false;
+        }
+        api = &pdh;
+        for (PCWSTR path : paths) {
+            HANDLE counter = nullptr;
+            if (pdh.addCounter(query, path, 0, &counter) != ERROR_SUCCESS) {
+                counter = nullptr;
+            }
+            counters.push_back(counter);
+        }
+        failed = false;
+        return true;
+    }
+    bool Collect() { return query && api->collect(query) == ERROR_SUCCESS; }
+    // PDH_FMT_DOUBLE.
+    double Value(size_t index) {
+        PDH_FMT_COUNTERVALUE value{};
+        if (index >= counters.size() || !counters[index] ||
+            api->getValue(counters[index], 0x00000200, nullptr, &value) !=
+                ERROR_SUCCESS ||
+            value.CStatus != ERROR_SUCCESS) {
+            return -1;
+        }
+        return value.doubleValue;
+    }
+    // Each instance's value (PDH_FMT_LARGE or PDH_FMT_DOUBLE).
+    std::vector<std::pair<std::wstring, double>> Values(size_t index) {
+        std::vector<std::pair<std::wstring, double>> values;
+        constexpr LONG kMoreData = (LONG)0x800007D2;
+        DWORD size = 0;
+        DWORD count = 0;
+        if (index >= counters.size() || !counters[index] ||
+            api->getArray(counters[index], 0x00000200, &size, &count,
+                          nullptr) != kMoreData ||
+            !size) {
+            return values;
+        }
+        std::vector<BYTE> buffer(size);
+        if (api->getArray(counters[index], 0x00000200, &size, &count,
+                          buffer.data()) != ERROR_SUCCESS) {
+            return values;
+        }
+        auto* items = (PDH_FMT_COUNTERVALUE_ITEM_W*)buffer.data();
+        for (DWORD i = 0; i < count; i++) {
+            if (items[i].FmtValue.CStatus == ERROR_SUCCESS && items[i].szName) {
+                values.push_back(
+                    {items[i].szName, items[i].FmtValue.doubleValue});
+            }
+        }
+        return values;
+    }
+    ~PdhQuery() {
+        if (query) {
+            api->closeQuery(query);
+        }
+    }
+};
+
+// The display driver's figures (d3dkmthk.h).
+struct KmtOpenAdapterFromLuid {
+    LUID luid;
+    UINT adapter;
+};
+struct KmtQueryAdapterInfo {
+    UINT adapter;
+    UINT type;
+    void* data;
+    UINT size;
+};
+struct KmtSegmentSizeInfo {
+    ULONGLONG dedicatedVideoMemory;
+    ULONGLONG dedicatedSystemMemory;
+    ULONGLONG sharedSystemMemory;
+};
+struct KmtAdapterPerfData {
+    UINT physicalAdapterIndex;
+    ULONGLONG memoryFrequency;
+    ULONGLONG maxMemoryFrequency;
+    ULONGLONG maxMemoryFrequencyOC;
+    ULONGLONG memoryBandwidth;
+    ULONGLONG pcieBandwidth;
+    ULONG fanRPM;
+    ULONG power;
+    ULONG temperature;
+    UCHAR powerStateOverride;
+};
+struct KmtCloseAdapter {
+    UINT adapter;
+};
+// KMTQAITYPE_GETSEGMENTSIZE and KMTQAITYPE_ADAPTERPERFDATA.
+constexpr UINT kKmtSegmentSize = 3;
+constexpr UINT kKmtAdapterPerfData = 62;
+
+// The GPU's total memories, and its temperature, fan and power, by its LUID
+// (as in its counters' names: "luid_0x00000000_0x0000AD41_phys_0").
+void ReadGpuDriverFigures(const std::wstring& instance, UsageDetails* usage) {
+    unsigned long high = 0, low = 0;
+    if (swscanf_s(instance.c_str(), L"luid_0x%lx_0x%lx", &high, &low) != 2) {
+        return;
+    }
+    HMODULE gdi = GetModuleHandle(L"gdi32.dll");
+    using Open_t = LONG(WINAPI*)(KmtOpenAdapterFromLuid*);
+    using Query_t = LONG(WINAPI*)(KmtQueryAdapterInfo*);
+    using Close_t = LONG(WINAPI*)(KmtCloseAdapter*);
+    auto open = gdi ? (Open_t)GetProcAddress(gdi, "D3DKMTOpenAdapterFromLuid")
+                    : nullptr;
+    auto query =
+        gdi ? (Query_t)GetProcAddress(gdi, "D3DKMTQueryAdapterInfo") : nullptr;
+    auto close =
+        gdi ? (Close_t)GetProcAddress(gdi, "D3DKMTCloseAdapter") : nullptr;
+    KmtOpenAdapterFromLuid opened{};
+    opened.luid.LowPart = low;
+    opened.luid.HighPart = (LONG)high;
+    if (!open || !query || !close || open(&opened) != 0) {
+        return;
+    }
+    KmtSegmentSizeInfo sizes{};
+    KmtQueryAdapterInfo sizeQuery{opened.adapter, kKmtSegmentSize, &sizes,
+                                  sizeof(sizes)};
+    if (query(&sizeQuery) == 0) {
+        usage->vramTotal = (long long)sizes.dedicatedVideoMemory;
+        usage->sharedTotal = (long long)sizes.sharedSystemMemory;
+    }
+    KmtAdapterPerfData perf{};
+    KmtQueryAdapterInfo perfQuery{opened.adapter, kKmtAdapterPerfData, &perf,
+                                  sizeof(perf)};
+    if (query(&perfQuery) == 0) {
+        usage->gpuTemperature = perf.temperature ? (int)perf.temperature : -1;
+        usage->gpuFan = (int)perf.fanRPM;
+        usage->gpuPower = (int)perf.power;
+    }
+    KmtCloseAdapter closing{opened.adapter};
+    close(&closing);
+}
+
+// The GPU's name, by its LUID (DXGI, loaded once).
+std::wstring GpuName(const std::wstring& instance) {
+    unsigned long high = 0, low = 0;
+    if (swscanf_s(instance.c_str(), L"luid_0x%lx_0x%lx", &high, &low) != 2) {
+        return {};
+    }
+    HMODULE dxgi =
+        LoadLibraryEx(L"dxgi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!dxgi) {
+        return {};
+    }
+    std::wstring name;
+    using Create_t = HRESULT(WINAPI*)(REFIID, void**);
+    auto create = (Create_t)GetProcAddress(dxgi, "CreateDXGIFactory1");
+    winrt::com_ptr<IDXGIFactory1> factory;
+    if (create && SUCCEEDED(create(__uuidof(IDXGIFactory1), factory.put_void()))) {
+        winrt::com_ptr<IDXGIAdapter1> adapter;
+        for (UINT i = 0;
+             factory->EnumAdapters1(i, adapter.put()) == S_OK; i++) {
+            DXGI_ADAPTER_DESC1 desc{};
+            if (SUCCEEDED(adapter->GetDesc1(&desc)) &&
+                desc.AdapterLuid.LowPart == low &&
+                (unsigned long)desc.AdapterLuid.HighPart == high) {
+                name = desc.Description;
+            }
+            adapter = nullptr;
+        }
+    }
+    factory = nullptr;
+    FreeLibrary(dxgi);
+    return name;
+}
+
+// The cores and threads, once.
+void CountCores(UsageDetails* usage) {
+    DWORD size = 0;
+    GetLogicalProcessorInformationEx(RelationProcessorCore, nullptr, &size);
+    std::vector<BYTE> buffer(size);
+    if (size &&
+        GetLogicalProcessorInformationEx(
+            RelationProcessorCore,
+            (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)buffer.data(), &size)) {
+        for (DWORD at = 0; at < size;) {
+            auto* info =
+                (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)(buffer.data() + at);
+            usage->cores++;
+            at += info->Size;
+        }
+    }
+    usage->threads = (int)GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
+}
+
+DWORD WINAPI UsageThreadProc(LPVOID parameter) {
+    const UsageWatch watch = *(UsageWatch*)parameter;
+    delete (UsageWatch*)parameter;
+    auto ticks = [](const FILETIME& time) {
+        return ((ULONGLONG)time.dwHighDateTime << 32) | time.dwLowDateTime;
+    };
+    FILETIME idle, kernel, user;
+    GetSystemTimes(&idle, &kernel, &user);
+    ULONGLONG lastIdle = ticks(idle);
+    ULONGLONG lastBusy = ticks(kernel) + ticks(user);
+    PdhApi pdh;
+    PdhQuery cpuQuery;
+    PdhQuery gpuQuery;
+    UsageDetails usage;
+    CountCores(&usage);
+    std::wstring gpuInstance;
+    using GetPerformanceInfo_t = BOOL(WINAPI*)(PPERFORMANCE_INFORMATION, DWORD);
+    auto getPerformanceInfo = (GetPerformanceInfo_t)GetProcAddress(
+        GetModuleHandle(L"kernel32.dll"), "K32GetPerformanceInfo");
+    auto keep = [](std::vector<float>& history, float value) {
+        history.push_back(value);
+        if (history.size() > kUsageHistory) {
+            history.erase(history.begin());
+        }
+    };
+    // The first a moment after starting.
+    DWORD wait = 500;
+    const HANDLE handles[] = {watch.stop, watch.wake};
+    for (;;) {
+        const DWORD woke = WaitForMultipleObjects(2, handles, FALSE, wait);
+        if (woke != WAIT_TIMEOUT && woke != WAIT_OBJECT_0 + 1) {
+            break;
+        }
+        wait = g_usageFast ? 1000 : 2000;
+        // The processor (the kernel's time includes the idle time), and its
+        // frequency now: its base one times how hard it runs.
+        if (GetSystemTimes(&idle, &kernel, &user)) {
+            const ULONGLONG nowIdle = ticks(idle);
+            const ULONGLONG nowBusy = ticks(kernel) + ticks(user);
+            const ULONGLONG total = nowBusy - lastBusy;
+            const ULONGLONG idleTime = nowIdle - lastIdle;
+            if (total > 0 && idleTime <= total) {
+                usage.cpu =
+                    (int)std::lround(100.0 * (total - idleTime) / total);
+            }
+            lastIdle = nowIdle;
+            lastBusy = nowBusy;
+        }
+        if (cpuQuery.Open(
+                pdh, {L"\\Processor Information(_Total)\\Processor Frequency",
+                      L"\\Processor Information(_Total)\\% Processor "
+                      L"Performance"}) &&
+            cpuQuery.Collect()) {
+            const double base = cpuQuery.Value(0);
+            const double performance = cpuQuery.Value(1);
+            usage.cpuBaseMhz = base > 0 ? (int)std::lround(base) : -1;
+            usage.cpuMhz = base > 0 && performance > 0
+                               ? (int)std::lround(base * performance / 100)
+                               : -1;
+        }
+        // The memory.
+        MEMORYSTATUSEX memory{sizeof(memory)};
+        if (GlobalMemoryStatusEx(&memory)) {
+            usage.ram = (int)memory.dwMemoryLoad;
+            usage.ramTotal = memory.ullTotalPhys;
+            usage.ramAvailable = memory.ullAvailPhys;
+            usage.ramUsed = memory.ullTotalPhys - memory.ullAvailPhys;
+        }
+        PERFORMANCE_INFORMATION performance{sizeof(performance)};
+        if (getPerformanceInfo &&
+            getPerformanceInfo(&performance, sizeof(performance))) {
+            usage.ramCached =
+                (ULONGLONG)performance.SystemCache * performance.PageSize;
+            usage.commitUsed =
+                (ULONGLONG)performance.CommitTotal * performance.PageSize;
+            usage.commitLimit =
+                (ULONGLONG)performance.CommitLimit * performance.PageSize;
+        }
+        // The GPU with the most video memory in use, and how busy its 3D
+        // engines are.
+        if (g_usageGpuWanted &&
+            gpuQuery.Open(pdh, {L"\\GPU Adapter Memory(*)\\Dedicated Usage",
+                                L"\\GPU Adapter Memory(*)\\Shared Usage",
+                                L"\\GPU Engine(*engtype_3D)\\Utilization "
+                                L"Percentage"}) &&
+            gpuQuery.Collect()) {
+            double most = -1;
+            std::wstring instance;
+            for (const auto& [name, value] : gpuQuery.Values(0)) {
+                if (value > most) {
+                    most = value;
+                    instance = name;
+                }
+            }
+            usage.vramUsed = most >= 0 ? (long long)most : -1;
+            usage.sharedUsed = -1;
+            for (const auto& [name, value] : gpuQuery.Values(1)) {
+                if (name == instance) {
+                    usage.sharedUsed = (long long)value;
+                }
+            }
+            // The engines are named "pid_..._luid_0x..._phys_0_eng_..".
+            const size_t luid = instance.find(L"_phys");
+            const std::wstring prefix =
+                luid == std::wstring::npos ? instance : instance.substr(0, luid);
+            double busy = 0;
+            bool any = false;
+            for (const auto& [name, value] : gpuQuery.Values(2)) {
+                if (!prefix.empty() && name.find(prefix) != std::wstring::npos) {
+                    busy += value;
+                    any = true;
+                }
+            }
+            usage.gpu = any ? (int)std::lround(std::min(busy, 100.0)) : -1;
+            if (instance != gpuInstance) {
+                gpuInstance = instance;
+                usage.gpuName = GpuName(instance);
+            }
+            ReadGpuDriverFigures(instance, &usage);
+        } else if (!g_usageGpuWanted) {
+            usage.vramUsed = usage.sharedUsed = -1;
+            usage.gpu = -1;
+        }
+        keep(usage.history[0], (float)std::max(usage.cpu, 0));
+        keep(usage.history[1], (float)std::max(usage.ram, 0));
+        if (usage.gpu >= 0) {
+            keep(usage.history[2], (float)usage.gpu);
+        }
+        if (usage.gpuTemperature >= 0) {
+            keep(usage.history[3], usage.gpuTemperature / 10.0f);
+        }
+        usage.measuredAt = NowSeconds();
+        AcquireSRWLockExclusive(&g_usageLock);
+        g_usage = usage;
+        ReleaseSRWLockExclusive(&g_usageLock);
+        PostMessage(watch.hwnd, WM_APP_USAGE, 0, 0);
+    }
+    return 0;
+}
+
+// What the processor, the memory or the GPU is doing, out of its item on the
+// pill: graphs of the last measures (moving along as new ones come), and the
+// figures in tiles.
+constexpr float kUsageWidth = 330;
+
+class UsagePanel : public Panel {
+   public:
+    enum class Kind { Cpu, Ram, Gpu };
+    void SetKind(Kind kind) {
+        m_kind = kind;
+        if (IsOpen()) {
+            Layout();
+            Render();
+        }
+    }
+    Kind GetKind() const { return m_kind; }
+    // New measures came.
+    void Refresh() {
+        if (IsOpen()) {
+            m_usage = GetUsage();
+            if (m_usage.measuredAt != m_shownAt) {
+                m_shownAt = m_usage.measuredAt;
+                m_shift = 1;
+            }
+            Layout();
+            StartIslandAnimation();
+        }
+    }
+
+   protected:
+    void Prepare(float scale) override {
+        if (scale != m_preparedScale) {
+            m_preparedScale = scale;
+            m_titleFormat = MakeFormat(L"Segoe UI Variable Text",
+                                       DWRITE_FONT_WEIGHT_SEMI_BOLD, 14 * scale,
+                                       DWRITE_TEXT_ALIGNMENT_LEADING);
+            m_labelFormat =
+                MakeFormat(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_NORMAL,
+                           11 * scale, DWRITE_TEXT_ALIGNMENT_LEADING);
+            m_valueFormat = MakeFormat(L"Segoe UI Variable Display",
+                                       DWRITE_FONT_WEIGHT_SEMI_BOLD, 17 * scale,
+                                       DWRITE_TEXT_ALIGNMENT_LEADING);
+            if (!m_tabular &&
+                SUCCEEDED(m_dwrite->CreateTypography(m_tabular.put()))) {
+                m_tabular->AddFontFeature(
+                    {DWRITE_FONT_FEATURE_TAG_TABULAR_FIGURES, 1});
+            }
+        }
+        m_usage = GetUsage();
+        Layout();
+    }
+
+    void OnOpen() override {
+        m_usage = GetUsage();
+        m_shownAt = m_usage.measuredAt;
+        m_shift = 0;
+        Layout();
+    }
+
+    bool AnimateContents(double dt) override {
+        // The graphs move along by one measure.
+        if (m_shift > 0) {
+            m_shift = std::max(0.0, m_shift - dt / 0.45);
+            return true;
+        }
+        return false;
+    }
+
+    void Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) override;
+
+   private:
+    struct Tile {
+        PCWSTR label;
+        std::wstring value;
+    };
+    std::vector<Tile> Tiles() const;
+
+    void Layout() {
+        const float s = m_scale;
+        const float width = std::round(kUsageWidth * s);
+        const float padding = std::round(14 * s);
+        float y = padding;
+        m_title = {padding, y, width - padding, y + std::round(22 * s)};
+        y += std::round(30 * s);
+        m_graphs.clear();
+        const float graph = std::round(62 * s);
+        const int graphs = m_kind == Kind::Gpu && !m_usage.history[3].empty()
+                               ? 2
+                               : 1;
+        for (int i = 0; i < graphs; i++) {
+            y += std::round(16 * s);
+            m_graphs.push_back({padding, y, width - padding, y + graph});
+            y += graph + std::round(8 * s);
+        }
+        const size_t tiles = Tiles().size();
+        const float tile = std::round(56 * s);
+        const float gap = std::round(8 * s);
+        m_tiles.clear();
+        const float half = (width - padding * 2 - gap) / 2;
+        for (size_t i = 0; i < tiles; i++) {
+            const float left = padding + (half + gap) * (i % 2);
+            m_tiles.push_back({std::round(left), y, std::round(left + half),
+                               y + tile});
+            if (i % 2 == 1 || i + 1 == tiles) {
+                y += tile + gap;
+            }
+        }
+        y += padding - gap;
+        m_size = {(LONG)width, (LONG)std::ceil(y)};
+    }
+
+    void DrawGraph(ID2D1RenderTarget* target,
+                   ID2D1SolidColorBrush* brush,
+                   const D2D1_RECT_F& rect,
+                   const std::vector<float>& values,
+                   float top,
+                   D2D1_COLOR_F color,
+                   PCWSTR label);
+
+    Kind m_kind = Kind::Cpu;
+    UsageDetails m_usage;
+    double m_shownAt = 0;
+    // How far the graphs still have to move along (1 to 0).
+    double m_shift = 0;
+    float m_preparedScale = 0;
+    winrt::com_ptr<IDWriteTextFormat> m_titleFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_labelFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_valueFormat;
+    winrt::com_ptr<IDWriteTypography> m_tabular;
+    D2D1_RECT_F m_title{};
+    std::vector<D2D1_RECT_F> m_graphs;
+    std::vector<D2D1_RECT_F> m_tiles;
+};
+
+// "6.3 GB", "414 MB".
+std::wstring BytesText(long long bytes) {
+    if (bytes < 0) {
+        return L"–";
+    }
+    WCHAR text[32];
+    if (bytes >= 1000LL * 1024 * 1024) {
+        swprintf_s(text, L"%.1f GB", bytes / (1024.0 * 1024 * 1024));
+    } else {
+        swprintf_s(text, L"%lld MB", bytes / (1024 * 1024));
+    }
+    return text;
+}
+
+std::vector<UsagePanel::Tile> UsagePanel::Tiles() const {
+    const UsageDetails& u = m_usage;
+    auto percent = [](int value) {
+        return value < 0 ? std::wstring(L"–")
+                         : std::to_wstring(value) + L"%";
+    };
+    auto mhz = [](int value) {
+        return value < 0 ? std::wstring(L"–")
+                         : std::to_wstring(value) + L" MHz";
+    };
+    switch (m_kind) {
+        case Kind::Cpu:
+            return {
+                {Tr(L"Usage", L"Uso"), percent(u.cpu)},
+                {Tr(L"Frequency", L"Frequência"), mhz(u.cpuMhz)},
+                {Tr(L"Cores / threads", L"Núcleos / threads"),
+                 std::to_wstring(u.cores) + L" / " + std::to_wstring(u.threads)},
+                {Tr(L"Base frequency", L"Frequência base"), mhz(u.cpuBaseMhz)},
+            };
+        case Kind::Ram:
+            return {
+                {Tr(L"In use", L"Em uso"), BytesText((long long)u.ramUsed)},
+                {Tr(L"Total", L"Total"), BytesText((long long)u.ramTotal)},
+                {Tr(L"Cached", L"Em cache"), BytesText((long long)u.ramCached)},
+                {Tr(L"Available", L"Disponível"),
+                 BytesText((long long)u.ramAvailable)},
+                {Tr(L"Committed", L"Confirmada"),
+                 BytesText((long long)u.commitUsed) + L" / " +
+                     BytesText((long long)u.commitLimit)},
+                {Tr(L"Utilization", L"Utilização"), percent(u.ram)},
+            };
+        case Kind::Gpu: {
+            std::vector<Tile> tiles{
+                {Tr(L"Usage", L"Uso"), percent(u.gpu)},
+                {Tr(L"Memory", L"Memória"),
+                 BytesText(u.vramUsed) +
+                     (u.vramTotal > 0 ? L" / " + BytesText(u.vramTotal)
+                                      : std::wstring())},
+            };
+            if (u.gpuTemperature >= 0) {
+                WCHAR text[16];
+                swprintf_s(text, L"%.0f °C", u.gpuTemperature / 10.0);
+                tiles.push_back({Tr(L"Temperature", L"Temperatura"), text});
+            }
+            if (u.gpuPower > 0) {
+                WCHAR text[16];
+                swprintf_s(text, L"%.0f%%", u.gpuPower / 10.0);
+                tiles.push_back({Tr(L"Power", L"Energia"), text});
+            }
+            if (u.gpuFan >= 0 && u.gpuTemperature >= 0) {
+                tiles.push_back({Tr(L"Fan", L"Ventoinha"),
+                                 std::to_wstring(u.gpuFan) + L" RPM"});
+            }
+            tiles.push_back(
+                {Tr(L"Shared memory", L"Memória compartilhada"),
+                 BytesText(u.sharedUsed) +
+                     (u.sharedTotal > 0 ? L" / " + BytesText(u.sharedTotal)
+                                        : std::wstring())});
+            return tiles;
+        }
+    }
+    return {};
+}
+
+void UsagePanel::DrawGraph(ID2D1RenderTarget* target,
+                           ID2D1SolidColorBrush* brush,
+                           const D2D1_RECT_F& rect,
+                           const std::vector<float>& values,
+                           float top,
+                           D2D1_COLOR_F color,
+                           PCWSTR label) {
+    const float s = m_scale;
+    brush->SetColor(Fg(0.5f));
+    target->DrawText(label, (UINT32)wcslen(label), m_labelFormat.get(),
+                     {rect.left, rect.top - std::round(17 * s), rect.right,
+                      rect.top},
+                     brush);
+    // A faint grid.
+    brush->SetColor(Fg(0.05f));
+    target->FillRectangle(rect, brush);
+    brush->SetColor(Fg(0.06f));
+    for (int i = 1; i < 4; i++) {
+        const float y = std::round(rect.top + (rect.bottom - rect.top) * i / 4);
+        target->FillRectangle({rect.left, y, rect.right, y + 1}, brush);
+    }
+    if (values.size() < 2) {
+        return;
+    }
+    winrt::com_ptr<ID2D1Factory> factory;
+    target->GetFactory(factory.put());
+    winrt::com_ptr<ID2D1PathGeometry> line;
+    winrt::com_ptr<ID2D1PathGeometry> area;
+    winrt::com_ptr<ID2D1GeometrySink> lineSink;
+    winrt::com_ptr<ID2D1GeometrySink> areaSink;
+    if (FAILED(factory->CreatePathGeometry(line.put())) ||
+        FAILED(factory->CreatePathGeometry(area.put())) ||
+        FAILED(line->Open(lineSink.put())) ||
+        FAILED(area->Open(areaSink.put()))) {
+        return;
+    }
+    // The newest at the right edge, the others a step apart each, sliding
+    // left as a new one comes.
+    const float step = (rect.right - rect.left) / (kUsageHistory - 1);
+    const float shift = (float)EaseInOutCubic(1 - m_shift) - 1;
+    auto point = [&](size_t i) {
+        const float x = rect.right -
+                        (values.size() - 1 - i + shift) * step;
+        const float y =
+            rect.bottom - (rect.bottom - rect.top) *
+                              std::clamp(values[i] / top, 0.0f, 1.0f);
+        return D2D1::Point2F(x, y);
+    };
+    lineSink->BeginFigure(point(0), D2D1_FIGURE_BEGIN_HOLLOW);
+    areaSink->BeginFigure({point(0).x, rect.bottom}, D2D1_FIGURE_BEGIN_FILLED);
+    areaSink->AddLine(point(0));
+    for (size_t i = 1; i < values.size(); i++) {
+        lineSink->AddLine(point(i));
+        areaSink->AddLine(point(i));
+    }
+    areaSink->AddLine({point(values.size() - 1).x, rect.bottom});
+    lineSink->EndFigure(D2D1_FIGURE_END_OPEN);
+    areaSink->EndFigure(D2D1_FIGURE_END_CLOSED);
+    lineSink->Close();
+    areaSink->Close();
+    target->PushAxisAlignedClip(rect, D2D1_ANTIALIAS_MODE_ALIASED);
+    brush->SetColor(D2D1::ColorF(color.r, color.g, color.b, 0.18f));
+    target->FillGeometry(area.get(), brush);
+    brush->SetColor(color);
+    target->DrawGeometry(line.get(), brush, std::max(1.0f, 1.5f * s));
+    target->PopAxisAlignedClip();
+}
+
+void UsagePanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
+    if (!m_titleFormat || !m_labelFormat || !m_valueFormat) {
+        return;
+    }
+    const float s = m_scale;
+    std::wstring title = m_kind == Kind::Cpu ? Tr(L"Processor", L"Processador")
+                         : m_kind == Kind::Ram
+                             ? Tr(L"Memory", L"Memória")
+                             : (m_usage.gpuName.empty() ? std::wstring(L"GPU")
+                                                        : m_usage.gpuName);
+    brush->SetColor(Fg(0.95f));
+    target->DrawText(title.c_str(), (UINT32)title.size(), m_titleFormat.get(),
+                     m_title, brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    const D2D1_COLOR_F blue = D2D1::ColorF(0.35f, 0.62f, 1.0f, 1);
+    if (!m_graphs.empty()) {
+        DrawGraph(target, brush, m_graphs[0],
+                  m_usage.history[m_kind == Kind::Cpu   ? 0
+                                  : m_kind == Kind::Ram ? 1
+                                                        : 2],
+                  100, blue, Tr(L"Utilization", L"Utilização"));
+    }
+    if (m_graphs.size() > 1) {
+        DrawGraph(target, brush, m_graphs[1], m_usage.history[3], 100,
+                  D2D1::ColorF(1.0f, 0.45f, 0.2f, 1),
+                  Tr(L"Temperature", L"Temperatura"));
+    }
+    const auto tiles = Tiles();
+    for (size_t i = 0; i < tiles.size() && i < m_tiles.size(); i++) {
+        const D2D1_RECT_F& rect = m_tiles[i];
+        const float radius = std::round(10 * s);
+        brush->SetColor(Fg(0.07f));
+        target->FillRoundedRectangle({rect, radius, radius}, brush);
+        const float inner = std::round(12 * s);
+        // Left in the left column, right in the right one.
+        const auto alignment = i % 2 ? DWRITE_TEXT_ALIGNMENT_TRAILING
+                                     : DWRITE_TEXT_ALIGNMENT_LEADING;
+        m_labelFormat->SetTextAlignment(alignment);
+        m_valueFormat->SetTextAlignment(alignment);
+        // Smaller when too long for the tile, never cut.
+        const float room = rect.right - rect.left - inner * 2;
+        auto fitted = [&](const std::wstring& text, IDWriteTextFormat* format,
+                          float height, bool figures) {
+            winrt::com_ptr<IDWriteTextLayout> layout;
+            if (FAILED(m_dwrite->CreateTextLayout(
+                    text.c_str(), (UINT32)text.size(), format, room, height,
+                    layout.put()))) {
+                return layout;
+            }
+            const DWRITE_TEXT_RANGE all{0, (UINT32)text.size()};
+            if (figures && m_tabular) {
+                layout->SetTypography(m_tabular.get(), all);
+            }
+            layout->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+            DWRITE_TEXT_METRICS metrics{};
+            layout->GetMetrics(&metrics);
+            if (metrics.widthIncludingTrailingWhitespace > room) {
+                layout->SetFontSize(
+                    format->GetFontSize() *
+                        std::max(0.55f,
+                                 room / metrics.widthIncludingTrailingWhitespace),
+                    all);
+            }
+            return layout;
+        };
+        const std::wstring label = tiles[i].label;
+        if (auto layout = fitted(label, m_labelFormat.get(),
+                                 std::round(16 * s), false)) {
+            brush->SetColor(Fg(0.55f));
+            target->DrawTextLayout({rect.left + inner,
+                                    rect.top + std::round(8 * s)},
+                                   layout.get(), brush);
+        }
+        if (auto layout = fitted(tiles[i].value, m_valueFormat.get(),
+                                 std::round(24 * s), true)) {
+            brush->SetColor(Fg(0.95f));
+            target->DrawTextLayout({rect.left + inner,
+                                    rect.top + std::round(25 * s)},
+                                   layout.get(), brush);
+        }
+        m_labelFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+        m_valueFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Notes, tasks and keyboard shortcuts: the user's own, kept by the mod (a
+// value each, a line per entry, its fields tab-separated with tabs, new
+// lines and backslashes escaped), in panels out of their items on the pill
+// or their buttons in the control center.
+
+std::wstring EscapeField(const std::wstring& text) {
+    std::wstring escaped;
+    for (WCHAR c : text) {
+        if (c == L'\\') {
+            escaped += L"\\\\";
+        } else if (c == L'\n') {
+            escaped += L"\\n";
+        } else if (c == L'\t') {
+            escaped += L"\\t";
+        } else if (c != L'\r') {
+            escaped += c;
+        }
+    }
+    return escaped;
+}
+
+std::wstring UnescapeField(const std::wstring& text) {
+    std::wstring plain;
+    for (size_t i = 0; i < text.size(); i++) {
+        if (text[i] == L'\\' && i + 1 < text.size()) {
+            const WCHAR next = text[++i];
+            plain += next == L'n' ? L'\n' : next == L't' ? L'\t' : next;
+        } else {
+            plain += text[i];
+        }
+    }
+    return plain;
+}
+
+// The entries of a value, each with `fields` fields.
+std::vector<std::vector<std::wstring>> LoadRecords(
+    PCWSTR name,
+    size_t fields,
+    size_t maxChars = 256 * 1024) {
+    std::vector<std::vector<std::wstring>> records;
+    std::vector<WCHAR> value(maxChars);
+    Wh_GetStringValue(name, value.data(), value.size());
+    for (PCWSTR line = value.data(); *line;) {
+        PCWSTR end = wcschr(line, L'\n');
+        const std::wstring text =
+            end ? std::wstring(line, end) : std::wstring(line);
+        line = end ? end + 1 : line + wcslen(line);
+        std::vector<std::wstring> record;
+        size_t at = 0;
+        while (record.size() + 1 < fields) {
+            const size_t tab = text.find(L'\t', at);
+            if (tab == std::wstring::npos) {
+                break;
+            }
+            record.push_back(UnescapeField(text.substr(at, tab - at)));
+            at = tab + 1;
+        }
+        if (record.size() + 1 == fields) {
+            record.push_back(UnescapeField(text.substr(at)));
+            records.push_back(std::move(record));
+        }
+    }
+    return records;
+}
+
+void SaveRecords(PCWSTR name,
+                 const std::vector<std::vector<std::wstring>>& records) {
+    std::wstring value;
+    for (const auto& record : records) {
+        for (size_t i = 0; i < record.size(); i++) {
+            value += (i ? L"\t" : L"") + EscapeField(record[i]);
+        }
+        value += L"\n";
+    }
+    Wh_SetStringValue(name, value.c_str());
+}
+
+// Now, as a number that also serves as an ID.
+long long NowStamp() {
+    FILETIME now;
+    GetSystemTimeAsFileTime(&now);
+    return ((long long)now.dwHighDateTime << 32) | now.dwLowDateTime;
+}
+
+// "06/10/2026 17:38", in the user's format.
+std::wstring StampText(long long stamp) {
+    FILETIME utc{(DWORD)stamp, (DWORD)(stamp >> 32)};
+    FILETIME local;
+    SYSTEMTIME time;
+    if (!FileTimeToLocalFileTime(&utc, &local) ||
+        !FileTimeToSystemTime(&local, &time)) {
+        return {};
+    }
+    WCHAR date[64] = L"";
+    WCHAR clock[32] = L"";
+    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, DATE_SHORTDATE, &time, nullptr,
+                    date, ARRAYSIZE(date), nullptr);
+    GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, &time, nullptr,
+                    clock, ARRAYSIZE(clock));
+    return std::wstring(date) + L"  " + clock;
+}
+
+
+constexpr WCHAR kGlyphNote = 0xE70B;
+constexpr WCHAR kGlyphTasks = 0xE9D5;
+constexpr WCHAR kGlyphKeyboardShortcuts = 0xE765;
+constexpr WCHAR kGlyphCopy = 0xE8C8;
+constexpr WCHAR kGlyphPencil = 0xE70F;
+constexpr WCHAR kGlyphAdd = 0xE710;
+
+// A panel with text boxes: their look, their caret (blinking a few seconds
+// after typing, then steady, so nothing is drawn while nothing happens), and
+// scrolling lists.
+class EditingPanel : public Panel {
+   protected:
+    void PrepareFormats(float scale) {
+        if (scale == m_preparedScale) {
+            return;
+        }
+        m_preparedScale = scale;
+        m_titleFormat = MakeFormat(L"Segoe UI Variable Text",
+                                   DWRITE_FONT_WEIGHT_SEMI_BOLD, 14 * scale,
+                                   DWRITE_TEXT_ALIGNMENT_LEADING);
+        m_textFormat =
+            MakeFormat(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_NORMAL,
+                       13 * scale, DWRITE_TEXT_ALIGNMENT_LEADING);
+        m_boldFormat =
+            MakeFormat(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_SEMI_BOLD,
+                       13 * scale, DWRITE_TEXT_ALIGNMENT_LEADING);
+        m_smallFormat =
+            MakeFormat(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_NORMAL,
+                       11 * scale, DWRITE_TEXT_ALIGNMENT_LEADING);
+        m_buttonFormat = MakeFormat(L"Segoe UI Variable Text",
+                                    DWRITE_FONT_WEIGHT_SEMI_BOLD, 12 * scale);
+        m_iconFormat = MakeFormat(L"Segoe Fluent Icons",
+                                  DWRITE_FONT_WEIGHT_NORMAL, 13 * scale);
+        m_bigIconFormat = MakeFormat(L"Segoe Fluent Icons",
+                                     DWRITE_FONT_WEIGHT_NORMAL, 15 * scale);
+    }
+    bool Ready() const {
+        return m_titleFormat && m_textFormat && m_boldFormat && m_smallFormat &&
+               m_buttonFormat && m_iconFormat && m_bigIconFormat;
+    }
+
+    // The caret blinks a moment after typing (`moving`: something else
+    // moves too, drawn at full rate then).
+    bool AnimateTyping(bool typing, bool moving) {
+        const bool blinking = typing && NowSeconds() - g_lastTyped < 5;
+        m_idleMotion = blinking && !moving;
+        return blinking || moving;
+    }
+
+    // A box: its frame (blue while typing in it), what's typed (wrapped,
+    // following the caret) or its hint, and the caret.
+    void DrawTextBox(ID2D1RenderTarget* target,
+                     ID2D1SolidColorBrush* brush,
+                     const D2D1_RECT_F& box,
+                     const std::wstring& text,
+                     TextEdit& edit,
+                     PCWSTR hint,
+                     bool focused) {
+        const float s = m_scale;
+        const float radius = std::round(9 * s);
+        brush->SetColor(Fg(0.07f));
+        target->FillRoundedRectangle({box, radius, radius}, brush);
+        brush->SetColor(focused ? D2D1::ColorF(0.04f, 0.52f, 1.0f, 0.9f)
+                                : Fg(0.12f));
+        target->DrawRoundedRectangle(
+            {{box.left + 0.5f, box.top + 0.5f, box.right - 0.5f,
+              box.bottom - 0.5f},
+             radius,
+             radius},
+            brush, focused ? 1.5f : 1.0f);
+        const float line = std::round(18 * s);
+        const float inner = std::round(10 * s);
+        const float padTop = std::min(std::round(8 * s),
+                                      std::round((box.bottom - box.top - line) /
+                                                 2));
+        const D2D1_RECT_F textRect{box.left + inner, box.top + padTop,
+                                   box.right - inner, box.bottom - padTop};
+        float caretX = textRect.left;
+        float caretTop = textRect.top;
+        float caretHeight = line;
+        if (text.empty()) {
+            brush->SetColor(Fg(0.4f));
+            target->DrawText(hint, (UINT32)wcslen(hint), m_textFormat.get(),
+                             {textRect.left, textRect.top, textRect.right,
+                              textRect.top + line},
+                             brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+            edit.layout = nullptr;
+            edit.origin = {textRect.left, textRect.top};
+        } else {
+            const WrappedField wrapped =
+                LayOutEdit(m_dwrite, m_textFormat.get(), text, edit,
+                           textRect.right - textRect.left,
+                           textRect.bottom - textRect.top, line);
+            if (wrapped.layout) {
+                target->PushAxisAlignedClip(textRect,
+                                            D2D1_ANTIALIAS_MODE_ALIASED);
+                DrawTextSelection(target, brush, wrapped.layout.get(),
+                                  {textRect.left, textRect.top - wrapped.scroll},
+                                  edit);
+                brush->SetColor(Fg(0.95f));
+                target->DrawTextLayout(
+                    {textRect.left, textRect.top - wrapped.scroll},
+                    wrapped.layout.get(), brush,
+                    D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+                target->PopAxisAlignedClip();
+                caretX = textRect.left + wrapped.caretX;
+                caretTop = textRect.top - wrapped.scroll + wrapped.caretY;
+                caretHeight = wrapped.caretHeight;
+                edit.origin = {textRect.left, textRect.top - wrapped.scroll};
+            }
+        }
+        if (focused && caretTop >= textRect.top - 1 &&
+            caretTop + caretHeight <= textRect.bottom + 1) {
+            brush->SetColor(NowSeconds() - g_lastTyped < 5
+                                ? CaretColor()
+                                : D2D1::ColorF(0.04f, 0.52f, 1.0f, 1));
+            target->FillRectangle({caretX + 1, caretTop + 1, caretX + 2.5f,
+                                   caretTop + caretHeight - 1},
+                                  brush);
+        }
+    }
+
+    // A rounded button: blue when it's the main one, lighter under the
+    // mouse.
+    void DrawButton(ID2D1RenderTarget* target,
+                    ID2D1SolidColorBrush* brush,
+                    const D2D1_RECT_F& rect,
+                    PCWSTR text,
+                    bool main,
+                    bool hover,
+                    float opacity = 1) {
+        const float radius = std::round(9 * m_scale);
+        const float lit = Hover(rect, hover);
+        if (main) {
+            brush->SetColor(
+                D2D1::ColorF(0.04f, 0.52f, 1.0f, (1.0f - 0.15f * lit) * opacity));
+        } else {
+            brush->SetColor(Fg((0.1f + 0.07f * lit) * opacity));
+        }
+        target->FillRoundedRectangle({rect, radius, radius}, brush);
+        brush->SetColor(main ? D2D1::ColorF(1, 1, 1, opacity)
+                             : Fg(0.9f * opacity));
+        target->DrawText(text, (UINT32)wcslen(text), m_buttonFormat.get(), rect,
+                         brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    }
+
+    // A small icon button (copy, edit, delete), lit under the mouse.
+    void DrawIconButton(ID2D1RenderTarget* target,
+                        ID2D1SolidColorBrush* brush,
+                        const D2D1_RECT_F& rect,
+                        WCHAR glyph,
+                        bool hover,
+                        float rest = 0.45f) {
+        const float lit = Hover(rect, hover);
+        if (lit > 0.01f) {
+            const float radius = (rect.bottom - rect.top) / 2;
+            brush->SetColor(Fg(0.1f * lit));
+            target->FillRoundedRectangle({rect, radius, radius}, brush);
+        }
+        brush->SetColor(Fg(rest + (0.95f - rest) * lit));
+        target->DrawText(&glyph, 1, m_iconFormat.get(), rect, brush);
+    }
+
+    // Rows growing in (added) and shrinking away (removed), fading.
+    struct RowMotion {
+        long long id;
+        double room;
+        double velocity;
+        bool leaving;
+    };
+    float RowRoom(long long id) const {
+        for (const auto& motion : m_rowMotions) {
+            if (motion.id == id) {
+                return (float)std::clamp(motion.room, 0.0, 1.0);
+            }
+        }
+        return 1;
+    }
+    bool RowLeaving(long long id) const {
+        return std::any_of(
+            m_rowMotions.begin(), m_rowMotions.end(),
+            [id](const RowMotion& motion) { return motion.id == id && motion.leaving; });
+    }
+    void RowArrives(long long id) {
+        m_rowMotions.push_back({id, 0, 0, false});
+        StartIslandAnimation();
+    }
+    void RowLeaves(long long id) {
+        for (auto& motion : m_rowMotions) {
+            if (motion.id == id) {
+                motion.leaving = true;
+                StartIslandAnimation();
+                return;
+            }
+        }
+        m_rowMotions.push_back({id, 1, 0, true});
+        StartIslandAnimation();
+    }
+    // Moves them; the ones gone out are given back (to remove for good).
+    bool AnimateRows(double dt, std::vector<long long>* gone) {
+        bool moving = false;
+        for (size_t i = 0; i < m_rowMotions.size();) {
+            RowMotion& motion = m_rowMotions[i];
+            const bool moves = SpringTowards(
+                motion.room, motion.velocity, motion.leaving ? 0 : 1,
+                motion.leaving ? 0.3 : 0.42, dt,
+                motion.leaving ? 1.0 : kBounceDamping);
+            if (moves) {
+                moving = true;
+                i++;
+                continue;
+            }
+            if (motion.leaving) {
+                gone->push_back(motion.id);
+            }
+            m_rowMotions.erase(m_rowMotions.begin() + i);
+        }
+        return moving;
+    }
+    std::vector<RowMotion> m_rowMotions;
+
+    // The most a list panel takes: the room there, up to about two thirds
+    // of the screen (longer lists scroll).
+    float ListMaxHeight() const {
+        const float screen = (float)(m_monitorRect.bottom - m_monitorRect.top);
+        return std::min(MaxHeight(),
+                        std::max(std::round(320 * m_scale), screen * 0.62f));
+    }
+    // A rect in the list (its own coordinates) on the panel.
+    D2D1_RECT_F InList(const D2D1_RECT_F& rect) const {
+        const float dy = m_listViewport.top - m_scroll.Offset();
+        return {rect.left, rect.top + dy, rect.right, rect.bottom + dy};
+    }
+    // A point on the panel, in the list (when it's over it).
+    bool ListPoint(POINT pt, POINT* inList) const {
+        if (!PointInRect(pt, m_listViewport)) {
+            return false;
+        }
+        *inList = {pt.x, (LONG)(pt.y - m_listViewport.top + m_scroll.Offset())};
+        return true;
+    }
+
+    float m_preparedScale = 0;
+    winrt::com_ptr<IDWriteTextFormat> m_titleFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_textFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_boldFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_smallFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_buttonFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_iconFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_bigIconFormat;
+    D2D1_RECT_F m_listViewport{};
+    SmoothScroll m_scroll;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// Notes: a box to write one (Enter makes a new line, Ctrl+Enter adds it),
+// and the notes under it, newest first: the pencil (or a click) edits one,
+// the copy button copies it, the "x" deletes it.
+
+struct Note {
+    long long id = 0;
+    long long stamp = 0;
+    std::wstring text;
+};
+constexpr size_t kMaxNotes = 100;
+constexpr size_t kMaxNoteLength = 2000;
+// A topic's mark, at the start of a line.
+constexpr WCHAR kTopicMark[] = L"\u2022 ";
+constexpr float kNotesWidth = 440;
+// The lines of a note shown in the list.
+constexpr int kNoteLinesShown = 3;
+
+class NotesPanel : public EditingPanel {
+   protected:
+    void Prepare(float scale) override {
+        PrepareFormats(scale);
+        Load();
+        Layout();
+    }
+
+    void OnOpen() override {
+        m_hover = {};
+        m_scroll.Reset();
+        m_edit.caret = m_text.size();
+        g_lastTyped = NowSeconds();
+        Layout();
+    }
+
+    void Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) override;
+
+    bool OnMouseMove(POINT pt) override {
+        const Hit hit = HitTest(pt);
+        if (hit == m_hover) {
+            return false;
+        }
+        m_hover = hit;
+        return true;
+    }
+    bool OnMouseLeave() override {
+        m_hover = {};
+        return true;
+    }
+    bool OnMouseDown(POINT pt) override {
+        if (PointInRect(pt, m_box)) {
+            EditTextClick(m_text, m_edit, pt);
+            return true;
+        }
+        return false;
+    }
+    bool OnMouseUp(POINT pt) override {
+        const Hit hit = HitTest(pt);
+        switch (hit.part) {
+            case Part::Add:
+                Add();
+                return true;
+            case Part::Cancel:
+                StopEditing();
+                return true;
+            case Part::Topic:
+                ToggleTopic();
+                return true;
+            case Part::Copy:
+                if (const Note* note = Find(hit.id)) {
+                    CopyTextToClipboard(m_hwnd, note->text);
+                    m_copiedId = hit.id;
+                    m_copiedAt = NowSeconds();
+                    StartIslandAnimation();
+                }
+                return true;
+            case Part::Delete:
+                // It shrinks away, then goes.
+                if (m_editingId == hit.id) {
+                    StopEditing();
+                }
+                RowLeaves(hit.id);
+                return true;
+            case Part::Row:
+            case Part::Edit:
+                if (const Note* note = Find(hit.id);
+                    note && !RowLeaving(hit.id)) {
+                    m_editingId = note->id;
+                    m_text = note->text;
+                    m_edit.Reset();
+                    m_edit.caret = m_text.size();
+                    g_lastTyped = NowSeconds();
+                    Layout();
+                }
+                return true;
+            default:
+                return false;
+        }
+    }
+    bool OnWheel(int delta) override {
+        POINT pt;
+        GetCursorPos(&pt);
+        ScreenToClient(m_hwnd, &pt);
+        pt.x -= m_contentOffset.x;
+        pt.y -= m_contentOffset.y;
+        if (PointInRect(pt, m_box)) {
+            EditTextWheel(m_edit, delta);
+            return true;
+        }
+        return m_scroll.Wheel(delta, std::round(60 * m_scale));
+    }
+    bool OnKey(WPARAM key) override {
+        if (key == VK_ESCAPE && m_editingId) {
+            StopEditing();
+            return true;
+        }
+        return EditTextKey(m_text, m_edit, key);
+    }
+    bool OnChar(WCHAR c) override {
+        // Enter: a new line (going on with a topic, or ending the topics on
+        // an empty one); Ctrl+Enter: added (or saved).
+        if (c == 0x0A) {
+            Add();
+            return true;
+        }
+        if (c == 0x1B) {
+            return false;
+        }
+        if (c == L'\r' && !m_edit.Selecting()) {
+            const size_t start = LineStart();
+            const std::wstring mark = kTopicMark;
+            if (m_text.compare(start, mark.size(), mark) == 0) {
+                if (m_edit.caret == start + mark.size() &&
+                    (start + mark.size() == m_text.size() ||
+                     m_text[start + mark.size()] == L'\n')) {
+                    m_text.erase(start, mark.size());
+                    m_edit.caret = start;
+                } else {
+                    EditTextChar(m_text, m_edit, L'\n', kMaxNoteLength,
+                                 m_hwnd);
+                    for (WCHAR part : mark) {
+                        EditTextChar(m_text, m_edit, part, kMaxNoteLength,
+                                     m_hwnd);
+                    }
+                }
+                Layout();
+                return true;
+            }
+        }
+        const bool taken = EditTextChar(m_text, m_edit, c == L'\r' ? L'\n' : c,
+                                        kMaxNoteLength, m_hwnd);
+        if (taken) {
+            Layout();
+        }
+        return taken;
+    }
+    bool AnimateContents(double dt) override {
+        const bool scrolling = m_scroll.Animate(dt);
+        const bool copied = m_copiedId && NowSeconds() - m_copiedAt < 1.4;
+        if (!copied) {
+            m_copiedId = 0;
+        }
+        std::vector<long long> gone;
+        const bool rows = AnimateRows(dt, &gone);
+        if (!gone.empty()) {
+            std::erase_if(m_notes, [&](const Note& note) {
+                return std::find(gone.begin(), gone.end(), note.id) !=
+                       gone.end();
+            });
+            Save();
+        }
+        if (rows || !gone.empty()) {
+            Layout();
+        }
+        return AnimateTyping(true, scrolling || copied || rows);
+    }
+
+   private:
+    enum class Part { None, Add, Cancel, Topic, Row, Edit, Copy, Delete };
+
+    // Where the caret's line starts.
+    size_t LineStart() const {
+        const size_t caret = std::min(m_edit.caret, m_text.size());
+        const size_t newLine = caret ? m_text.rfind(L'\n', caret - 1)
+                                     : std::wstring::npos;
+        return newLine == std::wstring::npos ? 0 : newLine + 1;
+    }
+    // The caret's line becomes a topic (or stops being one).
+    void ToggleTopic() {
+        m_edit.anchor = std::wstring::npos;
+        const size_t start = LineStart();
+        const std::wstring mark = kTopicMark;
+        if (m_text.compare(start, mark.size(), mark) == 0) {
+            m_text.erase(start, mark.size());
+            m_edit.caret = m_edit.caret >= start + mark.size()
+                               ? m_edit.caret - mark.size()
+                               : start;
+        } else if (m_text.size() + mark.size() <= kMaxNoteLength) {
+            m_text.insert(start, mark);
+            m_edit.caret += mark.size();
+        }
+        m_edit.follow = true;
+        g_lastTyped = NowSeconds();
+        Layout();
+    }
+    struct Hit {
+        Part part = Part::None;
+        long long id = 0;
+        bool operator==(const Hit& other) const {
+            return part == other.part && id == other.id;
+        }
+    };
+    struct Row {
+        long long id;
+        D2D1_RECT_F rect;
+        D2D1_RECT_F edit;
+        D2D1_RECT_F copy;
+        D2D1_RECT_F remove;
+    };
+
+    void Load() {
+        if (m_loaded) {
+            return;
+        }
+        m_loaded = true;
+        // (Up to 100 notes of 2000 characters, line breaks written as two.)
+        for (const auto& record : LoadRecords(L"notes", 3, 512 * 1024)) {
+            m_notes.push_back({_wtoi64(record[0].c_str()),
+                               _wtoi64(record[1].c_str()), record[2]});
+        }
+    }
+    void Save() {
+        std::vector<std::vector<std::wstring>> records;
+        for (const auto& note : m_notes) {
+            records.push_back({std::to_wstring(note.id),
+                               std::to_wstring(note.stamp), note.text});
+        }
+        SaveRecords(L"notes", records);
+    }
+    const Note* Find(long long id) const {
+        for (const auto& note : m_notes) {
+            if (note.id == id) {
+                return &note;
+            }
+        }
+        return nullptr;
+    }
+    void Add() {
+        // Nothing but spaces: nothing to keep.
+        if (m_text.find_first_not_of(L" \n\t") == std::wstring::npos) {
+            return;
+        }
+        if (m_editingId) {
+            for (auto& note : m_notes) {
+                if (note.id == m_editingId) {
+                    note.text = m_text;
+                    note.stamp = NowStamp();
+                }
+            }
+            std::erase_if(m_lineCounts, [&](const auto& entry) {
+                return entry.first == m_editingId;
+            });
+        } else {
+            if (m_notes.size() >= kMaxNotes) {
+                m_notes.pop_back();
+            }
+            const long long now = NowStamp();
+            m_notes.insert(m_notes.begin(), {now, now, m_text});
+            RowArrives(now);
+        }
+        Save();
+        m_editingId = 0;
+        m_text.clear();
+        m_edit.Reset();
+        m_scroll.Reset();
+        Layout();
+    }
+    void StopEditing() {
+        m_editingId = 0;
+        m_text.clear();
+        m_edit.Reset();
+        Layout();
+    }
+
+    void Layout() {
+        const float s = m_scale;
+        const float width = std::round(kNotesWidth * s);
+        const float padding = std::round(12 * s);
+        const float gap = std::round(8 * s);
+        float y = padding;
+        m_header = {padding + std::round(4 * s), y, width - padding,
+                    y + std::round(26 * s)};
+        const float header = std::round(28 * s);
+        // "Topics", as wide as its icon and name.
+        float topicWidth = std::round(92 * s);
+        {
+            PCWSTR topics = Tr(L"Topics", L"Tópicos");
+            winrt::com_ptr<IDWriteTextLayout> measure;
+            if (m_smallFormat &&
+                SUCCEEDED(m_dwrite->CreateTextLayout(
+                    topics, (UINT32)wcslen(topics), m_smallFormat.get(), 1000,
+                    header, measure.put()))) {
+                DWRITE_TEXT_METRICS metrics{};
+                measure->GetMetrics(&metrics);
+                topicWidth = std::round(28 * s) + std::ceil(metrics.width) +
+                             std::round(12 * s);
+            }
+        }
+        m_topic = {width - padding - topicWidth, y, width - padding,
+                   y + header};
+        y += std::round(32 * s);
+        const float line = std::round(18 * s);
+        const float written =
+            line * std::max(1, WrappedLineCount(
+                                   m_dwrite, m_textFormat.get(),
+                                   m_text.empty() ? std::wstring(L" ") : m_text,
+                                   width - padding * 2 - std::round(20 * s),
+                                   line)) +
+            std::round(16 * s) + line;
+        const float most = std::max(
+            std::round(112 * s),
+            std::min(ListMaxHeight() * 0.45f,
+                     ListMaxHeight() - y - std::round(170 * s)));
+        const float box = std::clamp(written, std::round(112 * s), most);
+        m_box = {padding, y, width - padding, y + box};
+        y += box;
+        // How long it is, of the most it can be.
+        m_counter = {padding, y + std::round(2 * s),
+                     width - padding - std::round(4 * s),
+                     y + std::round(18 * s)};
+        y += std::round(18 * s) + std::round(4 * s);
+        const float button = std::round(32 * s);
+        if (m_editingId) {
+            const float half = std::floor((width - padding * 2 - gap) / 2);
+            m_cancel = {padding, y, padding + half, y + button};
+            m_add = {width - padding - half, y, width - padding, y + button};
+        } else {
+            m_cancel = {};
+            m_add = {padding, y, width - padding, y + button};
+        }
+        y += button + gap;
+        // The notes, scrolling when there are many: each as tall as its
+        // first lines (as they're shown), growing in and shrinking away.
+        m_rows.clear();
+        const float icon = std::round(28 * s);
+        const float textWidth =
+            width - padding * 2 - icon * 2 - std::round(18 * s);
+        float listY = 0;
+        for (const auto& note : m_notes) {
+            int lines = 1;
+            for (const auto& [id, count] : m_lineCounts) {
+                if (id == note.id) {
+                    lines = count;
+                }
+            }
+            if (std::none_of(m_lineCounts.begin(), m_lineCounts.end(),
+                             [&](const auto& entry) {
+                                 return entry.first == note.id;
+                             })) {
+                lines = std::min(
+                    kNoteLinesShown,
+                    WrappedLineCount(m_dwrite, m_textFormat.get(), note.text,
+                                     textWidth, line));
+                m_lineCounts.push_back({note.id, lines});
+            }
+            const float room = RowRoom(note.id);
+            const float row =
+                std::max(std::round(30 * s) + line * std::max(lines, 1),
+                         icon * 2 + std::round(10 * s)) *
+                room;
+            const D2D1_RECT_F rect{padding, listY, width - padding,
+                                   listY + row};
+            const float middle = rect.top + std::round(19 * s);
+            m_rows.push_back(
+                {note.id, rect,
+                 {rect.left + std::round(4 * s), middle - icon / 2,
+                  rect.left + std::round(4 * s) + icon, middle + icon / 2},
+                 {rect.right - icon - std::round(4 * s),
+                  rect.top + std::round(3 * s), rect.right - std::round(4 * s),
+                  rect.top + std::round(3 * s) + icon},
+                 {rect.right - icon - std::round(4 * s),
+                  rect.top + std::round(3 * s) + icon,
+                  rect.right - std::round(4 * s),
+                  rect.top + std::round(3 * s) + icon * 2}});
+            listY += row + std::round(6 * s) * room;
+        }
+        const float content = m_rows.empty() ? std::round(40 * s)
+                                              : listY - std::round(6 * s);
+        const float room = std::max(std::round(80 * s),
+                                    ListMaxHeight() - y - padding);
+        const float viewport = std::min(content, room);
+        m_listViewport = {0, y, width, y + viewport};
+        m_scroll.SetSizes(viewport, content);
+        y += viewport + padding;
+        m_size = {(LONG)width, (LONG)std::ceil(y)};
+    }
+
+    // A note's first lines laid out, and when it was written, made once a
+    // version (scrolling only moves them).
+    struct NoteView {
+        long long id;
+        long long stamp;
+        float width;
+        float scale;
+        std::wstring when;
+        winrt::com_ptr<IDWriteTextLayout> layout;
+    };
+    const NoteView& ViewOf(const Note& note, float width) {
+        for (auto& view : m_noteViews) {
+            if (view.id == note.id) {
+                if (view.stamp == note.stamp && view.width == width &&
+                    view.scale == m_scale) {
+                    return view;
+                }
+                view = MakeView(note, width);
+                return view;
+            }
+        }
+        if (m_noteViews.size() > kMaxNotes * 2) {
+            m_noteViews.clear();
+        }
+        return m_noteViews.emplace_back(MakeView(note, width));
+    }
+    NoteView MakeView(const Note& note, float width) {
+        NoteView view{note.id, note.stamp, width, m_scale,
+                      StampText(note.stamp), nullptr};
+        const float line = std::round(18 * m_scale);
+        view.layout = WrappedLayout(m_dwrite, m_textFormat.get(), note.text,
+                                    width, line * kNoteLinesShown, line);
+        if (view.layout) {
+            const DWRITE_TRIMMING trimming{
+                DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
+            winrt::com_ptr<IDWriteInlineObject> ellipsis;
+            m_dwrite->CreateEllipsisTrimmingSign(m_textFormat.get(),
+                                                 ellipsis.put());
+            view.layout->SetTrimming(&trimming, ellipsis.get());
+        }
+        return view;
+    }
+    std::vector<NoteView> m_noteViews;
+
+    Hit HitTest(POINT pt) const {
+        if (PointInRect(pt, m_add)) {
+            return {Part::Add};
+        }
+        if (PointInRect(pt, m_cancel)) {
+            return {Part::Cancel};
+        }
+        if (PointInRect(pt, m_topic)) {
+            return {Part::Topic};
+        }
+        POINT inList;
+        if (!ListPoint(pt, &inList)) {
+            return {};
+        }
+        for (const auto& row : m_rows) {
+            if (!PointInRect(inList, row.rect)) {
+                continue;
+            }
+            if (PointInRect(inList, row.copy)) {
+                return {Part::Copy, row.id};
+            }
+            if (PointInRect(inList, row.remove)) {
+                return {Part::Delete, row.id};
+            }
+            if (PointInRect(inList, row.edit)) {
+                return {Part::Edit, row.id};
+            }
+            return {Part::Row, row.id};
+        }
+        return {};
+    }
+
+    bool m_loaded = false;
+    std::vector<Note> m_notes;
+    // How many lines each note shows (measured once a version).
+    std::vector<std::pair<long long, int>> m_lineCounts;
+    std::wstring m_text;
+    TextEdit m_edit;
+    long long m_editingId = 0;
+    long long m_copiedId = 0;
+    double m_copiedAt = 0;
+    Hit m_hover;
+    D2D1_RECT_F m_header{}, m_box{}, m_add{}, m_cancel{}, m_topic{},
+        m_counter{};
+    std::vector<Row> m_rows;
+};
+
+void NotesPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
+    if (!Ready()) {
+        return;
+    }
+    const float s = m_scale;
+    // The note icon, the title and how many.
+    brush->SetColor(D2D1::ColorF(1.0f, 0.8f, 0.25f, 1));
+    target->DrawText(&kGlyphNote, 1, m_bigIconFormat.get(),
+                     {m_header.left - std::round(4 * s), m_header.top,
+                      m_header.left + std::round(20 * s), m_header.bottom},
+                     brush);
+    std::wstring title = Tr(L"Notes", L"Anotações");
+    if (!m_notes.empty()) {
+        title += L"  ·  " + std::to_wstring(m_notes.size());
+    }
+    brush->SetColor(Fg(0.95f));
+    target->DrawText(title.c_str(), (UINT32)title.size(), m_titleFormat.get(),
+                     {m_header.left + std::round(24 * s), m_header.top,
+                      m_header.right, m_header.bottom},
+                     brush);
+    // Topics: the caret's line gets a "•" (Enter goes on with them).
+    {
+        const float lit = Hover(m_topic, m_hover.part == Part::Topic);
+        const float radius = (m_topic.bottom - m_topic.top) / 2;
+        brush->SetColor(Fg(0.08f + 0.08f * lit));
+        target->FillRoundedRectangle({m_topic, radius, radius}, brush);
+        const WCHAR list = 0xE8FD;
+        brush->SetColor(Fg(0.9f));
+        target->DrawText(&list, 1, m_iconFormat.get(),
+                         {m_topic.left + std::round(4 * s), m_topic.top,
+                          m_topic.left + std::round(28 * s), m_topic.bottom},
+                         brush);
+        PCWSTR topics = Tr(L"Topics", L"Tópicos");
+        target->DrawText(topics, (UINT32)wcslen(topics), m_smallFormat.get(),
+                         {m_topic.left + std::round(28 * s), m_topic.top,
+                          m_topic.right - std::round(6 * s), m_topic.bottom},
+                         brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    }
+    DrawTextBox(target, brush, m_box, m_text, m_edit,
+                Tr(L"Type your note here…", L"Escreva sua anotação aqui…"),
+                true);
+    // How long it is, of the most it can be (red at the limit).
+    {
+        const std::wstring length = std::to_wstring(m_text.size()) + L" / " +
+                                    std::to_wstring(kMaxNoteLength);
+        brush->SetColor(m_text.size() >= kMaxNoteLength
+                            ? D2D1::ColorF(1.0f, 0.4f, 0.35f, 1)
+                        : m_text.size() > kMaxNoteLength * 9 / 10
+                            ? D2D1::ColorF(1.0f, 0.75f, 0.3f, 1)
+                            : Fg(0.4f));
+        m_smallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+        target->DrawText(length.c_str(), (UINT32)length.size(),
+                         m_smallFormat.get(), m_counter, brush);
+        m_smallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    }
+    const bool empty =
+        m_text.find_first_not_of(L" \n\t") == std::wstring::npos;
+    if (m_editingId) {
+        DrawButton(target, brush, m_cancel, Tr(L"Cancel", L"Cancelar"), false,
+                   m_hover.part == Part::Cancel);
+        DrawButton(target, brush, m_add, Tr(L"Save", L"Salvar"), true,
+                   m_hover.part == Part::Add, empty ? 0.5f : 1.0f);
+    } else {
+        DrawButton(target, brush, m_add,
+                   Tr(L"Add note  (Ctrl+Enter)",
+                      L"Adicionar anotação  (Ctrl+Enter)"),
+                   !empty, m_hover.part == Part::Add);
+    }
+
+    if (m_notes.empty()) {
+        PCWSTR none = Tr(L"No notes yet", L"Nenhuma anotação ainda");
+        brush->SetColor(Fg(0.4f));
+        m_textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        target->DrawText(none, (UINT32)wcslen(none), m_textFormat.get(),
+                         m_listViewport, brush);
+        m_textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+        return;
+    }
+    BeginScrollArea(target, m_listViewport, m_scroll);
+    const float top = m_scroll.Offset();
+    const float bottom = top + m_listViewport.bottom - m_listViewport.top;
+    for (size_t i = 0; i < m_rows.size() && i < m_notes.size(); i++) {
+        const Row& row = m_rows[i];
+        const Note& note = m_notes[i];
+        if (row.rect.bottom < top || row.rect.top > bottom) {
+            continue;
+        }
+        const bool editing = note.id == m_editingId;
+        const bool hover = m_hover.id == note.id;
+        const float room = RowRoom(note.id);
+        if (room < 0.02f) {
+            continue;
+        }
+        // On a layer only while growing in or shrinking away (a layer per
+        // row makes scrolling heavy).
+        winrt::com_ptr<ID2D1Layer> layer;
+        const bool layered = room < 0.999f;
+        if (layered) {
+            target->CreateLayer(nullptr, layer.put());
+            target->PushLayer(
+                D2D1::LayerParameters(row.rect, nullptr,
+                                      D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                                      D2D1::IdentityMatrix(), room),
+                layer.get());
+        }
+        const float radius = std::round(10 * s);
+        brush->SetColor(Fg((editing ? 0.12f : 0.06f) +
+                           0.05f * Hover(HoverKey(7000, note.id), hover)));
+        target->FillRoundedRectangle({row.rect, radius, radius}, brush);
+        if (editing) {
+            brush->SetColor(D2D1::ColorF(0.04f, 0.52f, 1.0f, 0.8f));
+            target->DrawRoundedRectangle(
+                {{row.rect.left + 0.75f, row.rect.top + 0.75f,
+                  row.rect.right - 0.75f, row.rect.bottom - 0.75f},
+                 radius,
+                 radius},
+                brush, 1.5f);
+        }
+        DrawIconButton(target, brush, row.edit, kGlyphPencil,
+                       hover && m_hover.part == Part::Edit, 0.7f);
+        // When it was written, then its first lines as written (each line
+        // break kept), ending with "…" when there's more.
+        const float textLeft = row.edit.right + std::round(6 * s);
+        const float textRight = row.copy.left - std::round(4 * s);
+        const NoteView& view = ViewOf(note, textRight - textLeft);
+        const std::wstring& stamp = view.when;
+        brush->SetColor(Fg(0.45f));
+        target->DrawText(stamp.c_str(), (UINT32)stamp.size(),
+                         m_smallFormat.get(),
+                         {textLeft, row.rect.top + std::round(8 * s),
+                          textRight, row.rect.top + std::round(24 * s)},
+                         brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        const D2D1_RECT_F textRect{textLeft, row.rect.top + std::round(25 * s),
+                                   textRight,
+                                   row.rect.bottom - std::round(5 * s)};
+        if (IDWriteTextLayout* layout = view.layout.get()) {
+            target->PushAxisAlignedClip(textRect, D2D1_ANTIALIAS_MODE_ALIASED);
+            brush->SetColor(Fg(0.92f));
+            target->DrawTextLayout({textRect.left, textRect.top}, layout, brush,
+                                   D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+            target->PopAxisAlignedClip();
+        }
+        // Copied: a check for a moment.
+        const bool copied = m_copiedId == note.id;
+        DrawIconButton(target, brush, row.copy,
+                       copied ? kGlyphCheck : kGlyphCopy,
+                       hover && m_hover.part == Part::Copy,
+                       copied ? 0.95f : 0.5f);
+        DrawIconButton(target, brush, row.remove, kGlyphClose,
+                       hover && m_hover.part == Part::Delete, 0.35f);
+        if (layered) {
+            target->PopLayer();
+        }
+    }
+    EndScrollArea(target);
+    DrawScrollBar(target, brush, m_listViewport, m_scroll);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Tasks: "+ New task" (a box: Enter adds it, Escape gives up), the ones in
+// progress, then the last completed ones, dimmed; the circle completes one
+// (its check fills, then it slides down to the completed ones) or brings it
+// back; editing and deleting show under the mouse.
+
+struct Task {
+    long long id = 0;
+    long long stamp = 0;
+    bool done = false;
+    std::wstring title;
+};
+constexpr size_t kMaxTasks = 200;
+constexpr size_t kMaxTaskLength = 300;
+// Completed ones kept (the oldest go).
+constexpr size_t kMaxDoneTasks = 10;
+constexpr float kTasksWidth = 440;
+// A checked task: its check fills, then it goes down to the completed ones.
+constexpr double kTaskCheckSeconds = 0.28;
+constexpr double kTaskCompleteSeconds = 0.6;
+constexpr WCHAR kGlyphDelete = 0xE74D;
+
+class TasksPanel : public EditingPanel {
+   protected:
+    void Prepare(float scale) override {
+        PrepareFormats(scale);
+        Load();
+        Layout();
+    }
+
+    void OnOpen() override {
+        m_hover = {};
+        m_scroll.Reset();
+        m_typing = false;
+        m_editingId = 0;
+        m_text.clear();
+        m_edit.Reset();
+        m_rowY.clear();
+        Layout();
+    }
+
+    void Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) override;
+
+    bool OnMouseMove(POINT pt) override {
+        const Hit hit = HitTest(pt);
+        if (hit == m_hover) {
+            return false;
+        }
+        m_hover = hit;
+        return true;
+    }
+    bool OnMouseLeave() override {
+        m_hover = {};
+        return true;
+    }
+    bool OnMouseDown(POINT pt) override {
+        if (m_typing && PointInRect(pt, m_box)) {
+            EditTextClick(m_text, m_edit, pt);
+            return true;
+        }
+        return false;
+    }
+    bool OnMouseUp(POINT pt) override {
+        const Hit hit = HitTest(pt);
+        switch (hit.part) {
+            case Part::New:
+                StartTyping(0);
+                return true;
+            case Part::Add:
+                Commit();
+                return true;
+            case Part::Cancel:
+                StopTyping();
+                return true;
+            case Part::Check:
+                Toggle(hit.id);
+                return true;
+            case Part::Edit:
+                StartTyping(hit.id);
+                return true;
+            case Part::Delete:
+                if (!RowLeaving(hit.id)) {
+                    std::erase_if(m_completing, [&](const auto& entry) {
+                        return entry.first == hit.id;
+                    });
+                    m_deleting.push_back(hit.id);
+                    RowLeaves(hit.id);
+                }
+                return true;
+            default:
+                return false;
+        }
+    }
+    bool OnWheel(int delta) override {
+        return m_scroll.Wheel(delta, std::round(60 * m_scale));
+    }
+    bool OnKey(WPARAM key) override {
+        if (!m_typing) {
+            return false;
+        }
+        if (key == VK_ESCAPE) {
+            StopTyping();
+            return true;
+        }
+        return EditTextKey(m_text, m_edit, key);
+    }
+    bool OnChar(WCHAR c) override {
+        if (!m_typing) {
+            // Typing starts a new one.
+            if (c >= 0x20) {
+                StartTyping(0);
+            } else {
+                return false;
+            }
+        }
+        if (c == L'\r' || c == 0x0A) {
+            Commit();
+            return true;
+        }
+        if (c == 0x1B) {
+            return false;
+        }
+        // One line.
+        const bool taken = c != L'\n' && EditTextChar(m_text, m_edit, c,
+                                                      kMaxTaskLength, m_hwnd);
+        std::replace(m_text.begin(), m_text.end(), L'\n', L' ');
+        return taken;
+    }
+    bool AnimateContents(double dt) override {
+        const bool scrolling = m_scroll.Animate(dt);
+        // Checked ones, once their check has filled: down to the completed
+        // ones.
+        const double now = NowSeconds();
+        std::vector<long long> finished;
+        for (const auto& [id, at] : m_completing) {
+            if (now - at >= kTaskCompleteSeconds) {
+                finished.push_back(id);
+            }
+        }
+        for (long long id : finished) {
+            std::erase_if(m_completing, [&](const auto& entry) {
+                return entry.first == id;
+            });
+            MoveTask(id, true);
+        }
+        std::vector<long long> gone;
+        const bool rows = AnimateRows(dt, &gone);
+        for (long long id : gone) {
+            if (std::find(m_deleting.begin(), m_deleting.end(), id) !=
+                m_deleting.end()) {
+                std::erase_if(m_tasks,
+                              [&](const Task& task) { return task.id == id; });
+            }
+            std::erase(m_deleting, id);
+        }
+        if (!gone.empty() || !finished.empty()) {
+            Save();
+        }
+        if (rows || !gone.empty() || !finished.empty()) {
+            Layout();
+        }
+        // Each row slides to its place (a task moving between the lists,
+        // the others making room).
+        bool sliding = false;
+        for (const auto& row : m_rows) {
+            RowY& y = FindRowY(row.id, row.rect.top);
+            if (SpringTowards(y.y, y.velocity, row.rect.top, 0.5, dt, 0.92)) {
+                sliding = true;
+            }
+        }
+        return AnimateTyping(m_typing, scrolling || rows || sliding ||
+                                           !m_completing.empty());
+    }
+
+   private:
+    enum class Part { None, New, Add, Cancel, Check, Row, Edit, Delete };
+    struct Hit {
+        Part part = Part::None;
+        long long id = 0;
+        bool operator==(const Hit& other) const {
+            return part == other.part && id == other.id;
+        }
+    };
+    struct Row {
+        long long id;
+        D2D1_RECT_F rect;
+        D2D1_RECT_F check;
+        D2D1_RECT_F edit;
+        D2D1_RECT_F remove;
+        bool done;
+    };
+    // Where each row is drawn (sliding to its place).
+    struct RowY {
+        long long id;
+        double y;
+        double velocity;
+    };
+    RowY& FindRowY(long long id, float target) {
+        for (auto& entry : m_rowY) {
+            if (entry.id == id) {
+                return entry;
+            }
+        }
+        return m_rowY.emplace_back(RowY{id, target, 0});
+    }
+    float ShownY(const Row& row) const {
+        for (const auto& entry : m_rowY) {
+            if (entry.id == row.id) {
+                return (float)entry.y;
+            }
+        }
+        return row.rect.top;
+    }
+
+    void Load() {
+        if (m_loaded) {
+            return;
+        }
+        m_loaded = true;
+        for (const auto& record : LoadRecords(L"tasks", 4)) {
+            m_tasks.push_back({_wtoi64(record[0].c_str()),
+                               _wtoi64(record[1].c_str()), record[2] == L"1",
+                               record[3]});
+        }
+        // The ones in progress first, then the completed ones (as kept),
+        // only the latest of those.
+        std::stable_partition(m_tasks.begin(), m_tasks.end(),
+                              [](const Task& task) { return !task.done; });
+        size_t doneCount = 0;
+        std::erase_if(m_tasks, [&](const Task& t) {
+            return t.done && ++doneCount > kMaxDoneTasks;
+        });
+    }
+    void Save() {
+        std::vector<std::vector<std::wstring>> records;
+        for (const auto& task : m_tasks) {
+            records.push_back({std::to_wstring(task.id),
+                               std::to_wstring(task.stamp),
+                               task.done ? L"1" : L"0", task.title});
+        }
+        SaveRecords(L"tasks", records);
+    }
+    // Completed (the first of the completed ones) or back in progress (the
+    // last of the ones in progress); only the latest completed ones kept.
+    void MoveTask(long long id, bool done) {
+        const auto found =
+            std::find_if(m_tasks.begin(), m_tasks.end(),
+                         [&](const Task& task) { return task.id == id; });
+        if (found == m_tasks.end()) {
+            return;
+        }
+        Task task = std::move(*found);
+        m_tasks.erase(found);
+        task.done = done;
+        m_tasks.insert(std::find_if(m_tasks.begin(), m_tasks.end(),
+                                    [](const Task& t) { return t.done; }),
+                       std::move(task));
+        size_t doneCount = 0;
+        std::erase_if(m_tasks, [&](const Task& t) {
+            return t.done && ++doneCount > kMaxDoneTasks;
+        });
+    }
+    void Toggle(long long id) {
+        const auto found =
+            std::find_if(m_tasks.begin(), m_tasks.end(),
+                         [&](const Task& task) { return task.id == id; });
+        if (found == m_tasks.end() || RowLeaving(id)) {
+            return;
+        }
+        const bool completing =
+            std::any_of(m_completing.begin(), m_completing.end(),
+                        [&](const auto& entry) { return entry.first == id; });
+        if (completing) {
+            // Clicked again before it went: it stays.
+            std::erase_if(m_completing, [&](const auto& entry) {
+                return entry.first == id;
+            });
+        } else if (!found->done) {
+            m_completing.push_back({id, NowSeconds()});
+        } else {
+            MoveTask(id, false);
+            Save();
+            Layout();
+        }
+        StartIslandAnimation();
+    }
+    void StartTyping(long long id) {
+        m_typing = true;
+        m_editingId = id;
+        m_text.clear();
+        for (const auto& task : m_tasks) {
+            if (task.id == id) {
+                m_text = task.title;
+            }
+        }
+        m_edit.Reset();
+        m_edit.caret = m_text.size();
+        g_lastTyped = NowSeconds();
+        Layout();
+        StartIslandAnimation();
+    }
+    void StopTyping() {
+        m_typing = false;
+        m_editingId = 0;
+        m_text.clear();
+        m_edit.Reset();
+        Layout();
+    }
+    void Commit() {
+        const size_t first = m_text.find_first_not_of(L' ');
+        if (first == std::wstring::npos) {
+            StopTyping();
+            return;
+        }
+        const std::wstring title = m_text.substr(first);
+        if (m_editingId) {
+            for (auto& task : m_tasks) {
+                if (task.id == m_editingId) {
+                    task.title = title;
+                }
+            }
+        } else {
+            if (m_tasks.size() >= kMaxTasks) {
+                // The oldest completed one goes (or the oldest).
+                auto oldest = std::find_if(m_tasks.rbegin(), m_tasks.rend(),
+                                           [](const Task& t) { return t.done; });
+                m_tasks.erase(oldest != m_tasks.rend()
+                                  ? std::next(oldest).base()
+                                  : m_tasks.end() - 1);
+            }
+            const long long now = NowStamp();
+            m_tasks.insert(m_tasks.begin(), {now, now, false, title});
+            RowArrives(now);
+        }
+        Save();
+        StopTyping();
+    }
+
+    void Layout() {
+        const float s = m_scale;
+        const float width = std::round(kTasksWidth * s);
+        const float padding = std::round(12 * s);
+        const float gap = std::round(8 * s);
+        float y = padding;
+        const float header = std::round(30 * s);
+        m_new = {padding, y, padding + std::round(150 * s), y + header};
+        m_count = {m_new.right, y, width - padding - std::round(4 * s),
+                   y + header};
+        y += header + gap;
+        if (m_typing) {
+            m_box = {padding, y, width - padding, y + std::round(36 * s)};
+            y += m_box.bottom - m_box.top + gap;
+            // "Cancel" and "Add" (or "Save").
+            const float half = std::floor((width - padding * 2 - gap) / 2);
+            m_cancel = {padding, y, padding + half, y + std::round(30 * s)};
+            m_add = {width - padding - half, y, width - padding,
+                     y + std::round(30 * s)};
+            y += std::round(30 * s) + gap;
+        } else {
+            m_box = m_cancel = m_add = {};
+        }
+        m_rows.clear();
+        const float row = std::round(46 * s);
+        const float circle = std::round(28 * s);
+        const float button = std::round(28 * s);
+        float listY = 0;
+        auto addRow = [&](const Task& task) {
+            const float room = RowRoom(task.id);
+            const D2D1_RECT_F rect{padding, listY, width - padding,
+                                   listY + row * room};
+            const float middle = rect.top + row * room / 2;
+            const D2D1_RECT_F remove{rect.right - std::round(8 * s) - button,
+                                     middle - button / 2,
+                                     rect.right - std::round(8 * s),
+                                     middle + button / 2};
+            const D2D1_RECT_F edit{remove.left - std::round(4 * s) - button,
+                                   middle - button / 2,
+                                   remove.left - std::round(4 * s),
+                                   middle + button / 2};
+            m_rows.push_back(
+                {task.id, rect,
+                 {rect.left + std::round(8 * s), middle - circle / 2,
+                  rect.left + std::round(8 * s) + circle, middle + circle / 2},
+                 edit, remove, task.done});
+            listY += (row + std::round(6 * s)) * room;
+        };
+        size_t inProgress = 0;
+        size_t done = 0;
+        for (const auto& task : m_tasks) {
+            if (!task.done) {
+                addRow(task);
+                inProgress++;
+            } else {
+                done++;
+            }
+        }
+        m_none = {};
+        if (!inProgress) {
+            m_none = {padding, listY, width - padding,
+                      listY + std::round(44 * s)};
+            listY += std::round(44 * s);
+        }
+        m_doneHeader = {};
+        if (done) {
+            listY += std::round(4 * s);
+            m_doneHeader = {padding, listY, width - padding,
+                            listY + std::round(26 * s)};
+            listY += std::round(28 * s);
+            for (const auto& task : m_tasks) {
+                if (task.done) {
+                    addRow(task);
+                }
+            }
+        }
+        std::erase_if(m_rowY, [&](const RowY& entry) {
+            return std::none_of(m_rows.begin(), m_rows.end(),
+                                [&](const Row& r) { return r.id == entry.id; });
+        });
+        const float content = std::max(std::round(44 * s), listY);
+        const float room =
+            std::max(std::round(80 * s), ListMaxHeight() - y - padding);
+        const float viewport = std::min(content, room);
+        m_listViewport = {0, y, width, y + viewport};
+        m_scroll.SetSizes(viewport, content);
+        y += viewport + padding;
+        m_size = {(LONG)width, (LONG)std::ceil(y)};
+    }
+
+    Hit HitTest(POINT pt) const {
+        if (PointInRect(pt, m_new)) {
+            return {Part::New};
+        }
+        if (PointInRect(pt, m_add)) {
+            return {Part::Add};
+        }
+        if (PointInRect(pt, m_cancel)) {
+            return {Part::Cancel};
+        }
+        POINT inList;
+        if (!ListPoint(pt, &inList)) {
+            return {};
+        }
+        for (const auto& row : m_rows) {
+            if (!PointInRect(inList, row.rect)) {
+                continue;
+            }
+            if (PointInRect(inList, row.check)) {
+                return {Part::Check, row.id};
+            }
+            if (PointInRect(inList, row.edit)) {
+                return {Part::Edit, row.id};
+            }
+            if (PointInRect(inList, row.remove)) {
+                return {Part::Delete, row.id};
+            }
+            return {Part::Row, row.id};
+        }
+        return {};
+    }
+
+    // How far a checked task's check has filled (0 to 1), or -1.
+    float CheckProgress(long long id) const {
+        for (const auto& [taskId, at] : m_completing) {
+            if (taskId == id) {
+                return (float)std::clamp((NowSeconds() - at) / kTaskCheckSeconds,
+                                         0.0, 1.0);
+            }
+        }
+        return -1;
+    }
+
+    bool m_loaded = false;
+    std::vector<Task> m_tasks;
+    // Being checked (their check filling), and being deleted (once out of
+    // view).
+    std::vector<std::pair<long long, double>> m_completing;
+    std::vector<long long> m_deleting;
+    std::vector<RowY> m_rowY;
+    bool m_typing = false;
+    long long m_editingId = 0;
+    std::wstring m_text;
+    TextEdit m_edit;
+    Hit m_hover;
+    D2D1_RECT_F m_new{}, m_count{}, m_box{}, m_add{}, m_cancel{}, m_none{},
+        m_doneHeader{};
+    std::vector<Row> m_rows;
+};
+
+void TasksPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
+    if (!Ready()) {
+        return;
+    }
+    const float s = m_scale;
+    // "+ New task".
+    {
+        const float lit = Hover(m_new, m_hover.part == Part::New);
+        const float radius = std::round(9 * s);
+        if (lit > 0.01f) {
+            brush->SetColor(Fg(0.08f * lit));
+            target->FillRoundedRectangle({m_new, radius, radius}, brush);
+        }
+        brush->SetColor(Fg(0.95f));
+        target->DrawText(&kGlyphAdd, 1, m_bigIconFormat.get(),
+                         {m_new.left, m_new.top,
+                          m_new.left + std::round(28 * s), m_new.bottom},
+                         brush);
+        PCWSTR text = Tr(L"New task", L"Nova tarefa");
+        target->DrawText(text, (UINT32)wcslen(text), m_boldFormat.get(),
+                         {m_new.left + std::round(28 * s), m_new.top,
+                          m_new.right, m_new.bottom},
+                         brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    }
+    // How many are left.
+    size_t inProgress = 0;
+    size_t completed = 0;
+    for (const auto& task : m_tasks) {
+        (task.done ? completed : inProgress)++;
+    }
+    {
+        const std::wstring count =
+            std::to_wstring(inProgress) +
+            Tr(inProgress == 1 ? L" in progress" : L" in progress",
+               inProgress == 1 ? L" em andamento" : L" em andamento");
+        brush->SetColor(D2D1::ColorF(0.3f, 0.85f, 0.75f, 1));
+        m_smallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+        target->DrawText(count.c_str(), (UINT32)count.size(),
+                         m_smallFormat.get(), m_count, brush,
+                         D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        m_smallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    }
+    if (m_typing) {
+        DrawTextBox(target, brush, m_box, m_text, m_edit,
+                    m_editingId ? Tr(L"Task", L"Tarefa")
+                                : Tr(L"What needs doing?",
+                                     L"O que precisa ser feito?"),
+                    true);
+        const bool empty = m_text.find_first_not_of(L' ') == std::wstring::npos;
+        DrawButton(target, brush, m_cancel, Tr(L"Cancel", L"Cancelar"), false,
+                   m_hover.part == Part::Cancel);
+        DrawButton(target, brush, m_add,
+                   m_editingId ? Tr(L"Save  (Enter)", L"Salvar  (Enter)")
+                               : Tr(L"Add  (Enter)", L"Adicionar  (Enter)"),
+                   true, m_hover.part == Part::Add, empty ? 0.5f : 1.0f);
+    }
+    BeginScrollArea(target, m_listViewport, m_scroll);
+    const float top = m_scroll.Offset();
+    const float bottom = top + m_listViewport.bottom - m_listViewport.top;
+    // Nothing left to do.
+    if (m_none.bottom > m_none.top) {
+        PCWSTR none = completed ? Tr(L"All done", L"Tudo feito")
+                                : Tr(L"Nothing to do", L"Nada pendente");
+        brush->SetColor(Fg(0.4f));
+        m_textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        target->DrawText(none, (UINT32)wcslen(none), m_textFormat.get(),
+                         m_none, brush);
+        m_textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    }
+    // "Completed", over the last ones done.
+    if (m_doneHeader.bottom > m_doneHeader.top) {
+        const std::wstring header =
+            std::wstring(Tr(L"Completed", L"Concluídas")) + L"  ·  " +
+            std::to_wstring(completed);
+        brush->SetColor(Fg(0.45f));
+        target->DrawText(header.c_str(), (UINT32)header.size(),
+                         m_smallFormat.get(),
+                         {m_doneHeader.left + std::round(4 * s),
+                          m_doneHeader.top, m_doneHeader.right,
+                          m_doneHeader.bottom},
+                         brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        brush->SetColor(Fg(0.08f));
+        target->FillRectangle(
+            {m_doneHeader.left + std::round(4 * s), m_doneHeader.bottom - 1,
+             m_doneHeader.right - std::round(4 * s), m_doneHeader.bottom},
+            brush);
+    }
+    for (const auto& row : m_rows) {
+        // Where it is drawn now (sliding to its place).
+        const float dy = ShownY(row) - row.rect.top;
+        auto at = [dy](D2D1_RECT_F r) {
+            r.top += dy;
+            r.bottom += dy;
+            return r;
+        };
+        const D2D1_RECT_F rect = at(row.rect);
+        if (rect.bottom < top || rect.top > bottom) {
+            continue;
+        }
+        const Task* task = nullptr;
+        for (const auto& t : m_tasks) {
+            if (t.id == row.id) {
+                task = &t;
+            }
+        }
+        if (!task) {
+            continue;
+        }
+        const float room = RowRoom(row.id);
+        if (room < 0.02f) {
+            continue;
+        }
+        // The completed ones dimmed; growing in and shrinking away fade
+        // (drawn on a layer only then: a layer per row makes scrolling heavy).
+        const float alpha = room * (row.done ? 0.55f : 1.0f);
+        winrt::com_ptr<ID2D1Layer> layer;
+        const bool layered = alpha < 0.999f;
+        if (layered) {
+            target->CreateLayer(nullptr, layer.put());
+            target->PushLayer(
+                D2D1::LayerParameters(rect, nullptr,
+                                      D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                                      D2D1::IdentityMatrix(), alpha),
+                layer.get());
+        }
+        const bool hover = m_hover.id == row.id && !RowLeaving(row.id);
+        const float lit = Hover(HoverKey(7100, row.id), hover);
+        const float radius = std::round(10 * s);
+        brush->SetColor(Fg(0.05f + 0.05f * lit));
+        target->FillRoundedRectangle({rect, radius, radius}, brush);
+        brush->SetColor(Fg(0.09f));
+        target->DrawRoundedRectangle(
+            {{rect.left + 0.5f, rect.top + 0.5f, rect.right - 0.5f,
+              rect.bottom - 0.5f},
+             radius,
+             radius},
+            brush, 1);
+        // The circle: filled with a check when done (filling as it's
+        // checked).
+        const D2D1_RECT_F check = at(row.check);
+        const D2D1_POINT_2F center{(check.left + check.right) / 2,
+                                   (check.top + check.bottom) / 2};
+        const float circle = std::round(8.5f * s);
+        const float checkLit = Hover(
+            HoverKey(7101, row.id), hover && m_hover.part == Part::Check);
+        const float progress = CheckProgress(row.id);
+        const float filled =
+            row.done ? 1.0f
+            : progress >= 0
+                ? (float)EaseInOutCubic(progress)
+                : 0.0f;
+        brush->SetColor(Fg(0.6f + 0.35f * checkLit));
+        target->DrawEllipse({center, circle, circle}, brush,
+                            std::max(1.0f, 1.5f * s));
+        if (filled > 0.01f) {
+            // A little bigger as it fills, then back.
+            const float pop = 1 + 0.25f * std::sin(filled * 3.14159f);
+            const float r = circle * filled * pop;
+            brush->SetColor(D2D1::ColorF(0.2f, 0.78f, 0.35f, 1));
+            target->FillEllipse({center, r, r}, brush);
+            brush->SetColor(D2D1::ColorF(1, 1, 1, filled));
+            // On top of the list's own placement (it scrolls).
+            D2D1_MATRIX_3X2_F before;
+            target->GetTransform(&before);
+            target->SetTransform(
+                D2D1::Matrix3x2F::Scale(pop, pop, center) *
+                *D2D1::Matrix3x2F::ReinterpretBaseType(&before));
+            target->DrawText(&kGlyphCheck, 1, m_iconFormat.get(), check, brush);
+            target->SetTransform(before);
+        }
+        // The title, and under the mouse its date; its buttons on the right
+        // (the title makes room for them).
+        const D2D1_RECT_F edit = at(row.edit);
+        const D2D1_RECT_F remove = at(row.remove);
+        const float buttons = Hover(HoverKey(7102, row.id), hover);
+        const float textLeft = check.right + std::round(8 * s);
+        const float textRight =
+            rect.right - std::round(10 * s) -
+            (rect.right - edit.left - std::round(4 * s)) * buttons;
+        const bool struck = row.done || filled > 0.01f;
+        brush->SetColor(Fg(struck ? 0.95f - 0.4f * filled : 0.95f));
+        const float titleBottom = buttons > 0.01f
+                                      ? rect.top + std::round(28 * s)
+                                      : rect.bottom;
+        target->DrawText(task->title.c_str(), (UINT32)task->title.size(),
+                         m_textFormat.get(),
+                         {textLeft, rect.top, textRight,
+                          titleBottom + (rect.bottom - titleBottom) *
+                                            (1 - buttons)},
+                         brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        if (struck) {
+            // Struck through (drawn across as it's checked).
+            winrt::com_ptr<IDWriteTextLayout> layout;
+            if (SUCCEEDED(m_dwrite->CreateTextLayout(
+                    task->title.c_str(), (UINT32)task->title.size(),
+                    m_textFormat.get(), std::max(1.0f, textRight - textLeft),
+                    100, layout.put()))) {
+                DWRITE_TEXT_METRICS metrics{};
+                layout->GetMetrics(&metrics);
+                const float middle =
+                    buttons > 0.01f
+                        ? rect.top + std::round(14 * s)
+                        : (rect.top + rect.bottom) / 2;
+                const float lineY =
+                    middle + (((rect.top + rect.bottom) / 2) - middle) *
+                                 (1 - buttons);
+                const float length =
+                    std::min(metrics.width, textRight - textLeft) * filled;
+                brush->SetColor(Fg(0.5f));
+                target->FillRectangle({textLeft, lineY, textLeft + length,
+                                       lineY + std::max(1.0f, s)},
+                                      brush);
+            }
+        }
+        if (buttons > 0.01f) {
+            const std::wstring stamp = StampText(task->stamp);
+            brush->SetColor(Fg(0.45f * buttons));
+            target->DrawText(stamp.c_str(), (UINT32)stamp.size(),
+                             m_smallFormat.get(),
+                             {textLeft, rect.top + std::round(25 * s),
+                              textRight, rect.bottom - std::round(3 * s)},
+                             brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+            DrawIconButton(target, brush, edit, kGlyphPencil,
+                           hover && m_hover.part == Part::Edit,
+                           0.6f * buttons);
+            DrawIconButton(target, brush, remove, kGlyphDelete,
+                           hover && m_hover.part == Part::Delete,
+                           0.6f * buttons);
+        }
+        if (layered) {
+            target->PopLayer();
+        }
+    }
+    EndScrollArea(target);
+    DrawScrollBar(target, brush, m_listViewport, m_scroll);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Keyboard shortcuts to remember: the keys (recorded by pressing them) and
+// what they do, written by the user; a box filters them.
+
+struct ShortcutNote {
+    long long id = 0;
+    std::wstring keys;
+    std::wstring description;
+};
+constexpr size_t kMaxShortcuts = 300;
+// The file picked comes back to the panel (lParam: the shortcuts read, an
+// std::vector<ShortcutNote>* it takes; null when none).
+constexpr UINT WM_APP_SHORTCUTS_IMPORTED = WM_APP + 69;
+
+// "alt + shift + h" as "Alt+Shift+H".
+std::wstring TidyKeys(const std::wstring& keys) {
+    std::wstring tidy;
+    size_t at = 0;
+    while (at <= keys.size()) {
+        size_t plus = keys.find(L'+', at);
+        std::wstring key = keys.substr(
+            at, plus == std::wstring::npos ? std::wstring::npos : plus - at);
+        const size_t first = key.find_first_not_of(L" \t");
+        const size_t last = key.find_last_not_of(L" \t");
+        key = first == std::wstring::npos ? L""
+                                          : key.substr(first, last - first + 1);
+        std::wstring lower = key;
+        for (auto& c : lower) {
+            c = towlower(c);
+        }
+        static const struct {
+            PCWSTR from;
+            PCWSTR to;
+        } kNames[] = {{L"alt", L"Alt"},      {L"ctrl", L"Ctrl"},
+                      {L"control", L"Ctrl"}, {L"shift", L"Shift"},
+                      {L"win", L"Win"},      {L"lwin", L"Win"},
+                      {L"rwin", L"Win"},     {L"super", L"Win"},
+                      {L"return", L"Enter"}, {L"enter", L"Enter"},
+                      {L"left", L"\u2190"},  {L"right", L"\u2192"},
+                      {L"up", L"\u2191"},    {L"down", L"\u2193"},
+                      {L"space", L"Space"},  {L"tab", L"Tab"},
+                      {L"escape", L"Esc"},   {L"esc", L"Esc"},
+                      {L"oem_1", L";"},      {L"oem_2", L"/"},
+                      {L"oem_3", L"`"},      {L"oem_4", L"["},
+                      {L"oem_5", L"\\"},     {L"oem_6", L"]"},
+                      {L"oem_7", L"'"},      {L"oem_plus", L"Plus"},
+                      {L"oem_minus", L"-"},  {L"oem_comma", L"Comma"},
+                      {L"oem_period", L"."}};
+        bool named = false;
+        for (const auto& name : kNames) {
+            if (lower == name.from) {
+                key = name.to;
+                named = true;
+            }
+        }
+        if (!named && !key.empty()) {
+            key[0] = towupper(key[0]);
+        }
+        if (!key.empty()) {
+            tidy += (tidy.empty() ? L"" : L"+") + key;
+        }
+        if (plus == std::wstring::npos) {
+            break;
+        }
+        at = plus + 1;
+    }
+    return tidy;
+}
+
+// The shortcuts in a file: lines "keys : what they do" (whkd's format;
+// "#" starts a comment, "." an option).
+std::vector<ShortcutNote> ParseShortcutsFile(const std::wstring& text) {
+    std::vector<ShortcutNote> found;
+    long long id = NowStamp();
+    for (size_t at = 0; at < text.size();) {
+        size_t end = text.find(L'\n', at);
+        if (end == std::wstring::npos) {
+            end = text.size();
+        }
+        std::wstring line = text.substr(at, end - at);
+        at = end + 1;
+        while (!line.empty() && (line.back() == L'\r' || line.back() == L' ')) {
+            line.pop_back();
+        }
+        const size_t start = line.find_first_not_of(L" \t");
+        if (start == std::wstring::npos || line[start] == L'#' ||
+            line[start] == L'.' || line[start] == L'[') {
+            continue;
+        }
+        const size_t colon = line.find(L':', start);
+        if (colon == std::wstring::npos || colon == start) {
+            continue;
+        }
+        const std::wstring keys = TidyKeys(line.substr(start, colon - start));
+        std::wstring what = line.substr(colon + 1);
+        // Without a comment at its end.
+        const size_t comment = what.find(L" #");
+        if (comment != std::wstring::npos) {
+            what.erase(comment);
+        }
+        const size_t whatStart = what.find_first_not_of(L" \t");
+        what = whatStart == std::wstring::npos ? L"" : what.substr(whatStart);
+        // Keys are short words joined by "+".
+        if (keys.empty() || keys.size() > 60 || what.empty() ||
+            keys.find(L' ') != std::wstring::npos) {
+            continue;
+        }
+        found.push_back({id++, keys, what.substr(0, 200)});
+    }
+    return found;
+}
+
+// Picks a file (on a thread of its own: the dialog waits there) and reads
+// its shortcuts.
+DWORD WINAPI ImportShortcutsThreadProc(LPVOID parameter) {
+    const HWND panel = (HWND)parameter;
+    const HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    std::vector<ShortcutNote>* found = nullptr;
+    winrt::com_ptr<IFileOpenDialog> dialog;
+    if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr,
+                                   CLSCTX_INPROC_SERVER,
+                                   IID_PPV_ARGS(dialog.put())))) {
+        const COMDLG_FILTERSPEC filters[] = {
+            {L"whkdrc, *.txt", L"whkdrc;*.whkdrc;*.txt"},
+            {Tr(L"All files", L"Todos os arquivos"), L"*.*"}};
+        dialog->SetFileTypes(ARRAYSIZE(filters), filters);
+        dialog->SetTitle(Tr(L"Import shortcuts (like komorebi's whkdrc)",
+                            L"Importar atalhos (como o whkdrc do komorebi)"));
+        // Where komorebi keeps it.
+        WCHAR config[MAX_PATH];
+        winrt::com_ptr<IShellItem> folder;
+        if (ExpandEnvironmentStrings(L"%USERPROFILE%\\.config", config,
+                                     MAX_PATH) &&
+            GetFileAttributes(config) != INVALID_FILE_ATTRIBUTES &&
+            SUCCEEDED(SHCreateItemFromParsingName(config, nullptr,
+                                                  IID_PPV_ARGS(folder.put())))) {
+            dialog->SetFolder(folder.get());
+        }
+        winrt::com_ptr<IShellItem> item;
+        PWSTR path = nullptr;
+        if (SUCCEEDED(dialog->Show(panel)) &&
+            SUCCEEDED(dialog->GetResult(item.put())) &&
+            SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
+            HANDLE file = CreateFile(path, GENERIC_READ, FILE_SHARE_READ,
+                                     nullptr, OPEN_EXISTING, 0, nullptr);
+            if (file != INVALID_HANDLE_VALUE) {
+                std::string bytes(256 * 1024, '\0');
+                DWORD read = 0;
+                ReadFile(file, bytes.data(), (DWORD)bytes.size(), &read,
+                         nullptr);
+                CloseHandle(file);
+                bytes.resize(read);
+                // UTF-8 (with or without its mark), or UTF-16.
+                std::wstring text;
+                if (read >= 2 && (BYTE)bytes[0] == 0xFF &&
+                    (BYTE)bytes[1] == 0xFE) {
+                    text.assign((const WCHAR*)(bytes.data() + 2),
+                                (read - 2) / 2);
+                } else {
+                    if (read >= 3 && (BYTE)bytes[0] == 0xEF) {
+                        bytes.erase(0, 3);
+                    }
+                    const int length = MultiByteToWideChar(
+                        CP_UTF8, 0, bytes.data(), (int)bytes.size(), nullptr,
+                        0);
+                    text.resize(std::max(length, 0));
+                    MultiByteToWideChar(CP_UTF8, 0, bytes.data(),
+                                        (int)bytes.size(), text.data(), length);
+                }
+                found = new std::vector<ShortcutNote>(ParseShortcutsFile(text));
+            }
+            CoTaskMemFree(path);
+        }
+    }
+    dialog = nullptr;
+    if (SUCCEEDED(com)) {
+        CoUninitialize();
+    }
+    if (!PostMessage(panel, WM_APP_SHORTCUTS_IMPORTED, 0, (LPARAM)found)) {
+        delete found;
+    }
+    return 0;
+}
+constexpr float kShortcutsWidth = 440;
+
+// A key's name, as on the keyboard.
+std::wstring KeyName(UINT vk) {
+    switch (vk) {
+        case VK_LWIN:
+        case VK_RWIN:
+            return L"Win";
+        case VK_CONTROL:
+            return L"Ctrl";
+        case VK_MENU:
+            return L"Alt";
+        case VK_SHIFT:
+            return L"Shift";
+        case VK_LEFT:
+            return L"←";
+        case VK_RIGHT:
+            return L"→";
+        case VK_UP:
+            return L"↑";
+        case VK_DOWN:
+            return L"↓";
+        case VK_SPACE:
+            return Tr(L"Space", L"Espaço");
+        case VK_RETURN:
+            return L"Enter";
+        case VK_TAB:
+            return L"Tab";
+        case VK_ESCAPE:
+            return L"Esc";
+        default:
+            break;
+    }
+    if ((vk >= '0' && vk <= '9') || (vk >= 'A' && vk <= 'Z')) {
+        return std::wstring(1, (WCHAR)vk);
+    }
+    if (vk >= VK_F1 && vk <= VK_F24) {
+        return L"F" + std::to_wstring(vk - VK_F1 + 1);
+    }
+    UINT scanCode = MapVirtualKey(vk, MAPVK_VK_TO_VSC);
+    LONG lParam = (LONG)(scanCode << 16);
+    // The extended keys (Insert, Delete, Home, End, Page Up and Down).
+    if ((vk >= VK_PRIOR && vk <= VK_HELP) || vk == VK_DIVIDE ||
+        vk == VK_NUMLOCK) {
+        lParam |= 1 << 24;
+    }
+    WCHAR name[64] = L"";
+    if (GetKeyNameText(lParam, name, ARRAYSIZE(name)) > 0) {
+        return name;
+    }
+    WCHAR hex[16];
+    swprintf_s(hex, L"0x%02X", vk);
+    return hex;
+}
+
+bool IsModifierKey(UINT vk) {
+    return vk == VK_CONTROL || vk == VK_LCONTROL || vk == VK_RCONTROL ||
+           vk == VK_MENU || vk == VK_LMENU || vk == VK_RMENU ||
+           vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT ||
+           vk == VK_LWIN || vk == VK_RWIN;
+}
+
+// The modifiers held now, as "Ctrl+Alt+".
+std::wstring HeldModifiers() {
+    std::wstring keys;
+    if (GetKeyState(VK_LWIN) < 0 || GetKeyState(VK_RWIN) < 0) {
+        keys += L"Win+";
+    }
+    if (GetKeyState(VK_CONTROL) < 0) {
+        keys += L"Ctrl+";
+    }
+    if (GetKeyState(VK_MENU) < 0) {
+        keys += L"Alt+";
+    }
+    if (GetKeyState(VK_SHIFT) < 0) {
+        keys += L"Shift+";
+    }
+    return keys;
+}
+
+class ShortcutsPanel : public EditingPanel {
+   public:
+    // Alt with a key comes as a system key: it's recorded too.
+    bool OnSysKey(WPARAM key) override {
+        if (m_focus == Focus::Keys && !m_keysWritten) {
+            Record((UINT)key);
+            return true;
+        }
+        return false;
+    }
+    bool OnKeyUp(WPARAM key) override {
+        if (m_focus != Focus::Keys || m_keysWritten || m_held.empty()) {
+            return false;
+        }
+        std::erase(m_held, NormalKey((UINT)key));
+        // All let go: that combination is done (another may follow).
+        if (m_held.empty() && !m_chord.empty()) {
+            if (!m_keys.empty()) {
+                m_keys += L", ";
+            }
+            m_keys += ChordText();
+            m_chord.clear();
+            m_chords++;
+        }
+        return true;
+    }
+
+   protected:
+    void Prepare(float scale) override {
+        PrepareFormats(scale);
+        if (scale != m_chipScale) {
+            m_chipScale = scale;
+            m_chipFormat = MakeFormat(L"Segoe UI Variable Text",
+                                      DWRITE_FONT_WEIGHT_SEMI_BOLD, 11 * scale);
+        }
+        Load();
+        Layout();
+    }
+
+    void OnOpen() override {
+        m_hover = {};
+        m_scroll.Reset();
+        m_importStatus.clear();
+        m_filter.clear();
+        m_filterEdit.Reset();
+        m_form = false;
+        m_focus = Focus::Filter;
+        g_lastTyped = NowSeconds();
+        Layout();
+    }
+
+    void Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) override;
+
+    bool OnMouseMove(POINT pt) override {
+        const Hit hit = HitTest(pt);
+        if (hit == m_hover) {
+            return false;
+        }
+        m_hover = hit;
+        return true;
+    }
+    bool OnMouseLeave() override {
+        m_hover = {};
+        return true;
+    }
+    bool OnMouseDown(POINT pt) override {
+        if (PointInRect(pt, m_filterBox)) {
+            m_focus = Focus::Filter;
+            EditTextClick(m_filter, m_filterEdit, pt);
+            return true;
+        }
+        if (m_form && PointInRect(pt, m_keysMode)) {
+            return false;
+        }
+        if (m_form && PointInRect(pt, m_keysBox)) {
+            m_focus = Focus::Keys;
+            g_lastTyped = NowSeconds();
+            if (m_keysWritten) {
+                EditTextClick(m_keys, m_keysEdit, pt);
+            }
+            return true;
+        }
+        if (m_form && PointInRect(pt, m_descriptionBox)) {
+            m_focus = Focus::Description;
+            EditTextClick(m_description, m_descriptionEdit, pt);
+            return true;
+        }
+        return false;
+    }
+    bool OnMouseUp(POINT pt) override {
+        const Hit hit = HitTest(pt);
+        switch (hit.part) {
+            case Part::New:
+                StartForm(0);
+                return true;
+            case Part::Import:
+                if (!m_importThread) {
+                    m_dialogShown = true;
+                    m_importThread = CreateThread(
+                        nullptr, 0, ImportShortcutsThreadProc, m_hwnd, 0,
+                        nullptr);
+                    if (!m_importThread) {
+                        m_dialogShown = false;
+                    }
+                }
+                return true;
+            case Part::KeysMode:
+                // Written or pressed.
+                m_keysWritten = !m_keysWritten;
+                m_held.clear();
+                m_chord.clear();
+                m_focus = Focus::Keys;
+                m_keysEdit.Reset();
+                m_keysEdit.caret = m_keys.size();
+                g_lastTyped = NowSeconds();
+                return true;
+            case Part::Cancel:
+                StopForm();
+                return true;
+            case Part::Save:
+                Commit();
+                return true;
+            case Part::Row:
+                StartForm(hit.id);
+                return true;
+            case Part::Delete:
+                std::erase_if(m_shortcuts, [&](const ShortcutNote& shortcut) {
+                    return shortcut.id == hit.id;
+                });
+                Save();
+                Layout();
+                return true;
+            default:
+                return false;
+        }
+    }
+    bool OnWheel(int delta) override {
+        return m_scroll.Wheel(delta, std::round(60 * m_scale));
+    }
+    bool OnKey(WPARAM key) override {
+        if (m_focus == Focus::Keys && m_keysWritten) {
+            if (key == VK_ESCAPE) {
+                StopForm();
+                return true;
+            }
+            if (key == VK_TAB) {
+                m_focus = Focus::Description;
+                return true;
+            }
+            return EditTextKey(m_keys, m_keysEdit, key);
+        }
+        if (m_focus == Focus::Keys) {
+            // Nothing held: Escape gives up, Tab goes on to what it does,
+            // Backspace takes back the last combination.
+            if (m_held.empty() && key == VK_ESCAPE) {
+                StopForm();
+                return true;
+            }
+            if (m_held.empty() && key == VK_TAB && !m_keys.empty()) {
+                m_focus = Focus::Description;
+                return true;
+            }
+            if (m_held.empty() && key == VK_BACK) {
+                const size_t comma = m_keys.rfind(L", ");
+                m_keys = comma == std::wstring::npos ? std::wstring()
+                                                     : m_keys.substr(0, comma);
+                m_chords = m_keys.empty() ? 0 : std::max(m_chords - 1, 1);
+                return true;
+            }
+            Record((UINT)key);
+            return true;
+        }
+        if (key == VK_ESCAPE && m_form) {
+            StopForm();
+            return true;
+        }
+        if (key == VK_TAB && m_form) {
+            m_focus = m_focus == Focus::Description ? Focus::Keys
+                                                    : Focus::Description;
+            return true;
+        }
+        if (m_focus == Focus::Description) {
+            return EditTextKey(m_description, m_descriptionEdit, key);
+        }
+        const bool taken = EditTextKey(m_filter, m_filterEdit, key);
+        if (taken) {
+            Layout();
+        }
+        return taken;
+    }
+    bool OnChar(WCHAR c) override {
+        if (m_focus == Focus::Keys && m_keysWritten && c != L'\t' &&
+            c != 0x1B) {
+            if (c == L'\r' || c == 0x0A) {
+                m_focus = Focus::Description;
+                return true;
+            }
+            return c != L'\n' &&
+                   EditTextChar(m_keys, m_keysEdit, c, 80, m_hwnd);
+        }
+        if (m_focus == Focus::Keys || c == L'\t' || c == 0x1B) {
+            return false;
+        }
+        if (m_focus == Focus::Description) {
+            if (c == L'\r' || c == 0x0A) {
+                Commit();
+                return true;
+            }
+            return c != L'\n' && EditTextChar(m_description, m_descriptionEdit,
+                                               c, 200, m_hwnd);
+        }
+        if (c == L'\r' || c == 0x0A) {
+            return false;
+        }
+        const bool taken = EditTextChar(m_filter, m_filterEdit, c, 80, m_hwnd);
+        if (taken) {
+            m_scroll.Reset();
+            Layout();
+        }
+        return taken;
+    }
+    bool AnimateContents(double dt) override {
+        const bool scrolling = m_scroll.Animate(dt);
+        return AnimateTyping(true, scrolling);
+    }
+
+   private:
+    enum class Part { None, New, Import, Cancel, Save, KeysMode, Row, Delete };
+    enum class Focus { Filter, Keys, Description };
+    struct Hit {
+        Part part = Part::None;
+        long long id = 0;
+        bool operator==(const Hit& other) const {
+            return part == other.part && id == other.id;
+        }
+    };
+    struct Row {
+        long long id;
+        D2D1_RECT_F rect;
+        D2D1_RECT_F remove;
+    };
+
+    void Load() {
+        if (m_loaded) {
+            return;
+        }
+        m_loaded = true;
+        for (const auto& record : LoadRecords(L"shortcuts", 3)) {
+            m_shortcuts.push_back(
+                {_wtoi64(record[0].c_str()), record[1], record[2]});
+        }
+    }
+    void Save() {
+        std::vector<std::vector<std::wstring>> records;
+        for (const auto& shortcut : m_shortcuts) {
+            records.push_back({std::to_wstring(shortcut.id), shortcut.keys,
+                               shortcut.description});
+        }
+        SaveRecords(L"shortcuts", records);
+    }
+    // The same key whichever side it's on.
+    static UINT NormalKey(UINT vk) {
+        switch (vk) {
+            case VK_LCONTROL:
+            case VK_RCONTROL:
+                return VK_CONTROL;
+            case VK_LMENU:
+            case VK_RMENU:
+                return VK_MENU;
+            case VK_LSHIFT:
+            case VK_RSHIFT:
+                return VK_SHIFT;
+            case VK_RWIN:
+                return VK_LWIN;
+            default:
+                return vk;
+        }
+    }
+    // The keys held so far: the modifiers first (in the usual order), then
+    // the others as they were pressed.
+    std::wstring ChordText() const {
+        std::wstring text;
+        for (UINT modifier : {(UINT)VK_LWIN, (UINT)VK_CONTROL, (UINT)VK_MENU,
+                              (UINT)VK_SHIFT}) {
+            if (std::find(m_chord.begin(), m_chord.end(), modifier) !=
+                m_chord.end()) {
+                text += KeyName(modifier) + L"+";
+            }
+        }
+        for (UINT vk : m_chord) {
+            if (!IsModifierKey(vk)) {
+                text += KeyName(vk) + L"+";
+            }
+        }
+        if (!text.empty()) {
+            text.pop_back();
+        }
+        return text;
+    }
+    void Record(UINT vk) {
+        g_lastTyped = NowSeconds();
+        vk = NormalKey(vk);
+        // A new combination after one: up to three in a row.
+        if (m_held.empty() && m_chord.empty() && m_chords >= 3) {
+            return;
+        }
+        if (std::find(m_held.begin(), m_held.end(), vk) == m_held.end()) {
+            m_held.push_back(vk);
+        }
+        if (std::find(m_chord.begin(), m_chord.end(), vk) == m_chord.end() &&
+            m_chord.size() < 6) {
+            m_chord.push_back(vk);
+        }
+    }
+    // What's shown: the combinations done, and the one being pressed.
+    std::wstring KeysShown() const {
+        if (m_chord.empty()) {
+            return m_keys;
+        }
+        return m_keys + (m_keys.empty() ? L"" : L", ") + ChordText();
+    }
+    void StartForm(long long id) {
+        m_form = true;
+        m_editingId = id;
+        m_keys.clear();
+        m_description.clear();
+        for (const auto& shortcut : m_shortcuts) {
+            if (shortcut.id == id) {
+                m_keys = shortcut.keys;
+                m_description = shortcut.description;
+            }
+        }
+        m_descriptionEdit.Reset();
+        m_descriptionEdit.caret = m_description.size();
+        m_held.clear();
+        m_chord.clear();
+        m_chords = 0;
+        for (size_t at = 0; !m_keys.empty() && at != std::wstring::npos;
+             at = m_keys.find(L", ", at + 1)) {
+            m_chords++;
+        }
+        m_focus = id ? Focus::Description : Focus::Keys;
+        g_lastTyped = NowSeconds();
+        Layout();
+        StartIslandAnimation();
+    }
+    void StopForm() {
+        m_form = false;
+        m_editingId = 0;
+        m_focus = Focus::Filter;
+        Layout();
+    }
+    void Commit() {
+        if (m_keysWritten) {
+            std::wstring tidy;
+            for (size_t i = 0; i < m_keys.size(); i++) {
+                const WCHAR c = m_keys[i];
+                const bool nearPlus =
+                    c == L' ' &&
+                    ((i + 1 < m_keys.size() && m_keys[i + 1] == L'+') ||
+                     (!tidy.empty() && tidy.back() == L'+'));
+                if (!nearPlus) {
+                    tidy += c;
+                }
+            }
+            m_keys = tidy;
+            while (!m_keys.empty() && m_keys.back() == L' ') {
+                m_keys.pop_back();
+            }
+        }
+        if (m_keys.empty()) {
+            m_focus = Focus::Keys;
+            return;
+        }
+        if (m_editingId) {
+            for (auto& shortcut : m_shortcuts) {
+                if (shortcut.id == m_editingId) {
+                    shortcut.keys = m_keys;
+                    shortcut.description = m_description;
+                }
+            }
+        } else if (m_shortcuts.size() < kMaxShortcuts) {
+            m_shortcuts.push_back({NowStamp(), m_keys, m_description});
+        }
+        Save();
+        StopForm();
+    }
+    std::vector<const ShortcutNote*> Shown() const {
+        std::vector<const ShortcutNote*> shown;
+        for (const auto& shortcut : m_shortcuts) {
+            if (m_filter.empty() ||
+                MatchesSearch(shortcut.keys + L" " + shortcut.description,
+                              m_filter)) {
+                shown.push_back(&shortcut);
+            }
+        }
+        return shown;
+    }
+
+    void Layout() {
+        const float s = m_scale;
+        const float padding = std::round(12 * s);
+        const float gap = std::round(8 * s);
+        // As wide as the longest keys and description need (up to most of
+        // the screen); then the descriptions wrap.
+        const auto shown = Shown();
+        float keys = std::round(120 * s);
+        float description = 0;
+        for (const ShortcutNote* shortcut : shown) {
+            keys = std::max(keys, DrawKeys(nullptr, nullptr, shortcut->keys, 0,
+                                           0, 100000));
+            winrt::com_ptr<IDWriteTextLayout> layout;
+            if (m_textFormat &&
+                SUCCEEDED(m_dwrite->CreateTextLayout(
+                    shortcut->description.c_str(),
+                    (UINT32)shortcut->description.size(), m_textFormat.get(),
+                    100000, 100, layout.put()))) {
+                DWRITE_TEXT_METRICS metrics{};
+                layout->GetMetrics(&metrics);
+                description = std::max(description, std::ceil(metrics.width));
+            }
+        }
+        const float extra = padding * 2 + std::round(8 * s) +
+                            std::round(14 * s) + std::round(40 * s);
+        const float most = std::max(
+            std::round(kShortcutsWidth * s),
+            (float)(m_monitorRect.right - m_monitorRect.left) -
+                std::round(64 * s));
+        keys = std::min(keys, most * 0.55f);
+        const float width = std::clamp(extra + keys + description,
+                                       std::round(kShortcutsWidth * s), most);
+        m_keysColumn = keys;
+        const float descriptionWidth = width - extra - keys;
+        float y = padding;
+        m_filterBox = {padding, y, width - padding, y + std::round(34 * s)};
+        y += m_filterBox.bottom - m_filterBox.top + gap;
+        m_rows.clear();
+        const float line = std::round(18 * s);
+        float listY = 0;
+        for (const ShortcutNote* shortcut : shown) {
+            const int lines =
+                description > descriptionWidth
+                    ? WrappedLineCount(m_dwrite, m_textFormat.get(),
+                                       shortcut->description, descriptionWidth,
+                                       line)
+                    : 1;
+            const float row =
+                std::max(std::round(38 * s), line * lines + std::round(16 * s));
+            const D2D1_RECT_F rect{padding, listY, width - padding,
+                                   listY + row};
+            const float middle = (rect.top + rect.bottom) / 2;
+            const float close = std::round(26 * s);
+            m_rows.push_back(
+                {shortcut->id, rect,
+                 {rect.right - close - std::round(6 * s), middle - close / 2,
+                  rect.right - std::round(6 * s), middle + close / 2}});
+            listY += row + std::round(2 * s);
+        }
+        const float content = m_rows.empty() ? std::round(48 * s) : listY;
+        const float footer =
+            m_form ? std::round(34 * s) * 2 + std::round(32 * s) + gap * 4
+                   : std::round(32 * s) + gap;
+        const float room = std::max(std::round(80 * s),
+                                    MaxHeight() - y - footer - padding);
+        const float viewport = std::min(content, room);
+        m_listViewport = {0, y, width, y + viewport};
+        m_scroll.SetSizes(viewport, content);
+        y += viewport + gap;
+        if (m_form) {
+            const float half = std::floor((width - padding * 2 - gap) / 2);
+            // The keys, and "Write" / "Press" beside them.
+            const float mode = std::round(92 * s);
+            m_keysBox = {padding, y, width - padding - mode - gap,
+                         y + std::round(34 * s)};
+            m_keysMode = {m_keysBox.right + gap, y, width - padding,
+                          y + std::round(34 * s)};
+            y += std::round(34 * s) + gap;
+            m_descriptionBox = {padding, y, width - padding,
+                                y + std::round(34 * s)};
+            y += std::round(34 * s) + gap;
+            m_cancel = {padding, y, padding + half, y + std::round(32 * s)};
+            m_save = {width - padding - half, y, width - padding,
+                      y + std::round(32 * s)};
+            m_new = m_import = m_importStatusRect = {};
+            y += std::round(32 * s);
+        } else {
+            m_keysBox = m_descriptionBox = m_cancel = m_save = m_keysMode = {};
+            const float importWidth = std::round(150 * s);
+            m_new = {padding, y, width - padding - importWidth - gap,
+                     y + std::round(32 * s)};
+            m_import = {width - padding - importWidth, y, width - padding,
+                        y + std::round(32 * s)};
+            y += std::round(32 * s);
+            if (!m_importStatus.empty()) {
+                m_importStatusRect = {padding, y + std::round(4 * s),
+                                      width - padding, y + std::round(24 * s)};
+                y += std::round(24 * s);
+            } else {
+                m_importStatusRect = {};
+            }
+        }
+        y += padding;
+        m_size = {(LONG)width, (LONG)std::ceil(y)};
+    }
+
+    Hit HitTest(POINT pt) const {
+        if (PointInRect(pt, m_new)) {
+            return {Part::New};
+        }
+        if (PointInRect(pt, m_import)) {
+            return {Part::Import};
+        }
+        if (PointInRect(pt, m_cancel)) {
+            return {Part::Cancel};
+        }
+        if (PointInRect(pt, m_save)) {
+            return {Part::Save};
+        }
+        if (PointInRect(pt, m_keysMode)) {
+            return {Part::KeysMode};
+        }
+        POINT inList;
+        if (!ListPoint(pt, &inList)) {
+            return {};
+        }
+        for (const auto& row : m_rows) {
+            if (!PointInRect(inList, row.rect)) {
+                continue;
+            }
+            if (PointInRect(inList, row.remove)) {
+                return {Part::Delete, row.id};
+            }
+            return {Part::Row, row.id};
+        }
+        return {};
+    }
+
+    // The keys as little keycaps joined by "+".
+    // Returns where they end (only measured without a target).
+    float DrawKeys(ID2D1RenderTarget* target,
+                   ID2D1SolidColorBrush* brush,
+                   const std::wstring& keys,
+                   float x,
+                   float middle,
+                   float right);
+
+    bool m_loaded = false;
+    std::vector<ShortcutNote> m_shortcuts;
+    std::wstring m_filter;
+    TextEdit m_filterEdit;
+    bool m_form = false;
+    long long m_editingId = 0;
+    std::wstring m_keys;
+    // Being recorded: the keys down now, the ones pressed together so far,
+    // and how many combinations are done.
+    std::vector<UINT> m_held;
+    std::vector<UINT> m_chord;
+    int m_chords = 0;
+    std::wstring m_description;
+    TextEdit m_descriptionEdit;
+    TextEdit m_keysEdit;
+    Focus m_focus = Focus::Filter;
+    Hit m_hover;
+    float m_chipScale = 0;
+    winrt::com_ptr<IDWriteTextFormat> m_chipFormat;
+    // How much room the keys take (the widest of them).
+    float m_keysColumn = 0;
+    // Texts laid out once (a key's cap, a description), kept while their
+    // text, size and scale stay: scrolling only moves them.
+    struct CachedText {
+        std::wstring text;
+        float width;
+        float height;
+        float scale;
+        bool wrapped;
+        float measured;
+        winrt::com_ptr<IDWriteTextLayout> layout;
+    };
+    std::vector<CachedText> m_textCache;
+    CachedText& Cached(const std::wstring& text,
+                       float width,
+                       float height,
+                       bool wrapped) {
+        for (auto& entry : m_textCache) {
+            if (entry.wrapped == wrapped && entry.width == width &&
+                entry.height == height && entry.scale == m_scale &&
+                entry.text == text) {
+                return entry;
+            }
+        }
+        if (m_textCache.size() >= 768) {
+            m_textCache.clear();
+        }
+        CachedText entry{text, width, height, m_scale, wrapped, 0, nullptr};
+        if (wrapped) {
+            entry.layout = WrappedLayout(m_dwrite, m_textFormat.get(), text,
+                                         width, height, std::round(18 * m_scale));
+        } else if (m_chipFormat) {
+            m_dwrite->CreateTextLayout(text.c_str(), (UINT32)text.size(),
+                                       m_chipFormat.get(), width, height,
+                                       entry.layout.put());
+        }
+        if (entry.layout) {
+            DWRITE_TEXT_METRICS metrics{};
+            entry.layout->GetMetrics(&metrics);
+            entry.measured = wrapped ? metrics.height : metrics.width;
+        }
+        return m_textCache.emplace_back(std::move(entry));
+    }
+    D2D1_RECT_F m_filterBox{}, m_new{}, m_keysBox{}, m_descriptionBox{},
+        m_cancel{}, m_save{}, m_keysMode{}, m_import{}, m_importStatusRect{};
+    // The keys written (like "Ctrl+Shift+S") instead of pressed.
+    bool m_keysWritten = false;
+    // Importing from a file: its thread, and how it went.
+    HANDLE m_importThread = nullptr;
+    std::wstring m_importStatus;
+
+   protected:
+    bool OnAppMessage(UINT msg, WPARAM, LPARAM lParam) override {
+        if (msg != WM_APP_SHORTCUTS_IMPORTED) {
+            return false;
+        }
+        m_dialogShown = false;
+        if (m_importThread) {
+            WaitForSingleObject(m_importThread, INFINITE);
+            CloseHandle(m_importThread);
+            m_importThread = nullptr;
+        }
+        std::unique_ptr<std::vector<ShortcutNote>> found(
+            (std::vector<ShortcutNote>*)lParam);
+        if (found) {
+            // The new ones (not the same keys and words again).
+            size_t added = 0;
+            for (auto& shortcut : *found) {
+                const bool known = std::any_of(
+                    m_shortcuts.begin(), m_shortcuts.end(),
+                    [&](const ShortcutNote& other) {
+                        return other.keys == shortcut.keys &&
+                               other.description == shortcut.description;
+                    });
+                if (!known && m_shortcuts.size() < kMaxShortcuts) {
+                    m_shortcuts.push_back(std::move(shortcut));
+                    added++;
+                }
+            }
+            Save();
+            m_importStatus =
+                std::to_wstring(added) + Tr(L" shortcuts imported",
+                                            L" atalhos importados");
+        }
+        // Back in front (the dialog had it).
+        SetForegroundWindow(m_hwnd);
+        Layout();
+        return true;
+    }
+    void OnDestroy() override {
+        if (m_importThread) {
+            WaitForSingleObject(m_importThread, INFINITE);
+            CloseHandle(m_importThread);
+            m_importThread = nullptr;
+        }
+    }
+
+   private:
+    std::vector<Row> m_rows;
+};
+
+float ShortcutsPanel::DrawKeys(ID2D1RenderTarget* target,
+                               ID2D1SolidColorBrush* brush,
+                               const std::wstring& keys,
+                               float x,
+                               float middle,
+                               float right) {
+    const float s = m_scale;
+    const float height = std::round(22 * s);
+    size_t at = 0;
+    bool first = true;
+    bool newChord = false;
+    while (at <= keys.size() && x < right) {
+        size_t plus = keys.find_first_of(L"+,", at);
+        // A "+" or "," key itself ("Ctrl++").
+        if (plus == at && plus + 1 <= keys.size()) {
+            plus = keys.find_first_of(L"+,", at + 1);
+        }
+        std::wstring key = keys.substr(
+            at, plus == std::wstring::npos ? std::wstring::npos : plus - at);
+        while (!key.empty() && key[0] == L' ' && key.size() > 1) {
+            key.erase(0, 1);
+        }
+        if (key.empty()) {
+            break;
+        }
+        if (!first) {
+            // "+" between keys pressed together, "," between combinations.
+            const float jointWidth = std::round(14 * s);
+            if (target) {
+                if (IDWriteTextLayout* joint =
+                        Cached(newChord ? L"," : L"+", jointWidth, height,
+                               false)
+                            .layout.get()) {
+                    brush->SetColor(Fg(0.5f));
+                    target->DrawTextLayout({x, middle - height / 2}, joint,
+                                           brush);
+                }
+            }
+            x += std::round(newChord ? 18 * s : 14 * s);
+        }
+        first = false;
+        newChord = plus != std::wstring::npos && keys[plus] == L',';
+        const float width =
+            std::max(std::round(22 * s),
+                     std::ceil(Cached(key, 400, height, false).measured) +
+                         std::round(14 * s));
+        const D2D1_RECT_F chip{x, middle - height / 2,
+                               std::min(x + width, right),
+                               middle + height / 2};
+        const float radius = std::round(5 * s);
+        if (!target) {
+            x += width;
+            if (plus == std::wstring::npos) {
+                break;
+            }
+            at = plus + 1;
+            continue;
+        }
+        brush->SetColor(Fg(0.1f));
+        target->FillRoundedRectangle({chip, radius, radius}, brush);
+        brush->SetColor(Fg(0.2f));
+        target->DrawRoundedRectangle(
+            {{chip.left + 0.5f, chip.top + 0.5f, chip.right - 0.5f,
+              chip.bottom - 0.5f},
+             radius,
+             radius},
+            brush, 1);
+        brush->SetColor(Fg(0.92f));
+        if (chip.right - chip.left < width - 0.5f) {
+            // Cut at the column's end.
+            target->DrawText(key.c_str(), (UINT32)key.size(),
+                             m_chipFormat.get(), chip, brush,
+                             D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        } else if (IDWriteTextLayout* cap =
+                       Cached(key, width, height, false).layout.get()) {
+            target->DrawTextLayout({chip.left, chip.top}, cap, brush);
+        }
+        x += width;
+        if (plus == std::wstring::npos) {
+            break;
+        }
+        at = plus + 1;
+    }
+    return x;
+}
+
+void ShortcutsPanel::Draw(ID2D1RenderTarget* target,
+                          ID2D1SolidColorBrush* brush) {
+    if (!Ready() || !m_chipFormat) {
+        return;
+    }
+    const float s = m_scale;
+    DrawTextBox(target, brush, m_filterBox, m_filter, m_filterEdit,
+                Tr(L"Type to filter the shortcuts…",
+                   L"Digite para filtrar os atalhos…"),
+                m_focus == Focus::Filter);
+    if (m_rows.empty()) {
+        PCWSTR none = m_shortcuts.empty()
+                          ? Tr(L"Add the shortcuts you want to remember",
+                               L"Adicione os atalhos que você quer lembrar")
+                          : Tr(L"None found", L"Nenhum encontrado");
+        brush->SetColor(Fg(0.4f));
+        m_textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        target->DrawText(none, (UINT32)wcslen(none), m_textFormat.get(),
+                         m_listViewport, brush);
+        m_textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    } else {
+        BeginScrollArea(target, m_listViewport, m_scroll);
+        const float top = m_scroll.Offset();
+        const float bottom = top + m_listViewport.bottom - m_listViewport.top;
+        const auto shown = Shown();
+        for (size_t i = 0; i < m_rows.size() && i < shown.size(); i++) {
+            const Row& row = m_rows[i];
+            if (row.rect.bottom < top || row.rect.top > bottom) {
+                continue;
+            }
+            const bool hover = m_hover.id == row.id;
+            const float lit = Hover(HoverKey(7200, row.id), hover);
+            const bool editing = m_form && m_editingId == row.id;
+            if (lit > 0.01f || editing) {
+                const float radius = std::round(8 * s);
+                brush->SetColor(Fg(editing ? 0.12f : 0.07f * lit));
+                target->FillRoundedRectangle({row.rect, radius, radius}, brush);
+            }
+            const float middle = (row.rect.top + row.rect.bottom) / 2;
+            // The keys, then what they do (wrapped when long).
+            const float keysLeft = row.rect.left + std::round(8 * s);
+            DrawKeys(target, brush, shown[i]->keys, keysLeft, middle,
+                     keysLeft + m_keysColumn);
+            const float descriptionLeft =
+                keysLeft + m_keysColumn + std::round(14 * s);
+            const float descriptionRight =
+                std::max(descriptionLeft, row.rect.right - std::round(32 * s));
+            const CachedText& description =
+                Cached(shown[i]->description,
+                       descriptionRight - descriptionLeft,
+                       row.rect.bottom - row.rect.top, true);
+            if (description.layout) {
+                brush->SetColor(Fg(0.9f));
+                target->DrawTextLayout(
+                    {descriptionLeft, middle - description.measured / 2},
+                    description.layout.get(), brush,
+                    D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+            }
+            if (lit > 0.01f) {
+                DrawIconButton(target, brush, row.remove, kGlyphClose,
+                               hover && m_hover.part == Part::Delete,
+                               0.45f * lit);
+            }
+        }
+        EndScrollArea(target);
+        DrawScrollBar(target, brush, m_listViewport, m_scroll);
+    }
+    if (m_form) {
+        // The keys: pressed to record them (Backspace clears).
+        const bool recording = m_focus == Focus::Keys;
+        const std::wstring keysShown = KeysShown();
+        if (m_keysWritten) {
+            DrawTextBox(target, brush, m_keysBox, m_keys, m_keysEdit,
+                        Tr(L"Like Ctrl+Shift+S, or Ctrl+K, Ctrl+S",
+                           L"Como Ctrl+Shift+S, ou Ctrl+K, Ctrl+S"),
+                        recording);
+        } else if (keysShown.empty()) {
+            DrawTextBox(target, brush, m_keysBox, m_keys, m_keysEdit,
+                        recording ? Tr(L"Press the keys (Tab moves on)…",
+                                       L"Pressione as teclas (Tab continua)…")
+                                  : Tr(L"Click and press the keys",
+                                       L"Clique e pressione as teclas"),
+                        recording);
+        } else {
+            DrawTextBox(target, brush, m_keysBox, L"", m_keysEdit, L"",
+                        recording);
+            DrawKeys(target, brush, keysShown,
+                     m_keysBox.left + std::round(8 * s),
+                     (m_keysBox.top + m_keysBox.bottom) / 2,
+                     m_keysBox.right - std::round(6 * s));
+        }
+        // Written or pressed.
+        {
+            const float lit =
+                Hover(m_keysMode, m_hover.part == Part::KeysMode);
+            const float radius = std::round(9 * s);
+            brush->SetColor(Fg(0.1f + 0.08f * lit));
+            target->FillRoundedRectangle({m_keysMode, radius, radius}, brush);
+            PCWSTR mode = m_keysWritten ? Tr(L"Press", L"Gravar")
+                                        : Tr(L"Write", L"Digitar");
+            brush->SetColor(Fg(0.9f));
+            target->DrawText(mode, (UINT32)wcslen(mode), m_buttonFormat.get(),
+                             m_keysMode, brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        }
+        DrawTextBox(target, brush, m_descriptionBox, m_description,
+                    m_descriptionEdit,
+                    Tr(L"What it does", L"O que ele faz"),
+                    m_focus == Focus::Description);
+        DrawButton(target, brush, m_cancel, Tr(L"Cancel", L"Cancelar"), false,
+                   m_hover.part == Part::Cancel);
+        const bool ready = !m_keys.empty();
+        DrawButton(target, brush, m_save,
+                   m_editingId ? Tr(L"Save", L"Salvar")
+                               : Tr(L"Add", L"Adicionar"),
+                   true, m_hover.part == Part::Save, ready ? 1.0f : 0.5f);
+    } else {
+        DrawButton(target, brush, m_new,
+                   Tr(L"+  New shortcut", L"+  Novo atalho"), false,
+                   m_hover.part == Part::New);
+        DrawButton(target, brush, m_import,
+                   Tr(L"Import a file…", L"Importar arquivo…"), false,
+                   m_hover.part == Part::Import,
+                   m_importThread ? 0.5f : 1.0f);
+        if (!m_importStatus.empty()) {
+            brush->SetColor(Fg(0.55f));
+            target->DrawText(m_importStatus.c_str(),
+                             (UINT32)m_importStatus.size(),
+                             m_smallFormat.get(), m_importStatusRect, brush);
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// A small JSON reader, for the weather's answers.
+
+struct Json {
+    enum class Type { Null, Bool, Number, String, Array, Object };
+    Type type = Type::Null;
+    double number = 0;
+    bool boolean = false;
+    std::wstring string;
+    std::vector<Json> items;
+    std::vector<std::pair<std::wstring, Json>> members;
+
+    const Json& operator[](PCWSTR key) const {
+        for (const auto& [name, value] : members) {
+            if (name == key) {
+                return value;
+            }
+        }
+        return Missing();
+    }
+    const Json& operator[](size_t index) const {
+        return index < items.size() ? items[index] : Missing();
+    }
+    double Number(double otherwise = 0) const {
+        return type == Type::Number ? number : otherwise;
+    }
+    size_t Size() const { return items.size(); }
+    static const Json& Missing() {
+        static const Json missing;
+        return missing;
+    }
+};
+
+class JsonReader {
+   public:
+    explicit JsonReader(const std::wstring& text) : m_text(text) {}
+    bool Read(Json* value) {
+        return Value(value, 0) && (Skip(), m_at == m_text.size());
+    }
+
+   private:
+    void Skip() {
+        while (m_at < m_text.size() && iswspace(m_text[m_at])) {
+            m_at++;
+        }
+    }
+    bool Literal(PCWSTR word) {
+        const size_t length = wcslen(word);
+        if (m_text.compare(m_at, length, word) != 0) {
+            return false;
+        }
+        m_at += length;
+        return true;
+    }
+    bool String(std::wstring* out) {
+        if (m_at >= m_text.size() || m_text[m_at] != L'"') {
+            return false;
+        }
+        m_at++;
+        while (m_at < m_text.size() && m_text[m_at] != L'"') {
+            WCHAR c = m_text[m_at++];
+            if (c == L'\\' && m_at < m_text.size()) {
+                const WCHAR next = m_text[m_at++];
+                switch (next) {
+                    case L'n':
+                        c = L'\n';
+                        break;
+                    case L't':
+                        c = L'\t';
+                        break;
+                    case L'r':
+                        c = L'\r';
+                        break;
+                    case L'b':
+                    case L'f':
+                        c = L' ';
+                        break;
+                    case L'u':
+                        if (m_at + 4 > m_text.size()) {
+                            return false;
+                        }
+                        c = (WCHAR)wcstoul(m_text.substr(m_at, 4).c_str(),
+                                           nullptr, 16);
+                        m_at += 4;
+                        break;
+                    default:
+                        c = next;
+                        break;
+                }
+            }
+            *out += c;
+        }
+        if (m_at >= m_text.size()) {
+            return false;
+        }
+        m_at++;
+        return true;
+    }
+    bool Value(Json* value, int depth) {
+        if (depth > 32) {
+            return false;
+        }
+        Skip();
+        if (m_at >= m_text.size()) {
+            return false;
+        }
+        const WCHAR c = m_text[m_at];
+        if (c == L'{') {
+            m_at++;
+            value->type = Json::Type::Object;
+            Skip();
+            if (m_at < m_text.size() && m_text[m_at] == L'}') {
+                m_at++;
+                return true;
+            }
+            for (;;) {
+                Skip();
+                std::wstring name;
+                if (!String(&name)) {
+                    return false;
+                }
+                Skip();
+                if (m_at >= m_text.size() || m_text[m_at] != L':') {
+                    return false;
+                }
+                m_at++;
+                Json member;
+                if (!Value(&member, depth + 1)) {
+                    return false;
+                }
+                value->members.push_back({std::move(name), std::move(member)});
+                Skip();
+                if (m_at < m_text.size() && m_text[m_at] == L',') {
+                    m_at++;
+                    continue;
+                }
+                if (m_at < m_text.size() && m_text[m_at] == L'}') {
+                    m_at++;
+                    return true;
+                }
+                return false;
+            }
+        }
+        if (c == L'[') {
+            m_at++;
+            value->type = Json::Type::Array;
+            Skip();
+            if (m_at < m_text.size() && m_text[m_at] == L']') {
+                m_at++;
+                return true;
+            }
+            for (;;) {
+                Json item;
+                if (!Value(&item, depth + 1)) {
+                    return false;
+                }
+                value->items.push_back(std::move(item));
+                Skip();
+                if (m_at < m_text.size() && m_text[m_at] == L',') {
+                    m_at++;
+                    continue;
+                }
+                if (m_at < m_text.size() && m_text[m_at] == L']') {
+                    m_at++;
+                    return true;
+                }
+                return false;
+            }
+        }
+        if (c == L'"') {
+            value->type = Json::Type::String;
+            return String(&value->string);
+        }
+        if (Literal(L"true") || Literal(L"false")) {
+            value->type = Json::Type::Bool;
+            value->boolean = m_text[m_at - 1] == L'e' && m_text[m_at - 2] == L'u';
+            return true;
+        }
+        if (Literal(L"null")) {
+            return true;
+        }
+        PCWSTR start = m_text.c_str() + m_at;
+        PWSTR end = nullptr;
+        value->number = wcstod(start, &end);
+        if (end == start) {
+            return false;
+        }
+        value->type = Json::Type::Number;
+        m_at += end - start;
+        return true;
+    }
+
+    const std::wstring& m_text;
+    size_t m_at = 0;
+};
+
+// An https address's JSON (UTF-8).
+bool HttpsGetJson(const std::wstring& url, Json* json) {
+    std::vector<BYTE> data;
+    if (!HttpsGet(url, &data, 512 * 1024)) {
+        return false;
+    }
+    std::wstring text;
+    const int length = MultiByteToWideChar(CP_UTF8, 0, (const char*)data.data(),
+                                           (int)data.size(), nullptr, 0);
+    if (length <= 0) {
+        return false;
+    }
+    text.resize(length);
+    MultiByteToWideChar(CP_UTF8, 0, (const char*)data.data(), (int)data.size(),
+                        text.data(), length);
+    return JsonReader(text).Read(json);
+}
+
+// Escaped for an address's query.
+std::wstring UrlEncode(const std::wstring& text) {
+    std::string utf8;
+    const int length = WideCharToMultiByte(CP_UTF8, 0, text.c_str(),
+                                           (int)text.size(), nullptr, 0,
+                                           nullptr, nullptr);
+    utf8.resize(std::max(length, 0));
+    WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(),
+                        utf8.data(), length, nullptr, nullptr);
+    std::wstring encoded;
+    for (unsigned char c : utf8) {
+        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            encoded += (WCHAR)c;
+        } else {
+            WCHAR hex[4];
+            swprintf_s(hex, L"%%%02X", c);
+            encoded += hex;
+        }
+    }
+    return encoded;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// The weather, when chosen in the island's settings (off by default, since it
+// goes online): from the free Open-Meteo service (open-meteo.com, no key), for
+// the city typed in its panel (found with Open-Meteo's own geocoding), every
+// 30 minutes while it's on the pill, on a thread of its own. Shown on the
+// pill (its sky and temperature) and in its panel (now, the next hours, the
+// week).
+
+struct WeatherHour {
+    std::wstring time;
+    double temperature = 0;
+    int code = 0;
+    bool day = true;
+    double wind = 0;
+};
+struct WeatherDay {
+    std::wstring date;
+    int code = 0;
+    double high = 0;
+    double low = 0;
+};
+struct WeatherData {
+    bool valid = false;
+    // Imperial units (°F, mph), from Windows' measurement system.
+    bool imperial = false;
+    std::wstring city;
+    double temperature = 0;
+    double feelsLike = 0;
+    int humidity = 0;
+    int code = 0;
+    bool day = true;
+    int clouds = 0;
+    double pressure = 0;
+    double wind = 0;
+    int rainChance = -1;
+    double uv = -1;
+    std::wstring sunrise;
+    std::wstring sunset;
+    std::vector<WeatherHour> hours;
+    std::vector<WeatherDay> days;
+    // The city's time now ("2026-10-06T00:45").
+    std::wstring now;
+    double fetchedAt = 0;
+};
+SRWLOCK g_weatherLock = SRWLOCK_INIT;
+WeatherData g_weather;
+// The city chosen: its name as shown, and where it is.
+struct WeatherPlace {
+    std::wstring name;
+    double latitude = 0;
+    double longitude = 0;
+};
+// Tells the island new weather came (wParam: 1 when the city wasn't found,
+// 2 when the service didn't answer).
+constexpr UINT WM_APP_WEATHER = WM_APP + 67;
+constexpr double kWeatherRefreshSeconds = 30 * 60;
+
+WeatherPlace LoadWeatherPlace() {
+    WeatherPlace place;
+    for (const auto& record : LoadRecords(L"weatherPlace", 3)) {
+        place.name = record[0];
+        place.latitude = _wtof(record[1].c_str());
+        place.longitude = _wtof(record[2].c_str());
+    }
+    return place;
+}
+
+void SaveWeatherPlace(const WeatherPlace& place) {
+    WCHAR latitude[32], longitude[32];
+    swprintf_s(latitude, L"%.5f", place.latitude);
+    swprintf_s(longitude, L"%.5f", place.longitude);
+    SaveRecords(L"weatherPlace", {{place.name, latitude, longitude}});
+}
+
+bool UsesImperialUnits() {
+    DWORD system = 0;
+    return GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT,
+                           LOCALE_IMEASURE | LOCALE_RETURN_NUMBER,
+                           (LPWSTR)&system, sizeof(system) / sizeof(WCHAR)) &&
+           system == 1;
+}
+
+struct WeatherRequest {
+    HWND notify;
+    // A city to look for first (or the place known).
+    std::wstring search;
+    WeatherPlace place;
+};
+
+DWORD WINAPI WeatherThreadProc(LPVOID parameter) {
+    std::unique_ptr<WeatherRequest> request((WeatherRequest*)parameter);
+    WeatherPlace place = request->place;
+    if (!request->search.empty()) {
+        Json found;
+        const std::wstring language = Tr(L"en", L"pt");
+        if (!HttpsGetJson(
+                L"https://geocoding-api.open-meteo.com/v1/search?count=1&"
+                L"format=json&language=" +
+                    language + L"&name=" + UrlEncode(request->search),
+                &found)) {
+            PostMessage(request->notify, WM_APP_WEATHER, 2, 0);
+            return 0;
+        }
+        const Json& city = found[L"results"][(size_t)0];
+        if (city.type != Json::Type::Object) {
+            PostMessage(request->notify, WM_APP_WEATHER, 1, 0);
+            return 0;
+        }
+        place.name = city[L"name"].string;
+        if (!city[L"admin1"].string.empty() &&
+            city[L"admin1"].string != place.name) {
+            place.name += L", " + city[L"admin1"].string;
+        }
+        place.latitude = city[L"latitude"].Number();
+        place.longitude = city[L"longitude"].Number();
+        SaveWeatherPlace(place);
+    }
+    const bool imperial = UsesImperialUnits();
+    WCHAR where[96];
+    swprintf_s(where, L"latitude=%.4f&longitude=%.4f", place.latitude,
+               place.longitude);
+    Json forecast;
+    if (!HttpsGetJson(
+            std::wstring(L"https://api.open-meteo.com/v1/forecast?") + where +
+                L"&current=temperature_2m,apparent_temperature,relative_"
+                L"humidity_2m,weather_code,cloud_cover,pressure_msl,wind_speed_"
+                L"10m,is_day&hourly=temperature_2m,weather_code,wind_speed_10m,"
+                L"is_day&daily=weather_code,temperature_2m_max,temperature_2m_"
+                L"min,sunrise,sunset,uv_index_max,precipitation_probability_max"
+                L"&timezone=auto&forecast_days=7" +
+                (imperial ? L"&temperature_unit=fahrenheit&wind_speed_unit=mph"
+                          : L""),
+            &forecast) ||
+        forecast[L"current"].type != Json::Type::Object) {
+        PostMessage(request->notify, WM_APP_WEATHER, 2, 0);
+        return 0;
+    }
+    WeatherData data;
+    data.valid = true;
+    data.imperial = imperial;
+    data.city = place.name;
+    const Json& now = forecast[L"current"];
+    data.temperature = now[L"temperature_2m"].Number();
+    data.feelsLike = now[L"apparent_temperature"].Number();
+    data.humidity = (int)now[L"relative_humidity_2m"].Number();
+    data.code = (int)now[L"weather_code"].Number();
+    data.day = now[L"is_day"].Number(1) != 0;
+    data.clouds = (int)now[L"cloud_cover"].Number();
+    data.pressure = now[L"pressure_msl"].Number();
+    data.wind = now[L"wind_speed_10m"].Number();
+    data.now = now[L"time"].string;
+    const Json& hourly = forecast[L"hourly"];
+    for (size_t i = 0; i < hourly[L"time"].Size(); i++) {
+        WeatherHour hour;
+        hour.time = hourly[L"time"][i].string;
+        hour.temperature = hourly[L"temperature_2m"][i].Number();
+        hour.code = (int)hourly[L"weather_code"][i].Number();
+        hour.day = hourly[L"is_day"][i].Number(1) != 0;
+        hour.wind = hourly[L"wind_speed_10m"][i].Number();
+        data.hours.push_back(std::move(hour));
+    }
+    const Json& daily = forecast[L"daily"];
+    for (size_t i = 0; i < daily[L"time"].Size(); i++) {
+        WeatherDay day;
+        day.date = daily[L"time"][i].string;
+        day.code = (int)daily[L"weather_code"][i].Number();
+        day.high = daily[L"temperature_2m_max"][i].Number();
+        day.low = daily[L"temperature_2m_min"][i].Number();
+        data.days.push_back(std::move(day));
+    }
+    if (daily[L"time"].Size() > 0) {
+        data.sunrise = daily[L"sunrise"][(size_t)0].string;
+        data.sunset = daily[L"sunset"][(size_t)0].string;
+        data.uv = daily[L"uv_index_max"][(size_t)0].Number(-1);
+        data.rainChance =
+            (int)daily[L"precipitation_probability_max"][(size_t)0].Number(-1);
+    }
+    data.fetchedAt = NowSeconds();
+    AcquireSRWLockExclusive(&g_weatherLock);
+    g_weather = std::move(data);
+    ReleaseSRWLockExclusive(&g_weatherLock);
+    PostMessage(request->notify, WM_APP_WEATHER, 0, 0);
+    return 0;
+}
+
+WeatherData GetWeather() {
+    AcquireSRWLockShared(&g_weatherLock);
+    WeatherData data = g_weather;
+    ReleaseSRWLockShared(&g_weatherLock);
+    return data;
+}
+
+// A weather code (WMO) as an emoji, and in words.
+std::wstring WeatherEmoji(int code, bool day) {
+    switch (code) {
+        case 0:
+            return day ? L"☀️" : L"\U0001F319";
+        case 1:
+            return day ? L"\U0001F324️" : L"\U0001F319";
+        case 2:
+            return L"⛅";
+        case 3:
+            return L"☁️";
+        case 45:
+        case 48:
+            return L"\U0001F32B️";
+        case 51:
+        case 53:
+        case 55:
+        case 80:
+        case 81:
+        case 82:
+            return L"\U0001F326️";
+        case 71:
+        case 73:
+        case 75:
+        case 85:
+        case 86:
+            return L"\U0001F328️";
+        case 77:
+            return L"❄️";
+        case 95:
+        case 96:
+        case 99:
+            return L"⛈️";
+        default:
+            return L"\U0001F327️";
+    }
+}
+
+PCWSTR WeatherWords(int code) {
+    switch (code) {
+        case 0:
+            return Tr(L"Clear", L"Céu limpo");
+        case 1:
+            return Tr(L"Mostly clear", L"Poucas nuvens");
+        case 2:
+            return Tr(L"Partly cloudy", L"Parcialmente nublado");
+        case 3:
+            return Tr(L"Overcast", L"Nublado");
+        case 45:
+        case 48:
+            return Tr(L"Fog", L"Neblina");
+        case 51:
+        case 53:
+        case 55:
+            return Tr(L"Drizzle", L"Garoa");
+        case 56:
+        case 57:
+            return Tr(L"Freezing drizzle", L"Garoa congelante");
+        case 61:
+            return Tr(L"Light rain", L"Chuva fraca");
+        case 63:
+            return Tr(L"Rain", L"Chuva");
+        case 65:
+            return Tr(L"Heavy rain", L"Chuva forte");
+        case 66:
+        case 67:
+            return Tr(L"Freezing rain", L"Chuva congelante");
+        case 71:
+        case 73:
+        case 75:
+        case 77:
+            return Tr(L"Snow", L"Neve");
+        case 80:
+        case 81:
+        case 82:
+            return Tr(L"Showers", L"Pancadas de chuva");
+        case 85:
+        case 86:
+            return Tr(L"Snow showers", L"Pancadas de neve");
+        case 95:
+            return Tr(L"Thunderstorm", L"Trovoadas");
+        case 96:
+        case 99:
+            return Tr(L"Thunderstorm with hail", L"Trovoadas com granizo");
+        default:
+            return L"";
+    }
+}
+
+// "19°".
+std::wstring Degrees(double value) {
+    return std::to_wstring((int)std::lround(value)) + L"°";
+}
+
+constexpr float kWeatherWidth = 620;
+
+class WeatherPanel : public EditingPanel {
+   public:
+    // New weather came (`problem`: 1 city not found, 2 no answer).
+    void OnWeather(int problem) {
+        m_searching = false;
+        if (problem == 1) {
+            m_status = Tr(L"City not found", L"Cidade não encontrada");
+        } else if (problem == 2) {
+            m_status = Tr(L"The weather service didn't answer",
+                          L"O serviço do clima não respondeu");
+        } else {
+            m_status.clear();
+            m_choosing = false;
+        }
+        if (IsOpen()) {
+            m_data = GetWeather();
+            Layout();
+            Render();
+        }
+    }
+    // Asks the island for the weather of a city typed.
+    std::function<void(const std::wstring&)> search;
+
+   protected:
+    void Prepare(float scale) override {
+        PrepareFormats(scale);
+        if (scale != m_weatherScale) {
+            m_weatherScale = scale;
+            m_bigFormat = MakeFormat(L"Segoe UI Variable Display",
+                                     DWRITE_FONT_WEIGHT_SEMI_BOLD, 26 * scale);
+            m_centerFormat = MakeFormat(L"Segoe UI Variable Text",
+                                        DWRITE_FONT_WEIGHT_NORMAL, 12 * scale);
+            m_centerBoldFormat =
+                MakeFormat(L"Segoe UI Variable Text",
+                           DWRITE_FONT_WEIGHT_SEMI_BOLD, 13 * scale);
+            m_emojiFormat = MakeFormat(L"Segoe UI Emoji",
+                                       DWRITE_FONT_WEIGHT_NORMAL, 26 * scale);
+            m_smallEmojiFormat = MakeFormat(
+                L"Segoe UI Emoji", DWRITE_FONT_WEIGHT_NORMAL, 17 * scale);
+            m_emojiBitmaps.clear();
+            m_hoursBitmap = nullptr;
+            m_hoursKey.clear();
+        }
+        m_data = GetWeather();
+        Layout();
+    }
+
+    void OnOpen() override {
+        m_data = GetWeather();
+        m_hover = {};
+        m_day = 0;
+        m_hourScroll = m_hourScrollTarget = m_hourScrollVelocity = 0;
+        m_choosing = !m_data.valid && !m_searching;
+        m_cityEdit.caret = m_city.size();
+        Layout();
+    }
+
+    void Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) override;
+
+    bool OnMouseMove(POINT pt) override {
+        int day = -1;
+        const Part hover = HitTest(pt, &day);
+        if (hover == m_hover && day == m_hoverDay) {
+            return false;
+        }
+        m_hover = hover;
+        m_hoverDay = day;
+        return true;
+    }
+    bool OnWheel(int delta) override {
+        POINT pt;
+        GetCursorPos(&pt);
+        ScreenToClient(m_hwnd, &pt);
+        pt.x -= m_contentOffset.x;
+        pt.y -= m_contentOffset.y;
+        if (!PointInRect(pt, m_hoursRect)) {
+            return false;
+        }
+        const double most =
+            std::max(0.0, (double)DayHours().size() - kHoursShown);
+        m_hourScrollTarget = std::clamp(
+            m_hourScrollTarget - (double)delta / WHEEL_DELTA * 2, 0.0, most);
+        StartIslandAnimation();
+        return true;
+    }
+    bool OnMouseLeave() override {
+        m_hover = Part::None;
+        return true;
+    }
+    bool OnMouseDown(POINT pt) override {
+        if (m_choosing && PointInRect(pt, m_cityBox)) {
+            EditTextClick(m_city, m_cityEdit, pt);
+            return true;
+        }
+        return false;
+    }
+    bool OnMouseUp(POINT pt) override {
+        int day = -1;
+        switch (HitTest(pt, &day)) {
+            case Part::Day:
+                // Its hours below, from its start (now, for today).
+                if (day != m_day) {
+                    m_day = day;
+                    m_hourScroll = m_hourScrollTarget = 0;
+                    m_hourScrollVelocity = 0;
+                    m_daySwitch = 1;
+                    StartIslandAnimation();
+                }
+                return true;
+            case Part::Change:
+                m_choosing = !m_choosing || !m_data.valid;
+                m_status.clear();
+                g_lastTyped = NowSeconds();
+                Layout();
+                return true;
+            case Part::Search:
+                Search();
+                return true;
+            default:
+                return false;
+        }
+    }
+    bool OnKey(WPARAM key) override {
+        if (!m_choosing) {
+            return false;
+        }
+        if (key == VK_ESCAPE && m_data.valid) {
+            m_choosing = false;
+            Layout();
+            return true;
+        }
+        return EditTextKey(m_city, m_cityEdit, key);
+    }
+    bool OnChar(WCHAR c) override {
+        if (!m_choosing) {
+            return false;
+        }
+        if (c == L'\r' || c == 0x0A) {
+            Search();
+            return true;
+        }
+        if (c == 0x1B) {
+            return false;
+        }
+        return c != L'\n' && EditTextChar(m_city, m_cityEdit, c, 80, m_hwnd);
+    }
+    bool AnimateContents(double dt) override {
+        const bool scrolling =
+            SpringTowards(m_hourScroll, m_hourScrollVelocity,
+                          m_hourScrollTarget, 0.32, dt);
+        // Another day's hours fade in.
+        const bool switching = m_daySwitch > 0;
+        if (switching) {
+            m_daySwitch = std::max(0.0, m_daySwitch - dt / 0.3);
+        }
+        return AnimateTyping(m_choosing, scrolling || switching);
+    }
+
+   private:
+    enum class Part { None, Change, Search, Day };
+    // How many hours show at once.
+    static constexpr int kHoursShown = 8;
+
+    // The chosen day's hours (today's from now).
+    std::vector<const WeatherHour*> DayHours() const {
+        std::vector<const WeatherHour*> hours;
+        if (m_day < 0 || m_day >= (int)m_data.days.size()) {
+            return hours;
+        }
+        const std::wstring& date = m_data.days[m_day].date;
+        const std::wstring nowHour = m_data.now.substr(0, 13);
+        for (const auto& hour : m_data.hours) {
+            if (hour.time.compare(0, date.size(), date) != 0) {
+                continue;
+            }
+            if (m_day == 0 && !nowHour.empty() &&
+                hour.time.substr(0, 13) < nowHour) {
+                continue;
+            }
+            hours.push_back(&hour);
+        }
+        return hours;
+    }
+
+    void Search() {
+        if (m_city.find_first_not_of(L' ') == std::wstring::npos ||
+            m_searching || !search) {
+            return;
+        }
+        m_searching = true;
+        m_status = Tr(L"Looking…", L"Procurando…");
+        search(m_city);
+        Layout();
+    }
+
+    void Layout() {
+        const float s = m_scale;
+        const float width = std::round(kWeatherWidth * s);
+        const float padding = std::round(14 * s);
+        const float gap = std::round(8 * s);
+        float y = padding;
+        m_change = {padding, y, padding + std::round(32 * s),
+                    y + std::round(32 * s)};
+        if (m_choosing || !m_data.valid) {
+            y += std::round(40 * s);
+            m_cityBox = {padding, y, width - padding - std::round(110 * s),
+                         y + std::round(36 * s)};
+            m_search = {m_cityBox.right + gap, y, width - padding,
+                        y + std::round(36 * s)};
+            y += std::round(36 * s) + gap;
+            m_statusRect = {padding, y, width - padding, y + std::round(22 * s)};
+            y += std::round(22 * s);
+        } else {
+            m_cityBox = m_search = m_statusRect = {};
+        }
+        if (m_data.valid) {
+            m_title = {padding, y, width - padding, y + std::round(40 * s)};
+            y += std::round(40 * s);
+            m_sun = {padding, y, width - padding, y + std::round(24 * s)};
+            y += std::round(26 * s);
+            m_details = {padding, y, width - padding, y + std::round(36 * s)};
+            y += std::round(36 * s) + gap;
+            // The week: a card a day.
+            m_dayCards.clear();
+            const size_t days = std::min<size_t>(m_data.days.size(), 7);
+            const float cardGap = std::round(6 * s);
+            const float card =
+                days ? (width - padding * 2 - cardGap * (days - 1)) / days : 0;
+            for (size_t i = 0; i < days; i++) {
+                const float left = padding + (card + cardGap) * i;
+                m_dayCards.push_back({std::round(left), y,
+                                      std::round(left + card),
+                                      y + std::round(118 * s)});
+            }
+            y += std::round(118 * s) + gap * 2;
+            // The next hours.
+            m_hoursRect = {padding, y, width - padding, y + std::round(122 * s)};
+            y += std::round(122 * s) + gap;
+            m_credit = {padding, y, width - padding, y + std::round(18 * s)};
+            y += std::round(18 * s);
+        }
+        y += padding;
+        m_size = {(LONG)width, (LONG)std::ceil(y)};
+    }
+
+    Part HitTest(POINT pt, int* day) const {
+        if (m_data.valid && PointInRect(pt, m_change)) {
+            return Part::Change;
+        }
+        if (PointInRect(pt, m_search)) {
+            return Part::Search;
+        }
+        for (size_t i = 0; i < m_dayCards.size(); i++) {
+            if (PointInRect(pt, m_dayCards[i])) {
+                *day = (int)i;
+                return Part::Day;
+            }
+        }
+        return Part::None;
+    }
+
+    // Color emojis are slow to draw (every frame of a scroll drew dozens):
+    // each one is drawn once into a bitmap, then the bitmap is drawn.
+    void DrawEmoji(ID2D1RenderTarget* target,
+                   ID2D1SolidColorBrush* brush,
+                   const std::wstring& emoji,
+                   IDWriteTextFormat* format,
+                   const D2D1_RECT_F& rect) {
+        const float width = std::ceil(rect.right - rect.left);
+        const float height = std::ceil(rect.bottom - rect.top);
+        if (width < 1 || height < 1) {
+            return;
+        }
+        const std::wstring key =
+            emoji + L"|" + std::to_wstring((uintptr_t)format) + L"|" +
+            std::to_wstring((int)width) + L"x" + std::to_wstring((int)height) +
+            L"|" + std::to_wstring((int)(g_theme.light * 10));
+        ID2D1Bitmap* bitmap = nullptr;
+        for (const auto& cached : m_emojiBitmaps) {
+            if (cached.key == key) {
+                bitmap = cached.bitmap.get();
+            }
+        }
+        if (!bitmap) {
+            winrt::com_ptr<ID2D1BitmapRenderTarget> emojiTarget;
+            winrt::com_ptr<ID2D1Bitmap> made;
+            if (SUCCEEDED(target->CreateCompatibleRenderTarget(
+                    {width, height}, emojiTarget.put()))) {
+                emojiTarget->SetTextAntialiasMode(
+                    target->GetTextAntialiasMode());
+                emojiTarget->BeginDraw();
+                emojiTarget->Clear(D2D1::ColorF(0, 0, 0, 0));
+                brush->SetColor(Fg(1));
+                emojiTarget->DrawText(
+                    emoji.c_str(), (UINT32)emoji.size(), format,
+                    {0, 0, width, height}, brush,
+                    D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+                if (SUCCEEDED(emojiTarget->EndDraw())) {
+                    emojiTarget->GetBitmap(made.put());
+                }
+            }
+            if (!made) {
+                brush->SetColor(Fg(1));
+                target->DrawText(emoji.c_str(), (UINT32)emoji.size(), format,
+                                 rect, brush,
+                                 D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+                return;
+            }
+            if (m_emojiBitmaps.size() >= 64) {
+                m_emojiBitmaps.clear();
+            }
+            bitmap = made.get();
+            m_emojiBitmaps.push_back({key, std::move(made)});
+        }
+        const float left = std::round(rect.left);
+        const float top = std::round(rect.top);
+        target->DrawBitmap(bitmap, {left, top, left + width, top + height});
+    }
+
+    // The chosen day's hours as one long strip (drawn once per day, size
+    // and colors; scrolling only moves it).
+    void DrawHoursStrip(ID2D1RenderTarget* target,
+                        ID2D1SolidColorBrush* brush,
+                        const std::vector<const WeatherHour*>& dayHours,
+                        float column,
+                        float stripHeight);
+
+    struct EmojiBitmap {
+        std::wstring key;
+        winrt::com_ptr<ID2D1Bitmap> bitmap;
+    };
+    std::vector<EmojiBitmap> m_emojiBitmaps;
+    winrt::com_ptr<ID2D1Bitmap> m_hoursBitmap;
+    std::wstring m_hoursKey;
+
+    WeatherData m_data;
+    // The day chosen, and where its hours are scrolled (in hours).
+    int m_day = 0;
+    int m_hoverDay = -1;
+    double m_hourScroll = 0;
+    double m_hourScrollTarget = 0;
+    double m_hourScrollVelocity = 0;
+    double m_daySwitch = 0;
+    std::wstring m_city;
+    TextEdit m_cityEdit;
+    bool m_choosing = false;
+    bool m_searching = false;
+    std::wstring m_status;
+    Part m_hover = Part::None;
+    float m_weatherScale = 0;
+    winrt::com_ptr<IDWriteTextFormat> m_bigFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_centerFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_centerBoldFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_emojiFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_smallEmojiFormat;
+    D2D1_RECT_F m_change{}, m_cityBox{}, m_search{}, m_statusRect{}, m_title{},
+        m_sun{}, m_details{}, m_hoursRect{}, m_credit{};
+    std::vector<D2D1_RECT_F> m_dayCards;
+};
+
+void WeatherPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
+    if (!Ready() || !m_bigFormat || !m_centerFormat || !m_centerBoldFormat ||
+        !m_emojiFormat || !m_smallEmojiFormat) {
+        return;
+    }
+    const float s = m_scale;
+    const WeatherData& d = m_data;
+    // The city's button (changes it).
+    if (d.valid) {
+        const float lit = Hover(m_change, m_hover == Part::Change);
+        const float radius = std::round(8 * s);
+        brush->SetColor(Fg(0.06f + 0.1f * lit));
+        target->FillRoundedRectangle({m_change, radius, radius}, brush);
+        const WCHAR pin = 0xE707;
+        brush->SetColor(Fg(0.8f));
+        target->DrawText(&pin, 1, m_iconFormat.get(), m_change, brush);
+    }
+    if (m_choosing || !d.valid) {
+        DrawTextBox(target, brush, m_cityBox, m_city, m_cityEdit,
+                    Tr(L"Your city (like Campinas)",
+                       L"Sua cidade (como Campinas)"),
+                    true);
+        DrawButton(target, brush, m_search, Tr(L"Search", L"Buscar"), true,
+                   m_hover == Part::Search, m_searching ? 0.5f : 1.0f);
+        brush->SetColor(Fg(0.55f));
+        target->DrawText(m_status.c_str(), (UINT32)m_status.size(),
+                         m_smallFormat.get(), m_statusRect, brush);
+    }
+    if (!d.valid) {
+        return;
+    }
+    // "Campinas 19°".
+    const std::wstring title = d.city + L"  " + Degrees(d.temperature) +
+                               (d.imperial ? L"F" : L"C");
+    brush->SetColor(Fg(0.95f));
+    target->DrawText(title.c_str(), (UINT32)title.size(), m_bigFormat.get(),
+                     m_title, brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    // Sunrise and sunset.
+    auto clock = [](const std::wstring& time) {
+        const size_t t = time.find(L'T');
+        return t == std::wstring::npos ? std::wstring() : time.substr(t + 1, 5);
+    };
+    const std::wstring sun = L"☀️ " + clock(d.sunrise) +
+                             L"     \U0001F319 " + clock(d.sunset);
+    brush->SetColor(D2D1::ColorF(1.0f, 0.82f, 0.35f, 1));
+    target->DrawText(sun.c_str(), (UINT32)sun.size(), m_centerBoldFormat.get(),
+                     m_sun, brush, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+    // The details.
+    WCHAR line1[256], line2[256];
+    swprintf_s(line1, L"%ls %ls  •  %ls  •  %ls %d%%  •  %ls %.0f hPa",
+               Tr(L"Feels like", L"Sensação de"), Degrees(d.feelsLike).c_str(),
+               WeatherWords(d.code), Tr(L"Humidity", L"Umidade"), d.humidity,
+               Tr(L"Pressure", L"Pressão"), d.pressure);
+    std::wstring second = std::wstring(Tr(L"Clouds", L"Nuvens")) + L" " +
+                          std::to_wstring(d.clouds) + L"%";
+    if (d.rainChance >= 0) {
+        second += std::wstring(L"  •  ") + Tr(L"Rain chance", L"Chance de chuva") +
+                  L" " + std::to_wstring(d.rainChance) + L"%";
+    }
+    if (d.uv >= 0) {
+        swprintf_s(line2, L"  •  %ls %.1f", Tr(L"UV index", L"Índice UV"), d.uv);
+        second += line2;
+    }
+    brush->SetColor(Fg(0.6f));
+    target->DrawText(line1, (UINT32)wcslen(line1), m_centerFormat.get(),
+                     {m_details.left, m_details.top, m_details.right,
+                      m_details.top + std::round(18 * s)},
+                     brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    target->DrawText(second.c_str(), (UINT32)second.size(),
+                     m_centerFormat.get(),
+                     {m_details.left, m_details.top + std::round(18 * s),
+                      m_details.right, m_details.bottom},
+                     brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+
+    // The week.
+    for (size_t i = 0; i < m_dayCards.size() && i < d.days.size(); i++) {
+        const D2D1_RECT_F& card = m_dayCards[i];
+        const WeatherDay& day = d.days[i];
+        const float radius = std::round(12 * s);
+        const bool chosen = (int)i == m_day;
+        const float lit = Hover(card, m_hover == Part::Day &&
+                                          m_hoverDay == (int)i);
+        brush->SetColor(Fg((chosen ? 0.14f : 0.06f) + 0.05f * lit));
+        target->FillRoundedRectangle({card, radius, radius}, brush);
+        if (chosen) {
+            brush->SetColor(D2D1::ColorF(0.04f, 0.52f, 1.0f, 0.7f));
+            target->DrawRoundedRectangle(
+                {{card.left + 0.75f, card.top + 0.75f, card.right - 0.75f,
+                  card.bottom - 0.75f},
+                 radius,
+                 radius},
+                brush, 1.5f);
+        }
+        std::wstring name;
+        if (i == 0) {
+            name = Tr(L"Today", L"Hoje");
+        } else if (i == 1) {
+            name = Tr(L"Tomorrow", L"Amanhã");
+        } else {
+            SYSTEMTIME date{};
+            if (swscanf_s(day.date.c_str(), L"%hu-%hu-%hu", &date.wYear,
+                          &date.wMonth, &date.wDay) == 3) {
+                WCHAR text[32] = L"";
+                GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &date, L"dddd",
+                                text, ARRAYSIZE(text), nullptr);
+                name = text;
+                // "segunda-feira": "segunda".
+                const size_t dash = name.find(L'-');
+                if (dash != std::wstring::npos) {
+                    name = name.substr(0, dash);
+                }
+                if (!name.empty()) {
+                    name[0] = towupper(name[0]);
+                }
+            }
+        }
+        brush->SetColor(Fg(0.75f));
+        target->DrawText(name.c_str(), (UINT32)name.size(), m_centerFormat.get(),
+                         {card.left, card.top + std::round(8 * s), card.right,
+                          card.top + std::round(26 * s)},
+                         brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        DrawEmoji(target, brush, WeatherEmoji(day.code, true),
+                  m_emojiFormat.get(),
+                  {card.left, card.top + std::round(28 * s), card.right,
+                   card.top + std::round(66 * s)});
+        const std::wstring high = Degrees(day.high);
+        const std::wstring low = Degrees(day.low);
+        brush->SetColor(Fg(0.95f));
+        target->DrawText(high.c_str(), (UINT32)high.size(),
+                         m_centerBoldFormat.get(),
+                         {card.left, card.top + std::round(70 * s), card.right,
+                          card.top + std::round(90 * s)},
+                         brush);
+        brush->SetColor(Fg(0.5f));
+        target->DrawText(low.c_str(), (UINT32)low.size(), m_centerFormat.get(),
+                         {card.left, card.top + std::round(92 * s), card.right,
+                          card.top + std::round(110 * s)},
+                         brush);
+    }
+
+    // The chosen day's hours (eight at a time, the wheel scrolls them):
+    // their temperature as a line, their sky, wind and time, from a strip
+    // drawn once (see DrawHoursStrip).
+    const auto dayHours = DayHours();
+    const size_t hours = dayHours.size();
+    if (hours >= 2) {
+        const D2D1_RECT_F& area = m_hoursRect;
+        const float radius = std::round(12 * s);
+        brush->SetColor(Fg(0.05f));
+        target->FillRoundedRectangle({area, radius, radius}, brush);
+        const float column =
+            (area.right - area.left) / std::min<size_t>(hours, kHoursShown);
+        const float scrolled = (float)m_hourScroll * column;
+        const float stripWidth = std::ceil(column * hours);
+        const float stripHeight = std::ceil(area.bottom - area.top);
+        WCHAR key[160];
+        swprintf_s(key, L"%d|%.3f|%zu|%.2f|%.2f|%.3f,%.3f,%.3f|%.2f|%ls",
+                   m_day, m_data.fetchedAt, hours, column, s,
+                   g_theme.foreground[0], g_theme.foreground[1],
+                   g_theme.foreground[2], g_theme.light, m_data.now.c_str());
+        if (!m_hoursBitmap || m_hoursKey != key) {
+            m_hoursBitmap = nullptr;
+            m_hoursKey.clear();
+            winrt::com_ptr<ID2D1BitmapRenderTarget> stripTarget;
+            if (SUCCEEDED(target->CreateCompatibleRenderTarget(
+                    {stripWidth, stripHeight}, stripTarget.put()))) {
+                stripTarget->SetTextAntialiasMode(
+                    target->GetTextAntialiasMode());
+                stripTarget->BeginDraw();
+                stripTarget->Clear(D2D1::ColorF(0, 0, 0, 0));
+                DrawHoursStrip(stripTarget.get(), brush, dayHours, column,
+                               stripHeight);
+                if (SUCCEEDED(stripTarget->EndDraw()) &&
+                    SUCCEEDED(stripTarget->GetBitmap(m_hoursBitmap.put()))) {
+                    m_hoursKey = key;
+                }
+            }
+        }
+        winrt::com_ptr<ID2D1Layer> hoursLayer;
+        target->CreateLayer(nullptr, hoursLayer.put());
+        target->PushLayer(
+            D2D1::LayerParameters(area, nullptr,
+                                  D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                                  D2D1::IdentityMatrix(),
+                                  1 - 0.8f * (float)m_daySwitch),
+            hoursLayer.get());
+        if (m_hoursBitmap) {
+            const float left = std::round(area.left - scrolled);
+            target->DrawBitmap(m_hoursBitmap.get(),
+                               {left, area.top, left + stripWidth,
+                                area.top + stripHeight});
+        }
+        // How far along the day it's scrolled.
+        if (hours > (size_t)kHoursShown) {
+            const float track = area.right - area.left - radius * 2;
+            const float thumb = track * kHoursShown / hours;
+            const float x = area.left + radius +
+                            (track - thumb) * (float)(m_hourScroll /
+                                                      (hours - kHoursShown));
+            brush->SetColor(Fg(0.25f));
+            target->FillRoundedRectangle(
+                {{x, area.bottom - std::round(5 * s), x + thumb,
+                  area.bottom - std::round(2 * s)},
+                 1.5f * s,
+                 1.5f * s},
+                brush);
+        }
+        target->PopLayer();
+    }
+    // Its source (as its terms ask).
+    PCWSTR credit = Tr(L"Weather data by Open-Meteo.com",
+                       L"Dados do clima: Open-Meteo.com");
+    brush->SetColor(Fg(0.3f));
+    target->DrawText(credit, (UINT32)wcslen(credit), m_centerFormat.get(),
+                     m_credit, brush);
+}
+
+void WeatherPanel::DrawHoursStrip(
+    ID2D1RenderTarget* target,
+    ID2D1SolidColorBrush* brush,
+    const std::vector<const WeatherHour*>& dayHours,
+    float column,
+    float stripHeight) {
+    const float s = m_scale;
+    const WeatherData& d = m_data;
+    const size_t hours = dayHours.size();
+    auto clock = [](const std::wstring& time) {
+        const size_t t = time.find(L'T');
+        return t == std::wstring::npos ? std::wstring() : time.substr(t + 1, 5);
+    };
+    double lowest = dayHours[0]->temperature;
+    double highest = lowest;
+    for (size_t i = 0; i < hours; i++) {
+        lowest = std::min(lowest, dayHours[i]->temperature);
+        highest = std::max(highest, dayHours[i]->temperature);
+    }
+    const float lineTop = std::round(28 * s);
+    const float lineBottom = std::round(46 * s);
+    auto pointOf = [&](size_t i) {
+        const double range = std::max(highest - lowest, 1.0);
+        const float y = lineBottom -
+                        (lineBottom - lineTop) *
+                            (float)((dayHours[i]->temperature - lowest) / range);
+        return D2D1::Point2F(column * (i + 0.5f), y);
+    };
+    winrt::com_ptr<ID2D1Factory> factory;
+    target->GetFactory(factory.put());
+    winrt::com_ptr<ID2D1PathGeometry> path;
+    winrt::com_ptr<ID2D1GeometrySink> sink;
+    if (SUCCEEDED(factory->CreatePathGeometry(path.put())) &&
+        SUCCEEDED(path->Open(sink.put()))) {
+        sink->BeginFigure(pointOf(0), D2D1_FIGURE_BEGIN_HOLLOW);
+        for (size_t i = 1; i < hours; i++) {
+            sink->AddLine(pointOf(i));
+        }
+        sink->EndFigure(D2D1_FIGURE_END_OPEN);
+        sink->Close();
+        brush->SetColor(D2D1::ColorF(1.0f, 0.78f, 0.3f, 0.9f));
+        target->DrawGeometry(path.get(), brush, std::max(1.0f, 1.5f * s));
+    }
+    for (size_t i = 0; i < hours; i++) {
+        const WeatherHour& hour = *dayHours[i];
+        const float left = column * i;
+        const D2D1_POINT_2F point = pointOf(i);
+        const std::wstring temperature = Degrees(hour.temperature);
+        brush->SetColor(Fg(0.9f));
+        target->DrawText(temperature.c_str(), (UINT32)temperature.size(),
+                         m_centerFormat.get(),
+                         {left, point.y - std::round(22 * s), left + column,
+                          point.y - std::round(4 * s)},
+                         brush);
+        brush->SetColor(D2D1::ColorF(1.0f, 0.78f, 0.3f, 1));
+        target->FillEllipse({point, 2.5f * s, 2.5f * s}, brush);
+        DrawEmoji(target, brush, WeatherEmoji(hour.code, hour.day),
+                  m_smallEmojiFormat.get(),
+                  {left, std::round(52 * s), left + column, std::round(78 * s)});
+        WCHAR wind[32];
+        swprintf_s(wind, L"%.0f %ls", hour.wind, d.imperial ? L"mph" : L"km/h");
+        brush->SetColor(Fg(0.6f));
+        target->DrawText(wind, (UINT32)wcslen(wind), m_centerFormat.get(),
+                         {left, std::round(80 * s), left + column,
+                          std::round(97 * s)},
+                         brush);
+        const std::wstring when = i == 0 && m_day == 0
+                                      ? std::wstring(Tr(L"Now", L"Agora"))
+                                      : clock(hour.time);
+        brush->SetColor(Fg(0.85f));
+        target->DrawText(when.c_str(), (UINT32)when.size(),
+                         m_centerBoldFormat.get(),
+                         {left, std::round(98 * s), left + column,
+                          std::min(stripHeight, std::round(116 * s))},
+                         brush);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Updates, when chosen in the island's settings (off by default): the apps
+// with a newer version in winget (Windows' package manager, its own "winget
+// upgrade" list, run hidden), updated one by one or all from the panel; and
+// the Windows updates waiting (the Windows Update Agent's documented COM
+// interface, read only; they're installed in Windows Update, which the panel
+// opens). Looked for 20 seconds after the island starts and every 6 hours
+// while the item is on the pill (or when its panel opens, if it's old), on a
+// thread of their own.
+
+struct AppUpdate {
+    std::wstring name;
+    std::wstring id;
+    std::wstring version;
+    std::wstring available;
+    // 0: waiting, 1: updating, 2: updated, 3: failed, 4: opened in a
+    // terminal.
+    int state = 0;
+    // While updating: 0 getting ready, 1 downloading (`progress` from 0 to
+    // 1, or -1 when its size isn't known), 2 installing.
+    int stage = 0;
+    float progress = -1;
+};
+struct UpdatesData {
+    bool checking = false;
+    bool checked = false;
+    bool wingetMissing = false;
+    std::vector<AppUpdate> apps;
+    std::vector<std::wstring> windows;
+    double checkedAt = 0;
+};
+SRWLOCK g_updatesLock = SRWLOCK_INIT;
+UpdatesData g_updates;
+// Tells the island the updates changed.
+constexpr UINT WM_APP_UPDATES = WM_APP + 68;
+constexpr double kUpdatesCheckSeconds = 6 * 60 * 60;
+
+UpdatesData GetUpdates() {
+    AcquireSRWLockShared(&g_updatesLock);
+    UpdatesData data = g_updates;
+    ReleaseSRWLockShared(&g_updatesLock);
+    return data;
+}
+
+// winget (the App Installer's alias), run hidden with these arguments: its
+// output (UTF-8) and exit code. Gives up after `timeoutMs`, or when `stop` is
+// set (then it's left running when `leave`, like an update installing).
+std::wstring DecodeUtf8(const std::string& bytes) {
+    std::wstring text;
+    const int length = MultiByteToWideChar(CP_UTF8, 0, bytes.data(),
+                                           (int)bytes.size(), nullptr, 0);
+    text.resize(std::max(length, 0));
+    MultiByteToWideChar(CP_UTF8, 0, bytes.data(), (int)bytes.size(),
+                        text.data(), length);
+    return text;
+}
+
+bool RunWinget(const std::wstring& arguments,
+               DWORD timeoutMs,
+               HANDLE stop,
+               bool leave,
+               std::wstring* output,
+               DWORD* exitCode,
+               const std::function<void(const std::wstring&)>& onOutput = {}) {
+    WCHAR path[MAX_PATH];
+    if (!ExpandEnvironmentStrings(
+            L"%LOCALAPPDATA%\\Microsoft\\WindowsApps\\winget.exe", path,
+            MAX_PATH) ||
+        GetFileAttributes(path) == INVALID_FILE_ATTRIBUTES) {
+        return false;
+    }
+    SECURITY_ATTRIBUTES security{sizeof(security), nullptr, TRUE};
+    HANDLE readPipe = nullptr;
+    HANDLE writePipe = nullptr;
+    if (!CreatePipe(&readPipe, &writePipe, &security, 0)) {
+        return false;
+    }
+    SetHandleInformation(readPipe, HANDLE_FLAG_INHERIT, 0);
+    STARTUPINFO startup{sizeof(startup)};
+    startup.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+    startup.wShowWindow = SW_HIDE;
+    startup.hStdOutput = writePipe;
+    startup.hStdError = writePipe;
+    startup.hStdInput = nullptr;
+    std::wstring command = L"\"" + std::wstring(path) + L"\" " + arguments;
+    PROCESS_INFORMATION process{};
+    const BOOL started = CreateProcess(
+        path, command.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
+        nullptr, nullptr, &startup, &process);
+    CloseHandle(writePipe);
+    if (!started) {
+        CloseHandle(readPipe);
+        return false;
+    }
+    std::string bytes;
+    const ULONGLONG until = GetTickCount64() + timeoutMs;
+    ULONGLONG lastOutput = 0;
+    bool finished = false;
+    for (;;) {
+        // What it said so far, twice a second.
+        if (onOutput && GetTickCount64() - lastOutput >= 500) {
+            lastOutput = GetTickCount64();
+            onOutput(DecodeUtf8(bytes));
+        }
+        DWORD available = 0;
+        while (PeekNamedPipe(readPipe, nullptr, 0, nullptr, &available,
+                             nullptr) &&
+               available) {
+            char buffer[4096];
+            DWORD read = 0;
+            if (!ReadFile(readPipe, buffer,
+                          std::min<DWORD>(available, sizeof(buffer)), &read,
+                          nullptr) ||
+                !read) {
+                break;
+            }
+            if (bytes.size() < 1024 * 1024) {
+                bytes.append(buffer, read);
+            }
+        }
+        if (finished) {
+            break;
+        }
+        const HANDLE handles[] = {process.hProcess, stop};
+        const DWORD woke =
+            WaitForMultipleObjects(stop ? 2 : 1, handles, FALSE, 100);
+        if (woke == WAIT_OBJECT_0) {
+            // Once more for what's left in the pipe.
+            finished = true;
+            continue;
+        }
+        if (woke == WAIT_OBJECT_0 + 1 || GetTickCount64() > until) {
+            if (!leave) {
+                TerminateProcess(process.hProcess, 1);
+            }
+            break;
+        }
+    }
+    DWORD code = 1;
+    if (finished) {
+        GetExitCodeProcess(process.hProcess, &code);
+    }
+    CloseHandle(process.hProcess);
+    CloseHandle(process.hThread);
+    CloseHandle(readPipe);
+    if (exitCode) {
+        *exitCode = code;
+    }
+    if (output) {
+        *output = DecodeUtf8(bytes);
+    }
+    return finished;
+}
+
+// The size of a download (its Content-Length), or -1.
+long long UrlContentLength(const std::wstring& url) {
+    URL_COMPONENTS parts{sizeof(parts)};
+    parts.dwHostNameLength = (DWORD)-1;
+    parts.dwUrlPathLength = (DWORD)-1;
+    parts.dwExtraInfoLength = (DWORD)-1;
+    if (!WinHttpCrackUrl(url.c_str(), 0, 0, &parts) || !parts.lpszHostName) {
+        return -1;
+    }
+    const std::wstring host(parts.lpszHostName, parts.dwHostNameLength);
+    const std::wstring path =
+        parts.lpszUrlPath
+            ? std::wstring(parts.lpszUrlPath,
+                           parts.dwUrlPathLength + parts.dwExtraInfoLength)
+            : std::wstring(L"/");
+    long long length = -1;
+    HINTERNET session =
+        WinHttpOpen(L"Windhawk", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+                    WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    HINTERNET connection =
+        session ? WinHttpConnect(session, host.c_str(), parts.nPort, 0)
+                : nullptr;
+    HINTERNET request =
+        connection ? WinHttpOpenRequest(
+                         connection, L"HEAD", path.c_str(), nullptr,
+                         WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
+                         parts.nScheme == INTERNET_SCHEME_HTTPS
+                             ? WINHTTP_FLAG_SECURE
+                             : 0)
+                   : nullptr;
+    if (request) {
+        WinHttpSetTimeouts(request, 3000, 3000, 3000, 3000);
+        WCHAR value[32] = L"";
+        DWORD size = sizeof(value);
+        if (WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+                               WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+            WinHttpReceiveResponse(request, nullptr) &&
+            WinHttpQueryHeaders(request, WINHTTP_QUERY_CONTENT_LENGTH,
+                                WINHTTP_HEADER_NAME_BY_INDEX, value, &size,
+                                WINHTTP_NO_HEADER_INDEX)) {
+            length = _wtoi64(value);
+        }
+        WinHttpCloseHandle(request);
+    }
+    if (connection) {
+        WinHttpCloseHandle(connection);
+    }
+    if (session) {
+        WinHttpCloseHandle(session);
+    }
+    return length > 0 ? length : -1;
+}
+
+// How much winget has downloaded since `since`: the biggest file written
+// since then in its downloads folder (%TEMP%\WinGet, a folder per package).
+long long DownloadedSince(const FILETIME& since) {
+    WCHAR root[MAX_PATH];
+    if (!ExpandEnvironmentStrings(L"%TEMP%\\WinGet", root, MAX_PATH)) {
+        return -1;
+    }
+    long long biggest = -1;
+    auto scan = [&](const std::wstring& folder, int depth, auto& self) -> void {
+        WIN32_FIND_DATA found;
+        HANDLE find = FindFirstFile((folder + L"\\*").c_str(), &found);
+        if (find == INVALID_HANDLE_VALUE) {
+            return;
+        }
+        do {
+            if (found.cFileName[0] == L'.') {
+                continue;
+            }
+            if (found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                if (depth < 2) {
+                    self(folder + L"\\" + found.cFileName, depth + 1, self);
+                }
+            } else if (CompareFileTime(&found.ftLastWriteTime, &since) >= 0) {
+                biggest = std::max(
+                    biggest, ((long long)found.nFileSizeHigh << 32) |
+                                 found.nFileSizeLow);
+            }
+        } while (FindNextFile(find, &found));
+        FindClose(find);
+    };
+    scan(root, 0, scan);
+    return biggest;
+}
+
+// The first table of "winget upgrade": its header's words give where each
+// column starts (name, ID, version, available, source; in any language).
+std::vector<AppUpdate> ParseWingetUpgrades(const std::wstring& output) {
+    std::vector<std::wstring> lines;
+    for (size_t at = 0; at < output.size();) {
+        size_t end = output.find(L'\n', at);
+        if (end == std::wstring::npos) {
+            end = output.size();
+        }
+        std::wstring line = output.substr(at, end - at);
+        // Progress drawn over itself: only what's after the last return.
+        while (!line.empty() && line.back() == L'\r') {
+            line.pop_back();
+        }
+        const size_t carriage = line.rfind(L'\r');
+        if (carriage != std::wstring::npos) {
+            line = line.substr(carriage + 1);
+        }
+        lines.push_back(line);
+        at = end + 1;
+    }
+    std::vector<AppUpdate> apps;
+    for (size_t i = 1; i < lines.size(); i++) {
+        const std::wstring& rule = lines[i];
+        if (rule.size() < 20 ||
+            rule.find_first_not_of(L'-') != std::wstring::npos) {
+            continue;
+        }
+        const std::wstring& header = lines[i - 1];
+        std::vector<size_t> starts;
+        for (size_t c = 0; c < header.size(); c++) {
+            if (header[c] != L' ' && (c == 0 || header[c - 1] == L' ')) {
+                starts.push_back(c);
+            }
+        }
+        if (starts.size() < 4) {
+            return apps;
+        }
+        auto column = [&](const std::wstring& line, size_t index) {
+            if (index >= starts.size() || starts[index] >= line.size()) {
+                return std::wstring();
+            }
+            const size_t end = index + 1 < starts.size()
+                                   ? std::min(starts[index + 1], line.size())
+                                   : line.size();
+            std::wstring text = line.substr(starts[index], end - starts[index]);
+            while (!text.empty() && text.back() == L' ') {
+                text.pop_back();
+            }
+            return text;
+        };
+        for (size_t j = i + 1; j < lines.size(); j++) {
+            const std::wstring& line = lines[j];
+            // The table ends at its count ("10 upgrades available.").
+            if (line.empty() || line.size() < starts[3] ||
+                line.find_first_not_of(L' ') == std::wstring::npos) {
+                break;
+            }
+            AppUpdate app{column(line, 0), column(line, 1), column(line, 2),
+                          column(line, 3)};
+            if (app.id.empty() || app.available.empty() ||
+                app.id.find(L' ') != std::wstring::npos) {
+                break;
+            }
+            apps.push_back(std::move(app));
+        }
+        break;
+    }
+    return apps;
+}
+
+// The Windows updates waiting (their titles), or false when Windows Update
+// couldn't be asked.
+bool ListWindowsUpdates(std::vector<std::wstring>* titles) {
+    constexpr GUID kCLSID_UpdateSession = {
+        0x4cb43d7f, 0x7eee, 0x4906, {0x86, 0x98, 0x60, 0xda, 0x1c, 0x38, 0xf2, 0xfe}};
+    constexpr GUID kIID_IUpdateSession = {
+        0x816858a4, 0x260d, 0x4260, {0x93, 0x3a, 0x25, 0x85, 0xf1, 0xab, 0xc7, 0x6b}};
+    winrt::com_ptr<IUpdateSession> session;
+    winrt::com_ptr<IUpdateSearcher> searcher;
+    winrt::com_ptr<ISearchResult> result;
+    winrt::com_ptr<IUpdateCollection> updates;
+    BSTR criteria = SysAllocString(L"IsInstalled=0 and IsHidden=0");
+    bool ok = false;
+    if (SUCCEEDED(CoCreateInstance(kCLSID_UpdateSession, nullptr,
+                                   CLSCTX_INPROC_SERVER, kIID_IUpdateSession,
+                                   session.put_void())) &&
+        SUCCEEDED(session->CreateUpdateSearcher(searcher.put())) &&
+        SUCCEEDED(searcher->Search(criteria, result.put())) &&
+        SUCCEEDED(result->get_Updates(updates.put()))) {
+        ok = true;
+        LONG count = 0;
+        updates->get_Count(&count);
+        for (LONG i = 0; i < count && i < 50; i++) {
+            winrt::com_ptr<IUpdate> update;
+            BSTR title = nullptr;
+            if (SUCCEEDED(updates->get_Item(i, update.put())) &&
+                SUCCEEDED(update->get_Title(&title)) && title) {
+                titles->push_back(title);
+            }
+            SysFreeString(title);
+        }
+    }
+    SysFreeString(criteria);
+    return ok;
+}
+
+// Opens winget in a terminal for these apps, one after the other (it stays
+// open to show how it went).
+void UpdateInTerminal(const std::vector<std::wstring>& ids) {
+    if (ids.empty()) {
+        return;
+    }
+    std::wstring commands;
+    std::vector<std::wstring> run;
+    for (const auto& id : ids) {
+        // (Package IDs are words joined by dots; nothing cmd would read.)
+        if (id.empty() ||
+            !std::all_of(id.begin(), id.end(), [](WCHAR c) {
+                return iswalnum(c) || c == L'.' || c == L'-' || c == L'_' ||
+                       c == L'+';
+            })) {
+            continue;
+        }
+        if (!commands.empty()) {
+            commands += L" & ";
+        }
+        commands += L"winget upgrade --id \"" + id + L"\" --exact";
+        run.push_back(id);
+    }
+    if (commands.empty()) {
+        return;
+    }
+    ShellExecute(nullptr, L"open", L"cmd.exe", (L"/k " + commands).c_str(),
+                 nullptr, SW_SHOWNORMAL);
+    AcquireSRWLockExclusive(&g_updatesLock);
+    for (auto& app : g_updates.apps) {
+        if (std::find(run.begin(), run.end(), app.id) != run.end()) {
+            app.state = 4;
+        }
+    }
+    ReleaseSRWLockExclusive(&g_updatesLock);
+}
+
+struct UpdatesJob {
+    HWND notify;
+    HANDLE stop;
+    // The apps to update (their IDs, one after the other), or none to look
+    // for updates.
+    std::vector<std::wstring> appIds;
+};
+
+DWORD WINAPI UpdatesThreadProc(LPVOID parameter) {
+    std::unique_ptr<UpdatesJob> job((UpdatesJob*)parameter);
+    const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    auto setState = [&](const std::wstring& id, int state) {
+        AcquireSRWLockExclusive(&g_updatesLock);
+        for (auto& app : g_updates.apps) {
+            if (app.id == id) {
+                app.state = state;
+            }
+        }
+        ReleaseSRWLockExclusive(&g_updatesLock);
+        PostMessage(job->notify, WM_APP_UPDATES, 0, 0);
+    };
+    if (!job->appIds.empty()) {
+        // Each silently, accepting its terms (asked for by the user).
+        for (const auto& id : job->appIds) {
+            if (WaitForSingleObject(job->stop, 0) == WAIT_OBJECT_0) {
+                break;
+            }
+            setState(id, 1);
+            FILETIME started;
+            GetSystemTimeAsFileTime(&started);
+            std::wstring url;
+            long long total = -1;
+            auto onOutput = [&](const std::wstring& output) {
+                size_t at = output.find(L"https://");
+                if (at == std::wstring::npos) {
+                    at = output.find(L"http://");
+                }
+                int stage = 0;
+                float progress = -1;
+                if (at != std::wstring::npos) {
+                    const size_t end = output.find_first_of(L" \r\n", at);
+                    const std::wstring found = output.substr(
+                        at, end == std::wstring::npos ? std::wstring::npos
+                                                      : end - at);
+                    if (found != url) {
+                        url = found;
+                        total = UrlContentLength(url);
+                    }
+                    // A line after the address: downloaded (its hash checked),
+                    // installing.
+                    const size_t lineEnd = output.find(L'\n', at);
+                    const bool after =
+                        lineEnd != std::wstring::npos &&
+                        output.find_first_not_of(L" \r\n", lineEnd) !=
+                            std::wstring::npos;
+                    stage = after ? 2 : 1;
+                    if (stage == 1 && total > 0) {
+                        const long long got = DownloadedSince(started);
+                        progress = got > 0 ? std::clamp((float)got / total,
+                                                        0.0f, 1.0f)
+                                           : 0.0f;
+                    }
+                }
+                AcquireSRWLockExclusive(&g_updatesLock);
+                for (auto& app : g_updates.apps) {
+                    if (app.id == id) {
+                        app.stage = stage;
+                        app.progress = progress;
+                    }
+                }
+                ReleaseSRWLockExclusive(&g_updatesLock);
+                PostMessage(job->notify, WM_APP_UPDATES, 0, 0);
+            };
+            DWORD code = 1;
+            const bool done = RunWinget(
+                L"upgrade --id \"" + id +
+                    L"\" --exact --silent --accept-package-agreements "
+                    L"--accept-source-agreements --disable-interactivity",
+                30 * 60 * 1000, job->stop, true, nullptr, &code, onOutput);
+            setState(id, done && code == 0 ? 2 : 3);
+        }
+    } else {
+        std::wstring output;
+        DWORD code = 0;
+        const bool listed = RunWinget(
+            L"upgrade --accept-source-agreements --disable-interactivity",
+            2 * 60 * 1000, job->stop, false, &output, &code);
+        std::vector<AppUpdate> apps =
+            listed ? ParseWingetUpgrades(output) : std::vector<AppUpdate>();
+        std::vector<std::wstring> windows;
+        if (WaitForSingleObject(job->stop, 0) != WAIT_OBJECT_0) {
+            ListWindowsUpdates(&windows);
+        }
+        AcquireSRWLockExclusive(&g_updatesLock);
+        // The ones being updated keep their state.
+        for (auto& app : apps) {
+            for (const auto& before : g_updates.apps) {
+                if (before.id == app.id && before.state == 1) {
+                    app.state = 1;
+                }
+            }
+        }
+        g_updates.apps = std::move(apps);
+        g_updates.windows = std::move(windows);
+        g_updates.wingetMissing = !listed && output.empty();
+        g_updates.checking = false;
+        g_updates.checked = true;
+        g_updates.checkedAt = NowSeconds();
+        ReleaseSRWLockExclusive(&g_updatesLock);
+    }
+    if (SUCCEEDED(com)) {
+        CoUninitialize();
+    }
+    PostMessage(job->notify, WM_APP_UPDATES, 0, 0);
+    return 0;
+}
+
+constexpr float kUpdatesWidth = 440;
+
+class UpdatesPanel : public EditingPanel {
+   public:
+    // Asks the island to look for updates again, or to update an app (by
+    // its ID; all of them when empty).
+    std::function<void()> check;
+    std::function<void(const std::wstring&)> update;
+    void Refresh() {
+        if (IsOpen()) {
+            m_data = GetUpdates();
+            Layout();
+            Render();
+        }
+    }
+
+   protected:
+    void Prepare(float scale) override {
+        PrepareFormats(scale);
+        m_data = GetUpdates();
+        Layout();
+    }
+    void OnOpen() override {
+        m_data = GetUpdates();
+        m_hover = {};
+        m_scroll.Reset();
+        Layout();
+    }
+    void Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) override;
+    bool OnMouseMove(POINT pt) override {
+        const Hit hit = HitTest(pt);
+        if (hit == m_hover) {
+            return false;
+        }
+        m_hover = hit;
+        return true;
+    }
+    bool OnMouseLeave() override {
+        m_hover = {};
+        return true;
+    }
+    bool OnMouseUp(POINT pt) override {
+        const Hit hit = HitTest(pt);
+        switch (hit.part) {
+            case Part::Check:
+                if (check && !m_data.checking) {
+                    check();
+                }
+                return true;
+            case Part::All:
+                if (update) {
+                    update({});
+                }
+                return true;
+            case Part::App:
+                if (update && hit.index >= 0 &&
+                    hit.index < (int)m_data.apps.size() &&
+                    m_data.apps[hit.index].state != 1 &&
+                    m_data.apps[hit.index].state != 2) {
+                    // A failed one goes to the terminal, to see why.
+                    if (m_data.apps[hit.index].state == 3) {
+                        UpdateInTerminal({m_data.apps[hit.index].id});
+                        m_data = GetUpdates();
+                        Layout();
+                    } else {
+                        update(m_data.apps[hit.index].id);
+                    }
+                }
+                return true;
+            case Part::Terminal:
+                m_inTerminal = !m_inTerminal;
+                Wh_SetIntValue(L"updatesInTerminal", m_inTerminal);
+                return true;
+            case Part::Windows:
+                Close();
+                ShellExecute(nullptr, L"open", L"ms-settings:windowsupdate",
+                             nullptr, nullptr, SW_SHOWNORMAL);
+                return false;
+            default:
+                return false;
+        }
+    }
+    bool OnWheel(int delta) override {
+        return m_scroll.Wheel(delta, std::round(60 * m_scale));
+    }
+    bool AnimateContents(double dt) override {
+        // While something is busy, its "…" moves.
+        const bool busy =
+            m_data.checking ||
+            std::any_of(m_data.apps.begin(), m_data.apps.end(),
+                        [](const AppUpdate& app) { return app.state == 1; });
+        const bool scrolling = m_scroll.Animate(dt);
+        m_idleMotion = busy && !scrolling;
+        return busy || scrolling;
+    }
+
+   private:
+    enum class Part { None, Check, All, App, Windows, Terminal };
+    struct Hit {
+        Part part = Part::None;
+        int index = -1;
+        bool operator==(const Hit& other) const {
+            return part == other.part && index == other.index;
+        }
+    };
+
+    void Layout() {
+        const float s = m_scale;
+        const float width = std::round(kUpdatesWidth * s);
+        const float padding = std::round(14 * s);
+        const float gap = std::round(8 * s);
+        float y = padding;
+        m_header = {padding, y, width - padding, y + std::round(30 * s)};
+        m_checkButton = {width - padding - std::round(32 * s), y,
+                         width - padding, y + std::round(30 * s)};
+        m_terminal = {m_checkButton.left - std::round(150 * s), y,
+                      m_checkButton.left - std::round(6 * s),
+                      y + std::round(30 * s)};
+        y += std::round(30 * s) + gap;
+        // The list: apps (with "Update all"), then Windows'.
+        m_appRows.clear();
+        const float row = std::round(46 * s);
+        const float section = std::round(30 * s);
+        float listY = 0;
+        m_appsTitle = {padding, listY, width - padding, listY + section};
+        m_all = {width - padding - std::round(130 * s),
+                 listY + std::round(3 * s), width - padding,
+                 listY + section - std::round(3 * s)};
+        listY += section;
+        for (size_t i = 0; i < m_data.apps.size(); i++) {
+            m_appRows.push_back({padding, listY, width - padding, listY + row});
+            listY += row;
+        }
+        if (m_data.apps.empty()) {
+            listY += std::round(28 * s);
+        }
+        listY += gap;
+        m_windowsTitle = {padding, listY, width - padding, listY + section};
+        listY += section;
+        m_windowsRows = std::min<size_t>(m_data.windows.size(), 8);
+        m_windowsTop = listY;
+        listY += std::round(22 * s) * std::max<size_t>(m_windowsRows, 1);
+        m_windowsButton = {padding, listY + gap, width - padding,
+                           listY + gap + std::round(32 * s)};
+        listY = m_windowsButton.bottom;
+        const float room = std::max(std::round(120 * s),
+                                    MaxHeight() - y - padding);
+        const float viewport = std::min(listY, room);
+        m_listViewport = {0, y, width, y + viewport};
+        m_scroll.SetSizes(viewport, listY);
+        y += viewport + padding;
+        m_size = {(LONG)width, (LONG)std::ceil(y)};
+    }
+
+    D2D1_RECT_F AppButton(const D2D1_RECT_F& row) const {
+        const float s = m_scale;
+        return {row.right - std::round(108 * s), row.top + std::round(8 * s),
+                row.right, row.bottom - std::round(8 * s)};
+    }
+
+    Hit HitTest(POINT pt) const {
+        if (PointInRect(pt, m_checkButton)) {
+            return {Part::Check};
+        }
+        if (PointInRect(pt, m_terminal)) {
+            return {Part::Terminal};
+        }
+        POINT inList;
+        if (!ListPoint(pt, &inList)) {
+            return {};
+        }
+        if (m_data.apps.size() > 1 && PointInRect(inList, m_all)) {
+            return {Part::All};
+        }
+        for (size_t i = 0; i < m_appRows.size(); i++) {
+            if (PointInRect(inList, AppButton(m_appRows[i]))) {
+                return {Part::App, (int)i};
+            }
+        }
+        if (PointInRect(inList, m_windowsButton)) {
+            return {Part::Windows};
+        }
+        return {};
+    }
+
+    UpdatesData m_data;
+    Hit m_hover;
+    D2D1_RECT_F m_header{}, m_checkButton{}, m_appsTitle{}, m_all{},
+        m_windowsTitle{}, m_windowsButton{}, m_terminal{};
+
+   public:
+    // Updated in a terminal instead of silently (kept).
+    bool m_inTerminal = Wh_GetIntValue(L"updatesInTerminal", 0) != 0;
+
+   private:
+    std::vector<D2D1_RECT_F> m_appRows;
+    size_t m_windowsRows = 0;
+    float m_windowsTop = 0;
+};
+
+void UpdatesPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
+    if (!Ready()) {
+        return;
+    }
+    const float s = m_scale;
+    // "…" moving while busy.
+    const std::wstring dots(1 + (int)(NowSeconds() * 3) % 3, L'.');
+    const WCHAR icon = 0xE895;
+    brush->SetColor(D2D1::ColorF(0.04f, 0.52f, 1.0f, 1));
+    target->DrawText(&icon, 1, m_bigIconFormat.get(),
+                     {m_header.left, m_header.top,
+                      m_header.left + std::round(22 * s), m_header.bottom},
+                     brush);
+    std::wstring title = Tr(L"Updates", L"Atualizações");
+    if (m_data.checking) {
+        title += std::wstring(L"  ·  ") + Tr(L"checking", L"verificando") +
+                 dots;
+    }
+    brush->SetColor(Fg(0.95f));
+    target->DrawText(title.c_str(), (UINT32)title.size(), m_titleFormat.get(),
+                     {m_header.left + std::round(28 * s), m_header.top,
+                      m_checkButton.left, m_header.bottom},
+                     brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    DrawIconButton(target, brush, m_checkButton, 0xE72C,
+                   m_hover.part == Part::Check, m_data.checking ? 0.3f : 0.7f);
+    // "In a terminal": a box, checked when chosen.
+    {
+        const float lit = Hover(m_terminal, m_hover.part == Part::Terminal);
+        const float box = std::round(16 * s);
+        const float middle = (m_terminal.top + m_terminal.bottom) / 2;
+        const D2D1_RECT_F square{m_terminal.left + std::round(6 * s),
+                                 middle - box / 2,
+                                 m_terminal.left + std::round(6 * s) + box,
+                                 middle + box / 2};
+        const float corner = std::round(4 * s);
+        if (m_inTerminal) {
+            brush->SetColor(D2D1::ColorF(0.04f, 0.52f, 1.0f, 1));
+            target->FillRoundedRectangle({square, corner, corner}, brush);
+            brush->SetColor(D2D1::ColorF(1, 1, 1, 1));
+            target->DrawText(&kGlyphCheck, 1, m_iconFormat.get(), square,
+                             brush);
+        } else {
+            brush->SetColor(Fg(0.5f + 0.4f * lit));
+            target->DrawRoundedRectangle({square, corner, corner}, brush,
+                                         std::max(1.0f, 1.25f * s));
+        }
+        PCWSTR label = Tr(L"In a terminal", L"No terminal");
+        brush->SetColor(Fg(0.7f + 0.25f * lit));
+        target->DrawText(label, (UINT32)wcslen(label), m_smallFormat.get(),
+                         {square.right + std::round(6 * s), m_terminal.top,
+                          m_terminal.right, m_terminal.bottom},
+                         brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    }
+
+    BeginScrollArea(target, m_listViewport, m_scroll);
+    // Apps.
+    std::wstring apps = Tr(L"Apps (winget)", L"Apps (winget)");
+    if (!m_data.apps.empty()) {
+        apps += L"  ·  " + std::to_wstring(m_data.apps.size());
+    }
+    brush->SetColor(Fg(0.6f));
+    target->DrawText(apps.c_str(), (UINT32)apps.size(), m_smallFormat.get(),
+                     m_appsTitle, brush);
+    if (m_data.apps.size() > 1) {
+        DrawButton(target, brush, m_all, Tr(L"Update all", L"Atualizar tudo"),
+                   true, m_hover.part == Part::All);
+    }
+    if (m_data.apps.empty()) {
+        PCWSTR none = !m_data.checked     ? Tr(L"Not checked yet", L"Ainda não verificado")
+                      : m_data.wingetMissing ? Tr(L"winget isn't installed",
+                                                  L"O winget não está instalado")
+                                             : Tr(L"All up to date", L"Tudo atualizado");
+        brush->SetColor(Fg(0.45f));
+        target->DrawText(none, (UINT32)wcslen(none), m_textFormat.get(),
+                         {m_appsTitle.left, m_appsTitle.bottom,
+                          m_appsTitle.right,
+                          m_appsTitle.bottom + std::round(28 * s)},
+                         brush);
+    }
+    for (size_t i = 0; i < m_appRows.size() && i < m_data.apps.size(); i++) {
+        const AppUpdate& app = m_data.apps[i];
+        const D2D1_RECT_F& row = m_appRows[i];
+        const D2D1_RECT_F button = AppButton(row);
+        brush->SetColor(Fg(0.95f));
+        target->DrawText(app.name.c_str(), (UINT32)app.name.size(),
+                         m_boldFormat.get(),
+                         {row.left, row.top + std::round(4 * s),
+                          button.left - std::round(8 * s),
+                          row.top + std::round(24 * s)},
+                         brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        const bool hover = m_hover.part == Part::App && m_hover.index == (int)i;
+        if (app.state == 1) {
+            // Updating: a bar (filling while downloading, sweeping while
+            // getting ready or installing) and what it's doing.
+            const D2D1_RECT_F bar{row.left, row.top + std::round(28 * s),
+                                  button.left - std::round(10 * s),
+                                  row.top + std::round(32 * s)};
+            const float barRadius = (bar.bottom - bar.top) / 2;
+            brush->SetColor(Fg(0.1f));
+            target->FillRoundedRectangle({bar, barRadius, barRadius}, brush);
+            brush->SetColor(D2D1::ColorF(0.04f, 0.52f, 1.0f, 1));
+            const float length = bar.right - bar.left;
+            if (app.stage == 1 && app.progress >= 0) {
+                target->FillRoundedRectangle(
+                    {{bar.left, bar.top,
+                      bar.left + std::max(bar.bottom - bar.top,
+                                          length * app.progress),
+                      bar.bottom},
+                     barRadius,
+                     barRadius},
+                    brush);
+            } else {
+                const float phase = (float)std::fmod(NowSeconds() / 1.4, 1.0);
+                const float piece = length * 0.3f;
+                const float from = bar.left - piece + (length + piece) * phase;
+                target->PushAxisAlignedClip(bar, D2D1_ANTIALIAS_MODE_ALIASED);
+                target->FillRoundedRectangle(
+                    {{from, bar.top, from + piece, bar.bottom},
+                     barRadius,
+                     barRadius},
+                    brush);
+                target->PopAxisAlignedClip();
+            }
+            std::wstring doing;
+            if (app.stage == 1) {
+                doing = Tr(L"Downloading", L"Baixando");
+                if (app.progress >= 0) {
+                    doing += L" " +
+                             std::to_wstring((int)std::lround(app.progress * 100)) +
+                             L"%";
+                } else {
+                    doing += dots;
+                }
+            } else if (app.stage == 2) {
+                doing = std::wstring(Tr(L"Installing", L"Instalando")) + dots;
+            } else {
+                doing = std::wstring(Tr(L"Getting ready", L"Preparando")) + dots;
+            }
+            brush->SetColor(Fg(0.85f));
+            target->DrawText(doing.c_str(), (UINT32)doing.size(),
+                             m_buttonFormat.get(), button, brush,
+                             D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        } else {
+            const std::wstring versions =
+                app.version + L"  →  " + app.available;
+            brush->SetColor(Fg(0.5f));
+            target->DrawText(versions.c_str(), (UINT32)versions.size(),
+                             m_smallFormat.get(),
+                             {row.left, row.top + std::round(24 * s),
+                              button.left - std::round(8 * s),
+                              row.bottom - std::round(4 * s)},
+                             brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        }
+        switch (app.state) {
+            case 1:
+                break;
+            case 4:
+                brush->SetColor(Fg(0.6f));
+                target->DrawText(Tr(L"In the terminal", L"No terminal"),
+                                 (UINT32)wcslen(Tr(L"In the terminal",
+                                                   L"No terminal")),
+                                 m_buttonFormat.get(), button, brush);
+                break;
+            case 2:
+                brush->SetColor(D2D1::ColorF(0.2f, 0.78f, 0.35f, 1));
+                target->DrawText(Tr(L"✓ Updated", L"✓ Atualizado"),
+                                 (UINT32)wcslen(Tr(L"✓ Updated",
+                                                   L"✓ Atualizado")),
+                                 m_buttonFormat.get(), button, brush);
+                break;
+            case 3:
+                // Failed: in a terminal, to see why.
+                DrawButton(target, brush, button,
+                           Tr(L"Failed · terminal", L"Falhou · terminal"),
+                           false, hover);
+                break;
+            default:
+                DrawButton(target, brush, button, Tr(L"Update", L"Atualizar"),
+                           false, hover);
+                break;
+        }
+        if (i + 1 < m_appRows.size()) {
+            brush->SetColor(Fg(0.07f));
+            target->FillRectangle({row.left, row.bottom - 0.5f, row.right,
+                                   row.bottom + 0.5f},
+                                  brush);
+        }
+    }
+    // Windows'.
+    std::wstring windows = L"Windows Update";
+    if (!m_data.windows.empty()) {
+        windows += L"  ·  " + std::to_wstring(m_data.windows.size());
+    }
+    brush->SetColor(Fg(0.6f));
+    target->DrawText(windows.c_str(), (UINT32)windows.size(),
+                     m_smallFormat.get(), m_windowsTitle, brush);
+    const float line = std::round(22 * s);
+    if (m_data.windows.empty()) {
+        PCWSTR none = m_data.checked ? Tr(L"Nothing waiting", L"Nada pendente")
+                                     : Tr(L"Not checked yet",
+                                          L"Ainda não verificado");
+        brush->SetColor(Fg(0.45f));
+        target->DrawText(none, (UINT32)wcslen(none), m_textFormat.get(),
+                         {m_windowsTitle.left, m_windowsTop,
+                          m_windowsTitle.right, m_windowsTop + line},
+                         brush);
+    }
+    for (size_t i = 0; i < m_windowsRows && i < m_data.windows.size(); i++) {
+        const std::wstring text = L"•  " + m_data.windows[i];
+        brush->SetColor(Fg(0.85f));
+        target->DrawText(text.c_str(), (UINT32)text.size(), m_smallFormat.get(),
+                         {m_windowsTitle.left, m_windowsTop + line * i,
+                          m_windowsTitle.right, m_windowsTop + line * (i + 1)},
+                         brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    }
+    DrawButton(target, brush, m_windowsButton,
+               Tr(L"Open Windows Update", L"Abrir o Windows Update"), false,
+               m_hover.part == Part::Windows);
+    EndScrollArea(target);
+    DrawScrollBar(target, brush, m_listViewport, m_scroll);
+}
+
 class StatusEvents;
 
 class Island {
@@ -11323,12 +18334,23 @@ class Island {
     // Shared with the control center.
     IMMDeviceEnumerator* Devices() { return m_devices.get(); }
     winrt::com_ptr<IAudioEndpointVolume> GetVolume(std::wstring* deviceName);
+    // The default microphones' volume (for everything, and for
+    // communications when it's another), or nothing without one.
+    std::vector<winrt::com_ptr<IAudioEndpointVolume>> GetMicrophones();
+    // -1 without a microphone.
+    int MicrophoneMuted();
+    void ToggleMicrophone();
     NetworkInfo QueryNetwork();
     void OnVolumeChanged();
     void OnNetworkChanged();
     void OnDoNotDisturbChanged();
     void OpenNotifications();
     void OnPreferencesChanged();
+    // Wi-Fi joining, or Windows checking for the internet just after
+    // connecting (for the control center).
+    bool IsNetworkConnecting() const {
+        return m_netState == NetState::Connecting;
+    }
     // Another order of the items (see SetPillOrder): they slide there.
     void OnOrderChanged();
     // Apps with notifications not looked at yet (see m_unreadApps).
@@ -11339,9 +18361,48 @@ class Island {
     void ClearAppsFromList(const std::vector<std::wstring>& apps, bool all);
     // The notification list was opened: the bell's dot goes.
     void OnNotificationsSeen();
-    // Unread apps whose notifications left the Windows notification center
-    // (read elsewhere, like on the phone) leave the island too.
-    void DropGoneUnread();
+    // "Snooze" (Windows' own button, pressed on the island): the
+    // notification shows again a few minutes later.
+    void SnoozeToast(IslandToast toast);
+    // Whether a notification (by its ID) is snoozed now.
+    bool IsToastSnoozed(long long id) const {
+        return id > 0 &&
+               std::any_of(m_snoozedToasts.begin(), m_snoozedToasts.end(),
+                           [id](const auto& entry) {
+                               return entry.first.id == id;
+                           });
+    }
+    // Notifications changed in the Windows notification center: the ones
+    // gone (read elsewhere, like on the phone, or a call that ended) leave
+    // the island too.
+    void OnToastsChanged();
+    void DropGoneUnread(const std::vector<std::wstring>& inCenter);
+    // Opens (or closes) the updates; looked for if not yet (or long ago).
+    void OpenUpdates() {
+        const UpdatesData updates = GetUpdates();
+        if (!updates.checking &&
+            (!updates.checked || NowSeconds() - updates.checkedAt > 30 * 60)) {
+            StartUpdatesJob({});
+        }
+        TogglePanel(m_updatesPanel, IslandItem::Updates);
+    }
+    // Opens (or closes) the weather; old weather is measured again.
+    void OpenWeather() {
+        const WeatherData weather = GetWeather();
+        if (!weather.valid ||
+            NowSeconds() - weather.fetchedAt > kWeatherRefreshSeconds / 2) {
+            StartWeather({});
+        }
+        TogglePanel(m_weatherPanel, IslandItem::Weather);
+    }
+    // Opens (or closes) the notes, the tasks or the shortcuts, from their
+    // item on the pill or their button in the control center.
+    void OpenListPanel(IslandItem item) {
+        Panel& panel = item == IslandItem::Notes   ? (Panel&)m_notesPanel
+                       : item == IslandItem::Tasks ? (Panel&)m_tasksPanel
+                                                   : (Panel&)m_shortcutsPanel;
+        TogglePanel(panel, item);
+    }
     // Tells explorer the island is there (it sends what it has).
     void SayHello() {
         SendIpc(FindTaskbarWnd(), m_hwnd, kIpcHello, nullptr, 0);
@@ -11400,13 +18461,17 @@ class Island {
     void BannerParts(D2D1_RECT_F* field,
                      D2D1_RECT_F* send,
                      D2D1_RECT_F* open) const;
-    // The "x" at its top right, under the mouse.
+    // The "x" at its top right (deletes it) and the arrow left of it
+    // (minimizes it), under the mouse.
     D2D1_RECT_F BannerCloseRect() const;
+    D2D1_RECT_F BannerMinimizeRect() const;
     bool BannerHovered() const {
         return m_hover == IslandItem::Banner ||
                m_hover == IslandItem::BannerReply ||
                m_hover == IslandItem::BannerOpen ||
-               m_hover == IslandItem::BannerClose;
+               m_hover == IslandItem::BannerClose ||
+               m_hover == IslandItem::BannerMinimize ||
+               m_hover == IslandItem::BannerAction;
     }
     void StartBannerTyping();
     void EndBannerTyping();
@@ -11424,6 +18489,12 @@ class Island {
 
    public:
     void OnWindowsBanner(HWND banner, bool appeared);
+    // A Windows banner showed (whatever the island does with it).
+    void OnWindowsBannerSeen() { m_windowsBannerSeenAt = NowSeconds(); }
+    // The last Windows banner went (the stack ended).
+    void OnWindowsBannersGone();
+    // A read of Windows' banners is done (see ReadWindowsBanners).
+    void OnWindowsBannersRead();
     void WatchWindowsBannerMoves(DWORD processId);
     void OnTrayAppWindow(HWND hWnd);
 
@@ -11450,14 +18521,25 @@ class Island {
     MediaPanel m_mediaPanel;
     PowerPanel m_power;
     // All of them, for what's done to each.
-    std::array<Panel*, 5> Panels() {
-        return {&m_calendar, &m_control, &m_notifications, &m_mediaPanel,
-                &m_power};
+    std::array<Panel*, 11> Panels() {
+        return {&m_calendar,     &m_control,      &m_notifications,
+                &m_mediaPanel,   &m_power,        &m_usagePanel,
+                &m_notesPanel,   &m_tasksPanel,   &m_shortcutsPanel,
+                &m_weatherPanel, &m_updatesPanel};
+    }
+    std::array<const Panel*, 11> Panels() const {
+        return {&m_calendar,     &m_control,      &m_notifications,
+                &m_mediaPanel,   &m_power,        &m_usagePanel,
+                &m_notesPanel,   &m_tasksPanel,   &m_shortcutsPanel,
+                &m_weatherPanel, &m_updatesPanel};
     }
     bool AnyPanelOpen() const {
-        return m_calendar.IsOpen() || m_control.IsOpen() ||
-               m_notifications.IsOpen() || m_mediaPanel.IsOpen() ||
-               m_power.IsOpen();
+        for (const Panel* panel : Panels()) {
+            if (panel->IsOpen()) {
+                return true;
+            }
+        }
+        return false;
     }
     void CloseAllPanels() {
         for (Panel* panel : Panels()) {
@@ -11497,12 +18579,104 @@ class Island {
     // The title as shown (with its artist, when short).
     std::wstring m_mediaTitleShown;
     float m_mediaTitleWidth = 0;
+    // Another song: the title before slides up and away as the new one comes
+    // up from below, the cover before fades into the new one (1 to 0), and
+    // the pill's width follows the new title smoothly.
+    std::wstring m_mediaTitleBefore;
+    double m_mediaSwap = 0;
+    double m_mediaSwapVelocity = 0;
+    winrt::com_ptr<ID2D1Bitmap> m_mediaCoverBefore;
+    double m_mediaCoverSwap = 0;
+    double m_mediaCoverSwapVelocity = 0;
+    double m_mediaTitleWidthShown = 0;
+    double m_mediaTitleWidthVelocity = 0;
     ID2D1Bitmap* MediaCover();
     std::wstring MediaTitleText() const;
     double m_playSwap = 0;
     double m_playSwapVelocity = 0;
     void UpdateMediaShown();
     bool m_appBar = false;
+    // Windows' dark mode (for the light and dark mode button), and its icon
+    // turning half a turn when it's switched (0 light, 1 dark).
+    bool m_darkMode = false;
+    double m_themeTurn = 0;
+    double m_themeTurnVelocity = 0;
+    // The processor, memory and video memory use shown (see
+    // UsageThreadProc), its thread while shown, and the room each takes:
+    // each counts from the value before to the new one, one step at a time
+    // (-1 unknown).
+    double m_usageFrom[3] = {-1, -1, -1};
+    double m_usageTo[3] = {-1, -1, -1};
+    double m_usageChangedAt[3]{};
+    std::wstring UsageText(int index) const;
+    HANDLE m_usageThread = nullptr;
+    HANDLE m_usageStop = nullptr;
+    HANDLE m_usageWake = nullptr;
+    UsagePanel m_usagePanel;
+    NotesPanel m_notesPanel;
+    TasksPanel m_tasksPanel;
+    ShortcutsPanel m_shortcutsPanel;
+    WeatherPanel m_weatherPanel;
+    UpdatesPanel m_updatesPanel;
+    // The updates' threads (looking, updating), stopped with the island;
+    // how many are waiting (on the pill).
+    std::vector<HANDLE> m_updatesThreads;
+    HANDLE m_updatesStop = nullptr;
+    int m_updatesCount = 0;
+    bool m_updatesWatched = false;
+    void StartUpdatesJob(std::vector<std::wstring> appIds);
+    void UpdateUpdatesWatch();
+    void OnUpdates();
+    // The weather's thread (one at a time), and what the pill shows ("sky
+    // emoji, tab, temperature"), from g_weather.
+    HANDLE m_weatherThread = nullptr;
+    std::wstring m_weatherShown;
+    void StartWeather(const std::wstring& search);
+    void OnWeather(int problem);
+    void ShowWeather(const WeatherData& weather);
+    void UpdateWeatherWatch();
+    bool WeatherWanted() const;
+    // Failed tries in a row (each waits longer for the next).
+    int m_weatherRetries = 0;
+    // A city typed while a request was running: looked for once it ends.
+    std::wstring m_weatherPendingSearch;
+    // The network as the pill shows it: off, connecting (Wi-Fi joining, or
+    // Windows checking for the internet just after connecting), connected
+    // without internet, or online; and its glyph changing (the one before
+    // fading out as the new one grows in).
+    enum class NetState { Off, Connecting, NoInternet, Online };
+    NetState m_netState = NetState::Off;
+    bool m_netWifi = false;
+    int m_netBars = 3;
+    double m_netLocalSince = 0;
+    double m_netConnectingSince = 0;
+    double m_netShowConnectingUntil = 0;
+    std::wstring m_networkFrom;
+    double m_networkSwap = 0;
+    double m_networkSwapVelocity = 0;
+    void UpdateNetwork();
+    void SetNetworkGlyph(std::wstring glyph);
+    void OnInternetBack();
+    void DrawNetwork(ID2D1RenderTarget* target,
+                     ID2D1SolidColorBrush* brush,
+                     const IslandSlot& slot,
+                     float opacity);
+    float m_usageWidth = 0;
+    winrt::com_ptr<IDWriteTextFormat> m_weatherEmojiFormat;
+    float m_weatherEmojiScale = 0;
+    winrt::com_ptr<IDWriteTextFormat> m_usageLabelFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_usageValueFormat;
+    void UpdateUsageWatch();
+    void StopUsageWatch();
+    void OnUsage();
+    // How far a value's change is (0 to 1; 1 when done).
+    float UsageChange(int index) const {
+        const double changedAt = m_usageChangedAt[index];
+        return changedAt ? (float)std::clamp(
+                               (NowSeconds() - changedAt) / kUsageChangeSeconds,
+                               0.0, 1.0)
+                         : 1.0f;
+    }
 
     float m_scale = 0;
     RECT m_monitor{};
@@ -11548,6 +18722,15 @@ class Island {
     // The clock's two lines when upright: the time and a short date.
     std::wstring m_clockTime;
     std::wstring m_clockDate;
+    // Its parts shown (see GlobalClockParts), and, when they change, the
+    // text before fading out as the new one fades in, the width following.
+    int m_clockParts = -1;
+    std::wstring m_clockBefore;
+    double m_clockSwap = 0;
+    double m_clockSwapVelocity = 0;
+    double m_clockWidth = -1;
+    double m_clockWidthVelocity = 0;
+    float m_clockWidthTarget = 0;
     // The app in front whose place is used (empty: the one for all apps).
     std::wstring m_placeApp;
     HWINEVENTHOOK m_foregroundHook = nullptr;
@@ -11613,7 +18796,8 @@ class Island {
     void SaveUnread();
     void AddUnread(const IslandToast& toast);
     UnreadApp* FindUnread(const std::wstring& appId);
-    int m_unreadCheckTicks = 0;
+    // Snoozed notifications, and when they show again (see SnoozeToast).
+    std::vector<std::pair<IslandToast, double>> m_snoozedToasts;
     // Apps with a notification badge (from the taskbar), and their icons.
     // Each grows in and out (`shown` from 0 to 1).
     std::vector<std::wstring> m_badgeApps;
@@ -11674,22 +18858,74 @@ class Island {
     // one by one (the next when a banner goes).
     std::vector<IslandToast> m_waitingToasts;
     bool m_bannerWanted = false;
-    // When the Windows banner last appeared and where (see
-    // OnWindowsBanner). Windows shows its banners one after the other, in
-    // the order the notifications came, often well after them (a few
-    // seconds each): each notification the island takes is owed a banner
-    // (when it was taken), and a banner that appears takes the oldest one
-    // owed; with none owed, it waits a moment for the island to take its
-    // notification, which can come a little later.
+    // The Windows banners (see OnWindowsBanner). Windows 11 shows them in a
+    // stack, in one window: it's uncloaked when the first comes, the next
+    // ones join it, and it's cloaked when the last goes. The island can only
+    // move the whole window, so it's off the screen only while every banner
+    // in it is one the island shows: the notifications the island reads
+    // while no stack shows are the next stack's first ones (kept a few
+    // seconds), and one read while a stack shows has joined it. A call's,
+    // an alarm's or a reminder's, or one the island can't show now, brings
+    // the stack back at once, until it ends. A stack with none read yet
+    // waits a moment, hidden, for the island to read its notification,
+    // which can come a little later.
     double m_bannerShownAt = -100;
-    LONG m_bannerHomeTop = 0;
-    std::vector<double> m_bannersOwed;
-    bool m_shownBannerTaken = false;
-    bool m_shownBannerWaiting = false;
+    // Where Windows keeps the stack's bottom (it grows upwards from there).
+    LONG m_bannerHomeBottom = 0;
+    struct OwedBanner {
+        // Until when it's expected, and whether it goes.
+        double until;
+        bool take;
+    };
+    std::vector<OwedBanner> m_bannersOwed;
+    bool m_stackShowing = false;
+    // Off the screen (the island's), waiting for the island to read its
+    // notification, or kept on the screen until it ends.
+    bool m_stackHidden = false;
+    bool m_stackWaiting = false;
+    bool m_stackMustShow = false;
+    // When a Windows banner last showed (whatever the island did with it).
+    double m_windowsBannerSeenAt = -100;
     bool CanTakeBanners() const;
-    void TakeWindowsBanner();
+    void OweWindowsBanner(bool take);
     double BannerRestoreSeconds() const;
     void RestoreWindowsBanner();
+    // The stack has one the island doesn't show: back on the screen, and
+    // kept there until it ends.
+    void KeepWindowsBannersShown() {
+        m_stackMustShow = true;
+        RestoreWindowsBanner();
+    }
+    // With the island's own notifications, the call, alarm or reminder on
+    // the pill takes over Windows' banner for it (see WindowsBannerView):
+    // hidden while the pill shows it, with its buttons on the pill. Ends
+    // (and Windows' banner comes back) as soon as the pill doesn't show it,
+    // unless one of Windows' buttons was pressed (it goes by itself then,
+    // checked a moment later).
+    bool m_stackTakeover = false;
+    bool m_takeoverPressed = false;
+    bool m_takeoverDismiss = false;
+    std::vector<ToastReply::Action> m_bannerOwnActions;
+    LONG m_stackHeight = 0;
+    int m_bannerReadsBusy = 0;
+    bool m_bannerReadAgain = false;
+    int m_bannerReadRetries = 0;
+    HANDLE m_bannerReadStop = nullptr;
+    std::vector<HANDLE> m_bannerReadThreads;
+    void ReadWindowsBanners(DWORD delayMs);
+    void PressWindowsBanner(int button, const std::wstring& label);
+    void StartWindowsBannerThread(DWORD delayMs,
+                                  int press,
+                                  const WindowsBannerRead& fallback);
+    void EndTakeover();
+    bool WantsTakeover() const;
+    // A new stack, with the island's own notifications, is hidden at once
+    // while the island can show calls, alarms and reminders in its pill;
+    // when the stack last changed (one joining waits a moment for the
+    // island to read it).
+    bool CanTakeOverAhead() const;
+    double m_stackChangedAt = -100;
+    void OnBannerRestoreTimer();
     // The reply row: 0 hidden, 1 shown (under the mouse, or while typing).
     double m_bannerOpen = 0;
     double m_bannerOpenVelocity = 0;
@@ -11707,8 +18943,30 @@ class Island {
     // The most those take (the window has room for it).
     float BannerExtraRoom() const {
         return (m_bannerTextLines - 1) * std::round(18 * m_scale) +
-               (m_banner.reply.CanReply() ? BannerReplyExtra() : 0);
+               (BannerCanReply() ? BannerReplyExtra() : 0);
     }
+    // A call's, an alarm's or a reminder's buttons, in a row under it
+    // (instead of the reply box).
+    bool BannerHasActions() const {
+        return m_banner.urgent && !m_banner.reply.actions.empty();
+    }
+    bool BannerCanReply() const {
+        return m_banner.reply.CanReply() && !BannerHasActions();
+    }
+    D2D1_RECT_F BannerActionRect(size_t index) const;
+    // A call's, an alarm's or a reminder's sound (see QueueUrgentSound).
+    std::wstring m_urgentSoundApp;
+    std::wstring m_urgentSound;
+    bool m_urgentSoundLoop = false;
+    double m_urgentSoundAt = -100;
+    bool m_urgentRinging = false;
+    void QueueUrgentSound(const IslandToast& toast);
+    void PlayUrgentSound();
+    void StopUrgentSound();
+    // New notifications waiting for the pill: calls, alarms and reminders
+    // first.
+    void QueueToasts(std::vector<IslandToast> urgent,
+                     std::vector<IslandToast> others);
     bool m_bannerTyping = false;
     std::wstring m_bannerReplyText;
     TextEdit m_bannerEdit;
@@ -11744,6 +19002,12 @@ class Island {
     void StartStatusWatch();
     void StopStatusWatch();
     void WatchVolume();
+    // The default microphone (for communications too): muted or not, told
+    // when it changes like the volume.
+    void WatchMicrophone();
+    winrt::com_ptr<IAudioEndpointVolume> m_watchedMicrophone;
+    std::wstring MicrophoneGlyph();
+    std::wstring m_microphoneGlyph;
     StatusEvents* m_statusEvents = nullptr;
     winrt::com_ptr<IAudioEndpointVolume> m_watchedVolume;
     DWORD m_networkCookie = 0;
@@ -12329,6 +19593,14 @@ void ControlPanel::Update() {
         m_batteryPercent = power.BatteryLifePercent;
         m_charging = power.ACLineStatus == 1;
     }
+    // (Not on every refresh: reading them loads powrprof.dll and every
+    // plan's name.)
+    if (!m_powerReadAt || NowSeconds() - m_powerReadAt > 10) {
+        m_powerReadAt = NowSeconds();
+        m_powerMode = GetPowerMode();
+        m_powerPlans = GetPowerPlans(&m_activePlan);
+    }
+    m_microphoneMuted = g_island ? g_island->MicrophoneMuted() : -1;
 
     if (m_view == View::Output) {
         UpdateOutputs();
@@ -12624,11 +19896,16 @@ void ControlPanel::Layout() {
             // Under each app, its icons (all but the clock), and under them
             // the clock's parts.
             const float chips = std::round(32 * s);
-            const float itemChip = std::round(30 * s);
             const float itemGap = std::round(4 * s);
+            const float itemChip = std::round(30 * s);
+            // As many on a line as fit, then on more lines.
+            const int perLine = std::max(
+                1, (int)((width - padding * 2 - std::round(16 * s) + itemGap) /
+                         (itemChip + itemGap)));
+            const int iconLines = (kPillGroups - 1 + perLine - 1) / perLine;
             for (size_t i = 0; i < g_appPlaces.size(); i++) {
                 const D2D1_RECT_F rect{padding, y, width - padding,
-                                       y + row + chips * 2};
+                                       y + row + chips * (iconLines + 1)};
                 m_appPlaceRows.push_back(rect);
                 m_appPlaceRemoves.push_back(
                     {rect.right - remove, y, rect.right, y + row});
@@ -12638,16 +19915,22 @@ void ControlPanel::Layout() {
                      rect.right - remove - std::round(6 * s),
                      y + (row + gridHeight) / 2});
                 float chipLeft = rect.left + std::round(8 * s);
+                int shown = 0;
                 for (int group = 0; group < kPillGroups; group++) {
                     if ((PillGroup)group == PillGroup::Clock) {
                         continue;
                     }
+                    if (shown && shown % perLine == 0) {
+                        chipLeft = rect.left + std::round(8 * s);
+                    }
+                    const float top =
+                        y + row - std::round(2 * s) + chips * (shown / perLine);
                     m_appItemChips.push_back(
-                        {(int)i * 16 + group,
-                         {chipLeft, y + row - std::round(2 * s),
-                          chipLeft + itemChip,
-                          y + row - std::round(2 * s) + itemChip - itemGap}});
+                        {(int)i * kAppChipStride + group,
+                         {chipLeft, top, chipLeft + itemChip,
+                          top + itemChip - itemGap}});
                     chipLeft += itemChip + itemGap;
+                    shown++;
                 }
                 const float clockChip =
                     std::floor((rect.right - rect.left - std::round(16 * s) -
@@ -12655,14 +19938,15 @@ void ControlPanel::Layout() {
                                kClockParts);
                 chipLeft = rect.left + std::round(8 * s);
                 for (int part = 0; part < kClockParts; part++) {
-                    const float top = y + row - std::round(2 * s) + chips;
+                    const float top =
+                        y + row - std::round(2 * s) + chips * iconLines;
                     m_appItemChips.push_back(
-                        {(int)i * 16 + kClockChipFirst + part,
+                        {(int)i * kAppChipStride + kClockChipFirst + part,
                          {chipLeft, top, chipLeft + clockChip,
                           top + itemChip - itemGap}});
                     chipLeft += clockChip + itemGap;
                 }
-                y += row + chips * 2;
+                y += row + chips * (iconLines + 1);
             }
             const float label = std::round(28 * s);
             m_addAppsHeader = {padding, y, width - padding, y + label};
@@ -12702,6 +19986,12 @@ void ControlPanel::Layout() {
                          width - padding, y + button};
             m_status = {padding, y, m_connect.left - gap, y + button};
             y += button;
+        } else if (m_view == View::PowerPlans) {
+            const float row = std::round(34 * s);
+            for (size_t i = 0; i < m_powerPlans.size(); i++) {
+                m_rows.push_back({padding, y, width - padding, y + row});
+                y += row;
+            }
         } else if (m_view == View::Output) {
             const float row = std::round(kRowHeight * s);
             for (size_t i = 0; i < m_outputs.size(); i++) {
@@ -12742,7 +20032,7 @@ void ControlPanel::Layout() {
     m_networkTile = m_bluetoothTile = m_dndTile = m_nightTile = {};
     m_networkIcon = m_bluetoothIcon = m_dndIcon = {};
     m_display = m_brightnessSlider = m_sound = m_slider = m_volumeIcon =
-        m_deviceRow = m_mixerButton = m_batteryTile = {};
+        m_deviceRow = m_mixerButton = m_batteryTile = m_powerModeRect = {};
     const float tile = std::round(kTileHeight * s);
     const float half = (width - padding * 2 - gap) / 2;
     const float shortcut = std::round(kShortcutHeight * s);
@@ -12762,9 +20052,13 @@ void ControlPanel::Layout() {
         }
         column = 0;
     };
-    // Opened from the volume: only the sound.
+    // Opened from the volume or the battery: only those.
     static const std::vector<ControlId> kSoundOnly{ControlId::Sound};
-    for (ControlId id : m_soundOnly ? kSoundOnly : m_controls) {
+    static const std::vector<ControlId> kBatteryOnly{ControlId::Battery,
+                                                     ControlId::PowerMode};
+    for (ControlId id : m_only == Only::Sound     ? kSoundOnly
+                        : m_only == Only::Battery ? kBatteryOnly
+                                                  : m_controls) {
         const ControlInfo& info = GetControlInfo(id);
         if (info.kind != rowKind) {
             endRow();
@@ -12831,6 +20125,49 @@ void ControlPanel::Layout() {
                 m_batteryTile = rect;
             }
             y += battery + gap;
+        } else if (id == ControlId::PowerMode) {
+            if (m_powerPlans.empty() && !m_editing) {
+                continue;
+            }
+            // Its title, the active power plan (which opens their list),
+            // then (with the balanced plan) the three power modes side by
+            // side.
+            const float title = std::round(34 * s);
+            const float planRow = std::round(32 * s);
+            const float modes = m_powerMode >= 0 ? std::round(38 * s) : 0;
+            const float height =
+                m_powerPlans.empty()
+                    ? std::round(kPowerModeHeight * s)
+                    : title + planRow + modes + std::round(8 * s);
+            rect = {padding, y, width - padding, y + height};
+            m_powerPlanRow = {};
+            for (auto& choice : m_powerModeChoices) {
+                choice = {};
+            }
+            if (!m_powerPlans.empty()) {
+                m_powerModeRect = rect;
+                const float inner = std::round(6 * s);
+                float top = y + title;
+                m_powerPlanRow = {padding + inner, top,
+                                  width - padding - inner, top + planRow};
+                top += planRow;
+                if (m_powerMode >= 0) {
+                    const float modeInner = std::round(10 * s);
+                    const float between = std::round(6 * s);
+                    const float choice = (width - padding * 2 - modeInner * 2 -
+                                          between * 2) /
+                                         3;
+                    top += std::round(4 * s);
+                    for (int i = 0; i < 3; i++) {
+                        const float left =
+                            padding + modeInner + (choice + between) * i;
+                        m_powerModeChoices[i] = {std::round(left), top,
+                                                 std::round(left + choice),
+                                                 top + std::round(30 * s)};
+                    }
+                }
+            }
+            y += height + gap;
         }
         switch (id) {
             case ControlId::Network:
@@ -12858,8 +20195,8 @@ void ControlPanel::Layout() {
 
     const float footer = std::round(kFooterHeight * s);
     m_addRects.clear();
-    if (m_soundOnly) {
-        // Only the sound: no footer.
+    if (m_only != Only::All) {
+        // Only the sound or the battery: no footer.
         m_done = m_addHeader = m_more = m_edit = m_gear = {};
         y += padding / 2;
     } else if (m_editing) {
@@ -12904,7 +20241,7 @@ void ControlPanel::Layout() {
                   m_edit.left - std::round(6 * s), y + footer};
         m_more = {padding, y, m_gear.left - gap, y + footer};
     }
-    if (!m_soundOnly) {
+    if (m_only == Only::All) {
         y += footer + padding / 2;
     }
 
@@ -12987,7 +20324,10 @@ std::wstring ControlPanel::SettingText(const SettingEntry& entry) const {
                 L"preto grafite claro destaque vidro";
             break;
         case SettingKind::Size:
-            text += L" Size bigger smaller Tamanho maior menor";
+            text += entry.value
+                        ? L" Distance from the edges gap margin room space "
+                          L"Distância das bordas espaço margem"
+                        : L" Size bigger smaller Tamanho maior menor";
             break;
         case SettingKind::Place:
             text += L" Place where position Posição onde lugar";
@@ -13025,15 +20365,36 @@ void ControlPanel::LayoutOrderChips() {
     const float s = m_scale;
     const float gap = std::round(2 * s);
     const float inset = std::round(3 * s);
-    auto widthOf = [s](PillGroup group) {
-        return std::round((group == PillGroup::Clock ? 50 : 30) * s);
+    // Only the items on the pill (the others are turned on in the list).
+    std::vector<PillGroup> shown;
+    for (PillGroup group : g_pillOrder) {
+        if (PillGroupOn(group)) {
+            shown.push_back(group);
+        }
+    }
+    std::erase_if(m_orderChips, [&](const OrderChip& chip) {
+        return std::find(shown.begin(), shown.end(), chip.group) == shown.end();
+    });
+    // Narrower when they don't all fit.
+    float full = -gap;
+    for (PillGroup group : shown) {
+        full += std::round((group == PillGroup::Clock ? 50 : 30) * s) + gap;
+    }
+    const float room = m_orderStrip.right - m_orderStrip.left - inset * 2;
+    const float squeeze =
+        full > room && shown.size() > 1
+            ? (room - gap * (shown.size() - 1)) /
+                  (full - gap * (shown.size() - 1))
+            : 1.0f;
+    auto widthOf = [s, squeeze](PillGroup group) {
+        return std::floor((group == PillGroup::Clock ? 50 : 30) * s * squeeze);
     };
     float total = -gap;
-    for (PillGroup group : g_pillOrder) {
+    for (PillGroup group : shown) {
         total += widthOf(group) + gap;
     }
     float x = std::round((m_orderStrip.left + m_orderStrip.right - total) / 2);
-    for (PillGroup group : g_pillOrder) {
+    for (PillGroup group : shown) {
         const float width = widthOf(group);
         const D2D1_RECT_F rect{x, m_orderStrip.top + inset, x + width,
                                m_orderStrip.bottom - inset};
@@ -13053,12 +20414,15 @@ void ControlPanel::LayoutSettings() {
             {(int)SettingKind::Style, 0, kSectionLook},
             {(int)SettingKind::Theme, 0, kSectionLook},
             {(int)SettingKind::Size, 0, kSectionLook},
+            {(int)SettingKind::Pref, (int)IslandPref::PanelsFollow,
+             kSectionLook},
             {(int)SettingKind::Label, 0, kSectionPlace},
             {(int)SettingKind::Place, 0, kSectionPlace},
             {(int)SettingKind::AppPlaces, 0, kSectionPlace},
             {(int)SettingKind::Pref, (int)IslandPref::FreeDrag, kSectionPlace},
             {(int)SettingKind::Pref, (int)IslandPref::VerticalSides,
              kSectionPlace},
+            {(int)SettingKind::Size, 1, kSectionPlace},
             {(int)SettingKind::Label, 0, kSectionPill},
             {(int)SettingKind::Order, 0, kSectionPill},
             {(int)SettingKind::Pref, (int)IslandPref::ClockCenter,
@@ -13068,6 +20432,18 @@ void ControlPanel::LayoutSettings() {
             {(int)SettingKind::Pref, (int)IslandPref::Battery, kSectionPill},
             {(int)SettingKind::Pref, (int)IslandPref::Bell, kSectionPill},
             {(int)SettingKind::Pref, (int)IslandPref::Power, kSectionPill},
+            {(int)SettingKind::Pref, (int)IslandPref::ThemeButton,
+             kSectionPill},
+            {(int)SettingKind::Pref, (int)IslandPref::Microphone,
+             kSectionPill},
+            {(int)SettingKind::Pref, (int)IslandPref::Notes, kSectionPill},
+            {(int)SettingKind::Pref, (int)IslandPref::Tasks, kSectionPill},
+            {(int)SettingKind::Pref, (int)IslandPref::Shortcuts, kSectionPill},
+            {(int)SettingKind::Pref, (int)IslandPref::Weather, kSectionPill},
+            {(int)SettingKind::Pref, (int)IslandPref::Updates, kSectionPill},
+            {(int)SettingKind::Pref, (int)IslandPref::UsageCpu, kSectionPill},
+            {(int)SettingKind::Pref, (int)IslandPref::UsageRam, kSectionPill},
+            {(int)SettingKind::Pref, (int)IslandPref::UsageVram, kSectionPill},
             {(int)SettingKind::Label, 0, kSectionTrayMedia},
             {(int)SettingKind::Pref, (int)IslandPref::Tray, kSectionTrayMedia},
             {(int)SettingKind::Pref, (int)IslandPref::TrayOpen,
@@ -13084,6 +20460,7 @@ void ControlPanel::LayoutSettings() {
              kSectionClock},
             {(int)SettingKind::Pref, (int)IslandPref::ClockDate, kSectionClock},
             {(int)SettingKind::Pref, (int)IslandPref::ClockYear, kSectionClock},
+            {(int)SettingKind::Pref, (int)IslandPref::Holidays, kSectionClock},
             {(int)SettingKind::Label, 0, kSectionNotifications},
             {(int)SettingKind::Pref, (int)IslandPref::OwnNotifications,
              kSectionNotifications},
@@ -13106,11 +20483,17 @@ void ControlPanel::LayoutSettings() {
     const float padding = std::round(kControlPadding * s);
     const float column = std::round((kControlWidth - kControlPadding * 2) * s);
     const float between = std::round(25 * s);
-    // Two columns when the screen has room for them.
+    // Two or three columns when the screen has room for them.
     const float twoWidth = padding * 2 + column * 2 + between;
-    m_twoColumns = m_monitorRect.right - m_monitorRect.left >=
-                   twoWidth + std::round(48 * s);
-    const float width = m_twoColumns ? twoWidth : std::round(kControlWidth * s);
+    const float threeWidth = padding * 2 + column * 3 + between * 2;
+    const float screen = (float)(m_monitorRect.right - m_monitorRect.left);
+    m_columns = screen >= threeWidth + std::round(48 * s)  ? 3
+                : screen >= twoWidth + std::round(48 * s) ? 2
+                                                           : 1;
+    m_twoColumns = m_columns >= 2;
+    const float width = m_columns == 3   ? threeWidth
+                        : m_columns == 2 ? twoWidth
+                                         : std::round(kControlWidth * s);
 
     // "<  Island settings", and the search box: beside the title with two
     // columns, under it with one.
@@ -13155,25 +20538,23 @@ void ControlPanel::LayoutSettings() {
             total += height;
         }
     }
-    // The sections fill the first column up to about half, then the
-    // second one.
+    // The sections fill the columns in turn, each up to about its share.
     int sectionColumn[kSectionCount] = {};
-    float firstColumn = 0;
+    float filled = 0;
     int columnNow = 0;
     for (int i = 0; i < kSectionCount; i++) {
         if (!sectionShown[i]) {
             continue;
         }
-        if (m_twoColumns && columnNow == 0 && firstColumn > 0 &&
-            firstColumn + sectionHeight[i] / 2 > total / 2) {
-            columnNow = 1;
+        if (columnNow < m_columns - 1 && filled > 0 &&
+            filled + sectionHeight[i] / 2 >
+                total * (columnNow + 1) / m_columns) {
+            columnNow++;
         }
         sectionColumn[i] = columnNow;
-        if (columnNow == 0) {
-            firstColumn += sectionHeight[i];
-        }
+        filled += sectionHeight[i];
     }
-    float columnBottom[2] = {};
+    float columnBottom[3] = {};
     for (auto& entry : m_settings) {
         if (!entry.shown) {
             continue;
@@ -13213,15 +20594,17 @@ void ControlPanel::LayoutSettings() {
                 break;
             }
             case SettingKind::Size: {
-                m_sizeRow = rect;
+                const int slider = entry.value ? 1 : 0;
+                m_sizeRow[slider] = rect;
                 const float reset = std::round(28 * s);
-                m_sizeReset = {rect.right - std::round(2 * s) - reset,
-                               top + (height - reset) / 2,
-                               rect.right - std::round(2 * s),
-                               top + (height + reset) / 2};
-                m_sizeSlider = {rect.left + std::round(column * 0.48f), top,
-                                m_sizeReset.left - std::round(10 * s),
-                                top + height};
+                m_sizeReset[slider] = {rect.right - std::round(2 * s) - reset,
+                                       top + (height - reset) / 2,
+                                       rect.right - std::round(2 * s),
+                                       top + (height + reset) / 2};
+                m_sizeSlider[slider] = {
+                    rect.left + std::round(column * 0.48f), top,
+                    m_sizeReset[slider].left - std::round(10 * s),
+                    top + height};
                 break;
             }
             case SettingKind::Place: {
@@ -13248,13 +20631,17 @@ void ControlPanel::LayoutSettings() {
         }
     }
     m_nothingFound = total <= 0;
-    float content = std::max(columnBottom[0], columnBottom[1]);
+    float content =
+        std::max({columnBottom[0], columnBottom[1], columnBottom[2]});
     if (m_nothingFound) {
         content = std::round(64 * s);
     }
-    m_columnLine = m_twoColumns && columnBottom[1] > 0
+    m_columnLine = m_columns >= 2 && columnBottom[1] > 0
                        ? padding + column + between / 2
                        : -1;
+    m_columnLine2 = m_columns >= 3 && columnBottom[2] > 0
+                        ? padding + column * 2 + between * 1.5f
+                        : -1;
     // As tall as the list, up to the room on the screen (then it scrolls).
     const float viewport = std::min(
         content,
@@ -13467,14 +20854,16 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
                     }
                     break;
                 }
-                case SettingKind::Size:
-                    if (PointInRect(list, m_sizeReset)) {
-                        return {Part::SizeReset};
+                case SettingKind::Size: {
+                    const int slider = entry.value ? 1 : 0;
+                    if (PointInRect(list, m_sizeReset[slider])) {
+                        return {Part::SizeReset, slider};
                     }
-                    if (PointInRect(list, m_sizeSlider)) {
-                        return {Part::SizeSlider};
+                    if (PointInRect(list, m_sizeSlider[slider])) {
+                        return {Part::SizeSlider, slider};
                     }
                     break;
+                }
                 case SettingKind::Place:
                     if (!g_settings.islandBar) {
                         const int dot = PlaceDotAt(m_placeGrid, list);
@@ -13571,6 +20960,9 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
             if (m_view == View::Output) {
                 return {Part::Output, (int)i};
             }
+            if (m_view == View::PowerPlans) {
+                return {Part::PowerPlanRow, (int)i};
+            }
             // Row 0 is the device's volume (index -1).
             const int index = (int)i - 1;
             if (PointInRect(pt, m_rowIcons[i])) {
@@ -13648,6 +21040,16 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
                 return {};
             case ControlId::Battery:
                 return {Part::Battery};
+            case ControlId::PowerMode:
+                for (int i = 0; i < 3; i++) {
+                    if (PointInRect(pt, m_powerModeChoices[i])) {
+                        return {Part::PowerModeSegment, i};
+                    }
+                }
+                if (PointInRect(pt, m_powerPlanRow)) {
+                    return {Part::PowerPlan};
+                }
+                return {};
             default:
                 return {Part::Shortcut, (int)id};
         }
@@ -14290,10 +21692,10 @@ void ControlPanel::DrawAppPlaces(ID2D1RenderTarget* target,
         // Its icons: lit when shown while it's in front, dimmed and struck
         // through when hidden (fading between the two).
         for (const auto& [index, chip] : m_appItemChips) {
-            if (index / 16 != (int)i) {
+            if (index / kAppChipStride != (int)i) {
                 continue;
             }
-            const int group = index % 16;
+            const int group = index % kAppChipStride;
             if (group >= kClockChipFirst) {
                 // The clock's parts: lit when shown for this app.
                 const int part = group - kClockChipFirst;
@@ -14393,20 +21795,45 @@ void ControlPanel::DrawAppPlaces(ID2D1RenderTarget* target,
 }
 
 // The island's own options: its style, its colors, and what it shows.
-void ControlPanel::SetIslandSizeAt(POINT pt, bool keep) {
+// The island's sliders: what each one changes, its range and steps.
+struct IslandSlider {
+    int min;
+    int max;
+    int usual;
+    int step;
+};
+constexpr IslandSlider kIslandSliders[2] = {
+    {kIslandSizeMin, kIslandSizeMax, kIslandSizeDefault, kIslandSizeStep},
+    {kIslandGapMin, kIslandGapMax, kIslandGapDefault, kIslandGapStep},
+};
+
+void SetIslandSlider(int slider, int value, bool keep) {
+    if (slider == 1) {
+        SetIslandGap(value, keep);
+    } else {
+        SetIslandSize(value, keep);
+    }
+}
+
+int IslandSliderValue(int slider) {
+    return slider == 1 ? g_settings.islandGap : g_settings.islandSize;
+}
+
+void ControlPanel::SetIslandSizeAt(int slider, POINT pt, bool keep) {
     pt = ToSettingsList(pt);
+    const IslandSlider& info = kIslandSliders[slider];
     const float inset = std::round(10 * m_scale);
-    const float left = m_sizeSlider.left + inset;
-    const float right = m_sizeSlider.right - inset;
+    const float left = m_sizeSlider[slider].left + inset;
+    const float right = m_sizeSlider[slider].right - inset;
     if (right <= left) {
         return;
     }
     const float fraction =
         std::clamp((pt.x - left) / (right - left), 0.0f, 1.0f);
-    const int steps = (kIslandSizeMax - kIslandSizeMin) / kIslandSizeStep;
-    SetIslandSize(
-        kIslandSizeMin + (int)std::lround(fraction * steps) * kIslandSizeStep,
-        keep);
+    const int steps = (info.max - info.min) / info.step;
+    SetIslandSlider(slider,
+                    info.min + (int)std::lround(fraction * steps) * info.step,
+                    keep);
 }
 
 void ControlPanel::DrawSettings(ID2D1RenderTarget* target,
@@ -14420,12 +21847,15 @@ void ControlPanel::DrawSettings(ID2D1RenderTarget* target,
     const float offset = m_settingsScroll.Offset();
     const float height = viewport.bottom - viewport.top;
     // The line between the columns, along the part shown.
-    if (m_columnLine >= 0 && m_lineAlpha > 0.01) {
-        brush->SetColor(Fg(0.09f * (float)std::clamp(m_lineAlpha, 0.0, 1.0)));
-        target->FillRectangle(
-            {m_columnLine - 0.5f, offset + std::round(6 * s),
-             m_columnLine + 0.5f, offset + height - std::round(6 * s)},
-            brush);
+    for (float line : {m_columnLine, m_columnLine2}) {
+        if (line >= 0 && m_lineAlpha > 0.01) {
+            brush->SetColor(
+                Fg(0.09f * (float)std::clamp(m_lineAlpha, 0.0, 1.0)));
+            target->FillRectangle(
+                {line - 0.5f, offset + std::round(6 * s), line + 0.5f,
+                 offset + height - std::round(6 * s)},
+                brush);
+        }
     }
     D2D1_MATRIX_3X2_F list;
     target->GetTransform(&list);
@@ -14699,23 +22129,33 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
             }
             break;
         case SettingKind::Size:
-            // The size: its percentage, a slider (the knob in steps), and a
-            // button to restore it, dimmed while it's the usual size.
+            // The size (or the room from the edges): its value, a slider
+            // (the knob in steps), and a button to restore it, dimmed while
+            // it's the usual one.
             {
-                const int size = g_settings.islandSize;
+                const int slider = entry.value ? 1 : 0;
+                const IslandSlider& info = kIslandSliders[slider];
+                const D2D1_RECT_F& sizeRow = m_sizeRow[slider];
+                const D2D1_RECT_F& sizeSlider = m_sizeSlider[slider];
+                const D2D1_RECT_F& sizeReset = m_sizeReset[slider];
+                const int size = IslandSliderValue(slider);
+                const bool bar = slider == 1 && g_settings.islandBar;
                 const std::wstring name =
-                    std::wstring(Tr(L"Size", L"Tamanho")) + L" \u00B7 " +
-                    std::to_wstring(size) + L"%";
-                label(m_sizeRow, 0xE740, name.c_str(), m_sizeSlider.left, 1);
+                    slider == 1
+                        ? std::wstring(Tr(L"Edge distance", L"Distância da borda")) +
+                              L" \u00B7 " + std::to_wstring(size) + L" px"
+                        : std::wstring(Tr(L"Size", L"Tamanho")) + L" \u00B7 " +
+                              std::to_wstring(size) + L"%";
+                label(sizeRow, slider == 1 ? 0xE9A6 : 0xE740, name.c_str(),
+                      sizeSlider.left, bar ? 0.4f : 1.0f);
                 const float inset = std::round(10 * s);
-                const float middle =
-                    (m_sizeSlider.top + m_sizeSlider.bottom) / 2;
+                const float middle = (sizeSlider.top + sizeSlider.bottom) / 2;
                 const float thickness = std::round(4 * s);
                 const D2D1_RECT_F track{
-                    m_sizeSlider.left + inset, middle - thickness / 2,
-                    m_sizeSlider.right - inset, middle + thickness / 2};
-                const float fraction = (float)(size - kIslandSizeMin) /
-                                       (kIslandSizeMax - kIslandSizeMin);
+                    sizeSlider.left + inset, middle - thickness / 2,
+                    sizeSlider.right - inset, middle + thickness / 2};
+                const float fraction =
+                    (float)(size - info.min) / (info.max - info.min);
                 const float knobX =
                     track.left + (track.right - track.left) * fraction;
                 brush->SetColor(Fg(0.15f));
@@ -14727,40 +22167,43 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
                      thickness / 2,
                      thickness / 2},
                     brush);
-                // The usual size, marked on the track.
+                // The usual value, marked on the track.
                 const float usual =
-                    track.left +
-                    (track.right - track.left) *
-                        (float)(kIslandSizeDefault - kIslandSizeMin) /
-                        (kIslandSizeMax - kIslandSizeMin);
+                    track.left + (track.right - track.left) *
+                                     (float)(info.usual - info.min) /
+                                     (info.max - info.min);
                 brush->SetColor(Fg(0.35f));
                 target->FillRectangle(
                     {usual - std::round(1 * s), middle - std::round(6 * s),
                      usual + std::round(1 * s), middle + std::round(6 * s)},
                     brush);
                 const bool sliding =
-                    m_dragging && m_dragIndex == kDragIslandSize;
+                    m_dragging && m_dragIndex == kDragIslandSize - slider;
                 const float knob = std::round(
-                    (sliding || m_hover.part == Part::SizeSlider ? 9 : 8) * s);
+                    (sliding || (m_hover.part == Part::SizeSlider &&
+                                 m_hover.index == slider)
+                         ? 9
+                         : 8) *
+                    s);
                 brush->SetColor(D2D1::ColorF(1, 1, 1, 1));
                 target->FillEllipse({{knobX, middle}, knob, knob}, brush);
                 brush->SetColor(D2D1::ColorF(0, 0, 0, 0.25f));
                 target->DrawEllipse({{knobX, middle}, knob, knob}, brush, 1);
 
-                const bool usualSize = size == kIslandSizeDefault;
+                const bool usualSize = size == info.usual;
                 if (const float lit = Hover(
-                        m_sizeReset,
-                        !usualSize && m_hover.part == Part::SizeReset);
+                        sizeReset, !usualSize &&
+                                       m_hover.part == Part::SizeReset &&
+                                       m_hover.index == slider);
                     lit > 0.01f) {
-                    const float radius =
-                        (m_sizeReset.right - m_sizeReset.left) / 2;
+                    const float radius = (sizeReset.right - sizeReset.left) / 2;
                     brush->SetColor(Fg(0.12f * lit));
-                    target->FillRoundedRectangle({m_sizeReset, radius, radius},
+                    target->FillRoundedRectangle({sizeReset, radius, radius},
                                                  brush);
                 }
                 brush->SetColor(Fg(usualSize ? 0.25f : 0.85f));
                 const WCHAR restore = 0xE72C;
-                target->DrawText(&restore, 1, m_iconFormat.get(), m_sizeReset,
+                target->DrawText(&restore, 1, m_iconFormat.get(), sizeReset,
                                  brush);
             }
             break;
@@ -14828,7 +22271,9 @@ void ControlPanel::DrawOrderStrip(ID2D1RenderTarget* target,
     const OrderChip* dragged = nullptr;
     auto drawChip = [&](const OrderChip& chip) {
         const int pref = PillGroupPref(chip.group);
-        const bool shown = pref < 0 || GetIslandPref((IslandPref)pref);
+        const bool shown = pref >= 0 ? GetIslandPref((IslandPref)pref) != 0
+                           : chip.group == PillGroup::Usage ? AnyUsageShown()
+                                                            : true;
         const bool lifted = m_orderMoved && (int)chip.group == m_orderDrag;
         const bool hover =
             m_hover.part == Part::OrderChip && m_hover.index == (int)chip.group;
@@ -14877,9 +22322,8 @@ void ControlPanel::DrawOrderStrip(ID2D1RenderTarget* target,
                              L" · escondido, clique para mostrar");
         }
     } else {
-        hint = Tr(L"Drag to change the order · click to show or hide",
-                  L"Arraste para mudar a ordem · clique para mostrar ou "
-                  L"esconder");
+        hint = Tr(L"Drag to change the order · click to hide",
+                  L"Arraste para mudar a ordem · clique para esconder");
     }
     brush->SetColor(Fg(0.45f));
     DrawMarquee(target, brush, hint, m_smallFormat.get(),
@@ -15073,7 +22517,9 @@ void ControlPanel::DrawControl(ID2D1RenderTarget* target,
         (id == ControlId::Display && m_display.right <= m_display.left) ||
         (id == ControlId::Sound && m_sound.right <= m_sound.left) ||
         (id == ControlId::Battery &&
-         m_batteryTile.right <= m_batteryTile.left);
+         m_batteryTile.right <= m_batteryTile.left) ||
+        (id == ControlId::PowerMode &&
+         m_powerModeRect.right <= m_powerModeRect.left);
     if (missing) {
         const float radius = std::round(14 * s);
         brush->SetColor(Fg(0.08f));
@@ -15087,7 +22533,8 @@ void ControlPanel::DrawControl(ID2D1RenderTarget* target,
         // no place either).
         const bool unavailable =
             (id == ControlId::Display && m_brightness < 0) ||
-            (id == ControlId::Battery && !m_hasBattery);
+            (id == ControlId::Battery && !m_hasBattery) ||
+            (id == ControlId::PowerMode && m_powerPlans.empty());
         const std::wstring text =
             unavailable ? std::wstring(name) + L"  ·  " +
                               Tr(L"Not available here", L"Indisponível aqui")
@@ -15115,7 +22562,9 @@ void ControlPanel::DrawControl(ID2D1RenderTarget* target,
                 networkName = Tr(L"Network", L"Rede");
             }
             std::wstring networkState =
-                m_network.internet    ? Tr(L"Connected", L"Conectado")
+                g_island && g_island->IsNetworkConnecting()
+                    ? Tr(L"Connecting...", L"Conectando...")
+                : m_network.internet  ? Tr(L"Connected", L"Conectado")
                 : m_network.connected ? Tr(L"No internet", L"Sem internet")
                                       : Tr(L"Disconnected", L"Desconectado");
             if (m_wifiRadio == 0 && m_network.signal < 0 &&
@@ -15178,7 +22627,15 @@ void ControlPanel::DrawControl(ID2D1RenderTarget* target,
         case ControlId::Display:
         case ControlId::Sound:
         case ControlId::Battery:
+        case ControlId::PowerMode:
             // Below.
+            break;
+        case ControlId::Microphone:
+            DrawShortcut(target, brush, rect,
+                         m_microphoneMuted == 1 ? (WCHAR)0xF781 : info.glyph,
+                         name, m_microphoneMuted == 0,
+                         m_hover.part == Part::Shortcut &&
+                             m_hover.index == (int)id);
             break;
         default:
             DrawShortcut(target, brush, rect, info.glyph, name,
@@ -15256,6 +22713,70 @@ void ControlPanel::DrawControl(ID2D1RenderTarget* target,
         brush->SetColor(Fg(0.9f));
         target->DrawText(mixer, (UINT32)wcslen(mixer), m_linkFormat.get(),
                          m_mixerButton, brush);
+    }
+
+    // Power: its title, the power plans (the active one checked), and the
+    // power modes (the chosen one blue).
+    if (id == ControlId::PowerMode &&
+        m_powerModeRect.right > m_powerModeRect.left) {
+        const float sectionRadius = std::round(14 * s);
+        brush->SetColor(Fg(0.08f));
+        target->FillRoundedRectangle(
+            {m_powerModeRect, sectionRadius, sectionRadius}, brush);
+        const float sectionInner = std::round(12 * s);
+        const D2D1_RECT_F titleRect{
+            m_powerModeRect.left + sectionInner, m_powerModeRect.top,
+            m_powerModeRect.right - sectionInner,
+            m_powerModeRect.top + std::round(34 * s)};
+        PCWSTR title = Tr(L"Power", L"Energia");
+        brush->SetColor(Fg(0.95f));
+        target->DrawText(title, (UINT32)wcslen(title), m_sectionFormat.get(),
+                         titleRect, brush);
+        // The active plan, with "›" (its list).
+        if (m_powerPlanRow.right > m_powerPlanRow.left) {
+            const D2D1_RECT_F& row = m_powerPlanRow;
+            const float radius = std::round(8 * s);
+            brush->SetColor(
+                Fg(0.06f + 0.08f * Hover(row, m_hover.part == Part::PowerPlan)));
+            target->FillRoundedRectangle({row, radius, radius}, brush);
+            const float arrow = std::round(28 * s);
+            const std::wstring name =
+                m_activePlan >= 0 && m_activePlan < (int)m_powerPlans.size()
+                    ? m_powerPlans[m_activePlan].name
+                    : std::wstring(Tr(L"Choose a power plan",
+                                      L"Escolha um plano de energia"));
+            brush->SetColor(Fg(0.92f));
+            target->DrawText(name.c_str(), (UINT32)name.size(),
+                             m_subtitleFormat.get(),
+                             {row.left + std::round(10 * s), row.top,
+                              row.right - arrow, row.bottom},
+                             brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+            brush->SetColor(Fg(0.6f));
+            target->DrawText(&kGlyphNext, 1, m_smallIconFormat.get(),
+                             {row.right - arrow, row.top, row.right,
+                              row.bottom},
+                             brush);
+        }
+        static const PCWSTR kModeNames[3][2] = {
+            {L"Efficiency", L"Eficiência"},
+            {L"Balanced", L"Equilibrado"},
+            {L"Performance", L"Desempenho"}};
+        for (int i = 0; i < 3 && m_powerMode >= 0; i++) {
+            const D2D1_RECT_F& choice = m_powerModeChoices[i];
+            const float radius = (choice.bottom - choice.top) / 2;
+            const bool chosen = m_powerMode == i;
+            const float lit =
+                Hover(choice, m_hover.part == Part::PowerModeSegment &&
+                                  m_hover.index == i);
+            brush->SetColor(chosen ? D2D1::ColorF(0.04f, 0.52f, 1.0f,
+                                                  1.0f - 0.15f * lit)
+                                   : Fg(0.1f + 0.08f * lit));
+            target->FillRoundedRectangle({choice, radius, radius}, brush);
+            PCWSTR name = Tr(kModeNames[i][0], kModeNames[i][1]);
+            brush->SetColor(chosen ? D2D1::ColorF(1, 1, 1, 1) : Fg(0.9f));
+            target->DrawText(name, (UINT32)wcslen(name), m_linkFormat.get(),
+                             choice, brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        }
     }
 
     if (id == ControlId::Battery &&
@@ -15417,7 +22938,7 @@ void ControlPanel::DrawMain(ID2D1RenderTarget* target,
                          m_done, brush);
         return;
     }
-    if (m_soundOnly) {
+    if (m_only != Only::All) {
         return;
     }
 
@@ -15458,6 +22979,39 @@ void ControlPanel::DrawMain(ID2D1RenderTarget* target,
         editLayout->SetFontFamilyName(L"Segoe Fluent Icons", {0, 1});
         target->DrawTextLayout({m_edit.left, m_edit.top}, editLayout.get(),
                                brush);
+    }
+}
+
+void ControlPanel::DrawPowerPlans(ID2D1RenderTarget* target,
+                                 ID2D1SolidColorBrush* brush) {
+    const float s = m_scale;
+    DrawHeader(target, brush, Tr(L"Power plan", L"Plano de energia"));
+    for (size_t i = 0; i < m_powerPlans.size() && i < m_rows.size(); i++) {
+        const D2D1_RECT_F& row = m_rows[i];
+        const bool active = (int)i == m_activePlan;
+        const float lit = Hover(
+            row, m_hover.part == Part::PowerPlanRow && m_hover.index == (int)i);
+        if (lit > 0.01f || active) {
+            const float radius = std::round(10 * s);
+            const float rest = active ? 0.08f : 0.0f;
+            brush->SetColor(Fg(rest + (0.14f - rest) * lit));
+            target->FillRoundedRectangle({row, radius, radius}, brush);
+        }
+        const float check = std::round(36 * s);
+        const std::wstring& name = m_powerPlans[i].name;
+        brush->SetColor(Fg(0.95f));
+        target->DrawText(name.c_str(), (UINT32)name.size(),
+                         m_subtitleFormat.get(),
+                         {row.left + std::round(12 * s), row.top,
+                          row.right - check, row.bottom},
+                         brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        if (active) {
+            brush->SetColor(D2D1::ColorF(0.04f, 0.52f, 1.0f, 1));
+            target->DrawText(&kGlyphCheck, 1, m_iconFormat.get(),
+                             {row.right - check, row.top, row.right,
+                              row.bottom},
+                             brush);
+        }
     }
 }
 
@@ -15628,6 +23182,9 @@ void ControlPanel::DrawView(ID2D1RenderTarget* target,
         case View::Output:
             DrawOutputs(target, brush);
             break;
+        case View::PowerPlans:
+            DrawPowerPlans(target, brush);
+            break;
         case View::Mixer:
             DrawMixer(target, brush);
             break;
@@ -15714,23 +23271,20 @@ bool ControlPanel::OnMouseMove(POINT pt) {
         m_orderDragLeft = std::clamp(
             (float)ToSettingsList(pt).x - m_orderGrab, m_orderStrip.left,
             std::max(m_orderStrip.left, m_orderStrip.right - width));
-        // Its place: after the others whose middle it has passed.
+        // Its place: after the last shown one whose middle it has passed
+        // (the hidden ones keep theirs).
         const float middle = m_orderDragLeft + width / 2;
         std::vector<PillGroup> order;
         for (PillGroup group : g_pillOrder) {
-            if ((int)group == m_orderDrag) {
-                continue;
-            }
-            const OrderChip* other = FindOrderChip(group);
-            if (other && (other->rect.left + other->rect.right) / 2 < middle) {
+            if ((int)group != m_orderDrag) {
                 order.push_back(group);
             }
         }
-        const size_t index = order.size();
-        order.clear();
-        for (PillGroup group : g_pillOrder) {
-            if ((int)group != m_orderDrag) {
-                order.push_back(group);
+        size_t index = 0;
+        for (size_t i = 0; i < order.size(); i++) {
+            const OrderChip* other = FindOrderChip(order[i]);
+            if (other && (other->rect.left + other->rect.right) / 2 < middle) {
+                index = i + 1;
             }
         }
         order.insert(order.begin() + index, (PillGroup)m_orderDrag);
@@ -15775,8 +23329,8 @@ bool ControlPanel::OnMouseMove(POINT pt) {
         return false;
     }
     if (m_dragging) {
-        if (m_dragIndex == kDragIslandSize) {
-            SetIslandSizeAt(pt, false);
+        if (m_dragIndex <= kDragIslandSize) {
+            SetIslandSizeAt(kDragIslandSize - m_dragIndex, pt, false);
         } else if (m_dragIndex == kDragBrightness) {
             SetBrightnessAt(pt);
         } else if (m_dragIndex < 0) {
@@ -15831,9 +23385,9 @@ bool ControlPanel::OnMouseDown(POINT pt) {
     }
     if (hit.part == Part::SizeSlider) {
         m_dragging = true;
-        m_dragIndex = kDragIslandSize;
+        m_dragIndex = kDragIslandSize - hit.index;
         SetCapture(m_hwnd);
-        SetIslandSizeAt(pt, false);
+        SetIslandSizeAt(hit.index, pt, false);
         return true;
     }
     if (hit.part == Part::BrightnessSlider &&
@@ -15884,6 +23438,7 @@ bool ControlPanel::OnMouseUp(POINT pt) {
             pref >= 0) {
             SetIslandPref((IslandPref)pref,
                           GetIslandPref((IslandPref)pref) ? 0 : 1);
+            LayoutOrderChips();
         }
         return true;
     }
@@ -15912,8 +23467,8 @@ bool ControlPanel::OnMouseUp(POINT pt) {
     if (m_dragging) {
         m_dragging = false;
         ReleaseCapture();
-        if (m_dragIndex == kDragIslandSize) {
-            SetIslandSizeAt(pt, true);
+        if (m_dragIndex <= kDragIslandSize) {
+            SetIslandSizeAt(kDragIslandSize - m_dragIndex, pt, true);
         }
         return true;
     }
@@ -15998,6 +23553,34 @@ bool ControlPanel::OnMouseUp(POINT pt) {
                     m_darkMode = !m_darkMode;
                     StartWorker(DarkModeThreadProc,
                                 m_darkMode ? (void*)1 : nullptr);
+                    return true;
+                case ControlId::Weather:
+                    if (g_island) {
+                        g_island->OpenWeather();
+                    }
+                    return false;
+                case ControlId::Updates:
+                    if (g_island) {
+                        g_island->OpenUpdates();
+                    }
+                    return false;
+                case ControlId::Notes:
+                case ControlId::Tasks:
+                case ControlId::Shortcuts:
+                    // Opens out of the island in its place.
+                    if (g_island) {
+                        const auto id = (ControlId)hit.index;
+                        g_island->OpenListPanel(
+                            id == ControlId::Notes   ? IslandItem::Notes
+                            : id == ControlId::Tasks ? IslandItem::Tasks
+                                                     : IslandItem::Shortcuts);
+                    }
+                    return false;
+                case ControlId::Microphone:
+                    if (g_island) {
+                        g_island->ToggleMicrophone();
+                        m_microphoneMuted = g_island->MicrophoneMuted();
+                    }
                     return true;
                 case ControlId::Screenshot:
                     // After the panel is gone, so it isn't in the picture.
@@ -16114,7 +23697,7 @@ bool ControlPanel::OnMouseUp(POINT pt) {
             return true;
         }
         case Part::SizeReset:
-            SetIslandSize(kIslandSizeDefault, true);
+            SetIslandSlider(hit.index, kIslandSliders[hit.index].usual, true);
             return true;
         case Part::SearchClear:
             m_search.clear();
@@ -16143,10 +23726,10 @@ bool ControlPanel::OnMouseUp(POINT pt) {
             return true;
         }
         case Part::AppItemChip: {
-            const size_t entry = hit.index / 16;
+            const size_t entry = hit.index / kAppChipStride;
             if (entry < g_appPlaces.size()) {
                 IslandPlace& place = g_appPlaces[entry];
-                const int group = hit.index % 16;
+                const int group = hit.index % kAppChipStride;
                 if (group >= kClockChipFirst) {
                     // The clock's parts: its own clock, from the usual one.
                     if (place.clock < 0) {
@@ -16270,6 +23853,24 @@ bool ControlPanel::OnMouseUp(POINT pt) {
             Close();
             OpenUri(L"ms-settings:batterysaver");
             break;
+        case Part::PowerModeSegment:
+            if (hit.index >= 0 && hit.index < 3 && hit.index != m_powerMode &&
+                SetPowerMode(hit.index)) {
+                m_powerMode = hit.index;
+            }
+            return true;
+        case Part::PowerPlan:
+            SetView(View::PowerPlans);
+            return true;
+        case Part::PowerPlanRow:
+            // Another plan (the power modes show only with the balanced one).
+            if (hit.index >= 0 && hit.index < (int)m_powerPlans.size() &&
+                hit.index != m_activePlan &&
+                SetPowerPlan(m_powerPlans[hit.index].guid)) {
+                m_activePlan = hit.index;
+                m_powerMode = GetPowerMode();
+            }
+            return true;
         case Part::More:
             Close();
             PressWindowsKey('A');
@@ -16624,17 +24225,31 @@ std::wstring ToastSound(const char* xml, int size) {
     return XmlAttribute(tag, "src");
 }
 
+bool ToastSoundLoops(const char* xml, int size) {
+    const std::string_view view{xml, (size_t)std::max(size, 0)};
+    const size_t at = view.find("<audio");
+    if (at == std::string_view::npos) {
+        return false;
+    }
+    const size_t end = view.find('>', at);
+    return XmlAttribute(view.substr(at, end == std::string_view::npos
+                                            ? std::string_view::npos
+                                            : end - at),
+                        "loop") == L"true";
+}
+
 // The player for the apps' own sounds that aren't WAV files (WhatsApp's is
 // M4A), on the island's thread; let go with the island (see Island::Destroy).
 [[clang::no_destroy]] winrt::Windows::Media::Playback::MediaPlayer
     g_soundPlayer{nullptr};
 
-bool PlaySoundFile(const std::wstring& path) {
+bool PlaySoundFile(const std::wstring& path, bool loop) {
     const size_t dot = path.rfind(L'.');
     if (dot != std::wstring::npos &&
         _wcsicmp(path.c_str() + dot, L".wav") == 0) {
         return PlaySound(path.c_str(), nullptr,
-                         SND_FILENAME | SND_ASYNC | SND_NODEFAULT);
+                         SND_FILENAME | SND_ASYNC | SND_NODEFAULT |
+                             (loop ? SND_LOOP : 0));
     }
     WCHAR url[2048];
     DWORD length = ARRAYSIZE(url);
@@ -16653,6 +24268,7 @@ bool PlaySoundFile(const std::wstring& path) {
         }
         g_soundPlayer.Source(Core::MediaSource::CreateFromUri(
             winrt::Windows::Foundation::Uri(url)));
+        g_soundPlayer.IsLoopingEnabled(loop);
         g_soundPlayer.Play();
         return true;
     } catch (winrt::hresult_error const& e) {
@@ -16671,10 +24287,23 @@ void FreeSoundPlayer() {
     }
 }
 
+// Stops a sound that repeats (see PlayToastSound).
+void StopToastSound() {
+    PlaySound(nullptr, nullptr, 0);
+    if (g_soundPlayer) {
+        try {
+            g_soundPlayer.Pause();
+        } catch (...) {
+        }
+    }
+}
+
 // Plays a notification's sound (see IslandToast::sound): its app's own file,
 // or the Windows sound it names (the usual one by default), as the sounds
-// are set in Windows.
-void PlayToastSound(const std::wstring& appId, const std::wstring& sound) {
+// are set in Windows; over and over with `loop`, until StopToastSound.
+void PlayToastSound(const std::wstring& appId,
+                    const std::wstring& sound,
+                    bool loop = false) {
     if (sound == L"silent") {
         return;
     }
@@ -16687,7 +24316,7 @@ void PlayToastSound(const std::wstring& appId, const std::wstring& sound) {
             path += L"\\" + file;
             if (file.find(L"..") == std::wstring::npos &&
                 GetFileAttributes(path.c_str()) != INVALID_FILE_ATTRIBUTES &&
-                PlaySoundFile(path)) {
+                PlaySoundFile(path, loop)) {
                 return;
             }
         }
@@ -16697,9 +24326,11 @@ void PlayToastSound(const std::wstring& appId, const std::wstring& sound) {
                                    ? sound.substr(kWindowsSound.size())
                                    : L"Notification.Default";
     if (!PlaySound(alias.c_str(), nullptr,
-                   SND_ALIAS | SND_ASYNC | SND_NODEFAULT)) {
+                   SND_ALIAS | SND_ASYNC | SND_NODEFAULT |
+                       (loop ? SND_LOOP : 0))) {
         PlaySound(L"Notification.Default", nullptr,
-                  SND_ALIAS | SND_ASYNC | SND_NODEFAULT);
+                  SND_ALIAS | SND_ASYNC | SND_NODEFAULT |
+                      (loop ? SND_LOOP : 0));
     }
 }
 
@@ -16801,7 +24432,18 @@ bool ToastImage(const std::wstring& appId,
 // the address the app put in its notification. Only over https, small, not
 // waiting long, and kept in memory only.
 bool DownloadPicture(const std::wstring& url, std::vector<BYTE>* data) {
-    constexpr size_t kMaxSize = 4 * 1024 * 1024;
+    if (!HttpsGet(url, data, 4 * 1024 * 1024)) {
+        Wh_Log(L"Notification picture not downloaded: error %u",
+               GetLastError());
+        return false;
+    }
+    return true;
+}
+
+// An https address's contents (up to `maxSize`), not waiting long.
+bool HttpsGet(const std::wstring& url,
+              std::vector<BYTE>* data,
+              size_t maxSize) {
     URL_COMPONENTS parts{sizeof(parts)};
     parts.dwHostNameLength = (DWORD)-1;
     parts.dwUrlPathLength = (DWORD)-1;
@@ -16848,7 +24490,7 @@ bool DownloadPicture(const std::wstring& url, std::vector<BYTE>* data) {
             DWORD read = 0;
             while (WinHttpReadData(request, buffer, sizeof(buffer), &read) &&
                    read > 0) {
-                if (data->size() + read > kMaxSize) {
+                if (data->size() + read > maxSize) {
                     ok = false;
                     break;
                 }
@@ -16865,7 +24507,6 @@ bool DownloadPicture(const std::wstring& url, std::vector<BYTE>* data) {
     }
     if (!ok || data->empty()) {
         data->clear();
-        Wh_Log(L"Notification picture not downloaded: error %u", GetLastError());
         return false;
     }
     return true;
@@ -16913,6 +24554,54 @@ ToastReply ParseToastReply(const std::wstring& appId,
             reply.activationType = XmlAttribute(tag, "activationType");
             reply.label = XmlAttribute(tag, "content");
             break;
+        }
+    }
+    // The other buttons, up to three (like Windows shows them); the app's
+    // own ones are left out when it has no notification handler.
+    bool activatorKnown = false;
+    bool activator = false;
+    for (const auto& tag : actions) {
+        if (reply.actions.size() >= 3) {
+            break;
+        }
+        if ((!reply.inputId.empty() &&
+             XmlAttribute(tag, "hint-inputId") == reply.inputId) ||
+            XmlAttribute(tag, "placement") == L"contextMenu") {
+            continue;
+        }
+        ToastReply::Action action{XmlAttribute(tag, "content"),
+                                  XmlAttribute(tag, "arguments"),
+                                  XmlAttribute(tag, "activationType")};
+        if (action.activationType.empty()) {
+            action.activationType = L"foreground";
+        }
+        if (action.activationType == L"system") {
+            // Windows' own: "Snooze" (the island shows it again a few minutes
+            // later, see Island::SnoozeToast) and "Dismiss", named as Windows
+            // names them.
+            if (action.arguments == L"snooze") {
+                if (action.label.empty()) {
+                    action.label = Tr(L"Snooze", L"Tocar de novo");
+                }
+            } else if (action.arguments == L"dismiss") {
+                if (action.label.empty()) {
+                    action.label = Tr(L"Dismiss", L"Ignorar");
+                }
+            } else {
+                continue;
+            }
+        } else if (action.activationType != L"protocol") {
+            if (!activatorKnown) {
+                activatorKnown = true;
+                CLSID actionClsid;
+                activator = FindToastActivator(appId, &actionClsid);
+            }
+            if (!activator) {
+                continue;
+            }
+        }
+        if (!action.label.empty()) {
+            reply.actions.push_back(std::move(action));
         }
     }
     CLSID clsid;
@@ -17555,6 +25244,19 @@ void NotificationPanel::Load() {
             if (payload) {
                 notification.reply =
                     ParseToastReply(notification.appId, payload, size);
+                // "Snooze" only where the island shows it again (with its
+                // own notifications; otherwise Windows' banner has it).
+                if (!WindowsQuietForIsland()) {
+                    std::erase_if(notification.reply.actions,
+                                  [](const ToastReply::Action& action) {
+                                      return action.activationType ==
+                                                 L"system" &&
+                                             action.arguments == L"snooze";
+                                  });
+                }
+                notification.urgent = IsUrgentToast(payload, size);
+                notification.sound = ToastSound(payload, size);
+                notification.loop = ToastSoundLoops(payload, size);
             }
             const std::wstring key = DismissKey(notification);
             const bool dismissed =
@@ -17583,7 +25285,31 @@ void NotificationPanel::Layout() {
                 width - padding - std::round(4 * s), y + header};
     m_clearAll = {m_header.right - std::round(110 * s), y, m_header.right,
                   y + header};
+    // The gear right after the title ("Notifications  ·  3").
+    const float gearSize = std::round(30 * s);
+    float titleWidth = std::round(110 * s);
+    {
+        std::wstring title = Tr(L"Notifications", L"Notificações");
+        if (m_notifications.size() > 1) {
+            title += L"  ·  " + std::to_wstring(m_notifications.size());
+        }
+        winrt::com_ptr<IDWriteTextLayout> measure;
+        if (m_headerFormat &&
+            SUCCEEDED(m_dwrite->CreateTextLayout(
+                title.c_str(), (UINT32)title.size(), m_headerFormat.get(),
+                10000, header, measure.put()))) {
+            DWRITE_TEXT_METRICS metrics{};
+            measure->GetMetrics(&metrics);
+            titleWidth = std::ceil(metrics.widthIncludingTrailingWhitespace);
+        }
+    }
+    const float gearLeft =
+        std::min(m_header.left + titleWidth + std::round(4 * s),
+                 m_clearAll.left - std::round(6 * s) - gearSize);
+    m_settingsButton = {gearLeft, y + (header - gearSize) / 2,
+                        gearLeft + gearSize, y + (header + gearSize) / 2};
     y += header;
+    const float sectionTop = y;
     // "Do not disturb" with its switch.
     // Taller rows: a name and what it does.
     const float row = std::round(kSwitchRowHeight * s);
@@ -17598,16 +25324,22 @@ void NotificationPanel::Layout() {
                               2) +
                        toggleHeight};
     // The other switches, under it.
-    auto nextRow = [&](D2D1_RECT_F* rowRect, D2D1_RECT_F* toggle) {
-        y += row + std::round(4 * s);
+    // (The pill's banners and their minimized case share a card.)
+    auto nextRow = [&](D2D1_RECT_F* rowRect, D2D1_RECT_F* toggle,
+                       bool sameCard = false) {
+        y += row + (sameCard ? 0 : std::round(4 * s));
         *rowRect = {padding, y, width - padding, y + row};
         *toggle = {m_dndToggle.left, m_dndToggle.top + (y - m_dndRow.top),
                    m_dndToggle.right, m_dndToggle.bottom + (y - m_dndRow.top)};
     };
     nextRow(&m_bannerRow, &m_bannerToggle);
-    nextRow(&m_minimizedRow, &m_minimizedToggle);
+    nextRow(&m_minimizedRow, &m_minimizedToggle, true);
     nextRow(&m_contentRow, &m_contentToggle);
     y += row + gap;
+    // Folded: only as much of it as is open (drawn clipped to it).
+    const float folded = (float)std::clamp(m_settingsAmount, 0.0, 1.0);
+    y = sectionTop + (y - sectionTop) * folded;
+    m_settingsSection = {padding, sectionTop, width - padding, y};
 
     // The cards, in a list of their own that scrolls.
     m_cards.clear();
@@ -17656,9 +25388,9 @@ void NotificationPanel::Layout() {
         m_cards.push_back({padding, listY, width - padding, listY + height});
         listY += (height + gap) * room;
     }
-    // "No notifications".
-    const float content =
-        m_cards.empty() ? std::round(40 * s) : std::max(0.0f, listY - gap);
+    // "No notifications" (room for it kept while the last cards go, so the
+    // panel doesn't shrink and grow again).
+    const float content = std::max(std::round(40 * s), listY - gap);
     // Up to half of the screen's height (and the room the panel has).
     const float link = std::round(kFooterHeight * s);
     const float half = (float)(m_monitorRect.bottom - m_monitorRect.top) / 2;
@@ -17693,11 +25425,36 @@ void NotificationPanel::CardParts(const D2D1_RECT_F& card,
              field->right, field->bottom};
 }
 
+D2D1_RECT_F NotificationPanel::CardActionRect(const D2D1_RECT_F& card,
+                                              float extra,
+                                              const Notification& n,
+                                              size_t index) const {
+    D2D1_RECT_F replyButton, field, send;
+    CardParts(card, extra, &replyButton, &field, &send);
+    const float s = m_scale;
+    const float inner = std::round(12 * s);
+    const float gap = std::round(6 * s);
+    const float right =
+        n.reply.CanReply() ? replyButton.left - gap : replyButton.right;
+    const float count = (float)std::max<size_t>(1, n.reply.actions.size());
+    const float width =
+        std::min(std::round(96 * s),
+                 (right - card.left - inner - gap * (count - 1)) / count);
+    const float left = right - width * count - gap * (count - 1) +
+                       (width + gap) * index;
+    return {std::round(left), replyButton.top, std::round(left + width),
+            replyButton.bottom};
+}
+
 long long NotificationPanel::HoveredCard() const {
     if ((m_hover.part == Part::Card || m_hover.part == Part::Dismiss ||
          m_hover.part == Part::ReplyButton) &&
         m_hover.index >= 0 && m_hover.index < (int)m_notifications.size()) {
         return m_notifications[m_hover.index].id;
+    }
+    if (m_hover.part == Part::CardAction && m_hover.index >= 0 &&
+        m_hover.index / 16 < (int)m_notifications.size()) {
+        return m_notifications[m_hover.index / 16].id;
     }
     return -1;
 }
@@ -17716,10 +25473,12 @@ float NotificationPanel::CardExtra(long long id) const {
     if (hover <= 0) {
         return 0;
     }
-    // Room under the text for "Reply", so it doesn't cover it.
+    // Room under the text for "Reply" and the card's own buttons, so they
+    // don't cover it.
     float extra = 0;
     for (const auto& n : m_notifications) {
-        if (n.id == id && n.reply.CanReply() && id != m_replyId) {
+        if (n.id == id && (n.reply.CanReply() || !n.reply.actions.empty()) &&
+            id != m_replyId) {
             extra += std::round(32 * m_scale);
         }
     }
@@ -17745,6 +25504,15 @@ NotificationPanel::Hit NotificationPanel::HitTest(POINT panelPt) const {
             continue;
         }
         const Notification& n = m_notifications[i];
+        if (n.id != m_replyId && HoverAmount(n.id) > 0.5f &&
+            !(g_island && g_island->IsToastSnoozed(n.id))) {
+            for (size_t a = 0; a < n.reply.actions.size() && a < 16; a++) {
+                if (PointInRect(pt, CardActionRect(m_cards[i], CardExtra(n.id),
+                                                   n, a))) {
+                    return {Part::CardAction, (int)(i * 16 + a)};
+                }
+            }
+        }
         if (n.reply.CanReply()) {
             D2D1_RECT_F replyButton, field, send;
             CardParts(m_cards[i], CardExtra(n.id), &replyButton, &field, &send);
@@ -17769,6 +25537,16 @@ NotificationPanel::Hit NotificationPanel::HitTest(POINT panelPt) const {
     // The rest isn't scrolled.
     if (!m_notifications.empty() && PointInRect(panelPt, m_clearAll)) {
         return {Part::ClearAll};
+    }
+    if (PointInRect(panelPt, m_settingsButton)) {
+        return {Part::SettingsButton};
+    }
+    // The switches, only while unfolded.
+    if (m_settingsAmount < 0.9 || !PointInRect(panelPt, m_settingsSection)) {
+        if (PointInRect(panelPt, m_link)) {
+            return {Part::Link};
+        }
+        return {};
     }
     if (PointInRect(panelPt, m_dndRow)) {
         return {Part::DndToggle};
@@ -17955,6 +25733,46 @@ void NotificationPanel::Draw(ID2D1RenderTarget* target,
                          m_clearAll, brush);
     }
 
+    // The gear that unfolds the switches (blue while they're open).
+    {
+        const float lit =
+            Hover(m_settingsButton, m_hover.part == Part::SettingsButton);
+        const float radius = (m_settingsButton.bottom - m_settingsButton.top) / 2;
+        if (lit > 0.01f || m_settingsOpen) {
+            brush->SetColor(m_settingsOpen
+                                ? D2D1::ColorF(0.04f, 0.52f, 1.0f,
+                                               0.25f + 0.1f * lit)
+                                : Fg(0.1f * lit));
+            target->FillRoundedRectangle({m_settingsButton, radius, radius},
+                                         brush);
+        }
+        const D2D1_POINT_2F center{
+            (m_settingsButton.left + m_settingsButton.right) / 2,
+            (m_settingsButton.top + m_settingsButton.bottom) / 2};
+        // On top of the panel's own placement.
+        D2D1_MATRIX_3X2_F before;
+        target->GetTransform(&before);
+        target->SetTransform(
+            D2D1::Matrix3x2F::Rotation((float)m_settingsAmount * 90, center) *
+            *D2D1::Matrix3x2F::ReinterpretBaseType(&before));
+        const WCHAR gear = 0xE713;
+        brush->SetColor(Fg(0.6f + 0.35f * lit));
+        target->DrawText(&gear, 1, m_iconFormat.get(), m_settingsButton, brush);
+        target->SetTransform(before);
+    }
+    // The switches, unfolding (clipped to the part open, fading in).
+    const float unfolded = (float)std::clamp(m_settingsAmount, 0.0, 1.0);
+    winrt::com_ptr<ID2D1Layer> settingsLayer;
+    const bool settingsShown = unfolded > 0.01f;
+    if (settingsShown) {
+        target->CreateLayer(nullptr, settingsLayer.put());
+        target->PushLayer(
+            D2D1::LayerParameters(m_settingsSection, nullptr,
+                                  D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                                  D2D1::IdentityMatrix(), unfolded),
+            settingsLayer.get());
+    }
+    if (settingsShown) {
     // "Do not disturb", with the moon, and "Show content", with the eye.
     DrawSwitchRow(target, brush, m_dndRow, m_dndToggle, kGlyphMoon,
                   D2D1::ColorF(0.55f, 0.45f, 1.0f, 1),
@@ -17965,28 +25783,52 @@ void NotificationPanel::Draw(ID2D1RenderTarget* target,
                       : Tr(L"Windows' own: no notification sounds",
                            L"O do Windows: sem os sons das notificações"),
                   m_dndKnob, m_hover.part == Part::DndToggle);
+    // The pill's banners, and under them, in the same card, whether they
+    // also open the minimized pill (which only applies with them on).
+    {
+        const D2D1_RECT_F card{m_bannerRow.left, m_bannerRow.top,
+                               m_minimizedRow.right, m_minimizedRow.bottom};
+        const float radius = std::round(12 * s);
+        brush->SetColor(Fg(0.08f));
+        target->FillRoundedRectangle({card, radius, radius}, brush);
+        brush->SetColor(Fg(0.12f));
+        target->FillRectangle({m_minimizedRow.left + std::round(36 * s),
+                               m_minimizedRow.top - 0.5f,
+                               m_minimizedRow.right - std::round(10 * s),
+                               m_minimizedRow.top + 0.5f},
+                              brush);
+    }
     DrawSwitchRow(target, brush, m_bannerRow, m_bannerToggle, kGlyphBell,
                   D2D1::ColorF(0.04f, 0.52f, 1.0f, 1),
-                  Tr(L"New ones in the pill", L"Avisos na pílula"),
-                  Tr(L"The pill opens with each new one",
-                     L"A pílula se abre com cada notificação nova"),
-                  m_bannerKnob, m_hover.part == Part::BannerToggle);
+                  Tr(L"Banners in the pill", L"Avisos na pílula"),
+                  Tr(L"Each new one opens the pill for a moment",
+                     L"Cada nova abre a pílula por alguns segundos"),
+                  m_bannerKnob, m_hover.part == Part::BannerToggle, true,
+                  false);
     DrawSwitchRow(target, brush, m_minimizedRow, m_minimizedToggle,
                   kGlyphCollapse, D2D1::ColorF(0.04f, 0.52f, 1.0f, 1),
-                  Tr(L"Also with the pill minimized",
-                     L"Também com a pílula minimizada"),
-                  Tr(L"Otherwise, only the app's icon peeks out",
-                     L"Senão, só o ícone do app aparece na linha"),
+                  Tr(L"Even when minimized", L"Mesmo com a pílula minimizada"),
+                  Tr(L"Off: only the app's icon peeks out of the line",
+                     L"Desligado: só o ícone do app aparece na linha"),
                   m_minimizedKnob, m_hover.part == Part::MinimizedToggle,
-                  g_bannerEnabled);
+                  g_bannerEnabled, false);
     DrawSwitchRow(target, brush, m_contentRow, m_contentToggle, kGlyphShow,
                   D2D1::ColorF(0.04f, 0.52f, 1.0f, 1),
-                  Tr(L"Show their content", L"Mostrar o conteúdo"),
-                  Tr(L"The title and the text, in the pill and here",
-                     L"O título e o texto, na pílula e aqui"),
+                  Tr(L"Show what they say", L"Mostrar o conteúdo"),
+                  Tr(L"The title and the text, in the pill and in this list",
+                     L"O título e o texto, na pílula e nesta lista"),
                   m_contentKnob, m_hover.part == Part::ContentToggle);
+    }
+    if (settingsShown) {
+        target->PopLayer();
+    }
 
-    if (m_cards.empty()) {
+    if (m_cards.empty() ||
+        (m_clearAllPending &&
+         std::all_of(m_motions.begin(), m_motions.end(),
+                     [](const CardMotion& motion) {
+                         return motion.removing && motion.room < 0.5;
+                     }))) {
         PCWSTR empty = Tr(L"No notifications", L"Nenhuma notificação");
         brush->SetColor(Fg(0.5f));
         target->DrawText(empty, (UINT32)wcslen(empty), m_linkFormat.get(),
@@ -18117,6 +25959,51 @@ void NotificationPanel::Draw(ID2D1RenderTarget* target,
                          {card.left + inner, textTop, card.right - inner,
                           textTop + line},
                          brush, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+        // Snoozed: it says when it shows again, instead of its buttons.
+        const bool snoozed = g_island && g_island->IsToastSnoozed(n.id);
+        if (snoozed && focus > 0.01f && !n.reply.actions.empty()) {
+            const D2D1_RECT_F row = CardActionRect(card, CardExtra(n.id), n, 0);
+            PCWSTR label = Tr(L"Snoozed: shows again in 5 minutes",
+                              L"Adiada: volta em 5 minutos");
+            brush->SetColor(Fg(0.55f * focus));
+            target->DrawText(label, (UINT32)wcslen(label), m_appFormat.get(),
+                             {card.left + std::round(12 * s), row.top,
+                              card.right - std::round(12 * s), row.bottom},
+                             brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        }
+        // Its own buttons (a call's, an alarm's...), fading and growing in
+        // with the card's focus.
+        if (focus > 0.01f && n.id != m_replyId && !snoozed) {
+            m_appFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            for (size_t a = 0; a < n.reply.actions.size() && a < 16; a++) {
+                const D2D1_RECT_F rect =
+                    CardActionRect(card, CardExtra(n.id), n, a);
+                const float grow = 0.85f + 0.15f * focus;
+                const D2D1_POINT_2F middle{(rect.left + rect.right) / 2,
+                                           (rect.top + rect.bottom) / 2};
+                const float halfWidth = (rect.right - rect.left) / 2 * grow;
+                const float halfHeight = (rect.bottom - rect.top) / 2 * grow;
+                const D2D1_RECT_F button{middle.x - halfWidth,
+                                         middle.y - halfHeight,
+                                         middle.x + halfWidth,
+                                         middle.y + halfHeight};
+                const float lit = Hover(
+                    HoverKey(3003, n.id * 16 + (long long)a),
+                    m_hover.part == Part::CardAction &&
+                        m_hover.index == (int)(i * 16 + a));
+                brush->SetColor(Fg((0.2f + 0.1f * lit) * focus));
+                target->FillRoundedRectangle({button, halfHeight, halfHeight},
+                                             brush);
+                const std::wstring& label = n.reply.actions[a].label;
+                brush->SetColor(Fg(0.95f * focus));
+                target->DrawText(label.c_str(), (UINT32)label.size(),
+                                 m_appFormat.get(),
+                                 {rect.left + std::round(4 * s), rect.top,
+                                  rect.right - std::round(4 * s), rect.bottom},
+                                 brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+            }
+            m_appFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+        }
         // "Reply" on the card under the mouse; the box when answering.
         if (n.reply.CanReply()) {
             D2D1_RECT_F replyButton, field, send;
@@ -18165,6 +26052,10 @@ void NotificationPanel::Draw(ID2D1RenderTarget* target,
                     if (wrappedReply.layout) {
                         target->PushAxisAlignedClip(
                             textRect, D2D1_ANTIALIAS_MODE_ALIASED);
+                        DrawTextSelection(
+                            target, brush, wrappedReply.layout.get(),
+                            {textRect.left, textRect.top - wrappedReply.scroll},
+                            m_replyEdit);
                         brush->SetColor(Fg(0.95f));
                         target->DrawTextLayout(
                             {textRect.left, textRect.top - wrappedReply.scroll},
@@ -18301,6 +26192,12 @@ bool NotificationPanel::AnimateContents(double dt) {
                                  0.3, dt, kBounceDamping);
     const bool d = SpringTowards(m_minimizedKnob, m_minimizedKnobVelocity,
                                  minimized, 0.3, dt, kBounceDamping);
+    const bool folding =
+        SpringTowards(m_settingsAmount, m_settingsVelocity,
+                      m_settingsOpen ? 1 : 0, 0.4, dt);
+    if (folding) {
+        Layout();
+    }
 
     // The cards: sliding, then closing their room, then gone.
     bool cards = false;
@@ -18384,8 +26281,8 @@ bool NotificationPanel::AnimateContents(double dt) {
     }
     const bool scrolling = m_scroll.Animate(dt);
     const bool glowing = NowSeconds() - m_glowStart < kCardGlowSeconds;
-    const bool moving =
-        a || b || c || d || cards || scrolling || glowing || hovering;
+    const bool moving = a || b || c || d || folding || cards || scrolling ||
+                        glowing || hovering;
     // A reply being typed: its caret blinks (at the lower frame rate).
     const bool caret = m_replyId >= 0;
     m_idleMotion = caret && !moving;
@@ -18404,7 +26301,8 @@ void NotificationPanel::DrawSwitchRow(ID2D1RenderTarget* target,
                                       PCWSTR description,
                                       double knob,
                                       bool hover,
-                                      bool enabled) {
+                                      bool enabled,
+                                      bool ownCard) {
     const float s = m_scale;
     const float on = (float)std::clamp(knob < 0 ? 0.0 : knob, 0.0, 1.0);
     // Dimmed while it doesn't apply.
@@ -18419,8 +26317,20 @@ void NotificationPanel::DrawSwitchRow(ID2D1RenderTarget* target,
         hover = false;
     }
     const float radius = std::round(12 * s);
-    brush->SetColor(Fg(0.08f + 0.05f * Hover(row, hover)));
-    target->FillRoundedRectangle({row, radius, radius}, brush);
+    if (ownCard) {
+        brush->SetColor(Fg(0.08f + 0.05f * Hover(row, hover)));
+        target->FillRoundedRectangle({row, radius, radius}, brush);
+    } else {
+        // In a card shared with another row: lit inside it.
+        const float inset = std::round(3 * s);
+        brush->SetColor(Fg(0.05f * Hover(row, hover)));
+        target->FillRoundedRectangle(
+            {{row.left + inset, row.top + inset, row.right - inset,
+              row.bottom - inset},
+             radius - inset,
+             radius - inset},
+            brush);
+    }
     const float icon = std::round(36 * s);
     auto mix = [on](float a, float b) { return a + (b - a) * on; };
     const D2D1_COLOR_F ink = Fg(0.95f);
@@ -18629,6 +26539,47 @@ bool NotificationPanel::OnMouseUp(POINT pt) {
                 m_hover = {};
             }
             return true;
+        case Part::CardAction: {
+            // Its own button, pressed like Windows does: the app's, a link,
+            // or "Dismiss". Either way it's done with: it leaves the list.
+            const int card = hit.index / 16;
+            const size_t button = (size_t)(hit.index % 16);
+            if (card >= 0 && card < (int)m_notifications.size() &&
+                button < m_notifications[card].reply.actions.size()) {
+                const Notification n = m_notifications[card];
+                const ToastReply::Action& action = n.reply.actions[button];
+                // "Snooze": it shows again in the pill a few minutes later
+                // (it stays in the list meanwhile).
+                if (action.activationType == L"system" &&
+                    action.arguments == L"snooze") {
+                    if (g_island) {
+                        IslandToast toast{n.appId};
+                        toast.id = n.id;
+                        toast.title = n.title;
+                        toast.text = n.text;
+                        toast.fullText = n.fullText;
+                        toast.reply = n.reply;
+                        toast.urgent = n.urgent;
+                        toast.sound = n.sound;
+                        toast.loop = n.loop;
+                        g_island->SnoozeToast(std::move(toast));
+                        g_island->MarkAppRead(n.appId);
+                    }
+                    m_hover = {};
+                    return true;
+                }
+                if (action.activationType != L"system") {
+                    ActivateToast(n.appId, action.arguments,
+                                  action.activationType);
+                }
+                if (g_island) {
+                    g_island->MarkAppRead(n.appId);
+                }
+                Remove(n.id, 1);
+                m_hover = {};
+            }
+            return true;
+        }
         case Part::ClearAll: {
             // The cards in view slide away one after the other; then
             // everything that arrived until now is cleared.
@@ -18668,6 +26619,10 @@ bool NotificationPanel::OnMouseUp(POINT pt) {
             }
             return true;
         }
+        case Part::SettingsButton:
+            m_settingsOpen = !m_settingsOpen;
+            StartIslandAnimation();
+            return true;
         case Part::DndToggle:
             if (SetIslandQuiet(!m_doNotDisturb)) {
                 m_doNotDisturb = !m_doNotDisturb;
@@ -19442,6 +27397,30 @@ int GetIslandPref(IslandPref pref) {
             return g_settings.islandPower;
         case IslandPref::OwnNotifications:
             return g_settings.islandOwnsNotifications;
+        case IslandPref::PanelsFollow:
+            return g_settings.islandPanelsFollow;
+        case IslandPref::ThemeButton:
+            return g_settings.islandThemeButton;
+        case IslandPref::UsageCpu:
+            return g_settings.usageCpu;
+        case IslandPref::UsageRam:
+            return g_settings.usageRam;
+        case IslandPref::UsageVram:
+            return g_settings.usageVram;
+        case IslandPref::Microphone:
+            return g_settings.islandMicrophone;
+        case IslandPref::Holidays:
+            return g_settings.calendarHolidays;
+        case IslandPref::Notes:
+            return g_settings.islandNotes;
+        case IslandPref::Tasks:
+            return g_settings.islandTasks;
+        case IslandPref::Shortcuts:
+            return g_settings.islandShortcuts;
+        case IslandPref::Weather:
+            return g_settings.islandWeather;
+        case IslandPref::Updates:
+            return g_settings.islandUpdates;
     }
     return 0;
 }
@@ -19461,6 +27440,20 @@ void SetIslandPlace(const std::wstring& appId, double x, double y) {
 
 // Changed in the island's settings (its thread): shown right away, and kept
 // when `keep` (once the slider is let go).
+void SetIslandGap(int pixels, bool keep) {
+    pixels = std::clamp(pixels, kIslandGapMin, kIslandGapMax);
+    if (keep) {
+        Wh_SetIntValue(L"islandGap", pixels);
+    }
+    if (pixels == g_settings.islandGap) {
+        return;
+    }
+    g_settings.islandGap = pixels;
+    if (g_island) {
+        g_island->OnPreferencesChanged();
+    }
+}
+
 void SetIslandSize(int percent, bool keep) {
     percent = std::clamp(percent, kIslandSizeMin, kIslandSizeMax);
     if (keep) {
@@ -19568,10 +27561,47 @@ void SetIslandPref(IslandPref pref, int value) {
         case IslandPref::OwnNotifications:
             g_settings.islandOwnsNotifications = on;
             g_dndSwitchFailed = false;
+            g_dndSeenOn = false;
             UpdateWindowsQuiet(true);
             if (g_island) {
                 g_island->OnDoNotDisturbChanged();
             }
+            break;
+        case IslandPref::PanelsFollow:
+            g_settings.islandPanelsFollow = on;
+            break;
+        case IslandPref::ThemeButton:
+            g_settings.islandThemeButton = on;
+            break;
+        case IslandPref::UsageCpu:
+            g_settings.usageCpu = on;
+            break;
+        case IslandPref::UsageRam:
+            g_settings.usageRam = on;
+            break;
+        case IslandPref::UsageVram:
+            g_settings.usageVram = on;
+            break;
+        case IslandPref::Microphone:
+            g_settings.islandMicrophone = on;
+            break;
+        case IslandPref::Holidays:
+            g_settings.calendarHolidays = on;
+            break;
+        case IslandPref::Notes:
+            g_settings.islandNotes = on;
+            break;
+        case IslandPref::Tasks:
+            g_settings.islandTasks = on;
+            break;
+        case IslandPref::Shortcuts:
+            g_settings.islandShortcuts = on;
+            break;
+        case IslandPref::Weather:
+            g_settings.islandWeather = on;
+            break;
+        case IslandPref::Updates:
+            g_settings.islandUpdates = on;
             break;
     }
     if (g_island) {
@@ -19679,6 +27709,9 @@ class StatusEvents final : public IAudioEndpointVolumeCallback,
         if (flow == eRender && role == eMultimedia) {
             Post(kStatusAudioDevice);
         }
+        if (flow == eCapture && role == eConsole) {
+            Post(kStatusMicrophoneDevice);
+        }
         return S_OK;
     }
     IFACEMETHODIMP OnDeviceAdded(LPCWSTR) override { return S_OK; }
@@ -19713,10 +27746,21 @@ class StatusEvents final : public IAudioEndpointVolumeCallback,
 
 // Wi-Fi: connected, disconnected, or its signal changed.
 void WINAPI IslandWlanCallback(PWLAN_NOTIFICATION_DATA data, PVOID context) {
-    if (data->NotificationSource == WLAN_NOTIFICATION_SOURCE_MSM &&
+    const bool msm =
+        data->NotificationSource == WLAN_NOTIFICATION_SOURCE_MSM &&
         (data->NotificationCode == wlan_notification_msm_signal_quality_change ||
+         data->NotificationCode == wlan_notification_msm_associating ||
+         data->NotificationCode == wlan_notification_msm_authenticating ||
          data->NotificationCode == wlan_notification_msm_connected ||
-         data->NotificationCode == wlan_notification_msm_disconnected)) {
+         data->NotificationCode == wlan_notification_msm_disconnected);
+    const bool acm =
+        data->NotificationSource == WLAN_NOTIFICATION_SOURCE_ACM &&
+        (data->NotificationCode == wlan_notification_acm_connection_start ||
+         data->NotificationCode == wlan_notification_acm_connection_complete ||
+         data->NotificationCode ==
+             wlan_notification_acm_connection_attempt_fail ||
+         data->NotificationCode == wlan_notification_acm_disconnected);
+    if (msm || acm) {
         PostMessage((HWND)context, WM_APP_STATUS, kStatusNetwork, 0);
     }
 }
@@ -19733,10 +27777,11 @@ LONG NTAPI IslandDndCallback(ULONGLONG, ULONG, void*, void*, const void*,
 void Island::StartStatusWatch() {
     m_statusEvents = new StatusEvents(m_hwnd);
 
-    // The volume, and the default output device changing.
+    // The volume, the microphone, and the default devices changing.
     if (m_devices) {
         m_devices->RegisterEndpointNotificationCallback(m_statusEvents);
         WatchVolume();
+        WatchMicrophone();
     }
 
     // The network.
@@ -19753,9 +27798,10 @@ void Island::StartStatusWatch() {
         m_networkCookie = 0;
     }
     if (m_wlan &&
-        WlanRegisterNotification(m_wlan, WLAN_NOTIFICATION_SOURCE_MSM, TRUE,
-                                 IslandWlanCallback, m_hwnd, nullptr,
-                                 nullptr) == ERROR_SUCCESS) {
+        WlanRegisterNotification(
+            m_wlan, WLAN_NOTIFICATION_SOURCE_MSM | WLAN_NOTIFICATION_SOURCE_ACM,
+            TRUE, IslandWlanCallback, m_hwnd, nullptr,
+            nullptr) == ERROR_SUCCESS) {
         m_wlanWatched = true;
     }
 
@@ -19835,6 +27881,10 @@ void Island::StopStatusWatch() {
         m_watchedVolume->UnregisterControlChangeNotify(m_statusEvents);
         m_watchedVolume = nullptr;
     }
+    if (m_watchedMicrophone) {
+        m_watchedMicrophone->UnregisterControlChangeNotify(m_statusEvents);
+        m_watchedMicrophone = nullptr;
+    }
     if (m_devices) {
         m_devices->UnregisterEndpointNotificationCallback(m_statusEvents);
     }
@@ -19858,6 +27908,12 @@ ID2D1Bitmap* Island::MediaCover() {
         return m_mediaCover.get();
     }
     m_mediaCoverSerial = m_mediaShown.thumbnailSerial;
+    if (m_mediaCover && m_mediaTitleRoom > 0.01 && m_mediaAmount > 0.01) {
+        m_mediaCoverBefore = m_mediaCover;
+        m_mediaCoverSwap = 1;
+        m_mediaCoverSwapVelocity = 0;
+        StartAnimating();
+    }
     m_mediaCover = nullptr;
     if (m_mediaShown.thumbnail.empty() || !m_wic || !m_canvas.target) {
         return nullptr;
@@ -19908,6 +27964,7 @@ void Island::OnPlacesChanged() {
     if (PlaceShows(PillGroup::Media)) {
         StartMediaWatch();
     }
+    UpdateUsageWatch();
     // Away from the top, it can't stay a line.
     if (m_minimized && CurrentPlace().y > 0.001) {
         SetMinimized(false);
@@ -20010,9 +28067,137 @@ bool Island::GroupWanted(PillGroup group) const {
             return g_settings.islandBell;
         case PillGroup::Power:
             return g_settings.islandPower;
+        case PillGroup::Usage:
+            return AnyUsageShown();
+        case PillGroup::Theme:
+            return g_settings.islandThemeButton;
+        case PillGroup::Microphone:
+            return g_settings.islandMicrophone;
+        case PillGroup::Notes:
+            return g_settings.islandNotes;
+        case PillGroup::Tasks:
+            return g_settings.islandTasks;
+        case PillGroup::Shortcuts:
+            return g_settings.islandShortcuts;
+        case PillGroup::Weather:
+            return g_settings.islandWeather;
+        case PillGroup::Updates:
+            return g_settings.islandUpdates;
         default:
             return true;
     }
+}
+
+// The usage thread runs while some of it is shown (for all apps, or for the
+// app in front).
+void Island::UpdateUsageWatch() {
+    const bool wanted =
+        m_hwnd && (AnyUsageShown() || PlaceShows(PillGroup::Usage));
+    // The GPU too when its video memory is shown (or all of it, shown for
+    // an app), or its panel is open; every second with the panel open.
+    const bool panel = m_usagePanel.IsOpen();
+    g_usageGpuWanted =
+        g_settings.usageVram || !AnyUsageShown() ||
+        (panel && m_usagePanel.GetKind() == UsagePanel::Kind::Gpu);
+    g_usageFast = panel;
+    if (!wanted) {
+        StopUsageWatch();
+        return;
+    }
+    if (m_usageThread) {
+        return;
+    }
+    if (!m_usageStop) {
+        m_usageStop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    }
+    if (!m_usageWake) {
+        m_usageWake = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    }
+    if (!m_usageStop || !m_usageWake) {
+        return;
+    }
+    ResetEvent(m_usageStop);
+    auto* watch = new UsageWatch{m_hwnd, m_usageStop, m_usageWake};
+    m_usageThread = CreateThread(nullptr, 0, UsageThreadProc, watch, 0, nullptr);
+    if (!m_usageThread) {
+        delete watch;
+    }
+}
+
+void Island::StopUsageWatch() {
+    if (m_usageThread) {
+        SetEvent(m_usageStop);
+        WaitForSingleObject(m_usageThread, INFINITE);
+        CloseHandle(m_usageThread);
+        m_usageThread = nullptr;
+    }
+    for (HANDLE* event : {&m_usageStop, &m_usageWake}) {
+        if (*event) {
+            CloseHandle(*event);
+            *event = nullptr;
+        }
+    }
+    AcquireSRWLockExclusive(&g_usageLock);
+    g_usage = {};
+    ReleaseSRWLockExclusive(&g_usageLock);
+}
+
+// New values measured: shown if they changed.
+void Island::OnUsage() {
+    const UsageDetails usage = GetUsage();
+    const int cpu = usage.cpu;
+    const int ram = usage.ram;
+    const long long vram = usage.vramUsed;
+    m_usagePanel.Refresh();
+    // Back to every 2 seconds once its panel is closed.
+    g_usageFast = m_usagePanel.IsOpen();
+    // The video memory in megabytes.
+    const double values[3] = {(double)cpu, (double)ram,
+                              vram < 0 ? -1.0 : vram / (1024.0 * 1024)};
+    bool changed = false;
+    for (int i = 0; i < 3; i++) {
+        if (values[i] == m_usageTo[i]) {
+            continue;
+        }
+        changed = true;
+        // From where it is now (still counting, maybe); unknown ones at once.
+        const double now = NowSeconds();
+        const float done = UsageChange(i);
+        const double shown =
+            m_usageFrom[i] < 0 || m_usageTo[i] < 0
+                ? m_usageTo[i]
+                : m_usageFrom[i] +
+                      (m_usageTo[i] - m_usageFrom[i]) * EaseInOutCubic(done);
+        m_usageFrom[i] = shown;
+        m_usageTo[i] = values[i];
+        m_usageChangedAt[i] = shown < 0 || values[i] < 0 ? 0 : now;
+    }
+    if (changed) {
+        StartAnimating();
+        Render();
+    }
+}
+
+// The value as it's shown now: "23%", "1.6G", "850M", counting.
+std::wstring Island::UsageText(int index) const {
+    if (m_usageTo[index] < 0) {
+        return L"\u2013";
+    }
+    const float done = UsageChange(index);
+    const double value =
+        m_usageFrom[index] < 0
+            ? m_usageTo[index]
+            : m_usageFrom[index] + (m_usageTo[index] - m_usageFrom[index]) *
+                                       EaseInOutCubic(done);
+    WCHAR text[16];
+    if (index < 2) {
+        swprintf_s(text, L"%d%%", (int)std::lround(value));
+    } else if (value < 1000) {
+        swprintf_s(text, L"%dM", (int)std::lround(value));
+    } else {
+        swprintf_s(text, L"%.1fG", value / 1024);
+    }
+    return text;
 }
 
 // The items slide from where they were to their new places: each group's
@@ -20042,12 +28227,167 @@ void Island::OnPreferencesChanged() {
     if (g_settings.islandMedia || g_mediaButtonsInPill || g_mediaTitleInPill) {
         StartMediaWatch();
     }
+    UpdateUsageWatch();
+    UpdateWeatherWatch();
+    UpdateUpdatesWatch();
     StartAnimating();
     Render(true);
 }
 
+// Updates are looked for while their item is on the pill: 20 seconds after
+// it's on (or the island starts), then every 6 hours.
+void Island::UpdateUpdatesWatch() {
+    if (!m_hwnd) {
+        return;
+    }
+    if (!g_settings.islandUpdates && !PlaceShows(PillGroup::Updates)) {
+        KillTimer(m_hwnd, kUpdatesTimerId);
+        m_updatesWatched = false;
+        return;
+    }
+    if (!m_updatesWatched) {
+        m_updatesWatched = true;
+        // (A moment after the island starts, then every 6 hours.)
+        SetTimer(m_hwnd, kUpdatesTimerId, 20 * 1000, nullptr);
+    }
+}
+
+void Island::StartUpdatesJob(std::vector<std::wstring> appIds) {
+    if (!m_updatesStop) {
+        return;
+    }
+    std::erase_if(m_updatesThreads, [](HANDLE thread) {
+        if (WaitForSingleObject(thread, 0) == WAIT_OBJECT_0) {
+            CloseHandle(thread);
+            return true;
+        }
+        return false;
+    });
+    // One look at a time.
+    if (appIds.empty()) {
+        AcquireSRWLockExclusive(&g_updatesLock);
+        const bool busy = g_updates.checking;
+        g_updates.checking = true;
+        ReleaseSRWLockExclusive(&g_updatesLock);
+        if (busy) {
+            return;
+        }
+    }
+    auto* job = new UpdatesJob{m_hwnd, m_updatesStop, std::move(appIds)};
+    if (HANDLE thread =
+            CreateThread(nullptr, 0, UpdatesThreadProc, job, 0, nullptr)) {
+        m_updatesThreads.push_back(thread);
+    } else {
+        delete job;
+    }
+    m_updatesPanel.Refresh();
+}
+
+void Island::OnUpdates() {
+    const UpdatesData updates = GetUpdates();
+    int count = (int)updates.windows.size();
+    for (const auto& app : updates.apps) {
+        count += app.state != 2;
+    }
+    m_updatesCount = count;
+    m_updatesPanel.Refresh();
+    Render();
+}
+
+bool Island::WeatherWanted() const {
+    return g_settings.islandWeather || PlaceShows(PillGroup::Weather);
+}
+
+// The weather is measured while it's on the pill: now (if it's old), and
+// every 30 minutes.
+void Island::UpdateWeatherWatch() {
+    if (!m_hwnd) {
+        return;
+    }
+    if (!WeatherWanted()) {
+        KillTimer(m_hwnd, kWeatherTimerId);
+        KillTimer(m_hwnd, kWeatherRetryTimerId);
+        return;
+    }
+    const WeatherData weather = GetWeather();
+    ShowWeather(weather);
+    if (!weather.valid ||
+        NowSeconds() - weather.fetchedAt > kWeatherRefreshSeconds) {
+        StartWeather({});
+    }
+    SetTimer(m_hwnd, kWeatherTimerId, (UINT)(kWeatherRefreshSeconds * 1000),
+             nullptr);
+}
+
+// The sky and the temperature now, on the pill.
+void Island::ShowWeather(const WeatherData& weather) {
+    m_weatherShown =
+        weather.valid ? WeatherEmoji(weather.code, weather.day) + L"\t" +
+                            Degrees(weather.temperature)
+                      : std::wstring();
+}
+
+// Asks for the weather (of a city typed, or of the one chosen), on its
+// thread; nothing without a city.
+void Island::StartWeather(const std::wstring& search) {
+    if (m_weatherThread) {
+        if (WaitForSingleObject(m_weatherThread, 0) != WAIT_OBJECT_0) {
+            if (!search.empty()) {
+                m_weatherPendingSearch = search;
+            }
+            return;
+        }
+        CloseHandle(m_weatherThread);
+        m_weatherThread = nullptr;
+    }
+    auto* request = new WeatherRequest{m_hwnd, search, LoadWeatherPlace()};
+    if (search.empty() && request->place.name.empty()) {
+        delete request;
+        return;
+    }
+    m_weatherThread =
+        CreateThread(nullptr, 0, WeatherThreadProc, request, 0, nullptr);
+    if (!m_weatherThread) {
+        delete request;
+    }
+}
+
+void Island::OnWeather(int problem) {
+    // The service didn't answer (no internet yet, at startup): asked again
+    // in 15 s, then waiting longer each time (up to 5 minutes), and as soon
+    // as the internet comes (see OnInternetBack).
+    if (problem == 2 && WeatherWanted()) {
+        static constexpr UINT kRetrySeconds[] = {15, 30, 60, 120, 300};
+        const UINT seconds =
+            kRetrySeconds[std::min(m_weatherRetries,
+                                   (int)ARRAYSIZE(kRetrySeconds) - 1)];
+        m_weatherRetries++;
+        SetTimer(m_hwnd, kWeatherRetryTimerId, seconds * 1000, nullptr);
+    } else if (problem == 0) {
+        m_weatherRetries = 0;
+        KillTimer(m_hwnd, kWeatherRetryTimerId);
+    }
+    ShowWeather(GetWeather());
+    // A city typed meanwhile: looked for now (the panel keeps waiting for
+    // it).
+    if (!m_weatherPendingSearch.empty()) {
+        const std::wstring search = std::move(m_weatherPendingSearch);
+        m_weatherPendingSearch.clear();
+        if (m_weatherThread) {
+            // It's ending (it just told this).
+            WaitForSingleObject(m_weatherThread, 2000);
+        }
+        StartWeather(search);
+        Relayout();
+        return;
+    }
+    m_weatherPanel.OnWeather(problem);
+    Relayout();
+}
+
 bool Island::Create() {
     m_bar = g_settings.islandBar;
+    m_bannerReadStop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     LoadUnread();
     for (int i = 0; i < kPillGroups; i++) {
         m_groupShown[i] = GroupWanted((PillGroup)i) ? 1 : 0;
@@ -20094,7 +28434,13 @@ bool Island::Create() {
         !m_control.Create(m_d2d.get(), m_dwrite.get()) ||
         !m_notifications.Create(m_d2d.get(), m_dwrite.get()) ||
         !m_mediaPanel.Create(m_d2d.get(), m_dwrite.get()) ||
-        !m_power.Create(m_d2d.get(), m_dwrite.get())) {
+        !m_power.Create(m_d2d.get(), m_dwrite.get()) ||
+        !m_usagePanel.Create(m_d2d.get(), m_dwrite.get()) ||
+        !m_notesPanel.Create(m_d2d.get(), m_dwrite.get()) ||
+        !m_tasksPanel.Create(m_d2d.get(), m_dwrite.get()) ||
+        !m_shortcutsPanel.Create(m_d2d.get(), m_dwrite.get()) ||
+        !m_weatherPanel.Create(m_d2d.get(), m_dwrite.get()) ||
+        !m_updatesPanel.Create(m_d2d.get(), m_dwrite.get())) {
         Wh_Log(L"A panel couldn't be created");
     }
 
@@ -20109,10 +28455,39 @@ bool Island::Create() {
         m_wlan = nullptr;
     }
 
+    m_weatherPanel.search = [this](const std::wstring& city) {
+        StartWeather(city);
+    };
+    m_updatesPanel.check = [this] { StartUpdatesJob({}); };
+    m_updatesPanel.update = [this](const std::wstring& id) {
+        // One, or all the ones not updated yet.
+        std::vector<std::wstring> ids;
+        for (const auto& app : GetUpdates().apps) {
+            if ((id.empty() || app.id == id) && app.state != 1 &&
+                app.state != 2) {
+                ids.push_back(app.id);
+            }
+        }
+        if (ids.empty()) {
+            return;
+        }
+        if (m_updatesPanel.m_inTerminal) {
+            UpdateInTerminal(ids);
+            m_updatesPanel.Refresh();
+        } else {
+            StartUpdatesJob(ids);
+        }
+    };
+    m_updatesStop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     UpdateClock();
     UpdateStatus();
+    m_darkMode = IsDarkMode();
+    m_themeTurn = m_darkMode ? 1 : 0;
     Layout();
     StartStatusWatch();
+    UpdateUsageWatch();
+    UpdateWeatherWatch();
+    UpdateUpdatesWatch();
 
     // The bar reserves its strip at the top of the screen, like the taskbar
     // does at the bottom.
@@ -20147,11 +28522,26 @@ bool Island::Create() {
     m_foregroundHook = SetWinEventHook(
         EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
         IslandForegroundProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-    // The Windows banner: when it's uncloaked and as it moves.
-    m_bannerHook = SetWinEventHook(kEventObjectUncloaked,
+    // The Windows banner: when it's uncloaked and cloaked, and as it moves.
+    m_bannerHook = SetWinEventHook(kEventObjectCloaked,
                                    kEventObjectUncloaked, nullptr,
                                    BannerWinEventProc, 0, 0,
                                    WINEVENT_OUTOFCONTEXT);
+    // A stack of banners may be showing already: its process's moves are
+    // watched from the start, to know it as banners join it.
+    if (HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        snapshot != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32 entry{sizeof(entry)};
+        for (BOOL more = Process32First(snapshot, &entry); more;
+             more = Process32Next(snapshot, &entry)) {
+            if (_wcsicmp(entry.szExeFile, L"ShellExperienceHost.exe") == 0 &&
+                IsShellExperienceHost(entry.th32ProcessID)) {
+                WatchWindowsBannerMoves(entry.th32ProcessID);
+                break;
+            }
+        }
+        CloseHandle(snapshot);
+    }
     m_trayOpen = m_trayKeepOpen;
     m_trayAmount = m_trayBounce = m_trayArrow = m_trayOpen ? 1 : 0;
     g_showNotificationContent =
@@ -20201,6 +28591,7 @@ void Island::ScheduleTick() {
 
 void Island::Destroy() {
     UpdateWindowsQuiet(false);
+    StopUrgentSound();
     FreeSoundPlayer();
     g_islandWnd = nullptr;
     WaitForToastActivations();
@@ -20210,12 +28601,53 @@ void Island::Destroy() {
     }
     StopStatusWatch();
     StopMediaWatch();
+    StopUsageWatch();
+    if (m_weatherThread) {
+        // The requests give up after a few seconds.
+        WaitForSingleObject(m_weatherThread, 20000);
+        CloseHandle(m_weatherThread);
+        m_weatherThread = nullptr;
+    }
+    // Looking for updates stops; an app being updated goes on by itself.
+    if (m_updatesStop) {
+        SetEvent(m_updatesStop);
+    }
+    for (HANDLE thread : m_updatesThreads) {
+        WaitForSingleObject(thread, 10000);
+        CloseHandle(thread);
+    }
+    m_updatesThreads.clear();
+    if (m_updatesStop) {
+        CloseHandle(m_updatesStop);
+        m_updatesStop = nullptr;
+    }
     for (Panel* panel : Panels()) {
         panel->Destroy();
     }
     if (m_tooltip) {
         DestroyWindow(m_tooltip);
         m_tooltip = nullptr;
+    }
+    // Windows banners hidden now come back (one could be ringing), once the
+    // reads of them are done.
+    if (m_bannerReadStop) {
+        SetEvent(m_bannerReadStop);
+    }
+    for (HANDLE thread : m_bannerReadThreads) {
+        WaitForSingleObject(thread, 10000);
+        CloseHandle(thread);
+    }
+    m_bannerReadThreads.clear();
+    if (m_bannerReadStop) {
+        CloseHandle(m_bannerReadStop);
+        m_bannerReadStop = nullptr;
+    }
+    AcquireSRWLockExclusive(&g_windowsBannerReadsLock);
+    g_windowsBannerReads.clear();
+    ReleaseSRWLockExclusive(&g_windowsBannerReadsLock);
+    m_stackTakeover = false;
+    if (m_stackHidden) {
+        RestoreWindowsBanner();
     }
     for (HWINEVENTHOOK* hook :
          {&m_bannerHook, &m_bannerMoveHook, &m_foregroundHook}) {
@@ -20298,7 +28730,16 @@ void Island::UpdateClock() {
     GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT,
                     (parts & 1) ? 0 : TIME_NOSECONDS, &now, nullptr,
                     time, ARRAYSIZE(time));
+    const std::wstring before = m_clock;
     m_clock = date[0] ? std::wstring(date) + L"  " + time : std::wstring(time);
+    // Other parts (chosen, or the app in front's own): they fade over.
+    if (m_clockParts >= 0 && parts != m_clockParts && !before.empty()) {
+        m_clockBefore = before;
+        m_clockSwap = 1;
+        m_clockSwapVelocity = 0;
+        StartAnimating();
+    }
+    m_clockParts = parts;
     // Upright: the time without seconds, and the day and month under it.
     WCHAR shortTime[32] = L"";
     GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, &now, nullptr,
@@ -20339,6 +28780,74 @@ winrt::com_ptr<IAudioEndpointVolume> Island::GetVolume(
     return volume;
 }
 
+std::vector<winrt::com_ptr<IAudioEndpointVolume>> Island::GetMicrophones() {
+    std::vector<winrt::com_ptr<IAudioEndpointVolume>> volumes;
+    std::vector<std::wstring> ids;
+    for (ERole role : {eConsole, eCommunications}) {
+        winrt::com_ptr<IMMDevice> device;
+        winrt::com_ptr<IAudioEndpointVolume> volume;
+        LPWSTR id = nullptr;
+        if (!m_devices ||
+            FAILED(m_devices->GetDefaultAudioEndpoint(eCapture, role,
+                                                      device.put())) ||
+            FAILED(device->GetId(&id))) {
+            continue;
+        }
+        const std::wstring deviceId = id;
+        CoTaskMemFree(id);
+        if (std::find(ids.begin(), ids.end(), deviceId) != ids.end() ||
+            FAILED(device->Activate(kIID_IAudioEndpointVolume, CLSCTX_ALL,
+                                    nullptr, volume.put_void()))) {
+            continue;
+        }
+        ids.push_back(deviceId);
+        volumes.push_back(volume);
+    }
+    return volumes;
+}
+
+int Island::MicrophoneMuted() {
+    const auto microphones = GetMicrophones();
+    BOOL muted = FALSE;
+    if (microphones.empty() || FAILED(microphones[0]->GetMute(&muted))) {
+        return -1;
+    }
+    return muted ? 1 : 0;
+}
+
+// Muted or not, both of them (the communications one follows).
+void Island::ToggleMicrophone() {
+    const int muted = MicrophoneMuted();
+    if (muted < 0) {
+        return;
+    }
+    for (const auto& microphone : GetMicrophones()) {
+        microphone->SetMute(!muted, nullptr);
+    }
+    OnVolumeChanged();
+}
+
+std::wstring Island::MicrophoneGlyph() {
+    const int muted = MicrophoneMuted();
+    if (muted < 0) {
+        return {};
+    }
+    return {muted ? (WCHAR)0xF781 : (WCHAR)0xE720};
+}
+
+void Island::WatchMicrophone() {
+    if (m_watchedMicrophone) {
+        m_watchedMicrophone->UnregisterControlChangeNotify(m_statusEvents);
+        m_watchedMicrophone = nullptr;
+    }
+    const auto microphones = GetMicrophones();
+    if (!microphones.empty() &&
+        SUCCEEDED(
+            microphones[0]->RegisterControlChangeNotify(m_statusEvents))) {
+        m_watchedMicrophone = microphones[0];
+    }
+}
+
 NetworkInfo Island::QueryNetwork() {
     NetworkInfo info;
     NLM_CONNECTIVITY connectivity;
@@ -20346,6 +28855,33 @@ NetworkInfo Island::QueryNetwork() {
         info.internet = connectivity & (NLM_CONNECTIVITY_IPV4_INTERNET |
                                         NLM_CONNECTIVITY_IPV6_INTERNET);
         info.connected = connectivity != NLM_CONNECTIVITY_DISCONNECTED;
+    }
+    // The physical adapters (cable, Wi-Fi, mobile broadband): with some and
+    // none of them connected, nothing is (whatever virtual adapters say).
+    PMIB_IF_TABLE2 table = nullptr;
+    if (GetIfTable2(&table) == NO_ERROR && table) {
+        bool any = false;
+        bool up = false;
+        for (ULONG i = 0; i < table->NumEntries; i++) {
+            const MIB_IF_ROW2& row = table->Table[i];
+            if (!row.InterfaceAndOperStatusFlags.HardwareInterface ||
+                row.InterfaceAndOperStatusFlags.FilterInterface ||
+                (row.Type != IF_TYPE_ETHERNET_CSMACD &&
+                 row.Type != IF_TYPE_IEEE80211 && row.Type != 243 &&
+                 row.Type != 244)) {
+                continue;
+            }
+            any = true;
+            if (row.OperStatus == IfOperStatusUp &&
+                row.MediaConnectState == MediaConnectStateConnected) {
+                up = true;
+            }
+        }
+        FreeMibTable(table);
+        info.physical = up || !any;
+        if (!info.physical && !info.internet) {
+            info.connected = false;
+        }
     }
 
     // A connected Wi-Fi network shows its name and signal.
@@ -20355,6 +28891,11 @@ NetworkInfo Island::QueryNetwork() {
         for (DWORD i = 0; i < interfaces->dwNumberOfItems && info.signal < 0;
              i++) {
             const auto& adapter = interfaces->InterfaceInfo[i];
+            if (adapter.isState == wlan_interface_state_associating ||
+                adapter.isState == wlan_interface_state_discovering ||
+                adapter.isState == wlan_interface_state_authenticating) {
+                info.wifiConnecting = true;
+            }
             if (adapter.isState != wlan_interface_state_connected) {
                 continue;
             }
@@ -20380,16 +28921,170 @@ NetworkInfo Island::QueryNetwork() {
     return info;
 }
 
+// The network's state (see NetState), and its glyph.
 std::wstring Island::NetworkGlyph() {
     const NetworkInfo info = QueryNetwork();
-    if (!info.internet && !info.connected) {
-        return {kGlyphNoInternet};
+    const double now = NowSeconds();
+    const NetState before = m_netState;
+    // Connected without internet right after being off (or connecting):
+    // Windows is still checking for it.
+    if (!info.connected || info.internet) {
+        m_netLocalSince = 0;
+    } else if (!m_netLocalSince && (before == NetState::Off ||
+                                    before == NetState::Connecting)) {
+        m_netLocalSince = now;
     }
-    if (info.signal >= 0) {
-        return {info.internet ? kGlyphWifi[std::clamp(info.signal / 25, 0, 3)]
-                              : kGlyphNoInternet};
+    // Connected again from nothing: "connecting" shows a moment at least,
+    // even when the internet is there at once (not at the start).
+    if (info.internet && before == NetState::Off && !m_networkGlyph.empty()) {
+        m_netShowConnectingUntil = now + 1.4;
     }
-    return {info.internet ? kGlyphEthernet : kGlyphNoInternet};
+    NetState state;
+    if (info.internet && now >= m_netShowConnectingUntil) {
+        state = NetState::Online;
+    } else if (info.internet) {
+        state = NetState::Connecting;
+    } else if (info.wifiConnecting ||
+               (m_netLocalSince &&
+                now - m_netLocalSince < kNetworkCheckSeconds)) {
+        state = NetState::Connecting;
+    } else {
+        state = info.connected ? NetState::NoInternet : NetState::Off;
+    }
+    if (state == NetState::Connecting) {
+        if (!m_netConnectingSince) {
+            m_netConnectingSince = now;
+        } else if (now - m_netConnectingSince > kNetworkConnectingMax) {
+            state = info.connected ? NetState::NoInternet : NetState::Off;
+        }
+    } else {
+        m_netConnectingSince = 0;
+    }
+    m_netWifi = info.signal >= 0 || (info.wifiConnecting && !info.connected);
+    m_netBars = info.signal >= 0 ? std::clamp(info.signal / 25, 0, 3) : 3;
+    m_netState = state;
+    switch (state) {
+        case NetState::Online:
+            return {m_netWifi ? kGlyphWifi[m_netBars] : kGlyphEthernet};
+        case NetState::Connecting:
+            // (Drawn moving, see DrawNetwork.)
+            return {m_netWifi ? kGlyphWifi[3] : kGlyphEthernet, L'~'};
+        case NetState::NoInternet:
+            return {m_netWifi ? kGlyphWifiWarning[m_netBars]
+                              : kGlyphEthernetWarning};
+        default:
+            return {kGlyphNoInternet};
+    }
+}
+
+// The network's state now: its glyph (changing smoothly), checked again
+// every second while connecting, and what waited for the internet once it
+// comes.
+void Island::UpdateNetwork() {
+    const NetState before = m_netState;
+    SetNetworkGlyph(NetworkGlyph());
+    if (m_hwnd) {
+        if (m_netState == NetState::Connecting) {
+            SetTimer(m_hwnd, kNetworkTimerId, 1000, nullptr);
+            SetTimer(m_hwnd, kNetworkFrameTimerId, kNetworkFrameMs, nullptr);
+        } else {
+            KillTimer(m_hwnd, kNetworkTimerId);
+            KillTimer(m_hwnd, kNetworkFrameTimerId);
+        }
+    }
+    if (m_netState == NetState::Online && before != NetState::Online) {
+        OnInternetBack();
+    }
+}
+
+void Island::SetNetworkGlyph(std::wstring glyph) {
+    if (glyph == m_networkGlyph) {
+        return;
+    }
+    // The one before fades out as the new one grows in (not at the start).
+    if (!m_networkGlyph.empty()) {
+        m_networkFrom = m_networkGlyph;
+        m_networkSwap = 1;
+        m_networkSwapVelocity = 0;
+        StartAnimating();
+    }
+    m_networkGlyph = std::move(glyph);
+}
+
+// The internet came (after the island started, or back after it went):
+// the weather, if it's old or failed.
+void Island::OnInternetBack() {
+    if (!m_hwnd || !WeatherWanted()) {
+        return;
+    }
+    const WeatherData weather = GetWeather();
+    if (!weather.valid || m_weatherRetries > 0 ||
+        NowSeconds() - weather.fetchedAt > 10 * 60) {
+        KillTimer(m_hwnd, kWeatherRetryTimerId);
+        StartWeather({});
+    }
+}
+
+// The network's glyph on the pill: connecting moves (Wi-Fi's bars filling
+// one after another over a faint full one, or the cable pulsing), and a
+// change fades the glyph before out while the new one grows in.
+void Island::DrawNetwork(ID2D1RenderTarget* target,
+                         ID2D1SolidColorBrush* brush,
+                         const IslandSlot& slot,
+                         float opacity) {
+    IDWriteTextFormat* format = m_iconFormat.get();
+    if (!format) {
+        return;
+    }
+    const D2D1_POINT_2F center{(slot.rect.left + slot.rect.right) / 2,
+                               (slot.rect.top + slot.rect.bottom) / 2};
+    const float full = std::round(kIslandIconSlot * m_scale);
+    const D2D1_RECT_F rect{center.x - full / 2, slot.rect.top,
+                           center.x + full / 2, slot.rect.bottom};
+    float pressed = 1;
+    if (m_press.target == (int)IslandItem::Network) {
+        pressed = 1 - 0.24f * (float)std::clamp(m_press.Amount(NowSeconds()),
+                                                -0.3, 1.0);
+    }
+    auto drawGlyph = [&](const std::wstring& text, float alpha, float size) {
+        if (text.empty() || alpha <= 0.004f) {
+            return;
+        }
+        const float scale = std::max(size * pressed, 0.0f);
+        target->SetTransform(D2D1::Matrix3x2F::Scale(scale, scale, center));
+        if (text.size() > 1 && text[1] == L'~') {
+            const double now = NowSeconds();
+            if (text[0] == kGlyphEthernet) {
+                // The cable, pulsing.
+                const float pulse =
+                    0.35f + 0.65f * (0.5f + 0.5f * (float)std::cos(now * 4.2));
+                brush->SetColor(Fg(0.95f * alpha * pulse));
+                target->DrawText(&kGlyphEthernet, 1, format, rect, brush);
+            } else {
+                // Wi-Fi: a faint full one, its bars filling one after another.
+                brush->SetColor(Fg(0.25f * alpha));
+                target->DrawText(&kGlyphWifi[3], 1, format, rect, brush);
+                const int bar = (int)(now / 0.32) % 4;
+                brush->SetColor(Fg(0.95f * alpha));
+                target->DrawText(&kGlyphWifi[bar], 1, format, rect, brush);
+            }
+        } else {
+            brush->SetColor(Fg(0.95f * alpha));
+            target->DrawText(text.c_str(), 1, format, rect, brush);
+        }
+        target->SetTransform(D2D1::Matrix3x2F::Identity());
+    };
+    const float shown = std::max(slot.scale, 0.0f);
+    const float swap = (float)std::clamp(m_networkSwap, 0.0, 1.0);
+    const float alpha = opacity * std::clamp(slot.scale, 0.0f, 1.0f);
+    // The one before fades and shrinks a little as the new one grows in.
+    const float grow = 1 - swap;
+    if (swap > 0.001f) {
+        drawGlyph(m_networkFrom, alpha * swap * swap,
+                  shown * (0.8f + 0.2f * swap));
+    }
+    drawGlyph(m_networkGlyph, alpha * (1 - swap * swap),
+              shown * (0.8f + 0.2f * grow));
 }
 
 std::wstring Island::VolumeGlyph() {
@@ -20421,12 +29116,13 @@ void Island::OpenNotifications() {
 }
 
 void Island::OnNetworkChanged() {
-    m_networkGlyph = NetworkGlyph();
+    UpdateNetwork();
     Render();
 }
 
 void Island::OnVolumeChanged() {
     m_volumeGlyph = VolumeGlyph();
+    m_microphoneGlyph = MicrophoneGlyph();
     Render();
 }
 
@@ -20446,8 +29142,9 @@ std::wstring Island::BatteryGlyph() {
 }
 
 void Island::UpdateStatus() {
-    m_networkGlyph = NetworkGlyph();
+    UpdateNetwork();
     m_volumeGlyph = VolumeGlyph();
+    m_microphoneGlyph = MicrophoneGlyph();
     m_batteryGlyph = BatteryGlyph();
     // A moon while "Do not disturb" is on, like the macOS Focus icon.
     m_bellGlyph = {IsIslandQuiet() ? kGlyphMoon : kGlyphBell};
@@ -20520,6 +29217,30 @@ void Island::UpdateFormats(float scale) {
                                DWRITE_TEXT_ALIGNMENT_LEADING);
     m_bannerTextFormat = make(DWRITE_FONT_WEIGHT_NORMAL, 12.5f,
                               DWRITE_TEXT_ALIGNMENT_LEADING);
+    m_usageLabelFormat = make(DWRITE_FONT_WEIGHT_SEMI_BOLD, 7.5f,
+                              DWRITE_TEXT_ALIGNMENT_CENTER);
+    m_usageValueFormat = make(DWRITE_FONT_WEIGHT_SEMI_BOLD, 11,
+                              DWRITE_TEXT_ALIGNMENT_CENTER);
+    // As wide as the widest value (figures of equal width) or name.
+    m_usageWidth = std::round(34 * scale);
+    for (PCWSTR sample : {L"100%", L"88.8G", L"888M"}) {
+        winrt::com_ptr<IDWriteTextLayout> layout;
+        if (m_usageValueFormat &&
+            SUCCEEDED(m_dwrite->CreateTextLayout(
+                sample, (UINT32)wcslen(sample), m_usageValueFormat.get(),
+                1000 * scale, 100 * scale, layout.put()))) {
+            if (m_tabular) {
+                layout->SetTypography(m_tabular.get(),
+                                      {0, (UINT32)wcslen(sample)});
+            }
+            DWRITE_TEXT_METRICS metrics;
+            layout->GetMetrics(&metrics);
+            m_usageWidth = std::max(
+                m_usageWidth,
+                std::ceil(metrics.widthIncludingTrailingWhitespace +
+                          6 * scale));
+        }
+    }
 }
 
 // Places the items and sizes the island around them: centered in the pill,
@@ -20711,11 +29432,22 @@ void Island::Layout() {
                 if (!m_slots.empty()) {
                     x += spacing;
                 }
-                m_slots.push_back({IslandItem::Clock,
-                                   {x, 0, x + clockWidth, height},
-                                   m_clock,
-                                   0});
-                x += clockWidth + spacing;
+                {
+                    // Growing or shrinking to its new width.
+                    m_clockWidthTarget = clockWidth;
+                    if (m_clockWidth < 0 || m_vertical) {
+                        m_clockWidth = clockWidth;
+                        m_clockWidthVelocity = 0;
+                    } else if (std::fabs(m_clockWidth - clockWidth) > 0.5) {
+                        StartAnimating();
+                    }
+                    const float shownWidth = (float)m_clockWidth;
+                    m_slots.push_back({IslandItem::Clock,
+                                       {x, 0, x + shownWidth, height},
+                                       m_clock,
+                                       0});
+                    x += shownWidth + spacing;
+                }
                 break;
             case PillGroup::Bell:
                 addIcon(IslandItem::Bell, m_bellGlyph);
@@ -20766,6 +29498,7 @@ void Island::Layout() {
                             layout->GetMetrics(&metrics);
                             return metrics.widthIncludingTrailingWhitespace;
                         };
+                        const std::wstring before = m_mediaTitleShown;
                         m_mediaTitleShown = MediaTitleText();
                         m_mediaTitleWidth = measure(m_mediaTitleShown);
                         if (m_mediaTitleWidth < kMediaTitleShortWidth * scale &&
@@ -20775,14 +29508,32 @@ void Island::Layout() {
                                 L" \u00B7 " + m_mediaShown.artist;
                             m_mediaTitleWidth = measure(m_mediaTitleShown);
                         }
+                        m_mediaTitleWidth = std::clamp(
+                            m_mediaTitleWidth,
+                            std::round(kMediaTitleMinWidth * scale),
+                            std::round(kMediaTitleMaxWidth * scale));
+                        // Another title on the pill: it swaps in, and the
+                        // width follows; the same one (another size of the
+                        // island) or the first one is just there.
+                        const bool swapping = !before.empty() &&
+                                              before != m_mediaTitleShown &&
+                                              titleRoom > 0.01f &&
+                                              media > 0.01f;
+                        if (swapping) {
+                            m_mediaTitleBefore = before;
+                            m_mediaSwap = 1;
+                            m_mediaSwapVelocity = 0;
+                            StartAnimating();
+                        } else {
+                            m_mediaTitleWidthShown = m_mediaTitleWidth;
+                            m_mediaTitleWidthVelocity = 0;
+                        }
                     }
                     const std::wstring& title = m_mediaTitleShown;
-                    const float full =
-                        std::round(18 * scale) + std::round(8 * scale) +
-                        std::clamp(m_mediaTitleWidth,
-                                   std::round(kMediaTitleMinWidth * scale),
-                                   std::round(kMediaTitleMaxWidth * scale)) +
-                        std::round(4 * scale);
+                    const float full = std::round(18 * scale) +
+                                       std::round(8 * scale) +
+                                       (float)m_mediaTitleWidthShown +
+                                       std::round(4 * scale);
                     const float width =
                         (iconSlot +
                          (std::max(full, iconSlot) - iconSlot) * titleRoom) *
@@ -20813,6 +29564,87 @@ void Island::Layout() {
             }
             case PillGroup::Power:
                 addIcon(IslandItem::Power, {kGlyphPower});
+                break;
+            case PillGroup::Usage: {
+                // A short name over each value; all of them when shown for
+                // the app in front without any chosen.
+                const bool all = !AnyUsageShown();
+                const struct {
+                    IslandItem item;
+                    bool on;
+                    PCWSTR name;
+                } kUsages[] = {
+                    {IslandItem::UsageCpu, g_settings.usageCpu, L"CPU"},
+                    {IslandItem::UsageRam, g_settings.usageRam, L"RAM"},
+                    {IslandItem::UsageVram, g_settings.usageVram, L"VRAM"},
+                };
+                for (int i = 0; i < 3; i++) {
+                    if (!kUsages[i].on && !all) {
+                        continue;
+                    }
+                    const std::wstring value = UsageText(i);
+                    m_slots.push_back(
+                        {kUsages[i].item,
+                         {x, 0, x + m_usageWidth, height},
+                         std::wstring(kUsages[i].name) + L"\n" +
+                             (value.empty() ? L"\u2013" : value),
+                         7});
+                    x += m_usageWidth + spacing;
+                }
+                break;
+            }
+            case PillGroup::Microphone:
+                // (Nothing without a microphone.)
+                addIcon(IslandItem::Microphone, m_microphoneGlyph);
+                break;
+            case PillGroup::Notes:
+                addIcon(IslandItem::Notes, {kGlyphNote});
+                break;
+            case PillGroup::Tasks:
+                addIcon(IslandItem::Tasks, {kGlyphTasks});
+                break;
+            case PillGroup::Shortcuts:
+                addIcon(IslandItem::Shortcuts, {kGlyphKeyboardShortcuts});
+                break;
+            case PillGroup::Updates:
+                addIcon(IslandItem::Updates, {(WCHAR)0xE895});
+                break;
+            case PillGroup::Weather:
+                // Its sky and temperature (a cloud until it comes).
+                if (m_weatherShown.empty()) {
+                    addIcon(IslandItem::Weather, {(WCHAR)0xE753});
+                } else {
+                    // The sky, and the temperature as wide as it is.
+                    float temperatureWidth = std::round(26 * scale);
+                    const size_t tab = m_weatherShown.find(L'\t');
+                    winrt::com_ptr<IDWriteTextLayout> measure;
+                    if (tab != std::wstring::npos && m_textFormat &&
+                        SUCCEEDED(m_dwrite->CreateTextLayout(
+                            m_weatherShown.c_str() + tab + 1,
+                            (UINT32)(m_weatherShown.size() - tab - 1),
+                            m_textFormat.get(), 1000, height,
+                            measure.put()))) {
+                        DWRITE_TEXT_METRICS metrics{};
+                        measure->GetMetrics(&metrics);
+                        temperatureWidth = std::ceil(metrics.width);
+                    }
+                    const float weatherWidth = std::round(20 * scale) +
+                                               temperatureWidth +
+                                               std::round(4 * scale);
+                    m_slots.push_back({IslandItem::Weather,
+                                       {x, 0, x + weatherWidth, height},
+                                       m_weatherShown,
+                                       9});
+                    x += weatherWidth + spacing;
+                }
+                break;
+            case PillGroup::Theme:
+                // Drawn turning (see m_themeTurn).
+                m_slots.push_back({IslandItem::ThemeSwitch,
+                                   {x, 0, x + iconSlot, height},
+                                   L"",
+                                   8});
+                x += iconSlot + spacing;
                 break;
             case PillGroup::Count:
                 break;
@@ -20902,7 +29734,9 @@ void Island::Layout() {
         if (m_bannerWanted || m_bannerAmount > 0) {
             const float bannerHeight =
                 kBannerHeight +
-                (m_banner.reply.CanReply() ? kBannerReplyHeight : 0);
+                (m_banner.reply.CanReply() || BannerHasActions()
+                     ? kBannerReplyHeight
+                     : 0);
             windowWidth = std::max(windowWidth,
                                    std::ceil(kBannerWidth * scale * 1.08f + 2));
             windowHeight = std::max(
@@ -20919,7 +29753,7 @@ void Island::Layout() {
         }
         m_size = {(LONG)windowWidth, (LONG)windowHeight};
         m_pill = {pillLeft, shift, pillLeft + height, shift + length};
-        const float margin = std::round(kPillTopGap * scale);
+        const float margin = std::round(g_settings.islandGap * m_dpiScale);
         m_roomLeft = (float)m_monitor.left + margin;
         m_roomTop = (float)m_monitor.top + margin;
         m_roomWidth = std::max(
@@ -20950,7 +29784,9 @@ void Island::Layout() {
             windowWidth, std::ceil(kBannerWidth * scale * 1.08f / 2) * 2 + 2);
         const float bannerHeight =
             kBannerHeight +
-            (m_banner.reply.CanReply() ? kBannerReplyHeight : 0);
+            (m_banner.reply.CanReply() || BannerHasActions()
+                 ? kBannerReplyHeight
+                 : 0);
         windowHeight = std::max(
             windowHeight,
             std::ceil(top + (bannerHeight * scale + BannerExtraRoom()) * 1.08f +
@@ -20970,17 +29806,23 @@ void Island::Layout() {
     m_pill = {shift, pillTop, shift + pillWidth, pillTop + height};
 
     // Its place: from the top (where it's always been) to the bottom, left to
-    // right, inside the monitor.
-    const float margin = top;
+    // right, inside the monitor, the chosen room from its edges (see
+    // islandGap). Minimizing, the window goes up to the screen's top, where
+    // the line is.
+    const float margin = std::round(g_settings.islandGap * m_dpiScale);
     m_roomLeft = (float)m_monitor.left + margin;
-    m_roomTop = (float)m_monitor.top + top;
+    m_roomTop = (float)m_monitor.top + margin;
     m_roomWidth =
         std::max(0.0f, (float)(m_monitor.right - m_monitor.left) - margin * 2 -
                            pillWidth);
     m_roomHeight = std::max(0.0f, (float)(m_monitor.bottom - m_monitor.top) -
-                                      top - margin - height - TaskbarRoom());
+                                      margin * 2 - height - TaskbarRoom());
     const float pillX = m_roomLeft + (float)m_placeX * m_roomWidth;
-    const float pillY = m_roomTop + (float)m_placeY * m_roomHeight;
+    float pillY = m_roomTop + (float)m_placeY * m_roomHeight;
+    if (!AtBottom()) {
+        const float folded = 1 - (float)std::clamp(m_expand, 0.0, 1.0);
+        pillY += (top - margin) * folded;
+    }
     m_position = {(LONG)std::lround(pillX - shift),
                   (LONG)std::lround(pillY - pillTop)};
 }
@@ -21030,8 +29872,13 @@ void Island::PublishTrayPlaces() {
 
 // The banner, open, in the window.
 D2D1_RECT_F Island::BannerRect() const {
+    // Its own width (the pill shrinks into it when wider), or the pill's when
+    // the panels follow the island's width.
     const float width =
-        std::max(std::round(kBannerWidth * m_scale), m_pill.right - m_pill.left);
+        g_settings.islandPanelsFollow
+            ? std::max(std::round(kBannerWidth * m_scale),
+                       m_pill.right - m_pill.left)
+            : std::round(kBannerWidth * m_scale);
     const float open = (float)std::clamp(m_bannerOpen, 0.0, 1.05);
     const float height =
         std::round((kBannerHeight + kBannerReplyHeight * open) * m_scale) +
@@ -21070,6 +29917,21 @@ void Island::BannerParts(D2D1_RECT_F* field,
              field->bottom};
 }
 
+D2D1_RECT_F Island::BannerActionRect(size_t index) const {
+    const D2D1_RECT_F banner = BannerRect();
+    const float inner = std::round(14 * m_scale);
+    const float gap = std::round(8 * m_scale);
+    const float top = banner.top + std::round(kBannerHeight * m_scale) +
+                      BannerTextExtra();
+    const float height = std::round(32 * m_scale);
+    const float count =
+        (float)std::max<size_t>(1, m_banner.reply.actions.size());
+    const float width =
+        (banner.right - banner.left - inner * 2 - gap * (count - 1)) / count;
+    const float left = banner.left + inner + (width + gap) * index;
+    return {std::round(left), top, std::round(left + width), top + height};
+}
+
 float Island::BannerTextExtra() const {
     return (m_bannerTextLines - 1) * std::round(18 * m_scale) *
            (float)std::clamp(m_bannerExpand, 0.0, 1.05);
@@ -21083,8 +29945,12 @@ float Island::BannerReplyExtra() const {
 // shown (measured again only when they change).
 void Island::MeasureBanner() {
     const bool content = g_showNotificationContent;
-    const float width = std::max(std::round(kBannerWidth * m_scale),
-                                 m_vertical ? 0.0f : m_pill.right - m_pill.left);
+    // As wide as it's shown (see BannerRect).
+    const float width =
+        g_settings.islandPanelsFollow && !m_vertical
+            ? std::max(std::round(kBannerWidth * m_scale),
+                       m_pill.right - m_pill.left)
+            : std::round(kBannerWidth * m_scale);
     const std::wstring key = (content ? m_banner.fullText : std::wstring()) +
                              L"\n" + m_bannerReplyText + L"\n" +
                              std::to_wstring(width) + L"\n" +
@@ -21124,15 +29990,26 @@ D2D1_RECT_F Island::BannerCloseRect() const {
             banner.right - inner, banner.top + inner + size};
 }
 
+D2D1_RECT_F Island::BannerMinimizeRect() const {
+    const D2D1_RECT_F close = BannerCloseRect();
+    const float gap = std::round(6 * m_scale);
+    const float size = close.right - close.left;
+    return {close.left - gap - size, close.top, close.left - gap,
+            close.bottom};
+}
+
 // Typing a reply: the island takes the keyboard, and the banner stays until
 // clicking somewhere else.
 void Island::StartBannerTyping() {
-    if (m_bannerTyping || !m_banner.reply.CanReply()) {
+    if (m_bannerTyping || !BannerCanReply()) {
         return;
     }
     m_bannerTyping = true;
-    m_bannerReplyText.clear();
+    // What was typed before a call, an alarm or a reminder took the pill.
+    m_bannerReplyText = std::move(m_banner.draft);
+    m_banner.draft.clear();
     m_bannerEdit.Reset();
+    m_bannerEdit.caret = m_bannerReplyText.size();
     KillTimer(m_hwnd, kBannerTimerId);
     SetWindowLongPtr(m_hwnd, GWL_EXSTYLE,
                      GetWindowLongPtr(m_hwnd, GWL_EXSTYLE) & ~WS_EX_NOACTIVATE);
@@ -21191,6 +30068,10 @@ bool Island::OnBannerChar(WCHAR c) {
     return true;
 }
 
+// Defined further down.
+bool AppShowsBanners(const std::wstring& appId);
+bool WindowsShowsBanners();
+
 // Takes the latest new notification and shows it: in the pill, or peeking out
 // of the line when minimized. Not with "Do not disturb", in the bar, or over
 // an open panel.
@@ -21202,41 +30083,62 @@ void Island::ShowBanner() {
     for (const auto& toast : toasts) {
         AddUnread(toast);
     }
-    // The island's own notifications: the newest one's sound, as it comes
-    // (not in full screen, nor with the island's "Do not disturb", which
-    // only keeps them).
-    if (g_settings.islandOwnsNotifications) {
-        const IslandToast* newest = nullptr;
+    // Their Windows banners (see m_bannersOwed): the island's go (in the
+    // pill, or as its app's icon and in the list); a call's, an alarm's or a
+    // reminder's, or one the island can't show now, stays, and the others
+    // with it. Only while Windows shows banners (with its "Do not disturb",
+    // only calls, alarms and reminders show), and not for an app whose
+    // banners are off (Windows shows none for it).
+    if (g_settings.islandHideWindowsBanners && !WindowsQuietForIsland() &&
+        WindowsShowsBanners()) {
+        const bool canTake = CanTakeBanners();
         for (const auto& toast : toasts) {
-            if (!toast.appId.empty() && !toast.sticky && !toast.urgent) {
+            if (!toast.appId.empty() && !toast.sticky &&
+                AppShowsBanners(toast.appId)) {
+                OweWindowsBanner(canTake && !toast.urgent);
+            }
+        }
+    }
+    // The island's own notifications, with Windows kept quiet: the newest
+    // one's sound, as it comes (not in full screen, nor with the island's
+    // "Do not disturb", which only keeps them, nor over a call ringing).
+    // Calls, alarms and reminders show in the pill too, ahead of the
+    // others, and ring (see QueueUrgentSound); the island's "Do not disturb"
+    // lets them through, like Windows' does.
+    if (WindowsQuietForIsland()) {
+        const IslandToast* newest = nullptr;
+        const IslandToast* newestUrgent = nullptr;
+        for (const auto& toast : toasts) {
+            if (toast.appId.empty() || toast.sticky) {
+                continue;
+            }
+            if (toast.urgent) {
+                newestUrgent = &toast;
+            } else {
                 newest = &toast;
             }
         }
-        if (newest && !g_islandQuiet && m_visible) {
+        if (newest && !g_islandQuiet && m_visible && !m_urgentRinging) {
             PlayToastSound(newest->appId, newest->sound);
         }
-        if (g_islandQuiet) {
-            std::erase_if(
-                toasts, [](const IslandToast& toast) { return !toast.sticky; });
+        if (newestUrgent) {
+            QueueUrgentSound(*newestUrgent);
         }
+    } else {
+        // Otherwise Windows' banner shows them, with their buttons: not in
+        // the pill too.
+        std::erase_if(toasts,
+                      [](const IslandToast& toast) { return toast.urgent; });
     }
-    // On the island now (in the pill, or as its app's icon and in the list):
-    // their Windows banners go.
-    if (CanTakeBanners()) {
-        for (const auto& toast : toasts) {
-            if (!toast.appId.empty() && !toast.sticky && !toast.urgent) {
-                TakeWindowsBanner();
-            }
-        }
+    if (g_settings.islandOwnsNotifications && g_islandQuiet) {
+        std::erase_if(toasts, [](const IslandToast& toast) {
+            return !toast.sticky && !toast.urgent;
+        });
     }
-    // Calls, alarms and reminders keep Windows' banner (with its buttons):
-    // not in the pill too.
-    std::erase_if(toasts,
-                  [](const IslandToast& toast) { return toast.urgent; });
     // Apps ignored for a moment (see m_snoozedApps): not in the pill (their
     // sound plays, and their icon pops, see AddUnread).
     std::erase_if(toasts, [this](const IslandToast& toast) {
-        return !toast.sticky && IsSnoozed(toast.appId);
+        return !toast.sticky && !toast.urgent && IsSnoozed(toast.appId);
     });
     if (!g_bannerEnabled) {
         std::erase_if(toasts,
@@ -21245,46 +30147,100 @@ void Island::ShowBanner() {
     if (toasts.empty() && m_waitingToasts.empty()) {
         return;
     }
+    // Calls, alarms and reminders apart: they go first.
+    const auto firstUrgent = std::stable_partition(
+        toasts.begin(), toasts.end(),
+        [](const IslandToast& toast) { return !toast.urgent; });
+    std::vector<IslandToast> urgent(std::make_move_iterator(firstUrgent),
+                                    std::make_move_iterator(toasts.end()));
+    toasts.erase(firstUrgent, toasts.end());
+    const bool anyNew = !toasts.empty() || !urgent.empty();
+    // One of those on the pill: new ones wait behind it.
+    if (m_bannerWanted && m_banner.urgent) {
+        if (anyNew) {
+            const bool urgentQueued = !urgent.empty();
+            QueueToasts(std::move(urgent), std::move(toasts));
+            // Windows' stack may have it too: read again.
+            if (urgentQueued && m_stackShowing && WantsTakeover()) {
+                m_bannerReadRetries = 0;
+                ReadWindowsBanners(100);
+            }
+            StartAnimating();
+            Render(true);
+        }
+        return;
+    }
+    // The one on the pill gives way to a call, an alarm or a reminder, and
+    // shows again after it (with what was being typed).
+    IslandToast interrupted;
+    bool interrupting = false;
+    if (!urgent.empty() && m_bannerWanted) {
+        interrupted = m_banner;
+        if (m_bannerTyping) {
+            interrupted.draft = m_bannerReplyText;
+        }
+        interrupting = true;
+    }
     // Typing a reply: a new message of the same chat updates the banner (what
     // was typed stays, and the focus), others wait until the reply is done.
     // The pill takes them all, so the Windows banner goes.
     if (m_bannerTyping) {
-        for (auto& toast : toasts) {
-            if (toast.appId == m_banner.appId &&
-                toast.title == m_banner.title) {
-                m_banner.text = std::move(toast.text);
-                m_banner.fullText = std::move(toast.fullText);
-                m_banner.image = std::move(toast.image);
-                m_banner.imageCircle = toast.imageCircle;
-                m_banner.imageData = std::move(toast.imageData);
-                if (toast.reply.CanReply()) {
-                    m_banner.reply = std::move(toast.reply);
+        if (urgent.empty()) {
+            for (auto& toast : toasts) {
+                if (toast.appId == m_banner.appId &&
+                    toast.title == m_banner.title) {
+                    m_banner.text = std::move(toast.text);
+                    m_banner.fullText = std::move(toast.fullText);
+                    m_banner.image = std::move(toast.image);
+                    m_banner.imageCircle = toast.imageCircle;
+                    m_banner.imageData = std::move(toast.imageData);
+                    if (toast.reply.CanReply()) {
+                        m_banner.reply = std::move(toast.reply);
+                    }
+                } else {
+                    m_waitingToasts.push_back(std::move(toast));
                 }
-            } else {
-                m_waitingToasts.push_back(std::move(toast));
             }
+            StartAnimating();
+            Render(true);
+            return;
         }
-        StartAnimating();
-        Render(true);
-        return;
+        EndBannerTyping();
     }
     // Not shown in the pill now (the bar, or a panel open): it's on the
     // island anyway (its app with the red dot, the bell's dot, and the list,
     // shown again if open), so the Windows banner still goes. In full
     // screen, it stays (waiting ones keep waiting).
     if (m_bar || !m_visible || AnyPanelOpen()) {
-        if (!toasts.empty()) {
+        if (anyNew) {
             if (!CanTakeBanners()) {
-                RestoreWindowsBanner();
+                KeepWindowsBannersShown();
             }
             m_notifications.Refresh();
         }
         return;
     }
-    // The newest notification shows at once; a waiting one only when no
+    // The newest notification shows at once (a call, an alarm or a reminder
+    // first, the others then waiting behind it); a waiting one only when no
     // banner is shown.
     IslandToast next;
-    if (!toasts.empty()) {
+    if (!urgent.empty()) {
+        next = std::move(urgent.back());
+        urgent.pop_back();
+        std::vector<IslandToast> others;
+        if (!toasts.empty()) {
+            others.push_back(std::move(toasts.back()));
+        }
+        QueueToasts(std::move(urgent), std::move(others));
+        if (interrupting) {
+            m_waitingToasts.insert(
+                std::find_if(m_waitingToasts.begin(), m_waitingToasts.end(),
+                             [](const IslandToast& toast) {
+                                 return !toast.urgent;
+                             }),
+                std::move(interrupted));
+        }
+    } else if (!toasts.empty()) {
         next = std::move(toasts.back());
     } else if (!m_bannerWanted) {
         next = std::move(m_waitingToasts.front());
@@ -21293,8 +30249,8 @@ void Island::ShowBanner() {
         return;
     }
     if (m_minimized && !g_bannerWhenMinimized && !next.appId.empty()) {
-        if (!toasts.empty()) {
-            RestoreWindowsBanner();
+        if (anyNew) {
+            KeepWindowsBannersShown();
         }
         m_peekApp = next.appId;
         m_peekStart = NowSeconds();
@@ -21303,16 +30259,87 @@ void Island::ShowBanner() {
     }
     m_banner = std::move(next);
     m_bannerWanted = true;
-    if (!m_banner.sticky) {
+    // Calls, alarms and reminders stay until closed, answered, or gone from
+    // the notification center (see OnToastsChanged); Windows' banner for
+    // one may be taken over (see m_stackTakeover).
+    if (!m_banner.sticky && !m_banner.urgent) {
         SetTimer(m_hwnd, kBannerTimerId, kBannerShownMs, nullptr);
     } else {
         KillTimer(m_hwnd, kBannerTimerId);
     }
+    if (m_stackShowing && WantsTakeover()) {
+        m_bannerReadRetries = 0;
+        ReadWindowsBanners(200);
+    }
     StartAnimating();
+}
+
+void Island::QueueToasts(std::vector<IslandToast> urgent,
+                         std::vector<IslandToast> others) {
+    m_waitingToasts.insert(
+        std::find_if(m_waitingToasts.begin(), m_waitingToasts.end(),
+                     [](const IslandToast& toast) { return !toast.urgent; }),
+        std::make_move_iterator(urgent.begin()),
+        std::make_move_iterator(urgent.end()));
+    m_waitingToasts.insert(m_waitingToasts.end(),
+                           std::make_move_iterator(others.begin()),
+                           std::make_move_iterator(others.end()));
+}
+
+// A call's, an alarm's or a reminder's sound. Windows lets those through its
+// "Do not disturb" by default (showing its banner and playing their sound
+// itself), so the island waits a moment and plays it only if no Windows
+// banner showed meanwhile, or just before. One that repeats rings while it's
+// on the pill, up to a minute.
+void Island::QueueUrgentSound(const IslandToast& toast) {
+    m_urgentSoundApp = toast.appId;
+    m_urgentSound = toast.sound;
+    m_urgentSoundLoop = toast.loop;
+    m_urgentSoundAt = NowSeconds();
+    SetTimer(m_hwnd, kUrgentSoundTimerId, kUrgentSoundWaitMs, nullptr);
+}
+
+void Island::PlayUrgentSound() {
+    KillTimer(m_hwnd, kUrgentSoundTimerId);
+    if (m_windowsBannerSeenAt > m_urgentSoundAt - 4) {
+        return;
+    }
+    const bool onPill =
+        m_bannerWanted && m_banner.urgent &&
+        _wcsicmp(m_banner.appId.c_str(), m_urgentSoundApp.c_str()) == 0;
+    const bool loop = m_urgentSoundLoop && onPill;
+    if (m_urgentRinging) {
+        m_urgentRinging = false;
+        StopToastSound();
+    }
+    PlayToastSound(m_urgentSoundApp, m_urgentSound, loop);
+    if (loop) {
+        m_urgentRinging = true;
+        SetTimer(m_hwnd, kUrgentSoundStopTimerId, kUrgentSoundMaxMs, nullptr);
+    }
+}
+
+void Island::StopUrgentSound() {
+    KillTimer(m_hwnd, kUrgentSoundTimerId);
+    KillTimer(m_hwnd, kUrgentSoundStopTimerId);
+    if (m_urgentRinging) {
+        m_urgentRinging = false;
+        StopToastSound();
+    }
 }
 
 void Island::HideBanner() {
     KillTimer(m_hwnd, kBannerTimerId);
+    // A call, an alarm or a reminder stops ringing as it goes, and Windows'
+    // banner for it comes back, unless one of its buttons was pressed (it
+    // goes by itself then; checked a moment later).
+    if (m_banner.urgent) {
+        StopUrgentSound();
+        if (m_stackTakeover && !m_takeoverPressed) {
+            EndTakeover();
+        }
+        m_takeoverPressed = false;
+    }
     if (m_bannerWanted) {
         m_bannerWanted = false;
         StartAnimating();
@@ -21359,6 +30386,17 @@ void Island::Render(bool force) {
         std::to_wstring(m_press.target) + L"|" +
         std::to_wstring((int)(m_press.Amount(NowSeconds()) * 1000)) + L"|" +
         std::to_wstring((int)(m_playSwap * 1000)) + L"|" +
+        std::to_wstring((int)(m_themeTurn * 1000)) + L"|" +
+        std::to_wstring((int)(m_networkSwap * 1000)) + L"|" +
+        std::to_wstring((int)(m_clockSwap * 1000)) + L"|" +
+        std::to_wstring((int)(m_mediaSwap * 1000)) + L"|" +
+        std::to_wstring((int)(m_mediaCoverSwap * 1000)) + L"|" +
+        std::to_wstring((int)(m_mediaTitleWidthShown * 10)) + L"|" +
+        (m_netState == NetState::Connecting
+             ? std::to_wstring((int)(NowSeconds() * 1000 / kNetworkFrameMs))
+             : std::wstring()) +
+        L"|" +
+
         std::to_wstring(m_mediaShown.thumbnailSerial) + L"|" +
         std::to_wstring(m_vertical) + m_clockTime + L"|" +
         std::to_wstring(m_unseen) + L"|" + m_hoverFades.Signature() + L"|" +
@@ -21382,7 +30420,9 @@ void Island::Render(bool force) {
     const float scale = m_scale;
 
     winrt::com_ptr<ID2D1SolidColorBrush> brush;
-    target->CreateSolidColorBrush(Bg(0.94f), brush.put());
+    // Opaque (only the glass theme lets what's behind show, by its own
+    // opacity).
+    target->CreateSolidColorBrush(Bg(1), brush.put());
 
     if (m_bar) {
         target->FillRectangle(m_pill, brush.get());
@@ -21469,7 +30509,7 @@ void Island::Render(bool force) {
                              std::clamp(banner, 0.0f, 1.0f) *
                              std::clamp(open, 0.0f, 1.0f));
         // The line is light, to be seen over dark and light windows alike.
-        const D2D1_COLOR_F background = Bg(0.94f);
+        const D2D1_COLOR_F background = Bg(1);
         brush->SetColor(D2D1::ColorF(
             background.r + (0.55f - background.r) * lineMix,
             background.g + (0.55f - background.g) * lineMix,
@@ -21596,6 +30636,20 @@ void Island::Render(bool force) {
             brush->SetColor(Fg(0.95f * bannerContents * closeShown));
             target->DrawText(&kGlyphClose, 1, m_smallIconFormat.get(), close,
                              brush.get());
+            // The arrow that minimizes it.
+            const D2D1_RECT_F minimize = BannerMinimizeRect();
+            const float minimizeLit = m_hoverFades.Get(
+                HoverKey(1000, 7), m_hover == IslandItem::BannerMinimize);
+            brush->SetColor(
+                Fg((0.16f + 0.16f * minimizeLit) * bannerContents * closeShown));
+            target->FillEllipse({{(minimize.left + minimize.right) / 2,
+                                  (minimize.top + minimize.bottom) / 2},
+                                 closeRadius,
+                                 closeRadius},
+                                brush.get());
+            brush->SetColor(Fg(0.95f * bannerContents * closeShown));
+            target->DrawText(&kGlyphCollapse, 1, m_smallIconFormat.get(),
+                             minimize, brush.get());
         }
         if (closeShown < 0.99f) {
             brush->SetColor(Fg(0.55f * bannerContents * (1 - closeShown)));
@@ -21647,7 +30701,7 @@ void Island::Render(bool force) {
         // The reply box and "Open", under the mouse.
         const float row = bannerContents *
                           (float)std::clamp((m_bannerOpen - 0.3) / 0.7, 0.0, 1.0);
-        if (row > 0.01f && m_banner.reply.CanReply()) {
+        if (row > 0.01f && BannerCanReply()) {
             D2D1_RECT_F field, send, openButton;
             BannerParts(&field, &send, &openButton);
             const float fieldRadius = std::min((field.bottom - field.top) / 2,
@@ -21680,10 +30734,14 @@ void Island::Render(bool force) {
             float caretTop = field.top + padTop;
             float caretHeight = replyLine;
             if (empty) {
-                const std::wstring hint =
-                    m_banner.reply.placeholder.empty()
+                // What was typed before (see IslandToast::draft), or the
+                // hint.
+                std::wstring hint =
+                    !m_banner.draft.empty() ? m_banner.draft
+                    : m_banner.reply.placeholder.empty()
                         ? std::wstring(Tr(L"Reply", L"Responder"))
                         : m_banner.reply.placeholder;
+                std::replace(hint.begin(), hint.end(), L'\n', L' ');
                 brush->SetColor(Fg(0.45f * row));
                 target->DrawText(hint.c_str(), (UINT32)hint.size(),
                                  m_bannerTextFormat.get(),
@@ -21702,6 +30760,10 @@ void Island::Render(bool force) {
                 if (wrapped.layout) {
                     target->PushAxisAlignedClip(textRect,
                                                 D2D1_ANTIALIAS_MODE_ALIASED);
+                    DrawTextSelection(target, brush.get(), wrapped.layout.get(),
+                                      {textRect.left,
+                                       textRect.top - wrapped.scroll},
+                                      m_bannerEdit, row);
                     brush->SetColor(Fg(0.95f * row));
                     target->DrawTextLayout(
                         {textRect.left, textRect.top - wrapped.scroll},
@@ -21762,6 +30824,33 @@ void Island::Render(bool force) {
             target->DrawText(openText, (UINT32)wcslen(openText),
                              m_bannerTimeFormat.get(), openButton,
                              brush.get());
+            m_bannerTimeFormat->SetTextAlignment(
+                DWRITE_TEXT_ALIGNMENT_TRAILING);
+        }
+        // A call's, an alarm's or a reminder's buttons, lighter under the
+        // mouse.
+        if (row > 0.01f && BannerHasActions()) {
+            m_bannerTimeFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            for (size_t i = 0; i < m_banner.reply.actions.size(); i++) {
+                const D2D1_RECT_F button = BannerActionRect(i);
+                const float radius = (button.bottom - button.top) / 2;
+                const float lit = m_hoverFades.Get(
+                    HoverKey(1001, (long long)i),
+                    m_hover == IslandItem::BannerAction &&
+                        m_hoverApp == std::to_wstring(i));
+                brush->SetColor(Fg((0.16f + 0.1f * lit) * row));
+                target->FillRoundedRectangle({button, radius, radius},
+                                             brush.get());
+                const std::wstring& label = m_banner.reply.actions[i].label;
+                brush->SetColor(Fg(0.95f * row));
+                target->DrawText(label.c_str(), (UINT32)label.size(),
+                                 m_bannerTimeFormat.get(),
+                                 {button.left + std::round(6 * scale),
+                                  button.top,
+                                  button.right - std::round(6 * scale),
+                                  button.bottom},
+                                 brush.get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+            }
             m_bannerTimeFormat->SetTextAlignment(
                 DWRITE_TEXT_ALIGNMENT_TRAILING);
         }
@@ -21853,7 +30942,11 @@ void Island::Render(bool force) {
                 target->PushAxisAlignedClip(slot.rect,
                                             D2D1_ANTIALIAS_MODE_ALIASED);
                 ID2D1Bitmap* bitmap = MediaCover();
-                if (bitmap && title > 0.01f) {
+                // Rounded, filled keeping its proportions.
+                auto drawCover = [&](ID2D1Bitmap* image, float alpha) {
+                    if (!image || alpha <= 0.004f) {
+                        return;
+                    }
                     winrt::com_ptr<ID2D1RoundedRectangleGeometry> clip;
                     m_d2d->CreateRoundedRectangleGeometry(
                         {cover, std::round(4 * scale), std::round(4 * scale)},
@@ -21863,20 +30956,27 @@ void Island::Render(bool force) {
                     target->PushLayer(
                         D2D1::LayerParameters(D2D1::InfiniteRect(), clip.get(),
                                               D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
-                                              D2D1::IdentityMatrix(),
-                                              shown * title),
+                                              D2D1::IdentityMatrix(), alpha),
                         layer.get());
-                    // Filled, keeping its proportions.
-                    const D2D1_SIZE_F bitmapSize = bitmap->GetSize();
+                    const D2D1_SIZE_F bitmapSize = image->GetSize();
                     const float fill = std::max(
                         size / std::max(bitmapSize.width, 1.0f),
                         size / std::max(bitmapSize.height, 1.0f));
                     const float w = bitmapSize.width * fill;
                     const float h = bitmapSize.height * fill;
-                    target->DrawBitmap(bitmap,
+                    target->DrawBitmap(image,
                                        {coverCenter - w / 2, middle - h / 2,
                                         coverCenter + w / 2, middle + h / 2});
                     target->PopLayer();
+                };
+                const float coverSwap =
+                    m_mediaCoverBefore
+                        ? (float)std::clamp(m_mediaCoverSwap, 0.0, 1.0)
+                        : 0.0f;
+                if (title > 0.01f) {
+                    drawCover(m_mediaCoverBefore.get(),
+                              shown * title * coverSwap);
+                    drawCover(bitmap, shown * title * (1 - coverSwap));
                 }
                 // The note, fading as the cover comes (or staying, without a
                 // cover).
@@ -21889,17 +30989,164 @@ void Island::Render(bool force) {
                 if (title > 0.01f && m_bannerTextFormat) {
                     const float textLeft = slot.rect.left + std::round(2 * scale) +
                                            size + std::round(8 * scale);
-                    brush->SetColor(Fg(0.92f * shown * title));
+                    const float textRight = std::max(
+                        textLeft, slot.rect.right - std::round(4 * scale));
+                    // The title before goes up and away as the new one comes
+                    // up from below.
+                    const float swap =
+                        (float)std::clamp(m_mediaSwap, 0.0, 1.0);
+                    const float rise = std::round(10 * scale);
+                    if (swap > 0.004f && !m_mediaTitleBefore.empty()) {
+                        brush->SetColor(Fg(0.92f * shown * title * swap));
+                        target->DrawText(
+                            m_mediaTitleBefore.c_str(),
+                            (UINT32)m_mediaTitleBefore.size(),
+                            m_bannerTextFormat.get(),
+                            {textLeft, slot.rect.top - rise * (1 - swap),
+                             std::max(textRight,
+                                      textLeft + (float)m_mediaTitleWidth),
+                             slot.rect.bottom - rise * (1 - swap)},
+                            brush.get());
+                    }
+                    brush->SetColor(Fg(0.92f * shown * title * (1 - swap)));
                     target->DrawText(slot.text.c_str(), (UINT32)slot.text.size(),
                                      m_bannerTextFormat.get(),
-                                     {textLeft, slot.rect.top,
-                                      std::max(textLeft,
-                                               slot.rect.right -
-                                                   std::round(4 * scale)),
-                                      slot.rect.bottom},
+                                     {textLeft, slot.rect.top + rise * swap,
+                                      textRight, slot.rect.bottom + rise * swap},
                                      brush.get());
                 }
                 target->PopAxisAlignedClip();
+                continue;
+            }
+            if (slot.font == 7 && m_usageLabelFormat && m_usageValueFormat) {
+                // A use: a small icon and its short name, dim, over its
+                // value; a new value comes up from below as the one before
+                // goes up and away.
+                const int index = (int)slot.item - (int)IslandItem::UsageCpu;
+                static constexpr WCHAR kUsageGlyphs[3] = {0xE950, 0xE964,
+                                                          0xE7F4};
+                const size_t split = slot.text.find(L'\n');
+                const std::wstring name =
+                    std::wstring(1, kUsageGlyphs[index]) + L" " +
+                    slot.text.substr(0, split);
+                const std::wstring value = split == std::wstring::npos
+                                               ? std::wstring()
+                                               : slot.text.substr(split + 1);
+                const float shown =
+                    contentOpacity * std::clamp(slot.scale, 0.0f, 1.0f);
+                const float middle = (slot.rect.top + slot.rect.bottom) / 2;
+                const float nameHeight = std::round(9 * scale);
+                const float valueHeight = std::round(13 * scale);
+                const float top =
+                    std::round(middle - (nameHeight + valueHeight) / 2);
+                const float width = slot.rect.right - slot.rect.left;
+                winrt::com_ptr<IDWriteTextLayout> nameLayout;
+                if (SUCCEEDED(m_dwrite->CreateTextLayout(
+                        name.c_str(), (UINT32)name.size(),
+                        m_usageLabelFormat.get(), width, nameHeight,
+                        nameLayout.put()))) {
+                    nameLayout->SetFontFamilyName(L"Segoe Fluent Icons",
+                                                  {0, 1});
+                    nameLayout->SetFontSize(7 * scale, {0, 1});
+                    brush->SetColor(Fg(0.55f * shown));
+                    target->DrawTextLayout({slot.rect.left, top},
+                                           nameLayout.get(), brush.get());
+                }
+                const D2D1_RECT_F valueRect{slot.rect.left, top + nameHeight,
+                                            slot.rect.right,
+                                            top + nameHeight + valueHeight};
+                target->PushAxisAlignedClip(
+                    {valueRect.left, valueRect.top - 1, valueRect.right,
+                     valueRect.bottom + 1},
+                    D2D1_ANTIALIAS_MODE_ALIASED);
+                auto drawValue = [&](const std::wstring& text, float dy,
+                                     float opacity) {
+                    winrt::com_ptr<IDWriteTextLayout> layout;
+                    if (opacity <= 0.01f ||
+                        FAILED(m_dwrite->CreateTextLayout(
+                            text.c_str(), (UINT32)text.size(),
+                            m_usageValueFormat.get(), width, valueHeight,
+                            layout.put()))) {
+                        return;
+                    }
+                    if (m_tabular) {
+                        layout->SetTypography(m_tabular.get(),
+                                              {0, (UINT32)text.size()});
+                    }
+                    brush->SetColor(Fg(0.95f * shown * opacity));
+                    target->DrawTextLayout({valueRect.left, valueRect.top + dy},
+                                           layout.get(), brush.get());
+                };
+                // (It counts to a new value: see UsageText.)
+                drawValue(value, 0, 1);
+                target->PopAxisAlignedClip();
+                continue;
+            }
+            if (slot.font == 9 && m_textFormat) {
+                const size_t tab = slot.text.find(L'\t');
+                const std::wstring emoji = slot.text.substr(0, tab);
+                const std::wstring temperature =
+                    tab == std::wstring::npos ? std::wstring()
+                                              : slot.text.substr(tab + 1);
+                const float shown =
+                    contentOpacity * std::clamp(slot.scale, 0.0f, 1.0f);
+                if (!m_weatherEmojiFormat || m_weatherEmojiScale != scale) {
+                    m_weatherEmojiScale = scale;
+                    m_weatherEmojiFormat = nullptr;
+                    m_dwrite->CreateTextFormat(
+                        L"Segoe UI Emoji", nullptr, DWRITE_FONT_WEIGHT_NORMAL,
+                        DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                        13 * scale, L"", m_weatherEmojiFormat.put());
+                    if (m_weatherEmojiFormat) {
+                        m_weatherEmojiFormat->SetTextAlignment(
+                            DWRITE_TEXT_ALIGNMENT_CENTER);
+                        m_weatherEmojiFormat->SetParagraphAlignment(
+                            DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                    }
+                }
+                const float emojiWidth = std::round(20 * scale);
+                if (m_weatherEmojiFormat) {
+                    brush->SetColor(Fg(shown));
+                    target->DrawText(
+                        emoji.c_str(), (UINT32)emoji.size(),
+                        m_weatherEmojiFormat.get(),
+                        {slot.rect.left, slot.rect.top,
+                         slot.rect.left + emojiWidth, slot.rect.bottom},
+                        brush.get(), D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+                }
+                brush->SetColor(Fg(0.95f * shown));
+                target->DrawText(temperature.c_str(),
+                                 (UINT32)temperature.size(), m_textFormat.get(),
+                                 {slot.rect.left + emojiWidth, slot.rect.top,
+                                  slot.rect.right, slot.rect.bottom},
+                                 brush.get());
+                continue;
+            }
+            if (slot.font == 8 && m_iconFormat) {
+                // Light and dark mode: a half-filled circle, turning half a
+                // turn as it's switched (and pressed in like the others).
+                const D2D1_POINT_2F center{
+                    (slot.rect.left + slot.rect.right) / 2,
+                    (slot.rect.top + slot.rect.bottom) / 2};
+                float size = std::max(slot.scale, 0.0f);
+                if (m_press.target == (int)IslandItem::ThemeSwitch) {
+                    size *= 1 - 0.24f * (float)std::clamp(
+                                            m_press.Amount(NowSeconds()), -0.3,
+                                            1.0);
+                }
+                target->SetTransform(
+                    D2D1::Matrix3x2F::Scale(size, size, center) *
+                    D2D1::Matrix3x2F::Rotation((float)m_themeTurn * 180,
+                                               center));
+                const float full = std::round(kIslandIconSlot * scale);
+                const WCHAR glyph = 0xE7A1;
+                brush->SetColor(Fg(0.95f * contentOpacity *
+                                   std::clamp(slot.scale, 0.0f, 1.0f)));
+                target->DrawText(&glyph, 1, m_iconFormat.get(),
+                                 {center.x - full / 2, slot.rect.top,
+                                  center.x + full / 2, slot.rect.bottom},
+                                 brush.get());
+                target->SetTransform(D2D1::Matrix3x2F::Identity());
                 continue;
             }
             if (slot.font == 5) {
@@ -21987,6 +31234,10 @@ void Island::Render(bool force) {
                     brush.get());
                 continue;
             }
+            if (slot.item == IslandItem::Network) {
+                DrawNetwork(target, brush.get(), slot, contentOpacity);
+                continue;
+            }
             auto* format = slot.font == 1   ? m_iconFormat.get()
                            : slot.font == 2 ? m_smallIconFormat.get()
                                             : m_textFormat.get();
@@ -22040,16 +31291,34 @@ void Island::Render(bool force) {
                 continue;
             }
             // Text with figures of equal width; icons as they are.
-            winrt::com_ptr<IDWriteTextLayout> layout;
-            if (slot.font == 0 && m_tabular &&
-                SUCCEEDED(m_dwrite->CreateTextLayout(
-                    slot.text.c_str(), (UINT32)slot.text.size(), format,
-                    slot.rect.right - slot.rect.left,
-                    slot.rect.bottom - slot.rect.top, layout.put()))) {
-                layout->SetTypography(m_tabular.get(),
-                                      {0, (UINT32)slot.text.size()});
-                target->DrawTextLayout({slot.rect.left, slot.rect.top},
-                                       layout.get(), brush.get());
+            if (slot.font == 0 && m_tabular) {
+                // (Another set of parts: the one before fades out as this one
+                // fades in.)
+                const float swap =
+                    slot.item == IslandItem::Clock && !m_clockBefore.empty()
+                        ? (float)std::clamp(m_clockSwap, 0.0, 1.0)
+                        : 0.0f;
+                const D2D1_COLOR_F ink = brush->GetColor();
+                auto drawText = [&](const std::wstring& text, float alpha) {
+                    winrt::com_ptr<IDWriteTextLayout> layout;
+                    if (alpha <= 0.004f ||
+                        FAILED(m_dwrite->CreateTextLayout(
+                            text.c_str(), (UINT32)text.size(), format,
+                            slot.rect.right - slot.rect.left,
+                            slot.rect.bottom - slot.rect.top, layout.put()))) {
+                        return;
+                    }
+                    layout->SetTypography(m_tabular.get(),
+                                          {0, (UINT32)text.size()});
+                    brush->SetColor(
+                        D2D1::ColorF(ink.r, ink.g, ink.b, ink.a * alpha));
+                    target->DrawTextLayout({slot.rect.left, slot.rect.top},
+                                           layout.get(), brush.get());
+                };
+                if (swap > 0.004f) {
+                    drawText(m_clockBefore, swap * swap);
+                }
+                drawText(slot.text, 1 - swap * swap);
                 if (scaled) {
                     target->SetTransform(D2D1::Matrix3x2F::Identity());
                 }
@@ -22069,6 +31338,28 @@ void Island::Render(bool force) {
             }
             target->DrawText(slot.text.c_str(), (UINT32)slot.text.size(),
                              format, glyphRect, brush.get());
+            // Updates waiting: how many, on a red dot.
+            if (slot.item == IslandItem::Updates && m_updatesCount > 0) {
+                const float dot = 6 * scale;
+                const D2D1_POINT_2F at{
+                    (slot.rect.left + slot.rect.right) / 2 + 6 * scale,
+                    (slot.rect.top + slot.rect.bottom) / 2 - 5 * scale};
+                brush->SetColor(D2D1::ColorF(1.0f, 0.27f, 0.23f,
+                                             contentOpacity * glyphOpacity));
+                target->FillEllipse({at, dot, dot}, brush.get());
+                if (m_usageLabelFormat) {
+                    const std::wstring count =
+                        m_updatesCount > 9 ? L"9+"
+                                           : std::to_wstring(m_updatesCount);
+                    brush->SetColor(D2D1::ColorF(1, 1, 1,
+                                                 contentOpacity * glyphOpacity));
+                    target->DrawText(count.c_str(), (UINT32)count.size(),
+                                     m_usageLabelFormat.get(),
+                                     {at.x - dot, at.y - dot, at.x + dot,
+                                      at.y + dot},
+                                     brush.get());
+                }
+            }
             // New notifications not looked at yet: a red dot on the bell.
             if (slot.item == IslandItem::Bell && m_unseen) {
                 const float dot = 3 * scale;
@@ -22292,9 +31583,48 @@ void Island::AnimationFrame() {
                       kBounceDamping)) {
         apps = true;
     }
+    if (SpringTowards(m_mediaSwap, m_mediaSwapVelocity, 0, 0.55, dt)) {
+        apps = true;
+    } else if (!m_mediaTitleBefore.empty()) {
+        m_mediaTitleBefore.clear();
+    }
+    if (SpringTowards(m_mediaCoverSwap, m_mediaCoverSwapVelocity, 0, 0.6,
+                      dt)) {
+        apps = true;
+    } else if (m_mediaCoverBefore) {
+        m_mediaCoverBefore = nullptr;
+    }
+    if (SpringTowards(m_mediaTitleWidthShown, m_mediaTitleWidthVelocity,
+                      m_mediaTitleWidth, 0.5, dt)) {
+        apps = true;
+    }
+    if (SpringTowards(m_themeTurn, m_themeTurnVelocity, m_darkMode ? 1 : 0,
+                      0.5, dt, kBounceDamping)) {
+        apps = true;
+    }
+    if (SpringTowards(m_networkSwap, m_networkSwapVelocity, 0, 0.5, dt)) {
+        apps = true;
+    }
+    if (SpringTowards(m_clockSwap, m_clockSwapVelocity, 0, 0.45, dt)) {
+        apps = true;
+    } else if (!m_clockBefore.empty()) {
+        m_clockBefore.clear();
+    }
+    if (m_clockWidth >= 0 &&
+        SpringTowards(m_clockWidth, m_clockWidthVelocity, m_clockWidthTarget,
+                      0.45, dt)) {
+        apps = true;
+    }
+    for (double changedAt : m_usageChangedAt) {
+        if (changedAt && now - changedAt < kUsageChangeSeconds) {
+            apps = true;
+        }
+    }
     // The banner's reply row, under the mouse or while typing.
-    const bool wantRow = m_bannerWanted && m_banner.reply.CanReply() &&
-                         (m_bannerTyping || BannerHovered());
+    const bool wantRow =
+        m_bannerWanted && ((BannerCanReply() &&
+                            (m_bannerTyping || BannerHovered())) ||
+                           BannerHasActions());
     if (SpringTowards(m_bannerOpen, m_bannerOpenVelocity, wantRow ? 1 : 0,
                       kOpenSeconds, dt, wantRow ? kBounceDamping : 1.0)) {
         apps = true;
@@ -22353,13 +31683,16 @@ void Island::AnimationFrame() {
         }
     }
     Render();
-    const bool calendar = m_calendar.Animate(dt);
-    const bool control = m_control.Animate(dt);
-    const bool notifications = m_notifications.Animate(dt);
-    const bool mediaPanel = m_mediaPanel.Animate(dt);
-    const bool power = m_power.Animate(dt);
-    m_animating = expanding || calendar || control || notifications ||
-                  mediaPanel || power || apps;
+    // Started while drawing (another title measured, another cover decoded).
+    if (m_mediaSwap > 0 || m_mediaCoverSwap > 0 ||
+        std::fabs(m_mediaTitleWidthShown - m_mediaTitleWidth) > 0.01) {
+        apps = true;
+    }
+    bool panels = false;
+    for (Panel* panel : Panels()) {
+        panels = panel->Animate(dt) || panels;
+    }
+    m_animating = expanding || panels || apps;
 }
 
 void Island::SetMinimized(bool minimized) {
@@ -22367,6 +31700,10 @@ void Island::SetMinimized(bool minimized) {
     Wh_SetIntValue(L"islandMinimized", minimized);
     if (minimized) {
         CloseAllPanels();
+        EndTakeover();
+    } else if (m_stackShowing && WantsTakeover()) {
+        m_bannerReadRetries = 0;
+        ReadWindowsBanners(100);
     }
     StartAnimating();
 }
@@ -22411,29 +31748,56 @@ void Island::UpdateMediaShown() {
 }
 
 // Whether a visible window of another app is above the island where it is.
+// Never while a menu is open above it (a tray icon's menu, opened from the
+// island, or the app in front's own popups): the island isn't raised over
+// it then.
 bool Island::IsCovered() const {
     RECT island;
     if (!GetWindowRect(m_hwnd, &island)) {
         return false;
     }
     const DWORD self = GetCurrentProcessId();
+    DWORD foregroundProcess = 0;
+    if (HWND foreground = GetForegroundWindow()) {
+        GetWindowThreadProcessId(foreground, &foregroundProcess);
+    }
+    bool covered = false;
     for (HWND above = GetWindow(m_hwnd, GW_HWNDPREV); above;
          above = GetWindow(above, GW_HWNDPREV)) {
         DWORD processId = 0;
         GetWindowThreadProcessId(above, &processId);
+        if (processId == self || !IsWindowVisible(above)) {
+            continue;
+        }
+        int cloaked = 0;
+        if (SUCCEEDED(DwmGetWindowAttribute(above, DWMWA_CLOAKED, &cloaked,
+                                            sizeof(cloaked))) &&
+            cloaked) {
+            continue;
+        }
+        WCHAR className[16] = L"";
+        GetClassName(above, className, ARRAYSIZE(className));
+        const LONG style = GetWindowLong(above, GWL_STYLE);
+        const LONG exStyle = GetWindowLong(above, GWL_EXSTYLE);
+        RECT popup{};
+        GetWindowRect(above, &popup);
+        const bool menuLike =
+            processId == foregroundProcess && (style & WS_POPUP) &&
+            (style & WS_CAPTION) != WS_CAPTION &&
+            ((exStyle & WS_EX_TOOLWINDOW) || GetWindow(above, GW_OWNER)) &&
+            (popup.right - popup.left) * 2 < m_monitor.right - m_monitor.left &&
+            (popup.bottom - popup.top) * 2 < m_monitor.bottom - m_monitor.top;
+        if (wcscmp(className, L"#32768") == 0 || menuLike) {
+            return false;
+        }
         RECT rect;
         RECT overlap;
-        int cloaked = 0;
-        if (processId != self && IsWindowVisible(above) &&
-            (FAILED(DwmGetWindowAttribute(above, DWMWA_CLOAKED, &cloaked,
-                                          sizeof(cloaked))) ||
-             !cloaked) &&
-            GetWindowRect(above, &rect) &&
+        if (GetWindowRect(above, &rect) &&
             IntersectRect(&overlap, &rect, &island)) {
-            return true;
+            covered = true;
         }
     }
-    return false;
+    return covered;
 }
 
 void Island::Tick() {
@@ -22456,6 +31820,7 @@ void Island::Tick() {
             }
         } else {
             CloseAllPanels();
+            EndTakeover();
         }
         StartAnimating();
     }
@@ -22466,10 +31831,25 @@ void Island::Tick() {
         m_ticks = 0;
         UpdateStatus();
     }
-    // Every few seconds, only while some app has the red dot.
-    if (!m_unreadApps.empty() && ++m_unreadCheckTicks >= 4) {
-        m_unreadCheckTicks = 0;
-        DropGoneUnread();
+    // Snoozed notifications due again.
+    if (!m_snoozedToasts.empty()) {
+        const double now = NowSeconds();
+        std::vector<IslandToast> due;
+        std::erase_if(m_snoozedToasts, [&](auto& entry) {
+            if (entry.second > now) {
+                return false;
+            }
+            due.push_back(std::move(entry.first));
+            return true;
+        });
+        if (!due.empty()) {
+            AcquireSRWLockExclusive(&g_islandToastsLock);
+            g_islandToasts.insert(g_islandToasts.end(),
+                                  std::make_move_iterator(due.begin()),
+                                  std::make_move_iterator(due.end()));
+            ReleaseSRWLockExclusive(&g_islandToastsLock);
+            ShowBanner();
+        }
     }
     if (++m_raiseTicks >= kIslandRaiseTicks) {
         m_raiseTicks = 0;
@@ -22646,11 +32026,36 @@ void Island::ClearAppsFromList(const std::vector<std::wstring>& apps,
     Render(true);
 }
 
-void Island::DropGoneUnread() {
+void Island::OnToastsChanged() {
+    const bool urgentShown = m_bannerWanted && m_banner.urgent;
+    const bool urgentWaiting =
+        std::any_of(m_waitingToasts.begin(), m_waitingToasts.end(),
+                    [](const IslandToast& toast) { return toast.urgent; });
+    if (m_unreadApps.empty() && !urgentShown && !urgentWaiting) {
+        return;
+    }
     std::vector<std::wstring> inCenter;
     if (!m_notifications.AppsInCenter(&inCenter)) {
         return;
     }
+    auto present = [&](const std::wstring& appId) {
+        return std::any_of(inCenter.begin(), inCenter.end(),
+                           [&](const std::wstring& id) {
+                               return _wcsicmp(id.c_str(), appId.c_str()) == 0;
+                           });
+    };
+    // A call, an alarm or a reminder whose notification is gone (the call
+    // ended, or it was handled elsewhere) leaves the pill.
+    std::erase_if(m_waitingToasts, [&](const IslandToast& toast) {
+        return toast.urgent && !present(toast.appId);
+    });
+    if (urgentShown && !present(m_banner.appId)) {
+        HideBanner();
+    }
+    DropGoneUnread(inCenter);
+}
+
+void Island::DropGoneUnread(const std::vector<std::wstring>& inCenter) {
     const size_t before = m_unreadApps.size();
     std::erase_if(m_unreadApps, [&](const UnreadApp& app) {
         return std::none_of(inCenter.begin(), inCenter.end(),
@@ -22670,6 +32075,22 @@ void Island::DropGoneUnread() {
     m_notifications.Refresh();
     StartAnimating();
     Render(true);
+}
+
+// How long a notification snoozed on the island waits (the time Windows
+// uses for one without a choice of its own).
+constexpr double kToastSnoozeSeconds = 5 * 60;
+
+void Island::SnoozeToast(IslandToast toast) {
+    toast.draft.clear();
+    // Snoozed again: from now (once).
+    if (toast.id > 0) {
+        std::erase_if(m_snoozedToasts, [&](const auto& entry) {
+            return entry.first.id == toast.id;
+        });
+    }
+    m_snoozedToasts.push_back({std::move(toast), NowSeconds() +
+                                                     kToastSnoozeSeconds});
 }
 
 void Island::OnNotificationsSeen() {
@@ -22784,20 +32205,62 @@ void CALLBACK BannerWinEventProc(HWINEVENTHOOK,
         WCHAR className[64];
         RECT rect;
         DWORD processId = 0;
-        // Recognized when it first shows: no height yet.
-        // Not a flyout the user opened (the notification center, the quick
-        // settings): those come to the front.
+        MONITORINFO monitor{sizeof(monitor)};
+        // Recognized when it shows: the shell experience host's window at
+        // the bottom right corner of its monitor (with no height yet, or
+        // already its size). Not a flyout the user opened (the notification
+        // center, the calendar, the quick settings): those come to the
+        // front.
         if (GetForegroundWindow() != hWnd &&
             GetClassName(hWnd, className, ARRAYSIZE(className)) &&
             wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0 &&
-            GetWindowRect(hWnd, &rect) && rect.top == rect.bottom &&
+            GetWindowRect(hWnd, &rect) &&
+            GetMonitorInfo(MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST),
+                           &monitor) &&
+            rect.right >= monitor.rcMonitor.right - 40 &&
+            rect.bottom >= monitor.rcMonitor.bottom - 200 &&
             GetWindowThreadProcessId(hWnd, &processId) &&
             IsShellExperienceHost(processId)) {
             g_windowsBanner = hWnd;
             g_island->WatchWindowsBannerMoves(processId);
         }
     }
+    // The island started while a stack was already showing (no uncloaking
+    // to see): known by its moves as banners join it, at the bottom right
+    // of its monitor.
+    if (event == EVENT_OBJECT_LOCATIONCHANGE && !g_windowsBanner) {
+        WCHAR className[64];
+        RECT rect;
+        DWORD processId = 0;
+        int cloaked = 1;
+        MONITORINFO monitor{sizeof(monitor)};
+        if (GetForegroundWindow() != hWnd &&
+            GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+            wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0 &&
+            GetWindowRect(hWnd, &rect) && rect.bottom > rect.top &&
+            SUCCEEDED(DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked,
+                                            sizeof(cloaked))) &&
+            !cloaked &&
+            GetMonitorInfo(MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST),
+                           &monitor) &&
+            rect.right >= monitor.rcMonitor.right - 40 &&
+            rect.bottom >= monitor.rcMonitor.bottom - 200 &&
+            GetWindowThreadProcessId(hWnd, &processId) &&
+            IsShellExperienceHost(processId)) {
+            g_windowsBanner = hWnd;
+            g_island->OnWindowsBannerSeen();
+            g_island->OnWindowsBanner(hWnd, true);
+        }
+        return;
+    }
     if (hWnd == g_windowsBanner) {
+        if (event == kEventObjectCloaked) {
+            g_island->OnWindowsBannersGone();
+            return;
+        }
+        if (event == kEventObjectUncloaked) {
+            g_island->OnWindowsBannerSeen();
+        }
         g_island->OnWindowsBanner(hWnd, event == kEventObjectUncloaked);
     }
 }
@@ -22812,35 +32275,326 @@ void Island::WatchWindowsBannerMoves(DWORD processId) {
         BannerWinEventProc, processId, 0, WINEVENT_OUTOFCONTEXT);
 }
 
-// Whether the island takes new notifications from the Windows banner now
-// (see ShowBanner): in the pill, or as its app's icon and the bell's dot (the
-// bar, a panel open, typing a reply, in full screen, where nothing shows).
-// Not with its banners off, minimized without them, or when new
-// notifications can't be read.
-bool Island::CanTakeBanners() const {
-    return g_settings.islandHideWindowsBanners && g_bannerEnabled &&
-           g_toastWatchReady && !g_settings.islandOwnsNotifications &&
-           !(m_minimized && !g_bannerWhenMinimized);
+constexpr GUID kCLSID_CUIAutomation8 = {
+    0xe22ad333,
+    0xb25f,
+    0x460c,
+    {0x83, 0xd0, 0x05, 0x81, 0x10, 0x73, 0x95, 0xc9}};
+constexpr GUID kCLSID_CUIAutomation = {
+    0xff48dba4,
+    0x60ef,
+    0x4201,
+    {0xaa, 0x87, 0x54, 0x10, 0x3e, 0xef, 0x59, 0x4e}};
+constexpr GUID kIID_IUIAutomation = {
+    0x30cbe57d,
+    0xd9d0,
+    0x452a,
+    {0xab, 0x13, 0x7a, 0xc5, 0xac, 0x48, 0x25, 0xee}};
+constexpr GUID kIID_IUIAutomation2 = {
+    0x34723aff,
+    0x0c9d,
+    0x49d0,
+    {0x98, 0x96, 0x7a, 0xb5, 0x2d, 0xf8, 0xcd, 0x8a}};
+constexpr GUID kIID_IUIAutomationInvokePattern = {
+    0xfb377fbe,
+    0x8ea6,
+    0x46d5,
+    {0x9c, 0x73, 0x64, 0x99, 0x64, 0x2d, 0x30, 0x59}};
+
+// The elements under `parent` with an automation ID.
+winrt::com_ptr<IUIAutomationElementArray> FindByAutomationId(
+    IUIAutomation* uia,
+    IUIAutomationElement* parent,
+    PCWSTR id) {
+    winrt::com_ptr<IUIAutomationElementArray> found;
+    VARIANT value;
+    VariantInit(&value);
+    value.vt = VT_BSTR;
+    value.bstrVal = SysAllocString(id);
+    winrt::com_ptr<IUIAutomationCondition> condition;
+    if (value.bstrVal &&
+        SUCCEEDED(uia->CreatePropertyCondition(UIA_AutomationIdPropertyId,
+                                               value, condition.put()))) {
+        parent->FindAll(TreeScope_Descendants, condition.get(), found.put());
+    }
+    VariantClear(&value);
+    return found;
 }
 
-// How long a notification taken by the island waits for its Windows banner
-// at most (Windows' queue of banners can be long).
-constexpr double kBannerOwedSeconds = 120;
+std::vector<winrt::com_ptr<IUIAutomationElement>> ElementsOf(
+    IUIAutomationElementArray* array) {
+    std::vector<winrt::com_ptr<IUIAutomationElement>> elements;
+    int count = 0;
+    if (array && SUCCEEDED(array->get_Length(&count))) {
+        for (int i = 0; i < count; i++) {
+            winrt::com_ptr<IUIAutomationElement> element;
+            if (SUCCEEDED(array->GetElement(i, element.put())) && element) {
+                elements.push_back(std::move(element));
+            }
+        }
+    }
+    return elements;
+}
 
-// The island took a notification: the banner shown now, if it's been waiting
-// for it, goes; otherwise the next banner to appear is this one's.
-void Island::TakeWindowsBanner() {
-    if (m_shownBannerWaiting &&
-        NowSeconds() - m_bannerShownAt < BannerRestoreSeconds() + 1) {
-        m_shownBannerWaiting = false;
-        m_shownBannerTaken = true;
-        KillTimer(m_hwnd, kBannerRestoreTimerId);
-        if (g_windowsBanner) {
-            OnWindowsBanner(g_windowsBanner, false);
+std::wstring ElementName(IUIAutomationElement* element) {
+    std::wstring name;
+    BSTR value = nullptr;
+    if (SUCCEEDED(element->get_CurrentName(&value)) && value) {
+        name = value;
+    }
+    SysFreeString(value);
+    return name;
+}
+
+std::wstring ElementAutomationId(IUIAutomationElement* element) {
+    std::wstring id;
+    BSTR value = nullptr;
+    if (SUCCEEDED(element->get_CurrentAutomationId(&value)) && value) {
+        id = value;
+    }
+    SysFreeString(value);
+    return id;
+}
+
+// The notifications in a stack: its "window" elements (one per banner).
+// Windows numbers the ones after the first ("PriorityToastView3"), so
+// they're told apart by their ID's start; one with another ID counts as not
+// a call's, an alarm's or a reminder's.
+winrt::com_ptr<IUIAutomationElementArray> FindBannerViews(
+    IUIAutomation* uia,
+    IUIAutomationElement* root) {
+    winrt::com_ptr<IUIAutomationElementArray> found;
+    VARIANT value;
+    VariantInit(&value);
+    value.vt = VT_I4;
+    value.lVal = UIA_WindowControlTypeId;
+    winrt::com_ptr<IUIAutomationCondition> condition;
+    if (SUCCEEDED(uia->CreatePropertyCondition(UIA_ControlTypePropertyId,
+                                               value, condition.put()))) {
+        root->FindAll(TreeScope_Descendants, condition.get(), found.put());
+    }
+    return found;
+}
+
+// A title as both sides show it: one line, spaces collapsed, trimmed.
+std::wstring BannerText(const std::wstring& text) {
+    std::wstring result;
+    for (WCHAR c : text) {
+        const bool space = iswspace(c);
+        if (space && (result.empty() || result.back() == L' ')) {
+            continue;
+        }
+        result += space ? L' ' : c;
+    }
+    while (!result.empty() && result.back() == L' ') {
+        result.pop_back();
+    }
+    return result;
+}
+
+struct WindowsBannerRequest {
+    HWND banner;
+    HANDLE stop;
+    DWORD delayMs;
+    // The notification's title, and its button to press (-1: its "x"), or
+    // none (kReadOnly).
+    std::wstring title;
+    int press;
+    WindowsBannerRead fallback;
+};
+constexpr int kReadOnly = -2;
+
+// Reads the notifications in Windows' stack of banners; presses one's
+// button first if asked (and reads again a moment later).
+DWORD WINAPI WindowsBannerThreadProc(LPVOID parameter) {
+    std::unique_ptr<WindowsBannerRequest> request(
+        (WindowsBannerRequest*)parameter);
+    if (request->delayMs &&
+        WaitForSingleObject(request->stop, request->delayMs) == WAIT_OBJECT_0) {
+        return 0;
+    }
+    const HRESULT comResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    WindowsBannerRead read = std::move(request->fallback);
+    {
+        winrt::com_ptr<IUIAutomation> uia;
+        if (FAILED(CoCreateInstance(kCLSID_CUIAutomation8, nullptr,
+                                    CLSCTX_INPROC_SERVER, kIID_IUIAutomation,
+                                    uia.put_void()))) {
+            CoCreateInstance(kCLSID_CUIAutomation, nullptr,
+                             CLSCTX_INPROC_SERVER, kIID_IUIAutomation,
+                             uia.put_void());
+        }
+        // Not waiting long for a busy shell.
+        winrt::com_ptr<IUIAutomation2> uia2;
+        if (uia && SUCCEEDED(uia->QueryInterface(kIID_IUIAutomation2,
+                                                 uia2.put_void()))) {
+            uia2->put_ConnectionTimeout(1500);
+            uia2->put_TransactionTimeout(1500);
+        }
+        auto readViews = [&](bool press) {
+            read.views.clear();
+            winrt::com_ptr<IUIAutomationElement> root;
+            if (!uia || FAILED(uia->ElementFromHandle(request->banner,
+                                                      root.put())) ||
+                !root) {
+                return;
+            }
+            {
+                for (const auto& view :
+                     ElementsOf(FindBannerViews(uia.get(), root.get()).get())) {
+                    WindowsBannerView entry;
+                    entry.priority =
+                        ElementAutomationId(view.get())
+                            .starts_with(L"PriorityToastView");
+                    const auto titles = ElementsOf(
+                        FindByAutomationId(uia.get(), view.get(), L"Title")
+                            .get());
+                    if (!titles.empty()) {
+                        entry.title = BannerText(ElementName(titles[0].get()));
+                    }
+                    const auto buttons = ElementsOf(
+                        FindByAutomationId(uia.get(), view.get(),
+                                           L"VerbButton")
+                            .get());
+                    for (const auto& button : buttons) {
+                        entry.buttons.push_back(ElementName(button.get()));
+                    }
+                    const auto dismiss = ElementsOf(
+                        FindByAutomationId(uia.get(), view.get(),
+                                           L"DismissButton")
+                            .get());
+                    entry.dismiss = !dismiss.empty();
+                    // Pressed: the notification's own button, or its "x".
+                    if (press && entry.priority &&
+                        entry.title == BannerText(request->title)) {
+                        IUIAutomationElement* target =
+                            request->press >= 0
+                                ? (request->press < (int)buttons.size()
+                                       ? buttons[request->press].get()
+                                       : nullptr)
+                                : (dismiss.empty() ? nullptr
+                                                   : dismiss[0].get());
+                        winrt::com_ptr<IUIAutomationInvokePattern> invoke;
+                        if (target &&
+                            SUCCEEDED(target->GetCurrentPatternAs(
+                                UIA_InvokePatternId,
+                                kIID_IUIAutomationInvokePattern,
+                                invoke.put_void())) &&
+                            invoke && SUCCEEDED(invoke->Invoke())) {
+                            read.pressed = true;
+                            return;
+                        }
+                    }
+                    read.views.push_back(std::move(entry));
+                }
+            }
+        };
+        if (request->press != kReadOnly) {
+            read.pressRequested = true;
+            readViews(true);
+            // Windows takes it away: read again once it's gone.
+            if (read.pressed &&
+                WaitForSingleObject(request->stop, 700) == WAIT_OBJECT_0) {
+                uia2 = nullptr;
+                uia = nullptr;
+                if (SUCCEEDED(comResult)) {
+                    CoUninitialize();
+                }
+                return 0;
+            }
+        }
+        readViews(false);
+    }
+    if (SUCCEEDED(comResult)) {
+        CoUninitialize();
+    }
+    AcquireSRWLockExclusive(&g_windowsBannerReadsLock);
+    g_windowsBannerReads.push_back(std::move(read));
+    ReleaseSRWLockExclusive(&g_windowsBannerReadsLock);
+    if (HWND island = g_islandWnd) {
+        PostMessage(island, WM_APP_BANNER_READ, 0, 0);
+    }
+    return 0;
+}
+
+// Whether Windows shows banners now: not with its "Do not disturb" (or a
+// Focus rule), in full screen, or while presenting.
+bool WindowsShowsBanners() {
+    QUERY_USER_NOTIFICATION_STATE state;
+    return !IsDoNotDisturbOn() &&
+           SUCCEEDED(SHQueryUserNotificationState(&state)) &&
+           state == QUNS_ACCEPTS_NOTIFICATIONS;
+}
+
+// Whether Windows shows an app's notifications as banners (its own
+// notification settings, read only).
+bool AppShowsBanners(const std::wstring& appId) {
+    const std::wstring key =
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Notifications\\"
+        L"Settings\\" +
+        appId;
+    for (PCWSTR value : {L"Enabled", L"ShowBanner"}) {
+        DWORD data = 1;
+        DWORD size = sizeof(data);
+        if (RegGetValue(HKEY_CURRENT_USER, key.c_str(), value,
+                        RRF_RT_REG_DWORD, nullptr, &data,
+                        &size) == ERROR_SUCCESS &&
+            data == 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Whether a Windows banner is on now (its window uncloaked): new ones wait
+// their turn behind it.
+bool WindowsBannerShowing() {
+    int cloaked = 1;
+    return g_windowsBanner && IsWindow(g_windowsBanner) &&
+           SUCCEEDED(DwmGetWindowAttribute(g_windowsBanner, DWMWA_CLOAKED,
+                                           &cloaked, sizeof(cloaked))) &&
+           !cloaked;
+}
+
+// Whether the island takes new notifications from the Windows banner now
+// (see ShowBanner): in the pill, or as its app's icon and the bell's dot (the
+// bar, a panel open, typing a reply). Not with its banners off, minimized
+// without them, when new notifications can't be read, or when Windows shows
+// no banners (with its "Do not disturb", in full screen).
+bool Island::CanTakeBanners() const {
+    return g_settings.islandHideWindowsBanners && g_bannerEnabled &&
+           g_toastWatchReady && !(m_minimized && !g_bannerWhenMinimized) &&
+           WindowsShowsBanners();
+}
+
+// How long a notification the island read while no stack showed waits for
+// the next stack (Windows shows its banner at once, or not at all).
+constexpr double kBannerOwedSeconds = 6;
+
+// The island read a notification: its Windows banner goes (`take`) or
+// stays (see m_bannersOwed).
+void Island::OweWindowsBanner(bool take) {
+    const double now = NowSeconds();
+    // It joined the stack showing now (or started it, just before).
+    if (m_stackShowing && WindowsBannerShowing()) {
+        if (!take) {
+            KeepWindowsBannersShown();
+        } else if (m_stackWaiting && !m_stackMustShow) {
+            // The one it waited for: it stays off the screen.
+            m_stackWaiting = false;
+            KillTimer(m_hwnd, kBannerRestoreTimerId);
+        } else if (!m_stackHidden && !m_stackMustShow &&
+                   now - m_bannerShownAt < BannerRestoreSeconds() + 2 &&
+                   CanTakeBanners()) {
+            // Put back a moment ago, still waiting for it: off again.
+            m_stackHidden = true;
+            if (g_windowsBanner) {
+                OnWindowsBanner(g_windowsBanner, false);
+            }
         }
         return;
     }
-    m_bannersOwed.push_back(NowSeconds());
+    m_bannersOwed.push_back({now + kBannerOwedSeconds, take});
 }
 
 // How long a Windows banner hidden ahead of the pill waits for it: longer
@@ -22849,14 +32603,14 @@ double Island::BannerRestoreSeconds() const {
     return (g_settings.islandWebPictures ? 9000 : kBannerRestoreMs) / 1000.0;
 }
 
-// Moves the Windows banner off the screen when the pill shows the
-// notification instead. Each banner that appears is hidden right away when
-// the pill can show notifications, so it doesn't flash, and put back if the
-// pill doesn't take its notification shortly after (see
+// Moves the Windows banners off the screen when the island shows their
+// notifications instead (see m_bannersOwed). A new stack is hidden right
+// away when the island can show notifications, so it doesn't flash, and
+// put back if the island doesn't read its notification shortly after (see
 // RestoreWindowsBanner). Never a window that's in front (a flyout the user
 // opened).
 void Island::OnWindowsBanner(HWND banner, bool appeared) {
-    if (!g_settings.islandHideWindowsBanners ||
+    if ((!g_settings.islandHideWindowsBanners && !WindowsQuietForIsland()) ||
         GetForegroundWindow() == banner) {
         return;
     }
@@ -22870,55 +32624,304 @@ void Island::OnWindowsBanner(HWND banner, bool appeared) {
     const double now = NowSeconds();
     const int below = GetSystemMetrics(SM_YVIRTUALSCREEN) +
                       GetSystemMetrics(SM_CYVIRTUALSCREEN) + 200;
-    // A new notification's banner: the oldest one the island took, or one
-    // to wait for.
+    // A new stack: the notifications read just before are its first ones
+    // (all the island's, or not); with none, it waits for them.
     if (appeared) {
         m_bannerShownAt = now;
+        KillTimer(m_hwnd, kBannerRestoreTimerId);
         if (rect.top < below) {
-            m_bannerHomeTop = rect.top;
+            m_bannerHomeBottom = rect.bottom;
         }
-        std::erase_if(m_bannersOwed, [now](double at) {
-            return now - at > kBannerOwedSeconds;
+        m_stackShowing = true;
+        m_stackHidden = m_stackWaiting = m_stackMustShow = false;
+        m_stackTakeover = false;
+        m_stackHeight = rect.bottom - rect.top;
+        m_bannerReadRetries = 0;
+        std::erase_if(m_bannersOwed, [now](const OwedBanner& owed) {
+            return owed.until < now;
         });
-        m_shownBannerTaken = !m_bannersOwed.empty();
-        m_shownBannerWaiting = !m_shownBannerTaken;
-        if (m_shownBannerTaken) {
-            m_bannersOwed.erase(m_bannersOwed.begin());
+        // With the island's own notifications: the call, alarm or reminder
+        // on the pill may be this one.
+        if (WantsTakeover()) {
+            ReadWindowsBanners(300);
+        }
+        if (!g_settings.islandHideWindowsBanners) {
+            m_bannersOwed.clear();
+        } else if (!m_bannersOwed.empty()) {
+            const bool all =
+                std::all_of(m_bannersOwed.begin(), m_bannersOwed.end(),
+                            [](const OwedBanner& owed) { return owed.take; });
+            m_stackHidden = all;
+            m_stackMustShow = !all;
+            m_bannersOwed.clear();
+        } else if (CanTakeBanners() && !WindowsQuietForIsland()) {
+            m_stackHidden = m_stackWaiting = true;
+            SetTimer(m_hwnd, kBannerRestoreTimerId,
+                     (UINT)(BannerRestoreSeconds() * 1000), nullptr);
+        }
+        // With the island's own notifications, Windows shows only calls,
+        // alarms and reminders: hidden at once while it's read (see
+        // OnWindowsBannersRead), back if it isn't the island's.
+        m_stackChangedAt = now;
+        if (CanTakeOverAhead()) {
+            m_stackHidden = m_stackWaiting = true;
+            SetTimer(m_hwnd, kBannerRestoreTimerId, kBannerRestoreMs, nullptr);
+            ReadWindowsBanners(0);
         }
     }
-    const bool taken = m_shownBannerTaken;
-    const double waited = now - m_bannerShownAt;
-    const bool ahead = !taken && m_shownBannerWaiting &&
-                       waited < BannerRestoreSeconds() && CanTakeBanners();
-    if ((!taken && !ahead) || rect.top >= below) {
-        return;
+    // Another notification joined the stack (or one left): read again.
+    if (!appeared && m_stackShowing &&
+        rect.bottom - rect.top != m_stackHeight) {
+        m_stackHeight = rect.bottom - rect.top;
+        m_stackChangedAt = now;
+        if (WantsTakeover() || m_stackTakeover || m_stackWaiting) {
+            m_bannerReadRetries = 0;
+            ReadWindowsBanners(150);
+        }
     }
-    if (ahead) {
-        SetTimer(m_hwnd, kBannerRestoreTimerId,
-                 (UINT)std::max(1.0, (BannerRestoreSeconds() - waited) * 1000),
-                 nullptr);
+    // Where Windows has it, while it's on the screen.
+    if (!m_stackHidden && !appeared && rect.top < below) {
+        m_bannerHomeBottom = rect.bottom;
     }
-    SetWindowPos(banner, nullptr, rect.left, below, 0, 0,
-                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    // Windows may move it back as it shows: off again.
+    if (m_stackHidden && rect.top < below) {
+        SetWindowPos(banner, nullptr, rect.left, below, 0, 0,
+                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
 }
 
-// The Windows banner comes back where it was: the island didn't take its
-// notification in time, or can't now (in full screen, minimized without
-// banners). Not hidden again until another banner appears. One whose
-// notification the island has stays hidden.
-void Island::RestoreWindowsBanner() {
+void Island::OnWindowsBannersGone() {
     KillTimer(m_hwnd, kBannerRestoreTimerId);
-    if (m_shownBannerTaken) {
+    if (m_stackTakeover && m_bannerWanted && m_banner.urgent) {
+        m_banner.reply.actions = m_bannerOwnActions;
+        Render(true);
+    }
+    m_stackTakeover = false;
+    m_stackShowing = false;
+    m_stackHidden = m_stackWaiting = m_stackMustShow = false;
+}
+
+bool Island::CanTakeOverAhead() const {
+    return WindowsQuietForIsland() && g_bannerEnabled && m_visible && !m_bar &&
+           !m_minimized && !AnyPanelOpen();
+}
+
+// A stack hidden while waiting for the island (to read its notification, or
+// to read the stack) wasn't confirmed in time: it comes back.
+void Island::OnBannerRestoreTimer() {
+    KillTimer(m_hwnd, kBannerRestoreTimerId);
+    if (m_stackTakeover) {
+        EndTakeover();
+    } else {
+        RestoreWindowsBanner();
+    }
+}
+
+// The call, alarm or reminder on the pill, with the island's own
+// notifications, while the island is shown with its pill.
+bool Island::WantsTakeover() const {
+    return WindowsQuietForIsland() && m_bannerWanted && m_banner.urgent &&
+           !m_banner.appId.empty() && m_visible && !m_bar && !m_minimized &&
+           !AnyPanelOpen();
+}
+
+void Island::StartWindowsBannerThread(DWORD delayMs,
+                                      int press,
+                                      const WindowsBannerRead& fallback) {
+    if (!g_windowsBanner || !m_bannerReadStop) {
         return;
     }
-    m_shownBannerWaiting = false;
+    std::erase_if(m_bannerReadThreads, [](HANDLE thread) {
+        if (WaitForSingleObject(thread, 0) == WAIT_OBJECT_0) {
+            CloseHandle(thread);
+            return true;
+        }
+        return false;
+    });
+    auto* request = new WindowsBannerRequest{
+        g_windowsBanner, m_bannerReadStop, delayMs, m_banner.title, press,
+        fallback};
+    HANDLE thread = CreateThread(nullptr, 0, WindowsBannerThreadProc, request,
+                                 0, nullptr);
+    if (!thread) {
+        delete request;
+        return;
+    }
+    m_bannerReadThreads.push_back(thread);
+    m_bannerReadsBusy++;
+}
+
+// Reads Windows' stack of banners (one read at a time; another one after it
+// if asked meanwhile).
+void Island::ReadWindowsBanners(DWORD delayMs) {
+    if (!WantsTakeover() && !m_stackTakeover &&
+        !(m_stackWaiting && WindowsQuietForIsland())) {
+        return;
+    }
+    if (m_bannerReadsBusy > 0) {
+        m_bannerReadAgain = true;
+        return;
+    }
+    StartWindowsBannerThread(delayMs, kReadOnly, {});
+}
+
+// Presses a button of Windows' banner for the call, alarm or reminder on
+// the pill (-1: its "x"); if that fails, the island's own button with the
+// same name is pressed instead (the app's own).
+void Island::PressWindowsBanner(int button, const std::wstring& label) {
+    WindowsBannerRead fallback;
+    for (const auto& action : m_bannerOwnActions) {
+        if (!label.empty() && action.label == label &&
+            action.activationType != L"system") {
+            fallback.fallbackAppId = m_banner.appId;
+            fallback.fallbackArguments = action.arguments;
+            fallback.fallbackActivationType = action.activationType;
+            break;
+        }
+    }
+    m_takeoverPressed = true;
+    StartWindowsBannerThread(0, button, fallback);
+}
+
+// The takeover ends: the island's own buttons, and Windows' banner back on
+// the screen.
+void Island::EndTakeover() {
+    if (!m_stackTakeover) {
+        return;
+    }
+    m_stackTakeover = false;
+    if (m_bannerWanted && m_banner.urgent) {
+        m_banner.reply.actions = m_bannerOwnActions;
+        Render(true);
+    }
+    if (m_stackShowing) {
+        KeepWindowsBannersShown();
+    }
+}
+
+void Island::OnWindowsBannersRead() {
+    std::vector<WindowsBannerRead> reads;
+    AcquireSRWLockExclusive(&g_windowsBannerReadsLock);
+    reads.swap(g_windowsBannerReads);
+    ReleaseSRWLockExclusive(&g_windowsBannerReadsLock);
+    for (const auto& read : reads) {
+        m_bannerReadsBusy = std::max(0, m_bannerReadsBusy - 1);
+        // Pressing Windows' button failed (it's gone): the app's own.
+        if (read.pressRequested && !read.pressed &&
+            !read.fallbackAppId.empty()) {
+            ActivateToast(read.fallbackAppId, read.fallbackArguments,
+                          read.fallbackActivationType);
+        }
+    }
+    if (reads.empty()) {
+        return;
+    }
+    const auto& views = reads.back().views;
+    // Every notification in Windows' stack is the island's: the one on the
+    // pill, or one waiting for it (it shows next). Hidden, with the pill's
+    // one's buttons on the pill (Windows' own names, "Snooze" too).
+    const std::wstring title = BannerText(m_banner.title);
+    auto islands = [&](const std::wstring& viewTitle) {
+        return viewTitle == title ||
+               std::any_of(m_waitingToasts.begin(), m_waitingToasts.end(),
+                           [&](const IslandToast& toast) {
+                               return toast.urgent &&
+                                      BannerText(toast.title) == viewTitle;
+                           });
+    };
+    const auto pillView =
+        std::find_if(views.begin(), views.end(),
+                     [&](const WindowsBannerView& view) {
+                         return view.priority && view.title == title;
+                     });
+    const bool ours =
+        m_stackShowing && WantsTakeover() && pillView != views.end() &&
+        std::all_of(views.begin(), views.end(),
+                    [&](const WindowsBannerView& view) {
+                        return view.priority && !view.title.empty() &&
+                               islands(view.title);
+                    });
+    // Calls, alarms and reminders only, one of them not read by the island
+    // yet, the stack having just changed: it waits for it, hidden.
+    const bool waitForIsland =
+        !ours && m_stackShowing && CanTakeOverAhead() && !views.empty() &&
+        std::all_of(views.begin(), views.end(),
+                    [](const WindowsBannerView& view) {
+                        return view.priority;
+                    }) &&
+        NowSeconds() - m_stackChangedAt < kBannerRestoreMs / 1000.0;
+    if (ours) {
+        KillTimer(m_hwnd, kBannerRestoreTimerId);
+        m_stackWaiting = false;
+        if (!m_stackTakeover) {
+            m_stackTakeover = true;
+            m_bannerOwnActions = m_banner.reply.actions;
+        }
+        std::vector<ToastReply::Action> actions;
+        for (size_t i = 0; i < pillView->buttons.size() && i < 3; i++) {
+            if (!pillView->buttons[i].empty()) {
+                actions.push_back(
+                    {pillView->buttons[i], std::to_wstring(i), L"windows"});
+            }
+        }
+        m_banner.reply.actions = actions.empty() ? m_bannerOwnActions : actions;
+        m_takeoverDismiss = pillView->dismiss;
+        m_stackHidden = true;
+        if (g_windowsBanner) {
+            OnWindowsBanner(g_windowsBanner, false);
+        }
+        StartAnimating();
+        Render(true);
+    } else if (waitForIsland) {
+        if (!m_stackHidden) {
+            m_stackHidden = true;
+            if (g_windowsBanner) {
+                OnWindowsBanner(g_windowsBanner, false);
+            }
+        }
+        m_stackWaiting = true;
+        SetTimer(m_hwnd, kBannerRestoreTimerId,
+                 (UINT)std::max(
+                     1.0, (kBannerRestoreMs / 1000.0 -
+                           (NowSeconds() - m_stackChangedAt)) * 1000),
+                 nullptr);
+    } else if (m_stackTakeover) {
+        EndTakeover();
+    } else if (m_stackWaiting && WindowsQuietForIsland() && !views.empty()) {
+        // Not the island's (a priority app's notification, say): back now.
+        RestoreWindowsBanner();
+    } else if (m_stackShowing && (WantsTakeover() || m_stackWaiting) &&
+               views.empty() && m_bannerReadRetries < 3) {
+        // Not drawn yet: a moment later.
+        m_bannerReadRetries++;
+        m_bannerReadAgain = false;
+        if (m_bannerReadsBusy == 0) {
+            StartWindowsBannerThread(400, kReadOnly, {});
+        }
+        return;
+    }
+    if (m_bannerReadAgain && m_bannerReadsBusy == 0) {
+        m_bannerReadAgain = false;
+        ReadWindowsBanners(0);
+    }
+}
+
+// The Windows banners come back where they were: the island didn't read
+// the notification in time, or the stack has one the island doesn't show
+// (see KeepWindowsBannersShown).
+void Island::RestoreWindowsBanner() {
+    KillTimer(m_hwnd, kBannerRestoreTimerId);
+    m_stackHidden = false;
+    m_stackWaiting = false;
     RECT rect;
     const int below = GetSystemMetrics(SM_YVIRTUALSCREEN) +
                       GetSystemMetrics(SM_CYVIRTUALSCREEN) + 200;
     if (g_windowsBanner && IsWindow(g_windowsBanner) &&
-        GetWindowRect(g_windowsBanner, &rect) && rect.top >= below) {
-        SetWindowPos(g_windowsBanner, nullptr, rect.left, m_bannerHomeTop, 0,
-                     0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        GetWindowRect(g_windowsBanner, &rect) && rect.top >= below &&
+        m_bannerHomeBottom) {
+        SetWindowPos(g_windowsBanner, nullptr, rect.left,
+                     m_bannerHomeBottom - (rect.bottom - rect.top), 0, 0,
+                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
 }
 
@@ -23210,7 +33213,9 @@ void Island::OnMouseButton(UINT msg, LPARAM lParam) {
     const bool pressable = item == IslandItem::MediaPrevious ||
                            item == IslandItem::MediaPlayPause ||
                            item == IslandItem::MediaNext ||
-                           item == IslandItem::Media;
+                           item == IslandItem::Media ||
+                           item == IslandItem::ThemeSwitch ||
+                           item == IslandItem::Microphone;
     if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) {
         if (pressable) {
             m_press.Press((int)item);
@@ -23244,7 +33249,20 @@ IslandItem Island::HitTest(POINT pt, std::wstring* appId) const {
         if (PointInRect(pt, BannerCloseRect())) {
             return IslandItem::BannerClose;
         }
-        if (m_bannerOpen > 0.5 && m_banner.reply.CanReply()) {
+        if (PointInRect(pt, BannerMinimizeRect())) {
+            return IslandItem::BannerMinimize;
+        }
+        if (m_bannerOpen > 0.5 && BannerHasActions()) {
+            for (size_t i = 0; i < m_banner.reply.actions.size(); i++) {
+                if (PointInRect(pt, BannerActionRect(i))) {
+                    if (appId) {
+                        *appId = std::to_wstring(i);
+                    }
+                    return IslandItem::BannerAction;
+                }
+            }
+        }
+        if (m_bannerOpen > 0.5 && BannerCanReply()) {
             D2D1_RECT_F field, send, open;
             BannerParts(&field, &send, &open);
             if (PointInRect(pt, field)) {
@@ -23338,10 +33356,17 @@ void Island::TogglePanel(Panel& panel, IslandItem item) {
                            : AtBottom() ? Panel::Direction::Up
                                         : Panel::Direction::Down);
         CapturePill(panel);
+        // Or under the pill (over it, growing up), when the pill is wider
+        // than the panel.
+        const float gap = kPanelGap * m_scale;
+        const POINT below{
+            m_position.x + (LONG)((m_pill.left + m_pill.right) / 2),
+            m_position.y +
+                (LONG)(AtBottom() ? m_pill.top - gap : m_pill.bottom + gap)};
         panel.Open(anchor, m_dpiScale,
                    {m_position.x + m_pill.left, m_position.y + m_pill.top,
                     m_position.x + m_pill.right, m_position.y + m_pill.bottom},
-                   true);
+                   true, m_vertical ? nullptr : &below);
     } else {
         // Out of the item; out of the clock if the item isn't shown.
         const IslandSlot* from = nullptr;
@@ -23400,6 +33425,10 @@ void Island::OnClick(IslandItem item, const std::wstring& appId) {
             if (!m_banner.appId.empty()) {
                 const std::wstring bannerApp = m_banner.appId;
                 const ToastReply reply = m_banner.reply;
+                // Windows' banner for it goes too.
+                if (m_stackTakeover && m_takeoverDismiss) {
+                    PressWindowsBanner(-1, L"");
+                }
                 EndBannerTyping();
                 HideBanner();
                 if (OpenNotification(bannerApp, reply)) {
@@ -23418,9 +33447,33 @@ void Island::OnClick(IslandItem item, const std::wstring& appId) {
                 TogglePanel(m_calendar, IslandItem::Clock);
             }
             break;
-        case IslandItem::BannerClose:
-            // Its app is ignored for a moment (it stays in the list).
-            if (!m_banner.appId.empty() && !IsSnoozed(m_banner.appId)) {
+        case IslandItem::BannerClose: {
+            // Deleted: gone from the pill and the list (and its app from the
+            // island, if nothing else of it is left). Windows' banner for a
+            // call, an alarm or a reminder goes to the notification center.
+            if (m_stackTakeover && m_takeoverDismiss) {
+                PressWindowsBanner(-1, L"");
+            }
+            const long long id = m_banner.id;
+            const std::wstring bannerApp = m_banner.appId;
+            EndBannerTyping();
+            HideBanner();
+            m_notifications.DismissById(id);
+            if (!bannerApp.empty()) {
+                MarkAppRead(bannerApp);
+            }
+            break;
+        }
+        case IslandItem::BannerMinimize:
+            // Minimized: it stays in the list, and its app is ignored for a
+            // moment (only its icon on the island moves); a call's, an
+            // alarm's or a reminder's Windows banner goes to the
+            // notification center (it stops ringing), not ignored.
+            if (m_stackTakeover && m_takeoverDismiss) {
+                PressWindowsBanner(-1, L"");
+            }
+            if (!m_banner.appId.empty() && !m_banner.urgent &&
+                !IsSnoozed(m_banner.appId)) {
                 m_snoozedApps.push_back(
                     {m_banner.appId, NowSeconds() + kBannerSnoozeSeconds});
                 std::erase_if(m_waitingToasts, [this](const IslandToast& t) {
@@ -23431,6 +33484,33 @@ void Island::OnClick(IslandItem item, const std::wstring& appId) {
             EndBannerTyping();
             HideBanner();
             break;
+        case IslandItem::BannerAction: {
+            // A call's, an alarm's or a reminder's button: pressed like
+            // Windows does ("Dismiss" just closes it).
+            const size_t index = (size_t)_wtoi(appId.c_str());
+            if (index < m_banner.reply.actions.size()) {
+                const ToastReply::Action action =
+                    m_banner.reply.actions[index];
+                const std::wstring bannerApp = m_banner.appId;
+                // Windows' own button (taken over), or the island's.
+                if (action.activationType == L"windows") {
+                    PressWindowsBanner(_wtoi(action.arguments.c_str()),
+                                       action.label);
+                }
+                const IslandToast snoozed = m_banner;
+                HideBanner();
+                if (action.activationType == L"system" &&
+                    action.arguments == L"snooze") {
+                    SnoozeToast(snoozed);
+                } else if (action.activationType != L"system" &&
+                           action.activationType != L"windows") {
+                    ActivateToast(bannerApp, action.arguments,
+                                  action.activationType);
+                }
+                MarkAppRead(bannerApp);
+            }
+            break;
+        }
         case IslandItem::BannerReply: {
             // In the box: typing; on the send button: sending.
             D2D1_RECT_F field, send, open;
@@ -23468,9 +33548,14 @@ void Island::OnClick(IslandItem item, const std::wstring& appId) {
         case IslandItem::Network:
         case IslandItem::Volume:
         case IslandItem::Battery:
-            // The volume opens only the sound; the others, all of it (open
-            // already the other way: it switches).
-            if (!m_control.SetSoundOnly(item == IslandItem::Volume) ||
+            // The volume opens only the sound, the battery only itself and
+            // the power mode; the network, all of it (open already the other
+            // way: it switches).
+            if (!m_control.SetOnly(item == IslandItem::Volume
+                                       ? ControlPanel::Only::Sound
+                                   : item == IslandItem::Battery
+                                       ? ControlPanel::Only::Battery
+                                       : ControlPanel::Only::All) ||
                 !m_control.IsOpen()) {
                 TogglePanel(m_control, item);
             }
@@ -23504,6 +33589,47 @@ void Island::OnClick(IslandItem item, const std::wstring& appId) {
         case IslandItem::Power:
             TogglePanel(m_power, item);
             break;
+        case IslandItem::Microphone:
+            ToggleMicrophone();
+            m_control.Refresh();
+            break;
+        case IslandItem::Notes:
+        case IslandItem::Tasks:
+        case IslandItem::Shortcuts:
+            OpenListPanel(item);
+            break;
+        case IslandItem::Weather:
+            OpenWeather();
+            break;
+        case IslandItem::Updates:
+            OpenUpdates();
+            break;
+        case IslandItem::ThemeSwitch:
+            m_darkMode = !m_darkMode;
+            m_control.SwitchDarkMode(m_darkMode);
+            StartAnimating();
+            break;
+        case IslandItem::UsageCpu:
+        case IslandItem::UsageRam:
+        case IslandItem::UsageVram: {
+            const auto kind = item == IslandItem::UsageCpu
+                                  ? UsagePanel::Kind::Cpu
+                              : item == IslandItem::UsageRam
+                                  ? UsagePanel::Kind::Ram
+                                  : UsagePanel::Kind::Gpu;
+            // Open on another one: it shows that one.
+            if (m_usagePanel.IsOpen() && m_usagePanel.GetKind() != kind) {
+                m_usagePanel.SetKind(kind);
+            } else {
+                m_usagePanel.SetKind(kind);
+                TogglePanel(m_usagePanel, item);
+            }
+            UpdateUsageWatch();
+            if (m_usageWake && m_usagePanel.IsOpen()) {
+                SetEvent(m_usageWake);
+            }
+            break;
+        }
         case IslandItem::TraySeparator:
         case IslandItem::None:
             break;
@@ -23520,6 +33646,25 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
         return 0;
     }
     switch (msg) {
+        case WM_APP_USAGE:
+            OnUsage();
+            return 0;
+        case WM_APP_WEATHER:
+            OnWeather((int)wParam);
+            return 0;
+        case WM_APP_UPDATES:
+            OnUpdates();
+            return 0;
+        case WM_SETTINGCHANGE:
+            // Light or dark mode switched (here or elsewhere): the button
+            // turns to it.
+            if (lParam &&
+                wcscmp((PCWSTR)lParam, L"ImmersiveColorSet") == 0 &&
+                IsDarkMode() != m_darkMode) {
+                m_darkMode = !m_darkMode;
+                StartAnimating();
+            }
+            break;
         case WM_TIMER:
             if (wParam == kIslandTimerId) {
                 Tick();
@@ -23528,6 +33673,33 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             }
             if (wParam == kTrayAppTimerId) {
                 StopWatchingTrayAppWindows();
+                return 0;
+            }
+            if (wParam == kWeatherTimerId) {
+                StartWeather({});
+                return 0;
+            }
+            if (wParam == kWeatherRetryTimerId) {
+                KillTimer(m_hwnd, kWeatherRetryTimerId);
+                if (WeatherWanted()) {
+                    StartWeather({});
+                }
+                return 0;
+            }
+            if (wParam == kNetworkTimerId) {
+                OnNetworkChanged();
+                return 0;
+            }
+            if (wParam == kNetworkFrameTimerId) {
+                if (m_visible) {
+                    Render();
+                }
+                return 0;
+            }
+            if (wParam == kUpdatesTimerId) {
+                SetTimer(m_hwnd, kUpdatesTimerId,
+                         (UINT)(kUpdatesCheckSeconds * 1000), nullptr);
+                StartUpdatesJob({});
                 return 0;
             }
             if (wParam == kMediaTimerId) {
@@ -23540,9 +33712,20 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
                 ShowBanner();
                 return 0;
             }
+            if (wParam == kUrgentSoundTimerId) {
+                PlayUrgentSound();
+                return 0;
+            }
+            if (wParam == kUrgentSoundStopTimerId) {
+                KillTimer(m_hwnd, kUrgentSoundStopTimerId);
+                if (m_urgentRinging) {
+                    m_urgentRinging = false;
+                    StopToastSound();
+                }
+                return 0;
+            }
             if (wParam == kBannerRestoreTimerId) {
-                KillTimer(m_hwnd, kBannerRestoreTimerId);
-                RestoreWindowsBanner();
+                OnBannerRestoreTimer();
                 return 0;
             }
             if (wParam == kPinTimerId) {
@@ -23614,10 +33797,16 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
 
         case WM_APP_STATUS:
             switch (wParam) {
+                case kStatusMicrophoneDevice:
+                    WatchMicrophone();
+                    OnVolumeChanged();
+                    m_control.Refresh();
+                    break;
                 case kStatusAudioDevice:
                     WatchVolume();
                     [[fallthrough]];
                 case kStatusVolume:
+                    // (The microphone's mute too.)
                     OnVolumeChanged();
                     m_control.Refresh();
                     break;
@@ -23647,6 +33836,14 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
 
         case WM_APP_TOAST:
             ShowBanner();
+            return 0;
+
+        case WM_APP_TOASTS_CHANGED:
+            OnToastsChanged();
+            return 0;
+
+        case WM_APP_BANNER_READ:
+            OnWindowsBannersRead();
             return 0;
 
         case WM_APP_MEDIA:
@@ -24147,6 +34344,20 @@ void LoadSettings() {
         Wh_GetIntValue(L"islandVerticalSides", 1) != 0;
     g_settings.islandClockCenter = Wh_GetIntValue(L"islandClockCenter", 0) != 0;
     g_settings.islandPower = Wh_GetIntValue(L"islandPower", 0) != 0;
+    g_settings.islandPanelsFollow =
+        Wh_GetIntValue(L"islandPanelsFollow", 0) != 0;
+    g_settings.islandThemeButton =
+        Wh_GetIntValue(L"islandThemeButton", 0) != 0;
+    g_settings.usageCpu = Wh_GetIntValue(L"usageCpu", 0) != 0;
+    g_settings.usageRam = Wh_GetIntValue(L"usageRam", 0) != 0;
+    g_settings.usageVram = Wh_GetIntValue(L"usageVram", 0) != 0;
+    g_settings.islandMicrophone = Wh_GetIntValue(L"islandMicrophone", 0) != 0;
+    g_settings.calendarHolidays = Wh_GetIntValue(L"calendarHolidays", 0) != 0;
+    g_settings.islandNotes = Wh_GetIntValue(L"islandNotes", 0) != 0;
+    g_settings.islandTasks = Wh_GetIntValue(L"islandTasks", 0) != 0;
+    g_settings.islandShortcuts = Wh_GetIntValue(L"islandShortcuts", 0) != 0;
+    g_settings.islandWeather = Wh_GetIntValue(L"islandWeather", 0) != 0;
+    g_settings.islandUpdates = Wh_GetIntValue(L"islandUpdates", 0) != 0;
     g_settings.islandOwnsNotifications =
         Wh_GetIntValue(L"islandOwnsNotifications", 0) != 0;
     g_islandQuiet = Wh_GetIntValue(L"islandQuiet", 0) != 0;
@@ -24154,6 +34365,9 @@ void LoadSettings() {
     g_settings.islandSize = std::clamp(
         Wh_GetIntValue(L"islandSize", kIslandSizeDefault), kIslandSizeMin,
         kIslandSizeMax);
+    g_settings.islandGap =
+        std::clamp(Wh_GetIntValue(L"islandGap", kIslandGapDefault),
+                   kIslandGapMin, kIslandGapMax);
     g_settings.magnification =
         std::clamp(Wh_GetIntSetting(L"icons.magnification"), 100, 200) / 100.0;
     g_settings.magnificationRange =
@@ -24162,7 +34376,6 @@ void LoadSettings() {
     g_settings.keepOpenOnLaunch = Wh_GetIntSetting(L"icons.keepOpenOnLaunch") != 0;
     g_settings.keepOpenDuration =
         std::clamp(Wh_GetIntSetting(L"icons.keepOpenDuration"), 0, 5000);
-    g_settings.bounceOnAttention = Wh_GetIntSetting(L"icons.bounceOnAttention") != 0;
     g_settings.dotIndicator = Wh_GetIntSetting(L"dock.dotIndicator") != 0;
     // Options that only work with another one: as if off without it.
     if (!g_settings.autoHide) {
