@@ -6,6 +6,7 @@
 // @author          pajs
 // @github          https://github.com/pajs
 // @include         explorer.exe
+// @architecture    x86-64
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
