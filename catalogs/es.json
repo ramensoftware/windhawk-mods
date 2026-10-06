@@ -12106,6 +12106,35 @@
         "version": "0.12.4"
       }
     },
+    "start-everything": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791306259000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791306259000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "bardelyne",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lshlwapi -lcomctl32 -ldwmapi -luser32 -liphlpapi -lgdi32",
+        "description": "Search files, apps and settings from the Start menu with voidtools Everything, in place of Windows Search.",
+        "github": "https://github.com/bardelyne",
+        "include": [
+          "StartMenuExperienceHost.exe",
+          "SearchHost.exe",
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Everything & Power Tools in the Start Menu",
+        "version": "1.0"
+      }
+    },
     "start-menu-all-apps": {
       "details": {
         "defaultSorting": 53397,
