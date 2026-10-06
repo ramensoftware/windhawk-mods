@@ -174,11 +174,11 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// Menu presentation: the Windows 10 style menu, copied from the original
+// Menu presentation: the Windows 10 style menu
 //
 // Windows 10 draws its Win+X menu with its own owner-draw code, not with the plain
-// popup of TrackPopupMenuEx. This is the same code the mod this one comes from uses
-// ("ImmersiveMenu", ~430 lines): it takes the ordinary popup menu built below, reads
+// popup of TrackPopupMenuEx. The renderer below ("ImmersiveMenu", ~430 lines) takes
+// the ordinary popup menu built further down, reads
 // its items back through GetMenuItemInfoW and draws them with the Windows 10
 // proportions, colours and font - 32 px rows, the Windows 10 light (F9F9F9) or dark
 // (2B2B2B) scheme, the shell theme when the shell offers it. Entries and commands are
@@ -252,12 +252,11 @@ struct Session {
     COLORREF fill = RGB(249, 249, 249);
     COLORREF textNormal = RGB(0, 0, 0);
     COLORREF textDisabled = RGB(160, 160, 160);
-    COLORREF border = RGB(205, 205, 205);
     COLORREF separator = RGB(205, 205, 205);
     COLORREF hotFill = RGB(229, 229, 229);
     int itemHeight = 0;
-    // Proportions measured on the Windows 10 reference screenshot (uploads/image-2.png,
-    // 100% DPI) and used as they are, so the recreation has the proportions of the
+    // Proportions measured on the Windows 10 reference screenshot at 100% DPI and
+    // used as they are, so the recreation has the proportions of the
     // original: 32 px rows, text 32 px inside the item rectangle, the submenu chevron
     // 6 px from its right edge, the separator line inset by 8 px, and a menu about
     // 258 px wide - the width of the reference menu, from which the shell subtracts
@@ -266,7 +265,6 @@ struct Session {
     int padRight = 0;
     int chevronInset = 0;
     int separatorInset = 0;
-    int row = 0;                 // position inside the menu, for the log only
     std::vector<ItemData*> items;
 };
 static Session* g_session = nullptr;
@@ -335,7 +333,7 @@ static void Prepare(Session& s, HMENU menu) noexcept {
         MENUITEMINFOW set = {};
         set.cbSize = sizeof(set);
         set.fMask = MIIM_FTYPE | MIIM_DATA;
-        set.fType = info.fType | MFT_OWNERDRAW;        // the inverse of ApplyClassicMenu
+        set.fType = info.fType | MFT_OWNERDRAW;
         set.dwItemData = reinterpret_cast<ULONG_PTR>(data);
         SetMenuItemInfoW(menu, i, TRUE, &set);
         if (info.hSubMenu) Prepare(s, info.hSubMenu);
@@ -347,10 +345,15 @@ static void Prepare(Session& s, HMENU menu) noexcept {
     SetMenuInfo(menu, &mi);
 }
 
-static bool Begin(Session& s, HMENU menu, HWND owner) noexcept {
+static bool Begin(Session& s, HMENU menu, HWND owner, UINT dpiHint) noexcept {
     if (!owner || !LoadApi()) return false;
     s.owner = owner;
-    const UINT dpi = GetDpiForWindow(owner);
+    // The menu is measured with the scale of the monitor it opens on. The owner
+    // window is parked off-screen (see GetWinXMenuOwnerWindow), so its own DPI is
+    // that of the primary monitor, which is the wrong one for a secondary taskbar
+    // at a different scale: the caller passes the DPI of that monitor instead, and
+    // zero means that nothing better is known.
+    const UINT dpi = dpiHint ? dpiHint : GetDpiForWindow(owner);
     s.dpi = dpi >= 96 && dpi <= 480 ? (int)dpi : 96;
     // Windows 10 constants for the selected scheme: they stay in place if the
     // theme cannot be opened or does not carry a colour, so both themes are
@@ -359,7 +362,6 @@ static bool Begin(Session& s, HMENU menu, HWND owner) noexcept {
     s.fill = s.light ? RGB(249, 249, 249) : RGB(43, 43, 43);
     s.textNormal = s.light ? RGB(0, 0, 0) : RGB(255, 255, 255);
     s.textDisabled = s.light ? RGB(120, 120, 120) : RGB(160, 160, 160);
-    s.border = s.light ? RGB(205, 205, 205) : RGB(128, 128, 128);
     s.separator = s.light ? RGB(205, 205, 205) : RGB(128, 128, 128);
     s.hotFill = s.light ? RGB(229, 229, 229) : RGB(65, 65, 65);
     s.theme = OpenMenuTheme(owner, s.dpi);
@@ -575,9 +577,14 @@ static void Draw(Session* s, DRAWITEMSTRUCT* di, const ItemData* d) noexcept {
 // would be worse than doing nothing (in the power submenu "Sign out", "Sleep" and
 // "Shut down" all start with the same letter in several languages). Separators and
 // entries that open a submenu are not matched.
-static bool MatchMenuChar(Session* s, HMENU menu, wchar_t ch, UINT& idOut) {
+//
+// posOut is the zero-based position of the entry in the menu: with MNC_EXECUTE the
+// system chooses the item at that position - the low word of the return value is a
+// position, not a command identifier - and TrackPopupMenuEx with TPM_RETURNCMD then
+// returns the identifier of that item to the caller.
+static bool MatchMenuChar(Session* s, HMENU menu, wchar_t ch, UINT& posOut) {
     if (!menu || !ch) return false;
-    UINT id = 0;
+    UINT pos = 0;
     int matches = 0;
     const int count = GetMenuItemCount(menu);
     for (int i = 0; i < count; ++i) {
@@ -593,10 +600,10 @@ static bool MatchMenuChar(Session* s, HMENU menu, wchar_t ch, UINT& idOut) {
         if (!Owns(s, d) || !d->text[0]) continue;
         if (towupper(d->text[0]) != towupper(ch)) continue;
         if (++matches > 1) return false;
-        id = info.wID;
+        pos = static_cast<UINT>(i);
     }
     if (matches != 1) return false;
-    idOut = id;
+    posOut = pos;
     return true;
 }
 
@@ -619,11 +626,11 @@ static LRESULT CALLBACK OwnerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
         }
     } else if (s && msg == WM_MENUCHAR) {
         // LOWORD(wParam) is the character the user pressed, lParam the active menu.
-        // The item identifier is returned, which is what TrackPopupMenuEx with
-        // TPM_RETURNCMD gives back to the caller.
-        UINT id = 0;
-        if (MatchMenuChar(s, reinterpret_cast<HMENU>(lParam), (wchar_t)LOWORD(wParam), id))
-            return MAKELRESULT(id, MNC_EXECUTE);
+        // What the system wants back with MNC_EXECUTE is the position of the entry
+        // in that menu, and with TPM_RETURNCMD Track then returns its identifier.
+        UINT pos = 0;
+        if (MatchMenuChar(s, reinterpret_cast<HMENU>(lParam), (wchar_t)LOWORD(wParam), pos))
+            return MAKELRESULT(pos, MNC_EXECUTE);
         return MAKELRESULT(0, MNC_IGNORE);
     }
     return DefSubclassProc(hwnd, msg, wParam, lParam);
@@ -632,10 +639,10 @@ static LRESULT CALLBACK OwnerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
 // Like TrackPopupMenuEx with TPM_RETURNCMD, but with immersive items. It must be
 // called from the thread that owns "owner"; when no theme can be opened it shows
 // the standard popup.
-static UINT Track(HMENU menu, HWND owner, int x, int y, UINT flags) noexcept {
+static UINT Track(HMENU menu, HWND owner, int x, int y, UINT flags, UINT dpi) noexcept {
     flags = (flags & ~TPM_NONOTIFY) | TPM_RETURNCMD;
     Session session;
-    if (g_session || !Begin(session, menu, owner)) {
+    if (g_session || !Begin(session, menu, owner, dpi)) {
         End(session);
         return static_cast<UINT>(TrackPopupMenuEx(menu, flags, x, y, owner, nullptr));
     }
@@ -742,7 +749,9 @@ static bool g_winXKeyboardHookInstalled = false;
 // "nothing is open" without guessing: while it is set, a second chord - or a
 // right-click on Start - closes the menu instead of stacking another one.
 static std::atomic<bool> g_winXMenuOpen{false};
-static HWND g_winXMenuOwnerWindow = nullptr;   // owner of the open menu (WM_CANCELMODE target)
+// Owner of the open menu, the target of WM_CANCELMODE. It is written by the menu
+// thread and read by the hook thread and by Wh_ModUninit, so it is atomic.
+static std::atomic<HWND> g_winXMenuOwnerWindow{nullptr};
 static bool g_winXSwallowXUp = false;
 static bool g_winXXHeld = false;   // X is physically down: auto-repeat is ignored
 static bool g_winXMouseHookInstalled = false;
@@ -766,19 +775,39 @@ static std::atomic<bool> g_unloading{false};
 // "rundll32.exe powrprof.dll,SetSuspendState 0,1,0". The signature of
 // SetSuspendState is not the one rundll32 expects from an entry point, and that
 // call is known to hibernate instead of sleeping when hibernation is enabled.
-// SE_SHUTDOWN_NAME is enabled first, as the call requires it.
+// SE_SHUTDOWN_NAME is enabled for the call, which requires it, and the state the
+// privilege had before is put back afterwards: Explorer's process token is left as
+// it was found instead of keeping a privilege enabled for the rest of the session.
 static void SuspendSystem() {
+    TOKEN_PRIVILEGES enabled{};
+    enabled.PrivilegeCount = 1;
+    enabled.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+    // Room for the previous state of one privilege, which is all that is changed.
+    alignas(TOKEN_PRIVILEGES) BYTE previousBuffer[sizeof(TOKEN_PRIVILEGES) +
+                                                  sizeof(LUID_AND_ATTRIBUTES)]{};
+    auto* previous = reinterpret_cast<TOKEN_PRIVILEGES*>(previousBuffer);
+    DWORD previousSize = 0;
+
     HANDLE token = nullptr;
-    if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token)) {
-        TOKEN_PRIVILEGES privileges{};
-        privileges.PrivilegeCount = 1;
-        privileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-        if (LookupPrivilegeValueW(nullptr, SE_SHUTDOWN_NAME, &privileges.Privileges[0].Luid))
-            AdjustTokenPrivileges(token, FALSE, &privileges, 0, nullptr, nullptr);
-        CloseHandle(token);
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token))
+        token = nullptr;
+    if (token && LookupPrivilegeValueW(nullptr, SE_SHUTDOWN_NAME,
+                                       &enabled.Privileges[0].Luid)) {
+        AdjustTokenPrivileges(token, FALSE, &enabled, sizeof(previousBuffer), previous,
+                              &previousSize);
+        const DWORD adjustError = GetLastError();
+        if (adjustError == ERROR_NOT_ALL_ASSIGNED)
+            Wh_Log(L"[winx] SeShutdownPrivilege could not be enabled (%lu)", adjustError);
     }
+
     if (!SetSuspendState(FALSE, FALSE, FALSE))
         Wh_Log(L"[winx] SetSuspendState failed (%lu)", GetLastError());
+
+    if (token) {
+        if (previousSize)
+            AdjustTokenPrivileges(token, FALSE, previous, 0, nullptr, nullptr);
+        CloseHandle(token);
+    }
 }
 
 // CLSID of the shell automation object, {13709620-C279-11CE-A49E-444553540000}
@@ -982,12 +1011,12 @@ static bool IsPopupMenuForeground();
 class WinXMenuOpenScope {
 public:
     explicit WinXMenuOpenScope(HWND owner) {
-        g_winXMenuOwnerWindow = owner;
+        g_winXMenuOwnerWindow.store(owner, std::memory_order_release);
         g_winXMenuOpen.store(true, std::memory_order_release);
     }
     ~WinXMenuOpenScope() {
         g_winXMenuOpen.store(false, std::memory_order_release);
-        g_winXMenuOwnerWindow = nullptr;
+        g_winXMenuOwnerWindow.store(nullptr, std::memory_order_release);
     }
     WinXMenuOpenScope(const WinXMenuOpenScope&) = delete;
     WinXMenuOpenScope& operator=(const WinXMenuOpenScope&) = delete;
@@ -1005,7 +1034,7 @@ public:
 // ---------------------------------------------------------------------------
 static bool CloseWinXMenuIfOpen() {
     if (!g_winXMenuOpen.load(std::memory_order_acquire)) return false;
-    const HWND owner = g_winXMenuOwnerWindow;
+    const HWND owner = g_winXMenuOwnerWindow.load(std::memory_order_acquire);
     if (!owner || !IsWindow(owner)) return false;   // stale: let the chord through
     if (!PostMessageW(owner, WM_CANCELMODE, 0, 0)) return false;
     Wh_Log(L"[winx] the menu is open: this request closes it (as the native menu does)");
@@ -1278,7 +1307,7 @@ static void DestroyWinXMenuOwnerWindow() {
     }
 }
 
-// Re-arms the input hooks and refreshes the Start button rectangle. Called by the
+// Re-arms the input hooks. Called by the
 // services thread only: the taskbar can appear after the thread starts and be
 // recreated later, and a hook that failed to install is retried here instead of
 // being given up for the whole session.
@@ -1328,9 +1357,24 @@ static void UpdateWinXInputRoutes() {
 // "shell:AppsFolder\\...", "ms-settings:...".
 static bool IsShellNamespaceCommand(const wchar_t* command) {
     if (!command) return false;
+    // "shell:" covers both shell:... and shell:::{GUID}.
     return _wcsnicmp(command, L"shell:", 6) == 0 ||
-           _wcsnicmp(command, L"ms-settings:", 12) == 0 ||
-           _wcsnicmp(command, L"ms-availablenetworks:", 21) == 0;
+           _wcsnicmp(command, L"ms-settings:", 12) == 0;
+}
+
+// Whether Windows 10 would shut this machine down through Fast Startup: the Fast
+// Startup setting and hibernation itself must both be on, and only then is
+// "shutdown.exe /s /hybrid" a valid command - with either of them off it fails, and
+// ShellExecuteW would only see that shutdown.exe started. The registry is read, never
+// written.
+static bool IsHybridShutdownAvailable() {
+    if (!IsPwrHibernateAllowed()) return false;
+    DWORD value = 0, size = sizeof(value);
+    return RegGetValueW(HKEY_LOCAL_MACHINE,
+                        L"SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Power",
+                        L"HiberbootEnabled", RRF_RT_REG_DWORD, nullptr, &value,
+                        &size) == ERROR_SUCCESS &&
+           value != 0;
 }
 
 // Splits "file parameters" (at the first space) and hands both to ShellExecuteW.
@@ -1356,6 +1400,7 @@ static void RunWinXCommandSplit(const wchar_t* command, const wchar_t* verb,
 //
 // Accepted formats:
 //   "@sleep"      suspend the system (see SuspendSystem);
+//   "@shutdown"   shut down, through Fast Startup when it is available;
 //   "@desktop"    show the desktop (see ToggleDesktop);
 //   "@admin:exe"  program started with elevation (the "runas" verb);
 //   "shell:...", "shell:::{GUID}", "ms-settings:..."   shell namespaces;
@@ -1374,6 +1419,14 @@ static void RunWinXCommand(const wchar_t* command) {
     }
     if (_wcsicmp(command, L"@desktop") == 0) {
         ToggleDesktop();
+        return;
+    }
+    if (_wcsicmp(command, L"@shutdown") == 0) {
+        // The same shutdown the Windows 10 entry performs: a hybrid one when Fast
+        // Startup is available, a full one otherwise (see IsHybridShutdownAvailable).
+        RunWinXCommandSplit(IsHybridShutdownAvailable() ? L"shutdown.exe /s /hybrid /t 0"
+                                                        : L"shutdown.exe /s /t 0",
+                            L"open", L"power entry");
         return;
     }
     // No "@search" branch: the Search entry was removed from the menu (see the
@@ -1426,16 +1479,17 @@ static void RunWinXCommand(const wchar_t* command) {
 // used only when there is no taskbar at all.
 //
 // Order of preference: Start button -> taskbar edge -> monitor corner. The
-// pointer is used only when there is no taskbar at all. winXMenuOffsetX/Y shift
-// the result if another look is wanted (the README documents the 2015 Windows 10
-// reference screenshot, which is X=18, Y=+16: menu bottom edge 16 px below the
-// top edge of the taskbar).
+// pointer is used only when there is no taskbar at all. The WinXMenuOffsetX/Y
+// settings shift the result if another look is wanted (the 2015 Windows 10
+// reference screenshot is X=18, Y=+16: menu bottom edge 16 px below the top
+// edge of the taskbar).
 // ---------------------------------------------------------------------------
 struct WinXMenuAnchor {
     POINT point{};
     UINT flags = TPM_LEFTALIGN | TPM_BOTTOMALIGN;
     const wchar_t* source = L"window corner";
     bool taskbarOnTop = false;
+    UINT dpi = 0;   // scale of the monitor the menu opens on, 0 when it is unknown
 };
 
 static WinXMenuAnchor ComputeWinXMenuAnchor(HWND startButton) {
@@ -1508,6 +1562,14 @@ static WinXMenuAnchor ComputeWinXMenuAnchor(HWND startButton) {
         anchor.source = L"mouse pointer (no taskbar found)";
         return anchor;
     }
+
+    // Scale of the monitor the menu opens on, taken from a window that is on it:
+    // the owner window of the menu is parked off-screen, so its own DPI would be
+    // that of the primary monitor.
+    if (taskbar)
+        anchor.dpi = GetDpiForWindow(taskbar);
+    else if (haveButton)
+        anchor.dpi = GetDpiForWindow(startButton);
 
     // The offsets are a deliberate user choice and are applied after the
     // default anchor has been resolved, never before.
@@ -1619,7 +1681,7 @@ static void ShowCustomWinXMenuHere(HWND startButton) {
     static const wchar_t* const kPowerCmd[4] = {
         L"shutdown.exe /l",
         L"@sleep",
-        L"shutdown.exe /s /hybrid /t 0",
+        L"@shutdown",
         L"shutdown.exe /r /t 0",
     };
     // The language index is used by the shut-down submenu as well.
@@ -1646,8 +1708,8 @@ static void ShowCustomWinXMenuHere(HWND startButton) {
     const WinXMenuAnchor anchor = ComputeWinXMenuAnchor(startButton);
     const POINT pt = anchor.point;
     const UINT alignFlags = anchor.flags;
-    Wh_Log(L"[winx] anchor: %s -> (%ld,%ld)%s", anchor.source, pt.x, pt.y,
-           anchor.taskbarOnTop ? L" [taskbar on top]" : L"");
+    Wh_Log(L"[winx] anchor: %s -> (%ld,%ld)%s, dpi %u", anchor.source, pt.x, pt.y,
+           anchor.taskbarOnTop ? L" [taskbar on top]" : L"", anchor.dpi);
 
     // Owner: a window of this thread. Shell_TrayWnd is never used as the owner: the
     // menu must not run its modal loop on the taskbar thread.
@@ -1667,7 +1729,8 @@ static void ShowCustomWinXMenuHere(HWND startButton) {
 
     const WinXMenuOpenScope menuOpen(owner);
     const UINT selected = ImmersiveMenu::Track(menu.get(), owner, pt.x, pt.y,
-                                               TPM_RIGHTBUTTON | alignFlags);
+                                               TPM_RIGHTBUTTON | alignFlags,
+                                               anchor.dpi);
     PostMessageW(owner, WM_NULL, 0, 0);
 
     if (selected >= 101 && selected <= 104)
@@ -1791,24 +1854,21 @@ static DWORD WINAPI ExplorerServicesThread(LPVOID) {
     MSG queueInit{};
     PeekMessageW(&queueInit, nullptr, 0, 0, PM_NOREMOVE);
 
-    // Arms the hooks as soon as this process owns the taskbar, and keeps the Start
-    // button rectangle up to date from then on.
+    // Arms the hooks as soon as this process owns the taskbar, and keeps them armed
+    // from then on.
     UpdateWinXInputRoutes();
     Wh_Log(L"[winx] input hooks: keyboard %s, Start right-click %s",
            g_winXKeyboardHook.IsInstalled() ? L"ready" : L"unavailable",
            g_winXMouseHook.IsInstalled() ? L"ready" : L"unavailable");
 
-    ULONGLONG nextServiceTick = 0;
+    // UpdateWinXInputRoutes does its work at most every 2.5 s (that is its own
+    // throttle), so that is also how long this thread sleeps when nothing is posted
+    // to it; a shorter timeout would only wake it to do nothing. A request posted by
+    // a hook, and the stop event, wake it immediately whatever the timeout is.
     for (;;) {
-        DWORD waitMs = 400;
-        const ULONGLONG beforeWait = GetTickCount64();
-        if (nextServiceTick > beforeWait) {
-            const ULONGLONG untilTick = nextServiceTick - beforeWait;
-            if (untilTick < waitMs) waitMs = static_cast<DWORD>(untilTick);
-        }
         const DWORD waitResult = MsgWaitForMultipleObjectsEx(
             g_stopEvent ? 1 : 0, g_stopEvent ? &g_stopEvent : nullptr,
-            waitMs, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+            2500, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
         if (g_stopEvent && waitResult == WAIT_OBJECT_0) break;
 
         MSG msg;
@@ -1817,12 +1877,9 @@ static DWORD WINAPI ExplorerServicesThread(LPVOID) {
                 HandleWinXRequest(reinterpret_cast<HWND>(msg.lParam));
         }
 
-        const ULONGLONG now64 = GetTickCount64();
-        if (nextServiceTick && now64 < nextServiceTick) continue;
-        nextServiceTick = now64 + 400;
         // The taskbar can appear after this thread starts (and be recreated later):
-        // the routes are refreshed at every tick, so they are in place as soon as it
-        // is, and a hook that failed to install is retried.
+        // the routes are refreshed at every wake-up, so they are in place as soon as
+        // it is, and a hook that failed to install is retried.
         UpdateWinXInputRoutes();
     }
     Wh_Log(L"[winx] services finished");
@@ -1888,7 +1945,7 @@ void Wh_ModUninit() {
         // it) and the thread is then waited for.
         DWORD waitedMs = 0;
         while (WaitForSingleObject(g_menuThread, 100) == WAIT_TIMEOUT) {
-            if (const HWND owner = g_winXMenuOwnerWindow)
+            if (const HWND owner = g_winXMenuOwnerWindow.load(std::memory_order_acquire))
                 PostMessageW(owner, WM_CANCELMODE, 0, 0);
             waitedMs += 100;
             if (waitedMs % 5000 == 0)
