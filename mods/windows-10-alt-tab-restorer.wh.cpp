@@ -40,10 +40,19 @@ that decision. The mod:
 * answers the gate with "not available" for the Alt+Tab host, so the code paths
   that consult it directly also end up on the Windows 10 host.
 
-Both addresses are resolved with `WindhawkUtils::HookSymbols`, which caches them
-per `twinui.pcshell.dll` version, so the symbol lookup is paid once per build and
-not on every Explorer start. If a build doesn't expose the symbols, the mod falls
-back to the ExplorerPatcher call-site signature of `_CreateMTVHost` on x86-64.
+The two factories and the gate are resolved with `WindhawkUtils::HookSymbols`
+first, which caches the result per `twinui.pcshell.dll` version. Only if a name
+of a build doesn't match, the symbols of the module are searched for it, and on
+x86-64 the ExplorerPatcher call-site signature of `_CreateMTVHost` is the last
+resort for the factories. The redirect to the Windows 10 host is installed only
+together with the gate that selects it - on its own it would leave Alt+Tab
+without a switcher - and if neither the gate nor the host manager could be
+resolved, the mod stays inactive instead of installing half of the mechanism.
+
+If the shell's manager still gives up before it creates one of the two hosts -
+which happens on some builds - the mod creates the Windows 10 host directly, and
+after a few failures in a row it stops routing for the rest of the session so
+that the stock Windows 11 switcher keeps working.
 
 ## Notes
 
@@ -75,6 +84,7 @@ used by [ExplorerPatcher](https://github.com/valinet/ExplorerPatcher) by valinet
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <cwctype>
 #include <string>
 
 // The two host factories of CMultitaskingViewManager. Both take the host kind,
@@ -90,6 +100,15 @@ using CreateHostFn = HRESULT(WINAPI*)(void* self,
 // (the DirectComposition host) is available.
 using IsUndockedAssetAvailableFn =
     int64_t(__cdecl*)(int kind, int64_t arg2, int64_t arg3, const char* arg4);
+
+// The manager function that hands the host back to the shell. It is hooked
+// only for the E_UNEXPECTED safety net below; the argument order is the one
+// ExplorerPatcher forwards from it to the host factories.
+using CreateMtvHostFn = HRESULT(WINAPI*)(void* self,
+                                         unsigned int kind,
+                                         void* viewCollection,
+                                         const GUID* viewId,
+                                         void** output);
 
 using RegGetValueWFn = decltype(&RegGetValueW);
 using RegQueryValueExWFn = decltype(&RegQueryValueExW);
@@ -110,10 +129,21 @@ constexpr int kMaxDcompFailures = 3;
 
 static HMODULE g_twinuiModule = nullptr;
 
-// The DirectComposition factory is called directly, the XAML factory is hooked.
+// The addresses that the symbol lookup returns, before any hook is installed.
+static void* g_createDcompAddress = nullptr;
+static void* g_createXamlAddress = nullptr;
+static void* g_gateAddress = nullptr;
+static void* g_createMtvHostAddress = nullptr;
+
+// The DirectComposition factory is called directly; the other two are hooked.
 static CreateHostFn g_createDcompHost = nullptr;
 static CreateHostFn g_createXamlHostOriginal = nullptr;
 static IsUndockedAssetAvailableFn g_isUndockedAssetAvailableOriginal = nullptr;
+static CreateMtvHostFn g_createMtvHostOriginal = nullptr;
+
+// Counts the calls that reached one of the two host factories, so that the
+// safety net can tell whether the manager gave up before calling either of them.
+static std::atomic<unsigned long long> g_factoryEntries{0};
 
 static std::atomic<bool> g_routingEnabled{false};
 static std::atomic<bool> g_stopping{false};
@@ -166,6 +196,8 @@ static HRESULT WINAPI CreateXamlHostHook(void* self,
                                          ULONG_PTR arg3,
                                          ULONG_PTR arg4,
                                          void** output) {
+    g_factoryEntries.fetch_add(1, std::memory_order_relaxed);
+
     if (kind == kAltTabHostKind && IsRouting() && g_createDcompHost) {
         const HRESULT result = g_createDcompHost(self, kind, arg3, arg4, output);
         if (SUCCEEDED(result) && output && *output) {
@@ -184,6 +216,45 @@ static HRESULT WINAPI CreateXamlHostHook(void* self,
     return g_createXamlHostOriginal
         ? g_createXamlHostOriginal(self, kind, arg3, arg4, output)
         : E_FAIL;
+}
+
+// Safety net for the case that was seen on Windows 11 24H2: the manager gives
+// up with E_UNEXPECTED before it calls either host factory, with a null view
+// collection, so no host is created and Alt+Tab has nothing to show. The native
+// DirectComposition factory is then called directly, with the same argument
+// order that the manager uses for the XAML factory - the redirect above
+// forwards those arguments the same way, which is also what ExplorerPatcher
+// does. The call is made only when the manager really didn't reach a factory
+// and produced no host, and a few failures in a row turn the routing off for
+// the rest of the session instead of retrying forever.
+static HRESULT WINAPI CreateMtvHostHook(void* self,
+                                        unsigned int kind,
+                                        void* viewCollection,
+                                        const GUID* viewId,
+                                        void** output) {
+    const unsigned long long entriesBefore =
+        g_factoryEntries.load(std::memory_order_relaxed);
+    const HRESULT result = g_createMtvHostOriginal
+        ? g_createMtvHostOriginal(self, kind, viewCollection, viewId, output)
+        : E_FAIL;
+
+    if (kind == kAltTabHostKind && result == E_UNEXPECTED && IsRouting() &&
+        g_createDcompHost && viewId && output && !*output &&
+        g_factoryEntries.load(std::memory_order_relaxed) == entriesBefore) {
+        Wh_Log(L"_CreateMTVHost gave up before either host factory; creating the DirectComposition host directly");
+        const HRESULT dcompResult = g_createDcompHost(
+            self, kind, reinterpret_cast<ULONG_PTR>(viewCollection),
+            reinterpret_cast<ULONG_PTR>(viewId), output);
+        if (SUCCEEDED(dcompResult) && output && *output) {
+            g_dcompFailures.store(0, std::memory_order_relaxed);
+            return dcompResult;
+        }
+
+        ReportDcompFailure(static_cast<unsigned int>(dcompResult),
+                           output && *output);
+    }
+
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -442,34 +513,55 @@ static bool InstallRegistryReadHooks() {
 // Symbol resolution
 ////////////////////////////////////////////////////////////////////////////////
 
-// The undecorated names of the three functions that the mod needs, as they
-// appear in the twinui.pcshell.dll PDB. HookSymbols matches the names as they
-// are and caches the result per binary version; alternative spellings are tried
-// in order, and an entry that isn't found is not an error as long as the other
-// route is available.
+// The names of the functions that the mod needs, as they appear in the
+// twinui.pcshell.dll PDB. HookSymbols matches the names as they are and caches
+// the result per binary version, so the potentially slow symbol handling is
+// paid once per build. The undecorated names differ between Windows builds, so
+// several spellings are listed for each function; an entry that isn't found
+// isn't an error, and whatever is not resolved here is looked up by the symbol
+// search below.
 // twinui.pcshell.dll
 const WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
     {
-        {LR"(private: long __cdecl CMultitaskingViewManager::_CreateDCompMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))",
+        {LR"(?_CreateDCompMTVHost@CMultitaskingViewManager@@AEAAJW4MULTITASKING_VIEW_TYPES@@PEAUIApplicationViewCollection@@AEBU_GUID@@PEAPEAX@Z)",
+         LR"(?_CreateDCompMTVHost@CMultitaskingViewManager@@AEAAJIPEAPEAUIApplicationViewCollection@@AEBU_GUID@@PEAPEAX@Z)",
+         LR"(?_CreateDCompMTVHost@CMultitaskingViewManager@@QEAAJW4MULTITASKING_VIEW_TYPES@@PEAUIApplicationViewCollection@@AEBU_GUID@@PEAPEAX@Z)",
+         LR"(private: long __cdecl CMultitaskingViewManager::_CreateDCompMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))",
          LR"(private: long __cdecl CMultitaskingViewManager::_CreateDCompMTVHost(unsigned int,struct IApplicationViewCollection *,struct _GUID const &,void * *))",
          LR"(long __cdecl CMultitaskingViewManager::_CreateDCompMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))"},
-        &g_createDcompHost,
+        &g_createDcompAddress,
         nullptr,
         true,
     },
     {
-        {LR"(private: long __cdecl CMultitaskingViewManager::_CreateXamlMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))",
+        {LR"(?_CreateXamlMTVHost@CMultitaskingViewManager@@AEAAJW4MULTITASKING_VIEW_TYPES@@PEAUIApplicationViewCollection@@AEBU_GUID@@PEAPEAX@Z)",
+         LR"(?_CreateXamlMTVHost@CMultitaskingViewManager@@AEAAJIPEAPEAUIApplicationViewCollection@@AEBU_GUID@@PEAPEAX@Z)",
+         LR"(?_CreateXamlMTVHost@CMultitaskingViewManager@@QEAAJW4MULTITASKING_VIEW_TYPES@@PEAUIApplicationViewCollection@@AEBU_GUID@@PEAPEAX@Z)",
+         LR"(private: long __cdecl CMultitaskingViewManager::_CreateXamlMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))",
          LR"(private: long __cdecl CMultitaskingViewManager::_CreateXamlMTVHost(unsigned int,struct IApplicationViewCollection *,struct _GUID const &,void * *))",
          LR"(long __cdecl CMultitaskingViewManager::_CreateXamlMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))"},
-        &g_createXamlHostOriginal,
-        CreateXamlHostHook,
+        &g_createXamlAddress,
+        nullptr,
         true,
     },
     {
-        {LR"(__int64 __cdecl IsUndockedAssetAvailable(int,__int64,__int64,char const *))",
-         LR"(__int64 __cdecl IsUndockedAssetAvailable(int,unsigned __int64,unsigned __int64,char const *))"},
-        &g_isUndockedAssetAvailableOriginal,
-        IsUndockedAssetAvailableHook,
+        {LR"(?IsUndockedAssetAvailable@@YA_JH_J0PEBD@Z)",
+         LR"(?IsUndockedAssetAvailable@@YA_JH_K0PEBD@Z)",
+         LR"(__int64 __cdecl IsUndockedAssetAvailable(int,__int64,__int64,char const *))",
+         LR"(__int64 __cdecl IsUndockedAssetAvailable(int,unsigned __int64,unsigned __int64,char const *))",
+         LR"(IsUndockedAssetAvailable)"},
+        &g_gateAddress,
+        nullptr,
+        true,
+    },
+    {
+        // Only used by the E_UNEXPECTED safety net. The decorated name is the
+        // one that the shell keeps for this function; the undecorated spelling
+        // is a fallback for builds that expose it.
+        {LR"(?_CreateMTVHost@CMultitaskingViewManager@@AEAAJW4MULTITASKING_VIEW_TYPES@@PEAUIApplicationViewCollection@@AEBU_GUID@@PEAPEAX@Z)",
+         LR"(private: long __cdecl CMultitaskingViewManager::_CreateMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))"},
+        &g_createMtvHostAddress,
+        nullptr,
         true,
     },
 };
@@ -478,6 +570,190 @@ static void ResolveBySymbols() {
     if (!WindhawkUtils::HookSymbols(g_twinuiModule, symbolHooks,
                                     ARRAYSIZE(symbolHooks))) {
         Wh_Log(L"Not every Alt+Tab symbol of twinui.pcshell.dll could be resolved");
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Symbol search fallback
+//
+// A build that doesn't spell the names the way they are listed above needs the
+// symbols of twinui.pcshell.dll to be searched instead. This is more expensive
+// than HookSymbols, which caches its result, so it runs only for the functions
+// that are still missing, and it reports the names that it found so that the
+// list above can be completed for that build.
+////////////////////////////////////////////////////////////////////////////////
+
+// The address of one function, together with the name it was found under. Two
+// different addresses for the same name mean that the match isn't unique, and
+// the function is left unresolved rather than hooked at the wrong address.
+struct SymbolMatch {
+    void* address = nullptr;
+    // The name is copied: the buffer that symbol enumeration returns is only
+    // valid until the next symbol is read.
+    std::wstring name;
+    bool ambiguous = false;
+
+    void Add(void* value, const wchar_t* symbolName) {
+        if (!value) {
+            return;
+        }
+        if (!address) {
+            address = value;
+            name = symbolName;
+        } else if (address != value) {
+            ambiguous = true;
+        }
+    }
+};
+
+// The hooks are installed only once everything was resolved, and the XAML
+// redirect only together with the gate: the redirect on its own leaves the
+// shell with a host that it doesn't expect, which is worse than the stock
+// switcher. The DirectComposition factory isn't hooked; the redirect and the
+// safety net call it directly and look at the result.
+
+static bool InstallGateHook() {
+    if (g_isUndockedAssetAvailableOriginal) {
+        return true;
+    }
+    if (!g_gateAddress ||
+        !WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<IsUndockedAssetAvailableFn>(g_gateAddress),
+            IsUndockedAssetAvailableHook,
+            &g_isUndockedAssetAvailableOriginal)) {
+        Wh_Log(L"The Alt+Tab host gate couldn't be hooked");
+        g_isUndockedAssetAvailableOriginal = nullptr;
+        return false;
+    }
+    return true;
+}
+
+static bool InstallXamlHook() {
+    if (!g_createXamlAddress ||
+        !WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<CreateHostFn>(g_createXamlAddress),
+            CreateXamlHostHook, &g_createXamlHostOriginal)) {
+        Wh_Log(L"The XAML host factory couldn't be hooked");
+        g_createXamlHostOriginal = nullptr;
+        return false;
+    }
+    return true;
+}
+
+static bool InstallMtvHostHook() {
+    if (!g_createMtvHostAddress ||
+        !WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<CreateMtvHostFn>(g_createMtvHostAddress),
+            CreateMtvHostHook, &g_createMtvHostOriginal)) {
+        Wh_Log(L"The host manager couldn't be hooked");
+        g_createMtvHostOriginal = nullptr;
+        return false;
+    }
+    return true;
+}
+
+// The three functions take four parameters, and the parameter list is what
+// makes a match specific: a look-alike symbol with a different arity is skipped
+// instead of making the match ambiguous.
+static bool HasFourParameters(const wchar_t* name) {
+    if (!name) {
+        return false;
+    }
+
+    std::wstring text(name);
+    while (!text.empty() && iswspace(text.back())) {
+        text.pop_back();
+    }
+    if (text.size() >= 5 && text.compare(text.size() - 5, 5, L"const") == 0) {
+        text.resize(text.size() - 5);
+        while (!text.empty() && iswspace(text.back())) {
+            text.pop_back();
+        }
+    }
+    if (text.empty() || text.back() != L')') {
+        return false;
+    }
+
+    int depth = 0;
+    int commas = 0;
+    for (const wchar_t ch : text) {
+        if (ch == L'(' || ch == L'<') {
+            ++depth;
+        } else if (ch == L')' || ch == L'>') {
+            --depth;
+        } else if (ch == L',' && depth == 0) {
+            ++commas;
+        }
+    }
+    return commas == 3;
+}
+
+static void ResolveBySymbolSearch() {
+    static constexpr wchar_t kDcompNeedle[] = L"_CreateDCompMTVHost(";
+    static constexpr wchar_t kXamlNeedle[] = L"_CreateXamlMTVHost(";
+    static constexpr wchar_t kGateNeedle[] = L"IsUndockedAssetAvailable(";
+
+    SymbolMatch dcomp;
+    SymbolMatch xaml;
+    SymbolMatch gate;
+    SymbolMatch mtvHost;
+
+    WH_FIND_SYMBOL found{};
+    HANDLE search = Wh_FindFirstSymbol(g_twinuiModule, nullptr, &found);
+    if (!search) {
+        return;
+    }
+
+    do {
+        // Only undecorated names carry the parameter list, which is what makes
+        // the match specific; the decorated name is looked up separately above.
+        if (!found.address || !found.symbol ||
+            !wcsstr(found.symbol, L"__cdecl") ||
+            !HasFourParameters(found.symbol)) {
+            continue;
+        }
+
+        const wchar_t* name = found.symbol;
+        if (wcsstr(name, kDcompNeedle)) {
+            dcomp.Add(found.address, name);
+        } else if (wcsstr(name, kXamlNeedle)) {
+            xaml.Add(found.address, name);
+        } else if (wcsstr(name, kGateNeedle)) {
+            gate.Add(found.address, name);
+        } else if (wcsstr(name, L"_CreateMTVHost(")) {
+            mtvHost.Add(found.address, name);
+        }
+    } while (Wh_FindNextSymbol(search, &found));
+    Wh_FindCloseSymbol(search);
+
+    // Ambiguous matches are ignored; a caller that hooks the wrong address
+    // would take the whole Alt+Tab path with it.
+    for (SymbolMatch* match : {&dcomp, &xaml, &gate, &mtvHost}) {
+        if (match->ambiguous) {
+            Wh_Log(L"More than one symbol matched \"%s\"; ignoring the match",
+                   match->name.empty() ? L"?" : match->name.c_str());
+            match->address = nullptr;
+        }
+    }
+
+    if (!g_createDcompAddress && dcomp.address) {
+        g_createDcompAddress = dcomp.address;
+    }
+    if (!g_createXamlAddress && xaml.address) {
+        g_createXamlAddress = xaml.address;
+    }
+    if (!g_gateAddress && gate.address) {
+        g_gateAddress = gate.address;
+    }
+    if (!g_createMtvHostAddress && mtvHost.address) {
+        g_createMtvHostAddress = mtvHost.address;
+    }
+
+    if (!dcomp.name.empty() || !xaml.name.empty() || !gate.name.empty()) {
+        Wh_Log(L"Resolved by symbol search: gate=%s, XAML=%s, DirectComposition=%s",
+               gate.name.empty() ? L"-" : gate.name.c_str(),
+               xaml.name.empty() ? L"-" : xaml.name.c_str(),
+               dcomp.name.empty() ? L"-" : dcomp.name.c_str());
     }
 }
 
@@ -698,10 +974,10 @@ static bool FindNonInlinedFactories(const TextSection& section,
 }
 
 static bool ResolveByCallSites() {
-    // The symbol of the XAML factory was already resolved and hooked; the
-    // call-site addresses are only a replacement for the symbol route.
-    if (g_createXamlHostOriginal) {
-        return g_createDcompHost != nullptr;
+    // The factories were already resolved; the call-site addresses are only a
+    // replacement for the symbol routes.
+    if (g_createXamlAddress && g_createDcompAddress) {
+        return true;
     }
 
     TextSection section;
@@ -718,15 +994,8 @@ static bool ResolveByCallSites() {
         return false;
     }
 
-    g_createDcompHost = reinterpret_cast<CreateHostFn>(dcomp);
-    if (!WindhawkUtils::SetFunctionHook(reinterpret_cast<CreateHostFn>(xaml),
-                                        CreateXamlHostHook,
-                                        &g_createXamlHostOriginal)) {
-        Wh_Log(L"The XAML host factory couldn't be hooked");
-        g_createXamlHostOriginal = nullptr;
-        return false;
-    }
-
+    g_createDcompAddress = dcomp;
+    g_createXamlAddress = xaml;
     return true;
 }
 #endif  // defined(_M_X64)
@@ -750,32 +1019,63 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    // The exact names first, which is what the online symbol cache is keyed by;
+    // whatever is left is searched for in the symbols of the module.
     ResolveBySymbols();
-
-    const bool hasGate = g_isUndockedAssetAvailableOriginal != nullptr;
-    bool hasRedirect =
-        g_createDcompHost != nullptr && g_createXamlHostOriginal != nullptr;
+    if (!g_gateAddress || !g_createDcompAddress || !g_createXamlAddress) {
+        ResolveBySymbolSearch();
+    }
 
 #if defined(_M_X64)
-    // Only when the symbols of the build didn't resolve. The call-site addresses
-    // can't provide the gate, so the redirect is the only route then.
-    if (!hasRedirect) {
-        hasRedirect = ResolveByCallSites();
+    // Last resort, and only for the two factories: the call-site addresses
+    // can't provide the gate.
+    if (!g_createDcompAddress || !g_createXamlAddress) {
+        ResolveByCallSites();
     }
 #endif
 
-    if (!hasGate && !hasRedirect) {
-        Wh_Log(L"No Alt+Tab entry point of twinui.pcshell.dll could be resolved; the mod isn't activated");
+    // The gate is what makes the shell pick the Windows 10 host, and the
+    // redirect covers the call sites that go straight to the XAML factory. The
+    // redirect is only useful, and only safe, together with the gate; the
+    // safety net needs the DirectComposition factory. If none of that could be
+    // resolved, the mod stays inactive and says what was missing instead of
+    // leaving Alt+Tab in a state that is worse than the stock switcher.
+    const bool hasGate = g_gateAddress != nullptr;
+    const bool hasPair =
+        g_createDcompAddress != nullptr && g_createXamlAddress != nullptr;
+    const bool hasSafetyNet =
+        g_createMtvHostAddress != nullptr && g_createDcompAddress != nullptr;
+
+    if (!hasGate && !hasSafetyNet) {
+        Wh_Log(L"The Alt+Tab entry points of twinui.pcshell.dll couldn't be resolved (gate: %s, host factories: %s); the mod isn't activated and Alt+Tab is left as it is",
+               hasGate ? L"found" : L"not found",
+               hasPair ? L"found" : L"not found");
         FreeLibrary(g_twinuiModule);
         g_twinuiModule = nullptr;
         return FALSE;
     }
 
-    Wh_Log(L"Routing ready (gate: %s, XAML to DirectComposition redirect: %s)",
-           hasGate ? L"yes" : L"no", hasRedirect ? L"yes" : L"no");
+    if (g_createDcompAddress) {
+        g_createDcompHost = reinterpret_cast<CreateHostFn>(g_createDcompAddress);
+    }
+    if (hasGate) {
+        InstallGateHook();
+    }
+    if (hasGate && hasPair) {
+        InstallXamlHook();
+    }
+    if (hasSafetyNet) {
+        InstallMtvHostHook();
+    }
+
+    Wh_Log(L"Routing ready (gate: %s, XAML to DirectComposition redirect: %s, host manager safety net: %s)",
+           g_isUndockedAssetAvailableOriginal ? L"hooked" : L"not available",
+           g_createXamlHostOriginal ? L"hooked" : L"not available",
+           g_createMtvHostOriginal ? L"armed" : L"not available");
     g_routingEnabled.store(true, std::memory_order_release);
     return TRUE;
 }
+
 
 void Wh_ModBeforeUninit() {
     g_stopping.store(true, std::memory_order_release);
