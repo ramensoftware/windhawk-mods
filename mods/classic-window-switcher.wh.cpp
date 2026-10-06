@@ -31,8 +31,8 @@
 * You can navigate through the items with a mouse, the mouse wheel, or arrow keys.
     * Press Ctrl+Alt+Tab to keep the switcher open after releasing the Alt key.
 * You can close a focused window by pressing the Del key while the switcher is active.
-* It can show a per-application window list when you press Alt+Tilde.
 * It features many configurable options.
+    * It can optionally show a per-application window list when you press Alt+Tilde.
 */
 // ==/WindhawkModReadme==
 
@@ -41,13 +41,13 @@
 - CoolSwitchColumns: 7
   $name: Number of grid columns
   $name:ko-KR: 그리드 열 수
-  $description: Must be greater than 2 and less than 50.
-  $description:ko-KR: 2보다 크고 50보다 작아야 합니다.
+  $description: Must be between 2 and 50.
+  $description:ko-KR: 2와 50 사이어야 합니다.
 - CoolSwitchRows: 3
   $name: Number of grid rows
   $name:ko-KR: 그리드 행 수
-  $description: Must be greater than 2 and less than 25. At least 6 items must be able to show in total, otherwise default values will be used.
-  $description:ko-KR: 2보다 크고 25보다 작아야 합니다. 총 6개 이상의 항목이 표시될 수 있어야 하며, 그렇지 않으면 기본 크기가 사용됩니다.
+  $description: Must be between 2 and 25. At least 7 items must be able to show in total, otherwise a default size will be used.
+  $description:ko-KR: 2와 25 사이어야 합니다. 총 7개 이상의 항목이 표시될 수 있어야 하며, 그렇지 않으면 기본 크기가 사용됩니다.
 - ShowDelay: 100
   $name: Show delay (ms)
   $name:ko-KR: 표시 지연 시간 (ms)
@@ -1623,7 +1623,7 @@ void sws_WindowHelpers_GetDesiredWindowText(sws_WindowSwitcher* _this, sws_Windo
                     }
                 }
 
-                swprintf_s(wszTitle, MAX_PATH, L"%s - %d running windows", wszTitle2, window.dwCount);
+                _snwprintf_s(wszTitle, MAX_PATH, _TRUNCATE, L"%s - %u running windows", wszTitle2, window.dwCount);
             }
             else
             {
@@ -3934,7 +3934,7 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
         {
             _this->bWasControl = TRUE;
         }
-        if (((uMsg == WM_KEYDOWN || uMsg == WM_SYSKEYDOWN) && wParam == _this->vkTilde) ||
+        if (((uMsg == WM_KEYDOWN || uMsg == WM_SYSKEYDOWN) && wParam == _this->vkTilde && _this->settings.bPerApplicationList) ||
             ((uMsg == WM_KEYDOWN || uMsg == WM_SYSKEYDOWN) && wParam == VK_TAB) ||
             (uMsg == WM_HOTKEY && (LOWORD(lParam) & MOD_ALT)) ||
             ((uMsg == WM_KEYDOWN || uMsg == WM_SYSKEYDOWN) && wParam == VK_LEFT) ||
@@ -3990,7 +3990,9 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
 
                 if ((((uMsg == WM_KEYDOWN || uMsg == WM_SYSKEYDOWN) && wParam == _this->vkTilde) ||
                     (uMsg == WM_HOTKEY && ((int)wParam < 0))) &&
-                    _this->mode == SWS_WINDOWSWITCHER_LAYOUTMODE_FULL && pWindowList[_this->layout.iIndex].hWnd != GetShellWindow())
+                    _this->mode == SWS_WINDOWSWITCHER_LAYOUTMODE_FULL &&
+                    _this->settings.bPerApplicationList &&
+                    pWindowList[_this->layout.iIndex].hWnd != GetShellWindow())
                 {
                     HWND hFw = pWindowList[_this->layout.iIndex].hWnd;
                     HWND hOwner = GetWindow(hFw, GW_OWNER);
