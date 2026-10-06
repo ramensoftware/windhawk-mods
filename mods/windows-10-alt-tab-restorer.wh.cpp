@@ -494,42 +494,45 @@ static bool InstallRegistryReadHooks() {
 ////////////////////////////////////////////////////////////////////////////////
 
 // The names of the functions that the mod needs, as they appear in the
-// twinui.pcshell.dll PDB. HookSymbols matches these strings and caches the
-// result per binary version, so the potentially slow symbol handling is paid
-// once per build. Only undecorated names are listed: a mangled name encodes the
-// exact parameter types, so a wrong one would silently ask for a function with
-// a different prototype, while an undecorated name that doesn't match simply
-// doesn't resolve. The parameter list is part of the name, which is why the
-// spelling of the host kind parameter that the builds emit (the enum type and
-// its underlying type) is listed as an alternative, and an entry that isn't
-// found isn't an error - it disables only the mechanism that needs it.
+// twinui.pcshell.dll PDB. HookSymbols matches these strings as they are and
+// caches the result per binary version, so the potentially slow symbol handling
+// is paid once per build. The names are the undecorated ones, exactly as the
+// Windhawk Symbol Helper reports them for twinui.pcshell.dll - a mangled name
+// would encode the parameter types, so a wrong one would silently ask for a
+// function with a different prototype, while an undecorated name that doesn't
+// match simply doesn't resolve. Every entry is optional: a name that isn't
+// present on a build disables only the mechanism that needs it.
+//
+// On Windows 11 24H2 the helper reports _CreateMTVHost, _CreateDCompMTVHost,
+// _CreateXamlMTVHost, CreateMultitaskingView and CreateMultitaskingViewWithFilter,
+// but no IsUndockedAssetAvailable at all - the gate isn't in that build's PDB,
+// which is why the mod can also work through the host manager alone there.
 // twinui.pcshell.dll
 const WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
     {
-        {LR"(private: long __cdecl CMultitaskingViewManager::_CreateDCompMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))",
-         LR"(private: long __cdecl CMultitaskingViewManager::_CreateDCompMTVHost(unsigned int,struct IApplicationViewCollection *,struct _GUID const &,void * *))"},
+        {LR"(private: long __cdecl CMultitaskingViewManager::_CreateDCompMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))"},
         &g_createDcompAddress,
         nullptr,
         true,
     },
     {
-        {LR"(private: long __cdecl CMultitaskingViewManager::_CreateXamlMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))",
-         LR"(private: long __cdecl CMultitaskingViewManager::_CreateXamlMTVHost(unsigned int,struct IApplicationViewCollection *,struct _GUID const &,void * *))"},
+        {LR"(private: long __cdecl CMultitaskingViewManager::_CreateXamlMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))"},
         &g_createXamlAddress,
         nullptr,
         true,
     },
     {
-        {LR"(__int64 __cdecl IsUndockedAssetAvailable(int,__int64,__int64,char const *))",
-         LR"(__int64 __cdecl IsUndockedAssetAvailable(int,unsigned __int64,unsigned __int64,char const *))"},
+        // Not present in the 24H2 PDB; listed for builds that still expose the
+        // gate by name. If it isn't found, the gate hook isn't installed and
+        // the mod falls back to the host manager below.
+        {LR"(__int64 __cdecl IsUndockedAssetAvailable(int,__int64,__int64,char const *))"},
         &g_gateAddress,
         nullptr,
         true,
     },
     {
         // Only used by the E_UNEXPECTED safety net.
-        {LR"(private: long __cdecl CMultitaskingViewManager::_CreateMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))",
-         LR"(private: long __cdecl CMultitaskingViewManager::_CreateMTVHost(unsigned int,struct IApplicationViewCollection *,struct _GUID const &,void * *))"},
+        {LR"(private: long __cdecl CMultitaskingViewManager::_CreateMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))"},
         &g_createMtvHostAddress,
         nullptr,
         true,
