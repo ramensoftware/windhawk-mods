@@ -77,7 +77,7 @@
 - AlwaysUseWindowTitleAndIcon: false
   $name: Always use the window title and icon
   $name:ko-KR: 항상 창 제목 및 아이콘 사용
-- ScrollWheelBehavior: "0"
+- ScrollWheelBehavior: "4"
   $name: Scroll wheel behavior
   $name:ko-KR: 스크롤 휠 동작
   $description: Sets the behavior of the mouse scroll wheel when the switcher is open. If there are not enough items to scroll, the behavior falls back to item by item movement.
