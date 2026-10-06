@@ -170,15 +170,17 @@ live in the mod settings.
   screen. Use smaller heights or more columns.
 * Opacity below 100% uses a layered window. In that case the corners are
   rounded with a window region, so they aren't anti-aliased.
-* "Show desktop" (Win+D) and some wallpaper engines rearrange the desktop
-  windows. The mod checks every 2 seconds and re-attaches, so notes may take
-  a moment to come back.
+* The notes stay visible when you use Show desktop (Win+D). If a wallpaper
+  tool or an Explorer restart rearranges the desktop windows, the mod checks
+  every 2 seconds and puts the notes back above the desktop, so they may take
+  a moment to return.
 * Only bold and italic are supported; no underline, colors, sizes or images.
   Text dragged in from another app may show other formatting while you edit,
   but only bold and italic are kept.
 * The menus use the standard Windows look. They don't follow the active theme.
-* If the window just above the desktop belongs to an elevated program, the
-  notes can't be placed relative to it and may stay in front of it.
+* If the lowest window on screen belongs to an elevated program, the notes
+  can't be placed relative to it. They then use the nearest window they can,
+  and may stay in front of that elevated window.
 
 ## Credits
 
@@ -518,6 +520,9 @@ struct Note {
     // (on save and when editing ends), because reading formatting back out
     // of a rich edit costs more than plain text.
     bool editDirty = false;
+    // Set while the mod itself hides or destroys the window. Any other hide
+    // (Show desktop) is cancelled in WM_WINDOWPOSCHANGING.
+    bool hiding = false;
     HBRUSH bgBrush = nullptr;
     HBRUSH titleBrush = nullptr;
     COLORREF brushBg = CLR_INVALID, brushTitle = CLR_INVALID;
@@ -1332,17 +1337,32 @@ static std::wstring CurrentUserSid() {
     return result;
 }
 
-static bool EnsureDirectory(const std::wstring& dir) {
-    if (CreateDirectoryW(dir.c_str(), nullptr) || GetLastError() == ERROR_ALREADY_EXISTS) {
-        return true;
+// Creates `dir` if it doesn't exist. With `sddl`, a new folder gets that
+// security descriptor instead of inheriting the parent's permissions. The
+// permissions of a folder that already exists are never changed.
+static bool EnsureDirectory(const std::wstring& dir, PCWSTR sddl = nullptr) {
+    SECURITY_ATTRIBUTES sa{sizeof(sa), nullptr, FALSE};
+    PSECURITY_DESCRIPTOR sd = nullptr;
+    if (sddl && ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                    sddl, SDDL_REVISION_1, &sd, nullptr)) {
+        sa.lpSecurityDescriptor = sd;
+    } else if (sddl) {
+        Wh_Log(L"Couldn't build the folder permissions, error %u; using the default",
+               GetLastError());
     }
-    Wh_Log(L"CreateDirectoryW(%s) failed, error %u", dir.c_str(), GetLastError());
-    return false;
+    bool ok = CreateDirectoryW(dir.c_str(), sd ? &sa : nullptr) ||
+              GetLastError() == ERROR_ALREADY_EXISTS;
+    if (!ok) {
+        Wh_Log(L"CreateDirectoryW(%s) failed, error %u", dir.c_str(), GetLastError());
+    }
+    if (sd) LocalFree(sd);
+    return ok;
 }
 
 // The notes live in the mod's own storage folder, which Windhawk removes
 // together with the mod. That folder is shared by all Windows users, so the
-// notes go into a subfolder named after the current user's SID. The paths are
+// notes go into a subfolder named after the current user's SID, created so
+// that only that user, SYSTEM and administrators can open it. The paths are
 // only set once the folder exists, so nothing is ever saved to a location
 // that wasn't verified.
 static bool InitPaths() {
@@ -1355,11 +1375,16 @@ static bool InitPaths() {
     }
     std::wstring dir = buf;
     if (!EnsureDirectory(dir)) return false;
+    // No fallback to the shared folder: notes saved there would seem to
+    // vanish once the SID can be read again. The watchdog retries instead.
     std::wstring sid = CurrentUserSid();
-    if (!sid.empty()) {
-        dir += L"\\" + sid;
-        if (!EnsureDirectory(dir)) return false;
-    }
+    if (sid.empty()) return false;
+    dir += L"\\" + sid;
+    // Protected DACL (no inheritance from the shared folder): full access for
+    // this user, SYSTEM and administrators (so Windhawk can still remove the
+    // folder together with the mod).
+    std::wstring sddl = L"D:P(A;OICI;FA;;;" + sid + L")(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)";
+    if (!EnsureDirectory(dir, sddl.c_str())) return false;
     g_dataDir = dir;
     g_dataFile = dir + L"\\notes.json";
     return true;
@@ -1928,43 +1953,60 @@ static bool CanAnchorTo(DWORD pid) {
     return ok;
 }
 
-// Returns the hwndInsertAfter value that puts `hwnd` at desktop level, or
-// nullptr if it already is (or can't be moved). Desktop level means just above
-// the desktop window and below every visible window of other processes.
-// SetWindowPos inserts a window below hwndInsertAfter, so the anchor is the
-// lowest visible window of another process: the notes go directly under it.
-// Hidden windows between it and the desktop don't matter visually, and
-// anchoring to the window directly above the desktop would often fail (see
-// CanAnchorTo). HWND_BOTTOM is avoided because it would drop the note behind
-// the desktop. If the lowest visible window is topmost, no normal window is
-// above the desktop, and HWND_NOTOPMOST is the same place without turning
-// the note topmost.
-static HWND DesktopInsertAfter(HWND hwnd) {
-    if (!g_host || !IsWindow(g_host)) return nullptr;
+// Works out where `hwnd` has to go to be at desktop level. Returns false if
+// it already is (or can't be moved); otherwise returns true and stores the
+// hwndInsertAfter value to pass to SetWindowPos in `*after`.
+//
+// Desktop level means just above the desktop window and below every visible
+// window of other processes. SetWindowPos inserts a window below
+// hwndInsertAfter, so the anchor is the lowest visible window of another
+// process: the notes go directly under it. Hidden windows between it and the
+// desktop don't matter visually, and anchoring to the window directly above
+// the desktop would often fail (see CanAnchorTo). HWND_BOTTOM is avoided
+// because it would drop the note behind the desktop.
+//
+// If the lowest visible window is topmost (or there is none), no normal
+// window is above the desktop, and `*after` is HWND_TOP: for a non-topmost
+// window that means the top of the normal band, below all topmost windows.
+// (HWND_NOTOPMOST would do nothing here, since the notes aren't topmost.)
+// Note that HWND_TOP is a null handle, which is why "needs to move" is a
+// separate return value instead of a null `*after`.
+static bool DesktopInsertAfter(HWND hwnd, HWND* after) {
+    if (!g_host || !IsWindow(g_host)) return false;
     const DWORD ownPid = GetCurrentProcessId();
     for (HWND w = GetWindow(g_host, GW_HWNDPREV); w; w = GetWindow(w, GW_HWNDPREV)) {
-        if (w == hwnd) return nullptr;  // Already below every visible window.
+        if (w == hwnd) return false;  // Already below every visible window.
         DWORD pid = 0;
         GetWindowThreadProcessId(w, &pid);
         if (pid == ownPid || !IsWindowVisible(w)) continue;
         // `w` is the lowest visible window of another process.
-        if (GetWindowLongPtrW(w, GWL_EXSTYLE) & WS_EX_TOPMOST) return HWND_NOTOPMOST;
-        if (CanAnchorTo(pid)) return w;
+        if (GetWindowLongPtrW(w, GWL_EXSTYLE) & WS_EX_TOPMOST) {
+            *after = HWND_TOP;
+            return true;
+        }
+        if (CanAnchorTo(pid)) {
+            *after = w;
+            return true;
+        }
         // Can't anchor to it: use the nearest usable window below it instead.
         for (HWND d = GetWindow(w, GW_HWNDNEXT); d && d != g_host; d = GetWindow(d, GW_HWNDNEXT)) {
-            if (d == hwnd) return nullptr;
+            if (d == hwnd) return false;
             DWORD dpid = 0;
             GetWindowThreadProcessId(d, &dpid);
-            if (CanAnchorTo(dpid)) return d;
+            if (CanAnchorTo(dpid)) {
+                *after = d;
+                return true;
+            }
         }
-        return nullptr;
+        return false;
     }
-    return HWND_NOTOPMOST;  // Nothing visible above the desktop.
+    *after = HWND_TOP;  // Nothing visible above the desktop.
+    return true;
 }
 
 static void PlaceAboveHost(HWND hwnd) {
-    HWND after = DesktopInsertAfter(hwnd);
-    if (!after) return;
+    HWND after = nullptr;
+    if (!DesktopInsertAfter(hwnd, &after)) return;
     WIN_CHECK(SetWindowPos(hwnd, after, 0, 0, 0, 0,
                            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE));
 }
@@ -2602,7 +2644,11 @@ static void PositionNote(Note* n) {
     if (!IsVisibleNote(n)) {
         if (n->bodyEdit) EndBodyEdit(n);
         if (n->titleEdit) EndTitleEdit(n, true);
-        if (IsWindowVisible(n->hwnd)) ShowWindow(n->hwnd, SW_HIDE);
+        if (IsWindowVisible(n->hwnd)) {
+            n->hiding = true;  // Our own hide: don't cancel it.
+            ShowWindow(n->hwnd, SW_HIDE);
+            n->hiding = false;
+        }
         return;
     }
     RECT r = NoteRect(n);
@@ -3175,6 +3221,7 @@ static void DestroyNoteWindow(Note* n) {
     if (n->bodyEdit) EndBodyEdit(n);
     if (n->titleEdit) EndTitleEdit(n, true);
     if (n->hwnd) {
+        n->hiding = true;  // Destroying hides the window first.
         WIN_CHECK(DestroyWindow(n->hwnd));  // WM_NCDESTROY clears n->hwnd.
     }
     if (n->bgBrush) WIN_CHECK(DeleteObject(n->bgBrush));
@@ -3253,12 +3300,14 @@ static void UpdateDrag(Note* n) {
             return;
         }
         g_drag.moving = true;
-        // Lift the dragged note above the other notes (still below apps)
-        // by pushing every other note down to just above the desktop.
-        for (auto& other : g_notes) {
-            if (other.get() != n && other->hwnd && IsVisibleNote(other.get())) {
-                PlaceAboveHost(other->hwnd);
-            }
+        // Lift the dragged note above the other notes (still below apps):
+        // put it directly under the anchor, which is the top of the band
+        // the notes live in. Passing no window skips the "already in place"
+        // shortcut, and the Z-order handler leaves a dragged note alone.
+        HWND after = nullptr;
+        if (DesktopInsertAfter(nullptr, &after)) {
+            WIN_CHECK(SetWindowPos(n->hwnd, after, 0, 0, 0, 0,
+                                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE));
         }
     }
 
@@ -4237,10 +4286,16 @@ static LRESULT CALLBACK NoteWndProc(HWND hwnd, UINT msg, WPARAM wParam,
             // Skipped while editing, so the note being typed in stays visible,
             // and while it's being dragged.
             auto wp = (WINDOWPOS*)lParam;
+            // Show desktop (Win+D) hides top-level windows with
+            // SWP_HIDEWINDOW. A note stays on the desktop unless the mod
+            // hides it itself (single mode, deleting the note, shutdown).
+            if ((wp->flags & SWP_HIDEWINDOW) && !n->hiding && !g_quitting) {
+                wp->flags &= ~SWP_HIDEWINDOW;
+            }
             if (!(wp->flags & SWP_NOZORDER) && !n->bodyEdit && !n->titleEdit &&
                 g_drag.note != n) {
-                HWND after = DesktopInsertAfter(hwnd);
-                if (after) wp->hwndInsertAfter = after;
+                HWND after = nullptr;
+                if (DesktopInsertAfter(hwnd, &after)) wp->hwndInsertAfter = after;
                 else if (g_host) wp->flags |= SWP_NOZORDER;
             }
             return 0;
@@ -4484,6 +4539,17 @@ static void Watchdog() {
         RepinToHost(host);
     }
     RecreateMissingWindows();
+    // Bring back a note that something hid, and restore its stacking if
+    // something raised the desktop above it (Show desktop, wallpaper tools).
+    // PlaceAboveHost does nothing for a note that is already in place.
+    for (auto& p : g_notes) {
+        Note* n = p.get();
+        if (!n->hwnd || !IsVisibleNote(n) || n->bodyEdit || n->titleEdit || g_drag.note == n) {
+            continue;
+        }
+        if (!IsWindowVisible(n->hwnd)) ShowWindow(n->hwnd, SW_SHOWNOACTIVATE);
+        PlaceAboveHost(n->hwnd);
+    }
     // Covers resolution, work area and DPI changes that weren't broadcast.
     Geo geo = ComputeGeo();
     if (!SameGeo(geo, g_geo)) Layout();
