@@ -40,19 +40,21 @@ that decision. The mod:
 * answers the gate with "not available" for the Alt+Tab host, so the code paths
   that consult it directly also end up on the Windows 10 host.
 
-The two factories and the gate are resolved with `WindhawkUtils::HookSymbols`
-first, which caches the result per `twinui.pcshell.dll` version. Only if a name
-of a build doesn't match, the symbols of the module are searched for it, and on
-x86-64 the ExplorerPatcher call-site signature of `_CreateMTVHost` is the last
-resort for the factories. The redirect to the Windows 10 host is installed only
-together with the gate that selects it - on its own it would leave Alt+Tab
-without a switcher - and if neither the gate nor the host manager could be
-resolved, the mod stays inactive instead of installing half of the mechanism.
+The two host factories and the gate are resolved with
+`WindhawkUtils::HookSymbols`, which caches the result per `twinui.pcshell.dll`
+version; the names differ between builds, so the decorated spellings are listed
+next to the undecorated ones. On x86-64 the ExplorerPatcher call-site signature
+of `_CreateMTVHost` is the fallback for the factories. The redirect to the
+Windows 10 host is installed only together with the gate that selects it - on
+its own it would leave Alt+Tab without a switcher - and if neither the gate nor
+the host manager could be resolved, the mod stays inactive instead of installing
+half of the mechanism.
 
-If the shell's manager still gives up before it creates one of the two hosts -
-which happens on some builds - the mod creates the Windows 10 host directly, and
-after a few failures in a row it stops routing for the rest of the session so
-that the stock Windows 11 switcher keeps working.
+The manager owns the host creation, but on some builds it gives up with an error
+before it calls either factory, and then no host is created at all. In that case
+the mod creates the Windows 10 host directly, and after a few failures in a row
+it stops routing for the rest of the session so that the stock Windows 11
+switcher keeps working.
 
 ## Notes
 
@@ -84,7 +86,6 @@ used by [ExplorerPatcher](https://github.com/valinet/ExplorerPatcher) by valinet
 #include <atomic>
 #include <cstdint>
 #include <cstring>
-#include <cwctype>
 #include <string>
 
 // The two host factories of CMultitaskingViewManager. Both take the host kind,
@@ -516,10 +517,10 @@ static bool InstallRegistryReadHooks() {
 // The names of the functions that the mod needs, as they appear in the
 // twinui.pcshell.dll PDB. HookSymbols matches the names as they are and caches
 // the result per binary version, so the potentially slow symbol handling is
-// paid once per build. The undecorated names differ between Windows builds, so
-// several spellings are listed for each function; an entry that isn't found
-// isn't an error, and whatever is not resolved here is looked up by the symbol
-// search below.
+// paid once per build. The undecorated names differ between Windows builds and
+// some builds don't seem to expose the gate at all, so the decorated and the
+// undecorated spellings are both listed and an entry that isn't found isn't an
+// error - what is resolved decides which of the mechanisms can be installed.
 // twinui.pcshell.dll
 const WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
     {
@@ -574,43 +575,14 @@ static void ResolveBySymbols() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Symbol search fallback
+// Hook installation
 //
-// A build that doesn't spell the names the way they are listed above needs the
-// symbols of twinui.pcshell.dll to be searched instead. This is more expensive
-// than HookSymbols, which caches its result, so it runs only for the functions
-// that are still missing, and it reports the names that it found so that the
-// list above can be completed for that build.
-////////////////////////////////////////////////////////////////////////////////
-
-// The address of one function, together with the name it was found under. Two
-// different addresses for the same name mean that the match isn't unique, and
-// the function is left unresolved rather than hooked at the wrong address.
-struct SymbolMatch {
-    void* address = nullptr;
-    // The name is copied: the buffer that symbol enumeration returns is only
-    // valid until the next symbol is read.
-    std::wstring name;
-    bool ambiguous = false;
-
-    void Add(void* value, const wchar_t* symbolName) {
-        if (!value) {
-            return;
-        }
-        if (!address) {
-            address = value;
-            name = symbolName;
-        } else if (address != value) {
-            ambiguous = true;
-        }
-    }
-};
-
 // The hooks are installed only once everything was resolved, and the XAML
 // redirect only together with the gate: the redirect on its own leaves the
 // shell with a host that it doesn't expect, which is worse than the stock
 // switcher. The DirectComposition factory isn't hooked; the redirect and the
 // safety net call it directly and look at the result.
+////////////////////////////////////////////////////////////////////////////////
 
 static bool InstallGateHook() {
     if (g_isUndockedAssetAvailableOriginal) {
@@ -650,111 +622,6 @@ static bool InstallMtvHostHook() {
         return false;
     }
     return true;
-}
-
-// The three functions take four parameters, and the parameter list is what
-// makes a match specific: a look-alike symbol with a different arity is skipped
-// instead of making the match ambiguous.
-static bool HasFourParameters(const wchar_t* name) {
-    if (!name) {
-        return false;
-    }
-
-    std::wstring text(name);
-    while (!text.empty() && iswspace(text.back())) {
-        text.pop_back();
-    }
-    if (text.size() >= 5 && text.compare(text.size() - 5, 5, L"const") == 0) {
-        text.resize(text.size() - 5);
-        while (!text.empty() && iswspace(text.back())) {
-            text.pop_back();
-        }
-    }
-    if (text.empty() || text.back() != L')') {
-        return false;
-    }
-
-    int depth = 0;
-    int commas = 0;
-    for (const wchar_t ch : text) {
-        if (ch == L'(' || ch == L'<') {
-            ++depth;
-        } else if (ch == L')' || ch == L'>') {
-            --depth;
-        } else if (ch == L',' && depth == 0) {
-            ++commas;
-        }
-    }
-    return commas == 3;
-}
-
-static void ResolveBySymbolSearch() {
-    static constexpr wchar_t kDcompNeedle[] = L"_CreateDCompMTVHost(";
-    static constexpr wchar_t kXamlNeedle[] = L"_CreateXamlMTVHost(";
-    static constexpr wchar_t kGateNeedle[] = L"IsUndockedAssetAvailable(";
-
-    SymbolMatch dcomp;
-    SymbolMatch xaml;
-    SymbolMatch gate;
-    SymbolMatch mtvHost;
-
-    WH_FIND_SYMBOL found{};
-    HANDLE search = Wh_FindFirstSymbol(g_twinuiModule, nullptr, &found);
-    if (!search) {
-        return;
-    }
-
-    do {
-        // Only undecorated names carry the parameter list, which is what makes
-        // the match specific; the decorated name is looked up separately above.
-        if (!found.address || !found.symbol ||
-            !wcsstr(found.symbol, L"__cdecl") ||
-            !HasFourParameters(found.symbol)) {
-            continue;
-        }
-
-        const wchar_t* name = found.symbol;
-        if (wcsstr(name, kDcompNeedle)) {
-            dcomp.Add(found.address, name);
-        } else if (wcsstr(name, kXamlNeedle)) {
-            xaml.Add(found.address, name);
-        } else if (wcsstr(name, kGateNeedle)) {
-            gate.Add(found.address, name);
-        } else if (wcsstr(name, L"_CreateMTVHost(")) {
-            mtvHost.Add(found.address, name);
-        }
-    } while (Wh_FindNextSymbol(search, &found));
-    Wh_FindCloseSymbol(search);
-
-    // Ambiguous matches are ignored; a caller that hooks the wrong address
-    // would take the whole Alt+Tab path with it.
-    for (SymbolMatch* match : {&dcomp, &xaml, &gate, &mtvHost}) {
-        if (match->ambiguous) {
-            Wh_Log(L"More than one symbol matched \"%s\"; ignoring the match",
-                   match->name.empty() ? L"?" : match->name.c_str());
-            match->address = nullptr;
-        }
-    }
-
-    if (!g_createDcompAddress && dcomp.address) {
-        g_createDcompAddress = dcomp.address;
-    }
-    if (!g_createXamlAddress && xaml.address) {
-        g_createXamlAddress = xaml.address;
-    }
-    if (!g_gateAddress && gate.address) {
-        g_gateAddress = gate.address;
-    }
-    if (!g_createMtvHostAddress && mtvHost.address) {
-        g_createMtvHostAddress = mtvHost.address;
-    }
-
-    if (!dcomp.name.empty() || !xaml.name.empty() || !gate.name.empty()) {
-        Wh_Log(L"Resolved by symbol search: gate=%s, XAML=%s, DirectComposition=%s",
-               gate.name.empty() ? L"-" : gate.name.c_str(),
-               xaml.name.empty() ? L"-" : xaml.name.c_str(),
-               dcomp.name.empty() ? L"-" : dcomp.name.c_str());
-    }
 }
 
 #if defined(_M_X64)
@@ -1019,12 +886,12 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // The exact names first, which is what the online symbol cache is keyed by;
-    // whatever is left is searched for in the symbols of the module.
     ResolveBySymbols();
-    if (!g_gateAddress || !g_createDcompAddress || !g_createXamlAddress) {
-        ResolveBySymbolSearch();
-    }
+    Wh_Log(L"Resolved twinui.pcshell.dll entry points (gate: %s, XAML factory: %s, DirectComposition factory: %s, host manager: %s)",
+           g_gateAddress ? L"found" : L"not found",
+           g_createXamlAddress ? L"found" : L"not found",
+           g_createDcompAddress ? L"found" : L"not found",
+           g_createMtvHostAddress ? L"found" : L"not found");
 
 #if defined(_M_X64)
     // Last resort, and only for the two factories: the call-site addresses
