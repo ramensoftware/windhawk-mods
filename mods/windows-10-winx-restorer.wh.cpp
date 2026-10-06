@@ -7,7 +7,7 @@
 // @github          https://github.com/babamohammed2022
 // @architecture    x86-64
 // @include         explorer.exe
-// @compilerOptions -luser32 -lgdi32 -lshell32 -lcomctl32 -lole32 -ladvapi32
+// @compilerOptions -luser32 -lgdi32 -lshell32 -lcomctl32 -lole32 -ladvapi32 -lpowrprof
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -32,9 +32,14 @@ This mod has been tested on Windows 11 24H2.
 ## How it works
 
 * A dedicated thread owns the low-level input hooks and only pumps messages. Nothing slow
-  runs on the hook thread, so Windows never removes the hook for exceeding
-  `LowLevelHooksTimeout` and system input is never held up: the hook posts a private
-  message and the thread does the work.
+  and nothing that can block runs on the hook thread, so Windows never removes the hook for
+  exceeding `LowLevelHooksTimeout` and system input is never held up: a hook posts a private
+  message and the thread does the work. The mouse hook looks at right button events only
+  and resolves the Start button from the click with local queries, so a mouse move costs
+  nothing.
+* The menu opens on the taskbar the request came from: a right-click on the Start button of
+  a secondary taskbar opens it there, while the Win+X chord opens it on the primary taskbar,
+  as Windows 10 does.
 * The menu is created on a thread of the mod, with an owner window of that thread: the
   taskbar thread is never used to show it, and no window of the shell is subclassed.
   `TrackPopupMenuEx` runs a modal loop on the thread that calls it, and doing that on the
@@ -49,6 +54,21 @@ This mod has been tested on Windows 11 24H2.
   image is read with `QueryFullProcessImageNameW`, which is not affected by the
   `GetModuleFileNameW` hook of the Fake Explorer path mod that the Windows 10 taskbar
   requires.
+
+## Using the keyboard
+
+The arrow keys and Enter work as in any menu. Pressing a letter chooses the entry whose label
+starts with that letter, when exactly one entry of the open menu does: the items are
+owner-drawn, so the mod answers `WM_MENUCHAR` itself. An ambiguous letter is ignored rather
+than guessed - in the power submenu, for example, R chooses Restart while S does nothing,
+because Sign out, Sleep and Shut down all start with it. The "Shut down or sign out" entry
+opens a submenu, which a letter does not choose: the arrows do.
+
+## Limitations
+
+* While an elevated window has focus, the low-level hooks of a non-elevated Explorer do not
+  receive keystrokes (UIPI), so Win+X reaches the native handler instead of this mod.
+* Only the primary taskbar is used for the Win+X chord, which is what Windows 10 does.
 
 ## Requirements
 
@@ -96,7 +116,10 @@ mod requires. In the Windows 11 shell this mod does nothing and is not kept load
 #include <windows.h>
 #include <commctrl.h>
 #include <objbase.h>
+#include <powrprof.h>
+#include <shldisp.h>
 #include <atomic>
+#include <cwctype>
 #include <new>
 #include <vector>
 
@@ -544,6 +567,39 @@ static void Draw(Session* s, DRAWITEMSTRUCT* di, const ItemData* d) noexcept {
     }
 }
 
+// The entries are owner-drawn, so the system cannot match a pressed letter to an
+// item and sends WM_MENUCHAR to the owner window instead. The Windows 10 menu is
+// usable from the keyboard, so the letter is matched here: an entry is executed when
+// exactly one entry of the active menu starts with it. When more than one entry
+// matches, the key is ignored instead of guessing, because executing the wrong entry
+// would be worse than doing nothing (in the power submenu "Sign out", "Sleep" and
+// "Shut down" all start with the same letter in several languages). Separators and
+// entries that open a submenu are not matched.
+static bool MatchMenuChar(Session* s, HMENU menu, wchar_t ch, UINT& idOut) {
+    if (!menu || !ch) return false;
+    UINT id = 0;
+    int matches = 0;
+    const int count = GetMenuItemCount(menu);
+    for (int i = 0; i < count; ++i) {
+        MENUITEMINFOW info = {};
+        info.cbSize = sizeof(info);
+        info.fMask = MIIM_ID | MIIM_FTYPE | MIIM_SUBMENU | MIIM_DATA;
+        if (!GetMenuItemInfoW(menu, i, TRUE, &info)) continue;
+        if (info.fType & MFT_SEPARATOR) continue;
+        // An entry that opens a submenu is never executed by a letter: its identifier
+        // is the submenu handle and not a command index, and the arrows open it.
+        if (info.hSubMenu) continue;
+        const auto* d = reinterpret_cast<const ItemData*>(info.dwItemData);
+        if (!Owns(s, d) || !d->text[0]) continue;
+        if (towupper(d->text[0]) != towupper(ch)) continue;
+        if (++matches > 1) return false;
+        id = info.wID;
+    }
+    if (matches != 1) return false;
+    idOut = id;
+    return true;
+}
+
 static LRESULT CALLBACK OwnerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
                                   UINT_PTR, DWORD_PTR) {
     Session* s = g_session;
@@ -561,6 +617,14 @@ static LRESULT CALLBACK OwnerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
             Draw(s, di, d);
             return TRUE;
         }
+    } else if (s && msg == WM_MENUCHAR) {
+        // LOWORD(wParam) is the character the user pressed, lParam the active menu.
+        // The item identifier is returned, which is what TrackPopupMenuEx with
+        // TPM_RETURNCMD gives back to the caller.
+        UINT id = 0;
+        if (MatchMenuChar(s, reinterpret_cast<HMENU>(lParam), (wchar_t)LOWORD(wParam), id))
+            return MAKELRESULT(id, MNC_EXECUTE);
+        return MAKELRESULT(0, MNC_IGNORE);
     }
     return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
@@ -671,8 +735,6 @@ static UINT g_winXRouteMessage = 0;
 static int g_winXHookModuleAnchor = 0;
 static std::atomic<bool> g_winXKeyboardFallbackEnabled{false};
 static std::atomic<bool> g_winXMouseRouteEnabled{false};
-static HWND g_winXStartButtonForInput = nullptr;
-static RECT g_winXStartButtonRectForInput{};
 static bool g_winXRightButtonDownOnStart = false;
 static bool g_winXKeyboardHookInstalled = false;
 // g_winXMenuOpen is set for exactly as long as TrackPopupMenuEx keeps the menu on
@@ -700,15 +762,42 @@ static std::atomic<bool> g_unloading{false};
 // never run any of this. Each target is handed to the shell with ShellExecuteW and
 // every failure is logged.
 // ---------------------------------------------------------------------------
-static void InjectSystemChord(wchar_t letter) {
-    INPUT input[4] = {};
-    input[0].type = INPUT_KEYBOARD; input[0].ki.wVk = VK_LWIN;
-    input[1].type = INPUT_KEYBOARD; input[1].ki.wVk = (WORD)towupper(letter);
-    input[2].type = INPUT_KEYBOARD; input[2].ki.wVk = (WORD)towupper(letter);
-    input[2].ki.dwFlags = KEYEVENTF_KEYUP;
-    input[3].type = INPUT_KEYBOARD; input[3].ki.wVk = VK_LWIN;
-    input[3].ki.dwFlags = KEYEVENTF_KEYUP;
-    SendInput(ARRAYSIZE(input), input, sizeof(INPUT));
+// Sleep: SetSuspendState is called directly instead of
+// "rundll32.exe powrprof.dll,SetSuspendState 0,1,0". The signature of
+// SetSuspendState is not the one rundll32 expects from an entry point, and that
+// call is known to hibernate instead of sleeping when hibernation is enabled.
+// SE_SHUTDOWN_NAME is enabled first, as the call requires it.
+static void SuspendSystem() {
+    HANDLE token = nullptr;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token)) {
+        TOKEN_PRIVILEGES privileges{};
+        privileges.PrivilegeCount = 1;
+        privileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+        if (LookupPrivilegeValueW(nullptr, SE_SHUTDOWN_NAME, &privileges.Privileges[0].Luid))
+            AdjustTokenPrivileges(token, FALSE, &privileges, 0, nullptr, nullptr);
+        CloseHandle(token);
+    }
+    if (!SetSuspendState(FALSE, FALSE, FALSE))
+        Wh_Log(L"[winx] SetSuspendState failed (%lu)", GetLastError());
+}
+
+// Show the desktop: IShellDispatch4::ToggleDesktop is called directly instead of
+// injecting a Win+D chord, whose result depends on the modifiers the user is still
+// physically holding when the entry is chosen. COM is initialized on this thread
+// (see WinXMenuThread).
+static void ToggleDesktop() {
+    IShellDispatch4* shell = nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_Shell, nullptr, CLSCTX_INPROC_SERVER,
+                                  IID_PPV_ARGS(&shell));
+    if (FAILED(hr) || !shell) {
+        Wh_Log(L"[winx] ToggleDesktop: the shell dispatch object could not be created "
+               L"(0x%08X)", (unsigned)hr);
+        return;
+    }
+    hr = shell->ToggleDesktop();
+    shell->Release();
+    if (FAILED(hr))
+        Wh_Log(L"[winx] ToggleDesktop failed (0x%08X)", (unsigned)hr);
 }
 
 static bool OpenShellUri(const wchar_t* uri) {
@@ -803,8 +892,8 @@ static BOOL CALLBACK FindStartButtonChildProc(HWND hwnd, LPARAM param) {
     return TRUE;
 }
 
-static HWND FindNativeTaskbarStartButton() {
-    HWND taskbar = FindOwnTaskbarWindow();
+// The Start button of a taskbar window (the primary one or a secondary one).
+static HWND FindStartButtonInTaskbar(HWND taskbar) {
     if (!taskbar) return nullptr;
 
     RECT taskbarRect = {};
@@ -820,6 +909,12 @@ static HWND FindNativeTaskbarStartButton() {
     if (search.byId) return search.byId;
     if (search.byClass) return search.byClass;
     return search.byEdge;
+}
+
+// The Start button of the primary taskbar: the one the keyboard chord opens the menu
+// on, as Windows 10 does.
+static HWND FindNativeTaskbarStartButton() {
+    return FindStartButtonInTaskbar(FindOwnTaskbarWindow());
 }
 
 class ScopedWindowsHook {
@@ -855,18 +950,19 @@ static ScopedWindowsHook g_winXMouseHook;
 static void ClearWinXInputRoutes() {
     g_winXKeyboardFallbackEnabled.store(false, std::memory_order_release);
     g_winXMouseRouteEnabled.store(false, std::memory_order_release);
-    g_winXStartButtonForInput = nullptr;
-    g_winXStartButtonRectForInput = {};
     g_winXRightButtonDownOnStart = false;
 }
 
-static bool PostWinXContextRequestFromHook() {
+// startButton is the button the right-click came from, or null for the keyboard
+// chord: the menu opens on the taskbar the request came from.
+static bool PostWinXContextRequestFromHook(HWND startButton) {
     // The menu is not shown from here: this runs inside a low-level hook and
     // TrackPopupMenuEx blocks the thread. Windows removes a hook that does not answer
     // within LowLevelHooksTimeout (~300 ms), so the work is handed to the services
     // thread, which starts the menu thread.
     return g_servicesThreadId &&
-           PostThreadMessageW(g_servicesThreadId, g_winXRouteMessage, 0, 0);
+           PostThreadMessageW(g_servicesThreadId, g_winXRouteMessage, 0,
+                              reinterpret_cast<LPARAM>(startButton));
 }
 static bool IsPopupMenuForeground();
 
@@ -908,15 +1004,39 @@ static bool CloseWinXMenuIfOpen() {
     return true;
 }
 
-static bool IsWinXStartHitPoint(const POINT& point) {
-    HWND startButton = g_winXStartButtonForInput;
-    if (!startButton || !IsWindow(startButton) ||
-        !PtInRect(&g_winXStartButtonRectForInput, point)) {
-        return false;
+// The Start button under a point, or null. It runs inside the mouse hook, but only
+// for the right button events - never for a mouse move - and it uses local queries
+// only: WindowFromPoint, GetAncestor, GetClassNameW, GetWindowThreadProcessId and
+// GetDlgCtrlID send no message to any window, so nothing here can hold up input.
+//
+// The root window may be the taskbar of any monitor: Windows 10 shows a Start button
+// on the secondary taskbars too, and a right-click on any of them opens the menu.
+static HWND WinXStartButtonFromPoint(const POINT& point) {
+    const HWND hit = WindowFromPoint(point);
+    if (!hit) return nullptr;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hit, &pid);
+    if (pid != GetCurrentProcessId()) return nullptr;
+
+    const HWND root = GetAncestor(hit, GA_ROOT);
+    wchar_t rootClass[64] = {};
+    if (!GetClassNameW(root, rootClass, _countof(rootClass))) return nullptr;
+    if (_wcsicmp(rootClass, L"Shell_TrayWnd") != 0 &&
+        _wcsicmp(rootClass, L"Shell_SecondaryTrayWnd") != 0) {
+        return nullptr;
     }
-    HWND hitWindow = WindowFromPoint(point);
-    return hitWindow == startButton ||
-           (hitWindow && IsChild(startButton, hitWindow));
+
+    // The button can be the window under the pointer or one of its children.
+    for (HWND hwnd = hit; hwnd && hwnd != root; hwnd = GetParent(hwnd)) {
+        if (GetDlgCtrlID(hwnd) == 0x130) return hwnd;   // the native Start button
+        wchar_t className[128] = {};
+        if (GetClassNameW(hwnd, className, _countof(className)) &&
+            (_wcsicmp(className, L"Start") == 0 ||
+             ContainsNoCase(className, L"StartButton"))) {
+            return hwnd;
+        }
+    }
+    return nullptr;
 }
 
 static LRESULT CALLBACK WinXLowLevelKeyboardProc(int nCode, WPARAM wParam,
@@ -952,7 +1072,9 @@ static LRESULT CALLBACK WinXLowLevelKeyboardProc(int nCode, WPARAM wParam,
                 const bool repeat = g_winXXHeld;
                 g_winXXHeld = true;
                 if (repeat) return 1;
-                if (!CloseWinXMenuIfOpen()) PostWinXContextRequestFromHook();
+                // Win+X opens the menu on the primary taskbar, as Windows 10 does,
+                // so no Start button is passed: the services thread resolves it.
+                if (!CloseWinXMenuIfOpen()) PostWinXContextRequestFromHook(nullptr);
 
                 // The shell must not see the chord. A dummy key (VK 0xE8, unassigned,
                 // injected and therefore ignored by this hook) keeps the release of
@@ -976,19 +1098,21 @@ static LRESULT CALLBACK WinXLowLevelMouseProc(int nCode, WPARAM wParam,
                                               LPARAM lParam) {
     // A right-click on the Start button is answered by the mod: press and release are
     // consumed together, so no unmatched button-up can ever be leaked to the shell.
+    // Only those two events are looked at, so a mouse move costs nothing here.
     if (nCode == HC_ACTION && lParam &&
+        (wParam == WM_RBUTTONDOWN || wParam == WM_RBUTTONUP) &&
         g_winXMouseRouteEnabled.load(std::memory_order_acquire)) {
         const auto* mouse = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
-        if (!(mouse->flags & LLMHF_INJECTED) && IsWinXStartHitPoint(mouse->pt)) {
-            // Right click on Start: the mod answers it, not the shell (press and
-            // release are consumed together).
-            if (wParam == WM_RBUTTONDOWN && !IsPopupMenuForeground()) {
-                g_winXRightButtonDownOnStart = true;
-                return 1;
-            }
-            if (wParam == WM_RBUTTONUP && g_winXRightButtonDownOnStart) {
+        if (!(mouse->flags & LLMHF_INJECTED)) {
+            if (wParam == WM_RBUTTONDOWN) {
+                if (WinXStartButtonFromPoint(mouse->pt) && !IsPopupMenuForeground()) {
+                    g_winXRightButtonDownOnStart = true;
+                    return 1;
+                }
+            } else if (g_winXRightButtonDownOnStart) {
                 g_winXRightButtonDownOnStart = false;
-                if (!CloseWinXMenuIfOpen()) PostWinXContextRequestFromHook();
+                if (!CloseWinXMenuIfOpen())
+                    PostWinXContextRequestFromHook(WinXStartButtonFromPoint(mouse->pt));
                 return 1;
             }
         }
@@ -1171,14 +1295,9 @@ static void UpdateWinXInputRoutes() {
 
     // The chord is deliberately NOT registered with RegisterHotKey: Win-key
     // combinations are reserved to the OS (the registration fails on most builds).
-    // The low-level hooks handle the chord instead.
-    HWND startButton = FindNativeTaskbarStartButton();
-    if (startButton && GetWindowRect(startButton, &g_winXStartButtonRectForInput)) {
-        g_winXStartButtonForInput = startButton;
-    } else {
-        g_winXStartButtonForInput = nullptr;
-    }
-
+    // The low-level hooks handle the chord instead. The mouse hook resolves the Start
+    // button from the click itself, so nothing about it has to be kept up to date
+    // here.
     g_winXKeyboardFallbackEnabled.store(g_winXKeyboardHookInstalled,
                                         std::memory_order_release);
     g_winXMouseRouteEnabled.store(g_winXMouseHookInstalled,
@@ -1228,7 +1347,8 @@ static void RunWinXCommandSplit(const wchar_t* command, const wchar_t* verb,
 // Runs the command of a Win+X menu entry, on the menu thread.
 //
 // Accepted formats:
-//   "@winkey:X"   injected Win+letter chord (Run, Desktop) - opens nothing itself;
+//   "@sleep"      suspend the system (see SuspendSystem);
+//   "@desktop"    show the desktop (see ToggleDesktop);
 //   "@admin:exe"  program started with elevation (the "runas" verb);
 //   "shell:...", "shell:::{GUID}", "ms-settings:..."   shell namespaces;
 //   "file parameters"  any other program or applet.
@@ -1240,8 +1360,12 @@ static void RunWinXCommand(const wchar_t* command) {
     if (!command || !*command) return;
     Wh_Log(L"[winx] selected entry: %s", command);
 
-    if (wcsncmp(command, L"@winkey:", 8) == 0) {
-        if (command[8]) InjectSystemChord(command[8]);
+    if (_wcsicmp(command, L"@sleep") == 0) {
+        SuspendSystem();
+        return;
+    }
+    if (_wcsicmp(command, L"@desktop") == 0) {
+        ToggleDesktop();
         return;
     }
     // No "@search" branch: the Search entry was removed from the menu (see the
@@ -1271,13 +1395,13 @@ static void RunWinXCommand(const wchar_t* command) {
 //
 // This menu is a recreation of the Windows 10 power-user (Win+X) menu drawn
 // from Windows 10 reference screenshots: the same entries in the same order, the same
-// two separators (after "Command Prompt (Admin)" and before "Shut down or sign out"),
+// two separators (after "Terminal (Admin)" and before "Shut down or sign out"),
 // the same wording, the Windows 10 light/dark colours, the same row height and the
 // single chevron of the submenu. It is a recreation, not the original component, but
 // it is meant to look and behave like it (see ImmersiveMenu for the measurements).
 //
 // Shows a complete WIN+X menu with all standard Windows 10 entries:
-// Installed apps, Power Options, Event Viewer, System, Device Manager,
+// Programs and Features, Power Options, Event Viewer, System, Device Manager,
 // Network Connections, Disk Management, Computer Management, Terminal,
 // Terminal (Admin), Task Manager, Settings, File Explorer, Run,
 // Shut down or sign out, Desktop. The Search entry of the original menu is not
@@ -1319,10 +1443,21 @@ static WinXMenuAnchor ComputeWinXMenuAnchor(HWND startButton) {
     // taskbar thread can rebuild it: resolve it again here, at show time.
     if (!startButton || !IsWindow(startButton)) startButton = FindNativeTaskbarStartButton();
 
+    // The menu opens on the taskbar the request came from: the one that holds the
+    // Start button that was clicked, which is a secondary taskbar on a multi-monitor
+    // setup. The keyboard chord passes no button, so the primary taskbar is used, as
+    // Windows 10 does.
     RECT taskbarRect = {};
-    HWND taskbar = FindOwnTaskbarWindow();
-    if (!taskbar || !GetWindowRect(taskbar, &taskbarRect))
-        taskbar = nullptr;
+    HWND taskbar = (startButton && IsWindow(startButton))
+                       ? GetAncestor(startButton, GA_ROOT)
+                       : nullptr;
+    if (!taskbar) taskbar = FindOwnTaskbarWindow();
+    if (taskbar) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(taskbar, &pid);
+        if (pid != GetCurrentProcessId() || !GetWindowRect(taskbar, &taskbarRect))
+            taskbar = nullptr;
+    }
 
     RECT buttonRect = {};
     const bool haveButton = startButton && IsWindow(startButton) &&
@@ -1391,19 +1526,19 @@ static void ShowCustomWinXMenuHere(HWND startButton) {
     
     static const WinXItem items[] = {
         // Programs and Features: the wording of the Windows 10 menu of the
-        // reference screenshot, not "Installed apps". The target is
-        // ms-settings:appsfeatures, the Apps & features page of Windows 11;
-        // appwiz.cpl would open the classic Control Panel applet instead.
+        // reference screenshot, not "Installed apps", and the target of that entry,
+        // appwiz.cpl. ms-settings:appsfeatures would open the Windows 11 "Apps &
+        // features" page, which is what Windows 10 called "Apps and Features".
         { { L"Programmi e funzionalit\u00e0", L"Programs and Features", L"Programmes et fonctionnalit\u00e9s", L"Programas y caracter\u00edsticas", L"Programme und Features",
             L"Programas e Recursos", L"Programma's en onderdelen", L"\u041f\u0440\u043e\u0433\u0440\u0430\u043c\u043c\u044b \u0438 \u043a\u043e\u043c\u043f\u043e\u043d\u0435\u043d\u0442\u044b", L"\u30d7\u30ed\u30b0\u30e9\u30e0\u3068\u6a5f\u80fd", L"Programy i funkcje", L"Programmer og funktioner", L"Program och funktioner", L"Programmer og funksjoner", L"Ohjelmat ja toiminnot", L"Programlar ve Özellikler"},
-          L"ms-settings:appsfeatures" },
+          L"control.exe appwiz.cpl" },
         // Power Options
         { { L"Opzioni di alimentazione", L"Power Options", L"Options d'alimentation", L"Opciones de energ\u00eda", L"Energieoptionen",
-            L"Op\u00e7\u00f5es de energia", L"Energiebeheer", L"\u041f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u044b \u043f\u0438\u0442\u0430\u043d\u0438\u044f", L"\u30d1\u30ef\u30a2\u30aa\u30d7\u30b7\u30e7\u30f3", L"Opcje zasilania", L"Strømstyring", L"Energialternativ", L"Strømalternativer", L"Virranhallinta", L"Güç Seçenekleri"},
+            L"Op\u00e7\u00f5es de energia", L"Energiebeheer", L"\u041f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u044b \u043f\u0438\u0442\u0430\u043d\u0438\u044f", L"\u96fb\u6e90\u30aa\u30d7\u30b7\u30e7\u30f3", L"Opcje zasilania", L"Strømstyring", L"Energialternativ", L"Strømalternativer", L"Virranhallinta", L"Güç Seçenekleri"},
           L"control.exe powercfg.cpl" },
         // Event Viewer
         { { L"Visualizzatore eventi", L"Event Viewer", L"Observateur d'\u00e9v\u00e9nements", L"Visor de eventos", L"Ereignisanzeige",
-            L"Visualizador de Eventos", L"Gebeurtenisweergave", L"\u041f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u0441\u043e\u0431\u044b\u0442\u0438\u0439", L"\u30a4\u30d9\u30f3\u30c8\u30d3\u30e5\u30a4\u30e4\u30fc", L"Podgl\u0105d zdarze\u0144", L"Hændelsesfremviser", L"Loggboken", L"Hendelsesvisning", L"Tapahtumakatselu", L"Olay Görüntüleyicisi"},
+            L"Visualizador de Eventos", L"Gebeurtenisweergave", L"\u041f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u0441\u043e\u0431\u044b\u0442\u0438\u0439", L"\u30a4\u30d9\u30f3\u30c8 \u30d3\u30e5\u30fc\u30a2\u30fc", L"Podgl\u0105d zdarze\u0144", L"Hændelsesfremviser", L"Loggboken", L"Hendelsesvisning", L"Tapahtumakatselu", L"Olay Görüntüleyicisi"},
           L"eventvwr.msc" },
         // System
         { { L"Sistema", L"System", L"Syst\u00e8me", L"Sistema", L"System",
@@ -1411,21 +1546,21 @@ static void ShowCustomWinXMenuHere(HWND startButton) {
           L"ms-settings:about" },
         // Device Manager
         { { L"Gestione dispositivi", L"Device Manager", L"Gestionnaire de p\u00e9riph\u00e9riques", L"Administrador de dispositivos", L"Ger\u00e4temanager",
-            L"Gestor de Dispositivos", L"Apparaatbeheer", L"\u0414\u0438\u0441\u043f\u0435\u0442\u0447\u0435\u0440 \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432", L"\u30c7\u30d0\u30a4\u30b9\u30de\u30fc\u30b8\u30e3", L"Mened\u017cer urz\u0105dze\u0144", L"Enhedshåndtering", L"Enhetshanteraren", L"Enhetsbehandling", L"Laitehallinta", L"Aygıt Yöneticisi"},
+            L"Gestor de Dispositivos", L"Apparaatbeheer", L"\u0414\u0438\u0441\u043f\u0435\u0442\u0447\u0435\u0440 \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432", L"\u30c7\u30d0\u30a4\u30b9 \u30de\u30cd\u30fc\u30b8\u30e3\u30fc", L"Mened\u017cer urz\u0105dze\u0144", L"Enhedshåndtering", L"Enhetshanteraren", L"Enhetsbehandling", L"Laitehallinta", L"Aygıt Yöneticisi"},
           L"devmgmt.msc" },
         // Network Connections
         { { L"Connessioni di rete", L"Network Connections", L"Connexions r\u00e9seau", L"Conexiones de red", L"Netzwerkverbindungen",
-            L"Liga\u00e7\u00f5es de Rede", L"Netwerkverbindingen", L"\u0421\u0435\u0442\u0435\u0432\u044b\u0435 \u0441\u0432\u044f\u0437\u0438", L"\u30cd\u30c3\u30c8\u30ef\u30a2\u30af\u30bb\u30b7\u30e7\u30f3", L"Po\u0142\u0105\u0107czenia sieciowe", L"Netværksforbindelser", L"Nätverksanslutningar", L"Nettverkstilkoblinger", L"Verkkoyhteydet", L"Ağ Bağlantıları"},
+            L"Liga\u00e7\u00f5es de Rede", L"Netwerkverbindingen", L"\u0421\u0435\u0442\u0435\u0432\u044b\u0435 \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u044f", L"\u30cd\u30c3\u30c8\u30ef\u30fc\u30af\u63a5\u7d9a", L"Po\u0142\u0105czenia sieciowe", L"Netværksforbindelser", L"Nätverksanslutningar", L"Nettverkstilkoblinger", L"Verkkoyhteydet", L"Ağ Bağlantıları"},
           // ncpa.cpl does nothing on the private shell; the shell namespace below
           // is opened like every other shell operation.
           L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}" },
         // Disk Management
         { { L"Gestione disco", L"Disk Management", L"Gestion des disques", L"Administraci\u00f3n de discos", L"Datentr\u00e4gerverwaltung",
-            L"Gest\u00e3o de Discos", L"Schijfbeheer", L"\u0423\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u0434\u0438\u0441\u043a\u0430\u043c\u0438", L"\u30c7\u30a4\u30b9\u30af\u30de\u30fc\u30b8\u30e3", L"Zarzi\u0105dzanie dyskami", L"Diskhåndtering", L"Diskhantering", L"Diskbehandling", L"Levynhallinta", L"Disk Yönetimi"},
+            L"Gest\u00e3o de Discos", L"Schijfbeheer", L"\u0423\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u0434\u0438\u0441\u043a\u0430\u043c\u0438", L"\u30c7\u30a3\u30b9\u30af\u306e\u7ba1\u7406", L"Zarz\u0105dzanie dyskami", L"Diskhåndtering", L"Diskhantering", L"Diskbehandling", L"Levynhallinta", L"Disk Yönetimi"},
           L"diskmgmt.msc" },
         // Computer Management
         { { L"Gestione computer", L"Computer Management", L"Gestion de l'ordinateur", L"Administraci\u00f3n del equipo", L"Computerverwaltung",
-            L"Gest\u00e3o do Computador", L"Computerbeheer", L"\u0423\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u043a\u043e\u043c\u043f\u044c\u044e\u0442\u0435\u0440\u043e\u043c", L"\u30b3\u30f3\u30d4\u30e5\u30fc\u30bf\u30de\u30fc\u30b8\u30e3", L"Zarzi\u0105dzanie komputerem", L"Computerstyring", L"Datorhantering", L"Datamaskinbehandling", L"Tietokoneenhallinta", L"Bilgisayar Yönetimi"},
+            L"Gest\u00e3o do Computador", L"Computerbeheer", L"\u0423\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u043a\u043e\u043c\u043f\u044c\u044e\u0442\u0435\u0440\u043e\u043c", L"\u30b3\u30f3\u30d4\u30e5\u30fc\u30bf\u30fc\u306e\u7ba1\u7406", L"Zarz\u0105dzanie komputerem", L"Computerstyring", L"Datorhantering", L"Datamaskinbehandling", L"Tietokoneenhallinta", L"Bilgisayar Yönetimi"},
           L"compmgmt.msc" },
         // Terminal
         { { L"Terminale", L"Terminal", L"Terminal", L"Terminal", L"Terminal",
@@ -1433,11 +1568,11 @@ static void ShowCustomWinXMenuHere(HWND startButton) {
           L"wt.exe" },
         // Terminal (Admin)
         { { L"Terminale (Amministratore)", L"Terminal (Admin)", L"Terminal (Administrateur)", L"Terminal (Administrador)", L"Terminal (Admin)",
-            L"Terminal (Administrador)", L"Terminal (Administrator)", L"\u0422\u0435\u0440\u043c\u0438\u043d\u0430\u043b (\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440)", L"\u30bf\u30fc\u30df\u30ca\u30eb (\u7ba1\u6743\u8005)", L"Terminal (Administrator)", L"Terminal (administrator)", L"Terminal (administratör)", L"Terminal (administrator)", L"Pääte (järjestelmänvalvoja)", L"Terminal (Yönetici)"},
+            L"Terminal (Administrador)", L"Terminal (Administrator)", L"\u0422\u0435\u0440\u043c\u0438\u043d\u0430\u043b (\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440)", L"\u30bf\u30fc\u30df\u30ca\u30eb (\u7ba1\u7406\u8005)", L"Terminal (Administrator)", L"Terminal (administrator)", L"Terminal (administratör)", L"Terminal (administrator)", L"Pääte (järjestelmänvalvoja)", L"Terminal (Yönetici)"},
           L"@admin:wt.exe" },
         // Task Manager
         { { L"Gestione attivit\u00e0", L"Task Manager", L"Gestionnaire des t\u00e2ches", L"Administrador de tareas", L"Task-Manager",
-            L"Gestor de Tarefas", L"Taakbeheer", L"\u0414\u0438\u0441\u043f\u0435\u0442\u0447\u0435\u0440 \u0437\u0430\u0434\u0430\u0447", L"\u30bf\u30b9\u30af\u30de\u30fc\u30b8\u30e3", L"Mened\u017cer zada\u0144", L"Jobliste", L"Aktivitetshanteraren", L"Oppgavebehandling", L"Tehtävienhallinta", L"Görev Yöneticisi"},
+            L"Gestor de Tarefas", L"Taakbeheer", L"\u0414\u0438\u0441\u043f\u0435\u0442\u0447\u0435\u0440 \u0437\u0430\u0434\u0430\u0447", L"\u30bf\u30b9\u30af \u30de\u30cd\u30fc\u30b8\u30e3\u30fc", L"Mened\u017cer zada\u0144", L"Jobliste", L"Aktivitetshanteraren", L"Oppgavebehandling", L"Tehtävienhallinta", L"Görev Yöneticisi"},
           L"taskmgr.exe" },
         // Settings
         { { L"Impostazioni", L"Settings", L"Param\u00e8tres", L"Configuraci\u00f3n", L"Einstellungen",
@@ -1445,7 +1580,7 @@ static void ShowCustomWinXMenuHere(HWND startButton) {
           L"ms-settings:" },
         // File Explorer
         { { L"Esplora file", L"File Explorer", L"Explorateur de fichiers", L"Explorador de archivos", L"Datei-Explorer",
-            L"Explorador de Ficheiros", L"Verkenner", L"\u041f\u0440\u043e\u0432\u043e\u0434\u043d\u0438\u043a \u0444\u0430\u0439\u043b\u043e\u0432", L"\u30d5\u30a1\u30a4\u30eb\u30a8\u30af\u30b9\u30d7\u30ed\u30fc\u30e9", L"Eksplorator plik\u00f3w", L"Stifinder", L"Utforskaren", L"Filutforsker", L"Resurssienhallinta", L"Dosya Gezgini"},
+            L"Explorador de Ficheiros", L"Verkenner", L"\u041f\u0440\u043e\u0432\u043e\u0434\u043d\u0438\u043a \u0444\u0430\u0439\u043b\u043e\u0432", L"\u30a8\u30af\u30b9\u30d7\u30ed\u30fc\u30e9\u30fc", L"Eksplorator plik\u00f3w", L"Stifinder", L"Utforskaren", L"Filutforsker", L"Resurssienhallinta", L"Dosya Gezgini"},
           L"explorer.exe" },
         // The Windows 10 menu has a Search entry here. It is deliberately not part
         // of this recreation: opening the Windows 11 search host from a shell menu
@@ -1453,30 +1588,30 @@ static void ShowCustomWinXMenuHere(HWND startButton) {
         // and Windows Search is opened with Win+S, the taskbar Search box or Start.
         // Run
         { { L"Esegui", L"Run", L"Ex\u00e9cuter", L"Ejecutar", L"Ausf\u00fchren",
-            L"Executar", L"Uitvoeren", L"\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c", L"\u5b9f\u884c", L"Uruchom", L"Kør", L"Kör", L"Kjør", L"Suorita", L"Çalıştır"},
-          L"@winkey:R" },
+            L"Executar", L"Uitvoeren", L"\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c", L"\u30d5\u30a1\u30a4\u30eb\u540d\u3092\u6307\u5b9a\u3057\u3066\u5b9f\u884c", L"Uruchom", L"Kør", L"Kör", L"Kjør", L"Suorita", L"Çalıştır"},
+          L"shell:::{2559a1f3-21d7-11d4-bdaf-00c04f60b9f0}" },
         // Shut down or sign out
-        { { L"Disconnetti o esci", L"Shut down or sign out", L"Arr\u00eater ou d\u00e9connecter", L"Cerrar sesi\u00f3n o apagar", L"Herunterfahren oder abmelden",
-            L"Terminar Sess\u00e3o ou Desligar", L"Afsluiten of afmelden", L"\u0417\u0430\u043a\u0440\u044b\u0442\u044c \u0438\u043b\u0438 \u0432\u044b\u0439\u0442\u0438", L"\u30b7\u30e3\u30c3\u30c8\u30c0\u30a6\u30f3\u307e\u30ed\u30b0\u30a2\u30a6\u30c8", L"Zamknij lub wyloguj", L"Luk computeren, eller log af", L"Stäng av eller logga ut", L"Slå av eller logg av", L"Sammuta tai kirjaudu ulos", L"Kapat veya oturumu kapat"},
+        { { L"Arresta o disconnetti", L"Shut down or sign out", L"Arr\u00eater ou d\u00e9connecter", L"Cerrar sesi\u00f3n o apagar", L"Herunterfahren oder abmelden",
+            L"Terminar Sess\u00e3o ou Desligar", L"Afsluiten of afmelden", L"\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0438\u0435 \u0440\u0430\u0431\u043e\u0442\u044b \u0438\u043b\u0438 \u0432\u044b\u0445\u043e\u0434 \u0438\u0437 \u0441\u0438\u0441\u0442\u0435\u043c\u044b", L"\u30b7\u30e3\u30c3\u30c8\u30c0\u30a6\u30f3\u307e\u305f\u306f\u30b5\u30a4\u30f3\u30a2\u30a6\u30c8", L"Zamknij lub wyloguj", L"Luk computeren, eller log af", L"Stäng av eller logga ut", L"Slå av eller logg av", L"Sammuta tai kirjaudu ulos", L"Kapat veya oturumu kapat"},
           L"explorer.exe shell:::{85BBD9B8-4226-101A-A96C-945596089032}" },
         // Desktop
         { { L"Desktop", L"Desktop", L"Bureau", L"Escritorio", L"Desktop",
-            L"\u00c1rea de Trabalho", L"Bureaublad", L"\u0420\u0430\u0431\u043e\u0447\u0438\u0439 \u0441\u0442\u043e\u043b", L"\u30c7\u30b7\u30af\u30c8\u30c3\u30d7", L"Pulpit", L"Skrivebord", L"Skrivbord", L"Skrivebord", L"Työpöytä", L"Masaüstü"},
-          L"@winkey:D" }
+            L"\u00c1rea de Trabalho", L"Bureaublad", L"\u0420\u0430\u0431\u043e\u0447\u0438\u0439 \u0441\u0442\u043e\u043b", L"\u30c7\u30b9\u30af\u30c8\u30c3\u30d7", L"Pulpit", L"Skrivebord", L"Skrivbord", L"Skrivebord", L"Työpöytä", L"Masaüstü"},
+          L"@desktop" }
     };
     
     // Shut-down entries of the submenu (as in Windows 10), in every interface
     // language: the order is the one of UiLangId.
     static const wchar_t* const kPowerText[4][LANG_COUNT] = {
-        { L"Disconnetti", L"Sign out", L"Se déconnecter", L"Cerrar sesión", L"Abmelden", L"Terminar sessão", L"Afmelden", L"Выйти", L"サインアウト", L"Wyloguj", L"Log af", L"Logga ut", L"Logg av", L"Kirjaudu ulos", L"Oturumu kapat" },
+        { L"Disconnetti", L"Sign out", L"Se déconnecter", L"Cerrar sesión", L"Abmelden", L"Terminar sessão", L"Afmelden", L"Выход из системы", L"サインアウト", L"Wyloguj", L"Log af", L"Logga ut", L"Logg av", L"Kirjaudu ulos", L"Oturumu kapat" },
         { L"Sospendi", L"Sleep", L"Mettre en veille", L"Suspender", L"Energiesparmodus", L"Suspender", L"Sluimerstand", L"Спящий режим", L"スリープ", L"Uśpij", L"Slumre", L"Viloläge", L"Dvalemodus", L"Lepotila", L"Uyku" },
         { L"Arresta il sistema", L"Shut down", L"Arrêter", L"Apagar", L"Herunterfahren", L"Encerrar", L"Afsluiten", L"Завершение работы", L"シャットダウン", L"Zamknij", L"Luk computeren", L"Stäng av", L"Slå av", L"Sammuta", L"Kapat" },
         { L"Riavvia il sistema", L"Restart", L"Redémarrer", L"Reiniciar", L"Neu starten", L"Reiniciar", L"Opnieuw opstarten", L"Перезагрузка", L"再起動", L"Uruchom ponownie", L"Genstart", L"Starta om", L"Start på nytt", L"Käynnistä uudelleen", L"Yeniden başlat" },
     };
     static const wchar_t* const kPowerCmd[4] = {
         L"shutdown.exe /l",
-        L"rundll32.exe powrprof.dll,SetSuspendState 0,1,0",
-        L"shutdown.exe /s /t 0",
+        L"@sleep",
+        L"shutdown.exe /s /hybrid /t 0",
         L"shutdown.exe /r /t 0",
     };
     // The language index is used by the shut-down submenu as well.
@@ -1598,15 +1733,18 @@ static void ShowCustomWinXMenu(HWND startButton) {
 }
 
 // Handles a Win+X request posted by the input hooks, with a short debounce so that a
-// burst of requests opens one menu.
-static void HandleWinXRequest() {
+// burst of requests opens one menu. startButton is the button a right-click came
+// from, or null for the keyboard chord.
+static void HandleWinXRequest(HWND startButton) {
     static ULONGLONG lastRequest = 0;
 
     const ULONGLONG now = GetTickCount64();
     if (lastRequest && now - lastRequest < 400) return;
     lastRequest = now;
 
-    ShowCustomWinXMenu(FindNativeTaskbarStartButton());
+    if (!startButton || !IsWindow(startButton))
+        startButton = FindNativeTaskbarStartButton();
+    ShowCustomWinXMenu(startButton);
 }
 
 // Tears down what the services thread owns, when it exits. The hooks are removed
@@ -1668,7 +1806,7 @@ static DWORD WINAPI ExplorerServicesThread(LPVOID) {
         MSG msg;
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
             if (msg.message == g_winXRouteMessage)
-                HandleWinXRequest();
+                HandleWinXRequest(reinterpret_cast<HWND>(msg.lParam));
         }
 
         const ULONGLONG now64 = GetTickCount64();
