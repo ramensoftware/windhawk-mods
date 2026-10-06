@@ -41,9 +41,13 @@
 - CoolSwitchColumns: 7
   $name: Number of grid columns
   $name:ko-KR: 그리드 열 수
+  $description: Must be greater than 2 and less than 50.
+  $description:ko-KR: 2보다 크고 50보다 작아야 합니다.
 - CoolSwitchRows: 3
   $name: Number of grid rows
   $name:ko-KR: 그리드 행 수
+  $description: Must be greater than 2 and less than 25. At least 6 items must be able to show in total, otherwise default values will be used.
+  $description:ko-KR: 2보다 크고 25보다 작아야 합니다. 총 6개 이상의 항목이 표시될 수 있어야 하며, 그렇지 않으면 기본 크기가 사용됩니다.
 - ShowDelay: 100
   $name: Show delay (ms)
   $name:ko-KR: 표시 지연 시간 (ms)
@@ -64,11 +68,11 @@
   $name:ko-KR: 같은 모니터의 항목만 표시
   $description: Only show windows located on the switcher's monitor.
   $description:ko-KR: 전환기와 같은 모니터에 위치한 창만 표시합니다.
-- NoPerApplicationList: false
-  $name: Disable per-application list (Alt+`)
-  $name:ko-KR: 응용 프로그램별 목록 (Alt+`) 비활성화
-  $description: Disable the per-application window switcher, which is shown when Alt+Tilde is pressed.
-  $description:ko-KR: Alt+`를 누르면 표시되는 응용 프로그램별 전환기를 비활성화합니다.
+- PerApplicationList: false
+  $name: Enable per-application list (Alt+`)
+  $name:ko-KR: 응용 프로그램별 목록 (Alt+`) 활성화
+  $description: Enable the per-application window switcher, which is shown when Alt+Tilde is pressed.
+  $description:ko-KR: Alt+`를 누르면 표시되는 응용 프로그램별 전환기를 활성화합니다.
 - SwitcherIsPerApplication: false
   $name: Only show one item per application
   $name:ko-KR: 응용 프로그램 당 한 항목만 표시
@@ -77,6 +81,8 @@
 - AlwaysUseWindowTitleAndIcon: false
   $name: Always use the window title and icon
   $name:ko-KR: 항상 창 제목 및 아이콘 사용
+  $description: When showing only one item per application, use the title and icon of the most recently focused window in the category, instead of the application name and icon.
+  $description:ko-KR: 응용 프로그램 당 한 항목만 표시 중일 때, 응용 프로그램 이름 및 아이콘 대신 범주 내 가장 최근에 사용한 창의 제목과 아이콘을 사용합니다.
 - ScrollWheelBehavior: "4"
   $name: Scroll wheel behavior
   $name:ko-KR: 스크롤 휠 동작
@@ -621,7 +627,7 @@ typedef struct _sws_WindowSwitcherSettings
 {
     DWORD bIncludeWallpaper;
     DWORD bPerMonitor;
-    DWORD bNoPerApplicationList;
+    DWORD bPerApplicationList;
     DWORD bSwitcherIsPerApplication;
     DWORD bAlwaysUseWindowTitleAndIcon;
     DWORD dwScrollWheelBehavior;
@@ -1460,20 +1466,20 @@ void sws_WindowHelpers_GetDesktopText(wchar_t* wszTitle)
 {
     if (_sws_ExplorerFrame)
     {
-        LoadStringW((HINSTANCE)_sws_ExplorerFrame, 13140, wszTitle, MAX_PATH);
-        // Strip CJK "(D)" from it
-        auto titleText = std::wstring(wszTitle);
-        size_t pos = titleText.find(L"(&D)");
-        if (pos != std::wstring::npos)
+        if (LoadStringW(_sws_ExplorerFrame, 13140, wszTitle, MAX_PATH))
         {
-            titleText.replace(pos, 4, L"");
+            // Strip CJK "(D)" from it
+            auto titleText = std::wstring(wszTitle);
+            size_t pos = titleText.find(L"(&D)");
+            if (pos != std::wstring::npos)
+            {
+                titleText.replace(pos, 4, L"");
+            }
+            wcsncpy_s(wszTitle, MAX_PATH, titleText.c_str(), _TRUNCATE);
+            return;
         }
-        wcsncpy_s(wszTitle, MAX_PATH, titleText.c_str(), _TRUNCATE);
     }
-    else
-    {
-        wcscat_s(wszTitle, MAX_PATH, L"Desktop");
-    }
+    wcscpy_s(wszTitle, MAX_PATH, L"Desktop");
 }
 
 BOOL CALLBACK sws_WindowHelpers_AddAltTabWindowsToTimeStampedHWNDList(HWND hWnd, LPARAM hdpa)
@@ -1529,98 +1535,100 @@ void sws_WindowHelpers_GetDesiredWindowText(sws_WindowSwitcher* _this, sws_Windo
     }
     else
     {
-        if (window.dwCount > 1)
+        WCHAR wszRundll32Path[MAX_PATH];
+        GetSystemDirectoryW(wszRundll32Path, MAX_PATH);
+        wcscat_s(wszRundll32Path, MAX_PATH, L"\\rundll32.exe");
+        if (_this->settings.bAlwaysUseWindowTitleAndIcon || _this->mode != SWS_WINDOWSWITCHER_LAYOUTMODE_FULL || !_this->settings.bSwitcherIsPerApplication || !_wcsicmp(window.wszPath, wszRundll32Path))
         {
-            DWORD dwPrefixLen = 0;
-            BOOL bAUMIDOk = FALSE;
-            if (window.wszAUMID)
+            sws_WindowHelpers_GetWindowText(window.hWnd, wszTitle, MAX_PATH);
+        }
+        else
+        {
+            if (window.dwCount > 1)
             {
-                IShellItem2* pItem = NULL;
-                if (SUCCEEDED(SHCreateItemInKnownFolder(FOLDERID_AppsFolder, KF_FLAG_DONT_VERIFY, window.wszAUMID, IID_IShellItem2, (void**)&pItem)) && pItem)
+                DWORD dwPrefixLen = 0;
+                BOOL bAUMIDOk = FALSE;
+                if (window.wszAUMID)
                 {
-                    LPWSTR pDisplayName = NULL;
-                    if (SUCCEEDED(pItem->GetDisplayName(SIGDN_NORMALDISPLAY, &pDisplayName)) && pDisplayName)
+                    IShellItem2* pItem = NULL;
+                    if (SUCCEEDED(SHCreateItemInKnownFolder(FOLDERID_AppsFolder, KF_FLAG_DONT_VERIFY, window.wszAUMID, IID_IShellItem2, (void**)&pItem)) && pItem)
                     {
-                        bAUMIDOk = TRUE;
-                        wcscpy_s(wszTitle + dwPrefixLen, MAX_PATH - dwPrefixLen, pDisplayName);
-                        CoTaskMemFree(pDisplayName);
-                    }
-                    pItem->Release();
-                }
-            }
-            if (!bAUMIDOk)
-            {
-                IShellItem2* pIShellItem2 = NULL;
-                if (SUCCEEDED(SHCreateItemFromParsingName(window.wszPath, NULL, IID_IShellItem2, (void**)&pIShellItem2)))
-                {
-                    LPWSTR wszOutText = NULL;
-                    if (SUCCEEDED(pIShellItem2->GetString(PKEY_FileDescription, &wszOutText)))
-                    {
-                        int len = wcslen(wszOutText);
-                        if (len >= 4 && wszOutText[len - 1] == L'e' && wszOutText[len - 2] == L'x' && wszOutText[len - 3] == L'e' && wszOutText[len - 4] == L'.')
+                        LPWSTR pDisplayName = NULL;
+                        if (SUCCEEDED(pItem->GetDisplayName(SIGDN_NORMALDISPLAY, &pDisplayName)) && pDisplayName)
                         {
-                            CoTaskMemFree(wszOutText);
-                            if (SUCCEEDED(pIShellItem2->GetString(PKEY_Software_ProductName, &wszOutText)))
+                            bAUMIDOk = TRUE;
+                            wcscpy_s(wszTitle + dwPrefixLen, MAX_PATH - dwPrefixLen, pDisplayName);
+                            CoTaskMemFree(pDisplayName);
+                        }
+                        pItem->Release();
+                    }
+                }
+                if (!bAUMIDOk)
+                {
+                    IShellItem2* pIShellItem2 = NULL;
+                    if (SUCCEEDED(SHCreateItemFromParsingName(window.wszPath, NULL, IID_IShellItem2, (void**)&pIShellItem2)))
+                    {
+                        LPWSTR wszOutText = NULL;
+                        if (SUCCEEDED(pIShellItem2->GetString(PKEY_FileDescription, &wszOutText)))
+                        {
+                            int len = wcslen(wszOutText);
+                            if (len >= 4 && wszOutText[len - 1] == L'e' && wszOutText[len - 2] == L'x' && wszOutText[len - 3] == L'e' && wszOutText[len - 4] == L'.')
+                            {
+                                CoTaskMemFree(wszOutText);
+                                if (SUCCEEDED(pIShellItem2->GetString(PKEY_Software_ProductName, &wszOutText)))
+                                {
+                                    wcscpy_s(wszTitle + dwPrefixLen, MAX_PATH - dwPrefixLen, wszOutText);
+                                    CoTaskMemFree(wszOutText);
+                                }
+                                else
+                                {
+                                    sws_WindowHelpers_GetWindowText(window.hWnd, wszTitle + dwPrefixLen, MAX_PATH - dwPrefixLen);
+                                }
+                            }
+                            else
                             {
                                 wcscpy_s(wszTitle + dwPrefixLen, MAX_PATH - dwPrefixLen, wszOutText);
                                 CoTaskMemFree(wszOutText);
                             }
-                            else
-                            {
-                                sws_WindowHelpers_GetWindowText(window.hWnd, wszTitle + dwPrefixLen, MAX_PATH - dwPrefixLen);
-                            }
                         }
                         else
                         {
-                            wcscpy_s(wszTitle + dwPrefixLen, MAX_PATH - dwPrefixLen, wszOutText);
-                            CoTaskMemFree(wszOutText);
+                            sws_WindowHelpers_GetWindowText(window.hWnd, wszTitle + dwPrefixLen, MAX_PATH - dwPrefixLen);
+                        }
+                        pIShellItem2->Release();
+                    }
+                }
+
+                WCHAR wszTitle2[MAX_PATH];
+                wcscpy_s(wszTitle2, MAX_PATH, wszTitle);
+
+                if (_sws_Explorer)
+                {
+                    WCHAR wszFormat[MAX_PATH] = {};
+                    if (LoadStringW(_sws_Explorer, 11115, wszFormat, MAX_PATH))
+                    {
+                        auto titleText = std::wstring(wszFormat);
+                        size_t pos = titleText.find(L"%d");
+                        if (pos != std::wstring::npos)
+                        {
+                            titleText.replace(pos, 2, std::to_wstring(window.dwCount));
+                            pos = titleText.find(L"%s");
+                            if (pos != std::wstring::npos)
+                            {
+                                titleText.replace(pos, 2, wszTitle2);
+                                wcsncpy_s(wszTitle, MAX_PATH, titleText.c_str(), _TRUNCATE);
+                                return;
+                            }
                         }
                     }
-                    else
-                    {
-                        sws_WindowHelpers_GetWindowText(window.hWnd, wszTitle + dwPrefixLen, MAX_PATH - dwPrefixLen);
-                    }
-                    pIShellItem2->Release();
                 }
-            }
-            WCHAR wszTitle2[MAX_PATH];
-            wcscpy_s(wszTitle2, MAX_PATH, wszTitle);
 
-            WCHAR wszFormat[MAX_PATH] = {};
-            if (window.dwCount)
-            {
-                wcscpy_s(wszFormat, MAX_PATH, L"%s - %d running windows");
+                swprintf_s(wszTitle, MAX_PATH, L"%s - %d running windows", wszTitle2, window.dwCount);
             }
             else
             {
-                wcscpy_s(wszFormat, MAX_PATH, L"%s - 1 running window");
+                sws_WindowHelpers_GetWindowText(window.hWnd, wszTitle, MAX_PATH);
             }
-            if (_sws_Explorer)
-            {
-                if (window.dwCount)
-                {
-                    LoadStringW((HINSTANCE)_sws_Explorer, 11115, wszFormat, MAX_PATH);
-                }
-                else
-                {
-                    LoadStringW((HINSTANCE)_sws_Explorer, 11114, wszFormat, MAX_PATH);
-                }
-            }
-            auto titleText = std::wstring(wszFormat);
-            size_t pos;
-            if (window.dwCount && (pos = titleText.find(L"%d")) != std::wstring::npos)
-            {
-                titleText.replace(pos, 2, std::to_wstring(window.dwCount));
-            }
-            if ((pos = titleText.find(L"%s")) != std::wstring::npos)
-            {
-                titleText.replace(pos, 2, wszTitle2);
-            }
-            wcsncpy_s(wszTitle, MAX_PATH, titleText.c_str(), _TRUNCATE);
-        }
-        else
-        {
-            sws_WindowHelpers_GetWindowText(window.hWnd, wszTitle, MAX_PATH);
         }
     }
 }
@@ -2082,6 +2090,12 @@ sws_error_t sws_WindowSwitcherLayout_Initialize(
                         BOOL bShouldContinue = FALSE;
                         for (int j = i - 1; j >= 0; j--)
                         {
+                            BOOL isCandidateCloaked = FALSE;
+                            DwmGetWindowAttribute(windowList[j].hWnd, DWMWA_CLOAKED, &isCandidateCloaked, sizeof(BOOL));
+                            if (isCandidateCloaked)
+                            {
+                                continue;
+                            }
                             if (sws_WindowHelpers_IsAltTabWindow(windowList[j].hWnd) && windowList[i].wszAUMID && windowList[j].wszAUMID)
                             {
                                 if (!wcscmp(windowList[i].wszAUMID, windowList[j].wszAUMID) && (settings.bPerMonitor ? MonitorFromWindow(windowList[i].hWnd, MONITOR_DEFAULTTONULL) == MonitorFromWindow(windowList[j].hWnd, MONITOR_DEFAULTTONULL) : TRUE))
@@ -2509,7 +2523,7 @@ static void _sws_WindowSwitcher_DrawContour(sws_WindowSwitcher* _this, HDC hdcPa
 
 void sws_WindowSwitcher_RegisterHotkeys(sws_WindowSwitcher* _this)
 {
-    if (!_this->settings.bNoPerApplicationList)
+    if (_this->settings.bPerApplicationList)
     {
         RegisterHotKey(_this->hWnd, -1, MOD_ALT, _this->vkTilde);
         RegisterHotKey(_this->hWnd, -2, MOD_ALT | MOD_SHIFT, _this->vkTilde);
@@ -3942,7 +3956,7 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
             {
                 if (uMsg == WM_HOTKEY && (int)wParam < 0)
                 {
-                    if (_this->settings.bNoPerApplicationList)
+                    if (!_this->settings.bPerApplicationList)
                     {
                         return 0;
                     }
@@ -3952,17 +3966,20 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
                 {
                     _this->mode = SWS_WINDOWSWITCHER_LAYOUTMODE_FULL;
                 }
+
                 _this->initialDirection = SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_INITIAL;
                 if (uMsg == WM_HOTKEY && (LOWORD(lParam) & MOD_SHIFT))
                 {
                     _this->initialDirection = SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_BACKWARD;
                 }
+
+                _sws_WindowSwitcher_Show(_this);
+
                 POINT ptCursor;
                 GetCursorPos(&ptCursor);
                 RECT rcSwitcher;
                 GetWindowRect(_this->hWnd, &rcSwitcher);
                 _this->bIsCursorOnSwitcher = PtInRect(&rcSwitcher, ptCursor);
-                _sws_WindowSwitcher_Show(_this);
                 return 0;
             }
             else
@@ -4211,20 +4228,24 @@ sws_error_t sws_WindowSwitcher_RunMessageQueue(sws_WindowSwitcher* _this)
 
 void sws_WindowSwitcher_LoadSettings(sws_WindowSwitcher* _this)
 {
-    _this->dwShowDelay = Wh_GetIntSetting(L"ShowDelay");
-    if (_this->dwShowDelay > 10000) {
-        _this->dwShowDelay = 10000;
+    int showDelay = Wh_GetIntSetting(L"ShowDelay");
+    if (showDelay < 0) {
+        showDelay = 0;
     }
+    if (showDelay > 10000) {
+        showDelay = 10000;
+    }
+    _this->dwShowDelay = showDelay;
 
     _this->settings.bIncludeWallpaper = Wh_GetIntSetting(L"IncludeWallpaper");
     _this->bPrimaryOnly = Wh_GetIntSetting(L"PrimaryMonitorOnly");
     _this->settings.bPerMonitor = Wh_GetIntSetting(L"PerMonitor");
-    _this->settings.bNoPerApplicationList = Wh_GetIntSetting(L"NoPerApplicationList");
+    _this->settings.bPerApplicationList = Wh_GetIntSetting(L"PerApplicationList");
     _this->settings.bSwitcherIsPerApplication = Wh_GetIntSetting(L"SwitcherIsPerApplication");
     _this->settings.bAlwaysUseWindowTitleAndIcon = Wh_GetIntSetting(L"AlwaysUseWindowTitleAndIcon");
 
     _this->settings.dwScrollWheelBehavior = _wtoi(WindhawkUtils::StringSetting::make(L"ScrollWheelBehavior"));
-    if (_this->settings.dwScrollWheelBehavior < 0 || _this->settings.dwScrollWheelBehavior > SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_IFNOTCLIENTAREA_GRIDSCROLL)
+    if (_this->settings.dwScrollWheelBehavior > SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_IFNOTCLIENTAREA_GRIDSCROLL)
     {
         _this->settings.dwScrollWheelBehavior = SWS_SCROLLWHEELBEHAVIOR_DISABLED;
     }
@@ -4233,16 +4254,22 @@ void sws_WindowSwitcher_LoadSettings(sws_WindowSwitcher* _this)
     _this->bSkipIfOneWindow = Wh_GetIntSetting(L"SkipIfOneWindow");
     _this->bRegisterHotKey = Wh_GetIntSetting(L"RegisterHotKey");
 
-    _this->settings.dwGridColumns = Wh_GetIntSetting(L"CoolSwitchColumns");
-    if (_this->settings.dwGridColumns < 1 || _this->settings.dwGridColumns > 50)
+    int col = Wh_GetIntSetting(L"CoolSwitchColumns");
+    if (col < 2 || col > 50)
     {
-        _this->settings.dwGridColumns = SWS_WINDOWSWITCHERLAYOUT_DEFAULT_GRID_COLUMNS;
+        col = SWS_WINDOWSWITCHERLAYOUT_DEFAULT_GRID_COLUMNS;
     }
-    _this->settings.dwGridRows = Wh_GetIntSetting(L"CoolSwitchRows");
-    if (_this->settings.dwGridRows < 1 || _this->settings.dwGridRows > 25)
+    int row = Wh_GetIntSetting(L"CoolSwitchRows");
+    if (row < 2 || row > 25)
     {
-        _this->settings.dwGridRows = SWS_WINDOWSWITCHERLAYOUT_DEFAULT_GRID_ROWS;
+        row = SWS_WINDOWSWITCHERLAYOUT_DEFAULT_GRID_ROWS;
     }
+    if (col * row <= 6) {
+        col = SWS_WINDOWSWITCHERLAYOUT_DEFAULT_GRID_COLUMNS;
+        row = SWS_WINDOWSWITCHERLAYOUT_DEFAULT_GRID_ROWS;
+    }
+    _this->settings.dwGridColumns = col;
+    _this->settings.dwGridRows = row;
 }
 
 void sws_WindowSwitcher_Clear(sws_WindowSwitcher* _this)
