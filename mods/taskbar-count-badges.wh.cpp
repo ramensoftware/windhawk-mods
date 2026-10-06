@@ -2,7 +2,7 @@
 // @id              taskbar-count-badges
 // @name            Taskbar Count Badges
 // @description     Show customizable per-taskbar-button window counts as badges or dots on Windows 11.
-// @version         1.1.0
+// @version         1.2.0
 // @author          digART
 // @github          https://github.com/digart11
 // @license         GPL-3.0
@@ -34,6 +34,12 @@ button represents multiple windows. The indicator can be shown as either a
 
 
 ## What's new:
+
+### 1.2.0
+- Added horizontal and vertical offsets for dots
+- Added active/inactive indicator styling
+- Inactive number-badge backgrounds and dots are dimmed while the active app remains at full opacity
+- Added configurable inactive opacity and an option to disable inactive dimming
 
 ### 1.1.0
 - Added top and bottom dot positions
@@ -80,7 +86,7 @@ Shows a minimal stack or row of dots around the app icon.
 - Bottom replaces only the native Windows running indicator and therefore
   shows one dot for one running window; task progress remains untouched
 - Left, right, and top leave the native Windows running indicator untouched
-- Change dot size and color
+- Change dot size, horizontal and vertical offsets, and color
 - Up to five dots are shown; five dots means **five or more windows**
 
 ## Behavior
@@ -93,8 +99,12 @@ The minimum window count can be changed in the settings. Bottom dots are the
 exception: they always start at one window because they replace the Windows
 running indicator.
 
-Window counts update automatically as windows are opened and closed, and
-settings are applied live.
+By default, inactive number-badge backgrounds and dots are dimmed while the
+currently active app remains at full opacity. Inactive opacity can be adjusted
+in the settings, or inactive dimming can be disabled entirely.
+
+Window counts update automatically as windows are opened and closed, active
+state follows the Windows taskbar, and settings are applied live.
 
 ## Compatibility
 
@@ -148,6 +158,14 @@ ordering, or application behavior.
 
   - size: 4
     $name: Dot size
+
+  - offsetX: 0
+    $name: Horizontal offset
+    $description: Positive moves right, negative moves left.
+
+  - offsetY: 0
+    $name: Vertical offset
+    $description: Positive moves down, negative moves up.
 
   - color: "#FFFFFF"
     $name: Dot color
@@ -238,6 +256,14 @@ ordering, or application behavior.
   - maximumNumber: 99
     $name: Maximum number
     $description: Number badge only. Higher counts are shown with a plus sign, for example 99+.
+
+  - activeStateStyling: true
+    $name: Dim inactive indicators
+    $description: Dim inactive number-badge backgrounds or dots while keeping the active app indicator at full opacity.
+
+  - inactiveOpacity: 50
+    $name: Inactive opacity
+    $description: Opacity percentage used for inactive indicators when dimming is enabled.
   $name: Behavior
 */
 // ==/WindhawkModSettings==
@@ -346,10 +372,16 @@ struct Settings
 
     int dotSize = 4;
 
+    int dotOffsetX = 0;
+    int dotOffsetY = 0;
+
     std::wstring dotColor = L"#FFFFFF";
 
     int minimumCount = 2;
     int maximumNumber = 99;
+
+    bool activeStateStyling = true;
+    int inactiveOpacity = 50;
 };
 
 Settings g_settings;
@@ -383,6 +415,7 @@ struct TrackedButton
     bool bottomDotsUsedFallback = false;
 
     unsigned int lastAppliedCount = std::numeric_limits<unsigned int>::max();
+    std::optional<bool> lastAppliedActive;
     uint64_t lastSettingsGeneration = 0;
 };
 
@@ -567,6 +600,9 @@ void LoadSettings()
 
     g_settings.dotSize = std::max(2, Wh_GetIntSetting(L"VerticalDots.size"));
 
+    g_settings.dotOffsetX = Wh_GetIntSetting(L"VerticalDots.offsetX");
+    g_settings.dotOffsetY = Wh_GetIntSetting(L"VerticalDots.offsetY");
+
     g_settings.dotColor = ReadStringSetting(L"VerticalDots.color");
 
     // Behavior --------------------------------------------------------------
@@ -576,6 +612,12 @@ void LoadSettings()
 
     g_settings.maximumNumber =
         std::max(1, Wh_GetIntSetting(L"Behavior.maximumNumber"));
+
+    g_settings.activeStateStyling =
+        Wh_GetIntSetting(L"Behavior.activeStateStyling") != 0;
+
+    g_settings.inactiveOpacity =
+        std::clamp(Wh_GetIntSetting(L"Behavior.inactiveOpacity"), 0, 100);
 
     ++g_settingsGeneration;
 }
@@ -947,6 +989,9 @@ bool BindDotPositionExpression(Controls::Border badge,
         }
         }
 
+        dotX += static_cast<double>(g_settings.dotOffsetX);
+        dotY += static_cast<double>(g_settings.dotOffsetY);
+
         dotStack.Margin(Thickness{dotX, dotY, 0.0, 0.0});
 
         Hosting::ElementCompositionPreview::SetIsTranslationEnabled(badge,
@@ -1247,7 +1292,8 @@ unsigned int GetVisibleDotCount(unsigned int count)
     return std::min<unsigned int>(count, 5);
 }
 
-void RebuildDots(Controls::StackPanel dotStack, unsigned int count)
+void RebuildDots(Controls::StackPanel dotStack, unsigned int count,
+                 bool isActive)
 {
     dotStack.Children().Clear();
 
@@ -1259,6 +1305,11 @@ void RebuildDots(Controls::StackPanel dotStack, unsigned int count)
     defaultDotColor.B = 255;
 
     auto brush = CreateBrush(g_settings.dotColor, defaultDotColor);
+
+    if (g_settings.activeStateStyling && !isActive)
+    {
+        brush.Opacity(static_cast<double>(g_settings.inactiveOpacity) / 100.0);
+    }
 
     unsigned int dotCount = GetVisibleDotCount(count);
 
@@ -1301,6 +1352,7 @@ void RebuildDots(Controls::StackPanel dotStack, unsigned int count)
 
 bool ApplyBadgeVisualStyle(Controls::Border badge,
                            unsigned int count,
+                           bool isActive,
                            FrameworkElement taskListButton = nullptr,
                            FrameworkElement icon = nullptr,
                            Controls::Grid dotHost = nullptr,
@@ -1368,6 +1420,11 @@ bool ApplyBadgeVisualStyle(Controls::Border badge,
         auto backgroundBrush =
             CreateBrush(g_settings.badgeBackgroundColor, defaultBackground);
 
+        double backgroundOpacity =
+            g_settings.activeStateStyling && !isActive
+                ? static_cast<double>(g_settings.inactiveOpacity) / 100.0
+                : 1.0;
+
         auto borderBrush =
             CreateBrush(g_settings.badgeBorderColor, defaultBorder);
 
@@ -1384,6 +1441,7 @@ bool ApplyBadgeVisualStyle(Controls::Border badge,
             circleVisual.Height(size);
 
             circleVisual.Fill(backgroundBrush);
+            circleVisual.Opacity(backgroundOpacity);
 
             if (g_settings.badgeBorderThickness > 0)
             {
@@ -1418,6 +1476,7 @@ bool ApplyBadgeVisualStyle(Controls::Border badge,
                                                   cornerRadius, cornerRadius});
 
             badgeVisual.Background(backgroundBrush);
+            badgeVisual.Opacity(backgroundOpacity);
 
             if (g_settings.badgeBorderThickness > 0)
             {
@@ -1491,7 +1550,7 @@ bool ApplyBadgeVisualStyle(Controls::Border badge,
 
     dotStack.VerticalAlignment(VerticalAlignment::Center);
 
-    RebuildDots(dotStack, count);
+    RebuildDots(dotStack, count, isActive);
     return BindDotPositionExpression(
         badge, taskListButton, icon, dotHost, count,
         usedTransientBottomFallback);
@@ -1617,7 +1676,8 @@ void RemoveOrphanDotBadges(Controls::Grid const &dotHost)
 
 bool UpdateCountBadge(TrackedButton &tracked,
                       FrameworkElement taskListButton,
-                      unsigned int count)
+                      unsigned int count,
+                      bool isActive)
 {
     if (g_unloading)
     {
@@ -1786,7 +1846,7 @@ bool UpdateCountBadge(TrackedButton &tracked,
     }
 
     bool usedTransientBottomFallback = false;
-    if (!ApplyBadgeVisualStyle(badge, count, taskListButton, icon,
+    if (!ApplyBadgeVisualStyle(badge, count, isActive, taskListButton, icon,
                                dotHost, &usedTransientBottomFallback))
     {
         if (g_settings.displayStyle == DisplayStyle::Dots)
@@ -1866,6 +1926,7 @@ TrackedButton *TrackTaskbarButton(FrameworkElement element)
             existing->badge = {};
             existing->lastAppliedCount =
                 std::numeric_limits<unsigned int>::max();
+            existing->lastAppliedActive.reset();
             existing->lastSettingsGeneration = 0;
         }
 
@@ -1911,6 +1972,42 @@ bool GetTaskbarButtonViewModelCount(FrameworkElement element,
     return true;
 }
 
+std::optional<bool> GetTaskbarButtonActiveState(FrameworkElement element)
+{
+    auto iconPanel = FindChildByName(element, L"IconPanel");
+    if (!iconPanel)
+    {
+        return std::nullopt;
+    }
+
+    try
+    {
+        auto groups = VisualStateManager::GetVisualStateGroups(iconPanel);
+        for (auto const &group : groups)
+        {
+            if (group.Name() != L"RunningIndicatorStates")
+            {
+                continue;
+            }
+
+            auto state = group.CurrentState();
+            if (!state)
+            {
+                return std::nullopt;
+            }
+
+            auto stateName = state.Name();
+            return stateName == L"ActiveRunningIndicator" ||
+                   stateName == L"RequestingAttentionRunningIndicator";
+        }
+    }
+    catch (...)
+    {
+    }
+
+    return std::nullopt;
+}
+
 void ApplyCountToTrackedButton(TrackedButton &item, unsigned int count)
 {
     uint64_t settingsGeneration = g_settingsGeneration;
@@ -1928,6 +2025,13 @@ void ApplyCountToTrackedButton(TrackedButton &item, unsigned int count)
         RestoreRunningIndicator(item);
         return;
     }
+
+    // Skip active-state tracking entirely when inactive dimming is disabled.
+    // If Windows' active taskbar state isn't available, keep the custom
+    // indicator at full opacity rather than incorrectly dimming it.
+    bool isActive =
+        !g_settings.activeStateStyling ||
+        GetTaskbarButtonActiveState(element).value_or(true);
 
     bool runningIndicatorReady = true;
 
@@ -1970,6 +2074,7 @@ void ApplyCountToTrackedButton(TrackedButton &item, unsigned int count)
     }
 
     if (item.lastAppliedCount == count &&
+        item.lastAppliedActive == isActive &&
         item.lastSettingsGeneration == settingsGeneration &&
         (!badgeExpected || item.badge.get()) &&
         runningIndicatorReady &&
@@ -1982,21 +2087,25 @@ void ApplyCountToTrackedButton(TrackedButton &item, unsigned int count)
     // update doesn't apply the same visual change recursively. TrackTaskbarButton
     // never erases entries, so this reference stays valid across re-entry.
     unsigned int previousCount = item.lastAppliedCount;
+    auto previousActive = item.lastAppliedActive;
     uint64_t previousGeneration = item.lastSettingsGeneration;
     item.lastAppliedCount = count;
+    item.lastAppliedActive = isActive;
     item.lastSettingsGeneration = settingsGeneration;
 
     try
     {
-        if (!UpdateCountBadge(item, element, count))
+        if (!UpdateCountBadge(item, element, count, isActive))
         {
             item.lastAppliedCount = previousCount;
+            item.lastAppliedActive = previousActive;
             item.lastSettingsGeneration = previousGeneration;
         }
     }
     catch (...)
     {
         item.lastAppliedCount = previousCount;
+        item.lastAppliedActive = previousActive;
         item.lastSettingsGeneration = previousGeneration;
         throw;
     }
