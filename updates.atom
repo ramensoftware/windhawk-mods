@@ -2,12 +2,142 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-06T21:03:54.000Z</updated>
+    <updated>2026-10-06T22:05:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer real folder paths 0.1.5]]></title>
+        <id>https://windhawk.net/mods/explorer-real-folder-paths#2f67edf76611c6f463382cfbd6c987a4d6ee9d6b</id>
+        <link href="https://windhawk.net/mods/explorer-real-folder-paths"/>
+        <updated>2026-10-06T22:05:13.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix editable address paths for Dropbox and similar filesystem folders that retain a friendly editing name.</li>
+<li>Keep the existing navigation behavior when the additional Shell name symbol is unavailable.</li>
+</ul>]]></content>
+        <author>
+            <name>Nerdworld</name>
+            <uri>https://github.com/nerdworldDE</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[DXGI Flip Model Upgrade 1.0]]></title>
+        <id>https://windhawk.net/mods/dxgi-flip-model-upgrade#9db4af94bd5192d63c643e458ac38c88b2b297f3</id>
+        <link href="https://windhawk.net/mods/dxgi-flip-model-upgrade"/>
+        <updated>2026-10-06T22:05:09.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="dxgiflipmodelupgrade">DXGI Flip Model Upgrade</h1>
+<p><strong>Important: restart the game after this mod gets disabled, updated or
+reloaded while the game runs.</strong> The game keeps its upgraded swap chains, which
+need the mod for resizing and for keeping its render targets bound, so it may
+show a frozen or black picture, or fail. That includes mod updates that
+Windhawk installs automatically in the background. If you play with this mod
+enabled, consider turning off automatic updates for it.</p>
+<p>Many Direct3D 11 games present with the legacy <em>blt model</em>
+(<code>DXGI_SWAP_EFFECT_DISCARD</code> or <code>SEQUENTIAL</code>): in a window or borderless window,
+every frame is copied and composed by DWM, which adds latency and blocks
+Independent Flip. PresentMon reports them as <code>Composed: Copy with GPU GDI</code>.
+Many games also never enable tearing, so with VSync off they're still capped
+at the refresh rate in a window.</p>
+<p>This mod changes the swap chains the game creates:</p>
+<ul>
+<li><strong>Force flip model:</strong> blt model swap chains of Direct3D 11 games use the flip
+model instead (<code>FLIP_DISCARD</code> or <code>FLIP_SEQUENTIAL</code>). Once the game window
+covers the whole screen, DWM can promote it to <strong>Independent Flip</strong>.</li>
+<li><strong>Force allow tearing:</strong> flip model swap chains of Direct3D 11 and 12 games
+allow tearing, and frames presented with VSync off show immediately.</li>
+<li><strong>Maximum frame latency</strong>, <strong>Waitable swap chain</strong> and <strong>Force borderless</strong>
+are off by default, see their descriptions in the settings.</li>
+</ul>
+<p>Windows 11 has a similar system-wide option, "Optimizations for windowed
+games", for Direct3D 10 and 11. This mod applies per game, also works on
+Windows 10, and adds tearing.</p>
+<h2 id="howtoenablethemodforaprogram">How to enable the mod for a program</h2>
+<p>This mod doesn't target any process by default. In Windhawk, go to the mod's
+"Advanced" tab and scroll down to "Custom process inclusion list". In that box,
+put the filename of the game's <code>.exe</code>, then click "Save" and (re)start the game.
+Only swap chains created while the mod is loaded are changed.</p>
+<h2 id="howtoverify">How to verify</h2>
+<p>Use <a href="https://github.com/GameTechDev/PresentMon">PresentMon</a> (or an overlay that
+shows the presentation mode, such as RTSS). With the flip model, the game should
+show <code>Hardware: Independent Flip</code> or <code>Hardware Composed: Independent Flip</code> in
+borderless fullscreen, and <code>Composed: Flip</code> in a smaller window. With tearing
+and VSync off, the frame rate can go above the refresh rate. The log says what
+was changed for each swap chain, and why something wasn't.</p>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>Not changed to the flip model: swap chains with a multisampled back buffer,
+swap chains created in exclusive fullscreen (those already get flip
+presentation through Fullscreen Optimizations), Direct3D 10 games, and back
+buffer formats the flip model doesn't support.</li>
+<li>sRGB back buffers aren't supported by the flip model, so their format becomes
+the non-sRGB one. Render target views the game creates for them still get the
+sRGB format, but a game that reads the back buffer format sees the other one.</li>
+<li>The flip model only shows what the game renders with Direct3D. Anything drawn
+into the game window with GDI disappears.</li>
+<li>Tearing doesn't apply in exclusive fullscreen.</li>
+<li>With <strong>Force borderless</strong>, the game runs at the desktop resolution, and its
+picture is stretched if it renders at another one. The game is told it's in
+fullscreen. Alt+Enter is turned off for those swap chains, as it would switch
+to exclusive fullscreen behind the mod's back.</li>
+<li>With <strong>Waitable swap chain</strong>, games that already use a waitable swap chain
+keep their own settings.</li>
+<li>If the game loads <code>dxgi.dll</code> only after it started, the mod's hooks are
+installed a moment after that, and a swap chain the game creates right away
+may keep the blt model. The log then shows no "Hooked" lines before that swap
+chain.</li>
+</ul>
+<h2 id="anticheat">Anti-cheat</h2>
+<p><strong>Don't use this mod in online games protected by anti-cheat.</strong> It loads code
+into the game and hooks DXGI and Direct3D 11 functions:
+<code>CreateDXGIFactory</code>, <code>CreateDXGIFactory1</code> and <code>CreateDXGIFactory2</code>,
+<code>IDXGIFactory::CreateSwapChain</code> and <code>IDXGIFactory2::CreateSwapChainForHwnd</code>,
+<code>IDXGISwapChain::Present</code>, <code>Present1</code>, <code>ResizeBuffers</code>, <code>ResizeBuffers1</code>,
+<code>SetFullscreenState</code>, <code>GetFullscreenState</code> and <code>ResizeTarget</code>,
+<code>IDXGIDevice1::SetMaximumFrameLatency</code> and
+<code>ID3D11Device::CreateRenderTargetView</code>. It hooks no Windows loader or kernel
+functions, such as <code>LoadLibraryExW</code> in <code>kernelbase.dll</code>: if <code>dxgi.dll</code> isn't
+loaded yet when the mod starts, the mod learns about it through a Windows DLL
+load notification, and a thread of the mod installs the hooks. With <strong>Force
+borderless</strong>, another thread changes the game window. Present hooks are also
+how cheats draw overlays, so anti-cheat software may block the game, kick you
+or ban your account. There are no guarantees for any game.</p>
+<p>Enable the mod's logging (Advanced → Debug logging) to see what happens.</p>]]></content>
+        <author>
+            <name>tria</name>
+            <uri>https://github.com/triatomic</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[ClassicWindowSwitcher 1.3]]></title>
+        <id>https://windhawk.net/mods/classic-window-switcher#ef7ebe709b53c0e14da6769f29a9a5b0501facb6</id>
+        <link href="https://windhawk.net/mods/classic-window-switcher"/>
+        <updated>2026-10-06T22:05:05.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classicwindowswitcher">ClassicWindowSwitcher</h1>
+<ul>
+<li>This mod brings back the classic Alt+Tab dialog, even on Windows 11 24H2+, which removed the old switcher in win32kfull.sys.</li>
+<li>This is a direct port of my <a href="https://github.com/Ingan121/ClassicWindowSwitcher">ClassicWindowSwitcher</a>, which is a fork of valinet's <a href="https://github.com/valinet/sws">SimpleWindowSwitcher</a>.</li>
+<li>Please do not use this mod with other Alt+Tab mods. They might conflict with this mod.</li>
+<li>If you are using an alternative shell like Explorer7, have disabled the modern Alt+Tab UI with <code>AltTabSettings</code> registry, or if you prefer to have the classic Alt+Tab restored (on 24H2+) even without Explorer running, enable the last option in the mod settings.<ul>
+<li>If you enable this setting, you may have to restart Explorer after disabling this mod to get the modern switcher UI back.</li></ul></li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/Ingan121/ClassicWindowSwitcher/refs/heads/master/cws.webp" alt="Animated Screenshot" /></p>
+<h2 id="differenceswiththeoriginalclassicswitcher">Differences with the original classic switcher</h2>
+<ul>
+<li>It works even on Windows 11 24H2 and later.</li>
+<li>It shows UWP icons properly.</li>
+<li>You can navigate through the items with a mouse, the mouse wheel, or arrow keys.<ul>
+<li>Press Ctrl+Alt+Tab to keep the switcher open after releasing the Alt key.</li></ul></li>
+<li>You can close a focused window by pressing the Del key while the switcher is active.</li>
+<li>It features many configurable options.<ul>
+<li>It can optionally show a per-application window list when you press Alt+Tilde.</li></ul></li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Count Badges 1.2.0]]></title>
         <id>https://windhawk.net/mods/taskbar-count-badges#9fe62571e50a548b5f23fef91e948b03d74b78af</id>
@@ -923,168 +1053,6 @@ it inserts the slider into the jump list.</p>]]></content>
         <author>
             <name>Abdullah Masood</name>
             <uri>https://github.com/Abdullah-Masood-05</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Acrylic Color Glows 0.5.0]]></title>
-        <id>https://windhawk.net/mods/acrylic-color-glows#318c99c6364375c88fbfd29739e0208da2bc2268</id>
-        <link href="https://windhawk.net/mods/acrylic-color-glows"/>
-        <updated>2026-10-05T09:00:12.000Z</updated>
-        <content type="html"><![CDATA[<h2 id="whatsnew">What's new</h2>
-<h3 id="audioreactivityoptionaloffbydefault">Audio reactivity (optional, off by default)</h3>
-<p>Every effect can now speed up while sound is playing.</p>
-<ul>
-<li><strong>React to audio</strong>: turns the feature on.</li>
-<li><strong>Cycle duration at full volume</strong>: the cycle duration at the loudest level (default 3 s). The regular "Cycle duration" is used in silence, with smooth transitions in between.</li>
-<li><strong>Sensitivity</strong>: a percentage from 25 to 400 (100 = normal), for listening at low volume.</li>
-</ul>
-<p>The effect speeds up quickly and calms down gently when the sound stops. The level follows loudness as heard (square root of the peak), so it reacts at normal and low volume too.</p>
-<p><strong>Privacy:</strong> only the peak level of the default output device is read through <code>IAudioMeterInformation</code>. It's the same value that drives the bar in the Windows volume mixer. No audio is recorded, analyzed or sent anywhere, and the microphone is never used.</p>
-<p><strong>Resources:</strong></p>
-<ul>
-<li>The level is read only while an effect is moving. Frozen effects, hidden windows and the automatic power-saving pauses all stop it.</li>
-<li>The mod follows changes of the default output device, for example when headphones are plugged in.</li>
-<li>Without an output device it simply stays at normal speed, without logging errors.</li>
-</ul>
-<p>The new settings sit right below "Cycle duration", since they work together.</p>
-<h2 id="fixes">Fixes</h2>
-<ul>
-<li><strong>Reduced smoothness rate:</strong> it ran at about 21 updates per second instead of the intended 30. USER timers fire on the system tick (15.6 ms), so a 33 ms interval rounded up to about 47 ms. The interval is now 30 ms (about 32 updates per second). The audio mode uses 15 ms (about 64 updates per second).</li>
-</ul>
-<h2 id="technicalnotes">Technical notes</h2>
-<ul>
-<li><strong>How speed changes:</strong> with audio reactivity on, the shared clock is advanced by the worker. It adds the elapsed time multiplied by the current speed, because the compositor can't change the speed of a running animation. Speed changes therefore never cause a jump.</li>
-<li><strong>Reentrancy:</strong> audio COM calls are covered by the same reentrancy guard as the refresh.</li>
-<li><strong>Cleanup:</strong> the audio objects are released before the COM apartment is torn down.</li>
-<li><strong>Headers:</strong> <code>IAudioMeterInformation</code> is declared locally, because the compiler's <code>endpointvolume.h</code> only forward-declares it.</li>
-<li><strong>Metadata:</strong> added the <code>@github</code> field.</li>
-</ul>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hyprland Windows 1.1.2]]></title>
-        <id>https://windhawk.net/mods/hyprland-windows#63096e4ab291eeae57163f6581741267e1020fb9</id>
-        <link href="https://windhawk.net/mods/hyprland-windows"/>
-        <updated>2026-10-05T09:00:07.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="hyprlandwindows">Hyprland Windows</h1>
-<p>Window handling the way Hyprland does it, on Windows.</p>
-<p><img src="https://raw.githubusercontent.com/HiWord9/hyprland-windows/extra/demo/1.1.0.gif" alt="Hyprland Windows in action" /></p>
-<ul>
-<li><strong>Win + left mouse button</strong> - drag a window from anywhere on it, not just by
-its title bar.</li>
-<li><strong>Win + right mouse button</strong> - resize a window from anywhere on it, from
-whichever corner is closest to the cursor.</li>
-<li><strong>Win + double click</strong> - maximize a window, or restore it. The title bar is
-gone, so the double click that used to be on it now works anywhere on the
-window; the settings offer other things for it to do.</li>
-<li><strong>Win + middle click</strong> - close the window under the cursor. The button, the
-modifiers and the action are all settings; it can be a key instead, such as
-Win+Q - even one Windows already uses, like Win+W.</li>
-<li><strong>Ctrl+Alt+H</strong> - hide the focused window's title bar; press it again to bring
-the title bar back.</li>
-<li><strong>Win+Tab</strong> - go to the next virtual desktop that has windows on it, at once;
-Win+Shift+Tab goes back. Task View moves to Win+Ctrl+Tab.</li>
-</ul>
-<p>Moving and resizing feel like the real thing: windows still snap to the screen
-edges, dragging one to the top still offers the Windows 11 snap layouts, and
-<code>Esc</code> cancels a drag in progress. A window you are dragging fades to slightly
-translucent while you hold it, the way a Hyprland window does. Hold <code>Ctrl</code> as
-well and its edges turn magnetic: bring one close to another window or to the
-edge of the screen and it lines up with it. Hold <code>Shift</code> while resizing to
-keep the window's proportions.</p>
-<p>Title bars can also go away on their own: with hiding by default turned on,
-every new window opens without one, except the programs on a list of
-exceptions (Paint and the Snipping Tool to begin with).</p>
-<p>Give windows a border color - your own, or <code>accent</code> to follow the Windows
-accent color - and it fades from one color to the other as focus moves, the
-way a Hyprland border does. That goes for every window with a frame, or only
-for the ones whose title bar is hidden, whichever the settings say.</p>
-<p>Everything is configurable in the settings - the hotkey, the modifier key, the
-translucency, the magnet, the border, and how much of the frame goes away with
-the title bar.</p>
-<h2 id="goodtoknow">Good to know</h2>
-<ul>
-<li>Apps that draw their own title bar instead of using the system one (Chrome,
-Electron apps, VS Code, Office) are not affected by the hotkey.</li>
-<li>A window with a classic menu bar (File, Edit, …) can't keep that menu where it
-is once the title bar is gone, so by default it is hidden along with it and
-stays reachable from the keyboard with <code>Alt</code> or <code>F10</code>. The settings offer the
-other choices.</li>
-<li><code>Win</code> + mouse doesn't work over content drawn with WinUI or XAML - Paint,
-Windows Terminal, the tabs and address bar of File Explorer: Windows hands
-those clicks to the app past the point where the mod sees them.</li>
-<li>Win+Tab switches desktops through a part of Windows that Microsoft doesn't
-publish. It is known for Windows 10 and for Windows 11 from 22H2 on; on a
-build the mod doesn't recognize, and with only the one desktop, Win+Tab stays
-Task View.</li>
-<li>The hotkey, and a window shortcut that is a key, are taken everywhere: a
-program that uses the same keys for something of its own doesn't get them
-while the mod is on. Pick other keys in the settings if one does.</li>
-</ul>
-<h2 id="conflicts">Conflicts</h2>
-<ul>
-<li><a href="https://windhawk.net/mods/alt-drag">AltDrag</a> moves and resizes windows with
-a key and the mouse as well, and
-<a href="https://windhawk.net/mods/slick-window-arrangement">Slick Window Arrangement</a>
-snaps windows while they are dragged. Running either of them alongside this
-mod, two mods act on the same drag: use one of them at a time - or, with
-Slick Window Arrangement, turn this mod's magnetic edges off.</li>
-</ul>]]></content>
-        <author>
-            <name>hiword9</name>
-            <uri>https://github.com/HiWord9</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Margin 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-margin#a08ccae7c4e480dbdf1e9389d259d23c5d7448fd</id>
-        <link href="https://windhawk.net/mods/taskbar-margin"/>
-        <updated>2026-10-05T08:04:15.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarmargin">Taskbar Margin</h1>
-<p>Shifts the taskbar <strong>content</strong> to the right by a configurable number of pixels, leaving an empty margin on the left. The taskbar background stays full width, and the taskbar context menu follows the content.</p>
-<p>Only the taskbar itself is affected.</p>
-<p><img src="https://raw.githubusercontent.com/loliri/windhawk-taskbar-margin/main/images/before.png" alt="Taskbar without a margin" /><br />
-<em>Before</em></p>
-<p><img src="https://raw.githubusercontent.com/loliri/windhawk-taskbar-margin/main/images/after.png" alt="Taskbar with a left margin" /><br />
-<em>After</em></p>
-<p><img src="https://raw.githubusercontent.com/loliri/windhawk-taskbar-margin/main/images/jumplist.png" alt="Taskbar context menu" /><br />
-<em>The context menu follows the margin</em></p>
-<h2 id="settings">Settings</h2>
-<p>| Setting | Default | Description |
-| --- | --- | --- |
-| Left margin (pixels) | 220 | How much empty space to leave on the left of the taskbar content. |
-| Follow display DPI | on | Scale the margin with the display DPI, so it keeps the same visual size on high-DPI displays. Turn off to keep it at a constant physical pixel size. |
-| Displays | All | Which displays the margin applies to: all, only the primary one, or only the secondary ones. Each display has its own taskbar and its own DPI, so the margin is calculated per display. |</p>
-<h2 id="notes">Notes</h2>
-<p>Requires Windows 11.</p>
-<p>The taskbar must be:</p>
-<ul>
-<li><strong>left-aligned</strong> (Settings → Personalization → Taskbar → Taskbar icon alignment)</li>
-<li><strong>Bottom</strong> or <strong>Top</strong> (New in Windows 11 26H2, Settings → Personalization → Taskbar → Taskbar position)</li>
-</ul>
-<p>The taskbar is not mirrored correctly on right-to-left display languages: the margin is applied to the physical left regardless of the taskbar's flow direction, while the context menu is moved to the right.</p>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li><strong>TranslucentTB</strong> is confirmed compatible and can be used alongside this mod.</li>
-<li><strong>Windows 11 Taskbar Styler</strong> is not an alternative to this mod. It changes the taskbar itself, while this mod changes the position of the elements inside it. A taskbar restyled that way loses the taskbar's effects on the margin area, while this mod keeps them across the whole taskbar, margin included. It also cannot move the context menu (the jump list), which this mod does.</li>
-<li><strong>Taskbar jump list on cursor pos</strong> changes the same anchor point. Both mods offset it, so depending on the hook order the menu can open offset from the cursor. Use one or the other.</li>
-<li>Tested on Windows 11 26H2.</li>
-</ul>
-<h2 id="suggesteduse">Suggested use</h2>
-<p>For example, together with <a href="https://github.com/unchihugo/FluentFlyout">FluentFlyout</a>: enable the taskbar widget there, set its position to the bottom left corner, and turn on the fixed widget width. The taskbar elements then tile linearly instead of overlapping each other.</p>
-<h2 id="implementationnotes">Implementation notes</h2>
-<p>The taskbar context menu (the jump list) is not laid out by XAML. Its anchor point is computed in <code>explorer.exe</code> by <code>CTaskListWnd::_ComputeJumpViewPosition</code> in <code>taskbar.dll</code>, and handed to the process that draws the menu. The point is in physical screen pixels.</p>
-<p>Shifting the taskbar's XAML content therefore does not move the menu on its own, because the menu is not placed relative to it. The mod adjusts the anchor point instead, which is why it hooks that function.</p>
-<h2 id="license">License</h2>
-<p>GPL-3.0. The taskbar XAML access is based on the <a href="https://github.com/m417z/my-windhawk-mods">Start button always on the left</a> mod by m417z, which is also licensed under GPL-3.0.</p>
-<h2 id="feedback">Feedback</h2>
-<p>Bug reports and feature requests are welcome in <a href="https://github.com/loliri/windhawk-taskbar-margin/issues">Issues</a>.</p>]]></content>
-        <author>
-            <name>loliri</name>
-            <uri>https://github.com/loliri</uri>
         </author>
     </entry>
 </feed>

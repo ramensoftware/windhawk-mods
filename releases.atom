@@ -2,12 +2,128 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-06T17:04:19.000Z</updated>
+    <updated>2026-10-06T22:05:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[DXGI Flip Model Upgrade 1.0]]></title>
+        <id>https://windhawk.net/mods/dxgi-flip-model-upgrade#9db4af94bd5192d63c643e458ac38c88b2b297f3</id>
+        <link href="https://windhawk.net/mods/dxgi-flip-model-upgrade"/>
+        <updated>2026-10-06T22:05:09.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="dxgiflipmodelupgrade">DXGI Flip Model Upgrade</h1>
+<p><strong>Important: restart the game after this mod gets disabled, updated or
+reloaded while the game runs.</strong> The game keeps its upgraded swap chains, which
+need the mod for resizing and for keeping its render targets bound, so it may
+show a frozen or black picture, or fail. That includes mod updates that
+Windhawk installs automatically in the background. If you play with this mod
+enabled, consider turning off automatic updates for it.</p>
+<p>Many Direct3D 11 games present with the legacy <em>blt model</em>
+(<code>DXGI_SWAP_EFFECT_DISCARD</code> or <code>SEQUENTIAL</code>): in a window or borderless window,
+every frame is copied and composed by DWM, which adds latency and blocks
+Independent Flip. PresentMon reports them as <code>Composed: Copy with GPU GDI</code>.
+Many games also never enable tearing, so with VSync off they're still capped
+at the refresh rate in a window.</p>
+<p>This mod changes the swap chains the game creates:</p>
+<ul>
+<li><strong>Force flip model:</strong> blt model swap chains of Direct3D 11 games use the flip
+model instead (<code>FLIP_DISCARD</code> or <code>FLIP_SEQUENTIAL</code>). Once the game window
+covers the whole screen, DWM can promote it to <strong>Independent Flip</strong>.</li>
+<li><strong>Force allow tearing:</strong> flip model swap chains of Direct3D 11 and 12 games
+allow tearing, and frames presented with VSync off show immediately.</li>
+<li><strong>Maximum frame latency</strong>, <strong>Waitable swap chain</strong> and <strong>Force borderless</strong>
+are off by default, see their descriptions in the settings.</li>
+</ul>
+<p>Windows 11 has a similar system-wide option, "Optimizations for windowed
+games", for Direct3D 10 and 11. This mod applies per game, also works on
+Windows 10, and adds tearing.</p>
+<h2 id="howtoenablethemodforaprogram">How to enable the mod for a program</h2>
+<p>This mod doesn't target any process by default. In Windhawk, go to the mod's
+"Advanced" tab and scroll down to "Custom process inclusion list". In that box,
+put the filename of the game's <code>.exe</code>, then click "Save" and (re)start the game.
+Only swap chains created while the mod is loaded are changed.</p>
+<h2 id="howtoverify">How to verify</h2>
+<p>Use <a href="https://github.com/GameTechDev/PresentMon">PresentMon</a> (or an overlay that
+shows the presentation mode, such as RTSS). With the flip model, the game should
+show <code>Hardware: Independent Flip</code> or <code>Hardware Composed: Independent Flip</code> in
+borderless fullscreen, and <code>Composed: Flip</code> in a smaller window. With tearing
+and VSync off, the frame rate can go above the refresh rate. The log says what
+was changed for each swap chain, and why something wasn't.</p>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>Not changed to the flip model: swap chains with a multisampled back buffer,
+swap chains created in exclusive fullscreen (those already get flip
+presentation through Fullscreen Optimizations), Direct3D 10 games, and back
+buffer formats the flip model doesn't support.</li>
+<li>sRGB back buffers aren't supported by the flip model, so their format becomes
+the non-sRGB one. Render target views the game creates for them still get the
+sRGB format, but a game that reads the back buffer format sees the other one.</li>
+<li>The flip model only shows what the game renders with Direct3D. Anything drawn
+into the game window with GDI disappears.</li>
+<li>Tearing doesn't apply in exclusive fullscreen.</li>
+<li>With <strong>Force borderless</strong>, the game runs at the desktop resolution, and its
+picture is stretched if it renders at another one. The game is told it's in
+fullscreen. Alt+Enter is turned off for those swap chains, as it would switch
+to exclusive fullscreen behind the mod's back.</li>
+<li>With <strong>Waitable swap chain</strong>, games that already use a waitable swap chain
+keep their own settings.</li>
+<li>If the game loads <code>dxgi.dll</code> only after it started, the mod's hooks are
+installed a moment after that, and a swap chain the game creates right away
+may keep the blt model. The log then shows no "Hooked" lines before that swap
+chain.</li>
+</ul>
+<h2 id="anticheat">Anti-cheat</h2>
+<p><strong>Don't use this mod in online games protected by anti-cheat.</strong> It loads code
+into the game and hooks DXGI and Direct3D 11 functions:
+<code>CreateDXGIFactory</code>, <code>CreateDXGIFactory1</code> and <code>CreateDXGIFactory2</code>,
+<code>IDXGIFactory::CreateSwapChain</code> and <code>IDXGIFactory2::CreateSwapChainForHwnd</code>,
+<code>IDXGISwapChain::Present</code>, <code>Present1</code>, <code>ResizeBuffers</code>, <code>ResizeBuffers1</code>,
+<code>SetFullscreenState</code>, <code>GetFullscreenState</code> and <code>ResizeTarget</code>,
+<code>IDXGIDevice1::SetMaximumFrameLatency</code> and
+<code>ID3D11Device::CreateRenderTargetView</code>. It hooks no Windows loader or kernel
+functions, such as <code>LoadLibraryExW</code> in <code>kernelbase.dll</code>: if <code>dxgi.dll</code> isn't
+loaded yet when the mod starts, the mod learns about it through a Windows DLL
+load notification, and a thread of the mod installs the hooks. With <strong>Force
+borderless</strong>, another thread changes the game window. Present hooks are also
+how cheats draw overlays, so anti-cheat software may block the game, kick you
+or ban your account. There are no guarantees for any game.</p>
+<p>Enable the mod's logging (Advanced → Debug logging) to see what happens.</p>]]></content>
+        <author>
+            <name>tria</name>
+            <uri>https://github.com/triatomic</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[ClassicWindowSwitcher 1.3]]></title>
+        <id>https://windhawk.net/mods/classic-window-switcher#ef7ebe709b53c0e14da6769f29a9a5b0501facb6</id>
+        <link href="https://windhawk.net/mods/classic-window-switcher"/>
+        <updated>2026-10-06T22:05:05.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classicwindowswitcher">ClassicWindowSwitcher</h1>
+<ul>
+<li>This mod brings back the classic Alt+Tab dialog, even on Windows 11 24H2+, which removed the old switcher in win32kfull.sys.</li>
+<li>This is a direct port of my <a href="https://github.com/Ingan121/ClassicWindowSwitcher">ClassicWindowSwitcher</a>, which is a fork of valinet's <a href="https://github.com/valinet/sws">SimpleWindowSwitcher</a>.</li>
+<li>Please do not use this mod with other Alt+Tab mods. They might conflict with this mod.</li>
+<li>If you are using an alternative shell like Explorer7, have disabled the modern Alt+Tab UI with <code>AltTabSettings</code> registry, or if you prefer to have the classic Alt+Tab restored (on 24H2+) even without Explorer running, enable the last option in the mod settings.<ul>
+<li>If you enable this setting, you may have to restart Explorer after disabling this mod to get the modern switcher UI back.</li></ul></li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/Ingan121/ClassicWindowSwitcher/refs/heads/master/cws.webp" alt="Animated Screenshot" /></p>
+<h2 id="differenceswiththeoriginalclassicswitcher">Differences with the original classic switcher</h2>
+<ul>
+<li>It works even on Windows 11 24H2 and later.</li>
+<li>It shows UWP icons properly.</li>
+<li>You can navigate through the items with a mouse, the mouse wheel, or arrow keys.<ul>
+<li>Press Ctrl+Alt+Tab to keep the switcher open after releasing the Alt key.</li></ul></li>
+<li>You can close a focused window by pressing the Del key while the switcher is active.</li>
+<li>It features many configurable options.<ul>
+<li>It can optionally show a per-application window list when you press Alt+Tilde.</li></ul></li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Everything & Power Tools in the Start Menu 1.0]]></title>
         <id>https://windhawk.net/mods/start-everything#d2f3636c817d15b6a8c61f16b67ad7d9652adeb1</id>
@@ -1304,90 +1420,6 @@ português.</p>]]></content>
         <author>
             <name>Cris</name>
             <uri>https://github.com/cristianosm</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Icon Section Auto-Hide & Fluent Hover Reveal 1.3.4]]></title>
-        <id>https://windhawk.net/mods/desktop-icon-section-autohide#47d709edce0c60da43504bf61ff645eff601a7eb</id>
-        <link href="https://windhawk.net/mods/desktop-icon-section-autohide"/>
-        <updated>2026-10-03T17:01:37.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="desktopiconsectionautohidefluenthoverrevealzerowallpaperdimming">Desktop Icon Section Auto-Hide &amp; Fluent Hover Reveal (Zero Wallpaper Dimming)</h1>
-<p>Provides a clean, distraction-free desktop experience by automatically hiding desktop icons while keeping your wallpaper, Rainmeter widgets, and live wallpapers completely untouched and crystal clear.</p>
-<p><img src="https://raw.githubusercontent.com/Piyushdas1624/windhawk-mods/assets/desktop-icon-section-autohide-preview.jpg" alt="Desktop Icon Section Auto-Hide Preview" /></p>
-<h2 id="keyfeatures">Key Features</h2>
-<ul>
-<li><strong>Zero Wallpaper Dimming</strong>: Operates by modulating icon and label rendering directly in GDI. No dark overlays, no duplicated wallpaper snapshots, and no DirectComposition layers.</li>
-<li><strong>Smooth 60 FPS Fluent Eased Alpha Fade</strong>: Fluid, flicker-free alpha transitions using Ken Perlin's quintic smootherstep curve.</li>
-<li><strong>Specific App Pinning (Always-Visible Whitelist)</strong>: Keep essential shortcuts (e.g. Recycle Bin, This PC, or work apps) permanently visible at 100% opacity while all other shortcuts auto-hide.</li>
-<li><strong>Independent Pinned App Interaction</strong>: Clicking, hovering, or launching pinned apps never accidentally unhides the rest of your desktop icons.</li>
-<li><strong>Three-Way Double-Click Mode Cycle</strong>: Double-clicking empty desktop wallpaper cycles between:</li>
-</ul>
-<ol>
-<li><em>Auto Mode</em>: Unpinned icons reveal on section hover and auto-hide on exit or inactivity; pinned icons stay visible.</li>
-<li><em>Show All</em>: Keeps all desktop icons visible indefinitely (ideal for organizing files).</li>
-<li><em>Hide All</em>: Completely locks all unpinned icons hidden (ideal for presentations or clean wallpaper viewing).</li>
-</ol>
-<ul>
-<li><strong>Middle-Click Quick Toggle</strong>: Clicking the middle mouse button on empty wallpaper instantly toggles icon visibility.</li>
-<li><strong>Wallpaper Click-and-Hold Peek Mode</strong>: Press and hold the left mouse button on empty wallpaper for 400 ms to peek at your icons temporarily; releasing smoothly hides them again.</li>
-<li><strong>Active Rename & File Drag Focus Shield</strong>: Freezes all auto-hide timeouts while actively renaming an icon, dragging a shortcut, or rubber-band selecting multiple files.</li>
-<li><strong>Multi-Anchor Section Detection</strong>: Configure which edge houses your icons (Left edge, Right edge for secondary monitors, Top edge, or Custom bounding box).</li>
-<li><strong>Subtle Acoustic Feedback</strong>: Optional subtle Windows sound cues when switching modes.</li>
-</ul>
-<h2 id="pinningappsshortcuts">Pinning Apps &amp; Shortcuts</h2>
-<p>In the mod settings, you can enable built-in pinning for the <strong>Recycle Bin</strong> and <strong>This PC</strong>, or provide your own custom app names under <strong>Custom Pinned Apps & Shortcuts</strong>.</p>
-<ul>
-<li>Enter comma-separated names (e.g., <code>Google Chrome, Discord, Steam, Visual Studio Code</code>).</li>
-<li>Case-insensitive and extension-agnostic (<code>.lnk</code>, <code>.url</code> extensions are handled automatically).</li>
-<li>Supports wildcards like <code>*</code> and <code>?</code> (e.g., <code>Project*</code>, <code>Doc?</code>).</li>
-<li>Audit and verify all detected and pinned desktop icons in the Windhawk Mod Log tab.</li>
-</ul>
-<h2 id="creditsattribution">Credits &amp; Attribution</h2>
-<p>This mod builds upon and refines ideas and code patterns established in the Windhawk community:</p>
-<ul>
-<li><a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/zen-desktop-toggle-icons.wh.cpp">zen-desktop-toggle-icons</a> by Lanbo (Liset999) — Desktop window subclassing, window creation hook, property tracking, and clean lifecycle management.</li>
-<li><a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/desktop-icons-transparency.wh.cpp">desktop-icons-transparency</a> by zed712969-crypto — GDI icon and text alpha blending hooks enabling transparency without wallpaper dimming.</li>
-<li><a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/transparent-desktop-icons-spotlight.wh.cpp">transparent-desktop-icons-spotlight</a> by drgutman — Desktop hover-reveal interaction concepts.</li>
-</ul>
-<h3 id="whythisisastandalonemod">Why this is a standalone mod</h3>
-<p>While related mods focus either on full-desktop toggle hiding or uniform transparency, this mod introduces:</p>
-<ol>
-<li><strong>Section-based triggering</strong>: Confines auto-hide and hover-reveal to a configurable screen edge or custom bounding box (ideal for dock-style icon arrangements and multi-monitor setups).</li>
-<li><strong>Selective per-icon whitelist pinning</strong>: Keeps essential icons (like Recycle Bin, This PC, or user-selected work apps) permanently visible and interactable while temporary desktop clutter smoothly auto-hides.</li>
-<li><strong>Four-state workflow cycle & interaction shields</strong>: Combines Auto, Show All, and Hide All modes with a peek-on-hold gesture, middle-click toggle, and focus protection shields during file renaming, shortcut dragging, and rubber-band selection.</li>
-</ol>]]></content>
-        <author>
-            <name>Piyush Das</name>
-            <uri>https://github.com/Piyushdas1624</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Taskbar Auto-Hide in Context 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-autohide-in-context#c5440eb6ac037ad7e329a7cfca33f28992fe9c2b</id>
-        <link href="https://windhawk.net/mods/taskbar-autohide-in-context"/>
-        <updated>2026-10-03T16:00:25.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows11taskbarautohideincontext">Windows 11 Taskbar Auto-Hide in Context</h1>
-<p>Adds an "Auto-hide Taskbar" toggle to the native Windows 11 empty-taskbar context menu.</p>
-<p><img src="https://i.imgur.com/CRooPg6.gif" alt="Taskbar Auto-Hide demo" /></p>
-<h3 id="features">Features</h3>
-<ul>
-<li><strong>Native UI Integration</strong>: Injects seamlessly into the native Windows 11 XAML <code>MenuFlyout</code>.</li>
-<li><strong>Immediate Auto-Hide</strong>: Automatically releases taskbar focus upon enabling auto-hide, ensuring the taskbar hides immediately.</li>
-<li><strong>Customizable</strong>: Fully customizable label, and choose between classic checkmark or checkbox indicator styles.</li>
-<li><strong>Mod Compatibility</strong>: Fully compatible with the "Taskbar Restart Explorer" mod.</li>
-</ul>
-<h3 id="compatibility">Compatibility</h3>
-<ul>
-<li>Windows 11 (Tested on 26H2).</li>
-</ul>
-<h3 id="credits">Credits</h3>
-<ul>
-<li>Inspired by the menu injection technique from <a href="https://windhawk.net/mods/taskbar-restart-explorer">Taskbar Restart
-Explorer</a> by <strong>Mgrmjp</strong>.</li>
-</ul>]]></content>
-        <author>
-            <name>oyrslyng</name>
-            <uri>https://github.com/oyrslyng</uri>
         </author>
     </entry>
 </feed>

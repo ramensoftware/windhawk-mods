@@ -1,0 +1,14 @@
+{
+  "modId": "windows-animations",
+  "reviews": [
+    {
+      "authorName": "chg",
+      "content": "I REALLY LOVE this mod, there is just one problem, I don't know if it causes memory leaks but dwm.exe goes up by +180mb and doesn't go back down.\nI don't know if this is normal",
+      "id": 42,
+      "modVersion": "1.3.6",
+      "parentId": null,
+      "timestamp": 1791322990,
+      "votes": 0
+    }
+  ]
+}

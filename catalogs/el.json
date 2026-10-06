@@ -2589,6 +2589,35 @@
         "version": "2.16"
       }
     },
+    "classic-window-switcher": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791324305000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791324305000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Ingan121",
+        "compilerOptions": "-ldwmapi -lcomctl32 -lgdiplus -lshcore -luxtheme -lgdi32 -lole32 -luuid",
+        "description": "Bring back the classic Alt+Tab dialog",
+        "github": "https://github.com/Ingan121",
+        "homepage": "https://www.ingan121.com/",
+        "include": [
+          "windhawk-mod-uiaccess.exe",
+          "windhawk-mod.exe",
+          "windhawk.exe",
+          "explorer.exe"
+        ],
+        "license": "gpl-2.0",
+        "name": "ClassicWindowSwitcher",
+        "twitter": "https://twitter.com/Ingan121",
+        "version": "1.3"
+      }
+    },
     "classic-winver": {
       "details": {
         "defaultSorting": 4230,
@@ -4428,6 +4457,25 @@
         "version": "1.0"
       }
     },
+    "dxgi-flip-model-upgrade": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791324309000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791324309000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "tria",
+        "description": "Forces the DXGI flip model and tearing support in Direct3D 11 and 12 games, so windowed/borderless games can reach Independent Flip and run uncapped with VSync off",
+        "github": "https://github.com/triatomic",
+        "name": "DXGI Flip Model Upgrade",
+        "version": "1.0"
+      }
+    },
     "dynamic-island-for-windows": {
       "details": {
         "defaultSorting": 279324,
@@ -5469,7 +5517,7 @@
         "ratingUsers": 8,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791043222000,
+        "updated": 1791324313000,
         "users": 131
       },
       "metadata": {
@@ -5485,7 +5533,7 @@
         ],
         "license": "MIT",
         "name": "Explorer real folder paths",
-        "version": "0.1.3"
+        "version": "0.1.5"
       }
     },
     "explorer-rename-overwrite": {
@@ -17533,7 +17581,7 @@
         "rating": 9,
         "ratingBreakdown": [15, 6, 20, 78, 664],
         "ratingUsers": 783,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 0,
         "updated": 1790416952000,
         "users": 58846
