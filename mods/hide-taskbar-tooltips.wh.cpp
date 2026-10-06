@@ -1,13 +1,14 @@
 // ==WindhawkMod==
 // @id              hide-taskbar-tooltips
 // @name            Hide Taskbar Tooltips
-// @description     Suppresses native Windows 11 XAML hover tooltips in Explorer (taskbar buttons, system tray icons, and shell controls).
-// @version         1.0.8
+// @description     Suppresses native Windows 11 XAML hover tooltips in Explorer, with an option to also hide application preview thumbnails.
+// @version         1.1.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject
+// @donateUrl       https://ko-fi.com/gilnet
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -22,6 +23,8 @@ Suppresses native Windows 11 XAML hover tooltips in Explorer, covering:
 - System tray status icons tooltips (Network, Volume, Battery, Clock)
 - System XAML shell UI hosted in Explorer (Task View, snap layouts, and virtual desktops)
 
+Optionally, it can also hide application window preview thumbnails on hover.
+
 ## Preview
 
 **Before** (native Windows 11 tooltip on hover):  
@@ -30,11 +33,30 @@ Suppresses native Windows 11 XAML hover tooltips in Explorer, covering:
 **After** (tooltip suppressed):  
 ![After](https://i.imgur.com/tISQj2F.png)
 
+## Settings
+
+- **Also hide app window preview thumbnails**: When enabled, suppresses taskbar window preview thumbnails from popping up when hovering over application icons.
+
 ## Compatibility
 
 - Only Windows 11 is supported.
+
+## Support
+
+If you find this mod useful, you can support its development and maintenance:
+- [Support on Ko-fi](https://ko-fi.com/gilnet)
 */
 // ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- hideThumbnails: false
+  $name: Also hide app window preview thumbnails
+  $description: >-
+    In addition to suppressing hover tooltips, also prevents window preview
+    thumbnails from popping up when hovering over taskbar application buttons.
+*/
+// ==/WindhawkModSettings==
 
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
@@ -73,6 +95,17 @@ static bool IsWindows11OrGreater() {
 
 static std::atomic<DWORD> g_taskbarThreadId{0};
 static thread_local int t_tooltipScopeDepth = 0;
+
+struct Settings {
+    bool hideThumbnails{false};
+} g_settings;
+
+static void LoadSettings() {
+    g_settings.hideThumbnails = Wh_GetIntSetting(L"hideThumbnails") != 0;
+}
+
+static std::atomic<DWORD> g_showTaskListButtonHoverFlyoutThreadId{0};
+static thread_local bool t_inTransitionToFlyoutVisibleStickyState{false};
 
 struct ToolTipScope {
     ToolTipScope() {
@@ -175,6 +208,17 @@ static BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
                nCmdShow);
         if (nCmdShow != SW_HIDE) {
             return FALSE;
+        }
+    }
+
+    if (g_settings.hideThumbnails &&
+        g_showTaskListButtonHoverFlyoutThreadId.load(
+            std::memory_order_relaxed) == GetCurrentThreadId() &&
+        !t_inTransitionToFlyoutVisibleStickyState) {
+        if (nCmdShow != SW_HIDE) {
+            Wh_Log(L"> ShowWindow suppressed for thumbnail flyout %p, cmd=%d",
+                   hWnd, nCmdShow);
+            return TRUE;
         }
     }
     return ShowWindow_Original(hWnd, nCmdShow);
@@ -514,6 +558,114 @@ static TaskItemThumbnailView_UpdateToolTip_t
 static void __cdecl TaskItemThumbnailView_UpdateToolTip_Hook(void* /*pThis*/) {
 }
 
+// CTaskListWnd hooks for classic taskbar.dll / explorer.exe thumbnails
+using CTaskListWnd__DisplayExtendedUI_t = HRESULT(WINAPI*)(void* pThis,
+                                                           void* taskBtnGroup,
+                                                           int param2,
+                                                           DWORD flags,
+                                                           int param4);
+static CTaskListWnd__DisplayExtendedUI_t
+    CTaskListWnd__DisplayExtendedUI_Original = nullptr;
+
+static HRESULT WINAPI CTaskListWnd__DisplayExtendedUI_Hook(void* pThis,
+                                                           void* taskBtnGroup,
+                                                           int param2,
+                                                           DWORD flags,
+                                                           int param4) {
+    bool persistent = (flags & 2) != 0;
+    if (!persistent && g_settings.hideThumbnails) {
+        return S_OK;
+    }
+    return CTaskListWnd__DisplayExtendedUI_Original(
+        pThis, taskBtnGroup, param2, flags, param4);
+}
+
+using CTaskListThumbnailWnd__CanShowThumbnails_t = BOOL(WINAPI*)(void* pThis,
+                                                                 void* param1,
+                                                                 int param2,
+                                                                 int param3);
+static CTaskListThumbnailWnd__CanShowThumbnails_t
+    CTaskListThumbnailWnd__CanShowThumbnails_Original = nullptr;
+
+static BOOL WINAPI CTaskListThumbnailWnd__CanShowThumbnails_Hook(void* pThis,
+                                                                 void* param1,
+                                                                 int param2,
+                                                                 int param3) {
+    if (g_settings.hideThumbnails) {
+        return FALSE;
+    }
+    return CTaskListThumbnailWnd__CanShowThumbnails_Original(pThis, param1,
+                                                             param2, param3);
+}
+
+// Modern Taskbar.View.dll HoverFlyout hooks
+using HoverFlyoutController_ShowTaskListButtonHoverFlyout_t =
+    void(__cdecl*)(void* pThis,
+                   void* param1,
+                   void* param2,
+                   int param3,
+                   int param4);
+static HoverFlyoutController_ShowTaskListButtonHoverFlyout_t
+    HoverFlyoutController_ShowTaskListButtonHoverFlyout_Original = nullptr;
+
+static void __cdecl HoverFlyoutController_ShowTaskListButtonHoverFlyout_Hook(
+    void* pThis,
+    void* param1,
+    void* param2,
+    int param3,
+    int param4) {
+    if (!g_settings.hideThumbnails) {
+        HoverFlyoutController_ShowTaskListButtonHoverFlyout_Original(
+            pThis, param1, param2, param3, param4);
+        return;
+    }
+
+    g_showTaskListButtonHoverFlyoutThreadId.store(GetCurrentThreadId(),
+                                                  std::memory_order_relaxed);
+    HoverFlyoutController_ShowTaskListButtonHoverFlyout_Original(
+        pThis, param1, param2, param3, param4);
+    g_showTaskListButtonHoverFlyoutThreadId.store(0, std::memory_order_relaxed);
+}
+
+using HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_t =
+    void(__cdecl*)(void* pThis, void* param1, void* param2, int param3);
+static HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_t
+    HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_Original = nullptr;
+
+static void __cdecl HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_Hook(
+    void* pThis,
+    void* param1,
+    void* param2,
+    int param3) {
+    if (!g_settings.hideThumbnails) {
+        HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_Original(
+            pThis, param1, param2, param3);
+        return;
+    }
+
+    g_showTaskListButtonHoverFlyoutThreadId.store(GetCurrentThreadId(),
+                                                  std::memory_order_relaxed);
+    HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_Original(
+        pThis, param1, param2, param3);
+    g_showTaskListButtonHoverFlyoutThreadId.store(0, std::memory_order_relaxed);
+}
+
+using HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_t =
+    void(__cdecl*)(void* pThis, void* param1);
+static HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_t
+    HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_Original = nullptr;
+
+static void __cdecl HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_Hook(
+    void* pThis,
+    void* param1) {
+    t_inTransitionToFlyoutVisibleStickyState = true;
+    if (HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_Original) {
+        HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_Original(pThis,
+                                                                       param1);
+    }
+    t_inTransitionToFlyoutVisibleStickyState = false;
+}
+
 // Hover state hook in SystemTray.dll (zero-cost no-ops)
 using IconView_UpdateOuterToolTipPlacement_t = void(__cdecl*)(void* pThis,
                                                               bool isHover);
@@ -656,6 +808,30 @@ static bool HookTaskbarViewSymbols(HMODULE module) {
         },
         {
             {
+                LR"(private: void __cdecl winrt::Taskbar::implementation::HoverFlyoutModel::TransitionToFlyoutVisibleStickyState(struct winrt::hstring))",
+            },
+            &HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_Original,
+            HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_Hook,
+            true,
+        },
+        {
+            {
+                LR"(private: void __cdecl winrt::Taskbar::implementation::HoverFlyoutController::ShowTaskListButtonHoverFlyout(class std::vector<struct winrt::weak_ref<struct winrt::Windows::UI::Xaml::FrameworkElement>,class std::allocator<struct winrt::weak_ref<struct winrt::Windows::UI::Xaml::FrameworkElement> > >,struct winrt::Windows::Foundation::Collections::IVector<struct winrt::Windows::Foundation::IInspectable> const &,enum winrt::WindowsUdk::UI::Shell::InputDeviceKind,enum winrt::WindowsUdk::UI::Shell::TaskbarFlyoutKind))",
+            },
+            &HoverFlyoutController_ShowTaskListButtonHoverFlyout_Original,
+            HoverFlyoutController_ShowTaskListButtonHoverFlyout_Hook,
+            true,
+        },
+        {
+            {
+                LR"(private: void __cdecl winrt::Taskbar::implementation::HoverFlyoutController::ShowTaskListButtonHoverFlyout(class std::vector<struct winrt::weak_ref<struct winrt::Windows::UI::Xaml::FrameworkElement>,class std::allocator<struct winrt::weak_ref<struct winrt::Windows::UI::Xaml::FrameworkElement> > >,struct winrt::Windows::Foundation::Collections::IVector<struct winrt::Windows::Foundation::IInspectable> const &,enum winrt::WindowsUdk::UI::Shell::InputDeviceKind))",
+            },
+            &HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_Original,
+            HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_Hook,
+            true,
+        },
+        {
+            {
                 LR"(void __cdecl TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement(struct winrt::Windows::UI::Xaml::Controls::ToolTip const &,enum winrt::WindowsUdk::UI::Shell::TaskbarLocation,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size))",
                 LR"(void __cdecl TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement(struct winrt::Windows::UI::Xaml::Controls::ToolTip const &,enum winrt::WindowsUdk::Shell::TaskbarLocation,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size))",
             },
@@ -669,6 +845,39 @@ static bool HookTaskbarViewSymbols(HMODULE module) {
                                           ARRAYSIZE(taskbarViewHooks));
     Wh_Log(L"> HookTaskbarViewSymbols result: %d", res ? 1 : 0);
     return res;
+}
+
+static bool HookTaskbarDllSymbols() {
+    HMODULE module = LoadLibraryExW(L"taskbar.dll", nullptr,
+                                    LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) {
+        module = GetModuleHandleW(nullptr);
+    }
+    if (!module) {
+        return false;
+    }
+
+    // explorer.exe, taskbar.dll
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {
+            {
+                LR"(protected: long __cdecl CTaskListWnd::_DisplayExtendedUI(struct ITaskBtnGroup *,int,unsigned long,int))",
+            },
+            &CTaskListWnd__DisplayExtendedUI_Original,
+            CTaskListWnd__DisplayExtendedUI_Hook,
+            true,
+        },
+        {
+            {
+                LR"(private: int __cdecl CTaskListThumbnailWnd::_CanShowThumbnails(class CDPA<struct ITaskThumbnail,class CTContainer_PolicyUnOwned<struct ITaskThumbnail> > const *,int,int))",
+            },
+            &CTaskListThumbnailWnd__CanShowThumbnails_Original,
+            CTaskListThumbnailWnd__CanShowThumbnails_Hook,
+            true,
+        },
+    };
+
+    return WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
 }
 
 static void HandleLoadedModule(HMODULE module) {
@@ -713,14 +922,33 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    LoadSettings();
+
     bool hookedAny = false;
 
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
                                    &CreateWindowExW_Original);
-    WindhawkUtils::SetFunctionHook(ShowWindow, ShowWindow_Hook,
-                                   &ShowWindow_Original);
+
+    HMODULE win32u = GetModuleHandleW(L"win32u.dll");
+    if (win32u) {
+        auto pNtUserShowWindow = reinterpret_cast<ShowWindow_t>(
+            GetProcAddress(win32u, "NtUserShowWindow"));
+        if (pNtUserShowWindow) {
+            WindhawkUtils::SetFunctionHook(pNtUserShowWindow, ShowWindow_Hook,
+                                           &ShowWindow_Original);
+        }
+    }
+    if (!ShowWindow_Original) {
+        WindhawkUtils::SetFunctionHook(ShowWindow, ShowWindow_Hook,
+                                       &ShowWindow_Original);
+    }
+
     WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPos_Hook,
                                    &SetWindowPos_Original);
+
+    if (HookTaskbarDllSymbols()) {
+        hookedAny = true;
+    }
 
     if (HMODULE systemTrayModule = GetModuleHandleW(L"SystemTray.dll")) {
         g_systemTrayHooked = true;
@@ -757,6 +985,11 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     InitEagerToolTipHook();
+}
+
+void Wh_ModSettingsChanged() {
+    Wh_Log(L"> Settings changed");
+    LoadSettings();
 }
 
 void Wh_ModUninit() {
