@@ -347,7 +347,7 @@ typedef long long sws_error_t;
 #define SWS_ERROR_LOADLIBRARY_FAILED           0xA0010004 // "The requested library is not available"
 #define SWS_ERROR_FUNCTION_NOT_FOUND           0xA0010005 // "The requested procedure was not found"
 #define SWS_ERROR_INVALID_PARAMETER            0xA0010007 // "One or more of the parameters supplied is invalid"
-#define SWS_ERROR_APPRESOLVER_NOT_AVAILABLE	   0xA001000A // "Unable to initialize an instance of IAppResolver8"
+#define SWS_ERROR_APPRESOLVER_NOT_AVAILABLE       0xA001000A // "Unable to initialize an instance of IAppResolver8"
 
 // (always_)inline function still doesn't keep the line and function name in the Wh_Log output
 #define sws_error_Report(errnum) \
@@ -356,21 +356,21 @@ typedef long long sws_error_t;
 // sws_IconPainter.h
 typedef struct _sws_IconPainter_CallbackParams
 {
-	long long timestamp;
-	HWND hWnd;
-	int index;
-	BOOL bIsDesktop;
-	BOOL bUseApplicationIcon;
+    long long timestamp;
+    HWND hWnd;
+    int index;
+    BOOL bIsDesktop;
+    BOOL bUseApplicationIcon;
 } sws_IconPainter_CallbackParams;
 
 // sws_tshwnd.h
 typedef struct _sws_tshwnd
 {
-	HWND hWnd;
-	FILETIME ft;
-	BOOL bFlash;
-	double cbFlashAnimationState;
-	DWORD dwFlashAnimationState;
+    HWND hWnd;
+    FILETIME ft;
+    BOOL bFlash;
+    double cbFlashAnimationState;
+    DWORD dwFlashAnimationState;
 } sws_tshwnd;
 
 // sws_utility.h
@@ -416,22 +416,22 @@ inline BOOLEAN sws_nanosleep(LONGLONG ns) {
 // sws_vector.h
 typedef struct _sws_vector
 {
-	void* pList;
-	int cbSize;
-	int cbCapacity;
-	int cbElementSize;
+    void* pList;
+    int cbSize;
+    int cbCapacity;
+    int cbElementSize;
 } sws_vector;
 
 // sws_window.h
 typedef struct _sws_window
 {
-	HWND hWnd;
-	DWORD dwProcessId;
-	wchar_t wszPath[MAX_PATH];
-	BOOL bIsApplicationFrameHost;
-	sws_tshwnd* tshWnd;
-	wchar_t* wszAUMID;
-	struct _sws_window* pNextWindow;
+    HWND hWnd;
+    DWORD dwProcessId;
+    wchar_t wszPath[MAX_PATH];
+    BOOL bIsApplicationFrameHost;
+    sws_tshwnd* tshWnd;
+    wchar_t* wszAUMID;
+    struct _sws_window* pNextWindow;
 } sws_window;
 
 // sws_WindowHelpers.h
@@ -442,21 +442,21 @@ typedef struct _sws_window
 
 // bcc18b79-ba16-442f-80c4-8a59c30c463b
 DEFINE_GUID(__uuidof_IShellItemImageFactory,
-	0xbcc18b79,
-	0xba16, 0x442f, 0x80, 0xc4,
-	0x8a, 0x59, 0xc3, 0x0c, 0x46, 0x3b
+    0xbcc18b79,
+    0xba16, 0x442f, 0x80, 0xc4,
+    0x8a, 0x59, 0xc3, 0x0c, 0x46, 0x3b
 );
 
 DEFINE_GUID(__uuidof_IPropertyStore,
-	0x886D8EEB,
-	0x8CF2, 0x4446, 0x8D, 0x02,
-	0xCD, 0xBA, 0x1D, 0xBD, 0xCF, 0x99
+    0x886D8EEB,
+    0x8CF2, 0x4446, 0x8D, 0x02,
+    0xCD, 0xBA, 0x1D, 0xBD, 0xCF, 0x99
 );
 
 DEFINE_GUID(__uuidof_AppUserModelIdProperty,
-	0x9F4C2855,
-	0x9F79, 0x4B39, 0xA8, 0xD0,
-	0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3
+    0x9F4C2855,
+    0x9F79, 0x4B39, 0xA8, 0xD0,
+    0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3
 );
 
 // https://gist.github.com/m417z/451dfc2dad88d7ba88ed1814779a26b4
@@ -471,31 +471,31 @@ typedef interface IAppResolver_8 IAppResolver_8;
 
 typedef struct IAppResolver_8Vtbl
 {
-	BEGIN_INTERFACE
+    BEGIN_INTERFACE
 
-	HRESULT(STDMETHODCALLTYPE* QueryInterface)(
-		IAppResolver_8* This,
-		/* [in] */ REFIID riid,
-		/* [annotation][iid_is][out] */
-		_COM_Outptr_  void** ppvObject);
+    HRESULT(STDMETHODCALLTYPE* QueryInterface)(
+        IAppResolver_8* This,
+        /* [in] */ REFIID riid,
+        /* [annotation][iid_is][out] */
+        _COM_Outptr_  void** ppvObject);
 
-	ULONG(STDMETHODCALLTYPE* AddRef)(
-		IAppResolver_8* This);
+    ULONG(STDMETHODCALLTYPE* AddRef)(
+        IAppResolver_8* This);
 
-	ULONG(STDMETHODCALLTYPE* Release)(
-		IAppResolver_8* This);
+    ULONG(STDMETHODCALLTYPE* Release)(
+        IAppResolver_8* This);
 
-	HRESULT (STDMETHODCALLTYPE* GetAppIDForShortcut)(IAppResolver_8* This);
-	HRESULT (STDMETHODCALLTYPE* GetAppIDForShortcutObject)(IAppResolver_8* This);
-	HRESULT (STDMETHODCALLTYPE* GetAppIDForWindow)(IAppResolver_8* This, HWND hWnd, WCHAR** pszAppId, int* pUnknown1, int* pUnknown2, int* pUnknown3);
-	HRESULT (STDMETHODCALLTYPE* GetAppIDForProcess)(IAppResolver_8* This, DWORD dwProcessId, WCHAR** pszAppId, int* pUnknown1, int* pUnknown2, int* pUnknown3);
+    HRESULT (STDMETHODCALLTYPE* GetAppIDForShortcut)(IAppResolver_8* This);
+    HRESULT (STDMETHODCALLTYPE* GetAppIDForShortcutObject)(IAppResolver_8* This);
+    HRESULT (STDMETHODCALLTYPE* GetAppIDForWindow)(IAppResolver_8* This, HWND hWnd, WCHAR** pszAppId, int* pUnknown1, int* pUnknown2, int* pUnknown3);
+    HRESULT (STDMETHODCALLTYPE* GetAppIDForProcess)(IAppResolver_8* This, DWORD dwProcessId, WCHAR** pszAppId, int* pUnknown1, int* pUnknown2, int* pUnknown3);
 
-	END_INTERFACE
+    END_INTERFACE
 } IAppResolver_8Vtbl;
 
 interface IAppResolver_8
 {
-	CONST_VTBL struct IAppResolver_8Vtbl* lpVtbl;
+    CONST_VTBL struct IAppResolver_8Vtbl* lpVtbl;
 };
 
 typedef BOOL(WINAPI* pIsShellManagedWindow)(HWND);
@@ -513,20 +513,20 @@ pSHWindowsPolicy sws_SHWindowsPolicy;
 extern "C" WINUSERAPI BOOL WINAPI EndTask(HWND, BOOL, BOOL);
 
 typedef HWND(WINAPI* pCreateWindowInBand)(
-	_In_ DWORD dwExStyle,
-	_In_opt_ LPCWSTR lpClassName,
-	_In_opt_ LPCWSTR lpWindowName,
-	_In_ DWORD dwStyle,
-	_In_ int X,
-	_In_ int Y,
-	_In_ int nWidth,
-	_In_ int nHeight,
-	_In_opt_ HWND hWndParent,
-	_In_opt_ HMENU hMenu,
-	_In_opt_ HINSTANCE hInstance,
-	_In_opt_ LPVOID lpParam,
-	DWORD band
-	);
+    _In_ DWORD dwExStyle,
+    _In_opt_ LPCWSTR lpClassName,
+    _In_opt_ LPCWSTR lpWindowName,
+    _In_ DWORD dwStyle,
+    _In_ int X,
+    _In_ int Y,
+    _In_ int nWidth,
+    _In_ int nHeight,
+    _In_opt_ HWND hWndParent,
+    _In_opt_ HMENU hMenu,
+    _In_opt_ HINSTANCE hInstance,
+    _In_opt_ LPVOID lpParam,
+    DWORD band
+    );
 pCreateWindowInBand _sws_CreateWindowInBand;
 
 FILETIME sws_start_ft;
@@ -539,81 +539,81 @@ IAppResolver_8* sws_AppResolver;
 
 inline FILETIME sws_WindowHelpers_GetStartTime()
 {
-	return sws_start_ft;
+    return sws_start_ft;
 }
 
 inline FILETIME sws_WindowHelpers_GetAncientTime()
 {
-	ULARGE_INTEGER uli;
-	uli.LowPart = sws_ancient_ft.dwLowDateTime;
-	uli.HighPart = sws_ancient_ft.dwHighDateTime;
-	uli.QuadPart--;
-	sws_ancient_ft.dwHighDateTime = uli.HighPart;
-	sws_ancient_ft.dwLowDateTime = uli.LowPart;
-	return sws_ancient_ft;
+    ULARGE_INTEGER uli;
+    uli.LowPart = sws_ancient_ft.dwLowDateTime;
+    uli.HighPart = sws_ancient_ft.dwHighDateTime;
+    uli.QuadPart--;
+    sws_ancient_ft.dwHighDateTime = uli.HighPart;
+    sws_ancient_ft.dwLowDateTime = uli.LowPart;
+    return sws_ancient_ft;
 }
 
 enum ZBID
 {
-	ZBID_DEFAULT = 0,
-	ZBID_DESKTOP = 1,
-	ZBID_UIACCESS = 2,
-	ZBID_IMMERSIVE_IHM = 3,
-	ZBID_IMMERSIVE_NOTIFICATION = 4,
-	ZBID_IMMERSIVE_APPCHROME = 5,
-	ZBID_IMMERSIVE_MOGO = 6,
-	ZBID_IMMERSIVE_EDGY = 7,
-	ZBID_IMMERSIVE_INACTIVEMOBODY = 8,
-	ZBID_IMMERSIVE_INACTIVEDOCK = 9,
-	ZBID_IMMERSIVE_ACTIVEMOBODY = 10,
-	ZBID_IMMERSIVE_ACTIVEDOCK = 11,
-	ZBID_IMMERSIVE_BACKGROUND = 12,
-	ZBID_IMMERSIVE_SEARCH = 13,
-	ZBID_GENUINE_WINDOWS = 14,
-	ZBID_IMMERSIVE_RESTRICTED = 15,
-	ZBID_SYSTEM_TOOLS = 16,
-	ZBID_LOCK = 17,
-	ZBID_ABOVELOCK_UX = 18,
+    ZBID_DEFAULT = 0,
+    ZBID_DESKTOP = 1,
+    ZBID_UIACCESS = 2,
+    ZBID_IMMERSIVE_IHM = 3,
+    ZBID_IMMERSIVE_NOTIFICATION = 4,
+    ZBID_IMMERSIVE_APPCHROME = 5,
+    ZBID_IMMERSIVE_MOGO = 6,
+    ZBID_IMMERSIVE_EDGY = 7,
+    ZBID_IMMERSIVE_INACTIVEMOBODY = 8,
+    ZBID_IMMERSIVE_INACTIVEDOCK = 9,
+    ZBID_IMMERSIVE_ACTIVEMOBODY = 10,
+    ZBID_IMMERSIVE_ACTIVEDOCK = 11,
+    ZBID_IMMERSIVE_BACKGROUND = 12,
+    ZBID_IMMERSIVE_SEARCH = 13,
+    ZBID_GENUINE_WINDOWS = 14,
+    ZBID_IMMERSIVE_RESTRICTED = 15,
+    ZBID_SYSTEM_TOOLS = 16,
+    ZBID_LOCK = 17,
+    ZBID_ABOVELOCK_UX = 18,
 };
 
 wchar_t* sws_WindowHelpers_GetAUMIDForHWND(HWND hWnd);
 
 inline void _sws_WindowHelpers_ToggleDesktop()
 {
-	keybd_event(VK_LMENU, 0, KEYEVENTF_KEYUP, 0); // ensure alt is up
-	keybd_event(VK_LWIN, 0, 0, 0);
-	keybd_event('D', 0, 0, 0);
-	keybd_event('D', 0, KEYEVENTF_KEYUP, 0);
-	keybd_event(VK_LWIN, 0, KEYEVENTF_KEYUP, 0);
+    keybd_event(VK_LMENU, 0, KEYEVENTF_KEYUP, 0); // ensure alt is up
+    keybd_event(VK_LWIN, 0, 0, 0);
+    keybd_event('D', 0, 0, 0);
+    keybd_event('D', 0, KEYEVENTF_KEYUP, 0);
+    keybd_event(VK_LWIN, 0, KEYEVENTF_KEYUP, 0);
 }
 
 inline BOOL sws_WindowHelpers_IsWindowUWP(HWND hWnd)
 {
-	return sws_IsShellFrameWindow && sws_IsShellFrameWindow(hWnd);
+    return sws_IsShellFrameWindow && sws_IsShellFrameWindow(hWnd);
 }
 
 // sws_WindowSwitcherLayout.h
 typedef struct _sws_WindowSwitcherLayout
 {
-	HMONITOR hMonitor;
-	HWND hWnd;
+    HMONITOR hMonitor;
+    HWND hWnd;
 
-	sws_vector pWindowList;
-	int iX;
-	int iY;
-	unsigned int iWidth;
-	unsigned int iHeight;
-	unsigned int cbDpiX;
-	unsigned int cbDpiY;
-	int iIndex;
-	int iFirstItemIndex;
-	MONITORINFO mi;
-	unsigned int numTopMost;
-	BOOL bIncludeWallpaper;
-	HFONT hFontRegular;
-	unsigned int cbFontHeight;
-	unsigned int cbBorderSize;
-	long long timestamp;
+    sws_vector pWindowList;
+    int iX;
+    int iY;
+    unsigned int iWidth;
+    unsigned int iHeight;
+    unsigned int cbDpiX;
+    unsigned int cbDpiY;
+    int iIndex;
+    int iFirstItemIndex;
+    MONITORINFO mi;
+    unsigned int numTopMost;
+    BOOL bIncludeWallpaper;
+    HFONT hFontRegular;
+    unsigned int cbFontHeight;
+    unsigned int cbBorderSize;
+    long long timestamp;
 } sws_WindowSwitcherLayout;
 
 // sws_WindowSwitcher.h
@@ -622,11 +622,11 @@ typedef struct _sws_WindowSwitcherSettings
     DWORD bIncludeWallpaper;
     DWORD bPerMonitor;
     DWORD bNoPerApplicationList;
-	DWORD bSwitcherIsPerApplication;
+    DWORD bSwitcherIsPerApplication;
     DWORD bAlwaysUseWindowTitleAndIcon;
     DWORD dwScrollWheelBehavior;
     DWORD bScrollWheelInvert;
-	DWORD dwGridColumns;
+    DWORD dwGridColumns;
     DWORD dwGridRows;
 } sws_WindowSwitcherSettings;
 
@@ -639,7 +639,7 @@ typedef struct _sws_WindowSwitcher
     sws_WindowSwitcherLayout layout;
     int initialDirection;
     int direction;
-	int scrollDirection;
+    int scrollDirection;
     int lastKey;
     HBRUSH hBackgroundBrush;
     BOOL bPartialRedraw;
@@ -676,8 +676,8 @@ typedef struct _sws_WindowSwitcher
     DWORD cwOldMask;
     long long lastUpdateTime;
     BOOL bShouldStartFlashTimerWhenShowing;
-	BOOL bIsCursorOnSwitcher;
-	BOOL bSkipIfOneWindow;
+    BOOL bIsCursorOnSwitcher;
+    BOOL bSkipIfOneWindow;
     BOOL bRegisterHotKey;
 
     sws_WindowSwitcherSettings settings;
@@ -697,7 +697,7 @@ typedef struct _sws_WindowSwitcherLayoutWindow
     HWND hWnd;
     SIZE sizWindow;
     UINT gridX;
-	UINT gridY;
+    UINT gridY;
     RECT rcWindow;
     int iRowMax;
     HICON hIcon;
@@ -890,18 +890,18 @@ void sws_IconPainter_DrawIcon(HICON hIcon, HDC hDC, HBRUSH hBrush, Gdiplus::GpGr
 }
 
 static void __stdcall _sws_IconPainter_Callback(
-	HWND hWnd,
-	UINT uMsg,
-	ULONG_PTR _params,
-	LRESULT hIcon
+    HWND hWnd,
+    UINT uMsg,
+    ULONG_PTR _params,
+    LRESULT hIcon
 )
 {
-	sws_IconPainter_CallbackParams* params = (sws_IconPainter_CallbackParams*)_params;
+    sws_IconPainter_CallbackParams* params = (sws_IconPainter_CallbackParams*)_params;
     LONG_PTR ptr = GetWindowLongPtr(params->hWnd, GWLP_USERDATA);
     sws_WindowSwitcher* _this = (sws_WindowSwitcher*)(ptr);
 
-	if (_this->layout.timestamp == params->timestamp)
-	{
+    if (_this->layout.timestamp == params->timestamp)
+    {
         DWORD dwProcessId;
         GetWindowThreadProcessId(hWnd, &dwProcessId);
         sws_WindowSwitcherLayoutWindow* pWindowList = (sws_WindowSwitcherLayoutWindow*)_this->layout.pWindowList.pList;
@@ -1104,7 +1104,7 @@ static void __stdcall _sws_IconPainter_Callback(
             KillTimer(_this->hWnd, SWS_WINDOWSWITCHER_TIMER_PAINT);
             SendMessageW(_this->hWnd, SWS_WINDOWSWITCHER_PAINT_MSG, SWS_WINDOWSWITCHER_PAINTFLAGS_REDRAWENTIRE, 0);
         }
-	}
+    }
 
     free(params);
 }
@@ -1116,149 +1116,149 @@ BOOL sws_IconPainter_ExtractAndDrawIconAsync(HWND hWnd, sws_IconPainter_Callback
         return FALSE;
     }
     SetTimer(params->hWnd, SWS_WINDOWSWITCHER_TIMER_PAINT, SWS_WINDOWSWITCHER_TIMER_PAINT_GETICONASYNC_DELAY, NULL);
-	return SendMessageCallbackW(hWnd, WM_GETICON, ICON_BIG, 0, _sws_IconPainter_Callback, (ULONG_PTR)params);
+    return SendMessageCallbackW(hWnd, WM_GETICON, ICON_BIG, 0, _sws_IconPainter_Callback, (ULONG_PTR)params);
 }
 
 // sws_tshwnd.c
 void sws_tshwnd_ModifyTimestamp(sws_tshwnd* _this, FILETIME ft)
 {
-	_this->ft = ft;
+    _this->ft = ft;
 }
 
 void sws_tshwnd_UpdateTimestamp(sws_tshwnd* _this)
 {
-	GetSystemTimeAsFileTime(&(_this->ft));
+    GetSystemTimeAsFileTime(&(_this->ft));
 }
 
 int CALLBACK sws_tshwnd_CompareTimestamp(sws_tshwnd* p1, sws_tshwnd* p2, LPARAM flags)
 {
-	if (flags & SWS_SORT_DESCENDING)
-	{
-		return CompareFileTime(&(p2->ft), &(p1->ft));
-	}
-	return CompareFileTime(&(p1->ft), &(p2->ft));
+    if (flags & SWS_SORT_DESCENDING)
+    {
+        return CompareFileTime(&(p2->ft), &(p1->ft));
+    }
+    return CompareFileTime(&(p1->ft), &(p2->ft));
 }
 
 int CALLBACK sws_tshwnd_CompareHWND(sws_tshwnd* p1, sws_tshwnd* p2, LPARAM)
 {
-	return !(p1 && p2 && p1->hWnd == p2->hWnd);
+    return !(p1 && p2 && p1->hWnd == p2->hWnd);
 }
 
 BOOL sws_tshwnd_GetFlashState(sws_tshwnd* _this)
 {
-	return _this->bFlash;
+    return _this->bFlash;
 }
 
 void sws_tshwnd_SetFlashState(sws_tshwnd* _this, BOOL bFlash)
 {
-	_this->bFlash = bFlash;
+    _this->bFlash = bFlash;
 }
 
 sws_error_t sws_tshwnd_Initialize(sws_tshwnd* _this, HWND hWnd)
 {
-	sws_error_t rv = SWS_ERROR_SUCCESS;
+    sws_error_t rv = SWS_ERROR_SUCCESS;
 
-	if (!rv && _this)
-	{
-		_this->hWnd = hWnd;
-		GetSystemTimeAsFileTime(&(_this->ft));
-		_this->bFlash = FALSE;
-		_this->cbFlashAnimationState = 0;
-		_this->dwFlashAnimationState = 0;
-	}
+    if (!rv && _this)
+    {
+        _this->hWnd = hWnd;
+        GetSystemTimeAsFileTime(&(_this->ft));
+        _this->bFlash = FALSE;
+        _this->cbFlashAnimationState = 0;
+        _this->dwFlashAnimationState = 0;
+    }
 
-	return rv;
+    return rv;
 }
 
 // sws_vector.c
 sws_error_t sws_vector_PushBack(sws_vector* _this, void* pElement)
 {
-	sws_error_t rv = SWS_ERROR_SUCCESS;
+    sws_error_t rv = SWS_ERROR_SUCCESS;
 
-	if (!rv)
-	{
-		if (_this->cbCapacity == 0 || _this->cbElementSize == 0)
-		{
-			rv = sws_error_Report(SWS_ERROR_NO_MEMORY);
-		}
-	}
-	if (!rv)
-	{
-		if (_this->cbSize >= _this->cbCapacity)
-		{
-			void* prev = _this->pList;
-			_this->pList = realloc(_this->pList, (uintptr_t)_this->cbElementSize * (uintptr_t)((uintptr_t)_this->cbCapacity + SWS_VECTOR_CAPACITY));
-			if (!_this->pList)
-			{
-				free(prev);
-				_this->cbElementSize = 0;
-				_this->cbCapacity = 0;
-				_this->cbSize = 0;
-				rv = sws_error_Report(SWS_ERROR_NO_MEMORY);
-			}
-			else
-			{
-				_this->cbCapacity = _this->cbCapacity + SWS_VECTOR_CAPACITY;
-			}
-		}
-	}
-	if (!rv)
-	{
-		memcpy((void*)((uintptr_t)_this->pList + (uintptr_t)_this->cbSize * (uintptr_t)_this->cbElementSize), pElement, _this->cbElementSize);
-		_this->cbSize++;
-	}
+    if (!rv)
+    {
+        if (_this->cbCapacity == 0 || _this->cbElementSize == 0)
+        {
+            rv = sws_error_Report(SWS_ERROR_NO_MEMORY);
+        }
+    }
+    if (!rv)
+    {
+        if (_this->cbSize >= _this->cbCapacity)
+        {
+            void* prev = _this->pList;
+            _this->pList = realloc(_this->pList, (uintptr_t)_this->cbElementSize * (uintptr_t)((uintptr_t)_this->cbCapacity + SWS_VECTOR_CAPACITY));
+            if (!_this->pList)
+            {
+                free(prev);
+                _this->cbElementSize = 0;
+                _this->cbCapacity = 0;
+                _this->cbSize = 0;
+                rv = sws_error_Report(SWS_ERROR_NO_MEMORY);
+            }
+            else
+            {
+                _this->cbCapacity = _this->cbCapacity + SWS_VECTOR_CAPACITY;
+            }
+        }
+    }
+    if (!rv)
+    {
+        memcpy((void*)((uintptr_t)_this->pList + (uintptr_t)_this->cbSize * (uintptr_t)_this->cbElementSize), pElement, _this->cbElementSize);
+        _this->cbSize++;
+    }
 
-	return rv;
+    return rv;
 }
 
 void sws_vector_Clear(sws_vector* _this)
 {
-	if (_this)
-	{
-		free(_this->pList);
-		memset(_this, 0, sizeof(sws_vector));
-	}
+    if (_this)
+    {
+        free(_this->pList);
+        memset(_this, 0, sizeof(sws_vector));
+    }
 }
 
 sws_error_t sws_vector_Initialize(sws_vector* _this, unsigned int cbElementSize)
 {
-	sws_error_t rv = SWS_ERROR_SUCCESS;
+    sws_error_t rv = SWS_ERROR_SUCCESS;
 
-	if (!rv)
-	{
-		if (!_this)
-		{
-			rv = sws_error_Report(SWS_ERROR_NO_MEMORY);
-		}
-	}
-	if (!rv)
-	{
-		_this->pList = calloc(SWS_VECTOR_CAPACITY, cbElementSize);
-		if (!_this->pList)
-		{
-			rv = sws_error_Report(SWS_ERROR_NO_MEMORY);
-		}
-		_this->cbElementSize = cbElementSize;
-		_this->cbCapacity = SWS_VECTOR_CAPACITY;
-		_this->cbSize = 0;
-	}
+    if (!rv)
+    {
+        if (!_this)
+        {
+            rv = sws_error_Report(SWS_ERROR_NO_MEMORY);
+        }
+    }
+    if (!rv)
+    {
+        _this->pList = calloc(SWS_VECTOR_CAPACITY, cbElementSize);
+        if (!_this->pList)
+        {
+            rv = sws_error_Report(SWS_ERROR_NO_MEMORY);
+        }
+        _this->cbElementSize = cbElementSize;
+        _this->cbCapacity = SWS_VECTOR_CAPACITY;
+        _this->cbSize = 0;
+    }
 
-	return rv;
+    return rv;
 }
 
 // sws_window.c
 sws_error_t sws_window_Initialize(sws_window* _this, HWND hWnd)
 {
-	sws_error_t rv = SWS_ERROR_SUCCESS;
+    sws_error_t rv = SWS_ERROR_SUCCESS;
 
-	if (!rv)
-	{
-		ZeroMemory(_this->wszPath, MAX_PATH);
-		_this->hWnd = hWnd;
-	}
-	if (!rv)
-	{
-		HWND hWndOfInterest = hWnd;
+    if (!rv)
+    {
+        ZeroMemory(_this->wszPath, MAX_PATH);
+        _this->hWnd = hWnd;
+    }
+    if (!rv)
+    {
+        HWND hWndOfInterest = hWnd;
         if (_sws_HungWindowFromGhostWindow)
         {
             HWND hWndGhost = _sws_HungWindowFromGhostWindow(hWnd);
@@ -1267,31 +1267,31 @@ sws_error_t sws_window_Initialize(sws_window* _this, HWND hWnd)
                 hWndOfInterest = hWndGhost;
             }
         }
-		if (!GetWindowThreadProcessId(hWndOfInterest, &(_this->dwProcessId)))
-		{
-			rv = HRESULT_FROM_WIN32(GetLastError());
-		}
-	}
-	if (!rv)
-	{
-		HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, _this->dwProcessId);
-		if (hProcess)
-		{
-			GetModuleFileNameExW(hProcess, NULL, _this->wszPath, MAX_PATH);
-			CloseHandle(hProcess);
-		}
-	}
-	if (!rv)
-	{
-		_this->bIsApplicationFrameHost = sws_WindowHelpers_IsWindowUWP(hWnd);
-		_this->tshWnd = NULL;
-		_this->pNextWindow = NULL;
-	}
-	if (!rv)
-	{
-		_this->wszAUMID = sws_WindowHelpers_GetAUMIDForHWND(_this->hWnd);
-	}
-	return rv;
+        if (!GetWindowThreadProcessId(hWndOfInterest, &(_this->dwProcessId)))
+        {
+            rv = HRESULT_FROM_WIN32(GetLastError());
+        }
+    }
+    if (!rv)
+    {
+        HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, _this->dwProcessId);
+        if (hProcess)
+        {
+            GetModuleFileNameExW(hProcess, NULL, _this->wszPath, MAX_PATH);
+            CloseHandle(hProcess);
+        }
+    }
+    if (!rv)
+    {
+        _this->bIsApplicationFrameHost = sws_WindowHelpers_IsWindowUWP(hWnd);
+        _this->tshWnd = NULL;
+        _this->pNextWindow = NULL;
+    }
+    if (!rv)
+    {
+        _this->wszAUMID = sws_WindowHelpers_GetAUMIDForHWND(_this->hWnd);
+    }
+    return rv;
 }
 
 // sws_WindowHelpers.c
@@ -1306,161 +1306,161 @@ DEFINE_GUID(POLID_TurnOffSPIAnimations, 0xD7AF00A, 0xB468, 0x4A39, 0xB0, 0x16, 0
 BOOL CALLBACK sws_WindowHelpers_IsValidMonitor(HMONITOR hMonitor, HDC unnamedParam2, LPRECT unnamedParam3, LPARAM lParam)
 {
     HMONITOR* pMonitor = (HMONITOR*)lParam;
-	if (!pMonitor || !*(HMONITOR*)pMonitor) return FALSE;
-	if (hMonitor == *pMonitor)
-	{
-		*pMonitor = NULL;
-		return FALSE;
-	}
-	return TRUE;
+    if (!pMonitor || !*(HMONITOR*)pMonitor) return FALSE;
+    if (hMonitor == *pMonitor)
+    {
+        *pMonitor = NULL;
+        return FALSE;
+    }
+    return TRUE;
 }
 
 BOOL _sws_TestExStyle(HWND hWnd, DWORD dwExStyle)
 {
-	return dwExStyle == (dwExStyle & (DWORD)GetWindowLongPtrW(hWnd, GWL_EXSTYLE));
+    return dwExStyle == (dwExStyle & (DWORD)GetWindowLongPtrW(hWnd, GWL_EXSTYLE));
 }
 
 BOOLEAN _sws_IsOwnerToolWindow(HWND hwnd)
 {
-	BOOLEAN bRet = FALSE;
+    BOOLEAN bRet = FALSE;
 
-	HWND hwndCurrent = hwnd;
-	HWND hwndOwner = GetWindow(hwnd, GW_OWNER);
-	while (!_sws_TestExStyle(hwndCurrent, WS_EX_APPWINDOW) && hwndOwner)
-	{
-		HWND hwndPrev = hwndCurrent;
-		hwndCurrent = hwndOwner;
-		hwndOwner = GetWindow(hwndOwner, GW_OWNER);
-		if (_sws_TestExStyle(hwndCurrent, WS_EX_TOOLWINDOW))
-		{
-			bRet = !_sws_TestExStyle(hwndPrev, WS_EX_CONTROLPARENT) || hwndOwner != NULL;
-			break;
-		}
-	}
+    HWND hwndCurrent = hwnd;
+    HWND hwndOwner = GetWindow(hwnd, GW_OWNER);
+    while (!_sws_TestExStyle(hwndCurrent, WS_EX_APPWINDOW) && hwndOwner)
+    {
+        HWND hwndPrev = hwndCurrent;
+        hwndCurrent = hwndOwner;
+        hwndOwner = GetWindow(hwndOwner, GW_OWNER);
+        if (_sws_TestExStyle(hwndCurrent, WS_EX_TOOLWINDOW))
+        {
+            bRet = !_sws_TestExStyle(hwndPrev, WS_EX_CONTROLPARENT) || hwndOwner != NULL;
+            break;
+        }
+    }
 
-	return bRet;
+    return bRet;
 }
 
 BOOL _sws_IsReallyVisible(HWND hWnd)
 {
-	RECT rc;
-	GetWindowRect(hWnd, &rc);
-	return IsWindowVisible(hWnd) && !IsRectEmpty(&rc);
+    RECT rc;
+    GetWindowRect(hWnd, &rc);
+    return IsWindowVisible(hWnd) && !IsRectEmpty(&rc);
 }
 
 BOOL _sws_IsGhosted(HWND hwnd)
 {
-	return _sws_GhostWindowFromHungWindow && _sws_GhostWindowFromHungWindow(hwnd) != NULL;
+    return _sws_GhostWindowFromHungWindow && _sws_GhostWindowFromHungWindow(hwnd) != NULL;
 }
 
 BOOL _sws_ShouldListWindowInAltTab(HWND hwnd)
 {
-	BOOL bRet = FALSE;
+    BOOL bRet = FALSE;
 
-	if (IsWindow(hwnd) /*&& hwnd != _hwnd*/)
-	{
-		DWORD dwExStyle = (DWORD)GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-		HWND hwndOwner = GetWindow(hwnd, GW_OWNER);
-		BOOLEAN bOwnerVisible = IsWindow(hwndOwner) && IsWindowEnabled(hwndOwner) && _sws_IsReallyVisible(hwndOwner);
-		BOOLEAN bNoActivate = (dwExStyle & WS_EX_NOACTIVATE) != 0 || (dwExStyle & WS_EX_TOOLWINDOW) != 0;
-		BOOLEAN bAppWindow = (dwExStyle & WS_EX_APPWINDOW) != 0;
-		if (bAppWindow)
-		{
-			bNoActivate = FALSE;
-		}
-		bRet = _sws_IsReallyVisible(hwnd)
-			// && IsWindowEnabled(hwnd)
-			&& !bNoActivate
-			&& (bAppWindow || (!bOwnerVisible && !_sws_IsOwnerToolWindow(hwnd)))
-			&& !_sws_IsGhosted(hwnd);
-	}
+    if (IsWindow(hwnd) /*&& hwnd != _hwnd*/)
+    {
+        DWORD dwExStyle = (DWORD)GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        HWND hwndOwner = GetWindow(hwnd, GW_OWNER);
+        BOOLEAN bOwnerVisible = IsWindow(hwndOwner) && IsWindowEnabled(hwndOwner) && _sws_IsReallyVisible(hwndOwner);
+        BOOLEAN bNoActivate = (dwExStyle & WS_EX_NOACTIVATE) != 0 || (dwExStyle & WS_EX_TOOLWINDOW) != 0;
+        BOOLEAN bAppWindow = (dwExStyle & WS_EX_APPWINDOW) != 0;
+        if (bAppWindow)
+        {
+            bNoActivate = FALSE;
+        }
+        bRet = _sws_IsReallyVisible(hwnd)
+            // && IsWindowEnabled(hwnd)
+            && !bNoActivate
+            && (bAppWindow || (!bOwnerVisible && !_sws_IsOwnerToolWindow(hwnd)))
+            && !_sws_IsGhosted(hwnd);
+    }
 
-	return bRet;
+    return bRet;
 }
 
 BOOL _sws__IsTaskWindow(HWND hwnd)
 {
-	DWORD dwExStyle = (DWORD)GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-	return ((dwExStyle & WS_EX_APPWINDOW) != 0 || ((dwExStyle & WS_EX_TOOLWINDOW) == 0 && (dwExStyle & WS_EX_NOACTIVATE) == 0))
-		&& IsWindowVisible(hwnd)
-		&& !_sws_IsGhosted(hwnd);
+    DWORD dwExStyle = (DWORD)GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    return ((dwExStyle & WS_EX_APPWINDOW) != 0 || ((dwExStyle & WS_EX_TOOLWINDOW) == 0 && (dwExStyle & WS_EX_NOACTIVATE) == 0))
+        && IsWindowVisible(hwnd)
+        && !_sws_IsGhosted(hwnd);
 }
 
 BOOL _sws_IsTaskWindow(HWND hwnd, HWND* phwndTaskWindow)
 {
-	BOOL bRet = FALSE;
+    BOOL bRet = FALSE;
 
-	if (_sws_ShouldListWindowInAltTab(hwnd))
-	{
-		HWND hwndTaskWindow = hwnd;
-		HWND hwndCurrent = hwnd;
-		while ((hwndCurrent = GetWindow(hwndCurrent, GW_OWNER)))
-		{
-			if (!_sws__IsTaskWindow(hwndCurrent))
-				break;
-			hwndTaskWindow = hwndCurrent;
-		}
-		*phwndTaskWindow = hwndTaskWindow;
-		bRet = TRUE;
-	}
+    if (_sws_ShouldListWindowInAltTab(hwnd))
+    {
+        HWND hwndTaskWindow = hwnd;
+        HWND hwndCurrent = hwnd;
+        while ((hwndCurrent = GetWindow(hwndCurrent, GW_OWNER)))
+        {
+            if (!_sws__IsTaskWindow(hwndCurrent))
+                break;
+            hwndTaskWindow = hwndCurrent;
+        }
+        *phwndTaskWindow = hwndTaskWindow;
+        bRet = TRUE;
+    }
 
-	return bRet;
+    return bRet;
 }
 
 wchar_t* sws_WindowHelpers_GetAUMIDForHWND(HWND hWnd)
 {
-	WCHAR* pszAppId;
-	if (SUCCEEDED(sws_AppResolver->lpVtbl->GetAppIDForWindow(sws_AppResolver, hWnd, &pszAppId, NULL, NULL, NULL)) && pszAppId) return pszAppId;
-	return NULL;
+    WCHAR* pszAppId;
+    if (SUCCEEDED(sws_AppResolver->lpVtbl->GetAppIDForWindow(sws_AppResolver, hWnd, &pszAppId, NULL, NULL, NULL)) && pszAppId) return pszAppId;
+    return NULL;
 }
 
 BOOL sws_WindowHelpers_IsWindowShellManagedByExplorerPatcher(HWND hWnd)
 {
-	return GetPropW(hWnd, L"valinet.ExplorerPatcher.ShellManagedWindow") != 0;
+    return GetPropW(hWnd, L"valinet.ExplorerPatcher.ShellManagedWindow") != 0;
 }
 
 BOOL sws_WindowHelpers_ShouldTreatShellManagedWindowAsNotShellManaged(HWND hWnd)
 {
-	return GetPropW(hWnd, L"Microsoft.Windows.ShellManagedWindowAsNormalWindow") != 0;
+    return GetPropW(hWnd, L"Microsoft.Windows.ShellManagedWindowAsNormalWindow") != 0;
 }
 
 BOOL sws_WindowHelpers_IsAltTabWindow(HWND hWnd)
 {
-	// This identifies whether a window is a shell frame and includes those
-	// A shell frame corresponds to, as far as I can tell, the frame of a UWP app
-	// and we want those in the Alt-Tab list
-	// Bugfix: Exclude hung shell frame (immersive) UWP windows, as we already include
-	// ghost app windows in their place already
-	if (sws_WindowHelpers_IsWindowUWP(hWnd) && (!_sws_GhostWindowFromHungWindow || !_sws_GhostWindowFromHungWindow(hWnd)))
-	{
-		return TRUE;
-	}
-	// Next, we need to check whether the window is shell managed and exclude it if so
-	// Shell managed windows, as far as I can tell, represent all immersive UI the
-	// Windows shell might present the user with, like: Start menu, Search (Win+Q),
-	// notifications, taskbars etc
-	if (_sws_IsShellManagedWindow && _sws_IsShellManagedWindow(hWnd) && !sws_WindowHelpers_ShouldTreatShellManagedWindowAsNotShellManaged(hWnd))
-	{
-		return FALSE;
-	}
-	// Also, exclude some windows created by ExplorerPatcher
-	if (sws_WindowHelpers_IsWindowShellManagedByExplorerPatcher(hWnd))
-	{
-		return FALSE;
-	}
-	// Lastly, this check works with the remaining classic window and determines if it is a
-	// "task window" and only includes it in Alt-Tab if so; this check is taken from
-	// "AltTab.dll" in Windows 7 and this is how that OS decided to include a window in its
-	// window switcher
-	HWND hwndTaskWindow = NULL;
-	return _sws_IsTaskWindow(hWnd, &hwndTaskWindow);
+    // This identifies whether a window is a shell frame and includes those
+    // A shell frame corresponds to, as far as I can tell, the frame of a UWP app
+    // and we want those in the Alt-Tab list
+    // Bugfix: Exclude hung shell frame (immersive) UWP windows, as we already include
+    // ghost app windows in their place already
+    if (sws_WindowHelpers_IsWindowUWP(hWnd) && (!_sws_GhostWindowFromHungWindow || !_sws_GhostWindowFromHungWindow(hWnd)))
+    {
+        return TRUE;
+    }
+    // Next, we need to check whether the window is shell managed and exclude it if so
+    // Shell managed windows, as far as I can tell, represent all immersive UI the
+    // Windows shell might present the user with, like: Start menu, Search (Win+Q),
+    // notifications, taskbars etc
+    if (_sws_IsShellManagedWindow && _sws_IsShellManagedWindow(hWnd) && !sws_WindowHelpers_ShouldTreatShellManagedWindowAsNotShellManaged(hWnd))
+    {
+        return FALSE;
+    }
+    // Also, exclude some windows created by ExplorerPatcher
+    if (sws_WindowHelpers_IsWindowShellManagedByExplorerPatcher(hWnd))
+    {
+        return FALSE;
+    }
+    // Lastly, this check works with the remaining classic window and determines if it is a
+    // "task window" and only includes it in Alt-Tab if so; this check is taken from
+    // "AltTab.dll" in Windows 7 and this is how that OS decided to include a window in its
+    // window switcher
+    HWND hwndTaskWindow = NULL;
+    return _sws_IsTaskWindow(hWnd, &hwndTaskWindow);
 }
 
 void sws_WindowHelpers_GetDesktopText(wchar_t* wszTitle)
 {
-	if (_sws_ExplorerFrame)
-	{
-		LoadStringW((HINSTANCE)_sws_ExplorerFrame, 13140, wszTitle, MAX_PATH);
+    if (_sws_ExplorerFrame)
+    {
+        LoadStringW((HINSTANCE)_sws_ExplorerFrame, 13140, wszTitle, MAX_PATH);
         // Strip CJK "(D)" from it
         auto titleText = std::wstring(wszTitle);
         size_t pos = titleText.find(L"(&D)");
@@ -1469,42 +1469,42 @@ void sws_WindowHelpers_GetDesktopText(wchar_t* wszTitle)
             titleText.replace(pos, 4, L"");
         }
         wcsncpy_s(wszTitle, MAX_PATH, titleText.c_str(), _TRUNCATE);
-	}
-	else
-	{
-		wcscat_s(wszTitle, MAX_PATH, L"Desktop");
-	}
+    }
+    else
+    {
+        wcscat_s(wszTitle, MAX_PATH, L"Desktop");
+    }
 }
 
 BOOL CALLBACK sws_WindowHelpers_AddAltTabWindowsToTimeStampedHWNDList(HWND hWnd, LPARAM hdpa)
 {
-	if (!hdpa)
-	{
-		return FALSE;
-	}
-	if (sws_WindowHelpers_IsAltTabWindow(hWnd))
-	{
-		sws_tshwnd* tshWnd = (sws_tshwnd*)malloc(sizeof(sws_tshwnd));
-		if (tshWnd)
-		{
-			sws_tshwnd_Initialize(tshWnd, hWnd);
-			sws_tshwnd_ModifyTimestamp(tshWnd, sws_WindowHelpers_GetStartTime());
-			DPA_AppendPtr((HDPA)hdpa, tshWnd);
-		}
-	}
-	return TRUE;
+    if (!hdpa)
+    {
+        return FALSE;
+    }
+    if (sws_WindowHelpers_IsAltTabWindow(hWnd))
+    {
+        sws_tshwnd* tshWnd = (sws_tshwnd*)malloc(sizeof(sws_tshwnd));
+        if (tshWnd)
+        {
+            sws_tshwnd_Initialize(tshWnd, hWnd);
+            sws_tshwnd_ModifyTimestamp(tshWnd, sws_WindowHelpers_GetStartTime());
+            DPA_AppendPtr((HDPA)hdpa, tshWnd);
+        }
+    }
+    return TRUE;
 }
 
 BOOL sws_WindowHelpers_AreAnimationsAllowed()
 {
-	if (sws_SHWindowsPolicy && sws_SHWindowsPolicy(POLID_TurnOffSPIAnimations))
-	{
-		return FALSE;
-	}
+    if (sws_SHWindowsPolicy && sws_SHWindowsPolicy(POLID_TurnOffSPIAnimations))
+    {
+        return FALSE;
+    }
 
-	BOOL bAnimationsEnabled = FALSE;
-	SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &bAnimationsEnabled, 0);
-	return bAnimationsEnabled;
+    BOOL bAnimationsEnabled = FALSE;
+    SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &bAnimationsEnabled, 0);
+    return bAnimationsEnabled;
 }
 
 void sws_WindowHelpers_GetWindowText(HWND hWnd, LPWSTR lpWStr, DWORD dwLength)
@@ -1627,34 +1627,34 @@ void sws_WindowHelpers_GetDesiredWindowText(sws_WindowSwitcher* _this, sws_Windo
 
 HWND sws_WindowHelpers_GetLastActivePopup(HWND hWnd)
 {
-	HWND hOwner = GetWindow(hWnd, GW_OWNER);
-	return GetLastActivePopup(hOwner ? hOwner : hWnd);
+    HWND hOwner = GetWindow(hWnd, GW_OWNER);
+    return GetLastActivePopup(hOwner ? hOwner : hWnd);
 }
 
 void sws_WindowHelpers_Clear()
 {
-	Gdiplus::GdiplusShutdown(_sws_gdiplus_token);
-	_sws_gdiplus_token = 0;
-	if (sws_DefAppIcon)
-	{
-		DestroyIcon(sws_DefAppIcon);
-		sws_DefAppIcon = NULL;
-	}
-	if (_sws_hUser32)
-	{
-		FreeLibrary(_sws_hUser32);
-		_sws_hUser32 = NULL;
-	}
-	if (_sws_hShcore)
-	{
-		FreeLibrary(_sws_hShcore);
-		_sws_hShcore = NULL;
-	}
-	if (sws_AppResolver)
-	{
-		sws_AppResolver->lpVtbl->Release(sws_AppResolver);
-		sws_AppResolver = NULL;
-	}
+    Gdiplus::GdiplusShutdown(_sws_gdiplus_token);
+    _sws_gdiplus_token = 0;
+    if (sws_DefAppIcon)
+    {
+        DestroyIcon(sws_DefAppIcon);
+        sws_DefAppIcon = NULL;
+    }
+    if (_sws_hUser32)
+    {
+        FreeLibrary(_sws_hUser32);
+        _sws_hUser32 = NULL;
+    }
+    if (_sws_hShcore)
+    {
+        FreeLibrary(_sws_hShcore);
+        _sws_hShcore = NULL;
+    }
+    if (sws_AppResolver)
+    {
+        sws_AppResolver->lpVtbl->Release(sws_AppResolver);
+        sws_AppResolver = NULL;
+    }
     if (_sws_ExplorerFrame)
     {
         FreeLibrary(_sws_ExplorerFrame);
@@ -1669,42 +1669,42 @@ void sws_WindowHelpers_Clear()
 
 sws_error_t sws_WindowHelpers_Initialize()
 {
-	sws_error_t rv = SWS_ERROR_SUCCESS;
+    sws_error_t rv = SWS_ERROR_SUCCESS;
 
-	if (_sws_gdiplus_token)
-	{
-		return rv;
-	}
-	GetSystemTimeAsFileTime(&sws_ancient_ft);
-	GetSystemTimeAsFileTime(&sws_start_ft);
-	if (!rv)
-	{
-		LoadIconWithScaleDown(
-			(HINSTANCE)NULL,
-			(PCWSTR)32512,
-			(int)32,
-			(int)32,
-			(HICON*)(&(sws_DefAppIcon))
-		);
-		LoadIconWithScaleDown(
-			(HINSTANCE)NULL,
-			(PCWSTR)32512,
-			(int)32,
-			(int)32,
-			(HICON*)(&(sws_LegacyDefAppIcon))
-		);
-	}
-	if (!rv)
-	{
+    if (_sws_gdiplus_token)
+    {
+        return rv;
+    }
+    GetSystemTimeAsFileTime(&sws_ancient_ft);
+    GetSystemTimeAsFileTime(&sws_start_ft);
+    if (!rv)
+    {
+        LoadIconWithScaleDown(
+            (HINSTANCE)NULL,
+            (PCWSTR)32512,
+            (int)32,
+            (int)32,
+            (HICON*)(&(sws_DefAppIcon))
+        );
+        LoadIconWithScaleDown(
+            (HINSTANCE)NULL,
+            (PCWSTR)32512,
+            (int)32,
+            (int)32,
+            (HICON*)(&(sws_LegacyDefAppIcon))
+        );
+    }
+    if (!rv)
+    {
         Gdiplus::GdiplusStartupInput gdiplusStartupInput = { 0 };
-		rv = Gdiplus::GdiplusStartup(&_sws_gdiplus_token, &gdiplusStartupInput, NULL);
-	}
-	if (!rv)
-	{
-		if (!_sws_hUser32)
-		{
-			_sws_hUser32 = LoadLibraryExW(L"user32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
-		}
+        rv = Gdiplus::GdiplusStartup(&_sws_gdiplus_token, &gdiplusStartupInput, NULL);
+    }
+    if (!rv)
+    {
+        if (!_sws_hUser32)
+        {
+            _sws_hUser32 = LoadLibraryExW(L"user32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        }
         if (_sws_hUser32)
         {
             if (!_sws_HungWindowFromGhostWindow)
@@ -1733,24 +1733,24 @@ sws_error_t sws_WindowHelpers_Initialize()
             }
         }
     
-		if (!_sws_hShcore)
-		{
-			_sws_hShcore = LoadLibraryExW(L"shcore.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (!_sws_hShcore)
+        {
+            _sws_hShcore = LoadLibraryExW(L"shcore.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
         }
-		if (_sws_hShcore && !sws_SHWindowsPolicy)
-		{
-			sws_SHWindowsPolicy = (pSHWindowsPolicy)GetProcAddress(_sws_hShcore, (LPCSTR)190);
-		}
+        if (_sws_hShcore && !sws_SHWindowsPolicy)
+        {
+            sws_SHWindowsPolicy = (pSHWindowsPolicy)GetProcAddress(_sws_hShcore, (LPCSTR)190);
+        }
 
-		if (!sws_AppResolver)
-		{
-			CoCreateInstance(CLSID_StartMenuCacheAndAppResolver, NULL, CLSCTX_INPROC_SERVER | CLSCTX_INPROC_HANDLER, IID_IAppResolver_8, (void**)&sws_AppResolver);
-			if (!sws_AppResolver)
-			{
-				rv = SWS_ERROR_APPRESOLVER_NOT_AVAILABLE;
-			}
-		}
-	}
+        if (!sws_AppResolver)
+        {
+            CoCreateInstance(CLSID_StartMenuCacheAndAppResolver, NULL, CLSCTX_INPROC_SERVER | CLSCTX_INPROC_HANDLER, IID_IAppResolver_8, (void**)&sws_AppResolver);
+            if (!sws_AppResolver)
+            {
+                rv = SWS_ERROR_APPRESOLVER_NOT_AVAILABLE;
+            }
+        }
+    }
     if (!_sws_ExplorerFrame)
     {
         _sws_ExplorerFrame = LoadLibraryExW(L"ExplorerFrame.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32 | LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
@@ -1762,7 +1762,7 @@ sws_error_t sws_WindowHelpers_Initialize()
         wcscat_s(explorerPath, L"\\explorer.exe");
         _sws_Explorer = LoadLibraryExW(explorerPath, NULL, LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
     }
-	return rv;
+    return rv;
 }
 
 // sws_WindowSwitcherLayoutWindow.h
@@ -1849,311 +1849,311 @@ sws_error_t sws_WindowSwitcherLayoutWindow_Initialize(sws_WindowSwitcherLayoutWi
 // sws_WindowSwitcherLayout.c
 sws_error_t sws_WindowSwitcherLayout_InvalidateLayout(sws_WindowSwitcherLayout* _this)
 {
-	sws_error_t rv = SWS_ERROR_SUCCESS;
+    sws_error_t rv = SWS_ERROR_SUCCESS;
 
-	sws_WindowSwitcherLayoutWindow* pWindowList = (sws_WindowSwitcherLayoutWindow*)_this->pWindowList.pList;
-	for (int iCurrentWindow = _this->pWindowList.cbSize - 1; iCurrentWindow >= 0; iCurrentWindow--)
-	{
-		sws_WindowSwitcherLayoutWindow_Erase(&(pWindowList[iCurrentWindow]));
-	}
+    sws_WindowSwitcherLayoutWindow* pWindowList = (sws_WindowSwitcherLayoutWindow*)_this->pWindowList.pList;
+    for (int iCurrentWindow = _this->pWindowList.cbSize - 1; iCurrentWindow >= 0; iCurrentWindow--)
+    {
+        sws_WindowSwitcherLayoutWindow_Erase(&(pWindowList[iCurrentWindow]));
+    }
 
-	return rv;
+    return rv;
 }
 
 sws_error_t sws_WindowSwitcherLayout_ComputeLayout(sws_WindowSwitcherLayout* _this, int direction, HWND hTarget, UINT col, UINT maxRow)
 {
-	sws_error_t rv = SWS_ERROR_SUCCESS;
+    sws_error_t rv = SWS_ERROR_SUCCESS;
 
-	if (!rv)
-	{
-		int iObtainedIndex = 0;
+    if (!rv)
+    {
+        int iObtainedIndex = 0;
 
-		sws_WindowSwitcherLayoutWindow* pWindowList = (sws_WindowSwitcherLayoutWindow*)_this->pWindowList.pList;
+        sws_WindowSwitcherLayoutWindow* pWindowList = (sws_WindowSwitcherLayoutWindow*)_this->pWindowList.pList;
 
-		BOOL bHasTarget = FALSE;
+        BOOL bHasTarget = FALSE;
 
-		if (direction != SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_INITIAL)
-		{
-			if (direction == SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_BACKWARD)
-			{
-				bHasTarget = TRUE;
-				iObtainedIndex = _this->pWindowList.cbSize - 1;
-			}
-			else if (direction == SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_FORWARD)
-			{
-				if (_this->iIndex == _this->pWindowList.cbSize - 1)
-				{
-					iObtainedIndex = _this->iIndex;
-				}
-			}
-			sws_WindowSwitcherLayout_InvalidateLayout(_this);
-		}
+        if (direction != SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_INITIAL)
+        {
+            if (direction == SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_BACKWARD)
+            {
+                bHasTarget = TRUE;
+                iObtainedIndex = _this->pWindowList.cbSize - 1;
+            }
+            else if (direction == SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_FORWARD)
+            {
+                if (_this->iIndex == _this->pWindowList.cbSize - 1)
+                {
+                    iObtainedIndex = _this->iIndex;
+                }
+            }
+            sws_WindowSwitcherLayout_InvalidateLayout(_this);
+        }
 
-		BOOL bFinishedLayout = FALSE;
+        BOOL bFinishedLayout = FALSE;
 
-		while (1)
-		{
-			int iCurrentCount = 0;
+        while (1)
+        {
+            int iCurrentCount = 0;
 
-			for (int iCurrentWindow = iObtainedIndex ? iObtainedIndex : _this->iIndex; iCurrentWindow >= 0; iCurrentWindow--)
-			{
-				if (pWindowList[iCurrentWindow].hWnd == _this->hWnd)
-				{
-					continue;
-				}
+            for (int iCurrentWindow = iObtainedIndex ? iObtainedIndex : _this->iIndex; iCurrentWindow >= 0; iCurrentWindow--)
+            {
+                if (pWindowList[iCurrentWindow].hWnd == _this->hWnd)
+                {
+                    continue;
+                }
 
-				if (!bFinishedLayout)
-				{
-					pWindowList[iCurrentWindow].iRowMax = -1;
-				}
+                if (!bFinishedLayout)
+                {
+                    pWindowList[iCurrentWindow].iRowMax = -1;
+                }
 
-				iCurrentCount++;
-				if (iCurrentCount == _this->pWindowList.cbSize)
-				{
-					break;
-				}
-			}
+                iCurrentCount++;
+                if (iCurrentCount == _this->pWindowList.cbSize)
+                {
+                    break;
+                }
+            }
 
-			if (hTarget && direction == SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_INITIAL)
-			{
-				int iObtained = 0;
-				int iTmpTop = pWindowList[iObtained].rcWindow.top;
-				for (int j = iObtained; j >= 0; j--)
-				{
-					if (pWindowList[j].rcWindow.top != iTmpTop)
-					{
-						iObtained = j;
-						break;
-					}
-				}
-				sws_WindowSwitcherLayout_InvalidateLayout(_this);
-				iObtainedIndex = iObtained;
-				bFinishedLayout = FALSE;
-				continue;
-			}
-			if (!bHasTarget)
-			{
-				break;
-			}
-		}
+            if (hTarget && direction == SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_INITIAL)
+            {
+                int iObtained = 0;
+                int iTmpTop = pWindowList[iObtained].rcWindow.top;
+                for (int j = iObtained; j >= 0; j--)
+                {
+                    if (pWindowList[j].rcWindow.top != iTmpTop)
+                    {
+                        iObtained = j;
+                        break;
+                    }
+                }
+                sws_WindowSwitcherLayout_InvalidateLayout(_this);
+                iObtainedIndex = iObtained;
+                bFinishedLayout = FALSE;
+                continue;
+            }
+            if (!bHasTarget)
+            {
+                break;
+            }
+        }
 
-		UINT row = _this->pWindowList.cbSize / col;
-		if (_this->pWindowList.cbSize % col)
-		{
-			row++;
-		}
-		if (row > maxRow)
-		{
-			row = maxRow;
-		}
+        UINT row = _this->pWindowList.cbSize / col;
+        if (_this->pWindowList.cbSize % col)
+        {
+            row++;
+        }
+        if (row > maxRow)
+        {
+            row = maxRow;
+        }
 
-		if (!_this->iWidth)
-		{
-			_this->iWidth = col * SWS_WINDOWSWITCHERLAYOUT_ITEMSIZE * (_this->cbDpiX / DEFAULT_DPI_X) + 23 * (_this->cbDpiX / DEFAULT_DPI_X) + _this->cbBorderSize * 6;
-			_this->iHeight = row * SWS_WINDOWSWITCHERLAYOUT_ITEMSIZE * (_this->cbDpiX / DEFAULT_DPI_X) + 32 * (_this->cbDpiX / DEFAULT_DPI_X) + _this->cbFontHeight * 5 / 2.0;
-			_this->iX = ((_this->mi.rcWork.right - _this->mi.rcWork.left) - _this->iWidth) / 2 + _this->mi.rcWork.left;
-			_this->iY = ((_this->mi.rcWork.bottom - _this->mi.rcWork.top) - _this->iHeight) / 2 + _this->mi.rcWork.top;
-			//Wh_Log(L"height: %d, cbCurrentTop: %d, %f %f %f\n", _this->iHeight, cbCurrentTop, _this->cbThumbnailAvailableHeight, _this->cbBottomPadding, _this->cbPadding);
-		}
-	}
+        if (!_this->iWidth)
+        {
+            _this->iWidth = col * SWS_WINDOWSWITCHERLAYOUT_ITEMSIZE * (_this->cbDpiX / DEFAULT_DPI_X) + 23 * (_this->cbDpiX / DEFAULT_DPI_X) + _this->cbBorderSize * 6;
+            _this->iHeight = row * SWS_WINDOWSWITCHERLAYOUT_ITEMSIZE * (_this->cbDpiX / DEFAULT_DPI_X) + 32 * (_this->cbDpiX / DEFAULT_DPI_X) + _this->cbFontHeight * 5 / 2.0;
+            _this->iX = ((_this->mi.rcWork.right - _this->mi.rcWork.left) - _this->iWidth) / 2 + _this->mi.rcWork.left;
+            _this->iY = ((_this->mi.rcWork.bottom - _this->mi.rcWork.top) - _this->iHeight) / 2 + _this->mi.rcWork.top;
+            //Wh_Log(L"height: %d, cbCurrentTop: %d, %f %f %f\n", _this->iHeight, cbCurrentTop, _this->cbThumbnailAvailableHeight, _this->cbBottomPadding, _this->cbPadding);
+        }
+    }
 
-	return rv;
+    return rv;
 }
 
 void sws_WindowSwitcherLayout_Clear(sws_WindowSwitcherLayout* _this)
 {
-	if (_this)
-	{
-		DeleteObject(_this->hFontRegular);
-		sws_WindowSwitcherLayoutWindow* pWindowList = (sws_WindowSwitcherLayoutWindow*)_this->pWindowList.pList;
-		if (pWindowList)
-		{
-			for (int iCurrentWindow = 0; iCurrentWindow < _this->pWindowList.cbSize; ++iCurrentWindow)
-			{
-				sws_WindowSwitcherLayoutWindow_Clear(&(pWindowList[iCurrentWindow]));
-			}
-			sws_vector_Clear(&(_this->pWindowList));
-		}
-		memset(_this, 0, sizeof(sws_WindowSwitcherLayout));
-	}
+    if (_this)
+    {
+        DeleteObject(_this->hFontRegular);
+        sws_WindowSwitcherLayoutWindow* pWindowList = (sws_WindowSwitcherLayoutWindow*)_this->pWindowList.pList;
+        if (pWindowList)
+        {
+            for (int iCurrentWindow = 0; iCurrentWindow < _this->pWindowList.cbSize; ++iCurrentWindow)
+            {
+                sws_WindowSwitcherLayoutWindow_Clear(&(pWindowList[iCurrentWindow]));
+            }
+            sws_vector_Clear(&(_this->pWindowList));
+        }
+        memset(_this, 0, sizeof(sws_WindowSwitcherLayout));
+    }
 }
 
 sws_error_t sws_WindowSwitcherLayout_Initialize(
-	sws_WindowSwitcherLayout* _this, 
-	HMONITOR hMonitor, 
-	HWND hWnd, 
-	sws_WindowSwitcherSettings settings, 
-	sws_vector* pHWNDList, 
-	HWND hWndTarget
+    sws_WindowSwitcherLayout* _this, 
+    HMONITOR hMonitor, 
+    HWND hWnd, 
+    sws_WindowSwitcherSettings settings, 
+    sws_vector* pHWNDList, 
+    HWND hWndTarget
 )
 {
-	sws_error_t rv = SWS_ERROR_SUCCESS;
+    sws_error_t rv = SWS_ERROR_SUCCESS;
 
-	if (!rv)
-	{
-		if (!_this)
-		{
-			rv = sws_error_Report(SWS_ERROR_NO_MEMORY);
-		}
-		memset(_this, 0, sizeof(sws_WindowSwitcherLayout));
-	}
-	if (!rv)
-	{
-		rv = sws_error_Report(sws_WindowHelpers_Initialize());
-	}
-	if (!rv)
-	{
-		rv = sws_vector_Initialize(&(_this->pWindowList), sizeof(sws_WindowSwitcherLayoutWindow));
-	}
-	_this->mi.cbSize = sizeof(MONITORINFO);
-	if (!rv)
-	{
-		if (!GetMonitorInfoW(
-			hMonitor,
-			&(_this->mi)
-		))
-		{
-			rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
-		}
-	}
-	if (!rv)
-	{
-		_this->bIncludeWallpaper = settings.bIncludeWallpaper;
-		if (_this->bIncludeWallpaper)
-		{
-			if (!hWndTarget)
-			{
-				sws_WindowSwitcherLayoutWindow swsLayoutWindow;
-				sws_WindowSwitcherLayoutWindow_Initialize(&swsLayoutWindow, GetShellWindow(), NULL);
-				sws_vector_PushBack(&_this->pWindowList, &swsLayoutWindow);
-			}
-		}
-	}
-	if (!rv)
-	{
-		if (pHWNDList)
-		{
-			wchar_t* targetAUMID = sws_WindowHelpers_GetAUMIDForHWND(hWndTarget);
-			sws_window* windowList = (sws_window*)pHWNDList->pList;
-			sws_window* window = NULL;
-			if (hWndTarget)
-			{
-				for (int i = 0; i < pHWNDList->cbSize; ++i)
-				{
-					if (windowList[i].hWnd == hWndTarget)
-					{
-						window = &(windowList[i]);
-						break;
-					}
-				}
-			}
-			{
-				WCHAR wszRundll32Path[MAX_PATH];
-				GetSystemDirectoryW(wszRundll32Path, MAX_PATH);
-				wcscat_s(wszRundll32Path, MAX_PATH, L"\\rundll32.exe");
-				for (int i = pHWNDList->cbSize - 1; i >= 0; i--)
-				{
-					BOOL isCloaked = FALSE;
-					DwmGetWindowAttribute(windowList[i].hWnd, DWMWA_CLOAKED, &isCloaked, sizeof(BOOL));
-					if (isCloaked)
-					{
-						continue;
-					}
-					if (hWndTarget && hWndTarget != windowList[i].hWnd)
-					{
-						if (targetAUMID)
-						{
-							if (!(windowList[i].wszAUMID && !wcscmp(targetAUMID, windowList[i].wszAUMID))) continue;
-						}
-						else
-						{
-							if (!window)
-							{
-								continue;
-							}
-							else if (window->dwProcessId != windowList[i].dwProcessId && _wcsicmp(window->wszPath, windowList[i].wszPath))
-							{
-								continue;
-							}
-						}
-					}
-					if (!hWndTarget && settings.bSwitcherIsPerApplication && _wcsicmp(windowList[i].wszPath, wszRundll32Path))
-					{
-						BOOL bShouldContinue = FALSE;
-						for (int j = i - 1; j >= 0; j--)
-						{
-							if (sws_WindowHelpers_IsAltTabWindow(windowList[j].hWnd) && windowList[i].wszAUMID && windowList[j].wszAUMID)
-							{
-								if (!wcscmp(windowList[i].wszAUMID, windowList[j].wszAUMID) && (settings.bPerMonitor ? MonitorFromWindow(windowList[i].hWnd, MONITOR_DEFAULTTONULL) == MonitorFromWindow(windowList[j].hWnd, MONITOR_DEFAULTTONULL) : TRUE))
-								{
-									windowList[j].pNextWindow = windowList + i;
-									bShouldContinue = TRUE;
-									break;
-								}
-							}
-							else if (sws_WindowHelpers_IsAltTabWindow(windowList[j].hWnd) &&
-								(windowList[i].dwProcessId == windowList[j].dwProcessId || !_wcsicmp(windowList[i].wszPath, windowList[j].wszPath)) &&
-								(settings.bPerMonitor ? MonitorFromWindow(windowList[i].hWnd, MONITOR_DEFAULTTONULL) == MonitorFromWindow(windowList[j].hWnd, MONITOR_DEFAULTTONULL) : TRUE))
-							{
-								bShouldContinue = TRUE;
-								break;
-							}
-						}
-						if (bShouldContinue)
-						{
-							continue;
-						}
-					}
-					if (settings.bPerMonitor && hMonitor != MonitorFromWindow(windowList[i].hWnd, MONITOR_DEFAULTTONULL))
-					{
-						continue;
-					}
-					sws_WindowSwitcherLayoutWindow swsLayoutWindow;
-					sws_WindowSwitcherLayoutWindow_Initialize(&swsLayoutWindow, windowList[i].hWnd, windowList[i].wszPath);
-					for (sws_window* pcw = windowList + i; pcw != NULL; pcw = pcw->pNextWindow) sws_WindowSwitcherLayoutWindow_AddGroupedWnd(&swsLayoutWindow, pcw->hWnd);
-					sws_vector_PushBack(&_this->pWindowList, &swsLayoutWindow);
-				}
-			}
-			if (targetAUMID) CoTaskMemFree(targetAUMID);
-		}
-	}
-	_this->hWnd = hWnd;
-	_this->hMonitor = hMonitor;
-	_this->iIndex = _this->pWindowList.cbSize - 1;
+    if (!rv)
+    {
+        if (!_this)
+        {
+            rv = sws_error_Report(SWS_ERROR_NO_MEMORY);
+        }
+        memset(_this, 0, sizeof(sws_WindowSwitcherLayout));
+    }
+    if (!rv)
+    {
+        rv = sws_error_Report(sws_WindowHelpers_Initialize());
+    }
+    if (!rv)
+    {
+        rv = sws_vector_Initialize(&(_this->pWindowList), sizeof(sws_WindowSwitcherLayoutWindow));
+    }
+    _this->mi.cbSize = sizeof(MONITORINFO);
+    if (!rv)
+    {
+        if (!GetMonitorInfoW(
+            hMonitor,
+            &(_this->mi)
+        ))
+        {
+            rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
+        }
+    }
+    if (!rv)
+    {
+        _this->bIncludeWallpaper = settings.bIncludeWallpaper;
+        if (_this->bIncludeWallpaper)
+        {
+            if (!hWndTarget)
+            {
+                sws_WindowSwitcherLayoutWindow swsLayoutWindow;
+                sws_WindowSwitcherLayoutWindow_Initialize(&swsLayoutWindow, GetShellWindow(), NULL);
+                sws_vector_PushBack(&_this->pWindowList, &swsLayoutWindow);
+            }
+        }
+    }
+    if (!rv)
+    {
+        if (pHWNDList)
+        {
+            wchar_t* targetAUMID = sws_WindowHelpers_GetAUMIDForHWND(hWndTarget);
+            sws_window* windowList = (sws_window*)pHWNDList->pList;
+            sws_window* window = NULL;
+            if (hWndTarget)
+            {
+                for (int i = 0; i < pHWNDList->cbSize; ++i)
+                {
+                    if (windowList[i].hWnd == hWndTarget)
+                    {
+                        window = &(windowList[i]);
+                        break;
+                    }
+                }
+            }
+            {
+                WCHAR wszRundll32Path[MAX_PATH];
+                GetSystemDirectoryW(wszRundll32Path, MAX_PATH);
+                wcscat_s(wszRundll32Path, MAX_PATH, L"\\rundll32.exe");
+                for (int i = pHWNDList->cbSize - 1; i >= 0; i--)
+                {
+                    BOOL isCloaked = FALSE;
+                    DwmGetWindowAttribute(windowList[i].hWnd, DWMWA_CLOAKED, &isCloaked, sizeof(BOOL));
+                    if (isCloaked)
+                    {
+                        continue;
+                    }
+                    if (hWndTarget && hWndTarget != windowList[i].hWnd)
+                    {
+                        if (targetAUMID)
+                        {
+                            if (!(windowList[i].wszAUMID && !wcscmp(targetAUMID, windowList[i].wszAUMID))) continue;
+                        }
+                        else
+                        {
+                            if (!window)
+                            {
+                                continue;
+                            }
+                            else if (window->dwProcessId != windowList[i].dwProcessId && _wcsicmp(window->wszPath, windowList[i].wszPath))
+                            {
+                                continue;
+                            }
+                        }
+                    }
+                    if (!hWndTarget && settings.bSwitcherIsPerApplication && _wcsicmp(windowList[i].wszPath, wszRundll32Path))
+                    {
+                        BOOL bShouldContinue = FALSE;
+                        for (int j = i - 1; j >= 0; j--)
+                        {
+                            if (sws_WindowHelpers_IsAltTabWindow(windowList[j].hWnd) && windowList[i].wszAUMID && windowList[j].wszAUMID)
+                            {
+                                if (!wcscmp(windowList[i].wszAUMID, windowList[j].wszAUMID) && (settings.bPerMonitor ? MonitorFromWindow(windowList[i].hWnd, MONITOR_DEFAULTTONULL) == MonitorFromWindow(windowList[j].hWnd, MONITOR_DEFAULTTONULL) : TRUE))
+                                {
+                                    windowList[j].pNextWindow = windowList + i;
+                                    bShouldContinue = TRUE;
+                                    break;
+                                }
+                            }
+                            else if (sws_WindowHelpers_IsAltTabWindow(windowList[j].hWnd) &&
+                                (windowList[i].dwProcessId == windowList[j].dwProcessId || !_wcsicmp(windowList[i].wszPath, windowList[j].wszPath)) &&
+                                (settings.bPerMonitor ? MonitorFromWindow(windowList[i].hWnd, MONITOR_DEFAULTTONULL) == MonitorFromWindow(windowList[j].hWnd, MONITOR_DEFAULTTONULL) : TRUE))
+                            {
+                                bShouldContinue = TRUE;
+                                break;
+                            }
+                        }
+                        if (bShouldContinue)
+                        {
+                            continue;
+                        }
+                    }
+                    if (settings.bPerMonitor && hMonitor != MonitorFromWindow(windowList[i].hWnd, MONITOR_DEFAULTTONULL))
+                    {
+                        continue;
+                    }
+                    sws_WindowSwitcherLayoutWindow swsLayoutWindow;
+                    sws_WindowSwitcherLayoutWindow_Initialize(&swsLayoutWindow, windowList[i].hWnd, windowList[i].wszPath);
+                    for (sws_window* pcw = windowList + i; pcw != NULL; pcw = pcw->pNextWindow) sws_WindowSwitcherLayoutWindow_AddGroupedWnd(&swsLayoutWindow, pcw->hWnd);
+                    sws_vector_PushBack(&_this->pWindowList, &swsLayoutWindow);
+                }
+            }
+            if (targetAUMID) CoTaskMemFree(targetAUMID);
+        }
+    }
+    _this->hWnd = hWnd;
+    _this->hMonitor = hMonitor;
+    _this->iIndex = _this->pWindowList.cbSize - 1;
 
-	if (!rv)
-	{
-		HRESULT hr = GetDpiForMonitor(
-			hMonitor,
-			MDT_DEFAULT,
-			&(_this->cbDpiX),
-			&(_this->cbDpiY)
-		);
-		rv = sws_error_Report(hr);
-	}
-	if (!rv)
-	{
-		sws_WindowSwitcherLayoutWindow* pWindowList = (sws_WindowSwitcherLayoutWindow*)_this->pWindowList.pList;
-		for (int iCurrentWindow = _this->pWindowList.cbSize - 1; iCurrentWindow >= 0; iCurrentWindow--)
-		{
-			if (!pWindowList[iCurrentWindow].hIcon)
-			{
-				pWindowList[iCurrentWindow].rcIcon.left = 0;
-				pWindowList[iCurrentWindow].rcIcon.top = 0;
-				pWindowList[iCurrentWindow].rcIcon.right = SWS_WINDOWSWITCHERLAYOUT_ICONSIZE * (_this->cbDpiX / DEFAULT_DPI_X);
-				pWindowList[iCurrentWindow].rcIcon.bottom = pWindowList[iCurrentWindow].rcIcon.right;
-				pWindowList[iCurrentWindow].szIcon = pWindowList[iCurrentWindow].rcIcon.right;
-				pWindowList[iCurrentWindow].hIcon = sws_DefAppIcon;
-			}
-		}
-	}
-	if (!rv)
-	{
-		NONCLIENTMETRICS ncm;
-		ncm.cbSize = sizeof(NONCLIENTMETRICS);
+    if (!rv)
+    {
+        HRESULT hr = GetDpiForMonitor(
+            hMonitor,
+            MDT_DEFAULT,
+            &(_this->cbDpiX),
+            &(_this->cbDpiY)
+        );
+        rv = sws_error_Report(hr);
+    }
+    if (!rv)
+    {
+        sws_WindowSwitcherLayoutWindow* pWindowList = (sws_WindowSwitcherLayoutWindow*)_this->pWindowList.pList;
+        for (int iCurrentWindow = _this->pWindowList.cbSize - 1; iCurrentWindow >= 0; iCurrentWindow--)
+        {
+            if (!pWindowList[iCurrentWindow].hIcon)
+            {
+                pWindowList[iCurrentWindow].rcIcon.left = 0;
+                pWindowList[iCurrentWindow].rcIcon.top = 0;
+                pWindowList[iCurrentWindow].rcIcon.right = SWS_WINDOWSWITCHERLAYOUT_ICONSIZE * (_this->cbDpiX / DEFAULT_DPI_X);
+                pWindowList[iCurrentWindow].rcIcon.bottom = pWindowList[iCurrentWindow].rcIcon.right;
+                pWindowList[iCurrentWindow].szIcon = pWindowList[iCurrentWindow].rcIcon.right;
+                pWindowList[iCurrentWindow].hIcon = sws_DefAppIcon;
+            }
+        }
+    }
+    if (!rv)
+    {
+        NONCLIENTMETRICS ncm;
+        ncm.cbSize = sizeof(NONCLIENTMETRICS);
         if (!SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(NONCLIENTMETRICS), &ncm, 0, _this->cbDpiX))
         {
-			rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
+            rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
         }
         else
         {
@@ -2179,9 +2179,9 @@ sws_error_t sws_WindowSwitcherLayout_Initialize(
                 Wh_Log(L"font width: %d, height: %d\n", tm.tmAveCharWidth, tm.tmHeight);
             }
         }
-	}
+    }
 
-	return rv;
+    return rv;
 }
 
 // sws_WindowSwitcher.c
@@ -4000,7 +4000,7 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
                     (_this->settings.dwScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_ONLYCLIENTAREA_GRIDSCROLL ||
                         (_this->settings.dwScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_IFCLIENTAREA_GRIDSCROLL && _this->bIsCursorOnSwitcher) ||
                         _this->settings.dwScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_GRIDSCROLL ||
-						(_this->settings.dwScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_IFNOTCLIENTAREA_GRIDSCROLL && !_this->bIsCursorOnSwitcher))
+                        (_this->settings.dwScrollWheelBehavior == SWS_SCROLLWHEELBEHAVIOR_EVERYWHERE_IFNOTCLIENTAREA_GRIDSCROLL && !_this->bIsCursorOnSwitcher))
                     )
                 {
                     bIsGridScrolling = TRUE;
@@ -4613,24 +4613,24 @@ DWORD WINAPI sws_main(LPVOID)
     SetEvent(g_hQueueReady);
 
     sws_WindowSwitcher* switcher = NULL;
-	sws_error_t rv = SWS_ERROR_SUCCESS;
-	if (!rv)
-	{
-		rv = sws_WindowSwitcher_Initialize(&switcher);
-	}
-	if (!rv)
-	{
-		rv = sws_WindowSwitcher_RunMessageQueue(switcher);
-	}
+    sws_error_t rv = SWS_ERROR_SUCCESS;
+    if (!rv)
+    {
+        rv = sws_WindowSwitcher_Initialize(&switcher);
+    }
+    if (!rv)
+    {
+        rv = sws_WindowSwitcher_RunMessageQueue(switcher);
+    }
     sws_WindowSwitcher_Clear(switcher);
-	return rv;
+    return rv;
 }
 
 void WhTool_ModSettingsChanged() {
     HWND hSwitcher = FindWindowW(SWS_WINDOWSWITCHER_CLASSNAME, NULL);
     if (hSwitcher)
     {
-		PostMessageW(hSwitcher, SWS_WINDOWSWITCHER_RELOAD_CONFIG_MSG, 0, 0);
+        PostMessageW(hSwitcher, SWS_WINDOWSWITCHER_RELOAD_CONFIG_MSG, 0, 0);
     }
 }
 
