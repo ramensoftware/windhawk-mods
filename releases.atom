@@ -2,12 +2,82 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-06T07:02:00.000Z</updated>
+    <updated>2026-10-06T08:03:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Recent Focus Highlight 0.11.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-recent-focus-highlight#5380aa37205a3760e2a49d49c62f23e88561abdd</id>
+        <link href="https://windhawk.net/mods/taskbar-recent-focus-highlight"/>
+        <updated>2026-10-06T08:03:27.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarrecentfocushighlight">Taskbar Recent Focus Highlight</h1>
+<p>Highlights the taskbar icons of the apps you actually stayed on, and ranks
+the recently focused windows inside a multi-window thumbnail flyout.
+Previews have their own on/off setting.</p>
+<p><img src="https://raw.githubusercontent.com/jvlasek/taskbar-recent-focus-highlight/main/screenshots/taskbar-highlight-edge.png" alt="Taskbar side-bar highlight" /></p>
+<p><img src="https://raw.githubusercontent.com/jvlasek/taskbar-recent-focus-highlight/main/screenshots/flyout-preview-highlight.png" alt="Thumbnail flyout ranks" /></p>
+<h2 id="whatyousee">What you see</h2>
+<p>After an app stays focused for the <strong>minimum focus time</strong> (default 8 seconds),
+it joins a per-virtual-desktop recency list. The top N <strong>running</strong> taskbar
+buttons on the current desktop get a highlight:</p>
+<ul>
+<li><strong>Side bar</strong> (default) — a bar beside the icon (left on a bottom/top
+taskbar, under the icon on a left/right taskbar)</li>
+<li><strong>Frame</strong> / <strong>Full</strong> — a rounded rectangle around or behind the icon</li>
+</ul>
+<p>Rank 1 is strongest; ranks 2 and 3 (and 4+) use the intensities you set.
+Pinned icons that are not running on this desktop are never highlighted.
+A new app is added only after the minimum focus time. Re-focus of an app
+already in the list follows “When to skip min-focus” (default: it becomes
+rank 1 immediately). A short Alt+Tab that never settles does not add a new
+app. Each virtual desktop keeps its own list.</p>
+<p>When you hover a combined icon and the flyout shows <strong>two or more</strong> windows,
+that flyout gets its own recency ladder (independent of icon ranks). The
+last focused window of that app is rank 1 in the flyout even if you used
+other apps more recently. Single-window flyouts are left alone.</p>
+<p>Preview styles (default <strong>hybrid</strong>): whole-card plate for rank 1 and a title
+tint for ranks 2+; or a thin bar under the title, a soft title tint, or a
+whole-card plate.</p>
+<h2 id="settingsshort">Settings (short)</h2>
+<ul>
+<li><strong>General</strong> — how many apps, min-focus wait, when to skip the wait on
+re-focus, decay, exclude list, tray-only filter</li>
+<li><strong>Icons</strong> — style, color (including system accent), per-rank intensity,
+thickness / size / fill, optional icon scale</li>
+<li><strong>Previews</strong> — on/off, how many windows, style, intensities, separate
+min-focus and decay</li>
+</ul>
+<p>All of those are in the Windhawk settings panel. Disable the mod in Windhawk
+to clear highlights.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Works with Windows 11 Taskbar Styler: the side bar stays visible on hover,
+and preview plate tints are restored when the highlight is cleared.</li>
+<li>Icon matching uses the process path / AppUserModelID from the taskband
+(not the localized button label). If that resolve is unavailable, the icon
+is left unhighlighted rather than guessed from its name.</li>
+<li>Preview cards match via the flyout’s thumbnail model / index (HWND). If that
+resolve is unavailable, the card is left unmarked rather than guessed from
+its title.</li>
+<li>File Explorer folder windows (<code>CabinetWClass</code>) are ranked like other apps.
+The taskbar, desktop, Start, and IME stay ignored.</li>
+<li>Multi-monitor: the same rank is applied on every taskbar that shows that
+app.</li>
+<li>Verbose bind / preview-resolve lines go to Windhawk’s <strong>Mod logs</strong> (Advanced
+tab). There is no extra in-mod debug toggle.</li>
+<li>Taskband identity resolve is adapted from
+<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-volume-control-per-app.wh.cpp">taskbar-volume-control-per-app</a>;
+thumbnail HWND mapping from
+<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-thumbnail-reorder.wh.cpp">taskbar-thumbnail-reorder</a>.</li>
+</ul>]]></content>
+        <author>
+            <name>Jakub Vlášek</name>
+            <uri>https://github.com/jvlasek</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mobile Open Animation 1.0.0]]></title>
         <id>https://windhawk.net/mods/mobile-open-animation#cc3a28ff9b65369c12ce7d2c07e90b719e16dbda</id>
@@ -1249,54 +1319,6 @@ block the guard.</p>]]></content>
         <author>
             <name>Eron Greco Melo</name>
             <uri>https://github.com/eronGreco</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Auto Refresh Rate 1.0.0]]></title>
-        <id>https://windhawk.net/mods/auto-refresh-rate#6d1e4a85f76a6ac1f893efcaec2401a9ab2813ca</id>
-        <link href="https://windhawk.net/mods/auto-refresh-rate"/>
-        <updated>2026-10-01T21:02:21.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="autorefreshrate">Auto Refresh Rate</h1>
-<p>Automates display refresh rates based on AC/battery power, fullscreen games, foreground apps, and docking.</p>
-<p>Runs as a standalone background tool process via <code>windhawk.exe</code> using native event subscriptions (<code>RegisterPowerSettingNotification</code>, <code>SetWinEventHook</code>) with zero polling loops and 0.0% idle CPU usage.</p>
-<p>Configure target rates, app rules, and hotkeys in the <strong>Settings</strong> tab above.</p>
-<p><em>Quick test: Toggle Windows Energy Saver in Quick Settings (<code>Win + A</code>), or enable the cycle hotkey (<code>Win + Ctrl + R</code>) under Settings.</em></p>
-<h2 id="evaluationpriority">Evaluation Priority</h2>
-<p>When multiple rules trigger at once, display frequency resolves in strict order:</p>
-<ol>
-<li><strong>Manual Hotkey Lock</strong> — <code>Win + Ctrl + R</code> override active</li>
-<li><strong>Protected Apps</strong> — Inhibit tools running (<code>obs64</code>)</li>
-<li><strong>Windows Energy Saver</strong> — Drops to configured battery-saver rate</li>
-<li><strong>Foreground App / Game</strong> — App rules (<code>blender</code>, <code>resolve</code>) or fullscreen 3D boost</li>
-<li><strong>Night Schedule</strong> — Evening low-Hz comfort window</li>
-<li><strong>Power Baseline</strong> — AC (Panel Max) vs Battery (60 Hz)</li>
-</ol>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Power Baseline:</strong> Panel max on AC, 60 Hz (or minimum supported) on battery.</li>
-<li><strong>Game Boost:</strong> Boosts to highest supported refresh rate in borderless and exclusive fullscreen 3D games.</li>
-<li><strong>App Rules:</strong> Dedicated refresh rates for creative tools (<code>blender</code>, <code>resolve</code>, <code>affinity</code>) and media playback (<code>screenbox</code>, <code>netflix</code>).</li>
-<li><strong>Capture Protection:</strong> Freezes rate switching while capture or streaming tools run (<code>obs64</code>) to prevent capture drops or display flashes.</li>
-<li><strong>Smart Docking:</strong> Lowers only built-in laptop panels on battery; keeps external desktop monitors at full refresh rate.</li>
-<li><strong>Quiet Switching:</strong> Waits for keyboard and mouse activity to pause before lowering refresh rate.</li>
-<li><strong>Night Schedule:</strong> Optional time window to lock lower refresh rates during evening hours.</li>
-<li><strong>Native Notifications:</strong> Windows notification banner confirms rate changes and logs them to the Notification Center.</li>
-<li><strong>Cycle Hotkey:</strong> Optional <code>Win + Ctrl + R</code> shortcut to cycle supported panel frequencies.</li>
-</ul>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<ul>
-<li><strong>Panel Flashing:</strong> Increase <strong>Anti-flicker cooldown</strong> (default: 3 seconds) under <strong>Display & transitions</strong>.</li>
-<li><strong>External Displays on Battery:</strong> Smart docking leaves external monitors at full rate by default. Set <strong>Target displays</strong> to <code>all</code> and disable <strong>Smart laptop docking</strong> to switch all connected screens.</li>
-<li><strong>Diagnostics:</strong> Check Windhawk's <strong>Log</strong> tab for real-time AC/DC transitions, active process detection, and display modes.</li>
-</ul>
-<h2 id="changelog">Changelog</h2>
-<h3 id="version10020260930">Version 1.0.0 (2026-09-30)</h3>
-<ul>
-<li>Initial release.</li>
-</ul>]]></content>
-        <author>
-            <name>roypriyanshu02</name>
-            <uri>https://github.com/roypriyanshu02</uri>
         </author>
     </entry>
 </feed>

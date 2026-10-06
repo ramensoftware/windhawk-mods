@@ -2,12 +2,82 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-06T07:02:00.000Z</updated>
+    <updated>2026-10-06T08:03:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Recent Focus Highlight 0.11.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-recent-focus-highlight#5380aa37205a3760e2a49d49c62f23e88561abdd</id>
+        <link href="https://windhawk.net/mods/taskbar-recent-focus-highlight"/>
+        <updated>2026-10-06T08:03:27.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarrecentfocushighlight">Taskbar Recent Focus Highlight</h1>
+<p>Highlights the taskbar icons of the apps you actually stayed on, and ranks
+the recently focused windows inside a multi-window thumbnail flyout.
+Previews have their own on/off setting.</p>
+<p><img src="https://raw.githubusercontent.com/jvlasek/taskbar-recent-focus-highlight/main/screenshots/taskbar-highlight-edge.png" alt="Taskbar side-bar highlight" /></p>
+<p><img src="https://raw.githubusercontent.com/jvlasek/taskbar-recent-focus-highlight/main/screenshots/flyout-preview-highlight.png" alt="Thumbnail flyout ranks" /></p>
+<h2 id="whatyousee">What you see</h2>
+<p>After an app stays focused for the <strong>minimum focus time</strong> (default 8 seconds),
+it joins a per-virtual-desktop recency list. The top N <strong>running</strong> taskbar
+buttons on the current desktop get a highlight:</p>
+<ul>
+<li><strong>Side bar</strong> (default) — a bar beside the icon (left on a bottom/top
+taskbar, under the icon on a left/right taskbar)</li>
+<li><strong>Frame</strong> / <strong>Full</strong> — a rounded rectangle around or behind the icon</li>
+</ul>
+<p>Rank 1 is strongest; ranks 2 and 3 (and 4+) use the intensities you set.
+Pinned icons that are not running on this desktop are never highlighted.
+A new app is added only after the minimum focus time. Re-focus of an app
+already in the list follows “When to skip min-focus” (default: it becomes
+rank 1 immediately). A short Alt+Tab that never settles does not add a new
+app. Each virtual desktop keeps its own list.</p>
+<p>When you hover a combined icon and the flyout shows <strong>two or more</strong> windows,
+that flyout gets its own recency ladder (independent of icon ranks). The
+last focused window of that app is rank 1 in the flyout even if you used
+other apps more recently. Single-window flyouts are left alone.</p>
+<p>Preview styles (default <strong>hybrid</strong>): whole-card plate for rank 1 and a title
+tint for ranks 2+; or a thin bar under the title, a soft title tint, or a
+whole-card plate.</p>
+<h2 id="settingsshort">Settings (short)</h2>
+<ul>
+<li><strong>General</strong> — how many apps, min-focus wait, when to skip the wait on
+re-focus, decay, exclude list, tray-only filter</li>
+<li><strong>Icons</strong> — style, color (including system accent), per-rank intensity,
+thickness / size / fill, optional icon scale</li>
+<li><strong>Previews</strong> — on/off, how many windows, style, intensities, separate
+min-focus and decay</li>
+</ul>
+<p>All of those are in the Windhawk settings panel. Disable the mod in Windhawk
+to clear highlights.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Works with Windows 11 Taskbar Styler: the side bar stays visible on hover,
+and preview plate tints are restored when the highlight is cleared.</li>
+<li>Icon matching uses the process path / AppUserModelID from the taskband
+(not the localized button label). If that resolve is unavailable, the icon
+is left unhighlighted rather than guessed from its name.</li>
+<li>Preview cards match via the flyout’s thumbnail model / index (HWND). If that
+resolve is unavailable, the card is left unmarked rather than guessed from
+its title.</li>
+<li>File Explorer folder windows (<code>CabinetWClass</code>) are ranked like other apps.
+The taskbar, desktop, Start, and IME stay ignored.</li>
+<li>Multi-monitor: the same rank is applied on every taskbar that shows that
+app.</li>
+<li>Verbose bind / preview-resolve lines go to Windhawk’s <strong>Mod logs</strong> (Advanced
+tab). There is no extra in-mod debug toggle.</li>
+<li>Taskband identity resolve is adapted from
+<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-volume-control-per-app.wh.cpp">taskbar-volume-control-per-app</a>;
+thumbnail HWND mapping from
+<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-thumbnail-reorder.wh.cpp">taskbar-thumbnail-reorder</a>.</li>
+</ul>]]></content>
+        <author>
+            <name>Jakub Vlášek</name>
+            <uri>https://github.com/jvlasek</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mobile Open Animation 1.0.0]]></title>
         <id>https://windhawk.net/mods/mobile-open-animation#cc3a28ff9b65369c12ce7d2c07e90b719e16dbda</id>
@@ -1058,31 +1128,6 @@ covers the monitor the icon is on, to save CPU and battery.</li>
         <author>
             <name>HaVeN80</name>
             <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Skip harmful files confirmation 0.3.0]]></title>
-        <id>https://windhawk.net/mods/harmful-files-autoaccept#8d6bcc826078ee6d87e70fb303f149e8165a6ace</id>
-        <link href="https://windhawk.net/mods/harmful-files-autoaccept"/>
-        <updated>2026-10-03T17:01:52.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="skipharmfulfilesconfirmation">Skip harmful files confirmation</h1>
-<p><img src="https://raw.githubusercontent.com/Arimodu/windhawk-mod-assets/main/harmful-files-preview.png" alt="The harmful-files dialog crossed out with a red X" /></p>
-<p>Skips "These files might be harmful to your computer" when dragging files in
-File Explorer. Windows can show this confirmation when it classifies the source
-as untrusted, including some network shares.</p>
-<p>The mod accepts drag-source confirmations for every source, before constructing
-the dialog. It targets URLACTION<em>SHELL</em>SECURE<em>DRAGSOURCE with URLPOLICY</em>QUERY.
-Other actions and denial policies keep their original behavior. Copy/paste
-operations using other URL actions are not covered.</p>
-<p>To trust a specific network location instead, configure that location in
-Internet Options &gt; Security &gt; Local intranet &gt; Sites.</p>
-<p>Internet zone settings and Zone.Identifier streams are unchanged. Disable the
-mod to restore the confirmation. Windows DLL files are not modified.</p>
-<p>Version 0.3.0 was tested with Explorer drag-and-drop on Windows 11 x64.
-ARM64 runtime behavior remains untested. Shell symbols are required.</p>]]></content>
-        <author>
-            <name>Arimodu</name>
-            <uri>https://github.com/Arimodu</uri>
         </author>
     </entry>
 </feed>

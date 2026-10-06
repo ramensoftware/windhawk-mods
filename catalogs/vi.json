@@ -13993,6 +13993,32 @@
         "version": "2.5.4"
       }
     },
+    "taskbar-recent-focus-highlight": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791273807000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791273807000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Jakub Vlášek",
+        "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -ladvapi32",
+        "description": "Visually highlight the most recently focused running apps on the taskbar",
+        "github": "https://github.com/jvlasek",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Taskbar Recent Focus Highlight",
+        "version": "0.11.1"
+      }
+    },
     "taskbar-reorder-right-drag": {
       "details": {
         "defaultSorting": 11457,
