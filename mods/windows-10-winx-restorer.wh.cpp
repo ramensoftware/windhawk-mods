@@ -781,13 +781,21 @@ static void SuspendSystem() {
         Wh_Log(L"[winx] SetSuspendState failed (%lu)", GetLastError());
 }
 
+// CLSID of the shell automation object, {13709620-C279-11CE-A49E-444553540000}
+// ("Shell.Application"). shldisp.h only declares CLSID_Shell - it is defined by
+// libuuid, which this mod does not link - so the value is written out here.
+static const CLSID kClsidShell = {0x13709620,
+                                  0xc279,
+                                  0x11ce,
+                                  {0xa4, 0x9e, 0x44, 0x45, 0x53, 0x54, 0x00, 0x00}};
+
 // Show the desktop: IShellDispatch4::ToggleDesktop is called directly instead of
 // injecting a Win+D chord, whose result depends on the modifiers the user is still
 // physically holding when the entry is chosen. COM is initialized on this thread
 // (see WinXMenuThread).
 static void ToggleDesktop() {
     IShellDispatch4* shell = nullptr;
-    HRESULT hr = CoCreateInstance(CLSID_Shell, nullptr, CLSCTX_INPROC_SERVER,
+    HRESULT hr = CoCreateInstance(kClsidShell, nullptr, CLSCTX_INPROC_SERVER,
                                   IID_PPV_ARGS(&shell));
     if (FAILED(hr) || !shell) {
         Wh_Log(L"[winx] ToggleDesktop: the shell dispatch object could not be created "
