@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              taskbar-clock-spacer
 // @name            Taskbar Clock Spacer
-// @description     Companion for Taskbar Clock Customization: a %s% token for explicit, weightable gaps between clock items, where its built-in Justified alignment stretches every space. Windows 11 only.
+// @description     Companion for Taskbar Clock Customization: a %s% token for explicit, weightable elastic gaps between clock items (unlike its built-in Justified alignment, which stretches every space). Windows 11 only.
 // @version         1.1
 // @author          sb4ssman
 // @github          https://github.com/sb4ssman
@@ -130,6 +130,8 @@ own the whole clock width.
   weather segment use `{spacer}` instead — the weather service would consume
   `%s%` as its sunset token.
 - Lines without `%s%` are left completely alone — the mod is a no-op for them.
+- A line you hide in Taskbar Clock Customization stays hidden, even when its
+  format contains `%s%`. Unhiding it takes effect on the next clock tick.
 - Font, size, and color of the spaced segments follow the original clock text's
   current style, so the clock mod's style settings continue to apply.
 
@@ -531,8 +533,20 @@ static void ApplyRowWidthCap(FrameworkElement element, double width) {
         element.ClearValue(FrameworkElement::MaxWidthProperty());
 }
 
+// Both mods act from the same OnApplyTemplate hook, and the order between two
+// mods' hooks on one function is not defined, so on the first tick Taskbar
+// Clock Customization may not have set its Max width yet. Only warn once the
+// width has read zero for a few consecutive ticks. UI thread only.
+static int g_zeroWidthTicks = 0;
+constexpr int kZeroWidthTicksBeforeWarning = 3;
+
 static void WarnIfNoElasticRoom(bool hasElasticRoom) {
-    if (hasElasticRoom || g_warnedNoElasticRoom.exchange(true))
+    if (hasElasticRoom) {
+        g_zeroWidthTicks = 0;
+        return;
+    }
+    if (++g_zeroWidthTicks < kZeroWidthTicksBeforeWarning ||
+        g_warnedNoElasticRoom.exchange(true))
         return;
     Wh_Log(L"No spare width to distribute, so %%s%% produces no visible "
            L"gap. Set 'Max width' in Taskbar Clock Customization, or 'Max clock "
@@ -743,6 +757,15 @@ static void UpdateSpacerLine(SpacerState& state) {
         return;
     }
 
+    // Collapsed by someone else - Taskbar Clock Customization's "Hidden" line
+    // option. Building rows for it would bring a line back that the user hid.
+    // Only a block this mod collapsed counts as ours (sourceCollapsed).
+    if (!state.sourceCollapsed &&
+        original.Visibility() == Visibility::Collapsed) {
+        RemoveGeneratedPanel(state);
+        return;
+    }
+
     double width = EffectiveLineWidth(parent);
     WarnIfNoElasticRoom(width > 1.0);
     auto lines = SplitLines(fullText);
@@ -817,14 +840,21 @@ static void SetupSpacerForTextBlock(StackPanel parent, TextBlock textBlock) {
     g_states.back().textToken = textBlock.RegisterPropertyChangedCallback(
         TextBlock::TextProperty(),
         [](DependencyObject sender, DependencyProperty) {
-            if (g_unloading) return;
-            auto changed = sender.try_as<TextBlock>();
-            if (!changed) return;
-            for (auto& state : g_states) {
-                if (state.originalRef.get() == changed) {
-                    UpdateSpacerLine(state);
-                    return;
+            // Guarded like the two hooks. An exception escaping this delegate
+            // becomes a failed HRESULT inside SystemTray's own Text setter -
+            // Explorer's code, not this mod's.
+            try {
+                if (g_unloading) return;
+                auto changed = sender.try_as<TextBlock>();
+                if (!changed) return;
+                for (auto& state : g_states) {
+                    if (state.originalRef.get() == changed) {
+                        UpdateSpacerLine(state);
+                        return;
+                    }
                 }
+            } catch (...) {
+                Wh_Log(L"Text change handling failed");
             }
         });
 
@@ -1083,34 +1113,51 @@ void Wh_ModUninit() {
     g_unloading = true;
     Wh_Log(L"Uninit");
 
+    // With no tray module hooked nothing was ever registered - the case of an
+    // explorer.exe that is only hosting file windows - so there is nothing to
+    // clean up, and no reason to make every disable or update wait for it.
+    if (!g_systemTrayModuleHooked)
+        return;
+
     // ClearSpacerStates owns XAML registrations and must never run from an
-    // arbitrary Windhawk thread. Retry a taskbar-thread dispatch briefly; when
-    // none exists the tree is already gone, so retain only weak state safely.
+    // arbitrary Windhawk thread. Retry a taskbar-thread dispatch briefly when
+    // it fails. When there is no taskbar window at all, the tree is already
+    // gone and a window will not appear during unload, so stop at once and
+    // retain only weak state.
     bool cleared = false;
     for (int i = 0; i < 5 && !cleared; ++i) {
-        if (HWND hWnd = FindCurrentProcessTaskbarWnd())
-            cleared = RunFromWindowThread(
-                hWnd, [](void*) { ClearSpacerStates(); }, nullptr);
+        HWND hWnd = FindCurrentProcessTaskbarWnd();
+        if (!hWnd)
+            break;
+        cleared = RunFromWindowThread(
+            hWnd, [](void*) { ClearSpacerStates(); }, nullptr);
         if (!cleared) Sleep(100);
     }
     if (!cleared)
         Wh_Log(L"Failed to dispatch XAML cleanup; taskbar tree is unavailable");
 }
 
-void Wh_ModSettingsChanged() {
+static void ReloadSettings() {
     LoadSettings();
     g_warnedNoElasticRoom.store(false);
+    g_zeroWidthTicks = 0;
     Wh_Log(L"maxWidth=%d minSpacerWidth=%d",
            g_settings.maxWidth, g_settings.minSpacerWidth);
+}
 
+void Wh_ModSettingsChanged() {
+    // Load on the taskbar's UI thread, where every clock tick reads g_settings,
+    // so a tick can never observe a half-written change.
     HWND hWnd = FindCurrentProcessTaskbarWnd();
-    if (!hWnd) {
-        Wh_Log(L"No taskbar window found");
-        return;
-    }
-
-    RunFromWindowThread(hWnd, [](void*) {
+    bool ran = hWnd && RunFromWindowThread(hWnd, [](void*) {
+        ReloadSettings();
         for (auto& state : g_states)
             UpdateSpacerLine(state);
     }, nullptr);
+    if (!ran) {
+        // No reachable taskbar thread means no tick is reading g_settings,
+        // so loading here is safe; the next build picks the values up.
+        Wh_Log(L"No taskbar window reachable; settings loaded for later");
+        ReloadSettings();
+    }
 }
