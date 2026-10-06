@@ -479,9 +479,15 @@ int ParseKey(std::wstring keyStr) {
 
 void LoadSettings() {
     Wh_Log(L"Loading mod settings...");
-    g_showActionToasts = Wh_GetIntSetting(L"toasts.enabled", 1) != 0;
+    PCWSTR enabledStr = Wh_GetStringSetting(L"toasts.enabled");
+    g_showActionToasts = enabledStr ? (_wtoi(enabledStr) != 0) : true;
+    if (enabledStr) {
+        Wh_FreeStringSetting(enabledStr);
+    }
 
-    int duration = Wh_GetIntSetting(L"toasts.duration", 1400);
+    int duration = Wh_GetIntSetting(L"toasts.duration");
+    if (duration <= 0)
+        duration = 1400;
     if (duration < 500)
         duration = 500;
     if (duration > 5000)
@@ -490,7 +496,7 @@ void LoadSettings() {
 
     WindhawkUtils::StringSetting posStr =
         WindhawkUtils::StringSetting::make(L"toasts.position");
-    std::wstring pos = posStr.get() ? posStr.get() : L"bottom_center";
+    std::wstring pos = posStr.get();
 
     if (pos == L"top_left") {
         g_toastPosition = ToastPosition::TopLeft;
@@ -2326,19 +2332,16 @@ int WINAPI TranslateAcceleratorW_Hook(HWND hWnd,
         (lpMsg->message == WM_KEYDOWN || lpMsg->message == WM_SYSKEYDOWN)) {
         if (!(lpMsg->lParam & 0x40000000)) {
             if (ProcessHotKey(lpMsg->hwnd, lpMsg->wParam)) {
-                // Only run on true Alt-combinations (WM_SYSKEYDOWN).
-                // Combinations with Ctrl+Alt arrive as WM_KEYDOWN and are
-                // excluded.
-                if (lpMsg->message == WM_SYSKEYDOWN) {
+                // When a shortcut with Alt is consumed, Explorer remains
+                // trapped in its menu/keytip accelerator loop. On Windows 11,
+                // only a WM_KILLFOCUS/WM_SETFOCUS cycle reliably forces
+                // Explorer to reset this state without swallowing keys.
+                if (lpMsg->message == WM_SYSKEYDOWN &&
+                    (HIWORD(lpMsg->lParam) & KF_ALTDOWN)) {
                     HWND hFocus = GetFocus();
-                    HWND rootHwnd =
-                        GetAncestor(lpMsg->hwnd ? lpMsg->hwnd : hWnd, GA_ROOT);
+                    HWND rootHwnd = GetAncestor(lpMsg->hwnd, GA_ROOT);
 
-                    if (hFocus) {
-                        SendMessageW(hFocus, WM_CANCELMODE, 0, 0);
-                    }
                     if (rootHwnd) {
-                        SendMessageW(rootHwnd, WM_CANCELMODE, 0, 0);
                         SetFocus(rootHwnd);
                         if (hFocus && IsWindow(hFocus)) {
                             SetFocus(hFocus);
