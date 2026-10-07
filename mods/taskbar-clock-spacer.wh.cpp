@@ -470,6 +470,7 @@ static void CopyTextStyle(TextBlock src, TextBlock dst) {
     dst.LineStackingStrategy(src.LineStackingStrategy());
     dst.Foreground(src.Foreground());
     dst.TextAlignment(src.TextAlignment());
+    dst.TextTrimming(src.TextTrimming());
     dst.TextWrapping(TextWrapping::NoWrap);
 }
 
