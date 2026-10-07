@@ -130,8 +130,12 @@ own the whole clock width.
   weather segment use `{spacer}` instead — the weather service would consume
   `%s%` as its sunset token.
 - Lines without `%s%` are left completely alone — the mod is a no-op for them.
-- A line you hide in Taskbar Clock Customization stays hidden, even when its
-  format contains `%s%`. Unhiding it takes effect on the next clock tick.
+- A line hidden in Taskbar Clock Customization before this mod spaces it stays
+  hidden, even when its format contains `%s%`. If you hide a line that is
+  already spaced, turn this mod off and on to apply the hidden state. Do the
+  same if a hidden line appears after Explorer starts. Both mods collapse the
+  same source text block, so this mod cannot detect a second collapse of an
+  already collapsed block. Unhiding takes effect on the next clock tick.
 - Font, size, and color of the spaced segments follow the original clock text's
   current style, so the clock mod's style settings continue to apply.
 
@@ -387,6 +391,7 @@ struct SpacerState {
     uint64_t                    generatedLayoutKey = 0;
     int64_t                     textToken = 0;
     bool                        sourceCollapsed = false;
+    int                         zeroWidthTicks = 0;
 };
 
 // Wh_ModUninit is not called when Explorer terminates, so this vector's
@@ -533,19 +538,20 @@ static void ApplyRowWidthCap(FrameworkElement element, double width) {
         element.ClearValue(FrameworkElement::MaxWidthProperty());
 }
 
-// Both mods act from the same OnApplyTemplate hook, and the order between two
-// mods' hooks on one function is not defined, so on the first tick Taskbar
-// Clock Customization may not have set its Max width yet. Only warn once the
-// width has read zero for a few consecutive ticks. UI thread only.
-static int g_zeroWidthTicks = 0;
+// This implementation hook runs inside Taskbar Clock Customization's ABI
+// OnApplyTemplate hook, before it applies MaxWidth. Defer the warning until
+// the same line has no width on three consecutive evaluations; other lines
+// and monitors must not contribute to its counter. UI thread only.
 constexpr int kZeroWidthTicksBeforeWarning = 3;
 
-static void WarnIfNoElasticRoom(bool hasElasticRoom) {
+static void WarnIfNoElasticRoom(SpacerState& state, bool hasElasticRoom) {
     if (hasElasticRoom) {
-        g_zeroWidthTicks = 0;
+        state.zeroWidthTicks = 0;
         return;
     }
-    if (++g_zeroWidthTicks < kZeroWidthTicksBeforeWarning ||
+    if (state.zeroWidthTicks < kZeroWidthTicksBeforeWarning)
+        ++state.zeroWidthTicks;
+    if (state.zeroWidthTicks < kZeroWidthTicksBeforeWarning ||
         g_warnedNoElasticRoom.exchange(true))
         return;
     Wh_Log(L"No spare width to distribute, so %%s%% produces no visible "
@@ -752,6 +758,7 @@ static void UpdateSpacerLine(SpacerState& state) {
     std::wstring fullText{textHString.c_str(), textHString.size()};
 
     if (!HasSpacerToken(fullText)) {
+        state.zeroWidthTicks = 0;
         RemoveGeneratedPanel(state);
         RestoreSourceTextBlock(state, original);
         return;
@@ -762,12 +769,13 @@ static void UpdateSpacerLine(SpacerState& state) {
     // Only a block this mod collapsed counts as ours (sourceCollapsed).
     if (!state.sourceCollapsed &&
         original.Visibility() == Visibility::Collapsed) {
+        state.zeroWidthTicks = 0;
         RemoveGeneratedPanel(state);
         return;
     }
 
     double width = EffectiveLineWidth(parent);
-    WarnIfNoElasticRoom(width > 1.0);
+    WarnIfNoElasticRoom(state, width > 1.0);
     auto lines = SplitLines(fullText);
     uint64_t layoutKey = CurrentLayoutKey();
 
@@ -1140,7 +1148,6 @@ void Wh_ModUninit() {
 static void ReloadSettings() {
     LoadSettings();
     g_warnedNoElasticRoom.store(false);
-    g_zeroWidthTicks = 0;
     Wh_Log(L"maxWidth=%d minSpacerWidth=%d",
            g_settings.maxWidth, g_settings.minSpacerWidth);
 }
@@ -1151,13 +1158,24 @@ void Wh_ModSettingsChanged() {
     HWND hWnd = FindCurrentProcessTaskbarWnd();
     bool ran = hWnd && RunFromWindowThread(hWnd, [](void*) {
         ReloadSettings();
-        for (auto& state : g_states)
-            UpdateSpacerLine(state);
+        for (auto& state : g_states) {
+            state.zeroWidthTicks = 0;
+            try {
+                UpdateSpacerLine(state);
+            } catch (...) {
+                Wh_Log(L"Refresh of one clock line failed; continuing");
+            }
+        }
     }, nullptr);
     if (!ran) {
-        // No reachable taskbar thread means no tick is reading g_settings,
-        // so loading here is safe; the next build picks the values up.
-        Wh_Log(L"No taskbar window reachable; settings loaded for later");
-        ReloadSettings();
+        if (!hWnd) {
+            // No taskbar window means no clock tick can read these settings.
+            Wh_Log(L"No taskbar window reachable; settings loaded for later");
+            ReloadSettings();
+        } else {
+            // A failed dispatch does not prove the clock is idle. Keep the
+            // existing settings rather than writing them off the UI thread.
+            Wh_Log(L"Clock settings refresh failed; save settings again to retry");
+        }
     }
 }
