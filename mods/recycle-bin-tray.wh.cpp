@@ -1,9 +1,10 @@
 // ==WindhawkMod==
-// @id              recycle-bin-tray-explorer
-// @name            Recycle Bin Tray Icon (Explorer)
+// @id              recycle-bin-tray
+// @name            Recycle Bin Tray Icon
 // @description     Adds a working Recycle Bin icon to the notification area (tray) next to the clock
 // @version         1.0.0
-// @author          you
+// @author          YevhenVe
+// @github          https://github.com/YevhenVe
 // @include         explorer.exe
 // @compilerOptions -ld2d1 -ld3d11 -ldxgi -lole32 -lshell32 -lshlwapi -luser32 -lgdi32 -ladvapi32 -luuid
 // ==/WindhawkMod==
@@ -550,9 +551,15 @@ static void UpdateTray(bool force) {
     lstrcpynW(nid.szTip, tip.c_str(), ARRAYSIZE(nid.szTip));
 
     if (!g_added) {
+        // After a shell restart the tray can still hold a stale entry with the same hWnd/uID, which makes
+        // NIM_ADD fail with E_FAIL forever -> remove it first, and fall back to NIM_MODIFY if it still fails.
+        static int failLogs = 0;
+        Shell_NotifyIconW(NIM_DELETE, &nid);
         g_added = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
-        FileLog(L"NIM_ADD -> %d (err %lu), hIcon=%p full=%d light=%d", (int)g_added, GetLastError(),
-                (void*)nid.hIcon, (int)full, (int)light);
+        if (!g_added) g_added = Shell_NotifyIconW(NIM_MODIFY, &nid) != FALSE;
+        if (g_added || failLogs++ < 10)
+            FileLog(L"tray add -> %d, hIcon=%p full=%d light=%d", (int)g_added, (void*)nid.hIcon, (int)full,
+                    (int)light);
     } else if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
         g_added = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
         FileLog(L"NIM_MODIFY failed, re-add -> %d", (int)g_added);
@@ -839,7 +846,7 @@ static DWORD WINAPI UiThread(LPVOID) {
 static HANDLE g_instanceMutex = nullptr;
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Recycle Bin Tray Icon (Explorer): init");
+    Wh_Log(L"Recycle Bin Tray Icon: init");
     // Several explorer.exe processes can exist; only one may own the tray icon.
     g_instanceMutex = CreateMutexW(nullptr, FALSE, L"Local\\WindhawkRecycleBinTrayExplorer");
     if (!g_instanceMutex) return FALSE;
