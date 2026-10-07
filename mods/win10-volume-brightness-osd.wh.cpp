@@ -45,6 +45,11 @@ thumb, accent fill) for **volume** and **brightness**.
 * **Desktop PCs / external monitors:** enable "External monitor hotkeys". The
   mod then uses DDC/CI to change the brightness of the monitor under the mouse
   cursor with **Ctrl+Alt+Up / Ctrl+Alt+Down**.
+* The hotkeys are registered system-wide while the option is on. Ctrl+Alt+Up /
+  Down is also used by some applications (for example "add cursor above/below"
+  in VS Code) and by the screen rotation hotkey of some Intel graphics drivers,
+  so leave the option off if it conflicts. The flyout is shown on the monitor
+  that is being adjusted.
 * Brightness flyout trigger:
   * *On every brightness change* - shows the flyout whenever the system reports
     a new brightness (this includes automatic changes such as the ambient light
@@ -143,7 +148,7 @@ void LoadSettings() {
     g_cfg.useAccent  = Wh_GetIntSetting(L"useSystemAccent") != 0;
 
     PCWSTR trig = Wh_GetStringSetting(L"brightnessTrigger");
-    g_cfg.nativeTrigger = trig && wcscmp(trig, L"nativeOsd") == 0;
+    g_cfg.nativeTrigger = wcscmp(trig, L"nativeOsd") == 0;
     Wh_FreeStringSetting(trig);
 }
 
@@ -260,10 +265,14 @@ static bool IsVirtualDesktopSwitcherHoverWindow(HWND hwnd) {
 
 // Logs everything that can help to identify the native OSD window precisely.
 static void LogCandidate(HWND hwnd, PCWSTR cls, int w, int h, bool recent) {
+    // InternalGetWindowText reads the title without sending a message to the
+    // window, so it cannot stall the caller of ShowWindow/SetWindowPos.
+    using InternalGetWindowText_t = int(WINAPI*)(HWND, LPWSTR, int);
+    static InternalGetWindowText_t pInternalGetWindowText =
+        (InternalGetWindowText_t)GetProcAddress(
+            GetModuleHandleW(L"user32.dll"), "InternalGetWindowText");
     WCHAR title[128] = L"";
-    DWORD_PTR len = 0;
-    SendMessageTimeoutW(hwnd, WM_GETTEXT, ARRAYSIZE(title), (LPARAM)title,
-                        SMTO_ABORTIFHUNG | SMTO_BLOCK, 50, &len);
+    if (pInternalGetWindowText) pInternalGetWindowText(hwnd, title, ARRAYSIZE(title));
 
     WCHAR desc[128];
     GetThreadDescriptionOf(hwnd, desc, ARRAYSIZE(desc));
@@ -306,9 +315,8 @@ bool IsNativeOsd(HWND hwnd, int w, int h, bool recent) {
 
 // Returns true when the native OSD must be blocked.
 bool NativeOsdSeen(HWND hwnd, int w, int h) {
-    // Brightness notifications can arrive slightly before or after the native
-    // OSD window is created. Use a wider window than volume, otherwise the
-    // native brightness flyout can slip through.
+    // A volume or brightness event counts as "recent" for 2.5 s: the event and
+    // the native OSD window can appear in either order.
     bool trigger = g_cfg.brightness && g_cfg.nativeTrigger;
     if (!g_cfg.suppress && !trigger) return false;
 
@@ -571,9 +579,7 @@ void ExtApply() {
     SetEvent(g_ddc.ev);
 }
 
-// ---------------------------------------------------------------------------
 // OSD window
-// ---------------------------------------------------------------------------
 COLORREF AccentColor() {
     if (g_cfg.useAccent) {
         DWORD c = 0;
@@ -667,12 +673,14 @@ void Paint(HWND hwnd) {
     EndPaint(hwnd, &ps);
 }
 
-void ShowOsd(HWND h) {
+// `target` = monitor to show the flyout on (primary monitor when null).
+void ShowOsd(HWND h, HMONITOR target = nullptr) {
     KillTimer(h, TIMER_FADE);
     g_alpha = 255;
     SetLayeredWindowAttributes(h, 0, 255, LWA_ALPHA);
 
-    HMONITOR mon = MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    HMONITOR mon = target ? target
+                          : MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
     MONITORINFO mi{ sizeof(mi) };
     GetMonitorInfoW(mon, &mi);
 
@@ -688,14 +696,18 @@ void ShowOsd(HWND h) {
                  S(BASE_W), S(BASE_H),
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
     InvalidateRect(h, nullptr, FALSE);
-    SetTimer(h, TIMER_HIDE, g_cfg.timeoutMs, nullptr);
+
+    // While the thumb is being dragged the flyout must stay; the timer is
+    // restarted when the drag ends.
+    if (g_dragging) KillTimer(h, TIMER_HIDE);
+    else            SetTimer(h, TIMER_HIDE, g_cfg.timeoutMs, nullptr);
 }
 
-void ShowBrightness(HWND h, int level) {
+void ShowBrightness(HWND h, int level, HMONITOR target = nullptr) {
     g_mode  = MODE_BRIGHTNESS;
     g_level = level;
     g_muted = false;
-    ShowOsd(h);
+    ShowOsd(h, target);
 }
 
 // Hotkeys
@@ -773,7 +785,7 @@ static void ExtStep(HWND h, int delta) {
     g_extLast = GetTickCount64();
     g_lastBrTick = g_extLast;
 
-    ShowBrightness(h, g_extPct);
+    ShowBrightness(h, g_extPct, g_extMon);   // on the monitor being adjusted
     SetTimer(h, TIMER_APPLY, 60, nullptr);   // coalesce key repeats
 }
 
@@ -810,11 +822,12 @@ void SetLevelFromMouse(HWND h, int y) {
     if (level < 0) level = 0;
     if (level > 100) level = 100;
 
-    // keep the flyout visible while it is being dragged
+    // keep the flyout visible while it is being dragged (even if the mouse is
+    // held still): no hide timer runs until the drag ends
+    KillTimer(h, TIMER_HIDE);
     KillTimer(h, TIMER_FADE);
     g_alpha = 255;
     SetLayeredWindowAttributes(h, 0, 255, LWA_ALPHA);
-    SetTimer(h, TIMER_HIDE, g_cfg.timeoutMs, nullptr);
 
     if (g_mode == MODE_VOLUME) {
         if (!g_ep) return;
@@ -892,7 +905,9 @@ LRESULT CALLBACK OsdProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         return 0;
 
     case WM_RELOAD:
+        LoadSettings();                     // on the thread that reads most fields
         RegisterKeys(h);
+        InvalidateRect(h, nullptr, FALSE);
         return 0;
 
     case WM_EXT_READ: {
@@ -995,10 +1010,14 @@ LRESULT CALLBACK OsdProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         if (g_dragging) {
             g_dragging = false;
             ReleaseCapture();
+            SetTimer(h, TIMER_HIDE, g_cfg.timeoutMs, nullptr);
         }
         return 0;
     case WM_CAPTURECHANGED:
-        g_dragging = false;
+        if (g_dragging) {                   // capture lost: end the drag
+            g_dragging = false;
+            SetTimer(h, TIMER_HIDE, g_cfg.timeoutMs, nullptr);
+        }
         return 0;
     case WM_SETCURSOR:
         SetCursor(LoadCursorW(nullptr, IDC_ARROW));
@@ -1154,12 +1173,23 @@ DWORD WINAPI UiThread(LPVOID) {
 }
 
 // Windhawk entry points
+static bool ContainsNoCase(PCWSTR s, PCWSTR needle) {
+    size_t n = wcslen(needle);
+    for (; *s; s++) {
+        if (_wcsnicmp(s, needle, n) == 0) return true;
+    }
+    return false;
+}
+
 BOOL Wh_ModInit() {
     // Secondary explorer.exe processes (e.g. "Launch folder windows in a
-    // separate process": explorer.exe /factory,{...} -Embedding) must not get
-    // their own OSD, audio callbacks and hooks.
+    // separate process": explorer.exe /factory,{...} -Embedding, or
+    // explorer.exe /separate) must not get their own OSD, audio callbacks and
+    // hooks.
     PCWSTR cmdLine = GetCommandLineW();
-    if (cmdLine && (wcsstr(cmdLine, L"/factory") || wcsstr(cmdLine, L"-Embedding"))) {
+    if (cmdLine && (ContainsNoCase(cmdLine, L"/factory") ||
+                    ContainsNoCase(cmdLine, L"-Embedding") ||
+                    ContainsNoCase(cmdLine, L"/separate"))) {
         return FALSE;
     }
 
@@ -1196,12 +1226,10 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    LoadSettings();
+    // Settings are reloaded on the UI thread (WM_RELOAD), which also has to
+    // re-register the hotkeys.
     HWND osd = g_osd.load();
-    if (osd) {
-        PostMessageW(osd, WM_RELOAD, 0, 0);   // hotkeys must be (re)registered on the UI thread
-        InvalidateRect(osd, nullptr, FALSE);
-    }
+    if (osd) PostMessageW(osd, WM_RELOAD, 0, 0);
 }
 
 void Wh_ModUninit() {
