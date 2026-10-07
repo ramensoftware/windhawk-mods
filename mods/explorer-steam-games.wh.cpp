@@ -3336,25 +3336,36 @@ BOOL ExplorerInit() {
     return TRUE;
 }
 
-BOOL CALLBACK FindOwnWindowProc(HWND hWnd, LPARAM param) {
+// True if this explorer.exe shows the shell (taskbar, desktop) or folder
+// windows. The short-lived explorer.exe instances started by the menu verbs
+// only own hidden helper windows, so they're excluded.
+BOOL CALLBACK FindShellWindowProc(HWND hWnd, LPARAM param) {
     DWORD pid = 0;
     GetWindowThreadProcessId(hWnd, &pid);
     if (pid != GetCurrentProcessId()) return TRUE;
+    WCHAR cls[64];
+    if (!GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) return TRUE;
+    bool shell = _wcsicmp(cls, L"Shell_TrayWnd") == 0 || _wcsicmp(cls, L"Progman") == 0 ||
+                 (_wcsicmp(cls, L"CabinetWClass") == 0 && IsWindowVisible(hWnd));
+    if (!shell) return TRUE;
     *(bool*)param = true;
     return FALSE;
 }
 
+bool HasShellWindows() {
+    bool found = false;
+    EnumWindows(FindShellWindowProc, (LPARAM)&found);
+    return found;
+}
+
 void ExplorerAfterInit() {
-    if (!g_hive) return;
     // At process start nothing is cached yet, so there's nothing to refresh.
-    // This also skips the short-lived explorer.exe instances that the menu
-    // verbs start. A refresh is only needed when the mod is enabled in an
-    // explorer.exe that's already running (it already owns windows).
-    bool hasWindows = false;
-    EnumWindows(FindOwnWindowProc, (LPARAM)&hasWindows);
-    if (!hasWindows) return;
-    NotifyAssocChanged();
-    NotifyDesktopChanged();
+    // A refresh is only needed when the mod is enabled in an explorer.exe that
+    // already shows the shell or folder windows.
+    if (g_hive && HasShellWindows()) {
+        NotifyAssocChanged();
+        NotifyDesktopChanged();
+    }
 }
 
 void ExplorerSettingsChanged() {
@@ -3380,8 +3391,13 @@ void ExplorerUninit() {
     if (g_hiveToClose) {
         RegCloseKey(g_hiveToClose);
         g_hiveToClose = nullptr;
-        NotifyAssocChanged();
-        NotifyDesktopChanged();
+        // Only the processes showing windows need to drop the entries; the
+        // short-lived ones started by the menu verbs must not refresh the
+        // whole shell when they exit.
+        if (HasShellWindows()) {
+            NotifyAssocChanged();
+            NotifyDesktopChanged();
+        }
     }
 }
 
