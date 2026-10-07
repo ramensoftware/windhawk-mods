@@ -14,31 +14,27 @@
 /*
 # Windows 10 language flyout guard and indicator colours
 
-Two things the private Windows 10 shell gets wrong on a Windows 11 desktop, both of them
-around the language indicator of the tray (`ITA`, `ENG`, …):
+This mod tries to fix two issues that appear when using the private Windows 10 shell with the Windows 10 taskbar on Windows 11 24H2, both related to the tray language indicator (`ITA`, `ENG`, …):
 
-* **the flyout that appears by itself.** When the shell starts - and again when the mod
-  that restores the Windows 10 taskbar restarts it - the language flyout (or the invisible
-  window that catches the clicks of the whole screen) shows up on its own. During the guard
-  the mod hides it at the moment it is created, at the moment it is shown
-  (`ShowWindow`, `ShowWindowAsync`, `SetWindowPos`) and, as a last net, while it is simply
-  visible. **A click on the indicator is always allowed**: the guard steps aside for a few
-  seconds when the indicator is clicked, so the flyout opens when it is asked for and never
-  when it is not;
-* **the flat grey indicator.** The Windows 11 indicator paints its cell with the system
-  background, which on a Windows 10 taskbar is a grey box. The cell is painted with the
-  real taskbar colour instead (sampled around the cell, with the taskbar theme and the
-  cached colour as fallbacks) and the letters are drawn flat and horizontally, so `ITA`/`IT`
-  are readable on both a light and a dark taskbar.
+- **The flyout that appears on its own.** When the shell starts, the language flyout (or the invisible window that catches clicks across the screen) shows up without being requested. The mod hides it automatically, but **a click on the indicator is always allowed**, so the flyout opens only when you actually ask for it.
 
-The guard lasts 20 seconds by default and extends itself by a few seconds every time it
-hides something (a dismissal window can appear right after the flyout), up to four times
-the configured duration. Nothing is closed and no window of another process is destroyed:
-windows that are not ours are hidden, which needs no ownership.
+- **The flat grey indicator.** The Windows 11 indicator paints its cell with a grey box on a Windows 10 taskbar. The mod repaints it with the real taskbar colour and draws the letters flat and horizontally, so `ITA`/`IT` stay readable on both light and dark taskbars.
 
-Everything runs **inside the private Windows 10 shell** (an `explorer.exe` that is not the
-one in `%SystemRoot%`); the Windows 11 shell is never touched. No file is downloaded by
-this mod: it only works on windows and on the drawing of the shell it is loaded in.
+The guard lasts 20 seconds by default and extends itself slightly each time it hides something. Nothing is closed or destroyed: only windows that are not ours are hidden, and no ownership is required.
+
+Everything runs **inside the private Windows 10 shell**; the Windows 11 shell is never modified and system files are not replaced.
+
+## Screenshots
+
+### Before
+
+![Before](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/before.png)
+
+### After
+
+![After](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/after.png)
+
+
 
 ## Settings
 
@@ -51,11 +47,7 @@ this mod: it only works on windows and on the drawing of the shell it is loaded 
 
 ## The log
 
-With `LogLanguageGuard` on, the first windows of the session are listed one by one
-(`[language] window at logon: class … title …`), so the flyout can be recognised even when
-it is drawn by something else - another mod with its own class name, `ctfmon.exe` or a
-system window. The guard writes `[language] <why>: class … (owner)` for every window it
-hides and one summary line, `[language] guard finished: N interventions`, at the end.
+With `LogLanguageGuard` on, the first windows of the session are listed one by one, so the flyout can be recognised even when it is drawn by something else. The guard also writes a line for every window it hides, and a summary line at the end.
 */
 // ==/WindhawkModReadme==
 
@@ -83,7 +75,6 @@ hides and one summary line, `[language] guard finished: N interventions`, at the
     out who draws a flyout the guard does not recognise yet.
 */
 // ==/WindhawkModSettings==
-
 #undef INTERFACE
 #include <windows.h>
 #include <stdlib.h>
