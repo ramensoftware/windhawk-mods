@@ -33464,7 +33464,11 @@ void Island::OnMouseButton(UINT msg, LPARAM lParam) {
     }
     // A right click anywhere else on the island (not on another app's icon
     // or a notification): the settings bubble.
-    if (msg == WM_RBUTTONUP && item != IslandItem::None &&
+    // (Between two items too: anywhere on the pill.)
+    const bool onIsland =
+        item != IslandItem::None ||
+        PointInRect({(short)LOWORD(lParam), (short)HIWORD(lParam)}, m_pill);
+    if (msg == WM_RBUTTONUP && onIsland &&
         item != IslandItem::Overflow && item != IslandItem::TrayIcon &&
         item != IslandItem::TrayPin && item != IslandItem::SettingsBubble &&
         item != IslandItem::Banner && item != IslandItem::BannerReply &&
@@ -34458,6 +34462,8 @@ void UpdateAutoHide() {
         return;
     }
     if (g_settings.autoHide && SlidesItself() && !g_unloading) {
+        // This process looks after it now (see WhTool_ModUninit).
+        Wh_SetIntValue(L"explorerPartPid", (int)GetCurrentProcessId());
         APPBARDATA data{sizeof(data)};
         if (!(SHAppBarMessage(ABM_GETSTATE, &data) & ABS_AUTOHIDE)) {
             SetAutoHide(true);
@@ -34699,6 +34705,9 @@ void ExplorerModBeforeUninit() {
     StopWatchingIslandProcess();
     FreeIslandAppIcons();
     UpdateAutoHide();
+    if (Wh_GetIntValue(L"explorerPartPid", 0) == (int)GetCurrentProcessId()) {
+        Wh_SetIntValue(L"explorerPartPid", 0);
+    }
 }
 
 // The taskbar moved to another edge: once it has settled, the settings
@@ -34812,10 +34821,16 @@ void WhTool_ModUninit() {
     ReleaseSRWLockExclusive(&g_islandLifeLock);
     StopToastWatch();
     // Auto-hide turned on by the explorer.exe part is turned back off by
-    // that part when it unloads; from here too, in case it isn't loaded now
-    // (Explorer was restarted without the mod).
-    if (Wh_GetIntValue(L"turnedAutoHideOn", 0) &&
-        FindWindow(L"Shell_TrayWnd", nullptr)) {
+    // that part when it unloads; from here too, but only when no explorer.exe
+    // part looks after it now (Explorer was restarted without the mod). Not
+    // when one does (a new version, or the mod turned off and on quickly:
+    // the new part may have turned it on already).
+    DWORD trayProcessId = 0;
+    if (HWND tray = FindWindow(L"Shell_TrayWnd", nullptr)) {
+        GetWindowThreadProcessId(tray, &trayProcessId);
+    }
+    if (Wh_GetIntValue(L"turnedAutoHideOn", 0) && trayProcessId &&
+        (DWORD)Wh_GetIntValue(L"explorerPartPid", 0) != trayProcessId) {
         SetAutoHide(false);
         Wh_SetIntValue(L"turnedAutoHideOn", 0);
     }
