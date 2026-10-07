@@ -1,8 +1,8 @@
 // ==WindhawkMod==
-// @id              tray-privacy-indicator-anchor
-// @name            Tray Privacy Indicator Anchor
+// @id              privacy-indicator-anchor
+// @name            Privacy Indicator Anchor
 // @description     Permanently shows location/microphone/camera/Copilot icons in the system tray — dim when idle, bright when in use — preventing taskbar layout shifts.
-// @version         2.0
+// @version         2.1
 // @author          sb4ssman
 // @github          https://github.com/sb4ssman
 // @include         explorer.exe
@@ -12,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Tray Privacy Indicator Anchor
+# Privacy Indicator Anchor
 
 A Windhawk mod for Windows 11 that reserves stable tray space for privacy and
 status indicators. Location, microphone, camera, and Copilot placeholders stay
@@ -69,6 +69,11 @@ Copilot reports its installation state and links to the relevant settings:
 
 ![Copilot installation-state tooltip](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/copilot-tooltip.png)
 
+All four indicators in a row on a Windows 11 side taskbar, alongside the clock
+and other tray mods. Live-tested and approved:
+
+![Location, microphone, camera, and Copilot indicators on a Windows 11 side taskbar](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/win11-side-four-indicators.png)
+
 ## Features
 
 - Persistent placeholder icons for location, microphone, camera, and Copilot
@@ -89,24 +94,9 @@ Copilot reports its installation state and links to the relevant settings:
 - Click-through to the relevant Windows privacy, input, camera, taskbar, or app settings
 - Optional testing toggle to let Windows' native privacy indicators appear
 
-## Why this starts at 2.0
-
-Version 1.0 was never published — it existed only as a pull request. The 2.0 in
-the version field marks the settings contract, not a history of releases: every
-mod in this family moved to the same grouped layout — Placement, Content,
-Layout, Size, Adjust, Surface, Behavior — and to the shared **Arrangement**
-expression that replaced each mod's homegrown grid settings.
-
-**If you installed 1.x by hand from the pull request**, Windhawk cannot carry
-values across renamed keys, so your previous customizations are not migrated —
-re-apply them once. In particular, **check `Behavior` → `Monitor camera
-hardware privacy control`**: it is now opt-in and defaults to off, and it is
-the only thing that detects a physical camera shutter or kill switch.
-
-`itemOrder` and the whole grid-mode family are gone, replaced by a single
-**Arrangement** field. Grid mode, smart layout, fixed rows and columns, short
-row/column position and alignment, and the per-icon nudge settings no longer
-exist; what replaced each of them is below.
+If you installed an unpublished 1.x build, re-apply your customizations once:
+2.x groups the settings and uses an Arrangement field; renamed keys cannot
+be migrated. Camera hardware monitoring is now opt-in and defaults to off.
 
 ## The Arrangement field
 
@@ -130,6 +120,9 @@ field that does. Its default value is the word `auto`:
   location | (mic, camera) | copilot  a diamond
   ```
 
+  Order of operations: parentheses first, then `,`, then `|` — so
+  `a | b, c | d` is three columns with `b` stacked over `c`.
+
   The tokens are `location`, `mic` (or `microphone`), `camera`, and `copilot`,
   and they are case-insensitive. A separator is always required —
   `location (mic | camera)` is an error, not a shorthand.
@@ -150,9 +143,11 @@ location[+2,-1] | mic | camera   location moves 2px right and 1px up
 (mic, camera)[3,0] | location    the stacked pair moves 3px right
 ```
 
+Expression nudges are clamped to ±100 pixels per axis.
 Offsets are cosmetic. Nothing else shifts, and the group's overall size does
 not change. To move the whole cluster instead, use `Adjust` → horizontal and
-vertical offset.
+vertical offset. Nudges and offsets are screen pixels on every taskbar edge —
+see [Taskbar position](#taskbar-position).
 
 **Enabling an icon later.** An arrangement you write names the icons that
 existed when you wrote it. Turn another one on afterwards and it is in no
@@ -168,6 +163,26 @@ experimental `leftOfStart` and `rightOfStart` positions instead place the
 owned indicator group beside Start and reserve matching room in the centered
 taskbar items area. These Start-adjacent modes may need adjustment on future
 Windows builds or with other mods that also reposition Start.
+
+## Taskbar position
+
+Windows 11 can put the taskbar on any edge (Settings → Personalization →
+Taskbar → Taskbar behaviors, on builds that have the setting). The mod reads
+the edge Windows reports and rebuilds the group when the taskbar moves.
+
+- **Top** behaves exactly like bottom.
+- **Left or right**: an arrangement you write is laid out exactly as
+  written - `|` side by side, `,` stacked - and every `[dx,dy]` nudge
+  moves an icon `dx` right and `dy` down, on every edge. `auto` fits the
+  taskbar's width instead of its height, filling rows first or columns
+  first as set. Nothing is mirrored between left and right. `leftOfStart` and
+  `rightOfStart` become above and below Start.
+- [Vertical Taskbar](https://windhawk.net/mods/taskbar-vertical) in its default
+  native mode is the same native side taskbar. With its "Use the native taskbar
+  when possible" option off it rotates the tray elements this mod places,
+  through the same `RenderTransform` property, so the mod detects that (the
+  taskbar runs down a side while Windows still reports a horizontal edge) and
+  leaves the tray completely untouched.
 
 ## States and colors
 
@@ -235,8 +250,8 @@ Copilot opens taskbar or installed-app settings.
 mod hides Windows' own pop-in indicators and mirrors their state into the
 stable placeholders. A native indicator is only ever hidden while this mod is
 showing a placeholder for that same device: if its icon is turned off in
-`Content`, if the placeholders could not be placed, or on a vertical taskbar,
-Windows' indicator stays exactly as Windows draws it. Turn the setting off
+`Content`, if the placeholders could not be placed, or on a taskbar another
+mod is rotating, Windows' indicator stays exactly as Windows draws it. Turn the setting off
 temporarily when comparing against Windows' native tray glyphs during testing.
 Everything the mod changes on a native icon is restored to its exact prior
 value when the mod unloads.
@@ -411,7 +426,6 @@ value when the mod unloads.
 #include <winrt/Windows.Media.Capture.h>
 #include <winrt/Windows.Media.Devices.h>
 #include <winrt/Windows.UI.h>
-#include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
@@ -486,6 +500,9 @@ inline bool LoadBool(PCWSTR key) {
 //
 // Use a table rather than a chain of comparisons, so the accepted literals and
 // their enum mapping stay adjacent when this mod's settings evolve.
+//
+// Wh_GetStringSetting never returns null - an unset or unreadable setting is
+// L"" - so the value is used as is.
 template <typename T>
 struct Choice {
     wchar_t const* token;
@@ -495,7 +512,7 @@ struct Choice {
 template <typename T, size_t N>
 inline T LoadChoice(PCWSTR key, Choice<T> const (&choices)[N], T fallback) {
     auto setting = WindhawkUtils::StringSetting::make(key);
-    PCWSTR value = setting.get() ? setting.get() : L"";
+    PCWSTR value = setting.get();
     if (!*value) return fallback;
     for (auto const& choice : choices) {
         if (_wcsicmp(value, choice.token) == 0) return choice.value;
@@ -512,10 +529,10 @@ inline T LoadChoice(PCWSTR key, Choice<T> const (&choices)[N], T fallback) {
 // wrapper: it is the same contract, it already ships with Windhawk, and a
 // second copy of it is one more thing for a reader to check.
 template <size_t N>
-inline void LoadString(PCWSTR key, wchar_t (&buffer)[N],
-                       PCWSTR fallback = nullptr) {
+inline void LoadStringSetting(PCWSTR key, wchar_t (&buffer)[N],
+                              PCWSTR fallback = nullptr) {
     auto setting = WindhawkUtils::StringSetting::make(key);
-    PCWSTR value = setting.get() ? setting.get() : L"";
+    PCWSTR value = setting.get();
     if (!*value && fallback) value = fallback;
     wcsncpy_s(buffer, N, value, _TRUNCATE);
 }
@@ -529,8 +546,6 @@ inline void LoadString(PCWSTR key, wchar_t (&buffer)[N],
 namespace privacy_anchor_color_tokens {
 
 using winrt::Windows::UI::Color;
-using winrt::Windows::UI::Xaml::Media::Brush;
-using winrt::Windows::UI::Xaml::Media::SolidColorBrush;
 
 // Reported when the Windows accent color cannot be read, so the mod can log.
 using AccentErrorFn = void (*)();
@@ -589,17 +604,6 @@ inline bool Parse(wchar_t const* value, Color& out,
                BYTE(packed)};
     }
     return true;
-}
-
-// nullptr means "no color here". Never a fallback brush — a caller that wrote
-// a default color on parse failure would make an empty setting paint.
-inline Brush ParseBrush(wchar_t const* value,
-                        AccentErrorFn onAccentError = nullptr) {
-    Color color{};
-    if (!Parse(value, color, onAccentError)) return nullptr;
-    SolidColorBrush brush;
-    brush.Color(color);
-    return brush;
 }
 
 }  // namespace privacy_anchor_color_tokens
@@ -777,8 +781,8 @@ private:
             Fail(position_ - consumed, L"a finite number");
             return 0.0;
         }
-        // Offsets are cosmetic. Keep expression nudges within the same
-        // user-facing range as Adjust.OffsetX/Y so a typo cannot move an icon
+        // Offsets are cosmetic. Keep expression nudges within a
+        // bounded range of +/-100 pixels so a typo cannot move an icon
         // outside its owned group or hand XAML NaN/infinity.
         return std::clamp(value, -100.0, 100.0);
     }
@@ -815,8 +819,9 @@ inline bool Parse(std::wstring const& text, Node& root,
 
 // ---- Token vocabulary -------------------------------------------------------
 //
-// Tokens are stable utility identities, compared case-insensitively so an
-// arrangement remains readable without depending on localized labels.
+// A token is an item's stable IDENTITY, never its displayed label, compared
+// case-insensitively. Labels are not unique, can be localized, empty, or an
+// emoji, and renaming one would silently break an arrangement the user wrote.
 
 inline bool TokenIs(std::wstring const& token, wchar_t const* name) {
     size_t i = 0;
@@ -958,19 +963,15 @@ inline void ArrangeCached(Node const& node, Config const& config,
     }
 }
 
-// Parse + measure + arrange in one call. Returns false only on a parse error
-// (unbalanced parentheses, malformed offset, trailing garbage) — the caller
-// should then fall back to the auto expression and log that it did.
-// placements come back in expression order; totalSize is the group's bounding
-// box INCLUDING outer padding. A per-item offset shifts its leaf without
-// changing totalSize or any neighbor.
-inline bool Compute(std::wstring const& text, Config const& config,
-                    SizeResolver const& resolve,
-                    std::vector<Placement>& placements, Size& totalSize,
-                    ParseError* error = nullptr) {
-    Node root;
-    if (!Parse(text, root, error))
-        return false;
+// Measure + arrange a tree that is already parsed. For a mod that rewrites the
+// tree between Parse and layout - hiding an absent item, dropping a duplicate
+// - rather than laying out the text exactly as typed. placements come back in
+// expression order; totalSize is the group's bounding box INCLUDING outer
+// padding. A per-item offset shifts its leaf without changing totalSize or any
+// neighbor.
+inline void ComputeTree(Node const& root, Config const& config,
+                        SizeResolver const& resolve,
+                        std::vector<Placement>& placements, Size& totalSize) {
     // One cache for both passes: Arrange re-measures the same nodes at every
     // level, so sharing it is what keeps the whole call linear in node count.
     MeasureCache cache;
@@ -979,12 +980,25 @@ inline bool Compute(std::wstring const& text, Config const& config,
     if (inner.Empty()) {
         // No visible items: an empty group has no padded box either.
         totalSize = {};
-        return true;
+        return;
     }
     ArrangeCached(root, config, resolve, config.padX, config.padY, placements,
                   cache, &inner);
     totalSize = {inner.width + config.padX * 2.0,
                  inner.height + config.padY * 2.0};
+}
+
+// Parse + measure + arrange in one call. Returns false only on a parse error
+// (unbalanced parentheses, malformed offset, trailing garbage) — the caller
+// should then fall back to the auto expression and log that it did.
+inline bool Compute(std::wstring const& text, Config const& config,
+                    SizeResolver const& resolve,
+                    std::vector<Placement>& placements, Size& totalSize,
+                    ParseError* error = nullptr) {
+    Node root;
+    if (!Parse(text, root, error))
+        return false;
+    ComputeTree(root, config, resolve, placements, totalSize);
     return true;
 }
 
@@ -1084,19 +1098,28 @@ inline std::wstring BuildGridExpression(int count, int rows, int columns,
     return expr;
 }
 
-inline std::wstring BuildAutoExpression(int count, int maxRows, FillOrder fill,
-                                        TokenNamer const& namer = {}) {
-    Shape shape = ChooseShape(count, maxRows);
+// `maxLines` is how many lines of items fit across the taskbar's THICKNESS:
+// rows on a bottom or top taskbar, and - with `across` - columns on a left or
+// right one, where the width is the limit. The shape rule is the same either
+// way, the fewest lines along the taskbar, and the result is a plain screen
+// expression: '|' side by side and ',' stacked, and FillOrder::Rows still
+// fills left to right, then down.
+inline std::wstring BuildAutoExpression(int count, int maxLines, FillOrder fill,
+                                        TokenNamer const& namer = {},
+                                        bool across = false) {
+    Shape shape = ChooseShape(count, maxLines);
+    if (across)
+        return BuildGridExpression(count, shape.columns, shape.rows, fill,
+                                   namer);
     return BuildGridExpression(count, shape.rows, shape.columns, fill, namer);
 }
 
 // ---- Items the arrangement forgot -------------------------------------------
 //
-// A hand-written arrangement names the utilities that existed when it was
-// written. Windows shows and hides these live — the touch keyboard comes and
-// goes, the taskbar settings toggle the rest — so a utility that appears later
-// is in no group, resolves to nothing, and silently vanishes from the taskbar.
-// That is a trap, hence Layout.NewItems:
+// A hand-written arrangement names the items that existed when it was written.
+// When the set changes at runtime, an item that appears later is in no group,
+// resolves to nothing, and silently vanishes from the taskbar. That is a trap,
+// hence Layout.NewItems:
 //
 //   Append (default) — arrange the unlisted items automatically and put that
 //                      block after everything the user wrote, so a new item is
@@ -1108,10 +1131,10 @@ inline std::wstring BuildAutoExpression(int count, int maxRows, FillOrder fill,
 // arrangement when they next edit it.
 
 // Whether a token the user wrote refers to the same item as the one expected.
-// A plain case-insensitive name match is WRONG here, because the vocabulary
-// accepts aliases: "chevron" and "overflow" are one button, and comparing them
-// as strings makes an aliased item look missing and get appended a second
-// time. SameUtility below supplies the identity comparison.
+// Defaults to a case-insensitive name match, which is WRONG for a vocabulary
+// with aliases: two names for one item compare unequal as strings, so the
+// aliased item looks missing and is appended a second time. A mod with aliases
+// supplies its own identity comparison.
 using TokenMatcher =
     std::function<bool(std::wstring const& placed, std::wstring const& expected)>;
 
@@ -1136,19 +1159,23 @@ inline std::vector<std::wstring> MissingTokens(
     return missing;
 }
 
+// The appended block goes after the written one ALONG the taskbar: to its
+// right on a bottom or top taskbar, below it on a left or right one
+// (`across`), where there is room to grow.
 inline std::wstring AppendMissing(std::wstring const& expression,
                                   std::vector<std::wstring> const& missing,
-                                  int maxRows, FillOrder fill) {
+                                  int maxLines, FillOrder fill,
+                                  bool across = false) {
     if (missing.empty())
         return expression;
     auto namer = [&missing](int index) { return missing[index]; };
-    std::wstring block = BuildAutoExpression((int)missing.size(), maxRows, fill,
-                                             namer);
+    std::wstring block = BuildAutoExpression((int)missing.size(), maxLines,
+                                             fill, namer, across);
     if (block.empty())
         return expression;
     if (expression.empty())
         return block;
-    return L"(" + expression + L") | (" + block + L")";
+    return L"(" + expression + (across ? L"), (" : L") | (") + block + L")";
 }
 
 // ---- The one setting --------------------------------------------------------
@@ -1178,10 +1205,12 @@ inline bool IsAutoSetting(std::wstring const& setting) {
 }
 
 inline Arrangement ResolveArrangement(std::wstring const& setting, int count,
-                                      int maxRows, FillOrder fill,
-                                      TokenNamer const& namer = {}) {
+                                      int maxLines, FillOrder fill,
+                                      TokenNamer const& namer = {},
+                                      bool across = false) {
     if (IsAutoSetting(setting))
-        return {BuildAutoExpression(count, maxRows, fill, namer), true};
+        return {BuildAutoExpression(count, maxLines, fill, namer, across),
+                true};
     return {setting, false};
 }
 
@@ -1236,6 +1265,23 @@ public:
         snapshots_.clear();
     }
 
+    // The OWNER of the element changed a property the lease already holds.
+    // Re-read its local value into the snapshot, so a restore hands back what
+    // the owner last set rather than what it had set when the lease began.
+    // Call it from a property-changed callback, and only for a write that is
+    // not the mod's own - re-reading the mod's own value would make the lease
+    // "restore" the mod's change. A property never tracked is left alone.
+    void Refresh(DependencyObject const& object,
+                 DependencyProperty const& property) {
+        if (!object || !property) return;
+        for (auto& snapshot : snapshots_) {
+            if (snapshot.object == object && snapshot.property == property) {
+                snapshot.localValue = object.ReadLocalValue(property);
+                return;
+            }
+        }
+    }
+
     // Put ONE object's properties back and forget them, leaving every other
     // object's snapshots alone. For the case where a mod discovers that an
     // element it began borrowing was never actually its business — handing
@@ -1263,14 +1309,6 @@ public:
         }
     }
 
-    // Drop the snapshots WITHOUT restoring. For the case where the elements
-    // are already gone (an Explorer rebuild threw the tree away), so restoring
-    // would only throw. Do not use it to "skip" a restore that could run.
-    void Abandon() { snapshots_.clear(); }
-
-    size_t Count() const { return snapshots_.size(); }
-    bool Empty() const { return snapshots_.empty(); }
-
 private:
     std::vector<Snapshot> snapshots_;
 };
@@ -1283,7 +1321,6 @@ private:
 namespace privacy_anchor_taskbar_window {
 
 // ---- Window discovery -------------------------------------------------------
-
 
 inline HWND FindCurrentProcessTaskbarWnd() {
     HWND result = nullptr;
@@ -1543,59 +1580,113 @@ inline XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
 
 }  // namespace privacy_anchor_taskbar_xaml
 
-// -- Taskbar metrics and orientation ----------------------------------------
-// The taskbar's rect in DIPs, and whether a horizontal-layout model applies
-// at all - so a mod stands down on a vertical taskbar instead of arranging
-// into a rotated coordinate space.
+// -- Taskbar metrics, edge and orientation ----------------------------------
+// The taskbar's rect in DIPs, the edge Windows says it is docked to
+// (RootGrid's DockingStates), whether a mod may arrange there (any native
+// edge, never a taskbar another mod is rotating), and a watcher that
+// reports a move or thickness change - which re-lays out the taskbar
+// without rebuilding it.
 namespace privacy_anchor_taskbar_metrics {
 
-// ---- Taskbar metrics and orientation ----------------------------------------
+// ---- Taskbar metrics, edge and orientation ----------------------------------
 //
 // WHERE THE TASKBAR IS, AND WHETHER THIS MOD CAN WORK THERE.
 //
-// Windows 11 itself only puts the taskbar at the bottom. Two mods by m417z
-// move it, and both are first-class parts of the ecosystem this mod has to
-// live in:
+// Windows 11 builds with the native taskbar position setting (September 2026
+// update) put the taskbar on any edge themselves. On those builds Windows
+// ANNOUNCES the edge, and that announcement is what this component reads:
+// the taskbar root Grid (Taskbar.TaskbarFrame > Grid#RootGrid) sits in a
+// DockingStates visual state — DockedBottom, DockedTop, DockedLeft or
+// DockedRight. It is the same signal m417z's own mods read.
 //
-//   taskbar-on-top       — bottom -> top. FINE here. Everything
-//                          here is positioned relative to the taskbar's own
-//                          XAML tree, never to screen coordinates, so a top
-//                          taskbar is the same tree at a different y.
+// A NATIVE SIDE TASKBAR IS SUPPORTED. The tree is the same tree laid out
+// vertically: every tray anchor keeps its name, order and parent. A written
+// arrangement is laid out exactly as written there; only generated layouts
+// fill across the taskbar's width (the arrangement component's `across`).
 //
-//   taskbar-vertical     — bottom -> left/right. NOT COMPATIBLE, and not for
-//                          a reason cooperation can fix. It walks the very
-//                          same path this mod walks
-//                          (ControlCenterButton > Grid > ContentPresenter >
-//                          ItemsPresenter > StackPanel) and applies a
-//                          RotateTransform to `RenderTransform` on those
-//                          children. Positioning here sets a
-//                          TranslateTransform on the SAME property of the SAME
-//                          elements. One dependency property, two owners, last
-//                          writer wins — the two layouts cannot coexist.
-//
-// So: DETECT AND STAND DOWN, loudly, rather than fight and paint garbage. The
-// detection is the taskbar's own rect aspect, not a check for a specific mod —
-// it is the condition that matters, and it stays true however the taskbar got
-// that way.
+// A ROTATED TASKBAR IS NOT. m417z's Vertical Taskbar, with its native mode
+// turned off (or on a build without the native setting), rotates a horizontal
+// taskbar with RenderTransform on the very tray children this family positions
+// — one property, two owners, last writer wins. Windows still reports a
+// horizontal dock there while the window runs down the side, and that
+// mismatch is how it is recognised. A mod stands down rather than paint
+// garbage.
 //
 // The rect is in PHYSICAL pixels and every XAML size is a DIP, so conversion
 // belongs here instead of being re-derived at each call site.
 
+using winrt::Windows::UI::Xaml::FrameworkElement;
+using winrt::Windows::UI::Xaml::VisualStateManager;
+using winrt::Windows::UI::Xaml::Media::VisualTreeHelper;
+
 enum class Orientation { Horizontal, Vertical };
+enum class Edge { Unknown, Bottom, Top, Left, Right };
 
 struct Metrics {
     bool valid = false;
     RECT rect{};
     UINT dpi = 96;
+    // What the window looks like: taller than wide runs down a side.
     Orientation orientation = Orientation::Horizontal;
+    // What Windows says, when the caller read it (ReadDockedEdge).
+    Edge edge = Edge::Unknown;
+    // Runs down a side while Windows does not say it docked there: another
+    // mod is rotating a horizontal taskbar.
+    bool rotated = false;
     // The extent the arranged group has to fit INTO: the taskbar's height when
     // it runs across the screen, its width when it runs down the side.
     double constrainedDip = 0.0;
-    // The extent it can run ALONG.
-    double alongDip = 0.0;
 };
 
-inline Metrics GetMetrics(HWND taskbarWnd) {
+// The direct child of `parent` with this name, searching at most `levels`
+// generations. The taskbar's top is shallow and fixed:
+//   XamlRoot.Content() Grid > TaskbarFrame#TaskbarFrame > Grid#RootGrid
+inline FrameworkElement FindTaskbarChild(FrameworkElement const& parent,
+                                         wchar_t const* name, int levels) {
+    if (!parent || levels <= 0) return nullptr;
+    int count = VisualTreeHelper::GetChildrenCount(parent);
+    for (int i = 0; i < count; ++i) {
+        auto child =
+            VisualTreeHelper::GetChild(parent, i).try_as<FrameworkElement>();
+        if (child && child.Name() == name) return child;
+    }
+    for (int i = 0; i < count; ++i) {
+        auto child =
+            VisualTreeHelper::GetChild(parent, i).try_as<FrameworkElement>();
+        if (auto found = FindTaskbarChild(child, name, levels - 1)) return found;
+    }
+    return nullptr;
+}
+
+// Windows' own statement of the edge. UI thread only. `taskbarRoot` is the
+// taskbar XamlRoot's Content(). Unknown on builds without the native position
+// setting, or if the tree has changed shape.
+//
+// Read ONLY RootGrid's DockingStates. Per-element OrientationStates further
+// down (task-button IconPanels) were observed stale after a move back to the
+// bottom; RootGrid's state was right on every edge.
+inline Edge ReadDockedEdge(FrameworkElement const& taskbarRoot) {
+    auto frame = FindTaskbarChild(taskbarRoot, L"TaskbarFrame", 2);
+    auto rootGrid = FindTaskbarChild(frame, L"RootGrid", 2);
+    if (!rootGrid) return Edge::Unknown;
+    for (auto const& group : VisualStateManager::GetVisualStateGroups(rootGrid)) {
+        if (group.Name() != L"DockingStates") continue;
+        auto state = group.CurrentState();
+        if (!state) return Edge::Unknown;
+        auto name = state.Name();
+        if (name == L"DockedBottom") return Edge::Bottom;
+        if (name == L"DockedTop") return Edge::Top;
+        if (name == L"DockedLeft") return Edge::Left;
+        if (name == L"DockedRight") return Edge::Right;
+        return Edge::Unknown;
+    }
+    return Edge::Unknown;
+}
+
+// `docked` is ReadDockedEdge's answer when the caller has the taskbar's XAML,
+// Unknown otherwise. Without it a window running down the side is assumed
+// rotated — the safe answer on a build that cannot say otherwise.
+inline Metrics GetMetrics(HWND taskbarWnd, Edge docked = Edge::Unknown) {
     Metrics metrics;
     if (!taskbarWnd || !GetWindowRect(taskbarWnd, &metrics.rect))
         return metrics;
@@ -1608,29 +1699,136 @@ inline Metrics GetMetrics(HWND taskbarWnd) {
     double height = (double)(metrics.rect.bottom - metrics.rect.top);
     double scale = 96.0 / (double)metrics.dpi;
 
-    // Taller than wide means it runs down a side. Nothing else can produce
-    // that shape, so this needs no cooperation from whatever moved it.
     metrics.orientation =
         height > width ? Orientation::Vertical : Orientation::Horizontal;
-    if (metrics.orientation == Orientation::Horizontal) {
-        metrics.constrainedDip = height * scale;
-        metrics.alongDip = width * scale;
-    } else {
-        metrics.constrainedDip = width * scale;
-        metrics.alongDip = height * scale;
-    }
+    metrics.edge = docked;
+    metrics.rotated = metrics.orientation == Orientation::Vertical &&
+                      docked != Edge::Left && docked != Edge::Right;
+    bool horizontal = metrics.orientation == Orientation::Horizontal;
+    metrics.constrainedDip = (horizontal ? height : width) * scale;
     return metrics;
 }
 
-// Whether this mod's layout model applies at all. Checked BEFORE touching
-// anything, so a taskbar it does not describe is left exactly as it was found
-// rather than arranged into a coordinate space someone else is rotating.
-inline bool LayoutModelApplies(Metrics const& metrics) {
-    return metrics.valid && metrics.orientation == Orientation::Horizontal;
+// Whether this mod may arrange here: any edge Windows placed the taskbar on
+// itself, never a taskbar another mod is rotating. Checked BEFORE touching
+// anything, so a taskbar this does not describe is left exactly as found.
+inline bool CanArrange(Metrics const& metrics) {
+    return metrics.valid && !metrics.rotated;
+}
+
+// True on a left or right taskbar, where the WIDTH limits how many items fit
+// side by side: generated layouts ("auto") fill across it. A written
+// arrangement and every nudge are screen-literal on every edge, and top
+// behaves exactly like bottom.
+inline bool RunsDownSide(Metrics const& metrics) {
+    return metrics.orientation == Orientation::Vertical;
 }
 
 inline wchar_t const* OrientationName(Orientation orientation) {
     return orientation == Orientation::Vertical ? L"vertical" : L"horizontal";
+}
+
+inline wchar_t const* EdgeName(Edge edge) {
+    switch (edge) {
+        case Edge::Bottom: return L"bottom";
+        case Edge::Top: return L"top";
+        case Edge::Left: return L"left";
+        case Edge::Right: return L"right";
+        default: return L"unknown";
+    }
+}
+
+// ---- Following a move -------------------------------------------------------
+//
+// MOVING THE TASKBAR IS A RE-LAYOUT, NOT A REBUILD. The same elements survive
+// a move between edges and TrayUI::StartTaskbar never fires, so a mod's
+// rebuild hook will not tell it anything changed. Two signals cover every
+// move:
+//
+//   - TaskbarFrame's size, which changes between a horizontal and a side edge
+//     and whenever the thickness does (Windows' small and default heights,
+//     another mod's side width);
+//   - RootGrid's DockingStates group, which changes on EVERY edge change,
+//     including bottom <-> top and left <-> right, where the size does not.
+//     Those moves still re-template parts of the taskbar (live-observed:
+//     the OmniButton sat low after bottom -> top until a re-apply).
+//
+// The callback runs on the UI thread from inside a layout pass or a state
+// change, and both signals usually fire for one move: schedule the re-apply
+// (wake the retry), never re-arrange synchronously, and expect a repeat.
+//
+// The mod owns the EdgeWatch, and must StopEdgeWatch on the UI thread before
+// unload: both delegates point into the mod's image.
+struct EdgeWatch {
+    winrt::weak_ref<FrameworkElement> frame;
+    winrt::event_token token{};
+    winrt::weak_ref<winrt::Windows::UI::Xaml::VisualStateGroup> docking;
+    winrt::event_token dockingToken{};
+    bool side = false;
+    double thickness = 0.0;
+    void (*onChange)() = nullptr;
+};
+
+inline void StopEdgeWatch(EdgeWatch& watch) {
+    if (watch.token) {
+        if (auto frame = watch.frame.get()) frame.SizeChanged(watch.token);
+    }
+    if (watch.dockingToken) {
+        if (auto group = watch.docking.get())
+            group.CurrentStateChanged(watch.dockingToken);
+    }
+    watch.frame = nullptr;
+    watch.token = {};
+    watch.docking = nullptr;
+    watch.dockingToken = {};
+}
+
+// Idempotent: watching the same TaskbarFrame again is a no-op, and a rebuilt
+// taskbar's new frame replaces the old subscriptions. UI thread only.
+inline bool StartEdgeWatch(EdgeWatch& watch, FrameworkElement const& taskbarRoot,
+                           void (*onChange)()) {
+    auto frame = FindTaskbarChild(taskbarRoot, L"TaskbarFrame", 2);
+    if (!frame) return false;
+    if (watch.token && watch.frame.get() == frame) return true;
+    StopEdgeWatch(watch);
+    watch.frame = winrt::make_weak(frame);
+    watch.side = frame.ActualHeight() > frame.ActualWidth();
+    watch.thickness = watch.side ? frame.ActualWidth() : frame.ActualHeight();
+    watch.onChange = onChange;
+    EdgeWatch* target = &watch;
+    watch.token = frame.SizeChanged(
+        [target](winrt::Windows::Foundation::IInspectable const&,
+                 winrt::Windows::UI::Xaml::SizeChangedEventArgs const& args) {
+            auto size = args.NewSize();
+            bool side = size.Height > size.Width;
+            double thickness = side ? size.Width : size.Height;
+            // Content-sized themes change length as task buttons come and go.
+            // Only orientation and thickness require a new arrangement.
+            if (side == target->side &&
+                std::abs(thickness - target->thickness) < 0.5)
+                return;
+            target->side = side;
+            target->thickness = thickness;
+            if (target->onChange) target->onChange();
+        });
+
+    // Absent on builds without the native position setting; the size watch
+    // alone is then all there is, and all that is needed.
+    if (auto rootGrid = FindTaskbarChild(frame, L"RootGrid", 2)) {
+        for (auto const& group :
+             VisualStateManager::GetVisualStateGroups(rootGrid)) {
+            if (group.Name() != L"DockingStates") continue;
+            watch.docking = winrt::make_weak(group);
+            watch.dockingToken = group.CurrentStateChanged(
+                [target](winrt::Windows::Foundation::IInspectable const&,
+                         winrt::Windows::UI::Xaml::VisualStateChangedEventArgs
+                             const&) {
+                    if (target->onChange) target->onChange();
+                });
+            break;
+        }
+    }
+    return true;
 }
 
 }  // namespace privacy_anchor_taskbar_metrics
@@ -1854,14 +2052,6 @@ inline bool AcquireAt(Panel const& parent, int slot,
     return true;
 }
 
-inline bool Acquire(Panel const& parent, Anchor anchor,
-                    std::wstring const& markerName, Lease& lease) {
-    int slot = -1;
-    if (!parent || !ResolveSlot(parent, anchor, slot))
-        return false;
-    return AcquireAt(parent, slot, markerName, lease);
-}
-
 // Live index of the lease marker. Other mods inject and remove siblings around
 // us, so the acquire-time index is a hint, never the truth at removal time.
 inline bool FindMarker(Panel const& parent, Lease const& lease,
@@ -1965,6 +2155,9 @@ using winrt::Windows::UI::Xaml::Controls::Grid;
 using winrt::Windows::UI::Xaml::Media::TranslateTransform;
 using winrt::Windows::UI::Xaml::Media::VisualTreeHelper;
 
+// BEFORE or AFTER Start along the taskbar. On a bottom or top taskbar that is
+// left or right of Start; on a left or right taskbar, where Start sits at the
+// top and the task list runs down, Left means ABOVE Start and Right BELOW it.
 enum class Side {
     Left,
     Right,
@@ -1983,7 +2176,16 @@ struct Lease {
     winrt::event_token layoutToken{};
     Side side = Side::Left;
     double spacing = 0.0;
+    // A left or right taskbar: the lane runs vertically. Fixed for the
+    // lease's life; a move between edges re-acquires.
+    bool vertical = false;
 };
+
+// The leading edge of a margin along the lane: Left across a horizontal
+// taskbar, Top down a vertical one.
+inline double& LaneLead(Thickness& thickness, bool vertical) {
+    return vertical ? thickness.Top : thickness.Left;
+}
 
 inline void RestoreLocalValue(DependencyObject const& object,
                               DependencyProperty const& property,
@@ -2049,50 +2251,60 @@ inline bool Position(Lease& lease) noexcept {
         return false;
 
     try {
-        double groupWidth = lease.group.Width() +
-                            lease.groupOriginalMargin.Left +
-                            lease.groupOriginalMargin.Right;
-        double groupHeight = lease.group.Height() +
-                             lease.groupOriginalMargin.Top +
-                             lease.groupOriginalMargin.Bottom;
+        // ALONG is the lane's direction (x on a horizontal taskbar, y on a
+        // vertical one); ACROSS is the taskbar's thickness. Every quantity
+        // below is read along or across, so one arithmetic serves both.
+        bool vertical = lease.vertical;
+        auto const& original = lease.groupOriginalMargin;
+        double groupWidth = lease.group.Width() + original.Left + original.Right;
+        double groupHeight =
+            lease.group.Height() + original.Top + original.Bottom;
+        double groupAlong = vertical ? groupHeight : groupWidth;
+        double groupAcross = vertical ? groupWidth : groupHeight;
         bool startHidden =
             lease.startButton.Visibility() == Visibility::Collapsed;
-        double startWidth = lease.startButton.ActualWidth();
-        double startHeight = lease.startButton.ActualHeight();
-        if (startWidth <= 0.0 && !startHidden)
-            startWidth = 44.0;
-        if (startHeight <= 0.0)
-            startHeight = groupHeight;
+        double startAlong = vertical ? lease.startButton.ActualHeight()
+                                     : lease.startButton.ActualWidth();
+        double startAcross = vertical ? lease.startButton.ActualWidth()
+                                      : lease.startButton.ActualHeight();
+        if (startAlong <= 0.0 && !startHidden)
+            startAlong = 44.0;
+        if (startAcross <= 0.0)
+            startAcross = groupAcross;
 
-        // rawX is Start's live layout position with our own counter-shift
+        // rawAlong is Start's live layout position with our own counter-shift
         // backed out. It is re-read on every layout pass, so task-list churn
         // on a center-aligned taskbar re-centers the group naturally.
         auto transform = lease.startButton.TransformToVisual(lease.rootGrid);
         auto point = transform.TransformPoint({0.0f, 0.0f});
         auto existingShift =
             lease.startButton.RenderTransform().try_as<TranslateTransform>();
-        double currentShift = existingShift ? existingShift.X() : 0.0;
-        double rawX = point.X - currentShift;
+        double currentShift =
+            existingShift ? (vertical ? existingShift.Y() : existingShift.X())
+                          : 0.0;
+        double pointAlong = vertical ? point.Y : point.X;
+        double pointAcross = vertical ? point.X : point.Y;
+        double rawAlong = pointAlong - currentShift;
 
         double spacing = std::max(0.0, lease.spacing);
-        double push = groupWidth + spacing;
+        double push = groupAlong + spacing;
         if (lease.taskItemsPanel) {
             auto margin = lease.taskItemsPanel.Margin();
-            double needed =
-                lease.taskItemsPanelOriginalMargin.Left + push;
-            if (std::fabs(margin.Left - needed) > 0.5) {
-                margin.Left = needed;
+            auto originalPanel = lease.taskItemsPanelOriginalMargin;
+            double needed = LaneLead(originalPanel, vertical) + push;
+            if (std::fabs(LaneLead(margin, vertical) - needed) > 0.5) {
+                LaneLead(margin, vertical) = needed;
                 lease.taskItemsPanel.Margin(margin);
             }
         }
 
         // The Start counter-shift is a constant per mode, not an absolute-
         // anchor correction. When Start rides the repeater-margin push, room
-        // for a Left group already opens at the block's left edge (no shift),
-        // and a Right group needs Start pulled back so the gap opens between
-        // Start and the task items. When Start sits outside the repeater the
-        // roles invert: the pushed items leave the Right gap by themselves,
-        // and a Left group needs Start pushed out of the way instead.
+        // for a Left group already opens at the block's leading edge (no
+        // shift), and a Right group needs Start pulled back so the gap opens
+        // between Start and the task items. When Start sits outside the
+        // repeater the roles invert: the pushed items leave the Right gap by
+        // themselves, and a Left group needs Start pushed out of the way.
         double neededShift;
         if (lease.side == Side::Left)
             neededShift = lease.startInTaskItemsPanel ? 0.0 : push;
@@ -2107,33 +2319,39 @@ inline bool Position(Lease& lease) noexcept {
                               lease.startRenderTransformLocal);
         } else if (std::fabs(currentShift - neededShift) > 0.5) {
             TranslateTransform startShift;
-            startShift.X(neededShift);
+            if (vertical)
+                startShift.Y(neededShift);
+            else
+                startShift.X(neededShift);
             lease.startButton.RenderTransform(startShift);
         }
 
         // Place the group relative to where Start actually ends up.
-        double startFinalX = rawX + neededShift;
-        double left = lease.side == Side::Left
-                          ? startFinalX - groupWidth - spacing
-                          : startFinalX + startWidth + spacing;
-        if (left < 0.0)
-            left = 0.0;
+        double startFinal = rawAlong + neededShift;
+        double lead = lease.side == Side::Left
+                          ? startFinal - groupAlong - spacing
+                          : startFinal + startAlong + spacing;
+        if (lead < 0.0)
+            lead = 0.0;
 
-        // Center against the taskbar root; Start's own box is not a reliable
-        // vertical reference.
-        double rootHeight = lease.rootGrid.ActualHeight();
-        double startCenteredTop = point.Y + (startHeight - groupHeight) / 2.0;
-        double top = rootHeight > 0.0 ? (rootHeight - groupHeight) / 2.0
-                                      : startCenteredTop;
-        if (top < 0.0)
-            top = 0.0;
-        double rootWidth = lease.rootGrid.ActualWidth();
-        if (rootWidth > 0.0 && left + groupWidth > rootWidth)
-            left = std::max(0.0, rootWidth - groupWidth);
+        // Center across the taskbar root; Start's own box is not a reliable
+        // reference for the thickness.
+        double rootAcross = vertical ? lease.rootGrid.ActualWidth()
+                                     : lease.rootGrid.ActualHeight();
+        double startCentered =
+            pointAcross + (startAcross - groupAcross) / 2.0;
+        double across = rootAcross > 0.0 ? (rootAcross - groupAcross) / 2.0
+                                         : startCentered;
+        if (across < 0.0)
+            across = 0.0;
+        double rootAlong = vertical ? lease.rootGrid.ActualHeight()
+                                    : lease.rootGrid.ActualWidth();
+        if (rootAlong > 0.0 && lead + groupAlong > rootAlong)
+            lead = std::max(0.0, rootAlong - groupAlong);
 
         auto target = lease.groupOriginalMargin;
-        target.Left += left;
-        target.Top += top;
+        target.Left += vertical ? across : lead;
+        target.Top += vertical ? lead : across;
         auto current = lease.group.Margin();
         if (std::fabs(current.Left - target.Left) > 0.5 ||
             std::fabs(current.Top - target.Top) > 0.5) {
@@ -2174,8 +2392,11 @@ inline bool Release(Lease& lease) noexcept {
     return true;
 }
 
+// `vertical` is true on a left or right taskbar (taskbar_metrics::
+// RunsDownSide); the lane then runs down from Start instead of across.
 inline bool Acquire(FrameworkElement const& root, Grid const& group,
-                    Side side, double spacing, Lease& lease) {
+                    Side side, double spacing, Lease& lease,
+                    bool vertical = false) {
     if (!root || !group || lease.group || group.Width() <= 0.0 ||
         group.Height() <= 0.0)
         return false;
@@ -2193,6 +2414,7 @@ inline bool Acquire(FrameworkElement const& root, Grid const& group,
         UIElement::RenderTransformProperty());
     lease.side = side;
     lease.spacing = spacing;
+    lease.vertical = vertical;
 
     group.HorizontalAlignment(HorizontalAlignment::Left);
     group.VerticalAlignment(VerticalAlignment::Top);
@@ -2249,8 +2471,8 @@ namespace clr = privacy_anchor_color_tokens;
 namespace ngl = privacy_anchor_layout;
 namespace ple = privacy_anchor_property_lease;
 namespace taskbar_window = privacy_anchor_taskbar_window;
-namespace dispatch = privacy_anchor_dispatch;
 namespace taskbar_xaml = privacy_anchor_taskbar_xaml;
+namespace ui_dispatch = privacy_anchor_dispatch;
 namespace taskbar_metrics = privacy_anchor_taskbar_metrics;
 namespace lease_column = privacy_anchor_slot_lease;
 namespace start_placement = privacy_anchor_start_placement;
@@ -2390,7 +2612,7 @@ static void LoadSettings(ModSettings& s) {
     s.camera = sio::LoadBool(L"Content.Camera");
     s.copilot = sio::LoadBool(L"Content.Copilot");
 
-    sio::LoadString(L"Layout.Arrangement", s.arrangement, L"auto");
+    sio::LoadStringSetting(L"Layout.Arrangement", s.arrangement, L"auto");
 
     static constexpr sio::Choice<ngl::FillOrder> kFillOrders[] = {
         {L"rows", ngl::FillOrder::Rows},
@@ -2560,6 +2782,9 @@ static std::atomic<bool> g_taskbarDarkTheme{true};
 // thread. Controlled unload still clears them explicitly on the taskbar UI
 // thread in Wh_ModUninit.
 [[clang::no_destroy]] static Grid g_syntheticGrid = nullptr;
+// Mirrors "g_syntheticGrid is a finished, published bar" for the worker thread,
+// which must not read the projected type the UI thread writes.
+static std::atomic<bool> g_syntheticBarLive{false};
 [[clang::no_destroy]] static FrameworkElement g_locIcon = nullptr;
 [[clang::no_destroy]] static FrameworkElement g_micIcon = nullptr;
 [[clang::no_destroy]] static FrameworkElement g_camIcon = nullptr;
@@ -2693,7 +2918,7 @@ static HMODULE GetSystemTrayModuleHandle() {
 // exception logger, the dispatch message name, and its rebuild callback.
 // ============================================================
 
-using WindowThreadProc = dispatch::ThreadProc;
+using WindowThreadProc = ui_dispatch::ThreadProc;
 
 static void LogCurrentUiException(PCWSTR context) noexcept {
     try {
@@ -2715,7 +2940,7 @@ static XamlRoot GetTaskbarXamlRoot(HWND taskbarWindow) {
 
 static bool RunFromWindowThread(HWND window, WindowThreadProc proc,
                                 void* parameter) {
-    return dispatch::RunFromWindowThread(
+    return ui_dispatch::RunFromWindowThread(
         window, proc, parameter,
         L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 }
@@ -2891,6 +3116,12 @@ static ngl::FillOrder PrivacyFillOrder() {
     return g_settings.fillOrder;
 }
 
+// Whether the bar is laid out for a left or right taskbar:
+// a written arrangement is laid out exactly as written, while "auto" and the
+// block appended for unnamed items fill across the taskbar's WIDTH there. Set by TaskbarRequiresStandDown,
+// which every injection path calls first. UI thread only.
+static bool g_appliedSide = false;
+
 static ngl::Config PrivacyLayoutConfig() {
     ngl::Config config;
     config.spacing = (double)g_settings.itemSpacing;
@@ -2911,7 +3142,10 @@ static int AvailablePrivacyRows() {
     // constrainedDip is the taskbar's own thickness in DIPs whichever way it
     // runs, so the physical-px/DIP conversion the maintainer flagged lives in
     // the template now rather than being re-derived in each mod.
-    double reserved = 2.0 * (double)g_settings.padY;
+    // Padding is screen padding: across a side taskbar the horizontal
+    // padding is the part reserved.
+    double reserved = 2.0 * (double)(g_appliedSide ? g_settings.padX
+                                                   : g_settings.padY);
     int rows = ngl::RowsInHeight(
         metrics.constrainedDip - reserved, (double)g_settings.itemSize,
         (double)g_settings.itemSpacing);
@@ -2932,7 +3166,7 @@ static bool ComputePrivacyPlacements(
     };
     auto arrangement = ngl::ResolveArrangement(
         g_settings.arrangement, (int)enabledTokens.size(), maxRows, fill,
-        namer);
+        namer, g_appliedSide);
     std::wstring expression = arrangement.expression;
     ngl::ParseError error;
     bool ok = ngl::Compute(expression, PrivacyLayoutConfig(),
@@ -2944,7 +3178,8 @@ static bool ComputePrivacyPlacements(
                expression.c_str(), error.expected.c_str(),
                (int)error.position + 1);
         arrangement = ngl::ResolveArrangement(
-            L"auto", (int)enabledTokens.size(), maxRows, fill, namer);
+            L"auto", (int)enabledTokens.size(), maxRows, fill, namer,
+            g_appliedSide);
         expression = arrangement.expression;
         ok = ngl::Compute(expression, PrivacyLayoutConfig(),
                           ResolvePrivacyLayoutToken, placements, total,
@@ -2955,7 +3190,8 @@ static bool ComputePrivacyPlacements(
         auto missing = ngl::MissingTokens(enabledTokens, placements,
                                           SamePrivacyItem);
         if (!missing.empty()) {
-            expression = ngl::AppendMissing(expression, missing, maxRows, fill);
+            expression = ngl::AppendMissing(expression, missing, maxRows, fill,
+                                            g_appliedSide);
             ok = ngl::Compute(expression, PrivacyLayoutConfig(),
                               ResolvePrivacyLayoutToken, placements, total,
                               nullptr);
@@ -4698,29 +4934,54 @@ static void ApplyOffset(FrameworkElement const& fe, int x, int y) {
     }
 }
 
-// Logged once per orientation change rather than on every retry.
-static bool g_verticalStandDownLogged = false;
+// Logged once per stand-down rather than on every retry.
+static bool g_rotatedStandDownLogged = false;
 
-// A vertical taskbar ("Vertical Taskbar for Windows 11") walks the same tray
-// path this mod walks and owns RenderTransform on those children to rotate
-// them. This mod positions its anchor group by writing that same property on
-// the same elements, so the two cannot both be right: stand down and leave the
-// taskbar exactly as found. Every injection path asks this, not only the
-// retry path, or the first privacy IconView to load injects anyway.
+// Follows a move between edges, which re-lays out the existing taskbar tree
+// instead of rebuilding it. Holds only a weak reference and a token; stopped
+// on the UI thread in Wh_ModUninit.
+static taskbar_metrics::EdgeWatch g_edgeWatch;  // exit-time-safe: heap-only
+// Defers the re-apply a move asks for out of the layout pass that reported
+// it. Stopped and released on the UI thread in Wh_ModUninit.
+[[clang::no_destroy]] static DispatcherTimer g_edgeTimer{nullptr};
+static void OnTaskbarEdgeChanged();
+
+// Windows' native left/right taskbar is supported: the bar's arrangement turns
+// with it. A taskbar another mod ROTATES is not. "Vertical Taskbar for Windows
+// 11" with its native mode off walks the same tray path this mod walks and
+// owns RenderTransform on those children to rotate them; this mod positions its
+// anchor group by writing that same property on the same elements, so the two
+// cannot both be right: stand down and leave the taskbar exactly as found.
+// Every injection path asks this, not only the retry path, or the first
+// privacy IconView to load injects anyway. UI thread only: it reads the edge
+// Windows reports and starts watching for moves.
 static bool TaskbarRequiresStandDown(HWND window) {
     if (!window) return false;
-    auto metrics = taskbar_metrics::GetMetrics(window);
-    if (!metrics.valid || taskbar_metrics::LayoutModelApplies(metrics)) {
-        g_verticalStandDownLogged = false;
+    auto edge = taskbar_metrics::Edge::Unknown;
+    try {
+        if (auto xamlRoot = GetTaskbarXamlRoot(window)) {
+            if (auto root = xamlRoot.Content().try_as<FrameworkElement>()) {
+                edge = taskbar_metrics::ReadDockedEdge(root);
+                taskbar_metrics::StartEdgeWatch(g_edgeWatch, root,
+                                                OnTaskbarEdgeChanged);
+            }
+        }
+    } catch (...) {
+        LogCurrentUiException(L"taskbar edge read");
+    }
+    auto metrics = taskbar_metrics::GetMetrics(window, edge);
+    g_appliedSide = metrics.valid && taskbar_metrics::RunsDownSide(metrics);
+    if (!metrics.valid || taskbar_metrics::CanArrange(metrics)) {
+        g_rotatedStandDownLogged = false;
         return false;
     }
-    if (!g_verticalStandDownLogged) {
-        g_verticalStandDownLogged = true;
-        Wh_Log(L"[Apply] Taskbar is %s - standing down. This mod places "
-               L"its group with RenderTransform, which a vertical taskbar "
-               L"mod already owns on the same elements; leaving the "
-               L"native tray untouched.",
-               taskbar_metrics::OrientationName(metrics.orientation));
+    if (!g_rotatedStandDownLogged) {
+        g_rotatedStandDownLogged = true;
+        Wh_Log(L"[Apply] Taskbar runs down the side but Windows reports a %s "
+               L"edge - another mod is rotating it. Standing down: that mod "
+               L"owns RenderTransform on the elements this mod places, so the "
+               L"native tray is left untouched.",
+               taskbar_metrics::EdgeName(metrics.edge));
     }
     return true;
 }
@@ -4804,6 +5065,7 @@ static bool InjectSyntheticIcons(FrameworkElement root) {
     bar.VerticalAlignment(VerticalAlignment::Center);
     bar.HorizontalAlignment(HorizontalAlignment::Center);
     // Adjust.OffsetX/Y is cosmetic and does not participate in measurement.
+    // Screen pixels on every edge, like every [dx,dy] nudge.
     ApplyOffset(bar, g_settings.offsetX, g_settings.offsetY);
 
     g_locIcon = nullptr; g_micIcon = nullptr; g_camIcon = nullptr; g_copilotIcon = nullptr;
@@ -5076,7 +5338,7 @@ static bool InjectSyntheticIcons(FrameworkElement root) {
         if (!g_startLease ||
             !start_placement::Acquire(
                 root, bar, side, g_settings.itemSpacing,
-                *g_startLease)) {
+                *g_startLease, g_appliedSide)) {
             Wh_Log(L"[Inject] Start anchor unavailable: %s",
                    PositionName(g_settings.position));
             RemoveSyntheticIcons();
@@ -5103,6 +5365,7 @@ static bool InjectSyntheticIcons(FrameworkElement root) {
     }
 
     g_syntheticGrid   = bar;
+    g_syntheticBarLive = true;
     // Every callback on the bar lives on this window's thread. Remember it
     // here, where injection succeeds on every path (the IconView Loaded path
     // never reaches the end of ApplyStyle), so teardown dispatches to the
@@ -5195,6 +5458,7 @@ static void RemoveSyntheticIcons() {
     }
 
     g_syntheticGrid    = nullptr;
+    g_syntheticBarLive = false;
     g_locIcon = nullptr; g_micIcon = nullptr; g_camIcon = nullptr; g_copilotIcon = nullptr;
     g_locSlot = nullptr; g_micSlot = nullptr; g_camSlot = nullptr; g_copilotSlot = nullptr;
     g_locGlowIcon = nullptr; g_micGlowIcon = nullptr; g_camGlowIcon = nullptr; g_copilotGlowIcon = nullptr;
@@ -5288,10 +5552,19 @@ static PrivacyState* FindPrivacyStateByIconView(FrameworkElement const& iconView
 // synchronously, which calls back in here. RestoreObject is mid-iteration over
 // its snapshot list at that moment, so the nested call must not touch the
 // lease; the guard turns it into a no-op.
+//
+// g_ownVisibilityWrite marks every Visibility write this function makes, so
+// the visibility callback can tell the mod's own writes from Windows' - only
+// Windows' may refresh the snapshot the lease restores on unload.
+static bool g_ownVisibilityWrite = false;
+
 static void ApplyNativeSuppression(FrameworkElement const& iconView,
                                    PrivacyState const& state) {
-    static bool restoring = false;
-    if (restoring) return;
+    if (g_ownVisibilityWrite) return;
+    struct OwnWrite {
+        OwnWrite() { g_ownVisibilityWrite = true; }
+        ~OwnWrite() { g_ownVisibilityWrite = false; }
+    };
     bool suppress = g_settings.suppressNativeIndicators && state.typeKnown &&
                     SyntheticSlotReplaces(state.type);
     if (suppress) {
@@ -5300,14 +5573,14 @@ static void ApplyNativeSuppression(FrameworkElement const& iconView,
             return;
         TrackProperty(iconView, UIElement::VisibilityProperty());
         TrackProperty(iconView, UIElement::IsHitTestVisibleProperty());
+        OwnWrite own;
         iconView.Visibility(Visibility::Collapsed);
         iconView.IsHitTestVisible(false);
     } else if (g_lease) {
-        restoring = true;
+        OwnWrite own;
         g_lease->RestoreObject(iconView, [] {
             Wh_Log(L"[Privacy] Failed to restore an unreplaced icon");
         });
-        restoring = false;
     }
 }
 
@@ -5388,12 +5661,15 @@ static void ApplyPrivacyIndicatorBehavior(FrameworkElement iconView) {
                         SetPrivacyActive(state->type, false);
                 } else {
                     auto detectedType = DetectPrivacyType(newText);
-                    if (state->typeKnown && state->type != detectedType)
-                        SetPrivacyActive(state->type, false);
+                    bool hadType = state->typeKnown;
+                    auto previousType = state->type;
+                    // Record the new type BEFORE calling SetPrivacyActive: it
+                    // can re-enter XAML, so no pointer into the vector is held
+                    // across it, and the entry is re-found afterwards.
                     state->type = detectedType;
                     state->typeKnown = true;
-                    // SetPrivacyActive can re-enter XAML; re-find the entry
-                    // rather than holding a pointer into the vector across it.
+                    if (hadType && previousType != detectedType)
+                        SetPrivacyActive(previousType, false);
                     SetPrivacyActive(detectedType, true);
                     for (auto& s : g_privacyStates) {
                         if (s.textBlockRef.get() != tbRef) continue;
@@ -5411,9 +5687,14 @@ static void ApplyPrivacyIndicatorBehavior(FrameworkElement iconView) {
         UIElement::VisibilityProperty(),
         [](DependencyObject sender, DependencyProperty) {
             try {
-                if (g_unloading) return;
+                if (g_unloading || g_ownVisibilityWrite) return;
                 auto iconView = sender.try_as<FrameworkElement>();
-                if (!iconView || iconView.Visibility() == Visibility::Collapsed) return;
+                if (!iconView) return;
+                // Windows set this, not the mod: it is now the value to hand
+                // back on unload, whichever way it went.
+                if (g_lease)
+                    g_lease->Refresh(iconView, UIElement::VisibilityProperty());
+                if (iconView.Visibility() == Visibility::Collapsed) return;
                 if (auto* s = FindPrivacyStateByIconView(iconView))
                     ApplyNativeSuppression(iconView, *s);
             } catch (...) {
@@ -5572,6 +5853,37 @@ static void ApplyStyleOnWindowThread() {
         window, [](void*) { ApplyOnTaskbarThread(); }, nullptr);
 }
 
+// The taskbar moved between a horizontal and a side edge, or its thickness
+// changed. The tree survives (no rebuild), but the tray panel turned between
+// a row and a column, so the bar is rebuilt for the new shape. This runs on
+// the UI thread inside the layout pass that reported it, so the rebuild is
+// deferred to a one-shot timer rather than done synchronously.
+static void OnTaskbarEdgeChanged() {
+    if (g_unloading) return;
+    try {
+        if (!g_edgeTimer) {
+            g_edgeTimer = DispatcherTimer();
+            g_edgeTimer.Interval(std::chrono::milliseconds{150});
+            g_edgeTimer.Tick([](auto const&, auto const&) {
+                try {
+                    if (g_edgeTimer) g_edgeTimer.Stop();
+                    if (g_unloading) return;
+                    Wh_Log(L"[Apply] Taskbar edge or thickness changed; "
+                           L"rebuilding the bar");
+                    RemoveModUi();
+                    ApplyOnTaskbarThread();
+                } catch (...) {
+                    LogCurrentUiException(L"taskbar edge change");
+                }
+            });
+        }
+        g_edgeTimer.Stop();
+        g_edgeTimer.Start();
+    } catch (...) {
+        LogCurrentUiException(L"taskbar edge change scheduling");
+    }
+}
+
 static void StopRetryThread() {
     if (g_retryStopEvent) SetEvent(g_retryStopEvent);
     if (g_stateRefreshEvent) SetEvent(g_stateRefreshEvent);
@@ -5717,7 +6029,7 @@ BOOL Wh_ModInit() {
     Wh_Log(L"[Init] Privacy Anchor v2.0");
     // Failures inside a template-marshalled UI callback report in this mod's
     // voice rather than vanishing.
-    dispatch::SetExceptionLogger(LogCurrentUiException);
+    ui_dispatch::SetExceptionLogger(LogCurrentUiException);
     // No hook is live yet, so no other thread can be reading g_settings.
     LoadSettings(g_settings);
 
@@ -5779,7 +6091,7 @@ void Wh_ModAfterInit() {
         // Phase 1: retry injection up to 5×
         for (int i = 0; i < 5 && !g_unloading; i++) {
             if (WaitForSingleObject(stop, 2000) != WAIT_TIMEOUT) return 0;
-            if (g_syntheticGrid) break;
+            if (g_syntheticBarLive) break;
             Wh_Log(L"[AfterInit] Retry %d", i + 1);
             ApplyStyleOnWindowThread();
         }
@@ -5983,6 +6295,20 @@ void Wh_ModAfterInit() {
     }
 }
 
+// Both delegates point into this image, so they go before it is freed. UI
+// thread only; each step guarded so one failure cannot strand the other.
+static void StopEdgeFollowing() {
+    try {
+        taskbar_metrics::StopEdgeWatch(g_edgeWatch);
+    } catch (...) {
+    }
+    try {
+        if (g_edgeTimer) g_edgeTimer.Stop();
+        g_edgeTimer = nullptr;
+    } catch (...) {
+    }
+}
+
 void Wh_ModUninit() {
     g_unloading = true;
     Wh_Log(L"[Uninit]");
@@ -5995,6 +6321,7 @@ void Wh_ModUninit() {
     HWND hWnd = taskbar_window::ResolveTaskbarWnd(hostWnd ? hostWnd : g_taskbarWnd.load());
     if (hWnd) {
         bool cleaned = RunFromWindowThread(hWnd, [](void*) {
+            StopEdgeFollowing();
             RemoveModUi();
             // Terminal unload: free the no_destroy optional buffers on the UI
             // thread (RemoveModUi already revoked/cleared their elements).
@@ -6012,6 +6339,7 @@ void Wh_ModUninit() {
             HWND retryWnd = taskbar_window::ResolveTaskbarWnd(nullptr);
             bool retried =
                 retryWnd && RunFromWindowThread(retryWnd, [](void*) {
+                    StopEdgeFollowing();
                     RemoveModUi();
                 }, nullptr);
             if (!retried) {
@@ -6068,8 +6396,14 @@ void Wh_ModSettingsChanged() {
             ApplyOnTaskbarThread();
         }, &settingsDispatch);
     }
-    // No taskbar thread took it: nothing is reading g_settings there, so
-    // publish here rather than lose the change.
-    if (!settingsDispatch.ran)
-        g_settings = next;
+    if (!settingsDispatch.ran) {
+        if (!settingsDispatch.window) {
+            // No taskbar window exists; the next initial apply uses this copy.
+            g_settings = next;
+        } else {
+            // Failure to dispatch does not prove the live UI has no readers.
+            // Preserve its settings and let the user retry the save.
+            Wh_Log(L"[Settings] UI dispatch failed; save settings again to retry");
+        }
+    }
 }
