@@ -96,7 +96,6 @@ static std::unordered_set<HWND> g_applyingWindows;
 
 static HANDLE g_eventThread = nullptr;
 static DWORD g_eventThreadId = 0;
-static HANDLE g_eventThreadReady = nullptr;
 
 static std::wstring ToLower(std::wstring value) {
     std::transform(value.begin(), value.end(), value.begin(),
@@ -208,6 +207,59 @@ static void RefreshFrame(HWND hwnd) {
                  RDW_INVALIDATE | RDW_FRAME | RDW_UPDATENOW);
 }
 
+using RunFromWindowThreadProc = void(WINAPI*)(PVOID parameter);
+
+static bool RunFromWindowThread(HWND hwnd,
+                                RunFromWindowThreadProc proc,
+                                PVOID procParam) {
+    static const UINT runMessage =
+        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    struct RunParam {
+        RunFromWindowThreadProc proc;
+        PVOID procParam;
+    };
+
+    const DWORD threadId = GetWindowThreadProcessId(hwnd, nullptr);
+    if (!threadId) {
+        return false;
+    }
+
+    if (threadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (code == HC_ACTION) {
+                const CWPSTRUCT* message =
+                    reinterpret_cast<const CWPSTRUCT*>(lParam);
+
+                if (message->message == runMessage) {
+                    RunParam* param =
+                        reinterpret_cast<RunParam*>(message->lParam);
+                    param->proc(param->procParam);
+                }
+            }
+
+            return CallNextHookEx(nullptr, code, wParam, lParam);
+        },
+        nullptr,
+        threadId);
+
+    if (!hook) {
+        return false;
+    }
+
+    RunParam param = {proc, procParam};
+    SendMessageW(hwnd, runMessage, 0, reinterpret_cast<LPARAM>(&param));
+
+    UnhookWindowsHookEx(hook);
+    return true;
+}
+
 class ApplyWindowGuard {
 public:
     explicit ApplyWindowGuard(HWND hwnd) : m_hwnd(hwnd), m_acquired(false) {
@@ -253,6 +305,7 @@ static void RemoveWindowBackup(HWND hwnd) {
     g_applyingWindows.erase(hwnd);
 }
 
+// Called on the thread that owns hwnd.
 static void ApplyToWindow(HWND hwnd) {
     const AppSettings settings = GetSettingsSnapshot();
     if (!settings.matched || !IsTopLevelCaptionWindow(hwnd)) {
@@ -314,8 +367,22 @@ static void ApplyToWindow(HWND hwnd) {
     }
 }
 
+static void WINAPI ApplyToWindowProc(PVOID param) {
+    ApplyToWindow(static_cast<HWND>(param));
+}
+
+static void ApplyToWindowOnOwnerThread(HWND hwnd) {
+    const AppSettings settings = GetSettingsSnapshot();
+
+    if (!settings.matched || !IsTopLevelCaptionWindow(hwnd)) {
+        return;
+    }
+
+    RunFromWindowThread(hwnd, ApplyToWindowProc, hwnd);
+}
+
 static BOOL CALLBACK ApplyEnumProc(HWND hwnd, LPARAM) {
-    ApplyToWindow(hwnd);
+    ApplyToWindowOnOwnerThread(hwnd);
     return TRUE;
 }
 
@@ -342,27 +409,20 @@ static void CALLBACK WindowEventProc(
     }
 
     if (event == EVENT_OBJECT_CREATE || event == EVENT_OBJECT_SHOW) {
-        ApplyToWindow(hwnd);
+        ApplyToWindowOnOwnerThread(hwnd);
     }
 }
 
-static DWORD WINAPI WindowEventThread(LPVOID) {
+static DWORD WINAPI WindowEventThread(LPVOID parameter) {
+    HANDLE readyEvent = static_cast<HANDLE>(parameter);
+
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
     const DWORD processId = GetCurrentProcessId();
 
-    HWINEVENTHOOK createHook = SetWinEventHook(
+    HWINEVENTHOOK eventHook = SetWinEventHook(
         EVENT_OBJECT_CREATE,
-        EVENT_OBJECT_CREATE,
-        nullptr,
-        WindowEventProc,
-        processId,
-        0,
-        WINEVENT_OUTOFCONTEXT);
-
-    HWINEVENTHOOK showHook = SetWinEventHook(
-        EVENT_OBJECT_SHOW,
         EVENT_OBJECT_SHOW,
         nullptr,
         WindowEventProc,
@@ -370,38 +430,19 @@ static DWORD WINAPI WindowEventThread(LPVOID) {
         0,
         WINEVENT_OUTOFCONTEXT);
 
-    HWINEVENTHOOK destroyHook = SetWinEventHook(
-        EVENT_OBJECT_DESTROY,
-        EVENT_OBJECT_DESTROY,
-        nullptr,
-        WindowEventProc,
-        processId,
-        0,
-        WINEVENT_OUTOFCONTEXT);
-
-    if (!createHook || !showHook || !destroyHook) {
+    if (!eventHook) {
         Wh_Log(L"SetWinEventHook failed: %lu", GetLastError());
     }
 
-    if (g_eventThreadReady) {
-        SetEvent(g_eventThreadReady);
-    }
+    SetEvent(readyEvent);
 
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
 
-    if (destroyHook) {
-        UnhookWinEvent(destroyHook);
-    }
-
-    if (showHook) {
-        UnhookWinEvent(showHook);
-    }
-
-    if (createHook) {
-        UnhookWinEvent(createHook);
+    if (eventHook) {
+        UnhookWinEvent(eventHook);
     }
 
     return 0;
@@ -412,8 +453,8 @@ static bool StartWindowEventThread() {
         return true;
     }
 
-    g_eventThreadReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_eventThreadReady) {
+    HANDLE readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!readyEvent) {
         return false;
     }
 
@@ -421,22 +462,17 @@ static bool StartWindowEventThread() {
         nullptr,
         0,
         WindowEventThread,
-        nullptr,
+        readyEvent,
         0,
         &g_eventThreadId);
 
     if (!g_eventThread) {
-        CloseHandle(g_eventThreadReady);
-        g_eventThreadReady = nullptr;
+        CloseHandle(readyEvent);
         g_eventThreadId = 0;
         return false;
     }
 
-    const DWORD waitResult =
-        WaitForSingleObject(g_eventThreadReady, 5000);
-
-    CloseHandle(g_eventThreadReady);
-    g_eventThreadReady = nullptr;
+    const DWORD waitResult = WaitForSingleObject(readyEvent, 5000);
 
     if (waitResult != WAIT_OBJECT_0) {
         while (!PostThreadMessageW(g_eventThreadId, WM_QUIT, 0, 0) &&
@@ -447,9 +483,12 @@ static bool StartWindowEventThread() {
         CloseHandle(g_eventThread);
         g_eventThread = nullptr;
         g_eventThreadId = 0;
+
+        CloseHandle(readyEvent);
         return false;
     }
 
+    CloseHandle(readyEvent);
     return true;
 }
 
@@ -469,6 +508,56 @@ static void StopWindowEventThread() {
     g_eventThreadId = 0;
 }
 
+struct RestoreWindowParam {
+    HWND hwnd;
+    WindowBackup backup;
+};
+
+static void WINAPI RestoreWindowProc(PVOID parameter) {
+    RestoreWindowParam* param =
+        static_cast<RestoreWindowParam*>(parameter);
+
+    const HWND hwnd = param->hwnd;
+    const WindowBackup& backup = param->backup;
+
+    if (!IsWindow(hwnd)) {
+        return;
+    }
+
+    bool frameChanged = false;
+
+    if (backup.removedStyles) {
+        const LONG_PTR currentStyle =
+            GetWindowLongPtrW(hwnd, GWL_STYLE);
+        const LONG_PTR restoredStyle =
+            currentStyle | backup.removedStyles;
+
+        if (restoredStyle != currentStyle) {
+            SetLastError(ERROR_SUCCESS);
+            const LONG_PTR previousStyle =
+                SetWindowLongPtrW(hwnd, GWL_STYLE, restoredStyle);
+
+            if (previousStyle != 0 ||
+                GetLastError() == ERROR_SUCCESS) {
+                frameChanged = true;
+            }
+        }
+    }
+
+    if (backup.closeDisabled) {
+        HMENU menu = GetSystemMenu(hwnd, FALSE);
+        if (menu) {
+            EnableMenuItem(menu, SC_CLOSE,
+                           MF_BYCOMMAND | MF_ENABLED);
+            DrawMenuBar(hwnd);
+        }
+    }
+
+    if (frameChanged) {
+        RefreshFrame(hwnd);
+    }
+}
+
 static void RestoreAllWindows() {
     std::unordered_map<HWND, WindowBackup> backups;
 
@@ -483,38 +572,8 @@ static void RestoreAllWindows() {
             continue;
         }
 
-        bool frameChanged = false;
-
-        if (backup.removedStyles) {
-            const LONG_PTR currentStyle =
-                GetWindowLongPtrW(hwnd, GWL_STYLE);
-            const LONG_PTR restoredStyle =
-                currentStyle | backup.removedStyles;
-
-            if (restoredStyle != currentStyle) {
-                SetLastError(ERROR_SUCCESS);
-                const LONG_PTR previousStyle =
-                    SetWindowLongPtrW(hwnd, GWL_STYLE, restoredStyle);
-
-                if (previousStyle != 0 ||
-                    GetLastError() == ERROR_SUCCESS) {
-                    frameChanged = true;
-                }
-            }
-        }
-
-        if (backup.closeDisabled) {
-            HMENU menu = GetSystemMenu(hwnd, FALSE);
-            if (menu) {
-                EnableMenuItem(menu, SC_CLOSE,
-                               MF_BYCOMMAND | MF_ENABLED);
-                DrawMenuBar(hwnd);
-            }
-        }
-
-        if (frameChanged) {
-            RefreshFrame(hwnd);
-        }
+        RestoreWindowParam param = {hwnd, backup};
+        RunFromWindowThread(hwnd, RestoreWindowProc, &param);
     }
 }
 
