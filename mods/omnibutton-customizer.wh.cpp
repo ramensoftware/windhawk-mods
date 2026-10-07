@@ -114,27 +114,9 @@ wifi[-16,0] | (battery[-1,2], percent) | volume[16,0]
   OmniButton" anchors still mean what they always did
 - No XAML Diagnostics, so it coexists with Windows 11 Taskbar Styler
 
-## Why this starts at 2.0
-
-Version 1.0 was never published — it existed only as a pull request. The 2.0 in
-the version field marks the settings contract, not a history of releases: every
-mod in this family moved to the same grouped layout — Content, Layout,
-Size, Adjust, Surface — and to the shared **Arrangement** expression
-that replaced each mod's homegrown grid settings. This mod arrived at that
-contract second, so its first published version is the one that has it.
-
-**If you installed 1.x by hand from the pull request**, Windhawk cannot carry
-values across renamed keys, so your previous customizations are not migrated —
-re-apply them once.
-
-`itemOrder` and the whole grid-mode family are gone, replaced by a single
-**Arrangement** field. Grid mode, smart layout, fixed rows and columns, slot
-width and height, the coupled/independent battery mode, and all eight per-item
-nudge settings no longer exist; what replaced each of them is below.
-
-Battery and percentage are now always two independent arrangement items. The
-old coupled mode is not a mode any more — write them next to each other in the
-arrangement and you have it, with the freedom to put them anywhere instead.
+If you installed an unpublished 1.x build from the pull request, re-apply your
+customizations once: 2.x uses grouped settings and the Arrangement field, and
+Windhawk cannot migrate renamed setting keys.
 
 ## The Arrangement field
 
@@ -187,7 +169,8 @@ network[+2,-1] | volume | battery   network moves 2px right and 1px up
 (battery, percent)[3,0] | network   the stacked pair moves 3px right
 ```
 
-Offsets are cosmetic. Nothing else shifts, and the group's overall size does
+Each expression nudge is clamped to ±100 pixels on each axis; the whole-group
+Adjust offsets are clamped to ±40. Offsets are cosmetic. Nothing else shifts, and the group's overall size does
 not change. To move the whole cluster instead, use `Adjust` → horizontal and
 vertical offset. These replace the eight per-item nudge settings that 1.x had.
 Nudges and offsets are screen pixels on every taskbar edge — see
@@ -925,8 +908,8 @@ private:
             Fail(position_ - consumed, L"a finite number");
             return 0.0;
         }
-        // Offsets are cosmetic. Keep expression nudges within the same
-        // user-facing range as Adjust.OffsetX/Y so a typo cannot move an icon
+        // Offsets are cosmetic. Keep expression nudges within a
+        // bounded range of +/-100 pixels so a typo cannot move an icon
         // outside its owned group or hand XAML NaN/infinity.
         return std::clamp(value, -100.0, 100.0);
     }
@@ -2275,8 +2258,8 @@ struct EdgeWatch {
     winrt::event_token token{};
     winrt::weak_ref<winrt::Windows::UI::Xaml::VisualStateGroup> docking;
     winrt::event_token dockingToken{};
-    double width = 0.0;
-    double height = 0.0;
+    bool side = false;
+    double thickness = 0.0;
     void (*onChange)() = nullptr;
 };
 
@@ -2303,19 +2286,23 @@ inline bool StartEdgeWatch(EdgeWatch& watch, FrameworkElement const& taskbarRoot
     if (watch.token && watch.frame.get() == frame) return true;
     StopEdgeWatch(watch);
     watch.frame = winrt::make_weak(frame);
-    watch.width = frame.ActualWidth();
-    watch.height = frame.ActualHeight();
+    watch.side = frame.ActualHeight() > frame.ActualWidth();
+    watch.thickness = watch.side ? frame.ActualWidth() : frame.ActualHeight();
     watch.onChange = onChange;
     EdgeWatch* target = &watch;
     watch.token = frame.SizeChanged(
         [target](winrt::Windows::Foundation::IInspectable const&,
                  winrt::Windows::UI::Xaml::SizeChangedEventArgs const& args) {
             auto size = args.NewSize();
-            if (std::abs(size.Width - target->width) < 0.5 &&
-                std::abs(size.Height - target->height) < 0.5)
+            bool side = size.Height > size.Width;
+            double thickness = side ? size.Width : size.Height;
+            // Content-sized themes change length as task buttons come and go.
+            // Only orientation and thickness require a new arrangement.
+            if (side == target->side &&
+                std::abs(thickness - target->thickness) < 0.5)
                 return;
-            target->width = size.Width;
-            target->height = size.Height;
+            target->side = side;
+            target->thickness = thickness;
             if (target->onChange) target->onChange();
         });
 
@@ -2587,7 +2574,7 @@ namespace ngl = omni_layout;
 namespace ngs = omni_glyph_surface;
 namespace ple = omni_property_lease;
 namespace taskbar_window = omni_taskbar_window;
-namespace dispatch = omni_dispatch;
+namespace ui_dispatch = omni_dispatch;
 namespace taskbar_xaml = omni_taskbar_xaml;
 namespace taskbar_metrics = omni_taskbar_metrics;
 namespace retry_loop = omni_retry;
@@ -4178,19 +4165,11 @@ static void OnLayoutUpdatedImpl() {
         return;
     }
 
-    // A vertical taskbar mod enabled mid-session rotates the very elements
-    // this layout translates. ApplyAllSettings stands down for that, but a
-    // rebuild from here would bypass it and re-arrange into the rotated space,
-    // so stand down here too: hand everything back and stop watching. The next
-    // TrayUI::StartTaskbar re-evaluates, once the vertical mod is off again.
-    if (metrics.valid && !taskbar_metrics::CanArrange(metrics)) {
-        Wh_Log(L"[Layout] Taskbar is being rotated by another mod (%s edge "
-               L"reported) - standing down and restoring the native OmniButton",
-               taskbar_metrics::EdgeName(metrics.edge));
-        ApplyingScope applying;
-        CleanupAndResetCurrentElements();
-        RevokeLayoutUpdated();
-        g_applied = false;
+    // The cached edge can lag behind the window during a native move. Defer
+    // cleanup and re-read Windows' edge in ApplyAllSettings before deciding
+    // whether another mod is actually rotating the taskbar.
+    if (metrics.rotated) {
+        OnTaskbarEdgeChanged();
         return;
     }
 
@@ -4354,7 +4333,7 @@ static HWND FindCurrentProcessTaskbarWnd() {
     return taskbar_window::FindCurrentProcessTaskbarWnd();
 }
 
-using RunFromWindowThreadProc_t = dispatch::ThreadProc;
+using RunFromWindowThreadProc_t = ui_dispatch::ThreadProc;
 static void LogCurrentUiException(PCWSTR context) noexcept {
     try {
         throw;
@@ -4371,7 +4350,7 @@ static void LogCurrentUiException(PCWSTR context) noexcept {
 
 static bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc,
                                 void* procParam) {
-    return dispatch::RunFromWindowThread(
+    return ui_dispatch::RunFromWindowThread(
         hWnd, proc, procParam,
         L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 }
@@ -4680,7 +4659,7 @@ BOOL Wh_ModInit() {
     Wh_Log(L"OmniButton Customizer v%s", WH_MOD_VERSION);
     // Failures inside a template-marshalled UI callback report in this mod's
     // voice rather than vanishing.
-    dispatch::SetExceptionLogger(LogCurrentUiException);
+    ui_dispatch::SetExceptionLogger(LogCurrentUiException);
     LoadSettings();
     if (!HookTaskbarDllSymbols()) {
         Wh_Log(L"[Init] taskbar.dll symbol hooks failed");
