@@ -27,6 +27,27 @@ HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Control Center
     UseLiteLayout = 1 (REG_DWORD)
 ```
 
+## Screenshot
+
+![The restored Windows 10 Action Center](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win10actioncenter.png)
+
+## Requirements
+
+- Windows 11, version 24H2 or 25H2 (x86-64) - the versions this mod is written
+  and tested for. It is not meant for Windows 10.
+- Windhawk, with mod injection into system processes enabled. The mod is
+  injected into `explorer.exe`, `ShellExperienceHost.exe` and `ShellHost.exe`.
+- Strongly recommended, but not required: the Windows 10 taskbar, i.e. the mod
+  [Win10 taskbar on Win11 24H2 or 25H2](https://windhawk.net/mods/win10-taskbar-on-win11-24h2)
+  and, with it,
+  [Fake Explorer path](https://windhawk.net/mods/fake-explorer-path), which
+  that mod requires. The restored panel is opened and animated by the Windows
+  10 shell: the tray button and Win+A, the slide animation and the shortened
+  close timer are its paths (the shell's `twinui.pcshell.dll`). The virtual
+  value is served in the shell hosts whatever taskbar is running, so the mod
+  does not depend on the Windows 10 taskbar, but that is the setup it is
+  written for.
+
 ## How the virtualization works
 
 Microsoft's built-in registry virtualization (UAC virtualization) is not
@@ -49,14 +70,23 @@ opens (e.g. `CurrentVersion` handle + `Control Center`), different casing
 and trailing backslashes are all handled, and there is no global
 "last opened handle" state that can be confused by handle reuse.
 
+The application hive is kept in the storage directory Windhawk gives the mod
+and removes together with it: the first time the virtual key is needed, an
+empty hive file (a few KB) plus the `.LOG1`/`.LOG2` transaction logs the
+registry maintains next to a loaded hive are created there. Nothing is
+written when the key is never opened.
+
 ## Applying changes
 
 `UseLiteLayout` is read when ShellExperienceHost (and parts of Explorer)
 start. When the mod is enabled, disabled, or the virtual value setting is
-toggled, the mod restarts ShellExperienceHost (like ExplorerPatcher does).
-It is started again automatically on demand. If the Win+A / tray button
-still opens the Windows 11 panel after enabling the mod at runtime, restart
-Explorer once.
+toggled, the mod restarts ShellExperienceHost (like ExplorerPatcher does) -
+but only from the shell process that owns the taskbar. Folder windows,
+`explorer.exe /factory,... -Embedding` COM servers and the like run in
+explorer.exe processes of their own, and they must not kill a
+ShellExperienceHost that already reads the virtual value. It is started again
+automatically on demand. If the Win+A / tray button still opens the Windows
+11 panel after enabling the mod at runtime, restart Explorer once.
 
 ## Features
 
@@ -65,11 +95,8 @@ Explorer once.
 - Slide-in / slide-out animations, also on the very first open/close after
   ShellExperienceHost starts (window identified by its thread description,
   system repositioning absorbed into the animation)
-- Optional fake explorer.exe path (explorer.exe only)
-- No files are replaced under C:\Windows
-
-Note: an empty application hive file (a few KB) is created in the temp
-folder of the process the first time it's needed.
+- No files are replaced under C:\Windows, and none are left behind either:
+  the virtual key's hive lives in Windhawk's storage for this mod
 
 ## Credits 
 - AdmnistratoX - Fix for the animation of the Windows 10 Action Center 
@@ -100,10 +127,6 @@ folder of the process the first time it's needed.
 - lateShowFallback: true
   $name: First-show fallback animation
   $description: This setting enables a fallback animation for the first show when a show bypasses all hooked APIs; the panel may flash for one frame before sliding in
-
-- fakeExplorerPath: true
-  $name: Fake Explorer path
-  $description: This setting makes GetModuleFileNameW(NULL) report %SystemRoot%\explorer.exe, but only for explorer.exe
 */
 // ==/WindhawkModSettings==
 
@@ -202,7 +225,6 @@ static std::atomic<int> g_slideOutMs{140};
 
 static std::atomic<bool> g_virtualLiteLayout{true};
 static std::atomic<bool> g_restartSeh{true};
-static std::atomic<bool> g_fakeExplorerPath{true};
 static std::atomic<bool> g_lateShowFallback{true};
 
 static int Clamp(int v, int lo, int hi) {
@@ -216,7 +238,6 @@ static void LoadSettings() {
 
     g_virtualLiteLayout = Wh_GetIntSetting(L"virtualLiteLayout") != 0;
     g_restartSeh = Wh_GetIntSetting(L"restartShellExperienceHost") != 0;
-    g_fakeExplorerPath = Wh_GetIntSetting(L"fakeExplorerPath") != 0;
     g_lateShowFallback = Wh_GetIntSetting(L"lateShowFallback") != 0;
 }
 
@@ -355,6 +376,11 @@ static int GetKeyNtPath(HKEY h, wchar_t* out, int cchOut) {
 // Used as the backing handle when a caller opens the target key and it
 // doesn't exist. Being a real empty key, every API that we don't hook
 // behaves exactly like for an empty key; only UseLiteLayout is injected.
+//
+// The hive file is created lazily, in the storage directory Wh_GetModStoragePath
+// returns (see LoadAppHiveFile): nothing is written unless a caller really
+// opens the missing key, and Windhawk removes the directory together with the
+// mod, so no file of the mod is left behind.
 // ---------------------------------------------------------------------------
 
 static SRWLOCK g_appHiveLock = SRWLOCK_INIT;
@@ -363,19 +389,30 @@ static bool g_appHiveAttempted = false;
 static wchar_t g_appHiveNtPath[256] = {};
 static std::atomic<int> g_appHiveNtPathLen{0};
 
+// The hive belongs in the mod's storage directory, not in a temp folder: the
+// directory is removed by Windhawk together with the mod, while a hive in the
+// temp folder - and the .LOG1/.LOG2 transaction logs the registry creates next
+// to a loaded hive - would stay there after the mod is disabled or removed.
+// Windhawk creates the directory with Modify access for Everyone, All
+// Application Packages and All Restricted Application Packages, so
+// ShellExperienceHost's AppContainer can create and load the file there too.
 static HKEY LoadAppHiveFile(const wchar_t* fileName) {
-    wchar_t tempDir[MAX_PATH] = {};
-    DWORD n = GetTempPathW(_countof(tempDir), tempDir);
-    if (!n || n >= _countof(tempDir))
+    wchar_t storageDir[MAX_PATH] = {};
+    if (!Wh_GetModStoragePath(storageDir, _countof(storageDir))) {
+        Wh_Log(L"Registry virtualization: no mod storage directory, the "
+               L"missing key stays missing");
         return nullptr;
+    }
 
     wchar_t path[MAX_PATH] = {};
-    if (_snwprintf(path, _countof(path) - 1, L"%s%s", tempDir, fileName) <= 0)
+    if (_snwprintf(path, _countof(path) - 1, L"%s\\%s", storageDir,
+                   fileName) <= 0)
         return nullptr;
 
     HKEY root = nullptr;
     // dwOptions = 0: the hive may be loaded concurrently by other processes
-    // of the same user (explorer.exe, ShellHost.exe) without conflicts.
+    // (explorer.exe, ShellHost.exe, ShellExperienceHost.exe) without
+    // conflicts.
     LSTATUS st = RegLoadAppKeyW(path, &root, KEY_READ, 0, 0);
     if (st != ERROR_SUCCESS) {
         Wh_Log(L"RegLoadAppKeyW(%s) failed: %ld", path, st);
@@ -392,17 +429,10 @@ static HKEY GetAppHiveRoot() {
         if (!g_appHiveAttempted) {
             g_appHiveAttempted = true;
 
-            HKEY root = LoadAppHiveFile(L"windhawk-w10-action-center-empty.hiv");
-            if (!root) {
-                // The shared file might be damaged or in use by an
-                // incompatible instance; fall back to a per-process file.
-                wchar_t name[96];
-                _snwprintf(name, _countof(name) - 1,
-                           L"windhawk-w10-action-center-empty-%lu.hiv",
-                           GetCurrentProcessId());
-                name[_countof(name) - 1] = L'\0';
-                root = LoadAppHiveFile(name);
-            }
+            // One shared file: the hive may be loaded by several processes
+            // (explorer.exe, ShellHost.exe, ShellExperienceHost.exe) at once.
+            HKEY root =
+                LoadAppHiveFile(L"windhawk-w10-action-center-empty.hiv");
 
             if (root) {
                 int len = GetKeyNtPath(root, g_appHiveNtPath,
@@ -719,14 +749,53 @@ static LSTATUS WINAPI RegQueryInfoKeyW_Hook(HKEY hKey,
 }
 
 // ---------------------------------------------------------------------------
+// Taskbar ownership
+// ---------------------------------------------------------------------------
+
+// The taskbar window of this process, or null. FindWindowW is not enough: the
+// Windows 10 shell is a private copy of explorer.exe and can have sibling
+// processes started from the same folder, and only one of them owns the
+// taskbar. Enumerating sends no message to any window, so it is safe to call
+// from this mod's threads.
+static BOOL CALLBACK FindOwnTaskbarProc(HWND hwnd, LPARAM param) {
+    wchar_t className[32] = {};
+    if (!GetClassNameW(hwnd, className, _countof(className)) ||
+        _wcsicmp(className, L"Shell_TrayWnd") != 0) {
+        return TRUE;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != GetCurrentProcessId())
+        return TRUE;
+
+    *reinterpret_cast<HWND*>(param) = hwnd;
+    return FALSE;
+}
+
+static HWND FindOwnTaskbarWindow() {
+    HWND taskbar = nullptr;
+    EnumWindows(FindOwnTaskbarProc, reinterpret_cast<LPARAM>(&taskbar));
+    return taskbar;
+}
+
+// Only the process that owns the taskbar may restart ShellExperienceHost.
+// Windhawk injects this mod into every explorer.exe, and each of those starts
+// after the ShellExperienceHost that is already running: a folder window in a
+// process of its own, an `explorer.exe /factory,... -Embedding` COM server,
+// `explorer.exe /select,...`, and so on. Restarting from one of them would
+// kill a ShellExperienceHost that already reads the virtual UseLiteLayout=1,
+// losing the open panel and any toast on screen. At shell startup there is
+// nothing to restart and the taskbar window doesn't exist yet.
+static bool OwnsTaskbarWindow() {
+    return FindOwnTaskbarWindow() != nullptr;
+}
+
+// ---------------------------------------------------------------------------
 // ShellExperienceHost restart (same approach as ExplorerPatcher)
 // ---------------------------------------------------------------------------
 
-static FILETIME g_modInitTime = {};
-
-// onlyStartedBefore: if non-null, only instances created before that time
-// (i.e. ones that read UseLiteLayout before the mod was active) are killed.
-static void RestartShellExperienceHost(const FILETIME* onlyStartedBefore) {
+static void RestartShellExperienceHost() {
     wchar_t winDir[MAX_PATH] = {};
     UINT n = GetSystemWindowsDirectoryW(winDir, _countof(winDir));
     if (!n || n >= _countof(winDir))
@@ -773,69 +842,10 @@ static void RestartShellExperienceHost(const FILETIME* onlyStartedBefore) {
             continue;
         }
 
-        if (onlyStartedBefore) {
-            FILETIME created, exited, kernel, user;
-            if (!GetProcessTimes(p.get(), &created, &exited, &kernel, &user) ||
-                CompareFileTime(&created, onlyStartedBefore) >= 0) {
-                continue;
-            }
-        }
-
         if (TerminateProcess(p.get(), 0)) {
             Wh_Log(L"Restarted ShellExperienceHost (pid %lu)",
                    pe.th32ProcessID);
         }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Fake Explorer path (explorer.exe only)
-//
-// Inspired by Anixx's Fake Explorer path mod.
-// ---------------------------------------------------------------------------
-
-using GetModuleFileNameW_t = decltype(&GetModuleFileNameW);
-static GetModuleFileNameW_t GetModuleFileNameW_Original = nullptr;
-
-static wchar_t g_fakeExplorerPathBuf[MAX_PATH] = {};
-static DWORD g_fakeExplorerPathLen = 0;
-
-static DWORD WINAPI GetModuleFileNameW_Hook(HMODULE hModule,
-                                            LPWSTR lpFilename,
-                                            DWORD nSize) {
-    if (hModule == nullptr && lpFilename && nSize > 0 &&
-        g_fakeExplorerPathLen > 0 &&
-        g_fakeExplorerPath.load(std::memory_order_relaxed)) {
-        if (g_fakeExplorerPathLen >= nSize) {
-            // Documented truncation behavior.
-            memcpy(lpFilename, g_fakeExplorerPathBuf,
-                   (nSize - 1) * sizeof(wchar_t));
-            lpFilename[nSize - 1] = L'\0';
-            SetLastError(ERROR_INSUFFICIENT_BUFFER);
-            return nSize;
-        }
-
-        memcpy(lpFilename, g_fakeExplorerPathBuf,
-               (g_fakeExplorerPathLen + 1) * sizeof(wchar_t));
-        SetLastError(ERROR_SUCCESS);
-        return g_fakeExplorerPathLen;
-    }
-
-    return GetModuleFileNameW_Original(hModule, lpFilename, nSize);
-}
-
-static void InitFakeExplorerPath() {
-    wchar_t winDir[MAX_PATH] = {};
-    UINT n = GetSystemWindowsDirectoryW(winDir, _countof(winDir));
-    if (!n || n >= _countof(winDir))
-        return;
-
-    int len = _snwprintf(g_fakeExplorerPathBuf,
-                         _countof(g_fakeExplorerPathBuf) - 1,
-                         L"%s\\explorer.exe", winDir);
-    if (len > 0 && len < (int)_countof(g_fakeExplorerPathBuf)) {
-        g_fakeExplorerPathBuf[len] = L'\0';
-        g_fakeExplorerPathLen = (DWORD)len;
     }
 }
 
@@ -2048,16 +2058,14 @@ static bool HookFunction(void* target, T* hook, T** original, const wchar_t* nam
 BOOL Wh_ModInit() {
     LoadSettings();
 
-    GetSystemTimeAsFileTime(&g_modInitTime);
     g_processKind = DetectProcessKind();
 
     Wh_Log(L"%llu Windows 10 Action Center Restorer loaded in process kind %d "
-           L"delay=%d in=%d out=%d virtualLite=%d restartSeh=%d "
-           L"fakeExplorer=%d lateShow=%d",
+           L"delay=%d in=%d out=%d virtualLite=%d restartSeh=%d lateShow=%d",
            GetTickCount64(), (int)g_processKind, g_delayMs.load(),
            g_slideInMs.load(), g_slideOutMs.load(),
            (int)g_virtualLiteLayout.load(), (int)g_restartSeh.load(),
-           (int)g_fakeExplorerPath.load(), (int)g_lateShowFallback.load());
+           (int)g_lateShowFallback.load());
 
     if (g_processKind == ProcessKind::Other)
         return FALSE;
@@ -2098,23 +2106,6 @@ BOOL Wh_ModInit() {
         return TRUE;
 
     // -----------------------------------------------------------------------
-    // Fake Explorer path (explorer.exe only).
-    // -----------------------------------------------------------------------
-
-    if (g_processKind == ProcessKind::Explorer) {
-        InitFakeExplorerPath();
-
-        HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
-        void* p = kernelBase
-                      ? (void*)GetProcAddress(kernelBase, "GetModuleFileNameW")
-                      : nullptr;
-        if (!p)
-            p = (void*)GetModuleFileNameW;
-        HookFunction(p, GetModuleFileNameW_Hook, &GetModuleFileNameW_Original,
-                     L"GetModuleFileNameW");
-    }
-
-    // -----------------------------------------------------------------------
     // Action Center animation hooks (explorer.exe + ShellExperienceHost.exe)
     // -----------------------------------------------------------------------
 
@@ -2150,10 +2141,16 @@ void Wh_ModAfterInit() {
 
     StartWinEventThread();
 
-    // A ShellExperienceHost instance that started before the mod was active
-    // has already read the real (missing/0) UseLiteLayout value.
-    if (g_restartSeh.load() && g_virtualLiteLayout.load())
-        RestartShellExperienceHost(&g_modInitTime);
+    // Injected into a running shell: the taskbar already exists in this
+    // process, so the mod was enabled while the shell was up, and the
+    // ShellExperienceHost that is running has read the real (missing/0)
+    // UseLiteLayout value. At shell startup there is nothing to restart and
+    // no taskbar window yet, and the other explorer.exe instances of this
+    // session don't own the taskbar.
+    if (g_restartSeh.load() && g_virtualLiteLayout.load() &&
+        OwnsTaskbarWindow()) {
+        RestartShellExperienceHost();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2166,10 +2163,10 @@ void Wh_ModSettingsChanged() {
     LoadSettings();
 
     Wh_Log(L"Settings changed: delay=%d in=%d out=%d virtualLite=%d "
-           L"restartSeh=%d fakeExplorer=%d lateShow=%d",
+           L"restartSeh=%d lateShow=%d",
            g_delayMs.load(), g_slideInMs.load(), g_slideOutMs.load(),
            (int)g_virtualLiteLayout.load(), (int)g_restartSeh.load(),
-           (int)g_fakeExplorerPath.load(), (int)g_lateShowFallback.load());
+           (int)g_lateShowFallback.load());
 
     if (prevVirtual != g_virtualLiteLayout.load()) {
         // Re-identify the window with the new setting.
@@ -2177,8 +2174,10 @@ void Wh_ModSettingsChanged() {
         ResetFinal();
 
         if (g_processKind == ProcessKind::Explorer) {
-            if (g_restartSeh.load())
-                RestartShellExperienceHost(nullptr);
+            // Only the taskbar owner restarts ShellExperienceHost: the other
+            // explorer.exe instances must not kill the running one.
+            if (g_restartSeh.load() && OwnsTaskbarWindow())
+                RestartShellExperienceHost();
             Wh_Log(L"UseLiteLayout virtualization toggled; restart Explorer "
                    L"if the tray button still opens the previous panel");
         }
@@ -2228,10 +2227,12 @@ void Wh_ModUninit() {
         }
     }
 
-    // Bring the Windows 11 notification center back without a reboot.
+    // Bring the Windows 11 notification center back without a reboot. Only
+    // the process that owns the taskbar does it, so the other explorer.exe
+    // instances of the session don't kill the ShellExperienceHost in use.
     if (g_processKind == ProcessKind::Explorer && g_restartSeh.load() &&
-        g_virtualLiteLayout.load()) {
-        RestartShellExperienceHost(nullptr);
+        g_virtualLiteLayout.load() && OwnsTaskbarWindow()) {
+        RestartShellExperienceHost();
     }
 
     Wh_Log(L"Windows 10 Action Center Restorer unloaded. "
