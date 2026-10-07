@@ -18,6 +18,10 @@
 *Experimental Windows 10 — three desktops plus Task View, using automatic
 columns-first layout on a single-height taskbar. Live-tested and accepted.*
 
+![Experimental Windows 10: two desktops stacked before the hidden-icons chevron](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-vd-switcher/assets/win10-experimental-stack.png)
+*Experimental Windows 10 — two desktops stacked in one column before the
+hidden-icons chevron, desktop 1 active. Live-tested and accepted.*
+
 A [Windhawk](https://windhawk.net) mod that adds clickable taskbar buttons — one per virtual desktop — for instant switching without opening Task View. Windows 11 uses the system tray; Windows 10 uses native tray windows.
 
 ## Windows 10 compatibility (experimental)
@@ -29,7 +33,8 @@ experimental use. Appearance remains imperfect; exhaustive edge/lifecycle
 testing is still outstanding. It uses the
 same desktop labels, arrangement, sizes, padding, offsets, Task View button,
 colors, fonts, and hover previews as the Windows 11 backend. Desktop creation,
-removal, renaming, and switches made elsewhere are checked every 250 ms.
+removal, renaming, switches made elsewhere, and theme changes are picked up
+from Windows' registry change notifications rather than by polling.
 
 The classic taskbar reserves space through the native clock's layout, so app
 buttons give up only the needed width. It does not add rebar toolbar bands.
@@ -3607,9 +3612,6 @@ static Brush MakeShineBrush(Brush base) {
 
 // ---- Layout glue: settings -> the one arranger ------------------------------
 
-// Rows that fit in this taskbar. The rect is physical pixels and every XAML
-// size is a DIP, so the conversion happens before the division -- mixing them
-// is the bug flagged on PR #4855 and #4843.
 // "Last button in the grid": the Task View button is just another cell, sized
 // and shaped like a desktop button, rather than a column or sliver alongside.
 static bool TaskViewInGrid() {
@@ -3630,6 +3632,9 @@ static bool TaskViewTakesALine() {
            TaskViewIsVerticalPlacement() != g_side;
 }
 
+// Rows that fit in this taskbar. The rect is physical pixels and every XAML
+// size is a DIP, so the conversion happens before the division; mixing the
+// two units gives the wrong row count.
 static int AvailableRows(bool quiet = false, double itemExtent = 0) {
     HWND hWnd = taskbar_window::ResolveTaskbarWnd(g_taskbarWnd);
     auto metrics = taskbar_metrics::GetMetrics(hWnd);
@@ -4101,6 +4106,41 @@ static void StyleMasterButton(Button& btn,
                            hoverBrush, pressedBrush, borderBrush);
 }
 
+// Switch on a background thread, never on the taskbar's UI thread: when
+// SwitchToDesktop makes a LOCAL_SERVER COM call there, the STA message pump
+// runs and can deliver the notification thread's SendMessage re-entrantly,
+// corrupting XAML state mid-click. Both backends' click handlers use this.
+//
+// Creation is serialized with Wh_ModUninit, so every successful worker handle
+// is retained and waited for before the mod image is freed.
+static void SwitchToDesktopAsync(int index) {
+    std::lock_guard lock(g_switchThreadsMutex);
+    if (g_unloading) return;
+    // Reap finished workers while the lock is held. Without this the list only
+    // shrinks in Wh_ModUninit, so a user who switches desktops from the
+    // taskbar all day accumulates one thread handle and one dead thread object
+    // per click, inside explorer.exe, for the lifetime of the mod.
+    std::erase_if(g_switchThreads, [](HANDLE thread) {
+        if (WaitForSingleObject(thread, 0) != WAIT_OBJECT_0)
+            return false;
+        CloseHandle(thread);
+        return true;
+    });
+    HANDLE thread = CreateThread(nullptr, 0, [](LPVOID parameter) -> DWORD {
+        // Uninitialize only what was initialized.
+        HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        if (SUCCEEDED(hr)) {
+            if (!g_unloading) SwitchToDesktop((int)(INT_PTR)parameter);
+            CoUninitialize();
+        }
+        return 0;
+    }, (LPVOID)(INT_PTR)index, 0, nullptr);
+    if (thread)
+        g_switchThreads.push_back(thread);
+    else
+        Wh_Log(L"[Switch] Failed to create desktop-switch thread");
+}
+
 static Grid BuildButtonGrid(int count, int current) {
     std::vector<ngl::Placement> placements;
     ngl::Size total;
@@ -4227,36 +4267,7 @@ static Grid BuildButtonGrid(int count, int current) {
                 LogCurrentUiException(L"desktop button click");
             }
             if (g_unloading) return;
-            // Dispatch to a background thread to avoid STA re-entrancy: when
-            // SwitchToDesktop makes a LOCAL_SERVER COM call on the UI thread,
-            // the STA message pump runs and can deliver the notification thread's
-            // SendMessage re-entrantly, corrupting XAML state mid-click.
-            // Serialize creation with Wh_ModUninit so every successful worker
-            // handle is retained and waited before the mod image is freed.
-            std::lock_guard lock(g_switchThreadsMutex);
-            if (g_unloading) return;
-            // Reap finished workers while we already hold the lock. Without
-            // this the list only shrinks in Wh_ModUninit, so a user who
-            // switches desktops from the taskbar all day accumulates one
-            // thread handle and one dead thread object per click, inside
-            // explorer.exe, for the lifetime of the mod.
-            std::erase_if(g_switchThreads, [](HANDLE thread) {
-                if (WaitForSingleObject(thread, 0) != WAIT_OBJECT_0)
-                    return false;
-                CloseHandle(thread);
-                return true;
-            });
-            HANDLE h = CreateThread(nullptr, 0, [](LPVOID p2) -> DWORD {
-                int i2 = (int)(INT_PTR)p2;
-                CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-                if (!g_unloading) SwitchToDesktop(i2);
-                CoUninitialize();
-                return 0;
-            }, (LPVOID)(INT_PTR)capturedIdx, 0, nullptr);
-            if (h)
-                g_switchThreads.push_back(h);
-            else
-                Wh_Log(L"[Switch] Failed to create desktop-switch thread");
+            SwitchToDesktopAsync(capturedIdx);
         });
         previewEvents.owner = grid;
         previewEvents.button = btn;
@@ -5380,9 +5391,35 @@ struct Bar {
     ngl::Size total{};
     std::wstring tooltipText;
     Theme theme;
+    // Subclasses installed and space reserved. False while waiting for an
+    // anchor that is not there yet; the window then stays, hidden.
+    bool attached = false;
+    bool waitingLogged = false;
+    bool recheckPosted = false;
 };
 struct Creation { Bar* bar; bool consumed; };
-static HANDLE worker{}, stop{};
+
+// THE WORKER DOES NOT POLL WHILE THE BAR IS UP. What Update reads changes for
+// three reasons, and each has its own signal:
+//   - desktops (switch, create, remove, rename) and the theme or accent are
+//     registry values: the worker waits on change notifications for exactly
+//     those keys and marks what changed in `dirty`, so Update re-reads only
+//     that;
+//   - a settings save sets settingsPending and wakes the worker through
+//     `kick`;
+//   - geometry and tray hosts are re-checked on the taskbar thread itself: the
+//     tray children's subclass posts kRecheck when they move, and a slow
+//     SetTimer on the bar window catches anything that moves without telling
+//     us. Neither needs a hook, a SendMessage or an EnumWindows.
+// The worker falls back to a timed wait only while there is no bar - before
+// the tray exists, or after a taskbar rebuild destroyed it - or while a
+// registry watch cannot be armed and would otherwise miss its changes.
+enum : unsigned { DirtyDesktops = 1, DirtyTheme = 2, DirtyAll = 3 };
+static std::atomic<unsigned> dirty{DirtyAll};
+constexpr UINT kRecheck = WM_APP + 1;
+constexpr UINT_PTR kFallbackTimer = 1;
+constexpr UINT kFallbackMs = 2000;
+static HANDLE worker{}, stop{}, kick{};
 static HMODULE module{};
 static bool registered = false;
 static std::atomic<bool> settingsPending{false};
@@ -5435,6 +5472,13 @@ static void Place(Bar& bar) {
         bar.side ? tray.right : bar.reserve, bar.side ? bar.reserve : tray.bottom,
         SWP_NOACTIVATE | SWP_SHOWWINDOW);
 }
+// Ask for a geometry re-check on this thread, at most one in flight. Update
+// then compares the taskbar rect, DPI and tray hosts; nothing changed means
+// nothing is done.
+static void RequestRecheck(Bar& bar) {
+    if (bar.recheckPosted || !IsWindow(bar.window)) return;
+    bar.recheckPosted = PostMessageW(bar.window, kRecheck, 0, 0) != FALSE;
+}
 static LRESULT CALLBACK NativeSubclass(HWND window, UINT message, WPARAM wp,
                                        LPARAM lp, UINT_PTR id, DWORD_PTR) {
     Bar* bar = activeBar;
@@ -5469,10 +5513,16 @@ static LRESULT CALLBACK NativeSubclass(HWND window, UINT message, WPARAM wp,
     }
     LRESULT result = DefSubclassProc(window, message, wp, lp);
     if (bar && activeBar == bar && message == WM_WINDOWPOSCHANGED &&
-        (window == bar->clock || window == bar->notifications)) Place(*bar);
+        (window == bar->clock || window == bar->notifications)) {
+        Place(*bar);
+        // The clock and the notification button move when the taskbar moves
+        // or resizes and when a tray host comes or goes.
+        RequestRecheck(*bar);
+    }
     return result;
 }
 static void Detach(Bar& bar) {
+    bool wasAttached = std::exchange(bar.attached, false);
     bar.reserve = 0;
     if (activeBar == &bar) activeBar = nullptr;
     for (HWND child : bar.subclasses)
@@ -5480,7 +5530,9 @@ static void Detach(Bar& bar) {
             reinterpret_cast<UINT_PTR>(&NativeSubclass));
     bar.subclasses.clear();
     ShowWindow(bar.window, SW_HIDE);
-    Relayout(bar.taskbar);
+    // A bar that never attached reserved nothing. Relayout forces a full
+    // native taskbar layout, so it is not spent on an untouched taskbar.
+    if (wasAttached) Relayout(bar.taskbar);
 }
 static bool Attach(Bar& bar) {
     bar.clock = FindWindowExW(bar.tray, nullptr, L"TrayClockWClass", nullptr);
@@ -5501,12 +5553,15 @@ static bool Attach(Bar& bar) {
             Detach(bar); return false;
         }
     }
+    bar.attached = true;
     return true;
 }
 static bool HostsChanged(Bar const& bar) {
     if (FindWindowExW(bar.tray, nullptr, L"TrayClockWClass", nullptr) != bar.clock ||
         FindWindowExW(bar.tray, nullptr, L"TrayButton", nullptr) != bar.notifications)
         return true;
+    // Waiting for an anchor: nothing is subclassed to compare against yet.
+    if (!bar.attached) return false;
     for (HWND child = GetWindow(bar.tray, GW_CHILD); child;
          child = GetWindow(child, GW_HWNDNEXT)) {
         if (child != bar.window && std::find(bar.subclasses.begin(),
@@ -5731,23 +5786,7 @@ static void Paint(Bar& bar) {
         Wh_Log(L"Classic alpha drawing failed: %u",GetLastError());
     EndPaint(bar.window, &ps);
 }
-static void SwitchAsync(int index) {
-    std::lock_guard lock(g_switchThreadsMutex);
-    if (g_unloading) return;
-    std::erase_if(g_switchThreads, [](HANDLE thread) {
-        if (WaitForSingleObject(thread, 0) != WAIT_OBJECT_0) return false;
-        CloseHandle(thread); return true;
-    });
-    HANDLE thread = CreateThread(nullptr, 0, [](void* arg) -> DWORD {
-        HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-        if (SUCCEEDED(hr)) {
-            if (!g_unloading) SwitchToDesktop(int(INT_PTR(arg)));
-            CoUninitialize();
-        }
-        return 0;
-    }, reinterpret_cast<void*>(INT_PTR(index)), 0, nullptr);
-    if (thread) g_switchThreads.push_back(thread);
-}
+static void Update(void* parameter);
 static LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
     auto* bar = reinterpret_cast<Bar*>(GetWindowLongPtrW(window, GWLP_USERDATA));
     if (message == WM_NCCREATE) {
@@ -5797,7 +5836,7 @@ static LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wp, LPARAM 
                 keys[1].ki.wVk = keys[2].ki.wVk = VK_TAB;
                 keys[2].ki.dwFlags = keys[3].ki.dwFlags = KEYEVENTF_KEYUP;
                 SendInput(4, keys, sizeof(INPUT));
-            } else SwitchAsync(DesktopIndexFromToken(token, bar->count));
+            } else SwitchToDesktopAsync(DesktopIndexFromToken(token, bar->count));
         }
         InvalidateRect(window,nullptr,FALSE); return 0;
     }
@@ -5817,7 +5856,19 @@ static LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wp, LPARAM 
         return 0;
     }
     case WM_SIZE: case WM_THEMECHANGED: InvalidateRect(window,nullptr,FALSE); return 0;
+    // Update may destroy this window and build a new one (a rebuilt tray), so
+    // nothing here touches `bar` after it.
+    case WM_TIMER:
+        if (wp == kFallbackTimer && !g_unloading) Update(bar->taskbar);
+        return 0;
+    case kRecheck:
+        bar->recheckPosted = false;
+        if (!g_unloading) Update(bar->taskbar);
+        return 0;
     case WM_NCDESTROY:
+        // Destroyed with its tray (a taskbar rebuild), not by us: wake the
+        // worker, which waits on a timer until a new tray takes a new bar.
+        if (!g_unloading && kick) SetEvent(kick);
         Detach(*bar);
         if (bar->tooltip) DestroyWindow(bar->tooltip);
         desktop_preview::Hide();
@@ -5838,31 +5889,50 @@ static void Update(void* parameter) {
         window = nullptr;
     }
     auto* bar = window ? reinterpret_cast<Bar*>(GetWindowLongPtrW(window,GWLP_USERDATA)) : nullptr;
+    // Re-read only what the worker saw change. A new bar has nothing cached.
+    unsigned what = dirty.exchange(0) | (bar ? 0u : unsigned(DirtyAll));
     bool changed = settingsPending.exchange(false);
     if (changed) LoadSettings();
     g_taskbarWnd = taskbar;
     RECT rect{}; GetWindowRect(taskbar,&rect);
     bool side = rect.bottom-rect.top > rect.right-rect.left;
     g_side = side;
-    int count = ReadDesktopCount(), current = ReadCurrentDesktop();
-    auto names = ReadDesktopNames(count);
+    int count = bar ? bar->count : 0, current = bar ? bar->current : -1;
+    std::vector<std::wstring> names = bar ? bar->names : std::vector<std::wstring>{};
+    if (what & DirtyDesktops) {
+        count = ReadDesktopCount(); current = ReadCurrentDesktop();
+        names = ReadDesktopNames(count);
+    }
     double scale = std::max(96u,GetDpiForWindow(taskbar))/96.0;
     if (!bar) {
         bar = new Bar(); bar->taskbar = taskbar; bar->tray = tray;
         Creation creation{bar,false};
         window = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_LAYERED,kClass,L"Virtual desktops",
             WS_CHILD | WS_CLIPSIBLINGS,0,0,1,1,tray,nullptr,module,&creation);
-        if (!window) { if (!creation.consumed) delete bar; return; }
+        if (!window) {
+            if (!creation.consumed) delete bar;
+            dirty |= what;  // not consumed: the next attempt reads it all again
+            return;
+        }
         attachedWindow = window;
+        // The fallback for geometry nothing reports. It runs on this thread,
+        // so it costs no worker hook, SendMessage or EnumWindows.
+        SetTimer(window, kFallbackTimer, kFallbackMs, nullptr);
         changed = true;
     }
     bool layoutChanged = changed || count != bar->count || scale != bar->scale ||
-        !EqualRect(&rect,&bar->taskbarRect) || HostsChanged(*bar) || !IsWindow(bar->clock) ||
-        (bar->position == ClassicPosition::AfterNotifications && !IsWindow(bar->notifications));
+        !EqualRect(&rect,&bar->taskbarRect) || HostsChanged(*bar) ||
+        (bar->attached && (!IsWindow(bar->clock) ||
+            (bar->position == ClassicPosition::AfterNotifications &&
+             !IsWindow(bar->notifications))));
     bool contentChanged = current != bar->current || names != bar->names;
-    Theme theme = CurrentTheme();
-    contentChanged = contentChanged || theme != bar->theme;
-    bar->theme = theme;
+    // The theme and accent change only when their registry keys do. Reading
+    // them activates WinRT UISettings, so it is not done on every check.
+    if (what & DirtyTheme) {
+        Theme theme = CurrentTheme();
+        contentChanged = contentChanged || theme != bar->theme;
+        bar->theme = theme;
+    }
     if (side && contentChanged && ngl::IsAutoSetting(g_settings.arrangement) &&
         g_settings.fillOrder == ngl::FillOrder::Columns) layoutChanged = true;
     bar->count = count; bar->current = current; bar->names = std::move(names);
@@ -5878,9 +5948,15 @@ static void Update(void* parameter) {
         ComputeButtonPlacements(count,bar->placements,bar->total,false,
             compact ? &autoCell : nullptr);
         if (!Attach(*bar)) {
-            Wh_Log(L"Classic tray attachment unavailable; retrying");
-            DestroyWindow(window); return;
+            // Keep the hidden window and wait for the anchor: HostsChanged
+            // reports it when it appears. Destroying and recreating the
+            // window per attempt forced two taskbar relayouts each time.
+            if (!bar->waitingLogged)
+                Wh_Log(L"Classic tray anchor unavailable; waiting for it");
+            bar->waitingLogged = true;
+            return;
         }
+        bar->waitingLogged = false;
         if (!(g_settings.hideWhenSingle && count == 1))
             bar->reserve = std::max(1, int(std::ceil((side ?
                 bar->total.height : bar->total.width) * scale)));
@@ -5901,11 +5977,120 @@ static void Update(void* parameter) {
     }
     if (layoutChanged || contentChanged) InvalidateRect(window,nullptr,FALSE);
 }
-static DWORD WINAPI Worker(void*) {
-    while (WaitForSingleObject(stop,250) == WAIT_TIMEOUT) {
-        HWND taskbar = FindCurrentProcessTaskbarWnd();
-        if (taskbar) RunFromWindowThread(taskbar,Update,taskbar);
+// One registry key the worker waits on. RegNotifyChangeKeyValue signals once
+// per call, so every signal re-arms it. A key that does not exist yet (the
+// session's VirtualDesktops key before a second desktop is ever made) is
+// waited for through its parent, which reports a subkey appearing.
+struct RegistryWatch {
+    std::wstring path, parent;
+    unsigned flag = 0;
+    HKEY key{};
+    HANDLE event{};
+    bool onParent = false, armed = false;
+
+    bool Arm() {
+        if (key && onParent) {
+            HKEY real{};
+            if (RegOpenKeyExW(HKEY_CURRENT_USER, path.c_str(), 0, KEY_NOTIFY,
+                              &real) == ERROR_SUCCESS) {
+                RegCloseKey(key);
+                key = real;
+                onParent = false;
+            }
+        }
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            if (!key) {
+                onParent = false;
+                if (RegOpenKeyExW(HKEY_CURRENT_USER, path.c_str(), 0, KEY_NOTIFY,
+                                  &key) != ERROR_SUCCESS) {
+                    key = nullptr;
+                    if (RegOpenKeyExW(HKEY_CURRENT_USER, parent.c_str(), 0,
+                                      KEY_NOTIFY, &key) != ERROR_SUCCESS) {
+                        key = nullptr;
+                        return armed = false;
+                    }
+                    onParent = true;
+                }
+            }
+            DWORD filter = onParent ? REG_NOTIFY_CHANGE_NAME
+                : REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET;
+            if (RegNotifyChangeKeyValue(key, !onParent, filter, event, TRUE) ==
+                ERROR_SUCCESS)
+                return armed = true;
+            // Deleted under us: reopen once from scratch.
+            RegCloseKey(key);
+            key = nullptr;
+        }
+        return armed = false;
     }
+
+    void Close() {
+        if (key) RegCloseKey(key);
+        if (event) CloseHandle(event);
+        key = nullptr;
+        event = nullptr;
+    }
+};
+
+static DWORD WINAPI Worker(void*) {
+    DWORD sessionId = 0;
+    ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
+    std::wstring explorer = L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer";
+    std::wstring session = explorer + L"\\SessionInfo\\" + std::to_wstring(sessionId);
+    // Exactly the keys Update reads: ReadDesktopCount/Current/Names, and
+    // CurrentTheme (light theme, accent, high contrast).
+    RegistryWatch watches[] = {
+        {session + L"\\VirtualDesktops", session, DirtyDesktops},
+        {explorer + L"\\VirtualDesktops", explorer, DirtyDesktops},
+        {L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+         L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes", DirtyTheme},
+        {L"Software\\Microsoft\\Windows\\DWM", L"Software\\Microsoft\\Windows",
+         DirtyTheme},
+        {L"Control Panel\\Accessibility\\HighContrast",
+         L"Control Panel\\Accessibility", DirtyTheme},
+    };
+    std::vector<HANDLE> handles{stop, kick};
+    std::vector<RegistryWatch*> active;
+    for (auto& watch : watches) {
+        watch.event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (!watch.event) continue;
+        watch.Arm();
+        handles.push_back(watch.event);
+        active.push_back(&watch);
+    }
+    // A watch that cannot be armed would miss its changes, so the worker
+    // falls back to a slow re-read for as long as any is down.
+    auto degraded = [&] {
+        if (active.size() != ARRAYSIZE(watches)) return true;
+        for (auto* watch : active)
+            if (!watch->armed) return true;
+        return false;
+    };
+
+    DWORD timeout = 0;  // the first pass builds the bar at once
+    for (;;) {
+        DWORD result = WaitForMultipleObjects(DWORD(handles.size()),
+                                              handles.data(), FALSE, timeout);
+        if (result == WAIT_OBJECT_0 || result == WAIT_FAILED) break;
+        if (result == WAIT_TIMEOUT) {
+            // No bar yet, or a watch is down: read everything again.
+            dirty |= DirtyAll;
+            for (auto* watch : active)
+                if (!watch->armed) watch->Arm();
+        } else if (result >= WAIT_OBJECT_0 + 2 &&
+                   result < WAIT_OBJECT_0 + handles.size()) {
+            auto* watch = active[result - WAIT_OBJECT_0 - 2];
+            dirty |= watch->flag;
+            watch->Arm();
+        }
+        // WAIT_OBJECT_0 + 1 is `kick`: whoever set it recorded what changed.
+        HWND taskbar = FindCurrentProcessTaskbarWnd();
+        if (taskbar) RunFromWindowThread(taskbar, Update, taskbar);
+        HWND window = attachedWindow.load();
+        bool barAlive = window && IsWindow(window);
+        timeout = !barAlive ? 1000 : degraded() ? 2000 : INFINITE;
+    }
+    for (auto& watch : watches) watch.Close();
     return 0;
 }
 static bool Start() {
@@ -5918,10 +6103,16 @@ static bool Start() {
     registered = RegisterClassW(&wc) != 0;
     if (!registered) return false;
     stop = CreateEventW(nullptr,TRUE,FALSE,nullptr);
-    if (stop) worker = CreateThread(nullptr,0,Worker,nullptr,0,nullptr);
+    kick = CreateEventW(nullptr,FALSE,FALSE,nullptr);
+    if (stop && kick) worker = CreateThread(nullptr,0,Worker,nullptr,0,nullptr);
     if (!worker) {
-        if (stop) CloseHandle(stop); stop = nullptr;
-        UnregisterClassW(kClass,module); registered = false; return false;
+        if (stop) CloseHandle(stop);
+        if (kick) CloseHandle(kick);
+        stop = nullptr;
+        kick = nullptr;
+        UnregisterClassW(kClass,module);
+        registered = false;
+        return false;
     }
     return true;
 }
@@ -5961,6 +6152,8 @@ static void Stop() {
     }
     desktop_preview::UnregisterClassIfRegistered();
     if (registered && UnregisterClassW(kClass,module)) registered = false;
+    // Last: the bar's WM_NCDESTROY above reads it (and skips it, unloading).
+    if (kick) { CloseHandle(kick); kick = nullptr; }
 }
 } // namespace classic_ui
 
@@ -6167,7 +6360,12 @@ void Wh_ModUninit() {
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_classicTaskbar) { classic_ui::settingsPending = true; return; }
+    if (g_classicTaskbar) {
+        // The worker no longer polls, so wake it to apply the new settings.
+        classic_ui::settingsPending = true;
+        if (classic_ui::kick) SetEvent(classic_ui::kick);
+        return;
+    }
     // Stop the worker threads first. The notification thread dispatches
     // RebuildButtonGrid, and a late callback during a save could otherwise
     // rebuild the old bar while the UI thread is removing/reinserting columns.
