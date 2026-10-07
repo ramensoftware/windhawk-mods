@@ -29,6 +29,8 @@ This mod addresses two issues that can occur when the private Windows 10 shell i
 
 The guard lasts 20 seconds by default. Each intercepted flyout can extend it by 15 seconds, up to four times the configured duration. No window is closed or destroyed.
 
+**Startup reliability.** When Explorer starts, Windhawk loads the mod before the taskbar and the language indicator exist, and window-creation hooks only become active after `Wh_ModInit` returns. A background rescan therefore attaches to the indicator as soon as it appears (every 250 ms for the first three minutes, then every three seconds), so the mod no longer needs to be toggled manually after logon.
+
 The mod targets non-SystemRoot `explorer.exe` instances and limits the flyout sweep to the current process. System files are not replaced.
 */
 // ==/WindhawkModReadme==
@@ -73,6 +75,7 @@ The mod targets non-SystemRoot `explorer.exe` instances and limits the flyout sw
 #include <wchar.h>
 
 static std::atomic<bool> g_unloading{false};
+static std::atomic<ULONGLONG> g_modStartTick{0};
 
 static std::atomic<bool> g_langGuardEnabled{true};
 static std::atomic<DWORD> g_langGuardMs{20000};
@@ -523,6 +526,11 @@ static void TrackIndicatorWindow(HWND hwnd) {
     ReleaseSRWLockExclusive(&g_indicatorTargetsLock);
     g_indicatorInstallCount.fetch_sub(1, std::memory_order_acq_rel);
 
+    if (installed) {
+        Wh_Log(L"[lang] indicator %s 0x%p attached %llu ms after the mod init",
+               cls, (void*)hwnd,
+               (unsigned long long)(GetTickCount64() - g_modStartTick.load(std::memory_order_acquire)));
+    }
     if (installed && g_indicatorColours.load(std::memory_order_relaxed)) {
         InvalidateRect(hwnd, nullptr, FALSE);
     } else if (!installed && IsWindow(hwnd)) {
@@ -564,6 +572,7 @@ static void RemoveIndicatorSubclasses() {
         if (snapshot[i].subclassed && IsOwnProcessWindow(snapshot[i].wnd)) {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(
                 snapshot[i].wnd, IndicatorSubclassProc);
+            RemovePropW(snapshot[i].wnd, L"WhLangIndicatorPainted");
         }
     }
 
@@ -603,12 +612,22 @@ static bool PrimaryIndicatorRect(RECT* out) {
     return false;
 }
 
+// A layer that never reaches our painter (for example one drawn by the shell
+// itself right after logon) must not be allowed to take over the text, or the
+// indicator stays blank. Each layer that completes a paint stamps itself.
+static const wchar_t kIndicatorPaintedProp[] = L"WhLangIndicatorPainted";
+
+static bool LayerHasPainted(HWND wnd) {
+    return GetPropW(wnd, kIndicatorPaintedProp) != nullptr;
+}
+
 static bool ThisLayerShowsText(HWND hwnd) {
     RECT area = {};
     if (!PrimaryIndicatorRect(&area)) return true;
     POINT centre = { (area.left + area.right) / 2, (area.top + area.bottom) / 2 };
     HWND top = TopmostTrackedAt(centre);
-    return !top || top == hwnd;
+    if (!top || top == hwnd) return true;
+    return !LayerHasPainted(top);
 }
 
 static SRWLOCK g_layoutVariantCacheLock = SRWLOCK_INIT;
@@ -918,6 +937,7 @@ static void PaintIndicatorCell(HWND hwnd, const wchar_t* why, HDC targetDc) {
         return;
     }
     BitBlt(targetDc, 0, 0, width, height, memoryDc.get(), 0, 0, SRCCOPY);
+    if (showsText) SetPropW(hwnd, kIndicatorPaintedProp, (HANDLE)1);
 
     const int logIndex = g_indicatorCellLogs.fetch_add(1, std::memory_order_relaxed);
     if (logIndex < 40) {
@@ -1354,15 +1374,73 @@ static void LogCurrentSettings(const wchar_t* prefix) {
            g_langCensusLog.load(std::memory_order_relaxed) ? L"on" : L"off");
 }
 
+// --- Startup rescan ---------------------------------------------------------
+// At Explorer startup the engine loads the mod before the taskbar and the
+// language indicator exist, and hooks set in Wh_ModInit become active only after
+// it returns. A one-shot EnumWindows in Wh_ModInit therefore finds nothing, and
+// windows created in the gap are missed by the CreateWindowExW hook. This thread
+// repeats the scan until the indicator is attached. TrackIndicatorWindow is
+// idempotent, so repeated scans never subclass a window twice.
+static HANDLE g_rescanThread = nullptr;
+static HANDLE g_rescanStopEvent = nullptr;
+static SRWLOCK g_rescanLock = SRWLOCK_INIT;
+
+static DWORD WINAPI IndicatorRescanThread(LPVOID) {
+    const ULONGLONG start = GetTickCount64();
+    for (;;) {
+        const DWORD interval = (GetTickCount64() - start < 180000) ? 250 : 3000;
+        if (WaitForSingleObject(g_rescanStopEvent, interval) != WAIT_TIMEOUT) break;
+        if (g_unloading.load(std::memory_order_acquire)) break;
+        if (ShouldTrackIndicatorWindows()) ArmIndicatorSubclass();
+    }
+    return 0;
+}
+
+static bool StartIndicatorRescanThread() {
+    AcquireSRWLockExclusive(&g_rescanLock);
+    bool ok = true;
+    if (g_unloading.load(std::memory_order_acquire)) {
+        ok = false;
+    } else if (!g_rescanThread) {
+        if (!g_rescanStopEvent) {
+            g_rescanStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        } else {
+            ResetEvent(g_rescanStopEvent);
+        }
+        if (g_rescanStopEvent) {
+            g_rescanThread = CreateThread(nullptr, 0, IndicatorRescanThread, nullptr, 0, nullptr);
+        }
+        ok = g_rescanThread != nullptr;
+        if (!ok) Wh_Log(L"[lang] failed to start the startup rescan thread (%lu)", GetLastError());
+    }
+    ReleaseSRWLockExclusive(&g_rescanLock);
+    return ok;
+}
+
+static void StopIndicatorRescanThread() {
+    AcquireSRWLockExclusive(&g_rescanLock);
+    ScopedHandle threadHandle(g_rescanThread);
+    ScopedHandle stopEvent(g_rescanStopEvent);
+    g_rescanThread = nullptr;
+    g_rescanStopEvent = nullptr;
+    if (stopEvent.valid()) SetEvent(stopEvent.get());
+    if (threadHandle.valid()) WaitForSingleObject(threadHandle.get(), INFINITE);
+    ReleaseSRWLockExclusive(&g_rescanLock);
+}
+
 // --- Windhawk entry points --------------------------------------------------
 BOOL Wh_ModInit() {
     g_unloading.store(false, std::memory_order_release);
+    g_modStartTick.store(GetTickCount64(), std::memory_order_release);
     LoadLanguageSettings();
     Wh_Log(L"[lang] init: Windows 10 language flyout guard and indicator colours");
     LogCurrentSettings(L"settings");
 
     InstallLanguageGuardHooks();
-    if (ShouldTrackIndicatorWindows()) ArmIndicatorSubclass();
+    if (ShouldTrackIndicatorWindows()) {
+        ArmIndicatorSubclass();
+        StartIndicatorRescanThread();
+    }
     if (g_indicatorColours.load(std::memory_order_relaxed)) {
         StartLayoutPollThread();
     }
@@ -1378,6 +1456,13 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
+// Called by the engine after the hooks from Wh_ModInit are active, so windows
+// created in the gap since Wh_ModInit are picked up here.
+void Wh_ModAfterInit() {
+    if (ShouldTrackIndicatorWindows()) ArmIndicatorSubclass();
+    if (g_langGuardEnabled.load(std::memory_order_relaxed)) RunLanguageGuardCensus();
+}
+
 void Wh_ModBeforeUninit() {
     g_unloading.store(true, std::memory_order_release);
     AcquireSRWLockExclusive(&g_indicatorTargetsLock);
@@ -1386,10 +1471,14 @@ void Wh_ModBeforeUninit() {
     if (g_stopEvent) SetEvent(g_stopEvent);
     ReleaseSRWLockExclusive(&g_languageThreadLock);
     if (g_layoutPollStopEvent) SetEvent(g_layoutPollStopEvent);
+    AcquireSRWLockExclusive(&g_rescanLock);
+    if (g_rescanStopEvent) SetEvent(g_rescanStopEvent);
+    ReleaseSRWLockExclusive(&g_rescanLock);
 }
 
 void Wh_ModUninit() {
     g_unloading.store(true, std::memory_order_release);
+    StopIndicatorRescanThread();
     StopLayoutPollThread();
     StopLanguageGuardThread();
     RemoveIndicatorSubclasses();
@@ -1419,7 +1508,10 @@ void Wh_ModSettingsChanged() {
         RunLanguageGuardCensus();
     }
 
-    if (ShouldTrackIndicatorWindows()) ArmIndicatorSubclass();
+    if (ShouldTrackIndicatorWindows()) {
+        ArmIndicatorSubclass();
+        StartIndicatorRescanThread();
+    }
 
     if (coloursEnabled) {
         StartLayoutPollThread();
