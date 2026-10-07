@@ -137,7 +137,9 @@ arrangement rather than staying at its original tray position.
 
 Icons render at their native size unless you set `Size.ItemWidth` /
 `Size.ItemHeight`. A tall column of native-size icons can overhang a
-single-height taskbar; about 16 px makes it fit.
+single-height taskbar; about 16 px makes it fit. On a left or right taskbar
+the icons always keep their native size, and these two set only the spacing
+of the cells they are centered in.
 
 `Size.ItemSpacing` is the gap between items and may be negative to pull them
 together. `Adjust.PadX` / `PadY` reserve space at the outside edges of the
@@ -235,7 +237,7 @@ the edge Windows reports and re-arranges when the taskbar moves.
 - With Emoji hidden, the lone-icon Emoji fallback no longer claims the touch
   keyboard's host and leaves the keyboard's slot empty.
 - The microphone, camera and location in-use indicators no longer trigger a
-  full re-layout every time they appear or disappear.
+  re-layout of a tray host the mod is not arranging.
 - A re-arrangement that finds the tray mid-change, such as during a move
   between edges, now retries instead of leaving the native layout in place.
 
@@ -354,12 +356,15 @@ the edge Windows reports and re-arranges when the taskbar moves.
     $description: >-
       0 gives each utility the width Windows drew it at. A number puts every
       item in a fixed box of that width instead, which lines columns up but
-      adds dead space around a narrower glyph.
+      adds dead space around a narrower glyph. On a left or right taskbar the
+      icons keep their native size and this sets only the cell spacing.
   - ItemHeight: 0
     $name: Item height (px, 0 = native size)
     $description: >-
       0 uses the native size. A tall column of native-size icons can overhang
-      a single-height taskbar; about 16 here makes it fit.
+      a single-height taskbar; about 16 here makes it fit. On a left or right
+      taskbar the icons keep their native size and this sets only the cell
+      spacing.
   - ItemSpacing: 0
     $name: Item spacing (px)
     $description: >-
@@ -4107,6 +4112,12 @@ static bool ApplyLayout() {
     // cannot diagnose - so stand down completely, BEFORE touching anything.
     auto metrics = taskbar_metrics::GetMetrics(
         hWnd, taskbar_metrics::ReadDockedEdge(root));
+    if (!metrics.valid) {
+        // The window went away between ResolveTaskbarWnd and here. Transient:
+        // the rebuild that follows re-evaluates. Not a rotated taskbar.
+        Wh_Log(L"[Apply] Taskbar window rect unavailable");
+        return false;
+    }
     if (!taskbar_metrics::CanArrange(metrics)) {
         Wh_Log(
             L"[Apply] Taskbar runs down the side (%s, %.0f DIP thick) but "
