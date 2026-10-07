@@ -4,6 +4,7 @@
 // @description     Makes precision-touchpad keyboard and mouse gesture actions work on elevated windows
 // @version         0.6
 // @author          meteoni
+// @github          https://github.com/meteoni
 // @include         explorer.exe
 // @include         windhawk-mod-uiaccess.exe
 // @architecture    x86-64
