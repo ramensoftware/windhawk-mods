@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              Internet-Speed-On-Taskbar
+// @id              internet-speed-on-taskbar
 // @name            Internet Speed On Taskbar
 // @description     Native-style live upload/download speed inside the taskbar, left or next to the tray. Works alongside other taskbar mods.
 // @version         1.2
