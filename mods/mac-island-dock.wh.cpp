@@ -80,7 +80,8 @@ the taskbar.
     and signing out ask first, and Windows closes the apps as usual.
   * **Battery** (the battery): only the battery and the power plan (and,
     with the balanced plan, Windows' power modes).
-  * **More on the pill** (each one optional, off by default, in the gear):
+  * **More on the pill** (each one optional, off by default, in the island's
+    settings):
     how much the processor, the memory and the video memory are used
     (clicking one shows its graphs and details), a button muting the
     microphone, a button switching light and dark mode, **notes** (with
@@ -89,9 +90,9 @@ the taskbar.
     **keyboard shortcuts** to remember (recorded by pressing them, or
     imported from a file like komorebi's whkdrc), the **weather** (now, the
     next hours and the week, for a city typed in its panel) and **updates**
-    (the apps with a newer version in winget, updated from the panel, and
-    the Windows updates waiting). Notes, tasks and shortcuts also have
-    buttons in the control center.
+    (the apps with a newer version in winget, updated in a terminal: one,
+    the ones ticked, or all; and the Windows updates waiting). Notes, tasks
+    and shortcuts also have buttons in the control center.
 * **Colors**: black, graphite, light, the Windows accent color, or glass.
 * **The other apps' tray icons** on the island: the pinned ones always, the
   others opening sideways from the "⋯" button. Clicking, double-clicking and
@@ -112,7 +113,8 @@ the taskbar.
 * **Notifications** can be cleared from the island's list (all, or one by
   one); the gear at its top unfolds its switches ("Do not disturb", the
   banners in the pill, and showing what they say).
-* **Anywhere on the screen**: choose its place in the gear (or turn on
+* **Anywhere on the screen**: choose its place in the island's settings (or
+  turn on
   dragging the pill, which then snaps to the middle and the corners of each
   edge); some apps can have a place of their own (for example, lower, so it
   doesn't cover a browser's tabs), and icons and a clock of their own
@@ -122,14 +124,18 @@ the taskbar.
   front. On the lower half of the screen, its panels and banners open
   upwards; on the left and right edges it stands upright, and they open
   towards the middle.
-* **The island's options are in the island**: the gear at the bottom of the
-  control center (see below). Windhawk's settings only turn the island on
-  and set up the taskbar.
+* **The island's options are in the island**: right-click the island (the
+  pill or the minimized line) and click the gear that comes out under it
+  (see below). Windhawk's settings only turn the island on and set up the
+  taskbar.
 
 ### The island's settings
 
-The gear at the bottom of the control center opens them, in two or three
-columns (one on small screens, scrolling). Typing anywhere in them searches them
+A right click on the island (not on another app's icon or a notification)
+brings out a small bubble with a gear under it; clicking it opens the
+control center on the settings (with the bar style, the right click opens
+them right away). They show in two or three columns (one on small screens,
+scrolling). Typing anywhere in them searches them
 (accents don't matter); Ctrl+Backspace deletes a word, and Esc clears the
 search.
 
@@ -201,9 +207,19 @@ usable), or as it is (all of it, or only its apps).
 * **The island without the dock**: the "Taskbar" setting keeps the Windows
   taskbar as it is, or with only its apps (the island shows the clock, tray
   and notifications), to combine the island with other taskbar mods.
-* The mod turns on the taskbar's auto-hide while it's enabled, and turns it
-  back off when the mod is disabled (if it was off before). This can be
-  changed in the settings.
+* The mod turns on the taskbar's auto-hide (the Windows setting) while it's
+  enabled, and turns it back off when the mod is disabled (if it was off
+  before), also after a crash, at the next start. This can be changed in
+  the settings ("Hide the taskbar until the mouse reaches the bottom
+  edge"). If Explorer isn't running when
+  the mod is disabled, turn it off in Windows' taskbar settings.
+* **Windows' own settings**: the control center's switches and buttons
+  change Windows' settings themselves, as Windows' quick settings do: dark
+  mode, night light, the power plan and the power mode, the microphone's
+  mute, the default output device, Wi-Fi networks (a network joined is
+  saved by Windows, with its password), Sticky Keys and the other
+  accessibility switches, the display mode (Project), the monitor's
+  brightness, and the radios. They stay as set after the mod is disabled.
 * Without the island, the system tray (clock, network, volume) stays at the
   right end of the taskbar, in its own pill, unless it's hidden in the
   settings.
@@ -244,7 +260,8 @@ usable), or as it is (all of it, or only its apps).
   * When the island takes a new notification (in the pill, or, with the bar
     style or a panel open, as its app's icon with the red dot and in the
     list), the Windows banner is moved off the screen (it can be kept in the
-    gear); Windows places it again for the next notification. Windows 11
+    island's settings); Windows places it again for the next notification.
+    Windows 11
     shows its banners stacked in one window, so it's off the screen only
     while every banner in it is one the island shows: calls, alarms and
     reminders keep Windows' banner, with its buttons, and the others in the
@@ -276,18 +293,22 @@ usable), or as it is (all of it, or only its apps).
     island works as usual until the option is turned on again.
   * Replies go to the app the way Windows sends them from its own banners:
     through the notification handler the app registered.
-  * The mod only goes online for what's turned on in the gear (all of it
-    off by default): "Download pictures from the web" (a notification's
+  * The mod only goes online for what's turned on in the island's settings
+    (all of it off by default; an app's own icons can hide these items, but
+    not turn them on): "Download pictures from the web" (a notification's
     picture that's on the web, like WhatsApp's contact photos, downloaded
     over https from the address the app put in it, like Windows does, and
     only for apps allowed to go online; otherwise the app's icon is shown),
     the weather ([Open-Meteo](https://open-meteo.com): the city typed, then
     its forecast every 30 minutes while it's on the pill), the holidays
     ([Nager.Date](https://date.nager.at): the country set in Windows, once a
-    year) and updates (winget asks its own sources; the Windows updates are
-    read, read-only, through the Windows Update Agent).
-  * Updating an app runs "winget upgrade" for it (hidden and silent, or in
-    a terminal if chosen), only when asked in the panel.
+    year) and updates (winget asks its community source, 20 seconds after
+    the island starts unless it did in the last 6 hours, then every 6
+    hours; the Windows updates are read, read-only and offline, from
+    Windows' own last scan through the Windows Update Agent).
+  * Updates are only listed by the mod (it accepts no terms for you): an
+    app is updated in a terminal, where "winget upgrade" shows what it does
+    and asks for anything it needs, only when asked in the panel.
   * The power modes are read and set with the functions of powrprof.dll
     that Windows' Settings uses; the power plans with the documented ones.
   * The GPU's use comes from Windows' performance counters, and its
@@ -382,8 +403,8 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
     desligar e sair perguntam antes, e o Windows fecha os apps como sempre.
   * **Bateria** (a bateria): só a bateria e o plano de energia (e, com o
     plano equilibrado, os modos de energia do Windows).
-  * **Mais na pílula** (cada um opcional, desligado por padrão, na
-    engrenagem): o uso do processador, da memória e da memória de vídeo
+  * **Mais na pílula** (cada um opcional, desligado por padrão, nas
+    configurações da ilha): o uso do processador, da memória e da memória de vídeo
     (clicar num mostra os gráficos e os detalhes), um botão que silencia o
     microfone, um botão que troca o modo claro e escuro, **anotações** (com
     tópicos, copiadas com um clique), **tarefas** (em andamento, e as dez
@@ -391,7 +412,8 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
     teclas, ou importados de um arquivo como o whkdrc do komorebi), o
     **clima** (agora, as próximas horas e a semana, da cidade digitada no
     painel) e **atualizações** (os apps com versão nova no winget,
-    atualizados pelo painel, e as atualizações do Windows pendentes).
+    atualizados num terminal: um, os marcados, ou todos; e as atualizações
+    do Windows pendentes).
     Anotações, tarefas e atalhos também têm botões na central de controle.
 * **Cores**: preto, grafite, claro, a cor de destaque do Windows, ou vidro.
 * **Os ícones dos outros apps na bandeja**, na ilha: os fixados sempre, os
@@ -414,7 +436,8 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
 * **Notificações** podem ser limpas na lista da ilha (todas, ou uma por uma);
   a engrenagem no topo dela abre as chaves dela ("Não incomodar", os avisos
   na pílula e mostrar o conteúdo).
-* **Em qualquer lugar da tela**: escolha a posição na engrenagem (ou ligue
+* **Em qualquer lugar da tela**: escolha a posição nas configurações da ilha
+  (ou ligue
   mover a pílula arrastando; ela gruda no meio e nos cantos de cada borda);
   alguns apps podem ter uma posição só deles (por exemplo, mais abaixo, para
   não cobrir as abas do navegador) e ícones e relógio só deles (mostrados
@@ -422,14 +445,18 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
   um relógio mais curto deixa a ilha menor), e ela desliza para lá enquanto eles
   estão na frente. Na metade de baixo da tela, os painéis e os avisos abrem para
   cima; nas laterais ela fica em pé, e eles abrem para o meio.
-* **As opções da ilha ficam na ilha**: na engrenagem no fim da central de
-  controle (veja abaixo). As configurações do Windhawk só ligam a ilha e
-  ajustam a barra de tarefas.
+* **As opções da ilha ficam na ilha**: clique com o botão direito na ilha (na
+  pílula ou na linha minimizada) e clique na engrenagem que sai embaixo dela
+  (veja abaixo). As configurações do Windhawk só ligam a ilha e ajustam a
+  barra de tarefas.
 
 #### As configurações da ilha
 
-A engrenagem no fim da central de controle abre as configurações, em duas ou
-três colunas (uma em telas pequenas, rolando). Digitar em qualquer lugar delas
+Um clique com o botão direito na ilha (fora do ícone de outro app ou de uma
+notificação) faz sair um balãozinho com uma engrenagem embaixo dela; clicar
+nele abre a central de controle nas configurações (no estilo barra, o clique
+direito já abre as configurações). Elas aparecem em duas ou três colunas (uma
+em telas pequenas, rolando). Digitar em qualquer lugar delas
 faz uma busca (os acentos não importam); Ctrl+Backspace apaga uma
 palavra, e o Esc limpa a busca.
 
@@ -501,9 +528,20 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
 * **A ilha sem a dock**: a configuração "Barra de tarefas" mantém a barra do
   Windows como ela é, ou só com os apps (a ilha mostra o relógio, a bandeja e
   as notificações), para combinar a ilha com outros mods de barra.
-* O mod liga o ocultar automaticamente da barra enquanto está ativo, e desliga
-  de novo quando o mod é desativado (se estava desligado antes). Dá para mudar
-  isso nas configurações.
+* O mod liga o ocultar automaticamente da barra (a configuração do Windows)
+  enquanto está ativo, e desliga de novo quando o mod é desativado (se estava
+  desligado antes), também depois de um travamento, no próximo início. Dá
+  para mudar isso nas configurações ("Esconder a barra até o mouse chegar na
+  borda de baixo"). Se o Explorer não estiver rodando quando o mod for
+  desativado, desligue nas configurações da barra de tarefas do Windows.
+* **As configurações do próprio Windows**: as chaves e os botões da central
+  de controle mudam as configurações do próprio Windows, como as
+  configurações rápidas dele: o modo escuro, a luz noturna, o plano e o
+  modo de energia, o mudo do microfone, o dispositivo de saída padrão, as
+  redes Wi-Fi (uma rede conectada fica salva pelo Windows, com a senha), as
+  Teclas de Aderência e as outras chaves de acessibilidade, o modo de vídeo
+  (Projetar), o brilho do monitor e os rádios. Elas continuam como ficaram
+  depois que o mod é desativado.
 * Sem a ilha, a bandeja do sistema (relógio, rede, volume) fica na ponta
   direita da barra, numa pílula própria, a não ser que seja escondida nas
   configurações.
@@ -545,8 +583,9 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
     é só lido).
   * Quando a ilha pega uma notificação nova (na pílula, ou, no estilo barra ou
     com um painel aberto, como o ícone do app com o pontinho vermelho e na
-    lista), o aviso do Windows é tirado da tela (dá para mantê-lo na
-    engrenagem); o Windows o coloca de novo na próxima notificação.
+    lista), o aviso do Windows é tirado da tela (dá para mantê-lo nas
+    configurações da ilha); o Windows o coloca de novo na próxima
+    notificação.
     O Windows 11 mostra os avisos empilhados numa janela só, então ela sai da
     tela só enquanto todos os avisos nela são da ilha: chamadas, alarmes e
     lembretes ficam com o aviso do Windows, com os botões dele, e os outros
@@ -577,19 +616,23 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
     funciona como de costume até a opção ser ligada de novo.
   * As respostas chegam ao app do jeito que o Windows as manda pelos avisos
     dele: pelo receptor de notificações que o app registrou.
-  * O mod só acessa a internet para o que for ligado na engrenagem (tudo
-    vem desligado): "Baixar fotos da internet" (a imagem de uma notificação
+  * O mod só acessa a internet para o que for ligado nas configurações da
+    ilha (tudo vem desligado; os ícones próprios de um app podem esconder
+    esses itens, mas não ligá-los): "Baixar fotos da internet" (a imagem de uma notificação
     que está na internet, como as fotos dos contatos do WhatsApp, baixada
     por https do endereço que o app colocou nela, como o Windows faz, e só
     para apps com permissão de internet; senão, aparece o ícone do app), o
     clima ([Open-Meteo](https://open-meteo.com): a cidade digitada, depois a
     previsão dela a cada 30 minutos enquanto está na pílula), os feriados
     ([Nager.Date](https://date.nager.at): o país configurado no Windows, uma
-    vez por ano) e as atualizações (o winget consulta as fontes dele; as
-    atualizações do Windows são lidas, somente leitura, pelo Windows Update
-    Agent).
-  * Atualizar um app roda o "winget upgrade" dele (escondido e silencioso,
-    ou num terminal, se escolhido), só quando pedido no painel.
+    vez por ano) e as atualizações (o winget consulta a fonte da comunidade
+    dele, 20 segundos depois que a ilha começa, a não ser que já tenha
+    consultado nas últimas 6 horas, e depois a cada 6 horas; as atualizações
+    do Windows são lidas, somente leitura e offline, da última verificação
+    do próprio Windows, pelo Windows Update Agent).
+  * As atualizações só são listadas pelo mod (ele não aceita termos por
+    você): um app é atualizado num terminal, onde o "winget upgrade" mostra
+    o que faz e pede o que precisar, só quando pedido no painel.
   * Os modos de energia são lidos e trocados pelas funções do powrprof.dll
     que as Configurações do Windows usam; os planos de energia, pelas
     documentadas.
@@ -645,8 +688,8 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
 - showIsland: true
   $name: Island at the top
   $name:pt-BR: Ilha no topo
-  $description: The clock, the control center, notifications, what's playing and the other apps' tray icons, at the top of the screen. Its own options (style, colors, what it shows) are in it, in the gear at the bottom of its control center
-  $description:pt-BR: O relógio, a central de controle, as notificações, o que está tocando e os ícones dos outros apps, no topo da tela. As opções dela (estilo, cores, o que ela mostra) ficam nela mesma, na engrenagem no fim da central de controle
+  $description: The clock, the control center, notifications, what's playing and the other apps' tray icons, at the top of the screen. Its own options (style, colors, what it shows) are in it (right-click the island, then click the gear that comes out under it)
+  $description:pt-BR: O relógio, a central de controle, as notificações, o que está tocando e os ícones dos outros apps, no topo da tela. As opções dela (estilo, cores, o que ela mostra) ficam nela mesma (clique com o botão direito na ilha e depois na engrenagem que sai embaixo dela)
 - hiding:
   - autoHide: true
     $name: Hide the taskbar until the mouse reaches the bottom edge
@@ -4651,14 +4694,17 @@ bool ToastSoundLoops(const char* xml, int size);
 bool IsUrgentToast(const char* xml, int size);
 std::wstring PackageFolder(const std::wstring& appId);
 
-// The toasts newer than `lastId`: the AppUserModelIDs of their apps, and the
-// toasts themselves; moves `lastId` past them. Returns false if the database
-// can't be read.
+// The toasts newer than `lastId` (or only the one with the ID `onlyId`):
+// the AppUserModelIDs of their apps, and the toasts themselves; moves
+// `lastId` past them. Web pictures are downloaded only with `pictures`.
+// Returns false if the database can't be read.
 bool ReadNewToasts(Sqlite& sqlite,
                    const std::string& path,
                    long long& lastId,
                    std::vector<std::wstring>& apps,
-                   std::vector<IslandToast>& toasts) {
+                   std::vector<IslandToast>& toasts,
+                   long long onlyId = 0,
+                   bool pictures = true) {
     void* db = nullptr;
     if (sqlite.open_v2(path.c_str(), &db, Sqlite::kOpenReadOnly, nullptr) !=
         0) {
@@ -4674,10 +4720,12 @@ bool ReadNewToasts(Sqlite& sqlite,
                           "SELECT n.Id, h.PrimaryId, n.Payload FROM "
                           "Notification n JOIN NotificationHandler h ON "
                           "h.RecordId = n.HandlerId WHERE n.Id > ?1 AND "
-                          "n.Type = 'toast' ORDER BY n.Id",
+                          "(?2 = 0 OR n.Id = ?2) AND n.Type = 'toast' "
+                          "ORDER BY n.Id",
                           -1, &statement, nullptr) == 0;
     if (ok) {
         sqlite.bind_int64(statement, 1, lastId);
+        sqlite.bind_int64(statement, 2, onlyId);
         while (sqlite.step(statement) == Sqlite::kRow) {
             lastId = std::max(lastId, sqlite.column_int64(statement, 0));
             auto app = (PCWSTR)sqlite.column_text16(statement, 1);
@@ -4706,7 +4754,8 @@ bool ReadNewToasts(Sqlite& sqlite,
                 toast.urgent =
                     IsUrgentToast(payload, sqlite.column_bytes(statement, 2));
                 if (toast.image.starts_with(L"https://") &&
-                    !DownloadPicture(toast.image, &toast.imageData)) {
+                    (!pictures ||
+                     !DownloadPicture(toast.image, &toast.imageData))) {
                     toast.image.clear();
                 }
             }
@@ -4780,6 +4829,26 @@ std::string GetNotificationDatabasePath() {
         }
     }
     return path;
+}
+
+// One notification still in the database (by its ID), without its web
+// picture.
+bool ReadToastById(long long id, IslandToast* toast) {
+    Sqlite sqlite;
+    const std::string path = GetNotificationDatabasePath();
+    if (id <= 0 || path.empty() || !sqlite.Load()) {
+        return false;
+    }
+    long long lastId = id - 1;
+    std::vector<std::wstring> apps;
+    std::vector<IslandToast> toasts;
+    ReadNewToasts(sqlite, path, lastId, apps, toasts, id, false);
+    sqlite.Unload();
+    if (toasts.empty()) {
+        return false;
+    }
+    *toast = std::move(toasts[0]);
+    return true;
 }
 
 // New notifications are being read (the pill can show them).
@@ -5725,6 +5794,9 @@ enum class IslandItem {
     UsageCpu,
     UsageRam,
     UsageVram,
+    // The bubble with a gear under the island (a right click on it): the
+    // island's settings.
+    SettingsBubble,
 };
 
 struct IslandSlot {
@@ -6369,6 +6441,16 @@ constexpr float kIslandPanelRadius = 26;
 // A new notification in the pill: its size, and how long it stays.
 constexpr float kBannerWidth = 380;
 constexpr float kBannerHeight = 70;
+// The island's settings bubble (see Island::ShowGearBubble): its size and
+// gap from the pill, and how long it takes to come out, stays, stays after
+// the mouse leaves it, and takes to go.
+constexpr float kGearBubbleWidth = 46;
+constexpr float kGearBubbleHeight = 30;
+constexpr float kGearBubbleGap = 6;
+constexpr double kGearBubbleIn = 0.4;
+constexpr double kGearBubbleStay = 4;
+constexpr double kGearBubbleLinger = 1.5;
+constexpr double kGearBubbleOut = 0.25;
 // The row with the reply box and "Open", shown under the mouse.
 constexpr float kBannerReplyHeight = 46;
 constexpr UINT kBannerShownMs = 5000;
@@ -9856,8 +9938,8 @@ const ControlInfo& GetControlInfo(ControlId id) {
 constexpr int kMaxTiles = 8;
 constexpr int kMaxButtons = 8;
 
-// The island's own options, chosen in it (the gear in the control center)
-// rather than in Windhawk, and kept with Wh_SetIntValue.
+// The island's own options, chosen in it (the control center's settings,
+// from the bubble of a right click on the island) rather than in Windhawk, and kept with Wh_SetIntValue.
 enum class IslandPref {
     Bar,
     Theme,
@@ -10046,6 +10128,19 @@ bool PillGroupOn(PillGroup group) {
         return GetIslandPref((IslandPref)pref) != 0;
     }
     return group != PillGroup::Usage || AnyUsageShown();
+}
+
+// The groups that go online (weather, updates) show only with their own
+// option on: an app's own icons can hide them, never turn them on.
+bool OnlineGroupAllowed(PillGroup group) {
+    switch (group) {
+        case PillGroup::Weather:
+            return g_settings.islandWeather;
+        case PillGroup::Updates:
+            return g_settings.islandUpdates;
+        default:
+            return true;
+    }
 }
 
 // The option that shows a group, or -1 for the ones always there.
@@ -10798,6 +10893,17 @@ class ControlPanel : public Panel {
     // battery and the power mode (from the battery), or all of it. Returns
     // whether that changed; while open, it shows the other one.
     enum class Only { All, Sound, Battery };
+    // The island's settings (from the island's settings bubble): shown now
+    // if it's open, or when it opens next.
+    void ShowSettings() {
+        if (IsOpen()) {
+            m_editing = false;
+            SetView(View::Settings);
+            Render();
+        } else {
+            m_openOnSettings = true;
+        }
+    }
     bool SetOnly(Only only) {
         if (only == m_only) {
             return false;
@@ -10835,7 +10941,7 @@ class ControlPanel : public Panel {
         Bluetooth,
         Project,
         Accessibility,
-        // The island's own options (the gear).
+        // The island's own options (see Island::ShowGearBubble).
         Settings,
         // A place for some apps (from the island's settings).
         AppPlaces,
@@ -10878,7 +10984,6 @@ class ControlPanel : public Panel {
         ProjectRow,        // A display mode (index).
         AccessibilityRow,  // An accessibility feature (index).
         EditButton,        // "Edit" at the bottom.
-        SettingsButton,    // The gear at the bottom.
         EditControl,       // A control, while editing (its ControlId).
         EditRemove,        // Its "-" (its ControlId).
         EditAdd,           // A control to add (its ControlId).
@@ -11172,7 +11277,9 @@ class ControlPanel : public Panel {
     std::vector<std::pair<ControlId, D2D1_RECT_F>> m_controlRects;
     std::vector<ControlId> m_controls;
     bool m_controlsLoaded = false;
-    D2D1_RECT_F m_edit{}, m_gear{}, m_done{}, m_addHeader{};
+    D2D1_RECT_F m_edit{}, m_done{}, m_addHeader{};
+    // Opens on the island's settings (see ShowSettings).
+    bool m_openOnSettings = false;
     // Editing in place, like the iPhone's control center: the controls
     // each have a "-"; they're dragged to another place, and the
     // others (listed below) are added with a click. m_editAmount (0 to 1)
@@ -15206,9 +15313,21 @@ DWORD WINAPI ImportShortcutsThreadProc(LPVOID parameter) {
                                                   IID_PPV_ARGS(folder.put())))) {
             dialog->SetFolder(folder.get());
         }
+        // The dialog's owner is a hidden window of this thread, not the panel:
+        // the panel's thread mustn't be sent messages by the dialog (it may
+        // be waiting for this thread). Topmost, so the dialog shows over the
+        // island's panels; placed in the middle of the panel's screen.
+        MONITORINFO monitor{sizeof(monitor)};
+        GetMonitorInfo(MonitorFromWindow(panel, MONITOR_DEFAULTTOPRIMARY),
+                       &monitor);
+        const HWND owner = CreateWindowEx(
+            WS_EX_TOOLWINDOW | WS_EX_TOPMOST, L"STATIC", nullptr, WS_POPUP,
+            (monitor.rcWork.left + monitor.rcWork.right) / 2,
+            (monitor.rcWork.top + monitor.rcWork.bottom) / 2, 0, 0, nullptr,
+            nullptr, nullptr, nullptr);
         winrt::com_ptr<IShellItem> item;
         PWSTR path = nullptr;
-        if (SUCCEEDED(dialog->Show(panel)) &&
+        if (SUCCEEDED(dialog->Show(owner)) &&
             SUCCEEDED(dialog->GetResult(item.put())) &&
             SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
             HANDLE file = CreateFile(path, GENERIC_READ, FILE_SHARE_READ,
@@ -15240,6 +15359,9 @@ DWORD WINAPI ImportShortcutsThreadProc(LPVOID parameter) {
                 found = new std::vector<ShortcutNote>(ParseShortcutsFile(text));
             }
             CoTaskMemFree(path);
+        }
+        if (owner) {
+            DestroyWindow(owner);
         }
     }
     dialog = nullptr;
@@ -15988,13 +16110,28 @@ class ShortcutsPanel : public EditingPanel {
     }
     void OnDestroy() override {
         if (m_importThread) {
-            WaitForSingleObject(m_importThread, INFINITE);
+            // The island is going away with the dialog still open: it's
+            // closed (as if cancelled), and closed again until the thread
+            // ends, in case it was only about to show.
+            while (WaitForSingleObject(m_importThread, 100) == WAIT_TIMEOUT) {
+                EnumThreadWindows(GetThreadId(m_importThread),
+                                  CloseImportDialog, 0);
+            }
             CloseHandle(m_importThread);
             m_importThread = nullptr;
         }
     }
 
    private:
+    static BOOL CALLBACK CloseImportDialog(HWND hwnd, LPARAM) {
+        WCHAR className[16];
+        if (GetClassName(hwnd, className, ARRAYSIZE(className)) &&
+            wcscmp(className, L"#32770") == 0) {
+            PostMessage(hwnd, WM_CLOSE, 0, 0);
+        }
+        return TRUE;
+    }
+
     std::vector<Row> m_rows;
 };
 
@@ -17398,30 +17535,32 @@ void WeatherPanel::DrawHoursStrip(
 ////////////////////////////////////////////////////////////////////////////////
 // Updates, when chosen in the island's settings (off by default): the apps
 // with a newer version in winget (Windows' package manager, its own "winget
-// upgrade" list, run hidden), updated one by one or all from the panel; and
-// the Windows updates waiting (the Windows Update Agent's documented COM
-// interface, read only; they're installed in Windows Update, which the panel
-// opens). Looked for 20 seconds after the island starts and every 6 hours
-// while the item is on the pill (or when its panel opens, if it's old), on a
-// thread of their own.
+// upgrade" list of its community source, run hidden; it only lists them and
+// accepts nothing for the user), updated in a terminal where winget shows
+// what it does and asks what it needs: one app, the ones ticked, or all.
+// And the Windows updates waiting (the Windows Update Agent's documented COM
+// interface, read only and offline: the result of Windows' own last scan;
+// they're installed in Windows Update, which the panel opens). Looked for 20
+// seconds after the island starts (unless they were a moment ago) and every
+// 6 hours while the item is on the pill (or when its panel opens, if it's
+// old), on a thread of their own.
 
 struct AppUpdate {
     std::wstring name;
     std::wstring id;
     std::wstring version;
     std::wstring available;
-    // 0: waiting, 1: updating, 2: updated, 3: failed, 4: opened in a
-    // terminal.
+    // 0: waiting, 4: opened in a terminal.
     int state = 0;
-    // While updating: 0 getting ready, 1 downloading (`progress` from 0 to
-    // 1, or -1 when its size isn't known), 2 installing.
-    int stage = 0;
-    float progress = -1;
+    // Ticked, to update with the others ticked.
+    bool ticked = false;
 };
 struct UpdatesData {
     bool checking = false;
     bool checked = false;
     bool wingetMissing = false;
+    // winget ran but couldn't list them (it says why in a terminal).
+    bool wingetFailed = false;
     std::vector<AppUpdate> apps;
     std::vector<std::wstring> windows;
     double checkedAt = 0;
@@ -17439,9 +17578,16 @@ UpdatesData GetUpdates() {
     return data;
 }
 
-// winget (the App Installer's alias), run hidden with these arguments: its
-// output (UTF-8) and exit code. Gives up after `timeoutMs`, or when `stop` is
-// set (then it's left running when `leave`, like an update installing).
+// A package ID as winget writes them: words joined by dots, nothing a
+// command line would read otherwise.
+bool IsPackageId(const std::wstring& id) {
+    return !id.empty() && id.size() < 128 &&
+           std::all_of(id.begin(), id.end(), [](WCHAR c) {
+               return (c < 0x80 && iswalnum(c)) || c == L'.' || c == L'-' ||
+                      c == L'_' || c == L'+';
+           });
+}
+
 std::wstring DecodeUtf8(const std::string& bytes) {
     std::wstring text;
     const int length = MultiByteToWideChar(CP_UTF8, 0, bytes.data(),
@@ -17452,13 +17598,14 @@ std::wstring DecodeUtf8(const std::string& bytes) {
     return text;
 }
 
+// winget (the App Installer's alias), run hidden with these arguments: its
+// output (UTF-8) and exit code. Gives up (and ends it) after `timeoutMs`, or
+// when `stop` is set. It inherits only its output pipe.
 bool RunWinget(const std::wstring& arguments,
                DWORD timeoutMs,
                HANDLE stop,
-               bool leave,
                std::wstring* output,
-               DWORD* exitCode,
-               const std::function<void(const std::wstring&)>& onOutput = {}) {
+               DWORD* exitCode) {
     WCHAR path[MAX_PATH];
     if (!ExpandEnvironmentStrings(
             L"%LOCALAPPDATA%\\Microsoft\\WindowsApps\\winget.exe", path,
@@ -17473,17 +17620,34 @@ bool RunWinget(const std::wstring& arguments,
         return false;
     }
     SetHandleInformation(readPipe, HANDLE_FLAG_INHERIT, 0);
-    STARTUPINFO startup{sizeof(startup)};
-    startup.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
-    startup.wShowWindow = SW_HIDE;
-    startup.hStdOutput = writePipe;
-    startup.hStdError = writePipe;
-    startup.hStdInput = nullptr;
+    SIZE_T listSize = 0;
+    InitializeProcThreadAttributeList(nullptr, 1, 0, &listSize);
+    std::vector<BYTE> list(listSize);
+    auto* attributes = (LPPROC_THREAD_ATTRIBUTE_LIST)list.data();
+    const bool listed =
+        listSize && InitializeProcThreadAttributeList(attributes, 1, 0,
+                                                      &listSize) &&
+        UpdateProcThreadAttribute(attributes, 0,
+                                  PROC_THREAD_ATTRIBUTE_HANDLE_LIST, &writePipe,
+                                  sizeof(writePipe), nullptr, nullptr);
+    STARTUPINFOEX startup{};
+    startup.StartupInfo.cb = sizeof(startup);
+    startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+    startup.StartupInfo.wShowWindow = SW_HIDE;
+    startup.StartupInfo.hStdOutput = writePipe;
+    startup.StartupInfo.hStdError = writePipe;
+    startup.StartupInfo.hStdInput = nullptr;
+    startup.lpAttributeList = attributes;
     std::wstring command = L"\"" + std::wstring(path) + L"\" " + arguments;
     PROCESS_INFORMATION process{};
-    const BOOL started = CreateProcess(
-        path, command.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
-        nullptr, nullptr, &startup, &process);
+    const BOOL started =
+        listed && CreateProcess(path, command.data(), nullptr, nullptr, TRUE,
+                                CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT,
+                                nullptr, nullptr, &startup.StartupInfo,
+                                &process);
+    if (listed) {
+        DeleteProcThreadAttributeList(attributes);
+    }
     CloseHandle(writePipe);
     if (!started) {
         CloseHandle(readPipe);
@@ -17491,14 +17655,8 @@ bool RunWinget(const std::wstring& arguments,
     }
     std::string bytes;
     const ULONGLONG until = GetTickCount64() + timeoutMs;
-    ULONGLONG lastOutput = 0;
     bool finished = false;
     for (;;) {
-        // What it said so far, twice a second.
-        if (onOutput && GetTickCount64() - lastOutput >= 500) {
-            lastOutput = GetTickCount64();
-            onOutput(DecodeUtf8(bytes));
-        }
         DWORD available = 0;
         while (PeekNamedPipe(readPipe, nullptr, 0, nullptr, &available,
                              nullptr) &&
@@ -17526,10 +17684,8 @@ bool RunWinget(const std::wstring& arguments,
             finished = true;
             continue;
         }
-        if (woke == WAIT_OBJECT_0 + 1 || GetTickCount64() > until) {
-            if (!leave) {
-                TerminateProcess(process.hProcess, 1);
-            }
+        if (woke != WAIT_TIMEOUT || GetTickCount64() > until) {
+            TerminateProcess(process.hProcess, 1);
             break;
         }
     }
@@ -17547,93 +17703,6 @@ bool RunWinget(const std::wstring& arguments,
         *output = DecodeUtf8(bytes);
     }
     return finished;
-}
-
-// The size of a download (its Content-Length), or -1.
-long long UrlContentLength(const std::wstring& url) {
-    URL_COMPONENTS parts{sizeof(parts)};
-    parts.dwHostNameLength = (DWORD)-1;
-    parts.dwUrlPathLength = (DWORD)-1;
-    parts.dwExtraInfoLength = (DWORD)-1;
-    if (!WinHttpCrackUrl(url.c_str(), 0, 0, &parts) || !parts.lpszHostName) {
-        return -1;
-    }
-    const std::wstring host(parts.lpszHostName, parts.dwHostNameLength);
-    const std::wstring path =
-        parts.lpszUrlPath
-            ? std::wstring(parts.lpszUrlPath,
-                           parts.dwUrlPathLength + parts.dwExtraInfoLength)
-            : std::wstring(L"/");
-    long long length = -1;
-    HINTERNET session =
-        WinHttpOpen(L"Windhawk", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
-                    WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-    HINTERNET connection =
-        session ? WinHttpConnect(session, host.c_str(), parts.nPort, 0)
-                : nullptr;
-    HINTERNET request =
-        connection ? WinHttpOpenRequest(
-                         connection, L"HEAD", path.c_str(), nullptr,
-                         WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
-                         parts.nScheme == INTERNET_SCHEME_HTTPS
-                             ? WINHTTP_FLAG_SECURE
-                             : 0)
-                   : nullptr;
-    if (request) {
-        WinHttpSetTimeouts(request, 3000, 3000, 3000, 3000);
-        WCHAR value[32] = L"";
-        DWORD size = sizeof(value);
-        if (WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-                               WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
-            WinHttpReceiveResponse(request, nullptr) &&
-            WinHttpQueryHeaders(request, WINHTTP_QUERY_CONTENT_LENGTH,
-                                WINHTTP_HEADER_NAME_BY_INDEX, value, &size,
-                                WINHTTP_NO_HEADER_INDEX)) {
-            length = _wtoi64(value);
-        }
-        WinHttpCloseHandle(request);
-    }
-    if (connection) {
-        WinHttpCloseHandle(connection);
-    }
-    if (session) {
-        WinHttpCloseHandle(session);
-    }
-    return length > 0 ? length : -1;
-}
-
-// How much winget has downloaded since `since`: the biggest file written
-// since then in its downloads folder (%TEMP%\WinGet, a folder per package).
-long long DownloadedSince(const FILETIME& since) {
-    WCHAR root[MAX_PATH];
-    if (!ExpandEnvironmentStrings(L"%TEMP%\\WinGet", root, MAX_PATH)) {
-        return -1;
-    }
-    long long biggest = -1;
-    auto scan = [&](const std::wstring& folder, int depth, auto& self) -> void {
-        WIN32_FIND_DATA found;
-        HANDLE find = FindFirstFile((folder + L"\\*").c_str(), &found);
-        if (find == INVALID_HANDLE_VALUE) {
-            return;
-        }
-        do {
-            if (found.cFileName[0] == L'.') {
-                continue;
-            }
-            if (found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-                if (depth < 2) {
-                    self(folder + L"\\" + found.cFileName, depth + 1, self);
-                }
-            } else if (CompareFileTime(&found.ftLastWriteTime, &since) >= 0) {
-                biggest = std::max(
-                    biggest, ((long long)found.nFileSizeHigh << 32) |
-                                 found.nFileSizeLow);
-            }
-        } while (FindNextFile(find, &found));
-        FindClose(find);
-    };
-    scan(root, 0, scan);
-    return biggest;
 }
 
 // The first table of "winget upgrade": its header's words give where each
@@ -17696,8 +17765,7 @@ std::vector<AppUpdate> ParseWingetUpgrades(const std::wstring& output) {
             }
             AppUpdate app{column(line, 0), column(line, 1), column(line, 2),
                           column(line, 3)};
-            if (app.id.empty() || app.available.empty() ||
-                app.id.find(L' ') != std::wstring::npos) {
+            if (app.available.empty() || !IsPackageId(app.id)) {
                 break;
             }
             apps.push_back(std::move(app));
@@ -17708,7 +17776,8 @@ std::vector<AppUpdate> ParseWingetUpgrades(const std::wstring& output) {
 }
 
 // The Windows updates waiting (their titles), or false when Windows Update
-// couldn't be asked.
+// couldn't be asked. Offline: what Windows' own last scan found, without
+// contacting a server.
 bool ListWindowsUpdates(std::vector<std::wstring>* titles) {
     constexpr GUID kCLSID_UpdateSession = {
         0x4cb43d7f, 0x7eee, 0x4906, {0x86, 0x98, 0x60, 0xda, 0x1c, 0x38, 0xf2, 0xfe}};
@@ -17724,6 +17793,7 @@ bool ListWindowsUpdates(std::vector<std::wstring>* titles) {
                                    CLSCTX_INPROC_SERVER, kIID_IUpdateSession,
                                    session.put_void())) &&
         SUCCEEDED(session->CreateUpdateSearcher(searcher.put())) &&
+        SUCCEEDED(searcher->put_Online(VARIANT_FALSE)) &&
         SUCCEEDED(searcher->Search(criteria, result.put())) &&
         SUCCEEDED(result->get_Updates(updates.put()))) {
         ok = true;
@@ -17744,30 +17814,27 @@ bool ListWindowsUpdates(std::vector<std::wstring>* titles) {
 }
 
 // Opens winget in a terminal for these apps, one after the other (it stays
-// open to show how it went).
+// open to show how it went, and asks there for any terms to accept). With no
+// apps, the list itself (to see why it couldn't be read).
 void UpdateInTerminal(const std::vector<std::wstring>& ids) {
-    if (ids.empty()) {
-        return;
-    }
     std::wstring commands;
     std::vector<std::wstring> run;
     for (const auto& id : ids) {
-        // (Package IDs are words joined by dots; nothing cmd would read.)
-        if (id.empty() ||
-            !std::all_of(id.begin(), id.end(), [](WCHAR c) {
-                return iswalnum(c) || c == L'.' || c == L'-' || c == L'_' ||
-                       c == L'+';
-            })) {
+        if (!IsPackageId(id)) {
             continue;
         }
         if (!commands.empty()) {
             commands += L" & ";
         }
-        commands += L"winget upgrade --id \"" + id + L"\" --exact";
+        commands +=
+            L"winget upgrade --id \"" + id + L"\" --exact --source winget";
         run.push_back(id);
     }
     if (commands.empty()) {
-        return;
+        if (!ids.empty()) {
+            return;
+        }
+        commands = L"winget upgrade --source winget";
     }
     ShellExecute(nullptr, L"open", L"cmd.exe", (L"/k " + commands).c_str(),
                  nullptr, SW_SHOWNORMAL);
@@ -17775,125 +17842,58 @@ void UpdateInTerminal(const std::vector<std::wstring>& ids) {
     for (auto& app : g_updates.apps) {
         if (std::find(run.begin(), run.end(), app.id) != run.end()) {
             app.state = 4;
+            app.ticked = false;
         }
     }
     ReleaseSRWLockExclusive(&g_updatesLock);
 }
 
+// Looking for updates, on a thread. `stop` is the thread's own copy of the
+// island's event (it closes it).
 struct UpdatesJob {
     HWND notify;
     HANDLE stop;
-    // The apps to update (their IDs, one after the other), or none to look
-    // for updates.
-    std::vector<std::wstring> appIds;
 };
 
 DWORD WINAPI UpdatesThreadProc(LPVOID parameter) {
     std::unique_ptr<UpdatesJob> job((UpdatesJob*)parameter);
     const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    auto setState = [&](const std::wstring& id, int state) {
-        AcquireSRWLockExclusive(&g_updatesLock);
-        for (auto& app : g_updates.apps) {
-            if (app.id == id) {
-                app.state = state;
-            }
-        }
-        ReleaseSRWLockExclusive(&g_updatesLock);
-        PostMessage(job->notify, WM_APP_UPDATES, 0, 0);
-    };
-    if (!job->appIds.empty()) {
-        // Each silently, accepting its terms (asked for by the user).
-        for (const auto& id : job->appIds) {
-            if (WaitForSingleObject(job->stop, 0) == WAIT_OBJECT_0) {
-                break;
-            }
-            setState(id, 1);
-            FILETIME started;
-            GetSystemTimeAsFileTime(&started);
-            std::wstring url;
-            long long total = -1;
-            auto onOutput = [&](const std::wstring& output) {
-                size_t at = output.find(L"https://");
-                if (at == std::wstring::npos) {
-                    at = output.find(L"http://");
-                }
-                int stage = 0;
-                float progress = -1;
-                if (at != std::wstring::npos) {
-                    const size_t end = output.find_first_of(L" \r\n", at);
-                    const std::wstring found = output.substr(
-                        at, end == std::wstring::npos ? std::wstring::npos
-                                                      : end - at);
-                    if (found != url) {
-                        url = found;
-                        total = UrlContentLength(url);
-                    }
-                    // A line after the address: downloaded (its hash checked),
-                    // installing.
-                    const size_t lineEnd = output.find(L'\n', at);
-                    const bool after =
-                        lineEnd != std::wstring::npos &&
-                        output.find_first_not_of(L" \r\n", lineEnd) !=
-                            std::wstring::npos;
-                    stage = after ? 2 : 1;
-                    if (stage == 1 && total > 0) {
-                        const long long got = DownloadedSince(started);
-                        progress = got > 0 ? std::clamp((float)got / total,
-                                                        0.0f, 1.0f)
-                                           : 0.0f;
-                    }
-                }
-                AcquireSRWLockExclusive(&g_updatesLock);
-                for (auto& app : g_updates.apps) {
-                    if (app.id == id) {
-                        app.stage = stage;
-                        app.progress = progress;
-                    }
-                }
-                ReleaseSRWLockExclusive(&g_updatesLock);
-                PostMessage(job->notify, WM_APP_UPDATES, 0, 0);
-            };
-            DWORD code = 1;
-            const bool done = RunWinget(
-                L"upgrade --id \"" + id +
-                    L"\" --exact --silent --accept-package-agreements "
-                    L"--accept-source-agreements --disable-interactivity",
-                30 * 60 * 1000, job->stop, true, nullptr, &code, onOutput);
-            setState(id, done && code == 0 ? 2 : 3);
-        }
-    } else {
-        std::wstring output;
-        DWORD code = 0;
-        const bool listed = RunWinget(
-            L"upgrade --accept-source-agreements --disable-interactivity",
-            2 * 60 * 1000, job->stop, false, &output, &code);
-        std::vector<AppUpdate> apps =
-            listed ? ParseWingetUpgrades(output) : std::vector<AppUpdate>();
-        std::vector<std::wstring> windows;
-        if (WaitForSingleObject(job->stop, 0) != WAIT_OBJECT_0) {
-            ListWindowsUpdates(&windows);
-        }
-        AcquireSRWLockExclusive(&g_updatesLock);
-        // The ones being updated keep their state.
-        for (auto& app : apps) {
-            for (const auto& before : g_updates.apps) {
-                if (before.id == app.id && before.state == 1) {
-                    app.state = 1;
-                }
-            }
-        }
-        g_updates.apps = std::move(apps);
-        g_updates.windows = std::move(windows);
-        g_updates.wingetMissing = !listed && output.empty();
-        g_updates.checking = false;
-        g_updates.checked = true;
-        g_updates.checkedAt = NowSeconds();
-        ReleaseSRWLockExclusive(&g_updatesLock);
+    std::wstring output;
+    DWORD code = 0;
+    // Only the community source: it has no terms to accept (the Store's
+    // has; nothing is accepted here).
+    const bool listed =
+        RunWinget(L"upgrade --source winget --disable-interactivity",
+                  2 * 60 * 1000, job->stop, &output, &code);
+    std::vector<AppUpdate> apps =
+        listed ? ParseWingetUpgrades(output) : std::vector<AppUpdate>();
+    std::vector<std::wstring> windows;
+    if (WaitForSingleObject(job->stop, 0) != WAIT_OBJECT_0) {
+        ListWindowsUpdates(&windows);
     }
+    AcquireSRWLockExclusive(&g_updatesLock);
+    // The ones ticked stay ticked.
+    for (auto& app : apps) {
+        for (const auto& before : g_updates.apps) {
+            if (before.id == app.id) {
+                app.ticked = before.ticked;
+            }
+        }
+    }
+    g_updates.apps = std::move(apps);
+    g_updates.windows = std::move(windows);
+    g_updates.wingetMissing = !listed && output.empty();
+    g_updates.wingetFailed =
+        listed && code != 0 && g_updates.apps.empty();
+    g_updates.checking = false;
+    g_updates.checked = true;
+    g_updates.checkedAt = NowSeconds();
+    ReleaseSRWLockExclusive(&g_updatesLock);
     if (SUCCEEDED(com)) {
         CoUninitialize();
     }
     PostMessage(job->notify, WM_APP_UPDATES, 0, 0);
+    CloseHandle(job->stop);
     return 0;
 }
 
@@ -17901,10 +17901,8 @@ constexpr float kUpdatesWidth = 440;
 
 class UpdatesPanel : public EditingPanel {
    public:
-    // Asks the island to look for updates again, or to update an app (by
-    // its ID; all of them when empty).
+    // Asks the island to look for updates again.
     std::function<void()> check;
-    std::function<void(const std::wstring&)> update;
     void Refresh() {
         if (IsOpen()) {
             m_data = GetUpdates();
@@ -17946,29 +17944,43 @@ class UpdatesPanel : public EditingPanel {
                     check();
                 }
                 return true;
-            case Part::All:
-                if (update) {
-                    update({});
-                }
-                return true;
-            case Part::App:
-                if (update && hit.index >= 0 &&
-                    hit.index < (int)m_data.apps.size() &&
-                    m_data.apps[hit.index].state != 1 &&
-                    m_data.apps[hit.index].state != 2) {
-                    // A failed one goes to the terminal, to see why.
-                    if (m_data.apps[hit.index].state == 3) {
-                        UpdateInTerminal({m_data.apps[hit.index].id});
-                        m_data = GetUpdates();
-                        Layout();
-                    } else {
-                        update(m_data.apps[hit.index].id);
+            case Part::All: {
+                // The ones ticked, or all.
+                std::vector<std::wstring> ids;
+                for (const auto& app : m_data.apps) {
+                    if (app.ticked) {
+                        ids.push_back(app.id);
                     }
                 }
+                if (ids.empty()) {
+                    for (const auto& app : m_data.apps) {
+                        ids.push_back(app.id);
+                    }
+                }
+                UpdateInTerminal(ids);
+                Refresh();
                 return true;
-            case Part::Terminal:
-                m_inTerminal = !m_inTerminal;
-                Wh_SetIntValue(L"updatesInTerminal", m_inTerminal);
+            }
+            case Part::App:
+                if (hit.index >= 0 && hit.index < (int)m_data.apps.size()) {
+                    UpdateInTerminal({m_data.apps[hit.index].id});
+                    Refresh();
+                }
+                return true;
+            case Part::Tick:
+                if (hit.index >= 0 && hit.index < (int)m_data.apps.size()) {
+                    AcquireSRWLockExclusive(&g_updatesLock);
+                    for (auto& app : g_updates.apps) {
+                        if (app.id == m_data.apps[hit.index].id) {
+                            app.ticked = !app.ticked;
+                        }
+                    }
+                    ReleaseSRWLockExclusive(&g_updatesLock);
+                    Refresh();
+                }
+                return true;
+            case Part::WingetTerminal:
+                UpdateInTerminal({});
                 return true;
             case Part::Windows:
                 Close();
@@ -17983,18 +17995,15 @@ class UpdatesPanel : public EditingPanel {
         return m_scroll.Wheel(delta, std::round(60 * m_scale));
     }
     bool AnimateContents(double dt) override {
-        // While something is busy, its "…" moves.
-        const bool busy =
-            m_data.checking ||
-            std::any_of(m_data.apps.begin(), m_data.apps.end(),
-                        [](const AppUpdate& app) { return app.state == 1; });
+        // While looking, its "…" moves.
+        const bool busy = m_data.checking;
         const bool scrolling = m_scroll.Animate(dt);
         m_idleMotion = busy && !scrolling;
         return busy || scrolling;
     }
 
    private:
-    enum class Part { None, Check, All, App, Windows, Terminal };
+    enum class Part { None, Check, All, App, Tick, WingetTerminal, Windows };
     struct Hit {
         Part part = Part::None;
         int index = -1;
@@ -18002,6 +18011,12 @@ class UpdatesPanel : public EditingPanel {
             return part == other.part && index == other.index;
         }
     };
+
+    size_t TickedCount() const {
+        return (size_t)std::count_if(
+            m_data.apps.begin(), m_data.apps.end(),
+            [](const AppUpdate& app) { return app.ticked; });
+    }
 
     void Layout() {
         const float s = m_scale;
@@ -18012,9 +18027,6 @@ class UpdatesPanel : public EditingPanel {
         m_header = {padding, y, width - padding, y + std::round(30 * s)};
         m_checkButton = {width - padding - std::round(32 * s), y,
                          width - padding, y + std::round(30 * s)};
-        m_terminal = {m_checkButton.left - std::round(150 * s), y,
-                      m_checkButton.left - std::round(6 * s),
-                      y + std::round(30 * s)};
         y += std::round(30 * s) + gap;
         // The list: apps (with "Update all"), then Windows'.
         m_appRows.clear();
@@ -18022,7 +18034,7 @@ class UpdatesPanel : public EditingPanel {
         const float section = std::round(30 * s);
         float listY = 0;
         m_appsTitle = {padding, listY, width - padding, listY + section};
-        m_all = {width - padding - std::round(130 * s),
+        m_all = {width - padding - std::round(150 * s),
                  listY + std::round(3 * s), width - padding,
                  listY + section - std::round(3 * s)};
         listY += section;
@@ -18030,8 +18042,14 @@ class UpdatesPanel : public EditingPanel {
             m_appRows.push_back({padding, listY, width - padding, listY + row});
             listY += row;
         }
+        m_wingetButton = {};
         if (m_data.apps.empty()) {
             listY += std::round(28 * s);
+            if (m_data.wingetFailed) {
+                m_wingetButton = {padding, listY, width - padding,
+                                  listY + std::round(32 * s)};
+                listY = m_wingetButton.bottom;
+            }
         }
         listY += gap;
         m_windowsTitle = {padding, listY, width - padding, listY + section};
@@ -18056,13 +18074,17 @@ class UpdatesPanel : public EditingPanel {
         return {row.right - std::round(108 * s), row.top + std::round(8 * s),
                 row.right, row.bottom - std::round(8 * s)};
     }
+    // The box to tick, at the row's start.
+    D2D1_RECT_F TickBox(const D2D1_RECT_F& row) const {
+        const float s = m_scale;
+        const float box = std::round(18 * s);
+        const float middle = (row.top + row.bottom) / 2;
+        return {row.left, middle - box / 2, row.left + box, middle + box / 2};
+    }
 
     Hit HitTest(POINT pt) const {
         if (PointInRect(pt, m_checkButton)) {
             return {Part::Check};
-        }
-        if (PointInRect(pt, m_terminal)) {
-            return {Part::Terminal};
         }
         POINT inList;
         if (!ListPoint(pt, &inList)) {
@@ -18075,6 +18097,13 @@ class UpdatesPanel : public EditingPanel {
             if (PointInRect(inList, AppButton(m_appRows[i]))) {
                 return {Part::App, (int)i};
             }
+            // The box, or the app's name, ticks it.
+            if (m_data.apps.size() > 1 && PointInRect(inList, m_appRows[i])) {
+                return {Part::Tick, (int)i};
+            }
+        }
+        if (PointInRect(inList, m_wingetButton)) {
+            return {Part::WingetTerminal};
         }
         if (PointInRect(inList, m_windowsButton)) {
             return {Part::Windows};
@@ -18085,13 +18114,7 @@ class UpdatesPanel : public EditingPanel {
     UpdatesData m_data;
     Hit m_hover;
     D2D1_RECT_F m_header{}, m_checkButton{}, m_appsTitle{}, m_all{},
-        m_windowsTitle{}, m_windowsButton{}, m_terminal{};
-
-   public:
-    // Updated in a terminal instead of silently (kept).
-    bool m_inTerminal = Wh_GetIntValue(L"updatesInTerminal", 0) != 0;
-
-   private:
+        m_windowsTitle{}, m_windowsButton{}, m_wingetButton{};
     std::vector<D2D1_RECT_F> m_appRows;
     size_t m_windowsRows = 0;
     float m_windowsTop = 0;
@@ -18122,162 +18145,97 @@ void UpdatesPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) 
                      brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
     DrawIconButton(target, brush, m_checkButton, 0xE72C,
                    m_hover.part == Part::Check, m_data.checking ? 0.3f : 0.7f);
-    // "In a terminal": a box, checked when chosen.
-    {
-        const float lit = Hover(m_terminal, m_hover.part == Part::Terminal);
-        const float box = std::round(16 * s);
-        const float middle = (m_terminal.top + m_terminal.bottom) / 2;
-        const D2D1_RECT_F square{m_terminal.left + std::round(6 * s),
-                                 middle - box / 2,
-                                 m_terminal.left + std::round(6 * s) + box,
-                                 middle + box / 2};
-        const float corner = std::round(4 * s);
-        if (m_inTerminal) {
-            brush->SetColor(D2D1::ColorF(0.04f, 0.52f, 1.0f, 1));
-            target->FillRoundedRectangle({square, corner, corner}, brush);
-            brush->SetColor(D2D1::ColorF(1, 1, 1, 1));
-            target->DrawText(&kGlyphCheck, 1, m_iconFormat.get(), square,
-                             brush);
-        } else {
-            brush->SetColor(Fg(0.5f + 0.4f * lit));
-            target->DrawRoundedRectangle({square, corner, corner}, brush,
-                                         std::max(1.0f, 1.25f * s));
-        }
-        PCWSTR label = Tr(L"In a terminal", L"No terminal");
-        brush->SetColor(Fg(0.7f + 0.25f * lit));
-        target->DrawText(label, (UINT32)wcslen(label), m_smallFormat.get(),
-                         {square.right + std::round(6 * s), m_terminal.top,
-                          m_terminal.right, m_terminal.bottom},
-                         brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
-    }
 
     BeginScrollArea(target, m_listViewport, m_scroll);
-    // Apps.
-    std::wstring apps = Tr(L"Apps (winget)", L"Apps (winget)");
+    // Apps: updated in a terminal.
+    std::wstring apps = Tr(L"Apps (winget, in a terminal)",
+                           L"Apps (winget, no terminal)");
     if (!m_data.apps.empty()) {
         apps += L"  ·  " + std::to_wstring(m_data.apps.size());
     }
     brush->SetColor(Fg(0.6f));
     target->DrawText(apps.c_str(), (UINT32)apps.size(), m_smallFormat.get(),
-                     m_appsTitle, brush);
+                     {m_appsTitle.left, m_appsTitle.top,
+                      m_data.apps.size() > 1 ? m_all.left : m_appsTitle.right,
+                      m_appsTitle.bottom},
+                     brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
     if (m_data.apps.size() > 1) {
-        DrawButton(target, brush, m_all, Tr(L"Update all", L"Atualizar tudo"),
-                   true, m_hover.part == Part::All);
+        const size_t ticked = TickedCount();
+        const std::wstring all =
+            ticked ? Tr(L"Update ticked", L"Atualizar marcados") +
+                         std::wstring(L" (") + std::to_wstring(ticked) + L")"
+                   : Tr(L"Update all", L"Atualizar tudo");
+        DrawButton(target, brush, m_all, all.c_str(), true,
+                   m_hover.part == Part::All);
     }
     if (m_data.apps.empty()) {
-        PCWSTR none = !m_data.checked     ? Tr(L"Not checked yet", L"Ainda não verificado")
-                      : m_data.wingetMissing ? Tr(L"winget isn't installed",
-                                                  L"O winget não está instalado")
-                                             : Tr(L"All up to date", L"Tudo atualizado");
+        PCWSTR none = !m_data.checked ? Tr(L"Not checked yet",
+                                           L"Ainda não verificado")
+                      : m_data.wingetMissing
+                          ? Tr(L"winget isn't installed",
+                               L"O winget não está instalado")
+                      : m_data.wingetFailed
+                          ? Tr(L"winget couldn't list them",
+                               L"O winget não conseguiu listar")
+                          : Tr(L"All up to date", L"Tudo atualizado");
         brush->SetColor(Fg(0.45f));
         target->DrawText(none, (UINT32)wcslen(none), m_textFormat.get(),
                          {m_appsTitle.left, m_appsTitle.bottom,
                           m_appsTitle.right,
                           m_appsTitle.bottom + std::round(28 * s)},
                          brush);
+        if (m_data.wingetFailed) {
+            DrawButton(target, brush, m_wingetButton,
+                       Tr(L"See it in a terminal", L"Ver no terminal"), false,
+                       m_hover.part == Part::WingetTerminal);
+        }
     }
+    const bool ticking = m_data.apps.size() > 1;
     for (size_t i = 0; i < m_appRows.size() && i < m_data.apps.size(); i++) {
         const AppUpdate& app = m_data.apps[i];
         const D2D1_RECT_F& row = m_appRows[i];
         const D2D1_RECT_F button = AppButton(row);
+        float textLeft = row.left;
+        if (ticking) {
+            // Its box.
+            const D2D1_RECT_F square = TickBox(row);
+            const float corner = std::round(4 * s);
+            const float lit = Hover(
+                square, m_hover.part == Part::Tick && m_hover.index == (int)i);
+            if (app.ticked) {
+                brush->SetColor(D2D1::ColorF(0.04f, 0.52f, 1.0f, 1));
+                target->FillRoundedRectangle({square, corner, corner}, brush);
+                brush->SetColor(D2D1::ColorF(1, 1, 1, 1));
+                target->DrawText(&kGlyphCheck, 1, m_iconFormat.get(), square,
+                                 brush);
+            } else {
+                brush->SetColor(Fg(0.4f + 0.45f * lit));
+                target->DrawRoundedRectangle({square, corner, corner}, brush,
+                                             std::max(1.0f, 1.25f * s));
+            }
+            textLeft = square.right + std::round(10 * s);
+        }
         brush->SetColor(Fg(0.95f));
         target->DrawText(app.name.c_str(), (UINT32)app.name.size(),
                          m_boldFormat.get(),
-                         {row.left, row.top + std::round(4 * s),
+                         {textLeft, row.top + std::round(4 * s),
                           button.left - std::round(8 * s),
                           row.top + std::round(24 * s)},
                          brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        const std::wstring versions = app.version + L"  →  " + app.available;
+        brush->SetColor(Fg(0.5f));
+        target->DrawText(versions.c_str(), (UINT32)versions.size(),
+                         m_smallFormat.get(),
+                         {textLeft, row.top + std::round(24 * s),
+                          button.left - std::round(8 * s),
+                          row.bottom - std::round(4 * s)},
+                         brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
         const bool hover = m_hover.part == Part::App && m_hover.index == (int)i;
-        if (app.state == 1) {
-            // Updating: a bar (filling while downloading, sweeping while
-            // getting ready or installing) and what it's doing.
-            const D2D1_RECT_F bar{row.left, row.top + std::round(28 * s),
-                                  button.left - std::round(10 * s),
-                                  row.top + std::round(32 * s)};
-            const float barRadius = (bar.bottom - bar.top) / 2;
-            brush->SetColor(Fg(0.1f));
-            target->FillRoundedRectangle({bar, barRadius, barRadius}, brush);
-            brush->SetColor(D2D1::ColorF(0.04f, 0.52f, 1.0f, 1));
-            const float length = bar.right - bar.left;
-            if (app.stage == 1 && app.progress >= 0) {
-                target->FillRoundedRectangle(
-                    {{bar.left, bar.top,
-                      bar.left + std::max(bar.bottom - bar.top,
-                                          length * app.progress),
-                      bar.bottom},
-                     barRadius,
-                     barRadius},
-                    brush);
-            } else {
-                const float phase = (float)std::fmod(NowSeconds() / 1.4, 1.0);
-                const float piece = length * 0.3f;
-                const float from = bar.left - piece + (length + piece) * phase;
-                target->PushAxisAlignedClip(bar, D2D1_ANTIALIAS_MODE_ALIASED);
-                target->FillRoundedRectangle(
-                    {{from, bar.top, from + piece, bar.bottom},
-                     barRadius,
-                     barRadius},
-                    brush);
-                target->PopAxisAlignedClip();
-            }
-            std::wstring doing;
-            if (app.stage == 1) {
-                doing = Tr(L"Downloading", L"Baixando");
-                if (app.progress >= 0) {
-                    doing += L" " +
-                             std::to_wstring((int)std::lround(app.progress * 100)) +
-                             L"%";
-                } else {
-                    doing += dots;
-                }
-            } else if (app.stage == 2) {
-                doing = std::wstring(Tr(L"Installing", L"Instalando")) + dots;
-            } else {
-                doing = std::wstring(Tr(L"Getting ready", L"Preparando")) + dots;
-            }
-            brush->SetColor(Fg(0.85f));
-            target->DrawText(doing.c_str(), (UINT32)doing.size(),
-                             m_buttonFormat.get(), button, brush,
-                             D2D1_DRAW_TEXT_OPTIONS_CLIP);
-        } else {
-            const std::wstring versions =
-                app.version + L"  →  " + app.available;
-            brush->SetColor(Fg(0.5f));
-            target->DrawText(versions.c_str(), (UINT32)versions.size(),
-                             m_smallFormat.get(),
-                             {row.left, row.top + std::round(24 * s),
-                              button.left - std::round(8 * s),
-                              row.bottom - std::round(4 * s)},
-                             brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
-        }
-        switch (app.state) {
-            case 1:
-                break;
-            case 4:
-                brush->SetColor(Fg(0.6f));
-                target->DrawText(Tr(L"In the terminal", L"No terminal"),
-                                 (UINT32)wcslen(Tr(L"In the terminal",
-                                                   L"No terminal")),
-                                 m_buttonFormat.get(), button, brush);
-                break;
-            case 2:
-                brush->SetColor(D2D1::ColorF(0.2f, 0.78f, 0.35f, 1));
-                target->DrawText(Tr(L"✓ Updated", L"✓ Atualizado"),
-                                 (UINT32)wcslen(Tr(L"✓ Updated",
-                                                   L"✓ Atualizado")),
-                                 m_buttonFormat.get(), button, brush);
-                break;
-            case 3:
-                // Failed: in a terminal, to see why.
-                DrawButton(target, brush, button,
-                           Tr(L"Failed · terminal", L"Falhou · terminal"),
-                           false, hover);
-                break;
-            default:
-                DrawButton(target, brush, button, Tr(L"Update", L"Atualizar"),
-                           false, hover);
-                break;
-        }
+        // Opened in a terminal: can be opened again.
+        DrawButton(target, brush, button,
+                   app.state == 4 ? Tr(L"In the terminal", L"No terminal")
+                                  : Tr(L"Update", L"Atualizar"),
+                   false, hover, app.state == 4 ? 0.6f : 1.0f);
         if (i + 1 < m_appRows.size()) {
             brush->SetColor(Fg(0.07f));
             target->FillRectangle({row.left, row.bottom - 0.5f, row.right,
@@ -18364,6 +18322,10 @@ class Island {
     // "Snooze" (Windows' own button, pressed on the island): the
     // notification shows again a few minutes later.
     void SnoozeToast(IslandToast toast);
+    // Kept in the mod's storage (their ID and when they're due), so that a
+    // restart of the island or of the computer doesn't lose them.
+    void SaveSnoozed();
+    void LoadSnoozed();
     // Whether a notification (by its ID) is snoozed now.
     bool IsToastSnoozed(long long id) const {
         return id > 0 &&
@@ -18379,10 +18341,15 @@ class Island {
     void DropGoneUnread(const std::vector<std::wstring>& inCenter);
     // Opens (or closes) the updates; looked for if not yet (or long ago).
     void OpenUpdates() {
+        // Again too after apps went to the terminal (they may be updated).
         const UpdatesData updates = GetUpdates();
+        const bool inTerminal =
+            std::any_of(updates.apps.begin(), updates.apps.end(),
+                        [](const AppUpdate& app) { return app.state == 4; });
         if (!updates.checking &&
-            (!updates.checked || NowSeconds() - updates.checkedAt > 30 * 60)) {
-            StartUpdatesJob({});
+            (!updates.checked || inTerminal ||
+             NowSeconds() - updates.checkedAt > 30 * 60)) {
+            StartUpdatesJob();
         }
         TogglePanel(m_updatesPanel, IslandItem::Updates);
     }
@@ -18457,6 +18424,18 @@ class Island {
         int day = 0;
     } m_reminderDay;
     D2D1_RECT_F BannerRect() const;
+    // The settings bubble: shown on a right click on the island (whatever
+    // is on the pill, so the settings can always be reached), out of its
+    // edge like a new app peeking out of the line; it goes after a few
+    // seconds, or when it's clicked (the control center opens on the
+    // settings). On the bar, the settings open right away.
+    void ShowGearBubble();
+    void HideGearBubble();
+    void OpenIslandSettings();
+    D2D1_RECT_F GearBubbleRect() const;
+    float GearAmount(double now) const;
+    double m_gearShownAt = 0;
+    double m_gearHideAt = 0;
     // The reply box (with the send button at its end) and "Open".
     void BannerParts(D2D1_RECT_F* field,
                      D2D1_RECT_F* send,
@@ -18624,7 +18603,7 @@ class Island {
     HANDLE m_updatesStop = nullptr;
     int m_updatesCount = 0;
     bool m_updatesWatched = false;
-    void StartUpdatesJob(std::vector<std::wstring> appIds);
+    void StartUpdatesJob();
     void UpdateUpdatesWatch();
     void OnUpdates();
     // The weather's thread (one at a time), and what the pill shows ("sky
@@ -19073,7 +19052,8 @@ void ControlPanel::Prepare(float scale) {
 }
 
 void ControlPanel::OnOpen() {
-    m_view = View::Main;
+    m_view = m_openOnSettings ? View::Settings : View::Main;
+    m_openOnSettings = false;
     m_search.clear();
     m_settingsScroll.Reset();
     m_orderDrag = -1;
@@ -19090,6 +19070,9 @@ void ControlPanel::OnOpen() {
     m_viewIn = 1;
     m_viewInVelocity = 0;
     Layout();
+    if (m_view == View::Settings) {
+        SettleSettings();
+    }
     m_wifiStatus.clear();
     m_marqueeStart = NowSeconds();
     m_darkMode = IsDarkMode();
@@ -20197,7 +20180,7 @@ void ControlPanel::Layout() {
     m_addRects.clear();
     if (m_only != Only::All) {
         // Only the sound or the battery: no footer.
-        m_done = m_addHeader = m_more = m_edit = m_gear = {};
+        m_done = m_addHeader = m_more = m_edit = {};
         y += padding / 2;
     } else if (m_editing) {
         // The controls not shown, to add, three by three; then "Done".
@@ -20231,15 +20214,14 @@ void ControlPanel::Layout() {
         y += std::round(4 * s);
         const float doneWidth = std::round(110 * s);
         m_done = {width - padding - doneWidth, y, width - padding, y + footer};
-        m_more = m_edit = m_gear = {};
+        m_more = m_edit = {};
     } else {
-        // "More Windows controls", the gear and "Edit".
+        // "More Windows controls" and "Edit" (the island's settings are in
+        // the bubble of a right click on the island).
         m_done = m_addHeader = {};
         const float editWidth = std::round(84 * s);
         m_edit = {width - padding - editWidth, y, width - padding, y + footer};
-        m_gear = {m_edit.left - std::round(6 * s) - footer, y,
-                  m_edit.left - std::round(6 * s), y + footer};
-        m_more = {padding, y, m_gear.left - gap, y + footer};
+        m_more = {padding, y, m_edit.left - gap, y + footer};
     }
     if (m_only == Only::All) {
         y += footer + padding / 2;
@@ -21057,9 +21039,6 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
     if (PointInRect(pt, m_edit)) {
         return {Part::EditButton};
     }
-    if (PointInRect(pt, m_gear)) {
-        return {Part::SettingsButton};
-    }
     if (PointInRect(pt, m_more)) {
         return {Part::More};
     }
@@ -21725,7 +21704,8 @@ void ControlPanel::DrawAppPlaces(ID2D1RenderTarget* target,
                 KnobFor(5000 + index,
                         !((place.own ? place.hidden
                                      : place.hidden | GloballyHiddenGroups()) &
-                          (1u << group))),
+                          (1u << group)) &&
+                            OnlineGroupAllowed((PillGroup)group)),
                 0.0f,
                 1.0f);
             const bool chipHover =
@@ -22956,20 +22936,6 @@ void ControlPanel::DrawMain(ID2D1RenderTarget* target,
     const std::wstring editText =
         std::wstring(1, kGlyphEdit) + L"  " + Tr(L"Edit", L"Editar");
     brush->SetColor(Fg(0.9f));
-    // The gear: the island's own options.
-    {
-        const float gearRadius = (m_gear.bottom - m_gear.top) / 2 - 2;
-        brush->SetColor(Fg(
-            0.1f + 0.1f * Hover(m_gear, m_hover.part == Part::SettingsButton)));
-        target->FillEllipse({{(m_gear.left + m_gear.right) / 2,
-                              (m_gear.top + m_gear.bottom) / 2},
-                             gearRadius,
-                             gearRadius},
-                            brush);
-        brush->SetColor(Fg(0.9f));
-        target->DrawText(&kGlyphSettings, 1, m_iconFormat.get(), m_gear,
-                         brush);
-    }
     winrt::com_ptr<IDWriteTextLayout> editLayout;
     if (SUCCEEDED(m_dwrite->CreateTextLayout(
             editText.c_str(), (UINT32)editText.size(), m_linkFormat.get(),
@@ -23622,9 +23588,6 @@ bool ControlPanel::OnMouseUp(POINT pt) {
             return true;
         case Part::EditDone:
             SetEditing(false);
-            return true;
-        case Part::SettingsButton:
-            SetView(View::Settings);
             return true;
         case Part::EditRemove: {
             const ControlId id = (ControlId)hit.index;
@@ -27289,8 +27252,11 @@ bool MediaPanel::OnWheel(int delta) {
 // The island's own options.
 
 // Restarting the island (another style) is done from a thread of its own,
-// since the island's thread can't wait for itself to end.
+// since the island's thread can't wait for itself to end. Its handle is
+// written on the island's thread and read on Windhawk's: under its own lock
+// (not the life lock below, which is held while the island's thread ends).
 HANDLE g_islandRestartThread;
+SRWLOCK g_islandRestartLock = SRWLOCK_INIT;
 
 void StopIslandThread();
 void StartIslandThread();
@@ -27302,28 +27268,40 @@ SRWLOCK g_islandLifeLock = SRWLOCK_INIT;
 DWORD WINAPI IslandRestartThreadProc(LPVOID) {
     AcquireSRWLockExclusive(&g_islandLifeLock);
     StopIslandThread();
-    StartIslandThread();
+    if (!g_unloading) {
+        StartIslandThread();
+    }
     ReleaseSRWLockExclusive(&g_islandLifeLock);
     return 0;
 }
 
 void RestartIslandSoon() {
-    if (g_islandRestartThread) {
+    AcquireSRWLockExclusive(&g_islandRestartLock);
+    bool start = !g_unloading;
+    if (start && g_islandRestartThread) {
         if (WaitForSingleObject(g_islandRestartThread, 0) != WAIT_OBJECT_0) {
-            return;
+            start = false;
+        } else {
+            CloseHandle(g_islandRestartThread);
+            g_islandRestartThread = nullptr;
         }
-        CloseHandle(g_islandRestartThread);
     }
-    g_islandRestartThread =
-        CreateThread(nullptr, 0, IslandRestartThreadProc, nullptr, 0, nullptr);
+    if (start) {
+        g_islandRestartThread = CreateThread(
+            nullptr, 0, IslandRestartThreadProc, nullptr, 0, nullptr);
+    }
+    ReleaseSRWLockExclusive(&g_islandRestartLock);
 }
 
 // Before stopping the island elsewhere (unloading, settings changed).
 void WaitForIslandRestart() {
-    if (g_islandRestartThread) {
-        WaitForSingleObject(g_islandRestartThread, INFINITE);
-        CloseHandle(g_islandRestartThread);
-        g_islandRestartThread = nullptr;
+    AcquireSRWLockExclusive(&g_islandRestartLock);
+    const HANDLE thread = g_islandRestartThread;
+    g_islandRestartThread = nullptr;
+    ReleaseSRWLockExclusive(&g_islandRestartLock);
+    if (thread) {
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
     }
 }
 
@@ -27782,6 +27760,7 @@ void Island::StartStatusWatch() {
         m_devices->RegisterEndpointNotificationCallback(m_statusEvents);
         WatchVolume();
         WatchMicrophone();
+        m_microphoneGlyph = MicrophoneGlyph();
     }
 
     // The network.
@@ -27954,7 +27933,8 @@ float Island::TaskbarRoom() const {
 // Whether the app in front shows a group by its own choice.
 bool Island::PlaceShows(PillGroup group) const {
     const IslandPlace* place = FindAppPlace(m_placeApp);
-    return place && place->own && !(place->hidden & (1u << (int)group));
+    return place && place->own && !(place->hidden & (1u << (int)group)) &&
+           OnlineGroupAllowed(group);
 }
 
 void Island::OnPlacesChanged() {
@@ -27970,6 +27950,46 @@ void Island::OnPlacesChanged() {
         SetMinimized(false);
     }
     StartAnimating();
+}
+
+// Windows' own passing surfaces (Start, search, the quick settings and the
+// notification center, task view, Alt+Tab): not an app coming to the front.
+// The island stays as it is for the app behind them, instead of moving away
+// and back (while Start opens, for example).
+bool IsShellFlyout(HWND hwnd) {
+    WCHAR className[64] = L"";
+    GetClassName(hwnd, className, ARRAYSIZE(className));
+    for (PCWSTR shellClass :
+         {L"XamlExplorerHostIslandWindow", L"MultitaskingViewFrame",
+          L"TaskSwitcherWnd", L"ForegroundStaging"}) {
+        if (_wcsicmp(className, shellClass) == 0) {
+            return true;
+        }
+    }
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hwnd, &processId);
+    HANDLE process =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!process) {
+        return false;
+    }
+    WCHAR path[MAX_PATH];
+    DWORD size = ARRAYSIZE(path);
+    const bool named = QueryFullProcessImageName(process, 0, path, &size);
+    CloseHandle(process);
+    if (!named) {
+        return false;
+    }
+    PCWSTR name = wcsrchr(path, L'\\');
+    name = name ? name + 1 : path;
+    for (PCWSTR host :
+         {L"StartMenuExperienceHost.exe", L"SearchHost.exe", L"SearchApp.exe",
+          L"ShellExperienceHost.exe", L"ShellHost.exe"}) {
+        if (_wcsicmp(name, host) == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // The app in front, for its own place. The island's own windows (and the
@@ -28002,6 +28022,9 @@ void Island::OnForegroundChanged() {
             _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0) {
             return;
         }
+    }
+    if (IsShellFlyout(foreground)) {
+        return;
     }
     for (size_t i = m_unreadApps.size(); i-- > 0;) {
         if (WindowMatchesApp(foreground, m_unreadApps[i].id)) {
@@ -28048,6 +28071,9 @@ void Island::FinishDrag() {
 // Whether a group is shown now: turned on (the ones with a switch that's
 // only for whether they're there), and not hidden for the app in front.
 bool Island::GroupWanted(PillGroup group) const {
+    if (!OnlineGroupAllowed(group)) {
+        return false;
+    }
     if (const IslandPlace* place = FindAppPlace(m_placeApp)) {
         if (place->hidden & (1u << (int)group)) {
             return false;
@@ -28240,7 +28266,7 @@ void Island::UpdateUpdatesWatch() {
     if (!m_hwnd) {
         return;
     }
-    if (!g_settings.islandUpdates && !PlaceShows(PillGroup::Updates)) {
+    if (!g_settings.islandUpdates) {
         KillTimer(m_hwnd, kUpdatesTimerId);
         m_updatesWatched = false;
         return;
@@ -28252,7 +28278,7 @@ void Island::UpdateUpdatesWatch() {
     }
 }
 
-void Island::StartUpdatesJob(std::vector<std::wstring> appIds) {
+void Island::StartUpdatesJob() {
     if (!m_updatesStop) {
         return;
     }
@@ -28264,21 +28290,33 @@ void Island::StartUpdatesJob(std::vector<std::wstring> appIds) {
         return false;
     });
     // One look at a time.
-    if (appIds.empty()) {
-        AcquireSRWLockExclusive(&g_updatesLock);
-        const bool busy = g_updates.checking;
-        g_updates.checking = true;
-        ReleaseSRWLockExclusive(&g_updatesLock);
-        if (busy) {
-            return;
+    AcquireSRWLockExclusive(&g_updatesLock);
+    const bool busy = g_updates.checking;
+    g_updates.checking = true;
+    ReleaseSRWLockExclusive(&g_updatesLock);
+    if (busy) {
+        return;
+    }
+    // The thread gets its own handle of the stop event, so it stays valid
+    // even if the island gives up waiting for it.
+    HANDLE stop = nullptr;
+    HANDLE thread = nullptr;
+    if (DuplicateHandle(GetCurrentProcess(), m_updatesStop,
+                        GetCurrentProcess(), &stop, 0, FALSE,
+                        DUPLICATE_SAME_ACCESS)) {
+        auto* job = new UpdatesJob{m_hwnd, stop};
+        thread = CreateThread(nullptr, 0, UpdatesThreadProc, job, 0, nullptr);
+        if (thread) {
+            m_updatesThreads.push_back(thread);
+        } else {
+            delete job;
+            CloseHandle(stop);
         }
     }
-    auto* job = new UpdatesJob{m_hwnd, m_updatesStop, std::move(appIds)};
-    if (HANDLE thread =
-            CreateThread(nullptr, 0, UpdatesThreadProc, job, 0, nullptr)) {
-        m_updatesThreads.push_back(thread);
-    } else {
-        delete job;
+    if (!thread) {
+        AcquireSRWLockExclusive(&g_updatesLock);
+        g_updates.checking = false;
+        ReleaseSRWLockExclusive(&g_updatesLock);
     }
     m_updatesPanel.Refresh();
 }
@@ -28286,16 +28324,15 @@ void Island::StartUpdatesJob(std::vector<std::wstring> appIds) {
 void Island::OnUpdates() {
     const UpdatesData updates = GetUpdates();
     int count = (int)updates.windows.size();
-    for (const auto& app : updates.apps) {
-        count += app.state != 2;
-    }
+    count += (int)updates.apps.size();
     m_updatesCount = count;
     m_updatesPanel.Refresh();
     Render();
 }
 
 bool Island::WeatherWanted() const {
-    return g_settings.islandWeather || PlaceShows(PillGroup::Weather);
+    // (An app's own icons can't turn it on: see OnlineGroupAllowed.)
+    return g_settings.islandWeather;
 }
 
 // The weather is measured while it's on the pill: now (if it's old), and
@@ -28389,6 +28426,7 @@ bool Island::Create() {
     m_bar = g_settings.islandBar;
     m_bannerReadStop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     LoadUnread();
+    LoadSnoozed();
     for (int i = 0; i < kPillGroups; i++) {
         m_groupShown[i] = GroupWanted((PillGroup)i) ? 1 : 0;
     }
@@ -28458,26 +28496,7 @@ bool Island::Create() {
     m_weatherPanel.search = [this](const std::wstring& city) {
         StartWeather(city);
     };
-    m_updatesPanel.check = [this] { StartUpdatesJob({}); };
-    m_updatesPanel.update = [this](const std::wstring& id) {
-        // One, or all the ones not updated yet.
-        std::vector<std::wstring> ids;
-        for (const auto& app : GetUpdates().apps) {
-            if ((id.empty() || app.id == id) && app.state != 1 &&
-                app.state != 2) {
-                ids.push_back(app.id);
-            }
-        }
-        if (ids.empty()) {
-            return;
-        }
-        if (m_updatesPanel.m_inTerminal) {
-            UpdateInTerminal(ids);
-            m_updatesPanel.Refresh();
-        } else {
-            StartUpdatesJob(ids);
-        }
-    };
+    m_updatesPanel.check = [this] { StartUpdatesJob(); };
     m_updatesStop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     UpdateClock();
     UpdateStatus();
@@ -28602,16 +28621,22 @@ void Island::Destroy() {
     StopStatusWatch();
     StopMediaWatch();
     StopUsageWatch();
+    // Everything waited for below is told to stop first, so the waits run
+    // together.
+    if (m_updatesStop) {
+        SetEvent(m_updatesStop);
+    }
+    if (m_bannerReadStop) {
+        SetEvent(m_bannerReadStop);
+    }
     if (m_weatherThread) {
         // The requests give up after a few seconds.
         WaitForSingleObject(m_weatherThread, 20000);
         CloseHandle(m_weatherThread);
         m_weatherThread = nullptr;
     }
-    // Looking for updates stops; an app being updated goes on by itself.
-    if (m_updatesStop) {
-        SetEvent(m_updatesStop);
-    }
+    // (Each thread has its own handle of its stop event: closing the
+    // island's is safe even if one is still ending.)
     for (HANDLE thread : m_updatesThreads) {
         WaitForSingleObject(thread, 10000);
         CloseHandle(thread);
@@ -28630,9 +28655,6 @@ void Island::Destroy() {
     }
     // Windows banners hidden now come back (one could be ringing), once the
     // reads of them are done.
-    if (m_bannerReadStop) {
-        SetEvent(m_bannerReadStop);
-    }
     for (HANDLE thread : m_bannerReadThreads) {
         WaitForSingleObject(thread, 10000);
         CloseHandle(thread);
@@ -28827,9 +28849,11 @@ void Island::ToggleMicrophone() {
     OnVolumeChanged();
 }
 
+// From the microphone already watched (the default one), not looked up
+// again on every change.
 std::wstring Island::MicrophoneGlyph() {
-    const int muted = MicrophoneMuted();
-    if (muted < 0) {
+    BOOL muted = FALSE;
+    if (!m_watchedMicrophone || FAILED(m_watchedMicrophone->GetMute(&muted))) {
         return {};
     }
     return {muted ? (WCHAR)0xF781 : (WCHAR)0xE720};
@@ -29745,6 +29769,13 @@ void Island::Layout() {
                           2) * 2 +
                     2);
         }
+        if (m_gearShownAt) {
+            windowWidth = std::max(
+                windowWidth,
+                height + std::ceil((kGearBubbleGap + kGearBubbleWidth) *
+                                   scale * 1.1f) +
+                    2);
+        }
         const float pillLeft = m_sideLeft ? 0 : windowWidth - height;
         const float shift = (windowHeight - length) / 2;
         for (auto& slot : m_slots) {
@@ -29791,6 +29822,14 @@ void Island::Layout() {
             windowHeight,
             std::ceil(top + (bannerHeight * scale + BannerExtraRoom()) * 1.08f +
                       2));
+    }
+    if (m_gearShownAt && !m_minimized) {
+        windowHeight = std::max(
+            windowHeight,
+            top + height +
+                std::ceil((kGearBubbleGap + kGearBubbleHeight) * scale *
+                          1.1f) +
+                2);
     }
     const float shift = (windowWidth - pillWidth) / 2;
     // On the lower half, the pill is at the window's bottom (banners open
@@ -30364,6 +30403,7 @@ void Island::Render(bool force) {
         std::to_wstring((int)(m_appear * 1000)) + std::to_wstring(m_away) +
         L"|" + std::to_wstring(m_position.y) + L"|" +
         std::to_wstring((int)(PeekAmount(NowSeconds()) * 1000)) + L"|" +
+        std::to_wstring((int)(GearAmount(NowSeconds()) * 1000)) + L"|" +
         std::to_wstring((int)(m_bannerAmount * 1000)) + L"|" + m_banner.appId +
         m_banner.title + m_banner.text + L"|" +
         std::to_wstring((int)(m_bannerOpen * 1000)) + L"|" +
@@ -30538,6 +30578,50 @@ void Island::Render(bool force) {
                                  dot,
                                  dot},
                                 brush.get());
+        }
+        // The settings bubble: grows out of the island's edge (out of the
+        // line when minimized), away while a banner opens.
+        const float gear = GearAmount(NowSeconds()) *
+                           (1 - std::clamp(banner * 3, 0.0f, 1.0f));
+        if (gear > 0.001f && m_iconFormat) {
+            const D2D1_RECT_F full = GearBubbleRect();
+            D2D1_POINT_2F anchor{(full.left + full.right) / 2, full.top};
+            if (m_vertical) {
+                anchor = {m_sideLeft ? full.left : full.right,
+                          (full.top + full.bottom) / 2};
+            } else if (!m_minimized && AtBottom()) {
+                anchor.y = full.bottom;
+            }
+            const float k = std::clamp(gear, 0.0f, 1.1f);
+            const D2D1_RECT_F bubble{anchor.x + (full.left - anchor.x) * k,
+                                     anchor.y + (full.top - anchor.y) * k,
+                                     anchor.x + (full.right - anchor.x) * k,
+                                     anchor.y + (full.bottom - anchor.y) * k};
+            const float opacity = std::clamp(gear * 1.6f, 0.0f, 1.0f);
+            const float bubbleRadius = std::min(bubble.bottom - bubble.top,
+                                                bubble.right - bubble.left) /
+                                       2;
+            D2D1_COLOR_F fill = Bg(1);
+            fill.a *= opacity;
+            brush->SetColor(fill);
+            target->FillRoundedRectangle({bubble, bubbleRadius, bubbleRadius},
+                                         brush.get());
+            if (m_hover == IslandItem::SettingsBubble) {
+                brush->SetColor(Fg(0.12f * opacity));
+                target->FillRoundedRectangle(
+                    {bubble, bubbleRadius, bubbleRadius}, brush.get());
+            }
+            brush->SetColor(Fg(0.10f * opacity));
+            target->DrawRoundedRectangle(
+                {{bubble.left + 0.5f, bubble.top + 0.5f, bubble.right - 0.5f,
+                  bubble.bottom - 0.5f},
+                 bubbleRadius,
+                 bubbleRadius},
+                brush.get(), 1);
+            brush->SetColor(Fg(0.9f * std::clamp((gear - 0.3f) / 0.5f, 0.0f,
+                                                 1.0f)));
+            target->DrawText(&kGlyphSettings, 1, m_iconFormat.get(), bubble,
+                             brush.get());
         }
     }
 
@@ -31393,6 +31477,70 @@ constexpr double kPeekIn = 0.45;
 constexpr double kPeekHold = 1.9;
 constexpr double kPeekOut = 0.45;
 
+void Island::ShowGearBubble() {
+    const double now = NowSeconds();
+    // Again from the start if it was going away.
+    if (!m_gearShownAt || now >= m_gearHideAt) {
+        m_gearShownAt = now;
+    }
+    m_gearHideAt = now + kGearBubbleStay;
+    StartAnimating();
+    Render(true);
+}
+
+void Island::HideGearBubble() {
+    const double now = NowSeconds();
+    if (m_gearShownAt && now < m_gearHideAt) {
+        m_gearHideAt = now;
+        StartAnimating();
+    }
+}
+
+void Island::OpenIslandSettings() {
+    HideGearBubble();
+    m_control.SetOnly(ControlPanel::Only::All);
+    const bool open = m_control.IsOpen();
+    m_control.ShowSettings();
+    if (!open) {
+        TogglePanel(m_control, IslandItem::Network);
+    }
+}
+
+// Under the pill (over it on the lower half of the screen, beside it when
+// upright); when minimized, where the pill would be, under the line.
+D2D1_RECT_F Island::GearBubbleRect() const {
+    const float width = std::round(kGearBubbleWidth * m_scale);
+    const float height = std::round(kGearBubbleHeight * m_scale);
+    const float gap = std::round(kGearBubbleGap * m_scale);
+    if (m_vertical) {
+        const float middle = std::round((m_pill.top + m_pill.bottom) / 2);
+        const float left =
+            m_sideLeft ? m_pill.right + gap : m_pill.left - gap - width;
+        return {left, middle - height / 2, left + width, middle + height / 2};
+    }
+    const float centerX = std::round((m_pill.left + m_pill.right) / 2);
+    const float top = m_minimized   ? m_pill.top
+                      : AtBottom() ? m_pill.top - gap - height
+                                   : m_pill.bottom + gap;
+    return {centerX - width / 2, top, centerX + width / 2, top + height};
+}
+
+// How far it's out, from 0 to 1 (a bit more while bouncing).
+float Island::GearAmount(double now) const {
+    if (!m_gearShownAt) {
+        return 0;
+    }
+    const double t = now - m_gearShownAt;
+    float amount = t < kGearBubbleIn ? (float)SpringOut(t / kGearBubbleIn) : 1;
+    if (now >= m_gearHideAt) {
+        amount = std::min(
+            amount,
+            1 - (float)EaseInOutCubic(
+                    std::min(1.0, (now - m_gearHideAt) / kGearBubbleOut)));
+    }
+    return std::max(amount, 0.0f);
+}
+
 float Island::PeekAmount(double now) {
     if (!m_peekStart) {
         return 0;
@@ -31658,6 +31806,18 @@ void Island::AnimationFrame() {
             apps = true;
         }
     }
+    if (m_gearShownAt) {
+        // It stays while the mouse is on it.
+        if (m_hover == IslandItem::SettingsBubble && now < m_gearHideAt &&
+            m_gearHideAt - now < kGearBubbleLinger) {
+            m_gearHideAt = now + kGearBubbleLinger;
+        }
+        if (now >= m_gearHideAt + kGearBubbleOut) {
+            m_gearShownAt = 0;
+            m_gearHideAt = 0;
+        }
+        apps = true;
+    }
     // A pin growing in.
     if (!m_pinShownKey.empty() && now - m_pinShownAt < kPinGrowSeconds) {
         apps = true;
@@ -31843,6 +32003,7 @@ void Island::Tick() {
             return true;
         });
         if (!due.empty()) {
+            SaveSnoozed();
             AcquireSRWLockExclusive(&g_islandToastsLock);
             g_islandToasts.insert(g_islandToasts.end(),
                                   std::make_move_iterator(due.begin()),
@@ -32091,6 +32252,61 @@ void Island::SnoozeToast(IslandToast toast) {
     }
     m_snoozedToasts.push_back({std::move(toast), NowSeconds() +
                                                      kToastSnoozeSeconds});
+    SaveSnoozed();
+}
+
+// The clock of the computer, in seconds (for times kept across restarts).
+double WallClockSeconds() {
+    FILETIME now;
+    GetSystemTimeAsFileTime(&now);
+    return (double)(((ULONGLONG)now.dwHighDateTime << 32) |
+                    now.dwLowDateTime) /
+           1e7;
+}
+
+// A line per notification: "<ID> <when it's due>" (the island's own, like
+// a calendar reminder, aren't in the database and aren't kept).
+void Island::SaveSnoozed() {
+    const double now = NowSeconds();
+    const double wall = WallClockSeconds();
+    std::wstring value;
+    for (const auto& [toast, due] : m_snoozedToasts) {
+        if (toast.id > 0) {
+            value += std::to_wstring(toast.id) + L" " +
+                     std::to_wstring((long long)(wall + (due - now))) + L"\n";
+        }
+    }
+    Wh_SetStringValue(L"snoozedToasts", value.c_str());
+}
+
+// Read again from the notification database: the ones gone from it (cleared
+// in Windows meanwhile) are dropped.
+void Island::LoadSnoozed() {
+    std::vector<WCHAR> value(4096);
+    Wh_GetStringValue(L"snoozedToasts", value.data(), value.size());
+    const double now = NowSeconds();
+    const double wall = WallClockSeconds();
+    bool dropped = false;
+    for (PCWSTR line = value.data(); *line;) {
+        PCWSTR end = wcschr(line, L'\n');
+        long long id = 0;
+        long long due = 0;
+        IslandToast toast;
+        if (swscanf(line, L"%lld %lld", &id, &due) == 2 &&
+            !IsToastSnoozed(id) && ReadToastById(id, &toast)) {
+            m_snoozedToasts.push_back(
+                {std::move(toast), now + std::max(0.0, (double)due - wall)});
+        } else {
+            dropped = true;
+        }
+        if (!end) {
+            break;
+        }
+        line = end + 1;
+    }
+    if (dropped) {
+        SaveSnoozed();
+    }
 }
 
 void Island::OnNotificationsSeen() {
@@ -32393,7 +32609,13 @@ std::wstring BannerText(const std::wstring& text) {
 }
 
 struct WindowsBannerRequest {
+    ~WindowsBannerRequest() {
+        if (stop) {
+            CloseHandle(stop);
+        }
+    }
     HWND banner;
+    // The thread's own handle of the island's stop event.
     HANDLE stop;
     DWORD delayMs;
     // The notification's title, and its button to press (-1: its "x"), or
@@ -32433,6 +32655,8 @@ DWORD WINAPI WindowsBannerThreadProc(LPVOID parameter) {
         }
         auto readViews = [&](bool press) {
             read.views.clear();
+            // What would be pressed, in each view titled like the pill's.
+            std::vector<winrt::com_ptr<IUIAutomationElement>> targets;
             winrt::com_ptr<IUIAutomationElement> root;
             if (!uia || FAILED(uia->ElementFromHandle(request->banner,
                                                       root.put())) ||
@@ -32464,29 +32688,29 @@ DWORD WINAPI WindowsBannerThreadProc(LPVOID parameter) {
                                            L"DismissButton")
                             .get());
                     entry.dismiss = !dismiss.empty();
-                    // Pressed: the notification's own button, or its "x".
+                    // To press: the notification's own button, or its "x".
                     if (press && entry.priority &&
                         entry.title == BannerText(request->title)) {
-                        IUIAutomationElement* target =
+                        targets.push_back(
                             request->press >= 0
                                 ? (request->press < (int)buttons.size()
-                                       ? buttons[request->press].get()
+                                       ? buttons[request->press]
                                        : nullptr)
-                                : (dismiss.empty() ? nullptr
-                                                   : dismiss[0].get());
-                        winrt::com_ptr<IUIAutomationInvokePattern> invoke;
-                        if (target &&
-                            SUCCEEDED(target->GetCurrentPatternAs(
-                                UIA_InvokePatternId,
-                                kIID_IUIAutomationInvokePattern,
-                                invoke.put_void())) &&
-                            invoke && SUCCEEDED(invoke->Invoke())) {
-                            read.pressed = true;
-                            return;
-                        }
+                                : (dismiss.empty() ? nullptr : dismiss[0]));
                     }
                     read.views.push_back(std::move(entry));
                 }
+            }
+            // Pressed only when one notification matches: with two alike
+            // ("Meeting" twice), Windows' own isn't guessed (the island's
+            // button is pressed instead).
+            winrt::com_ptr<IUIAutomationInvokePattern> invoke;
+            if (targets.size() == 1 && targets[0] &&
+                SUCCEEDED(targets[0]->GetCurrentPatternAs(
+                    UIA_InvokePatternId, kIID_IUIAutomationInvokePattern,
+                    invoke.put_void())) &&
+                invoke && SUCCEEDED(invoke->Invoke())) {
+                read.pressed = true;
             }
         };
         if (request->press != kReadOnly) {
@@ -32738,9 +32962,14 @@ void Island::StartWindowsBannerThread(DWORD delayMs,
         }
         return false;
     });
+    HANDLE stop = nullptr;
+    if (!DuplicateHandle(GetCurrentProcess(), m_bannerReadStop,
+                         GetCurrentProcess(), &stop, 0, FALSE,
+                         DUPLICATE_SAME_ACCESS)) {
+        return;
+    }
     auto* request = new WindowsBannerRequest{
-        g_windowsBanner, m_bannerReadStop, delayMs, m_banner.title, press,
-        fallback};
+        g_windowsBanner, stop, delayMs, m_banner.title, press, fallback};
     HANDLE thread = CreateThread(nullptr, 0, WindowsBannerThreadProc, request,
                                  0, nullptr);
     if (!thread) {
@@ -33233,6 +33462,21 @@ void Island::OnMouseButton(UINT msg, LPARAM lParam) {
         }
         OnClick(item, key);
     }
+    // A right click anywhere else on the island (not on another app's icon
+    // or a notification): the settings bubble.
+    if (msg == WM_RBUTTONUP && item != IslandItem::None &&
+        item != IslandItem::Overflow && item != IslandItem::TrayIcon &&
+        item != IslandItem::TrayPin && item != IslandItem::SettingsBubble &&
+        item != IslandItem::Banner && item != IslandItem::BannerReply &&
+        item != IslandItem::BannerOpen && item != IslandItem::BannerClose &&
+        item != IslandItem::BannerMinimize &&
+        item != IslandItem::BannerAction) {
+        if (m_bar) {
+            OpenIslandSettings();
+        } else {
+            ShowGearBubble();
+        }
+    }
     // The arrow's right click keeps the list open, or not.
     if (msg == WM_RBUTTONUP && item == IslandItem::Overflow) {
         m_trayKeepOpen = !m_trayKeepOpen;
@@ -33245,6 +33489,10 @@ void Island::OnMouseButton(UINT msg, LPARAM lParam) {
 }
 
 IslandItem Island::HitTest(POINT pt, std::wstring* appId) const {
+    if (!m_bar && GearAmount(NowSeconds()) > 0.5f &&
+        PointInRect(pt, GearBubbleRect())) {
+        return IslandItem::SettingsBubble;
+    }
     if (!m_bar && m_bannerAmount > 0.5 && PointInRect(pt, BannerRect())) {
         if (PointInRect(pt, BannerCloseRect())) {
             return IslandItem::BannerClose;
@@ -33324,6 +33572,7 @@ void CapturePillFor(Panel& panel) {
 // is open at a time. The pill itself becomes the panel; on the bar, the panel
 // drops out of the clicked item.
 void Island::TogglePanel(Panel& panel, IslandItem item) {
+    HideGearBubble();
     EndBannerTyping();
     if (m_bannerWanted || m_bannerAmount > 0) {
         HideBanner();
@@ -33545,6 +33794,9 @@ void Island::OnClick(IslandItem item, const std::wstring& appId) {
         case IslandItem::TrayIcon:
         case IslandItem::TrayPin:
             break;
+        case IslandItem::SettingsBubble:
+            OpenIslandSettings();
+            break;
         case IslandItem::Network:
         case IslandItem::Volume:
         case IslandItem::Battery:
@@ -33697,9 +33949,21 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
                 return 0;
             }
             if (wParam == kUpdatesTimerId) {
+                // Looked for a moment ago (before a restart of the island):
+                // not again until it's due.
+                const UpdatesData updates = GetUpdates();
+                const double since = NowSeconds() - updates.checkedAt;
+                if (updates.checked && since >= 0 &&
+                    since < kUpdatesCheckSeconds) {
+                    SetTimer(m_hwnd, kUpdatesTimerId,
+                             (UINT)((kUpdatesCheckSeconds - since) * 1000) +
+                                 1000,
+                             nullptr);
+                    return 0;
+                }
                 SetTimer(m_hwnd, kUpdatesTimerId,
                          (UINT)(kUpdatesCheckSeconds * 1000), nullptr);
-                StartUpdatesJob({});
+                StartUpdatesJob();
                 return 0;
             }
             if (wParam == kMediaTimerId) {
@@ -34540,10 +34804,21 @@ BOOL WhTool_ModInit() {
 void WhTool_ModUninit() {
     Wh_Log(L">");
 
+    // (No restart starts once this is set.)
     g_unloading = true;
     WaitForIslandRestart();
+    AcquireSRWLockExclusive(&g_islandLifeLock);
     StopIslandThread();
+    ReleaseSRWLockExclusive(&g_islandLifeLock);
     StopToastWatch();
+    // Auto-hide turned on by the explorer.exe part is turned back off by
+    // that part when it unloads; from here too, in case it isn't loaded now
+    // (Explorer was restarted without the mod).
+    if (Wh_GetIntValue(L"turnedAutoHideOn", 0) &&
+        FindWindow(L"Shell_TrayWnd", nullptr)) {
+        SetAutoHide(false);
+        Wh_SetIntValue(L"turnedAutoHideOn", 0);
+    }
     winrt::clear_factory_cache();
     using CoDecrementMTAUsage_t = HRESULT(WINAPI*)(CO_MTA_USAGE_COOKIE);
     if (auto decrement = (CoDecrementMTAUsage_t)GetComBaseProc(
