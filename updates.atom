@@ -2,12 +2,40 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-07T12:01:12.000Z</updated>
+    <updated>2026-10-07T20:00:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Snap Flyout Instant 1.0]]></title>
+        <id>https://windhawk.net/mods/snap-flyout-instant#cdf00260c67214c639a07a99665d02ed9e7b3ae8</id>
+        <link href="https://windhawk.net/mods/snap-flyout-instant"/>
+        <updated>2026-10-07T20:00:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="snapflyoutinstant">Snap Flyout Instant</h1>
+<p>Removes the delay before the snap layouts flyout appears when you hover the
+maximize button of a window in Windows 11.</p>
+<p>By default Windows waits 600 ms before showing the flyout. This mod shortens
+that wait to a value you choose (1 ms by default).</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Delay in milliseconds</strong>: time before the flyout is shown. Lower is faster.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The mod only shortens the timer that the shell creates right after the
+flyout's invoke timer starts, and only when it is created by the WinRT
+thread pool timer. Other timers in the shell are left alone.</li>
+<li>The mod looks up an internal symbol of <code>twinui.pcshell.dll</code>. A future Windows
+update may rename it, in which case the mod will simply have no effect.</li>
+<li>Tested on Windows 11 build 26300.9457.</li>
+</ul>]]></content>
+        <author>
+            <name>pajs</name>
+            <uri>https://github.com/pajs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Minimize to tray 1.1]]></title>
         <id>https://windhawk.net/mods/minimize-to-tray#75d2189b53ab143eb28f441bdce8ecc5b6a0831d</id>
@@ -1051,58 +1079,6 @@ Windhawk's process exclusion list.</p>
         <author>
             <name>Nico6719</name>
             <uri>https://github.com/Nico6719</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Taskbar Only on Desktop 8.1.8]]></title>
-        <id>https://windhawk.net/mods/hide-taskbar-only-on-desktop#9690c990f8bcb9dc98bf5f19dee944138d20d9a5</id>
-        <link href="https://windhawk.net/mods/hide-taskbar-only-on-desktop"/>
-        <updated>2026-10-06T07:01:56.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="changelog4version818">Changelog 4 — Version 8.1.8</h3>
-<ul>
-<li>Added shell cloak/uncloak event handling for more reliable taskbar updates when Start/Search or other shell surfaces change visibility through DWM cloaking.</li>
-<li>Improved recent-close automatic taskbar-focus handling while preserving the existing same-monitor restriction.</li>
-<li>Reduced false automatic-focus classification by clearing stale close-handoff state when explicit Windows-key taskbar navigation is detected.</li>
-<li>Corrected minimize/restore lifecycle handling so <code>EVENT_SYSTEM_MINIMIZEEND</code> is treated as a restore transition.</li>
-<li>Improved completed-minimize detection while preserving transition protection during minimize/restore operations.</li>
-<li>Removed ineffective destroy-time recent-departure bookkeeping.</li>
-<li>Removed duplicate mouse-activation and other redundant state checks.</li>
-<li>Renamed the cloak-related application-window parameter to <code>allowCloaked</code> for clarity.</li>
-<li>Removed a redundant transition-validation bounds check and other small pieces of dead or duplicated code.</li>
-<li>Restored focused explanatory comments for the non-obvious state-machine mechanisms.</li>
-<li>Restored the canonical Windhawk tool-mod launcher boilerplate, including Session 0 and service-process exclusions.</li>
-<li>Preserved the Windows Animations, Start menu, cross-monitor, hover, keyboard navigation, fullscreen, and taskbar transition behavior from previous 8.1.x updates.</li>
-</ul>
-<h3 id="changelog3version817">Changelog 3 — Version 8.1.7</h3>
-<ul>
-<li>Improved Windows Animations close-probe triggering by limiting it to windows associated with an actual close session or animation ghost.</li>
-<li>Removed unnecessary close-probe arming from unrelated foreground, minimize, move/size, show/hide, and destroy events.</li>
-<li>Increased the close-probe interval from 8 ms to 16 ms while preserving the existing close-session burst and grace-period behavior.</li>
-<li>Reduced unnecessary transition-validation and taskbar-integrity polling by limiting rechecks to active or recently active transitions.</li>
-<li>Increased the taskbar-integrity recheck interval from 8 ms to 16 ms.</li>
-<li>Fixed Start menu visibility detection for DWM-cloaked Start menu windows.</li>
-<li>Preserved the v8.1.6 cross-monitor taskbar protection and the v8.1.5 hover, Start menu, keyboard, minimize/restore, fullscreen, and multi-monitor behavior.</li>
-</ul>
-<h3 id="changelog2version816">Changelog 2 — Version 8.1.6</h3>
-<ul>
-<li>Improved compatibility with the <code>windows-animations</code> mod during application close and minimize transitions.</li>
-<li>Prevented automatic taskbar focus after closing an application from being treated as intentional taskbar activation.</li>
-<li>Improved cross-monitor transition handling to prevent inactive secondary taskbars from being shown unnecessarily.</li>
-<li>Removed redundant <code>MonitorList</code> plumbing and unused monitor snapshots from the Windows Animations close-session scanner.</li>
-<li>Simplified the monitor intersection helper by removing an unused output parameter and redundant local variables.</li>
-<li>Preserved existing close, restore/maximize, minimize-transition, fullscreen, hover, Start menu, and multi-monitor behaviour.</li>
-</ul>
-<h3 id="changelog1version815">Changelog 1 — Version 8.1.5</h3>
-<ul>
-<li>Fixed hover reveal being blocked by the transition-time taskbar integrity guard after minimize/close transitions.</li>
-<li>Gave hover reveal priority over transition reassertion while keeping anti-flash protection for unrelated displays.</li>
-<li>Prevented the integrity timer from re-hiding a taskbar after normal state evaluation determined it should remain visible.</li>
-<li>Fixed the empty work-area strip and restored taskbar hover/interaction after application open, restore, and maximize transitions.</li>
-<li>Added explicit Start menu session handling so repeated keyboard Start open/close cycles do not leave the taskbar permanently revealed.</li>
-</ul>]]></content>
-        <author>
-            <name>Sahil Dashoni</name>
-            <uri>https://github.com/Sahil-Dashoni</uri>
         </author>
     </entry>
 </feed>

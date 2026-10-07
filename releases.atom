@@ -2,12 +2,40 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-07T12:01:06.000Z</updated>
+    <updated>2026-10-07T20:00:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Snap Flyout Instant 1.0]]></title>
+        <id>https://windhawk.net/mods/snap-flyout-instant#cdf00260c67214c639a07a99665d02ed9e7b3ae8</id>
+        <link href="https://windhawk.net/mods/snap-flyout-instant"/>
+        <updated>2026-10-07T20:00:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="snapflyoutinstant">Snap Flyout Instant</h1>
+<p>Removes the delay before the snap layouts flyout appears when you hover the
+maximize button of a window in Windows 11.</p>
+<p>By default Windows waits 600 ms before showing the flyout. This mod shortens
+that wait to a value you choose (1 ms by default).</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Delay in milliseconds</strong>: time before the flyout is shown. Lower is faster.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The mod only shortens the timer that the shell creates right after the
+flyout's invoke timer starts, and only when it is created by the WinRT
+thread pool timer. Other timers in the shell are left alone.</li>
+<li>The mod looks up an internal symbol of <code>twinui.pcshell.dll</code>. A future Windows
+update may rename it, in which case the mod will simply have no effect.</li>
+<li>Tested on Windows 11 build 26300.9457.</li>
+</ul>]]></content>
+        <author>
+            <name>pajs</name>
+            <uri>https://github.com/pajs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 10 Win+X restorer on Win11 24H2 1.0.0]]></title>
         <id>https://windhawk.net/mods/windows-10-winx-restorer#3ee9f7c131cee7f86153433910a5ce62242c4744</id>
@@ -1450,137 +1478,6 @@ through, so <code>RegQueryValueExA/W</code> and <code>RegGetValueA/W</code> are 
         <author>
             <name>loliri</name>
             <uri>https://github.com/loliri</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[OverhauldedWin Alt+Tab 1.2.1]]></title>
-        <id>https://windhawk.net/mods/overhaulded-alt-tab#44918b3fcd5111318f1ebf7d663b788826688f95</id>
-        <link href="https://windhawk.net/mods/overhaulded-alt-tab"/>
-        <updated>2026-10-04T15:02:37.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="overhauldedtaskswitcher">Overhaulded Task Switcher</h1>
-<p>A modern, fluid and highly visual replacement for the native Windows Alt+Tab experience.</p>
-<p>Built from scratch in native C++ as a project to explore Windows APIs, graphics, animation systems and desktop customization. </p>
-<blockquote>
-  <p>Ofc, made as a C++ practice project. Hope you enjoy it as much as I enjoy developing it.</p>
-</blockquote>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/TaskManager.jpg" alt="OverhauldedWin Task Switcher" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Modern horizontal task switcher interface</li>
-<li>App grouping by application/process</li>
-<li>Real DWM window previews</li>
-<li>Dynamic Obsidian visual system</li>
-<li>CPU-based desktop blur</li>
-<li>Rounded cards with subtle downward shadows</li>
-<li>Floating task switcher surface</li>
-<li>Fluid opening animation</li>
-<li>Smooth horizontal navigation</li>
-<li>Interruptible navigation animations</li>
-<li>Subtle center-card snap animation</li>
-<li>Hover interactions</li>
-<li>Window closing</li>
-<li>Resolution-aware UI scaling</li>
-<li>High-DPI support</li>
-<li>Alt + Tab support</li>
-<li>Alt + Shift + Tab support</li>
-<li>AltGr + Tab support</li>
-<li>Lightweight native C++ implementation</li>
-<li>Background execution for fast activation</li>
-</ul>
-<h3 id="anotherfeatures">Another Features</h3>
-<ul>
-<li>Visual continuity between selections</li>
-<li>Smooth carousel-style navigation </li>
-<li>Real window previews</li>
-<li>Application-aware grouping</li>
-<li>Subtle depth and lighting</li>
-<li>Fast activation through background execution</li>
-</ul>
-<p>Overhaulded also aims to remain visually distinct from other Windows task-switcher projects while exploring its own interaction and visual language.</p>
-<h2 id="design">Design</h2>
-<p>Overhaulded focuses on a dark, minimal interface inspired by modern desktop UI design while keeping the selector feeling native to Windows.</p>
-<p>The visual system uses a Black Obsidian surface with:</p>
-<ul>
-<li>Rounded cards</li>
-<li>Subtle downward shadows</li>
-<li>Content-based illumination</li>
-<li>Soft depth separation</li>
-<li>Smooth transitions</li>
-<li>A fixed central visualizer</li>
-</ul>
-<p>The central visualizer remains fixed while the cards move through the carousel, creating the impression of navigating through a physical stack of windows rather than moving the entire interface.</p>
-<h2 id="smoothanimations">Smooth Animations</h2>
-<h3 id="openclose">Open / Close</h3>
-<p><img src="https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/Open_n'_Close.webp" alt="OverhauldedWin Open Animation" /></p>
-<h3 id="navigation">Navigation</h3>
-<p><img src="https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/Desplacement.webp" alt="OverhauldedWin" /></p>
-<h3 id="windowclose">Window Close</h3>
-<p><img src="https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/abort.webp" alt="OverhauldedWin" /></p>
-<h2 id="backgroundexecution">Background Execution</h2>
-<p>Overhaulded remains prepared in the background instead of creating the entire task-switcher interface from scratch every time Alt+Tab is pressed.</p>
-<p>This allows the selector to appear immediately while keeping the visual opening animation smooth.</p>
-<p>The architecture separates global input handling from the UI/rendering system so that heavy graphics and window-management operations do not run directly inside low-level keyboard hooks.</p>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li>Windows 11 only</li>
-<li>Windhawk</li>
-</ul>
-<h2 id="installation">Installation</h2>
-<ol>
-<li>Install Windhawk.</li>
-<li>Open the Overhaulded Win Task Switcher mod.</li>
-<li>Install or compile the latest release.</li>
-<li>Enable the mod.</li>
-<li>Press <code>Alt + Tab</code> to open Overhaulded.</li>
-</ol>
-<h2 id="controls">Controls</h2>
-<p>| Shortcut                                            | Action                        |
-| --------------------------------------------------- | ----------------------------- |
-| <code>Alt + Tab</code>                                         | Move to the next window       |
-| <code>Alt + Shift + Tab</code>                                 | Move to the previous window   |
-| <code>Alt + Tab</code> + release <code>Alt</code>                         | Activate the selected window  |
-| <code>Esc</code>                                               | Cancel the switcher           |
-| <code>Ctrl + Alt + Tab + Arrow</code> <code>Alt + Tab Arrow</code>        | Additional navigation/control |</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>Overhaulded is currently designed specifically for Windows 11.</p>
-<p>The project is still under active development, so behavior may vary depending on:</p>
-<ul>
-<li>Display scaling</li>
-<li>Multiple-monitor configurations</li>
-<li>Windows configuration</li>
-<li>Application window types</li>
-<li>Other Alt+Tab/task-switcher modifications</li>
-</ul>
-<p>Running multiple applications that replace the native Windows task switcher at the same time may cause conflicts.</p>
-<h2 id="knownlimitations">Known Limitations</h2>
-<p>Overhaulded is still a pre-release project.</p>
-<p>Some applications may behave differently from standard desktop windows, particularly applications that use unusual window structures, custom rendering or multiple processes.</p>
-<p>Additional compatibility improvements are planned as development continues.</p>
-<h2 id="development">Development</h2>
-<p>Overhaulded is primarily a C++ project focused on exploring:</p>
-<ul>
-<li>Win32 APIs</li>
-<li>Windows hooks</li>
-<li>DWM</li>
-<li>Direct2D</li>
-<li>DirectWrite</li>
-<li>GDI</li>
-<li>Window management</li>
-<li>High-DPI rendering</li>
-<li>Desktop animation systems</li>
-<li>Native Windows UI</li>
-</ul>
-<p>The project is continuously evolving as new ideas and technical improvements are explored.</p>
-<h2 id="license">License</h2>
-<p>This project is licensed under the <strong>MIT License</strong>.</p>
-<p>See the <a href="https://github.com/IMiloDev/OverhauldedWin/blob/main/LICENSE">LICENSE</a> file for the complete license text.</p>
-<hr />
-<p><strong>Overhaulded Task Switcher</strong>
-Native C++ • Windows 11 • Windhawk</p>]]></content>
-        <author>
-            <name>IMiloDev</name>
-            <uri>https://github.com/IMiloDev</uri>
         </author>
     </entry>
 </feed>

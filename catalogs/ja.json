@@ -12061,6 +12061,31 @@
         "version": "1.0.0"
       }
     },
+    "snap-flyout-instant": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791403224000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791403224000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "pajs",
+        "description": "Removes the delay before the snap layouts flyout appears when hovering the maximize button",
+        "github": "https://github.com/pajs",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Snap Flyout Instant",
+        "version": "1.0"
+      }
+    },
     "snap-restore-position": {
       "details": {
         "defaultSorting": 684,
