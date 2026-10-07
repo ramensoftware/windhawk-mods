@@ -1,9 +1,9 @@
 // ==WindhawkMod==
 // @id              desktop-no-view-submenu
-// @name            Desktop No View Submenu
-// @description     Removes the View submenu from the desktop context menu and moves "Show desktop icons" into Sort by, as in Windows XP and earlier; works on Windows 11 24H2
-// @name:ru         Без подменю «Вид» на рабочем столе
-// @description:ru  Убирает подменю «Вид» из контекстного меню рабочего стола и переносит пункт «Отображать значки рабочего стола» в «Сортировка», как в Windows XP и более ранних; работает в Windows 11 24H2
+// @name            Desktop No View Submenu for Windows 11 24H2+
+// @description     Removes the View submenu from the desktop context menu on Windows 11 24H2+ and lets you choose where to keep "Show desktop icons"
+// @name:ru         Без подменю «Вид» на рабочем столе для Windows 11 24H2+
+// @description:ru  Убирает подменю «Вид» из контекстного меню рабочего стола в Windows 11 24H2+ и позволяет выбрать, куда перенести пункт «Отображать значки рабочего стола»
 // @version         2.1
 // @author          appEW
 // @github          https://github.com/appEW
@@ -14,7 +14,11 @@
 
 // ==WindhawkModReadme==
 /*
-# Desktop No View Submenu
+# Desktop No View Submenu for Windows 11 24H2+
+
+Intended for Windows 11 24H2 and later, where the original mod's desktop
+detection stopped working. Use this mod if Desktop No View Menu leaves the
+View submenu in place on those versions.
 
 > **Tested only on Windows 11 24H2 (build 26100).** It has not been tried on any other version of Windows and may not work there.
 
@@ -39,7 +43,11 @@ that only ever appears in the desktop's background menu - "Show desktop icons".
 
 ---
 
-## По-русски
+## Без подменю «Вид» на рабочем столе для Windows 11 24H2+
+
+Предназначен для Windows 11 24H2 и более новых выпусков, где перестало
+работать распознавание рабочего стола в оригинальном моде. Используйте эту
+версию, если Desktop No View Menu оставляет подменю «Вид» на этих выпусках.
 
 В Windows XP и более ранних версиях вид рабочего стола нельзя было менять, и в
 его контекстном меню не было подменю «Вид». Мод убирает это подменю и, как в
