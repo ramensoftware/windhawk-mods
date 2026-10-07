@@ -28,14 +28,14 @@ A native replacement for Windows 11 Start Menu search, powered by voidtools Ever
 - Learns your favorites: apps you open from here more often move up among results that match equally well. A clearly better match always stays on top. Can be turned off in the settings, which also forgets what was learned.
 - On-Demand Animated Palette: The Start Menu stays completely clean and uncluttered when idle. The search palette slides in with a short ease-out animation the moment you type or click the search box, and collapses when emptied or on Escape.
 - Windows Search Out of the Way: SearchHost keeps running for the shell, but its window is never shown and it cannot launch Edge WebView2, the web view behind its Bing-backed search panel.
-- Inline Calculator: Type /c <expression> (e.g. /c 100 * 5, /c sqrt(144), /c 15% of 200, /c 2^10) to evaluate math expressions instantly. Press Enter to copy the result.
-- Configurable Unit Conversions: Type /c <number> [unit] to convert units using formulas configured in Mod Settings. Users can add, edit, or delete conversion items individually from the settings UI.
+- Inline Calculator: Type a sum (e.g. 100 * 5, sqrt(144), 15% of 200, 2^10) and the result shows above the apps; large and small results in scientific notation too. Press Enter to copy it.
+- Unit Converter: Type 100 km to see it in the usual units of its kind, or 100 km to mi (also in, ->) for just one; 255 hex or 0xFF for other bases. Knows length, mass, temperature, speed, area, volume, data, data rate, time, pressure, energy, power, angle and frequency, with . or , as the decimal point; each kind has its color. Add units it does not know in the settings (Reciprocal converts them back).
 - Network Interface Inspector: Type /ip to display all active Wi-Fi, Ethernet, and VPN network interfaces with their IP addresses, subnet masks, gateways, and hardware descriptions. Press Enter to copy the IP.
 - Full Right-Click Context Menu: Right-click any file, folder, or application to Open, Run as Administrator, Open in terminal (folders), Properties, Create desktop shortcut, Cut/Copy (files), Copy path, Open file location, or Uninstall (apps).
 - Native Properties Dialogs: Properties opens through explorer.exe, the same dialog as in File Explorer.
 - Drag and Drop: drag a file or folder from the results into File Explorer, the desktop or another app - Photoshop, a code editor, a chat - as you would from File Explorer. It is always a copy, never a move. Start closes once it has landed; Escape, or letting go over Start, cancels.
-- Uninstall: right-click an app and choose Uninstall. After a confirmation that names what goes, a Store app is removed as Start removes it, and a program runs its own uninstaller, the one Installed apps in Settings runs. Apps that are part of Windows offer none.
-- File Preview: the selected file gets a preview card beside the Start menu - a large thumbnail (the one File Explorer shows, so pictures, a frame of a video and documents; PDFs show their first page, drawn by Windows' own PDF renderer) with its size, date and, for pictures and videos, dimensions and length. Videos and animated GIF and WebP images play in it, muted.
+- Uninstall: right-click an app and choose Uninstall. After a confirmation that names what goes, a Store app is removed as Start removes it, and a program runs its own uninstaller, the one Installed apps in Settings runs. Apps that are part of Windows offer none. A Store app is removed in the background, with no progress bar: it is gone from the list after a few seconds.
+- File Preview: the selected file gets a preview card beside the Start menu - a large thumbnail (the one File Explorer shows, so pictures, a frame of a video and documents; PDFs show their first page, drawn by Windows' own PDF renderer) with its size, date and, for pictures and videos, dimensions and length. Videos and animated GIF and WebP images play in it, muted, and a PDF turns through its first pages. SVG images are drawn by Windows' own renderer. A file with no picture shows the start of its text instead: a text or code file its first lines, and a Word, Excel, PowerPoint, RTF or OpenDocument file its first paragraphs, read by Windows' own document readers (no Office needed). Below it, the details: type, size, dates, and what the kind of file has of its own - dimensions, length, artist and album, camera, a program's description and version, a document's title and author. A folder shows how many items it holds and, when Everything keeps folder sizes, its size. A click on the path copies it.
 - Opens in Front: Programs are started by Explorer, the way the stock Start menu starts them, so they come to the front even when they take a while to start or you move the mouse meanwhile.
 - Explicit Web Search: Trigger web searches on demand using the '?' prefix (e.g. '?query'). Includes customizable keyword shortcuts such as '?yt' (YouTube), '?gh' (GitHub), '?w' (Wikipedia), and '?r' (Reddit).
 - Start Menu Styler Compatibility: Automatically syncs background styles (Tinted Glass, Acrylic, custom theme colors) in real time without restarting the mod.
@@ -69,9 +69,10 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 
 ## Command Reference
 
-- /c <expression>: Calculate math expression (e.g. /c 100 * 5, /c sqrt(144), /c 15% of 200).
-- /c <number>: Display all configured unit conversions and programmer radix (Hex, Bin, Oct).
-- /c <number> <unit>: Targeted unit conversion (e.g. /c 100 km, /c 32 c, /c 50 lbs).
+- <sum>: Calculate (e.g. 100 * 5, sqrt(144), 15% of 200, 2^10).
+- <number> hex, 0xFF, 0b1010: The number in other bases (Hex, Bin, Oct).
+- <number> <unit>: The number in the usual units of its kind (e.g. 100 km, 32 f, 1,5 kg).
+- <number> <unit> to <unit>: Just that conversion (e.g. 100 km to mi; also in, ->, =).
 - /ip: List all active network interfaces and IP addresses.
 - ? <term>: Web search using default search engine.
 - ?<shortcut> <term>: Targeted web search (e.g. ?yt lo-fi, ?gh windhawk, ?w physics, ?r windows).
@@ -89,6 +90,9 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 - panelMargin: 0
   $name: Search Panel Margin
   $description: Space in pixels between the search panel and the edges of the Start menu. 0 (the default) fills the Start menu edge to edge; 14 gives the inset look of earlier versions.
+- textScale: 100
+  $name: Text Size (%)
+  $description: Size of the search panel's text, as a percentage of the usual (80 to 150, default 100).
 - searchDebounceMs: 0
   $name: Search Debounce Delay (ms)
   $description: Extra delay in milliseconds before searching, to let typing settle (default 0, instant). Rarely needed - while a search runs, new keystrokes already wait and only the latest text is searched.
@@ -100,7 +104,7 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
   $description: Show a preview of the selected file beside the Start menu - a large thumbnail (the one File Explorer shows) with its size, date and, for pictures and videos, dimensions and length.
 - animatePreview: true
   $name: Play Videos and Animations
-  $description: In the file preview, play videos and animated GIF and WebP images - muted, on a loop.
+  $description: In the file preview, play videos and animated GIF and WebP images - muted, on a loop - and turn through a PDF's first pages.
 - showKeyHints: true
   $name: Show Keyboard Shortcuts Bar
   $description: Display the keyboard shortcut hints ([Up/Down] Select, [Tab] Next, [Enter] Open, [Ctrl+Enter] Admin, [Shift+Enter] Menu, [Esc] Close) in the bottom bar.
@@ -161,70 +165,23 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
   $description: >-
     Keywords that send a query to a specific site instead of the default search engine, typed as "?keyword query" (for example "?yt music").
 - unitConversions:
-    - - fromUnit: "km"
+    - - fromUnit: "px"
         $name: Source Unit
-        $description: Trigger unit (e.g. km)
-      - toUnit: "miles"
+        $description: The unit typed after the number (e.g. px)
+      - toUnit: "em"
         $name: Target Unit
-      - formula: "x * 0.621371"
+      - formula: "x / 16"
         $name: Formula
         $description: Formula using 'x' as input number
-      - category: "Distance"
+      - category: "CSS"
         $name: Category
-    - - fromUnit: "c"
-        $name: Source Unit
-        $description: Trigger unit (e.g. c)
-      - toUnit: "°F"
-        $name: Target Unit
-      - formula: "x * 9 / 5 + 32"
-        $name: Formula
-        $description: Formula using 'x' as input number
-      - category: "Temperature"
-        $name: Category
-    - - fromUnit: "kg"
-        $name: Source Unit
-        $description: Trigger unit (e.g. kg)
-      - toUnit: "lbs"
-        $name: Target Unit
-      - formula: "x * 2.20462"
-        $name: Formula
-        $description: Formula using 'x' as input number
-      - category: "Weight"
-        $name: Category
-    - - fromUnit: "m"
-        $name: Source Unit
-        $description: Trigger unit (e.g. m)
-      - toUnit: "feet"
-        $name: Target Unit
-      - formula: "x * 3.28084"
-        $name: Formula
-        $description: Formula using 'x' as input number
-      - category: "Length"
-        $name: Category
-    - - fromUnit: "cm"
-        $name: Source Unit
-        $description: Trigger unit (e.g. cm)
-      - toUnit: "in"
-        $name: Target Unit
-      - formula: "x / 2.54"
-        $name: Formula
-        $description: Formula using 'x' as input number
-      - category: "Length"
-        $name: Category
-    - - fromUnit: "mb"
-        $name: Source Unit
-        $description: Trigger unit (e.g. mb)
-      - toUnit: "GB"
-        $name: Target Unit
-      - formula: "x / 1024"
-        $name: Formula
-        $description: Formula using 'x' as input number
-      - category: "Storage"
-        $name: Category
+      - reciprocal: true
+        $name: Reciprocal
+        $description: Also convert back, from the target unit to the source unit. For a linear formula (a * x + b), as a unit conversion is.
   $name: Custom Unit Conversions
   $description: >-
-    Configurable unit conversions for /c <number> [unit].
-    Formulas evaluate using 'x' as input. You can add, edit, or remove items individually at any time.
+    Units the converter does not know already - it knows length, mass, temperature, speed, area, volume, data, data rate, time, pressure, energy, power, angle and frequency.
+    Formulas use 'x' as the input number. Add, edit or remove items at any time.
 */
 // ==/WindhawkModSettings==
 
@@ -253,6 +210,8 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 #include <dwmapi.h>
 #include <shlwapi.h>
 #include <appmodel.h>
+#include <filter.h>
+#include <filterr.h>
 #include <string_view>
 #include <limits>
 #include <atomic>
@@ -613,7 +572,9 @@ inline bool ParseReply(const void* data, DWORD size, std::vector<Result>* out,
 // until the reply arrives or the timeout expires.
 class Client {
    public:
-    Client() = default;
+    // Each thread that queries has a client of its own, under a class name of
+    // its own: the search thread's and the preview thread's (FolderFacts).
+    explicit Client(const wchar_t* className = kReplyClass) : className_(className) {}
     Client(const Client&) = delete;
     Client& operator=(const Client&) = delete;
 
@@ -622,7 +583,7 @@ class Client {
             DestroyWindow(hwnd_);
         }
         if (atom_) {
-            UnregisterClassW(kReplyClass, GetCurrentModuleHandle());
+            UnregisterClassW(className_, GetCurrentModuleHandle());
         }
     }
 
@@ -631,12 +592,12 @@ class Client {
         wc.cbSize = sizeof(wc);
         wc.lpfnWndProc = &Client::WndProc;
         wc.hInstance = GetCurrentModuleHandle();
-        wc.lpszClassName = kReplyClass;
+        wc.lpszClassName = className_;
         atom_ = RegisterClassExW(&wc);
         if (!atom_) {
             return false;
         }
-        hwnd_ = CreateWindowExW(0, kReplyClass, L"", WS_POPUP, 0, 0, 0, 0,
+        hwnd_ = CreateWindowExW(0, className_, L"", WS_POPUP, 0, 0, 0, 0,
                                 HWND_MESSAGE, nullptr, wc.hInstance, this);
         if (!hwnd_) {
             return false;
@@ -683,6 +644,7 @@ class Client {
 
    private:
     static constexpr wchar_t kReplyClass[] = L"WindhawkEverythingBrokerReply";
+    const wchar_t* className_ = kReplyClass;
     static constexpr DWORD kReplyIdBase = 0x45560000;  // EV, then a serial
 
     // Everything echoes the id as the reply's dwData. A new one per query means
@@ -3393,47 +3355,6 @@ inline bool EvaluateConversionFormula(const std::wstring& formula, double n, dou
 // ---------------------------------------------------------------------------
 // 5. Standalone Number & Multi-Unit Conversions (/c)
 // ---------------------------------------------------------------------------
-inline bool ParseConversionQuery(const std::wstring& input, double& outNum, std::wstring& outUnit, bool& isHelp) {
-    std::wstring t = Trim(input);
-    if (t.starts_with(L"/c") || t.starts_with(L"/C")) {
-        t = Trim(t.substr(2));
-    } else {
-        return false;
-    }
-
-    if (t.empty()) {
-        isHelp = true;
-        return true;
-    }
-    isHelp = false;
-
-    size_t i = 0;
-    if (i < t.size() && (t[i] == L'+' || t[i] == L'-')) i++;
-    bool hasDigits = false;
-    bool hasDot = false;
-    while (i < t.size()) {
-        if (iswdigit(t[i])) {
-            hasDigits = true;
-            i++;
-        } else if (t[i] == L'.' && !hasDot) {
-            hasDot = true;
-            i++;
-        } else {
-            break;
-        }
-    }
-
-    if (!hasDigits) return false;
-
-    std::wstring numPart = t.substr(0, i);
-    wchar_t* pEnd = nullptr;
-    outNum = wcstod(numPart.c_str(), &pEnd);
-
-    std::wstring rest = Trim(t.substr(i));
-    outUnit = ToLower(rest);
-    return true;
-}
-
 inline std::wstring NormalizeUnit(const std::wstring& unitRaw) {
     std::wstring u = ToLower(Trim(unitRaw));
     if (u == L"c" || u == L"\u00B0c" || u == L"celsius") return L"c";
@@ -3631,8 +3552,6 @@ static bool IsSearchHostWindow(HWND hwnd) {
     return match;
 }
 
-// Start sends this to SearchHost's CoreWindow when SearchHost holds the
-// foreground and Start cannot take it. See SearchHostSubclassProc.
 // Explorer's helper posts this to Start's CoreWindow when a drag of a result
 // it ran (StartFileDrag) is over: wParam 1 if it was dropped.
 static UINT DragDoneMessage() {
@@ -3640,6 +3559,8 @@ static UINT DragDoneMessage() {
     return message;
 }
 
+// Start sends this to SearchHost's CoreWindow when SearchHost holds the
+// foreground and Start cannot take it. See SearchHostSubclassProc.
 static UINT StartForegroundRequestMessage() {
     static const UINT message = RegisterWindowMessageW(L"StartEverything_StartForegroundRequest");
     return message;
@@ -4015,40 +3936,52 @@ static void RunExplorerDrag(HWND hWnd) {
     }
 }
 
+// The thread showing an uninstall error, while it does (AcceptPackageRemoval):
+// StopExplorerHelperHost closes the box rather than wait for a click.
+static std::atomic<DWORD> g_removalBoxThread{0};
+
 // Removes a packaged app for this user, for Uninstall in an app's menu in
 // Start (RequestPackageRemoval): here, in a plain desktop process, as package
-// management is not open to Start's. Asked for as "family\ntitle", only by
-// Start and only for a well-formed family name; says so when it fails.
-static bool AcceptPackageRemoval(HWND sender, std::wstring request) {
-    DWORD senderPid = 0, startPid = 0;
-    if (sender) {
-        GetWindowThreadProcessId(sender, &senderPid);
+// management is not open to Start's. Nothing the request says is taken on
+// trust -- any process can send it: it is acted on only while Start is open
+// and in front, where the user has just confirmed it, and only for a package
+// that is not part of Windows, checked again here. Says so when it fails,
+// under the package's own name.
+static bool AcceptPackageRemoval(std::wstring family) {
+    while (!family.empty() && family.back() == L'\0') {
+        family.pop_back();
     }
-    if (HWND start = CachedStartWindow()) {
+    HWND start = CachedStartWindow();
+    DWORD startPid = 0, foregroundPid = 0;
+    if (start) {
         GetWindowThreadProcessId(start, &startPid);
     }
-    while (!request.empty() && request.back() == L'\0') {
-        request.pop_back();
-    }
-    const size_t newline = request.find(L'\n');
-    const std::wstring family = request.substr(0, newline);
-    const std::wstring title = newline == std::wstring::npos ? family : request.substr(newline + 1);
+    GetWindowThreadProcessId(GetForegroundWindow(), &foregroundPid);
     const size_t underscore = family.rfind(L'_');
-    if (!senderPid || senderPid != startPid || family.size() > 128 || underscore == std::wstring::npos ||
-        family.size() - underscore - 1 != 13 ||
+    if (!start || IsCloaked(start) || !startPid || foregroundPid != startPid || family.size() > 128 ||
+        underscore == std::wstring::npos || family.size() - underscore - 1 != 13 ||
         family.find_first_not_of(L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-_") !=
             std::wstring::npos) {
         Wh_Log(L"[Explorer] uninstall: refused %ls", family.c_str());
         return false;
     }
-    SpawnTrackedLaunch([family, title] {
+    SpawnTrackedLaunch([family] {
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
+        std::wstring name = family;
         std::wstring error;
         try {
+            namespace appmodel = winrt::Windows::ApplicationModel;
             winrt::Windows::Management::Deployment::PackageManager manager;
             bool found = false;
             for (auto const& package : manager.FindPackagesForUser(L"", family)) {
+                if (package.IsFramework() || package.SignatureKind() == appmodel::PackageSignatureKind::System) {
+                    continue;  // part of Windows: never removed from here
+                }
                 found = true;
+                try {
+                    name = package.DisplayName().c_str();
+                } catch (...) {
+                }
                 auto result = manager.RemovePackageAsync(package.Id().FullName()).get();
                 const int32_t code = result.ExtendedErrorCode();
                 if (code < 0) {
@@ -4059,15 +3992,17 @@ static bool AcceptPackageRemoval(HWND sender, std::wstring request) {
                 }
             }
             if (!found) {
-                error = L"It is not installed for this account.";
+                error = L"It is not installed for this account, or it is part of Windows.";
             }
         } catch (winrt::hresult_error const& e) {
             error = e.message().c_str();
         }
         Wh_Log(L"[Explorer] uninstall %ls: %ls", family.c_str(), error.empty() ? L"removed" : error.c_str());
-        if (!error.empty()) {
-            MessageBoxW(nullptr, (L"Couldn't uninstall " + title + L".\n\n" + error).c_str(), title.c_str(),
+        if (!error.empty() && !g_quit.load()) {
+            g_removalBoxThread.store(GetCurrentThreadId());
+            MessageBoxW(nullptr, (L"Couldn't uninstall " + name + L".\n\n" + error).c_str(), name.c_str(),
                         MB_OK | MB_ICONWARNING | MB_TOPMOST | MB_SETFOREGROUND);
+            g_removalBoxThread.store(0);
         }
         winrt::uninit_apartment();
     });
@@ -4083,7 +4018,6 @@ static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
         auto pcds = reinterpret_cast<const COPYDATASTRUCT*>(lParam);
         if (pcds && pcds->dwData == kExplorerUninstallMagic && pcds->lpData && pcds->cbData >= sizeof(wchar_t)) {
             return AcceptPackageRemoval(
-                       reinterpret_cast<HWND>(wParam),
                        std::wstring(reinterpret_cast<const wchar_t*>(pcds->lpData), pcds->cbData / sizeof(wchar_t)))
                        ? 1
                        : 0;
@@ -4106,6 +4040,9 @@ static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
             if (GetForegroundWindow() != hWnd || !(GetAsyncKeyState(button) & 0x8000) || !local ||
                 GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
                 Wh_Log(L"[Explorer] drag: refused for %ls", path.c_str());
+                if (HWND start = CachedStartWindow(); start && !IsCloaked(start) && GetForegroundWindow() == hWnd) {
+                    SetForegroundWindow(start);  // it gave this window the foreground for the drag
+                }
                 return 0;
             }
             // Started from the message loop: the drag loop must not run
@@ -4324,6 +4261,14 @@ static void StopExplorerHelperHost() {
         CloseHandle(g_hExplorerHelperThread);
         g_hExplorerHelperThread = nullptr;
         g_explorerHelperThreadId = 0;
+    }
+    // An uninstall error still up would hold the unload until clicked.
+    for (int i = 0; i < 50 && g_removalBoxThread.load(); ++i) {
+        EnumThreadWindows(g_removalBoxThread.load(), [](HWND hwnd, LPARAM) -> BOOL {
+            PostMessageW(hwnd, WM_CLOSE, 0, 0);
+            return TRUE;
+        }, 0);
+        Sleep(100);
     }
     WaitForTrackedLaunches();
 }
@@ -4568,7 +4513,11 @@ struct CustomConversion {
     std::wstring toUnit;
     std::wstring formula;
     std::wstring category;
+    bool reciprocal = false;  // also back, from toUnit (calc::Invert)
 };
+
+// The text size setting (textScale), for Fs.
+std::atomic<int> g_textScale{100};
 
 struct Settings {
     std::wstring defaultSearchUrl = L"https://duckduckgo.com/?q={q}";
@@ -4579,6 +4528,7 @@ struct Settings {
     int maxFileResults = 12;
     int searchDebounceMs = 0;
     int panelMargin = 0;
+    int textScale = 100;  // percent
     bool showKeyHints = true;
     bool filterNoisyPaths = true;
     bool learnFavorites = true;
@@ -4634,22 +4584,15 @@ void LoadSettings() {
         auto cat = WindhawkUtils::StringSetting::make(L"unitConversions[%d].category", i);
 
         CustomConversion c;
-        c.fromUnit = tools::ToLower(tools::Trim(fromU.get()));
+        c.fromUnit = tools::Trim(fromU.get());  // shown as written; matched by NormalizeUnit
         c.toUnit = (toU.get() && *toU.get()) ? tools::Trim(toU.get()) : L"";
         c.formula = (formula.get() && *formula.get()) ? tools::Trim(formula.get()) : L"";
         c.category = (cat.get() && *cat.get()) ? tools::Trim(cat.get()) : L"Conversion";
+        c.reciprocal = Wh_GetIntSetting(L"unitConversions[%d].reciprocal", i) != 0;
 
         if (!c.fromUnit.empty() && !c.toUnit.empty() && !c.formula.empty()) {
             g_settings.unitConversions.push_back(std::move(c));
         }
-    }
-    if (g_settings.unitConversions.empty()) {
-        g_settings.unitConversions.push_back({L"km", L"miles", L"x * 0.621371", L"Distance"});
-        g_settings.unitConversions.push_back({L"c", L"\u00B0F", L"x * 9 / 5 + 32", L"Temperature"});
-        g_settings.unitConversions.push_back({L"kg", L"lbs", L"x * 2.20462", L"Weight"});
-        g_settings.unitConversions.push_back({L"m", L"feet", L"x * 3.28084", L"Length"});
-        g_settings.unitConversions.push_back({L"cm", L"in", L"x / 2.54", L"Length"});
-        g_settings.unitConversions.push_back({L"mb", L"GB", L"x / 1024", L"Storage"});
     }
 
     g_settings.filterNoisyPaths = Wh_GetIntSetting(L"filterNoisyPaths") != 0;
@@ -4697,6 +4640,9 @@ void LoadSettings() {
     g_settings.searchDebounceMs = std::clamp(Wh_GetIntSetting(L"searchDebounceMs"), 0, 1000);
 
     g_settings.panelMargin = std::clamp(Wh_GetIntSetting(L"panelMargin"), 0, 60);
+    const int textScale = Wh_GetIntSetting(L"textScale");
+    g_settings.textScale = textScale ? std::clamp(textScale, 80, 150) : 100;  // 0: not set yet
+    g_textScale.store(g_settings.textScale);
 
     g_settings.showKeyHints = Wh_GetIntSetting(L"showKeyHints") != 0;
 
@@ -4853,6 +4799,11 @@ void HidePreview();
 void HideAllOtherSearchBoxes(wux::DependencyObject const& root, int depth = 15);
 void SyncOverlayBackground();
 
+// A font size of the mod's own UI at the text size setting (textScale).
+double Fs(double size) {
+    return size * g_textScale.load(std::memory_order_relaxed) / 100.0;
+}
+
 // The space between the search panel and Start's edges (panelMargin).
 int PanelMargin() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
@@ -4946,6 +4897,10 @@ wuxc::Border FindMenuAcrylicBorder() {
 
 void SyncOverlayBackground() {
     if (!g_resultsHost) return;
+    const int margin = PanelMargin();
+    try {
+        g_resultsHost.Margin(wux::ThicknessHelper::FromUniformLength(margin));
+    } catch (...) {}
     try {
         if (auto border = FindMenuAcrylicBorder()) {
             if (auto brush = border.Background()) {
@@ -4959,8 +4914,6 @@ void SyncOverlayBackground() {
                     // Covering Start to its edges, the results cover its
                     // outline too: it is drawn again on top. Inset, the
                     // outline still shows around them.
-                    const int margin = PanelMargin();
-                    g_resultsHost.Margin(wux::ThicknessHelper::FromUniformLength(margin));
                     g_resultsHost.BorderBrush(border.BorderBrush());
                     g_resultsHost.BorderThickness(margin == 0 ? border.BorderThickness()
                                                               : wux::ThicknessHelper::FromUniformLength(0));
@@ -6326,6 +6279,7 @@ struct Row {
     std::wstring programPath; // apps launched by app ID: their program on disk, for its file actions
     std::wstring copyText;   // text to copy to clipboard on activation
     std::wstring customGlyph; // Segoe Fluent glyph override (e.g. \uE1D0, \uE701, \uE88E)
+    uint32_t glyphColor = 0;  // ARGB of the glyph -- a conversion's kind (calc::KindColor) -- or 0
 };
 
 // Icons take 24 logical pixels in a row, which on a display at 150% is 36 real
@@ -6623,24 +6577,30 @@ inline DWORD ReadDword(HKEY key, const wchar_t* name) {
 
 // Folders that hold many programs, which an install folder must not be taken
 // for (some installers register one as theirs).
-inline bool IsSharedFolder(const std::wstring& dir) {
+inline std::vector<std::wstring> SharedFolders() {
     static const KNOWNFOLDERID* const kShared[] = {
         &FOLDERID_ProgramFiles,       &FOLDERID_ProgramFilesX86, &FOLDERID_ProgramFilesCommon,
         &FOLDERID_ProgramFilesCommonX86, &FOLDERID_LocalAppData,  &FOLDERID_RoamingAppData,
         &FOLDERID_UserProgramFiles,   &FOLDERID_Windows,         &FOLDERID_Profile,
         &FOLDERID_ProgramData,
     };
+    std::vector<std::wstring> folders;
+    for (const KNOWNFOLDERID* id : kShared) {
+        PWSTR path = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderPath(*id, KF_FLAG_DONT_VERIFY, nullptr, &path)) && path) {
+            folders.push_back(path);
+        }
+        CoTaskMemFree(path);
+    }
+    return folders;
+}
+
+inline bool IsSharedFolder(const std::wstring& dir, const std::vector<std::wstring>& shared) {
     if (dir.size() <= 3) {
         return true;  // a drive
     }
-    for (const KNOWNFOLDERID* id : kShared) {
-        PWSTR path = nullptr;
-        bool same = false;
-        if (SUCCEEDED(SHGetKnownFolderPath(*id, KF_FLAG_DONT_VERIFY, nullptr, &path)) && path) {
-            same = EqualsI(dir, path);
-        }
-        CoTaskMemFree(path);
-        if (same) {
+    for (const std::wstring& folder : shared) {
+        if (EqualsI(dir, folder)) {
             return true;
         }
     }
@@ -6689,6 +6649,7 @@ inline std::optional<Command> FindProgramUninstaller(const std::wstring& program
         return std::nullopt;
     }
     const std::wstring programDir = Folder(program);
+    const std::vector<std::wstring> shared = SharedFolders();
     struct Root {
         HKEY hive;
         REGSAM view;
@@ -6739,11 +6700,11 @@ inline std::optional<Command> FindProgramUninstaller(const std::wstring& program
                 if (!program.empty() && EqualsI(icon, program)) {
                     rule = 4;
                 } else if (!program.empty() && !location.empty() && IsUnder(program, location) &&
-                           !IsSharedFolder(location)) {
+                           !IsSharedFolder(location, shared)) {
                     rule = 3;
                     depth = location.size();
                 } else if (!program.empty() && !sharedUninstaller && !forOther && !programDir.empty() &&
-                           (IsUnder(file, programDir) || IsUnder(icon, programDir)) && !IsSharedFolder(programDir)) {
+                           (IsUnder(file, programDir) || IsUnder(icon, programDir)) && !IsSharedFolder(programDir, shared)) {
                     rule = 2;
                 }
                 const int named = NameMatch(name, title);
@@ -6804,12 +6765,12 @@ inline std::wstring RemovablePackageFamily(const std::wstring& appId) {
 }  // namespace uninstall
 
 // Has Explorer remove a packaged app (AcceptPackageRemoval).
-bool RequestPackageRemoval(const std::wstring& family, const std::wstring& title) {
+bool RequestPackageRemoval(const std::wstring& family) {
     HWND helper = FindExplorerHelperWindow();
     if (!helper) {
         return false;
     }
-    std::wstring request = family + L"\n" + title;
+    std::wstring request = family;
     COPYDATASTRUCT cds{};
     cds.dwData = kExplorerUninstallMagic;
     cds.cbData = static_cast<DWORD>((request.size() + 1) * sizeof(wchar_t));
@@ -7236,19 +7197,28 @@ void SetFileSelection(int index) {
 // drawn by Windows' own PDF renderer (RenderPdfPage), so the preview does not
 // depend on a PDF app being installed.
 //
+// An SVG with no thumbnail is drawn by XAML's own renderer (OpenSvg).
+// A file with no picture shows the start of its text instead, when it has
+// some: a text file -- any, by what is in it -- line for line
+// (ReadTextStart), or a Word, Excel, PowerPoint, RTF or OpenDocument file
+// through Windows' own document filters, Office or not (ReadDocumentText).
+//
 // Motion plays over the still once it is ready (animatePreview): a video,
 // muted and looping, through XAML's own player; a GIF, which XAML animates
 // itself; an animated WebP, whose frames Windows' WebP decoder hands over
 // whole but without their timing, which is read from the file
-// (WebpFrameDurations). Never sound. All of it stops and is let go the
+// (WebpFrameDurations); a PDF's first pages, a second each. Never sound. All
+// of it stops and is let go the
 // moment the selection moves or Start closes.
 //
 // The card is a Popup beside the menu: right of it, or left when that would
 // run off the screen. Start's window covers the whole screen, but its window
 // region is the menu, and nothing of the window shows outside it -- so while
 // the card is up, its rectangle is added to the region (SetPreviewRegion), and
-// exactly that part is taken out again when it goes. It never takes focus --
-// the keyboard stays in the search box -- and lets the pointer through. It follows the selection
+// exactly that part is taken out again when it goes -- so a click on it goes
+// to Start's window, which hands it to the card: a click on the path copies
+// it. It never takes focus; the keyboard stays in the search box. It follows
+// the selection
 // after a short pause, so arrowing through results does not flash a card per
 // row. Thumbnails are fetched on a thread of their own: one can take a few
 // hundred milliseconds, more the first time a video is seen.
@@ -7275,9 +7245,13 @@ struct Result {
     double scale = 1.0;        // physical pixels per DIP when it was made
     int pages = 0;             // a PDF drawn by RenderPdfPage: how many pages
     std::wstring name;
-    std::wstring details;
+    std::vector<std::pair<std::wstring, std::wstring>> facts;  // label and value, in the order shown
+    std::wstring text;       // the start of a text file or a document, shown where a picture would be
+    bool monospace = false;  // the text is a text file's, line for line
     // Motion over the still (see the module comment). At most one is set.
     winrt::Windows::Storage::Streams::IRandomAccessStream gif{nullptr};
+    winrt::Windows::Storage::Streams::IRandomAccessStream svg{nullptr};  // drawn by XAML (OpenSvg)
+    double svgAspect = 1.0;                                               // its height over its width
     winrt::Windows::Storage::StorageFile video{nullptr};
     std::vector<std::vector<BYTE>> frames;  // an animated WebP, each like pixels
     std::vector<int> delays;                // milliseconds per frame
@@ -7287,17 +7261,117 @@ std::mutex g_mutex;
 std::condition_variable g_wake;
 std::wstring g_request;  // the path to fetch next, or empty
 bool g_quit = false;
-std::optional<Result> g_result;  // the last fetched, for the XAML thread
+[[clang::no_destroy]] std::optional<Result> g_result;  // the last fetched, for the XAML thread
 [[clang::no_destroy]] std::optional<std::thread> g_thread;
 
-// Media properties, defined here: propkey.h would add every key there is to
-// the DLL (see kLinkTargetParsingPath). System.Image.HorizontalSize and
-// VerticalSize, System.Video.FrameWidth and FrameHeight, System.Media.Duration.
+// Properties, defined here: propkey.h would add every key there is to the
+// DLL (see kLinkTargetParsingPath). System.Image.HorizontalSize and
+// VerticalSize, System.Video.FrameWidth and FrameHeight, System.Media.Duration,
+// then those of the details (Fetch): System.ItemTypeText,
+// System.Video.FrameRate, System.Audio.EncodingBitrate, System.Music.Artist
+// and AlbumTitle, System.Photo.DateTaken and CameraModel,
+// System.FileDescription, FileVersion and Company, System.Title and Author.
 inline constexpr PROPERTYKEY kImageWidth{{0x6444048F, 0x4C8B, 0x11D1, {0x8B, 0x70, 0x08, 0x00, 0x36, 0xB1, 0x1A, 0x03}}, 3};
 inline constexpr PROPERTYKEY kImageHeight{{0x6444048F, 0x4C8B, 0x11D1, {0x8B, 0x70, 0x08, 0x00, 0x36, 0xB1, 0x1A, 0x03}}, 4};
 inline constexpr PROPERTYKEY kVideoWidth{{0x64440491, 0x4C8B, 0x11D1, {0x8B, 0x70, 0x08, 0x00, 0x36, 0xB1, 0x1A, 0x03}}, 3};
 inline constexpr PROPERTYKEY kVideoHeight{{0x64440491, 0x4C8B, 0x11D1, {0x8B, 0x70, 0x08, 0x00, 0x36, 0xB1, 0x1A, 0x03}}, 4};
 inline constexpr PROPERTYKEY kDuration{{0x64440490, 0x4C8B, 0x11D1, {0x8B, 0x70, 0x08, 0x00, 0x36, 0xB1, 0x1A, 0x03}}, 3};
+inline constexpr PROPERTYKEY kItemTypeText{{0xB725F130, 0x47EF, 0x101A, {0xA5, 0xF1, 0x02, 0x60, 0x8C, 0x9E, 0xEB, 0xAC}}, 4};
+inline constexpr PROPERTYKEY kFrameRate{{0x64440491, 0x4C8B, 0x11D1, {0x8B, 0x70, 0x08, 0x00, 0x36, 0xB1, 0x1A, 0x03}}, 6};
+inline constexpr PROPERTYKEY kBitrate{{0x64440490, 0x4C8B, 0x11D1, {0x8B, 0x70, 0x08, 0x00, 0x36, 0xB1, 0x1A, 0x03}}, 4};
+inline constexpr PROPERTYKEY kArtist{{0x56A3372E, 0xCE9C, 0x11D2, {0x9F, 0x0E, 0x00, 0x60, 0x97, 0xC6, 0x86, 0xF6}}, 2};
+inline constexpr PROPERTYKEY kAlbum{{0x56A3372E, 0xCE9C, 0x11D2, {0x9F, 0x0E, 0x00, 0x60, 0x97, 0xC6, 0x86, 0xF6}}, 4};
+inline constexpr PROPERTYKEY kDateTaken{{0x14B81DA1, 0x0135, 0x4D31, {0x96, 0xD9, 0x6C, 0xBF, 0xC9, 0x67, 0x1A, 0x99}}, 36867};
+inline constexpr PROPERTYKEY kCameraModel{{0x14B81DA1, 0x0135, 0x4D31, {0x96, 0xD9, 0x6C, 0xBF, 0xC9, 0x67, 0x1A, 0x99}}, 272};
+inline constexpr PROPERTYKEY kFileDescription{{0x0CEF7D53, 0xFA64, 0x11D1, {0xA2, 0x03, 0x00, 0x00, 0xF8, 0x1F, 0xED, 0xEE}}, 3};
+inline constexpr PROPERTYKEY kFileVersion{{0x0CEF7D53, 0xFA64, 0x11D1, {0xA2, 0x03, 0x00, 0x00, 0xF8, 0x1F, 0xED, 0xEE}}, 4};
+inline constexpr PROPERTYKEY kCompany{{0xD5CDD502, 0x2E9C, 0x101B, {0x93, 0x97, 0x08, 0x00, 0x2B, 0x2C, 0xF9, 0xAE}}, 15};
+inline constexpr PROPERTYKEY kTitle{{0xF29F85E0, 0x4FF9, 0x1068, {0xAB, 0x91, 0x08, 0x00, 0x2B, 0x27, 0xB3, 0xD9}}, 2};
+inline constexpr PROPERTYKEY kAuthor{{0xF29F85E0, 0x4FF9, 0x1068, {0xAB, 0x91, 0x08, 0x00, 0x2B, 0x27, 0xB3, 0xD9}}, 4};
+
+// A property as text: a string, or a list of them joined (artists, authors).
+inline std::wstring PropertyText(IShellItem2* item, REFPROPERTYKEY key) {
+    PROPVARIANT value;
+    PropVariantInit(&value);
+    std::wstring text;
+    if (SUCCEEDED(item->GetProperty(key, &value))) {
+        if (value.vt == VT_LPWSTR && value.pwszVal) {
+            text = value.pwszVal;
+        } else if (value.vt == (VT_VECTOR | VT_LPWSTR)) {
+            for (ULONG i = 0; i < value.calpwstr.cElems; ++i) {
+                if (value.calpwstr.pElems[i] && *value.calpwstr.pElems[i]) {
+                    text += (text.empty() ? L"" : L"; ");
+                    text += value.calpwstr.pElems[i];
+                }
+            }
+        }
+        PropVariantClear(&value);
+    }
+    while (!text.empty() && iswspace(text.back())) {
+        text.pop_back();
+    }
+    return text;
+}
+
+inline std::wstring ByteSize(ULONGLONG bytes) {
+    wchar_t text[32] = {};
+    StrFormatByteSizeW(static_cast<LONGLONG>(bytes), text, ARRAYSIZE(text));
+    return text;
+}
+
+inline std::wstring ItemCount(DWORD count, bool more) {
+    return std::to_wstring(count) + (more ? L"+" : L"") + (count == 1 && !more ? L" item" : L" items");
+}
+
+// A folder's size and how many items it holds directly, from Everything's
+// index: one query each, answered in a few milliseconds. The size only when
+// Everything keeps folder sizes (its "Index folder size" option); false when
+// Everything does not know the folder.
+inline bool FolderFacts(everything::Client* client, const std::wstring& path, ULONGLONG* size, bool* sized,
+                        DWORD* items) {
+    const size_t slash = path.find_last_of(L'\\');
+    if (!client || slash == std::wstring::npos || slash + 1 >= path.size()) {
+        return false;  // a drive: not a folder to Everything
+    }
+    std::wstring parent = path.substr(0, slash);
+    if (parent.size() == 2) {
+        parent += L'\\';  // "C:" is "C:\"
+    }
+    std::vector<everything::Result> found;
+    DWORD total = 0;
+    if (!client->Query(L"folder: parent:\"" + parent + L"\" wfn:\"" + path.substr(slash + 1) + L"\"", 1, &found, &total,
+                       300, everything::kReqName | everything::kReqPath | everything::kReqSize) ||
+        found.empty()) {
+        return false;
+    }
+    *sized = found[0].size != ~0ULL;  // what Everything answers when it keeps no folder sizes
+    *size = found[0].size;
+    std::vector<everything::Result> children;
+    return client->Query(L"parent:\"" + path + L"\"", 1, &children, items, 300, everything::kReqName);
+}
+
+// How many items a folder holds directly, counted here: when Everything
+// does not know it. Up to 10000.
+inline DWORD CountItems(const std::wstring& path, bool* more) {
+    DWORD count = 0;
+    *more = false;
+    WIN32_FIND_DATAW data;
+    HANDLE find = FindFirstFileExW((path + L"\\*").c_str(), FindExInfoBasic, &data, FindExSearchNameMatch, nullptr,
+                                   FIND_FIRST_EX_LARGE_FETCH);
+    if (find == INVALID_HANDLE_VALUE) {
+        return 0;
+    }
+    do {
+        if (wcscmp(data.cFileName, L".") && wcscmp(data.cFileName, L"..")) {
+            if (++count >= 10000) {
+                *more = true;
+                break;
+            }
+        }
+    } while (FindNextFileW(find, &data));
+    FindClose(find);
+    return count;
+}
 
 // A thumbnail or a property can make the shell read the file, which on a
 // network or removable drive can stall for seconds. Those get the name and
@@ -7350,41 +7424,71 @@ inline void RunInMta(F&& f) {
     worker.join();
 }
 
-// The first page of a PDF, fitted into width x height pixels, by Windows' own
-// renderer (Windows.Data.Pdf). Fails on an encrypted PDF, for one.
-inline bool RenderPdfPage(const std::wstring& path, int width, int height, Result* r) {
+// How many of a PDF's pages the preview turns through, and for how long each.
+inline constexpr int kPdfPages = 10;
+inline constexpr int kPdfPageMs = 1000;
+
+// A PDF's first page, fitted into width x height pixels, by Windows' own
+// renderer (Windows.Data.Pdf) -- and when `pages` allows more and there are,
+// the first pages as frames, shown a second each: the same size as the first,
+// a page of another shape centered in it. Fails on an encrypted PDF, for one.
+inline bool RenderPdfPage(const std::wstring& path, int width, int height, int pages, Result* r) {
     bool ok = false;
     RunInMta([&] {
-        {
-            namespace pdf = winrt::Windows::Data::Pdf;
-            namespace imaging = winrt::Windows::Graphics::Imaging;
-            auto file = winrt::Windows::Storage::StorageFile::GetFileFromPathAsync(path).get();
-            auto document = pdf::PdfDocument::LoadFromFileAsync(file).get();
-            if (document.PageCount() > 0) {
-                auto page = document.GetPage(0);
-                const auto size = page.Size();
-                const double fit = std::min(width / std::max(1.0, static_cast<double>(size.Width)),
-                                            height / std::max(1.0, static_cast<double>(size.Height)));
-                pdf::PdfPageRenderOptions options;
-                options.DestinationWidth(static_cast<uint32_t>(std::max(1.0, size.Width * fit)));
-                options.DestinationHeight(static_cast<uint32_t>(std::max(1.0, size.Height * fit)));
-                winrt::Windows::Storage::Streams::InMemoryRandomAccessStream stream;
-                page.RenderToStreamAsync(stream, options).get();
-                auto decoder = imaging::BitmapDecoder::CreateAsync(stream).get();
-                auto data = decoder.GetPixelDataAsync(imaging::BitmapPixelFormat::Bgra8, imaging::BitmapAlphaMode::Premultiplied,
-                                                      imaging::BitmapTransform(), imaging::ExifOrientationMode::IgnoreExifOrientation,
-                                                      imaging::ColorManagementMode::DoNotColorManage)
-                                .get();
-                auto bytes = data.DetachPixelData();
-                const int w = static_cast<int>(decoder.PixelWidth()), h = static_cast<int>(decoder.PixelHeight());
-                if (w > 0 && h > 0 && bytes.size() == static_cast<size_t>(w) * h * 4) {
-                    r->pixels.assign(bytes.begin(), bytes.end());
-                    r->width = w;
-                    r->height = h;
-                    r->pages = static_cast<int>(document.PageCount());
-                    ok = true;
-                }
+        namespace pdf = winrt::Windows::Data::Pdf;
+        namespace imaging = winrt::Windows::Graphics::Imaging;
+        auto file = winrt::Windows::Storage::StorageFile::GetFileFromPathAsync(path).get();
+        auto document = pdf::PdfDocument::LoadFromFileAsync(file).get();
+        auto render = [&](uint32_t index, int boxWidth, int boxHeight, std::vector<BYTE>* pixels, int* w, int* h) {
+            auto page = document.GetPage(index);
+            const auto size = page.Size();
+            const double fit = std::min(boxWidth / std::max(1.0, static_cast<double>(size.Width)),
+                                        boxHeight / std::max(1.0, static_cast<double>(size.Height)));
+            pdf::PdfPageRenderOptions options;
+            options.DestinationWidth(static_cast<uint32_t>(std::max(1.0, size.Width * fit)));
+            options.DestinationHeight(static_cast<uint32_t>(std::max(1.0, size.Height * fit)));
+            winrt::Windows::Storage::Streams::InMemoryRandomAccessStream stream;
+            page.RenderToStreamAsync(stream, options).get();
+            auto decoder = imaging::BitmapDecoder::CreateAsync(stream).get();
+            auto data = decoder.GetPixelDataAsync(imaging::BitmapPixelFormat::Bgra8, imaging::BitmapAlphaMode::Premultiplied,
+                                                  imaging::BitmapTransform(), imaging::ExifOrientationMode::IgnoreExifOrientation,
+                                                  imaging::ColorManagementMode::DoNotColorManage)
+                            .get();
+            auto bytes = data.DetachPixelData();
+            *w = static_cast<int>(decoder.PixelWidth());
+            *h = static_cast<int>(decoder.PixelHeight());
+            if (*w <= 0 || *h <= 0 || bytes.size() != static_cast<size_t>(*w) * *h * 4) {
+                return false;
             }
+            pixels->assign(bytes.begin(), bytes.end());
+            return true;
+        };
+        const int count = static_cast<int>(document.PageCount());
+        if (count <= 0 || !render(0, width, height, &r->pixels, &r->width, &r->height)) {
+            return;
+        }
+        r->pages = count;
+        ok = true;
+        const int frames = std::min(count, pages);
+        if (frames < 2) {
+            return;
+        }
+        r->frames.push_back(r->pixels);
+        r->delays.push_back(kPdfPageMs);
+        for (int i = 1; i < frames; ++i) {
+            std::vector<BYTE> page;
+            int w = 0, h = 0;
+            if (!render(static_cast<uint32_t>(i), r->width, r->height, &page, &w, &h)) {
+                break;
+            }
+            std::vector<BYTE> frame(r->pixels.size(), 0);
+            const int left = (r->width - std::min(w, r->width)) / 2, top = (r->height - std::min(h, r->height)) / 2;
+            for (int y = 0; y < std::min(h, r->height); ++y) {
+                memcpy(&frame[(static_cast<size_t>(top + y) * r->width + left) * 4], &page[static_cast<size_t>(y) * w * 4],
+                       static_cast<size_t>(std::min(w, r->width)) * 4);
+            }
+            r->frames.push_back(std::move(frame));
+            r->delays.push_back(kPdfPageMs);
         }
     });
     return ok;
@@ -7492,8 +7596,232 @@ inline void FetchMotion(const std::wstring& path, int width, int height, Result*
     }
 }
 
+// An SVG, for XAML's own renderer (SvgImageSource) to draw on the card, and
+// its shape: from the viewBox of its <svg> element, else its width and
+// height, else square.
+inline bool OpenSvg(const std::wstring& path, Result* r) {
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                              OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    char bytes[4096];
+    DWORD read = 0;
+    ReadFile(file, bytes, sizeof(bytes) - 1, &read, nullptr);
+    CloseHandle(file);
+    bytes[read] = 0;
+    const char* tag = strstr(bytes, "<svg");
+    if (!tag) {
+        return false;
+    }
+    const char* end = strchr(tag, '>');
+    const std::string svgTag(tag, end ? end : bytes + read);
+    auto attribute = [&](const char* name) -> std::string {
+        const std::string key = std::string(" ") + name + "=";
+        size_t at = svgTag.find(key);
+        if (at == std::string::npos) {
+            at = svgTag.find(std::string("\n") + name + "=");
+        }
+        if (at == std::string::npos || at + key.size() >= svgTag.size()) {
+            return {};
+        }
+        const char quote = svgTag[at + key.size()];
+        const size_t start = at + key.size() + 1;
+        const size_t close = svgTag.find(quote, start);
+        return close == std::string::npos ? std::string() : svgTag.substr(start, close - start);
+    };
+    double aspect = 0;
+    const std::string viewBox = attribute("viewBox");
+    if (!viewBox.empty()) {
+        double box[4] = {};
+        const char* cursor = viewBox.c_str();
+        for (double& value : box) {
+            char* next = nullptr;
+            value = strtod(cursor, &next);
+            cursor = next;
+            while (*cursor == ',' || *cursor == ' ') {
+                ++cursor;
+            }
+        }
+        if (box[2] > 0 && box[3] > 0) {
+            aspect = box[3] / box[2];
+        }
+    }
+    if (!aspect) {
+        const double width = strtod(attribute("width").c_str(), nullptr);
+        const double height = strtod(attribute("height").c_str(), nullptr);
+        aspect = width > 0 && height > 0 ? height / width : 1;
+    }
+    r->svgAspect = std::clamp(aspect, 0.2, 5.0);
+    RunInMta([&] {
+        r->svg = winrt::Windows::Storage::StorageFile::GetFileFromPathAsync(path).get().OpenReadAsync().get();
+    });
+    return r->svg != nullptr;
+}
+
+// The start of a text file -- any: by what is in it, not its name -- as up to
+// 40 lines: UTF-16 or UTF-8 by its byte order mark, else UTF-8 when it is,
+// else the system's code page. Nothing when it is not text: a NUL, or too
+// many other control characters, in the first 8 KB.
+inline bool ReadTextStart(const std::wstring& path, std::wstring* text) {
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                              OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    char bytes[8192];
+    DWORD read = 0;
+    const bool ok = ReadFile(file, bytes, sizeof(bytes), &read, nullptr) && read > 0;
+    CloseHandle(file);
+    if (!ok) {
+        return false;
+    }
+    std::wstring decoded;
+    auto decode = [&](UINT codePage, const char* from, int length, DWORD flags) {
+        const int count = MultiByteToWideChar(codePage, flags, from, length, nullptr, 0);
+        if (count <= 0) {
+            return false;
+        }
+        decoded.resize(count);
+        MultiByteToWideChar(codePage, flags, from, length, decoded.data(), count);
+        return true;
+    };
+    if (read >= 2 && static_cast<BYTE>(bytes[0]) == 0xFF && static_cast<BYTE>(bytes[1]) == 0xFE) {
+        decoded.assign(reinterpret_cast<const wchar_t*>(bytes + 2), (read - 2) / 2);
+    } else {
+        const int skip = read >= 3 && static_cast<BYTE>(bytes[0]) == 0xEF && static_cast<BYTE>(bytes[1]) == 0xBB &&
+                                 static_cast<BYTE>(bytes[2]) == 0xBF
+                             ? 3
+                             : 0;
+        if (memchr(bytes, 0, read)) {
+            return false;
+        }
+        // A character cut off at the end of what was read is not an error.
+        int length = static_cast<int>(read) - skip;
+        bool utf8 = false;
+        for (int cut = 0; cut < 4 && length - cut > 0 && !utf8; ++cut) {
+            utf8 = decode(CP_UTF8, bytes + skip, length - cut, MB_ERR_INVALID_CHARS);
+        }
+        if (!utf8 && !decode(CP_ACP, bytes + skip, length, 0)) {
+            return false;
+        }
+    }
+    size_t control = 0;
+    for (wchar_t ch : decoded) {
+        if (ch == 0) {
+            return false;
+        }
+        control += ch < 0x20 && ch != L'\t' && ch != L'\r' && ch != L'\n' && ch != L'\f';
+    }
+    if (decoded.empty() || control * 20 > decoded.size()) {
+        return false;
+    }
+    // Line for line: tabs as four spaces, long lines cut.
+    std::wstring out;
+    int lines = 0;
+    size_t column = 0;
+    for (size_t i = 0; i < decoded.size() && lines < 40; ++i) {
+        const wchar_t ch = decoded[i];
+        if (ch == L'\r') {
+            continue;
+        }
+        if (ch == L'\n') {
+            out += L'\n';
+            ++lines;
+            column = 0;
+        } else if (column < 200) {
+            if (ch == L'\t') {
+                out.append(4, L' ');
+                column += 4;
+            } else if (ch >= 0x20) {
+                out += ch;
+                ++column;
+            }
+        }
+    }
+    while (!out.empty() && (out.back() == L'\n' || out.back() == L' ')) {
+        out.pop_back();
+    }
+    if (out.empty()) {
+        return false;
+    }
+    *text = std::move(out);
+    return true;
+}
+
+// The start of a document's text -- Word, Excel, PowerPoint, RTF,
+// OpenDocument -- through the filter Windows' own search reads it with
+// (LoadIFilter): Windows has them for these, Office or not. Up to 30 MB, and
+// the first 1500 characters.
+inline bool ReadDocumentText(const std::wstring& path, const std::wstring& lowerName, std::wstring* text) {
+    static const wchar_t* const kDocuments[] = {L".doc", L".docx", L".docm", L".dot", L".dotx", L".rtf",
+                                                L".odt", L".xls", L".xlsx", L".xlsm", L".ppt", L".pptx",
+                                                L".pptm", L".ods", L".odp"};
+    const size_t dot = lowerName.rfind(L'.');
+    if (dot == std::wstring::npos ||
+        std::none_of(std::begin(kDocuments), std::end(kDocuments),
+                     [&](const wchar_t* ext) { return lowerName.compare(dot, std::wstring::npos, ext) == 0; })) {
+        return false;
+    }
+    WIN32_FILE_ATTRIBUTE_DATA attributes{};
+    if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &attributes) || attributes.nFileSizeHigh ||
+        attributes.nFileSizeLow > 30u * 1024 * 1024) {
+        return false;
+    }
+    using LoadIFilterFn = HRESULT(WINAPI*)(PCWSTR, IUnknown*, void**);
+    static const auto loadIFilter = reinterpret_cast<LoadIFilterFn>(
+        GetProcAddress(LoadLibraryExW(L"query.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32), "LoadIFilter"));
+    IFilter* filter = nullptr;
+    if (!loadIFilter || FAILED(loadIFilter(path.c_str(), nullptr, reinterpret_cast<void**>(&filter))) || !filter) {
+        return false;
+    }
+    ULONG flags = 0;
+    std::wstring out;
+    if (SUCCEEDED(filter->Init(IFILTER_INIT_CANON_PARAGRAPHS | IFILTER_INIT_HARD_LINE_BREAKS, 0, nullptr, &flags))) {
+        STAT_CHUNK chunk{};
+        for (int chunks = 0; out.size() < 1500 && chunks < 2000 && filter->GetChunk(&chunk) == S_OK; ++chunks) {
+            if (!(chunk.flags & CHUNK_TEXT)) {
+                continue;
+            }
+            if (!out.empty()) {
+                out += chunk.breakType >= CHUNK_EOP ? L'\n' : L' ';
+            }
+            wchar_t buffer[512];
+            ULONG size = ARRAYSIZE(buffer);
+            HRESULT got;
+            while (out.size() < 1500 && ((got = filter->GetText(&size, buffer)) == S_OK || got == FILTER_S_LAST_TEXT)) {
+                for (ULONG i = 0; i < size; ++i) {
+                    const wchar_t ch = buffer[i] == L'\r' || buffer[i] == 0x0B ? L'\n' : buffer[i];
+                    // No empty lines or runs of spaces: the text, close.
+                    if ((ch == L'\n' && (out.empty() || out.back() == L'\n')) ||
+                        (ch == L' ' && (out.empty() || out.back() == L' ' || out.back() == L'\n')) ||
+                        (ch < 0x20 && ch != L'\n')) {
+                        continue;
+                    }
+                    out += ch;
+                }
+                if (got == FILTER_S_LAST_TEXT) {
+                    break;
+                }
+                size = ARRAYSIZE(buffer);
+            }
+        }
+    }
+    filter->Release();
+    while (!out.empty() && iswspace(out.back())) {
+        out.pop_back();
+    }
+    if (out.empty()) {
+        return false;
+    }
+    *text = std::move(out);
+    return true;
+}
+
 // The icon of the file's type, from its name alone -- for a file the shell
-// could not open (no access, or a drive not read from here).
+// could not open (no access, or a drive not read from here). SHIL_JUMBO's,
+// unless the type has no 256px image -- then that list has its 48 in a corner
+// of the 256 -- and then the 48 itself, at its own size.
 inline void TypeIcon(const std::wstring& path, int side, Result* r) {
     SHFILEINFOW info{};
     const DWORD attributes = GetFileAttributesW(path.c_str());
@@ -7502,45 +7830,89 @@ inline void TypeIcon(const std::wstring& path, int side, Result* r) {
                         SHGFI_USEFILEATTRIBUTES | SHGFI_SYSICONINDEX)) {
         return;
     }
-    IImageList* list = nullptr;
-    if (FAILED(SHGetImageList(SHIL_JUMBO, IID_PPV_ARGS(&list))) || !list) {
-        return;
-    }
-    HICON icon = nullptr;
-    if (SUCCEEDED(list->GetIcon(info.iIcon, ILD_TRANSPARENT, &icon)) && icon) {
-        if (icons::IconToBgra(icon, side, &r->pixels)) {
-            r->width = r->height = side;
+    for (int which : {SHIL_JUMBO, SHIL_EXTRALARGE}) {
+        IImageList* list = nullptr;
+        if (FAILED(SHGetImageList(which, IID_PPV_ARGS(&list))) || !list) {
+            continue;
         }
-        DestroyIcon(icon);
+        int cx = 0, cy = 0;
+        list->GetIconSize(&cx, &cy);
+        const int size = which == SHIL_JUMBO ? side : std::min(side, cx);
+        HICON icon = nullptr;
+        std::vector<BYTE> pixels;
+        bool ok = SUCCEEDED(list->GetIcon(info.iIcon, ILD_TRANSPARENT, &icon)) && icon &&
+                  icons::IconToBgra(icon, size, &pixels);
+        if (icon) {
+            DestroyIcon(icon);
+        }
+        list->Release();
+        if (ok && which == SHIL_JUMBO) {
+            // Nothing drawn past the corner a 48 takes in a 256: that is all there is.
+            const int corner = size * 48 / 256 + 1;
+            bool beyond = false;
+            for (int y = 0; y < size && !beyond; ++y) {
+                for (int x = y < corner ? corner : 0; x < size; ++x) {
+                    if (pixels[(static_cast<size_t>(y) * size + x) * 4 + 3]) {
+                        beyond = true;
+                        break;
+                    }
+                }
+            }
+            ok = beyond;
+        }
+        if (ok) {
+            r->pixels = std::move(pixels);
+            r->width = r->height = size;
+            return;
+        }
     }
-    list->Release();
 }
 
 // On the preview thread.
-inline Result Fetch(const std::wstring& path, double scale, bool animate) {
+inline Result Fetch(const std::wstring& path, double scale, bool animate, everything::Client* everythingClient) {
     Result r;
     r.path = path;
     r.scale = scale;
     const size_t slash = path.find_last_of(L"\\/");
     r.name = slash == std::wstring::npos ? path : path.substr(slash + 1);
-    const std::wstring folder = slash == std::wstring::npos ? L"" : path.substr(0, slash);
 
-    std::vector<std::wstring> lines;
+    // The details: what File Explorer's details pane shows of it, and what
+    // its kind has of its own.
+    std::wstring type, size, items, dimensions, length, frameRate, bitrate, artist, album, title, author, description,
+        version, company, camera, taken, modified, created;
     if (OnFixedDrive(path)) {
         IShellItem2* item = nullptr;
         if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), nullptr, IID_PPV_ARGS(&item))) && item) {
+            type = PropertyText(item, kItemTypeText);
             ULONG w = 0, h = 0;
-            ULONGLONG duration = 0;
-            std::wstring media;
             if ((SUCCEEDED(item->GetUInt32(kImageWidth, &w)) && SUCCEEDED(item->GetUInt32(kImageHeight, &h)) && w && h) ||
                 (SUCCEEDED(item->GetUInt32(kVideoWidth, &w)) && SUCCEEDED(item->GetUInt32(kVideoHeight, &h)) && w && h)) {
-                media = std::to_wstring(w) + L" \u00D7 " + std::to_wstring(h);
+                dimensions = std::to_wstring(w) + L" \u00D7 " + std::to_wstring(h);
             }
+            ULONGLONG duration = 0;
             if (SUCCEEDED(item->GetUInt64(kDuration, &duration)) && duration) {
-                media += (media.empty() ? L"" : L" \u2022 ") + FormatDuration(duration);
+                length = FormatDuration(duration);
             }
-            if (!media.empty()) {
-                lines.push_back(media);
+            ULONG number = 0;
+            if (SUCCEEDED(item->GetUInt32(kFrameRate, &number)) && number) {  // frames per 1000 seconds
+                wchar_t text[32];
+                swprintf_s(text, number % 1000 ? L"%.2f fps" : L"%.0f fps", number / 1000.0);
+                frameRate = text;
+            }
+            if (SUCCEEDED(item->GetUInt32(kBitrate, &number)) && number) {  // bits per second
+                bitrate = std::to_wstring((number + 500) / 1000) + L" kbps";
+            }
+            artist = PropertyText(item, kArtist);
+            album = PropertyText(item, kAlbum);
+            title = PropertyText(item, kTitle);
+            author = PropertyText(item, kAuthor);
+            description = PropertyText(item, kFileDescription);
+            version = PropertyText(item, kFileVersion);
+            company = PropertyText(item, kCompany);
+            camera = PropertyText(item, kCameraModel);
+            FILETIME shot{};
+            if (SUCCEEDED(item->GetFileTime(kDateTaken, &shot)) && (shot.dwLowDateTime || shot.dwHighDateTime)) {
+                taken = FormatDate(shot);
             }
 
             // A thumbnail at full size; without one, a PDF's first page, else
@@ -7565,8 +7937,14 @@ inline Result Fetch(const std::wstring& path, double scale, bool animate) {
                     }
                     DeleteObject(bitmap);
                 } else if (lower.size() > 4 && lower.ends_with(L".pdf") &&
-                           RenderPdfPage(path, want.cx, want.cy, &r)) {
+                           RenderPdfPage(path, want.cx, want.cy, animate ? kPdfPages : 1, &r)) {
                     // drawn
+                } else if (lower.size() > 4 && lower.ends_with(L".svg") && OpenSvg(path, &r)) {
+                    // drawn on the card
+                } else if (ReadDocumentText(path, lower, &r.text)) {
+                    // its text, where a picture would be
+                } else if (ReadTextStart(path, &r.text)) {
+                    r.monospace = true;
                 } else {
                     const int side = TypeIconPixels(scale);
                     if (SUCCEEDED(factory->GetImage(SIZE{side, side}, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK, &bitmap)) &&
@@ -7583,40 +7961,57 @@ inline Result Fetch(const std::wstring& path, double scale, bool animate) {
             }
             item->Release();
         }
-        if (r.pages) {
-            lines.push_back(r.pages == 1 ? std::wstring(L"1 page") : std::to_wstring(r.pages) + L" pages");
-        }
         if (animate) {
             FetchMotion(path, static_cast<int>(kThumbWidth * scale), static_cast<int>(kThumbHeight * scale), &r);
         }
 
         WIN32_FILE_ATTRIBUTE_DATA attributes{};
         if (GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &attributes)) {
-            std::wstring line;
             if (attributes.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-                line = L"Folder";
+                ULONGLONG bytes = 0;
+                bool sized = false, more = false;
+                DWORD count = 0;
+                if (!FolderFacts(everythingClient, path, &bytes, &sized, &count)) {
+                    count = CountItems(path, &more);
+                }
+                if (sized) {
+                    size = ByteSize(bytes);
+                }
+                items = ItemCount(count, more);
             } else {
-                wchar_t size[32] = {};
-                const ULONGLONG bytes = (static_cast<ULONGLONG>(attributes.nFileSizeHigh) << 32) | attributes.nFileSizeLow;
-                StrFormatByteSizeW(static_cast<LONGLONG>(bytes), size, ARRAYSIZE(size));
-                line = size;
+                size = ByteSize((static_cast<ULONGLONG>(attributes.nFileSizeHigh) << 32) | attributes.nFileSizeLow);
             }
-            const std::wstring date = FormatDate(attributes.ftLastWriteTime);
-            if (!date.empty()) {
-                line += L" \u2022 " + date;
-            }
-            lines.push_back(line);
+            modified = FormatDate(attributes.ftLastWriteTime);
+            created = FormatDate(attributes.ftCreationTime);
         }
     }
-    if (r.pixels.empty()) {
+    if (r.pixels.empty() && r.text.empty() && !r.svg) {
         TypeIcon(path, TypeIconPixels(scale), &r);
     }
-    if (!folder.empty()) {
-        lines.push_back(folder);
-    }
-    for (size_t i = 0; i < lines.size(); ++i) {
-        r.details += (i ? L"\n" : L"") + lines[i];
-    }
+    auto add = [&r](const wchar_t* label, const std::wstring& value) {
+        if (!value.empty()) {
+            r.facts.emplace_back(label, value);
+        }
+    };
+    add(L"Type", type);
+    add(L"Size", size);
+    add(L"Contains", items);
+    add(L"Dimensions", dimensions);
+    add(L"Length", length);
+    add(L"Pages", r.pages ? std::to_wstring(r.pages) : std::wstring());
+    add(L"Frame rate", frameRate);
+    add(L"Bitrate", bitrate);
+    add(L"Artist", artist);
+    add(L"Album", album);
+    add(L"Title", title);
+    add(L"Author", author);
+    add(L"Description", description);
+    add(L"Version", version);
+    add(L"Company", company);
+    add(L"Camera", camera);
+    add(L"Taken", taken);
+    add(L"Modified", modified);
+    add(L"Created", created);
     return r;
 }
 
@@ -7628,15 +8023,19 @@ inline Result Fetch(const std::wstring& path, double scale, bool animate) {
 [[clang::no_destroy]] wuxc::Border g_previewThumbBox{nullptr};
 [[clang::no_destroy]] wuxc::Image g_previewImage{nullptr};
 [[clang::no_destroy]] wuxc::TextBlock g_previewName{nullptr};
-[[clang::no_destroy]] wuxc::TextBlock g_previewDetails{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_previewText{nullptr};
+[[clang::no_destroy]] wuxc::Grid g_previewFacts{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_previewPath{nullptr};
+[[clang::no_destroy]] wux::DispatcherTimer g_previewCopied{nullptr};  // puts the path back after "Copied"
+std::wstring g_previewShownPath;
 [[clang::no_destroy]] wux::DispatcherTimer g_previewTimer{nullptr};
+[[clang::no_destroy]] wuxma::Storyboard g_previewResize{nullptr};  // PreviewResize
+[[clang::no_destroy]] wuxma::DoubleAnimation g_previewResizeAnimation{nullptr};
 std::wstring g_previewWanted;  // the selected file's path, or empty
 
-// What plays over the still. XAML thread only, but for the video player's
-// event, which counts on g_previewPlayGeneration to tell a stale one.
+// What plays over the still. XAML thread only.
 [[clang::no_destroy]] wuxc::MediaPlayerElement g_previewVideo{nullptr};
 [[clang::no_destroy]] winrt::Windows::Media::Playback::MediaPlayer g_previewPlayer{nullptr};
-[[clang::no_destroy]] std::optional<winrt::Windows::Media::Playback::MediaPlayer::MediaOpened_revoker> g_previewOpened;
 [[clang::no_destroy]] wuxmi::BitmapImage g_previewGif{nullptr};
 [[clang::no_destroy]] std::optional<wuxmi::BitmapImage::ImageOpened_revoker> g_previewGifOpened;
 [[clang::no_destroy]] wux::DispatcherTimer g_previewFrameTimer{nullptr};
@@ -7650,6 +8049,11 @@ void ApplyPreview();
 
 void PreviewThreadMain() {
     HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    std::optional<everything::Client> everythingClient;
+    everythingClient.emplace(L"WindhawkEverythingPreviewReply");
+    if (!everythingClient->Init()) {
+        everythingClient.reset();
+    }
     for (;;) {
         std::wstring path;
         {
@@ -7667,7 +8071,8 @@ void PreviewThreadMain() {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             animate = g_settings.animatePreview;
         }
-        preview::Result result = preview::Fetch(path, (dpi ? dpi : 96) / 96.0, animate);
+        preview::Result result =
+            preview::Fetch(path, (dpi ? dpi : 96) / 96.0, animate, everythingClient ? &*everythingClient : nullptr);
         {
             std::lock_guard<std::mutex> lock(preview::g_mutex);
             if (preview::g_quit || !preview::g_request.empty()) {
@@ -7683,21 +8088,25 @@ void PreviewThreadMain() {
         } catch (...) {
         }
     }
+    everythingClient.reset();  // its window, on this thread
     if (SUCCEEDED(comHr)) {
         CoUninitialize();
     }
 }
 
 void StopPreviewThread() {
+    std::optional<std::thread> thread;
     {
         std::lock_guard<std::mutex> lock(preview::g_mutex);
-        preview::g_quit = true;
+        preview::g_quit = true;  // for good: nothing starts the thread again
+        thread.swap(preview::g_thread);
     }
     preview::g_wake.notify_all();
-    if (preview::g_thread && preview::g_thread->joinable()) {
-        preview::g_thread->join();
+    if (thread && thread->joinable()) {
+        thread->join();
     }
-    preview::g_thread.reset();
+    std::lock_guard<std::mutex> lock(preview::g_mutex);
+    preview::g_result.reset();
 }
 
 bool PreviewEnabled() {
@@ -7777,7 +8186,6 @@ void StopPreviewMotion() {
         g_previewFrames.clear();
         g_previewDelays.clear();
         g_previewFrameBitmap = nullptr;
-        g_previewOpened.reset();
         if (g_previewVideo) {
             g_previewVideo.Visibility(wux::Visibility::Collapsed);
             g_previewVideo.SetMediaPlayer(nullptr);
@@ -7818,7 +8226,6 @@ void BuildPreviewCard() {
     card.Padding(wux::ThicknessHelper::FromUniformLength(12));
     card.CornerRadius(wux::CornerRadius{8, 8, 8, 8});
     card.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
-    card.IsHitTestVisible(false);
 
     wuxc::StackPanel stack;
     wuxc::Border thumbBox;
@@ -7836,26 +8243,79 @@ void BuildPreviewCard() {
     video.VerticalAlignment(wux::VerticalAlignment::Center);
     video.Visibility(wux::Visibility::Collapsed);
     thumbGrid.Children().Append(video);
+    wuxc::TextBlock thumbText;  // a text file's or a document's start (Result::text)
+    thumbText.Margin(wux::ThicknessHelper::FromLengths(10, 8, 10, 8));
+    thumbText.FontSize(Fs(11));
+    thumbText.Opacity(0.85);
+    thumbText.MaxLines(24);
+    thumbText.TextTrimming(wux::TextTrimming::CharacterEllipsis);
+    thumbText.Visibility(wux::Visibility::Collapsed);
+    thumbGrid.Children().Append(thumbText);
     thumbBox.Child(thumbGrid);
     stack.Children().Append(thumbBox);
 
     wuxc::TextBlock name;
     name.Margin(wux::ThicknessHelper::FromLengths(2, 10, 2, 0));
-    name.FontSize(14);
+    name.FontSize(Fs(14));
     name.FontWeight(wut::FontWeights::SemiBold());
     name.TextWrapping(wux::TextWrapping::Wrap);
     name.MaxLines(2);
     name.TextTrimming(wux::TextTrimming::CharacterEllipsis);
     stack.Children().Append(name);
 
-    wuxc::TextBlock details;
-    details.Margin(wux::ThicknessHelper::FromLengths(2, 4, 2, 0));
-    details.FontSize(12);
-    details.Opacity(0.7);
-    details.TextWrapping(wux::TextWrapping::Wrap);
-    details.MaxLines(4);
-    details.TextTrimming(wux::TextTrimming::CharacterEllipsis);
-    stack.Children().Append(details);
+    // The details, label and value (ApplyPreview fills them in).
+    wuxc::Grid facts;
+    facts.Margin(wux::ThicknessHelper::FromLengths(2, 8, 2, 0));
+    facts.ColumnSpacing(12);
+    facts.RowSpacing(3);
+    wuxc::ColumnDefinition labelColumn;
+    labelColumn.Width(wux::GridLengthHelper::Auto());
+    facts.ColumnDefinitions().Append(labelColumn);
+    wuxc::ColumnDefinition valueColumn;
+    valueColumn.Width(wux::GridLengthHelper::FromValueAndType(1, wux::GridUnitType::Star));
+    facts.ColumnDefinitions().Append(valueColumn);
+    stack.Children().Append(facts);
+
+    // The full path, which a click copies -- without taking the keyboard
+    // from the search box.
+    wuxc::Button pathButton;
+    pathButton.Margin(wux::ThicknessHelper::FromLengths(-2, 6, -2, 0));
+    pathButton.Padding(wux::ThicknessHelper::FromLengths(4, 4, 4, 4));
+    pathButton.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
+    pathButton.HorizontalContentAlignment(wux::HorizontalAlignment::Left);
+    pathButton.Background(MakeBrush(0, 0, 0, 0));
+    pathButton.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
+    pathButton.IsTabStop(false);
+    pathButton.AllowFocusOnInteraction(false);
+    wuxc::ToolTipService::SetToolTip(pathButton, winrt::box_value(L"Copy path"));
+    wuxc::TextBlock pathText;
+    pathText.FontSize(Fs(12));
+    pathText.Opacity(0.7);
+    pathText.TextWrapping(wux::TextWrapping::Wrap);
+    pathText.MaxLines(3);
+    pathText.TextTrimming(wux::TextTrimming::CharacterEllipsis);
+    pathButton.Content(pathText);
+    KeepHandler(pathButton, pathButton.Click(winrt::auto_revoke, [](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+        if (g_previewShownPath.empty() || !g_previewPath) {
+            return;
+        }
+        tools::CopyTextToClipboard(g_previewShownPath);
+        g_previewPath.Text(L"Copied to clipboard");
+        if (!g_previewCopied) {
+            g_previewCopied = wux::DispatcherTimer();
+            g_previewCopied.Interval(std::chrono::milliseconds(1200));
+            KeepHandler(g_previewCopied, g_previewCopied.Tick(winrt::auto_revoke, [](wf::IInspectable const&,
+                                                                                    wf::IInspectable const&) {
+                g_previewCopied.Stop();
+                if (g_previewPath) {
+                    g_previewPath.Text(winrt::hstring{g_previewShownPath});
+                }
+            }));
+        }
+        g_previewCopied.Stop();
+        g_previewCopied.Start();
+    }));
+    stack.Children().Append(pathButton);
     card.Child(stack);
 
     wuxcp::Popup popup;
@@ -7873,13 +8333,16 @@ void BuildPreviewCard() {
     g_previewThumbBox = thumbBox;
     g_previewImage = image;
     g_previewVideo = video;
+    g_previewText = thumbText;
     g_previewName = name;
-    g_previewDetails = details;
+    g_previewFacts = facts;
+    g_previewPath = pathText;
 }
 
 // Beside the panel: right of it, or left when the right would run off the
-// window (Start's window, the whole screen).
-void PositionPreview() {
+// window (Start's window, the whole screen). The window region takes in at
+// least atLeast DIPs of height: what the card spans while it changes size.
+void PositionPreview(double atLeast = 0) {
     if (!g_previewPopup || !g_resultsHost) {
         return;
     }
@@ -7908,7 +8371,7 @@ void PositionPreview() {
     // Level with the top of the panel, unless a tall card would run off the
     // bottom of the screen.
     g_previewCard.Measure(wf::Size{static_cast<float>(preview::kWidth), std::numeric_limits<float>::infinity()});
-    const double height = g_previewCard.DesiredSize().Height;
+    const double height = std::max(static_cast<double>(g_previewCard.DesiredSize().Height), atLeast);
     double y = origin.Y;
     if (windowHeight > 0 && y + height > windowHeight) {
         y = std::max(0.0, windowHeight - height);
@@ -7974,25 +8437,15 @@ void StartPreviewMotion(preview::Result& result) {
         g_previewFrameTimer.Interval(std::chrono::milliseconds(g_previewDelays[0]));
         g_previewFrameTimer.Start();
     } else if (result.video) {
-        // Muted and looping, shown over the still once it has opened.
+        // Muted and looping, over the still, which it shows as its poster
+        // until the first frame is ready.
         namespace playback = winrt::Windows::Media::Playback;
         playback::MediaPlayer player;
         player.IsMuted(true);
         player.IsLoopingEnabled(true);
         player.AutoPlay(true);
-        g_previewOpened = player.MediaOpened(winrt::auto_revoke, [generation](auto&&, auto&&) {
-            try {
-                if (generation != g_previewPlayGeneration.load() || !g_ourBox) {
-                    return;
-                }
-                g_ourBox.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Normal, wuc::DispatchedHandler{[generation] {
-                    if (generation == g_previewPlayGeneration.load() && g_previewVideo) {
-                        g_previewVideo.Visibility(wux::Visibility::Visible);
-                    }
-                }});
-            } catch (...) {
-            }
-        });
+        g_previewVideo.PosterSource(g_previewImage.Source());
+        g_previewVideo.Visibility(wux::Visibility::Visible);
         g_previewVideo.Width(g_previewImage.Width());
         g_previewVideo.Height(g_previewImage.Height());
         g_previewVideo.SetMediaPlayer(player);
@@ -8014,9 +8467,16 @@ void StartPreviewMotion(preview::Result& result) {
 // where the drag works as anywhere else. Start's results stay up meanwhile
 // (g_dragging); Explorer tells Start how it ended (DragDoneMessage).
 void StartFileDrag(std::wstring const& path) {
-    HWND helper = FindExplorerLaunchHolder();
+    // Only what Explorer's helper takes (a local file or folder that exists),
+    // or Start would give it the foreground for nothing.
+    bool local = path.size() >= 3 && path[1] == L':' && !PathIsUNCW(path.c_str());
+    if (local) {
+        const wchar_t root[] = {path[0], L':', L'\\', 0};
+        local = GetDriveTypeW(root) != DRIVE_REMOTE && GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+    }
+    HWND helper = local ? FindExplorerLaunchHolder() : nullptr;
     if (!helper) {
-        Wh_Log(L"drag: no Explorer helper");
+        Wh_Log(L"drag: not for %ls", path.c_str());
         return;
     }
     ReleaseCapture();  // the row's button holds the mouse
@@ -8073,6 +8533,41 @@ void AddPointerHandler(wux::UIElement const& element, wux::RoutedEvent const& ev
 }
 
 // Shows what the preview thread found, if it is still what is selected.
+// Eases the card's height from what it was to what its new content needs,
+// over a sixth of a second. The content is laid out at once at its own size:
+// while the card is shorter, it is cut off at the bottom; while taller, the
+// card shows its background below it. The window region covers the larger of
+// the two meanwhile.
+void PreviewResize(double fromHeight, double toHeight) {
+    if (!g_previewResize) {
+        g_previewResizeAnimation = wuxma::DoubleAnimation();
+        g_previewResizeAnimation.EnableDependentAnimation(true);  // Height is laid out, so on this thread
+        g_previewResizeAnimation.Duration(wux::DurationHelper::FromTimeSpan(std::chrono::milliseconds(160)));
+        wuxma::CubicEase ease;
+        ease.EasingMode(wuxma::EasingMode::EaseOut);
+        g_previewResizeAnimation.EasingFunction(ease);
+        wuxma::Storyboard::SetTargetProperty(g_previewResizeAnimation, L"Height");
+        g_previewResize = wuxma::Storyboard();
+        g_previewResize.Children().Append(g_previewResizeAnimation);
+        KeepHandler(g_previewResize, g_previewResize.Completed(winrt::auto_revoke, [](wf::IInspectable const&,
+                                                                                      wf::IInspectable const&) {
+            if (g_previewCard) {
+                g_previewCard.ClearValue(wux::FrameworkElement::HeightProperty());
+            }
+            if (g_previewResize) {
+                g_previewResize.Stop();  // let go of the animated value: back to its own height
+            }
+            PositionPreview();
+        }));
+    }
+    wuxma::Storyboard::SetTarget(g_previewResizeAnimation, g_previewCard);
+    g_previewResizeAnimation.From(fromHeight);
+    g_previewResizeAnimation.To(toHeight);
+    g_previewCard.Height(fromHeight);
+    PositionPreview(std::max(fromHeight, toHeight));
+    g_previewResize.Begin();
+}
+
 void ApplyPreview() try {
     std::optional<preview::Result> result;
     {
@@ -8094,6 +8589,14 @@ void ApplyPreview() try {
     g_previewCard.BorderBrush(isLight ? MakeBrush(0x24, 0x00, 0x00, 0x00) : MakeBrush(0x30, 0xFF, 0xFF, 0xFF));
     g_previewThumbBox.Background(isLight ? MakeBrush(0x0C, 0x00, 0x00, 0x00) : MakeBrush(0x10, 0xFF, 0xFF, 0xFF));
 
+    // Already up: it eases from the old content's height to the new one's
+    // (PreviewResize) rather than jump.
+    const double fromHeight = g_previewPopup.IsOpen() ? g_previewCard.ActualHeight() : 0;
+    if (g_previewResize) {
+        g_previewResize.Stop();
+    }
+    g_previewCard.ClearValue(wux::FrameworkElement::HeightProperty());
+
     StopPreviewMotion();
     wuxmi::WriteableBitmap bitmap{nullptr};
     if (result->width > 0 && result->height > 0 &&
@@ -8109,6 +8612,7 @@ void ApplyPreview() try {
         }
     }
     g_previewImage.Source(bitmap);
+    g_previewImage.Margin(wux::ThicknessHelper::FromUniformLength(0));
     if (bitmap) {
         // Pixel for pixel: made at the display's scale. The box is as high as
         // the picture, so a wide one leaves no bands above and below.
@@ -8116,14 +8620,80 @@ void ApplyPreview() try {
         g_previewImage.Height(result->height / result->scale);
         g_previewThumbBox.Height(std::max(result->height / result->scale, 48.0));
     }
-    g_previewThumbBox.Visibility(bitmap ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+    // An SVG, drawn by XAML at the display's scale, in a box of its shape, on
+    // a light background: most are dark shapes on nothing.
+    const bool showSvg = !bitmap && result->svg;
+    if (showSvg) {
+        double width = preview::kThumbWidth, height = width * result->svgAspect;
+        if (height > preview::kThumbHeight) {
+            height = preview::kThumbHeight;
+            width = height / result->svgAspect;
+        }
+        height = std::max(height, 48.0);
+        constexpr double kInset = 8;
+        wuxmi::SvgImageSource svg;
+        svg.RasterizePixelWidth((width - 2 * kInset) * result->scale);
+        svg.RasterizePixelHeight((height - 2 * kInset) * result->scale);
+        svg.SetSourceAsync(result->svg);
+        g_previewImage.Source(svg);
+        g_previewImage.Width(width - 2 * kInset);
+        g_previewImage.Height(height - 2 * kInset);
+        g_previewImage.Margin(wux::ThicknessHelper::FromUniformLength(kInset));
+        g_previewThumbBox.Height(height);
+        g_previewThumbBox.Background(MakeBrush(0xF2, 0xFF, 0xFF, 0xFF));
+    }
+    const bool picture = bitmap || showSvg;
+    g_previewImage.Visibility(picture ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+    // Text in place of a picture: a text file line for line, in a monospaced
+    // font; a document's paragraphs, wrapped. The box is as high as the text.
+    const bool showText = !picture && !result->text.empty();
+    g_previewText.Visibility(showText ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+    if (showText) {
+        g_previewText.Text(winrt::hstring{result->text});
+        g_previewText.FontFamily(wuxm::FontFamily(result->monospace ? L"Cascadia Mono, Consolas" : L"Segoe UI"));
+        g_previewText.TextWrapping(result->monospace ? wux::TextWrapping::NoWrap : wux::TextWrapping::Wrap);
+        g_previewThumbBox.ClearValue(wux::FrameworkElement::HeightProperty());
+    }
+    g_previewThumbBox.Visibility(picture || showText ? wux::Visibility::Visible : wux::Visibility::Collapsed);
     if (bitmap) {
         StartPreviewMotion(*result);
     }
     g_previewName.Text(winrt::hstring{result->name});
-    g_previewDetails.Text(winrt::hstring{result->details});
+    g_previewFacts.Children().Clear();
+    g_previewFacts.RowDefinitions().Clear();
+    for (size_t i = 0; i < result->facts.size(); ++i) {
+        wuxc::RowDefinition row;
+        row.Height(wux::GridLengthHelper::Auto());
+        g_previewFacts.RowDefinitions().Append(row);
+        wuxc::TextBlock label;
+        label.Text(winrt::hstring{result->facts[i].first});
+        label.FontSize(Fs(12));
+        label.Opacity(0.55);
+        wuxc::Grid::SetRow(label, static_cast<int32_t>(i));
+        g_previewFacts.Children().Append(label);
+        wuxc::TextBlock value;
+        value.Text(winrt::hstring{result->facts[i].second});
+        value.FontSize(Fs(12));
+        value.TextWrapping(wux::TextWrapping::Wrap);
+        value.MaxLines(2);
+        value.TextTrimming(wux::TextTrimming::CharacterEllipsis);
+        wuxc::Grid::SetRow(value, static_cast<int32_t>(i));
+        wuxc::Grid::SetColumn(value, 1);
+        g_previewFacts.Children().Append(value);
+    }
+    g_previewShownPath = result->path;
+    if (g_previewCopied) {
+        g_previewCopied.Stop();
+    }
+    g_previewPath.Text(winrt::hstring{result->path});
 
-    PositionPreview();
+    g_previewCard.Measure(wf::Size{static_cast<float>(preview::kWidth), std::numeric_limits<float>::infinity()});
+    const double toHeight = g_previewCard.DesiredSize().Height;
+    if (fromHeight > 0 && std::abs(toHeight - fromHeight) > 1) {
+        PreviewResize(fromHeight, toHeight);
+    } else {
+        PositionPreview();
+    }
     if (!g_previewPopup.IsOpen()) {
         g_previewCard.Opacity(0.0);
         g_previewPopup.IsOpen(true);
@@ -8171,8 +8741,7 @@ void SchedulePreview() try {
             {
                 std::lock_guard<std::mutex> lock(preview::g_mutex);
                 preview::g_request = g_previewWanted;
-                if (!preview::g_thread) {
-                    preview::g_quit = false;
+                if (!preview::g_thread && !preview::g_quit) {
                     preview::g_thread.emplace(PreviewThreadMain);
                 }
             }
@@ -8533,7 +9102,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
     wuxc::FontIcon searchIcon;
     searchIcon.Glyph(L"\uE721");
-    searchIcon.FontSize(14);
+    searchIcon.FontSize(Fs(14));
     searchIcon.Opacity(0.65);
     searchIcon.Margin(wux::ThicknessHelper::FromLengths(0, 0, 10, 0));
     searchIcon.VerticalAlignment(wux::VerticalAlignment::Center);
@@ -8545,7 +9114,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     box.PlaceholderText(L"Search apps, settings, and files...");
     box.VerticalAlignment(wux::VerticalAlignment::Center);
     box.VerticalContentAlignment(wux::VerticalAlignment::Center);
-    box.FontSize(14);
+    box.FontSize(Fs(14));
     box.Background(MakeBrush(0, 0, 0, 0));
     box.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
     box.IsTabStop(true);
@@ -8719,7 +9288,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
     wuxc::FontIcon boltIcon;
     boltIcon.Glyph(L"\uE946");
-    boltIcon.FontSize(11);
+    boltIcon.FontSize(Fs(11));
     boltIcon.Opacity(0.5);
     boltIcon.Margin(wux::ThicknessHelper::FromLengths(0, 0, 6, 0));
     boltIcon.VerticalAlignment(wux::VerticalAlignment::Center);
@@ -8727,7 +9296,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
     wuxc::TextBlock statusText;
     statusText.Text(L"Everything Search");
-    statusText.FontSize(11);
+    statusText.FontSize(Fs(11));
     statusText.Opacity(0.5);
     statusText.VerticalAlignment(wux::VerticalAlignment::Center);
     leftStatus.Children().Append(statusText);
@@ -8756,7 +9325,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
         wuxc::TextBlock keyBlock;
         keyBlock.Text(winrt::hstring{key});
-        keyBlock.FontSize(9.5);
+        keyBlock.FontSize(Fs(9.5));
         keyBlock.FontWeight(wut::FontWeights::SemiBold());
         keyBlock.Opacity(0.75);
         keyBadge.Child(keyBlock);
@@ -8764,7 +9333,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
         wuxc::TextBlock actionBlock;
         actionBlock.Text(winrt::hstring{action});
-        actionBlock.FontSize(10.5);
+        actionBlock.FontSize(Fs(10.5));
         actionBlock.Opacity(0.45);
         actionBlock.Margin(wux::ThicknessHelper::FromLengths(4, 0, 0, 0));
         actionBlock.VerticalAlignment(wux::VerticalAlignment::Center);
@@ -8910,7 +9479,7 @@ void RenderResults() try {
 
         wuxc::FontIcon icon;
         icon.Glyph(winrt::hstring{iconGlyph});
-        icon.FontSize(11.5);
+        icon.FontSize(Fs(11.5));
         icon.Opacity(0.6);
         icon.Margin(wux::ThicknessHelper::FromLengths(0, 0, 6, 0));
         icon.VerticalAlignment(wux::VerticalAlignment::Center);
@@ -8918,7 +9487,7 @@ void RenderResults() try {
 
         wuxc::TextBlock titleBlock;
         titleBlock.Text(winrt::hstring{title});
-        titleBlock.FontSize(11);
+        titleBlock.FontSize(Fs(11));
         titleBlock.FontWeight(wut::FontWeights::SemiBold());
         titleBlock.Opacity(0.65);
         titleBlock.CharacterSpacing(40);
@@ -8940,7 +9509,7 @@ void RenderResults() try {
 
             wuxc::TextBlock badgeBlock;
             badgeBlock.Text(winrt::hstring{badgeStr});
-            badgeBlock.FontSize(9.5);
+            badgeBlock.FontSize(Fs(9.5));
             badgeBlock.FontWeight(wut::FontWeights::SemiBold());
             badgeBlock.Opacity(0.7);
             badge.Child(badgeBlock);
@@ -9002,7 +9571,7 @@ void RenderResults() try {
             iconBox.VerticalAlignment(wux::VerticalAlignment::Center);
 
             wuxc::FontIcon fallbackIcon;
-            fallbackIcon.FontSize(15);
+            fallbackIcon.FontSize(Fs(15));
             fallbackIcon.Opacity(0.5);
             fallbackIcon.HorizontalAlignment(wux::HorizontalAlignment::Center);
             fallbackIcon.VerticalAlignment(wux::VerticalAlignment::Center);
@@ -9016,6 +9585,11 @@ void RenderResults() try {
             } else if (!item.customGlyph.empty()) {
                 fallbackIcon.Glyph(winrt::hstring{item.customGlyph});
                 fallbackIcon.Opacity(0.85);
+                if (const uint32_t c = item.glyphColor) {
+                    fallbackIcon.Foreground(MakeBrush(static_cast<uint8_t>(c >> 24), static_cast<uint8_t>(c >> 16),
+                                                      static_cast<uint8_t>(c >> 8), static_cast<uint8_t>(c)));
+                    fallbackIcon.Opacity(1.0);
+                }
             } else {
                 fallbackIcon.Glyph(L"\uE71D");
             }
@@ -9030,20 +9604,30 @@ void RenderResults() try {
 
         wuxc::TextBlock name;
         name.Text(winrt::hstring{item.title});
-        name.FontSize(12.5);
+        name.FontSize(Fs(12.5));
         name.FontWeight(wut::FontWeights::SemiBold());
         name.TextTrimming(wux::TextTrimming::CharacterEllipsis);
         name.TextWrapping(wux::TextWrapping::NoWrap);
+        // A result to copy -- a sum, a conversion -- is shown whole: a long
+        // one wraps instead of being cut off.
+        const bool whole = !item.copyText.empty();
+        if (whole) {
+            name.TextWrapping(wux::TextWrapping::Wrap);
+            name.MaxLines(4);
+        }
         text.Children().Append(name);
 
         if (!item.subtitle.empty()) {
             wuxc::TextBlock sub;
             sub.Text(winrt::hstring{item.subtitle});
             sub.Opacity(0.45);
-            sub.FontSize(10.5);
+            sub.FontSize(Fs(10.5));
             sub.Margin(wux::ThicknessHelper::FromLengths(0, 1, 0, 0));
             sub.TextTrimming(wux::TextTrimming::CharacterEllipsis);
-            sub.TextWrapping(wux::TextWrapping::NoWrap);
+            sub.TextWrapping(whole ? wux::TextWrapping::Wrap : wux::TextWrapping::NoWrap);
+            if (whole) {
+                sub.MaxLines(2);
+            }
             text.Children().Append(sub);
         }
         layout.Children().Append(text);
@@ -9059,6 +9643,9 @@ void RenderResults() try {
         button.Padding(wux::ThicknessHelper::FromLengths(10, 6, 10, 6));
         button.Margin(wux::ThicknessHelper::FromLengths(2, 1, 2, 1));
         button.IsTabStop(false);
+        if (whole) {
+            wuxc::ToolTipService::SetToolTip(button, winrt::box_value(winrt::hstring{item.title}));
+        }
 
         button.Resources().Insert(winrt::box_value(L"ButtonBackgroundPointerOver"),
             isLight ? MakeBrush(0x14, 0x00, 0x5F, 0xB8) : MakeBrush(0x28, 0xFF, 0xFF, 0xFF));
@@ -9268,7 +9855,7 @@ void RenderResults() try {
                                     if (!anchor) return;
                                     ConfirmUninstall(anchor, uninstaller ? uninstaller->name : appTitle, [family, uninstaller, appTitle] {
                                         if (!family.empty()) {
-                                            if (RequestPackageRemoval(family, appTitle)) {
+                                            if (RequestPackageRemoval(family)) {
                                                 DismissStartMenu();
                                             }
                                         } else if (uninstaller) {
@@ -9304,7 +9891,7 @@ void RenderResults() try {
 
         wuxc::FontIcon emptyIcon;
         emptyIcon.Glyph(L"\uE71D");
-        emptyIcon.FontSize(24);
+        emptyIcon.FontSize(Fs(24));
         emptyIcon.Opacity(0.2);
         emptyIcon.HorizontalAlignment(wux::HorizontalAlignment::Center);
         emptyIcon.Margin(wux::ThicknessHelper::FromLengths(0, 0, 0, 6));
@@ -9312,7 +9899,7 @@ void RenderResults() try {
 
         wuxc::TextBlock emptyTitle;
         emptyTitle.Text(L"No matching applications");
-        emptyTitle.FontSize(11.5);
+        emptyTitle.FontSize(Fs(11.5));
         emptyTitle.FontWeight(wut::FontWeights::SemiBold());
         emptyTitle.Opacity(0.45);
         emptyTitle.HorizontalAlignment(wux::HorizontalAlignment::Center);
@@ -9320,7 +9907,7 @@ void RenderResults() try {
 
         wuxc::TextBlock emptySubtitle;
         emptySubtitle.Text(L"Check files or refine your query");
-        emptySubtitle.FontSize(10.5);
+        emptySubtitle.FontSize(Fs(10.5));
         emptySubtitle.Opacity(0.3);
         emptySubtitle.HorizontalAlignment(wux::HorizontalAlignment::Center);
         emptySubtitle.Margin(wux::ThicknessHelper::FromLengths(0, 2, 0, 0));
@@ -9438,7 +10025,7 @@ void RenderResults() try {
             iconBox.VerticalAlignment(wux::VerticalAlignment::Center);
 
             wuxc::FontIcon fallbackIcon;
-            fallbackIcon.FontSize(15);
+            fallbackIcon.FontSize(Fs(15));
             fallbackIcon.Opacity(0.5);
             fallbackIcon.HorizontalAlignment(wux::HorizontalAlignment::Center);
             fallbackIcon.VerticalAlignment(wux::VerticalAlignment::Center);
@@ -9459,7 +10046,7 @@ void RenderResults() try {
 
         wuxc::TextBlock name;
         name.Text(winrt::hstring{item.title});
-        name.FontSize(12.5);
+        name.FontSize(Fs(12.5));
         name.FontWeight(wut::FontWeights::SemiBold());
         name.TextTrimming(wux::TextTrimming::CharacterEllipsis);
         name.TextWrapping(wux::TextWrapping::NoWrap);
@@ -9469,7 +10056,7 @@ void RenderResults() try {
             wuxc::TextBlock sub;
             sub.Text(winrt::hstring{item.subtitle});
             sub.Opacity(0.45);
-            sub.FontSize(10.5);
+            sub.FontSize(Fs(10.5));
             sub.Margin(wux::ThicknessHelper::FromLengths(0, 1, 0, 0));
             sub.TextTrimming(wux::TextTrimming::CharacterEllipsis);
             sub.TextWrapping(wux::TextWrapping::NoWrap);
@@ -9728,7 +10315,7 @@ void RenderResults() try {
 
         wuxc::FontIcon emptyIcon;
         emptyIcon.Glyph(L"\uE8B7");
-        emptyIcon.FontSize(24);
+        emptyIcon.FontSize(Fs(24));
         emptyIcon.Opacity(0.2);
         emptyIcon.HorizontalAlignment(wux::HorizontalAlignment::Center);
         emptyIcon.Margin(wux::ThicknessHelper::FromLengths(0, 0, 0, 6));
@@ -9736,7 +10323,7 @@ void RenderResults() try {
 
         wuxc::TextBlock emptyTitle;
         emptyTitle.Text(L"No matching files");
-        emptyTitle.FontSize(11.5);
+        emptyTitle.FontSize(Fs(11.5));
         emptyTitle.FontWeight(wut::FontWeights::SemiBold());
         emptyTitle.Opacity(0.45);
         emptyTitle.HorizontalAlignment(wux::HorizontalAlignment::Center);
@@ -9744,7 +10331,7 @@ void RenderResults() try {
 
         wuxc::TextBlock emptySubtitle;
         emptySubtitle.Text(L"Everything index returned 0 items");
-        emptySubtitle.FontSize(10.5);
+        emptySubtitle.FontSize(Fs(10.5));
         emptySubtitle.Opacity(0.3);
         emptySubtitle.HorizontalAlignment(wux::HorizontalAlignment::Center);
         emptySubtitle.Margin(wux::ThicknessHelper::FromLengths(0, 2, 0, 0));
@@ -10148,6 +10735,581 @@ void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool
     }
 }
 
+// ---------------------------------------------------------------------------
+// Calculator and unit converter, with no command: whatever is typed that is a
+// sum (2^10), a number with a unit (100 km), a conversion (100 km to mi) or a
+// number in another base (0xFF, 255 hex) is worked out above the apps -- and
+// only that: a number alone, or one in a file name ("2024 report", "3d"), is
+// left to the search.
+//
+// It knows units itself (kUnits), so nothing has to be set up: any unit
+// converts to any other of its kind, through the kind's base unit (base =
+// value * factor + offset), both ways. "100 km" shows the kind's usual units,
+// and first all of them on one line; "100 km to mi" (in, ->, =) just that
+// one. The settings add units it does not know (unitConversions): one formula
+// each, and back again when asked (reciprocal) and the formula is linear.
+// Numbers are read with "." or "," as the decimal point and shown with the
+// user's.
+// ---------------------------------------------------------------------------
+namespace calc {
+
+struct Unit {
+    const wchar_t* symbol;  // as shown
+    const wchar_t* kind;
+    double factor;  // to the kind's base unit
+    double offset;
+    bool usual;  // among those shown when no target is asked for
+    const wchar_t* names;  // lowercase, '|'-separated; the symbol is one too
+};
+
+// KB, MB, GB, TB count in 1024s, as File Explorer does.
+inline constexpr Unit kUnits[] = {
+    {L"mm", L"Length", 0.001, 0, true, L"millimeter|millimeters|millimetre|millimetres"},
+    {L"cm", L"Length", 0.01, 0, true, L"centimeter|centimeters|centimetre|centimetres"},
+    {L"m", L"Length", 1, 0, true, L"meter|meters|metre|metres"},
+    {L"km", L"Length", 1000, 0, true, L"kilometer|kilometers|kilometre|kilometres"},
+    {L"in", L"Length", 0.0254, 0, true, L"inch|inches|\""},
+    {L"ft", L"Length", 0.3048, 0, true, L"foot|feet|'"},
+    {L"yd", L"Length", 0.9144, 0, false, L"yard|yards"},
+    {L"mi", L"Length", 1609.344, 0, true, L"mile|miles"},
+    {L"nmi", L"Length", 1852, 0, false, L"nautical mile|nautical miles"},
+
+    {L"mg", L"Mass", 1e-6, 0, false, L"milligram|milligrams"},
+    {L"g", L"Mass", 0.001, 0, true, L"gram|grams|gramme|grammes"},
+    {L"kg", L"Mass", 1, 0, true, L"kilo|kilos|kilogram|kilograms"},
+    {L"t", L"Mass", 1000, 0, false, L"tonne|tonnes|ton|tons"},
+    {L"oz", L"Mass", 0.028349523125, 0, true, L"ounce|ounces"},
+    {L"lb", L"Mass", 0.45359237, 0, true, L"lbs|pound|pounds"},
+    {L"st", L"Mass", 6.35029318, 0, false, L"stone|stones"},
+
+    {L"\u00B0C", L"Temperature", 1, 273.15, true, L"c|\u2103|celsius"},
+    {L"\u00B0F", L"Temperature", 5.0 / 9, 459.67 * 5.0 / 9, true, L"f|\u2109|fahrenheit"},
+    {L"K", L"Temperature", 1, 0, true, L"kelvin|kelvins"},
+
+    {L"m/s", L"Speed", 1, 0, true, L"mps"},
+    {L"km/h", L"Speed", 1 / 3.6, 0, true, L"kmh|kph|kmph"},
+    {L"mph", L"Speed", 0.44704, 0, true, L"mi/h"},
+    {L"kn", L"Speed", 1852.0 / 3600, 0, true, L"kt|knot|knots"},
+    {L"ft/s", L"Speed", 0.3048, 0, false, L""},
+
+    {L"mm\u00B2", L"Area", 1e-6, 0, false, L"mm2|sq mm"},
+    {L"cm\u00B2", L"Area", 1e-4, 0, true, L"cm2|sq cm"},
+    {L"m\u00B2", L"Area", 1, 0, true, L"m2|sq m|sqm"},
+    {L"km\u00B2", L"Area", 1e6, 0, true, L"km2|sq km"},
+    {L"a", L"Area", 100, 0, false, L"are|ares"},
+    {L"ha", L"Area", 1e4, 0, true, L"hectare|hectares"},
+    {L"ac", L"Area", 4046.8564224, 0, true, L"acre|acres"},
+    {L"in\u00B2", L"Area", 0.00064516, 0, false, L"in2|sq in"},
+    {L"ft\u00B2", L"Area", 0.09290304, 0, true, L"ft2|sq ft|sqft"},
+    {L"yd\u00B2", L"Area", 0.83612736, 0, false, L"yd2|sq yd"},
+    {L"mi\u00B2", L"Area", 2589988.110336, 0, false, L"mi2|sq mi"},
+
+    {L"ml", L"Volume", 0.001, 0, true, L"milliliter|milliliters|millilitre|millilitres|cc|cm\u00B3|cm3"},
+    {L"l", L"Volume", 1, 0, true, L"liter|liters|litre|litres"},
+    {L"m\u00B3", L"Volume", 1000, 0, true, L"m3|cubic meter|cubic meters|cubic metre|cubic metres"},
+    {L"gal", L"Volume", 3.785411784, 0, true, L"gallon|gallons"},
+    {L"qt", L"Volume", 0.946352946, 0, false, L"quart|quarts"},
+    {L"pt", L"Volume", 0.473176473, 0, false, L"pint|pints"},
+    {L"cup", L"Volume", 0.2365882365, 0, true, L"cups"},
+    {L"fl oz", L"Volume", 0.0295735295625, 0, true, L"floz|fluid ounce|fluid ounces"},
+    {L"tbsp", L"Volume", 0.01478676478125, 0, false, L"tablespoon|tablespoons"},
+    {L"tsp", L"Volume", 0.00492892159375, 0, false, L"teaspoon|teaspoons"},
+
+    {L"bit", L"Data", 0.125, 0, false, L"bits"},
+    {L"B", L"Data", 1, 0, true, L"byte|bytes"},
+    {L"KB", L"Data", 1024, 0, true, L"kib|kilobyte|kilobytes"},
+    {L"MB", L"Data", 1048576, 0, true, L"mib|megabyte|megabytes"},
+    {L"GB", L"Data", 1073741824, 0, true, L"gib|gigabyte|gigabytes"},
+    {L"TB", L"Data", 1099511627776, 0, true, L"tib|terabyte|terabytes"},
+    {L"PB", L"Data", 1125899906842624, 0, false, L"pib|petabyte|petabytes"},
+    {L"Kbit", L"Data", 125, 0, false, L"kbits|kilobit|kilobits"},
+    {L"Mbit", L"Data", 125000, 0, false, L"mbits|megabit|megabits"},
+    {L"Gbit", L"Data", 125000000, 0, false, L"gbits|gigabit|gigabits"},
+
+    {L"KB/s", L"Data rate", 1024, 0, false, L""},
+    {L"MB/s", L"Data rate", 1048576, 0, true, L""},
+    {L"Mbps", L"Data rate", 125000, 0, true, L"mbit/s"},
+    {L"Gbps", L"Data rate", 125000000, 0, true, L"gbit/s"},
+
+    {L"ms", L"Time", 0.001, 0, false, L"millisecond|milliseconds"},
+    {L"s", L"Time", 1, 0, true, L"sec|secs|second|seconds"},
+    {L"min", L"Time", 60, 0, true, L"mins|minute|minutes"},
+    {L"h", L"Time", 3600, 0, true, L"hr|hrs|hour|hours"},
+    {L"d", L"Time", 86400, 0, true, L"day|days"},
+    {L"wk", L"Time", 604800, 0, true, L"week|weeks"},
+    {L"yr", L"Time", 31557600, 0, false, L"year|years"},
+
+    {L"Pa", L"Pressure", 1, 0, false, L"pascal|pascals"},
+    {L"kPa", L"Pressure", 1000, 0, true, L""},
+    {L"MPa", L"Pressure", 1e6, 0, false, L""},
+    {L"bar", L"Pressure", 1e5, 0, true, L"bars"},
+    {L"atm", L"Pressure", 101325, 0, true, L"atmosphere|atmospheres"},
+    {L"psi", L"Pressure", 6894.757293168, 0, true, L""},
+    {L"mmHg", L"Pressure", 133.322387415, 0, true, L"torr"},
+
+    {L"J", L"Energy", 1, 0, true, L"joule|joules"},
+    {L"kJ", L"Energy", 1000, 0, true, L""},
+    {L"cal", L"Energy", 4.184, 0, false, L"calorie|calories"},
+    {L"kcal", L"Energy", 4184, 0, true, L""},
+    {L"Wh", L"Energy", 3600, 0, false, L""},
+    {L"kWh", L"Energy", 3.6e6, 0, true, L""},
+
+    {L"W", L"Power", 1, 0, true, L"watt|watts"},
+    {L"kW", L"Power", 1000, 0, true, L"kilowatt|kilowatts"},
+    {L"hp", L"Power", 745.69987158227022, 0, true, L"horsepower"},
+
+    {L"\u00B0", L"Angle", 1, 0, true, L"deg|degree|degrees"},
+    {L"rad", L"Angle", 57.29577951308232, 0, true, L"radian|radians"},
+    {L"grad", L"Angle", 0.9, 0, false, L"gon|gradian|gradians"},
+    {L"turn", L"Angle", 360, 0, false, L"turns|rev"},
+
+    {L"Hz", L"Frequency", 1, 0, true, L"hertz"},
+    {L"kHz", L"Frequency", 1e3, 0, true, L""},
+    {L"MHz", L"Frequency", 1e6, 0, true, L""},
+    {L"GHz", L"Frequency", 1e9, 0, true, L""},
+};
+
+// One color per kind, on the row's icon; a kind from the settings gets one
+// of the same by its name.
+inline uint32_t KindColor(const std::wstring& kind) {
+    static const std::pair<const wchar_t*, uint32_t> kColors[] = {
+        {L"Length", 0xFF4FA3F7},    {L"Mass", 0xFFF2994A},      {L"Temperature", 0xFFEB5757},
+        {L"Speed", 0xFFBB6BD9},     {L"Area", 0xFF27AE60},      {L"Volume", 0xFF2DB7B7},
+        {L"Data", 0xFF6C7BF2},      {L"Data rate", 0xFF9B8CF2}, {L"Time", 0xFFE2B93B},
+        {L"Pressure", 0xFFB08968},  {L"Energy", 0xFFF2C94C},    {L"Power", 0xFFEF7AB0},
+        {L"Angle", 0xFF9AA5B1},     {L"Frequency", 0xFF56CCF2}, {L"Base Radix", 0xFF8FA0B5},
+    };
+    for (const auto& [name, color] : kColors) {
+        if (kind == name) {
+            return color;
+        }
+    }
+    uint32_t hash = 2166136261u;
+    for (wchar_t ch : kind) {
+        hash = (hash ^ static_cast<uint32_t>(towlower(ch))) * 16777619u;
+    }
+    return kColors[hash % std::size(kColors)].second;
+}
+
+// Lowercase, any script.
+inline std::wstring Lower(std::wstring text) {
+    if (!text.empty()) {
+        CharLowerBuffW(text.data(), static_cast<DWORD>(text.size()));
+    }
+    return text;
+}
+
+// A unit by its symbol or any of its names, whatever the case, the spaces or
+// a closing period ("min.").
+inline const Unit* FindUnit(const std::wstring& name) {
+    std::wstring key;
+    for (wchar_t ch : Lower(tools::Trim(name))) {
+        if (ch == L' ' && (key.empty() || key.back() == L' ')) {
+            continue;
+        }
+        key += ch;
+    }
+    for (int pass = 0; pass < 2 && !key.empty(); ++pass) {
+        for (const Unit& unit : kUnits) {
+            if (key == Lower(unit.symbol)) {
+                return &unit;
+            }
+            for (const wchar_t* name = unit.names; *name;) {
+                const wchar_t* end = wcschr(name, L'|');
+                const size_t length = end ? static_cast<size_t>(end - name) : wcslen(name);
+                if (key.size() == length && key.compare(0, length, name, length) == 0) {
+                    return &unit;
+                }
+                if (!end) {
+                    break;
+                }
+                name = end + 1;
+            }
+        }
+        if (key.back() != L'.') {
+            break;
+        }
+        key.pop_back();
+    }
+    return nullptr;
+}
+
+// The user's decimal point.
+inline wchar_t DecimalPoint() {
+    wchar_t point[4] = {};
+    return GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SDECIMAL, point, 4) > 0 && point[0] ? point[0] : L'.';
+}
+
+// A number at the start of text: "." or "," as the decimal point (in
+// "1,000.5" the last one is), thousands grouped by spaces ("1 000"), the
+// other mark ("1,000" in English) or several of one ("1.000.000"), an
+// exponent ("1e3"). How many characters it took, or 0.
+inline size_t ParseNumber(const std::wstring& text, double* value) {
+    size_t i = 0;
+    std::wstring span;  // digits and marks, spaces left out
+    if (i < text.size() && (text[i] == L'-' || text[i] == L'+')) {
+        span += text[i++];
+    }
+    auto threeDigits = [&](size_t at) {
+        return at + 3 <= text.size() && iswdigit(text[at]) && iswdigit(text[at + 1]) && iswdigit(text[at + 2]) &&
+               (at + 3 == text.size() || !iswdigit(text[at + 3]));
+    };
+    bool digits = false;
+    while (i < text.size()) {
+        const wchar_t ch = text[i];
+        if (ch >= L'0' && ch <= L'9') {
+            span += ch;
+            digits = true;
+            ++i;
+        } else if ((ch == L'.' || ch == L',') && i + 1 < text.size() && iswdigit(text[i + 1])) {
+            span += ch;
+            ++i;
+        } else if ((ch == L' ' || ch == 0xA0 || ch == 0x202F || ch == L'\'') && digits && threeDigits(i + 1)) {
+            ++i;  // a thousands group
+        } else {
+            break;
+        }
+    }
+    if (!digits) {
+        return 0;
+    }
+    // Which mark is the decimal point.
+    const size_t lastDot = span.rfind(L'.'), lastComma = span.rfind(L',');
+    wchar_t point = 0;
+    if (lastDot != std::wstring::npos && lastComma != std::wstring::npos) {
+        point = lastDot > lastComma ? L'.' : L',';
+    } else if (lastDot != std::wstring::npos || lastComma != std::wstring::npos) {
+        const wchar_t mark = lastDot != std::wstring::npos ? L'.' : L',';
+        const size_t at = span.rfind(mark);
+        const bool several = span.find(mark) != at;
+        const bool groupLike = span.size() - at - 1 == 3 && mark != DecimalPoint();
+        point = several || groupLike ? 0 : mark;
+    }
+    std::string ascii;
+    for (wchar_t ch : span) {
+        if (ch == point) {
+            ascii += '.';
+        } else if (ch != L'.' && ch != L',') {
+            ascii += static_cast<char>(ch);
+        }
+    }
+    // An exponent: e, a sign, digits.
+    if (i < text.size() && (text[i] == L'e' || text[i] == L'E')) {
+        size_t j = i + 1;
+        std::string exponent = "e";
+        if (j < text.size() && (text[j] == L'-' || text[j] == L'+')) {
+            exponent += static_cast<char>(text[j++]);
+        }
+        const size_t digitsAt = j;
+        while (j < text.size() && iswdigit(text[j])) {
+            exponent += static_cast<char>(text[j++]);
+        }
+        if (j > digitsAt) {
+            ascii += exponent;
+            i = j;
+        }
+    }
+    *value = strtod(ascii.c_str(), nullptr);
+    return i;
+}
+
+// Scientific notation, as 9.9e4: up to 6 significant digits.
+inline std::wstring Scientific(double value) {
+    if (value == 0 || std::isnan(value) || std::isinf(value)) {
+        return value == 0 ? L"0" : L"Error";
+    }
+    int exponent = static_cast<int>(std::floor(std::log10(std::fabs(value))));
+    double mantissa = value / std::pow(10.0, exponent);
+    wchar_t text[64];
+    swprintf_s(text, L"%.6g", mantissa);
+    if (std::fabs(wcstod(text, nullptr)) >= 10) {  // rounded up to 10
+        mantissa /= 10;
+        ++exponent;
+        swprintf_s(text, L"%.6g", mantissa);
+    }
+    std::wstring result = text;
+    std::replace(result.begin(), result.end(), L'.', DecimalPoint());
+    return result + L"e" + std::to_wstring(exponent);
+}
+
+// A result as people write it: whole numbers whole, others to 7 significant
+// digits, the user's decimal point; scientific when too large or small for
+// that.
+inline std::wstring Format(double value) {
+    if (std::isnan(value) || std::isinf(value)) {
+        return L"Error";
+    }
+    const double magnitude = std::fabs(value);
+    if (magnitude != 0 && (magnitude >= 1e15 || magnitude < 1e-4)) {
+        return Scientific(value);
+    }
+    wchar_t text[64];
+    if (value == std::round(value)) {
+        swprintf_s(text, L"%.0f", value);
+    } else {
+        swprintf_s(text, L"%.7g", value);
+    }
+    std::wstring result = text;
+    std::replace(result.begin(), result.end(), L'.', DecimalPoint());
+    return result;
+}
+
+// Worth showing in scientific notation too: large or small, and not
+// already shown that way (Format).
+inline bool Large(double value) {
+    const double magnitude = std::fabs(value);
+    return (magnitude >= 1e4 || (magnitude != 0 && magnitude < 1e-3)) && Format(value) != Scientific(value);
+}
+
+inline Row MakeRow(std::wstring title, std::wstring subtitle, std::wstring copy, const wchar_t* glyph,
+                   uint32_t color = 0) {
+    Row r;
+    r.title = std::move(title);
+    r.subtitle = std::move(subtitle);
+    r.copyText = std::move(copy);
+    r.customGlyph = glyph;
+    r.glyphColor = color;
+    r.canRunAsAdmin = false;
+    return r;
+}
+
+inline constexpr wchar_t kCalcGlyph[] = L"\uE1D0";
+inline constexpr wchar_t kConvertGlyph[] = L"\uE88E";
+inline constexpr wchar_t kDot[] = L" \u2022 ";
+
+// Whether a unit typed is a unit from the settings: by its name, by what it
+// stands for (NormalizeUnit), or as the same unit of kUnits ("kilometre",
+// "km").
+inline bool SameUnit(const std::wstring& typed, const std::wstring& configured) {
+    if (Lower(tools::Trim(typed)) == Lower(tools::Trim(configured)) ||
+        tools::NormalizeUnit(typed) == tools::NormalizeUnit(configured)) {
+        return true;
+    }
+    const Unit* unit = FindUnit(typed);
+    return unit && unit == FindUnit(configured);
+}
+
+// A conversion from the settings that kUnits does already: one the earlier
+// default settings had, left in someone's settings.
+inline bool Known(const CustomConversion& c) {
+    const Unit* from = FindUnit(c.fromUnit);
+    const Unit* to = FindUnit(c.toUnit);
+    return from && to && wcscmp(from->kind, to->kind) == 0;
+}
+
+// Runs a formula from the settings backwards: possible when it is linear,
+// as a * x + b, which three points tell.
+inline bool Invert(const std::wstring& formula, double y, double* x) {
+    double f0 = 0, f1 = 0, f2 = 0;
+    if (!tools::EvaluateConversionFormula(formula, 0, f0) || !tools::EvaluateConversionFormula(formula, 1, f1) ||
+        !tools::EvaluateConversionFormula(formula, 2, f2)) {
+        return false;
+    }
+    const double a = f1 - f0;
+    if (a == 0 || std::fabs(f2 - (f0 + 2 * a)) > 1e-9 * std::max(1.0, std::fabs(f2))) {
+        return false;
+    }
+    *x = (y - f0) / a;
+    return true;
+}
+
+// The settings' conversions of a number with the unit typed: from it, and
+// back to it where reciprocal.
+inline void CustomRows(double number, const std::wstring& unit, const std::vector<CustomConversion>& customs,
+                       std::vector<Row>* rows) {
+    for (const CustomConversion& c : customs) {
+        if (Known(c)) {
+            continue;
+        }
+        double out = 0;
+        if (SameUnit(unit, c.fromUnit) && tools::EvaluateConversionFormula(c.formula, number, out)) {
+            const std::wstring result = Format(out) + L" " + c.toUnit;
+            rows->push_back(MakeRow(Format(number) + L" " + c.fromUnit + L" = " + result,
+                                    c.category + kDot + L"Press Enter to copy " + result, result, kConvertGlyph,
+                                    KindColor(c.category)));
+        }
+        if (c.reciprocal && SameUnit(unit, c.toUnit) && Invert(c.formula, number, &out)) {
+            const std::wstring result = Format(out) + L" " + c.fromUnit;
+            rows->push_back(MakeRow(Format(number) + L" " + c.toUnit + L" = " + result,
+                                    c.category + kDot + L"Press Enter to copy " + result, result, kConvertGlyph,
+                                    KindColor(c.category)));
+        }
+    }
+}
+
+// Groups of `size` digits from the right, as 111 1111 1111.
+inline std::wstring Grouped(const std::wstring& digits, size_t size) {
+    std::wstring out;
+    for (size_t i = 0; i < digits.size(); ++i) {
+        if (i && (digits.size() - i) % size == 0) {
+            out += L' ';
+        }
+        out += digits[i];
+    }
+    return out;
+}
+
+// A whole number in other bases: 2047 = 0x7FF = 0b111 1111 1111 = 0o3777.
+inline void RadixRows(double number, std::vector<Row>* rows) {
+    if (number < 0 || number > 9007199254740992.0 || number != std::floor(number)) {
+        return;
+    }
+    const unsigned long long n = static_cast<unsigned long long>(number);
+    wchar_t hex[32], oct[32];
+    swprintf_s(hex, L"%llX", n);
+    swprintf_s(oct, L"%llo", n);
+    std::wstring bin;
+    for (unsigned long long v = n; v || bin.empty(); v >>= 1) {
+        bin.insert(bin.begin(), (v & 1) ? L'1' : L'0');
+    }
+    const std::wstring hexText = std::wstring(L"0x") + (wcslen(hex) > 8 ? Grouped(hex, 4) : hex);
+    rows->push_back(MakeRow(Format(number) + L" = " + hexText + L" (Hex) = 0b" + Grouped(bin, 4) + L" (Bin) = 0o" + oct +
+                                L" (Oct)",
+                            std::wstring(L"Base Radix") + kDot + L"Press Enter to copy 0x" + hex,
+                            std::wstring(L"0x") + hex, kConvertGlyph, KindColor(L"Base Radix")));
+}
+
+// A number written in another base: 0xFF, 0b1010, 0o17.
+inline bool ParseBased(const std::wstring& text, double* value) {
+    if (text.size() < 3 || text[0] != L'0') {
+        return false;
+    }
+    const wchar_t mark = static_cast<wchar_t>(towlower(text[1]));
+    const int radix = mark == L'x' ? 16 : mark == L'b' ? 2 : mark == L'o' ? 8 : 0;
+    if (!radix) {
+        return false;
+    }
+    unsigned long long n = 0;
+    for (size_t i = 2; i < text.size(); ++i) {
+        const wchar_t ch = static_cast<wchar_t>(towlower(text[i]));
+        const int digit = iswdigit(ch) ? ch - L'0' : (ch >= L'a' && ch <= L'f') ? ch - L'a' + 10 : 99;
+        if (digit >= radix || n > (1ULL << 53)) {
+            return false;
+        }
+        n = n * radix + digit;
+    }
+    *value = static_cast<double>(n);
+    return true;
+}
+
+// Asks for other bases: "hex", "to binary", "in oct".
+inline bool BaseWords(std::wstring text) {
+    text = Lower(tools::Trim(text));
+    for (const wchar_t* lead : {L"to ", L"in ", L"as "}) {
+        if (text.starts_with(lead)) {
+            text = tools::Trim(text.substr(wcslen(lead)));
+        }
+    }
+    for (const wchar_t* word : {L"hex", L"hexadecimal", L"bin", L"binary", L"oct", L"octal", L"base", L"bases", L"radix"}) {
+        if (text == word) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// A number with a unit, and maybe a target: "100 km", "100 km to mi".
+inline bool ConversionRows(double number, const std::wstring& text, const std::vector<CustomConversion>& customs,
+                           std::vector<Row>* rows) {
+    const Unit* from = nullptr;
+    const Unit* to = nullptr;
+    std::wstring unitText = text;
+    const std::wstring lower = Lower(text);
+    for (const wchar_t* separator : {L" to ", L" in ", L" into ", L" as ", L"->", L"\u2192", L"="}) {
+        for (size_t at = lower.find(separator); at != std::wstring::npos && !to;
+             at = lower.find(separator, at + 1)) {
+            const Unit* left = FindUnit(text.substr(0, at));
+            const Unit* right = FindUnit(text.substr(at + wcslen(separator)));
+            if (left && right && wcscmp(left->kind, right->kind) == 0) {
+                from = left;
+                to = right;
+                unitText = tools::Trim(text.substr(0, at));
+            }
+        }
+    }
+    if (!from) {
+        from = FindUnit(text);
+    }
+    const size_t before = rows->size();
+    if (from) {
+        const double base = number * from->factor + from->offset;
+        const std::wstring source = Format(number) + L" " + from->symbol;
+        const uint32_t color = KindColor(from->kind);
+        std::vector<std::wstring> results;
+        for (const Unit& unit : kUnits) {
+            if (to ? &unit != to : (!unit.usual || &unit == from || wcscmp(unit.kind, from->kind) != 0)) {
+                continue;
+            }
+            results.push_back(Format((base - unit.offset) / unit.factor) + L" " + unit.symbol);
+        }
+        if (results.size() > 1) {
+            // All of them on one line first.
+            std::wstring all = source;
+            for (const std::wstring& result : results) {
+                all += L" = " + result;
+            }
+            rows->push_back(MakeRow(all, from->kind + std::wstring(kDot) + L"Press Enter to copy this line", all,
+                                    kConvertGlyph, color));
+        }
+        for (const std::wstring& result : results) {
+            rows->push_back(MakeRow(source + L" = " + result,
+                                    from->kind + std::wstring(kDot) + L"Press Enter to copy " + result, result,
+                                    kConvertGlyph, color));
+        }
+    }
+    if (!to) {
+        CustomRows(number, unitText, customs, rows);
+    }
+    return rows->size() > before;
+}
+
+// The rows for what was typed, when it is something to work out; none when
+// it is not.
+inline std::vector<Row> Rows(const std::wstring& input) {
+    std::vector<Row> rows;
+    const std::wstring arg = tools::Trim(input);
+    if (arg.find_first_of(L"0123456789") == std::wstring::npos) {
+        return rows;  // "e", "pi": words, not sums
+    }
+    double number = 0;
+    if (ParseBased(arg, &number)) {
+        RadixRows(number, &rows);
+        return rows;
+    }
+    std::vector<CustomConversion> customs;
+    {
+        std::lock_guard<std::mutex> lock(g_settingsMutex);
+        customs = g_settings.unitConversions;
+    }
+    const size_t used = ParseNumber(arg, &number);
+    if (used && used < arg.size()) {
+        const std::wstring rest = tools::Trim(arg.substr(used));
+        if (BaseWords(rest)) {
+            RadixRows(number, &rows);
+            return rows;
+        }
+        // A one-letter unit right after the number is a name: 3d, 4k, 5g.
+        const bool spaced = arg[used] == L' ';
+        if ((spaced || rest.size() > 1) && ConversionRows(number, rest, customs, &rows)) {
+            return rows;
+        }
+    }
+    double value = 0;
+    if (used < arg.size() && tools::EvaluateMath(arg, value)) {  // a sum, not a number alone
+        rows.push_back(MakeRow(L"= " + Format(value), arg + kDot + L"Press Enter to copy result", Format(value),
+                               kCalcGlyph));
+        if (Large(value)) {
+            rows.push_back(MakeRow(L"= " + Scientific(value),
+                                   std::wstring(L"Scientific notation") + kDot + L"Press Enter to copy " +
+                                       Scientific(value),
+                                   Scientific(value), kCalcGlyph));
+        }
+    }
+    return rows;
+}
+
+}  // namespace calc
+
 void SearchThreadMain() {
     // COM for the apps index: it enumerates shell:AppsFolder.
     HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -10341,10 +11503,6 @@ void SearchThreadMain() {
         std::wstring qLower = tools::ToLower(qTrim);
 
         bool isIpCommand = (qLower == L"/ip" || qLower.starts_with(L"/ip "));
-        bool isCCommand = (qLower == L"/c" || qLower.starts_with(L"/c ") ||
-                          (qLower.size() >= 3 && qLower[0] == L'/' && qLower[1] == L'c' &&
-                           (iswdigit(qLower[2]) || qLower[2] == L'-' || qLower[2] == L'+' || qLower[2] == L'(')));
-
         bool isExplicitWeb = query.starts_with(L"?");
         std::wstring webQuery;
         ResolvedWebQuery explicitWeb;
@@ -10404,7 +11562,7 @@ void SearchThreadMain() {
             return true;
         };
 
-        if (isIpCommand || isCCommand) {
+        if (isIpCommand) {
             pool.clear();
             total = 0;
             ms = 0;
@@ -10461,130 +11619,6 @@ void SearchThreadMain() {
                     appRows.push_back(std::move(r));
                 }
             }
-        } else if (isCCommand) {
-            std::wstring cArg = tools::Trim(qTrim.substr(2));
-            if (cArg.empty()) {
-                Row r;
-                r.title = L"Calculator & Unit Converter";
-                r.subtitle = L"Usage: /c <expression> for math, or /c <number> [unit] for conversion \u2022 e.g. /c 100 * 5, /c 100 km, /c 50";
-                r.customGlyph = L"\uE1D0";
-                r.canRunAsAdmin = false;
-                r.appIndex = static_cast<int>(lastHits.size());
-                lastHits.push_back(nullptr);
-                appRows.push_back(std::move(r));
-            } else {
-                double mathVal = 0.0;
-                if (tools::EvaluateMath(cArg, mathVal)) {
-                    Row r;
-                    std::wstring formatted = tools::FormatCleanNumber(mathVal);
-                    r.title = L"= " + formatted;
-                    r.subtitle = cArg + L" \u2022 Press Enter to copy result";
-                    r.copyText = formatted;
-                    r.customGlyph = L"\uE1D0"; // Calculator
-                    r.canRunAsAdmin = false;
-                    r.appIndex = static_cast<int>(lastHits.size());
-                    lastHits.push_back(nullptr);
-                    appRows.push_back(std::move(r));
-                } else {
-                    double convNum = 0.0;
-                    std::wstring convUnit;
-                    bool isHelp = false;
-                    if (tools::ParseConversionQuery(qTrim, convNum, convUnit, isHelp)) {
-                        std::vector<CustomConversion> conversions;
-                        {
-                            std::lock_guard<std::mutex> lock(g_settingsMutex);
-                            conversions = g_settings.unitConversions;
-                        }
-
-                        std::wstring normUnit = tools::NormalizeUnit(convUnit);
-                        std::vector<Row> convRows;
-
-                        for (const auto& c : conversions) {
-                            if (!convUnit.empty()) {
-                                std::wstring normFrom = tools::NormalizeUnit(c.fromUnit);
-                                if (normFrom != normUnit && tools::ToLower(c.fromUnit) != convUnit) {
-                                    continue;
-                                }
-                            }
-                            double outVal = 0.0;
-                            if (tools::EvaluateConversionFormula(c.formula, convNum, outVal)) {
-                                Row r;
-                                std::wstring numStr = tools::FormatCleanNumber(convNum);
-                                std::wstring outStr = tools::FormatCleanNumber(outVal);
-                                r.title = numStr + L" " + c.fromUnit + L" = " + outStr + L" " + c.toUnit;
-                                r.subtitle = c.category + L" \u2022 Press Enter to copy " + outStr + L" " + c.toUnit;
-                                r.copyText = outStr + L" " + c.toUnit;
-                                r.customGlyph = L"\uE88E";
-                                r.canRunAsAdmin = false;
-                                r.appIndex = static_cast<int>(lastHits.size());
-                                lastHits.push_back(nullptr);
-                                convRows.push_back(std::move(r));
-                            }
-                        }
-
-                        if (convUnit.empty() && convNum >= 0.0 && convNum <= 16777215.0 && (convNum == std::floor(convNum))) {
-                            unsigned long long intVal = static_cast<unsigned long long>(convNum);
-                            wchar_t hexBuf[32];
-                            swprintf_s(hexBuf, L"0x%llX", intVal);
-                            std::wstring binStr = L"0b";
-                            if (intVal == 0) {
-                                binStr += L"0";
-                            } else {
-                                for (int b = 31; b >= 0; --b) {
-                                    if ((intVal >> b) & 1) {
-                                        for (int j = b; j >= 0; --j) {
-                                            binStr.push_back(((intVal >> j) & 1) ? L'1' : L'0');
-                                        }
-                                        break;
-                                    }
-                                }
-                            }
-                            wchar_t octBuf[32];
-                            swprintf_s(octBuf, L"0o%llo", intVal);
-                            std::wstring numStr = tools::FormatCleanNumber(convNum);
-
-                            Row r;
-                            r.title = numStr + L" = " + hexBuf + L" (Hex) = " + binStr + L" (Bin) = " + octBuf + L" (Oct)";
-                            r.subtitle = L"Base Radix \u2022 Press Enter to copy " + std::wstring(hexBuf);
-                            r.copyText = hexBuf;
-                            r.customGlyph = L"\uE88E";
-                            r.canRunAsAdmin = false;
-                            r.appIndex = static_cast<int>(lastHits.size());
-                            lastHits.push_back(nullptr);
-                            convRows.push_back(std::move(r));
-                        }
-
-                        if (convRows.empty()) {
-                            Row r;
-                            if (!convUnit.empty()) {
-                                r.title = L"Unknown Unit: \"" + convUnit + L"\"";
-                                r.subtitle = L"No match in configured conversions. Configure custom units in Windhawk Settings.";
-                            } else {
-                                r.title = L"No Conversions Configured";
-                                r.subtitle = L"Add unit conversion rules in Windhawk Mod Settings.";
-                            }
-                            r.customGlyph = L"\uE88E";
-                            r.canRunAsAdmin = false;
-                            r.appIndex = static_cast<int>(lastHits.size());
-                            lastHits.push_back(nullptr);
-                            convRows.push_back(std::move(r));
-                        }
-
-                        for (auto& cr : convRows) {
-                            appRows.push_back(std::move(cr));
-                        }
-                    } else {
-                        Row r;
-                        r.title = L"Invalid Expression or Unit: \"" + cArg + L"\"";
-                        r.subtitle = L"Usage: /c <expression> (e.g. /c 100 * 5) or /c <number> [unit] (e.g. /c 100 km)";
-                        r.customGlyph = L"\uE1D0";
-                        r.canRunAsAdmin = false;
-                        r.appIndex = static_cast<int>(lastHits.size());
-                        lastHits.push_back(nullptr);
-                        appRows.push_back(std::move(r));
-                    }
-                }
-            }
         } else if (isExplicitWeb) {
             Row webRow;
             if (explicitWeb.queryTerm.empty()) {
@@ -10605,6 +11639,13 @@ void SearchThreadMain() {
             webRow.appIndex = -1;
             appRows.push_back(std::move(webRow));
         } else {
+            // A sum, a conversion or another base typed: worked out above the
+            // apps (calc).
+            for (Row& r : calc::Rows(qTrim)) {
+                r.appIndex = static_cast<int>(lastHits.size());
+                lastHits.push_back(nullptr);
+                appRows.push_back(std::move(r));
+            }
             for (const apps::Match& m : appIndex.Search(query, static_cast<size_t>(maxApps), learnedUsage())) {
                 if (!m.app) {
                     continue;
@@ -10660,33 +11701,6 @@ void SearchThreadMain() {
                 lastHits.push_back(m.app);
             }
 
-            // Math expression check
-            if (!query.empty()) {
-                std::vector<Row> utilityRows;
-
-                double mathVal = 0.0;
-                std::wstring mathExpr = query;
-                if (mathExpr.starts_with(L"=") || mathExpr.starts_with(L"/calc ")) {
-                    if (mathExpr.starts_with(L"=")) mathExpr = mathExpr.substr(1);
-                    else mathExpr = mathExpr.substr(6);
-                }
-                if (tools::EvaluateMath(mathExpr, mathVal)) {
-                    Row r;
-                    std::wstring formatted = tools::FormatCleanNumber(mathVal);
-                    r.title = L"= " + formatted;
-                    r.subtitle = tools::Trim(mathExpr) + L" \u2022 Press Enter to copy result";
-                    r.copyText = formatted;
-                    r.customGlyph = L"\uE1D0"; // Calculator
-                    r.canRunAsAdmin = false;
-                    r.appIndex = static_cast<int>(lastHits.size());
-                    lastHits.push_back(nullptr);
-                    utilityRows.push_back(std::move(r));
-                }
-
-                for (auto& ur : utilityRows) {
-                    appRows.push_back(std::move(ur));
-                }
-            }
         }
 
         std::vector<Row> fileRows;
@@ -10993,15 +12007,26 @@ void TeardownStartMenuUi() {
 
     try {
         HidePreview();
+        if (g_previewResize) {
+            g_previewResize.Stop();
+        }
+        g_previewResize = nullptr;
+        g_previewResizeAnimation = nullptr;
         g_previewTimer = nullptr;
         g_previewFrameTimer = nullptr;
         g_previewVideo = nullptr;
+        g_previewText = nullptr;
         g_previewPopup = nullptr;
         g_previewCard = nullptr;
         g_previewThumbBox = nullptr;
         g_previewImage = nullptr;
         g_previewName = nullptr;
-        g_previewDetails = nullptr;
+        g_previewFacts = nullptr;
+        g_previewPath = nullptr;
+        if (g_previewCopied) {
+            g_previewCopied.Stop();
+        }
+        g_previewCopied = nullptr;
     } catch (...) {}
 
     try {
@@ -11173,6 +12198,9 @@ void Wh_ModSettingsChanged() {
                         g_footerHints.Visibility(show ? wux::Visibility::Visible : wux::Visibility::Collapsed);
                     }
                     SyncOverlayBackground();  // the panel margin
+                    if (g_ourBox) {
+                        g_ourBox.FontSize(Fs(14));  // the text size; the results take it when next shown
+                    }
                 });
         } catch (...) {}
     }
