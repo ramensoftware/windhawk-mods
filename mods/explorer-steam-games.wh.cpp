@@ -98,10 +98,13 @@ The mod has two parts:
   storage, loaded with `RegLoadAppKey`: it isn't part of the system registry
   and no other program can see it.
 
-**The mod doesn't write to the real registry.** Disabling or removing it makes
-the navigation pane entries and menu entries disappear right away, and nothing
-is left behind even if a process crashes. These entries only appear in File
-Explorer windows, not in other programs' Open/Save dialogs.
+**The mod doesn't write to the system registry.** Disabling or removing it
+makes the navigation pane entries and menu entries disappear right away, even
+if a process crashed before. The private hive file (`<user>-shell.hiv` in the
+mod's storage) is mod data like the shortcuts; if File Explorer still has it
+open when the mod is removed, it may stay there until Explorer restarts and can
+then be deleted by hand. These entries only appear in File Explorer windows,
+not in other programs' Open/Save dialogs.
 
 By default the shortcut folder is in the mod's own Windhawk storage (one
 subfolder per Windows user), so Windhawk deletes it when the mod is removed;
@@ -2678,6 +2681,7 @@ void Sync(SyncCache& cache) {
     for (int p = 0; p < P_COUNT; p++) nodeSig += counts[p] ? L"1" : L"0";
     if (nodeSig != cache.nodeSig) {
         cache.nodeSig = nodeSig;
+        NotifyAssocChanged();
         NotifyDesktopChanged();
     }
 
@@ -2888,11 +2892,6 @@ SRWLOCK g_handlesLock = SRWLOCK_INIT;
 std::set<HKEY> g_nsHandles, g_hideHandles;
 volatile LONG g_trackedCount = 0;
 
-// Navigation pane folders to list, cached for a second.
-SRWLOCK g_nodesLock = SRWLOCK_INIT;
-std::vector<std::wstring> g_nodes;
-ULONGLONG g_nodesTime = 0;
-
 bool ContainsI(const wchar_t* s, const wchar_t* needle) {
     size_t n = wcslen(needle);
     for (; *s; s++) {
@@ -3012,32 +3011,20 @@ bool IsTrackedKey(HKEY h, bool ns) {
     return ns ? path == kNsPath : IsHidePath(path);
 }
 
+// Navigation pane folders to list: one per platform folder that exists (or
+// the single "Games" entry).
 std::vector<std::wstring> ActiveNodes() {
-    ULONGLONG now = GetTickCount64();
-    AcquireSRWLockShared(&g_nodesLock);
-    if (g_nodesTime && now - g_nodesTime < 1000) {
-        std::vector<std::wstring> nodes = g_nodes;
-        ReleaseSRWLockShared(&g_nodesLock);
-        return nodes;
-    }
-    ReleaseSRWLockShared(&g_nodesLock);
-
     Settings s = GetSettings();
     std::wstring root = RootFolder(s);
     std::vector<std::wstring> nodes;
-    if (!root.empty()) {
-        bool any = false;
-        for (int p = 0; p < P_COUNT; p++) {
-            if (!s.enabled[p] || !DirExists(root + L"\\" + kPlatforms[p].folder)) continue;
-            any = true;
-            if (!s.singleNode) nodes.push_back(kPlatforms[p].clsid);
-        }
-        if (s.singleNode && any) nodes.push_back(kClsidAll);
+    if (root.empty()) return nodes;
+    bool any = false;
+    for (int p = 0; p < P_COUNT; p++) {
+        if (!s.enabled[p] || !DirExists(root + L"\\" + kPlatforms[p].folder)) continue;
+        any = true;
+        if (!s.singleNode) nodes.push_back(kPlatforms[p].clsid);
     }
-    AcquireSRWLockExclusive(&g_nodesLock);
-    g_nodes = nodes;
-    g_nodesTime = now ? now : 1;
-    ReleaseSRWLockExclusive(&g_nodesLock);
+    if (s.singleNode && any) nodes.push_back(kClsidAll);
     return nodes;
 }
 
@@ -3045,12 +3032,6 @@ std::vector<std::wstring> AllNodes() {
     std::vector<std::wstring> nodes{kClsidAll};
     for (int p = 0; p < P_COUNT; p++) nodes.push_back(kPlatforms[p].clsid);
     return nodes;
-}
-
-void InvalidateNodes() {
-    AcquireSRWLockExclusive(&g_nodesLock);
-    g_nodesTime = 0;
-    ReleaseSRWLockExclusive(&g_nodesLock);
 }
 
 LSTATUS ServeDword(LPDWORD type, LPBYTE data, LPDWORD cb) {
@@ -3101,7 +3082,10 @@ LSTATUS WINAPI RegOpenKeyExW_Hook(HKEY hKey, LPCWSTR sub, DWORD options, REGSAM 
     if (!ns && !hide) return status;
     // The real key may not exist: hand out an empty read-only stand-in so the
     // mod's entries can still be added to it.
-    if (status == ERROR_FILE_NOT_FOUND && !(sam & (KEY_SET_VALUE | KEY_CREATE_SUB_KEY))) {
+    const REGSAM kWriteAccess = KEY_SET_VALUE | KEY_CREATE_SUB_KEY | KEY_CREATE_LINK |
+                                WRITE_DAC | WRITE_OWNER | DELETE | GENERIC_WRITE |
+                                GENERIC_ALL | MAXIMUM_ALLOWED;
+    if (status == ERROR_FILE_NOT_FOUND && !(sam & kWriteAccess)) {
         status = RegOpenKeyExW_Original(hive, ns ? L"NameSpace" : L"HideDesktopIcons", 0,
                                         KEY_READ, result);
     }
@@ -3169,7 +3153,6 @@ LSTATUS WINAPI RegEnumKeyExW_Hook(HKEY hKey, DWORD index, LPWSTR name, LPDWORD n
     std::vector<std::wstring> nodes = ActiveNodes();
     if (index - real >= nodes.size()) return status;
     const std::wstring& clsid = nodes[index - real];
-    Wh_Log(L"RegEnumKeyExW: adding %s", clsid.c_str());
     if (!nameLen) return ERROR_INVALID_PARAMETER;
     if (!name || *nameLen <= clsid.size()) {
         *nameLen = (DWORD)clsid.size() + 1;
@@ -3209,10 +3192,8 @@ LSTATUS WINAPI RegQueryInfoKeyW_Hook(HKEY hKey, LPWSTR cls, LPDWORD clsLen,
 // Hides the mod's folders from the desktop (HideDesktopIcons\NewStartPanel).
 LSTATUS WINAPI RegQueryValueExW_Hook(HKEY hKey, LPCWSTR valueName, LPDWORD reserved,
                                      LPDWORD type, LPBYTE data, LPDWORD cb) {
-    if (g_hive && IsOurNodeName(valueName)) {
-        std::wstring path = KeyPath(hKey);
-        Wh_Log(L"RegQueryValueExW %s in [%s]", valueName, path.c_str());
-        if (IsHidePath(path)) return ServeDword(type, data, cb);
+    if (g_hive && IsOurNodeName(valueName) && IsHidePath(KeyPath(hKey))) {
+        return ServeDword(type, data, cb);
     }
     return RegQueryValueExW_Original(hKey, valueName, reserved, type, data, cb);
 }
@@ -3234,7 +3215,6 @@ LSTATUS WINAPI RegEnumValueW_Hook(HKEY hKey, DWORD index, LPWSTR name, LPDWORD n
     std::vector<std::wstring> nodes = AllNodes();
     if (index - real >= nodes.size()) return status;
     const std::wstring& clsid = nodes[index - real];
-    Wh_Log(L"RegEnumValueW: hiding %s", clsid.c_str());
     if (!nameLen) return ERROR_INVALID_PARAMETER;
     if (!name || *nameLen <= clsid.size()) {
         *nameLen = (DWORD)clsid.size() + 1;
@@ -3261,7 +3241,6 @@ LSTATUS WINAPI RegGetValueW_Hook(HKEY hKey, LPCWSTR sub, LPCWSTR value, DWORD fl
             RegCloseKey_Original(key);
             return status;
         }
-        if (ourValue) Wh_Log(L"RegGetValueW %s in [%s]", value, full.c_str());
         if (ourValue && IsHidePath(full)) {
             if (!(flags & RRF_RT_REG_DWORD)) return ERROR_UNSUPPORTED_TYPE;
             return ServeDword(type, (LPBYTE)data, cb);
@@ -3357,8 +3336,23 @@ BOOL ExplorerInit() {
     return TRUE;
 }
 
+BOOL CALLBACK FindOwnWindowProc(HWND hWnd, LPARAM param) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid != GetCurrentProcessId()) return TRUE;
+    *(bool*)param = true;
+    return FALSE;
+}
+
 void ExplorerAfterInit() {
-    // The hooks are active now: let open windows pick up the entries.
+    if (!g_hive) return;
+    // At process start nothing is cached yet, so there's nothing to refresh.
+    // This also skips the short-lived explorer.exe instances that the menu
+    // verbs start. A refresh is only needed when the mod is enabled in an
+    // explorer.exe that's already running (it already owns windows).
+    bool hasWindows = false;
+    EnumWindows(FindOwnWindowProc, (LPARAM)&hasWindows);
+    if (!hasWindows) return;
     NotifyAssocChanged();
     NotifyDesktopChanged();
 }
@@ -3366,7 +3360,6 @@ void ExplorerAfterInit() {
 void ExplorerSettingsChanged() {
     LoadSettings();
     g_lang = GetSettings().lang;
-    InvalidateNodes();
     if (g_hive) {
         BuildHive(GetSettings());
         NotifyAssocChanged();
@@ -3374,12 +3367,22 @@ void ExplorerSettingsChanged() {
     }
 }
 
-void ExplorerUninit() {
-    HKEY hive = g_hive;
+HKEY g_hiveToClose = nullptr;
+
+// Called while the hooks are still active: they stop answering from now on.
+void ExplorerBeforeUninit() {
+    g_hiveToClose = g_hive;
     g_hive = nullptr;
-    if (hive) RegCloseKey(hive);
-    NotifyAssocChanged();
-    NotifyDesktopChanged();
+}
+
+void ExplorerUninit() {
+    if (g_hive) ExplorerBeforeUninit();
+    if (g_hiveToClose) {
+        RegCloseKey(g_hiveToClose);
+        g_hiveToClose = nullptr;
+        NotifyAssocChanged();
+        NotifyDesktopChanged();
+    }
 }
 
 }  // namespace
@@ -3634,6 +3637,10 @@ void Wh_ModSettingsChanged() {
         return;
     }
     ToolModLauncher_ModSettingsChanged();
+}
+
+void Wh_ModBeforeUninit() {
+    if (g_isExplorer) ExplorerBeforeUninit();
 }
 
 void Wh_ModUninit() {
