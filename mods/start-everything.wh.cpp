@@ -2,7 +2,7 @@
 // @id              start-everything
 // @name            Everything & Power Tools in the Start Menu
 // @description     Search files, apps and settings from the Start menu with voidtools Everything, in place of Windows Search.
-// @version         1.0
+// @version         1.1
 // @author          bardelyne
 // @github          https://github.com/bardelyne
 // @include         StartMenuExperienceHost.exe
@@ -31,8 +31,11 @@ A native replacement for Windows 11 Start Menu search, powered by voidtools Ever
 - Inline Calculator: Type /c <expression> (e.g. /c 100 * 5, /c sqrt(144), /c 15% of 200, /c 2^10) to evaluate math expressions instantly. Press Enter to copy the result.
 - Configurable Unit Conversions: Type /c <number> [unit] to convert units using formulas configured in Mod Settings. Users can add, edit, or delete conversion items individually from the settings UI.
 - Network Interface Inspector: Type /ip to display all active Wi-Fi, Ethernet, and VPN network interfaces with their IP addresses, subnet masks, gateways, and hardware descriptions. Press Enter to copy the IP.
-- Full Right-Click Context Menu: Right-click any file, folder, or application to Open, Run as Administrator, Open in terminal (folders), Properties, Create desktop shortcut, Cut/Copy (files), Copy path, or Open file location.
+- Full Right-Click Context Menu: Right-click any file, folder, or application to Open, Run as Administrator, Open in terminal (folders), Properties, Create desktop shortcut, Cut/Copy (files), Copy path, Open file location, or Uninstall (apps).
 - Native Properties Dialogs: Properties opens through explorer.exe, the same dialog as in File Explorer.
+- Drag and Drop: drag a file or folder from the results into File Explorer, the desktop or another app - Photoshop, a code editor, a chat - as you would from File Explorer. It is always a copy, never a move. Start closes once it has landed; Escape, or letting go over Start, cancels.
+- Uninstall: right-click an app and choose Uninstall. After a confirmation that names what goes, a Store app is removed as Start removes it, and a program runs its own uninstaller, the one Installed apps in Settings runs. Apps that are part of Windows offer none.
+- File Preview: the selected file gets a preview card beside the Start menu - a large thumbnail (the one File Explorer shows, so pictures, a frame of a video and documents; PDFs show their first page, drawn by Windows' own PDF renderer) with its size, date and, for pictures and videos, dimensions and length. Videos and animated GIF and WebP images play in it, muted.
 - Opens in Front: Programs are started by Explorer, the way the stock Start menu starts them, so they come to the front even when they take a while to start or you move the mouse meanwhile.
 - Explicit Web Search: Trigger web searches on demand using the '?' prefix (e.g. '?query'). Includes customizable keyword shortcuts such as '?yt' (YouTube), '?gh' (GitHub), '?w' (Wikipedia), and '?r' (Reddit).
 - Start Menu Styler Compatibility: Automatically syncs background styles (Tinted Glass, Acrylic, custom theme colors) in real time without restarting the mod.
@@ -42,7 +45,7 @@ A native replacement for Windows 11 Start Menu search, powered by voidtools Ever
 ## Requirements
 
 1. Windows 11 (version 22H2+ x86-64).
-2. voidtools Everything (version 1.4 or 1.5a) running in the background.
+2. voidtools Everything (version 1.4 or 1.5, alpha or beta) running in the background.
 
 ## Taskbar Search
 
@@ -60,7 +63,7 @@ The Windows key, the Start button, Win+S, and the taskbar search icon all open t
 - Ctrl + Enter: Run the selected application or file as Administrator (triggers UAC).
 - Shift + Enter: Open the selected result's context menu, the same one a right-click opens; navigate it with the arrow keys and Enter.
 - Escape: Clear the current query and smoothly collapse the search palette back to pinned apps.
-- Right-Click: Context menu with Open, Run as Administrator, Open in terminal, Properties, Create desktop shortcut, Cut/Copy (files), Copy path, and Open file location.
+- Right-Click: Context menu with Open, Run as Administrator, Open in terminal, Properties, Create desktop shortcut, Cut/Copy (files), Copy path, Open file location, and Uninstall (apps).
 
 Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start Menu. Use 'Create desktop shortcut' first, then right-click the shortcut on your desktop and select 'Pin to Taskbar' or 'Pin to Start'.
 
@@ -83,12 +86,21 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 - maxFileResults: 12
   $name: Max File Results
   $description: Number of file matches to display in the Files column (default 12).
+- panelMargin: 0
+  $name: Search Panel Margin
+  $description: Space in pixels between the search panel and the edges of the Start menu. 0 (the default) fills the Start menu edge to edge; 14 gives the inset look of earlier versions.
 - searchDebounceMs: 0
   $name: Search Debounce Delay (ms)
   $description: Extra delay in milliseconds before searching, to let typing settle (default 0, instant). Rarely needed - while a search runs, new keystrokes already wait and only the latest text is searched.
 - learnFavorites: true
   $name: Learn Favorite Apps
   $description: Apps you open from here more often move up among results that match equally well. Turning this off stops counting and forgets the apps learned so far; turn it on again to start over.
+- filePreview: true
+  $name: File Preview
+  $description: Show a preview of the selected file beside the Start menu - a large thumbnail (the one File Explorer shows) with its size, date and, for pictures and videos, dimensions and length.
+- animatePreview: true
+  $name: Play Videos and Animations
+  $description: In the file preview, play videos and animated GIF and WebP images - muted, on a loop.
 - showKeyHints: true
   $name: Show Keyboard Shortcuts Bar
   $description: Display the keyboard shortcut hints ([Up/Down] Select, [Tab] Next, [Enter] Open, [Ctrl+Enter] Admin, [Shift+Enter] Menu, [Esc] Close) in the bottom bar.
@@ -240,6 +252,7 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 #include <commctrl.h>
 #include <dwmapi.h>
 #include <shlwapi.h>
+#include <appmodel.h>
 #include <string_view>
 #include <limits>
 #include <atomic>
@@ -410,9 +423,28 @@ struct Result {
     DWORD runCount = 0;
 };
 
-// Is Everything running and listening?
+// Is Everything running and listening? A named instance listens under the
+// class name with its name appended in brackets, as voidtools' es.exe looks
+// for it with -instance -- and Everything 1.5 alpha runs as the instance
+// "1.5a" unless told otherwise, so for most 1.5a users the plain name finds
+// nothing. The plain name first, then 1.5a, then any other instance.
 inline HWND FindIpcWindow() {
-    return FindWindowW(kIpcWindowClass, nullptr);
+    if (HWND hwnd = FindWindowW(kIpcWindowClass, nullptr)) {
+        return hwnd;
+    }
+    if (HWND hwnd = FindWindowW(L"EVERYTHING_TASKBAR_NOTIFICATION_(1.5a)", nullptr)) {
+        return hwnd;
+    }
+    static const wchar_t kInstancePrefix[] = L"EVERYTHING_TASKBAR_NOTIFICATION_(";
+    for (HWND hwnd = FindWindowExW(nullptr, nullptr, nullptr, nullptr); hwnd;
+         hwnd = FindWindowExW(nullptr, hwnd, nullptr, nullptr)) {
+        wchar_t name[128] = {};
+        if (GetClassNameW(hwnd, name, ARRAYSIZE(name)) &&
+            _wcsnicmp(name, kInstancePrefix, ARRAYSIZE(kInstancePrefix) - 1) == 0) {
+            return hwnd;
+        }
+    }
+    return nullptr;
 }
 
 namespace detail {
@@ -1094,35 +1126,36 @@ inline std::vector<std::vector<Tap>> AxisTaps(int from, int to) {
     return taps;
 }
 
-// Resizes a square premultiplied BGRA image, one axis at a time.
-inline std::vector<BYTE> Resample(const std::vector<BYTE>& src, int from, int to) {
-    if (from == to) {
+// Resizes a premultiplied BGRA image, one axis at a time.
+inline std::vector<BYTE> Resample(const std::vector<BYTE>& src, int fromW, int fromH, int toW, int toH) {
+    if (fromW == toW && fromH == toH) {
         return src;
     }
-    const auto taps = AxisTaps(from, to);
-    std::vector<float> rows(static_cast<size_t>(from) * to * 4);
-    for (int y = 0; y < from; ++y) {
-        for (int x = 0; x < to; ++x) {
-            float* d = &rows[(static_cast<size_t>(y) * to + x) * 4];
-            for (const Tap& t : taps[x]) {
-                const BYTE* s = &src[(static_cast<size_t>(y) * from + t.index) * 4];
+    const auto tapsX = AxisTaps(fromW, toW);
+    const auto tapsY = AxisTaps(fromH, toH);
+    std::vector<float> rows(static_cast<size_t>(fromH) * toW * 4);
+    for (int y = 0; y < fromH; ++y) {
+        for (int x = 0; x < toW; ++x) {
+            float* d = &rows[(static_cast<size_t>(y) * toW + x) * 4];
+            for (const Tap& t : tapsX[x]) {
+                const BYTE* s = &src[(static_cast<size_t>(y) * fromW + t.index) * 4];
                 for (int c = 0; c < 4; ++c) {
                     d[c] += s[c] * t.weight;
                 }
             }
         }
     }
-    std::vector<BYTE> out(static_cast<size_t>(to) * to * 4);
-    for (int y = 0; y < to; ++y) {
-        for (int x = 0; x < to; ++x) {
+    std::vector<BYTE> out(static_cast<size_t>(toW) * toH * 4);
+    for (int y = 0; y < toH; ++y) {
+        for (int x = 0; x < toW; ++x) {
             float acc[4] = {};
-            for (const Tap& t : taps[y]) {
-                const float* s = &rows[(static_cast<size_t>(t.index) * to + x) * 4];
+            for (const Tap& t : tapsY[y]) {
+                const float* s = &rows[(static_cast<size_t>(t.index) * toW + x) * 4];
                 for (int c = 0; c < 4; ++c) {
                     acc[c] += s[c] * t.weight;
                 }
             }
-            BYTE* d = &out[(static_cast<size_t>(y) * to + x) * 4];
+            BYTE* d = &out[(static_cast<size_t>(y) * toW + x) * 4];
             const BYTE alpha = static_cast<BYTE>(std::clamp(std::lround(acc[3]), 0L, 255L));
             for (int c = 0; c < 3; ++c) {
                 // A colour above its alpha is not a premultiplied pixel.
@@ -1132,6 +1165,11 @@ inline std::vector<BYTE> Resample(const std::vector<BYTE>& src, int from, int to
         }
     }
     return out;
+}
+
+// The same for a square image.
+inline std::vector<BYTE> Resample(const std::vector<BYTE>& src, int from, int to) {
+    return Resample(src, from, from, to, to);
 }
 
 // Premultiplies an image whose colours are not, which XAML would otherwise
@@ -1193,6 +1231,35 @@ inline bool BitmapToBgra(HBITMAP bitmap, int size, std::vector<BYTE>* out) {
     }
     Premultiply(&pixels, true);
     *out = Resample(pixels, side, size);
+    return true;
+}
+
+// Copies a bitmap of any shape into a top-down 32bpp premultiplied BGRA
+// buffer, at its own size: thumbnails are seldom square.
+inline bool BitmapToPixels(HBITMAP bitmap, std::vector<BYTE>* out, int* width, int* height) {
+    BITMAP info{};
+    if (!bitmap || !GetObjectW(bitmap, sizeof(info), &info) || info.bmWidth <= 0 || info.bmWidth > 4096 ||
+        info.bmHeight == 0 || std::abs(info.bmHeight) > 4096) {
+        return false;
+    }
+    const int w = info.bmWidth, h = std::abs(info.bmHeight);
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = w;
+    bi.bmiHeader.biHeight = -h;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    out->assign(static_cast<size_t>(w) * h * 4, 0);
+    HDC screen = GetDC(nullptr);
+    const int scanned = GetDIBits(screen, bitmap, 0, h, out->data(), &bi, DIB_RGB_COLORS);
+    ReleaseDC(nullptr, screen);
+    if (scanned != h) {
+        return false;
+    }
+    Premultiply(out, true);
+    *width = w;
+    *height = h;
     return true;
 }
 
@@ -3418,6 +3485,13 @@ inline std::wstring NormalizeUnit(const std::wstring& unitRaw) {
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Media.Animation.h>
+#include <winrt/Windows.Data.Pdf.h>
+#include <winrt/Windows.Media.Core.h>
+#include <winrt/Windows.Media.Playback.h>
+#include <winrt/Windows.Graphics.Imaging.h>
+#include <winrt/Windows.Storage.h>
+#include <winrt/Windows.ApplicationModel.h>
+#include <winrt/Windows.Management.Deployment.h>
 
 #pragma pop_macro("GetCurrentTime")
 
@@ -3559,6 +3633,13 @@ static bool IsSearchHostWindow(HWND hwnd) {
 
 // Start sends this to SearchHost's CoreWindow when SearchHost holds the
 // foreground and Start cannot take it. See SearchHostSubclassProc.
+// Explorer's helper posts this to Start's CoreWindow when a drag of a result
+// it ran (StartFileDrag) is over: wParam 1 if it was dropped.
+static UINT DragDoneMessage() {
+    static const UINT message = RegisterWindowMessageW(L"StartEverything_DragDone");
+    return message;
+}
+
 static UINT StartForegroundRequestMessage() {
     static const UINT message = RegisterWindowMessageW(L"StartEverything_StartForegroundRequest");
     return message;
@@ -3632,6 +3713,10 @@ static void WaitForTrackedLaunches() {
 static const wchar_t kExplorerHelperClassName[] = L"StartEverything_ExplorerHostClass";
 static const wchar_t kExplorerHelperWindowName[] = L"StartEverything_ExplorerHost";
 static const ULONG_PTR kExplorerCopyDataMagic = 0x53455052; // 'SEPR'
+static const ULONG_PTR kExplorerDragMagic = 0x53454447;      // 'SEDG': drag a result (StartFileDrag)
+static const ULONG_PTR kExplorerUninstallMagic = 0x5345554E; // 'SEUN': remove a packaged app (RequestPackageRemoval)
+static const UINT kExplorerStartDrag = WM_APP + 0x31;
+static std::wstring g_explorerDragPath;  // helper thread only
 
 static HANDLE g_hExplorerHelperThread = nullptr;
 static DWORD g_explorerHelperThreadId = 0;
@@ -3802,10 +3887,233 @@ static bool CheckSearchShownWithoutStart() {
     return true;
 }
 
+static int PrimaryButton() {
+    return GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON;
+}
+
+// Feeds a drag of a result (RunExplorerDrag) the mouse. The button was
+// pressed in Start, and until it is released Windows sends the mouse to the
+// window it was pressed on -- Start's -- whichever window holds the capture:
+// the drag loop here would never hear of the moves or the release. So a
+// thread watches the pointer and tells the loop: a move whenever it has
+// moved, and the release once the button is up, each with where the pointer
+// is -- the loop takes it from the message, as from a real one -- and the
+// loop asks ExplorerDragSource whether to go on.
+struct ExplorerDragFeed {
+    DWORD loopThread = 0;
+    std::atomic<bool> released{false};
+    std::atomic<bool> done{false};
+};
+
+static DWORD WINAPI ExplorerDragFeedThread(LPVOID param) {
+    auto* feed = static_cast<ExplorerDragFeed*>(param);
+    POINT last{LONG_MIN, LONG_MIN};
+    while (!feed->done.load()) {
+        if (!(GetAsyncKeyState(PrimaryButton()) & 0x8000)) {
+            feed->released.store(true);
+        }
+        GUITHREADINFO info{sizeof(info)};
+        HWND loop = GetGUIThreadInfo(feed->loopThread, &info) ? info.hwndCapture : nullptr;
+        POINT pt;
+        if (loop && GetCursorPos(&pt)) {
+            POINT client = pt;
+            ScreenToClient(loop, &client);
+            const LPARAM at = MAKELPARAM(client.x, client.y);
+            if (feed->released.load()) {
+                PostMessageW(loop, WM_LBUTTONUP, 0, at);
+            } else if (pt.x != last.x || pt.y != last.y) {
+                PostMessageW(loop, WM_MOUSEMOVE, MK_LBUTTON, at);
+                last = pt;
+            }
+        }
+        Sleep(feed->released.load() ? 50 : 10);
+    }
+    return 0;
+}
+
+// Ends a drag of a result when the button is up or Escape is pressed. Lives
+// on RunExplorerDrag's stack.
+struct ExplorerDragSource : IDropSource {
+    ExplorerDragFeed* feed;
+    explicit ExplorerDragSource(ExplorerDragFeed* f) : feed(f) {}
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
+        if (riid == IID_IUnknown || riid == IID_IDropSource) {
+            *ppv = static_cast<IDropSource*>(this);
+            return S_OK;
+        }
+        *ppv = nullptr;
+        return E_NOINTERFACE;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return 1; }
+    ULONG STDMETHODCALLTYPE Release() override { return 1; }
+    HRESULT STDMETHODCALLTYPE QueryContinueDrag(BOOL escape, DWORD) override {
+        if (escape) {
+            return DRAGDROP_S_CANCEL;
+        }
+        if (feed->released.load() || !(GetAsyncKeyState(PrimaryButton()) & 0x8000)) {
+            return DRAGDROP_S_DROP;
+        }
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GiveFeedback(DWORD) override { return DRAGDROP_S_USEDEFAULTCURSORS; }
+};
+
+// Runs a drag of a result for Start (StartFileDrag) with the shell's own data
+// object and drag loop -- the same as dragging the file in File Explorer: the
+// same formats for whatever it is dropped on, the same picture under the
+// pointer -- but only ever as a copy, so a drag from search can never move a
+// file. Then tells Start how it ended -- dropped, or cancelled with Escape
+// or by letting go over Start itself -- and on a cancel hands it the
+// keyboard back.
+static void RunExplorerDrag(HWND hWnd) {
+    std::wstring path = std::exchange(g_explorerDragPath, std::wstring());
+    if (path.empty()) {
+        return;
+    }
+    HRESULT ole = OleInitialize(nullptr);
+    IShellItem* item = nullptr;
+    IDataObject* data = nullptr;
+    DWORD effect = DROPEFFECT_NONE;
+    HRESULT hr = E_FAIL;
+    if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), nullptr, IID_PPV_ARGS(&item))) && item &&
+        SUCCEEDED(item->BindToHandler(nullptr, BHID_DataObject, IID_PPV_ARGS(&data))) && data) {
+        ExplorerDragFeed feed;
+        feed.loopThread = GetCurrentThreadId();
+        ExplorerDragSource source(&feed);
+        if (HANDLE feeder = CreateThread(nullptr, 0, ExplorerDragFeedThread, &feed, 0, nullptr)) {
+            hr = SHDoDragDrop(hWnd, data, &source, DROPEFFECT_COPY, &effect);
+            feed.done.store(true);
+            WaitForSingleObject(feeder, INFINITE);
+            CloseHandle(feeder);
+        }
+        Wh_Log(L"[Explorer] drag: %ls -> %08X, effect %lu", path.c_str(), static_cast<unsigned>(hr), effect);
+    } else {
+        Wh_Log(L"[Explorer] drag: could not open %ls", path.c_str());
+    }
+    if (data) {
+        data->Release();
+    }
+    if (item) {
+        item->Release();
+    }
+    if (SUCCEEDED(ole)) {
+        OleUninitialize();
+    }
+    // Not the effect: a drop into a folder copies in the background and
+    // reports none.
+    HWND start = CachedStartWindow();
+    POINT pt{};
+    GetCursorPos(&pt);
+    HWND under = WindowFromPoint(pt);
+    const bool overStart = start && under && GetAncestor(under, GA_ROOT) == start;
+    const bool dropped = hr == DRAGDROP_S_DROP && !overStart;
+    if (start) {
+        if (!dropped && !IsCloaked(start) && GetForegroundWindow() == hWnd) {
+            SetForegroundWindow(start);
+        }
+        PostMessageW(start, DragDoneMessage(), dropped ? 1 : 0, 0);
+    }
+}
+
+// Removes a packaged app for this user, for Uninstall in an app's menu in
+// Start (RequestPackageRemoval): here, in a plain desktop process, as package
+// management is not open to Start's. Asked for as "family\ntitle", only by
+// Start and only for a well-formed family name; says so when it fails.
+static bool AcceptPackageRemoval(HWND sender, std::wstring request) {
+    DWORD senderPid = 0, startPid = 0;
+    if (sender) {
+        GetWindowThreadProcessId(sender, &senderPid);
+    }
+    if (HWND start = CachedStartWindow()) {
+        GetWindowThreadProcessId(start, &startPid);
+    }
+    while (!request.empty() && request.back() == L'\0') {
+        request.pop_back();
+    }
+    const size_t newline = request.find(L'\n');
+    const std::wstring family = request.substr(0, newline);
+    const std::wstring title = newline == std::wstring::npos ? family : request.substr(newline + 1);
+    const size_t underscore = family.rfind(L'_');
+    if (!senderPid || senderPid != startPid || family.size() > 128 || underscore == std::wstring::npos ||
+        family.size() - underscore - 1 != 13 ||
+        family.find_first_not_of(L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-_") !=
+            std::wstring::npos) {
+        Wh_Log(L"[Explorer] uninstall: refused %ls", family.c_str());
+        return false;
+    }
+    SpawnTrackedLaunch([family, title] {
+        winrt::init_apartment(winrt::apartment_type::multi_threaded);
+        std::wstring error;
+        try {
+            winrt::Windows::Management::Deployment::PackageManager manager;
+            bool found = false;
+            for (auto const& package : manager.FindPackagesForUser(L"", family)) {
+                found = true;
+                auto result = manager.RemovePackageAsync(package.Id().FullName()).get();
+                const int32_t code = result.ExtendedErrorCode();
+                if (code < 0) {
+                    error = result.ErrorText().c_str();
+                    if (error.empty()) {
+                        error = winrt::hresult_error(code).message().c_str();
+                    }
+                }
+            }
+            if (!found) {
+                error = L"It is not installed for this account.";
+            }
+        } catch (winrt::hresult_error const& e) {
+            error = e.message().c_str();
+        }
+        Wh_Log(L"[Explorer] uninstall %ls: %ls", family.c_str(), error.empty() ? L"removed" : error.c_str());
+        if (!error.empty()) {
+            MessageBoxW(nullptr, (L"Couldn't uninstall " + title + L".\n\n" + error).c_str(), title.c_str(),
+                        MB_OK | MB_ICONWARNING | MB_TOPMOST | MB_SETFOREGROUND);
+        }
+        winrt::uninit_apartment();
+    });
+    return true;
+}
+
 static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
+    case kExplorerStartDrag:
+        RunExplorerDrag(hWnd);
+        return 0;
     case WM_COPYDATA: {
         auto pcds = reinterpret_cast<const COPYDATASTRUCT*>(lParam);
+        if (pcds && pcds->dwData == kExplorerUninstallMagic && pcds->lpData && pcds->cbData >= sizeof(wchar_t)) {
+            return AcceptPackageRemoval(
+                       reinterpret_cast<HWND>(wParam),
+                       std::wstring(reinterpret_cast<const wchar_t*>(pcds->lpData), pcds->cbData / sizeof(wchar_t)))
+                       ? 1
+                       : 0;
+        }
+        if (pcds && pcds->dwData == kExplorerDragMagic && pcds->lpData && pcds->cbData >= sizeof(wchar_t)) {
+            std::wstring path(reinterpret_cast<const wchar_t*>(pcds->lpData), pcds->cbData / sizeof(wchar_t));
+            while (!path.empty() && path.back() == L'\0') {
+                path.pop_back();
+            }
+            // Only a drag the user is making: this window was given the
+            // foreground, which only the foreground process can do, and the
+            // primary button is down. And only a local file or folder that
+            // exists, as for Properties.
+            const int button = PrimaryButton();
+            bool local = path.size() >= 3 && path[1] == L':' && !PathIsUNCW(path.c_str());
+            if (local) {
+                const wchar_t root[] = {path[0], L':', L'\\', 0};
+                local = GetDriveTypeW(root) != DRIVE_REMOTE;
+            }
+            if (GetForegroundWindow() != hWnd || !(GetAsyncKeyState(button) & 0x8000) || !local ||
+                GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                Wh_Log(L"[Explorer] drag: refused for %ls", path.c_str());
+                return 0;
+            }
+            // Started from the message loop: the drag loop must not run
+            // inside Start's SendMessage, which would wait for it.
+            g_explorerDragPath = std::move(path);
+            PostMessageW(hWnd, kExplorerStartDrag, 0, 0);
+            return 1;
+        }
         if (pcds && pcds->dwData == kExplorerCopyDataMagic && pcds->lpData && pcds->cbData >= sizeof(wchar_t)) {
             size_t charCount = pcds->cbData / sizeof(wchar_t);
             const wchar_t* pStr = reinterpret_cast<const wchar_t*>(pcds->lpData);
@@ -4270,9 +4578,12 @@ struct Settings {
     int maxAppResults = 6;
     int maxFileResults = 12;
     int searchDebounceMs = 0;
+    int panelMargin = 0;
     bool showKeyHints = true;
     bool filterNoisyPaths = true;
     bool learnFavorites = true;
+    bool filePreview = true;
+    bool animatePreview = true;
 };
 
 Settings g_settings;
@@ -4385,11 +4696,15 @@ void LoadSettings() {
 
     g_settings.searchDebounceMs = std::clamp(Wh_GetIntSetting(L"searchDebounceMs"), 0, 1000);
 
+    g_settings.panelMargin = std::clamp(Wh_GetIntSetting(L"panelMargin"), 0, 60);
+
     g_settings.showKeyHints = Wh_GetIntSetting(L"showKeyHints") != 0;
 
     // Off forgets: the stored counts now, the search thread's copy on its next
     // turn (g_forgetUsage).
     g_settings.learnFavorites = Wh_GetIntSetting(L"learnFavorites") != 0;
+    g_settings.filePreview = Wh_GetIntSetting(L"filePreview") != 0;
+    g_settings.animatePreview = Wh_GetIntSetting(L"animatePreview") != 0;
     if (!g_settings.learnFavorites) {
         Wh_DeleteValue(apps::kUsageValueName);
         g_forgetUsage.store(true);
@@ -4534,8 +4849,16 @@ std::atomic<bool> g_isHiding{false};
 void HideStockPlaceholder(wux::FrameworkElement const& stock);
 void RevealOverlayAnimated();
 void HideOverlayAnimated();
+void HidePreview();
 void HideAllOtherSearchBoxes(wux::DependencyObject const& root, int depth = 15);
 void SyncOverlayBackground();
+
+// The space between the search panel and Start's edges (panelMargin).
+int PanelMargin() {
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    return g_settings.panelMargin;
+}
+
 void RequestRender();
 void TeardownStartMenuUi();
 inline UINT GetTeardownMessage() {
@@ -4632,8 +4955,15 @@ void SyncOverlayBackground() {
                         winrt::get_class_name(brush).c_str());
                 }
                 try {
-                    auto cr = border.CornerRadius();
-                    g_resultsHost.CornerRadius(cr);
+                    g_resultsHost.CornerRadius(border.CornerRadius());
+                    // Covering Start to its edges, the results cover its
+                    // outline too: it is drawn again on top. Inset, the
+                    // outline still shows around them.
+                    const int margin = PanelMargin();
+                    g_resultsHost.Margin(wux::ThicknessHelper::FromUniformLength(margin));
+                    g_resultsHost.BorderBrush(border.BorderBrush());
+                    g_resultsHost.BorderThickness(margin == 0 ? border.BorderThickness()
+                                                              : wux::ThicknessHelper::FromUniformLength(0));
                 } catch (...) {}
             }
         }
@@ -4730,6 +5060,7 @@ void RevealOverlayAnimated() {
 }
 
 void HideOverlayAnimated() {
+    HidePreview();
     if (!g_resultsHost) return;
     try {
         if (g_isHiding.load()) {
@@ -5126,7 +5457,8 @@ void TakeForegroundWhenShown() {
 // moved elsewhere Start is already closing, and because the cloak lags the
 // foreground change by ~200ms, a toggle in that gap would reopen it. The one
 // exception is Explorer's helper, given the foreground for a launch
-// (DismissStartMenuForLaunch): a hidden window, which Start does not close for.
+// (DismissStartMenuForLaunch) or a drag (StartFileDrag): a hidden window,
+// which Start does not close for.
 HWND FindExplorerLaunchHolder();
 
 void CloseStartMenu() {
@@ -5162,6 +5494,10 @@ void CloseStartMenu() {
 // a launch took it from the program instead: that cancelled its right to come
 // to the front, and it opened behind.
 std::atomic<ULONGLONG> g_launchedAtTick{0};
+
+// A result is being dragged, by Explorer's helper (StartFileDrag), which holds
+// the foreground until the drop: Start losing it then is not Start closing.
+static bool g_dragging = false;
 constexpr ULONGLONG kLaunchHandoffMs = 2000;
 
 bool SearchHostTookForegroundFromOpenStart() {
@@ -5243,6 +5579,7 @@ constexpr ULONGLONG kEnterWaitMs = 3000;
 
 void DismissStartMenu() {
     try {
+        HidePreview();
         g_enterWaiting = false;
         g_suppressRefocus.store(true);
         if (g_openFocus) {
@@ -5640,6 +5977,22 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
         return kTeardownDone;
     }
 
+    if (uMsg && uMsg == DragDoneMessage()) {
+        g_dragging = false;
+        if (IsOurWindowCloaked()) {
+            return 0;  // closed meanwhile
+        }
+        if (wParam) {
+            DismissStartMenu();  // dropped: Start's job is done
+        } else if (g_ourBox) {
+            try {
+                g_ourBox.Focus(wux::FocusState::Programmatic);  // cancelled: back to typing
+            } catch (...) {
+            }
+        }
+        return 0;
+    }
+
     static UINT s_uMsgTaskbarCreated = 0;
     if (s_uMsgTaskbarCreated == 0) {
         s_uMsgTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
@@ -5666,6 +6019,7 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
                 return DefSubclassProc(hWnd, uMsg, wParam, lParam);
             }
             g_suppressRefocus.store(false);
+            g_dragging = false;  // in case Explorer never said the drag was over
             Wh_Log(L"subclass: WM_ACTIVATE (active, prev=%p) -> ready for search", otherHwnd);
             if (g_ourBox && !g_isOverlayVisible.load()) {
                 g_ourBox.Text(L"");
@@ -5685,6 +6039,10 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
                 Wh_Log(L"subclass: WM_ACTIVATE (inactive, internal other=%p) -> ignoring", otherHwnd);
                 return DefSubclassProc(hWnd, uMsg, wParam, lParam);
             }
+            if (g_dragging) {
+                // Explorer's helper running a drag of a result (StartFileDrag).
+                return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            }
 
             if (SearchHostTookForegroundFromOpenStart()) {
                 Wh_Log(L"subclass: WM_ACTIVATE (inactive) to SearchHost while open -> taking it back");
@@ -5694,6 +6052,7 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
             StashTextIfSwappedOut();
             g_suppressRefocus.store(true);
             g_enterWaiting = false;
+            HidePreview();
             Wh_Log(L"subclass: WM_ACTIVATE (inactive, other=%p pid=%lu) -> suppressing refocus", otherHwnd, otherPid);
             if (g_resultsHost) {
                 g_resultsHost.Visibility(wux::Visibility::Visible);
@@ -6156,6 +6515,391 @@ HWND FindExplorerHelperWindow() {
     return any;
 }
 
+// What Uninstall in an app's menu does for an app. A packaged app is removed
+// for this user, unless it is part of Windows. A program runs the uninstaller
+// it registered for Settings' Installed apps -- found by its program file,
+// install folder or name -- and one that registered none, or that is part of
+// Windows, gets no Uninstall.
+namespace uninstall {
+
+struct Command {
+    std::wstring name;    // as Installed apps shows it
+    std::wstring file;    // the uninstaller
+    std::wstring params;
+};
+
+inline bool EqualsI(const std::wstring& a, const std::wstring& b) {
+    return a.size() == b.size() && CompareStringOrdinal(a.c_str(), -1, b.c_str(), -1, TRUE) == CSTR_EQUAL;
+}
+
+// Whether path is dir or inside it.
+inline bool IsUnder(const std::wstring& path, const std::wstring& dir) {
+    if (dir.empty() || path.size() < dir.size() ||
+        CompareStringOrdinal(path.c_str(), static_cast<int>(dir.size()), dir.c_str(), static_cast<int>(dir.size()),
+                             TRUE) != CSTR_EQUAL) {
+        return false;
+    }
+    return path.size() == dir.size() || path[dir.size()] == L'\\' || dir.back() == L'\\';
+}
+
+inline std::wstring Folder(const std::wstring& path) {
+    size_t slash = path.find_last_of(L'\\');
+    return slash == std::wstring::npos ? std::wstring() : path.substr(0, slash);
+}
+
+// A registry path value as a plain path: environment variables expanded,
+// without quotes, an icon index (",0") or a trailing backslash.
+inline std::wstring CleanPath(std::wstring s, bool iconIndex) {
+    if (s.find(L'%') != std::wstring::npos) {
+        wchar_t expanded[MAX_PATH * 2];
+        DWORD n = ExpandEnvironmentStringsW(s.c_str(), expanded, ARRAYSIZE(expanded));
+        if (n && n <= ARRAYSIZE(expanded)) {
+            s = expanded;
+        }
+    }
+    auto trim = [&s] {
+        while (!s.empty() && (s.front() == L' ' || s.front() == L'"')) s.erase(s.begin());
+        while (!s.empty() && (s.back() == L' ' || s.back() == L'"')) s.pop_back();
+    };
+    trim();
+    if (iconIndex) {
+        size_t comma = s.find_last_of(L',');
+        if (comma != std::wstring::npos && comma + 1 < s.size() &&
+            s.find_first_not_of(L"-0123456789 ", comma + 1) == std::wstring::npos) {
+            s.resize(comma);
+            trim();
+        }
+    }
+    while (s.size() > 3 && s.back() == L'\\') s.pop_back();
+    return s;
+}
+
+// Splits a command line into the program and its arguments: the quoted part,
+// else up to the first ".exe" (uninstall strings are often unquoted paths
+// with spaces), else up to the first space.
+inline void SplitCommand(const std::wstring& line, std::wstring& file, std::wstring& params) {
+    std::wstring s = line;
+    while (!s.empty() && s.front() == L' ') s.erase(s.begin());
+    size_t end;
+    if (!s.empty() && s.front() == L'"') {
+        end = s.find(L'"', 1);
+        file = s.substr(1, end == std::wstring::npos ? std::wstring::npos : end - 1);
+        end = end == std::wstring::npos ? s.size() : end + 1;
+    } else {
+        std::wstring lower = s;
+        for (auto& c : lower) c = static_cast<wchar_t>(towlower(c));
+        size_t exe = lower.find(L".exe");
+        end = exe != std::wstring::npos ? exe + 4 : s.find(L' ');
+        if (end == std::wstring::npos) end = s.size();
+        file = s.substr(0, end);
+    }
+    params = end < s.size() ? s.substr(end) : std::wstring();
+    while (!params.empty() && params.front() == L' ') params.erase(params.begin());
+    if (file.find(L'%') != std::wstring::npos) {
+        file = CleanPath(file, false);
+    }
+}
+
+inline std::wstring ReadString(HKEY key, const wchar_t* name) {
+    wchar_t buf[2048];
+    DWORD size = sizeof(buf) - sizeof(wchar_t);
+    DWORD type = 0;
+    if (RegQueryValueExW(key, name, nullptr, &type, reinterpret_cast<BYTE*>(buf), &size) != ERROR_SUCCESS ||
+        (type != REG_SZ && type != REG_EXPAND_SZ)) {
+        return {};
+    }
+    buf[size / sizeof(wchar_t)] = 0;
+    return buf;
+}
+
+inline DWORD ReadDword(HKEY key, const wchar_t* name) {
+    DWORD value = 0, size = sizeof(value), type = 0;
+    if (RegQueryValueExW(key, name, nullptr, &type, reinterpret_cast<BYTE*>(&value), &size) != ERROR_SUCCESS ||
+        type != REG_DWORD) {
+        return 0;
+    }
+    return value;
+}
+
+// Folders that hold many programs, which an install folder must not be taken
+// for (some installers register one as theirs).
+inline bool IsSharedFolder(const std::wstring& dir) {
+    static const KNOWNFOLDERID* const kShared[] = {
+        &FOLDERID_ProgramFiles,       &FOLDERID_ProgramFilesX86, &FOLDERID_ProgramFilesCommon,
+        &FOLDERID_ProgramFilesCommonX86, &FOLDERID_LocalAppData,  &FOLDERID_RoamingAppData,
+        &FOLDERID_UserProgramFiles,   &FOLDERID_Windows,         &FOLDERID_Profile,
+        &FOLDERID_ProgramData,
+    };
+    if (dir.size() <= 3) {
+        return true;  // a drive
+    }
+    for (const KNOWNFOLDERID* id : kShared) {
+        PWSTR path = nullptr;
+        bool same = false;
+        if (SUCCEEDED(SHGetKnownFolderPath(*id, KF_FLAG_DONT_VERIFY, nullptr, &path)) && path) {
+            same = EqualsI(dir, path);
+        }
+        CoTaskMemFree(path);
+        if (same) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline bool IsWindowsPath(const std::wstring& path) {
+    wchar_t windir[MAX_PATH];
+    UINT n = GetWindowsDirectoryW(windir, MAX_PATH);
+    return n && n < MAX_PATH && IsUnder(path, windir);
+}
+
+// How well an entry's name fits the app's name in Start: 2 the same, 1 the
+// same but for a version ("NVIDIA App 11.0.9" for "NVIDIA App"), or the
+// start of it, at least two words long ("File Converter" for "File
+// Converter Settings"), else 0.
+inline int NameMatch(const std::wstring& name, const std::wstring& title) {
+    if (name.empty() || title.empty()) {
+        return 0;
+    }
+    if (EqualsI(name, title)) {
+        return 2;
+    }
+    auto startsWithWord = [](const std::wstring& s, const std::wstring& prefix) {
+        return s.size() > prefix.size() + 1 && s[prefix.size()] == L' ' &&
+               CompareStringOrdinal(s.c_str(), static_cast<int>(prefix.size()), prefix.c_str(),
+                                    static_cast<int>(prefix.size()), TRUE) == CSTR_EQUAL;
+    };
+    if (startsWithWord(name, title)) {
+        const wchar_t next = name[title.size() + 1];
+        const wchar_t after = title.size() + 2 < name.size() ? name[title.size() + 2] : 0;
+        if (iswdigit(next) || next == L'(' || ((next == L'v' || next == L'V') && iswdigit(after))) {
+            return 1;
+        }
+    }
+    if (startsWithWord(title, name) && name.find(L' ') != std::wstring::npos) {
+        return 1;
+    }
+    return 0;
+}
+
+// The uninstaller registered for a program (its file, or empty when not
+// known) and its name in Start.
+inline std::optional<Command> FindProgramUninstaller(const std::wstring& program, const std::wstring& title) {
+    if (!program.empty() && IsWindowsPath(program)) {
+        return std::nullopt;
+    }
+    const std::wstring programDir = Folder(program);
+    struct Root {
+        HKEY hive;
+        REGSAM view;
+    };
+    static const Root kRoots[] = {
+        {HKEY_LOCAL_MACHINE, KEY_WOW64_64KEY},
+        {HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY},
+        {HKEY_CURRENT_USER, 0},
+    };
+    std::optional<Command> best;
+    int bestScore = 0;
+    size_t bestDepth = 0;
+    for (const Root& root : kRoots) {
+        HKEY list = nullptr;
+        if (RegOpenKeyExW(root.hive, L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall", 0,
+                          KEY_READ | root.view, &list) != ERROR_SUCCESS) {
+            continue;
+        }
+        wchar_t sub[256];
+        for (DWORD i = 0;; ++i) {
+            DWORD subLen = ARRAYSIZE(sub);
+            if (RegEnumKeyExW(list, i, sub, &subLen, nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS) {
+                break;
+            }
+            HKEY entry = nullptr;
+            if (RegOpenKeyExW(list, sub, 0, KEY_READ | root.view, &entry) != ERROR_SUCCESS) {
+                continue;
+            }
+            // As Installed apps lists them: named, removable, not an update.
+            const std::wstring name = ReadString(entry, L"DisplayName");
+            const std::wstring uninstallString = ReadString(entry, L"UninstallString");
+            const bool listed = !name.empty() && !uninstallString.empty() && !ReadDword(entry, L"SystemComponent") &&
+                                !ReadDword(entry, L"NoRemove") && ReadString(entry, L"ParentKeyName").empty();
+
+            int score = 0;
+            size_t depth = 0;
+            if (listed) {
+                std::wstring file, params;
+                SplitCommand(uninstallString, file, params);
+                const std::wstring icon = CleanPath(ReadString(entry, L"DisplayIcon"), true);
+                const std::wstring location = CleanPath(ReadString(entry, L"InstallLocation"), false);
+                const std::wstring fileName = file.substr(file.find_last_of(L'\\') + 1);
+                const bool sharedUninstaller = EqualsI(fileName, L"msiexec.exe") || EqualsI(fileName, L"rundll32.exe");
+                // A launcher's uninstaller removes something else -- a game:
+                // steam.exe steam://uninstall/730.
+                const bool forOther = EqualsI(file, program) || params.find(L"://") != std::wstring::npos;
+                int rule = 0;
+                if (!program.empty() && EqualsI(icon, program)) {
+                    rule = 4;
+                } else if (!program.empty() && !location.empty() && IsUnder(program, location) &&
+                           !IsSharedFolder(location)) {
+                    rule = 3;
+                    depth = location.size();
+                } else if (!program.empty() && !sharedUninstaller && !forOther && !programDir.empty() &&
+                           (IsUnder(file, programDir) || IsUnder(icon, programDir)) && !IsSharedFolder(programDir)) {
+                    rule = 2;
+                }
+                const int named = NameMatch(name, title);
+                if (!rule && named) {
+                    rule = 1;
+                }
+                score = rule ? rule * 4 + named : 0;
+                if (score > bestScore || (score == bestScore && score && depth > bestDepth)) {
+                    // MSI's /I opens its repair-or-remove dialog; /X removes.
+                    if (EqualsI(fileName, L"msiexec.exe") || EqualsI(file, L"msiexec")) {
+                        for (size_t at = 0; at + 1 < params.size(); ++at) {
+                            if (params[at] == L'/' && (params[at + 1] == L'I' || params[at + 1] == L'i')) {
+                                params[at + 1] = L'X';
+                                break;
+                            }
+                        }
+                    }
+                    best = Command{name, file, params};
+                    bestScore = score;
+                    bestDepth = depth;
+                }
+            }
+            RegCloseKey(entry);
+        }
+        RegCloseKey(list);
+    }
+    return best;
+}
+
+// The package family of a packaged app's app ID ("family!app") when it can be
+// uninstalled: installed for this user and not part of Windows (those live
+// under the Windows folder, in SystemApps).
+inline std::wstring RemovablePackageFamily(const std::wstring& appId) {
+    const size_t bang = appId.find(L'!');
+    if (bang == std::wstring::npos || bang == 0 || appId.find(L'\\') != std::wstring::npos) {
+        return {};
+    }
+    const std::wstring family = appId.substr(0, bang);
+    UINT32 count = 0, length = 0;
+    if (GetPackagesByPackageFamily(family.c_str(), &count, nullptr, &length, nullptr) != ERROR_INSUFFICIENT_BUFFER ||
+        !count) {
+        return {};
+    }
+    std::vector<PWSTR> names(count);
+    std::vector<wchar_t> buffer(length);
+    if (GetPackagesByPackageFamily(family.c_str(), &count, names.data(), &length, buffer.data()) != ERROR_SUCCESS ||
+        !count) {
+        return {};
+    }
+    wchar_t path[MAX_PATH];
+    UINT32 pathLength = MAX_PATH;
+    if (GetPackagePathByFullName(names[0], &pathLength, path) != ERROR_SUCCESS || IsWindowsPath(path)) {
+        return {};
+    }
+    return family;
+}
+
+}  // namespace uninstall
+
+// Has Explorer remove a packaged app (AcceptPackageRemoval).
+bool RequestPackageRemoval(const std::wstring& family, const std::wstring& title) {
+    HWND helper = FindExplorerHelperWindow();
+    if (!helper) {
+        return false;
+    }
+    std::wstring request = family + L"\n" + title;
+    COPYDATASTRUCT cds{};
+    cds.dwData = kExplorerUninstallMagic;
+    cds.cbData = static_cast<DWORD>((request.size() + 1) * sizeof(wchar_t));
+    cds.lpData = request.data();
+    DWORD_PTR accepted = 0;
+    return SendMessageTimeoutW(helper, WM_COPYDATA, reinterpret_cast<WPARAM>(GetOurCoreWindow()),
+                               reinterpret_cast<LPARAM>(&cds), SMTO_ABORTIFHUNG, 2000, &accepted) &&
+           accepted;
+}
+
+// Starts a program's uninstaller, through Explorer like any program opened
+// from Start (DismissStartMenuForLaunch), so it comes to the front -- and
+// asks for elevation itself when it needs it.
+void RunUninstaller(uninstall::Command command) {
+    SpawnTrackedLaunch([command = std::move(command)] {
+        WaitForLaunchGate();
+        HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        const std::wstring dir = uninstall::Folder(command.file);
+        if (!ShellExecuteInExplorer(command.file, command.params, dir)) {
+            SHELLEXECUTEINFOW sei{};
+            sei.cbSize = sizeof(sei);
+            sei.fMask = SEE_MASK_NOASYNC;
+            sei.lpFile = command.file.c_str();
+            sei.lpParameters = command.params.c_str();
+            sei.lpDirectory = dir.empty() ? nullptr : dir.c_str();
+            sei.nShow = SW_SHOWNORMAL;
+            ShellExecuteExW(&sei);
+        }
+        Wh_Log(L"uninstall: ran %ls %ls", command.file.c_str(), command.params.c_str());
+        g_launchesDone.fetch_add(1);
+        if (SUCCEEDED(comHr)) {
+            CoUninitialize();
+        }
+    });
+}
+
+double VisibleTop();
+
+// Asks before uninstalling, as Start's own Uninstall does: a flyout on the
+// app's card naming what goes.
+void ConfirmUninstall(wux::FrameworkElement const& anchor, std::wstring const& name, std::function<void()> uninstallNow) {
+    wuxc::Flyout flyout;
+    wuxc::StackPanel panel;
+    panel.MaxWidth(300);
+    wuxc::TextBlock text;
+    text.Text(winrt::hstring{name + L" and its related info will be uninstalled."});
+    text.TextWrapping(wux::TextWrapping::Wrap);
+    panel.Children().Append(text);
+    wuxc::Button confirm;
+    confirm.Content(winrt::box_value(L"Uninstall"));
+    confirm.HorizontalAlignment(wux::HorizontalAlignment::Right);
+    confirm.Margin(wux::ThicknessHelper::FromLengths(0, 12, 0, 0));
+    try {
+        auto resources = wux::Application::Current().Resources();
+        auto key = winrt::box_value(L"AccentButtonStyle");
+        if (resources.HasKey(key)) {
+            confirm.Style(resources.Lookup(key).as<wux::Style>());
+        }
+    } catch (...) {
+    }
+    KeepHandler(confirm, confirm.Click(winrt::auto_revoke, [weakFlyout = winrt::make_weak(flyout), uninstallNow](
+                                                               wf::IInspectable const&, wux::RoutedEventArgs const&) {
+        if (auto f = weakFlyout.get()) {
+            f.Hide();
+        }
+        uninstallNow();
+    }));
+    panel.Children().Append(confirm);
+    flyout.Content(panel);
+    // Above the card, where XAML puts it, unless it would reach past the top
+    // of what Start shows (VisibleTop) -- XAML sees room there that is not
+    // drawn, as on the first card -- then below.
+    try {
+        panel.Measure(wf::Size{300, std::numeric_limits<float>::infinity()});
+        constexpr double kChrome = 40;  // the flyout's padding, border and gap to the card
+        const double cardTop = anchor.TransformToVisual(nullptr).TransformPoint(wf::Point{0, 0}).Y;
+        if (cardTop - panel.DesiredSize().Height - kChrome < VisibleTop()) {
+            flyout.Placement(wuxcp::FlyoutPlacementMode::Bottom);
+        }
+    } catch (...) {
+    }
+    KeepHandler(flyout, flyout.Opened(winrt::auto_revoke, [](wf::IInspectable const&, wf::IInspectable const&) {
+        NoteContextMenuOpened();
+    }));
+    KeepHandler(flyout, flyout.Closed(winrt::auto_revoke, [](wf::IInspectable const&, wf::IInspectable const&) {
+        NoteContextMenuClosed();
+    }));
+    flyout.ShowAt(anchor);
+}
+
 void ShowPropertiesDialog(std::wstring path) {
     SpawnTrackedLaunch([path = std::move(path)] {
         // Give Start a moment to close first (DismissStartMenu asks the shell
@@ -6444,6 +7188,8 @@ void PaintColumnSelection(const std::optional<std::vector<wuxc::Button>>& button
     }
 }
 
+void SchedulePreview();
+
 // Selects an app card, which makes Apps the active column.
 void SetAppSelection(int index) {
     if (!g_appButtonsOpt || g_appButtonsOpt->empty()) {
@@ -6458,6 +7204,7 @@ void SetAppSelection(int index) {
     g_filesColumnActive = false;
     PaintColumnSelection(g_appButtonsOpt, index);
     PaintColumnSelection(g_fileButtonsOpt, -1);
+    SchedulePreview();
 }
 
 // Selects a file row, which makes Files the active column.
@@ -6474,6 +7221,970 @@ void SetFileSelection(int index) {
     g_filesColumnActive = true;
     PaintColumnSelection(g_fileButtonsOpt, index);
     PaintColumnSelection(g_appButtonsOpt, -1);
+    SchedulePreview();
+}
+
+// ---------------------------------------------------------------------------
+// File preview: a card beside Start for the selected file
+//
+// A large thumbnail and a few details -- size, date, and for pictures and
+// videos their dimensions and length -- for telling similar names apart. The
+// thumbnail is the one File Explorer shows: whatever the shell has for the
+// type (pictures, a frame of a video, documents, anything an installed app
+// provides one for), else the type's icon. So no type needs code here -- but
+// PDFs, which Windows gives no thumbnail of its own: their first page is
+// drawn by Windows' own PDF renderer (RenderPdfPage), so the preview does not
+// depend on a PDF app being installed.
+//
+// Motion plays over the still once it is ready (animatePreview): a video,
+// muted and looping, through XAML's own player; a GIF, which XAML animates
+// itself; an animated WebP, whose frames Windows' WebP decoder hands over
+// whole but without their timing, which is read from the file
+// (WebpFrameDurations). Never sound. All of it stops and is let go the
+// moment the selection moves or Start closes.
+//
+// The card is a Popup beside the menu: right of it, or left when that would
+// run off the screen. Start's window covers the whole screen, but its window
+// region is the menu, and nothing of the window shows outside it -- so while
+// the card is up, its rectangle is added to the region (SetPreviewRegion), and
+// exactly that part is taken out again when it goes. It never takes focus --
+// the keyboard stays in the search box -- and lets the pointer through. It follows the selection
+// after a short pause, so arrowing through results does not flash a card per
+// row. Thumbnails are fetched on a thread of their own: one can take a few
+// hundred milliseconds, more the first time a video is seen.
+// ---------------------------------------------------------------------------
+
+namespace preview {
+
+inline constexpr double kWidth = 300;       // the card, in DIPs
+inline constexpr double kThumbWidth = 276;  // the thumbnail's box inside it
+inline constexpr double kThumbHeight = 400;  // a portrait photo at the full width
+
+// A file with no thumbnail shows its icon as large as a folder's thumbnail:
+// up to 256 pixels, the largest size icons are made at.
+inline int TypeIconPixels(double scale) {
+    return std::min(256, static_cast<int>(kThumbWidth * scale));
+}
+
+// What the thread found for a path.
+struct Result {
+    std::wstring path;
+    std::vector<BYTE> pixels;  // premultiplied BGRA, width x height; empty if none
+    int width = 0;
+    int height = 0;
+    double scale = 1.0;        // physical pixels per DIP when it was made
+    int pages = 0;             // a PDF drawn by RenderPdfPage: how many pages
+    std::wstring name;
+    std::wstring details;
+    // Motion over the still (see the module comment). At most one is set.
+    winrt::Windows::Storage::Streams::IRandomAccessStream gif{nullptr};
+    winrt::Windows::Storage::StorageFile video{nullptr};
+    std::vector<std::vector<BYTE>> frames;  // an animated WebP, each like pixels
+    std::vector<int> delays;                // milliseconds per frame
+};
+
+std::mutex g_mutex;
+std::condition_variable g_wake;
+std::wstring g_request;  // the path to fetch next, or empty
+bool g_quit = false;
+std::optional<Result> g_result;  // the last fetched, for the XAML thread
+[[clang::no_destroy]] std::optional<std::thread> g_thread;
+
+// Media properties, defined here: propkey.h would add every key there is to
+// the DLL (see kLinkTargetParsingPath). System.Image.HorizontalSize and
+// VerticalSize, System.Video.FrameWidth and FrameHeight, System.Media.Duration.
+inline constexpr PROPERTYKEY kImageWidth{{0x6444048F, 0x4C8B, 0x11D1, {0x8B, 0x70, 0x08, 0x00, 0x36, 0xB1, 0x1A, 0x03}}, 3};
+inline constexpr PROPERTYKEY kImageHeight{{0x6444048F, 0x4C8B, 0x11D1, {0x8B, 0x70, 0x08, 0x00, 0x36, 0xB1, 0x1A, 0x03}}, 4};
+inline constexpr PROPERTYKEY kVideoWidth{{0x64440491, 0x4C8B, 0x11D1, {0x8B, 0x70, 0x08, 0x00, 0x36, 0xB1, 0x1A, 0x03}}, 3};
+inline constexpr PROPERTYKEY kVideoHeight{{0x64440491, 0x4C8B, 0x11D1, {0x8B, 0x70, 0x08, 0x00, 0x36, 0xB1, 0x1A, 0x03}}, 4};
+inline constexpr PROPERTYKEY kDuration{{0x64440490, 0x4C8B, 0x11D1, {0x8B, 0x70, 0x08, 0x00, 0x36, 0xB1, 0x1A, 0x03}}, 3};
+
+// A thumbnail or a property can make the shell read the file, which on a
+// network or removable drive can stall for seconds. Those get the name and
+// folder only.
+inline bool OnFixedDrive(const std::wstring& path) {
+    if (path.size() < 3 || path[1] != L':') {
+        return false;
+    }
+    const wchar_t root[] = {path[0], L':', L'\\', 0};
+    return GetDriveTypeW(root) == DRIVE_FIXED;
+}
+
+inline std::wstring FormatDuration(ULONGLONG hundredNs) {
+    const ULONGLONG total = hundredNs / 10000000ULL;
+    wchar_t text[32];
+    if (total >= 3600) {
+        swprintf_s(text, L"%llu:%02llu:%02llu", total / 3600, (total / 60) % 60, total % 60);
+    } else {
+        swprintf_s(text, L"%llu:%02llu", total / 60, total % 60);
+    }
+    return text;
+}
+
+inline std::wstring FormatDate(const FILETIME& ft) {
+    SYSTEMTIME utc{}, local{};
+    if (!FileTimeToSystemTime(&ft, &utc) || !SystemTimeToTzSpecificLocalTime(nullptr, &utc, &local)) {
+        return L"";
+    }
+    wchar_t date[64] = {}, time[64] = {};
+    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, DATE_SHORTDATE, &local, nullptr, date, 64, nullptr);
+    GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, &local, nullptr, time, 64);
+    return std::wstring(date) + L" " + time;
+}
+
+// Runs f on a thread of its own in the multithreaded apartment and waits for
+// it: f waits for WinRT operations, which must not be done in the preview
+// thread's single-threaded one.
+template <typename F>
+inline void RunInMta(F&& f) {
+    std::thread worker([&] {
+        HRESULT co = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        try {
+            f();
+        } catch (...) {
+        }
+        if (SUCCEEDED(co)) {
+            CoUninitialize();
+        }
+    });
+    worker.join();
+}
+
+// The first page of a PDF, fitted into width x height pixels, by Windows' own
+// renderer (Windows.Data.Pdf). Fails on an encrypted PDF, for one.
+inline bool RenderPdfPage(const std::wstring& path, int width, int height, Result* r) {
+    bool ok = false;
+    RunInMta([&] {
+        {
+            namespace pdf = winrt::Windows::Data::Pdf;
+            namespace imaging = winrt::Windows::Graphics::Imaging;
+            auto file = winrt::Windows::Storage::StorageFile::GetFileFromPathAsync(path).get();
+            auto document = pdf::PdfDocument::LoadFromFileAsync(file).get();
+            if (document.PageCount() > 0) {
+                auto page = document.GetPage(0);
+                const auto size = page.Size();
+                const double fit = std::min(width / std::max(1.0, static_cast<double>(size.Width)),
+                                            height / std::max(1.0, static_cast<double>(size.Height)));
+                pdf::PdfPageRenderOptions options;
+                options.DestinationWidth(static_cast<uint32_t>(std::max(1.0, size.Width * fit)));
+                options.DestinationHeight(static_cast<uint32_t>(std::max(1.0, size.Height * fit)));
+                winrt::Windows::Storage::Streams::InMemoryRandomAccessStream stream;
+                page.RenderToStreamAsync(stream, options).get();
+                auto decoder = imaging::BitmapDecoder::CreateAsync(stream).get();
+                auto data = decoder.GetPixelDataAsync(imaging::BitmapPixelFormat::Bgra8, imaging::BitmapAlphaMode::Premultiplied,
+                                                      imaging::BitmapTransform(), imaging::ExifOrientationMode::IgnoreExifOrientation,
+                                                      imaging::ColorManagementMode::DoNotColorManage)
+                                .get();
+                auto bytes = data.DetachPixelData();
+                const int w = static_cast<int>(decoder.PixelWidth()), h = static_cast<int>(decoder.PixelHeight());
+                if (w > 0 && h > 0 && bytes.size() == static_cast<size_t>(w) * h * 4) {
+                    r->pixels.assign(bytes.begin(), bytes.end());
+                    r->width = w;
+                    r->height = h;
+                    r->pages = static_cast<int>(document.PageCount());
+                    ok = true;
+                }
+            }
+        }
+    });
+    return ok;
+}
+
+// How long each frame of an animated WebP shows, in milliseconds, from the
+// file's ANMF chunks: Windows' decoder hands over the frames without it.
+inline std::vector<int> WebpFrameDurations(const std::wstring& path) {
+    std::vector<int> durations;
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                              OPEN_EXISTING, 0, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return durations;
+    }
+    BYTE header[12] = {};
+    DWORD read = 0;
+    if (ReadFile(file, header, sizeof(header), &read, nullptr) && read == sizeof(header) &&
+        memcmp(header, "RIFF", 4) == 0 && memcmp(header + 8, "WEBP", 4) == 0) {
+        LARGE_INTEGER pos{};
+        pos.QuadPart = 12;
+        for (int chunks = 0; chunks < 100000; ++chunks) {
+            BYTE chunk[8 + 16] = {};  // the chunk header, and an ANMF's fields
+            if (!SetFilePointerEx(file, pos, nullptr, FILE_BEGIN) || !ReadFile(file, chunk, sizeof(chunk), &read, nullptr) ||
+                read < 8) {
+                break;
+            }
+            const uint32_t size = chunk[4] | (chunk[5] << 8) | (chunk[6] << 16) | (static_cast<uint32_t>(chunk[7]) << 24);
+            if (memcmp(chunk, "ANMF", 4) == 0 && read >= 8 + 15) {
+                durations.push_back(chunk[8 + 12] | (chunk[8 + 13] << 8) | (chunk[8 + 14] << 16));
+            }
+            pos.QuadPart += 8 + static_cast<LONGLONG>(size) + (size & 1);
+        }
+    }
+    CloseHandle(file);
+    return durations;
+}
+
+// An animated WebP's frames, fitted into width x height pixels -- the first
+// becomes the still. Leaves r alone for a still WebP, or one too large to keep
+// in memory.
+inline void DecodeAnimatedWebp(const std::wstring& path, int width, int height, Result* r) {
+    constexpr size_t kMaxFrames = 300;
+    constexpr size_t kMaxBytes = 64 << 20;
+    RunInMta([&] {
+        namespace imaging = winrt::Windows::Graphics::Imaging;
+        auto file = winrt::Windows::Storage::StorageFile::GetFileFromPathAsync(path).get();
+        auto decoder = imaging::BitmapDecoder::CreateAsync(file.OpenReadAsync().get()).get();
+        const uint32_t count = decoder.FrameCount();
+        const double fit = std::min({1.0, width / std::max(1.0, static_cast<double>(decoder.PixelWidth())),
+                                     height / std::max(1.0, static_cast<double>(decoder.PixelHeight()))});
+        const uint32_t w = std::max(1u, static_cast<uint32_t>(decoder.PixelWidth() * fit));
+        const uint32_t h = std::max(1u, static_cast<uint32_t>(decoder.PixelHeight() * fit));
+        if (count < 2 || count > kMaxFrames || static_cast<size_t>(count) * w * h * 4 > kMaxBytes) {
+            return;
+        }
+        imaging::BitmapTransform transform;
+        transform.ScaledWidth(w);
+        transform.ScaledHeight(h);
+        transform.InterpolationMode(imaging::BitmapInterpolationMode::Fant);
+        std::vector<std::vector<BYTE>> frames;
+        for (uint32_t i = 0; i < count; ++i) {
+            auto frame = decoder.GetFrameAsync(i).get();
+            auto data = frame.GetPixelDataAsync(imaging::BitmapPixelFormat::Bgra8, imaging::BitmapAlphaMode::Premultiplied,
+                                                transform, imaging::ExifOrientationMode::IgnoreExifOrientation,
+                                                imaging::ColorManagementMode::DoNotColorManage)
+                            .get();
+            auto bytes = data.DetachPixelData();
+            if (bytes.size() != static_cast<size_t>(w) * h * 4) {
+                return;
+            }
+            frames.emplace_back(bytes.begin(), bytes.end());
+        }
+        std::vector<int> delays = WebpFrameDurations(path);
+        delays.resize(frames.size(), 100);
+        for (int& delay : delays) {
+            delay = delay < 20 ? 100 : delay;  // as browsers treat 0 and near-0
+        }
+        r->pixels = frames.front();
+        r->width = static_cast<int>(w);
+        r->height = static_cast<int>(h);
+        r->frames = std::move(frames);
+        r->delays = std::move(delays);
+    });
+}
+
+// Opens what the card plays over the still, if anything: a GIF for XAML to
+// animate, a video for its player, an animated WebP's frames.
+inline void FetchMotion(const std::wstring& path, int width, int height, Result* r) {
+    const size_t dot = r->name.rfind(L'.');
+    if (dot == std::wstring::npos) {
+        return;
+    }
+    const std::wstring ext = tools::ToLower(r->name.substr(dot));
+    PERCEIVED type = PERCEIVED_TYPE_UNSPECIFIED;
+    PERCEIVEDFLAG flags = 0;
+    if (ext == L".gif") {
+        RunInMta([&] {
+            auto file = winrt::Windows::Storage::StorageFile::GetFileFromPathAsync(path).get();
+            r->gif = file.OpenReadAsync().get();
+        });
+    } else if (ext == L".webp") {
+        DecodeAnimatedWebp(path, width, height, r);
+    } else if (SUCCEEDED(AssocGetPerceivedType(ext.c_str(), &type, &flags, nullptr)) && type == PERCEIVED_TYPE_VIDEO) {
+        RunInMta([&] { r->video = winrt::Windows::Storage::StorageFile::GetFileFromPathAsync(path).get(); });
+    }
+}
+
+// The icon of the file's type, from its name alone -- for a file the shell
+// could not open (no access, or a drive not read from here).
+inline void TypeIcon(const std::wstring& path, int side, Result* r) {
+    SHFILEINFOW info{};
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    const bool folder = attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY);
+    if (!SHGetFileInfoW(path.c_str(), folder ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_NORMAL, &info, sizeof(info),
+                        SHGFI_USEFILEATTRIBUTES | SHGFI_SYSICONINDEX)) {
+        return;
+    }
+    IImageList* list = nullptr;
+    if (FAILED(SHGetImageList(SHIL_JUMBO, IID_PPV_ARGS(&list))) || !list) {
+        return;
+    }
+    HICON icon = nullptr;
+    if (SUCCEEDED(list->GetIcon(info.iIcon, ILD_TRANSPARENT, &icon)) && icon) {
+        if (icons::IconToBgra(icon, side, &r->pixels)) {
+            r->width = r->height = side;
+        }
+        DestroyIcon(icon);
+    }
+    list->Release();
+}
+
+// On the preview thread.
+inline Result Fetch(const std::wstring& path, double scale, bool animate) {
+    Result r;
+    r.path = path;
+    r.scale = scale;
+    const size_t slash = path.find_last_of(L"\\/");
+    r.name = slash == std::wstring::npos ? path : path.substr(slash + 1);
+    const std::wstring folder = slash == std::wstring::npos ? L"" : path.substr(0, slash);
+
+    std::vector<std::wstring> lines;
+    if (OnFixedDrive(path)) {
+        IShellItem2* item = nullptr;
+        if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), nullptr, IID_PPV_ARGS(&item))) && item) {
+            ULONG w = 0, h = 0;
+            ULONGLONG duration = 0;
+            std::wstring media;
+            if ((SUCCEEDED(item->GetUInt32(kImageWidth, &w)) && SUCCEEDED(item->GetUInt32(kImageHeight, &h)) && w && h) ||
+                (SUCCEEDED(item->GetUInt32(kVideoWidth, &w)) && SUCCEEDED(item->GetUInt32(kVideoHeight, &h)) && w && h)) {
+                media = std::to_wstring(w) + L" \u00D7 " + std::to_wstring(h);
+            }
+            if (SUCCEEDED(item->GetUInt64(kDuration, &duration)) && duration) {
+                media += (media.empty() ? L"" : L" \u2022 ") + FormatDuration(duration);
+            }
+            if (!media.empty()) {
+                lines.push_back(media);
+            }
+
+            // A thumbnail at full size; without one, a PDF's first page, else
+            // the type's icon (TypeIconPixels).
+            IShellItemImageFactory* factory = nullptr;
+            if (SUCCEEDED(item->QueryInterface(IID_PPV_ARGS(&factory))) && factory) {
+                SIZE want{static_cast<LONG>(kThumbWidth * scale), static_cast<LONG>(kThumbHeight * scale)};
+                HBITMAP bitmap = nullptr;
+                const std::wstring lower = tools::ToLower(r.name);
+                if (SUCCEEDED(factory->GetImage(want, SIIGBF_THUMBNAILONLY, &bitmap)) && bitmap) {
+                    // The shell fits a thumbnail to the longer side of the size
+                    // asked for, so a wide one comes back wider than the box.
+                    if (icons::BitmapToPixels(bitmap, &r.pixels, &r.width, &r.height) &&
+                        (r.width > want.cx || r.height > want.cy)) {
+                        const double fit = std::min(static_cast<double>(want.cx) / r.width,
+                                                    static_cast<double>(want.cy) / r.height);
+                        const int w = std::max(1, static_cast<int>(r.width * fit));
+                        const int h = std::max(1, static_cast<int>(r.height * fit));
+                        r.pixels = icons::Resample(r.pixels, r.width, r.height, w, h);
+                        r.width = w;
+                        r.height = h;
+                    }
+                    DeleteObject(bitmap);
+                } else if (lower.size() > 4 && lower.ends_with(L".pdf") &&
+                           RenderPdfPage(path, want.cx, want.cy, &r)) {
+                    // drawn
+                } else {
+                    const int side = TypeIconPixels(scale);
+                    if (SUCCEEDED(factory->GetImage(SIZE{side, side}, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK, &bitmap)) &&
+                        bitmap) {
+                        if (icons::BitmapToPixels(bitmap, &r.pixels, &r.width, &r.height) && r.width == r.height &&
+                            r.width != side) {
+                            r.pixels = icons::Resample(r.pixels, r.width, side);
+                            r.width = r.height = side;
+                        }
+                        DeleteObject(bitmap);
+                    }
+                }
+                factory->Release();
+            }
+            item->Release();
+        }
+        if (r.pages) {
+            lines.push_back(r.pages == 1 ? std::wstring(L"1 page") : std::to_wstring(r.pages) + L" pages");
+        }
+        if (animate) {
+            FetchMotion(path, static_cast<int>(kThumbWidth * scale), static_cast<int>(kThumbHeight * scale), &r);
+        }
+
+        WIN32_FILE_ATTRIBUTE_DATA attributes{};
+        if (GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &attributes)) {
+            std::wstring line;
+            if (attributes.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                line = L"Folder";
+            } else {
+                wchar_t size[32] = {};
+                const ULONGLONG bytes = (static_cast<ULONGLONG>(attributes.nFileSizeHigh) << 32) | attributes.nFileSizeLow;
+                StrFormatByteSizeW(static_cast<LONGLONG>(bytes), size, ARRAYSIZE(size));
+                line = size;
+            }
+            const std::wstring date = FormatDate(attributes.ftLastWriteTime);
+            if (!date.empty()) {
+                line += L" \u2022 " + date;
+            }
+            lines.push_back(line);
+        }
+    }
+    if (r.pixels.empty()) {
+        TypeIcon(path, TypeIconPixels(scale), &r);
+    }
+    if (!folder.empty()) {
+        lines.push_back(folder);
+    }
+    for (size_t i = 0; i < lines.size(); ++i) {
+        r.details += (i ? L"\n" : L"") + lines[i];
+    }
+    return r;
+}
+
+}  // namespace preview
+
+// The card, built on first use. XAML thread only.
+[[clang::no_destroy]] wuxcp::Popup g_previewPopup{nullptr};
+[[clang::no_destroy]] wuxc::Border g_previewCard{nullptr};
+[[clang::no_destroy]] wuxc::Border g_previewThumbBox{nullptr};
+[[clang::no_destroy]] wuxc::Image g_previewImage{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_previewName{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_previewDetails{nullptr};
+[[clang::no_destroy]] wux::DispatcherTimer g_previewTimer{nullptr};
+std::wstring g_previewWanted;  // the selected file's path, or empty
+
+// What plays over the still. XAML thread only, but for the video player's
+// event, which counts on g_previewPlayGeneration to tell a stale one.
+[[clang::no_destroy]] wuxc::MediaPlayerElement g_previewVideo{nullptr};
+[[clang::no_destroy]] winrt::Windows::Media::Playback::MediaPlayer g_previewPlayer{nullptr};
+[[clang::no_destroy]] std::optional<winrt::Windows::Media::Playback::MediaPlayer::MediaOpened_revoker> g_previewOpened;
+[[clang::no_destroy]] wuxmi::BitmapImage g_previewGif{nullptr};
+[[clang::no_destroy]] std::optional<wuxmi::BitmapImage::ImageOpened_revoker> g_previewGifOpened;
+[[clang::no_destroy]] wux::DispatcherTimer g_previewFrameTimer{nullptr};
+[[clang::no_destroy]] wuxmi::WriteableBitmap g_previewFrameBitmap{nullptr};
+std::vector<std::vector<BYTE>> g_previewFrames;
+std::vector<int> g_previewDelays;
+size_t g_previewFrame = 0;
+std::atomic<unsigned> g_previewPlayGeneration{0};
+
+void ApplyPreview();
+
+void PreviewThreadMain() {
+    HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    for (;;) {
+        std::wstring path;
+        {
+            std::unique_lock<std::mutex> lock(preview::g_mutex);
+            preview::g_wake.wait(lock, [] { return preview::g_quit || !preview::g_request.empty(); });
+            if (preview::g_quit) {
+                break;
+            }
+            path = std::exchange(preview::g_request, std::wstring());
+        }
+        HWND start = GetOurCoreWindow();
+        UINT dpi = start ? GetDpiForWindow(start) : 0;
+        bool animate = true;
+        {
+            std::lock_guard<std::mutex> lock(g_settingsMutex);
+            animate = g_settings.animatePreview;
+        }
+        preview::Result result = preview::Fetch(path, (dpi ? dpi : 96) / 96.0, animate);
+        {
+            std::lock_guard<std::mutex> lock(preview::g_mutex);
+            if (preview::g_quit || !preview::g_request.empty()) {
+                continue;  // stopping, or already outdated
+            }
+            preview::g_result = std::move(result);
+        }
+        try {
+            if (g_ourBox) {
+                g_ourBox.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Normal,
+                                               wuc::DispatchedHandler{[] { ApplyPreview(); }});
+            }
+        } catch (...) {
+        }
+    }
+    if (SUCCEEDED(comHr)) {
+        CoUninitialize();
+    }
+}
+
+void StopPreviewThread() {
+    {
+        std::lock_guard<std::mutex> lock(preview::g_mutex);
+        preview::g_quit = true;
+    }
+    preview::g_wake.notify_all();
+    if (preview::g_thread && preview::g_thread->joinable()) {
+        preview::g_thread->join();
+    }
+    preview::g_thread.reset();
+}
+
+bool PreviewEnabled() {
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    return g_settings.filePreview;
+}
+
+// What SetPreviewRegion added to Start's window region, or null.
+static HRGN g_previewAddedRegion = nullptr;
+
+// The top of what Start shows, in XAML's coordinates: its window covers the
+// screen but draws only inside its window region, the menu (less what
+// SetPreviewRegion added). 0 when it has no region.
+double VisibleTop() {
+    HWND start = GetOurCoreWindow();
+    if (!start) {
+        return 0;
+    }
+    double top = 0;
+    HRGN region = CreateRectRgn(0, 0, 0, 0);
+    const int kind = GetWindowRgn(start, region);
+    if (kind != ERROR && kind != NULLREGION) {
+        if (g_previewAddedRegion) {
+            CombineRgn(region, region, g_previewAddedRegion, RGN_DIFF);
+        }
+        RECT box{};
+        if (GetRgnBox(region, &box) != NULLREGION) {
+            top = box.top * 96.0 / GetDpiForWindow(start);
+        }
+    }
+    DeleteObject(region);
+    return top;
+}
+
+// Adds a rectangle of Start's window (physical pixels) to its window region,
+// in place of what was added before; null only takes that out. Only the part
+// the region lacked is added, so taking it out never cuts into the menu.
+void SetPreviewRegion(const RECT* rect) {
+    HWND start = GetOurCoreWindow();
+    if (!start) {
+        return;
+    }
+    HRGN region = CreateRectRgn(0, 0, 0, 0);
+    const int kind = GetWindowRgn(start, region);
+    if (kind == ERROR || kind == NULLREGION) {
+        DeleteObject(region);  // no region: nothing is clipped
+        return;
+    }
+    if (g_previewAddedRegion) {
+        CombineRgn(region, region, g_previewAddedRegion, RGN_DIFF);
+        DeleteObject(g_previewAddedRegion);
+        g_previewAddedRegion = nullptr;
+    }
+    if (rect) {
+        HRGN card = CreateRectRgnIndirect(rect);
+        HRGN added = CreateRectRgn(0, 0, 0, 0);
+        if (CombineRgn(added, card, region, RGN_DIFF) != NULLREGION) {
+            CombineRgn(region, region, added, RGN_OR);
+            g_previewAddedRegion = added;
+        } else {
+            DeleteObject(added);
+        }
+        DeleteObject(card);
+    }
+    SetWindowRgn(start, region, TRUE);  // the window owns it from here
+}
+
+// Stops whatever plays over the still and lets it go.
+void StopPreviewMotion() {
+    g_previewPlayGeneration.fetch_add(1);
+    try {
+        g_previewGifOpened.reset();
+        g_previewGif = nullptr;
+        if (g_previewFrameTimer) {
+            g_previewFrameTimer.Stop();
+        }
+        g_previewFrames.clear();
+        g_previewDelays.clear();
+        g_previewFrameBitmap = nullptr;
+        g_previewOpened.reset();
+        if (g_previewVideo) {
+            g_previewVideo.Visibility(wux::Visibility::Collapsed);
+            g_previewVideo.SetMediaPlayer(nullptr);
+        }
+        if (g_previewPlayer) {
+            g_previewPlayer.Pause();
+            g_previewPlayer.Source(nullptr);
+            g_previewPlayer.Close();
+            g_previewPlayer = nullptr;
+        }
+    } catch (...) {
+    }
+}
+
+void HidePreview() {
+    StopPreviewMotion();
+    g_previewWanted.clear();
+    try {
+        if (g_previewTimer) {
+            g_previewTimer.Stop();
+        }
+        if (g_previewPopup && g_previewPopup.IsOpen()) {
+            g_previewPopup.IsOpen(false);
+        }
+    } catch (...) {
+    }
+    if (g_previewAddedRegion) {
+        SetPreviewRegion(nullptr);
+    }
+}
+
+void BuildPreviewCard() {
+    if (g_previewPopup) {
+        return;
+    }
+    wuxc::Border card;
+    card.Width(preview::kWidth);
+    card.Padding(wux::ThicknessHelper::FromUniformLength(12));
+    card.CornerRadius(wux::CornerRadius{8, 8, 8, 8});
+    card.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
+    card.IsHitTestVisible(false);
+
+    wuxc::StackPanel stack;
+    wuxc::Border thumbBox;
+    thumbBox.CornerRadius(wux::CornerRadius{6, 6, 6, 6});
+    wuxc::Grid thumbGrid;
+    wuxc::Image image;
+    image.Stretch(wuxm::Stretch::Uniform);
+    image.HorizontalAlignment(wux::HorizontalAlignment::Center);
+    image.VerticalAlignment(wux::VerticalAlignment::Center);
+    thumbGrid.Children().Append(image);
+    wuxc::MediaPlayerElement video;
+    video.AreTransportControlsEnabled(false);
+    video.Stretch(wuxm::Stretch::Uniform);
+    video.HorizontalAlignment(wux::HorizontalAlignment::Center);
+    video.VerticalAlignment(wux::VerticalAlignment::Center);
+    video.Visibility(wux::Visibility::Collapsed);
+    thumbGrid.Children().Append(video);
+    thumbBox.Child(thumbGrid);
+    stack.Children().Append(thumbBox);
+
+    wuxc::TextBlock name;
+    name.Margin(wux::ThicknessHelper::FromLengths(2, 10, 2, 0));
+    name.FontSize(14);
+    name.FontWeight(wut::FontWeights::SemiBold());
+    name.TextWrapping(wux::TextWrapping::Wrap);
+    name.MaxLines(2);
+    name.TextTrimming(wux::TextTrimming::CharacterEllipsis);
+    stack.Children().Append(name);
+
+    wuxc::TextBlock details;
+    details.Margin(wux::ThicknessHelper::FromLengths(2, 4, 2, 0));
+    details.FontSize(12);
+    details.Opacity(0.7);
+    details.TextWrapping(wux::TextWrapping::Wrap);
+    details.MaxLines(4);
+    details.TextTrimming(wux::TextTrimming::CharacterEllipsis);
+    stack.Children().Append(details);
+    card.Child(stack);
+
+    wuxcp::Popup popup;
+    popup.Child(card);
+    popup.IsLightDismissEnabled(false);
+    try {
+        if (g_resultsHost && g_resultsHost.XamlRoot()) {
+            popup.XamlRoot(g_resultsHost.XamlRoot());
+        }
+    } catch (...) {
+    }
+
+    g_previewPopup = popup;
+    g_previewCard = card;
+    g_previewThumbBox = thumbBox;
+    g_previewImage = image;
+    g_previewVideo = video;
+    g_previewName = name;
+    g_previewDetails = details;
+}
+
+// Beside the panel: right of it, or left when the right would run off the
+// window (Start's window, the whole screen).
+void PositionPreview() {
+    if (!g_previewPopup || !g_resultsHost) {
+        return;
+    }
+    const auto origin = g_resultsHost.TransformToVisual(nullptr).TransformPoint(wf::Point{0, 0});
+    const double panelWidth = g_resultsHost.ActualWidth();
+    double windowWidth = 0, windowHeight = 0;
+    try {
+        if (auto root = g_resultsHost.XamlRoot()) {
+            windowWidth = root.Size().Width;
+            windowHeight = root.Size().Height;
+        }
+    } catch (...) {
+    }
+    if (windowWidth <= 0) {
+        try {
+            windowWidth = wux::Window::Current().Bounds().Width;
+            windowHeight = wux::Window::Current().Bounds().Height;
+        } catch (...) {
+        }
+    }
+    constexpr double kGap = 12;
+    double x = origin.X + panelWidth + kGap;
+    if (windowWidth > 0 && x + preview::kWidth > windowWidth && origin.X - kGap - preview::kWidth >= 0) {
+        x = origin.X - kGap - preview::kWidth;
+    }
+    // Level with the top of the panel, unless a tall card would run off the
+    // bottom of the screen.
+    g_previewCard.Measure(wf::Size{static_cast<float>(preview::kWidth), std::numeric_limits<float>::infinity()});
+    const double height = g_previewCard.DesiredSize().Height;
+    double y = origin.Y;
+    if (windowHeight > 0 && y + height > windowHeight) {
+        y = std::max(0.0, windowHeight - height);
+    }
+    g_previewPopup.HorizontalOffset(x);
+    g_previewPopup.VerticalOffset(y);
+
+    // Its rectangle in physical pixels, for the window region.
+    HWND start = GetOurCoreWindow();
+    const double scale = (start ? GetDpiForWindow(start) : 96) / 96.0;
+    RECT rect{static_cast<LONG>(std::floor(x * scale)) - 1, static_cast<LONG>(std::floor(y * scale)) - 1,
+              static_cast<LONG>(std::ceil((x + preview::kWidth) * scale)) + 1,
+              static_cast<LONG>(std::ceil((y + height) * scale)) + 1};
+    SetPreviewRegion(&rect);
+}
+
+// Plays a result's motion over the still, already shown at its size.
+void StartPreviewMotion(preview::Result& result) {
+    const unsigned generation = g_previewPlayGeneration.load();
+    if (result.gif) {
+        // Swapped in once loaded, so the still shows until then.
+        wuxmi::BitmapImage gif;
+        gif.DecodePixelWidth(result.width);
+        g_previewGifOpened = gif.ImageOpened(winrt::auto_revoke, [generation](auto&&, auto&&) {
+            if (generation == g_previewPlayGeneration.load() && g_previewGif && g_previewImage) {
+                g_previewImage.Source(g_previewGif);
+            }
+        });
+        g_previewGif = gif;
+        gif.SetSourceAsync(result.gif);
+    } else if (!result.frames.empty()) {
+        g_previewFrames = std::move(result.frames);
+        g_previewDelays = std::move(result.delays);
+        g_previewFrame = 0;
+        g_previewFrameBitmap = wuxmi::WriteableBitmap{result.width, result.height};
+        g_previewImage.Source(g_previewFrameBitmap);
+        if (!g_previewFrameTimer) {
+            g_previewFrameTimer = wux::DispatcherTimer();
+            KeepHandler(g_previewFrameTimer,
+                        g_previewFrameTimer.Tick(winrt::auto_revoke, [](wf::IInspectable const&, wf::IInspectable const&) {
+                            if (g_previewFrames.empty() || !g_previewFrameBitmap) {
+                                g_previewFrameTimer.Stop();
+                                return;
+                            }
+                            g_previewFrame = (g_previewFrame + 1) % g_previewFrames.size();
+                            const auto& frame = g_previewFrames[g_previewFrame];
+                            auto access = g_previewFrameBitmap.PixelBuffer().as<::Windows::Storage::Streams::IBufferByteAccess>();
+                            BYTE* dest = nullptr;
+                            if (SUCCEEDED(access->Buffer(&dest)) && dest &&
+                                g_previewFrameBitmap.PixelBuffer().Capacity() >= frame.size()) {
+                                memcpy(dest, frame.data(), frame.size());
+                                g_previewFrameBitmap.Invalidate();
+                            }
+                            g_previewFrameTimer.Interval(std::chrono::milliseconds(g_previewDelays[g_previewFrame]));
+                        }));
+        }
+        auto access = g_previewFrameBitmap.PixelBuffer().as<::Windows::Storage::Streams::IBufferByteAccess>();
+        BYTE* dest = nullptr;
+        if (SUCCEEDED(access->Buffer(&dest)) && dest) {
+            memcpy(dest, g_previewFrames[0].data(), g_previewFrames[0].size());
+            g_previewFrameBitmap.Invalidate();
+        }
+        g_previewFrameTimer.Interval(std::chrono::milliseconds(g_previewDelays[0]));
+        g_previewFrameTimer.Start();
+    } else if (result.video) {
+        // Muted and looping, shown over the still once it has opened.
+        namespace playback = winrt::Windows::Media::Playback;
+        playback::MediaPlayer player;
+        player.IsMuted(true);
+        player.IsLoopingEnabled(true);
+        player.AutoPlay(true);
+        g_previewOpened = player.MediaOpened(winrt::auto_revoke, [generation](auto&&, auto&&) {
+            try {
+                if (generation != g_previewPlayGeneration.load() || !g_ourBox) {
+                    return;
+                }
+                g_ourBox.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Normal, wuc::DispatchedHandler{[generation] {
+                    if (generation == g_previewPlayGeneration.load() && g_previewVideo) {
+                        g_previewVideo.Visibility(wux::Visibility::Visible);
+                    }
+                }});
+            } catch (...) {
+            }
+        });
+        g_previewVideo.Width(g_previewImage.Width());
+        g_previewVideo.Height(g_previewImage.Height());
+        g_previewVideo.SetMediaPlayer(player);
+        g_previewPlayer = player;
+        player.Source(winrt::Windows::Media::Core::MediaSource::CreateFromStorageFile(result.video));
+    }
+}
+
+// Drags a result out of Start, as File Explorer drags a file, by handing the
+// drag to this mod's helper window in Explorer (RunExplorerDrag).
+//
+// Nowhere in this process works. XAML's own drag (CanDrag, StartDragAsync)
+// fails inside XAML in Start's window, which then ends the process. A shell
+// drag loop on Start's thread gets only the first move of the mouse -- Start's
+// input does not come through ordinary window messages -- and then waits for
+// good, the whole menu with it. One on another thread gets no mouse at all,
+// and Windows will not hand the foreground to it while the button is down.
+// It does hand it to Explorer's helper, a plain window in a plain process,
+// where the drag works as anywhere else. Start's results stay up meanwhile
+// (g_dragging); Explorer tells Start how it ended (DragDoneMessage).
+void StartFileDrag(std::wstring const& path) {
+    HWND helper = FindExplorerLaunchHolder();
+    if (!helper) {
+        Wh_Log(L"drag: no Explorer helper");
+        return;
+    }
+    ReleaseCapture();  // the row's button holds the mouse
+    g_dragging = true;
+    if (!SetForegroundWindow(helper)) {
+        g_dragging = false;
+        Wh_Log(L"drag: Explorer's helper did not get the foreground");
+        return;
+    }
+    COPYDATASTRUCT cds{};
+    cds.dwData = kExplorerDragMagic;
+    cds.cbData = static_cast<DWORD>((path.size() + 1) * sizeof(wchar_t));
+    cds.lpData = const_cast<wchar_t*>(path.c_str());
+    DWORD_PTR accepted = 0;
+    if (!SendMessageTimeoutW(helper, WM_COPYDATA, reinterpret_cast<WPARAM>(GetOurCoreWindow()),
+                             reinterpret_cast<LPARAM>(&cds), SMTO_ABORTIFHUNG, 500, &accepted) ||
+        !accepted) {
+        g_dragging = false;
+        Wh_Log(L"drag: Explorer's helper refused %ls", path.c_str());
+    }
+}
+
+// Removes, when destroyed, a handler added with AddHandler -- which C++/WinRT
+// gives no revoker for -- so KeepHandler can hold it like the others.
+struct RoutedHandlerRevoker {
+    winrt::weak_ref<wux::UIElement> element;
+    wux::RoutedEvent event{nullptr};
+    wf::IInspectable handler{nullptr};
+
+    RoutedHandlerRevoker(wux::UIElement const& e, wux::RoutedEvent const& ev, wf::IInspectable const& h)
+        : element(winrt::make_weak(e)), event(ev), handler(h) {}
+    RoutedHandlerRevoker(RoutedHandlerRevoker&&) = default;
+    RoutedHandlerRevoker& operator=(RoutedHandlerRevoker&&) = default;
+    ~RoutedHandlerRevoker() {
+        if (!handler) {
+            return;  // moved from
+        }
+        try {
+            if (auto e = element.get()) {
+                e.RemoveHandler(event, handler);
+            }
+        } catch (...) {
+        }
+    }
+};
+
+// A pointer handler that also hears events a control has already handled --
+// a Button handles its own presses.
+void AddPointerHandler(wux::UIElement const& element, wux::RoutedEvent const& event,
+                       wux::Input::PointerEventHandler const& handler) {
+    auto boxed = winrt::box_value(handler);
+    element.AddHandler(event, boxed, true);
+    KeepHandler(element, RoutedHandlerRevoker{element, event, boxed});
+}
+
+// Shows what the preview thread found, if it is still what is selected.
+void ApplyPreview() try {
+    std::optional<preview::Result> result;
+    {
+        std::lock_guard<std::mutex> lock(preview::g_mutex);
+        result = std::move(preview::g_result);
+        preview::g_result.reset();
+    }
+    if (!result || result->path != g_previewWanted || !g_isOverlayVisible.load() || !g_resultsHost) {
+        Wh_Log(L"preview: dropped (%ls)", result ? L"no longer selected" : L"nothing fetched");
+        return;
+    }
+    BuildPreviewCard();
+
+    const bool isLight = IsLightTheme();
+    g_previewCard.RequestedTheme(isLight ? wux::ElementTheme::Light : wux::ElementTheme::Dark);
+    auto background = g_resultsHost.Background();
+    g_previewCard.Background(background ? background
+                                        : (isLight ? MakeBrush(0xF2, 0xF3, 0xF3, 0xF3) : MakeBrush(0xF2, 0x20, 0x20, 0x20)));
+    g_previewCard.BorderBrush(isLight ? MakeBrush(0x24, 0x00, 0x00, 0x00) : MakeBrush(0x30, 0xFF, 0xFF, 0xFF));
+    g_previewThumbBox.Background(isLight ? MakeBrush(0x0C, 0x00, 0x00, 0x00) : MakeBrush(0x10, 0xFF, 0xFF, 0xFF));
+
+    StopPreviewMotion();
+    wuxmi::WriteableBitmap bitmap{nullptr};
+    if (result->width > 0 && result->height > 0 &&
+        result->pixels.size() == static_cast<size_t>(result->width) * result->height * 4) {
+        bitmap = wuxmi::WriteableBitmap{result->width, result->height};
+        auto access = bitmap.PixelBuffer().as<::Windows::Storage::Streams::IBufferByteAccess>();
+        BYTE* dest = nullptr;
+        if (SUCCEEDED(access->Buffer(&dest)) && dest) {
+            memcpy(dest, result->pixels.data(), result->pixels.size());
+            bitmap.Invalidate();
+        } else {
+            bitmap = nullptr;
+        }
+    }
+    g_previewImage.Source(bitmap);
+    if (bitmap) {
+        // Pixel for pixel: made at the display's scale. The box is as high as
+        // the picture, so a wide one leaves no bands above and below.
+        g_previewImage.Width(result->width / result->scale);
+        g_previewImage.Height(result->height / result->scale);
+        g_previewThumbBox.Height(std::max(result->height / result->scale, 48.0));
+    }
+    g_previewThumbBox.Visibility(bitmap ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+    if (bitmap) {
+        StartPreviewMotion(*result);
+    }
+    g_previewName.Text(winrt::hstring{result->name});
+    g_previewDetails.Text(winrt::hstring{result->details});
+
+    PositionPreview();
+    if (!g_previewPopup.IsOpen()) {
+        g_previewCard.Opacity(0.0);
+        g_previewPopup.IsOpen(true);
+        wuxma::Storyboard fade;
+        wuxma::DoubleAnimation opacity;
+        opacity.From(0.0);
+        opacity.To(1.0);
+        opacity.Duration(wux::DurationHelper::FromTimeSpan(std::chrono::milliseconds(120)));
+        wuxma::Storyboard::SetTarget(opacity, g_previewCard);
+        wuxma::Storyboard::SetTargetProperty(opacity, L"Opacity");
+        fade.Children().Append(opacity);
+        fade.Begin();
+    }
+    Wh_Log(L"preview: showing %ls (%dx%d) at %.0f,%.0f", result->name.c_str(), result->width, result->height,
+           g_previewPopup.HorizontalOffset(), g_previewPopup.VerticalOffset());
+} catch (...) {
+    Wh_Log(L"preview: failed %08X", static_cast<unsigned>(winrt::to_hresult()));
+}
+
+// Follows the selection: the selected file's preview, after a short pause.
+void SchedulePreview() try {
+    if (g_dragging) {
+        return;
+    }
+    std::wstring path;
+    if (g_filesColumnActive && g_selectedFile >= 0 && g_selectedFile < static_cast<int>(g_currentFileRows.size())) {
+        path = g_currentFileRows[g_selectedFile].openPath;
+    }
+    if (path.empty() || !PreviewEnabled()) {
+        HidePreview();
+        return;
+    }
+    if (path == g_previewWanted) {
+        return;
+    }
+    g_previewWanted = path;
+    if (!g_previewTimer) {
+        g_previewTimer = wux::DispatcherTimer();
+        KeepHandler(g_previewTimer, g_previewTimer.Tick(winrt::auto_revoke, [](wf::IInspectable const&, wf::IInspectable const&) {
+            g_previewTimer.Stop();
+            if (g_previewWanted.empty() || !g_isOverlayVisible.load()) {
+                return;
+            }
+            Wh_Log(L"preview: fetching %ls", g_previewWanted.c_str());
+            {
+                std::lock_guard<std::mutex> lock(preview::g_mutex);
+                preview::g_request = g_previewWanted;
+                if (!preview::g_thread) {
+                    preview::g_quit = false;
+                    preview::g_thread.emplace(PreviewThreadMain);
+                }
+            }
+            preview::g_wake.notify_all();
+        }));
+    }
+    // Quicker once a card is up: moving from one file to the next.
+    const bool open = g_previewPopup && g_previewPopup.IsOpen();
+    g_previewTimer.Interval(std::chrono::milliseconds(open ? 80 : 250));
+    g_previewTimer.Stop();
+    g_previewTimer.Start();
+} catch (...) {
 }
 
 // File types "Run as administrator" is offered for.
@@ -6762,7 +8473,11 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
     wuxc::Grid root;
     root.Name(L"WindhawkEverythingResults");
-    root.Margin(wux::ThicknessHelper::FromLengths(14, 14, 14, 10));
+    // Edge to edge by default: with a margin, a band of Start shows around the
+    // results like a frame inside the frame. SyncOverlayBackground gives it
+    // Start's own surface -- background, corners and, edge to edge, outline --
+    // so it reads as Start. The margin is a setting (panelMargin).
+    root.Margin(wux::ThicknessHelper::FromUniformLength(PanelMargin()));
     root.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
     root.VerticalAlignment(wux::VerticalAlignment::Stretch);
     root.Visibility(wux::Visibility::Visible);
@@ -7146,7 +8861,8 @@ void RenderResults() try {
         } else if (!appNames.empty() && appNames[0].customGlyph == L"\uE1D0") {
             std::wstring statusStr = L"Calculator \u2022 Press Enter to copy result";
             g_footerStatus.Text(winrt::hstring{statusStr});
-        } else if (!appNames.empty() && (appNames[0].openPath.starts_with(L"http:") || appNames[0].openPath.starts_with(L"https:"))) {
+        } else if (!appNames.empty() && appNames[0].appIndex < 0 &&
+                   (appNames[0].openPath.starts_with(L"http:") || appNames[0].openPath.starts_with(L"https:"))) {
             std::wstring statusStr = L"Web Search \u2022 Press Enter to search in default browser";
             if (!files.empty()) {
                 statusStr += L" (" + std::to_wstring(files.size()) + L" files matched)";
@@ -7236,7 +8952,9 @@ void RenderResults() try {
         return headerGrid;
     };
 
-    bool isWebMode = (!appNames.empty() && (appNames[0].openPath.starts_with(L"http:") || appNames[0].openPath.starts_with(L"https:")));
+    // The web-search rows have no app index; a Start menu internet shortcut is an app.
+    bool isWebMode = (!appNames.empty() && appNames[0].appIndex < 0 &&
+                      (appNames[0].openPath.starts_with(L"http:") || appNames[0].openPath.starts_with(L"https:")));
     if (g_appsHeaderHolder) {
         if (!appNames.empty() && (appNames[0].customGlyph == L"\uE701" || appNames[0].customGlyph == L"\uE704" || appNames[0].customGlyph == L"\uE839")) {
             g_appsHeaderHolder.Child(makeHeader(L"NETWORK INTERFACES", L"\uE701", static_cast<int>(appNames.size())));
@@ -7360,7 +9078,7 @@ void RenderResults() try {
         KeepHandler(button, button.PointerEntered(winrt::auto_revoke, [weakBtn = winrt::make_weak(button)](wf::IInspectable const&,
                                                                    wux::Input::PointerRoutedEventArgs const&) {
             auto btn = weakBtn.get();
-            if (!btn || !g_activeAppsOpt) return;
+            if (!btn || !g_activeAppsOpt || g_dragging) return;  // a drag passing over
             for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
                 if ((*g_activeAppsOpt)[i].button == btn) {
                     SetAppSelection(static_cast<int>(i));
@@ -7403,7 +9121,7 @@ void RenderResults() try {
                 }));
                 flyout.Items().Append(copyItem);
             } else {
-                bool isWebItem = item.openPath.starts_with(L"http:") || item.openPath.starts_with(L"https:");
+                bool isWebItem = item.appIndex < 0 && (item.openPath.starts_with(L"http:") || item.openPath.starts_with(L"https:"));
                 bool isSettingItem = item.isSetting;
 
                 wuxc::MenuFlyoutItem openItem;
@@ -7517,6 +9235,49 @@ void RenderResults() try {
                                 ShowPropertiesDialog(filePath);
                             }));
                             flyout.Items().Append(propItem);
+                        }
+
+                        // Uninstall, as in Start's own menu: a packaged app is
+                        // removed, a program runs its uninstaller (uninstall).
+                        // Offered only where one of them applies.
+                        std::wstring family = viaAppId ? uninstall::RemovablePackageFamily(locTarget) : std::wstring();
+                        std::optional<uninstall::Command> uninstaller;
+                        if (family.empty()) {
+                            std::wstring program = filePath;
+                            if (std::wstring target = apps::ResolveLnkTarget(program); !target.empty()) {
+                                program = target;
+                            }
+                            uninstaller = uninstall::FindProgramUninstaller(program, appTitle);
+                        }
+                        if (!family.empty() || uninstaller) {
+                            wuxc::MenuFlyoutSeparator sep3;
+                            flyout.Items().Append(sep3);
+
+                            wuxc::MenuFlyoutItem uninstallItem;
+                            uninstallItem.Text(L"Uninstall");
+                            wuxc::FontIcon uninstallIcon;
+                            uninstallIcon.Glyph(L"\uE74D");
+                            uninstallItem.Icon(uninstallIcon);
+                            KeepHandler(uninstallItem, uninstallItem.Click(winrt::auto_revoke, [weakBtn, family, uninstaller, appTitle](
+                                                                               wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                                auto btn = weakBtn.get();
+                                if (!btn) return;
+                                // After the menu has closed: one flyout at a time.
+                                btn.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Low, wuc::DispatchedHandler{[weakBtn, family, uninstaller, appTitle] {
+                                    auto anchor = weakBtn.get();
+                                    if (!anchor) return;
+                                    ConfirmUninstall(anchor, uninstaller ? uninstaller->name : appTitle, [family, uninstaller, appTitle] {
+                                        if (!family.empty()) {
+                                            if (RequestPackageRemoval(family, appTitle)) {
+                                                DismissStartMenu();
+                                            }
+                                        } else if (uninstaller) {
+                                            DismissStartMenuForLaunch([command = *uninstaller] { RunUninstaller(command); });
+                                        }
+                                    });
+                                }});
+                            }));
+                            flyout.Items().Append(uninstallItem);
                         }
                     }
                 }
@@ -7747,7 +9508,7 @@ void RenderResults() try {
         KeepHandler(button, button.PointerEntered(winrt::auto_revoke, [weak = winrt::make_weak(button)](wf::IInspectable const&,
                                                                 wux::Input::PointerRoutedEventArgs const&) {
             auto btn = weak.get();
-            if (!btn || !g_fileButtonsOpt) return;
+            if (!btn || !g_fileButtonsOpt || g_dragging) return;  // a drag passing over
             for (size_t i = 0; i < g_fileButtonsOpt->size(); ++i) {
                 if ((*g_fileButtonsOpt)[i] == btn) {
                     SetFileSelection(static_cast<int>(i));
@@ -7759,8 +9520,57 @@ void RenderResults() try {
         if (!item.openPath.empty()) {
             std::wstring target = item.openPath;
             KeepHandler(button, button.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                if (g_dragging) {
+                    return;  // the release that ends a drag (StartFileDrag)
+                }
                 DismissStartMenuForLaunch([target] { OpenResult(target); });
             }));
+
+            // Dragging the row drags the file (StartFileDrag). A Button takes the
+            // mouse the moment it is pressed and handles the events, so the
+            // press and the moves are watched here, handled or not, and the
+            // drag starts once the pointer has moved a few pixels with the
+            // button down. The Button lets the mouse go then, so no click
+            // follows.
+            auto pressedAt = std::make_shared<std::optional<wf::Point>>();
+            const auto weakButton = winrt::make_weak(button);
+            AddPointerHandler(button, wux::UIElement::PointerPressedEvent(),
+                              [pressedAt, weakButton](wf::IInspectable const&, wux::Input::PointerRoutedEventArgs const& e) {
+                                  auto btn = weakButton.get();
+                                  pressedAt->reset();
+                                  if (btn) {
+                                      auto point = e.GetCurrentPoint(btn);
+                                      if (point.Properties().IsLeftButtonPressed()) {
+                                          *pressedAt = point.Position();
+                                      }
+                                  }
+                              });
+            AddPointerHandler(button, wux::UIElement::PointerMovedEvent(),
+                              [pressedAt, weakButton, target](wf::IInspectable const&,
+                                                              wux::Input::PointerRoutedEventArgs const& e) {
+                                  auto btn = weakButton.get();
+                                  if (!*pressedAt || !btn) {
+                                      return;
+                                  }
+                                  auto point = e.GetCurrentPoint(btn);
+                                  if (!point.Properties().IsLeftButtonPressed()) {
+                                      pressedAt->reset();
+                                      return;
+                                  }
+                                  const float dx = point.Position().X - (*pressedAt)->X;
+                                  const float dy = point.Position().Y - (*pressedAt)->Y;
+                                  if (dx * dx + dy * dy < 36) {
+                                      return;
+                                  }
+                                  pressedAt->reset();
+                                  btn.ReleasePointerCaptures();
+                                  HidePreview();
+                                  StartFileDrag(target);
+                              });
+            AddPointerHandler(button, wux::UIElement::PointerReleasedEvent(),
+                              [pressedAt](wf::IInspectable const&, wux::Input::PointerRoutedEventArgs const&) {
+                                  pressedAt->reset();
+                              });
 
             wuxc::MenuFlyout menu;
             KeepHandler(menu, menu.Opened(winrt::auto_revoke, [](wf::IInspectable const&, wf::IInspectable const&) { NoteContextMenuOpened(); }));
@@ -9120,6 +10930,8 @@ void PlaceOurSearchBox(wux::FrameworkElement const& stockButton) try {
                                 TriggerMenuOpenFocus();
                             } else if (SearchHostTookForegroundFromOpenStart()) {
                                 // Taken back by the subclass (WM_ACTIVATE); nothing to reset.
+                            } else if (g_dragging) {
+                                // Explorer's helper running a drag (StartFileDrag).
                             } else {
                                 StashTextIfSwappedOut();
                                 g_suppressRefocus.store(true);
@@ -9177,6 +10989,19 @@ void TeardownStartMenuUi() {
     // Before anything is dropped: see g_xamlHandlers.
     try {
         g_xamlHandlers.reset();
+    } catch (...) {}
+
+    try {
+        HidePreview();
+        g_previewTimer = nullptr;
+        g_previewFrameTimer = nullptr;
+        g_previewVideo = nullptr;
+        g_previewPopup = nullptr;
+        g_previewCard = nullptr;
+        g_previewThumbBox = nullptr;
+        g_previewImage = nullptr;
+        g_previewName = nullptr;
+        g_previewDetails = nullptr;
     } catch (...) {}
 
     try {
@@ -9347,6 +11172,7 @@ void Wh_ModSettingsChanged() {
                         }
                         g_footerHints.Visibility(show ? wux::Visibility::Visible : wux::Visibility::Collapsed);
                     }
+                    SyncOverlayBackground();  // the panel margin
                 });
         } catch (...) {}
     }
@@ -9404,6 +11230,8 @@ void Wh_ModUninit() {
         g_searchThread->join();
         g_searchThread.reset();
     }
+    // Before the teardown is queued, so whatever it dispatched runs first.
+    StopPreviewThread();
     WaitForTrackedLaunches();
 
     bool tornDown = false;
