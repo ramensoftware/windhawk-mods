@@ -6,6 +6,7 @@
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         windhawk.exe
+// @include         explorer.exe
 // @compilerOptions -lole32 -lshell32 -lshlwapi -luuid -ladvapi32 -lwindowscodecs
 // ==/WindhawkMod==
 
@@ -86,44 +87,35 @@ English, Italian, Spanish, French, German, Portuguese, Polish and Russian.
 Other languages use English.
 
 ## How it works
-The mod runs in its own Windhawk process (it doesn't inject into Explorer).
-It creates a real folder with the shortcuts and a hidden `.data` folder, then
-pins it to the navigation pane. By default the folder is in the mod's own
-Windhawk storage (one subfolder per Windows user), so Windhawk deletes it when
-the mod is removed; you can choose another location in the settings. With
-"Delete the shortcut folder when the mod is disabled or removed" (on by
-default) the folder is deleted when the mod is disabled too; everything is
-rebuilt when the mod is enabled again (this also happens when the mod is
-updated). Only files created by the mod are deleted. If you change the
-shortcut folder, the old one is cleaned up the same way.
+The mod has two parts:
+
+* A background process (a dedicated Windhawk process, not Explorer) reads the
+  launchers' files and keeps a real folder with the shortcuts and a hidden
+  `.data` folder up to date.
+* Inside `explorer.exe` the mod only hooks registry reads, so that Explorer
+  sees the navigation pane entries and the games' file types (the context
+  menu). Their definitions live in a private registry hive file in the mod's
+  storage, loaded with `RegLoadAppKey`: it isn't part of the system registry
+  and no other program can see it.
+
+**The mod doesn't write to the real registry.** Disabling or removing it makes
+the navigation pane entries and menu entries disappear right away, and nothing
+is left behind even if a process crashes. These entries only appear in File
+Explorer windows, not in other programs' Open/Save dialogs.
+
+By default the shortcut folder is in the mod's own Windhawk storage (one
+subfolder per Windows user), so Windhawk deletes it when the mod is removed;
+you can choose another location in the settings. With "Delete the shortcut
+folder when the mod is disabled or removed" (on by default) the folder is
+deleted when the mod is disabled too; everything is rebuilt when the mod is
+enabled again (this also happens when the mod is updated). Only files created
+by the mod are deleted. If you change the shortcut folder, the old one is
+cleaned up the same way.
 
 The mod never writes into game or launcher folders.
 
-## Registry entries
-The navigation pane entries and the context menu need these keys in the
-current user's registry. All of them are created as **volatile** keys: they
-live in memory only, are removed when the mod is disabled, and disappear at
-sign-out or restart even if the mod was killed or crashed.
-
-* `HKCU\Software\Classes\.whsteam0` … `.whsteam3`, `.whsteamlib`, and
-  `.whepic0…3`, `.whgog0…3`, `.whxbox0…3` for the enabled experimental
-  launchers: file types of the mod's internal target files.
-* `HKCU\Software\Classes\WhGames.*`: the matching ProgIDs, with the menu
-  entries (they run `explorer.exe` on a file inside the mod's folder).
-* `HKCU\Software\Classes\CLSID\{7C3E1B52-9A4D-4F6B-8E21-3D5A6C9B0F47…4B}`
-  and `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Desktop\NameSpace\{…}`:
-  the navigation pane entries (a standard shell folder pointing at the mod's
-  folder).
-
-One non-volatile value is also written, because it lives in an existing
-Windows key: `{…}=1` in
-`HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel`
-(it keeps the entries off the desktop). It is removed with the rest; if the mod
-is killed it stays, but it only refers to a key that no longer exists. If the
-`Desktop\NameSpace` key didn't exist, it is created (empty) as a regular key.
-
-If new menu entries don't show up after updating the mod, restart File
-Explorer once.
+If the entries don't show up right after enabling or updating the mod, open a
+new File Explorer window (or restart File Explorer once).
 */
 // ==/WindhawkModReadme==
 
@@ -223,10 +215,6 @@ const PlatformInfo kPlatforms[P_COUNT] = {
 };
 const wchar_t kClsidAll[] = L"{7C3E1B52-9A4D-4F6B-8E21-3D5A6C9B0F4B}";
 
-const wchar_t kNameSpaceKey[] =
-    L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Desktop\\NameSpace\\";
-const wchar_t kHideIconsKey[] =
-    L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\HideDesktopIcons\\NewStartPanel";
 
 const wchar_t kDataFolder[] = L".data";
 const wchar_t kSmartPrefix[] = L"\x2605 ";  // "★ "
@@ -703,51 +691,24 @@ std::wstring RootFolder(const Settings& s) {
 
 // ============================================================ registry
 
-// Set when a registry write or delete actually changed something.
+// The shell entries (file types and navigation pane folders) are never
+// written to the real registry. Explorer builds them in a private application
+// hive (a file in the mod's storage, loaded with RegLoadAppKey, invisible to
+// other processes), and the registry read hooks below make Explorer see them.
+HKEY g_hive = nullptr;
+
+// Set when a write or delete in the hive actually changed something.
 bool g_regChanged = false;
 
-// Standard keys that contain the mod's keys. They are created normally if
-// missing (a volatile key can't hold the non-volatile keys other software may
-// add later); everything the mod creates below them is volatile.
-const wchar_t* const kRegContainers[] = {
-    L"Software\\Classes",
-    L"Software\\Classes\\CLSID",
-    L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Desktop\\NameSpace",
-};
-
-// Opens or creates a key of the mod. Keys under kRegContainers are created as
-// volatile (in memory only): they disappear at sign-out even if the mod never
-// gets to remove them.
-bool OpenModKey(const std::wstring& key, HKEY* h, DWORD* disposition) {
-    std::wstring container;
-    for (auto c : kRegContainers) {
-        std::wstring cs = c;
-        if (key.size() > cs.size() && _wcsnicmp(key.c_str(), cs.c_str(), cs.size()) == 0 &&
-            key[cs.size()] == L'\\' && cs.size() > container.size()) {
-            container = cs;
-        }
-    }
-    DWORD options = 0;
-    if (!container.empty()) {
-        HKEY hc;
-        if (RegCreateKeyExW(HKEY_CURRENT_USER, container.c_str(), 0, nullptr, 0, KEY_READ,
-                            nullptr, &hc, nullptr) == ERROR_SUCCESS) {
-            RegCloseKey(hc);
-        }
-        options = REG_OPTION_VOLATILE;
-    }
-    return RegCreateKeyExW(HKEY_CURRENT_USER, key.c_str(), 0, nullptr, options,
-                           KEY_SET_VALUE | KEY_QUERY_VALUE, nullptr, h,
-                           disposition) == ERROR_SUCCESS;
-}
-
-// Writes a value only if it differs, so Explorer's association cache is
-// invalidated only when needed.
+// Writes a value in the hive only if it differs, so Explorer's association
+// cache is invalidated only when needed.
 bool RegWrite(const std::wstring& key, const wchar_t* name, DWORD type,
               const void* data, DWORD size) {
     HKEY h;
     DWORD disposition = 0;
-    if (!OpenModKey(key, &h, &disposition)) {
+    if (!g_hive ||
+        RegCreateKeyExW(g_hive, key.c_str(), 0, nullptr, 0, KEY_SET_VALUE | KEY_QUERY_VALUE,
+                        nullptr, &h, &disposition) != ERROR_SUCCESS) {
         return false;
     }
     if (disposition == REG_OPENED_EXISTING_KEY) {
@@ -771,13 +732,22 @@ bool RegWrite(const std::wstring& key, const wchar_t* name, DWORD type,
 }
 
 void RegDeleteKeyTree(const std::wstring& key) {
-    if (RegDeleteTreeW(HKEY_CURRENT_USER, key.c_str()) == ERROR_SUCCESS) {
+    if (g_hive && RegDeleteTreeW(g_hive, key.c_str()) == ERROR_SUCCESS) {
         g_regChanged = true;
     }
 }
 
 void NotifyAssocChanged() {
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST | SHCNF_FLUSHNOWAIT, nullptr, nullptr);
+}
+
+// Asks Explorer to refresh the desktop's children (navigation pane roots).
+void NotifyDesktopChanged() {
+    PIDLIST_ABSOLUTE desktop = nullptr;
+    if (SUCCEEDED(SHGetSpecialFolderLocation(nullptr, CSIDL_DESKTOP, &desktop))) {
+        SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_IDLIST | SHCNF_FLUSHNOWAIT, desktop, nullptr);
+        CoTaskMemFree(desktop);
+    }
 }
 
 bool RegStr(const std::wstring& key, const wchar_t* name, const std::wstring& v,
@@ -881,16 +851,16 @@ std::wstring LaunchSuffix(int p) {
 // File type of not installed Steam games: Install and a few store links.
 void RegisterLibraryType(bool enable) {
     if (!enable) {
-        RegDeleteKeyTree(L"Software\\Classes\\" + std::wstring(kLibExt));
-        RegDeleteKeyTree(L"Software\\Classes\\" + std::wstring(kLibProgId));
+        RegDeleteKeyTree(L"Classes\\" + std::wstring(kLibExt));
+        RegDeleteKeyTree(L"Classes\\" + std::wstring(kLibProgId));
         return;
     }
     auto command = [](const std::wstring& suffix) {
         return L"\"%SystemRoot%\\explorer.exe\" \"%1" + suffix + L"\"";
     };
     std::wstring icon = PlatformIcon(P_STEAM);
-    std::wstring cls = L"Software\\Classes\\" + std::wstring(kLibProgId);
-    RegStr(L"Software\\Classes\\" + std::wstring(kLibExt), nullptr, kLibProgId);
+    std::wstring cls = L"Classes\\" + std::wstring(kLibProgId);
+    RegStr(L"Classes\\" + std::wstring(kLibExt), nullptr, kLibProgId);
     RegStr(cls, nullptr, Tr(S_LIB_TYPE));
     RegStr(cls + L"\\DefaultIcon", nullptr, icon, REG_EXPAND_SZ);
     RegStr(cls + L"\\shell", nullptr, L"open");
@@ -915,9 +885,7 @@ void RegisterLibraryType(bool enable) {
 }
 
 // File types of the enabled platforms (the others are removed).
-// Returns true if anything changed in the registry.
-bool RegisterFileTypes(const Settings& s) {
-    g_regChanged = false;
+void RegisterFileTypes(const Settings& s) {
     bool galaxy = !GalaxyExe().empty();
     auto command = [](const std::wstring& suffix) {
         return L"\"%SystemRoot%\\explorer.exe\" \"%1" + suffix + L"\"";
@@ -926,15 +894,15 @@ bool RegisterFileTypes(const Settings& s) {
     for (int p = 0; p < P_COUNT; p++) {
         if (!s.enabled[p]) {
             for (int bits = 0; bits < 4; bits++) {
-                RegDeleteKeyTree(L"Software\\Classes\\" + ExtFor(p, bits));
-                RegDeleteKeyTree(L"Software\\Classes\\" + ProgIdFor(p, bits));
+                RegDeleteKeyTree(L"Classes\\" + ExtFor(p, bits));
+                RegDeleteKeyTree(L"Classes\\" + ProgIdFor(p, bits));
             }
             continue;
         }
         std::wstring icon = PlatformIcon(p);
         for (int bits = 0; bits < 4; bits++) {
-            std::wstring cls = L"Software\\Classes\\" + ProgIdFor(p, bits);
-            RegStr(L"Software\\Classes\\" + ExtFor(p, bits), nullptr, ProgIdFor(p, bits));
+            std::wstring cls = L"Classes\\" + ProgIdFor(p, bits);
+            RegStr(L"Classes\\" + ExtFor(p, bits), nullptr, ProgIdFor(p, bits));
             RegStr(cls, nullptr, TrFormat(S_GAME_TYPE, kPlatforms[p].folder));
             RegStr(cls + L"\\DefaultIcon", nullptr, icon, REG_EXPAND_SZ);
             RegStr(cls + L"\\shell", nullptr, L"open");
@@ -980,13 +948,13 @@ bool RegisterFileTypes(const Settings& s) {
         }
     }
     RegisterLibraryType(s.enabled[P_STEAM] && s.showNotInstalled);
-    if (g_regChanged) NotifyAssocChanged();
-    return g_regChanged;
 }
 
+// Hive keys of the navigation pane folders. All of them are always present
+// in the hive; the NameSpace hook decides which ones Explorer lists.
 void RegisterNode(const std::wstring& clsid, const std::wstring& name,
                   const std::wstring& icon, const std::wstring& target, DWORD sortIndex) {
-    std::wstring base = L"Software\\Classes\\CLSID\\" + clsid;
+    std::wstring base = L"Classes\\CLSID\\" + clsid;
     RegStr(base, nullptr, name);
     RegDword(base, L"System.IsPinnedToNameSpaceTree", 1);
     RegDword(base, L"SortOrderIndex", sortIndex);
@@ -998,30 +966,34 @@ void RegisterNode(const std::wstring& clsid, const std::wstring& name,
     RegStr(base + L"\\Instance\\InitPropertyBag", L"TargetFolderPath", target);
     RegDword(base + L"\\ShellFolder", L"FolderValueFlags", 0x28);
     RegDword(base + L"\\ShellFolder", L"Attributes", 0xF080004D);
-    RegStr(std::wstring(kNameSpaceKey) + clsid, nullptr, name);
-    RegDword(kHideIconsKey, clsid.c_str(), 1);
+    RegStr(L"NameSpaceNodes\\" + clsid, nullptr, name);
 }
 
-void UnregisterNode(const std::wstring& clsid) {
-    RegDeleteTreeW(HKEY_CURRENT_USER, (L"Software\\Classes\\CLSID\\" + clsid).c_str());
-    RegDeleteTreeW(HKEY_CURRENT_USER, (std::wstring(kNameSpaceKey) + clsid).c_str());
-    RegDeleteKeyValueW(HKEY_CURRENT_USER, kHideIconsKey, clsid.c_str());
-}
+// Writes everything Explorer needs into the hive. Returns true if it changed.
+bool BuildHive(const Settings& s) {
+    g_regChanged = false;
+    RegisterFileTypes(s);
 
-void UnregisterAll() {
-    RegDeleteTreeW(HKEY_CURRENT_USER, (L"Software\\Classes\\" + std::wstring(kLibExt)).c_str());
-    RegDeleteTreeW(HKEY_CURRENT_USER, (L"Software\\Classes\\" + std::wstring(kLibProgId)).c_str());
+    std::wstring root = RootFolder(s);
+    int firstEnabled = P_STEAM;
+    for (int p = P_COUNT - 1; p >= 0; p--) {
+        if (s.enabled[p]) firstEnabled = p;
+    }
+    RegisterNode(kClsidAll, s.singleNodeName.empty() ? Tr(S_GAMES) : s.singleNodeName,
+                 PlatformIcon(firstEnabled), root, 0x42);
     for (int p = 0; p < P_COUNT; p++) {
-        UnregisterNode(kPlatforms[p].clsid);
-        for (int bits = 0; bits < 4; bits++) {
-            RegDeleteTreeW(HKEY_CURRENT_USER,
-                           (L"Software\\Classes\\" + ExtFor(p, bits)).c_str());
-            RegDeleteTreeW(HKEY_CURRENT_USER,
-                           (L"Software\\Classes\\" + ProgIdFor(p, bits)).c_str());
+        RegisterNode(kPlatforms[p].clsid, kPlatforms[p].folder, PlatformIcon(p),
+                     root + L"\\" + kPlatforms[p].folder, 0x42 + p);
+    }
+    // Empty stand-ins, used when the real keys don't exist (see the hooks).
+    HKEY h;
+    for (auto key : {L"NameSpace", L"HideDesktopIcons"}) {
+        if (RegCreateKeyExW(g_hive, key, 0, nullptr, 0, KEY_READ, nullptr, &h, nullptr) ==
+            ERROR_SUCCESS) {
+            RegCloseKey(h);
         }
     }
-    UnregisterNode(kClsidAll);
-    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+    return g_regChanged;
 }
 
 // ============================================================ parsers
@@ -2367,7 +2339,7 @@ struct SyncCache {
     std::map<std::wstring, std::wstring> exeIcons;  // dir -> exe
     std::map<std::wstring, std::wstring> dataSigs;  // data dir -> signature hash
     std::map<std::wstring, std::wstring> linkSigs;  // lnk path (lower) -> hash
-    std::map<std::wstring, std::wstring> nodeSigs;  // clsid -> signature
+    std::wstring nodeSig;                           // platforms with games
     std::wstring linkSigsFile;                      // where linkSigs are saved
     bool linkSigsDirty = false;
     bool firstRun = true;
@@ -2700,48 +2672,14 @@ void Sync(SyncCache& cache) {
     }
     SaveLinkSigs(cache);
 
-    // Navigation pane nodes: clsid -> {name, icon, target folder}.
-    std::map<std::wstring, std::vector<std::wstring>> nodes;
-    if (s.singleNode) {
-        if (!games.empty()) {
-            int iconFrom = counts[P_STEAM] ? P_STEAM
-                           : counts[P_EPIC] ? P_EPIC
-                           : counts[P_GOG]  ? P_GOG
-                                            : P_XBOX;
-            nodes[kClsidAll] = {s.singleNodeName.empty() ? Tr(S_GAMES)
-                                                         : s.singleNodeName,
-                                PlatformIcon(iconFrom), root};
-        }
-    } else {
-        for (int p = 0; p < P_COUNT; p++) {
-            if (counts[p]) {
-                nodes[kPlatforms[p].clsid] = {kPlatforms[p].folder, PlatformIcon(p),
-                                              root + L"\\" + kPlatforms[p].folder};
-            }
-        }
+    // Explorer lists one navigation pane folder per platform folder (or the
+    // single "Games" entry): ask it to refresh when that set changes.
+    std::wstring nodeSig;
+    for (int p = 0; p < P_COUNT; p++) nodeSig += counts[p] ? L"1" : L"0";
+    if (nodeSig != cache.nodeSig) {
+        cache.nodeSig = nodeSig;
+        NotifyDesktopChanged();
     }
-    bool changed = false;
-    DWORD sortIndex = 0x42;
-    for (const auto& n : nodes) {
-        std::wstring sig = n.second[0] + L"|" + n.second[1] + L"|" + n.second[2];
-        if (cache.nodeSigs[n.first] != sig) {
-            RegisterNode(n.first, n.second[0], n.second[1], n.second[2], sortIndex);
-            cache.nodeSigs[n.first] = sig;
-            changed = true;
-        }
-        sortIndex++;
-    }
-    std::vector<std::wstring> allNodes{kClsidAll};
-    for (int p = 0; p < P_COUNT; p++) allNodes.push_back(kPlatforms[p].clsid);
-    for (const auto& clsid : allNodes) {
-        if (nodes.count(clsid)) continue;
-        if (cache.firstRun || cache.nodeSigs.count(clsid)) {
-            UnregisterNode(clsid);
-            cache.nodeSigs.erase(clsid);
-            changed = true;
-        }
-    }
-    if (changed) SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
 
     if (filesChanged) SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATHW, root.c_str(), nullptr);
     cache.firstRun = false;
@@ -2825,8 +2763,6 @@ DWORD WINAPI Worker(LPVOID) {
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     SyncCache cache;
     bool needRegister = true;
-    bool typesChanged = false;
-    bool registeredOnce = false;
     const DWORD kPeriodicResync = 15 * 60 * 1000;
 
     std::wstring lastRoot;
@@ -2840,25 +2776,12 @@ DWORD WINAPI Worker(LPVOID) {
         }
         lastRoot = root;
         if (needRegister) {
-            if (!registeredOnce) {
-                // Keys left by an unclean exit (or by an older non-volatile
-                // version): delete them so they're recreated as volatile.
-                UnregisterAll();
-                registeredOnce = true;
-            }
-            typesChanged = RegisterFileTypes(GetSettings());
-            cache.nodeSigs.clear();
+            cache.nodeSig.clear();
             cache.firstRun = true;
             needRegister = false;
         }
         Sync(cache);
         if (Stopping()) break;
-        if (typesChanged) {
-            // Again now that the files exist, so open windows pick up the
-            // new file types without restarting Explorer.
-            NotifyAssocChanged();
-            typesChanged = false;
-        }
 
         Watches w = SetUpWatches(GetSettings());
         DWORD count = (DWORD)w.handles.size();
@@ -2930,6 +2853,535 @@ void LoadSettings() {
     ReleaseSRWLockExclusive(&g_settingsLock);
 }
 
+// ============================================================ explorer hooks
+//
+// In explorer.exe the mod only answers registry reads: the file types and the
+// navigation pane folders come from the private hive (g_hive), and the
+// NameSpace / HideDesktopIcons keys get the mod's entries added. Nothing is
+// written to the real registry, and everything disappears when the mod is
+// unloaded.
+
+// Normalized, lowercase key paths the hooks care about.
+const wchar_t kNsPath[] =
+    L"hkcu\\software\\microsoft\\windows\\currentversion\\explorer\\desktop\\namespace";
+const wchar_t kHidePath[] =
+    L"hkcu\\software\\microsoft\\windows\\currentversion\\explorer\\hidedesktopicons\\"
+    L"newstartpanel";
+const wchar_t kHidePathClassic[] =
+    L"hkcu\\software\\microsoft\\windows\\currentversion\\explorer\\hidedesktopicons\\"
+    L"classicstartmenu";
+
+bool IsHidePath(const std::wstring& path) {
+    return path == kHidePath || path == kHidePathClassic;
+}
+const wchar_t kGuidPrefix[] = L"{7c3e1b52-9a4d-4f6b-8e21-3d5a6c9b0f4";
+
+using NtQueryKey_t = LONG(NTAPI*)(HANDLE, int, PVOID, ULONG, PULONG);
+NtQueryKey_t g_NtQueryKey = nullptr;
+
+// Kernel paths of the hive's stand-in keys (lowercase).
+std::wstring g_hiveNsKernel, g_hiveHideKernel;
+
+// Handles of NameSpace / NewStartPanel keys opened through the hook. Only a
+// fast pre-filter: the key path is always checked again before use.
+SRWLOCK g_handlesLock = SRWLOCK_INIT;
+std::set<HKEY> g_nsHandles, g_hideHandles;
+volatile LONG g_trackedCount = 0;
+
+// Navigation pane folders to list, cached for a second.
+SRWLOCK g_nodesLock = SRWLOCK_INIT;
+std::vector<std::wstring> g_nodes;
+ULONGLONG g_nodesTime = 0;
+
+bool ContainsI(const wchar_t* s, const wchar_t* needle) {
+    size_t n = wcslen(needle);
+    for (; *s; s++) {
+        size_t i = 0;
+        while (i < n && s[i] && towlower(s[i]) == needle[i]) i++;
+        if (i == n) return true;
+    }
+    return false;
+}
+
+// Cheap test on a sub key or value name before doing any real work.
+bool MightBeOurs(const wchar_t* sub) {
+    return ContainsI(sub, L".wh") || ContainsI(sub, L"whgames.") ||
+           ContainsI(sub, kGuidPrefix) || ContainsI(sub, L"namespace") ||
+           ContainsI(sub, L"newstartpanel") || ContainsI(sub, L"classicstartmenu");
+}
+
+bool IsOurNodeName(const wchar_t* name) {
+    if (!name || _wcsnicmp(name, kGuidPrefix, wcslen(kGuidPrefix)) != 0) return false;
+    if (_wcsicmp(name, kClsidAll) == 0) return true;
+    for (int p = 0; p < P_COUNT; p++) {
+        if (_wcsicmp(name, kPlatforms[p].clsid) == 0) return true;
+    }
+    return false;
+}
+
+// "classes\..." for any classes root, "hkcu\..." for the current user's
+// hive, "hklm\..." for the machine hive.
+std::wstring NormalizeKeyPath(std::wstring k) {
+    auto cut = [&](const std::wstring& prefix, const std::wstring& to) {
+        if (k.compare(0, prefix.size(), prefix) == 0 &&
+            (k.size() == prefix.size() || k[prefix.size()] == L'\\')) {
+            k = to + k.substr(prefix.size());
+            return true;
+        }
+        return false;
+    };
+    if (!g_hiveNsKernel.empty() && k == g_hiveNsKernel) return kNsPath;
+    if (!g_hiveHideKernel.empty() && k == g_hiveHideKernel) return kHidePath;
+    if (cut(L"\\registry\\machine\\software\\classes", L"classes")) return k;
+    if (cut(L"\\registry\\machine", L"hklm")) return k;
+    if (k.compare(0, 15, L"\\registry\\user\\") == 0) {
+        size_t sidEnd = k.find(L'\\', 15);
+        std::wstring sid = k.substr(15, sidEnd == std::wstring::npos ? std::wstring::npos
+                                                                      : sidEnd - 15);
+        std::wstring rest = sidEnd == std::wstring::npos ? L"" : k.substr(sidEnd);
+        if (EndsWith(sid, L"_classes")) return L"classes" + rest;
+        k = L"hkcu" + rest;
+    }
+    if (cut(L"hkcu\\software\\classes", L"classes")) return k;
+    if (cut(L"hklm\\software\\classes", L"classes")) return k;
+    return k.compare(0, 7, L"classes") == 0 || k.compare(0, 4, L"hkcu") == 0 ||
+                   k.compare(0, 4, L"hklm") == 0
+               ? k
+               : std::wstring();
+}
+
+std::wstring KeyPath(HKEY h) {
+    if (h == HKEY_CLASSES_ROOT) return L"classes";
+    if (h == HKEY_CURRENT_USER) return L"hkcu";
+    if (h == HKEY_LOCAL_MACHINE) return L"hklm";
+    if (!g_NtQueryKey || ((ULONG_PTR)h & 0x80000000) == 0x80000000) return {};
+    alignas(8) BYTE buf[4096];
+    ULONG len = 0;
+    if (g_NtQueryKey(h, 3 /* KeyNameInformation */, buf, sizeof(buf), &len) < 0) return {};
+    ULONG nameLen = *(ULONG*)buf;
+    if (nameLen > sizeof(buf) - sizeof(ULONG)) return {};
+    return NormalizeKeyPath(Lower(std::wstring((wchar_t*)(buf + sizeof(ULONG)), nameLen / 2)));
+}
+
+std::wstring JoinKeyPath(const std::wstring& base, const wchar_t* sub) {
+    if (base.empty()) return {};
+    std::wstring s = sub ? Lower(sub) : L"";
+    while (!s.empty() && s[0] == L'\\') s.erase(0, 1);
+    while (!s.empty() && s.back() == L'\\') s.pop_back();
+    return NormalizeKeyPath(s.empty() ? base : base + L"\\" + s);
+}
+
+// Path of the key in the hive that replaces "full", if it's one of ours.
+bool MapToHive(const std::wstring& full, std::wstring& out) {
+    if (full.compare(0, 8, L"classes\\") == 0) {
+        std::wstring r = full.substr(8);
+        std::wstring c1 = r.substr(0, r.find(L'\\'));
+        bool ours = StartsWith(c1, L".whsteam") || StartsWith(c1, L".whepic") ||
+                    StartsWith(c1, L".whgog") || StartsWith(c1, L".whxbox") ||
+                    StartsWith(c1, L"whgames.");
+        if (!ours && c1 == L"clsid" && r.size() > 6) {
+            ours = IsOurNodeName(r.substr(6, 38).c_str());
+        }
+        if (ours) out = L"Classes\\" + r;
+        return ours;
+    }
+    std::wstring ns = std::wstring(kNsPath) + L"\\";
+    if (full.compare(0, ns.size(), ns) == 0 &&
+        IsOurNodeName(full.substr(ns.size(), 38).c_str())) {
+        out = L"NameSpaceNodes\\" + full.substr(ns.size());
+        return true;
+    }
+    return false;
+}
+
+void TrackHandle(HKEY h, bool ns) {
+    AcquireSRWLockExclusive(&g_handlesLock);
+    (ns ? g_nsHandles : g_hideHandles).insert(h);
+    g_trackedCount = (LONG)(g_nsHandles.size() + g_hideHandles.size());
+    ReleaseSRWLockExclusive(&g_handlesLock);
+}
+
+// True if "h" is a NameSpace (ns) or NewStartPanel (!ns) key.
+bool IsTrackedKey(HKEY h, bool ns) {
+    if (!g_trackedCount) return false;
+    AcquireSRWLockShared(&g_handlesLock);
+    bool found = (ns ? g_nsHandles : g_hideHandles).count(h) > 0;
+    ReleaseSRWLockShared(&g_handlesLock);
+    if (!found) return false;
+    std::wstring path = KeyPath(h);
+    return ns ? path == kNsPath : IsHidePath(path);
+}
+
+std::vector<std::wstring> ActiveNodes() {
+    ULONGLONG now = GetTickCount64();
+    AcquireSRWLockShared(&g_nodesLock);
+    if (g_nodesTime && now - g_nodesTime < 1000) {
+        std::vector<std::wstring> nodes = g_nodes;
+        ReleaseSRWLockShared(&g_nodesLock);
+        return nodes;
+    }
+    ReleaseSRWLockShared(&g_nodesLock);
+
+    Settings s = GetSettings();
+    std::wstring root = RootFolder(s);
+    std::vector<std::wstring> nodes;
+    if (!root.empty()) {
+        bool any = false;
+        for (int p = 0; p < P_COUNT; p++) {
+            if (!s.enabled[p] || !DirExists(root + L"\\" + kPlatforms[p].folder)) continue;
+            any = true;
+            if (!s.singleNode) nodes.push_back(kPlatforms[p].clsid);
+        }
+        if (s.singleNode && any) nodes.push_back(kClsidAll);
+    }
+    AcquireSRWLockExclusive(&g_nodesLock);
+    g_nodes = nodes;
+    g_nodesTime = now ? now : 1;
+    ReleaseSRWLockExclusive(&g_nodesLock);
+    return nodes;
+}
+
+std::vector<std::wstring> AllNodes() {
+    std::vector<std::wstring> nodes{kClsidAll};
+    for (int p = 0; p < P_COUNT; p++) nodes.push_back(kPlatforms[p].clsid);
+    return nodes;
+}
+
+void InvalidateNodes() {
+    AcquireSRWLockExclusive(&g_nodesLock);
+    g_nodesTime = 0;
+    ReleaseSRWLockExclusive(&g_nodesLock);
+}
+
+LSTATUS ServeDword(LPDWORD type, LPBYTE data, LPDWORD cb) {
+    if (type) *type = REG_DWORD;
+    if (!cb) return data ? ERROR_INVALID_PARAMETER : ERROR_SUCCESS;
+    if (data) {
+        if (*cb < sizeof(DWORD)) {
+            *cb = sizeof(DWORD);
+            return ERROR_MORE_DATA;
+        }
+        *(DWORD*)data = 1;
+    }
+    *cb = sizeof(DWORD);
+    return ERROR_SUCCESS;
+}
+
+using RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
+RegOpenKeyExW_t RegOpenKeyExW_Original;
+using RegCloseKey_t = decltype(&RegCloseKey);
+RegCloseKey_t RegCloseKey_Original;
+using RegEnumKeyExW_t = decltype(&RegEnumKeyExW);
+RegEnumKeyExW_t RegEnumKeyExW_Original;
+using RegQueryInfoKeyW_t = decltype(&RegQueryInfoKeyW);
+RegQueryInfoKeyW_t RegQueryInfoKeyW_Original;
+using RegQueryValueExW_t = decltype(&RegQueryValueExW);
+RegQueryValueExW_t RegQueryValueExW_Original;
+using RegGetValueW_t = decltype(&RegGetValueW);
+RegGetValueW_t RegGetValueW_Original;
+using RegEnumValueW_t = decltype(&RegEnumValueW);
+RegEnumValueW_t RegEnumValueW_Original;
+using RegCreateKeyExW_t = decltype(&RegCreateKeyExW);
+RegCreateKeyExW_t RegCreateKeyExW_Original;
+
+LSTATUS WINAPI RegOpenKeyExW_Hook(HKEY hKey, LPCWSTR sub, DWORD options, REGSAM sam,
+                                  PHKEY result) {
+    HKEY hive = g_hive;
+    if (!hive || !sub || !*sub || !result || !MightBeOurs(sub)) {
+        return RegOpenKeyExW_Original(hKey, sub, options, sam, result);
+    }
+    std::wstring full = JoinKeyPath(KeyPath(hKey), sub);
+    std::wstring hivePath;
+    if (!full.empty() && MapToHive(full, hivePath)) {
+        return RegOpenKeyExW_Original(hive, hivePath.c_str(), 0,
+                                      sam & ~(KEY_WOW64_32KEY | KEY_WOW64_64KEY), result);
+    }
+    LSTATUS status = RegOpenKeyExW_Original(hKey, sub, options, sam, result);
+    bool ns = full == kNsPath, hide = IsHidePath(full);
+    if (!ns && !hide) return status;
+    // The real key may not exist: hand out an empty read-only stand-in so the
+    // mod's entries can still be added to it.
+    if (status == ERROR_FILE_NOT_FOUND && !(sam & (KEY_SET_VALUE | KEY_CREATE_SUB_KEY))) {
+        status = RegOpenKeyExW_Original(hive, ns ? L"NameSpace" : L"HideDesktopIcons", 0,
+                                        KEY_READ, result);
+    }
+    if (status == ERROR_SUCCESS) TrackHandle(*result, ns);
+    return status;
+}
+
+// Same as RegOpenKeyExW_Hook, for code that opens keys with RegCreateKeyExW.
+LSTATUS WINAPI RegCreateKeyExW_Hook(HKEY hKey, LPCWSTR sub, DWORD reserved, LPWSTR cls,
+                                    DWORD options, REGSAM sam,
+                                    const LPSECURITY_ATTRIBUTES security, PHKEY result,
+                                    LPDWORD disposition) {
+    HKEY hive = g_hive;
+    if (!hive || !sub || !*sub || !result || !MightBeOurs(sub)) {
+        return RegCreateKeyExW_Original(hKey, sub, reserved, cls, options, sam, security,
+                                        result, disposition);
+    }
+    std::wstring full = JoinKeyPath(KeyPath(hKey), sub);
+    std::wstring hivePath;
+    if (!full.empty() && MapToHive(full, hivePath)) {
+        return RegCreateKeyExW_Original(hive, hivePath.c_str(), 0, nullptr, 0,
+                                        sam & ~(KEY_WOW64_32KEY | KEY_WOW64_64KEY), nullptr,
+                                        result, disposition);
+    }
+    LSTATUS status = RegCreateKeyExW_Original(hKey, sub, reserved, cls, options, sam,
+                                              security, result, disposition);
+    bool ns = full == kNsPath, hide = IsHidePath(full);
+    if (status == ERROR_SUCCESS && (ns || hide)) TrackHandle(*result, ns);
+    return status;
+}
+
+LSTATUS WINAPI RegCloseKey_Hook(HKEY hKey) {
+    bool tracked = false;
+    if (g_trackedCount) {
+        AcquireSRWLockShared(&g_handlesLock);
+        tracked = g_nsHandles.count(hKey) || g_hideHandles.count(hKey);
+        ReleaseSRWLockShared(&g_handlesLock);
+    }
+    if (tracked) {
+        AcquireSRWLockExclusive(&g_handlesLock);
+        g_nsHandles.erase(hKey);
+        g_hideHandles.erase(hKey);
+        g_trackedCount = (LONG)(g_nsHandles.size() + g_hideHandles.size());
+        ReleaseSRWLockExclusive(&g_handlesLock);
+    }
+    return RegCloseKey_Original(hKey);
+}
+
+// Adds the mod's folders after the real NameSpace entries.
+LSTATUS WINAPI RegEnumKeyExW_Hook(HKEY hKey, DWORD index, LPWSTR name, LPDWORD nameLen,
+                                  LPDWORD reserved, LPWSTR cls, LPDWORD clsLen,
+                                  PFILETIME lastWrite) {
+    LSTATUS status = RegEnumKeyExW_Original(hKey, index, name, nameLen, reserved, cls,
+                                            clsLen, lastWrite);
+    if (status != ERROR_NO_MORE_ITEMS || !g_hive || !IsTrackedKey(hKey, true)) {
+        return status;
+    }
+    DWORD real = 0;
+    if (RegQueryInfoKeyW_Original(hKey, nullptr, nullptr, nullptr, &real, nullptr, nullptr,
+                                  nullptr, nullptr, nullptr, nullptr, nullptr) !=
+            ERROR_SUCCESS ||
+        index < real) {
+        return status;
+    }
+    std::vector<std::wstring> nodes = ActiveNodes();
+    if (index - real >= nodes.size()) return status;
+    const std::wstring& clsid = nodes[index - real];
+    Wh_Log(L"RegEnumKeyExW: adding %s", clsid.c_str());
+    if (!nameLen) return ERROR_INVALID_PARAMETER;
+    if (!name || *nameLen <= clsid.size()) {
+        *nameLen = (DWORD)clsid.size() + 1;
+        return ERROR_MORE_DATA;
+    }
+    wcscpy_s(name, *nameLen, clsid.c_str());
+    *nameLen = (DWORD)clsid.size();
+    if (cls && clsLen && *clsLen) cls[0] = L'\0';
+    if (clsLen) *clsLen = 0;
+    if (lastWrite) GetSystemTimeAsFileTime(lastWrite);
+    return ERROR_SUCCESS;
+}
+
+LSTATUS WINAPI RegQueryInfoKeyW_Hook(HKEY hKey, LPWSTR cls, LPDWORD clsLen,
+                                     LPDWORD reserved, LPDWORD subKeys,
+                                     LPDWORD maxSubKeyLen, LPDWORD maxClassLen,
+                                     LPDWORD values, LPDWORD maxValueNameLen,
+                                     LPDWORD maxValueLen, LPDWORD securityLen,
+                                     PFILETIME lastWrite) {
+    LSTATUS status = RegQueryInfoKeyW_Original(hKey, cls, clsLen, reserved, subKeys,
+                                               maxSubKeyLen, maxClassLen, values,
+                                               maxValueNameLen, maxValueLen, securityLen,
+                                               lastWrite);
+    if (status != ERROR_SUCCESS || !g_hive) return status;
+    if (subKeys && IsTrackedKey(hKey, true)) {
+        size_t extra = ActiveNodes().size();
+        *subKeys += (DWORD)extra;
+        if (extra && maxSubKeyLen && *maxSubKeyLen < 38) *maxSubKeyLen = 38;
+    } else if (values && IsTrackedKey(hKey, false)) {
+        *values += (DWORD)AllNodes().size();
+        if (maxValueNameLen && *maxValueNameLen < 38) *maxValueNameLen = 38;
+        if (maxValueLen && *maxValueLen < sizeof(DWORD)) *maxValueLen = sizeof(DWORD);
+    }
+    return status;
+}
+
+// Hides the mod's folders from the desktop (HideDesktopIcons\NewStartPanel).
+LSTATUS WINAPI RegQueryValueExW_Hook(HKEY hKey, LPCWSTR valueName, LPDWORD reserved,
+                                     LPDWORD type, LPBYTE data, LPDWORD cb) {
+    if (g_hive && IsOurNodeName(valueName)) {
+        std::wstring path = KeyPath(hKey);
+        Wh_Log(L"RegQueryValueExW %s in [%s]", valueName, path.c_str());
+        if (IsHidePath(path)) return ServeDword(type, data, cb);
+    }
+    return RegQueryValueExW_Original(hKey, valueName, reserved, type, data, cb);
+}
+
+// Adds "{clsid}"=1 values after the real HideDesktopIcons values.
+LSTATUS WINAPI RegEnumValueW_Hook(HKEY hKey, DWORD index, LPWSTR name, LPDWORD nameLen,
+                                  LPDWORD reserved, LPDWORD type, LPBYTE data, LPDWORD cb) {
+    LSTATUS status =
+        RegEnumValueW_Original(hKey, index, name, nameLen, reserved, type, data, cb);
+    if (status != ERROR_NO_MORE_ITEMS || !g_hive || !IsHidePath(KeyPath(hKey))) {
+        return status;
+    }
+    DWORD real = 0;
+    if (RegQueryInfoKeyW_Original(hKey, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                                  &real, nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS ||
+        index < real) {
+        return status;
+    }
+    std::vector<std::wstring> nodes = AllNodes();
+    if (index - real >= nodes.size()) return status;
+    const std::wstring& clsid = nodes[index - real];
+    Wh_Log(L"RegEnumValueW: hiding %s", clsid.c_str());
+    if (!nameLen) return ERROR_INVALID_PARAMETER;
+    if (!name || *nameLen <= clsid.size()) {
+        *nameLen = (DWORD)clsid.size() + 1;
+        return ERROR_MORE_DATA;
+    }
+    wcscpy_s(name, *nameLen, clsid.c_str());
+    *nameLen = (DWORD)clsid.size();
+    return ServeDword(type, data, cb);
+}
+
+LSTATUS WINAPI RegGetValueW_Hook(HKEY hKey, LPCWSTR sub, LPCWSTR value, DWORD flags,
+                                 LPDWORD type, PVOID data, LPDWORD cb) {
+    HKEY hive = g_hive;
+    bool ourValue = IsOurNodeName(value);
+    if (hive && ((sub && *sub && MightBeOurs(sub)) || ourValue)) {
+        std::wstring full = JoinKeyPath(KeyPath(hKey), sub);
+        std::wstring hivePath;
+        if (sub && *sub && !full.empty() && MapToHive(full, hivePath)) {
+            HKEY key;
+            LSTATUS status =
+                RegOpenKeyExW_Original(hive, hivePath.c_str(), 0, KEY_QUERY_VALUE, &key);
+            if (status != ERROR_SUCCESS) return status;
+            status = RegGetValueW_Original(key, nullptr, value, flags, type, data, cb);
+            RegCloseKey_Original(key);
+            return status;
+        }
+        if (ourValue) Wh_Log(L"RegGetValueW %s in [%s]", value, full.c_str());
+        if (ourValue && IsHidePath(full)) {
+            if (!(flags & RRF_RT_REG_DWORD)) return ERROR_UNSUPPORTED_TYPE;
+            return ServeDword(type, (LPBYTE)data, cb);
+        }
+    }
+    return RegGetValueW_Original(hKey, sub, value, flags, type, data, cb);
+}
+
+// Loads (or creates) the private hive in the mod's storage.
+bool OpenHive() {
+    WCHAR storage[MAX_PATH];
+    WCHAR user[256];
+    DWORD userLen = ARRAYSIZE(user);
+    if (!Wh_GetModStoragePath(storage, ARRAYSIZE(storage)) || !GetUserNameW(user, &userLen)) {
+        return false;
+    }
+    SHCreateDirectoryExW(nullptr, storage, nullptr);
+    std::wstring file = std::wstring(storage) + L"\\" + user + L"-shell.hiv";
+    HKEY hive = nullptr;
+    LSTATUS status = RegLoadAppKeyW(file.c_str(), &hive, KEY_ALL_ACCESS, 0, 0);
+    if (status != ERROR_SUCCESS) {
+        Wh_Log(L"RegLoadAppKey failed: %d", (int)status);
+        return false;
+    }
+    g_hive = hive;
+    return true;
+}
+
+// Kernel paths of the stand-in keys, so the hooks recognize them.
+void ReadStandInPaths() {
+    for (int i = 0; i < 2; i++) {
+        HKEY h;
+        if (RegOpenKeyExW(g_hive, i ? L"HideDesktopIcons" : L"NameSpace", 0, KEY_READ, &h) !=
+            ERROR_SUCCESS) {
+            continue;
+        }
+        alignas(8) BYTE buf[2048];
+        ULONG len = 0;
+        if (g_NtQueryKey && g_NtQueryKey(h, 3, buf, sizeof(buf), &len) >= 0) {
+            ULONG nameLen = *(ULONG*)buf;
+            if (nameLen <= sizeof(buf) - sizeof(ULONG)) {
+                std::wstring k = Lower(std::wstring((wchar_t*)(buf + sizeof(ULONG)), nameLen / 2));
+                (i ? g_hiveHideKernel : g_hiveNsKernel) = k;
+            }
+        }
+        RegCloseKey(h);
+    }
+}
+
+void* KernelBaseFunction(const char* name) {
+    HMODULE module = GetModuleHandleW(L"kernelbase.dll");
+    void* p = module ? (void*)GetProcAddress(module, name) : nullptr;
+    if (!p) {
+        module = GetModuleHandleW(L"advapi32.dll");
+        if (module) p = (void*)GetProcAddress(module, name);
+    }
+    return p;
+}
+
+BOOL ExplorerInit() {
+    LoadSettings();
+    g_lang = GetSettings().lang;
+    g_NtQueryKey =
+        (NtQueryKey_t)(void*)GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryKey");
+    if (!g_NtQueryKey || !OpenHive()) {
+        Wh_Log(L"Explorer integration disabled");
+        return TRUE;
+    }
+    BuildHive(GetSettings());
+    ReadStandInPaths();
+
+    struct {
+        const char* name;
+        void* hook;
+        void** original;
+    } hooks[] = {
+        {"RegOpenKeyExW", (void*)RegOpenKeyExW_Hook, (void**)&RegOpenKeyExW_Original},
+        {"RegCloseKey", (void*)RegCloseKey_Hook, (void**)&RegCloseKey_Original},
+        {"RegEnumKeyExW", (void*)RegEnumKeyExW_Hook, (void**)&RegEnumKeyExW_Original},
+        {"RegQueryInfoKeyW", (void*)RegQueryInfoKeyW_Hook, (void**)&RegQueryInfoKeyW_Original},
+        {"RegQueryValueExW", (void*)RegQueryValueExW_Hook, (void**)&RegQueryValueExW_Original},
+        {"RegGetValueW", (void*)RegGetValueW_Hook, (void**)&RegGetValueW_Original},
+        {"RegEnumValueW", (void*)RegEnumValueW_Hook, (void**)&RegEnumValueW_Original},
+        {"RegCreateKeyExW", (void*)RegCreateKeyExW_Hook, (void**)&RegCreateKeyExW_Original},
+    };
+    for (auto& h : hooks) {
+        void* target = KernelBaseFunction(h.name);
+        if (!target || !Wh_SetFunctionHook(target, h.hook, h.original)) {
+            Wh_Log(L"Failed to hook %S", h.name);
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+void ExplorerAfterInit() {
+    // The hooks are active now: let open windows pick up the entries.
+    NotifyAssocChanged();
+    NotifyDesktopChanged();
+}
+
+void ExplorerSettingsChanged() {
+    LoadSettings();
+    g_lang = GetSettings().lang;
+    InvalidateNodes();
+    if (g_hive) {
+        BuildHive(GetSettings());
+        NotifyAssocChanged();
+        NotifyDesktopChanged();
+    }
+}
+
+void ExplorerUninit() {
+    HKEY hive = g_hive;
+    g_hive = nullptr;
+    if (hive) RegCloseKey(hive);
+    NotifyAssocChanged();
+    NotifyDesktopChanged();
+}
+
 }  // namespace
 
 BOOL WhTool_ModInit() {
@@ -2948,7 +3400,7 @@ void WhTool_ModUninit() {
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
-    UnregisterAll();
+    NotifyDesktopChanged();
     if (g_resyncEvent) CloseHandle(g_resyncEvent);
     if (g_stopEvent) CloseHandle(g_stopEvent);
 }
@@ -2957,6 +3409,22 @@ void WhTool_ModSettingsChanged() {
     LoadSettings();
     SetEvent(g_resyncEvent);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Entry points. The mod runs in two kinds of processes:
+// * explorer.exe: registry read hooks only (see "explorer hooks"); no file
+//   parsing and no background work happen there.
+// * a dedicated windhawk.exe process: the scanning and the shortcut folder,
+//   started by the standard tool mod launcher below. The launcher code is the
+//   unmodified snippet from the wiki; its callbacks are renamed with macros so
+//   that the explorer.exe case can be handled first.
+
+bool g_isExplorer = false;
+
+#define Wh_ModInit ToolModLauncher_ModInit
+#define Wh_ModAfterInit ToolModLauncher_ModAfterInit
+#define Wh_ModSettingsChanged ToolModLauncher_ModSettingsChanged
+#define Wh_ModUninit ToolModLauncher_ModUninit
 
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
@@ -3135,4 +3603,43 @@ void Wh_ModUninit() {
 
     WhTool_ModUninit();
     ExitProcess(0);
+}
+
+#undef Wh_ModInit
+#undef Wh_ModAfterInit
+#undef Wh_ModSettingsChanged
+#undef Wh_ModUninit
+
+BOOL Wh_ModInit() {
+    WCHAR path[MAX_PATH];
+    DWORD len = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
+    if (len && len < ARRAYSIZE(path) && _wcsicmp(PathFindFileNameW(path), L"explorer.exe") == 0) {
+        g_isExplorer = true;
+        return ExplorerInit();
+    }
+    return ToolModLauncher_ModInit();
+}
+
+void Wh_ModAfterInit() {
+    if (g_isExplorer) {
+        ExplorerAfterInit();
+        return;
+    }
+    ToolModLauncher_ModAfterInit();
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isExplorer) {
+        ExplorerSettingsChanged();
+        return;
+    }
+    ToolModLauncher_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isExplorer) {
+        ExplorerUninit();
+        return;
+    }
+    ToolModLauncher_ModUninit();
 }
