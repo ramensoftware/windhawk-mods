@@ -5515,6 +5515,33 @@
         "version": "1.0.0"
       }
     },
+    "explorer-picker": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791356402000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791356402000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86",
+          "x86-64"
+        ],
+        "author": "appEW",
+        "compilerOptions": "-lcomctl32 -lole32 -lshell32 -lshlwapi -luuid -ladvapi32 -lgdi32",
+        "description": "Replaces the Open, Save As and folder picker dialogs of every program with a real Explorer window that has a File name / Files of type bar at the bottom",
+        "github": "https://github.com/appEW",
+        "include": [
+          "*"
+        ],
+        "name": "Explorer Picker",
+        "version": "1.5.4"
+      }
+    },
     "explorer-real-folder-paths": {
       "details": {
         "defaultSorting": 1503,

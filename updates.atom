@@ -2,12 +2,152 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-06T22:05:13.000Z</updated>
+    <updated>2026-10-07T07:00:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Picker 1.5.4]]></title>
+        <id>https://windhawk.net/mods/explorer-picker#e107837f61706174ee2d11039349466bb78d2fb6</id>
+        <link href="https://windhawk.net/mods/explorer-picker"/>
+        <updated>2026-10-07T07:00:02.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorerpicker">Explorer Picker</h1>
+<p>The Open, Save As and folder picker dialogs of every program are replaced with
+a real Explorer window (<code>explorer.exe</code>) with a File name / Files of type / Open /
+Cancel bar at the bottom. The folder tree, the toolbars, the address bar and
+the status bar are the same as in any other Explorer window, along with
+whatever other mods change them.</p>
+<blockquote>
+  <p><strong>Tested only on Windows 11 24H2 (build 26100).</strong> It has not been tried on any other version of Windows and may not work there.</p>
+</blockquote>
+<h2 id="screenshots">Screenshots / Скриншоты</h2>
+<p>The screenshots use a classic theme and additional Explorer mods.
+На скриншотах используются классическая тема и дополнительные моды Проводника.</p>
+<p><strong>Choosing a background photo / Выбор фотографии для фона</strong></p>
+<p><img src="https://raw.githubusercontent.com/appEW/windhawk-mods/eba5481bf58fc0a7354a1fe2a5c979d24a4a2685/EP1.png" alt="Choosing a background photo / Выбор фотографии для фона" /></p>
+<p><strong>Choosing a folder / Выбор папки</strong></p>
+<p><img src="https://raw.githubusercontent.com/appEW/windhawk-mods/eba5481bf58fc0a7354a1fe2a5c979d24a4a2685/EP2.png" alt="Choosing a folder / Выбор папки" /></p>
+<p><strong>Opening a file / Открытие файла</strong></p>
+<p><img src="https://raw.githubusercontent.com/appEW/windhawk-mods/eba5481bf58fc0a7354a1fe2a5c979d24a4a2685/EP3.png" alt="Opening a file / Открытие файла" /></p>
+<h2 id="howitworks">How it works</h2>
+<p>The one mod plays both parts:</p>
+<ul>
+<li>in <code>explorer.exe</code> it opens the picker window, builds the bar at the bottom
+and reads the current folder and the selection itself;</li>
+<li>in every other process it intercepts <code>GetOpenFileName</code> / <code>GetSaveFileName</code>
+(Unicode and ANSI) and <code>IFileOpenDialog</code> / <code>IFileSaveDialog</code>, passes the
+request to Explorer, and hands the result back to the program in the form it
+expects.</li>
+</ul>
+<p>Supported: opening one or several files, saving with a confirmation before
+replacing a file, picking a folder, file type filters, <code>IFileDialogEvents</code>
+events, the extra controls of <code>IFileDialogCustomize</code> (check boxes, combo boxes,
+radio buttons, edit boxes, buttons, labels, groups, menus), and the templates
+and hook procedures of old-style dialogs with their check boxes. System file
+pickers, including the Windows Background photo picker, and native application
+panels such as REAPER's project-saving options are supported. Application item
+filters are checked before accepting files; Explorer keeps its usual folder
+contents. Programs
+running as administrator use their native dialogs by default. The optional
+setting to replace those dialogs allows programs without administrator rights
+to influence the choice made by an administrator program.</p>
+<p>If a program asks for something Explorer cannot do, or Explorer is not
+available, the normal dialog is shown. The risky option below can ignore
+additional application features.</p>
+<h2 id="riskyignoreadditionalapplicationfeatures">Risky: ignore additional application features</h2>
+<p><strong>Ignore additional dialog features (risky)</strong> is <strong>disabled by default</strong>.
+When enabled, the picker omits application controls, native panels, previews
+and dialog-event callbacks, including application-specific acceptance checks.
+Old Win32 dialog hooks, templates and editable custom filters are also
+ignored. This lets Explorer replace dialogs whose additional features would
+otherwise require the native window. Extra options cannot be changed; the
+application may use its defaults or retained values instead.</p>
+<p><strong>Use at your own risk:</strong> application-specific behavior and validation can be
+lost, causing incorrect opening or saving, crashes or data loss. Ordinary
+file types, result buffers, item filters, path checks and overwrite
+confirmation remain supported. Unrepresentable results, required unsupported
+file-dialog behavior or an unavailable Explorer can still require the native
+dialog. Disabling the option restores the usual compatibility handling.</p>
+<p>By default, services, system accounts, critical processes, AppContainer
+processes, Chromium worker processes and Windhawk itself are skipped. Single
+programs can be excluded on the <em>Advanced</em> tab.</p>
+<p>The picker is an ordinary Explorer window: its size, navigation history and
+recent locations are handled by Explorer, just like those of other folder windows.
+Disabling the mod cancels active pickers and releases its windows and threads.
+Applications keep their original Windows COM dialog objects.</p>
+<p>The texts of the bar and of its messages follow the Windows display language:
+Russian on a Russian Windows, the wording of the English common dialog
+everywhere else. Application-provided captions keep the application's language.
+The panel updates its default captions when Windows notifies it of a settings
+change. Its font and spacing follow the window's DPI; long captions wrap and
+the rows grow to keep the text inside the controls.</p>
+<hr />
+<h2 id="">По-русски</h2>
+<p>Окна «Открыть», «Сохранить как» и «Выбор папки» всех программ заменяются
+настоящим окном Проводника (explorer.exe) с нижней панелью «Имя файла» /
+«Тип файлов» / «Открыть» / «Отмена». Дерево папок, панели инструментов,
+адресная строка и строка состояния — те же, что в обычном Проводнике.</p>
+<p>Один мод выполняет обе роли:</p>
+<ul>
+<li>в explorer.exe — открывает окно выбора, встраивает нижнюю панель и сам
+читает текущую папку и выделение;</li>
+<li>в остальных процессах — перехватывает <code>GetOpenFileName</code>/<code>GetSaveFileName</code>
+(Unicode и ANSI) и <code>IFileOpenDialog</code>/<code>IFileSaveDialog</code>, передаёт запрос в
+Проводник и возвращает программе результат в привычной для неё форме.</li>
+</ul>
+<p>Поддерживаются: один и несколько файлов, сохранение с подтверждением замены,
+выбор папки, фильтры типов, события <code>IFileDialogEvents</code>, дополнительные
+элементы <code>IFileDialogCustomize</code> (флажки, списки, переключатели, поля, кнопки,
+надписи, группы, меню), шаблоны/обработчики старых диалогов с флажками.
+Поддерживаются системный выбор фотографии для фона Windows и native-панели
+приложений, включая параметры сохранения проекта REAPER. Фильтр приложения
+проверяется перед принятием файлов; содержимое папки отображается как в
+обычном Проводнике.
+Программы с правами администратора по умолчанию используют штатные диалоги.
+Опциональное включение замены позволяет программам без прав администратора
+влиять на выбор файла программой с правами администратора.</p>
+<p>Если программа запрашивает то, что нельзя повторить в Проводнике, или
+Проводник недоступен, показывается обычное окно. Рискованная опция ниже позволяет
+игнорировать дополнительные функции приложения.</p>
+<h3 id="-1">Рискованно: игнорирование дополнительных функций приложения</h3>
+<p><strong>«Игнорировать дополнительные функции диалогов (рискованно)»</strong>
+<strong>по умолчанию выключено</strong>. При включении не показываются элементы приложения,
+native-панели и предпросмотр, не вызываются обработчики событий диалога, включая
+дополнительные проверки принятия файла. В старых Win32-диалогах также
+игнорируются hooks, шаблоны и редактируемые пользовательские фильтры. Поэтому
+Проводник может заменить окно даже при несовместимых дополнительных элементах.
+Изменить дополнительные параметры нельзя: приложение может использовать
+значения по умолчанию или ранее заданные значения.</p>
+<p><strong>Используйте на свой страх и риск:</strong> потеря специальных функций и проверок
+может привести к неправильному открытию/сохранению, сбоям или потере данных.
+Обычные типы файлов, буферы результата, фильтр допустимых элементов, проверка
+пути и подтверждение перезаписи сохраняются. Непредставимый результат,
+обязательные неподдерживаемые функции или недоступный Проводник по-прежнему
+могут потребовать штатный диалог. Выключение опции возвращает обычную обработку
+совместимости.</p>
+<p>По умолчанию пропускаются службы, системные учётные записи, критические
+процессы, AppContainer, дочерние процессы Chromium и сам Windhawk.
+Отдельные программы можно исключить на вкладке «Дополнительно».</p>
+<p>Окно выбора является обычным окном Проводника: размер, история переходов
+и недавние папки обрабатываются Проводником как в других окнах папок.
+Отключение мода отменяет открытые окна выбора и освобождает его окна и потоки.
+Приложения сохраняют исходные COM-объекты диалогов Windows.</p>
+<p>Надписи на нижней панели и тексты сообщений следуют языку интерфейса Windows:
+в русской Windows - по-русски, в остальных - как в английском стандартном окне
+выбора файла. Подписи, переданные приложением, сохраняют его язык. При уведомлении
+Windows об изменении настроек стандартные подписи панели обновляются. Шрифт и
+отступы следуют DPI окна; длинные подписи переносятся, а высота строк увеличивается,
+чтобы текст помещался в элементах.</p>
+<blockquote>
+  <p><strong>Проверено только на Windows 11 24H2 (сборка 26100).</strong> На других версиях Windows мод не проверялся и может не работать.</p>
+</blockquote>]]></content>
+        <author>
+            <name>appEW</name>
+            <uri>https://github.com/appEW</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer real folder paths 0.1.5]]></title>
         <id>https://windhawk.net/mods/explorer-real-folder-paths#2f67edf76611c6f463382cfbd6c987a4d6ee9d6b</id>
@@ -1040,19 +1180,6 @@ it inserts the slider into the jump list.</p>]]></content>
         <author>
             <name>WasiXGamer</name>
             <uri>https://github.com/wasixgamer</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MacOS Minimize Animation 3.1.6]]></title>
-        <id>https://windhawk.net/mods/macos-minimize-animation#1cefd9b6c5400916d74378ed90d711adc699f69b</id>
-        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
-        <updated>2026-10-05T10:01:41.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Reverted the v3.1.5 hardware Direct2D render target, which showed a greyed window during the animation on some NVIDIA / external-monitor setups. The genie uses the default render target again, as in v3.1.4.</li>
-</ul>]]></content>
-        <author>
-            <name>Abdullah Masood</name>
-            <uri>https://github.com/Abdullah-Masood-05</uri>
         </author>
     </entry>
 </feed>
