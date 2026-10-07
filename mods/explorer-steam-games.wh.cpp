@@ -2349,7 +2349,7 @@ struct SyncCache {
 };
 
 // Link signatures are saved in .data\links.sig ("hash<TAB>path" per line),
-// so shortcuts are not all rewritten every time Explorer starts.
+// so shortcuts are not all rewritten every time the tool process starts.
 void LoadLinkSigs(SyncCache& cache, const std::wstring& file) {
     cache.linkSigs.clear();
     cache.linkSigsFile = file;
@@ -3011,20 +3011,41 @@ bool IsTrackedKey(HKEY h, bool ns) {
     return ns ? path == kNsPath : IsHidePath(path);
 }
 
+// What the hooks need from the settings, computed once in ExplorerInit and
+// ExplorerSettingsChanged so the hooks don't parse settings on every call.
+struct NodeConfig {
+    std::wstring root;
+    bool enabled[P_COUNT] = {};
+    bool singleNode = false;
+};
+SRWLOCK g_nodeConfigLock = SRWLOCK_INIT;
+NodeConfig g_nodeConfig;
+
+void UpdateNodeConfig(const Settings& s) {
+    NodeConfig c;
+    c.root = RootFolder(s);
+    for (int p = 0; p < P_COUNT; p++) c.enabled[p] = s.enabled[p];
+    c.singleNode = s.singleNode;
+    AcquireSRWLockExclusive(&g_nodeConfigLock);
+    g_nodeConfig = std::move(c);
+    ReleaseSRWLockExclusive(&g_nodeConfigLock);
+}
+
 // Navigation pane folders to list: one per platform folder that exists (or
 // the single "Games" entry).
 std::vector<std::wstring> ActiveNodes() {
-    Settings s = GetSettings();
-    std::wstring root = RootFolder(s);
+    AcquireSRWLockShared(&g_nodeConfigLock);
+    NodeConfig c = g_nodeConfig;
+    ReleaseSRWLockShared(&g_nodeConfigLock);
     std::vector<std::wstring> nodes;
-    if (root.empty()) return nodes;
+    if (c.root.empty()) return nodes;
     bool any = false;
     for (int p = 0; p < P_COUNT; p++) {
-        if (!s.enabled[p] || !DirExists(root + L"\\" + kPlatforms[p].folder)) continue;
+        if (!c.enabled[p] || !DirExists(c.root + L"\\" + kPlatforms[p].folder)) continue;
         any = true;
-        if (!s.singleNode) nodes.push_back(kPlatforms[p].clsid);
+        if (!c.singleNode) nodes.push_back(kPlatforms[p].clsid);
     }
-    if (s.singleNode && any) nodes.push_back(kClsidAll);
+    if (c.singleNode && any) nodes.push_back(kClsidAll);
     return nodes;
 }
 
@@ -3203,7 +3224,7 @@ LSTATUS WINAPI RegEnumValueW_Hook(HKEY hKey, DWORD index, LPWSTR name, LPDWORD n
                                   LPDWORD reserved, LPDWORD type, LPBYTE data, LPDWORD cb) {
     LSTATUS status =
         RegEnumValueW_Original(hKey, index, name, nameLen, reserved, type, data, cb);
-    if (status != ERROR_NO_MORE_ITEMS || !g_hive || !IsHidePath(KeyPath(hKey))) {
+    if (status != ERROR_NO_MORE_ITEMS || !g_hive || !IsTrackedKey(hKey, false)) {
         return status;
     }
     DWORD real = 0;
@@ -3290,14 +3311,24 @@ void ReadStandInPaths() {
     }
 }
 
-void* KernelBaseFunction(const char* name) {
+FARPROC KernelBaseFunction(const char* name) {
     HMODULE module = GetModuleHandleW(L"kernelbase.dll");
-    void* p = module ? (void*)GetProcAddress(module, name) : nullptr;
+    FARPROC p = module ? GetProcAddress(module, name) : nullptr;
     if (!p) {
         module = GetModuleHandleW(L"advapi32.dll");
-        if (module) p = (void*)GetProcAddress(module, name);
+        if (module) p = GetProcAddress(module, name);
     }
     return p;
+}
+
+template <typename T>
+bool HookKernelBase(const char* name, T hook, T* original) {
+    T target = (T)(void*)KernelBaseFunction(name);
+    if (!target || !WindhawkUtils::SetFunctionHook(target, hook, original)) {
+        Wh_Log(L"Failed to hook %S", name);
+        return false;
+    }
+    return true;
 }
 
 BOOL ExplorerInit() {
@@ -3310,28 +3341,26 @@ BOOL ExplorerInit() {
         return TRUE;
     }
     BuildHive(GetSettings());
+    UpdateNodeConfig(GetSettings());
     ReadStandInPaths();
 
-    struct {
-        const char* name;
-        void* hook;
-        void** original;
-    } hooks[] = {
-        {"RegOpenKeyExW", (void*)RegOpenKeyExW_Hook, (void**)&RegOpenKeyExW_Original},
-        {"RegCloseKey", (void*)RegCloseKey_Hook, (void**)&RegCloseKey_Original},
-        {"RegEnumKeyExW", (void*)RegEnumKeyExW_Hook, (void**)&RegEnumKeyExW_Original},
-        {"RegQueryInfoKeyW", (void*)RegQueryInfoKeyW_Hook, (void**)&RegQueryInfoKeyW_Original},
-        {"RegQueryValueExW", (void*)RegQueryValueExW_Hook, (void**)&RegQueryValueExW_Original},
-        {"RegGetValueW", (void*)RegGetValueW_Hook, (void**)&RegGetValueW_Original},
-        {"RegEnumValueW", (void*)RegEnumValueW_Hook, (void**)&RegEnumValueW_Original},
-        {"RegCreateKeyExW", (void*)RegCreateKeyExW_Hook, (void**)&RegCreateKeyExW_Original},
-    };
-    for (auto& h : hooks) {
-        void* target = KernelBaseFunction(h.name);
-        if (!target || !Wh_SetFunctionHook(target, h.hook, h.original)) {
-            Wh_Log(L"Failed to hook %S", h.name);
-            return FALSE;
-        }
+    bool ok = HookKernelBase("RegOpenKeyExW", RegOpenKeyExW_Hook, &RegOpenKeyExW_Original) &&
+              HookKernelBase("RegCloseKey", RegCloseKey_Hook, &RegCloseKey_Original) &&
+              HookKernelBase("RegEnumKeyExW", RegEnumKeyExW_Hook, &RegEnumKeyExW_Original) &&
+              HookKernelBase("RegQueryInfoKeyW", RegQueryInfoKeyW_Hook,
+                             &RegQueryInfoKeyW_Original) &&
+              HookKernelBase("RegQueryValueExW", RegQueryValueExW_Hook,
+                             &RegQueryValueExW_Original) &&
+              HookKernelBase("RegGetValueW", RegGetValueW_Hook, &RegGetValueW_Original) &&
+              HookKernelBase("RegEnumValueW", RegEnumValueW_Hook, &RegEnumValueW_Original) &&
+              HookKernelBase("RegCreateKeyExW", RegCreateKeyExW_Hook,
+                             &RegCreateKeyExW_Original);
+    if (!ok) {
+        // The mod won't load, so ExplorerUninit won't run: release the hive.
+        HKEY hive = g_hive;
+        g_hive = nullptr;
+        RegCloseKey(hive);
+        return FALSE;
     }
     return TRUE;
 }
@@ -3373,6 +3402,7 @@ void ExplorerSettingsChanged() {
     g_lang = GetSettings().lang;
     if (g_hive) {
         BuildHive(GetSettings());
+        UpdateNodeConfig(GetSettings());
         NotifyAssocChanged();
         NotifyDesktopChanged();
     }
@@ -3435,15 +3465,17 @@ void WhTool_ModSettingsChanged() {
 //   parsing and no background work happen there.
 // * a dedicated windhawk.exe process: the scanning and the shortcut folder,
 //   started by the standard tool mod launcher below. The launcher code is the
-//   unmodified snippet from the wiki; its callbacks are renamed with macros so
-//   that the explorer.exe case can be handled first.
+//   snippet from the wiki, with an explorer.exe check added at the start of
+//   each callback.
 
 bool g_isExplorer = false;
 
-#define Wh_ModInit ToolModLauncher_ModInit
-#define Wh_ModAfterInit ToolModLauncher_ModAfterInit
-#define Wh_ModSettingsChanged ToolModLauncher_ModSettingsChanged
-#define Wh_ModUninit ToolModLauncher_ModUninit
+bool IsExplorerProcess() {
+    WCHAR path[MAX_PATH];
+    DWORD len = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
+    return len && len < ARRAYSIZE(path) &&
+           _wcsicmp(PathFindFileNameW(path), L"explorer.exe") == 0;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
@@ -3468,6 +3500,11 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
+    if (IsExplorerProcess()) {
+        g_isExplorer = true;
+        return ExplorerInit();
+    }
+
     DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
         sessionId == 0) {
@@ -3547,6 +3584,11 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
+    if (g_isExplorer) {
+        ExplorerAfterInit();
+        return;
+    }
+
     if (!g_isToolModProcessLauncher) {
         return;
     }
@@ -3608,6 +3650,11 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
+    if (g_isExplorer) {
+        ExplorerSettingsChanged();
+        return;
+    }
+
     if (g_isToolModProcessLauncher) {
         return;
     }
@@ -3616,6 +3663,11 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
+    if (g_isExplorer) {
+        ExplorerUninit();
+        return;
+    }
+
     if (g_isToolModProcessLauncher) {
         return;
     }
@@ -3624,45 +3676,6 @@ void Wh_ModUninit() {
     ExitProcess(0);
 }
 
-#undef Wh_ModInit
-#undef Wh_ModAfterInit
-#undef Wh_ModSettingsChanged
-#undef Wh_ModUninit
-
-BOOL Wh_ModInit() {
-    WCHAR path[MAX_PATH];
-    DWORD len = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
-    if (len && len < ARRAYSIZE(path) && _wcsicmp(PathFindFileNameW(path), L"explorer.exe") == 0) {
-        g_isExplorer = true;
-        return ExplorerInit();
-    }
-    return ToolModLauncher_ModInit();
-}
-
-void Wh_ModAfterInit() {
-    if (g_isExplorer) {
-        ExplorerAfterInit();
-        return;
-    }
-    ToolModLauncher_ModAfterInit();
-}
-
-void Wh_ModSettingsChanged() {
-    if (g_isExplorer) {
-        ExplorerSettingsChanged();
-        return;
-    }
-    ToolModLauncher_ModSettingsChanged();
-}
-
 void Wh_ModBeforeUninit() {
     if (g_isExplorer) ExplorerBeforeUninit();
-}
-
-void Wh_ModUninit() {
-    if (g_isExplorer) {
-        ExplorerUninit();
-        return;
-    }
-    ToolModLauncher_ModUninit();
 }
