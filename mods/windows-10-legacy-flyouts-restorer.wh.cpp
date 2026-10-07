@@ -1,208 +1,29 @@
 // ==WindhawkMod==
 // @id              windows-10-legacy-flyouts-restorer
 // @name            Windows 10 legacy flyouts on Win11 24H2 restorer
-// @description     This mod restores the Windows 10 network icon and its flyout and the Action Center button in the private Windows 10 shell, with the verified Windows 10 tray modules
-// @version         1.0.0
+// @description     This mod restores the Windows 10 network icon and its flyout in the private Windows 10 shell, with the verified Windows 10 tray modules
+// @version         1.0.1
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lgdi32 -lshell32 -ladvapi32 -luser32 -lwintrust -lcrypt32 -lurlmon -lversion -lwininet -lbcrypt -lcomctl32 -lshlwapi -ldwmapi -luuid -lwlanapi -lruntimeobject
+// @compilerOptions -lole32 -loleaut32 -lgdi32 -lshell32 -ladvapi32 -luser32 -lwintrust -lcrypt32 -lwininet -lbcrypt -lcomctl32 -lshlwapi -ldwmapi -luuid -lwlanapi -lruntimeobject
 // @include         explorer.exe
 // @include         ShellExperienceHost.exe
 // ==/WindhawkMod==
-
 // ==WindhawkModReadme==
 /*
 # Windows 10 legacy flyouts on Win11 24H2 restorer
 
-This mod tries to restore the legacy flyouts on the taskbar when running the Windows 10 explorer.exe on Windows 11 24H2+ using this mod https://windhawk.net/mods/win10-taskbar-on-win11-24h2
-Everything on this page happens **inside the private Windows 10 shell** (an `explorer.exe`
-that is not the one in `%SystemRoot%`): the Windows 11 shell is never touched.
-
-* the Windows 10 tray modules (`pnidui.dll`, `stobject.dll`) are
-  **downloaded by this mod** from the Microsoft symbol server, verified against their pinned
-  SHA-256 and their Microsoft signature, then loaded into the private shell. The network
-  icon and its menu, the volume icon and the battery flyout come from the genuine Windows 10
-  code, not from a reimplementation;
-* the window classes the Windows 10 shell asks for are redirected to those verified copies by
-  hooking the loader, so the shell cannot end up mixing a Windows 11 DLL with a Windows 10 one;
-* the Action Center button that the Windows 11 shell hides is written back on (the opposite of
-  the `hide-action-center-icon` mod) and that conflict is handled.
-
-## The click on the network icon and the battery flyout
-
-The left click on the network icon is taken over **at the icon itself**: the window that
-`pnidui.dll` registers its tray icon with - the one that receives the `NIN_*` / `WM_LBUTTONUP`
-callbacks - is subclassed, and the click is consumed before pnidui's own handler can see it.
-That handler is what opened the Settings page, and it does not necessarily go through
-`shell32!ShellExecuteW`: blocking URIs there was not enough. The consumed click becomes a
-request for the genuine Windows 10 network flyout (shell experience manager, experience
-`Windows.Internal.ShellExperience.NetworkFlyout`, anchored on the rectangle of the icon). The
-right click and every other message are passed straight through, so the native menu of the icon
-is untouched, and the icon itself - registration, image, tooltip - is not modified.
-
-As a second net, every `ms-settings:network*` and `ms-availablenetworks:` target of this shell
-is answered with the same request instead of being forwarded, and the shims report success so
-that the caller does not fall back to anything else. **No page is ever opened from the network
-icon**, and there is no fallback that can open one.
-
-The battery icon is taken over the same way, and opens the same kind of window: the left click is
-**consumed**, and the genuine Windows 10 battery flyout is opened through the shell experience
-manager - experience `Windows.Internal.ShellExperience.TrayBatteryFlyout`, interface
-`IID_TrayBatteryFlyoutExperienceManager`, anchored on the rectangle of the battery icon. That is
-the same authentic call the Windows 10 shell makes for this icon, exactly as for the network
-flyout above; if the call fails, nothing at all is started and the log names the step that
-failed.
-
-1.3.4 fixed two things that kept that click from arriving. The first is where the icon lives:
-the previous versions took the click on the service window of `stobject.dll` and recognised the
-battery by the **text** of its registration. On this shell neither is true - the battery is
-registered on `SystemTray_Main` with an **empty text** (id 1225, and the log of the previous
-round says exactly that: `window SystemTray_Main, id 1225, guid {7820AE75-...}, text ""`), so no
-click was ever recognised and the mod's request was never made. The GUID names the icon, and it
-does not depend on the language of the system, so the mod now follows the GUID: it remembers
-where that icon is registered and answers its left click there, on whatever window the shell has
-put it. Only that icon is answered - the callback message carries the id of the icon in
-`wParam`, and a click that arrives without it must fall inside the rectangle of the battery icon.
-
-**This mod does not answer any registry value.** `UseWin32BatteryFlyout = 1` makes
-`stobject.dll` show its Windows 7 era Win32 flyout: that is the compatible behaviour of an older
-shell, not the Windows 10 flyout, and it is not used here. No setting is involved either:
-Windhawk writes the settings of a mod **when the mod is installed**, and for a value that is not
-in the stored list `Wh_GetIntSetting` returns 0 (Windhawk wiki, "Creating a new mod": "if the
-value doesn't exist ... the return value is zero"), so a behaviour that depends on a **new**
-setting stays switched off on every existing installation. The settings added by 1.3.0/1.3.1
-(`LegacyNetworkUx`, `NetworkClickOpensFlyout`, `LegacyBatteryFlyout`, `FlyoutDiagnostics`) are
-gone.
-
-The three tiles of the flyout (`networkux.dll` and the `Windows.Networking.UX.*` classes) are
-**not** part of this mod: the extra DLL is no longer downloaded, pinned, redirected or loaded,
-and the flyout is the one the private Windows 10 shell draws by itself.
-
-## Why the flyout used to close again, and what keeps it open
-
-The flyout is not drawn by Explorer: `ShellExperienceHost.exe` draws it, and how it draws it is
-decided by `Windows.UI.QuickActions.dll` - the module that brings the templates of the flyout.
-From build 25951 on that module enters the flyout through the new **Control Center** template
-set, and the Windows 10 flyout cannot be built with it: the window appears and is torn down
-again at once (the "it opens for a millisecond and then closes" of a click on the network icon),
-and the battery flyout does not even get that far and takes the process down while it is being
-built. This is the same failure ExplorerPatcher fixes on these builds, and this mod applies the
-same correction: in the module the shell has loaded, five bytes are turned into NOPs, eight
-bytes are copied from the older template loader and the call that follows is pointed at it, so
-the shell builds the flyout with the Windows 10 template set and keeps it on screen.
-
-That module is **not loaded** when the mod starts, and it cannot be loaded from here: asking for
-it at that moment fails (the log of the previous round says `Windows.UI.QuickActions.dll is not
-available (error 1114)`), because the shell loads it later, when it builds the flyout. So the
-mod does not load it: it watches the loads of that process and patches the module as soon as it
-appears, which is before the shell has built anything with it. The patterns are the ones of the
-real module; when they are not found, nothing at all is written and the log says so.
-
-The template set alone is not the whole of it. The page of the network flyout (`NetworkUX.dll`)
-asks for the quick action button with the name of the **Windows 11** template, and under the
-Windows 10 template set that name is the wrong one: the Windows 10 button is never used and the
-buttons the flyout draws are inert - ExplorerPatcher writes it next to the same correction
-("they will only appear as non-interactive text blocks"). A flyout that is built in half is a
-flyout the shell takes down again. From 1.3.5 the mod takes over the **one** import of that page
-which calls `WindowsCreateStringReference` and answers with the Windows 10 button name
-(`QuickToggleWinuiFluentTemplate`), and only when the template set of this process really is the
-Windows 10 one; it is what ExplorerPatcher does in its `HandleLoadedNetworkUX`. That page is not
-loaded by this mod, and nothing else of it is touched. Both halves are applied in **every**
-process that draws the flyout, so the flyout opens on every click and not only on the first one.
-
-From 1.3.7 the flyout also takes the part of the **Windows 10 skin** that lives in the resource dictionary of its page - the same one ExplorerPatcher writes next to this correction: the margin of the quick action panel (12,0,0,12), the size of the quick action button (4,0,0,4, 90x64), the two global corner radii and the two focus rectangle thicknesses of the Windows 10 look. The rules of the skin that name single controls of the page need a visual tree engine (the mod the style export comes from); this mod does not carry one, so those are not applied and the log says so.
-
-From 1.3.8 the two halves of that correction survive a **reload of the mod**, which is what used to leave the flyout built in half (inert buttons, or a window taken down at once). The bytes written into `Windows.UI.QuickActions.dll` stay written in memory while the mod is reloaded - the module is not restored on purpose, because putting the original bytes back while the shell is drawing a flyout would build it with the Windows 11 template set again - while the flags of the new copy of the mod read zero, so the site could not be found any more and the button name was never asked for. The two halves are now decided by the **content**: the site is searched first in its untouched form and then in the written one (a copy of the mask with the groups this patch rewrites left free), and the import entry of the page is recognised by looking at where it points. When the work is already there, the module is pinned in memory (`GetModuleHandleExW` with `GET_MODULE_HANDLE_EX_FLAG_PIN`, which by Microsoft's documentation keeps it loaded until the process ends and does not change the reference count), so that a COM unload - a DLL whose `DllCanUnloadNow` says `S_OK` may be unloaded once the `CoFreeUnusedLibrariesEx` delay expires, ten minutes by default - cannot replace a patched copy with a fresh one. The pin is not reversible, lives only in `ShellExperienceHost.exe`, and is never done when the patterns are not found.
-
-## The crash on enable and on disable
-
-The Windhawk documentation says how a mod has to behave around its own lifetime, and 1.3.0 did
-not follow it. From the mod API pages:
-
-* `Wh_SetFunctionHook`: "can't be called after `Wh_ModBeforeUninit` returns";
-* `Wh_ApplyHookOperations`: "called automatically by Windhawk after `Wh_ModInit`" and, in its own
-  words, "ideally, all hooks should be set in `Wh_ModInit` and this function should never be used";
-* the "Mod lifetime" page draws the order: `Wh_ModInit`, the implicit apply, then the hooks are
-  removed between `Wh_ModBeforeUninit` and `Wh_ModUninit`.
-
-1.3.0 registered the tray hooks from the services thread, that is after the queue had already been
-applied, so they were inert; the mod then called `Wh_ApplyHookOperations` in a loop from that
-thread while the engine was loading or unloading hooks of its own. The hook queue is not meant to
-be operated by two threads at once, which is what took explorer.exe down at enable and at disable.
-
-From 1.3.1: **every hook of this mod is registered inside `Wh_ModInit`** (the tray support hooks,
-the key policy hooks, the network click hooks, the battery and Action Center hooks), no other
-thread calls a `Wh_*` hook function, and `Wh_ApplyHookOperations` is not used at all.
-
-The disable path followed the same documentation. The shell's clock and show-desktop windows were
-subclassed by the mod and the subclass was never removed: their window procedure still pointed
-into this module when it was unloaded, so the next message to the clock (it repaints every second)
-jumped into freed code. The tray work now tears down what it created - the forced icon, the hidden
-owner window and its thread, the fallback icon, and every subclass (including the click
-interception added in 1.3.2) - on its own thread, while the module is still loaded, and
-`Wh_ModBeforeUninit` stops and joins that thread with a bounded wait because it is the last
-callback in which the mod may be running. `Wh_ModUninit` runs after the hooks have been removed:
-it no longer waits with `INFINITE`, and it closes the worker's handles only when the worker has
-actually exited.
-
-## Where the files come from
-
-The Windows 10 binaries this mod needs (`pnidui.dll`, `stobject.dll` and
-`explorer.exe`) are downloaded from the Microsoft symbol server, checked against their pinned
-SHA-256 **and** against their Microsoft Authenticode signature, and stored in the folder the
-Windows 10 taskbar mod by Anixx uses for its own download:
-
-`%ProgramData%\Windhawk\Engine\ModsWritable\LegacyStore`
-
-Both mods therefore share one set of files instead of two copies of the same system binaries: a
-file that is already there and matches the pin is reused as it is, and only what is missing is
-downloaded. If that folder cannot be created or written, the mod falls back to its own Windhawk
-storage and keeps working on its own.
-
-## Settings
-
-| Setting | What it does |
-|---|---|
-| `ProvideTrayModules` (default on) | download and load `pnidui.dll` and `stobject.dll` |
-| `ShowActionCenterButton` (default on) | show the Action Center button; off leaves the byte alone, so the mod that hides it wins |
-| `ActionCenterConflict` (default `reassert`) | `reassert` keeps the button visible and logs the conflict; `log` writes once and only reports |
-| `LogTrayActivity` (default off) | writes every load, class factory and menu operation to the log |
-| `RequireSignature` (default on) | also check the Authenticode signature of what is downloaded |
-| `DownloadTimeoutSec` (default 20) | per-connection timeout of the downloads |
-
-## The Action Center animation
-
-The panel slides in from the right edge and out again, and its close delay is shortened:
-the ~2 s timer the shell sets while the pointer is away becomes `ActionCenterCloseDelayMs`.
-The technique is the one of the mod **"Action Center fixes (fast close + slide)" by
-AdmXP8** (v0.9) - the panel is caught at the moment the shell cloaks it, parked just
-outside the screen edge and moved in by a worker thread - with two differences: everything
-is behind one setting that is checked at every call, and the docked position is restored on
-close and on unload, so the panel can never be left parked off-screen. The panel belongs to
-`ShellExperienceHost.exe`, so this mod is loaded in that process too; there, only this
-section runs.
-
-## The Action Center button, and the conflict with "hide-action-center-icon"
-
-The Windows 10 taskbar keeps "show the Action Center button" in one byte of the button
-window's own data, 120 bytes in. `hide-action-center-icon` writes `FALSE` there; this mod
-writes `TRUE` and keeps it there:
-
-* every write is validated first (`VirtualQuery`: committed, writable, not a guard page), so a
-  different layout can never crash the shell - it is logged instead;
-* the byte is re-read twice per second on this mod's own thread; if another mod sets it back
-  to 0, the conflict is named in the log and the value is written again
-  (`ActionCenterConflict=reassert`). With `log`, the mod writes once and only reports it;
-* with `ShowActionCenterButton` off the byte is never read nor written, which is the setting to
-  use when the other mod has to win;
-* no registry value is written anywhere: everything is served in memory.
-
-## What is not in this module
-
-Win+X, the Alt+Tab host and the rest of the Windows 10 shell are separate mods of the same
-set (two mods hooking the same method would be a race, not a fix). This module resolves no
-symbol by name at all.
+Restores the genuine Windows 10 network, volume and battery flyouts on Windows 11 24H2 by
+running a private Windows 10 shell: the Windows 11 shell is never touched. The Windows 10 tray
+modules are downloaded from the Microsoft symbol server, verified by SHA-256 and signature, and
+loaded into that shell. The left click on the network and battery icons is consumed at the icon
+and turned into the authentic Windows 10 flyout request, while right click and every other
+message pass through unchanged. The flyout drawn by ShellExperienceHost.exe is corrected so the
+Windows 10 template set, button name and skin are used and the window stays open. The Action
+Center button and its animation are not part of this mod: manage them with a dedicated mod
+instead. All values are served in memory; only the verified binaries, the "Peek at desktop"
+toggle and the optional tray reset are written to disk or the registry.
 */
 // ==/WindhawkModReadme==
 
@@ -211,70 +32,63 @@ symbol by name at all.
 - ForceNetworkTrayIcon: true
   $name: Force the network icon into the taskbar
   $description: >-
-    If the native PNI (pnidui.dll) does not register the network icon within the delay
-    below, the mod registers it itself with Shell_NotifyIconW, its own owner window and
-    the system GUID of the network icon, and verifies with Shell_NotifyIconGetRect that
-    the icon really is in the taskbar. When the native icon appears, the forced one is
-    retired by itself. ms-availablenetworks: is never used as a substitute.
+    This setting forces the network icon into the taskbar. If the native PNI (pnidui.dll)
+    does not register the network icon within the delay below, the mod registers it itself
+    with Shell_NotifyIconW, its own owner window and the system GUID of the network icon,
+    and verifies with Shell_NotifyIconGetRect that the icon really is in the taskbar. When
+    the native icon appears, the forced one is retired by itself. ms-availablenetworks: is
+    never used as a substitute.
 - ForceNetworkTrayDelaySec: 12
   $name: Wait before forcing the icon (seconds)
   $description: >-
-    How long the native icon is given before the mod registers it itself (0-600).
+    This setting controls the wait before forcing the icon. It is how long the native icon
+    is given before the mod registers it itself (0-600).
 - ForceNetworkTrayResetTraySettings: false
   $name: Reset the saved tray state if the icon still does not appear
   $description: >-
-    Last resort: IconStreams/PastIconsStream under TrayNotify are backed up (the backup is
-    written next to the store) and then cleared once, because that binary state is shared
-    with the Windows 11 shell and can keep the icon marked as hidden. The real registry
-    values are never touched by the other steps.
+    This setting resets the saved tray state if the icon still does not appear. Off by
+    default; opt in only if the icon still does not appear with everything else on. Last
+    resort: IconStreams/PastIconsStream under TrayNotify are backed up (the backup is
+    written next to the store) and then permanently deleted once, because that binary state
+    is shared with the Windows 11 shell and can keep the icon marked as hidden. This is a
+    real, permanent change to shared shell state: it survives disabling or uninstalling the
+    mod (Windows recreates both values the next time it needs them, pre-populated again from
+    the current icons), and it is not undone automatically. The real registry values under
+    TrayNotify are never touched by the other steps, only by this explicit, one-time, opt-in
+    action.
 - TrayRestoreOverflowChevron: true
   $name: Give the taskbar its overflow chevron back
   $description: >-
-    While the forced icon exists the mod serves EnableAutoTray=0 in memory only; the
-    virtual override is removed (and the real value left alone) once the forced icon is
-    stable.
+    This setting gives the taskbar its overflow chevron back. While the forced icon exists
+    the mod serves EnableAutoTray=0 in memory only; the virtual override is removed (and the
+    real value left alone) once the forced icon is stable.
 - ShellOpGuardTimeoutMs: 1500
   $name: Time limit for the guarded shell operations (ms)
   $description: >-
-    The shell operations started from a menu (for example "Customize notification area
-    icons") run on a service thread with this time cap (200-10000).
+    This setting sets the time limit for the guarded shell operations. The shell operations
+    started from a menu (for example "Customize notification area icons") run on a service
+    thread with this time cap (200-10000).
 - ProvideTrayModules: true
   $name: Load the Windows 10 tray modules
   $description: >-
-    Downloads pnidui.dll and stobject.dll, verifies them (SHA-256 and signature) and loads
-    them in the private Windows 10 shell: network icon with its menu, volume icon with the
-    battery flyout.
-- ShowActionCenterButton: true
-  $name: Show the Action Center button
+    This setting loads the Windows 10 tray modules. Downloads pnidui.dll and stobject.dll,
+    verifies them (SHA-256 and signature) and loads them in the private Windows 10 shell:
+    network icon with its menu, volume icon with the battery flyout.
+- themeScheme: auto
+  $name: Win+X / clock / show-desktop menu colour scheme
   $description: >-
-    The Windows 11 shell does not draw the Action Center button of the Windows 10 taskbar.
-    This writes the button flag back on, the opposite of what the mod
-    "hide-action-center-icon" does. Off = the byte is left alone.
-- ActionCenterConflict: reassert
-  $name: Conflict with another mod
-  $description: >-
-    reassert = keep the button visible and name the conflict in the log; log = write once and
-    only report it if another mod changes the byte.
+    This setting sets the colour scheme of the Win+X / clock / show-desktop menu. auto follows
+    the Windows app theme (Settings > Personalization > Colors, the same AppsUseLightTheme
+    value Explorer itself uses); light/dark force the Windows 10 light or dark owner-drawn
+    menu regardless of the current system theme.
   $options:
-  - reassert: Keep it visible
-  - log: Write once, report the conflict
-- ActionCenterAnimation: true
-  $name: Action Center animation
-  $description: >-
-    The panel slides in and out from the right edge and its ~2 s close timer becomes the
-    delay below. Base: the mod "Action Center fixes (fast close + slide)" by AdmXP8.
-- ActionCenterCloseDelayMs: 50
-  $name: Action Center close delay (ms)
-  $description: Replaces the ~2000 ms timer that closes the panel (1-1900).
-- ActionCenterSlideInMs: 220
-  $name: Action Center slide-in (ms)
-  $description: How long the panel takes to slide in. 0 = off.
-- ActionCenterSlideOutMs: 140
-  $name: Action Center slide-out (ms)
-  $description: How long the panel takes to slide out. 0 = off.
+  - auto: Follow the Windows theme
+  - light: Always light
+  - dark: Always dark
 - ExperimentalSquareFlyoutCorners: false
   $name: "Experimental: square window corners for the flyouts"
   $description: >-
+    This setting is experimental and asks DWM for square window corners for the flyouts.
     EXPERIMENTAL, off by default, and it does not work: it asks DWM for square window corners
     (DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_DONOTROUND) on the windows of ShellExperienceHost.exe.
     DWM accepts the request and nothing fails, but the corners of the network flyout stay
@@ -283,17 +97,20 @@ symbol by name at all.
 - LogTrayActivity: false
   $name: Log every tray operation
   $description: >-
-    Writes every LoadLibrary, class factory and menu operation to the log. Useful to see which
-    module the shell is asking for; it can be verbose.
+    This setting logs every tray operation. Writes every LoadLibrary, class factory and menu
+    operation to the log. Useful to see which module the shell is asking for; it can be
+    verbose.
 - RequireSignature: true
   $name: Check the signature of the downloaded files
   $description: >-
-    Every file is checked against its pinned SHA-256 first. With this on, the Authenticode
-    signature is checked as well (Microsoft signer); with it off a matching hash is enough.
+    This setting checks the signature of the downloaded files. Every file is checked against
+    its pinned SHA-256 first. With this on, the Authenticode signature is checked as well
+    (Microsoft signer); with it off a matching hash is enough.
 - DownloadTimeoutSec: 20
   $name: Download timeout (seconds)
   $description: >-
-    Connection, receive and send timeout of the downloads of the Windows 10 shell files.
+    This setting sets the download timeout. Connection, receive and send timeout of the
+    downloads of the Windows 10 shell files.
 */
 // ==/WindhawkModSettings==
 // 1.3.3: winsock2.h belongs before windows.h and here it is the first include of the file.
@@ -374,7 +191,7 @@ symbol by name at all.
 #include <bcrypt.h>
 #include <winternl.h>   // UNICODE_STRING for the LdrLoadDll hook
 #include <time.h>
-#include <tlhelp32.h>   // fotografia dei processi (sonda del centro operativo)
+#include <tlhelp32.h>   // fotografia dei processi (moduli caricati, ecc.)
 #include <shellapi.h>
 #include <shlobj.h>     // SHParseDisplayName / SHOpenFolderAndSelectItems
 #include <wlanapi.h>    // interruttore Wi-Fi vero (riquadro in fondo al flyout)
@@ -388,76 +205,27 @@ symbol by name at all.
 // The shell this module lives in. In the monolith g_unloading lived among the globals of
 // the shell-services section; here it is the only flag of that kind.
 static std::atomic<bool> g_unloading{false};
-// The monolith's detailed diagnostic switch: off here, this module logs what it does.
-static std::atomic<bool> g_verboseDiagnostics{false};
 
 // Options of this module. They are read once and copied into the fields of the monolith
 // configuration the tray/menu code already uses (g_cfg), so those blocks stay as they are.
 static bool g_logTrayActivity = false;
-static bool g_showActionCenterButton = true;
-static bool g_actionCenterReassert = true;
 
 // ---------------------------------------------------------------------------
-// Action Center: fast close and slide
-//
-// Base: the mod "Action Center fixes (fast close + slide)" by AdmXP8 (v0.9), whose
-// technique is kept here as it is: the panel is caught at the moment the shell cloaks
-// it, parked just outside the screen edge and slid in, and the ~2000 ms close timer is
-// replaced with a short one while the panel is open.
-//
-// Three things are different from the original, all of them inside this mod:
-//   * everything is behind one setting and every hook re-checks it at each call, so the
-//     animation can be switched on and off while the shell runs, without touching hooks;
-//   * the docked position is restored on close, when the panel is identified again and on
-//     unload, so the panel can never be left parked outside the screen;
-//   * the timer is replaced only when the caller is the shell's own multitasking code
-//     (twinui.pcshell.dll in the stack) and the timeout is the ~2 s one, so no other
-//     timer of the process is touched.
-//
-// The panel belongs to ShellExperienceHost.exe: this mod is loaded in that process as
-// well (see the include list) and there this section is the only part that runs.
-// ---------------------------------------------------------------------------
-static bool g_acAnimation = true;
 // EXPERIMENTAL (1.3.9), off by default: square window corners for the flyouts of
 // ShellExperienceHost.exe through DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_DONOTROUND.
 // It causes no errors (the log shows DWM answering 0x00000000 for the window of the network
 // flyout, class Windows.UI.Core.CoreWindow, title "Network connections"), but it does NOT
 // work: the corners of the flyout stay rounded, most likely because they are drawn by the
 // XAML of the page and not by the window. Left here, disabled, for anyone who knows why.
+// ---------------------------------------------------------------------------
 static bool g_squareFlyoutCorners = false;
-static int g_acCloseDelayMs = 50;      // the ~2000 ms close timer becomes this
-static int g_acSlideInMs = 220;        // 0 = off
-static int g_acSlideOutMs = 140;       // 0 = off
-static volatile bool g_acOpen = false;
-static bool g_acHaveFinal = false;
-static int g_acFinalX = 0;
-static int g_acFinalY = 0;
-static HWND g_acPanel = nullptr;       // identified once: the Action Center window
-static volatile LONG g_acGeneration = 0;
-static bool g_acAnimationHooksInstalled = false;
-static std::atomic<unsigned int> g_acActiveCloakCalls{0};
-static std::mutex g_acSlideThreadsMutex;
-static std::vector<HANDLE> g_acSlideThreads;
-static bool g_acSlideThreadsStopping = false;
-static int g_acAnimLogs = 0;
+static bool g_squareCornersHookInstalled = false;
 
 static int ClampInt(int value, int low, int high) {
     if (value < low) return low;
     if (value > high) return high;
     return value;
 }
-
-// https://stackoverflow.com/a/51274008
-template <auto fn>
-struct deleter_from_fn {
-    template <typename T>
-    constexpr void operator()(T* arg) const {
-        fn(arg);
-    }
-};
-using string_setting_unique_ptr =
-    std::unique_ptr<const WCHAR[], deleter_from_fn<Wh_FreeStringSetting>>;
-
 
 // Legacy component headers stay at global scope.
 #undef INTERFACE
@@ -482,7 +250,7 @@ using string_setting_unique_ptr =
 #include <winternl.h>   // UNICODE_STRING for the LdrLoadDll hook
 #include <time.h>
 #include <commctrl.h>   // sottoclasse di finestre (SetWindowSubclass)
-#include <tlhelp32.h>   // fotografia dei processi (sonda del centro operativo)
+#include <tlhelp32.h>   // fotografia dei processi (moduli caricati, ecc.)
 #include <shellapi.h>
 #include <shlobj.h>     // SHParseDisplayName / SHOpenFolderAndSelectItems
 #include <wlanapi.h>    // interruttore Wi-Fi vero (riquadro in fondo al flyout)
@@ -514,6 +282,29 @@ using string_setting_unique_ptr =
 #include <shellscalingapi.h>
 
 // Original legacy-component history (not release documentation):
+//
+// MODIFICHE (2026-10-07) - 1.0.1 (Action Center removed from this mod):
+// - The Action Center button (ShowActionCenterButton/ActionCenterConflict), its
+//   slide-in/slide-out/close-delay animation (ActionCenterAnimation and its three timing
+//   settings), its diagnostics probe, and the (already dead, never wired to a value-read
+//   hook) virtual UseLiteLayout / DisableNotificationCenter registry policy and the dead
+//   notification crash-fix hook are all removed: the user now manages the Action Center
+//   with a separate, dedicated mod, and this mod no longer touches it in any way. The
+//   experimental square-corners feature (DwmSetWindowAttribute_Hook, InstallSquareCornersHook)
+//   is kept exactly as it was: it targets the network/battery flyout windows of
+//   ShellExperienceHost.exe, not the Action Center panel, and only shared the DWM hook
+//   infrastructure with the removed animation, which has now been split apart.
+// - The 6 corresponding settings are removed from the settings block, and the 4
+//   already-unused g_cfg fields left over from an earlier iteration of the animation
+//   (actionCenterAnimation/actionCenterAnimInMs/actionCenterAnimOutMs/
+//   actionCenterCloseDelayMs, never read anywhere) are removed as well.
+// - NativeUi::InstallKeyHooks/OpenKeyHook/CloseKeyHook/TryRead/Cleanup and the
+//   RegOpenKeyExW/RegCloseKey hooks they installed are removed (they only ever served the
+//   Action Center virtualization above, and, being never actually wired into a live
+//   value-read hook, never served a value to anything). What NativeUi needs for the
+//   unrelated, still-live EnableAutoTray virtual read (IsExplorerPath) is kept, in a new,
+//   minimal NativeUi::InitializeKeyPathSupport() called from Wh_ModInit.
+// - The README/@description no longer mentions the Action Center button or its animation.
 //
 // MODIFICHE CANDIDATE (2026-10-04) - 1.0.0 (bootstrap PNI path-gated):
 // - Il log utente di 1.0.0 mostra SHEnableServiceObject -> S_OK prima che il redirect
@@ -948,7 +739,7 @@ using string_setting_unique_ptr =
 
 // The mod uses C++ exception boundaries only. It does not register a VEH, use
 // Microsoft structured-exception syntax, rewrite CONTEXT records, or claim to recover from native faults.
-// Keep this namespace at global scope: Wh_ModInit and AppletGuard use it below.
+// Keep this namespace at global scope: Wh_ModInit uses it below.
 #include <tlhelp32.h>
 
 namespace CppGuard {
@@ -1076,395 +867,6 @@ static bool RunGuarded(const wchar_t* tag, void (*fn)(void*), void* ctx,
 
 }  // namespace CppGuard
 
-// ===========================================================================
-// AppletGuard (1.0.0) - C++ exception boundaries for Control Panel APIs.
-// It installs no native OS exception handler and does not claim native-fault recovery.
-// These definitions remain at global scope; they install no native exception handler.
-// ===========================================================================
-namespace AppletGuard {
-
-using PropertySheetW_t = INT_PTR(WINAPI*)(LPCPROPSHEETHEADERW);
-using PropertySheetA_t = INT_PTR(WINAPI*)(LPCPROPSHEETHEADERA);
-using DialogBoxParamW_t = INT_PTR(WINAPI*)(HINSTANCE, LPCWSTR, HWND, DLGPROC, LPARAM);
-using DialogBoxParamA_t = INT_PTR(WINAPI*)(HINSTANCE, LPCSTR, HWND, DLGPROC, LPARAM);
-using DialogBoxIndirectParamW_t = INT_PTR(WINAPI*)(HINSTANCE, LPCDLGTEMPLATEW, HWND, DLGPROC, LPARAM);
-using DialogBoxIndirectParamA_t = INT_PTR(WINAPI*)(HINSTANCE, LPCDLGTEMPLATEA, HWND, DLGPROC, LPARAM);
-using CreateDialogParamW_t = HWND(WINAPI*)(HINSTANCE, LPCWSTR, HWND, DLGPROC, LPARAM);
-using CreateDialogParamA_t = HWND(WINAPI*)(HINSTANCE, LPCSTR, HWND, DLGPROC, LPARAM);
-using CreateDialogIndirectParamW_t = HWND(WINAPI*)(HINSTANCE, LPCDLGTEMPLATEW, HWND, DLGPROC, LPARAM);
-using CreateDialogIndirectParamA_t = HWND(WINAPI*)(HINSTANCE, LPCDLGTEMPLATEA, HWND, DLGPROC, LPARAM);
-using PeekMessageW_t = BOOL(WINAPI*)(LPMSG, HWND, UINT, UINT, UINT);
-using PeekMessageA_t = BOOL(WINAPI*)(LPMSG, HWND, UINT, UINT, UINT);
-using GetMessageW_t = BOOL(WINAPI*)(LPMSG, HWND, UINT, UINT);
-using GetMessageA_t = BOOL(WINAPI*)(LPMSG, HWND, UINT, UINT);
-using DispatchMessageW_t = LRESULT(WINAPI*)(const MSG*);
-using DispatchMessageA_t = LRESULT(WINAPI*)(const MSG*);
-using IsDialogMessageW_t = BOOL(WINAPI*)(HWND, LPMSG);
-using IsDialogMessageA_t = BOOL(WINAPI*)(HWND, LPMSG);
-
-static PropertySheetW_t PropertySheetW_Original = nullptr;
-static PropertySheetA_t PropertySheetA_Original = nullptr;
-static DialogBoxParamW_t DialogBoxParamW_Original = nullptr;
-static DialogBoxParamA_t DialogBoxParamA_Original = nullptr;
-static DialogBoxIndirectParamW_t DialogBoxIndirectParamW_Original = nullptr;
-static DialogBoxIndirectParamA_t DialogBoxIndirectParamA_Original = nullptr;
-static CreateDialogParamW_t CreateDialogParamW_Original = nullptr;
-static CreateDialogParamA_t CreateDialogParamA_Original = nullptr;
-static CreateDialogIndirectParamW_t CreateDialogIndirectParamW_Original = nullptr;
-static CreateDialogIndirectParamA_t CreateDialogIndirectParamA_Original = nullptr;
-static PeekMessageW_t PeekMessageW_Original = nullptr;
-static PeekMessageA_t PeekMessageA_Original = nullptr;
-static GetMessageW_t GetMessageW_Original = nullptr;
-static GetMessageA_t GetMessageA_Original = nullptr;
-static DispatchMessageW_t DispatchMessageW_Original = nullptr;
-static DispatchMessageA_t DispatchMessageA_Original = nullptr;
-static IsDialogMessageW_t IsDialogMessageW_Original = nullptr;
-static IsDialogMessageA_t IsDialogMessageA_Original = nullptr;
-static std::atomic<bool> g_installed{false};
-static std::atomic<unsigned int> g_cppExceptionLogs{0};
-
-// C++ exception boundaries for applet APIs; no native-fault recovery is installed.
-static void ReportCppException(const wchar_t* api) noexcept {
-    const unsigned int count = g_cppExceptionLogs.fetch_add(1, std::memory_order_relaxed);
-    if (count < 8) {
-        Wh_Log(L"[applet-guard] C++ exception crossed %s; operation cancelled", api);
-    } else if (count == 8) {
-        Wh_Log(L"[applet-guard] further C++ exception messages suppressed");
-    }
-}
-
-// Nome del processo host: e' una impostazione (guardHosts) perche' un altro
-// applet puo' vivere in un processo diverso (per esempio mmc.exe).
-static bool IsHostProcess(PCWSTR exe) noexcept {
-    if (!exe) return false;
-    try {
-        string_setting_unique_ptr hosts(Wh_GetStringSetting(L"guardHosts"));
-        if (!hosts.get() || !*hosts.get()) return false;
-        bool match = false;
-        const wchar_t* p = hosts.get();
-        while (*p) {
-            while (*p == L' ' || *p == L'\t' || *p == L';' || *p == L',') ++p;
-            const wchar_t* start = p;
-            while (*p && *p != L';' && *p != L',') ++p;
-            size_t len = static_cast<size_t>(p - start);
-            while (len && (start[len - 1] == L' ' || start[len - 1] == L'\t')) --len;
-            if (len && len < 64) {
-                wchar_t name[64] = {};
-                wmemcpy(name, start, len);
-                if (_wcsicmp(name, exe) == 0) {
-                    match = true;
-                    break;
-                }
-            }
-        }
-        return match;
-    } catch (...) {
-        Wh_Log(L"[applet-guard] guardHosts read raised a C++ exception; this process is not treated as an applet host");
-        return false;
-    }
-}
-
-template <typename Result, typename Call>
-static Result InvokeGuardedAppletApi(const wchar_t* operation, const wchar_t* api,
-                                    Result failure, Call&& call) {
-    (void)operation;
-    try {
-        return call();
-    } catch (...) {
-        ReportCppException(api);
-        return failure;
-    }
-}
-
-static INT_PTR WINAPI PropertySheetW_Hook(LPCPROPSHEETHEADERW header) {
-    if (!PropertySheetW_Original) return -1;
-    return InvokeGuardedAppletApi<INT_PTR>(L"property sheet of a Control Panel applet", L"PropertySheetW", -1,
-        [&] { return PropertySheetW_Original(header); });
-}
-
-static INT_PTR WINAPI PropertySheetA_Hook(LPCPROPSHEETHEADERA header) {
-    if (!PropertySheetA_Original) return -1;
-    return InvokeGuardedAppletApi<INT_PTR>(L"property sheet of a Control Panel applet (ANSI)", L"PropertySheetA", -1,
-        [&] { return PropertySheetA_Original(header); });
-}
-
-static INT_PTR WINAPI DialogBoxParamW_Hook(HINSTANCE instance, LPCWSTR templ, HWND parent,
-                                           DLGPROC proc, LPARAM param) {
-    if (!DialogBoxParamW_Original) return -1;
-    return InvokeGuardedAppletApi<INT_PTR>(L"dialog of a Control Panel applet", L"DialogBoxParamW", -1,
-        [&] { return DialogBoxParamW_Original(instance, templ, parent, proc, param); });
-}
-
-static INT_PTR WINAPI DialogBoxParamA_Hook(HINSTANCE instance, LPCSTR templ, HWND parent,
-                                           DLGPROC proc, LPARAM param) {
-    if (!DialogBoxParamA_Original) return -1;
-    return InvokeGuardedAppletApi<INT_PTR>(L"dialog of a Control Panel applet (ANSI)", L"DialogBoxParamA", -1,
-        [&] { return DialogBoxParamA_Original(instance, templ, parent, proc, param); });
-}
-
-static INT_PTR WINAPI DialogBoxIndirectParamW_Hook(HINSTANCE instance, LPCDLGTEMPLATEW templ,
-                                                   HWND parent, DLGPROC proc, LPARAM param) {
-    if (!DialogBoxIndirectParamW_Original) return -1;
-    return InvokeGuardedAppletApi<INT_PTR>(L"dialog of a Control Panel applet", L"DialogBoxIndirectParamW", -1,
-        [&] { return DialogBoxIndirectParamW_Original(instance, templ, parent, proc, param); });
-}
-
-static INT_PTR WINAPI DialogBoxIndirectParamA_Hook(HINSTANCE instance, LPCDLGTEMPLATEA templ,
-                                                   HWND parent, DLGPROC proc, LPARAM param) {
-    if (!DialogBoxIndirectParamA_Original) return -1;
-    return InvokeGuardedAppletApi<INT_PTR>(L"dialog of a Control Panel applet (ANSI)", L"DialogBoxIndirectParamA", -1,
-        [&] { return DialogBoxIndirectParamA_Original(instance, templ, parent, proc, param); });
-}
-
-static HWND WINAPI CreateDialogParamW_Hook(HINSTANCE instance, LPCWSTR templ, HWND parent,
-                                            DLGPROC proc, LPARAM param) {
-    if (!CreateDialogParamW_Original) return nullptr;
-    return InvokeGuardedAppletApi<HWND>(L"modeless dialog of a Control Panel applet", L"CreateDialogParamW", nullptr,
-        [&] { return CreateDialogParamW_Original(instance, templ, parent, proc, param); });
-}
-
-static HWND WINAPI CreateDialogParamA_Hook(HINSTANCE instance, LPCSTR templ, HWND parent,
-                                            DLGPROC proc, LPARAM param) {
-    if (!CreateDialogParamA_Original) return nullptr;
-    return InvokeGuardedAppletApi<HWND>(L"modeless dialog of a Control Panel applet (ANSI)", L"CreateDialogParamA", nullptr,
-        [&] { return CreateDialogParamA_Original(instance, templ, parent, proc, param); });
-}
-
-static HWND WINAPI CreateDialogIndirectParamW_Hook(HINSTANCE instance, LPCDLGTEMPLATEW templ,
-                                                    HWND parent, DLGPROC proc, LPARAM param) {
-    if (!CreateDialogIndirectParamW_Original) return nullptr;
-    return InvokeGuardedAppletApi<HWND>(L"modeless dialog of a Control Panel applet", L"CreateDialogIndirectParamW", nullptr,
-        [&] { return CreateDialogIndirectParamW_Original(instance, templ, parent, proc, param); });
-}
-
-static HWND WINAPI CreateDialogIndirectParamA_Hook(HINSTANCE instance, LPCDLGTEMPLATEA templ,
-                                                    HWND parent, DLGPROC proc, LPARAM param) {
-    if (!CreateDialogIndirectParamA_Original) return nullptr;
-    return InvokeGuardedAppletApi<HWND>(L"modeless dialog of a Control Panel applet (ANSI)", L"CreateDialogIndirectParamA", nullptr,
-        [&] { return CreateDialogIndirectParamA_Original(instance, templ, parent, proc, param); });
-}
-
-// I messaggi che il sistema consegna direttamente a una finestra dell'applet
-// arrivano mentre il thread e' dentro PeekMessage/GetMessage: la sezione
-// protetta copre anche quel percorso.
-static BOOL WINAPI PeekMessageW_Hook(LPMSG msg, HWND hwnd, UINT first, UINT last, UINT remove) {
-    if (!PeekMessageW_Original) return FALSE;
-    return InvokeGuardedAppletApi<BOOL>(L"message delivered to a Control Panel applet", L"PeekMessageW", FALSE,
-        [&] { return PeekMessageW_Original(msg, hwnd, first, last, remove); });
-}
-
-static BOOL WINAPI PeekMessageA_Hook(LPMSG msg, HWND hwnd, UINT first, UINT last, UINT remove) {
-    if (!PeekMessageA_Original) return FALSE;
-    return InvokeGuardedAppletApi<BOOL>(L"message delivered to a Control Panel applet (ANSI)", L"PeekMessageA", FALSE,
-        [&] { return PeekMessageA_Original(msg, hwnd, first, last, remove); });
-}
-
-static BOOL WINAPI GetMessageW_Hook(LPMSG msg, HWND hwnd, UINT first, UINT last) {
-    if (!GetMessageW_Original) return FALSE;
-    return InvokeGuardedAppletApi<BOOL>(L"message delivered to a Control Panel applet", L"GetMessageW", FALSE,
-        [&] { return GetMessageW_Original(msg, hwnd, first, last); });
-}
-
-static BOOL WINAPI GetMessageA_Hook(LPMSG msg, HWND hwnd, UINT first, UINT last) {
-    if (!GetMessageA_Original) return FALSE;
-    return InvokeGuardedAppletApi<BOOL>(L"message delivered to a Control Panel applet (ANSI)", L"GetMessageA", FALSE,
-        [&] { return GetMessageA_Original(msg, hwnd, first, last); });
-}
-
-static LRESULT WINAPI DispatchMessageW_Hook(const MSG* msg) {
-    if (!DispatchMessageW_Original) return 0;
-    return InvokeGuardedAppletApi<LRESULT>(L"message dispatched to a Control Panel applet", L"DispatchMessageW", 0,
-        [&] { return DispatchMessageW_Original(msg); });
-}
-
-static LRESULT WINAPI DispatchMessageA_Hook(const MSG* msg) {
-    if (!DispatchMessageA_Original) return 0;
-    return InvokeGuardedAppletApi<LRESULT>(L"message dispatched to a Control Panel applet (ANSI)", L"DispatchMessageA", 0,
-        [&] { return DispatchMessageA_Original(msg); });
-}
-
-static BOOL WINAPI IsDialogMessageW_Hook(HWND dialog, LPMSG msg) {
-    if (!IsDialogMessageW_Original) return FALSE;
-    return InvokeGuardedAppletApi<BOOL>(L"dialog message dispatched to a Control Panel applet", L"IsDialogMessageW", FALSE,
-        [&] { return IsDialogMessageW_Original(dialog, msg); });
-}
-
-static BOOL WINAPI IsDialogMessageA_Hook(HWND dialog, LPMSG msg) {
-    if (!IsDialogMessageA_Original) return FALSE;
-    return InvokeGuardedAppletApi<BOOL>(L"dialog message dispatched to a Control Panel applet (ANSI)", L"IsDialogMessageA", FALSE,
-        [&] { return IsDialogMessageA_Original(dialog, msg); });
-}
-
-// `original` is the address of the slot Windhawk fills during installation.
-// It is normally null before the hook is installed, so test the slot pointer,
-// not `*original`; testing the latter silently skipped every AppletGuard hook.
-static bool InstallHook(void* target, void* hook, void** original) {
-    if (!target || !hook || !original) return false;
-    return Wh_SetFunctionHook(target, hook, original);
-}
-
-static bool Install() noexcept {
-    if (g_installed.exchange(true)) return true;
-    try {
-        CppGuard::Install();
-        HMODULE user32 = GetModuleHandleW(L"user32.dll");
-        HMODULE comctl32 = GetModuleHandleW(L"comctl32.dll");
-        if (!user32) {
-            Wh_Log(L"[applet-guard] user32.dll is not loaded: the applet host stays unguarded");
-            g_installed.store(false);
-            CppGuard::Uninstall();          // no process-wide exception handler is registered
-            return false;
-        }
-
-        // Le funzioni possono mancare o un hook puo' fallire: misuriamo ogni esito.
-        // Un controllo dei soli originali prima della chiamata impedirebbe
-        // l'installazione: Windhawk li valorizza soltanto quando l'hook riesce.
-        bool sheetW = false, sheetA = false;
-        if (comctl32) {
-            sheetW = InstallHook(reinterpret_cast<void*>(GetProcAddress(comctl32, "PropertySheetW")),
-                                 reinterpret_cast<void*>(PropertySheetW_Hook),
-                                 reinterpret_cast<void**>(&PropertySheetW_Original)) &&
-                     PropertySheetW_Original != nullptr;
-            sheetA = InstallHook(reinterpret_cast<void*>(GetProcAddress(comctl32, "PropertySheetA")),
-                                 reinterpret_cast<void*>(PropertySheetA_Hook),
-                                 reinterpret_cast<void**>(&PropertySheetA_Original)) &&
-                     PropertySheetA_Original != nullptr;
-        }
-        const bool dialogParamW =
-            InstallHook(reinterpret_cast<void*>(GetProcAddress(user32, "DialogBoxParamW")),
-                        reinterpret_cast<void*>(DialogBoxParamW_Hook),
-                        reinterpret_cast<void**>(&DialogBoxParamW_Original)) &&
-            DialogBoxParamW_Original != nullptr;
-        const bool dialogParamA =
-            InstallHook(reinterpret_cast<void*>(GetProcAddress(user32, "DialogBoxParamA")),
-                        reinterpret_cast<void*>(DialogBoxParamA_Hook),
-                        reinterpret_cast<void**>(&DialogBoxParamA_Original)) &&
-            DialogBoxParamA_Original != nullptr;
-        const bool dialogIndirectW =
-            InstallHook(reinterpret_cast<void*>(GetProcAddress(user32, "DialogBoxIndirectParamW")),
-                        reinterpret_cast<void*>(DialogBoxIndirectParamW_Hook),
-                        reinterpret_cast<void**>(&DialogBoxIndirectParamW_Original)) &&
-            DialogBoxIndirectParamW_Original != nullptr;
-        const bool dialogIndirectA =
-            InstallHook(reinterpret_cast<void*>(GetProcAddress(user32, "DialogBoxIndirectParamA")),
-                        reinterpret_cast<void*>(DialogBoxIndirectParamA_Hook),
-                        reinterpret_cast<void**>(&DialogBoxIndirectParamA_Original)) &&
-            DialogBoxIndirectParamA_Original != nullptr;
-        const bool createDialogW =
-            InstallHook(reinterpret_cast<void*>(GetProcAddress(user32, "CreateDialogParamW")),
-                        reinterpret_cast<void*>(CreateDialogParamW_Hook),
-                        reinterpret_cast<void**>(&CreateDialogParamW_Original)) &&
-            CreateDialogParamW_Original != nullptr;
-        const bool createDialogA =
-            InstallHook(reinterpret_cast<void*>(GetProcAddress(user32, "CreateDialogParamA")),
-                        reinterpret_cast<void*>(CreateDialogParamA_Hook),
-                        reinterpret_cast<void**>(&CreateDialogParamA_Original)) &&
-            CreateDialogParamA_Original != nullptr;
-        const bool createDialogIndirectW =
-            InstallHook(reinterpret_cast<void*>(GetProcAddress(user32, "CreateDialogIndirectParamW")),
-                        reinterpret_cast<void*>(CreateDialogIndirectParamW_Hook),
-                        reinterpret_cast<void**>(&CreateDialogIndirectParamW_Original)) &&
-            CreateDialogIndirectParamW_Original != nullptr;
-        const bool createDialogIndirectA =
-            InstallHook(reinterpret_cast<void*>(GetProcAddress(user32, "CreateDialogIndirectParamA")),
-                        reinterpret_cast<void*>(CreateDialogIndirectParamA_Hook),
-                        reinterpret_cast<void**>(&CreateDialogIndirectParamA_Original)) &&
-            CreateDialogIndirectParamA_Original != nullptr;
-        const bool peekMessageW =
-            InstallHook(reinterpret_cast<void*>(GetProcAddress(user32, "PeekMessageW")),
-                        reinterpret_cast<void*>(PeekMessageW_Hook),
-                        reinterpret_cast<void**>(&PeekMessageW_Original)) &&
-            PeekMessageW_Original != nullptr;
-        const bool peekMessageA =
-            InstallHook(reinterpret_cast<void*>(GetProcAddress(user32, "PeekMessageA")),
-                        reinterpret_cast<void*>(PeekMessageA_Hook),
-                        reinterpret_cast<void**>(&PeekMessageA_Original)) &&
-            PeekMessageA_Original != nullptr;
-        const bool getMessageW =
-            InstallHook(reinterpret_cast<void*>(GetProcAddress(user32, "GetMessageW")),
-                        reinterpret_cast<void*>(GetMessageW_Hook),
-                        reinterpret_cast<void**>(&GetMessageW_Original)) &&
-            GetMessageW_Original != nullptr;
-        const bool getMessageA =
-            InstallHook(reinterpret_cast<void*>(GetProcAddress(user32, "GetMessageA")),
-                        reinterpret_cast<void*>(GetMessageA_Hook),
-                        reinterpret_cast<void**>(&GetMessageA_Original)) &&
-            GetMessageA_Original != nullptr;
-        const bool dispatchMessageW =
-            InstallHook(reinterpret_cast<void*>(GetProcAddress(user32, "DispatchMessageW")),
-                        reinterpret_cast<void*>(DispatchMessageW_Hook),
-                        reinterpret_cast<void**>(&DispatchMessageW_Original)) &&
-            DispatchMessageW_Original != nullptr;
-        const bool dispatchMessageA =
-            InstallHook(reinterpret_cast<void*>(GetProcAddress(user32, "DispatchMessageA")),
-                        reinterpret_cast<void*>(DispatchMessageA_Hook),
-                        reinterpret_cast<void**>(&DispatchMessageA_Original)) &&
-            DispatchMessageA_Original != nullptr;
-        const bool isDialogMessageW =
-            InstallHook(reinterpret_cast<void*>(GetProcAddress(user32, "IsDialogMessageW")),
-                        reinterpret_cast<void*>(IsDialogMessageW_Hook),
-                        reinterpret_cast<void**>(&IsDialogMessageW_Original)) &&
-            IsDialogMessageW_Original != nullptr;
-        const bool isDialogMessageA =
-            InstallHook(reinterpret_cast<void*>(GetProcAddress(user32, "IsDialogMessageA")),
-                        reinterpret_cast<void*>(IsDialogMessageA_Hook),
-                        reinterpret_cast<void**>(&IsDialogMessageA_Original)) &&
-            IsDialogMessageA_Original != nullptr;
-
-        Wh_Log(L"[applet-guard] hooks: PropertySheetW=%d PropertySheetA=%d "
-               L"DialogBoxParamW=%d DialogBoxParamA=%d DialogBoxIndirectParamW=%d DialogBoxIndirectParamA=%d "
-               L"CreateDialogParamW=%d CreateDialogParamA=%d "
-               L"CreateDialogIndirectParamW=%d CreateDialogIndirectParamA=%d "
-               L"PeekMessageW=%d PeekMessageA=%d GetMessageW=%d GetMessageA=%d "
-               L"DispatchMessageW=%d DispatchMessageA=%d IsDialogMessageW=%d IsDialogMessageA=%d",
-               sheetW, sheetA, dialogParamW, dialogParamA, dialogIndirectW, dialogIndirectA,
-               createDialogW, createDialogA, createDialogIndirectW, createDialogIndirectA,
-               peekMessageW, peekMessageA, getMessageW, getMessageA, dispatchMessageW,
-               dispatchMessageA, isDialogMessageW, isDialogMessageA);
-        if (!(sheetW || sheetA || dialogParamW || dialogParamA || dialogIndirectW || dialogIndirectA ||
-              createDialogW || createDialogA || createDialogIndirectW || createDialogIndirectA ||
-              peekMessageW || peekMessageA || getMessageW || getMessageA || dispatchMessageW ||
-              dispatchMessageA || isDialogMessageW || isDialogMessageA)) {
-            Wh_Log(L"[applet-guard] no API hook installed: guard-only load aborted");
-            g_installed.store(false);
-            CppGuard::Uninstall();
-            return false;
-        }
-        return true;
-    } catch (...) {
-        Wh_Log(L"[applet-guard] C++ exception while installing the Control Panel boundaries; guard-only load aborted");
-        g_installed.store(false);
-        CppGuard::Uninstall();
-        return false;
-    }
-}
-
-static bool Installed() noexcept { return g_installed.load(); }
-
-static void Uninstall() noexcept {
-    if (!g_installed.exchange(false)) return;
-    PropertySheetW_Original = nullptr;
-    PropertySheetA_Original = nullptr;
-    DialogBoxParamW_Original = nullptr;
-    DialogBoxParamA_Original = nullptr;
-    DialogBoxIndirectParamW_Original = nullptr;
-    DialogBoxIndirectParamA_Original = nullptr;
-    CreateDialogParamW_Original = nullptr;
-    CreateDialogParamA_Original = nullptr;
-    CreateDialogIndirectParamW_Original = nullptr;
-    CreateDialogIndirectParamA_Original = nullptr;
-    PeekMessageW_Original = nullptr;
-    PeekMessageA_Original = nullptr;
-    GetMessageW_Original = nullptr;
-    GetMessageA_Original = nullptr;
-    DispatchMessageW_Original = nullptr;
-    DispatchMessageA_Original = nullptr;
-    IsDialogMessageW_Original = nullptr;
-    IsDialogMessageA_Original = nullptr;
-    CppGuard::Uninstall();
-}
-
-}  // namespace AppletGuard
 
 namespace RestorerTaskbar {
 
@@ -1492,15 +894,14 @@ struct BuildInfo {
     const wchar_t* sha256;        // real hash of the file served by msdl (verified)
     DWORD timeDateStamp;          // gate di build
     DWORD sizeOfImage;
-    DWORD notificationOffset;     // 0 = offset unknown for this build
     DWORD shellManagedOffset;     // ShouldTreatShellManagedWindowAsNotShellManaged (0 = unknown)
 };
 
 static const BuildInfo kBuilds[] = {
     // 10.0.19039.1 — used by the official mod and by the community fixes
-    { L"10.0.19039.1", L"7AC6EEC3442000", L"58f78b5f90efc75d6c7d3d85bc8b36983fe410406f217619dbe2384130d65bfe", 0x7AC6EEC3, 0x442000, 0x14DC40, 0x4FEA8 },
+    { L"10.0.19039.1", L"7AC6EEC3442000", L"58f78b5f90efc75d6c7d3d85bc8b36983fe410406f217619dbe2384130d65bfe", 0x7AC6EEC3, 0x442000, 0x4FEA8 },
     // 10.0.19041.7725 (KB5122878, September 2026) — more recent; the log says which is installed
-    { L"10.0.19041.7725", L"7A77DC0C5c9000", L"c493059ca065b0780ce5a430ade23f74c79c9578ec49c1fb18d7ad3f81dfec5e", 0x7A77DC0C, 0x5C9000, 0, 0x5F0E0 },
+    { L"10.0.19041.7725", L"7A77DC0C5c9000", L"c493059ca065b0780ce5a430ade23f74c79c9578ec49c1fb18d7ad3f81dfec5e", 0x7A77DC0C, 0x5C9000, 0x5F0E0 },
 };
 static const int kBuildCount = _countof(kBuilds);
 
@@ -1532,7 +933,6 @@ static struct {
     bool winXMenuAnchorCursor;   // 1.0.0: legacy cursor anchor instead of the Start button
     int  winXMenuOffsetX;        // 1.0.0: shift of the resolved anchor point (px)
     int  winXMenuOffsetY;
-    bool fixNotificationsCrash;
     bool fixUwpTaskbar;          // UWP apps (ApplicationFrameWindow) on the taskbar
     bool spoofExplorerPath;
     bool perUserShellRedirect;
@@ -1541,21 +941,15 @@ static struct {
     bool emergencyHotkey;
     int  liveSwitch;             // 0 none, 1 to-legacy, 2 to-win11
     bool watchdog;
-    bool notificationsOff;          // virtual read fallback when the crash hook is unavailable
     bool languageGuard;          // sezione 9: sopprime il flyout di lingua all'avvio
     int  downloadTimeoutSec;
     bool tightenStoreAcl;
     bool forceWin11StartLeft;
-    bool xamlRestyle;            // Win10 graphical restyle injected into the native flyout (Win10Restyle)
     // 1.0.0
     bool forceNetworkTrayIcon;             // registra l'icona di rete se la PNI nativa non lo fa
     int  forceNetworkTrayDelaySec;         // attesa prima dell'intervento (s)
     bool forceNetworkTrayResetTraySettings;// azzera una volta lo stato della barra (con backup)
     bool trayRestoreOverflowChevron;       // 1.0.0: rimuove l'override virtuale per rivedere il pulsante "^"
-    bool actionCenterAnimation;            // movimento del pannello del centro operativo
-    int  actionCenterAnimInMs;             // durata apertura
-    int  actionCenterAnimOutMs;            // durata chiusura
-    int  actionCenterCloseDelayMs;         // ritardo di chiusura al posto dei ~2000 ms
     int  shellOpGuardTimeoutMs;            // tetto di tempo per le operazioni shell:::
 } g_cfg = {};
 
@@ -1656,50 +1050,22 @@ private:
 // no code is copied and no SimpleWindowSwitcher is bundled.
 // These boundaries handle C++ exceptions; no native-fault recovery is installed.
 // ===========================================================================
-static std::atomic<bool> g_notificationCrashFixActive{false};
-static std::atomic<bool> g_notificationPolicyReady{false};
 
 namespace NativeUi {
-static std::atomic<bool> actionCenter{true};
 static std::atomic<bool> ribbon10{true};
 static bool registryProcess = false;
 static bool explorerProcess = false;
 static bool privateExplorer = false;
-// Only the private legacy Explorer and the two shell hosts can create/read the
-// Action Center policy in the processes into which this mod is injected.
-static bool actionCenterPolicyProcess = false;
 static std::atomic<bool> stopping{false};
-
-static void LoadSettings() noexcept {
-    // Each option fails independently; StringSetting owns the Windhawk string.
-    try {
-        actionCenter.store(Wh_GetIntSetting(L"Win10ActionCenter") != 0);
-    } catch (...) { Wh_Log(L"[action-center] settings exception; keeping previous option"); }
-}
 
 // Exact registry paths, including hive. Never override an unrelated value merely
 // because it has the same name. NtQueryKey also recognizes handles opened before
 // this mod, so no global bookkeeping of ordinary registry handles is necessary.
-/*static constexpr wchar_t kControlSubkey[] =
-    L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Control Center";*/
-static constexpr wchar_t kControlNative[] =
-    L"\\REGISTRY\\MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Control Center";
 static constexpr wchar_t kExplorerSubkey[] =
     L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer";
-static constexpr wchar_t kNotificationPolicySubkey[] =
-    L"SOFTWARE\\Policies\\Microsoft\\Windows\\Explorer";
 using NtQueryKeyFn = LONG(NTAPI*)(HANDLE, int, void*, ULONG, ULONG*);
 static NtQueryKeyFn ntQueryKey = nullptr;
 static std::wstring currentUserNative;
-static std::mutex proxyMutex;
-static std::unordered_set<HKEY> proxyKeys;
-static decltype(&RegOpenKeyExW) openKeyOriginal = nullptr;
-static decltype(&RegCloseKey) closeKeyOriginal = nullptr;
-
-static bool IsProxy(HKEY key) {
-    std::lock_guard<std::mutex> lock(proxyMutex);
-    return proxyKeys.find(key) != proxyKeys.end();
-}
 
 static std::wstring KeyPath(HKEY key) {
     if (key == HKEY_LOCAL_MACHINE) return L"\\REGISTRY\\MACHINE";
@@ -1725,19 +1091,9 @@ static std::wstring FullPath(HKEY key, LPCWSTR subkey) {
     return path;
 }
 
-static bool IsControlPath(HKEY key, LPCWSTR subkey) {
-    return _wcsicmp(FullPath(key, subkey).c_str(), kControlNative) == 0;
-}
-
 static bool IsExplorerPath(HKEY key, LPCWSTR subkey) {
     if (currentUserNative.empty()) return false;
     auto expected = currentUserNative + L"\\" + kExplorerSubkey;
-    return _wcsicmp(FullPath(key, subkey).c_str(), expected.c_str()) == 0;
-}
-
-static bool IsNotificationPolicyPath(HKEY key, LPCWSTR subkey) {
-    if (currentUserNative.empty()) return false;
-    auto expected = currentUserNative + L"\\" + kNotificationPolicySubkey;
     return _wcsicmp(FullPath(key, subkey).c_str(), expected.c_str()) == 0;
 }
 
@@ -1770,110 +1126,15 @@ static LSTATUS CopyDword(DWORD value, bool getValue, DWORD flags,
     return ERROR_SUCCESS;
 }
 
-static bool TryRead(HKEY key, LPCWSTR subkey, LPCWSTR name, bool getValue,
-                    DWORD flags, LPDWORD type, void* data, LPDWORD bytes,
-                    LSTATUS* result) noexcept {
-    try {
-        if (!registryProcess || stopping.load()) return false;
-        // Proxies represent only a missing, read-only Control Center key.
-        const bool proxy = IsProxy(key);
-        if (proxy && ((subkey && *subkey) || !name ||
-                      _wcsicmp(name, L"UseLiteLayout") != 0 || !actionCenter.load())) {
-            *result = ERROR_FILE_NOT_FOUND;
-            if (getValue && (flags & RRF_ZEROONFAILURE) && data && bytes)
-                memset(data, 0, *bytes);
-            return true;
-        }
-        if (!name) return false;
-        if (actionCenter.load() && _wcsicmp(name, L"UseLiteLayout") == 0 &&
-            (proxy || IsControlPath(key, subkey))) {
-            *result = CopyDword(1, getValue, flags, type, data, bytes);
-            static std::atomic<bool> reported{false};
-            if (!reported.exchange(true))
-                Wh_Log(L"[action-center] serving virtual HKLM Control Center / UseLiteLayout = 1 (not a registry write)");
-            return true;
-        }
-        if (actionCenterPolicyProcess &&
-            g_notificationPolicyReady.load(std::memory_order_acquire) &&
-            g_cfg.notificationsOff &&
-            !g_notificationCrashFixActive.load(std::memory_order_acquire) &&
-            _wcsicmp(name, L"DisableNotificationCenter") == 0 &&
-            IsNotificationPolicyPath(key, subkey)) {
-            *result = CopyDword(1, getValue, flags, type, data, bytes);
-            static std::atomic<bool> reported{false};
-            if (!reported.exchange(true))
-                Wh_Log(L"[notif] serving virtual DisableNotificationCenter=1 in this Action Center host (not a registry write)");
-            return true;
-        }
-    } catch (...) {
-        Wh_Log(L"[native-ui] registry read exception; using the real registry");
-    }
-    return false;
-}
-
-static LSTATUS WINAPI OpenKeyHook(HKEY key, LPCWSTR subkey, DWORD options,
-                                  REGSAM access, PHKEY output) {
-    try {
-        const bool proxy = registryProcess && IsProxy(key);
-        const bool target = registryProcess && !stopping.load() && actionCenter.load() &&
-                            (proxy ? (!subkey || !*subkey) : IsControlPath(key, subkey));
-        if (proxy && !target) return ERROR_FILE_NOT_FOUND;
-        if (target && output && options == 0 &&
-            !(access & ~(KEY_READ | KEY_WOW64_32KEY | KEY_WOW64_64KEY)) &&
-            (access & (KEY_WOW64_32KEY | KEY_WOW64_64KEY)) !=
-                (KEY_WOW64_32KEY | KEY_WOW64_64KEY)) {
-            LSTATUS status = proxy ? ERROR_FILE_NOT_FOUND :
-                openKeyOriginal(key, subkey, options, access, output);
-            if (status != ERROR_FILE_NOT_FOUND && status != ERROR_PATH_NOT_FOUND)
-                return status;  // Never bypass ACCESS_DENIED.
-            // A genuine read-only handle is returned, never a made-up HKEY.
-            // Its ownership passes to the caller. The proxy is only a projection
-            // for OpenKeyExW / QueryValueExW / GetValueW / CloseKey, not a full hive.
-            ScopedRegKey backing;
-            status = openKeyOriginal(HKEY_LOCAL_MACHINE, L"SOFTWARE", 0,
-                                     KEY_QUERY_VALUE, backing.put());
-            if (status != ERROR_SUCCESS) return status;
-            {
-                std::lock_guard<std::mutex> lock(proxyMutex);
-                proxyKeys.insert(backing.get());
-            }
-            *output = backing.release();
-            return ERROR_SUCCESS;
-        }
-        if (proxy) return ERROR_ACCESS_DENIED;  // Never grant write access.
-    } catch (...) {
-        Wh_Log(L"[action-center] virtual key open exception");
-        // No retry of an open that may already have produced an owned handle.
-        if (output) *output = nullptr;
-        return ERROR_NOT_ENOUGH_MEMORY;
-    }
-    try { return openKeyOriginal(key, subkey, options, access, output); }
-    catch (...) {
-        Wh_Log(L"[action-center] original registry open raised a C++ exception");
-        return ERROR_GEN_FAILURE;
-    }
-}
-
-static LSTATUS WINAPI CloseKeyHook(HKEY key) {
-    try {
-        std::lock_guard<std::mutex> lock(proxyMutex);
-        // Erase before closing to avoid a recycled handle inheriting proxy state.
-        proxyKeys.erase(key);
-    } catch (...) { Wh_Log(L"[action-center] proxy bookkeeping exception on close"); }
-    try { return closeKeyOriginal(key); }
-    catch (...) {
-        Wh_Log(L"[action-center] original registry close raised a C++ exception; not retrying");
-        return ERROR_GEN_FAILURE;
-    }
-}
-
-// The two policy hooks are installed at most once each: a second Wh_SetFunctionHook on
-// the same target fails, and reporting "not installed" for a hook that is in fact in
-// place would make the caller retry it forever.
-static bool closeKeyHooked = false;
-static bool openKeyHooked = false;
-
-static bool InstallKeyHooks() noexcept {
+// 1.4.0: this used to also install RegOpenKeyExW/RegCloseKey hooks and a fake "Control
+// Center" registry key, to serve a virtual UseLiteLayout / DisableNotificationCenter for
+// this mod's own Action Center button and notification-policy features. Both features (and
+// this virtualization, which was never actually wired into a value-read hook and so never
+// served a value to anything) are removed: the user manages the Action Center with a
+// separate, dedicated mod. What remains here is only what IsExplorerPath needs: the native
+// path of HKEY_CURRENT_USER, used (unconditionally, not gated behind the Action Center
+// flag this used to require) by the EnableAutoTray virtual read below.
+static bool InitializeKeyPathSupport() noexcept {
     try {
         HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
         ntQueryKey = ntdll ? reinterpret_cast<NtQueryKeyFn>(
@@ -1882,37 +1143,12 @@ static bool InstallKeyHooks() noexcept {
         if (RegOpenCurrentUser(KEY_QUERY_VALUE, user.put()) == ERROR_SUCCESS)
             currentUserNative = KeyPath(user.get());
         if (!ntQueryKey) {
-            Wh_Log(L"[action-center] NtQueryKey unavailable: handle-based reads cannot be matched");
+            Wh_Log(L"[native-ui] NtQueryKey unavailable: handle-based reads cannot be matched");
             return false;
-        }
-        // Register close first. If open registration fails, close remains harmless.
-        if (!closeKeyHooked) {
-            if (!Wh_SetFunctionHook(reinterpret_cast<void*>(RegCloseKey),
-                                    reinterpret_cast<void*>(CloseKeyHook),
-                                    reinterpret_cast<void**>(&closeKeyOriginal))) {
-                Wh_Log(L"[actioncenter] the RegCloseKey hook could not be installed (%lu)",
-                       GetLastError());
-                return false;
-            }
-            closeKeyHooked = true;
-        }
-        if (!openKeyHooked) {
-            // Wh_SetFunctionHook refuses a target that this process has already hooked,
-            // so a half-installed state must never be reported as "install from scratch":
-            // the second call would fail forever and the caller would retry it at every
-            // tick.
-            if (!Wh_SetFunctionHook(reinterpret_cast<void*>(RegOpenKeyExW),
-                                    reinterpret_cast<void*>(OpenKeyHook),
-                                    reinterpret_cast<void**>(&openKeyOriginal))) {
-                Wh_Log(L"[actioncenter] the RegOpenKeyExW hook could not be installed (%lu)",
-                       GetLastError());
-                return false;
-            }
-            openKeyHooked = true;
         }
         return true;
     } catch (...) {
-        Wh_Log(L"[action-center] key hook installation exception");
+        Wh_Log(L"[native-ui] key path initialization exception");
         return false;
     }
 }
@@ -1926,15 +1162,6 @@ static bool BlockXamlAdapter(REFCLSID clsid) noexcept {
                IsEqualCLSID(clsid, adapter);
     } catch (...) { Wh_Log(L"[ribbon] selector exception; keeping system UI"); }
     return false;
-}
-
-static void Cleanup() noexcept {
-    // Called only AFTER Windhawk has removed hooks. Caller-owned registry handles
-    // are deliberately not closed here. Their owners still close them normally.
-    try {
-        std::lock_guard<std::mutex> lock(proxyMutex);
-        proxyKeys.clear();
-    } catch (...) { Wh_Log(L"[native-ui] cleanup exception"); }
 }
 }  // namespace NativeUi
 
@@ -2192,15 +1419,9 @@ static bool EnsureDirectory(const wchar_t* dir) {
     return false;
 }
 
-static const int kHotkeyId = 0xA1B2;
 
 static DWORD g_servicesThreadId = 0;
 
-// 1.0.0: lo stato della mod sta nello storage di Windhawk, non in una chiave di
-// HKCU creata per l'occasione: sparisce con la mod e non lascia residui.
-static DWORD GetFailureCount() {
-    return (DWORD)Wh_GetIntValue(L"FailureCount", 0);
-}
 
 static bool ContainsNoCase(const wchar_t* haystack, const wchar_t* needle) {
     if (!haystack || !needle || !*needle) return false;
@@ -3237,7 +2458,68 @@ static bool PeekAeroAllowed() {
     return on != 0;
 }
 
+// 1.4.0: these two values are genuine, documented Windows settings (the same ones the
+// Peek-at-desktop checkbox in a real Windows 10 taskbar writes), not a private mod side
+// channel - so unlike a mod-only flag, a user flipping this entry arguably expects it to
+// behave like any other Windows setting change and stick. That said, Windhawk's own-cleanup
+// expectation is that a mod's unload should not leave behind a change the user never made
+// through a first-class Windows UI. The values are therefore captured (once, lazily, the
+// first time this mod actually writes them) and restored to what they were before this mod
+// ever touched them when the mod is disabled through the normal unload path. A hard kill or
+// crash cannot run this restore - no process-local mechanism can guarantee that for any
+// mod - but the documented, requested disable path now leaves the two keys exactly as found.
+static bool g_peekOriginalCaptured = false;
+static bool g_peekOriginalHadPreviewDesktop = false;
+static DWORD g_peekOriginalPreviewDesktop = 0;
+static bool g_peekOriginalHadAeroPeek = false;
+static DWORD g_peekOriginalAeroPeek = 0;
+
+static void CapturePeekOriginalValuesOnce() {
+    if (g_peekOriginalCaptured) return;
+    g_peekOriginalCaptured = true;
+    g_peekOriginalHadPreviewDesktop =
+        ReadRegDwordHkcu(kPeekKeyEsc, L"DisablePreviewDesktop", &g_peekOriginalPreviewDesktop);
+    g_peekOriginalHadAeroPeek =
+        ReadRegDwordHkcu(kPeekKeyDwm, L"EnableAeroPeek", &g_peekOriginalAeroPeek);
+}
+
+// Called from Wh_ModBeforeUninit, while the mod is still loaded and normally unloading:
+// puts both values back exactly as they were before this mod's menu entry was ever used,
+// including removing a value that did not exist before (never leaves a value this mod
+// invented). A no-op if the toggle in this menu was never actually used.
+static void RestorePeekAtDesktopOnUnload() noexcept {
+    try {
+        if (!g_peekOriginalCaptured) return;
+        ScopedHKey key;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, kPeekKeyEsc, 0, KEY_SET_VALUE, key.receive()) ==
+                ERROR_SUCCESS && key.valid()) {
+            if (g_peekOriginalHadPreviewDesktop)
+                RegSetValueExW(key.get(), L"DisablePreviewDesktop", 0, REG_DWORD,
+                               (const BYTE*)&g_peekOriginalPreviewDesktop, sizeof(DWORD));
+            else
+                RegDeleteValueW(key.get(), L"DisablePreviewDesktop");
+        }
+        ScopedHKey dwmKey;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, kPeekKeyDwm, 0, KEY_SET_VALUE, dwmKey.receive()) ==
+                ERROR_SUCCESS && dwmKey.valid()) {
+            if (g_peekOriginalHadAeroPeek)
+                RegSetValueExW(dwmKey.get(), L"EnableAeroPeek", 0, REG_DWORD,
+                               (const BYTE*)&g_peekOriginalAeroPeek, sizeof(DWORD));
+            else
+                RegDeleteValueW(dwmKey.get(), L"EnableAeroPeek");
+        }
+        DWORD_PTR ignored = 0;
+        SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)kPeekCacheGroup,
+                            SMTO_ABORTIFHUNG, 800, &ignored);
+        Wh_Log(L"[menu] Peek-at-desktop registry values restored to what they were before "
+               L"this mod touched them");
+    } catch (...) {
+        Wh_Log(L"[menu] exception while restoring the Peek-at-desktop registry values");
+    }
+}
+
 static bool TogglePeekAtDesktop(bool* nowEnabled) {
+    CapturePeekOriginalValuesOnce();
     const bool want = !PeekAtDesktopEnabled();
     bool ok = WriteRegDwordHkcu(kPeekKeyEsc, L"DisablePreviewDesktop", want ? 0 : 1);
     if (want) ok = WriteRegDwordHkcu(kPeekKeyDwm, L"EnableAeroPeek", 1) && ok;
@@ -3662,20 +2944,6 @@ static bool RunCommandGuarded(const wchar_t* file, const wchar_t* params,
     return false;
 }
 
-// Accordo iniettato: usato dalle voci che devono per forza passare da una scorciatoia
-// di Windows (Esegui e Desktop nel menu Win+X).
-static void InjectSystemChord(wchar_t key) noexcept {
-    try {
-        INPUT in[4] = {};
-        for (INPUT& i : in) i.type = INPUT_KEYBOARD;
-        in[0].ki.wVk = VK_LWIN;
-        in[1].ki.wVk = static_cast<WORD>(key);
-        in[2].ki.wVk = static_cast<WORD>(key);   in[2].ki.dwFlags = KEYEVENTF_KEYUP;
-        in[3].ki.wVk = VK_LWIN;                  in[3].ki.dwFlags = KEYEVENTF_KEYUP;
-        SendInput(4, in, sizeof(INPUT));
-    } catch (...) {
-    }
-}
 
 }  // namespace ShellOpGuard
 
@@ -3881,65 +3149,6 @@ static HMENU WINAPI LoadMenuW_Hook(HINSTANCE hInstance, LPCWSTR lpMenuName) {
 
 // --- 3) language indicator fix: removed from this mod (1.3.9). It lives in the separate
 // mod "windows-10-language-flyout-guard"; the hooks it needed were never registered here.
-
-// --- 4) notification crash fix (ilovethisgame's mod), exact-build gated ---
-// Signature identical to ilovethisgame's original (no WINAPI convention:
-// on x86-64 there is only one anyway, but the match must stay exact).
-typedef HRESULT (*NotificationsAdded_t)(void* pthis, uint32_t arg2, void* const* iterator, uint32_t length);
-static NotificationsAdded_t NotificationsAdded_Original = nullptr;
-
-static HRESULT NotificationsAdded_Hook(void* pthis, uint32_t arg2, void* const* iterator, uint32_t length) {
-    (void)pthis;
-    (void)arg2;
-    (void)iterator;
-    try {
-        Wh_Log(L"[notif] %u notifications suppressed by the compatibility hook (legacy shell)", length);
-    } catch (...) {
-        // No C++ exception is allowed to escape this callback.
-    }
-    return S_OK;
-}
-
-static bool InstallNotificationCrashFix() {
-    if (!g_cfg.fixNotificationsCrash) {
-        Wh_Log(L"[notif] compatibility hook disabled; virtual policy fallback may be used");
-        return false;
-    }
-
-    const BuildInfo* runtimeBuild = nullptr;
-    for (int i = 0; i < kBuildCount; i++) {
-        if (g_explorerTs == kBuilds[i].timeDateStamp &&
-            g_explorerImageSize == kBuilds[i].sizeOfImage) {
-            runtimeBuild = &kBuilds[i];
-            break;
-        }
-    }
-
-    if (!runtimeBuild || !runtimeBuild->notificationOffset) {
-        Wh_Log(L"[notif] no verified offset for this running shell build; using the virtual suppression fallback");
-        return false;
-    }
-
-    HMODULE module = GetModuleHandleW(nullptr);
-    if (!module) {
-        Wh_Log(L"[notif] main module handle unavailable; using the virtual suppression fallback");
-        return false;
-    }
-
-    void* target = (void*)((BYTE*)module + runtimeBuild->notificationOffset);
-    if (!Wh_SetFunctionHook(target, (void*)NotificationsAdded_Hook,
-                            (void**)&NotificationsAdded_Original)) {
-        Wh_Log(L"[notif] compatibility hook installation failed for %s; using the virtual suppression fallback",
-               runtimeBuild->label);
-        return false;
-    }
-
-    g_notificationCrashFixActive.store(true, std::memory_order_release);
-    Wh_Log(L"[notif] compatibility fix active for verified runtime build %s (base+0x%X)",
-           runtimeBuild->label, runtimeBuild->notificationOffset);
-    return true;
-}
-
 // --- 5) network: guarded routing for non-PNI network launches --------------
 // The old generic workaround can still rewrite a network-settings launch from
 // another caller. A click delivered to pnidui's real PNIHiddenWnd is different:
@@ -3984,10 +3193,6 @@ static bool IsBlockedNetworkPage(LPCWSTR target) {
     return false;
 }
 
-namespace Win10Restyle {
-void Arm();
-void Shutdown();
-}
 // 1.3.2: the click on the network icon opens the genuine Windows 10 flyout through the shell
 // experience manager. It is defined further down, inside NetworkTrayForce (it needs the tray
 // icon rectangle and the PNI registration), and declared here in that same namespace: a
@@ -4242,9 +3447,15 @@ static UINT NetworkMenuMessage() {
 }
 
 
-static LRESULT CALLBACK NetworkIconSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
-                                                UINT_PTR sid, DWORD_PTR ref) {
-    (void)sid;
+// 1.4.0: this used to be a raw SetWindowSubclass callback (6-parameter SUBCLASSPROC). The
+// window it subclasses (PNIHiddenWnd / stobject's service window) belongs to the shell's own
+// thread, not this mod's, so a raw SetWindowSubclass call here is a cross-thread call into
+// comctl32 state that is not thread-safe, and the subclass was also never removed on unload.
+// It now uses the same WindhawkUtils::*FromAnyThread machinery and 5-parameter signature as
+// PniClickSubclassProc / BatteryClickSubclassProc / TrayMenuSubclassProc below, and is torn
+// down in FlyoutServicesThread alongside them.
+static LRESULT NetworkIconSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
+                                       DWORD_PTR ref) {
     (void)ref;
     (void)wParam;
     try {
@@ -4322,6 +3533,7 @@ static const wchar_t* TrayOwnerModuleOfWindow(HWND w) {
 
 static HWND g_trayWnds[2] = {};
 static int g_trayWndCount = 0;
+static const UINT_PTR kNetworkIconSubclassId = 81;
 
 static BOOL CALLBACK FindPniWindowProc(HWND w, LPARAM param) {
     wchar_t cls[64] = {};
@@ -4350,7 +3562,16 @@ static BOOL CALLBACK FindPniWindowProc(HWND w, LPARAM param) {
     if (g_trayWndCount >= (int)_countof(g_trayWnds)) return FALSE;
 
     g_trayWnds[g_trayWndCount++] = w;
-    SetWindowSubclass(w, NetworkIconSubclassProc, (UINT_PTR)(2 + g_trayWndCount), 0);
+    // 1.4.0: cross-thread subclass of a window owned by the shell's thread - must go through
+    // WindhawkUtils, like every other subclass this mod installs on a shell window. Raw
+    // SetWindowSubclass cannot safely subclass a window owned by another thread.
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(w, NetworkIconSubclassProc,
+                                                       kNetworkIconSubclassId)) {
+        Wh_Log(L"[tray] right-click supervision: could not subclass service window class %s (%s)",
+               cls, owner ? owner : L"unknown module");
+        g_trayWndCount--;
+        return TRUE;
+    }
     Wh_Log(L"[tray] right-click supervision: service window class %s (%s)",
            cls, owner ? owner : L"unknown module");
     if (g_trayWndCount >= (int)_countof(g_trayWnds)) return FALSE;
@@ -7358,329 +6579,6 @@ static void RetryTrayModulesIfNeeded() {
     LoadTrayModules(L"recupero differito");
 }
 
-// ===========================================================================
-// ACTION CENTRE: WHAT THIS WINDOWS STILL HAS (diagnostics only)
-// ===========================================================================
-// The Windows 10 shell opens its action centre by asking ShellExperienceHost for
-// it. On Windows 11 24H2 ShellExperienceHost no longer carries that code path,
-// so nothing appears - and here the Windows 11 shell is not running at all,
-// because the shell is the Windows 10 one. Before choosing a way to restore it,
-// the mod writes down what exists. Three probes, three kinds of evidence:
-//   A) processes: if asking for the action centre starts a XAML host, it is named;
-//   B) windows: if a panel window appears anywhere, its class is named;
-//   C) the notification platform: the per-user database is copied and read with
-//      the winsqlite3.dll that ships with Windows, so the count and the last
-//      notifications are known (nothing is written, the live file is only read).
-// Every line carries the sender process, so the log says who did what.
-
-static const wchar_t* const kAcHostProcesses[] = {
-    L"ShellExperienceHost.exe",
-    L"ShellHost.exe",
-};
-static const int kAcHostProcessCount = (int)(sizeof(kAcHostProcesses) / sizeof(kAcHostProcesses[0]));
-
-// Window classes that mean "a shell panel was created": the XAML hosts and the
-// names the panels have used across builds.
-static const wchar_t* const kAcWindowMarkers[] = {
-    L"corewindow", L"actioncenter", L"controlcenter", L"notification",
-    L"shellexperience", L"immersive",
-};
-static const int kAcWindowMarkerCount = (int)(sizeof(kAcWindowMarkers) / sizeof(kAcWindowMarkers[0]));
-
-// Defined with the indicator measurement further below, used here to name the
-// module a window class procedure comes from.
-static void ModuleOfAddress(const void* addr, wchar_t* buf, size_t count);
-
-static DWORD g_acProbeUntil = 0;
-static int g_acProbeLogs = 0;
-static bool g_acDbProbed = false;
-static wchar_t g_acWindowsSeen[8][64] = {};
-static int g_acWindowsSeenCount = 0;
-
-// A library loaded just for this probe: RAII, so it is freed on every path.
-class ScopedLibrary {
-public:
-    explicit ScopedLibrary(HMODULE m = nullptr) : m_m(m) {}
-    ~ScopedLibrary() { if (m_m) FreeLibrary(m_m); }
-    ScopedLibrary(const ScopedLibrary&) = delete;
-    ScopedLibrary& operator=(const ScopedLibrary&) = delete;
-    HMODULE get() const { return m_m; }
-private:
-    HMODULE m_m;
-};
-
-class ScopedDeleteFile {
-public:
-    explicit ScopedDeleteFile(const wchar_t* path) noexcept {
-        if (path) wcsncpy_s(m_path, _countof(m_path), path, _TRUNCATE);
-    }
-    ~ScopedDeleteFile() noexcept {
-        if (!m_path[0]) return;
-        if (!DeleteFileW(m_path)) {
-            const DWORD error = GetLastError();
-            if (error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND)
-                Wh_Log(L"[actioncenter] temporary notification-probe file cleanup failed (%lu): %s",
-                       error, m_path);
-        }
-    }
-    ScopedDeleteFile(const ScopedDeleteFile&) = delete;
-    ScopedDeleteFile& operator=(const ScopedDeleteFile&) = delete;
-private:
-    wchar_t m_path[MAX_PATH]{};
-};
-
-// Copies a file that another process keeps open (the notification database is
-// open in the service): widest sharing on the source, plain create on the copy.
-static bool CopyFileWideShare(const wchar_t* src, const wchar_t* dst) {
-    if (!src || !dst) return false;
-    ScopedHandle in(CreateFileW(src, GENERIC_READ,
-                                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                                nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
-    if (!in.valid()) return false;
-    ScopedHandle out(CreateFileW(dst, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
-                                 FILE_ATTRIBUTE_NORMAL, nullptr));
-    if (!out.valid()) return false;
-    char buf[64 * 1024];
-    DWORD read = 0;
-    while (ReadFile(in.get(), buf, sizeof(buf), &read, nullptr) && read) {
-        DWORD written = 0;
-        if (!WriteFile(out.get(), buf, read, &written, nullptr) || written != read) return false;
-    }
-    return true;
-}
-
-// --- A) and B): processes and windows --------------------------------------
-static void AcLogProcessProbe() {
-    ScopedHandle snap(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
-    if (!snap.valid()) return;
-    PROCESSENTRY32W pe = {};
-    pe.dwSize = sizeof(pe);
-    if (!Process32FirstW(snap.get(), &pe)) return;
-    do {
-        for (int i = 0; i < kAcHostProcessCount && g_acProbeLogs < 20; i++) {
-            if (_wcsicmp(pe.szExeFile, kAcHostProcesses[i]) != 0) continue;
-            static bool logged[4] = {};
-            if (logged[i]) continue;
-            logged[i] = true;
-            g_acProbeLogs++;
-            Wh_Log(L"[actioncenter] XAML host running: %s (pid %lu)", pe.szExeFile, pe.th32ProcessID);
-        }
-    } while (Process32NextW(snap.get(), &pe));
-}
-
-static BOOL CALLBACK AcWindowProbeProc(HWND hwnd, LPARAM) {
-    try {
-        if (!IsWindowVisible(hwnd)) return TRUE;
-        wchar_t cls[128] = {};
-        if (!GetClassNameW(hwnd, cls, _countof(cls)) || !cls[0]) return TRUE;
-        wchar_t low[128] = {};
-        for (int i = 0; i < 127 && cls[i]; i++) low[i] = (wchar_t)towlower(cls[i]);
-        bool matches = false;
-        for (int i = 0; i < kAcWindowMarkerCount; i++)
-            if (wcsstr(low, kAcWindowMarkers[i])) matches = true;
-        if (!matches) return TRUE;
-        for (int i = 0; i < g_acWindowsSeenCount; i++)
-            if (_wcsicmp(g_acWindowsSeen[i], cls) == 0) return TRUE;
-        if (g_acWindowsSeenCount >= (int)(sizeof(g_acWindowsSeen) / sizeof(g_acWindowsSeen[0]))) return TRUE;
-        wcsncpy_s(g_acWindowsSeen[g_acWindowsSeenCount], 64, cls, _TRUNCATE);
-        g_acWindowsSeenCount++;
-        // The sender: which process owns this window - the answer to "who showed it".
-        DWORD pid = 0;
-        GetWindowThreadProcessId(hwnd, &pid);
-        wchar_t mod[MAX_PATH] = {};
-        ModuleOfAddress((const void*)GetClassLongPtrW(hwnd, GCLP_WNDPROC), mod, _countof(mod));
-        const wchar_t* modName = wcsrchr(mod, L'\\');
-        Wh_Log(L"[actioncenter] window appears: %s 0x%p (pid %lu, %s)",
-               cls, (void*)hwnd, pid, modName ? modName + 1 : L"unknown module");
-    } catch (...) {
-        static std::atomic<bool> reported{false};
-        if (!reported.exchange(true))
-            Wh_Log(L"[actioncenter] window probe callback raised an exception");
-    }
-    return TRUE;
-}
-
-// --- C) the notification platform -----------------------------------------
-static void ProbeNotificationDatabase() {
-    wchar_t srcDir[MAX_PATH] = {};
-    if (!GetEnvironmentVariableW(L"LOCALAPPDATA", srcDir, _countof(srcDir))) {
-        Wh_Log(L"[actioncenter] LOCALAPPDATA not readable: notification database probe skipped");
-        return;
-    }
-    wchar_t src[MAX_PATH] = {};
-    swprintf_s(src, L"%s\\Microsoft\\Windows\\Notifications\\wpndatabase.db", srcDir);
-    const DWORD attrs = GetFileAttributesW(src);
-    if (attrs == INVALID_FILE_ATTRIBUTES) {
-        Wh_Log(L"[actioncenter] no notification database on this machine: %s", src);
-        return;
-    }
-    WIN32_FILE_ATTRIBUTE_DATA fad = {};
-    if (GetFileAttributesExW(src, GetFileExInfoStandard, &fad) &&
-        (fad.nFileSizeHigh > 0 || fad.nFileSizeLow > 32u * 1024u * 1024u)) {
-        Wh_Log(L"[actioncenter] notification database larger than 32 MB: probe skipped");
-        return;
-    }
-
-    // A copy is read, never the live file, and the copies are removed at the end.
-    wchar_t copy[MAX_PATH] = {};
-    swprintf_s(copy, L"%s\\wpndb-probe.db", g_cfg.storePath);
-    ScopedDeleteFile copyCleanup(copy);
-    if (!CopyFileWideShare(src, copy)) {
-        Wh_Log(L"[actioncenter] the notification database is locked and could not be copied");
-        return;
-    }
-    wchar_t srcWal[MAX_PATH] = {}, copyWal[MAX_PATH] = {};
-    wcscpy_s(srcWal, src); wcscat_s(srcWal, L"-wal");
-    wcscpy_s(copyWal, copy); wcscat_s(copyWal, L"-wal");
-    ScopedDeleteFile walCleanup(copyWal);
-    const bool haveWal = GetFileAttributesW(srcWal) != INVALID_FILE_ATTRIBUTES &&
-                         CopyFileWideShare(srcWal, copyWal);
-    wchar_t srcShm[MAX_PATH] = {}, copyShm[MAX_PATH] = {};
-    wcscpy_s(srcShm, src); wcscat_s(srcShm, L"-shm");
-    wcscpy_s(copyShm, copy); wcscat_s(copyShm, L"-shm");
-    ScopedDeleteFile shmCleanup(copyShm);
-    const bool haveShm = GetFileAttributesW(srcShm) != INVALID_FILE_ATTRIBUTES &&
-                         CopyFileWideShare(srcShm, copyShm);
-
-    ScopedLibrary sqlLib(LoadLibraryExW(L"winsqlite3.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32));
-    if (!sqlLib.get()) {
-        Wh_Log(L"[actioncenter] winsqlite3.dll not available: probe skipped");
-        return;
-    }
-    typedef int (*open_v2_t)(const char*, void**, int, const char*);
-    typedef int (*prepare_t)(void*, const char*, int, void**, const char**);
-    typedef int (*step_t)(void*);
-    typedef const unsigned char* (*col_text_t)(void*, int);
-    typedef int (*col_int_t)(void*, int);
-    typedef int (*finalize_t)(void*);
-    typedef int (*close_t)(void*);
-    typedef const char* (*errmsg_t)(void*);
-    struct ScopedSqliteDb {
-        void* handle = nullptr;
-        close_t close = nullptr;
-        ~ScopedSqliteDb() { closeNow(); }
-        void closeNow() noexcept {
-            if (!handle || !close) return;
-            const int result = close(handle);
-            if (result != 0) {
-                Wh_Log(L"[actioncenter] SQLite close returned %d during probe cleanup", result);
-                return;  // Keep ownership so the destructor can retry once.
-            }
-            handle = nullptr;
-        }
-    };
-    struct ScopedSqliteStatement {
-        void* handle = nullptr;
-        finalize_t finalize = nullptr;
-        ~ScopedSqliteStatement() noexcept {
-            if (handle && finalize) {
-                const int result = finalize(handle);
-                if (result != 0)
-                    Wh_Log(L"[actioncenter] SQLite statement finalization returned %d", result);
-            }
-        }
-    };
-    auto pOpen = (open_v2_t)GetProcAddress(sqlLib.get(), "sqlite3_open_v2");
-    auto pPrepare = (prepare_t)GetProcAddress(sqlLib.get(), "sqlite3_prepare_v2");
-    auto pStep = (step_t)GetProcAddress(sqlLib.get(), "sqlite3_step");
-    auto pText = (col_text_t)GetProcAddress(sqlLib.get(), "sqlite3_column_text");
-    auto pInt = (col_int_t)GetProcAddress(sqlLib.get(), "sqlite3_column_int");
-    auto pFinal = (finalize_t)GetProcAddress(sqlLib.get(), "sqlite3_finalize");
-    auto pClose = (close_t)GetProcAddress(sqlLib.get(), "sqlite3_close");
-    auto pErrmsg = (errmsg_t)GetProcAddress(sqlLib.get(), "sqlite3_errmsg");
-    if (!pOpen || !pPrepare || !pStep || !pText || !pFinal || !pClose) {
-        Wh_Log(L"[actioncenter] winsqlite3.dll has no usable entry points: probe skipped");
-        return;
-    }
-
-    ScopedSqliteDb db{};
-    db.close = pClose;
-    if (pOpen((const char*)copy, &db.handle, 0x00000002 /*READWRITE*/ | 0x00000040 /*URI*/, nullptr) != 0 || !db.handle) {
-        wchar_t wideErr[200] = L"no error text";
-        if (db.handle && pErrmsg) {
-            const char* msg = pErrmsg(db.handle);
-            if (msg) MultiByteToWideChar(CP_UTF8, 0, msg, -1, wideErr, _countof(wideErr));
-        }
-        Wh_Log(L"[actioncenter] the notification database copy did not open (%s)", wideErr);
-        db.closeNow();
-        return;
-    }
-
-    Wh_Log(L"[actioncenter] notification database copy ready (%s%s)",
-           haveWal ? L"with WAL" : L"without WAL", haveShm ? L", with SHM" : L"");
-
-    // What tables are there: the schema is the answer to "can this be read at all".
-    {
-        wchar_t tables[240] = {};
-        ScopedSqliteStatement st{};
-        st.finalize = pFinal;
-        if (pPrepare(db.handle, "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name", -1, &st.handle, nullptr) == 0) {
-            size_t used = 0;
-            int rows = 0;
-            while (pStep(st.handle) == 100 && rows < 14) {
-                const unsigned char* name = pText(st.handle, 0);
-                if (name) {
-                    wchar_t wname[64] = {};
-                    MultiByteToWideChar(CP_UTF8, 0, (const char*)name, -1, wname, _countof(wname));
-                    if (used + wcslen(wname) + 2 < _countof(tables)) {
-                        if (used) { tables[used++] = L','; tables[used++] = L' '; }
-                        wcsncpy_s(tables + used, _countof(tables) - used, wname, _TRUNCATE);
-                        used = wcslen(tables);
-                    }
-                }
-                rows++;
-            }
-            Wh_Log(L"[actioncenter] notification database tables (%d): %s", rows, tables);
-        } else {
-            Wh_Log(L"[actioncenter] the table list could not be read");
-        }
-    }
-
-    // Count only. Notification payloads can contain private user content and
-    // are deliberately never copied into the Windhawk log.
-    {
-        ScopedSqliteStatement st{};
-        st.finalize = pFinal;
-        if (pPrepare(db.handle, "SELECT COUNT(*) FROM Notification", -1, &st.handle, nullptr) == 0) {
-            if (pStep(st.handle) == 100 && pInt)
-                Wh_Log(L"[actioncenter] notifications in the database: %d", pInt(st.handle, 0));
-        } else {
-            Wh_Log(L"[actioncenter] the Notification table is not readable");
-        }
-    }
-
-    db.closeNow();
-    Wh_Log(L"[actioncenter] probe finished; RAII is removing temporary copies");
-}
-
-// Runs for the first three minutes of the shell: that is when the user tries the
-// action centre. After that the probe is over and costs nothing.
-static void ActionCenterProbeTick() {
-    try {
-        const DWORD now = GetTickCount();
-        if (!g_acProbeUntil) g_acProbeUntil = now + 180000;
-        if (now > g_acProbeUntil) return;
-        static DWORD last = 0;
-        if (last && now - last < 2000) return;
-        const bool first = (last == 0);
-        last = now;
-
-        AcLogProcessProbe();
-        EnumWindows(AcWindowProbeProc, 0);
-
-        // The database probe waits for the notification service to have written
-        // something and runs once: 12 seconds after the shell started.
-        if (g_verboseDiagnostics.load(std::memory_order_relaxed) &&
-            !g_acDbProbed && !first &&
-            (now - (g_acProbeUntil - 180000)) > 12000) {
-            g_acDbProbed = true;
-            ProbeNotificationDatabase();
-        }
-    } catch (...) {
-        Wh_Log(L"[actioncenter] exception in the probe");
-    }
-}
-
 static void** FindIatSlot(HMODULE module, const char* dllHint, const char* funcHint) {
 #ifdef _WIN64
     if (!module || !dllHint || !funcHint) return nullptr;
@@ -7733,16 +6631,6 @@ static void LogCallerModule(void* caller, wchar_t* buf, size_t count) {
 }
 
 
-// and only once every 12 seconds.
-static void ModuleOfAddress(const void* addr, wchar_t* buf, size_t count) {
-    if (!buf || count == 0) return;
-    buf[0] = 0;
-    HMODULE m = nullptr;
-    if (addr && GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                                       GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                   (LPCWSTR)addr, &m) && m)
-        GetModuleFileNameW(m, buf, (DWORD)count);
-}
 
 
 // 1.3.9: OpenSettingsPage and ToggleWifiRadio are gone. Both were unused, and the first one
@@ -7781,11 +6669,6 @@ static int g_verifyFailures = 0;
 static int g_publishCount = 0;
 
 // Stato del ripristino del pulsante di overflow e del flyout autentico.
-// Le tre costanti seguenti servono esclusivamente a migrare un backup creato da
-// una versione precedente; questa versione non ne crea uno nuovo.
-static constexpr wchar_t kTrayForceStateKey[] = L"Software\\Win10Shell\\TrayForce";
-static constexpr wchar_t kAutoTrayBackupValue[] = L"EnableAutoTrayOriginal";
-static constexpr DWORD kAutoTrayAbsent = 0xFFFFFFFF;
 static std::atomic<bool> g_autoTrayRestored{false};
 // All'avvio la mod non tocca la barra. L'override virtuale e l'eventuale reset
 // di TrayNotify scattano solo se, dopo l'attesa, l'icona forzata non e' comparsa:
@@ -7822,39 +6705,6 @@ static void NudgeTray() noexcept {
 // intatto, quindi togliendo la risposta torna il comportamento normale dell'overflow.
 static bool PublishForcedRegistration() noexcept;   // definita piu' sotto
 
-// 1.0.0: solo lettura. Un backup lasciato da una versione precedente viene
-// riconosciuto e registrato nel log, ma la mod non scrive piu' nel registro
-// dell'utente, nemmeno per rimediare a se stessa: se il valore memorizzato non
-// serve piu', l'utente cancella la chiave indicata nel log.
-static void MigrateLegacyAutoTrayStateOnce() noexcept {
-    static std::atomic<bool> attempted{false};
-    if (attempted.exchange(true, std::memory_order_acq_rel)) return;
-    try {
-
-        ScopedHKey legacy;
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, kTrayForceStateKey, 0,
-                          KEY_QUERY_VALUE | KEY_SET_VALUE,
-                          legacy.receive()) != ERROR_SUCCESS || !legacy.valid()) {
-            return;
-        }
-        DWORD stored = 0;
-        DWORD type = 0;
-        DWORD size = sizeof(stored);
-        if (RegQueryValueExW(legacy.get(), kAutoTrayBackupValue, nullptr, &type,
-                             reinterpret_cast<BYTE*>(&stored), &size) != ERROR_SUCCESS ||
-            type != REG_DWORD || size != sizeof(stored)) {
-            return;
-        }
-
-        // Nessuna scrittura: il valore reale di Explorer resta quello che e'.
-        Wh_Log(L"[tray-force] legacy EnableAutoTray backup found (%s in a former build): "
-               L"the real Explorer value is left untouched. If the key is no longer "
-               L"needed, delete HKCU\\Software\\Win10Shell\\TrayForce",
-               stored == kAutoTrayAbsent ? L"no value" : L"a saved value");
-    } catch (...) {
-        Wh_Log(L"[tray-force] exception while migrating legacy EnableAutoTray state");
-    }
-}
 
 static bool RestoreOverflowChevron() noexcept {
     try {
@@ -8988,19 +7838,64 @@ static LRESULT CALLBACK OwnerWindowProc(HWND hwnd, UINT message, WPARAM wParam,
         if (message == kCallbackMessage) {
             if (g_unloading.load(std::memory_order_acquire)) return 0;
             const UINT event = LOWORD(lParam);          // NIN_* oppure WM_*
+            const UINT iconIdHi = HIWORD(lParam);       // version-4 only: icon ID here
+            // Every callback from the icon is logged with its decoded event and the
+            // version-4 icon-ID word, except plain mouse-move hover (by far the most frequent
+            // one and never actionable), so a click that reaches here but does not match any
+            // branch below is still visible without flooding the log.
+            if (event != WM_MOUSEMOVE) {
+                Wh_Log(L"[diag] icon callback: event=0x%04X iconIdHi=%u wParam=0x%p kIconId=%u",
+                       event, iconIdHi, (void*)wParam, (unsigned)kIconId);
+            }
             if (event == WM_LBUTTONUP || event == NIN_SELECT || event == NIN_KEYSELECT)
                 OpenNativeNetworkFlyout(hwnd, L"left");
             else if (event == WM_RBUTTONUP || event == WM_CONTEXTMENU)
                 OpenNativeNetworkFlyout(hwnd, L"destro");   // menu di pnidui (stesse voci)
-            // WM_MOUSEMOVE / WM_LBUTTONDOWN / altro: nessuna azione, nessun log
-            // ad alta frequenza.
+            // WM_MOUSEMOVE / WM_LBUTTONDOWN / altro: nessuna azione (ma il log sopra c'e' gia',
+            // tranne per il mouse-move).
             return 0;
+        }
+        // Diagnosed via a live DbgView capture: on at least one system, a second, genuine
+        // registration for the same system network icon (GUID) appears some minutes after
+        // this mod's forced one - almost certainly the authentic pnidui.dll (downloaded and
+        // loaded by this same mod) completing its own native registration once its internal
+        // state machine is ready. From that point on, real clicks are delivered to this same
+        // owner window using THAT registration's callback message number instead of
+        // kCallbackMessage - a RegisterWindowMessage-allocated value (high range, like
+        // taskbarCreated), different on every boot, so it cannot be matched by a fixed
+        // constant. It is still unmistakably an icon-callback payload for this exact icon:
+        // HIWORD(lParam) carries the icon ID exactly like the version-4 convention used
+        // above, and LOWORD(lParam) carries the same NIN_*/WM_* event codes. Rather than
+        // depend on discovering the exact message (which is not a fixed value we can name
+        // ahead of time), any unrecognized message in the RegisterWindowMessage range whose
+        // payload decodes to our own icon ID is treated the same way a direct kCallbackMessage
+        // callback would be. This keeps the flyout working even while a second, independent
+        // registration for the same icon is alive in this process.
+        if (message >= 0xC000 && message != g_taskbarCreatedMessage &&
+            message != ShowNetworkFlyoutMessage() &&
+            message != NetworkTrayForce::BatteryFlyout::ShowBatteryFlyoutMessage()) {
+            const UINT event = LOWORD(lParam);
+            const UINT iconIdHi = HIWORD(lParam);
+            if (iconIdHi == kIconId &&
+                (event == WM_LBUTTONUP || event == NIN_SELECT || event == NIN_KEYSELECT ||
+                 event == WM_RBUTTONUP || event == WM_CONTEXTMENU) &&
+                !g_unloading.load(std::memory_order_acquire)) {
+                Wh_Log(L"[diag] unrecognized message 0x%04X decodes as an icon callback for "
+                       L"this icon (event=0x%04X): treated like kCallbackMessage", message,
+                       event);
+                if (event == WM_LBUTTONUP || event == NIN_SELECT || event == NIN_KEYSELECT)
+                    OpenNativeNetworkFlyout(hwnd, L"left");
+                else
+                    OpenNativeNetworkFlyout(hwnd, L"destro");
+                return 0;
+            }
         }
         if (message == kMsgQuitOwner) {
             DestroyWindow(hwnd);
             return 0;
         }
         if (message == WM_DESTROY) {
+
             PostQuitMessage(0);
             return 0;
         }
@@ -9634,27 +8529,11 @@ static void LoadFlyoutSettings() {
     g_cfg.shellOpGuardTimeoutMs = Wh_GetIntSetting(L"ShellOpGuardTimeoutMs");
     if (g_cfg.shellOpGuardTimeoutMs < 200) g_cfg.shellOpGuardTimeoutMs = 200;
     if (g_cfg.shellOpGuardTimeoutMs > 10000) g_cfg.shellOpGuardTimeoutMs = 10000;
-    // Constants of the reference mod: the notification policy is only a virtual
-    // fallback. No private QuickActions binary patch is applied by this source, and
-    // the experimental UWP taskbar buttons stay off.
-    g_cfg.notificationsOff = true;
+    // Constants of the reference mod: no private QuickActions binary patch is applied by
+    // this source, and the experimental UWP taskbar buttons stay off.
     g_cfg.fixUwpTaskbar = false;
-    g_cfg.fixNotificationsCrash = true;   // the Action Center policy is served in memory
     g_logTrayActivity = Wh_GetIntSetting(L"LogTrayActivity") != 0;
-
-    // Action Center animation (base: the mod by AdmXP8, v0.9).
-    g_acAnimation = Wh_GetIntSetting(L"ActionCenterAnimation") != 0;
     g_squareFlyoutCorners = Wh_GetIntSetting(L"ExperimentalSquareFlyoutCorners") != 0;
-    g_acCloseDelayMs = ClampInt(Wh_GetIntSetting(L"ActionCenterCloseDelayMs"), 1, 1900);
-    g_acSlideInMs = ClampInt(Wh_GetIntSetting(L"ActionCenterSlideInMs"), 0, 1000);
-    g_acSlideOutMs = ClampInt(Wh_GetIntSetting(L"ActionCenterSlideOutMs"), 0, 1000);
-    g_showActionCenterButton = Wh_GetIntSetting(L"ShowActionCenterButton") != 0;
-    try {
-        auto value = WindhawkUtils::StringSetting::make(L"ActionCenterConflict");
-        g_actionCenterReassert = !value.get() || _wcsicmp(value.get(), L"reassert") == 0;
-    } catch (...) {
-        g_actionCenterReassert = true;
-    }
 }
 // ---------------------------------------------------------------------------
 // The two tray windows that own a menu of their own
@@ -9849,147 +8728,6 @@ static void ArmTrayMenuSubclass() {
     }
 }
 
-
-// ---------------------------------------------------------------------------
-// Action Center button: the opposite of what "hide-action-center-icon" does
-//
-// The Windows 10 taskbar keeps "show the Action Center button" in the window's own data,
-// 120 bytes in: the same byte that mod writes with FALSE. Here it is written with TRUE and
-// kept there, because a byte cannot be shared - whoever writes last wins. Two things make
-// running next to that mod safe:
-//   * every write is validated first (the byte must be committed, writable and not a guard
-//     page), so a different layout of the window data can never take the shell down;
-//   * the byte is re-read twice per second: when another mod sets it back to 0, the
-//     conflict is named in the log and the value is written again.
-// Nothing is written to the registry for this: the flag lives in the taskbar process only.
-// ---------------------------------------------------------------------------
-static const wchar_t* kActionCenterButtonClass = L"ControlCenterButton";
-static const size_t kActionCenterButtonFlagOffset = 120;   // same field as that mod
-
-typedef HWND(WINAPI* CreateWindowExW_t)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int,
-                                        HWND, HMENU, HINSTANCE, LPVOID);
-static CreateWindowExW_t CreateWindowExW_Original = nullptr;
-static HWND g_actionCenterButton = nullptr;
-static unsigned g_actionCenterConflicts = 0;
-static bool g_actionCenterConflictNamed = false;
-static bool g_actionCenterWriteRefused = false;
-
-// A byte is written only after this check: committed, writable, inside this process.
-static bool CanWriteByte(const void* address) {
-    MEMORY_BASIC_INFORMATION info = {};
-    if (!address) return false;
-    if (VirtualQuery(address, &info, sizeof(info)) != sizeof(info)) return false;
-    if (info.State != MEM_COMMIT) return false;
-    if (info.Protect & (PAGE_GUARD | PAGE_NOACCESS)) return false;
-    const DWORD protect = info.Protect & 0xFF;
-    return protect == PAGE_READWRITE || protect == PAGE_WRITECOPY ||
-           protect == PAGE_EXECUTE_READWRITE || protect == PAGE_EXECUTE_WRITECOPY;
-}
-
-static BYTE* ActionCenterButtonFlag(HWND hwnd) {
-    BYTE* data = reinterpret_cast<BYTE*>(GetWindowLongPtrW(hwnd, 0));
-    if (!data) return nullptr;
-    BYTE* flag = data + kActionCenterButtonFlagOffset;
-    return CanWriteByte(flag) ? flag : nullptr;
-}
-
-static bool WriteActionCenterButtonFlag(HWND hwnd, unsigned char value, const wchar_t* why) {
-    BYTE* flag = ActionCenterButtonFlag(hwnd);
-    if (!flag) {
-        if (!g_actionCenterWriteRefused) {
-            g_actionCenterWriteRefused = true;
-            Wh_Log(L"[actioncenter] the button flag is not writable in this build: the button "
-                   L"is left as the shell made it");
-        }
-        return false;
-    }
-    if (*flag == value) return true;
-    *flag = value;
-    Wh_Log(L"[actioncenter] button flag written to %u (%s)", (unsigned)value, why);
-    return true;
-}
-
-static bool IsActionCenterButtonClass(LPCWSTR className) {
-    if (!className || ((ULONG_PTR)className & ~(ULONG_PTR)0xffff) == 0) return false;
-    return _wcsicmp(className, kActionCenterButtonClass) == 0;
-}
-
-// Called from the CreateWindowExW hook, so the button is caught as the taskbar makes it.
-static void OnActionCenterButtonCreated(HWND hwnd) {
-    if (!g_showActionCenterButton) return;
-    g_actionCenterButton = hwnd;
-    WriteActionCenterButtonFlag(hwnd, 1, L"button created");
-}
-
-// Retry path: the button can also exist from before this mod was loaded.
-struct ActionCenterSearch { HWND found; };
-static BOOL CALLBACK ActionCenterSearchProc(HWND hwnd, LPARAM param) {
-    wchar_t cls[64] = {};
-    if (GetClassNameW(hwnd, cls, _countof(cls)) &&
-        _wcsicmp(cls, kActionCenterButtonClass) == 0) {
-        reinterpret_cast<ActionCenterSearch*>(param)->found = hwnd;
-        return FALSE;
-    }
-    return TRUE;
-}
-
-static HWND FindActionCenterButton() {
-    if (g_actionCenterButton && IsWindow(g_actionCenterButton)) return g_actionCenterButton;
-    ActionCenterSearch search = {};
-    HWND shell = GetShellWindow();
-    if (shell) EnumChildWindows(shell, ActionCenterSearchProc, reinterpret_cast<LPARAM>(&search));
-    if (!search.found) EnumWindows(ActionCenterSearchProc, reinterpret_cast<LPARAM>(&search));
-    if (search.found) g_actionCenterButton = search.found;
-    return g_actionCenterButton;
-}
-
-// Twice per second: keeps the value written and names the conflict.
-static void ActionCenterButtonTick() {
-    if (!g_showActionCenterButton || g_unloading.load()) return;
-    HWND button = FindActionCenterButton();
-    if (!button) return;
-    BYTE* flag = ActionCenterButtonFlag(button);
-    if (!flag) return;
-    if (*flag == 1) return;
-
-    if (!g_actionCenterReassert) {
-        if (!g_actionCenterConflictNamed) {
-            g_actionCenterConflictNamed = true;
-            Wh_Log(L"[actioncenter] another mod hides the Action Center button "
-                   L"(hide-action-center-icon writes the same byte). ActionCenterConflict=log: "
-                   L"the button stays hidden; set ShowActionCenterButton=off to stop both mods "
-                   L"from writing this byte");
-        }
-        return;
-    }
-
-    ++g_actionCenterConflicts;
-    WriteActionCenterButtonFlag(button, 1, L"reasserted against another mod");
-    if (!g_actionCenterConflictNamed) {
-        g_actionCenterConflictNamed = true;
-        Wh_Log(L"[actioncenter] conflict detected: another mod (hide-action-center-icon) writes "
-               L"the same button flag. This mod writes it back, so the button stays visible; "
-               L"disable the other mod, or set ShowActionCenterButton=off here, to stop both "
-               L"from writing this byte");
-    } else if (g_actionCenterConflicts % 20 == 0) {
-        Wh_Log(L"[actioncenter] the button flag was reset again (%u times): another mod is still "
-               L"writing this byte", g_actionCenterConflicts);
-    }
-}
-
-static HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
-                                        DWORD dwStyle, int x, int y, int nWidth, int nHeight,
-                                        HWND hWndParent, HMENU hMenu, HINSTANCE hInstance,
-                                        LPVOID lpParam) {
-    HWND hwnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, x, y,
-                                         nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
-    try {
-        if (hwnd && IsActionCenterButtonClass(lpClassName)) OnActionCenterButtonCreated(hwnd);
-    } catch (...) {
-    }
-    return hwnd;
-}
-
 // ---------------------------------------------------------------------------
 // The Windows 10 tray DLLs: this module downloads and verifies them itself
 //
@@ -10056,336 +8794,22 @@ static bool IsCoreWindow(HWND hwnd) {
     return wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0;
 }
 
-// The panel is a window of ShellExperienceHost.exe, not of this process.
-static bool IsShellExperienceHostWindow(HWND hwnd) {
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    if (!pid) return false;
-    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!process) return false;
-    wchar_t path[MAX_PATH] = {};
-    DWORD size = _countof(path);
-    const bool ok = QueryFullProcessImageNameW(process, 0, path, &size) != 0;
-    CloseHandle(process);
-    if (!ok) return false;
-    const wchar_t* base = wcsrchr(path, L'\\');
-    return _wcsicmp(base ? base + 1 : path, L"ShellExperienceHost.exe") == 0;
-}
-
-// Shape of the Action Center: full height of the work area, docked to the right edge of
-// its monitor, 250-700 px wide. Every other flyout is left alone.
-static bool LooksLikeActionCenterPanel(const RECT& rect, const MONITORINFO& monitor) {
-    const int width = rect.right - rect.left;
-    return rect.top <= monitor.rcWork.top + 2 &&
-           rect.bottom >= monitor.rcWork.bottom - 2 &&
-           rect.right >= monitor.rcMonitor.right - 2 &&
-           rect.right <= monitor.rcMonitor.right + 2 &&
-           width >= 250 && width <= 700;
-}
-
-// The close timer belongs to the shell's own code: only a timer set from inside
-// twinui.pcshell.dll is replaced.
-static bool TwinuiInStack() {
-    void* frames[12] = {};
-    const USHORT count = CaptureStackBackTrace(1, 12, frames, nullptr);
-    for (USHORT i = 0; i < count; ++i) {
-        HMODULE module = nullptr;
-        if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                                    GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                (LPCWSTR)frames[i], &module) || !module)
-            continue;
-        wchar_t path[MAX_PATH] = {};
-        if (!GetModuleFileNameW(module, path, _countof(path))) continue;
-        const wchar_t* base = wcsrchr(path, L'\\');
-        if (_wcsicmp(base ? base + 1 : path, L"twinui.pcshell.dll") == 0) return true;
-    }
-    return false;
-}
-
-// Only a relative timeout of about two seconds, only while the panel is open, and only
-// from the shell's own code: anything else is passed through untouched.
-static bool IsCloseTimer(const FILETIME* due) {
-    if (!g_acOpen || !due) return false;
-    ULARGE_INTEGER value = {};
-    value.LowPart = due->dwLowDateTime;
-    value.HighPart = due->dwHighDateTime;
-    const LONGLONG ticks = static_cast<LONGLONG>(value.QuadPart);
-    if (ticks >= 0) return false;
-    const LONGLONG ms = (-ticks) / 10000;
-    if (ms < 1900 || ms > 2100) return false;
-    return TwinuiInStack();
-}
-
-static FILETIME RelativeDue(int ms) {
-    LARGE_INTEGER value = {};
-    value.QuadPart = -static_cast<LONGLONG>(ms) * 10000;
-    FILETIME due = {};
-    due.dwLowDateTime = value.LowPart;
-    due.dwHighDateTime = static_cast<DWORD>(value.HighPart);
-    return due;
-}
-
-static double EaseOut(double t) {
-    const double u = 1.0 - t;
-    return 1.0 - u * u * u;
-}
-
-static ULONGLONG AcNowMs() {
-    LARGE_INTEGER frequency = {}, counter = {};
-    QueryPerformanceFrequency(&frequency);
-    QueryPerformanceCounter(&counter);
-    return static_cast<ULONGLONG>(counter.QuadPart * 1000 / frequency.QuadPart);
-}
-
-static void MovePanelX(HWND hwnd, int x, int y) {
-    SetWindowPos(hwnd, nullptr, x, y, 0, 0,
-                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
-}
-
-// Returns false when a newer open or close started while this slide was running.
-static bool RunAcSlide(HWND hwnd, int fromX, int toX, int y, int ms, LONG generation) {
-    const ULONGLONG start = AcNowMs();
-    for (;;) {
-        if (generation != g_acGeneration) return false;
-        const ULONGLONG elapsed = AcNowMs() - start;
-        const double t = elapsed >= static_cast<ULONGLONG>(ms)
-                             ? 1.0
-                             : static_cast<double>(elapsed) / static_cast<double>(ms);
-        MovePanelX(hwnd, fromX + static_cast<int>((toX - fromX) * EaseOut(t)), y);
-        if (t >= 1.0) return true;
-        Sleep(8);
-    }
-}
-
-struct AcSlideThreadParam {
-    HWND hwnd;
-    int fromX;
-    int toX;
-    int y;
-    int ms;
-    LONG generation;
-};
-
-static DWORD WINAPI AcSlideInThread(LPVOID parameter) noexcept {
-    std::unique_ptr<AcSlideThreadParam> owned(
-        static_cast<AcSlideThreadParam*>(parameter));
-    try {
-        const AcSlideThreadParam params = *owned;
-        if (RunAcSlide(params.hwnd, params.fromX, params.toX, params.y,
-                       params.ms, params.generation) && g_acAnimLogs++ < 6)
-            Wh_Log(L"[ac-anim] slide-in finished at x=%d", params.toX);
-    } catch (...) {
-        Wh_Log(L"[ac-anim] C++ exception in the slide-in worker");
-    }
-    return 0;
-}
-
-static bool StartAcSlideInThread(const AcSlideThreadParam& value) noexcept {
-    AcSlideThreadParam* params = nullptr;
-    try {
-        params = new AcSlideThreadParam(value);
-        std::lock_guard<std::mutex> lock(g_acSlideThreadsMutex);
-        if (g_acSlideThreadsStopping || g_unloading.load(std::memory_order_acquire)) {
-            delete params;
-            return false;
-        }
-
-        // Prune finished thread handles while retaining all running workers.
-        for (size_t i = 0; i < g_acSlideThreads.size();) {
-            if (WaitForSingleObject(g_acSlideThreads[i], 0) == WAIT_OBJECT_0) {
-                CloseHandle(g_acSlideThreads[i]);
-                g_acSlideThreads.erase(g_acSlideThreads.begin() + i);
-            } else {
-                ++i;
-            }
-        }
-        // Reserve before starting the thread, so a successful CreateThread can
-        // always be recorded and later joined by StopActionCenterAnimation.
-        g_acSlideThreads.reserve(g_acSlideThreads.size() + 1);
-        HANDLE thread = CreateThread(nullptr, 0, AcSlideInThread, params, 0, nullptr);
-        if (!thread) {
-            delete params;
-            Wh_Log(L"[ac-anim] slide-in worker not created (%lu)", GetLastError());
-            return false;
-        }
-        g_acSlideThreads.push_back(thread);
-        params = nullptr; // ownership transferred to the worker
-        return true;
-    } catch (...) {
-        delete params;
-        Wh_Log(L"[ac-anim] C++ exception while starting the slide-in worker");
-        return false;
-    }
-}
-
-// Called during unload: cancel and join slide workers before restoring the docked
-// position, so a worker cannot move the panel off-screen after the restoration.
-static void StopActionCenterAnimation() noexcept {
-    InterlockedIncrement(&g_acGeneration);
-    g_acOpen = false;
-
-    std::vector<HANDLE> threads;
-    bool collected = false;
-    bool loggedLockError = false;
-    while (!collected) {
-        try {
-            std::lock_guard<std::mutex> lock(g_acSlideThreadsMutex);
-            g_acSlideThreadsStopping = true;
-            threads.swap(g_acSlideThreads);
-            collected = true;
-        } catch (...) {
-            if (!loggedLockError) {
-                Wh_Log(L"[ac-anim] C++ exception while collecting slide-in worker handles; retrying");
-                loggedLockError = true;
-            }
-            Sleep(10);
-        }
-    }
-
-    // A cloaking callback may be running the close animation synchronously. The
-    // generation change above asks it to stop; wait before the final position reset.
-    while (g_acActiveCloakCalls.load(std::memory_order_seq_cst) != 0) Sleep(1);
-
-    for (HANDLE thread : threads) {
-        if (!thread) continue;
-        const DWORD waited = WaitForSingleObject(thread, INFINITE);
-        if (waited != WAIT_OBJECT_0)
-            Wh_Log(L"[ac-anim] waiting for a slide-in worker failed (%lu)", GetLastError());
-        CloseHandle(thread);
-    }
-
-    if (g_acPanel && g_acHaveFinal && IsWindow(g_acPanel))
-        MovePanelX(g_acPanel, g_acFinalX, g_acFinalY);
-}
-
 typedef HRESULT(WINAPI* DwmSetWindowAttribute_t)(HWND, DWORD, LPCVOID, DWORD);
 static DwmSetWindowAttribute_t DwmSetWindowAttribute_Original = nullptr;
 static const DWORD kDwmwaCloak = 13;
-
-typedef VOID(WINAPI* SetThreadpoolTimer_t)(void*, PFILETIME, DWORD, DWORD);
-static SetThreadpoolTimer_t SetThreadpoolTimer_Original = nullptr;
-typedef BOOL(WINAPI* SetThreadpoolTimerEx_t)(void*, PFILETIME, DWORD, DWORD);
-static SetThreadpoolTimerEx_t SetThreadpoolTimerEx_Original = nullptr;
-
-// C++ exceptions caught by these hooks, so the log says it once per kind.
-static LONG g_acCppExceptionLogs = 0;
-
-// The panel handle is only touched while it is still a live window of this process: a
-// recycled handle would be a window of somebody else.
-static bool AcPanelUsable(HWND hwnd) {
-    return hwnd && IsWindow(hwnd) &&
-           GetWindowThreadProcessId(hwnd, nullptr) == GetCurrentProcessId();
-}
-
-// The animation itself (base: the "Action Center fixes" mod by AdmXP8, v0.9). Its
-// hook boundary handles C++ exceptions; no native-fault recovery is installed.
-static HRESULT AcCloakImpl(HWND hwnd, DWORD attribute, LPCVOID value, DWORD size) {
-    if (!g_acAnimation || g_unloading.load() || attribute != kDwmwaCloak || !value ||
-        size < sizeof(int) || !IsCoreWindow(hwnd))
-        return DwmSetWindowAttribute_Original(hwnd, attribute, value, size);
-    if (!IsShellExperienceHostWindow(hwnd) && hwnd != g_acPanel)
-        return DwmSetWindowAttribute_Original(hwnd, attribute, value, size);
-
-    const int cloaked = *static_cast<const int*>(value);
-    MONITORINFO monitor = {};
-    monitor.cbSize = sizeof(monitor);
-    GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &monitor);
-    RECT rect = {};
-    GetWindowRect(hwnd, &rect);
-
-    bool known = (hwnd == g_acPanel);
-    if (!known && cloaked == 0 && LooksLikeActionCenterPanel(rect, monitor)) {
-        g_acPanel = hwnd;
-        known = true;
-        if (g_acAnimLogs++ < 6)
-            Wh_Log(L"[ac-anim] Action Center panel identified (%ld,%ld,%ld,%ld)",
-                   rect.left, rect.top, rect.right, rect.bottom);
-    }
-    if (!known) return DwmSetWindowAttribute_Original(hwnd, attribute, value, size);
-
-    if (cloaked == 0) {                        // the panel is about to be shown
-        g_acOpen = true;
-        const LONG generation = InterlockedIncrement(&g_acGeneration);
-        // Learn the docked position, only when the panel really is docked.
-        if (rect.left < monitor.rcMonitor.right - 10 &&
-            rect.right >= monitor.rcWork.right - 2) {
-            g_acFinalX = rect.left;
-            g_acFinalY = rect.top;
-            g_acHaveFinal = true;
-        }
-        if (g_acSlideInMs > 0 && g_acHaveFinal && AcPanelUsable(hwnd)) {
-            const int offscreen = monitor.rcMonitor.right;
-            MovePanelX(hwnd, offscreen, g_acFinalY);   // parked just outside
-            Sleep(30);                                 // let the window thread apply it
-            const HRESULT result =
-                DwmSetWindowAttribute_Original(hwnd, attribute, value, size);
-            if (AcPanelUsable(hwnd)) {
-                const AcSlideThreadParam params{
-                    hwnd, offscreen, g_acFinalX, g_acFinalY, g_acSlideInMs, generation };
-                if (StartAcSlideInThread(params)) {
-                    if (g_acAnimLogs++ < 6)
-                        Wh_Log(L"[ac-anim] slide-in %d -> %d (%d ms)", offscreen, g_acFinalX,
-                               g_acSlideInMs);
-                } else {
-                    // The panel was parked before the worker was requested. If the
-                    // worker cannot be started (especially during unload), restore it.
-                    MovePanelX(hwnd, g_acFinalX, g_acFinalY);
-                }
-            }
-            return result;
-        }
-        return DwmSetWindowAttribute_Original(hwnd, attribute, value, size);
-    }
-
-    // The panel is about to be hidden: slide it out, then let the shell cloak it.
-    g_acOpen = false;
-    const LONG generation = InterlockedIncrement(&g_acGeneration);
-    if (g_acSlideOutMs > 0 && g_acHaveFinal && AcPanelUsable(hwnd) &&
-        rect.left < monitor.rcMonitor.right) {
-        if (g_acAnimLogs++ < 6)
-            Wh_Log(L"[ac-anim] slide-out %ld -> %ld (%d ms)", rect.left,
-                   monitor.rcMonitor.right, g_acSlideOutMs);
-        RunAcSlide(hwnd, rect.left, monitor.rcMonitor.right, g_acFinalY, g_acSlideOutMs,
-                   generation);
-    }
-    const HRESULT result = DwmSetWindowAttribute_Original(hwnd, attribute, value, size);
-    // Ready for the next time: only while the panel still is a live window.
-    if (g_acHaveFinal && AcPanelUsable(hwnd)) MovePanelX(hwnd, g_acFinalX, g_acFinalY);
-    return result;
-}
-
-struct AcCloakCall {
-    HWND hwnd;
-    DWORD attribute;
-    LPCVOID value;
-    DWORD size;
-    HRESULT result;
-};
-
-static void AcCloakEntry(void* parameter) {
-    auto* call = static_cast<AcCloakCall*>(parameter);
-    call->result = AcCloakImpl(call->hwnd, call->attribute, call->value, call->size);
-}
 
 static HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd, DWORD attribute, LPCVOID value,
                                                 DWORD size) {
     if (!DwmSetWindowAttribute_Original) return E_FAIL;   // hook in place, original unknown
     if (g_unloading.load(std::memory_order_seq_cst))
         return DwmSetWindowAttribute_Original(hwnd, attribute, value, size);
-    g_acActiveCloakCalls.fetch_add(1, std::memory_order_seq_cst);
-    struct ActiveCloakCallScope {
-        ~ActiveCloakCallScope() {
-            g_acActiveCloakCalls.fetch_sub(1, std::memory_order_seq_cst);
-        }
-    } activeCloakCall;
-    if (g_unloading.load(std::memory_order_seq_cst))
-        return DwmSetWindowAttribute_Original(hwnd, attribute, value, size);
-    // 1.3.9, EXPERIMENTAL and off by default (ExperimentalSquareFlyoutCorners; it does not work,
-    // see g_squareFlyoutCorners): square corners for the flyouts of this process. Windows 11 rounds every top-level
-    // window through DWM; the documented switch is DWMWA_WINDOW_CORNER_PREFERENCE (33) with
-    // DWMWCP_DONOTROUND (1). It is set when a CoreWindow of ShellExperienceHost.exe is about to
-    // be shown (cloak value 0), once per window handle, on the thread that shows it. The window
-    // is the one the network flyout lives in, as well as the other flyouts of this shell.
+    // EXPERIMENTAL and off by default (ExperimentalSquareFlyoutCorners; it does not work,
+    // see g_squareFlyoutCorners): square corners for the flyouts of this process. Windows 11
+    // rounds every top-level window through DWM; the documented switch is
+    // DWMWA_WINDOW_CORNER_PREFERENCE (33) with DWMWCP_DONOTROUND (1). It is set when a
+    // CoreWindow of ShellExperienceHost.exe is about to be shown (cloak value 0), once per
+    // window handle, on the thread that shows it. The window is the one the network flyout
+    // lives in, as well as the other flyouts of this shell.
     if (g_squareFlyoutCorners && attribute == kDwmwaCloak && value && size >= sizeof(int) &&
         *static_cast<const int*>(value) == 0 && IsCoreWindow(hwnd) &&
         ImageNameIs(g_realExePath, L"ShellExperienceHost.exe")) {
@@ -10407,15 +8831,7 @@ static HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd, DWORD attribute, LPC
         } catch (...) {
         }
     }
-    AcCloakCall call = { hwnd, attribute, value, size, E_FAIL };
-    DWORD fault = 0;
-    if (!CppGuard::RunGuarded(L"ac-anim cloak", AcCloakEntry, &call, &fault)) {
-        if (InterlockedIncrement(&g_acCppExceptionLogs) <= 3)
-            Wh_Log(L"[ac-anim] a C++ exception was caught (0x%08X) while the panel was being shown",
-                   fault);
-        return DwmSetWindowAttribute_Original(hwnd, attribute, value, size);
-    }
-    return call.result;
+    return DwmSetWindowAttribute_Original(hwnd, attribute, value, size);
 }
 
 // 1.3.9: the cloak hook above never fired for the network flyout in the user's log (no
@@ -10466,63 +8882,13 @@ static void SquareShellWindowsNow() noexcept {
     }
 }
 
-// The close delay: the shell sets a ~2000 ms threadpool timer while the pointer is away
-// from the panel; with this hook it becomes the configured value. Both entry points are
-// taken by address, so the module does not depend on the declarations of these two.
-static BOOL AcCloseTimerImpl(bool ex, void* timer, PFILETIME due, DWORD period,
-                             DWORD windowLength) {
-    if (g_acAnimation && !g_unloading.load() && IsCloseTimer(due)) {
-        FILETIME shorter = RelativeDue(g_acCloseDelayMs);
-        if (g_acAnimLogs++ < 6)
-            Wh_Log(L"[ac-anim] close timer replaced: ~2000 ms -> %d ms", g_acCloseDelayMs);
-        if (ex) return SetThreadpoolTimerEx_Original(timer, &shorter, period, windowLength);
-        SetThreadpoolTimer_Original(timer, &shorter, period, windowLength);
-        return TRUE;
-    }
-    if (ex) return SetThreadpoolTimerEx_Original(timer, due, period, windowLength);
-    SetThreadpoolTimer_Original(timer, due, period, windowLength);
-    return TRUE;
-}
-
-struct AcTimerCall {
-    void* timer;
-    PFILETIME due;
-    DWORD period;
-    DWORD windowLength;
-    bool ex;
-    BOOL result;
-};
-
-static void AcTimerEntry(void* parameter) {
-    auto* call = static_cast<AcTimerCall*>(parameter);
-    call->result = AcCloseTimerImpl(call->ex, call->timer, call->due, call->period,
-                                    call->windowLength);
-}
-
-static VOID WINAPI SetThreadpoolTimer_Hook(void* timer, PFILETIME due, DWORD period,
-                                           DWORD windowLength) {
-    if (!SetThreadpoolTimer_Original) return;
-    AcTimerCall call = { timer, due, period, windowLength, false, TRUE };
-    DWORD fault = 0;
-    if (!CppGuard::RunGuarded(L"ac-anim timer", AcTimerEntry, &call, &fault))
-        SetThreadpoolTimer_Original(timer, due, period, windowLength);
-}
-
-static BOOL WINAPI SetThreadpoolTimerEx_Hook(void* timer, PFILETIME due, DWORD period,
-                                             DWORD windowLength) {
-    if (!SetThreadpoolTimerEx_Original) return FALSE;
-    AcTimerCall call = { timer, due, period, windowLength, true, TRUE };
-    DWORD fault = 0;
-    if (!CppGuard::RunGuarded(L"ac-anim timer", AcTimerEntry, &call, &fault))
-        return SetThreadpoolTimerEx_Original(timer, due, period, windowLength);
-    return call.result;
-}
-
-// Installed once, from both processes this mod is loaded in. Every hook checks the
-// setting at each call, so the animation can be switched while the shell runs.
-static void InstallActionCenterAnimation() {
-    if (g_acAnimationHooksInstalled) return;
-    g_acAnimationHooksInstalled = true;
+// Installed once, from both processes this mod is loaded in (the private shell and
+// ShellExperienceHost.exe): only the DWM cloak hook is needed for the experimental
+// square-corners feature (ExperimentalSquareFlyoutCorners); the Action Center animation
+// this used to also install is gone, see the removal note near the top of the file.
+static void InstallSquareCornersHook() {
+    if (g_squareCornersHookInstalled) return;
+    g_squareCornersHookInstalled = true;
     try {
         HMODULE dwmapi = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (dwmapi) {
@@ -10530,33 +8896,15 @@ static void InstallActionCenterAnimation() {
             if (target) {
                 if (!Wh_SetFunctionHook(target, (void*)DwmSetWindowAttribute_Hook,
                                         (void**)&DwmSetWindowAttribute_Original))
-                    Wh_Log(L"[ac-anim] the cloak hook could not be installed: no slide");
+                    Wh_Log(L"[networkux] the square-corners hook could not be installed");
             } else {
-                Wh_Log(L"[ac-anim] DwmSetWindowAttribute not found: no slide");
+                Wh_Log(L"[networkux] DwmSetWindowAttribute not found: no square corners");
             }
         } else {
-            Wh_Log(L"[ac-anim] dwmapi.dll unavailable: no slide");
+            Wh_Log(L"[networkux] dwmapi.dll unavailable: no square corners");
         }
-        HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
-        if (kernel32) {
-            void* timer = reinterpret_cast<void*>(GetProcAddress(kernel32, "SetThreadpoolTimer"));
-            void* timerEx =
-                reinterpret_cast<void*>(GetProcAddress(kernel32, "SetThreadpoolTimerEx"));
-            if (timer) {
-                if (!Wh_SetFunctionHook(timer, (void*)SetThreadpoolTimer_Hook,
-                                        (void**)&SetThreadpoolTimer_Original))
-                    Wh_Log(L"[ac-anim] the close-timer hook could not be installed");
-            }
-            if (timerEx) {
-                if (!Wh_SetFunctionHook(timerEx, (void*)SetThreadpoolTimerEx_Hook,
-                                        (void**)&SetThreadpoolTimerEx_Original))
-                    Wh_Log(L"[ac-anim] the close-timer hook (Ex) could not be installed");
-            }
-        }
-        Wh_Log(L"[ac-anim] ready (close delay %d ms, slide in %d ms, out %d ms)",
-               g_acCloseDelayMs, g_acSlideInMs, g_acSlideOutMs);
     } catch (...) {
-        Wh_Log(L"[ac-anim] setup exception: the animation stays off");
+        Wh_Log(L"[networkux] square-corners setup exception");
     }
 }
 
@@ -10571,29 +8919,6 @@ static HANDLE g_stopEvent = nullptr;
 static HANDLE g_servicesThread = nullptr;
 static DWORD g_trayThreadId = 0;
 
-static void InstallActionCenterButtonHook() {
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    if (!user32) return;
-    void* target = reinterpret_cast<void*>(GetProcAddress(user32, "CreateWindowExW"));
-    if (!target) return;
-    if (!Wh_SetFunctionHook(target, (void*)CreateWindowExW_Hook,
-                            (void**)&CreateWindowExW_Original)) {
-        Wh_Log(L"[actioncenter] the button hook could not be installed: the button flag is "
-               L"still kept by the monitor");
-    } else {
-        Wh_Log(L"[actioncenter] button hook installed (class %s, flag at +%u)",
-               kActionCenterButtonClass, (unsigned)kActionCenterButtonFlagOffset);
-    }
-}
-
-// The policy hooks are tried at most three times. A build (or a process) where they
-// cannot be installed is reported once and then left alone: retrying at every tick wrote
-// the same line to the log every 500 ms for the whole lifetime of the process.
-// 1.3.1: the policy hooks moved into Wh_ModInit (see the note there). The retry ladder that
-// used to live here registered them from the tray thread, that is after the engine had
-// already applied the hook queue: the hooks stayed queued and inert, and the registration ran
-// in parallel with the engine's own hook operations. It is gone on purpose.
-
 static void TrayThreadWork(bool firstRun) {
     if (firstRun) {
         // Which process this is, in the terms the tray code uses: the private Windows 10
@@ -10604,9 +8929,8 @@ static void TrayThreadWork(bool firstRun) {
         NativeUi::privateExplorer = IsPrivateExplorerProcess();
         Wh_Log(L"[flyout] process role: private shell=%d", NativeUi::privateExplorer ? 1 : 0);
         Wh_Log(L"[flyout] the Windows 10 tray is being restored in this shell "
-               L"(tray modules=%s, AC button=%s)",
-               g_cfg.provideTrayDlls ? L"on" : L"off",
-               g_showActionCenterButton ? L"on" : L"off");
+               L"(tray modules=%s)",
+               g_cfg.provideTrayDlls ? L"on" : L"off");
     }
 
     // The DLLs come from this mod: downloaded if missing, verified against the pinned
@@ -10633,14 +8957,7 @@ static void TrayThreadWork(bool firstRun) {
     // the Windows 10 one of this mod answers the right click.
     ArmTrayMenuSubclass();
 
-    // The Action Center policy of Windows 10, served in memory: no registry write.
-    // 1.3.1: the policy hooks themselves are registered in Wh_ModInit (see the note there);
-    // this thread never touches the hook queue. Only the process flag is kept alive here, so
-    // that it follows a settings change.
-    if (g_cfg.fixNotificationsCrash) NativeUi::actionCenterPolicyProcess = true;
-
     RetryTrayModulesIfNeeded();
-    ActionCenterButtonTick();
 
     // The three steps the reference mod runs on every tray tick while the private shell
     // is up. The last one is the ladder that FORCES the network icon: the SSO of
@@ -10706,6 +9023,21 @@ static DWORD WINAPI FlyoutServicesThread(LPVOID) {
     // scaricato. Si toglie per prima.
     NetworkTrayForce::DisarmNetworkIconClickSubclass();
     NetworkTrayForce::DisarmBatteryIconClickSubclass();
+    // 1.4.0: the right-click supervision subclass on the pnidui/stobject service windows
+    // (g_trayWnds[]) used to be installed with a raw SetWindowSubclass and never removed here -
+    // the window procedure kept pointing into this module after unload, which could take the
+    // next message to that window (and the shell with it) into freed code. It is removed the
+    // same way every other shell-window subclass in this thread is.
+    for (int i = g_trayWndCount - 1; i >= 0; i--) {
+        HWND wnd = g_trayWnds[i];
+        if (wnd && IsWindow(wnd)) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(wnd, NetworkIconSubclassProc);
+            Wh_Log(L"[tray] right-click supervision subclass removed from 0x%p while unloading the mod",
+                   (void*)wnd);
+        }
+        g_trayWnds[i] = nullptr;
+    }
+    g_trayWndCount = 0;
     NetworkIconFallbackShutdown();
     NetworkTrayForce::Shutdown();
     for (int i = g_trayMenuTargetCount - 1; i >= 0; i--) {
@@ -11373,65 +9705,6 @@ static void Uninstall() noexcept {
 
 }  // namespace NetworkUxHostPatch
 
-// ===========================================================================
-// 1.3.7 - IL PUNTO DEL DIZIONARIO DI RISORSE DEL FLYOUT DI RETE (solo byte).
-//
-// La pelle grafica (chunk-skin.inc) ha bisogno di sapere se questa build ha il
-// punto in cui la pagina del flyout di rete carica il proprio dizionario di
-// risorse. ExplorerPatcher lo trova cosi' (HandleLoadedNetworkUX) e questo blocco
-// fa la stessa lettura. Qui NON c'e' niente di XAML e niente di Windhawk: solo
-// byte, maschera e aritmetica dell'indirizzo - cosi' il banco di prova
-// (patch/harness2.cpp) la esegue su un'immagine finta e controlla i conti.
-//
-// Il sito, dentro NetworkUX.dll (NetworkUX::App::StaticOnLaunched):
-//
-//   48 8B 40 10              mov  rax, [rax+10h]
-//   E8 ?? ?? ?? ??           call rel32
-//   E8 ?? ?? ?? ??           call rel32   <- questa e' LoadResourceDictionaries
-//   80 3D ?? ?? ?? ?? 00     cmp  byte ptr [rip+disp32], 0
-//   75 05                    jne  +5
-//   E8                       call rel32
-//
-// Se il sito non c'e' (una build che questo codice non conosce) non si tocca
-// niente: la pelle non si applica e il log lo dice.
-// ===========================================================================
-namespace NetworkUxSkinPattern {
-
-static const unsigned char kCallSite[] = {
-    0x48, 0x8B, 0x40, 0x10, 0xE8, 0x00, 0x00, 0x00, 0x00, 0xE8,
-    0x00, 0x00, 0x00, 0x00, 0x80, 0x3D, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x75, 0x05, 0xE8,
-};
-static const char kCallSiteMask[] = "xxxxx????x????xx????xxxx";
-
-// Quanti byte separano l'inizio del sito dalla call che interessa: i quattro del
-// mov e i cinque della prima call.
-static const size_t kDictionaryCallAt = 9;
-
-// Segue la rel32 di una call e restituisce dove porta.
-static unsigned char* Rel32Target(unsigned char* call) noexcept {
-    if (!call || call[0] != 0xE8) return nullptr;
-    int displacement = 0;
-    memcpy(&displacement, call + 1, sizeof(displacement));
-    return call + 5 + displacement;
-}
-
-// La routine cercata, se il sito e' nell'intervallo dato: un indirizzo fuori dal
-// codice (o un sito trovato piu' di una volta) vuol dire una build non conosciuta,
-// e in quel caso non si scrive nulla.
-static unsigned char* ResolveDictionaryRoutine(unsigned char* text, size_t size) noexcept {
-    if (!text || size < sizeof(kCallSite)) return nullptr;
-    unsigned char* site = FlyoutHostPatch::FindPattern(text, size, kCallSite, kCallSiteMask);
-    if (!site) return nullptr;
-    if (FlyoutHostPatch::FindPattern(site + 1, size - (site + 1 - text), kCallSite,
-                                     kCallSiteMask))
-        return nullptr;   // due siti: non si sa quale sia quello giusto
-    unsigned char* target = Rel32Target(site + kDictionaryCallAt);
-    if (!target || target < text || target >= text + size) return nullptr;
-    return target;
-}
-
-}  // namespace NetworkUxSkinPattern
 
 // ===========================================================================
 // 1.3.7 - LA PELLE GRAFICA DEL FLYOUT DI RETE (le regole di "10Flyouts v4.5").
@@ -11662,12 +9935,12 @@ BOOL Wh_ModInit() {
         Wh_Log(L"[flyout] data folder: %s",
                g_cfg.storePath[0] ? g_cfg.storePath : L"(not available)");
 
-        // ShellExperienceHost.exe hosts the Action Center panel. This mod is loaded there
-        // as well, and in that process only the animation section runs: it is not the
-        // shell process, and nothing else of the mod applies to it.
+        // ShellExperienceHost.exe hosts the flyouts this mod draws (network, battery). This
+        // mod is loaded there as well, and in that process only the flyout-host patches (and
+        // optionally the experimental square-corners hook) run: it is not the shell process,
+        // and nothing else of the mod applies to it.
         if (ImageNameIs(g_realExePath, L"ShellExperienceHost.exe")) {
-            Wh_Log(L"[flyout] ShellExperienceHost: the Action Center animation is the only "
-                   L"part of this mod that runs here");
+            Wh_Log(L"[flyout] ShellExperienceHost: only the flyout-host patches run here");
             // This process is the one that draws the flyout: it has to build it the Windows 10
             // way, otherwise the flyout it shows is torn down again after a moment.
             FlyoutHostPatch::Install();
@@ -11675,9 +9948,8 @@ BOOL Wh_ModInit() {
             // Windows 10, altrimenti i pulsanti del set di template qui sopra
             // restano blocchi di testo inerti (ExplorerPatcher, stessa nota).
             NetworkUxHostPatch::Install();
-            // The cloak hook also carries the experimental square corners, so it is installed
-            // when either option is on. The animation parts check g_acAnimation at every call.
-            if (g_acAnimation || g_squareFlyoutCorners) InstallActionCenterAnimation();
+            // Experimental and off by default; see g_squareFlyoutCorners.
+            if (g_squareFlyoutCorners) InstallSquareCornersHook();
             SquareShellWindowsNow();
             return TRUE;
         }
@@ -11711,27 +9983,18 @@ BOOL Wh_ModInit() {
         // Nothing outside Wh_ModInit touches the hook queue any more.
         InstallTraySupportHooks();
 
-        // The Action Center policy of Windows 10, served in memory: no registry write.
-        // The hooks themselves belong here, for the same reason.
-        if (g_cfg.fixNotificationsCrash) {
-            NativeUi::actionCenterPolicyProcess = true;
-            if (NativeUi::InstallKeyHooks())
-                Wh_Log(L"[actioncenter] the policy hooks are installed (in Wh_ModInit)");
-            else
-                Wh_Log(L"[actioncenter] the policy hooks are not available in this process: "
-                       L"the notification policy stays as the shell serves it");
-        }
+        // Resolves the native (\REGISTRY\...) path of HKEY_CURRENT_USER once: IsExplorerPath
+        // (used by the EnableAutoTray virtual read) needs it, and it is cheap to always have
+        // ready rather than gate it behind a setting.
+        NativeUi::InitializeKeyPathSupport();
 
         // The click on the network icon: ShellExecuteW and ShellExecuteExW.
         InstallNetworkClickHooks();
 
-        // The button hook is installed once and checks the setting at every call, so the
-        // setting can be switched at run time without installing or removing hooks.
-        InstallActionCenterButtonHook();
-
-        // On some builds the panel is hosted by this very process, so the animation hooks
-        // are installed here too (in ShellExperienceHost the same call was made above).
-        if (g_acAnimation) InstallActionCenterAnimation();
+        // Experimental and off by default; see g_squareFlyoutCorners. On some builds the
+        // flyout host is this very process, so the hook is installed here too (in
+        // ShellExperienceHost the same call was made above).
+        if (g_squareFlyoutCorners) InstallSquareCornersHook();
 
         g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (!g_stopEvent) {
@@ -11779,7 +10042,7 @@ void Wh_ModBeforeUninit() {
     // more, so the mod has to be quiet here already.
     g_unloading.store(true, std::memory_order_seq_cst);
     ShellOpGuard::BeginShutdown();
-    StopActionCenterAnimation();
+    RestorePeekAtDesktopOnUnload();
     // 1.3.5: la voce della tabella delle importazioni del flyout di rete torna al
     // valore di prima mentre il modulo e' ancora caricato (ScopedImportRedirect).
     NetworkUxHostPatch::Uninstall();
@@ -11806,8 +10069,6 @@ void Wh_ModUninit() {
     }
     // The timed-out ShellExecute workers of this mod are joined here (bounded).
     ShellOpGuard::Shutdown();
-    // The panel must never stay parked outside the screen.
-    StopActionCenterAnimation();
     NativeUi::stopping.store(true, std::memory_order_release);
     g_trayThreadId = 0;
     Wh_Log(L"[flyout] unloaded");
@@ -11816,10 +10077,6 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     LoadFlyoutSettings();
     NetworkTrayForce::SettingsChanged();
-    Wh_Log(L"[flyout] settings reloaded: tray modules=%s AC button=%s (conflict=%s) "
-           L"AC animation=%s",
-           g_cfg.provideTrayDlls ? L"on" : L"off",
-           g_showActionCenterButton ? L"on" : L"off",
-           g_actionCenterReassert ? L"reassert" : L"log",
-           g_acAnimation ? L"on" : L"off");
+    Wh_Log(L"[flyout] settings reloaded: tray modules=%s",
+           g_cfg.provideTrayDlls ? L"on" : L"off");
 }
