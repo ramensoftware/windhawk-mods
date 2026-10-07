@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              windows-10-alt-tab-restorer
+// @id              windows-10-alt-tab-recreation
 // @name            Windows 10 Alt+Tab Recreation
 // @description     This mod recreates the Windows 10 Alt+Tab window switcher on Windows 11 without modifying explorer.exe
 // @version         1.0.0
