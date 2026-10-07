@@ -199,16 +199,37 @@ any time.
 //     being called it is reinstalled by a watchdog, and if the switcher is
 //     left open without Alt being held (a missed key event) it commits by
 //     itself.
+//
+// Why this mod exists next to the Simple Window Switcher mod
+//
+// The Simple Window Switcher mod (Lone, a port of ExplorerPatcher's Simple
+// Window Switcher) only partially recreates the Windows 10 switcher: it is a
+// generic, configurable window switcher whose layout happens to be close to
+// the Windows 10 one, and it is not presented as a Windows 10 recreation. This
+// mod has a single, narrower goal: to be the Windows 10 Alt+Tab, with the
+// Windows 10 semantics (4x4 page, second page, selection border, 85% dark
+// panel, no desktop dimming) as the defaults, and nothing else.
+//
+// That difference matters to the people the mod is for. An average user who
+// wants the Windows 10 switcher back does not know that a mod called "Simple
+// Window Switcher" can give it to them, and has no reason to look for it under
+// that name; a mod called "Windows 10 Alt+Tab Recreation" says what it does
+// at first sight, in the catalog and in the search results. The name is part of
+// the purpose of the mod, so it is a separate mod and not a settings preset of
+// another one.
+//
+// Why this mod recreates the switcher instead of restoring the original one
+//
+// A restoration, which reuses the Windows 10 components inside explorer.exe the
+// way ExplorerPatcher does, was the first approach and was abandoned on
+// purpose: it stopped working on the author's own system, and it depends on a
+// long list of internal, undocumented symbols that change from build to build.
+// Chasing those symbols means a mod that breaks with every Windows update and
+// that can't be verified on every build, which makes the effort not worth it.
+// A recreation that uses only documented APIs (DWM thumbnails, GDI, a
+// low-level keyboard hook) keeps working across builds, and it never touches
+// the shell.
 // -----------------------------------------------------------------------------
-
-// The tool mod launcher below uses a few TCHAR macros, so the mod builds as a
-// Unicode module, like every other Windhawk mod.
-#ifndef UNICODE
-#define UNICODE
-#endif
-#ifndef _UNICODE
-#define _UNICODE
-#endif
 
 #include <windhawk_api.h>
 
@@ -1135,13 +1156,19 @@ static HICON LoadWindowIcon(HWND hwnd, const std::wstring& appPath,
     return nullptr;
 }
 
-static bool IsWindowCloaked(HWND hwnd) {
+// DWM_CLOAKED_SHELL: the window is cloaked by the shell, which is how windows
+// on other virtual desktops are hidden.
+#ifndef DWM_CLOAKED_SHELL
+#define DWM_CLOAKED_SHELL 0x2
+#endif
+
+static DWORD GetWindowCloakReason(HWND hwnd) {
     DWORD cloaked = 0;
     if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked,
                                         sizeof(cloaked)))) {
-        return cloaked != 0;
+        return cloaked;
     }
-    return false;
+    return 0;
 }
 
 static IVirtualDesktopManager* g_virtualDesktopManager = nullptr;
@@ -1159,7 +1186,7 @@ static bool IsOnCurrentVirtualDesktop(HWND hwnd) {
     return onCurrentDesktop != FALSE;
 }
 
-static bool IsSwitcherWindow(HWND hwnd) {
+static bool IsSwitcherWindow(HWND hwnd, bool includeOtherDesktops) {
     if (!hwnd || !IsWindowVisible(hwnd)) {
         return false;
     }
@@ -1182,9 +1209,18 @@ static bool IsSwitcherWindow(HWND hwnd) {
         return false;
     }
 
-    // Applications on another virtual desktop are cloaked by the shell.
-    if (IsWindowCloaked(hwnd)) {
-        return false;
+    // Windows on another virtual desktop are cloaked by the shell, so a cloaked
+    // window can only be accepted when the user asked for the windows of all
+    // the desktops, and only if the shell is the sole reason it is cloaked and
+    // the window really is on another desktop. Anything else that is cloaked,
+    // such as a suspended UWP app on the current desktop, is not a window the
+    // user can switch to.
+    const DWORD cloakReason = GetWindowCloakReason(hwnd);
+    if (cloakReason != 0) {
+        if (!includeOtherDesktops || cloakReason != DWM_CLOAKED_SHELL ||
+            IsOnCurrentVirtualDesktop(hwnd)) {
+            return false;
+        }
     }
 
     if (GetWindowTextLengthW(hwnd) == 0) {
@@ -1213,7 +1249,7 @@ static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
         return FALSE;
     }
 
-    if (!IsSwitcherWindow(hwnd)) {
+    if (!IsSwitcherWindow(hwnd, !context->settings->currentDesktopOnly)) {
         ++context->skipped;
         return TRUE;
     }
@@ -2352,18 +2388,47 @@ static bool AttachAndSetForeground(HWND hwnd) {
     return activated;
 }
 
+// A key that no application acts on. A bare Alt press and release, with no
+// other key in between, is the gesture that opens the menu bar of the window
+// that has the focus (SC_KEYMENU, Office KeyTips, the Firefox menu bar), so
+// every place that swallows or injects Alt without a real key between the two
+// events puts this key between them, like AutoHotkey's "menu mask key". The
+// mod's own hook skips it because it is marked as injected.
+constexpr WORD kMenuMaskVk = 0xE8;  // unassigned virtual key
+
 // Input that this process injects is attributed to this process, which then
-// has the right to change the foreground window. The injected key is a bare
-// Alt press, which applications don't act on, and the mod's own hook skips it
-// because it is marked as injected.
+// has the right to change the foreground window. The injected Alt press has
+// the mask key between the press and the release, so the window that receives
+// it doesn't take it for the gesture that opens its menu.
 static void InjectNeutralKey() {
-    INPUT inputs[2] = {};
+    INPUT inputs[4] = {};
     inputs[0].type = INPUT_KEYBOARD;
     inputs[0].ki.wVk = VK_MENU;
     inputs[1].type = INPUT_KEYBOARD;
-    inputs[1].ki.wVk = VK_MENU;
-    inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[1].ki.wVk = kMenuMaskVk;
+    inputs[2] = inputs[1];
+    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[3].type = INPUT_KEYBOARD;
+    inputs[3].ki.wVk = VK_MENU;
+    inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
     SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT));
+}
+
+// Called as soon as the mod swallows the key that starts a session (the first
+// Tab, Alt+` or the fallback hotkey). The foreground window then sees Alt down,
+// the mask key and, later, Alt up, instead of a bare Alt press and release, so
+// ending the session without a window switch (Esc, the current window picked,
+// or a single open window) never opens the menu bar of the active window.
+static void SendMenuMaskKey() {
+    INPUT inputs[2] = {};
+    inputs[0].type = INPUT_KEYBOARD;
+    inputs[0].ki.wVk = kMenuMaskVk;
+    inputs[1] = inputs[0];
+    inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    if (!SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT))) {
+        Wh_Log(L"The menu mask key couldn't be sent (error %lu)",
+               GetLastError());
+    }
 }
 
 static bool ActivateWindow(HWND hwnd) {
@@ -2508,6 +2573,8 @@ static void OnShowRequest(bool previous) {
 
         if (result == SessionResult::NothingToShow ||
             result == SessionResult::Ok) {
+            // The Tab of this Alt press was swallowed, whatever happens next.
+            SendMenuMaskKey();
             if (result == SessionResult::Ok) {
                 if (foregroundFound) {
                     MoveSelection(previous ? -1 : 1);
@@ -2537,7 +2604,11 @@ static void OnSameAppRequest() {
 
     const Settings settings = GetSettingsCopy();
     bool foregroundFound = false;
-    if (BeginSession(settings, true, &foregroundFound) != SessionResult::Ok) {
+    const SessionResult result =
+        BeginSession(settings, true, &foregroundFound);
+    // The Alt+` of this Alt press was swallowed, whatever happens next.
+    SendMenuMaskKey();
+    if (result != SessionResult::Ok) {
         EndSession();
         return;
     }
@@ -3406,7 +3477,7 @@ BOOL Wh_ModInit() {
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
@@ -3506,7 +3577,7 @@ void Wh_ModAfterInit() {
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
         HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
         DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
         LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
