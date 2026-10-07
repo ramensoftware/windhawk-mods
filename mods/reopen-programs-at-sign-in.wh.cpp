@@ -2,51 +2,80 @@
 // @id              reopen-programs-at-sign-in
 // @name            Reopen Programs at Sign-in
 // @description     Reopens the programs that were open before shutdown/restart the next time you sign in
-// @version         1.2.0
+// @version         2.0.0
 // @author          lima26x
 // @github          https://github.com/brdantas26
 // @include         explorer.exe
-// @compilerOptions -luser32 -ladvapi32 -ldwmapi
+// @compilerOptions -ladvapi32 -ldwmapi -lsecur32 -lshell32 -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Reopen Programs at Sign-in
 
-When the mod is enabled for the first time, a small window asks whether you
-want the programs that were open to be reopened automatically the next time
-you sign in to Windows. To open that window again (and turn it on/off), press
-**Ctrl + Alt + Shift + R**.
+While the mod is enabled, it keeps track of which programs have a window open.
+The next time you sign in to Windows, those programs are opened again. To turn
+the feature off, disable the mod.
 
-- Only programs are reopened (one every 2 seconds, starting 15 s after
-  sign-in). Documents/tabs depend on each program.
+- Only programs are reopened (one every 2 seconds, starting 15 seconds after
+  sign-in by default). Documents/tabs depend on each program.
 - Programs running as administrator and Windows components (File Explorer,
   Control Panel...) are not reopened.
 - Programs that are already running (e.g. from Startup) are not opened twice.
-- If Explorer restarts during the day, nothing is reopened.
+- Nothing is reopened if the mod is enabled long after signing in, or if
+  Explorer restarts during the day: only a fresh sign-in triggers it.
+- Each Windows account keeps its own list.
+
+Windows has a similar built-in option (Settings → Accounts → Sign-in options →
+"Automatically save my restartable apps and restart them when I sign back in").
+It only restores apps that support it (e.g. Office, browsers); this mod reopens
+any program, using its executable path.
 
 ---
 
 # Reabrir programas ao entrar (Português)
 
-Quando o mod é ativado pela primeira vez, uma pequena janela pergunta se você
-quer que os programas que estavam abertos sejam reabertos automaticamente na
-próxima vez que você entrar no Windows. Para abrir essa janela de novo (e
-ligar/desligar a função), pressione **Ctrl + Alt + Shift + R**.
+Enquanto o mod estiver ativado, ele anota quais programas têm janela aberta.
+Na próxima vez que você entrar no Windows, esses programas são abertos de novo.
+Para desligar a função, desative o mod.
 
-- Só os programas são reabertos (um a cada 2 segundos, começando 15 s depois
-  de entrar). Documentos e abas dependem de cada programa.
+- Só os programas são reabertos (um a cada 2 segundos, começando 15 segundos
+  depois de entrar, por padrão). Documentos e abas dependem de cada programa.
 - Programas abertos como administrador e componentes do Windows (Explorador de
   Arquivos, Painel de Controle...) não são reabertos.
 - Programas que já estão abertos (por exemplo, os que iniciam com o Windows)
   não são abertos duas vezes.
-- Se o Explorer reiniciar durante o dia, nada é reaberto.
+- Nada é reaberto se o mod for ativado muito depois do login, nem se o Explorer
+  reiniciar durante o dia: só um login novo dispara a restauração.
+- Cada conta do Windows tem a sua própria lista.
+
+O Windows tem uma opção parecida (Configurações → Contas → Opções de entrada →
+"Salvar automaticamente meus aplicativos reiniciáveis e reiniciá-los quando eu
+entrar novamente"). Ela só restaura apps compatíveis (como Office e
+navegadores); este mod reabre qualquer programa, pelo caminho do executável.
 */
 // ==/WindhawkModReadme==
 
+// ==WindhawkModSettings==
+/*
+- restoreDelay: 15
+  $name: Delay after sign-in (seconds)
+  $name:pt-BR: Atraso após entrar (segundos)
+  $description: How long to wait after signing in before reopening programs (0-600).
+  $description:pt-BR: Quanto esperar depois de entrar antes de reabrir os programas (0-600).
+- maxPrograms: 25
+  $name: Maximum number of programs to reopen
+  $name:pt-BR: Número máximo de programas a reabrir
+  $description: Upper limit for the saved list (1-50).
+  $description:pt-BR: Limite máximo da lista salva (1-50).
+*/
+// ==/WindhawkModSettings==
+
 #include <appmodel.h>
-#include <commctrl.h>
 #include <dwmapi.h>
+#include <ntsecapi.h>
+#include <sddl.h>
+#include <shellapi.h>
 #include <tlhelp32.h>
 
 #ifndef DWM_CLOAKED_SHELL
@@ -55,8 +84,6 @@ ligar/desligar a função), pressione **Ctrl + Alt + Shift + R**.
 
 #include <algorithm>
 #include <atomic>
-#include <cstdarg>
-#include <cstdio>
 #include <cwctype>
 #include <string>
 #include <vector>
@@ -65,19 +92,19 @@ extern "C" IMAGE_DOS_HEADER __ImageBase;  // this mod's DLL
 
 constexpr wchar_t kSessionClass[] = L"ReopenPrograms_Session";
 constexpr UINT_PTR kTimerSnapshot = 1, kTimerRestoreStart = 2,
-                   kTimerRestoreStep = 3, kTimerFirstRun = 4;
+                   kTimerRestoreStep = 3;
 constexpr UINT kSnapshotIntervalMs = 20 * 1000;  // the list used at next sign-in
-constexpr UINT kRestoreDelayMs = 15 * 1000;      // let the desktop finish loading
 constexpr UINT kRestoreStepMs = 2 * 1000;        // one app at a time, no CPU spike
-constexpr size_t kMaxApps = 25;
-constexpr int kHotkeyId = 1;  // Ctrl + Alt + Shift + R
+// Restore only if the sign-in is at most this old (FILETIME units, 100 ns).
+constexpr ULONGLONG kMaxLogonAge = 10ULL * 60 * 10000000;
 
 HANDLE g_sessionThread;
 std::atomic<HWND> g_sessionWnd{nullptr};
-std::atomic<HWND> g_dialogWnd{nullptr};
 std::atomic<bool> g_stopping{false};
+std::atomic<int> g_restoreDelaySec{15};
+std::atomic<int> g_maxApps{25};
 // Touched only by the session thread.
-bool g_dialogOpen, g_endingSession, g_restoring;
+bool g_endingSession, g_restoring;
 std::vector<std::wstring> g_restoreQueue;
 std::wstring g_lastSaved;
 
@@ -86,19 +113,59 @@ std::wstring ToLower(std::wstring s) {
     return s;
 }
 
-// Formats with standard printf rules (%ls = wide string) and sends to the
-// Windhawk log (visible with "Debug logging" enabled in the mod's Advanced tab).
-void Log(PCWSTR format, ...) {
-    wchar_t msg[4096];
-    va_list args;
-    va_start(args, format);
-    vswprintf(msg, ARRAYSIZE(msg), format, args);
-    va_end(args);
-    Wh_Log(L"%s", msg);
+void LoadSettings() {
+    g_restoreDelaySec = std::clamp(Wh_GetIntSetting(L"restoreDelay"), 0, 600);
+    g_maxApps = std::clamp(Wh_GetIntSetting(L"maxPrograms"), 1, 50);
 }
 
-// -1 = never asked, 0 = off, 1 = on. Kept in the mod's own storage.
-int RestoreChoice() { return Wh_GetIntValue(L"restoreEnabled", -1); }
+// ---------------------------------------------------------------------------
+// Per-user storage
+// ---------------------------------------------------------------------------
+
+// The mod's storage is shared by every account on the PC, so each value name
+// gets the user's SID appended: each account keeps its own list.
+const std::wstring& UserSid() {
+    static const std::wstring sid = [] {
+        std::wstring result;
+        HANDLE token;
+        if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+            alignas(TOKEN_USER) BYTE buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+            DWORD size;
+            PWSTR str;
+            if (GetTokenInformation(token, TokenUser, buffer, sizeof(buffer), &size) &&
+                ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(buffer)->User.Sid,
+                                       &str)) {
+                result = str;
+                LocalFree(str);
+            }
+            CloseHandle(token);
+        }
+        return result;
+    }();
+    return sid;
+}
+
+// Empty = SID unknown: nothing is saved or restored.
+std::wstring PerUserValueName(PCWSTR name) {
+    return UserSid().empty() ? std::wstring() : std::wstring(name) + L"_" + UserSid();
+}
+
+std::wstring ReadStringValue(PCWSTR name) {
+    std::wstring valueName = PerUserValueName(name);
+    if (valueName.empty()) return {};
+    std::vector<wchar_t> buf(32768);
+    Wh_GetStringValue(valueName.c_str(), buf.data(), buf.size());
+    return buf.data();
+}
+
+bool WriteStringValue(PCWSTR name, const std::wstring& value) {
+    std::wstring valueName = PerUserValueName(name);
+    return !valueName.empty() && Wh_SetStringValue(valueName.c_str(), value.c_str());
+}
+
+// ---------------------------------------------------------------------------
+// Which programs are open
+// ---------------------------------------------------------------------------
 
 const std::wstring& WindowsDir() {
     static const std::wstring dir = [] {
@@ -187,12 +254,6 @@ std::wstring AppKey(DWORD pid, std::wstring* whySkipped = nullptr) {
     return {};
 }
 
-std::wstring ReadSavedSession() {
-    std::vector<wchar_t> buf(32768);
-    Wh_GetStringValue(L"lastSession", buf.data(), buf.size());
-    return buf.data();
-}
-
 struct Snapshot {
     std::vector<std::wstring> apps;     // keys to relaunch
     std::vector<std::wstring> skipped;  // for the log only
@@ -206,7 +267,7 @@ void AddUnique(std::vector<std::wstring>& list, const std::wstring& item) {
 // convert to the __stdcall WNDENUMPROC.
 BOOL CALLBACK CollectAppWindow(HWND hwnd, LPARAM param) {
     auto& snap = *reinterpret_cast<Snapshot*>(param);
-    if (snap.apps.size() >= kMaxApps || !IsAppWindow(hwnd)) return TRUE;
+    if (!IsAppWindow(hwnd)) return TRUE;
 
     // Store apps (Calculator, Photos...) are shown inside a frame owned by
     // ApplicationFrameHost.exe; the real app owns the inner CoreWindow.
@@ -239,20 +300,26 @@ void SaveSnapshot() {
     EnumWindows(CollectAppWindow, reinterpret_cast<LPARAM>(&snap));
     // EnumWindows returns windows in Z-order, which changes every time you
     // switch apps. Sorting means "changed" = a program opened/closed, not
-    // just which window is in front.
+    // just which window is in front, and the cap below keeps a stable set.
     std::sort(snap.apps.begin(), snap.apps.end());
     std::sort(snap.skipped.begin(), snap.skipped.end());
+    if (snap.apps.size() > static_cast<size_t>(g_maxApps))
+        snap.apps.resize(g_maxApps);
 
     std::wstring joined, skipped;
     for (const auto& app : snap.apps) joined += app + L'\n';
     for (const auto& s : snap.skipped) skipped += s + L'\n';
     // Only write when something changed (no registry write every 20 s).
-    if (joined != g_lastSaved && Wh_SetStringValue(L"lastSession", joined.c_str())) {
+    if (joined != g_lastSaved && WriteStringValue(L"lastSession", joined)) {
         g_lastSaved = joined;
-        Log(L"Saved %u app(s):\n%ls", (unsigned)snap.apps.size(), joined.c_str());
-        if (!skipped.empty()) Log(L"Not saved (by design):\n%ls", skipped.c_str());
+        Wh_Log(L"Saved %u app(s):\n%s", (unsigned)snap.apps.size(), joined.c_str());
+        if (!skipped.empty()) Wh_Log(L"Not saved (by design):\n%s", skipped.c_str());
     }
 }
+
+// ---------------------------------------------------------------------------
+// Reopening
+// ---------------------------------------------------------------------------
 
 void BuildRestoreQueue() {
     // Apps already running (e.g. from Startup) are not launched twice.
@@ -265,17 +332,18 @@ void BuildRestoreQueue() {
         CloseHandle(snap);
     }
 
-    std::wstring saved = ReadSavedSession();
+    std::wstring saved = ReadStringValue(L"lastSession");
     for (size_t start = 0, end; (end = saved.find(L'\n', start)) != saved.npos;
          start = end + 1) {
         std::wstring key = saved.substr(start, end - start);
         if (key.size() <= 2) continue;
+        if (g_restoreQueue.size() >= static_cast<size_t>(g_maxApps)) break;
         if (std::find(running.begin(), running.end(), key) != running.end())
-            Log(L"Already running, skipped: %ls", key.c_str());
+            Wh_Log(L"Already running, skipped: %s", key.c_str());
         else
             g_restoreQueue.push_back(key);
     }
-    Log(L"Restoring %u app(s)", (unsigned)g_restoreQueue.size());
+    Wh_Log(L"Restoring %u app(s)", (unsigned)g_restoreQueue.size());
 }
 
 void LaunchApp(const std::wstring& key) {
@@ -296,142 +364,64 @@ void LaunchApp(const std::wstring& key) {
     PROCESS_INFORMATION pi;
     if (CreateProcessW(app.c_str(), cmdLine.data(), nullptr, nullptr, FALSE, 0,
                        nullptr, dir.empty() ? nullptr : dir.c_str(), &si, &pi)) {
-        Log(L"Launched %ls", value.c_str());
+        Wh_Log(L"Launched %s", value.c_str());
         CloseHandle(pi.hThread);
         CloseHandle(pi.hProcess);
     } else {
-        Log(L"Could not launch %ls (error %u)", value.c_str(),
-            (unsigned)GetLastError());
+        Wh_Log(L"Could not launch %s (error %u)", value.c_str(),
+               (unsigned)GetLastError());
     }
 }
 
-HRESULT CALLBACK DialogCallback(HWND hwnd, UINT msg, WPARAM, LPARAM, LONG_PTR) {
-    if (msg == TDN_CREATED) {
-        g_dialogWnd = hwnd;
-        if (g_stopping) PostMessageW(hwnd, WM_CLOSE, 0, 0);
-        SetForegroundWindow(hwnd);
-    } else if (msg == TDN_DESTROYED) {
-        g_dialogWnd = nullptr;
-    }
-    return S_OK;
+// The current sign-in's id (logon session) and when it started.
+bool GetLogonInfo(LUID& id, ULONGLONG& logonTime) {
+    HANDLE token;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return false;
+    TOKEN_STATISTICS stats;
+    DWORD size;
+    bool ok = GetTokenInformation(token, TokenStatistics, &stats, sizeof(stats), &size);
+    CloseHandle(token);
+    if (!ok) return false;
+
+    id = stats.AuthenticationId;
+    PSECURITY_LOGON_SESSION_DATA data = nullptr;
+    if (LsaGetLogonSessionData(&id, &data) != 0 || !data) return false;
+    logonTime = static_cast<ULONGLONG>(data->LogonTime.QuadPart);
+    LsaFreeReturnBuffer(data);
+    return true;
 }
 
-// Options window texts, one set per language.
-struct DialogText {
-    PCWSTR title, question, content, statusLabel, on, off, onButton, offButton,
-        footer, messageBoxHint;
-};
+// True once per sign-in, and only if that sign-in is recent. This is what keeps
+// an Explorer restart (same sign-in) or enabling the mod in the afternoon (old
+// sign-in, possibly days-old list) from reopening everything.
+bool ShouldRestoreThisSignIn() {
+    LUID id;
+    ULONGLONG logonTime;
+    if (!GetLogonInfo(id, logonTime)) return false;
 
-constexpr DialogText kTextPt = {
-    L"Reabrir programas ao entrar",
-    L"Reabrir seus programas quando você entrar no Windows?",
-    L"Quando está ligado, o computador anota quais programas estão abertos. "
-    L"Depois que você desligar ou reiniciar, esses programas são abertos de "
-    L"novo, sozinhos, assim que você entrar no Windows.\n\n"
-    L"Bom saber:\n"
-    L"• Só os programas são reabertos. Documentos e abas dependem de cada programa.\n"
-    L"• Programas abertos como administrador não são reabertos, por segurança.\n"
-    L"• Os programas abrem um de cada vez, para não deixar o computador lento.\n\n",
-    L"Situação atual: ",
-    L"LIGADO",
-    L"DESLIGADO",
-    L"Ligar\nReabrir automaticamente os programas que estavam abertos",
-    L"Desligar\nIniciar o Windows normalmente, sem reabrir nada",
-    L"Para abrir esta janela de novo, pressione Ctrl + Alt + Shift + R.",
-    L"\n\nSim = Ligar     Não = Desligar",
-};
+    std::wstring key = std::to_wstring(id.HighPart) + L":" +
+                       std::to_wstring(id.LowPart) + L":" +
+                       std::to_wstring(logonTime);
+    if (ReadStringValue(L"lastRestoredSignIn") == key) return false;
+    if (!WriteStringValue(L"lastRestoredSignIn", key)) return false;
 
-constexpr DialogText kTextEn = {
-    L"Reopen programs at sign-in",
-    L"Reopen your programs when you sign in to Windows?",
-    L"When this is on, your computer keeps track of which programs are open. "
-    L"After you shut down or restart, those programs open again by "
-    L"themselves as soon as you sign in to Windows.\n\n"
-    L"Good to know:\n"
-    L"• Only the programs are reopened. Documents and tabs depend on each program.\n"
-    L"• Programs running as administrator are not reopened, for safety.\n"
-    L"• Programs open one at a time, so your computer doesn't slow down.\n\n",
-    L"Current status: ",
-    L"ON",
-    L"OFF",
-    L"Turn on\nAutomatically reopen the programs that were open",
-    L"Turn off\nStart Windows normally, without reopening anything",
-    L"To open this window again, press Ctrl + Alt + Shift + R.",
-    L"\n\nYes = Turn on     No = Turn off",
-};
-
-// Portuguese if Windows is in Portuguese (Brazil or Portugal), else English.
-const DialogText& Text() {
-    return PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_PORTUGUESE ? kTextPt
-                                                                        : kTextEn;
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    ULONGLONG now = (static_cast<ULONGLONG>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
+    bool recent = now >= logonTime && now - logonTime <= kMaxLogonAge;
+    Wh_Log(L"New sign-in detected, recent=%d", recent ? 1 : 0);
+    return recent;
 }
 
-// The options window: one on/off choice in plain language.
-void ShowOptionsDialog() {
-    if (g_dialogOpen) return;
-    g_dialogOpen = true;
-
-    enum { kOn = 100, kOff = 101 };
-    const DialogText& text = Text();
-    int current = RestoreChoice();
-    std::wstring content = std::wstring(text.content) + text.statusLabel +
-                           (current == 1 ? text.on : text.off);
-
-    TASKDIALOG_BUTTON buttons[] = {
-        {kOn, text.onButton},
-        {kOff, text.offButton},
-    };
-    TASKDIALOGCONFIG cfg{sizeof(cfg)};
-    cfg.dwFlags = TDF_USE_COMMAND_LINKS | TDF_ALLOW_DIALOG_CANCELLATION;
-    cfg.dwCommonButtons = TDCBF_CLOSE_BUTTON;
-    cfg.pszWindowTitle = text.title;
-    cfg.pszMainIcon = TD_INFORMATION_ICON;
-    cfg.pszMainInstruction = text.question;
-    cfg.pszContent = content.c_str();
-    cfg.cButtons = ARRAYSIZE(buttons);
-    cfg.pButtons = buttons;
-    cfg.nDefaultButton = current == 0 ? kOff : kOn;
-    cfg.pszFooter = text.footer;
-    cfg.pfCallback = DialogCallback;
-
-    // Loaded at runtime so we get the comctl32 v6 that Explorer already uses
-    // (TaskDialog doesn't exist in v5).
-    int button = IDCANCEL;
-    HMODULE comctl = LoadLibraryW(L"comctl32.dll");
-    auto taskDialog = comctl ? reinterpret_cast<decltype(&TaskDialogIndirect)>(
-                                   GetProcAddress(comctl, "TaskDialogIndirect"))
-                             : nullptr;
-    if (taskDialog) {
-        taskDialog(&cfg, &button, nullptr, nullptr);
-    } else {
-        int r = MessageBoxW(nullptr,
-                            (content + text.messageBoxHint).c_str(),
-                            cfg.pszWindowTitle,
-                            MB_YESNOCANCEL | MB_ICONQUESTION | MB_SETFOREGROUND);
-        button = r == IDYES ? kOn : r == IDNO ? kOff : IDCANCEL;
-    }
-    if (comctl) FreeLibrary(comctl);
-
-    if (button == kOn) {
-        Wh_SetIntValue(L"restoreEnabled", 1);
-        SaveSnapshot();
-    } else if (button == kOff || current == -1) {
-        Wh_SetIntValue(L"restoreEnabled", 0);  // closing on first run = off
-    }
-
-    g_dialogOpen = false;
-    if (g_stopping) PostQuitMessage(0);
-}
+// ---------------------------------------------------------------------------
+// Session thread: hidden window, timers and shutdown notifications
+// ---------------------------------------------------------------------------
 
 LRESULT CALLBACK SessionWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_TIMER:
-            if (wParam == kTimerFirstRun) {
-                KillTimer(hwnd, wParam);
-                ShowOptionsDialog();
-            } else if (wParam == kTimerSnapshot) {
-                if (!g_endingSession && !g_restoring && RestoreChoice() == 1)
-                    SaveSnapshot();
+            if (wParam == kTimerSnapshot) {
+                if (!g_endingSession && !g_restoring) SaveSnapshot();
             } else if (wParam == kTimerRestoreStart) {
                 KillTimer(hwnd, wParam);
                 BuildRestoreQueue();
@@ -447,12 +437,8 @@ LRESULT CALLBACK SessionWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             }
             return 0;
 
-        case WM_HOTKEY:
-            ShowOptionsDialog();
-            return 0;
-
-        // Shutdown/restart/sign-out: freeze the list. No snapshot here: Explorer
-        // is usually told LAST, after programs have already closed.
+        // Shutdown/restart/sign-out: freeze the list. No snapshot here: this
+        // process is told late, after programs have already started closing.
         case WM_QUERYENDSESSION:
             g_endingSession = true;
             return TRUE;
@@ -464,7 +450,6 @@ LRESULT CALLBACK SessionWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             DestroyWindow(hwnd);
             return 0;
         case WM_DESTROY:
-            UnregisterHotKey(hwnd, kHotkeyId);
             PostQuitMessage(0);
             return 0;
     }
@@ -472,17 +457,6 @@ LRESULT CALLBACK SessionWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 }
 
 DWORD WINAPI SessionThread(LPVOID) {
-    // Only one instance per user session, even with several explorer.exe
-    // (e.g. "Launch folder windows in a separate process").
-    HANDLE mutex = CreateMutexW(nullptr, FALSE, L"Local\\ReopenPrograms_Session");
-    if (!mutex) return 0;
-    // Normal: "explorer.exe shell:AppsFolder\..." (used to reopen Store apps)
-    // and folder windows can start extra Explorer processes. Stay idle there.
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        CloseHandle(mutex);
-        return 0;
-    }
-
     HINSTANCE instance = reinterpret_cast<HINSTANCE>(&__ImageBase);
     WNDCLASSW wc{};
     wc.lpfnWndProc = SessionWndProc;
@@ -496,29 +470,11 @@ DWORD WINAPI SessionThread(LPVOID) {
                                 0, 0, 0, 0, nullptr, nullptr, instance, nullptr);
     g_sessionWnd = hwnd;
     if (hwnd) {
-        g_lastSaved = ReadSavedSession();
-        if (!RegisterHotKey(hwnd, kHotkeyId,
-                            MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, 'R'))
-            Log(L"Hotkey Ctrl+Alt+Shift+R is taken by another program");
-
-        // Volatile key = erased by Windows at sign-out. If we create it, this is
-        // the first Explorer of this sign-in; if it already exists, Explorer
-        // just restarted (crash) and we must NOT reopen everything again.
-        HKEY key;
-        DWORD disposition = 0;
-        if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\ReopenPrograms_Session",
-                            0, nullptr, REG_OPTION_VOLATILE, KEY_READ, nullptr,
-                            &key, &disposition) == ERROR_SUCCESS)
-            RegCloseKey(key);
-
-        int choice = RestoreChoice();
-        Log(L"Started. choice=%d (-1 never asked, 0 off, 1 on), new sign-in=%d",
-            choice, disposition == REG_CREATED_NEW_KEY ? 1 : 0);
-        if (choice == -1) {
-            SetTimer(hwnd, kTimerFirstRun, 3000, nullptr);  // first activation
-        } else if (choice == 1 && disposition == REG_CREATED_NEW_KEY) {
+        g_lastSaved = ReadStringValue(L"lastSession");
+        if (ShouldRestoreThisSignIn()) {
             g_restoring = true;
-            SetTimer(hwnd, kTimerRestoreStart, kRestoreDelayMs, nullptr);
+            SetTimer(hwnd, kTimerRestoreStart,
+                     static_cast<UINT>(g_restoreDelaySec) * 1000, nullptr);
         }
         SetTimer(hwnd, kTimerSnapshot, kSnapshotIntervalMs, nullptr);
 
@@ -531,22 +487,208 @@ DWORD WINAPI SessionThread(LPVOID) {
     }
 
     UnregisterClassW(kSessionClass, instance);
-    CloseHandle(mutex);
     return 0;
 }
 
-BOOL Wh_ModInit() {
+// ---------------------------------------------------------------------------
+// Tool mod lifecycle (the boilerplate below calls these)
+// ---------------------------------------------------------------------------
+
+BOOL WhTool_ModInit() {
+    LoadSettings();
     g_sessionThread = CreateThread(nullptr, 0, SessionThread, nullptr, 0, nullptr);
+    return g_sessionThread != nullptr;
+}
+
+void WhTool_ModSettingsChanged() {
+    LoadSettings();
+}
+
+void WhTool_ModUninit() {
+    // Stop the session thread; the boilerplate then ends the process.
+    if (!g_sessionThread) return;
+    g_stopping = true;
+    if (HWND wnd = g_sessionWnd) PostMessageW(wnd, WM_CLOSE, 0, 0);
+    WaitForSingleObject(g_sessionThread, INFINITE);
+    CloseHandle(g_sessionThread);
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
-void Wh_ModUninit() {
-    // Stop the session thread before the DLL is unloaded.
-    if (g_sessionThread) {
-        g_stopping = true;
-        if (HWND dialog = g_dialogWnd) PostMessageW(dialog, WM_CLOSE, 0, 0);
-        if (HWND wnd = g_sessionWnd) PostMessageW(wnd, WM_CLOSE, 0, 0);
-        WaitForSingleObject(g_sessionThread, INFINITE);
-        CloseHandle(g_sessionThread);
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
     }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
