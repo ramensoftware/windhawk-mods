@@ -2,12 +2,194 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-07T07:00:02.000Z</updated>
+    <updated>2026-10-07T08:01:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Easy Notes 1.0.0]]></title>
+        <id>https://windhawk.net/mods/desktop-sticky-notes#a62876b77495715634ac44a4b15bbf55fdf1a490</id>
+        <link href="https://windhawk.net/mods/desktop-sticky-notes"/>
+        <updated>2026-10-07T08:01:30.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="easynotes">Easy Notes</h1>
+<p>Sticky notes for your Windows desktop. The notes sit above the wallpaper and
+desktop icons, but <strong>behind every application window</strong>, like part of the
+wallpaper you can write on. They never take focus by themselves, and they
+never show up in the taskbar or in Alt+Tab.</p>
+<p><img src="https://raw.githubusercontent.com/Torsion1035/easy-notes/main/screenshot.png" alt="Easy Notes: three notes and the Themes panel" /></p>
+<p>The mod runs in its own process, so it never runs inside Explorer.</p>
+<h2 id="modes">Modes</h2>
+<ul>
+<li><strong>Single</strong>: one note.</li>
+<li><strong>Multiple</strong>: as many notes as you want, for example one per department or
+client. Each note has its own title, and can have its own background color.</li>
+</ul>
+<p>Switching modes never deletes anything. Single mode shows the first note, and
+Multiple mode shows all of them. Switch with the <em>Mode</em> setting or from a
+note's <strong>…</strong> menu &gt; <em>Mode</em>; whichever you changed last wins.</p>
+<h2 id="thetoolpanel">The tool panel</h2>
+<p>Every note has a two-row tool panel at the top:</p>
+<ul>
+<li><strong>Row 1, the title bar</strong>: the note's title (drag it to move the note,
+double-click it to rename) and the <strong>…</strong> menu button on the right.</li>
+<li><strong>Row 2, the tool strip</strong>, left to right:</li>
+<li><strong>1.</strong>: auto-numbering on/off</li>
+<li><strong>checkbox icon</strong>: turn every line into a checkbox, or back into plain text</li>
+<li><strong>B</strong> and <strong>I</strong>: bold and italic for the selected text. They work while
+you're editing and are faded out otherwise.</li>
+<li><strong>Color circle</strong> (right end): drawn in the note's current background
+color, so it previews the note. Click it for the color menu.</li>
+</ul>
+<h3 id="menutitlebar">"…" menu (title bar)</h3>
+<ol>
+<li>Themes…</li>
+<li>Mode: Single / Multiple</li>
+<li>Auto-numbering (checked when on)</li>
+<li>All lines as checkboxes</li>
+<li>Height: Small / Medium / Large</li>
+<li>New note (disabled in Single mode)</li>
+<li>Delete note</li>
+<li>About Easy Notes (creator and MIT license)</li>
+</ol>
+<p>Right-clicking the title bar or the tool strip opens the same menu.</p>
+<h3 id="colormenucolorcircleinrow2">Color menu (Color circle in row 2)</h3>
+<ol>
+<li>Themes…</li>
+<li>Follow theme: clears this note's background override (checked when no
+override is set)</li>
+<li>Yellow, Green, Blue, Pink, Purple, Orange, Gray, each with a swatch. These
+set this note's background only.</li>
+<li>Custom (hex from settings): the <em>Custom color</em> hex code</li>
+</ol>
+<h3 id="rightclickmenuonthenotebody">Right-click menu on the note body</h3>
+<p>Cut, Copy, Paste, Bold, Italic, Themes…, Delete note. Cut, Copy, Paste, Bold
+and Italic work while you're editing and are shown disabled otherwise.</p>
+<h2 id="usingthenotes">Using the notes</h2>
+<p>| Action | How |
+|---|---|
+| Edit text | Click an empty part of a note's body. Press <strong>Esc</strong> or click elsewhere to finish. |
+| Rename | Double-click the title. <strong>Enter</strong> saves and <strong>Esc</strong> cancels. |
+| Bold / Italic | While editing, select text and click <strong>B</strong> / <strong>I</strong>, press <strong>Ctrl+B</strong> / <strong>Ctrl+I</strong>, or use the right-click menu. With nothing selected, it applies to what you type next. |
+| Checkbox item | Start a line with <code>[ ]</code> while editing. <code>[x]</code> marks it as done. In normal view, click the box to toggle it. Done items are struck through. |
+| Links | <code>http://</code>, <code>https://</code> and <code>www.</code> addresses are underlined. Click one to open it in your default browser. |
+| Auto-numbering | Click <strong>1.</strong> in the tool strip (off by default). Non-empty lines are numbered 1., 2., 3., … and the numbers update automatically. |
+| Checklist | Click the checkbox icon in the tool strip, or "…" &gt; <em>All lines as checkboxes</em>. |
+| Note color | Click the Color circle: <em>Follow theme</em>, a preset color, or <em>Custom (hex from settings)</em>. Text turns light automatically on dark colors. |
+| Theme | "…" &gt; <em>Themes…</em>, the Color circle &gt; <em>Themes…</em>, right-click &gt; <em>Themes…</em>, or the <em>Theme</em> setting. |
+| Height | "…" &gt; <em>Height</em> &gt; Small / Medium / Large. |
+| New / delete | "…" &gt; <em>New note</em> / <em>Delete note</em> (delete is also in the right-click menu). |
+| Move | Drag the title bar. Horizontal movement only switches columns, and vertical movement is free. A blue outline shows where the note will land. |
+| Scroll | Use the mouse wheel over a note whose text doesn't fit. |
+| Paste | Ctrl+V and <em>Paste</em> insert plain text: formatting copied from web pages is dropped. |</p>
+<h2 id="themes">Themes</h2>
+<p>Pick a theme in the <strong>Themes panel</strong> (open it with <em>Themes…</em> from the "…"
+menu, the Color circle or the right-click menu), or in the <em>Theme</em> setting.
+Both set the same thing, and whichever you changed last wins.</p>
+<p>The panel shows three sections:</p>
+<ul>
+<li><strong>Showa Tones</strong> (Wada colors): Hojicha, Yoru Kinari, Sakura Sumi, Kaki,
+Matcha Kuri, Ume</li>
+<li><strong>Right Now</strong> (2026 trend colors): Kumo, Tsuchi, Moegi, Fuji, Akane</li>
+<li><strong>Quiet Hours</strong> (minimal neutrals): <strong>Default</strong>, Shiro, Hai, Kinu, Sumi</li>
+</ul>
+<p><strong>Default</strong> is the solid color from the <em>Solid color</em> setting, and it's the
+theme on a fresh install.</p>
+<p>Each tile shows a miniature note in that theme's real colors (title bar, tool
+strip with icons, two lines of text). Hover a tile to see what the name means.
+A round dot in each tile's corner marks the selection: an empty ring for the
+others, a filled dot for the selected theme, which also gets an outline.</p>
+<p>Click a tile to apply it to every note immediately; it's saved right away.
+Notes with a background override go back to following the theme. You can
+also use the arrow keys to move between tiles, <strong>Space</strong> or <strong>Enter</strong> to
+select, and <strong>Esc</strong> to close. The panel also closes when you click anywhere
+outside it.</p>
+<h2 id="customcolors">Custom colors</h2>
+<p>The <em>Appearance</em> setting decides where the note look comes from:</p>
+<ul>
+<li><strong>Theme</strong> (default): the selected theme (see above).</li>
+<li><strong>Solid color</strong>: every note uses the <em>Solid color</em> hex code as its
+background. The title bar, tool strip and text colors are derived from it.</li>
+<li><strong>Custom (Jiyu builder)</strong>: Jiyu is the free-form theme. Set <em>Jiyu base
+color</em> (note background) and <em>Jiyu strip color</em> (tool strip). The title bar,
+icons and text are derived from those two. Jiyu is reachable only through
+this setting, not through the panel.</li>
+</ul>
+<p>In Solid and Custom mode the Themes panel opens dimmed, with a banner saying
+which mode is on. Clicking a tile then only saves your choice. It takes
+effect when <em>Appearance</em> is set back to <em>Theme</em>.</p>
+<p>A note's own background (Color circle) applies in every mode. It changes the
+background only; the title bar and tool strip keep the current look.</p>
+<p><em>Option text color</em> and <em>Option hover color</em> change the theme names and the
+hover highlight in the Themes panel. Leave them empty for automatic colors.</p>
+<h2 id="layoutmultiplemode">Layout (Multiple mode)</h2>
+<p>Notes are placed on an automatic column grid on the <strong>primary monitor's work
+area</strong>. The column count is <code>floor(available width / (column width + gap))</code>.
+The <em>Column width</em> setting ranges from 220 to 600. Every note is exactly one
+column wide, and its height is Small, Medium or Large. Notes in a column
+stack from top to bottom without overlapping. If you drop a note above (or
+onto the upper half of) another note, the notes below are pushed down. When
+the resolution or DPI changes, the grid reflows. If there are fewer columns
+than before, notes from removed columns move into the last column.</p>
+<h2 id="storage">Storage</h2>
+<p>Notes are saved shortly after each change, in the mod's own storage folder
+(in a subfolder per Windows user). Windhawk removes the folder together with
+the mod. The file is written to a temporary file first and then renamed, so a
+crash can't leave it half-written. If <code>notes.json</code> can't be read, nothing is
+overwritten. If it can't be parsed, it's copied to <code>notes.corrupt.json</code> before
+anything new is written. Mode, column width, colors, font size and opacity
+live in the mod settings.</p>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>Notes only appear on the primary monitor.</li>
+<li>A column that has more notes than fit vertically runs off the bottom of the
+screen. Use smaller heights or more columns.</li>
+<li>Opacity below 100% uses a layered window. In that case the corners are
+rounded with a window region, so they aren't anti-aliased.</li>
+<li>The notes stay visible when you use Show desktop (Win+D). If a wallpaper
+tool or an Explorer restart rearranges the desktop windows, the mod checks
+every 2 seconds and puts the notes back above the desktop, so they may take
+a moment to return.</li>
+<li>Only bold and italic are supported; no underline, colors, sizes or images.
+Text dragged in from another app may show other formatting while you edit,
+but only bold and italic are kept.</li>
+<li>The menus use the standard Windows look. They don't follow the active theme.</li>
+<li>If the lowest window on screen belongs to an elevated program, the notes
+can't be placed relative to it. They then use the nearest window they can,
+and may stay in front of that elevated window.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<p>Created by <strong>Torsion</strong>.</p>
+<p>Licensed under the MIT License.</p>]]></content>
+        <author>
+            <name>Torsion</name>
+            <uri>https://github.com/Torsion1035</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Fix for Classic theme metrics on 24H2, 25H2, 26H2 builds 9444+ 1.0]]></title>
+        <id>https://windhawk.net/mods/classic-theme-metrics-fix#eb5196771051983b0382a6c06a410bc53d7675ce</id>
+        <link href="https://windhawk.net/mods/classic-theme-metrics-fix"/>
+        <updated>2026-10-07T08:01:24.000Z</updated>
+        <content type="html"><![CDATA[<p>This mod is intended to workaround the bug with broken titlebar and scrollbar buttons in Classic theme on Windows 11 24H2, 25H2, 26H2 with build number 9444 and newer or version 26H1. If you are on build 8875 or below, you do not need this mod.</p>
+<p>On the newest builds of Windows Microsoft broke the very core of its operating system, the essential part of the kernel,
+the module win32k.sys. This led to the titlebar buttons and scrollbars in unthemed applications being broken.</p>
+<p>How it works? On the affected build the actual size of the titlebar and scrollbar buttons is taken from the user's registry
+section, while their visible size is takes from the default user. This makes the buttons to be painted with different size than their actual size, creating garbage and visual glitches.</p>
+<p>This mod copies the user's window metrics data from the current user (HKEY<em>CURRENT</em>USER\Control Panel\Desktop\WindowMetrics) to the default user (HKEY_USERS.DEFAULT\Control Panel\Desktop\WindowMetrics) upon theme change, thus
+forcing them being in sync. </p>
+<p>Unfortunately, the values from the default user's registry are read only once during the login screen. This makes it impossible to intercept the query during the interactive user's session.
+After a theme change, re-login for the changes to take effect.</p>
+<p>Before mod:</p>
+<p><img src="https://i.imgur.com/MSXt5Wt.png" alt="before" /></p>
+<p>After mod:</p>
+<p><img src="https://i.imgur.com/Y8GreLt.png" alt="after" /></p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Picker 1.5.4]]></title>
         <id>https://windhawk.net/mods/explorer-picker#e107837f61706174ee2d11039349466bb78d2fb6</id>
@@ -1371,130 +1553,6 @@ ARM64 runtime behavior remains untested. Shell symbols are required.</p>]]></con
         <author>
             <name>Arimodu</name>
             <uri>https://github.com/Arimodu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Multi-DPI Cursor 1.0]]></title>
-        <id>https://windhawk.net/mods/multi-dpi-cursor#07ea9504ad2912adc13f31fc317fc6ed20ab251a</id>
-        <link href="https://windhawk.net/mods/multi-dpi-cursor"/>
-        <updated>2026-10-03T17:01:48.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="multidpicursor">Multi-DPI Cursor</h1>
-<p>Windows uses a single cursor size (in pixels) for all monitors, so on a mixed
-setup (e.g. 100 % and 125 % scaling) the cursor looks smaller on the
-higher-DPI monitor.</p>
-<p>Whenever the cursor moves to another monitor, this mod sets the cursor size to
-<code>baseSize × monitorDpi / 96</code>. At 125 % a base size of 32 becomes 40.</p>
-<p>By default, the base size is the pointer size chosen in Windows Settings
-(Accessibility &gt; Mouse pointer and touch), so the Settings slider keeps working.
-Set a base size in the mod settings to override it. While dragging the
-slider, the cursor briefly jumps between the Settings size and the scaled
-size, and settles once the slider is released.</p>
-<p>Cursor movement is received via an out-of-context WinEvent hook, so there is
-no polling and mouse input is never delayed. Disabling the mod restores the
-pointer size from Windows Settings.</p>
-<p>The size is applied live only and never written to the registry. It relies on
-the undocumented <code>SystemParametersInfo(0x2029)</code> call used by the Settings app,
-which a Windows update could change.</p>]]></content>
-        <author>
-            <name>Marco Kretz</name>
-            <uri>https://github.com/marco-kretz</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Acrylic Color Glows 0.4.2]]></title>
-        <id>https://windhawk.net/mods/acrylic-color-glows#72b4d1d86c1ec6e0fefba8f2b54b33dec2021738</id>
-        <link href="https://windhawk.net/mods/acrylic-color-glows"/>
-        <updated>2026-10-03T17:01:45.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="acryliccolorglows">Acrylic Color Glows</h1>
-<p><img src="https://i.imgur.com/qvqqV2I.png" alt="Acrylic Glow" />
-<a href="https://i.imgur.com/huCSr8H.mp4">Watch the overview video in full quality</a></p>
-<p>Animated light effects behind the windows you choose: drifting glows, sweeping
-light beams, orbs moving in the directions you pick, or flowing waves. The
-effect is drawn by a separate, click-through window placed directly below each
-target window, so a translucent (acrylic/blur) target blurs it into its own
-background. The mod doesn't inject code into other processes, never draws above
-text or controls, and doesn't change the transparency of any application.</p>
-<h2 id="effects">Effects</h2>
-<ul>
-<li><strong>Glows</strong>: three large glows drifting from side to side.</li>
-<li><strong>Light beams</strong>: soft beams coming from one edge of the window and slowly
-sweeping back and forth. Choose the number of beams, the edge and the sweep
-angle.</li>
-<li><strong>Directional orbs</strong>: up to 12 orbs, each with its own color, direction and
-speed. They bounce off the edges or wrap around to the opposite side.</li>
-<li><strong>Waves</strong>: three flowing bands of color. Choose the amplitude and the
-wavelength.</li>
-</ul>
-<p>Colors 1-3 are used by glows, beams and waves; orbs have their own colors.
-"Cycle duration" sets the overall speed of every effect. "Size" sets the glow
-and orb diameter and the beam and wave thickness.</p>
-<h2 id="savingpower">Saving power</h2>
-<p>While an effect moves, Windows has to redraw the screen and recompute the blur
-of every decorated window on each frame. Slower or fainter effects don't
-reduce that work; fewer moving windows do:</p>
-<ul>
-<li><strong>Animate</strong>: all windows, only the active window (the others keep their
-effect, frozen), or none (a still effect, with no ongoing GPU work).</li>
-<li><strong>Smoothness</strong>: "Reduced" updates the motion about 30 times per second
-instead of at the monitor's refresh rate. Slow, blurred motion looks almost
-the same, and it saves power on high refresh rate monitors.</li>
-<li><strong>Power saving</strong>: freeze every effect on battery saver, while a fullscreen
-app, game or presentation is in front, or when Windows animation effects
-are turned off; hide it when Windows transparency effects are turned off,
-since acrylic is then opaque.</li>
-</ul>
-<p>Frozen effects resume exactly where they stopped. When nothing is moving, the
-shared clock stops too.</p>
-<p>The effect sits behind the window's blur, so fine details are softened: large,
-slow, soft shapes work best. Speeds are rounded very slightly so that every
-motion loops seamlessly.</p>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li>Windows 10 version 1803 or later (Windows 11 recommended).</li>
-<li>Target windows must already be translucent, for example through their own
-acrylic backdrop or another Windhawk mod. Opaque or Mica backgrounds hide the
-effect.</li>
-<li>Don't combine this mod with another mod that also draws effects behind the
-same windows.</li>
-</ul>
-<h2 id="modes">Modes</h2>
-<ul>
-<li><strong>Selected applications</strong>: every regular top-level window of the listed
-processes gets the effect, whether or not Windows reports it as acrylic.</li>
-<li><strong>Automatic</strong>: only windows that declare the acrylic system backdrop
-(<code>DWMSBT_TRANSIENTWINDOW</code>) to Windows. Acrylic implemented in other ways
-isn't detected.</li>
-<li><strong>Selected applications + automatic</strong>: both.</li>
-</ul>
-<p>Process names are case-insensitive, without paths or wildcards. Exclusions
-always win. Most UWP apps run inside <code>ApplicationFrameHost.exe</code>.</p>
-<p>The desktop, taskbar, shell overlays, tool windows and the mod's own process
-are always skipped. Processes that can't be queried (for example elevated or
-protected ones) are skipped too.</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod runs as a tool mod in a dedicated Windhawk process. A single worker
-thread owns all effect windows. Animations run on the GPU through
-Windows.UI.Composition, driven by one shared clock. Window events keep the effect aligned, and a two-second poll
-catches anything that was missed.</p>
-<p>Settings changes apply immediately. Colors and intensity change in place;
-other changes rebuild the effect windows, which fade back in.</p>
-<p>The effect is hidden while the target is minimized, hidden or cloaked. It is
-also hidden briefly while a window opens, maximizes, restores or comes back
-from the taskbar, then fades in once the system animation is over.</p>
-<p>Effect windows are fully click-through, never take focus and don't appear in
-the taskbar or in Alt+Tab. Invisible overlays (fully transparent or
-click-through windows), tiny helper windows and borderless popups such as
-tooltips, menus, flyouts and drop-down lists are never decorated.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>The effect window is a separate window, so during fast dragging it can lag
-slightly behind the target.</li>
-<li>The final color depends on each application's tint and blur strength.</li>
-<li>The window limit includes temporarily hidden effects.</li>
-</ul>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
         </author>
     </entry>
 </feed>

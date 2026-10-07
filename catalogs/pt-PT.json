@@ -413,12 +413,12 @@
         "ratingUsers": 18,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791223360000,
+        "updated": 1791360095000,
         "users": 146
       },
       "metadata": {
         "author": "caliberda",
-        "compilerOptions": "-ld3d11 -ldxgi -ld2d1 -ldcomp -ldwrite -ldwmapi -lole32 -loleaut32 -luuid -lruntimeobject -lwindowscodecs -lshcore -lshell32 -lgdi32",
+        "compilerOptions": "-ld3d11 -ldxgi -ld2d1 -ldcomp -ldwrite -ldwmapi -lole32 -loleaut32 -luuid -lruntimeobject -lwindowscodecs -lshcore -lshell32 -lgdi32 -ladvapi32",
         "description": "Substitui o Alt+Tab por uma pilha 3D fluida de janelas ao vivo, no estilo Flip 3D do Windows Vista",
         "github": "https://github.com/cesarkali",
         "homepage": "https://caliberda.com.br",
@@ -428,7 +428,7 @@
         ],
         "license": "MIT",
         "name": "Alt+Tab Flip 3D (estilo Vista)",
-        "version": "1.5.3"
+        "version": "1.6.0"
       },
       "metadataEnglish": {
         "description": "Replaces Alt+Tab with a fluid, Windows Vista-style Flip 3D stack of live windows",
@@ -2423,6 +2423,29 @@
         "version": "1.0.0"
       }
     },
+    "classic-theme-metrics-fix": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791360084000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791360084000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Anixx",
+        "compilerOptions": "-ladvapi32 -lwtsapi32",
+        "description": "Syncs WindowMetrics of current user with default user at theme change and logon.",
+        "github": "https://github.com/Anixx",
+        "include": [
+          "winlogon.exe"
+        ],
+        "name": "Fix for Classic theme metrics on 24H2, 25H2, 26H2 builds 9444+",
+        "version": "1.0"
+      }
+    },
     "classic-theme-transparency-fix": {
       "details": {
         "defaultSorting": 10550,
@@ -2583,7 +2606,7 @@
         "ratingUsers": 9,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791097233000,
+        "updated": 1791360079000,
         "users": 31
       },
       "metadata": {
@@ -2591,14 +2614,15 @@
           "x86-64"
         ],
         "author": "appEW",
-        "compilerOptions": "-lcomctl32 -lgdi32 -lmsimg32 -lole32 -lshlwapi -luuid -lwindowscodecs",
-        "description": "Brings back the Windows 2000 WebView - the pane left of the file list with the icon and name of the folder or the selected item, a divider line, a description and See also links",
+        "compilerOptions": "-lcomctl32 -lgdi32 -lmsimg32 -lole32 -lshlwapi -luuid -lwindowscodecs -loleaut32 -lpropsys -lshell32 -luxtheme -lwinspool",
+        "description": "Restores Explorer WebView with Windows 2000/98/Me layouts, file thumbnails, image viewing, metadata, classic disk charts and special folder actions",
         "github": "https://github.com/appEW",
         "include": [
           "explorer.exe"
         ],
+        "license": "MIT",
         "name": "Classic WebView Pane",
-        "version": "2.16"
+        "version": "2.17"
       }
     },
     "classic-window-switcher": {
@@ -3758,6 +3782,30 @@
         ],
         "name": "2D Rectangular Selection for Desktop",
         "version": "1.0"
+      }
+    },
+    "desktop-sticky-notes": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791360090000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791360090000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Torsion",
+        "compilerOptions": "-lgdi32 -luser32 -lcomctl32 -lshell32 -lole32 -ldwmapi -ladvapi32",
+        "description": "Sticky notes that live on the desktop, with checklists, clickable links, auto-numbering and a snapping column grid",
+        "github": "https://github.com/Torsion1035",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Easy Notes",
+        "version": "1.0.0"
       }
     },
     "desktop-watermark-tweaks": {

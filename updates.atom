@@ -2,12 +2,235 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-07T07:00:02.000Z</updated>
+    <updated>2026-10-07T08:01:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Alt+Tab Flip 3D (Vista Style) 1.6.0]]></title>
+        <id>https://windhawk.net/mods/alt-tab-flip-3d#843d28cb7ca4d6d1b96b32b117820a12131dd087</id>
+        <link href="https://windhawk.net/mods/alt-tab-flip-3d"/>
+        <updated>2026-10-07T08:01:35.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Alt+Tab is taken over reliably next to tools that inject keys, like AutoHotkey scripts: keys injected by other programs no longer end or block a session (#5945).</li>
+<li>New "Shortcut" setting: Alt+Tab, Win+Tab, or both (#5946).</li>
+<li>Ctrl+Alt+Tab opens the switcher and keeps it open after the keys are released (can be turned off) (#5947).</li>
+<li>New "Title position" setting: bottom of the screen, or right below the selected window (#5948).</li>
+<li>The blurred wallpaper background no longer turns black when the wallpaper can't be read (Windows Spotlight, HEIC/AVIF files, a deleted file): Windows' own copy of the wallpaper is used, and the desktop shows through if there's none.</li>
+<li>Middle-click a window to close it, or click the X shown on the window under the mouse (both can be turned off). The closed window shrinks away and the others slide into place.</li>
+<li>New "Window size" and "Depth" settings, to bring the windows closer or push them farther back.</li>
+<li>Bars and docks such as YASB and WindowSill are left out of the switcher, and an "Excluded apps" list leaves out any other app.</li>
+</ul>]]></content>
+        <author>
+            <name>caliberda</name>
+            <uri>https://github.com/cesarkali</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Easy Notes 1.0.0]]></title>
+        <id>https://windhawk.net/mods/desktop-sticky-notes#a62876b77495715634ac44a4b15bbf55fdf1a490</id>
+        <link href="https://windhawk.net/mods/desktop-sticky-notes"/>
+        <updated>2026-10-07T08:01:30.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="easynotes">Easy Notes</h1>
+<p>Sticky notes for your Windows desktop. The notes sit above the wallpaper and
+desktop icons, but <strong>behind every application window</strong>, like part of the
+wallpaper you can write on. They never take focus by themselves, and they
+never show up in the taskbar or in Alt+Tab.</p>
+<p><img src="https://raw.githubusercontent.com/Torsion1035/easy-notes/main/screenshot.png" alt="Easy Notes: three notes and the Themes panel" /></p>
+<p>The mod runs in its own process, so it never runs inside Explorer.</p>
+<h2 id="modes">Modes</h2>
+<ul>
+<li><strong>Single</strong>: one note.</li>
+<li><strong>Multiple</strong>: as many notes as you want, for example one per department or
+client. Each note has its own title, and can have its own background color.</li>
+</ul>
+<p>Switching modes never deletes anything. Single mode shows the first note, and
+Multiple mode shows all of them. Switch with the <em>Mode</em> setting or from a
+note's <strong>…</strong> menu &gt; <em>Mode</em>; whichever you changed last wins.</p>
+<h2 id="thetoolpanel">The tool panel</h2>
+<p>Every note has a two-row tool panel at the top:</p>
+<ul>
+<li><strong>Row 1, the title bar</strong>: the note's title (drag it to move the note,
+double-click it to rename) and the <strong>…</strong> menu button on the right.</li>
+<li><strong>Row 2, the tool strip</strong>, left to right:</li>
+<li><strong>1.</strong>: auto-numbering on/off</li>
+<li><strong>checkbox icon</strong>: turn every line into a checkbox, or back into plain text</li>
+<li><strong>B</strong> and <strong>I</strong>: bold and italic for the selected text. They work while
+you're editing and are faded out otherwise.</li>
+<li><strong>Color circle</strong> (right end): drawn in the note's current background
+color, so it previews the note. Click it for the color menu.</li>
+</ul>
+<h3 id="menutitlebar">"…" menu (title bar)</h3>
+<ol>
+<li>Themes…</li>
+<li>Mode: Single / Multiple</li>
+<li>Auto-numbering (checked when on)</li>
+<li>All lines as checkboxes</li>
+<li>Height: Small / Medium / Large</li>
+<li>New note (disabled in Single mode)</li>
+<li>Delete note</li>
+<li>About Easy Notes (creator and MIT license)</li>
+</ol>
+<p>Right-clicking the title bar or the tool strip opens the same menu.</p>
+<h3 id="colormenucolorcircleinrow2">Color menu (Color circle in row 2)</h3>
+<ol>
+<li>Themes…</li>
+<li>Follow theme: clears this note's background override (checked when no
+override is set)</li>
+<li>Yellow, Green, Blue, Pink, Purple, Orange, Gray, each with a swatch. These
+set this note's background only.</li>
+<li>Custom (hex from settings): the <em>Custom color</em> hex code</li>
+</ol>
+<h3 id="rightclickmenuonthenotebody">Right-click menu on the note body</h3>
+<p>Cut, Copy, Paste, Bold, Italic, Themes…, Delete note. Cut, Copy, Paste, Bold
+and Italic work while you're editing and are shown disabled otherwise.</p>
+<h2 id="usingthenotes">Using the notes</h2>
+<p>| Action | How |
+|---|---|
+| Edit text | Click an empty part of a note's body. Press <strong>Esc</strong> or click elsewhere to finish. |
+| Rename | Double-click the title. <strong>Enter</strong> saves and <strong>Esc</strong> cancels. |
+| Bold / Italic | While editing, select text and click <strong>B</strong> / <strong>I</strong>, press <strong>Ctrl+B</strong> / <strong>Ctrl+I</strong>, or use the right-click menu. With nothing selected, it applies to what you type next. |
+| Checkbox item | Start a line with <code>[ ]</code> while editing. <code>[x]</code> marks it as done. In normal view, click the box to toggle it. Done items are struck through. |
+| Links | <code>http://</code>, <code>https://</code> and <code>www.</code> addresses are underlined. Click one to open it in your default browser. |
+| Auto-numbering | Click <strong>1.</strong> in the tool strip (off by default). Non-empty lines are numbered 1., 2., 3., … and the numbers update automatically. |
+| Checklist | Click the checkbox icon in the tool strip, or "…" &gt; <em>All lines as checkboxes</em>. |
+| Note color | Click the Color circle: <em>Follow theme</em>, a preset color, or <em>Custom (hex from settings)</em>. Text turns light automatically on dark colors. |
+| Theme | "…" &gt; <em>Themes…</em>, the Color circle &gt; <em>Themes…</em>, right-click &gt; <em>Themes…</em>, or the <em>Theme</em> setting. |
+| Height | "…" &gt; <em>Height</em> &gt; Small / Medium / Large. |
+| New / delete | "…" &gt; <em>New note</em> / <em>Delete note</em> (delete is also in the right-click menu). |
+| Move | Drag the title bar. Horizontal movement only switches columns, and vertical movement is free. A blue outline shows where the note will land. |
+| Scroll | Use the mouse wheel over a note whose text doesn't fit. |
+| Paste | Ctrl+V and <em>Paste</em> insert plain text: formatting copied from web pages is dropped. |</p>
+<h2 id="themes">Themes</h2>
+<p>Pick a theme in the <strong>Themes panel</strong> (open it with <em>Themes…</em> from the "…"
+menu, the Color circle or the right-click menu), or in the <em>Theme</em> setting.
+Both set the same thing, and whichever you changed last wins.</p>
+<p>The panel shows three sections:</p>
+<ul>
+<li><strong>Showa Tones</strong> (Wada colors): Hojicha, Yoru Kinari, Sakura Sumi, Kaki,
+Matcha Kuri, Ume</li>
+<li><strong>Right Now</strong> (2026 trend colors): Kumo, Tsuchi, Moegi, Fuji, Akane</li>
+<li><strong>Quiet Hours</strong> (minimal neutrals): <strong>Default</strong>, Shiro, Hai, Kinu, Sumi</li>
+</ul>
+<p><strong>Default</strong> is the solid color from the <em>Solid color</em> setting, and it's the
+theme on a fresh install.</p>
+<p>Each tile shows a miniature note in that theme's real colors (title bar, tool
+strip with icons, two lines of text). Hover a tile to see what the name means.
+A round dot in each tile's corner marks the selection: an empty ring for the
+others, a filled dot for the selected theme, which also gets an outline.</p>
+<p>Click a tile to apply it to every note immediately; it's saved right away.
+Notes with a background override go back to following the theme. You can
+also use the arrow keys to move between tiles, <strong>Space</strong> or <strong>Enter</strong> to
+select, and <strong>Esc</strong> to close. The panel also closes when you click anywhere
+outside it.</p>
+<h2 id="customcolors">Custom colors</h2>
+<p>The <em>Appearance</em> setting decides where the note look comes from:</p>
+<ul>
+<li><strong>Theme</strong> (default): the selected theme (see above).</li>
+<li><strong>Solid color</strong>: every note uses the <em>Solid color</em> hex code as its
+background. The title bar, tool strip and text colors are derived from it.</li>
+<li><strong>Custom (Jiyu builder)</strong>: Jiyu is the free-form theme. Set <em>Jiyu base
+color</em> (note background) and <em>Jiyu strip color</em> (tool strip). The title bar,
+icons and text are derived from those two. Jiyu is reachable only through
+this setting, not through the panel.</li>
+</ul>
+<p>In Solid and Custom mode the Themes panel opens dimmed, with a banner saying
+which mode is on. Clicking a tile then only saves your choice. It takes
+effect when <em>Appearance</em> is set back to <em>Theme</em>.</p>
+<p>A note's own background (Color circle) applies in every mode. It changes the
+background only; the title bar and tool strip keep the current look.</p>
+<p><em>Option text color</em> and <em>Option hover color</em> change the theme names and the
+hover highlight in the Themes panel. Leave them empty for automatic colors.</p>
+<h2 id="layoutmultiplemode">Layout (Multiple mode)</h2>
+<p>Notes are placed on an automatic column grid on the <strong>primary monitor's work
+area</strong>. The column count is <code>floor(available width / (column width + gap))</code>.
+The <em>Column width</em> setting ranges from 220 to 600. Every note is exactly one
+column wide, and its height is Small, Medium or Large. Notes in a column
+stack from top to bottom without overlapping. If you drop a note above (or
+onto the upper half of) another note, the notes below are pushed down. When
+the resolution or DPI changes, the grid reflows. If there are fewer columns
+than before, notes from removed columns move into the last column.</p>
+<h2 id="storage">Storage</h2>
+<p>Notes are saved shortly after each change, in the mod's own storage folder
+(in a subfolder per Windows user). Windhawk removes the folder together with
+the mod. The file is written to a temporary file first and then renamed, so a
+crash can't leave it half-written. If <code>notes.json</code> can't be read, nothing is
+overwritten. If it can't be parsed, it's copied to <code>notes.corrupt.json</code> before
+anything new is written. Mode, column width, colors, font size and opacity
+live in the mod settings.</p>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>Notes only appear on the primary monitor.</li>
+<li>A column that has more notes than fit vertically runs off the bottom of the
+screen. Use smaller heights or more columns.</li>
+<li>Opacity below 100% uses a layered window. In that case the corners are
+rounded with a window region, so they aren't anti-aliased.</li>
+<li>The notes stay visible when you use Show desktop (Win+D). If a wallpaper
+tool or an Explorer restart rearranges the desktop windows, the mod checks
+every 2 seconds and puts the notes back above the desktop, so they may take
+a moment to return.</li>
+<li>Only bold and italic are supported; no underline, colors, sizes or images.
+Text dragged in from another app may show other formatting while you edit,
+but only bold and italic are kept.</li>
+<li>The menus use the standard Windows look. They don't follow the active theme.</li>
+<li>If the lowest window on screen belongs to an elevated program, the notes
+can't be placed relative to it. They then use the nearest window they can,
+and may stay in front of that elevated window.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<p>Created by <strong>Torsion</strong>.</p>
+<p>Licensed under the MIT License.</p>]]></content>
+        <author>
+            <name>Torsion</name>
+            <uri>https://github.com/Torsion1035</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Fix for Classic theme metrics on 24H2, 25H2, 26H2 builds 9444+ 1.0]]></title>
+        <id>https://windhawk.net/mods/classic-theme-metrics-fix#eb5196771051983b0382a6c06a410bc53d7675ce</id>
+        <link href="https://windhawk.net/mods/classic-theme-metrics-fix"/>
+        <updated>2026-10-07T08:01:24.000Z</updated>
+        <content type="html"><![CDATA[<p>This mod is intended to workaround the bug with broken titlebar and scrollbar buttons in Classic theme on Windows 11 24H2, 25H2, 26H2 with build number 9444 and newer or version 26H1. If you are on build 8875 or below, you do not need this mod.</p>
+<p>On the newest builds of Windows Microsoft broke the very core of its operating system, the essential part of the kernel,
+the module win32k.sys. This led to the titlebar buttons and scrollbars in unthemed applications being broken.</p>
+<p>How it works? On the affected build the actual size of the titlebar and scrollbar buttons is taken from the user's registry
+section, while their visible size is takes from the default user. This makes the buttons to be painted with different size than their actual size, creating garbage and visual glitches.</p>
+<p>This mod copies the user's window metrics data from the current user (HKEY<em>CURRENT</em>USER\Control Panel\Desktop\WindowMetrics) to the default user (HKEY_USERS.DEFAULT\Control Panel\Desktop\WindowMetrics) upon theme change, thus
+forcing them being in sync. </p>
+<p>Unfortunately, the values from the default user's registry are read only once during the login screen. This makes it impossible to intercept the query during the interactive user's session.
+After a theme change, re-login for the changes to take effect.</p>
+<p>Before mod:</p>
+<p><img src="https://i.imgur.com/MSXt5Wt.png" alt="before" /></p>
+<p>After mod:</p>
+<p><img src="https://i.imgur.com/Y8GreLt.png" alt="after" /></p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Classic WebView Pane 2.17]]></title>
+        <id>https://windhawk.net/mods/classic-webview-pane#7d87bb3f48d7cfc2bd2150fc583a4e481fb84a29</id>
+        <link href="https://windhawk.net/mods/classic-webview-pane"/>
+        <updated>2026-10-07T08:01:19.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add individually switchable file thumbnails, an image viewer for Pictures/imgview folders, metadata, attributes, multiple-selection details, special-folder templates/actions and background printer updates.</li>
+<li>Add zoom, panning, actual size, best fit, printing and a separate image window. The Separate Window button can instead launch a user-selected viewer with configurable arguments and a quoted image path.</li>
+<li>Add Windows 2000/98/Me profiles, automatic English/Russian captions based on the Windows display language, language overrides and editable text captions. Built-in clouds use Picture width 0; squares use 127, matching the reference DLL, without overwriting the saved manual width.</li>
+<li>Preserve the 2.16 disk-chart and startup-layout fixes. Limit attachment to Explorer folder frames, preserve Desktop interaction and remove obsolete preview controls when the active folder changes.</li>
+<li>Retain a complete pane during Shell view replacement, preserve the shared sunken frame and corner artwork, and use the same NT5 pane width in Pictures and ordinary folders.</li>
+<li>Correct preview-toolbar painting, resizing and window recreation. Remove the extra white toolbar gap in both embedded and separate viewers; scroll overflowing details independently of the preview, with optional compact headers.</li>
+<li>Restore special-folder description plaques with system tooltip colours/font and tight, balanced text padding; correct profile colours and background blending.</li>
+<li>Keep divider colours in their original positions when a scrollbar appears: clip the full-width divider beneath the scrollbar. Avoid spurious horizontal scrolling caused by DPI rounding.</li>
+<li>Cancel stale preview results, join workers before unloading and preserve complete settings snapshots during nested Shell callbacks. Independently implement the identified Windows-source fragments and clarify setting scope/defaults.</li>
+</ul>]]></content>
+        <author>
+            <name>appEW</name>
+            <uri>https://github.com/appEW</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Picker 1.5.4]]></title>
         <id>https://windhawk.net/mods/explorer-picker#e107837f61706174ee2d11039349466bb78d2fb6</id>
@@ -983,203 +1206,6 @@ Instagram <a href="https://www.instagram.com/cesar.kali">@cesar.kali</a>).</li>
         <author>
             <name>caliberda</name>
             <uri>https://github.com/cesarkali</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Quick Launch Dock 1.0.0]]></title>
-        <id>https://windhawk.net/mods/quick-launch-dock#35684ca5377a3971a573a524841c6922e20eab27</id>
-        <link href="https://windhawk.net/mods/quick-launch-dock"/>
-        <updated>2026-10-05T15:03:19.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="quicklaunchdock">Quick Launch Dock</h1>
-<p><img src="https://raw.githubusercontent.com/cheliks1123/Quick-launch-dock/main/quck-lauch-dock.gif" alt="Quick Launch Dock demo - dragging a shortcut onto the dock" /></p>
-<p><em>Drag a shortcut onto the dock and it stays there. Click an icon to launch it.</em></p>
-<p>A slim, smoothly animated dock that lives on the edge of your screen and gives you
-one-click access to your favourite programs, files and folders. Think of it as a
-tiny launcher bar with "+" slots: drop a shortcut onto it, or click "+" and pick a
-program, and it stays there until you remove it.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Add programs your way</strong></li>
-<li>Drag and drop shortcuts, executables, files or folders onto the dock.</li>
-<li>Click the <strong>+</strong> slot to choose a program in a file dialog (shortcuts are kept as shortcuts, so their icons stay correct).</li>
-<li>Right-click the <strong>+</strong> slot to paste a path from the clipboard (quotes and <code>%ENVIRONMENT%</code> variables are handled).</li>
-<li><strong>One-click launch</strong> — click an icon to start it. The working directory is set automatically.</li>
-<li><strong>Right-click menu</strong> on any icon: Open, Run as administrator, Show in folder, Move up / Move down, Remove.</li>
-<li><strong>Persistent list</strong> — your slots are saved by Windhawk and restored after a restart.</li>
-<li><strong>Auto-hide</strong> — the dock collapses into a thin strip and smoothly slides out when you move the mouse to the screen edge.</li>
-<li><strong>Smooth animations</strong> — slide-in/out, hover highlight fade, icon zoom on hover, appear/disappear and re-ordering animations. Frames are synchronized with your monitor's refresh rate, so it stays smooth on 60/144/240 Hz displays.</li>
-<li><strong>High-quality rendering</strong> — anti-aliased rounded corners and high-quality icon scaling (GDI+), per-pixel transparent window, DPI-aware sizes.</li>
-<li><strong>Fullscreen aware</strong> — optionally hides itself while a fullscreen app or game is active.</li>
-<li><strong>Fully themeable</strong> — background, hover, accent (plus sign and handle) and border colors are configurable (<code>#RRGGBB</code>).</li>
-<li><strong>Left or right edge</strong>, adjustable icon size, tooltips with the item name.</li>
-<li>Does not use the taskbar, does not hook any functions and does not modify system files. Disabling the mod removes the dock completely.</li>
-</ul>
-<h2 id="howitdiffersfromexistingmods">How it differs from existing mods</h2>
-<ul>
-<li><strong>Quick Launch & Media Panel</strong> is a collapsible panel at the top of the screen with shortcut pages and media controls. This mod is a minimal vertical dock on the left or right screen edge: a column of icons and a "+" slot, with no pages and no media controls.</li>
-<li><strong>Left Taskbar Quick Pin Dock</strong> is attached to the taskbar next to the Start button. This mod floats on the screen edge independently of the taskbar.</li>
-<li>What is specific to this mod: auto-hide into a thin strip that smoothly slides out on hover, hide-in-fullscreen, per-item "Run as administrator" and "Show in folder", and configurable colors.</li>
-</ul>
-<h2 id="howtouse">How to use</h2>
-<ol>
-<li>Enable the mod. A dock appears at the right edge of the primary monitor (vertically centered).</li>
-<li>Drag a shortcut/program/folder onto it, or click <strong>+</strong>.</li>
-<li>Click an icon to launch. Right-click an icon for more actions.</li>
-<li>With auto-hide enabled, move the cursor to the screen edge to reveal the dock.</li>
-</ol>
-<h2 id="settings">Settings</h2>
-<p>| Setting | Description |
-| --- | --- |
-| Screen side | Right or left edge of the primary monitor. |
-| Icon size | Icon size in pixels at 100% DPI (16–96). Scales with system DPI. |
-| Auto-hide | Collapse to a thin strip until the cursor touches the edge. |
-| Hide when a fullscreen app is active | Hides the dock above fullscreen windows/games. |
-| Animations | Turns all animations on or off. |
-| Background / Hover / Accent / Border color | Colors in <code>#RRGGBB</code> format. Invalid values fall back to the defaults. |</p>
-<h2 id="notesandlimitations">Notes and limitations</h2>
-<ul>
-<li>The mod runs as a standalone tool in its own dedicated process (it is not injected into Explorer and hooks nothing), so a problem in the mod can never affect the Windows shell, and only one instance is ever running.</li>
-<li>Drag and drop from windows running <strong>as administrator</strong> is blocked by Windows (UIPI). Use the <strong>+</strong> button in that case.</li>
-<li>The dock is placed on the <strong>primary</strong> monitor. With auto-hide and another monitor attached on the same side, the cursor may pass the edge too quickly to reveal the dock — disable auto-hide there.</li>
-<li>The number of slots is limited by the screen height.</li>
-<li>Slots are stored as file paths. If a file is moved or deleted, its icon becomes generic until you remove it.</li>
-</ul>
-<hr />
-<h1 id="">Панель быстрого запуска</h1>
-<p>Тонкая плавно анимированная панель у края экрана для быстрого запуска любимых
-программ, файлов и папок. По сути — мини-лаунчер с «плюсиками»: перетащи на него
-ярлык или нажми «+» и выбери программу — она останется на панели, пока ты сам её не уберёшь.</p>
-<h2 id="-1">Возможности</h2>
-<ul>
-<li><strong>Добавление как удобно</strong></li>
-<li>Перетаскивание ярлыков, exe-файлов, файлов и папок прямо на панель.</li>
-<li>Клик по <strong>+</strong> — выбор программы через диалог (ярлыки сохраняются как ярлыки, поэтому иконки остаются правильными).</li>
-<li>ПКМ по <strong>+</strong> — вставить путь из буфера обмена (кавычки и переменные вида <code>%APPDATA%</code> обрабатываются).</li>
-<li><strong>Запуск в один клик</strong> — рабочая папка выставляется автоматически.</li>
-<li><strong>Контекстное меню</strong> на любой иконке: Открыть, Запуск от имени администратора, Показать в папке, Переместить выше / ниже, Удалить.</li>
-<li><strong>Список сохраняется</strong> — слоты хранятся в Windhawk и восстанавливаются после перезагрузки.</li>
-<li><strong>Автоскрытие</strong> — в покое панель сворачивается в тонкую полоску и плавно выезжает, когда подводишь курсор к краю экрана.</li>
-<li><strong>Плавные анимации</strong> — выезд и сворачивание, плавная подсветка, увеличение иконки при наведении, анимации появления, удаления и перестановки. Кадры синхронизированы с частотой монитора, поэтому всё плавно на 60/144/240 Гц.</li>
-<li><strong>Качественная отрисовка</strong> — сглаженные скруглённые углы и качественное масштабирование иконок (GDI+), окно с попиксельной прозрачностью, учёт DPI.</li>
-<li><strong>Полноэкранные приложения</strong> — при желании панель сама прячется, пока открыта полноэкранная программа или игра.</li>
-<li><strong>Настраиваемые цвета</strong> — фон, подсветка, акцент (плюс и полоска) и рамка задаются в формате <code>#RRGGBB</code>.</li>
-<li><strong>Левый или правый край</strong>, размер иконок, подсказки с названием элемента.</li>
-<li>Не использует панель задач, не перехватывает функции и не меняет системные файлы. При отключении мода панель полностью исчезает.</li>
-</ul>
-<h2 id="-2">Чем отличается от существующих модов</h2>
-<ul>
-<li><strong>Quick Launch & Media Panel</strong> — сворачиваемая панель у верхнего края экрана со страницами ярлыков и управлением медиа. Этот мод — минимальная вертикальная панель у левого или правого края экрана: колонка иконок и слот «+», без страниц и без медиа-кнопок.</li>
-<li><strong>Left Taskbar Quick Pin Dock</strong> — панель, прикреплённая к панели задач рядом с кнопкой «Пуск». Этот мод свободно располагается у края экрана и от панели задач не зависит.</li>
-<li>Особенности этого мода: автоскрытие в тонкую полоску с плавным выездом при наведении, скрытие в полноэкранных приложениях, «Запуск от имени администратора» и «Показать в папке» для каждого элемента, настраиваемые цвета.</li>
-</ul>
-<h2 id="-3">Как пользоваться</h2>
-<ol>
-<li>Включи мод. У правого края основного монитора по центру по вертикали появится панель.</li>
-<li>Перетащи на неё ярлык, программу или папку либо нажми <strong>+</strong>.</li>
-<li>Клик по иконке — запуск. ПКМ по иконке — дополнительные действия.</li>
-<li>При включённом автоскрытии подведи курсор к краю экрана, чтобы показать панель.</li>
-</ol>
-<h2 id="-4">Настройки</h2>
-<p>| Настройка | Описание |
-| --- | --- |
-| Сторона экрана | Правый или левый край основного монитора. |
-| Размер иконок | Размер в пикселях при 100% DPI (16–96), масштабируется вместе с DPI системы. |
-| Автоскрытие | Сворачивать в тонкую полоску, пока курсор не коснётся края. |
-| Прятать в полноэкранных приложениях | Скрывает панель поверх полноэкранных окон и игр. |
-| Анимации | Включает и выключает все анимации. |
-| Цвета фона / подсветки / акцента / рамки | Формат <code>#RRGGBB</code>. При неверном значении используется цвет по умолчанию. |</p>
-<h2 id="-5">Примечания и ограничения</h2>
-<ul>
-<li>Мод работает как самостоятельный инструмент в собственном процессе (он не внедряется в проводник и ничего не перехватывает), поэтому сбой мода не может повлиять на оболочку Windows, а одновременно запущена всегда только одна копия.</li>
-<li>Перетаскивание из окон, запущенных <strong>от имени администратора</strong>, блокируется Windows (UIPI). В этом случае используй кнопку <strong>+</strong>.</li>
-<li>Панель располагается на <strong>основном</strong> мониторе. При автоскрытии и втором мониторе с той же стороны курсор может проскакивать край слишком быстро — в таком случае отключи автоскрытие.</li>
-<li>Количество слотов ограничено высотой экрана.</li>
-<li>Слоты хранятся как пути к файлам. Если файл перенесён или удалён, иконка станет стандартной, пока ты не уберёшь слот.</li>
-</ul>]]></content>
-        <author>
-            <name>cheliks1123</name>
-            <uri>https://github.com/cheliks1123</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Jump List Volume Control 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-jump-list-volume-control#f845399b58aa0ddc84a43ee6336a4e45532eb464</id>
-        <link href="https://windhawk.net/mods/taskbar-jump-list-volume-control"/>
-        <updated>2026-10-05T14:01:42.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarjumplistvolumecontrol">Taskbar Jump List Volume Control</h1>
-<p>Adds a volume slider and a mute button for the app to the jump list that opens
-when you right-click a taskbar button on Windows 11.</p>
-<p><img src="https://i.imgur.com/eZOdWZv.gif" alt="Demonstration" /></p>
-<ul>
-<li>The slider only appears for apps that have an audio session.</li>
-<li>Scrolling the mouse wheel or a precision touchpad over the slider also
-changes the volume.</li>
-<li>Apps that play audio from child processes (Chrome, Firefox, Discord, etc.)
-are supported.</li>
-</ul>
-<h2 id="howitworks">How it works</h2>
-<p>The jump list is rendered by <code>ShellExperienceHost.exe</code>, not by <code>explorer.exe</code>,
-so this mod is loaded into both processes. In <code>explorer.exe</code> it finds the app of
-the right-clicked button and its audio sessions, and in <code>ShellExperienceHost.exe</code>
-it inserts the slider into the jump list.</p>]]></content>
-        <author>
-            <name>Ara</name>
-            <uri>https://github.com/ara-hwang</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cursor Override 1.1.1]]></title>
-        <id>https://windhawk.net/mods/cursor-override#008c2a263b7ef316dc906376c6ac76263588a02d</id>
-        <link href="https://windhawk.net/mods/cursor-override"/>
-        <updated>2026-10-05T13:00:23.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add Row select and Column select cursor replacements with configurable .cur and .ani paths.</li>
-<li>Extend the existing image-and-hotspot recognition with the additional cursor signatures.</li>
-<li>Update the supported cursor list and standardize setting descriptions.</li>
-</ul>]]></content>
-        <author>
-            <name>Basti</name>
-            <uri>https://github.com/sebastianheder01</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[TopBar for Windows 1.3.0]]></title>
-        <id>https://windhawk.net/mods/windhawk-topbar#3a25447184fb292f91b386490c355dd55658d2fb</id>
-        <link href="https://windhawk.net/mods/windhawk-topbar"/>
-        <updated>2026-10-05T12:04:08.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="added">Added</h3>
-<ul>
-<li>Added a Media Player widget in TopBar with song name, thumbnail, visualizer, and media controls.</li>
-<li>Added a Control Panel button &amp; flyout to quickly access Wi-Fi, Bluetooth, Battery, Sound, Brightness, and other basic settings.</li>
-<li>Added a Start menu flyout featuring All Apps grid, account settings, and power controls.</li>
-<li>Added a Spotlight style Search flyout supporting Apps, Files, Settings, and Control Panel results.</li>
-<li>Default Start and Search key remapping: Win key and Taskbar Start button map to TopBar Start Menu; Win + S and Taskbar Search icon map to TopBar Spotlight Search (BETA, may have some bugs).</li>
-<li>Added Per-Monitor brightness control in display flyout.</li>
-<li>Added Night Light button in the Display flyout.</li>
-<li>Added a "Restart Explorer" button in the Start and Taskbar context menus to restart windows <code>explorer.exe</code> easily.</li>
-<li>Added Glyphs to all context menu entries.</li>
-<li>Added Font color setting that changes to set custom font color.</li>
-<li>Added Wi-Fi signal-strength indication on the its icon.</li>
-<li>Added Option to customize button Resource Button labels(e.g., "CPU:", "RAM:").</li>
-<li>Added more font family options in the font dropdown <em>(Note: Certain fonts may affect button scaling)</em>.</li>
-<li>Added Midnight Neon theme</li>
-</ul>
-<h3 id="updatesimprovements">Updates &amp; Improvements</h3>
-<ul>
-<li>Added native background blur, removed dependency on the wallpaper layer, and added live wallpaper support.</li>
-<li>Icons now feature transparent backgrounds (previously black) and shrink dynamically when it is out of space.</li>
-<li>Added support for switching between °C and °F units.</li>
-<li>Updated Recycle Bin icon, and reduced Battery icon glyph size.</li>
-<li>Updated the OS27 GoldenGate, NoIslands, and GreenBar themes.</li>
-</ul>
-<h3 id="fixes">Fixes</h3>
-<ul>
-<li>Fixed issue where right-clicking task list buttons showed the incorrect menu.</li>
-<li>Fixed button flashing on hover in the OS27 Golden Gate theme.(made the background be the same on all the CommonStates by if the value is set without any state.</li>
-</ul>]]></content>
-        <author>
-            <name>WasiXGamer</name>
-            <uri>https://github.com/wasixgamer</uri>
         </author>
     </entry>
 </feed>
