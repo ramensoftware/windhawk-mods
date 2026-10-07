@@ -8,7 +8,6 @@
 // @architecture    x86-64
 // @compilerOptions -ladvapi32 -lcomctl32 -lgdi32 -luser32
 // @include         explorer.exe
-// @exclude         %SystemRoot%\explorer.exe
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -20,11 +19,20 @@ This mod addresses two issues that can occur when the private Windows 10 shell i
 - **A language flyout that opens at startup.** For a limited time after the shell starts, the mod suppresses known language-switcher window classes in this Explorer process. It does not enumerate or hide windows owned by other processes. Clicking the language indicator manually is allowed through the guard.
 - **The language indicator's orientation and appearance.** The optional colour feature uses one theme-aware painter for the indicator's client area and reads the full active keyboard-layout ID, so variants such as Italian (142) display as `ITA 142` rather than being collapsed to `ITA IT`. It handles paint itself rather than allowing Explorer's legacy grey fill to overwrite the composited background, and it repaints on hover, press, theme, and layout state changes.
 
+### Before
+
+![Before](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/before.png)
+
+### After
+
+![After](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/after.png)
+
 The guard lasts 20 seconds by default. Each intercepted flyout can extend it by 15 seconds, up to four times the configured duration. No window is closed or destroyed.
 
 The mod targets non-SystemRoot `explorer.exe` instances and limits the flyout sweep to the current process. System files are not replaced.
 */
 // ==/WindhawkModReadme==
+
 // ==WindhawkModSettings==
 /*
 - LanguageGuard: true
@@ -55,6 +63,7 @@ The mod targets non-SystemRoot `explorer.exe` instances and limits the flyout sw
     guard starts, and logs matching windows that it suppresses.
 */
 // ==/WindhawkModSettings==
+
 #include <windows.h>
 #include <commctrl.h>
 #include <windhawk_api.h>
@@ -391,8 +400,6 @@ static void RunLanguageGuardCensus() {
 }
 
 // --- Language indicator tracking --------------------------------------------
-#define WM_APP_FORCE_INDICATOR_REPAINT (WM_APP + 0x51)
-
 static const DWORD_PTR kIndicatorSubclassRefData = 78;
 static constexpr int kMaxIndicatorTargets = 32;
 static SRWLOCK g_indicatorTargetsLock = SRWLOCK_INIT;
@@ -447,14 +454,18 @@ static int CopyIndicatorTargets(HWND* out, int capacity) {
     return count;
 }
 
+// InvalidateRect is safe to call from any thread: the invalidation is queued
+// on the owning thread and coalesced into a single WM_PAINT. RedrawWindow with
+// RDW_UPDATENOW would instead force a synchronous paint per call, which at
+// mouse-move rate would run the registry scan below on Explorer's taskbar UI
+// thread for every movement.
 static void InvalidateIndicatorTargets() {
     if (g_unloading.load(std::memory_order_acquire)) return;
     HWND targets[kMaxIndicatorTargets] = {};
     const int count = CopyIndicatorTargets(targets, _countof(targets));
     for (int i = 0; i < count; i++) {
         if (IsOwnProcessWindow(targets[i]) && IsWindowVisible(targets[i])) {
-            RedrawWindow(targets[i], nullptr, nullptr,
-                         RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE);
+            InvalidateRect(targets[i], nullptr, FALSE);
         }
     }
 }
@@ -676,41 +687,80 @@ static bool GetCachedLayoutVariant(const wchar_t* layoutId, wchar_t* variant,
 //
 // Both the root and the per-subkey HKEYs are owned by ScopedRegKey, so every
 // exit path (early return, break, exception) closes them without leaks.
+//
+// The full scan is expensive (a couple of hundred subkeys on a typical
+// install), and it would otherwise run on every paint, including every mouse
+// move over the indicator. The result is therefore cached per Layout Id in a
+// small lock-protected table, so the scan runs once per distinct layout.
+static SRWLOCK g_klidCacheLock = SRWLOCK_INIT;
+static constexpr int kKlidCacheSize = 16;
+struct KlidCacheEntry {
+    WORD layoutId;
+    wchar_t klid[KL_NAMELENGTH];
+};
+static KlidCacheEntry g_klidCache[kKlidCacheSize] = {};
+static int g_klidCacheCount = 0;
+
 static bool FindKlidByLayoutId(WORD layoutId, wchar_t* out, size_t outCount) {
     if (!out || outCount < 2 || layoutId == 0) return false;
     out[0] = 0;
 
-    ScopedRegKey hRoot;
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-                      L"SYSTEM\\CurrentControlSet\\Control\\Keyboard Layouts",
-                      0, KEY_READ, hRoot.put()) != ERROR_SUCCESS) {
-        return false;
-    }
-
-    for (DWORD i = 0; ; ++i) {
-        wchar_t subKey[256] = {};
-        DWORD subLen = _countof(subKey);
-        FILETIME ft{};
-        if (RegEnumKeyExW(hRoot.get(), i, subKey, &subLen, nullptr, nullptr, nullptr, &ft) != ERROR_SUCCESS) {
-            break;
+    AcquireSRWLockShared(&g_klidCacheLock);
+    for (int i = 0; i < g_klidCacheCount; i++) {
+        if (g_klidCache[i].layoutId == layoutId) {
+            const bool found = g_klidCache[i].klid[0] != 0;
+            if (found) wcsncpy_s(out, outCount, g_klidCache[i].klid, _TRUNCATE);
+            ReleaseSRWLockShared(&g_klidCacheLock);
+            return found;
         }
+    }
+    ReleaseSRWLockShared(&g_klidCacheLock);
 
-        ScopedRegKey hSub;
-        if (RegOpenKeyExW(hRoot.get(), subKey, 0, KEY_READ, hSub.put()) == ERROR_SUCCESS) {
-            wchar_t idBuf[16] = {};
-            DWORD cb = sizeof(idBuf);
-            if (RegQueryValueExW(hSub.get(), L"Layout Id", nullptr, nullptr,
-                                 reinterpret_cast<LPBYTE>(idBuf), &cb) == ERROR_SUCCESS && idBuf[0]) {
-                wchar_t* end = nullptr;
-                unsigned long parsed = wcstoul(idBuf, &end, 16);
-                if (end != idBuf && (parsed & 0xFFFF) == layoutId) {
-                    wcsncpy_s(out, outCount, subKey, _TRUNCATE);
-                    return true;
+    wchar_t resolved[KL_NAMELENGTH] = {};
+    bool found = false;
+    {
+        ScopedRegKey hRoot;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                          L"SYSTEM\\CurrentControlSet\\Control\\Keyboard Layouts",
+                          0, KEY_READ, hRoot.put()) == ERROR_SUCCESS) {
+            for (DWORD i = 0; ; ++i) {
+                wchar_t subKey[256] = {};
+                DWORD subLen = _countof(subKey);
+                FILETIME ft{};
+                if (RegEnumKeyExW(hRoot.get(), i, subKey, &subLen, nullptr, nullptr, nullptr, &ft) != ERROR_SUCCESS) {
+                    break;
+                }
+
+                ScopedRegKey hSub;
+                if (RegOpenKeyExW(hRoot.get(), subKey, 0, KEY_READ, hSub.put()) == ERROR_SUCCESS) {
+                    wchar_t idBuf[16] = {};
+                    DWORD cb = sizeof(idBuf);
+                    if (RegQueryValueExW(hSub.get(), L"Layout Id", nullptr, nullptr,
+                                         reinterpret_cast<LPBYTE>(idBuf), &cb) == ERROR_SUCCESS && idBuf[0]) {
+                        wchar_t* end = nullptr;
+                        unsigned long parsed = wcstoul(idBuf, &end, 16);
+                        if (end != idBuf && (parsed & 0xFFFF) == layoutId) {
+                            wcsncpy_s(resolved, _countof(resolved), subKey, _TRUNCATE);
+                            found = true;
+                            break;
+                        }
+                    }
                 }
             }
         }
     }
-    return false;
+
+    AcquireSRWLockExclusive(&g_klidCacheLock);
+    if (g_klidCacheCount < kKlidCacheSize) {
+        g_klidCache[g_klidCacheCount].layoutId = layoutId;
+        wcsncpy_s(g_klidCache[g_klidCacheCount].klid, KL_NAMELENGTH,
+                  found ? resolved : L"", _TRUNCATE);
+        g_klidCacheCount++;
+    }
+    ReleaseSRWLockExclusive(&g_klidCacheLock);
+
+    if (found) wcsncpy_s(out, outCount, resolved, _TRUNCATE);
+    return found;
 }
 
 // Resolve the active layout at paint time. Reads the keyboard layout from the
@@ -898,13 +948,19 @@ static void RequestIndicatorRepaint() {
     }
 }
 
+// InvalidateRect is thread-safe and makes the owning thread repaint, so no
+// private message is needed. WM_APP is documented as reserved for the owning
+// application (Explorer, in this case) and must not be posted to its windows
+// from another module. A RegisterWindowMessageW value would be the correct
+// fallback if a custom notification were ever required.
 static void PostForceRepaintToIndicators() {
-    if (g_unloading.load(std::memory_order_acquire)) return;
+    if (g_unloading.load(std::memory_order_acquire) ||
+        !g_indicatorColours.load(std::memory_order_relaxed)) return;
     HWND targets[kMaxIndicatorTargets] = {};
     const int count = CopyIndicatorTargets(targets, _countof(targets));
     for (int i = 0; i < count; i++) {
         if (IsOwnProcessWindow(targets[i])) {
-            PostMessageW(targets[i], WM_APP_FORCE_INDICATOR_REPAINT, 0, 0);
+            InvalidateRect(targets[i], nullptr, FALSE);
         }
     }
 }
@@ -975,14 +1031,6 @@ static LRESULT IndicatorSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             if (coloursEnabled) {
                 HDC hdc = (HDC)wParam;
                 if (hdc) PaintIndicatorCell(hwnd, L"printclient", hdc);
-                return 0;
-            }
-            break;
-
-        case WM_APP_FORCE_INDICATOR_REPAINT:
-            if (coloursEnabled) {
-                InvalidateRect(hwnd, nullptr, FALSE);
-                UpdateWindow(hwnd);
                 return 0;
             }
             break;
