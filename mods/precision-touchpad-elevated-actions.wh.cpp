@@ -27,18 +27,7 @@ before injection, and accepts only self-contained balanced keyboard actions or
 middle/X-button mouse clicks. It cannot inject movement, wheel input, left/right
 clicks, or unbalanced key/button state.
 
-Requires Windhawk 2.0 alpha 4 or later.
-
-Only the Explorer process that owns Windows' shell desktop window can relay
-gestures. Other Explorer processes pass input through before stack inspection,
-token queries, buffering or IPC. Shell identity is checked dynamically so the
-hooks can load before the desktop exists and follow later shell registration.
-There is no polling thread or process enumeration in Explorer.
-
-The worker also checks the current shell immediately before injection. Its
-pipe is scoped to this mod and Windows session. Windhawk owns host startup,
-single-instance protection, hook removal and process teardown.
-
+# Requires Windhawk 2.0 alpha 4 or later.
 */
 // ==/WindhawkModReadme==
 
