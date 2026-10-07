@@ -4,13 +4,13 @@
 // @name:pt-BR      Alt+Tab Flip 3D (estilo Vista)
 // @description     Replaces Alt+Tab with a fluid, Windows Vista-style Flip 3D stack of live windows
 // @description:pt-BR Substitui o Alt+Tab por uma pilha 3D fluida de janelas ao vivo, no estilo Flip 3D do Windows Vista
-// @version         1.5.3
+// @version         1.6.0
 // @author          caliberda
 // @github          https://github.com/cesarkali
 // @homepage        https://caliberda.com.br
 // @include         windhawk.exe
 // @include         explorer.exe
-// @compilerOptions -ld3d11 -ldxgi -ld2d1 -ldcomp -ldwrite -ldwmapi -lole32 -loleaut32 -luuid -lruntimeobject -lwindowscodecs -lshcore -lshell32 -lgdi32
+// @compilerOptions -ld3d11 -ldxgi -ld2d1 -ldcomp -ldwrite -ldwmapi -lole32 -loleaut32 -luuid -lruntimeobject -lwindowscodecs -lshcore -lshell32 -lgdi32 -ladvapi32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -66,10 +66,16 @@ where the active window is).
 |---------------------------|-----------------------------------------------|
 | Alt+Tab                   | Open the stack / next window                  |
 | Alt+Shift+Tab             | Previous window                               |
+| Ctrl+Alt+Tab              | Open the stack and keep it open (optional)    |
 | Arrow keys, mouse wheel   | Flip forward / backward                       |
 | Release Alt, Enter, Space | Switch to the window in front                 |
 | Click a window            | Switch to that window                         |
+| Middle-click a window     | Close that window (optional)                  |
+| Click the X on a window   | Close that window (optional)                  |
 | Esc                       | Cancel and go back to where you were          |
+
+Win+Tab can open the switcher too, instead of Alt+Tab or together with it
+(see the *Shortcut* setting). Release Win to switch.
 
 A quick Alt+Tab tap (shorter than the *show delay*) switches instantly to the
 previous window without showing the stack, just like the native switcher.
@@ -80,7 +86,7 @@ previous window without showing the stack, just like the native switcher.
   brings Flip 3D back on **Win+Tab**. This mod replaces **Alt+Tab** instead,
   draws the windows with real perspective from their live content, and adds
   nine more 3D layouts. Both can be installed together, since they use
-  different shortcuts.
+  different shortcuts, unless the *Shortcut* setting here includes Win+Tab.
 * **[Simple Window Switcher](https://windhawk.net/mods/simple-window-switcher)**
   and **[Legacy Alt+Tab dialog](https://windhawk.net/mods/legacy-alt-tab)**
   also replace Alt+Tab. The 2D styles here are close to them, and are included
@@ -93,7 +99,12 @@ above. Only one of them can take over Alt+Tab.
 ## Notes
 
 * Windows 11 only (uses Windows Graphics Capture without the yellow border).
-* Ctrl+Alt+Tab and Win+Tab are not changed.
+* Bars and docks that stay on top of the screen, such as YASB and WindowSill,
+  are left out of the switcher. Other apps can be left out with the
+  *Excluded apps* setting.
+* If the wallpaper can't be read (for example a format Windows shows but
+  can't decode, or Windows Spotlight), the copy Windows keeps of the current
+  wallpaper is used. If there's none, the desktop shows through, dimmed.
 * The switcher runs in its own background process, so a problem in it can't
   affect the taskbar or the desktop. Only the small part that handles the case
   below runs inside explorer.
@@ -162,10 +173,16 @@ onde está a janela ativa).
 |------------------------------|--------------------------------------------|
 | Alt+Tab                      | Abre a pilha / próxima janela              |
 | Alt+Shift+Tab                | Janela anterior                            |
+| Ctrl+Alt+Tab                 | Abre a pilha e a mantém aberta (opcional)  |
 | Setas, roda do mouse         | Avança / volta na pilha                    |
 | Soltar Alt, Enter, Espaço    | Muda para a janela da frente               |
 | Clicar numa janela           | Muda para essa janela                      |
+| Clique do meio numa janela   | Fecha essa janela (opcional)               |
+| Clicar no X de uma janela    | Fecha essa janela (opcional)               |
 | Esc                          | Cancela e volta para onde você estava      |
+
+O Win+Tab também pode abrir o alternador, no lugar do Alt+Tab ou junto com
+ele (veja a configuração *Atalho*). Solte o Win para trocar.
 
 Um toque rápido no Alt+Tab (menor que o *atraso para exibir*) troca na hora
 para a janela anterior sem mostrar a pilha, igual ao alternador nativo.
@@ -176,7 +193,8 @@ para a janela anterior sem mostrar a pilha, igual ao alternador nativo.
   traz o Flip 3D de volta no **Win+Tab**. Este mod substitui o **Alt+Tab**,
   desenha as janelas com perspectiva real a partir do conteúdo ao vivo e tem
   mais nove layouts 3D. Os dois podem ficar instalados juntos, porque usam
-  atalhos diferentes.
+  atalhos diferentes, a menos que a configuração *Atalho* daqui inclua o
+  Win+Tab.
 * O **[Simple Window Switcher](https://windhawk.net/mods/simple-window-switcher)**
   e o **[Legacy Alt+Tab dialog](https://windhawk.net/mods/legacy-alt-tab)**
   também substituem o Alt+Tab. Os estilos 2D daqui são parecidos com eles e
@@ -189,7 +207,13 @@ acima. Só um deles consegue assumir o Alt+Tab.
 ### Observações
 
 * Somente Windows 11 (usa o Windows Graphics Capture sem a borda amarela).
-* Ctrl+Alt+Tab e Win+Tab não são alterados.
+* Barras e docks que ficam sempre por cima na tela, como o YASB e o
+  WindowSill, ficam fora do alternador. Outros apps podem ser tirados com a
+  configuração *Apps excluídos*.
+* Se o papel de parede não puder ser lido (por exemplo, um formato que o
+  Windows mostra mas não decodifica, ou o Windows Spotlight), é usada a cópia
+  que o Windows guarda do papel de parede atual. Se não houver, a área de
+  trabalho aparece por trás, escurecida.
 * O alternador roda num processo próprio, em segundo plano, então um problema
   nele não afeta a barra de tarefas nem a área de trabalho. Só a pequena parte
   que trata o caso abaixo roda dentro do explorer.
@@ -264,6 +288,24 @@ acima. Só um deles consegue assumir o Alt+Tab.
   $options:pt-BR:
   - cursor: Onde está o cursor do mouse
   - activeWindow: Onde está a janela ativa
+- shortcut: altTab
+  $name: Shortcut
+  $name:pt-BR: Atalho
+  $description: Which shortcut opens the switcher
+  $description:pt-BR: Qual atalho abre o alternador
+  $options:
+  - altTab: Alt+Tab
+  - winTab: Win+Tab (Alt+Tab stays native)
+  - both: Alt+Tab and Win+Tab
+  $options:pt-BR:
+  - altTab: Alt+Tab
+  - winTab: Win+Tab (o Alt+Tab fica nativo)
+  - both: Alt+Tab e Win+Tab
+- stickyShortcut: true
+  $name: Ctrl+Alt+Tab keeps the switcher open
+  $name:pt-BR: Ctrl+Alt+Tab mantém o alternador aberto
+  $description: Opens the switcher and keeps it open after the keys are released. Pick a window with the arrows, Tab or the mouse wheel, then press Enter or click it. Esc or a click outside the windows closes it. Only when the shortcut includes Alt+Tab
+  $description:pt-BR: Abre o alternador e o mantém aberto depois de soltar as teclas. Escolha a janela com as setas, o Tab ou a roda do mouse e aperte Enter ou clique nela. Esc ou um clique fora das janelas fecha. Só quando o atalho inclui o Alt+Tab
 - animationDuration: 420
   $name: Open/close animation duration (ms)
   $name:pt-BR: Duração da animação de abrir/fechar (ms)
@@ -289,6 +331,16 @@ acima. Só um deles consegue assumir o Alt+Tab.
   $name:pt-BR: Espaçamento da pilha (%)
   $description: Distance between the windows in the stack (40-250)
   $description:pt-BR: Distância entre as janelas na pilha (40-250)
+- windowSize: 100
+  $name: Window size (%)
+  $name:pt-BR: Tamanho das janelas (%)
+  $description: Makes the windows in the switcher bigger, as if closer, or smaller, as if farther away (50-200). In the grid, windows only grow up to the size of their cell. Not used by the 2D styles
+  $description:pt-BR: Deixa as janelas do alternador maiores, como se estivessem mais perto, ou menores, como se estivessem mais longe (50-200). Na grade, as janelas só crescem até o tamanho da célula. Não vale para os estilos 2D
+- depth: 100
+  $name: Depth (%)
+  $name:pt-BR: Profundidade (%)
+  $description: How far back the windows behind the front one go (0-300). Lower values bring them closer. Not used by the 2D styles
+  $description:pt-BR: O quanto as janelas de trás vão para o fundo (0-300). Valores menores as trazem para mais perto. Não vale para os estilos 2D
 - maxWindows: 20
   $name: Maximum number of windows
   $name:pt-BR: Número máximo de janelas
@@ -322,6 +374,17 @@ acima. Só um deles consegue assumir o Alt+Tab.
   $name:pt-BR: Mostrar título da janela
   $description: Shows the icon and title of the window in front
   $description:pt-BR: Mostra o ícone e o título da janela da frente
+- titlePosition: bottom
+  $name: Title position
+  $name:pt-BR: Posição do título
+  $description: Where the title of the window in front is shown. Not used by the 2D styles
+  $description:pt-BR: Onde o título da janela da frente aparece. Não vale para os estilos 2D
+  $options:
+  - bottom: Bottom of the screen
+  - belowWindow: Right below the selected window
+  $options:pt-BR:
+  - bottom: Parte de baixo da tela
+  - belowWindow: Logo abaixo da janela escolhida
 - shadows: true
   $name: Window shadows
   $name:pt-BR: Sombras das janelas
@@ -335,6 +398,25 @@ acima. Só um deles consegue assumir o Alt+Tab.
   $name:pt-BR: Mostrar o conteúdo das janelas minimizadas
   $description: Shows the last content of minimized windows, like the taskbar previews. When off, they're shown as a card with the app icon
   $description:pt-BR: Mostra o último conteúdo das janelas minimizadas, como as miniaturas da barra de tarefas. Desligado, elas aparecem como um cartão com o ícone do app
+- middleClickClose: true
+  $name: Middle-click closes a window
+  $name:pt-BR: Clique do meio fecha a janela
+- closeButton: true
+  $name: Close button
+  $name:pt-BR: Botão de fechar
+  $description: Shows an X on the window under the mouse. Clicking it closes that window
+  $description:pt-BR: Mostra um X na janela embaixo do mouse. Clicar nele fecha essa janela
+- hideBars: true
+  $name: Leave out bars and docks
+  $name:pt-BR: Deixar de fora barras e docks
+  $description: Skips long, thin windows that stay on top or sit outside the work area, like status bars and docks (YASB, WindowSill and similar)
+  $description:pt-BR: Ignora janelas compridas e finas que ficam sempre por cima ou fora da área de trabalho, como barras de status e docks (YASB, WindowSill e parecidos)
+- excludedApps:
+  - ""
+  $name: Excluded apps
+  $name:pt-BR: Apps excluídos
+  $description: Windows of these apps never appear in the switcher. Process names, like yasb.exe, or window class names
+  $description:pt-BR: Janelas desses apps nunca aparecem no alternador. Nomes de processo, como yasb.exe, ou nomes de classe da janela
 */
 // ==/WindhawkModSettings==
 
@@ -436,6 +518,10 @@ constexpr WPARAM kStartBackwards = 1;
 // Started from explorer's own Alt+Tab hotkey: the keyboard hook didn't see
 // the keys, usually because an elevated window has the focus.
 constexpr WPARAM kStartFromHotkey = 2;
+// Started with Ctrl+Alt+Tab: stays open after the keys are released.
+constexpr WPARAM kStartSticky = 4;
+// Started with Win+Tab: ends when Win is released.
+constexpr WPARAM kStartWinKey = 8;
 
 // The explorer thread that receives the Alt+Tab hotkey, found by its name.
 // Until it's found, it's looked for again, less and less often (see
@@ -457,6 +543,13 @@ constexpr ULONG_PTR kInjectedInputTag = 0x46334453;
 // Unassigned virtual key, used to stop Alt from activating menu bars.
 constexpr WORD kDummyVk = 0xE8;
 
+// Closing a window from the switcher: it shrinks and fades out, and the
+// others slide to their new places.
+constexpr double kCloseAnimationSeconds = 0.22;
+constexpr double kSlideAnimationSeconds = 0.32;
+// Smaller close buttons (on far-away cards) aren't shown.
+constexpr float kMinCloseButtonRadius = 4;
+
 constexpr WCHAR kOverlayClassName[] = L"WindhawkFlip3DSwitcherOverlay";
 constexpr WCHAR kProxyClassName[] = L"WindhawkFlip3DSwitcherProxy";
 // The overlay's title tells explorer whether the switcher can take over
@@ -464,7 +557,7 @@ constexpr WCHAR kProxyClassName[] = L"WindhawkFlip3DSwitcherProxy";
 constexpr WCHAR kOverlayTitleIdle[] = L"Flip 3D";
 constexpr WCHAR kOverlayTitleReady[] = L"Flip 3D (ready)";
 // Posted by explorer to the overlay when it receives the Alt+Tab hotkey.
-// wParam: kStartBackwards or 0.
+// wParam: kStartBackwards, kStartSticky and kStartWinKey flags.
 constexpr WCHAR kHotkeyMessageName[] = L"WindhawkFlip3DSwitcher_Hotkey";
 
 enum class AnimationStyle {
@@ -488,24 +581,43 @@ enum class AnimationStyle {
 };
 enum class MonitorMode { Cursor, ActiveWindow };
 enum class BackgroundMode { BlurredWallpaper, Wallpaper, Dim };
+enum class TitlePosition { Bottom, BelowWindow };
 
 struct Settings {
     AnimationStyle style;
     MonitorMode monitor;
+    bool altTab;
+    bool winTab;
+    bool stickyShortcut;
     int animationDurationMs;
     float flipSpeed;
     int showDelayMs;
     float tiltRadians;
     float stackSpacing;
+    float windowSize;
+    float depth;
     int maxWindows;
     BackgroundMode background;
     float blurAmount;
     float dimOpacity;
     bool showTitle;
+    TitlePosition titlePosition;
     bool shadows;
     bool includeMinimized;
     bool minimizedContent;
+    bool middleClickClose;
+    bool closeButton;
+    bool hideBars;
+    // Lowercase process or window class names.
+    std::vector<std::wstring> excludedApps;
 };
+
+std::wstring ToLower(std::wstring text) {
+    if (!text.empty()) {
+        CharLowerBuffW(text.data(), (DWORD)text.size());
+    }
+    return text;
+}
 
 Settings LoadSettings() {
     Settings s;
@@ -543,6 +655,13 @@ Settings LoadSettings() {
                     ? MonitorMode::ActiveWindow
                     : MonitorMode::Cursor;
 
+    const auto shortcut = WindhawkUtils::StringSetting::make(L"shortcut");
+    s.altTab = wcscmp(shortcut, L"winTab") != 0;
+    s.winTab =
+        wcscmp(shortcut, L"winTab") == 0 || wcscmp(shortcut, L"both") == 0;
+    // Part of the Alt+Tab family: native too when only Win+Tab is taken over.
+    s.stickyShortcut = s.altTab && Wh_GetIntSetting(L"stickyShortcut") != 0;
+
     s.animationDurationMs =
         std::clamp(Wh_GetIntSetting(L"animationDuration"), 50, 3000);
     s.flipSpeed = std::clamp(Wh_GetIntSetting(L"flipSpeed"), 25, 400) / 100.0f;
@@ -551,6 +670,9 @@ Settings LoadSettings() {
                     3.14159265f / 180.0f;
     s.stackSpacing =
         std::clamp(Wh_GetIntSetting(L"stackSpacing"), 40, 250) / 100.0f;
+    s.windowSize =
+        std::clamp(Wh_GetIntSetting(L"windowSize"), 50, 200) / 100.0f;
+    s.depth = std::clamp(Wh_GetIntSetting(L"depth"), 0, 300) / 100.0f;
     s.maxWindows = std::clamp(Wh_GetIntSetting(L"maxWindows"), 2, 40);
 
     const auto background = WindhawkUtils::StringSetting::make(L"background");
@@ -565,9 +687,35 @@ Settings LoadSettings() {
     s.blurAmount = (float)std::clamp(Wh_GetIntSetting(L"blurAmount"), 1, 100);
     s.dimOpacity = std::clamp(Wh_GetIntSetting(L"dimOpacity"), 0, 90) / 100.0f;
     s.showTitle = Wh_GetIntSetting(L"showTitle") != 0;
+    const auto titlePosition =
+        WindhawkUtils::StringSetting::make(L"titlePosition");
+    s.titlePosition = wcscmp(titlePosition, L"belowWindow") == 0
+                          ? TitlePosition::BelowWindow
+                          : TitlePosition::Bottom;
     s.shadows = Wh_GetIntSetting(L"shadows") != 0;
     s.includeMinimized = Wh_GetIntSetting(L"includeMinimized") != 0;
     s.minimizedContent = Wh_GetIntSetting(L"minimizedContent") != 0;
+    s.middleClickClose = Wh_GetIntSetting(L"middleClickClose") != 0;
+    s.closeButton = Wh_GetIntSetting(L"closeButton") != 0;
+    s.hideBars = Wh_GetIntSetting(L"hideBars") != 0;
+
+    for (int i = 0; i < 100; i++) {
+        std::wstring name =
+            WindhawkUtils::StringSetting::make(L"excludedApps[%d]", i).get();
+        if (name.empty()) {
+            break;
+        }
+        // Full paths are accepted too: only the file name is compared.
+        if (const size_t slash = name.find_last_of(L"\\/");
+            slash != std::wstring::npos) {
+            name.erase(0, slash + 1);
+        }
+        name.erase(0, name.find_first_not_of(L" \t\""));
+        name.erase(name.find_last_not_of(L" \t\"") + 1);
+        if (!name.empty()) {
+            s.excludedApps.push_back(ToLower(name));
+        }
+    }
     return s;
 }
 
@@ -588,6 +736,21 @@ std::atomic<bool> g_ready;
 std::atomic<bool> g_takeOver;
 // An Alt+Tab session is in progress (Alt is still held).
 std::atomic<bool> g_switching;
+
+// The key whose release ends the session and switches.
+enum class HoldKey { Alt, Win, None };
+std::atomic<HoldKey> g_holdKey{HoldKey::Alt};
+
+// The shortcuts that open the switcher, read by the keyboard hook.
+std::atomic<bool> g_altTabShortcut{true};
+std::atomic<bool> g_winTabShortcut;
+std::atomic<bool> g_stickyShortcut;
+
+void ApplyShortcutSettings(const Settings& settings) {
+    g_altTabShortcut = settings.altTab;
+    g_winTabShortcut = settings.winTab;
+    g_stickyShortcut = settings.stickyShortcut;
+}
 
 bool IsPanelStyle(AnimationStyle style) {
     return style == AnimationStyle::Windows11 ||
@@ -652,6 +815,52 @@ bool EndSwitching() {
     return true;
 }
 
+// Ctrl and Win keys pressed on the real keyboard, as seen by the hook (hook
+// thread only). Input injected by other programs is left out: AutoHotkey
+// scripts, for example, tap Ctrl or release and press Alt again to mask their
+// own hotkeys, and that must not block or end a session.
+constexpr int kLeftCtrlBit = 1;
+constexpr int kRightCtrlBit = 2;
+constexpr int kLeftWinBit = 4;
+constexpr int kRightWinBit = 8;
+int g_physicalModifiers;
+
+int ModifierBit(DWORD vk) {
+    switch (vk) {
+        case VK_LCONTROL:
+            return kLeftCtrlBit;
+        case VK_RCONTROL:
+            return kRightCtrlBit;
+        case VK_LWIN:
+            return kLeftWinBit;
+        case VK_RWIN:
+            return kRightWinBit;
+    }
+    return 0;
+}
+
+void ResetPhysicalModifiers() {
+    g_physicalModifiers = 0;
+    for (DWORD vk : {VK_LCONTROL, VK_RCONTROL, VK_LWIN, VK_RWIN}) {
+        if (IsKeyDown(vk)) {
+            g_physicalModifiers |= ModifierBit(vk);
+        }
+    }
+}
+
+// A modifier counts as held only if both the real keyboard and the system
+// say so: the system state includes keys injected by other programs, and the
+// hook can miss a real release (e.g. while an elevated window has the focus).
+bool CtrlHeld() {
+    return (g_physicalModifiers & (kLeftCtrlBit | kRightCtrlBit)) &&
+           IsKeyDown(VK_CONTROL);
+}
+
+bool WinHeld() {
+    return (g_physicalModifiers & (kLeftWinBit | kRightWinBit)) &&
+           (IsKeyDown(VK_LWIN) || IsKeyDown(VK_RWIN));
+}
+
 LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
     if (code != HC_ACTION) {
         return CallNextHookEx(nullptr, code, wParam, lParam);
@@ -663,17 +872,43 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
     }
 
     const bool keyDown = wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
+    const bool injected = (kb->flags & LLKHF_INJECTED) != 0;
     const DWORD vk = kb->vkCode;
 
+    if (const int bit = ModifierBit(vk); bit && !injected) {
+        if (keyDown) {
+            g_physicalModifiers |= bit;
+        } else {
+            g_physicalModifiers &= ~bit;
+        }
+    }
+
     if (!g_switching) {
-        if (keyDown && vk == VK_TAB && (kb->flags & LLKHF_ALTDOWN) &&
-            g_ready && g_takeOver && !IsKeyDown(VK_CONTROL) && !IsKeyDown(VK_LWIN) &&
-            !IsKeyDown(VK_RWIN)) {
-            g_switching = true;
-            PostMessageW(g_overlayWnd, WM_APP_START,
-                         IsKeyDown(VK_SHIFT) ? kStartBackwards : 0, 0);
-            PostThreadMessageW(g_hookThreadId, WM_HOOK_ENGAGE, 0, 0);
-            return 1;
+        if (keyDown && vk == VK_TAB && g_ready && g_takeOver) {
+            const bool alt = (kb->flags & LLKHF_ALTDOWN) != 0;
+            const bool ctrl = CtrlHeld();
+            const bool win = WinHeld();
+            bool start = false;
+            HoldKey hold = HoldKey::Alt;
+            if (alt && !win) {
+                if (ctrl) {
+                    start = g_stickyShortcut;
+                    hold = HoldKey::None;
+                } else {
+                    start = g_altTabShortcut;
+                }
+            } else if (win && !alt && !ctrl) {
+                start = g_winTabShortcut;
+                hold = HoldKey::Win;
+            }
+            if (start) {
+                g_holdKey = hold;
+                g_switching = true;
+                PostMessageW(g_overlayWnd, WM_APP_START,
+                             IsKeyDown(VK_SHIFT) ? kStartBackwards : 0, 0);
+                PostThreadMessageW(g_hookThreadId, WM_HOOK_ENGAGE, 0, 0);
+                return 1;
+            }
         }
         return CallNextHookEx(nullptr, code, wParam, lParam);
     }
@@ -682,10 +917,18 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
         case VK_MENU:
         case VK_LMENU:
         case VK_RMENU:
-            if (!keyDown && EndSwitching()) {
+        case VK_LWIN:
+        case VK_RWIN: {
+            // An injected release is left to the UI thread, which switches
+            // once the key stays released for a moment (see HoldReleased).
+            const HoldKey key = (vk == VK_LWIN || vk == VK_RWIN)
+                                    ? HoldKey::Win
+                                    : HoldKey::Alt;
+            if (!keyDown && !injected && g_holdKey == key && EndSwitching()) {
                 PostMessageW(g_overlayWnd, WM_APP_COMMIT, 0, 0);
             }
             return CallNextHookEx(nullptr, code, wParam, lParam);
+        }
 
         case VK_SHIFT:
         case VK_LSHIFT:
@@ -693,8 +936,6 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
         case VK_CONTROL:
         case VK_LCONTROL:
         case VK_RCONTROL:
-        case VK_LWIN:
-        case VK_RWIN:
             return CallNextHookEx(nullptr, code, wParam, lParam);
     }
 
@@ -750,6 +991,7 @@ LRESULT CALLBACK MouseProc(int code, WPARAM wParam, LPARAM lParam) {
 // native style leaves no system-wide hook behind.
 void UpdateKeyboardHook() {
     if (g_takeOver && !g_keyboardHook) {
+        ResetPhysicalModifiers();
         g_keyboardHook =
             SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardProc, g_module, 0);
         if (!g_keyboardHook) {
@@ -830,10 +1072,14 @@ HANDLE g_messageHookThread;  // To know when it ends.
 std::atomic<int> g_messageHookCalls;
 HANDLE g_explorerStopEvent;
 HANDLE g_explorerThread;
+// Which hotkeys are handed over. Set before the hook is installed.
+bool g_forwardAltTab;
+bool g_forwardWinTab;
+bool g_forwardSticky;
 
 // Hands the hotkey to the switcher. Returns false if the switcher isn't running
 // or can't take over Alt+Tab right now; the native switcher then opens.
-bool ForwardHotkey(bool backwards) {
+bool ForwardHotkey(WPARAM flags) {
     HWND overlay = FindWindowW(kOverlayClassName, kOverlayTitleReady);
     if (!overlay) {
         return false;
@@ -845,8 +1091,7 @@ bool ForwardHotkey(bool backwards) {
     GetWindowThreadProcessId(overlay, &processId);
     AllowSetForegroundWindow(processId);
 
-    return PostMessageW(overlay, g_hotkeyMessage,
-                        backwards ? kStartBackwards : 0, 0) != FALSE;
+    return PostMessageW(overlay, g_hotkeyMessage, flags, 0) != FALSE;
 }
 
 LRESULT CALLBACK GetMessageProc(int code, WPARAM wParam, LPARAM lParam) {
@@ -856,9 +1101,23 @@ LRESULT CALLBACK GetMessageProc(int code, WPARAM wParam, LPARAM lParam) {
     if (code == HC_ACTION && wParam == PM_REMOVE &&
         msg->message == WM_HOTKEY && HIWORD(msg->lParam) == VK_TAB) {
         const UINT modifiers = LOWORD(msg->lParam);
-        if ((modifiers & MOD_ALT) && !(modifiers & (MOD_CONTROL | MOD_WIN)) &&
-            ForwardHotkey((modifiers & MOD_SHIFT) != 0)) {
-            Wh_Log(L"Alt+Tab reached explorer's hotkey, handing it over");
+        const bool alt = (modifiers & MOD_ALT) != 0;
+        const bool ctrl = (modifiers & MOD_CONTROL) != 0;
+        const bool win = (modifiers & MOD_WIN) != 0;
+        bool forward = false;
+        WPARAM flags = (modifiers & MOD_SHIFT) ? kStartBackwards : 0;
+        if (alt && !ctrl && !win) {
+            forward = g_forwardAltTab;
+        } else if (alt && ctrl && !win) {
+            forward = g_forwardSticky;
+            flags |= kStartSticky;
+        } else if (win && !alt && !ctrl) {
+            forward = g_forwardWinTab;
+            flags |= kStartWinKey;
+        }
+        if (forward && ForwardHotkey(flags)) {
+            Wh_Log(L"Hotkey 0x%X+Tab reached explorer, handing it over",
+                   modifiers);
             // Explorer gets an empty message instead of the hotkey.
             msg->message = WM_NULL;
         }
@@ -1021,10 +1280,14 @@ void StopExplorerPart() {
 
 // Doesn't wait for anything, so explorer's startup isn't delayed.
 void StartExplorerPart() {
-    if (LoadSettings().style == AnimationStyle::Native) {
+    const Settings settings = LoadSettings();
+    if (settings.style == AnimationStyle::Native) {
         // Nothing to hand over.
         return;
     }
+    g_forwardAltTab = settings.altTab;
+    g_forwardWinTab = settings.winTab;
+    g_forwardSticky = settings.stickyShortcut;
 
     g_explorerStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_explorerStopEvent) {
@@ -1074,6 +1337,90 @@ bool IsSwitchableWindow(HWND hwnd) {
         }
     }
     return true;
+}
+
+// Whether the window belongs to one of the excluded apps, by process name or
+// window class name.
+bool IsExcludedApp(HWND hwnd, const std::vector<std::wstring>& excluded) {
+    if (excluded.empty()) {
+        return false;
+    }
+
+    WCHAR className[256];
+    if (GetClassNameW(hwnd, className, ARRAYSIZE(className))) {
+        const std::wstring name = ToLower(className);
+        if (std::find(excluded.begin(), excluded.end(), name) !=
+            excluded.end()) {
+            return true;
+        }
+        // Packaged apps are hosted by ApplicationFrameHost.exe; the app's
+        // own process owns the CoreWindow inside the frame.
+        if (name == L"applicationframewindow") {
+            if (HWND core = FindWindowExW(hwnd, nullptr,
+                                          L"Windows.UI.Core.CoreWindow",
+                                          nullptr)) {
+                hwnd = core;
+            }
+        }
+    }
+
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hwnd, &processId);
+    HANDLE process =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!process) {
+        return false;
+    }
+    WCHAR path[MAX_PATH];
+    DWORD size = ARRAYSIZE(path);
+    const bool gotPath =
+        QueryFullProcessImageNameW(process, 0, path, &size) != FALSE;
+    CloseHandle(process);
+    if (!gotPath) {
+        return false;
+    }
+    PCWSTR fileName = wcsrchr(path, L'\\');
+    const std::wstring name = ToLower(fileName ? fileName + 1 : path);
+    return std::find(excluded.begin(), excluded.end(), name) != excluded.end();
+}
+
+// Bars and docks (YASB, WindowSill and similar) look like normal windows to
+// the system. They're long and thin, and stay on top or sit outside the work
+// area (the space reserved for app bars).
+bool IsBarWindow(HWND hwnd) {
+    RECT rect;
+    if (IsIconic(hwnd) || !GetWindowRect(hwnd, &rect)) {
+        return false;
+    }
+    MONITORINFO info{sizeof(info)};
+    if (!GetMonitorInfoW(MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST),
+                         &info)) {
+        return false;
+    }
+    const RECT& monitor = info.rcMonitor;
+    const LONG width = rect.right - rect.left;
+    const LONG height = rect.bottom - rect.top;
+    const LONG monitorWidth = monitor.right - monitor.left;
+    const LONG monitorHeight = monitor.bottom - monitor.top;
+    const bool horizontal =
+        width * 10 >= monitorWidth * 3 && height * 100 <= monitorHeight * 15;
+    const bool vertical =
+        height * 10 >= monitorHeight * 3 && width * 100 <= monitorWidth * 15;
+    if (!horizontal && !vertical) {
+        return false;
+    }
+
+    if (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) {
+        return true;
+    }
+    RECT inWorkArea;
+    if (!IntersectRect(&inWorkArea, &rect, &info.rcWork)) {
+        return true;
+    }
+    // Mostly outside the work area.
+    const LONG visible = (inWorkArea.right - inWorkArea.left) *
+                         (inWorkArea.bottom - inWorkArea.top);
+    return visible * 2 < width * height;
 }
 
 // Window bounds in physical pixels. For minimized windows, the restored bounds.
@@ -1283,6 +1630,16 @@ struct Item {
     com_ptr<IDWriteTextLayout> label;
     float labelWidth = 0;
 
+    // When the window was asked to close (see CloseItem), or 0.
+    double closeRequestedAt = 0;
+
+    // The pose it was last drawn with, and the one it slides from after
+    // another window closed (see RemoveClosedItems).
+    Pose lastPose;
+    bool hasLastPose = false;
+    Pose slideFrom;
+    bool slides = false;
+
     float Width() const { return (float)(rect.right - rect.left); }
     float Height() const { return (float)(rect.bottom - rect.top); }
 };
@@ -1293,6 +1650,17 @@ struct DrawEntry {
     Pose pose;
     float order;  // Larger is farther away, drawn first.
     Quad quad;
+};
+
+struct CloseButton {
+    D2D1_POINT_2F center{};
+    float radius = 0;
+
+    bool Contains(D2D1_POINT_2F point) const {
+        const float dx = point.x - center.x;
+        const float dy = point.y - center.y;
+        return radius > 0 && dx * dx + dy * dy <= radius * radius;
+    }
 };
 
 class Switcher {
@@ -1314,12 +1682,20 @@ class Switcher {
     void HandleDeviceLost();
     bool EnsureSwapChain(UINT width, UINT height);
 
-    void OnHotkey(bool backwards);
+    void OnHotkey(WPARAM flags);
     void OnStart(WPARAM flags);
     void OnStep(int step);
     void OnCommit(int index);
     void OnCancel();
     void OnClick(POINT pt);
+    void OnMiddleClick(POINT pt);
+    int HitTest(D2D1_POINT_2F point, CloseButton* button) const;
+    CloseButton CloseButtonForQuad(const Quad& quad) const;
+    CloseButton CloseButtonForCell(const D2D1_RECT_F& cell) const;
+    void CloseItem(int index);
+    void RemoveClosedItems(double now);
+    void UpdateHover();
+    void DrawCloseButton(float t);
 
     void CollectWindows();
     bool CreateProxy(Item& item);
@@ -1333,7 +1709,7 @@ class Switcher {
     void TakeFocus();
     void ShowOverlay();
     void HideOverlay();
-    bool AltReleased(double now);
+    bool HoldReleased(double now);
     void BeginClose(bool commit);
     void FinishClose();
     void EndSession();
@@ -1365,6 +1741,11 @@ class Switcher {
     com_ptr<ID2D1Bitmap1> CreateAppIconBitmap(HWND hwnd);
     com_ptr<ID2D1Bitmap1> CreatePlaceholder(const Item& item);
     com_ptr<ID2D1Bitmap1> CreateTargetBitmap(UINT width, UINT height);
+    com_ptr<ID2D1Bitmap1> DecodeWallpaper(const std::wstring& path,
+                                          UINT width,
+                                          UINT height,
+                                          DESKTOP_WALLPAPER_POSITION position,
+                                          D2D1_RECT_F* rect);
     void UpdateBackground();
 
     int SelectedIndex() const;
@@ -1408,6 +1789,14 @@ class Switcher {
     // Session.
     State m_state = State::Idle;
     std::vector<std::unique_ptr<Item>> m_items;
+    // Closed windows, shrinking and fading out where they were.
+    struct ClosingItem {
+        std::unique_ptr<Item> item;
+        double start;
+    };
+    std::vector<ClosingItem> m_closingItems;
+    // When the remaining windows started sliding to their new places.
+    double m_slideStart = 0;
     std::vector<DrawEntry> m_drawList;
     RECT m_monitor{};
     // Monitor DPI / 96, for text sizes.
@@ -1431,6 +1820,10 @@ class Switcher {
     int m_wheelRemainder = 0;
     int m_titleIndex = -1;
     com_ptr<IDWriteTextLayout> m_titleLayout;
+    // The item under the mouse, which shows a close button (see UpdateHover).
+    int m_hoverIndex = -1;
+    CloseButton m_hoverButton;
+    bool m_hoverOnButton = false;
 
     // Layout, in pixels.
     float m_width = 0, m_height = 0;
@@ -1469,6 +1862,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
 bool Switcher::CreateOverlay() {
     m_settings = LoadSettings();
     g_takeOver = m_settings.style != AnimationStyle::Native;
+    ApplyShortcutSettings(m_settings);
 
     WNDCLASSEXW wc{sizeof(wc)};
     wc.lpfnWndProc = OverlayWndProc;
@@ -1821,7 +2215,7 @@ void Switcher::Run() {
 
         if (m_state == State::Pending) {
             const double now = NowSeconds();
-            if (AltReleased(now) && EndSwitching()) {
+            if (HoldReleased(now) && EndSwitching()) {
                 OnCommit(-1);
             } else if (now >= m_showAt) {
                 // A quick Alt+Tab never gets here, so it doesn't pay for
@@ -1848,7 +2242,7 @@ LRESULT Switcher::HandleMessage(HWND hwnd,
                                 WPARAM wParam,
                                 LPARAM lParam) {
     if (msg == g_hotkeyMessage && g_hotkeyMessage) {
-        OnHotkey((wParam & kStartBackwards) != 0);
+        OnHotkey(wParam);
         return 0;
     }
 
@@ -1858,6 +2252,10 @@ LRESULT Switcher::HandleMessage(HWND hwnd,
 
         case WM_LBUTTONDOWN:
             OnClick({(short)LOWORD(lParam), (short)HIWORD(lParam)});
+            return 0;
+
+        case WM_MBUTTONDOWN:
+            OnMiddleClick({(short)LOWORD(lParam), (short)HIWORD(lParam)});
             return 0;
 
         case WM_APP_START:
@@ -1897,6 +2295,7 @@ LRESULT Switcher::HandleMessage(HWND hwnd,
         case WM_APP_SETTINGS:
             m_settings = LoadSettings();
             g_takeOver = m_settings.style != AnimationStyle::Native;
+            ApplyShortcutSettings(m_settings);
             PostThreadMessageW(g_hookThreadId, WM_HOOK_UPDATE, 0, 0);
             m_backgroundKey.clear();
             m_titleFormat = nullptr;
@@ -1929,16 +2328,24 @@ int Switcher::SelectedIndex() const {
 
 // Explorer received the Alt+Tab hotkey and handed it over: the keyboard hook
 // didn't see the keys, usually because an elevated window has the focus.
-void Switcher::OnHotkey(bool backwards) {
+void Switcher::OnHotkey(WPARAM flags) {
     if (!g_ready || !g_takeOver) {
         return;
     }
-    if (g_switching.exchange(true)) {
+    const bool backwards = (flags & kStartBackwards) != 0;
+    if (g_switching) {
         // Tab pressed again while Alt is held.
         OnStep(backwards ? -1 : 1);
         return;
     }
-    Wh_Log(L"Alt+Tab reached explorer's hotkey, taking it over");
+    g_holdKey = (flags & kStartSticky)   ? HoldKey::None
+                : (flags & kStartWinKey) ? HoldKey::Win
+                                         : HoldKey::Alt;
+    if (g_switching.exchange(true)) {
+        OnStep(backwards ? -1 : 1);
+        return;
+    }
+    Wh_Log(L"Hotkey reached explorer, taking it over");
     PostThreadMessageW(g_hookThreadId, WM_HOOK_ENGAGE, 0, 0);
     OnStart(kStartFromHotkey | (backwards ? kStartBackwards : 0));
 }
@@ -2000,6 +2407,7 @@ void Switcher::OnStart(WPARAM flags) {
     m_wheelRemainder = 0;
     m_altReleasedAt = 0;
     m_titleIndex = -1;
+    m_hoverIndex = -1;
     m_commit = false;
     m_selectedOnTopWhenFlat = false;
 
@@ -2057,11 +2465,24 @@ void Switcher::HideOverlay() {
     m_hasFocus = false;
 }
 
-// Fallback for a missed Alt release (e.g. a secure desktop took the input, or
-// the keys never reached the hook). The hook normally reports it first, so
-// it only counts once Alt stays released for a moment.
-bool Switcher::AltReleased(double now) {
-    if (!g_switching || IsKeyDown(VK_MENU)) {
+// Fallback for a missed Alt (or Win) release (e.g. a secure desktop took the
+// input, or the keys never reached the hook), and the way injected releases
+// are handled. The hook normally reports a real release first, so this only
+// counts once the key stays released for a moment. Sessions opened with
+// Ctrl+Alt+Tab don't end here.
+bool Switcher::HoldReleased(double now) {
+    bool held = true;
+    switch (g_holdKey.load()) {
+        case HoldKey::Alt:
+            held = IsKeyDown(VK_MENU);
+            break;
+        case HoldKey::Win:
+            held = IsKeyDown(VK_LWIN) || IsKeyDown(VK_RWIN);
+            break;
+        case HoldKey::None:
+            break;
+    }
+    if (!g_switching || held) {
         m_altReleasedAt = 0;
         return false;
     }
@@ -2130,17 +2551,53 @@ void Switcher::OnClick(POINT pt) {
         return;
     }
     const D2D1_POINT_2F point{(float)pt.x, (float)pt.y};
+    CloseButton button;
+    const int index = HitTest(point, &button);
+    if (index < 0) {
+        // In a Ctrl+Alt+Tab session, the mouse alone can dismiss it. In the
+        // 2D styles, only outside the panel: a click between two thumbnails
+        // is just a near miss.
+        const bool onPanel = IsPanelStyle(m_settings.style) &&
+                             point.x >= m_panel.left &&
+                             point.x < m_panel.right &&
+                             point.y >= m_panel.top && point.y < m_panel.bottom;
+        if (g_holdKey == HoldKey::None && !onPanel && EndSwitching()) {
+            OnCancel();
+        }
+        return;
+    }
+    if (m_settings.closeButton && button.Contains(point)) {
+        CloseItem(index);
+        return;
+    }
+    EndSwitching();
+    OnCommit(index);
+}
+
+void Switcher::OnMiddleClick(POINT pt) {
+    if (m_state != State::Open || !m_settings.middleClickClose) {
+        return;
+    }
+    CloseButton button;
+    const int index = HitTest({(float)pt.x, (float)pt.y}, &button);
+    if (index >= 0) {
+        CloseItem(index);
+    }
+}
+
+// The item under a point (overlay coordinates), or -1. Also returns where that
+// item's close button is.
+int Switcher::HitTest(D2D1_POINT_2F point, CloseButton* button) const {
     if (IsPanelStyle(m_settings.style)) {
         for (size_t i = 0; i < m_cells.size(); i++) {
             const D2D1_RECT_F& cell = m_cells[i];
             if (point.x >= cell.left && point.x < cell.right &&
                 point.y >= cell.top && point.y < cell.bottom) {
-                EndSwitching();
-                OnCommit((int)i);
-                return;
+                *button = CloseButtonForCell(cell);
+                return (int)i;
             }
         }
-        return;
+        return -1;
     }
     for (auto it = m_drawList.rbegin(); it != m_drawList.rend(); ++it) {
         if (it->pose.opacity < 0.5f || !QuadContains(it->quad, point)) {
@@ -2148,32 +2605,201 @@ void Switcher::OnClick(POINT pt) {
         }
         for (size_t i = 0; i < m_items.size(); i++) {
             if (m_items[i].get() == it->item) {
-                EndSwitching();
-                OnCommit((int)i);
-                return;
+                *button = CloseButtonForQuad(it->quad);
+                return (int)i;
             }
         }
     }
+    return -1;
+}
+
+// Inside the top-right corner of a card, whatever its perspective.
+CloseButton Switcher::CloseButtonForQuad(const Quad& quad) const {
+    auto length = [](D2D1_POINT_2F a, D2D1_POINT_2F b) {
+        return std::hypot(b.x - a.x, b.y - a.y);
+    };
+    const float shortest = std::min(length(quad.p[0], quad.p[1]),
+                                    length(quad.p[1], quad.p[2]));
+    CloseButton button;
+    button.radius = std::min(std::round(13 * m_dpiScale), shortest * 0.12f);
+    if (button.radius < kMinCloseButtonRadius) {
+        // Too small to see or hit: no button.
+        button.radius = 0;
+    }
+
+    const D2D1_POINT_2F corner = quad.p[1];
+    const float centerX =
+        (quad.p[0].x + quad.p[1].x + quad.p[2].x + quad.p[3].x) / 4;
+    const float centerY =
+        (quad.p[0].y + quad.p[1].y + quad.p[2].y + quad.p[3].y) / 4;
+    const float toCenter =
+        std::max(length(corner, {centerX, centerY}), 1.0f);
+    const float inset = std::min(button.radius * 1.35f * 1.414f, toCenter);
+    button.center = {corner.x + (centerX - corner.x) / toCenter * inset,
+                     corner.y + (centerY - corner.y) / toCenter * inset};
+    return button;
+}
+
+CloseButton Switcher::CloseButtonForCell(const D2D1_RECT_F& cell) const {
+    CloseButton button;
+    button.radius =
+        std::min(std::round(11 * m_dpiScale),
+                 std::min(cell.right - cell.left, cell.bottom - cell.top) *
+                     0.16f);
+    if (button.radius < kMinCloseButtonRadius) {
+        button.radius = 0;
+    }
+    const float inset = std::round(button.radius * 1.3f);
+    button.center = {cell.right - inset, cell.top + inset};
+    return button;
+}
+
+// Asks the window to close, like its own close button. The item goes away
+// once the window does (see RemoveClosedItems); if the app asks something
+// first (e.g. to save), the window stays in the switcher.
+void Switcher::CloseItem(int index) {
+    Item& item = *m_items[index];
+    if (item.closeRequestedAt) {
+        return;
+    }
+    item.closeRequestedAt = NowSeconds();
+    if (!PostMessageW(item.hwnd, WM_SYSCOMMAND, SC_CLOSE, 0)) {
+        // E.g. an elevated window, which this process can't post to.
+        Wh_Log(L"Couldn't close %p: %u", item.hwnd, GetLastError());
+        item.closeRequestedAt = 0;
+    }
+}
+
+void Switcher::RemoveClosedItems(double now) {
+    if (!m_items.empty()) {
+        // m_target isn't wrapped, and the item count may change below: wrap
+        // it so that SelectedIndex() keeps pointing to the same item. The
+        // shift is a multiple of the count, so nothing moves on screen.
+        const int selected = SelectedIndex();
+        m_scroll -= (double)(m_target - selected);
+        m_target = selected;
+    }
+    bool removed = false;
+    for (size_t i = 0; i < m_items.size();) {
+        Item& item = *m_items[i];
+        if (!item.closeRequestedAt) {
+            i++;
+            continue;
+        }
+        if (IsWindow(item.hwnd) && IsSwitchableWindow(item.hwnd)) {
+            // Still there after a while: the app kept it open.
+            if (now - item.closeRequestedAt > 3) {
+                item.closeRequestedAt = 0;
+            }
+            i++;
+            continue;
+        }
+
+        // Keep the selected window in front: removing an item before it
+        // shifts the indexes.
+        if ((int)i < SelectedIndex()) {
+            m_target--;
+            m_scroll -= 1;
+        }
+        // Its last frame stays, for the animation.
+        StopCapture(item);
+        if (item.hasLastPose) {
+            m_closingItems.push_back({std::move(m_items[i]), now});
+        }
+        m_items.erase(m_items.begin() + i);
+        removed = true;
+    }
+    if (!removed) {
+        return;
+    }
+
+    // The others slide from where they are now to their new places.
+    for (auto& item : m_items) {
+        item->slideFrom = item->lastPose;
+        item->slides = item->hasLastPose;
+    }
+    m_slideStart = now;
+
+    // The draw list points to the items.
+    m_drawList.clear();
+    m_hoverIndex = -1;
+    m_titleIndex = -1;
+    m_titleLayout = nullptr;
+    // With nothing left, this also clears the panel cells.
+    ComputeLayout();
+    if (m_items.empty()) {
+        EndSwitching();
+        BeginClose(false);
+    }
+}
+
+// Finds the item under the mouse, which shows the close button.
+void Switcher::UpdateHover() {
+    m_hoverIndex = -1;
+    m_hoverOnButton = false;
+    if (!m_settings.closeButton || m_state != State::Open) {
+        return;
+    }
+    POINT cursor;
+    if (!GetCursorPos(&cursor) || !PtInRect(&m_monitor, cursor)) {
+        return;
+    }
+    const D2D1_POINT_2F point{(float)(cursor.x - m_monitor.left),
+                              (float)(cursor.y - m_monitor.top)};
+    m_hoverIndex = HitTest(point, &m_hoverButton);
+    m_hoverOnButton = m_hoverIndex >= 0 && m_hoverButton.Contains(point);
+}
+
+void Switcher::DrawCloseButton(float t) {
+    if (m_hoverIndex < 0 || m_hoverIndex >= (int)m_items.size() ||
+        m_items[m_hoverIndex]->closeRequestedAt || t < 0.01f) {
+        return;
+    }
+    const CloseButton& button = m_hoverButton;
+    const float r = button.radius;
+    if (r <= 0) {
+        return;
+    }
+    const D2D1_ELLIPSE circle{button.center, r, r};
+    if (m_hoverOnButton) {
+        // Red, like the close buttons of Windows.
+        m_brush->SetColor(D2D1::ColorF(0.77f, 0.17f, 0.11f, 0.95f * t));
+    } else {
+        m_brush->SetColor(D2D1::ColorF(0.12f, 0.12f, 0.13f, 0.88f * t));
+    }
+    m_ctx->FillEllipse(circle, m_brush.get());
+    m_brush->SetColor(D2D1::ColorF(1, 1, 1, 0.22f * t));
+    m_ctx->DrawEllipse(circle, m_brush.get(), 1);
+
+    const float arm = r * 0.36f;
+    const float stroke = std::max(1.5f, r * 0.14f);
+    const D2D1_POINT_2F c = button.center;
+    m_brush->SetColor(D2D1::ColorF(1, 1, 1, t));
+    m_ctx->DrawLine({c.x - arm, c.y - arm}, {c.x + arm, c.y + arm},
+                    m_brush.get(), stroke);
+    m_ctx->DrawLine({c.x - arm, c.y + arm}, {c.x + arm, c.y - arm},
+                    m_brush.get(), stroke);
 }
 
 struct EnumWindowsContext {
     std::vector<HWND> windows;
-    size_t max;
-    bool includeMinimized;
+    const Settings* settings;
 };
 
 BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
     auto* context = reinterpret_cast<EnumWindowsContext*>(lParam);
+    const Settings& settings = *context->settings;
     if (IsSwitchableWindow(hwnd) &&
-        (context->includeMinimized || !IsIconic(hwnd))) {
+        (settings.includeMinimized || !IsIconic(hwnd)) &&
+        !(settings.hideBars && IsBarWindow(hwnd)) &&
+        !IsExcludedApp(hwnd, settings.excludedApps)) {
         context->windows.push_back(hwnd);
     }
-    return context->windows.size() < context->max;
+    return context->windows.size() < (size_t)settings.maxWindows;
 }
 
 void Switcher::CollectWindows() {
-    EnumWindowsContext context{
-        {}, (size_t)m_settings.maxWindows, m_settings.includeMinimized};
+    EnumWindowsContext context{{}, &m_settings};
     EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&context));
 
     // EnumWindows returns the Z order, which puts topmost windows first. The
@@ -2431,6 +3057,7 @@ void Switcher::Teardown() {
     }
     m_drawList.clear();
     m_items.clear();
+    m_closingItems.clear();
     m_titleLayout = nullptr;
     m_titleIndex = -1;
     m_capturing = false;
@@ -2743,8 +3370,13 @@ Pose Switcher::LayoutPose(const Item& item, int index, float rel) const {
             const int inRow = std::min(
                 m_gridColumns, (int)m_items.size() - row * m_gridColumns);
             const float selected = std::max(0.0f, 1 - distance);
-            pose.scale = std::min({m_boxWidth * 0.88f / item.Width(),
-                                   m_boxHeight * 0.84f / item.Height(), 1.0f}) *
+            // The window size setting only resizes the window inside its
+            // cell, so the grid always fits on the screen.
+            const float cellFit = std::min(m_boxWidth * 0.88f / item.Width(),
+                                           m_boxHeight * 0.84f / item.Height());
+            pose.scale = std::min(std::min(cellFit, 1.0f) *
+                                      m_settings.windowSize,
+                                  cellFit) *
                          (1 + selected * 0.05f);
             pose.x = (column - (inRow - 1) / 2.0f) * m_boxWidth;
             pose.y = m_frontY + (row + 0.5f) * m_boxHeight;
@@ -2884,15 +3516,29 @@ Quad Switcher::Project(const Pose& pose, float width, float height) const {
 void Switcher::BuildDrawList(float t) {
     m_drawList.clear();
     const int count = (int)m_items.size();
-    if (!count) {
-        return;
-    }
     const int selected = SelectedIndex();
 
+    const bool panel = IsPanelStyle(m_settings.style);
+    const double now = NowSeconds();
+    const float slide = (float)std::clamp(
+        (now - m_slideStart) / kSlideAnimationSeconds, 0.0, 1.0);
     auto add = [&](int index, int chain, float rel, float fade) {
         Item* item = m_items[index].get();
         Pose layout = LayoutPose(*item, index, rel);
         layout.opacity *= fade;
+        if (!panel) {
+            // Window size: zoom the whole arrangement around the screen
+            // center (the grid does it in LayoutPose). Depth: how far back
+            // the windows behind go.
+            if (m_settings.style != AnimationStyle::Grid) {
+                layout.x *= m_settings.windowSize;
+                layout.y *= m_settings.windowSize;
+                layout.scale *= m_settings.windowSize;
+            }
+            if (layout.z > 0) {
+                layout.z *= m_settings.depth;
+            }
+        }
 
         // Drawing order: the real Z order while flat, depth in the switcher.
         float flatOrder = (float)index;
@@ -2905,6 +3551,14 @@ void Switcher::BuildDrawList(float t) {
         entry.item = item;
         entry.chain = chain;
         entry.pose = LerpPose(FlatPose(*item), layout, t);
+        if (chain == 0) {
+            if (item->slides && slide < 1) {
+                entry.pose = LerpPose(item->slideFrom, entry.pose,
+                                      EaseOutQuart(slide));
+            }
+            item->lastPose = entry.pose;
+            item->hasLastPose = true;
+        }
         entry.order = Lerp(flatOrder, depthOrder, t);
         entry.quad = Project(entry.pose, item->Width(), item->Height());
         if (entry.pose.opacity > 0.003f) {
@@ -2932,6 +3586,26 @@ void Switcher::BuildDrawList(float t) {
             add(i, 0, leaving, 1);
             add(i, 1, slot, -leaving);
         }
+    }
+
+    // Closed windows shrink and fade out where they were.
+    std::erase_if(m_closingItems, [now](const ClosingItem& closing) {
+        return now - closing.start >= kCloseAnimationSeconds;
+    });
+    for (ClosingItem& closing : m_closingItems) {
+        const float progress = (float)std::clamp(
+            (now - closing.start) / kCloseAnimationSeconds, 0.0, 1.0);
+        Item* item = closing.item.get();
+        DrawEntry entry;
+        entry.item = item;
+        entry.chain = 0;
+        entry.pose = item->lastPose;
+        entry.pose.scale *= 1 - 0.25f * EaseOutQuart(progress);
+        entry.pose.opacity *= (1 - progress) * (1 - progress);
+        entry.pose.highlight = 0;
+        entry.order = entry.pose.z / (m_width * 0.05f) - 0.01f;
+        entry.quad = Project(entry.pose, item->Width(), item->Height());
+        m_drawList.push_back(entry);
     }
 
     std::stable_sort(m_drawList.begin(), m_drawList.end(),
@@ -3270,7 +3944,7 @@ void Switcher::DrawLabel(Item& item,
 
 // Icons, titles and the selection border, drawn over the thumbnails.
 void Switcher::DrawPanelFront(float t) {
-    if (m_cells.empty()) {
+    if (m_cells.empty() || m_items.empty()) {
         return;
     }
     const AnimationStyle style = m_settings.style;
@@ -3370,7 +4044,9 @@ void Switcher::DrawCard(const DrawEntry& entry, float t) {
         kTransform3DPropTransformMatrix,
         RectToQuadMatrix(size.width, size.height, entry.quad));
 
-    const float b = entry.pose.brightness;
+    // Dimmed while its app is closing it.
+    const float b =
+        entry.pose.brightness * (item.closeRequestedAt ? 0.6f : 1.0f);
     const D2D1_MATRIX_5X4_F colorMatrix =
         D2D1::Matrix5x4F(b, 0, 0, 0,                   //
                          0, b, 0, 0,                   //
@@ -3461,9 +4137,36 @@ void Switcher::DrawTitle(float t) {
     m_titleLayout->GetMetrics(&metrics);
     const float iconSize = item.icon ? std::round(fontSize * 1.6f) : 0;
     const float gap = item.icon ? std::round(fontSize * 0.6f) : 0;
-    const float left =
-        std::round((m_width - (iconSize + gap + metrics.width)) / 2);
-    const float centerY = std::round(m_height * 0.91f);
+    const float totalWidth = iconSize + gap + metrics.width;
+
+    float centerX = m_width / 2;
+    float centerY = std::round(m_height * 0.91f);
+    if (m_settings.titlePosition == TitlePosition::BelowWindow) {
+        // Under the selected window, following it as it moves.
+        const DrawEntry* entry = nullptr;
+        for (const DrawEntry& candidate : m_drawList) {
+            if (candidate.item == &item &&
+                (!entry || candidate.pose.opacity > entry->pose.opacity)) {
+                entry = &candidate;
+            }
+        }
+        if (entry) {
+            float minX = entry->quad.p[0].x, maxX = minX;
+            float bottom = entry->quad.p[0].y;
+            for (const D2D1_POINT_2F& corner : entry->quad.p) {
+                minX = std::min(minX, corner.x);
+                maxX = std::max(maxX, corner.x);
+                bottom = std::max(bottom, corner.y);
+            }
+            centerX = (minX + maxX) / 2;
+            centerY = std::round(std::min(bottom + iconSize / 2 + fontSize,
+                                          m_height - fontSize * 1.5f));
+        }
+    }
+    const float margin = std::round(fontSize);
+    const float left = std::round(std::clamp(
+        centerX - totalWidth / 2, margin,
+        std::max(margin, m_width - totalWidth - margin)));
 
     if (item.icon) {
         const D2D1_RECT_F iconRect{left, centerY - iconSize / 2,
@@ -3486,9 +4189,10 @@ void Switcher::RenderFrame() {
     const double dt = std::clamp(now - m_lastFrame, 0.0, 0.05);
     m_lastFrame = now;
 
-    if (m_state == State::Open && AltReleased(now) && EndSwitching()) {
+    if (m_state == State::Open && HoldReleased(now) && EndSwitching()) {
         BeginClose(true);
     }
+    RemoveClosedItems(now);
 
     // Critically damped spring towards the target.
     const double omega = 15.0 * m_settings.flipSpeed;
@@ -3519,6 +4223,7 @@ void Switcher::RenderFrame() {
         PollFrames(*item);
     }
     BuildDrawList(t);
+    UpdateHover();
 
     m_ctx->SetTarget(m_targetBitmap.get());
     m_ctx->BeginDraw();
@@ -3543,7 +4248,9 @@ void Switcher::RenderFrame() {
     }
     if (panel) {
         DrawPanelFront(t);
-    } else {
+    }
+    DrawCloseButton(t);
+    if (!panel) {
         DrawTitle(t);
     }
 
@@ -3721,6 +4428,107 @@ com_ptr<ID2D1Bitmap1> Switcher::CreatePlaceholder(const Item& item) {
     return SUCCEEDED(hr) ? bitmap : nullptr;
 }
 
+// Decodes a wallpaper image, scaled and placed the way Windows shows it on a
+// width x height monitor. Returns null if the file can't be read.
+com_ptr<ID2D1Bitmap1> Switcher::DecodeWallpaper(
+    const std::wstring& path,
+    UINT width,
+    UINT height,
+    DESKTOP_WALLPAPER_POSITION position,
+    D2D1_RECT_F* rect) {
+    com_ptr<IWICBitmapDecoder> decoder;
+    com_ptr<IWICBitmapFrameDecode> frame;
+    UINT imageWidth = 0, imageHeight = 0;
+    if (path.empty() ||
+        FAILED(m_wicFactory->CreateDecoderFromFilename(
+            path.c_str(), nullptr, GENERIC_READ,
+            WICDecodeMetadataCacheOnDemand, decoder.put())) ||
+        FAILED(decoder->GetFrame(0, frame.put())) ||
+        FAILED(frame->GetSize(&imageWidth, &imageHeight)) || !imageWidth ||
+        !imageHeight) {
+        return nullptr;
+    }
+
+    float drawWidth = (float)width;
+    float drawHeight = (float)height;
+    const float scaleX = width / (float)imageWidth;
+    const float scaleY = height / (float)imageHeight;
+    switch (position) {
+        case DWPOS_FIT:
+            drawWidth = imageWidth * std::min(scaleX, scaleY);
+            drawHeight = imageHeight * std::min(scaleX, scaleY);
+            break;
+        case DWPOS_STRETCH:
+            break;
+        case DWPOS_CENTER:
+            drawWidth = (float)imageWidth;
+            drawHeight = (float)imageHeight;
+            break;
+        default:  // Fill, span and tile.
+            drawWidth = imageWidth * std::max(scaleX, scaleY);
+            drawHeight = imageHeight * std::max(scaleX, scaleY);
+            break;
+    }
+    *rect = {(width - drawWidth) / 2, (height - drawHeight) / 2,
+             (width + drawWidth) / 2, (height + drawHeight) / 2};
+
+    com_ptr<IWICBitmapScaler> scaler;
+    com_ptr<IWICFormatConverter> converter;
+    com_ptr<ID2D1Bitmap1> image;
+    const UINT scaledWidth = (UINT)std::max(std::lround(drawWidth), 1L);
+    const UINT scaledHeight = (UINT)std::max(std::lround(drawHeight), 1L);
+    if (FAILED(m_wicFactory->CreateBitmapScaler(scaler.put())) ||
+        FAILED(scaler->Initialize(frame.get(), scaledWidth, scaledHeight,
+                                  WICBitmapInterpolationModeFant)) ||
+        FAILED(m_wicFactory->CreateFormatConverter(converter.put())) ||
+        FAILED(converter->Initialize(scaler.get(),
+                                     GUID_WICPixelFormat32bppPBGRA,
+                                     WICBitmapDitherTypeNone, nullptr, 0,
+                                     WICBitmapPaletteTypeMedianCut)) ||
+        FAILED(m_ctx->CreateBitmapFromWicBitmap(converter.get(), nullptr,
+                                                image.put()))) {
+        return nullptr;
+    }
+    return image;
+}
+
+ULONGLONG GetFileWriteTime(const std::wstring& path) {
+    WIN32_FILE_ATTRIBUTE_DATA attributes{};
+    if (path.empty() || !GetFileAttributesExW(path.c_str(),
+                                              GetFileExInfoStandard,
+                                              &attributes)) {
+        return 0;
+    }
+    return ((ULONGLONG)attributes.ftLastWriteTime.dwHighDateTime << 32) |
+           attributes.ftLastWriteTime.dwLowDateTime;
+}
+
+// The copy of the current wallpaper that Windows keeps, as a JPEG. It exists
+// even when the original can't be read here, e.g. a format WIC can't decode
+// (HEIC, AVIF, JPEG XL), a deleted file, or some Windows Spotlight images.
+std::wstring GetTranscodedWallpaperPath() {
+    WCHAR path[MAX_PATH];
+    const DWORD length = ExpandEnvironmentStringsW(
+        L"%APPDATA%\\Microsoft\\Windows\\Themes\\TranscodedWallpaper",
+        path, ARRAYSIZE(path));
+    if (!length || length > ARRAYSIZE(path)) {
+        return {};
+    }
+    return path;
+}
+
+// Whether the desktop background is a solid color, with no picture.
+bool IsSolidColorBackground() {
+    DWORD type = 0;
+    DWORD size = sizeof(type);
+    return RegGetValueW(HKEY_CURRENT_USER,
+                        L"Software\\Microsoft\\Windows\\CurrentVersion\\"
+                        L"Explorer\\Wallpapers",
+                        L"BackgroundType", RRF_RT_REG_DWORD, nullptr, &type,
+                        &size) == ERROR_SUCCESS &&
+           type == 1;
+}
+
 void Switcher::UpdateBackground() {
     if (m_settings.background == BackgroundMode::Dim) {
         m_background = nullptr;
@@ -3769,22 +4577,19 @@ void Switcher::UpdateBackground() {
         }
     }
 
-    // The wallpaper file is often replaced in place, so include its time.
-    WIN32_FILE_ATTRIBUTE_DATA attributes{};
-    if (!path.empty() && !GetFileAttributesExW(
-                             path.c_str(), GetFileExInfoStandard, &attributes)) {
-        path.clear();
-    }
-    const ULONGLONG fileTime =
-        ((ULONGLONG)attributes.ftLastWriteTime.dwHighDateTime << 32) |
-        attributes.ftLastWriteTime.dwLowDateTime;
+    const bool solidColor = IsSolidColorBackground();
+    const std::wstring transcoded =
+        solidColor ? std::wstring() : GetTranscodedWallpaperPath();
+
+    // The wallpaper files are often replaced in place, so include their time.
     const std::wstring key =
-        path + L"|" + std::to_wstring(fileTime) + L"|" +
-        std::to_wstring(width) + L"x" + std::to_wstring(height) + L"|" +
+        path + L"|" + std::to_wstring(GetFileWriteTime(path)) + L"|" +
+        transcoded + L"|" + std::to_wstring(GetFileWriteTime(transcoded)) +
+        L"|" + std::to_wstring(width) + L"x" + std::to_wstring(height) + L"|" +
         std::to_wstring(color) + L"|" + std::to_wstring((int)position) + L"|" +
         std::to_wstring((int)m_settings.background) + L"|" +
         std::to_wstring(m_settings.blurAmount);
-    if (m_background && key == m_backgroundKey) {
+    if (key == m_backgroundKey) {
         return;
     }
     m_background = nullptr;
@@ -3793,54 +4598,19 @@ void Switcher::UpdateBackground() {
     // Decode the image, scaled to the size it's displayed at.
     com_ptr<ID2D1Bitmap1> image;
     D2D1_RECT_F imageRect{};
-    com_ptr<IWICBitmapDecoder> decoder;
-    com_ptr<IWICBitmapFrameDecode> frame;
-    UINT imageWidth = 0, imageHeight = 0;
-    if (!path.empty() &&
-        SUCCEEDED(m_wicFactory->CreateDecoderFromFilename(
-            path.c_str(), nullptr, GENERIC_READ,
-            WICDecodeMetadataCacheOnDemand, decoder.put())) &&
-        SUCCEEDED(decoder->GetFrame(0, frame.put())) &&
-        SUCCEEDED(frame->GetSize(&imageWidth, &imageHeight)) && imageWidth &&
-        imageHeight) {
-        float drawWidth = (float)width;
-        float drawHeight = (float)height;
-        const float scaleX = width / (float)imageWidth;
-        const float scaleY = height / (float)imageHeight;
-        switch (position) {
-            case DWPOS_FIT:
-                drawWidth = imageWidth * std::min(scaleX, scaleY);
-                drawHeight = imageHeight * std::min(scaleX, scaleY);
-                break;
-            case DWPOS_STRETCH:
-                break;
-            case DWPOS_CENTER:
-                drawWidth = (float)imageWidth;
-                drawHeight = (float)imageHeight;
-                break;
-            default:  // Fill, span and tile.
-                drawWidth = imageWidth * std::max(scaleX, scaleY);
-                drawHeight = imageHeight * std::max(scaleX, scaleY);
-                break;
+    if (!solidColor) {
+        image = DecodeWallpaper(path, width, height, position, &imageRect);
+        if (!image) {
+            image = DecodeWallpaper(transcoded, width, height, position,
+                                    &imageRect);
+            Wh_Log(L"Wallpaper \"%s\" can't be read, %s", path.c_str(),
+                   image ? L"using Windows' copy of it"
+                         : L"and Windows' copy can't either");
         }
-        imageRect = {(width - drawWidth) / 2, (height - drawHeight) / 2,
-                     (width + drawWidth) / 2, (height + drawHeight) / 2};
-
-        com_ptr<IWICBitmapScaler> scaler;
-        com_ptr<IWICFormatConverter> converter;
-        const UINT scaledWidth = (UINT)std::max(std::lround(drawWidth), 1L);
-        const UINT scaledHeight = (UINT)std::max(std::lround(drawHeight), 1L);
-        if (SUCCEEDED(m_wicFactory->CreateBitmapScaler(scaler.put())) &&
-            SUCCEEDED(scaler->Initialize(frame.get(), scaledWidth,
-                                         scaledHeight,
-                                         WICBitmapInterpolationModeFant)) &&
-            SUCCEEDED(m_wicFactory->CreateFormatConverter(converter.put())) &&
-            SUCCEEDED(converter->Initialize(
-                scaler.get(), GUID_WICPixelFormat32bppPBGRA,
-                WICBitmapDitherTypeNone, nullptr, 0,
-                WICBitmapPaletteTypeMedianCut))) {
-            m_ctx->CreateBitmapFromWicBitmap(converter.get(), nullptr,
-                                             image.put());
+        if (!image) {
+            // Better than a black screen: the desktop shows through, dimmed,
+            // like with the "Dim only" background.
+            return;
         }
     }
 
