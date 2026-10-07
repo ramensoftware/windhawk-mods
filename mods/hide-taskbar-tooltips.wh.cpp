@@ -1,13 +1,13 @@
 // ==WindhawkMod==
 // @id              hide-taskbar-tooltips
 // @name            Hide Taskbar Tooltips
-// @description     Suppresses native Windows 11 XAML hover tooltips in Explorer (taskbar buttons, system tray icons, and shell controls).
-// @version         1.0.8
+// @description     Suppresses native Windows 11 XAML hover tooltips in Explorer, with selective area filtering for taskbar apps and system tray icons.
+// @version         1.1.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
-// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject
+// @donateUrl       https://ko-fi.com/gilnet
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -22,19 +22,47 @@ Suppresses native Windows 11 XAML hover tooltips in Explorer, covering:
 - System tray status icons tooltips (Network, Volume, Battery, Clock)
 - System XAML shell UI hosted in Explorer (Task View, snap layouts, and virtual desktops)
 
+If you also wish to hide application window preview thumbnails, use the [Disable Taskbar Thumbnails](https://windhawk.net/mods/taskbar-thumbnails) mod, which can be used alongside this mod.
+
 ## Preview
 
 **Before** (native Windows 11 tooltip on hover):  
-![Before](https://i.imgur.com/dLAXEzl.png)
+![Before](https://i.imgur.com/XW2Ygxq.png)
 
 **After** (tooltip suppressed):  
-![After](https://i.imgur.com/tISQj2F.png)
+![After](https://i.imgur.com/IBPlzQf.png)
+
+## Settings
+
+- **Hide Taskbar Application Tooltips**: Suppresses hover tooltips and labels appearing over pinned or running taskbar application buttons.
+- **Hide System Tray & Status Tooltips**: Suppresses hover tooltips over system status icons (Network, Volume, Battery, and Clock).
 
 ## Compatibility
 
 - Only Windows 11 is supported.
+- Supported Architectures: x86, x64, and ARM64.
+
+## Support
+
+If you find this mod useful, you can support its development and maintenance:
+- [Support on Ko-fi](https://ko-fi.com/gilnet)
 */
 // ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- hideTaskbarAppTooltips: true
+  $name: Hide Taskbar Application Tooltips
+  $description: >-
+    Suppresses hover tooltips and labels appearing over pinned or running
+    taskbar application buttons.
+- hideSystemTrayTooltips: true
+  $name: Hide System Tray & Status Tooltips
+  $description: >-
+    Suppresses hover tooltips over system status icons (Network, Volume,
+    Battery, and Clock).
+*/
+// ==/WindhawkModSettings==
 
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
@@ -43,12 +71,14 @@ Suppresses native Windows 11 XAML hover tooltips in Explorer, covering:
 
 #include <atomic>
 #include <mutex>
+#include <string_view>
 #include <unordered_set>
 
 #undef GetCurrentTime
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
 
 static bool IsWindows11OrGreater() {
     HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
@@ -74,6 +104,31 @@ static bool IsWindows11OrGreater() {
 static std::atomic<DWORD> g_taskbarThreadId{0};
 static thread_local int t_tooltipScopeDepth = 0;
 
+struct Settings {
+    bool hideTaskbarAppTooltips{true};
+    bool hideSystemTrayTooltips{true};
+} g_settings;
+
+static void LoadSettings() {
+    PCWSTR sApp = Wh_GetStringSetting(L"hideTaskbarAppTooltips");
+    if (sApp) {
+        g_settings.hideTaskbarAppTooltips =
+            wcscmp(sApp, L"0") != 0 && _wcsicmp(sApp, L"false") != 0;
+        Wh_FreeStringSetting(sApp);
+    } else {
+        g_settings.hideTaskbarAppTooltips = true;
+    }
+
+    PCWSTR sTray = Wh_GetStringSetting(L"hideSystemTrayTooltips");
+    if (sTray) {
+        g_settings.hideSystemTrayTooltips =
+            wcscmp(sTray, L"0") != 0 && _wcsicmp(sTray, L"false") != 0;
+        Wh_FreeStringSetting(sTray);
+    } else {
+        g_settings.hideSystemTrayTooltips = true;
+    }
+}
+
 struct ToolTipScope {
     ToolTipScope() {
         t_tooltipScopeDepth++;
@@ -83,41 +138,139 @@ struct ToolTipScope {
     }
 };
 
-static std::unordered_set<HWND> s_tooltipWindows;
-static std::mutex s_tooltipWindowsMutex;
-static std::atomic<bool> s_hasTrackedWindows{false};
+enum class ToolTipArea {
+    Unknown,
+    TaskbarApp,
+    SystemTray,
+};
 
-static void RecordTooltipWindow(HWND hWnd) {
-    if (!hWnd) {
+static std::unordered_set<void*> s_taskbarToolTips;
+static std::unordered_set<void*> s_systemTrayToolTips;
+static std::mutex s_toolTipsMutex;
+
+static void RegisterToolTip(void* pToolTip, ToolTipArea area) {
+    if (!pToolTip) {
         return;
     }
-    std::lock_guard<std::mutex> lock(s_tooltipWindowsMutex);
-    s_tooltipWindows.insert(hWnd);
-    s_hasTrackedWindows.store(true, std::memory_order_relaxed);
+    std::lock_guard<std::mutex> lock(s_toolTipsMutex);
+    if (area == ToolTipArea::TaskbarApp) {
+        s_taskbarToolTips.insert(pToolTip);
+    } else if (area == ToolTipArea::SystemTray) {
+        s_systemTrayToolTips.insert(pToolTip);
+    }
 }
 
-static bool IsTooltipWindow(HWND hWnd) {
-    if (!hWnd || !s_hasTrackedWindows.load(std::memory_order_relaxed)) {
-        return false;
+static ToolTipArea LookupRegisteredToolTip(void* pToolTip) {
+    if (!pToolTip) {
+        return ToolTipArea::Unknown;
     }
-    if (!IsWindow(hWnd)) {
-        return false;
+    std::lock_guard<std::mutex> lock(s_toolTipsMutex);
+    if (s_taskbarToolTips.find(pToolTip) != s_taskbarToolTips.end()) {
+        return ToolTipArea::TaskbarApp;
     }
-    std::lock_guard<std::mutex> lock(s_tooltipWindowsMutex);
-    auto it = s_tooltipWindows.find(hWnd);
-    if (it == s_tooltipWindows.end()) {
-        return false;
+    if (s_systemTrayToolTips.find(pToolTip) != s_systemTrayToolTips.end()) {
+        return ToolTipArea::SystemTray;
     }
-    WCHAR className[64] = {0};
-    if (!GetClassNameW(hWnd, className, ARRAYSIZE(className)) ||
-        _wcsicmp(className, L"Xaml_WindowedPopupClass") != 0) {
-        s_tooltipWindows.erase(it);
-        if (s_tooltipWindows.empty()) {
-            s_hasTrackedWindows.store(false, std::memory_order_relaxed);
+    return ToolTipArea::Unknown;
+}
+
+static ToolTipArea IdentifyCallerArea() {
+    void* stack[32];
+    USHORT frames = CaptureStackBackTrace(1, 32, stack, nullptr);
+    HMODULE hSystemTray = GetModuleHandleW(L"SystemTray.dll");
+    HMODULE hTaskbarView = GetModuleHandleW(L"Taskbar.View.dll");
+
+    for (USHORT i = 0; i < frames; i++) {
+        HMODULE hMod = nullptr;
+        if (GetModuleHandleExW(
+                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                    GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                reinterpret_cast<LPCWSTR>(stack[i]),
+                &hMod)) {
+            if (hMod == hSystemTray) {
+                return ToolTipArea::SystemTray;
+            }
+            if (hMod == hTaskbarView) {
+                return ToolTipArea::TaskbarApp;
+            }
         }
-        return false;
     }
-    return true;
+    return ToolTipArea::Unknown;
+}
+
+static ToolTipArea IdentifyToolTipArea(void* pThis) {
+    if (!pThis) {
+        return ToolTipArea::TaskbarApp;
+    }
+
+    // 1. Check registered pointer cache
+    ToolTipArea cached = LookupRegisteredToolTip(pThis);
+    if (cached != ToolTipArea::Unknown) {
+        return cached;
+    }
+
+    // 2. Check call stack caller module
+    ToolTipArea callerArea = IdentifyCallerArea();
+    if (callerArea != ToolTipArea::Unknown) {
+        RegisterToolTip(pThis, callerArea);
+        return callerArea;
+    }
+
+    // 3. Inspect PlacementTarget runtime class & visual tree
+    try {
+        winrt::Windows::UI::Xaml::Controls::ToolTip toolTip{nullptr};
+        winrt::copy_from_abi(toolTip, pThis);
+        if (toolTip) {
+            winrt::Windows::UI::Xaml::UIElement target =
+                toolTip.PlacementTarget();
+            if (target) {
+                winrt::Windows::UI::Xaml::DependencyObject current = target;
+                for (int depth = 0; current && depth < 10; depth++) {
+                    winrt::hstring name = winrt::get_class_name(current);
+                    if (!name.empty()) {
+                        std::wstring_view sv{name};
+                        if (sv.find(L"SystemTray") != std::wstring_view::npos ||
+                            sv.find(L"Tray") != std::wstring_view::npos ||
+                            sv.find(L"Clock") != std::wstring_view::npos ||
+                            sv.find(L"StatusArea") != std::wstring_view::npos) {
+                            RegisterToolTip(pThis, ToolTipArea::SystemTray);
+                            return ToolTipArea::SystemTray;
+                        }
+                        if (sv.find(L"Taskbar") != std::wstring_view::npos ||
+                            sv.find(L"TaskList") != std::wstring_view::npos ||
+                            sv.find(L"LaunchList") != std::wstring_view::npos) {
+                            RegisterToolTip(pThis, ToolTipArea::TaskbarApp);
+                            return ToolTipArea::TaskbarApp;
+                        }
+                    }
+                    current = winrt::Windows::UI::Xaml::Media::
+                        VisualTreeHelper::GetParent(current);
+                }
+
+                // 4. Physical screen coordinate fallback (System Tray is on the rightmost 30%)
+                if (auto fe = target.try_as<
+                              winrt::Windows::UI::Xaml::FrameworkElement>()) {
+                    auto transform = fe.TransformToVisual(nullptr);
+                    auto pt = transform.TransformPoint(
+                        winrt::Windows::Foundation::Point{0, 0});
+                    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+                    if (screenWidth > 0) {
+                        ToolTipArea area = (pt.X > (screenWidth * 0.70f))
+                                               ? ToolTipArea::SystemTray
+                                               : ToolTipArea::TaskbarApp;
+                        RegisterToolTip(pThis, area);
+                        return area;
+                    }
+                }
+            }
+        }
+    } catch (...) {
+        Wh_Log(L"> IdentifyToolTipArea exception caught");
+    }
+
+    // Default fallback: In Explorer taskbar, any tooltip not explicitly
+    // identified as System Tray belongs to taskbar apps / shell UI.
+    return ToolTipArea::TaskbarApp;
 }
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
@@ -142,23 +295,21 @@ static HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
                                         hWndParent, hMenu, hInstance, lpParam);
     }
 
-    bool isTooltipScope = (t_tooltipScopeDepth > 0);
-    bool isXamlPopup =
-        (lpClassName && (reinterpret_cast<ULONG_PTR>(lpClassName) > 0xFFFF) &&
-         _wcsicmp(lpClassName, L"Xaml_WindowedPopupClass") == 0);
+    if (t_tooltipScopeDepth > 0) {
+        bool isXamlPopup =
+            (lpClassName &&
+             (reinterpret_cast<ULONG_PTR>(lpClassName) > 0xFFFF) &&
+             _wcsicmp(lpClassName, L"Xaml_WindowedPopupClass") == 0);
 
-    if (isTooltipScope && isXamlPopup) {
-        Wh_Log(L"> CreateWindowExW in tooltip scope: class=%s, style=0x%X",
-               lpClassName, dwStyle);
-        dwStyle &= ~WS_VISIBLE;
+        if (isXamlPopup) {
+            Wh_Log(L"> CreateWindowExW in tooltip scope: class=%s, style=0x%X",
+                   lpClassName, dwStyle);
+            dwStyle &= ~WS_VISIBLE;
+        }
     }
-    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
-                                         dwStyle, X, Y, nWidth, nHeight,
-                                         hWndParent, hMenu, hInstance, lpParam);
-    if (hWnd && isTooltipScope && isXamlPopup) {
-        RecordTooltipWindow(hWnd);
-    }
-    return hWnd;
+    return CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
+                                    dwStyle, X, Y, nWidth, nHeight,
+                                    hWndParent, hMenu, hInstance, lpParam);
 }
 
 using ShowWindow_t = decltype(&ShowWindow);
@@ -170,8 +321,8 @@ static BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
         return ShowWindow_Original(hWnd, nCmdShow);
     }
 
-    if (t_tooltipScopeDepth > 0 || IsTooltipWindow(hWnd)) {
-        Wh_Log(L"> ShowWindow suppressed for tooltip window %p, cmd=%d", hWnd,
+    if (t_tooltipScopeDepth > 0) {
+        Wh_Log(L"> ShowWindow suppressed in tooltip scope for %p, cmd=%d", hWnd,
                nCmdShow);
         if (nCmdShow != SW_HIDE) {
             return FALSE;
@@ -197,20 +348,11 @@ static BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
     }
 
     if (t_tooltipScopeDepth > 0) {
-        if (!IsTooltipWindow(hWnd)) {
-            WCHAR className[64] = {0};
-            if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
-                _wcsicmp(className, L"Xaml_WindowedPopupClass") == 0) {
-                Wh_Log(L"> SetWindowPos in tooltip scope: %p (%s), flags=0x%X",
-                       hWnd, className, uFlags);
-                RecordTooltipWindow(hWnd);
-            }
-        }
-    }
-
-    if (IsTooltipWindow(hWnd)) {
         if (uFlags & SWP_SHOWWINDOW) {
-            Wh_Log(L"> SetWindowPos SWP_SHOWWINDOW stripped for %p", hWnd);
+            Wh_Log(
+                L"> SetWindowPos SWP_SHOWWINDOW stripped in tooltip scope for "
+                L"%p",
+                hWnd);
             uFlags &= ~SWP_SHOWWINDOW;
             uFlags |= SWP_HIDEWINDOW;
         }
@@ -225,9 +367,36 @@ static std::atomic<bool> g_putIsOpenHooked{false};
 
 static HRESULT __stdcall ToolTip_put_IsOpen_Hook(void* pThis, boolean value) {
     if (value) {
-        // Suppress opening any tooltip popup in the XAML framework with zero overhead
-        return S_OK;
+        // Fast paths based on settings
+        if (g_settings.hideTaskbarAppTooltips &&
+            g_settings.hideSystemTrayTooltips) {
+            // Both suppressed: identical to v1.0.9, suppress with zero overhead
+            return S_OK;
+        }
+
+        if (!g_settings.hideTaskbarAppTooltips &&
+            !g_settings.hideSystemTrayTooltips) {
+            // Both unsuppressed: allow opening
+            if (g_toolTipPutIsOpenOriginal) {
+                return g_toolTipPutIsOpenOriginal(pThis, value);
+            }
+            return S_OK;
+        }
+
+        // Selective case: one enabled, one disabled
+        ToolTipArea area = IdentifyToolTipArea(pThis);
+        if (area == ToolTipArea::SystemTray) {
+            if (g_settings.hideSystemTrayTooltips) {
+                return S_OK;
+            }
+        } else {
+            // TaskbarApp and other shell taskbar UI elements
+            if (g_settings.hideTaskbarAppTooltips) {
+                return S_OK;
+            }
+        }
     }
+
     if (g_toolTipPutIsOpenOriginal) {
         return g_toolTipPutIsOpenOriginal(pThis, value);
     }
@@ -312,7 +481,9 @@ struct RunFromWindowThreadParam {
     void* procParam;
 };
 
-static LRESULT CALLBACK CallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam) {
+static LRESULT CALLBACK CallWndProcHook(int nCode,
+                                        WPARAM wParam,
+                                        LPARAM lParam) {
     if (nCode == HC_ACTION) {
         const auto* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
         if (cwp->message == GetRunFromWindowThreadMessage()) {
@@ -348,8 +519,10 @@ static bool RunFromWindowThread(HWND hWnd,
     }
 
     RunFromWindowThreadParam param{proc, procParam};
-    SendMessageW(hWnd, GetRunFromWindowThreadMessage(), 0,
-                 reinterpret_cast<LPARAM>(&param));
+    DWORD_PTR dwResult = 0;
+    SendMessageTimeoutW(hWnd, GetRunFromWindowThreadMessage(), 0,
+                        reinterpret_cast<LPARAM>(&param),
+                        SMTO_ABORTIFHUNG | SMTO_NORMAL, 2000, &dwResult);
 
     UnhookWindowsHookEx(hook);
     return true;
@@ -370,7 +543,9 @@ static void WINAPI EagerHookToolTipOnTaskbarThread(void* /*procParam*/) {
                         reinterpret_cast<void*>(ToolTip_put_IsOpen_Hook),
                         reinterpret_cast<void**>(&g_toolTipPutIsOpenOriginal));
                     Wh_ApplyHookOperations();
-                    Wh_Log(L"> Successfully hooked ToolTip::put_IsOpen eagerly on Taskbar UI thread!");
+                    Wh_Log(
+                        L"> Successfully hooked ToolTip::put_IsOpen eagerly on "
+                        L"Taskbar UI thread!");
                 }
             }
         }
@@ -384,8 +559,9 @@ static void InitEagerToolTipHook() {
     if (hTaskbarWnd) {
         DWORD threadId = GetWindowThreadProcessId(hTaskbarWnd, nullptr);
         g_taskbarThreadId.store(threadId, std::memory_order_relaxed);
-        Wh_Log(L"> Dispatching eager ToolTip hook to Taskbar window %p (thread %u)",
-               hTaskbarWnd, threadId);
+        Wh_Log(
+            L"> Dispatching eager ToolTip hook to Taskbar window %p (thread %u)",
+            hTaskbarWnd, threadId);
         RunFromWindowThread(hTaskbarWnd, EagerHookToolTipOnTaskbarThread,
                             nullptr);
     } else {
@@ -406,6 +582,18 @@ static void __cdecl PositionTaskbarTooltip_Hook(void* pToolTip,
                                                 int location,
                                                 bool b1,
                                                 bool b2) {
+    void* pIToolTip =
+        pToolTip ? *(reinterpret_cast<void**>(pToolTip)) : nullptr;
+    if (pIToolTip) {
+        RegisterToolTip(pIToolTip, ToolTipArea::SystemTray);
+    }
+    if (!g_settings.hideSystemTrayTooltips) {
+        if (PositionTaskbarTooltip_Original) {
+            PositionTaskbarTooltip_Original(pToolTip, pTarget, location, b1,
+                                            b2);
+        }
+        return;
+    }
     ToolTipScope scope;
     if (!SuppressToolTip(pToolTip) && PositionTaskbarTooltip_Original) {
         PositionTaskbarTooltip_Original(pToolTip, pTarget, location, b1, b2);
@@ -427,6 +615,18 @@ static void __cdecl ApplyTaskbarTooltipPlacement_Tray_Hook(
     int location,
     winrt::Windows::Foundation::Size size1,
     winrt::Windows::Foundation::Size size2) {
+    void* pIToolTip =
+        pToolTip ? *(reinterpret_cast<void**>(pToolTip)) : nullptr;
+    if (pIToolTip) {
+        RegisterToolTip(pIToolTip, ToolTipArea::SystemTray);
+    }
+    if (!g_settings.hideSystemTrayTooltips) {
+        if (ApplyTaskbarTooltipPlacement_Tray_Original) {
+            ApplyTaskbarTooltipPlacement_Tray_Original(pToolTip, location,
+                                                       size1, size2);
+        }
+        return;
+    }
     ToolTipScope scope;
     if (!SuppressToolTip(pToolTip) &&
         ApplyTaskbarTooltipPlacement_Tray_Original) {
@@ -443,6 +643,18 @@ static void __cdecl ApplyTaskbarTooltipPlacement_View_Hook(
     int location,
     winrt::Windows::Foundation::Size size1,
     winrt::Windows::Foundation::Size size2) {
+    void* pIToolTip =
+        pToolTip ? *(reinterpret_cast<void**>(pToolTip)) : nullptr;
+    if (pIToolTip) {
+        RegisterToolTip(pIToolTip, ToolTipArea::TaskbarApp);
+    }
+    if (!g_settings.hideTaskbarAppTooltips) {
+        if (ApplyTaskbarTooltipPlacement_View_Original) {
+            ApplyTaskbarTooltipPlacement_View_Original(pToolTip, location,
+                                                       size1, size2);
+        }
+        return;
+    }
     ToolTipScope scope;
     if (!SuppressToolTip(pToolTip) &&
         ApplyTaskbarTooltipPlacement_View_Original) {
@@ -469,6 +681,18 @@ static void __cdecl ApplyTaskbarTooltipPlacement6_Hook(
     winrt::Windows::Foundation::Size size2,
     bool b1,
     bool b2) {
+    void* pIToolTip =
+        pToolTip ? *(reinterpret_cast<void**>(pToolTip)) : nullptr;
+    if (pIToolTip) {
+        RegisterToolTip(pIToolTip, ToolTipArea::TaskbarApp);
+    }
+    if (!g_settings.hideTaskbarAppTooltips) {
+        if (ApplyTaskbarTooltipPlacement6_Original) {
+            ApplyTaskbarTooltipPlacement6_Original(pToolTip, location, size1,
+                                                   size2, b1, b2);
+        }
+        return;
+    }
     ToolTipScope scope;
     if (!SuppressToolTip(pToolTip) && ApplyTaskbarTooltipPlacement6_Original) {
         ApplyTaskbarTooltipPlacement6_Original(pToolTip, location, size1, size2,
@@ -476,65 +700,59 @@ static void __cdecl ApplyTaskbarTooltipPlacement6_Hook(
     }
 }
 
-// Hover state hooks in Taskbar.View.dll (zero-cost no-ops)
+// Hover state hooks in Taskbar.View.dll
 using ExperienceToggleButton_UpdateHover_t = void(__cdecl*)(void* pThis,
                                                             bool isHover);
 static ExperienceToggleButton_UpdateHover_t
     ExperienceToggleButton_UpdateHover_Original = nullptr;
 
-static void __cdecl ExperienceToggleButton_UpdateHover_Hook(void* /*pThis*/,
-                                                            bool /*isHover*/) {
+static void __cdecl ExperienceToggleButton_UpdateHover_Hook(void* pThis,
+                                                            bool isHover) {
+    if (!g_settings.hideTaskbarAppTooltips) {
+        if (ExperienceToggleButton_UpdateHover_Original) {
+            ExperienceToggleButton_UpdateHover_Original(pThis, isHover);
+        }
+    }
 }
 
 using TaskListButton_UpdateHover_t = void(__cdecl*)(void* pThis);
 static TaskListButton_UpdateHover_t TaskListButton_UpdateHover_Original =
     nullptr;
 
-static void __cdecl TaskListButton_UpdateHover_Hook(void* /*pThis*/) {
+static void __cdecl TaskListButton_UpdateHover_Hook(void* pThis) {
+    if (!g_settings.hideTaskbarAppTooltips) {
+        if (TaskListButton_UpdateHover_Original) {
+            TaskListButton_UpdateHover_Original(pThis);
+        }
+    }
 }
 
 using OverflowToggleButton_UpdateHover_t = void(__cdecl*)(void* pThis);
 static OverflowToggleButton_UpdateHover_t
     OverflowToggleButton_UpdateHover_Original = nullptr;
 
-static void __cdecl OverflowToggleButton_UpdateHover_Hook(void* /*pThis*/) {
+static void __cdecl OverflowToggleButton_UpdateHover_Hook(void* pThis) {
+    if (!g_settings.hideTaskbarAppTooltips) {
+        if (OverflowToggleButton_UpdateHover_Original) {
+            OverflowToggleButton_UpdateHover_Original(pThis);
+        }
+    }
 }
 
-using TaskListButton_AddToolTipContent_t = void(__cdecl*)(void* pThis);
-static TaskListButton_AddToolTipContent_t
-    TaskListButton_AddToolTipContent_Original = nullptr;
-
-static void __cdecl TaskListButton_AddToolTipContent_Hook(void* /*pThis*/) {
-}
-
-using TaskItemThumbnailView_UpdateToolTip_t = void(__cdecl*)(void* pThis);
-static TaskItemThumbnailView_UpdateToolTip_t
-    TaskItemThumbnailView_UpdateToolTip_Original = nullptr;
-
-static void __cdecl TaskItemThumbnailView_UpdateToolTip_Hook(void* /*pThis*/) {
-}
-
-// Hover state hook in SystemTray.dll (zero-cost no-ops)
+// Hover state hook in SystemTray.dll
 using IconView_UpdateOuterToolTipPlacement_t = void(__cdecl*)(void* pThis,
                                                               bool isHover);
 static IconView_UpdateOuterToolTipPlacement_t
     IconView_UpdateOuterToolTipPlacement_Original = nullptr;
 
-static void __cdecl IconView_UpdateOuterToolTipPlacement_Hook(
-    void* /*pThis*/,
-    bool /*isHover*/) {
+static void __cdecl IconView_UpdateOuterToolTipPlacement_Hook(void* pThis,
+                                                              bool isHover) {
+    if (!g_settings.hideSystemTrayTooltips) {
+        if (IconView_UpdateOuterToolTipPlacement_Original) {
+            IconView_UpdateOuterToolTipPlacement_Original(pThis, isHover);
+        }
+    }
 }
-
-// Method IsToolTipEnabled -> return false
-using IsToolTipEnabled_t = bool(__cdecl*)(void* pThis);
-
-static bool __cdecl IsToolTipEnabled_Hook(void* /*pThis*/) {
-    return false;
-}
-
-static IsToolTipEnabled_t IsToolTipEnabled_LaunchList_Orig = nullptr;
-static IsToolTipEnabled_t IsToolTipEnabled_Augmented_Orig = nullptr;
-static IsToolTipEnabled_t IsToolTipEnabled_Recommended_Orig = nullptr;
 
 static std::atomic<bool> g_systemTrayHooked{false};
 static std::atomic<bool> g_taskbarViewHooked{false};
@@ -607,46 +825,6 @@ static bool HookTaskbarViewSymbols(HMODULE module) {
         },
         {
             {
-                LR"(public: void __cdecl winrt::Taskbar::implementation::TaskListButton::AddToolTipContent(void))",
-            },
-            &TaskListButton_AddToolTipContent_Original,
-            TaskListButton_AddToolTipContent_Hook,
-            true,
-        },
-        {
-            {
-                LR"(private: void __cdecl winrt::Taskbar::implementation::TaskItemThumbnailView::UpdateToolTip(void))",
-            },
-            &TaskItemThumbnailView_UpdateToolTip_Original,
-            TaskItemThumbnailView_UpdateToolTip_Hook,
-            true,
-        },
-        {
-            {
-                LR"(public: virtual bool __cdecl winrt::Taskbar::implementation::LaunchListItemViewModel::IsToolTipEnabled(void)const)",
-            },
-            &IsToolTipEnabled_LaunchList_Orig,
-            IsToolTipEnabled_Hook,
-            true,
-        },
-        {
-            {
-                LR"(public: virtual bool __cdecl winrt::Taskbar::implementation::AugmentedEntryPointViewModel::IsToolTipEnabled(void)const)",
-            },
-            &IsToolTipEnabled_Augmented_Orig,
-            IsToolTipEnabled_Hook,
-            true,
-        },
-        {
-            {
-                LR"(public: bool __cdecl winrt::Taskbar::implementation::RecommendedItemViewModel::IsToolTipEnabled(void)const)",
-            },
-            &IsToolTipEnabled_Recommended_Orig,
-            IsToolTipEnabled_Hook,
-            true,
-        },
-        {
-            {
                 LR"(void __cdecl TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement(struct winrt::Windows::UI::Xaml::Controls::ToolTip const &,enum winrt::WindowsUdk::UI::Shell::TaskbarLocation,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size,bool,bool))",
                 LR"(void __cdecl TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement(struct winrt::Windows::UI::Xaml::Controls::ToolTip const &,enum winrt::WindowsUdk::Shell::TaskbarLocation,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size,bool,bool))",
             },
@@ -713,6 +891,14 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    LoadSettings();
+
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (hTaskbarWnd) {
+        g_taskbarThreadId.store(GetWindowThreadProcessId(hTaskbarWnd, nullptr),
+                                std::memory_order_relaxed);
+    }
+
     bool hookedAny = false;
 
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
@@ -757,6 +943,16 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     InitEagerToolTipHook();
+    Wh_Log(L"> Hide Taskbar Tooltips active — SystemTray: %d, TaskbarView: %d",
+           (int)g_systemTrayHooked.load(), (int)g_taskbarViewHooked.load());
+}
+
+void Wh_ModSettingsChanged() {
+    Wh_Log(L"> Settings changed");
+    LoadSettings();
+    Wh_Log(L"> Updated settings: hideTaskbarApp=%d, hideSystemTray=%d",
+           (int)g_settings.hideTaskbarAppTooltips,
+           (int)g_settings.hideSystemTrayTooltips);
 }
 
 void Wh_ModUninit() {
