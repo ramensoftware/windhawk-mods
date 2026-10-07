@@ -28,7 +28,8 @@ button-name redirect and resource-dictionary skin that used to restyle them were
 this mod and are left for a separate, dedicated mod. The Action Center button and its animation
 are not part of this mod: manage them with a dedicated mod instead. All values are served in
 memory; only the verified binaries, the "Peek at desktop" toggle and the optional tray reset are
-written to disk or the registry.
+written to disk or the registry. This mod is x86-64 only (see @architecture): it patches raw
+bytes and import-table entries of x64 shell modules, which does not carry over to ARM64 builds.
 
 ## Example Screenshot (Battery Flyout)
 
@@ -3305,6 +3306,11 @@ static void** FindIatSlot(HMODULE module, const char* dllHint, const char* funcH
 // non segna nulla come concluso, cosi' un richiamo successivo puo' ancora riuscire.
 static std::atomic<bool> g_pniduiShellExecuteExResolved{false};
 
+// [fix] La voce della IAT di pnidui resta nostra finche' il mod e' caricato: la rimettiamo a
+// posto in Wh_ModBeforeUninit (RestorePniduiShellExecuteExIatOnUnload, piu' sotto), come le
+// altre voci di tabella delle importazioni che questo mod prende in prestito.
+static void** g_pniduiShellExecuteExIatSlot = nullptr;
+
 static void TryHookPniduiShellExecuteExIat(const wchar_t* reason) {
     if (g_pniduiShellExecuteExResolved.load(std::memory_order_acquire)) return;
     HMODULE pnidui = GetModuleHandleW(L"pnidui.dll");
@@ -3317,18 +3323,50 @@ static void TryHookPniduiShellExecuteExIat(const wchar_t* reason) {
         if (target == (void*)ShellExecuteExW) {
             Wh_Log(L"[network] ShellExecuteExW: pnidui calls the same address we hook "
                    L"(0x%p, %s)", target, reason);
-        } else if (Wh_SetFunctionHook(target, (void*)ShellExecuteExW_TargetedHook,
-                                      (void**)&ShellExecuteExW_TargetedOriginal)) {
-            Wh_Log(L"[network] ShellExecuteExW: the address used by pnidui is hooked too "
-                   L"(0x%p, %s)", target, reason);
         } else {
-            Wh_Log(L"[network] ShellExecuteExW: the address used by pnidui refuses to be "
-                   L"hooked (%s)", reason);
+            // [fix] Questo era un Wh_SetFunctionHook(): funziona solo se Wh_ApplyHookOperations
+            // gira dopo, e il motore lo fa da solo una volta sola, subito dopo che Wh_ModInit
+            // ritorna (vedi la nota su Wh_ApplyHookOperations piu' sotto sul perche' questo mod
+            // non lo richiama mai a mano: farlo da un filo diverso da quello di Wh_ModInit va in
+            // corsa con le operazioni del motore sulla stessa coda e in passato ha fatto cadere
+            // explorer.exe a ogni attivazione/disattivazione). Una registrazione fatta piu'
+            // tardi - come questa, quando pnidui si carica dopo che Wh_ModInit e' gia' tornato -
+            // restava quindi in coda e inerte: l'aggancio mirato non scattava mai. Corretto
+            // scrivendo direttamente quella voce (un solo puntatore, come i byte che
+            // PatchQuickActionsTemplates riscrive): funziona a prescindere da quando gira.
+            DWORD oldProtect = 0;
+            if (VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &oldProtect)) {
+                ShellExecuteExW_TargetedOriginal = reinterpret_cast<ShellExecuteExW_t>(target);
+                *slot = reinterpret_cast<void*>(&ShellExecuteExW_TargetedHook);
+                DWORD ignored = 0;
+                VirtualProtect(slot, sizeof(void*), oldProtect, &ignored);
+                g_pniduiShellExecuteExIatSlot = slot;
+                Wh_Log(L"[network] ShellExecuteExW: the import table entry used by pnidui now "
+                       L"points to this mod (0x%p, %s)", target, reason);
+            } else {
+                Wh_Log(L"[network] ShellExecuteExW: the import table entry used by pnidui could "
+                       L"not be made writable (%s)", reason);
+            }
         }
     } else {
         Wh_Log(L"[network] ShellExecuteExW: pnidui loaded but its ShellExecuteExW IAT slot "
                L"was not found (%s)", reason);
     }
+}
+
+// Rimette la voce della IAT di pnidui com'era prima, mentre il modulo e' ancora caricato:
+// chiamata da Wh_ModBeforeUninit, sullo stesso filo, prima che il motore tolga gli hook.
+static void RestorePniduiShellExecuteExIatOnUnload() noexcept {
+    if (!g_pniduiShellExecuteExIatSlot || !ShellExecuteExW_TargetedOriginal) return;
+    DWORD oldProtect = 0;
+    if (VirtualProtect(g_pniduiShellExecuteExIatSlot, sizeof(void*), PAGE_READWRITE,
+                       &oldProtect)) {
+        *g_pniduiShellExecuteExIatSlot =
+            reinterpret_cast<void*>(ShellExecuteExW_TargetedOriginal);
+        DWORD ignored = 0;
+        VirtualProtect(g_pniduiShellExecuteExIatSlot, sizeof(void*), oldProtect, &ignored);
+    }
+    g_pniduiShellExecuteExIatSlot = nullptr;
 }
 
 // Installs the two entry points of the network click. The global hook covers every
@@ -9630,6 +9668,7 @@ void Wh_ModBeforeUninit() {
     g_unloading.store(true, std::memory_order_seq_cst);
     ShellOpGuard::BeginShutdown();
     RestorePeekAtDesktopOnUnload();
+    RestorePniduiShellExecuteExIatOnUnload();
     if (g_stopEvent) SetEvent(g_stopEvent);
     JoinServicesThread(L"Wh_ModBeforeUninit");
 }
