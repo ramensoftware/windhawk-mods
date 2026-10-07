@@ -438,7 +438,8 @@ LRESULT CALLBACK SessionWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             return 0;
 
         // Shutdown/restart/sign-out: freeze the list. No snapshot here: this
-        // process is told late, after programs have already started closing.
+        // helper is an ordinary app, so it is told in no particular order and
+        // programs may already be closing. SM_SHUTTINGDOWN covers the rest.
         case WM_QUERYENDSESSION:
             g_endingSession = true;
             return TRUE;
