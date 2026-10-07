@@ -6,9 +6,10 @@
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         windhawk.exe
-// @compilerOptions -lopengl32 -lgdi32 -luser32 -lshell32 -ldwmapi -lwtsapi32
+// @compilerOptions -ld3d11 -ldxgi -ldcomp -ldwmapi -lwtsapi32 -lgdi32 -luser32 -lshell32 -luuid
 // ==/WindhawkMod==
 
+// clang-format off
 // ==WindhawkModReadme==
 /*
 # Fluid Wallpaper
@@ -16,7 +17,7 @@
 [Watch the overview video in full quality](https://i.imgur.com/yXW45Vs.mp4)
 
 An animated, interactive fluid simulation rendered on the GPU behind your
-desktop icons. It is a native OpenGL port of the shaders from
+desktop icons. The shaders are a Direct3D port of
 [WebGL Fluid Simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation)
 by Pavel Dobryakov (MIT license).
 
@@ -27,44 +28,51 @@ by Pavel Dobryakov (MIT license).
 - Moving the mouse over the desktop stirs the fluid. No clicks are needed and
   no mouse hooks are installed; clicks always reach the desktop.
 - Bloom, sun rays and shading effects, all configurable.
-- Pauses automatically when the desktop can't be seen: when a monitor is
-  covered by a maximized or full-screen window, when the session is locked and
-  when the display is turned off.
+- Pauses automatically when the desktop can't be seen: when a monitor's
+  desktop is fully covered by windows (maximized, full-screen or several
+  windows side by side), when the session is locked or switched away, and when
+  the display is turned off.
+- Optional lower frame rate or pause on battery power and Energy Saver.
 
 To see the wallpaper, minimize your windows. Settings are applied live;
 changing a setting restarts the simulation.
 
-## Performance
+## How it works
 
-On Windows 11 24H2 and later the desktop is hosted differently, and frames are
-copied from the GPU to a layered window (read back at up to 1536 pixels on the
-longest edge and scaled up). This uses noticeably more CPU than the direct
-OpenGL path used on older builds.
+Each monitor gets a child window of Explorer's wallpaper host, without a
+redirection surface. The simulation runs in Direct3D 11 and its final pass is
+drawn straight into a DirectComposition swap chain attached to that window.
+Frames never leave the GPU. The same path is used on the classic desktop
+layout and on the Windows 11 24H2+ layout.
 
-- Lighter profile: Maximum FPS 30, Dye resolution 512, Autonomous trails 2.
-- Swirlier profile: Vorticity 50, Dye dissipation 60, Autonomous trail force
-  4500.
+The mod doesn't change your wallpaper settings, the registry or the order of
+Explorer's own windows. Disabling it removes its windows and reveals your
+normal wallpaper.
+
+## Performance tips
+
+- Lighter: Maximum FPS 30, Dye resolution 512, Trails 2, Bloom off.
+- Swirlier: Vorticity 50, Dye dissipation 60, Trail force 4500.
 
 ## Troubleshooting
 
 If the wallpaper doesn't appear, open the mod log in Windhawk: the lines
-starting with "Desktop layout", "OpenGL" and "Layered frame" describe what was
+starting with "Desktop layout", "Direct3D" and "Monitor" describe what was
 found and created. Please include them when reporting a problem, together with
 your Windows build number.
 
-If the animation stays frozen while the desktop is visible, a window on that
-monitor is probably reported as maximized while hidden. Disable **Pause when
-covered** in that case.
+If the animation stays frozen while the desktop is visible, a window that
+looks hidden is probably reported as visible and covering it. Disable **Pause
+when the desktop is covered** in that case.
 
 ## Requirements and limitations
 
-- A GPU driver with OpenGL 3.0 and floating-point framebuffer support.
+- Windows 10 or 11 and a GPU with Direct3D feature level 10.0 or later.
 - Relies on the undocumented WorkerW desktop layout of Windows, which differs
   between Windows 10, Windows 11 and Windows 11 24H2 and later. Future Windows
   builds may change it.
-- May not work over Remote Desktop or with software OpenGL renderers.
-- No registry writes and no changes to your wallpaper settings. Disabling the
-  mod removes its windows and reveals your normal wallpaper.
+- Below 30 FPS (including the battery option) the motion also slows down,
+  because each simulation step is limited in length to stay stable.
 - The transparent background and screenshot features of the web demo are not
   included.
 - Some settings use integer scales; for example, 80 means 0.8.
@@ -73,121 +81,142 @@ covered** in that case.
 
 // ==WindhawkModSettings==
 /*
-- fps: 30
-  $name: Maximum FPS
-  $description: "15-120. Higher values look smoother but use more CPU and GPU. Below 30, the motion also slows down."
-- pause: false
-  $name: Pause simulation
-- pauseWhenCovered: true
-  $name: Pause when covered
-  $description: "Pause a monitor's simulation while a maximized or full-screen window covers it."
-- primaryOnly: false
-  $name: Primary monitor only
-- mouse: true
-  $name: Mouse interaction
-  $description: "Moving the mouse stirs the fluid. No clicks needed."
-- desktopOnly: true
-  $name: Mouse only over the desktop
-  $description: "Disable to also react to mouse movement over other windows."
-- force: 6000
-  $name: Mouse force
-  $description: "100-15000"
-- radius: 25
-  $name: Splat radius ×100
-  $description: "1-200. 25 means 0.25, the default of the web demo."
-- simResolution: 128
-  $name: Simulation resolution
-  $description: "64-512"
-- dyeResolution: 1024
-  $name: Dye resolution
-  $description: "256-2048. Lower values reduce GPU memory and load."
-- density: 100
-  $name: Dye dissipation ×100
-  $description: "0-1000. 100 means 1.0. Higher values make colors fade faster."
-- velocity: 20
-  $name: Velocity dissipation ×100
-  $description: "0-1000. 20 means 0.2."
-- pressure: 80
-  $name: Pressure ×100
-  $description: "0-100"
-- iterations: 20
-  $name: Pressure iterations
-  $description: "5-60"
-- curl: 30
-  $name: Vorticity
-  $description: "0-100. Higher values create more swirls."
-- shading: true
-  $name: Shading
-- colorful: true
-  $name: Changing colors
-  $description: "Cycle through hues. When disabled, the fixed color below is used."
-- colorSpeed: 10
-  $name: Color change speed
-  $description: "0-100"
-- red: 30
-  $name: "Fixed color: red"
-  $description: "0-255"
-- green: 160
-  $name: "Fixed color: green"
-  $description: "0-255"
-- blue: 255
-  $name: "Fixed color: blue"
-  $description: "0-255"
-- backgroundRed: 0
-  $name: "Background: red"
-  $description: "0-255"
-- backgroundGreen: 0
-  $name: "Background: green"
-  $description: "0-255"
-- backgroundBlue: 0
-  $name: "Background: blue"
-  $description: "0-255"
-- autoMotion: true
+- general:
+  - fps: 30
+    $name: Maximum FPS
+    $description: "15-120. Higher values look smoother but use more GPU."
+  - pause: false
+    $name: Pause simulation
+  - pauseWhenCovered: true
+    $name: Pause when the desktop is covered
+    $description: "Pause a monitor while its desktop is hidden by windows: maximized, full-screen, or several windows side by side."
+  - onBattery: halfFps
+    $name: On battery or Energy Saver
+    $options:
+    - normal: Run normally
+    - halfFps: Half frame rate
+    - pause: Pause
+  - primaryOnly: false
+    $name: Primary monitor only
+  $name: General
+- mouse:
+  - enabled: true
+    $name: Mouse interaction
+    $description: "Moving the mouse stirs the fluid. No clicks needed."
+  - desktopOnly: true
+    $name: Only over the desktop
+    $description: "Disable to also react to mouse movement over other windows."
+  - force: 6000
+    $name: Force
+    $description: "100-15000"
+  $name: Mouse
+- simulation:
+  - simResolution: 128
+    $name: Simulation resolution
+    $description: "64-512"
+  - dyeResolution: 1024
+    $name: Dye resolution
+    $description: "256-2048. Lower values reduce GPU memory and load."
+  - densityDissipation: 100
+    $name: Dye dissipation ×100
+    $description: "0-1000. 100 means 1.0. Higher values make colors fade faster."
+  - velocityDissipation: 20
+    $name: Velocity dissipation ×100
+    $description: "0-1000. 20 means 0.2."
+  - pressure: 80
+    $name: Pressure ×100
+    $description: "0-100"
+  - pressureIterations: 20
+    $name: Pressure iterations
+    $description: "5-60"
+  - curl: 30
+    $name: Vorticity
+    $description: "0-100. Higher values create more swirls."
+  - splatRadius: 25
+    $name: Splat radius ×100
+    $description: "1-200. 25 means 0.25, the default of the web demo."
+  $name: Simulation
+- colors:
+  - colorful: true
+    $name: Changing colors
+    $description: "Cycle through hues. When disabled, the fixed color below is used."
+  - colorSpeed: 10
+    $name: Color change speed
+    $description: "0-100"
+  - fixedRed: 30
+    $name: "Fixed color: red"
+    $description: "0-255"
+  - fixedGreen: 160
+    $name: "Fixed color: green"
+    $description: "0-255"
+  - fixedBlue: 255
+    $name: "Fixed color: blue"
+    $description: "0-255"
+  - backgroundRed: 0
+    $name: "Background: red"
+    $description: "0-255"
+  - backgroundGreen: 0
+    $name: "Background: green"
+    $description: "0-255"
+  - backgroundBlue: 0
+    $name: "Background: blue"
+    $description: "0-255"
+  - shading: true
+    $name: Shading
+  $name: Colors
+- autoMotion:
+  - enabled: true
+    $name: Autonomous motion
+  - trails: 3
+    $name: Trails
+    $description: "1-6"
+  - speed: 35
+    $name: Speed
+    $description: "1-100"
+  - force: 3000
+    $name: Trail force
+    $description: "100-15000"
+  - colorAmount: 55
+    $name: Color amount ×100
+    $description: "1-300"
+  - bursts: true
+    $name: Color bursts
+  - burstSeconds: 12
+    $name: Seconds between bursts
+    $description: "2-120"
   $name: Autonomous motion
-- emitters: 3
-  $name: Autonomous trails
-  $description: "1-6"
-- autoSpeed: 35
-  $name: Autonomous motion speed
-  $description: "1-100"
-- autoForce: 3000
-  $name: Autonomous trail force
-  $description: "100-15000"
-- autoColor: 55
-  $name: Autonomous color amount ×100
-  $description: "1-300"
-- bursts: true
-  $name: Color bursts
-- burstSeconds: 12
-  $name: Seconds between bursts
-  $description: "2-120"
-- bloom: true
+- bloom:
+  - enabled: true
+    $name: Enabled
+  - resolution: 256
+    $name: Resolution
+    $description: "64-512"
+  - levels: 8
+    $name: Levels
+    $description: "2-8"
+  - intensity: 80
+    $name: Intensity ×100
+    $description: "0-300"
+  - threshold: 60
+    $name: Threshold ×100
+    $description: "0-300"
+  - softKnee: 70
+    $name: Soft knee ×100
+    $description: "0-100"
   $name: Bloom
-- bloomResolution: 256
-  $name: Bloom resolution
-  $description: "64-512"
-- bloomIterations: 8
-  $name: Bloom levels
-  $description: "2-8"
-- bloomIntensity: 80
-  $name: Bloom intensity ×100
-  $description: "0-300"
-- bloomThreshold: 60
-  $name: Bloom threshold ×100
-  $description: "0-300"
-- bloomKnee: 70
-  $name: Bloom soft knee ×100
-  $description: "0-100"
-- sunrays: true
+- sunrays:
+  - enabled: true
+    $name: Enabled
+  - resolution: 196
+    $name: Resolution
+    $description: "64-512"
+  - intensity: 100
+    $name: Intensity ×100
+    $description: "0-300"
   $name: Sun rays
-- sunResolution: 196
-  $name: Sun rays resolution
-  $description: "64-512"
-- sunWeight: 100
-  $name: Sun rays intensity ×100
-  $description: "0-300"
 */
 // ==/WindhawkModSettings==
+// clang-format on
 
 /*
 Shaders adapted from PavelDoGreat/WebGL-Fluid-Simulation.
@@ -221,18 +250,19 @@ SOFTWARE.
 #endif
 #include <windows.h>
 
+#include <d3d11.h>
+#include <d3dcompiler.h>
+#include <dcomp.h>
 #include <dwmapi.h>
+#include <dxgi1_3.h>
 #include <shellapi.h>
 #include <wtsapi32.h>
-
-#include <GL/gl.h>
 
 #include <algorithm>
 #include <climits>
 #include <cmath>
 #include <cstdint>
 #include <initializer_list>
-#include <map>
 #include <memory>
 #include <random>
 #include <stdexcept>
@@ -240,348 +270,253 @@ SOFTWARE.
 #include <utility>
 #include <vector>
 
+#ifndef WS_EX_NOREDIRECTIONBITMAP
+#define WS_EX_NOREDIRECTIONBITMAP 0x00200000L
+#endif
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
-// Shaders
+// Shaders (HLSL port of the WebGL shaders; see the license above)
 
-const char* kBaseVertexShader = R"GLSL(
-varying vec2 vUv;
-varying vec2 vL;
-varying vec2 vR;
-varying vec2 vT;
-varying vec2 vB;
-uniform vec2 texelSize;
+const char kShaderSource[] = R"HLSL(
+cbuffer Params : register(b0) {
+    float2 texelSize;
+    float2 splatPoint;
+    float3 color;
+    float radius;
+    float3 curve;
+    float aspectRatio;
+    float3 background;
+    float dt;
+    float dissipation;
+    float curl;
+    float value;
+    float threshold;
+    float intensity;
+    float weight;
+    float2 padding;
+};
 
-void main () {
-    vUv = gl_Vertex.xy * 0.5 + 0.5;
-    vL = vUv - vec2(texelSize.x, 0.0);
-    vR = vUv + vec2(texelSize.x, 0.0);
-    vT = vUv + vec2(0.0, texelSize.y);
-    vB = vUv - vec2(0.0, texelSize.y);
-    gl_Position = vec4(gl_Vertex.xy, 0.0, 1.0);
+Texture2D tex0 : register(t0);
+Texture2D tex1 : register(t1);
+Texture2D tex2 : register(t2);
+SamplerState linearClamp : register(s0);
+
+struct Varyings {
+    float4 position : SV_Position;
+    float2 uv : TEXCOORD0;
+    float2 l : TEXCOORD1;
+    float2 r : TEXCOORD2;
+    float2 t : TEXCOORD3;
+    float2 b : TEXCOORD4;
+};
+
+// The math keeps the original WebGL convention (v grows upwards). Direct3D
+// stores rows top-down, so v is flipped on every read. Rendering and sampling
+// then agree, and v = 1 is the top of the screen, as in the original.
+float4 Tex(Texture2D source, float2 uv) {
+    return source.SampleLevel(linearClamp, float2(uv.x, 1.0 - uv.y), 0);
 }
-)GLSL";
 
-const char* kBlurVertexShader = R"GLSL(
-varying vec2 vUv;
-varying vec2 vL;
-varying vec2 vR;
-uniform vec2 texelSize;
+// One triangle covering the target; no vertex buffer needed.
+Varyings FullscreenTriangle(uint id) {
+    float2 uv = float2((id << 1) & 2, id & 2);
+    Varyings o;
+    o.position = float4(uv * 2.0 - 1.0, 0.0, 1.0);
+    o.uv = uv;
+    o.l = uv;
+    o.r = uv;
+    o.t = uv;
+    o.b = uv;
+    return o;
+}
 
-void main () {
-    vUv = gl_Vertex.xy * 0.5 + 0.5;
+Varyings BaseVS(uint id : SV_VertexID) {
+    Varyings o = FullscreenTriangle(id);
+    o.l = o.uv - float2(texelSize.x, 0.0);
+    o.r = o.uv + float2(texelSize.x, 0.0);
+    o.t = o.uv + float2(0.0, texelSize.y);
+    o.b = o.uv - float2(0.0, texelSize.y);
+    return o;
+}
+
+Varyings BlurVS(uint id : SV_VertexID) {
+    Varyings o = FullscreenTriangle(id);
     float offset = 1.33333333;
-    vL = vUv - texelSize * offset;
-    vR = vUv + texelSize * offset;
-    gl_Position = vec4(gl_Vertex.xy, 0.0, 1.0);
+    o.l = o.uv - texelSize * offset;
+    o.r = o.uv + texelSize * offset;
+    return o;
 }
-)GLSL";
 
-const char* kBlurShader = R"GLSL(
-varying vec2 vUv;
-varying vec2 vL;
-varying vec2 vR;
-uniform sampler2D uTexture;
-
-void main () {
-    vec4 sum = texture2D(uTexture, vUv) * 0.29411764;
-    sum += texture2D(uTexture, vL) * 0.35294117;
-    sum += texture2D(uTexture, vR) * 0.35294117;
-    gl_FragColor = sum;
+float4 BlurPS(Varyings i) : SV_Target {
+    float4 sum = Tex(tex0, i.uv) * 0.29411764;
+    sum += Tex(tex0, i.l) * 0.35294117;
+    sum += Tex(tex0, i.r) * 0.35294117;
+    return sum;
 }
-)GLSL";
 
-const char* kClearShader = R"GLSL(
-varying vec2 vUv;
-uniform sampler2D uTexture;
-uniform float value;
-
-void main () {
-    gl_FragColor = value * texture2D(uTexture, vUv);
+float4 ClearPS(Varyings i) : SV_Target {
+    return value * Tex(tex0, i.uv);
 }
-)GLSL";
 
-const char* kSplatShader = R"GLSL(
-varying vec2 vUv;
-uniform sampler2D uTarget;
-uniform float aspectRatio;
-uniform vec3 color;
-uniform vec2 point;
-uniform float radius;
-
-void main () {
-    vec2 p = vUv - point.xy;
+float4 SplatPS(Varyings i) : SV_Target {
+    float2 p = i.uv - splatPoint;
     p.x *= aspectRatio;
-    vec3 splat = exp(-dot(p, p) / radius) * color;
-    vec3 base = texture2D(uTarget, vUv).xyz;
-    gl_FragColor = vec4(base + splat, 1.0);
+    float3 splat = exp(-dot(p, p) / radius) * color;
+    float3 base = Tex(tex0, i.uv).xyz;
+    return float4(base + splat, 1.0);
 }
-)GLSL";
 
-const char* kAdvectionShader = R"GLSL(
-varying vec2 vUv;
-uniform sampler2D uVelocity;
-uniform sampler2D uSource;
-uniform vec2 texelSize;
-uniform float dt;
-uniform float dissipation;
-
-void main () {
-    vec2 coord = vUv - dt * texture2D(uVelocity, vUv).xy * texelSize;
-    vec4 result = texture2D(uSource, coord);
+// tex0: velocity, tex1: advected quantity.
+float4 AdvectionPS(Varyings i) : SV_Target {
+    float2 coord = i.uv - dt * Tex(tex0, i.uv).xy * texelSize;
+    float4 result = Tex(tex1, coord);
     float decay = 1.0 + dissipation * dt;
-    gl_FragColor = result / decay;
+    return result / decay;
 }
-)GLSL";
 
-const char* kDivergenceShader = R"GLSL(
-varying vec2 vUv;
-varying vec2 vL;
-varying vec2 vR;
-varying vec2 vT;
-varying vec2 vB;
-uniform sampler2D uVelocity;
+float4 DivergencePS(Varyings i) : SV_Target {
+    float L = Tex(tex0, i.l).x;
+    float R = Tex(tex0, i.r).x;
+    float T = Tex(tex0, i.t).y;
+    float B = Tex(tex0, i.b).y;
 
-void main () {
-    float L = texture2D(uVelocity, vL).x;
-    float R = texture2D(uVelocity, vR).x;
-    float T = texture2D(uVelocity, vT).y;
-    float B = texture2D(uVelocity, vB).y;
-
-    vec2 C = texture2D(uVelocity, vUv).xy;
-    if (vL.x < 0.0) { L = -C.x; }
-    if (vR.x > 1.0) { R = -C.x; }
-    if (vT.y > 1.0) { T = -C.y; }
-    if (vB.y < 0.0) { B = -C.y; }
+    float2 C = Tex(tex0, i.uv).xy;
+    if (i.l.x < 0.0) { L = -C.x; }
+    if (i.r.x > 1.0) { R = -C.x; }
+    if (i.t.y > 1.0) { T = -C.y; }
+    if (i.b.y < 0.0) { B = -C.y; }
 
     float div = 0.5 * (R - L + T - B);
-    gl_FragColor = vec4(div, 0.0, 0.0, 1.0);
+    return float4(div, 0.0, 0.0, 1.0);
 }
-)GLSL";
 
-const char* kCurlShader = R"GLSL(
-varying vec2 vUv;
-varying vec2 vL;
-varying vec2 vR;
-varying vec2 vT;
-varying vec2 vB;
-uniform sampler2D uVelocity;
-
-void main () {
-    float L = texture2D(uVelocity, vL).y;
-    float R = texture2D(uVelocity, vR).y;
-    float T = texture2D(uVelocity, vT).x;
-    float B = texture2D(uVelocity, vB).x;
+float4 CurlPS(Varyings i) : SV_Target {
+    float L = Tex(tex0, i.l).y;
+    float R = Tex(tex0, i.r).y;
+    float T = Tex(tex0, i.t).x;
+    float B = Tex(tex0, i.b).x;
     float vorticity = R - L - T + B;
-    gl_FragColor = vec4(0.5 * vorticity, 0.0, 0.0, 1.0);
+    return float4(0.5 * vorticity, 0.0, 0.0, 1.0);
 }
-)GLSL";
 
-const char* kVorticityShader = R"GLSL(
-varying vec2 vUv;
-varying vec2 vL;
-varying vec2 vR;
-varying vec2 vT;
-varying vec2 vB;
-uniform sampler2D uVelocity;
-uniform sampler2D uCurl;
-uniform float curl;
-uniform float dt;
+// tex0: velocity, tex1: curl.
+float4 VorticityPS(Varyings i) : SV_Target {
+    float L = Tex(tex1, i.l).x;
+    float R = Tex(tex1, i.r).x;
+    float T = Tex(tex1, i.t).x;
+    float B = Tex(tex1, i.b).x;
+    float C = Tex(tex1, i.uv).x;
 
-void main () {
-    float L = texture2D(uCurl, vL).x;
-    float R = texture2D(uCurl, vR).x;
-    float T = texture2D(uCurl, vT).x;
-    float B = texture2D(uCurl, vB).x;
-    float C = texture2D(uCurl, vUv).x;
-
-    vec2 force = 0.5 * vec2(abs(T) - abs(B), abs(R) - abs(L));
+    float2 force = 0.5 * float2(abs(T) - abs(B), abs(R) - abs(L));
     force /= length(force) + 0.0001;
     force *= curl * C;
     force.y *= -1.0;
 
-    vec2 vel = texture2D(uVelocity, vUv).xy;
-    gl_FragColor = vec4(vel + force * dt, 0.0, 1.0);
+    float2 velocity = Tex(tex0, i.uv).xy;
+    return float4(velocity + force * dt, 0.0, 1.0);
 }
-)GLSL";
 
-const char* kPressureShader = R"GLSL(
-varying vec2 vUv;
-varying vec2 vL;
-varying vec2 vR;
-varying vec2 vT;
-varying vec2 vB;
-uniform sampler2D uPressure;
-uniform sampler2D uDivergence;
-
-void main () {
-    float L = texture2D(uPressure, vL).x;
-    float R = texture2D(uPressure, vR).x;
-    float T = texture2D(uPressure, vT).x;
-    float B = texture2D(uPressure, vB).x;
-    float divergence = texture2D(uDivergence, vUv).x;
+// tex0: pressure, tex1: divergence.
+float4 PressurePS(Varyings i) : SV_Target {
+    float L = Tex(tex0, i.l).x;
+    float R = Tex(tex0, i.r).x;
+    float T = Tex(tex0, i.t).x;
+    float B = Tex(tex0, i.b).x;
+    float divergence = Tex(tex1, i.uv).x;
     float pressure = (L + R + B + T - divergence) * 0.25;
-    gl_FragColor = vec4(pressure, 0.0, 0.0, 1.0);
+    return float4(pressure, 0.0, 0.0, 1.0);
 }
-)GLSL";
 
-const char* kGradientSubtractShader = R"GLSL(
-varying vec2 vUv;
-varying vec2 vL;
-varying vec2 vR;
-varying vec2 vT;
-varying vec2 vB;
-uniform sampler2D uPressure;
-uniform sampler2D uVelocity;
-
-void main () {
-    float L = texture2D(uPressure, vL).x;
-    float R = texture2D(uPressure, vR).x;
-    float T = texture2D(uPressure, vT).x;
-    float B = texture2D(uPressure, vB).x;
-    vec2 velocity = texture2D(uVelocity, vUv).xy;
-    velocity.xy -= vec2(R - L, T - B);
-    gl_FragColor = vec4(velocity, 0.0, 1.0);
+// tex0: pressure, tex1: velocity.
+float4 GradientSubtractPS(Varyings i) : SV_Target {
+    float L = Tex(tex0, i.l).x;
+    float R = Tex(tex0, i.r).x;
+    float T = Tex(tex0, i.t).x;
+    float B = Tex(tex0, i.b).x;
+    float2 velocity = Tex(tex1, i.uv).xy;
+    velocity -= float2(R - L, T - B);
+    return float4(velocity, 0.0, 1.0);
 }
-)GLSL";
 
-const char* kBloomPrefilterShader = R"GLSL(
-varying vec2 vUv;
-uniform sampler2D uTexture;
-uniform vec3 curve;
-uniform float threshold;
-
-void main () {
-    vec3 c = texture2D(uTexture, vUv).rgb;
+float4 BloomPrefilterPS(Varyings i) : SV_Target {
+    float3 c = Tex(tex0, i.uv).rgb;
     float br = max(c.r, max(c.g, c.b));
     float rq = clamp(br - curve.x, 0.0, curve.y);
     rq = curve.z * rq * rq;
     c *= max(rq, br - threshold) / max(br, 0.0001);
-    gl_FragColor = vec4(c, 0.0);
+    return float4(c, 0.0);
 }
-)GLSL";
 
-const char* kBloomBlurShader = R"GLSL(
-varying vec2 vL;
-varying vec2 vR;
-varying vec2 vT;
-varying vec2 vB;
-uniform sampler2D uTexture;
-
-void main () {
-    vec4 sum = vec4(0.0);
-    sum += texture2D(uTexture, vL);
-    sum += texture2D(uTexture, vR);
-    sum += texture2D(uTexture, vT);
-    sum += texture2D(uTexture, vB);
-    sum *= 0.25;
-    gl_FragColor = sum;
+float4 BloomBlurPS(Varyings i) : SV_Target {
+    float4 sum = Tex(tex0, i.l) + Tex(tex0, i.r) + Tex(tex0, i.t) +
+                 Tex(tex0, i.b);
+    return sum * 0.25;
 }
-)GLSL";
 
-const char* kBloomFinalShader = R"GLSL(
-varying vec2 vL;
-varying vec2 vR;
-varying vec2 vT;
-varying vec2 vB;
-uniform sampler2D uTexture;
-uniform float intensity;
-
-void main () {
-    vec4 sum = vec4(0.0);
-    sum += texture2D(uTexture, vL);
-    sum += texture2D(uTexture, vR);
-    sum += texture2D(uTexture, vT);
-    sum += texture2D(uTexture, vB);
-    sum *= 0.25;
-    gl_FragColor = sum * intensity;
+float4 BloomFinalPS(Varyings i) : SV_Target {
+    float4 sum = Tex(tex0, i.l) + Tex(tex0, i.r) + Tex(tex0, i.t) +
+                 Tex(tex0, i.b);
+    return sum * 0.25 * intensity;
 }
-)GLSL";
 
-const char* kSunraysMaskShader = R"GLSL(
-varying vec2 vUv;
-uniform sampler2D uTexture;
-
-void main () {
-    vec4 c = texture2D(uTexture, vUv);
+float4 SunraysMaskPS(Varyings i) : SV_Target {
+    float4 c = Tex(tex0, i.uv);
     float br = max(c.r, max(c.g, c.b));
     c.a = 1.0 - min(max(br * 20.0, 0.0), 0.8);
-    gl_FragColor = c;
+    return c;
 }
-)GLSL";
 
-const char* kSunraysShader = R"GLSL(
-varying vec2 vUv;
-uniform sampler2D uTexture;
-uniform float weight;
+float4 SunraysPS(Varyings i) : SV_Target {
+    const float density = 0.3;
+    const float decay = 0.95;
+    const float exposure = 0.7;
 
-#define ITERATIONS 16
-
-void main () {
-    float Density = 0.3;
-    float Decay = 0.95;
-    float Exposure = 0.7;
-
-    vec2 coord = vUv;
-    vec2 dir = vUv - 0.5;
-
-    dir *= 1.0 / float(ITERATIONS) * Density;
+    float2 coord = i.uv;
+    float2 dir = (i.uv - 0.5) * (density / 16.0);
     float illuminationDecay = 1.0;
+    float rays = Tex(tex0, i.uv).a;
 
-    float color = texture2D(uTexture, vUv).a;
-
-    for (int i = 0; i < ITERATIONS; i++) {
+    [unroll] for (int k = 0; k < 16; k++) {
         coord -= dir;
-        float col = texture2D(uTexture, coord).a;
-        color += col * illuminationDecay * weight;
-        illuminationDecay *= Decay;
+        rays += Tex(tex0, coord).a * illuminationDecay * weight;
+        illuminationDecay *= decay;
     }
-
-    gl_FragColor = vec4(color * Exposure, 0.0, 0.0, 1.0);
-}
-)GLSL";
-
-const char* kDisplayShader = R"GLSL(
-varying vec2 vUv;
-varying vec2 vL;
-varying vec2 vR;
-varying vec2 vT;
-varying vec2 vB;
-uniform sampler2D uTexture;
-uniform sampler2D uBloom;
-uniform sampler2D uSunrays;
-uniform vec3 background;
-uniform vec2 texelSize;
-
-vec3 linearToGamma (vec3 color) {
-    color = max(color, vec3(0));
-    return max(1.055 * pow(color, vec3(0.416666667)) - 0.055, vec3(0));
+    return float4(rays * exposure, 0.0, 0.0, 1.0);
 }
 
-void main () {
-    vec3 c = texture2D(uTexture, vUv).rgb;
+float3 LinearToGamma(float3 c) {
+    c = max(c, float3(0.0, 0.0, 0.0));
+    return max(1.055 * pow(c, float3(0.416666667, 0.416666667, 0.416666667)) - 0.055,
+               float3(0.0, 0.0, 0.0));
+}
+
+// tex0: dye, tex1: bloom, tex2: sun rays.
+float4 DisplayPS(Varyings i) : SV_Target {
+    float3 c = Tex(tex0, i.uv).rgb;
 
 #ifdef SHADING
-    vec3 lc = texture2D(uTexture, vL).rgb;
-    vec3 rc = texture2D(uTexture, vR).rgb;
-    vec3 tc = texture2D(uTexture, vT).rgb;
-    vec3 bc = texture2D(uTexture, vB).rgb;
+    float3 lc = Tex(tex0, i.l).rgb;
+    float3 rc = Tex(tex0, i.r).rgb;
+    float3 tc = Tex(tex0, i.t).rgb;
+    float3 bc = Tex(tex0, i.b).rgb;
 
     float dx = length(rc) - length(lc);
     float dy = length(tc) - length(bc);
 
-    vec3 n = normalize(vec3(dx, dy, length(texelSize)));
-    vec3 l = vec3(0.0, 0.0, 1.0);
-
-    float diffuse = clamp(dot(n, l) + 0.7, 0.7, 1.0);
+    float3 n = normalize(float3(dx, dy, length(texelSize)));
+    float diffuse = clamp(dot(n, float3(0.0, 0.0, 1.0)) + 0.7, 0.7, 1.0);
     c *= diffuse;
 #endif
 
 #ifdef BLOOM
-    vec3 bloom = texture2D(uBloom, vUv).rgb;
+    float3 bloom = Tex(tex1, i.uv).rgb;
 #endif
 
 #ifdef SUNRAYS
-    float sunrays = texture2D(uSunrays, vUv).r;
+    float sunrays = Tex(tex2, i.uv).r;
     c *= sunrays;
 #ifdef BLOOM
     bloom *= sunrays;
@@ -590,272 +525,159 @@ void main () {
 
 #ifdef BLOOM
     // Hash noise replaces the demo's dithering texture.
-    float noise = fract(sin(dot(vUv, vec2(12.9898, 78.233))) * 43758.5453);
+    float noise = frac(sin(dot(i.uv, float2(12.9898, 78.233))) * 43758.5453);
     noise = noise * 2.0 - 1.0;
     bloom += noise / 255.0;
-    bloom = linearToGamma(bloom);
+    bloom = LinearToGamma(bloom);
     c += bloom;
 #endif
 
     float a = max(c.r, max(c.g, c.b));
-    gl_FragColor = vec4(c + background * (1.0 - clamp(a, 0.0, 1.0)), 1.0);
+    return float4(c + background * (1.0 - saturate(a)), 1.0);
 }
-)GLSL";
+)HLSL";
+
+// Must match the cbuffer layout above (HLSL packs into 16-byte registers).
+struct alignas(16) ShaderParams {
+    float texelSize[2];
+    float splatPoint[2];
+    float color[3];
+    float radius;
+    float curve[3];
+    float aspectRatio;
+    float background[3];
+    float dt;
+    float dissipation;
+    float curl;
+    float value;
+    float threshold;
+    float intensity;
+    float weight;
+    float padding[2];
+};
+static_assert(sizeof(ShaderParams) == 96, "ShaderParams must match cbuffer");
 
 ////////////////////////////////////////////////////////////////////////////////
-// OpenGL entry points
-//
-// Functions beyond the OpenGL 1.1 exports of opengl32.dll. On Windows these
-// pointers are only valid for the context they were queried with, so each
-// wallpaper keeps its own table (monitors can be driven by different GPUs).
+// Small helpers
 
-constexpr GLenum kGlFramebuffer = 0x8D40;
-constexpr GLenum kGlColorAttachment0 = 0x8CE0;
-constexpr GLenum kGlFramebufferComplete = 0x8CD5;
-constexpr GLenum kGlRgba16f = 0x881A;
-constexpr GLenum kGlRgba8 = 0x8058;
-constexpr GLenum kGlTexture0 = 0x84C0;
-constexpr GLenum kGlClampToEdge = 0x812F;
-constexpr GLenum kGlBgra = 0x80E1;
-constexpr GLenum kGlFragmentShader = 0x8B30;
-constexpr GLenum kGlVertexShader = 0x8B31;
-constexpr GLenum kGlCompileStatus = 0x8B81;
-constexpr GLenum kGlLinkStatus = 0x8B82;
-
-#define FLUID_GL_FUNCTIONS(X)                                                \
-    X(GLuint, CreateShader, GLenum)                                          \
-    X(void, ShaderSource, GLuint, GLsizei, const char* const*, const GLint*) \
-    X(void, CompileShader, GLuint)                                           \
-    X(void, GetShaderiv, GLuint, GLenum, GLint*)                             \
-    X(void, GetShaderInfoLog, GLuint, GLsizei, GLsizei*, char*)              \
-    X(void, DeleteShader, GLuint)                                            \
-    X(GLuint, CreateProgram)                                                 \
-    X(void, AttachShader, GLuint, GLuint)                                    \
-    X(void, LinkProgram, GLuint)                                             \
-    X(void, GetProgramiv, GLuint, GLenum, GLint*)                            \
-    X(void, GetProgramInfoLog, GLuint, GLsizei, GLsizei*, char*)             \
-    X(void, DeleteProgram, GLuint)                                           \
-    X(void, UseProgram, GLuint)                                              \
-    X(GLint, GetUniformLocation, GLuint, const char*)                        \
-    X(void, Uniform1i, GLint, GLint)                                         \
-    X(void, Uniform1f, GLint, GLfloat)                                       \
-    X(void, Uniform2f, GLint, GLfloat, GLfloat)                              \
-    X(void, Uniform3f, GLint, GLfloat, GLfloat, GLfloat)                     \
-    X(void, ActiveTexture, GLenum)                                           \
-    X(void, GenFramebuffers, GLsizei, GLuint*)                               \
-    X(void, BindFramebuffer, GLenum, GLuint)                                 \
-    X(void, FramebufferTexture2D, GLenum, GLenum, GLenum, GLuint, GLint)     \
-    X(GLenum, CheckFramebufferStatus, GLenum)                                \
-    X(void, DeleteFramebuffers, GLsizei, const GLuint*)
-
-const char* GLString(GLenum name) {
-    auto value = reinterpret_cast<const char*>(glGetString(name));
-    return value ? value : "(unknown)";
-}
-
-void* GLAddress(const char* name) {
-    PROC proc = wglGetProcAddress(name);
-    auto value = reinterpret_cast<intptr_t>(proc);
-    // Some drivers return small sentinel values instead of nullptr.
-    if (!proc || value == 1 || value == 2 || value == 3 || value == -1) {
-        proc = GetProcAddress(GetModuleHandleW(L"opengl32.dll"), name);
+template <typename T>
+class ComPtr {
+   public:
+    ComPtr() = default;
+    ComPtr(const ComPtr&) = delete;
+    ComPtr& operator=(const ComPtr&) = delete;
+    ComPtr(ComPtr&& other) noexcept : p_(std::exchange(other.p_, nullptr)) {}
+    ComPtr& operator=(ComPtr&& other) noexcept {
+        if (this != &other) {
+            Reset();
+            p_ = std::exchange(other.p_, nullptr);
+        }
+        return *this;
     }
-    return reinterpret_cast<void*>(proc);
-}
+    ~ComPtr() { Reset(); }
 
-struct GLApi {
-#define X(ret, name, ...) ret(APIENTRY* name)(__VA_ARGS__) = nullptr;
-    FLUID_GL_FUNCTIONS(X)
-#undef X
+    void Reset() {
+        if (p_) {
+            p_->Release();
+            p_ = nullptr;
+        }
+    }
+    T* Get() const { return p_; }
+    T** Put() {
+        Reset();
+        return &p_;
+    }
+    T* operator->() const { return p_; }
+    explicit operator bool() const { return p_ != nullptr; }
 
-    void Load() {
-#define X(ret, name, ...)                                             \
-    name = reinterpret_cast<decltype(name)>(GLAddress("gl" #name));   \
-    if (!name) {                                                      \
-        throw std::runtime_error("Missing OpenGL function gl" #name); \
-    }
-        FLUID_GL_FUNCTIONS(X)
-#undef X
-    }
+   private:
+    T* p_ = nullptr;
 };
 
-// Per-context state: entry points, bound program and cached uniform locations.
-struct GLContext {
-    GLApi api;
-    GLuint program = 0;
-    // Uniform names are always string literals, so their address is a stable
-    // key. Two literals with the same text just produce two valid entries.
-    std::map<std::pair<GLuint, const char*>, GLint> uniforms;
+class HResultError : public std::runtime_error {
+   public:
+    HResultError(const char* what, HRESULT hr)
+        : std::runtime_error(Format(what, hr)), hr_(hr) {}
+    HRESULT hr() const { return hr_; }
+
+   private:
+    static std::string Format(const char* what, HRESULT hr) {
+        char buffer[160];
+        snprintf(buffer, sizeof(buffer), "%s failed (0x%08lX)", what,
+                 static_cast<unsigned long>(hr));
+        return buffer;
+    }
+    HRESULT hr_;
 };
 
-// The context current on the render thread. Only touched by that thread.
-GLContext* g_gl = nullptr;
-
-GLApi& GL() {
-    return g_gl->api;
-}
-
-struct Target {
-    GLuint texture = 0;
-    GLuint fbo = 0;
-    int w = 0;
-    int h = 0;
-};
-
-struct DoubleTarget {
-    Target read;
-    Target write;
-    void swap() { std::swap(read, write); }
-};
-
-GLuint BuildShader(GLenum type, const std::string& source) {
-    GLuint id = GL().CreateShader(type);
-    const char* text = source.c_str();
-    GL().ShaderSource(id, 1, &text, nullptr);
-    GL().CompileShader(id);
-    GLint ok = 0;
-    GL().GetShaderiv(id, kGlCompileStatus, &ok);
-    if (!ok) {
-        char log[4096]{};
-        GL().GetShaderInfoLog(id, sizeof(log), nullptr, log);
-        GL().DeleteShader(id);
-        throw std::runtime_error(std::string("Shader compilation failed: ") +
-                                 log);
+void Check(HRESULT hr, const char* what) {
+    if (FAILED(hr)) {
+        throw HResultError(what, hr);
     }
-    return id;
 }
 
-GLuint BuildProgram(const char* fragment,
-                    const std::string& defines,
-                    const char* vertex) {
-    GLuint vs = 0, fs = 0, program = 0;
-    try {
-        vs = BuildShader(kGlVertexShader,
-                         std::string("#version 120\n") + vertex);
-        fs = BuildShader(kGlFragmentShader,
-                         std::string("#version 120\n") + defines + fragment);
-        program = GL().CreateProgram();
-        GL().AttachShader(program, vs);
-        GL().AttachShader(program, fs);
-        GL().LinkProgram(program);
-        GLint ok = 0;
-        GL().GetProgramiv(program, kGlLinkStatus, &ok);
-        if (!ok) {
-            char log[4096]{};
-            GL().GetProgramInfoLog(program, sizeof(log), nullptr, log);
-            throw std::runtime_error(std::string("Program link failed: ") +
-                                     log);
-        }
-    } catch (...) {
-        if (vs) {
-            GL().DeleteShader(vs);
-        }
-        if (fs) {
-            GL().DeleteShader(fs);
-        }
-        if (program) {
-            GL().DeleteProgram(program);
-        }
-        throw;
+bool IsDeviceLost(HRESULT hr) {
+    return hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET ||
+           hr == DXGI_ERROR_DEVICE_HUNG;
+}
+
+void PumpMessages() {
+    MSG msg;
+    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
     }
-    GL().DeleteShader(vs);
-    GL().DeleteShader(fs);
-    return program;
-}
-
-void UseProgram(GLuint program) {
-    g_gl->program = program;
-    GL().UseProgram(program);
-}
-
-GLint UniformLocation(const char* name) {
-    auto key = std::make_pair(g_gl->program, name);
-    auto it = g_gl->uniforms.find(key);
-    if (it != g_gl->uniforms.end()) {
-        return it->second;
-    }
-    GLint location = GL().GetUniformLocation(g_gl->program, name);
-    g_gl->uniforms.emplace(key, location);
-    return location;
-}
-
-void SetFloat(const char* name, float v) {
-    GL().Uniform1f(UniformLocation(name), v);
-}
-
-void SetVec2(const char* name, float x, float y) {
-    GL().Uniform2f(UniformLocation(name), x, y);
-}
-
-void SetVec3(const char* name, float x, float y, float z) {
-    GL().Uniform3f(UniformLocation(name), x, y, z);
-}
-
-void SetTexture(const char* name, const Target& t, int unit = 0) {
-    GL().ActiveTexture(kGlTexture0 + unit);
-    glBindTexture(GL_TEXTURE_2D, t.texture);
-    GL().Uniform1i(UniformLocation(name), unit);
-}
-
-void SetTexelSize(const Target& t) {
-    SetVec2("texelSize", 1.f / t.w, 1.f / t.h);
-}
-
-void DrawQuad() {
-    glBegin(GL_QUADS);
-    glVertex2f(-1, -1);
-    glVertex2f(1, -1);
-    glVertex2f(1, 1);
-    glVertex2f(-1, 1);
-    glEnd();
-}
-
-void DrawTo(const Target& t) {
-    GL().BindFramebuffer(kGlFramebuffer, t.fbo);
-    glViewport(0, 0, t.w, t.h);
-    DrawQuad();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Settings
 
+enum class BatteryMode { Normal, HalfFps, Pause };
+
 struct Settings {
     int fps;
+    bool pause;
+    bool pauseWhenCovered;
+    BatteryMode onBattery;
+    bool primaryOnly;
+
+    bool mouse;
+    bool desktopOnly;
+    float mouseForce;
+
     int simResolution;
     int dyeResolution;
-    int pressureIterations;
-    int emitters;
-    int bloomResolution;
-    int bloomLevels;
-    int sunraysResolution;
-    int burstSeconds;
     float densityDissipation;
     float velocityDissipation;
     float pressure;
+    int pressureIterations;
     float curl;
     float splatRadius;
-    float mouseForce;
+
+    bool colorful;
     float colorSpeed;
+    float fixedColor[3];
+    float background[3];
+    bool shading;
+
+    bool autoMotion;
+    int emitters;
     float autoSpeed;
     float autoForce;
     float autoColor;
+    bool bursts;
+    int burstSeconds;
+
+    bool bloom;
+    int bloomResolution;
+    int bloomLevels;
     float bloomIntensity;
     float bloomThreshold;
     float bloomKnee;
-    float sunraysWeight;
-    bool shading;
-    bool colorful;
-    bool autoMotion;
-    bool bursts;
-    bool mouse;
-    bool desktopOnly;
-    bool bloom;
+
     bool sunrays;
-    bool pause;
-    bool pauseWhenCovered;
-    bool primaryOnly;
-    float fixedColor[3];
-    float background[3];
+    int sunraysResolution;
+    float sunraysWeight;
 };
 
 int IntSetting(const wchar_t* key, int lo, int hi) {
@@ -866,52 +688,73 @@ bool BoolSetting(const wchar_t* key) {
     return Wh_GetIntSetting(key) != 0;
 }
 
+BatteryMode ReadBatteryMode() {
+    PCWSTR value = Wh_GetStringSetting(L"general.onBattery");
+    BatteryMode mode = BatteryMode::HalfFps;
+    if (value) {
+        if (wcscmp(value, L"normal") == 0) {
+            mode = BatteryMode::Normal;
+        } else if (wcscmp(value, L"pause") == 0) {
+            mode = BatteryMode::Pause;
+        }
+        Wh_FreeStringSetting(value);
+    }
+    return mode;
+}
+
 Settings ReadSettings() {
     Settings s{};
-    s.fps = IntSetting(L"fps", 15, 120);
-    s.simResolution = IntSetting(L"simResolution", 64, 512);
-    s.dyeResolution = IntSetting(L"dyeResolution", 256, 2048);
-    s.pressureIterations = IntSetting(L"iterations", 5, 60);
-    s.densityDissipation = IntSetting(L"density", 0, 1000) / 100.f;
-    s.velocityDissipation = IntSetting(L"velocity", 0, 1000) / 100.f;
-    s.pressure = IntSetting(L"pressure", 0, 100) / 100.f;
-    s.curl = float(IntSetting(L"curl", 0, 100));
+    s.fps = IntSetting(L"general.fps", 15, 120);
+    s.pause = BoolSetting(L"general.pause");
+    s.pauseWhenCovered = BoolSetting(L"general.pauseWhenCovered");
+    s.onBattery = ReadBatteryMode();
+    s.primaryOnly = BoolSetting(L"general.primaryOnly");
+
+    s.mouse = BoolSetting(L"mouse.enabled");
+    s.desktopOnly = BoolSetting(L"mouse.desktopOnly");
+    s.mouseForce = float(IntSetting(L"mouse.force", 100, 15000));
+
+    s.simResolution = IntSetting(L"simulation.simResolution", 64, 512);
+    s.dyeResolution = IntSetting(L"simulation.dyeResolution", 256, 2048);
+    s.densityDissipation =
+        IntSetting(L"simulation.densityDissipation", 0, 1000) / 100.f;
+    s.velocityDissipation =
+        IntSetting(L"simulation.velocityDissipation", 0, 1000) / 100.f;
+    s.pressure = IntSetting(L"simulation.pressure", 0, 100) / 100.f;
+    s.pressureIterations = IntSetting(L"simulation.pressureIterations", 5, 60);
+    s.curl = float(IntSetting(L"simulation.curl", 0, 100));
     // The setting mirrors the demo's SPLAT_RADIUS (25 = 0.25). The demo then
     // divides it by 100 before passing it to the shader, hence 10000 here.
-    s.splatRadius = IntSetting(L"radius", 1, 200) / 10000.f;
-    s.mouseForce = float(IntSetting(L"force", 100, 15000));
-    s.colorSpeed = float(IntSetting(L"colorSpeed", 0, 100));
-    s.emitters = IntSetting(L"emitters", 1, 6);
-    s.autoSpeed = IntSetting(L"autoSpeed", 1, 100) / 100.f;
-    s.autoForce = float(IntSetting(L"autoForce", 100, 15000));
-    s.autoColor = IntSetting(L"autoColor", 1, 300) / 100.f;
-    s.burstSeconds = IntSetting(L"burstSeconds", 2, 120);
-    s.bloomResolution = IntSetting(L"bloomResolution", 64, 512);
-    s.bloomLevels = IntSetting(L"bloomIterations", 2, 8);
-    s.bloomIntensity = IntSetting(L"bloomIntensity", 0, 300) / 100.f;
-    s.bloomThreshold = IntSetting(L"bloomThreshold", 0, 300) / 100.f;
-    s.bloomKnee = IntSetting(L"bloomKnee", 0, 100) / 100.f;
-    s.sunraysResolution = IntSetting(L"sunResolution", 64, 512);
-    s.sunraysWeight = IntSetting(L"sunWeight", 0, 300) / 100.f;
+    s.splatRadius = IntSetting(L"simulation.splatRadius", 1, 200) / 10000.f;
 
-    s.shading = BoolSetting(L"shading");
-    s.colorful = BoolSetting(L"colorful");
-    s.autoMotion = BoolSetting(L"autoMotion");
-    s.bursts = BoolSetting(L"bursts");
-    s.mouse = BoolSetting(L"mouse");
-    s.desktopOnly = BoolSetting(L"desktopOnly");
-    s.bloom = BoolSetting(L"bloom");
-    s.sunrays = BoolSetting(L"sunrays");
-    s.pause = BoolSetting(L"pause");
-    s.pauseWhenCovered = BoolSetting(L"pauseWhenCovered");
-    s.primaryOnly = BoolSetting(L"primaryOnly");
+    s.colorful = BoolSetting(L"colors.colorful");
+    s.colorSpeed = float(IntSetting(L"colors.colorSpeed", 0, 100));
+    s.fixedColor[0] = IntSetting(L"colors.fixedRed", 0, 255) / 255.f;
+    s.fixedColor[1] = IntSetting(L"colors.fixedGreen", 0, 255) / 255.f;
+    s.fixedColor[2] = IntSetting(L"colors.fixedBlue", 0, 255) / 255.f;
+    s.background[0] = IntSetting(L"colors.backgroundRed", 0, 255) / 255.f;
+    s.background[1] = IntSetting(L"colors.backgroundGreen", 0, 255) / 255.f;
+    s.background[2] = IntSetting(L"colors.backgroundBlue", 0, 255) / 255.f;
+    s.shading = BoolSetting(L"colors.shading");
 
-    s.fixedColor[0] = IntSetting(L"red", 0, 255) / 255.f;
-    s.fixedColor[1] = IntSetting(L"green", 0, 255) / 255.f;
-    s.fixedColor[2] = IntSetting(L"blue", 0, 255) / 255.f;
-    s.background[0] = IntSetting(L"backgroundRed", 0, 255) / 255.f;
-    s.background[1] = IntSetting(L"backgroundGreen", 0, 255) / 255.f;
-    s.background[2] = IntSetting(L"backgroundBlue", 0, 255) / 255.f;
+    s.autoMotion = BoolSetting(L"autoMotion.enabled");
+    s.emitters = IntSetting(L"autoMotion.trails", 1, 6);
+    s.autoSpeed = IntSetting(L"autoMotion.speed", 1, 100) / 100.f;
+    s.autoForce = float(IntSetting(L"autoMotion.force", 100, 15000));
+    s.autoColor = IntSetting(L"autoMotion.colorAmount", 1, 300) / 100.f;
+    s.bursts = BoolSetting(L"autoMotion.bursts");
+    s.burstSeconds = IntSetting(L"autoMotion.burstSeconds", 2, 120);
+
+    s.bloom = BoolSetting(L"bloom.enabled");
+    s.bloomResolution = IntSetting(L"bloom.resolution", 64, 512);
+    s.bloomLevels = IntSetting(L"bloom.levels", 2, 8);
+    s.bloomIntensity = IntSetting(L"bloom.intensity", 0, 300) / 100.f;
+    s.bloomThreshold = IntSetting(L"bloom.threshold", 0, 300) / 100.f;
+    s.bloomKnee = IntSetting(L"bloom.softKnee", 0, 100) / 100.f;
+
+    s.sunrays = BoolSetting(L"sunrays.enabled");
+    s.sunraysResolution = IntSetting(L"sunrays.resolution", 64, 512);
+    s.sunraysWeight = IntSetting(L"sunrays.intensity", 0, 300) / 100.f;
     return s;
 }
 
@@ -926,130 +769,134 @@ HANDLE g_worker = nullptr;
 bool g_startupOK = false;
 
 constexpr wchar_t kWindowClass[] = L"WindhawkFluidWallpaperWindow";
-constexpr wchar_t kLayerClass[] = L"WindhawkFluidWallpaperLayer";
 constexpr wchar_t kControlClass[] = L"WindhawkFluidWallpaperControl";
 
 constexpr float kTau = 6.283185f;
 constexpr double kIdleIntervalMs = 200;
-constexpr int kMaxPresentEdge = 1536;
+// A monitor counts as covered when less than this share of its work area
+// remains visible (tolerates hairline gaps between snapped windows).
+constexpr double kCoveredVisibleFraction = 0.005;
 
-// {6FE69556-704A-47A0-8F24-C28D936FDA47}
+// Power setting GUIDs (WinNT.h; not all are in every SDK version).
 constexpr GUID kConsoleDisplayState = {
     0x6fe69556,
     0x704a,
     0x47a0,
     {0x8f, 0x24, 0xc2, 0x8d, 0x93, 0x6f, 0xda, 0x47}};
+constexpr GUID kAcDcPowerSource = {
+    0x5d3e9a59,
+    0xe9d5,
+    0x4b00,
+    {0xa6, 0xbd, 0xff, 0x34, 0xff, 0x51, 0x65, 0x48}};
+constexpr GUID kPowerSavingStatus = {  // Windows 10 battery saver.
+    0xe00958c0,
+    0xc213,
+    0x4ace,
+    {0xac, 0x77, 0xfe, 0xcc, 0xed, 0x2e, 0xee, 0xa5}};
+constexpr GUID kEnergySaverStatus = {  // Windows 11 Energy Saver.
+    0x550e8400,
+    0xe29b,
+    0x41d4,
+    {0xa7, 0x16, 0x44, 0x66, 0x55, 0x44, 0x00, 0x00}};
 
 // Written by the control window procedure, read by the render loop. Both run
 // on the render thread.
 bool g_sessionLocked = false;
 bool g_sessionDisconnected = false;  // Fast user switching, RDP disconnect.
 bool g_displayOff = false;
+bool g_onBattery = false;
+bool g_batterySaver = false;
+bool g_energySaver = false;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Desktop layout
 
-HWND g_wallpaperParent = nullptr;
-HWND g_iconHost = nullptr;
-HWND g_iconView = nullptr;
-bool g_raisedDesktop = false;
-HWND g_backgroundWindow = nullptr;
-HWND g_savedBackground = nullptr;
-HWND g_savedBackgroundPrevious = nullptr;
-
-// On raised desktops, keep the shell's background WorkerW below our window.
-void EnsureDesktopOrder() {
-    if (!g_raisedDesktop || !g_backgroundWindow ||
-        !IsWindow(g_backgroundWindow)) {
-        return;
+// Explorer's process. The mod runs in its own process, so desktop windows are
+// matched against the shell's process.
+DWORD ShellProcessId() {
+    DWORD process = 0;
+    if (HWND shell = GetShellWindow()) {
+        GetWindowThreadProcessId(shell, &process);
     }
-    if (g_savedBackground != g_backgroundWindow) {
-        g_savedBackground = g_backgroundWindow;
-        g_savedBackgroundPrevious = GetWindow(g_backgroundWindow, GW_HWNDPREV);
-    }
-    SetWindowPos(g_backgroundWindow, HWND_BOTTOM, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    return process;
 }
 
-void RestoreDesktopOrder() {
-    bool previousValid =
-        !g_savedBackgroundPrevious ||
-        (IsWindow(g_savedBackgroundPrevious) &&
-         GetParent(g_savedBackgroundPrevious) == GetParent(g_savedBackground));
-    if (g_savedBackground && IsWindow(g_savedBackground) && previousValid) {
-        SetWindowPos(
-            g_savedBackground,
-            g_savedBackgroundPrevious ? g_savedBackgroundPrevious : HWND_TOP, 0,
-            0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    }
-    g_savedBackground = nullptr;
-    g_savedBackgroundPrevious = nullptr;
+DWORD WindowProcessId(HWND w) {
+    DWORD process = 0;
+    GetWindowThreadProcessId(w, &process);
+    return process;
 }
 
-BOOL CALLBACK FindIconView(HWND top, LPARAM) {
-    HWND icons = FindWindowExW(top, nullptr, L"SHELLDLL_DefView", nullptr);
-    if (icons && !g_iconView) {
-        g_iconHost = top;
-        g_iconView = icons;
+struct IconHostSearch {
+    DWORD shellProcess;
+    HWND result;
+};
+
+BOOL CALLBACK FindIconHost(HWND w, LPARAM param) {
+    auto search = reinterpret_cast<IconHostSearch*>(param);
+    if (WindowProcessId(w) == search->shellProcess && IsWindowVisible(w) &&
+        FindWindowExW(w, nullptr, L"SHELLDLL_DefView", nullptr)) {
+        search->result = w;
+        return FALSE;
     }
     return TRUE;
 }
 
-HWND FindWallpaperParent() {
-    g_wallpaperParent = nullptr;
-    g_iconHost = nullptr;
-    g_iconView = nullptr;
-    g_raisedDesktop = false;
+// Returns the window to parent the wallpaper to. On the Windows 11 24H2+
+// layout, that's Progman, and `iconView` receives the icon view to stay
+// below. On the classic layout, it's the WorkerW behind the icons and
+// `iconView` is null.
+HWND FindWallpaperHost(HWND& iconView) {
+    iconView = nullptr;
+    DWORD shellProcess = ShellProcessId();
+    if (!shellProcess) {
+        return nullptr;
+    }
 
     HWND progman = FindWindowW(L"Progman", nullptr);
-    if (!progman) {
-        return nullptr;
-    }
-
-    // Undocumented: ask Progman to create the WorkerW used for animated
-    // wallpapers (the same message used by other wallpaper engines).
-    DWORD_PTR result = 0;
-    SendMessageTimeoutW(progman, 0x052C, 0xD, 0, SMTO_ABORTIFHUNG, 1000,
-                        &result);
-    SendMessageTimeoutW(progman, 0x052C, 0xD, 1, SMTO_ABORTIFHUNG, 1000,
-                        &result);
-
-    EnumWindows(FindIconView, 0);
-    if (!g_iconView) {
-        Wh_Log(L"Desktop SHELLDLL_DefView not found");
-        return nullptr;
-    }
-
-    HWND childWorker = FindWindowExW(g_iconHost, nullptr, L"WorkerW", nullptr);
-    g_backgroundWindow = childWorker;
-    g_raisedDesktop = (GetWindowLongPtrW(g_iconHost, GWL_EXSTYLE) &
-                       WS_EX_NOREDIRECTIONBITMAP) != 0 ||
-                      childWorker != nullptr;
-
-    if (g_raisedDesktop) {
-        // Windows 11 24H2+: the wallpaper is a sibling below DefView and above
-        // the shell's background WorkerW. Do not place it inside that WorkerW.
-        g_wallpaperParent = g_iconHost;
-    } else {
-        g_wallpaperParent =
-            FindWindowExW(nullptr, g_iconHost, L"WorkerW", nullptr);
-        if (g_wallpaperParent && FindWindowExW(g_wallpaperParent, nullptr,
-                                               L"SHELLDLL_DefView", nullptr)) {
-            g_wallpaperParent = nullptr;
+    if (progman && WindowProcessId(progman) == shellProcess) {
+        HWND view =
+            FindWindowExW(progman, nullptr, L"SHELLDLL_DefView", nullptr);
+        HWND worker = FindWindowExW(progman, nullptr, L"WorkerW", nullptr);
+        if (view && worker &&
+            (GetWindowLongPtrW(progman, GWL_EXSTYLE) &
+             WS_EX_NOREDIRECTIONBITMAP) &&
+            (GetWindowLongPtrW(view, GWL_EXSTYLE) & WS_EX_LAYERED)) {
+            iconView = view;
+            return progman;
         }
     }
 
-    RECT client{};
-    if (g_wallpaperParent) {
-        GetClientRect(g_wallpaperParent, &client);
+    IconHostSearch search{shellProcess, nullptr};
+    EnumWindows(FindIconHost, reinterpret_cast<LPARAM>(&search));
+    if (!search.result) {
+        return nullptr;
     }
-    Wh_Log(
-        L"Desktop layout: raised=%d parent=%p icons=%p backgroundChild=%p "
-        L"client=%ldx%ld visible=%d",
-        g_raisedDesktop, g_wallpaperParent, g_iconView, childWorker,
-        client.right, client.bottom,
-        g_wallpaperParent ? IsWindowVisible(g_wallpaperParent) : 0);
-    return g_wallpaperParent;
+    HWND host = FindWindowExW(nullptr, search.result, L"WorkerW", nullptr);
+    if (!host || !IsWindowVisible(host) ||
+        WindowProcessId(host) != shellProcess ||
+        FindWindowExW(host, nullptr, L"SHELLDLL_DefView", nullptr)) {
+        return nullptr;
+    }
+    return host;
+}
+
+HWND FindOrCreateWallpaperHost(HWND& iconView) {
+    HWND host = FindWallpaperHost(iconView);
+    if (host) {
+        return host;
+    }
+    HWND progman = FindWindowW(L"Progman", nullptr);
+    DWORD shellProcess = ShellProcessId();
+    if (progman && shellProcess && WindowProcessId(progman) == shellProcess) {
+        // Undocumented: ask Explorer to create the WorkerW wallpaper layer,
+        // the same message used by other wallpaper engines.
+        DWORD_PTR result = 0;
+        SendMessageTimeoutW(progman, 0x052C, 0xD, 1, SMTO_ABORTIFHUNG, 1000,
+                            &result);
+        host = FindWallpaperHost(iconView);
+    }
+    return host;
 }
 
 bool ClassIsAnyOf(HWND w, std::initializer_list<const wchar_t*> names) {
@@ -1068,71 +915,24 @@ bool ClassIsAnyOf(HWND w, std::initializer_list<const wchar_t*> names) {
 bool IsShellOrOwnWindow(HWND w) {
     return ClassIsAnyOf(
         w, {L"Progman", L"WorkerW", L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd",
-            kWindowClass, kLayerClass, kControlClass});
+            kWindowClass, kControlClass});
 }
 
 bool DesktopAt(POINT p) {
     HWND w = WindowFromPoint(p);
     for (int i = 0; w && i < 8; i++, w = GetParent(w)) {
         if (ClassIsAnyOf(w, {L"SHELLDLL_DefView", L"Progman", L"WorkerW",
-                             kWindowClass, kLayerClass})) {
+                             kWindowClass})) {
             return true;
         }
     }
     return false;
 }
 
-bool IsCloaked(HWND w) {
-    DWORD cloaked = 0;
-    return SUCCEEDED(DwmGetWindowAttribute(w, DWMWA_CLOAKED, &cloaked,
-                                           sizeof(cloaked))) &&
-           cloaked != 0;
-}
-
-// Collects monitors hidden behind a maximized or full-screen window. Hidden
-// windows, windows on other virtual desktops (cloaked) and click-through
-// overlays are ignored.
-// Cheap checks first: this runs over every top-level window 4 times a second.
-BOOL CALLBACK CollectCoveredMonitor(HWND w, LPARAM param) {
-    if (!IsWindowVisible(w) || IsIconic(w)) {
-        return TRUE;
-    }
-    LONG_PTR exStyle = GetWindowLongPtrW(w, GWL_EXSTYLE);
-    if (exStyle & WS_EX_TRANSPARENT) {
-        return TRUE;
-    }
-    HMONITOR monitor = MonitorFromWindow(w, MONITOR_DEFAULTTONULL);
-    if (!monitor) {
-        return TRUE;
-    }
-    bool covers = IsZoomed(w) != FALSE;
-    if (!covers && !(exStyle & WS_EX_TOOLWINDOW)) {
-        MONITORINFO mi{};
-        mi.cbSize = sizeof(mi);
-        RECT wr{};
-        covers = GetMonitorInfoW(monitor, &mi) && GetWindowRect(w, &wr) &&
-                 wr.left <= mi.rcMonitor.left && wr.top <= mi.rcMonitor.top &&
-                 wr.right >= mi.rcMonitor.right &&
-                 wr.bottom >= mi.rcMonitor.bottom;
-    }
-    if (covers && !IsShellOrOwnWindow(w) && !IsCloaked(w)) {
-        auto& list = *reinterpret_cast<std::vector<HMONITOR>*>(param);
-        if (std::find(list.begin(), list.end(), monitor) == list.end()) {
-            list.push_back(monitor);
-        }
-    }
-    return TRUE;
-}
-
-std::vector<HMONITOR> CoveredMonitors() {
-    std::vector<HMONITOR> list;
-    EnumWindows(CollectCoveredMonitor, reinterpret_cast<LPARAM>(&list));
-    return list;
-}
-
 struct MonitorInfo {
     HMONITOR monitor;
     RECT rect;
+    RECT work;
     bool primary;
 };
 
@@ -1141,7 +941,8 @@ BOOL CALLBACK CollectMonitor(HMONITOR h, HDC, LPRECT, LPARAM param) {
     mi.cbSize = sizeof(mi);
     if (GetMonitorInfoW(h, &mi)) {
         reinterpret_cast<std::vector<MonitorInfo>*>(param)->push_back(
-            {h, mi.rcMonitor, (mi.dwFlags & MONITORINFOF_PRIMARY) != 0});
+            {h, mi.rcMonitor, mi.rcWork,
+             (mi.dwFlags & MONITORINFOF_PRIMARY) != 0});
     }
     return TRUE;
 }
@@ -1174,102 +975,470 @@ bool SameMonitors(const std::vector<MonitorInfo>& a,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Wallpaper: one window, OpenGL context and simulation per monitor
+// Desktop visibility: subtract every visible window from each monitor's work
+// area; a monitor is covered when (almost) nothing is left. This handles
+// maximized and full-screen windows as well as tiled or snapped windows.
 
-struct Wallpaper {
-    MonitorInfo info{};
-    Settings s{};
+bool IsCloaked(HWND w) {
+    DWORD cloaked = 0;
+    return SUCCEEDED(DwmGetWindowAttribute(w, DWMWA_CLOAKED, &cloaked,
+                                           sizeof(cloaked))) &&
+           cloaked != 0;
+}
 
-    HWND window = nullptr;
-    HWND renderWindow = nullptr;  // Hidden WGL drawable for layered windows.
-    HDC dc = nullptr;
-    HGLRC context = nullptr;
-    GLContext gl;
-    bool layered = false;
-    bool loggedFrame = false;
-    DWORD lastPresentError = 0;
+// Layered windows can be partly or fully transparent. Only those with a
+// known constant full opacity count as covering.
+bool IsOpaqueLayered(HWND w) {
+    COLORREF key = 0;
+    BYTE alpha = 0;
+    DWORD flags = 0;
+    if (!GetLayeredWindowAttributes(w, &key, &alpha, &flags)) {
+        return false;  // UpdateLayeredWindow: per-pixel alpha, unknown.
+    }
+    return !(flags & LWA_COLORKEY) && (!(flags & LWA_ALPHA) || alpha == 255);
+}
 
-    // Layered presentation: the frame is rendered into an RGBA8 target, read
-    // back at reduced size into frameDC, and scaled into the window by
-    // WM_PAINT.
-    Target presentation;
-    int presentW = 0;
-    int presentH = 0;
-    HDC frameDC = nullptr;
-    HBITMAP frameBitmap = nullptr;
-    HGDIOBJ oldFrameBitmap = nullptr;
-    void* readback = nullptr;
+struct CoverRegion {
+    HMONITOR monitor;
+    RECT work;
+    HRGN visible;
+};
 
-    std::vector<Target> targets;
-    std::vector<GLuint> programs;
-    DoubleTarget velocity, dye, pressure;
-    Target divergence, curl, bloom, sunMask, sun, sunTemp;
-    std::vector<Target> bloomLevels;
-    GLuint pSplat = 0, pAdvection = 0, pCurl = 0, pVorticity = 0;
-    GLuint pDivergence = 0, pPressure = 0, pGradient = 0, pClear = 0;
-    GLuint pBloomPrefilter = 0, pBloomBlur = 0, pBloomFinal = 0;
-    GLuint pSunraysMask = 0, pSunrays = 0, pBlur = 0, pDisplay = 0;
+// Cheap checks first: this runs over every top-level window 4 times a second.
+BOOL CALLBACK SubtractWindow(HWND w, LPARAM param) {
+    if (!IsWindowVisible(w) || IsIconic(w)) {
+        return TRUE;
+    }
+    LONG_PTR exStyle = GetWindowLongPtrW(w, GWL_EXSTYLE);
+    if ((exStyle & WS_EX_TRANSPARENT) ||
+        ((exStyle & WS_EX_LAYERED) && !IsOpaqueLayered(w))) {
+        return TRUE;
+    }
+    // The visible frame, without the invisible resize borders.
+    RECT r{};
+    if (FAILED(DwmGetWindowAttribute(w, DWMWA_EXTENDED_FRAME_BOUNDS, &r,
+                                     sizeof(r))) &&
+        !GetWindowRect(w, &r)) {
+        return TRUE;
+    }
+    auto& regions = *reinterpret_cast<std::vector<CoverRegion>*>(param);
+    bool touches = false;
+    for (const auto& region : regions) {
+        RECT overlap;
+        if (IntersectRect(&overlap, &r, &region.work)) {
+            touches = true;
+            break;
+        }
+    }
+    if (!touches || IsShellOrOwnWindow(w) || IsCloaked(w)) {
+        return TRUE;
+    }
+    HRGN windowRegion = CreateRectRgnIndirect(&r);
+    if (windowRegion) {
+        for (auto& region : regions) {
+            CombineRgn(region.visible, region.visible, windowRegion, RGN_DIFF);
+        }
+        DeleteObject(windowRegion);
+    }
+    return TRUE;
+}
 
-    std::mt19937 random{std::random_device{}()};
-    float clock = 0;
-    float burstClock = 0;
-    float phase = 0;
-    POINT previousMouse{};
-    bool hadMouse = false;
-    bool wasPaused = false;
+LONGLONG RegionArea(HRGN region) {
+    DWORD size = GetRegionData(region, 0, nullptr);
+    if (!size) {
+        return LLONG_MAX;  // Unknown: treat as visible.
+    }
+    std::vector<BYTE> buffer(size);
+    auto data = reinterpret_cast<RGNDATA*>(buffer.data());
+    if (!GetRegionData(region, size, data)) {
+        return LLONG_MAX;
+    }
+    auto rects = reinterpret_cast<const RECT*>(data->Buffer);
+    LONGLONG area = 0;
+    for (DWORD i = 0; i < data->rdh.nCount; i++) {
+        area += LONGLONG(rects[i].right - rects[i].left) *
+                (rects[i].bottom - rects[i].top);
+    }
+    return area;
+}
 
-    struct Emitter {
-        float x, y;
-    };
-    std::vector<Emitter> emitters;
+std::vector<HMONITOR> CoveredMonitors(
+    const std::vector<MonitorInfo>& monitors) {
+    std::vector<CoverRegion> regions;
+    for (const auto& mi : monitors) {
+        if (HRGN rgn = CreateRectRgnIndirect(&mi.work)) {
+            regions.push_back({mi.monitor, mi.work, rgn});
+        }
+    }
+    EnumWindows(SubtractWindow, reinterpret_cast<LPARAM>(&regions));
 
-    Wallpaper() = default;
+    std::vector<HMONITOR> covered;
+    for (auto& region : regions) {
+        LONGLONG total = LONGLONG(region.work.right - region.work.left) *
+                         (region.work.bottom - region.work.top);
+        if (RegionArea(region.visible) <= total * kCoveredVisibleFraction) {
+            covered.push_back(region.monitor);
+        }
+        DeleteObject(region.visible);
+    }
+    return covered;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Direct3D 11
+
+// d3dcompiler_47.dll ships with Windows 10 and 11. It's loaded from System32
+// at runtime, so the mod doesn't depend on an import library for it.
+class ShaderCompiler {
+   public:
+    ShaderCompiler() {
+        module_ = LoadLibraryExW(L"d3dcompiler_47.dll", nullptr,
+                                 LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (module_) {
+            compile_ = reinterpret_cast<pD3DCompile>(
+                reinterpret_cast<void*>(GetProcAddress(module_, "D3DCompile")));
+        }
+    }
+    ~ShaderCompiler() {
+        if (module_) {
+            FreeLibrary(module_);
+        }
+    }
+    ShaderCompiler(const ShaderCompiler&) = delete;
+    ShaderCompiler& operator=(const ShaderCompiler&) = delete;
+
+    ComPtr<ID3DBlob> Compile(const char* entry,
+                             const char* profile,
+                             const D3D_SHADER_MACRO* defines = nullptr) {
+        if (!compile_) {
+            throw std::runtime_error("d3dcompiler_47.dll is unavailable");
+        }
+        ComPtr<ID3DBlob> code, errors;
+        HRESULT hr = compile_(kShaderSource, sizeof(kShaderSource) - 1,
+                              "fluid.hlsl", defines, nullptr, entry, profile,
+                              D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, code.Put(),
+                              errors.Put());
+        if (FAILED(hr)) {
+            std::string message = std::string("Shader ") + entry + " failed";
+            if (errors) {
+                message += ": ";
+                message.append(
+                    static_cast<const char*>(errors->GetBufferPointer()),
+                    errors->GetBufferSize());
+            }
+            throw std::runtime_error(message);
+        }
+        return code;
+    }
+
+   private:
+    HMODULE module_ = nullptr;
+    pD3DCompile compile_ = nullptr;
+};
+
+struct RenderTarget {
+    ComPtr<ID3D11Texture2D> texture;
+    ComPtr<ID3D11RenderTargetView> rtv;
+    ComPtr<ID3D11ShaderResourceView> srv;
+    int w = 0;
+    int h = 0;
+};
+
+struct DoubleTarget {
+    RenderTarget read;
+    RenderTarget write;
+    void swap() { std::swap(read, write); }
+};
+
+// The device, shaders and fixed pipeline state, shared by all monitors.
+class Gpu {
+   public:
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> context;
+    ComPtr<IDXGIFactory2> factory;
+    ComPtr<IDCompositionDevice> dcomp;
+    int maxTextureSize = 8192;
+
+    ComPtr<ID3D11VertexShader> baseVS, blurVS;
+    ComPtr<ID3D11PixelShader> blurPS, clearPS, splatPS, advectionPS;
+    ComPtr<ID3D11PixelShader> divergencePS, curlPS, vorticityPS, pressurePS;
+    ComPtr<ID3D11PixelShader> gradientPS, bloomPrefilterPS, bloomBlurPS;
+    ComPtr<ID3D11PixelShader> bloomFinalPS, sunraysMaskPS, sunraysPS;
+    ComPtr<ID3D11PixelShader> displayPS;
+
+    // Uniforms for the next Pass(); uploaded on every draw.
+    ShaderParams params{};
+
+    void Create(const Settings& s, ShaderCompiler& compiler) {
+        CreateDevice();
+        CreateShaders(s, compiler);
+        CreateState();
+    }
+
+    void CheckDevice() const {
+        HRESULT reason = device->GetDeviceRemovedReason();
+        if (FAILED(reason)) {
+            throw HResultError("GPU device", reason);
+        }
+    }
+
+    RenderTarget CreateTarget(int w, int h) {
+        RenderTarget t;
+        t.w = w;
+        t.h = h;
+        D3D11_TEXTURE2D_DESC desc{};
+        desc.Width = UINT(w);
+        desc.Height = UINT(h);
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+        Check(device->CreateTexture2D(&desc, nullptr, t.texture.Put()),
+              "CreateTexture2D");
+        Check(device->CreateRenderTargetView(t.texture.Get(), nullptr,
+                                             t.rtv.Put()),
+              "CreateRenderTargetView");
+        Check(device->CreateShaderResourceView(t.texture.Get(), nullptr,
+                                               t.srv.Put()),
+              "CreateShaderResourceView");
+        const float zero[4]{};
+        context->ClearRenderTargetView(t.rtv.Get(), zero);
+        return t;
+    }
+
+    void SetTexelSize(const RenderTarget& t) {
+        params.texelSize[0] = 1.f / t.w;
+        params.texelSize[1] = 1.f / t.h;
+    }
+
+    // Draws one full-screen triangle into `target`. The target is bound
+    // before the inputs, so a texture that was just written can be read.
+    void Pass(ID3D11PixelShader* ps,
+              ID3D11RenderTargetView* target,
+              int w,
+              int h,
+              std::initializer_list<const RenderTarget*> inputs,
+              bool additive = false,
+              ID3D11VertexShader* vs = nullptr) {
+        context->OMSetRenderTargets(1, &target, nullptr);
+        D3D11_VIEWPORT viewport{0, 0, float(w), float(h), 0, 1};
+        context->RSSetViewports(1, &viewport);
+
+        ID3D11ShaderResourceView* views[3]{};
+        size_t slot = 0;
+        for (const RenderTarget* input : inputs) {
+            if (slot < ARRAYSIZE(views)) {
+                views[slot++] = input ? input->srv.Get() : nullptr;
+            }
+        }
+        context->PSSetShaderResources(0, ARRAYSIZE(views), views);
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        Check(context->Map(paramsBuffer_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0,
+                           &mapped),
+              "Map");
+        memcpy(mapped.pData, &params, sizeof(params));
+        context->Unmap(paramsBuffer_.Get(), 0);
+
+        context->VSSetShader(vs ? vs : baseVS.Get(), nullptr, 0);
+        context->PSSetShader(ps, nullptr, 0);
+        context->OMSetBlendState(additive ? additive_.Get() : nullptr, nullptr,
+                                 0xffffffff);
+        context->Draw(3, 0);
+    }
+
+    void Pass(ID3D11PixelShader* ps,
+              const RenderTarget& target,
+              std::initializer_list<const RenderTarget*> inputs,
+              bool additive = false,
+              ID3D11VertexShader* vs = nullptr) {
+        Pass(ps, target.rtv.Get(), target.w, target.h, inputs, additive, vs);
+    }
+
+   private:
+    ComPtr<ID3D11SamplerState> sampler_;
+    ComPtr<ID3D11BlendState> additive_;
+    ComPtr<ID3D11RasterizerState> rasterizer_;
+    ComPtr<ID3D11Buffer> paramsBuffer_;
+
+    void CreateDevice() {
+        const D3D_FEATURE_LEVEL levels[] = {
+            D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0,
+            D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0};
+        D3D_FEATURE_LEVEL level{};
+        UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+        HRESULT hr =
+            D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags,
+                              levels, ARRAYSIZE(levels), D3D11_SDK_VERSION,
+                              device.Put(), &level, context.Put());
+        if (hr == E_INVALIDARG) {  // Runtimes without 11.1 reject the list.
+            hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
+                                   flags, levels + 1, ARRAYSIZE(levels) - 1,
+                                   D3D11_SDK_VERSION, device.Put(), &level,
+                                   context.Put());
+        }
+        Check(hr, "D3D11CreateDevice");
+        maxTextureSize = level >= D3D_FEATURE_LEVEL_11_0 ? 16384 : 8192;
+
+        ComPtr<IDXGIDevice1> dxgiDevice;
+        Check(device->QueryInterface(IID_PPV_ARGS(dxgiDevice.Put())),
+              "IDXGIDevice1");
+        // Don't let the CPU queue frames far ahead of the GPU.
+        dxgiDevice->SetMaximumFrameLatency(2);
+
+        ComPtr<IDXGIAdapter> adapter;
+        Check(dxgiDevice->GetAdapter(adapter.Put()), "GetAdapter");
+        Check(adapter->GetParent(IID_PPV_ARGS(factory.Put())), "IDXGIFactory2");
+        DXGI_ADAPTER_DESC desc{};
+        adapter->GetDesc(&desc);
+        Wh_Log(L"Direct3D: %s, feature level %x", desc.Description,
+               unsigned(level));
+
+        Check(DCompositionCreateDevice(dxgiDevice.Get(),
+                                       IID_PPV_ARGS(dcomp.Put())),
+              "DCompositionCreateDevice");
+    }
+
+    // Compiling takes a moment; messages are pumped in between because the
+    // wallpaper windows are children of Explorer's window, which ties the
+    // two threads' input together.
+    void CreateShaders(const Settings& s, ShaderCompiler& compiler) {
+        auto vertex = [&](const char* entry, ComPtr<ID3D11VertexShader>& out) {
+            auto code = compiler.Compile(entry, "vs_4_0");
+            Check(device->CreateVertexShader(code->GetBufferPointer(),
+                                             code->GetBufferSize(), nullptr,
+                                             out.Put()),
+                  "CreateVertexShader");
+            PumpMessages();
+        };
+        auto pixel = [&](const char* entry, ComPtr<ID3D11PixelShader>& out,
+                         const D3D_SHADER_MACRO* defines = nullptr) {
+            auto code = compiler.Compile(entry, "ps_4_0", defines);
+            Check(device->CreatePixelShader(code->GetBufferPointer(),
+                                            code->GetBufferSize(), nullptr,
+                                            out.Put()),
+                  "CreatePixelShader");
+            PumpMessages();
+        };
+
+        vertex("BaseVS", baseVS);
+        vertex("BlurVS", blurVS);
+        pixel("BlurPS", blurPS);
+        pixel("ClearPS", clearPS);
+        pixel("SplatPS", splatPS);
+        pixel("AdvectionPS", advectionPS);
+        pixel("DivergencePS", divergencePS);
+        pixel("CurlPS", curlPS);
+        pixel("VorticityPS", vorticityPS);
+        pixel("PressurePS", pressurePS);
+        pixel("GradientSubtractPS", gradientPS);
+        pixel("BloomPrefilterPS", bloomPrefilterPS);
+        pixel("BloomBlurPS", bloomBlurPS);
+        pixel("BloomFinalPS", bloomFinalPS);
+        pixel("SunraysMaskPS", sunraysMaskPS);
+        pixel("SunraysPS", sunraysPS);
+
+        std::vector<D3D_SHADER_MACRO> defines;
+        if (s.shading) {
+            defines.push_back({"SHADING", "1"});
+        }
+        if (s.bloom) {
+            defines.push_back({"BLOOM", "1"});
+        }
+        if (s.sunrays) {
+            defines.push_back({"SUNRAYS", "1"});
+        }
+        defines.push_back({nullptr, nullptr});
+        pixel("DisplayPS", displayPS, defines.data());
+    }
+
+    void CreateState() {
+        D3D11_SAMPLER_DESC sampler{};
+        sampler.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+        sampler.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+        sampler.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+        sampler.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+        sampler.ComparisonFunc = D3D11_COMPARISON_NEVER;
+        sampler.MaxLOD = D3D11_FLOAT32_MAX;
+        Check(device->CreateSamplerState(&sampler, sampler_.Put()),
+              "CreateSamplerState");
+
+        D3D11_BLEND_DESC blend{};
+        auto& rt = blend.RenderTarget[0];
+        rt.BlendEnable = TRUE;
+        rt.SrcBlend = D3D11_BLEND_ONE;
+        rt.DestBlend = D3D11_BLEND_ONE;
+        rt.BlendOp = D3D11_BLEND_OP_ADD;
+        rt.SrcBlendAlpha = D3D11_BLEND_ONE;
+        rt.DestBlendAlpha = D3D11_BLEND_ONE;
+        rt.BlendOpAlpha = D3D11_BLEND_OP_ADD;
+        rt.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+        Check(device->CreateBlendState(&blend, additive_.Put()),
+              "CreateBlendState");
+
+        // The full-screen triangle's winding isn't relevant; don't cull.
+        D3D11_RASTERIZER_DESC raster{};
+        raster.FillMode = D3D11_FILL_SOLID;
+        raster.CullMode = D3D11_CULL_NONE;
+        raster.DepthClipEnable = TRUE;
+        Check(device->CreateRasterizerState(&raster, rasterizer_.Put()),
+              "CreateRasterizerState");
+
+        D3D11_BUFFER_DESC buffer{};
+        buffer.ByteWidth = sizeof(ShaderParams);
+        buffer.Usage = D3D11_USAGE_DYNAMIC;
+        buffer.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        buffer.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        Check(device->CreateBuffer(&buffer, nullptr, paramsBuffer_.Put()),
+              "CreateBuffer");
+
+        // Fixed state for every pass: no vertex buffers, one sampler, one
+        // constant buffer.
+        context->IASetInputLayout(nullptr);
+        context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        context->RSSetState(rasterizer_.Get());
+        ID3D11SamplerState* samplers[] = {sampler_.Get()};
+        context->PSSetSamplers(0, 1, samplers);
+        ID3D11Buffer* buffers[] = {paramsBuffer_.Get()};
+        context->VSSetConstantBuffers(0, 1, buffers);
+        context->PSSetConstantBuffers(0, 1, buffers);
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// Wallpaper: one window, swap chain and simulation per monitor
+
+class Wallpaper {
+   public:
+    Wallpaper(Gpu& gpu, const MonitorInfo& info, const Settings& settings)
+        : gpu_(gpu), info_(info), s_(settings) {}
     Wallpaper(const Wallpaper&) = delete;
     Wallpaper& operator=(const Wallpaper&) = delete;
 
-    int Width() const { return info.rect.right - info.rect.left; }
-    int Height() const { return info.rect.bottom - info.rect.top; }
-    float Aspect() const { return float(Width()) / Height(); }
-    float Rand() { return std::uniform_real_distribution<float>(0, 1)(random); }
-
-    bool MakeCurrent() {
-        if (!wglMakeCurrent(dc, context)) {
-            return false;
+    ~Wallpaper() {
+        // Release composition objects before the window they target.
+        visual_.Reset();
+        compositionTarget_.Reset();
+        if (window_ && IsWindow(window_)) {
+            DestroyWindow(window_);  // No WM_PARENTNOTIFY: see CreateHost.
         }
-        g_gl = &gl;
-        return true;
     }
 
-    // Called from WM_PAINT of the desktop layered window.
-    void Paint(HDC output) const {
-        if (!frameDC) {
-            return;
-        }
-        SetStretchBltMode(output, COLORONCOLOR);
-        StretchBlt(output, 0, 0, Width(), Height(), frameDC, 0, 0, presentW,
-                   presentH, SRCCOPY);
-    }
+    HWND window() const { return window_; }
+    HMONITOR monitor() const { return info_.monitor; }
 
-    ////////////////////////////////////////////////////////////////////////
-    // Initialization
-
-    void Initialize(const MonitorInfo& mi,
-                    const Settings& settings,
-                    HWND parent) {
-        info = mi;
-        s = settings;
-        phase = Rand() * kTau;
-
-        CreateWindows(parent);
-        CreateContext();
-        CreatePrograms();
+    void Initialize(HWND parent, HWND iconView) {
+        phase_ = Rand() * kTau;
+        parent_ = parent;
+        iconView_ = iconView;
+        CreateHost();
+        CreateSwapChain();
         CreateTargets();
-        if (layered) {
-            CreatePresentation();
-        }
 
-        for (int i = 0; i < s.emitters; i++) {
-            emitters.push_back(EmitterPosition(i, 0));
+        for (int i = 0; i < s_.emitters; i++) {
+            emitters_.push_back(EmitterPosition(i, 0));
         }
         for (int i = 0; i < 8; i++) {
             float c[3];
@@ -1277,192 +1446,154 @@ struct Wallpaper {
             Splat(Rand(), Rand(), (Rand() - .5f) * 1000, (Rand() - .5f) * 1000,
                   c);
         }
-
-        Render();
-        ShowWindow(window, SW_SHOWNOACTIVATE);
-        EnsureDesktopOrder();
-        SetWindowPos(window, layered ? g_iconView : HWND_BOTTOM, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        loggedFrame = false;
-        Render();
-        Wh_Log(L"Wallpaper shown: window=%p layered=%d visible=%d", window,
-               layered, IsWindowVisible(window));
+        Render();  // Shows the window after the first frame is presented.
+        Wh_Log(L"Monitor %ld,%ld %dx%d: window=%p", info_.rect.left,
+               info_.rect.top, Width(), Height(), window_);
     }
 
-    void CreateWindows(HWND parent) {
-        layered = g_raisedDesktop;
-
-        POINT origin{info.rect.left, info.rect.top};
-        MapWindowPoints(nullptr, parent, &origin, 1);
-
-        DWORD exStyle = WS_EX_NOACTIVATE | WS_EX_TRANSPARENT;
-        if (layered) {
-            exStyle |= WS_EX_LAYERED;
+    // On the 24H2+ layout, Explorer can reorder its children; keep the
+    // wallpaper directly below the icon view and above the shell's WorkerW.
+    void EnsureLayerOrder() {
+        if (!iconView_) {
+            return;
         }
-        DWORD style = WS_CHILD;
-        if (!layered) {
-            style |= WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+        for (HWND previous = GetWindow(window_, GW_HWNDPREV); previous;
+             previous = GetWindow(previous, GW_HWNDPREV)) {
+            if (previous == iconView_) {
+                return;
+            }
+            if (ClassIsAnyOf(previous, {L"WorkerW"})) {
+                break;
+            }
         }
+        Position(0);
+    }
 
-        window = CreateWindowExW(exStyle, layered ? kLayerClass : kWindowClass,
-                                 L"Fluid Wallpaper", style, origin.x, origin.y,
-                                 Width(), Height(), parent, nullptr, g_instance,
-                                 nullptr);
-        if (!window) {
+    // Returns true if a frame was simulated and presented.
+    bool Step(float dt, POINT mouse, bool mouseActive, bool paused) {
+        if (paused) {
+            hadMouse_ = false;
+            wasPaused_ = true;
+            return false;
+        }
+        if (wasPaused_) {
+            dt = std::min(dt, 1.f / 60);
+            wasPaused_ = false;
+        }
+        clock_ += dt;
+        burstClock_ += dt;
+
+        Emit(dt);
+        ApplyMouse(mouse, mouseActive);
+        Simulate(dt);
+        Render();
+        return true;
+    }
+
+   private:
+    Gpu& gpu_;
+    MonitorInfo info_;
+    Settings s_;
+
+    HWND window_ = nullptr;
+    HWND parent_ = nullptr;
+    HWND iconView_ = nullptr;
+    bool shown_ = false;
+    ComPtr<IDXGISwapChain1> swapChain_;
+    ComPtr<ID3D11RenderTargetView> backBuffer_;
+    ComPtr<IDCompositionTarget> compositionTarget_;
+    ComPtr<IDCompositionVisual> visual_;
+
+    DoubleTarget velocity_, dye_, pressure_;
+    RenderTarget divergence_, curl_, bloom_, sunMask_, sun_, sunTemp_;
+    std::vector<RenderTarget> bloomLevels_;
+
+    std::mt19937 random_{std::random_device{}()};
+    float clock_ = 0;
+    float burstClock_ = 0;
+    float phase_ = 0;
+    POINT previousMouse_{};
+    bool hadMouse_ = false;
+    bool wasPaused_ = false;
+
+    struct Emitter {
+        float x, y;
+    };
+    std::vector<Emitter> emitters_;
+
+    int Width() const { return info_.rect.right - info_.rect.left; }
+    int Height() const { return info_.rect.bottom - info_.rect.top; }
+    float Aspect() const { return float(Width()) / Height(); }
+    float Rand() {
+        return std::uniform_real_distribution<float>(0, 1)(random_);
+    }
+
+    ////////////////////////////////////////////////////////////////////////
+    // Setup
+
+    void CreateHost() {
+        // A child of Explorer's wallpaper host without a redirection surface:
+        // content comes only from DirectComposition. WS_EX_NOPARENTNOTIFY
+        // avoids synchronous WM_PARENTNOTIFY calls into Explorer when the
+        // window is created or destroyed (Explorer might be hung).
+        window_ = CreateWindowExW(
+            WS_EX_NOREDIRECTIONBITMAP | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW |
+                WS_EX_NOPARENTNOTIFY | WS_EX_TRANSPARENT,
+            kWindowClass, L"Fluid Wallpaper", WS_CHILD | WS_CLIPSIBLINGS, 0, 0,
+            0, 0, parent_, nullptr, g_instance, nullptr);
+        if (!window_) {
             throw std::runtime_error("Cannot create wallpaper window");
         }
-        SetWindowPos(window, layered ? g_iconView : HWND_BOTTOM, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-
-        if (layered) {
-            // Layered windows cannot use a CS_OWNDC class. Keep WGL on a
-            // separate hidden drawable and transfer only the finished frame.
-            renderWindow = CreateWindowExW(
-                WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kWindowClass,
-                L"Fluid Wallpaper GPU renderer", WS_POPUP, 0, 0, 16, 16,
-                nullptr, nullptr, g_instance, nullptr);
-            if (!renderWindow) {
-                throw std::runtime_error("Cannot create hidden GPU drawable");
-            }
-            // A layered child at constant opacity uses redirected painting,
-            // so WM_PAINT can draw into it like a normal window.
-            if (!SetLayeredWindowAttributes(window, 0, 255, LWA_ALPHA)) {
-                throw std::runtime_error(
-                    "Fixed-opacity layered window setup failed");
-            }
-        }
+        Position(0);  // Shown after the first frame.
     }
 
-    void CreateContext() {
-        dc = GetDC(layered ? renderWindow : window);
-        if (!dc) {
-            throw std::runtime_error("GetDC failed");
-        }
-
-        PIXELFORMATDESCRIPTOR pfd{};
-        pfd.nSize = sizeof(pfd);
-        pfd.nVersion = 1;
-        pfd.dwFlags =
-            PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
-        pfd.iPixelType = PFD_TYPE_RGBA;
-        pfd.cColorBits = 32;
-        pfd.iLayerType = PFD_MAIN_PLANE;
-        int format = ChoosePixelFormat(dc, &pfd);
-        if (!format || !SetPixelFormat(dc, format, &pfd)) {
-            throw std::runtime_error("OpenGL pixel format unavailable");
-        }
-
-        context = wglCreateContext(dc);
-        if (!context || !MakeCurrent()) {
-            throw std::runtime_error("OpenGL context unavailable");
-        }
-        gl.api.Load();
-
-        Wh_Log(L"OpenGL: %S / %S; monitor %ld,%ld %dx%d", GLString(GL_VERSION),
-               GLString(GL_RENDERER), info.rect.left, info.rect.top, Width(),
-               Height());
-
-        GLint maxTexture = 0;
-        glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTexture);
-        if (maxTexture < 2048) {
-            throw std::runtime_error("GPU texture size limit too low");
-        }
-        // Keep aspect-ratio-scaled allocations within the hardware limit.
-        float aspect = std::max(Aspect(), 1.f / Aspect());
-        s.dyeResolution = std::min(s.dyeResolution, int(maxTexture / aspect));
-
-        glDisable(GL_BLEND);
-        glDisable(GL_DEPTH_TEST);
-        glDisable(GL_CULL_FACE);
-
-        // Frame pacing is done by the render loop, not by vsync.
-        using SwapInterval_t = BOOL(WINAPI*)(int);
-        if (auto swapInterval = reinterpret_cast<SwapInterval_t>(
-                GLAddress("wglSwapIntervalEXT"))) {
-            swapInterval(0);
-        }
+    void Position(UINT flags) {
+        POINT origin{info_.rect.left, info_.rect.top};
+        MapWindowPoints(nullptr, parent_, &origin, 1);
+        SetWindowPos(window_, iconView_ ? iconView_ : HWND_BOTTOM, origin.x,
+                     origin.y, Width(), Height(), SWP_NOACTIVATE | flags);
     }
 
-    GLuint MakeProgram(const char* fragment,
-                       const std::string& defines = "",
-                       const char* vertex = kBaseVertexShader) {
-        GLuint p = BuildProgram(fragment, defines, vertex);
-        programs.push_back(p);
-        return p;
-    }
+    void CreateSwapChain() {
+        DXGI_SWAP_CHAIN_DESC1 desc{};
+        desc.Width = UINT(Width());
+        desc.Height = UINT(Height());
+        desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        desc.BufferCount = 2;
+        desc.Scaling = DXGI_SCALING_STRETCH;
+        desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+        desc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+        Check(gpu_.factory->CreateSwapChainForComposition(
+                  gpu_.device.Get(), &desc, nullptr, swapChain_.Put()),
+              "CreateSwapChainForComposition");
 
-    void CreatePrograms() {
-        pSplat = MakeProgram(kSplatShader);
-        pAdvection = MakeProgram(kAdvectionShader);
-        pCurl = MakeProgram(kCurlShader);
-        pVorticity = MakeProgram(kVorticityShader);
-        pDivergence = MakeProgram(kDivergenceShader);
-        pPressure = MakeProgram(kPressureShader);
-        pGradient = MakeProgram(kGradientSubtractShader);
-        pClear = MakeProgram(kClearShader);
-        pBloomPrefilter = MakeProgram(kBloomPrefilterShader);
-        pBloomBlur = MakeProgram(kBloomBlurShader);
-        pBloomFinal = MakeProgram(kBloomFinalShader);
-        pSunraysMask = MakeProgram(kSunraysMaskShader);
-        pSunrays = MakeProgram(kSunraysShader);
-        pBlur = MakeProgram(kBlurShader, "", kBlurVertexShader);
+        // With flip-model swap chains in D3D11, buffer 0 always refers to the
+        // current back buffer, so one view is enough.
+        ComPtr<ID3D11Texture2D> buffer;
+        Check(swapChain_->GetBuffer(0, IID_PPV_ARGS(buffer.Put())),
+              "GetBuffer");
+        Check(gpu_.device->CreateRenderTargetView(buffer.Get(), nullptr,
+                                                  backBuffer_.Put()),
+              "CreateRenderTargetView");
 
-        std::string defines;
-        if (s.shading) {
-            defines += "#define SHADING\n";
-        }
-        if (s.bloom) {
-            defines += "#define BLOOM\n";
-        }
-        if (s.sunrays) {
-            defines += "#define SUNRAYS\n";
-        }
-        pDisplay = MakeProgram(kDisplayShader, defines);
-    }
-
-    // Simulation targets are RGBA16F. The presentation target is RGBA8: it
-    // halves readback bandwidth and BGRA8 readback is a driver fast path.
-    Target MakeTarget(int w,
-                      int h,
-                      GLenum internalFormat = kGlRgba16f,
-                      GLenum type = GL_FLOAT) {
-        Target t{};
-        t.w = w;
-        t.h = h;
-        glGenTextures(1, &t.texture);
-        GL().GenFramebuffers(1, &t.fbo);
-        targets.push_back(t);
-
-        GL().ActiveTexture(kGlTexture0);
-        glBindTexture(GL_TEXTURE_2D, t.texture);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, kGlClampToEdge);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, kGlClampToEdge);
-        glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, w, h, 0, GL_RGBA, type,
-                     nullptr);
-
-        GL().BindFramebuffer(kGlFramebuffer, t.fbo);
-        GL().FramebufferTexture2D(kGlFramebuffer, kGlColorAttachment0,
-                                  GL_TEXTURE_2D, t.texture, 0);
-        if (GL().CheckFramebufferStatus(kGlFramebuffer) !=
-            kGlFramebufferComplete) {
-            throw std::runtime_error(
-                "Framebuffer format unsupported or GPU memory exhausted");
-        }
-        glViewport(0, 0, w, h);
-        glClearColor(0, 0, 0, 0);
-        glClear(GL_COLOR_BUFFER_BIT);
-        return t;
+        Check(gpu_.dcomp->CreateTargetForHwnd(window_, TRUE,
+                                              compositionTarget_.Put()),
+              "CreateTargetForHwnd");
+        Check(gpu_.dcomp->CreateVisual(visual_.Put()), "CreateVisual");
+        Check(visual_->SetContent(swapChain_.Get()), "SetContent");
+        Check(compositionTarget_->SetRoot(visual_.Get()), "SetRoot");
+        Check(gpu_.dcomp->Commit(), "Commit");
     }
 
     // A target whose shorter side is `base`, matching the monitor's aspect.
-    Target MakeScaledTarget(int base) {
+    RenderTarget MakeScaledTarget(int base) {
         float a = Aspect();
         if (a >= 1) {
-            return MakeTarget(int(std::round(base * a)), base);
+            return gpu_.CreateTarget(int(std::round(base * a)), base);
         }
-        return MakeTarget(base, int(std::round(base / a)));
+        return gpu_.CreateTarget(base, int(std::round(base / a)));
     }
 
     DoubleTarget MakeScaledPair(int base) {
@@ -1470,69 +1601,42 @@ struct Wallpaper {
     }
 
     void CreateTargets() {
-        velocity = MakeScaledPair(s.simResolution);
-        dye = MakeScaledPair(s.dyeResolution);
-        pressure = MakeScaledPair(s.simResolution);
-        divergence = MakeScaledTarget(s.simResolution);
-        curl = MakeScaledTarget(s.simResolution);
+        // Keep aspect-ratio-scaled allocations within the hardware limit.
+        float aspect = std::max(Aspect(), 1.f / Aspect());
+        s_.dyeResolution =
+            std::min(s_.dyeResolution, int(gpu_.maxTextureSize / aspect));
 
-        if (s.bloom) {
-            bloom = MakeScaledTarget(s.bloomResolution);
-            int w = bloom.w, h = bloom.h;
-            for (int i = 0; i < s.bloomLevels; i++) {
+        velocity_ = MakeScaledPair(s_.simResolution);
+        dye_ = MakeScaledPair(s_.dyeResolution);
+        pressure_ = MakeScaledPair(s_.simResolution);
+        divergence_ = MakeScaledTarget(s_.simResolution);
+        curl_ = MakeScaledTarget(s_.simResolution);
+
+        if (s_.bloom) {
+            bloom_ = MakeScaledTarget(s_.bloomResolution);
+            int w = bloom_.w, h = bloom_.h;
+            for (int i = 0; i < s_.bloomLevels; i++) {
                 w /= 2;
                 h /= 2;
                 if (w < 2 || h < 2) {
                     break;
                 }
-                bloomLevels.push_back(MakeTarget(w, h));
+                bloomLevels_.push_back(gpu_.CreateTarget(w, h));
             }
         }
-        if (s.sunrays) {
-            sunMask = MakeScaledTarget(s.sunraysResolution);
-            sun = MakeScaledTarget(s.sunraysResolution);
-            sunTemp = MakeScaledTarget(s.sunraysResolution);
+        if (s_.sunrays) {
+            sunMask_ = MakeScaledTarget(s_.sunraysResolution);
+            sun_ = MakeScaledTarget(s_.sunraysResolution);
+            sunTemp_ = MakeScaledTarget(s_.sunraysResolution);
         }
-    }
-
-    HBITMAP CreateFrameBitmap(int w, int h, void** pixels) {
-        BITMAPINFO bi{};
-        bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        bi.bmiHeader.biWidth = w;
-        bi.bmiHeader.biHeight = h;  // Bottom-up, like glReadPixels.
-        bi.bmiHeader.biPlanes = 1;
-        bi.bmiHeader.biBitCount = 32;
-        bi.bmiHeader.biCompression = BI_RGB;
-        return CreateDIBSection(nullptr, &bi, DIB_RGB_COLORS, pixels, nullptr,
-                                0);
-    }
-
-    void CreatePresentation() {
-        float scale =
-            std::min(1.f, float(kMaxPresentEdge) / std::max(Width(), Height()));
-        presentW = std::max(1, int(std::round(Width() * scale)));
-        presentH = std::max(1, int(std::round(Height() * scale)));
-        presentation =
-            MakeTarget(presentW, presentH, kGlRgba8, GL_UNSIGNED_BYTE);
-
-        frameDC = CreateCompatibleDC(nullptr);
-        frameBitmap = CreateFrameBitmap(presentW, presentH, &readback);
-        if (!frameDC || !frameBitmap || !readback) {
-            throw std::runtime_error("Presentation buffer allocation failed");
-        }
-        oldFrameBitmap = SelectObject(frameDC, frameBitmap);
-        SetWindowLongPtrW(window, GWLP_USERDATA,
-                          reinterpret_cast<LONG_PTR>(this));
-        Wh_Log(L"Layered presentation: %dx%d readback -> %dx%d, window=%p",
-               presentW, presentH, Width(), Height(), window);
     }
 
     ////////////////////////////////////////////////////////////////////////
     // Simulation
 
     Emitter EmitterPosition(int i, float time) const {
-        float p = phase + i * 2.39996f;  // Golden angle spreads the trails.
-        float t = time * s.autoSpeed;
+        float p = phase_ + i * 2.39996f;  // Golden angle spreads the trails.
+        float t = time * s_.autoSpeed;
         return {.5f + .38f * std::sin(t * (.63f + i * .09f) + p) *
                           std::cos(t * .23f + p * .7f),
                 .5f + .38f * std::cos(t * (.49f + i * .07f) + p) *
@@ -1540,16 +1644,17 @@ struct Wallpaper {
     }
 
     void Color(float out[3], float offset = 0) const {
-        if (!s.colorful) {
+        if (!s_.colorful) {
             for (int i = 0; i < 3; i++) {
-                out[i] = s.fixedColor[i] * .15f;
+                out[i] = s_.fixedColor[i] * .15f;
             }
             return;
         }
         // HSV hue cycle with saturation and value 1, scaled by 0.15 like the
         // demo's generateColor().
         float h = std::fmod(
-            phase / kTau + clock * s.colorSpeed * .025f + offset * .17f, 1.f);
+            phase_ / kTau + clock_ * s_.colorSpeed * .025f + offset * .17f,
+            1.f);
         for (int i = 0; i < 3; i++) {
             float x = std::fmod(h * 6.f + (i == 0   ? 0.f
                                            : i == 1 ? 4.f
@@ -1560,90 +1665,71 @@ struct Wallpaper {
     }
 
     void Splat(float x, float y, float dx, float dy, const float c[3]) {
-        UseProgram(pSplat);
-        SetTexture("uTarget", velocity.read);
-        SetFloat("aspectRatio", Aspect());
-        SetVec2("point", x, y);
-        SetFloat("radius", s.splatRadius * std::max(1.f, Aspect()));
-        SetVec3("color", dx, dy, 0);
-        DrawTo(velocity.write);
-        velocity.swap();
+        ShaderParams& p = gpu_.params;
+        p.aspectRatio = Aspect();
+        p.splatPoint[0] = x;
+        p.splatPoint[1] = y;
+        p.radius = s_.splatRadius * std::max(1.f, Aspect());
 
-        SetTexture("uTarget", dye.read);
-        SetVec3("color", c[0], c[1], c[2]);
-        DrawTo(dye.write);
-        dye.swap();
-    }
+        p.color[0] = dx;
+        p.color[1] = dy;
+        p.color[2] = 0;
+        gpu_.Pass(gpu_.splatPS.Get(), velocity_.write, {&velocity_.read});
+        velocity_.swap();
 
-    // Returns true if a frame was simulated and presented.
-    bool Step(float dt, POINT mouse, bool mouseActive, bool paused) {
-        if (paused) {
-            hadMouse = false;
-            wasPaused = true;
-            return false;
-        }
-        if (!MakeCurrent()) {
-            throw std::runtime_error("wglMakeCurrent failed");
-        }
-        if (wasPaused) {
-            dt = std::min(dt, 1.f / 60);
-            wasPaused = false;
-        }
-        clock += dt;
-        burstClock += dt;
-
-        glDisable(GL_BLEND);
-        Emit(dt);
-        ApplyMouse(mouse, mouseActive);
-        Simulate(dt);
-        Render();
-        return true;
+        p.color[0] = c[0];
+        p.color[1] = c[1];
+        p.color[2] = c[2];
+        gpu_.Pass(gpu_.splatPS.Get(), dye_.write, {&dye_.read});
+        dye_.swap();
     }
 
     void Emit(float dt) {
-        if (!s.autoMotion) {
+        if (!s_.autoMotion) {
             return;
         }
-        for (int i = 0; i < s.emitters; i++) {
-            Emitter next = EmitterPosition(i, clock);
-            Emitter old = emitters[i];
+        for (int i = 0; i < s_.emitters; i++) {
+            Emitter next = EmitterPosition(i, clock_);
+            Emitter old = emitters_[i];
             float c[3];
             Color(c, float(i));
-            float amount = s.autoColor * dt * 60.f;
+            float amount = s_.autoColor * dt * 60.f;
             for (float& v : c) {
                 v *= amount;
             }
             // Momentum comes from the path delta, so it is frame-rate
             // independent.
-            Splat(next.x, next.y, (next.x - old.x) * s.autoForce,
-                  (next.y - old.y) * s.autoForce, c);
-            emitters[i] = next;
+            Splat(next.x, next.y, (next.x - old.x) * s_.autoForce,
+                  (next.y - old.y) * s_.autoForce, c);
+            emitters_[i] = next;
         }
-        if (s.bursts && burstClock >= s.burstSeconds) {
-            burstClock = 0;
+        if (s_.bursts && burstClock_ >= s_.burstSeconds) {
+            burstClock_ = 0;
             for (int i = 0; i < 4; i++) {
                 float c[3];
                 Color(c, float(i) + Rand());
                 for (float& v : c) {
                     v *= 4;
                 }
-                Splat(Rand(), Rand(), (Rand() - .5f) * s.autoForce,
-                      (Rand() - .5f) * s.autoForce, c);
+                Splat(Rand(), Rand(), (Rand() - .5f) * s_.autoForce,
+                      (Rand() - .5f) * s_.autoForce, c);
             }
         }
     }
 
     void ApplyMouse(POINT mouse, bool mouseActive) {
-        if (!mouseActive || !PtInRect(&info.rect, mouse)) {
-            hadMouse = false;
-            previousMouse = mouse;
+        if (!mouseActive || !PtInRect(&info_.rect, mouse)) {
+            hadMouse_ = false;
+            previousMouse_ = mouse;
             return;
         }
-        bool moved = mouse.x != previousMouse.x || mouse.y != previousMouse.y;
-        if (hadMouse && moved && PtInRect(&info.rect, previousMouse)) {
+        bool moved = mouse.x != previousMouse_.x || mouse.y != previousMouse_.y;
+        if (hadMouse_ && moved && PtInRect(&info_.rect, previousMouse_)) {
             float w = float(Width()), h = float(Height());
-            float dx = std::clamp((mouse.x - previousMouse.x) / w, -.15f, .15f);
-            float dy = std::clamp((previousMouse.y - mouse.y) / h, -.15f, .15f);
+            float dx =
+                std::clamp((mouse.x - previousMouse_.x) / w, -.15f, .15f);
+            float dy =
+                std::clamp((previousMouse_.y - mouse.y) / h, -.15f, .15f);
             // Like the demo, scale the delta on the longer axis so the
             // impulse stays circular.
             float aspect = w / h;
@@ -1655,260 +1741,123 @@ struct Wallpaper {
             }
             float c[3];
             Color(c);
-            Splat((mouse.x - info.rect.left) / w,
-                  1.f - (mouse.y - info.rect.top) / h, dx * s.mouseForce,
-                  dy * s.mouseForce, c);
+            Splat((mouse.x - info_.rect.left) / w,
+                  1.f - (mouse.y - info_.rect.top) / h, dx * s_.mouseForce,
+                  dy * s_.mouseForce, c);
         }
-        hadMouse = true;
-        previousMouse = mouse;
+        hadMouse_ = true;
+        previousMouse_ = mouse;
     }
 
     void Simulate(float dt) {
-        UseProgram(pCurl);
-        SetTexelSize(velocity.read);
-        SetTexture("uVelocity", velocity.read);
-        DrawTo(curl);
+        ShaderParams& p = gpu_.params;
+        gpu_.SetTexelSize(velocity_.read);
+        p.dt = dt;
 
-        UseProgram(pVorticity);
-        SetTexelSize(velocity.read);
-        SetTexture("uVelocity", velocity.read);
-        SetTexture("uCurl", curl, 1);
-        SetFloat("curl", s.curl);
-        SetFloat("dt", dt);
-        DrawTo(velocity.write);
-        velocity.swap();
+        gpu_.Pass(gpu_.curlPS.Get(), curl_, {&velocity_.read});
 
-        UseProgram(pDivergence);
-        SetTexelSize(velocity.read);
-        SetTexture("uVelocity", velocity.read);
-        DrawTo(divergence);
+        p.curl = s_.curl;
+        gpu_.Pass(gpu_.vorticityPS.Get(), velocity_.write,
+                  {&velocity_.read, &curl_});
+        velocity_.swap();
 
-        UseProgram(pClear);
-        SetTexture("uTexture", pressure.read);
-        SetFloat("value", s.pressure);
-        DrawTo(pressure.write);
-        pressure.swap();
+        gpu_.Pass(gpu_.divergencePS.Get(), divergence_, {&velocity_.read});
 
-        UseProgram(pPressure);
-        SetTexelSize(velocity.read);
-        SetTexture("uDivergence", divergence);
-        for (int i = 0; i < s.pressureIterations; i++) {
-            SetTexture("uPressure", pressure.read, 1);
-            DrawTo(pressure.write);
-            pressure.swap();
+        p.value = s_.pressure;
+        gpu_.Pass(gpu_.clearPS.Get(), pressure_.write, {&pressure_.read});
+        pressure_.swap();
+
+        for (int i = 0; i < s_.pressureIterations; i++) {
+            gpu_.Pass(gpu_.pressurePS.Get(), pressure_.write,
+                      {&pressure_.read, &divergence_});
+            pressure_.swap();
         }
 
-        UseProgram(pGradient);
-        SetTexelSize(velocity.read);
-        SetTexture("uPressure", pressure.read);
-        SetTexture("uVelocity", velocity.read, 1);
-        DrawTo(velocity.write);
-        velocity.swap();
+        gpu_.Pass(gpu_.gradientPS.Get(), velocity_.write,
+                  {&pressure_.read, &velocity_.read});
+        velocity_.swap();
 
-        UseProgram(pAdvection);
-        SetTexelSize(velocity.read);
-        SetTexture("uVelocity", velocity.read);
-        SetTexture("uSource", velocity.read);
-        SetFloat("dt", dt);
-        SetFloat("dissipation", s.velocityDissipation);
-        DrawTo(velocity.write);
-        velocity.swap();
+        p.dissipation = s_.velocityDissipation;
+        gpu_.Pass(gpu_.advectionPS.Get(), velocity_.write,
+                  {&velocity_.read, &velocity_.read});
+        velocity_.swap();
 
-        SetTexture("uVelocity", velocity.read);
-        SetTexture("uSource", dye.read, 1);
-        SetFloat("dissipation", s.densityDissipation);
-        DrawTo(dye.write);
-        dye.swap();
+        // The dye is advected with the simulation texel size, as in the demo.
+        p.dissipation = s_.densityDissipation;
+        gpu_.Pass(gpu_.advectionPS.Get(), dye_.write,
+                  {&velocity_.read, &dye_.read});
+        dye_.swap();
     }
 
     ////////////////////////////////////////////////////////////////////////
     // Rendering
 
     void ApplyBloom() {
-        UseProgram(pBloomPrefilter);
-        SetTexture("uTexture", dye.read);
-        float knee = s.bloomThreshold * s.bloomKnee + .0001f;
-        SetVec3("curve", s.bloomThreshold - knee, knee * 2, .25f / knee);
-        SetFloat("threshold", s.bloomThreshold);
-        DrawTo(bloom);
+        ShaderParams& p = gpu_.params;
+        float knee = s_.bloomThreshold * s_.bloomKnee + .0001f;
+        p.curve[0] = s_.bloomThreshold - knee;
+        p.curve[1] = knee * 2;
+        p.curve[2] = .25f / knee;
+        p.threshold = s_.bloomThreshold;
+        gpu_.Pass(gpu_.bloomPrefilterPS.Get(), bloom_, {&dye_.read});
 
-        UseProgram(pBloomBlur);
-        Target last = bloom;
-        for (const Target& level : bloomLevels) {
-            SetTexelSize(last);
-            SetTexture("uTexture", last);
-            DrawTo(level);
-            last = level;
+        const RenderTarget* last = &bloom_;
+        for (const RenderTarget& level : bloomLevels_) {
+            gpu_.SetTexelSize(*last);
+            gpu_.Pass(gpu_.bloomBlurPS.Get(), level, {last});
+            last = &level;
         }
-        glBlendFunc(GL_ONE, GL_ONE);
-        glEnable(GL_BLEND);
-        for (int i = int(bloomLevels.size()) - 2; i >= 0; i--) {
-            SetTexelSize(last);
-            SetTexture("uTexture", last);
-            DrawTo(bloomLevels[i]);
-            last = bloomLevels[i];
+        for (int i = int(bloomLevels_.size()) - 2; i >= 0; i--) {
+            gpu_.SetTexelSize(*last);
+            gpu_.Pass(gpu_.bloomBlurPS.Get(), bloomLevels_[i], {last},
+                      /*additive=*/true);
+            last = &bloomLevels_[i];
         }
-        glDisable(GL_BLEND);
 
-        UseProgram(pBloomFinal);
-        SetTexelSize(last);
-        SetTexture("uTexture", last);
-        SetFloat("intensity", s.bloomIntensity);
-        DrawTo(bloom);
+        gpu_.SetTexelSize(*last);
+        p.intensity = s_.bloomIntensity;
+        gpu_.Pass(gpu_.bloomFinalPS.Get(), bloom_, {last});
     }
 
     void ApplySunrays() {
-        UseProgram(pSunraysMask);
-        SetTexture("uTexture", dye.read);
-        DrawTo(sunMask);
+        ShaderParams& p = gpu_.params;
+        gpu_.Pass(gpu_.sunraysMaskPS.Get(), sunMask_, {&dye_.read});
 
-        UseProgram(pSunrays);
-        SetTexture("uTexture", sunMask);
-        SetFloat("weight", s.sunraysWeight);
-        DrawTo(sun);
+        p.weight = s_.sunraysWeight;
+        gpu_.Pass(gpu_.sunraysPS.Get(), sun_, {&sunMask_});
 
-        UseProgram(pBlur);
-        SetVec2("texelSize", 1.f / sun.w, 0);
-        SetTexture("uTexture", sun);
-        DrawTo(sunTemp);
-        SetVec2("texelSize", 0, 1.f / sun.h);
-        SetTexture("uTexture", sunTemp);
-        DrawTo(sun);
+        p.texelSize[0] = 1.f / sun_.w;
+        p.texelSize[1] = 0;
+        gpu_.Pass(gpu_.blurPS.Get(), sunTemp_, {&sun_}, false,
+                  gpu_.blurVS.Get());
+        p.texelSize[0] = 0;
+        p.texelSize[1] = 1.f / sun_.h;
+        gpu_.Pass(gpu_.blurPS.Get(), sun_, {&sunTemp_}, false,
+                  gpu_.blurVS.Get());
     }
 
     void Render() {
-        glDisable(GL_BLEND);
-        if (s.bloom && bloomLevels.size() >= 2) {
+        if (s_.bloom && bloomLevels_.size() >= 2) {
             ApplyBloom();
         }
-        if (s.sunrays) {
+        if (s_.sunrays) {
             ApplySunrays();
         }
 
-        int outputW = layered ? presentW : Width();
-        int outputH = layered ? presentH : Height();
-        UseProgram(pDisplay);
-        SetVec2("texelSize", 1.f / outputW, 1.f / outputH);
-        SetTexture("uTexture", dye.read);
-        if (s.bloom) {
-            SetTexture("uBloom", bloom, 1);
+        ShaderParams& p = gpu_.params;
+        p.texelSize[0] = 1.f / Width();
+        p.texelSize[1] = 1.f / Height();
+        for (int i = 0; i < 3; i++) {
+            p.background[i] = s_.background[i];
         }
-        if (s.sunrays) {
-            SetTexture("uSunrays", sun, 2);
-        }
-        SetVec3("background", s.background[0], s.background[1],
-                s.background[2]);
+        gpu_.Pass(gpu_.displayPS.Get(), backBuffer_.Get(), Width(), Height(),
+                  {&dye_.read, s_.bloom ? &bloom_ : nullptr,
+                   s_.sunrays ? &sun_ : nullptr});
 
-        if (layered) {
-            PresentLayered();
-        } else {
-            PresentWgl();
-        }
-    }
-
-    void PresentWgl() {
-        GL().BindFramebuffer(kGlFramebuffer, 0);
-        glViewport(0, 0, Width(), Height());
-        DrawQuad();
-        BOOL ok = SwapBuffers(dc);
-        if (!loggedFrame) {
-            Wh_Log(L"WGL frame: swap=%d GL=0x%X window=%p", ok, glGetError(),
-                   window);
-            loggedFrame = true;
-        }
-    }
-
-    void PresentLayered() {
-        DrawTo(presentation);
-        GdiFlush();  // Finish earlier GDI reads before overwriting the DIB.
-        glPixelStorei(GL_PACK_ALIGNMENT, 4);
-        glReadPixels(0, 0, presentW, presentH, kGlBgra, GL_UNSIGNED_BYTE,
-                     readback);
-
-        // WM_PAINT scales the readback straight into the redirection surface:
-        // a single copy per frame.
-        BOOL ok = RedrawWindow(window, nullptr, nullptr,
-                               RDW_INVALIDATE | RDW_UPDATENOW);
-
-        DWORD error = ok ? 0 : GetLastError();
-        if (!loggedFrame || error != lastPresentError) {
-            LogLayeredFrame(ok, error);
-            loggedFrame = true;
-            lastPresentError = error;
-        }
-    }
-
-    void LogLayeredFrame(BOOL ok, DWORD error) {
-        unsigned maxValue = 0;
-        uint64_t sum = 0;
-        unsigned samples = 0;
-        auto pixels = static_cast<const unsigned char*>(readback);
-        for (int i = 0; i < presentW * presentH; i += 97) {
-            for (int c = 0; c < 3; c++) {
-                unsigned value = pixels[4 * i + c];
-                maxValue = std::max(maxValue, value);
-                sum += value;
-                samples++;
-            }
-        }
-        RECT actual{};
-        GetWindowRect(window, &actual);
-        Wh_Log(
-            L"Layered frame: ok=%d error=%lu GL=0x%X mean=%.2f max=%u "
-            L"rect=%ld,%ld %ldx%ld visible=%d prev=%p next=%p",
-            ok, error, glGetError(), samples ? double(sum) / samples : 0.,
-            maxValue, actual.left, actual.top, actual.right - actual.left,
-            actual.bottom - actual.top, IsWindowVisible(window),
-            GetWindow(window, GW_HWNDPREV), GetWindow(window, GW_HWNDNEXT));
-    }
-
-    ////////////////////////////////////////////////////////////////////////
-    // Cleanup
-
-    ~Wallpaper() {
-        if (window && IsWindow(window)) {
-            SetWindowLongPtrW(window, GWLP_USERDATA, 0);
-            ShowWindow(window, SW_HIDE);
-        }
-        if (context && MakeCurrent()) {
-            if (gl.api.DeleteProgram) {
-                for (GLuint p : programs) {
-                    gl.api.DeleteProgram(p);
-                }
-            }
-            for (const Target& t : targets) {
-                if (gl.api.DeleteFramebuffers && t.fbo) {
-                    gl.api.DeleteFramebuffers(1, &t.fbo);
-                }
-                if (t.texture) {
-                    glDeleteTextures(1, &t.texture);
-                }
-            }
-            wglMakeCurrent(nullptr, nullptr);
-        }
-        if (g_gl == &gl) {
-            g_gl = nullptr;
-        }
-        if (context) {
-            wglDeleteContext(context);
-        }
-        if (dc) {
-            ReleaseDC(layered ? renderWindow : window, dc);
-        }
-        if (frameDC && oldFrameBitmap) {
-            SelectObject(frameDC, oldFrameBitmap);
-        }
-        if (frameBitmap) {
-            DeleteObject(frameBitmap);
-        }
-        if (frameDC) {
-            DeleteDC(frameDC);
-        }
-        if (renderWindow) {
-            DestroyWindow(renderWindow);
-        }
-        if (window && IsWindow(window)) {
-            DestroyWindow(window);
+        Check(swapChain_->Present(0, 0), "Present");
+        if (!shown_) {
+            ShowWindow(window_, SW_SHOWNA);
+            shown_ = true;
         }
     }
 };
@@ -1924,24 +1873,23 @@ LRESULT CALLBACK WallpaperWindowProc(HWND w, UINT m, WPARAM wp, LPARAM lp) {
             return MA_NOACTIVATE;
         case WM_ERASEBKGND:
             return 1;
-        case WM_PAINT: {
-            PAINTSTRUCT ps;
-            HDC output = BeginPaint(w, &ps);
-            auto wallpaper = reinterpret_cast<const Wallpaper*>(
-                GetWindowLongPtrW(w, GWLP_USERDATA));
-            if (wallpaper) {
-                wallpaper->Paint(output);
-            }
-            EndPaint(w, &ps);
+        case WM_PAINT:
+            // No redirection surface: DirectComposition supplies the content.
+            ValidateRect(w, nullptr);
             return 0;
-        }
         case WM_CLOSE:
             return 0;
     }
     return DefWindowProcW(w, m, wp, lp);
 }
 
-// Hidden window that receives session lock and display power notifications.
+DWORD PowerSettingValue(const POWERBROADCAST_SETTING* setting) {
+    return setting->DataLength >= sizeof(DWORD)
+               ? *reinterpret_cast<const DWORD*>(setting->Data)
+               : 0;
+}
+
+// Hidden window that receives session and power notifications.
 LRESULT CALLBACK ControlWindowProc(HWND w, UINT m, WPARAM wp, LPARAM lp) {
     if (m == WM_WTSSESSION_CHANGE) {
         switch (wp) {
@@ -1964,11 +1912,18 @@ LRESULT CALLBACK ControlWindowProc(HWND w, UINT m, WPARAM wp, LPARAM lp) {
     }
     if (m == WM_POWERBROADCAST && wp == PBT_POWERSETTINGCHANGE) {
         auto setting = reinterpret_cast<const POWERBROADCAST_SETTING*>(lp);
-        if (setting &&
-            IsEqualGUID(setting->PowerSetting, kConsoleDisplayState) &&
-            setting->DataLength >= sizeof(DWORD)) {
-            // 0 = off, 1 = on, 2 = dimmed.
-            g_displayOff = *reinterpret_cast<const DWORD*>(setting->Data) == 0;
+        if (setting) {
+            DWORD value = PowerSettingValue(setting);
+            const GUID& id = setting->PowerSetting;
+            if (IsEqualGUID(id, kConsoleDisplayState)) {
+                g_displayOff = value == 0;  // 0 off, 1 on, 2 dimmed.
+            } else if (IsEqualGUID(id, kAcDcPowerSource)) {
+                g_onBattery = value != 0;  // 0 AC, 1 battery, 2 UPS.
+            } else if (IsEqualGUID(id, kPowerSavingStatus)) {
+                g_batterySaver = value != 0;
+            } else if (IsEqualGUID(id, kEnergySaverStatus)) {
+                g_energySaver = value != 0;  // 0 off, 1 standard, 2 high.
+            }
         }
         return TRUE;
     }
@@ -1981,22 +1936,11 @@ LRESULT CALLBACK ControlWindowProc(HWND w, UINT m, WPARAM wp, LPARAM lp) {
 bool RegisterWindowClasses() {
     WNDCLASSEXW cls{};
     cls.cbSize = sizeof(cls);
-    cls.style = CS_OWNDC;
     cls.lpfnWndProc = WallpaperWindowProc;
     cls.hInstance = g_instance;
     cls.lpszClassName = kWindowClass;
     if (!RegisterClassExW(&cls)) {
         Wh_Log(L"RegisterClass failed: %lu", GetLastError());
-        return false;
-    }
-
-    // Layered windows cannot use CS_OWNDC.
-    WNDCLASSEXW layerCls = cls;
-    layerCls.style = 0;
-    layerCls.lpszClassName = kLayerClass;
-    if (!RegisterClassExW(&layerCls)) {
-        Wh_Log(L"RegisterClass failed: %lu", GetLastError());
-        UnregisterClassW(kWindowClass, g_instance);
         return false;
     }
 
@@ -2007,7 +1951,6 @@ bool RegisterWindowClasses() {
     controlCls.lpszClassName = kControlClass;
     if (!RegisterClassExW(&controlCls)) {
         Wh_Log(L"RegisterClass failed: %lu", GetLastError());
-        UnregisterClassW(kLayerClass, g_instance);
         UnregisterClassW(kWindowClass, g_instance);
         return false;
     }
@@ -2016,24 +1959,11 @@ bool RegisterWindowClasses() {
 
 void UnregisterWindowClasses() {
     UnregisterClassW(kControlClass, g_instance);
-    UnregisterClassW(kLayerClass, g_instance);
     UnregisterClassW(kWindowClass, g_instance);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Render thread
-
-void PumpMessages() {
-    MSG msg;
-    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
-    }
-}
-
-#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
-#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
-#endif
 
 // A high-resolution waitable timer (Windows 10 1803+) gives accurate frame
 // pacing without changing the system timer resolution. Older systems fall back
@@ -2072,7 +2002,7 @@ bool WaitForNextFrame(HANDLE timer,
         if (timer &&
             SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE)) {
             count = 2;
-            timeout = timeout + 1000;  // Safety net; the timer fires first.
+            timeout += 1000;  // Safety net; the timer fires first.
         }
 
         DWORD result = MsgWaitForMultipleObjectsEx(
@@ -2088,12 +2018,81 @@ bool WaitForNextFrame(HANDLE timer,
     }
 }
 
-void RunRenderLoop(HANDLE frameTimer) {
+struct Renderer {
+    ShaderCompiler compiler;
+    std::unique_ptr<Gpu> gpu;
+    // Declared after `gpu`, so they're destroyed first.
     std::vector<std::unique_ptr<Wallpaper>> wallpapers;
     std::vector<MonitorInfo> monitors;
-    std::vector<HMONITOR> covered;
-    Settings settings = ReadSettings();
     HWND parent = nullptr;
+    HWND iconView = nullptr;
+
+    void Clear() {
+        wallpapers.clear();
+        gpu.reset();
+    }
+
+    // Returns true if at least one wallpaper is running.
+    bool Build(const Settings& settings) {
+        Clear();
+        monitors = Monitors(settings.primaryOnly);
+        parent = FindOrCreateWallpaperHost(iconView);
+        if (!parent) {
+            Wh_Log(L"Desktop window not found (Explorer not ready?)");
+            return false;
+        }
+        Wh_Log(L"Desktop layout: %s, host=%p",
+               iconView ? L"layered (Progman)" : L"classic (WorkerW)", parent);
+
+        gpu = std::make_unique<Gpu>();
+        gpu->Create(settings, compiler);
+        for (const auto& mi : monitors) {
+            // Keep Explorer responsive: see Gpu::CreateShaders.
+            PumpMessages();
+            auto w = std::make_unique<Wallpaper>(*gpu, mi, settings);
+            try {
+                w->Initialize(parent, iconView);
+                wallpapers.push_back(std::move(w));
+            } catch (const HResultError& e) {
+                if (IsDeviceLost(e.hr())) {
+                    throw;
+                }
+                Wh_Log(L"Monitor initialization failed: %S", e.what());
+            } catch (const std::exception& e) {
+                Wh_Log(L"Monitor initialization failed: %S", e.what());
+            }
+        }
+        return !wallpapers.empty();
+    }
+
+    // Periodic check; returns true if everything must be rebuilt.
+    bool NeedsRebuild(const Settings& settings) {
+        if (!gpu || wallpapers.empty()) {
+            return true;
+        }
+        gpu->CheckDevice();  // Throws on device loss.
+        HWND currentIcons = nullptr;
+        if (FindWallpaperHost(currentIcons) != parent ||
+            currentIcons != iconView) {
+            return true;  // Explorer restarted or the layout changed.
+        }
+        if (!SameMonitors(monitors, Monitors(settings.primaryOnly))) {
+            return true;
+        }
+        for (auto& w : wallpapers) {
+            if (!IsWindow(w->window())) {
+                return true;
+            }
+            w->EnsureLayerOrder();
+        }
+        return false;
+    }
+};
+
+void RunRenderLoop(HANDLE frameTimer) {
+    Renderer renderer;
+    Settings settings = ReadSettings();
+    std::vector<HMONITOR> covered;
 
     bool rebuild = true;
     int failures = 0;
@@ -2114,12 +2113,14 @@ void RunRenderLoop(HANDLE frameTimer) {
     for (;;) {
         LARGE_INTEGER frameStart;
         QueryPerformanceCounter(&frameStart);
+        // Each step is limited to 1/30 s to keep the simulation stable.
         float dt =
             std::clamp(float(double(frameStart.QuadPart - last.QuadPart) /
                              frequency.QuadPart),
                        .001f, 1.f / 30);
         last = frameStart;
         bool anyActive = false;
+        bool powerSaving = g_onBattery || g_batterySaver || g_energySaver;
 
         PumpMessages();
 
@@ -2134,50 +2135,21 @@ void RunRenderLoop(HANDLE frameTimer) {
             ULONGLONG now = GetTickCount64();
             if (now >= nextHealthCheck) {
                 nextHealthCheck = now + 2000;
-                if (!wallpapers.empty()) {
-                    EnsureDesktopOrder();
-                }
-                if (!SameMonitors(monitors, Monitors(settings.primaryOnly))) {
+                if (!rebuild && renderer.NeedsRebuild(settings)) {
                     rebuild = true;
-                }
-                // Also covers Explorer restarts: the parent window disappears.
-                if (!parent || !IsWindow(parent) || wallpapers.empty()) {
-                    rebuild = true;
-                }
-                for (auto& w : wallpapers) {
-                    if (!IsWindow(w->window)) {
-                        rebuild = true;
-                    }
                 }
             }
 
             if (rebuild && now >= nextRebuild) {
                 rebuild = false;
-                wallpapers.clear();
-                RestoreDesktopOrder();
-                monitors = Monitors(settings.primaryOnly);
-                parent = FindWallpaperParent();
-                if (parent) {
-                    EnsureDesktopOrder();
-                    for (const auto& mi : monitors) {
-                        auto w = std::make_unique<Wallpaper>();
-                        try {
-                            w->Initialize(mi, settings, parent);
-                            wallpapers.push_back(std::move(w));
-                        } catch (const std::exception& e) {
-                            Wh_Log(L"Monitor initialization failed: %S",
-                                   e.what());
-                        }
-                    }
-                } else {
-                    Wh_Log(L"Desktop window not found (Explorer not ready?)");
-                }
-                if (wallpapers.empty()) {
-                    scheduleRetry(now);
-                } else {
+                if (renderer.Build(settings)) {
                     failures = 0;
                     nextRebuild = 0;
+                } else {
+                    renderer.Clear();
+                    scheduleRetry(now);
                 }
+                nextCoverCheck = 0;
                 QueryPerformanceCounter(&last);
                 dt = 1.f / settings.fps;
             }
@@ -2185,13 +2157,15 @@ void RunRenderLoop(HANDLE frameTimer) {
             if (now >= nextCoverCheck) {
                 nextCoverCheck = now + 250;
                 covered.clear();
-                if (settings.pauseWhenCovered) {
-                    covered = CoveredMonitors();
+                if (settings.pauseWhenCovered && !renderer.wallpapers.empty()) {
+                    covered = CoveredMonitors(renderer.monitors);
                 }
             }
 
-            bool globalPause = settings.pause || g_sessionLocked ||
-                               g_sessionDisconnected || g_displayOff;
+            bool globalPause =
+                settings.pause || g_sessionLocked || g_sessionDisconnected ||
+                g_displayOff ||
+                (powerSaving && settings.onBattery == BatteryMode::Pause);
 
             POINT mouse{LONG_MIN, LONG_MIN};
             bool mouseActive = false;
@@ -2199,31 +2173,34 @@ void RunRenderLoop(HANDLE frameTimer) {
                 mouseActive = !settings.desktopOnly || DesktopAt(mouse);
             }
 
-            for (auto& w : wallpapers) {
+            for (auto& w : renderer.wallpapers) {
                 bool paused =
                     globalPause || std::find(covered.begin(), covered.end(),
-                                             w->info.monitor) != covered.end();
+                                             w->monitor()) != covered.end();
                 if (w->Step(dt, mouse, mouseActive, paused)) {
                     anyActive = true;
                 }
             }
         } catch (const std::exception& e) {
-            // For example a lost GPU context: start over after a delay.
+            // For example a lost GPU device (driver update, TDR): start over.
             Wh_Log(L"Renderer error: %S", e.what());
-            wallpapers.clear();
-            RestoreDesktopOrder();
+            renderer.Clear();
             rebuild = true;
             scheduleRetry(GetTickCount64());
+            anyActive = false;
         }
 
-        double intervalMs = anyActive ? 1000.0 / settings.fps : kIdleIntervalMs;
+        int fps = settings.fps;
+        if (powerSaving && settings.onBattery == BatteryMode::HalfFps) {
+            fps = std::max(15, fps / 2);
+        }
+        double intervalMs = anyActive ? 1000.0 / fps : kIdleIntervalMs;
         if (WaitForNextFrame(frameTimer, frameStart, intervalMs, frequency)) {
             break;
         }
     }
 
-    wallpapers.clear();
-    RestoreDesktopOrder();
+    renderer.Clear();
 }
 
 DWORD WINAPI RenderThread(void*) {
@@ -2239,16 +2216,23 @@ DWORD WINAPI RenderThread(void*) {
         CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kControlClass,
                         L"Fluid Wallpaper control", WS_POPUP, 0, 0, 0, 0,
                         nullptr, nullptr, g_instance, nullptr);
-    HPOWERNOTIFY powerNotify = nullptr;
+    std::vector<HPOWERNOTIFY> powerNotifications;
     bool sessionNotify = false;
     if (control) {
-        powerNotify = RegisterPowerSettingNotification(
-            control, &kConsoleDisplayState, DEVICE_NOTIFY_WINDOW_HANDLE);
+        // Each registration immediately reports the current value.
+        for (const GUID* id : {&kConsoleDisplayState, &kAcDcPowerSource,
+                               &kPowerSavingStatus, &kEnergySaverStatus}) {
+            // Older Windows versions don't know every GUID; that's fine.
+            if (HPOWERNOTIFY notify = RegisterPowerSettingNotification(
+                    control, id, DEVICE_NOTIFY_WINDOW_HANDLE)) {
+                powerNotifications.push_back(notify);
+            }
+        }
         sessionNotify =
             WTSRegisterSessionNotification(control, NOTIFY_FOR_THIS_SESSION);
     } else {
         Wh_Log(
-            L"Control window creation failed: %lu; lock and display-off "
+            L"Control window creation failed: %lu; session and power "
             L"detection disabled",
             GetLastError());
     }
@@ -2267,8 +2251,8 @@ DWORD WINAPI RenderThread(void*) {
     if (sessionNotify) {
         WTSUnRegisterSessionNotification(control);
     }
-    if (powerNotify) {
-        UnregisterPowerSettingNotification(powerNotify);
+    for (HPOWERNOTIFY notify : powerNotifications) {
+        UnregisterPowerSettingNotification(notify);
     }
     if (control) {
         DestroyWindow(control);
