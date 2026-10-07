@@ -2,12 +2,13 @@
 // @id              precision-touchpad-elevated-actions
 // @name            Fix Precision Touchpad Gestures for Elevated Windows
 // @description     Makes precision-touchpad keyboard and mouse gesture actions work on elevated windows
-// @version         0.6
+// @version         0.7
 // @author          meteoni
-// @github          https://github.com/meteoni
+// @github          https://github.com/Meteoni
 // @include         explorer.exe
+// @include         windhawk.exe
+// @include         windhawk-mod.exe
 // @include         windhawk-mod-uiaccess.exe
-// @architecture    x86-64
 // @compilerOptions -ladvapi32 -luser32 -lshell32
 // ==/WindhawkMod==
 
@@ -19,9 +20,16 @@ Windows precision-touchpad advanced gestures are synthesized by the shell as
 keyboard or mouse input. Medium-integrity Explorer can synthesize the input,
 but UIPI prevents it from reaching a higher-integrity target window.
 
-This mod preserves Windows' native gesture semantics and only changes which
-process performs the final synthetic input. In this case, it relays to a native
-Windhawk 2.0 `windhawk-mod-uiaccess.exe` tool host. 
+This mod runs a UIAccess or elevated helper process that injects touchpad-gesture
+keyboard shortcuts and supported mouse clicks into elevated (administrator)
+windows on behalf of the current shell Explorer. It intentionally allows this
+input to cross Windows' UIPI boundary and trusts code running inside that
+Explorer process. An ordinary, unelevated tool host cannot serve as the relay
+and exits without starting a worker.
+
+For elevated targets, held shortcuts and mouse buttons are sent as complete taps
+on release. Holds longer than one second and gestures whose target changes before
+release are discarded to avoid leaving keys or buttons pressed.
 
 Requires Windhawk 2.0 alpha 4 or later.
 */
@@ -41,6 +49,7 @@ Requires Windhawk 2.0 alpha 4 or later.
 namespace {
 
 constexpr wchar_t kUiAccessHostName[] = L"windhawk-mod-uiaccess.exe";
+constexpr wchar_t kElevatedHostName[] = L"windhawk-mod-elevated.exe";
 constexpr wchar_t kExplorerName[] = L"explorer.exe";
 
 constexpr uint32_t kProtocolMagic = 0x54504857;  // "WHPT"
@@ -100,7 +109,7 @@ static_assert(std::is_trivially_copyable_v<InjectResponse>);
 
 enum class ProcessMode {
     Explorer,
-    UiAccessWorker,
+    InputWorker,
     Other,
 };
 
@@ -165,8 +174,9 @@ ProcessMode DetectProcessMode() {
     if (_wcsicmp(name.c_str(), kExplorerName) == 0) {
         return ProcessMode::Explorer;
     }
-    if (_wcsicmp(name.c_str(), kUiAccessHostName) == 0) {
-        return ProcessMode::UiAccessWorker;
+    if (_wcsicmp(name.c_str(), kUiAccessHostName) == 0 ||
+        _wcsicmp(name.c_str(), kElevatedHostName) == 0) {
+        return ProcessMode::InputWorker;
     }
     return ProcessMode::Other;
 }
@@ -297,19 +307,19 @@ DWORD QueryCurrentIntegrityRid() {
     return rid;
 }
 
-bool QueryCurrentUiAccess() {
-    HANDLE token = nullptr;
-    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
-        return false;
-    }
-
+bool TokenHasInputRelayPrivileges(HANDLE token) {
     DWORD uiAccess = 0;
     DWORD bytes = 0;
-    bool ok = GetTokenInformation(token, TokenUIAccess, &uiAccess,
-                                  sizeof(uiAccess), &bytes) &&
-              uiAccess != 0;
-    CloseHandle(token);
-    return ok;
+    if (GetTokenInformation(token, TokenUIAccess, &uiAccess,
+                            sizeof(uiAccess), &bytes) && uiAccess != 0) {
+        return true;
+    }
+
+    TOKEN_ELEVATION elevation{};
+    return GetTokenInformation(token, TokenElevation, &elevation,
+                               sizeof(elevation), &bytes) &&
+           elevation.TokenIsElevated != 0 &&
+           QueryTokenIntegrityRid(token) >= SECURITY_MANDATORY_HIGH_RID;
 }
 
 bool QueryProcessImageBaseName(DWORD pid, std::wstring* baseNameOut) {
@@ -424,7 +434,8 @@ bool ValidateWorkerServer(HANDLE pipe) {
 
     const wchar_t* slash = wcsrchr(path, L'\\');
     const wchar_t* baseName = slash ? slash + 1 : path;
-    if (_wcsicmp(baseName, kUiAccessHostName) != 0) {
+    if (_wcsicmp(baseName, kUiAccessHostName) != 0 &&
+        _wcsicmp(baseName, kElevatedHostName) != 0) {
         Wh_Log(L"Explorer: rejected pipe server pid=%lu image='%s'",
                serverPid, baseName);
         CloseHandle(process);
@@ -441,20 +452,16 @@ bool ValidateWorkerServer(HANDLE pipe) {
 
     std::vector<BYTE> serverUser;
     std::vector<BYTE> currentUser;
-    DWORD uiAccess = 0;
-    DWORD bytes = 0;
     bool tokenOk = QueryTokenUser(token, &serverUser) &&
                    QueryCurrentUser(&currentUser) &&
                    SameUserBuffers(serverUser, currentUser) &&
-                   GetTokenInformation(token, TokenUIAccess, &uiAccess,
-                                       sizeof(uiAccess), &bytes) &&
-                   uiAccess != 0;
+                   TokenHasInputRelayPrivileges(token);
 
     CloseHandle(token);
     CloseHandle(process);
 
     if (!tokenOk) {
-        Wh_Log(L"Explorer: rejected unauthenticated/non-UIAccess worker pid=%lu",
+        Wh_Log(L"Explorer: rejected unauthenticated/unprivileged worker pid=%lu",
                serverPid);
         return false;
     }
@@ -1007,25 +1014,33 @@ DWORD WINAPI WorkerThreadProc(void*) {
     return 0;
 }
 
-bool InitializeUiAccessWorker() {
+bool InitializeInputWorker() {
     if (!ProcessIdToSessionId(GetCurrentProcessId(), &g_sessionId)) {
         Wh_Log(L"Worker: ProcessIdToSessionId failed: %lu", GetLastError());
         return false;
     }
 
-    DWORD integrity = QueryCurrentIntegrityRid();
-    bool uiAccess = QueryCurrentUiAccess();
-    Wh_Log(L"Worker: starting in %s, session=%lu IL=0x%lX UIAccess=%d",
-           kUiAccessHostName, g_sessionId, integrity, uiAccess);
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        Wh_Log(L"Worker: couldn't query host token: %lu", GetLastError());
+        return false;
+    }
+    DWORD integrity = QueryTokenIntegrityRid(token);
+    bool canRelayInput = TokenHasInputRelayPrivileges(token);
+    CloseHandle(token);
+    Wh_Log(L"Worker: starting in %s, session=%lu IL=0x%lX privileged=%d",
+           GetCurrentProcessBaseName().c_str(), g_sessionId, integrity,
+           canRelayInput);
 
-    if (!uiAccess) {
-        Wh_Log(L"Worker: host doesn't have UIAccess; refusing to run");
+    if (!canRelayInput) {
+        Wh_Log(L"Worker: host has neither UIAccess nor elevation; refusing to run");
         return false;
     }
 
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     if (!user32) {
-        user32 = LoadLibraryW(L"user32.dll");
+        user32 = LoadLibraryExW(L"user32.dll", nullptr,
+                                LOAD_LIBRARY_SEARCH_SYSTEM32);
     }
     if (!user32) {
         Wh_Log(L"Worker: couldn't load user32.dll");
@@ -1059,7 +1074,7 @@ bool InitializeUiAccessWorker() {
     return true;
 }
 
-void StopUiAccessWorker() {
+void StopInputWorker() {
     if (g_workerStopEvent) {
         SetEvent(g_workerStopEvent);
     }
@@ -1256,17 +1271,12 @@ void ClearPendingMouseLocked() {
     g_pendingMouse = {};
 }
 
-bool BufferKeyboardDown(const KEYBDINPUT* inputs,
+void BufferKeyboardDown(const KEYBDINPUT* inputs,
                         uint32_t count,
                         HWND target,
                         DWORD targetPid) {
     ULONGLONG now = GetTickCount64();
     AcquireSRWLockExclusive(&g_pendingLock);
-
-    if (g_pendingKeyboard.active &&
-        IsPendingExpired(g_pendingKeyboard.startedAt, now)) {
-        ClearPendingKeyboardLocked();
-    }
 
     // Each observed touchpad gesture start carries its complete set of key-down
     // records in one call. Replace any unfinished older gesture rather than
@@ -1280,7 +1290,6 @@ bool BufferKeyboardDown(const KEYBDINPUT* inputs,
     g_pendingKeyboard.downCount = count;
 
     ReleaseSRWLockExclusive(&g_pendingLock);
-    return true;
 }
 
 enum class BufferedReleaseResult {
@@ -1364,16 +1373,11 @@ BufferedReleaseResult ConsumeKeyboardRelease(
     return BufferedReleaseResult::Complete;
 }
 
-bool BufferMouseDown(const MOUSEINPUT& input,
+void BufferMouseDown(const MOUSEINPUT& input,
                      HWND target,
                      DWORD targetPid) {
     ULONGLONG now = GetTickCount64();
     AcquireSRWLockExclusive(&g_pendingLock);
-
-    if (g_pendingMouse.active &&
-        IsPendingExpired(g_pendingMouse.startedAt, now)) {
-        ClearPendingMouseLocked();
-    }
 
     // A new gesture start replaces an unfinished old one. Nothing privileged
     // has been injected yet, so discarding it cannot leave button state held.
@@ -1384,7 +1388,6 @@ bool BufferMouseDown(const MOUSEINPUT& input,
     g_pendingMouse.down = input;
 
     ReleaseSRWLockExclusive(&g_pendingLock);
-    return true;
 }
 
 bool ConsumeMouseRelease(const MOUSEINPUT& input, InjectRequest* requestOut) {
@@ -1736,7 +1739,8 @@ UINT WINAPI NtUserInjectMouseInput_Hook(const MOUSEINPUT* inputs,
 bool HookWin32uInjectionBoundaries() {
     HMODULE win32u = GetModuleHandleW(L"win32u.dll");
     if (!win32u) {
-        win32u = LoadLibraryW(L"win32u.dll");
+        win32u = LoadLibraryExW(L"win32u.dll", nullptr,
+                                LOAD_LIBRARY_SEARCH_SYSTEM32);
     }
     if (!win32u) {
         return false;
@@ -1795,7 +1799,7 @@ bool InitializeExplorerHook() {
 }  // namespace
 
 BOOL WhToolLauncher_ModInit(BOOL* launch) {
-    // Windhawk's session manager launches the UIAccess host. The header's
+    // Windhawk's session manager launches the privileged host. The header's
     // legacy launcher would otherwise spawn another copy of Explorer here.
     *launch = FALSE;
     return DetectProcessMode() == ProcessMode::Explorer &&
@@ -1822,12 +1826,13 @@ void WhToolLauncher_ModUninit() {
 }
 
 BOOL WhTool_ModInit() {
-    return DetectProcessMode() == ProcessMode::UiAccessWorker &&
-                   InitializeUiAccessWorker()
-               ? TRUE
-               : FALSE;
+    if (DetectProcessMode() != ProcessMode::InputWorker) {
+        Wh_Log(L"Worker: a UIAccess or elevated tool host is required");
+        return FALSE;
+    }
+    return InitializeInputWorker() ? TRUE : FALSE;
 }
 
 void WhTool_ModUninit() {
-    StopUiAccessWorker();
+    StopInputWorker();
 }
