@@ -8218,21 +8218,22 @@ void PreviewThreadMain() {
         }
         preview::Result result =
             preview::Fetch(path, (dpi ? dpi : 96) / 96.0, animate, everythingClient ? &*everythingClient : nullptr);
+        // The card shows the first page; a PDF's next pages follow. What they
+        // need is taken here, before the result is the XAML thread's.
+        std::optional<preview::Result> still;
         {
             std::lock_guard<std::mutex> lock(preview::g_mutex);
             if (preview::g_quit || !preview::g_request.empty()) {
                 continue;  // stopping, or already outdated
             }
+            if (result.morePages) {
+                still.emplace();
+                still->path = result.path;
+                still->pixels = result.pixels;
+                still->width = result.width;
+                still->height = result.height;
+            }
             preview::g_result = std::move(result);
-        }
-        // The card shows the first page; a PDF's next pages follow.
-        std::optional<preview::Result> still;
-        if (preview::g_result && preview::g_result->morePages) {
-            still.emplace();
-            still->path = preview::g_result->path;
-            still->pixels = preview::g_result->pixels;
-            still->width = preview::g_result->width;
-            still->height = preview::g_result->height;
         }
         try {
             if (g_ourBox) {
