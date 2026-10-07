@@ -1652,7 +1652,7 @@ def validate_specific_keywords(path: Path, mod_source: str):
         (r'\bnoUndecoratedSymbols\b', 'noUndecoratedSymbols', 'Decorated symbols don\'t support online caching, undecorated symbols are usually preferred'),
         (r'\bWh_SetFunctionHookT\b', 'Wh_SetFunctionHookT', 'Deprecated, use `WindhawkUtils::SetFunctionHook` instead'),
         (r'\b__ptr64\b', '__ptr64', 'Windhawk doesn\'t use symbols with __ptr64 markers (UNDNAME_NO_PTR64)'),
-        (r'^\s*#define\s*W[Hh]_', 'Windhawk symbol redefinition', 'Avoid redefining Windhawk symbols'),
+        (r'^\s*#\s*define\s+(?!WH_WINRT_WINUI2\b)W[Hh]_', 'Windhawk symbol redefinition', 'Avoid redefining Windhawk symbols'),
     ]
     # fmt: on
 
