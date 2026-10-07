@@ -1,9 +1,10 @@
 // ==WindhawkMod==
 // @id              windows-10-action-center-restorer
-// @name            Windows 10 Action Center Restorer on Windows 11 24H2
+// @name            Windows 10 Action Center Restorer on Windows 11 24H2+
 // @description     This mod restores the Windows 10 Action Center on Windows 11 with the fixed slide animation
 // @version         1.0.0
 // @author          babamohammed
+// @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @include         ShellExperienceHost.exe
 // @include         ShellHost.exe
@@ -13,9 +14,9 @@
 
 // ==WindhawkModReadme==
 /*
-# Windows 10 Action Center Restorer on Windows 11 24H2
+# Windows 10 Action Center Restorer on Windows 11 24H2+
 
-This mod restores the Windows 10 Action Center on Windows 11 24H2 **without
+This mod restores the Windows 10 Action Center on Windows 11 24H2+ **without
 modifying the real Windows registry**.
 
 While the mod is loaded, the following value is exposed virtually, only
@@ -69,6 +70,9 @@ Explorer once.
 
 Note: an empty application hive file (a few KB) is created in the temp
 folder of the process the first time it's needed.
+
+## Credits 
+- AdmnistratoX - Fix for the animation of the Windows 10 Action Center 
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
