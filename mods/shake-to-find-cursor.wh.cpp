@@ -930,6 +930,15 @@ void OnTimerFired() {
                 // size has settled, so an animated cursor animates again.
                 g_animating = false;
                 ResizeVisibleCursor(static_cast<int>(std::lround(g_currentSize)));
+                // Animated types that aren't on screen may still have the
+                // stand-in from the end of the grow. Restore them too, so a
+                // busy cursor that appears while the mouse is still (e.g. an
+                // app starts loading) spins instead of showing a frozen frame.
+                for (size_t i = 0; i < kCursorTypeCount; i++) {
+                    if (g_sources[i].appliedStatic) {
+                        SetCursorTypeSize(i, g_sources[i].appliedSize);
+                    }
+                }
                 ScheduleHoldCheck(now);
             }
             break;
