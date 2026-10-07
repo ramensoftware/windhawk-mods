@@ -2,7 +2,7 @@
 // @id              tray-utility-customizer
 // @name            Tray Utility Customizer
 // @description     Granular per-icon control over the Windows tray utility icons — Show hidden icons, Emoji, touch keyboard, pen menu, virtual touchpad, and input/language indicator — arranged by one nestable layout expression.
-// @version         2.0
+// @version         2.1
 // @author          sb4ssman
 // @github          https://github.com/sb4ssman
 // @include         explorer.exe
@@ -58,6 +58,9 @@ positions each icon individually, at its native size by default.
 ![Right of Start, stacked on a double-height taskbar](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/right-of-start-2x-taskmanager-height.png)
 *Right of Start on a double-height taskbar, stacked as a column beside Start.*
 
+![On a side taskbar](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/side-taskbar-row.png)
+*`touchKeyboard | emoji | overflow` on a native side taskbar: one row at the top of the tray, with Windows' own cells left intact.*
+
 ## Upgrading from 1.x
 
 Version 2.0 groups the settings under `Placement`, `Content`, `Layout`, `Size`,
@@ -84,6 +87,8 @@ One string describes the whole layout, under `Layout` → `Arrangement`:
 - `|` places items **side by side**, always
 - `,` stacks them **on top of each other**, always
 - parentheses nest, to any depth
+- order of operations: parentheses first, then `,`, then `|` — so
+  `a | b, c | d` is three columns with `b` stacked over `c`
 - `name[dx,dy]` nudges one item; `(a, b)[dx,dy]` nudges a whole group
 - every group is centered against its siblings (see `Layout.Justify`)
 
@@ -177,21 +182,32 @@ distinct identity.
 | `Size.ItemSpacing` | `0` | Gap between items; negative pulls them together |
 | `Adjust.PadX` / `PadY` | `0` | Space reserved at the group's edges; participates in layout |
 | `Adjust.OffsetX` / `OffsetY` | `0` | Moves the group visually; reserves nothing |
-| `Behavior.MinimumTrayHeight` | `44` | Below this tray height the mod leaves everything native |
+| `Behavior.MinimumTrayHeight` | `44` | Below this tray thickness (height, or width on a side taskbar) the mod leaves everything native |
 | `Behavior.Detection` | `auto` | Guarded detection, or Force MainStack |
 
 ## Taskbar position
 
-Windows 11 only puts the taskbar at the bottom, but two mods move it:
+Windows 11 can put the taskbar on any edge (Settings → Personalization →
+Taskbar → Taskbar behaviors, on builds that have the setting). This mod reads
+the edge Windows reports and re-arranges when the taskbar moves.
 
-- **[taskbar-on-top](https://windhawk.net/mods/taskbar-on-top) — supported.**
-  Nothing here positions against screen coordinates; everything is relative to
-  the taskbar's own XAML tree.
-- **[taskbar-vertical](https://windhawk.net/mods/taskbar-vertical) — not
-  compatible.** It rotates the same tray elements this mod positions, through
-  the same `RenderTransform` property. One property, two owners. This mod
-  detects a vertical taskbar, **leaves it completely untouched**, and says so
-  in the log rather than painting a rotated mess.
+- **Top — the same as bottom.** Nothing here positions against screen
+  coordinates; everything is relative to the taskbar's own XAML tree. This
+  also covers [taskbar-on-top](https://windhawk.net/mods/taskbar-on-top).
+- **Left or right**: an arrangement you write is laid out exactly as
+  written - `|` side by side, `,` stacked - and every `[dx,dy]` nudge
+  moves an item `dx` right and `dy` down, on every edge. `auto` fits the
+  taskbar's width instead of its height, filling rows first or columns
+  first as set. Nothing is mirrored between left and right. *Left of Start* and
+  *Right of Start* become *above Start* and *below Start*.
+- **[taskbar-vertical](https://windhawk.net/mods/taskbar-vertical) —
+  supported in its default native mode**, which uses the same native side
+  taskbar. With its "Use the native taskbar when possible" option off, it
+  rotates the same tray elements this mod positions, through the same
+  `RenderTransform` property — one property, two owners. This mod detects
+  that case (the taskbar runs down a side while Windows still reports a
+  horizontal edge), **leaves it completely untouched**, and says so in the
+  log rather than painting a rotated mess.
 
 ## Known limitations
 
@@ -204,6 +220,21 @@ Windows 11 only puts the taskbar at the bottom, but two mods move it:
   the taskbar's next layout pass settles it.
 
 ## Changelog
+
+### 2.1
+
+- Native left and right taskbars (Windows 11's own taskbar position setting)
+  are supported. The mod reads the edge Windows reports, re-arranges when the
+  taskbar moves between edges without an Explorer restart, keeps Windows' own
+  side-taskbar cells intact, and moves each icon into its arranged cell. `auto`
+  fills across a side taskbar's width. A taskbar that another mod rotates is
+  still left untouched.
+- A written arrangement that names no utility Windows is currently showing now
+  waits for one to appear, instead of retrying and then giving up.
+- With Emoji hidden, the lone-icon Emoji fallback no longer claims the touch
+  keyboard's host and leaves the keyboard's slot empty.
+- The microphone, camera and location in-use indicators no longer trigger a
+  full re-layout every time they appear or disappear.
 
 ### 2.0
 
@@ -435,6 +466,9 @@ inline bool LoadBool(PCWSTR key) {
 //
 // Use a table rather than a chain of comparisons, so the accepted literals and
 // their enum mapping stay adjacent when this mod's settings evolve.
+//
+// Wh_GetStringSetting never returns null - an unset or unreadable setting is
+// L"" - so the value is used as is.
 template <typename T>
 struct Choice {
     wchar_t const* token;
@@ -444,29 +478,12 @@ struct Choice {
 template <typename T, size_t N>
 inline T LoadChoice(PCWSTR key, Choice<T> const (&choices)[N], T fallback) {
     auto setting = WindhawkUtils::StringSetting::make(key);
-    PCWSTR value = setting.get() ? setting.get() : L"";
+    PCWSTR value = setting.get();
     if (!*value) return fallback;
     for (auto const& choice : choices) {
         if (_wcsicmp(value, choice.token) == 0) return choice.value;
     }
     return fallback;
-}
-
-// Copy a string setting into a fixed buffer, always NUL-terminated, using
-// `fallback` when the setting is empty. Fixed buffers rather than std::wstring
-// because a namespace-scope settings struct must not own heap - see the
-// exit-time destructor audit.
-//
-// Reading goes through WindhawkUtils::StringSetting rather than a local RAII
-// wrapper: it is the same contract, it already ships with Windhawk, and a
-// second copy of it is one more thing for a reader to check.
-template <size_t N>
-inline void LoadString(PCWSTR key, wchar_t (&buffer)[N],
-                       PCWSTR fallback = nullptr) {
-    auto setting = WindhawkUtils::StringSetting::make(key);
-    PCWSTR value = setting.get() ? setting.get() : L"";
-    if (!*value && fallback) value = fallback;
-    wcsncpy_s(buffer, N, value, _TRUNCATE);
 }
 
 }  // namespace tray_utility_settings
@@ -644,8 +661,8 @@ private:
             Fail(position_ - consumed, L"a finite number");
             return 0.0;
         }
-        // Offsets are cosmetic. Keep expression nudges within the same
-        // user-facing range as Adjust.OffsetX/Y so a typo cannot move an icon
+        // Offsets are cosmetic. Keep expression nudges within a
+        // bounded range of +/-100 pixels so a typo cannot move an icon
         // outside its owned group or hand XAML NaN/infinity.
         return std::clamp(value, -100.0, 100.0);
     }
@@ -682,8 +699,9 @@ inline bool Parse(std::wstring const& text, Node& root,
 
 // ---- Token vocabulary -------------------------------------------------------
 //
-// Tokens are stable utility identities, compared case-insensitively so an
-// arrangement remains readable without depending on localized labels.
+// A token is an item's stable IDENTITY, never its displayed label, compared
+// case-insensitively. Labels are not unique, can be localized, empty, or an
+// emoji, and renaming one would silently break an arrangement the user wrote.
 
 inline bool TokenIs(std::wstring const& token, wchar_t const* name) {
     size_t i = 0;
@@ -825,19 +843,15 @@ inline void ArrangeCached(Node const& node, Config const& config,
     }
 }
 
-// Parse + measure + arrange in one call. Returns false only on a parse error
-// (unbalanced parentheses, malformed offset, trailing garbage) — the caller
-// should then fall back to the auto expression and log that it did.
-// placements come back in expression order; totalSize is the group's bounding
-// box INCLUDING outer padding. A per-item offset shifts its leaf without
-// changing totalSize or any neighbor.
-inline bool Compute(std::wstring const& text, Config const& config,
-                    SizeResolver const& resolve,
-                    std::vector<Placement>& placements, Size& totalSize,
-                    ParseError* error = nullptr) {
-    Node root;
-    if (!Parse(text, root, error))
-        return false;
+// Measure + arrange a tree that is already parsed. For a mod that rewrites the
+// tree between Parse and layout - hiding an absent item, dropping a duplicate
+// - rather than laying out the text exactly as typed. placements come back in
+// expression order; totalSize is the group's bounding box INCLUDING outer
+// padding. A per-item offset shifts its leaf without changing totalSize or any
+// neighbor.
+inline void ComputeTree(Node const& root, Config const& config,
+                        SizeResolver const& resolve,
+                        std::vector<Placement>& placements, Size& totalSize) {
     // One cache for both passes: Arrange re-measures the same nodes at every
     // level, so sharing it is what keeps the whole call linear in node count.
     MeasureCache cache;
@@ -846,12 +860,25 @@ inline bool Compute(std::wstring const& text, Config const& config,
     if (inner.Empty()) {
         // No visible items: an empty group has no padded box either.
         totalSize = {};
-        return true;
+        return;
     }
     ArrangeCached(root, config, resolve, config.padX, config.padY, placements,
                   cache, &inner);
     totalSize = {inner.width + config.padX * 2.0,
                  inner.height + config.padY * 2.0};
+}
+
+// Parse + measure + arrange in one call. Returns false only on a parse error
+// (unbalanced parentheses, malformed offset, trailing garbage) — the caller
+// should then fall back to the auto expression and log that it did.
+inline bool Compute(std::wstring const& text, Config const& config,
+                    SizeResolver const& resolve,
+                    std::vector<Placement>& placements, Size& totalSize,
+                    ParseError* error = nullptr) {
+    Node root;
+    if (!Parse(text, root, error))
+        return false;
+    ComputeTree(root, config, resolve, placements, totalSize);
     return true;
 }
 
@@ -951,19 +978,28 @@ inline std::wstring BuildGridExpression(int count, int rows, int columns,
     return expr;
 }
 
-inline std::wstring BuildAutoExpression(int count, int maxRows, FillOrder fill,
-                                        TokenNamer const& namer = {}) {
-    Shape shape = ChooseShape(count, maxRows);
+// `maxLines` is how many lines of items fit across the taskbar's THICKNESS:
+// rows on a bottom or top taskbar, and - with `across` - columns on a left or
+// right one, where the width is the limit. The shape rule is the same either
+// way, the fewest lines along the taskbar, and the result is a plain screen
+// expression: '|' side by side and ',' stacked, and FillOrder::Rows still
+// fills left to right, then down.
+inline std::wstring BuildAutoExpression(int count, int maxLines, FillOrder fill,
+                                        TokenNamer const& namer = {},
+                                        bool across = false) {
+    Shape shape = ChooseShape(count, maxLines);
+    if (across)
+        return BuildGridExpression(count, shape.columns, shape.rows, fill,
+                                   namer);
     return BuildGridExpression(count, shape.rows, shape.columns, fill, namer);
 }
 
 // ---- Items the arrangement forgot -------------------------------------------
 //
-// A hand-written arrangement names the utilities that existed when it was
-// written. Windows shows and hides these live — the touch keyboard comes and
-// goes, the taskbar settings toggle the rest — so a utility that appears later
-// is in no group, resolves to nothing, and silently vanishes from the taskbar.
-// That is a trap, hence Layout.NewItems:
+// A hand-written arrangement names the items that existed when it was written.
+// When the set changes at runtime, an item that appears later is in no group,
+// resolves to nothing, and silently vanishes from the taskbar. That is a trap,
+// hence Layout.NewItems:
 //
 //   Append (default) — arrange the unlisted items automatically and put that
 //                      block after everything the user wrote, so a new item is
@@ -975,10 +1011,10 @@ inline std::wstring BuildAutoExpression(int count, int maxRows, FillOrder fill,
 // arrangement when they next edit it.
 
 // Whether a token the user wrote refers to the same item as the one expected.
-// A plain case-insensitive name match is WRONG here, because the vocabulary
-// accepts aliases: "chevron" and "overflow" are one button, and comparing them
-// as strings makes an aliased item look missing and get appended a second
-// time. SameUtility below supplies the identity comparison.
+// Defaults to a case-insensitive name match, which is WRONG for a vocabulary
+// with aliases: two names for one item compare unequal as strings, so the
+// aliased item looks missing and is appended a second time. A mod with aliases
+// supplies its own identity comparison.
 using TokenMatcher =
     std::function<bool(std::wstring const& placed, std::wstring const& expected)>;
 
@@ -1003,19 +1039,23 @@ inline std::vector<std::wstring> MissingTokens(
     return missing;
 }
 
+// The appended block goes after the written one ALONG the taskbar: to its
+// right on a bottom or top taskbar, below it on a left or right one
+// (`across`), where there is room to grow.
 inline std::wstring AppendMissing(std::wstring const& expression,
                                   std::vector<std::wstring> const& missing,
-                                  int maxRows, FillOrder fill) {
+                                  int maxLines, FillOrder fill,
+                                  bool across = false) {
     if (missing.empty())
         return expression;
     auto namer = [&missing](int index) { return missing[index]; };
-    std::wstring block = BuildAutoExpression((int)missing.size(), maxRows, fill,
-                                             namer);
+    std::wstring block = BuildAutoExpression((int)missing.size(), maxLines,
+                                             fill, namer, across);
     if (block.empty())
         return expression;
     if (expression.empty())
         return block;
-    return L"(" + expression + L") | (" + block + L")";
+    return L"(" + expression + (across ? L"), (" : L") | (") + block + L")";
 }
 
 // ---- The one setting --------------------------------------------------------
@@ -1045,10 +1085,12 @@ inline bool IsAutoSetting(std::wstring const& setting) {
 }
 
 inline Arrangement ResolveArrangement(std::wstring const& setting, int count,
-                                      int maxRows, FillOrder fill,
-                                      TokenNamer const& namer = {}) {
+                                      int maxLines, FillOrder fill,
+                                      TokenNamer const& namer = {},
+                                      bool across = false) {
     if (IsAutoSetting(setting))
-        return {BuildAutoExpression(count, maxRows, fill, namer), true};
+        return {BuildAutoExpression(count, maxLines, fill, namer, across),
+                true};
     return {setting, false};
 }
 
@@ -1165,40 +1207,14 @@ public:
         snapshots_.clear();
     }
 
-    // Put ONE object's properties back and forget them, leaving every other
-    // object's snapshots alone. For the case where a mod discovers that an
-    // element it began borrowing was never actually its business — handing
-    // that element back has to be possible without ending the whole lease.
-    void RestoreObject(DependencyObject const& object,
-                       RestoreErrorFn const& onError = {}) {
-        if (!object) return;
-        for (auto it = snapshots_.rbegin(); it != snapshots_.rend();) {
-            if (it->object != object) {
-                ++it;
-                continue;
-            }
-            try {
-                if (it->localValue == DependencyProperty::UnsetValue())
-                    it->object.ClearValue(it->property);
-                else
-                    it->object.SetValue(it->property, it->localValue);
-            } catch (...) {
-                if (onError) onError();
-            }
-            // Erase through the reverse iterator without invalidating the
-            // traversal: base() points one past the element being erased.
-            it = std::make_reverse_iterator(snapshots_.erase(
-                std::next(it).base()));
-        }
-    }
-
     // Drop the snapshots WITHOUT restoring. For the case where the elements
     // are already gone (an Explorer rebuild threw the tree away), so restoring
     // would only throw. Do not use it to "skip" a restore that could run.
     void Abandon() { snapshots_.clear(); }
 
-    size_t Count() const { return snapshots_.size(); }
-    bool Empty() const { return snapshots_.empty(); }
+    size_t SnapshotCount() const { return snapshots_.size(); }
+
+    bool HasSnapshots() const { return !snapshots_.empty(); }
 
 private:
     std::vector<Snapshot> snapshots_;
@@ -1212,7 +1228,6 @@ private:
 namespace tray_utility_taskbar_window {
 
 // ---- Window discovery -------------------------------------------------------
-
 
 inline HWND FindCurrentProcessTaskbarWnd() {
     HWND result = nullptr;
@@ -1472,59 +1487,113 @@ inline XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
 
 }  // namespace tray_utility_taskbar_xaml
 
-// -- Taskbar metrics and orientation ----------------------------------------
-// The taskbar's rect in DIPs, and whether a horizontal-layout model applies
-// at all - so a mod stands down on a vertical taskbar instead of arranging
-// into a rotated coordinate space.
+// -- Taskbar metrics, edge and orientation ----------------------------------
+// The taskbar's rect in DIPs, the edge Windows says it is docked to
+// (RootGrid's DockingStates), whether a mod may arrange there (any native
+// edge, never a taskbar another mod is rotating), and a watcher that
+// reports a move or thickness change - which re-lays out the taskbar
+// without rebuilding it.
 namespace tray_utility_taskbar_metrics {
 
-// ---- Taskbar metrics and orientation ----------------------------------------
+// ---- Taskbar metrics, edge and orientation ----------------------------------
 //
 // WHERE THE TASKBAR IS, AND WHETHER THIS MOD CAN WORK THERE.
 //
-// Windows 11 itself only puts the taskbar at the bottom. Two mods by m417z
-// move it, and both are first-class parts of the ecosystem this mod has to
-// live in:
+// Windows 11 builds with the native taskbar position setting (September 2026
+// update) put the taskbar on any edge themselves. On those builds Windows
+// ANNOUNCES the edge, and that announcement is what this component reads:
+// the taskbar root Grid (Taskbar.TaskbarFrame > Grid#RootGrid) sits in a
+// DockingStates visual state — DockedBottom, DockedTop, DockedLeft or
+// DockedRight. It is the same signal m417z's own mods read.
 //
-//   taskbar-on-top       — bottom -> top. FINE here. Everything
-//                          here is positioned relative to the taskbar's own
-//                          XAML tree, never to screen coordinates, so a top
-//                          taskbar is the same tree at a different y.
+// A NATIVE SIDE TASKBAR IS SUPPORTED. The tree is the same tree laid out
+// vertically: every tray anchor keeps its name, order and parent. A written
+// arrangement is laid out exactly as written there; only generated layouts
+// fill across the taskbar's width (the arrangement component's `across`).
 //
-//   taskbar-vertical     — bottom -> left/right. NOT COMPATIBLE, and not for
-//                          a reason cooperation can fix. It walks the very
-//                          same path this mod walks
-//                          (ControlCenterButton > Grid > ContentPresenter >
-//                          ItemsPresenter > StackPanel) and applies a
-//                          RotateTransform to `RenderTransform` on those
-//                          children. Positioning here sets a
-//                          TranslateTransform on the SAME property of the SAME
-//                          elements. One dependency property, two owners, last
-//                          writer wins — the two layouts cannot coexist.
-//
-// So: DETECT AND STAND DOWN, loudly, rather than fight and paint garbage. The
-// detection is the taskbar's own rect aspect, not a check for a specific mod —
-// it is the condition that matters, and it stays true however the taskbar got
-// that way.
+// A ROTATED TASKBAR IS NOT. m417z's Vertical Taskbar, with its native mode
+// turned off (or on a build without the native setting), rotates a horizontal
+// taskbar with RenderTransform on the very tray children this family positions
+// — one property, two owners, last writer wins. Windows still reports a
+// horizontal dock there while the window runs down the side, and that
+// mismatch is how it is recognised. A mod stands down rather than paint
+// garbage.
 //
 // The rect is in PHYSICAL pixels and every XAML size is a DIP, so conversion
 // belongs here instead of being re-derived at each call site.
 
+using winrt::Windows::UI::Xaml::FrameworkElement;
+using winrt::Windows::UI::Xaml::VisualStateManager;
+using winrt::Windows::UI::Xaml::Media::VisualTreeHelper;
+
 enum class Orientation { Horizontal, Vertical };
+enum class Edge { Unknown, Bottom, Top, Left, Right };
 
 struct Metrics {
     bool valid = false;
     RECT rect{};
     UINT dpi = 96;
+    // What the window looks like: taller than wide runs down a side.
     Orientation orientation = Orientation::Horizontal;
+    // What Windows says, when the caller read it (ReadDockedEdge).
+    Edge edge = Edge::Unknown;
+    // Runs down a side while Windows does not say it docked there: another
+    // mod is rotating a horizontal taskbar.
+    bool rotated = false;
     // The extent the arranged group has to fit INTO: the taskbar's height when
     // it runs across the screen, its width when it runs down the side.
     double constrainedDip = 0.0;
-    // The extent it can run ALONG.
-    double alongDip = 0.0;
 };
 
-inline Metrics GetMetrics(HWND taskbarWnd) {
+// The direct child of `parent` with this name, searching at most `levels`
+// generations. The taskbar's top is shallow and fixed:
+//   XamlRoot.Content() Grid > TaskbarFrame#TaskbarFrame > Grid#RootGrid
+inline FrameworkElement FindTaskbarChild(FrameworkElement const& parent,
+                                         wchar_t const* name, int levels) {
+    if (!parent || levels <= 0) return nullptr;
+    int count = VisualTreeHelper::GetChildrenCount(parent);
+    for (int i = 0; i < count; ++i) {
+        auto child =
+            VisualTreeHelper::GetChild(parent, i).try_as<FrameworkElement>();
+        if (child && child.Name() == name) return child;
+    }
+    for (int i = 0; i < count; ++i) {
+        auto child =
+            VisualTreeHelper::GetChild(parent, i).try_as<FrameworkElement>();
+        if (auto found = FindTaskbarChild(child, name, levels - 1)) return found;
+    }
+    return nullptr;
+}
+
+// Windows' own statement of the edge. UI thread only. `taskbarRoot` is the
+// taskbar XamlRoot's Content(). Unknown on builds without the native position
+// setting, or if the tree has changed shape.
+//
+// Read ONLY RootGrid's DockingStates. Per-element OrientationStates further
+// down (task-button IconPanels) were observed stale after a move back to the
+// bottom; RootGrid's state was right on every edge.
+inline Edge ReadDockedEdge(FrameworkElement const& taskbarRoot) {
+    auto frame = FindTaskbarChild(taskbarRoot, L"TaskbarFrame", 2);
+    auto rootGrid = FindTaskbarChild(frame, L"RootGrid", 2);
+    if (!rootGrid) return Edge::Unknown;
+    for (auto const& group : VisualStateManager::GetVisualStateGroups(rootGrid)) {
+        if (group.Name() != L"DockingStates") continue;
+        auto state = group.CurrentState();
+        if (!state) return Edge::Unknown;
+        auto name = state.Name();
+        if (name == L"DockedBottom") return Edge::Bottom;
+        if (name == L"DockedTop") return Edge::Top;
+        if (name == L"DockedLeft") return Edge::Left;
+        if (name == L"DockedRight") return Edge::Right;
+        return Edge::Unknown;
+    }
+    return Edge::Unknown;
+}
+
+// `docked` is ReadDockedEdge's answer when the caller has the taskbar's XAML,
+// Unknown otherwise. Without it a window running down the side is assumed
+// rotated — the safe answer on a build that cannot say otherwise.
+inline Metrics GetMetrics(HWND taskbarWnd, Edge docked = Edge::Unknown) {
     Metrics metrics;
     if (!taskbarWnd || !GetWindowRect(taskbarWnd, &metrics.rect))
         return metrics;
@@ -1537,29 +1606,136 @@ inline Metrics GetMetrics(HWND taskbarWnd) {
     double height = (double)(metrics.rect.bottom - metrics.rect.top);
     double scale = 96.0 / (double)metrics.dpi;
 
-    // Taller than wide means it runs down a side. Nothing else can produce
-    // that shape, so this needs no cooperation from whatever moved it.
     metrics.orientation =
         height > width ? Orientation::Vertical : Orientation::Horizontal;
-    if (metrics.orientation == Orientation::Horizontal) {
-        metrics.constrainedDip = height * scale;
-        metrics.alongDip = width * scale;
-    } else {
-        metrics.constrainedDip = width * scale;
-        metrics.alongDip = height * scale;
-    }
+    metrics.edge = docked;
+    metrics.rotated = metrics.orientation == Orientation::Vertical &&
+                      docked != Edge::Left && docked != Edge::Right;
+    bool horizontal = metrics.orientation == Orientation::Horizontal;
+    metrics.constrainedDip = (horizontal ? height : width) * scale;
     return metrics;
 }
 
-// Whether this mod's layout model applies at all. Checked BEFORE touching
-// anything, so a taskbar it does not describe is left exactly as it was found
-// rather than arranged into a coordinate space someone else is rotating.
-inline bool LayoutModelApplies(Metrics const& metrics) {
-    return metrics.valid && metrics.orientation == Orientation::Horizontal;
+// Whether this mod may arrange here: any edge Windows placed the taskbar on
+// itself, never a taskbar another mod is rotating. Checked BEFORE touching
+// anything, so a taskbar this does not describe is left exactly as found.
+inline bool CanArrange(Metrics const& metrics) {
+    return metrics.valid && !metrics.rotated;
+}
+
+// True on a left or right taskbar, where the WIDTH limits how many items fit
+// side by side: generated layouts ("auto") fill across it. A written
+// arrangement and every nudge are screen-literal on every edge, and top
+// behaves exactly like bottom.
+inline bool RunsDownSide(Metrics const& metrics) {
+    return metrics.orientation == Orientation::Vertical;
 }
 
 inline wchar_t const* OrientationName(Orientation orientation) {
     return orientation == Orientation::Vertical ? L"vertical" : L"horizontal";
+}
+
+inline wchar_t const* EdgeName(Edge edge) {
+    switch (edge) {
+        case Edge::Bottom: return L"bottom";
+        case Edge::Top: return L"top";
+        case Edge::Left: return L"left";
+        case Edge::Right: return L"right";
+        default: return L"unknown";
+    }
+}
+
+// ---- Following a move -------------------------------------------------------
+//
+// MOVING THE TASKBAR IS A RE-LAYOUT, NOT A REBUILD. The same elements survive
+// a move between edges and TrayUI::StartTaskbar never fires, so a mod's
+// rebuild hook will not tell it anything changed. Two signals cover every
+// move:
+//
+//   - TaskbarFrame's size, which changes between a horizontal and a side edge
+//     and whenever the thickness does (Windows' small and default heights,
+//     another mod's side width);
+//   - RootGrid's DockingStates group, which changes on EVERY edge change,
+//     including bottom <-> top and left <-> right, where the size does not.
+//     Those moves still re-template parts of the taskbar (live-observed:
+//     the OmniButton sat low after bottom -> top until a re-apply).
+//
+// The callback runs on the UI thread from inside a layout pass or a state
+// change, and both signals usually fire for one move: schedule the re-apply
+// (wake the retry), never re-arrange synchronously, and expect a repeat.
+//
+// The mod owns the EdgeWatch, and must StopEdgeWatch on the UI thread before
+// unload: both delegates point into the mod's image.
+struct EdgeWatch {
+    winrt::weak_ref<FrameworkElement> frame;
+    winrt::event_token token{};
+    winrt::weak_ref<winrt::Windows::UI::Xaml::VisualStateGroup> docking;
+    winrt::event_token dockingToken{};
+    bool side = false;
+    double thickness = 0.0;
+    void (*onChange)() = nullptr;
+};
+
+inline void StopEdgeWatch(EdgeWatch& watch) {
+    if (watch.token) {
+        if (auto frame = watch.frame.get()) frame.SizeChanged(watch.token);
+    }
+    if (watch.dockingToken) {
+        if (auto group = watch.docking.get())
+            group.CurrentStateChanged(watch.dockingToken);
+    }
+    watch.frame = nullptr;
+    watch.token = {};
+    watch.docking = nullptr;
+    watch.dockingToken = {};
+}
+
+// Idempotent: watching the same TaskbarFrame again is a no-op, and a rebuilt
+// taskbar's new frame replaces the old subscriptions. UI thread only.
+inline bool StartEdgeWatch(EdgeWatch& watch, FrameworkElement const& taskbarRoot,
+                           void (*onChange)()) {
+    auto frame = FindTaskbarChild(taskbarRoot, L"TaskbarFrame", 2);
+    if (!frame) return false;
+    if (watch.token && watch.frame.get() == frame) return true;
+    StopEdgeWatch(watch);
+    watch.frame = winrt::make_weak(frame);
+    watch.side = frame.ActualHeight() > frame.ActualWidth();
+    watch.thickness = watch.side ? frame.ActualWidth() : frame.ActualHeight();
+    watch.onChange = onChange;
+    EdgeWatch* target = &watch;
+    watch.token = frame.SizeChanged(
+        [target](winrt::Windows::Foundation::IInspectable const&,
+                 winrt::Windows::UI::Xaml::SizeChangedEventArgs const& args) {
+            auto size = args.NewSize();
+            bool side = size.Height > size.Width;
+            double thickness = side ? size.Width : size.Height;
+            // Content-sized themes change length as task buttons come and go.
+            // Only orientation and thickness require a new arrangement.
+            if (side == target->side &&
+                std::abs(thickness - target->thickness) < 0.5)
+                return;
+            target->side = side;
+            target->thickness = thickness;
+            if (target->onChange) target->onChange();
+        });
+
+    // Absent on builds without the native position setting; the size watch
+    // alone is then all there is, and all that is needed.
+    if (auto rootGrid = FindTaskbarChild(frame, L"RootGrid", 2)) {
+        for (auto const& group :
+             VisualStateManager::GetVisualStateGroups(rootGrid)) {
+            if (group.Name() != L"DockingStates") continue;
+            watch.docking = winrt::make_weak(group);
+            watch.dockingToken = group.CurrentStateChanged(
+                [target](winrt::Windows::Foundation::IInspectable const&,
+                         winrt::Windows::UI::Xaml::VisualStateChangedEventArgs
+                             const&) {
+                    if (target->onChange) target->onChange();
+                });
+            break;
+        }
+    }
+    return true;
 }
 
 }  // namespace tray_utility_taskbar_metrics
@@ -1588,9 +1764,10 @@ namespace tray_utility_retry {
 // thread with SendMessage, so a UI-thread caller blocked on the mutex while
 // another thread waited under it could never service that message.
 //
-// Start() itself is not serialized against a concurrent Start(), because both
-// of this mod's callers run on the taskbar's UI thread.
-
+// Start() may be called from Windhawk's thread (init, a settings change) and
+// from the taskbar's UI thread (a rebuild) at once. Two overlapping Start()
+// calls are safe: each publishes its run by exchange and stops whatever run it
+// displaced, so no run is ever left without an owner that will wait for it.
 
 class RetryLoop {
 public:
@@ -1604,7 +1781,57 @@ public:
 
     void Start(AttemptFn attempt, AppliedFn applied,
                std::atomic<bool> const& unloading, int attempts = 5,
-               DWORD intervalMs = 2000, bool forceFirstAttempt = false) {
+               DWORD intervalMs = 2000) {
+        Launch(attempt, applied, unloading, attempts, intervalMs, false);
+    }
+
+    // For a caller that must not wait - the taskbar's UI thread, inside
+    // Explorer's own taskbar construction. A live run is woken instead of
+    // being stopped: it skips its interval, runs an attempt now and gets a
+    // fresh attempt budget. Only when no run is live is a new one started,
+    // and the Stop() inside it then waits on a thread that has already left
+    // the loop, which returns at once.
+    //
+    // Either way the FIRST attempt runs even if `applied` still reports done.
+    // A caller wakes the loop because something changed, and may truthfully
+    // still own live state that the attempt has to restore and reapply - so it
+    // must not have to falsify `applied` just to be heard.
+    void StartOrWake(AttemptFn attempt, AppliedFn applied,
+                     std::atomic<bool> const& unloading, int attempts = 5,
+                     DWORD intervalMs = 2000) {
+        if (unloading) return;
+        std::shared_ptr<Run> run;
+        {
+            std::lock_guard<std::mutex> guard(mutex_);
+            run = run_;
+        }
+        if (run) {
+            std::lock_guard<std::mutex> gate(run->gate);
+            if (!run->finished) {
+                run->woken = true;
+                SetEvent(run->wakeEvent);
+                return;
+            }
+        }
+        Launch(attempt, applied, unloading, attempts, intervalMs, true);
+    }
+
+    void Stop() {
+        std::shared_ptr<Run> run;
+        {
+            std::lock_guard<std::mutex> guard(mutex_);
+            run = run_;  // shared, not moved: a concurrent Stop must wait too
+        }
+        if (!run) return;
+        StopRun(run);
+        std::lock_guard<std::mutex> guard(mutex_);
+        if (run_ == run) run_.reset();
+    }
+
+private:
+    void Launch(AttemptFn attempt, AppliedFn applied,
+                std::atomic<bool> const& unloading, int attempts,
+                DWORD intervalMs, bool forced) {
         Stop();
         if (unloading) return;
 
@@ -1614,9 +1841,11 @@ public:
         run->unloading = &unloading;
         run->attempts = attempts;
         run->intervalMs = intervalMs;
-        run->forceFirstAttempt = forceFirstAttempt;
+        run->woken = forced;
         run->stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        if (!run->stopEvent) return;  // ~Run closes nothing it did not create
+        run->wakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        // ~Run closes only what was created.
+        if (!run->stopEvent || !run->wakeEvent) return;
 
         // The thread carries a reference of its own, so the Run survives until
         // both the loop and the thread are done with it, whichever ends first.
@@ -1648,53 +1877,77 @@ public:
         if (displaced) StopRun(displaced);
     }
 
-    void Stop() {
-        std::shared_ptr<Run> run;
-        {
-            std::lock_guard<std::mutex> guard(mutex_);
-            run = run_;  // shared, not moved: a concurrent Stop must wait too
-        }
-        if (!run) return;
-        StopRun(run);
-        std::lock_guard<std::mutex> guard(mutex_);
-        if (run_ == run) run_.reset();
-    }
-
-private:
     struct Run {
         HANDLE thread = nullptr;
         HANDLE stopEvent = nullptr;
+        HANDLE wakeEvent = nullptr;  // auto-reset
         AttemptFn attempt = nullptr;
         AppliedFn applied = nullptr;
         std::atomic<bool> const* unloading = nullptr;
         int attempts = 5;
         DWORD intervalMs = 2000;
-        bool forceFirstAttempt = false;
+        // Guards woken/finished, so a wake is either seen by the loop or
+        // refused because the loop has already ended - never lost between.
+        std::mutex gate;
+        bool woken = false;
+        bool finished = false;
 
         // Closed exactly once, when the last of the loop and the thread lets
         // go. Both have already stopped using them by then.
         ~Run() {
             if (thread) CloseHandle(thread);
             if (stopEvent) CloseHandle(stopEvent);
+            if (wakeEvent) CloseHandle(wakeEvent);
         }
     };
+
+    // The loop is about to end. A wake that arrived since the last attempt
+    // restarts it instead; otherwise the run is marked finished, so a later
+    // StartOrWake starts a new run rather than waking this dead one.
+    static bool ContinueForWake(Run& run) {
+        std::lock_guard<std::mutex> gate(run.gate);
+        bool stopping = *run.unloading ||
+                        WaitForSingleObject(run.stopEvent, 0) != WAIT_TIMEOUT;
+        if (run.woken && !stopping) return true;
+        run.finished = true;
+        return false;
+    }
+
+    static void MarkFinished(Run& run) {
+        std::lock_guard<std::mutex> gate(run.gate);
+        run.finished = true;
+    }
 
     static DWORD WINAPI ThreadMain(void* parameter) {
         auto* owned = static_cast<std::shared_ptr<Run>*>(parameter);
         std::shared_ptr<Run> run = *owned;
         delete owned;
-        for (int i = 0; i < run->attempts && !*run->unloading; ++i) {
-            // Opt-in, via forceFirstAttempt. A caller that clears its own
-            // "applied" flag before starting does not need it. It exists for
-            // the caller that must run one restore/reapply pass while `applied`
-            // still truthfully reports that it owns live XAML — so that flag
-            // does not have to be falsified just to wake this loop.
-            if (run->applied && !(run->forceFirstAttempt && i == 0) &&
-                run->applied())
-                break;
-            if (i && WaitForSingleObject(run->stopEvent, run->intervalMs) !=
-                         WAIT_TIMEOUT)
-                break;
+        for (int i = 0;; ++i) {
+            bool done = *run->unloading || i >= run->attempts ||
+                        (run->applied && run->applied());
+            if (done) {
+                // A pending wake overrides `applied` and the spent budget: it
+                // earns a fresh budget whose first attempt runs now.
+                if (!ContinueForWake(*run)) break;
+                i = 0;
+            } else if (i) {
+                HANDLE events[] = {run->stopEvent, run->wakeEvent};
+                DWORD result = WaitForMultipleObjects(2, events, FALSE,
+                                                      run->intervalMs);
+                if (result == WAIT_OBJECT_0 + 1) {
+                    i = 0;
+                } else if (result != WAIT_TIMEOUT) {
+                    MarkFinished(*run);
+                    break;
+                }
+            }
+            // This attempt answers every wake that came before it. One that
+            // arrives while it runs sets both again and earns another.
+            {
+                std::lock_guard<std::mutex> gate(run->gate);
+                run->woken = false;
+                ResetEvent(run->wakeEvent);
+            }
             if (run->attempt) run->attempt();
         }
         return 0;
@@ -1944,8 +2197,8 @@ inline bool AcquireAt(Panel const& parent, int slot,
     return true;
 }
 
-inline bool Acquire(Panel const& parent, Anchor anchor,
-                    std::wstring const& markerName, Lease& lease) {
+inline bool AcquireAtAnchor(Panel const& parent, Anchor anchor,
+                            std::wstring const& markerName, Lease& lease) {
     int slot = -1;
     if (!parent || !ResolveSlot(parent, anchor, slot))
         return false;
@@ -2055,6 +2308,9 @@ using winrt::Windows::UI::Xaml::Controls::Grid;
 using winrt::Windows::UI::Xaml::Media::TranslateTransform;
 using winrt::Windows::UI::Xaml::Media::VisualTreeHelper;
 
+// BEFORE or AFTER Start along the taskbar. On a bottom or top taskbar that is
+// left or right of Start; on a left or right taskbar, where Start sits at the
+// top and the task list runs down, Left means ABOVE Start and Right BELOW it.
 enum class Side {
     Left,
     Right,
@@ -2073,7 +2329,16 @@ struct Lease {
     winrt::event_token layoutToken{};
     Side side = Side::Left;
     double spacing = 0.0;
+    // A left or right taskbar: the lane runs vertically. Fixed for the
+    // lease's life; a move between edges re-acquires.
+    bool vertical = false;
 };
+
+// The leading edge of a margin along the lane: Left across a horizontal
+// taskbar, Top down a vertical one.
+inline double& LaneLead(Thickness& thickness, bool vertical) {
+    return vertical ? thickness.Top : thickness.Left;
+}
 
 inline void RestoreLocalValue(DependencyObject const& object,
                               DependencyProperty const& property,
@@ -2139,50 +2404,60 @@ inline bool Position(Lease& lease) noexcept {
         return false;
 
     try {
-        double groupWidth = lease.group.Width() +
-                            lease.groupOriginalMargin.Left +
-                            lease.groupOriginalMargin.Right;
-        double groupHeight = lease.group.Height() +
-                             lease.groupOriginalMargin.Top +
-                             lease.groupOriginalMargin.Bottom;
+        // ALONG is the lane's direction (x on a horizontal taskbar, y on a
+        // vertical one); ACROSS is the taskbar's thickness. Every quantity
+        // below is read along or across, so one arithmetic serves both.
+        bool vertical = lease.vertical;
+        auto const& original = lease.groupOriginalMargin;
+        double groupWidth = lease.group.Width() + original.Left + original.Right;
+        double groupHeight =
+            lease.group.Height() + original.Top + original.Bottom;
+        double groupAlong = vertical ? groupHeight : groupWidth;
+        double groupAcross = vertical ? groupWidth : groupHeight;
         bool startHidden =
             lease.startButton.Visibility() == Visibility::Collapsed;
-        double startWidth = lease.startButton.ActualWidth();
-        double startHeight = lease.startButton.ActualHeight();
-        if (startWidth <= 0.0 && !startHidden)
-            startWidth = 44.0;
-        if (startHeight <= 0.0)
-            startHeight = groupHeight;
+        double startAlong = vertical ? lease.startButton.ActualHeight()
+                                     : lease.startButton.ActualWidth();
+        double startAcross = vertical ? lease.startButton.ActualWidth()
+                                      : lease.startButton.ActualHeight();
+        if (startAlong <= 0.0 && !startHidden)
+            startAlong = 44.0;
+        if (startAcross <= 0.0)
+            startAcross = groupAcross;
 
-        // rawX is Start's live layout position with our own counter-shift
+        // rawAlong is Start's live layout position with our own counter-shift
         // backed out. It is re-read on every layout pass, so task-list churn
         // on a center-aligned taskbar re-centers the group naturally.
         auto transform = lease.startButton.TransformToVisual(lease.rootGrid);
         auto point = transform.TransformPoint({0.0f, 0.0f});
         auto existingShift =
             lease.startButton.RenderTransform().try_as<TranslateTransform>();
-        double currentShift = existingShift ? existingShift.X() : 0.0;
-        double rawX = point.X - currentShift;
+        double currentShift =
+            existingShift ? (vertical ? existingShift.Y() : existingShift.X())
+                          : 0.0;
+        double pointAlong = vertical ? point.Y : point.X;
+        double pointAcross = vertical ? point.X : point.Y;
+        double rawAlong = pointAlong - currentShift;
 
         double spacing = std::max(0.0, lease.spacing);
-        double push = groupWidth + spacing;
+        double push = groupAlong + spacing;
         if (lease.taskItemsPanel) {
             auto margin = lease.taskItemsPanel.Margin();
-            double needed =
-                lease.taskItemsPanelOriginalMargin.Left + push;
-            if (std::fabs(margin.Left - needed) > 0.5) {
-                margin.Left = needed;
+            auto originalPanel = lease.taskItemsPanelOriginalMargin;
+            double needed = LaneLead(originalPanel, vertical) + push;
+            if (std::fabs(LaneLead(margin, vertical) - needed) > 0.5) {
+                LaneLead(margin, vertical) = needed;
                 lease.taskItemsPanel.Margin(margin);
             }
         }
 
         // The Start counter-shift is a constant per mode, not an absolute-
         // anchor correction. When Start rides the repeater-margin push, room
-        // for a Left group already opens at the block's left edge (no shift),
-        // and a Right group needs Start pulled back so the gap opens between
-        // Start and the task items. When Start sits outside the repeater the
-        // roles invert: the pushed items leave the Right gap by themselves,
-        // and a Left group needs Start pushed out of the way instead.
+        // for a Left group already opens at the block's leading edge (no
+        // shift), and a Right group needs Start pulled back so the gap opens
+        // between Start and the task items. When Start sits outside the
+        // repeater the roles invert: the pushed items leave the Right gap by
+        // themselves, and a Left group needs Start pushed out of the way.
         double neededShift;
         if (lease.side == Side::Left)
             neededShift = lease.startInTaskItemsPanel ? 0.0 : push;
@@ -2197,33 +2472,39 @@ inline bool Position(Lease& lease) noexcept {
                               lease.startRenderTransformLocal);
         } else if (std::fabs(currentShift - neededShift) > 0.5) {
             TranslateTransform startShift;
-            startShift.X(neededShift);
+            if (vertical)
+                startShift.Y(neededShift);
+            else
+                startShift.X(neededShift);
             lease.startButton.RenderTransform(startShift);
         }
 
         // Place the group relative to where Start actually ends up.
-        double startFinalX = rawX + neededShift;
-        double left = lease.side == Side::Left
-                          ? startFinalX - groupWidth - spacing
-                          : startFinalX + startWidth + spacing;
-        if (left < 0.0)
-            left = 0.0;
+        double startFinal = rawAlong + neededShift;
+        double lead = lease.side == Side::Left
+                          ? startFinal - groupAlong - spacing
+                          : startFinal + startAlong + spacing;
+        if (lead < 0.0)
+            lead = 0.0;
 
-        // Center against the taskbar root; Start's own box is not a reliable
-        // vertical reference.
-        double rootHeight = lease.rootGrid.ActualHeight();
-        double startCenteredTop = point.Y + (startHeight - groupHeight) / 2.0;
-        double top = rootHeight > 0.0 ? (rootHeight - groupHeight) / 2.0
-                                      : startCenteredTop;
-        if (top < 0.0)
-            top = 0.0;
-        double rootWidth = lease.rootGrid.ActualWidth();
-        if (rootWidth > 0.0 && left + groupWidth > rootWidth)
-            left = std::max(0.0, rootWidth - groupWidth);
+        // Center across the taskbar root; Start's own box is not a reliable
+        // reference for the thickness.
+        double rootAcross = vertical ? lease.rootGrid.ActualWidth()
+                                     : lease.rootGrid.ActualHeight();
+        double startCentered =
+            pointAcross + (startAcross - groupAcross) / 2.0;
+        double across = rootAcross > 0.0 ? (rootAcross - groupAcross) / 2.0
+                                         : startCentered;
+        if (across < 0.0)
+            across = 0.0;
+        double rootAlong = vertical ? lease.rootGrid.ActualHeight()
+                                    : lease.rootGrid.ActualWidth();
+        if (rootAlong > 0.0 && lead + groupAlong > rootAlong)
+            lead = std::max(0.0, rootAlong - groupAlong);
 
         auto target = lease.groupOriginalMargin;
-        target.Left += left;
-        target.Top += top;
+        target.Left += vertical ? across : lead;
+        target.Top += vertical ? lead : across;
         auto current = lease.group.Margin();
         if (std::fabs(current.Left - target.Left) > 0.5 ||
             std::fabs(current.Top - target.Top) > 0.5) {
@@ -2264,8 +2545,11 @@ inline bool Release(Lease& lease) noexcept {
     return true;
 }
 
+// `vertical` is true on a left or right taskbar (taskbar_metrics::
+// RunsDownSide); the lane then runs down from Start instead of across.
 inline bool Acquire(FrameworkElement const& root, Grid const& group,
-                    Side side, double spacing, Lease& lease) {
+                    Side side, double spacing, Lease& lease,
+                    bool vertical = false) {
     if (!root || !group || lease.group || group.Width() <= 0.0 ||
         group.Height() <= 0.0)
         return false;
@@ -2283,6 +2567,7 @@ inline bool Acquire(FrameworkElement const& root, Grid const& group,
         UIElement::RenderTransformProperty());
     lease.side = side;
     lease.spacing = spacing;
+    lease.vertical = vertical;
 
     group.HorizontalAlignment(HorizontalAlignment::Left);
     group.VerticalAlignment(VerticalAlignment::Top);
@@ -2467,6 +2752,13 @@ static std::atomic<bool> g_treeStale = false;
 // must retire on this, and must keep going on that. Cleared on every apply
 // and on an Explorer rebuild, so the decision is re-made rather than cached.
 static std::atomic<bool> g_stoodDown = false;
+
+// Follows a move between edges, which re-lays out the existing taskbar tree
+// instead of rebuilding it: the tray panel flips between a row and a column
+// and the group has to be arranged again for it. Holds only a weak reference
+// and a token; stopped on the UI thread in TearDownOnWindowThread.
+static tray_utility_taskbar_metrics::EdgeWatch g_edgeWatch;  // exit-time-safe: heap-only
+static void OnTaskbarEdgeChanged();
 // Grid on older taskbars, StackPanel since 26200.9457; Panel covers both.
 [[clang::no_destroy]] static Panel g_layoutGrid{nullptr};
 [[clang::no_destroy]] static Grid g_group{nullptr};
@@ -2506,6 +2798,11 @@ struct CandidateCount {
 // Weak refs and ints only; weak_ref release is a plain refcount decrement.
 static std::vector<CandidateCount> g_candidateCounts;  // exit-time-safe: heap-only
 static winrt::event_token g_trayLayoutToken{};
+// The last apply settled with nothing to place - a written arrangement naming
+// only utilities Windows is not showing. The drift check stays registered on
+// the tray (g_layoutGrid) to notice them appear; nothing else is owned.
+static bool g_watchingOnly = false;
+static int g_candidateHostCount = 0;
 [[clang::no_destroy]] static DispatcherTimer g_reapplyTimer{nullptr};
 [[clang::no_destroy]] static DispatcherTimer g_startSettleTimer{nullptr};
 
@@ -2544,6 +2841,19 @@ static void ScheduleReapply() {
         g_reapplyTimer.Start();
     } catch (...) {
     }
+}
+
+// The taskbar moved between a horizontal and a side edge, or its thickness
+// changed. The tree survives (no rebuild), but the tray panel turned between
+// a row and a column, so the group is arranged again for the new shape. On
+// the UI thread inside a layout pass: schedule, never arrange synchronously.
+static void OnTaskbarEdgeChanged() {
+    if (g_unloading) {
+        return;
+    }
+    Wh_Log(L"[Apply] Taskbar edge or thickness changed; re-arranging");
+    g_stoodDown = false;
+    ScheduleReapply();
 }
 
 static void ClearHostWatchers() {
@@ -2830,6 +3140,29 @@ static std::wstring DescribeElementGlyphs(FrameworkElement const& element) {
     return buffer;
 }
 
+// The microphone, location and camera in-use indicators are IconViews in
+// MainStack alongside the utilities, and they come and go with every call or
+// map lookup. They are never utilities, so they must not make an unmanaged
+// host look changed - that re-ran a full restore and re-apply per mic session
+// for an identical result. Glyphs as Windows draws them (Segoe Fluent Icons).
+static bool IsPrivacyIndicatorGlyph(wchar_t glyph) {
+    return glyph == 0xE37A || glyph == 0xF47F || glyph == 0xE361 ||
+           glyph == 0xE720 || glyph == 0xEC71 || glyph == 0xE722;
+}
+
+// Visible icons in an unmanaged candidate host that could be a utility. Not a
+// match against the utility glyphs: the lone-icon emoji fallback exists for an
+// emoji panel whose glyph is not recognised, so every non-indicator icon counts.
+static int CountCandidateIconViews(FrameworkElement const& host) {
+    std::vector<FrameworkElement> icons;
+    CollectVisibleIconViews(host, icons);
+    int count = 0;
+    for (auto const& icon : icons) {
+        if (!IsPrivacyIndicatorGlyph(FirstGlyphChar(icon))) ++count;
+    }
+    return count;
+}
+
 static bool IconViewMatchesToken(FrameworkElement const& iconView,
                                  std::wstring const& token) {
     wchar_t glyph = FirstGlyphChar(iconView);
@@ -2894,18 +3227,23 @@ static bool IsUtilityCandidateHost(FrameworkElement const& element) {
            name.find(L"TrayUtilityCustomizer") == std::wstring::npos;
 }
 
-static double NaturalWidth(FrameworkElement const& element) {
-    double width = element.ActualWidth();
-    return width > 0.0 ? width : 24.0;
+static ngl::Size NativeItemSize(double actualWidth, double actualHeight,
+                                bool side) {
+    // The native control stretches across the tray: height on top/bottom,
+    // width on left/right. Only its along-taskbar extent is a native cell size.
+    double along = side ? actualHeight : actualWidth;
+    if (along <= 0.0) along = 24.0;
+    double across = side ? actualWidth : actualHeight;
+    across = across > 0.0 ? std::min(along, across) : along;
+    return side ? ngl::Size{across, along} : ngl::Size{along, across};
 }
 
-static double NaturalHeight(FrameworkElement const& element) {
-    // Tray icons stretch to the full tray height, so ActualHeight is not a
-    // content size. The native content box is square-ish: use the width,
-    // capped by whatever height the element actually has.
-    double width = NaturalWidth(element);
-    double height = element.ActualHeight();
-    return height > 0.0 ? std::min(width, height) : width;
+static double NaturalWidth(FrameworkElement const& element, bool side = false) {
+    return NativeItemSize(element.ActualWidth(), element.ActualHeight(), side).width;
+}
+
+static double NaturalHeight(FrameworkElement const& element, bool side = false) {
+    return NativeItemSize(element.ActualWidth(), element.ActualHeight(), side).height;
 }
 
 // Forgiving token spelling: canonicalize what the user typed. Returns
@@ -2994,7 +3332,7 @@ static std::vector<LayoutItem> ResolveLayoutItems(
     Panel const& trayGrid,
     FrameworkElement const& overflowHost,
     FrameworkElement const& mainStack,
-    std::vector<std::wstring> const& wantedTokens) {
+    std::vector<std::wstring> const& wantedTokens, bool side) {
     std::vector<LayoutItem> items;
 
     // Utility candidate hosts and their visible icons, collected once.
@@ -3032,8 +3370,27 @@ static std::vector<LayoutItem> ResolveLayoutItems(
 
             if (!item.element && item.token == L"emoji" && mainStack) {
                 int visibleIcons = CountVisibleIconViews(mainStack);
+                // A lone icon is only taken to be the emoji panel when it is
+                // not recognisably some OTHER utility. Otherwise, with the
+                // emoji panel hidden and the touch keyboard the one icon left,
+                // both tokens would claim MainStack and the keyboard's slot
+                // would come out empty.
+                bool loneIconIsAnotherUtility = false;
+                if (visibleIcons == 1) {
+                    std::vector<FrameworkElement> icons;
+                    CollectVisibleIconViews(mainStack, icons);
+                    for (auto const& icon : icons) {
+                        for (int i = 0; i < kUtilityCount; ++i) {
+                            std::wstring other = kUtilityTokens[i];
+                            if (other != L"emoji" && other != L"overflow" &&
+                                IconViewMatchesToken(icon, other)) {
+                                loneIconIsAnotherUtility = true;
+                            }
+                        }
+                    }
+                }
                 if (g_settings.mergeMode == MergeMode::ForceMainStack ||
-                    visibleIcons == 1) {
+                    (visibleIcons == 1 && !loneIconIsAnotherUtility)) {
                     item.element = mainStack;
                     item.host = mainStack;
                     item.hostLeaf = true;
@@ -3066,8 +3423,11 @@ static std::vector<LayoutItem> ResolveLayoutItems(
             continue;
         }
 
-        item.naturalW = NaturalWidth(item.element);
-        item.naturalH = NaturalHeight(item.element);
+        item.naturalW = NaturalWidth(item.element, side);
+        item.naturalH = NaturalHeight(item.element, side);
+        Wh_Log(L"[Discover] %s side=%d actual=%.1fx%.1f cell=%.1fx%.1f",
+               item.token.c_str(), side, item.element.ActualWidth(),
+               item.element.ActualHeight(), item.naturalW, item.naturalH);
 
         Wh_Log(
             L"[Discover] %s host=%s hostLeaf=%d glyph=%s "
@@ -3260,6 +3620,12 @@ static void RestoreLayout() {
     // Tokens can be live while an apply is pending. Revoke them before the
     // ownership check so controlled unload cannot leave mod callbacks in XAML.
     RevokeLayoutCallbacks();
+    if (g_watchingOnly) {
+        // Watching owned only the drift check, just revoked, and the tray
+        // reference it was registered on.
+        g_watchingOnly = false;
+        if (!g_layoutApplied) g_layoutGrid = nullptr;
+    }
     if (!g_layoutApplied) {
         return;
     }
@@ -3348,7 +3714,332 @@ struct IconTarget {
     double y = 0.0;
     double width = 0.0;
     double height = 0.0;
+    // The tray host that carries the element, and the canonical token it was
+    // placed as - empty for a straggler. The side path re-finds its elements
+    // by these after the move (PlaceSideItems).
+    FrameworkElement host{nullptr};
+    std::wstring token;
 };
+
+// The native panel can change its flow direction when the taskbar moves.
+// Follow that panel rather than assuming side taskbars or all hosts share an axis.
+struct NativeIconFlow {
+    DependencyObject lane{nullptr};
+    bool vertical = false;
+};
+
+// ── Side-taskbar placement ────────────────────────────────────────────────
+//
+// On a left or right taskbar the utilities sit in a WrapGrid of fixed native
+// cells (80x38, two across a 160-wide tray, on 26300). OmniButton's proven
+// rule applies: never reshape that grid - a cell pushed into a row the grid
+// does not cover is not drawn - and move each item from where it actually
+// renders to its arranged cell by RenderTransform alone.
+//
+// OmniButton does that inside a host that never moves. This mod moves its
+// hosts into the owned group first, which adds three rules a straight port
+// missed:
+//
+//  1. MEASURE ONLY AFTER THE GROUP IS LAID OUT. A host just appended to a
+//     group that has never been arranged reports nothing useful. Its native
+//     size is captured before the move (nativeSizes); every rendered position
+//     is read after one layout pass that includes the group.
+//  2. RE-FIND THE ITEMS AFTER THAT PASS. The side hosts lay out through a
+//     virtualizing WrapGrid, which can realize fresh item containers when its
+//     list moves. A reference taken before the move can name a control that is
+//     no longer drawn, and translating it moves nothing on screen.
+//  3. MOVE A WHOLE-HOST ITEM'S CONTENT, NOT THE HOST. The host keeps its
+//     native width (160) inside a group that is often narrower, so the group
+//     clips it - and that clip lives in the host's own coordinate space.
+//     Translating the host carries the clip along with it, so the chevron,
+//     drawn at the middle of its 160-wide host, never leaves the clipped-off
+//     part in a narrow column. Translating the host's content moves the glyph
+//     into the visible part instead.
+
+// The part of `element` that is actually drawn: its first visible, non-empty
+// glyph, or the element itself when it draws something else (an image icon).
+static FrameworkElement DrawnPart(FrameworkElement const& element) {
+    auto glyph = tree_walk::FindDescendant(
+        element, 12, [](FrameworkElement const& candidate) {
+            auto text = candidate.try_as<TextBlock>();
+            return text && !text.Text().empty() &&
+                   text.Visibility() == Visibility::Visible &&
+                   text.ActualWidth() > 0 && text.ActualHeight() > 0;
+        });
+    return glyph ? glyph : element;
+}
+
+// Translate `mover` so `measured`, rendered inside `host`, is centered on the
+// target's cell. False when the item has not been laid out, so there is
+// nothing to measure from.
+static bool CenterSideItem(FrameworkElement const& mover,
+                           FrameworkElement const& measured,
+                           FrameworkElement const& host,
+                           IconTarget const& target, PCWSTR name) {
+    if (measured.ActualWidth() <= 0 || measured.ActualHeight() <= 0) {
+        Wh_Log(L"[Layout] Side item %s has no rendered size yet", name);
+        return false;
+    }
+    auto bounds = measured.TransformToVisual(host).TransformBounds(
+        {0, 0, static_cast<float>(measured.ActualWidth()),
+         static_cast<float>(measured.ActualHeight())});
+    double centerX = bounds.X + bounds.Width / 2.0;
+    double centerY = bounds.Y + bounds.Height / 2.0;
+    double targetX = target.x + target.width / 2.0;
+    double targetY = target.y + target.height / 2.0;
+    g_lease->Track(mover, UIElement::RenderTransformProperty());
+    TranslateTransform shift;
+    shift.X(targetX - centerX);
+    shift.Y(targetY - centerY);
+    mover.RenderTransform(shift);
+    Wh_Log(L"[Layout] Side item %s drawn=%.1f,%.1f -> cell center %.1f,%.1f",
+           name, centerX, centerY, targetX, targetY);
+    return true;
+}
+
+// Places every side item. False (nothing to measure yet, or an item that is
+// gone) means the caller rolls the whole apply back and lets the retry come
+// again; a half-placed side layout is never left behind.
+static bool PlaceSideItems(std::vector<FrameworkElement> const& hosts,
+                           std::vector<ngl::Size> const& nativeSizes,
+                           std::vector<IconTarget> const& targets,
+                           std::vector<LayoutItem> const& items,
+                           ngl::Size total, double offsetX, double offsetY) {
+    // Native size or the arranged footprint, whichever is larger, so the
+    // host's own internal layout is exactly Windows' and every arranged cell
+    // falls inside it. Item cells, their sizes and alignment are untouched.
+    for (size_t i = 0; i < hosts.size(); ++i) {
+        auto const& host = hosts[i];
+        TrackPlacement(host);
+        host.Width(std::max(nativeSizes[i].width, total.width));
+        host.Height(std::max(nativeSizes[i].height, total.height));
+        host.HorizontalAlignment(HorizontalAlignment::Left);
+        host.VerticalAlignment(VerticalAlignment::Top);
+        host.Margin(Thickness{offsetX, offsetY, 0, 0});
+    }
+    // One pass for the whole tree, group included (rule 1).
+    if (!hosts.empty()) {
+        hosts.front().UpdateLayout();
+    }
+
+    for (auto const& host : hosts) {
+        LayoutItem const* leafItem = nullptr;
+        for (auto const& item : items) {
+            if (item.hostLeaf && item.host == host) {
+                leafItem = &item;
+                break;
+            }
+        }
+
+        if (leafItem) {
+            auto target = std::find_if(
+                targets.begin(), targets.end(), [&](IconTarget const& value) {
+                    return value.element == leafItem->element;
+                });
+            if (target == targets.end()) {
+                continue;
+            }
+            // Rule 3: the host's template root, not the host.
+            auto content = VisualTreeHelper::GetChildrenCount(host) > 0
+                               ? VisualTreeHelper::GetChild(host, 0)
+                                     .try_as<FrameworkElement>()
+                               : nullptr;
+            if (!content) {
+                Wh_Log(L"[Layout] Side host %s has no content to move",
+                       host.Name().c_str());
+                return false;
+            }
+            if (!CenterSideItem(content, DrawnPart(content), host, *target,
+                                leafItem->token.c_str())) {
+                return false;
+            }
+            continue;
+        }
+
+        // Rule 2: match what the host draws NOW to this host's targets - by
+        // identity first, then the stragglers it carried, in order.
+        std::vector<FrameworkElement> icons;
+        CollectVisibleIconViews(host, icons);
+        std::vector<bool> used(targets.size(), false);
+        int placed = 0;
+        int expected = 0;
+        for (auto const& target : targets) {
+            if (target.host == host) {
+                ++expected;
+            }
+        }
+        for (auto const& icon : icons) {
+            size_t match = targets.size();
+            for (size_t i = 0; i < targets.size() && match == targets.size();
+                 ++i) {
+                if (!used[i] && targets[i].host == host &&
+                    !targets[i].token.empty() &&
+                    IconViewMatchesToken(icon, targets[i].token)) {
+                    match = i;
+                }
+            }
+            for (size_t i = 0; i < targets.size() && match == targets.size();
+                 ++i) {
+                if (!used[i] && targets[i].host == host &&
+                    targets[i].token.empty()) {
+                    match = i;
+                }
+            }
+            if (match == targets.size()) {
+                Wh_Log(L"[Layout] Side host %s draws an icon (glyph %s) "
+                       L"with no cell; left native",
+                       host.Name().c_str(),
+                       DescribeElementGlyphs(icon).c_str());
+                continue;
+            }
+            used[match] = true;
+            auto const& target = targets[match];
+            if (icon != target.element) {
+                Wh_Log(L"[Layout] Side host %s realized %s again after the "
+                       L"move; placing the live control",
+                       host.Name().c_str(),
+                       target.token.empty() ? L"a carried icon"
+                                            : target.token.c_str());
+            }
+            if (!CenterSideItem(icon, DrawnPart(icon), host, target,
+                                target.token.empty()
+                                    ? L"(carried)"
+                                    : target.token.c_str())) {
+                return false;
+            }
+            ++placed;
+        }
+        if (placed != expected) {
+            // An arranged item the host no longer draws: its cell would sit
+            // empty. Not settled - let the retry resolve the new set.
+            Wh_Log(L"[Layout] Side host %s placed %d of %d items",
+                   host.Name().c_str(), placed, expected);
+            return false;
+        }
+    }
+    return true;
+}
+
+static NativeIconFlow FindNativeIconFlow(FrameworkElement const& icon,
+                                         FrameworkElement const& host) {
+    auto parent = VisualTreeHelper::GetParent(icon);
+    for (int depth = 0; parent && depth < 20; ++depth) {
+        if (auto panel = parent.try_as<StackPanel>())
+            return {parent, panel.Orientation() == Orientation::Vertical};
+        if (auto panel = parent.try_as<ItemsStackPanel>())
+            return {parent, panel.Orientation() == Orientation::Vertical};
+        if (parent == host) break;
+        parent = VisualTreeHelper::GetParent(parent);
+    }
+    return {host, false};
+}
+
+static Thickness CompensatedIconMargin(IconTarget const& target,
+                                       bool vertical, double& flow) {
+    double left = target.x - (vertical ? 0.0 : flow);
+    double top = target.y - (vertical ? flow : 0.0);
+    flow += std::max(0.0, vertical ? top + target.height
+                                  : left + target.width);
+    return {left, top, 0.0, 0.0};
+}
+
+// Remember every unmanaged candidate host's icon count (see g_candidateCounts),
+// and how many candidate hosts there are, so a utility that appears later -
+// inside an existing host or as a new one - is noticed.
+static void RecordCandidateCounts(
+    Panel const& trayGrid, std::vector<FrameworkElement> const& managedHosts) {
+    g_candidateHostCount = 0;
+    for (auto const& child : trayGrid.Children()) {
+        auto element = child.try_as<FrameworkElement>();
+        if (!element || !IsUtilityCandidateHost(element)) {
+            continue;
+        }
+        ++g_candidateHostCount;
+        bool managed = false;
+        for (auto const& host : managedHosts) {
+            if (host == element) {
+                managed = true;
+                break;
+            }
+        }
+        if (!managed) {
+            g_candidateCounts.push_back(
+                {winrt::make_weak(element), CountCandidateIconViews(element)});
+        }
+    }
+}
+
+// Visibility watchers miss icons appearing or vanishing inside a host, so on
+// tray layout passes verify that every managed host is intact with an
+// unchanged visible icon count, and that no unmanaged candidate has gained or
+// lost icons; any drift re-runs layout. It also runs WATCH-ONLY, when the last
+// apply settled with nothing to place, so the utility that apply was waiting
+// for is picked up when Windows shows it.
+static void RegisterTrayDriftCheck(Panel const& trayGrid) {
+    g_trayLayoutToken = trayGrid.LayoutUpdated([](auto const&, auto const&) {
+        if (g_unloading || (!g_layoutApplied && !g_watchingOnly)) {
+            return;
+        }
+        // Throttle: layout passes come in bursts (animations, clock ticks),
+        // and each check walks every candidate host's subtree. Utility icons
+        // change on a human timescale, so twice a second keeps this off the
+        // hot path without making a change feel late.
+        static ULONGLONG lastCheckTick = 0;
+        ULONGLONG nowTick = GetTickCount64();
+        if (nowTick - lastCheckTick < 500) {
+            return;
+        }
+        lastCheckTick = nowTick;
+        for (auto const& record : *g_hostRecords) {
+            if (!record.element) {
+                continue;
+            }
+            bool changed = false;
+            try {
+                changed = !VisualTreeHelper::GetParent(record.element) ||
+                          record.element.Visibility() != Visibility::Visible;
+                if (!changed) {
+                    changed = CountVisibleIconViews(record.element) !=
+                              record.visibleIconViews;
+                }
+            } catch (...) {
+                changed = true;
+            }
+            if (changed) {
+                Wh_Log(L"[Apply] Managed host changed; reapplying");
+                ScheduleReapply();
+                return;
+            }
+        }
+        for (auto const& candidate : g_candidateCounts) {
+            try {
+                auto host = candidate.host.get();
+                if (host && CountCandidateIconViews(host) !=
+                                candidate.visibleIconViews) {
+                    Wh_Log(L"[Apply] %s changed its icons; reapplying",
+                           host.Name().c_str());
+                    ScheduleReapply();
+                    return;
+                }
+            } catch (...) {
+            }
+        }
+        // Watching only: a utility may also arrive as a host of its own.
+        if (g_watchingOnly && g_layoutGrid) {
+            try {
+                int hosts = 0;
+                for (auto const& child : g_layoutGrid.Children()) {
+                    auto element = child.try_as<FrameworkElement>();
+                    if (element && IsUtilityCandidateHost(element)) ++hosts;
+                }
+                if (hosts != g_candidateHostCount) {
+                    ScheduleReapply();
+                }
+            } catch (...) {
+            }
+        }
+    });
+}
 
 static bool ApplyLayout() {
     ClearHostWatchers();
@@ -3358,7 +4049,7 @@ static bool ApplyLayout() {
     // After an in-place taskbar rebuild (TrayUI::StartTaskbar) the old XAML
     // tree is gone; drop stale references instead of restoring into it.
     if (g_treeStale.exchange(false) &&
-        (!g_hostRecords->empty() || !g_lease->Empty())) {
+        (!g_hostRecords->empty() || g_lease->HasSnapshots())) {
         // We still own strong references to the old tree here, so revoke its
         // callbacks before releasing those references. Don't attempt full
         // placement restoration into a detached taskbar tree.
@@ -3381,24 +4072,6 @@ static bool ApplyLayout() {
     }
     g_taskbarWnd.store(hWnd);
 
-    // Stand down completely on a taskbar this mod's layout model does not
-    // describe, BEFORE touching anything. A vertical taskbar is rotated by
-    // whichever mod moved it, and arranging into a coordinate space someone
-    // else is rotating produces garbage the user cannot diagnose.
-    auto metrics = taskbar_metrics::GetMetrics(hWnd);
-    if (!taskbar_metrics::LayoutModelApplies(metrics)) {
-        Wh_Log(
-            L"[Apply] Taskbar is %s (%.0fx%.0f DIP); leaving the native "
-            L"layout untouched",
-            taskbar_metrics::OrientationName(metrics.orientation),
-            metrics.alongDip,
-            metrics.constrainedDip);
-        // Nothing left to wait for, so the retry loop retires. An Explorer
-        // rebuild re-evaluates if the user disables the vertical mod.
-        g_stoodDown = true;
-        return true;
-    }
-
     auto xamlRoot = GetTaskbarXamlRoot(hWnd);
     if (!xamlRoot) {
         Wh_Log(L"[Apply] Taskbar XAML root unavailable");
@@ -3409,6 +4082,33 @@ static bool ApplyLayout() {
     if (!root) {
         return false;
     }
+
+    // Moving the taskbar re-lays out this same tree; watch for it from the
+    // first apply on. Idempotent.
+    taskbar_metrics::StartEdgeWatch(g_edgeWatch, root, OnTaskbarEdgeChanged);
+
+    // Windows' native left/right taskbar is supported: the arrangement turns
+    // with it. A taskbar another mod ROTATES is not - arranging into a
+    // coordinate space someone else is rotating produces garbage the user
+    // cannot diagnose - so stand down completely, BEFORE touching anything.
+    auto metrics = taskbar_metrics::GetMetrics(
+        hWnd, taskbar_metrics::ReadDockedEdge(root));
+    if (!taskbar_metrics::CanArrange(metrics)) {
+        Wh_Log(
+            L"[Apply] Taskbar runs down the side but Windows reports a %s "
+            L"edge - another mod is rotating it; leaving the native layout "
+            L"untouched",
+            taskbar_metrics::EdgeName(metrics.edge));
+        // Nothing left to wait for, so the retry loop retires. A move or an
+        // Explorer rebuild re-evaluates.
+        g_stoodDown = true;
+        return true;
+    }
+    bool side = taskbar_metrics::RunsDownSide(metrics);
+
+    // RestoreLayout reinserted native hosts and invalidated their measure.
+    // Complete that pass before taking native sizes or walking item containers.
+    root.UpdateLayout();
 
     auto trayGridElement = tree_walk::FindDescendant(
         root, 20,
@@ -3449,7 +4149,10 @@ static bool ApplyLayout() {
     // only for decisions another attempt cannot change. The tray frame is in
     // the tree before its first arrange pass, so a zero height is "not laid
     // out yet", never "too short" — returning false keeps the retry alive.
-    double trayHeight = trayGrid.ActualHeight();
+    // The tray's THICKNESS: its height across a bottom or top taskbar, its
+    // width down a side one.
+    double trayHeight =
+        side ? trayGrid.ActualWidth() : trayGrid.ActualHeight();
     if (trayHeight <= 0.0) {
         Wh_Log(L"[Apply] Tray not laid out yet");
         return false;
@@ -3457,7 +4160,7 @@ static bool ApplyLayout() {
     if (g_settings.minimumTrayHeight > 0 &&
         trayHeight < static_cast<double>(g_settings.minimumTrayHeight)) {
         Wh_Log(
-            L"[Apply] Tray height %.1f is below minimum %d",
+            L"[Apply] Tray thickness %.1f is below minimum %d",
             trayHeight,
             g_settings.minimumTrayHeight);
         g_stoodDown = true;  // settled: a measured tray that is too short
@@ -3482,7 +4185,7 @@ static bool ApplyLayout() {
     // actually exists, and a written arrangement needs the same list to tell
     // which items it forgot to name.
     auto items = ResolveLayoutItems(trayGrid, overflowHost, mainStack,
-                                    enabledTokens);
+                                   enabledTokens, side);
     if (items.empty()) {
         // MainStack fills in from the tray view model after the frame exists,
         // and with no hidden icons the chevron is collapsed too. Not settled.
@@ -3527,17 +4230,25 @@ static bool ApplyLayout() {
     // vertical padding is spoken for on both sides before the height is
     // divided, or the assembled group overflows the taskbar. The height is in
     // DIPs (taskbar_host::GetMetrics), never raw GetWindowRect pixels.
-    double rowHeight = static_cast<double>(g_settings.itemHeight);
+    // On a side taskbar the lines run ACROSS its width, so an item's extent
+    // across is its width. Padding is screen padding, so across a side
+    // taskbar it is the horizontal padding that is reserved.
+    double rowHeight = static_cast<double>(
+        side ? g_settings.itemWidth : g_settings.itemHeight);
     if (rowHeight <= 0.0) {
         for (auto const& item : items) {
-            rowHeight = std::max(rowHeight, item.naturalH);
+            rowHeight =
+                std::max(rowHeight, side ? item.naturalW : item.naturalH);
         }
     }
     // The group lives in SystemTrayFrameGrid, not in the whole taskbar. Its
-    // live XAML height is already DIPs and remains correct when the tray does
-    // not span the taskbar's full height.
-    double gridHeightDip =
-        std::max(0.0, trayGrid.ActualHeight() - config.padY * 2.0);
+    // live XAML size is already DIPs and remains correct when the tray does
+    // not span the taskbar's full thickness.
+    double gridHeightDip = std::max(
+        0.0, trayHeight - (side ? config.padX : config.padY) * 2.0);
+    // A written arrangement is laid out exactly as written on every edge;
+    // "auto" fills across a side taskbar's width (`side`).
+    auto fill = g_settings.fillOrder;
     int maxRows = ngl::RowsInHeight(gridHeightDip, rowHeight, config.spacing);
 
     auto namer = [&presentTokens](int index) {
@@ -3545,7 +4256,7 @@ static bool ApplyLayout() {
     };
     auto arrangement = ngl::ResolveArrangement(
         g_settings.arrangement, static_cast<int>(presentTokens.size()),
-        maxRows, g_settings.fillOrder, namer);
+        maxRows, fill, namer, side);
     std::wstring expression = arrangement.expression;
     if (!arrangement.wasAuto) {
         WarnUnknownTokens(expression);
@@ -3563,8 +4274,8 @@ static bool ApplyLayout() {
             parseError.expected.c_str(),
             expression.c_str());
         expression = ngl::BuildAutoExpression(
-            static_cast<int>(presentTokens.size()), maxRows,
-            g_settings.fillOrder, namer);
+            static_cast<int>(presentTokens.size()), maxRows, fill, namer,
+            side);
         arrangement.wasAuto = true;
         if (!ngl::Compute(expression, config, resolve, placements, total)) {
             Wh_Log(L"[Apply] Automatic arrangement failed to build");
@@ -3588,7 +4299,7 @@ static bool ApplyLayout() {
                 appended += token;
             }
             expression = ngl::AppendMissing(expression, missing, maxRows,
-                                            g_settings.fillOrder);
+                                            fill, side);
             Wh_Log(
                 L"[Layout] Your arrangement does not name %s; appended after "
                 L"it. Fold it in when you next edit the arrangement, or set "
@@ -3606,9 +4317,19 @@ static bool ApplyLayout() {
     }
 
     if (placements.empty() || total.Empty()) {
-        // Every present item resolved to an empty size — still measuring.
-        Wh_Log(L"[Apply] Layout produced no placements yet");
-        return false;
+        // SETTLED, not measuring: NaturalWidth floors every present item at
+        // 24 px, so this is only reached when a written arrangement (with
+        // Layout.NewItems = ignore) names none of the utilities Windows is
+        // showing. Retrying would only log this for the whole budget. Watch
+        // the tray instead, so the named utility is placed when it appears.
+        Wh_Log(L"[Apply] The arrangement names no utility Windows is showing; "
+               L"watching for one to appear");
+        g_layoutGrid = trayGrid;
+        g_watchingOnly = true;
+        RecordCandidateCounts(trayGrid, {});
+        RegisterTrayDriftCheck(trayGrid);
+        g_stoodDown = true;
+        return true;
     }
 
     if (arrangement.wasAuto) {
@@ -3632,7 +4353,8 @@ static bool ApplyLayout() {
                 continue;
             }
             targets.push_back({item.element, placement.x, placement.y,
-                               placement.size.width, placement.size.height});
+                               placement.size.width, placement.size.height,
+                               item.host, placementToken});
             bool known = false;
             for (auto const& host : managedHosts) {
                 if (host == item.host) {
@@ -3661,7 +4383,9 @@ static bool ApplyLayout() {
     // group's origin underneath another one. This is a physical consequence
     // of reparenting, not the Layout.NewItems policy: these are icons with no
     // token at all, so no arrangement could have named them.
-    double extraCursor = total.width;
+    // Stragglers continue ALONG the taskbar: to the right of the group on a
+    // bottom or top taskbar, below it on a side one.
+    double extraCursor = side ? total.height : total.width;
     for (auto const& host : managedHosts) {
         bool leafHost = false;
         for (auto const& item : items) {
@@ -3691,15 +4415,22 @@ static bool ApplyLayout() {
                 carried += L", ";
             }
             carried += name;
-            double width = NaturalWidth(icon);
-            double height = NaturalHeight(icon);
+            double width = NaturalWidth(icon, side);
+            double height = NaturalHeight(icon, side);
             IconTarget straggler;
             straggler.element = icon;
+            straggler.host = host;
             straggler.width = width;
             straggler.height = height;
-            straggler.x = extraCursor + config.spacing;
-            straggler.y = std::max(0.0, (total.height - height) / 2.0);
-            extraCursor = straggler.x + width;
+            if (side) {
+                straggler.y = extraCursor + config.spacing;
+                straggler.x = std::max(0.0, (total.width - width) / 2.0);
+                extraCursor = straggler.y + height;
+            } else {
+                straggler.x = extraCursor + config.spacing;
+                straggler.y = std::max(0.0, (total.height - height) / 2.0);
+                extraCursor = straggler.x + width;
+            }
             targets.push_back(straggler);
         }
         if (!carried.empty()) {
@@ -3707,7 +4438,10 @@ static bool ApplyLayout() {
                    carried.c_str());
         }
     }
-    total.width = std::max(total.width, extraCursor);
+    if (side)
+        total.height = std::max(total.height, extraCursor);
+    else
+        total.width = std::max(total.width, extraCursor);
 
     // From here on we mutate the tree: snapshot everything first.
     g_layoutGrid = trayGrid;
@@ -3729,12 +4463,12 @@ static bool ApplyLayout() {
     int sharedColumn = -1;
 
     if (startPosition) {
-        auto side = g_settings.position == Position::LeftOfStart
-                        ? start_placement::Side::Left
-                        : start_placement::Side::Right;
+        auto startSide = g_settings.position == Position::LeftOfStart
+                             ? start_placement::Side::Left
+                             : start_placement::Side::Right;
         if (!start_placement::Acquire(
-                root, group, side,
-                std::max(0, g_settings.itemSpacing), g_startLease)) {
+                root, group, startSide,
+                std::max(0, g_settings.itemSpacing), g_startLease, side)) {
             Wh_Log(
                 L"[Apply] Start anchor unavailable; "
                 L"leaving the native layout unchanged");
@@ -3751,7 +4485,8 @@ static bool ApplyLayout() {
             Wh_Log(
                 L"[Start] side=%s inRepeater=%d start=(%.1f,%.1f "
                 L"%.1fx%.1f) groupMargin=(%.1f,%.1f) root=%.1fx%.1f",
-                side == start_placement::Side::Left ? L"left" : L"right",
+                startSide == start_placement::Side::Left ? L"before"
+                                                         : L"after",
                 g_startLease.startInTaskItemsPanel,
                 point.X,
                 point.Y,
@@ -3822,7 +4557,7 @@ static bool ApplyLayout() {
                 default:
                     break;
             }
-            if (!lease_column::Acquire(trayGrid, anchor,
+            if (!lease_column::AcquireAtAnchor(trayGrid, anchor,
                                        kLayoutColumnMarkerName,
                                        g_columnLease)) {
                 Wh_Log(
@@ -3861,6 +4596,14 @@ static bool ApplyLayout() {
     }
     g_group = group;
 
+    // Native host sizes, read while the hosts are still where Windows laid
+    // them out. Once moved into the group they report nothing usable until a
+    // layout pass has run (PlaceSideItems, rule 1).
+    std::vector<ngl::Size> nativeHostSizes;
+    for (auto const& host : managedHosts) {
+        nativeHostSizes.push_back({host.ActualWidth(), host.ActualHeight()});
+    }
+
     // Reparent the involved hosts into the group. The group is a plain
     // Grid, so the hosts overlap; blank host regions have no background
     // and stay hit-test transparent, so icons of one host remain clickable
@@ -3876,11 +4619,26 @@ static bool ApplyLayout() {
     // Adjust.OffsetX/Y move the group VISUALLY and reserve nothing, so they
     // ride on the hosts rather than on the group itself — the group's own
     // margin belongs to the Start lease, which repositions it every layout
-    // pass.
+    // pass. Screen pixels on every edge, like every [dx,dy] nudge.
     double groupOffsetX = static_cast<double>(g_settings.offsetX);
     double groupOffsetY = static_cast<double>(g_settings.offsetY);
 
+    // A failure past this point must ROLL BACK, not just return false:
+    // g_layoutApplied is already true, and LayoutIsApplied reads it as done,
+    // so a bare return retires the retry over a half-placed layout - hosts in
+    // the group, unsized and unplaced. RestoreLayout clears it again.
+    if (side && !PlaceSideItems(managedHosts, nativeHostSizes, targets, items,
+                                total, groupOffsetX, groupOffsetY)) {
+        Wh_Log(L"[Apply] Side placement incomplete; restoring native layout "
+               L"and retrying");
+        RestoreLayout();
+        return false;
+    }
+
     for (auto const& host : managedHosts) {
+        if (side) {
+            break;  // placed above
+        }
         // Host-leaf items (the chevron, MainStack fallback) are placed as
         // a whole; icon hosts span the group and their icons are placed
         // individually with flow-compensating margins.
@@ -3908,13 +4666,12 @@ static bool ApplyLayout() {
         ApplyLeafPlacement(host, 0.0, 0.0, total.width, total.height);
         host.Margin(Thickness{groupOffsetX, groupOffsetY, 0.0, 0.0});
 
-        // Windows lays the host's icons out in one horizontal flow. Each
-        // icon's Left margin steers it from where the flow would put it to
-        // its target, and the flow position advances by the arranged
-        // extent (never negative — XAML floors desired size at zero).
+        // Compensate the actual native stacking axis, with a separate cursor
+        // for each panel. Manual expressions remain literal on every edge.
         std::vector<FrameworkElement> icons;
         CollectVisibleIconViews(host, icons);
-        double flow = 0.0;
+        struct FlowCursor { DependencyObject lane; double position = 0.0; };
+        std::vector<FlowCursor> flows;
         for (auto const& icon : icons) {
             IconTarget const* target = nullptr;
             for (auto const& candidate : targets) {
@@ -3933,87 +4690,24 @@ static bool ApplyLayout() {
             icon.MinHeight(0);
             icon.MaxWidth(target->width);
             icon.MaxHeight(target->height);
+            icon.HorizontalAlignment(HorizontalAlignment::Left);
             icon.VerticalAlignment(VerticalAlignment::Top);
-            double marginLeft = target->x - flow;
-            icon.Margin(Thickness{marginLeft, target->y, 0.0, 0.0});
+            auto nativeFlow = FindNativeIconFlow(icon, host);
+            auto cursor = std::find_if(flows.begin(), flows.end(), [&](auto const& value) {
+                return value.lane == nativeFlow.lane;
+            });
+            if (cursor == flows.end()) {
+                flows.push_back({nativeFlow.lane});
+                cursor = std::prev(flows.end());
+            }
+            icon.Margin(CompensatedIconMargin(*target, nativeFlow.vertical,
+                                              cursor->position));
             icon.RenderTransform(nullptr);
-            flow += std::max(0.0, marginLeft + target->width);
         }
     }
 
-    // Remember the unmanaged candidates too (see g_candidateCounts).
-    for (auto const& child : trayGrid.Children()) {
-        auto element = child.try_as<FrameworkElement>();
-        if (!element || !IsUtilityCandidateHost(element)) {
-            continue;
-        }
-        bool managed = false;
-        for (auto const& host : managedHosts) {
-            if (host == element) {
-                managed = true;
-                break;
-            }
-        }
-        if (!managed) {
-            g_candidateCounts.push_back(
-                {winrt::make_weak(element), CountVisibleIconViews(element)});
-        }
-    }
-
-    // Visibility watchers miss icons appearing or vanishing inside a host,
-    // so verify on tray layout passes that every managed host is intact
-    // and its visible icon count is unchanged, and that no unmanaged
-    // candidate has gained or lost icons; any drift re-runs layout.
-    g_trayLayoutToken = trayGrid.LayoutUpdated(
-        [](auto const&, auto const&) {
-            if (g_unloading || !g_layoutApplied) {
-                return;
-            }
-            // Throttle: layout passes come in bursts (animations, clock
-            // ticks), and each check walks every candidate host's subtree.
-            // Utility icons change on a human timescale, so twice a second
-            // keeps this off the hot path without making a change feel late.
-            static ULONGLONG lastCheckTick = 0;
-            ULONGLONG nowTick = GetTickCount64();
-            if (nowTick - lastCheckTick < 500) {
-                return;
-            }
-            lastCheckTick = nowTick;
-            for (auto const& record : *g_hostRecords) {
-                if (!record.element) {
-                    continue;
-                }
-                bool changed = false;
-                try {
-                    changed =
-                        !VisualTreeHelper::GetParent(record.element) ||
-                        record.element.Visibility() !=
-                            Visibility::Visible;
-                    if (!changed) {
-                        changed =
-                            CountVisibleIconViews(record.element) !=
-                            record.visibleIconViews;
-                    }
-                } catch (...) {
-                    changed = true;
-                }
-                if (changed) {
-                    ScheduleReapply();
-                    return;
-                }
-            }
-            for (auto const& candidate : g_candidateCounts) {
-                try {
-                    auto host = candidate.host.get();
-                    if (host && CountVisibleIconViews(host) !=
-                                    candidate.visibleIconViews) {
-                        ScheduleReapply();
-                        return;
-                    }
-                } catch (...) {
-                }
-            }
-        });
+    RecordCandidateCounts(trayGrid, managedHosts);
+    RegisterTrayDriftCheck(trayGrid);
 
     if (startPosition && g_startLease.group) {
         // Removing the hosts shrinks the tray and the centered taskbar
@@ -4059,7 +4753,7 @@ static bool ApplyLayout() {
         total.width,
         total.height,
         trayGrid.ActualHeight(),
-        static_cast<int>(g_lease->Count()),
+        static_cast<int>(g_lease->SnapshotCount()),
         expression.c_str());
     return true;
 }
@@ -4092,12 +4786,10 @@ static void ApplyLayoutOnWindowThread() {
 // rebuild trigger all live in tray_utility_taskbar. Three things kick an apply —
 // this retry, an Explorer taskbar rebuild, and the visibility watchers — and
 // all three converge on the one idempotent ApplyLayout.
-// no_destroy is not about waiting — RetryLoop's destructor waits for nothing;
-// it would only release the last Run and close two handles. It is kept so the
-// lab's exit-time-destructor audit stays exact (every namespace-scope object
-// with a non-trivial destructor is either marked or proven heap-only), and
-// Wh_ModUninit stops the loop explicitly.
-[[clang::no_destroy]] static retry_loop::RetryLoop g_retry;
+// Wh_ModUninit stops the loop explicitly. After that it holds nothing, and even
+// at process exit its implicit destructor only closes handles and frees memory,
+// so it needs no no_destroy.
+static retry_loop::RetryLoop g_retry;  // exit-time-safe: heap-only
 
 // Attempts x 1.5 s. Transient "not ready yet" states return false and keep
 // the loop alive, so the budget has to cover a tray that populates slowly at
@@ -4126,12 +4818,15 @@ static void OnTaskbarRebuilt() {
     g_taskbarWnd.store(nullptr);
     g_treeStale = true;
     g_stoodDown = false;
-    g_retry.Start(RetryAttempt, LayoutIsApplied, g_unloading, kRetryAttempts,
-                  kRetryIntervalMs, true);
+    // On the taskbar's UI thread: wake a live retry rather than stopping and
+    // waiting for it. The woken attempt runs even though g_layoutApplied still
+    // truthfully reports the old tree, and restores it before re-applying.
+    g_retry.StartOrWake(RetryAttempt, LayoutIsApplied, g_unloading,
+                        kRetryAttempts, kRetryIntervalMs);
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"[Init] Tray Utility Customizer v2.0");
+    Wh_Log(L"[Init] Tray Utility Customizer v" WH_MOD_VERSION);
     LoadSettings();
     dispatch::SetExceptionLogger(LogUiCallbackFailure);
 
@@ -4148,7 +4843,7 @@ void Wh_ModAfterInit() {
     // attach to an Explorer whose taskbar window exists while its tray XAML
     // is still being built, and one failed attempt would never come back.
     g_retry.Start(RetryAttempt, LayoutIsApplied, g_unloading, kRetryAttempts,
-                  kRetryIntervalMs, false);
+                  kRetryIntervalMs);
 }
 
 void Wh_ModSettingsChanged() {
@@ -4170,11 +4865,12 @@ void Wh_ModSettingsChanged() {
                 LoadSettings();
                 Wh_Log(L"[Settings] Reapplying");
                 // Request a retry without lying about ownership of the live
-                // layout; the forced first pass restores it before applying
-                // the new settings.
+                // layout: StartOrWake's first attempt runs regardless, and
+                // restores the layout before applying the new settings. The
+                // loop was stopped above, so this starts a fresh run.
                 g_stoodDown = false;
-                g_retry.Start(RetryAttempt, LayoutIsApplied, g_unloading,
-                              kRetryAttempts, kRetryIntervalMs, true);
+                g_retry.StartOrWake(RetryAttempt, LayoutIsApplied, g_unloading,
+                                    kRetryAttempts, kRetryIntervalMs);
             },
             nullptr)) {
         Wh_Log(L"[Settings] Could not dispatch the reapply to the taskbar UI thread");
@@ -4186,6 +4882,10 @@ void Wh_ModSettingsChanged() {
 // RestoreLayout before its ownership check), and the borrowed properties.
 // Runs on the taskbar's UI thread, and is safe to run twice.
 static void TearDownOnWindowThread(void*) {
+    try {
+        taskbar_metrics::StopEdgeWatch(g_edgeWatch);
+    } catch (...) {
+    }
     ClearHostWatchers();
     if (g_reapplyTimer) {
         try {
