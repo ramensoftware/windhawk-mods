@@ -236,7 +236,7 @@ caching, a tray-edge limit, and shared layout, settings, surface and tray-column
 - Layout:
   - Arrangement: auto
     $name: Arrangement
-    $description: "auto fits the taskbar height. Use 1 | 2 for a row, 1, 2 for a column; parentheses nest groups. Numbers follow the Folders list."
+    $description: "auto fits the taskbar height, or width on a side taskbar. Use 1 | 2 for a row, 1, 2 for a column; parentheses nest groups. Numbers follow the Folders list."
   - FillOrder: rows
     $name: Fill order
     $options:
@@ -2292,7 +2292,7 @@ namespace bs = folder_menus_button_surface;
 namespace ngl = folder_menus_layout;
 namespace igc = folder_menus_slot_lease;
 namespace taskbar_window = folder_menus_taskbar_window;
-namespace ui_dispatch = folder_menus_dispatch;
+namespace dispatch = folder_menus_dispatch;
 namespace taskbar_xaml = folder_menus_taskbar_xaml;
 namespace taskbar_metrics = folder_menus_taskbar_metrics;
 namespace retry_loop = folder_menus_retry;
@@ -2413,7 +2413,7 @@ static std::wstring FileNameFromPath(std::wstring path) {
 template <typename... Args>
 static std::wstring GetStringSetting(PCWSTR name, Args... args) {
     auto value = WindhawkUtils::StringSetting::make(name, args...);
-    return value.get() ? std::wstring(value.get()) : std::wstring{};
+    return std::wstring(value.get());
 }
 
 static std::vector<FolderEntry> LoadFolders() {
@@ -2441,6 +2441,24 @@ static std::vector<FolderEntry> LoadFolders() {
 // setting, so any reader of the old flat keys would leave the settings page
 // showing one value while the mod used another; the README instead asks 0.7
 // users to re-apply their settings once.
+// THE ICON WORKER NEVER READS g_settings. LoadSettings runs on the taskbar
+// thread and reassigns g_settings.folders, and the worker cannot be relied on
+// to be stopped at that moment: a rebuild or an edge change can wake it just
+// as a settings save begins. So LoadSettings publishes what the worker needs
+// here, under g_folderIconsMutex, and the worker copies it out under the same
+// lock. The generation lets an extraction that started under the previous
+// settings drop its result instead of caching it.
+//
+// g_folderIconsMutex also guards the icon cache below. It is never held across
+// a Shell call, because the UI thread takes it to read an icon and must not
+// wait out an extraction. No no_destroy: std::mutex has a trivial destructor
+// here, so the attribute would suppress nothing.
+static std::mutex g_folderIconsMutex;  // exit-time-safe: heap-only
+static std::vector<FolderEntry> g_iconEntries;  // exit-time-safe: heap-only
+static int g_iconWidth = 22;
+static int g_iconHeight = 22;
+static unsigned long long g_iconGeneration = 0;
+
 static void LoadSettings() {
     static constexpr sio::Choice<Position> kPositions[] = {
         {L"beforeIcons", Position::BeforeIcons},
@@ -2503,6 +2521,11 @@ static void LoadSettings() {
     g_settings.cornerRadius = sio::LoadInt(L"Surface.CornerRadius", -1, 64);
     g_settings.opacityPct = sio::LoadInt(L"Surface.Opacity", 0, 100);
     g_settings.shineEffect = sio::LoadBool(L"Surface.ShineEffect");
+    std::lock_guard lock(g_folderIconsMutex);
+    g_iconEntries = g_settings.folders;
+    g_iconWidth = g_settings.buttonWidth;
+    g_iconHeight = g_settings.buttonHeight;
+    ++g_iconGeneration;
 }
 
 // ============================================================
@@ -2624,8 +2647,8 @@ static XamlRoot GetTaskbarXamlRoot(HWND window) {
     return taskbar_xaml::GetTaskbarXamlRoot(window);
 }
 
-static bool RunFromWindowThread(HWND window, ui_dispatch::ThreadProc callback, void* parameter) {
-    return ui_dispatch::RunFromWindowThread(window, callback, parameter,
+static bool RunFromWindowThread(HWND window, dispatch::ThreadProc callback, void* parameter) {
+    return dispatch::RunFromWindowThread(window, callback, parameter,
         L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 }
 
@@ -3490,17 +3513,12 @@ static std::vector<FolderIconPixels> g_folderIcons; // exit-time-safe: heap-only
 // Remember every failed target until settings reload, so retries and taskbar
 // rebuilds do not repeatedly probe unavailable Shell targets.
 static std::vector<std::wstring> g_failedIconTargets; // exit-time-safe: heap-only
-// Guards the two vectors above and NOTHING ELSE - never held across a Shell
-// call, because the UI thread takes it to read an icon and must not wait out
-// an extraction. No no_destroy: std::mutex has a trivial destructor here, so
-// the attribute would suppress nothing.
-static std::mutex g_folderIconsMutex;  // exit-time-safe: heap-only
-
-static int FolderIconSize() {
-    HWND taskbar = taskbar_window::ResolveTaskbarWnd(g_taskbarWnd);
+// The one icon-size rule, so the worker's cached size and the UI thread's
+// lookup cannot drift apart. Each caller passes its own copy of the inputs.
+static int FolderIconSize(HWND taskbar, int buttonWidth, int buttonHeight) {
     UINT dpi = taskbar ? GetDpiForWindow(taskbar) : 96;
-    return std::clamp(MulDiv(std::max(1, std::min(g_settings.buttonWidth,
-        g_settings.buttonHeight) - 4), dpi ? dpi : 96, 96), 8, 256);
+    return std::clamp(MulDiv(std::max(1, std::min(buttonWidth, buttonHeight) - 4),
+                             dpi ? dpi : 96, 96), 8, 256);
 }
 
 // Extract one target's icon pixels, with no lock held: this is the Shell
@@ -3540,9 +3558,11 @@ static bool ExtractFolderIcon(std::wstring const& target, int size,
     return rows == out.height;
 }
 
-static void CacheFolderIcon(std::wstring const& target, int size) {
+static void CacheFolderIcon(std::wstring const& target, int size,
+                            unsigned long long generation) {
     {
         std::lock_guard lock(g_folderIconsMutex);
+        if (generation != g_iconGeneration) return;
         for (auto const& cached : g_folderIcons)
             if (cached.target == target && cached.requested == size) return;
         for (auto const& failed : g_failedIconTargets)
@@ -3551,6 +3571,7 @@ static void CacheFolderIcon(std::wstring const& target, int size) {
     FolderIconPixels extracted;
     bool ok = ExtractFolderIcon(target, size, extracted);
     std::lock_guard lock(g_folderIconsMutex);
+    if (generation != g_iconGeneration) return;
     if (!ok) {
         Wh_Log(L"[Icons] Extraction failed; using the label until settings change");
         g_failedIconTargets.push_back(target);
@@ -3570,15 +3591,26 @@ static void ForgetFailedFolderIcons() {
 static void PrepareFolderIcons() {
     HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     try {
-        int size = FolderIconSize();
-        for (auto const& entry : g_settings.folders) {
+        std::vector<FolderEntry> entries;
+        int width, height;
+        unsigned long long generation;
+        {
+            std::lock_guard lock(g_folderIconsMutex);
+            entries = g_iconEntries;
+            width = g_iconWidth;
+            height = g_iconHeight;
+            generation = g_iconGeneration;
+        }
+        // Not g_taskbarWnd: the taskbar thread writes it.
+        int size = FolderIconSize(FindCurrentProcessTaskbarWnd(), width, height);
+        for (auto const& entry : entries) {
             // Each of these is a Shell round trip that can block for as long
             // as an unreachable network target takes. Unload and a settings
             // change both wait on this worker, so check between entries
             // instead of making them wait out the whole list.
             if (g_unloading || retry_loop::RetryLoop::StopRequested())
                 break;
-            if (entry.useDefaultIcon) CacheFolderIcon(entry.target, size);
+            if (entry.useDefaultIcon) CacheFolderIcon(entry.target, size, generation);
         }
     } catch (...) { Wh_Log(L"[Icons] Shell icon extraction failed; using labels"); }
     if (SUCCEEDED(hr)) CoUninitialize();
@@ -3587,7 +3619,8 @@ static void PrepareFolderIcons() {
 static Image NativeFolderIcon(FolderEntry const& entry) {
     std::lock_guard lock(g_folderIconsMutex);
     FolderIconPixels const* cached = nullptr;
-    int size = FolderIconSize();
+    int size = FolderIconSize(taskbar_window::ResolveTaskbarWnd(g_taskbarWnd),
+                              g_settings.buttonWidth, g_settings.buttonHeight);
     for (auto const& item : g_folderIcons) {
         if (item.target != entry.target) continue;
         if (!cached || abs(item.requested - size) < abs(cached->requested - size)) cached = &item;
@@ -3829,7 +3862,7 @@ static bool PositionAfterAppIcons() noexcept {
 // button with TransformToVisual. The placement depends only on how many app
 // buttons there are, how wide the row of them is, the frame's size, and the
 // tray's width (the tray is right-aligned, so its left edge moves with it).
-// Compare those five cheap reads and skip the walk when none moved.
+// Compare these cheap geometry/count reads and skip the walk when none moved.
 static bool AppIconLayoutChanged() noexcept {
     if (!g_appPlacement) return false;
     auto& p = *g_appPlacement;
@@ -4133,8 +4166,11 @@ static void ApplyAllSettings() {
             hWnd, taskbar_metrics::ReadDockedEdge(root));
         if (!taskbar_metrics::CanArrange(metrics)) {
             RemoveButtonGrid();
-            Wh_Log(L"[Apply] Taskbar runs down the side but Windows reports a "
-                   L"%s edge - another mod is rotating it; standing down",
+            Wh_Log(L"[Apply] Taskbar runs down the side (%s, %.0f DIP thick) "
+                   L"but Windows reports a %s edge - another mod is rotating "
+                   L"it; standing down",
+                   taskbar_metrics::OrientationName(metrics.orientation),
+                   metrics.constrainedDip,
                    taskbar_metrics::EdgeName(metrics.edge));
             // Settled, not failed: retrying cannot change it. A move, a
             // taskbar rebuild or a settings change re-evaluates.
@@ -4303,7 +4339,7 @@ static void LogUiCallbackFailure(PCWSTR context) {
 BOOL Wh_ModInit() {
     Wh_Log(L"[Init] Taskbar Folder Menus v%s", WH_MOD_VERSION);
     LoadSettings();
-    ui_dispatch::SetExceptionLogger(LogUiCallbackFailure);
+    dispatch::SetExceptionLogger(LogUiCallbackFailure);
     g_menuIdleEvent = CreateEventW(nullptr, TRUE, TRUE, nullptr);
     if (!g_menuIdleEvent) {
         Wh_Log(L"[Init] Failed to create menu-idle event");
