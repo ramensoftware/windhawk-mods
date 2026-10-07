@@ -40,7 +40,6 @@ If you also wish to hide application window preview thumbnails, use the [Disable
 ## Compatibility
 
 - Only Windows 11 is supported.
-- Supported Architectures: x86, x64, and ARM64.
 
 ## Support
 
@@ -105,28 +104,17 @@ static std::atomic<DWORD> g_taskbarThreadId{0};
 static thread_local int t_tooltipScopeDepth = 0;
 
 struct Settings {
-    bool hideTaskbarAppTooltips{true};
-    bool hideSystemTrayTooltips{true};
+    std::atomic<bool> hideTaskbarAppTooltips{true};
+    std::atomic<bool> hideSystemTrayTooltips{true};
 } g_settings;
 
 static void LoadSettings() {
-    PCWSTR sApp = Wh_GetStringSetting(L"hideTaskbarAppTooltips");
-    if (sApp) {
-        g_settings.hideTaskbarAppTooltips =
-            wcscmp(sApp, L"0") != 0 && _wcsicmp(sApp, L"false") != 0;
-        Wh_FreeStringSetting(sApp);
-    } else {
-        g_settings.hideTaskbarAppTooltips = true;
-    }
-
-    PCWSTR sTray = Wh_GetStringSetting(L"hideSystemTrayTooltips");
-    if (sTray) {
-        g_settings.hideSystemTrayTooltips =
-            wcscmp(sTray, L"0") != 0 && _wcsicmp(sTray, L"false") != 0;
-        Wh_FreeStringSetting(sTray);
-    } else {
-        g_settings.hideSystemTrayTooltips = true;
-    }
+    g_settings.hideTaskbarAppTooltips.store(
+        Wh_GetIntSetting(L"hideTaskbarAppTooltips") != 0,
+        std::memory_order_relaxed);
+    g_settings.hideSystemTrayTooltips.store(
+        Wh_GetIntSetting(L"hideSystemTrayTooltips") != 0,
+        std::memory_order_relaxed);
 }
 
 struct ToolTipScope {
@@ -368,14 +356,17 @@ static std::atomic<bool> g_putIsOpenHooked{false};
 static HRESULT __stdcall ToolTip_put_IsOpen_Hook(void* pThis, boolean value) {
     if (value) {
         // Fast paths based on settings
-        if (g_settings.hideTaskbarAppTooltips &&
-            g_settings.hideSystemTrayTooltips) {
-            // Both suppressed: identical to v1.0.9, suppress with zero overhead
+        bool hideApps =
+            g_settings.hideTaskbarAppTooltips.load(std::memory_order_relaxed);
+        bool hideTray =
+            g_settings.hideSystemTrayTooltips.load(std::memory_order_relaxed);
+
+        if (hideApps && hideTray) {
+            // Both suppressed: suppress with zero overhead
             return S_OK;
         }
 
-        if (!g_settings.hideTaskbarAppTooltips &&
-            !g_settings.hideSystemTrayTooltips) {
+        if (!hideApps && !hideTray) {
             // Both unsuppressed: allow opening
             if (g_toolTipPutIsOpenOriginal) {
                 return g_toolTipPutIsOpenOriginal(pThis, value);
@@ -386,12 +377,12 @@ static HRESULT __stdcall ToolTip_put_IsOpen_Hook(void* pThis, boolean value) {
         // Selective case: one enabled, one disabled
         ToolTipArea area = IdentifyToolTipArea(pThis);
         if (area == ToolTipArea::SystemTray) {
-            if (g_settings.hideSystemTrayTooltips) {
+            if (hideTray) {
                 return S_OK;
             }
         } else {
             // TaskbarApp and other shell taskbar UI elements
-            if (g_settings.hideTaskbarAppTooltips) {
+            if (hideApps) {
                 return S_OK;
             }
         }
@@ -519,10 +510,8 @@ static bool RunFromWindowThread(HWND hWnd,
     }
 
     RunFromWindowThreadParam param{proc, procParam};
-    DWORD_PTR dwResult = 0;
-    SendMessageTimeoutW(hWnd, GetRunFromWindowThreadMessage(), 0,
-                        reinterpret_cast<LPARAM>(&param),
-                        SMTO_ABORTIFHUNG | SMTO_NORMAL, 2000, &dwResult);
+    SendMessageW(hWnd, GetRunFromWindowThreadMessage(), 0,
+                 reinterpret_cast<LPARAM>(&param));
 
     UnhookWindowsHookEx(hook);
     return true;
@@ -587,7 +576,7 @@ static void __cdecl PositionTaskbarTooltip_Hook(void* pToolTip,
     if (pIToolTip) {
         RegisterToolTip(pIToolTip, ToolTipArea::SystemTray);
     }
-    if (!g_settings.hideSystemTrayTooltips) {
+    if (!g_settings.hideSystemTrayTooltips.load(std::memory_order_relaxed)) {
         if (PositionTaskbarTooltip_Original) {
             PositionTaskbarTooltip_Original(pToolTip, pTarget, location, b1,
                                             b2);
@@ -620,7 +609,7 @@ static void __cdecl ApplyTaskbarTooltipPlacement_Tray_Hook(
     if (pIToolTip) {
         RegisterToolTip(pIToolTip, ToolTipArea::SystemTray);
     }
-    if (!g_settings.hideSystemTrayTooltips) {
+    if (!g_settings.hideSystemTrayTooltips.load(std::memory_order_relaxed)) {
         if (ApplyTaskbarTooltipPlacement_Tray_Original) {
             ApplyTaskbarTooltipPlacement_Tray_Original(pToolTip, location,
                                                        size1, size2);
@@ -648,7 +637,7 @@ static void __cdecl ApplyTaskbarTooltipPlacement_View_Hook(
     if (pIToolTip) {
         RegisterToolTip(pIToolTip, ToolTipArea::TaskbarApp);
     }
-    if (!g_settings.hideTaskbarAppTooltips) {
+    if (!g_settings.hideTaskbarAppTooltips.load(std::memory_order_relaxed)) {
         if (ApplyTaskbarTooltipPlacement_View_Original) {
             ApplyTaskbarTooltipPlacement_View_Original(pToolTip, location,
                                                        size1, size2);
@@ -686,7 +675,7 @@ static void __cdecl ApplyTaskbarTooltipPlacement6_Hook(
     if (pIToolTip) {
         RegisterToolTip(pIToolTip, ToolTipArea::TaskbarApp);
     }
-    if (!g_settings.hideTaskbarAppTooltips) {
+    if (!g_settings.hideTaskbarAppTooltips.load(std::memory_order_relaxed)) {
         if (ApplyTaskbarTooltipPlacement6_Original) {
             ApplyTaskbarTooltipPlacement6_Original(pToolTip, location, size1,
                                                    size2, b1, b2);
@@ -708,7 +697,7 @@ static ExperienceToggleButton_UpdateHover_t
 
 static void __cdecl ExperienceToggleButton_UpdateHover_Hook(void* pThis,
                                                             bool isHover) {
-    if (!g_settings.hideTaskbarAppTooltips) {
+    if (!g_settings.hideTaskbarAppTooltips.load(std::memory_order_relaxed)) {
         if (ExperienceToggleButton_UpdateHover_Original) {
             ExperienceToggleButton_UpdateHover_Original(pThis, isHover);
         }
@@ -720,7 +709,7 @@ static TaskListButton_UpdateHover_t TaskListButton_UpdateHover_Original =
     nullptr;
 
 static void __cdecl TaskListButton_UpdateHover_Hook(void* pThis) {
-    if (!g_settings.hideTaskbarAppTooltips) {
+    if (!g_settings.hideTaskbarAppTooltips.load(std::memory_order_relaxed)) {
         if (TaskListButton_UpdateHover_Original) {
             TaskListButton_UpdateHover_Original(pThis);
         }
@@ -732,7 +721,7 @@ static OverflowToggleButton_UpdateHover_t
     OverflowToggleButton_UpdateHover_Original = nullptr;
 
 static void __cdecl OverflowToggleButton_UpdateHover_Hook(void* pThis) {
-    if (!g_settings.hideTaskbarAppTooltips) {
+    if (!g_settings.hideTaskbarAppTooltips.load(std::memory_order_relaxed)) {
         if (OverflowToggleButton_UpdateHover_Original) {
             OverflowToggleButton_UpdateHover_Original(pThis);
         }
@@ -747,7 +736,7 @@ static IconView_UpdateOuterToolTipPlacement_t
 
 static void __cdecl IconView_UpdateOuterToolTipPlacement_Hook(void* pThis,
                                                               bool isHover) {
-    if (!g_settings.hideSystemTrayTooltips) {
+    if (!g_settings.hideSystemTrayTooltips.load(std::memory_order_relaxed)) {
         if (IconView_UpdateOuterToolTipPlacement_Original) {
             IconView_UpdateOuterToolTipPlacement_Original(pThis, isHover);
         }
@@ -951,8 +940,10 @@ void Wh_ModSettingsChanged() {
     Wh_Log(L"> Settings changed");
     LoadSettings();
     Wh_Log(L"> Updated settings: hideTaskbarApp=%d, hideSystemTray=%d",
-           (int)g_settings.hideTaskbarAppTooltips,
-           (int)g_settings.hideSystemTrayTooltips);
+           g_settings.hideTaskbarAppTooltips.load(std::memory_order_relaxed) ? 1
+                                                                             : 0,
+           g_settings.hideSystemTrayTooltips.load(std::memory_order_relaxed) ? 1
+                                                                             : 0);
 }
 
 void Wh_ModUninit() {
