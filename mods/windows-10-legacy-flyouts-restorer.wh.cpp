@@ -2,9 +2,10 @@
 // @id              windows-10-legacy-flyouts-restorer
 // @name            Windows 10 legacy flyouts on Win11 24H2 restorer
 // @description     This mod restores the Windows 10 network icon and its flyout in the private Windows 10 shell, with the verified Windows 10 tray modules
-// @version         1.0.1
+// @version         1.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
+// @license         GPL-3.0
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lgdi32 -lshell32 -ladvapi32 -luser32 -lwintrust -lcrypt32 -lwininet -lbcrypt -lcomctl32 -lshlwapi -ldwmapi -luuid -lwlanapi -lruntimeobject
 // @include         explorer.exe
@@ -14,16 +15,28 @@
 /*
 # Windows 10 legacy flyouts on Win11 24H2 restorer
 
-Restores the genuine Windows 10 network, volume and battery flyouts on Windows 11 24H2 by
+This mod tries to restore the Windows 10 network, volume and battery flyouts on Windows 11 24H2 by
 running a private Windows 10 shell: the Windows 11 shell is never touched. The Windows 10 tray
 modules are downloaded from the Microsoft symbol server, verified by SHA-256 and signature, and
 loaded into that shell. The left click on the network and battery icons is consumed at the icon
 and turned into the authentic Windows 10 flyout request, while right click and every other
 message pass through unchanged. The flyout drawn by ShellExperienceHost.exe is corrected so the
-Windows 10 template set, button name and skin are used and the window stays open. The Action
-Center button and its animation are not part of this mod: manage them with a dedicated mod
-instead. All values are served in memory; only the verified binaries, the "Peek at desktop"
-toggle and the optional tray reset are written to disk or the registry.
+Windows 10 template set is used and the window stays open, instead of being torn down right
+after it is built. The three quick-action tiles (Wi-Fi, airplane mode, hotspot) in the network
+flyout keep the stock Windows 11 button template, styling and behavior for now: the Windows 10
+button-name redirect and resource-dictionary skin that used to restyle them were removed from
+this mod and are left for a separate, dedicated mod. The Action Center button and its animation
+are not part of this mod: manage them with a dedicated mod instead. All values are served in
+memory; only the verified binaries, the "Peek at desktop" toggle and the optional tray reset are
+written to disk or the registry.
+
+## Example Screenshot (Battery Flyout)
+
+![Battery flyout example](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/batteryflyoutexample.png)
+
+## Credits 
+
+- ExplorerPatcher (by valinet) - Research for the Windows 10 flyouts running on Windows 11
 */
 // ==/WindhawkModReadme==
 
@@ -336,6 +349,26 @@ static int ClampInt(int value, int low, int high) {
 //   fail-closed until a verified pnidui click callback can open the Win10 flyout.
 //   The name is resolved through the variant table and the probe logs the outcome.
 //
+// MODIFICHE AGGIUNTE (2026-10-07) - 1.0.0 (revisione pre-pubblicazione: via il ricambio del
+// pulsante e la pelle grafica delle azioni rapide; licenza):
+// - NetworkUxHostPatch e NetworkUxSkin (le voci 1.3.5 e 1.3.7 qui sotto: il ricambio del nome
+//   del pulsante di NetworkUX.dll e la pelle grafica del dizionario di risorse) sono stati
+//   tolti da questo mod. Le tre tessere delle azioni rapide (Wi-Fi, modalita' aereo, hotspot)
+//   restano quindi con il pulsante, la misura e lo stile di Windows 11; non rispondono ancora
+//   al clic. Il motivo: quella parte e' ancora in lavorazione (il dizionario di risorse della
+//   pagina non espone sempre le chiavi attese nello stesso momento) e il revisore della mod ha
+//   chiesto di non lasciare un modulo (NetworkUX.dll) fissato in memoria per una funzione non
+//   ancora conclusa. Una mod dedicata, separata da questa, riprendera' il lavoro sulle tessere.
+// - Il ricambio del set di template di Windows.UI.QuickActions.dll (FlyoutHostPatch,
+//   PatchQuickActionsTemplates, voce 1.3.4 qui sotto) RESTA: senza di lui il flyout di rete e
+//   quello della batteria non si costruiscono affatto su questi build (si disfano un istante
+//   dopo essere apparsi, e la pagina della batteria puo' far cadere il processo). Non e' la
+//   stessa cosa del ricambio del pulsante appena tolto, e non si tocca.
+// - @license portato a GPL-3.0 (prima assente): il file tiene ancora codice adattato da
+//   explorer-frame-classic di m417z (GPL-3.0, il blocco BlockXamlAdapter) e dalla correzione dei
+//   template di ExplorerPatcher (GPL-2.0, PatchQuickActionsTemplates qui sopra). GPL-3.0 e' la
+//   licenza che i due rispettano entrambi senza bisogno di sapere se ExplorerPatcher consente
+//   "o versioni successive".
 // MODIFICHE AGGIUNTE (2026-10-06) - 1.3.8 (il flyout costruito a meta' dopo un ricaricamento del
 // mod, e il modulo che non deve piu' sparire: contenuto invece di flag, e modulo fissato in
 // memoria):
@@ -3262,6 +3295,42 @@ static BOOL WINAPI ShellExecuteExW_TargetedHook(SHELLEXECUTEINFOW* info) {
 // Defined further down with the rest of the IAT helpers of the reference mod.
 static void** FindIatSlot(HMODULE module, const char* dllHint, const char* funcHint);
 
+// [diag-fix] Il tentativo di agganciare la IAT di pnidui per ShellExecuteExW avveniva una
+// sola volta, da Wh_ModInit: se pnidui.dll non era ancora caricato in quel momento (un vero
+// riavvio di explorer.exe puo' farlo caricare piu' tardi rispetto a un semplice ricarico del
+// mod in un processo gia' avviato da un po'), il tentativo falliva una volta per tutte e non
+// veniva mai ripetuto: il click sull'icona finiva allora nel comportamento nativo (apre le
+// Impostazioni) perche' il solo hook globale su ShellExecuteExW non basta (pnidui tiene una
+// copia dell'indirizzo). Richiamabile piu' volte in sicurezza: se pnidui.dll non c'e' ancora
+// non segna nulla come concluso, cosi' un richiamo successivo puo' ancora riuscire.
+static std::atomic<bool> g_pniduiShellExecuteExResolved{false};
+
+static void TryHookPniduiShellExecuteExIat(const wchar_t* reason) {
+    if (g_pniduiShellExecuteExResolved.load(std::memory_order_acquire)) return;
+    HMODULE pnidui = GetModuleHandleW(L"pnidui.dll");
+    if (!pnidui) return;
+    if (g_pniduiShellExecuteExResolved.exchange(true, std::memory_order_acq_rel)) return;
+
+    void** slot = FindIatSlot(pnidui, "SHELL32", "ShellExecuteExW");
+    if (slot && *slot) {
+        void* target = *slot;
+        if (target == (void*)ShellExecuteExW) {
+            Wh_Log(L"[network] ShellExecuteExW: pnidui calls the same address we hook "
+                   L"(0x%p, %s)", target, reason);
+        } else if (Wh_SetFunctionHook(target, (void*)ShellExecuteExW_TargetedHook,
+                                      (void**)&ShellExecuteExW_TargetedOriginal)) {
+            Wh_Log(L"[network] ShellExecuteExW: the address used by pnidui is hooked too "
+                   L"(0x%p, %s)", target, reason);
+        } else {
+            Wh_Log(L"[network] ShellExecuteExW: the address used by pnidui refuses to be "
+                   L"hooked (%s)", reason);
+        }
+    } else {
+        Wh_Log(L"[network] ShellExecuteExW: pnidui loaded but its ShellExecuteExW IAT slot "
+               L"was not found (%s)", reason);
+    }
+}
+
 // Installs the two entry points of the network click. The global hook covers every
 // caller; the slot pnidui calls through its import table is hooked as well, because a
 // module that keeps a copy of the address would otherwise slip past the global one.
@@ -3272,22 +3341,10 @@ static bool InstallShellExecuteExHooks() {
                            (void**)&ShellExecuteExW_Original))
         installed = true;
 
-    HMODULE pnidui = GetModuleHandleW(L"pnidui.dll");
-    void** slot = pnidui ? FindIatSlot(pnidui, "SHELL32", "ShellExecuteExW") : nullptr;
-    if (slot && *slot) {
-        void* target = *slot;
-        if (target == (void*)ShellExecuteExW) {
-            Wh_Log(L"[network] ShellExecuteExW: pnidui calls the same address we hook (0x%p)", target);
-        } else if (Wh_SetFunctionHook(target, (void*)ShellExecuteExW_TargetedHook,
-                                      (void**)&ShellExecuteExW_TargetedOriginal)) {
-            Wh_Log(L"[network] ShellExecuteExW: the address used by pnidui is hooked too (0x%p)", target);
-            installed = true;
-        } else {
-            Wh_Log(L"[network] ShellExecuteExW: the address used by pnidui refuses to be hooked");
-        }
-    } else {
-        Wh_Log(L"[network] ShellExecuteExW: pnidui not loaded, the global hook stays");
-    }
+    TryHookPniduiShellExecuteExIat(L"Wh_ModInit");
+    if (!GetModuleHandleW(L"pnidui.dll"))
+        Wh_Log(L"[network] ShellExecuteExW: pnidui not loaded yet, the global hook stays "
+               L"for now (retried as the process goes on)");
 
     return installed;
 }
@@ -7812,6 +7869,12 @@ static bool OpenNativeNetworkFlyout(HWND owner, PCWSTR how) noexcept {
 static LRESULT CALLBACK OwnerWindowProc(HWND hwnd, UINT message, WPARAM wParam,
                                         LPARAM lParam) noexcept {
     try {
+        // [diag-fix] Costo trascurabile dopo il primo successo (un solo atomic load): rete di
+        // sicurezza nel caso pnidui.dll si carichi dopo InstallNetworkClickHooks (vedi la nota
+        // li'), ad esempio dopo un riavvio vero di explorer.exe anziche' un semplice ricarico
+        // del mod. Questa funzione gira ad ogni messaggio, quindi il recupero avviene in pratica
+        // subito, ben prima che l'utente possa cliccare l'icona.
+        TryHookPniduiShellExecuteExIat(L"OwnerWindowProc");
         if (g_taskbarCreatedMessage && message == g_taskbarCreatedMessage) {
             // La barra e' stata ricreata: la registrazione forzata va rifatta.
             Wh_Log(L"[tray-force] the notification bar has been recreated: "
@@ -8837,9 +8900,9 @@ static HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd, DWORD attribute, LPC
 // 1.3.9: the cloak hook above never fired for the network flyout in the user's log (no
 // "square window corners" line), so the corner preference is also applied directly: every
 // top-level window of this process gets DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_DONOTROUND.
-// It is called when the flyout page is being built (CreateStringReferenceShim) and once at
-// start. The classes and titles of the windows found are logged, so the log says which window
-// the flyout really lives in and what DWM answered.
+// It is called once at start, in the ShellExperienceHost.exe branch of Wh_ModInit. The classes
+// and titles of the windows found are logged, so the log says which window the flyout really
+// lives in and what DWM answered.
 static BOOL CALLBACK SquareWindowProc(HWND hwnd, LPARAM lParam) {
     try {
         DWORD pid = 0;
@@ -9078,12 +9141,6 @@ static DWORD WINAPI FlyoutServicesThread(LPVOID) {
 // If the patterns are not found (a build this code does not know) nothing at all is written
 // and the log says so.
 // ===========================================================================
-// 1.3.5: il blocco del flyout di rete (definito dopo questo, prima di Wh_ModInit) vuole
-// sapere quando la shell carica NetworkUX.dll, la pagina di quel flyout; e il blocco dei
-// template, che sta qui sotto, la usa prima che quel namespace venga definito. La
-// dichiarazione e' quindi a livello di file, come quella del flyout della batteria.
-namespace NetworkUxHostPatch { void OnNetworkUxLoaded(void* module) noexcept; }
-
 // ===========================================================================
 // 1.3.5 - RAII: le risorse che questo mod prende in prestito e restituisce.
 //
@@ -9092,13 +9149,12 @@ namespace NetworkUxHostPatch { void OnNetworkUxLoaded(void* module) noexcept; }
 //
 //   * ScopedWriteProtect: rende scrivibile una pagina e la rimette com'era quando
 //     l'oggetto esce di scena - anche se in mezzo si esce con un return, o se il
-//     codice alza un'eccezione C++ (che il chiamante intercetta piu' in alto);
-//   * ScopedImportRedirect: manda una voce della tabella delle importazioni di un
-//     modulo a una funzione di questo mod, e la rimette com'era allo stesso modo.
+//     codice alza un'eccezione C++ (che il chiamante intercetta piu' in alto).
 //
-// Stanno davanti ai due blocchi che li prendono in prestito (il set di template
-// Windows 10 del processo dei flyout e il flyout di rete), perche' entrambi ne
-// hanno bisogno e nessuno dei due deve sapere come si sblocca una pagina.
+// Sta davanti al blocco che la prende in prestito (il set di template Windows 10 del
+// processo dei flyout), perche' quel blocco non deve sapere come si sblocca una pagina.
+// 1.0.0: ScopedImportRedirect (la stessa idea, per una voce della tabella delle
+// importazioni) e' stata tolta insieme a NetworkUxHostPatch, il suo unico utilizzo.
 // ===========================================================================
 class ScopedWriteProtect {
 public:
@@ -9125,59 +9181,6 @@ private:
     bool m_ok = false;
 };
 
-class ScopedImportRedirect {
-public:
-    ScopedImportRedirect() = default;
-    ~ScopedImportRedirect() { Restore(); }
-    ScopedImportRedirect(const ScopedImportRedirect&) = delete;
-    ScopedImportRedirect& operator=(const ScopedImportRedirect&) = delete;
-
-    // Una volta sola: se la voce e' gia' nostra, o se manca, non si tocca nulla.
-    bool Redirect(void** slot, void* replacement) noexcept {
-        if (m_redirected || !slot || !replacement) return false;
-        m_slot = slot;
-        m_previous = *slot;
-        ScopedWriteProtect writable(slot, sizeof(void*));
-        if (!writable) return false;
-        *slot = replacement;
-        m_redirected = true;
-        return true;
-    }
-
-    bool redirected() const noexcept { return m_redirected; }
-
-    // 1.3.8 (C): la voce che questo oggetto tiene e' ancora quella? Serve a chi deve decidere
-    // DAL CONTENUTO (la voce punta gia' alla funzione di questo mod?) e non da un flag.
-    bool owns(void** slot) const noexcept { return m_redirected && m_slot == slot; }
-
-    // 1.3.8: lascia andare la voce SENZA riscriverla. Si usa quando la voce presa in prestito
-    // stava in una copia del modulo che non c'e' piu' (la pagina era stata scaricata e
-    // ricaricata): riscriverla sarebbe un accesso a memoria liberata, quindi il mod non la tocca
-    // e prende in prestito la voce della copia nuova. Con il pin di questa revisione (A) il caso
-    // non dovrebbe presentarsi; se il pin non riesce, pero', l'oggetto non deve restare con un
-    // indirizzo che non gli appartiene.
-    void Abandon() noexcept {
-        m_slot = nullptr;
-        m_previous = nullptr;
-        m_redirected = false;
-    }
-
-    // La voce torna al valore che aveva: la chiamata e' nostra solo finche' il mod
-    // e' caricato, come per ogni altra cosa che questo mod prende in prestito.
-    void Restore() noexcept {
-        if (!m_redirected) return;
-        m_redirected = false;
-        if (!m_slot) return;
-        ScopedWriteProtect writable(m_slot, sizeof(void*));
-        if (!writable) return;
-        *m_slot = m_previous;
-    }
-
-private:
-    void** m_slot = nullptr;
-    void* m_previous = nullptr;
-    bool m_redirected = false;
-};
 namespace FlyoutHostPatch {
 
 static std::atomic<bool> g_patched{false};
@@ -9185,12 +9188,6 @@ static std::atomic<int> g_logs{0};
 // 1.3.8 (A): il modulo e' stato fissato in memoria (GetModuleHandleEx_W con
 // GET_MODULE_HANDLE_EX_FLAG_PIN). Una volta per processo: il pin non si rifa' e non si annulla.
 static std::atomic<bool> g_pinned{false};
-
-// 1.3.5: il processo ha davvero preso il set di template di Windows 10? Lo chiede il blocco
-// del flyout di rete (sotto, chunk-netux.inc): il nome del pulsante di Windows 10 ha senso
-// solo su quel set, altrimenti quei pulsanti non si costruiscono piu' (la nota di
-// ExplorerPatcher accanto alla stessa correzione).
-static bool TemplatesPatched() noexcept { return g_patched.load(std::memory_order_relaxed); }
 
 // ---- ricerca nei byte: 'x' = byte esatto, '?' = qualunque -------------------
 static bool MaskMatches(const unsigned char* at, const unsigned char* pattern,
@@ -9284,9 +9281,8 @@ static_assert(sizeof(kTargetMaskRelaxed) == sizeof(kTargetMask), "le due mascher
 // Una DLL COM puo' essere scaricata quando DllCanUnloadNow risponde S_OK (nessun oggetto e'
 // piu' in uso) e il ritardo di CoFreeUnusedLibrariesEx e' scaduto: dieci minuti per
 // impostazione predefinita, trattati come zero per i componenti apartment. Se
-// Windows.UI.QuickActions.dll (o NetworkUX.dll) venisse scaricata e ricaricata mentre il mod e'
-// caricato, la copia nuova - mappata di nuovo dal file su disco - non porterebbe ne' i byte
-// riscritti qui ne' la voce della tabella delle importazioni presa in prestito.
+// Windows.UI.QuickActions.dll venisse scaricata e ricaricata mentre il mod e' caricato, la copia
+// nuova - mappata di nuovo dal file su disco - non porterebbe i byte riscritti qui.
 //
 // La risposta documentata e' GetModuleHandleExW con GET_MODULE_HANDLE_EX_FLAG_PIN: "the module
 // stays loaded until the process terminates, regardless of the number of calls to FreeLibrary",
@@ -9296,12 +9292,13 @@ static_assert(sizeof(kTargetMaskRelaxed) == sizeof(kTargetMask), "le due mascher
 // indirizzo dentro il modulo lo e'.
 //
 // Il pin NON e' reversibile e vive solo nel processo in cui e' stato fatto, cioe'
-// ShellExperienceHost.exe (il processo che disegna i flyout): finche' quel processo vive i due
-// moduli restano caricati, e se il mod viene disattivato la voce della tabella delle
-// importazioni torna com'era (ScopedImportRedirect) ma i byte riscritti e il pin restano. Non
-// tocca altri processi e non scrive nulla su disco. Se la chiamata non riesce il mod lo scrive e
-// prosegue: la patch vale finche' il modulo resta caricato, e il riconoscimento dal contenuto
-// (B) copre il caso di una copia nuova.
+// ShellExperienceHost.exe (il processo che disegna i flyout): finche' quel processo vive il
+// modulo resta caricato, e se il mod viene disattivato i byte riscritti e il pin restano
+// comunque (1.0.0: non c'e' piu' nessuna voce della tabella delle importazioni da rimettere a
+// posto qui, perche' NetworkUxHostPatch e' stato tolto - vedi la nota di changelog in cima al
+// file). Non tocca altri processi e non scrive nulla su disco. Se la chiamata non riesce il mod
+// lo scrive e prosegue: la patch vale finche' il modulo resta caricato, e il riconoscimento dal
+// contenuto (B) copre il caso di una copia nuova.
 // ===========================================================================
 static void PinModuleOrLog(HMODULE module, const wchar_t* tag, const wchar_t* name,
                            std::atomic<bool>& alreadyPinned) noexcept {
@@ -9471,10 +9468,6 @@ static void OnModuleLoaded(HMODULE module, const wchar_t* text, size_t length) n
             PatchQuickActionsTemplates(module);
             return;
         }
-        // 1.3.5: nello stesso momento, la pagina del flyout di rete. Il modulo e' suo, e il
-        // blocco qui sotto non lo carica: prende solo la voce che gli serve, se c'e'.
-        if (NameIsModuleNamed(text, length, L"NetworkUX.dll"))
-            NetworkUxHostPatch::OnNetworkUxLoaded(reinterpret_cast<void*>(module));
     } catch (...) {
     }
 }
@@ -9515,414 +9508,12 @@ static void Install() noexcept {
 
 }  // namespace FlyoutHostPatch
 // ===========================================================================
-// 1.3.5 - IL FLYOUT DI RETE: i pulsanti tornano quelli di Windows 10.
-//
-// Il set di template di Windows 10 del blocco qui sopra (Windows.UI.QuickActions.dll)
-// non basta da solo nel processo che disegna il flyout. La pagina del flyout di rete
-// (NetworkUX.dll) chiede il pulsante delle azioni rapide con il nome del template di
-// Windows 11, e con quel nome il pulsante del set di Windows 10 non viene mai usato:
-// ExplorerPatcher lo scrive accanto alla stessa correzione - "If we're doing the quick
-// actions patch but not this, they will only appear as non-interactive text blocks".
-// Un flyout i cui pulsanti non rispondono e' un flyout che la shell richiude: da li'
-// viene "si apre una volta e poi piu'".
-//
-// ExplorerPatcher risolve nella sua HandleLoadedNetworkUX(), e questo blocco fa la
-// stessa cosa - la parte che si puo' fare senza toccare l'albero XAML:
-//
-//   * il nome "ToggleButtonWinuiFluentTemplate" che NetworkUX.dll passa a
-//     WindowsCreateStringReference diventa "QuickToggleWinuiFluentTemplate", il nome
-//     del pulsante di Windows 10. Si manda a una nostra funzione la voce della tabella
-//     delle importazioni di NetworkUX.dll (una sola, il resto del modulo non si tocca);
-//   * il nome si cambia SOLO se il set di template di Windows 10 e' stato applicato in
-//     questo processo (TemplatesPatched): senza quella patch il pulsante deve restare
-//     quello di questa build.
-//
-// La seconda meta' di quella correzione (il dizionario di risorse della pagina:
-// QuickActionPanelMargin e QuickActionControlStyle, la geometria dei pulsanti di
-// Windows 10) usa le API XAML e arriva con la prossima revisione: qui il nome e' la
-// parte che decide se il pulsante e' vivo o e' un blocco di testo.
-//
-// Il modulo non viene caricato da questo mod: si prende se e' gia' qui, o quando la
-// shell lo carica (lo stesso avviso del blocco dei template, OnModuleLoaded).
-//
-// 1.3.8 - due correzioni in questo blocco (A e C del giro): niente piu' fermo su g_redirected
-// (quel flag dice "l'ho presa io", non "la voce che c'e' adesso punta alla mia funzione": dopo
-// uno scarico e un ricarico del modulo sarebbe vero lo stesso e la voce della copia nuova
-// resterebbe quella di Windows) e, dopo la presa, il modulo fissato in memoria con
-// FlyoutHostPatch::PinModuleOrLog (una copia nuova non porterebbe la voce presa in prestito).
+// 1.0.0: NetworkUxHostPatch (il ricambio del nome del pulsante di NetworkUX.dll, ex 1.3.5)
+// e NetworkUxSkin (la pelle grafica del dizionario di risorse, ex 1.3.7) sono stati tolti:
+// vedi la nota di changelog in cima al file (1.0.0). Il ricambio del set di template di
+// Windows.UI.QuickActions.dll qui sopra (FlyoutHostPatch) resta, perche' senza quello il
+// flyout non si costruisce affatto su queste build.
 // ===========================================================================
-namespace NetworkUxSkin { void TryApply() noexcept; }  // 1.3.7: la pelle grafica (chunk-skin.inc)
-
-namespace NetworkUxHostPatch {
-
-static std::atomic<bool> g_redirected{false};
-static std::atomic<int> g_logs{0};
-// 1.3.8 (A): NetworkUX.dll e' stata fissata in memoria (una volta per processo).
-static std::atomic<bool> g_pinned{false};
-
-typedef HRESULT(WINAPI* WindowsCreateStringReference_t)(const wchar_t* source, UINT32 length,
-                                                        void* header, void** string);
-static WindowsCreateStringReference_t WindowsCreateStringReference_Original = nullptr;
-
-// I due nomi, gli stessi di ExplorerPatcher (NetworkUX_WindowsCreateStringReference).
-static const wchar_t kWin11ButtonTemplate[] = L"ToggleButtonWinuiFluentTemplate";
-static const wchar_t kWin10ButtonTemplate[] = L"QuickToggleWinuiFluentTemplate";
-
-// La voce della tabella delle importazioni e' nostra solo finche' il mod e' caricato.
-static ScopedImportRedirect g_import;
-
-static HRESULT WINAPI CreateStringReferenceShim(const wchar_t* source, UINT32 length,
-                                                void* header, void** string) {
-    try {
-        if (source && length == _countof(kWin11ButtonTemplate) - 1 &&
-            wcsncmp(source, kWin11ButtonTemplate, length) == 0 &&
-            FlyoutHostPatch::TemplatesPatched()) {
-            if (g_logs.fetch_add(1, std::memory_order_relaxed) < 4)
-                Wh_Log(L"[networkux] the network flyout asks for the Windows 11 button: with "
-                       L"the Windows 10 template set of this process it becomes the button of "
-                       L"Windows 10");
-            source = kWin10ButtonTemplate;
-            length = static_cast<UINT32>(_countof(kWin10ButtonTemplate) - 1);
-        }
-    } catch (...) {
-    }
-    // 1.3.7: la pelle grafica (il dizionario di risorse della pagina). E' la pagina
-    // stessa a passare di qui, quindi il filo e' quello che disegna il flyout; se le
-    // chiavi del dizionario non ci sono ancora, si riprova alla chiamata dopo.
-    SquareShellWindowsNow();   // 1.3.9
-    NetworkUxSkin::TryApply();
-    if (!WindowsCreateStringReference_Original) return E_FAIL;
-    return WindowsCreateStringReference_Original(source, length, header, string);
-}
-
-// Chiamata quando NetworkUX.dll compare in questo processo (o se era gia' qui).
-// Prende la voce della tabella delle importazioni del modulo e la manda al nostro shim.
-//
-// Non e' `static`: la dichiarazione anticipata sta nel blocco dei template, che la usa
-// (OnModuleLoaded) prima che questo namespace sia definito, esattamente come per
-// RequestBatteryFlyout. Le due hanno lo stesso nome, la stessa firma e lo stesso namespace.
-void OnNetworkUxLoaded(void* module) noexcept {
-    try {
-        if (!module) return;
-
-        // 1.3.8 (D): la base del modulo e l'esito, come per i template. Questa riga esce sia
-        // quando la pagina arriva (OnModuleLoaded) sia quando c'era gia' all'avvio del processo
-        // (Install): sotto ci sono gli altri esiti (voce presa, gia' nostra, non trovata, fissata).
-        if (g_logs.fetch_add(1, std::memory_order_relaxed) < 8)
-            Wh_Log(L"[networkux] NetworkUX.dll is here (0x%p): the entry of the page is looked at "
-                   L"now", module);
-
-        HMODULE combase = GetModuleHandleW(L"combase.dll");
-        // GetProcAddress restituisce FARPROC, non un void*: il compilatore del mod (clang)
-        // non lo converte da solo, e il cast e' quello che il file usa gia' per le altre
-        // voci prese allo stesso modo (LoadLibraryW, LdrLoadDll, DwmSetWindowAttribute).
-        void* original = combase ? reinterpret_cast<void*>(
-                                       GetProcAddress(combase, "WindowsCreateStringReference"))
-                                 : nullptr;
-        if (!original) {
-            Wh_Log(L"[networkux] NetworkUX.dll (0x%p): the entry point of the string of this "
-                   L"shell was not found: the button of the network flyout stays the one of this "
-                   L"build", module);
-            return;
-        }
-        WindowsCreateStringReference_Original =
-            reinterpret_cast<WindowsCreateStringReference_t>(original);
-
-        void** slot = FindIatSlot(static_cast<HMODULE>(module),
-                                  "api-ms-win-core-winrt-string-l1-1-0.dll",
-                                  "WindowsCreateStringReference");
-        if (!slot) {
-            Wh_Log(L"[networkux] NetworkUX.dll (0x%p) does not call that entry point through "
-                   L"its import table: the button of the network flyout stays the one of this "
-                   L"build", module);
-            return;
-        }
-        // 1.3.8 (C): la decisione non poggia ne' su un flag ne' sull'indirizzo di base del modulo
-        // (ASLR puo' riassegnare a una copia nuova lo stesso indirizzo): poggia sul CONTENUTO
-        // della voce. Se punta gia' alla funzione di questo mod, il lavoro e' fatto - ed e' il caso
-        // di una seconda segnalazione dello stesso modulo, o di un mod ricaricato in un processo
-        // che aveva gia' la voce presa (in quel caso la voce non e' mai stata rimessa: il nuovo
-        // Uninstall() di Wh_ModBeforeUninit la rimettera' com'era quando il mod verra' scaricato).
-        if (*slot == reinterpret_cast<void*>(&CreateStringReferenceShim)) {
-            g_redirected.store(true, std::memory_order_relaxed);
-            Wh_Log(L"[networkux] the entry of NetworkUX.dll (0x%p) already points to this mod: "
-                   L"nothing is taken over again, the button of the network flyout is already the "
-                   L"one of Windows 10", module);
-            FlyoutHostPatch::PinModuleOrLog(static_cast<HMODULE>(module), L"[networkux]",
-                                            L"NetworkUX.dll", g_pinned);
-            return;
-        }
-
-        // Se la voce presa in prestito prima stava in una copia di questo modulo che non c'e'
-        // piu', quell'indirizzo non e' piu' memoria di nessuno: si lascia andare senza
-        // riscriverlo (Abandon) e si prende in prestito la voce che c'e' adesso.
-        if (g_import.redirected() && !g_import.owns(slot)) {
-            Wh_Log(L"[networkux] the entry taken over before belongs to a copy of NetworkUX.dll "
-                   L"that is not here any more: it is left as it is and the entry of this copy is "
-                   L"taken instead");
-            g_import.Abandon();
-        }
-
-        if (!g_import.owns(slot) &&
-            !g_import.Redirect(slot, reinterpret_cast<void*>(&CreateStringReferenceShim))) {
-            Wh_Log(L"[networkux] NetworkUX.dll (0x%p): that entry could not be taken over: the "
-                   L"button of the network flyout stays the one of this build", module);
-            return;
-        }
-        g_redirected.store(true, std::memory_order_relaxed);
-        Wh_Log(L"[networkux] the page of the network flyout now asks the Windows 10 button "
-               L"(module 0x%p): with the Windows 10 template set, its buttons are the ones of "
-               L"Windows 10 (and they answer)", module);
-        // 1.3.8 (A): la voce presa in prestito non puo' piu' sparire con il modulo.
-        FlyoutHostPatch::PinModuleOrLog(static_cast<HMODULE>(module), L"[networkux]",
-                                        L"NetworkUX.dll", g_pinned);
-    } catch (...) {
-        Wh_Log(L"[networkux] exception while taking over the button of the network flyout");
-    }
-}
-
-// Chiamata da Wh_ModInit, dentro il ramo di ShellExperienceHost.exe, accanto al blocco dei
-// template: gli hook sono registrati mentre Wh_ModInit gira (documentazione Windhawk) e il
-// modulo della pagina puo' arrivare dopo.
-static void Install() noexcept {
-    try {
-        OnNetworkUxLoaded(reinterpret_cast<void*>(GetModuleHandleW(L"NetworkUX.dll")));
-    } catch (...) {
-    }
-}
-
-// Chiamata da Wh_ModBeforeUninit, sullo stesso filo della fine del mod: la voce della
-// tabella delle importazioni torna com'era prima che il modulo venga scaricato.
-static void Uninstall() noexcept {
-    try {
-        if (!g_redirected.load(std::memory_order_relaxed)) return;
-        g_import.Restore();
-        g_redirected.store(false, std::memory_order_relaxed);
-        Wh_Log(L"[networkux] the page of the network flyout is back to its own entry point");
-    } catch (...) {
-    }
-}
-
-}  // namespace NetworkUxHostPatch
-
-
-// ===========================================================================
-// 1.3.7 - LA PELLE GRAFICA DEL FLYOUT DI RETE (le regole di "10Flyouts v4.5").
-//
-// Il file dell'utente (uploads/10Flyouts v4.5.txt) e' un elenco di regole per i
-// flyout della shell, scritte per il motore di una mod di stile (la "Windows 11
-// Notification Center Styler"): ogni regola nomina un elemento dell'albero XAML
-// per nome e posizione, e quel motore le va a scrivere elemento per elemento.
-// Questo mod non porta quel motore dentro di se': non prende in mano l'albero XAML
-// di un altro programma e non fa da ponte verso un motore esterno.
-//
-// La parte di quelle regole che si puo' scrivere con le API XAML documentate e'
-// quella che riguarda il dizionario di risorse della pagina - ed e' la stessa che
-// ExplorerPatcher scrive accanto alla correzione dei template
-// (NetworkUX_PatchResourceDictionary, chiamata subito dopo
-// NetworkUX::App::LoadResourceDictionaries, il cui punto sta in
-// chunk-skin-pattern.inc). Sono le regole della geometria dei pulsanti delle
-// azioni rapide e delle superfici:
-//
-//   * QuickActionPanelMargin - il margine del pannello delle azioni rapide.
-//     Windows 10 usa 12,0,0,12 (Windows 11: 12,0,24,0).
-//   * QuickActionControlStyle - la misura del singolo pulsante. Windows 10 usa
-//     Margin 4,0,0,4 e Width 90 Height 64 (Windows 11: 12,0,0,0 e 96x90). Si
-//     toccano SOLO i tre setter della misura: gli altri restano dove sono
-//     (ExplorerPatcher toglie tutti i setter e li rimette; qui si fa di meno,
-//     perche' quello che la pagina si aspetta non si sa e non si tocca).
-//   * ControlCornerRadius e OverlayCornerRadius a 0 - la documentazione Microsoft
-//     li chiama raggi d'angolo globali: "You can override these values in your
-//     App.xaml to change the rounding across all controls in your app". Il file
-//     chiede CornerRadius=0 su bordi, pulsanti, caselle e barre di scorrimento:
-//     questo e' il punto in cui si puo' chiedere per tutti.
-//   * FocusVisualPrimaryThickness e FocusVisualSecondaryThickness a 0, quando
-//     questa build li tiene nel dizionario: il file li azzera su griglie, pulsanti
-//     e link, ed e' la stessa cosa che la comunita' usa per togliere il rettangolo
-//     bianco dai flyout di Windows 10 su Windows 11 ("10FlyoutFix").
-//
-// Cosa NON si applica, detto chiaro: le regole che nominano i singoli controlli
-// della pagina (il bordo del LogonFrame, il fondo acrilico, il collegamento
-// "Impostazioni" e la sua descrizione, l'indicatore di selezione della lista delle
-// reti, i margini dei pulsanti, i caratteri). Quelle vanno scritte dentro l'albero
-// XAML mentre quegli elementi esistono, cioe' vogliono un motore di stile: qui non
-// c'e' e non si finge che ci sia. Il log dice cosa e' stato scritto e cosa no.
-//
-// Come si applica, e perche' cosi': dalla voce di 1.3.5 (la chiamata
-// WindowsCreateStringReference di NetworkUX.dll). E' la pagina stessa a chiamare,
-// quindi il filo e' quello che disegna il flyout e il momento e' il suo. Il
-// dizionario pero' arriva mentre la pagina si costruisce: finche' le sue chiavi
-// non ci sono si riprova alla chiamata dopo (poche decine di tentativi, poi si
-// smette). Nessun hook nuovo - il mod registra tutti i suoi hook in Wh_ModInit
-// (vedi la nota li'), e questa parte non tocca la coda degli hook -, nessuna
-// impostazione, nessuna chiave di registro, nessun modulo caricato.
-// ===========================================================================
-namespace NetworkUxSkin {
-
-namespace wux = winrt::Windows::UI::Xaml;
-
-static std::atomic<bool> g_valuesWritten{false};
-static std::atomic<bool> g_styleWritten{false};
-static std::atomic<int> g_attempts{0};
-static std::atomic<int> g_logs{0};
-
-// Il tipo di un valore del dizionario. I valori di XAML possono essere racchiusi
-// ("Windows.Foundation.IReference`1<...>"): si guarda il nome per intero, cosi'
-// va bene sia il valore diretto sia quello racchiuso.
-static bool ValueIsOfType(winrt::Windows::Foundation::IInspectable const& value,
-                          const wchar_t* needle) noexcept {
-    try {
-        winrt::hstring name = winrt::get_class_name(value);
-        return name.c_str() && wcsstr(name.c_str(), needle) != nullptr;
-    } catch (...) {
-        return false;
-    }
-}
-
-static bool DictionaryHas(wux::ResourceDictionary const& resources, const wchar_t* key) noexcept {
-    try {
-        return resources.HasKey(winrt::box_value(winrt::hstring(key)));
-    } catch (...) {
-        return false;
-    }
-}
-
-// Scrive un valore del dizionario.
-// - la chiave c'e' gia': si sostituisce solo se il tipo che c'e' regge quello
-//   nuovo (si legge dal valore che c'e', non si indovina);
-// - la chiave non c'e': si aggiunge solo quando la documentazione Microsoft dice
-//   che quella chiave si sovrascrive proprio cosi' (i due raggi d'angolo);
-// - qualunque altra cosa: non si scrive, e il log lo dice.
-static bool PutValue(wux::ResourceDictionary const& resources, const wchar_t* key,
-                     winrt::Windows::Foundation::IInspectable const& value,
-                     const wchar_t* typeNeedle, bool insertIfAbsent) noexcept {
-    try {
-        auto boxedKey = winrt::box_value(winrt::hstring(key));
-        if (resources.HasKey(boxedKey)) {
-            if (!ValueIsOfType(resources.Lookup(boxedKey), typeNeedle)) {
-                if (g_logs.fetch_add(1, std::memory_order_relaxed) < 8)
-                    Wh_Log(L"[networkux] %s: this build keeps it with another type, left as "
-                           L"it is", key);
-                return false;
-            }
-        } else if (!insertIfAbsent) {
-            return false;
-        }
-        resources.Insert(boxedKey, value);
-        return true;
-    } catch (...) {
-        return false;
-    }
-}
-
-// La misura del pulsante delle azioni rapide come la scrive ExplorerPatcher:
-// Margin 4,0,0,4, Width 90, Height 64. Solo quei tre setter.
-static bool PutControlStyleMetrics(wux::ResourceDictionary const& resources) noexcept {
-    try {
-        auto style = resources.Lookup(winrt::box_value(winrt::hstring(L"QuickActionControlStyle")))
-                         .try_as<wux::Style>();
-        if (!style) {
-            if (g_logs.fetch_add(1, std::memory_order_relaxed) < 8)
-                Wh_Log(L"[networkux] QuickActionControlStyle is not a style in this build: the "
-                       L"size of the quick action buttons stays as it is");
-            return false;
-        }
-        if (style.IsSealed()) {
-            // Uno stile gia' usato non si puo' piu' cambiare: lo dice la regola
-            // degli stili di XAML, e il log lo scrive invece di forzare qualcosa.
-            if (g_logs.fetch_add(1, std::memory_order_relaxed) < 8)
-                Wh_Log(L"[networkux] QuickActionControlStyle is already in use (sealed): the "
-                       L"size of the quick action buttons stays as it is");
-            return false;
-        }
-
-        wux::DependencyProperty properties[3] = {
-            wux::FrameworkElement::MarginProperty(),
-            wux::FrameworkElement::WidthProperty(),
-            wux::FrameworkElement::HeightProperty(),
-        };
-        winrt::Windows::Foundation::IInspectable values[3] = {
-            winrt::box_value(wux::Thickness{4.0, 0.0, 0.0, 4.0}),
-            winrt::box_value(90.0),
-            winrt::box_value(64.0),
-        };
-
-        auto setters = style.Setters();
-        for (int i = 0; i < 3; ++i) {
-            bool done = false;
-            const uint32_t count = setters.Size();
-            for (uint32_t j = 0; j < count; ++j) {
-                auto setter = setters.GetAt(j).try_as<wux::Setter>();
-                if (!setter || !setter.Property()) continue;
-                if (setter.Property() != properties[i]) continue;
-                setter.Value(values[i]);
-                done = true;
-                break;
-            }
-            if (!done) setters.Append(wux::Setter(properties[i], values[i]));
-        }
-        Wh_Log(L"[networkux] the quick action buttons of this flyout have the size of Windows 10 "
-               L"(margin 4,0,0,4, 90x64)");
-        return true;
-    } catch (...) {
-        return false;
-    }
-}
-
-// Un tentativo, chiamato dalla voce di 1.3.5. Quando le chiavi del dizionario ci
-// sono, i valori si scrivono una volta sola; la misura dello stile si riprova
-// finche' non riesce (se lo stile e' gia' in uso non riesce mai, e si smette di
-// provare dopo qualche decina di tentativi).
-void TryApply() noexcept {
-    try {
-        const bool valuesDone = g_valuesWritten.load(std::memory_order_relaxed);
-        const bool styleDone = g_styleWritten.load(std::memory_order_relaxed);
-        if (valuesDone && styleDone) return;
-        if (g_attempts.fetch_add(1, std::memory_order_relaxed) >= 256) return;
-
-        auto app = wux::Application::Current();
-        if (!app) return;   // il programma XAML non c'e' ancora
-        auto resources = app.Resources();
-        if (!resources) return;
-
-        // La chiave che ExplorerPatcher usa come prova che questo e' il dizionario
-        // della pagina: finche' non c'e', non e' il momento.
-        if (!valuesDone && DictionaryHas(resources, L"QuickActionPanelMargin")) {
-            int written = 0;
-            if (PutValue(resources, L"QuickActionPanelMargin",
-                         winrt::box_value(wux::Thickness{12.0, 0.0, 0.0, 12.0}),
-                         L"Thickness", false))
-                ++written;
-            if (PutValue(resources, L"ControlCornerRadius",
-                         winrt::box_value(wux::CornerRadius{0.0, 0.0, 0.0, 0.0}),
-                         L"CornerRadius", true))
-                ++written;
-            if (PutValue(resources, L"OverlayCornerRadius",
-                         winrt::box_value(wux::CornerRadius{0.0, 0.0, 0.0, 0.0}),
-                         L"CornerRadius", true))
-                ++written;
-            if (PutValue(resources, L"FocusVisualPrimaryThickness",
-                         winrt::box_value(wux::Thickness{0.0, 0.0, 0.0, 0.0}),
-                         L"Thickness", false))
-                ++written;
-            if (PutValue(resources, L"FocusVisualSecondaryThickness",
-                         winrt::box_value(wux::Thickness{0.0, 0.0, 0.0, 0.0}),
-                         L"Thickness", false))
-                ++written;
-            g_valuesWritten.store(true, std::memory_order_relaxed);
-            Wh_Log(L"[networkux] the dictionary of this flyout takes the Windows 10 skin: %d "
-                   L"value(s) written (panel margin of Windows 10, square corners, no focus "
-                   L"rectangle)", written);
-        }
-
-        if (!styleDone && DictionaryHas(resources, L"QuickActionControlStyle") &&
-            PutControlStyleMetrics(resources))
-            g_styleWritten.store(true, std::memory_order_relaxed);
-    } catch (...) {
-    }
-}
-
-}  // namespace NetworkUxSkin
 BOOL Wh_ModInit() {
     try {
         LoadFlyoutSettings();
@@ -9944,10 +9535,6 @@ BOOL Wh_ModInit() {
             // This process is the one that draws the flyout: it has to build it the Windows 10
             // way, otherwise the flyout it shows is torn down again after a moment.
             FlyoutHostPatch::Install();
-            // 1.3.5: la pagina del flyout di rete deve chiedere il pulsante di
-            // Windows 10, altrimenti i pulsanti del set di template qui sopra
-            // restano blocchi di testo inerti (ExplorerPatcher, stessa nota).
-            NetworkUxHostPatch::Install();
             // Experimental and off by default; see g_squareFlyoutCorners.
             if (g_squareFlyoutCorners) InstallSquareCornersHook();
             SquareShellWindowsNow();
@@ -10043,9 +9630,6 @@ void Wh_ModBeforeUninit() {
     g_unloading.store(true, std::memory_order_seq_cst);
     ShellOpGuard::BeginShutdown();
     RestorePeekAtDesktopOnUnload();
-    // 1.3.5: la voce della tabella delle importazioni del flyout di rete torna al
-    // valore di prima mentre il modulo e' ancora caricato (ScopedImportRedirect).
-    NetworkUxHostPatch::Uninstall();
     if (g_stopEvent) SetEvent(g_stopEvent);
     JoinServicesThread(L"Wh_ModBeforeUninit");
 }
