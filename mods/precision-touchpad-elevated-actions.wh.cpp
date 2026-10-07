@@ -22,7 +22,7 @@ This mod preserves Windows' native gesture semantics and only changes which
 process performs the final synthetic input. In this case, it relays to a native
 Windhawk 2.0 `windhawk-mod-uiaccess.exe` tool host. 
 
-# Requires Windhawk 2.0 alpha 4 or later.
+Requires Windhawk 2.0 alpha 4 or later.
 */
 // ==/WindhawkModReadme==
 
