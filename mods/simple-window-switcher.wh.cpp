@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              simple-window-switcher
 // @name            Simple Window Switcher
-// @description     Replaces the default Alt+Tab with a lightweight window switcher inspired by ExplorerPatcher's Simple Window Switcher
+// @description     Customizable Alt+Tab replacement with live previews, application grouping, multiple layouts, animations, and precision touchpad controls
 // @version         3.0
 // @author          Lone
 // @github          https://github.com/Louis047
@@ -13,81 +13,134 @@
 // ==WindhawkModReadme==
 /*
 # Simple Window Switcher
-A lightweight Alt+Tab replacement for Windows, ported from the [Simple Window Switcher](https://github.com/valinet/sws) project.
-Additional improvements made by [Asteski](https://github.com/Asteski) and [bropines](https://github.com/bropines).
+
+A customizable Alt+Tab replacement for Windows, based on the
+[Simple Window Switcher](https://github.com/valinet/sws) project, with additional
+improvements by [Asteski](https://github.com/Asteski) and
+[bropines](https://github.com/bropines).
 
 ## Features
-- Grid layout with live DWM thumbnail previews
-- Different Task List, Header Content and Thumbnails layouts
-- Center align task list content and titles (horizontal and vertical options)
-- Keyboard navigation (Tab/Shift+Tab/Shift/Backtick, Arrow keys, Enter, Esc)
-- Mouse click to select, scroll wheel to cycle from anywhere
-- Scroll wheel page navigation (hold a secondary modifier to switch pages instead of individual windows)
-- Virtual Desktop Support (defaults to showing windows from all virtual desktops — change under Accessibility → Virtual Desktop Behavior)
-- Group windows by application (macOS Cmd+Tab style, one entry per app)
-- Drill into an app's windows with a Ctrl tap to pick a specific window (Esc backs out)
-- Win+Alt+Tab override to display windows from all monitors when using Per-Monitor mode
-- Alt+Ctrl+Tab sticky mode
-- Alt+` shortcut to cycle backwards or filter to windows of the same active application
-- Keyboard shortcut to close the selected window (Q, Ctrl+W, or Del)
-- Directional overflow chevrons (▲/▼/◀/▶) at the edges when windows extend off-screen
-- Show/hide close button toggle under Appearance → Thumbnails
-- Theme support (None/Backdrop Acrylic) with fully customizable background opacity
-- Works with elevated/admin applications
-- Dark/light mode auto-detection
-- Custom border colors with optional Windows accent color
-- Different item highlight options
-- DPI-aware, multi-monitor aware
-- Rounded corners for switcher and task thumbnails (optional)
-- Dynamic UI adjustments (e.g., intelligent close button placement over thumbnails)
-- Drag to cancel clicks (cancels card selection or close button when cursor is dragged away)
-- Gaming Full Screen Experience ("Xbox Mode") and Tablet Mode support with full window enumeration
-- Precision touchpad sub-notch smoothing (smooth 2-finger panning without overscrolling)
-- Two-finger tap to close the selected window entry while the switcher is active
- - Raw HID three-finger swipes: normal sessions commit on lift; sticky sessions stay open after a swipe and commit with a stationary three-finger tap
-- While the switcher is active, the mod requests ownership of supported three-finger touchpad manipulations and actions; on systems with the documented controller, Windows does not process them while the switcher owns the foreground
-- Highly reliable Explorer restart prompt handling without infinite loops
 
-### Raw touchpad gestures
+- Live DWM window previews, with optional titles, icons, close buttons, and
+  overflow indicators.
+- Entrance, exit, selection, hover, scrolling, and layout-resize animations that
+  respect the Windows animation setting.
+- Solid/transparent, Acrylic, and Mica themes; light/dark color schemes; custom
+  or accent colors; configurable fonts, highlights, shadows, and corner radii.
+- Optional desktop-snapshot or wallpaper backdrop blur behind the switcher.
+- Application grouping with individual-window drill-in, window-count badges,
+  and configurable group closing and restoration.
+- Recent-window ordering, live window-list updates, and options to hide, sort,
+  or mark minimized windows.
+- Multi-monitor display and filtering, DPI-aware sizing, and current/all virtual
+  desktop filtering. All virtual desktops are included by default.
+- Window exclusions by title or executable name, custom application names/icons,
+  and an option to use the native switcher in Xbox Mode.
+- Keyboard, mouse, scroll-wheel, and supported precision-touchpad controls.
 
-  Enable **Touchpad → Enable Three-Finger Gestures** and leave **Sticky Switcher
-  from Upward Swipe** enabled to use the Raw HID reader. With Sticky Switcher
-   from Upward Swipe enabled, an upward stroke opens sticky mode. Outside a
-   switcher session, downward swipes and taps keep their configured Windows
-   actions. Horizontal motion can open a normal switcher in either launch mode.
-  While the switcher is active and owns the foreground, the documented Windows
-   touchpad takeover claims both three-finger manipulations and three-finger
-   actions. Explorer-side hooks also filter native actions belonging to an
-   owned raw stroke, including its bounded release grace. The native tap filter
-   runs before the configured action (such as Search or a custom Start shortcut)
-   is dispatched; it does not intercept physical keyboard or Start-button input.
-   Normal horizontal-swipe
-  sessions still commit when all fingers lift. In sticky mode (Alt+Ctrl+Tab, or an upward swipe), swipes
-only navigate; lift, then make a fresh stationary three-finger tap to commit.
-Enter/click still commits and Esc/click-away cancels. In sticky mode, a fresh
-upward swipe enters an application group; a fresh downward swipe leaves the
-group, or dismisses the main switcher without selecting a window. Start a
-horizontal drag to navigate continuously in all directions without executing
-these one-shot commands. Normal touchpad sessions use bounded spatial
- navigation; keyboard, mouse, and ordinary scroll-wheel cycling retain their
- existing behavior.
-Reverse Scroll Direction reverses selection navigation, not the physical up/down
-commands for opening/dismissing sticky mode or entering/leaving groups.
+## Layouts
 
-  Windows gesture takeover requires a supported TouchpadGesturesController API
-   (documented minimum: Windows 11). Background controllers are ignored by
-   Windows; Explorer filtering additionally depends on matching shell symbols
-   and is available on the 64-bit architectures. When
-  Sticky Switcher from Upward Swipe is disabled, Windows owns outside up/down/
-  tap actions; horizontal drag invocation remains available. If the API or raw
-  reader is unavailable, touchpad takeover is not claimed; keyboard/mouse
-  support remains available. While the switcher is active, a stationary two-finger
-  tap closes the selected window entry through the same lazy close path as the
-  keyboard close commands.
+Choose a layout under **Appearance → Layout → Switcher Layout**.
+
+| Layout | Description |
+| --- | --- |
+| Default | Classic window grid with horizontal or vertical orientation and configurable header and thumbnail placement. |
+| Badge (macOS-style) | Thumbnail cards with an overlaid application icon and a title above or below the preview. Requires thumbnails to be enabled. |
+| Dock | An application-icon strip with an optional central preview of the selected window and configurable close-button and group-indicator placement. |
+
+## Controls
+
+### Keyboard and mouse
+
+| Input | Action |
+| --- | --- |
+| Alt+Tab | Open the switcher and cycle forward; release Alt to activate the selection. |
+| Alt+Shift+Tab | Cycle backward by default. The **Backward Shortcut** setting also offers Alt+Shift. |
+| Alt+Ctrl+Tab | Open sticky mode, which stays open after releasing Alt. |
+| Alt+Backtick | Cycle backward or cycle the current application's windows, according to **Alt+Backtick Behavior**. The current application's group expands automatically in same-app mode. |
+| Win+Alt+Tab | Temporarily bypass the per-monitor window filter. |
+| Tab / Shift+Tab, arrow keys | Navigate entries while the switcher is open. Shift+Tab follows the configured backward shortcut. |
+| Page Up / Page Down | Navigate overflow pages. |
+| Enter / Space, left-click an entry | Activate the selected or clicked window. |
+| Esc | Leave an expanded application group, or dismiss the switcher. |
+| Ctrl tap | Expand or collapse an application group when grouping is enabled. |
+| Q / Ctrl+W / Delete | Close the selected entry. |
+| Close button / middle-click | Close the entry under the pointer. |
+| Click outside | Dismiss the switcher. |
+
+Scroll-wheel navigation is disabled by default. Enable it under
+**Accessibility → Scroll Wheel Activation** to change selection or scroll pages
+from anywhere. The secondary modifier/action settings provide an alternate wheel
+action; two-finger scrolling follows these same settings. Dragging a pressed
+entry or close button cancels the click.
+
+Close commands request a normal application close; applications can still ask to
+save changes. Closing a grouped entry follows **Grouping → Group Close Button
+Behavior**, which defaults to closing its most recent window.
+
+### Touchpad
+
+Enable **Touchpad → Enable Three-Finger Gestures** for swipe and tap controls on
+a supported precision touchpad. **Sticky Switcher from Upward Swipe** controls
+the upward launcher independently.
+
+| Gesture | Action |
+| --- | --- |
+| Three-finger horizontal swipe while closed | Open normal mode, drag to navigate, and lift all fingers to activate the selection. |
+| Three-finger upward swipe while closed | Open sticky mode when the upward launcher is enabled. |
+| Three-finger drag while open | Navigate entries and rows without wrapping past the spatial edges. In sticky mode, lifting after a drag leaves the switcher open. |
+| Fresh stationary three-finger tap in sticky mode | Activate the selection after lifting from the previous swipe. |
+| Fresh upward swipe in sticky mode | Expand the selected application group, when grouping is enabled and it has multiple windows. |
+| Fresh downward swipe in sticky mode | Leave an expanded group, or dismiss the main switcher without selecting a window. |
+| Short stationary two-finger tap while open | Close the selected entry. |
+
+In sticky mode, start a horizontal drag before turning vertically to navigate
+rows without executing the fresh up/down commands. Outside a session, downward
+swipes and three-finger taps retain their Windows actions; disabling the upward
+launcher also leaves outside upward swipes to Windows. **Reverse Scroll
+Direction** reverses navigation, not the physical up/down commands.
+
+When normal Alt+Tab and a three-finger drag are used together, selection waits
+for both Alt release and finger lift. Enter/click and Esc/click-away remain
+available to select or cancel.
+
+## Compatibility and limitations
+
+- Touchpad swipe/tap controls require usable Raw HID contact reports. Legacy
+  mouse-only touchpads are not supported by the gesture reader; device and driver
+  reporting can affect recognition. Tap detection expects a short, stationary
+  contact: movement or staggered finger placement/lift can prevent recognition.
+- Suppressing Windows' three-finger actions during a session requires a supported
+  foreground gesture controller. Additional Explorer-side filtering depends on
+  matching Windows shell symbols and is available only on 64-bit architectures.
+  Native Windows gestures can interfere when these mechanisms are unavailable;
+  keyboard and mouse controls remain available.
+- On systems supporting the touchpad-parameter API (documented for
+  [Windows 11 24H2 and later](https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-touchpad_parameters_v1)),
+  Windows' two-finger right-click tap is temporarily disabled during the active
+  switcher session and its previous value is restored afterward. This is a live
+  change, without saving a Windows preference. If the API is unavailable or the
+  change fails, the fallback relies on receiving the corresponding mouse events;
+  a tap outside the switcher can otherwise right-click or dismiss it.
+- Mica requires Windows 11. The automatic theme uses Mica on Windows 11 and
+  Acrylic on Windows 10; backdrop blur is a separate, optional setting.
+
+## Configuration
+
+- **Theme / Appearance**: colors, materials, layout, positioning, fonts, preview
+  styling, and animation options.
+- **Dimensions**: tile sizing, screen limits, padding, and shrink-to-fit behavior.
+- **Grouping**: application grouping, displayed titles, restoration, and closing.
+- **Accessibility**: invocation delay, navigation, monitor/desktop filtering, and
+  minimized-window options.
+- **Touchpad / Excluded Windows / Custom Header**: gesture controls, exclusion
+  patterns, Xbox Mode exclusion, and per-application names/icons.
 
 ## Screenshots
 
-| Horizontal squared (default) | Horizontal squared without thumbnails |
+### Layouts — Default
+
+| Horizontal squared | Horizontal squared without thumbnails |
 | :---: | :---: |
 | ![Horizontal default](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/4.png) | ![Horizontal without thumbnails](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/3.png) |
 
@@ -102,6 +155,14 @@ commands for opening/dismissing sticky mode or entering/leaving groups.
 | Horizontal rounded with thumbnails and no icons |
 | :---: |
 | ![Horizontal rounded with thumbnails and no icons](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/simple-window-switcher/8.png) |
+
+### Layouts — Badge (macOS-style)
+
+*Screenshot placeholder — images to be added.*
+
+### Layouts — Dock
+
+*Screenshot placeholder — images to be added.*
 
 */
 // ==/WindhawkModReadme==
@@ -863,6 +924,17 @@ commands for opening/dismissing sticky mode or entering/leaving groups.
 // The confirmed post-lift call arrived 184 ms after release. Keep a separate,
 // shorter marker-only grace; its physical expiry is measured from the lift.
 #define SWS_RAW_SWIPE_LIFT_GRACE_MS 1000
+// The backstop must not end a raw session while the fingers are still down.
+// Every frame refreshes this, so only a lost reader or a missed lift can reach it.
+#define SWS_RAW_SESSION_LOST_TIMEOUT_MS 4000
+// A stationary two-finger tap is owned only by a visible, interactive session.
+// Keep its promoted mouse pair briefly after lift, without retaining foreground.
+#define SWS_RAW_TAP_MAX_MS 300
+#define SWS_RAW_TAP_SLOP (65535 / 50)
+#define SWS_RAW_TWO_TAP_MOUSE_GRACE_MS 250u
+#define SWS_RAW_TWO_TAP_MOUSE_PAIR_MS 500u
+#define SWS_RAW_TWO_TAP_MOUSE_TIMER_ID 115
+#define SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID 116
 // Posted by the low-level mouse hook so the heavy CycleLinear work runs in the
 // wndproc instead of on the synchronous raw-input path. WPARAM is the direction.
 #define WM_SWS_SCROLL           (WM_APP + 1)
@@ -882,13 +954,17 @@ commands for opening/dismissing sticky mode or entering/leaving groups.
 // Let the reader adopt reports after a foreground/context handoff. This is a
 // single bounded wait, not a synthetic lift or a foreground retry loop.
 #define SWS_NATIVE_TOUCHPAD_HANDOFF_MS 50u
+#define SWS_NATIVE_TOUCHPAD_CANDIDATE_WAIT_MS 20u
 #define SWS_RAW_SWIPE_PROP L"WindhawkSWSRawSwipe"
 #define SWS_RAW_SWIPE_SESSION_PROP L"WindhawkSWSRawSwipeSession"
 #define SWS_RAW_SWIPE_UP_PROP L"WindhawkSWSRawSwipeUp"
+#define SWS_RAW_THREE_CANDIDATE_PROP L"WindhawkSWSRawThreeCandidate"
+#define SWS_RAW_THREE_CANDIDATE_MS 1000u
 // The tool publishes readiness independently of raw direction classification.
 // Bits 0/1 declare enabled/usable reader, bit 2 enables outside sticky-up.
 // Higher bits are an epoch: disable/reader loss invalidates existing decisions.
 #define SWS_NATIVE_SWIPE_POLICY_PROP L"WindhawkSWSNativeSwipePolicy"
+#define SWS_NATIVE_SWIPE_PROFILE_PROP L"WindhawkSWSNativeSwipeProfile"
 #define SWS_NATIVE_SWIPE_ACTIVE_PROP L"WindhawkSWSNativeSwipeActive"
 #define SWS_NATIVE_TOUCHPAD_EPOCH_PROP L"WindhawkSWSNativeTouchpadEpoch"
 // Explorer publishes source-gate availability on its own taskbar window so
@@ -2935,6 +3011,118 @@ static RECT ScaleLayoutRect(const RECT& rect, float scale) {
     int x = (rect.left + rect.right - width) / 2;
     int y = (rect.top + rect.bottom - height) / 2;
     return { x, y, x + width, y + height };
+}
+
+static bool UseDockScreenProjection() {
+    // Scroll owns its viewport translation and its canvases. The fractional
+    // projection is only for an ordinary Dock reflow where the window and the
+    // inner layout are sampled by the same layout track.
+    return DockLayoutActive() && g_layoutTransition.active &&
+           !g_layoutTransition.scrollReflow && !g_scrollTransition.active;
+}
+
+static float DockTransitionSample() {
+    return g_easeLayout.Solve(g_layoutTransition.progress);
+}
+
+struct DockPaintSpace {
+    RectF screenFrame;
+    int pixelOriginX;
+    int pixelOriginY;
+};
+
+static DockPaintSpace GetDockPaintSpace() {
+    RectF frame = LerpRect(g_layoutTransition.rcWndStart,
+                           g_layoutTransition.rcWndTarget,
+                           DockTransitionSample());
+    return {frame, (int)roundf(frame.left), (int)roundf(frame.top)};
+}
+
+static RectF DockEntryCellForPaint(const WindowEntry& entry,
+                                   const DockPaintSpace* paintSpace) {
+    if (paintSpace && HasLayoutRect(entry.rcCellStart) &&
+        HasLayoutRect(entry.rcCellTarget) && !entry.isNewEntry) {
+        return LerpRect(ToRectF(entry.rcCellStart),
+                        ToRectF(entry.rcCellTarget),
+                        DockTransitionSample());
+    }
+    return ToRectF(entry.rcCell);
+}
+
+static RectF DockDepartingCellForPaint(
+    const DepartingEntrySnapshot& entry, const DockPaintSpace* paintSpace) {
+    if (paintSpace && HasLayoutRect(entry.rcCellStart) &&
+        HasLayoutRect(entry.rcCellTarget)) {
+        return LerpRect(ToRectF(entry.rcCellStart),
+                        ToRectF(entry.rcCellTarget),
+                        ItemScaleEasing(entry.motion));
+    }
+    return ToRectF(entry.rcCellCurrent);
+}
+
+static RECT DockScreenSnapRect(const RectF& localRect,
+                               const DockPaintSpace& paintSpace) {
+    return {
+        (LONG)roundf(paintSpace.screenFrame.left + localRect.left) -
+            paintSpace.pixelOriginX,
+        (LONG)roundf(paintSpace.screenFrame.top + localRect.top) -
+            paintSpace.pixelOriginY,
+        (LONG)roundf(paintSpace.screenFrame.left + localRect.right) -
+            paintSpace.pixelOriginX,
+        (LONG)roundf(paintSpace.screenFrame.top + localRect.bottom) -
+            paintSpace.pixelOriginY,
+    };
+}
+
+static POINT DockScreenSnapIcon(const RectF& cell, int iconSize, int offsetX,
+                                int offsetY, const DockPaintSpace& paintSpace) {
+    float localX = cell.left + (cell.right - cell.left - iconSize) * 0.5f +
+                   offsetX;
+    float localY = cell.top + (cell.bottom - cell.top - iconSize) * 0.5f +
+                   offsetY;
+    return {
+        (LONG)roundf(paintSpace.screenFrame.left + localX) -
+            paintSpace.pixelOriginX,
+        (LONG)roundf(paintSpace.screenFrame.top + localY) -
+            paintSpace.pixelOriginY,
+    };
+}
+
+static POINT DockLegacyIcon(const RECT& cell, int iconSize, int offsetX,
+                            int offsetY) {
+    return {
+        (LONG)roundf(cell.left + (cell.right - cell.left - iconSize) * 0.5f) +
+            offsetX,
+        (LONG)roundf(cell.top + (cell.bottom - cell.top - iconSize) * 0.5f) +
+            offsetY,
+    };
+}
+
+static RECT DockTitleTextRectForPaint(const DockPaintSpace* paintSpace) {
+    int margin = DpiScale(20, g_dpiX);
+    if (!paintSpace) {
+        RECT rcText = g_rcDockTitleBar;
+        rcText.left += margin;
+        rcText.right -= margin;
+        if (g_dockPreviewSlide.active) {
+            int offX = (int)roundf(g_dockPreviewSlide.currentOffset);
+            rcText.left += offX;
+            rcText.right += offX;
+        }
+        return rcText;
+    }
+
+    RectF title = LerpRect(ToRectF(g_layoutTransition.rcDockTitleStart),
+                           ToRectF(g_layoutTransition.rcDockTitleTarget),
+                           DockTransitionSample());
+    title.left += margin;
+    title.right -= margin;
+    if (g_dockPreviewSlide.active) {
+        int offX = (int)roundf(g_dockPreviewSlide.currentOffset);
+        title.left += offX;
+        title.right += offX;
+    }
+    return DockScreenSnapRect(title, *paintSpace);
 }
 
 static void ApplyEntryPresentationGeometry(WindowEntry& entry) {
@@ -5813,6 +6001,25 @@ static std::atomic<bool> g_touchpadGesturesEnabled{true};
 static std::atomic<bool> g_touchpadSwitcherActive{false};
 static std::atomic<bool> g_touchpadStickyLaunchEnabled{true};
 static std::atomic<bool> g_touchpadGestureTakeoverAvailable{true};
+// Built-in laptop traces use a single HID finger collection and historically
+// reach the native target before raw tips are available. The Apple driver
+// descriptor used by the reported external device exposes five collections;
+// only that positively observed multi-collection profile requires raw proof
+// before an outside native gesture is claimed.
+static std::atomic<bool> g_touchpadNativeCandidateRequired{false};
+// The reader and the UI thread share the physical three-finger stroke phase.
+// The native Explorer hook cannot read this atomic directly; it uses the
+// timestamp candidate window property published from the same reader thread.
+static std::atomic<ULONGLONG> g_touchpadRawThreeFingerNextSerial{0};
+static std::atomic<ULONGLONG> g_touchpadRawThreeFingerState{0};
+static std::atomic<ULONGLONG> g_touchpadRawThreeFingerLastTick{0};
+// The reader publishes tap evidence before posting to the UI. The mouse hook
+// can then suppress the promoted right-click before it cancels/focuses an app
+// under the cursor. High 32 bits identify the stroke; low 32 bits are expiry.
+static std::atomic<bool> g_touchpadTwoFingerCloseActive{false};
+static std::atomic<bool> g_touchpadTwoFingerTapSuppressed{false};
+static std::atomic<DWORD> g_touchpadRawTwoFingerNextSerial{0};
+static std::atomic<ULONGLONG> g_touchpadRawTwoFingerTapMouseState{0};
 // Settings callbacks run outside the switcher thread. These atomics are the
 // cross-thread source of truth until WM_SWS_SETTINGS_CHANGED reloads the full
 // UI settings snapshot on the switcher thread.
@@ -5830,6 +6037,9 @@ struct TouchpadInputDiagnostics {
     std::atomic<DWORD> rejectedDevices{0};
     std::atomic<DWORD> readFailures{0};
     std::atomic<DWORD> frames{0};
+    std::atomic<DWORD> contactFrames{0};
+    std::atomic<DWORD> hybridReports{0};
+    std::atomic<DWORD> emptyReports{0};
     std::atomic<DWORD> posted{0};
     std::atomic<DWORD> postFailures{0};
     std::atomic<DWORD> uiFrames{0};
@@ -5966,6 +6176,15 @@ static HWND s_rawShieldRestoreForeground = NULL;
 static HWND s_touchpadActivationRetryTarget = NULL;
 static ULONGLONG s_touchpadActivationRetryDeadline = 0;
 static bool s_touchpadCommitActivation = false;
+// A normal Alt session and a normal three-finger session are separate owners.
+// The switcher commits only after both owners have released.
+static bool s_altSessionOwner = false;
+static bool s_altHeld = false;
+static ULONGLONG s_altRawBaselineSerial = 0;
+static ULONGLONG s_combinedRawSerial = 0;
+static bool s_combinedRawSeen = false;
+static bool s_combinedRawLiftHandled = false;
+static bool s_commitStarted = false;
 struct NativeTouchpadInvocation {
     DWORD token = 0;
     DWORD epoch = 0;
@@ -5981,6 +6200,8 @@ static bool s_nativeTouchpadRawDiscardPending = false;
 static bool SwitcherOwnsRawSwipe();
 static bool SwitcherOwnsActiveRawSwipe();
 static bool NativeSwipeSourceGateActive();
+static bool CombinedRawReleasePending();
+static void AdoptRawThreeFingerState(bool allowCurrentLive = false);
 
 // Serialize the two in-process publishers with expiry/removal. Explorer only
 // reads the property and never takes this lock or waits on the switcher queue.
@@ -6007,10 +6228,18 @@ static void PublishNativeSwipePolicy() {
         DWORD policy = (s_nativeSwipePolicyEpoch << 3) | (enabled ? 1u : 0u) |
                        (reader ? 2u : 0u) |
                        (g_touchpadStickyLaunchEnabled.load() ? 4u : 0u);
+        bool profilePublished = true;
+        if (g_touchpadNativeCandidateRequired.load()) {
+            profilePublished = SetPropW(g_hSwitcher, SWS_NATIVE_SWIPE_PROFILE_PROP,
+                                        (HANDLE)(ULONG_PTR)1);
+        } else {
+            RemovePropW(g_hSwitcher, SWS_NATIVE_SWIPE_PROFILE_PROP);
+        }
         if (SetPropW(g_hSwitcher, SWS_NATIVE_SWIPE_POLICY_PROP,
                      (HANDLE)(ULONG_PTR)policy) &&
             SetPropW(g_hSwitcher, SWS_NATIVE_TOUCHPAD_EPOCH_PROP,
-                     (HANDLE)(ULONG_PTR)s_nativeTouchpadRelayEpoch.load())) {
+                     (HANDLE)(ULONG_PTR)s_nativeTouchpadRelayEpoch.load()) &&
+            profilePublished) {
             if (ready && g_touchpadSwitcherActive.load()) {
                 SetPropW(g_hSwitcher, SWS_NATIVE_SWIPE_ACTIVE_PROP,
                          (HANDLE)(ULONG_PTR)1);
@@ -6022,6 +6251,7 @@ static void PublishNativeSwipePolicy() {
             RemovePropW(g_hSwitcher, SWS_NATIVE_SWIPE_POLICY_PROP);
             RemovePropW(g_hSwitcher, SWS_NATIVE_SWIPE_ACTIVE_PROP);
             RemovePropW(g_hSwitcher, SWS_NATIVE_TOUCHPAD_EPOCH_PROP);
+            RemovePropW(g_hSwitcher, SWS_NATIVE_SWIPE_PROFILE_PROP);
         }
     }
     ReleaseSRWLockExclusive(&s_rawSwipeMarkerLock);
@@ -6033,6 +6263,8 @@ static void RemoveNativeSwipePolicy() {
         RemovePropW(g_hSwitcher, SWS_NATIVE_SWIPE_POLICY_PROP);
         RemovePropW(g_hSwitcher, SWS_NATIVE_SWIPE_ACTIVE_PROP);
         RemovePropW(g_hSwitcher, SWS_NATIVE_TOUCHPAD_EPOCH_PROP);
+        RemovePropW(g_hSwitcher, SWS_NATIVE_SWIPE_PROFILE_PROP);
+        RemovePropW(g_hSwitcher, SWS_RAW_THREE_CANDIDATE_PROP);
     }
     ReleaseSRWLockExclusive(&s_rawSwipeMarkerLock);
 }
@@ -6057,6 +6289,71 @@ static DWORD RawSwipeMarkerRemainingMs(HANDLE marker, ULONGLONG tick) {
                          ? SWS_RAW_SWIPE_LIFT_GRACE_MS
                          : SWS_RAW_SWIPE_OWNER_MS;
     return age < lifetime ? lifetime - age : 0;
+}
+
+static HANDLE EncodeRawThreeFingerCandidate(ULONGLONG tick) {
+    DWORD stamp = (DWORD)tick & SWS_RAW_SWIPE_TIMESTAMP_MASK;
+    if (!stamp) stamp = SWS_RAW_SWIPE_TIMESTAMP_MASK;
+    return (HANDLE)(ULONG_PTR)stamp;
+}
+
+static DWORD RawThreeFingerCandidateRemainingMs(HANDLE candidate, ULONGLONG tick) {
+    if (!candidate) return 0;
+    DWORD encoded = (DWORD)(ULONG_PTR)candidate;
+    DWORD age = ((DWORD)tick - (encoded & SWS_RAW_SWIPE_TIMESTAMP_MASK)) &
+                SWS_RAW_SWIPE_TIMESTAMP_MASK;
+    return age < SWS_RAW_THREE_CANDIDATE_MS
+               ? SWS_RAW_THREE_CANDIDATE_MS - age
+               : 0;
+}
+
+static void PublishRawThreeFingerCandidate(ULONGLONG tick) {
+    if (!g_hSwitcher) return;
+    AcquireSRWLockExclusive(&s_rawSwipeMarkerLock);
+    if (TouchpadHandlingEnabled() && g_touchpadReaderAvailable.load()) {
+        SetPropW(g_hSwitcher, SWS_RAW_THREE_CANDIDATE_PROP,
+                 EncodeRawThreeFingerCandidate(tick));
+    } else {
+        RemovePropW(g_hSwitcher, SWS_RAW_THREE_CANDIDATE_PROP);
+    }
+    ReleaseSRWLockExclusive(&s_rawSwipeMarkerLock);
+}
+
+static void ClearRawThreeFingerCandidateProperty() {
+    if (!g_hSwitcher) return;
+    AcquireSRWLockExclusive(&s_rawSwipeMarkerLock);
+    RemovePropW(g_hSwitcher, SWS_RAW_THREE_CANDIDATE_PROP);
+    ReleaseSRWLockExclusive(&s_rawSwipeMarkerLock);
+}
+
+// Explorer reads this property without taking the tool-process lock. Like the
+// existing raw-swipe marker, the value is only an expiring timestamp; a stale
+// or missing property fails open to Windows' native gesture handling.
+static bool FreshRawThreeFingerCandidate(HWND endpoint, ULONGLONG tick) {
+    return endpoint && RawThreeFingerCandidateRemainingMs(
+                             GetPropW(endpoint, SWS_RAW_THREE_CANDIDATE_PROP),
+                             tick) != 0;
+}
+
+#define SWS_RAW_THREE_PHASE_NONE 0u
+#define SWS_RAW_THREE_PHASE_LIVE 1u
+#define SWS_RAW_THREE_PHASE_LIFTED 2u
+#define SWS_RAW_THREE_PHASE_LOST 3u
+
+static ULONGLONG RawThreeFingerStateSerial(ULONGLONG state) {
+    return state >> 2;
+}
+
+static ULONG RawThreeFingerStatePhase(ULONGLONG state) {
+    return (ULONG)(state & 3u);
+}
+
+static void PublishRawThreeFingerState(ULONGLONG serial, ULONG phase,
+                                       ULONGLONG tick) {
+    if (!serial) return;
+    g_touchpadRawThreeFingerLastTick.store(tick, std::memory_order_release);
+    g_touchpadRawThreeFingerState.store((serial << 2) | (phase & 3u),
+                                        std::memory_order_release);
 }
 
 static void SetRawSwipeUpMarker(bool upward) {
@@ -6173,7 +6470,8 @@ static void ScheduleRawTouchpadShieldRelease();
 
 static bool RawTouchpadOwnsInput() {
     return TouchpadHandlingEnabled() && g_touchpadReaderAvailable.load() &&
-           (s_rawSessionOwned || s_rawTouchpadShieldActive) &&
+           (s_rawSessionOwned || s_rawTouchpadShieldActive ||
+            CombinedRawReleasePending()) &&
            (g_isVisible || g_isPendingShow || s_rawTouchpadShieldActive) &&
            !g_animExitActive && !g_isHidingSwitcher;
 }
@@ -9035,14 +9333,9 @@ static void FillSwitcherBackground(HDC hdc, const RECT& rect, bool fillBg) {
                   DIB_RGB_COLORS, SRCCOPY);
 }
 
-static void DrawDockEntryIcon(HDC hdc, const WindowEntry& e, const RECT& cell,
-                             int index, float itemAlpha) {
-    if (!HasLayoutRect(cell)) return;
-    int iconSz = DpiScale(g_settings.dockIconSize > 0 ? g_settings.dockIconSize : 48, g_dpiX);
-    int cellW = cell.right - cell.left;
-    int cellH = cell.bottom - cell.top;
-    int iconX = (int)roundf(cell.left + (cellW - iconSz) / 2.0f);
-    int iconY = (int)roundf(cell.top + (cellH - iconSz) / 2.0f);
+static void DrawDockEntryIcon(HDC hdc, const WindowEntry& e, int iconX,
+                              int iconY, int iconSz, int index,
+                              float itemAlpha) {
     bool emphasized = index >= 0 && (index == g_selectedIndex || index == g_hoverIndex);
     bool isMin = g_settings.showMinimizedIndicator && IsEntryMinimized(e);
     if (isMin && MinimizedStyleUsesDimming()) {
@@ -9108,6 +9401,12 @@ static void DrawDockIconStrip(HDC hdc) {
         DrawSelectionFillF(hdc, SelectionRectWithViewport());
     }
 
+    DockPaintSpace transitionPaint = {};
+    const DockPaintSpace* paintSpace = nullptr;
+    if (UseDockScreenProjection()) {
+        transitionPaint = GetDockPaintSpace();
+        paintSpace = &transitionPaint;
+    }
     int offX = (int)roundf(g_scrollTransition.offsetCurrentX);
     int iconSz = DpiScale(g_settings.dockIconSize > 0 ? g_settings.dockIconSize : 48, g_dpiX);
     if (g_scrollTransition.active) {
@@ -9119,22 +9418,33 @@ static void DrawDockIconStrip(HDC hdc) {
             entry.hIcon = snap.hIcon;
             entry.groupWindows = snap.groupWindows;
             RECT cell = snap.rcCell;
-            OffsetRect(&cell, offX - g_scrollTransition.travelDistanceX, 0);
-            DrawDockEntryIcon(hdc, entry, cell, index, snap.alpha);
+            if (!HasLayoutRect(cell)) continue;
+            int dx = offX - g_scrollTransition.travelDistanceX;
+            POINT icon = paintSpace
+                             ? DockScreenSnapIcon(ToRectF(cell), iconSz, dx, 0,
+                                                  *paintSpace)
+                             : DockLegacyIcon(cell, iconSz, dx, 0);
+            DrawDockEntryIcon(hdc, entry, icon.x, icon.y, iconSz, index,
+                              snap.alpha);
         }
     }
     for (int i = 0; i < (int)g_windows.size(); i++) {
         auto& entry = g_windows[i];
         if (IsWindowTruncated(i)) continue;
-        entry.drawnIconX = (int)roundf(entry.rcCell.left +
-            (entry.rcCell.right - entry.rcCell.left - iconSz) / 2.0f);
-        entry.drawnIconY = (int)roundf(entry.rcCell.top +
-            (entry.rcCell.bottom - entry.rcCell.top - iconSz) / 2.0f);
+        RectF paintCell = DockEntryCellForPaint(entry, paintSpace);
+        POINT unscrolledIcon = paintSpace
+                                   ? DockScreenSnapIcon(paintCell, iconSz, 0,
+                                                        0, *paintSpace)
+                                   : DockLegacyIcon(entry.rcCell, iconSz, 0, 0);
+        POINT icon = paintSpace
+                         ? DockScreenSnapIcon(paintCell, iconSz, offX, 0,
+                                              *paintSpace)
+                         : DockLegacyIcon(entry.rcCell, iconSz, offX, 0);
+        entry.drawnIconX = unscrolledIcon.x;
+        entry.drawnIconY = unscrolledIcon.y;
         entry.drawnIconSz = iconSz;
-        RECT cell = entry.rcCell;
-        OffsetRect(&cell, offX, 0);
         float alpha = (g_layoutTransition.active && entry.isNewEntry) ? entry.enterAlpha : 1.0f;
-        DrawDockEntryIcon(hdc, entry, cell, i, alpha);
+        DrawDockEntryIcon(hdc, entry, icon.x, icon.y, iconSz, i, alpha);
     }
 
     if (g_layoutTransition.active && !g_layoutTransition.departingItems.empty()) {
@@ -9143,10 +9453,14 @@ static void DrawDockIconStrip(HDC hdc) {
             int cellW = dep.rcCellCurrent.right - dep.rcCellCurrent.left;
             int cellH = dep.rcCellCurrent.bottom - dep.rcCellCurrent.top;
             if (cellW <= 0 || cellH <= 0) continue;
-            int iconX = (int)roundf(dep.rcCellCurrent.left + (cellW - iconSz) / 2.0f) + offX;
-            int iconY = (int)roundf(dep.rcCellCurrent.top + (cellH - iconSz) / 2.0f);
-
-            DrawIconWithAlpha(hdc, iconX, iconY, dep.hIcon, iconSz, dep.alpha);
+            RectF paintCell = DockDepartingCellForPaint(dep, paintSpace);
+            POINT icon = paintSpace
+                             ? DockScreenSnapIcon(paintCell, iconSz, offX, 0,
+                                                  *paintSpace)
+                             : DockLegacyIcon(dep.rcCellCurrent, iconSz, offX,
+                                              0);
+            DrawIconWithAlpha(hdc, icon.x, icon.y, dep.hIcon, iconSz,
+                              dep.alpha);
         }
     }
     RestoreDC(hdc, saved);
@@ -9216,14 +9530,15 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
     // 5. Draw centered window title in g_rcDockTitleBar
     if (g_settings.showTitle && g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
         const auto& selWnd = g_windows[g_selectedIndex];
-        RECT rcText = g_rcDockTitleBar;
-        rcText.left += DpiScale(20, g_dpiX);
-        rcText.right -= DpiScale(20, g_dpiX);
+        DockPaintSpace transitionPaint = {};
+        const DockPaintSpace* paintSpace = nullptr;
+        if (UseDockScreenProjection()) {
+            transitionPaint = GetDockPaintSpace();
+            paintSpace = &transitionPaint;
+        }
+        RECT rcText = DockTitleTextRectForPaint(paintSpace);
         float titleAlpha = 1.0f;
         if (g_dockPreviewSlide.active) {
-            int offX = (int)roundf(g_dockPreviewSlide.currentOffset);
-            rcText.left += offX;
-            rcText.right += offX;
             titleAlpha = g_dockPreviewSlide.currentAlpha;
         }
 
@@ -10645,12 +10960,237 @@ static void ResetScrollWheelAccumulators() {
     s_lastTouchpadScrollTick = 0;
 }
 
+// Stable TOUCHPAD_PARAMETERS_V1 layout from the Windows SDK. The compiler's
+// SDK predates these declarations; keep the numbered version rather than the
+// latest-version alias. SPI_GET/SETTOUCHPADPARAMETERS require Windows 11 24H2.
+struct SwsTouchpadParametersV1 {
+    UINT versionNumber;
+    UINT maxSupportedContacts;
+    UINT legacyTouchpadFeatures;
+    BOOL touchpadPresent : 1;
+    BOOL legacyTouchpadPresent : 1;
+    BOOL externalMousePresent : 1;
+    BOOL touchpadEnabled : 1;
+    BOOL touchpadActive : 1;
+    BOOL feedbackSupported : 1;
+    BOOL clickForceSupported : 1;
+    BOOL reserved1 : 25;
+    BOOL allowActiveWhenMousePresent : 1;
+    BOOL feedbackEnabled : 1;
+    BOOL tapEnabled : 1;
+    BOOL tapAndDragEnabled : 1;
+    BOOL twoFingerTapEnabled : 1;
+    BOOL rightClickZoneEnabled : 1;
+    BOOL mouseAccelSettingHonored : 1;
+    BOOL panEnabled : 1;
+    BOOL zoomEnabled : 1;
+    BOOL scrollDirectionReversed : 1;
+    BOOL reserved2 : 22;
+    UINT sensitivityLevel;
+    UINT cursorSpeed;
+    UINT feedbackIntensity;
+    UINT clickForceSensitivity;
+    UINT rightClickZoneWidth;
+    UINT rightClickZoneHeight;
+};
+static_assert(sizeof(SwsTouchpadParametersV1) == 44);
+static constexpr UINT SWS_SPI_GETTOUCHPADPARAMETERS = 0x00AE;
+static constexpr UINT SWS_SPI_SETTOUCHPADPARAMETERS = 0x00AF;
+
+// Switcher-thread only. We own a restore only after changing an enabled tap
+// action. If Windows already had it disabled, leave that preference disabled.
+static bool s_twoFingerTapRestoreOwned = false;
+static bool s_twoFingerTapParametersUnavailable = false;
+static DWORD s_twoFingerTapParameterError = ERROR_SUCCESS;
+
+static void UpdateTwoFingerTapOverride(bool want) {
+    if (want && g_touchpadTwoFingerTapSuppressed.load()) {
+        if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID);
+        return;
+    }
+    if (!want && !s_twoFingerTapRestoreOwned) {
+        g_touchpadTwoFingerTapSuppressed.store(false);
+        if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID);
+        return;
+    }
+    if (want && s_twoFingerTapParametersUnavailable) return;
+
+    SwsTouchpadParametersV1 parameters{};
+    parameters.versionNumber = 1;
+    SetLastError(ERROR_SUCCESS);
+    BOOL read = SystemParametersInfoW(SWS_SPI_GETTOUCHPADPARAMETERS,
+                                     sizeof(parameters), &parameters, 0);
+    DWORD error = read ? ERROR_SUCCESS : GetLastError();
+    if (read && want && !parameters.touchpadPresent) return;
+    if (read && (!want || parameters.twoFingerTapEnabled)) {
+        // Read afresh on release, and change only our bit. Never restore a
+        // snapshot of unrelated settings the user may have changed meanwhile.
+        parameters.twoFingerTapEnabled = want ? FALSE : TRUE;
+        SetLastError(ERROR_SUCCESS);
+        BOOL set = SystemParametersInfoW(SWS_SPI_SETTOUCHPADPARAMETERS,
+                                        sizeof(parameters), &parameters, 0);
+        error = set ? ERROR_SUCCESS : GetLastError();
+        if (set) s_twoFingerTapRestoreOwned = want;
+        read = set;
+    }
+    if (read) {
+        s_twoFingerTapParameterError = ERROR_SUCCESS;
+        g_touchpadTwoFingerTapSuppressed.store(want);
+        if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID);
+        if (want) {
+            // There is no promoted tap pair to intercept on this path. Retire
+            // fallback evidence so a physical mouse click cannot claim it.
+            g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
+        }
+        Wh_Log(L"SWS: two-finger Windows tap override active=%d restoreOwned=%d (live only)",
+               want, s_twoFingerTapRestoreOwned);
+        return;
+    }
+    if (want && (error == ERROR_INVALID_PARAMETER || error == ERROR_INVALID_SPI_VALUE)) {
+        s_twoFingerTapParametersUnavailable = true;
+    }
+    if (s_twoFingerTapParameterError != error) {
+        s_twoFingerTapParameterError = error;
+        Wh_Log(L"SWS: two-finger Windows tap %s failed (error=%u)",
+               want ? L"override" : L"restore", error);
+    }
+    // A failed restore must retain ownership and retry, including while hidden.
+    if (!want && g_hSwitcher) {
+        SetTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID, 100, nullptr);
+    }
+}
+
+static ULONGLONG EncodeRawTwoFingerTapMouseState(DWORD serial,
+                                                ULONGLONG deadline) {
+    return ((ULONGLONG)serial << 32) | (DWORD)deadline;
+}
+
+static DWORD RawTwoFingerTapMouseRemainingMs(ULONGLONG state, ULONGLONG now) {
+    LONG remaining = (LONG)((DWORD)state - (DWORD)now);
+    return state && remaining > 0 ? (DWORD)remaining : 0;
+}
+
+// Switcher-thread only. Once a down is consumed, its matching up must also be
+// consumed, even if the raw lift closes the last entry or settings disable input.
+static DWORD s_rawTwoFingerMouseButtonSerial = 0;
+static ULONGLONG s_rawTwoFingerMouseButtonDeadline = 0;
+
+static void UpdateTwoFingerTapMouseHookLifetime() {
+    if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_RAW_TWO_TAP_MOUSE_TIMER_ID);
+    if (g_isVisible || g_isPendingShow) return;
+    ULONGLONG now = GetTickCount64();
+    DWORD remaining = 0;
+    if (TouchpadHandlingEnabled() && g_touchpadReaderAvailable.load()) {
+        remaining = RawTwoFingerTapMouseRemainingMs(
+            g_touchpadRawTwoFingerTapMouseState.load(std::memory_order_acquire), now);
+    }
+    if (s_rawTwoFingerMouseButtonDeadline > now) {
+        remaining = (std::max)(remaining,
+            (DWORD)(s_rawTwoFingerMouseButtonDeadline - now));
+    } else {
+        s_rawTwoFingerMouseButtonSerial = 0;
+        s_rawTwoFingerMouseButtonDeadline = 0;
+    }
+    if (g_hMouseHook && remaining && g_hSwitcher &&
+        SetTimer(g_hSwitcher, SWS_RAW_TWO_TAP_MOUSE_TIMER_ID, remaining, nullptr)) {
+        return;
+    }
+    if (g_hMouseHook) {
+        UnhookWindowsHookEx(g_hMouseHook);
+        g_hMouseHook = nullptr;
+    }
+}
+
+static bool SuppressTwoFingerTapMouse(WPARAM message) {
+    if (message != WM_RBUTTONDOWN && message != WM_RBUTTONUP) return false;
+    ULONGLONG now = GetTickCount64();
+    if (message == WM_RBUTTONUP) {
+        bool paired = s_rawTwoFingerMouseButtonSerial &&
+                      now < s_rawTwoFingerMouseButtonDeadline;
+        DWORD serial = s_rawTwoFingerMouseButtonSerial;
+        s_rawTwoFingerMouseButtonSerial = 0;
+        s_rawTwoFingerMouseButtonDeadline = 0;
+        if (!paired) return false; // Never consume an up whose down passed through.
+        ULONGLONG state = g_touchpadRawTwoFingerTapMouseState.load(
+            std::memory_order_acquire);
+        while ((DWORD)(state >> 32) == serial &&
+               !g_touchpadRawTwoFingerTapMouseState.compare_exchange_weak(
+                   state, 0, std::memory_order_acq_rel)) {}
+        UpdateTwoFingerTapMouseHookLifetime();
+        return true;
+    }
+    if (!TouchpadHandlingEnabled() || !g_touchpadReaderAvailable.load()) return false;
+    if (g_touchpadTwoFingerTapSuppressed.load()) return false;
+    ULONGLONG state = g_touchpadRawTwoFingerTapMouseState.load(
+        std::memory_order_acquire);
+    if (!RawTwoFingerTapMouseRemainingMs(state, now)) return false;
+    s_rawTwoFingerMouseButtonSerial = (DWORD)(state >> 32);
+    s_rawTwoFingerMouseButtonDeadline = now + SWS_RAW_TWO_TAP_MOUSE_PAIR_MS;
+    UpdateTwoFingerTapMouseHookLifetime();
+    return true;
+}
+
+static long long TouchpadTraceAgeMs(ULONGLONG now, ULONGLONG tick) {
+    return tick ? (tick <= now ? (long long)(now - tick) : 0) : -1;
+}
+
+static void LogTwoFingerTapMouseEvent(WPARAM message,
+                                      const MSLLHOOKSTRUCT& mouse,
+                                      ULONGLONG stateBefore,
+                                      DWORD pairSerialBefore,
+                                      bool consumed) {
+    ULONGLONG now = GetTickCount64();
+    HWND underCursor = WindowFromPoint(mouse.pt);
+    auto& stats = s_touchpadInputDiagnostics;
+    // Diagnostic only: record the hook payload and reader/UI snapshots. Mouse
+    // flags/extra-info are not assumed to identify touchpad input, and neither
+    // cursor position nor logging changes the ownership decision.
+    Wh_Log(L"SWS TAPTRACE mouse tick=%llu eventTick=%u eventAgeMs=%u message=0x%X consumed=%d flags=0x%X extra=0x%llX "
+           L"cursor=%d,%d under=%p inside=%d foreground=%p hook=%p visible=%d pending=%d exit=%d hiding=%d "
+           L"enabled=%d available=%d stopping=%d closeActive=%d candidateSerial=%u candidateRemainingMs=%u pairSerial=%u "
+           L"uiTips=%d uiTap=%d selected=%d raw=%u reports=%u frames=%u posted=%u uiFrames=%u readerTips=%u "
+           L"rawAgeMs=%lld frameAgeMs=%lld uiAgeMs=%lld",
+           (unsigned long long)now, mouse.time, (DWORD)now - mouse.time,
+           (UINT)message, consumed, mouse.flags, (unsigned long long)mouse.dwExtraInfo,
+           mouse.pt.x, mouse.pt.y, underCursor, IsSwitcherWindow(underCursor),
+           GetForegroundWindow(), g_hMouseHook, g_isVisible, g_isPendingShow,
+           g_animExitActive, g_isHidingSwitcher, g_touchpadGesturesEnabled.load(),
+           g_touchpadReaderAvailable.load(), g_touchpadReaderStopping.load(),
+           g_touchpadTwoFingerCloseActive.load(), (DWORD)(stateBefore >> 32),
+           RawTwoFingerTapMouseRemainingMs(stateBefore, now), pairSerialBefore,
+           s_rawGestureTips, s_rawTwoFingerTapActive, g_selectedIndex,
+           stats.rawMessages.load(), stats.hidReports.load(), stats.frames.load(),
+           stats.posted.load(), stats.uiFrames.load(), stats.lastTips.load(),
+           TouchpadTraceAgeMs(now, stats.lastRawTick.load()),
+           TouchpadTraceAgeMs(now, stats.lastFrameTick.load()),
+           TouchpadTraceAgeMs(now, stats.lastUiTick.load()));
+}
+
 static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION) {
+        ULONGLONG stateBefore = g_touchpadRawTwoFingerTapMouseState.load(
+            std::memory_order_acquire);
+        DWORD pairSerialBefore = s_rawTwoFingerMouseButtonSerial;
+        bool consumed = SuppressTwoFingerTapMouse(wParam);
+        if (wParam == WM_RBUTTONDOWN || wParam == WM_RBUTTONUP) {
+            LogTwoFingerTapMouseEvent(wParam, *(const MSLLHOOKSTRUCT*)lParam,
+                                     stateBefore, pairSerialBefore, consumed);
+        }
+        if (consumed) {
+            g_ctrlTapPending = false;
+            Wh_Log(L"SWS: consumed owned two-finger tap mouse event (message=0x%X)", (UINT)wParam);
+            return 1;
+        }
+    }
     if (nCode == HC_ACTION && g_isVisible &&
         (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN || wParam == WM_MBUTTONDOWN)) {
         g_ctrlTapPending = false;
         auto* mouse = (MSLLHOOKSTRUCT*)lParam;
         if (!IsSwitcherWindow(WindowFromPoint(mouse->pt))) {
+            Wh_Log(L"SWS TAPTRACE click-away tick=%llu message=0x%X cursor=%d,%d uiTips=%d uiTap=%d selected=%d",
+                   (unsigned long long)GetTickCount64(), (UINT)wParam,
+                   mouse->pt.x, mouse->pt.y, s_rawGestureTips,
+                   s_rawTwoFingerTapActive, g_selectedIndex);
             PostMessageW(g_hSwitcher, WM_SWS_CANCEL_INPUT, 0, 0);
         }
     }
@@ -10790,8 +11330,11 @@ static void RevealPendingSwitcher() {
         ShowWindow(g_hSwitcher, SW_HIDE);
     }
     g_isVisible = true;
+    RefreshTouchpadGestureKinds();
     if (!g_hMouseHook) {
         g_hMouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, GetModuleHandle(NULL), 0);
+        Wh_Log(L"SWS TAPTRACE mouse hook installed (reveal hook=%p error=%u)",
+               g_hMouseHook, g_hMouseHook ? ERROR_SUCCESS : GetLastError());
     }
 
     // Re-resolve the final switcher rect before reading it.
@@ -11221,6 +11764,13 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
         // failed show doesn't leak HTHUMBNAIL handles.
         UnregisterThumbnails();
         g_touchpadSwitcherActive.store(false);
+        s_altSessionOwner = false;
+        s_altHeld = false;
+        s_altRawBaselineSerial = 0;
+        s_combinedRawSerial = 0;
+        s_combinedRawSeen = false;
+        s_combinedRawLiftHandled = false;
+        s_commitStarted = false;
         PublishNativeSwipePolicy();
         return;
     }
@@ -11329,6 +11879,8 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
     RefreshTouchpadGestureKinds();
     if (!g_hMouseHook) {
         g_hMouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, GetModuleHandle(NULL), 0);
+        Wh_Log(L"SWS TAPTRACE mouse hook installed (show hook=%p error=%u)",
+               g_hMouseHook, g_hMouseHook ? ERROR_SUCCESS : GetLastError());
     }
 
     ApplyThemeToWindow(g_hSwitcher);
@@ -11366,7 +11918,12 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
 
 static void HideSwitcher() {
     if (g_isHidingSwitcher) return;
+    g_touchpadTwoFingerCloseActive.store(false);
     g_touchpadSwitcherActive.store(false);
+    // A cancelled session must not let the still-held stroke re-enter through
+    // the Explorer-side native source gate. The reader will publish the next
+    // candidate only after a complete lift and a fresh contact edge.
+    ClearRawThreeFingerCandidateProperty();
     PublishNativeSwipePolicy();
     g_isHidingSwitcher = true;
     Wh_Log(L"SWS: hiding session (sticky=%d, raw=%d, tips=%d, foreground=%p)",
@@ -11456,10 +12013,9 @@ static void HideSwitcher() {
 
     g_isVisible = false;
     g_isPendingShow = false;
-    if (g_hMouseHook) {
-        UnhookWindowsHookEx(g_hMouseHook);
-        g_hMouseHook = NULL;
-    }
+    // UI teardown is not the end of the already-owned tap's mouse pair.
+    // The short timer keeps only its input filter alive, never its foreground.
+    UpdateTwoFingerTapMouseHookLifetime();
     g_isSticky = false;
     g_isAltBacktickSameApp = false;
     g_sameAppSessionKey[0] = L'\0';
@@ -11470,6 +12026,13 @@ static void HideSwitcher() {
     g_drillInAfterReveal = false;
     g_isPaginatedView = false;
     g_isTouchpadGestureActive = false;
+    s_altSessionOwner = false;
+    s_altHeld = false;
+    s_altRawBaselineSerial = 0;
+    s_combinedRawSerial = 0;
+    s_combinedRawSeen = false;
+    s_combinedRawLiftHandled = false;
+    s_commitStarted = false;
     if (g_hSwitcher) {
         KillTimer(g_hSwitcher, SWS_CLOSE_VERIFY_TIMER_ID);
         KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
@@ -11548,6 +12111,8 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
 
 static void StartExitAnimation(bool activateSelectedWindow) {
     if ((!g_isVisible && !g_isPendingShow) || g_animExitActive) return;
+    g_touchpadTwoFingerCloseActive.store(false);
+    UpdateTwoFingerTapOverride(false);
     if (!activateSelectedWindow) s_touchpadCommitActivation = false;
     // A lift during cancellation must not commit; continuing the cancelled
     // stroke must not reopen the switcher before all fingers have lifted.
@@ -11616,6 +12181,64 @@ static void SwitchToSelected() {
     // the first commit already tore everything down — a second commit must no-op.
     if (!g_isVisible && !g_isPendingShow) return;
     StartExitAnimation(true);
+}
+
+static void AdoptRawThreeFingerState(bool allowCurrentLive) {
+    if (!s_altSessionOwner) return;
+    ULONGLONG state = g_touchpadRawThreeFingerState.load(std::memory_order_acquire);
+    ULONGLONG serial = RawThreeFingerStateSerial(state);
+    ULONG phase = RawThreeFingerStatePhase(state);
+    if (!serial ||
+        (serial <= s_altRawBaselineSerial &&
+         !(allowCurrentLive && phase == SWS_RAW_THREE_PHASE_LIVE))) {
+        return;
+    }
+    if (!s_combinedRawSeen || serial != s_combinedRawSerial) {
+        s_combinedRawSerial = serial;
+        s_combinedRawSeen = true;
+        s_combinedRawLiftHandled = false;
+    }
+    if (g_hSwitcher && (g_isVisible || g_isPendingShow) &&
+        (phase == SWS_RAW_THREE_PHASE_LIVE ||
+         phase == SWS_RAW_THREE_PHASE_LIFTED)) {
+        SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID,
+                 SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
+    }
+}
+
+static bool CombinedRawReleasePending() {
+    AdoptRawThreeFingerState();
+    return s_altSessionOwner && s_combinedRawSeen &&
+           !s_combinedRawLiftHandled;
+}
+
+static void KeepAltReleasePolling() {
+    if (g_hSwitcher && s_altSessionOwner &&
+        (g_isVisible || g_isPendingShow)) {
+        SetTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID, 50, NULL);
+    }
+}
+
+static bool TryCommitAfterInputRelease() {
+    if (!g_isVisible && !g_isPendingShow) return false;
+    AdoptRawThreeFingerState();
+    if (s_commitStarted) return true;
+    if ((s_altSessionOwner && s_altHeld) || g_isTouchpadGestureActive ||
+        CombinedRawReleasePending()) {
+        KeepAltReleasePolling();
+        return false;
+    }
+    s_commitStarted = true;
+    s_touchpadCommitActivation = true;
+    SwitchToSelected();
+    return true;
+}
+
+static void HandleAltRelease() {
+    s_altHeld = false;
+    AdoptRawThreeFingerState();
+    if (g_isSticky) return;
+    TryCommitAfterInputRelease();
 }
 
 // Helper: recompute layout and reposition switcher window
@@ -13577,7 +14200,11 @@ static void QueueCloseWindow(HWND hw) {
         s_pendingCloseDeadlines.erase(hw);
     }
     // A failed post is not an in-flight close and must remain retryable.
-    if (PostMessage(hw, WM_SYSCOMMAND, SC_CLOSE, 0)) {
+    BOOL posted = PostMessage(hw, WM_SYSCOMMAND, SC_CLOSE, 0);
+    DWORD error = posted ? ERROR_SUCCESS : GetLastError();
+    Wh_Log(L"SWS TAPTRACE close post tick=%llu window=%p posted=%d error=%u",
+           (unsigned long long)now, hw, posted, error);
+    if (posted) {
         s_pendingCloseWindows.push_back(hw);
         s_pendingCloseDeadlines[hw] = now + SWS_CLOSE_COOLDOWN_MS;
     }
@@ -13614,9 +14241,6 @@ static void CloseSwitcherEntry(int idx) {
 // successful SendInput does not establish foreground eligibility. Log both the
 // request and the actual activation result rather than assuming it succeeded.
 #define SWS_RAW_FOREGROUND_TAP_VK 0xE8
-// The backstop must not end a raw session while the fingers are still down.
-// Every frame refreshes this, so only a lost reader or a missed lift can reach it.
-#define SWS_RAW_SESSION_LOST_TIMEOUT_MS 4000
 static void TapUnassignedKeyForForeground() {
     INPUT inputs[2] = {};
     inputs[0].type = INPUT_KEYBOARD;
@@ -13739,11 +14363,21 @@ static void BeginTouchpadGesture(int step) {
 }
 
 static void EndTouchpadGesture() {
-    s_touchpadCommitActivation = true;
     g_isTouchpadGestureActive = false;
     if (g_hSwitcher) {
         KillTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID);
     }
+    // A touchpad release is only one half of a combined Alt+Tab session. Do
+    // not commit while Alt is still physically held, and do not commit a
+    // native handoff until its reader-observed lift reaches the UI thread.
+    if (s_altSessionOwner &&
+        (s_altHeld || CombinedRawReleasePending())) {
+        KeepAltReleasePolling();
+        return;
+    }
+    if (s_commitStarted) return;
+    s_commitStarted = true;
+    s_touchpadCommitActivation = true;
     if (g_isVisible || g_isPendingShow) {
         SwitchToSelected();
     }
@@ -13775,8 +14409,6 @@ static void EndTouchpadGesture() {
 // from walking the layout through itself while still covering several rows when needed.
 #define SWS_RAW_SWIPE_ROW_INTERVAL_MS 140
 // A tap must be stationary, not just a drag which failed to change selection.
-#define SWS_RAW_TAP_MAX_MS 300
-#define SWS_RAW_TAP_SLOP (65535 / 50)
 #define SWS_RAW_DIRECTION_TRAVEL (SWS_RAW_SWIPE_ENTRY_PITCH / 3)
 
 static void PublishRawSwipe(bool liftGrace = false) {
@@ -13815,9 +14447,16 @@ static bool PreserveRawStrokeOnFocusLoss() {
     // The first shell gesture can activate another window before its native
     // switcher is intercepted. This is not a lift. Explicit clicks/Win-key
     // actions and Esc still cancel; between strokes ordinary focus loss cancels.
-    return RawTouchpadOwnsInput() && g_isTouchpadGestureActive &&
-           s_rawGestureTips > 0 && s_rawTouchpadLastFrameTick &&
-           GetTickCount64() - s_rawTouchpadLastFrameTick < SWS_RAW_SESSION_LOST_TIMEOUT_MS &&
+    ULONGLONG now = GetTickCount64();
+    ULONGLONG readerTick = g_touchpadRawThreeFingerLastTick.load(
+        std::memory_order_acquire);
+    bool liveUiStroke = g_isTouchpadGestureActive && s_rawGestureTips > 0 &&
+                        s_rawTouchpadLastFrameTick &&
+                        now - s_rawTouchpadLastFrameTick <
+                            SWS_RAW_SESSION_LOST_TIMEOUT_MS;
+    bool liveCombinedStroke = CombinedRawReleasePending() && readerTick &&
+                              now - readerTick < SWS_RAW_SESSION_LOST_TIMEOUT_MS;
+    return RawTouchpadOwnsInput() && (liveUiStroke || liveCombinedStroke) &&
            !(GetAsyncKeyState(VK_LBUTTON) & 0x8000) &&
            !(GetAsyncKeyState(VK_RBUTTON) & 0x8000) &&
            !(GetAsyncKeyState(VK_MBUTTON) & 0x8000) &&
@@ -14067,6 +14706,20 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     const ULONGLONG now = GetTickCount64();
     ++s_touchpadInputDiagnostics.uiFrames;
     s_touchpadInputDiagnostics.lastUiTick.store(now);
+    if ((int)tips != s_rawGestureTips) {
+        Wh_Log(L"SWS TAPTRACE ui tick=%llu eventTick=%u messageAgeMs=%u tips=%u previous=%d position=%u,%u "
+               L"tap=%d visible=%d pending=%d exit=%d ignore=%d nativeDiscard=%d selected=%d",
+               (unsigned long long)now, (DWORD)GetMessageTime(),
+               (DWORD)now - (DWORD)GetMessageTime(), tips, s_rawGestureTips,
+               packedPos & 0xFFFF, (packedPos >> 16) & 0xFFFF,
+               s_rawTwoFingerTapActive, g_isVisible, g_isPendingShow,
+               g_animExitActive, s_rawIgnoreUntilLift,
+               s_nativeTouchpadRawDiscardPending, g_selectedIndex);
+    }
+    AdoptRawThreeFingerState();
+    if (tips == 0 && s_altSessionOwner && s_combinedRawSeen) {
+        s_combinedRawLiftHandled = true;
+    }
     if (s_nativeTouchpadRawDiscardPending) {
         if ((LONG)((DWORD)GetMessageTime() - s_nativeTouchpadRawDiscardTick) <= 0) return;
         s_nativeTouchpadRawDiscardPending = false;
@@ -14122,16 +14775,28 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         closeTwoFingerTap = s_rawTwoFingerTapActive && !s_rawTwoFingerTapMoved &&
                             now - s_rawTwoFingerTapStartTick <= SWS_RAW_TAP_MAX_MS &&
                             g_isVisible && !g_animExitActive;
+        if (s_rawTwoFingerTapActive) {
+            Wh_Log(L"SWS TAPTRACE ui tap release tick=%llu heldMs=%llu close=%d selected=%d",
+                   (unsigned long long)now,
+                   (unsigned long long)(now - s_rawTwoFingerTapStartTick),
+                   closeTwoFingerTap, g_selectedIndex);
+        }
         ResetRawTwoFingerTap();
     } else if (s_rawTwoFingerTapActive) {
         if (tips > 2 ||
             abs(frameX - s_rawTwoFingerTapOriginX) > SWS_RAW_TAP_SLOP ||
             abs(frameY - s_rawTwoFingerTapOriginY) > SWS_RAW_TAP_SLOP) {
+            Wh_Log(L"SWS TAPTRACE ui tap invalidated tick=%llu tips=%u delta=%d,%d slop=%d",
+                   (unsigned long long)now, tips,
+                   frameX - s_rawTwoFingerTapOriginX,
+                   frameY - s_rawTwoFingerTapOriginY, SWS_RAW_TAP_SLOP);
             ResetRawTwoFingerTap();
         } else if (tips == 2 && prevTips == 0) {
             ResetRawTwoFingerTap();
         }
     } else if (tips == 2 && prevTips == 0 && g_isVisible && !g_isPendingShow) {
+        Wh_Log(L"SWS TAPTRACE ui tap armed tick=%llu selected=%d",
+               (unsigned long long)now, g_selectedIndex);
         s_rawTwoFingerTapActive = true;
         s_rawTwoFingerTapMoved = false;
         s_rawTwoFingerTapStartTick = now;
@@ -14147,6 +14812,9 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     if (tips == 0) {
         if (closeTwoFingerTap && g_selectedIndex >= 0 &&
             g_selectedIndex < (int)g_windows.size()) {
+            Wh_Log(L"SWS TAPTRACE ui close tick=%llu selected=%d window=%p",
+                   (unsigned long long)now, g_selectedIndex,
+                   g_windows[g_selectedIndex].hWnd);
             CloseSwitcherEntry(g_selectedIndex);
             return;
         }
@@ -14222,7 +14890,11 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         if (g_isVisible || g_isPendingShow) {
             s_rawSessionOwned = true;
             g_isTouchpadGestureActive = true;
-            KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
+            if (s_altSessionOwner && !g_isSticky) {
+                KeepAltReleasePolling();
+            } else {
+                KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
+            }
             if (g_isPendingShow) RevealPendingSwitcher();
             SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
         }
@@ -14531,6 +15203,15 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     }
 
     if (uMsg == WM_TIMER) {
+        if (wParam == SWS_RAW_TWO_TAP_MOUSE_TIMER_ID) {
+            UpdateTwoFingerTapMouseHookLifetime();
+            return 0;
+        }
+
+        if (wParam == SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID) {
+            UpdateTwoFingerTapOverride(g_touchpadTwoFingerCloseActive.load());
+            return 0;
+        }
         if (wParam == SWS_NATIVE_TOUCHPAD_COMPLETION_TIMER_ID) {
             KillTimer(hWnd, SWS_NATIVE_TOUCHPAD_COMPLETION_TIMER_ID);
             CompleteNativeTouchpadInvocation();
@@ -14547,10 +15228,14 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
 
         if (wParam == SWS_ALT_POLL_TIMER_ID) {
-            if (g_isTouchpadGestureActive) {
+            if (g_isTouchpadGestureActive && !s_altSessionOwner) {
                 return 0; // Physical Alt key polling strictly disabled during touchpad gestures
             }
             if (!g_isSticky && (GetAsyncKeyState(VK_MENU) & 0x8000) == 0) {
+                if (s_altSessionOwner) {
+                    HandleAltRelease();
+                    return 0;
+                }
                 if (GetTickCount64() - s_lastTouchpadScrollTick < 1200) {
                     return 0; // Grace period while user is scrolling/gesturing with touchpad
                 }
@@ -14630,6 +15315,22 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 
         if (wParam == SWS_TOUCHPAD_IDLE_TIMER_ID) {
             KillTimer(hWnd, SWS_TOUCHPAD_IDLE_TIMER_ID);
+            AdoptRawThreeFingerState();
+            if (s_altSessionOwner && s_combinedRawSeen &&
+                !s_combinedRawLiftHandled) {
+                ULONGLONG readerTick =
+                    g_touchpadRawThreeFingerLastTick.load(
+                        std::memory_order_acquire);
+                if (readerTick && GetTickCount64() - readerTick <
+                                      SWS_RAW_SESSION_LOST_TIMEOUT_MS) {
+                    SetTimer(hWnd, SWS_TOUCHPAD_IDLE_TIMER_ID,
+                             SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
+                    return 0;
+                }
+                Wh_Log(L"SWS: combined raw input lost -> cancelling without selection");
+                HideSwitcher();
+                return 0;
+            }
             if (s_rawTouchpadShieldActive) {
                 if (s_rawTouchpadShieldReleasePending && s_rawGestureTips == 0) {
                     SetTimer(hWnd, SWS_TOUCHPAD_IDLE_TIMER_ID,
@@ -14798,6 +15499,19 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             return 0;
         }
 
+        if (!s_altSessionOwner) {
+            ULONGLONG rawState = g_touchpadRawThreeFingerState.load(
+                std::memory_order_acquire);
+            s_altRawBaselineSerial = RawThreeFingerStateSerial(rawState);
+            s_combinedRawSerial = 0;
+            s_combinedRawSeen = false;
+            s_combinedRawLiftHandled = false;
+            s_commitStarted = false;
+        }
+        s_altSessionOwner = true;
+        s_altHeld = true;
+        AdoptRawThreeFingerState(true);
+
         if (!g_isVisible && !g_isPendingShow) {
             HWND hFg = GetForegroundWindow();
             if (hFg && !IsSwitcherWindow(hFg) && IsEligibleWindow(hFg)) {
@@ -14963,8 +15677,8 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             }
         }
 
-        if (wParam == VK_MENU && (g_isVisible || g_isPendingShow) && !g_isSticky && !g_isTouchpadGestureActive) {
-            SwitchToSelected();
+        if (wParam == VK_MENU && (g_isVisible || g_isPendingShow) && !g_isSticky) {
+            HandleAltRelease();
             return 0;
         }
         if (wParam == VK_ESCAPE && (g_isVisible || g_isPendingShow)) {
@@ -14983,8 +15697,8 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             }
         }
 
-        if (wParam == VK_MENU && (g_isVisible || g_isPendingShow) && !g_isSticky && !g_isTouchpadGestureActive) {
-            SwitchToSelected();
+        if (wParam == VK_MENU && (g_isVisible || g_isPendingShow) && !g_isSticky) {
+            HandleAltRelease();
             return 0;
         }
         break;
@@ -15087,11 +15801,15 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
         return 0;
     case WM_SWS_CANCEL_INPUT:
+        Wh_Log(L"SWS TAPTRACE cancellation tick=%llu visible=%d pending=%d exit=%d tips=%d tap=%d selected=%d",
+               (unsigned long long)GetTickCount64(), g_isVisible, g_isPendingShow,
+               g_animExitActive, s_rawGestureTips, s_rawTwoFingerTapActive,
+               g_selectedIndex);
         if (g_isVisible || g_isPendingShow) StartExitAnimation(false);
         return 0;
     case WM_SWS_TOUCHPAD_READER_CHANGED:
         if (!g_touchpadReaderAvailable.load()) {
-            if (s_rawSessionOwned) HideSwitcher();
+            if (s_rawSessionOwned || s_combinedRawSeen) HideSwitcher();
             CancelRawTouchpadStroke();
             s_rawTouchpadLastFrameTick = 0;
             FinishRawTouchpadShield();
@@ -15352,6 +16070,10 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     }
     case WM_ACTIVATE:
         if (LOWORD(wParam) == WA_INACTIVE && (g_isVisible || g_isPendingShow)) {
+            Wh_Log(L"SWS TAPTRACE deactivation tick=%llu newActive=%p foreground=%p tips=%d tap=%d selected=%d",
+                   (unsigned long long)GetTickCount64(), (HWND)lParam,
+                   GetForegroundWindow(), s_rawGestureTips, s_rawTwoFingerTapActive,
+                   g_selectedIndex);
             if (g_animExitActive || g_isHidingSwitcher || g_recoveringShellFocus) return 0;
             HWND hNewActive = (HWND)lParam;
             HWND hCheck = hNewActive ? hNewActive : GetForegroundWindow();
@@ -15371,6 +16093,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             if (PreserveRawStrokeOnFocusLoss()) {
                 Wh_Log(L"SWS: retaining live raw stroke after deactivation (foreground=%p, tips=%d)",
                        hCheck, s_rawGestureTips);
+                return 0;
+            }
+            if (CombinedRawReleasePending()) {
+                Wh_Log(L"SWS: retaining combined Alt/raw session after deactivation (foreground=%p)",
+                       hCheck);
                 return 0;
             }
             if ((s_rawSessionOwned || g_isSticky) && hCheck && !IsSwitcherWindow(hCheck)) {
@@ -15397,6 +16124,10 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         break;
     case WM_KILLFOCUS:
         if (g_isVisible || g_isPendingShow) {
+            Wh_Log(L"SWS TAPTRACE focus loss tick=%llu newFocus=%p foreground=%p tips=%d tap=%d selected=%d",
+                   (unsigned long long)GetTickCount64(), (HWND)wParam,
+                   GetForegroundWindow(), s_rawGestureTips, s_rawTwoFingerTapActive,
+                   g_selectedIndex);
             if (g_animExitActive || g_isHidingSwitcher || g_recoveringShellFocus) return 0;
             HWND hNewFocus = (HWND)wParam;
             HWND hCheck = hNewFocus ? hNewFocus : GetForegroundWindow();
@@ -15414,6 +16145,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             if (PreserveRawStrokeOnFocusLoss()) {
                 Wh_Log(L"SWS: retaining live raw stroke after focus loss (foreground=%p, tips=%d)",
                        hCheck, s_rawGestureTips);
+                return 0;
+            }
+            if (CombinedRawReleasePending()) {
+                Wh_Log(L"SWS: retaining combined Alt/raw session after focus loss (foreground=%p)",
+                       hCheck);
                 return 0;
             }
             if ((s_rawSessionOwned || g_isSticky) && hCheck && !IsSwitcherWindow(hCheck)) {
@@ -16262,6 +16998,7 @@ struct NativeSwipePolicy {
     HWND endpoint = nullptr;
     DWORD value = 0;
     bool active = false;
+    bool candidateRequired = false;
     DWORD relayEpoch = 0;
 };
 
@@ -16272,6 +17009,8 @@ static NativeSwipePolicy ReadNativeSwipePolicy() {
         policy.value = (DWORD)(ULONG_PTR)GetPropW(
             policy.endpoint, SWS_NATIVE_SWIPE_POLICY_PROP);
         policy.active = GetPropW(policy.endpoint, SWS_NATIVE_SWIPE_ACTIVE_PROP) != nullptr;
+        policy.candidateRequired =
+            GetPropW(policy.endpoint, SWS_NATIVE_SWIPE_PROFILE_PROP) != nullptr;
         policy.relayEpoch = (DWORD)(ULONG_PTR)GetPropW(
             policy.endpoint, SWS_NATIVE_TOUCHPAD_EPOCH_PROP);
     }
@@ -16473,8 +17212,30 @@ static void __cdecl NativeSwipeCancel_Hook(void* pThis) {
     EndNativeSwipeState(pThis, generation);
 }
 
+static bool WaitForFreshRawThreeFingerCandidate(NativeSwipePolicy& policy,
+                                                DWORD* waitedMs) {
+    ULONGLONG start = GetTickCount64();
+    ULONGLONG deadline = start + SWS_NATIVE_TOUCHPAD_CANDIDATE_WAIT_MS;
+    bool found = false;
+    do {
+        policy = ReadNativeSwipePolicy();
+        if (policy.active) break;
+        if (NativeTouchpadPolicyReady(policy) && policy.endpoint &&
+            FreshRawThreeFingerCandidate(policy.endpoint, GetTickCount64())) {
+            found = true;
+            break;
+        }
+        if (GetTickCount64() >= deadline) break;
+        Sleep(1);
+    } while (true);
+    if (waitedMs) {
+        *waitedMs = (DWORD)(GetTickCount64() - start);
+    }
+    return found;
+}
+
 static HRESULT __cdecl NativeSwipeTarget_Hook(void* pThis, int type, int direction,
-                                             void** target) {
+                                              void** target) {
     NativeSwipeScope* scope = s_nativeSwipeThread.current;
     auto* state = scope ? &scope->state : nullptr;
     if (s_nativeSwipeShutdownRequested.load() || !s_nativeSwipeHooksAvailable.load() ||
@@ -16504,8 +17265,16 @@ static HRESULT __cdecl NativeSwipeTarget_Hook(void* pThis, int type, int directi
         // state must not veto this PTP source gate. Outside down/tap stay native.
         bool reserved = direction == 1 || direction == 3 ||
                         (direction == 2 && (policy.value & 4u));
+        bool candidateRequired = policy.candidateRequired;
+        DWORD candidateWaitMs = 0;
+        bool candidate = policy.active || !candidateRequired;
+        if (!policy.active && reserved && candidateRequired) {
+            candidate = WaitForFreshRawThreeFingerCandidate(policy,
+                                                            &candidateWaitMs);
+            ready = NativeTouchpadPolicyReady(policy);
+        }
         bool suppress = ready && direction >= 1 && direction <= 4 &&
-                        (policy.active || reserved);
+                        (policy.active || (reserved && candidate));
         if (suppress && !policy.active) {
             state->relayToken = BeginNativeSwipeInvocation(policy, (UINT)direction);
             state->relayEpoch = policy.relayEpoch;
@@ -16520,10 +17289,15 @@ static HRESULT __cdecl NativeSwipeTarget_Hook(void* pThis, int type, int directi
         state->endpoint = policy.endpoint;
         state->policyEpoch = policy.value >> 3;
         CommitNativeSwipeState(*state);
-        if (suppress) Wh_Log(L"SWS: suppressed native PTP start (direction=%d active=%d)",
-                             direction, policy.active);
-        else Wh_Log(L"SWS: native PTP start left to Windows (direction=%d active=%d ready=%d sticky=%d)",
-                    direction, policy.active, ready, (policy.value & 4u) != 0);
+        if (suppress) {
+            Wh_Log(L"SWS: suppressed native PTP start (direction=%d active=%d candidateRequired=%d candidate=%d waitMs=%u)",
+                   direction, policy.active, candidateRequired, candidate,
+                   candidateWaitMs);
+        } else {
+            Wh_Log(L"SWS: native PTP start left to Windows (direction=%d active=%d ready=%d sticky=%d candidateRequired=%d candidate=%d waitMs=%u)",
+                   direction, policy.active, ready, (policy.value & 4u) != 0,
+                   candidateRequired, candidate, candidateWaitMs);
+        }
         Wh_Log(L"SWS: native PTP start context %s",
                FormatTouchpadForegroundDiagnostic(GetForegroundWindow(), policy.endpoint).c_str());
         RequestTouchpadInputDiagnostics(policy.endpoint, (UINT)direction);
@@ -16976,6 +17750,15 @@ static bool UpdateTouchpadGestureTakeover(bool want) {
 
 static bool RefreshTouchpadGestureKinds() {
     // Only the switcher thread creates, configures and releases this controller.
+    bool twoFingerActive =
+        TouchpadHandlingEnabled() && g_touchpadReaderAvailable.load() &&
+        g_isVisible && !g_animExitActive && !g_isHidingSwitcher;
+    if (g_touchpadTwoFingerCloseActive.exchange(twoFingerActive) != twoFingerActive) {
+        Wh_Log(L"SWS TAPTRACE lifetime tick=%llu closeActive=%d visible=%d pending=%d exit=%d hiding=%d hook=%p",
+               (unsigned long long)GetTickCount64(), twoFingerActive, g_isVisible,
+               g_isPendingShow, g_animExitActive, g_isHidingSwitcher, g_hMouseHook);
+    }
+    UpdateTwoFingerTapOverride(twoFingerActive);
     return UpdateTouchpadGestureTakeover(TouchpadGestureTakeoverWanted());
 }
 
@@ -17188,6 +17971,16 @@ thread_exit:
     g_touchpadGesturesEnabled.store(false);
     PublishNativeSwipePolicy();
     if (g_isVisible || g_isPendingShow) HideSwitcher();
+    g_touchpadTwoFingerCloseActive.store(false);
+    UpdateTwoFingerTapOverride(false);
+    g_touchpadRawTwoFingerTapMouseState.store(0);
+    s_rawTwoFingerMouseButtonSerial = 0;
+    s_rawTwoFingerMouseButtonDeadline = 0;
+    if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_RAW_TWO_TAP_MOUSE_TIMER_ID);
+    if (g_hMouseHook) {
+        UnhookWindowsHookEx(g_hMouseHook);
+        g_hMouseHook = nullptr;
+    }
     FinishRawTouchpadShield();
     ReleaseTouchpadGestureTakeover();
     UnregisterThumbnails();
@@ -17249,6 +18042,7 @@ struct TouchpadDevice {
     double rangeX = 0.0;
     double rangeY = 0.0;
     bool hasContactCount = false;
+    bool candidateGated = false;
     bool valid = false;
 };
 
@@ -17258,6 +18052,15 @@ static ULONG g_touchpadFrameExpected = 0;
 static HANDLE g_hTouchpadReaderThread = NULL;
 static HANDLE g_hTouchpadReaderStopEvent = NULL;
 static HANDLE g_hTouchpadReaderReadyEvent = NULL;
+
+static void UpdateNativeCandidateRequirement() {
+    bool required = std::any_of(
+        g_touchpadDevices.begin(), g_touchpadDevices.end(),
+        [](const auto& entry) {
+            return entry.second.valid && entry.second.candidateGated;
+        });
+    g_touchpadNativeCandidateRequired.store(required);
+}
 
 // Some devices declare a maximum which only fits unsigned.
 static double TouchpadLogicalRange(const HIDP_VALUE_CAPS& caps) {
@@ -17320,6 +18123,15 @@ static const TouchpadDevice* TouchpadDeviceFor(HANDLE hDevice) {
     }
 
     dev.valid = !dev.fingerCollections.empty() && dev.rangeX > 0 && dev.rangeY > 0;
+    // The reported Apple driver publishes five logical finger collections.
+    // Laptop PTP devices observed by this reader use a single hybrid
+    // collection and must retain the old native-first timing.
+    dev.candidateGated = dev.valid && dev.hasContactCount &&
+                         dev.fingerCollections.size() >= 3;
+    UpdateNativeCandidateRequirement();
+    if (g_touchpadReaderAvailable.load()) {
+        PublishNativeSwipePolicy();
+    }
     Wh_Log(L"SWS touchpad reader: device %p valid=%d slots=%u contactCount=%d range=%.0fx%.0f", hDevice,
            dev.valid, (UINT)dev.fingerCollections.size(), dev.hasContactCount, dev.rangeX, dev.rangeY);
     return dev.valid ? &dev : NULL;
@@ -17331,18 +18143,83 @@ struct TouchpadReaderStroke {
     ULONG lastTips = 0;
     bool markerStrokeOwned = false;
     bool markerSessionOwned = false;
+    bool threeFingerCandidatePublished = false;
+    bool threeFingerCandidateBlocked = false;
+    ULONGLONG threeFingerSerial = 0;
+    DWORD twoFingerTapMouseSerial = 0;
+    ULONGLONG twoFingerTapStartTick = 0;
+    int twoFingerTapOriginX = 0;
+    int twoFingerTapOriginY = 0;
     double lastX = -1.0;
     double lastY = -1.0;
     ULONGLONG lastPostTick = 0;
 };
 static TouchpadReaderStroke s_touchpadReaderStroke;
 
+static void UpdateRawTwoFingerTapMouseEvidence(ULONG tips, ULONG previousTips,
+                                              ULONG packedPos, ULONGLONG now) {
+    auto& stroke = s_touchpadReaderStroke;
+    if (g_touchpadTwoFingerTapSuppressed.load()) {
+        stroke.twoFingerTapMouseSerial = 0;
+        g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
+        return;
+    }
+    int x = (int)(packedPos & 0xFFFF);
+    int y = (int)((packedPos >> 16) & 0xFFFF);
+    if (tips > 0 && previousTips == 0) {
+        // Every fresh stroke retires the prior release tail, including a new
+        // outside tap after dismissal. Windows owns that new stroke normally.
+        g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
+        stroke.twoFingerTapMouseSerial = 0;
+        if (tips == 2 && g_touchpadTwoFingerCloseActive.load()) {
+            DWORD serial = ++g_touchpadRawTwoFingerNextSerial;
+            if (!serial) serial = ++g_touchpadRawTwoFingerNextSerial;
+            stroke.twoFingerTapMouseSerial = serial;
+            stroke.twoFingerTapStartTick = now;
+            stroke.twoFingerTapOriginX = x;
+            stroke.twoFingerTapOriginY = y;
+            g_touchpadRawTwoFingerTapMouseState.store(
+                EncodeRawTwoFingerTapMouseState(serial, now + SWS_RAW_TAP_MAX_MS),
+                std::memory_order_release);
+        }
+    } else if (stroke.twoFingerTapMouseSerial) {
+        bool tap = now - stroke.twoFingerTapStartTick <= SWS_RAW_TAP_MAX_MS &&
+                   tips <= 2 &&
+                   (!tips || (abs(x - stroke.twoFingerTapOriginX) <= SWS_RAW_TAP_SLOP &&
+                              abs(y - stroke.twoFingerTapOriginY) <= SWS_RAW_TAP_SLOP));
+        if (!tap) {
+            stroke.twoFingerTapMouseSerial = 0;
+            g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
+        } else if (tips == 0) {
+            // Update only the same live stroke. A consumed mouse up may have
+            // retired it already, and must not be re-published by a late lift.
+            ULONGLONG state = g_touchpadRawTwoFingerTapMouseState.load(
+                std::memory_order_acquire);
+            if ((DWORD)(state >> 32) == stroke.twoFingerTapMouseSerial) {
+                g_touchpadRawTwoFingerTapMouseState.compare_exchange_strong(
+                    state, EncodeRawTwoFingerTapMouseState(stroke.twoFingerTapMouseSerial,
+                                                          now + SWS_RAW_TWO_TAP_MOUSE_GRACE_MS),
+                    std::memory_order_acq_rel);
+            }
+            stroke.twoFingerTapMouseSerial = 0;
+        }
+    }
+}
+
 static void TouchpadReaderSetAvailable(bool available) {
     if (available && g_touchpadReaderStopping.load()) return;
     if (!available) {
         // Retire cross-process evidence now, not after a queued UI notification.
+        if (s_touchpadReaderStroke.threeFingerSerial) {
+            PublishRawThreeFingerState(s_touchpadReaderStroke.threeFingerSerial,
+                                       SWS_RAW_THREE_PHASE_LOST,
+                                       GetTickCount64());
+        }
         ClearRawSwipeMarkerPropertyFromReader();
+        ClearRawThreeFingerCandidateProperty();
+        g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
         s_touchpadReaderStroke = {};
+        g_touchpadNativeCandidateRequired.store(false);
     }
     bool changed = g_touchpadReaderAvailable.exchange(available) != available;
     if (changed || !available) PublishNativeSwipePolicy();
@@ -17388,7 +18265,14 @@ static void TouchpadReaderProcessFrame(const TouchpadDevice& dev) {
     ++s_touchpadInputDiagnostics.frames;
     s_touchpadInputDiagnostics.lastFrameTick.store(GetTickCount64());
     if (!g_touchpadGesturesEnabled.load()) {
+        if (s_touchpadReaderStroke.threeFingerSerial) {
+            PublishRawThreeFingerState(s_touchpadReaderStroke.threeFingerSerial,
+                                       SWS_RAW_THREE_PHASE_LOST,
+                                       GetTickCount64());
+        }
         ClearRawSwipeMarkerPropertyFromReader();
+        ClearRawThreeFingerCandidateProperty();
+        g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
         s_touchpadReaderStroke = {};
         return;
     }
@@ -17408,10 +18292,73 @@ static void TouchpadReaderProcessFrame(const TouchpadDevice& dev) {
     if (tips) {
         cx /= tips;
         cy /= tips;
+        ++s_touchpadInputDiagnostics.contactFrames;
     }
     s_touchpadInputDiagnostics.lastTips.store(tips);
+    ULONGLONG now = GetTickCount64();
+    auto& readerStroke = s_touchpadReaderStroke;
+    ULONG previousTips = readerStroke.lastTips;
+    if (tips > 0 && previousTips == 0) {
+        // If a device skipped its zero-contact report, do not let the prior
+        // physical stroke authorize the next native gesture.
+        ClearRawThreeFingerCandidateProperty();
+        readerStroke.threeFingerCandidatePublished = false;
+        readerStroke.threeFingerCandidateBlocked = false;
+    }
+    if (tips > SWS_RAW_SWIPE_FINGERS) {
+        readerStroke.threeFingerCandidateBlocked = true;
+        if (readerStroke.threeFingerCandidatePublished) {
+            ClearRawThreeFingerCandidateProperty();
+        }
+    }
+    if (tips == SWS_RAW_SWIPE_FINGERS &&
+        !readerStroke.threeFingerCandidatePublished &&
+        !readerStroke.threeFingerCandidateBlocked) {
+        ULONGLONG serial = g_touchpadRawThreeFingerNextSerial.fetch_add(
+                                1, std::memory_order_relaxed) + 1;
+        if (!serial) {
+            serial = g_touchpadRawThreeFingerNextSerial.fetch_add(
+                         1, std::memory_order_relaxed) + 1;
+        }
+        readerStroke.threeFingerSerial = serial;
+        readerStroke.threeFingerCandidatePublished = true;
+        PublishRawThreeFingerState(serial, SWS_RAW_THREE_PHASE_LIVE, now);
+        PublishRawThreeFingerCandidate(now);
+        Wh_Log(L"SWS: raw three-finger candidate published (serial=%llu)",
+               (unsigned long long)serial);
+    } else if (readerStroke.threeFingerCandidatePublished && tips > 0) {
+        g_touchpadRawThreeFingerLastTick.store(now, std::memory_order_release);
+    }
+    if (tips == 0) {
+        if (readerStroke.threeFingerCandidatePublished &&
+            readerStroke.threeFingerSerial) {
+            PublishRawThreeFingerState(readerStroke.threeFingerSerial,
+                                       SWS_RAW_THREE_PHASE_LIFTED, now);
+        }
+        ClearRawThreeFingerCandidateProperty();
+        readerStroke.threeFingerCandidatePublished = false;
+        readerStroke.threeFingerCandidateBlocked = false;
+    }
     double nx = dev.rangeX > 0 ? cx / dev.rangeX : 0.0;
     double ny = dev.rangeY > 0 ? cy / dev.rangeY : 0.0;
+    ULONG packedPos = ((ULONG)(nx * 65535.0) & 0xFFFF) | (((ULONG)(ny * 65535.0) & 0xFFFF) << 16);
+    DWORD tapSerialBefore = readerStroke.twoFingerTapMouseSerial;
+    UpdateRawTwoFingerTapMouseEvidence(tips, previousTips, packedPos, now);
+    if (tips != previousTips || tapSerialBefore != readerStroke.twoFingerTapMouseSerial) {
+        ULONGLONG tapState = g_touchpadRawTwoFingerTapMouseState.load(std::memory_order_acquire);
+        Wh_Log(L"SWS TAPTRACE reader tick=%llu tips=%u previous=%u contacts=%u position=%u,%u closeActive=%d "
+               L"serialBefore=%u serialAfter=%u candidateSerial=%u candidateRemainingMs=%u tapAgeMs=%lld "
+               L"origin=%d,%d raw=%u reports=%u frames=%u posted=%u",
+               (unsigned long long)now, tips, previousTips, (UINT)g_touchpadFrame.size(),
+               packedPos & 0xFFFF, (packedPos >> 16) & 0xFFFF,
+               g_touchpadTwoFingerCloseActive.load(), tapSerialBefore,
+               readerStroke.twoFingerTapMouseSerial, (DWORD)(tapState >> 32),
+               RawTwoFingerTapMouseRemainingMs(tapState, now),
+               TouchpadTraceAgeMs(now, readerStroke.twoFingerTapStartTick),
+               readerStroke.twoFingerTapOriginX, readerStroke.twoFingerTapOriginY,
+               s_touchpadInputDiagnostics.rawMessages.load(), s_touchpadInputDiagnostics.hidReports.load(),
+               s_touchpadInputDiagnostics.frames.load(), s_touchpadInputDiagnostics.posted.load());
+    }
 
     if (!g_hSwitcher || !g_WM_SWS_TOUCHPAD_FRAME || !IsWindow(g_hSwitcher)) {
         return;
@@ -17426,7 +18373,6 @@ static void TouchpadReaderProcessFrame(const TouchpadDevice& dev) {
     double signedDy = cy - s_lastY;
     double dx = signedDx < 0 ? -signedDx : signedDx;
     double dy = signedDy < 0 ? -signedDy : signedDy;
-    ULONGLONG now = GetTickCount64();
     // Heartbeat while any finger is still down: the switcher keeps a raw session open
     // until the lift, so resting fingers have to keep producing posts.
     bool heartbeat = tips > 0 && now - s_lastPostTick >= 500;
@@ -17503,7 +18449,6 @@ static void TouchpadReaderProcessFrame(const TouchpadDevice& dev) {
     s_lastY = cy;
     s_lastPostTick = now;
 
-    ULONG packedPos = ((ULONG)(nx * 65535.0) & 0xFFFF) | (((ULONG)(ny * 65535.0) & 0xFFFF) << 16);
     if (PostMessageW(g_hSwitcher, g_WM_SWS_TOUCHPAD_FRAME, (WPARAM)tips, (LPARAM)packedPos)) {
         ++s_touchpadInputDiagnostics.posted;
     } else {
@@ -17520,10 +18465,25 @@ static void TouchpadReaderOnReport(const TouchpadDevice& dev, PCHAR report, ULON
         ULONG count = 0;
         if (HidP_GetUsageValue(HidP_Input, SWS_HID_PAGE_DIGITIZER, dev.contactCountCollection,
                                SWS_HID_USAGE_CONTACT_COUNT, &count, preparsed, report,
-                               length) == HIDP_STATUS_SUCCESS &&
-            count > 0) {
-            g_touchpadFrame.clear();
-            g_touchpadFrameExpected = count;
+                                length) == HIDP_STATUS_SUCCESS) {
+            if (count > 0) {
+                // A nonzero count starts a new frame, including resync after
+                // a missed report. It counts reported contacts, not tip bits.
+                g_touchpadFrame.clear();
+                g_touchpadFrameExpected = count;
+            } else if (g_touchpadFrameExpected) {
+                // Hybrid PTPs put the total only in the first report. A zero
+                // while contacts are pending continues that same frame; it
+                // is not a lift. Keep its contacts and announced count.
+                ++s_touchpadInputDiagnostics.hybridReports;
+            } else {
+                // No frame is pending: this is a standalone empty report.
+                // Do not read unused contact slots as live fingers.
+                ++s_touchpadInputDiagnostics.emptyReports;
+                g_touchpadFrame.clear();
+                TouchpadReaderProcessFrame(dev);
+                return;
+            }
         }
         if (!g_touchpadFrameExpected) {
             return; // the rest of a frame whose start was missed
@@ -17531,6 +18491,13 @@ static void TouchpadReaderOnReport(const TouchpadDevice& dev, PCHAR report, ULON
     }
 
     for (USHORT collection : dev.fingerCollections) {
+        // Parallel reports and the last hybrid packet can contain unused
+        // slots with stale data. Only the announced contacts belong to this
+        // frame, including contacts whose tip switch reports their release.
+        if (dev.hasContactCount &&
+            g_touchpadFrame.size() >= g_touchpadFrameExpected) {
+            break;
+        }
         ULONG x = 0;
         ULONG y = 0;
         if (HidP_GetUsageValue(HidP_Input, SWS_HID_PAGE_GENERIC, collection, SWS_HID_USAGE_X, &x,
@@ -17634,9 +18601,15 @@ static void TouchpadReaderOnDeviceChange(HANDLE hDevice, WPARAM change) {
     if (device == g_touchpadDevices.end()) return;
     s_touchpadReaderStroke = {};
     ClearRawSwipeMarkerPropertyFromReader();
+    ClearRawThreeFingerCandidateProperty();
+    g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
     g_touchpadDevices.erase(device);
     g_touchpadFrame.clear();
     g_touchpadFrameExpected = 0;
+    UpdateNativeCandidateRequirement();
+    if (g_touchpadReaderAvailable.load()) {
+        PublishNativeSwipePolicy();
+    }
     bool anyValid = std::any_of(g_touchpadDevices.begin(), g_touchpadDevices.end(),
         [](const auto& entry) { return entry.second.valid; });
     TouchpadReaderSetAvailable(anyValid);
@@ -17670,11 +18643,13 @@ static std::wstring FormatTouchpadInputDiagnostics() {
     }
     WCHAR text[768];
     swprintf_s(text,
-        L"raw=%u reports=%u rejectedDevices=%u readFailures=%u frames=%u posted=%u postFailures=%u uiFrames=%u "
+        L"raw=%u reports=%u rejectedDevices=%u readFailures=%u frames=%u contactFrames=%u hybridReports=%u emptyReports=%u "
+        L"posted=%u postFailures=%u uiFrames=%u "
         L"rawAgeMs=%lld frameAgeMs=%lld uiAgeMs=%lld tips=%u readError=%u postError=%u "
         L"reader=%p registeredTarget=%p registrationFlags=0x%X registrationError=%u enabled=%d available=%d stopping=%d",
         stats.rawMessages.load(), stats.hidReports.load(), stats.rejectedDevices.load(), stats.readFailures.load(),
-        stats.frames.load(), stats.posted.load(), stats.postFailures.load(), stats.uiFrames.load(),
+        stats.frames.load(), stats.contactFrames.load(), stats.hybridReports.load(), stats.emptyReports.load(),
+        stats.posted.load(), stats.postFailures.load(), stats.uiFrames.load(),
         age(stats.lastRawTick.load()), age(stats.lastFrameTick.load()), age(stats.lastUiTick.load()),
         stats.lastTips.load(), stats.lastReadError.load(), stats.lastPostError.load(),
         g_touchpadReaderWindow.load(), registeredTarget, flags, registrationError,
@@ -17885,6 +18860,7 @@ static void StopTouchpadReader() {
 
 BOOL WhTool_ModInit() {
     Wh_Log(L"Simple Window Switcher: WhTool_ModInit");
+    Wh_Log(L"SWS TAPTRACE diagnostics build 2: live two-finger override and mouse routing capture");
     if (!g_WM_SWS_TOUCHPAD_FRAME) {
         g_WM_SWS_TOUCHPAD_FRAME = RegisterWindowMessageW(L"Windhawk_SWS_TouchpadFrame");
     }
