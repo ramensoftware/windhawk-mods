@@ -13,26 +13,30 @@
 /*
 # Per-app Titlebar Buttons
 
-Hide selected native Windows titlebar buttons on a per-application basis.
+Hide or disable selected native Windows titlebar buttons on a per-application
+basis.
 
-Add one or more process names in the mod settings and choose whether to hide
+Add one or more process names in the mod settings and choose whether to affect
 the Minimize, Maximize/Restore, and Close buttons for each application.
 
 Process names can be entered with or without the `.exe` extension. For example,
 both `taskmgr` and `taskmgr.exe` match Task Manager. Matching is
 case-insensitive, and a full executable path is also accepted.
 
-## Close button behavior
+## Native titlebar behavior
 
-Windows provides independent window style flags for the Minimize and
-Maximize/Restore buttons, but not for the Close button.
+Windows treats the Minimize and Maximize/Restore buttons as a pair. If only one
+of those style flags is removed, Windows may keep both buttons visible and show
+the affected button as disabled. Removing both flags removes the pair.
 
-When Close is selected together with both Minimize and Maximize/Restore, the
-native caption button cluster is removed.
+Windows doesn't provide an independent window style flag for the Close button.
+If Close is selected while Minimize or Maximize/Restore is still available,
+the Close command is disabled.
 
-When Close is selected while either Minimize or Maximize/Restore remains
-visible, the Close command is disabled instead. This preserves the remaining
-native caption controls and the window system menu.
+If Close is selected and the resulting window has neither Minimize nor
+Maximize/Restore available, the mod removes `WS_SYSMENU`. This removes the
+native caption button cluster, and also removes the titlebar icon and the
+Alt+Space system menu for that window while the setting is active.
 
 ## Compatibility
 
@@ -50,11 +54,13 @@ not respond to these settings.
       $description: Executable name with or without .exe, for example notepad or notepad.exe.
     - hideMinimize: false
       $name: Hide Minimize
+      $description: On native titlebars, hiding only one of Minimize or Maximize may leave a disabled button.
     - hideMaximize: false
       $name: Hide Maximize / Restore
+      $description: On native titlebars, hiding only one of Minimize or Maximize may leave a disabled button.
     - hideClose: false
       $name: Hide Close
-      $description: If other caption buttons remain visible, Close is disabled instead of removed.
+      $description: If Minimize or Maximize remains available, Close is disabled instead of removing the whole caption cluster.
   $name: Applications
   $description: Add an entry for each application to customize.
 */
@@ -65,8 +71,11 @@ not respond to these settings.
 
 #include <algorithm>
 #include <cwctype>
+#include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
+#include <utility>
 
 struct AppSettings {
     bool matched;
@@ -76,17 +85,18 @@ struct AppSettings {
 };
 
 struct WindowBackup {
-    LONG_PTR style;
-    bool styleCaptured;
-    bool closeCaptured;
-    UINT closeState;
+    LONG_PTR removedStyles = 0;
+    bool closeDisabled = false;
 };
 
+static std::mutex g_stateMutex;
 static AppSettings g_settings = {};
 static std::unordered_map<HWND, WindowBackup> g_backups;
+static std::unordered_set<HWND> g_applyingWindows;
 
 static HANDLE g_eventThread = nullptr;
 static DWORD g_eventThreadId = 0;
+static HANDLE g_eventThreadReady = nullptr;
 
 static std::wstring ToLower(std::wstring value) {
     std::transform(value.begin(), value.end(), value.begin(),
@@ -132,10 +142,8 @@ static AppSettings LoadSettingsForCurrentProcess() {
         PCWSTR processValue =
             Wh_GetStringSetting(L"applications[%d].process", i);
 
-        if (!processValue || !*processValue) {
-            if (processValue) {
-                Wh_FreeStringSetting(processValue);
-            }
+        if (!*processValue) {
+            Wh_FreeStringSetting(processValue);
             break;
         }
 
@@ -157,6 +165,16 @@ static AppSettings LoadSettingsForCurrentProcess() {
     return result;
 }
 
+static AppSettings GetSettingsSnapshot() {
+    std::lock_guard<std::mutex> lock(g_stateMutex);
+    return g_settings;
+}
+
+static void SetSettings(const AppSettings& settings) {
+    std::lock_guard<std::mutex> lock(g_stateMutex);
+    g_settings = settings;
+}
+
 static bool IsTopLevelCaptionWindow(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) {
         return false;
@@ -168,13 +186,13 @@ static bool IsTopLevelCaptionWindow(HWND hwnd) {
         return false;
     }
 
-    LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+    const LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
 
     if (style & WS_CHILD) {
         return false;
     }
 
-    if (!(style & WS_CAPTION)) {
+    if ((style & WS_CAPTION) != WS_CAPTION) {
         return false;
     }
 
@@ -190,60 +208,108 @@ static void RefreshFrame(HWND hwnd) {
                  RDW_INVALIDATE | RDW_FRAME | RDW_UPDATENOW);
 }
 
-static void CaptureBackup(HWND hwnd) {
-    auto& backup = g_backups[hwnd];
-
-    if (!backup.styleCaptured) {
-        backup.style = GetWindowLongPtrW(hwnd, GWL_STYLE);
-        backup.styleCaptured = true;
+class ApplyWindowGuard {
+public:
+    explicit ApplyWindowGuard(HWND hwnd) : m_hwnd(hwnd), m_acquired(false) {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        m_acquired = g_applyingWindows.insert(hwnd).second;
     }
 
-    if (!backup.closeCaptured) {
-        HMENU menu = GetSystemMenu(hwnd, FALSE);
-        if (menu) {
-            backup.closeState = GetMenuState(menu, SC_CLOSE, MF_BYCOMMAND);
-            backup.closeCaptured = true;
+    ~ApplyWindowGuard() {
+        if (!m_acquired) {
+            return;
         }
-    }
-}
 
-static void ApplyToWindow(HWND hwnd) {
-    if (!g_settings.matched || !IsTopLevelCaptionWindow(hwnd)) {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        g_applyingWindows.erase(m_hwnd);
+    }
+
+    explicit operator bool() const {
+        return m_acquired;
+    }
+
+private:
+    HWND m_hwnd;
+    bool m_acquired;
+};
+
+static void RecordRemovedStyles(HWND hwnd, LONG_PTR removedStyles) {
+    if (!removedStyles) {
         return;
     }
 
-    CaptureBackup(hwnd);
+    std::lock_guard<std::mutex> lock(g_stateMutex);
+    g_backups[hwnd].removedStyles |= removedStyles;
+}
 
-    LONG_PTR oldStyle = GetWindowLongPtrW(hwnd, GWL_STYLE);
+static void RecordCloseDisabled(HWND hwnd) {
+    std::lock_guard<std::mutex> lock(g_stateMutex);
+    g_backups[hwnd].closeDisabled = true;
+}
+
+static void RemoveWindowBackup(HWND hwnd) {
+    std::lock_guard<std::mutex> lock(g_stateMutex);
+    g_backups.erase(hwnd);
+    g_applyingWindows.erase(hwnd);
+}
+
+static void ApplyToWindow(HWND hwnd) {
+    const AppSettings settings = GetSettingsSnapshot();
+    if (!settings.matched || !IsTopLevelCaptionWindow(hwnd)) {
+        return;
+    }
+
+    ApplyWindowGuard applyGuard(hwnd);
+    if (!applyGuard) {
+        return;
+    }
+
+    const LONG_PTR oldStyle = GetWindowLongPtrW(hwnd, GWL_STYLE);
     LONG_PTR newStyle = oldStyle;
 
-    if (g_settings.hideMinimize) {
+    if (settings.hideMinimize) {
         newStyle &= ~static_cast<LONG_PTR>(WS_MINIMIZEBOX);
     }
 
-    if (g_settings.hideMaximize) {
+    if (settings.hideMaximize) {
         newStyle &= ~static_cast<LONG_PTR>(WS_MAXIMIZEBOX);
     }
 
     const bool hideWholeCluster =
-        g_settings.hideClose &&
-        g_settings.hideMinimize &&
-        g_settings.hideMaximize;
+        settings.hideClose &&
+        !(newStyle & (WS_MINIMIZEBOX | WS_MAXIMIZEBOX));
 
     if (hideWholeCluster) {
         newStyle &= ~static_cast<LONG_PTR>(WS_SYSMENU);
     }
 
-    if (newStyle != oldStyle) {
-        SetWindowLongPtrW(hwnd, GWL_STYLE, newStyle);
-        RefreshFrame(hwnd);
+    const LONG_PTR removedStyles = oldStyle & ~newStyle;
+    if (removedStyles) {
+        SetLastError(ERROR_SUCCESS);
+        const LONG_PTR previousStyle =
+            SetWindowLongPtrW(hwnd, GWL_STYLE, newStyle);
+
+        if (previousStyle != 0 || GetLastError() == ERROR_SUCCESS) {
+            RecordRemovedStyles(hwnd, removedStyles);
+            RefreshFrame(hwnd);
+        }
     }
 
-    if (g_settings.hideClose && !hideWholeCluster) {
+    if (settings.hideClose && !hideWholeCluster) {
         HMENU menu = GetSystemMenu(hwnd, FALSE);
         if (menu) {
-            EnableMenuItem(menu, SC_CLOSE, MF_BYCOMMAND | MF_GRAYED);
-            DrawMenuBar(hwnd);
+            const UINT closeState =
+                GetMenuState(menu, SC_CLOSE, MF_BYCOMMAND);
+
+            if (closeState != static_cast<UINT>(-1) &&
+                !(closeState & (MF_DISABLED | MF_GRAYED))) {
+                if (EnableMenuItem(menu, SC_CLOSE,
+                                   MF_BYCOMMAND | MF_GRAYED) !=
+                    static_cast<UINT>(-1)) {
+                    RecordCloseDisabled(hwnd);
+                    DrawMenuBar(hwnd);
+                }
+            }
         }
     }
 }
@@ -266,18 +332,24 @@ static void CALLBACK WindowEventProc(
     DWORD eventThread,
     DWORD eventTime) {
 
-    if (!g_settings.matched || !hwnd) {
+    if (!hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
         return;
     }
 
-    if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
+    if (event == EVENT_OBJECT_DESTROY) {
+        RemoveWindowBackup(hwnd);
         return;
     }
 
-    ApplyToWindow(hwnd);
+    if (event == EVENT_OBJECT_CREATE || event == EVENT_OBJECT_SHOW) {
+        ApplyToWindow(hwnd);
+    }
 }
 
 static DWORD WINAPI WindowEventThread(LPVOID) {
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+
     const DWORD processId = GetCurrentProcessId();
 
     HWINEVENTHOOK createHook = SetWinEventHook(
@@ -298,14 +370,30 @@ static DWORD WINAPI WindowEventThread(LPVOID) {
         0,
         WINEVENT_OUTOFCONTEXT);
 
-    if (!createHook || !showHook) {
+    HWINEVENTHOOK destroyHook = SetWinEventHook(
+        EVENT_OBJECT_DESTROY,
+        EVENT_OBJECT_DESTROY,
+        nullptr,
+        WindowEventProc,
+        processId,
+        0,
+        WINEVENT_OUTOFCONTEXT);
+
+    if (!createHook || !showHook || !destroyHook) {
         Wh_Log(L"SetWinEventHook failed: %lu", GetLastError());
     }
 
-    MSG msg;
+    if (g_eventThreadReady) {
+        SetEvent(g_eventThreadReady);
+    }
+
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
+    }
+
+    if (destroyHook) {
+        UnhookWinEvent(destroyHook);
     }
 
     if (showHook) {
@@ -324,6 +412,11 @@ static bool StartWindowEventThread() {
         return true;
     }
 
+    g_eventThreadReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_eventThreadReady) {
+        return false;
+    }
+
     g_eventThread = CreateThread(
         nullptr,
         0,
@@ -332,7 +425,32 @@ static bool StartWindowEventThread() {
         0,
         &g_eventThreadId);
 
-    return g_eventThread != nullptr;
+    if (!g_eventThread) {
+        CloseHandle(g_eventThreadReady);
+        g_eventThreadReady = nullptr;
+        g_eventThreadId = 0;
+        return false;
+    }
+
+    const DWORD waitResult =
+        WaitForSingleObject(g_eventThreadReady, 5000);
+
+    CloseHandle(g_eventThreadReady);
+    g_eventThreadReady = nullptr;
+
+    if (waitResult != WAIT_OBJECT_0) {
+        while (!PostThreadMessageW(g_eventThreadId, WM_QUIT, 0, 0) &&
+               WaitForSingleObject(g_eventThread, 10) == WAIT_TIMEOUT) {
+        }
+
+        WaitForSingleObject(g_eventThread, INFINITE);
+        CloseHandle(g_eventThread);
+        g_eventThread = nullptr;
+        g_eventThreadId = 0;
+        return false;
+    }
+
+    return true;
 }
 
 static void StopWindowEventThread() {
@@ -340,8 +458,9 @@ static void StopWindowEventThread() {
         return;
     }
 
-    PostThreadMessageW(g_eventThreadId, WM_NULL, 0, 0);
-    PostThreadMessageW(g_eventThreadId, WM_QUIT, 0, 0);
+    while (!PostThreadMessageW(g_eventThreadId, WM_QUIT, 0, 0) &&
+           WaitForSingleObject(g_eventThread, 10) == WAIT_TIMEOUT) {
+    }
 
     WaitForSingleObject(g_eventThread, INFINITE);
     CloseHandle(g_eventThread);
@@ -351,151 +470,65 @@ static void StopWindowEventThread() {
 }
 
 static void RestoreAllWindows() {
-    for (auto& item : g_backups) {
-        HWND hwnd = item.first;
-        WindowBackup& backup = item.second;
+    std::unordered_map<HWND, WindowBackup> backups;
 
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        backups = std::exchange(g_backups, {});
+        g_applyingWindows.clear();
+    }
+
+    for (const auto& [hwnd, backup] : backups) {
         if (!IsWindow(hwnd)) {
             continue;
         }
 
-        if (backup.styleCaptured) {
-            SetWindowLongPtrW(hwnd, GWL_STYLE, backup.style);
-        }
+        bool frameChanged = false;
 
-        if (backup.closeCaptured) {
-            GetSystemMenu(hwnd, TRUE);
-            HMENU menu = GetSystemMenu(hwnd, FALSE);
+        if (backup.removedStyles) {
+            const LONG_PTR currentStyle =
+                GetWindowLongPtrW(hwnd, GWL_STYLE);
+            const LONG_PTR restoredStyle =
+                currentStyle | backup.removedStyles;
 
-            if (menu && backup.closeState != static_cast<UINT>(-1)) {
-                if (backup.closeState & (MF_DISABLED | MF_GRAYED)) {
-                    EnableMenuItem(menu, SC_CLOSE,
-                                   MF_BYCOMMAND | MF_GRAYED);
-                } else {
-                    EnableMenuItem(menu, SC_CLOSE,
-                                   MF_BYCOMMAND | MF_ENABLED);
+            if (restoredStyle != currentStyle) {
+                SetLastError(ERROR_SUCCESS);
+                const LONG_PTR previousStyle =
+                    SetWindowLongPtrW(hwnd, GWL_STYLE, restoredStyle);
+
+                if (previousStyle != 0 ||
+                    GetLastError() == ERROR_SUCCESS) {
+                    frameChanged = true;
                 }
             }
         }
 
-        RefreshFrame(hwnd);
-        DrawMenuBar(hwnd);
+        if (backup.closeDisabled) {
+            HMENU menu = GetSystemMenu(hwnd, FALSE);
+            if (menu) {
+                EnableMenuItem(menu, SC_CLOSE,
+                               MF_BYCOMMAND | MF_ENABLED);
+                DrawMenuBar(hwnd);
+            }
+        }
+
+        if (frameChanged) {
+            RefreshFrame(hwnd);
+        }
     }
-
-    g_backups.clear();
-}
-
-using CreateWindowExW_t = decltype(&CreateWindowExW);
-static CreateWindowExW_t CreateWindowExW_Original;
-
-static HWND WINAPI CreateWindowExW_Hook(
-    DWORD exStyle,
-    LPCWSTR className,
-    LPCWSTR windowName,
-    DWORD style,
-    int x,
-    int y,
-    int width,
-    int height,
-    HWND parent,
-    HMENU menu,
-    HINSTANCE instance,
-    LPVOID param) {
-
-    HWND hwnd = CreateWindowExW_Original(
-        exStyle, className, windowName, style,
-        x, y, width, height, parent, menu, instance, param);
-
-    if (hwnd) {
-        ApplyToWindow(hwnd);
-    }
-
-    return hwnd;
-}
-
-using CreateWindowExA_t = decltype(&CreateWindowExA);
-static CreateWindowExA_t CreateWindowExA_Original;
-
-static HWND WINAPI CreateWindowExA_Hook(
-    DWORD exStyle,
-    LPCSTR className,
-    LPCSTR windowName,
-    DWORD style,
-    int x,
-    int y,
-    int width,
-    int height,
-    HWND parent,
-    HMENU menu,
-    HINSTANCE instance,
-    LPVOID param) {
-
-    HWND hwnd = CreateWindowExA_Original(
-        exStyle, className, windowName, style,
-        x, y, width, height, parent, menu, instance, param);
-
-    if (hwnd) {
-        ApplyToWindow(hwnd);
-    }
-
-    return hwnd;
-}
-
-using ShowWindow_t = decltype(&ShowWindow);
-static ShowWindow_t ShowWindow_Original;
-
-static BOOL WINAPI ShowWindow_Hook(HWND hwnd, int cmdShow) {
-    BOOL result = ShowWindow_Original(hwnd, cmdShow);
-
-    if (hwnd) {
-        ApplyToWindow(hwnd);
-    }
-
-    return result;
-}
-
-using ShowWindowAsync_t = decltype(&ShowWindowAsync);
-static ShowWindowAsync_t ShowWindowAsync_Original;
-
-static BOOL WINAPI ShowWindowAsync_Hook(HWND hwnd, int cmdShow) {
-    BOOL result = ShowWindowAsync_Original(hwnd, cmdShow);
-
-    if (hwnd) {
-        ApplyToWindow(hwnd);
-    }
-
-    return result;
 }
 
 BOOL Wh_ModInit() {
-    g_settings = LoadSettingsForCurrentProcess();
+    const AppSettings settings = LoadSettingsForCurrentProcess();
+    SetSettings(settings);
 
-    if (!g_settings.matched) {
+    if (!settings.matched) {
         return FALSE;
     }
 
-    Wh_SetFunctionHook(
-        reinterpret_cast<void*>(CreateWindowExW),
-        reinterpret_cast<void*>(CreateWindowExW_Hook),
-        reinterpret_cast<void**>(&CreateWindowExW_Original));
-
-    Wh_SetFunctionHook(
-        reinterpret_cast<void*>(CreateWindowExA),
-        reinterpret_cast<void*>(CreateWindowExA_Hook),
-        reinterpret_cast<void**>(&CreateWindowExA_Original));
-
-    Wh_SetFunctionHook(
-        reinterpret_cast<void*>(ShowWindow),
-        reinterpret_cast<void*>(ShowWindow_Hook),
-        reinterpret_cast<void**>(&ShowWindow_Original));
-
-    Wh_SetFunctionHook(
-        reinterpret_cast<void*>(ShowWindowAsync),
-        reinterpret_cast<void*>(ShowWindowAsync_Hook),
-        reinterpret_cast<void**>(&ShowWindowAsync_Original));
-
     if (!StartWindowEventThread()) {
         Wh_Log(L"Failed to start window event thread");
+        return FALSE;
     }
 
     return TRUE;
@@ -506,12 +539,22 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
+    StopWindowEventThread();
     RestoreAllWindows();
-    g_settings = LoadSettingsForCurrentProcess();
 
-    if (g_settings.matched) {
-        ApplyToExistingWindows();
+    const AppSettings settings = LoadSettingsForCurrentProcess();
+    SetSettings(settings);
+
+    if (!settings.matched) {
+        return;
     }
+
+    if (!StartWindowEventThread()) {
+        Wh_Log(L"Failed to restart window event thread");
+        return;
+    }
+
+    ApplyToExistingWindows();
 }
 
 void Wh_ModUninit() {
