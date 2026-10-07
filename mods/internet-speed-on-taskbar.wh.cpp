@@ -91,11 +91,12 @@ use Adapter filter to pick one.
 // ==/WindhawkModSettings==
 
 #include <winsock2.h>
-#include <windows.h>
 #include <ws2ipdef.h>
+#include <windhawk_utils.h>
+#include <windows.h>
+#include <shellapi.h>
 #include <iphlpapi.h>
 #include <netioapi.h>
-#include <shellapi.h>
 #include <uiautomation.h>
 
 #include <algorithm>
