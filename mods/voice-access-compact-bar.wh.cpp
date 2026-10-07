@@ -18,8 +18,10 @@
 By default, Windows 11 Voice Access docks a bar across the full width of the
 monitor and reserves that strip of the screen, so every maximized window moves
 down to make room. This mod turns the bar into a compact window that floats
-near the top-right corner of the monitor, and removes the reserved strip so
-other windows can use the whole screen again.
+near the top of the monitor, aligned to the left, center or right, and removes
+the reserved strip so other windows can use the whole screen again.
+
+![Before and after](https://raw.githubusercontent.com/jcyrio/windhawk-voice-access-compact-bar/main/screenshot.jpg)
 
 Requires Windows 11 with Voice Access. Keep Windhawk running while Voice Access
 is open. The mod takes effect the moment Voice Access docks its bar, so the
@@ -35,6 +37,9 @@ recreates it, for example after a display change.
   is kept at least 300 pixels wide and never wider than the monitor.
 * **Distance from top**: how far below the top edge of the monitor the compact
   window sits, in pixels at 100% display scaling.
+* **Horizontal alignment**: whether the compact window sits at the left edge,
+  the center or the right edge of the monitor. Pick the side where it covers
+  the least of your maximized windows.
 
 Settings take effect immediately. Disabling the mod, or turning compact
 placement off, restores the original full-width bar and its reserved strip.
@@ -60,6 +65,13 @@ placement off, restores the original full-width bar and its reserved strip.
 - top: 100
   $name: Distance from top
   $description: Gap between the top of the monitor and the compact window, in pixels at 100% scaling
+- alignment: right
+  $name: Horizontal alignment
+  $description: Which side of the monitor the compact window sits on
+  $options:
+  - left: Left
+  - center: Center
+  - right: Right
 */
 // ==/WindhawkModSettings==
 
@@ -76,6 +88,8 @@ static std::atomic<bool> g_stopping{false};
 static std::atomic<bool> g_compact{false};
 // True while the shell holds a zero-height reservation submitted by this mod.
 static std::atomic<bool> g_released{false};
+enum class Alignment { Left, Center, Right };
+static std::atomic<Alignment> g_alignment{Alignment::Right};
 static std::atomic<int> g_width{900}, g_top{100}, g_logCount{0};
 
 // Geometry of the docked bar as Voice Access last requested it. This is both
@@ -117,8 +131,9 @@ static bool IsAttachedBar(HWND window) {
     return window && window == g_bar.load() && IsWindow(window);
 }
 
-// Compact rectangle at the top-right of the monitor the bar is on. Settings
-// are given at 100% scaling and scaled to the DPI of the bar's monitor.
+// Compact rectangle near the top of the monitor the bar is on, aligned per the
+// settings. Pixel settings are given at 100% scaling and scaled to the DPI of
+// the bar's monitor.
 static RECT DesiredRect(HWND window, const RECT& docked) {
     MONITORINFO monitor{}; monitor.cbSize = sizeof(monitor);
     if (!GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &monitor))
@@ -132,8 +147,20 @@ static RECT DesiredRect(HWND window, const RECT& docked) {
     LONG minWidth = std::min<LONG>(scale(300), maxWidth);
     LONG width = std::clamp<LONG>(scale(g_width.load()), minWidth, maxWidth);
     LONG height = docked.bottom - docked.top;
-    LONG left = std::max(monitor.rcMonitor.left,
-                         monitor.rcMonitor.right - width - scale(16));
+    LONG margin = scale(16);
+    LONG left;
+    switch (g_alignment.load()) {
+        case Alignment::Left:
+            left = monitor.rcMonitor.left + margin;
+            break;
+        case Alignment::Center:
+            left = monitor.rcMonitor.left + (maxWidth - width) / 2;
+            break;
+        default:
+            left = monitor.rcMonitor.right - width - margin;
+            break;
+    }
+    left = std::clamp<LONG>(left, monitor.rcMonitor.left, monitor.rcMonitor.right - width);
     LONG lowestTop = std::max(monitor.rcMonitor.top, monitor.rcMonitor.bottom - height);
     LONG top = std::clamp<LONG>(monitor.rcMonitor.top + scale(g_top.load()),
                               monitor.rcMonitor.top, lowestTop);
@@ -178,6 +205,14 @@ static bool Attach(HWND window, const RECT& docked) {
     SetDocked(docked);
     if (!WindhawkUtils::SetWindowSubclassFromAnyThread(window, BarSubclassProc, 0)) {
         Wh_Log(L"Failed to subclass Voice Access bar %p; error=%lu", window, GetLastError());
+        g_bar = nullptr;
+        return false;
+    }
+    // Wh_ModBeforeUninit may have checked g_bar before it was claimed above.
+    // It sets g_stopping first, so one of the two sides always removes the
+    // subclass; removing it twice is harmless.
+    if (g_stopping.load()) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(window, BarSubclassProc);
         g_bar = nullptr;
         return false;
     }
@@ -235,6 +270,11 @@ static void ReadSettings() {
     g_width = Wh_GetIntSetting(L"width");
     g_top = Wh_GetIntSetting(L"top");
     g_compact = Wh_GetIntSetting(L"compact") != 0;
+    PCWSTR alignment = Wh_GetStringSetting(L"alignment");
+    if (wcscmp(alignment, L"left") == 0) g_alignment = Alignment::Left;
+    else if (wcscmp(alignment, L"center") == 0) g_alignment = Alignment::Center;
+    else g_alignment = Alignment::Right;
+    Wh_FreeStringSetting(alignment);
 }
 
 static void ApplyRect(RECT rect) {
