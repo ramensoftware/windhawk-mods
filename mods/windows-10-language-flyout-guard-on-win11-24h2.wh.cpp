@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              windows-10-language-flyout-guard-on-win11-24h2
-// @name            Windows 10 language flyout guard and indicator colors
+// @name            Windows 10 language flyout guard and indicator colours
 // @description     This mod hides the startup language flyout in the private Windows 10 shell on Windows 11 24H2+
 // @version         1.0.0
 // @author          babamohammed
@@ -13,70 +13,46 @@
 
 // ==WindhawkModReadme==
 /*
-# Windows 10 language flyout guard and indicator colors
+# Windows 10 language flyout guard and indicator colours
 
 This mod addresses two issues that can occur when the private Windows 10 shell is used by the Windows 10 taskbar mod on Windows 11 24H2 and later:
 
 - **A language flyout that opens at startup.** For a limited time after the shell starts, the mod suppresses known language-switcher window classes in this Explorer process. It does not enumerate or hide windows owned by other processes. Clicking the language indicator manually is allowed through the guard.
-- **The language indicator's orientation and appearance.** The optional color feature uses one theme-aware painter for the indicator's client area. It handles paint itself rather than allowing Explorer's legacy grey fill to overwrite the composited background, and it repaints on hover, press, theme, and layout state changes. If taskbar transparency is disabled or a classic/high-contrast theme is used, the transparent background might not blend correctly; turn this option off in that setup.
+- **The language indicator's orientation and appearance.** The optional colour feature uses one theme-aware painter for the indicator's client area and reads the full active keyboard-layout ID, so variants such as Italian (142) display as `ITA 142` rather than being collapsed to `ITA IT`. It handles paint itself rather than allowing Explorer's legacy grey fill to overwrite the composited background, and it repaints on hover, press, theme, and layout state changes.
 
 The guard lasts 20 seconds by default. Each intercepted flyout can extend it by 15 seconds, up to four times the configured duration. No window is closed or destroyed.
 
 The mod targets non-SystemRoot `explorer.exe` instances and limits the flyout sweep to the current process. System files are not replaced.
-
-## Screenshots
-
-### Before
-
-![Before](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/before.png)
-
-### After
-
-![After](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/after.png)
-
-## Settings
-
-| Setting | What it does |
-|---|---|
-| `LanguageGuard` (default on) | suppress known startup language flyouts in this Explorer process |
-| `LanguageGuardSeconds` (default 20) | initial guard duration; an intercepted flyout extends it by 15 seconds, up to four times this duration |
-| `LanguageIndicatorColours` (default on) | redraw the indicator text horizontally with a theme-appropriate color |
-| `LanguageIndicatorRightClickOpensTaskbarMenu` (default off) | route a right-click from the language indicator to the taskbar context menu instead of the indicator's native menu |
-| `LogLanguageGuard` (default off) | log a one-time census of visible window classes in this Explorer process and each matching suppression |
-
-The color option intentionally overlaps with [Fix language indicator in Win10 taskbar under Win11 24H2+](https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator) by Anixx: both repaint the same visible indicator using different techniques. This mod retains the color feature alongside the flyout guard; **do not enable both indicator-repainting features at the same time**, since either painter can overwrite the other's result. If you only need the flyout guard, turn `LanguageIndicatorColours` off.
-
-The color path is adapted from that existing mod's horizontal-text correction. The flyout guard is a separate feature.
 */
 // ==/WindhawkModReadme==
-
 // ==WindhawkModSettings==
 /*
 - LanguageGuard: true
   $name: Hide the language flyout at logon
   $description: >-
-    Suppresses known language flyouts in this Explorer process during startup. A click on
-    the language indicator lets the flyout through temporarily.
+    This setting suppresses known language flyouts in this Explorer process during
+    startup. A click on the language indicator lets the flyout through temporarily.
 - LanguageGuardSeconds: 20
   $name: Guard duration (seconds)
   $description: >-
-    How long the guard watches for the flyout. Each intercepted flyout extends it by
-    15 seconds, up to four times this duration.
+    This setting controls how long the guard watches for the flyout. Each intercepted
+    flyout extends it by 15 seconds, up to four times this duration.
 - LanguageIndicatorColours: true
-  $name: Windows 10 colors of the language indicator
+  $name: Windows 10 colours of the language indicator
   $description: >-
-    Draws the language indicator text horizontally with a theme-appropriate color.
-    The transparent background relies on taskbar transparency composition.
+    This setting draws the active language and full keyboard-layout variant horizontally
+    with a theme-appropriate colour (for example, ITA 142 instead of ITA IT). The
+    transparent background relies on taskbar transparency composition.
 - LanguageIndicatorRightClickOpensTaskbarMenu: false
   $name: Open the taskbar menu on indicator right-click
   $description: >-
-    Off by default. When enabled, right-clicking the language indicator opens the taskbar
-    context menu instead of the indicator's native context menu.
+    This setting is off by default. When enabled, right-clicking the language indicator
+    opens the taskbar context menu instead of the indicator's native context menu.
 - LogLanguageGuard: false
   $name: Log the windows of the logon
   $description: >-
-    Logs visible window classes in this Explorer process once when the guard starts,
-    and logs matching windows that it suppresses.
+    This setting logs visible window classes in this Explorer process once when the
+    guard starts, and logs matching windows that it suppresses.
 */
 // ==/WindhawkModSettings==
 #include <windows.h>
@@ -87,23 +63,20 @@ The color path is adapted from that existing mod's horizontal-text correction. T
 #include <string.h>
 #include <wchar.h>
 
-// The private-shell target is selected by Windhawk's real process path filters
-// above; no runtime GetModuleFileName check is used (Fake Explorer path hooks it).
 static std::atomic<bool> g_unloading{false};
 
-// Options of this module. These are read from hook and window-procedure threads.
 static std::atomic<bool> g_langGuardEnabled{true};
 static std::atomic<DWORD> g_langGuardMs{20000};
 static std::atomic<bool> g_indicatorColours{true};
 static std::atomic<bool> g_routeRightClickToTaskbar{false};
 static std::atomic<bool> g_langCensusLog{false};
 
-// With the color option enabled, the subclass owns the complete client paint:
-// forwarding WM_PAINT would restore Explorer's legacy fill over our composition.
-// Mouse/theme/layout changes invalidate the cell and use the same painter, so the
-// appearance follows state transitions without a competing periodic repaint.
-
 static void TrackIndicatorWindow(HWND hwnd);
+
+// --- RAII helpers -----------------------------------------------------------
+// Every scoped class owns one resource and releases it in its destructor, so
+// error paths and early returns never leak. The classes are non-copyable to
+// prevent accidental double-release.
 
 class ScopedGdiObj {
 public:
@@ -145,8 +118,60 @@ private:
     int m_saved;
 };
 
-// Theme lookup is cached because the single-painter path can run on every state
-// transition (paint, hover, press, layout change).
+class ScopedMemDc {
+public:
+    explicit ScopedMemDc(HDC src) : m_dc(CreateCompatibleDC(src)) {}
+    ~ScopedMemDc() { if (m_dc) DeleteDC(m_dc); }
+    ScopedMemDc(const ScopedMemDc&) = delete;
+    ScopedMemDc& operator=(const ScopedMemDc&) = delete;
+    HDC get() const { return m_dc; }
+    bool valid() const { return m_dc != nullptr; }
+private:
+    HDC m_dc;
+};
+
+// Owns a registry HKEY. put() closes any previously held key and returns the
+// address of the slot so RegOpenKeyExW can write into it directly; this keeps
+// call sites readable and closes on every exit path, including early returns
+// inside the enum loop.
+class ScopedRegKey {
+public:
+    ScopedRegKey() : m_key(nullptr) {}
+    ~ScopedRegKey() { if (m_key) RegCloseKey(m_key); }
+    ScopedRegKey(const ScopedRegKey&) = delete;
+    ScopedRegKey& operator=(const ScopedRegKey&) = delete;
+    HKEY* put() { reset(); return &m_key; }
+    HKEY get() const { return m_key; }
+    void reset() { if (m_key) { RegCloseKey(m_key); m_key = nullptr; } }
+    bool valid() const { return m_key != nullptr; }
+private:
+    HKEY m_key;
+};
+
+// Owns a generic kernel HANDLE (event, thread, ...). Move-only so it can be
+// returned from a factory while still guaranteeing release on every path.
+class ScopedHandle {
+public:
+    ScopedHandle() : m_h(nullptr) {}
+    explicit ScopedHandle(HANDLE h) : m_h(h) {}
+    ~ScopedHandle() { if (m_h) CloseHandle(m_h); }
+    ScopedHandle(const ScopedHandle&) = delete;
+    ScopedHandle& operator=(const ScopedHandle&) = delete;
+    ScopedHandle(ScopedHandle&& o) noexcept : m_h(o.m_h) { o.m_h = nullptr; }
+    ScopedHandle& operator=(ScopedHandle&& o) noexcept {
+        if (this != &o) { reset(); m_h = o.m_h; o.m_h = nullptr; }
+        return *this;
+    }
+    HANDLE get() const { return m_h; }
+    HANDLE* put() { reset(); return &m_h; }
+    HANDLE release() { HANDLE h = m_h; m_h = nullptr; return h; }
+    void reset(HANDLE h = nullptr) { if (m_h && m_h != h) CloseHandle(m_h); m_h = h; }
+    bool valid() const { return m_h != nullptr; }
+private:
+    HANDLE m_h;
+};
+
+// --- Theme colours ----------------------------------------------------------
 static SRWLOCK g_themeCacheLock = SRWLOCK_INIT;
 static ULONGLONG g_themeCacheTick = 0;
 static bool g_themeUsesLight = false;
@@ -178,13 +203,10 @@ static void ResetThemeCache() {
 }
 
 static COLORREF IndicatorTextColor() {
-    // Avoid pure black: GDI black is treated as transparent by the composited
-    // taskbar, so use an opaque near-black on light themes and white on dark ones.
     return TaskbarUsesLightTheme() ? RGB(28, 28, 28) : RGB(255, 255, 255);
 }
 
-// The language flyout is suppressed only inside this Explorer process. Exact
-// class matching avoids hiding unrelated third-party windows with similar names.
+// --- Language flyout guard --------------------------------------------------
 static std::atomic<ULONGLONG> g_langGuardUntil{0};
 static std::atomic<ULONGLONG> g_langGuardStart{0};
 static std::atomic<ULONGLONG> g_langManualUntil{0};
@@ -202,7 +224,7 @@ static bool IsOwnProcessWindow(HWND hwnd) {
 }
 
 static bool IsLanguageFlyoutClass(const wchar_t* cls) {
-    if (!cls || (ULONG_PTR)cls <= 0xFFFF) return false;  // class atom, not a name
+    if (!cls || (ULONG_PTR)cls <= 0xFFFF) return false;
     return _wcsicmp(cls, L"Shell_InputSwitchTopLevelWindow") == 0 ||
            _wcsicmp(cls, L"Shell_InputSwitchDismissOverlay") == 0 ||
            _wcsicmp(cls, L"Windhawk_Win78LanguageFlyout") == 0;
@@ -223,8 +245,6 @@ static bool LanguageGuardActive() {
     return until != 0 && GetTickCount64() < until;
 }
 
-// A suppression extends the guard by 15 seconds, with an absolute cap of four
-// times the configured duration from the original guard start.
 static void ExtendLanguageGuard() {
     const ULONGLONG start = g_langGuardStart.load(std::memory_order_acquire);
     const ULONGLONG now = GetTickCount64();
@@ -274,8 +294,6 @@ static void LogLanguageEvent(const wchar_t* how, HWND hwnd) {
     Wh_Log(L"[language] %s: class %s (pid %lu)", how, cls, GetCurrentProcessId());
 }
 
-// Hide asynchronously: even a stalled window thread cannot keep the guard worker
-// from exiting during mod unload. No WM_CLOSE or cross-process window operation is used.
 static void SuppressLanguageWindow(HWND hwnd, const wchar_t* how) {
     if (!LooksLikeLanguageFlyout(hwnd)) return;
     g_langSuppressions.fetch_add(1, std::memory_order_relaxed);
@@ -372,11 +390,8 @@ static void RunLanguageGuardCensus() {
     EnumWindows(LangCensusProc, 1);
 }
 
-// --- 10-bis) the language indicator: manual clicks and one authoritative paint --
-// When colors are enabled, WM_PAINT/WM_PRINTCLIENT are fully handled by this
-// subclass. Explorer's legacy paint is not forwarded, otherwise its grey fill can
-// cover our theme-aware transparent composition, especially on non-classic themes.
-
+// --- Language indicator tracking --------------------------------------------
+#define WM_APP_FORCE_INDICATOR_REPAINT (WM_APP + 0x51)
 
 static const DWORD_PTR kIndicatorSubclassRefData = 78;
 static constexpr int kMaxIndicatorTargets = 32;
@@ -384,8 +399,6 @@ static SRWLOCK g_indicatorTargetsLock = SRWLOCK_INIT;
 static std::atomic<int> g_indicatorCellLogs{0};
 static std::atomic<int> g_indicatorInstallCount{0};
 
-// IMEModeButton is deliberately excluded: it is the separate IME-mode control
-// (A/あ, 中/英), not a language indicator layer.
 static const wchar_t* const kIndicatorClasses[] = {
     L"TrayInputIndicatorWClass",
     L"InputIndicatorWClass",
@@ -434,15 +447,14 @@ static int CopyIndicatorTargets(HWND* out, int capacity) {
     return count;
 }
 
-// Invalidate only tracked indicator windows. Windows coalesces these requests
-// into WM_PAINT; the subclass is the sole painter whenever the color option is on.
 static void InvalidateIndicatorTargets() {
     if (g_unloading.load(std::memory_order_acquire)) return;
     HWND targets[kMaxIndicatorTargets] = {};
     const int count = CopyIndicatorTargets(targets, _countof(targets));
     for (int i = 0; i < count; i++) {
         if (IsOwnProcessWindow(targets[i]) && IsWindowVisible(targets[i])) {
-            InvalidateRect(targets[i], nullptr, FALSE);
+            RedrawWindow(targets[i], nullptr, nullptr,
+                         RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE);
         }
     }
 }
@@ -501,8 +513,6 @@ static void TrackIndicatorWindow(HWND hwnd) {
     g_indicatorInstallCount.fetch_sub(1, std::memory_order_acq_rel);
 
     if (installed && g_indicatorColours.load(std::memory_order_relaxed)) {
-        // Ensure an already-created cell gets its first mod-owned paint even if
-        // Explorer has no pending update region yet.
         InvalidateRect(hwnd, nullptr, FALSE);
     } else if (!installed && IsWindow(hwnd)) {
         Wh_Log(L"[lang] failed to subclass indicator window %s 0x%p", cls, (void*)hwnd);
@@ -525,17 +535,11 @@ static BOOL CALLBACK TaskbarEnumProc(HWND hwnd, LPARAM) {
     return TRUE;
 }
 
-// Discover current indicator windows at init/settings changes; later windows are
-// caught by CreateWindowExW_Hook on their creating thread.
 static void ArmIndicatorSubclass() {
-    // TaskbarEnumProc walks both the primary and secondary taskbars and tracks
-    // every indicator child, so a separate FindWindow-based lookup is unnecessary.
     EnumWindows(TaskbarEnumProc, 0);
 }
 
 static void RemoveIndicatorSubclasses() {
-    // Wh_ModBeforeUninit prevents new installs. Wait for any installation that
-    // already started so its subclass cannot outlive the cleanup snapshot.
     while (g_indicatorInstallCount.load(std::memory_order_acquire) != 0) Sleep(1);
 
     IndicatorTarget snapshot[kMaxIndicatorTargets] = {};
@@ -558,18 +562,7 @@ static void RemoveIndicatorSubclasses() {
     ReleaseSRWLockExclusive(&g_indicatorTargetsLock);
 }
 
-class ScopedMemDc {
-public:
-    explicit ScopedMemDc(HDC src) : m_dc(CreateCompatibleDC(src)) {}
-    ~ScopedMemDc() { if (m_dc) DeleteDC(m_dc); }
-    ScopedMemDc(const ScopedMemDc&) = delete;
-    ScopedMemDc& operator=(const ScopedMemDc&) = delete;
-    HDC get() const { return m_dc; }
-    bool valid() const { return m_dc != nullptr; }
-private:
-    HDC m_dc;
-};
-
+// --- Indicator text resolution ----------------------------------------------
 static HWND TopmostTrackedAt(POINT point) {
     HWND wnd = WindowFromPoint(point);
     for (int depth = 0; wnd && depth < 32; depth++) {
@@ -607,15 +600,141 @@ static bool ThisLayerShowsText(HWND hwnd) {
     return !top || top == hwnd;
 }
 
-// Resolve the active layout at paint time instead of caching text from Explorer's
-// internal GDI passes; that avoids retaining a partial hover string such as "ITA"
-// without its matching country code.
+static SRWLOCK g_layoutVariantCacheLock = SRWLOCK_INIT;
+static wchar_t g_cachedLayoutId[KL_NAMELENGTH] = {};
+static wchar_t g_cachedLayoutVariant[16] = {};
+static bool g_layoutVariantCacheValid = false;
+
+static bool ReadLayoutVariant(const wchar_t* layoutId, wchar_t* variant,
+                              size_t variantCount) {
+    static const wchar_t kLayoutsKey[] =
+        L"SYSTEM\\CurrentControlSet\\Control\\Keyboard Layouts\\";
+    wchar_t subkey[_countof(kLayoutsKey) + KL_NAMELENGTH] = {};
+    wcscpy_s(subkey, _countof(subkey), kLayoutsKey);
+    wcscat_s(subkey, _countof(subkey), layoutId);
+
+    wchar_t layoutText[128] = {};
+    DWORD bytes = sizeof(layoutText);
+    if (RegGetValueW(HKEY_LOCAL_MACHINE, subkey, L"Layout Text",
+                     RRF_RT_REG_SZ, nullptr, layoutText, &bytes) != ERROR_SUCCESS) {
+        return false;
+    }
+
+    const wchar_t* open = wcsrchr(layoutText, L'(');
+    const wchar_t* close = open ? wcschr(open + 1, L')') : nullptr;
+    if (!open || !close) return false;
+
+    const wchar_t* start = open + 1;
+    while (start < close && (*start == L' ' || *start == L'\t')) start++;
+    while (close > start && (close[-1] == L' ' || close[-1] == L'\t')) close--;
+    const size_t length = (size_t)(close - start);
+    if (!length || length >= variantCount) return false;
+
+    wmemcpy(variant, start, length);
+    variant[length] = 0;
+    return true;
+}
+
+static bool GetCachedLayoutVariant(const wchar_t* layoutId, wchar_t* variant,
+                                   size_t variantCount) {
+    if (!layoutId || !variant || variantCount < 2) return false;
+
+    AcquireSRWLockShared(&g_layoutVariantCacheLock);
+    if (g_layoutVariantCacheValid && wcscmp(g_cachedLayoutId, layoutId) == 0) {
+        const bool found = g_cachedLayoutVariant[0] != 0;
+        if (found && wcscpy_s(variant, variantCount, g_cachedLayoutVariant) != 0) {
+            ReleaseSRWLockShared(&g_layoutVariantCacheLock);
+            return false;
+        }
+        if (!found) variant[0] = 0;
+        ReleaseSRWLockShared(&g_layoutVariantCacheLock);
+        return found;
+    }
+    ReleaseSRWLockShared(&g_layoutVariantCacheLock);
+
+    wchar_t resolved[16] = {};
+    const bool found = ReadLayoutVariant(layoutId, resolved, _countof(resolved));
+    AcquireSRWLockExclusive(&g_layoutVariantCacheLock);
+    wcscpy_s(g_cachedLayoutId, _countof(g_cachedLayoutId), layoutId);
+    wcscpy_s(g_cachedLayoutVariant, _countof(g_cachedLayoutVariant),
+             found ? resolved : L"");
+    g_layoutVariantCacheValid = true;
+    if (found && wcscpy_s(variant, variantCount, resolved) != 0) {
+        ReleaseSRWLockExclusive(&g_layoutVariantCacheLock);
+        return false;
+    }
+    if (!found) variant[0] = 0;
+    ReleaseSRWLockExclusive(&g_layoutVariantCacheLock);
+    return found;
+}
+
+// Some keyboard layouts carry a hardware "Layout Id" in the HKL's high word
+// (top nibble == 0xF) rather than a KLID prefix. Those must be resolved by
+// scanning HKLM\SYSTEM\CurrentControlSet\Control\Keyboard Layouts for a
+// subkey whose "Layout Id" value matches devId & 0x0FFF; the subkey name is
+// the real KLID. Returns false when no match is found.
+//
+// Both the root and the per-subkey HKEYs are owned by ScopedRegKey, so every
+// exit path (early return, break, exception) closes them without leaks.
+static bool FindKlidByLayoutId(WORD layoutId, wchar_t* out, size_t outCount) {
+    if (!out || outCount < 2 || layoutId == 0) return false;
+    out[0] = 0;
+
+    ScopedRegKey hRoot;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                      L"SYSTEM\\CurrentControlSet\\Control\\Keyboard Layouts",
+                      0, KEY_READ, hRoot.put()) != ERROR_SUCCESS) {
+        return false;
+    }
+
+    for (DWORD i = 0; ; ++i) {
+        wchar_t subKey[256] = {};
+        DWORD subLen = _countof(subKey);
+        FILETIME ft{};
+        if (RegEnumKeyExW(hRoot.get(), i, subKey, &subLen, nullptr, nullptr, nullptr, &ft) != ERROR_SUCCESS) {
+            break;
+        }
+
+        ScopedRegKey hSub;
+        if (RegOpenKeyExW(hRoot.get(), subKey, 0, KEY_READ, hSub.put()) == ERROR_SUCCESS) {
+            wchar_t idBuf[16] = {};
+            DWORD cb = sizeof(idBuf);
+            if (RegQueryValueExW(hSub.get(), L"Layout Id", nullptr, nullptr,
+                                 reinterpret_cast<LPBYTE>(idBuf), &cb) == ERROR_SUCCESS && idBuf[0]) {
+                wchar_t* end = nullptr;
+                unsigned long parsed = wcstoul(idBuf, &end, 16);
+                if (end != idBuf && (parsed & 0xFFFF) == layoutId) {
+                    wcsncpy_s(out, outCount, subKey, _TRUNCATE);
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+// Resolve the active layout at paint time. Reads the keyboard layout from the
+// foreground thread, because that is the thread that actually receives the
+// layout change; the taskbar indicator's own thread does not necessarily
+// reflect the active layout when another app owns the focus. The KLID is
+// derived directly from the HKL (with FindKlidByLayoutId for hardware Layout
+// Ids), not from GetKeyboardLayoutNameW, which would only read the calling
+// thread's layout.
 static bool GetIndicatorText(HWND hwnd, wchar_t* text, size_t textCount,
                              wchar_t* text2, size_t text2Count) {
     if (!hwnd || !text || textCount < 4 || !text2 || text2Count < 4) return false;
     text[0] = text2[0] = 0;
 
-    const DWORD threadId = GetWindowThreadProcessId(hwnd, nullptr);
+    DWORD threadId = 0;
+    HWND hFore = GetForegroundWindow();
+    if (hFore) {
+        threadId = GetWindowThreadProcessId(hFore, nullptr);
+    }
+    if (!threadId) {
+        threadId = GetWindowThreadProcessId(hwnd, nullptr);
+    }
+    if (!threadId) return false;
+
     const HKL layout = GetKeyboardLayout(threadId);
     if (!layout) return false;
     const LANGID lang = (LANGID)LOWORD((UINT_PTR)layout);
@@ -623,11 +742,34 @@ static bool GetIndicatorText(HWND hwnd, wchar_t* text, size_t textCount,
                         text, (int)textCount) || !text[0]) {
         return false;
     }
-    GetLocaleInfoW(MAKELCID(lang, SORT_DEFAULT), LOCALE_SISO3166CTRYNAME,
-                   text2, (int)text2Count);
+
+    const WORD dev = HIWORD((UINT_PTR)layout);
+    const WORD langLow = LOWORD((UINT_PTR)layout);
+    wchar_t layoutId[KL_NAMELENGTH] = {};
+    if ((dev & 0xF000) == 0xF000) {
+        if (!FindKlidByLayoutId((WORD)(dev & 0x0FFF), layoutId, _countof(layoutId))) {
+            swprintf_s(layoutId, L"%08X", (UINT)langLow);
+        }
+    } else if (dev == 0 || dev == langLow) {
+        swprintf_s(layoutId, L"%08X", (UINT)langLow);
+    } else {
+        swprintf_s(layoutId, L"%04X%04X", (UINT)dev, (UINT)langLow);
+    }
+
+    if (!GetCachedLayoutVariant(layoutId, text2, text2Count)) {
+        GetLocaleInfoW(MAKELCID(lang, SORT_DEFAULT), LOCALE_SISO3166CTRYNAME,
+                       text2, (int)text2Count);
+    }
+
+    static std::atomic<int> s_log{0};
+    if (s_log.fetch_add(1, std::memory_order_relaxed) < 60) {
+        Wh_Log(L"[lang-paint] GetIndicatorText: tid=0x%X hkl=0x%p klid=%s text=%s text2=%s",
+               (unsigned)threadId, (void*)layout, layoutId, text, text2);
+    }
     return true;
 }
 
+// --- Painting ---------------------------------------------------------------
 static void PaintIndicatorCell(HWND hwnd, const wchar_t* why, HDC targetDc) {
     if (g_unloading.load(std::memory_order_acquire) ||
         !g_indicatorColours.load(std::memory_order_relaxed) ||
@@ -650,8 +792,6 @@ static void PaintIndicatorCell(HWND hwnd, const wchar_t* why, HDC targetDc) {
     wchar_t text2[16] = {};
     if (showsText && !GetIndicatorText(hwnd, text, _countof(text), text2, _countof(text2))) return;
 
-    // Keep the caller's HDC state intact. WM_PAINT and WM_PRINTCLIENT can pass
-    // Explorer-owned DCs that are reused for other taskbar content.
     ScopedSavedDc targetState(targetDc);
     if (!targetState.valid()) return;
     ScopedMemDc memoryDc(targetDc);
@@ -699,8 +839,6 @@ static void PaintIndicatorCell(HWND hwnd, const wchar_t* why, HDC targetDc) {
             }
         }
 
-        // Convert the white glyph coverage into premultiplied ARGB. The DIB's
-        // zero-alpha pixels let the taskbar composition show through behind text.
         const COLORREF foreground = IndicatorTextColor();
         const unsigned fr = GetRValue(foreground);
         const unsigned fg = GetGValue(foreground);
@@ -732,15 +870,17 @@ static void PaintIndicatorCell(HWND hwnd, const wchar_t* why, HDC targetDc) {
     BitBlt(targetDc, 0, 0, width, height, memoryDc.get(), 0, 0, SRCCOPY);
 
     const int logIndex = g_indicatorCellLogs.fetch_add(1, std::memory_order_relaxed);
-    if (logIndex < 8) {
+    if (logIndex < 40) {
         RECT windowRect = {};
         GetWindowRect(hwnd, &windowRect);
-        Wh_Log(L"[lang] indicator repainted (%s): %s 0x%p %dx%d at (%d,%d), text %s",
+        Wh_Log(L"[lang] indicator repainted (%s): %s 0x%p %dx%d at (%d,%d), text %s %s",
                why, cls, (void*)hwnd, width, height, windowRect.left, windowRect.top,
-               showsText ? text : L"(carried by topmost indicator layer)");
+               showsText ? text : L"(carried by topmost indicator layer)",
+               showsText ? text2 : L"");
     }
 }
 
+// --- Indicator subclass -----------------------------------------------------
 static HWND GetIndicatorTaskbarWindow(HWND hwnd) {
     HWND tray = GetAncestor(hwnd, GA_ROOT);
     if (!tray || !IsOwnProcessWindow(tray)) return nullptr;
@@ -754,12 +894,44 @@ static HWND GetIndicatorTaskbarWindow(HWND hwnd) {
 static void RequestIndicatorRepaint() {
     if (g_indicatorColours.load(std::memory_order_relaxed) &&
         !g_unloading.load(std::memory_order_acquire)) {
-        // Do not remove these state invalidations: a non-classic composited taskbar
-        // otherwise keeps stale/legacy paint when hover, press, or layout changes.
-        // Invalidate every layer because the topmost one can change on hover/press;
-        // bErase=FALSE preserves the composed taskbar background.
         InvalidateIndicatorTargets();
     }
+}
+
+static void PostForceRepaintToIndicators() {
+    if (g_unloading.load(std::memory_order_acquire)) return;
+    HWND targets[kMaxIndicatorTargets] = {};
+    const int count = CopyIndicatorTargets(targets, _countof(targets));
+    for (int i = 0; i < count; i++) {
+        if (IsOwnProcessWindow(targets[i])) {
+            PostMessageW(targets[i], WM_APP_FORCE_INDICATOR_REPAINT, 0, 0);
+        }
+    }
+}
+
+typedef HKL(WINAPI* ActivateKeyboardLayout_t)(HKL, UINT);
+static ActivateKeyboardLayout_t ActivateKeyboardLayout_Original = nullptr;
+
+typedef HKL(WINAPI* LoadKeyboardLayoutW_t)(LPCWSTR, UINT);
+static LoadKeyboardLayoutW_t LoadKeyboardLayoutW_Original = nullptr;
+
+static HKL WINAPI ActivateKeyboardLayout_Hook(HKL layout, UINT flags) {
+    const HKL previous = GetKeyboardLayout(GetCurrentThreadId());
+    const HKL result = ActivateKeyboardLayout_Original(layout, flags);
+    Wh_Log(L"[lang-hook] ActivateKeyboardLayout: requested=0x%p flags=0x%X prev=0x%p -> result=0x%p",
+           (void*)layout, flags, (void*)previous, (void*)result);
+    PostForceRepaintToIndicators();
+    return result;
+}
+
+static HKL WINAPI LoadKeyboardLayoutW_Hook(LPCWSTR id, UINT flags) {
+    const HKL result = LoadKeyboardLayoutW_Original(id, flags);
+    Wh_Log(L"[lang-hook] LoadKeyboardLayoutW: id=%s flags=0x%X -> result=0x%p",
+           id ? id : L"(null)", flags, (void*)result);
+    if (!(flags & KLF_NOTELLSHELL)) {
+        PostForceRepaintToIndicators();
+    }
+    return result;
 }
 
 static void TrackIndicatorMouseLeave(HWND hwnd) {
@@ -782,18 +954,15 @@ static LRESULT IndicatorSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
 
-    const bool colorsEnabled = g_indicatorColours.load(std::memory_order_relaxed);
+    const bool coloursEnabled = g_indicatorColours.load(std::memory_order_relaxed);
     bool repaintAfterDefault = false;
     switch (msg) {
         case WM_ERASEBKGND:
-            if (colorsEnabled) return 1;
+            if (coloursEnabled) return 1;
             break;
 
         case WM_PAINT:
-            if (colorsEnabled) {
-                // One authoritative paint: do not forward WM_PAINT to Explorer,
-                // whose legacy themed fill would cover our composited rendering.
-                // BeginPaint/EndPaint still validate the update region.
+            if (coloursEnabled) {
                 PAINTSTRUCT paint = {};
                 HDC hdc = BeginPaint(hwnd, &paint);
                 if (hdc) PaintIndicatorCell(hwnd, L"paint", hdc);
@@ -803,9 +972,17 @@ static LRESULT IndicatorSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             break;
 
         case WM_PRINTCLIENT:
-            if (colorsEnabled) {
+            if (coloursEnabled) {
                 HDC hdc = (HDC)wParam;
                 if (hdc) PaintIndicatorCell(hwnd, L"printclient", hdc);
+                return 0;
+            }
+            break;
+
+        case WM_APP_FORCE_INDICATOR_REPAINT:
+            if (coloursEnabled) {
+                InvalidateRect(hwnd, nullptr, FALSE);
+                UpdateWindow(hwnd);
                 return 0;
             }
             break;
@@ -835,7 +1012,7 @@ static LRESULT IndicatorSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 }
             }
             repaintAfterDefault = true;
-            break;  // default: keep the language indicator's native context menu
+            break;
         }
 
         case WM_RBUTTONUP:
@@ -852,6 +1029,15 @@ static LRESULT IndicatorSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             repaintAfterDefault = true;
             break;
 
+        case WM_INPUTLANGCHANGE:
+            if (coloursEnabled) {
+                InvalidateRect(hwnd, nullptr, FALSE);
+                UpdateWindow(hwnd);
+                return 0;
+            }
+            repaintAfterDefault = true;
+            break;
+
         case WM_MOUSELEAVE:
         case WM_MOUSEHOVER:
         case WM_MBUTTONDOWN:
@@ -860,7 +1046,6 @@ static LRESULT IndicatorSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         case WM_ENABLE:
         case WM_SETFOCUS:
         case WM_KILLFOCUS:
-        case WM_INPUTLANGCHANGE:
             repaintAfterDefault = true;
             break;
 
@@ -873,12 +1058,91 @@ static LRESULT IndicatorSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
     }
 
     const LRESULT result = DefSubclassProc(hwnd, msg, wParam, lParam);
-    if (repaintAfterDefault && colorsEnabled) RequestIndicatorRepaint();
+    if (repaintAfterDefault && coloursEnabled) RequestIndicatorRepaint();
     return result;
 }
 
-// The guard thread exists only while the guard is active. It sweeps this process's
-// top-level windows, uses asynchronous hides, and exits as soon as the deadline passes.
+// --- Layout polling thread ---------------------------------------------------
+// The real change of layout happens on the foreground thread. The taskbar
+// indicator's own thread does not necessarily reflect it, so polling the
+// indicator thread alone can miss the change. Poll the foreground thread's
+// HKL instead; also poll the indicator thread as a fallback when there is no
+// foreground window.
+static HANDLE g_layoutPollThread = nullptr;
+static HANDLE g_layoutPollStopEvent = nullptr;
+
+static DWORD WINAPI LayoutPollThread(LPVOID) {
+    DWORD lastFgHkl = 0;
+    DWORD lastIndHkl = 0;
+    {
+        HWND hFore = GetForegroundWindow();
+        if (hFore) {
+            DWORD tid = GetWindowThreadProcessId(hFore, nullptr);
+            if (tid) lastFgHkl = (DWORD)(UINT_PTR)GetKeyboardLayout(tid);
+        }
+        HWND targets[kMaxIndicatorTargets] = {};
+        const int count = CopyIndicatorTargets(targets, _countof(targets));
+        if (count > 0) {
+            DWORD tid = GetWindowThreadProcessId(targets[0], nullptr);
+            if (tid) lastIndHkl = (DWORD)(UINT_PTR)GetKeyboardLayout(tid);
+        }
+    }
+
+    for (;;) {
+        if (WaitForSingleObject(g_layoutPollStopEvent, 100) != WAIT_TIMEOUT) break;
+        if (g_unloading.load(std::memory_order_acquire)) break;
+        if (!g_indicatorColours.load(std::memory_order_relaxed)) continue;
+
+        DWORD fgHkl = 0;
+        HWND hFore = GetForegroundWindow();
+        if (hFore) {
+            DWORD tid = GetWindowThreadProcessId(hFore, nullptr);
+            if (tid) fgHkl = (DWORD)(UINT_PTR)GetKeyboardLayout(tid);
+        }
+
+        DWORD indHkl = 0;
+        HWND targets[kMaxIndicatorTargets] = {};
+        const int count = CopyIndicatorTargets(targets, _countof(targets));
+        if (count > 0) {
+            DWORD tid = GetWindowThreadProcessId(targets[0], nullptr);
+            if (tid) indHkl = (DWORD)(UINT_PTR)GetKeyboardLayout(tid);
+        }
+
+        if (fgHkl == lastFgHkl && indHkl == lastIndHkl) continue;
+        Wh_Log(L"[lang-poll] layout change: fg=0x%08X ind=0x%08X",
+               (unsigned)fgHkl, (unsigned)indHkl);
+        lastFgHkl = fgHkl;
+        lastIndHkl = indHkl;
+        PostForceRepaintToIndicators();
+    }
+    return 0;
+}
+
+static bool StartLayoutPollThread() {
+    if (g_layoutPollThread) return true;
+    if (!g_layoutPollStopEvent) {
+        g_layoutPollStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!g_layoutPollStopEvent) return false;
+    } else {
+        ResetEvent(g_layoutPollStopEvent);
+    }
+    g_layoutPollThread = CreateThread(nullptr, 0, LayoutPollThread, nullptr, 0, nullptr);
+    return g_layoutPollThread != nullptr;
+}
+
+static void StopLayoutPollThread() {
+    // Take ownership of the handles under RAII so the destructor closes them
+    // even if a future edit adds an early return between the waits.
+    ScopedHandle threadHandle(g_layoutPollThread);
+    ScopedHandle stopEvent(g_layoutPollStopEvent);
+    g_layoutPollThread = nullptr;
+    g_layoutPollStopEvent = nullptr;
+
+    if (stopEvent.valid()) SetEvent(stopEvent.get());
+    if (threadHandle.valid()) WaitForSingleObject(threadHandle.get(), INFINITE);
+}
+
+// --- Language guard thread --------------------------------------------------
 static SRWLOCK g_languageThreadLock = SRWLOCK_INIT;
 static HANDLE g_stopEvent = nullptr;
 static HANDLE g_languageThread = nullptr;
@@ -892,11 +1156,19 @@ static void InstallLanguageGuardHooks() {
                                                  (void**)&CreateWindowExW_Original);
     const bool hookedPos = Wh_SetFunctionHook((void*)SetWindowPos, (void*)SetWindowPos_Hook,
                                               (void**)&SetWindowPos_Original);
-    Wh_Log(L"[language] guard hooks: ShowWindow %s, ShowWindowAsync %s, CreateWindowExW %s, SetWindowPos %s",
+    const bool hookedActivate = Wh_SetFunctionHook((void*)ActivateKeyboardLayout,
+                                                   (void*)ActivateKeyboardLayout_Hook,
+                                                   (void**)&ActivateKeyboardLayout_Original);
+    const bool hookedLoad = Wh_SetFunctionHook((void*)LoadKeyboardLayoutW,
+                                               (void*)LoadKeyboardLayoutW_Hook,
+                                               (void**)&LoadKeyboardLayoutW_Original);
+    Wh_Log(L"[language] guard hooks: ShowWindow %s, ShowWindowAsync %s, CreateWindowExW %s, SetWindowPos %s, ActivateKeyboardLayout %s, LoadKeyboardLayoutW %s",
            hookedShow ? L"installed" : L"not installed",
            hookedAsync ? L"installed" : L"not installed",
            hookedCreate ? L"installed" : L"not installed",
-           hookedPos ? L"installed" : L"not installed");
+           hookedPos ? L"installed" : L"not installed",
+           hookedActivate ? L"installed" : L"not installed",
+           hookedLoad ? L"installed" : L"not installed");
 }
 
 static void ArmLanguageGuard() {
@@ -915,7 +1187,7 @@ static void ArmLanguageGuard() {
 
 static void DisarmLanguageGuard() {
     g_langGuardUntil.store(0, std::memory_order_release);
-    Wh_Log(L"[language] guard off (the indicator colors stay on)");
+    Wh_Log(L"[language] guard off (the indicator colours stay on)");
 }
 
 static void LogLanguageGuardFinished() {
@@ -941,8 +1213,6 @@ static DWORD WINAPI LanguageGuardThread(LPVOID) {
             break;
         }
 
-        // Only the language guard is polled here. Indicator paints are driven by
-        // WM_PAINT and explicit state-change invalidations, never by a timer.
         EnumWindows(LangCensusProc, firstCensus ? 1 : 0);
         firstCensus = false;
         if (!LanguageGuardActive()) {
@@ -996,18 +1266,16 @@ static bool StartLanguageGuardThread() {
 
 static void StopLanguageGuardThread() {
     AcquireSRWLockExclusive(&g_languageThreadLock);
-    if (g_stopEvent) SetEvent(g_stopEvent);
-    if (g_languageThread) {
-        // The guard worker enumerates same-process windows and hides them through
-        // asynchronous APIs, so it never waits on another window thread.
-        WaitForSingleObject(g_languageThread, INFINITE);
-        CloseHandle(g_languageThread);
-        g_languageThread = nullptr;
-    }
-    if (g_stopEvent) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
-    }
+    // Take ownership under RAII before waiting, so the handles are released
+    // exactly once on every exit path even if a future edit adds an early
+    // return inside the locked section.
+    ScopedHandle threadHandle(g_languageThread);
+    ScopedHandle stopEvent(g_stopEvent);
+    g_languageThread = nullptr;
+    g_stopEvent = nullptr;
+
+    if (stopEvent.valid()) SetEvent(stopEvent.get());
+    if (threadHandle.valid()) WaitForSingleObject(threadHandle.get(), INFINITE);
     ReleaseSRWLockExclusive(&g_languageThreadLock);
 }
 
@@ -1029,7 +1297,7 @@ static void LoadLanguageSettings() {
 }
 
 static void LogCurrentSettings(const wchar_t* prefix) {
-    Wh_Log(L"[lang] %s: guard=%s (%u s), indicator colors=%s, taskbar menu on right-click=%s, logon census=%s",
+    Wh_Log(L"[lang] %s: guard=%s (%u s), indicator colours=%s, taskbar menu on right-click=%s, logon census=%s",
            prefix,
            g_langGuardEnabled.load(std::memory_order_relaxed) ? L"on" : L"off",
            (unsigned)(g_langGuardMs.load(std::memory_order_relaxed) / 1000),
@@ -1038,16 +1306,18 @@ static void LogCurrentSettings(const wchar_t* prefix) {
            g_langCensusLog.load(std::memory_order_relaxed) ? L"on" : L"off");
 }
 
+// --- Windhawk entry points --------------------------------------------------
 BOOL Wh_ModInit() {
     g_unloading.store(false, std::memory_order_release);
     LoadLanguageSettings();
-    Wh_Log(L"[lang] init: Windows 10 language flyout guard and indicator colors");
+    Wh_Log(L"[lang] init: Windows 10 language flyout guard and indicator colours");
     LogCurrentSettings(L"settings");
 
-    // Flyout interception is runtime-gated. Indicator color rendering is
-    // handled exclusively by its WM_PAINT subclass; no competing GDI hooks exist.
     InstallLanguageGuardHooks();
     if (ShouldTrackIndicatorWindows()) ArmIndicatorSubclass();
+    if (g_indicatorColours.load(std::memory_order_relaxed)) {
+        StartLayoutPollThread();
+    }
 
     const bool guardEnabled = g_langGuardEnabled.load(std::memory_order_relaxed);
     if (guardEnabled) {
@@ -1062,19 +1332,18 @@ BOOL Wh_ModInit() {
 
 void Wh_ModBeforeUninit() {
     g_unloading.store(true, std::memory_order_release);
-    // Synchronize with TrackIndicatorWindow's in-flight check before shutdown.
     AcquireSRWLockExclusive(&g_indicatorTargetsLock);
     ReleaseSRWLockExclusive(&g_indicatorTargetsLock);
     AcquireSRWLockExclusive(&g_languageThreadLock);
     if (g_stopEvent) SetEvent(g_stopEvent);
     ReleaseSRWLockExclusive(&g_languageThreadLock);
+    if (g_layoutPollStopEvent) SetEvent(g_layoutPollStopEvent);
 }
 
 void Wh_ModUninit() {
     g_unloading.store(true, std::memory_order_release);
+    StopLayoutPollThread();
     StopLanguageGuardThread();
-    // Remove every subclass before Windhawk unloads this image. Otherwise the next
-    // message to an indicator could jump into unmapped code.
     RemoveIndicatorSubclasses();
     Wh_Log(L"[lang] unloaded");
 }
@@ -1086,7 +1355,7 @@ void Wh_ModSettingsChanged() {
     const bool previousColours = g_indicatorColours.load(std::memory_order_acquire);
 
     LoadLanguageSettings();
-    const bool colorsEnabled = g_indicatorColours.load(std::memory_order_acquire);
+    const bool coloursEnabled = g_indicatorColours.load(std::memory_order_acquire);
     const bool guardEnabled = g_langGuardEnabled.load(std::memory_order_acquire);
     const DWORD duration = g_langGuardMs.load(std::memory_order_acquire);
 
@@ -1103,9 +1372,14 @@ void Wh_ModSettingsChanged() {
     }
 
     if (ShouldTrackIndicatorWindows()) ArmIndicatorSubclass();
-    if (previousColours != colorsEnabled) {
-        // Switching the option changes who owns WM_PAINT. Invalidate once so
-        // either our single painter or Explorer's native painter takes over.
+
+    if (coloursEnabled) {
+        StartLayoutPollThread();
+    } else {
+        StopLayoutPollThread();
+    }
+
+    if (previousColours != coloursEnabled) {
         ResetThemeCache();
         InvalidateIndicatorTargets();
     }
