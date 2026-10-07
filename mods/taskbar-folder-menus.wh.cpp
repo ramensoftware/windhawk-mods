@@ -2534,7 +2534,9 @@ static void LoadSettings() {
 
 static std::atomic<bool> g_unloading{false};
 static std::atomic<bool> g_updatingSettings{false};
-static HWND              g_taskbarWnd = nullptr;
+// Written by the taskbar thread, the retry worker and Windhawk's thread, and
+// read by all three: atomic, so every access is well-defined.
+static std::atomic<HWND> g_taskbarWnd{nullptr};
 [[clang::no_destroy]] static Grid g_buttonGrid = nullptr;
 static igc::Lease g_columnLease; // exit-time-safe: heap-only
 static std::atomic<bool>  g_injectionLive{false};
@@ -3292,7 +3294,7 @@ static LRESULT CALLBACK FolderMenuMsgFilterProc(
                 // ShowFolderMenu resolved and validated that window, and if
                 // Shell_TrayWnd was recreated since the last apply the cached
                 // one is dead and the deferral would simply fail.
-                if (PostMessageW(g_menuOwner ? g_menuOwner : g_taskbarWnd,
+                if (PostMessageW(g_menuOwner ? g_menuOwner : g_taskbarWnd.load(),
                                  WM_MENURBUTTONUP, itemPosition,
                                  reinterpret_cast<LPARAM>(itemMenu))) {
                     Wh_Log(L"[ContextMenu] Deferred menu id position=%u to owner",
@@ -3601,8 +3603,9 @@ static void PrepareFolderIcons() {
             height = g_iconHeight;
             generation = g_iconGeneration;
         }
-        // Not g_taskbarWnd: the taskbar thread writes it.
-        int size = FolderIconSize(FindCurrentProcessTaskbarWnd(), width, height);
+        int size = FolderIconSize(
+            taskbar_window::ResolveTaskbarWnd(g_taskbarWnd.load()), width,
+            height);
         for (auto const& entry : entries) {
             // Each of these is a Shell round trip that can block for as long
             // as an unreachable network target takes. Unload and a settings
