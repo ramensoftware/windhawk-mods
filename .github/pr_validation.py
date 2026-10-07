@@ -10,6 +10,7 @@ import json
 import math
 import os
 import re
+import subprocess
 import sys
 import time
 import unicodedata
@@ -1856,6 +1857,18 @@ def validate_pr_changelog(pr_body: str) -> int:
     return 0
 
 
+def get_pr_changes() -> list[tuple[str, Path]]:
+    """(status, path) pairs for the files changed by the pull request."""
+    # The checkout is GitHub's test merge commit, whose first parent is the tip
+    # of the base branch.
+    output = subprocess.check_output(
+        ['git', 'diff-tree', '-r', '-z', '--no-renames', '--name-status', 'HEAD^1', 'HEAD'],
+        text=True,
+    )
+    fields = output.split('\0')[:-1]
+    return [(status, Path(path)) for status, path in zip(fields[::2], fields[1::2])]
+
+
 def main():
     if len(sys.argv) > 1:
         test_run()
@@ -1870,17 +1883,18 @@ def main():
 
     warnings = 0
 
-    paths = [Path(p) for p in json.loads(os.environ['ALL_CHANGED_AND_MODIFIED_FILES'])]
-    if len(paths) == 0:
+    changes = get_pr_changes()
+    if len(changes) == 0:
         sys.exit('No files changed')
 
-    added_count = int(os.environ['ADDED_FILES_COUNT'])
-    modified_count = int(os.environ['MODIFIED_FILES_COUNT'])
-    all_count = int(os.environ['ALL_CHANGED_AND_MODIFIED_FILES_COUNT'])
+    statuses = [status for status, _ in changes]
+    added_count = statuses.count('A')
+    modified_count = statuses.count('M')
+    all_count = len(changes)
 
     if (added_count, modified_count, all_count) not in [(1, 0, 1), (0, 1, 1)]:
         warnings += add_warning(
-            paths[0],
+            changes[0][1],
             1,
             'Must be one added or one modified file, got '
             f'{added_count=} {modified_count=} {all_count=}',
@@ -1903,7 +1917,10 @@ def main():
     if modified_count != 0:
         warnings += validate_pr_changelog(pr_body)
 
-    for path in paths:
+    for status, path in changes:
+        if status == 'D':
+            continue
+
         print(f'Checking {path=}')
 
         path_warnings = validate_mod_file(path, pr_author, pr_author_id)
