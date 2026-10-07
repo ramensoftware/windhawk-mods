@@ -101,7 +101,7 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
   $description: Apps you open from here more often move up among results that match equally well. Turning this off stops counting and forgets the apps learned so far; turn it on again to start over.
 - filePreview: true
   $name: File Preview
-  $description: Show a preview of the selected file beside the Start menu - a large thumbnail (the one File Explorer shows) with its size, date and, for pictures and videos, dimensions and length.
+  $description: Show a preview of the selected file beside the Start menu - its thumbnail (pictures, video frames, PDF pages, SVG), or the start of a text file or document - with its details (type, size, dates, and per kind dimensions, length, artist, version or author) and its path, which a click copies.
 - animatePreview: true
   $name: Play Videos and Animations
   $description: In the file preview, play videos and animated GIF and WebP images - muted, on a loop - and turn through a PDF's first pages.
@@ -3552,6 +3552,15 @@ static bool IsSearchHostWindow(HWND hwnd) {
     return match;
 }
 
+// Explorer's helper sends this to Start's CoreWindow to ask whether a request
+// to remove a Store app is really Start's (AcceptPackageRemoval): lParam is
+// the family name's hash; Start answers 1 while it is asking for just that
+// (RequestPackageRemoval).
+static UINT RemovalCheckMessage() {
+    static const UINT message = RegisterWindowMessageW(L"StartEverything_RemovalCheck");
+    return message;
+}
+
 // Explorer's helper posts this to Start's CoreWindow when a drag of a result
 // it ran (StartFileDrag) is over: wParam 1 if it was dropped.
 static UINT DragDoneMessage() {
@@ -3944,9 +3953,10 @@ static std::atomic<DWORD> g_removalBoxThread{0};
 // Start (RequestPackageRemoval): here, in a plain desktop process, as package
 // management is not open to Start's. Nothing the request says is taken on
 // trust -- any process can send it: it is acted on only while Start is open
-// and in front, where the user has just confirmed it, and only for a package
-// that is not part of Windows, checked again here. Says so when it fails,
-// under the package's own name.
+// and in front, where the user has just confirmed it, when Start itself says
+// it is asking for this package (RemovalCheckMessage), and only for a
+// package that is not part of Windows, checked again here. Says so when it
+// fails, under the package's own name.
 static bool AcceptPackageRemoval(std::wstring family) {
     while (!family.empty() && family.back() == L'\0') {
         family.pop_back();
@@ -3963,6 +3973,14 @@ static bool AcceptPackageRemoval(std::wstring family) {
         family.find_first_not_of(L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-_") !=
             std::wstring::npos) {
         Wh_Log(L"[Explorer] uninstall: refused %ls", family.c_str());
+        return false;
+    }
+    // Start sent this from inside a SendMessage, so it answers this one meanwhile.
+    DWORD_PTR confirmed = 0;
+    if (!SendMessageTimeoutW(start, RemovalCheckMessage(), 0, static_cast<LPARAM>(std::hash<std::wstring>{}(family)),
+                             SMTO_ABORTIFHUNG, 1000, &confirmed) ||
+        !confirmed) {
+        Wh_Log(L"[Explorer] uninstall: refused %ls, not asked for by Start", family.c_str());
         return false;
     }
     SpawnTrackedLaunch([family] {
@@ -4804,6 +4822,37 @@ double Fs(double size) {
     return size * g_textScale.load(std::memory_order_relaxed) / 100.0;
 }
 
+// Sets a font size of the mod's UI, keeping the size it is at 100% in the
+// element's Tag, for RescaleFonts.
+template <typename Element>
+void ScaleFont(Element const& element, double size) {
+    element.FontSize(Fs(size));
+    element.Tag(winrt::box_value(size));
+}
+
+// Puts a new text size on what is already built (ScaleFont).
+void RescaleFonts(wux::DependencyObject const& root) {
+    if (!root) {
+        return;
+    }
+    if (auto element = root.try_as<wux::FrameworkElement>()) {
+        if (auto base = element.Tag().try_as<wf::IReference<double>>()) {
+            const double size = Fs(base.Value());
+            if (auto text = root.try_as<wuxc::TextBlock>()) {
+                text.FontSize(size);
+            } else if (auto icon = root.try_as<wuxc::FontIcon>()) {
+                icon.FontSize(size);
+            } else if (auto control = root.try_as<wuxc::Control>()) {
+                control.FontSize(size);
+            }
+        }
+    }
+    const int32_t count = wuxm::VisualTreeHelper::GetChildrenCount(root);
+    for (int32_t i = 0; i < count; ++i) {
+        RescaleFonts(wuxm::VisualTreeHelper::GetChild(root, i));
+    }
+}
+
 // The space between the search panel and Start's edges (panelMargin).
 int PanelMargin() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
@@ -5448,6 +5497,10 @@ void CloseStartMenu() {
 // to the front, and it opened behind.
 std::atomic<ULONGLONG> g_launchedAtTick{0};
 
+// The Store app Start is asking Explorer to remove, while it asks
+// (RequestPackageRemoval): what it answers RemovalCheckMessage by. XAML thread.
+static std::wstring g_removalPending;
+
 // A result is being dragged, by Explorer's helper (StartFileDrag), which holds
 // the foreground until the drop: Start losing it then is not Start closing.
 static bool g_dragging = false;
@@ -5928,6 +5981,11 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
         Wh_Log(L"subclass: teardown message received");
         TeardownStartMenuUi();
         return kTeardownDone;
+    }
+
+    if (uMsg && uMsg == RemovalCheckMessage()) {
+        return !g_removalPending.empty() &&
+               std::hash<std::wstring>{}(g_removalPending) == static_cast<size_t>(lParam);
     }
 
     if (uMsg && uMsg == DragDoneMessage()) {
@@ -6776,9 +6834,12 @@ bool RequestPackageRemoval(const std::wstring& family) {
     cds.cbData = static_cast<DWORD>((request.size() + 1) * sizeof(wchar_t));
     cds.lpData = request.data();
     DWORD_PTR accepted = 0;
-    return SendMessageTimeoutW(helper, WM_COPYDATA, reinterpret_cast<WPARAM>(GetOurCoreWindow()),
-                               reinterpret_cast<LPARAM>(&cds), SMTO_ABORTIFHUNG, 2000, &accepted) &&
-           accepted;
+    g_removalPending = family;  // Explorer asks back (RemovalCheckMessage)
+    const bool ok = SendMessageTimeoutW(helper, WM_COPYDATA, reinterpret_cast<WPARAM>(GetOurCoreWindow()),
+                                        reinterpret_cast<LPARAM>(&cds), SMTO_ABORTIFHUNG, 2000, &accepted) &&
+                    accepted;
+    g_removalPending.clear();
+    return ok;
 }
 
 // Starts a program's uninstaller, through Explorer like any program opened
@@ -7201,7 +7262,8 @@ void SetFileSelection(int index) {
 // A file with no picture shows the start of its text instead, when it has
 // some: a text file -- any, by what is in it -- line for line
 // (ReadTextStart), or a Word, Excel, PowerPoint, RTF or OpenDocument file
-// through Windows' own document filters, Office or not (ReadDocumentText).
+// through Windows' or Office's own document filters (ReadDocumentText),
+// which run here, in Start.
 //
 // Motion plays over the still once it is ready (animatePreview): a video,
 // muted and looping, through XAML's own player; a GIF, which XAML animates
@@ -7244,6 +7306,7 @@ struct Result {
     int height = 0;
     double scale = 1.0;        // physical pixels per DIP when it was made
     int pages = 0;             // a PDF drawn by RenderPdfPage: how many pages
+    bool morePages = false;    // and its next pages are to follow (RenderPdfFrames)
     std::wstring name;
     std::vector<std::pair<std::wstring, std::wstring>> facts;  // label and value, in the order shown
     std::wstring text;       // the start of a text file or a document, shown where a picture would be
@@ -7262,6 +7325,7 @@ std::condition_variable g_wake;
 std::wstring g_request;  // the path to fetch next, or empty
 bool g_quit = false;
 [[clang::no_destroy]] std::optional<Result> g_result;  // the last fetched, for the XAML thread
+[[clang::no_destroy]] std::optional<Result> g_frames;  // a PDF's pages after its card (ApplyPreviewFrames)
 [[clang::no_destroy]] std::optional<std::thread> g_thread;
 
 // Properties, defined here: propkey.h would add every key there is to the
@@ -7428,70 +7492,85 @@ inline void RunInMta(F&& f) {
 inline constexpr int kPdfPages = 10;
 inline constexpr int kPdfPageMs = 1000;
 
-// A PDF's first page, fitted into width x height pixels, by Windows' own
-// renderer (Windows.Data.Pdf) -- and when `pages` allows more and there are,
-// the first pages as frames, shown a second each: the same size as the first,
-// a page of another shape centered in it. Fails on an encrypted PDF, for one.
-inline bool RenderPdfPage(const std::wstring& path, int width, int height, int pages, Result* r) {
+// A page of a PDF, fitted into width x height pixels, by Windows' own
+// renderer (Windows.Data.Pdf). In the multithreaded apartment (RunInMta).
+inline bool RenderPdfPageOf(winrt::Windows::Data::Pdf::PdfDocument const& document, uint32_t index, int width, int height,
+                            std::vector<BYTE>* pixels, int* w, int* h) {
+    namespace pdf = winrt::Windows::Data::Pdf;
+    namespace imaging = winrt::Windows::Graphics::Imaging;
+    auto page = document.GetPage(index);
+    const auto size = page.Size();
+    const double fit = std::min(width / std::max(1.0, static_cast<double>(size.Width)),
+                                height / std::max(1.0, static_cast<double>(size.Height)));
+    pdf::PdfPageRenderOptions options;
+    options.DestinationWidth(static_cast<uint32_t>(std::max(1.0, size.Width * fit)));
+    options.DestinationHeight(static_cast<uint32_t>(std::max(1.0, size.Height * fit)));
+    winrt::Windows::Storage::Streams::InMemoryRandomAccessStream stream;
+    page.RenderToStreamAsync(stream, options).get();
+    auto decoder = imaging::BitmapDecoder::CreateAsync(stream).get();
+    auto data = decoder.GetPixelDataAsync(imaging::BitmapPixelFormat::Bgra8, imaging::BitmapAlphaMode::Premultiplied,
+                                          imaging::BitmapTransform(), imaging::ExifOrientationMode::IgnoreExifOrientation,
+                                          imaging::ColorManagementMode::DoNotColorManage)
+                    .get();
+    auto bytes = data.DetachPixelData();
+    *w = static_cast<int>(decoder.PixelWidth());
+    *h = static_cast<int>(decoder.PixelHeight());
+    if (*w <= 0 || *h <= 0 || bytes.size() != static_cast<size_t>(*w) * *h * 4) {
+        return false;
+    }
+    pixels->assign(bytes.begin(), bytes.end());
+    return true;
+}
+
+// A PDF's first page, fitted into width x height pixels, and how many pages it
+// has. The card shows it at once; the next pages follow (RenderPdfFrames).
+// Fails on an encrypted PDF, for one.
+inline bool RenderPdfPage(const std::wstring& path, int width, int height, Result* r) {
     bool ok = false;
     RunInMta([&] {
-        namespace pdf = winrt::Windows::Data::Pdf;
-        namespace imaging = winrt::Windows::Graphics::Imaging;
         auto file = winrt::Windows::Storage::StorageFile::GetFileFromPathAsync(path).get();
-        auto document = pdf::PdfDocument::LoadFromFileAsync(file).get();
-        auto render = [&](uint32_t index, int boxWidth, int boxHeight, std::vector<BYTE>* pixels, int* w, int* h) {
-            auto page = document.GetPage(index);
-            const auto size = page.Size();
-            const double fit = std::min(boxWidth / std::max(1.0, static_cast<double>(size.Width)),
-                                        boxHeight / std::max(1.0, static_cast<double>(size.Height)));
-            pdf::PdfPageRenderOptions options;
-            options.DestinationWidth(static_cast<uint32_t>(std::max(1.0, size.Width * fit)));
-            options.DestinationHeight(static_cast<uint32_t>(std::max(1.0, size.Height * fit)));
-            winrt::Windows::Storage::Streams::InMemoryRandomAccessStream stream;
-            page.RenderToStreamAsync(stream, options).get();
-            auto decoder = imaging::BitmapDecoder::CreateAsync(stream).get();
-            auto data = decoder.GetPixelDataAsync(imaging::BitmapPixelFormat::Bgra8, imaging::BitmapAlphaMode::Premultiplied,
-                                                  imaging::BitmapTransform(), imaging::ExifOrientationMode::IgnoreExifOrientation,
-                                                  imaging::ColorManagementMode::DoNotColorManage)
-                            .get();
-            auto bytes = data.DetachPixelData();
-            *w = static_cast<int>(decoder.PixelWidth());
-            *h = static_cast<int>(decoder.PixelHeight());
-            if (*w <= 0 || *h <= 0 || bytes.size() != static_cast<size_t>(*w) * *h * 4) {
-                return false;
-            }
-            pixels->assign(bytes.begin(), bytes.end());
-            return true;
-        };
-        const int count = static_cast<int>(document.PageCount());
-        if (count <= 0 || !render(0, width, height, &r->pixels, &r->width, &r->height)) {
-            return;
-        }
-        r->pages = count;
-        ok = true;
-        const int frames = std::min(count, pages);
-        if (frames < 2) {
-            return;
-        }
-        r->frames.push_back(r->pixels);
-        r->delays.push_back(kPdfPageMs);
-        for (int i = 1; i < frames; ++i) {
-            std::vector<BYTE> page;
-            int w = 0, h = 0;
-            if (!render(static_cast<uint32_t>(i), r->width, r->height, &page, &w, &h)) {
-                break;
-            }
-            std::vector<BYTE> frame(r->pixels.size(), 0);
-            const int left = (r->width - std::min(w, r->width)) / 2, top = (r->height - std::min(h, r->height)) / 2;
-            for (int y = 0; y < std::min(h, r->height); ++y) {
-                memcpy(&frame[(static_cast<size_t>(top + y) * r->width + left) * 4], &page[static_cast<size_t>(y) * w * 4],
-                       static_cast<size_t>(std::min(w, r->width)) * 4);
-            }
-            r->frames.push_back(std::move(frame));
-            r->delays.push_back(kPdfPageMs);
+        auto document = winrt::Windows::Data::Pdf::PdfDocument::LoadFromFileAsync(file).get();
+        if (document.PageCount() > 0 && RenderPdfPageOf(document, 0, width, height, &r->pixels, &r->width, &r->height)) {
+            r->pages = static_cast<int>(document.PageCount());
+            ok = true;
         }
     });
     return ok;
+}
+
+// A PDF's first pages, up to kPdfPages, as frames the size of its first page
+// (still), a page of another shape centered: shown a second each once they
+// are ready. Gives up when stop() says the selection has moved.
+template <typename Stop>
+inline void RenderPdfFrames(const std::wstring& path, const Result& still, Stop&& stop, std::vector<std::vector<BYTE>>* frames,
+                            std::vector<int>* delays) {
+    RunInMta([&] {
+        auto file = winrt::Windows::Storage::StorageFile::GetFileFromPathAsync(path).get();
+        auto document = winrt::Windows::Data::Pdf::PdfDocument::LoadFromFileAsync(file).get();
+        const int count = std::min(static_cast<int>(document.PageCount()), kPdfPages);
+        frames->push_back(still.pixels);
+        delays->push_back(kPdfPageMs);
+        for (int i = 1; i < count && !stop(); ++i) {
+            std::vector<BYTE> page;
+            int w = 0, h = 0;
+            if (!RenderPdfPageOf(document, static_cast<uint32_t>(i), still.width, still.height, &page, &w, &h)) {
+                break;
+            }
+            std::vector<BYTE> frame(still.pixels.size(), 0);
+            const int cw = std::min(w, still.width), ch = std::min(h, still.height);
+            const int left = (still.width - cw) / 2, top = (still.height - ch) / 2;
+            for (int y = 0; y < ch; ++y) {
+                memcpy(&frame[(static_cast<size_t>(top + y) * still.width + left) * 4], &page[static_cast<size_t>(y) * w * 4],
+                       static_cast<size_t>(cw) * 4);
+            }
+            frames->push_back(std::move(frame));
+            delays->push_back(kPdfPageMs);
+        }
+    });
+    if (frames->size() < 2 || stop()) {
+        frames->clear();
+        delays->clear();
+    }
 }
 
 // How long each frame of an animated WebP shows, in milliseconds, from the
@@ -7749,10 +7828,66 @@ inline bool ReadTextStart(const std::wstring& path, std::wstring* text) {
     return true;
 }
 
+// The document filter (IFilter) registered for a file name's extension, as
+// LoadIFilter finds it: its class, if its DLL is Windows' own (System32) or
+// Microsoft Office's. Those are what the types in ReadDocumentText have; no
+// other is loaded into Start.
+inline bool TrustedDocumentFilter(const std::wstring& extension, CLSID* filter) {
+    auto read = [](const std::wstring& key) {
+        wchar_t value[MAX_PATH * 2];
+        DWORD size = sizeof(value);
+        if (RegGetValueW(HKEY_CLASSES_ROOT, key.c_str(), nullptr, RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ, nullptr, value,
+                         &size) != ERROR_SUCCESS) {
+            return std::wstring();
+        }
+        wchar_t expanded[MAX_PATH * 2];
+        const DWORD n = ExpandEnvironmentStringsW(value, expanded, ARRAYSIZE(expanded));
+        return std::wstring(n && n <= ARRAYSIZE(expanded) ? expanded : value);
+    };
+    std::wstring handler = read(extension + L"\\PersistentHandler");
+    if (handler.empty()) {
+        const std::wstring progId = read(extension);
+        const std::wstring clsid = progId.empty() ? std::wstring() : read(progId + L"\\CLSID");
+        handler = clsid.empty() ? std::wstring() : read(L"CLSID\\" + clsid + L"\\PersistentHandler");
+    }
+    const std::wstring filterClsid =
+        handler.empty()
+            ? std::wstring()
+            : read(L"CLSID\\" + handler + L"\\PersistentAddinsRegistered\\{89BCB740-6119-101A-BCB7-00DD010655AF}");
+    const std::wstring dll = filterClsid.empty() ? std::wstring() : read(L"CLSID\\" + filterClsid + L"\\InprocServer32");
+    if (dll.empty() || FAILED(CLSIDFromString(filterClsid.c_str(), filter))) {
+        return false;
+    }
+    wchar_t system[MAX_PATH];
+    const UINT n = GetSystemDirectoryW(system, MAX_PATH);
+    if (n && n < MAX_PATH && uninstall::IsUnder(dll, system)) {
+        return true;
+    }
+    static const std::pair<const KNOWNFOLDERID*, const wchar_t*> kOffice[] = {
+        {&FOLDERID_ProgramFiles, L"\\Microsoft Office"},
+        {&FOLDERID_ProgramFilesX86, L"\\Microsoft Office"},
+        {&FOLDERID_ProgramFilesCommon, L"\\Microsoft Shared\\Filters"},
+        {&FOLDERID_ProgramFilesCommonX86, L"\\Microsoft Shared\\Filters"},
+    };
+    for (const auto& [id, under] : kOffice) {
+        PWSTR folder = nullptr;
+        bool inside = false;
+        if (SUCCEEDED(SHGetKnownFolderPath(*id, KF_FLAG_DONT_VERIFY, nullptr, &folder)) && folder) {
+            inside = uninstall::IsUnder(dll, std::wstring(folder) + under);
+        }
+        CoTaskMemFree(folder);
+        if (inside) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // The start of a document's text -- Word, Excel, PowerPoint, RTF,
-// OpenDocument -- through the filter Windows' own search reads it with
-// (LoadIFilter): Windows has them for these, Office or not. Up to 30 MB, and
-// the first 1500 characters.
+// OpenDocument -- through the document filter Windows' own search reads it
+// with (TrustedDocumentFilter): Windows has them for these, Office or not.
+// They run here, in Start, so: only Windows' or Office's, up to 30 MB, the
+// first 1500 characters.
 inline bool ReadDocumentText(const std::wstring& path, const std::wstring& lowerName, std::wstring* text) {
     static const wchar_t* const kDocuments[] = {L".doc", L".docx", L".docm", L".dot", L".dotx", L".rtf",
                                                 L".odt", L".xls", L".xlsx", L".xlsm", L".ppt", L".pptx",
@@ -7768,16 +7903,25 @@ inline bool ReadDocumentText(const std::wstring& path, const std::wstring& lower
         attributes.nFileSizeLow > 30u * 1024 * 1024) {
         return false;
     }
-    using LoadIFilterFn = HRESULT(WINAPI*)(PCWSTR, IUnknown*, void**);
-    static const auto loadIFilter = reinterpret_cast<LoadIFilterFn>(
-        GetProcAddress(LoadLibraryExW(L"query.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32), "LoadIFilter"));
-    IFilter* filter = nullptr;
-    if (!loadIFilter || FAILED(loadIFilter(path.c_str(), nullptr, reinterpret_cast<void**>(&filter))) || !filter) {
+    CLSID filterClass{};
+    if (!TrustedDocumentFilter(lowerName.substr(dot), &filterClass)) {
         return false;
+    }
+    IFilter* filter = nullptr;
+    IPersistFile* file = nullptr;
+    if (FAILED(CoCreateInstance(filterClass, nullptr, CLSCTX_INPROC_SERVER, IID_IFilter, reinterpret_cast<void**>(&filter))) ||
+        !filter) {
+        return false;
+    }
+    bool loaded = SUCCEEDED(filter->QueryInterface(IID_IPersistFile, reinterpret_cast<void**>(&file))) && file &&
+                  SUCCEEDED(file->Load(path.c_str(), STGM_READ | STGM_SHARE_DENY_NONE));
+    if (file) {
+        file->Release();
     }
     ULONG flags = 0;
     std::wstring out;
-    if (SUCCEEDED(filter->Init(IFILTER_INIT_CANON_PARAGRAPHS | IFILTER_INIT_HARD_LINE_BREAKS, 0, nullptr, &flags))) {
+    if (loaded &&
+        SUCCEEDED(filter->Init(IFILTER_INIT_CANON_PARAGRAPHS | IFILTER_INIT_HARD_LINE_BREAKS, 0, nullptr, &flags))) {
         STAT_CHUNK chunk{};
         for (int chunks = 0; out.size() < 1500 && chunks < 2000 && filter->GetChunk(&chunk) == S_OK; ++chunks) {
             if (!(chunk.flags & CHUNK_TEXT)) {
@@ -7937,8 +8081,8 @@ inline Result Fetch(const std::wstring& path, double scale, bool animate, everyt
                     }
                     DeleteObject(bitmap);
                 } else if (lower.size() > 4 && lower.ends_with(L".pdf") &&
-                           RenderPdfPage(path, want.cx, want.cy, animate ? kPdfPages : 1, &r)) {
-                    // drawn
+                           RenderPdfPage(path, want.cx, want.cy, &r)) {
+                    r.morePages = animate && r.pages > 1;  // RenderPdfFrames, after the card shows
                 } else if (lower.size() > 4 && lower.ends_with(L".svg") && OpenSvg(path, &r)) {
                     // drawn on the card
                 } else if (ReadDocumentText(path, lower, &r.text)) {
@@ -8046,6 +8190,7 @@ size_t g_previewFrame = 0;
 std::atomic<unsigned> g_previewPlayGeneration{0};
 
 void ApplyPreview();
+void ApplyPreviewFrames();
 
 void PreviewThreadMain() {
     HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
@@ -8080,12 +8225,44 @@ void PreviewThreadMain() {
             }
             preview::g_result = std::move(result);
         }
+        // The card shows the first page; a PDF's next pages follow.
+        std::optional<preview::Result> still;
+        if (preview::g_result && preview::g_result->morePages) {
+            still.emplace();
+            still->path = preview::g_result->path;
+            still->pixels = preview::g_result->pixels;
+            still->width = preview::g_result->width;
+            still->height = preview::g_result->height;
+        }
         try {
             if (g_ourBox) {
                 g_ourBox.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Normal,
                                                wuc::DispatchedHandler{[] { ApplyPreview(); }});
             }
         } catch (...) {
+        }
+        if (still) {
+            auto moved = [] {
+                std::lock_guard<std::mutex> lock(preview::g_mutex);
+                return preview::g_quit || !preview::g_request.empty();
+            };
+            preview::RenderPdfFrames(still->path, *still, moved, &still->frames, &still->delays);
+            if (!still->frames.empty()) {
+                {
+                    std::lock_guard<std::mutex> lock(preview::g_mutex);
+                    if (preview::g_quit || !preview::g_request.empty()) {
+                        continue;
+                    }
+                    preview::g_frames = std::move(still);
+                }
+                try {
+                    if (g_ourBox) {
+                        g_ourBox.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Normal,
+                                                       wuc::DispatchedHandler{[] { ApplyPreviewFrames(); }});
+                    }
+                } catch (...) {
+                }
+            }
         }
     }
     everythingClient.reset();  // its window, on this thread
@@ -8107,6 +8284,7 @@ void StopPreviewThread() {
     }
     std::lock_guard<std::mutex> lock(preview::g_mutex);
     preview::g_result.reset();
+    preview::g_frames.reset();
 }
 
 bool PreviewEnabled() {
@@ -8245,7 +8423,7 @@ void BuildPreviewCard() {
     thumbGrid.Children().Append(video);
     wuxc::TextBlock thumbText;  // a text file's or a document's start (Result::text)
     thumbText.Margin(wux::ThicknessHelper::FromLengths(10, 8, 10, 8));
-    thumbText.FontSize(Fs(11));
+    ScaleFont(thumbText, 11);
     thumbText.Opacity(0.85);
     thumbText.MaxLines(24);
     thumbText.TextTrimming(wux::TextTrimming::CharacterEllipsis);
@@ -8256,7 +8434,7 @@ void BuildPreviewCard() {
 
     wuxc::TextBlock name;
     name.Margin(wux::ThicknessHelper::FromLengths(2, 10, 2, 0));
-    name.FontSize(Fs(14));
+    ScaleFont(name, 14);
     name.FontWeight(wut::FontWeights::SemiBold());
     name.TextWrapping(wux::TextWrapping::Wrap);
     name.MaxLines(2);
@@ -8289,7 +8467,7 @@ void BuildPreviewCard() {
     pathButton.AllowFocusOnInteraction(false);
     wuxc::ToolTipService::SetToolTip(pathButton, winrt::box_value(L"Copy path"));
     wuxc::TextBlock pathText;
-    pathText.FontSize(Fs(12));
+    ScaleFont(pathText, 12);
     pathText.Opacity(0.7);
     pathText.TextWrapping(wux::TextWrapping::Wrap);
     pathText.MaxLines(3);
@@ -8667,13 +8845,13 @@ void ApplyPreview() try {
         g_previewFacts.RowDefinitions().Append(row);
         wuxc::TextBlock label;
         label.Text(winrt::hstring{result->facts[i].first});
-        label.FontSize(Fs(12));
+        ScaleFont(label, 12);
         label.Opacity(0.55);
         wuxc::Grid::SetRow(label, static_cast<int32_t>(i));
         g_previewFacts.Children().Append(label);
         wuxc::TextBlock value;
         value.Text(winrt::hstring{result->facts[i].second});
-        value.FontSize(Fs(12));
+        ScaleFont(value, 12);
         value.TextWrapping(wux::TextWrapping::Wrap);
         value.MaxLines(2);
         value.TextTrimming(wux::TextTrimming::CharacterEllipsis);
@@ -8711,6 +8889,22 @@ void ApplyPreview() try {
            g_previewPopup.HorizontalOffset(), g_previewPopup.VerticalOffset());
 } catch (...) {
     Wh_Log(L"preview: failed %08X", static_cast<unsigned>(winrt::to_hresult()));
+}
+
+// A PDF's next pages, once ready, for the card still showing its first.
+void ApplyPreviewFrames() try {
+    std::optional<preview::Result> frames;
+    {
+        std::lock_guard<std::mutex> lock(preview::g_mutex);
+        frames = std::move(preview::g_frames);
+        preview::g_frames.reset();
+    }
+    if (!frames || !g_previewPopup || !g_previewPopup.IsOpen() || frames->path != g_previewShownPath ||
+        !g_previewFrames.empty()) {
+        return;
+    }
+    StartPreviewMotion(*frames);
+} catch (...) {
 }
 
 // Follows the selection: the selected file's preview, after a short pause.
@@ -9089,7 +9283,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     searchBarBorder.Background(isLight ? MakeBrush(0xD0, 0xFF, 0xFF, 0xFF) : MakeBrush(0x18, 0xFF, 0xFF, 0xFF));
     searchBarBorder.BorderBrush(isLight ? MakeBrush(0x30, 0x00, 0x00, 0x00) : MakeBrush(0x28, 0xFF, 0xFF, 0xFF));
     searchBarBorder.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
-    searchBarBorder.Height(40);
+    searchBarBorder.Height(Fs(40));  // the text size's (Wh_ModSettingsChanged)
     wuxc::Grid::SetRow(searchBarBorder, 0);
     g_searchBarBorder = searchBarBorder;
 
@@ -9102,7 +9296,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
     wuxc::FontIcon searchIcon;
     searchIcon.Glyph(L"\uE721");
-    searchIcon.FontSize(Fs(14));
+    ScaleFont(searchIcon, 14);
     searchIcon.Opacity(0.65);
     searchIcon.Margin(wux::ThicknessHelper::FromLengths(0, 0, 10, 0));
     searchIcon.VerticalAlignment(wux::VerticalAlignment::Center);
@@ -9114,7 +9308,11 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     box.PlaceholderText(L"Search apps, settings, and files...");
     box.VerticalAlignment(wux::VerticalAlignment::Center);
     box.VerticalContentAlignment(wux::VerticalAlignment::Center);
-    box.FontSize(Fs(14));
+    ScaleFont(box, 14);
+    // As tall as its text and centered in the bar, at any text size: no
+    // minimum height, the same space above the text as below.
+    box.MinHeight(0);
+    box.Padding(wux::ThicknessHelper::FromLengths(10, 5, 6, 5));
     box.Background(MakeBrush(0, 0, 0, 0));
     box.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
     box.IsTabStop(true);
@@ -9139,6 +9337,29 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
         box.Resources().Insert(winrt::box_value(winrt::hstring{key}),
                                wuxm::SolidColorBrush{winrt::Windows::UI::Colors::Transparent()});
     }
+    // Start's TextBox style still draws a background of its own when focused,
+    // a lighter pill inside the bar: its template's BorderElement, hidden so
+    // the bar is one surface. The bar has the border.
+    KeepHandler(box, box.Loaded(winrt::auto_revoke, [](wf::IInspectable const& sender, wux::RoutedEventArgs const&) {
+        std::function<bool(wux::DependencyObject const&)> hide = [&](wux::DependencyObject const& node) {
+            const int32_t count = wuxm::VisualTreeHelper::GetChildrenCount(node);
+            for (int32_t i = 0; i < count; ++i) {
+                auto child = wuxm::VisualTreeHelper::GetChild(node, i);
+                if (auto element = child.try_as<wux::FrameworkElement>(); element && element.Name() == L"BorderElement") {
+                    element.Opacity(0);
+                    return true;
+                }
+                if (hide(child)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        try {
+            hide(sender.as<wux::DependencyObject>());
+        } catch (...) {
+        }
+    }));
 
     g_ourBoxChanged = box.TextChanged(
         winrt::auto_revoke,
@@ -9288,7 +9509,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
     wuxc::FontIcon boltIcon;
     boltIcon.Glyph(L"\uE946");
-    boltIcon.FontSize(Fs(11));
+    ScaleFont(boltIcon, 11);
     boltIcon.Opacity(0.5);
     boltIcon.Margin(wux::ThicknessHelper::FromLengths(0, 0, 6, 0));
     boltIcon.VerticalAlignment(wux::VerticalAlignment::Center);
@@ -9296,7 +9517,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
     wuxc::TextBlock statusText;
     statusText.Text(L"Everything Search");
-    statusText.FontSize(Fs(11));
+    ScaleFont(statusText, 11);
     statusText.Opacity(0.5);
     statusText.VerticalAlignment(wux::VerticalAlignment::Center);
     leftStatus.Children().Append(statusText);
@@ -9325,7 +9546,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
         wuxc::TextBlock keyBlock;
         keyBlock.Text(winrt::hstring{key});
-        keyBlock.FontSize(Fs(9.5));
+        ScaleFont(keyBlock, 9.5);
         keyBlock.FontWeight(wut::FontWeights::SemiBold());
         keyBlock.Opacity(0.75);
         keyBadge.Child(keyBlock);
@@ -9333,7 +9554,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
         wuxc::TextBlock actionBlock;
         actionBlock.Text(winrt::hstring{action});
-        actionBlock.FontSize(Fs(10.5));
+        ScaleFont(actionBlock, 10.5);
         actionBlock.Opacity(0.45);
         actionBlock.Margin(wux::ThicknessHelper::FromLengths(4, 0, 0, 0));
         actionBlock.VerticalAlignment(wux::VerticalAlignment::Center);
@@ -9479,7 +9700,7 @@ void RenderResults() try {
 
         wuxc::FontIcon icon;
         icon.Glyph(winrt::hstring{iconGlyph});
-        icon.FontSize(Fs(11.5));
+        ScaleFont(icon, 11.5);
         icon.Opacity(0.6);
         icon.Margin(wux::ThicknessHelper::FromLengths(0, 0, 6, 0));
         icon.VerticalAlignment(wux::VerticalAlignment::Center);
@@ -9487,7 +9708,7 @@ void RenderResults() try {
 
         wuxc::TextBlock titleBlock;
         titleBlock.Text(winrt::hstring{title});
-        titleBlock.FontSize(Fs(11));
+        ScaleFont(titleBlock, 11);
         titleBlock.FontWeight(wut::FontWeights::SemiBold());
         titleBlock.Opacity(0.65);
         titleBlock.CharacterSpacing(40);
@@ -9509,7 +9730,7 @@ void RenderResults() try {
 
             wuxc::TextBlock badgeBlock;
             badgeBlock.Text(winrt::hstring{badgeStr});
-            badgeBlock.FontSize(Fs(9.5));
+            ScaleFont(badgeBlock, 9.5);
             badgeBlock.FontWeight(wut::FontWeights::SemiBold());
             badgeBlock.Opacity(0.7);
             badge.Child(badgeBlock);
@@ -9571,7 +9792,7 @@ void RenderResults() try {
             iconBox.VerticalAlignment(wux::VerticalAlignment::Center);
 
             wuxc::FontIcon fallbackIcon;
-            fallbackIcon.FontSize(Fs(15));
+            ScaleFont(fallbackIcon, 15);
             fallbackIcon.Opacity(0.5);
             fallbackIcon.HorizontalAlignment(wux::HorizontalAlignment::Center);
             fallbackIcon.VerticalAlignment(wux::VerticalAlignment::Center);
@@ -9604,7 +9825,7 @@ void RenderResults() try {
 
         wuxc::TextBlock name;
         name.Text(winrt::hstring{item.title});
-        name.FontSize(Fs(12.5));
+        ScaleFont(name, 12.5);
         name.FontWeight(wut::FontWeights::SemiBold());
         name.TextTrimming(wux::TextTrimming::CharacterEllipsis);
         name.TextWrapping(wux::TextWrapping::NoWrap);
@@ -9621,7 +9842,7 @@ void RenderResults() try {
             wuxc::TextBlock sub;
             sub.Text(winrt::hstring{item.subtitle});
             sub.Opacity(0.45);
-            sub.FontSize(Fs(10.5));
+            ScaleFont(sub, 10.5);
             sub.Margin(wux::ThicknessHelper::FromLengths(0, 1, 0, 0));
             sub.TextTrimming(wux::TextTrimming::CharacterEllipsis);
             sub.TextWrapping(whole ? wux::TextWrapping::Wrap : wux::TextWrapping::NoWrap);
@@ -9891,7 +10112,7 @@ void RenderResults() try {
 
         wuxc::FontIcon emptyIcon;
         emptyIcon.Glyph(L"\uE71D");
-        emptyIcon.FontSize(Fs(24));
+        ScaleFont(emptyIcon, 24);
         emptyIcon.Opacity(0.2);
         emptyIcon.HorizontalAlignment(wux::HorizontalAlignment::Center);
         emptyIcon.Margin(wux::ThicknessHelper::FromLengths(0, 0, 0, 6));
@@ -9899,7 +10120,7 @@ void RenderResults() try {
 
         wuxc::TextBlock emptyTitle;
         emptyTitle.Text(L"No matching applications");
-        emptyTitle.FontSize(Fs(11.5));
+        ScaleFont(emptyTitle, 11.5);
         emptyTitle.FontWeight(wut::FontWeights::SemiBold());
         emptyTitle.Opacity(0.45);
         emptyTitle.HorizontalAlignment(wux::HorizontalAlignment::Center);
@@ -9907,7 +10128,7 @@ void RenderResults() try {
 
         wuxc::TextBlock emptySubtitle;
         emptySubtitle.Text(L"Check files or refine your query");
-        emptySubtitle.FontSize(Fs(10.5));
+        ScaleFont(emptySubtitle, 10.5);
         emptySubtitle.Opacity(0.3);
         emptySubtitle.HorizontalAlignment(wux::HorizontalAlignment::Center);
         emptySubtitle.Margin(wux::ThicknessHelper::FromLengths(0, 2, 0, 0));
@@ -10025,7 +10246,7 @@ void RenderResults() try {
             iconBox.VerticalAlignment(wux::VerticalAlignment::Center);
 
             wuxc::FontIcon fallbackIcon;
-            fallbackIcon.FontSize(Fs(15));
+            ScaleFont(fallbackIcon, 15);
             fallbackIcon.Opacity(0.5);
             fallbackIcon.HorizontalAlignment(wux::HorizontalAlignment::Center);
             fallbackIcon.VerticalAlignment(wux::VerticalAlignment::Center);
@@ -10046,7 +10267,7 @@ void RenderResults() try {
 
         wuxc::TextBlock name;
         name.Text(winrt::hstring{item.title});
-        name.FontSize(Fs(12.5));
+        ScaleFont(name, 12.5);
         name.FontWeight(wut::FontWeights::SemiBold());
         name.TextTrimming(wux::TextTrimming::CharacterEllipsis);
         name.TextWrapping(wux::TextWrapping::NoWrap);
@@ -10056,7 +10277,7 @@ void RenderResults() try {
             wuxc::TextBlock sub;
             sub.Text(winrt::hstring{item.subtitle});
             sub.Opacity(0.45);
-            sub.FontSize(Fs(10.5));
+            ScaleFont(sub, 10.5);
             sub.Margin(wux::ThicknessHelper::FromLengths(0, 1, 0, 0));
             sub.TextTrimming(wux::TextTrimming::CharacterEllipsis);
             sub.TextWrapping(wux::TextWrapping::NoWrap);
@@ -10315,7 +10536,7 @@ void RenderResults() try {
 
         wuxc::FontIcon emptyIcon;
         emptyIcon.Glyph(L"\uE8B7");
-        emptyIcon.FontSize(Fs(24));
+        ScaleFont(emptyIcon, 24);
         emptyIcon.Opacity(0.2);
         emptyIcon.HorizontalAlignment(wux::HorizontalAlignment::Center);
         emptyIcon.Margin(wux::ThicknessHelper::FromLengths(0, 0, 0, 6));
@@ -10323,7 +10544,7 @@ void RenderResults() try {
 
         wuxc::TextBlock emptyTitle;
         emptyTitle.Text(L"No matching files");
-        emptyTitle.FontSize(Fs(11.5));
+        ScaleFont(emptyTitle, 11.5);
         emptyTitle.FontWeight(wut::FontWeights::SemiBold());
         emptyTitle.Opacity(0.45);
         emptyTitle.HorizontalAlignment(wux::HorizontalAlignment::Center);
@@ -10331,7 +10552,7 @@ void RenderResults() try {
 
         wuxc::TextBlock emptySubtitle;
         emptySubtitle.Text(L"Everything index returned 0 items");
-        emptySubtitle.FontSize(Fs(10.5));
+        ScaleFont(emptySubtitle, 10.5);
         emptySubtitle.Opacity(0.3);
         emptySubtitle.HorizontalAlignment(wux::HorizontalAlignment::Center);
         emptySubtitle.Margin(wux::ThicknessHelper::FromLengths(0, 2, 0, 0));
@@ -11089,12 +11310,27 @@ inline bool SameUnit(const std::wstring& typed, const std::wstring& configured) 
     return unit && unit == FindUnit(configured);
 }
 
-// A conversion from the settings that kUnits does already: one the earlier
-// default settings had, left in someone's settings.
+// A conversion from the settings that kUnits does already: one of those the
+// earlier default settings had, left as it was in someone's settings. One
+// changed -- a decimal MB to GB, say -- is the user's, and stays.
 inline bool Known(const CustomConversion& c) {
-    const Unit* from = FindUnit(c.fromUnit);
-    const Unit* to = FindUnit(c.toUnit);
-    return from && to && wcscmp(from->kind, to->kind) == 0;
+    static const wchar_t* const kOldDefaults[][3] = {
+        {L"km", L"miles", L"x*0.621371"}, {L"c", L"\u00B0f", L"x*9/5+32"}, {L"kg", L"lbs", L"x*2.20462"},
+        {L"m", L"feet", L"x*3.28084"},    {L"cm", L"in", L"x/2.54"},      {L"mb", L"gb", L"x/1024"},
+    };
+    std::wstring formula;
+    for (wchar_t ch : Lower(c.formula)) {
+        if (ch != L' ') {
+            formula += ch;
+        }
+    }
+    const std::wstring from = Lower(tools::Trim(c.fromUnit)), to = Lower(tools::Trim(c.toUnit));
+    for (const auto& old : kOldDefaults) {
+        if (from == old[0] && to == old[1] && formula == old[2]) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Runs a formula from the settings backwards: possible when it is linear,
@@ -11263,6 +11499,26 @@ inline bool ConversionRows(double number, const std::wstring& text, const std::v
     return rows->size() > before;
 }
 
+// Not a sum, though it would work out as one: a name, as of a file -- a
+// resolution (1920x1080), a date (2024-01-01, 01.02.2024), a span of years
+// (2024-2025).
+inline bool LooksLikeName(const std::wstring& text) {
+    for (size_t i = 1; i + 1 < text.size(); ++i) {
+        if ((text[i] == L'x' || text[i] == L'X') && iswdigit(text[i - 1]) && iswdigit(text[i + 1])) {
+            return true;
+        }
+    }
+    if (text.find_first_not_of(L"0123456789-./") != std::wstring::npos) {
+        return false;
+    }
+    const size_t marks = std::count_if(text.begin(), text.end(), [](wchar_t ch) { return ch == L'-' || ch == L'.' || ch == L'/'; });
+    if (marks >= 2) {
+        return true;
+    }
+    const size_t dash = text.find(L'-');
+    return marks == 1 && dash == 4 && (text.size() - dash - 1 == 2 || text.size() - dash - 1 == 4);
+}
+
 // The rows for what was typed, when it is something to work out; none when
 // it is not.
 inline std::vector<Row> Rows(const std::wstring& input) {
@@ -11295,7 +11551,7 @@ inline std::vector<Row> Rows(const std::wstring& input) {
         }
     }
     double value = 0;
-    if (used < arg.size() && tools::EvaluateMath(arg, value)) {  // a sum, not a number alone
+    if (used < arg.size() && !LooksLikeName(arg) && tools::EvaluateMath(arg, value)) {  // a sum, not a number alone
         rows.push_back(MakeRow(L"= " + Format(value), arg + kDot + L"Press Enter to copy result", Format(value),
                                kCalcGlyph));
         if (Large(value)) {
@@ -12198,9 +12454,15 @@ void Wh_ModSettingsChanged() {
                         g_footerHints.Visibility(show ? wux::Visibility::Visible : wux::Visibility::Collapsed);
                     }
                     SyncOverlayBackground();  // the panel margin
+                    // The text size, on all that is built.
                     if (g_ourBox) {
-                        g_ourBox.FontSize(Fs(14));  // the text size; the results take it when next shown
+                        ScaleFont(g_ourBox, 14);
                     }
+                    if (g_searchBarBorder) {
+                        g_searchBarBorder.Height(Fs(40));
+                    }
+                    RescaleFonts(g_resultsHost);
+                    RescaleFonts(g_previewCard);
                 });
         } catch (...) {}
     }
