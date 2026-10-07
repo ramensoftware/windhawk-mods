@@ -142,7 +142,8 @@ single-height taskbar; about 16 px makes it fit.
 `Size.ItemSpacing` is the gap between items and may be negative to pull them
 together. `Adjust.PadX` / `PadY` reserve space at the outside edges of the
 group and participate in layout — raising `PadY` gives `auto` fewer rows to
-work with. `Adjust.OffsetX` / `OffsetY` move the whole group visually and
+work with (on a left or right taskbar, raising `PadX` gives it fewer columns).
+`Adjust.OffsetX` / `OffsetY` move the whole group visually and
 reserve nothing.
 
 ## Position
@@ -235,6 +236,8 @@ the edge Windows reports and re-arranges when the taskbar moves.
   keyboard's host and leaves the keyboard's slot empty.
 - The microphone, camera and location in-use indicators no longer trigger a
   full re-layout every time they appear or disappear.
+- A re-arrangement that finds the tray mid-change, such as during a move
+  between edges, now retries instead of leaving the native layout in place.
 
 ### 2.0
 
@@ -306,7 +309,8 @@ the edge Windows reports and re-arranges when the taskbar moves.
   - Arrangement: "auto"
     $name: Arrangement
     $description: >-
-      "auto" fits the utilities you enabled above to the taskbar height.
+      "auto" fits the utilities you enabled above to the taskbar height
+      (its width, on a left or right taskbar).
       Anything else is an explicit layout: names side by side with "|",
       stacked with ",", and grouped with parentheses - "overflow, emoji |
       touchKeyboard" is the chevron over Emoji beside the touch keyboard.
@@ -368,13 +372,16 @@ the edge Windows reports and re-arranges when the taskbar moves.
 - Adjust:
   - PadX: 0
     $name: Horizontal padding (px)
-    $description: Space reserved on both sides of the group. Participates in layout.
+    $description: >-
+      Space reserved on both sides of the group. Participates in layout. On
+      a left or right taskbar it is reserved before the arrangement divides
+      the taskbar width, so raising it gives "auto" fewer columns.
   - PadY: 0
     $name: Vertical padding (px)
     $description: >-
-      Space reserved above and below the group. Reserved before the
-      arrangement divides the taskbar height, so raising it gives "auto"
-      fewer rows to work with.
+      Space reserved above and below the group. On a bottom or top taskbar
+      it is reserved before the arrangement divides the taskbar height, so
+      raising it gives "auto" fewer rows to work with.
   - OffsetX: 0
     $name: Horizontal offset (px)
     $description: Moves the whole group. Does not reserve space.
@@ -387,8 +394,9 @@ the edge Windows reports and re-arranges when the taskbar moves.
   - MinimumTrayHeight: 44
     $name: Minimum tray height (px)
     $description: >-
-      Below this height the mod leaves the native layout unchanged. Use 0 to
-      allow rearranging on any taskbar height.
+      Below this tray thickness - its height, or its width on a left or
+      right taskbar - the mod leaves the native layout unchanged. Use 0 to
+      allow rearranging on any taskbar.
   - Detection: "auto"
     $name: Detection mode
     $description: >-
@@ -2781,6 +2789,7 @@ static constexpr wchar_t kGlyphTouchKeyboard = 0xE765;
 // the whole layout when the visible set changes.
 
 static bool ApplyLayout();
+static void WakeRetry();
 
 struct HostWatcher {
     FrameworkElement element{nullptr};
@@ -2824,10 +2833,16 @@ static void ScheduleReapply() {
                     }
                     if (!g_unloading) {
                         try {
+                            // ApplyLayout restored the native layout and
+                            // revoked the drift check before it failed, so
+                            // nothing else will come back for it. A move
+                            // between edges is exactly when the tray is
+                            // still re-templating, so hand it to the retry.
                             if (!ApplyLayout()) {
                                 Wh_Log(
                                     L"[Apply] Scheduled reapply found "
-                                    L"the tray unusable");
+                                    L"the tray unusable; retrying");
+                                WakeRetry();
                             }
                         } catch (...) {
                             Wh_Log(
@@ -2903,7 +2918,7 @@ static void WatchHostVisibility(FrameworkElement const& element) {
 
 static std::wstring ReadStringSetting(PCWSTR key) {
     auto value = WindhawkUtils::StringSetting::make(key);
-    return value.get() ? std::wstring(value.get()) : std::wstring{};
+    return std::wstring(value.get());
 }
 
 template <size_t N>
@@ -3425,17 +3440,16 @@ static std::vector<LayoutItem> ResolveLayoutItems(
 
         item.naturalW = NaturalWidth(item.element, side);
         item.naturalH = NaturalHeight(item.element, side);
-        Wh_Log(L"[Discover] %s side=%d actual=%.1fx%.1f cell=%.1fx%.1f",
-               item.token.c_str(), side, item.element.ActualWidth(),
-               item.element.ActualHeight(), item.naturalW, item.naturalH);
-
         Wh_Log(
-            L"[Discover] %s host=%s hostLeaf=%d glyph=%s "
-            L"natural=%.1fx%.1f",
+            L"[Discover] %s host=%s hostLeaf=%d glyph=%s side=%d "
+            L"actual=%.1fx%.1f natural=%.1fx%.1f",
             item.token.c_str(),
             item.host.Name().c_str(),
             item.hostLeaf,
             DescribeElementGlyphs(item.element).c_str(),
+            side,
+            item.element.ActualWidth(),
+            item.element.ActualHeight(),
             item.naturalW,
             item.naturalH);
         items.push_back(std::move(item));
@@ -4095,10 +4109,11 @@ static bool ApplyLayout() {
         hWnd, taskbar_metrics::ReadDockedEdge(root));
     if (!taskbar_metrics::CanArrange(metrics)) {
         Wh_Log(
-            L"[Apply] Taskbar runs down the side but Windows reports a %s "
-            L"edge - another mod is rotating it; leaving the native layout "
-            L"untouched",
-            taskbar_metrics::EdgeName(metrics.edge));
+            L"[Apply] Taskbar runs down the side (%s, %.0f DIP thick) but "
+            L"Windows reports a %s edge - another mod is rotating it; "
+            L"leaving the native layout untouched",
+            taskbar_metrics::OrientationName(metrics.orientation),
+            metrics.constrainedDip, taskbar_metrics::EdgeName(metrics.edge));
         // Nothing left to wait for, so the retry loop retires. A move or an
         // Explorer rebuild re-evaluates.
         g_stoodDown = true;
@@ -4818,9 +4833,14 @@ static void OnTaskbarRebuilt() {
     g_taskbarWnd.store(nullptr);
     g_treeStale = true;
     g_stoodDown = false;
-    // On the taskbar's UI thread: wake a live retry rather than stopping and
-    // waiting for it. The woken attempt runs even though g_layoutApplied still
-    // truthfully reports the old tree, and restores it before re-applying.
+    WakeRetry();
+}
+
+// For callers on the taskbar's UI thread - a rebuild, or a scheduled reapply
+// that found the tray mid-change: wake a live retry rather than stopping and
+// waiting for it. The woken attempt runs even if g_layoutApplied still
+// truthfully reports an old layout, and restores it before re-applying.
+static void WakeRetry() {
     g_retry.StartOrWake(RetryAttempt, LayoutIsApplied, g_unloading,
                         kRetryAttempts, kRetryIntervalMs);
 }
