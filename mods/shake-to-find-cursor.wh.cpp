@@ -220,12 +220,14 @@ bool IsAnimatedCursorFile(PCWSTR path) {
 // animations can show it at any size without decoding every frame of the .ani
 // file (60+ frames in some themes) on every animation step.
 struct StaticFrame {
-    std::vector<BYTE> resource;  // Hotspot (2 x WORD) + image, as
-                                 // CreateIconFromResourceEx expects.
-    int width;
-    int height;
-    int hotspotX;
-    int hotspotY;
+    std::vector<BYTE> file;      // The frame's .cur/.ico data.
+    std::vector<BYTE> resource;  // The image in use, prepared for
+                                 // CreateIconFromResourceEx.
+    int preparedEntry = -1;      // Which image `resource` holds.
+    int width = 0;
+    int height = 0;
+    int hotspotX = 0;
+    int hotspotY = 0;
 };
 
 constexpr DWORD FourCC(char a, char b, char c, char d) {
@@ -296,9 +298,58 @@ bool ReadFirstAniFrame(PCWSTR path, std::vector<BYTE>& frame) {
     return found;
 }
 
-// Picks the largest image in a .cur/.ico file (the frame format inside .ani
-// files) and prepares it for CreateIconFromResourceEx.
-bool PrepareStaticFrame(const std::vector<BYTE>& file, StaticFrame& frame) {
+// Validates the .cur/.ico data of a frame (the frame format inside .ani files)
+// before any of its images are used.
+bool IsValidIconFile(const std::vector<BYTE>& file) {
+    if (file.size() < 6) {
+        return false;
+    }
+    const WORD type = static_cast<WORD>(file[2] | file[3] << 8);
+    const WORD count = static_cast<WORD>(file[4] | file[5] << 8);
+    return (type == 1 || type == 2) && count > 0 &&
+           file.size() >= 6 + 16 * static_cast<size_t>(count);
+}
+
+// Picks the image to scale from, like LoadImage does for the full cursor: the
+// smallest one at least `size` wide, or the largest one if none is that big.
+// Returns -1 if the file has no usable image.
+int PickIconEntry(const std::vector<BYTE>& file, int size) {
+    auto readDword = [&](size_t at) {
+        return static_cast<DWORD>(file[at]) |
+               static_cast<DWORD>(file[at + 1]) << 8 |
+               static_cast<DWORD>(file[at + 2]) << 16 |
+               static_cast<DWORD>(file[at + 3]) << 24;
+    };
+
+    const int count = file[4] | file[5] << 8;
+    int fitting = -1;
+    int fittingWidth = 0;
+    int largest = -1;
+    int largestWidth = 0;
+    for (int i = 0; i < count; i++) {
+        const size_t entry = 6 + 16 * static_cast<size_t>(i);
+        const int width = file[entry] ? file[entry] : 256;
+        const DWORD bytes = readDword(entry + 8);
+        const DWORD offset = readDword(entry + 12);
+        if (bytes == 0 || offset > file.size() || bytes > file.size() - offset) {
+            continue;
+        }
+        if (width > largestWidth) {
+            largest = i;
+            largestWidth = width;
+        }
+        if (width >= size && (fitting < 0 || width < fittingWidth)) {
+            fitting = i;
+            fittingWidth = width;
+        }
+    }
+    return fitting >= 0 ? fitting : largest;
+}
+
+// Prepares one image of the frame for CreateIconFromResourceEx: its hotspot as
+// two WORDs, followed by the image data.
+void PrepareIconEntry(StaticFrame& frame, int index) {
+    const std::vector<BYTE>& file = frame.file;
     auto readWord = [&](size_t at) {
         return static_cast<WORD>(file[at] | file[at + 1] << 8);
     };
@@ -307,42 +358,16 @@ bool PrepareStaticFrame(const std::vector<BYTE>& file, StaticFrame& frame) {
                static_cast<DWORD>(readWord(at + 2)) << 16;
     };
 
-    if (file.size() < 6) {
-        return false;
-    }
-    const WORD type = readWord(2);
-    const WORD count = readWord(4);
-    if ((type != 1 && type != 2) || count == 0 ||
-        file.size() < 6 + 16 * static_cast<size_t>(count)) {
-        return false;
-    }
-
-    int best = -1;
-    int bestWidth = 0;
-    for (int i = 0; i < count; i++) {
-        const size_t entry = 6 + 16 * static_cast<size_t>(i);
-        const int width = file[entry] ? file[entry] : 256;
-        const DWORD bytes = readDword(entry + 8);
-        const DWORD offset = readDword(entry + 12);
-        if (bytes > 0 && offset <= file.size() && bytes <= file.size() - offset &&
-            width > bestWidth) {
-            best = i;
-            bestWidth = width;
-        }
-    }
-    if (best < 0) {
-        return false;
-    }
-
-    const size_t entry = 6 + 16 * static_cast<size_t>(best);
+    const bool isCursor = readWord(2) == 2;
+    const size_t entry = 6 + 16 * static_cast<size_t>(index);
     const DWORD bytes = readDword(entry + 8);
     const DWORD offset = readDword(entry + 12);
 
-    frame.width = bestWidth;
+    frame.width = file[entry] ? file[entry] : 256;
     frame.height = file[entry + 1] ? file[entry + 1] : 256;
     // In .cur files these two fields are the hotspot; .ico frames have none.
-    frame.hotspotX = type == 2 ? readWord(entry + 4) : 0;
-    frame.hotspotY = type == 2 ? readWord(entry + 6) : 0;
+    frame.hotspotX = isCursor ? readWord(entry + 4) : 0;
+    frame.hotspotY = isCursor ? readWord(entry + 6) : 0;
 
     frame.resource.resize(4 + bytes);
     frame.resource[0] = static_cast<BYTE>(frame.hotspotX);
@@ -351,16 +376,23 @@ bool PrepareStaticFrame(const std::vector<BYTE>& file, StaticFrame& frame) {
     frame.resource[3] = static_cast<BYTE>(frame.hotspotY >> 8);
     std::copy(file.begin() + offset, file.begin() + offset + bytes,
               frame.resource.begin() + 4);
-    return true;
+    frame.preparedEntry = index;
 }
 
-// Creates a static cursor from the prepared frame at the given size, with the
-// hotspot scaled to match.
-HCURSOR CreateStaticFrameCursor(const StaticFrame& frame, int size) {
+// Creates a static cursor from the frame at the given size, with the hotspot
+// scaled to match.
+HCURSOR CreateStaticFrameCursor(StaticFrame& frame, int size) {
+    const int index = PickIconEntry(frame.file, size);
+    if (index < 0) {
+        return nullptr;
+    }
+    if (index != frame.preparedEntry) {
+        PrepareIconEntry(frame, index);
+    }
+
     HCURSOR scaled = reinterpret_cast<HCURSOR>(CreateIconFromResourceEx(
-        const_cast<BYTE*>(frame.resource.data()),
-        static_cast<DWORD>(frame.resource.size()), FALSE, 0x00030000, size,
-        size, LR_DEFAULTCOLOR));
+        frame.resource.data(), static_cast<DWORD>(frame.resource.size()),
+        FALSE, 0x00030000, size, size, LR_DEFAULTCOLOR));
     if (!scaled) {
         return nullptr;
     }
@@ -637,10 +669,10 @@ void CaptureCursorSources(int normalSize) {
 HCURSOR LoadStaticCursorAtSize(CursorSource& source, int size) {
     if (!source.staticFrameTried) {
         source.staticFrameTried = true;
-        std::vector<BYTE> file;
         source.staticFrameReady =
-            source.hasPath && ReadFirstAniFrame(source.path, file) &&
-            PrepareStaticFrame(file, source.staticFrame);
+            source.hasPath &&
+            ReadFirstAniFrame(source.path, source.staticFrame.file) &&
+            IsValidIconFile(source.staticFrame.file);
         if (!source.staticFrameReady) {
             source.staticFrame = {};
         }
@@ -703,9 +735,9 @@ void ResizeVisibleCursor(int size, bool staticFrame = false) {
     }
 }
 
-void ResizeAllCursors(int size) {
+void ResizeAllCursors(int size, bool staticFrame = false) {
     for (size_t i = 0; i < kCursorTypeCount; i++) {
-        SetCursorTypeSize(i, size);
+        SetCursorTypeSize(i, size, staticFrame);
     }
 }
 
@@ -838,9 +870,17 @@ void RenderTweenFrame(ULONGLONG now) {
             // Once the visible cursor is there, every type catches up. The
             // visible one goes first so an animated cursor starts animating
             // again before the rest are loaded.
+            //
+            // If you're still shaking, the keep-growing phase is about to
+            // change the size again, so animated cursors keep their static
+            // stand-in instead of being fully decoded only to be swapped
+            // out on the next frame. They get the full animation once the
+            // size settles (see OnTimerFired).
             const int size = static_cast<int>(std::lround(g_currentSize));
-            ResizeVisibleCursor(size);
-            ResizeAllCursors(size);
+            const bool stillShaking = g_settings.keepGrowingPercent > 0 &&
+                                      now - g_lastShakeTime <= kShakeGapMs;
+            ResizeVisibleCursor(size, stillShaking);
+            ResizeAllCursors(size, stillShaking);
             g_phase = Phase::Enlarged;
             ScheduleTimer(g_frameInterval100ns);
         } else {
