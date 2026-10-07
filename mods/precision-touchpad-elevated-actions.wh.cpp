@@ -19,13 +19,8 @@ keyboard or mouse input. Medium-integrity Explorer can synthesize the input,
 but UIPI prevents it from reaching a higher-integrity target window.
 
 This mod preserves Windows' native gesture semantics and only changes which
-process performs the final synthetic input:
-
-The privileged side is a native Windhawk 2.0 `windhawk-mod-uiaccess.exe` tool
-host. It authenticates the shell Explorer client, revalidates the target just
-before injection, and accepts only self-contained balanced keyboard actions or
-middle/X-button mouse clicks. It cannot inject movement, wheel input, left/right
-clicks, or unbalanced key/button state.
+process performs the final synthetic input. In this case, it relays to a native
+Windhawk 2.0 `windhawk-mod-uiaccess.exe` tool host. 
 
 # Requires Windhawk 2.0 alpha 4 or later.
 */
