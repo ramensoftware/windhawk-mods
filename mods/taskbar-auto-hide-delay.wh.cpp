@@ -63,7 +63,7 @@ and
   $name: Hide delay (seconds)
   $description: How long the taskbar stays visible (with the pointer not over it) before it's hidden.
 */
-// ==WindhawkModSettings==
+// ==/WindhawkModSettings==
 
 #include <shellapi.h>
 
@@ -110,6 +110,15 @@ bool IsAutoHideEnabled() {
     return (SHAppBarMessage(ABM_GETSTATE, &abd) & ABS_AUTOHIDE) != 0;
 }
 
+BOOL CALLBACK CollectSecondaryTaskbarProc(HWND hwnd, LPARAM lParam) {
+    WCHAR className[32];
+    if (GetClassName(hwnd, className, ARRAYSIZE(className)) &&
+        _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0) {
+        reinterpret_cast<std::vector<HWND>*>(lParam)->push_back(hwnd);
+    }
+    return TRUE;
+}
+
 void CollectTaskbars(std::vector<HWND>* out) {
     out->clear();
 
@@ -119,16 +128,7 @@ void CollectTaskbars(std::vector<HWND>* out) {
     }
 
     // Taskbars on secondary monitors.
-    EnumWindows(
-        [](HWND hwnd, LPARAM lParam) -> BOOL {
-            WCHAR className[32];
-            if (GetClassName(hwnd, className, ARRAYSIZE(className)) &&
-                _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0) {
-                reinterpret_cast<std::vector<HWND>*>(lParam)->push_back(hwnd);
-            }
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(out));
+    EnumWindows(CollectSecondaryTaskbarProc, reinterpret_cast<LPARAM>(out));
 }
 
 // Returns true if enough of the taskbar is on screen to be considered
@@ -245,14 +245,14 @@ DWORD WINAPI PollThread(LPVOID /*param*/) {
     return 0;
 }
 
-bool WhTool_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L">");
     LoadSettings();
 
     g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     if (!g_stopEvent) {
         Wh_Log(L"CreateEvent failed");
-        return false;
+        return FALSE;
     }
 
     g_threadHandle = CreateThread(nullptr, 0, PollThread, nullptr, 0, nullptr);
@@ -260,9 +260,9 @@ bool WhTool_ModInit() {
         Wh_Log(L"CreateThread failed");
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
-        return false;
+        return FALSE;
     }
-    return true;
+    return TRUE;
 }
 
 void WhTool_ModSettingsChanged() {
