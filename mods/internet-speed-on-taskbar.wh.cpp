@@ -7,7 +7,7 @@
 // @github		https://github.com/Webspace-com
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -liphlpapi -lgdi32 -luser32 -ladvapi32 -lshell32 -lole32 -loleaut32 -luuid -Wno-#warnings
+// @compilerOptions -liphlpapi -lgdi32 -luser32 -ladvapi32 -lshell32 -lole32 -loleaut32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -89,9 +89,11 @@ use Adapter filter to pick one.
   $description: When off, clicks pass through to the taskbar
 */
 // ==/WindhawkModSettings==
-
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-W#warnings"
 #include <winsock2.h>
 #include <ws2ipdef.h>
+#pragma GCC diagnostic pop
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <shellapi.h>
