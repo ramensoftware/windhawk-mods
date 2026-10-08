@@ -2,7 +2,7 @@
 // @id              explorer-custom-shortcuts
 // @name            Explorer Custom Shortcuts
 // @description     Adds app-style keyboard shortcuts to File Explorer with dynamic tokens, selection modes, and internal commands.
-// @version         1.5.0
+// @version         1.5.1
 // @author          ArvindSaini978
 // @github          https://github.com/ArvindSaini978
 // @include         explorer.exe
@@ -479,9 +479,11 @@ int ParseKey(std::wstring keyStr) {
 
 void LoadSettings() {
     Wh_Log(L"Loading mod settings...");
-    g_showActionToasts = Wh_GetIntSetting(L"toasts.enabled", 1) != 0;
+    g_showActionToasts = Wh_GetIntSetting(L"toasts.enabled") != 0;
 
-    int duration = Wh_GetIntSetting(L"toasts.duration", 1400);
+    int duration = Wh_GetIntSetting(L"toasts.duration");
+    if (duration <= 0)
+        duration = 1400;
     if (duration < 500)
         duration = 500;
     if (duration > 5000)
@@ -490,7 +492,7 @@ void LoadSettings() {
 
     WindhawkUtils::StringSetting posStr =
         WindhawkUtils::StringSetting::make(L"toasts.position");
-    std::wstring pos = posStr.get() ? posStr.get() : L"bottom_center";
+    std::wstring pos = posStr.get();
 
     if (pos == L"top_left") {
         g_toastPosition = ToastPosition::TopLeft;
@@ -2326,6 +2328,23 @@ int WINAPI TranslateAcceleratorW_Hook(HWND hWnd,
         (lpMsg->message == WM_KEYDOWN || lpMsg->message == WM_SYSKEYDOWN)) {
         if (!(lpMsg->lParam & 0x40000000)) {
             if (ProcessHotKey(lpMsg->hwnd, lpMsg->wParam)) {
+                // When a shortcut with Alt is consumed, Explorer remains
+                // trapped in its menu/keytip accelerator loop. On Windows 11,
+                // only a WM_KILLFOCUS/WM_SETFOCUS cycle reliably forces
+                // Explorer to reset this state without swallowing keys.
+                if (lpMsg->message == WM_SYSKEYDOWN &&
+                    (HIWORD(lpMsg->lParam) & KF_ALTDOWN)) {
+                    HWND hFocus = GetFocus();
+                    HWND rootHwnd = GetAncestor(lpMsg->hwnd, GA_ROOT);
+
+                    if (rootHwnd) {
+                        SetFocus(rootHwnd);
+                        if (hFocus && IsWindow(hFocus)) {
+                            SetFocus(hFocus);
+                        }
+                    }
+                }
+
                 return 1;
             }
         }
