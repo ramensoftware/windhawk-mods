@@ -11,8 +11,8 @@
 
 // ==WindhawkModReadme==
 /*
-Ever wanted to get rid of the extension when trying to save a file on your computer or rename something on your PC
-well your days of suffering are over because I give you the solution ma dude
+Ever wanted to get rid of the extension when trying to save a file on your computer or rename something on your PC while keeping the file type intact?
+well your days of suffering are over because I give you the solution ma dudes and dudettes.
 This mod hides file extensions during inline file renaming in File Explorer, Desktop and "save as" operations.
 
 ### Key Features
