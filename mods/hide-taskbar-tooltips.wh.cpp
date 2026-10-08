@@ -6,6 +6,7 @@
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
+// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject
 // @donateUrl       https://ko-fi.com/gilnet
 // @license         GPL-3.0
