@@ -4,7 +4,7 @@
 // @description     Animates activation-driven virtual desktop switches and suppresses transient replacement-window switches.
 // @version         0.6.0
 // @author          meteoni
-// @github          https://github.com/Meteony
+// @github          https://github.com/Meteoni
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32
