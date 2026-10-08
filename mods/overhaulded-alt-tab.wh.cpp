@@ -2,10 +2,10 @@
 // @id              overhaulded-alt-tab
 // @name            OverhauldedWin Alt+Tab
 // @description     Replaces the boring Windows Alt+Tab with a modern and elegant window switcher.
-// @version         1.2.1
+// @version         1.3.0
 // @author          IMiloDev
 // @github          https://github.com/IMiloDev
-// @homepage        https://github.com/IMiloDev/OverhauldedWin-Task-Switcher
+// @homepage        https://github.com/IMiloDev/OverhauldedWin
 // @include         windhawk.exe
 // @compilerOptions -lshell32
 // ==/WindhawkMod==
@@ -13,13 +13,23 @@
 // ==WindhawkModReadme==
 /*
 # Overhaulded Task Switcher
-
+ 
 A modern, fluid and highly visual replacement for the native Windows Alt+Tab experience.
 
-Built from scratch in native C++ as a project to explore Windows APIs, graphics, animation systems and desktop customization. 
+Built from scratch in native C++ as a project to explore Windows APIs, graphics, animation systems and desktop customization. You can also see the original [GITHUB REPOSITORY](https://github.com/IMiloDev/OverhauldedWin) to send me issues.
 
-> Ofc, made as a C++ practice project. Hope you enjoy it as much as I enjoy developing it.
- 
+> **⚠️ DISCLAIMER**
+>
+> If the **Windhawk window is in the foreground**, the native Windows Task Switcher may appear above Overhaulded during `Alt + Tab`.
+>
+> **Workaround:** Minimize or close the Windhawk window before using Overhaulded.
+>
+> [Read more about this limitation →](#native-windows-task-switcher)
+
+
+
+> 
+
 ## Screenshot
 
 ![OverhauldedWin Task Switcher](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/TaskManager.jpg)
@@ -30,7 +40,6 @@ Built from scratch in native C++ as a project to explore Windows APIs, graphics,
 - App grouping by application/process
 - Real DWM window previews
 - Dynamic Obsidian visual system
-- CPU-based desktop blur
 - Rounded cards with subtle downward shadows
 - Floating task switcher surface
 - Fluid opening animation
@@ -50,7 +59,7 @@ Built from scratch in native C++ as a project to explore Windows APIs, graphics,
 ### Another Features
 
 - Visual continuity between selections
-- Smooth carousel-style navigation 
+- Smooth carousel-style navigation
 - Real window previews
 - Application-aware grouping
 - Subtle depth and lighting
@@ -95,28 +104,37 @@ This allows the selector to appear immediately while keeping the visual opening 
 
 The architecture separates global input handling from the UI/rendering system so that heavy graphics and window-management operations do not run directly inside low-level keyboard hooks.
 
-## Requirements
+---
 
-- Windows 11 only
-- Windhawk
+# IMPORTANT
 
-## Installation
+Overhaulded is still a pre-release project.
 
-1. Install Windhawk.
-2. Open the Overhaulded Win Task Switcher mod.
-3. Install or compile the latest release.
-4. Enable the mod.
-5. Press `Alt + Tab` to open Overhaulded.
+Some applications may behave differently than standard desktop windows, especially those using unusual window structures, custom rendering, or multiple processes.
+
+### Native Windows Task Switcher
+
+When the **Windhawk window itself is in the foreground**, Windows keeps the native task switcher on top of Overhaulded when an `Alt + Tab` session is initiated.
+
+In this situation, the native Windows task switcher may appear over the Overhaulded interface, even though Overhaulded uses a "topmost" window and correctly handles keyboard input.
+
+This behavior is related to how the Windows Shell manages its native task switcher and window/composition priority during the `Alt + Tab` operation. Windows does not provide a reliable, documented, and guaranteed public API that allows forcing a third-party window (which does not take focus) to remain visually above the native task switcher.
+
+Behavior may vary depending on the Windows version and system configuration. This is a limitation of the Windows Shell, not a failure to detect or handle `Alt + Tab` input.
+
+I apologize in advance for the inconvenience. I am constantly looking for a way to fix this issue, but public documentation hasn't yielded a solution so far; while it isn't necessarily impossible, it is highly likely that this issue cannot be resolved without delving into sensitive Windows ecosystem code.
+
+---
 
 ## Controls
 
-| Shortcut                                            | Action                        |
-| --------------------------------------------------- | ----------------------------- |
-| `Alt + Tab`                                         | Move to the next window       |
-| `Alt + Shift + Tab`                                 | Move to the previous window   |
-| `Alt + Tab` + release `Alt`                         | Activate the selected window  |
-| `Esc`                                               | Cancel the switcher           |
-| `Ctrl + Alt + Tab + Arrow` `Alt + Tab Arrow`        | Additional navigation/control |
+| Shortcut                                     | Action                        |
+| -------------------------------------------- | ----------------------------- |
+| `Alt + Tab`                                  | Move to the next window       |
+| `Alt gr+ Tab`                                | Move to the previous window   |
+| `Alt + Tab` + release `Alt`                  | Activate the selected window  |
+| `Esc`                                        | Cancel the switcher           |
+| `Alt gr + Tab + Arrows` `Alt + Tab + Arrows` | Additional navigation/control |
 
 ## Compatibility
 
@@ -131,14 +149,6 @@ The project is still under active development, so behavior may vary depending on
 - Other Alt+Tab/task-switcher modifications
 
 Running multiple applications that replace the native Windows task switcher at the same time may cause conflicts.
-
-## Known Limitations
-
-Overhaulded is still a pre-release project.
-
-Some applications may behave differently from standard desktop windows, particularly applications that use unusual window structures, custom rendering or multiple processes.
-
-Additional compatibility improvements are planned as development continues.
 
 ## Development
 
@@ -161,37 +171,105 @@ The project is continuously evolving as new ideas and technical improvements are
 
 This project is licensed under the **MIT License**.
 
-See the [LICENSE](https://github.com/IMiloDev/OverhauldedWin/blob/main/LICENSE) file for the complete license text.
+See the https://github.com/IMiloDev/OverhauldedWin/blob/main/LICENSE file for the complete license text.
 
 ---
 
-**Overhaulded Task Switcher**
-Native C++ • Windows 11 • Windhawk
+> Made by Milo.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- VisibleCards: "5"
-  $name: Visible cards
-  $description: Number of cards shown in the carousel.
+- Appearance:
+    - Scale: "100"
+      $name: Scale
+      $description: Overall task switcher scale.
+      $options:
+      - "50": 50%
+      - "75": 75%
+      - "90": 90%
+      - "100": 100% (default)
+      - "110": 110%
+      - "125": 125%
+    - PerformanceMode: "balanced"
+      $name: Performance mode
+      $description: Controls the animation update frequency.
+      $options:
+      - "balanced": Balanced (default)
+      - "smooth": Smooth
+    - AnimationSpeed: "100"
+      $name: Animation speed
+      $description: Relative speed of the task switcher animations.
+      $options:
+      - "75": 75%
+      - "100": 100% (default)
+      - "125": 125%
+      - "150": 150%
+    - Cards:
+        - VisibleCards: "5"
+          $name: Visible cards
+          $description: Number of cards shown in the carousel.
+          $options:
+          - "3": 3 cards
+          - "5": 5 cards (default)
+        - NormalColor: "#050507"
+          $name: Cards color
+          $description: Base color of the cards that are not selected.
+        - SelectedColor: "#090A0B"
+          $name: Selected card color
+          $description: Base color of the selected card.
+- Background: "dwm"
+  $name: Background
+  $description: Background layer behind the cards.
   $options:
-  - "3": 3 cards
-  - "5": 5 cards (default)
-- AnimationSpeed: "100"
-  $name: Animation speed
-  $description: Relative speed of existing animations.
-  $options:
-  - "75": 75%
-  - "100": 100% (default)
-  - "125": 125%
-  - "150": 150%
-- PerformanceMode: "balanced"
-  $name: Performance mode
-  $description: Controls the animation update frequency.
-  $options:
-  - "balanced": Balanced (default)
-  - "smooth": Smooth
+  - "none": None
+  - "dwm": Transparent - DWM (Default)
+- Dwm:
+    - BackgroundColor: "#141A22"
+      $name: Background color
+      $description: Color of the transparent DWM background behind the cards.
+    - Opacity: "20"
+      $name: Opacity
+      $description: DWM background opacity (0-100).
+- ExperimentalSettings:
+    - GeneralBackground: "none"
+      $name: General Background
+      $description: Experimental features may require additional GPU, CPU and RAM resources and may affect performance. Pattern Waves requires a background other than None.
+      $options:
+      - "none": None (Default)
+      - "pattern": Pattern Waves
+    - PatternWaves:
+        - Shape: "dots"
+          $name: Shape
+          $description: Pattern shape.
+          $options:
+          - "dots": Dots (default)
+          - "squares": Squares
+        - Speed: "100"
+          $name: Speed
+          $description: Procedural wave speed (0-200).
+        - WaveStrength: "65"
+          $name: Wave strength
+          $description: Surface deformation intensity (0-200).
+        - Density: "24"
+          $name: Density
+          $description: Dot spacing (8-48).
+        - Light: "80"
+          $name: Light
+          $description: Apparent depth and illumination (0-200).
+        - Contrast: "100"
+          $name: Contrast
+          $description: Dot contrast (0-200).
+        - Opacity: "100"
+          $name: Opacity
+          $description: Pattern opacity (0-100).
+        - CursorInteraction: true
+          $name: Cursor interaction
+          $description: Enable cursor-driven ripples.
+        - CursorStrength: "100"
+          $name: Cursor strength
+          $description: Cursor ripple intensity (0-200).
 */
 // ==/WindhawkModSettings==
 
@@ -204,6 +282,8 @@ Native C++ • Windows 11 • Windhawk
 #include <algorithm>
 #include <cmath>
 #include <utility>
+#include <cwchar>
+#include <cstring>
 
 
 #ifndef WH_MOD_ID
@@ -222,12 +302,103 @@ static const int kSelectorWidth = 1220;
 static const int kSelectorHeight = 430;
 static const int kMaxCarouselSlots = 5;
 static int g_visibleCardCount = 5;
+static int g_uiScalePercent = 100;
 static int g_animationSpeedPercent = 100;
+
+enum class BaseBackgroundMode
+{
+    None,
+    Dwm
+};
+
+enum class ExperimentalBackgroundMode
+{
+    None,
+    PatternWaves
+};
+
+static BaseBackgroundMode g_baseBackgroundMode = BaseBackgroundMode::Dwm;
+static ExperimentalBackgroundMode g_experimentalBackgroundMode =
+    ExperimentalBackgroundMode::None;
+
+// Pattern Waves is available only as an overlay over an active base
+// background. Its saved setting is preserved while Background is None, but it
+// must not render or run its simulation in that state.
+static bool IsPatternWavesActive()
+{
+    return g_baseBackgroundMode != BaseBackgroundMode::None &&
+           g_experimentalBackgroundMode == ExperimentalBackgroundMode::PatternWaves;
+}
+
+// The mouse spotlight is an independent background interaction. It remains
+// available even when an experimental background such as Pattern Waves is active.
+static bool IsBackgroundSpotlightAllowed()
+{
+    return g_baseBackgroundMode == BaseBackgroundMode::Dwm;
+}
+
+static COLORREF g_dwmBackgroundColor = RGB(20, 26, 34);
+static float g_dwmBackgroundOpacity = 0.20f;
+
+// Cursor spotlight over the background only. The cards are rendered later,
+// so their surfaces naturally occlude the spotlight without extra masks.
+static ID2D1RadialGradientBrush* g_backgroundSpotlightBrush = nullptr;
+static COLORREF g_backgroundSpotlightBrushColor = CLR_INVALID;
+static POINT g_backgroundSpotlightPoint = {};
+static bool g_backgroundSpotlightActive = false;
+enum class PatternShape
+{
+    Dots,
+    Squares
+};
+
+static PatternShape g_patternShape = PatternShape::Dots;
+static float g_patternSpeed = 1.0f;
+static float g_patternWaveStrength = 0.65f;
+static float g_patternDensity = 24.0f;
+static float g_patternLight = 0.80f;
+static float g_patternContrast = 1.0f;
+static float g_patternOpacity = 0.55f;
+static bool g_patternCursorInteraction = true;
+static float g_patternCursorStrength = 1.0f;
+static const int kPatternFieldWidth = 96;
+static const int kPatternFieldHeight = 36;
+static const int kPatternFieldCount = kPatternFieldWidth * kPatternFieldHeight;
+static const UINT kPatternTimerId = 91;
+// Pattern Waves tiene un presupuesto independiente del renderer principal.
+static float g_patternQualityScale = 1.0f;
+// La calidad del fondo no debe oscilar con la granularidad del reloj de Windows.
+// Se requieren varias muestras consecutivas y existe un periodo de permanencia.
+static ULONGLONG g_patternQualityCooldownUntil = 0;
+static int g_patternSlowSamples = 0;
+static int g_patternFastSamples = 0;
+
+// One low-resolution height field drives every visible part of Pattern Waves:
+// fixed-grid dot scale, field-derived lighting and opacity.
+// Ripple simulation buffers. The procedural base surface is sampled separately;
+// these buffers contain only the transient disturbance caused by the cursor.
+static float g_patternRippleA[kPatternFieldCount] = {};
+static float g_patternRippleB[kPatternFieldCount] = {};
+static float g_patternRippleC[kPatternFieldCount] = {};
+static float* g_patternRippleCurrent = g_patternRippleA;
+static float* g_patternRipplePrevious = g_patternRippleB;
+static float* g_patternRippleNext = g_patternRippleC;
+static POINT g_patternCursor = {};
+static POINT g_patternPreviousCursor = {};
+static bool g_patternHasCursor = false;
+static bool g_patternCursorInside = false;
+static ULONGLONG g_patternLastTick = 0;
+// One shared combined-field cache per rendered frame. Dots and border sample
+// this cache instead of recomputing procedural trigonometry independently.
+static float g_patternCombinedFieldCache[kPatternFieldCount] = {};
+static float g_patternRenderTime = 0.0f;
 static const int kCounterWidth = 140;
 static const int kCounterHeight = 28;
 static const int kCounterTop = 378;
 // Opacidad común de las superficies Black Obsidian; los textos y thumbnails no se alteran.
 static const float kCardSurfaceOpacity = 0.75f;
+static COLORREF g_cardNormalColor = RGB(5, 5, 7);
+static COLORREF g_cardSelectedColor = RGB(9, 10, 11);
 // Timer del failsafe: solo existe mientras el selector está abierto.
 static const UINT_PTR kActivityTimerId = 77;
 static const UINT_PTR kAnimTimerId = 88;
@@ -245,19 +416,141 @@ static float AnimationDuration(float baseMs)
 }
 static void LoadTaskSwitcherSettings()
 {
-    auto read = [](PCWSTR key, PCWSTR fallback) {
+    auto read = [](PCWSTR key) {
         PCWSTR value = Wh_GetStringSetting(key);
-        if (!value) return std::wstring(fallback);
         std::wstring result(value);
         Wh_FreeStringSetting(value);
         return result;
     };
-    std::wstring visible = read(L"VisibleCards", L"5");
+
+    std::wstring visible = read(L"Appearance.Cards.VisibleCards");
+    if (visible.empty())
+        visible = read(L"Appearance.VisibleCards");
+    if (visible.empty())
+        visible = read(L"VisibleCards");
     g_visibleCardCount = visible == L"3" ? 3 : 5;
-    std::wstring speed = read(L"AnimationSpeed", L"100");
+
+    std::wstring scale = read(L"Appearance.Scale");
+    if (scale.empty())
+        scale = read(L"Scale");
+    g_uiScalePercent = 100;
+    if (!scale.empty())
+    {
+        wchar_t* end = nullptr;
+        long parsed = wcstol(scale.c_str(), &end, 10);
+        if (end != scale.c_str())
+            g_uiScalePercent = static_cast<int>(std::max(50L, std::min(125L, parsed)));
+    }
+
+    std::wstring speed = read(L"Appearance.AnimationSpeed");
+    if (speed.empty())
+        speed = read(L"AnimationSpeed");
     g_animationSpeedPercent = (speed == L"75" ? 75 : speed == L"125" ? 125 : speed == L"150" ? 150 : 100);
-    std::wstring mode = read(L"PerformanceMode", L"balanced");
+    std::wstring mode = read(L"Appearance.PerformanceMode");
+    if (mode.empty())
+        mode = read(L"PerformanceMode");
     g_animationFps = mode == L"smooth" ? 120 : 90;
+
+    // New settings are independent: Background is the base layer and
+    // ExperimentalSettings.GeneralBackground controls optional overlays.
+    // If the new keys are absent, safely read the legacy GeneralBackground
+    // container so existing preferences are not lost.
+    std::wstring background = read(L"Background");
+    std::wstring legacyBackground = read(L"GeneralBackground.Background");
+    if (background.empty())
+        background = legacyBackground;
+    // Legacy "blurred_dwm" values are intentionally mapped to the normal DWM
+    // background so old saved settings remain valid after Blurred-DWM removal.
+    g_baseBackgroundMode = background == L"none"
+        ? BaseBackgroundMode::None
+        : BaseBackgroundMode::Dwm;
+
+    std::wstring experimentalBackground = read(L"ExperimentalSettings.GeneralBackground");
+    if (experimentalBackground.empty())
+        experimentalBackground = legacyBackground == L"pattern" ? L"pattern" : L"none";
+    g_experimentalBackgroundMode = experimentalBackground == L"pattern"
+        ? ExperimentalBackgroundMode::PatternWaves
+        : ExperimentalBackgroundMode::None;
+
+    auto clampFloat = [](float value, float low, float high) {
+        return std::max(low, std::min(high, value));
+    };
+    auto parseColor = [](const std::wstring& value, COLORREF fallback) {
+        if (value.size() != 7 || value[0] != L'#')
+            return fallback;
+        wchar_t* end = nullptr;
+        unsigned long rgb = wcstoul(value.c_str() + 1, &end, 16);
+        if (end != value.c_str() + 7)
+            return fallback;
+        return RGB((rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff);
+    };
+
+    std::wstring cardNormalColor = read(L"Appearance.Cards.NormalColor");
+    if (cardNormalColor.empty())
+        cardNormalColor = read(L"Cards.NormalColor");
+    g_cardNormalColor = parseColor(cardNormalColor, RGB(5, 5, 7));
+
+    std::wstring cardSelectedColor = read(L"Appearance.Cards.SelectedColor");
+    if (cardSelectedColor.empty())
+        cardSelectedColor = read(L"Cards.SelectedColor");
+    g_cardSelectedColor = parseColor(cardSelectedColor, RGB(9, 10, 11));
+
+    std::wstring dwmColor = read(L"Dwm.BackgroundColor");
+    if (dwmColor.empty())
+        dwmColor = read(L"Appearance.BackgroundColor");
+    if (dwmColor.empty())
+        dwmColor = read(L"Dwm.Color");
+    if (dwmColor.empty())
+        dwmColor = read(L"GeneralBackground.Dwm.Color");
+    g_dwmBackgroundColor = parseColor(dwmColor, RGB(20, 26, 34));
+    std::wstring dwmOpacity = read(L"Dwm.Opacity");
+    if (dwmOpacity.empty())
+        dwmOpacity = read(L"GeneralBackground.Dwm.Opacity");
+    g_dwmBackgroundOpacity = 0.20f;
+    if (!dwmOpacity.empty())
+    {
+        wchar_t* end = nullptr;
+        float parsed = wcstof(dwmOpacity.c_str(), &end);
+        if (end != dwmOpacity.c_str())
+            g_dwmBackgroundOpacity = std::max(0.0f, std::min(100.0f, parsed)) / 100.0f;
+    }
+    // Free 0-200 control with recalibrated scale: the new 100 value
+    // reproduces the previous internal 200 behavior exactly.
+    auto readFloatWithLegacy = [&](PCWSTR key, PCWSTR legacyKey,
+                                   float fallback, float low, float high) {
+        std::wstring value = read(key);
+        if (value.empty())
+            value = read(legacyKey);
+        if (value.empty())
+            return fallback;
+        wchar_t* end = nullptr;
+        float parsed = wcstof(value.c_str(), &end);
+        if (end == value.c_str())
+            return fallback;
+        return clampFloat(parsed, low, high);
+    };
+    std::wstring patternShape = read(L"ExperimentalSettings.PatternWaves.Shape");
+    if (patternShape.empty())
+        patternShape = read(L"GeneralBackground.PatternWaves.Shape");
+    if (patternShape == L"squares")
+        g_patternShape = PatternShape::Squares;
+    else
+        g_patternShape = PatternShape::Dots;
+
+    g_patternSpeed = (readFloatWithLegacy(L"ExperimentalSettings.PatternWaves.Speed",
+                                L"GeneralBackground.PatternWaves.Speed",
+                                100.0f, 0.0f, 200.0f) * 2.0f) / 100.0f;
+    g_patternWaveStrength = readFloatWithLegacy(L"ExperimentalSettings.PatternWaves.WaveStrength", L"GeneralBackground.PatternWaves.WaveStrength", 65.0f, 0.0f, 200.0f) / 100.0f;
+    g_patternDensity = readFloatWithLegacy(L"ExperimentalSettings.PatternWaves.Density", L"GeneralBackground.PatternWaves.Density", 24.0f, 8.0f, 48.0f);
+    g_patternLight = readFloatWithLegacy(L"ExperimentalSettings.PatternWaves.Light", L"GeneralBackground.PatternWaves.Light", 80.0f, 0.0f, 200.0f) / 100.0f;
+    g_patternContrast = readFloatWithLegacy(L"ExperimentalSettings.PatternWaves.Contrast", L"GeneralBackground.PatternWaves.Contrast", 100.0f, 0.0f, 200.0f) / 100.0f;
+    g_patternOpacity = readFloatWithLegacy(L"ExperimentalSettings.PatternWaves.Opacity", L"GeneralBackground.PatternWaves.Opacity", 100.0f, 0.0f, 100.0f) / 100.0f;
+    std::wstring cursorInteraction = read(L"ExperimentalSettings.PatternWaves.CursorInteraction");
+    if (cursorInteraction.empty())
+        cursorInteraction = read(L"GeneralBackground.PatternWaves.CursorInteraction");
+    g_patternCursorInteraction = cursorInteraction.empty()
+        ? true : (cursorInteraction != L"0");
+    g_patternCursorStrength = readFloatWithLegacy(L"ExperimentalSettings.PatternWaves.CursorStrength", L"GeneralBackground.PatternWaves.CursorStrength", 100.0f, 0.0f, 200.0f) / 100.0f;
 }
 
 
@@ -266,6 +559,13 @@ static void LoadTaskSwitcherSettings()
 static UINT GetAnimationTimerInterval()
 {
     return static_cast<UINT>(std::max(1, 1000 / g_animationFps));
+}
+
+static UINT GetPatternTimerInterval()
+{
+    // El efecto experimental no comparte la frecuencia de navegación/cards.
+    // 30 Hz es suficiente para un fondo y deja margen a DWM/input en equipos antiguos.
+    return g_patternQualityScale < 0.72f ? 50u : 33u;
 }
 static const UINT kTabRepeatInitialDelayMs = 325;
 static const UINT kTabRepeatIntervalMs = 125;
@@ -287,6 +587,8 @@ static int g_runtimeSelectorHeight = kSelectorHeight;
 static float g_sceneScaleX = 1.0f;
 static float g_sceneScaleY = 1.0f;
 static float g_sceneOpacity = 1.0f;
+// Desplazamiento físico común de la escena durante materialización/salida.
+static float g_sceneOffsetY = 0.0f;
 static float g_sceneTiltDegrees = 0.0f;
 static float g_selectionTiltDirection = 0.0f;
 static float g_cardSnapScale = 1.0f;
@@ -318,7 +620,8 @@ static void UpdateUIScaleForWorkArea(const RECT& work, float dpiScale)
     float scaleX = dipWidth / kReferenceScreenWidth;
     float scaleY = dipHeight / kReferenceScreenHeight;
     float fit = std::max(kMinimumUiScale, std::min(1.0f, std::min(scaleX, scaleY)));
-    g_uiScale.value = fit * dpiScale;
+    const float userScale = static_cast<float>(g_uiScalePercent) / 100.0f;
+    g_uiScale.value = fit * dpiScale * userScale;
     g_runtimeSelectorWidth = ScaleLayoutPx(static_cast<float>(kSelectorWidth));
     g_runtimeSelectorHeight = ScaleLayoutPx(static_cast<float>(kSelectorHeight));
 }
@@ -327,6 +630,20 @@ static void GetSceneScale(float& scaleX, float& scaleY)
 {
     scaleX = g_sceneScaleX;
     scaleY = g_sceneScaleY;
+}
+
+static D2D1::Matrix3x2F GetSceneTransform()
+{
+    float sx = 1.0f, sy = 1.0f;
+    GetSceneScale(sx, sy);
+    D2D1::Matrix3x2F transform = D2D1::Matrix3x2F::Scale(
+        D2D1::SizeF(sx, sy),
+        D2D1::Point2F(static_cast<float>(g_runtimeSelectorWidth) * 0.5f,
+                      static_cast<float>(g_runtimeSelectorHeight) * 0.5f));
+    // El offset se expresa en píxeles del cliente ya transformado, igual que
+    // el movimiento físico aplicado al HWND del selector.
+    transform._32 += g_sceneOffsetY;
+    return transform;
 }
 
 static RECT TransformSceneRect(const RECT& source)
@@ -338,8 +655,8 @@ static RECT TransformSceneRect(const RECT& source)
     RECT result = {};
     result.left = static_cast<int>(roundf(cx + (source.left - cx) * sx));
     result.right = static_cast<int>(roundf(cx + (source.right - cx) * sx));
-    result.top = static_cast<int>(roundf(cy + (source.top - cy) * sy));
-    result.bottom = static_cast<int>(roundf(cy + (source.bottom - cy) * sy));
+    result.top = static_cast<int>(roundf(cy + (source.top - cy) * sy + g_sceneOffsetY));
+    result.bottom = static_cast<int>(roundf(cy + (source.bottom - cy) * sy + g_sceneOffsetY));
     return result;
 }
 
@@ -363,6 +680,7 @@ typedef HRESULT (WINAPI* DwmSetWindowAttributeFn)(HWND, DWORD,
                                                    const void*, DWORD);
 typedef HRESULT (WINAPI* DwmGetWindowAttributeFn)(HWND, DWORD,
                                                    void*, DWORD);
+
 struct MARGINS
 {
     int cxLeftWidth;
@@ -374,10 +692,11 @@ struct MARGINS
 // Atributos y flags DWM usados por el glass y las miniaturas.
 static const DWORD kDwmWindowCornerPreference = 33;
 static const DWORD kDwmBorderColor = 34;
-// COLORREF en formato 0x00BBGGRR: obsidiana acorde al fondo general.
-static const DWORD kDwmGlassBorderColor = 0x000D0A08;
+static const DWORD kDwmColorNone = 0xFFFFFFFE;
+static const DWORD kDwmCornerPreferenceDoNotRound = 1;
 static const DWORD kDwmNcRenderingPolicy = 2;
-static const DWORD kDwmNcRenderingPolicyDisabled = 1;
+static const DWORD kDwmNcRenderingPolicyUseWindowStyle = 0;
+static const DWORD kDwmUseImmersiveDarkMode = 20;
 static const DWORD kDwmWaSystemBackdropType = 38;
 static const DWORD kDwmSbtNone = 1;
 
@@ -463,7 +782,7 @@ struct UserWindowInfo
 //  Input thread : dueño de WH_KEYBOARD_LL y WH_MOUSE_LL. Los callbacks solo
 //                 actualizan estado atómico/local y publican comandos al UI
 //                 thread con PostThreadMessage. Nada más.
-//  UI thread    : dueño del HWND del selector, D2D/DWrite/GDI/DWM, blur,
+//  UI thread    : dueño del HWND del selector, D2D/DWrite/GDI/DWM,
 //                 animaciones, timers, WinEvent hook, enumeración de ventanas,
 //                 iconos, información de procesos y activación de ventanas.
 //
@@ -514,6 +833,9 @@ static const UINT WM_IN_ACTIVATE = WM_APP + 21;     // wParam=target HWND
 
 // Solo UI thread.
 static HWND g_selector = nullptr;
+// El contenido D2D y la superficie visual viven en g_selector.
+static int g_selectorCenterX = 0;
+static int g_selectorCenterY = 0;
 static bool g_classesRegistered = false;
 static LONG g_uiSessionId = 0;
 static bool g_uiTabDown = false;
@@ -529,6 +851,13 @@ struct ThumbnailSlot
 {
     HTHUMBNAIL thumbnail;
     HWND source;
+    int sourceWidth = 0;
+    int sourceHeight = 0;
+    RECT lastDestination = {};
+    RECT lastSource = {};
+    BYTE lastOpacity = 0;
+    BOOL lastVisible = FALSE;
+    bool hasProperties = false;
 };
 
 static ThumbnailSlot g_thumbnailSlots[kMaxCarouselSlots] = {};
@@ -562,6 +891,7 @@ static float g_selectionStartTiltDegrees = 0.0f;
 static float g_closeStartScaleX = 1.0f;
 static float g_closeStartScaleY = 1.0f;
 static float g_closeStartOpacity = 1.0f;
+static float g_closeStartOffsetY = 0.0f;
 static HWND g_pendingActivationTarget = nullptr;
 static HWND g_selectorOriginWindow = nullptr;
 static bool g_cardExitActive = false;
@@ -601,6 +931,8 @@ static ID2D1Factory* g_d2dFactory = nullptr;
 static ID2D1DCRenderTarget* g_d2dDCRenderTarget = nullptr;
 static ID2D1SolidColorBrush* g_d2dBrush = nullptr;
 static ID2D1RadialGradientBrush* g_closeAccentBrush = nullptr;
+static ID2D1PathGeometry* g_closeButtonGeometry = nullptr;
+static RECT g_closeButtonGeometryRect = {};
 
 static IDWriteFactory* g_dwriteFactory = nullptr;
 static IDWriteTextFormat* g_dwriteSelectedFormat = nullptr;
@@ -624,14 +956,6 @@ typedef BOOL (WINAPI* RoundRectFn)(HDC, int, int, int, int, int, int);
 typedef int (WINAPI* GetTextFaceWFn)(HDC, int, LPWSTR);
 typedef int (WINAPI* GetDIBitsFn)(HDC, HBITMAP, UINT, UINT, LPVOID, LPBITMAPINFO, UINT);
 typedef int (WINAPI* GetObjectWFn)(HGDIOBJ, int, LPVOID);
-typedef HDC (WINAPI* CreateCompatibleDCFn)(HDC);
-typedef HBITMAP (WINAPI* CreateDIBSectionFn)(HDC, const BITMAPINFO*, UINT, void**, HANDLE*, DWORD);
-typedef BOOL (WINAPI* StretchBltFn)(HDC, int, int, int, int, HDC, int, int, int, int, DWORD);
-typedef int (WINAPI* SetStretchBltModeFn)(HDC, int);
-typedef BOOL (WINAPI* SetBrushOrgExFn)(HDC, int, int, LPPOINT);
-typedef BOOL (WINAPI* BitBltFn)(HDC, int, int, int, int, HDC, int, int, DWORD);
-typedef int (WINAPI* GetDIBitsFn)(HDC, HBITMAP, UINT, UINT, LPVOID, LPBITMAPINFO, UINT);
-typedef BOOL (WINAPI* DeleteDCFn)(HDC);
 
 static HMODULE g_gdiApi = nullptr;
 static CreateFontIndirectWFn g_createFontIndirectW = nullptr;
@@ -647,13 +971,6 @@ static RoundRectFn g_roundRect = nullptr;
 static GetTextFaceWFn g_getTextFaceW = nullptr;
 static GetDIBitsFn g_getDIBits = nullptr;
 static GetObjectWFn g_getObjectW = nullptr;
-static CreateCompatibleDCFn g_createCompatibleDC = nullptr;
-static CreateDIBSectionFn g_createDIBSection = nullptr;
-static StretchBltFn g_stretchBlt = nullptr;
-static SetStretchBltModeFn g_setStretchBltMode = nullptr;
-static SetBrushOrgExFn g_setBrushOrgEx = nullptr;
-static BitBltFn g_bitBlt = nullptr;
-static DeleteDCFn g_deleteDC = nullptr;
 
 static HFONT g_nameFont = nullptr;
 static HFONT g_selectedNameFont = nullptr;
@@ -668,31 +985,6 @@ static std::vector<std::pair<DWORD, size_t>> g_groupWindowCursors;
 static int g_selected = 0;
 static SelectorState g_state = SelectorState::Idle;
 
-// Variables para el blur del fondo
-static HDC g_blurDC = nullptr;
-static HBITMAP g_blurBitmap = nullptr;
-static HBITMAP g_blurOldBitmap = nullptr;
-static unsigned char* g_blurPixels = nullptr;
-static int g_blurWidth = 0;
-static int g_blurHeight = 0;
-static bool g_blurBackgroundCreated = false;
-// El fondo se procesa a media resolución del área realmente capturada.
-// Los límites evitan imágenes demasiado pequeñas en resoluciones compactas.
-static const int kBlurDownscaleNumerator = 1;
-static const int kBlurDownscaleDenominator = 2;
-static const int kBlurMinimumWidth = 320;
-static const int kBlurMinimumHeight = 180;
-static const int kBlurPassCount = 3;
-static const int kBlurPassRadius = 2;
-// Reduce los halos de color producidos por el antialiasing subpíxel del
-// escritorio al hacer downscale/upscale de texto blanco.
-// Corrección cromática ligera: conserva los colores del escritorio y solo
-// atenúa los bordes RGB más agresivos del antialiasing subpíxel.
-static const float kBlurChromaSuppression = 0.18f;
-static const float kBlurPreChromaSuppression = 0.16f;
-static int g_blurCaptureX = 0;
-static int g_blurCaptureY = 0;
-static ID2D1Bitmap* g_blurD2DBitmap = nullptr;
 
 static bool LoadGdiFunctions();
 static bool LoadDwmFunctions();
@@ -704,7 +996,6 @@ static void CleanupKeyboardState();
 static void EmergencyCloseSelector();
 static void StartSelectorClose(HWND target);
 static void UpdateSelectorMotion();
-static float EaseOutCubic(float t);
 static void UpdateCarouselAnimation(HWND hwnd);
 static float GetCardExitProgress();
 static float GetCardExitOpacity();
@@ -722,6 +1013,155 @@ static void SelectPrevious();
 static void StopCarouselAnimation();
 static void UpdateSelectorControls();
 static void UpdateThumbnailSlots();
+struct CardSlotGeometry
+{
+    float left;
+    float top;
+    float right;
+    float bottom;
+    float cornerRadius;
+    float headerHeight;
+    float padding;
+};
+
+static CardSlotGeometry GetCanonicalSlotKeyframe(int slot)
+{
+    CardSlotGeometry g = {};
+    if (slot <= -1)
+    {
+        g.left = -115.0f;
+        g.top = 160.0f;
+        g.right = -5.0f;
+        g.bottom = 280.0f;
+        g.cornerRadius = 10.0f;
+        g.headerHeight = 24.0f;
+        g.padding = 6.0f;
+    }
+    else if (slot == 0)
+    {
+        g.left = 15.0f;
+        g.top = 160.0f;
+        g.right = 125.0f;
+        g.bottom = 280.0f;
+        g.cornerRadius = 12.0f;
+        g.headerHeight = 24.0f;
+        g.padding = 6.0f;
+    }
+    else if (slot == 1)
+    {
+        g.left = 135.0f;
+        g.top = 125.0f;
+        g.right = 375.0f;
+        g.bottom = 315.0f;
+        g.cornerRadius = 12.0f;
+        g.headerHeight = 28.0f;
+        g.padding = 8.0f;
+    }
+    else if (slot == 2)
+    {
+        g.left = 390.0f;
+        g.top = 55.0f;
+        g.right = 830.0f;
+        g.bottom = 355.0f;
+        g.cornerRadius = 14.0f;
+        g.headerHeight = 34.0f;
+        g.padding = 10.0f;
+    }
+    else if (slot == 3)
+    {
+        g.left = 845.0f;
+        g.top = 125.0f;
+        g.right = 1085.0f;
+        g.bottom = 315.0f;
+        g.cornerRadius = 12.0f;
+        g.headerHeight = 28.0f;
+        g.padding = 8.0f;
+    }
+    else if (slot == 4)
+    {
+        g.left = 1095.0f;
+        g.top = 160.0f;
+        g.right = 1205.0f;
+        g.bottom = 280.0f;
+        g.cornerRadius = 12.0f;
+        g.headerHeight = 24.0f;
+        g.padding = 6.0f;
+    }
+    else
+    {
+        g.left = 1225.0f;
+        g.top = 160.0f;
+        g.right = 1335.0f;
+        g.bottom = 280.0f;
+        g.cornerRadius = 10.0f;
+        g.headerHeight = 24.0f;
+        g.padding = 6.0f;
+    }
+    return g;
+}
+
+static CardSlotGeometry GetSlotKeyframe(int slot)
+{
+    CardSlotGeometry g = {};
+    if (g_visibleCardCount == 5)
+    {
+        // Keep the original five-card trajectory, including its off-screen
+        // keyframes used while a navigation animation is in progress.
+        g = GetCanonicalSlotKeyframe(slot);
+    }
+    else
+    {
+        // The three-card layout reuses the center and adjacent keyframes.
+        const int relative = slot - GetCarouselCenterSlot();
+        const int canonical = std::max(-1, std::min(1, relative)) + 2;
+        g = GetCanonicalSlotKeyframe(canonical);
+    }
+    return g;
+}
+
+static inline float LerpFloat(float a, float b, float t)
+{
+    return a + (b - a) * t;
+}
+
+
+static CardSlotGeometry GetInterpolatedSlotGeometry(float virtualSlot)
+{
+    int k0 = static_cast<int>(floorf(virtualSlot));
+    int k1 = k0 + 1;
+    float f = virtualSlot - static_cast<float>(k0);
+
+    CardSlotGeometry g0 = GetSlotKeyframe(k0);
+    CardSlotGeometry g1 = GetSlotKeyframe(k1);
+
+    CardSlotGeometry res = {};
+    res.left = LerpFloat(g0.left, g1.left, f);
+    res.top = LerpFloat(g0.top, g1.top, f);
+    res.right = LerpFloat(g0.right, g1.right, f);
+    res.bottom = LerpFloat(g0.bottom, g1.bottom, f);
+    res.cornerRadius = LerpFloat(g0.cornerRadius, g1.cornerRadius, f);
+    res.headerHeight = LerpFloat(g0.headerHeight, g1.headerHeight, f);
+    res.padding = LerpFloat(g0.padding, g1.padding, f);
+    res.left *= g_uiScale.value;
+    res.top *= g_uiScale.value;
+    res.right *= g_uiScale.value;
+    res.bottom *= g_uiScale.value;
+    res.cornerRadius *= g_uiScale.value;
+    res.headerHeight *= g_uiScale.value;
+    res.padding *= g_uiScale.value;
+
+    if (fabsf(g_sceneTiltDegrees) > 0.001f)
+    {
+        const float selectorCenterX = static_cast<float>(g_runtimeSelectorWidth) * 0.5f;
+        const float slotCenterX = (res.left + res.right) * 0.5f;
+        const float radians = g_sceneTiltDegrees * 3.14159265358979323846f / 180.0f;
+        const float verticalOffset = tanf(radians) * (slotCenterX - selectorCenterX);
+        res.top += verticalOffset;
+        res.bottom += verticalOffset;
+    }
+    return res;
+}
+
 static RECT GetSlotCardRect(int slot);
 static RECT GetSlotHeaderRect(int slot);
 static RECT GetSlotPreviewRect(int slot);
@@ -733,13 +1173,95 @@ static int GetSlotAtPoint(POINT ptClient);
 static int ResolveGroupIndex(int slot);
 static void UpdateHoveredSlot(POINT ptClient);
 static void CloseWindowForSlot(int slot);
+static ID2D1RadialGradientBrush* EnsureBackgroundSpotlightBrush()
+{
+    if (!g_d2dDCRenderTarget)
+        return nullptr;
+
+    if (g_backgroundSpotlightBrush &&
+        g_backgroundSpotlightBrushColor == g_dwmBackgroundColor)
+        return g_backgroundSpotlightBrush;
+
+    if (g_backgroundSpotlightBrush)
+    {
+        g_backgroundSpotlightBrush->Release();
+        g_backgroundSpotlightBrush = nullptr;
+    }
+
+    const float r = GetRValue(g_dwmBackgroundColor) / 255.0f;
+    const float g = GetGValue(g_dwmBackgroundColor) / 255.0f;
+    const float b = GetBValue(g_dwmBackgroundColor) / 255.0f;
+
+    const float brightR = std::min(1.0f, r * 1.65f + 0.035f);
+    const float brightG = std::min(1.0f, g * 1.65f + 0.035f);
+    const float brightB = std::min(1.0f, b * 1.65f + 0.035f);
+
+    D2D1_GRADIENT_STOP stops[3] = {};
+    stops[0].position = 0.0f;
+    stops[0].color = D2D1::ColorF(brightR, brightG, brightB, 0.34f);
+    stops[1].position = 0.42f;
+    stops[1].color = D2D1::ColorF(brightR, brightG, brightB, 0.13f);
+    stops[2].position = 1.0f;
+    stops[2].color = D2D1::ColorF(brightR, brightG, brightB, 0.0f);
+
+    ID2D1GradientStopCollection* collection = nullptr;
+    if (FAILED(g_d2dDCRenderTarget->CreateGradientStopCollection(
+            stops, 3, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &collection)) ||
+        !collection)
+        return nullptr;
+
+    D2D1_RADIAL_GRADIENT_BRUSH_PROPERTIES props = {};
+    props.center = D2D1::Point2F(0.0f, 0.0f);
+    props.gradientOriginOffset = D2D1::Point2F(0.0f, 0.0f);
+    props.radiusX = DpiPx(310.0f);
+    props.radiusY = DpiPx(310.0f);
+
+    HRESULT hr = g_d2dDCRenderTarget->CreateRadialGradientBrush(
+        &props, nullptr, collection, &g_backgroundSpotlightBrush);
+    collection->Release();
+    if (FAILED(hr) || !g_backgroundSpotlightBrush)
+        return nullptr;
+
+    g_backgroundSpotlightBrushColor = g_dwmBackgroundColor;
+    return g_backgroundSpotlightBrush;
+}
+
 static ID2D1RadialGradientBrush* EnsureCloseAccentBrush();
+static ID2D1RadialGradientBrush* EnsureBackgroundSpotlightBrush();
 static void PaintSelectorScene(HWND hwnd, HDC hdc);
+static void UpdateSelectorSurfaceTransform();
+static void ApplySelectorRoundedRegion(HWND hwnd);
+static void ResetPatternWaves();
+static void UpdatePatternWaves();
+static void DrawPatternShape(float x, float y, float radius, float scaleX,
+                                float scaleY)
+{
+    const float drawX = static_cast<float>(g_runtimeSelectorWidth) * 0.5f +
+                        (x - static_cast<float>(g_runtimeSelectorWidth) * 0.5f) * scaleX;
+    const float drawY = static_cast<float>(g_runtimeSelectorHeight) * 0.5f +
+                        (y - static_cast<float>(g_runtimeSelectorHeight) * 0.5f) * scaleY;
+    const float rx = std::max(0.5f, radius * scaleX);
+    const float ry = std::max(0.5f, radius * scaleY);
+
+    if (g_patternShape == PatternShape::Squares)
+    {
+        D2D1_RECT_F square = D2D1::RectF(
+            drawX - rx, drawY - ry, drawX + rx, drawY + ry);
+        g_d2dDCRenderTarget->FillRectangle(&square, g_d2dBrush);
+        return;
+    }
+
+    g_d2dDCRenderTarget->FillEllipse(
+        D2D1::Ellipse(D2D1::Point2F(drawX, drawY), rx, ry),
+        g_d2dBrush);
+}
+
+static void DrawPatternWaves(const RECT& clientRect,
+                              float presentationScaleX = 1.0f,
+                              float presentationScaleY = 1.0f);
+static bool IsPointInsidePatternArea(POINT point);
 static void PaintBottomShadowD2D(const RECT& objectRect, float radius,
                                  float strength);
-static void CreateBlurBackground(int captureX, int captureY);
-static void ReleaseBlurBackground();
-static void ApplyBlurToPixels(unsigned char* pixels, int width, int height, int radius);
 static MediaAccent ExtractMediaAccentFromImage(HICON icon);
 static D2D1_COLOR_F AddMediaAccent(const D2D1_COLOR_F& base,
                                    const MediaAccent& accent, float influence);
@@ -896,7 +1418,7 @@ static std::wstring BaseNameWithoutExtension(const std::wstring& path)
     size_t dot = name.find_last_of(L'.');
     if (dot != std::wstring::npos)
         name.resize(dot);
-    return name.empty() ? L"Aplicación" : name;
+    return name.empty() ? L"Application" : name;
 }
 
 static std::wstring LowerAscii(std::wstring value)
@@ -932,7 +1454,7 @@ static std::wstring GetFileDescription(const std::wstring& path)
     if (path.empty())
         return std::wstring();
 
-    HMODULE version = LoadLibraryW(L"version.dll");
+    HMODULE version = LoadLibraryExW(L"version.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!version)
         return std::wstring();
     GetFileVersionInfoSizeWFn getSize = reinterpret_cast<GetFileVersionInfoSizeWFn>(
@@ -1630,7 +2152,7 @@ static bool LoadDwmFunctions()
         g_dwmUpdateThumbnailProperties && g_dwmGetWindowAttribute)
         return true;
 
-    g_dwmApi = LoadLibraryW(L"dwmapi.dll");
+    g_dwmApi = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!g_dwmApi)
         return false;
 
@@ -1696,43 +2218,36 @@ static void ApplySelectorVisuals(HWND hwnd)
         return;
 
     g_dwmGlassEnabled = false;
-    if (LoadDwmFunctions() && g_dwmSetWindowAttribute)
+    if (!LoadDwmFunctions() || !g_dwmSetWindowAttribute)
+        return;
+
+    MARGINS margins = { -1, -1, -1, -1 };
+    typedef HRESULT (WINAPI* DwmExtendFrameIntoClientAreaFn)(HWND, const MARGINS*);
+    DwmExtendFrameIntoClientAreaFn pDwmExtendFrameIntoClientArea =
+        reinterpret_cast<DwmExtendFrameIntoClientAreaFn>(
+            GetProcAddress(g_dwmApi, "DwmExtendFrameIntoClientArea"));
+    if (pDwmExtendFrameIntoClientArea)
     {
-        // Habilitar glass en toda el área cliente
-        MARGINS margins = { -1, -1, -1, -1 };
-        typedef HRESULT (WINAPI* DwmExtendFrameIntoClientAreaFn)(HWND, const MARGINS*);
-        DwmExtendFrameIntoClientAreaFn pDwmExtendFrameIntoClientArea =
-            reinterpret_cast<DwmExtendFrameIntoClientAreaFn>(
-                GetProcAddress(g_dwmApi, "DwmExtendFrameIntoClientArea"));
-        if (pDwmExtendFrameIntoClientArea)
-        {
-            HRESULT frameResult = pDwmExtendFrameIntoClientArea(hwnd, &margins);
-            // Glass transparente dinámico: el contenido detrás sigue vivo.
-            // El backdrop nativo permanece desactivado para conservar la
-            // transparencia DWM estable de este selector.
-            g_dwmGlassEnabled = SUCCEEDED(frameResult);
-        }
-
-        // Mantener el backdrop nativo desactivado: el glass transparente se
-        // obtiene mediante el frame extendido y deja vivo el vídeo detrás.
-        DWORD backdrop = kDwmSbtNone;
-        g_dwmSetWindowAttribute(hwnd, kDwmWaSystemBackdropType,
-                                &backdrop, sizeof(backdrop));
-        // Mantener el borde nativo, pero igualarlo al tono general obsidiana
-        // para que el margen de DWM no aparezca gris ni contrastado.
-        DWORD borderColor = kDwmGlassBorderColor;
-        g_dwmSetWindowAttribute(hwnd, kDwmBorderColor,
-                                &borderColor, sizeof(borderColor));
-
-        DWORD ncPolicy = kDwmNcRenderingPolicyDisabled;
-        g_dwmSetWindowAttribute(hwnd, kDwmNcRenderingPolicy,
-                                &ncPolicy, sizeof(ncPolicy));
-        // El redondeo exterior lo controla el renderer; no pedir esquinas
-        // nativas que puedan dejar un marco estático durante las animaciones.
-        DWORD preference = 0;
-        g_dwmSetWindowAttribute(hwnd, kDwmWindowCornerPreference,
-                                &preference, sizeof(preference));
+        HRESULT frameResult = pDwmExtendFrameIntoClientArea(hwnd, &margins);
+        g_dwmGlassEnabled = SUCCEEDED(frameResult);
     }
+
+    DWORD backdrop = kDwmSbtNone;
+    g_dwmSetWindowAttribute(hwnd, kDwmWaSystemBackdropType,
+                            &backdrop, sizeof(backdrop));
+
+    BOOL useDarkMode = FALSE;
+    g_dwmSetWindowAttribute(hwnd, kDwmUseImmersiveDarkMode,
+                            &useDarkMode, sizeof(useDarkMode));
+    DWORD borderColor = kDwmColorNone;
+    g_dwmSetWindowAttribute(hwnd, kDwmBorderColor,
+                            &borderColor, sizeof(borderColor));
+    DWORD ncPolicy = kDwmNcRenderingPolicyUseWindowStyle;
+    g_dwmSetWindowAttribute(hwnd, kDwmNcRenderingPolicy,
+                            &ncPolicy, sizeof(ncPolicy));
+    DWORD preference = kDwmCornerPreferenceDoNotRound;
+    g_dwmSetWindowAttribute(hwnd, kDwmWindowCornerPreference,
+                            &preference, sizeof(preference));
 }
 
 static HICON GetApplicationIcon(HWND hwnd, const std::wstring& processPath, bool* outOwnIcon)
@@ -1810,9 +2325,9 @@ static bool LoadD2DAndDWrite()
         return true;
 
     if (!g_d2dApi)
-        g_d2dApi = LoadLibraryW(L"d2d1.dll");
+        g_d2dApi = LoadLibraryExW(L"d2d1.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!g_dwriteApi)
-        g_dwriteApi = LoadLibraryW(L"dwrite.dll");
+        g_dwriteApi = LoadLibraryExW(L"dwrite.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
     if (g_d2dApi && !g_d2dFactory)
     {
@@ -1861,22 +2376,22 @@ static bool LoadD2DAndDWrite()
         g_dwriteFactory->CreateTextFormat(
             L"Segoe UI Variable Text", nullptr,
             DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-            std::max(10.0f, 16.0f * g_uiScale.value), L"es-es", &g_dwriteSelectedFormat);
+            std::max(10.0f, 16.0f * g_uiScale.value), L"", &g_dwriteSelectedFormat);
 
         g_dwriteFactory->CreateTextFormat(
             L"Segoe UI Variable Text", nullptr,
             DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-            std::max(9.0f, 13.0f * g_uiScale.value), L"es-es", &g_dwriteNormalFormat);
+            std::max(9.0f, 13.0f * g_uiScale.value), L"", &g_dwriteNormalFormat);
 
         g_dwriteFactory->CreateTextFormat(
             L"Segoe UI Variable Text", nullptr,
             DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-            std::max(9.0f, 13.0f * g_uiScale.value), L"es-es", &g_dwriteCounterFormat);
+            std::max(9.0f, 13.0f * g_uiScale.value), L"", &g_dwriteCounterFormat);
 
         g_dwriteFactory->CreateTextFormat(
             L"Segoe UI Variable Text", nullptr,
             DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-            std::max(11.0f, 18.0f * g_uiScale.value), L"es-es", &g_dwriteCloseFormat);
+            std::max(11.0f, 18.0f * g_uiScale.value), L"", &g_dwriteCloseFormat);
 
         if (g_dwriteSelectedFormat)
         {
@@ -2074,6 +2589,10 @@ static void UnloadD2DAndDWrite()
     if (g_dwriteFactory) { g_dwriteFactory->Release(); g_dwriteFactory = nullptr; }
 
     if (g_closeAccentBrush) { g_closeAccentBrush->Release(); g_closeAccentBrush = nullptr; }
+    if (g_backgroundSpotlightBrush) { g_backgroundSpotlightBrush->Release(); g_backgroundSpotlightBrush = nullptr; }
+    g_backgroundSpotlightBrushColor = CLR_INVALID;
+    if (g_closeButtonGeometry) { g_closeButtonGeometry->Release(); g_closeButtonGeometry = nullptr; }
+    g_closeButtonGeometryRect = {};
     if (g_d2dBrush) { g_d2dBrush->Release(); g_d2dBrush = nullptr; }
     if (g_d2dDCRenderTarget) { g_d2dDCRenderTarget->Release(); g_d2dDCRenderTarget = nullptr; }
     if (g_d2dFactory) { g_d2dFactory->Release(); g_d2dFactory = nullptr; }
@@ -2087,8 +2606,7 @@ static bool LoadGdiFunctions()
     if (g_createFontIndirectW && g_deleteObject && g_createRoundRectRgn && g_getStockObject &&
         g_setBkMode && g_setTextColor && g_createSolidBrush &&
         g_createPen && g_selectObject && g_roundRect && g_getTextFaceW &&
-        g_getDIBits && g_getObjectW && g_createCompatibleDC &&
-        g_createDIBSection && g_stretchBlt && g_bitBlt && g_deleteDC)
+        g_getDIBits && g_getObjectW)
         return true;
 
     if (!g_gdiApi)
@@ -2122,26 +2640,11 @@ static bool LoadGdiFunctions()
         GetProcAddress(g_gdiApi, "GetDIBits"));
     g_getObjectW = reinterpret_cast<GetObjectWFn>(
         GetProcAddress(g_gdiApi, "GetObjectW"));
-    g_createCompatibleDC = reinterpret_cast<CreateCompatibleDCFn>(
-        GetProcAddress(g_gdiApi, "CreateCompatibleDC"));
-    g_createDIBSection = reinterpret_cast<CreateDIBSectionFn>(
-        GetProcAddress(g_gdiApi, "CreateDIBSection"));
-    g_stretchBlt = reinterpret_cast<StretchBltFn>(
-        GetProcAddress(g_gdiApi, "StretchBlt"));
-    g_setStretchBltMode = reinterpret_cast<SetStretchBltModeFn>(
-        GetProcAddress(g_gdiApi, "SetStretchBltMode"));
-    g_setBrushOrgEx = reinterpret_cast<SetBrushOrgExFn>(
-        GetProcAddress(g_gdiApi, "SetBrushOrgEx"));
-    g_bitBlt = reinterpret_cast<BitBltFn>(
-        GetProcAddress(g_gdiApi, "BitBlt"));
-    g_deleteDC = reinterpret_cast<DeleteDCFn>(
-        GetProcAddress(g_gdiApi, "DeleteDC"));
 
     if (!g_createFontIndirectW || !g_deleteObject || !g_createRoundRectRgn || !g_getStockObject ||
         !g_setBkMode || !g_setTextColor || !g_createSolidBrush ||
         !g_createPen || !g_selectObject || !g_roundRect ||
-        !g_getDIBits || !g_getObjectW || !g_createCompatibleDC ||
-        !g_createDIBSection || !g_stretchBlt || !g_bitBlt || !g_deleteDC)
+        !g_getDIBits || !g_getObjectW)
     {
         FreeLibrary(g_gdiApi);
         g_gdiApi = nullptr;
@@ -2389,362 +2892,8 @@ static RECT ContainedRect(const RECT& area, int sourceWidth, int sourceHeight)
     return result;
 }
 
-// SISTEMA DE BLUR PROPIO
-
-static void ApplyBlurToPixels(unsigned char* pixels, int width, int height, int radius)
-{
-    if (!pixels || width <= 0 || height <= 0 || radius <= 0)
-        return;
-
-    // Kernel Gaussian binomial de cinco taps: [1, 4, 6, 4, 1] / 16.
-    // Es separable y se repite para obtener una distribución más suave sin
-    // reservar un kernel grande ni introducir una ruta D3D adicional.
-    const int weights[5] = { 1, 4, 6, 4, 1 };
-    const int kernelRadius = std::min(radius, 2);
-    const int kernelWidth = kernelRadius * 2 + 1;
-    const int weightOffset = 2 - kernelRadius;
-    const int weightDivisor = kernelRadius == 2 ? 16 : 6;
-    const size_t pixelBytes = static_cast<size_t>(width) * height * 4;
-    std::vector<unsigned char> source(pixelBytes);
-    std::vector<unsigned char> horizontal(pixelBytes);
-    std::vector<unsigned char> destination(pixelBytes);
-    std::copy(pixels, pixels + pixelBytes, source.begin());
-
-    for (int pass = 0; pass < kBlurPassCount; ++pass)
-    {
-        for (int y = 0; y < height; ++y)
-        {
-            for (int x = 0; x < width; ++x)
-            {
-                int sumB = 0, sumG = 0, sumR = 0, sumA = 0;
-                for (int k = 0; k < kernelWidth; ++k)
-                {
-                    int sx = std::max(0, std::min(width - 1,
-                        x + k - kernelRadius));
-                    const unsigned char* p = source.data() +
-                        (static_cast<size_t>(y) * width + sx) * 4;
-                    int weight = weights[k + weightOffset];
-                    sumB += p[0] * weight;
-                    sumG += p[1] * weight;
-                    sumR += p[2] * weight;
-                    sumA += p[3] * weight;
-                }
-
-                unsigned char* d = horizontal.data() +
-                    (static_cast<size_t>(y) * width + x) * 4;
-                d[0] = static_cast<unsigned char>((sumB + weightDivisor / 2) /
-                                                   weightDivisor);
-                d[1] = static_cast<unsigned char>((sumG + weightDivisor / 2) /
-                                                   weightDivisor);
-                d[2] = static_cast<unsigned char>((sumR + weightDivisor / 2) /
-                                                   weightDivisor);
-                d[3] = static_cast<unsigned char>((sumA + weightDivisor / 2) /
-                                                   weightDivisor);
-            }
-        }
-
-        for (int y = 0; y < height; ++y)
-        {
-            for (int x = 0; x < width; ++x)
-            {
-                int sumB = 0, sumG = 0, sumR = 0, sumA = 0;
-                for (int k = 0; k < kernelWidth; ++k)
-                {
-                    int sy = std::max(0, std::min(height - 1,
-                        y + k - kernelRadius));
-                    const unsigned char* p = horizontal.data() +
-                        (static_cast<size_t>(sy) * width + x) * 4;
-                    int weight = weights[k + weightOffset];
-                    sumB += p[0] * weight;
-                    sumG += p[1] * weight;
-                    sumR += p[2] * weight;
-                    sumA += p[3] * weight;
-                }
-
-                unsigned char* d = destination.data() +
-                    (static_cast<size_t>(y) * width + x) * 4;
-                d[0] = static_cast<unsigned char>((sumB + weightDivisor / 2) /
-                                                   weightDivisor);
-                d[1] = static_cast<unsigned char>((sumG + weightDivisor / 2) /
-                                                   weightDivisor);
-                d[2] = static_cast<unsigned char>((sumR + weightDivisor / 2) /
-                                                   weightDivisor);
-                d[3] = static_cast<unsigned char>((sumA + weightDivisor / 2) /
-                                                   weightDivisor);
-            }
-        }
-
-        source.swap(destination);
-    }
-
-    std::copy(source.begin(), source.end(), pixels);
-}
-
-static void CreateBlurBackground(int captureX, int captureY)
-{
-    if (g_blurBackgroundCreated)
-        return;
-
-    if (!LoadGdiFunctions())
-        return;
-
-    const int captureWidth = g_runtimeSelectorWidth;
-    const int captureHeight = g_runtimeSelectorHeight;
-    g_blurCaptureX = captureX;
-    g_blurCaptureY = captureY;
-
-    // Procesar a ~50% reduce el área de trabajo a una cuarta parte. El tamaño
-    // se deriva del área/escala del monitor ya calculada por el selector; no
-    // se usan dimensiones fijas dependientes de una resolución concreta.
-    g_blurWidth = std::max(kBlurMinimumWidth,
-        (captureWidth * kBlurDownscaleNumerator) / kBlurDownscaleDenominator);
-    g_blurHeight = std::max(kBlurMinimumHeight,
-        (captureHeight * kBlurDownscaleNumerator) / kBlurDownscaleDenominator);
-
-    HDC screenDC = GetDC(nullptr);
-    if (!screenDC)
-        return;
-
-    g_blurDC = g_createCompatibleDC(screenDC);
-    if (!g_blurDC)
-    {
-        ReleaseDC(nullptr, screenDC);
-        return;
-    }
-
-    BITMAPINFO bmi = {};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = g_blurWidth;
-    bmi.bmiHeader.biHeight = -g_blurHeight;
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-
-    g_blurBitmap = g_createDIBSection(screenDC, &bmi, DIB_RGB_COLORS,
-                                      reinterpret_cast<void**>(&g_blurPixels), nullptr, 0);
-    if (!g_blurBitmap || !g_blurPixels)
-    {
-        if (g_blurBitmap) g_deleteObject(g_blurBitmap);
-        g_blurBitmap = nullptr;
-        g_deleteDC(g_blurDC);
-        g_blurDC = nullptr;
-        ReleaseDC(nullptr, screenDC);
-        return;
-    }
-
-    g_blurOldBitmap = reinterpret_cast<HBITMAP>(g_selectObject(g_blurDC, g_blurBitmap));
-
-    // HALFTONE evita el patrón de interpolación por defecto de StretchBlt,
-    // que puede generar líneas de color al reducir texto y vídeo. Las dos
-    // funciones son opcionales para conservar compatibilidad con GDI.
-    if (g_setStretchBltMode)
-        g_setStretchBltMode(g_blurDC, HALFTONE);
-    if (g_setBrushOrgEx)
-        g_setBrushOrgEx(g_blurDC, 0, 0, nullptr);
-
-    // Captura y downscale en una sola operación, antes de hacer visible la ventana.
-    BOOL copied = g_stretchBlt(g_blurDC, 0, 0, g_blurWidth, g_blurHeight,
-                               screenDC, captureX, captureY,
-                               captureWidth, captureHeight,
-                               SRCCOPY | CAPTUREBLT);
-    if (!copied)
-    {
-        ReleaseBlurBackground();
-        ReleaseDC(nullptr, screenDC);
-        return;
-    }
-
-    // El DIB creado directamente expone ya los píxeles BGRA contiguos.
-    // Se atenúa la crominancia subpíxel antes del blur: se conservan los
-    // colores reales, pero los bordes RGB extremos no se propagan.
-    for (int i = 0; i < g_blurWidth * g_blurHeight * 4; i += 4)
-    {
-        float blue = static_cast<float>(g_blurPixels[i + 0]);
-        float green = static_cast<float>(g_blurPixels[i + 1]);
-        float red = static_cast<float>(g_blurPixels[i + 2]);
-        float luminance = red * 0.2126f + green * 0.7152f + blue * 0.0722f;
-        blue += (luminance - blue) * kBlurPreChromaSuppression;
-        green += (luminance - green) * kBlurPreChromaSuppression;
-        red += (luminance - red) * kBlurPreChromaSuppression;
-        g_blurPixels[i + 0] = static_cast<unsigned char>(blue);
-        g_blurPixels[i + 1] = static_cast<unsigned char>(green);
-        g_blurPixels[i + 2] = static_cast<unsigned char>(red);
-        g_blurPixels[i + 3] = 255;
-    }
-
-    ApplyBlurToPixels(g_blurPixels, g_blurWidth, g_blurHeight,
-                      kBlurPassRadius);
-
-    // Tinte obsidiana moderado; el alpha permanece opaco porque la intensidad
-    // final de la capa se controla de forma independiente al dibujarla.
-    for (int i = 0; i < g_blurWidth * g_blurHeight * 4; i += 4)
-    {
-        // Atenuar ligeramente la crominancia evita halos RGB sin eliminar
-        // el color real del escritorio o del vídeo.
-        float blue = static_cast<float>(g_blurPixels[i + 0]);
-        float green = static_cast<float>(g_blurPixels[i + 1]);
-        float red = static_cast<float>(g_blurPixels[i + 2]);
-        float luminance = red * 0.2126f + green * 0.7152f + blue * 0.0722f;
-        blue += (luminance - blue) * kBlurChromaSuppression;
-        green += (luminance - green) * kBlurChromaSuppression;
-        red += (luminance - red) * kBlurChromaSuppression;
-        g_blurPixels[i + 0] = static_cast<unsigned char>(blue * 0.90f);
-        g_blurPixels[i + 1] = static_cast<unsigned char>(green * 0.92f);
-        g_blurPixels[i + 2] = static_cast<unsigned char>(red * 0.94f);
-        g_blurPixels[i + 3] = 255;
-    }
-
-    ReleaseDC(nullptr, screenDC);
-    g_blurBackgroundCreated = true;
-}
-
-static void ReleaseBlurBackground()
-{
-    if (g_blurD2DBitmap)
-    {
-        g_blurD2DBitmap->Release();
-        g_blurD2DBitmap = nullptr;
-    }
-
-    if (g_blurDC)
-    {
-        if (g_blurOldBitmap)
-            g_selectObject(g_blurDC, g_blurOldBitmap);
-        if (g_blurBitmap)
-            g_deleteObject(g_blurBitmap);
-        g_deleteDC(g_blurDC);
-    }
-
-    g_blurDC = nullptr;
-    g_blurBitmap = nullptr;
-    g_blurOldBitmap = nullptr;
-    g_blurPixels = nullptr;
-    g_blurWidth = 0;
-    g_blurHeight = 0;
-    g_blurCaptureX = 0;
-    g_blurCaptureY = 0;
-    g_blurBackgroundCreated = false;
-}
 
 // GEOMETRÍA Y TRAYECTORIA DEL CARRUSEL
-
-struct CardSlotGeometry
-{
-    float left;
-    float top;
-    float right;
-    float bottom;
-    float cornerRadius;
-    float headerHeight;
-    float padding;
-};
-
-static CardSlotGeometry GetCanonicalSlotKeyframe(int slot)
-{
-    CardSlotGeometry g = {};
-    if (slot <= -1)
-    {
-        g.left = -115.0f;
-        g.top = 160.0f;
-        g.right = -5.0f;
-        g.bottom = 280.0f;
-        g.cornerRadius = 10.0f;
-        g.headerHeight = 24.0f;
-        g.padding = 6.0f;
-    }
-    else if (slot == 0)
-    {
-        g.left = 15.0f;
-        g.top = 160.0f;
-        g.right = 125.0f;
-        g.bottom = 280.0f;
-        g.cornerRadius = 12.0f;
-        g.headerHeight = 24.0f;
-        g.padding = 6.0f;
-    }
-    else if (slot == 1)
-    {
-        g.left = 135.0f;
-        g.top = 125.0f;
-        g.right = 375.0f;
-        g.bottom = 315.0f;
-        g.cornerRadius = 12.0f;
-        g.headerHeight = 28.0f;
-        g.padding = 8.0f;
-    }
-    else if (slot == 2)
-    {
-        g.left = 390.0f;
-        g.top = 55.0f;
-        g.right = 830.0f;
-        g.bottom = 355.0f;
-        g.cornerRadius = 14.0f;
-        g.headerHeight = 34.0f;
-        g.padding = 10.0f;
-    }
-    else if (slot == 3)
-    {
-        g.left = 845.0f;
-        g.top = 125.0f;
-        g.right = 1085.0f;
-        g.bottom = 315.0f;
-        g.cornerRadius = 12.0f;
-        g.headerHeight = 28.0f;
-        g.padding = 8.0f;
-    }
-    else if (slot == 4)
-    {
-        g.left = 1095.0f;
-        g.top = 160.0f;
-        g.right = 1205.0f;
-        g.bottom = 280.0f;
-        g.cornerRadius = 12.0f;
-        g.headerHeight = 24.0f;
-        g.padding = 6.0f;
-    }
-    else
-    {
-        g.left = 1225.0f;
-        g.top = 160.0f;
-        g.right = 1335.0f;
-        g.bottom = 280.0f;
-        g.cornerRadius = 10.0f;
-        g.headerHeight = 24.0f;
-        g.padding = 6.0f;
-    }
-    return g;
-}
-
-static CardSlotGeometry GetSlotKeyframe(int slot)
-{
-    CardSlotGeometry g = {};
-    if (g_visibleCardCount == 5)
-    {
-        // Keep the original five-card trajectory, including its off-screen
-        // keyframes used while a navigation animation is in progress.
-        g = GetCanonicalSlotKeyframe(slot);
-    }
-    else
-    {
-        // The three-card layout reuses the center and adjacent keyframes.
-        const int relative = slot - GetCarouselCenterSlot();
-        const int canonical = std::max(-1, std::min(1, relative)) + 2;
-        g = GetCanonicalSlotKeyframe(canonical);
-    }
-    return g;
-}
-
-static inline float LerpFloat(float a, float b, float t)
-{
-    return a + (b - a) * t;
-}
-
-static float EaseOutCubic(float t)
-{
-    t = std::max(0.0f, std::min(1.0f, t));
-    float inverse = 1.0f - t;
-    return 1.0f - inverse * inverse * inverse;
-}
 
 static RECT ScaleRectAroundCenter(const RECT& rect, float scale)
 {
@@ -2771,47 +2920,6 @@ static RECT ScaleRectAroundPoint(const RECT& rect, float scale,
     result.top = static_cast<LONG>(roundf(pivotY + (rect.top - pivotY) * scale));
     result.bottom = static_cast<LONG>(roundf(pivotY + (rect.bottom - pivotY) * scale));
     return result;
-}
-
-static CardSlotGeometry GetInterpolatedSlotGeometry(float virtualSlot)
-{
-    int k0 = static_cast<int>(floorf(virtualSlot));
-    int k1 = k0 + 1;
-    float f = virtualSlot - static_cast<float>(k0);
-
-    CardSlotGeometry g0 = GetSlotKeyframe(k0);
-    CardSlotGeometry g1 = GetSlotKeyframe(k1);
-
-    CardSlotGeometry res = {};
-    res.left = LerpFloat(g0.left, g1.left, f);
-    res.top = LerpFloat(g0.top, g1.top, f);
-    res.right = LerpFloat(g0.right, g1.right, f);
-    res.bottom = LerpFloat(g0.bottom, g1.bottom, f);
-    res.cornerRadius = LerpFloat(g0.cornerRadius, g1.cornerRadius, f);
-    res.headerHeight = LerpFloat(g0.headerHeight, g1.headerHeight, f);
-    res.padding = LerpFloat(g0.padding, g1.padding, f);
-    res.left *= g_uiScale.value;
-    res.top *= g_uiScale.value;
-    res.right *= g_uiScale.value;
-    res.bottom *= g_uiScale.value;
-    res.cornerRadius *= g_uiScale.value;
-    res.headerHeight *= g_uiScale.value;
-    res.padding *= g_uiScale.value;
-
-    // Inclinación sutil del carrusel durante la navegación. Se aplica como
-    // una deformación geométrica vertical alrededor del eje central, no como
-    // un bitmap rotado; así los DWM thumbnails reciben exactamente la misma
-    // trayectoria y no se desacoplan visualmente de las cards.
-    if (fabsf(g_sceneTiltDegrees) > 0.001f)
-    {
-        const float selectorCenterX = static_cast<float>(g_runtimeSelectorWidth) * 0.5f;
-        const float slotCenterX = (res.left + res.right) * 0.5f;
-        const float radians = g_sceneTiltDegrees * 3.14159265358979323846f / 180.0f;
-        const float verticalOffset = tanf(radians) * (slotCenterX - selectorCenterX);
-        res.top += verticalOffset;
-        res.bottom += verticalOffset;
-    }
-    return res;
 }
 
 static RECT GetSlotCardRect(int slot)
@@ -2910,7 +3018,7 @@ static RECT GetCloseHoverButtonRect(int slot)
     return rc;
 }
 
-static ID2D1PathGeometry* CreateCloseButtonGeometry(const RECT& rect)
+static ID2D1PathGeometry* BuildCloseButtonGeometry(const RECT& rect)
 {
     if (!g_d2dFactory)
         return nullptr;
@@ -2954,6 +3062,22 @@ static ID2D1PathGeometry* CreateCloseButtonGeometry(const RECT& rect)
     sink->Close();
     sink->Release();
     return geometry;
+}
+
+static ID2D1PathGeometry* CreateCloseButtonGeometry(const RECT& rect)
+{
+    if (g_closeButtonGeometry &&
+        std::memcmp(&g_closeButtonGeometryRect, &rect, sizeof(RECT)) == 0)
+        return g_closeButtonGeometry;
+    if (g_closeButtonGeometry)
+    {
+        g_closeButtonGeometry->Release();
+        g_closeButtonGeometry = nullptr;
+    }
+    g_closeButtonGeometry = BuildCloseButtonGeometry(rect);
+    if (g_closeButtonGeometry)
+        g_closeButtonGeometryRect = rect;
+    return g_closeButtonGeometry;
 }
 
 static int ResolveGroupIndex(int slot)
@@ -3116,6 +3240,13 @@ static void UnregisterThumbnailSlot(int slot)
         g_dwmUnregisterThumbnail(g_thumbnailSlots[slot].thumbnail);
     g_thumbnailSlots[slot].thumbnail = nullptr;
     g_thumbnailSlots[slot].source = nullptr;
+    g_thumbnailSlots[slot].sourceWidth = 0;
+    g_thumbnailSlots[slot].sourceHeight = 0;
+    g_thumbnailSlots[slot].lastDestination = {};
+    g_thumbnailSlots[slot].lastSource = {};
+    g_thumbnailSlots[slot].lastOpacity = 0;
+    g_thumbnailSlots[slot].lastVisible = FALSE;
+    g_thumbnailSlots[slot].hasProperties = false;
 }
 
 static void UnregisterAllThumbnails()
@@ -3131,9 +3262,17 @@ static void UpdateThumbnailProperties(int slot, const RECT& area, HWND source)
         !g_dwmUpdateThumbnailProperties)
         return;
 
-    int sourceWidth = 0;
-    int sourceHeight = 0;
+    ThumbnailSlot& slotState = g_thumbnailSlots[slot];
+    int sourceWidth = slotState.sourceWidth;
+    int sourceHeight = slotState.sourceHeight;
+    if (slotState.source != source || sourceWidth <= 0 || sourceHeight <= 0)
+    {
+        sourceWidth = 0;
+        sourceHeight = 0;
+    }
 
+    if (sourceWidth <= 0 || sourceHeight <= 0)
+    {
     if (IsIconic(source))
     {
         WINDOWPLACEMENT wp = {};
@@ -3166,6 +3305,9 @@ static void UpdateThumbnailProperties(int slot, const RECT& area, HWND source)
         sourceWidth = 1600;
         sourceHeight = 1000;
     }
+    }
+    slotState.sourceWidth = sourceWidth;
+    slotState.sourceHeight = sourceHeight;
 
     DwmThumbnailPropertiesLocal properties = {};
     properties.dwFlags = kDwmTnpRectDestination | kDwmTnpOpacity |
@@ -3215,7 +3357,22 @@ static void UpdateThumbnailProperties(int slot, const RECT& area, HWND source)
         thumbnailOpacity *= GetCardExitOpacity();
     properties.opacity = static_cast<BYTE>(std::max(0, std::min(255,
         static_cast<int>(roundf(thumbnailOpacity * 255.0f)))));
-    g_dwmUpdateThumbnailProperties(g_thumbnailSlots[slot].thumbnail, &properties);
+
+    // UpdateThumbnailProperties puede ejecutarse en cada frame de una animación.
+    // DWM no necesita recibir otra orden si geometría, visibilidad y opacidad no cambiaron.
+    bool unchanged = slotState.hasProperties &&
+        slotState.lastVisible == properties.fVisible &&
+        slotState.lastOpacity == properties.opacity &&
+        std::memcmp(&slotState.lastDestination, &properties.rcDestination, sizeof(RECT)) == 0 &&
+        std::memcmp(&slotState.lastSource, &properties.rcSource, sizeof(RECT)) == 0;
+    if (unchanged)
+        return;
+    g_dwmUpdateThumbnailProperties(slotState.thumbnail, &properties);
+    slotState.lastDestination = properties.rcDestination;
+    slotState.lastSource = properties.rcSource;
+    slotState.lastOpacity = properties.opacity;
+    slotState.lastVisible = properties.fVisible;
+    slotState.hasProperties = true;
 }
 
 static void UpdateThumbnailSlots()
@@ -3273,6 +3430,7 @@ static void StopCarouselAnimation()
     g_sceneScaleX = 1.0f;
     g_sceneScaleY = 1.0f;
     g_sceneOpacity = 1.0f;
+    g_sceneOffsetY = 0.0f;
     g_sceneTiltDegrees = 0.0f;
     g_selectionTiltDirection = 0.0f;
     g_cardSnapScale = 1.0f;
@@ -3299,6 +3457,8 @@ static void StartSelectorClose(HWND target)
     g_closeStartScaleX = g_sceneScaleX;
     g_closeStartScaleY = g_sceneScaleY;
     g_closeStartOpacity = g_sceneOpacity;
+    g_closeStartOffsetY = 0.0f;
+    g_sceneOffsetY = 0.0f;
     if (g_selectorAnimation != SelectorAnimationState::Opening &&
         g_selectorAnimation != SelectorAnimationState::SelectionChange)
     {
@@ -3388,29 +3548,28 @@ static void UpdateSelectorMotion()
     {
         const float duration = AnimationDuration(240.0f);
         float t = std::min(1.0f, static_cast<float>(elapsed) / duration);
-        // Fluid Pop: una expansión rápida, un único overshoot sutil y
-        // un asentamiento corto; no es un rebote elástico.
-        static const float phaseTimes[] =
-            { 0.0f, 0.58f, 1.0f };
-        static const float phaseScales[] =
-            { 0.94f, 1.045f, 1.0f };
-        int phase = t <= phaseTimes[1] ? 0 :
-                    1;
-        float phaseSpan = phaseTimes[phase + 1] - phaseTimes[phase];
-        float localT = phaseSpan > 0.0f
-            ? (t - phaseTimes[phase]) / phaseSpan : 1.0f;
-        localT = std::max(0.0f, std::min(1.0f, localT));
-        float smoothT = localT * localT * (3.0f - 2.0f * localT);
-        g_sceneScaleX = phaseScales[phase] +
-                        (phaseScales[phase + 1] - phaseScales[phase]) * smoothT;
+        // Materialización monotónica: sin overshoot ni rebote. El contenedor
+        // crece desde el centro con una sola curva suave.
+        float smoothT = t * t * (3.0f - 2.0f * t);
+        g_sceneScaleX = 0.94f + 0.06f * smoothT;
         g_sceneScaleY = g_sceneScaleX;
-        float opacityT = std::min(1.0f, t / 0.48f);
+        float cardT = std::min(1.0f, t / 0.82f);
+        cardT = cardT * cardT * (3.0f - 2.0f * cardT);
+        float targetCardScale = 0.92f + 0.08f * cardT;
+        g_cardSnapScale = targetCardScale /
+                          std::max(0.01f, g_sceneScaleX);
+        // La materialización conserva el centro geométrico; no hay deriva
+        // hacia abajo ni hacia la derecha durante la expansión.
+        g_sceneOffsetY = 0.0f;
+        float opacityT = std::min(1.0f, t / 0.55f);
         g_sceneOpacity = opacityT * opacityT * (3.0f - 2.0f * opacityT);
         if (t >= 1.0f)
         {
             g_sceneScaleX = 1.0f;
             g_sceneScaleY = 1.0f;
             g_sceneOpacity = 1.0f;
+            g_sceneOffsetY = 0.0f;
+            g_cardSnapScale = 1.0f;
             g_selectorAnimation = SelectorAnimationState::Open;
             KillTimer(g_selector, kSelectorMotionTimerId);
         }
@@ -3425,6 +3584,7 @@ static void UpdateSelectorMotion()
         g_sceneScaleX = 1.0f;
         g_sceneScaleY = 1.0f;
         g_sceneOpacity = 1.0f;
+        g_sceneOffsetY = 0.0f;
         g_sceneTiltDegrees = 0.0f;
         if (t >= 1.0f)
         {
@@ -3438,7 +3598,9 @@ static void UpdateSelectorMotion()
     }
     else if (g_selectorAnimation == SelectorAnimationState::Closing)
     {
-        const float duration = AnimationDuration(420.0f);
+        // CRT/TV: primero se comprime verticalmente hacia el centro y luego
+        // horizontalmente hasta una línea/punto, sin desplazar el pivote.
+        const float duration = AnimationDuration(360.0f);
         float t = std::min(1.0f, static_cast<float>(elapsed) / duration);
         float verticalPhase = std::min(1.0f, t / 0.72f);
         float verticalEase = verticalPhase * verticalPhase * verticalPhase;
@@ -3446,6 +3608,7 @@ static void UpdateSelectorMotion()
         float horizontalPhase = std::max(0.0f, (t - 0.72f) / 0.28f);
         g_sceneScaleX = g_closeStartScaleX *
                         (1.0f - 0.92f * horizontalPhase * horizontalPhase);
+        g_sceneOffsetY = 0.0f;
         g_sceneOpacity = g_closeStartOpacity * (1.0f - t);
         if (t >= 1.0f)
         {
@@ -3453,6 +3616,7 @@ static void UpdateSelectorMotion()
             g_pendingActivationTarget = nullptr;
             g_sceneScaleX = 1.0f;
             g_sceneScaleY = 1.0f;
+            g_sceneOffsetY = 0.0f;
             g_sceneTiltDegrees = 0.0f;
             g_selectorAnimation = SelectorAnimationState::None;
             KillTimer(g_selector, kSelectorMotionTimerId);
@@ -3465,6 +3629,7 @@ static void UpdateSelectorMotion()
             return;
         }
     }
+    UpdateSelectorSurfaceTransform();
     UpdateSelectorControls();
 }
 
@@ -3502,9 +3667,12 @@ static ID2D1LinearGradientBrush* EnsureSurfaceGradientBrush(int groupIndex,
     if (brush)
         return brush;
 
-    D2D1_COLOR_F base = selected
-        ? D2D1::ColorF(0.035f, 0.040f, 0.045f, kCardSurfaceOpacity)
-        : D2D1::ColorF(0.018f, 0.020f, 0.024f, kCardSurfaceOpacity);
+    COLORREF cardColor = selected ? g_cardSelectedColor : g_cardNormalColor;
+    D2D1_COLOR_F base = D2D1::ColorF(
+        GetRValue(cardColor) / 255.0f,
+        GetGValue(cardColor) / 255.0f,
+        GetBValue(cardColor) / 255.0f,
+        kCardSurfaceOpacity);
     // Columna ambiental horizontalmente modulada: el centro recibe una
     // influencia moderada y los extremos recuperan Black Obsidian.
     D2D1_COLOR_F edge = base;
@@ -3736,6 +3904,441 @@ static void PaintCenterAccentMarginD2D(const RECT& cardRect, int groupIndex, flo
                                                static_cast<float>(ScaleLayoutPx(1.0f)));
 }
 
+static void ResetPatternWaves()
+{
+    ZeroMemory(g_patternRippleA, sizeof(g_patternRippleA));
+    ZeroMemory(g_patternRippleB, sizeof(g_patternRippleB));
+    ZeroMemory(g_patternRippleC, sizeof(g_patternRippleC));
+    g_patternRippleCurrent = g_patternRippleA;
+    g_patternRipplePrevious = g_patternRippleB;
+    g_patternRippleNext = g_patternRippleC;
+    g_patternHasCursor = false;
+    g_patternCursorInside = false;
+    ZeroMemory(g_patternCombinedFieldCache, sizeof(g_patternCombinedFieldCache));
+    g_patternRenderTime = 0.0f;
+    g_patternLastTick = GetTickCount64();
+    g_patternQualityScale = 1.0f;
+    g_patternQualityCooldownUntil = 0;
+    g_patternSlowSamples = 0;
+    g_patternFastSamples = 0;
+}
+
+static int PatternFieldWrappedIndex(int x, int y)
+{
+    x %= kPatternFieldWidth;
+    y %= kPatternFieldHeight;
+    if (x < 0) x += kPatternFieldWidth;
+    if (y < 0) y += kPatternFieldHeight;
+    return y * kPatternFieldWidth + x;
+}
+
+static float SmoothStep01(float value)
+{
+    value = std::max(0.0f, std::min(1.0f, value));
+    return value * value * (3.0f - 2.0f * value);
+}
+
+static float WrapPatternCoordinate(float pixel, float extent, int fieldSize)
+{
+    if (extent <= 0.0f || fieldSize <= 1)
+        return 0.0f;
+    float period = static_cast<float>(fieldSize - 1);
+    float coordinate = pixel * period / extent;
+    coordinate = fmodf(coordinate, period);
+    if (coordinate < 0.0f)
+        coordinate += period;
+    return coordinate;
+}
+
+static void AddPatternFieldImpulse(float pixelX, float pixelY, float amplitude)
+{
+    if (g_runtimeSelectorWidth <= 0 || g_runtimeSelectorHeight <= 0)
+        return;
+    float fx = pixelX * (kPatternFieldWidth - 1) /
+               static_cast<float>(g_runtimeSelectorWidth);
+    float fy = pixelY * (kPatternFieldHeight - 1) /
+               static_cast<float>(g_runtimeSelectorHeight);
+    int centerX = static_cast<int>(roundf(fx));
+    int centerY = static_cast<int>(roundf(fy));
+    for (int oy = -2; oy <= 2; ++oy)
+    {
+        for (int ox = -2; ox <= 2; ++ox)
+        {
+            float distance = sqrtf(static_cast<float>(ox * ox + oy * oy));
+            if (distance > 2.2f)
+                continue;
+            float weight = 1.0f - distance / 2.6f;
+            g_patternRippleCurrent[PatternFieldWrappedIndex(centerX + ox,
+                                                              centerY + oy)] +=
+                amplitude * weight;
+        }
+    }
+}
+
+static void UpdatePatternCursor(POINT point)
+{
+    const bool inside = IsPointInsidePatternArea(point);
+    if (!g_patternHasCursor)
+    {
+        g_patternCursor = point;
+        g_patternPreviousCursor = point;
+        g_patternHasCursor = true;
+        g_patternCursorInside = inside;
+        return;
+    }
+    const bool wasInside = g_patternCursorInside;
+    float dx = static_cast<float>(point.x - g_patternCursor.x);
+    float dy = static_cast<float>(point.y - g_patternCursor.y);
+    g_patternPreviousCursor = g_patternCursor;
+    g_patternCursor = point;
+    g_patternCursorInside = inside;
+    if (inside && wasInside && IsPatternWavesActive() &&
+        g_patternCursorInteraction && (dx * dx + dy * dy) > 1.0f)
+    {
+        float distance = sqrtf(dx * dx + dy * dy);
+        float velocity = std::min(1.8f, distance / 42.0f);
+        float impulse = velocity * g_patternCursorStrength *
+                        (0.40f + g_patternWaveStrength * 0.30f);
+        int segments = std::max(1, std::min(8, static_cast<int>(distance / 18.0f)));
+        for (int i = 1; i <= segments; ++i)
+        {
+            float t = static_cast<float>(i) / static_cast<float>(segments);
+            float x = static_cast<float>(g_patternPreviousCursor.x) + dx * t;
+            float y = static_cast<float>(g_patternPreviousCursor.y) + dy * t;
+            AddPatternFieldImpulse(x, y, impulse * (1.0f - 0.10f * t));
+        }
+    }
+}
+
+static void UpdatePatternWaves()
+{
+    if (!g_selector || !IsWindow(g_selector) || !IsPatternWavesActive())
+        return;
+    ULONGLONG now = GetTickCount64();
+    float dt = g_patternLastTick == 0 ? 0.016f :
+        std::min(0.05f, static_cast<float>(now - g_patternLastTick) / 1000.0f);
+    g_patternLastTick = now;
+
+    // Only cursor energy is simulated here. The base surface is procedural and
+    // sampled separately, so every ripple naturally returns to that base.
+    int steps = dt > 0.026f ? 2 : 1;
+    float propagation = std::max(0.10f, std::min(0.42f,
+        0.18f + g_patternWaveStrength * 0.16f));
+    float damping = powf(0.985f, 60.0f * dt / static_cast<float>(steps));
+    for (int step = 0; step < steps; ++step)
+    {
+        for (int y = 0; y < kPatternFieldHeight; ++y)
+        {
+            for (int x = 0; x < kPatternFieldWidth; ++x)
+            {
+                int index = y * kPatternFieldWidth + x;
+                int left = PatternFieldWrappedIndex(x - 1, y);
+                int right = PatternFieldWrappedIndex(x + 1, y);
+                int up = PatternFieldWrappedIndex(x, y - 1);
+                int down = PatternFieldWrappedIndex(x, y + 1);
+                float center = g_patternRippleCurrent[index];
+                float neighbors = g_patternRippleCurrent[left] +
+                    g_patternRippleCurrent[right] +
+                    g_patternRippleCurrent[up] +
+                    g_patternRippleCurrent[down];
+                float laplacian = neighbors - center * 4.0f;
+                float value = 2.0f * center - g_patternRipplePrevious[index] +
+                              laplacian * propagation;
+                value *= damping;
+                g_patternRippleNext[index] =
+                    std::max(-1.0f, std::min(1.0f, value));
+            }
+        }
+        float* oldPrevious = g_patternRipplePrevious;
+        g_patternRipplePrevious = g_patternRippleCurrent;
+        g_patternRippleCurrent = g_patternRippleNext;
+        g_patternRippleNext = oldPrevious;
+    }
+    InvalidateRect(g_selector, nullptr, FALSE);
+}
+
+// Stable spatial variation: it is tied to the fixed grid coordinates, not to
+// time, so dots have a subtle hierarchy without behaving independently.
+static float PatternDotVariation(float pixelX, float pixelY, float spacing)
+{
+    int gridX = static_cast<int>(floorf(pixelX / std::max(1.0f, spacing)));
+    int gridY = static_cast<int>(floorf(pixelY / std::max(1.0f, spacing)));
+    unsigned int hash = static_cast<unsigned int>(gridX) * 73856093u ^
+                        static_cast<unsigned int>(gridY) * 19349663u;
+    hash ^= hash >> 13;
+    hash *= 1274126177u;
+    return static_cast<float>(hash & 0xffffu) / 65535.0f;
+}
+
+static float PatternBaseHeight(float pixelX, float pixelY, float time)
+{
+    if (g_runtimeSelectorWidth <= 0 || g_runtimeSelectorHeight <= 0)
+        return 0.0f;
+    // X is dominant, producing vertical crests. Y and time bend them organically.
+    float nx = pixelX / static_cast<float>(g_runtimeSelectorWidth);
+    float ny = pixelY / static_cast<float>(g_runtimeSelectorHeight);
+    // Moderately faster phase motion keeps the vertical crests visibly moving
+    // without turning the pattern into noisy flicker.
+    const float speed = 0.55f + g_patternSpeed * 1.35f;
+    float organic = 0.20f * sinf(ny * 7.0f + time * 0.31f +
+                                  sinf(nx * 4.0f + time * 0.17f));
+    float ridges = sinf(nx * 13.5f + time * speed + organic);
+    float fine = 0.28f * sinf(nx * 27.0f - time * speed * 0.55f + ny * 2.5f);
+    float height = (ridges + fine) / 1.28f;
+    // Slightly larger field amplitude gives the influence more spatial body;
+    // visual brightness remains controlled in the dot stage below.
+    return height * std::max(0.0f, std::min(2.0f, g_patternWaveStrength)) * 0.68f;
+}
+
+static void UpdatePatternRenderCache(float time)
+{
+    g_patternRenderTime = time;
+    const float rippleScale = 0.72f + g_patternWaveStrength * 0.38f;
+    const float width = static_cast<float>(std::max(1, g_runtimeSelectorWidth));
+    const float height = static_cast<float>(std::max(1, g_runtimeSelectorHeight));
+    for (int y = 0; y < kPatternFieldHeight; ++y)
+    {
+        float pixelY = static_cast<float>(y) * height /
+                       static_cast<float>(kPatternFieldHeight - 1);
+        for (int x = 0; x < kPatternFieldWidth; ++x)
+        {
+            float pixelX = static_cast<float>(x) * width /
+                           static_cast<float>(kPatternFieldWidth - 1);
+            int index = y * kPatternFieldWidth + x;
+            g_patternCombinedFieldCache[index] =
+                PatternBaseHeight(pixelX, pixelY, time) +
+                g_patternRippleCurrent[index] * rippleScale;
+        }
+    }
+}
+
+static float PatternFieldSample(float pixelX, float pixelY)
+{
+    if (g_runtimeSelectorWidth <= 0 || g_runtimeSelectorHeight <= 0)
+        return 0.0f;
+    float fx = WrapPatternCoordinate(pixelX,
+        static_cast<float>(g_runtimeSelectorWidth), kPatternFieldWidth);
+    float fy = WrapPatternCoordinate(pixelY,
+        static_cast<float>(g_runtimeSelectorHeight), kPatternFieldHeight);
+    int x0 = static_cast<int>(floorf(fx));
+    int y0 = static_cast<int>(floorf(fy));
+    float tx = fx - x0;
+    float ty = fy - y0;
+    int x1 = (x0 + 1) % kPatternFieldWidth;
+    int y1 = (y0 + 1) % kPatternFieldHeight;
+    float a = g_patternCombinedFieldCache[PatternFieldWrappedIndex(x0, y0)];
+    float b = g_patternCombinedFieldCache[PatternFieldWrappedIndex(x1, y0)];
+    float c = g_patternCombinedFieldCache[PatternFieldWrappedIndex(x0, y1)];
+    float d = g_patternCombinedFieldCache[PatternFieldWrappedIndex(x1, y1)];
+    float top = a + (b - a) * tx;
+    float bottom = c + (d - c) * tx;
+    return top + (bottom - top) * ty;
+}
+
+static void DrawPatternWaves(const RECT& clientRect,
+                              float presentationScaleX,
+                              float presentationScaleY)
+{
+    if (!IsPatternWavesActive() || !g_d2dDCRenderTarget || !g_d2dBrush)
+        return;
+    const int width = clientRect.right - clientRect.left;
+    const int height = clientRect.bottom - clientRect.top;
+    if (width <= 0 || height <= 0)
+        return;
+
+    const ULONGLONG drawStart = GetTickCount64();
+    UpdatePatternRenderCache(static_cast<float>(drawStart) / 1000.0f);
+    // La calidad adaptativa controla la cadencia, no la geometría del patrón.
+    // Así una variación de rendimiento no cambia tamaño/posición de los dots.
+    // Density controls the visual grid independently from the low-resolution
+    // simulation. At the default value this produces a considerably denser
+    // micro-dot surface while keeping the ripple buffer small.
+    const float spacing = std::max(6.0f,
+        g_patternDensity * g_uiScale.value * 0.55f);
+    const float renderMargin = spacing * 1.5f;
+    const float light = std::max(0.0f, std::min(2.0f, g_patternLight));
+    const float contrast = std::max(0.0f, std::min(2.0f, g_patternContrast));
+    const float effectOpacity = std::max(0.0f, std::min(1.0f, g_patternOpacity));
+
+    // Keep DWM visible. This is a translucent tint plus one dot field, not an
+    // opaque second background.
+    D2D1_RECT_F background = D2D1::RectF(0.0f, 0.0f,
+                                          static_cast<float>(width),
+                                          static_cast<float>(height));
+    g_d2dBrush->SetColor(D2D1::ColorF(0.025f, 0.035f, 0.055f,
+                                      0.08f * effectOpacity));
+    g_d2dDCRenderTarget->FillRectangle(&background, g_d2dBrush);
+
+    // The caller already applies the scene transform used by the cards and
+    // DWM background. Pattern Waves is deliberately rendered in that same
+    // coordinate space, so opening/closing animations affect the whole field
+    // without introducing a second animation system.
+
+    for (float y = -renderMargin; y < height + renderMargin; y += spacing)
+    {
+        for (float x = -renderMargin; x < width + renderMargin; x += spacing)
+        {
+            // The grid is fixed. The combined field is converted into a smooth
+            // influence profile; it changes only the visual state of each dot.
+            float field = std::max(-1.0f, std::min(1.0f,
+                PatternFieldSample(x, y)));
+            float dx = (PatternFieldSample(x + 3.0f, y) -
+                        PatternFieldSample(x - 3.0f, y)) * 0.1667f;
+            float dy = (PatternFieldSample(x, y + 3.0f) -
+                        PatternFieldSample(x, y - 3.0f)) * 0.1667f;
+            float normalLight = std::max(0.0f, std::min(1.0f,
+                0.50f + (-dx - dy) * 0.36f * light));
+            // A shared-field falloff controls every visual property. The stable
+            // variation only supplies subtle scale/opacity hierarchy on the
+            // fixed grid; it is never an animation of individual dots.
+            float waveEnergy = std::max(0.0f, std::min(1.0f,
+                fabsf(field) * (1.25f + 0.20f * light)));
+            // Broaden the soft band first, then use a gentle nonlinear remap
+            // so the crest grows visibly without creating hard rings.
+            float influence = SmoothStep01((waveEnergy - 0.10f) / 0.82f);
+            influence = powf(influence, 0.78f);
+            float litInfluence = std::max(0.0f, std::min(1.0f,
+                influence * (0.50f + normalLight * 0.50f)));
+            float brightness = std::max(0.0f, std::min(1.0f,
+                0.12f + litInfluence * 0.70f));
+            brightness = std::max(0.0f, std::min(1.0f,
+                0.16f + (brightness - 0.16f) * contrast));
+            float variation = PatternDotVariation(x, y, spacing);
+            float baseScale = 0.78f + variation * 0.22f;
+            // Most dots remain micro-sized; only the shared-field crest adds
+            // substantial scale. This widens the wave without adding dots.
+            float radius = std::max(0.85f,
+                spacing * (0.026f * baseScale + influence * 0.185f));
+            // Lift visibility mainly through opacity, while retaining a dim
+            // but clearly present base layer over the Obsidian background.
+            float dotAlpha = effectOpacity *
+                std::min(0.90f, 0.095f + 0.17f * brightness +
+                         0.45f * influence + variation * 0.030f);
+            // Neutral white/gray palette: the field changes tone, not hue.
+            // Neutral luminance ramp: small dots become light gray, while
+            // wave-driven dots approach white without introducing saturation.
+            float tone = std::max(0.0f, std::min(0.985f,
+                0.62f + brightness * 0.25f + influence * 0.20f +
+                variation * 0.020f));
+            g_d2dBrush->SetColor(D2D1::ColorF(tone, tone, tone, dotAlpha));
+            DrawPatternShape(x, y, radius, presentationScaleX, presentationScaleY);
+        }
+    }
+
+    // No restablecer aquí el transform: el caller conserva el mismo transform
+    // de escena para continuar dibujando cards/UI de forma consistente.
+
+    // Ajuste con histéresis fuerte. GetTickCount64 tiene una granularidad que
+    // puede convertir un render de 0 ms en 15/16 ms de una muestra a otra;
+    // reaccionar a una sola medición cambia el grid y produce saltos visuales.
+    // Esto solo modifica la densidad propia del fondo, nunca layout/transform UI.
+    ULONGLONG drawMs = GetTickCount64() - drawStart;
+    ULONGLONG now = GetTickCount64();
+    if (drawMs >= 12)
+    {
+        ++g_patternSlowSamples;
+        g_patternFastSamples = 0;
+    }
+    else if (drawMs <= 4)
+    {
+        ++g_patternFastSamples;
+        g_patternSlowSamples = 0;
+    }
+    else
+    {
+        g_patternSlowSamples = 0;
+        g_patternFastSamples = 0;
+    }
+
+    bool qualityChanged = false;
+    // En idle, el grid elegido para el fondo permanece estable. La simulación
+    // y el repaint continúan; solo se evita un cambio compositivo no solicitado.
+    const bool layoutIdle = g_selectorAnimation == SelectorAnimationState::Open &&
+                            !g_animActive && !g_cardExitActive;
+    if (layoutIdle)
+    {
+        g_patternSlowSamples = 0;
+        g_patternFastSamples = 0;
+    }
+    if (!layoutIdle && now >= g_patternQualityCooldownUntil)
+    {
+        // Cuatro muestras lentas consecutivas para degradar.
+        if (g_patternSlowSamples >= 4)
+        {
+            float next = std::max(0.55f, g_patternQualityScale - 0.15f);
+            qualityChanged = next != g_patternQualityScale;
+            g_patternQualityScale = next;
+            g_patternSlowSamples = 0;
+            g_patternFastSamples = 0;
+            g_patternQualityCooldownUntil = now + 2500;
+        }
+        // La recuperación es deliberadamente mucho más lenta que la degradación.
+        else if (g_patternFastSamples >= 24 && g_patternQualityScale < 1.0f)
+        {
+            g_patternQualityScale = std::min(1.0f, g_patternQualityScale + 0.05f);
+            qualityChanged = true;
+            g_patternSlowSamples = 0;
+            g_patternFastSamples = 0;
+            g_patternQualityCooldownUntil = now + 2500;
+        }
+    }
+    if (qualityChanged && g_selector && IsWindow(g_selector))
+        SetTimer(g_selector, kPatternTimerId, GetPatternTimerInterval(), nullptr);
+}
+static bool IsPointInsideRoundedRect(const D2D1_ROUNDED_RECT& rect, float x, float y)
+{
+    if (x < rect.rect.left || x > rect.rect.right ||
+        y < rect.rect.top || y > rect.rect.bottom)
+        return false;
+
+    const float radiusX = std::min(rect.radiusX,
+        (rect.rect.right - rect.rect.left) * 0.5f);
+    const float radiusY = std::min(rect.radiusY,
+        (rect.rect.bottom - rect.rect.top) * 0.5f);
+    if ((x >= rect.rect.left + radiusX && x <= rect.rect.right - radiusX) ||
+        (y >= rect.rect.top + radiusY && y <= rect.rect.bottom - radiusY))
+        return true;
+
+    float cx = x < rect.rect.left + radiusX
+        ? rect.rect.left + radiusX : rect.rect.right - radiusX;
+    float cy = y < rect.rect.top + radiusY
+        ? rect.rect.top + radiusY : rect.rect.bottom - radiusY;
+    float nx = (x - cx) / std::max(1.0f, radiusX);
+    float ny = (y - cy) / std::max(1.0f, radiusY);
+    return nx * nx + ny * ny <= 1.0f;
+}
+
+// Radio único del contenedor principal. La región Win32 es la autoridad de
+// clipping; cualquier hit-test o capa visual debe reutilizar exactamente este
+// cálculo para no introducir una segunda curvatura.
+static int GetSelectorCornerRadiusPx(int width, int height)
+{
+    if (width <= 0 || height <= 0)
+        return 0;
+    int radius = std::max(ScaleLayoutPx(27.0f), 16);
+    return std::min(radius, std::min(width, height) / 2);
+}
+
+static bool IsPointInsidePatternArea(POINT point)
+{
+    if (!IsPatternWavesActive() ||
+        g_runtimeSelectorWidth <= 0 || g_runtimeSelectorHeight <= 0)
+        return false;
+
+    // Reuse the exact dimensions and radius of ApplySelectorRoundedRegion.
+    // The final pixels are clipped by that same SetWindowRgn region.
+    RECT clientRect = { 0, 0, g_runtimeSelectorWidth, g_runtimeSelectorHeight };
+    int radiusPx = GetSelectorCornerRadiusPx(clientRect.right, clientRect.bottom);
+    D2D1_ROUNDED_RECT area = D2D1::RoundedRect(
+        D2D1::RectF(0.0f, 0.0f,
+                    static_cast<float>(clientRect.right),
+                    static_cast<float>(clientRect.bottom)),
+        static_cast<float>(radiusPx), static_cast<float>(radiusPx));
+    return IsPointInsideRoundedRect(area,
+                                    static_cast<float>(point.x),
+                                    static_cast<float>(point.y));
+}
+
 static void PaintSelectorScene(HWND hwnd, HDC hdc)
 {
     RECT clientRect = {};
@@ -3754,21 +4357,15 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
         g_d2dDCRenderTarget->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
         // Clear completamente para dejar que DWM glass sea visible
         g_d2dDCRenderTarget->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
+        RECT sceneRect = { 0, 0, g_runtimeSelectorWidth, g_runtimeSelectorHeight };
         g_d2dDCRenderTarget->PushAxisAlignedClip(
             D2D1::RectF(0.0f, 0.0f,
-                        static_cast<float>(g_runtimeSelectorWidth),
-                        static_cast<float>(g_runtimeSelectorHeight)),
+                        static_cast<float>(sceneRect.right),
+                        static_cast<float>(sceneRect.bottom)),
             D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
         float sceneScaleX = 1.0f;
         float sceneScaleY = 1.0f;
         GetSceneScale(sceneScaleX, sceneScaleY);
-        if (sceneScaleX != 1.0f || sceneScaleY != 1.0f)
-        {
-            g_d2dDCRenderTarget->SetTransform(D2D1::Matrix3x2F::Scale(
-                D2D1::SizeF(sceneScaleX, sceneScaleY),
-                D2D1::Point2F(static_cast<float>(g_runtimeSelectorWidth) * 0.5f,
-                              static_cast<float>(g_runtimeSelectorHeight) * 0.5f)));
-        }
         ID2D1Layer* sceneOpacityLayer = nullptr;
         if (g_sceneOpacity < 0.999f &&
             SUCCEEDED(g_d2dDCRenderTarget->CreateLayer(nullptr, &sceneOpacityLayer)) &&
@@ -3782,81 +4379,106 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
             g_d2dDCRenderTarget->PushLayer(&opacityParameters, sceneOpacityLayer);
         }
 
-        // Glass DWM transparente: no se dibuja bitmap y el vídeo permanece
-        // vivo detrás; solo se añade un tinte oscuro muy ligero.
-        if (g_dwmGlassEnabled)
+        // El background y el contenedor forman parte de la misma escena que
+        // las cards: deben acompañar la escala de apertura/cierre y compartir
+        // su pivote central.
+        if (sceneScaleX != 1.0f || sceneScaleY != 1.0f ||
+            g_sceneOffsetY != 0.0f)
         {
-            D2D1_RECT_F bgRect = D2D1::RectF(
-                static_cast<float>(clientRect.left),
-                static_cast<float>(clientRect.top),
-                static_cast<float>(clientRect.right),
-                static_cast<float>(clientRect.bottom));
-            // Mantener el color original de la superficie; el ajuste de borde
-            // se realiza únicamente mediante DWMWA_BORDER_COLOR.
-            g_d2dBrush->SetColor(D2D1::ColorF(0.035f, 0.050f, 0.075f, 0.20f));
+            g_d2dDCRenderTarget->SetTransform(GetSceneTransform());
+        }
+
+        // Base background layer. None deliberately leaves the surface
+        // transparent so whatever is underneath remains visible.
+        D2D1_RECT_F bgRect = D2D1::RectF(
+            static_cast<float>(sceneRect.left),
+            static_cast<float>(sceneRect.top),
+            static_cast<float>(sceneRect.right),
+            static_cast<float>(sceneRect.bottom));
+        if (g_baseBackgroundMode == BaseBackgroundMode::Dwm && g_dwmGlassEnabled)
+        {
+            float r = GetRValue(g_dwmBackgroundColor) / 255.0f;
+            float g = GetGValue(g_dwmBackgroundColor) / 255.0f;
+            float b = GetBValue(g_dwmBackgroundColor) / 255.0f;
+            g_d2dBrush->SetColor(D2D1::ColorF(r, g, b, g_dwmBackgroundOpacity));
             g_d2dDCRenderTarget->FillRectangle(&bgRect, g_d2dBrush);
         }
-        else if (g_blurBackgroundCreated && g_blurPixels && g_blurDC)
+        else if (g_baseBackgroundMode == BaseBackgroundMode::Dwm)
         {
-            D2D1_RECT_F bgRect = D2D1::RectF(
-                static_cast<float>(clientRect.left),
-                static_cast<float>(clientRect.top),
-                static_cast<float>(clientRect.right),
-                static_cast<float>(clientRect.bottom));
-
-            if (!g_blurD2DBitmap)
-            {
-                D2D1_BITMAP_PROPERTIES props = D2D1::BitmapProperties(
-                    D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
-                    96.0f, 96.0f);
-                g_d2dDCRenderTarget->CreateBitmap(
-                    D2D1::SizeU(static_cast<UINT32>(g_blurWidth), static_cast<UINT32>(g_blurHeight)),
-                    g_blurPixels, static_cast<UINT32>(g_blurWidth * 4), &props,
-                    &g_blurD2DBitmap);
-            }
-
-            if (g_blurD2DBitmap)
-                // Opacidad completa: evita que el vídeo vivo se mezcle con la
-                // captura y deje el primer frame superpuesto.
-                g_d2dDCRenderTarget->DrawBitmap(g_blurD2DBitmap, &bgRect, 1.0f,
-                                                 D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
-
-            // Capa obsidiana separada: evita oscurecer en exceso los píxeles
-            // capturados y mantiene control independiente sobre la composición.
-            g_d2dBrush->SetColor(D2D1::ColorF(0.035f, 0.050f, 0.075f, 0.15f));
-            g_d2dDCRenderTarget->FillRectangle(&bgRect, g_d2dBrush);
-        }
-        else
-        {
-            // Fallback si no hay blur
-            D2D1_RECT_F bgRect = D2D1::RectF(
-                static_cast<float>(clientRect.left),
-                static_cast<float>(clientRect.top),
-                static_cast<float>(clientRect.right),
-                static_cast<float>(clientRect.bottom));
+            // Fallback for DWM mode if glass is unavailable.
             g_d2dBrush->SetColor(D2D1::ColorF(0.70f, 0.74f, 0.82f, 0.18f));
             g_d2dDCRenderTarget->FillRectangle(&bgRect, g_d2dBrush);
         }
 
-        // Borde vectorial sutil del contenedor. La región real de la ventana
-        // ya recorta las esquinas, por lo que no queda un rectángulo cuadrado.
-        const float containerRadius = static_cast<float>(ScaleLayoutPx(27.0f));
-        const float containerInset = DpiPx(0.75f);
-        D2D1_ROUNDED_RECT containerRect = D2D1::RoundedRect(
-            D2D1::RectF(containerInset, containerInset,
-                        static_cast<float>(clientRect.right) - containerInset,
-                        static_cast<float>(clientRect.bottom) - containerInset),
-            containerRadius, containerRadius);
-        g_d2dBrush->SetColor(D2D1::ColorF(0.32f, 0.36f, 0.43f, 0.30f));
-        g_d2dDCRenderTarget->DrawRoundedRectangle(&containerRect, g_d2dBrush, DpiPx(1.0f));
+        // Cursor spotlight: only the background is affected. Cards are drawn
+        // afterwards, so the spotlight never bleeds across their surfaces.
+        if (IsBackgroundSpotlightAllowed() &&
+            g_dwmGlassEnabled && g_backgroundSpotlightActive)
+        {
+            ID2D1RadialGradientBrush* spotlight = EnsureBackgroundSpotlightBrush();
+            if (spotlight)
+            {
+                float sx = 1.0f, sy = 1.0f;
+                GetSceneScale(sx, sy);
+                float cx = static_cast<float>(g_runtimeSelectorWidth) * 0.5f;
+                float cy = static_cast<float>(g_runtimeSelectorHeight) * 0.5f;
+                float sceneX = cx +
+                    (static_cast<float>(g_backgroundSpotlightPoint.x) - cx) /
+                    std::max(0.001f, sx);
+                float sceneY = cy +
+                    (static_cast<float>(g_backgroundSpotlightPoint.y) - cy - g_sceneOffsetY) /
+                    std::max(0.001f, sy);
+                spotlight->SetCenter(D2D1::Point2F(sceneX, sceneY));
+                spotlight->SetGradientOriginOffset(D2D1::Point2F(0.0f, 0.0f));
+                spotlight->SetRadiusX(DpiPx(310.0f) / std::max(0.001f, sx));
+                spotlight->SetRadiusY(DpiPx(310.0f) / std::max(0.001f, sy));
+                g_d2dDCRenderTarget->FillRectangle(&bgRect, spotlight);
+            }
+        }
 
-        RECT containerShadow = {
-            ScaleLayoutPx(12.0f),
-            clientRect.bottom - ScaleLayoutPx(8.0f),
-            clientRect.right - ScaleLayoutPx(12.0f),
-            clientRect.bottom
-        };
-        PaintBottomShadowD2D(containerShadow, ScaleLayoutPx(12.0f), 0.34f);
+        // Experimental background is an independent layer over the base.
+        if (IsPatternWavesActive())
+        {
+            // Pattern Waves is content inside the selector's existing DWM
+            // container. The window region clips it; no second rounded mask
+            // or Pattern-specific container is created here.
+            // The caller already owns the scene transform, so pass identity to
+            // the Pattern Waves presentation parameter and avoid double scale.
+            DrawPatternWaves(sceneRect, 1.0f, 1.0f);
+            if (sceneScaleX != 1.0f || sceneScaleY != 1.0f ||
+                g_sceneOffsetY != 0.0f)
+            {
+                g_d2dDCRenderTarget->SetTransform(GetSceneTransform());
+            }
+        }
+
+        // The global container border/shadow is itself a background visual.
+        // With no base and no experimental layer, omit it so cards float over
+        // the desktop. Pattern Waves keeps its own mask and reactive border.
+        const bool hasVisualBackground =
+            g_baseBackgroundMode != BaseBackgroundMode::None;
+        if (hasVisualBackground)
+        {
+            // DWM owns the single rounded container. Pattern Waves does not
+            // replace or add another outline around the same area.
+            D2D1_ROUNDED_RECT containerRect = D2D1::RoundedRect(
+                D2D1::RectF(DpiPx(0.75f), DpiPx(0.75f),
+                            static_cast<float>(sceneRect.right) - DpiPx(0.75f),
+                            static_cast<float>(sceneRect.bottom) - DpiPx(0.75f)),
+                static_cast<float>(ScaleLayoutPx(27.0f)),
+                static_cast<float>(ScaleLayoutPx(27.0f)));
+            g_d2dBrush->SetColor(D2D1::ColorF(0.32f, 0.36f, 0.43f, 0.30f));
+            g_d2dDCRenderTarget->DrawRoundedRectangle(&containerRect,
+                                                       g_d2dBrush, DpiPx(1.0f));
+
+            RECT containerShadow = {
+                ScaleLayoutPx(12.0f),
+                sceneRect.bottom - ScaleLayoutPx(8.0f),
+                sceneRect.right - ScaleLayoutPx(12.0f),
+                sceneRect.bottom
+            };
+            PaintBottomShadowD2D(containerShadow, ScaleLayoutPx(12.0f), 0.34f);
+        }
 
     for (int slot = 0; slot < GetCarouselSlotCount(); ++slot)
         {
@@ -3889,9 +4511,12 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
             if (selected && slot == GetCarouselCenterSlot())
                 PaintCenterAccentMarginD2D(cardRect, index, radius);
 
-            D2D1_COLOR_F bgCol = selected
-                ? D2D1::ColorF(0.035f, 0.040f, 0.045f, kCardSurfaceOpacity)
-                : D2D1::ColorF(0.018f, 0.020f, 0.024f, kCardSurfaceOpacity);
+            COLORREF cardColor = selected ? g_cardSelectedColor : g_cardNormalColor;
+            D2D1_COLOR_F bgCol = D2D1::ColorF(
+                GetRValue(cardColor) / 255.0f,
+                GetGValue(cardColor) / 255.0f,
+                GetBValue(cardColor) / 255.0f,
+                kCardSurfaceOpacity);
             D2D1_ROUNDED_RECT cr = D2D1::RoundedRect(
                 D2D1::RectF(static_cast<float>(cardRect.left) + 0.5f, static_cast<float>(cardRect.top) + 0.5f,
                             static_cast<float>(cardRect.right) - 0.5f, static_cast<float>(cardRect.bottom) - 0.5f),
@@ -4028,7 +4653,6 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
                         g_d2dDCRenderTarget->FillGeometry(closeGeometry, g_d2dBrush);
                         g_d2dBrush->SetColor(D2D1::ColorF(0.45f, 0.10f, 0.12f, 0.62f));
                         g_d2dDCRenderTarget->DrawGeometry(closeGeometry, g_d2dBrush, DpiPx(1.0f));
-                        closeGeometry->Release();
                     }
                 }
 
@@ -4065,13 +4689,19 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
         return;
     }
 
-    RECT containerShadow = {
-        ScaleLayoutPx(12.0f),
-        clientRect.bottom - ScaleLayoutPx(8.0f),
-        clientRect.right - ScaleLayoutPx(12.0f),
-        clientRect.bottom
-    };
-    PaintBottomShadowGDI(hdc, containerShadow, ScaleLayoutPx(12.0f));
+    const bool hasVisualBackground =
+        g_baseBackgroundMode != BaseBackgroundMode::None ||
+        IsPatternWavesActive();
+    if (hasVisualBackground)
+    {
+        RECT containerShadow = {
+            ScaleLayoutPx(12.0f),
+            clientRect.bottom - ScaleLayoutPx(8.0f),
+            clientRect.right - ScaleLayoutPx(12.0f),
+            clientRect.bottom
+        };
+        PaintBottomShadowGDI(hdc, containerShadow, ScaleLayoutPx(12.0f));
+    }
 
     for (int slot = 0; slot < GetCarouselSlotCount(); ++slot)
     {
@@ -4189,6 +4819,17 @@ static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, 
             return 0;
         }
 
+        if (wParam == kPatternTimerId)
+        {
+            if (!IsPatternWavesActive() || !IsSelectorActive())
+            {
+                KillTimer(hwnd, kPatternTimerId);
+                return 0;
+            }
+            UpdatePatternWaves();
+            return 0;
+        }
+
         if (wParam == kAnimTimerId)
         {
             if (!g_animActive)
@@ -4208,8 +4849,11 @@ static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, 
             }
             else
             {
-                float t = static_cast<float>(elapsed) / kNavigationDuration;
-                float ease = EaseOutCubic(t);
+                float t = static_cast<float>(elapsed) /
+                          AnimationDuration(kNavigationDuration);
+                t = std::min(1.0f, std::max(0.0f, t));
+                float smooth = t * t * (3.0f - 2.0f * t);
+                float ease = 1.0f - powf(1.0f - smooth, 3.0f);
                 g_animOffset = g_animStartOffset * (1.0f - ease);
             }
             UpdateSelectorControls();
@@ -4286,6 +4930,16 @@ static void UnregisterSelectorClasses()
     g_classesRegistered = false;
 }
 
+static void UpdateSelectorSurfaceTransform()
+{
+    if (!g_selector || !IsWindow(g_selector))
+        return;
+
+    // The selector HWND remains physically fixed. Opening/closing animations
+    // are rendered entirely by D2D; no separate blur surface is used.
+    ApplySelectorRoundedRegion(g_selector);
+}
+
 static void ApplySelectorRoundedRegion(HWND hwnd)
 {
     if (!hwnd || !IsWindow(hwnd) || !LoadGdiFunctions() || !g_createRoundRectRgn)
@@ -4298,9 +4952,9 @@ static void ApplySelectorRoundedRegion(HWND hwnd)
     if (width <= 0 || height <= 0)
         return;
 
-    int radius = std::max(ScaleLayoutPx(27.0f), 16);
-    radius = std::min(radius, std::min(width, height) / 2);
-    HRGN region = g_createRoundRectRgn(0, 0, width + 1, height + 1, radius, radius);
+    int radius = GetSelectorCornerRadiusPx(width, height);
+    HRGN region = g_createRoundRectRgn(0, 0, width + 1, height + 1,
+                                       radius * 2, radius * 2);
     if (region)
         SetWindowRgn(hwnd, region, TRUE);
 }
@@ -4333,6 +4987,7 @@ static bool InitializePersistentSelector()
     g_selector = selector;
     RemoveNativeSelectorFrame(g_selector);
     ApplySelectorVisuals(g_selector);
+
 
     // Precalentar el renderer mientras el selector está oculto. Esto elimina
     // la creación de D2D/DWrite/fonts del camino crítico de Alt+Tab.
@@ -4384,21 +5039,18 @@ static bool CreateSelector(bool shiftHeld)
     CreateUiFonts();
     int x = work.left + ((work.right - work.left) - g_runtimeSelectorWidth) / 2;
     int y = work.top + ((work.bottom - work.top) - g_runtimeSelectorHeight) / 2;
+    g_selectorCenterX = x + g_runtimeSelectorWidth / 2;
+    g_selectorCenterY = y + g_runtimeSelectorHeight / 2;
 
     StopCarouselAnimation();
-    ReleaseBlurBackground();
 
-    // Con DWM glass el fondo es transparente y vivo; no se captura ningún
-    // frame estático. Si DWM no está disponible, se usa el blur propio.
-    if (!g_dwmGlassEnabled)
-        CreateBlurBackground(x, y);
-
+    // El HWND principal mantiene una superficie física estable durante la animación.
     SetWindowPos(g_selector, HWND_TOPMOST, x, y,
                  g_runtimeSelectorWidth, g_runtimeSelectorHeight,
                  SWP_NOACTIVATE | SWP_HIDEWINDOW);
     ApplySelectorRoundedRegion(g_selector);
-
-    // RefreshWindowList coloca la ventana que estaba en foreground en índice 0.
+    ApplySelectorVisuals(g_selector);
+// RefreshWindowList coloca la ventana que estaba en foreground en índice 0.
     // La primera pulsación respeta Shift: Alt+Tab avanza y Alt+Shift+Tab
     // retrocede desde la ventana actualmente activa.
     if (g_groups.size() > 1)
@@ -4410,10 +5062,13 @@ static bool CreateSelector(bool shiftHeld)
     g_animActive = false;
     g_sceneScaleX = 0.94f;
     g_sceneScaleY = 0.94f;
-    g_sceneOpacity = 0.05f;
+    g_sceneOpacity = 0.0f;
+    g_sceneOffsetY = 0.0f;
+    g_cardSnapScale = 0.92f / g_sceneScaleX;
     g_sceneTiltDegrees = 0.0f;
     g_selectorAnimation = SelectorAnimationState::Opening;
     g_selectorAnimationStart = GetTickCount64();
+    UpdateSelectorSurfaceTransform();
 
     UpdateSelectorControls();
 
@@ -4425,16 +5080,14 @@ static bool CreateSelector(bool shiftHeld)
 
     ShowWindow(g_selector, SW_SHOWNOACTIVATE);
     UpdateWindow(g_selector);
-    SetWindowPos(g_selector, HWND_TOPMOST, x, y,
-                 g_runtimeSelectorWidth, g_runtimeSelectorHeight,
-                 SWP_SHOWWINDOW | SWP_NOACTIVATE);
+    UpdateSelectorSurfaceTransform();
 
     g_selectorOpening = false;
-    // El bitmap permanece cacheado durante la sesión. No se recaptura después
-    // de mostrar el selector: ocultar/mostrar la ventana produciría parpadeo.
-    // La captura inicial se realizó mientras el selector aún estaba oculto.
     SetTimer(g_selector, kSelectorMotionTimerId,
              GetAnimationTimerInterval(), nullptr);
+    ResetPatternWaves();
+    if (IsPatternWavesActive())
+        SetTimer(g_selector, kPatternTimerId, GetPatternTimerInterval(), nullptr);
     // Failsafe solo mientras el selector está abierto (sin polling permanente).
     SetTimer(g_selector, kActivityTimerId, 250, nullptr);
     return true;
@@ -4448,19 +5101,21 @@ static void HideSelectorForSession()
     KillTimer(g_selector, kAnimTimerId);
     KillTimer(g_selector, kTabRepeatTimerId);
     KillTimer(g_selector, kSelectorMotionTimerId);
+    KillTimer(g_selector, kPatternTimerId);
     KillTimer(g_selector, kActivityTimerId);
     g_tabRepeatStarted = false;
     g_uiTabDown = false;
 
-    // Los thumbnails permanecen registrados mientras el HWND persistente está
-    // oculto. En la siguiente sesión UpdateThumbnailSlots reutiliza los que aún
-    // apuntan a la misma ventana y reemplaza únicamente los que hayan cambiado.
-    ShowWindow(g_selector, SW_HIDE);
-    UiSetInteractive(false);
+    // No conservar superficies DWM registradas mientras el selector está oculto:
+    // así ninguna miniatura puede sobrevivir visualmente al cierre. La siguiente
+    // sesión las registra de nuevo mediante UpdateThumbnailSlots.
+    UnregisterAllThumbnails();
+    ShowWindow(g_selector, SW_HIDE);UiSetInteractive(false);
     g_selectorAnimation = SelectorAnimationState::None;
     g_sceneScaleX = 1.0f;
     g_sceneScaleY = 1.0f;
     g_sceneOpacity = 1.0f;
+    g_sceneOffsetY = 0.0f;
     g_sceneTiltDegrees = 0.0f;
     g_selectionTiltDirection = 0.0f;
     g_cardSnapScale = 1.0f;
@@ -4479,9 +5134,6 @@ static void HideSelectorForSession()
     g_pendingActivationTarget = nullptr;
     g_selectorOriginWindow = nullptr;
 
-    // El fondo depende del escritorio actual; se libera al terminar la sesión
-    // para que la siguiente apertura capture una imagen fresca.
-    ReleaseBlurBackground();
 }
 
 static void DestroySelector()
@@ -4496,11 +5148,13 @@ static void DestroySelector()
 // Solo UI thread, al terminar el hilo.
 static void ShutdownPersistentSelector()
 {
+
     if (g_selector && IsWindow(g_selector))
     {
         KillTimer(g_selector, kAnimTimerId);
         KillTimer(g_selector, kTabRepeatTimerId);
         KillTimer(g_selector, kSelectorMotionTimerId);
+        KillTimer(g_selector, kPatternTimerId);
         KillTimer(g_selector, kActivityTimerId);
         UnregisterAllThumbnails();
         HWND selector = g_selector;
@@ -4508,7 +5162,6 @@ static void ShutdownPersistentSelector()
         DestroyWindow(selector);
     }
 
-    ReleaseBlurBackground();
     ReleaseGroupResources();
     UnloadD2DAndDWrite();
     UnloadDwmFunctions();
@@ -4551,7 +5204,12 @@ static void UpdateCarouselAnimation(HWND hwnd)
     ULONGLONG elapsed = now - g_animStartTime;
     float progress = std::min(1.0f,
         static_cast<float>(elapsed) / AnimationDuration(kNavigationDuration));
-    float eased = EaseOutCubic(progress);
+    // D2D card motion: interpolate the logical slot position continuously,
+    // then let PaintSelectorScene render the resulting geometry every frame.
+    // A quintic ease-out gives a fast initial glide with a clean, non-jittery
+    // settle at the destination. No bitmap interpolation is used.
+    float smooth = progress * progress * (3.0f - 2.0f * progress);
+    float eased = 1.0f - powf(1.0f - smooth, 3.0f);
     g_animOffset = g_animStartOffset * (1.0f - eased);
 
     // Snap sutil de la card que llega al centro; no se aplica al contenedor,
@@ -4794,7 +5452,20 @@ static void UiHandleMouseMove()
     if (!IsSelectorActive() || !g_selector || !IsWindow(g_selector))
         return;
     ScreenToClient(g_selector, &pt);
+    g_backgroundSpotlightPoint = pt;
+    RECT clientRect = {};
+    GetClientRect(g_selector, &clientRect);
+    g_backgroundSpotlightActive = PtInRect(&clientRect, pt) &&
+                                   IsBackgroundSpotlightAllowed();
+    UpdatePatternCursor(pt);
+    // Apply the cursor impulse immediately on the UI thread instead of waiting
+    // for the next 33/50 Hz Pattern timer tick. This keeps the wave response
+    // synchronized with mouse movement while the timer continues propagating
+    // the already-created wave field between mouse events.
+    if (IsPatternWavesActive() && g_patternCursorInteraction)
+        UpdatePatternWaves();
     UpdateHoveredSlot(pt);
+    InvalidateRect(g_selector, nullptr, FALSE);
     MarkSelectorActivity();
 }
 
@@ -4842,6 +5513,20 @@ static void UiHandleMouseButton(UINT message, POINT screenPt)
 
 static void UiHandleSettingsChanged()
 {
+    LoadTaskSwitcherSettings();
+    for (auto& group : g_groups)
+    {
+        if (group.surfaceBrushNormal)
+        {
+            group.surfaceBrushNormal->Release();
+            group.surfaceBrushNormal = nullptr;
+        }
+        if (group.surfaceBrushSelected)
+        {
+            group.surfaceBrushSelected->Release();
+            group.surfaceBrushSelected = nullptr;
+        }
+    }
     if (g_selector && IsWindow(g_selector))
     {
         if (g_selectorAnimation != SelectorAnimationState::None &&
@@ -4853,6 +5538,20 @@ static void UiHandleSettingsChanged()
                      GetAnimationTimerInterval(), nullptr);
         // A visible-card count change can invalidate existing DWM slot mapping.
         UnregisterAllThumbnails();
+        ResetPatternWaves();
+        if (IsPatternWavesActive())
+        {
+            if (IsSelectorActive())
+                SetTimer(g_selector, kPatternTimerId, GetPatternTimerInterval(), nullptr);
+            else
+                KillTimer(g_selector, kPatternTimerId);
+        }
+        else
+        {
+            KillTimer(g_selector, kPatternTimerId);
+        }
+        ApplySelectorVisuals(g_selector);
+        UpdateSelectorSurfaceTransform();
         UpdateSelectorControls();
     }
 }
@@ -5023,7 +5722,9 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
     // estado de AltGr; el resto de teclas inyectadas se ignoran.
     const bool fakeAltGrCtrl = key->vkCode == VK_LCONTROL && key->scanCode == 0x21D;
     if ((key->flags & LLKHF_INJECTED) != 0 && !fakeAltGrCtrl)
+    {
         return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
+    }
 
     SyncInputSession();
 
@@ -5036,6 +5737,15 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
     bool isLeftCtrl = (vk == VK_LCONTROL) || (vk == VK_CONTROL && (key->flags & LLKHF_EXTENDED) == 0);
     bool isRightCtrl = (vk == VK_RCONTROL) || (vk == VK_CONTROL && (key->flags & LLKHF_EXTENDED) != 0);
 
+    // This tool mod runs inside windhawk.exe. Consume Alt only while its
+    // process owns the foreground window; all other applications retain the
+    // normal Alt behavior.
+    bool windhawkForeground = false;
+    HWND foreground = GetForegroundWindow();
+    DWORD foregroundProcessId = 0;
+    if (foreground && GetWindowThreadProcessId(foreground, &foregroundProcessId))
+        windhawkForeground = foregroundProcessId == GetCurrentProcessId();
+
     if (isLeftAlt)
     {
         if (down)
@@ -5044,10 +5754,15 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
         {
             g_altLeftDown = false;
             SendAltMenuMaskIfNeeded();
+            if (InputSessionActive() && SessionModifierReleased())
             OnModifierReleased();
         }
         else
             g_altGrActive = IsAltGrPhysicallyDown();
+        if (windhawkForeground)
+        {
+            return 1;
+        }
         return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
     }
 
@@ -5059,10 +5774,15 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
         {
             g_altRightDown = false;
             SendAltMenuMaskIfNeeded();
+            if (InputSessionActive() && SessionModifierReleased())
             OnModifierReleased();
         }
         else
             g_altGrActive = IsAltGrPhysicallyDown();
+        if (windhawkForeground)
+        {
+            return 1;
+        }
         return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
     }
 
@@ -5140,7 +5860,9 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
     if (vk == VK_RETURN && sessionActive)
     {
         if (down)
+        {
             InputEndSession(WM_UI_CONFIRM);
+        }
         return 1;
     }
 
@@ -5182,17 +5904,31 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
                     g_altGrActive = altGrHeld;
                     g_altGrTaskSwitcherArmed = altGrHeld;
 
-                    // El UI thread abre el selector ya precargado. El hook no
-                    // enumera ventanas ni toca D2D/DWM: solo publica el comando.
-                    if (PostUiCommand(WM_UI_OPEN, static_cast<WPARAM>(id),
-                                      shift ? 1 : 0))
+                    // La primera pulsación se consume EN ESTE MISMO callback.
+                    // No esperamos a que el UI thread abra el selector antes de
+                    // bloquearla: Windows nunca recibe este Tab como Alt+Tab.
+                    const bool posted = PostUiCommand(
+                        WM_UI_OPEN, static_cast<WPARAM>(id), shift ? 1 : 0);
+
+                    if (posted)
                     {
                         g_altMenuMaskPending = !altGrHeld;
                         return 1;
                     }
 
-                    // Sin UI disponible no se bloquea la pulsación: Windows
-                    // conserva su comportamiento normal.
+                    // Para AltGr el bloqueo es deliberado incluso si el UI thread
+                    // no está disponible. Es preferible perder esa pulsación a
+                    // dejar que Windows abra su Task Switcher nativo.
+                    if (altGrHeld)
+                    {
+                        InterlockedCompareExchange(&g_sessionActive, 0, id);
+                        ClearSelectorKeyboardSession();
+                        g_altGrTaskSwitcherArmed = false;
+                        return 1;
+                    }
+
+                    // Alt/Alt+Tab tradicional conserva su fallback anterior si
+                    // nuestro UI no está disponible.
                     InterlockedCompareExchange(&g_sessionActive, 0, id);
                     ClearSelectorKeyboardSession();
                     g_altGrTaskSwitcherArmed = false;
@@ -5215,7 +5951,9 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
         {
             g_tabDown = false;
             if (sessionActive)
+            {
                 PostUiCommand(WM_UI_TAB_UP, static_cast<WPARAM>(g_inputSessionId), 0);
+            }
             if (sessionActive || g_tabSuppressed)
             {
                 g_tabSuppressed = false;
@@ -5227,13 +5965,16 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
     if (sessionActive)
     {
         if (vk == VK_LWIN || vk == VK_RWIN || vk == VK_APPS)
+        {
             return 1;
+        }
 
         if (vk != VK_SHIFT && vk != VK_LSHIFT && vk != VK_RSHIFT &&
             !isLeftAlt && !isRightAlt && !isLeftCtrl && !isRightCtrl)
+        {
             return 1;
+        }
     }
-
     return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
 }
 
@@ -5307,14 +6048,35 @@ static DWORD WINAPI InputThreadProc(LPVOID)
     bool ok = false;
     HWND control = CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 0, 0,
                                    HWND_MESSAGE, nullptr, g_hModule, nullptr);
-    if (control)
+    if (!control)
+    {
+        Wh_Log(L"Input control window creation failed: %lu", GetLastError());
+    }
+    else
     {
         g_inputControlWnd = control;
-        g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHook, g_hModule, 0);
+
+        // A low-level hook callback executes on the installing input thread.
+        // Prefer the mod module, but retry without an hMod for tool-process
+        // loaders that cannot resolve the injected module for a global hook.
+        SetLastError(ERROR_SUCCESS);
+        g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHook,
+                                           g_hModule, 0);
+        DWORD hookError = g_keyboardHook ? ERROR_SUCCESS : GetLastError();
+        if (!g_keyboardHook && hookError == ERROR_MOD_NOT_FOUND)
+        {
+            SetLastError(ERROR_SUCCESS);
+            g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHook,
+                                               nullptr, 0);
+            if (!g_keyboardHook)
+                hookError = GetLastError();
+        }
         ok = g_keyboardHook != nullptr;
+        if (!ok)
+            Wh_Log(L"SetWindowsHookEx(WH_KEYBOARD_LL) failed: %lu", hookError);
     }
-    if (!ok)
-        Wh_Log(L"Input thread initialization failed: %lu", GetLastError());
+    if (!ok && control)
+        Wh_Log(L"Input thread initialization failed");
 
     InterlockedExchange(&g_inputInitOk, ok ? 1 : 0);
     SetEvent(g_inputReadyEvent);
@@ -5334,8 +6096,20 @@ static DWORD WINAPI InputThreadProc(LPVOID)
                 if (message.wParam != 0)
                 {
                     if (!g_mouseHook)
+                    {
+                        SetLastError(ERROR_SUCCESS);
                         g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseHook,
                                                         g_hModule, 0);
+                        if (!g_mouseHook && GetLastError() == ERROR_MOD_NOT_FOUND)
+                        {
+                            SetLastError(ERROR_SUCCESS);
+                            g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseHook,
+                                                            nullptr, 0);
+                        }
+                        if (!g_mouseHook)
+                            Wh_Log(L"SetWindowsHookEx(WH_MOUSE_LL) failed: %lu",
+                                   GetLastError());
+                    }
                 }
                 else if (g_mouseHook)
                 {
@@ -5368,6 +6142,7 @@ static DWORD WINAPI InputThreadProc(LPVOID)
 
 static bool InitializeUiThreadState()
 {
+    LoadTaskSwitcherSettings();
     if (!RegisterSelectorClasses())
         return false;
 
@@ -5501,7 +6276,6 @@ static bool StartWorkerThread(LPTHREAD_START_ROUTINE proc, HANDLE* outThread,
 
 BOOL WhTool_ModInit()
 {
-    LoadTaskSwitcherSettings();
 
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -5542,8 +6316,7 @@ BOOL WhTool_ModInit()
 
 void WhTool_ModSettingsChanged()
 {
-    LoadTaskSwitcherSettings();
-    // Los timers pertenecen al UI thread; se le pide que los reprograme.
+    // Los ajustes los carga exclusivamente el UI thread.
     PostUiCommand(WM_UI_SETTINGS, 0, 0);
 }
 
