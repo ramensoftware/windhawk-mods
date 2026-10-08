@@ -767,13 +767,12 @@ void CaptureCursorSources(int normalSize) {
 // The frame the stand-in for an animated cursor should show right now. The
 // stand-in keeps the animation running while the size changes: each step shows
 // the frame that's due at that moment, so only one frame is decoded per step.
-// Returns 0 if the .ani file can't be indexed (e.g. the built-in animated
-// cursors, which have no file); the stand-in is then a still image.
+// Returns 0 if the .ani file can't be indexed (e.g. it fails to parse); the
+// stand-in is then a still image.
 int StandInFrameNow(CursorSource& source) {
     if (!source.standInTried) {
         source.standInTried = true;
-        source.standInReady =
-            source.hasPath && ReadAniIndex(source.path, source.aniIndex);
+        source.standInReady = ReadAniIndex(source.path, source.aniIndex);
         source.aniStartMs = NowMs();
         source.loadedFrame = -1;
     }
@@ -1065,6 +1064,16 @@ bool FinishShrinkOnLoopStart(ULONGLONG now) {
             if (source.appliedStatic && source.standInReady &&
                 now - g_shrinkDoneMs < kMaxLoopWaitMs &&
                 !StandInAtLoopStart(source)) {
+                // The shrink only resized the visible cursor, so the other
+                // types are still enlarged. Bring them back now, so one that
+                // appears while waiting (e.g. the arrow when a busy app
+                // finishes) isn't shown big. Each type is resized once; after
+                // that it's skipped.
+                for (size_t j = 0; j < kCursorTypeCount; j++) {
+                    if (j != i && g_sources[j].appliedSize != g_normalSize) {
+                        SetCursorTypeSize(j, g_normalSize);
+                    }
+                }
                 SetCursorTypeSize(i, g_normalSize);  // Next frame, normal size.
                 return false;
             }
