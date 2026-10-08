@@ -50,7 +50,7 @@ LRESULT CALLBACK RenameEditSubclassProc(
     switch (uMsg) {
         case WM_GETTEXT: {
             LRESULT len = DefSubclassProc(hWnd, uMsg, wParam, lParam);
-            if (len > 0 && wParam > 0) {
+            if (len > 0 && wParam > 0 && lParam != 0) {
                 wchar_t* buf = (wchar_t*)lParam;
                 std::wstring ext;
                 {
@@ -63,11 +63,21 @@ LRESULT CALLBACK RenameEditSubclassProc(
 
                 if (!ext.empty()) {
                     std::wstring full = buf;
-                    // Re-attach extension if user didn't type a dot
-                    if (full.find(L'.') == std::wstring::npos) {
-                        full += ext;
-                        wcsncpy_s(buf, wParam, full.c_str(), _TRUNCATE);
-                        return wcslen(buf); // Return actual copied length
+                    if (!full.empty()) {
+                        // Re-attach extension if the text does not already end with it
+                        bool alreadyHasExt = false;
+                        if (full.length() >= ext.length()) {
+                            std::wstring suffix = full.substr(full.length() - ext.length());
+                            if (_wcsicmp(suffix.c_str(), ext.c_str()) == 0) {
+                                alreadyHasExt = true;
+                            }
+                        }
+
+                        if (!alreadyHasExt) {
+                            full += ext;
+                            wcsncpy_s(buf, wParam, full.c_str(), _TRUNCATE);
+                            return wcslen(buf);
+                        }
                     }
                 }
             }
@@ -91,8 +101,18 @@ LRESULT CALLBACK RenameEditSubclassProc(
                     DefSubclassProc(hWnd, WM_GETTEXT, (WPARAM)bufLen, (LPARAM)&currentText[0]);
                     currentText.resize(wcslen(currentText.c_str()));
 
-                    if (currentText.find(L'.') == std::wstring::npos) {
-                        return len + ext.length();
+                    if (!currentText.empty()) {
+                        bool alreadyHasExt = false;
+                        if (currentText.length() >= ext.length()) {
+                            std::wstring suffix = currentText.substr(currentText.length() - ext.length());
+                            if (_wcsicmp(suffix.c_str(), ext.c_str()) == 0) {
+                                alreadyHasExt = true;
+                            }
+                        }
+
+                        if (!alreadyHasExt) {
+                            return len + ext.length();
+                        }
                     }
                 }
             }
@@ -142,13 +162,11 @@ bool IsSaveDialogEditControl(HWND hWnd) {
         return false;
     }
 
-    // Verify dialog contains modern Explorer view elements
     if (FindWindowExW(topDialog, NULL, L"DUIViewWndClassName", NULL) == NULL &&
         FindWindowExW(topDialog, NULL, L"SHELLDLL_DefView", NULL) == NULL) {
         return false;
     }
 
-    // Exclude address bar and search inputs
     if (HasAncestorClass(hWnd, L"Address Band Root") || HasAncestorClass(hWnd, L"TravelBand")) {
         return false;
     }
@@ -158,7 +176,6 @@ bool IsSaveDialogEditControl(HWND hWnd) {
         return true;
     }
 
-    // Walk parent hierarchy to handle ComboBoxEx32 wrapper controls (cmb13 = 1148)
     HWND parent = GetParent(hWnd);
     while (parent && parent != topDialog) {
         int pId = GetDlgCtrlID(parent);
@@ -176,10 +193,25 @@ bool IsRenameEditControl(HWND hWnd) {
         return false;
     }
 
-    // Must belong to Explorer item views or Navigation pane
-    if (HasAncestorClass(hWnd, L"SHELLDLL_DefView") || HasAncestorClass(hWnd, L"NamespaceTreeControl")) {
-        if (!HasAncestorClass(hWnd, L"Address Band Root") && !HasAncestorClass(hWnd, L"ComboBox")) {
-            return true;
+    if (HasAncestorClass(hWnd, L"SHELLDLL_DefView") ||
+        HasAncestorClass(hWnd, L"NamespaceTreeControl") ||
+        HasAncestorClass(hWnd, L"SysListView32") ||
+        HasAncestorClass(hWnd, L"DirectUIHWND")) {
+
+        if (!HasAncestorClass(hWnd, L"Address Band Root") &&
+            !HasAncestorClass(hWnd, L"TravelBand") &&
+            !HasAncestorClass(hWnd, L"ComboBox")) {
+
+            HWND topWnd = GetAncestor(hWnd, GA_ROOT);
+            if (topWnd) {
+                if (IsClassName(topWnd, L"CabinetWClass") ||
+                    IsClassName(topWnd, L"ExploreWClass") ||
+                    IsClassName(topWnd, L"Progman") ||
+                    IsClassName(topWnd, L"WorkerW") ||
+                    IsClassName(topWnd, L"#32770")) {
+                    return true;
+                }
+            }
         }
     }
 
