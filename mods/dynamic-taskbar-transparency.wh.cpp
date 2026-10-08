@@ -163,18 +163,15 @@ same general taskbar background use case.
 
   - areaThreshold: 80
     $name: Area threshold (%)
-    $description: A window is considered large if its area reaches this
-percentage of the monitor area.
+    $description: A window is considered large if its area reaches this percentage of the monitor area.
 
   - widthThreshold: 90
     $name: Width threshold (%)
-    $description: A window is considered large if its width reaches this
-percentage of the monitor width.
+    $description: A window is considered large if its width reaches this percentage of the monitor width.
 
   - heightThreshold: 90
     $name: Height threshold (%)
-    $description: A window is considered large if its height reaches this
-percentage of the monitor height.
+    $description: A window is considered large if its height reaches this percentage of the monitor height.
 
   $name: Detection
 */
@@ -184,11 +181,11 @@ percentage of the monitor height.
 
 #undef GetCurrentTime
 
-#include <d2d1_1.h>
+#include <windows.h>
 #include <dwmapi.h>
 #include <initguid.h>
+#include <d2d1_1.h>
 #include <windows.graphics.effects.h>
-#include <windows.h>
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Graphics.Effects.h>
