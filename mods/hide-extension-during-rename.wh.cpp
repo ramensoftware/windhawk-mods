@@ -6,7 +6,7 @@
 // @author       AuralSX
 // @github       https://github.com/AuralSX
 // @include      *
-// @compilerOptions -luser32 -lshlwapi
+// @compilerOptions -luser32 -lshlwapi -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -27,199 +27,203 @@ This mod hides file extensions during inline file renaming in File Explorer, Des
 
 #include <windows.h>
 #include <shlwapi.h>
+#include <commctrl.h>
 #include <string>
+#include <unordered_map>
+#include <mutex>
+#include <vector>
 
-#define PROP_ORIG_PROC L"Wh_OrigWndProc"
-#define PROP_FILE_EXT  L"Wh_FileExt"
+#include <windhawk_utils.h>
 
-// --- Helper: Extracts extension from filename string (e.g., "file.txt" -> ".txt") ---
-std::wstring GetExtension(const wchar_t* path) {
-    if (!path || *path == L'\0') return L"";
-    
-    std::wstring str = path;
-    size_t lastDot = str.find_last_of(L".");
-    size_t lastSlash = str.find_last_of(L"/\\");
+// Global tracking map for active subclassed edit controls
+std::mutex g_editsMutex;
+std::unordered_map<HWND, std::wstring> g_hiddenExt;
 
-    if (lastDot != std::wstring::npos && 
-       (lastSlash == std::wstring::npos || lastDot > lastSlash)) {
-        if (lastDot > 0 && str[lastDot - 1] != L'/' && str[lastDot - 1] != L'\\') {
-            return str.substr(lastDot);
-        }
-    }
-    return L"";
-}
-
-// --- Helper: Strips extension from filename string ---
-std::wstring StripExtension(const wchar_t* path) {
-    if (!path || *path == L'\0') return L"";
-    
-    std::wstring result = path;
-    size_t lastDot = result.find_last_of(L".");
-    size_t lastSlash = result.find_last_of(L"/\\");
-
-    if (lastDot != std::wstring::npos && 
-       (lastSlash == std::wstring::npos || lastDot > lastSlash)) {
-        if (lastDot > 0 && result[lastDot - 1] != L'/' && result[lastDot - 1] != L'\\') {
-            result = result.substr(0, lastDot);
-        }
-    }
-    return result;
-}
-
-// Custom Window Procedure for Inline Rename Edit Controls
-LRESULT CALLBACK RenameEditWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    WNDPROC origProc = (WNDPROC)GetPropW(hWnd, PROP_ORIG_PROC);
-    if (!origProc) return DefWindowProcW(hWnd, uMsg, wParam, lParam);
-
-    if (uMsg == WM_GETTEXT) {
-        LRESULT res = CallWindowProcW(origProc, hWnd, uMsg, wParam, lParam);
-        wchar_t* pExt = (wchar_t*)GetPropW(hWnd, PROP_FILE_EXT);
-        if (res > 0 && pExt && *pExt != L'\0') {
-            wchar_t* buf = reinterpret_cast<wchar_t*>(lParam);
-            int maxLen = static_cast<int>(wParam);
-            
-            if (buf && GetExtension(buf).empty()) {
-                std::wstring full = std::wstring(buf) + pExt;
-                wcsncpy_s(buf, maxLen, full.c_str(), _TRUNCATE);
-                return full.length();
-            }
-        }
-        return res;
-    }
-    else if (uMsg == WM_GETTEXTLENGTH) {
-        LRESULT res = CallWindowProcW(origProc, hWnd, uMsg, wParam, lParam);
-        wchar_t* pExt = (wchar_t*)GetPropW(hWnd, PROP_FILE_EXT);
-        if (pExt && *pExt != L'\0') {
-            wchar_t buf[MAX_PATH] = {0};
-            CallWindowProcW(origProc, hWnd, WM_GETTEXT, MAX_PATH, reinterpret_cast<LPARAM>(buf));
-            if (GetExtension(buf).empty()) {
-                return res + wcslen(pExt);
-            }
-        }
-        return res;
-    }
-    else if (uMsg == WM_NCDESTROY) {
-        wchar_t* pExt = (wchar_t*)GetPropW(hWnd, PROP_FILE_EXT);
-        if (pExt) delete[] pExt;
-        RemovePropW(hWnd, PROP_ORIG_PROC);
-        RemovePropW(hWnd, PROP_FILE_EXT);
-        SetWindowLongPtrW(hWnd, GWLP_WNDPROC, (LONG_PTR)origProc);
-        return CallWindowProcW(origProc, hWnd, uMsg, wParam, lParam);
-    }
-
-    return CallWindowProcW(origProc, hWnd, uMsg, wParam, lParam);
-}
-
-// Detect if an edit control is inside a Save As / Open file dialog
-BOOL IsSaveDialogEditControl(HWND hWnd) {
-    if (!hWnd) return FALSE;
-
-    wchar_t className[64] = {0};
-    GetClassNameW(hWnd, className, 64);
-    if (wcsicmp(className, L"Edit") != 0 && wcsnicmp(className, L"RichEdit", 8) != 0) {
-        return FALSE;
-    }
-
-    int controlId = GetDlgCtrlID(hWnd);
-    HWND hParent = GetParent(hWnd);
-    while (hParent) {
-        wchar_t parentClass[64] = {0};
-        GetClassNameW(hParent, parentClass, 64);
-
-        if (controlId == 1152 || controlId == 1001) {
-            if (wcscmp(parentClass, L"#32770") == 0 || wcscmp(parentClass, L"DirectUIHWND") == 0) {
-                return TRUE;
-            }
-        }
-        hParent = GetParent(hParent);
-    }
-    return FALSE;
-}
-
-// Detect if an edit control is an inline file/desktop rename box
-BOOL IsRenameEditControl(HWND hWnd) {
-    if (!hWnd) return FALSE;
-
-    wchar_t className[64] = {0};
-    GetClassNameW(hWnd, className, 64);
-    if (wcsicmp(className, L"Edit") != 0 && wcsnicmp(className, L"RichEdit", 8) != 0) {
-        return FALSE;
-    }
-
-    HWND hParent = GetParent(hWnd);
-    while (hParent) {
-        wchar_t parentClass[64] = {0};
-        GetClassNameW(hParent, parentClass, 64);
-
-        // EXCLUDE: Address bar or search box controls in File Explorer
-        if (wcscmp(parentClass, L"ComboBoxEx32") == 0 ||
-            wcscmp(parentClass, L"ReBarWindow32") == 0 ||
-            wcscmp(parentClass, L"Address Band Root") == 0) {
-            return FALSE;
-        }
-
-        // INCLUDE: File Explorer item containers, tree controls, and Desktop
-        if (wcscmp(parentClass, L"SHELLDLL_DefView") == 0 ||
-            wcscmp(parentClass, L"SysListView32") == 0 ||
-            wcscmp(parentClass, L"DirectUIHWND") == 0 ||
-            wcscmp(parentClass, L"UIPropertyMainClass") == 0 ||
-            wcscmp(parentClass, L"NamespaceTreeControl") == 0) {
-            return TRUE;
-        }
-        hParent = GetParent(hParent);
-    }
-    return FALSE;
-}
-
-// --- Hook: SetWindowTextW ---
-typedef BOOL (WINAPI *SetWindowTextW_t)(HWND hWnd, LPCWSTR lpString);
-SetWindowTextW_t SetWindowTextW_Original = nullptr;
-
-BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
-    if (lpString) {
-        // CASE 1: Save As Dialogs -> Strip extension completely
-        if (IsSaveDialogEditControl(hWnd)) {
-            std::wstring stripped = StripExtension(lpString);
-            return SetWindowTextW_Original(hWnd, stripped.c_str());
-        }
-        
-        // CASE 2: File Explorer / Desktop Renaming -> Subclass window to intercept WM_GETTEXT
-        if (IsRenameEditControl(hWnd)) {
-            std::wstring ext = GetExtension(lpString);
-            if (!ext.empty()) {
-                if (!GetPropW(hWnd, PROP_ORIG_PROC)) {
-                    WNDPROC origProc = (WNDPROC)GetWindowLongPtrW(hWnd, GWLP_WNDPROC);
-                    if (origProc && origProc != RenameEditWndProc) {
-                        SetPropW(hWnd, PROP_ORIG_PROC, (HANDLE)origProc);
-                        
-                        wchar_t* pExtCopy = new wchar_t[ext.length() + 1];
-                        wcscpy_s(pExtCopy, ext.length() + 1, ext.c_str());
-                        SetPropW(hWnd, PROP_FILE_EXT, (HANDLE)pExtCopy);
-
-                        SetWindowLongPtrW(hWnd, GWLP_WNDPROC, (LONG_PTR)RenameEditWndProc);
+// Subclass procedure matching WindhawkUtils WH_SUBCLASSPROC (5 parameters)
+LRESULT CALLBACK RenameEditSubclassProc(
+    HWND hWnd,
+    UINT uMsg,
+    WPARAM wParam,
+    LPARAM lParam,
+    DWORD_PTR dwRefData
+) {
+    switch (uMsg) {
+        case WM_GETTEXT: {
+            LRESULT len = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            if (len > 0 && wParam > 0) {
+                wchar_t* buf = (wchar_t*)lParam;
+                std::wstring ext;
+                {
+                    std::lock_guard<std::mutex> lock(g_editsMutex);
+                    auto it = g_hiddenExt.find(hWnd);
+                    if (it != g_hiddenExt.end()) {
+                        ext = it->second;
                     }
                 }
 
-                std::wstring stripped = StripExtension(lpString);
-                return SetWindowTextW_Original(hWnd, stripped.c_str());
+                if (!ext.empty()) {
+                    std::wstring full = buf;
+                    // Re-attach extension if user didn't type a dot
+                    if (full.find(L'.') == std::wstring::npos) {
+                        full += ext;
+                        wcsncpy_s(buf, wParam, full.c_str(), _TRUNCATE);
+                        return wcslen(buf); // Return actual copied length
+                    }
+                }
+            }
+            return len;
+        }
+
+        case WM_GETTEXTLENGTH: {
+            LRESULT len = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            if (len > 0) {
+                std::wstring ext;
+                {
+                    std::lock_guard<std::mutex> lock(g_editsMutex);
+                    auto it = g_hiddenExt.find(hWnd);
+                    if (it != g_hiddenExt.end()) {
+                        ext = it->second;
+                    }
+                }
+                if (!ext.empty()) {
+                    int bufLen = (int)len + 1;
+                    std::wstring currentText(bufLen, L'\0');
+                    DefSubclassProc(hWnd, WM_GETTEXT, (WPARAM)bufLen, (LPARAM)&currentText[0]);
+                    currentText.resize(wcslen(currentText.c_str()));
+
+                    if (currentText.find(L'.') == std::wstring::npos) {
+                        return len + ext.length();
+                    }
+                }
+            }
+            return len;
+        }
+
+        case WM_NCDESTROY: {
+            {
+                std::lock_guard<std::mutex> lock(g_editsMutex);
+                g_hiddenExt.erase(hWnd);
+            }
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, RenameEditSubclassProc);
+            break;
+        }
+    }
+
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+// Window detection helpers
+bool IsClassName(HWND hWnd, const wchar_t* targetClass) {
+    wchar_t className[256];
+    if (GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
+        return _wcsicmp(className, targetClass) == 0;
+    }
+    return false;
+}
+
+bool HasAncestorClass(HWND hWnd, const wchar_t* targetClass, int maxLevels = 8) {
+    HWND curr = GetParent(hWnd);
+    int level = 0;
+    while (curr && level < maxLevels) {
+        if (IsClassName(curr, targetClass)) return true;
+        curr = GetParent(curr);
+        level++;
+    }
+    return false;
+}
+
+bool IsSaveDialogEditControl(HWND hWnd) {
+    if (!IsClassName(hWnd, L"Edit") && !IsClassName(hWnd, L"RichEdit20W")) {
+        return false;
+    }
+
+    int ctrlId = GetDlgCtrlID(hWnd);
+
+    // Modern dialog: Edit 1001 inside ComboBox 1148 inside #32770 with DUIViewWndClassName
+    if (ctrlId == 1001) {
+        HWND parentCombo = GetParent(hWnd);
+        if (parentCombo && GetDlgCtrlID(parentCombo) == 1148 && IsClassName(parentCombo, L"ComboBox")) {
+            HWND topDialog = GetAncestor(hWnd, GA_ROOT);
+            if (topDialog && IsClassName(topDialog, L"#32770")) {
+                if (FindWindowExW(topDialog, NULL, L"DUIViewWndClassName", NULL) != NULL) {
+                    return true;
+                }
             }
         }
     }
+
+    // Legacy dialog: edt1 (1152) directly under #32770
+    if (ctrlId == 1152) {
+        HWND topDialog = GetAncestor(hWnd, GA_ROOT);
+        if (topDialog && IsClassName(topDialog, L"#32770")) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool IsRenameEditControl(HWND hWnd) {
+    if (!IsClassName(hWnd, L"Edit")) {
+        return false;
+    }
+
+    // Must belong to Explorer item views or Navigation pane
+    if (HasAncestorClass(hWnd, L"SHELLDLL_DefView") || HasAncestorClass(hWnd, L"NamespaceTreeControl")) {
+        if (!HasAncestorClass(hWnd, L"Address Band Root") && !HasAncestorClass(hWnd, L"ComboBox")) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// SetWindowTextW Hook
+using SetWindowTextW_t = decltype(&SetWindowTextW);
+SetWindowTextW_t SetWindowTextW_Original = nullptr;
+
+BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
+    if (lpString && (IsSaveDialogEditControl(hWnd) || IsRenameEditControl(hWnd))) {
+        LPCWSTR ext = PathFindExtensionW(lpString);
+        if (ext && *ext != L'\0' && wcslen(ext) > 1) {
+            std::wstring fullPath(lpString);
+            std::wstring baseName = fullPath.substr(0, fullPath.length() - wcslen(ext));
+            std::wstring extension(ext);
+
+            {
+                std::lock_guard<std::mutex> lock(g_editsMutex);
+                g_hiddenExt[hWnd] = extension;
+            }
+
+            WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, RenameEditSubclassProc, 0);
+
+            return SetWindowTextW_Original(hWnd, baseName.c_str());
+        }
+    }
+
     return SetWindowTextW_Original(hWnd, lpString);
 }
 
-// --- Windhawk Entry Points ---
+// Mod initialization and cleanup
 BOOL Wh_ModInit() {
-    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-    if (hUser32) {
-        void* pSetWindowTextW = (void*)GetProcAddress(hUser32, "SetWindowTextW");
-        if (pSetWindowTextW) {
-            Wh_SetFunctionHook(pSetWindowTextW, (void*)SetWindowTextW_Hook, (void**)&SetWindowTextW_Original);
-        }
-    }
+    WindhawkUtils::SetFunctionHook(
+        SetWindowTextW,
+        SetWindowTextW_Hook,
+        &SetWindowTextW_Original
+    );
     return TRUE;
 }
 
 void Wh_ModUninit() {
-    // Hooks automatically removed by Windhawk engine
+    std::vector<HWND> edits;
+    {
+        std::lock_guard<std::mutex> lock(g_editsMutex);
+        for (const auto& [hWnd, ext] : g_hiddenExt) {
+            edits.push_back(hWnd);
+        }
+    }
+
+    for (HWND hWnd : edits) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, RenameEditSubclassProc);
+    }
 }
