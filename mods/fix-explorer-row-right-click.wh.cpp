@@ -11,7 +11,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Full Row Right-Click in Explorer
+# Fix Explorer Row Right-Click
 
 Right-click anywhere on a file's row or item area to open its context menu, rather than having to click directly on the file name.
 
@@ -29,20 +29,18 @@ Right-click anywhere on a file's row or item area to open its context menu, rath
 // ==/WindhawkModReadme==
 
 #include <windows.h>
-#include <windowsx.h>
 #include <oleacc.h>
 #include <windhawk_api.h>
+#include <windhawk_utils.h>
 
-static const IID My_IID_IAccessible = {
-    0x618736E0, 0x3C3D, 0x11CF, { 0x81, 0x0C, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71 }
-};
+using DispatchMessageW_t = decltype(&DispatchMessageW);
+DispatchMessageW_t DispatchMessageW_Original = nullptr;
 
-using DispatchMessageW_t = LRESULT (WINAPI *)(const MSG *lpMsg);
-DispatchMessageW_t pOriginalDispatchMessageW = nullptr;
-
+// Verify that the window receiving the click is the File Explorer folder view
 bool IsExplorerFileView(HWND hWnd) {
     if (!hWnd) return false;
 
+    // Ignore header controls (e.g. column headers) and scrollbars
     WCHAR cls[64];
     if (GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) {
         if (wcscmp(cls, L"SysHeader32") == 0 || wcscmp(cls, L"ScrollBar") == 0) {
@@ -50,6 +48,7 @@ bool IsExplorerFileView(HWND hWnd) {
         }
     }
 
+    // Must be hosted inside SHELLDLL_DefView (Explorer file listing)
     bool insideDefView = false;
     HWND hCurrent = hWnd;
     while (hCurrent) {
@@ -67,6 +66,7 @@ bool IsExplorerFileView(HWND hWnd) {
         return false;
     }
 
+    // Exclude the Desktop (Progman or WorkerW)
     HWND hRoot = GetAncestor(hWnd, GA_ROOT);
     WCHAR rootClass[64];
     if (GetClassNameW(hRoot, rootClass, ARRAYSIZE(rootClass))) {
@@ -78,100 +78,102 @@ bool IsExplorerFileView(HWND hWnd) {
     return true;
 }
 
-bool CheckItemAtPoint(POINT ptScreen, bool* pIsItem, bool* pIsSelected) {
-    *pIsItem = false;
+// Walks up the accessibility hierarchy to find a ROLE_SYSTEM_LISTITEM
+bool FindRowAtPoint(POINT ptScreen, IAccessible** ppRowAcc, VARIANT* pRowChild, bool* pIsSelected) {
+    *ppRowAcc = nullptr;
+    VariantInit(pRowChild);
     *pIsSelected = false;
 
     IAccessible* pAcc = nullptr;
     VARIANT varChild;
     VariantInit(&varChild);
 
-    HRESULT hr = AccessibleObjectFromPoint(ptScreen, &pAcc, &varChild);
-    if (FAILED(hr) || !pAcc) {
+    if (FAILED(AccessibleObjectFromPoint(ptScreen, &pAcc, &varChild)) || !pAcc) {
         return false;
     }
 
-    VARIANT varRole;
-    VariantInit(&varRole);
-    VARIANT varState;
-    VariantInit(&varState);
+    IAccessible* cur = pAcc;
+    VARIANT curChild = varChild;
 
-    auto inspect = [&](IAccessible* acc, const VARIANT& child) {
-        if (SUCCEEDED(acc->get_accRole(child, &varRole))) {
-            long role = (varRole.vt == VT_I4) ? varRole.lVal : 0;
-            if (role == ROLE_SYSTEM_LISTITEM ||
-                role == ROLE_SYSTEM_CELL ||
-                role == ROLE_SYSTEM_TEXT ||
-                role == ROLE_SYSTEM_GRAPHIC ||
-                role == ROLE_SYSTEM_CHECKBUTTON) {
-                *pIsItem = true;
-            }
-        }
-        if (SUCCEEDED(acc->get_accState(child, &varState))) {
-            long state = (varState.vt == VT_I4) ? varState.lVal : 0;
-            if (state & STATE_SYSTEM_SELECTED) {
-                *pIsSelected = true;
-            }
-        }
-    };
+    for (int depth = 0; cur && depth < 5; depth++) {
+        VARIANT role;
+        VariantInit(&role);
+        bool isRow = SUCCEEDED(cur->get_accRole(curChild, &role)) &&
+                     role.vt == VT_I4 && role.lVal == ROLE_SYSTEM_LISTITEM;
+        VariantClear(&role);
 
-    inspect(pAcc, varChild);
-
-    if (*pIsItem && !(*pIsSelected)) {
-        IDispatch* pParentDisp = nullptr;
-        if (SUCCEEDED(pAcc->get_accParent(&pParentDisp)) && pParentDisp) {
-            IAccessible* pParentAcc = nullptr;
-            if (SUCCEEDED(pParentDisp->QueryInterface(My_IID_IAccessible, (void**)&pParentAcc))) {
-                VARIANT selfChild;
-                selfChild.vt = VT_I4;
-                selfChild.lVal = CHILDID_SELF;
-                inspect(pParentAcc, selfChild);
-                pParentAcc->Release();
+        if (isRow) {
+            VARIANT state;
+            VariantInit(&state);
+            if (SUCCEEDED(cur->get_accState(curChild, &state)) && state.vt == VT_I4) {
+                *pIsSelected = (state.lVal & STATE_SYSTEM_SELECTED) != 0;
             }
-            pParentDisp->Release();
+            VariantClear(&state);
+
+            *ppRowAcc = cur; // Caller takes ownership
+            *pRowChild = curChild;
+            return true;
         }
+
+        // When varChild is a simple child ID, its parent is `cur` itself
+        if (curChild.lVal != CHILDID_SELF) {
+            curChild.lVal = CHILDID_SELF;
+            continue;
+        }
+
+        IDispatch* parentDisp = nullptr;
+        IAccessible* parent = nullptr;
+        if (SUCCEEDED(cur->get_accParent(&parentDisp)) && parentDisp) {
+            parentDisp->QueryInterface(IID_PPV_ARGS(&parent));
+            parentDisp->Release();
+        }
+
+        cur->Release();
+        cur = parent;
     }
 
-    VariantClear(&varRole);
-    VariantClear(&varState);
-    VariantClear(&varChild);
-    pAcc->Release();
-
-    return true;
+    if (cur) {
+        cur->Release();
+    }
+    return false;
 }
 
 LRESULT WINAPI DispatchMessageWHook(const MSG *lpMsg) {
     if (lpMsg && lpMsg->message == WM_RBUTTONDOWN) {
+        // Do not interfere if Ctrl or Shift is held (e.g. selection modifier shortcuts)
         if ((GetKeyState(VK_CONTROL) & 0x8000) == 0 &&
             (GetKeyState(VK_SHIFT) & 0x8000) == 0) {
 
             if (IsExplorerFileView(lpMsg->hwnd)) {
-                POINT ptClient = { (SHORT)LOWORD(lpMsg->lParam), (SHORT)HIWORD(lpMsg->lParam) };
-                POINT ptScreen = ptClient;
-                ClientToScreen(lpMsg->hwnd, &ptScreen);
-
-                bool isItem = false;
+                IAccessible* pRowAcc = nullptr;
+                VARIANT rowChild;
                 bool isSelected = false;
 
-                if (CheckItemAtPoint(ptScreen, &isItem, &isSelected)) {
-                    if (isItem && !isSelected) {
-                        SendMessageW(lpMsg->hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lpMsg->lParam);
-                        SendMessageW(lpMsg->hwnd, WM_LBUTTONUP, 0, lpMsg->lParam);
+                if (FindRowAtPoint(lpMsg->pt, &pRowAcc, &rowChild, &isSelected)) {
+                    if (!isSelected) {
+                        // Attempt to focus and select the item via MSAA directly
+                        HRESULT hr = pRowAcc->accSelect(SELFLAG_TAKEFOCUS | SELFLAG_TAKESELECTION, rowChild);
+                        if (FAILED(hr)) {
+                            // Fallback to synthesizing a left click if accSelect is not implemented
+                            SendMessageW(lpMsg->hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lpMsg->lParam);
+                            SendMessageW(lpMsg->hwnd, WM_LBUTTONUP, 0, lpMsg->lParam);
+                        }
                     }
+                    pRowAcc->Release();
                 }
             }
         }
     }
 
-    return pOriginalDispatchMessageW(lpMsg);
+    return DispatchMessageW_Original(lpMsg);
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Explorer Row Right-Click Fix loaded");
+    Wh_Log(L"Explorer Full Row Right-Click loaded");
 
-    if (!Wh_SetFunctionHook((void*)DispatchMessageW,
-                            (void*)DispatchMessageWHook,
-                            (void**)&pOriginalDispatchMessageW)) {
+    if (!WindhawkUtils::SetFunctionHook(DispatchMessageW,
+                                        DispatchMessageWHook,
+                                        &DispatchMessageW_Original)) {
         Wh_Log(L"Failed to hook DispatchMessageW");
         return FALSE;
     }
@@ -180,5 +182,5 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"Explorer Row Right-Click Fix unloaded");
+    Wh_Log(L"Explorer Full Row Right-Click unloaded");
 }
