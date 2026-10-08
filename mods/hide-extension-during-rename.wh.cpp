@@ -137,27 +137,35 @@ bool IsSaveDialogEditControl(HWND hWnd) {
         return false;
     }
 
-    int ctrlId = GetDlgCtrlID(hWnd);
-
-    // Modern dialog: Edit 1001 inside ComboBox 1148 inside #32770 with DUIViewWndClassName
-    if (ctrlId == 1001) {
-        HWND parentCombo = GetParent(hWnd);
-        if (parentCombo && GetDlgCtrlID(parentCombo) == 1148 && IsClassName(parentCombo, L"ComboBox")) {
-            HWND topDialog = GetAncestor(hWnd, GA_ROOT);
-            if (topDialog && IsClassName(topDialog, L"#32770")) {
-                if (FindWindowExW(topDialog, NULL, L"DUIViewWndClassName", NULL) != NULL) {
-                    return true;
-                }
-            }
-        }
+    HWND topDialog = GetAncestor(hWnd, GA_ROOT);
+    if (!topDialog || !IsClassName(topDialog, L"#32770")) {
+        return false;
     }
 
-    // Legacy dialog: edt1 (1152) directly under #32770
-    if (ctrlId == 1152) {
-        HWND topDialog = GetAncestor(hWnd, GA_ROOT);
-        if (topDialog && IsClassName(topDialog, L"#32770")) {
+    // Verify dialog contains modern Explorer view elements
+    if (FindWindowExW(topDialog, NULL, L"DUIViewWndClassName", NULL) == NULL &&
+        FindWindowExW(topDialog, NULL, L"SHELLDLL_DefView", NULL) == NULL) {
+        return false;
+    }
+
+    // Exclude address bar and search inputs
+    if (HasAncestorClass(hWnd, L"Address Band Root") || HasAncestorClass(hWnd, L"TravelBand")) {
+        return false;
+    }
+
+    int ctrlId = GetDlgCtrlID(hWnd);
+    if (ctrlId == 1152 || ctrlId == 1001) {
+        return true;
+    }
+
+    // Walk parent hierarchy to handle ComboBoxEx32 wrapper controls (cmb13 = 1148)
+    HWND parent = GetParent(hWnd);
+    while (parent && parent != topDialog) {
+        int pId = GetDlgCtrlID(parent);
+        if (pId == 1148 || pId == 1001) {
             return true;
         }
+        parent = GetParent(parent);
     }
 
     return false;
