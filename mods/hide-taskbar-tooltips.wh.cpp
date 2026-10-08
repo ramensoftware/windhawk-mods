@@ -544,6 +544,12 @@ static void WINAPI EagerHookToolTipOnTaskbarThread(void* /*procParam*/) {
     }
 }
 
+static void EnsurePutIsOpenHooked() {
+    if (!g_putIsOpenHooked.load(std::memory_order_relaxed)) {
+        EagerHookToolTipOnTaskbarThread(nullptr);
+    }
+}
+
 static void InitEagerToolTipHook() {
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (hTaskbarWnd) {
@@ -572,6 +578,7 @@ static void __cdecl PositionTaskbarTooltip_Hook(void* pToolTip,
                                                 int location,
                                                 bool b1,
                                                 bool b2) {
+    EnsurePutIsOpenHooked();
     void* pIToolTip =
         pToolTip ? *(reinterpret_cast<void**>(pToolTip)) : nullptr;
     if (pIToolTip) {
@@ -605,6 +612,7 @@ static void __cdecl ApplyTaskbarTooltipPlacement_Tray_Hook(
     int location,
     winrt::Windows::Foundation::Size size1,
     winrt::Windows::Foundation::Size size2) {
+    EnsurePutIsOpenHooked();
     void* pIToolTip =
         pToolTip ? *(reinterpret_cast<void**>(pToolTip)) : nullptr;
     if (pIToolTip) {
@@ -633,6 +641,7 @@ static void __cdecl ApplyTaskbarTooltipPlacement_View_Hook(
     int location,
     winrt::Windows::Foundation::Size size1,
     winrt::Windows::Foundation::Size size2) {
+    EnsurePutIsOpenHooked();
     void* pIToolTip =
         pToolTip ? *(reinterpret_cast<void**>(pToolTip)) : nullptr;
     if (pIToolTip) {
@@ -671,6 +680,7 @@ static void __cdecl ApplyTaskbarTooltipPlacement6_Hook(
     winrt::Windows::Foundation::Size size2,
     bool b1,
     bool b2) {
+    EnsurePutIsOpenHooked();
     void* pIToolTip =
         pToolTip ? *(reinterpret_cast<void**>(pToolTip)) : nullptr;
     if (pIToolTip) {
@@ -698,6 +708,7 @@ static ExperienceToggleButton_UpdateHover_t
 
 static void __cdecl ExperienceToggleButton_UpdateHover_Hook(void* pThis,
                                                             bool isHover) {
+    EnsurePutIsOpenHooked();
     if (!g_settings.hideTaskbarAppTooltips.load(std::memory_order_relaxed)) {
         if (ExperienceToggleButton_UpdateHover_Original) {
             ExperienceToggleButton_UpdateHover_Original(pThis, isHover);
@@ -710,6 +721,7 @@ static TaskListButton_UpdateHover_t TaskListButton_UpdateHover_Original =
     nullptr;
 
 static void __cdecl TaskListButton_UpdateHover_Hook(void* pThis) {
+    EnsurePutIsOpenHooked();
     if (!g_settings.hideTaskbarAppTooltips.load(std::memory_order_relaxed)) {
         if (TaskListButton_UpdateHover_Original) {
             TaskListButton_UpdateHover_Original(pThis);
@@ -722,6 +734,7 @@ static OverflowToggleButton_UpdateHover_t
     OverflowToggleButton_UpdateHover_Original = nullptr;
 
 static void __cdecl OverflowToggleButton_UpdateHover_Hook(void* pThis) {
+    EnsurePutIsOpenHooked();
     if (!g_settings.hideTaskbarAppTooltips.load(std::memory_order_relaxed)) {
         if (OverflowToggleButton_UpdateHover_Original) {
             OverflowToggleButton_UpdateHover_Original(pThis);
@@ -737,6 +750,7 @@ static IconView_UpdateOuterToolTipPlacement_t
 
 static void __cdecl IconView_UpdateOuterToolTipPlacement_Hook(void* pThis,
                                                               bool isHover) {
+    EnsurePutIsOpenHooked();
     if (!g_settings.hideSystemTrayTooltips.load(std::memory_order_relaxed)) {
         if (IconView_UpdateOuterToolTipPlacement_Original) {
             IconView_UpdateOuterToolTipPlacement_Original(pThis, isHover);
