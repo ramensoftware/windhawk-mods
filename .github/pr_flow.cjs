@@ -251,7 +251,7 @@ async function react({ github, core, owner, repo, commentId, content }) {
 }
 
 /**
- * The AI review only handles a pull request that adds or updates a single mod
+ * The review flow only accepts a pull request that adds or updates a single mod
  * file, which is also what the rest of the automated checks expect.
  *
  * @param {object} params
@@ -290,6 +290,18 @@ async function getOutOfScopeReason({ github, owner, repo, prNumber }) {
   }
 
   return null;
+}
+
+/**
+ * @param {string} outOfScopeReason
+ * @returns {string}
+ */
+function formatOutOfScopeRefusal(outOfScopeReason) {
+  return (
+    `a pull request must add or update a single mod file under \`mods/\`, but ${outOfScopeReason}.\n\n` +
+    `Update this pull request to meet that requirement, using a separate pull request for each mod if you're submitting more than one, then comment \`${AI_REVIEW_COMMAND}\`. ` +
+    `See the [pull request review process](${WIKI_URL}) for details.`
+  );
 }
 
 /**
@@ -439,11 +451,7 @@ async function runAiReview({ github, core, owner, repo, pullRequest, currentFlow
 
   const outOfScopeReason = await getOutOfScopeReason({ github, owner, repo, prNumber });
   if (outOfScopeReason) {
-    return (
-      `the AI review only handles a pull request that adds or updates a single mod file under \`mods/\`, but ${outOfScopeReason}.\n\n` +
-      `Comment \`${READY_FOR_REVIEWER_COMMAND}\` to hand this pull request over to a human reviewer directly. ` +
-      `See the [pull request review process](${WIKI_URL}) for details.`
-    );
+    return formatOutOfScopeRefusal(outOfScopeReason);
   }
 
   if (AI_REVIEW_UNAVAILABLE) {
@@ -504,26 +512,26 @@ async function runReadyForReviewer({
     return 'an AI review is being prepared, please wait for it to be posted.';
   }
 
-  // A pull request the AI reviewer can't handle goes straight to a human, so
-  // there's nothing to check it against.
   const outOfScopeReason = await getOutOfScopeReason({ github, owner, repo, prNumber });
-  if (!outOfScopeReason) {
-    const headSha = pullRequest.head.sha;
-    const reviewedSha = await getLastReviewedSha({ github, owner, repo, prNumber, botLogin });
+  if (outOfScopeReason) {
+    return formatOutOfScopeRefusal(outOfScopeReason);
+  }
 
-    if (!reviewedSha) {
-      return (
-        `this pull request hasn't been through an AI review yet. Comment \`${AI_REVIEW_COMMAND}\` first.\n\n` +
-        `See the [pull request review process](${WIKI_URL}) for details.`
-      );
-    }
+  const headSha = pullRequest.head.sha;
+  const reviewedSha = await getLastReviewedSha({ github, owner, repo, prNumber, botLogin });
 
-    if (reviewedSha !== headSha) {
-      return (
-        `the most recent AI review covers ${reviewedSha.slice(0, 7)}, but the current head of this pull request is ${headSha.slice(0, 7)}. ` +
-        `Comment \`${AI_REVIEW_COMMAND}\` to get a review of the current code.`
-      );
-    }
+  if (!reviewedSha) {
+    return (
+      `this pull request hasn't been through an AI review yet. Comment \`${AI_REVIEW_COMMAND}\` first.\n\n` +
+      `See the [pull request review process](${WIKI_URL}) for details.`
+    );
+  }
+
+  if (reviewedSha !== headSha) {
+    return (
+      `the most recent AI review covers ${reviewedSha.slice(0, 7)}, but the current head of this pull request is ${headSha.slice(0, 7)}. ` +
+      `Comment \`${AI_REVIEW_COMMAND}\` to get a review of the current code.`
+    );
   }
 
   await setFlowLabel({
