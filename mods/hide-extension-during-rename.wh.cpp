@@ -4,6 +4,7 @@
 // @description  Hides file extensions in Save As dialogs and during File Explorer/Desktop renaming.
 // @version      1.0
 // @author       AuralSX
+// @github       https://github.com/AuralSX
 // @include      *
 // @compilerOptions -luser32 -lshlwapi
 // ==/WindhawkMod==
