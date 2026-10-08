@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-08T20:13:44.000Z</updated>
+    <updated>2026-10-08T21:45:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[D3D9 Flip Model Upgrade 1.1]]></title>
+        <id>https://windhawk.net/mods/d3d9-flip-model-upgrade#feb623294a194eecdb29c8459f4bdcd941466458</id>
+        <link href="https://windhawk.net/mods/d3d9-flip-model-upgrade"/>
+        <updated>2026-10-08T21:45:52.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the flip model conflicting with in-game overlays, such as the Steam overlay, which made games render incorrectly.</li>
+<li>Fixed managed vertex and index buffers not working with software vertex processing.</li>
+<li>Fixed the borderless conversion blocking on the thread the window belongs to.</li>
+<li>Added the SafeHook option, for games whose anti-tamper protection hangs or closes them with the mod enabled. It detects d3d9.dll loading with a Windows DLL load notification instead of hooking <code>LoadLibraryExW</code> in kernelbase.dll.</li>
+</ul>]]></content>
+        <author>
+            <name>tria</name>
+            <uri>https://github.com/triatomic</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 10 Action Center Restorer on Windows 11 24H2+ 1.0.0]]></title>
         <id>https://windhawk.net/mods/windows-10-action-center-restorer#d3577d8bbf385b85aa9d48b2a05d3648d395839a</id>
@@ -956,21 +972,6 @@ or ban your account. There are no guarantees for any game.</p>
         <author>
             <name>digART</name>
             <uri>https://github.com/digart11</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better file sizes in Explorer details 1.6]]></title>
-        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#c89e4f4b2c154f31a7b6f5f80a164b2f24a288f6</id>
-        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
-        <updated>2026-10-06T18:56:37.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to keep showing file sizes in KBs in newer Windows 11 versions. Starting with update KB5101684, Windows 11 is gradually switching to MB/GB for large files with no option to go back (ViVeTool flag 61014711).</li>
-<li>Fixed compatibility with some new Windows 11 versions (ViVeTool flag 61389601).</li>
-<li>Improved compatibility with conflicting mods such as Explorer Status Bar Metadata and File Explorer Details Auto-Fit Columns.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

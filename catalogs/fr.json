@@ -3394,7 +3394,7 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1789854959000,
+        "updated": 1791495952000,
         "users": 49
       },
       "metadata": {
@@ -3402,7 +3402,7 @@
         "description": "Upgrades Direct3D 9 games to D3D9Ex with a FLIPEX swap chain so windowed/borderless games can reach Independent Flip",
         "github": "https://github.com/triatomic",
         "name": "D3D9 Flip Model Upgrade",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "dark-menus": {
