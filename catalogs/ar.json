@@ -10882,6 +10882,33 @@
         "version": "2.2.0"
       }
     },
+    "privacy-indicator-anchor": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791500558000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791500558000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "sb4ssman",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion -lsetupapi -lcfgmgr32 -lshell32",
+        "description": "Permanently shows location/microphone/camera/Copilot icons in the system tray — dim when idle, bright when in use — preventing taskbar layout shifts.",
+        "github": "https://github.com/sb4ssman",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Privacy Indicator Anchor",
+        "version": "2.1"
+      }
+    },
     "proportional-monitor-cursor": {
       "details": {
         "defaultSorting": 1107,
@@ -13320,6 +13347,33 @@
         "name": "Taskbar Clock Customization",
         "twitter": "https://twitter.com/m417z",
         "version": "1.8.1"
+      }
+    },
+    "taskbar-clock-spacer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791500554000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791500554000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "sb4ssman",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion",
+        "description": "Companion for Taskbar Clock Customization: a %s% token for explicit, weightable elastic gaps between clock items (unlike its built-in Justified alignment, which stretches every space). Windows 11 only.",
+        "github": "https://github.com/sb4ssman",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Taskbar Clock Spacer",
+        "version": "1.1"
       }
     },
     "taskbar-clock-to-left": {

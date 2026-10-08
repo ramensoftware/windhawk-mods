@@ -2,12 +2,346 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-08T22:01:26.000Z</updated>
+    <updated>2026-10-08T23:02:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Privacy Indicator Anchor 2.1]]></title>
+        <id>https://windhawk.net/mods/privacy-indicator-anchor#74f43bd051f2419f240851cf106e6f77f5066731</id>
+        <link href="https://windhawk.net/mods/privacy-indicator-anchor"/>
+        <updated>2026-10-08T23:02:38.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="privacyindicatoranchor">Privacy Indicator Anchor</h1>
+<p>A Windhawk mod for Windows 11 that reserves stable tray space for privacy and
+status indicators. Location, microphone, camera, and Copilot placeholders stay
+visible in the system tray: dim when idle, bright when active.</p>
+<p>The goal is to stop taskbar tray sections from shifting when Windows briefly
+shows or hides privacy indicators, especially when Windows Web Experience Pack
+or Widgets frequently access location.</p>
+<h2 id="gallery">Gallery</h2>
+<p>Idle location and microphone placeholders reserve their tray space without
+demanding attention:</p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/location-mic-availble-not-in-use.png" alt="Idle location and microphone placeholders" /></p>
+<p>All four unavailable indicators in a single row, arranged as
+<code>location | mic | camera | copilot</code>:</p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/all-4-disabled.png" alt="All four privacy indicators unavailable in one row" /></p>
+<p>The same four indicators in a compact block, which is what <code>auto</code> picks on a
+standard taskbar, where two rows of the default 16 px icons fit:</p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/all-4-disabled-grid.png" alt="All four unavailable indicators in a compact grid" /></p>
+<p>Activity highlighted in red — the microphone in use, and the slashed camera
+reporting attempted use while its hardware switch blocks it:</p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/camera-mic-in-use-highlighted.png" alt="Active microphone in red beside a red slashed camera blocked by its hardware switch" /></p>
+<p>The active glow treatment provides a more emphatic alternative:</p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/cam-mic-in-use-highlight-glow.png" alt="Active microphone and camera with glow" /></p>
+<p>Active or requested pathways can remain conspicuous even while blocked:</p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/requested-or-active-pathways-disabled.png" alt="Requested or active privacy pathways shown while blocked" /></p>
+<p>The location tooltip explains the access-denied reason and opens the matching
+Windows privacy page when clicked:</p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/location-tooltip-and-win-settings.png" alt="Location evidence tooltip and Windows Location settings" /></p>
+<p>Microphone evidence distinguishes an endpoint mute from privacy denial:</p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/mic-tooltip.png" alt="Microphone endpoint-mute evidence tooltip" /></p>
+<p>Supported camera drivers report their hardware privacy-control evidence:</p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/camera-tooltip.png" alt="Camera hardware privacy-control evidence tooltip" /></p>
+<p>Copilot reports its installation state and links to the relevant settings:</p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/copilot-tooltip.png" alt="Copilot installation-state tooltip" /></p>
+<p>All four indicators in a row on a Windows 11 side taskbar, alongside the clock
+and other tray mods. Live-tested and approved:</p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/win11-side-four-indicators.png" alt="Location, microphone, camera, and Copilot indicators on a Windows 11 side taskbar" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Persistent placeholder icons for location, microphone, camera, and Copilot</li>
+<li>Idle opacity setting so inactive icons can be subtle but still reserve space</li>
+<li>One nestable <strong>Arrangement</strong> expression places the icons in any shape —
+fitted to your taskbar height automatically, or written out by hand</li>
+<li>Turn any of the four icons off individually; Windows' own indicator for that
+device then stays visible, so nothing goes unreported</li>
+<li>Tray placement before icons, before OmniButton, before clock, after clock, or after Show Desktop</li>
+<li>Experimental placement immediately left or right of Start</li>
+<li>Per-icon and per-group pixel nudges inside the arrangement expression, plus a
+whole-group offset</li>
+<li>Independent idle, active, disabled, glow, and slash colors</li>
+<li>Steady, breathing, or radiating active emphasis with reach/speed controls</li>
+<li>Disabled slash overlays for blocked or unavailable privacy devices</li>
+<li>Hardware camera shutter/kill-switch detection on supported Windows 11 camera drivers</li>
+<li>Evidence-specific tooltips instead of a generic "hardware disabled" label</li>
+<li>Click-through to the relevant Windows privacy, input, camera, taskbar, or app settings</li>
+<li>Optional testing toggle to let Windows' native privacy indicators appear</li>
+</ul>
+<p>If you installed an unpublished 1.x build, re-apply your customizations once:
+2.x groups the settings and uses an Arrangement field; renamed keys cannot
+be migrated. Camera hardware monitoring is now opt-in and defaults to off.</p>
+<h2 id="thearrangementfield">The Arrangement field</h2>
+<p><code>Layout</code> → <code>Arrangement</code> decides how the icons are placed, and it is the only
+field that does. Its default value is the word <code>auto</code>:</p>
+<ul>
+<li><strong><code>auto</code></strong> fits the enabled icons to the available taskbar height. <code>Fill
+order</code> chooses whether they fill across rows or down columns; <code>Short row or
+column</code> aligns a ragged last group. The shape is worked out for you: the mod
+takes the narrowest grid that fits the height, preferring the one that wastes
+the fewest slots. A standard taskbar already fits two rows of the default
+16 px icons, so four icons become a 2×2 block, not a lopsided 3+1; write
+<code>location | mic | camera | copilot</code> for a single row instead.</li>
+<li><strong>Anything else</strong> is an arrangement you write. Names sit side by side with
+<code>|</code> and stack with <code>,</code>, and parentheses group them:</li>
+</ul>
+<pre><code class="text language-text">  location, camera | mic, copilot     a 2x2 block
+  location | mic | camera | copilot   a single row
+  location, mic, camera, copilot      a single column
+  location | (mic, camera) | copilot  a diamond
+</code></pre>
+<p>Order of operations: parentheses first, then <code>,</code>, then <code>|</code> — so
+  <code>a | b, c | d</code> is three columns with <code>b</code> stacked over <code>c</code>.</p>
+<p>The tokens are <code>location</code>, <code>mic</code> (or <code>microphone</code>), <code>camera</code>, and <code>copilot</code>,
+  and they are case-insensitive. A separator is always required —
+  <code>location (mic | camera)</code> is an error, not a shorthand.</p>
+<p><strong>Omitting a token hides that icon</strong>, exactly like turning it off in <code>Content</code>.</p>
+<p>Every time the layout is applied, the arrangement <code>auto</code> produced is written to
+the Windhawk log. Copy that line into the Arrangement field and you have the
+automatic layout as a starting point to edit — the automatic and manual paths
+are the same field and the same syntax. If what you write doesn't parse, the
+log says what was expected and where, and the automatic arrangement is used
+until you fix it.</p>
+<p><strong>Nudging.</strong> Append a pixel offset to any name to move just that icon:</p>
+<pre><code class="text language-text">location[+2,-1] | mic | camera   location moves 2px right and 1px up
+(mic, camera)[3,0] | location    the stacked pair moves 3px right
+</code></pre>
+<p>Expression nudges are clamped to ±100 pixels per axis.
+Offsets are cosmetic. Nothing else shifts, and the group's overall size does
+not change. To move the whole cluster instead, use <code>Adjust</code> → horizontal and
+vertical offset. Nudges and offsets are screen pixels on every taskbar edge —
+see <a href="#taskbar-position">Taskbar position</a>.</p>
+<p><strong>Enabling an icon later.</strong> An arrangement you write names the icons that
+existed when you wrote it. Turn another one on afterwards and it is in no
+group, so by default it is appended after your arrangement rather than
+vanishing — the log says when that happened. Set <code>Layout</code> → <code>Newly enabled
+icons</code> to <em>Leave them out</em> if you would rather your arrangement be the whole
+truth. <code>auto</code> always includes every enabled icon.</p>
+<h2 id="placement">Placement</h2>
+<p>The five tray positions reserve a dedicated system-tray column. The
+experimental <code>leftOfStart</code> and <code>rightOfStart</code> positions instead place the
+owned indicator group beside Start and reserve matching room in the centered
+taskbar items area. These Start-adjacent modes may need adjustment on future
+Windows builds or with other mods that also reposition Start.</p>
+<h2 id="taskbarposition">Taskbar position</h2>
+<p>Windows 11 can put the taskbar on any edge (Settings → Personalization →
+Taskbar → Taskbar behaviors, on builds that have the setting). The mod reads
+the edge Windows reports and rebuilds the group when the taskbar moves.</p>
+<ul>
+<li><strong>Top</strong> behaves exactly like bottom.</li>
+<li><strong>Left or right</strong>: an arrangement you write is laid out exactly as
+written - <code>|</code> side by side, <code>,</code> stacked - and every <code>[dx,dy]</code> nudge
+moves an icon <code>dx</code> right and <code>dy</code> down, on every edge. <code>auto</code> fits the
+taskbar's width instead of its height, filling rows first or columns
+first as set. Nothing is mirrored between left and right. <code>leftOfStart</code> and
+<code>rightOfStart</code> become above and below Start.</li>
+<li><a href="https://windhawk.net/mods/taskbar-vertical">Vertical Taskbar</a> in its default
+native mode is the same native side taskbar. With its "Use the native taskbar
+when possible" option off it rotates the tray elements this mod places,
+through the same <code>RenderTransform</code> property, so the mod detects that (the
+taskbar runs down a side while Windows still reports a horizontal edge) and
+leaves the tray completely untouched.</li>
+</ul>
+<h2 id="statesandcolors">States and colors</h2>
+<p>Each icon has four visual states: idle/available, active, disabled/unavailable,
+and active while disabled. The last state keeps the active treatment underneath
+the slash by default, so a muted or shuttered device still demands attention
+when Windows reports attempted use. <code>Surface</code> → <code>Emphasize blocked activity</code>
+can turn that combined treatment off.</p>
+<p>Every color setting — idle, active, disabled, glow, and slash — accepts
+<code>#RRGGBB</code> or <code>#AARRGGBB</code> hex (the alpha byte is honored, and the <code>#</code> is
+optional), the generics <code>accent</code>, <code>accentLight</code>, and <code>accentDark</code> for the
+Windows accent shades, or <code>transparent</code>. An empty color uses the system
+foreground, except an empty glow color, which follows the active color and then
+the Windows accent color.</p>
+<p>The glow can be a steady halo, a breathing pulse, or animated radiation rings.
+Its opacity, reach, and speed are independent controls. The effect is drawn
+inside the existing icon slot and never changes the taskbar width.</p>
+<p>For a deliberately striking treatment, start with <code>Glow style: Radiating
+rings</code>, <code>Glow opacity: 85</code>, <code>Glow reach: 260</code>, and <code>Glow cycle: 850</code>, then
+choose an active/glow color that fits the rest of the taskbar theme.</p>
+<h2 id="notes">Notes</h2>
+<p>Camera hardware-switch detection and the Copilot indicator are experimental
+because Windows exposes those states differently across devices and builds.</p>
+<p>Camera activity is detected from Windows webcam-usage records and any mirrored
+native privacy state. Hardware camera blocking uses Windows 11
+<code>CameraOcclusionInfo</code> when the camera driver supports it. Cameras without that
+driver capability retain software-access and device-availability checks, but
+their physical shutter or kill-switch state might not be detectable.</p>
+<p>Windows documents idle-camera occlusion reports as advisory rather than an
+absolute privacy guarantee. The tooltip therefore says "likely blocked" and
+names the camera-driver evidence.</p>
+<p><strong>This monitor is opt-in and defaults to OFF</strong>, under <code>Behavior</code> -&gt; <code>Monitor
+camera hardware privacy control</code>. It is the only thing that detects a physical
+shutter or kill switch, so with it off the camera icon still reports software
+access, device availability and in-use state, but a shutter will never
+register. The mod says so in its log and in the camera's own tooltip rather
+than leaving you to wonder. When enabled, it initializes the default camera
+controller in <code>SharedReadOnly</code> mode but never starts preview or frame capture.
+Turn it off if a particular camera activates its LED/indicator or behaves
+poorly while monitored. State changes use the driver's native event; a
+five-minute watchdog only checks that the subscription remains responsive. The
+controller is also released when the camera icon is turned off in <code>Content</code>.</p>
+<p>Privacy access, usage records, policies, packages, and device topology are
+monitored with Windows registry/device events rather than a three-second global
+sweep. Copilot process activity is checked separately once per minute, and a
+five-minute health reconciliation repairs any missed notification. Failed
+camera and registry-monitor setup backs off from seconds to thirty minutes;
+access-denied registry monitors remain disabled for the current mod session.</p>
+<p>Each icon is clickable. Location opens Location privacy settings. Microphone
+opens either microphone privacy or default-input settings according to the
+reported reason. Camera opens either camera privacy or camera-device settings.
+Copilot opens taskbar or installed-app settings.</p>
+<p><code>Behavior</code> -&gt; <code>Suppress Windows privacy indicators</code> is on by default, so the
+mod hides Windows' own pop-in indicators and mirrors their state into the
+stable placeholders. A native indicator is only ever hidden while this mod is
+showing a placeholder for that same device: if its icon is turned off in
+<code>Content</code>, if the placeholders could not be placed, or on a taskbar another
+mod is rotating, Windows' indicator stays exactly as Windows draws it. Turn the setting off
+temporarily when comparing against Windows' native tray glyphs during testing.
+Everything the mod changes on a native icon is restored to its exact prior
+value when the mod unloads.</p>]]></content>
+        <author>
+            <name>sb4ssman</name>
+            <uri>https://github.com/sb4ssman</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock Spacer 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-spacer#cadc656d0e615a315d285713c49600f2709d2412</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-spacer"/>
+        <updated>2026-10-08T23:02:34.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarclockspacer">Taskbar Clock Spacer</h1>
+<p>Adds a <code>%s%</code> elastic spacer token to the Windows 11 taskbar clock, so clock items
+can be pushed apart to fill a fixed width instead of bunching together.</p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-clock-spacer/assets/clock-spacer-working.png" alt="Clock Spacer distributing a custom clock across multiple rows" />
+<em>User-confirmed working configuration, September 9, 2026, with system stats,
+time, date, and weather arranged across a fixed-width clock.</em></p>
+<h2 id="tworequirementspleasereadbeforeinstalling">Two requirements — please read before installing</h2>
+<p><strong>1. This mod does nothing on its own.</strong> It is a companion for
+<a href="https://windhawk.net/mods/taskbar-clock-customization">Taskbar Clock Customization</a>.
+That mod produces the clock text; this mod only rearranges it. Install and
+configure that mod first.</p>
+<p><strong>2. The clock needs a fixed width.</strong> An elastic spacer distributes <em>leftover</em>
+width. If the clock sizes itself to its own text there is no leftover width,
+every gap computes to zero, and the result looks exactly as if the mod were not
+installed. Set a fixed width using either:</p>
+<ul>
+<li><strong>Max width</strong> in Taskbar Clock Customization's settings, or</li>
+<li><strong>Max clock width</strong> in this mod's settings.</li>
+</ul>
+<p>Either one works. 120 px is a reasonable starting point.</p>
+<p>Windows 11 only. This mod does not work on Windows 10.</p>
+<h2 id="trythebuiltinoptionfirst">Try the built-in option first</h2>
+<p>Taskbar Clock Customization 1.8 and later can spread a line across a fixed
+width on its own: set its <strong>Text alignment</strong> to <strong>Justified</strong>, use ordinary
+spaces where you want the gaps, and use a non-breaking space inside items you
+want kept together. If that looks right for your clock, you don't need this mod.</p>
+<p>What <code>%s%</code> does that <strong>Justified</strong> does not:</p>
+<ul>
+<li><strong>Gaps only where you put them.</strong> Justified stretches every space in the
+line, and can widen the spacing between characters — its author noted large
+gaps opening inside <code>MB/s</code>. With <code>%s%</code>, ordinary spaces and the characters
+inside each item are left exactly as they are.</li>
+<li><strong>Weighted gaps.</strong> <code>%s%%s%</code> takes twice the share of a single <code>%s%</code>.</li>
+<li><strong>A minimum gap.</strong> <strong>Minimum spacer width</strong> keeps every gap visible even when
+the text nearly fills the clock.</li>
+<li><strong>Gaps inside the weather.</strong> <code>{spacer}</code> works inside the Weather format, where
+the weather text arrives as one pre-formatted string.</li>
+</ul>
+<h2 id="whatitdoes">What it does</h2>
+<p>Put <code>%s%</code> between items in the clock's Top Line or Bottom Line format. Each <code>%s%</code>
+becomes a gap, and all leftover width is shared out evenly between the gaps.</p>
+<p>| Format | Result |
+| --- | --- |
+| <code>%time%%s%%date%</code> | time hugs the left edge, date hugs the right, gap fills the middle |
+| <code>%time%%s%%date%%s%%weekday%</code> | three items, two equal gaps |
+| <code>%time%%s%%date%%s%%s%%weekday%</code> | Double-spacer: more space is weighted between date and weekday |</p>
+<p>The first item always hugs the left edge and the last always hugs the right edge,
+so the line stays anchored as the text changes width.</p>
+<h3 id="spacersinsidetheweather">Spacers inside the weather</h3>
+<p>The weather service substitutes <code>%s</code> as its sunset token, so <code>%s%</code> cannot be
+written inside Taskbar Clock Customization's <strong>Weather format</strong>. Write
+<code>{spacer}</code> there instead, for example:</p>
+<pre><code>%c{spacer}🌡️%t{spacer}🌬️%w
+</code></pre>
+<p><code>{spacer}</code> passes through the weather service verbatim, arrives in the clock
+line, and becomes the same elastic gap as <code>%s%</code> — so weather items justify
+with the rest of the clock.</p>
+<h2 id="setup">Setup</h2>
+<ol>
+<li>Install <strong>Taskbar Clock Customization</strong> and set up your clock format.</li>
+<li>Set a <strong>Max width</strong> in its settings, for example <code>120</code>.</li>
+<li>Install this mod.</li>
+<li>Edit the clock mod's <strong>Top line</strong> or <strong>Bottom line</strong> to put <code>%s%</code> between
+items, for example <code>%time%%s%%date%</code>.</li>
+</ol>
+<p>The <code>%s%</code> token passes through Taskbar Clock Customization untouched and is
+interpreted here at display time.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p><strong><code>%s%</code> disappears and nothing moves.</strong> This is the fixed-width problem in
+requirement 2 above. Set a <strong>Max width</strong> in Taskbar Clock Customization, or a
+<strong>Max clock width</strong> here. The mod also writes a one-line explanation to the
+Windhawk log the first time it detects this.</p>
+<p><strong>Nothing happens at all.</strong> Confirm Taskbar Clock Customization is installed and
+enabled, and that <code>%s%</code> is in its <strong>Top line</strong> or <strong>Bottom line</strong> setting — not in
+the tooltip, the middle line, or the weather format.</p>
+<p><strong>The spacer works but the clock is the wrong width.</strong> Adjust either the clock
+mod's <strong>Max width</strong> or this mod's <strong>Max clock width</strong>. The latter applies only
+to generated spacer rows, so leave it at <code>0</code> when you want the clock mod to
+own the whole clock width.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Max clock width</strong> — fixed width for generated spacer rows. When it is <code>0</code>,
+the mod uses a finite <strong>Max width</strong> already set on the shared clock panel by
+Taskbar Clock Customization. It does not constrain an unspaced native line.</li>
+<li><strong>Minimum spacer width</strong> — a floor, in pixels, for every gap. <code>0</code> (the default)
+leaves gaps fully elastic. A small value such as <code>8</code> guarantees a visible gap
+even before a fixed clock width is configured.</li>
+</ul>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li><code>%s%</code> is interpreted after Taskbar Clock Customization expands its format
+tokens, so it works in the top and bottom line formats. Inside the composite
+weather segment use <code>{spacer}</code> instead — the weather service would consume
+<code>%s%</code> as its sunset token.</li>
+<li>Lines without <code>%s%</code> are left completely alone — the mod is a no-op for them.</li>
+<li>A line hidden in Taskbar Clock Customization before this mod spaces it stays
+hidden, even when its format contains <code>%s%</code>. If you hide a line that is
+already spaced, turn this mod off and on to apply the hidden state. Do the
+same if a hidden line appears after Explorer starts. Both mods collapse the
+same source text block, so this mod cannot detect a second collapse of an
+already collapsed block. Unhiding takes effect on the next clock tick.</li>
+<li>Font, size, and color of the spaced segments follow the original clock text's
+current style, so the clock mod's style settings continue to apply.</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<p>The mod hooks two system-tray symbols and watches the clock's time and date text
+blocks. <code>DateTimeIconContent::OnApplyTemplate</code> catches every clock that is
+templated from then on, including after Explorer rebuilds the taskbar;
+<code>BadgeIconContent::get_ViewModel</code> catches the clocks that were already on screen
+when the mod was enabled, on every monitor's taskbar. Between the two there is no
+clock left to search for, so the mod needs no visual-tree scan.</p>
+<p>When a line contains <code>%s%</code>, the source text block is collapsed and a generated
+panel is inserted in its place: each line becomes a Grid whose text segments sit
+in <code>Auto</code> columns separated by <code>Star</code> columns, and the star columns absorb the
+leftover width. When only the text changes — which happens every second — the
+existing segments are rewritten in place rather than rebuilt, so the visual tree
+stays stable.</p>
+<h2 id="relationshiptotaskbarclockcustomization">Relationship to Taskbar Clock Customization</h2>
+<p>The spacer was first offered as a patch to Taskbar Clock Customization itself
+(<a href="https://github.com/m417z/my-windhawk-mods/pull/68">m417z/my-windhawk-mods#68</a>).
+Its maintainer preferred an approach without generated layout elements and
+added the <strong>Justified</strong> text alignment described above, then judged creating
+extra text elements to be out of scope for that mod. This companion carries the
+explicit-gap approach separately and leaves Taskbar Clock Customization
+untouched.</p>]]></content>
+        <author>
+            <name>sb4ssman</name>
+            <uri>https://github.com/sb4ssman</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Numpad Disabler 1.0.0]]></title>
         <id>https://windhawk.net/mods/numpad-disabler#3546e14097d30b6a3251367d8ee803c2952173d9</id>
@@ -1021,185 +1355,6 @@ mod requires. In the Windows 11 shell this mod does nothing and is not kept load
         <author>
             <name>HeyOkay</name>
             <uri>https://github.com/HeyOkay</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Alt+Tab Flip 3D (Vista Style) 1.6.0]]></title>
-        <id>https://windhawk.net/mods/alt-tab-flip-3d#843d28cb7ca4d6d1b96b32b117820a12131dd087</id>
-        <link href="https://windhawk.net/mods/alt-tab-flip-3d"/>
-        <updated>2026-10-07T08:01:35.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Alt+Tab is taken over reliably next to tools that inject keys, like AutoHotkey scripts: keys injected by other programs no longer end or block a session (#5945).</li>
-<li>New "Shortcut" setting: Alt+Tab, Win+Tab, or both (#5946).</li>
-<li>Ctrl+Alt+Tab opens the switcher and keeps it open after the keys are released (can be turned off) (#5947).</li>
-<li>New "Title position" setting: bottom of the screen, or right below the selected window (#5948).</li>
-<li>The blurred wallpaper background no longer turns black when the wallpaper can't be read (Windows Spotlight, HEIC/AVIF files, a deleted file): Windows' own copy of the wallpaper is used, and the desktop shows through if there's none.</li>
-<li>Middle-click a window to close it, or click the X shown on the window under the mouse (both can be turned off). The closed window shrinks away and the others slide into place.</li>
-<li>New "Window size" and "Depth" settings, to bring the windows closer or push them farther back.</li>
-<li>Bars and docks such as YASB and WindowSill are left out of the switcher, and an "Excluded apps" list leaves out any other app.</li>
-</ul>]]></content>
-        <author>
-            <name>caliberda</name>
-            <uri>https://github.com/cesarkali</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Easy Notes 1.0.0]]></title>
-        <id>https://windhawk.net/mods/desktop-sticky-notes#a62876b77495715634ac44a4b15bbf55fdf1a490</id>
-        <link href="https://windhawk.net/mods/desktop-sticky-notes"/>
-        <updated>2026-10-07T08:01:30.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="easynotes">Easy Notes</h1>
-<p>Sticky notes for your Windows desktop. The notes sit above the wallpaper and
-desktop icons, but <strong>behind every application window</strong>, like part of the
-wallpaper you can write on. They never take focus by themselves, and they
-never show up in the taskbar or in Alt+Tab.</p>
-<p><img src="https://raw.githubusercontent.com/Torsion1035/easy-notes/main/screenshot.png" alt="Easy Notes: three notes and the Themes panel" /></p>
-<p>The mod runs in its own process, so it never runs inside Explorer.</p>
-<h2 id="modes">Modes</h2>
-<ul>
-<li><strong>Single</strong>: one note.</li>
-<li><strong>Multiple</strong>: as many notes as you want, for example one per department or
-client. Each note has its own title, and can have its own background color.</li>
-</ul>
-<p>Switching modes never deletes anything. Single mode shows the first note, and
-Multiple mode shows all of them. Switch with the <em>Mode</em> setting or from a
-note's <strong>…</strong> menu &gt; <em>Mode</em>; whichever you changed last wins.</p>
-<h2 id="thetoolpanel">The tool panel</h2>
-<p>Every note has a two-row tool panel at the top:</p>
-<ul>
-<li><strong>Row 1, the title bar</strong>: the note's title (drag it to move the note,
-double-click it to rename) and the <strong>…</strong> menu button on the right.</li>
-<li><strong>Row 2, the tool strip</strong>, left to right:</li>
-<li><strong>1.</strong>: auto-numbering on/off</li>
-<li><strong>checkbox icon</strong>: turn every line into a checkbox, or back into plain text</li>
-<li><strong>B</strong> and <strong>I</strong>: bold and italic for the selected text. They work while
-you're editing and are faded out otherwise.</li>
-<li><strong>Color circle</strong> (right end): drawn in the note's current background
-color, so it previews the note. Click it for the color menu.</li>
-</ul>
-<h3 id="menutitlebar">"…" menu (title bar)</h3>
-<ol>
-<li>Themes…</li>
-<li>Mode: Single / Multiple</li>
-<li>Auto-numbering (checked when on)</li>
-<li>All lines as checkboxes</li>
-<li>Height: Small / Medium / Large</li>
-<li>New note (disabled in Single mode)</li>
-<li>Delete note</li>
-<li>About Easy Notes (creator and MIT license)</li>
-</ol>
-<p>Right-clicking the title bar or the tool strip opens the same menu.</p>
-<h3 id="colormenucolorcircleinrow2">Color menu (Color circle in row 2)</h3>
-<ol>
-<li>Themes…</li>
-<li>Follow theme: clears this note's background override (checked when no
-override is set)</li>
-<li>Yellow, Green, Blue, Pink, Purple, Orange, Gray, each with a swatch. These
-set this note's background only.</li>
-<li>Custom (hex from settings): the <em>Custom color</em> hex code</li>
-</ol>
-<h3 id="rightclickmenuonthenotebody">Right-click menu on the note body</h3>
-<p>Cut, Copy, Paste, Bold, Italic, Themes…, Delete note. Cut, Copy, Paste, Bold
-and Italic work while you're editing and are shown disabled otherwise.</p>
-<h2 id="usingthenotes">Using the notes</h2>
-<p>| Action | How |
-|---|---|
-| Edit text | Click an empty part of a note's body. Press <strong>Esc</strong> or click elsewhere to finish. |
-| Rename | Double-click the title. <strong>Enter</strong> saves and <strong>Esc</strong> cancels. |
-| Bold / Italic | While editing, select text and click <strong>B</strong> / <strong>I</strong>, press <strong>Ctrl+B</strong> / <strong>Ctrl+I</strong>, or use the right-click menu. With nothing selected, it applies to what you type next. |
-| Checkbox item | Start a line with <code>[ ]</code> while editing. <code>[x]</code> marks it as done. In normal view, click the box to toggle it. Done items are struck through. |
-| Links | <code>http://</code>, <code>https://</code> and <code>www.</code> addresses are underlined. Click one to open it in your default browser. |
-| Auto-numbering | Click <strong>1.</strong> in the tool strip (off by default). Non-empty lines are numbered 1., 2., 3., … and the numbers update automatically. |
-| Checklist | Click the checkbox icon in the tool strip, or "…" &gt; <em>All lines as checkboxes</em>. |
-| Note color | Click the Color circle: <em>Follow theme</em>, a preset color, or <em>Custom (hex from settings)</em>. Text turns light automatically on dark colors. |
-| Theme | "…" &gt; <em>Themes…</em>, the Color circle &gt; <em>Themes…</em>, right-click &gt; <em>Themes…</em>, or the <em>Theme</em> setting. |
-| Height | "…" &gt; <em>Height</em> &gt; Small / Medium / Large. |
-| New / delete | "…" &gt; <em>New note</em> / <em>Delete note</em> (delete is also in the right-click menu). |
-| Move | Drag the title bar. Horizontal movement only switches columns, and vertical movement is free. A blue outline shows where the note will land. |
-| Scroll | Use the mouse wheel over a note whose text doesn't fit. |
-| Paste | Ctrl+V and <em>Paste</em> insert plain text: formatting copied from web pages is dropped. |</p>
-<h2 id="themes">Themes</h2>
-<p>Pick a theme in the <strong>Themes panel</strong> (open it with <em>Themes…</em> from the "…"
-menu, the Color circle or the right-click menu), or in the <em>Theme</em> setting.
-Both set the same thing, and whichever you changed last wins.</p>
-<p>The panel shows three sections:</p>
-<ul>
-<li><strong>Showa Tones</strong> (Wada colors): Hojicha, Yoru Kinari, Sakura Sumi, Kaki,
-Matcha Kuri, Ume</li>
-<li><strong>Right Now</strong> (2026 trend colors): Kumo, Tsuchi, Moegi, Fuji, Akane</li>
-<li><strong>Quiet Hours</strong> (minimal neutrals): <strong>Default</strong>, Shiro, Hai, Kinu, Sumi</li>
-</ul>
-<p><strong>Default</strong> is the solid color from the <em>Solid color</em> setting, and it's the
-theme on a fresh install.</p>
-<p>Each tile shows a miniature note in that theme's real colors (title bar, tool
-strip with icons, two lines of text). Hover a tile to see what the name means.
-A round dot in each tile's corner marks the selection: an empty ring for the
-others, a filled dot for the selected theme, which also gets an outline.</p>
-<p>Click a tile to apply it to every note immediately; it's saved right away.
-Notes with a background override go back to following the theme. You can
-also use the arrow keys to move between tiles, <strong>Space</strong> or <strong>Enter</strong> to
-select, and <strong>Esc</strong> to close. The panel also closes when you click anywhere
-outside it.</p>
-<h2 id="customcolors">Custom colors</h2>
-<p>The <em>Appearance</em> setting decides where the note look comes from:</p>
-<ul>
-<li><strong>Theme</strong> (default): the selected theme (see above).</li>
-<li><strong>Solid color</strong>: every note uses the <em>Solid color</em> hex code as its
-background. The title bar, tool strip and text colors are derived from it.</li>
-<li><strong>Custom (Jiyu builder)</strong>: Jiyu is the free-form theme. Set <em>Jiyu base
-color</em> (note background) and <em>Jiyu strip color</em> (tool strip). The title bar,
-icons and text are derived from those two. Jiyu is reachable only through
-this setting, not through the panel.</li>
-</ul>
-<p>In Solid and Custom mode the Themes panel opens dimmed, with a banner saying
-which mode is on. Clicking a tile then only saves your choice. It takes
-effect when <em>Appearance</em> is set back to <em>Theme</em>.</p>
-<p>A note's own background (Color circle) applies in every mode. It changes the
-background only; the title bar and tool strip keep the current look.</p>
-<p><em>Option text color</em> and <em>Option hover color</em> change the theme names and the
-hover highlight in the Themes panel. Leave them empty for automatic colors.</p>
-<h2 id="layoutmultiplemode">Layout (Multiple mode)</h2>
-<p>Notes are placed on an automatic column grid on the <strong>primary monitor's work
-area</strong>. The column count is <code>floor(available width / (column width + gap))</code>.
-The <em>Column width</em> setting ranges from 220 to 600. Every note is exactly one
-column wide, and its height is Small, Medium or Large. Notes in a column
-stack from top to bottom without overlapping. If you drop a note above (or
-onto the upper half of) another note, the notes below are pushed down. When
-the resolution or DPI changes, the grid reflows. If there are fewer columns
-than before, notes from removed columns move into the last column.</p>
-<h2 id="storage">Storage</h2>
-<p>Notes are saved shortly after each change, in the mod's own storage folder
-(in a subfolder per Windows user). Windhawk removes the folder together with
-the mod. The file is written to a temporary file first and then renamed, so a
-crash can't leave it half-written. If <code>notes.json</code> can't be read, nothing is
-overwritten. If it can't be parsed, it's copied to <code>notes.corrupt.json</code> before
-anything new is written. Mode, column width, colors, font size and opacity
-live in the mod settings.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>Notes only appear on the primary monitor.</li>
-<li>A column that has more notes than fit vertically runs off the bottom of the
-screen. Use smaller heights or more columns.</li>
-<li>Opacity below 100% uses a layered window. In that case the corners are
-rounded with a window region, so they aren't anti-aliased.</li>
-<li>The notes stay visible when you use Show desktop (Win+D). If a wallpaper
-tool or an Explorer restart rearranges the desktop windows, the mod checks
-every 2 seconds and puts the notes back above the desktop, so they may take
-a moment to return.</li>
-<li>Only bold and italic are supported; no underline, colors, sizes or images.
-Text dragged in from another app may show other formatting while you edit,
-but only bold and italic are kept.</li>
-<li>The menus use the standard Windows look. They don't follow the active theme.</li>
-<li>If the lowest window on screen belongs to an elevated program, the notes
-can't be placed relative to it. They then use the nearest window they can,
-and may stay in front of that elevated window.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>Created by <strong>Torsion</strong>.</p>
-<p>Licensed under the MIT License.</p>]]></content>
-        <author>
-            <name>Torsion</name>
-            <uri>https://github.com/Torsion1035</uri>
         </author>
     </entry>
 </feed>
