@@ -7,7 +7,7 @@
 // @github		https://github.com/Webspace-com
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -liphlpapi -lgdi32 -luser32 -ladvapi32 -lshell32 -lole32 -loleaut32 -luuid
+// @compilerOptions -liphlpapi -lgdi32 -luser32 -ladvapi32 -lshell32 -lole32 -loleaut32 -luuid -Wno-#warnings
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
