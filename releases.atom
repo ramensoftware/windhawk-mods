@@ -2,12 +2,165 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-07T20:00:24.000Z</updated>
+    <updated>2026-10-08T06:02:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Size on disk column in Explorer details 0.7.0]]></title>
+        <id>https://windhawk.net/mods/explorer-size-on-disk-column#f8eb145f3748a28fc5b1023f6f9cea084cbb7b88</id>
+        <link href="https://windhawk.net/mods/explorer-size-on-disk-column"/>
+        <updated>2026-10-08T06:02:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="sizeondiskcolumninexplorerdetails">Size on disk column in Explorer details</h1>
+<p>Adds a <strong>Size on disk</strong> column to File Explorer's details view. The value 
+matches the "Size on disk" figure in a file or folder's Properties dialog as 
+closely as possible.</p>
+<p><img src="https://raw.githubusercontent.com/stoilms/windhawk-explorer-size-on-disk-column/main/images/screenshot2.png" alt="Size on disk column showing sizes for files and folders" /></p>
+<h2 id="howtouse">How to use</h2>
+<ol>
+<li>Enable the mod and restart Explorer (or sign out and back in).</li>
+<li>Open a folder in <strong>Details</strong> view.</li>
+<li>Right-click any column header and tick <strong>Size on disk</strong>. 
+If it isn't in the short list, click <strong>More…</strong> and find it there.</li>
+</ol>
+<p><img src="https://raw.githubusercontent.com/stoilms/windhawk-explorer-size-on-disk-column/main/images/screenshot1.png" alt="Size on disk in the column header menu" /></p>
+<p>The values match the Properties dialog:</p>
+<p><img src="https://raw.githubusercontent.com/stoilms/windhawk-explorer-size-on-disk-column/main/images/screenshot3.png" alt="Properties dialog showing the same size on disk" /></p>
+<h2 id="howthevalueiscalculated">How the value is calculated</h2>
+<ul>
+<li><strong>Files:</strong> the file's allocation size, as reported by the file system. For
+NTFS-compressed, sparse and CompactOS/WOF-compressed files, the compressed
+size rounded up to the volume's cluster size is used instead. Cloud
+placeholders (OneDrive, etc.) report only what is stored locally and are
+never downloaded.</li>
+<li><strong>Folders:</strong> the sum of the size on disk of every file underneath,
+calculated manually by walking the folder tree. Junctions and symbolic links
+are not followed: they aren't counted inside a folder, and show no value
+themselves. OneDrive and other cloud folders are walked.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Folder calculation can be slow for large trees, so it always runs in the
+background, at low priority and at most two folders at a time. A folder's
+value appears as soon as its calculation finishes. Calculating a
+folder also caches its subfolders (all of them, or only the direct ones -
+see <strong>Remember subfolder sizes</strong>), so browsing into them is instant.
+Cached values are shown immediately and refreshed in the background.</li>
+<li>Cloud folders whose contents aren't on this PC yet are counted as 0 bytes
+without being listed, so OneDrive isn't asked to fetch anything.</li>
+<li>Network drives are skipped by default and the column stays empty there,
+because querying them can make Explorer stop responding on slow
+connections. Turn on <strong>Calculate sizes on network drives</strong> to include them.</li>
+<li>Only regular file-system folders are supported. Libraries, search results,
+zip folders and the Recycle Bin are not.</li>
+<li>Hard links are counted once per link, as the Properties dialog does.</li>
+</ul>
+<h2 id="showingthecolumnineveryfolder">Showing the column in every folder</h2>
+<p>With <strong>Add to default folder layouts</strong> enabled, the column is added to
+Explorer's built-in templates for regular file folders (general items,
+documents, pictures, music, videos, downloads, the user folder and OneDrive).
+Other views, such as Home, Gallery, libraries and search results, are left
+alone. Templates only apply to folders that
+don't have saved view settings, so after enabling it either reset saved views
+(Folder Options &gt; View &gt; <strong>Reset Folders</strong>) or set the column up in one folder
+and use Folder Options &gt; View &gt; <strong>Apply to Folders</strong> for each folder type.</p>
+<h2 id="howitworks">How it works</h2>
+<p>Windows already defines a hidden System.FileAllocationSize property, and
+Explorer's own getter for it (CFSFolder::_GetFileAllocationSize) just returns
+the logical size. The mod exposes the property as a column and replaces that
+getter with a real size on disk calculation.</p>]]></content>
+        <author>
+            <name>stoilms</name>
+            <uri>https://github.com/stoilms</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Compact Voice Access bar 1.0]]></title>
+        <id>https://windhawk.net/mods/voice-access-compact-bar#2e863acf5e0aa7cd11664eb955d11b85b3c4d5f5</id>
+        <link href="https://windhawk.net/mods/voice-access-compact-bar"/>
+        <updated>2026-10-08T06:02:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="compactvoiceaccessbar">Compact Voice Access bar</h1>
+<p>By default, Windows 11 Voice Access docks a bar across the full width of the
+monitor and reserves that strip of the screen, so every maximized window moves
+down to make room. This mod turns the bar into a compact window that floats
+near the top of the monitor, aligned to the left, center or right, and removes
+the reserved strip so other windows can use the whole screen again.</p>
+<p><img src="https://raw.githubusercontent.com/jcyrio/windhawk-voice-access-compact-bar/main/screenshot.jpg" alt="Before and after" /></p>
+<p>Requires Windows 11 with Voice Access. Keep Windhawk running while Voice Access
+is open. The mod takes effect the moment Voice Access docks its bar, so the
+full-width bar never flashes on screen, and it follows the bar if Voice Access
+recreates it, for example after a display change.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Compact placement</strong>: turn the compact window on or off. When it is off,
+the mod leaves Voice Access exactly as Windows positions it.</li>
+<li><strong>Window width</strong>: width of the compact window in pixels at 100% display
+scaling. The value is scaled automatically on high-DPI monitors. The window
+is kept at least 300 pixels wide and never wider than the monitor.</li>
+<li><strong>Distance from top</strong>: how far below the top edge of the monitor the compact
+window sits, in pixels at 100% display scaling.</li>
+<li><strong>Horizontal alignment</strong>: whether the compact window sits at the left edge,
+the center or the right edge of the monitor. Pick the side where it covers
+the least of your maximized windows.</li>
+</ul>
+<p>Settings take effect immediately. Disabling the mod, or turning compact
+placement off, restores the original full-width bar and its reserved strip.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The mod resizes the outer Voice Access window only. The contents of the bar
+are laid out by Voice Access itself, so a very narrow width may clip some of
+its controls. Widen the window if that happens.</li>
+<li>Enable Windhawk logging for the mod to see when it attaches to the bar, the
+window positions it applies, and the result of each work-area change.</li>
+</ul>]]></content>
+        <author>
+            <name>jcyrio</name>
+            <uri>https://github.com/jcyrio</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Desktop Icon Arrangement 0.1.1]]></title>
+        <id>https://windhawk.net/mods/desktop-icon-arrangement#eed1976809b0ae229cbcc61a3861bf6d7390ee08</id>
+        <link href="https://windhawk.net/mods/desktop-icon-arrangement"/>
+        <updated>2026-10-08T06:02:09.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="desktopiconarrangement">Desktop Icon Arrangement</h1>
+<p>Experimental mod for Windows 11. Turn off <strong>View > Auto arrange icons</strong>
+on the desktop before enabling it. <strong>Align icons to grid</strong> can stay enabled.</p>
+<p>The mod remembers the current layout. When a new desktop item appears, it
+restores the positions of existing items and puts the new item in a free column
+to their right. Further new items fill this area from top to bottom, then move
+to the next column. If that area is full, it tries other monitors and free gaps.
+When there is insufficient space for a whole batch, Windows keeps its layout.</p>
+<p>This also applies to files dropped on the desktop: their drop location is
+replaced by the configured placement. Moving existing icons remains possible.
+Changing <strong>First column for new icons</strong> lets you choose a fixed starting column;
+0 calculates it from your arrangement whenever a fresh baseline is established.</p>
+<p>This is a corrective mod, not an interception of Explorer's insertion code.
+Icons may briefly move before the next check (250 ms by default during desktop
+activity). A short follow-up period corrects delayed rearrangements by Explorer.
+Desktop mouse gestures end follow-up corrections when no new items appear.
+Positions are kept in memory, and Explorer
+stores changes through its normal desktop API. Disabling the mod stops future
+corrections and leaves the current arrangement in place.</p>
+<p>The mod runs in a dedicated Windhawk process. Shell notifications from the user
+and public desktop folders trigger brief checks for changes. The saved layout
+is also refreshed while the desktop is active and once when it loses focus.
+Otherwise, a fallback check runs every five seconds. Missed notifications can
+therefore delay a correction. Mouse gestures in other apps do not pause it.</p>
+<p>Icon size, monitor layout, grid spacing, view mode, auto-arrange and starting
+column changes establish a fresh baseline, as does reconnecting after an
+Explorer restart. The mod does not restore layouts from earlier sessions.
+Renames reported by Shell notifications retain their positions; undelivered or
+late rename notifications can make a renamed item look like a new item.</p>
+<p>Enable logging for this mod in Windhawk to see connection, correction and
+error messages.</p>]]></content>
+        <author>
+            <name>Nerdworld</name>
+            <uri>https://github.com/nerdworldDE</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Snap Flyout Instant 1.0]]></title>
         <id>https://windhawk.net/mods/snap-flyout-instant#cdf00260c67214c639a07a99665d02ed9e7b3ae8</id>
@@ -1357,127 +1510,6 @@ Slick Window Arrangement, turn this mod's magnetic edges off.</li>
         <author>
             <name>hiword9</name>
             <uri>https://github.com/HiWord9</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Margin 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-margin#a08ccae7c4e480dbdf1e9389d259d23c5d7448fd</id>
-        <link href="https://windhawk.net/mods/taskbar-margin"/>
-        <updated>2026-10-05T08:04:15.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarmargin">Taskbar Margin</h1>
-<p>Shifts the taskbar <strong>content</strong> to the right by a configurable number of pixels, leaving an empty margin on the left. The taskbar background stays full width, and the taskbar context menu follows the content.</p>
-<p>Only the taskbar itself is affected.</p>
-<p><img src="https://raw.githubusercontent.com/loliri/windhawk-taskbar-margin/main/images/before.png" alt="Taskbar without a margin" /><br />
-<em>Before</em></p>
-<p><img src="https://raw.githubusercontent.com/loliri/windhawk-taskbar-margin/main/images/after.png" alt="Taskbar with a left margin" /><br />
-<em>After</em></p>
-<p><img src="https://raw.githubusercontent.com/loliri/windhawk-taskbar-margin/main/images/jumplist.png" alt="Taskbar context menu" /><br />
-<em>The context menu follows the margin</em></p>
-<h2 id="settings">Settings</h2>
-<p>| Setting | Default | Description |
-| --- | --- | --- |
-| Left margin (pixels) | 220 | How much empty space to leave on the left of the taskbar content. |
-| Follow display DPI | on | Scale the margin with the display DPI, so it keeps the same visual size on high-DPI displays. Turn off to keep it at a constant physical pixel size. |
-| Displays | All | Which displays the margin applies to: all, only the primary one, or only the secondary ones. Each display has its own taskbar and its own DPI, so the margin is calculated per display. |</p>
-<h2 id="notes">Notes</h2>
-<p>Requires Windows 11.</p>
-<p>The taskbar must be:</p>
-<ul>
-<li><strong>left-aligned</strong> (Settings → Personalization → Taskbar → Taskbar icon alignment)</li>
-<li><strong>Bottom</strong> or <strong>Top</strong> (New in Windows 11 26H2, Settings → Personalization → Taskbar → Taskbar position)</li>
-</ul>
-<p>The taskbar is not mirrored correctly on right-to-left display languages: the margin is applied to the physical left regardless of the taskbar's flow direction, while the context menu is moved to the right.</p>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li><strong>TranslucentTB</strong> is confirmed compatible and can be used alongside this mod.</li>
-<li><strong>Windows 11 Taskbar Styler</strong> is not an alternative to this mod. It changes the taskbar itself, while this mod changes the position of the elements inside it. A taskbar restyled that way loses the taskbar's effects on the margin area, while this mod keeps them across the whole taskbar, margin included. It also cannot move the context menu (the jump list), which this mod does.</li>
-<li><strong>Taskbar jump list on cursor pos</strong> changes the same anchor point. Both mods offset it, so depending on the hook order the menu can open offset from the cursor. Use one or the other.</li>
-<li>Tested on Windows 11 26H2.</li>
-</ul>
-<h2 id="suggesteduse">Suggested use</h2>
-<p>For example, together with <a href="https://github.com/unchihugo/FluentFlyout">FluentFlyout</a>: enable the taskbar widget there, set its position to the bottom left corner, and turn on the fixed widget width. The taskbar elements then tile linearly instead of overlapping each other.</p>
-<h2 id="implementationnotes">Implementation notes</h2>
-<p>The taskbar context menu (the jump list) is not laid out by XAML. Its anchor point is computed in <code>explorer.exe</code> by <code>CTaskListWnd::_ComputeJumpViewPosition</code> in <code>taskbar.dll</code>, and handed to the process that draws the menu. The point is in physical screen pixels.</p>
-<p>Shifting the taskbar's XAML content therefore does not move the menu on its own, because the menu is not placed relative to it. The mod adjusts the anchor point instead, which is why it hooks that function.</p>
-<h2 id="license">License</h2>
-<p>GPL-3.0. The taskbar XAML access is based on the <a href="https://github.com/m417z/my-windhawk-mods">Start button always on the left</a> mod by m417z, which is also licensed under GPL-3.0.</p>
-<h2 id="feedback">Feedback</h2>
-<p>Bug reports and feature requests are welcome in <a href="https://github.com/loliri/windhawk-taskbar-margin/issues">Issues</a>.</p>]]></content>
-        <author>
-            <name>loliri</name>
-            <uri>https://github.com/loliri</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Force System Cursor 2.0]]></title>
-        <id>https://windhawk.net/mods/force-system-cursor#011c83aa2958e98a6cdf09a10f16c547feebdb2f</id>
-        <link href="https://windhawk.net/mods/force-system-cursor"/>
-        <updated>2026-10-05T08:04:11.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="forcesystemcursor">Force System Cursor</h1>
-<p>Replaces a program's custom cursor with the system default cursor, or with a
-built-in cursor, while letting the program hide the cursor normally.</p>
-<h2 id="choosingthetargetprogram">Choosing the target program</h2>
-<p>The mod targets nothing by default, so it does nothing until you tell it which
-process to apply to. Open the mod in Windhawk, go to the <strong>Advanced</strong> tab, and
-put the executable name of your target in the <strong>Custom process inclusion list</strong>.
-The change applies as soon as you save, and takes effect the next time the
-program starts.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Enable custom cursor</strong>: when on, use the built-in cursor (or the file set
-below); when off, use the system default cursor.</li>
-<li><strong>Custom cursor file path (optional)</strong>: the full path of a <code>.cur</code> file to use
-instead of the built-in cursor. Leave empty to use the built-in one.</li>
-</ul>]]></content>
-        <author>
-            <name>loliri</name>
-            <uri>https://github.com/loliri</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Spoof MachineGuid 1.0]]></title>
-        <id>https://windhawk.net/mods/spoof-machine-guid#502f03cdbbc39d903c44b43dff65cd633dfd6593</id>
-        <link href="https://windhawk.net/mods/spoof-machine-guid"/>
-        <updated>2026-10-05T08:04:06.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="spoofmachineguid">Spoof MachineGuid</h1>
-<p>Replaces the <code>MachineGuid</code> value that registry queries return, for the target
-process only. The real value on the system is left untouched, and other
-processes keep seeing it.</p>
-<h2 id="intendeduse">Intended use</h2>
-<p><code>MachineGuid</code>, stored at
-<code>HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid</code>, is a per-installation
-identifier that is assigned when Windows is installed. Programs commonly read
-it to recognise a particular machine: license activation and trial checks,
-telemetry and device fingerprinting, and some anti-cheat and ban systems.</p>
-<p>This mod is for making a single program see a different value, so it stops
-recognising the machine. Typical reasons are testing software that keys off this
-value, or keeping one specific application from correlating the machine across
-sessions.</p>
-<p>Note that <code>MachineGuid</code> is only one of several identifiers a program can use —
-the SMBIOS UUID, volume serial numbers, MAC addresses and the Windows product ID
-are others. Changing this one value will not make every program see a different
-machine.</p>
-<h2 id="choosingthetargetprocess">Choosing the target process</h2>
-<p>The mod targets nothing by default, so it does nothing until you tell it which
-process to apply to. Open the mod in Windhawk, go to the <strong>Advanced</strong> tab, and
-put the executable name of your target in the <strong>Custom process inclusion list</strong>.
-The change applies as soon as you save, and takes effect the next time the
-program starts.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Fake MachineGuid</strong>: the GUID to return in place of the real one. Both the
-plain <code>11111111-2222-3333-4444-555555555555</code> form and the braced
-<code>{11111111-2222-3333-4444-555555555555}</code> form are accepted. Any other value
-leaves the mod inactive, and a note is written to the log.</li>
-</ul>
-<h2 id="howitworks">How it works</h2>
-<p>The mod hooks <code>NtQueryValueKey</code> in ntdll, which every Win32 registry read goes
-through, so <code>RegQueryValueExA/W</code> and <code>RegGetValueA/W</code> are all covered. Only a
-<code>REG_SZ</code> value named <code>MachineGuid</code> in the
-<code>\REGISTRY\MACHINE\SOFTWARE\Microsoft\Cryptography</code> key is replaced.</p>]]></content>
-        <author>
-            <name>loliri</name>
-            <uri>https://github.com/loliri</uri>
         </author>
     </entry>
 </feed>

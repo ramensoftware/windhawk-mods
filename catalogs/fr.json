@@ -3536,6 +3536,30 @@
         "version": "7.2"
       }
     },
+    "desktop-icon-arrangement": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791439329000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791439329000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Nerdworld",
+        "compilerOptions": "-lole32 -lshell32 -luuid",
+        "description": "Preserve existing desktop icon positions and place new icons in free columns to the right.",
+        "github": "https://github.com/nerdworldDE",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Desktop Icon Arrangement",
+        "version": "0.1.1"
+      }
+    },
     "desktop-icon-section-autohide": {
       "details": {
         "defaultSorting": 850,
@@ -5060,7 +5084,7 @@
         "ratingUsers": 5,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1790964209000,
+        "updated": 1791439334000,
         "users": 26
       },
       "metadata": {
@@ -5076,7 +5100,7 @@
         ],
         "license": "MIT",
         "name": "Explorer Custom Shortcuts",
-        "version": "1.5.0"
+        "version": "1.5.1"
       }
     },
     "explorer-details-better-file-sizes": {
@@ -5670,6 +5694,33 @@
         ],
         "name": "Explorer Single Window Tabs",
         "version": "0.8"
+      }
+    },
+    "explorer-size-on-disk-column": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791439344000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791439344000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "stoilms",
+        "compilerOptions": "-lole32 -loleaut32 -lpropsys -lshlwapi -luuid",
+        "description": "Adds a \"Size on disk\" column to File Explorer's details view for files and folders",
+        "github": "https://github.com/stoilms",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Size on disk column in Explorer details",
+        "version": "0.7.0"
       }
     },
     "explorer-status-metadata": {
@@ -16174,6 +16225,33 @@
         ],
         "name": "Disable VMware upgrade dialog",
         "twitter": "https://twitter.com/m417z",
+        "version": "1.0"
+      }
+    },
+    "voice-access-compact-bar": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791439339000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791439339000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "jcyrio",
+        "compilerOptions": "-lshell32 -lcomctl32",
+        "description": "Turn the full-width Voice Access bar into a compact window and stop it from reserving space at the top of the screen",
+        "github": "https://github.com/jcyrio",
+        "include": [
+          "VoiceAccess.exe"
+        ],
+        "license": "MIT",
+        "name": "Compact Voice Access bar",
         "version": "1.0"
       }
     },

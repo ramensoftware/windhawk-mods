@@ -1,3 +1,8 @@
+## 1.5.1 ([Oct 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4e4b6b8a851ea95542ae6d1cd07efb05ff07ab07/mods/explorer-custom-shortcuts.wh.cpp))
+
+* **Fix (Keyboard Shortcuts):** Resolved an issue where invoking shortcuts with the `Alt` key (e.g., `Alt+C`) caused Explorer to get stuck in its menu/keytip accelerator loop, blocking standalone keys like `Delete` and `Backspace`.
+* **Improvement (Settings):** Cleaned up notification settings parsing with proper bounds clamping and safe default fallbacks.
+
 ## 1.5.0 ([Oct 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/efe709cf5a54c20c661b4322a8367d278a95f9f1/mods/explorer-custom-shortcuts.wh.cpp))
 
 * Added `internal:showProperties` command to open native properties dialogs for selected items (capped at 15 windows to prevent Explorer hangs).

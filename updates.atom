@@ -2,12 +2,179 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-07T20:00:24.000Z</updated>
+    <updated>2026-10-08T06:02:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Size on disk column in Explorer details 0.7.0]]></title>
+        <id>https://windhawk.net/mods/explorer-size-on-disk-column#f8eb145f3748a28fc5b1023f6f9cea084cbb7b88</id>
+        <link href="https://windhawk.net/mods/explorer-size-on-disk-column"/>
+        <updated>2026-10-08T06:02:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="sizeondiskcolumninexplorerdetails">Size on disk column in Explorer details</h1>
+<p>Adds a <strong>Size on disk</strong> column to File Explorer's details view. The value 
+matches the "Size on disk" figure in a file or folder's Properties dialog as 
+closely as possible.</p>
+<p><img src="https://raw.githubusercontent.com/stoilms/windhawk-explorer-size-on-disk-column/main/images/screenshot2.png" alt="Size on disk column showing sizes for files and folders" /></p>
+<h2 id="howtouse">How to use</h2>
+<ol>
+<li>Enable the mod and restart Explorer (or sign out and back in).</li>
+<li>Open a folder in <strong>Details</strong> view.</li>
+<li>Right-click any column header and tick <strong>Size on disk</strong>. 
+If it isn't in the short list, click <strong>More…</strong> and find it there.</li>
+</ol>
+<p><img src="https://raw.githubusercontent.com/stoilms/windhawk-explorer-size-on-disk-column/main/images/screenshot1.png" alt="Size on disk in the column header menu" /></p>
+<p>The values match the Properties dialog:</p>
+<p><img src="https://raw.githubusercontent.com/stoilms/windhawk-explorer-size-on-disk-column/main/images/screenshot3.png" alt="Properties dialog showing the same size on disk" /></p>
+<h2 id="howthevalueiscalculated">How the value is calculated</h2>
+<ul>
+<li><strong>Files:</strong> the file's allocation size, as reported by the file system. For
+NTFS-compressed, sparse and CompactOS/WOF-compressed files, the compressed
+size rounded up to the volume's cluster size is used instead. Cloud
+placeholders (OneDrive, etc.) report only what is stored locally and are
+never downloaded.</li>
+<li><strong>Folders:</strong> the sum of the size on disk of every file underneath,
+calculated manually by walking the folder tree. Junctions and symbolic links
+are not followed: they aren't counted inside a folder, and show no value
+themselves. OneDrive and other cloud folders are walked.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Folder calculation can be slow for large trees, so it always runs in the
+background, at low priority and at most two folders at a time. A folder's
+value appears as soon as its calculation finishes. Calculating a
+folder also caches its subfolders (all of them, or only the direct ones -
+see <strong>Remember subfolder sizes</strong>), so browsing into them is instant.
+Cached values are shown immediately and refreshed in the background.</li>
+<li>Cloud folders whose contents aren't on this PC yet are counted as 0 bytes
+without being listed, so OneDrive isn't asked to fetch anything.</li>
+<li>Network drives are skipped by default and the column stays empty there,
+because querying them can make Explorer stop responding on slow
+connections. Turn on <strong>Calculate sizes on network drives</strong> to include them.</li>
+<li>Only regular file-system folders are supported. Libraries, search results,
+zip folders and the Recycle Bin are not.</li>
+<li>Hard links are counted once per link, as the Properties dialog does.</li>
+</ul>
+<h2 id="showingthecolumnineveryfolder">Showing the column in every folder</h2>
+<p>With <strong>Add to default folder layouts</strong> enabled, the column is added to
+Explorer's built-in templates for regular file folders (general items,
+documents, pictures, music, videos, downloads, the user folder and OneDrive).
+Other views, such as Home, Gallery, libraries and search results, are left
+alone. Templates only apply to folders that
+don't have saved view settings, so after enabling it either reset saved views
+(Folder Options &gt; View &gt; <strong>Reset Folders</strong>) or set the column up in one folder
+and use Folder Options &gt; View &gt; <strong>Apply to Folders</strong> for each folder type.</p>
+<h2 id="howitworks">How it works</h2>
+<p>Windows already defines a hidden System.FileAllocationSize property, and
+Explorer's own getter for it (CFSFolder::_GetFileAllocationSize) just returns
+the logical size. The mod exposes the property as a column and replaces that
+getter with a real size on disk calculation.</p>]]></content>
+        <author>
+            <name>stoilms</name>
+            <uri>https://github.com/stoilms</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Compact Voice Access bar 1.0]]></title>
+        <id>https://windhawk.net/mods/voice-access-compact-bar#2e863acf5e0aa7cd11664eb955d11b85b3c4d5f5</id>
+        <link href="https://windhawk.net/mods/voice-access-compact-bar"/>
+        <updated>2026-10-08T06:02:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="compactvoiceaccessbar">Compact Voice Access bar</h1>
+<p>By default, Windows 11 Voice Access docks a bar across the full width of the
+monitor and reserves that strip of the screen, so every maximized window moves
+down to make room. This mod turns the bar into a compact window that floats
+near the top of the monitor, aligned to the left, center or right, and removes
+the reserved strip so other windows can use the whole screen again.</p>
+<p><img src="https://raw.githubusercontent.com/jcyrio/windhawk-voice-access-compact-bar/main/screenshot.jpg" alt="Before and after" /></p>
+<p>Requires Windows 11 with Voice Access. Keep Windhawk running while Voice Access
+is open. The mod takes effect the moment Voice Access docks its bar, so the
+full-width bar never flashes on screen, and it follows the bar if Voice Access
+recreates it, for example after a display change.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Compact placement</strong>: turn the compact window on or off. When it is off,
+the mod leaves Voice Access exactly as Windows positions it.</li>
+<li><strong>Window width</strong>: width of the compact window in pixels at 100% display
+scaling. The value is scaled automatically on high-DPI monitors. The window
+is kept at least 300 pixels wide and never wider than the monitor.</li>
+<li><strong>Distance from top</strong>: how far below the top edge of the monitor the compact
+window sits, in pixels at 100% display scaling.</li>
+<li><strong>Horizontal alignment</strong>: whether the compact window sits at the left edge,
+the center or the right edge of the monitor. Pick the side where it covers
+the least of your maximized windows.</li>
+</ul>
+<p>Settings take effect immediately. Disabling the mod, or turning compact
+placement off, restores the original full-width bar and its reserved strip.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The mod resizes the outer Voice Access window only. The contents of the bar
+are laid out by Voice Access itself, so a very narrow width may clip some of
+its controls. Widen the window if that happens.</li>
+<li>Enable Windhawk logging for the mod to see when it attaches to the bar, the
+window positions it applies, and the result of each work-area change.</li>
+</ul>]]></content>
+        <author>
+            <name>jcyrio</name>
+            <uri>https://github.com/jcyrio</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Explorer Custom Shortcuts 1.5.1]]></title>
+        <id>https://windhawk.net/mods/explorer-custom-shortcuts#4e4b6b8a851ea95542ae6d1cd07efb05ff07ab07</id>
+        <link href="https://windhawk.net/mods/explorer-custom-shortcuts"/>
+        <updated>2026-10-08T06:02:14.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Fix (Keyboard Shortcuts):</strong> Resolved an issue where invoking shortcuts with the <code>Alt</code> key (e.g., <code>Alt+C</code>) caused Explorer to get stuck in its menu/keytip accelerator loop, blocking standalone keys like <code>Delete</code> and <code>Backspace</code>.</li>
+<li><strong>Improvement (Settings):</strong> Cleaned up notification settings parsing with proper bounds clamping and safe default fallbacks.</li>
+</ul>]]></content>
+        <author>
+            <name>ArvindSaini978</name>
+            <uri>https://github.com/ArvindSaini978</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Desktop Icon Arrangement 0.1.1]]></title>
+        <id>https://windhawk.net/mods/desktop-icon-arrangement#eed1976809b0ae229cbcc61a3861bf6d7390ee08</id>
+        <link href="https://windhawk.net/mods/desktop-icon-arrangement"/>
+        <updated>2026-10-08T06:02:09.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="desktopiconarrangement">Desktop Icon Arrangement</h1>
+<p>Experimental mod for Windows 11. Turn off <strong>View > Auto arrange icons</strong>
+on the desktop before enabling it. <strong>Align icons to grid</strong> can stay enabled.</p>
+<p>The mod remembers the current layout. When a new desktop item appears, it
+restores the positions of existing items and puts the new item in a free column
+to their right. Further new items fill this area from top to bottom, then move
+to the next column. If that area is full, it tries other monitors and free gaps.
+When there is insufficient space for a whole batch, Windows keeps its layout.</p>
+<p>This also applies to files dropped on the desktop: their drop location is
+replaced by the configured placement. Moving existing icons remains possible.
+Changing <strong>First column for new icons</strong> lets you choose a fixed starting column;
+0 calculates it from your arrangement whenever a fresh baseline is established.</p>
+<p>This is a corrective mod, not an interception of Explorer's insertion code.
+Icons may briefly move before the next check (250 ms by default during desktop
+activity). A short follow-up period corrects delayed rearrangements by Explorer.
+Desktop mouse gestures end follow-up corrections when no new items appear.
+Positions are kept in memory, and Explorer
+stores changes through its normal desktop API. Disabling the mod stops future
+corrections and leaves the current arrangement in place.</p>
+<p>The mod runs in a dedicated Windhawk process. Shell notifications from the user
+and public desktop folders trigger brief checks for changes. The saved layout
+is also refreshed while the desktop is active and once when it loses focus.
+Otherwise, a fallback check runs every five seconds. Missed notifications can
+therefore delay a correction. Mouse gestures in other apps do not pause it.</p>
+<p>Icon size, monitor layout, grid spacing, view mode, auto-arrange and starting
+column changes establish a fresh baseline, as does reconnecting after an
+Explorer restart. The mod does not restore layouts from earlier sessions.
+Renames reported by Shell notifications retain their positions; undelivered or
+late rename notifications can make a renamed item look like a new item.</p>
+<p>Enable logging for this mod in Windhawk to see connection, correction and
+error messages.</p>]]></content>
+        <author>
+            <name>Nerdworld</name>
+            <uri>https://github.com/nerdworldDE</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Snap Flyout Instant 1.0]]></title>
         <id>https://windhawk.net/mods/snap-flyout-instant#cdf00260c67214c639a07a99665d02ed9e7b3ae8</id>
@@ -832,253 +999,6 @@ tool-host. Тип запуска службы, политики, системн�
         <author>
             <name>appEW</name>
             <uri>https://github.com/appEW</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[SnapSentry 0.21.3]]></title>
-        <id>https://windhawk.net/mods/snap-sentry#57d182b9e16e49ebcce006c381dc3331caaded78</id>
-        <link href="https://windhawk.net/mods/snap-sentry"/>
-        <updated>2026-10-06T11:01:41.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>A screenshot taken just as settings change now follows the new settings instead of being skipped.</li>
-<li>A screenshot still waiting when you change the watched folder is now skipped instead of being handled under the new one.</li>
-<li>Turning the notification on while a screenshot is being handled now shows it instead of the dialog.</li>
-<li>A duplicate that was kept is remembered, even if the earlier copy was edited, so a later identical screenshot is still caught.</li>
-<li>The readme now shows renaming, duplicate removal and the Markdown path in action.</li>
-<li>The log now notes when a screenshot can't be checked for duplicates.</li>
-<li>Tightened a few loose ends.</li>
-</ul>]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mute in Background 1.0]]></title>
-        <id>https://windhawk.net/mods/mute-in-background#2a76fdfa5d6ed25e2df73167d7d39f623e0a61d1</id>
-        <link href="https://windhawk.net/mods/mute-in-background"/>
-        <updated>2026-10-06T09:04:15.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="muteinbackground">Mute in Background</h1>
-<p>Mutes the target program automatically while it is in the background, and
-unmutes it when it comes back to the foreground.</p>
-<h2 id="choosingthetargetprogram">Choosing the target program</h2>
-<p>The mod targets nothing by default, so it does nothing until you tell it which
-process to apply to. Open the mod in Windhawk, go to the <strong>Advanced</strong> tab, and
-put the executable name of your target in the <strong>Custom process inclusion list</strong>.
-The mod takes effect as soon as you save.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Mute is used, not the volume level, so a program's volume in the Volume Mixer
-is left as it is.</li>
-<li>Only sessions this mod muted itself are unmuted, so a program you muted by
-hand in the Volume Mixer stays muted. The one exception is the first pass after
-a run that left the program muted: a mute that was already there can't be told
-apart from one the user set, so it is treated as the mod's and undone.</li>
-<li>Windows remembers a program's mute state between launches. If the program is
-closed while it is in the background, it starts muted the next time; the mod
-clears that as soon as it is loaded into the program again. If the mod is
-disabled while the program is closed, the mute has to be cleared by hand in
-the Volume Mixer.</li>
-<li><strong>Don't add multi-process programs</strong> (Chrome, Edge, Discord, Spotify and other
-Chromium/Electron apps). Their audio comes from a child process that never
-owns the foreground window, so the mod would keep them muted the whole time,
-including while they are in the foreground.</li>
-</ul>]]></content>
-        <author>
-            <name>loliri</name>
-            <uri>https://github.com/loliri</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Recent Focus Highlight 0.11.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-recent-focus-highlight#5380aa37205a3760e2a49d49c62f23e88561abdd</id>
-        <link href="https://windhawk.net/mods/taskbar-recent-focus-highlight"/>
-        <updated>2026-10-06T08:03:27.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarrecentfocushighlight">Taskbar Recent Focus Highlight</h1>
-<p>Highlights the taskbar icons of the apps you actually stayed on, and ranks
-the recently focused windows inside a multi-window thumbnail flyout.
-Previews have their own on/off setting.</p>
-<p><img src="https://raw.githubusercontent.com/jvlasek/taskbar-recent-focus-highlight/main/screenshots/taskbar-highlight-edge.png" alt="Taskbar side-bar highlight" /></p>
-<p><img src="https://raw.githubusercontent.com/jvlasek/taskbar-recent-focus-highlight/main/screenshots/flyout-preview-highlight.png" alt="Thumbnail flyout ranks" /></p>
-<h2 id="whatyousee">What you see</h2>
-<p>After an app stays focused for the <strong>minimum focus time</strong> (default 8 seconds),
-it joins a per-virtual-desktop recency list. The top N <strong>running</strong> taskbar
-buttons on the current desktop get a highlight:</p>
-<ul>
-<li><strong>Side bar</strong> (default) — a bar beside the icon (left on a bottom/top
-taskbar, under the icon on a left/right taskbar)</li>
-<li><strong>Frame</strong> / <strong>Full</strong> — a rounded rectangle around or behind the icon</li>
-</ul>
-<p>Rank 1 is strongest; ranks 2 and 3 (and 4+) use the intensities you set.
-Pinned icons that are not running on this desktop are never highlighted.
-A new app is added only after the minimum focus time. Re-focus of an app
-already in the list follows “When to skip min-focus” (default: it becomes
-rank 1 immediately). A short Alt+Tab that never settles does not add a new
-app. Each virtual desktop keeps its own list.</p>
-<p>When you hover a combined icon and the flyout shows <strong>two or more</strong> windows,
-that flyout gets its own recency ladder (independent of icon ranks). The
-last focused window of that app is rank 1 in the flyout even if you used
-other apps more recently. Single-window flyouts are left alone.</p>
-<p>Preview styles (default <strong>hybrid</strong>): whole-card plate for rank 1 and a title
-tint for ranks 2+; or a thin bar under the title, a soft title tint, or a
-whole-card plate.</p>
-<h2 id="settingsshort">Settings (short)</h2>
-<ul>
-<li><strong>General</strong> — how many apps, min-focus wait, when to skip the wait on
-re-focus, decay, exclude list, tray-only filter</li>
-<li><strong>Icons</strong> — style, color (including system accent), per-rank intensity,
-thickness / size / fill, optional icon scale</li>
-<li><strong>Previews</strong> — on/off, how many windows, style, intensities, separate
-min-focus and decay</li>
-</ul>
-<p>All of those are in the Windhawk settings panel. Disable the mod in Windhawk
-to clear highlights.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Works with Windows 11 Taskbar Styler: the side bar stays visible on hover,
-and preview plate tints are restored when the highlight is cleared.</li>
-<li>Icon matching uses the process path / AppUserModelID from the taskband
-(not the localized button label). If that resolve is unavailable, the icon
-is left unhighlighted rather than guessed from its name.</li>
-<li>Preview cards match via the flyout’s thumbnail model / index (HWND). If that
-resolve is unavailable, the card is left unmarked rather than guessed from
-its title.</li>
-<li>File Explorer folder windows (<code>CabinetWClass</code>) are ranked like other apps.
-The taskbar, desktop, Start, and IME stay ignored.</li>
-<li>Multi-monitor: the same rank is applied on every taskbar that shows that
-app.</li>
-<li>Verbose bind / preview-resolve lines go to Windhawk’s <strong>Mod logs</strong> (Advanced
-tab). There is no extra in-mod debug toggle.</li>
-<li>Taskband identity resolve is adapted from
-<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-volume-control-per-app.wh.cpp">taskbar-volume-control-per-app</a>;
-thumbnail HWND mapping from
-<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-thumbnail-reorder.wh.cpp">taskbar-thumbnail-reorder</a>.</li>
-</ul>]]></content>
-        <author>
-            <name>Jakub Vlášek</name>
-            <uri>https://github.com/jvlasek</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mobile Open Animation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/mobile-open-animation#cc3a28ff9b65369c12ce7d2c07e90b719e16dbda</id>
-        <link href="https://windhawk.net/mods/mobile-open-animation"/>
-        <updated>2026-10-06T07:02:00.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="mobileopenanimation">Mobile Open Animation</h1>
-<p><img src="https://raw.githubusercontent.com/Nico6719/windhawk-mods/assets/mobile-open-animation.gif" alt="Demo" /></p>
-<p>Windows apps open the way they do on a phone: the window zooms open from the icon you
-clicked, and fades in, instead of appearing all at once. The app icon keeps its size
-the whole time; only the frame grows.</p>
-<p>Works from desktop icons, the taskbar, the Start menu and search, and from
-double-clicking a file that starts a program.</p>
-<h2 id="settings">Settings</h2>
-<p>Open the mod's "Settings" tab in Windhawk. The ones you are most likely to touch:</p>
-<ul>
-<li><strong>Zoom a splash panel with the app icon</strong> - on by default, and what the animation
-above shows: a panel carrying the app icon appears the instant you click and zooms
-open, and hands over to the real window once it has painted. Turn it off to animate
-the real window instead: cheaper, but a slow-starting app shows no visible animation.</li>
-<li><strong>Zoom origin</strong> - where the window grows out from. The default is the icon you
-clicked, which is the point of the mod; the other choices are the window centre and
-the bottom of the screen.</li>
-<li><strong>Start size</strong> - the size of the square the animation starts from. 96 (the default)
-is roughly a desktop icon at 96 DPI.</li>
-<li><strong>Duration / Panel fade-out</strong> - how fast the animation runs. Phones use 200-300ms.</li>
-<li><strong>Frame interval</strong> - 0 follows the monitor's refresh rate, which is what you want on a
-high-refresh display.</li>
-<li><strong>Excluded window classes</strong> - the mod ships with a list of window classes it never
-touches (UWP hosts, tray and tooltip windows, the desktop, and so on). Add your own
-here if a program misbehaves. To keep the mod out of a whole process instead, use
-Windhawk's own process exclusion list in the mod's Advanced tab - that also avoids
-loading the mod there at all.</li>
-</ul>
-<p>Everything else has a description in the settings panel.</p>
-<h2 id="whathasnoanimation">What has no animation</h2>
-<ul>
-<li><strong>UWP / WinUI apps</strong> - Windows 11 Notepad, Settings, Terminal, Calculator, Photos and
-so on. They animate themselves, so the mod skips them on purpose. Note that
-<code>C:\Windows\System32\notepad.exe</code> may not even exist on Windows 11 (Notepad is a
-Store app now), so <strong>do not use Notepad to test</strong>.</li>
-<li><strong>Online games with anti-cheat, and security suites</strong> - they refuse to be injected, so
-the mod cannot get in.</li>
-<li><strong>Dialogs</strong> - off by default. There is a setting to enable them.</li>
-<li><strong>Windows of another process</strong> - a launch only ever animates the windows of the
-process it started.</li>
-<li><strong>System UI hosts</strong> - the shell experience hosts, the Start menu, search, the lock
-screen and a few more are excluded from the mod entirely, so it is not even loaded
-into them.</li>
-<li>Windows with absurdly small sizes.</li>
-</ul>
-<h2 id="aprogramhasnoanimationnowwhat">A program has no animation, now what</h2>
-<ol>
-<li>Open Windhawk, go to this mod's page and turn logging on for it (that switch is in
-Windhawk's own interface, not a mod setting).</li>
-<li>Start that program once.</li>
-<li>Read the log in Windhawk.</li>
-</ol>
-<p>The decision for every window and the reason it was skipped are written there, with the
-timings. Attach it to an issue and it can be diagnosed.</p>
-<h2 id="togetherwithotheranimationmods">Together with other animation mods</h2>
-<p><strong>Windows Animations</strong> has an "Animate app launches" option of its own. Both mods hook
-the same window-shown path and cloak the same windows, so <strong>enable only one of the two
-launch animations</strong>. What is unique here is growing the window out of the icon you
-clicked, and the icon splash panel; Windows Animations covers minimize, restore and
-close, and an app-launch animation without the icon.</p>
-<h2 id="note">Note</h2>
-<p>This mod applies to almost every process, matching Windhawk's own injection scope.
-<strong>Quit Windhawk before playing online games with anti-cheat</strong>, or add the game to
-Windhawk's process exclusion list.</p>
-<hr />
-<h2 id="">中文</h2>
-<p><img src="https://raw.githubusercontent.com/Nico6719/windhawk-mods/assets/mobile-open-animation.gif" alt="效果" /></p>
-<p>让 Windows 应用像手机那样「打开」：窗口从你点击的图标处放大铺开并淡入，而不是整块弹出来。
-图标在整段动画里保持原大小，只有外框在长大。</p>
-<p>桌面图标、任务栏、开始菜单和搜索、双击文件启动程序都支持。</p>
-<h3 id="-1">设置</h3>
-<p>在 Windhawk 里打开本 mod 的「设置」标签页。常用的几个：</p>
-<ul>
-<li><strong>用图标占位面板做展开动画</strong> —— 默认开，就是上面动图的效果：点下去立刻出现一块带应用图标的
-占位面板并放大铺开，等真窗口画好再交接。关掉后改成直接动画窗口本身，更省资源，但对启动慢的
-应用会看不出动画。</li>
-<li><strong>缩放锚点</strong> —— 窗口从哪儿长出来。默认「你点击的图标」（这就是本 mod 的卖点），另外还有
-窗口中心和屏幕底部。</li>
-<li><strong>起始边长</strong> —— 动画从多大的方块开始。96（默认）大约就是桌面图标的大小。</li>
-<li><strong>时长 / 面板淡出时长</strong> —— 动画快慢。手机一般是 200-300ms。</li>
-<li><strong>帧间隔</strong> —— 0 跟随显示器刷新率（高刷屏就该用这个）。</li>
-<li><strong>排除的窗口类名</strong> —— mod 自带一份永不触碰的窗口类清单（UWP 宿主、托盘与提示窗口、桌面等）。
-某个程序表现异常时把它的类名加进去。要整个进程都不参与，请用本 mod「高级」标签页里 Windhawk
-自带的进程排除列表 —— 那样还能连带避免把 mod 加载进去。</li>
-</ul>
-<p>其余设置项都带内置说明，鼠标移上去就能看到。</p>
-<h3 id="-2">哪些窗口不会有动画</h3>
-<ul>
-<li><strong>UWP / WinUI 应用</strong> —— Win11 的记事本、设置、终端、计算器、照片等。它们有自己的打开动画，
-本 mod 会主动跳过。另外 Win11 上 <code>C:\Windows\System32\notepad.exe</code> 可能根本不存在
-（记事本已是商店版），<strong>不要用记事本测试</strong>。</li>
-<li><strong>带反作弊的在线游戏、杀毒软件</strong> —— 这些程序拒绝被注入，mod 无从下手。</li>
-<li><strong>对话框</strong> —— 默认不做动画，可以在设置里打开。</li>
-<li><strong>别的进程的窗口</strong> —— 一次启动只给这次启动出来的那个进程的窗口做动画。</li>
-<li><strong>系统界面宿主</strong> —— 壳体验宿主、开始菜单、搜索、锁屏等进程被整体排除，mod 根本不会被加载进去。</li>
-<li>尺寸异常小的窗口。</li>
-</ul>
-<h3 id="-3">某个程序没有动画，怎么办</h3>
-<ol>
-<li>打开 Windhawk，在本 mod 的页面里为它打开日志开关（那是 Windhawk 界面里的开关，不是 mod 设置）。</li>
-<li>启动那个程序一次。</li>
-<li>在 Windhawk 里看日志。</li>
-</ol>
-<p>每个窗口的判定结果、跳过原因和各阶段耗时都在里面。贴到 issue 里就能定位。</p>
-<h3 id="mod">和别的动画 mod 一起用</h3>
-<p><strong>Windows Animations</strong> 也有自己的「Animate app launches」选项。两个 mod 都挂窗口显示路径、
-都给同一批窗口做 cloak，所以这两个「打开动画」<strong>只能开一个</strong>。本 mod 独有的东西是「从你点的
-图标处放大」和那块图标占位面板；Windows Animations 管的是最小化、还原、关闭，以及没有图标的
-打开动画。</p>
-<h3 id="-4">注意</h3>
-<p>本 mod 作用于几乎所有进程，和 Windhawk 本身的注入范围一致。
-<strong>玩带反作弊的在线游戏之前请先退出 Windhawk</strong>，或者把游戏加进 Windhawk 的进程排除列表。</p>]]></content>
-        <author>
-            <name>Nico6719</name>
-            <uri>https://github.com/Nico6719</uri>
         </author>
     </entry>
 </feed>
