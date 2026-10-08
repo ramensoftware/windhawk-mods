@@ -6,7 +6,7 @@
 // @author          iMAboud
 // @include         explorer.exe
 // @github          https://github.com/iMAboud
-// @compilerOptions -loleacc -loleaut32 -luuid
+// @compilerOptions -loleacc -loleaut32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
