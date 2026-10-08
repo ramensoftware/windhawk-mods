@@ -1,21 +1,22 @@
 // ==WindhawkMod==
-// @id              hide-clock-tooltip-only
-// @name            Hide Windows 11 Clock Tooltip Only
-// @description     Removes only the native Windows 11 taskbar clock hover tooltip.
+// @id              hide-windows-11-clock-tooltip
+// @name            Hide Windows 11 Clock Tooltip
+// @description     Completely disables the Windows 11 taskbar clock hover tooltip while keeping the clock functional.
 // @version         1.0.6
-// @author          Custom
+// @author          ViiT4liTy
+// @github          https://github.com/ViiT4liTy
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
 //
-// Standalone companion mod for Taskbar Clock Customization.
+// Standalone Windows 11 taskbar clock tooltip suppression mod.
 // The clock tooltip text is cleared and the Windows 11 clock element is made
 // non-hit-testable, reproducing the Taskbar Styler setting:
 //   Target: SystemTray.DateTimeIconContent
 //   Style:  IsHitTestVisible=False
 //
-// This removes the need for Windows 11 Taskbar Styler for this particular fix.
+// No additional Windhawk mod is required.
 
 #include <windhawk_utils.h>
 #include <winstring.h>
@@ -183,8 +184,8 @@ bool HookSystemTraySymbols(HMODULE module) {
     if (!module) {
         return false;
     }
-
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks[] = {
         {
             {LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString(struct _SYSTEMTIME const &,struct _SYSTEMTIME const &,class SystemTrayTelemetry::ClockUpdate &))"},
             &ClockSystemTrayIconDataModel_GetTimeToolTipString_Original,
@@ -230,7 +231,7 @@ bool HookSystemTraySymbols(HMODULE module) {
     };
 
     return WindhawkUtils::HookSymbols(
-        module, hooks, ARRAYSIZE(hooks));
+        module, systemTrayDllHooks, ARRAYSIZE(systemTrayDllHooks));
 }
 
 HMODULE GetSystemTrayModuleHandle() {
@@ -278,7 +279,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Initializing Hide Windows 11 Clock Tooltip Only 1.0.5");
+    Wh_Log(L"Initializing Hide Windows 11 Clock Tooltip 1.0.6");
 
     TryHookSystemTray();
 
@@ -299,3 +300,49 @@ BOOL Wh_ModInit() {
 
     return TRUE;
 }
+
+// ==WindhawkModReadme==
+/*
+# Hide Windows 11 Clock Tooltip
+
+Disables the native tooltip that appears when hovering over the Windows 11 taskbar clock, including the empty or black tooltip popup, while keeping the clock visible and functional.
+
+## Features
+
+- Removes the native clock tooltip text and its visual popup.
+- Keeps the taskbar clock visible and functional.
+- Works independently without requiring Windows 11 Taskbar Styler or other mods.
+- Does not change the date, time, or clock formatting.
+- Can be used alongside Taskbar Clock Customization.
+
+## Compatibility
+
+Designed for Windows 11 (x86-64) and targets `explorer.exe`. Windows updates may change internal taskbar components and require updates to this mod.
+
+## License
+
+MIT
+
+---
+
+# Ocultar Tooltip do Relógio do Windows 11
+
+Desativa o tooltip nativo que aparece ao passar o mouse sobre o relógio da barra de tarefas do Windows 11, incluindo a janela vazia ou preta, sem ocultar ou desativar o relógio.
+
+## Funcionalidades
+
+- Remove o texto do tooltip nativo e sua janela visual.
+- Mantém o relógio da barra de tarefas visível e funcional.
+- Funciona de forma independente, sem exigir o Windows 11 Taskbar Styler ou outros mods.
+- Não altera a data, a hora ou a formatação do relógio.
+- Pode ser usado junto com o Taskbar Clock Customization.
+
+## Compatibilidade
+
+Desenvolvido para Windows 11 (x86-64), com atuação no processo `explorer.exe`. Atualizações do Windows podem alterar componentes internos da barra de tarefas e exigir atualizações deste mod.
+
+## Licença
+
+MIT
+*/
+// ==/WindhawkModReadme==
