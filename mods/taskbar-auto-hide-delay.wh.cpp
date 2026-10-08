@@ -44,8 +44,9 @@ The mod does nothing if auto-hide is disabled in the Windows settings.
 covers a narrower case: it hooks the taskbar internals and only helps when
 Windows forces the taskbar to stay shown because an inactive window is
 notifying. This mod reacts to any reason the taskbar becomes visible —
-new windows, dialogs, notifications — and uses no hooks, so it does not
-depend on the taskbar's internal code.
+new windows, dialogs, notifications — and uses no hooks; the only internal
+detail it relies on is the taskbar's auto-hide timer ID, which has been
+stable for a long time and is also used by other taskbar mods.
 
 ## Compatibility
 
@@ -137,6 +138,12 @@ void CollectTaskbars(std::vector<HWND>* out) {
 // with the monitor rect, which handles taskbars on any edge, including side
 // taskbars placed by other mods.
 bool IsTaskbarShown(HWND hwnd, RECT* rectOut) {
+    // Skip windows that are hidden but may still be positioned on screen
+    // (for example, hidden by another mod with ShowWindow).
+    if (!IsWindowVisible(hwnd)) {
+        return false;
+    }
+
     RECT rc;
     if (!GetWindowRect(hwnd, &rc)) {
         return false;
@@ -424,7 +431,8 @@ void Wh_ModAfterInit() {
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
         LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
         DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-        LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
     CreateProcessInternalW_t pCreateProcessInternalW =
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
