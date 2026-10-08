@@ -31,7 +31,7 @@ flip through them; release Alt and the chosen window flies back into place.
 
 ## Animation styles
 
-![All animation styles](https://i.imgur.com/ul1d5ca.jpeg)
+![All animation styles](https://i.imgur.com/WtbqDRW.png)
 
 * **Flip 3D**: the Windows Vista stack, receding up and to the left.
 * **Cascade**: a deck of windows tilted backwards, receding upwards.
@@ -46,8 +46,8 @@ flip through them; release Alt and the chosen window flies back into place.
 * **Rolodex**: a vertical wheel, windows roll over the top and under the
   bottom.
 * **Cube**: each window is a face of a cube that turns to the next one.
-* **Sphere**: windows spread over a ball that spins to bring the chosen one
-  to the front.
+* **Sphere**: windows spread over a ball, in bands that spiral around it;
+  the ball turns to bring the chosen one to the middle of its front.
 * **Shuffle**: a deck of windows; the front one is lifted over the deck and
   slid in at the back.
 * **Domino**: windows standing in a row; the front one falls over.
@@ -149,7 +149,7 @@ passando por elas; solte o Alt e a janela escolhida volta voando para o lugar.
 
 ### Estilos de animação
 
-![Todos os estilos de animação](https://i.imgur.com/ul1d5ca.jpeg)
+![Todos os estilos de animação](https://i.imgur.com/WtbqDRW.png)
 
 * **Flip 3D**: a pilha do Windows Vista, indo para cima e para a esquerda.
 * **Cascata**: um baralho de janelas inclinado para trás, subindo.
@@ -163,8 +163,8 @@ passando por elas; solte o Alt e a janela escolhida volta voando para o lugar.
 * **Túnel**: janelas afundando num túnel que gira.
 * **Rolodex**: uma roda vertical, as janelas rolam por cima e por baixo.
 * **Cubo**: cada janela é uma face de um cubo que gira para a próxima.
-* **Esfera**: janelas espalhadas numa bola que gira para trazer a escolhida
-  para a frente.
+* **Esfera**: janelas espalhadas numa bola, em faixas que dão a volta nela
+  em espiral; a bola gira para trazer a escolhida para o meio da frente.
 * **Embaralhar**: um baralho de janelas; a da frente é levantada por cima e
   colocada no fundo.
 * **Dominó**: janelas em pé numa fileira; a da frente cai.
@@ -334,8 +334,8 @@ acima. Só um deles consegue assumir o Alt+Tab.
 - winTabStyle: same
   $name: Win+Tab animation style
   $name:pt-BR: Estilo da animação no Win+Tab
-  $description: Lets Win+Tab use a different style from Alt+Tab. Only when the shortcut includes Win+Tab
-  $description:pt-BR: Deixa o Win+Tab usar um estilo diferente do Alt+Tab. Só quando o atalho inclui o Win+Tab
+  $description: Lets Win+Tab use a different style from Alt+Tab. Only when the shortcut includes Win+Tab. The "Native Windows Alt+Tab" style turns the whole mod off, Win+Tab too; to keep Alt+Tab native and use the mod on Win+Tab only, choose the "Win+Tab" shortcut instead
+  $description:pt-BR: Deixa o Win+Tab usar um estilo diferente do Alt+Tab. Só quando o atalho inclui o Win+Tab. O estilo "Alt+Tab nativo do Windows" desliga o mod inteiro, o Win+Tab também; para deixar o Alt+Tab nativo e usar o mod só no Win+Tab, escolha o atalho "Win+Tab"
   $options:
   - same: Same as Alt+Tab
   - flip3d: Flip 3D (Vista stack)
@@ -620,6 +620,7 @@ constexpr UINT WM_APP_COMMIT = WM_APP + 4;  // switch to the front window
 constexpr UINT WM_APP_CANCEL = WM_APP + 5;  // go back without switching
 constexpr UINT WM_APP_SETTINGS = WM_APP + 6;
 constexpr UINT WM_APP_REFRESH_ICONS = WM_APP + 7;  // Posted to itself.
+constexpr UINT WM_APP_MOVE_DEVICE = WM_APP + 8;    // Posted to itself.
 
 constexpr WPARAM kStartBackwards = 1;
 // Started from explorer's own Alt+Tab hotkey: the keyboard hook didn't see
@@ -754,6 +755,7 @@ Settings LoadSettings() {
         PCWSTR name;
         AnimationStyle style;
     } kStyles[] = {
+        {L"flip3d", AnimationStyle::Flip3D},
         {L"cascade", AnimationStyle::Cascade},
         {L"coverflow", AnimationStyle::CoverFlow},
         {L"carousel", AnimationStyle::Carousel},
@@ -777,9 +779,6 @@ Settings LoadSettings() {
     auto readStyle = [&](PCWSTR name, AnimationStyle fallback) {
         const auto value = WindhawkUtils::StringSetting::make(name);
         AnimationStyle result = fallback;
-        if (wcscmp(value, L"flip3d") == 0) {
-            result = AnimationStyle::Flip3D;
-        }
         for (const auto& entry : kStyles) {
             if (wcscmp(value, entry.name) == 0) {
                 result = entry.style;
@@ -1637,6 +1636,7 @@ struct Pose {
     float opacity = 1;
     float brightness = 1;
     float highlight = 0;  // Selection outline, used by the grid.
+    float squeeze = 1;    // Height, on top of the scale (cube faces).
 };
 
 Pose LerpPose(const Pose& a, const Pose& b, float t) {
@@ -1649,7 +1649,8 @@ Pose LerpPose(const Pose& a, const Pose& b, float t) {
             Lerp(a.angleZ, b.angleZ, t),
             Lerp(a.opacity, b.opacity, t),
             Lerp(a.brightness, b.brightness, t),
-            Lerp(a.highlight, b.highlight, t)};
+            Lerp(a.highlight, b.highlight, t),
+            Lerp(a.squeeze, b.squeeze, t)};
 }
 
 // Corners in order: top-left, top-right, bottom-right, bottom-left.
@@ -1875,6 +1876,7 @@ class Switcher {
     void ReleaseDeviceResources();
     bool DeviceRemoved() const;
     void RecreateDevice(HMONITOR monitor);
+    void MoveDeviceToMonitor();
     void HandleDeviceLost();
     void UpdateSyncInterval();
     void StopRestoreCheck();
@@ -1937,8 +1939,9 @@ class Switcher {
 
     com_ptr<ID2D1Bitmap1> GetIconBitmap(HWND hwnd);
     void RefreshIcons();
-    com_ptr<ID2D1Bitmap1> CreateIconBitmap(HICON icon);
-    com_ptr<ID2D1Bitmap1> CreateAppIconBitmap(HWND hwnd);
+    com_ptr<IWICBitmap> ReadIconPixels(HICON icon);
+    com_ptr<IWICBitmap> ReadAppIconPixels(HWND hwnd);
+    com_ptr<ID2D1Bitmap1> CreateIconBitmap(IWICBitmap* pixels);
     com_ptr<ID2D1Bitmap1> CreatePlaceholder(const Item& item);
     com_ptr<ID2D1Bitmap1> CreateTargetBitmap(UINT width, UINT height);
     com_ptr<ID2D1Bitmap1> DecodeWallpaper(const std::wstring& path,
@@ -1991,10 +1994,12 @@ class Switcher {
     HWND m_restoreWnd = nullptr;
     int m_restoreTries = 0;
 
-    // Window icons, kept across sessions (see GetIconBitmap). The bitmap is
-    // null for windows without an icon.
+    // Window icons, kept across sessions (see GetIconBitmap). The pixels are
+    // null for windows without an icon. They're kept when the device changes;
+    // only the bitmap belongs to the device, and is made again from them.
     struct CachedIcon {
         HICON source = nullptr;  // The window icon it was made from, if any.
+        com_ptr<IWICBitmap> pixels;
         com_ptr<ID2D1Bitmap1> bitmap;
     };
     std::unordered_map<HWND, CachedIcon> m_iconCache;
@@ -2138,10 +2143,13 @@ void Switcher::Activate() {
     if (!CreateDeviceResources(
             MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY))) {
         // Alt+Tab isn't taken over, so the native switcher keeps working.
+        // Tried again regularly (e.g. a graphics driver is being installed).
         ReleaseDeviceResources();
+        SetTimer(m_hwnd, kDeviceRetryTimerId, kDeviceRetryMs, nullptr);
         PublishState();
         return;
     }
+    KillTimer(m_hwnd, kDeviceRetryTimerId);
 
     if (!m_borderlessRequested) {
         m_borderlessRequested = true;
@@ -2174,6 +2182,7 @@ void Switcher::Deactivate() {
     Teardown();
     m_state = State::Idle;
     ReleaseDeviceResources();
+    m_iconCache.clear();
     PublishState();
 }
 
@@ -2318,8 +2327,10 @@ void Switcher::ReleaseDeviceResources() {
     m_titleIndex = -1;
     m_background = nullptr;
     m_backgroundKey.clear();
-    // The bitmaps belong to the device.
-    m_iconCache.clear();
+    // The bitmaps belong to the device, the icons' pixels don't.
+    for (auto& [hwnd, entry] : m_iconCache) {
+        entry.bitmap = nullptr;
+    }
     if (m_ctx) {
         m_ctx->SetTarget(nullptr);
     }
@@ -2366,6 +2377,29 @@ void Switcher::RecreateDevice(HMONITOR monitor) {
     PublishState();
 }
 
+// Moves the device to the GPU of the monitor last switched on (or of the
+// primary one, if that monitor is gone) when it's on another GPU, so frames
+// aren't copied between GPUs. Only while idle, since it takes a moment. The
+// monitor's GPU is only looked up again when the monitor or the displays
+// change.
+void Switcher::MoveDeviceToMonitor() {
+    if (m_state != State::Idle || !m_d3dDevice) {
+        return;
+    }
+    HMONITOR monitor = MonitorFromRect(&m_monitor, MONITOR_DEFAULTTOPRIMARY);
+    if (monitor == m_checkedMonitor) {
+        return;
+    }
+    m_checkedMonitor = monitor;
+    LUID adapter{};
+    if (GetMonitorAdapterLuid(monitor, &adapter) &&
+        (adapter.LowPart != m_adapterLuid.LowPart ||
+         adapter.HighPart != m_adapterLuid.HighPart)) {
+        Wh_Log(L"Moving to the monitor's GPU");
+        RecreateDevice(monitor);
+    }
+}
+
 void Switcher::HandleDeviceLost() {
     Wh_Log(L"Graphics device lost, recreating");
     // The Alt release will reach the foreground app normally.
@@ -2379,14 +2413,30 @@ void Switcher::HandleDeviceLost() {
 // Present waits this many vertical blanks, which caps the frame rate.
 void Switcher::UpdateSyncInterval() {
     m_syncInterval = 1;
-    DWM_TIMING_INFO timing{sizeof(timing)};
-    if (m_settings.maxFps <= 0 ||
-        FAILED(DwmGetCompositionTimingInfo(nullptr, &timing)) ||
-        !timing.rateRefresh.uiDenominator) {
+    if (m_settings.maxFps <= 0) {
         return;
     }
-    const double refresh = (double)timing.rateRefresh.uiNumerator /
-                           timing.rateRefresh.uiDenominator;
+    // The refresh rate of the switcher's monitor, which can differ from the
+    // others'. 0 and 1 mean the hardware's default rate.
+    double refresh = 0;
+    MONITORINFOEXW info{};
+    info.cbSize = sizeof(info);
+    DEVMODEW mode{};
+    mode.dmSize = sizeof(mode);
+    if (GetMonitorInfoW(MonitorFromRect(&m_monitor, MONITOR_DEFAULTTOPRIMARY),
+                        &info) &&
+        EnumDisplaySettingsW(info.szDevice, ENUM_CURRENT_SETTINGS, &mode) &&
+        mode.dmDisplayFrequency > 1) {
+        refresh = mode.dmDisplayFrequency;
+    } else {
+        DWM_TIMING_INFO timing{sizeof(timing)};
+        if (FAILED(DwmGetCompositionTimingInfo(nullptr, &timing)) ||
+            !timing.rateRefresh.uiDenominator) {
+            return;
+        }
+        refresh = (double)timing.rateRefresh.uiNumerator /
+                  timing.rateRefresh.uiDenominator;
+    }
     // Present accepts 1 to 4.
     m_syncInterval =
         (UINT)std::clamp(std::lround(refresh / m_settings.maxFps), 1L, 4L);
@@ -2462,6 +2512,7 @@ void Switcher::Shutdown() {
     }
     Teardown();
     ReleaseDeviceResources();
+    m_iconCache.clear();
     m_dwriteFactory = nullptr;
     m_wicFactory = nullptr;
     if (m_hwnd) {
@@ -2590,6 +2641,10 @@ LRESULT Switcher::HandleMessage(HWND hwnd,
             }
             return 0;
 
+        case WM_APP_MOVE_DEVICE:
+            MoveDeviceToMonitor();
+            return 0;
+
         case WM_APP_SETTINGS:
             m_settings = LoadSettings();
             // A session in progress keeps the style of its shortcut.
@@ -2622,16 +2677,24 @@ LRESULT Switcher::HandleMessage(HWND hwnd,
                 if (!g_takeOver || m_d3dDevice) {
                     KillTimer(m_hwnd, kDeviceRetryTimerId);
                 } else if (m_state == State::Idle) {
-                    RecreateDevice(
-                        MonitorFromRect(&m_monitor, MONITOR_DEFAULTTOPRIMARY));
+                    if (m_borderlessRequested) {
+                        RecreateDevice(MonitorFromRect(
+                            &m_monitor, MONITOR_DEFAULTTOPRIMARY));
+                    } else {
+                        // The first start failed.
+                        Activate();
+                    }
                 }
                 return 0;
             }
             break;
 
         case WM_DISPLAYCHANGE:
+            // E.g. an external monitor on the other GPU was unplugged: move
+            // the device back, so that GPU can power down.
             m_checkedMonitor = nullptr;
             m_backgroundKey.clear();
+            PostMessageW(m_hwnd, WM_APP_MOVE_DEVICE, 0, 0);
             break;
 
         case WM_SETTINGCHANGE:
@@ -2709,19 +2772,11 @@ void Switcher::OnStart(WPARAM flags) {
     // A previous window may still be on its way back from minimized.
     StopRestoreCheck();
 
-    // The device is gone (e.g. the graphics driver was updated or reset) or
-    // belongs to another GPU than this monitor's: start over with a new one,
-    // so the frames don't have to be copied between GPUs. The monitor's GPU
-    // is only looked up again when the monitor or the displays change.
-    bool otherAdapter = false;
-    if (monitor != m_checkedMonitor) {
-        m_checkedMonitor = monitor;
-        LUID adapter{};
-        otherAdapter = GetMonitorAdapterLuid(monitor, &adapter) &&
-                       (adapter.LowPart != m_adapterLuid.LowPart ||
-                        adapter.HighPart != m_adapterLuid.HighPart);
-    }
-    if (DeviceRemoved() || otherAdapter) {
+    // The device is gone (e.g. the graphics driver was updated or reset):
+    // start over with a new one. If it's only on another GPU than this
+    // monitor's, this session keeps it, and it moves once the session is over
+    // (see MoveDeviceToMonitor), so Alt+Tab never waits for that.
+    if (DeviceRemoved()) {
         RecreateDevice(monitor);
         if (!g_ready) {
             EndSwitching();
@@ -3453,10 +3508,12 @@ void Switcher::BeginClose(bool commit) {
     // desktop revealed as the switcher fades out already matches where the
     // windows are flying to. Otherwise the old front window shows through
     // while they move (a double image when frames come slowly). Minimized
-    // windows wait for the end, so their restore animation stays hidden.
+    // windows wait for the end, so their restore animation stays hidden, and
+    // so do always-on-top ones, which would come up above the overlay.
     m_activatedEarly = false;
     HWND target = CommitTarget();
-    if (target && !IsIconic(target)) {
+    if (target && !IsIconic(target) &&
+        !(GetWindowLongPtrW(target, GWL_EXSTYLE) & WS_EX_TOPMOST)) {
         ActivateWindow(target);
         m_activatedEarly = true;
     }
@@ -3487,7 +3544,9 @@ void Switcher::EndSession() {
     HideOverlay();
     Teardown();
     m_state = State::Idle;
-    // Nobody is waiting now, so check the cached icons (see GetIconBitmap).
+    // Nobody is waiting now, so check whether the device should move to this
+    // monitor's GPU, and the cached icons (see GetIconBitmap).
+    PostMessageW(m_hwnd, WM_APP_MOVE_DEVICE, 0, 0);
     PostMessageW(m_hwnd, WM_APP_REFRESH_ICONS, 0, 0);
 }
 
@@ -3526,8 +3585,8 @@ void Switcher::StopRestoreCheck() {
 }
 
 // A minimized window switched to is still minimized: ask again, the way the
-// taskbar does it, then directly (not if its app stopped responding, since
-// ShowWindow would wait for it).
+// taskbar does it, then directly (without waiting for its app, which may be
+// busy).
 void Switcher::CheckRestored() {
     HWND hwnd = m_restoreWnd;
     if (!hwnd || !IsWindow(hwnd) || !IsIconic(hwnd) ||
@@ -3544,8 +3603,8 @@ void Switcher::CheckRestored() {
     SendDummyKeyPress();
     if (m_restoreTries == 1) {
         PostMessageW(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0);
-    } else if (!IsHungAppWindow(hwnd)) {
-        ShowWindow(hwnd, SW_RESTORE);
+    } else {
+        ShowWindowAsync(hwnd, SW_RESTORE);
     }
 
     HWND popup = GetLastActivePopup(hwnd);
@@ -3688,7 +3747,7 @@ void Switcher::ComputeLayout() {
 
         case AnimationStyle::Cube:
             // Each window is a face of a cube turning around its vertical
-            // axis. All faces get the same box, so the edges meet.
+            // axis. All faces are as wide as the cube, so the edges meet.
             m_boxWidth = m_width * 0.40f;
             m_boxHeight = m_height * 0.46f;
             m_frontX = 0;
@@ -3698,16 +3757,28 @@ void Switcher::ComputeLayout() {
             m_stepZ = 3.14159265f / 2;  // Angle per window.
             break;
 
-        case AnimationStyle::Sphere:
-            // Windows on the surface of a ball, in two staggered rings.
+        case AnimationStyle::Sphere: {
+            // Windows on a spiral around a ball, from the selected one in
+            // the middle of its face. Each window is a step further around
+            // and a little lower; one turn later, the windows are a step
+            // lower, in the next band. Steps get smaller with more windows,
+            // so all of them fit on the ball once, from top to bottom.
             m_boxWidth = m_width * 0.25f;
             m_boxHeight = m_height * 0.30f;
             m_frontX = 0;
             m_frontY = -m_height * 0.01f;
             m_stepX = m_height * 0.40f * spacing;  // Radius.
-            m_stepY = 0.30f;                       // Latitude of the rings.
-            m_stepZ = std::clamp(m_boxWidth * 0.95f / m_stepX, 0.3f, 1.0f);
+            // Longitude per window, at most about a window's width. Over
+            // count windows, the bands then reach count * step^2 / (4 pi)
+            // up and down, which stays within kMaxLatitude.
+            constexpr float kMaxLatitude = 1.15f;
+            m_stepZ = std::min(
+                std::clamp(m_boxWidth * 0.95f / m_stepX, 0.3f, 1.0f),
+                2 * std::sqrt(3.14159265f * kMaxLatitude / count));
+            // Latitude per window: one step per turn.
+            m_stepY = m_stepZ * m_stepZ / (2 * 3.14159265f);
             break;
+        }
 
         case AnimationStyle::Shuffle:
             // A deck of cards: the front one is lifted over the deck and
@@ -3941,6 +4012,11 @@ Pose Switcher::LayoutPose(const Item& item, int index, float rel) const {
             // while turning, the one coming in are seen.
             const float angle = rel * m_stepZ;
             const float half = m_stepX;
+            // Whatever the window's shape: as wide as the cube, and windows
+            // taller than the cube are squeezed to its height.
+            pose.scale = 2 * half / item.Width();
+            pose.squeeze =
+                std::min(1.0f, m_boxHeight / (item.Height() * pose.scale));
             pose.x = half * std::sin(angle);
             pose.y = m_frontY;
             pose.z = half * (1 - std::cos(angle)) + half * 0.35f;
@@ -3951,22 +4027,35 @@ Pose Switcher::LayoutPose(const Item& item, int index, float rel) const {
         }
 
         case AnimationStyle::Sphere: {
-            // The selected window comes to the middle of the ball's face;
-            // the others sit higher or lower, alternately.
+            // See ComputeLayout. Earlier windows go left and up, later ones
+            // right and down. Only the front of the ball is shown.
             const float selected = std::max(0.0f, 1 - distance);
-            const float latitude =
-                (index % 2 ? -m_stepY : m_stepY) * std::min(distance, 1.0f);
+            const float latitude = -rel * m_stepY;
             const float longitude = rel * m_stepZ;
             const float facing = std::cos(longitude) * std::cos(latitude);
             pose.x = m_stepX * std::sin(longitude) * std::cos(latitude);
             pose.y = m_frontY - m_stepX * std::sin(latitude);
-            pose.z = m_stepX * (1 - facing) - selected * m_stepX * 0.12f;
+            pose.z = m_stepX * (1 - facing) - selected * m_stepX * 0.2f;
             pose.angleY = longitude;
             pose.angleX = latitude;
-            pose.scale = fit * (1 + selected * 0.15f);
-            pose.brightness = 0.5f + 0.5f * std::max(facing, 0.0f);
+            // Small enough for a step between neighbours, both along a band
+            // and between bands, and smaller towards the top and bottom,
+            // where the bands are shorter.
+            const float cell = m_stepX * m_stepZ;
+            pose.scale = std::min({fit, cell * 0.92f / item.Width(),
+                                   cell * 0.85f / item.Height()}) *
+                         std::max(std::cos(latitude), 0.5f) *
+                         (1 + selected * 0.25f);
+            pose.brightness = 0.45f + 0.55f * std::max(facing, 0.0f);
             pose.highlight = selected;
-            pose.opacity = std::clamp((facing - 0.05f) * 4, 0.0f, 1.0f);
+            pose.opacity = std::clamp((facing - 0.3f) * 4, 0.0f, 1.0f);
+            // Also faded out at both ends of the spiral, where a window
+            // jumps from one end to the other. Not with a few windows: the
+            // ends are then next to the selected one.
+            if (m_items.size() > 4) {
+                const float ends = m_items.size() / 2.0f - distance;
+                pose.opacity *= std::clamp(ends * 1.5f, 0.0f, 1.0f);
+            }
             break;
         }
 
@@ -4025,7 +4114,7 @@ Pose Switcher::LayoutPose(const Item& item, int index, float rel) const {
 
 Quad Switcher::Project(const Pose& pose, float width, float height) const {
     const float halfWidth = width * pose.scale / 2;
-    const float halfHeight = height * pose.scale / 2;
+    const float halfHeight = height * pose.scale * pose.squeeze / 2;
     const float cosY = std::cos(pose.angleY), sinY = std::sin(pose.angleY);
     const float cosX = std::cos(pose.angleX), sinX = std::sin(pose.angleX);
     const float cosZ = std::cos(pose.angleZ), sinZ = std::sin(pose.angleZ);
@@ -4839,18 +4928,26 @@ void Switcher::RenderFrame() {
 // sessions, and RefreshIcons checks them after a session.
 com_ptr<ID2D1Bitmap1> Switcher::GetIconBitmap(HWND hwnd) {
     if (auto it = m_iconCache.find(hwnd); it != m_iconCache.end()) {
-        return it->second.bitmap;
+        CachedIcon& entry = it->second;
+        if (!entry.bitmap && entry.pixels) {
+            // The device changed since: only the bitmap is made again.
+            entry.bitmap = CreateIconBitmap(entry.pixels.get());
+        }
+        return entry.bitmap;
     }
 
     CachedIcon entry;
     if (HICON icon = GetWindowIcon(hwnd)) {
-        entry.bitmap = CreateIconBitmap(icon);
-        if (entry.bitmap) {
+        entry.pixels = ReadIconPixels(icon);
+        if (entry.pixels) {
             entry.source = icon;
         }
     }
-    if (!entry.bitmap) {
-        entry.bitmap = CreateAppIconBitmap(hwnd);
+    if (!entry.pixels) {
+        entry.pixels = ReadAppIconPixels(hwnd);
+    }
+    if (entry.pixels) {
+        entry.bitmap = CreateIconBitmap(entry.pixels.get());
     }
     m_iconCache[hwnd] = entry;
     return entry.bitmap;
@@ -4864,19 +4961,47 @@ void Switcher::RefreshIcons() {
     for (auto& [hwnd, entry] : m_iconCache) {
         HICON icon = GetWindowIcon(hwnd);
         if (icon && icon != entry.source) {
-            if (auto bitmap = CreateIconBitmap(icon)) {
-                entry = {icon, bitmap};
+            if (auto pixels = ReadIconPixels(icon)) {
+                entry = {icon, pixels, CreateIconBitmap(pixels.get())};
             }
-        } else if (!icon && !entry.bitmap) {
+        } else if (!icon && !entry.pixels) {
             // Still no window icon; the app may have finished starting.
-            entry.bitmap = CreateAppIconBitmap(hwnd);
+            entry.pixels = ReadAppIconPixels(hwnd);
+            if (entry.pixels) {
+                entry.bitmap = CreateIconBitmap(entry.pixels.get());
+            }
         }
     }
 }
 
+// Copies an image into memory, in the format of the bitmaps. Unlike a bitmap,
+// the copy doesn't belong to the device.
+com_ptr<IWICBitmap> CopyPixels(IWICImagingFactory* factory,
+                               IWICBitmapSource* source) {
+    com_ptr<IWICFormatConverter> converter;
+    com_ptr<IWICBitmap> pixels;
+    if (FAILED(factory->CreateFormatConverter(converter.put())) ||
+        FAILED(converter->Initialize(source, GUID_WICPixelFormat32bppPBGRA,
+                                     WICBitmapDitherTypeNone, nullptr, 0,
+                                     WICBitmapPaletteTypeMedianCut)) ||
+        FAILED(factory->CreateBitmapFromSource(
+            converter.get(), WICBitmapCacheOnLoad, pixels.put()))) {
+        return nullptr;
+    }
+    return pixels;
+}
+
+com_ptr<IWICBitmap> Switcher::ReadIconPixels(HICON icon) {
+    com_ptr<IWICBitmap> wicBitmap;
+    if (FAILED(m_wicFactory->CreateBitmapFromHICON(icon, wicBitmap.put()))) {
+        return nullptr;
+    }
+    return CopyPixels(m_wicFactory.get(), wicBitmap.get());
+}
+
 // Packaged (UWP) apps, hosted in an ApplicationFrameWindow, usually have no
 // window icon. Their icon comes from the shell, by the app's AppUserModelID.
-com_ptr<ID2D1Bitmap1> Switcher::CreateAppIconBitmap(HWND hwnd) {
+com_ptr<IWICBitmap> Switcher::ReadAppIconPixels(HWND hwnd) {
     com_ptr<IPropertyStore> store;
     if (FAILED(SHGetPropertyStoreForWindow(hwnd, IID_PPV_ARGS(store.put())))) {
         return nullptr;
@@ -4907,34 +5032,19 @@ com_ptr<ID2D1Bitmap1> Switcher::CreateAppIconBitmap(HWND hwnd) {
     }
 
     com_ptr<IWICBitmap> wicBitmap;
-    com_ptr<IWICFormatConverter> converter;
-    com_ptr<ID2D1Bitmap1> bitmap;
-    const bool ok =
-        SUCCEEDED(m_wicFactory->CreateBitmapFromHBITMAP(
+    com_ptr<IWICBitmap> pixels;
+    if (SUCCEEDED(m_wicFactory->CreateBitmapFromHBITMAP(
             hbitmap, nullptr, WICBitmapUsePremultipliedAlpha,
-            wicBitmap.put())) &&
-        SUCCEEDED(m_wicFactory->CreateFormatConverter(converter.put())) &&
-        SUCCEEDED(converter->Initialize(
-            wicBitmap.get(), GUID_WICPixelFormat32bppPBGRA,
-            WICBitmapDitherTypeNone, nullptr, 0,
-            WICBitmapPaletteTypeMedianCut)) &&
-        SUCCEEDED(m_ctx->CreateBitmapFromWicBitmap(converter.get(), nullptr,
-                                                   bitmap.put()));
+            wicBitmap.put()))) {
+        pixels = CopyPixels(m_wicFactory.get(), wicBitmap.get());
+    }
     DeleteObject(hbitmap);
-    return ok ? bitmap : nullptr;
+    return pixels;
 }
 
-com_ptr<ID2D1Bitmap1> Switcher::CreateIconBitmap(HICON icon) {
-    com_ptr<IWICBitmap> wicBitmap;
-    com_ptr<IWICFormatConverter> converter;
+com_ptr<ID2D1Bitmap1> Switcher::CreateIconBitmap(IWICBitmap* pixels) {
     com_ptr<ID2D1Bitmap1> bitmap;
-    if (FAILED(m_wicFactory->CreateBitmapFromHICON(icon, wicBitmap.put())) ||
-        FAILED(m_wicFactory->CreateFormatConverter(converter.put())) ||
-        FAILED(converter->Initialize(wicBitmap.get(),
-                                     GUID_WICPixelFormat32bppPBGRA,
-                                     WICBitmapDitherTypeNone, nullptr, 0,
-                                     WICBitmapPaletteTypeMedianCut)) ||
-        FAILED(m_ctx->CreateBitmapFromWicBitmap(converter.get(), nullptr,
+    if (FAILED(m_ctx->CreateBitmapFromWicBitmap(pixels, nullptr,
                                                 bitmap.put()))) {
         return nullptr;
     }
