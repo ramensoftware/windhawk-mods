@@ -2,12 +2,98 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-08T13:04:19.000Z</updated>
+    <updated>2026-10-08T20:13:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 Action Center Restorer on Windows 11 24H2+ 1.0.0]]></title>
+        <id>https://windhawk.net/mods/windows-10-action-center-restorer#d3577d8bbf385b85aa9d48b2a05d3648d395839a</id>
+        <link href="https://windhawk.net/mods/windows-10-action-center-restorer"/>
+        <updated>2026-10-08T20:13:44.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows10actioncenterrestoreronwindows1124h2">Windows 10 Action Center Restorer on Windows 11 24H2+</h1>
+<p>This mod restores the Windows 10 Action Center on Windows 11 24H2+ <strong>without
+modifying the real Windows registry</strong>.</p>
+<p>While the mod is loaded, the following value is exposed virtually, only
+inside the processes the mod is injected into:</p>
+<pre><code>HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Control Center
+    UseLiteLayout = 1 (REG_DWORD)
+</code></pre>
+<h2 id="screenshot">Screenshot</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win10actioncenter.png" alt="The restored Windows 10 Action Center" /></p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Windows 11, version 24H2 or 25H2 (x86-64) - the versions this mod is written
+and tested for. It is not meant for Windows 10.</li>
+<li>Windhawk, with mod injection into system processes enabled. The mod is
+injected into <code>explorer.exe</code>, <code>ShellExperienceHost.exe</code> and <code>ShellHost.exe</code>.</li>
+<li>Strongly recommended, but not required: the Windows 10 taskbar, i.e. the mod
+<a href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2">Win10 taskbar on Win11 24H2 or 25H2</a>
+and, with it,
+<a href="https://windhawk.net/mods/fake-explorer-path">Fake Explorer path</a>, which
+that mod requires. The restored panel is opened and animated by the Windows
+10 shell: the tray button and Win+A, the slide animation and the shortened
+close timer are its paths (the shell's <code>twinui.pcshell.dll</code>). The virtual
+value is served in the shell hosts whatever taskbar is running, so the mod
+does not depend on the Windows 10 taskbar, but that is the setup it is
+written for.</li>
+</ul>
+<h2 id="howthevirtualizationworks">How the virtualization works</h2>
+<p>Microsoft's built-in registry virtualization (UAC virtualization) is not
+available for 64-bit processes, so the value is virtualized at the Win32
+registry API level (kernelbase.dll):</p>
+<ul>
+<li><code>RegGetValueW</code> - the API ShellExperienceHost actually uses to read
+<code>UseLiteLayout</code> (see ExplorerPatcher's <code>ShellExperienceHostPatches.cpp</code>).</li>
+<li><code>RegQueryValueExW</code> - for code that opens the key and queries the value.</li>
+<li><code>RegOpenKeyExW</code> - if the <code>Control Center</code> key doesn't exist, a read-only
+handle to an <strong>empty private application hive</strong> (<code>RegLoadAppKeyW</code>) is
+returned, so the key behaves exactly like an existing empty key that
+contains only <code>UseLiteLayout</code>. No real key is created and no other key's
+values are exposed.</li>
+<li><code>RegEnumValueW</code> / <code>RegQueryInfoKeyW</code> - keep enumeration and value counts
+consistent with the virtual value.</li>
+</ul>
+<p>Keys are identified by their real kernel path (<code>NtQueryKey</code>), so relative
+opens (e.g. <code>CurrentVersion</code> handle + <code>Control Center</code>), different casing
+and trailing backslashes are all handled, and there is no global
+"last opened handle" state that can be confused by handle reuse.</p>
+<p>The application hive is kept in the storage directory Windhawk gives the mod
+and removes together with it: the first time the virtual key is needed, an
+empty hive file (a few KB) plus the <code>.LOG1</code>/<code>.LOG2</code> transaction logs the
+registry maintains next to a loaded hive are created there. Nothing is
+written when the key is never opened.</p>
+<h2 id="applyingchanges">Applying changes</h2>
+<p><code>UseLiteLayout</code> is read when ShellExperienceHost (and parts of Explorer)
+start. When the mod is enabled, disabled, or the virtual value setting is
+toggled, the mod restarts ShellExperienceHost (like ExplorerPatcher does) -
+but only from the shell process that owns the taskbar. Folder windows,
+<code>explorer.exe /factory,... -Embedding</code> COM servers and the like run in
+explorer.exe processes of their own, and they must not kill a
+ShellExperienceHost that already reads the virtual value. It is started again
+automatically on demand. If the Win+A / tray button still opens the Windows
+11 panel after enabling the mod at runtime, restart Explorer once.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Virtual <code>UseLiteLayout=1</code>, no HKLM modification</li>
+<li>Fast Action Center close timer</li>
+<li>Slide-in / slide-out animations, also on the very first open/close after
+ShellExperienceHost starts (window identified by its thread description,
+system repositioning absorbed into the animation)</li>
+<li>No files are replaced under C:\Windows, and none are left behind either:
+the virtual key's hive lives in Windhawk's storage for this mod</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>AdmnistratoX - Fix for the animation of the Windows 10 Action Center</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar collapse to running apps 1.0.0]]></title>
         <id>https://windhawk.net/mods/taskbar-collapse-to-running#cea2c56198ae53cf90c75bd464eeac04af0c6d2c</id>
@@ -885,70 +971,6 @@ or ban your account. There are no guarantees for any game.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Everything & Power Tools in the Start Menu 1.0]]></title>
-        <id>https://windhawk.net/mods/start-everything#d2f3636c817d15b6a8c61f16b67ad7d9652adeb1</id>
-        <link href="https://windhawk.net/mods/start-everything"/>
-        <updated>2026-10-06T17:04:19.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="everythingpowertoolsinthestartmenu">Everything &amp; Power Tools in the Start Menu</h1>
-<p>A native replacement for Windows 11 Start Menu search, powered by voidtools Everything. Type in the Start Menu to search files, apps, and settings instantly. Windows Search stays out of the way: its window is never shown, and it cannot start the Edge WebView2 process behind its Bing-backed search panel. Win+S and the taskbar search icon open this search too.</p>
-<p><img src="https://raw.githubusercontent.com/bardelyne/start-everything/main/screenshot.png" alt="Everything & Power Tools in the Start Menu" /></p>
-<h2 id="keyfeatures">Key Features</h2>
-<ul>
-<li>Instant Everything Search: Queries voidtools Everything directly through its IPC interface for fast results across millions of files. The mod keeps no index of its own.</li>
-<li>Smart Apps and Settings Search: Fuzzy matching across Desktop applications, Microsoft Store / UWP packages, Control Panel applets, and Windows Settings URIs (ms-settings:) with sharp shell icons, made at the exact pixel size of your display.</li>
-<li>Learns your favorites: apps you open from here more often move up among results that match equally well. A clearly better match always stays on top. Can be turned off in the settings, which also forgets what was learned.</li>
-<li>On-Demand Animated Palette: The Start Menu stays completely clean and uncluttered when idle. The search palette slides in with a short ease-out animation the moment you type or click the search box, and collapses when emptied or on Escape.</li>
-<li>Windows Search Out of the Way: SearchHost keeps running for the shell, but its window is never shown and it cannot launch Edge WebView2, the web view behind its Bing-backed search panel.</li>
-<li>Inline Calculator: Type /c <expression> (e.g. /c 100 * 5, /c sqrt(144), /c 15% of 200, /c 2^10) to evaluate math expressions instantly. Press Enter to copy the result.</li>
-<li>Configurable Unit Conversions: Type /c <number> [unit] to convert units using formulas configured in Mod Settings. Users can add, edit, or delete conversion items individually from the settings UI.</li>
-<li>Network Interface Inspector: Type /ip to display all active Wi-Fi, Ethernet, and VPN network interfaces with their IP addresses, subnet masks, gateways, and hardware descriptions. Press Enter to copy the IP.</li>
-<li>Full Right-Click Context Menu: Right-click any file, folder, or application to Open, Run as Administrator, Open in terminal (folders), Properties, Create desktop shortcut, Cut/Copy (files), Copy path, or Open file location.</li>
-<li>Native Properties Dialogs: Properties opens through explorer.exe, the same dialog as in File Explorer.</li>
-<li>Opens in Front: Programs are started by Explorer, the way the stock Start menu starts them, so they come to the front even when they take a while to start or you move the mouse meanwhile.</li>
-<li>Explicit Web Search: Trigger web searches on demand using the '?' prefix (e.g. '?query'). Includes customizable keyword shortcuts such as '?yt' (YouTube), '?gh' (GitHub), '?w' (Wikipedia), and '?r' (Reddit).</li>
-<li>Start Menu Styler Compatibility: Automatically syncs background styles (Tinted Glass, Acrylic, custom theme colors) in real time without restarting the mod.</li>
-<li>Type Anywhere: Typing anywhere in the open Start Menu goes to the search box.</li>
-<li>Win+S and the Search Icon: Win+S and the taskbar search icon open the Start Menu with this search instead of the Windows search panel.</li>
-</ul>
-<h2 id="requirements">Requirements</h2>
-<ol>
-<li>Windows 11 (version 22H2+ x86-64).</li>
-<li>voidtools Everything (version 1.4 or 1.5a) running in the background.</li>
-</ol>
-<h2 id="taskbarsearch">Taskbar Search</h2>
-<p>The Windows key, the Start button, Win+S, and the taskbar search icon all open this search. The full taskbar search box is not supported, so set Search to "Search icon only" or "Hide":</p>
-<ol>
-<li>Right-click the Taskbar and select Taskbar settings (or Settings &gt; Personalization &gt; Taskbar).</li>
-<li>Under Taskbar items, set Search to "Search icon only" or "Hide".</li>
-</ol>
-<h2 id="keyboardshortcuts">Keyboard Shortcuts</h2>
-<ul>
-<li>Type any key: Automatically reveals the search palette, focuses the search box, and queries apps and files.</li>
-<li>Up / Down: Navigate through application, calculation, conversion, and file results.</li>
-<li>Tab / Shift + Tab: Move to the next / previous result, through the apps and on into the files.</li>
-<li>Left / Right: Switch between the Apps and Files columns. Right switches only with the cursor at the end of the query, so the arrows still move the cursor while you edit.</li>
-<li>Enter: Launch the selected application, copy calculation/conversion/IP result, or open item. Pressed before the results for what you typed are in, it opens the first one as soon as they arrive.</li>
-<li>Ctrl + Enter: Run the selected application or file as Administrator (triggers UAC).</li>
-<li>Shift + Enter: Open the selected result's context menu, the same one a right-click opens; navigate it with the arrow keys and Enter.</li>
-<li>Escape: Clear the current query and smoothly collapse the search palette back to pinned apps.</li>
-<li>Right-Click: Context menu with Open, Run as Administrator, Open in terminal, Properties, Create desktop shortcut, Cut/Copy (files), Copy path, and Open file location.</li>
-</ul>
-<p>Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start Menu. Use 'Create desktop shortcut' first, then right-click the shortcut on your desktop and select 'Pin to Taskbar' or 'Pin to Start'.</p>
-<h2 id="commandreference">Command Reference</h2>
-<ul>
-<li>/c <expression>: Calculate math expression (e.g. /c 100 * 5, /c sqrt(144), /c 15% of 200).</li>
-<li>/c <number>: Display all configured unit conversions and programmer radix (Hex, Bin, Oct).</li>
-<li>/c <number> <unit>: Targeted unit conversion (e.g. /c 100 km, /c 32 c, /c 50 lbs).</li>
-<li>/ip: List all active network interfaces and IP addresses.</li>
-<li>? <term>: Web search using default search engine.</li>
-<li>?<shortcut> <term>: Targeted web search (e.g. ?yt lo-fi, ?gh windhawk, ?w physics, ?r windows).</li>
-</ul>]]></content>
-        <author>
-            <name>bardelyne</name>
-            <uri>https://github.com/bardelyne</uri>
         </author>
     </entry>
 </feed>
