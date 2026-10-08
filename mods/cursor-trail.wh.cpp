@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              cursor-trail
-// @name            Cursor trail
+// @name            Simple Cursor Trail
 // @description     A fully customizable cursor trail overlay for the Windows desktop.
 // @version         1.0
 // @author          Ulrizza
@@ -12,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-# WindHawk - Cursor Trail
+# Simple Cursor Trail
 
 A fully customizable cursor trail for the Windows desktop.  
 
@@ -23,15 +23,13 @@ I always liked the original Windows cursor trail, but it was too limited, so I m
 If you see any bug or want more settings/features, add an issue on the [Github repo](https://github.com/Ulrizza/WindHawk-CursorTrail)!  
 I cannot promise you anything because I don't have much free time but I enjoyed making this plugin so I'll do my best 🤘
 
-**Disclamer:** I used AI to make this project, I just wanted a custom cursor trail and now I have it so I'm happy. If you are botherded by that, just don't install it.
+**Disclaimer:** I used AI to make this project, I just wanted a custom cursor trail and now I have it so I'm happy. If you are bothered by that, just don't install it.
 
 ## Installation
 
 1. Install [Windhawk](https://windhawk.net/).
-2. Install **Cursor trail** from the Windhawk mods catalog, or import the source
-   (`CursorTrail.cpp`) from this repository via the Windhawk mod editor.
-3. On Windows 11, also install the companion **Cursor trail helper - always on top**
-   mod so the trail draws above the taskbar and Start menu.
+2. Install **Simple Cursor Trail** from the Windhawk mods catalog, or import the
+   source (`CursorTrail.cpp`) from this repository via the Windhawk mod editor.
 
 ## The two styles
 
@@ -41,6 +39,21 @@ I cannot promise you anything because I don't have much free time but I enjoyed 
   where it spawned (they stay put and only fade out). Each copy keeps the exact
   cursor image from when it was sampled, so an image change (e.g. arrow to
   I-beam) appears gradually along the trail.
+
+## How it differs
+
+This mod is intentionally minimal: it just draws a trail — no particles,
+physics, or extra effects. It offers two styles:
+
+- **Simple line** — a line that follows the cursor, with customizable width,
+  color, and opacity.
+- **Cursor ghost** — faded copies of the real cursor image, left behind where
+  they spawned; directly inspired by the classic Windows cursor-trail feature.
+
+By contrast, [Mouse Trail](https://windhawk.net/mods/mouse-trail) follows the
+cursor with special effects from a full D3D11 particle/physics engine, while
+[Cursor Motion Blur](https://windhawk.net/mods/cursor-motion-blur) only smears
+the cursor at high speed.
 
 ## Features
 
@@ -357,74 +370,17 @@ Fine-tune the trail origin horizontally in pixels (auto-centered by default, 0 =
 `15 15`  
 ![tail_offset.y = +10](https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/tail_offset.15.15.gif)
 
-## Above the taskbar and Start menu
-
-On Windows 11 the trail is drawn under the taskbar and Start menu. Install
-the companion **Cursor trail helper - always on top** mod to lift it above
-both (it needs a one-time Win-key press).
-
-## Architecture
-
-The main mod is a single translation unit (`CursorTrail.cpp`); the optional always-on-top helper (see [Above the taskbar](#above-the-taskbar-and-start-menu)) is a separate mod in `CursorTrailHelperAlwaysOnTop.cpp`. This section describes the main mod. All state is file-scope, grouped into five struct instances:
-
-| Instance | Type | Purpose |
-|---|---|---|
-| `settings` | `Settings` | Parsed settings (tail geometry, style, width/color/opacity, trail offset). Written by `LoadSettings()`, read by all threads. |
-| `cursor` | `CursorState` | Cursor geometry cache: `centerOffset`/`visualOffset` (mutex-protected) plus render-thread-only debug dims and the per-`HCURSOR` `geomCache`. |
-| `origin` | `OriginTransition` | Poll-thread-owned ease-in-out state for the trail-origin glide on cursor-image change. |
-| `render` | `RenderResources` | Direct2D factory/target/brushes, stroke style, the cached backbuffer, and the per-`HCURSOR` `cursorBitmapCache` (tinted bitmap variants) used by the ghost style. Render-thread-only. |
-| `runtime` | `Runtime` | Overlay window/threads, the `history` deque, atomics, multimedia timer, and per-frame render state. |
-
-### Threads
-
-- **Overlay thread** (`OverlayThreadProc`) — creates the `WS_EX_LAYERED` topmost window, runs the message loop, and does all Direct2D rendering via `SmearTimerProc`.
-- **Poll thread** (`PollThreadProc`) — samples the cursor every 1 ms and pushes decimated samples into `runtime.history`.
-- **Multimedia timer** (`MMTimerCallback`, a system thread) — posts `WM_TIMER` at ~125 Hz to wake the overlay thread. It never touches Direct2D directly.
-
-### Locking model
-
-- `runtime.historyMutex` protects `runtime.history` (poll + render threads).
-- `cursor.offsetMutex` protects `cursor.centerOffset` / `cursor.visualOffset` (written by render thread, read by poll thread).
-- Lock order is always `runtime.historyMutex` → `cursor.offsetMutex`.
-- `runtime.isGameRunning`, `runtime.cursorHidden`, `runtime.renderScheduled`, and `runtime.trailEnabled` are atomics.
-- `origin.*`, `render.*`, and the cursor debug dimensions are single-thread owned (see table above).
-
-### Render pipeline
-
-`SmearTimerProc` is a thin orchestrator that delegates to helpers, in order:
-
-1. `EnsureBackbuffer` / `EnsureRenderTarget` — (re)create the backbuffer bitmap and D2D render target.
-2. `BuildTrailPoints` — snapshot `runtime.history`; the line style spatially decimates it, while the ghost style emits every latched copy in order, producing a parallel per-point `HCURSOR` list and (ghost only) a per-point opacity `ratio` list.
-3. `ChaikinSmooth` (Simple line only) — two-pass corner smoothing; the ghost style draws its latched copies directly so its copy count matches the setting.
-4. `ComputeTrailBBox` — trail bounding box plus stroke-width (line) or cursor-size (ghost) margin.
-5. `RenderTrail` — dispatch to the active style renderer (`RenderSimpleLineStyle` or `RenderCursorGhostStyle`); both paint tail → head so the newest part stays on top at self-crossings.
-6. `RenderToggleEffect` — optional enable/disable hotkey circle (2px outline, centered on the trail head, follows the cursor).
-7. `DrawDebug` — optional white/red outline boxes plus a green trail-start marker.
-8. `BlitOverlay` — dirty-rect tracking plus `UpdateLayeredWindow`.
-9. `PruneCursorCaches` (ghost only) — drop cached cursor geometry/bitmaps no longer referenced by the trail.
-
-### Settings & blending
-
-- `LoadSettings` uses `ReadStringSetting`, `ParseFloatList`, `SplitAndTrim`, and `ParseHexColor`, and precomputes color band boundaries (`settings.colorBandStart`/`colorBandEnd`) and opacity alphas (`settings.opacityValues`, stored as 0–1) so the hot path does no parsing or per-frame allocation. `LoadCommonTrailSettings(prefix)` reads the settings shared by both styles (trail mode, tail duration/size, timeout, opacity) from `ghostOptions` or `simpleLineOptions`, and `LoadColorSettings(prefix, defaultColor)` reads the per-style color gradient into `settings.activeColorsRGB` (and precomputes the ghost tint samples into `settings.ghostTints`); `TrailPointBudget`/`AutoPointSpacing` hold the shared point-count and spacing formulas.
-- `GetBlendedColor`, `InterpolateValues`, and `InterpolateOpacity` are allocation-free; `Ease` applies the smoothstep easing curve.
-
-### Cursor geometry
-
-`UpdateCursorCenterOffset` caches, per `HCURSOR`: the bitmap-center offset (for the debug boxes), the visible-pixel-center offset (the line-style trail origin), the hotspot, the alpha-trimmed visible bounds, and the DPI scale. It is rebuilt only when the cursor handle changes. `ComputeCursorGeom` holds the shared computation; `GetCursorGeom` lazily computes geometry for any cursor handle still referenced by the trail (so the ghost style can draw older images after an image change). Ghost samples store the raw cursor hotspot, and the ghost renderer anchors each copy by its own image's hotspot, so a copy lands exactly where that cursor image was — independent of the render thread's offset refresh. The ghost style also builds and caches D2D bitmaps per `HCURSOR` via `EnsureCursorBitmap`, rendering the cursor with `DrawIconEx` at the on-screen pixel size (color + mask + anti-aliased alpha) so copies are blitted 1:1 without resampling. The `ghostOptions.color` gradient (when set) is baked into the cached pixels by sampling it at `kGhostTintSteps` ratios (one bitmap per sample; an empty color list yields a single untinted variant), and `GetCursorBitmap(hCursor, ratio)` selects the nearest variant for each copy. `color.replace.mode` picks the pixels to recolor: `whole` swaps every non-transparent pixel; `auto` splits each pixel between two reference colors — the replace color (the cursor's enclosed center color from `AnalyzeCursorColors`, falling back to the largest region when nothing is enclosed) and a keep color (the largest boundary/outline region) — swapping pixels closer to the replace color with a small softness band around the midpoint; `custom` replaces pixels whose color matches `color.replace.custom` (soft falloff so anti-aliased edges blend), leaving every other color untouched. Both caches are released with the render target.
-
-### Lifecycle
-
-- `WhTool_ModInit` — `LoadSettings()` then spawns `OverlayThreadProc`.
-- `WhTool_ModSettingsChanged` — `LoadSettings()`, then posts `kMsgApplyHotkey` to the overlay window to re-register the hotkey on its thread.
-- `WhTool_ModUninit` — signals the poll thread, kills the timer, and posts `WM_QUIT`.
-- The overlay thread registers the `hotkeyOptions.key` setting (`ApplyHotkey`) right after creating the window and unregisters it before destroying the window. `WM_HOTKEY` flips `runtime.trailEnabled`, which suppresses sampling/rendering like the fullscreen-game path does, and (when `hotkeyOptions.animate` is on) calls `StartToggleEffect` to play the circle animation centered on the trail head (disable: grows + fades out, ease in; enable: shrinks + fades in, ease out; 400 ms, 2px outline, diameter 6× the cursor, colored by `GetCursorColor`'s ghost-`auto` pick, following the cursor).
-- The `Wh_ModInit` / `Wh_ModAfterInit` / `Wh_ModUninit` block at the bottom of the file is Windhawk's tool-mod launcher boilerplate and should be left as-is.
-
 ## Licence
 
 This project is licensed under the MIT License. You're free to use, modify, and
 redistribute the code as long as you keep the original copyright notice and
-credit the author (Ulrizza). See [LICENSE](LICENSE) for the full text.
+credit the author (Ulrizza). See [LICENSE](https://github.com/Ulrizza/WindHawk-CursorTrail/blob/main/LICENSE) for the full text.
+
+Part of this mod is adapted from
+[Cursor Motion Blur](https://windhawk.net/mods/cursor-motion-blur) by
+[TheatriChris](https://github.com/chrisc44890), Copyright (c) TheatriChris
+(MIT): the overlay-window scaffolding, the fullscreen-game detection, and
+parts of the render loop.
 
 */
 // ==/WindhawkModReadme==
@@ -636,8 +592,6 @@ struct Settings {
     int   tailSize = 2000;
     DWORD sizeTimeout = 0;
     bool  antialiasing = true;
-    bool  debugShowOutline = false;                    // test-only; hidden from the settings UI
-    bool  debugShowTailPreview = false;                // test-only; hidden from the settings UI
     bool  isGhost = false;                            // active style is cursor_ghost
     int   ghostSpacing = 0;                           // extra px between ghost copies
     float ghostSpawnDist = 2.0f;                      // px cursor must travel before a new ghost is stamped
@@ -647,8 +601,6 @@ struct Settings {
     std::vector<Rgb> ghostTints;                      // precomputed tint per baked variant (head → tail)
     GhostReplaceMode ghostReplaceMode = GHOST_REPLACE_AUTO;  // which pixels to recolor
     Rgb   ghostReplaceColor = { 1.0f, 1.0f, 1.0f };   // Custom: original cursor color to swap for the tint
-
-    std::wstring    activeStyle = L"simple_line";
 
     std::vector<float> simpleLineWidths;              // parsed width values, one per stop
     std::vector<Rgb>   activeColorsRGB;               // pre-parsed colors of the active style
@@ -666,26 +618,22 @@ struct CursorGeom {
     int   bmWidth = 0, bmHeight = 0;
     float dpiScaleX = 1.0f, dpiScaleY = 1.0f;
     int   hotspotX = 0, hotspotY = 0;  // hotspot in native bitmap pixels
-    POINT centerOffset = { 0, 0 };   // hotspot → bitmap center (scaled)
     POINT visualOffset = { 0, 0 };   // hotspot → visible-pixel center (scaled)
     float visCenterX = 0.0f, visCenterY = 0.0f;  // visible center in bitmap pixels
     bool  visibleValid = false;
     int   visLeft = 0, visTop = 0, visRight = 0, visBottom = 0;
 };
 
-// Cursor geometry cache. The center/visual offsets are shared with the poll
-// thread via offsetMutex; the debug dimensions and geomCache below are
-// render-thread-only.
+// Cursor geometry cache. The visual offset is shared with the poll thread via
+// offsetMutex; the cursor dimensions and geomCache below are render-thread-only.
 struct CursorState {
     HCURSOR cachedCursor = NULL;
-    POINT   centerOffset = { 0, 0 };  // hotspot → bitmap center (anchors debug boxes)
     POINT   visualOffset = { 0, 0 };  // hotspot → visible-pixel center (trail origin)
-    std::mutex offsetMutex;                 // protects center/visual offsets (read by poll thread)
+    std::mutex offsetMutex;                 // protects visualOffset (read by poll thread)
 
-    int   bmWidth = 0, bmHeight = 0;        // bitmap dims + DPI scale for the debug boxes
+    int   bmWidth = 0, bmHeight = 0;        // bitmap dims + DPI scale (toggle effect + ghost bitmaps)
     float dpiScaleX = 1.0f, dpiScaleY = 1.0f;
-    bool  visibleValid = false;             // visible (alpha-trimmed) bounds
-    int   visLeft = 0, visTop = 0, visRight = 0, visBottom = 0;
+    UINT  lastDpiX = 96, lastDpiY = 96;     // effective DPI the current geometry was built for
 
     std::unordered_map<HCURSOR, CursorGeom> geomCache;  // render-thread-only per-cursor geometry
 };
@@ -727,10 +675,6 @@ struct RenderResources {
     ID2D1SolidColorBrush* pSimpleLineBrush = nullptr;
     ID2D1SolidColorBrush* pEffectBrush = nullptr;   // enable/disable toggle circle
     ID2D1StrokeStyle*     pStrokeStyle = nullptr;
-    // DEBUG brushes (temporary): white = bitmap bounds, red = visible pixels, green = trail start.
-    ID2D1SolidColorBrush* pDebugBrush = nullptr;
-    ID2D1SolidColorBrush* pDebugBrushRed = nullptr;
-    ID2D1SolidColorBrush* pDebugBrushGreen = nullptr;
 
     // Cursor ghost style: per-HCURSOR D2D bitmaps, built lazily when a new
     // cursor image appears and released with the render target.
@@ -750,21 +694,36 @@ struct Runtime {
     std::mutex historyMutex;                  // protects history (poll + render threads)
     HANDLE pollThread = NULL;
     HANDLE pollStopEvent = NULL;
+    HANDLE overlayReadyEvent = NULL;          // signalled once the overlay window exists
     std::atomic<bool> isGameRunning{false};   // set by render thread, read by poll thread
     std::atomic<bool> cursorHidden{false};    // set by render thread, read by poll thread
     std::atomic<bool> renderScheduled{false}; // set by MMTimerCallback, cleared by overlay thread
     std::atomic<bool> trailEnabled{true};     // toggled by the enable/disable hotkey; read by both threads
-    int     sampleRate = 1;                   // polling interval in ms
+    std::atomic<bool> overlayIdle{false};     // render timer stopped (set by overlay, read by poll)
+    std::atomic<bool> idleWakePending{false}; // coalesces poll -> overlay kMsgIdleWake posts
+    // Bumped by the poll thread whenever the trail content changes (sample
+    // pushed/evicted, cursor image changed). The render thread only redraws
+    // when this differs from renderedRevision, so a static trail doesn't keep
+    // repainting an identical frame. Read/written under historyMutex.
+    std::atomic<unsigned long long> contentRevision{0};
     MMRESULT mmTimerId = 0;
+    DWORD   lastActiveTime = 0;               // overlay-thread-only; last frame with work
+    bool    periodRaised = false;             // overlay-thread-only; timeBeginPeriod(1) state
 
     DWORD lastMovementTime = 0;               // poll-thread-owned
     POINT lastCursorPos = { 0, 0 };           // previous raw cursor position (movement tracking)
     bool  lastCursorValid = false;
     bool  isFading = false;
+    HCURSOR lastSampledCursor = NULL;         // poll-thread-owned; last cursor image sampled
+    POINT lastSamplePos = { 0, 0 };           // poll-thread-owned; last pushed sample (canvas coords)
+    bool  lastSampleValid = false;            // poll-thread-owned; whether lastSamplePos is set
 
     RECT  prevDirtyRect = { 0, 0, 0, 0 };     // render-thread-only frame state
     bool  hasPrevDirty = false;
     bool  needsClear = false;
+    bool  needsFullClear = false;             // backbuffer just (re)created; clear the whole thing once
+    unsigned long long renderedRevision = 0;  // render-thread-only; last content revision drawn
+    unsigned renderedSettingsVersion = 0;     // render-thread-only; last settings version drawn
     DWORD lastFullscreenCheck = 0;
 };
 
@@ -786,6 +745,13 @@ struct ToggleEffect {
 static const DWORD kEffectDurationMs = 400;
 static const float kEffectDiameterFactor = 6.0f;
 static const float kEffectStrokeWidth = 2.0f;
+
+// Idle handling: the render timer and the 1 ms timer resolution are only kept
+// alive while there is something to draw. See EnterIdleIfInactive/ResumeRenderTimer.
+static const int   kRenderIntervalMs  = 8;   // ~125 Hz render timer
+static const DWORD kIdleGraceMs       = 200; // inactivity before the render timer stops
+static const DWORD kIdlePollIntervalMs = 20; // poll interval while the overlay is idle
+static const DWORD kSampleIntervalMs  = 1;   // cursor poll interval while active
 
 ToggleEffect toggleEffect;
 
@@ -860,6 +826,8 @@ static std::wstring ReadStringSetting(const wchar_t* key, const std::wstring& de
 // thread. MOD_NOREPEAT suppresses auto-repeat while the combo is held.
 static const int kHotkeyId = 1;
 static const UINT kMsgApplyHotkey = WM_APP + 1;
+static const UINT kMsgIdleWake = WM_APP + 2;  // poll thread -> overlay: resume rendering
+static const UINT kMsgApplySettings = WM_APP + 3;  // main thread -> overlay: reload settings
 
 // Splits on '+', trimming spaces and dropping empty tokens.
 static std::vector<std::wstring> SplitOnPlus(const std::wstring& input) {
@@ -1047,7 +1015,9 @@ static void LoadCommonTrailSettings(const wchar_t* prefix) {
     settings.sizeBased    = ReadStringSetting(key(L"trail_mode").c_str(), L"time_based") == L"size_based";
     settings.tailDuration = Wh_GetIntSetting(key(L"timeBased.tail_duration").c_str());
     settings.tailSize     = Wh_GetIntSetting(key(L"sizeBased.tail_size").c_str());
-    settings.sizeTimeout  = Wh_GetIntSetting(key(L"sizeBased.timeout").c_str());
+    int sizeTimeout = Wh_GetIntSetting(key(L"sizeBased.timeout").c_str());
+    if (sizeTimeout < 0) sizeTimeout = 0;   // clamp before the unsigned conversion
+    settings.sizeTimeout  = (DWORD)sizeTimeout;
 
     ParseFloatList(key(L"opacity.values").c_str(), L"100", 0.0f, 100.0f, 100.0f, settings.opacityValues);
     for (float& v : settings.opacityValues) v /= 100.0f;
@@ -1115,19 +1085,9 @@ void LoadSettings() {
     settings.tailOffsetX = Wh_GetIntSetting(L"tail_offset.x");
     settings.tailOffsetY = Wh_GetIntSetting(L"tail_offset.y");
 
-    // Test-only debug features, hidden from the settings UI (the `debug` group
-    // was removed from the ==WindhawkModSettings== metadata). Flip these to
-    // true to exercise the debug outline / tail preview during development.
-    settings.debugShowOutline = false;
-    settings.debugShowTailPreview = false;
-
-    settings.activeStyle = ReadStringSetting(L"style", L"simple_line");
-
-    // RG-3: unknown style value → fallback to simple_line
-    if (settings.activeStyle != L"simple_line" && settings.activeStyle != L"cursor_ghost") {
-        settings.activeStyle = L"simple_line";
-    }
-    settings.isGhost = (settings.activeStyle == L"cursor_ghost");
+    // Unknown style values fall back to simple_line (isGhost stays false).
+    std::wstring style = ReadStringSetting(L"style", L"simple_line");
+    settings.isGhost = (style == L"cursor_ghost");
 
     if (settings.isGhost) {
         // Cursor ghost has its own trail options. sizeBased.tail_size is the
@@ -1200,7 +1160,6 @@ void LoadSettings() {
     } else {
         if (settings.tailSize < 20) settings.tailSize = 20;
     }
-    if (settings.sizeTimeout < 0) settings.sizeTimeout = 0;
 
     // Parse width values (min 1, no upper clamp)
     ParseFloatList(L"simpleLineOptions.width.values", L"1", 1.0f, 1e30f, 1.0f, settings.simpleLineWidths);
@@ -1228,6 +1187,20 @@ static DWORD ReadRegDword(HKEY root, const wchar_t* subKey, const wchar_t* value
     return data;
 }
 
+// Returns the effective per-monitor DPI of the monitor under the pointer
+// (default 96 when it can't be determined). Used both to size the cursor and to
+// detect when the geometry cache must be rebuilt after a DPI change.
+static void GetCursorDpi(UINT& dpiX, UINT& dpiY) {
+    dpiX = 96; dpiY = 96;
+    POINT pt;
+    if (GetCursorPos(&pt)) {
+        HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+        if (hMon) {
+            GetDpiForMonitor(hMon, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
+        }
+    }
+}
+
 // Returns the true on-screen size (physical pixels) of the cursor on the monitor
 // under the pointer. The Windows cursor-size setting is stored in the registry
 // as a DPI-independent base size (HKCU\Control Panel\Cursors\CursorBaseSize,
@@ -1236,13 +1209,7 @@ static DWORD ReadRegDword(HKEY root, const wchar_t* subKey, const wchar_t* value
 // as a fallback.
 static void GetActualCursorSize(int& cx, int& cy) {
     UINT dpiX = 96, dpiY = 96;
-    POINT pt;
-    if (GetCursorPos(&pt)) {
-        HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-        if (hMon) {
-            GetDpiForMonitor(hMon, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
-        }
-    }
+    GetCursorDpi(dpiX, dpiY);
 
     bool found = false;
     DWORD base = ReadRegDword(HKEY_CURRENT_USER, L"Control Panel\\Cursors",
@@ -1276,6 +1243,19 @@ static void ResolveCursorBitmapDimensions(ICONINFO& ii, int& bmWidth, int& bmHei
     }
 }
 
+// Single shared WIC imaging factory (render-thread-only). Created lazily on
+// first use and released when the overlay thread tears down; creating one per
+// call (as ComputeVisibleBounds / EnsureCursorBitmap used to) is wasteful.
+static IWICImagingFactory* g_pWicFactory = nullptr;
+
+static IWICImagingFactory* GetWicFactory() {
+    if (!g_pWicFactory) {
+        CoCreateInstance(CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER,
+                         IID_PPV_ARGS(&g_pWicFactory));
+    }
+    return g_pWicFactory;
+}
+
 // Computes the visible (non-transparent) pixel bounds of a cursor HBITMAP by
 // scanning its alpha channel (threshold 8 ignores faint anti-aliased edges).
 // Bounds are in bitmap pixel coordinates (right/bottom exclusive). Uses WIC
@@ -1284,13 +1264,11 @@ static void ComputeVisibleBounds(HBITMAP hbm, int& left, int& top, int& right, i
     left = top = right = bottom = 0;
     valid = false;
 
-    IWICImagingFactory* pWicFactory = nullptr;
-    HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER,
-                                  IID_PPV_ARGS(&pWicFactory));
-    if (FAILED(hr) || !pWicFactory) return;
+    IWICImagingFactory* pWicFactory = GetWicFactory();
+    if (!pWicFactory) return;
 
     IWICBitmap* pWicBitmap = nullptr;
-    hr = pWicFactory->CreateBitmapFromHBITMAP(hbm, NULL,
+    HRESULT hr = pWicFactory->CreateBitmapFromHBITMAP(hbm, NULL,
         WICBitmapUsePremultipliedAlpha, &pWicBitmap);
     if (SUCCEEDED(hr) && pWicBitmap) {
         UINT w = 0, h = 0;
@@ -1325,7 +1303,6 @@ static void ComputeVisibleBounds(HBITMAP hbm, int& left, int& top, int& right, i
         }
         pWicBitmap->Release();
     }
-    pWicFactory->Release();
 }
 
 // Computes geometry for one cursor image (bitmap dims, DPI scale, hotspot to
@@ -1354,10 +1331,6 @@ static bool ComputeCursorGeom(HCURSOR hCursor, CursorGeom& g) {
         g.hotspotX = (int)ii.xHotspot;
         g.hotspotY = (int)ii.yHotspot;
 
-        // Bitmap center (anchors the debug outline boxes).
-        g.centerOffset.x = (int)(((bmWidth / 2.0f) - (int)ii.xHotspot) * sx + 0.5f);
-        g.centerOffset.y = (int)(((bmHeight / 2.0f) - (int)ii.yHotspot) * sy + 0.5f);
-
         // Visible-pixel center (trail origin). Falls back to the bitmap center.
         ComputeVisibleBounds(hbmToUse, g.visLeft, g.visTop,
                              g.visRight, g.visBottom, g.visibleValid);
@@ -1379,18 +1352,15 @@ static bool ComputeCursorGeom(HCURSOR hCursor, CursorGeom& g) {
 }
 
 // Update the cached geometry for the current cursor. The current cursor's
-// geometry is also published in the scalar cursor.* fields for the poll thread
-// (trail origin) and the debug overlay; the full per-cursor geometry lives in
-// cursor.geomCache so the ghost style can place older cursor images too.
+// visual offset is also published in the scalar cursor.* fields for the poll
+// thread (trail origin); the full per-cursor geometry lives in cursor.geomCache
+// so the ghost style can place older cursor images too.
 void UpdateCursorCenterOffset() {
-    std::lock_guard<std::mutex> lock(cursor.offsetMutex);
-
     CURSORINFO ci = { sizeof(CURSORINFO) };
     if (!GetCursorInfo(&ci) || !(ci.flags & CURSOR_SHOWING) || !ci.hCursor) {
+        std::lock_guard<std::mutex> lock(cursor.offsetMutex);
         runtime.cursorHidden.store(true);
-        cursor.centerOffset = { 0, 0 };
         cursor.visualOffset = { 0, 0 };
-        cursor.visibleValid = false;
         cursor.bmWidth = 0;
         cursor.bmHeight = 0;
         cursor.cachedCursor = NULL;
@@ -1398,34 +1368,40 @@ void UpdateCursorCenterOffset() {
     }
     runtime.cursorHidden.store(false);
 
-    if (ci.hCursor == cursor.cachedCursor) {
-        return;  // same cursor as last frame, reuse cached geometry
+    UINT dpiX = 96, dpiY = 96;
+    GetCursorDpi(dpiX, dpiY);
+
+    {
+        std::lock_guard<std::mutex> lock(cursor.offsetMutex);
+        if (ci.hCursor == cursor.cachedCursor &&
+            dpiX == cursor.lastDpiX && dpiY == cursor.lastDpiY) {
+            return;  // same cursor and DPI, reuse cached geometry
+        }
     }
 
+    // Compute the geometry WITHOUT holding offsetMutex: this does a WIC
+    // factory call, a pixel scan, and registry/DPI reads, and the poll thread
+    // takes the same lock briefly every sample just to read visualOffset.
     CursorGeom g;
     if (!ComputeCursorGeom(ci.hCursor, g)) {
-        cursor.centerOffset = { 0, 0 };
+        std::lock_guard<std::mutex> lock(cursor.offsetMutex);
         cursor.visualOffset = { 0, 0 };
-        cursor.visibleValid = false;
         cursor.bmWidth = 0;
         cursor.bmHeight = 0;
         cursor.cachedCursor = NULL;
         return;
     }
 
+    std::lock_guard<std::mutex> lock(cursor.offsetMutex);
     cursor.geomCache[ci.hCursor] = g;
 
-    cursor.centerOffset = g.centerOffset;
     cursor.visualOffset = g.visualOffset;
     cursor.bmWidth = g.bmWidth;
     cursor.bmHeight = g.bmHeight;
     cursor.dpiScaleX = g.dpiScaleX;
     cursor.dpiScaleY = g.dpiScaleY;
-    cursor.visibleValid = g.visibleValid;
-    cursor.visLeft = g.visLeft;
-    cursor.visTop = g.visTop;
-    cursor.visRight = g.visRight;
-    cursor.visBottom = g.visBottom;
+    cursor.lastDpiX = dpiX;
+    cursor.lastDpiY = dpiY;
 
     cursor.cachedCursor = ci.hCursor;
 }
@@ -1680,10 +1656,8 @@ static void EnsureCursorBitmap(HCURSOR hCursor, int targetW, int targetH) {
     SelectObject(hdcMem, hOld);
     DeleteDC(hdcMem);
 
-    IWICImagingFactory* pWicFactory = nullptr;
-    HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER,
-                                  IID_PPV_ARGS(&pWicFactory));
-    if (SUCCEEDED(hr) && pWicFactory) {
+    IWICImagingFactory* pWicFactory = GetWicFactory();
+    if (pWicFactory) {
         size_t pixelBytes = (size_t)targetW * targetH * 4;
         size_t pixelCount = (size_t)targetW * targetH;
 
@@ -1793,7 +1767,7 @@ static void EnsureCursorBitmap(HCURSOR hCursor, int targetW, int targetH) {
             }
 
             IWICBitmap* pWicBitmap = nullptr;
-            hr = pWicFactory->CreateBitmapFromMemory(
+            HRESULT hr = pWicFactory->CreateBitmapFromMemory(
                 (UINT)targetW, (UINT)targetH, GUID_WICPixelFormat32bppPBGRA,
                 (UINT)targetW * 4, (UINT)pixelBytes,
                 scratch.data(), &pWicBitmap);
@@ -1809,7 +1783,6 @@ static void EnsureCursorBitmap(HCURSOR hCursor, int targetW, int targetH) {
                 pWicBitmap->Release();
             }
         }
-        pWicFactory->Release();
     }
 
     DeleteObject(hDib);
@@ -1836,11 +1809,13 @@ bool IsGameRunning() {
         return false;
     }
 
-    // Cache the desktop worker handles so we don't spam the Windows string table search literally 60 times a second
-    static HWND s_hwndProgman = FindWindowW(L"Progman", NULL);
-    static HWND s_hwndWorkerW = FindWindowW(L"WorkerW", NULL);
-    
-    if (hwnd == s_hwndProgman || hwnd == s_hwndWorkerW) {
+    // Look up the desktop handles fresh each call (this runs at most once per
+    // 500 ms) instead of caching them, so they don't go stale when Explorer
+    // restarts and recreates the Progman/WorkerW windows.
+    HWND hwndProgman = FindWindowW(L"Progman", NULL);
+    HWND hwndWorkerW = FindWindowW(L"WorkerW", NULL);
+
+    if (hwnd == hwndProgman || hwnd == hwndWorkerW) {
         return false;
     }
 
@@ -2102,9 +2077,6 @@ void RenderCursorGhostStyle(const std::vector<D2D1_POINT_2F>& smoothed,
 static void ReleaseRenderTargetResources() {
     if (render.pSimpleLineBrush) { render.pSimpleLineBrush->Release(); render.pSimpleLineBrush = nullptr; }
     if (render.pEffectBrush) { render.pEffectBrush->Release(); render.pEffectBrush = nullptr; }
-    if (render.pDebugBrush) { render.pDebugBrush->Release(); render.pDebugBrush = nullptr; }
-    if (render.pDebugBrushRed) { render.pDebugBrushRed->Release(); render.pDebugBrushRed = nullptr; }
-    if (render.pDebugBrushGreen) { render.pDebugBrushGreen->Release(); render.pDebugBrushGreen = nullptr; }
     for (auto& kv : render.cursorBitmapCache) {
         for (auto& v : kv.second.variants) {
             if (v.bitmap) v.bitmap->Release();
@@ -2150,30 +2122,145 @@ static void GrowBBox(RECT& bbox, bool& hasBBox, LONG l, LONG t, LONG r, LONG b) 
     }
 }
 
+// Forward declaration: defined with the idle handling below.
+static void RequestOverlayWake();
+
+// Records that the trail content changed since the last rendered frame: bumps
+// the revision so the render thread redraws, and, if the overlay has gone idle,
+// wakes it. Call with runtime.historyMutex held (the poll thread mutates the
+// history under that lock); the render thread re-checks the revision under the
+// same lock before idling, so a change can never be stranded.
+static void MarkContentChanged() {
+    runtime.contentRevision.fetch_add(1, std::memory_order_relaxed);
+    if (runtime.overlayIdle.load()) {
+        RequestOverlayWake();
+    }
+}
+
 // Time-based eviction: drop samples older than settings.tailDuration, then cap the
 // total count. Caller must hold runtime.historyMutex.
 static void EvictByTime(DWORD now) {
-    while (!runtime.history.empty() && (now - runtime.history.back().t) > (DWORD)settings.tailDuration)
+    bool changed = false;
+    while (!runtime.history.empty() && (now - runtime.history.back().t) > (DWORD)settings.tailDuration) {
         runtime.history.pop_back();
+        changed = true;
+    }
     const size_t kMaxSamples = (size_t)(settings.tailDuration);
-    while (runtime.history.size() > kMaxSamples)
+    while (runtime.history.size() > kMaxSamples) {
         runtime.history.pop_back();
+        changed = true;
+    }
+    if (changed) MarkContentChanged();
+}
+
+// Forward declaration: MMTimerCallback is defined later, before OverlayThreadProc.
+void CALLBACK MMTimerCallback(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2);
+
+// --- Idle handling ---------------------------------------------------------
+// The render timer and the 1 ms timer resolution are only needed while there is
+// something to draw. When the trail has fully faded, no toggle effect is playing
+// and the cursor is still, the overlay thread stops the multimedia timer,
+// releases the timer resolution, and hides the overlay window; the poll thread
+// then samples at a much slower rate. Cursor movement (or a hotkey / settings
+// change) wakes the overlay and shows the window again.
+
+// Re-arms the render timer, the 1 ms timer resolution, and the overlay window.
+// Safe to call when already active. Overlay-thread-only.
+static void ResumeRenderTimer() {
+    runtime.idleWakePending.store(false);
+    runtime.overlayIdle.store(false);
+    if (runtime.overlayHwnd) {
+        ShowWindow(runtime.overlayHwnd, SW_SHOWNA);
+    }
+    if (!runtime.periodRaised) {
+        timeBeginPeriod(1);
+        runtime.periodRaised = true;
+    }
+    if (!runtime.mmTimerId) {
+        runtime.mmTimerId = timeSetEvent(kRenderIntervalMs, 1, MMTimerCallback, 0, TIME_PERIODIC);
+    }
+}
+
+// Called by the overlay thread after a frame. idleAllowed is false when the
+// frame just drew something (so there is no point idling). If the overlay has
+// been inactive for kIdleGraceMs and no content change is pending, stops the
+// render timer, releases the timer resolution, and hides the overlay window.
+// Overlay-thread-only.
+static void EnterIdleIfInactive(DWORD now, bool idleAllowed) {
+    if (!idleAllowed) {
+        return;
+    }
+    if (runtime.overlayIdle.load()) {
+        return;
+    }
+    if (now - runtime.lastActiveTime < kIdleGraceMs) {
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(runtime.historyMutex);
+        // A content change may have arrived since the frame was rendered (the
+        // poll thread bumps the revision and wakes under this same lock); stay
+        // awake so that change gets drawn instead of being stranded.
+        if (runtime.contentRevision.load(std::memory_order_relaxed) !=
+            runtime.renderedRevision) {
+            return;
+        }
+        // Set the flag while holding the lock: the poll thread bumps the
+        // revision under the same lock and re-checks the flag, so a change
+        // arriving right now is guaranteed to wake us again.
+        runtime.overlayIdle.store(true);
+    }
+
+    if (runtime.mmTimerId) {
+        timeKillEvent(runtime.mmTimerId);
+        runtime.mmTimerId = 0;
+    }
+    if (runtime.periodRaised) {
+        timeEndPeriod(1);
+        runtime.periodRaised = false;
+    }
+    if (runtime.overlayHwnd) {
+        ShowWindow(runtime.overlayHwnd, SW_HIDE);
+    }
+}
+
+// Called by the poll thread when the cursor has moved. Coalesces wake requests
+// so at most one kMsgIdleWake is queued at a time.
+static void RequestOverlayWake() {
+    if (runtime.overlayHwnd && !runtime.idleWakePending.exchange(true)) {
+        if (!PostMessage(runtime.overlayHwnd, kMsgIdleWake, 0, 0)) {
+            runtime.idleWakePending.store(false);
+        }
+    }
 }
 
 // High-frequency cursor polling thread.
-// Runs at runtime.sampleRate ms intervals (default 1 ms), pushes sampled positions
-// into runtime.history when the trail is active. All D2D operations remain on the
+// Runs at kSampleIntervalMs (1 ms) intervals while active, pushing sampled
+// positions into runtime.history. All D2D operations remain on the
 // overlay/render thread — this thread only touches runtime.history (under mutex),
 // GetCursorPos, and the atomic flags.
 DWORD WINAPI PollThreadProc(LPVOID) {
     // Match the overlay thread's DPI awareness so coordinate spaces agree.
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
-    // Wait on the stop event with a runtime.sampleRate ms timeout to drive the loop.
-    while (WaitForSingleObject(runtime.pollStopEvent, runtime.sampleRate) == WAIT_TIMEOUT) {
+    // Wait on the stop event to drive the loop. Sampling runs at
+    // kSampleIntervalMs (1 ms) while the overlay is active, and at a much slower
+    // kIdlePollIntervalMs while the overlay is idle so a stationary cursor
+    // doesn't keep waking the CPU.
+    for (;;) {
+        DWORD waitMs = runtime.overlayIdle.load() ? kIdlePollIntervalMs
+                                                  : kSampleIntervalMs;
+        if (WaitForSingleObject(runtime.pollStopEvent, waitMs) != WAIT_TIMEOUT) {
+            break;
+        }
         // Respect the game-running flag set by SmearTimerProc, and the
-        // enable/disable hotkey state.
-        if (runtime.isGameRunning.load() || !runtime.trailEnabled.load()) continue;
+        // enable/disable hotkey state. Drop the sample anchor so a fresh one is
+        // pushed when sampling resumes.
+        if (runtime.isGameRunning.load() || !runtime.trailEnabled.load()) {
+            runtime.lastSampleValid = false;
+            continue;
+        }
 
         POINT pt;
         if (!GetCursorPos(&pt)) continue;
@@ -2209,6 +2296,16 @@ DWORD WINAPI PollThreadProc(LPVOID) {
             runtime.lastCursorPos = pt;
             runtime.lastCursorValid = true;
 
+            // For the line style, a cursor image change (e.g. arrow -> I-beam)
+            // must redraw even while the cursor is stationary so the trail head
+            // picks up the new image's visual center. Ghost copies keep their
+            // own latched image, so it only matters when a new copy spawns.
+            if (!settings.isGhost && sampleCursor && runtime.lastSampledCursor &&
+                sampleCursor != runtime.lastSampledCursor) {
+                MarkContentChanged();
+            }
+            runtime.lastSampledCursor = sampleCursor;
+
             if (settings.sizeBased) {
                 if ((settings.sizeTimeout > 0 && runtime.lastMovementTime > 0 &&
                      now - runtime.lastMovementTime > settings.sizeTimeout) ||
@@ -2232,8 +2329,11 @@ DWORD WINAPI PollThreadProc(LPVOID) {
                         // history to settings.tailSize copies; the oldest drops as
                         // new copies are stamped. When the cursor stops, no new
                         // copies are pushed, so the existing ones stay put.
-                        while (runtime.history.size() > (size_t)settings.tailSize)
-                            runtime.history.pop_back();
+                        if (runtime.history.size() > (size_t)settings.tailSize) {
+                            while (runtime.history.size() > (size_t)settings.tailSize)
+                                runtime.history.pop_back();
+                            MarkContentChanged();
+                        }
                     } else {
                         // Distance-based eviction: walk from head (newest)
                         // backwards, accumulating pixel distance. Pop
@@ -2248,6 +2348,7 @@ DWORD WINAPI PollThreadProc(LPVOID) {
                             if (cumulative > settings.tailSize) {
                                 while (runtime.history.size() > i)
                                     runtime.history.pop_back();
+                                MarkContentChanged();
                                 break;
                             }
                         }
@@ -2263,6 +2364,7 @@ DWORD WINAPI PollThreadProc(LPVOID) {
             // new samples are pushed until the cursor is shown again.
             if (runtime.cursorHidden.load()) {
                 origin.lastCursorValid = false;
+                runtime.lastSampleValid = false;
                 continue;
             }
 
@@ -2346,18 +2448,22 @@ DWORD WINAPI PollThreadProc(LPVOID) {
 
             // === SPAWN / DUPLICATE-SKIP — only blocks push, not eviction ===
             // Eviction has already run above, so it is safe to continue here.
-            if (!runtime.history.empty()) {
+            // Compare against the last pushed sample (not history.front()) so a
+            // stationary cursor doesn't push a fresh sample every time the
+            // history drains; that would keep the trail non-empty forever and
+            // stop the overlay from ever going idle.
+            if (runtime.lastSampleValid) {
                 if (settings.isGhost) {
                     // Ghost copies are latched at their spawn position, so only
                     // stamp a new copy once the cursor has travelled far enough
                     // from the last one. This keeps existing copies fixed in
                     // place instead of sliding with the cursor.
-                    float dx = (float)(newPt.x - runtime.history.front().pos.x);
-                    float dy = (float)(newPt.y - runtime.history.front().pos.y);
+                    float dx = (float)(newPt.x - runtime.lastSamplePos.x);
+                    float dy = (float)(newPt.y - runtime.lastSamplePos.y);
                     if (dx * dx + dy * dy < settings.ghostSpawnDist * settings.ghostSpawnDist)
                         continue;
-                } else if (runtime.history.front().pos.x == newPt.x &&
-                           runtime.history.front().pos.y == newPt.y) {
+                } else if (runtime.lastSamplePos.x == newPt.x &&
+                           runtime.lastSamplePos.y == newPt.y) {
                     // Cursor hasn't moved since last sample — skip push.
                     continue;
                 }
@@ -2369,23 +2475,30 @@ DWORD WINAPI PollThreadProc(LPVOID) {
             s.t = now;
             s.cursor = sampleCursor;
             runtime.history.push_front(s);
+            runtime.lastSamplePos = newPt;
+            runtime.lastSampleValid = true;
             runtime.lastMovementTime = now;
             runtime.isFading = false;
+            MarkContentChanged();
         }
     }
     return 0;
 }
 
-// Forward declaration: MMTimerCallback is defined later (before
-// OverlayThreadProc). Forward-declare so the compiler knows the signature.
-void CALLBACK MMTimerCallback(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2);
-
 // Allocates/recreates the backbuffer bitmap when the screen size changes.
 // Rebuilding the bitmap invalidates the render target, so it is released here.
 static void EnsureBackbuffer(HDC hdcScreen, int vW, int vH) {
     if (!render.hBitmap || render.cachedVW != vW || render.cachedVH != vH) {
-        if (render.hBitmap) DeleteObject(render.hBitmap);
-        if (render.hdcMem) DeleteDC(render.hdcMem);
+        // Delete the DC before the bitmap: the bitmap is still selected into the
+        // DC and DeleteObject fails for a selected bitmap (leaking it).
+        if (render.hdcMem) {
+            DeleteDC(render.hdcMem);
+            render.hdcMem = NULL;
+        }
+        if (render.hBitmap) {
+            DeleteObject(render.hBitmap);
+            render.hBitmap = NULL;
+        }
 
         render.hdcMem = CreateCompatibleDC(hdcScreen);
         render.hBitmap = CreateCompatibleBitmap(hdcScreen, vW, vH);
@@ -2393,6 +2506,10 @@ static void EnsureBackbuffer(HDC hdcScreen, int vW, int vH) {
 
         render.cachedVW = vW;
         render.cachedVH = vH;
+
+        // A freshly created bitmap holds uninitialized pixels; force a full
+        // clear on the next frame instead of relying on the dirty-rect clear.
+        runtime.needsFullClear = true;
 
         if (render.pDCRenderTarget) {
             ReleaseRenderTargetResources();
@@ -2411,12 +2528,6 @@ static void EnsureRenderTarget() {
 
         render.pD2DFactory->CreateDCRenderTarget(&props, &render.pDCRenderTarget);
         if (render.pDCRenderTarget) {
-            render.pDCRenderTarget->CreateSolidColorBrush(
-                D2D1::ColorF(D2D1::ColorF::White), &render.pDebugBrush);
-            render.pDCRenderTarget->CreateSolidColorBrush(
-                D2D1::ColorF(D2D1::ColorF::Red), &render.pDebugBrushRed);
-            render.pDCRenderTarget->CreateSolidColorBrush(
-                D2D1::ColorF(D2D1::ColorF::Lime), &render.pDebugBrushGreen);
             render.pDCRenderTarget->CreateSolidColorBrush(
                 D2D1::ColorF(D2D1::ColorF::White), &render.pEffectBrush);
         }
@@ -2587,67 +2698,13 @@ static void RenderTrail(const std::vector<D2D1_POINT_2F>& smoothed,
             RenderSimpleLineStyle(smoothed);
         }
         // Future styles: add else-if branches here, e.g.
-        // else if (settings.activeStyle == L"glow") { RenderGlowStyle(smoothed); }
-        runtime.needsClear = true;
-    } else {
-        runtime.needsClear = false;
+        // else if (style == L"glow") { RenderGlowStyle(smoothed); }
     }
-}
-
-// Draws the debug outline boxes and trail-start marker (when enabled).
-static void DrawDebug(const POINT& pt, int vX, int vY,
-                      const std::vector<D2D1_POINT_2F>& smoothed,
-                      RECT& bbox, bool& hasBBox) {
-    // White/red outline boxes around the detected cursor bitmap and its
-    // visible (alpha-trimmed) pixels.
-    if (settings.debugShowOutline && cursor.bmWidth > 0 && cursor.bmHeight > 0) {
-        POINT centerOffset;
-        {
-            std::lock_guard<std::mutex> offsetLock(cursor.offsetMutex);
-            centerOffset = cursor.centerOffset;
-        }
-        float boxW = cursor.bmWidth * cursor.dpiScaleX;
-        float boxH = cursor.bmHeight * cursor.dpiScaleY;
-        float boxCx = (float)(pt.x + centerOffset.x - vX);
-        float boxCy = (float)(pt.y + centerOffset.y - vY);
-        D2D1_RECT_F debugBox = D2D1::RectF(boxCx - boxW / 2.0f,
-                                           boxCy - boxH / 2.0f,
-                                           boxCx + boxW / 2.0f,
-                                           boxCy + boxH / 2.0f);
-        if (render.pDebugBrush) {
-            render.pDCRenderTarget->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
-            render.pDCRenderTarget->DrawRectangle(debugBox, render.pDebugBrush, 2.0f);
-        }
-        if (cursor.visibleValid && render.pDebugBrushRed) {
-            float baseX = boxCx - boxW / 2.0f;
-            float baseY = boxCy - boxH / 2.0f;
-            D2D1_RECT_F visBox = D2D1::RectF(
-                baseX + cursor.visLeft * cursor.dpiScaleX,
-                baseY + cursor.visTop * cursor.dpiScaleY,
-                baseX + cursor.visRight * cursor.dpiScaleX,
-                baseY + cursor.visBottom * cursor.dpiScaleY);
-            render.pDCRenderTarget->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
-            render.pDCRenderTarget->DrawRectangle(visBox, render.pDebugBrushRed, 2.0f);
-        }
-        GrowBBox(bbox, hasBBox,
-                 (LONG)debugBox.left - 1, (LONG)debugBox.top - 1,
-                 (LONG)debugBox.right + 1, (LONG)debugBox.bottom + 1);
-    }
-
-    // Green "+" marking the exact trail start (head point).
-    if (settings.debugShowOutline && !smoothed.empty() && render.pDebugBrushGreen) {
-        float hx = smoothed[0].x;
-        float hy = smoothed[0].y;
-        const float half = 8.0f;
-        render.pDCRenderTarget->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
-        render.pDCRenderTarget->DrawLine(D2D1::Point2F(hx - half, hy),
-                                    D2D1::Point2F(hx + half, hy), render.pDebugBrushGreen, 2.0f);
-        render.pDCRenderTarget->DrawLine(D2D1::Point2F(hx, hy - half),
-                                    D2D1::Point2F(hx, hy + half), render.pDebugBrushGreen, 2.0f);
-        GrowBBox(bbox, hasBBox,
-                 (LONG)hx - (LONG)half - 1, (LONG)hy - (LONG)half - 1,
-                 (LONG)hx + (LONG)half + 1, (LONG)hy + (LONG)half + 1);
-    }
+    // A trail frame replaces the previous one and the dirty-rect blit erases
+    // any leftovers, so no separate clear pass is queued. needsClear is only
+    // raised by the transient toggle effect that ends without drawing, to force
+    // one erasing frame.
+    runtime.needsClear = false;
 }
 
 // Blits the backbuffer to the overlay window via UpdateLayeredWindow, using a
@@ -2803,84 +2860,21 @@ static void RenderToggleEffect(const std::vector<D2D1_POINT_2F>& smoothed,
              (LONG)(cx + margin), (LONG)(cy + margin));
 }
 
-// --- Debug: static tail preview --------------------------------------------
-// Draws a fixed horizontal preview of the trail's appearance to the left of the
-// cursor, so it can be tuned without moving the mouse. It reuses the style
-// renderers, so width/color/opacity/size/replace and the gradients all match the
-// real trail; only the animated (position/age) parts are omitted.
-static const float kPreviewLength = 500.0f;
-static const float kPreviewOffsetY = 50.0f;
-static const int   kPreviewLinePoints = 64;
-static const int   kPreviewMaxCopies = 512;
-
-static void RenderTailPreview(const POINT& pt, int vX, int vY,
-                              RECT& bbox, bool& hasBBox) {
-    if (!render.pDCRenderTarget) return;
-
-    // Head sits flush at the cursor's x; the tail extends leftward.
-    float rightX = (float)(pt.x - vX);
-    float cy = (float)(pt.y - kPreviewOffsetY - vY);
-
-    if (settings.isGhost) {
-        HCURSOR h = cursor.cachedCursor;
-        if (!h) return;
-        CursorGeom g;
-        if (!GetCursorGeom(h, g)) return;
-
-        // Copy count: the configured Copies when size-based, otherwise as many
-        // as fit over the preview length at the configured spawn spacing.
-        int count;
-        if (settings.sizeBased) {
-            count = settings.tailSize;
-        } else {
-            float spacing = settings.ghostSpawnDist;
-            if (spacing < 1.0f) spacing = 1.0f;
-            count = (int)(kPreviewLength / spacing) + 1;
-        }
-        if (count < 2) count = 2;
-        if (count > kPreviewMaxCopies) count = kPreviewMaxCopies;
-
-        std::vector<D2D1_POINT_2F> points;
-        std::vector<HCURSOR> cursors;
-        std::vector<float> ratios;
-        points.reserve(count);
-        cursors.reserve(count);
-        ratios.reserve(count);
-        for (int i = 0; i < count; ++i) {
-            float t = (float)i / (float)(count - 1);
-            // Head at the right end, tail to the left.
-            points.push_back(D2D1::Point2F(rightX - t * kPreviewLength, cy));
-            cursors.push_back(h);
-            ratios.push_back(t);
-        }
-        RenderCursorGhostStyle(points, cursors, ratios);
-
-        float w = g.bmWidth * g.dpiScaleX * settings.ghostSizeMax;
-        float hh = g.bmHeight * g.dpiScaleY * settings.ghostSizeMax;
-        GrowBBox(bbox, hasBBox,
-                 (LONG)(rightX - kPreviewLength - w), (LONG)(cy - hh),
-                 (LONG)(rightX + w), (LONG)(cy + hh));
-    } else {
-        float maxWidth = 1.0f;
-        for (float w : settings.simpleLineWidths) {
-            if (w > maxWidth) maxWidth = w;
-        }
-
-        std::vector<D2D1_POINT_2F> points;
-        points.reserve(kPreviewLinePoints);
-        for (int i = 0; i < kPreviewLinePoints; ++i) {
-            float t = (float)i / (float)(kPreviewLinePoints - 1);
-            points.push_back(D2D1::Point2F(rightX - t * kPreviewLength, cy));
-        }
-        RenderSimpleLineStyle(points);
-
-        float margin = maxWidth * 0.5f + 2.0f;
-        GrowBBox(bbox, hasBBox,
-                 (LONG)(rightX - kPreviewLength), (LONG)(cy - margin),
-                 (LONG)(rightX), (LONG)(cy + margin));
+// Grows bbox/hasBBox to cover the toggle-effect circle's maximum extent. Uses
+// the largest possible radius (rather than the current eased radius) so the
+// clear/clip region always contains the circle.
+static void GrowToggleEffectBBox(const D2D1_POINT_2F& head, RECT& bbox, bool& hasBBox) {
+    float cursorSize = 32.0f;
+    if (cursor.bmWidth > 0 && cursor.bmHeight > 0) {
+        float w = cursor.bmWidth * cursor.dpiScaleX;
+        float h = cursor.bmHeight * cursor.dpiScaleY;
+        cursorSize = (w > h) ? w : h;
     }
-
-    runtime.needsClear = true;
+    float maxRadius = cursorSize * kEffectDiameterFactor * 0.5f;
+    float margin = maxRadius + kEffectStrokeWidth + 1.0f;
+    GrowBBox(bbox, hasBBox,
+             (LONG)(head.x - margin), (LONG)(head.y - margin),
+             (LONG)(head.x + margin), (LONG)(head.y + margin));
 }
 
 VOID CALLBACK SmearTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
@@ -2904,9 +2898,6 @@ VOID CALLBACK SmearTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTim
     bool gameRunning = runtime.isGameRunning.load();
     bool suppress = gameRunning || !runtime.trailEnabled.load();
     bool effectActive = toggleEffect.active;
-    // The static tail preview is independent of the enable/disable hotkey, but
-    // stays paused while a fullscreen game runs.
-    bool previewActive = settings.debugShowTailPreview && !gameRunning;
 
     int vX = GetSystemMetrics(SM_XVIRTUALSCREEN);
     int vY = GetSystemMetrics(SM_YVIRTUALSCREEN);
@@ -2914,18 +2905,39 @@ VOID CALLBACK SmearTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTim
     int vH = GetSystemMetrics(SM_CYVIRTUALSCREEN) - 1;
 
     if (suppress) {
-        // Keep the cursor geometry fresh so the toggle circle and the tail
-        // preview can follow the cursor even while the trail itself is off.
-        if (effectActive || previewActive) {
+        // Keep the cursor geometry fresh so the toggle circle can follow the
+        // cursor even while the trail itself is off.
+        if (effectActive) {
             UpdateCursorCenterOffset();
         }
+        // Decide whether there is anything to draw while holding the lock, but
+        // release it before EnterIdleIfInactive (which takes the lock itself).
+        bool nothingToDraw;
         {
             std::lock_guard<std::mutex> lock(runtime.historyMutex);
             bool wasEmpty = runtime.history.empty();
             runtime.history.clear();
-            if (wasEmpty && !runtime.needsClear && !effectActive && !previewActive) {
-                return;
+            nothingToDraw = wasEmpty && !runtime.needsClear && !effectActive;
+            if (nothingToDraw) {
+                // Nothing is staged for drawing after the wipe; mark the current
+                // content as rendered so EnterIdleIfInactive may stop the timer.
+                runtime.renderedRevision =
+                    runtime.contentRevision.load(std::memory_order_relaxed);
+            } else {
+                // Something was on screen (or an effect is pending);
+                // force a frame so it gets erased instead of being skipped.
+                MarkContentChanged();
             }
+        }
+        if (nothingToDraw) {
+            // Nothing to draw. If the trail is suppressed because the user
+            // turned it off (not because a game is running), let the overlay
+            // go idle; the hotkey wakes it again. While a game is running we
+            // keep the timer alive so we notice when it exits.
+            if (!gameRunning) {
+                EnterIdleIfInactive(dwTime, true);
+            }
+            return;
         }
     } else {
         // Trail active — update cursor appearance caches. The poll thread
@@ -2934,15 +2946,32 @@ VOID CALLBACK SmearTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTim
         UpdateCursorCenterOffset();
     }
 
-    // Snapshot the current history size to decide whether to draw.
-    bool historyEmpty;
+    // Snapshot the content revision (and the sample count) to decide whether
+    // this frame would differ from the last one. Frames that would be
+    // pixel-identical are skipped so a static trail doesn't keep repainting the
+    // whole backbuffer at 125 Hz.
+    unsigned long long rev;
+    size_t historyCount;
     {
         std::lock_guard<std::mutex> lock(runtime.historyMutex);
-        historyEmpty = runtime.history.empty();
+        rev = runtime.contentRevision.load(std::memory_order_relaxed);
+        historyCount = runtime.history.size();
     }
+    bool contentChanged = (rev != runtime.renderedRevision);
+    unsigned settingsVersion = g_settingsVersion.load(std::memory_order_relaxed);
+    bool settingsChanged = (settingsVersion != runtime.renderedSettingsVersion);
+    // Cursor-ghost time-based copies fade by age, so their look changes every
+    // frame even with an unchanged history. Every other combination only
+    // changes when the history does (index-based ratios, eviction-driven fades).
+    // A single sample draws nothing, so it doesn't count.
+    bool timeDependent = settings.isGhost && !settings.sizeBased &&
+                         historyCount >= 2;
+    bool wantDraw = contentChanged || settingsChanged || timeDependent ||
+                    runtime.needsClear || effectActive;
 
-    if (!historyEmpty || runtime.needsClear || effectActive || previewActive ||
-        (settings.debugShowOutline && cursor.bmWidth > 0 && cursor.bmHeight > 0)) {
+    if (wantDraw) {
+        // Something is being drawn this frame; keep the overlay awake.
+        runtime.lastActiveTime = dwTime;
         HDC hdcScreen = GetDC(NULL);
 
         EnsureBackbuffer(hdcScreen, vW, vH);
@@ -2951,11 +2980,73 @@ VOID CALLBACK SmearTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTim
         RECT curBBox = { 0, 0, 0, 0 };
         bool hasCurBBox = false;
 
+        // Build the trail points and bounding box BEFORE drawing so the clear
+        // pass can be clipped to just the affected region instead of wiping the
+        // whole virtual-desktop backbuffer every frame.
+        std::vector<D2D1_POINT_2F> smoothed;
+        std::vector<HCURSOR> cursors;
+        std::vector<float> ratios;
+        if (render.pDCRenderTarget) {
+            BuildTrailPoints(pt, vX, vY, smoothed, cursors, ratios);
+            if (smoothed.size() >= 2) {
+                if (!settings.isGhost) {
+                    ChaikinSmooth(smoothed);
+                }
+                ComputeTrailBBox(smoothed, cursors, curBBox);
+                hasCurBBox = true;
+            }
+            if (effectActive && !smoothed.empty()) {
+                GrowToggleEffectBBox(smoothed[0], curBBox, hasCurBBox);
+            }
+        }
+
+        // The region to clear + redraw is the union of this frame's bbox and the
+        // previous frame's bbox (so the old trail is erased). Falls back to the
+        // full screen when there is no bounded region.
+        RECT clearRect = { 0, 0, vW, vH };
+        bool useClearRect = false;
+        if (hasCurBBox && runtime.hasPrevDirty) {
+            clearRect.left   = (curBBox.left   < runtime.prevDirtyRect.left)   ? curBBox.left   : runtime.prevDirtyRect.left;
+            clearRect.top    = (curBBox.top    < runtime.prevDirtyRect.top)    ? curBBox.top    : runtime.prevDirtyRect.top;
+            clearRect.right  = (curBBox.right  > runtime.prevDirtyRect.right)  ? curBBox.right  : runtime.prevDirtyRect.right;
+            clearRect.bottom = (curBBox.bottom > runtime.prevDirtyRect.bottom) ? curBBox.bottom : runtime.prevDirtyRect.bottom;
+            useClearRect = true;
+        } else if (hasCurBBox) {
+            clearRect = curBBox;
+            useClearRect = true;
+        } else if (runtime.hasPrevDirty) {
+            clearRect = runtime.prevDirtyRect;
+            useClearRect = true;
+        }
+        if (useClearRect) {
+            if (clearRect.left < 0) clearRect.left = 0;
+            if (clearRect.top < 0) clearRect.top = 0;
+            if (clearRect.right > vW) clearRect.right = vW;
+            if (clearRect.bottom > vH) clearRect.bottom = vH;
+            int clearW = clearRect.right - clearRect.left;
+            int clearH = clearRect.bottom - clearRect.top;
+            if (clearW > 768 || clearH > 768 || clearW <= 0 || clearH <= 0) {
+                useClearRect = false;
+            }
+        }
+        // A freshly (re)created backbuffer holds uninitialized pixels, so clear
+        // the whole thing once rather than relying on the clipped clear.
+        if (runtime.needsFullClear) {
+            useClearRect = false;
+            runtime.needsFullClear = false;
+        }
+
         if (render.pDCRenderTarget) {
             RECT rc = { 0, 0, vW, vH };
+            if (useClearRect) rc = clearRect;
             render.pDCRenderTarget->BindDC(render.hdcMem, &rc);
 
             render.pDCRenderTarget->BeginDraw();
+            // BindDC re-origins the target at the sub-rect's top-left, so undo
+            // that shift: drawing code still uses absolute backbuffer coords.
+            render.pDCRenderTarget->SetTransform(D2D1::Matrix3x2F::Translation(
+                useClearRect ? -(float)rc.left : 0.0f,
+                useClearRect ? -(float)rc.top : 0.0f));
             render.pDCRenderTarget->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
             render.pDCRenderTarget->SetAntialiasMode(settings.antialiasing
                 ? D2D1_ANTIALIAS_MODE_PER_PRIMITIVE
@@ -2969,29 +3060,9 @@ VOID CALLBACK SmearTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTim
                 EnsureCursorBitmap(cursor.cachedCursor, tw, th);
             }
 
-            std::vector<D2D1_POINT_2F> smoothed;
-            std::vector<HCURSOR> cursors;
-            std::vector<float> ratios;
-            BuildTrailPoints(pt, vX, vY, smoothed, cursors, ratios);
-
-            if (smoothed.size() >= 2) {
-                // Ghost stamps the decimated points directly so the copy count
-                // matches the configured size; the line style smooths corners.
-                if (!settings.isGhost) {
-                    ChaikinSmooth(smoothed);
-                }
-                ComputeTrailBBox(smoothed, cursors, curBBox);
-                hasCurBBox = true;
-            }
             RenderTrail(smoothed, cursors, ratios);
 
             RenderToggleEffect(smoothed, curBBox, hasCurBBox);
-
-            if (previewActive) {
-                RenderTailPreview(pt, vX, vY, curBBox, hasCurBBox);
-            }
-
-            DrawDebug(pt, vX, vY, smoothed, curBBox, hasCurBBox);
 
             HRESULT hr = render.pDCRenderTarget->EndDraw();
             if (hr == D2DERR_RECREATE_TARGET) {
@@ -3003,15 +3074,28 @@ VOID CALLBACK SmearTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTim
         }
 
         BlitOverlay(hwnd, hdcScreen, vX, vY, vW, vH, curBBox, hasCurBBox);
+
+        // Mark the revisions we actually drew. Any change that arrived while
+        // this frame was being built leaves contentRevision/settingsVersion
+        // ahead, so the next tick redraws.
+        runtime.renderedRevision = rev;
+        runtime.renderedSettingsVersion = settingsVersion;
+    }
+
+    // If nothing changed this frame, release the render timer once the grace
+    // period has elapsed. Skipped while a game is running so game-exit
+    // detection keeps working.
+    if (!gameRunning) {
+        EnterIdleIfInactive(dwTime, !wantDraw);
     }
 }
 
 // Custom window proc for the overlay. Handles WM_TIMER (posted by the
 // multimedia timer callback) by calling SmearTimerProc directly. Also handles
-// the enable/disable hotkey (WM_HOTKEY) and hotkey re-registration on settings
-// change (kMsgApplyHotkey). All other messages go to DefWindowProc. This keeps
-// all rendering on the overlay thread while using the multimedia timer for
-// non-coalesced wakeups.
+// the enable/disable hotkey (WM_HOTKEY), hotkey re-registration on settings
+// change (kMsgApplyHotkey), and settings reload (kMsgApplySettings). All other
+// messages go to DefWindowProc. This keeps all rendering on the overlay thread
+// while using the multimedia timer for non-coalesced wakeups.
 LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (uMsg == WM_TIMER) {
         // Clear before rendering so a frame that arrives while this one is still
@@ -3020,7 +3104,17 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
         SmearTimerProc(hwnd, uMsg, wParam, GetTickCount());
         return 0;
     }
+    if (uMsg == kMsgIdleWake) {
+        // The poll thread saw movement while the overlay was idle; resume
+        // rendering (and re-arm the render timer / timer resolution).
+        ResumeRenderTimer();
+        runtime.lastActiveTime = GetTickCount();
+        return 0;
+    }
     if (uMsg == WM_HOTKEY) {
+        // A hotkey must work even while the overlay is idle.
+        ResumeRenderTimer();
+        runtime.lastActiveTime = GetTickCount();
         if ((int)wParam == kHotkeyId) {
             bool enabled = !runtime.trailEnabled.load();
             runtime.trailEnabled.store(enabled);
@@ -3030,7 +3124,28 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
         return 0;
     }
     if (uMsg == kMsgApplyHotkey) {
+        ResumeRenderTimer();
+        runtime.lastActiveTime = GetTickCount();
         ApplyHotkey(hwnd);
+        return 0;
+    }
+    if (uMsg == kMsgApplySettings) {
+        // Settings must not change while the render thread reads them mid-frame
+        // or while the poll thread reads them under historyMutex. Handling the
+        // reload here on the overlay thread serializes it against rendering,
+        // and taking historyMutex serializes it against the poll thread.
+        ResumeRenderTimer();
+        runtime.lastActiveTime = GetTickCount();
+        {
+            std::lock_guard<std::mutex> lock(runtime.historyMutex);
+            LoadSettings();
+            // Samples captured under the old style were offset differently
+            // (e.g. the line origin vs. the ghost hotspot), so drop them and
+            // start the trail fresh rather than briefly misplacing the copies.
+            runtime.history.clear();
+            runtime.lastSampleValid = false;
+            MarkContentChanged();
+        }
         return 0;
     }
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
@@ -3065,15 +3180,14 @@ DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
     // Direct2D demands COM to be initialized on this thread before it will talk to us
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
 
-    // Tell Windows we aren't a blurry legacy piece of shit so mixed-DPI monitors don't fuck up the math
+    // Enable per-monitor DPI awareness so mixed-DPI monitors scale correctly.
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &render.pD2DFactory);
 
     HINSTANCE hInstance = GetModuleHandle(NULL);
-    // Keep in sync with kOverlayClass in the companion "Cursor trail helper -
-    // always on top" mod, which finds this window to raise it above the taskbar.
-    const wchar_t CLASS_NAME[] = L"SmearFrameOverlayClass";
+    // Unique overlay window class name (must not collide with other mods).
+    const wchar_t CLASS_NAME[] = L"CursorTrailOverlayClass";
 
     WNDCLASS wc = { };
     wc.lpfnWndProc = OverlayWndProc; 
@@ -3096,6 +3210,13 @@ DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
         NULL, NULL, hInstance, NULL
     );
 
+    // The window (and its message queue) now exist, or creation failed and we
+    // are about to return. Signal either way so WhTool_ModUninit's wait for the
+    // window can't block forever on the failed path.
+    if (runtime.overlayReadyEvent) {
+        SetEvent(runtime.overlayReadyEvent);
+    }
+
     if (!runtime.overlayHwnd) return 0;
 
     ShowWindow(runtime.overlayHwnd, SW_SHOWNA);
@@ -3113,14 +3234,14 @@ DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
     // Use a multimedia timer instead of SetTimer. Multimedia timers have ~1ms
     // resolution and are not coalesced like WM_TIMER, giving smoother animation
     // under load. The callback PostMessages the overlay window, keeping all
-    // rendering on this thread.
+    // rendering on this thread. The timer (and the 1 ms resolution) is released
+    // by EnterIdleIfInactive when there is nothing to draw and re-armed by
+    // ResumeRenderTimer on movement or a hotkey.
     timeBeginPeriod(1);
-    // Fixed render interval (8ms = ~125Hz). The render rate setting was removed
-    // because it has no visible effect after decoupling sampling from rendering.
-    // The poll thread samples at 1ms independently; this timer only controls
-    // how often the overlay is redrawn.
-    const int kRenderIntervalMs = 8;
+    runtime.periodRaised = true;
     runtime.mmTimerId = timeSetEvent(kRenderIntervalMs, 1, MMTimerCallback, 0, TIME_PERIODIC);
+
+    runtime.lastActiveTime = GetTickCount();
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
@@ -3147,27 +3268,35 @@ DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
     if (render.pStrokeStyle) { render.pStrokeStyle->Release(); render.pStrokeStyle = nullptr; }
     if (render.pD2DFactory) { render.pD2DFactory->Release(); render.pD2DFactory = nullptr; }
 
-    if (render.hBitmap) DeleteObject(render.hBitmap);
-    if (render.hdcMem) DeleteDC(render.hdcMem);
+    if (render.hdcMem) { DeleteDC(render.hdcMem); render.hdcMem = NULL; }
+    if (render.hBitmap) { DeleteObject(render.hBitmap); render.hBitmap = NULL; }
 
     // Kill the multimedia timer if still running (may have been killed
-    // already by WhTool_ModUninit) and restore default timer resolution.
+    // already by EnterIdleIfInactive) and release the timer resolution if we
+    // still hold it.
     if (runtime.mmTimerId) {
         timeKillEvent(runtime.mmTimerId);
         runtime.mmTimerId = 0;
     }
-    timeEndPeriod(1);
+    if (runtime.periodRaised) {
+        timeEndPeriod(1);
+        runtime.periodRaised = false;
+    }
 
     UnregisterHotKey(runtime.overlayHwnd, kHotkeyId);
     DestroyWindow(runtime.overlayHwnd);
     UnregisterClass(CLASS_NAME, hInstance);
 
+    if (g_pWicFactory) { g_pWicFactory->Release(); g_pWicFactory = nullptr; }
     CoUninitialize();
     return 0;
 }
 
 BOOL WhTool_ModInit() {
     LoadSettings();
+    // Created before the thread so WhTool_ModUninit can wait for the overlay
+    // window to exist even if the mod is disabled immediately after starting.
+    runtime.overlayReadyEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     runtime.threadHandle = CreateThread(NULL, 0, OverlayThreadProc, NULL, 0, &runtime.overlayThreadId);
     return TRUE;
 }
@@ -3180,37 +3309,42 @@ void WhTool_ModUninit() {
         SetEvent(runtime.pollStopEvent);
     }
 
-    // Kill the multimedia timer BEFORE posting WM_QUIT. The timer posts
-    // WM_TIMER messages at 125Hz; if left running, they flood the message
-    // queue and starve WM_QUIT, causing the unload to hang forever.
-    if (runtime.mmTimerId) {
-        timeKillEvent(runtime.mmTimerId);
-        runtime.mmTimerId = 0;
-        Sleep(20);  // Let any in-flight MMTimerCallback fire and complete
+    // Wait until the overlay thread has created (or failed to create) its
+    // window. Without this, disabling right after startup could find
+    // runtime.overlayHwnd still NULL, post no WM_QUIT, and then block the join
+    // below forever.
+    if (runtime.threadHandle && runtime.overlayReadyEvent) {
+        WaitForSingleObject(runtime.overlayReadyEvent, INFINITE);
     }
 
-    if (runtime.overlayThreadId) {
-        PostThreadMessage(runtime.overlayThreadId, WM_QUIT, 0, 0);
+    // Post WM_QUIT to the overlay window so its message loop exits and runs the
+    // thread's own teardown (kill the timer, free D2D, destroy the window).
+    // The timer callback coalesces to a single pending WM_TIMER (renderScheduled
+    // guard), so it can't starve WM_QUIT and a clean, unbounded join is reliable.
+    if (runtime.overlayHwnd) {
+        PostMessage(runtime.overlayHwnd, WM_QUIT, 0, 0);
     }
     if (runtime.threadHandle) {
-        DWORD waitResult = WaitForSingleObject(runtime.threadHandle, 5000);
-        if (waitResult == WAIT_TIMEOUT) {
-            // Safety net: if the overlay thread didn't exit cleanly in 5s,
-            // force-terminate to avoid hanging Windhawk's unload.
-            TerminateThread(runtime.threadHandle, 0);
-        }
+        WaitForSingleObject(runtime.threadHandle, INFINITE);
         CloseHandle(runtime.threadHandle);
         runtime.threadHandle = NULL;
+    }
+    if (runtime.overlayReadyEvent) {
+        CloseHandle(runtime.overlayReadyEvent);
+        runtime.overlayReadyEvent = NULL;
     }
 }
 
 void WhTool_ModSettingsChanged() {
-    LoadSettings();
-
-    // Re-register the hotkey on the overlay thread, which owns the window and
-    // its message queue (RegisterHotKey/UnregisterHotKey are thread-bound).
+    // Reload settings on the overlay thread (kMsgApplySettings) so the write
+    // doesn't race with the render/poll threads. Re-register the hotkey on the
+    // overlay thread too, which owns the window and its message queue
+    // (RegisterHotKey/UnregisterHotKey are thread-bound).
     if (runtime.overlayHwnd) {
+        PostMessage(runtime.overlayHwnd, kMsgApplySettings, 0, 0);
         PostMessage(runtime.overlayHwnd, kMsgApplyHotkey, 0, 0);
+    } else {
+        LoadSettings();  // overlay thread not running yet; no race
     }
 }
 
@@ -3237,8 +3371,6 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    timeBeginPeriod(1);
-
     DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
         sessionId == 0) {
@@ -3387,8 +3519,6 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
-    timeEndPeriod(1);
-
     if (g_isToolModProcessLauncher) {
         return;
     }
