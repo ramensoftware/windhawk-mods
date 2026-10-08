@@ -46,6 +46,8 @@ kept in the mod's own storage folder (or in the folder of the `installFolder`
 setting), which Windhawk removes together with the mod, and no registry key is
 left behind.
 
+This modification has been tested on Windows 10 21H2 and Windows 11 24H2.
+
 ## Screenshot (Before)
 
 ![Before](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/beforekeyboard.PNG)
@@ -100,42 +102,62 @@ windows.
   $description: >-
     This setting sets the folder that holds the Windows 7 files; environment
     variables are expanded. Leave it empty to use the mod's own storage folder,
-    which Windhawk removes together with the mod.
+    which Windhawk removes together with the mod. The mod downloads the pinned
+    Windows 7 files into this folder; a file there that is not the pinned build
+    is first renamed to <name>.user-backup, never overwritten.
   $description:it: >-
     Questa impostazione indica la cartella che contiene i file di Windows 7; le
     variabili d'ambiente vengono espanse. Lasciala vuota per usare la cartella di
-    archiviazione del mod, che Windhawk rimuove insieme al mod.
+    archiviazione del mod, che Windhawk rimuove insieme al mod. Il mod scarica i
+    file di Windows 7 previsti in questa cartella; un file già presente che non
+    è la build prevista viene prima rinominato in <nome>.user-backup, mai
+    sovrascritto.
   $description:ru: >-
     Этот параметр задаёт папку с файлами Windows 7; переменные среды раскрываются.
     Оставьте его пустым, чтобы использовать собственную папку хранения мода,
-    которую Windhawk удаляет вместе с модом.
+    которую Windhawk удаляет вместе с модом. Мод загружает в эту папку нужные
+    файлы Windows 7; существующий файл, не совпадающий с нужной сборкой, сначала
+    переименовывается в <имя>.user-backup и никогда не перезаписывается.
   $description:es: >-
     Esta opción indica la carpeta que contiene los archivos de Windows 7; las
     variables de entorno se expanden. Déjala vacía para usar la carpeta de
-    almacenamiento del mod, que Windhawk elimina junto con el mod.
+    almacenamiento del mod, que Windhawk elimina junto con el mod. El mod
+    descarga los archivos de Windows 7 en esta carpeta; un archivo existente que
+    no sea la compilación esperada se renombra antes a <nombre>.user-backup y
+    nunca se sobrescribe.
   $description:pt-BR: >-
     Esta configuração indica a pasta que contém os arquivos do Windows 7; as
     variáveis de ambiente são expandidas. Deixe-a vazia para usar a pasta de
-    armazenamento do mod, que o Windhawk remove junto com o mod.
+    armazenamento do mod, que o Windhawk remove junto com o mod. O mod baixa os
+    arquivos do Windows 7 para esta pasta; um arquivo existente que não seja a
+    compilação esperada é antes renomeado para <nome>.user-backup e nunca é
+    sobrescrito.
   $description:fr: >-
     Ce paramètre indique le dossier qui contient les fichiers de Windows 7 ; les
     variables d'environnement sont développées. Laissez-le vide pour utiliser le
-    dossier de stockage du mod, que Windhawk supprime avec le mod.
+    dossier de stockage du mod, que Windhawk supprime avec le mod. Le mod
+    télécharge les fichiers de Windows 7 dans ce dossier ; un fichier existant
+    qui n'est pas la build attendue est d'abord renommé en <nom>.user-backup,
+    jamais écrasé.
   $description:de: >-
     Diese Einstellung legt den Ordner mit den Windows 7-Dateien fest;
     Umgebungsvariablen werden erweitert. Leer lassen, um den eigenen
     Speicherordner des Mods zu verwenden, den Windhawk zusammen mit dem Mod
-    entfernt.
+    entfernt. Das Mod lädt die Windows 7-Dateien in diesen Ordner herunter; eine
+    vorhandene Datei, die nicht der erwarteten Version entspricht, wird zuerst in
+    <Name>.user-backup umbenannt und nie überschrieben.
   $description:pl: >-
     To ustawienie wskazuje folder z plikami Windows 7; zmienne środowiskowe są
     rozwijane. Pozostaw je puste, aby użyć własnego folderu magazynu moda, który
-    Windhawk usuwa razem z modem.
+    Windhawk usuwa razem z modem. Mod pobiera pliki Windows 7 do tego folderu;
+    istniejący plik, który nie jest oczekiwaną wersją, jest najpierw zmieniany na
+    <nazwa>.user-backup i nigdy nie jest nadpisywany.
   $description:zh-CN: >-
-    此设置指定存放 Windows 7 文件的文件夹；环境变量会被展开。留空则使用模组自己的存储文件夹，卸载模组时 Windhawk 会一并删除。
+    此设置指定存放 Windows 7 文件的文件夹；环境变量会被展开。留空则使用模组自己的存储文件夹，卸载模组时 Windhawk 会一并删除。模组会把所需的 Windows 7 文件下载到此文件夹；其中与预期版本不符的现有文件会先被重命名为 <名称>.user-backup，绝不会被覆盖。
   $description:ja: >-
-    この設定は、Windows 7 のファイルを置くフォルダーを指定します。環境変数は展開されます。空にすると、mod 専用の保存フォルダーを使用します（mod の削除時に Windhawk が削除します）。
+    この設定は、Windows 7 のファイルを置くフォルダーを指定します。環境変数は展開されます。空にすると、mod 専用の保存フォルダーを使用します（mod の削除時に Windhawk が削除します）。mod は必要な Windows 7 のファイルをこのフォルダーにダウンロードします。想定したビルドと異なる既存のファイルは、上書きされず、先に <名前>.user-backup に名前変更されます。
   $description:ko: >-
-    이 설정은 Windows 7 파일이 들어 있는 폴더를 지정합니다. 환경 변수는 확장됩니다. 비워 두면 모드 전용 저장 폴더를 사용하며, 모드를 제거할 때 Windhawk가 함께 삭제합니다.
+    이 설정은 Windows 7 파일이 들어 있는 폴더를 지정합니다. 환경 변수는 확장됩니다. 비워 두면 모드 전용 저장 폴더를 사용하며, 모드를 제거할 때 Windhawk가 함께 삭제합니다. 모드는 필요한 Windows 7 파일을 이 폴더에 다운로드하며, 예상한 빌드가 아닌 기존 파일은 덮어쓰지 않고 먼저 <이름>.user-backup으로 이름이 바뀝니다.
 - preloadLocalDlls: true
   $name: Preload the DLLs from the install folder first
   $name:it: Precarica prima le DLL dalla cartella di installazione
@@ -399,8 +421,10 @@ windows.
 #include <winver.h>
 
 #include <atomic>
+#include <exception>
 #include <map>
 #include <mutex>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -504,6 +528,32 @@ HANDLE g_stopEvent = nullptr;
 std::mutex g_workersLock;
 std::vector<HANDLE> g_workers;
 
+// Every worker starts here. A C++ exception that leaves a thread routine ends
+// in std::terminate, which would take the host process (explorer.exe) down, so
+// the routine runs inside a try/catch. The log calls in the handlers use string
+// literals only: nothing there can allocate and throw again.
+struct WorkerStart {
+    LPTHREAD_START_ROUTINE routine;
+    void* parameter;
+    const wchar_t* what;  // a string literal: it outlives the thread
+};
+
+DWORD WINAPI WorkerTrampoline(LPVOID context) {
+    WorkerStart start = *static_cast<WorkerStart*>(context);
+    delete static_cast<WorkerStart*>(context);
+
+    try {
+        return start.routine(start.parameter);
+    } catch (const std::exception&) {
+        Wh_Log(L"A worker thread ended with a C++ exception (std::exception); "
+               L"the host process is kept alive");
+    } catch (...) {
+        Wh_Log(L"A worker thread ended with an unknown C++ exception; the host "
+               L"process is kept alive");
+    }
+    return 1;
+}
+
 bool SpawnWorker(LPTHREAD_START_ROUTINE routine, void* parameter,
                  const wchar_t* what) {
     // The check and the registration happen under the same lock as the swap in
@@ -516,14 +566,32 @@ bool SpawnWorker(LPTHREAD_START_ROUTINE routine, void* parameter,
         return false;
     }
 
-    HANDLE thread = CreateThread(nullptr, 0, routine, parameter, 0, nullptr);
-    if (!thread) {
-        Wh_Log(L"Could not create the %s thread (error %lu)", what,
-               GetLastError());
+    // The room for the handle is reserved before the thread exists: a
+    // push_back that failed afterwards would leave a running thread that
+    // JoinWorkers does not know about.
+    try {
+        g_workers.reserve(g_workers.size() + 1);
+    } catch (...) {
+        Wh_Log(L"Could not create the %s thread (out of memory)", what);
         return false;
     }
 
-    g_workers.push_back(thread);
+    WorkerStart* start = new (std::nothrow) WorkerStart{routine, parameter, what};
+    if (!start) {
+        Wh_Log(L"Could not create the %s thread (out of memory)", what);
+        return false;
+    }
+
+    HANDLE thread =
+        CreateThread(nullptr, 0, WorkerTrampoline, start, 0, nullptr);
+    if (!thread) {
+        Wh_Log(L"Could not create the %s thread (error %lu)", what,
+               GetLastError());
+        delete start;
+        return false;
+    }
+
+    g_workers.push_back(thread);  // cannot throw: the capacity is reserved
     return true;
 }
 
@@ -2031,6 +2099,35 @@ bool DownloadToFile(const std::wstring& urlPath, const std::wstring& dest) {
     return ok;
 }
 
+// Moves a file that is not the pinned build out of the way instead of letting
+// the replacement overwrite it: the install folder may be a folder of the
+// user's own (installFolder setting), and a file there, such as a copy from a
+// Windows 7 SP1 install, belongs to the user. The name never clashes with an
+// earlier backup, so a second pass cannot destroy the first one.
+bool MoveAsideUserFile(const std::wstring& path, std::wstring* movedTo) {
+    for (int n = 0; n < 100; n++) {
+        std::wstring target = path + L".user-backup";
+        if (n > 0) {
+            target += L"." + std::to_wstring(n);
+        }
+        if (GetFileAttributesW(target.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            continue;
+        }
+        // No MOVEFILE_REPLACE_EXISTING: an existing backup is never touched.
+        if (MoveFileExW(path.c_str(), target.c_str(), 0)) {
+            if (movedTo) {
+                *movedTo = target;
+            }
+            return true;
+        }
+        if (GetLastError() != ERROR_ALREADY_EXISTS &&
+            GetLastError() != ERROR_FILE_EXISTS) {
+            return false;
+        }
+    }
+    return false;
+}
+
 bool EnsureFiles() {
     bool allPresent = true;
     std::wstring dir = GetInstallDir();
@@ -2053,8 +2150,9 @@ bool EnsureFiles() {
         }
         if (existing == PeCheck::ValidButOther) {
             Wh_Log(L"%s: present but not the pinned Windows 7 build (the "
-                   L"digest does not match); the pinned file replaces it",
-                   file.name);
+                   L"digest does not match); it is moved aside as "
+                   L"%s.user-backup and the pinned file replaces it",
+                   file.name, file.name);
         }
 
         wchar_t urlPath[512];
@@ -2094,6 +2192,22 @@ bool EnsureFiles() {
                    file.name);
             allPresent = false;
             continue;
+        }
+        // The download is verified: only now is the user's own file moved
+        // aside (never before, so a failed download leaves it untouched). If
+        // it cannot be moved, it is kept and nothing is replaced.
+        if (existing == PeCheck::ValidButOther) {
+            std::wstring backup;
+            if (!MoveAsideUserFile(dest, &backup)) {
+                Wh_Log(L"%s: the existing file cannot be moved aside (error "
+                       L"%lu), so it is kept and not replaced",
+                       file.name, GetLastError());
+                DeleteFileW(temp.c_str());
+                allPresent = false;
+                continue;
+            }
+            Wh_Log(L"%s: the existing file was moved to %s", file.name,
+                   backup.c_str());
         }
         if (!MoveFileExW(temp.c_str(), dest.c_str(),
                          MOVEFILE_REPLACE_EXISTING)) {
@@ -2597,6 +2711,23 @@ LaunchDecision DecideLaunch(PCWSTR api, LPCWSTR applicationName,
     return decision;
 }
 
+// The hooks call this instead of DecideLaunch. The decision builds several
+// strings, so it can throw (std::bad_alloc); an exception must not leave a hook
+// that runs inside the host process. On failure the launch is simply not
+// redirected, so the behaviour is the one of Windows without the mod. Only the
+// code of the mod is inside the try: the original function is called by the
+// hook afterwards, outside it.
+LaunchDecision SafeDecideLaunch(PCWSTR api, LPCWSTR applicationName,
+                                LPCWSTR commandLine, void* returnAddress) {
+    try {
+        return DecideLaunch(api, applicationName, commandLine, returnAddress);
+    } catch (...) {
+        Wh_Log(L"DecideLaunch failed with a C++ exception; the launch is not "
+               L"redirected");
+    }
+    return LaunchDecision{};
+}
+
 void LogRedirectFailure(DWORD error) {
     std::wstring explanation = DescribeLaunchError(error);
     if (!explanation.empty()) {
@@ -2622,7 +2753,7 @@ BOOL WINAPI CreateProcessInternalW_Hook(
     PHANDLE restrictedToken) {
     void* caller = MOD_CALLER_ADDRESS();
     LaunchDecision decision =
-        DecideLaunch(L"CreateProcess", applicationName, commandLine, caller);
+        SafeDecideLaunch(L"CreateProcess", applicationName, commandLine, caller);
 
     if (!decision.redirect) {
         return CreateProcessInternalW_Original(
@@ -2683,7 +2814,7 @@ BOOL WINAPI CreateProcessW_Hook(LPCWSTR applicationName, LPWSTR commandLine,
                                 LPPROCESS_INFORMATION processInformation) {
     void* caller = MOD_CALLER_ADDRESS();
     LaunchDecision decision =
-        DecideLaunch(L"CreateProcessW", applicationName, commandLine, caller);
+        SafeDecideLaunch(L"CreateProcessW", applicationName, commandLine, caller);
 
     if (!decision.redirect) {
         return CreateProcessW_Original(
@@ -2771,7 +2902,7 @@ BOOL WINAPI ShellExecuteExW_Hook(SHELLEXECUTEINFOW* info) {
     }
 
     LaunchDecision decision =
-        DecideLaunch(L"ShellExecuteEx", info->lpFile, nullptr, caller);
+        SafeDecideLaunch(L"ShellExecuteEx", info->lpFile, nullptr, caller);
     if (!decision.redirect) {
         return ShellExecuteExW_Original(info);
     }
@@ -2812,7 +2943,7 @@ HINSTANCE WINAPI ShellExecuteW_Hook(HWND window, LPCWSTR operation,
                                     LPCWSTR file, LPCWSTR parameters,
                                     LPCWSTR directory, INT showCommand) {
     void* caller = MOD_CALLER_ADDRESS();
-    LaunchDecision decision = DecideLaunch(L"ShellExecute", file, nullptr, caller);
+    LaunchDecision decision = SafeDecideLaunch(L"ShellExecute", file, nullptr, caller);
 
     if (!decision.redirect) {
         return ShellExecuteW_Original(window, operation, file, parameters,
@@ -3191,13 +3322,26 @@ bool RedirectDll(PCWSTR name, void* callerAddress, DWORD flags,
     return true;
 }
 
+// The LoadLibrary hooks call this instead of RedirectDll, for the same reason
+// as SafeDecideLaunch: on an exception the load is simply not redirected.
+bool SafeRedirectDll(PCWSTR name, void* callerAddress, DWORD flags,
+                     std::wstring& redirected) {
+    try {
+        return RedirectDll(name, callerAddress, flags, redirected);
+    } catch (...) {
+        Wh_Log(L"RedirectDll failed with a C++ exception; the load is not "
+               L"redirected");
+    }
+    return false;
+}
+
 using LoadLibraryW_t = HMODULE(WINAPI*)(LPCWSTR);
 LoadLibraryW_t LoadLibraryW_Original;
 
 HMODULE WINAPI LoadLibraryW_Hook(LPCWSTR name) {
     void* caller = MOD_CALLER_ADDRESS();
     std::wstring redirected;
-    if (RedirectDll(name, caller, 0, redirected)) {
+    if (SafeRedirectDll(name, caller, 0, redirected)) {
         HMODULE module = LoadLibraryW_Original(redirected.c_str());
         if (g_loadRedirectLimit.Allow(200)) {
             Wh_Log(L"LoadLibraryW: %s -> %s (%s)", name, redirected.c_str(),
@@ -3223,7 +3367,7 @@ LoadLibraryExW_t LoadLibraryExW_Original;
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
     void* caller = MOD_CALLER_ADDRESS();
     std::wstring redirected;
-    if (RedirectDll(name, caller, flags, redirected)) {
+    if (SafeRedirectDll(name, caller, flags, redirected)) {
         HMODULE module = LoadLibraryExW_Original(redirected.c_str(), nullptr, flags);
         if (g_loadRedirectLimit.Allow(200)) {
             Wh_Log(L"LoadLibraryExW: %s -> %s (%s)", name, redirected.c_str(),
@@ -3295,7 +3439,7 @@ HMODULE WINAPI LoadLibraryA_Hook(LPCSTR name) {
     WideStringFromAnsi(name, &wide);
 
     std::wstring redirected;
-    if (!wide.empty() && RedirectDll(wide.c_str(), caller, 0, redirected)) {
+    if (!wide.empty() && SafeRedirectDll(wide.c_str(), caller, 0, redirected)) {
         std::string narrow = NarrowString(redirected);
         HMODULE module = LoadLibraryA_Original(narrow.c_str());
         Wh_Log(L"LoadLibraryA: %s -> %s (%s)", wide.c_str(), redirected.c_str(),
@@ -3323,7 +3467,7 @@ HMODULE WINAPI LoadLibraryExA_Hook(LPCSTR name, HANDLE file, DWORD flags) {
     WideStringFromAnsi(name, &wide);
 
     std::wstring redirected;
-    if (!wide.empty() && RedirectDll(wide.c_str(), caller, flags, redirected)) {
+    if (!wide.empty() && SafeRedirectDll(wide.c_str(), caller, flags, redirected)) {
         std::string narrow = NarrowString(redirected);
         HMODULE module = LoadLibraryExA_Original(narrow.c_str(), file, flags);
         Wh_Log(L"LoadLibraryExA: %s -> %s (%s)", wide.c_str(),
