@@ -1761,12 +1761,10 @@ com_ptr<IDXGIAdapter1> FindMonitorAdapter(HMONITOR monitor) {
         return nullptr;
     }
     com_ptr<IDXGIAdapter1> adapter;
-    for (UINT i = 0;
-         factory->EnumAdapters1(i, adapter.put()) != DXGI_ERROR_NOT_FOUND;
+    for (UINT i = 0; SUCCEEDED(factory->EnumAdapters1(i, adapter.put()));
          i++) {
         com_ptr<IDXGIOutput> output;
-        for (UINT j = 0;
-             adapter->EnumOutputs(j, output.put()) != DXGI_ERROR_NOT_FOUND;
+        for (UINT j = 0; SUCCEEDED(adapter->EnumOutputs(j, output.put()));
              j++) {
             DXGI_OUTPUT_DESC desc;
             if (SUCCEEDED(output->GetDesc(&desc)) && desc.Monitor == monitor) {
@@ -1878,7 +1876,7 @@ class Switcher {
     void RecreateDevice(HMONITOR monitor);
     void MoveDeviceToMonitor();
     void HandleDeviceLost();
-    void UpdateSyncInterval();
+    void UpdateFrameRate();
     void StopRestoreCheck();
     void CheckRestored();
     bool EnsureSwapChain(UINT width, UINT height);
@@ -1984,8 +1982,12 @@ class Switcher {
     // it's recreated right away instead of at the next Alt+Tab.
     HANDLE m_deviceRemovedEvent = nullptr;
     DWORD m_deviceRemovedCookie = 0;
-    // Vertical blanks per frame (see the frame rate limit).
-    UINT m_syncInterval = 1;
+    // The frame rate limit (see RenderFrame): the time between frames (0 for
+    // every refresh), the time between refreshes, and when the next frame is
+    // due.
+    double m_frameInterval = 0;
+    double m_refreshInterval = 1.0 / 60;
+    double m_nextFrameAt = 0;
     // The last frame's result, so a repeating error is logged once.
     HRESULT m_lastRenderError = S_OK;
 
@@ -2230,6 +2232,12 @@ bool Switcher::CreateDeviceResources(HMONITOR monitor) {
     }
 
     m_dxgiDevice = m_d3dDevice.as<IDXGIDevice>();
+    // At most one frame waits for the screen, so a key press shows on the
+    // next one, and the last frames of the closing animation aren't dropped
+    // when the overlay is hidden.
+    if (auto device1 = m_dxgiDevice.try_as<IDXGIDevice1>()) {
+        device1->SetMaximumFrameLatency(1);
+    }
     com_ptr<IDXGIAdapter> deviceAdapter;
     DXGI_ADAPTER_DESC adapterDesc;
     if (SUCCEEDED(m_dxgiDevice->GetAdapter(deviceAdapter.put())) &&
@@ -2410,9 +2418,11 @@ void Switcher::HandleDeviceLost() {
     RecreateDevice(MonitorFromRect(&m_monitor, MONITOR_DEFAULTTOPRIMARY));
 }
 
-// Present waits this many vertical blanks, which caps the frame rate.
-void Switcher::UpdateSyncInterval() {
-    m_syncInterval = 1;
+// Sets up the frame rate limit (see RenderFrame) for the switcher's monitor.
+// A limit at or above its refresh rate changes nothing.
+void Switcher::UpdateFrameRate() {
+    m_frameInterval = 0;
+    m_nextFrameAt = 0;
     if (m_settings.maxFps <= 0) {
         return;
     }
@@ -2437,9 +2447,11 @@ void Switcher::UpdateSyncInterval() {
         refresh = (double)timing.rateRefresh.uiNumerator /
                   timing.rateRefresh.uiDenominator;
     }
-    // Present accepts 1 to 4.
-    m_syncInterval =
-        (UINT)std::clamp(std::lround(refresh / m_settings.maxFps), 1L, 4L);
+    if (refresh <= 0 || m_settings.maxFps >= refresh * 0.95) {
+        return;
+    }
+    m_frameInterval = 1.0 / m_settings.maxFps;
+    m_refreshInterval = 1.0 / refresh;
 }
 
 bool Switcher::EnsureSwapChain(UINT width, UINT height) {
@@ -3475,7 +3487,7 @@ void Switcher::ShowOverlay() {
         return;
     }
     UpdateBackground();
-    UpdateSyncInterval();
+    UpdateFrameRate();
     if (!m_capturing) {
         StartCaptures();
     }
@@ -4819,6 +4831,22 @@ void Switcher::DrawTitle(float t) {
 
 void Switcher::RenderFrame() {
     const double now = NowSeconds();
+    // Under the frame rate limit, a refresh is only waited for until the next
+    // frame is due. Frames then come on the refreshes nearest to their time,
+    // so on average exactly as often as the limit, whatever the screen's
+    // refresh rate. If the compositor can't be waited on (it's restarting),
+    // a moment passes instead, so the loop doesn't spin.
+    if (m_frameInterval > 0) {
+        if (now < m_nextFrameAt - m_refreshInterval / 2) {
+            if (FAILED(DwmFlush())) {
+                MsgWaitForMultipleObjects(0, nullptr, FALSE, 1, QS_ALLINPUT);
+            }
+            return;
+        }
+        // After a long frame, the next one is due a whole interval later.
+        m_nextFrameAt =
+            std::max(m_nextFrameAt, now - m_frameInterval) + m_frameInterval;
+    }
     const double dt = std::clamp(now - m_lastFrame, 0.0, 0.05);
     m_lastFrame = now;
 
@@ -4902,7 +4930,7 @@ void Switcher::RenderFrame() {
     HRESULT hr = m_ctx->EndDraw();
     m_ctx->SetTarget(nullptr);
     if (SUCCEEDED(hr)) {
-        hr = m_swapChain->Present(m_syncInterval, 0);
+        hr = m_swapChain->Present(1, 0);
     }
     if (FAILED(hr)) {
         if (hr == D2DERR_RECREATE_TARGET || hr == DXGI_ERROR_DEVICE_REMOVED ||
