@@ -1,43 +1,63 @@
 // ==WindhawkMod==
 // @id              taskbar-auto-hide-delay
 // @name            Taskbar auto-hide after a delay
-// @description     Hides the auto-hide taskbar a configurable number of seconds after it becomes visible (e.g. when a new window or dialog appears), unless the mouse pointer is over it
-// @version         0.1
-// @author          nikit
+// @description     Hides the auto-hide taskbar a configurable number of seconds after it becomes visible, unless the mouse pointer is over it
+// @version         1.0
+// @author          nikitor32
+// @github          https://github.com/nikitor32
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lshell32
 // ==/WindhawkMod==
 
+// Source code is published under The GNU General Public License v3.0.
+//
+// For bug reports and feature requests, please open an issue here:
+// https://github.com/ramensoftware/windhawk-mods/issues
+
 // ==WindhawkModReadme==
 /*
 # Taskbar auto-hide after a delay
 
-Windows 11 (24H2) hides the auto-hide taskbar only in response to a
-"pointer left the taskbar" event. When the taskbar becomes visible for
-another reason — for example when a new window or dialog appears — that
-event never fires, so the taskbar stays on screen indefinitely.
+Windows 11 (24H2) hides the auto-hide taskbar only when the pointer leaves
+the taskbar. If the taskbar becomes visible for another reason — for
+example, when a new window or dialog appears — no "pointer left" event ever
+fires, and the taskbar stays on screen indefinitely.
 
-This mod watches the taskbar. As soon as it becomes visible while the mouse
-pointer is **not** over it, it starts a countdown. When the countdown
-expires, the taskbar is hidden again.
+This mod watches the taskbars. As soon as a taskbar becomes visible while
+the mouse pointer is **not** over it, a countdown starts. When the countdown
+expires, the taskbar is hidden again using the taskbar's own hide timer, so
+it slides away with the standard animation.
 
 If you move the pointer over the taskbar, the countdown is cancelled so the
 taskbar stays available while you interact with it.
 
-Works together with other taskbar mods such as
-"Taskbar auto-hide when maximized".
+The mod does nothing if auto-hide is disabled in the Windows settings.
+
+## Settings
+
+* **Enable delayed auto-hide** — turn the mod on or off.
+* **Hide delay (seconds)** — how long the taskbar stays visible before it
+  is hidden. Default: 3.
+
+## Compatibility
+
+The mod doesn't use hooks, so it's designed to work together with other
+taskbar mods such as
+[Taskbar auto-hide when maximized](https://windhawk.net/mods/taskbar-auto-hide-when-maximized)
+and
+[Taskbar auto-hide keyboard only](https://windhawk.net/mods/taskbar-auto-hide-keyboard-only).
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - enabled: true
-  $name: Включить авто-скрытие по таймеру
-  $description: Если выключено, мод ничего не делает.
+  $name: Enable delayed auto-hide
+  $description: If disabled, the mod does nothing.
 - hideDelaySeconds: 3
-  $name: Задержка до скрытия (секунды)
-  $description: Сколько секунд панель остаётся видимой (при курсоре вне её), прежде чем скрыться.
+  $name: Hide delay (seconds)
+  $description: How long the taskbar stays visible (with the pointer not over it) before it's hidden.
 */
 // ==/WindhawkModSettings==
 
