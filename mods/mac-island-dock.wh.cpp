@@ -29,9 +29,11 @@ the top of the screen with the clock, a control center, notifications and
 what's playing; and, if you want it, a dock like the one on macOS instead of
 the taskbar.
 
-| The control center and the settings | The calendar and a notification |
+![The island minimized to a line and opened again](https://i.imgur.com/obcRfEh.gif)
+
+| The control center | A new notification in the pill |
 | :---: | :---: |
-| ![The control center, editing it, and the island's settings](https://i.imgur.com/x2JTfH9.gif) | ![The calendar, and a new notification answered from the pill](https://i.imgur.com/tSf46GE.gif) |
+| ![The control center, and editing it](https://i.imgur.com/YgHQ0Zs.gif) | ![A new notification in the pill](https://i.imgur.com/8VlkvfE.gif) |
 
 ## The island
 
@@ -174,23 +176,35 @@ search, and Esc (or a click outside) closes them.
 
 ### Screenshots
 
-| What's playing | The control center |
+| The calendar | What's playing | Notifications |
+| :---: | :---: | :---: |
+| ![The calendar](https://i.imgur.com/BklN6j7.png) | ![What's playing](https://i.imgur.com/mHmKd5L.png) | ![Notifications](https://i.imgur.com/nmcC43L.png) |
+| **The weather** | **Notes** | **Tasks** |
+| ![The weather](https://i.imgur.com/5fxH29Y.png) | ![Notes](https://i.imgur.com/Qj0NbXp.png) | ![Tasks](https://i.imgur.com/29Jdwf7.png) |
+| **Updates** | **The processor's use** | **Power** |
+| ![Updates](https://i.imgur.com/sL5ksJc.png) | ![The processor's use](https://i.imgur.com/Vl5mLv0.png) | ![Power](https://i.imgur.com/lvMsIua.png) |
+
+| The island's settings | Keyboard shortcuts |
 | :---: | :---: |
-| ![What's playing](https://i.imgur.com/MUbasD3.gif) | ![The control center](https://i.imgur.com/v7dzSiz.png) |
-| **The calendar** | **The island's settings** |
-| ![The calendar](https://i.imgur.com/s6vQr9b.png) | ![The island's settings](https://i.imgur.com/gUoeHWi.png) |
+| ![The island's settings](https://i.imgur.com/tngYzwN.png) | ![Keyboard shortcuts](https://i.imgur.com/q75V4Sm.png) |
+
+The other apps' tray icons: their list open, and opening:
+
+![The tray icons' list open](https://i.imgur.com/Xt2pVE9.png)
+
+![The tray icons' list opening](https://i.imgur.com/ulHZh2A.gif)
 
 The bar style, at the top of the screen:
 
-![The bar style](https://i.imgur.com/GMNJ6Fj.png)
+![The bar style](https://i.imgur.com/gtPY5YI.png)
 
 | Colors | |
 | :--- | :---: |
-| Black | ![Black](https://i.imgur.com/W6RuZzU.png) |
-| Graphite | ![Graphite](https://i.imgur.com/0Ku4wWx.png) |
-| Light | ![Light](https://i.imgur.com/iqZRqtX.png) |
-| The Windows accent color | ![Accent color](https://i.imgur.com/KDjmAiE.png) |
-| Glass | ![Glass](https://i.imgur.com/3Rh5YTQ.png) |
+| Black | ![Black](https://i.imgur.com/AQKn4nY.png) |
+| Graphite | ![Graphite](https://i.imgur.com/J7r7GeH.png) |
+| Light | ![Light](https://i.imgur.com/B6lsL49.png) |
+| The Windows accent color | ![Accent color](https://i.imgur.com/Ilr8YHB.png) |
+| Glass | ![Glass](https://i.imgur.com/kAsBeR8.png) |
 
 ## The dock (optional)
 
@@ -200,6 +214,8 @@ soft shadow rising from the bottom edge, the magnification and the bounces,
 sliding in and out with the mod's animation; it only comes up and takes
 clicks around its apps, so the rest of the bottom of the screen stays
 usable), or as it is (all of it, or only its apps).
+
+![The transparent taskbar, with only its apps](https://i.imgur.com/z0FMhlK.gif)
 
 * **Compact and floating**: only the app icons, centered, in a rounded pill
   that floats a little above the bottom edge.
@@ -387,9 +403,11 @@ O topo do macOS e a Dynamic Island do iPhone no Windows 11: uma ilha no topo
 da tela com o relógio, uma central de controle, as notificações e o que está
 tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
 
-| A central de controle e as configurações | O calendário e uma notificação |
+![A ilha minimizada numa linha e aberta de novo](https://i.imgur.com/obcRfEh.gif)
+
+| A central de controle | Uma notificação nova na pílula |
 | :---: | :---: |
-| ![A central de controle, editando, e as configurações da ilha](https://i.imgur.com/x2JTfH9.gif) | ![O calendário, e uma notificação nova respondida pela pílula](https://i.imgur.com/tSf46GE.gif) |
+| ![A central de controle, e editando](https://i.imgur.com/YgHQ0Zs.gif) | ![Uma notificação nova na pílula](https://i.imgur.com/8VlkvfE.gif) |
 
 ### A ilha
 
@@ -532,23 +550,35 @@ palavra, o Esc limpa a busca, e o Esc (ou um clique fora) fecha.
 
 #### Imagens
 
-| O que está tocando | A central de controle |
+| O calendário | O que está tocando | Notificações |
+| :---: | :---: | :---: |
+| ![O calendário](https://i.imgur.com/BklN6j7.png) | ![O que está tocando](https://i.imgur.com/mHmKd5L.png) | ![Notificações](https://i.imgur.com/nmcC43L.png) |
+| **O clima** | **Anotações** | **Tarefas** |
+| ![O clima](https://i.imgur.com/5fxH29Y.png) | ![Anotações](https://i.imgur.com/Qj0NbXp.png) | ![Tarefas](https://i.imgur.com/29Jdwf7.png) |
+| **Atualizações** | **O uso do processador** | **Energia** |
+| ![Atualizações](https://i.imgur.com/sL5ksJc.png) | ![O uso do processador](https://i.imgur.com/Vl5mLv0.png) | ![Energia](https://i.imgur.com/lvMsIua.png) |
+
+| As configurações da ilha | Atalhos do teclado |
 | :---: | :---: |
-| ![O que está tocando](https://i.imgur.com/MUbasD3.gif) | ![A central de controle](https://i.imgur.com/v7dzSiz.png) |
-| **O calendário** | **As configurações da ilha** |
-| ![O calendário](https://i.imgur.com/s6vQr9b.png) | ![As configurações da ilha](https://i.imgur.com/gUoeHWi.png) |
+| ![As configurações da ilha](https://i.imgur.com/tngYzwN.png) | ![Atalhos do teclado](https://i.imgur.com/q75V4Sm.png) |
+
+Os ícones dos outros apps na bandeja: a lista deles aberta, e abrindo:
+
+![A lista dos ícones da bandeja aberta](https://i.imgur.com/Xt2pVE9.png)
+
+![A lista dos ícones da bandeja abrindo](https://i.imgur.com/ulHZh2A.gif)
 
 O estilo barra, no topo da tela:
 
-![O estilo barra](https://i.imgur.com/GMNJ6Fj.png)
+![O estilo barra](https://i.imgur.com/gtPY5YI.png)
 
 | Cores | |
 | :--- | :---: |
-| Preto | ![Preto](https://i.imgur.com/W6RuZzU.png) |
-| Grafite | ![Grafite](https://i.imgur.com/0Ku4wWx.png) |
-| Claro | ![Claro](https://i.imgur.com/iqZRqtX.png) |
-| A cor de destaque do Windows | ![Cor de destaque](https://i.imgur.com/KDjmAiE.png) |
-| Vidro | ![Vidro](https://i.imgur.com/3Rh5YTQ.png) |
+| Preto | ![Preto](https://i.imgur.com/AQKn4nY.png) |
+| Grafite | ![Grafite](https://i.imgur.com/J7r7GeH.png) |
+| Claro | ![Claro](https://i.imgur.com/B6lsL49.png) |
+| A cor de destaque do Windows | ![Cor de destaque](https://i.imgur.com/Ilr8YHB.png) |
+| Vidro | ![Vidro](https://i.imgur.com/kAsBeR8.png) |
 
 ### A dock (opcional)
 
@@ -558,6 +588,8 @@ sombra suave subindo da borda de baixo, a ampliação e os pulos, entrando e
 saindo com a animação do mod; ela só aparece e só pega os cliques em volta dos
 apps, então o resto da parte de baixo da tela continua clicável), ou como ela
 é (inteira, ou só com os apps).
+
+![A barra do Windows transparente, só com os apps](https://i.imgur.com/z0FMhlK.gif)
 
 * **Compacta e flutuante**: só os ícones dos apps, centralizados, numa pílula
   arredondada que flutua um pouco acima da borda de baixo.
@@ -4433,6 +4465,11 @@ LRESULT OnTrayIconRectRequest(const COPYDATASTRUCT* copyData) {
 // explorer part unloads, and taken back when it loads: the icons whose
 // window is still there, in the same process. Their picture is the
 // program's own icon until the app changes it.
+// The kept list's room (characters), read back into a buffer of that size:
+// short tooltips, and the icons that don't fit are left out.
+constexpr size_t kTrayIconsKeptRoom = 16384;
+constexpr size_t kTrayIconsKeptTip = 64;
+
 void KeepTrayIcons() {
     if (!OwnsTaskbar()) {
         return;
@@ -4442,27 +4479,36 @@ void KeepTrayIcons() {
     for (const auto& icon : g_trayIcons) {
         WCHAR guid[64] = L"";
         StringFromGUID2(icon.guid, guid, ARRAYSIZE(guid));
-        std::wstring tip = icon.tip;
+        std::wstring tip = icon.tip.substr(0, kTrayIconsKeptTip);
         std::replace_if(
             tip.begin(), tip.end(),
             [](WCHAR c) { return c == L'\n' || c == L'\r' || c == L'\t'; },
             L' ');
-        value += std::to_wstring((UINT64)(ULONG_PTR)icon.owner) + L"\t" +
-                 std::to_wstring(icon.id) + L"\t" + guid + L"\t" +
-                 std::to_wstring(icon.hasGuid) + L"\t" +
-                 std::to_wstring(icon.callback) + L"\t" +
-                 std::to_wstring(icon.version) + L"\t" +
-                 std::to_wstring(icon.hidden) + L"\t" +
-                 std::to_wstring(icon.processId) + L"\t" + tip + L"\n";
+        const std::wstring line =
+            std::to_wstring((UINT64)(ULONG_PTR)icon.owner) + L"\t" +
+            std::to_wstring(icon.id) + L"\t" + guid + L"\t" +
+            std::to_wstring(icon.hasGuid) + L"\t" +
+            std::to_wstring(icon.callback) + L"\t" +
+            std::to_wstring(icon.version) + L"\t" +
+            std::to_wstring(icon.hidden) + L"\t" +
+            std::to_wstring(icon.processId) + L"\t" + tip + L"\n";
+        if (value.size() + line.size() >= kTrayIconsKeptRoom) {
+            break;
+        }
+        value += line;
     }
     ReleaseSRWLockShared(&g_trayIconsLock);
     Wh_SetStringValue(L"trayIconsKept", value.c_str());
 }
 
 void TakeBackTrayIcons() {
-    WCHAR buffer[16384];
-    if (!OwnsTaskbar() ||
-        !Wh_GetStringValue(L"trayIconsKept", buffer, ARRAYSIZE(buffer))) {
+    if (!OwnsTaskbar()) {
+        return;
+    }
+    WCHAR buffer[kTrayIconsKeptRoom];
+    const size_t length =
+        Wh_GetStringValue(L"trayIconsKept", buffer, ARRAYSIZE(buffer));
+    if (!length) {
         return;
     }
     Wh_DeleteValue(L"trayIconsKept");
@@ -6691,22 +6737,30 @@ int GetNightLight() {
 bool SetNightLight(bool on) {
     auto records = ReadNightLightRecords();
     bool changed = false;
-    // Now, in seconds since 1970, as a varint.
+    // Now, in seconds since 1970. Windows only applies a record whose stamp
+    // is newer than the one it has: a second change within the same second
+    // (a quick second click) gets the next second.
     FILETIME fileTime;
     GetSystemTimeAsFileTime(&fileTime);
-    ULONGLONG now = ((((ULONGLONG)fileTime.dwHighDateTime << 32) |
-                      fileTime.dwLowDateTime) -
-                     116444736000000000ULL) /
-                    10000000;
-    std::vector<BYTE> stamp;
-    do {
-        BYTE byte = now & 0x7F;
-        now >>= 7;
-        stamp.push_back(now ? byte | 0x80 : byte);
-    } while (now);
+    const ULONGLONG now = ((((ULONGLONG)fileTime.dwHighDateTime << 32) |
+                            fileTime.dwLowDateTime) -
+                           116444736000000000ULL) /
+                          10000000;
 
     for (auto& record : records) {
         auto& d = record.data;
+        ULONGLONG before = 0;
+        for (size_t i = 0; i < record.stampLength && i < 9; i++) {
+            before |= (ULONGLONG)(d[record.stampAt + i] & 0x7F) << (7 * i);
+        }
+        // As a varint.
+        ULONGLONG value = std::max(now, before + 1);
+        std::vector<BYTE> stamp;
+        do {
+            BYTE byte = value & 0x7F;
+            value >>= 7;
+            stamp.push_back(value ? byte | 0x80 : byte);
+        } while (value);
         const size_t state = record.lengthAt + 1;
         if (on && !record.on) {
             d.insert(d.begin() + state + 4, {0x10, 0x00});
@@ -12830,13 +12884,16 @@ DWORD WINAPI MediaThreadProc(LPVOID) {
             double titleChangedAt = 0;
             UINT thumbnailSerial = 0;
             // Every session, watched for its title and its state (for the
-            // list of apps to choose from).
+            // list of apps to choose from). Its title is kept, and read again
+            // only when that session says it changed (one call to its app).
             struct WatchedSession {
                 GlobalSystemMediaTransportControlsSession session{nullptr};
                 GlobalSystemMediaTransportControlsSession::
                     MediaPropertiesChanged_revoker properties;
                 GlobalSystemMediaTransportControlsSession::
                     PlaybackInfoChanged_revoker playback;
+                std::wstring title;
+                std::shared_ptr<std::atomic<bool>> titleStale;
             };
             std::vector<WatchedSession> watched;
             SetEvent(g_mediaChangedEvent);
@@ -12892,28 +12949,51 @@ DWORD WINAPI MediaThreadProc(LPVOID) {
                                     [](const auto& a, const WatchedSession& b) {
                                         return a == b.session;
                                     })) {
+                        // The ones still there keep their title.
+                        std::vector<WatchedSession> before =
+                            std::move(watched);
                         watched.clear();
                         for (const auto& each : all) {
+                            auto old = std::find_if(
+                                before.begin(), before.end(),
+                                [&](const WatchedSession& entry) {
+                                    return entry.session == each;
+                                });
+                            if (old != before.end()) {
+                                watched.push_back(std::move(*old));
+                                continue;
+                            }
                             WatchedSession entry;
                             entry.session = each;
+                            entry.titleStale =
+                                std::make_shared<std::atomic<bool>>(true);
                             entry.properties = each.MediaPropertiesChanged(
-                                winrt::auto_revoke, changed);
+                                winrt::auto_revoke,
+                                [stale = entry.titleStale](auto&&...) {
+                                    *stale = true;
+                                    SetEvent(g_mediaChangedEvent);
+                                });
                             entry.playback = each.PlaybackInfoChanged(
                                 winrt::auto_revoke, changed);
                             watched.push_back(std::move(entry));
                         }
                     }
                     std::vector<MediaSource> sources;
-                    for (const auto& each : all) {
+                    for (auto& entry : watched) {
+                        const auto& each = entry.session;
                         MediaSource source;
                         source.appId = each.SourceAppUserModelId();
-                        try {
-                            if (auto info =
-                                    each.TryGetMediaPropertiesAsync().get()) {
-                                source.title = info.Title();
+                        if (entry.titleStale->exchange(false)) {
+                            try {
+                                if (auto info =
+                                        each.TryGetMediaPropertiesAsync()
+                                            .get()) {
+                                    entry.title = info.Title();
+                                }
+                            } catch (winrt::hresult_error const&) {
                             }
-                        } catch (winrt::hresult_error const&) {
                         }
+                        source.title = entry.title;
                         if (auto playback = each.GetPlaybackInfo()) {
                             source.playing =
                                 playback.PlaybackStatus() ==
@@ -17903,6 +17983,34 @@ WeatherData GetWeather() {
     AcquireSRWLockShared(&g_weatherLock);
     WeatherData data = g_weather;
     ReleaseSRWLockShared(&g_weatherLock);
+    // The city's time now: the one fetched, moved on by the time since, so
+    // that after midnight (before the next fetch) the day that ended isn't
+    // "today" anymore, and its hours are gone.
+    SYSTEMTIME time{};
+    FILETIME file;
+    if (data.valid && data.fetchedAt > 0 &&
+        swscanf_s(data.now.c_str(), L"%hu-%hu-%huT%hu:%hu", &time.wYear,
+                  &time.wMonth, &time.wDay, &time.wHour,
+                  &time.wMinute) == 5 &&
+        SystemTimeToFileTime(&time, &file)) {
+        ULARGE_INTEGER value{};
+        value.LowPart = file.dwLowDateTime;
+        value.HighPart = file.dwHighDateTime;
+        value.QuadPart += (ULONGLONG)(
+            std::max(0.0, NowSeconds() - data.fetchedAt) * 10000000);
+        file.dwLowDateTime = value.LowPart;
+        file.dwHighDateTime = value.HighPart;
+        if (FileTimeToSystemTime(&file, &time)) {
+            WCHAR text[32];
+            swprintf_s(text, L"%04u-%02u-%02uT%02u:%02u", time.wYear,
+                       time.wMonth, time.wDay, time.wHour, time.wMinute);
+            data.now = text;
+            const std::wstring today = data.now.substr(0, 10);
+            std::erase_if(data.days, [&](const WeatherDay& day) {
+                return day.date < today;
+            });
+        }
+    }
     return data;
 }
 
