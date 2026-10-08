@@ -29,6 +29,10 @@ Windows treats the Minimize and Maximize/Restore buttons as a pair. If only one
 of those style flags is removed, Windows may keep both buttons visible and show
 the affected button as disabled. Removing both flags removes the pair.
 
+These are native window style flags, so disabling Maximize also disables native
+maximize actions such as titlebar double-click and the Maximize system-menu
+command while the setting is active.
+
 Windows doesn't provide an independent window style flag for the Close button.
 If Close is selected while Minimize or Maximize/Restore is still available,
 the Close command is disabled.
@@ -150,13 +154,16 @@ static AppSettings LoadSettingsForCurrentProcess() {
         Wh_FreeStringSetting(processValue);
 
         if (process == currentProcess) {
-            result.matched = true;
             result.hideMinimize =
                 Wh_GetIntSetting(L"applications[%d].hideMinimize", i) != 0;
             result.hideMaximize =
                 Wh_GetIntSetting(L"applications[%d].hideMaximize", i) != 0;
             result.hideClose =
                 Wh_GetIntSetting(L"applications[%d].hideClose", i) != 0;
+            result.matched =
+                result.hideMinimize ||
+                result.hideMaximize ||
+                result.hideClose;
             break;
         }
     }
@@ -232,7 +239,7 @@ static bool RunFromWindowThread(HWND hwnd,
 
     HHOOK hook = SetWindowsHookExW(
         WH_CALLWNDPROC,
-        [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT {
+        [](int code, WPARAM wParam, LPARAM lParam) WINAPI -> LRESULT {
             if (code == HC_ACTION) {
                 const CWPSTRUCT* message =
                     reinterpret_cast<const CWPSTRUCT*>(lParam);
