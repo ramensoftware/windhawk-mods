@@ -5,9 +5,9 @@
 // @version         1.0
 // @author          FouadMODS
 // @github          https://github.com/modsfouad
-// @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -liphlpapi -lgdi32 -luser32 -lshell32 -ladvapi32
+// @twitter         https://twitter.com/modsfouad
+// @include         windhawk.exe
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -liphlpapi -lgdi32 -luser32 -lshell32 -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -57,7 +57,11 @@ The selected template provides coordinated text, arrow, background, and border c
 
 ## Notes
 
-This mod draws a floating overlay next to the Windows 11 notification area; it does not reserve taskbar space. If the widget overlaps another taskbar item, adjust **Horizontal offset** or **Gap from system tray** in Settings. Designed primarily for a horizontal taskbar.
+This mod draws a floating overlay next to the Windows 11 notification area; it does not reserve taskbar space. If the widget overlaps another taskbar item, adjust **Horizontal offset** or **Gap from system tray** in Settings. Designed primarily for a horizontal taskbar; the automatic tray position uses the primary taskbar.
+
+## Alternatives
+
+This mod is a separate presentation-focused overlay with premium colorways, vector arrow styles, compact sizing, and a saved drag position. For a simpler taskbar-docked readout, see [Taskbar Network Speed Indicator](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/net-speed-taskbar.wh.cpp). For speeds integrated into the clock, see [Taskbar Clock Customization](https://windhawk.net/mods/taskbar-clock-customization).
 */
 // ==/WindhawkModReadme==
 
@@ -125,6 +129,7 @@ This mod draws a floating overlay next to the Windows 11 notification area; it d
 
 - fontWeight: semibold
   $name: Font weight
+  $description: Used only with the Custom template.
   $options:
     - normal: Normal
     - medium: Medium
@@ -133,6 +138,7 @@ This mod draws a floating overlay next to the Windows 11 notification area; it d
 
 - valueColor: auto
   $name: Speed text color
+  $description: Used only with the Custom template.
   $options:
     - auto: Automatic light/dark
     - white: White
@@ -142,7 +148,7 @@ This mod draws a floating overlay next to the Windows 11 notification area; it d
 
 - accentArrows: true
   $name: Accent arrow colors
-  $description: Cyan download arrow and mint upload arrow. Disable for monochrome.
+  $description: Used only with the Custom template. Cyan download arrow and mint upload arrow; disable for monochrome.
 
 - arrowStyle: solid
   $name: Arrow style
@@ -154,6 +160,7 @@ This mod draws a floating overlay next to the Windows 11 notification area; it d
 
 - backgroundStyle: glass
   $name: Background
+  $description: Used only with the Custom template.
   $options:
     - transparent: Transparent
     - glass: Subtle glass pill
@@ -173,7 +180,7 @@ This mod draws a floating overlay next to the Windows 11 notification area; it d
 
 - cornerRadius: 10
   $name: Corner radius
-  $description: Used by the glass/solid background.
+  $description: Used by the glass/solid background. (Used only with the Custom template.)
 - hideInFullscreen: true
   $name: Hide in full screen
   $description: Hide the meter during detected Direct3D full-screen or presentation mode.
@@ -184,13 +191,17 @@ This mod draws a floating overlay next to the Windows 11 notification area; it d
 */
 // ==/WindhawkModSettings==
 
-#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <iphlpapi.h>
+#include <netioapi.h>
 #include <shellapi.h>
 #include <cwchar>
 #include <cwctype>
 #include <algorithm>
+#include <atomic>
+#include <cstdint>
 
 namespace {
 
@@ -252,27 +263,31 @@ struct Settings {
 SRWLOCK g_settingsLock = SRWLOCK_INIT;
 Settings g_settings;
 
-HWND g_hwnd = nullptr;
+std::atomic<HWND> g_hwnd{nullptr};
 HANDLE g_thread = nullptr;
-DWORD g_threadId = 0;
+std::atomic<DWORD> g_threadId{0};
+HANDLE g_queueReady = nullptr;
+HWINEVENTHOOK g_foregroundHook = nullptr;
 
-DWORD g_lastBytesIn = 0;
-DWORD g_lastBytesOut = 0;
+ULONGLONG g_lastBytesIn = 0;
+ULONGLONG g_lastBytesOut = 0;
+ULONGLONG g_lastInterfaceSignature = 0;
 ULONGLONG g_lastSampleTick = 0;
 bool g_haveBaseline = false;
 double g_displayDown = 0.0;
 double g_displayUp = 0.0;
 
-HWND g_lastTaskbar = nullptr;
 UINT g_lastDpi = 96;
 int g_lastWidthPx = 0;
 int g_lastHeightPx = 0;
 
 // Accessed only by the widget thread. Saved atomically as one storage value.
 bool g_isDragging = false;
+bool g_dragMoved = false;
 bool g_freePosition = false;
 POINT g_position = {};
 POINT g_dragAnchor = {};
+POINT g_dragStart = {};
 struct SavedPosition {
     DWORD version;
     LONG x;
@@ -538,167 +553,100 @@ static bool ContainsInsensitive(PCWSTR haystack, PCWSTR needle) {
     return false;
 }
 
-static void GetLegacyInterfaceDescription(
-    const MIB_IFROW& row,
-    wchar_t* out,
-    size_t outCount) {
-    if (!out || outCount == 0) {
-        return;
-    }
-
-    out[0] = L'\0';
-
-    DWORD descrLen = row.dwDescrLen;
-    if (descrLen > MAXLEN_IFDESCR) {
-        descrLen = MAXLEN_IFDESCR;
-    }
-
-    if (descrLen == 0) {
-        return;
-    }
-
-    int converted = MultiByteToWideChar(
-        CP_ACP,
-        0,
-        reinterpret_cast<LPCCH>(row.bDescr),
-        static_cast<int>(descrLen),
-        out,
-        static_cast<int>(outCount - 1));
-
-    if (converted > 0) {
-        out[converted] = L'\0';
-    } else {
-        out[0] = L'\0';
-    }
-}
-
-static bool LegacyInterfaceMatchesFilter(
-    const MIB_IFROW& row,
-    PCWSTR filter) {
-    if (!filter || !*filter) {
-        return true;
-    }
-
-    if (ContainsInsensitive(row.wszName, filter)) {
-        return true;
-    }
-
-    wchar_t description[MAXLEN_IFDESCR + 1] = {};
-    GetLegacyInterfaceDescription(
-        row, description, ARRAYSIZE(description));
-
-    return ContainsInsensitive(description, filter);
-}
-
-static bool IsUsableLegacyInterface(const MIB_IFROW& row) {
-    if (row.dwOperStatus != IF_OPER_STATUS_OPERATIONAL) {
+static bool IsUsableInterface(const MIB_IF_ROW2& row) {
+    if (row.OperStatus != IfOperStatusUp ||
+        row.InterfaceAndOperStatusFlags.FilterInterface) {
         return false;
     }
 
-    if (row.dwType == IF_TYPE_SOFTWARE_LOOPBACK ||
-        row.dwType == IF_TYPE_TUNNEL) {
-        return false;
-    }
-
-    return true;
+    return row.Type != IF_TYPE_SOFTWARE_LOOPBACK &&
+           row.Type != IF_TYPE_TUNNEL;
 }
 
 static bool GetNetworkBytesAll(
     const Settings& s,
-    DWORD* bytesIn,
-    DWORD* bytesOut) {
+    ULONGLONG* bytesIn,
+    ULONGLONG* bytesOut,
+    ULONGLONG* interfaceSignature) {
     *bytesIn = 0;
     *bytesOut = 0;
+    *interfaceSignature = 1469598103934665603ULL;
 
-    ULONG size = 0;
-    DWORD result = GetIfTable(nullptr, &size, FALSE);
-
-    if (result != ERROR_INSUFFICIENT_BUFFER || size == 0) {
+    PMIB_IF_TABLE2 table = nullptr;
+    if (GetIfTable2(&table) != NO_ERROR || !table) {
         return false;
     }
 
-    PMIB_IFTABLE table = static_cast<PMIB_IFTABLE>(
-        HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size));
-    if (!table) {
-        return false;
-    }
-
-    result = GetIfTable(table, &size, FALSE);
-    if (result != NO_ERROR) {
-        HeapFree(GetProcessHeap(), 0, table);
-        return false;
-    }
-
+    const bool hasFilter = s.adapterName[0] != L'\0';
     bool found = false;
-
-    for (DWORD i = 0; i < table->dwNumEntries; ++i) {
-        const MIB_IFROW& row = table->table[i];
-
-        if (!IsUsableLegacyInterface(row)) {
+    for (ULONG i = 0; i < table->NumEntries; ++i) {
+        const MIB_IF_ROW2& row = table->Table[i];
+        if (!IsUsableInterface(row)) {
             continue;
         }
 
-        if (!LegacyInterfaceMatchesFilter(row, s.adapterName)) {
+        if (hasFilter) {
+            if (!ContainsInsensitive(row.Alias, s.adapterName) &&
+                !ContainsInsensitive(row.Description, s.adapterName)) {
+                continue;
+            }
+        } else if (!row.InterfaceAndOperStatusFlags.HardwareInterface) {
             continue;
         }
 
-        // DWORD overflow is intentional. Taking the sample-to-sample
-        // difference as DWORD below makes the delta wrap-safe.
-        *bytesIn += row.dwInOctets;
-        *bytesOut += row.dwOutOctets;
+        *bytesIn += row.InOctets;
+        *bytesOut += row.OutOctets;
+        *interfaceSignature ^=
+            static_cast<ULONGLONG>(row.InterfaceIndex) * 0x9E3779B97F4A7C15ULL;
         found = true;
     }
 
-    HeapFree(GetProcessHeap(), 0, table);
+    FreeMibTable(table);
     return found;
 }
 
 static bool GetNetworkBytesActiveRoute(
     const Settings& s,
-    DWORD* bytesIn,
-    DWORD* bytesOut) {
+    ULONGLONG* bytesIn,
+    ULONGLONG* bytesOut,
+    ULONGLONG* interfaceSignature) {
     *bytesIn = 0;
     *bytesOut = 0;
+    *interfaceSignature = 0;
 
-    // If the user explicitly chose an adapter by name/description,
-    // use the filtered interface table instead of the default route.
     if (s.adapterName[0]) {
-        return GetNetworkBytesAll(s, bytesIn, bytesOut);
+        return GetNetworkBytesAll(s, bytesIn, bytesOut, interfaceSignature);
     }
 
     DWORD ifIndex = 0;
-
-    // 8.8.8.8. GetBestInterface only chooses the interface; it doesn't
-    // send any traffic to this address.
-    if (GetBestInterface(0x08080808, &ifIndex) != NO_ERROR ||
-        ifIndex == 0) {
+    if (GetBestInterface(0x08080808, &ifIndex) != NO_ERROR || ifIndex == 0) {
         return false;
     }
 
-    MIB_IFROW row = {};
-    row.dwIndex = ifIndex;
-
-    if (GetIfEntry(&row) != NO_ERROR ||
-        !IsUsableLegacyInterface(row)) {
+    MIB_IF_ROW2 row = {};
+    row.InterfaceIndex = ifIndex;
+    if (GetIfEntry2(&row) != NO_ERROR || !IsUsableInterface(row)) {
         return false;
     }
 
-    *bytesIn = row.dwInOctets;
-    *bytesOut = row.dwOutOctets;
+    *bytesIn = row.InOctets;
+    *bytesOut = row.OutOctets;
+    *interfaceSignature = row.InterfaceIndex;
     return true;
 }
 
 static bool GetNetworkBytes(
     const Settings& s,
-    DWORD* bytesIn,
-    DWORD* bytesOut) {
-    if (s.adapterMode == Settings::AdapterMode::ActiveRoute) {
-        if (GetNetworkBytesActiveRoute(s, bytesIn, bytesOut)) {
-            return true;
-        }
+    ULONGLONG* bytesIn,
+    ULONGLONG* bytesOut,
+    ULONGLONG* interfaceSignature) {
+    if (s.adapterMode == Settings::AdapterMode::ActiveRoute &&
+        GetNetworkBytesActiveRoute(
+            s, bytesIn, bytesOut, interfaceSignature)) {
+        return true;
     }
 
-    return GetNetworkBytesAll(s, bytesIn, bytesOut);
+    return GetNetworkBytesAll(s, bytesIn, bytesOut, interfaceSignature);
 }
 
 static void FormatSpeed(double bytesPerSec, bool bits, wchar_t* out, size_t outCount) {
@@ -784,7 +732,8 @@ static bool IsFullscreenSuppressed(const Settings& s) {
     }
 
     return state == QUNS_RUNNING_D3D_FULL_SCREEN ||
-           state == QUNS_PRESENTATION_MODE;
+           state == QUNS_PRESENTATION_MODE ||
+           state == QUNS_BUSY;
 }
 
 static bool PointInsideRoundedRect(
@@ -1221,24 +1170,30 @@ static bool RepositionWidget();
 static void UpdateNetworkSample() {
     Settings s = GetSettingsCopy();
 
-    DWORD currentIn = 0;
-    DWORD currentOut = 0;
-
-    if (!GetNetworkBytes(s, &currentIn, &currentOut)) {
+    ULONGLONG currentIn = 0;
+    ULONGLONG currentOut = 0;
+    ULONGLONG interfaceSignature = 0;
+    if (!GetNetworkBytes(s, &currentIn, &currentOut, &interfaceSignature)) {
+        g_haveBaseline = false;
         return;
     }
 
     ULONGLONG now = GetTickCount64();
-
-    if (!g_haveBaseline) {
+    if (!g_haveBaseline ||
+        interfaceSignature != g_lastInterfaceSignature ||
+        currentIn < g_lastBytesIn || currentOut < g_lastBytesOut) {
         g_lastBytesIn = currentIn;
         g_lastBytesOut = currentOut;
+        g_lastInterfaceSignature = interfaceSignature;
         g_lastSampleTick = now;
         g_haveBaseline = true;
         g_displayDown = 0.0;
         g_displayUp = 0.0;
-        if (GetCompactWidgetWidthPx(s, g_lastDpi) != g_lastWidthPx) RepositionWidget();
-        else RenderWidget();
+        if (GetCompactWidgetWidthPx(s, g_lastDpi) != g_lastWidthPx) {
+            RepositionWidget();
+        } else {
+            RenderWidget();
+        }
         return;
     }
 
@@ -1247,22 +1202,17 @@ static void UpdateNetworkSample() {
         return;
     }
 
-    // Unsigned DWORD subtraction is intentionally used here.
-    // It remains correct when the legacy 32-bit interface counters wrap.
-    DWORD deltaIn = currentIn - g_lastBytesIn;
-    DWORD deltaOut = currentOut - g_lastBytesOut;
-
+    ULONGLONG deltaIn = currentIn - g_lastBytesIn;
+    ULONGLONG deltaOut = currentOut - g_lastBytesOut;
     double seconds = elapsedMs / 1000.0;
-    double rawDown = deltaIn / seconds;
-    double rawUp = deltaOut / seconds;
+    double rawDown = static_cast<double>(deltaIn) / seconds;
+    double rawUp = static_cast<double>(deltaOut) / seconds;
 
-    // Tiny background noise is displayed as zero for a cleaner readout.
     if (rawDown < 8.0) rawDown = 0.0;
     if (rawUp < 8.0) rawUp = 0.0;
 
     double alpha = 1.0 - (s.smoothingPercent / 100.0);
     alpha = std::clamp(alpha, 0.05, 1.0);
-
     if (g_displayDown == 0.0 && g_displayUp == 0.0) {
         g_displayDown = rawDown;
         g_displayUp = rawUp;
@@ -1276,35 +1226,65 @@ static void UpdateNetworkSample() {
 
     g_lastBytesIn = currentIn;
     g_lastBytesOut = currentOut;
+    g_lastInterfaceSignature = interfaceSignature;
     g_lastSampleTick = now;
 
-    if (GetCompactWidgetWidthPx(s, g_lastDpi) != g_lastWidthPx) RepositionWidget();
-    else RenderWidget();
+    if (GetCompactWidgetWidthPx(s, g_lastDpi) != g_lastWidthPx) {
+        RepositionWidget();
+    } else {
+        RenderWidget();
+    }
 }
 
 static HWND FindPrimaryTaskbar() {
     return FindWindowW(L"Shell_TrayWnd", nullptr);
 }
 
+static void CALLBACK ForegroundChanged(
+    HWINEVENTHOOK, DWORD event, HWND foreground, LONG, LONG, DWORD, DWORD) {
+    if (event != EVENT_SYSTEM_FOREGROUND || !foreground) return;
+
+    HWND taskbar = FindPrimaryTaskbar();
+    if (!taskbar || (foreground != taskbar &&
+        GetAncestor(foreground, GA_ROOT) != taskbar)) {
+        return;
+    }
+
+    HWND hwnd = g_hwnd.load(std::memory_order_acquire);
+    if (hwnd) PostMessageW(hwnd, WM_APP + 26, 0, 0);
+}
+
+static void PlaceWidget(HWND hwnd, int x, int y, int width, int height) {
+    RECT current = {};
+    const bool hasRect = GetWindowRect(hwnd, &current) != FALSE;
+    const bool sameGeometry = hasRect && current.left == x && current.top == y &&
+        current.right - current.left == width &&
+        current.bottom - current.top == height;
+    const bool topmost =
+        (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+    if (sameGeometry && IsWindowVisible(hwnd) && topmost) {
+        return;
+    }
+
+    SetWindowPos(hwnd, HWND_TOPMOST, x, y, width, height,
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
+}
+
 static bool RepositionWidget() {
-    if (!g_hwnd || !IsWindow(g_hwnd)) {
+    HWND hwnd = g_hwnd.load(std::memory_order_acquire);
+    if (!hwnd || !IsWindow(hwnd)) {
         return false;
     }
 
-    // Direct mouse tracking owns the position until the button is released.
     if (g_isDragging) return true;
     Settings s = GetSettingsCopy();
 
     if (g_freePosition) {
         if (IsFullscreenSuppressed(s)) {
-            ShowWindow(g_hwnd, SW_HIDE);
+            ShowWindow(hwnd, SW_HIDE);
             return true;
         }
-        // A free widget has no taskbar owner, so it can move above the desktop
-        // and onto other monitors independently of taskbar visibility.
-        SetWindowLongPtrW(g_hwnd, GWLP_HWNDPARENT, 0);
-        g_lastTaskbar = nullptr;
-        UINT dpi = GetDpiForWindow(g_hwnd);
+        UINT dpi = GetDpiForWindow(hwnd);
         if (!dpi) dpi = 96;
         int widthPx = GetCompactWidgetWidthPx(s, dpi);
         int heightPx = ScaleForDpi(s.height, dpi);
@@ -1312,8 +1292,6 @@ static bool RepositionWidget() {
                      g_position.x + widthPx, g_position.y + heightPx};
         MONITORINFO monitor = {};
         monitor.cbSize = sizeof(monitor);
-        // Use the full monitor, including its taskbar. Recover a saved position
-        // if a monitor was unplugged or its resolution changed.
         if (GetMonitorInfoW(MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST), &monitor)) {
             g_position.x = std::clamp(g_position.x, monitor.rcMonitor.left,
                 std::max(monitor.rcMonitor.left, monitor.rcMonitor.right - widthPx));
@@ -1325,111 +1303,69 @@ static bool RepositionWidget() {
         g_lastDpi = dpi;
         g_lastWidthPx = widthPx;
         g_lastHeightPx = heightPx;
-        SetWindowPos(g_hwnd, HWND_TOPMOST, g_position.x, g_position.y,
-                     widthPx, heightPx, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        PlaceWidget(hwnd, g_position.x, g_position.y, widthPx, heightPx);
         if (sizeChanged) RenderWidget();
         return true;
     }
 
     HWND taskbar = FindPrimaryTaskbar();
     if (!taskbar || !IsWindow(taskbar) || !IsWindowVisible(taskbar)) {
-        ShowWindow(g_hwnd, SW_HIDE);
+        ShowWindow(hwnd, SW_HIDE);
         return false;
     }
-
     if (IsFullscreenSuppressed(s)) {
-        ShowWindow(g_hwnd, SW_HIDE);
+        ShowWindow(hwnd, SW_HIDE);
         return true;
     }
 
     RECT taskbarRect = {};
     if (!GetWindowRect(taskbar, &taskbarRect) || IsRectEmpty(&taskbarRect)) {
-        ShowWindow(g_hwnd, SW_HIDE);
+        ShowWindow(hwnd, SW_HIDE);
         return false;
     }
 
     int taskbarWidth = taskbarRect.right - taskbarRect.left;
     int taskbarHeight = taskbarRect.bottom - taskbarRect.top;
-
-    // Designed for horizontal Windows 11 taskbars.
     if (taskbarHeight > taskbarWidth) {
-        ShowWindow(g_hwnd, SW_HIDE);
+        ShowWindow(hwnd, SW_HIDE);
         return false;
     }
 
     UINT dpi = GetDpiForWindow(taskbar);
     if (!dpi) dpi = 96;
-
     int widthPx = GetCompactWidgetWidthPx(s, dpi);
     int requestedHeightPx = ScaleForDpi(s.height, dpi);
     int maxHeightPx = std::max(16, taskbarHeight - ScaleForDpi(4, dpi));
     int heightPx = std::min(requestedHeightPx, maxHeightPx);
 
-    HWND trayNotify =
-        FindWindowExW(taskbar, nullptr, L"TrayNotifyWnd", nullptr);
-
+    HWND trayNotify = FindWindowExW(taskbar, nullptr, L"TrayNotifyWnd", nullptr);
     RECT trayRect = {};
-    bool haveTrayRect =
-        trayNotify &&
-        GetWindowRect(trayNotify, &trayRect) &&
-        !IsRectEmpty(&trayRect);
+    bool haveTrayRect = trayNotify && GetWindowRect(trayNotify, &trayRect) &&
+                        !IsRectEmpty(&trayRect);
 
     int gapPx = ScaleForDpi(s.gapFromTray, dpi);
     int xOffsetPx = ScaleForDpi(s.horizontalOffset, dpi);
     int yOffsetPx = ScaleForDpi(s.verticalOffset, dpi);
+    int x = haveTrayRect
+        ? trayRect.left - gapPx - widthPx + xOffsetPx
+        : taskbarRect.right - ScaleForDpi(s.fallbackRightOffset, dpi) -
+              widthPx + xOffsetPx;
+    int y = taskbarRect.top + (taskbarHeight - heightPx) / 2 + yOffsetPx;
 
-    int x = 0;
-    if (haveTrayRect) {
-        x = trayRect.left - gapPx - widthPx + xOffsetPx;
-    } else {
-        x = taskbarRect.right -
-            ScaleForDpi(s.fallbackRightOffset, dpi) -
-            widthPx + xOffsetPx;
-    }
-
-    int y =
-        taskbarRect.top +
-        (taskbarHeight - heightPx) / 2 +
-        yOffsetPx;
-
-    // Keep the meter inside the taskbar bounds.
     const int taskbarLeft = static_cast<int>(taskbarRect.left);
     const int taskbarTop = static_cast<int>(taskbarRect.top);
     const int taskbarRight = static_cast<int>(taskbarRect.right);
     const int taskbarBottom = static_cast<int>(taskbarRect.bottom);
-
     x = std::clamp(x, taskbarLeft, std::max(taskbarLeft, taskbarRight - widthPx));
     y = std::clamp(y, taskbarTop, std::max(taskbarTop, taskbarBottom - heightPx));
 
-    if (g_lastTaskbar != taskbar) {
-        SetWindowLongPtrW(
-            g_hwnd, GWLP_HWNDPARENT,
-            reinterpret_cast<LONG_PTR>(taskbar));
-        g_lastTaskbar = taskbar;
-    }
-
-    bool sizeChanged =
-        widthPx != g_lastWidthPx ||
-        heightPx != g_lastHeightPx ||
-        dpi != g_lastDpi;
-
+    bool sizeChanged = widthPx != g_lastWidthPx || heightPx != g_lastHeightPx ||
+                       dpi != g_lastDpi;
     g_lastDpi = dpi;
     g_lastWidthPx = widthPx;
     g_lastHeightPx = heightPx;
-
-    SetWindowPos(
-        g_hwnd,
-        HWND_TOPMOST,
-        x,
-        y,
-        widthPx,
-        heightPx,
-        SWP_NOACTIVATE | SWP_SHOWWINDOW);
-
-    if (sizeChanged) {
-        RenderWidget();
-    }
-
+    PlaceWidget(hwnd, x, y, widthPx, heightPx);
+    if (sizeChanged) RenderWidget();
     return true;
 }
 
@@ -1439,6 +1375,21 @@ static void TrackDrag() {
     if (!g_isDragging) return;
     POINT cursor = {};
     if (!GetCursorPos(&cursor)) return;
+
+    if (!g_dragMoved) {
+        const int thresholdX = std::max(1, GetSystemMetrics(SM_CXDRAG));
+        const int thresholdY = std::max(1, GetSystemMetrics(SM_CYDRAG));
+        if (cursor.x - g_dragStart.x < thresholdX &&
+            g_dragStart.x - cursor.x < thresholdX &&
+            cursor.y - g_dragStart.y < thresholdY &&
+            g_dragStart.y - cursor.y < thresholdY) {
+            return;
+        }
+
+        g_dragMoved = true;
+        g_freePosition = true;
+    }
+
     POINT next = {cursor.x - g_dragAnchor.x, cursor.y - g_dragAnchor.y};
     if (next.x == g_position.x && next.y == g_position.y) return;
     g_position = next;
@@ -1449,11 +1400,13 @@ static void TrackDrag() {
 static void FinishDrag() {
     if (!g_isDragging) return;
     TrackDrag();
+    const bool moved = g_dragMoved;
     g_isDragging = false;
+    g_dragMoved = false;
     KillTimer(g_hwnd, TIMER_DRAG);
     if (GetCapture() == g_hwnd) ReleaseCapture();
+    if (moved) SavePosition();
     RepositionWidget();
-    SavePosition();
     RenderWidget();
 }
 
@@ -1476,11 +1429,10 @@ static LRESULT CALLBACK WidgetWndProc(
             // the original placement intact.
             if (!SetTimer(hwnd, TIMER_DRAG, 16, nullptr)) return 0;
             g_dragAnchor = {cursor.x - rect.left, cursor.y - rect.top};
+            g_dragStart = cursor;
             g_position = {rect.left, rect.top};
             g_isDragging = true;
-            g_freePosition = true;
-            SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, 0);
-            g_lastTaskbar = nullptr;
+            g_dragMoved = false;
             SetCapture(hwnd);
             SetCursor(LoadCursorW(nullptr, IDC_SIZEALL));
             return 0;
@@ -1538,6 +1490,13 @@ static LRESULT CALLBACK WidgetWndProc(
             RenderWidget();
             return 0;
 
+        case WM_APP + 26:
+            if (IsWindowVisible(hwnd)) {
+                SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+            return 0;
+
         case WM_APP_SETTINGS: {
             Settings s = GetSettingsCopy();
 
@@ -1571,13 +1530,22 @@ static LRESULT CALLBACK WidgetWndProc(
 }
 
 static DWORD WINAPI WidgetThread(LPVOID) {
-    g_threadId = GetCurrentThreadId();
+    MSG msg = {};
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    SetEvent(g_queueReady);
 
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
-    HINSTANCE instance = GetModuleHandleW(nullptr);
-    const wchar_t* className = L"WindhawkPremiumNetSpeedWidget";
+    HMODULE instance = nullptr;
+    if (!GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&WidgetThread), &instance)) {
+        Wh_Log(L"GetModuleHandleExW failed, error=%u", GetLastError());
+        return 1;
+    }
 
+    const wchar_t* className = L"WindhawkPremiumNetSpeedWidget";
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
     wc.hInstance = instance;
@@ -1586,13 +1554,13 @@ static DWORD WINAPI WidgetThread(LPVOID) {
     wc.lpszClassName = className;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
 
-    RegisterClassExW(&wc);
+    if (!RegisterClassExW(&wc)) {
+        Wh_Log(L"RegisterClassExW failed, error=%u", GetLastError());
+        return 1;
+    }
 
     g_hwnd = CreateWindowExW(
-        WS_EX_LAYERED |
-            WS_EX_TOOLWINDOW |
-            WS_EX_NOACTIVATE |
-            WS_EX_TOPMOST,
+        WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
         className,
         L"Premium Taskbar Net Speed",
         WS_POPUP,
@@ -1602,75 +1570,265 @@ static DWORD WINAPI WidgetThread(LPVOID) {
         instance,
         nullptr);
 
-    if (!g_hwnd) {
+    if (!g_hwnd.load(std::memory_order_acquire)) {
         Wh_Log(L"CreateWindowExW failed, error=%u", GetLastError());
         UnregisterClassW(className, instance);
         return 1;
     }
 
-    Settings s = GetSettingsCopy();
+    g_foregroundHook = SetWinEventHook(
+        EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
+        ForegroundChanged, 0, 0,
+        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    if (!g_foregroundHook) {
+        Wh_Log(L"SetWinEventHook failed, error=%u", GetLastError());
+    }
 
+    Settings s = GetSettingsCopy();
     LoadPosition();
     RepositionWidget();
     UpdateNetworkSample();
-
     SetTimer(g_hwnd, TIMER_SAMPLE, s.updateIntervalMs, nullptr);
     SetTimer(g_hwnd, TIMER_POSITION, 1000, nullptr);
 
-    MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
 
-    g_hwnd = nullptr;
-    g_threadId = 0;
-    UnregisterClassW(className, instance);
+    if (g_foregroundHook) {
+        UnhookWinEvent(g_foregroundHook);
+        g_foregroundHook = nullptr;
+    }
+
+    HWND hwnd = g_hwnd.exchange(nullptr, std::memory_order_acq_rel);
+    if (hwnd && IsWindow(hwnd)) {
+        DestroyWindow(hwnd);
+    }
+    if (!UnregisterClassW(className, instance)) {
+        Wh_Log(L"UnregisterClassW failed, error=%u", GetLastError());
+    }
     return 0;
 }
 
 }  // namespace
 
-BOOL Wh_ModInit() {
-    // Avoid starting in Explorer folder-window helper subprocesses.
-    PCWSTR cmdLine = GetCommandLineW();
-    if (cmdLine && wcsstr(cmdLine, L"/factory")) {
-        return FALSE;
-    }
-
+BOOL WhTool_ModInit() {
     ReloadSettings();
 
-    g_thread = CreateThread(
-        nullptr, 0, WidgetThread, nullptr, 0, nullptr);
-
-    if (!g_thread) {
-        Wh_Log(L"CreateThread failed, error=%u", GetLastError());
+    g_queueReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_queueReady) {
+        Wh_Log(L"CreateEventW failed, error=%u", GetLastError());
         return FALSE;
     }
 
+    DWORD threadId = 0;
+    g_thread = CreateThread(nullptr, 0, WidgetThread, nullptr, 0, &threadId);
+    if (!g_thread) {
+        Wh_Log(L"CreateThread failed, error=%u", GetLastError());
+        CloseHandle(g_queueReady);
+        g_queueReady = nullptr;
+        return FALSE;
+    }
+
+    g_threadId.store(threadId, std::memory_order_release);
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     ReloadSettings();
+    HWND hwnd = g_hwnd.load(std::memory_order_acquire);
+    if (hwnd) PostMessageW(hwnd, WM_APP_SETTINGS, 0, 0);
+}
 
-    HWND hwnd = g_hwnd;
-    if (hwnd && IsWindow(hwnd)) {
-        PostMessageW(hwnd, WM_APP_SETTINGS, 0, 0);
+void WhTool_ModUninit() {
+    HANDLE thread = g_thread;
+    if (!thread) return;
+
+    if (g_queueReady) {
+        WaitForSingleObject(g_queueReady, INFINITE);
+    }
+    DWORD threadId = g_threadId.load(std::memory_order_acquire);
+    if (threadId) {
+        PostThreadMessageW(threadId, WM_QUIT, 0, 0);
+    }
+
+    WaitForSingleObject(thread, INFINITE);
+    CloseHandle(thread);
+    g_thread = nullptr;
+    g_threadId.store(0, std::memory_order_release);
+
+    if (g_queueReady) {
+        CloseHandle(g_queueReady);
+        g_queueReady = nullptr;
     }
 }
 
-void Wh_ModUninit() {
-    HWND hwnd = g_hwnd;
-    if (hwnd && IsWindow(hwnd)) {
-        PostMessageW(hwnd, WM_CLOSE, 0, 0);
-    } else if (g_threadId) {
-        PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
     }
 
-    if (g_thread) {
-        WaitForSingleObject(g_thread, 3000);
-        CloseHandle(g_thread);
-        g_thread = nullptr;
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
     }
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR commandLine[MAX_PATH + 2 +
+        (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"",
+               currentProcessPath, WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
