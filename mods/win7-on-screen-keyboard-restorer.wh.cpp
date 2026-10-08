@@ -1,7 +1,27 @@
 // ==WindhawkMod==
 // @id              win7-on-screen-keyboard-restorer
 // @name            Windows 7 On Screen Keyboard Restorer
+// @name:it Ripristino della tastiera su schermo di Windows 7
+// @name:ru Восстановление экранной клавиатуры Windows 7
+// @name:es Restaurador del teclado en pantalla de Windows 7
+// @name:pt-BR Restaurador do Teclado Virtual do Windows 7
+// @name:fr Restaurateur du clavier visuel de Windows 7
+// @name:de Windows 7 Bildschirmtastatur-Wiederherstellung
+// @name:pl Przywracanie klawiatury ekranowej z Windows 7
+// @name:zh-CN Windows 7 屏幕键盘还原
+// @name:ja Windows 7 スクリーン キーボード復元
+// @name:ko Windows 7 화상 키보드 복원
 // @description     This mod redirects the Windows 10/11 On-Screen Keyboard (osk.exe) to the original Windows 7 one 
+// @description:it Questo mod reindirizza la tastiera su schermo (osk.exe) di Windows 10/11 a quella originale di Windows 7
+// @description:ru Этот мод перенаправляет экранную клавиатуру Windows 10/11 (osk.exe) на оригинальную клавиатуру Windows 7
+// @description:es Este mod redirige el teclado en pantalla (osk.exe) de Windows 10/11 al original de Windows 7
+// @description:pt-BR Este mod redireciona o Teclado Virtual do Windows 10/11 (osk.exe) para o original do Windows 7
+// @description:fr Ce mod redirige le clavier visuel (osk.exe) de Windows 10/11 vers celui d'origine de Windows 7
+// @description:de Dieses Mod leitet die Bildschirmtastatur (osk.exe) von Windows 10/11 auf die ursprüngliche von Windows 7 um
+// @description:pl Ten mod przekierowuje klawiaturę ekranową (osk.exe) z Windows 10/11 do oryginalnej klawiatury z Windows 7
+// @description:zh-CN 此模组将 Windows 10/11 的屏幕键盘 (osk.exe) 重定向为 Windows 7 的原始版本
+// @description:ja この mod は、Windows 10/11 のスクリーン キーボード (osk.exe) を Windows 7 のオリジナル版にリダイレクトします
+// @description:ko 이 모드는 Windows 10/11의 화상 키보드(osk.exe)를 원래의 Windows 7 버전으로 리디렉션합니다
 // @version         1.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
@@ -18,9 +38,13 @@
 
 This modification tries to restore the original Windows 7 On-Screen Keyboard on Windows 10 and
 Windows 11: whenever the system `osk.exe` is about to start, the Windows 7
-`osk.exe` is started instead. This is a best effort restoration and the Windows 7 files are downloaded from
-Microsoft's public symbol server and verified, and nothing is written to
-`System32`, to `Common Files`, or to Image File Execution Options.
+`osk.exe` is started instead. This is a best effort restoration. The Windows 7
+files are downloaded from Microsoft's public symbol server and verified against
+pinned SHA-256 digests before they are used, and nothing is written to
+`System32`, to `Common Files`, or to Image File Execution Options. The files are
+kept in the mod's own storage folder (or in the folder of the `installFolder`
+setting), which Windhawk removes together with the mod, and no registry key is
+left behind.
 
 ## Screenshot (Before)
 
@@ -63,85 +87,306 @@ windows.
 /*
 - installFolder: ""
   $name: Install folder
+  $name:it: Cartella di installazione
+  $name:ru: Папка установки
+  $name:es: Carpeta de instalación
+  $name:pt-BR: Pasta de instalação
+  $name:fr: Dossier d'installation
+  $name:de: Installationsordner
+  $name:pl: Folder instalacyjny
+  $name:zh-CN: 安装文件夹
+  $name:ja: インストール フォルダー
+  $name:ko: 설치 폴더
   $description: >-
-    Folder holding the Windows 7 files. Environment variables are expanded.
-    Leave empty for %USERPROFILE%\AppData\Local\Win7OnScreenKeyboard. Do not
-    use %LOCALAPPDATA% here: inside packaged processes (Search, Start) that
-    variable points to the package's redirected AppData folder, which is not
-    the folder the other processes use.
-- autoDownload: true
-  $name: Download missing files automatically
-  $description: >-
-    Downloads the Windows 7 files from the Microsoft symbol server when they
-    are missing. Files that are already present are never replaced and never
-    deleted, so a set prepared by hand keeps working.
-- prepareInstallFiles: true
-  $name: Prepare the Windows 7 files so they can run outside a protected folder
-  $description: >-
-    Applies the two same-length edits described in the documentation to a copy
-    of osk.exe that verifies as the pinned Windows 7 build: the delay-load name
-    DUI70.dll becomes DUI71.dll, and uiAccess="true" becomes uiAccess="false"
-    in the embedded manifest (otherwise Windows refuses to start the image with
-    error 740). Nothing else in the file is touched, and a file that is already
-    prepared is left alone. Disable this only if you supply your own prepared
-    copy.
-- redirectLaunches: true
-  $name: Redirect osk.exe launches in the shell processes
-  $description: >-
-    Hooks the process creation and shell execute APIs in the processes listed in
-    the mod, so that a request for the system osk.exe becomes the Windows 7
-    copy before the system keyboard starts.
-- handoffFromStockOsk: true
-  $name: Hand off from the system osk.exe (catch-all)
-  $description: >-
-    If the system osk.exe starts anyway, the mod starts the Windows 7 copy and
-    closes the process it is running in. This covers launch paths that cannot be
-    hooked. If the Windows 7 copy cannot be started, the system keyboard is left
-    running.
+    This setting sets the folder that holds the Windows 7 files; environment
+    variables are expanded. Leave it empty to use the mod's own storage folder,
+    which Windhawk removes together with the mod.
+  $description:it: >-
+    Questa impostazione indica la cartella che contiene i file di Windows 7; le
+    variabili d'ambiente vengono espanse. Lasciala vuota per usare la cartella di
+    archiviazione del mod, che Windhawk rimuove insieme al mod.
+  $description:ru: >-
+    Этот параметр задаёт папку с файлами Windows 7; переменные среды раскрываются.
+    Оставьте его пустым, чтобы использовать собственную папку хранения мода,
+    которую Windhawk удаляет вместе с модом.
+  $description:es: >-
+    Esta opción indica la carpeta que contiene los archivos de Windows 7; las
+    variables de entorno se expanden. Déjala vacía para usar la carpeta de
+    almacenamiento del mod, que Windhawk elimina junto con el mod.
+  $description:pt-BR: >-
+    Esta configuração indica a pasta que contém os arquivos do Windows 7; as
+    variáveis de ambiente são expandidas. Deixe-a vazia para usar a pasta de
+    armazenamento do mod, que o Windhawk remove junto com o mod.
+  $description:fr: >-
+    Ce paramètre indique le dossier qui contient les fichiers de Windows 7 ; les
+    variables d'environnement sont développées. Laissez-le vide pour utiliser le
+    dossier de stockage du mod, que Windhawk supprime avec le mod.
+  $description:de: >-
+    Diese Einstellung legt den Ordner mit den Windows 7-Dateien fest;
+    Umgebungsvariablen werden erweitert. Leer lassen, um den eigenen
+    Speicherordner des Mods zu verwenden, den Windhawk zusammen mit dem Mod
+    entfernt.
+  $description:pl: >-
+    To ustawienie wskazuje folder z plikami Windows 7; zmienne środowiskowe są
+    rozwijane. Pozostaw je puste, aby użyć własnego folderu magazynu moda, który
+    Windhawk usuwa razem z modem.
+  $description:zh-CN: >-
+    此设置指定存放 Windows 7 文件的文件夹；环境变量会被展开。留空则使用模组自己的存储文件夹，卸载模组时 Windhawk 会一并删除。
+  $description:ja: >-
+    この設定は、Windows 7 のファイルを置くフォルダーを指定します。環境変数は展開されます。空にすると、mod 専用の保存フォルダーを使用します（mod の削除時に Windhawk が削除します）。
+  $description:ko: >-
+    이 설정은 Windows 7 파일이 들어 있는 폴더를 지정합니다. 환경 변수는 확장됩니다. 비워 두면 모드 전용 저장 폴더를 사용하며, 모드를 제거할 때 Windhawk가 함께 삭제합니다.
 - preloadLocalDlls: true
   $name: Preload the DLLs from the install folder first
+  $name:it: Precarica prima le DLL dalla cartella di installazione
+  $name:ru: Сначала предзагружать DLL из папки установки
+  $name:es: Precargar primero las DLL de la carpeta de instalación
+  $name:pt-BR: Pré-carregar primeiro as DLLs da pasta de instalação
+  $name:fr: Précharger d'abord les DLL du dossier d'installation
+  $name:de: Die DLLs zuerst aus dem Installationsordner vorladen
+  $name:pl: Wczytaj najpierw biblioteki DLL z folderu instalacyjnego
+  $name:zh-CN: 优先从安装文件夹预加载 DLL
+  $name:ja: インストール フォルダーの DLL を先にプリロードする
+  $name:ko: 설치 폴더의 DLL을 먼저 미리 로드
   $description: >-
-    Loads dui71.dll and msswch.dll from the install folder before the Windows 7
-    osk.exe can pull in a system copy with the same name. Keep this on: the
-    Windows 7 keyboard expects its own DirectUI (dui71.dll) and, if the system
-    one ends up in the process first, the keyboard still starts but parts of it
-    (the keys that are not plain text) do not come up.
+    This setting loads dui71.dll and msswch.dll from the install folder before the
+    system copies with the same names. Keep it on: with the system copies, the
+    keys that are not plain text come out blank.
+  $description:it: >-
+    Questa impostazione carica dui71.dll e msswch.dll dalla cartella di
+    installazione prima delle copie di sistema con lo stesso nome. Lasciala
+    attiva: con le copie di sistema i tasti che non sono testo semplice restano
+    vuoti.
+  $description:ru: >-
+    Этот параметр загружает dui71.dll и msswch.dll из папки установки раньше
+    системных копий с теми же именами. Оставьте его включённым: с системными
+    копиями клавиши, которые не являются обычным текстом, остаются пустыми.
+  $description:es: >-
+    Esta opción carga dui71.dll y msswch.dll desde la carpeta de instalación antes
+    que las copias del sistema con los mismos nombres. Déjala activada: con las
+    copias del sistema, las teclas que no son texto simple salen vacías.
+  $description:pt-BR: >-
+    Esta configuração carrega dui71.dll e msswch.dll da pasta de instalação antes
+    das cópias do sistema com os mesmos nomes. Mantenha-a ativada: com as cópias
+    do sistema, as teclas que não são texto simples ficam vazias.
+  $description:fr: >-
+    Ce paramètre charge dui71.dll et msswch.dll depuis le dossier d'installation
+    avant les copies système portant les mêmes noms. Gardez-le activé : avec les
+    copies système, les touches qui ne sont pas du texte simple restent vides.
+  $description:de: >-
+    Diese Einstellung lädt dui71.dll und msswch.dll aus dem Installationsordner
+    vor den Systemkopien mit denselben Namen. Eingeschaltet lassen: Mit den
+    Systemkopien bleiben die Tasten, die kein reiner Text sind, leer.
+  $description:pl: >-
+    To ustawienie wczytuje dui71.dll i msswch.dll z folderu instalacyjnego przed
+    systemowymi kopiami o tych samych nazwach. Pozostaw je włączone: z systemowymi
+    kopiami klawisze, które nie są zwykłym tekstem, pozostają puste.
+  $description:zh-CN: >-
+    此设置先从安装文件夹加载 dui71.dll 和 msswch.dll，早于同名的系统副本。请保持开启：使用系统副本时，非纯文本的按键会显示为空白。
+  $description:ja: >-
+    この設定は、同名のシステム側コピーより先に、インストール フォルダーから dui71.dll と msswch.dll を読み込みます。オンのままにしてください。システム側コピーでは、通常のテキストではないキーが空白になります。
+  $description:ko: >-
+    이 설정은 같은 이름의 시스템 복사본보다 먼저 설치 폴더에서 dui71.dll과 msswch.dll을 로드합니다. 켜 둔 상태로 유지하세요. 시스템 복사본을 쓰면 일반 텍스트가 아닌 키가 비어 있게 됩니다.
 - windowsKeyFace: "box"
   $name: Face of the Windows key
+  $name:it: Aspetto del tasto Windows
+  $name:ru: Вид клавиши Windows
+  $name:es: Aspecto de la tecla Windows
+  $name:pt-BR: Aparência da tecla Windows
+  $name:fr: Apparence de la touche Windows
+  $name:de: Aussehen der Windows-Taste
+  $name:pl: Wygląd klawisza Windows
+  $name:zh-CN: Windows 键的外观
+  $name:ja: Windows キーの図柄
+  $name:ko: Windows 키 모양
   $description: >-
-    The Windows key of the Windows 7 keyboard is drawn with a glyph taken from
-    the font installed on the system; on Windows 10 and 11 that glyph is the
-    current (flat) logo. Allowed values: "box" draws the squared plus sign
-    U+229E (the closest plain character to the classic flag), "win" writes the
-    word Win, "keep" leaves the glyph of the system font alone. Any other
-    private-use glyph in a key caption is dropped in every case, because it
-    cannot be rendered by the fonts of this system.
+    This setting chooses how the Windows key is drawn: "box" (the squared plus
+    sign U+229E, closest to the classic flag), "win" (the word Win) or "keep" (the
+    glyph of the system font, the current logo).
+  $description:it: >-
+    Questa impostazione sceglie come disegnare il tasto Windows: "box" (il segno
+    più quadrato U+229E, il più vicino alla bandiera classica), "win" (la parola
+    Win) oppure "keep" (il glifo del font di sistema, il logo attuale).
+  $description:ru: >-
+    Этот параметр выбирает вид клавиши Windows: "box" (квадратный знак плюса
+    U+229E, ближайший к классическому флагу), "win" (слово Win) или "keep" (глиф
+    системного шрифта, текущий логотип).
+  $description:es: >-
+    Esta opción elige cómo se dibuja la tecla Windows: "box" (el signo más
+    cuadrado U+229E, lo más parecido a la bandera clásica), "win" (la palabra Win)
+    o "keep" (el glifo de la fuente del sistema, el logotipo actual).
+  $description:pt-BR: >-
+    Esta configuração escolhe como a tecla Windows é desenhada: "box" (o sinal de
+    mais quadrado U+229E, o mais próximo da bandeira clássica), "win" (a palavra
+    Win) ou "keep" (o glifo da fonte do sistema, o logotipo atual).
+  $description:fr: >-
+    Ce paramètre choisit l'aspect de la touche Windows : "box" (le signe plus
+    encadré U+229E, le plus proche du drapeau classique), "win" (le mot Win) ou
+    "keep" (le glyphe de la police système, le logo actuel).
+  $description:de: >-
+    Diese Einstellung wählt das Aussehen der Windows-Taste: "box" (das eingerahmte
+    Pluszeichen U+229E, am nächsten zur klassischen Flagge), "win" (das Wort Win)
+    oder "keep" (der Glyph der Systemschriftart, das aktuelle Logo).
+  $description:pl: >-
+    To ustawienie wybiera wygląd klawisza Windows: "box" (kwadratowy znak plus
+    U+229E, najbliższy klasycznej fladze), "win" (słowo Win) lub "keep" (glif
+    czcionki systemowej, obecne logo).
+  $description:zh-CN: >-
+    此设置选择 Windows 键的绘制方式："box"（方框加号 U+229E，最接近经典旗帜）、"win"（单词 Win）或 "keep"（系统字体字形，即当前的徽标）。
+  $description:ja: >-
+    この設定は Windows キーの図柄を選びます。"box"（四角いプラス記号 U+229E、従来の旗に最も近い）、"win"（Win という語）、"keep"（システム フォントのグリフ、現在のロゴ）です。
+  $description:ko: >-
+    이 설정은 Windows 키의 모양을 선택합니다. "box"(네모 안 더하기 기호 U+229E, 고전적인 깃발에 가장 가까움), "win"(Win이라는 단어), "keep"(시스템 글꼴의 글리프, 현재 로고)입니다.
 - keyFaces: true
   $name: Supply the faces of the keys that are not text
+  $name:it: Fornisci l'aspetto dei tasti che non sono testo
+  $name:ru: Подставлять изображения клавиш, которые не являются текстом
+  $name:es: Proporcionar el aspecto de las teclas que no son texto
+  $name:pt-BR: Fornecer a aparência das teclas que não são texto
+  $name:fr: Fournir l'apparence des touches qui ne sont pas du texte
+  $name:de: Die Darstellung der Tasten bereitstellen, die kein Text sind
+  $name:pl: Dostarczaj wygląd klawiszy, które nie są tekstem
+  $name:zh-CN: 提供非文本按键的外观
+  $name:ja: テキストではないキーの図柄を提供する
+  $name:ko: 텍스트가 아닌 키의 모양 제공
   $description: >-
-    The Windows 7 keyboard asks the system for the pictures of the keys that are
-    not text (the Windows key, the menu key, Enter and the four arrows) with
-    LoadImageW(..., IMAGE_ICON, id). On Windows 10 and 11 the module that
-    answers has the pictures of the keyboard of this system, so the Windows key
-    shows the current logo, and the five keys that have no counterpart there
-    (Enter and the arrows) come out empty and do not work. With this on, the
-    keyboard is given the faces of the Windows 7 keyboard, drawn from scratch
-    and kept in the mod as base64 images (nothing is taken from the Windows 7
-    files).
+    This setting supplies the faces of the keys that are not text (Windows, menu,
+    Enter and the four arrows), drawn inside the mod: the system has no pictures
+    for them, and five keys would come out empty.
+  $description:it: >-
+    Questa impostazione fornisce l'aspetto dei tasti che non sono testo (Windows,
+    menu, Invio e le quattro frecce), disegnato dentro il mod: il sistema non ha
+    immagini per loro e cinque tasti risulterebbero vuoti.
+  $description:ru: >-
+    Этот параметр подставляет изображения клавиш, которые не являются текстом
+    (Windows, меню, Enter и четыре стрелки), нарисованные внутри мода: у системы
+    нет для них картинок, и пять клавиш остались бы пустыми.
+  $description:es: >-
+    Esta opción proporciona las caras de las teclas que no son texto (Windows,
+    menú, Intro y las cuatro flechas), dibujadas dentro del mod: el sistema no
+    tiene imágenes para ellas y cinco teclas saldrían vacías.
+  $description:pt-BR: >-
+    Esta configuração fornece as faces das teclas que não são texto (Windows,
+    menu, Enter e as quatro setas), desenhadas dentro do mod: o sistema não tem
+    imagens para elas e cinco teclas ficariam vazias.
+  $description:fr: >-
+    Ce paramètre fournit l'apparence des touches qui ne sont pas du texte
+    (Windows, menu, Entrée et les quatre flèches), dessinée dans le mod : le
+    système n'a pas d'images pour elles et cinq touches resteraient vides.
+  $description:de: >-
+    Diese Einstellung liefert die Darstellung der Tasten, die kein Text sind
+    (Windows, Menü, Enter und die vier Pfeile), im Mod gezeichnet: Das System hat
+    keine Bilder dafür, und fünf Tasten blieben leer.
+  $description:pl: >-
+    To ustawienie dostarcza wygląd klawiszy, które nie są tekstem (Windows, menu,
+    Enter i cztery strzałki), rysowany w modzie: system nie ma dla nich obrazów i
+    pięć klawiszy byłoby pustych.
+  $description:zh-CN: >-
+    此设置提供非文本按键（Windows、菜单、Enter 和四个方向键）的外观，由 mod 自行绘制：系统中没有它们的图像，否则五个按键会显示为空白。
+  $description:ja: >-
+    この設定は、テキストではないキー（Windows、メニュー、Enter、4 つの矢印キー）の図柄を mod 内で描画して渡します。システムにはこれらの画像がないため、オフにすると 5 つのキーが空白になります。
+  $description:ko: >-
+    이 설정은 텍스트가 아닌 키(Windows, 메뉴, Enter 및 네 개의 화살표)의 모양을 mod 안에서 그려서 제공합니다. 시스템에는 이들의 그림이 없어, 끄면 다섯 개의 키가 비어 있게 됩니다.
 - keyFaceColor: "white"
   $name: Colour of the faces that are supplied
+  $name:it: Colore degli aspetti forniti
+  $name:ru: Цвет подставляемых изображений
+  $name:es: Color de las imágenes proporcionadas
+  $name:pt-BR: Cor da aparência fornecida
+  $name:fr: Couleur des apparences fournies
+  $name:de: Farbe der bereitgestellten Darstellungen
+  $name:pl: Kolor dostarczanych wyglądów
+  $name:zh-CN: 所提供外观的颜色
+  $name:ja: 提供する図柄の色
+  $name:ko: 제공되는 모양의 색
   $description: >-
-    "white" is the colour of the original pictures: the Windows 7 keyboard
-    draws its keys dark, and its Windows, menu, Enter and arrow keys are white.
-    "auto" is white as well: the keys are dark whatever the theme. "black" or a colour in
-    the form "#RRGGBB" fix the colour by hand. A change of this setting is
-    applied at once, without restarting the keyboard.
+    This setting sets the colour of the supplied faces: "white" (the colour of the
+    originals), "black" or a colour such as "#RRGGBB". Changes apply at once,
+    without restarting the keyboard.
+  $description:it: >-
+    Questa impostazione imposta il colore degli aspetti forniti: "white" (il
+    colore degli originali), "black" o un colore come "#RRGGBB". Le modifiche si
+    applicano subito, senza riavviare la tastiera.
+  $description:ru: >-
+    Этот параметр задаёт цвет подставляемых изображений: "white" (цвет
+    оригиналов), "black" или цвет вида "#RRGGBB". Изменения применяются сразу, без
+    перезапуска клавиатуры.
+  $description:es: >-
+    Esta opción fija el color de las caras proporcionadas: "white" (el color de
+    las originales), "black" o un color como "#RRGGBB". Los cambios se aplican al
+    momento, sin reiniciar el teclado.
+  $description:pt-BR: >-
+    Esta configuração define a cor das faces fornecidas: "white" (a cor das
+    originais), "black" ou uma cor como "#RRGGBB". As alterações são aplicadas na
+    hora, sem reiniciar o teclado.
+  $description:fr: >-
+    Ce paramètre règle la couleur des apparences fournies : "white" (la couleur
+    des originales), "black" ou une couleur au format "#RRGGBB". Les changements
+    s'appliquent immédiatement, sans redémarrer le clavier.
+  $description:de: >-
+    Diese Einstellung legt die Farbe der gelieferten Darstellungen fest: "white"
+    (die Farbe der Originale), "black" oder eine Farbe wie "#RRGGBB". Änderungen
+    wirken sofort, ohne die Tastatur neu zu starten.
+  $description:pl: >-
+    To ustawienie ustawia kolor dostarczanych wyglądów: "white" (kolor
+    oryginałów), "black" lub kolor w formacie "#RRGGBB". Zmiany działają od razu,
+    bez ponownego uruchamiania klawiatury.
+  $description:zh-CN: >-
+    此设置设定所提供外观的颜色："white"（原始图像的颜色）、"black" 或 "#RRGGBB" 形式的颜色。更改会立即生效，无需重启键盘。
+  $description:ja: >-
+    この設定は、提供する図柄の色を指定します。"white"（元の画像の色）、"black"、または "#RRGGBB" 形式の色です。変更はキーボードを再起動せずにすぐ適用されます。
+  $description:ko: >-
+    이 설정은 제공되는 모양의 색을 지정합니다. "white"(원본 그림의 색), "black" 또는 "#RRGGBB" 형식의 색입니다. 변경 사항은 키보드를 다시 시작하지 않고 즉시 적용됩니다.
 - diagnostics: true
   $name: Verbose diagnostic logging
+  $name:it: Registrazione diagnostica dettagliata
+  $name:ru: Подробный диагностический журнал
+  $name:es: Registro de diagnóstico detallado
+  $name:pt-BR: Log de diagnóstico detalhado
+  $name:fr: Journal de diagnostic détaillé
+  $name:de: Ausführliche Diagnoseprotokollierung
+  $name:pl: Szczegółowe rejestrowanie diagnostyczne
+  $name:zh-CN: 详细诊断日志
+  $name:ja: 詳細な診断ログ
+  $name:ko: 상세 진단 로깅
   $description: >-
-    Logs every osk-related process creation with its caller module, the hook
-    installation results, the file preparation steps, and the DLL/string/dialog
-    fallbacks inside the Windows 7 osk.exe.
+    This setting logs the work of the mod in detail: the hook results, the file
+    preparation, the DLL and string fallbacks, and every osk-related process start
+    with its caller.
+  $description:it: >-
+    Questa impostazione registra in dettaglio il lavoro del mod: risultati degli
+    hook, preparazione dei file, ripieghi di DLL e stringhe e ogni avvio di
+    processo legato a osk con il suo chiamante.
+  $description:ru: >-
+    Этот параметр подробно записывает работу мода: результаты хуков, подготовку
+    файлов, резервные варианты для DLL и строк, а также каждый запуск процесса,
+    связанного с osk, и его вызывающий модуль.
+  $description:es: >-
+    Esta opción registra con detalle el trabajo del mod: los resultados de los
+    enganches, la preparación de archivos, los respaldos de DLL y cadenas y cada
+    inicio de proceso relacionado con osk y su llamador.
+  $description:pt-BR: >-
+    Esta configuração registra detalhadamente o trabalho do mod: os resultados dos
+    hooks, a preparação dos arquivos, os fallbacks de DLL e strings e cada início
+    de processo relacionado ao osk com o seu chamador.
+  $description:fr: >-
+    Ce paramètre journalise en détail le travail du mod : les résultats des hooks,
+    la préparation des fichiers, les solutions de repli pour les DLL et les
+    chaînes, et chaque lancement de processus lié à osk avec son appelant.
+  $description:de: >-
+    Diese Einstellung protokolliert die Arbeit des Mods ausführlich:
+    Hook-Ergebnisse, Dateivorbereitung, die DLL- und Zeichenfolgen-Ersatzlösungen
+    und jeden osk-bezogenen Prozessstart mit seinem Aufrufer.
+  $description:pl: >-
+    To ustawienie szczegółowo rejestruje pracę moda: wyniki hooków, przygotowanie
+    plików, mechanizmy zastępcze dla DLL i ciągów oraz każde uruchomienie procesu
+    związanego z osk wraz z modułem wywołującym.
+  $description:zh-CN: >-
+    此设置详细记录 mod 的工作情况：挂钩结果、文件准备、DLL 和字符串回退，以及每个与 osk 相关的进程启动及其调用模块。
+  $description:ja: >-
+    この設定は mod の動作を詳しく記録します。フックの結果、ファイルの準備、DLL と文字列のフォールバック、そして osk に関連する各プロセスの起動と呼び出し元です。
+  $description:ko: >-
+    이 설정은 mod의 작업을 자세히 기록합니다. 후킹 결과, 파일 준비, DLL 및 문자열 폴백, 그리고 osk 관련 프로세스 시작과 호출 모듈입니다.
 */
 // ==/WindhawkModSettings==
 
@@ -163,10 +408,10 @@ windows.
 // based: the MSVC intrinsic _ReturnAddress() is not declared there, so the
 // compiler builtin is used instead.
 #if defined(__clang__) || defined(__GNUC__)
-#define WH_CALLER_ADDRESS() __builtin_return_address(0)
+#define MOD_CALLER_ADDRESS() __builtin_return_address(0)
 #else
 #include <intrin.h>
-#define WH_CALLER_ADDRESS() _ReturnAddress()
+#define MOD_CALLER_ADDRESS() _ReturnAddress()
 #endif
 
 namespace {
@@ -190,6 +435,61 @@ std::atomic<bool> g_diagnostics{true};
 std::wstring GetInstallDir() {
     std::lock_guard<std::mutex> lock(g_stateLock);
     return g_installDir;
+}// ---------------------------------------------------------------------------
+// Data served to the keyboard outlives this mod
+//
+// A resource handle is valid for the lifetime of its module, so the keyboard
+// is free to cache the handles and the pointers it is given. Anything this mod
+// serves therefore has to stay readable after Windhawk has unmapped the
+// module: the handles and the bytes live in blocks of the process heap that
+// are deliberately never freed (a few KB in all). A copy is reused while the
+// bytes do not change, so a keyboard layout switch adds one small block at
+// most.
+// ---------------------------------------------------------------------------
+
+std::mutex g_servedLock;
+
+struct ServedBlock {
+    const void* key;  // what the bytes were served for
+    const BYTE* data;
+    size_t size;
+};
+
+std::vector<ServedBlock> g_servedBlocks;
+
+const BYTE* ServePersistentBytes(const void* key, const std::vector<BYTE>& bytes,
+                                size_t* size) {
+    std::lock_guard<std::mutex> guard(g_servedLock);
+    for (const ServedBlock& block : g_servedBlocks) {
+        if (block.key == key && block.size == bytes.size() &&
+            memcmp(block.data, bytes.data(), bytes.size()) == 0) {
+            *size = block.size;
+            return block.data;
+        }
+    }
+
+    BYTE* copy = (BYTE*)HeapAlloc(GetProcessHeap(), 0, bytes.size() + 1);
+    if (!copy) {
+        return nullptr;
+    }
+    memcpy(copy, bytes.data(), bytes.size());
+    g_servedBlocks.push_back({key, copy, bytes.size()});
+    *size = bytes.size();
+    return copy;
+}
+
+// The same for a string that is handed out by address: LoadStringW with a
+// length of zero writes the address of the string into the caller's buffer,
+// and that pointer must not point into this module either.
+PCWSTR ServePersistentString(PCWSTR source) {
+    if (!source) {
+        return nullptr;
+    }
+    std::vector<BYTE> bytes((wcslen(source) + 1) * sizeof(wchar_t));
+    memcpy(bytes.data(), source, bytes.size());
+    size_t size = 0;
+    const BYTE* copy = ServePersistentBytes(source, bytes, &size);
+    return copy ? (PCWSTR)copy : source;
 }
 
 HMODULE g_exeModule = nullptr;
@@ -206,6 +506,16 @@ std::vector<HANDLE> g_workers;
 
 bool SpawnWorker(LPTHREAD_START_ROUTINE routine, void* parameter,
                  const wchar_t* what) {
+    // The check and the registration happen under the same lock as the swap in
+    // JoinWorkers below: a thread is either tracked (and waited for) or
+    // refused. A thread started after the shutdown began would run code of
+    // this mod after Windhawk has unmapped it.
+    std::lock_guard<std::mutex> lock(g_workersLock);
+    if (g_stopEvent && WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
+        Wh_Log(L"The %s thread is not started: the mod is shutting down", what);
+        return false;
+    }
+
     HANDLE thread = CreateThread(nullptr, 0, routine, parameter, 0, nullptr);
     if (!thread) {
         Wh_Log(L"Could not create the %s thread (error %lu)", what,
@@ -213,27 +523,30 @@ bool SpawnWorker(LPTHREAD_START_ROUTINE routine, void* parameter,
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(g_workersLock);
     g_workers.push_back(thread);
     return true;
 }
 
-void JoinWorkers(DWORD totalWaitMs) {
-    std::vector<HANDLE> threads;
-    {
-        std::lock_guard<std::mutex> lock(g_workersLock);
-        threads.swap(g_workers);
-    }
-
-    ULONGLONG deadline = GetTickCount64() + totalWaitMs;
-    for (HANDLE thread : threads) {
-        ULONGLONG now = GetTickCount64();
-        DWORD remaining = now < deadline ? (DWORD)(deadline - now) : 0;
-        if (WaitForSingleObject(thread, remaining) == WAIT_TIMEOUT) {
-            Wh_Log(L"A worker thread did not stop within the deadline; the mod "
-                   L"will be unloaded anyway");
+void JoinWorkers() {
+    // Waits without a deadline: Windhawk unmaps this module as soon as
+    // Wh_ModUninit returns, so a thread that is still running in it would take
+    // the host process down with it. The waits inside the workers are
+    // cancellable (g_stopEvent, and CancelHttp for the network), so this
+    // returns quickly in practice. The loop is what catches a thread that was
+    // started while the handles were being swapped out.
+    for (;;) {
+        std::vector<HANDLE> threads;
+        {
+            std::lock_guard<std::mutex> lock(g_workersLock);
+            threads.swap(g_workers);
         }
-        CloseHandle(thread);
+        if (threads.empty()) {
+            return;
+        }
+        for (HANDLE thread : threads) {
+            WaitForSingleObject(thread, INFINITE);
+            CloseHandle(thread);
+        }
     }
 }
 
@@ -253,39 +566,27 @@ std::wstring ExpandVariables(const std::wstring& text) {
     return expanded;
 }
 
-bool ContainsNoCase(const std::wstring& text, PCWSTR needle) {
-    return !text.empty() && StrStrIW(text.c_str(), needle) != nullptr;
-}
-
 void LoadSettings() {
     PCWSTR value = Wh_GetStringSetting(L"installFolder");
     std::wstring folder = value ? value : L"";
     Wh_FreeStringSetting(value);
 
     if (folder.empty()) {
-        // %USERPROFILE% and not %LOCALAPPDATA%: in a packaged process (Search,
-        // Start, ...) %LOCALAPPDATA% resolves to the package's redirected
-        // AppData folder, so the processes would not agree on one folder.
-        folder = L"%USERPROFILE%\\AppData\\Local\\Win7OnScreenKeyboard";
+        // The mod's own storage folder: Windhawk creates it next to the mod's
+        // settings, every process of the mod gets the same path, and removing
+        // the mod removes the files with it. None of the processes this mod is
+        // loaded into is packaged, so the folder is seen the same everywhere.
+        wchar_t path[32768] = {};
+        size_t length = Wh_GetModStoragePath(path, ARRAYSIZE(path));
+        if (length == 0 || length >= ARRAYSIZE(path)) {
+            Wh_Log(L"Windhawk did not provide the mod storage path; the folder "
+                   L"of the input files has to be set by hand");
+            folder = L"%USERPROFILE%\\AppData\\Local\\Win7OnScreenKeyboard";
+        } else {
+            folder = path;
+        }
     }
     folder = ExpandVariables(folder);
-
-    // A packaged process may still rewrite the path; catch it and use the real
-    // profile folder instead of silently working on a copy of the files.
-    if (ContainsNoCase(folder, L"\\AppData\\Local\\Packages\\")) {
-        std::wstring profile = ExpandVariables(L"%USERPROFILE%");
-        size_t packagePos = folder.find(L"\\Packages\\");
-        std::wstring tail =
-            (packagePos != std::wstring::npos)
-                ? folder.substr(folder.find(L"\\", packagePos + 10) + 1)
-                : L"Win7OnScreenKeyboard";
-        std::wstring redirected =
-            profile + L"\\AppData\\Local\\" + (tail.empty() ? L"Win7OnScreenKeyboard" : tail);
-        Wh_Log(L"The configured install folder %s is a package-redirected path; "
-               L"using %s instead",
-               folder.c_str(), redirected.c_str());
-        folder = redirected;
-    }
 
     while (folder.size() > 3 &&
            (folder.back() == L'\\' || folder.back() == L'/')) {
@@ -297,13 +598,11 @@ void LoadSettings() {
         g_installDir = folder;
     }
 
-    // The mod must work on its own, whatever the settings say: the files are
-    // always downloaded from the symbol server, always prepared, and the
-    // Windows 7 keyboard is always used as soon as its files are there.
-    g_autoDownload = true;
-    g_prepareFiles = true;
-    g_redirectLaunches = true;
-    g_handoff = true;
+    // These have no setting on purpose: the mod must work on its own, so the
+    // files are always downloaded from the symbol server, always verified
+    // against the pinned SHA-256 digests, always prepared, and the Windows 7
+    // keyboard is always used as soon as its files are there. The globals keep
+    // their initial value of true.
     g_preloadLocalDlls = Wh_GetIntSetting(L"preloadLocalDlls") != 0;
 
     {
@@ -427,8 +726,8 @@ std::wstring DescribeLaunchError(DWORD error) {
             return L"740 ERROR_ELEVATION_REQUIRED - the program declares "
                    L"uiAccess=\"true\" and Windows only starts such programs "
                    L"from a protected location (Program Files, System32). The "
-                   L"copy in the install folder is not prepared: enable "
-                   L"\"Prepare the Windows 7 files\" or use a prepared copy";
+                   L"copy in the install folder is not prepared yet: the setup "
+                   L"prepares it on its own";
         case 2:
             return L"2 ERROR_FILE_NOT_FOUND - the file is missing";
         case 5:
@@ -550,22 +849,47 @@ bool PathsEqual(const std::wstring& a, const std::wstring& b) {
 // The Windows 7 files: verification
 // ---------------------------------------------------------------------------
 
+// SHA-256 digests (64 uppercase hex characters) of the four files, exactly as
+// the Microsoft symbol server serves them. The digest is what pins a file: the
+// timestamp and the image size below are two header fields that any x64 PE can
+// carry, so they are only used for the diagnostics.
+//
+// osk.exe is the only file this mod edits, and the preparation is a
+// deterministic edit of its bytes, so the digest of the prepared form is
+// pinned as well. CheckPinnedFile below also accepts a prepared file that is
+// exactly the pinned edit of the pinned original (see PrepareBytes), which is
+// the same guarantee computed rather than stored.
+constexpr PCWSTR kShaOskOriginal =
+    L"E1F7612086C2D01F15F2E74F1C22BC6ABEB56F18E6BDA058EDCE8D780AEBB353";
+constexpr PCWSTR kShaOskPrepared =
+    L"E72F9DC42FF825542F3753BE3C424166BDCBF6B3889E0EE759D028198D993159";
+constexpr PCWSTR kShaDui70 =
+    L"98D21EFFF511E407336A226420701E82554DA01FA05661303836B6860D63749D";
+constexpr PCWSTR kShaMsswch =
+    L"F8802FC97CC07102731542EF65B42871D01B9C2CDEAD1A3DEB7071E807C1EBFB";
+constexpr PCWSTR kShaTabskb =
+    L"92B399510B50B0FD5AB3CE3ADD9642A0D4E02D5295FCDBC283027EA62FC632FE";
+
 struct RemoteFile {
-    PCWSTR name;     // name in the install folder
-    PCWSTR urlName;  // name on the symbol server (dui71.dll <- dui70.dll)
+    PCWSTR name;            // name in the install folder
+    PCWSTR urlName;         // name on the symbol server (dui71.dll <- dui70.dll)
     DWORD timestamp;
     DWORD sizeOfImage;
     PCWSTR role;
+    PCWSTR sha256;          // digest of the file as downloaded
+    PCWSTR sha256Prepared;  // digest of its prepared form, when it has one
 };
 
 const RemoteFile kFiles[] = {
-    {L"osk.exe", L"osk.exe", 0x4A5BD272, 0xAC000, L"the keyboard"},
+    {L"osk.exe", L"osk.exe", 0x4A5BD272, 0xAC000, L"the keyboard",
+     kShaOskOriginal, kShaOskPrepared},
     {L"dui71.dll", L"dui70.dll", 0x4A5BDF25, 0xF2000,
-     L"Windows 7 DirectUI, renamed so it does not collide with the system one"},
+     L"Windows 7 DirectUI, renamed so it does not collide with the system one",
+     kShaDui70, nullptr},
     {L"msswch.dll", L"msswch.dll", 0x4A5BDFAD, 0x9000,
-     L"static import of osk.exe"},
+     L"static import of osk.exe", kShaMsswch, nullptr},
     {L"tabskb.dll", L"tabskb.dll", 0x4CE7C9CF, 0x72000,
-     L"the keyboard layout"},
+     L"the keyboard layout", kShaTabskb, nullptr},
 };
 
 enum class PeCheck { Invalid, ValidButOther, Exact };
@@ -601,6 +925,149 @@ PeCheck CheckPeFile(const std::wstring& path, const RemoteFile& expected) {
 
     CloseHandle(file);
     return result;
+}
+
+// The two helpers live with the install-folder code further down, after this
+// block: declared here because the check of the prepared osk.exe needs them.
+bool ReadFileBytes(const std::wstring& path, std::vector<BYTE>& out);
+bool PrepareBytes(const std::vector<BYTE>& original, std::vector<BYTE>& out);
+
+// ---------------------------------------------------------------------------
+// SHA-256 of a file, through the CryptoAPI (advapi32 is already linked).
+//
+// CheckPeFile above only compares the timestamp and the image size, and any
+// x64 PE can be built with the same two values: the digest is what proves that
+// a file is the pinned build.
+// ---------------------------------------------------------------------------
+
+bool Sha256OfFile(const std::wstring& path, BYTE digest[32]) {
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                              nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,
+                              nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+
+    HCRYPTPROV provider = 0;
+    HCRYPTHASH hash = 0;
+    bool ok = false;
+    if (CryptAcquireContextW(&provider, nullptr, nullptr, PROV_RSA_AES,
+                             CRYPT_VERIFYCONTEXT)) {
+        if (CryptCreateHash(provider, CALG_SHA_256, 0, 0, &hash)) {
+            BYTE buffer[64 * 1024];
+            DWORD read = 0;
+            ok = true;
+            for (;;) {
+                if (!ReadFile(file, buffer, sizeof(buffer), &read, nullptr)) {
+                    ok = false;
+                    break;
+                }
+                if (read == 0) {
+                    break;
+                }
+                if (!CryptHashData(hash, buffer, read, 0)) {
+                    ok = false;
+                    break;
+                }
+            }
+            DWORD length = 32;
+            if (ok &&
+                !CryptGetHashParam(hash, HP_HASHVAL, digest, &length, 0)) {
+                ok = false;
+            }
+            CryptDestroyHash(hash);
+        }
+        CryptReleaseContext(provider, 0);
+    }
+
+    CloseHandle(file);
+    return ok;
+}
+
+wchar_t HexUpperChar(BYTE value) {
+    return value < 10 ? (wchar_t)(L'0' + value) : (wchar_t)(L'A' + value - 10);
+}
+
+bool Sha256MatchesHex(const BYTE digest[32], PCWSTR expectedHex) {
+    if (!expectedHex) {
+        return false;
+    }
+    for (int i = 0; i < 32; i++) {
+        if (expectedHex[i * 2] != HexUpperChar(digest[i] >> 4) ||
+            expectedHex[i * 2 + 1] != HexUpperChar(digest[i] & 0xF)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool Sha256MatchesFile(const std::wstring& path, PCWSTR expectedHex) {
+    BYTE digest[32];
+    return Sha256OfFile(path, digest) && Sha256MatchesHex(digest, expectedHex);
+}
+
+constexpr PCWSTR kOskBackupSuffix = L".original";
+
+// The prepared osk.exe is the pinned file with the two documented edits, and
+// the edits are deterministic, so the prepared image can be recomputed from
+// the pinned original and compared byte by byte with the file on disk. This
+// accepts a prepared file whose digest is not the pinned one without ever
+// accepting a file that is not the pinned image.
+bool IsPinnedPreparation(const std::wstring& preparedPath,
+                         const std::wstring& originalPath) {
+    std::vector<BYTE> original;
+    if (!ReadFileBytes(originalPath, original)) {
+        return false;
+    }
+    if (!Sha256MatchesFile(originalPath, kShaOskOriginal)) {
+        return false;
+    }
+
+    std::vector<BYTE> expected;
+    if (!PrepareBytes(original, expected)) {
+        return false;
+    }
+
+    std::vector<BYTE> prepared;
+    if (!ReadFileBytes(preparedPath, prepared)) {
+        return false;
+    }
+    return prepared.size() == expected.size() &&
+           memcmp(prepared.data(), expected.data(), prepared.size()) == 0;
+}
+
+// ---------------------------------------------------------------------------
+// The verification of a file in the install folder.
+//
+// Exact means: the bytes are the pinned Windows 7 build. osk.exe is accepted
+// in its prepared form as well: either its digest is the pinned one, or the
+// prepared file is exactly the deterministic edit of the pinned original.
+// ValidButOther means a readable x64 image that is not the pinned build: it is
+// not used, and EnsureFiles replaces it.
+// ---------------------------------------------------------------------------
+
+PeCheck CheckPinnedFile(const std::wstring& path, const RemoteFile& expected) {
+    PeCheck pe = CheckPeFile(path, expected);
+    if (pe == PeCheck::Invalid) {
+        return PeCheck::Invalid;
+    }
+
+    BYTE digest[32];
+    if (!Sha256OfFile(path, digest)) {
+        return PeCheck::ValidButOther;
+    }
+    if (Sha256MatchesHex(digest, expected.sha256)) {
+        return PeCheck::Exact;
+    }
+    if (expected.sha256Prepared &&
+        Sha256MatchesHex(digest, expected.sha256Prepared)) {
+        return PeCheck::Exact;
+    }
+    if (expected.sha256Prepared &&
+        IsPinnedPreparation(path, path + kOskBackupSuffix)) {
+        return PeCheck::Exact;
+    }
+    return PeCheck::ValidButOther;
 }
 
 bool ReadFileBytes(const std::wstring& path, std::vector<BYTE>& out) {
@@ -949,32 +1416,42 @@ struct OskState {
 // and the last one lands on the resource's own padding byte. The resource size
 // field in the resource directory is then incremented, exactly like the
 // community package for Windows 10/11 does it.
-bool PatchManifestUiAccess(std::vector<BYTE>& data, size_t* patchedAt) {
+bool PatchManifestUiAccess(std::vector<BYTE>& data, size_t* patchedAt,
+                           bool quiet = false) {
     PeManifest manifest;
     if (!PeFindManifest(data, &manifest)) {
-        Wh_Log(L"Preparation: RT_MANIFEST not found, the manifest is left "
-               L"untouched");
+        if (!quiet) {
+            Wh_Log(L"Preparation: RT_MANIFEST not found, the manifest is left "
+                   L"untouched");
+        }
         return false;
     }
 
     const size_t manifestEnd = manifest.dataOffset + manifest.dataSize;
     if (manifestEnd > data.size()) {
-        Wh_Log(L"Preparation: the manifest resource does not fit in the file");
+        if (!quiet) {
+            Wh_Log(
+                L"Preparation: the manifest resource does not fit in the file");
+        }
         return false;
     }
 
     size_t position = FindBytesInRange(data, "uiAccess=\"true\"",
                                        manifest.dataOffset, manifestEnd);
     if (position == (size_t)-1) {
-        Wh_Log(L"Preparation: the manifest carries no uiAccess=\"true\" "
-               L"(already prepared or a different manifest)");
+        if (!quiet) {
+            Wh_Log(L"Preparation: the manifest carries no uiAccess=\"true\" "
+                   L"(already prepared or a different manifest)");
+        }
         return false;
     }
 
     DWORD padding = 4 - (manifest.dataSize % 4);
     if (padding < 1 || manifestEnd + 1 > data.size()) {
-        Wh_Log(L"Preparation: no padding byte after the manifest resource, the "
-               L"manifest is left untouched");
+        if (!quiet) {
+            Wh_Log(L"Preparation: no padding byte after the manifest resource, "
+                   L"the manifest is left untouched");
+        }
         return false;
     }
 
@@ -1000,16 +1477,36 @@ bool PatchManifestUiAccess(std::vector<BYTE>& data, size_t* patchedAt) {
     if (patchedAt) {
         *patchedAt = position;
     }
-    Wh_Log(L"Preparation: manifest uiAccess=\"true\" -> \"false\" at offset "
-           L"0x%llX; the manifest resource grows from %lu to %lu bytes (no other "
-           L"byte of the file moves)",
-           (unsigned long long)position, (unsigned long)manifest.dataSize,
-           (unsigned long)newSize);
+    if (!quiet) {
+        Wh_Log(L"Preparation: manifest uiAccess=\"true\" -> \"false\" at "
+               L"offset 0x%llX; the manifest resource grows from %lu to %lu "
+               L"bytes (no other byte of the file moves)",
+               (unsigned long long)position, (unsigned long)manifest.dataSize,
+               (unsigned long)newSize);
+    }
     return true;
 }
 
 // Applies the preparation to one file. Only called for files that verified as
 // the pinned Windows 7 build and only when the user asked for it.
+// The two preparation edits, applied to a copy of the bytes. PrepareOskFile
+// below performs the same edits on the file; they are kept in one place so
+// that a prepared osk.exe can also be verified by recomputing it.
+bool PrepareBytes(const std::vector<BYTE>& original, std::vector<BYTE>& out) {
+    out = original;
+
+    size_t position = FindBytes(out, "DUI70.dll");
+    if (position == (size_t)-1 || CountBytes(out, "DUI70.dll") != 1) {
+        return false;
+    }
+    memcpy(out.data() + position, "DUI71.dll", 9);
+
+    if (FindBytes(out, "uiAccess=\"true\"") == (size_t)-1) {
+        return true;  // nothing more to do: the manifest is already prepared
+    }
+    return PatchManifestUiAccess(out, nullptr, true);
+}
+
 OskState PrepareOskFile(const std::wstring& path) {
     OskState state;
     std::vector<BYTE> data;
@@ -1119,7 +1616,7 @@ OskState PrepareOskFile(const std::wstring& path) {
     bool verified = manifestOk &&
                     FindBytes(check, "DUI71.dll") != (size_t)-1 &&
                     FindBytes(check, "uiAccess=\"true\"") == (size_t)-1 &&
-                    CheckPeFile(path, expected) == PeCheck::Exact;
+                    CheckPinnedFile(path, expected) == PeCheck::Exact;
 
     if (!verified) {
         Wh_Log(L"Preparation: verification failed, restoring the original file");
@@ -1147,125 +1644,17 @@ OskState InspectOskFile(const std::wstring& path) {
     return state;
 }
 
-// ---------------------------------------------------------------------------
-// Registry notes
-//
-// Some launcher processes (the packaged ones, e.g. SearchHost.exe) run with a
-// restricted view of the profile: reading or creating the install folder can
-// fail there with error 2 even though the very same path works everywhere
-// else. Two things are therefore kept in HKCU\Software\...: the resolved
-// install folder and whether a process that could actually read it verified
-// the files. Reading HKCU\Software is allowed to packaged processes, so the
-// note makes such a process diagnosable instead of just silently "missing".
-// ---------------------------------------------------------------------------
+// The mod keeps nothing outside its own storage folder: the state of the
+// install folder is recomputed when it is needed (CheckInstallFolder) and
+// logged, and a running Windows 7 keyboard is found back through its image
+// path, so no note is left in the registry for the user to clean up.
 
-constexpr PCWSTR kRegistryKey = L"Software\\Win7OnScreenKeyboardRestorer";
-
-bool RegistryReadDword(PCWSTR name, DWORD* value) {
-    HKEY key = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kRegistryKey, 0, KEY_READ, &key) !=
-        ERROR_SUCCESS) {
-        return false;
-    }
-
-    DWORD type = 0;
-    DWORD size = sizeof(*value);
-    DWORD data = 0;
-    LSTATUS status =
-        RegQueryValueExW(key, name, nullptr, &type,
-                         reinterpret_cast<LPBYTE>(&data), &size);
-    RegCloseKey(key);
-
-    if (status != ERROR_SUCCESS || type != REG_DWORD || size != sizeof(data)) {
-        return false;
-    }
-    *value = data;
-    return true;
-}
-
-bool RegistryReadString(PCWSTR name, std::wstring* value) {
-    HKEY key = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kRegistryKey, 0, KEY_READ, &key) !=
-        ERROR_SUCCESS) {
-        return false;
-    }
-
-    DWORD type = 0;
-    DWORD size = 0;
-    LSTATUS status =
-        RegQueryValueExW(key, name, nullptr, &type, nullptr, &size);
-    if (status != ERROR_SUCCESS || type != REG_SZ || size < sizeof(wchar_t) ||
-        size > 32768) {
-        RegCloseKey(key);
-        return false;
-    }
-
-    // One extra character so that the string is terminated even if the value
-    // stored in the registry is not (REG_SZ is supposed to be, but the buffer
-    // must never be walked past its end either way).
-    std::wstring buffer(size / sizeof(wchar_t) + 1, L'\0');
-    DWORD capacity = (DWORD)(buffer.size() * sizeof(wchar_t));
-    status = RegQueryValueExW(key, name, nullptr, &type,
-                              reinterpret_cast<LPBYTE>(buffer.data()), &capacity);
-    RegCloseKey(key);
-    if (status != ERROR_SUCCESS) {
-        return false;
-    }
-
-    buffer.resize(wcslen(buffer.c_str()));
-    *value = buffer;
-    return true;
-}
-
-bool RegistryWriteDword(PCWSTR name, DWORD value) {
-    HKEY key = nullptr;
-    DWORD disposition = 0;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKey, 0, nullptr, 0,
-                        KEY_WRITE, nullptr, &key, &disposition) !=
-        ERROR_SUCCESS) {
-        return false;
-    }
-    LSTATUS status = RegSetValueExW(key, name, 0, REG_DWORD,
-                                    reinterpret_cast<const BYTE*>(&value),
-                                    sizeof(value));
-    RegCloseKey(key);
-    return status == ERROR_SUCCESS;
-}
-
-bool RegistryWriteString(PCWSTR name, const std::wstring& value) {
-    HKEY key = nullptr;
-    DWORD disposition = 0;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKey, 0, nullptr, 0,
-                        KEY_WRITE, nullptr, &key, &disposition) !=
-        ERROR_SUCCESS) {
-        return false;
-    }
-    LSTATUS status =
-        RegSetValueExW(key, name, 0, REG_SZ,
-                       reinterpret_cast<const BYTE*>(value.c_str()),
-                       (DWORD)((value.size() + 1) * sizeof(wchar_t)));
-    RegCloseKey(key);
-    return status == ERROR_SUCCESS;
-}
-
-// One line that says exactly what this process can and cannot do with the
-// install folder. Error 2 here, with the same path working elsewhere, is the
-// signature of a packaged process with a restricted profile view.
-// Note: Wh_Log takes a printf-style format string, and an invalid conversion
-// specifier is not a cosmetic problem: the MSVC runtime calls its invalid
-// parameter handler, which terminates the process. Every literal percent sign
-// in a format string must be written as %%.
 void LogFolderAccess(const wchar_t* who) {
     std::wstring dir = GetInstallDir();
     std::wstring osk = JoinPath(dir, L"osk.exe");
 
     DWORD dirAttributes = GetFileAttributesW(dir.c_str());
     DWORD oskAttributes = GetFileAttributesW(osk.c_str());
-
-    std::wstring cachedDir;
-    DWORD cachedReady = 0;
-    bool haveCache = RegistryReadString(L"InstallDir", &cachedDir);
-    bool haveReady = RegistryReadDword(L"Ready", &cachedReady);
 
     Wh_Log(L"%s: folder probe for %s", who, dir.c_str());
     Wh_Log(L"  %%USERPROFILE%%=%s",
@@ -1276,27 +1665,13 @@ void LogFolderAccess(const wchar_t* who) {
            dirAttributes == INVALID_FILE_ATTRIBUTES ? L"not visible" : L"visible",
            oskAttributes == INVALID_FILE_ATTRIBUTES ? L"not visible" : L"visible");
     if (dirAttributes == INVALID_FILE_ATTRIBUTES) {
-        Wh_Log(L"  folder is not visible to this process (error %lu); if this "
-               L"process is a packaged app the profile view is restricted",
+        Wh_Log(L"  folder is not visible to this process (error %lu)",
                GetLastError());
-    }
-    if (haveCache || haveReady) {
-        Wh_Log(L"  registry note: InstallDir=%s, Ready=%lu",
-               haveCache ? cachedDir.c_str() : L"(absent)",
-               (unsigned long)(haveReady ? cachedReady : 0));
-    } else {
-        Wh_Log(L"  registry note: none yet (no process has verified the files "
-               L"so far)");
     }
 }
 
-// ---------------------------------------------------------------------------
-// Install folder handling
-// ---------------------------------------------------------------------------
-
 struct InstallState {
-    bool filesUsable = false;    // every file present and a valid x64 image
-    bool allExact = false;       // every file is the pinned Windows 7 build
+    bool filesUsable = false;    // every file is the pinned Windows 7 build
     bool canStart = false;       // no uiAccess requirement left in osk.exe
     bool fullyPrepared = false;  // canStart and the delay-load name is patched
     std::wstring missing;
@@ -1309,7 +1684,7 @@ InstallState CheckInstallFolder() {
 
     for (const auto& file : kFiles) {
         std::wstring path = JoinPath(dir, file.name);
-        PeCheck check = CheckPeFile(path, file);
+        PeCheck check = CheckPinnedFile(path, file);
         if (check == PeCheck::Invalid) {
             if (!state.missing.empty()) {
                 state.missing += L", ";
@@ -1323,8 +1698,9 @@ InstallState CheckInstallFolder() {
         }
     }
 
-    state.filesUsable = state.missing.empty();
-    state.allExact = state.filesUsable && state.otherBuild.empty();
+    // A file that is present but is not the pinned build is not usable: the
+    // keyboard is started by Explorer, which does not check anything.
+    state.filesUsable = state.missing.empty() && state.otherBuild.empty();
 
     if (state.filesUsable) {
         OskState osk = InspectOskFile(JoinPath(dir, L"osk.exe"));
@@ -1332,16 +1708,6 @@ InstallState CheckInstallFolder() {
         state.fullyPrepared = state.canStart && !osk.delayLoadPristine;
     }
     return state;
-}
-
-// Publishes what the setup thread verified, so that a process which cannot
-// read the install folder can still be told apart from one that simply has not
-// finished setting up yet.
-void PublishStateToRegistry(const InstallState& state) {
-    RegistryWriteString(L"InstallDir", GetInstallDir());
-    RegistryWriteDword(L"Ready", state.canStart ? 1 : 0);
-    RegistryWriteDword(L"FilesUsable", state.filesUsable ? 1 : 0);
-    RegistryWriteDword(L"Stamp", (DWORD)GetTickCount64());
 }
 
 // Cached answer to "can we start the Windows 7 keyboard right now?". The cache
@@ -1364,20 +1730,15 @@ bool ComputeReady() {
         // The files are there but osk.exe is not prepared yet (UIAccess):
         // prepare it right now instead of waiting for the setup thread.
         std::wstring oskPath = JoinPath(GetInstallDir(), L"osk.exe");
-        if (CheckPeFile(oskPath, kFiles[0]) == PeCheck::Exact) {
+        if (CheckPinnedFile(oskPath, kFiles[0]) == PeCheck::Exact) {
             PrepareOskFile(oskPath);
             state = CheckInstallFolder();
         }
     }
-    if (state.canStart) {
-        // A process that can actually see and verify the folder notes it down
-        // for the processes that cannot (packaged launchers).
-        PublishStateToRegistry(state);
-    } else {
+    if (!state.canStart) {
         Wh_Log(L"The Windows 7 osk.exe in the install folder still declares "
-               L"uiAccess=\"true\": Windows will refuse to start it (error "
-               L"740). Enable \"Prepare the Windows 7 files\" or replace the "
-               L"file with a prepared copy");
+               L"uiAccess=\"true\": Windows refuses to start it (error 740) "
+               L"until the setup prepares the file");
         return false;
     }
     return true;
@@ -1438,7 +1799,7 @@ void MigrateLegacyDui70() {
     }
 
     RemoteFile expected = kFiles[1];
-    if (CheckPeFile(disabled, expected) != PeCheck::Exact) {
+    if (CheckPinnedFile(disabled, expected) != PeCheck::Exact) {
         if (FileExists(disabled)) {
             Wh_Log(L"%s is not the Windows 7 DUI70.dll, so it is not used as "
                    L"dui71.dll (it stays as %s)",
@@ -1461,10 +1822,10 @@ void LogInstallFolderState() {
     std::wstring dir = GetInstallDir();
     InstallState state = CheckInstallFolder();
     Wh_Log(L"Install folder: %s", dir.c_str());
-    Wh_Log(L"  usable: %d, all files are the pinned Windows 7 build: %d, "
-           L"osk.exe can start: %d, fully prepared: %d",
-           state.filesUsable ? 1 : 0, state.allExact ? 1 : 0,
-           state.canStart ? 1 : 0, state.fullyPrepared ? 1 : 0);
+    Wh_Log(L"  all files are the pinned Windows 7 build: %d, osk.exe can "
+           L"start: %d, fully prepared: %d",
+           state.filesUsable ? 1 : 0, state.canStart ? 1 : 0,
+           state.fullyPrepared ? 1 : 0);
     if (!state.missing.empty()) {
         Wh_Log(L"  missing or invalid: %s", state.missing.c_str());
     }
@@ -1474,10 +1835,11 @@ void LogInstallFolderState() {
 
     for (const auto& file : kFiles) {
         std::wstring path = JoinPath(dir, file.name);
-        PeCheck check = CheckPeFile(path, file);
+        PeCheck check = CheckPinnedFile(path, file);
         Wh_Log(L"  %-12s %s (%s)", file.name,
                check == PeCheck::Exact     ? L"ok, verified"
-               : check == PeCheck::ValidButOther ? L"present, different build"
+               : check == PeCheck::ValidButOther ? L"present, not the pinned "
+                                                   L"build"
                                                  : L"MISSING",
                file.role);
     }
@@ -1500,11 +1862,62 @@ void LogInstallFolderState() {
 // Download
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// The download in progress, as handles the shutdown can close
+//
+// WinHTTP documents that closing a handle makes the calls that are blocked on
+// it return, so Wh_ModBeforeUninit closes these handles to cancel a download
+// instead of letting the shutdown wait for a network timeout. Each handle is
+// closed exactly once: this list is the only place a handle is given up.
+// ---------------------------------------------------------------------------
+
+std::mutex g_httpLock;
+std::vector<HINTERNET> g_httpHandles;
+
+void TrackHttpHandle(HINTERNET handle) {
+    if (!handle) {
+        return;
+    }
+    std::lock_guard<std::mutex> guard(g_httpLock);
+    g_httpHandles.push_back(handle);
+}
+
+// Hands the handle back to be closed, or nullptr when CancelHttp already
+// closed it.
+HINTERNET UntrackHttpHandle(HINTERNET handle) {
+    if (!handle) {
+        return nullptr;
+    }
+    std::lock_guard<std::mutex> guard(g_httpLock);
+    for (size_t i = 0; i < g_httpHandles.size(); i++) {
+        if (g_httpHandles[i] == handle) {
+            g_httpHandles.erase(g_httpHandles.begin() + i);
+            return handle;
+        }
+    }
+    return nullptr;
+}
+
+void CancelHttp() {
+    std::vector<HINTERNET> handles;
+    {
+        std::lock_guard<std::mutex> guard(g_httpLock);
+        handles.swap(g_httpHandles);
+    }
+    for (HINTERNET handle : handles) {
+        WinHttpCloseHandle(handle);
+    }
+}
+
 bool DownloadToFile(const std::wstring& urlPath, const std::wstring& dest) {
     constexpr DWORD kMaxSize = 16 * 1024 * 1024;
     bool ok = false;
 
-    HINTERNET session = WinHttpOpen(L"Microsoft-Symbol-Server/10.0.0.0",
+    // A user agent that names this mod: the mod is not Microsoft's symbol
+    // tool and must not pretend to be it.
+    HINTERNET session = WinHttpOpen(L"Win7OnScreenKeyboardRestorer/1.0.0 "
+                                    L"(Windhawk mod; "
+                                    L"https://github.com/babamohammed2022)",
                                     WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                     WINHTTP_NO_PROXY_NAME,
                                     WINHTTP_NO_PROXY_BYPASS, 0);
@@ -1513,15 +1926,18 @@ bool DownloadToFile(const std::wstring& urlPath, const std::wstring& dest) {
     HANDLE out = INVALID_HANDLE_VALUE;
 
     if (session) {
+        TrackHttpHandle(session);
         WinHttpSetTimeouts(session, 15000, 15000, 30000, 60000);
         connection = WinHttpConnect(session, L"msdl.microsoft.com",
                                     INTERNET_DEFAULT_HTTPS_PORT, 0);
+        TrackHttpHandle(connection);
     }
     if (connection) {
         request = WinHttpOpenRequest(connection, L"GET", urlPath.c_str(),
                                      nullptr, WINHTTP_NO_REFERER,
                                      WINHTTP_DEFAULT_ACCEPT_TYPES,
                                      WINHTTP_FLAG_SECURE);
+        TrackHttpHandle(request);
     }
     if (!request) {
         Wh_Log(L"WinHTTP open failed (%lu)", GetLastError());
@@ -1602,14 +2018,15 @@ bool DownloadToFile(const std::wstring& urlPath, const std::wstring& dest) {
     if (out != INVALID_HANDLE_VALUE) {
         CloseHandle(out);
     }
-    if (request) {
-        WinHttpCloseHandle(request);
+    // Each handle is closed here unless CancelHttp got to it first.
+    if (HINTERNET handle = UntrackHttpHandle(request)) {
+        WinHttpCloseHandle(handle);
     }
-    if (connection) {
-        WinHttpCloseHandle(connection);
+    if (HINTERNET handle = UntrackHttpHandle(connection)) {
+        WinHttpCloseHandle(handle);
     }
-    if (session) {
-        WinHttpCloseHandle(session);
+    if (HINTERNET handle = UntrackHttpHandle(session)) {
+        WinHttpCloseHandle(handle);
     }
     return ok;
 }
@@ -1630,15 +2047,14 @@ bool EnsureFiles() {
         }
 
         std::wstring dest = JoinPath(dir, file.name);
-        PeCheck existing = CheckPeFile(dest, file);
+        PeCheck existing = CheckPinnedFile(dest, file);
         if (existing == PeCheck::Exact) {
             continue;
         }
         if (existing == PeCheck::ValidButOther) {
-            Wh_Log(L"%s: present but not the expected Windows 7 build "
-                   L"(timestamp/size differ); keeping the existing file",
+            Wh_Log(L"%s: present but not the pinned Windows 7 build (the "
+                   L"digest does not match); the pinned file replaces it",
                    file.name);
-            continue;
         }
 
         wchar_t urlPath[512];
@@ -1670,10 +2086,11 @@ bool EnsureFiles() {
             allPresent = false;
             continue;
         }
-        if (CheckPeFile(temp, file) != PeCheck::Exact) {
+        if (CheckPinnedFile(temp, file) != PeCheck::Exact) {
             DeleteFileW(temp.c_str());
-            Wh_Log(L"%s: the downloaded file is not the expected Windows 7 "
-                   L"build and was discarded",
+            Wh_Log(L"%s: the downloaded file does not have the pinned SHA-256 "
+                   L"digest and was discarded (the download may have been "
+                   L"tampered with, or the symbol server serves another file)",
                    file.name);
             allPresent = false;
             continue;
@@ -1735,11 +2152,12 @@ void RunSetupSteps(bool retries) {
         RemoteFile expected = kFiles[0];
         if (FileExists(oskPath)) {
             if (g_prepareFiles) {
-                if (CheckPeFile(oskPath, expected) == PeCheck::Exact) {
+                if (CheckPinnedFile(oskPath, expected) == PeCheck::Exact) {
                     PrepareOskFile(oskPath);
                 } else {
                     Wh_Log(L"Preparation skipped: %s is not the pinned Windows 7 "
-                           L"build; if it is a prepared copy it is used as it is",
+                           L"build; it is not used and the setup replaces it "
+                           L"with the pinned file",
                            oskPath.c_str());
                 }
             } else {
@@ -1765,7 +2183,6 @@ DWORD WINAPI SetupThread(LPVOID) {
     RunSetupSteps(true);
 
     LogInstallFolderState();
-    PublishStateToRegistry(CheckInstallFolder());
     LogFolderAccess(L"Setup");
     InvalidateReadyCache();
     IsReady();  // recompute and cache for the hooks
@@ -2203,7 +2620,7 @@ BOOL WINAPI CreateProcessInternalW_Hook(
     DWORD creationFlags, LPVOID environment, LPCWSTR currentDirectory,
     LPSTARTUPINFOW startupInfo, LPPROCESS_INFORMATION processInformation,
     PHANDLE restrictedToken) {
-    void* caller = WH_CALLER_ADDRESS();
+    void* caller = MOD_CALLER_ADDRESS();
     LaunchDecision decision =
         DecideLaunch(L"CreateProcess", applicationName, commandLine, caller);
 
@@ -2264,7 +2681,7 @@ BOOL WINAPI CreateProcessW_Hook(LPCWSTR applicationName, LPWSTR commandLine,
                                 LPVOID environment, LPCWSTR currentDirectory,
                                 LPSTARTUPINFOW startupInfo,
                                 LPPROCESS_INFORMATION processInformation) {
-    void* caller = WH_CALLER_ADDRESS();
+    void* caller = MOD_CALLER_ADDRESS();
     LaunchDecision decision =
         DecideLaunch(L"CreateProcessW", applicationName, commandLine, caller);
 
@@ -2338,7 +2755,7 @@ BOOL WINAPI ShellExecuteExW_Hook(SHELLEXECUTEINFOW* info) {
         return ShellExecuteExW_Original(info);
     }
 
-    void* caller = WH_CALLER_ADDRESS();
+    void* caller = MOD_CALLER_ADDRESS();
 
     if (info->fMask & (SEE_MASK_IDLIST | SEE_MASK_INVOKEIDLIST)) {
         if (g_diagnostics && g_idListLogLimit.Allow(2000)) {
@@ -2394,7 +2811,7 @@ ShellExecuteW_t ShellExecuteW_Original;
 HINSTANCE WINAPI ShellExecuteW_Hook(HWND window, LPCWSTR operation,
                                     LPCWSTR file, LPCWSTR parameters,
                                     LPCWSTR directory, INT showCommand) {
-    void* caller = WH_CALLER_ADDRESS();
+    void* caller = MOD_CALLER_ADDRESS();
     LaunchDecision decision = DecideLaunch(L"ShellExecute", file, nullptr, caller);
 
     if (!decision.redirect) {
@@ -2778,7 +3195,7 @@ using LoadLibraryW_t = HMODULE(WINAPI*)(LPCWSTR);
 LoadLibraryW_t LoadLibraryW_Original;
 
 HMODULE WINAPI LoadLibraryW_Hook(LPCWSTR name) {
-    void* caller = WH_CALLER_ADDRESS();
+    void* caller = MOD_CALLER_ADDRESS();
     std::wstring redirected;
     if (RedirectDll(name, caller, 0, redirected)) {
         HMODULE module = LoadLibraryW_Original(redirected.c_str());
@@ -2804,7 +3221,7 @@ using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
 LoadLibraryExW_t LoadLibraryExW_Original;
 
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
-    void* caller = WH_CALLER_ADDRESS();
+    void* caller = MOD_CALLER_ADDRESS();
     std::wstring redirected;
     if (RedirectDll(name, caller, flags, redirected)) {
         HMODULE module = LoadLibraryExW_Original(redirected.c_str(), nullptr, flags);
@@ -2872,7 +3289,7 @@ using LoadLibraryA_t = HMODULE(WINAPI*)(LPCSTR);
 LoadLibraryA_t LoadLibraryA_Original;
 
 HMODULE WINAPI LoadLibraryA_Hook(LPCSTR name) {
-    void* caller = WH_CALLER_ADDRESS();
+    void* caller = MOD_CALLER_ADDRESS();
     std::wstring wide;
 
     WideStringFromAnsi(name, &wide);
@@ -2901,7 +3318,7 @@ using LoadLibraryExA_t = HMODULE(WINAPI*)(LPCSTR, HANDLE, DWORD);
 LoadLibraryExA_t LoadLibraryExA_Original;
 
 HMODULE WINAPI LoadLibraryExA_Hook(LPCSTR name, HANDLE file, DWORD flags) {
-    void* caller = WH_CALLER_ADDRESS();
+    void* caller = MOD_CALLER_ADDRESS();
     std::wstring wide;
     WideStringFromAnsi(name, &wide);
 
@@ -3962,12 +4379,28 @@ struct FaceResource {
     WORD kind;  // kFaceGroupKind or kFaceIconKind
 };
 
-alignas(8) FaceResource g_faceGroupHandles[ARRAYSIZE(kKeyFaces)];
-alignas(8) FaceResource g_faceIconHandles[ARRAYSIZE(kKeyFaces)];
+// The handle arrays live in blocks of the process heap that are never freed:
+// the keyboard caches the handles it is given, and they have to stay readable
+// after this mod is unloaded (see ServePersistentBytes for the bytes).
+FaceResource* g_faceGroupHandles = nullptr;
+FaceResource* g_faceIconHandles = nullptr;
 
 void InitialiseFaceHandles() {
     static std::once_flag once;
     std::call_once(once, []() {
+        g_faceGroupHandles =
+            (FaceResource*)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+                                     sizeof(FaceResource) *
+                                         ARRAYSIZE(kKeyFaces));
+        g_faceIconHandles =
+            (FaceResource*)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+                                     sizeof(FaceResource) *
+                                         ARRAYSIZE(kKeyFaces));
+        if (!g_faceGroupHandles || !g_faceIconHandles) {
+            Wh_Log(L"Could not allocate the face handles; the pictures of the "
+                   L"keys are not served");
+            return;
+        }
         for (size_t i = 0; i < ARRAYSIZE(kKeyFaces); i++) {
             g_faceGroupHandles[i] = {kFaceResourceMagic, (WORD)kKeyFaces[i].id,
                                      (WORD)kFaceGroupKind};
@@ -3980,6 +4413,11 @@ void InitialiseFaceHandles() {
 // Recognises a handle of this mod without ever looking at foreign memory: the
 // address has to be inside the two arrays above.
 const FaceResource* AsFaceResource(const void* handle) {
+    InitialiseFaceHandles();
+    if (!g_faceGroupHandles || !g_faceIconHandles) {
+        return nullptr;
+    }
+
     auto inside = [handle](const FaceResource* first) {
         ULONG_PTR value = (ULONG_PTR)handle;
         ULONG_PTR begin = (ULONG_PTR)first;
@@ -4032,6 +4470,9 @@ HRSRC FaceResourceHandleFor(LPCWSTR type, LPCWSTR name) {
     }
 
     InitialiseFaceHandles();
+    if (!g_faceGroupHandles || !g_faceIconHandles) {
+        return nullptr;
+    }
     const FaceResource* resource = nullptr;
     if (typeId == kRtGroupIcon) {
         resource = &g_faceGroupHandles[index];
@@ -4096,10 +4537,9 @@ HANDLE WINAPI LoadImageW_Hook(HINSTANCE instance, LPCWSTR name, UINT type,
 }
 
 // ---------------------------------------------------------------------------
-// The keys the keyboard sends. The Windows 7 keyboard injects its keys with
-// SendInput, so this is what tells whether pressing a key really produced input
-// (and whether the system refused it): a key that never appears here is a key
-// whose press never reached the keyboard's own handling.
+// The resources the keyboard draws its keys with (the pictures of the keys and
+// the captions) are served by this mod instead of the files on disk: the
+// resource calls below answer for the handles this mod handed out.
 // ---------------------------------------------------------------------------
 
 using SizeofResource_t = DWORD(WINAPI*)(HMODULE, HRSRC);
@@ -4132,53 +4572,21 @@ using LockResource_t = LPVOID(WINAPI*)(HGLOBAL);
 LockResource_t LockResource_Original;
 
 LPVOID WINAPI LockResource_Hook(HGLOBAL data) {
+    // The keyboard keeps the pointer it gets here, so the bytes come from
+    // blocks that are never freed: see ServePersistentBytes.
+    size_t size = 0;
     if (const FaceResource* face = AsFaceResource((const void*)data)) {
         if (const std::vector<BYTE>* bits = FaceResourceBits(face)) {
-            return (LPVOID)bits->data();
+            return (LPVOID)ServePersistentBytes(bits, *bits, &size);
         }
         return nullptr;
     }
     if (const std::vector<BYTE>* bytes = CaptionBlockBits((const void*)data)) {
-        return (LPVOID)bytes->data();
+        return (LPVOID)ServePersistentBytes(bytes, *bytes, &size);
     }
     return LockResource_Original(data);
 }
 
-using SendInput_t = UINT(WINAPI*)(UINT, LPINPUT, int);
-SendInput_t SendInput_Original;
-
-UINT WINAPI SendInput_Hook(UINT count, LPINPUT inputs, int size) {
-    UINT result = SendInput_Original(count, inputs, size);
-
-    if (g_diagnostics && g_oskProcess) {
-        static std::atomic<int> limit{0};
-        if (limit.fetch_add(1, std::memory_order_relaxed) < 200 && inputs &&
-            size == (int)sizeof(INPUT)) {
-            for (UINT i = 0; i < count && i < 4; i++) {
-                if (inputs[i].type != INPUT_KEYBOARD) {
-                    continue;
-                }
-                const KEYBDINPUT& key = inputs[i].ki;
-                bool up = (key.dwFlags & KEYEVENTF_KEYUP) != 0;
-                if (key.dwFlags & KEYEVENTF_UNICODE) {
-                    Wh_Log(L"SendInput: character U+%04X %s",
-                           (unsigned int)key.wScan, up ? L"up" : L"down");
-                } else {
-                    Wh_Log(L"SendInput: key 0x%02X (scan code %u) %s",
-                           (unsigned int)key.wVk, (unsigned int)key.wScan,
-                           up ? L"up" : L"down");
-                }
-            }
-        }
-
-        if (result != count) {
-            Wh_Log(L"SendInput: the system refused %u of %u events (error %lu)",
-                   count - result, count, (unsigned long)GetLastError());
-        }
-    }
-
-    return result;
-}
 
 // ---------------------------------------------------------------------------
 // A snapshot of the modules a few seconds after the keyboard was started: it
@@ -4234,6 +4642,323 @@ const StringEntry kStrings[] = {
     {1031, L"F12"},
     {1041, L"Move the cursor to where you want to enter text."},
 };
+
+// ---------------------------------------------------------------------------
+// The same string ids in the languages of the settings block. The English
+// table above stays the reference; the table of the Windows interface
+// language (GetUserDefaultUILanguage) is served instead, and a language or
+// an id without a translation falls back to English. The texts are the ones
+// the localized Windows 7 keyboard shows, so the window title and the
+// strings of the keyboard read in the language of the system.
+// ---------------------------------------------------------------------------
+
+// Italian (it).
+const StringEntry kStringsIt[] = {
+    {1001, L"Tastiera su schermo"},
+    {1005, L"Impossibile avviare la tastiera su schermo."},
+    {1013, L"Selezionare il dispositivo da usare per scorrere i tasti."},
+    {1014,
+     L"A:0:0,5 secondi:1:0,75 secondi:2:1 secondo:3:1,5 secondi:4:2 "
+     L"secondi:5:2,5 secondi:6:3 secondi:"},
+    {1021, L"Tasto barra spaziatrice"},
+    {1022, L"Invio"},
+    {1023, L"F2"},
+    {1024, L"F3"},
+    {1025, L"F4"},
+    {1026, L"F5"},
+    {1027, L"F6"},
+    {1028, L"F7"},
+    {1029, L"F8"},
+    {1030, L"F9"},
+    {1031, L"F12"},
+    {1041,
+     L"Spostare il cursore nel punto in cui si desidera immettere il "
+     L"testo."},
+};
+
+// Russian (ru).
+const StringEntry kStringsRu[] = {
+    {1001, L"Экранная клавиатура"},
+    {1005, L"Не удалось запустить экранную клавиатуру."},
+    {1013, L"Выберите устройство, с помощью которого нужно перебирать клавиши."},
+    {1014,
+     L"A:0:0,5 секунды:1:0,75 секунды:2:1 секунда:3:1,5 секунды:4:2 "
+     L"секунды:5:2,5 секунды:6:3 секунды:"},
+    {1021, L"Клавиша пробела"},
+    {1022, L"Ввод"},
+    {1023, L"F2"},
+    {1024, L"F3"},
+    {1025, L"F4"},
+    {1026, L"F5"},
+    {1027, L"F6"},
+    {1028, L"F7"},
+    {1029, L"F8"},
+    {1030, L"F9"},
+    {1031, L"F12"},
+    {1041, L"Переместите курсор туда, куда нужно ввести текст."},
+};
+
+// Spanish (es).
+const StringEntry kStringsEs[] = {
+    {1001, L"Teclado en pantalla"},
+    {1005, L"No se pudo iniciar el teclado en pantalla."},
+    {1013, L"Seleccione el dispositivo que desea usar para recorrer las teclas."},
+    {1014,
+     L"A:0:0,5 segundos:1:0,75 segundos:2:1 segundo:3:1,5 segundos:4:2 "
+     L"segundos:5:2,5 segundos:6:3 segundos:"},
+    {1021, L"Tecla de la barra espaciadora"},
+    {1022, L"Intro"},
+    {1023, L"F2"},
+    {1024, L"F3"},
+    {1025, L"F4"},
+    {1026, L"F5"},
+    {1027, L"F6"},
+    {1028, L"F7"},
+    {1029, L"F8"},
+    {1030, L"F9"},
+    {1031, L"F12"},
+    {1041, L"Mueva el cursor al lugar donde desea escribir texto."},
+};
+
+// Portuguese (Brazil) (pt-BR).
+const StringEntry kStringsPtBr[] = {
+    {1001, L"Teclado Virtual"},
+    {1005, L"Não foi possível iniciar o Teclado Virtual."},
+    {1013, L"Selecione o dispositivo que deseja usar para percorrer as teclas."},
+    {1014,
+     L"A:0:0,5 segundo:1:0,75 segundo:2:1 segundo:3:1,5 segundos:4:2 "
+     L"segundos:5:2,5 segundos:6:3 segundos:"},
+    {1021, L"Tecla de barra de espaço"},
+    {1022, L"Enter"},
+    {1023, L"F2"},
+    {1024, L"F3"},
+    {1025, L"F4"},
+    {1026, L"F5"},
+    {1027, L"F6"},
+    {1028, L"F7"},
+    {1029, L"F8"},
+    {1030, L"F9"},
+    {1031, L"F12"},
+    {1041, L"Mova o cursor para onde deseja inserir texto."},
+};
+
+// French (fr).
+const StringEntry kStringsFr[] = {
+    {1001, L"Clavier visuel"},
+    {1005, L"Impossible de démarrer le clavier visuel."},
+    {1013,
+     L"Sélectionnez le périphérique à utiliser pour parcourir les "
+     L"touches."},
+    {1014,
+     L"A:0:0,5 seconde:1:0,75 seconde:2:1 seconde:3:1,5 seconde:4:2 "
+     L"secondes:5:2,5 secondes:6:3 secondes:"},
+    {1021, L"Touche barre d'espace"},
+    {1022, L"Entrée"},
+    {1023, L"F2"},
+    {1024, L"F3"},
+    {1025, L"F4"},
+    {1026, L"F5"},
+    {1027, L"F6"},
+    {1028, L"F7"},
+    {1029, L"F8"},
+    {1030, L"F9"},
+    {1031, L"F12"},
+    {1041, L"Déplacez le curseur à l'endroit où vous voulez saisir du texte."},
+};
+
+// German (de).
+const StringEntry kStringsDe[] = {
+    {1001, L"Bildschirmtastatur"},
+    {1005, L"Die Bildschirmtastatur konnte nicht gestartet werden."},
+    {1013,
+     L"Wählen Sie das Gerät aus, mit dem Sie die Tasten durchlaufen "
+     L"möchten."},
+    {1014,
+     L"A:0:0,5 Sekunde:1:0,75 Sekunde:2:1 Sekunde:3:1,5 Sekunden:4:2 "
+     L"Sekunden:5:2,5 Sekunden:6:3 Sekunden:"},
+    {1021, L"Leertaste"},
+    {1022, L"Eingabe"},
+    {1023, L"F2"},
+    {1024, L"F3"},
+    {1025, L"F4"},
+    {1026, L"F5"},
+    {1027, L"F6"},
+    {1028, L"F7"},
+    {1029, L"F8"},
+    {1030, L"F9"},
+    {1031, L"F12"},
+    {1041,
+     L"Bewegen Sie den Cursor an die Stelle, an der Sie Text eingeben "
+     L"möchten."},
+};
+
+// Polish (pl).
+const StringEntry kStringsPl[] = {
+    {1001, L"Klawiatura ekranowa"},
+    {1005, L"Nie można uruchomić klawiatury ekranowej."},
+    {1013,
+     L"Wybierz urządzenie, którego chcesz użyć do przechodzenia po "
+     L"klawiszach."},
+    {1014,
+     L"A:0:0,5 sekundy:1:0,75 sekundy:2:1 sekunda:3:1,5 sekundy:4:2 "
+     L"sekundy:5:2,5 sekundy:6:3 sekundy:"},
+    {1021, L"Klawisz spacji"},
+    {1022, L"Enter"},
+    {1023, L"F2"},
+    {1024, L"F3"},
+    {1025, L"F4"},
+    {1026, L"F5"},
+    {1027, L"F6"},
+    {1028, L"F7"},
+    {1029, L"F8"},
+    {1030, L"F9"},
+    {1031, L"F12"},
+    {1041, L"Przenieś kursor w miejsce, w którym chcesz wprowadzić tekst."},
+};
+
+// Chinese (Simplified) (zh-CN).
+const StringEntry kStringsZhCn[] = {
+    {1001, L"屏幕键盘"},
+    {1005, L"无法启动屏幕键盘。"},
+    {1013, L"选择要用于扫描按键的设备。"},
+    {1014, L"A:0:0.5 秒:1:0.75 秒:2:1 秒:3:1.5 秒:4:2 秒:5:2.5 秒:6:3 秒:"},
+    {1021, L"空格键"},
+    {1022, L"Enter"},
+    {1023, L"F2"},
+    {1024, L"F3"},
+    {1025, L"F4"},
+    {1026, L"F5"},
+    {1027, L"F6"},
+    {1028, L"F7"},
+    {1029, L"F8"},
+    {1030, L"F9"},
+    {1031, L"F12"},
+    {1041, L"将光标移到要输入文本的位置。"},
+};
+
+// Japanese (ja).
+const StringEntry kStringsJa[] = {
+    {1001, L"スクリーン キーボード"},
+    {1005, L"スクリーン キーボードを起動できませんでした。"},
+    {1013, L"キーのスキャンに使用するデバイスを選択してください。"},
+    {1014, L"A:0:0.5 秒:1:0.75 秒:2:1 秒:3:1.5 秒:4:2 秒:5:2.5 秒:6:3 秒:"},
+    {1021, L"スペース キー"},
+    {1022, L"Enter"},
+    {1023, L"F2"},
+    {1024, L"F3"},
+    {1025, L"F4"},
+    {1026, L"F5"},
+    {1027, L"F6"},
+    {1028, L"F7"},
+    {1029, L"F8"},
+    {1030, L"F9"},
+    {1031, L"F12"},
+    {1041, L"テキストを入力する位置にカーソルを移動してください。"},
+};
+
+// Korean (ko).
+const StringEntry kStringsKo[] = {
+    {1001, L"화상 키보드"},
+    {1005, L"화상 키보드를 시작할 수 없습니다."},
+    {1013, L"키를 스캔하는 데 사용할 장치를 선택하세요."},
+    {1014, L"A:0:0.5초:1:0.75초:2:1초:3:1.5초:4:2초:5:2.5초:6:3초:"},
+    {1021, L"스페이스바 키"},
+    {1022, L"Enter"},
+    {1023, L"F2"},
+    {1024, L"F3"},
+    {1025, L"F4"},
+    {1026, L"F5"},
+    {1027, L"F6"},
+    {1028, L"F7"},
+    {1029, L"F8"},
+    {1030, L"F9"},
+    {1031, L"F12"},
+    {1041, L"텍스트를 입력할 위치로 커서를 이동하세요."},
+};
+
+struct LocalizedStringTable {
+    LANGID language;
+    const StringEntry* entries;
+    size_t count;
+};
+
+const LocalizedStringTable kLocalizedStringTables[] = {
+    {MAKELANGID(LANG_ITALIAN, SUBLANG_NEUTRAL),
+     kStringsIt, ARRAYSIZE(kStringsIt)},
+    {MAKELANGID(LANG_RUSSIAN, SUBLANG_NEUTRAL),
+     kStringsRu, ARRAYSIZE(kStringsRu)},
+    {MAKELANGID(LANG_SPANISH, SUBLANG_NEUTRAL),
+     kStringsEs, ARRAYSIZE(kStringsEs)},
+    {MAKELANGID(LANG_PORTUGUESE, SUBLANG_PORTUGUESE_BRAZILIAN),
+     kStringsPtBr, ARRAYSIZE(kStringsPtBr)},
+    {MAKELANGID(LANG_FRENCH, SUBLANG_NEUTRAL),
+     kStringsFr, ARRAYSIZE(kStringsFr)},
+    {MAKELANGID(LANG_GERMAN, SUBLANG_NEUTRAL),
+     kStringsDe, ARRAYSIZE(kStringsDe)},
+    {MAKELANGID(LANG_POLISH, SUBLANG_NEUTRAL),
+     kStringsPl, ARRAYSIZE(kStringsPl)},
+    {MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED),
+     kStringsZhCn, ARRAYSIZE(kStringsZhCn)},
+    {MAKELANGID(LANG_JAPANESE, SUBLANG_NEUTRAL),
+     kStringsJa, ARRAYSIZE(kStringsJa)},
+    {MAKELANGID(LANG_KOREAN, SUBLANG_NEUTRAL),
+     kStringsKo, ARRAYSIZE(kStringsKo)},
+};
+
+// The table in use: English until SelectStringTable picks another one.
+const StringEntry* g_strings = kStrings;
+size_t g_stringsCount = ARRAYSIZE(kStrings);
+
+// Picks the table of the Windows interface language: an exact language and
+// sublanguage first, then the table of the language whatever the
+// sublanguage (Portuguese without the Brazilian sublanguage, for example),
+// and English for a language the mod does not translate.
+void SelectStringTable() {
+    LANGID language = GetUserDefaultUILanguage();
+    const LocalizedStringTable* match = nullptr;
+    bool exact = false;
+    for (const LocalizedStringTable& candidate : kLocalizedStringTables) {
+        if (PRIMARYLANGID(candidate.language) != PRIMARYLANGID(language)) {
+            continue;
+        }
+        if (SUBLANGID(candidate.language) == SUBLANGID(language)) {
+            match = &candidate;
+            exact = true;
+            break;
+        }
+        if (!match) {
+            match = &candidate;
+        }
+    }
+    if (match) {
+        g_strings = match->entries;
+        g_stringsCount = match->count;
+    } else {
+        g_strings = kStrings;
+        g_stringsCount = ARRAYSIZE(kStrings);
+    }
+    Wh_Log(L"Strings: interface language 0x%04X, %s", language,
+           match ? (exact ? L"translated" : L"translated (language match)")
+                 : L"English (not translated)");
+}
+
+// The text of a string id in the selected language, with the English table
+// of the official MUI as the fallback. A null return means the id is not a
+// string this mod serves at all, and the caller keeps its own result.
+PCWSTR LocalizedString(UINT id) {
+    for (size_t i = 0; i < g_stringsCount; i++) {
+        if (g_strings[i].id == id) {
+            return g_strings[i].text;
+        }
+    }
+    for (const StringEntry& entry : kStrings) {
+        if (entry.id == id) {
+            return entry.text;
+        }
+    }
+    return nullptr;
+}
+
 
 
 // The names and the captions of the keys, from the same official resource file
@@ -4308,7 +5033,9 @@ const KeyboardStringEntry kKeyboardStrings[] = {
 // holds the ids (N - 1) * 16 to (N - 1) * 16 + 15, so 938 starts at 14992 and
 // the keys use 15002 to 15071). Two things leave keys blank:
 //  * the caption of Backspace (id 15003, scancode 0x0E) is a private-use
-//    character that the font does not draw; it is shown as the left arrow;
+//    glyph that the keyboard font does not draw (on the modern module it shows
+//    as a small box). The key always shows the Unicode sign ERASE TO THE LEFT
+//    (U+232B) instead, which Windows draws with the system font fallback;
 //  * a caption that is empty in the module is given the name of
 //    kKeyboardStrings, when there is one.
 // The blocks that still have blank captions are written to the log, with their
@@ -4321,7 +5048,10 @@ constexpr UINT kCaptionLastBlock = 942;
 constexpr UINT kCaptionBlockCount = kCaptionLastBlock - kCaptionFirstBlock + 1;
 constexpr UINT kCaptionsPerBlock = 16;
 constexpr UINT kBackspaceCaption = 15003;
-constexpr wchar_t kBackspaceArrow = L'\u2190';
+// The sign of the Backspace key: U+232B ERASE TO THE LEFT. Segoe Fluent Icons
+// draws the same key as BackSpaceQWERTY (E750, Microsoft Learn), but that code
+// point is private use, which the keyboard font cannot draw in a caption.
+constexpr wchar_t kBackspaceIcon = L'\u232B';
 
 struct CaptionBlock {
     UINT block;
@@ -4330,7 +5060,27 @@ struct CaptionBlock {
     std::vector<BYTE> bytes;
 };
 
-CaptionBlock g_captionBlocks[kCaptionBlockCount];
+// Allocated on the process heap and never freed, for the same reason as the
+// face handles above: the handles served to the keyboard outlive this module.
+CaptionBlock* g_captionBlocks = nullptr;
+
+bool EnsureCaptionBlocks() {
+    static std::once_flag once;
+    std::call_once(once, []() {
+        CaptionBlock* blocks =
+            (CaptionBlock*)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+                                     sizeof(CaptionBlock) * kCaptionBlockCount);
+        if (!blocks) {
+            Wh_Log(L"Could not allocate the caption blocks");
+            return;
+        }
+        for (UINT i = 0; i < kCaptionBlockCount; i++) {
+            new (&blocks[i]) CaptionBlock();
+        }
+        g_captionBlocks = blocks;
+    });
+    return g_captionBlocks != nullptr;
+}
 std::mutex g_captionMutex;
 
 bool IsPrivateUseCaption(wchar_t c) {
@@ -4403,6 +5153,9 @@ const wchar_t* KeyboardCaptionName(UINT id) {
 }
 
 const CaptionBlock* AsCaptionBlock(const void* handle) {
+    if (!EnsureCaptionBlocks()) {
+        return nullptr;
+    }
     uintptr_t address = (uintptr_t)handle;
     uintptr_t first = (uintptr_t)&g_captionBlocks[0];
     uintptr_t last = (uintptr_t)&g_captionBlocks[kCaptionBlockCount];
@@ -4500,8 +5253,8 @@ bool BuildCaptionBlock(HMODULE module, HRSRC original, UINT block,
     for (UINT i = 0; i < captions.size(); i++) {
         UINT id = first + i;
         std::wstring& text = captions[i];
-        if (id == kBackspaceCaption && !HasVisibleCaption(text)) {
-            text = std::wstring(1, kBackspaceArrow);
+        if (id == kBackspaceCaption) {
+            text = std::wstring(1, kBackspaceIcon);
             backspace++;
             continue;
         }
@@ -4551,6 +5304,10 @@ HRSRC CaptionBlockFor(HMODULE module, LPCWSTR type, LPCWSTR name,
         return nullptr;
     }
 
+    if (!EnsureCaptionBlocks()) {
+        return nullptr;
+    }
+
     std::lock_guard<std::mutex> lock(g_captionMutex);
     CaptionBlock& slot = g_captionBlocks[block - kCaptionFirstBlock];
     if (!slot.built) {
@@ -4573,7 +5330,10 @@ int WriteFallbackString(PCWSTR source, LPWSTR buffer, int bufferMax) {
         if (!buffer) {
             return 0;
         }
-        *reinterpret_cast<PCWSTR*>(buffer) = source;
+        // The caller keeps the address it is given here (this is how
+        // LoadStringW hands out a string), so it must not point into this
+        // module: see ServePersistentString.
+        *reinterpret_cast<PCWSTR*>(buffer) = ServePersistentString(source);
         return length;
     }
     if (!buffer || bufferMax < 0) {
@@ -4797,11 +5557,8 @@ int WINAPI LoadStringW_Hook(HINSTANCE instance, UINT id, LPWSTR buffer,
         }
     }
 
-    for (const auto& entry : kStrings) {
-        if (entry.id != id) {
-            continue;
-        }
-        return WriteFallbackString(entry.text, buffer, bufferMax);
+    if (PCWSTR text = LocalizedString(id)) {
+        return WriteFallbackString(text, buffer, bufferMax);
     }
 
     if (instance && instance != g_exeModule) {
@@ -5180,7 +5937,7 @@ void WINAPI ExitProcess_Hook(UINT exitCode) {
     Wh_Log(L"ExitProcess(%s) after %llu ms, called from %s",
            DescribeExitCode(exitCode).c_str(),
            (unsigned long long)(GetTickCount64() - g_startTick),
-           DescribeCallerModule(WH_CALLER_ADDRESS()).c_str());
+           DescribeCallerModule(MOD_CALLER_ADDRESS()).c_str());
     ExitProcess_Original(exitCode);
 }
 
@@ -5192,7 +5949,7 @@ BOOL WINAPI TerminateProcess_Hook(HANDLE process, UINT exitCode) {
         Wh_Log(L"TerminateProcess(self, %s) after %llu ms, called from %s",
                DescribeExitCode(exitCode).c_str(),
                (unsigned long long)(GetTickCount64() - g_startTick),
-               DescribeCallerModule(WH_CALLER_ADDRESS()).c_str());
+               DescribeCallerModule(MOD_CALLER_ADDRESS()).c_str());
     }
     return TerminateProcess_Original(process, exitCode);
 }
@@ -5222,63 +5979,75 @@ void PreloadLocalDlls() {
 // is not on the symbol server, and it does not always do it through a call
 // that the string fallback above can answer. Whatever the way it asks, a main
 // window that ends up with an empty caption gets the original title (string
-// 1001 of the official MUI). Only top-level, captioned, unowned windows of this
-// process with no title at all are touched: nothing that has a title is changed.
-struct TitleFixContext {
-    DWORD pid;
-    PCWSTR title;
-    int fixed;
-};
+// 1001 of the official MUI).
+//
+// The window is created once, so the title is filled in when it is created
+// (CreateWindowExW below) instead of polling for it: the thread that asked
+// every window of the process for its caption every 300 ms, for the whole life
+// of the keyboard, woke the keyboard up for nothing. Only top-level,
+// captioned, unowned windows of this process with no title at all are touched:
+// nothing that has a title is changed.
+void FixWindowTitle(HWND window) {
+    if (!window) {
+        return;
+    }
 
-BOOL CALLBACK TitleFixEnumProc(HWND window, LPARAM param) {
-    auto* context = reinterpret_cast<TitleFixContext*>(param);
     DWORD pid = 0;
     GetWindowThreadProcessId(window, &pid);
-    if (pid != context->pid || GetWindow(window, GW_OWNER) != nullptr) {
-        return TRUE;
+    if (pid != GetCurrentProcessId() ||
+        GetWindow(window, GW_OWNER) != nullptr) {
+        return;
     }
     LONG_PTR style = GetWindowLongPtrW(window, GWL_STYLE);
     if ((style & WS_CAPTION) != WS_CAPTION || (style & WS_CHILD)) {
-        return TRUE;
+        return;
     }
     DWORD_PTR length = 0;
     if (!SendMessageTimeoutW(window, WM_GETTEXTLENGTH, 0, 0,
                              SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, &length) ||
         length != 0) {
-        return TRUE;
+        return;
+    }
+
+    PCWSTR title = LocalizedString(1001);
+    if (!title) {
+        return;
     }
     DWORD_PTR ignored = 0;
     if (SendMessageTimeoutW(window, WM_SETTEXT, 0,
-                            reinterpret_cast<LPARAM>(context->title),
+                            reinterpret_cast<LPARAM>(title),
                             SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, &ignored)) {
-        context->fixed++;
-    }
-    return TRUE;
-}
-
-DWORD WINAPI TitleThread(LPVOID) {
-    PCWSTR title = L"On-Screen Keyboard";
-    for (const auto& entry : kStrings) {
-        if (entry.id == 1001) {
-            title = entry.text;
-        }
-    }
-    bool logged = false;
-    for (;;) {
-        TitleFixContext context{GetCurrentProcessId(), title, 0};
-        EnumWindows(TitleFixEnumProc, reinterpret_cast<LPARAM>(&context));
-        if (context.fixed > 0 && !logged) {
+        static std::atomic<int> logged{0};
+        if (logged.fetch_add(1, std::memory_order_relaxed) == 0) {
             Wh_Log(L"Window title: the main window had no title, \"%s\" was "
                    L"set",
                    title);
-            logged = true;
-        }
-        if (g_stopEvent &&
-            WaitForSingleObject(g_stopEvent, 300) == WAIT_OBJECT_0) {
-            break;
         }
     }
-    return 0;
+}
+
+// The windows that already exist when the hooks are installed: the keyboard
+// may have created its main window before this mod was loaded into it.
+BOOL CALLBACK TitleFixEnumProc(HWND window, LPARAM) {
+    FixWindowTitle(window);
+    return TRUE;
+}
+
+using CreateWindowExW_t = HWND(WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD, int,
+                                        int, int, int, HWND, HMENU, HINSTANCE,
+                                        LPVOID);
+CreateWindowExW_t CreateWindowExW_Original;
+
+HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, LPCWSTR className,
+                                 LPCWSTR windowName, DWORD style, int x, int y,
+                                 int width, int height, HWND parent,
+                                 HMENU menu, HINSTANCE instance,
+                                 LPVOID param) {
+    HWND window =
+        CreateWindowExW_Original(exStyle, className, windowName, style, x, y,
+                                 width, height, parent, menu, instance, param);
+    FixWindowTitle(window);
+    return window;
 }
 
 void HookOskProcess() {
@@ -5328,9 +6097,12 @@ void HookOskProcess() {
     HookExportWithFallback(L"kernelbase.dll", L"kernel32.dll", "LockResource",
                            reinterpret_cast<void*>(LockResource_Hook),
                            reinterpret_cast<void**>(&LockResource_Original));
-    HookExport(L"user32.dll", "SendInput",
-               reinterpret_cast<void*>(SendInput_Hook),
-               reinterpret_cast<void**>(&SendInput_Original));
+    HookExport(L"user32.dll", "CreateWindowExW",
+               reinterpret_cast<void*>(CreateWindowExW_Hook),
+               reinterpret_cast<void**>(&CreateWindowExW_Original));
+    // The keyboard may have created its main window before the hooks above
+    // were installed; a window that appears later is caught by the hook.
+    EnumWindows(TitleFixEnumProc, 0);
     HookExportWithFallback(L"kernelbase.dll", L"kernel32.dll", "ExitProcess",
                            reinterpret_cast<void*>(ExitProcess_Hook),
                            reinterpret_cast<void**>(&ExitProcess_Original));
@@ -5389,11 +6161,12 @@ BOOL Wh_ModInit() {
     g_startTick = GetTickCount64();
 
     LoadSettings();
-    Wh_Log(L"Init (v0.3.2) in %s", GetProcessImagePath().c_str());
+    Wh_Log(L"Init in %s", GetProcessImagePath().c_str());
 
     if (IsOskImageName()) {
         if (IsOurOskProcess()) {
             g_oskProcess = true;
+            SelectStringTable();
             LogOskProcessEnvironment();
             if (g_diagnostics) {
                 LogFolderAccess(L"osk.exe");
@@ -5403,7 +6176,6 @@ BOOL Wh_ModInit() {
                 PreloadLocalDlls();
             }
             SpawnWorker(ModuleSnapshotThread, nullptr, L"module snapshot");
-            SpawnWorker(TitleThread, nullptr, L"window title");
         } else {
             RunStockOskHandoff();
         }
@@ -5422,16 +6194,24 @@ BOOL Wh_ModInit() {
 
 void Wh_ModBeforeUninit() {
     // Hooks are still active here: tell the workers to stop before anything is
-    // removed.
+    // removed, and close the handles of the download in progress. WinHTTP
+    // documents that closing a handle makes the calls that are blocked on it
+    // return, which is what keeps the shutdown below from waiting for a
+    // network timeout.
     if (g_stopEvent) {
         SetEvent(g_stopEvent);
     }
+    CancelHttp();
 }
 
 void Wh_ModUninit() {
-    JoinWorkers(5000);
-    // Deliberately not freeing the data the hooks may still read (settings
-    // strings, dialog templates): they live for the lifetime of the module.
+    JoinWorkers();
+    // Nothing here frees the data the hooks served to the keyboard: resource
+    // handles, resource bytes and strings live in blocks of the process heap
+    // that are never freed, so they stay valid after the unload (see
+    // ServePersistentBytes and the handles served by FindResourceExW). The
+    // dialog templates are copies inside the dialogs the keyboard created, and
+    // the settings strings are only read by the hooks, which are gone by now.
 }
 
 void Wh_ModSettingsChanged() {
