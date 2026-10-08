@@ -1,7 +1,7 @@
 // ==WindhawkMod==
-// @id              true-cursor-motion-blur
-// @name            True Cursor Motion Blur
-// @description     A real motion blur for the mouse pointer: fading copies of your own cursor along its path
+// @id              pointer-afterimage-motion-blur
+// @name            Pointer Afterimage Motion Blur
+// @description     A real motion blur for the mouse pointer, made of fading afterimages of your own cursor
 // @version         1.0
 // @author          sidlikesgrapess
 // @github          https://github.com/sidlikesgrapess
@@ -13,7 +13,7 @@
 
 // ==WindhawkModReadme==
 /*
-# True Cursor Motion Blur
+# Pointer Afterimage Motion Blur
 A live motion blur for the mouse pointer, everywhere in Windows. While the
 mouse moves, fading copies of your actual cursor are drawn along its recent
 path, so it looks like a camera motion blur rather than a trail. Unlike the
@@ -279,7 +279,10 @@ static DWORD WINAPI SampleThread(void*) {
             lastMon = mon;
             UINT dpi = 96, mainDpi = 96, dy;
             GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dpi, &dy);
-            if (!g_blankActive) arrow = ArrowSize();   // while hiding, the arrow is our invisible one
+            // While hiding, the arrow is our invisible one: keep a size only if it was measured with hiding off.
+            bool blankBefore = g_blankActive;
+            int measured = blankBefore ? 0 : ArrowSize();
+            if (!blankBefore && !g_blankActive) arrow = measured;
             monCursor = MulDiv(arrow, dpi, GetDpiForSystem());
             int hz = RefreshRate(mon);
             // The hide speed is set in cm/s as measured on the main monitor. Windows moves the pointer further on a
@@ -782,7 +785,7 @@ static DWORD WINAPI RenderThread(void*) {
     WNDCLASSW wc = {};
     wc.lpfnWndProc = OverlayProc;
     wc.hInstance = inst;
-    wc.lpszClassName = L"TrueCursorMotionBlur";
+    wc.lpszClassName = L"PointerAfterimageMotionBlur";
     RegisterClassW(&wc);
     g_wnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
                             wc.lpszClassName, L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, inst, nullptr);
@@ -879,7 +882,7 @@ BOOL WhTool_ModInit() {
     InitializeCriticalSection(&g_gate);
     HANDLE token;
     if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
-        BYTE buf[SECURITY_MAX_SID_SIZE + sizeof(TOKEN_USER)];
+        alignas(TOKEN_USER) BYTE buf[SECURITY_MAX_SID_SIZE + sizeof(TOKEN_USER)];
         DWORD len;
         LPWSTR sid;
         if (GetTokenInformation(token, TokenUser, buf, sizeof(buf), &len) &&
