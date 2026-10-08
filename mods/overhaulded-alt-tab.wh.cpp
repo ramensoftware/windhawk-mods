@@ -286,8 +286,8 @@ See the https://github.com/IMiloDev/OverhauldedWin/blob/main/LICENSE file for th
 #include <cstring>
 
 
-#ifndef WH_MOD_ID
-#define WH_MOD_ID L"overhaulded-alt-tab"
+#ifndef OVERHAULDED_MOD_ID
+#define OVERHAULDED_MOD_ID L"overhaulded-alt-tab"
 #endif
 
 typedef DWORD (WINAPI* GetFileVersionInfoSizeWFn)(LPCWSTR, LPDWORD);
@@ -6409,7 +6409,7 @@ BOOL Wh_ModInit() {
     for (int i = 1; i < argc - 1; i++) {
         if (wcscmp(argv[i], L"-tool-mod") == 0) {
             isToolModProcess = true;
-            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+            if (wcscmp(argv[i + 1], OVERHAULDED_MOD_ID) == 0) {
                 isCurrentToolModProcess = true;
             }
             break;
@@ -6424,14 +6424,14 @@ BOOL Wh_ModInit() {
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
-            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" OVERHAULDED_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
 
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            Wh_Log(L"Tool mod already running (%s)", OVERHAULDED_MOD_ID);
             ExitProcess(1);
         }
 
@@ -6475,9 +6475,9 @@ void Wh_ModAfterInit() {
 
     WCHAR
     commandLine[MAX_PATH + 2 +
-                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+                (sizeof(L" -tool-mod \"" OVERHAULDED_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
-               WH_MOD_ID);
+               OVERHAULDED_MOD_ID);
 
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
