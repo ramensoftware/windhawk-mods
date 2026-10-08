@@ -670,15 +670,6 @@ const WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         true,
     },
     {
-        // Not present in the 24H2 PDB; listed for builds that still expose the
-        // gate by name. If it isn't found, the gate hook isn't installed and
-        // the mod falls back to the host manager below.
-        {LR"(__int64 __cdecl IsUndockedAssetAvailable(int,__int64,__int64,char const *))"},
-        &g_gateAddress,
-        nullptr,
-        true,
-    },
-    {
         // Only used by the E_UNEXPECTED safety net.
         {LR"(private: long __cdecl CMultitaskingViewManager::_CreateMTVHost(enum MULTITASKING_VIEW_TYPES,struct IApplicationViewCollection *,struct _GUID const &,void * *))"},
         &g_createMtvHostAddress,
