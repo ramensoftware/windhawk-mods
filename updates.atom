@@ -2,12 +2,573 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-08T21:45:52.000Z</updated>
+    <updated>2026-10-08T22:01:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Numpad Disabler 1.0.0]]></title>
+        <id>https://windhawk.net/mods/numpad-disabler#3546e14097d30b6a3251367d8ee803c2952173d9</id>
+        <link href="https://windhawk.net/mods/numpad-disabler"/>
+        <updated>2026-10-08T22:01:26.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="numpaddisabler">* Numpad Disabler</h1>
+<p>This mod selectively "deafens" a specific application so it cannot detect Numpad key presses.</p>
+<p>### 🎯 Common Use Cases</p>
+<ul>
+<li><p><strong>Gaming:</strong> Prevents game trainers, overlays, or macro tools in the background from activating when you use the Numpad inside your game.</p></li>
+<li><p><strong>Productivity:</strong> Stops specific background applications from hijacking or reacting to your Numpad inputs while you work.</p>
+<h3 id="performancestabilityguarantee">🛡️ Performance &amp; Stability Guarantee</h3>
+<p>By relying exclusively on Windhawk's native process filtering, this mod has zero performance overhead. It will not hook or interfere with your web browsers, Windows Explorer, or your main games unless you explicitly target them.</p>
+<h3 id="configurationguide">⚙️ Configuration Guide</h3>
+<p>The mod targets nothing by default. To choose which applications to block:</p></li>
+</ul>
+<ol>
+<li>Open the mod in Windhawk and go to the <strong>Advanced</strong> tab.</li>
+<li>Add the exact executable name(s) of the application(s) you want to block (e.g., <code>trainer.exe</code> or <code>macro_tool.exe</code>) to the <strong>Custom process inclusion list</strong>.</li>
+<li>Click Save. The mod takes effect immediately.</li>
+</ol>]]></content>
+        <author>
+            <name>osmanonurkoc</name>
+            <uri>https://github.com/osmanonurkoc</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Fluid Wallpaper 1.0.0]]></title>
+        <id>https://windhawk.net/mods/fluid-wallpaper#8a03fd64b8f1f3bdf6d962520d4739cf783b531e</id>
+        <link href="https://windhawk.net/mods/fluid-wallpaper"/>
+        <updated>2026-10-08T22:01:22.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fluidwallpaper">Fluid Wallpaper</h1>
+<p><img src="https://i.imgur.com/rIzdlWv.jpeg" alt="Screenshot" />
+<a href="https://i.imgur.com/yXW45Vs.mp4">Watch the overview video in full quality</a></p>
+<p>An animated, interactive fluid simulation rendered on the GPU behind your
+desktop icons. The shaders are a Direct3D port of
+<a href="https://github.com/PavelDoGreat/WebGL-Fluid-Simulation">WebGL Fluid Simulation</a>
+by Pavel Dobryakov (MIT license).</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>One independent simulation per monitor, drawn behind the desktop icons.</li>
+<li>Autonomous color trails and periodic color bursts keep the fluid moving.</li>
+<li>Moving the mouse over the desktop stirs the fluid. No clicks are needed and
+no mouse hooks are installed; clicks always reach the desktop.</li>
+<li>Bloom, sun rays and shading effects, all configurable.</li>
+<li>Pauses automatically when the desktop can't be seen: when a monitor's
+desktop is fully covered by windows (maximized, full-screen or several
+windows side by side), when the session is locked or switched away, and when
+the display is turned off.</li>
+<li>Optional lower frame rate or pause on battery power and Energy Saver.</li>
+</ul>
+<p>To see the wallpaper, minimize your windows. Settings are applied live;
+changing a setting restarts the simulation.</p>
+<h2 id="howitworks">How it works</h2>
+<p>Each monitor gets a child window of Explorer's wallpaper host, without a
+redirection surface. The simulation runs in Direct3D 11 and its final pass is
+drawn straight into a DirectComposition swap chain attached to that window.
+Frames never leave the GPU. The same path is used on the classic desktop
+layout and on the Windows 11 24H2+ layout.</p>
+<p>The mod doesn't change your wallpaper settings, the registry or the order of
+Explorer's own windows. Disabling it removes its windows and reveals your
+normal wallpaper.</p>
+<h2 id="performancetips">Performance tips</h2>
+<ul>
+<li>Lighter: Maximum FPS 30, Dye resolution 512, Trails 2, Bloom off.</li>
+<li>Swirlier: Vorticity 50, Dye dissipation 60, Trail force 4500.</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p>If the wallpaper doesn't appear, open the mod log in Windhawk: the lines
+starting with "Desktop layout", "Direct3D" and "Monitor" describe what was
+found and created. Please include them when reporting a problem, together with
+your Windows build number.</p>
+<p>If the animation stays frozen while the desktop is visible, a window that
+looks hidden is probably reported as visible and covering it. Disable <strong>Pause
+when the desktop is covered</strong> in that case.</p>
+<h2 id="requirementsandlimitations">Requirements and limitations</h2>
+<ul>
+<li>Windows 10 or 11 and a GPU with Direct3D feature level 10.0 or later.</li>
+<li>Relies on the undocumented WorkerW desktop layout of Windows, which differs
+between Windows 10, Windows 11 and Windows 11 24H2 and later. Future Windows
+builds may change it.</li>
+<li>Below 30 FPS (including the battery option) the motion also slows down,
+because each simulation step is limited in length to stay stable.</li>
+<li>The transparent background and screenshot features of the web demo are not
+included.</li>
+<li>Some settings use integer scales; for example, 80 means 0.8.</li>
+</ul>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Steam Games in Explorer 1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-steam-games#06f757037dab9ee0cd3ed270f4546ed5cde55c02</id>
+        <link href="https://windhawk.net/mods/explorer-steam-games"/>
+        <updated>2026-10-08T22:01:17.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="steamgamesinexplorer">Steam Games in Explorer</h1>
+<p><img src="https://i.imgur.com/xz3s5xn.png" alt="Screenshot" /></p>
+<p>Adds your installed <strong>Steam</strong> games to the File Explorer navigation pane, with
+launch, install folder, save and screenshot folders, playtime and automatic
+collections.</p>
+<p><strong>Epic Games</strong>, <strong>GOG</strong> and <strong>Xbox / PC Game Pass</strong> are supported as
+<strong>experimental</strong> (off by default, see below).</p>
+<p>Choose between one entry per platform or a single <strong>Games</strong> entry with a
+subfolder per platform.</p>
+<h2 id="turnonthecommentscolumn">⚠️ Turn on the "Comments" column</h2>
+<p>Playtime, last played date, size on disk and pending updates are shown in the
+<strong>Comments</strong> column, which File Explorer hides by default. To see them:</p>
+<ol>
+<li>Open the <strong>Steam</strong> folder in the navigation pane and switch to
+<strong>View → Details</strong>.</li>
+<li>Right-click any column header (e.g. "Name") and tick <strong>Comments</strong>.
+If it's not in the list, click <strong>More…</strong>, find <strong>Comments</strong> and tick it.</li>
+</ol>
+<p>File Explorer remembers the choice for that folder (repeat it in the ★
+collection folders if they don't pick it up). Without this column the
+mod still works, but you'll only see the information in the tooltip when
+hovering a game.</p>
+<h2 id="experimentallaunchers">Experimental launchers</h2>
+<p>Epic Games, GOG and Xbox / PC Game Pass support is built on the files those
+launchers keep on disk, but it has not been tested widely yet. Turn them on in
+the settings and please report any game that is missing, wrong or doesn't
+launch in the mod's GitHub discussion or issues.</p>
+<h2 id="contextmenu">Context menu</h2>
+<ul>
+<li><strong>Double-click / Play</strong>: launches the game.</li>
+<li><strong>Open install folder</strong>.</li>
+<li><strong>Open save folder</strong> (Steam games with Steam Cloud).</li>
+<li><strong>Open screenshot folder</strong> (screenshots taken with Steam).</li>
+<li><strong>Steam ▸</strong>: Library, Store page, Community hub, Guides, Achievements,
+Verify integrity of game files, Uninstall.</li>
+<li><strong>GOG ▸</strong>: Open in GOG Galaxy (when Galaxy is installed).</li>
+</ul>
+<p>On Windows 11 these entries are under "Show more options" (or Shift+F10),
+unless you use a mod that restores the classic context menu.</p>
+<h2 id="collections">Collections</h2>
+<p>Inside each platform folder, each one can be turned on or off:
+★ Recently played, ★ Never played, ★ Not played in N months, ★ Largest,
+★ Update pending. A collection only appears when it is not empty (playtime and
+last played date are only available for Steam).</p>
+<h2 id="columnsdetailsview">Columns (Details view)</h2>
+<ul>
+<li><strong>Comments</strong> (must be enabled, see above): playtime, last played, size on
+disk, pending updates.</li>
+<li><strong>Date modified</strong> = last played, <strong>Date created</strong> = install date.</li>
+</ul>
+<h2 id="notinstalledgamesoptional">Not installed games (optional)</h2>
+<p>A ★ Not installed collection inside Steam lists the games in your Steam
+library that are not installed. Double-click (or right-click → Install) opens
+Steam's install dialog. The list comes from Steam's local cache (library
+artwork and <code>appinfo.vdf</code>), so no account or API key is needed; it may include
+games borrowed through Steam Family and miss games you never opened in the
+library.</p>
+<h2 id="covers">Covers</h2>
+<p>With "Game icons: Cover", Steam and Xbox games use their cover art as icon:
+with "Large icons" view the folder looks like a game library.</p>
+<h2 id="language">Language</h2>
+<p>Folder names, menu entries and comments follow the Windows display language:
+English, Italian, Spanish, French, German, Portuguese, Polish and Russian.
+Other languages use English.</p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod has two parts:</p>
+<ul>
+<li>A background process (a dedicated Windhawk process, not Explorer) reads the
+launchers' files and keeps a real folder with the shortcuts and a hidden
+<code>.data</code> folder up to date.</li>
+<li>Inside <code>explorer.exe</code> the mod only hooks registry reads, so that Explorer
+sees the navigation pane entries and the games' file types (the context
+menu). Their definitions live in a private registry hive file in the mod's
+storage, loaded with <code>RegLoadAppKey</code>: it isn't part of the system registry
+and no other program can see it.</li>
+</ul>
+<p><strong>The mod doesn't write to the system registry.</strong> Disabling or removing it
+makes the navigation pane entries and menu entries disappear right away, even
+if a process crashed before. The private hive file (<code>&lt;user&gt;-shell.hiv</code> in the
+mod's storage) is mod data like the shortcuts; if File Explorer still has it
+open when the mod is removed, it may stay there until Explorer restarts and can
+then be deleted by hand. These entries only appear in File Explorer windows,
+not in other programs' Open/Save dialogs.</p>
+<p>By default the shortcut folder is in the mod's own Windhawk storage (one
+subfolder per Windows user), so Windhawk deletes it when the mod is removed;
+you can choose another location in the settings. With "Delete the shortcut
+folder when the mod is disabled or removed" (on by default) the folder is
+deleted when the mod is disabled too; everything is rebuilt when the mod is
+enabled again (this also happens when the mod is updated). Only files created
+by the mod are deleted. If you change the shortcut folder, the old one is
+cleaned up the same way.</p>
+<p>The mod never writes into game or launcher folders.</p>
+<p>If the entries don't show up right after enabling or updating the mod, open a
+new File Explorer window (or restart File Explorer once).</p>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Tray Utility Customizer 2.1]]></title>
+        <id>https://windhawk.net/mods/tray-utility-customizer#a2316b7fb9a4d8fe2d9c952113454b20b05079b9</id>
+        <link href="https://windhawk.net/mods/tray-utility-customizer"/>
+        <updated>2026-10-08T22:01:12.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for Windows 11 26200.9457 / KB5129195, where <code>SystemTrayFrameGrid</code> became a <code>StackPanel</code>; both panel shapes are classified at runtime and never cached</li>
+<li>Fixed restore-on-disable on an ordered tray panel, where host markers recorded a column that no longer meant anything; hosts now return to their marker's live child index</li>
+<li>Moved the whole settings surface to grouped keys; 1.x settings do not migrate</li>
+<li>Replaced the layout expression, primary axis, group alignment and twelve per-icon nudge settings with one <code>Arrangement</code> field; <code>|</code> is always horizontal and <code>,</code> always vertical</li>
+<li>Added <code>auto</code>, which fits the enabled utilities to the taskbar height and logs its generated expression</li>
+<li>Added per-utility <code>Content</code> switches and a <code>Layout.NewItems</code> policy</li>
+<li>Added <code>Adjust.PadX</code> / <code>PadY</code> / <code>OffsetX</code> / <code>OffsetY</code></li>
+<li>Computed row capacity in DIPs from the real DPI, fixing the automatic shape at 125% and 150% scaling</li>
+<li>Added support for Windows 11's native left and right taskbars: the arrangement follows the edge Windows reports, re-arranges on a move between edges, and keeps Windows' own side-taskbar cells intact; a taskbar another mod rotates is still left untouched</li>
+<li>A written arrangement that names no utility Windows is showing now waits for one to appear</li>
+<li>With Emoji hidden, the lone-icon Emoji fallback no longer claims the touch keyboard's host</li>
+<li>The microphone, camera and location in-use indicators no longer trigger a re-layout of a tray host the mod is not arranging</li>
+<li>A re-arrangement that finds the tray mid-change, such as during a move between edges, now retries instead of leaving the native layout in place</li>
+<li>Restored borrowed elements to their exact previous local value, clearing the property when it had none</li>
+</ul>]]></content>
+        <author>
+            <name>sb4ssman</name>
+            <uri>https://github.com/sb4ssman</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Folder Menus 2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-folder-menus#349f08bd4bd7132006ca8b2a9ce5c928b6d4f91c</id>
+        <link href="https://windhawk.net/mods/taskbar-folder-menus"/>
+        <updated>2026-10-08T22:01:08.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added native side-taskbar layouts with literal manual arrangements</li>
+<li>Made taskbar construction wake the icon worker without joining it</li>
+<li>Added cancellation checks between targets and cached every failed icon target until settings reload</li>
+<li>Published settings on the taskbar thread and filtered length-only edge events</li>
+<li>Gave the icon worker its own snapshot of the folder list and button size, so a settings save cannot race its Shell icon extraction</li>
+<li>Cleaned up unused helpers, initialization handles and comments</li>
+</ul>]]></content>
+        <author>
+            <name>sb4ssman</name>
+            <uri>https://github.com/sb4ssman</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[OmniButton Customizer 2.1]]></title>
+        <id>https://windhawk.net/mods/omnibutton-customizer#7f1699f246d7b9245d2eff5ebd0fb9329c67f746</id>
+        <link href="https://windhawk.net/mods/omnibutton-customizer"/>
+        <updated>2026-10-08T22:01:02.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="omnibuttoncustomizer">OmniButton Customizer</h1>
+<p>A <a href="https://windhawk.net">Windhawk</a> mod for Windows 11 that takes the native
+OmniButton — the network / volume / battery cluster that opens Quick Settings —
+and lets you arrange its items into any shape you like, hide the ones you don't
+want, and restyle each one independently. It works on a taskbar at any edge of
+the screen.</p>
+<p>These native icons are compound and a little weird — each is several glyphs
+layered on top of one another, each with its own built-in visual origin — so a
+mathematically correct grid does not necessarily look like one. <code>auto</code> gets the
+shape right, but it does not make pleasing arrangements; expect to adjust.
+Where an example below shows its arrangement, that is the real string, nudges
+and all.</p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-auto.png" alt="All four items as a 2×2 block on a single-height taskbar" />
+<em>Straight out of the box: <code>Arrangement</code> left at <code>auto</code>, which fits the four
+native items to the taskbar height and settles on a 2×2 block.</em></p>
+<h2 id="showcase">Showcase</h2>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-arranged-2x2.png" alt="The same 2×2 block, written by hand" />
+<em>The same shape written out and optically corrected. The parentheses matter,
+because <code>,</code> binds tighter than <code>|</code>:</em></p>
+<pre><code class="text language-text">(network[-6,2] | volume[-2,4]), (battery[1,0] | percent[4,-2])
+</code></pre>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-diamond-adjusted-with-hover.png" alt="The four items arranged as a diamond, with the native tooltip showing" />
+<em>A diamond — volume on top, battery below, network and the percentage on the
+sides. No parentheses needed this time. It is still the native button, so the
+tooltip and the click through to Quick Settings work as they always did:</em></p>
+<pre><code class="text language-text">network[4,-2] | volume[2,-4], battery[0,4] | percent[0,-2]
+</code></pre>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-arranged-2-over-1.png" alt="Network and volume above a centered battery" />
+<em>Three items with the percentage left out: two across the top, the battery
+centered below. <code>Short row or column</code> decides how a ragged last group lines up.</em></p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-arranged-reverse.png" alt="The items in a single row" />
+<em>A single row, in an order you choose rather than the native one.</em></p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-compact-stack.png" alt="A tight two-high stack" />
+<em>Pulled in close with a negative <code>Size</code> → <code>Item spacing</code> — the setting that
+tightens a cluster.</em></p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-stacked-with-percent-emphasis.png" alt="A tight cluster with an enlarged battery percentage" />
+<em>The percentage enlarged with <code>Surface</code> → <code>Battery percentage size</code>.</em></p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/with-colors.png" alt="A recolored battery percentage in a busy tray" />
+<em>Per-item color — here the battery percentage. An empty color leaves an item
+exactly as Windows drew it.</em></p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/double-height-arranged-vertical.png" alt="All four items arranged vertically on a double-height taskbar" />
+<em>A single column on a double-height taskbar, alongside several other tray and
+taskbar mods in a dense two-row tray:</em></p>
+<pre><code class="text language-text">network[-2,6], volume[0,2], battery[0,0], percent[2,-6]
+</code></pre>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/top-2x2.png" alt="A 2x2 block on a taskbar at the top of the screen" />
+<em>A taskbar at the top: arrangements work exactly as they do at the bottom.</em></p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/side-left-single-row.png" alt="All four items in one evenly spaced row on a left taskbar" />
+<em>A taskbar on the left, with the four items nudged onto evenly spaced points
+across the button:</em></p>
+<pre><code class="text language-text">percent[-12,-1] | battery[-3,0] | volume[8,0] | wifi[14,0]
+</code></pre>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/side-left-stacked.png" alt="A three-row arrangement on a left taskbar" />
+<em>Rows stack on a side taskbar too. Windows gives the button a fixed height
+there; the mod grows it to fit.</em></p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/side-right-diamond.png" alt="Battery over its percentage between network and volume on a right taskbar" />
+<em>A taskbar on the right: the battery over its percentage, between network and
+volume, with <code>Adjust</code> → <code>Horizontal padding</code> at 8:</em></p>
+<pre><code class="text language-text">wifi[-16,0] | (battery[-1,2], percent) | volume[16,0]
+</code></pre>
+<h2 id="features">Features</h2>
+<ul>
+<li>Arrange network, volume, battery, and the battery percentage into any grid —
+automatically fitted to your taskbar height, or written out by hand</li>
+<li>Turn any of the four items off individually</li>
+<li>Writes no Windows settings and no registry values — it arranges the taskbar
+and nothing else</li>
+<li>Independent color and opacity per item, plus size and font family on the
+battery percentage, the one item that is really a single piece of text</li>
+<li>Per-item and per-group pixel nudges inside the arrangement expression</li>
+<li>Group padding and offset for positioning the cluster inside the button</li>
+<li>Keeps the native button in its native tray position, so other mods' "before
+OmniButton" anchors still mean what they always did</li>
+<li>No XAML Diagnostics, so it coexists with Windows 11 Taskbar Styler</li>
+</ul>
+<p>If you installed an unpublished 1.x build from the pull request, re-apply your
+customizations once: 2.x uses grouped settings and the Arrangement field, and
+Windhawk cannot migrate renamed setting keys.</p>
+<h2 id="thearrangementfield">The Arrangement field</h2>
+<p><code>Layout</code> → <code>Arrangement</code> decides how the items are placed, and it is the only
+field that does. Its default value is the word <code>auto</code>:</p>
+<ul>
+<li><strong><code>auto</code></strong> fits the available items to the taskbar height. <code>Fill order</code>
+chooses whether they fill across rows or down columns; <code>Short row or column</code>
+aligns a ragged last group. The shape is worked out for you: the mod takes
+the narrowest grid that fits the height, preferring the one that wastes the
+fewest slots — four items on a standard taskbar become a 2×2 block, not a
+lopsided 3+1.</li>
+<li><strong>Anything else</strong> is an arrangement you write. Names sit side by side with
+<code>|</code> and stack with <code>,</code>, and parentheses group them:</li>
+</ul>
+<pre><code class="text language-text">  network, battery | volume, percent     a 2x2 block
+  network | volume | battery | percent   a single row
+  network, volume, battery, percent      a single column
+  network | volume | (battery, percent)  battery stacked over its percentage
+  network | (volume, battery) | percent  a diamond
+</code></pre>
+<p>Order of operations: parentheses first, then <code>,</code>, then <code>|</code> — so
+  <code>a | b, c | d</code> is three columns with <code>b</code> stacked over <code>c</code>, and a 2×2 block
+  is <code>(a | b), (c | d)</code> or <code>a, c | b, d</code>.</p>
+<p>The tokens are <code>network</code> (or <code>wifi</code>), <code>volume</code>, <code>battery</code>, and <code>percent</code>,
+  and they are case-insensitive. A name the mod does not know is ignored and
+  logged. <code>network</code> is the one native slot whose glyph changes
+  between Wi-Fi, Ethernet, disconnected, airplane-mode, and VPN states. A
+  separator is always required — <code>network (volume | battery)</code> is an error,
+  not a shorthand for <code>network | (volume | battery)</code>.</p>
+<p><strong>Omitting a token hides that item</strong>, exactly like turning it off in <code>Content</code>.
+Items Windows isn't showing at all — the battery on a desktop PC, for one — are
+skipped silently whether you name them or not.</p>
+<p>Every time the layout is applied, the arrangement <code>auto</code> produced is written to
+the Windhawk log. Copy that line into the Arrangement field and you have the
+automatic layout as a starting point to edit — the automatic and manual paths
+are the same field and the same syntax. If what you write doesn't parse, the
+log says what was expected and where, and the automatic arrangement is used
+until you fix it.</p>
+<p><strong>Nudging.</strong> Append a pixel offset to any name to move just that item:</p>
+<pre><code class="text language-text">network[+2,-1] | volume | battery   network moves 2px right and 1px up
+(battery, percent)[3,0] | network   the stacked pair moves 3px right
+</code></pre>
+<p>Each expression nudge is clamped to ±100 pixels on each axis; the whole-group
+Adjust offsets are clamped to ±40. Offsets are cosmetic. Nothing else shifts, and the group's overall size does
+not change. To move the whole cluster instead, use <code>Adjust</code> → horizontal and
+vertical offset. These replace the eight per-item nudge settings that 1.x had.
+Nudges and offsets are screen pixels on every taskbar edge — see
+<a href="#other-taskbar-positions">Other taskbar positions</a>.</p>
+<p><strong>The percentage arriving late.</strong> An arrangement you write names the items that
+existed when you wrote it. Turn the battery percentage on afterwards and it is
+in no group, so by default it is appended after your arrangement rather than
+vanishing — the log says when that happened, so you can fold it in when you
+next edit. Set <code>Layout</code> → <code>Items your arrangement does not name</code> to <em>Leave it
+out</em> if you would rather your arrangement be the whole truth. <code>auto</code> always
+includes every enabled item.</p>
+<h2 id="thebatterypercentage">The battery percentage</h2>
+<p><strong>Whether the percentage exists is Windows' decision, not this mod's.</strong> Turn it
+on or off in <strong>Settings → System → Power & battery → Battery percentage</strong>. This
+mod does not write that setting, or any other Windows setting.</p>
+<p><code>Content</code> → <code>Battery percentage</code> hides the percentage from the arrangement,
+exactly like the three toggles above it hide their own items. All four mean the
+same thing, and none of them reaches outside the taskbar. If Windows isn't
+showing the percentage, there is nothing here to arrange or hide and the toggle
+does nothing.</p>
+<p><em>An earlier version did drive the Windows setting. It was removed: even with
+the correct registry value and a change broadcast, Explorer only sometimes
+re-read it and the Settings page never refreshed, so the control worked once
+and then appeared dead. A switch that behaves that way is worse than no switch.</em></p>
+<p>Because the percentage genuinely appears and disappears in the native tree,
+the mod watches for it and re-applies the arrangement when it shows up or goes
+away, rather than leaving a briefly unstyled percentage sitting in the cluster.</p>
+<p><strong>It is text, so it does not use <code>Item width</code>.</strong> "9%", "80%", and "100%" are
+three different widths, and a font change moves them again. The percentage's
+cell is measured from the text it actually contains — never narrower than
+<code>Item width</code>, wider when it needs to be — so it cannot be clipped at the edge
+of the group. If the value grows past the cell that was reserved for it, the
+layout is re-applied at the new width. Every other item is a glyph and does
+use <code>Item width</code>.</p>
+<h2 id="settings">Settings</h2>
+<h3 id="content">Content</h3>
+<p>| Setting | Default | Description |
+|---------|---------|-------------|
+| Network | On | Wi-Fi, Ethernet, disconnected, airplane-mode, and VPN states share this one native slot |
+| Volume | On | |
+| Battery | On | Absent on machines without a battery |
+| Battery percentage | On | Hides it from the arrangement. Windows decides whether it exists — Settings → System → Power &amp; battery |</p>
+<h3 id="layout">Layout</h3>
+<p>| Setting | Default | Description |
+|---------|---------|-------------|
+| Arrangement | <code>auto</code> | <code>auto</code>, or an arrangement you write — see above |
+| Fill order | Fill rows first | Used by <code>auto</code> |
+| Short row or column | Center | Used by <code>auto</code>; start, center, or end |
+| Items your arrangement does not name | Add it after | Or leave it out; only applies to a written arrangement |</p>
+<h3 id="size">Size</h3>
+<p>| Setting | Default | Description |
+|---------|---------|-------------|
+| Item width | 0 (fit) | 0 reserves exactly the width each item needs; a number puts every item in a fixed box of that width. Clamped to 0–80 |
+| Item height | 24 px | Clamped to 16–80 |
+| Item spacing | 0 px | Gap between items along each axis; negative pulls them together. Clamped to −16–40 |</p>
+<p><strong>How to make the cluster tight.</strong> Two settings change the space <em>between</em> the
+icons, and horizontal padding is not one of them:</p>
+<ul>
+<li><strong><code>Item width</code></strong> is the box each glyph is centered in. A native tray glyph is
+about 16px wide, so a 32px box is 16px of dead space per item — barely
+noticeable in a 2×2 block, and half the button in a single row. <code>0</code> sizes
+every item to its own content, which is why it is the default.</li>
+<li><strong><code>Item spacing</code></strong> is the gap between those boxes, and it goes negative if you
+want them closer than touching.</li>
+<li><strong><code>Horizontal padding</code></strong> is <em>outside</em> the whole group. It cannot change the
+distance between two items, and no value of it ever will.</li>
+</ul>
+<p>If the button looks far bigger than the icons in it, <code>Item width</code> is almost
+always the reason.</p>
+<h3 id="adjust">Adjust</h3>
+<p>| Setting | Default | Description |
+|---------|---------|-------------|
+| Horizontal padding | 4 px | Reserved on both sides of the group; clamped to 0–24. <strong>Not cosmetic — see below</strong> |
+| Vertical padding | 0 px | Reserved above and below the group; clamped to 0–24 |
+| Horizontal offset | 0 px | Moves the group; reserves no space; clamped to ±40 |
+| Vertical offset | 0 px | Moves the group up (negative) or down (positive); clamped to ±40 |</p>
+<p><strong>Why horizontal padding defaults to 4 and not 0.</strong> The mod zeroes the
+OmniButton's own padding so the arrangement owns the entire content area — and
+the button has rounded corners. An item arranged flush against that edge has
+its last pixels shaved by the curve, which is exactly what used to clip the
+"%" off the battery percentage. Those few pixels are the group's breathing
+room, not decoration. Setting it to 0 is supported, but expect edge items to
+touch the button's rounded border.</p>
+<p>It is <em>outer</em> padding: it reserves space at the two ends of the group and can
+never change the gap between two items. <code>Item width</code> and <code>Item spacing</code> do
+that.</p>
+<h3 id="surface">Surface</h3>
+<p>| Setting | Default | Description |
+|---------|---------|-------------|
+| Network / Volume / Battery / Battery percentage color | <em>(native)</em> | Empty preserves the native color |
+| Network / Volume / Battery / Battery percentage opacity | -1 | -1 is the native opacity; otherwise 0–100% |
+| Battery percentage size | 0 pt | 0 is the native size; clamped to 0–64 |
+| Battery percentage font family | <em>(native)</em> | Empty preserves the native font |</p>
+<p><strong>Why only the percentage has a size and a font.</strong> Because only the percentage
+is a single piece of text. Each of the other three is a <strong>stack of glyphs
+layered exactly on top of one another</strong> — network and volume are three deep
+(Windows calls them Underlay, Base, and AccentOverlay), the battery is two, an
+outline and a fill. That stacking is how one icon shows signal strength, a mute
+slash, or a charge level.</p>
+<p>Resize or re-font one layer of a stack and it stops coinciding with the others:
+you get a larger glyph ghosting over the original rather than a bigger icon. So
+those two controls are not offered for items that are stacked, and the mod
+works out which is which by counting the glyphs rather than assuming.</p>
+<p>Color and opacity work on all four. Color is applied where every layer inherits
+it, so a stack recolors as one — except the battery, whose layers have no
+shared parent to write to; there the outline recolors reliably and the fill only
+on some Windows builds. The log says what it found. Opacity applies to the whole
+item rather than to any glyph inside it, so it is always safe.</p>
+<p>All color settings accept <code>#RRGGBB</code> or <code>#AARRGGBB</code> hex (the alpha byte is
+honored), the generics <code>accent</code>, <code>accentLight</code>, and <code>accentDark</code> for the
+Windows accent shades, or <code>transparent</code> for a fully transparent glyph — nothing
+drawn, the item still present and clickable. Leaving a color empty keeps the
+native color.</p>
+<h2 id="othertaskbarmods">Other taskbar mods</h2>
+<p><strong><a href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks">Tray system icon tweaks</a></strong>
+has its own <code>hideNetworkIcon</code> / <code>hideVolumeIcon</code> / <code>hideBatteryIcon</code> switches,
+which cover the same three icons as this mod's <code>Content</code> switches. They are not
+aware of each other: if an icon is hidden there and enabled here, this mod
+reserves an arrangement cell for something Windows is not drawing. Pick one
+mod to own the show/hide decision.</p>
+<p><strong><a href="https://windhawk.net/mods/taskbar-multi-tray">Multiple taskbars</a>.</strong> This mod
+resolves the primary <code>Shell_TrayWnd</code> only, so OmniButtons on secondary-monitor
+taskbars keep their native arrangement. The primary one is arranged normally.</p>
+<p>The mod deliberately does not move the native <code>ControlCenterButton</code> across tray
+columns. Keeping it where Windows put it is what lets other mods' semantic
+anchors — "before OmniButton", "before clock" — keep their established meaning.
+Moving it would need a shared placement lease so two mods couldn't claim
+contradictory anchor order, so this mod offers no placement setting at all.</p>
+<h2 id="othertaskbarpositions">Other taskbar positions</h2>
+<p>Windows 11 can put the taskbar on any edge (Settings → Personalization →
+Taskbar → Taskbar behaviors, on builds that have the setting). This mod reads
+the edge Windows reports and follows a move while it is running. The last four
+screenshots in the <a href="#showcase">Showcase</a> are the top, left and right edges.</p>
+<p><strong>Top — the same as bottom.</strong> Everything is positioned relative to the
+taskbar's own layout, never to screen coordinates, so a taskbar at the top
+gets the same arrangement in a different place. This also covers
+<a href="https://windhawk.net/mods/taskbar-on-top">Taskbar on top</a>.</p>
+<p><strong>Left or right — your arrangement as written.</strong> An arrangement you write is
+laid out exactly as written on every edge: <code>|</code> side by side, <code>,</code> stacked, and
+<code>[dx,dy]</code> always moves an item <code>dx</code> right and <code>dy</code> down. The horizontal and
+vertical settings in <code>Adjust</code> stay horizontal and vertical, and nothing is
+mirrored between left and right. Only <code>auto</code> changes: it fits the taskbar's
+width instead of its height. Windows makes the OmniButton a fixed height on a
+side taskbar, so the mod raises its minimum height to fit the arrangement.</p>
+<p><strong><a href="https://windhawk.net/mods/taskbar-vertical">Vertical Taskbar</a> — supported
+in its default native mode</strong>, which uses the same native side taskbar. With
+its "Use the native taskbar when possible" option turned off, it rotates a
+horizontal taskbar instead, writing <code>RenderTransform</code> on the very OmniButton
+elements this mod moves. One property cannot have two owners, so this mod
+detects that case (the taskbar runs down a side while Windows still reports a
+horizontal edge), leaves the native OmniButton completely untouched, and says
+so in the Windhawk log.</p>
+<h2 id="taskbarstyler">Taskbar Styler</h2>
+<p>Does not use XAML Diagnostics, so it is compatible with Windows 11 Taskbar
+Styler. The mod leases the native elements' dependency properties and restores
+each one's exact prior local value when it unloads.</p>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>The items may not appear arranged until the mod injects on the first tray
+icon load; the retry loop runs up to 5 times at 2-second intervals</li>
+<li>A glyph's color, size, and font wait for its XAML template to expand. That
+normally happens within a few layout passes; if an item's template never
+produces a text glyph, the log says so and the item keeps its native
+appearance</li>
+<li>Turning the battery percentage on or off in Windows Settings sometimes needs
+the next Explorer start before the taskbar reflects it. That is Windows, not
+this mod — the arrangement follows whatever ends up on screen</li>
+<li>Switching every item off under <code>Content</code> leaves a small blank button rather
+than nothing at all. That button is still the way into Quick Settings, so it
+keeps a minimum clickable size on purpose</li>
+</ul>]]></content>
+        <author>
+            <name>sb4ssman</name>
+            <uri>https://github.com/sb4ssman</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Virtual Desktop Switcher 2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-vd-switcher#f9b3bde0d49096c5c76a161f2e3ca08ec5d7f976</id>
+        <link href="https://windhawk.net/mods/taskbar-vd-switcher"/>
+        <updated>2026-10-08T22:00:56.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added grouped settings and one nestable Arrangement expression; old renamed keys reset once</li>
+<li>Added native side-taskbar layouts and literal written arrangements</li>
+<li>Added experimental Windows 10 tray-window placement and compact automatic grids</li>
+<li>The Windows 10 backend waits on registry change notifications instead of polling Explorer, and keeps a hidden bar while its anchor is missing instead of forcing taskbar relayouts</li>
+<li>Hardened rebuild, settings, teardown and retry lifecycle handling</li>
+<li>Added DPI-aware preview fonts and bounded same-process caption reads</li>
+<li>Retained configurable labels/symbols/fonts, native checked states and hover previews</li>
+</ul>]]></content>
+        <author>
+            <name>sb4ssman</name>
+            <uri>https://github.com/sb4ssman</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[D3D9 Flip Model Upgrade 1.1]]></title>
         <id>https://windhawk.net/mods/d3d9-flip-model-upgrade#feb623294a194eecdb29c8459f4bdcd941466458</id>
@@ -639,339 +1200,6 @@ and may stay in front of that elevated window.</li>
         <author>
             <name>Torsion</name>
             <uri>https://github.com/Torsion1035</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix for Classic theme metrics on 24H2, 25H2, 26H2 builds 9444+ 1.0]]></title>
-        <id>https://windhawk.net/mods/classic-theme-metrics-fix#eb5196771051983b0382a6c06a410bc53d7675ce</id>
-        <link href="https://windhawk.net/mods/classic-theme-metrics-fix"/>
-        <updated>2026-10-07T08:01:24.000Z</updated>
-        <content type="html"><![CDATA[<p>This mod is intended to workaround the bug with broken titlebar and scrollbar buttons in Classic theme on Windows 11 24H2, 25H2, 26H2 with build number 9444 and newer or version 26H1. If you are on build 8875 or below, you do not need this mod.</p>
-<p>On the newest builds of Windows Microsoft broke the very core of its operating system, the essential part of the kernel,
-the module win32k.sys. This led to the titlebar buttons and scrollbars in unthemed applications being broken.</p>
-<p>How it works? On the affected build the actual size of the titlebar and scrollbar buttons is taken from the user's registry
-section, while their visible size is takes from the default user. This makes the buttons to be painted with different size than their actual size, creating garbage and visual glitches.</p>
-<p>This mod copies the user's window metrics data from the current user (HKEY<em>CURRENT</em>USER\Control Panel\Desktop\WindowMetrics) to the default user (HKEY_USERS.DEFAULT\Control Panel\Desktop\WindowMetrics) upon theme change, thus
-forcing them being in sync. </p>
-<p>Unfortunately, the values from the default user's registry are read only once during the login screen. This makes it impossible to intercept the query during the interactive user's session.
-After a theme change, re-login for the changes to take effect.</p>
-<p>Before mod:</p>
-<p><img src="https://i.imgur.com/MSXt5Wt.png" alt="before" /></p>
-<p>After mod:</p>
-<p><img src="https://i.imgur.com/Y8GreLt.png" alt="after" /></p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic WebView Pane 2.17]]></title>
-        <id>https://windhawk.net/mods/classic-webview-pane#7d87bb3f48d7cfc2bd2150fc583a4e481fb84a29</id>
-        <link href="https://windhawk.net/mods/classic-webview-pane"/>
-        <updated>2026-10-07T08:01:19.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add individually switchable file thumbnails, an image viewer for Pictures/imgview folders, metadata, attributes, multiple-selection details, special-folder templates/actions and background printer updates.</li>
-<li>Add zoom, panning, actual size, best fit, printing and a separate image window. The Separate Window button can instead launch a user-selected viewer with configurable arguments and a quoted image path.</li>
-<li>Add Windows 2000/98/Me profiles, automatic English/Russian captions based on the Windows display language, language overrides and editable text captions. Built-in clouds use Picture width 0; squares use 127, matching the reference DLL, without overwriting the saved manual width.</li>
-<li>Preserve the 2.16 disk-chart and startup-layout fixes. Limit attachment to Explorer folder frames, preserve Desktop interaction and remove obsolete preview controls when the active folder changes.</li>
-<li>Retain a complete pane during Shell view replacement, preserve the shared sunken frame and corner artwork, and use the same NT5 pane width in Pictures and ordinary folders.</li>
-<li>Correct preview-toolbar painting, resizing and window recreation. Remove the extra white toolbar gap in both embedded and separate viewers; scroll overflowing details independently of the preview, with optional compact headers.</li>
-<li>Restore special-folder description plaques with system tooltip colours/font and tight, balanced text padding; correct profile colours and background blending.</li>
-<li>Keep divider colours in their original positions when a scrollbar appears: clip the full-width divider beneath the scrollbar. Avoid spurious horizontal scrolling caused by DPI rounding.</li>
-<li>Cancel stale preview results, join workers before unloading and preserve complete settings snapshots during nested Shell callbacks. Independently implement the identified Windows-source fragments and clarify setting scope/defaults.</li>
-</ul>]]></content>
-        <author>
-            <name>appEW</name>
-            <uri>https://github.com/appEW</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Picker 1.5.4]]></title>
-        <id>https://windhawk.net/mods/explorer-picker#e107837f61706174ee2d11039349466bb78d2fb6</id>
-        <link href="https://windhawk.net/mods/explorer-picker"/>
-        <updated>2026-10-07T07:00:02.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorerpicker">Explorer Picker</h1>
-<p>The Open, Save As and folder picker dialogs of every program are replaced with
-a real Explorer window (<code>explorer.exe</code>) with a File name / Files of type / Open /
-Cancel bar at the bottom. The folder tree, the toolbars, the address bar and
-the status bar are the same as in any other Explorer window, along with
-whatever other mods change them.</p>
-<blockquote>
-  <p><strong>Tested only on Windows 11 24H2 (build 26100).</strong> It has not been tried on any other version of Windows and may not work there.</p>
-</blockquote>
-<h2 id="screenshots">Screenshots / Скриншоты</h2>
-<p>The screenshots use a classic theme and additional Explorer mods.
-На скриншотах используются классическая тема и дополнительные моды Проводника.</p>
-<p><strong>Choosing a background photo / Выбор фотографии для фона</strong></p>
-<p><img src="https://raw.githubusercontent.com/appEW/windhawk-mods/eba5481bf58fc0a7354a1fe2a5c979d24a4a2685/EP1.png" alt="Choosing a background photo / Выбор фотографии для фона" /></p>
-<p><strong>Choosing a folder / Выбор папки</strong></p>
-<p><img src="https://raw.githubusercontent.com/appEW/windhawk-mods/eba5481bf58fc0a7354a1fe2a5c979d24a4a2685/EP2.png" alt="Choosing a folder / Выбор папки" /></p>
-<p><strong>Opening a file / Открытие файла</strong></p>
-<p><img src="https://raw.githubusercontent.com/appEW/windhawk-mods/eba5481bf58fc0a7354a1fe2a5c979d24a4a2685/EP3.png" alt="Opening a file / Открытие файла" /></p>
-<h2 id="howitworks">How it works</h2>
-<p>The one mod plays both parts:</p>
-<ul>
-<li>in <code>explorer.exe</code> it opens the picker window, builds the bar at the bottom
-and reads the current folder and the selection itself;</li>
-<li>in every other process it intercepts <code>GetOpenFileName</code> / <code>GetSaveFileName</code>
-(Unicode and ANSI) and <code>IFileOpenDialog</code> / <code>IFileSaveDialog</code>, passes the
-request to Explorer, and hands the result back to the program in the form it
-expects.</li>
-</ul>
-<p>Supported: opening one or several files, saving with a confirmation before
-replacing a file, picking a folder, file type filters, <code>IFileDialogEvents</code>
-events, the extra controls of <code>IFileDialogCustomize</code> (check boxes, combo boxes,
-radio buttons, edit boxes, buttons, labels, groups, menus), and the templates
-and hook procedures of old-style dialogs with their check boxes. System file
-pickers, including the Windows Background photo picker, and native application
-panels such as REAPER's project-saving options are supported. Application item
-filters are checked before accepting files; Explorer keeps its usual folder
-contents. Programs
-running as administrator use their native dialogs by default. The optional
-setting to replace those dialogs allows programs without administrator rights
-to influence the choice made by an administrator program.</p>
-<p>If a program asks for something Explorer cannot do, or Explorer is not
-available, the normal dialog is shown. The risky option below can ignore
-additional application features.</p>
-<h2 id="riskyignoreadditionalapplicationfeatures">Risky: ignore additional application features</h2>
-<p><strong>Ignore additional dialog features (risky)</strong> is <strong>disabled by default</strong>.
-When enabled, the picker omits application controls, native panels, previews
-and dialog-event callbacks, including application-specific acceptance checks.
-Old Win32 dialog hooks, templates and editable custom filters are also
-ignored. This lets Explorer replace dialogs whose additional features would
-otherwise require the native window. Extra options cannot be changed; the
-application may use its defaults or retained values instead.</p>
-<p><strong>Use at your own risk:</strong> application-specific behavior and validation can be
-lost, causing incorrect opening or saving, crashes or data loss. Ordinary
-file types, result buffers, item filters, path checks and overwrite
-confirmation remain supported. Unrepresentable results, required unsupported
-file-dialog behavior or an unavailable Explorer can still require the native
-dialog. Disabling the option restores the usual compatibility handling.</p>
-<p>By default, services, system accounts, critical processes, AppContainer
-processes, Chromium worker processes and Windhawk itself are skipped. Single
-programs can be excluded on the <em>Advanced</em> tab.</p>
-<p>The picker is an ordinary Explorer window: its size, navigation history and
-recent locations are handled by Explorer, just like those of other folder windows.
-Disabling the mod cancels active pickers and releases its windows and threads.
-Applications keep their original Windows COM dialog objects.</p>
-<p>The texts of the bar and of its messages follow the Windows display language:
-Russian on a Russian Windows, the wording of the English common dialog
-everywhere else. Application-provided captions keep the application's language.
-The panel updates its default captions when Windows notifies it of a settings
-change. Its font and spacing follow the window's DPI; long captions wrap and
-the rows grow to keep the text inside the controls.</p>
-<hr />
-<h2 id="">По-русски</h2>
-<p>Окна «Открыть», «Сохранить как» и «Выбор папки» всех программ заменяются
-настоящим окном Проводника (explorer.exe) с нижней панелью «Имя файла» /
-«Тип файлов» / «Открыть» / «Отмена». Дерево папок, панели инструментов,
-адресная строка и строка состояния — те же, что в обычном Проводнике.</p>
-<p>Один мод выполняет обе роли:</p>
-<ul>
-<li>в explorer.exe — открывает окно выбора, встраивает нижнюю панель и сам
-читает текущую папку и выделение;</li>
-<li>в остальных процессах — перехватывает <code>GetOpenFileName</code>/<code>GetSaveFileName</code>
-(Unicode и ANSI) и <code>IFileOpenDialog</code>/<code>IFileSaveDialog</code>, передаёт запрос в
-Проводник и возвращает программе результат в привычной для неё форме.</li>
-</ul>
-<p>Поддерживаются: один и несколько файлов, сохранение с подтверждением замены,
-выбор папки, фильтры типов, события <code>IFileDialogEvents</code>, дополнительные
-элементы <code>IFileDialogCustomize</code> (флажки, списки, переключатели, поля, кнопки,
-надписи, группы, меню), шаблоны/обработчики старых диалогов с флажками.
-Поддерживаются системный выбор фотографии для фона Windows и native-панели
-приложений, включая параметры сохранения проекта REAPER. Фильтр приложения
-проверяется перед принятием файлов; содержимое папки отображается как в
-обычном Проводнике.
-Программы с правами администратора по умолчанию используют штатные диалоги.
-Опциональное включение замены позволяет программам без прав администратора
-влиять на выбор файла программой с правами администратора.</p>
-<p>Если программа запрашивает то, что нельзя повторить в Проводнике, или
-Проводник недоступен, показывается обычное окно. Рискованная опция ниже позволяет
-игнорировать дополнительные функции приложения.</p>
-<h3 id="-1">Рискованно: игнорирование дополнительных функций приложения</h3>
-<p><strong>«Игнорировать дополнительные функции диалогов (рискованно)»</strong>
-<strong>по умолчанию выключено</strong>. При включении не показываются элементы приложения,
-native-панели и предпросмотр, не вызываются обработчики событий диалога, включая
-дополнительные проверки принятия файла. В старых Win32-диалогах также
-игнорируются hooks, шаблоны и редактируемые пользовательские фильтры. Поэтому
-Проводник может заменить окно даже при несовместимых дополнительных элементах.
-Изменить дополнительные параметры нельзя: приложение может использовать
-значения по умолчанию или ранее заданные значения.</p>
-<p><strong>Используйте на свой страх и риск:</strong> потеря специальных функций и проверок
-может привести к неправильному открытию/сохранению, сбоям или потере данных.
-Обычные типы файлов, буферы результата, фильтр допустимых элементов, проверка
-пути и подтверждение перезаписи сохраняются. Непредставимый результат,
-обязательные неподдерживаемые функции или недоступный Проводник по-прежнему
-могут потребовать штатный диалог. Выключение опции возвращает обычную обработку
-совместимости.</p>
-<p>По умолчанию пропускаются службы, системные учётные записи, критические
-процессы, AppContainer, дочерние процессы Chromium и сам Windhawk.
-Отдельные программы можно исключить на вкладке «Дополнительно».</p>
-<p>Окно выбора является обычным окном Проводника: размер, история переходов
-и недавние папки обрабатываются Проводником как в других окнах папок.
-Отключение мода отменяет открытые окна выбора и освобождает его окна и потоки.
-Приложения сохраняют исходные COM-объекты диалогов Windows.</p>
-<p>Надписи на нижней панели и тексты сообщений следуют языку интерфейса Windows:
-в русской Windows - по-русски, в остальных - как в английском стандартном окне
-выбора файла. Подписи, переданные приложением, сохраняют его язык. При уведомлении
-Windows об изменении настроек стандартные подписи панели обновляются. Шрифт и
-отступы следуют DPI окна; длинные подписи переносятся, а высота строк увеличивается,
-чтобы текст помещался в элементах.</p>
-<blockquote>
-  <p><strong>Проверено только на Windows 11 24H2 (сборка 26100).</strong> На других версиях Windows мод не проверялся и может не работать.</p>
-</blockquote>]]></content>
-        <author>
-            <name>appEW</name>
-            <uri>https://github.com/appEW</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer real folder paths 0.1.5]]></title>
-        <id>https://windhawk.net/mods/explorer-real-folder-paths#2f67edf76611c6f463382cfbd6c987a4d6ee9d6b</id>
-        <link href="https://windhawk.net/mods/explorer-real-folder-paths"/>
-        <updated>2026-10-06T22:05:13.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix editable address paths for Dropbox and similar filesystem folders that retain a friendly editing name.</li>
-<li>Keep the existing navigation behavior when the additional Shell name symbol is unavailable.</li>
-</ul>]]></content>
-        <author>
-            <name>Nerdworld</name>
-            <uri>https://github.com/nerdworldDE</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[DXGI Flip Model Upgrade 1.0]]></title>
-        <id>https://windhawk.net/mods/dxgi-flip-model-upgrade#9db4af94bd5192d63c643e458ac38c88b2b297f3</id>
-        <link href="https://windhawk.net/mods/dxgi-flip-model-upgrade"/>
-        <updated>2026-10-06T22:05:09.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="dxgiflipmodelupgrade">DXGI Flip Model Upgrade</h1>
-<p><strong>Important: restart the game after this mod gets disabled, updated or
-reloaded while the game runs.</strong> The game keeps its upgraded swap chains, which
-need the mod for resizing and for keeping its render targets bound, so it may
-show a frozen or black picture, or fail. That includes mod updates that
-Windhawk installs automatically in the background. If you play with this mod
-enabled, consider turning off automatic updates for it.</p>
-<p>Many Direct3D 11 games present with the legacy <em>blt model</em>
-(<code>DXGI_SWAP_EFFECT_DISCARD</code> or <code>SEQUENTIAL</code>): in a window or borderless window,
-every frame is copied and composed by DWM, which adds latency and blocks
-Independent Flip. PresentMon reports them as <code>Composed: Copy with GPU GDI</code>.
-Many games also never enable tearing, so with VSync off they're still capped
-at the refresh rate in a window.</p>
-<p>This mod changes the swap chains the game creates:</p>
-<ul>
-<li><strong>Force flip model:</strong> blt model swap chains of Direct3D 11 games use the flip
-model instead (<code>FLIP_DISCARD</code> or <code>FLIP_SEQUENTIAL</code>). Once the game window
-covers the whole screen, DWM can promote it to <strong>Independent Flip</strong>.</li>
-<li><strong>Force allow tearing:</strong> flip model swap chains of Direct3D 11 and 12 games
-allow tearing, and frames presented with VSync off show immediately.</li>
-<li><strong>Maximum frame latency</strong>, <strong>Waitable swap chain</strong> and <strong>Force borderless</strong>
-are off by default, see their descriptions in the settings.</li>
-</ul>
-<p>Windows 11 has a similar system-wide option, "Optimizations for windowed
-games", for Direct3D 10 and 11. This mod applies per game, also works on
-Windows 10, and adds tearing.</p>
-<h2 id="howtoenablethemodforaprogram">How to enable the mod for a program</h2>
-<p>This mod doesn't target any process by default. In Windhawk, go to the mod's
-"Advanced" tab and scroll down to "Custom process inclusion list". In that box,
-put the filename of the game's <code>.exe</code>, then click "Save" and (re)start the game.
-Only swap chains created while the mod is loaded are changed.</p>
-<h2 id="howtoverify">How to verify</h2>
-<p>Use <a href="https://github.com/GameTechDev/PresentMon">PresentMon</a> (or an overlay that
-shows the presentation mode, such as RTSS). With the flip model, the game should
-show <code>Hardware: Independent Flip</code> or <code>Hardware Composed: Independent Flip</code> in
-borderless fullscreen, and <code>Composed: Flip</code> in a smaller window. With tearing
-and VSync off, the frame rate can go above the refresh rate. The log says what
-was changed for each swap chain, and why something wasn't.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>Not changed to the flip model: swap chains with a multisampled back buffer,
-swap chains created in exclusive fullscreen (those already get flip
-presentation through Fullscreen Optimizations), Direct3D 10 games, and back
-buffer formats the flip model doesn't support.</li>
-<li>sRGB back buffers aren't supported by the flip model, so their format becomes
-the non-sRGB one. Render target views the game creates for them still get the
-sRGB format, but a game that reads the back buffer format sees the other one.</li>
-<li>The flip model only shows what the game renders with Direct3D. Anything drawn
-into the game window with GDI disappears.</li>
-<li>Tearing doesn't apply in exclusive fullscreen.</li>
-<li>With <strong>Force borderless</strong>, the game runs at the desktop resolution, and its
-picture is stretched if it renders at another one. The game is told it's in
-fullscreen. Alt+Enter is turned off for those swap chains, as it would switch
-to exclusive fullscreen behind the mod's back.</li>
-<li>With <strong>Waitable swap chain</strong>, games that already use a waitable swap chain
-keep their own settings.</li>
-<li>If the game loads <code>dxgi.dll</code> only after it started, the mod's hooks are
-installed a moment after that, and a swap chain the game creates right away
-may keep the blt model. The log then shows no "Hooked" lines before that swap
-chain.</li>
-</ul>
-<h2 id="anticheat">Anti-cheat</h2>
-<p><strong>Don't use this mod in online games protected by anti-cheat.</strong> It loads code
-into the game and hooks DXGI and Direct3D 11 functions:
-<code>CreateDXGIFactory</code>, <code>CreateDXGIFactory1</code> and <code>CreateDXGIFactory2</code>,
-<code>IDXGIFactory::CreateSwapChain</code> and <code>IDXGIFactory2::CreateSwapChainForHwnd</code>,
-<code>IDXGISwapChain::Present</code>, <code>Present1</code>, <code>ResizeBuffers</code>, <code>ResizeBuffers1</code>,
-<code>SetFullscreenState</code>, <code>GetFullscreenState</code> and <code>ResizeTarget</code>,
-<code>IDXGIDevice1::SetMaximumFrameLatency</code> and
-<code>ID3D11Device::CreateRenderTargetView</code>. It hooks no Windows loader or kernel
-functions, such as <code>LoadLibraryExW</code> in <code>kernelbase.dll</code>: if <code>dxgi.dll</code> isn't
-loaded yet when the mod starts, the mod learns about it through a Windows DLL
-load notification, and a thread of the mod installs the hooks. With <strong>Force
-borderless</strong>, another thread changes the game window. Present hooks are also
-how cheats draw overlays, so anti-cheat software may block the game, kick you
-or ban your account. There are no guarantees for any game.</p>
-<p>Enable the mod's logging (Advanced → Debug logging) to see what happens.</p>]]></content>
-        <author>
-            <name>tria</name>
-            <uri>https://github.com/triatomic</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[ClassicWindowSwitcher 1.3]]></title>
-        <id>https://windhawk.net/mods/classic-window-switcher#ef7ebe709b53c0e14da6769f29a9a5b0501facb6</id>
-        <link href="https://windhawk.net/mods/classic-window-switcher"/>
-        <updated>2026-10-06T22:05:05.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicwindowswitcher">ClassicWindowSwitcher</h1>
-<ul>
-<li>This mod brings back the classic Alt+Tab dialog, even on Windows 11 24H2+, which removed the old switcher in win32kfull.sys.</li>
-<li>This is a direct port of my <a href="https://github.com/Ingan121/ClassicWindowSwitcher">ClassicWindowSwitcher</a>, which is a fork of valinet's <a href="https://github.com/valinet/sws">SimpleWindowSwitcher</a>.</li>
-<li>Please do not use this mod with other Alt+Tab mods. They might conflict with this mod.</li>
-<li>If you are using an alternative shell like Explorer7, have disabled the modern Alt+Tab UI with <code>AltTabSettings</code> registry, or if you prefer to have the classic Alt+Tab restored (on 24H2+) even without Explorer running, enable the last option in the mod settings.<ul>
-<li>If you enable this setting, you may have to restart Explorer after disabling this mod to get the modern switcher UI back.</li></ul></li>
-</ul>
-<p><img src="https://raw.githubusercontent.com/Ingan121/ClassicWindowSwitcher/refs/heads/master/cws.webp" alt="Animated Screenshot" /></p>
-<h2 id="differenceswiththeoriginalclassicswitcher">Differences with the original classic switcher</h2>
-<ul>
-<li>It works even on Windows 11 24H2 and later.</li>
-<li>It shows UWP icons properly.</li>
-<li>You can navigate through the items with a mouse, the mouse wheel, or arrow keys.<ul>
-<li>Press Ctrl+Alt+Tab to keep the switcher open after releasing the Alt key.</li></ul></li>
-<li>You can close a focused window by pressing the Del key while the switcher is active.</li>
-<li>It features many configurable options.<ul>
-<li>It can optionally show a per-application window list when you press Alt+Tilde.</li></ul></li>
-</ul>]]></content>
-        <author>
-            <name>Ingan121</name>
-            <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Count Badges 1.2.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-count-badges#9fe62571e50a548b5f23fef91e948b03d74b78af</id>
-        <link href="https://windhawk.net/mods/taskbar-count-badges"/>
-        <updated>2026-10-06T21:03:54.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add horizontal and vertical offset settings for dots</li>
-<li>Add active/inactive indicator styling</li>
-<li>Dim inactive dots while keeping the active app indicator at full opacity</li>
-<li>Dim inactive number-badge backgrounds while keeping the badge text readable</li>
-<li>Add configurable inactive opacity</li>
-<li>Allow inactive dimming to be disabled</li>
-<li>Update the embedded mod documentation for version 1.2.0</li>
-</ul>]]></content>
-        <author>
-            <name>digART</name>
-            <uri>https://github.com/digart11</uri>
         </author>
     </entry>
 </feed>

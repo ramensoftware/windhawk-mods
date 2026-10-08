@@ -5761,6 +5761,31 @@
         "version": "1.4.0"
       }
     },
+    "explorer-steam-games": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791496877000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791496877000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "HaVeN80",
+        "compilerOptions": "-lole32 -lshell32 -lshlwapi -luuid -ladvapi32 -lwindowscodecs",
+        "description": "Your Steam games in the File Explorer navigation pane: launch, open folders, playtime, collections (Epic, GOG and Xbox experimental)",
+        "github": "https://github.com/haven80",
+        "include": [
+          "windhawk.exe",
+          "explorer.exe"
+        ],
+        "name": "Steam Games in Explorer",
+        "version": "1.0"
+      }
+    },
     "explorer-tab-utility-window-hider": {
       "details": {
         "defaultSorting": 369,
@@ -6833,6 +6858,30 @@
         "name": "Flight Simulator window focus helper",
         "twitter": "https://twitter.com/m417z",
         "version": "1.1"
+      }
+    },
+    "fluid-wallpaper": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791496882000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791496882000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "HaVeN80",
+        "compilerOptions": "-ld3d11 -ldxgi -ldcomp -ldwmapi -lwtsapi32 -lgdi32 -luser32 -lshell32 -luuid",
+        "description": "Animated GPU fluid simulation wallpaper with autonomous motion, mouse interaction and per-monitor rendering",
+        "github": "https://github.com/haven80",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Fluid Wallpaper",
+        "version": "1.0.0"
       }
     },
     "folder-thumbnail-style-switcher": {
@@ -9837,6 +9886,27 @@
         "version": "1.1.9"
       }
     },
+    "numpad-disabler": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791496886000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791496886000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "osmanonurkoc",
+        "compilerOptions": "-luser32",
+        "description": "Selectively disables Numpad key detection for a specific application. Prevents background tools or game trainers from intercepting Numpad inputs.",
+        "github": "https://github.com/osmanonurkoc",
+        "name": "Numpad Disabler",
+        "version": "1.0.0"
+      }
+    },
     "nvidia-control-panel-missing-dialog-hider": {
       "details": {
         "defaultSorting": 590,
@@ -10063,6 +10133,33 @@
         ],
         "name": "Old This PC Commands",
         "version": "1.0.1"
+      }
+    },
+    "omnibutton-customizer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791496862000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791496862000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "sb4ssman",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion",
+        "description": "Arrange the Windows 11 OmniButton's network, volume, battery and percentage into any layout you write, hide any of them, and recolor them independently",
+        "github": "https://github.com/sb4ssman",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "OmniButton Customizer",
+        "version": "2.1"
       }
     },
     "on-screen-indicator-position": {
@@ -13671,7 +13768,7 @@
         "ratingUsers": 16,
         "reviews": 0,
         "trendingSorting": -0.7882496796534046,
-        "updated": 1784834873000,
+        "updated": 1791496868000,
         "users": 252
       },
       "metadata": {
@@ -13679,14 +13776,14 @@
           "x86-64"
         ],
         "author": "sb4ssman",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshell32 -luuid -lgdi32 -lcomctl32",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -lgdi32 -lcomctl32",
         "description": "Adds compact Windows 11 taskbar buttons that open configured Shell targets as popup menus, similar to classic taskbar toolbars.",
         "github": "https://github.com/sb4ssman",
         "include": [
           "explorer.exe"
         ],
         "name": "Taskbar Folder Menus",
-        "version": "0.7"
+        "version": "2.1"
       }
     },
     "taskbar-grouping": {
@@ -14917,7 +15014,7 @@
         "ratingUsers": 19,
         "reviews": 0,
         "trendingSorting": 0.49623620075895564,
-        "updated": 1784382633000,
+        "updated": 1791496856000,
         "users": 336
       },
       "metadata": {
@@ -14925,14 +15022,14 @@
           "x86-64"
         ],
         "author": "sb4ssman",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion -luuid",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion -luuid -ldwmapi -lgdi32 -lcomctl32",
         "description": "Injects clickable buttons into the taskbar — one per virtual desktop — with configurable grid arrangement for direct switching.",
         "github": "https://github.com/sb4ssman",
         "include": [
           "explorer.exe"
         ],
         "name": "Taskbar Virtual Desktop Switcher",
-        "version": "1.7"
+        "version": "2.1"
       }
     },
     "taskbar-vertical": {
@@ -15683,7 +15780,7 @@
         "ratingUsers": 9,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1784835109000,
+        "updated": 1791496872000,
         "users": 98
       },
       "metadata": {
@@ -15698,7 +15795,7 @@
           "explorer.exe"
         ],
         "name": "Tray Utility Customizer",
-        "version": "1.1"
+        "version": "2.1"
       }
     },
     "two-sided-snapping": {
