@@ -5,8 +5,7 @@
 // @version         1.0
 // @author          nikitor32
 // @github          https://github.com/nikitor32
-// @include         explorer.exe
-// @architecture    x86-64
+// @include         windhawk.exe
 // @compilerOptions -lshell32
 // ==/WindhawkMod==
 
@@ -24,10 +23,10 @@ the taskbar. If the taskbar becomes visible for another reason — for
 example, when a new window or dialog appears — no "pointer left" event ever
 fires, and the taskbar stays on screen indefinitely.
 
-This mod watches the taskbars. As soon as a taskbar becomes visible while
-the mouse pointer is **not** over it, a countdown starts. When the countdown
-expires, the taskbar is hidden again using the taskbar's own hide timer, so
-it slides away with the standard animation.
+The mod runs as a small background tool and watches the taskbars. As soon as
+a taskbar becomes visible while the mouse pointer is **not** over it, a
+countdown starts. When the countdown expires, the mod sends the taskbar its
+own hide message, so it slides away with the standard animation.
 
 If you move the pointer over the taskbar, the countdown is cancelled so the
 taskbar stays available while you interact with it.
@@ -36,9 +35,17 @@ The mod does nothing if auto-hide is disabled in the Windows settings.
 
 ## Settings
 
-* **Enable delayed auto-hide** — turn the mod on or off.
 * **Hide delay (seconds)** — how long the taskbar stays visible before it
   is hidden. Default: 3.
+
+## Compared to Better Taskbar Autohide
+
+[Better Taskbar Autohide](https://windhawk.net/mods/taskbar-autohide-better)
+covers a narrower case: it hooks the taskbar internals and only helps when
+Windows forces the taskbar to stay shown because an inactive window is
+notifying. This mod reacts to any reason the taskbar becomes visible —
+new windows, dialogs, notifications — and uses no hooks, so it does not
+depend on the taskbar's internal code.
 
 ## Compatibility
 
@@ -52,14 +59,11 @@ and
 
 // ==WindhawkModSettings==
 /*
-- enabled: true
-  $name: Enable delayed auto-hide
-  $description: If disabled, the mod does nothing.
 - hideDelaySeconds: 3
   $name: Hide delay (seconds)
   $description: How long the taskbar stays visible (with the pointer not over it) before it's hidden.
 */
-// ==/WindhawkModSettings==
+// ==WindhawkModSettings==
 
 #include <shellapi.h>
 
@@ -68,30 +72,30 @@ and
 #include <unordered_map>
 #include <vector>
 
-// The settings are read from the polling thread while they can be updated
-// from another thread, so atomic types are used to avoid data races.
-std::atomic<bool> g_enabled{true};
+// The delay can be updated from another thread while the polling thread
+// reads it, so an atomic type is used to avoid a data race.
 std::atomic<int> g_hideDelaySeconds{3};
 
 // The taskbar hides itself when its internal "hide" timer (ID 2) fires.
-// This is the same trick the official taskbar mods use.
+// We post WM_TIMER with that ID instead of arming a timer: the taskbar
+// handles the message once, on its own thread, and no timer is left behind.
 constexpr UINT_PTR kTrayUITimerHide = 2;
 
 // How often we check the taskbar state, in milliseconds.
 constexpr DWORD kPollIntervalMs = 300;
 
-std::atomic<bool> g_stopFlag{false};
+HANDLE g_stopEvent = nullptr;
 HANDLE g_threadHandle = nullptr;
 
-// Per-taskbar countdown state.
+// Per-taskbar countdown state. Owned by the polling thread.
 struct TaskbarState {
     bool countdownActive = false;
     ULONGLONG countdownStart = 0;
 };
-std::unordered_map<HWND, TaskbarState> g_states;
+
+using StateMap = std::unordered_map<HWND, TaskbarState>;
 
 void LoadSettings() {
-    g_enabled.store(Wh_GetIntSetting(L"enabled") != 0);
     int hideDelaySeconds = Wh_GetIntSetting(L"hideDelaySeconds");
     if (hideDelaySeconds < 0) {
         hideDelaySeconds = 0;
@@ -129,7 +133,9 @@ void CollectTaskbars(std::vector<HWND>* out) {
 
 // Returns true if enough of the taskbar is on screen to be considered
 // visible. When auto-hidden, the taskbar is moved mostly off-screen, so only
-// a sliver remains.
+// a sliver remains. The visible part is the intersection of the window rect
+// with the monitor rect, which handles taskbars on any edge, including side
+// taskbars placed by other mods.
 bool IsTaskbarShown(HWND hwnd, RECT* rectOut) {
     RECT rc;
     if (!GetWindowRect(hwnd, &rc)) {
@@ -143,17 +149,17 @@ bool IsTaskbarShown(HWND hwnd, RECT* rectOut) {
         return false;
     }
 
-    int visibleTop = (std::max)(rc.top, mi.rcMonitor.top);
-    int visibleBottom = (std::min)(rc.bottom, mi.rcMonitor.bottom);
-    int visibleHeight = visibleBottom - visibleTop;
-    int fullHeight = rc.bottom - rc.top;
-
-    if (fullHeight <= 0) {
+    RECT visible;
+    if (!IntersectRect(&visible, &rc, &mi.rcMonitor)) {
         return false;
     }
 
+    LONGLONG fullArea = (LONGLONG)(rc.right - rc.left) * (rc.bottom - rc.top);
+    LONGLONG visibleArea = (LONGLONG)(visible.right - visible.left) *
+                           (visible.bottom - visible.top);
+
     // At least half of the taskbar is on screen.
-    bool shown = visibleHeight * 2 >= fullHeight;
+    bool shown = fullArea > 0 && visibleArea * 2 >= fullArea;
     if (shown) {
         *rectOut = rc;
     }
@@ -168,25 +174,15 @@ bool IsPointerOver(const RECT& rc) {
     return PtInRect(&rc, pt) != 0;
 }
 
-void PollOnce() {
-    if (!g_enabled.load()) {
-        return;
-    }
-
-    // If auto-hide is off, never touch the taskbar.
-    if (!IsAutoHideEnabled()) {
-        g_states.clear();
-        return;
-    }
-
+void PollOnce(StateMap* states) {
     std::vector<HWND> taskbars;
     CollectTaskbars(&taskbars);
 
     // Forget state for taskbars that no longer exist.
-    for (auto it = g_states.begin(); it != g_states.end();) {
+    for (auto it = states->begin(); it != states->end();) {
         if (std::find(taskbars.begin(), taskbars.end(), it->first) ==
             taskbars.end()) {
-            it = g_states.erase(it);
+            it = states->erase(it);
         } else {
             ++it;
         }
@@ -200,7 +196,7 @@ void PollOnce() {
         RECT rc;
         bool shown = IsTaskbarShown(hwnd, &rc);
 
-        TaskbarState& state = g_states[hwnd];
+        TaskbarState& state = (*states)[hwnd];
 
         // Hidden -> reset the countdown.
         if (!shown) {
@@ -223,8 +219,13 @@ void PollOnce() {
             Wh_Log(L"Taskbar %08X visible, starting %d s countdown",
                    (DWORD)(ULONG_PTR)hwnd, hideDelaySeconds);
         } else if (now - state.countdownStart >= delayMs) {
-            Wh_Log(L"Taskbar %08X: hiding after delay", (DWORD)(ULONG_PTR)hwnd);
-            SetTimer(hwnd, kTrayUITimerHide, 0, nullptr);
+            // Ask the taskbar to hide only when Windows auto-hide is on.
+            // The state query happens once per countdown, not every poll.
+            if (IsAutoHideEnabled()) {
+                Wh_Log(L"Taskbar %08X: hiding after delay",
+                       (DWORD)(ULONG_PTR)hwnd);
+                PostMessage(hwnd, WM_TIMER, kTrayUITimerHide, 0);
+            }
             state.countdownActive = false;
             state.countdownStart = 0;
         }
@@ -232,44 +233,236 @@ void PollOnce() {
 }
 
 DWORD WINAPI PollThread(LPVOID /*param*/) {
-    while (!g_stopFlag.load()) {
-        PollOnce();
-        Sleep(kPollIntervalMs);
+    // The state map is local: only this thread touches it.
+    StateMap states;
+
+    // Waiting on the stop event doubles as the polling interval, so the
+    // thread exits promptly once the mod is unloaded.
+    while (WaitForSingleObject(g_stopEvent, kPollIntervalMs) ==
+           WAIT_TIMEOUT) {
+        PollOnce(&states);
     }
     return 0;
 }
 
-BOOL Wh_ModInit() {
+bool WhTool_ModInit() {
     Wh_Log(L">");
     LoadSettings();
+
+    g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (!g_stopEvent) {
+        Wh_Log(L"CreateEvent failed");
+        return false;
+    }
+
+    g_threadHandle = CreateThread(nullptr, 0, PollThread, nullptr, 0, nullptr);
+    if (!g_threadHandle) {
+        Wh_Log(L"CreateThread failed");
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+        return false;
+    }
+    return true;
+}
+
+void WhTool_ModSettingsChanged() {
+    Wh_Log(L">");
+    LoadSettings();
+}
+
+void WhTool_ModUninit() {
+    Wh_Log(L">");
+    // Wait for the polling thread without a timeout: it can block inside
+    // SHAppBarMessage while the taskbar thread is busy, and unloading the
+    // mod while the thread is still running would crash the process.
+    if (g_stopEvent) {
+        SetEvent(g_stopEvent);
+    }
+    if (g_threadHandle) {
+        WaitForSingleObject(g_threadHandle, INFINITE);
+        CloseHandle(g_threadHandle);
+        g_threadHandle = nullptr;
+    }
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    Wh_Log(L">");
-    g_stopFlag.store(false);
-    g_threadHandle =
-        CreateThread(nullptr, 0, PollThread, nullptr, 0, nullptr);
-}
-
-void Wh_ModBeforeUninit() {
-    Wh_Log(L">");
-    g_stopFlag.store(true);
-    if (g_threadHandle) {
-        WaitForSingleObject(g_threadHandle, 2000);
-        CloseHandle(g_threadHandle);
-        g_threadHandle = nullptr;
+    if (!g_isToolModProcessLauncher) {
+        return;
     }
-}
 
-void Wh_ModUninit() {
-    Wh_Log(L">");
-    g_states.clear();
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    Wh_Log(L">");
-    // Note: g_states is intentionally not touched here. It's owned by the
-    // polling thread; the new delay is picked up on the next poll anyway.
-    LoadSettings();
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
