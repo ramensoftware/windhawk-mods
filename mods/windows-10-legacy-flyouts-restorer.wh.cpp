@@ -54,12 +54,16 @@ left to dedicated mods.
 - **The download stays.** Files are fetched at run time from `msdl.microsoft.com` into the shared
   store; nothing else is fetched. A failed download is retried with a backoff (1 minute, doubling
   up to 15), never on every tick.
-- **What is written and where it persists.** The verified files go to the data folder; the tray
-  state backup and the "already reset" marker of the optional tray reset go to this mod's own
-  storage. The "Peek at desktop" toggle is restored to the state it had before the mod was loaded
-  when the mod is disabled. The optional tray reset (`ForceNetworkTrayResetTraySettings`) is a
-  deliberate, one-time, permanent deletion of shared shell state that is not undone - see its
-  setting.
+- **What is written and where it persists.** The verified files go to the data folder. The tray
+  state backup and one-time marker normally go to this mod's Windhawk storage; if that path is
+  unavailable, the code falls back to the shared data folder. Windhawk removes its mod storage on
+  uninstall, so copy the backup elsewhere first if you may need it later. The "Peek at desktop"
+  toggle is process-local: this mod does not write `DisablePreviewDesktop` or `EnableAeroPeek`.
+  While active, its registry-query hook supplies the toggled values to the private shell; on normal
+  unload those virtual values are dropped and the shell is notified to reread the real settings. A
+  crash cannot leave registry values changed by this menu. The optional tray reset
+  (`ForceNetworkTrayResetTraySettings`) is a separate, deliberate, one-time deletion of shared
+  shell state after a complete backup; it is not undone automatically - see its setting.
 - **In `ShellExperienceHost.exe`.** The template-set change is reverted when the mod is disabled.
   The module that was patched is also *pinned* (`GET_MODULE_HANDLE_EX_FLAG_PIN`), and there is no
   documented way to un-pin a module: `Windows.UI.QuickActions.dll` therefore stays loaded until
@@ -103,12 +107,12 @@ left to dedicated mods.
   $description: >-
     This setting resets the saved tray state if the icon still does not appear. Off by
     default; opt in only if the icon still does not appear with everything else on. Last
-    resort: IconStreams/PastIconsStream under TrayNotify are backed up (the backup is
-    written next to the store) and then permanently deleted once, because that binary state
-    is shared with the Windows 11 shell and can keep the icon marked as hidden. This is a
-    real, permanent change to shared shell state: it survives disabling or uninstalling the
-    mod (Windows recreates both values the next time it needs them, pre-populated again from
-    the current icons), and it is not undone automatically. The real registry values under
+    resort: IconStreams/PastIconsStream under TrayNotify are permanently deleted once, but
+    only after every existing value has been read completely as REG_BINARY and a complete
+    backup plus a one-time marker have been written. If a read or backup fails, neither
+    value is deleted. This is still a real, permanent change to shared shell state: it
+    survives disabling or uninstalling the mod (Windows recreates both values the next
+    time it needs them), and it is not undone automatically. The real registry values under
     TrayNotify are never touched by the other steps, only by this explicit, one-time, opt-in
     action.
 - ShellOpGuardTimeoutMs: 1500
@@ -745,14 +749,7 @@ static bool EnsureDirectory(const wchar_t* dir) {
     return false;
 }
 
-static bool ContainsNoCase(const wchar_t* haystack, const wchar_t* needle) {
-    if (!haystack || !needle || !*needle) return false;
-    size_t n = wcslen(needle);
-    for (const wchar_t* p = haystack; *p; p++) {
-        if (_wcsnicmp(p, needle, n) == 0) return true;
-    }
-    return false;
-}
+
 
 #define IDM_MOD_SHOWDESKTOP 0x7C74
 // The show desktop button panel: "Show desktop" and "Peek at desktop". Explorer's own
@@ -1423,22 +1420,24 @@ static bool ToggleDesktopLikeWin10() {
 }
 
 // --- the show desktop button and the clock: the two menus of Windows 10 ----
-// everything here is cosmetic on the surface and careful underneath: nothing is
-// written except the two documented registry values, and every call is inside a
-// try/catch with RAII. What the Windows 10 menus contain, and the ids explorer
-// uses, come from the shipped binary (see the note at the top of the file).
+// Everything here is cosmetic on the surface and careful underneath. The Peek
+// checkbox is virtualized for this shell process; its two registry values are never
+// written. What the Windows 10 menus contain, and the ids Explorer uses, come from
+// the shipped binary (see the note at the top of the file).
 
 // (the four texts and the insertion helper are defined above, together with
 // the ids, because the menu is built before this code runs)
 
-// HKCU keys the shell itself uses for Peek (Explorer\\Advanced\\DisablePreviewDesktop
-// and DWM\\EnableAeroPeek). Explorer keeps the answer in its settings cache, so a
+// HKCU keys the shell itself uses for Peek (Explorer\Advanced\DisablePreviewDesktop
+// and DWM\EnableAeroPeek). Explorer keeps the answer in its settings cache, so a
 // change is announced with the group name its own code compares against
 // ("SettingsCacheChangeMessage"), which is how the toggle applies without a
 // shell restart on the builds that listen for it.
 static const wchar_t* const kPeekKeyEsc = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced";
 static const wchar_t* const kPeekKeyDwm = L"Software\\Microsoft\\Windows\\DWM";
 static const wchar_t* const kPeekCacheGroup = L"SettingsCacheChangeMessage";
+static const wchar_t kPeekEscNtSuffix[] = L"\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced";
+static const wchar_t kPeekDwmNtSuffix[] = L"\\Microsoft\\Windows\\DWM";
 
 class ScopedHKey {
 public:
@@ -1466,14 +1465,158 @@ static bool ReadRegDwordHkcu(const wchar_t* sub, const wchar_t* value, DWORD* ou
     return true;
 }
 
-static bool WriteRegDwordHkcu(const wchar_t* sub, const wchar_t* value, DWORD v) {
-    if (!sub || !value) return false;
-    ScopedHKey key;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, sub, 0, nullptr, 0, KEY_SET_VALUE, nullptr,
-                        key.receive(), nullptr) != ERROR_SUCCESS)
+// RegQueryValueExW receives an open HKEY, not the key's path. NtQueryKey is used
+// only to identify the two exact HKCU keys; if it is unavailable, the menu is
+// disabled rather than falling back to persistent registry writes. The query hook
+// itself follows Microsoft's documented buffer-size contract (including the
+// ERROR_MORE_DATA probe).
+using RegQueryValueExW_t = LSTATUS (WINAPI*)(HKEY, LPCWSTR, LPDWORD, LPDWORD, LPBYTE, LPDWORD);
+using NtQueryKey_t = NTSTATUS (NTAPI*)(HANDLE, ULONG, PVOID, ULONG, PULONG);
+
+static constexpr ULONG kPeekKeyNameInformation = 3;  // KEY_INFORMATION_CLASS::KeyNameInformation
+static constexpr size_t kPeekNtKeyNameChars = 1024;
+struct PeekKeyNameInformation {
+    ULONG NameLength;
+    WCHAR Name[kPeekNtKeyNameChars];
+};
+
+static RegQueryValueExW_t g_regQueryValueExWOriginal = nullptr;
+static NtQueryKey_t g_ntQueryKey = nullptr;
+static wchar_t g_currentUserSoftwareNtPath[512] = {};
+static size_t g_currentUserSoftwareNtPathChars = 0;
+static std::atomic<bool> g_peekRegistryHookRegistered{false};
+static std::atomic<bool> g_peekRegistryHookReady{false};
+static std::atomic<bool> g_peekDisableOverrideActive{false};
+static std::atomic<DWORD> g_peekVirtualDisablePreviewDesktop{0};
+static std::atomic<bool> g_peekAeroOverrideActive{false};
+static std::atomic<DWORD> g_peekVirtualEnableAeroPeek{1};
+
+static bool CaptureCurrentUserSoftwareNtPath() noexcept {
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    if (!ntdll) return false;
+    g_ntQueryKey = reinterpret_cast<NtQueryKey_t>(GetProcAddress(ntdll, "NtQueryKey"));
+    if (!g_ntQueryKey) return false;
+
+    // Use a documented Win32 open for the current user's Software key, then cache
+    // its canonical object-manager name once. The hook can compare against this
+    // immutable prefix without allocating or opening registry keys on every query.
+    ScopedHKey software;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software", 0, KEY_QUERY_VALUE,
+                      software.receive()) != ERROR_SUCCESS || !software.valid())
         return false;
-    if (!key.valid()) return false;
-    return RegSetValueExW(key.get(), value, 0, REG_DWORD, (const BYTE*)&v, sizeof(v)) == ERROR_SUCCESS;
+
+    PeekKeyNameInformation info = {};
+    ULONG returned = 0;
+    const NTSTATUS status = g_ntQueryKey(software.get(), kPeekKeyNameInformation, &info,
+                                         static_cast<ULONG>(sizeof(info)), &returned);
+    if (status < 0 || info.NameLength > sizeof(info.Name) ||
+        info.NameLength % sizeof(WCHAR) != 0)
+        return false;
+
+    size_t chars = info.NameLength / sizeof(WCHAR);
+    if (chars && info.Name[chars - 1] == L'\0') --chars;
+    if (!chars || chars >= _countof(g_currentUserSoftwareNtPath)) return false;
+
+    memcpy(g_currentUserSoftwareNtPath, info.Name, chars * sizeof(WCHAR));
+    g_currentUserSoftwareNtPath[chars] = L'\0';
+    g_currentUserSoftwareNtPathChars = chars;
+    return true;
+}
+
+static bool IsCurrentUserPeekKey(HKEY key, const wchar_t* ntSuffix) noexcept {
+    if (!g_ntQueryKey || !ntSuffix || !g_currentUserSoftwareNtPathChars) return false;
+
+    PeekKeyNameInformation info = {};
+    ULONG returned = 0;
+    const NTSTATUS status = g_ntQueryKey(key, kPeekKeyNameInformation, &info,
+                                         static_cast<ULONG>(sizeof(info)), &returned);
+    if (status < 0 || info.NameLength > sizeof(info.Name) ||
+        info.NameLength % sizeof(WCHAR) != 0)
+        return false;
+
+    size_t chars = info.NameLength / sizeof(WCHAR);
+    if (chars && info.Name[chars - 1] == L'\0') --chars;
+    const size_t suffixChars = wcslen(ntSuffix);
+    if (chars != g_currentUserSoftwareNtPathChars + suffixChars) return false;
+    return _wcsnicmp(info.Name, g_currentUserSoftwareNtPath,
+                     g_currentUserSoftwareNtPathChars) == 0 &&
+           _wcsnicmp(info.Name + g_currentUserSoftwareNtPathChars,
+                     ntSuffix, suffixChars) == 0;
+}
+
+static bool TryGetVirtualPeekValue(HKEY key, LPCWSTR valueName, DWORD* value) noexcept {
+    if (!valueName || !value || g_unloading.load(std::memory_order_acquire)) return false;
+
+    const bool isDisableValue =
+        _wcsicmp(valueName, L"DisablePreviewDesktop") == 0 &&
+        g_peekDisableOverrideActive.load(std::memory_order_acquire);
+    const bool isAeroValue =
+        _wcsicmp(valueName, L"EnableAeroPeek") == 0 &&
+        g_peekAeroOverrideActive.load(std::memory_order_acquire);
+    if (!isDisableValue && !isAeroValue) return false;
+
+    const wchar_t* suffix = isDisableValue ? kPeekEscNtSuffix : kPeekDwmNtSuffix;
+    if (!IsCurrentUserPeekKey(key, suffix) ||
+        g_unloading.load(std::memory_order_acquire))
+        return false;
+
+    if (isDisableValue) {
+        if (!g_peekDisableOverrideActive.load(std::memory_order_acquire)) return false;
+        *value = g_peekVirtualDisablePreviewDesktop.load(std::memory_order_acquire);
+    } else {
+        if (!g_peekAeroOverrideActive.load(std::memory_order_acquire)) return false;
+        *value = g_peekVirtualEnableAeroPeek.load(std::memory_order_acquire);
+    }
+    return true;
+}
+
+static LSTATUS WINAPI RegQueryValueExW_Hook(HKEY key, LPCWSTR valueName, LPDWORD reserved,
+                                           LPDWORD type, LPBYTE data,
+                                           LPDWORD dataSize) noexcept {
+    if (!reserved) {
+        DWORD virtualValue = 0;
+        if (TryGetVirtualPeekValue(key, valueName, &virtualValue)) {
+            // Per RegQueryValueExW, lpcbData may be NULL only when lpData is NULL.
+            if (data && !dataSize) return ERROR_INVALID_PARAMETER;
+            if (type) *type = REG_DWORD;
+            if (!data) {
+                if (dataSize) *dataSize = sizeof(virtualValue);
+                return ERROR_SUCCESS;
+            }
+            const DWORD capacity = *dataSize;
+            if (capacity < sizeof(virtualValue)) {
+                *dataSize = sizeof(virtualValue);
+                return ERROR_MORE_DATA;
+            }
+            memcpy(data, &virtualValue, sizeof(virtualValue));
+            *dataSize = sizeof(virtualValue);
+            return ERROR_SUCCESS;
+        }
+    }
+
+    return g_regQueryValueExWOriginal
+               ? g_regQueryValueExWOriginal(key, valueName, reserved, type, data, dataSize)
+               : ERROR_INVALID_FUNCTION;
+}
+
+static bool InstallPeekRegistryVirtualization() {
+    if (!CaptureCurrentUserSoftwareNtPath()) {
+        Wh_Log(L"[menu] Peek virtualization unavailable: the current user's registry key "
+               L"could not be identified; its menu entry will be disabled");
+        return false;
+    }
+    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(RegQueryValueExW),
+                            reinterpret_cast<void*>(RegQueryValueExW_Hook),
+                            reinterpret_cast<void**>(&g_regQueryValueExWOriginal))) {
+        Wh_Log(L"[menu] Peek virtualization unavailable: RegQueryValueExW could not be hooked; "
+               L"its menu entry will be disabled");
+        return false;
+    }
+
+    g_peekRegistryHookRegistered.store(true, std::memory_order_release);
+    Wh_Log(L"[menu] Peek registry-query hook registered; Windhawk applies it after "
+           L"Wh_ModInit returns");
+    return true;
 }
 
 // Peek is ON when DisablePreviewDesktop is 0, exactly as the shell reads it.
@@ -1490,71 +1633,7 @@ static bool PeekAeroAllowed() {
     return on != 0;
 }
 
-// These two values are genuine, documented Windows settings (the same ones the
-// peek-at-desktop checkbox in a real Windows 10 taskbar writes), not a private mod side
-// channel - so unlike a mod-only flag, a user flipping this entry arguably expects it to
-// behave like any other Windows setting change and stick. That said, Windhawk's own-cleanup
-// expectation is that a mod's unload should not leave behind a change the user never made
-// through a first-class Windows UI. The values are therefore captured (once, lazily, the
-// first time this mod actually writes them) and restored to what they were before this mod
-// ever touched them when the mod is disabled through the normal unload path. A hard kill or
-// crash cannot run this restore - no process-local mechanism can guarantee that for any
-// mod - but the documented, requested disable path now leaves the two keys exactly as found.
-static bool g_peekOriginalCaptured = false;
-static bool g_peekOriginalHadPreviewDesktop = false;
-static DWORD g_peekOriginalPreviewDesktop = 0;
-static bool g_peekOriginalHadAeroPeek = false;
-static DWORD g_peekOriginalAeroPeek = 0;
-
-static void CapturePeekOriginalValuesOnce() {
-    if (g_peekOriginalCaptured) return;
-    g_peekOriginalCaptured = true;
-    g_peekOriginalHadPreviewDesktop =
-        ReadRegDwordHkcu(kPeekKeyEsc, L"DisablePreviewDesktop", &g_peekOriginalPreviewDesktop);
-    g_peekOriginalHadAeroPeek =
-        ReadRegDwordHkcu(kPeekKeyDwm, L"EnableAeroPeek", &g_peekOriginalAeroPeek);
-}
-
-// Called from Wh_ModBeforeUninit, while the mod is still loaded and normally unloading:
-// puts both values back exactly as they were before this mod's menu entry was ever used,
-// including removing a value that did not exist before (never leaves a value this mod
-// invented). A no-op if the toggle in this menu was never actually used.
-static void RestorePeekAtDesktopOnUnload() noexcept {
-    try {
-        if (!g_peekOriginalCaptured) return;
-        ScopedHKey key;
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, kPeekKeyEsc, 0, KEY_SET_VALUE, key.receive()) ==
-                ERROR_SUCCESS && key.valid()) {
-            if (g_peekOriginalHadPreviewDesktop)
-                RegSetValueExW(key.get(), L"DisablePreviewDesktop", 0, REG_DWORD,
-                               (const BYTE*)&g_peekOriginalPreviewDesktop, sizeof(DWORD));
-            else
-                RegDeleteValueW(key.get(), L"DisablePreviewDesktop");
-        }
-        ScopedHKey dwmKey;
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, kPeekKeyDwm, 0, KEY_SET_VALUE, dwmKey.receive()) ==
-                ERROR_SUCCESS && dwmKey.valid()) {
-            if (g_peekOriginalHadAeroPeek)
-                RegSetValueExW(dwmKey.get(), L"EnableAeroPeek", 0, REG_DWORD,
-                               (const BYTE*)&g_peekOriginalAeroPeek, sizeof(DWORD));
-            else
-                RegDeleteValueW(dwmKey.get(), L"EnableAeroPeek");
-        }
-        DWORD_PTR ignored = 0;
-        SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)kPeekCacheGroup,
-                            SMTO_ABORTIFHUNG, 800, &ignored);
-        Wh_Log(L"[menu] Peek-at-desktop registry values restored to what they were before "
-               L"this mod touched them");
-    } catch (...) {
-        Wh_Log(L"[menu] exception while restoring the Peek-at-desktop registry values");
-    }
-}
-
-static bool TogglePeekAtDesktop(bool* nowEnabled) {
-    CapturePeekOriginalValuesOnce();
-    const bool want = !PeekAtDesktopEnabled();
-    bool ok = WriteRegDwordHkcu(kPeekKeyEsc, L"DisablePreviewDesktop", want ? 0 : 1);
-    if (want) ok = WriteRegDwordHkcu(kPeekKeyDwm, L"EnableAeroPeek", 1) && ok;
+static void NotifyPeekSettingsChanged() noexcept {
     DWORD_PTR ignored = 0;
     SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)kPeekCacheGroup,
                         SMTO_ABORTIFHUNG, 800, &ignored);
@@ -1562,8 +1641,55 @@ static bool TogglePeekAtDesktop(bool* nowEnabled) {
     if (tray)
         SendMessageTimeoutW(tray, WM_SETTINGCHANGE, 0, (LPARAM)kPeekCacheGroup,
                             SMTO_ABORTIFHUNG, 800, &ignored);
+}
+
+static bool TogglePeekAtDesktop(bool* nowEnabled) {
+    if (g_unloading.load(std::memory_order_acquire) ||
+        !g_peekRegistryHookReady.load(std::memory_order_acquire)) {
+        if (nowEnabled) *nowEnabled = PeekAtDesktopEnabled();
+        return false;
+    }
+
+    const bool want = !PeekAtDesktopEnabled();
+    g_peekVirtualDisablePreviewDesktop.store(want ? 0 : 1, std::memory_order_release);
+    g_peekDisableOverrideActive.store(true, std::memory_order_release);
+    if (want) {
+        // The old shell enables Aero Peek when this item is switched on. Virtualize that
+        // write too, so the setting is temporary and the real registry remains untouched.
+        g_peekVirtualEnableAeroPeek.store(1, std::memory_order_release);
+        g_peekAeroOverrideActive.store(true, std::memory_order_release);
+    }
+
+    // Verify that the hook can see the exact open-key handles before reporting success. If
+    // key-name inspection fails on a future Windows build, clear the override instead of
+    // showing a checkbox that appears to work but does not affect the shell.
+    if (PeekAtDesktopEnabled() != want || (want && !PeekAeroAllowed())) {
+        g_peekDisableOverrideActive.store(false, std::memory_order_release);
+        g_peekAeroOverrideActive.store(false, std::memory_order_release);
+        g_peekRegistryHookReady.store(false, std::memory_order_release);
+        NotifyPeekSettingsChanged();
+        if (nowEnabled) *nowEnabled = PeekAtDesktopEnabled();
+        return false;
+    }
+
+    NotifyPeekSettingsChanged();
     if (nowEnabled) *nowEnabled = want;
-    return ok;
+    return true;
+}
+
+// Called from Wh_ModBeforeUninit while the hook is still installed. Dropping the virtual
+// values before notifying the shell makes its next query see the real, untouched registry.
+static void ClearPeekOverridesOnUnload() noexcept {
+    g_peekRegistryHookReady.store(false, std::memory_order_release);
+    const bool hadDisableOverride =
+        g_peekDisableOverrideActive.exchange(false, std::memory_order_acq_rel);
+    const bool hadAeroOverride =
+        g_peekAeroOverrideActive.exchange(false, std::memory_order_acq_rel);
+    if (hadDisableOverride || hadAeroOverride) {
+        NotifyPeekSettingsChanged();
+        Wh_Log(L"[menu] process-local Peek overrides cleared; the real registry values were "
+               L"never modified");
+    }
 }
 
 // ===========================================================================
@@ -2001,7 +2127,8 @@ static void ShowShowDesktopMenu(HWND owner) {
     AppendMenuW(menu, MF_STRING, IDM_MOD_SHOWDESKTOP, kShowDesktopText[lang]);
     SetMenuDefaultItem(menu, IDM_MOD_SHOWDESKTOP, FALSE);
     UINT flags = MF_STRING | (PeekAtDesktopEnabled() ? MF_CHECKED : 0);
-    if (!PeekAeroAllowed()) flags |= MF_GRAYED;
+    if (!g_peekRegistryHookReady.load(std::memory_order_acquire) || !PeekAeroAllowed())
+        flags |= MF_GRAYED;
     AppendMenuW(menu, flags, IDM_MOD_PEEK, kPeekText[lang]);
     if (g_peekMenuLogs < 5) {
         g_peekMenuLogs++;
@@ -2029,8 +2156,11 @@ static bool HandleClassicMenuCommand(UINT id) {
         case IDM_MOD_PEEK: {
             bool nowOn = false;
             ok = TogglePeekAtDesktop(&nowOn);
-            Wh_Log(L"[menu] peek at desktop turned %s%s", nowOn ? L"on" : L"off",
-                   ok ? L"" : L" (the registry write failed)");
+            if (ok)
+                Wh_Log(L"[menu] peek at desktop turned %s", nowOn ? L"on" : L"off");
+            else
+                Wh_Log(L"[menu] peek toggle was not applied; process-local virtualization is "
+                       L"unavailable");
             label = L"peek at desktop";
             break;
         }
@@ -5769,16 +5899,21 @@ static bool ResolveStateDir(wchar_t* out, size_t count) noexcept {
     return true;
 }
 
-// Backup of the binary state of the notification area and its deletion, once. Nothing is
-// deleted without a backup.
+// Backup of the binary state of the notification area and its deletion, once. Fail closed:
+// every value that exists must be read completely as REG_BINARY and the complete backup plus
+// the one-time marker must be durable before either value is removed.
 static bool BackupAndResetTrayValuesOnce() noexcept {
     try {
         const wchar_t* kValues[] = { L"IconStreams", L"PastIconsStream" };
         ScopedHKey key;
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, kTrayNotifyKey, 0, KEY_READ | KEY_SET_VALUE,
-                          key.receive()) != ERROR_SUCCESS ||
-            !key.valid())
-            return true;   // nulla da azzerare
+        const LONG openStatus = RegOpenKeyExW(HKEY_CURRENT_USER, kTrayNotifyKey, 0,
+                                               KEY_READ | KEY_SET_VALUE, key.receive());
+        if (openStatus == ERROR_FILE_NOT_FOUND) return true;  // no state to reset
+        if (openStatus != ERROR_SUCCESS || !key.valid()) {
+            Wh_Log(L"[tray-force] TrayNotify could not be opened (%ld): no values are deleted",
+                   openStatus);
+            return false;
+        }
 
         wchar_t stateDir[MAX_PATH] = {};
         if (!ResolveStateDir(stateDir, _countof(stateDir))) {
@@ -5788,73 +5923,143 @@ static bool BackupAndResetTrayValuesOnce() noexcept {
         }
 
         wchar_t marker[MAX_PATH] = {};
-        _snwprintf_s(marker, _countof(marker), _TRUNCATE, L"%s\\tray-state-reset.done",
-                     stateDir);
+        wchar_t backup[MAX_PATH] = {};
+        if (_snwprintf_s(marker, _countof(marker), _TRUNCATE,
+                         L"%s\\tray-state-reset.done", stateDir) < 0 || !marker[0] ||
+            _snwprintf_s(backup, _countof(backup), _TRUNCATE,
+                         L"%s\\tray-state-backup.bin", stateDir) < 0 || !backup[0]) {
+            Wh_Log(L"[tray-force] state-file path is too long: the tray state is left as it is");
+            return false;
+        }
         if (GetFileAttributesW(marker) != INVALID_FILE_ATTRIBUTES) return true;
 
-        // Only for the backup path: a raw dump of the values
+        // Keep the existing binary format: UTF-16 value name (including NUL), DWORD byte
+        // count, then the exact REG_BINARY bytes. Registry query sizes are probed first and
+        // rechecked on the data read, as required by RegQueryValueExW's size contract.
+        static constexpr DWORD kMaxSavedValueBytes = 16 * 1024 * 1024;
         std::vector<BYTE> dump;
         bool anyValue = false;
         for (const wchar_t* value : kValues) {
             DWORD type = 0, size = 0;
-            if (RegQueryValueExW(key.get(), value, nullptr, &type, nullptr, &size) != ERROR_SUCCESS ||
-                type != REG_BINARY || size == 0)
-                continue;
+            const LONG probe = RegQueryValueExW(key.get(), value, nullptr, &type, nullptr, &size);
+            if (probe == ERROR_FILE_NOT_FOUND) continue;
+            if (probe != ERROR_SUCCESS) {
+                Wh_Log(L"[tray-force] could not size TrayNotify\\%s (%ld): no values are deleted",
+                       value, probe);
+                return false;
+            }
+            if (type != REG_BINARY || size > kMaxSavedValueBytes) {
+                Wh_Log(L"[tray-force] TrayNotify\\%s is not a supported REG_BINARY value "
+                       L"(type %lu, %lu bytes): no values are deleted",
+                       value, type, size);
+                return false;
+            }
+
             std::vector<BYTE> data(size);
-            if (RegQueryValueExW(key.get(), value, nullptr, &type, data.data(), &size) != ERROR_SUCCESS)
-                continue;
+            DWORD actualType = type;
+            DWORD actualSize = size;
+            const LONG read = RegQueryValueExW(key.get(), value, nullptr, &actualType,
+                                               size ? data.data() : nullptr, &actualSize);
+            if (read != ERROR_SUCCESS || actualType != REG_BINARY || actualSize != size) {
+                Wh_Log(L"[tray-force] TrayNotify\\%s changed or could not be read fully "
+                       L"(%ld): no values are deleted",
+                       value, read);
+                return false;
+            }
+
             const size_t nameChars = wcslen(value) + 1;
             const BYTE* name = reinterpret_cast<const BYTE*>(value);
             dump.insert(dump.end(), name, name + nameChars * sizeof(wchar_t));
             dump.insert(dump.end(), reinterpret_cast<const BYTE*>(&size),
                         reinterpret_cast<const BYTE*>(&size) + sizeof(size));
-            dump.insert(dump.end(), data.begin(), data.begin() + size);
+            dump.insert(dump.end(), data.begin(), data.end());
             anyValue = true;
         }
-        if (!anyValue) {
-            // No state to save: the marker is written all the same.
-            ScopedHandle markerFile(CreateFileW(marker, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
-                                                FILE_ATTRIBUTE_NORMAL, nullptr));
-            return markerFile.valid();
+
+        if (anyValue) {
+            // CREATE_NEW preserves any older backup rather than silently overwriting it.
+            bool backupWritten = false;
+            {
+                ScopedHandle file(CreateFileW(backup, GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                                              FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH,
+                                              nullptr));
+                if (!file.valid()) {
+                    Wh_Log(L"[tray-force] tray state backup could not be created (%lu): "
+                           L"no clearing", GetLastError());
+                    return false;
+                }
+                DWORD written = 0;
+                backupWritten = WriteFile(file.get(), dump.data(),
+                                          static_cast<DWORD>(dump.size()), &written, nullptr) &&
+                                written == dump.size() && FlushFileBuffers(file.get());
+            }
+            if (!backupWritten) {
+                // This file was created by this attempt, and the handle is closed now.
+                // Remove the incomplete copy so a later retry can make a fresh backup.
+                DeleteFileW(backup);
+                Wh_Log(L"[tray-force] incomplete or unflushed backup: no clearing");
+                return false;
+            }
+            Wh_Log(L"[tray-force] tray state saved to %s (%lu bytes)", backup,
+                   static_cast<unsigned long>(dump.size()));
         }
 
-        wchar_t backup[MAX_PATH] = {};
-        _snwprintf_s(backup, _countof(backup), _TRUNCATE, L"%s\\tray-state-backup.bin",
-                     stateDir);
-        {
-            ScopedHandle file(CreateFileW(backup, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
-                                          FILE_ATTRIBUTE_NORMAL, nullptr));
-            if (!file.valid()) {
-                Wh_Log(L"[tray-force] tray state backup not writable (%lu): "
-                       L"no clearing", GetLastError());
-                return false;
-            }
-            DWORD written = 0;
-            if (!WriteFile(file.get(), dump.data(), static_cast<DWORD>(dump.size()),
-                           &written, nullptr) || written != dump.size()) {
-                Wh_Log(L"[tray-force] incomplete backup: no clearing");
-                return false;
-            }
+        // Record the attempt before deletion. If Explorer or the host is terminated between
+        // deletion and the next instruction, the next run cannot overwrite the only backup
+        // or repeat the destructive reset. A marker-write failure also means no deletion.
+        const char markerText[] = "Windhawk tray reset attempt; backup: tray-state-backup.bin\r\n";
+        HANDLE markerHandle = CreateFileW(marker, GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                                          FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, nullptr);
+        if (markerHandle == INVALID_HANDLE_VALUE) {
+            const DWORD error = GetLastError();
+            if (error == ERROR_FILE_EXISTS || error == ERROR_ALREADY_EXISTS) return true;
+            Wh_Log(L"[tray-force] one-time reset marker could not be created (%lu): "
+                   L"no clearing", error);
+            return false;
         }
-        Wh_Log(L"[tray-force] tray state saved to %s (%lu bytes)", backup,
-               static_cast<unsigned long>(dump.size()));
+        bool markerWritten = false;
+        {
+            ScopedHandle markerFile(markerHandle);
+            DWORD written = 0;
+            markerWritten = WriteFile(markerFile.get(), markerText,
+                                      static_cast<DWORD>(sizeof(markerText) - 1),
+                                      &written, nullptr) &&
+                            written == sizeof(markerText) - 1 &&
+                            FlushFileBuffers(markerFile.get());
+        }
+        if (!markerWritten) {
+            DeleteFileW(marker);
+            Wh_Log(L"[tray-force] one-time reset marker could not be flushed: no clearing");
+            return false;
+        }
+
+        if (!anyValue) {
+            Wh_Log(L"[tray-force] no saved TrayNotify binary values were present; no clearing "
+                   L"was needed");
+            return true;
+        }
 
         int removed = 0;
         for (const wchar_t* value : kValues) {
-            if (RegDeleteValueW(key.get(), value) == ERROR_SUCCESS) ++removed;
+            const LONG result = RegDeleteValueW(key.get(), value);
+            if (result == ERROR_SUCCESS) {
+                ++removed;
+            } else if (result != ERROR_FILE_NOT_FOUND) {
+                Wh_Log(L"[tray-force] could not delete TrayNotify\\%s (%ld); the complete "
+                       L"backup is retained", value, result);
+            }
         }
         if (removed == 0) {
-            Wh_Log(L"[tray-force] tray state cannot be cleared: the shell will regenerate it "
-                   L"or the icon stays hidden by the user's choice");
+            Wh_Log(L"[tray-force] tray state was not cleared; the complete backup and attempt "
+                   L"marker are retained");
             return false;
         }
-        ScopedHandle markerFile(CreateFileW(marker, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
-                                            FILE_ATTRIBUTE_NORMAL, nullptr));
-        Wh_Log(L"[tray-force] tray state cleared (%d values): the Windows 10 shell "
-               L"rebuilds the default state, with the system icons visible", removed);
+        Wh_Log(L"[tray-force] tray state cleared (%d values) after a complete backup; "
+               L"Windows will rebuild the saved notification-area state", removed);
         return true;
     } catch (...) {
-        Wh_Log(L"[tray-force] exception while resetting the tray state");
+        Wh_Log(L"[tray-force] exception while backing up or resetting the tray state; "
+               L"no further deletion is attempted");
         return false;
     }
 }
@@ -5869,9 +6074,9 @@ static bool ApplyVisibilityGuarantees() noexcept {
         bool ok = true;
 
         if (g_escalate.load(std::memory_order_acquire)) {
-            // Binary state of the bar (with a backup) - once, as the last escalation.
-            if (g_cfg.forceNetworkTrayResetTraySettings)
-                BackupAndResetTrayValuesOnce();
+            // Binary state of the bar (with a verified backup) - once, as the last escalation.
+            if (g_cfg.forceNetworkTrayResetTraySettings && !BackupAndResetTrayValuesOnce())
+                ok = false;
         }
 
         NudgeTray();
@@ -6756,7 +6961,7 @@ static void DisarmBatteryIconClickSubclass() noexcept {
     g_batteryClickId = 0;
 }
 
-static bool OpenNativeNetworkFlyout(HWND owner, PCWSTR how) noexcept {
+static bool OpenNativeNetworkFlyout(HWND owner, bool rightClick) noexcept {
     try {
         if (g_unloading.load(std::memory_order_acquire)) return false;
         const ULONGLONG now = GetTickCount64();
@@ -6765,7 +6970,6 @@ static bool OpenNativeNetworkFlyout(HWND owner, PCWSTR how) noexcept {
 
         NetworkPniRegistration reg = {};
         const bool have = CopyNetworkPniRegistration(&reg);
-        const bool rightClick = how && _wcsicmp(how, L"destro") == 0;
 
         if (rightClick) {
             // The right click stays as it was: the menu of pnidui's native callback, then
@@ -6829,7 +7033,7 @@ static LRESULT CALLBACK OwnerWindowProc(HWND hwnd, UINT message, WPARAM wParam,
         if (message == ShowNetworkFlyoutMessage()) {
             // A hook (or a module of the bar) has asked for the flyout: it is
             // opened here, on the thread of the icon's owner window, as a click would do.
-            if (!g_unloading.load(std::memory_order_acquire)) OpenNativeNetworkFlyout(hwnd, L"left");
+            if (!g_unloading.load(std::memory_order_acquire)) OpenNativeNetworkFlyout(hwnd, false);
             return 0;
         }
         if (message == NetworkTrayForce::BatteryFlyout::ShowBatteryFlyoutMessage()) {
@@ -6853,9 +7057,9 @@ static LRESULT CALLBACK OwnerWindowProc(HWND hwnd, UINT message, WPARAM wParam,
                        event, iconIdHi, (void*)wParam, (unsigned)kIconId);
             }
             if (event == WM_LBUTTONUP || event == NIN_SELECT || event == NIN_KEYSELECT)
-                OpenNativeNetworkFlyout(hwnd, L"left");
+                OpenNativeNetworkFlyout(hwnd, false);
             else if (event == WM_RBUTTONUP || event == WM_CONTEXTMENU)
-                OpenNativeNetworkFlyout(hwnd, L"right");   // pnidui's own menu (same entries)
+                OpenNativeNetworkFlyout(hwnd, true);   // pnidui's own menu (same entries)
             // WM_MOUSEMOVE / WM_LBUTTONDOWN / anything else: no action (the log above has
             // already said what matters, apart from the mouse-move).
             return 0;
@@ -6889,9 +7093,9 @@ static LRESULT CALLBACK OwnerWindowProc(HWND hwnd, UINT message, WPARAM wParam,
                        L"this icon (event=0x%04X): treated like kCallbackMessage", message,
                        event);
                 if (event == WM_LBUTTONUP || event == NIN_SELECT || event == NIN_KEYSELECT)
-                    OpenNativeNetworkFlyout(hwnd, L"left");
+                    OpenNativeNetworkFlyout(hwnd, false);
                 else
-                    OpenNativeNetworkFlyout(hwnd, L"destro");
+                    OpenNativeNetworkFlyout(hwnd, true);
                 return 0;
             }
         }
@@ -7188,13 +7392,6 @@ static void OnTaskbarTransition(bool up) noexcept {
     }
 }
 
-static void RequestReinstall(PCWSTR reason) noexcept {
-    g_reinstallRequested.store(true, std::memory_order_release);
-    g_guaranteesApplied = false;
-    g_firstTick = 0;
-    Wh_Log(L"[tray-force] reinstall requested for the next cycle (%s)",
-           reason ? reason : L"settings");
-}
 
 static void Tick() noexcept {
     try {
@@ -8353,6 +8550,11 @@ BOOL Wh_ModInit() {
             return TRUE;
         }
 
+        // Peek values are virtualized only in the private shell process. If either path
+        // identification or the documented Win32 query hook is unavailable, the menu item is
+        // disabled; this feature never falls back to writing the user's registry.
+        InstallPeekRegistryVirtualization();
+
         // The battery icon opens the Windows 10 battery flyout. The hook
         // is installed here, inside Wh_ModInit, so that the engine applies it at once (see
         // the note below), and it is not tied to a setting: with a settings list saved by an
@@ -8395,6 +8597,17 @@ BOOL Wh_ModInit() {
     }
 }
 
+// Windhawk calls this only after applying the hook operations queued by Wh_ModInit.
+// Marking the virtual setting ready here avoids a brief race when the mod is loaded into
+// an Explorer process that is already running.
+void Wh_ModAfterInit() {
+    if (g_peekRegistryHookRegistered.load(std::memory_order_acquire)) {
+        g_peekRegistryHookReady.store(true, std::memory_order_release);
+        Wh_Log(L"[menu] Peek process-local registry virtualization is active; the real "
+               L"registry values remain untouched");
+    }
+}
+
 // The unload, in the order the Windhawk documentation describes it.
 //
 // "Mod lifetime": Wh_ModBeforeUninit, then the engine removes the hooks, then Wh_ModUninit;
@@ -8433,7 +8646,7 @@ void Wh_ModBeforeUninit() {
     // services thread is waiting on has to be released here.
     CancelActiveDownload();
     ShellOpGuard::BeginShutdown();
-    RestorePeekAtDesktopOnUnload();
+    ClearPeekOverridesOnUnload();
     // The bytes written in ShellExperienceHost.exe by this copy of the mod are its own
     // doing, and are given back before the image goes away. The module pin cannot be
     // undone (no documented way exists); that is noted in the README and in the log.
