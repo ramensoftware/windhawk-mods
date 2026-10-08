@@ -16,9 +16,10 @@
 # True Cursor Motion Blur
 A live motion blur for the mouse pointer, everywhere in Windows. While the
 mouse moves, fading copies of your actual cursor are drawn along its recent
-path, so it looks like a camera motion blur rather than a trail. (Unlike the
-Cursor Motion Blur mod's smear ribbon or Mouse Trail's particles, the blur is
-made of your own cursor picture.)
+path, so it looks like a camera motion blur rather than a trail. Unlike the
+smear ribbon of [Cursor Motion Blur](https://windhawk.net/mods/cursor-motion-blur)
+or the particles of [Mouse Trail](https://windhawk.net/mods/mouse-trail), the
+blur is made of your own cursor picture.
 
 ![Demo](https://raw.githubusercontent.com/sidlikesgrapess/CursorMotionBlur/main/assets/demo.gif)
 
@@ -58,7 +59,11 @@ made of your own cursor picture.)
   Settings > Bluetooth & devices > Mouse > Additional mouse settings > Pointers
   and click OK.
 - **Another tool's custom cursors get reset.** Restoring after hiding reloads
-  the Windows cursor scheme; turn hiding off if you use such a tool.
+  the Windows cursor scheme, so turn hiding off if you use a tool that swaps
+  the system cursors, such as the Shake to Find Cursor or macOS magnifying
+  cursor mods.
+- **No blur over the Start menu, Search or Task View.** Windows keeps those
+  above every app's windows, including the blur.
 - **No blur in a game or video.** That is the fullscreen pause; turn off
   "Pause in fullscreen apps and games" if you want it there.
 - **The cursor hides too often or not at all.** Raise or lower "Hide above
@@ -81,7 +86,9 @@ made of your own cursor picture.)
   $description: 10-150. How far back in time the blur reaches.
 - hideWhenFast: false
   $name: Hide the real cursor when moving very fast
-  $description: Swaps the system cursors for an invisible one while you move fast, and restores your cursor scheme afterwards.
+  $description: >-
+    Swaps the system cursors for an invisible one while you move fast, and
+    restores your cursor scheme afterwards.
 - hideSpeed: 40
   $name: Hide above speed (cm/s)
   $description: 20-300. Measured on the main monitor; the same hand speed on every monitor.
@@ -100,6 +107,7 @@ made of your own cursor picture.)
 #include <atomic>
 #include <mmsystem.h>
 #include <shellapi.h>
+#include <sddl.h>
 #include <shellscalingapi.h>
 #include <stdio.h>
 #include <limits.h>
@@ -109,7 +117,8 @@ made of your own cursor picture.)
 
 #define HOLD_MS        10      // how long after the last fast moment the cursor may come back
 #define SHOW_WINDOW_MS 12      // the speed that brings the cursor back is measured over just this many ms
-#define COVER_PX       10.0    // ~px of travel one copy covers at cursor size 32 (keeps the opacity independent of copy density)
+// ~px of travel one copy covers at cursor size 32 (keeps the opacity independent of copy density)
+#define COVER_PX       10.0
 #define MAX_SAMPLES    512
 #define MAX_COPIES     100     // the most copies spread along the trail in one frame
 #define COPY_BUF       (MAX_SAMPLES + MAX_COPIES)
@@ -130,14 +139,14 @@ static int g_histN;
 static HCURSOR g_curHandle;
 static bool g_curVisible, g_hideWanted;
 static int g_monCursor = 32;          // cursor width on the monitor the cursor is on
-static double g_hidePxPerCm = 38;     // turns the hide speed (cm/s on the main monitor) into px/s on the monitor in use
 static std::atomic<int> g_monGap{7};     // ms between frames: half a refresh of the monitor the cursor is on
 static std::atomic<bool> g_blankActive;  // the system cursors are currently swapped for an invisible one
 static std::atomic<bool> g_drawFailed;   // the overlay could not draw: then never hide the real cursor
 static std::atomic<bool> g_monStale, g_spritesStale;   // display or cursor settings changed
 static std::atomic<bool> g_recheck;      // settings or the foreground window changed: check for fullscreen apps now
 static std::atomic<bool> g_paused;       // a fullscreen app is in front
-static std::atomic<bool> g_adminFront;   // the window in front runs with more rights: Windows sends us no raw input then
+// the window in front runs with more rights: Windows sends us no raw input then
+static std::atomic<bool> g_adminFront;
 static std::atomic<bool> g_stop;
 static std::atomic<HWND> g_wnd;          // the overlay window (owned by the render thread)
 
@@ -173,7 +182,8 @@ static int RefreshRate(HMONITOR mon) {
     mi.cbSize = sizeof(mi);
     DEVMODEW dm = {};
     dm.dmSize = sizeof(dm);
-    if (GetMonitorInfoW(mon, &mi) && EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm) && dm.dmDisplayFrequency > 1)
+    if (GetMonitorInfoW(mon, &mi) && EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm) &&
+        dm.dmDisplayFrequency > 1)
         return dm.dmDisplayFrequency;
     return 60;
 }
@@ -197,21 +207,38 @@ static bool FullscreenAppRunning() {
            (s == QUNS_BUSY || s == QUNS_RUNNING_D3D_FULL_SCREEN || s == QUNS_PRESENTATION_MODE);
 }
 
+// Width of the arrow as Windows loaded it: at the system DPI, and with the Accessibility pointer size applied.
+static int ArrowSize() {
+    int size = 0;
+    ICONINFO ii;
+    if (GetIconInfo(LoadCursorW(nullptr, IDC_ARROW), &ii)) {
+        BITMAP bm;
+        if (GetObjectW(ii.hbmColor ? ii.hbmColor : ii.hbmMask, sizeof(bm), &bm)) size = bm.bmWidth;
+        if (ii.hbmColor) DeleteObject(ii.hbmColor);
+        DeleteObject(ii.hbmMask);
+    }
+    return size > 0 ? size : GetSystemMetrics(SM_CXCURSOR);
+}
+
 static void ReloadCursors() { SystemParametersInfoW(SPI_SETCURSORS, 0, nullptr, 0); }
 
 // Whether our invisible cursor is in place, also kept in the mod's storage: if the process is ever killed while hiding,
 // the next start knows to put the user's cursors back (and otherwise leaves the cursor scheme alone). That is a storage
 // write per hide and per restore, only while hiding is switched on: a deliberate trade for being able to recover.
+// The flag is per user, as the storage is shared by everyone signed in on the machine.
+static WCHAR g_hiddenKey[256] = L"cursorsHidden";
+
 static void SetBlank(bool on) {
     g_blankActive = on;
-    Wh_SetIntValue(L"cursorsHidden", on);
+    Wh_SetIntValue(g_hiddenKey, on);
 }
 
 // ---- sampler ----
 
 static DWORD WINAPI SampleThread(void*) {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);   // cursor positions in physical pixels
     HMONITOR lastMon = nullptr;
+    int arrow = 32;
+    double hidePxPerCm = 38;   // turns the hide speed (cm/s on the main monitor) into px/s on the monitor in use
     LONGLONG lastMove = 0, lastFast = 0, lastFullscreenCheck = -1000;
     bool paused = false, timerHigh = false;
     while (!g_stop) {
@@ -224,7 +251,8 @@ static DWORD WINAPI SampleThread(void*) {
             g_paused = paused;
             if (paused != was) {
                 Wh_Log(L"Paused for a fullscreen app: %d", paused);
-                if (g_wnd) PostMessageW(g_wnd, WM_APP_PAUSED, paused, 0);   // stop listening to the mouse during the game
+                // stop listening to the mouse during the game
+                if (g_wnd) PostMessageW(g_wnd, WM_APP_PAUSED, paused, 0);
             }
         }
         if (paused) {
@@ -241,36 +269,45 @@ static DWORD WINAPI SampleThread(void*) {
 
         CURSORINFO ci;
         ci.cbSize = sizeof(ci);
+        bool showing = GetCursorInfo(&ci) && (ci.flags & CURSOR_SHOWING);
+        // Crossing to another monitor: measure it here, outside the lock, as some of these calls are slow.
+        HMONITOR mon = showing ? MonitorFromPoint(ci.ptScreenPos, MONITOR_DEFAULTTONEAREST) : lastMon;
+        bool stale = showing && g_monStale.exchange(false);
+        bool newMon = showing && (mon != lastMon || stale);
+        int monCursor = 32;
+        if (newMon) {
+            lastMon = mon;
+            UINT dpi = 96, mainDpi = 96, dy;
+            GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dpi, &dy);
+            if (!g_blankActive) arrow = ArrowSize();   // while hiding, the arrow is our invisible one
+            monCursor = MulDiv(arrow, dpi, GetDpiForSystem());
+            int hz = RefreshRate(mon);
+            // The hide speed is set in cm/s as measured on the main monitor. Windows moves the pointer further on a
+            // monitor with more scaling (twice the pixels at 200%), so scale it by the DPI to hide at the same hand
+            // speed on every monitor.
+            POINT origin = {0, 0};
+            HMONITOR mainMon = MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
+            GetDpiForMonitor(mainMon, MDT_EFFECTIVE_DPI, &mainDpi, &dy);
+            hidePxPerCm = PixelsPerCm(mainMon, mainDpi) * dpi / mainDpi;
+            // Half a refresh: frames are not timed to the screen's refreshes, so a whole one would leave the blur
+            // fresh on some refreshes and almost a refresh old on others, and it would jitter against the pointer.
+            g_monGap = 500 / hz > 3 ? 500 / hz : 3;
+        }
+
         EnterCriticalSection(&g_gate);
-        if (!GetCursorInfo(&ci) || !(ci.flags & CURSOR_SHOWING)) {
+        if (!showing) {
             g_curVisible = false;
             g_histN = 0;
             if (g_hideWanted) { g_hideWanted = false; SetEvent(g_hideChanged); }
         } else {
             g_curVisible = true;
             if (!g_blankActive) g_curHandle = ci.hCursor;   // keep the real cursor's picture while it is hidden
-            bool changed = g_histN == 0 || g_hist[g_histN - 1].x != ci.ptScreenPos.x || g_hist[g_histN - 1].y != ci.ptScreenPos.y;
+            bool changed = g_histN == 0 || g_hist[g_histN - 1].x != ci.ptScreenPos.x ||
+                           g_hist[g_histN - 1].y != ci.ptScreenPos.y;
 
-            // crossing to another monitor: drop the trail so it doesn't smear across the gap
-            HMONITOR mon = changed ? MonitorFromPoint(ci.ptScreenPos, MONITOR_DEFAULTTONEAREST) : lastMon;
-            bool stale = g_monStale.exchange(false);
-            if (mon != lastMon || stale) {
+            if (newMon) {   // drop the trail so it doesn't smear across the gap between monitors
                 g_histN = 0;
-                lastMon = mon;
-                UINT dpi = 96, mainDpi = 96, dy;
-                GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dpi, &dy);
-                g_monCursor = GetSystemMetricsForDpi(SM_CXCURSOR, dpi);
-                int hz = RefreshRate(mon);
-                // The hide speed is set in cm/s as measured on the main monitor. Windows moves the pointer further on a
-                // monitor with more scaling (twice the pixels at 200%), so scale it by the DPI to hide at the same hand
-                // speed on every monitor.
-                POINT origin = {0, 0};
-                HMONITOR mainMon = MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
-                GetDpiForMonitor(mainMon, MDT_EFFECTIVE_DPI, &mainDpi, &dy);
-                g_hidePxPerCm = PixelsPerCm(mainMon, mainDpi) * dpi / mainDpi;
-                // Half a refresh: frames are not timed to the screen's refreshes, so a whole one would leave the blur
-                // fresh on some refreshes and almost a refresh old on others, and it would jitter against the pointer.
-                g_monGap = 500 / hz > 3 ? 500 / hz : 3;
+                g_monCursor = monCursor;
             }
 
             LONGLONG now = Now();
@@ -309,7 +346,7 @@ static DWORD WINAPI SampleThread(void*) {
                     if (i > j) recentPath += d;
                 }
                 double speed = path * 1000.0 / dt;
-                double hide = g_hideSpeedCm * g_hidePxPerCm;   // px/s on this monitor, the same hand speed everywhere
+                double hide = g_hideSpeedCm * hidePxPerCm;   // px/s on this monitor, the same hand speed everywhere
                 LONGLONG recentDt = now - g_hist[j].t;
                 double recent = recentDt >= 4 ? recentPath * 1000.0 / recentDt : speed;
                 if (speed > hide) {
@@ -335,7 +372,8 @@ static DWORD WINAPI SampleThread(void*) {
             // Sleep until the mouse moves; while an app hides the cursor, just look once per report. While a window with more
             // rights is in front no mouse reports arrive, so look every 10 ms instead, and every 100 ms once the mouse has
             // been still for a second.
-            DWORD poll = !g_adminFront ? INFINITE : Now() - lastMove < 1000 ? 10 : 100;
+            DWORD poll = INFINITE;
+            if (g_adminFront) poll = Now() - lastMove < 1000 ? 10 : 100;
             if (WaitForSingleObject(g_mouseWake, poll) == WAIT_OBJECT_0 && visible) lastMove = Now();
         }
     }
@@ -347,7 +385,8 @@ static DWORD WINAPI SampleThread(void*) {
 
 static DWORD WINAPI HideThread(void*) {
     // static system cursors blanked while the mouse is fast (the animated wait/app-starting ones are left alone)
-    static const UINT ids[] = {32512, 32513, 32515, 32516, 32642, 32643, 32644, 32645, 32646, 32648, 32649, 32651, 32671, 32672};
+    static const UINT ids[] = {32512, 32513, 32515, 32516, 32642, 32643, 32644,
+                               32645, 32646, 32648, 32649, 32651, 32671, 32672};
     BYTE andMask[128], xorMask[128];
     memset(andMask, 0xFF, sizeof(andMask));
     memset(xorMask, 0, sizeof(xorMask));
@@ -391,7 +430,8 @@ static Sprite* Grab(HCURSOR h, bool* empty) {
     if (!GetIconInfo(h, &ii)) return nullptr;
     BITMAP bm = {};
     GetObjectW(ii.hbmColor ? ii.hbmColor : ii.hbmMask, sizeof(bm), &bm);
-    int w = bm.bmWidth, ht = ii.hbmColor ? bm.bmHeight : bm.bmHeight / 2;   // a monochrome mask holds AND and XOR halves
+    // a monochrome mask holds AND and XOR halves
+    int w = bm.bmWidth, ht = ii.hbmColor ? bm.bmHeight : bm.bmHeight / 2;
     if (ii.hbmColor) DeleteObject(ii.hbmColor);
     if (ii.hbmMask) DeleteObject(ii.hbmMask);
     if (w <= 0 || ht <= 0 || w > 256 || ht > 256) return nullptr;
@@ -416,9 +456,11 @@ static Sprite* Grab(HCURSOR h, bool* empty) {
         bool any = false;
         for (int i = 0; i < n; i++) {
             UINT32 b = px[i];
-            int a = 255 - ((int)(onWhite[i] >> 8 & 255) - (int)(b >> 8 & 255));   // how much of the background shows through
+            // how much of the background shows through
+            int a = 255 - ((int)(onWhite[i] >> 8 & 255) - (int)(b >> 8 & 255));
             a = Clamp(a, 0, 255);
-            UINT32 r = b >> 16 & 255, g = b >> 8 & 255, bl = b & 255, ua = (UINT32)a;   // on black = premultiplied colour
+            // on black = premultiplied colour
+            UINT32 r = b >> 16 & 255, g = b >> 8 & 255, bl = b & 255, ua = (UINT32)a;
             px[i] = ua << 24 | (r < ua ? r : ua) << 16 | (g < ua ? g : ua) << 8 | (bl < ua ? bl : ua);
             any |= a != 0;
         }
@@ -473,7 +515,8 @@ static Sprite* GetSprite(HCURSOR h) {
 static HDC g_memDc;
 static HBITMAP g_dib;
 static HGDIOBJ g_dibOld;
-static UINT32* g_bits;         // the canvas: premultiplied BGRA, top-down, g_canvasW wide; frames use its top-left corner
+// the canvas: premultiplied BGRA, top-down, g_canvasW wide; frames use its top-left corner
+static UINT32* g_bits;
 static int g_canvasW, g_canvasH;
 static UINT32* g_pic;          // the cursor picture at the drawn size
 static int* g_span;            // per row of g_pic: first and one-past-last visible pixel
@@ -521,7 +564,8 @@ static UINT32 Pixel(const Sprite* sp, int x, int y, int w, int h) {
         if (fy < 0) fy = 0;
         int x0 = (int)fx, y0 = (int)fy, x1 = x0 + 1 < sp->w ? x0 + 1 : x0, y1 = y0 + 1 < sp->h ? y0 + 1 : y0;
         float ax = fx - x0, ay = fy - y0, wt[4] = {(1 - ax) * (1 - ay), ax * (1 - ay), (1 - ax) * ay, ax * ay};
-        UINT32 p[4] = {sp->px[y0 * sp->w + x0], sp->px[y0 * sp->w + x1], sp->px[y1 * sp->w + x0], sp->px[y1 * sp->w + x1]};
+        UINT32 p[4] = {sp->px[y0 * sp->w + x0], sp->px[y0 * sp->w + x1],
+                       sp->px[y1 * sp->w + x0], sp->px[y1 * sp->w + x1]};
         for (int i = 0; i < 4; i++)
             for (int s = 0; s < 4; s++) acc[s] += (p[i] >> (8 * s) & 255) * wt[i];
         n = 1;
@@ -544,7 +588,8 @@ static bool Resize(const Sprite* sp, int w, int h) {
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++)
             g_pic[y * w + x] = w == sp->w && h == sp->h ? sp->px[y * w + x] : Pixel(sp, x, y, w, h);
-    for (int y = 0; y < h; y++) {   // most of a cursor is transparent: blending only touches the visible part of each row
+    // most of a cursor is transparent: blending only touches the visible part of each row
+    for (int y = 0; y < h; y++) {
         int a = 0, b = w;
         while (a < w && !g_pic[y * w + a]) a++;
         while (b > a && !g_pic[y * w + b - 1]) b--;
@@ -678,7 +723,8 @@ static bool Render() {
 // Raw mouse input: while on, Windows tells the overlay about every mouse report (even while other apps are active), so
 // the sampler can sleep until the mouse really moves. Off while paused for a fullscreen game.
 static bool ListenToMouse(bool on) {
-    RAWINPUTDEVICE mouse = {1, 2, on ? (DWORD)RIDEV_INPUTSINK : (DWORD)RIDEV_REMOVE, on ? g_wnd.load() : nullptr};   // generic desktop / mouse
+    // generic desktop / mouse
+    RAWINPUTDEVICE mouse = {1, 2, on ? (DWORD)RIDEV_INPUTSINK : (DWORD)RIDEV_REMOVE, on ? g_wnd.load() : nullptr};
     if (RegisterRawInputDevices(&mouse, 1, sizeof(mouse))) return true;
     Wh_Log(L"RegisterRawInputDevices(%d) failed: %lu", on, GetLastError());
     return false;
@@ -732,8 +778,6 @@ static LRESULT CALLBACK OverlayProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
 // Draws when the mouse moves, at most once per half refresh of the monitor, and keeps drawing until the trail has faded
 // after a stop. Idle, it wakes once more to give back memory, then sleeps until the mouse moves.
 static DWORD WINAPI RenderThread(void*) {
-    // physical pixels on every monitor (the overlay is placed and sized in them), whatever the host process uses
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     HINSTANCE inst = GetModuleHandleW(nullptr);
     WNDCLASSW wc = {};
     wc.lpfnWndProc = OverlayProc;
@@ -833,15 +877,28 @@ BOOL WhTool_ModInit() {
     QueryPerformanceFrequency(&g_freq);
     QueryPerformanceCounter(&g_start);
     InitializeCriticalSection(&g_gate);
-    if (Wh_GetIntValue(L"cursorsHidden", 0)) {   // an earlier run was killed while hiding the cursor
+    HANDLE token;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        BYTE buf[SECURITY_MAX_SID_SIZE + sizeof(TOKEN_USER)];
+        DWORD len;
+        LPWSTR sid;
+        if (GetTokenInformation(token, TokenUser, buf, sizeof(buf), &len) &&
+            ConvertSidToStringSidW(((TOKEN_USER*)buf)->User.Sid, &sid)) {
+            swprintf_s(g_hiddenKey, L"cursorsHidden_%s", sid);
+            LocalFree(sid);
+        }
+        CloseHandle(token);
+    }
+    if (Wh_GetIntValue(g_hiddenKey, 0)) {   // an earlier run was killed while hiding the cursor
         Wh_Log(L"Restoring the cursors after an earlier run");
         ReloadCursors();
-        Wh_SetIntValue(L"cursorsHidden", 0);
+        Wh_SetIntValue(g_hiddenKey, 0);
     }
     g_prevFilter = SetUnhandledExceptionFilter(CrashFilter);
 
     // Windows 11 ignores a finer timer for a process with no visible window; the short waits here need it while moving.
-    PROCESS_POWER_THROTTLING_STATE pt = {PROCESS_POWER_THROTTLING_CURRENT_VERSION, PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION, 0};
+    PROCESS_POWER_THROTTLING_STATE pt = {PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+                                         PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION, 0};
     SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, &pt, sizeof(pt));
 
     g_moved = CreateEventW(nullptr, FALSE, FALSE, nullptr);
