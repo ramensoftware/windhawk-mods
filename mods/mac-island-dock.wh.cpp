@@ -10,7 +10,7 @@
 // @homepage        https://caliberda.com.br
 // @include         windhawk.exe
 // @include         explorer.exe
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -lcomctl32 -lgdi32 -lmsimg32 -ld2d1 -ldwrite -lwlanapi -luuid -lwindowscodecs -lversion -lbthprops -ldxva2 -lshlwapi -lwinhttp -lwinmm -liphlpapi
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -lcomctl32 -lgdi32 -lmsimg32 -ld2d1 -ldwrite -lwlanapi -luuid -lwindowscodecs -lversion -lbthprops -ldxva2 -lshlwapi -lwinhttp -lwinmm -liphlpapi -lshcore
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -68,6 +68,11 @@ the taskbar.
   * **What's playing** (the music note): the cover, the song, a timeline to
     jump in it, previous / play / next, and the volume (the mouse wheel too).
     The buttons, and the cover with the title, can also sit on the pill.
+    With several apps with media (a paused Spotify and a browser playing,
+    for example), a row at its top chooses which one the island controls
+    ("Automatic" follows Windows); on the pill, a dot under the cover for
+    each, and Shift+wheel (or a sideways touchpad swipe) on it goes to the
+    next one.
   * The control center's controls can be chosen and ordered right in it
     ("Edit", like on the iPhone: drag one to move it, "-" removes
     it, and the others are listed below to add), with shortcuts like dark
@@ -91,14 +96,20 @@ the taskbar.
     imported from a file like komorebi's whkdrc), the **weather** (now, the
     next hours and the week, for a city typed in its panel) and **updates**
     (the apps with a newer version in winget, updated in a terminal: one,
-    the ones ticked, or all; and the Windows updates waiting). Notes, tasks
+    the ones ticked, or all; an app can be ignored, so one winget can't
+    update doesn't keep the count on the pill, and shown again; and the
+    Windows updates waiting). Notes, tasks
     and shortcuts also have buttons in the control center.
 * **Colors**: black, graphite, light, the Windows accent color, or glass.
 * **The other apps' tray icons** on the island: the pinned ones always, the
   others opening sideways from the "⋯" button. Clicking, double-clicking and
   right-clicking them works like on the taskbar (a double click opens the app,
   the right button shows its menu); the pin that shows after the mouse
-  stays two seconds on an icon (or the middle button) pins it.
+  stays two seconds on an icon (or the middle button) pins it. With many
+  icons, the list shows twelve at a time (a setting, in Windhawk and in the
+  island; fewer on small screens): the icons at an edge with more past it
+  fade out, and the mouse wheel (or a sideways swipe) over the icons scrolls
+  the list.
 * **New notifications in the pill**: the pill opens with the app, the title
   and the text for a few seconds, like the iPhone's Dynamic Island (not with
   "Do not disturb"), with the sender's picture when the notification has one
@@ -124,10 +135,22 @@ the taskbar.
   front. On the lower half of the screen, its panels and banners open
   upwards; on the left and right edges it stands upright, and they open
   towards the middle.
+* **Several monitors**: the island stays on the main monitor, on another
+  one chosen, or follows the monitor with the mouse; each monitor keeps its
+  own place for it. Going to another monitor, it closes into its dot, which
+  glides there and opens again.
+* **Smooth everywhere**: what it shows opens, closes, grows, shrinks and
+  changes with springs (icons crossfade, new tray icons and notifications
+  grow in, old ones shrink away). For slower computers, the "Animations"
+  settings (in Windhawk and in the island, the same ones) turn them off,
+  keep only the essential ones ("partial": the island, panels and banners
+  opening and closing, without bounces, glows, color blends, counting
+  numbers or scrolling text), change their speed, or limit the frames a
+  second (about 90, 60 or 30; the animations keep their length).
 * **The island's options are in the island**: right-click the island (the
   pill or the minimized line) and click the gear that comes out under it
-  (see below). Windhawk's settings only turn the island on and set up the
-  taskbar.
+  (see below). Windhawk's settings turn the island on, set up the taskbar
+  and the animations.
 
 ### The island's settings
 
@@ -136,17 +159,18 @@ brings out a small bubble with a gear under it; clicking it opens the
 control center on the settings (with the bar style, the right click opens
 them right away). They show in two or three columns (one on small screens,
 scrolling). Typing anywhere in them searches them
-(accents don't matter); Ctrl+Backspace deletes a word, and Esc clears the
-search.
+(accents don't matter); Ctrl+Backspace deletes a word, Esc clears the
+search, and Esc (or a click outside) closes them.
 
 | Section | What it sets |
 | :--- | :--- |
 | Look | The style (pill or bar), the colors, the size, and panels as wide as the island. |
-| Place | Where it sits; "Place and icons per app" (a place, icons and a clock of their own for some apps, added from the open apps); moving the pill by dragging it; standing upright on the left and right edges; its distance from the screen's edges. |
+| Place | Where it sits (kept for each monitor); "Place and icons per app" (a place, icons and a clock of their own for some apps, added from the open apps); moving the pill by dragging it; standing upright on the left and right edges; its distance from the screen's edges; on the monitor with the mouse, or on the monitor chosen. |
 | On the pill | The order of its items (drag them in the little pill), the clock kept in the middle, and which items it shows: network, volume, battery, the bell, and (off by default) the power button, light and dark mode, the microphone, notes, tasks, keyboard shortcuts, the weather, updates, and the processor, memory and video memory use. |
-| Tray icons and media | The other apps' tray icons (and keeping their list open), what's playing, and its buttons and cover with the title on the pill. |
+| Tray icons and media | The other apps' tray icons (keeping their list open, and how many it shows before it scrolls), what's playing, and its buttons and cover with the title on the pill. |
 | Clock | Seconds, the day of the week, the day and month, the year, and the holidays in the calendar (off by default). |
 | Notifications | "The island handles notifications and their sounds" (off by default, see the notes), new notifications in the pill (also while it's minimized), hiding the Windows banners, and downloading pictures from the web (off by default). |
+| Animations | On or off, how many (all, partial, none), their speed, and the frames a second. The same as in Windhawk's settings: the mod can't change Windhawk's, so a change here holds until one is changed in Windhawk. |
 
 ### Screenshots
 
@@ -191,6 +215,8 @@ usable), or as it is (all of it, or only its apps).
   it opens the app. The whole dock, or nothing at all, can be chosen instead.
   On the transparent taskbar, an app asking for attention neither bounces
   nor brings the taskbar up: its button shows it once the taskbar is up.
+* **Apps coming and going**: an app opening grows into the dock, and the
+  icons next to it slide over to make room (and back when one closes).
 * **Dots under open apps**, instead of the Windows line.
 * **Hidden until you need it**: the taskbar auto-hides, and springs in when
   the mouse reaches the bottom edge of the screen.
@@ -255,8 +281,14 @@ usable), or as it is (all of it, or only its apps).
     center uses.
   * The tray icons are read as the apps send them to the taskbar. When the
     mod starts, it asks the apps to send them again, with the message Windows
-    sends when the taskbar restarts. Clearing notifications on the island only
-    hides them there (the Windows notification database is only read).
+    sends when the taskbar restarts; an app that changes an icon the mod
+    hasn't seen yet (one started before it) is sent that message on its own.
+    Some apps never send them again (Spotify): so that their icons aren't
+    lost when the mod reloads (its settings saved, turned off and on), the
+    list is kept in the mod's storage while it reloads, and taken back for
+    the apps still running.
+    Clearing notifications on the island only hides them there (the Windows
+    notification database is only read).
   * When the island takes a new notification (in the pill, or, with the bar
     style or a panel open, as its app's icon with the red dot and in the
     list), the Windows banner is moved off the screen (it can be kept in the
@@ -318,6 +350,12 @@ usable), or as it is (all of it, or only its apps).
     them (with "Fast startup", shutting down works like the Start menu's).
     On PCs with Modern Standby, "Sleep" turns the screen off, which is what
     puts them to sleep.
+* **Graphics driver updates**: the island and its panels are drawn with
+  Direct2D on layered windows. If the graphics driver is updated or reset,
+  the island starts again by itself (every two seconds at most, while the
+  driver is still installing), with everything drawn anew. The picture is
+  copied to the window, so on laptops with two GPUs it doesn't matter which
+  one draws it.
 * **Similar mods**: [Dynamic Island for
   Windows](https://windhawk.net/mods/dynamic-island-for-windows) is a pill
   overlay that reacts to media, downloads and the clipboard; [Island Media
@@ -389,7 +427,11 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
   * **O que está tocando** (a nota musical): a capa, a música, uma linha do
     tempo para pular partes, voltar / tocar / avançar e o volume (a roda do
     mouse também). Os botões, e a capa com o título, também podem ficar na
-    pílula.
+    pílula. Com vários apps com mídia (um Spotify pausado e um navegador
+    tocando, por exemplo), uma fileira no topo escolhe qual a ilha controla
+    ("Automático" segue o Windows); na pílula, um pontinho embaixo da capa
+    para cada um, e Shift+roda (ou deslizar para o lado no touchpad) em cima
+    dela passa para o próximo.
   * Os controles da central de controle podem ser escolhidos e ordenados nela
     mesma ("Editar", como no iPhone: arraste um para mudar de
     lugar, o "-" tira, e os outros ficam listados embaixo para adicionar), com
@@ -412,7 +454,9 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
     teclas, ou importados de um arquivo como o whkdrc do komorebi), o
     **clima** (agora, as próximas horas e a semana, da cidade digitada no
     painel) e **atualizações** (os apps com versão nova no winget,
-    atualizados num terminal: um, os marcados, ou todos; e as atualizações
+    atualizados num terminal: um, os marcados, ou todos; um app pode ser
+    ignorado, para um que o winget não consegue atualizar não deixar o
+    contador da pílula preso, e voltar a ser mostrado; e as atualizações
     do Windows pendentes).
     Anotações, tarefas e atalhos também têm botões na central de controle.
 * **Cores**: preto, grafite, claro, a cor de destaque do Windows, ou vidro.
@@ -420,7 +464,11 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
   outros abrindo para o lado pelo botão "⋯". Clicar, clicar duas vezes e
   clicar com o botão direito funcionam como na barra (o duplo clique abre o
   app, o botão direito mostra o menu dele); o alfinete que aparece depois de
-  dois segundos com o mouse no ícone (ou o botão do meio) fixa o ícone.
+  dois segundos com o mouse no ícone (ou o botão do meio) fixa o ícone. Com
+  muitos ícones, a lista mostra doze por vez (uma configuração, no Windhawk
+  e na ilha; menos em telas pequenas): os ícones numa ponta com mais depois
+  dela vão sumindo, e a roda do mouse (ou deslizar para o lado) em cima dos
+  ícones rola a lista.
 * **Notificações novas na pílula**: a pílula se abre com o app, o título e o
   texto por alguns segundos, como a Dynamic Island do iPhone (não com o "Não
   incomodar" ligado), com a foto de quem mandou quando a notificação tem uma
@@ -445,10 +493,22 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
   um relógio mais curto deixa a ilha menor), e ela desliza para lá enquanto eles
   estão na frente. Na metade de baixo da tela, os painéis e os avisos abrem para
   cima; nas laterais ela fica em pé, e eles abrem para o meio.
+* **Vários monitores**: a ilha fica no monitor principal, num outro
+  escolhido, ou segue o monitor onde está o mouse; cada monitor guarda a
+  posição dela. Indo para outro monitor, ela se fecha no pontinho, que
+  desliza até lá e se abre de novo.
+* **Suave em tudo**: o que ela mostra abre, fecha, cresce, diminui e muda
+  com efeito de mola (os ícones trocam com transição, ícones da bandeja e
+  notificações novas crescem, os que saem encolhem). Para computadores mais
+  lentos, as configurações de "Animações" (no Windhawk e na ilha, as mesmas)
+  desligam tudo, deixam só o essencial ("parciais": a ilha, os painéis e os
+  avisos abrindo e fechando, sem quiques, brilhos, mistura de cores, números
+  contando nem texto rolando), mudam a velocidade ou limitam os quadros por
+  segundo (cerca de 90, 60 ou 30; as animações mantêm a duração).
 * **As opções da ilha ficam na ilha**: clique com o botão direito na ilha (na
   pílula ou na linha minimizada) e clique na engrenagem que sai embaixo dela
-  (veja abaixo). As configurações do Windhawk só ligam a ilha e ajustam a
-  barra de tarefas.
+  (veja abaixo). As configurações do Windhawk ligam a ilha e ajustam a
+  barra de tarefas e as animações.
 
 #### As configurações da ilha
 
@@ -458,16 +518,17 @@ nele abre a central de controle nas configurações (no estilo barra, o clique
 direito já abre as configurações). Elas aparecem em duas ou três colunas (uma
 em telas pequenas, rolando). Digitar em qualquer lugar delas
 faz uma busca (os acentos não importam); Ctrl+Backspace apaga uma
-palavra, e o Esc limpa a busca.
+palavra, o Esc limpa a busca, e o Esc (ou um clique fora) fecha.
 
 | Seção | O que ela ajusta |
 | :--- | :--- |
 | Aparência | O estilo (pílula ou barra), as cores, o tamanho, e painéis na largura da ilha. |
-| Posição | Onde ela fica; "Posição e ícones por app" (uma posição, ícones e relógio só de alguns apps, escolhidos entre os apps abertos); mover a pílula arrastando; ficar em pé nas laterais; a distância dela até as bordas da tela. |
+| Posição | Onde ela fica (guardado para cada monitor); "Posição e ícones por app" (uma posição, ícones e relógio só de alguns apps, escolhidos entre os apps abertos); mover a pílula arrastando; ficar em pé nas laterais; a distância dela até as bordas da tela; no monitor onde está o mouse, ou no monitor escolhido. |
 | Na pílula | A ordem dos itens (arraste-os na pilulinha), o relógio no meio, e quais itens ela mostra: rede, volume, bateria, o sino, e (desligados por padrão) o botão de desligar, o modo claro e escuro, o microfone, anotações, tarefas, atalhos do teclado, o clima, atualizações, e o uso do processador, da memória e da memória de vídeo. |
-| Bandeja e mídia | Os ícones dos outros apps (e manter a lista deles aberta), o que está tocando, e os botões e a capa com o título na pílula. |
+| Bandeja e mídia | Os ícones dos outros apps (manter a lista deles aberta, e quantos ela mostra antes de rolar), o que está tocando, e os botões e a capa com o título na pílula. |
 | Relógio | Segundos, o dia da semana, o dia e o mês, o ano, e os feriados no calendário (desligado por padrão). |
 | Notificações | "A ilha cuida das notificações e dos sons" (desligada por padrão, veja as observações), os avisos na pílula (também com ela minimizada), esconder os avisos do Windows e baixar fotos da internet (desligado por padrão). |
+| Animações | Ligadas ou não, quantas (todas, parciais, nenhuma), a velocidade e os quadros por segundo. As mesmas das configurações do Windhawk: o mod não consegue mudar as do Windhawk, então uma mudança aqui vale até uma delas mudar no Windhawk. |
 
 #### Imagens
 
@@ -512,6 +573,8 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
   Clicar nele abre o app. Dá para escolher a dock inteira, ou nada, no lugar.
   Na barra transparente, um app pedindo atenção não pula nem faz a barra
   aparecer: o botão dele mostra isso quando a barra estiver à vista.
+* **Apps chegando e saindo**: um app abrindo cresce na dock, e os ícones do
+  lado deslizam para abrir espaço (e voltam quando um fecha).
 * **Pontinhos embaixo dos apps abertos**, no lugar do traço do Windows.
 * **Escondida até você precisar**: a barra se oculta sozinha e entra com efeito
   de mola quando o mouse chega na borda de baixo da tela.
@@ -578,7 +641,13 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
     notificações do Windows usa.
   * Os ícones da bandeja são lidos quando os apps os mandam para a barra.
     Quando o mod começa, ele pede aos apps que os mandem de novo, com a
-    mensagem que o Windows manda quando a barra reinicia. Limpar as
+    mensagem que o Windows manda quando a barra reinicia; um app que muda um
+    ícone que o mod ainda não viu (aberto antes dele) recebe essa mensagem
+    só para ele. Alguns apps nunca os mandam de novo (Spotify): para os
+    ícones deles não se perderem quando o mod recarrega (configurações
+    salvas, desligar e ligar), a lista fica guardada no armazenamento do mod
+    enquanto ele recarrega e volta para os apps que ainda estão abertos.
+    Limpar as
     notificações na ilha só as esconde ali (o banco de notificações do Windows
     é só lido).
   * Quando a ilha pega uma notificação nova (na pílula, ou, no estilo barra ou
@@ -643,6 +712,12 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
     isso (com a "Inicialização rápida", desligar funciona como no menu
     Iniciar). Em PCs com Modern Standby, "Suspender" desliga a tela, que é o
     que põe esses PCs para dormir.
+* **Atualização do driver de vídeo**: a ilha e os painéis são desenhados
+  com Direct2D em janelas em camadas. Se o driver de vídeo é atualizado ou
+  reiniciado, a ilha começa de novo sozinha (no máximo a cada dois
+  segundos, enquanto o driver ainda está instalando), com tudo desenhado de
+  novo. A imagem é copiada para a janela, então em notebooks com duas placas
+  de vídeo não importa qual delas desenha.
 * **Mods parecidos**: o [Dynamic Island for
   Windows](https://windhawk.net/mods/dynamic-island-for-windows) é uma pílula
   que reage a mídia, downloads e área de transferência; o [Island Media
@@ -690,6 +765,11 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
   $name:pt-BR: Ilha no topo
   $description: The clock, the control center, notifications, what's playing and the other apps' tray icons, at the top of the screen. Its own options (style, colors, what it shows) are in it (right-click the island, then click the gear that comes out under it)
   $description:pt-BR: O relógio, a central de controle, as notificações, o que está tocando e os ícones dos outros apps, no topo da tela. As opções dela (estilo, cores, o que ela mostra) ficam nela mesma (clique com o botão direito na ilha e depois na engrenagem que sai embaixo dela)
+- trayListIcons: 12
+  $name: Tray icons shown before the list scrolls
+  $name:pt-BR: Ícones da bandeja mostrados antes de a lista rolar
+  $description: How many of the other apps' tray icons the island's open list shows at a time; past that, the mouse wheel scrolls it. Also in the island's settings, where a change holds until this one is changed (4-40, default 12)
+  $description:pt-BR: Quantos ícones dos outros apps a lista aberta da ilha mostra por vez; passando disso, a roda do mouse rola a lista. Também fica nas configurações da ilha, onde uma mudança vale até esta ser mudada (4-40, padrão 12)
 - hiding:
   - autoHide: true
     $name: Hide the taskbar until the mouse reaches the bottom edge
@@ -699,23 +779,23 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
   - showDelay: 0
     $name: Wait before showing (ms)
     $name:pt-BR: Espera para aparecer (ms)
-    $description: How long the mouse has to stay at the bottom edge (0-2000)
-    $description:pt-BR: Quanto tempo o mouse precisa ficar na borda de baixo (0-2000)
+    $description: How long the mouse has to stay at the bottom edge (0-2000, default 0)
+    $description:pt-BR: Quanto tempo o mouse precisa ficar na borda de baixo (0-2000, padrão 0)
   - hideDelay: 400
     $name: Wait before hiding (ms)
     $name:pt-BR: Espera para esconder (ms)
-    $description: How long it stays after the mouse leaves it (0-5000)
-    $description:pt-BR: Quanto tempo ela fica depois que o mouse sai (0-5000)
+    $description: How long it stays after the mouse leaves it (0-5000, default 400)
+    $description:pt-BR: Quanto tempo ela fica depois que o mouse sai (0-5000, padrão 400)
   - showDuration: 260
     $name: Showing animation (ms)
     $name:pt-BR: Animação de aparecer (ms)
-    $description: How long it takes to slide in, with a little spring (0-1000; 0 is instant)
-    $description:pt-BR: Quanto tempo ela leva para entrar, com um leve efeito de mola (0-1000; 0 é na hora)
+    $description: How long it takes to slide in, with a little spring; 0 is instant, and the speed in the animations group changes it too (0-1000, default 260)
+    $description:pt-BR: Quanto tempo ela leva para entrar, com um leve efeito de mola; 0 é na hora, e a velocidade do grupo de animações também muda isso (0-1000, padrão 260)
   - hideDuration: 220
     $name: Hiding animation (ms)
     $name:pt-BR: Animação de esconder (ms)
-    $description: How long it takes to slide out (0-1000; 0 is instant)
-    $description:pt-BR: Quanto tempo ela leva para sair (0-1000; 0 é na hora)
+    $description: How long it takes to slide out; 0 is instant (0-1000, default 220)
+    $description:pt-BR: Quanto tempo ela leva para sair; 0 é na hora (0-1000, padrão 220)
   - fullscreenGuard: true
     $name: Not over games and videos in full screen
     $name:pt-BR: Não aparecer sobre jogos e vídeos em tela cheia
@@ -729,16 +809,18 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
   - magnification: 150
     $name: Icon magnification (%)
     $name:pt-BR: Ampliação dos ícones (%)
-    $description: How big the icon under the mouse gets, in a wave like on macOS (100 turns it off, up to 200). On the transparent taskbar the icons can only grow up to its top
-    $description:pt-BR: O quanto o ícone embaixo do mouse cresce, numa onda como no macOS (100 desliga, até 200). Na barra transparente os ícones só crescem até o topo dela
+    $description: How big the icon under the mouse gets, in a wave like on macOS; 100 turns it off. On the transparent taskbar the icons can only grow up to its top (100-200, default 150)
+    $description:pt-BR: O quanto o ícone embaixo do mouse cresce, numa onda como no macOS; 100 desliga. Na barra transparente os ícones só crescem até o topo dela (100-200, padrão 150)
   - magnificationRange: 120
     $name: Magnification reach (px)
     $name:pt-BR: Alcance da ampliação (px)
-    $description: How far from the mouse the neighboring icons still grow (40-300). Only with magnification above 100
-    $description:pt-BR: Até que distância do mouse os ícones vizinhos também crescem (40-300). Só com ampliação acima de 100
+    $description: How far from the mouse the neighboring icons still grow. Only with magnification above 100 (40-300, default 120)
+    $description:pt-BR: Até que distância do mouse os ícones vizinhos também crescem. Só com ampliação acima de 100 (40-300, padrão 120)
   - bounceOnLaunch: true
     $name: Bounce while an app opens
     $name:pt-BR: Pular enquanto um app abre
+    $description: The icon of an app being opened bounces until its window shows, like on macOS (not with the "partial" or no animations)
+    $description:pt-BR: O ícone de um app abrindo pula até a janela dele aparecer, como no macOS (não com animações "parciais" ou sem animações)
   - keepOpenOnLaunch: true
     $name: Stay up while a clicked app opens
     $name:pt-BR: Ficar aberta enquanto um app clicado abre
@@ -747,8 +829,8 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
   - keepOpenDuration: 1500
     $name: How long it stays after the app opens (ms)
     $name:pt-BR: Quanto tempo ela fica depois que o app abre (ms)
-    $description: Enough to see the bounces (0-5000). Only with the option above on
-    $description:pt-BR: O suficiente para ver os pulos (0-5000). Só com a opção acima ligada
+    $description: Enough to see the bounces. Only with the option above on (0-5000, default 1500)
+    $description:pt-BR: O suficiente para ver os pulos. Só com a opção acima ligada (0-5000, padrão 1500)
   $name: App icons (dock and transparent taskbar)
   $name:pt-BR: Ícones dos apps (dock e barra transparente)
   $description: Only for the "Dock" and "Windows taskbar, transparent" choices above
@@ -757,23 +839,23 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
   - dockHeight: 38
     $name: Height (px)
     $name:pt-BR: Altura (px)
-    $description: Of the dock itself (28-64). If the taskbar is taller, the room above the dock is left for the magnified icons
-    $description:pt-BR: Da própria dock (28-64). Se a barra de tarefas for mais alta, o espaço acima da dock fica para os ícones ampliados
+    $description: Of the dock itself. If the taskbar is taller, the room above the dock is left for the magnified icons (28-64, default 38)
+    $description:pt-BR: Da própria dock. Se a barra de tarefas for mais alta, o espaço acima da dock fica para os ícones ampliados (28-64, padrão 38)
   - bottomGap: 6
     $name: Gap at the bottom (px)
     $name:pt-BR: Espaço embaixo (px)
-    $description: Between the dock and the bottom edge of the screen (0-16)
-    $description:pt-BR: Entre a dock e a borda de baixo da tela (0-16)
+    $description: Between the dock and the bottom edge of the screen (0-16, default 6)
+    $description:pt-BR: Entre a dock e a borda de baixo da tela (0-16, padrão 6)
   - cornerRadius: 14
     $name: Corner roundness (px)
     $name:pt-BR: Arredondamento dos cantos (px)
-    $description: 0 is square, 24 is very round
-    $description:pt-BR: 0 é quadrado, 24 é bem arredondado
+    $description: 0 is square, 24 is very round (0-24, default 14)
+    $description:pt-BR: 0 é quadrado, 24 é bem arredondado (0-24, padrão 14)
   - backgroundOpacity: 55
     $name: Background tint (%)
     $name:pt-BR: Cor do fundo (%)
-    $description: How much color over the blur (0 is only blur, 100 is solid)
-    $description:pt-BR: Quanto de cor por cima do desfoque (0 é só desfoque, 100 é sólido)
+    $description: How much color over the blur; 0 is only blur, 100 is solid (0-100, default 55)
+    $description:pt-BR: Quanto de cor por cima do desfoque; 0 é só desfoque, 100 é sólido (0-100, padrão 55)
   - dotIndicator: true
     $name: Dots under open apps
     $name:pt-BR: Pontinhos embaixo dos apps abertos
@@ -782,6 +864,8 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
   - attentionMode: icon
     $name: When an app needs attention with the dock hidden
     $name:pt-BR: Quando um app pede atenção com a dock escondida
+    $description: An app flashing its taskbar button (a message, a download done) while the dock is hidden
+    $description:pt-BR: Um app piscando o botão na barra (uma mensagem, um download pronto) enquanto a dock está escondida
     $options:
     - icon: Only the app's icon peeks out, bouncing
     - dock: The whole dock shows up
@@ -799,6 +883,49 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
   $name:pt-BR: Visual da dock (só para a dock)
   $description: Only for the "Dock" choice above
   $description:pt-BR: Só para a opção "Dock" acima
+- animations:
+  - enabled: true
+    $name: Animations
+    $name:pt-BR: Animações
+    $description: Every animation of the mod (island, panels, banners and dock). Off, everything changes at once
+    $description:pt-BR: Todas as animações do mod (ilha, painéis, avisos e dock). Desligadas, tudo muda na hora
+  - level: all
+    $name: How many
+    $name:pt-BR: Quantas
+    $description: '"Partial" keeps the island, panels and banners opening and closing, and drops what only decorates, for slower computers'
+    $description:pt-BR: '"Parciais" mantém a ilha, os painéis e os avisos abrindo e fechando, e tira o que só enfeita, para computadores mais lentos'
+    $options:
+    - all: All
+    - partial: "Partial: no bounces, glows, color blends, counting numbers nor scrolling text"
+    - none: None
+    $options:pt-BR:
+    - all: Todas
+    - partial: "Parciais: sem quiques, brilhos, mistura de cores, números contando nem texto rolando"
+    - none: Nenhuma
+  - speed: 125
+    $name: Speed (%)
+    $name:pt-BR: Velocidade (%)
+    $description: More is faster, less is slower (50-200, default 125)
+    $description:pt-BR: Mais é mais rápido, menos é mais lento (50-200, padrão 125)
+  - frameRate: screen
+    $name: Frame rate limit
+    $name:pt-BR: Limite de quadros por segundo
+    $description: Fewer frames cost less on slower computers; the animations keep their length
+    $description:pt-BR: Menos quadros custam menos em computadores mais lentos; as animações mantêm a duração
+    $options:
+    - screen: The screen's rate
+    - fps90: About 90 a second
+    - fps60: About 60 a second
+    - fps30: About 30 a second
+    $options:pt-BR:
+    - screen: A taxa da tela
+    - fps90: Cerca de 90 por segundo
+    - fps60: Cerca de 60 por segundo
+    - fps30: Cerca de 30 por segundo
+  $name: Animations (island, panels and dock)
+  $name:pt-BR: Animações (ilha, painéis e dock)
+  $description: Also in the island's settings. The mod can't change these, so a change there wins until one of these is changed again
+  $description:pt-BR: Também nas configurações da ilha. O mod não consegue mudar estas, então uma mudança lá vale até uma destas mudar de novo
 */
 // ==/WindhawkModSettings==
 
@@ -813,15 +940,13 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
 #include <endpointvolume.h>
 #include <highlevelmonitorconfigurationapi.h>
 #include <mmdeviceapi.h>
+// The notification sounds (PlaySound; WIN32_LEAN_AND_MEAN leaves it out).
+#include <mmsystem.h>
 #include <netlistmgr.h>
-// The network adapters' table (GetIfTable2) needs the Winsock types first;
-// windows.h is already in (Windhawk includes it), which only makes winsock2.h
-// warn about the order (it works: windows.h didn't pull the old winsock.h's
-// definitions in).
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-W#warnings"
+// The network adapters' table (GetIfTable2) needs the Winsock types first
+// (WIN32_LEAN_AND_MEAN, in the compiler options, keeps windows.h from pulling
+// the old winsock.h in before it).
 #include <winsock2.h>
-#pragma clang diagnostic pop
 #include <ws2ipdef.h>
 #include <iphlpapi.h>
 #include <dxgi.h>
@@ -833,6 +958,7 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
 #include <winhttp.h>
 #include <wlanapi.h>
 #include <shellapi.h>
+#include <shellscalingapi.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <shobjidl.h>
@@ -954,6 +1080,8 @@ struct {
     int islandSize;
     // The room between the island and the screen's edges (px at 100%).
     int islandGap;
+    // On the monitor where the mouse is (several monitors).
+    bool islandFollowMouse;
     double magnification;
     double magnificationRange;
     bool bounceOnLaunch;
@@ -1006,6 +1134,170 @@ enum class ThemeId { Black, Graphite, Light, Accent, Glass, Count };
 int g_themeIndex;
 
 double NowSeconds();
+
+// How the mod animates (see LoadAnimationSettings), in both processes: the
+// level (0 all, 1 partial: no bounces nor decorations, 2 none), the speed in
+// percent, and the frame rate limit (0 the screen's, or frames a second).
+std::atomic<int> g_animationLevel{0};
+std::atomic<int> g_animationSpeed{100};
+std::atomic<int> g_frameRateLimit{0};
+
+int AnimationLevel() {
+    return g_animationLevel.load(std::memory_order_relaxed);
+}
+
+// A real time step, as the animations take it (faster or slower).
+double AnimationDt(double dt) {
+    return dt * g_animationSpeed.load(std::memory_order_relaxed) / 100.0;
+}
+
+// How long a timed animation lasts at the chosen speed: 0 without
+// animations, and for a decoration (a glow, a color blend, a number
+// counting...) at the "partial" level too.
+double AnimationSeconds(double seconds, bool decoration = false) {
+    const int level = AnimationLevel();
+    if (level >= 2 || (decoration && level >= 1)) {
+        return 0;
+    }
+    return seconds * 100.0 / g_animationSpeed.load(std::memory_order_relaxed);
+}
+
+// An animation's length in milliseconds at the chosen speed (0, at once,
+// without animations).
+int AnimationMs(int ms) {
+    return (int)std::lround(AnimationSeconds(ms / 1000.0) * 1000);
+}
+
+// The animation settings as chosen: on, level (0 all, 1 partial, 2 none),
+// speed (percent) and frame rate (0 the screen's, 1 about 90, 2 about 60, 3
+// about 30).
+struct AnimationChoice {
+    int on = 1;
+    int level = 0;
+    int speed = 125;
+    int rate = 0;
+};
+constexpr int kAnimationSpeedMin = 50;
+constexpr int kAnimationSpeedMax = 200;
+constexpr int kAnimationSpeedDefault = 125;
+constexpr int kAnimationSpeedStep = 10;
+constexpr int kFrameRates[] = {0, 90, 60, 30};
+AnimationChoice g_animationChoice;
+
+int EncodeAnimations(const AnimationChoice& choice) {
+    return 1 + choice.on + choice.level * 2 + choice.rate * 8 +
+           choice.speed * 32;
+}
+
+AnimationChoice DecodeAnimations(int code) {
+    code--;
+    return {code & 1, (code >> 1) & 3, code >> 5, (code >> 3) & 3};
+}
+
+AnimationChoice AnimationsFromWindhawk() {
+    AnimationChoice choice;
+    choice.on = Wh_GetIntSetting(L"animations.enabled") != 0;
+    const auto level = WindhawkUtils::StringSetting::make(L"animations.level");
+    choice.level = wcscmp(level, L"partial") == 0 ? 1
+                   : wcscmp(level, L"none") == 0  ? 2
+                                                  : 0;
+    choice.speed = Wh_GetIntSetting(L"animations.speed");
+    const auto rate =
+        WindhawkUtils::StringSetting::make(L"animations.frameRate");
+    choice.rate = wcscmp(rate, L"fps90") == 0   ? 1
+                  : wcscmp(rate, L"fps60") == 0 ? 2
+                  : wcscmp(rate, L"fps30") == 0 ? 3
+                                                : 0;
+    return choice;
+}
+
+void ApplyAnimationChoice(AnimationChoice choice) {
+    choice.on = choice.on ? 1 : 0;
+    choice.level = std::clamp(choice.level, 0, 2);
+    choice.speed =
+        std::clamp(choice.speed, kAnimationSpeedMin, kAnimationSpeedMax);
+    choice.rate = std::clamp(choice.rate, 0, 3);
+    g_animationChoice = choice;
+    g_animationLevel = choice.on ? choice.level : 2;
+    g_animationSpeed = choice.speed;
+    g_frameRateLimit = kFrameRates[choice.rate];
+}
+
+// Windhawk's animation settings, unless they were changed in the island's
+// settings since (the mod can't change Windhawk's own): the island keeps its
+// choice together with the Windhawk ones it was made over, so a later change
+// in Windhawk wins again. Read by both processes.
+void LoadAnimationSettings() {
+    const AnimationChoice windhawk = AnimationsFromWindhawk();
+    AnimationChoice choice = windhawk;
+    if (const int island = Wh_GetIntValue(L"animationsIsland", 0);
+        island > 0) {
+        if (Wh_GetIntValue(L"animationsBase", 0) ==
+            EncodeAnimations(windhawk)) {
+            choice = DecodeAnimations(island);
+        } else {
+            Wh_DeleteValue(L"animationsIsland");
+            Wh_DeleteValue(L"animationsBase");
+        }
+    }
+    ApplyAnimationChoice(choice);
+}
+
+// Changed in the island (`keep`: saved, not only shown while sliding).
+void SetAnimationChoice(const AnimationChoice& choice, bool keep) {
+    ApplyAnimationChoice(choice);
+    if (keep) {
+        Wh_SetIntValue(L"animationsIsland",
+                       EncodeAnimations(g_animationChoice));
+        Wh_SetIntValue(L"animationsBase",
+                       EncodeAnimations(AnimationsFromWindhawk()));
+    }
+}
+
+// Moves `value` towards `target` like a spring, over about `seconds`.
+// `damping` 1 settles without overshooting; lower values bounce a little, like
+// the iPhone's Dynamic Island. Returns true while it's still moving.
+bool SpringTowards(double& value, double& velocity, double target,
+                   double seconds, double dt, double damping = 1.0) {
+    // Without animations, it's there at once; at the "partial" level, it
+    // doesn't bounce.
+    const int level = AnimationLevel();
+    if (level >= 2) {
+        value = target;
+        velocity = 0;
+        return false;
+    }
+    if (level == 1) {
+        damping = std::max(damping, 1.0);
+    }
+    const double omega = 8.0 / seconds;
+    constexpr double kStep = 1.0 / 480;
+    for (double remaining = dt; remaining > 0; remaining -= kStep) {
+        const double h = std::min(remaining, kStep);
+        const double acceleration = omega * omega * (target - value) -
+                                    2 * damping * omega * velocity;
+        velocity += acceleration * h;
+        value += velocity * h;
+    }
+    if (std::fabs(target - value) < 0.001 && std::fabs(velocity) < 0.01) {
+        value = target;
+        velocity = 0;
+        return false;
+    }
+    return true;
+}
+
+// A decoration (a glow, a crossfade, an icon turning): like SpringTowards,
+// but there at once from the "partial" level on.
+bool SpringDecoration(double& value, double& velocity, double target,
+                      double seconds, double dt, double damping = 1.0) {
+    if (AnimationLevel() >= 1) {
+        value = target;
+        velocity = 0;
+        return false;
+    }
+    return SpringTowards(value, velocity, target, seconds, dt, damping);
+}
 
 // Reads the chosen theme. Chosen in the island, the colors blend into it (see
 // StepTheme); otherwise, they're there right away.
@@ -1063,8 +1355,11 @@ bool StepTheme() {
     if (!g_themeChangeStart) {
         return false;
     }
-    const double t = std::clamp(
-        (NowSeconds() - g_themeChangeStart) / kThemeChangeSeconds, 0.0, 1.0);
+    const double length = AnimationSeconds(kThemeChangeSeconds, true);
+    const double t =
+        length > 0 ? std::clamp((NowSeconds() - g_themeChangeStart) / length,
+                                0.0, 1.0)
+                   : 1.0;
     const float k = (float)(t < 0.5 ? 4 * t * t * t
                                     : 1 - std::pow(-2 * t + 2, 3) / 2);
     auto mix = [k](float a, float b) { return a + (b - a) * k; };
@@ -1270,6 +1565,8 @@ enum IpcKind : ULONG_PTR {
     // The shell gives packaged apps' icons in explorer, not always in the
     // island's process.
     kIpcAppIcon,
+    // The island to explorer: the animation settings were changed in it.
+    kIpcAnimations,
 };
 constexpr UINT kIpcTimeoutMs = 400;
 
@@ -1450,7 +1747,9 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
         return nullptr;
     }
 
-    size_t taskbarElementIUnknownOffset = 0x48;
+    size_t taskbarElementIUnknownOffset = 0x10;
+
+#if defined(_M_X64)
     {
         // 48:83EC 28 | sub rsp,28
         // 48:83C1 48 | add rcx,48
@@ -1462,6 +1761,24 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
             Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
         }
     }
+#elif defined(_M_ARM64)
+    {
+        // 7f2303d5 pacibsp
+        // fd7bbfa9 stp     fp, lr, [sp, #-0x10]!
+        // fd030091 mov     fp, sp
+        // 080c41f8 ldr     x8, [x0, #0x10]!
+        const DWORD* p = (const DWORD*)TaskbarHost_FrameHeight_Original;
+        if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+            p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+            taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#else
+    // 32-bit: only the island's process (windhawk.exe) is, and the taskbar
+    // part never runs there (Windows 11's explorer.exe is 64-bit).
+#endif
 
     auto* taskbarElementIUnknown =
         *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] +
@@ -1722,6 +2039,16 @@ struct DockIcon {
     Media::TranslateTransform lift{nullptr};
     // Eased towards the size the mouse position asks for.
     double magnification = 1;
+    // An app opened: its button grows in (0 to 1, a bit more while
+    // bouncing).
+    double appear = 1;
+    double appearVelocity = 0;
+    // Moved by the taskbar (an app opened or closed next to it, or the dock
+    // centered again): it slides from where it was (its layout middle last
+    // time, NAN before the first frame).
+    double slide = 0;
+    double slideVelocity = 0;
+    double lastCenter = NAN;
     // Bouncing: when it started (0 when not bouncing) and how many groups of
     // bounces it has (see BounceSequence).
     double bounceStart = 0;
@@ -2018,7 +2345,7 @@ void ShowDockForNotification() {
     RECT shown = rect;
     OffsetRect(&shown, 0, monitor.rcMonitor.bottom - rect.bottom);
     g_shownForNotification = true;
-    SlideTo(g_dockWnd, shown, g_settings.showDuration, true);
+    SlideTo(g_dockWnd, shown, AnimationMs(g_settings.showDuration), true);
 
     if (g_notificationTimer) {
         g_notificationTimer.Stop();
@@ -2045,7 +2372,7 @@ void ShowDockForNotification() {
             timer.Stop();
             g_shownForNotification = false;
             SlideTo(g_dockWnd, g_notificationHiddenRect,
-                    g_settings.hideDuration, false);
+                    AnimationMs(g_settings.hideDuration), false);
         });
     g_notificationTimer.Start();
 }
@@ -2419,6 +2746,10 @@ void RescanDockIcons() {
                         L"Taskbar.AugmentedEntryPointButton"},
                        buttons);
 
+    // A button that comes once the dock is set up is an app opening: it
+    // grows in (not the ones there from the start).
+    const bool opening = g_dockItemCount >= 0 && NowSeconds() - g_dockSince > 1;
+    bool added = false;
     for (const auto& button : buttons) {
         if (FindDockIcon(button)) {
             continue;
@@ -2444,8 +2775,13 @@ void RescanDockIcons() {
             SetStyled(button, UIElement::RenderTransformOriginProperty(),
                       winrt::box_value(winrt::Windows::Foundation::Point{0, 0}));
         }
+        if (opening &&
+            winrt::get_class_name(button) == L"Taskbar.TaskListButton") {
+            icon.appear = 0;
+            added = true;
+        }
         g_dockIcons.push_back(icon);
-        DockIcon& added = g_dockIcons.back();
+        DockIcon& newIcon = g_dockIcons.back();
 
         const bool watched =
             std::any_of(g_watchedButtons.begin(), g_watchedButtons.end(),
@@ -2456,7 +2792,7 @@ void RescanDockIcons() {
             WatchRunningState(button);
         }
         if (g_settings.dotIndicator && IsDock()) {
-            MakeDots(added, button);
+            MakeDots(newIcon, button);
         }
 
         // No highlight behind the icon on hover or for the active app, like
@@ -2471,6 +2807,9 @@ void RescanDockIcons() {
                       winrt::box_value(Visibility::Collapsed));
         }
     }
+    if (added && AnimatesIcons()) {
+        StartRendering();
+    }
 }
 
 // Height of the icon's bounce right now, in pixels (negative is up), for a
@@ -2479,9 +2818,15 @@ double BounceOffset(DockIcon& icon, double now, double maxHeight) {
     if (!icon.bounceStart) {
         return 0;
     }
+    // Bounces are decorations (none from the "partial" level on), at the
+    // chosen speed.
+    if (AnimationLevel() >= 1) {
+        icon.bounceStart = 0;
+        return 0;
+    }
     bool done;
-    const double height =
-        BounceSequence(now - icon.bounceStart, icon.bounceGroups, &done);
+    const double height = BounceSequence(
+        AnimationDt(now - icon.bounceStart), icon.bounceGroups, &done);
     if (done) {
         icon.bounceStart = 0;
         return 0;
@@ -2633,7 +2978,13 @@ void OnRendering(winrt::Windows::Foundation::IInspectable const&,
 
 void OnRenderingUnsafe() {
     const double now = NowSeconds();
-    const double dt = std::clamp(now - g_lastRenderTime, 0.0, 0.05);
+    // Under a frame rate limit, some of the taskbar's frames are skipped.
+    if (const int limit = g_frameRateLimit.load(std::memory_order_relaxed);
+        limit && now - g_lastRenderTime < 1.0 / limit - 0.002) {
+        return;
+    }
+    const double dt =
+        AnimationDt(std::clamp(now - g_lastRenderTime, 0.0, 0.05));
     g_lastRenderTime = now;
 
     auto frame = g_dockFrame.get();
@@ -2747,7 +3098,9 @@ void OnRenderingUnsafe() {
     const bool hovering = !placed.empty() && mouseY >= 0 &&
                           mouseY <= clientHeight + 2 && mouseX >= left - 16 &&
                           mouseX <= right + 16;
-    const double follow = 1 - std::exp(-dt * kMagnificationFollow);
+    const double follow = AnimationLevel() >= 2
+                              ? 1.0
+                              : 1 - std::exp(-dt * kMagnificationFollow);
 
     bool busy = hovering;
 
@@ -2824,10 +3177,29 @@ void OnRenderingUnsafe() {
         // Grows upwards from the icon's bottom edge, around the button's
         // middle, like on macOS.
         const double originY = item.iconTop + item.iconHeight;
+        // Growing in when its app opened.
+        if (SpringTowards(icon.appear, icon.appearVelocity, 1, 0.42, dt,
+                          0.72)) {
+            busy = true;
+        }
+        const double appear = std::max(icon.appear, 0.0);
         icon.scale.CenterX(item.buttonWidth / 2);
         icon.scale.CenterY(originY);
-        icon.scale.ScaleX(icon.magnification);
-        icon.scale.ScaleY(icon.magnification);
+        icon.scale.ScaleX(icon.magnification * appear);
+        icon.scale.ScaleY(icon.magnification * appear);
+
+        // Moved by the taskbar: it slides there from where it was (not while
+        // an icon is dragged, which the taskbar moves itself).
+        if (!std::isnan(icon.lastCenter) &&
+            std::fabs(item.center - icon.lastCenter) > 0.5 &&
+            !(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
+            icon.slide += icon.lastCenter - item.center;
+        }
+        icon.lastCenter = item.center;
+        if (SpringTowards(icon.slide, icon.slideVelocity, 0, 0.36, dt)) {
+            busy = true;
+        }
+        icon.lift.X(icon.slide);
 
         // The bounce uses what's left above the (possibly magnified) icon.
         const double bounceRoom = iconBottom - 1 - reach * icon.magnification;
@@ -3288,13 +3660,51 @@ int LerpInt(int a, int b, double t) {
     return a + (int)std::lround((b - a) * t);
 }
 
+// Waits for the next frame of an animation: the screen's next refresh, or a
+// few of them under the frame rate limit (as many as fit its interval, from
+// the screen's rate, read again every few seconds). If the compositor can't
+// be waited on (it's restarting), a frame time passes instead, so the
+// animation goes on without spinning.
+void WaitForAnimationFrame() {
+    thread_local double rate = 60;
+    thread_local double rateReadAt = -100;
+    int refreshes = 1;
+    if (const int limit = g_frameRateLimit.load(std::memory_order_relaxed)) {
+        const double now = NowSeconds();
+        if (now - rateReadAt > 5) {
+            rateReadAt = now;
+            DWM_TIMING_INFO timing{sizeof(timing)};
+            if (SUCCEEDED(DwmGetCompositionTimingInfo(nullptr, &timing)) &&
+                timing.rateRefresh.uiDenominator &&
+                timing.rateRefresh.uiNumerator) {
+                rate = (double)timing.rateRefresh.uiNumerator /
+                       timing.rateRefresh.uiDenominator;
+            }
+        }
+        refreshes = std::clamp((int)std::lround(rate / limit), 1, 8);
+    }
+    for (int i = 0; i < refreshes; i++) {
+        if (FAILED(DwmFlush())) {
+            MsgWaitForMultipleObjects(0, nullptr, FALSE, 16 * refreshes,
+                                      QS_ALLINPUT);
+            return;
+        }
+    }
+}
+
 // Slides the window from where it is to `target`, one step per display frame,
 // timed by the clock so a slow frame doesn't slow the whole animation down.
 // Showing settles like a spring; hiding eases in and out.
 void SlideTo(HWND hWnd, const RECT& target, int durationMs, bool show) {
     RECT start;
-    if (durationMs <= 0 || !GetWindowRect(hWnd, &start) ||
-        EqualRect(&start, &target)) {
+    if (!GetWindowRect(hWnd, &start) || EqualRect(&start, &target)) {
+        return;
+    }
+    // Without an animation, it's there at once.
+    if (durationMs <= 0) {
+        SetWindowPos(hWnd, nullptr, target.left, target.top,
+                     target.right - target.left, target.bottom - target.top,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
         return;
     }
 
@@ -3314,8 +3724,7 @@ void SlideTo(HWND hWnd, const RECT& target, int durationMs, bool show) {
         if (t >= 1) {
             break;
         }
-        // Waits for the next frame.
-        DwmFlush();
+        WaitForAnimationFrame();
     }
 }
 
@@ -3464,7 +3873,9 @@ void WINAPI TrayUI_SlideWindow_Hook(void* pThis,
     // The window is moved by the mod's own animation, then the taskbar
     // finishes the move without its animation, which keeps its state right.
     SlideTo(hWnd, *rect,
-            show ? g_settings.showDuration : g_settings.hideDuration, show);
+            AnimationMs(show ? g_settings.showDuration
+                             : g_settings.hideDuration),
+            show);
     TrayUI_SlideWindow_Original(pThis, hWnd, rect, monitor, show, false);
     // Still cut down to its apps.
     if (IsTransparentTaskbar() && hWnd == g_dockWnd &&
@@ -3569,7 +3980,14 @@ bool CoversMonitor(HWND hWnd,
 // Whether a full-screen app (a game, a video) is on this taskbar's monitor:
 // the window in front, or the one at the top of the screen (in front may be
 // something small, like a browser's "press Esc" hint).
+bool IsFullscreenAppOn(HMONITOR monitor);
+
 bool IsFullscreenAppOnMonitor(HWND hTaskbarWnd) {
+    return IsFullscreenAppOn(
+        MonitorFromWindow(hTaskbarWnd, MONITOR_DEFAULTTONEAREST));
+}
+
+bool IsFullscreenAppOn(HMONITOR monitor) {
     // Exclusive full screen (Direct3D) and presentations, as reported by
     // Windows.
     QUERY_USER_NOTIFICATION_STATE state = QUNS_ACCEPTS_NOTIFICATIONS;
@@ -3581,7 +3999,6 @@ bool IsFullscreenAppOnMonitor(HWND hTaskbarWnd) {
     // "Busy": Windows sees a full-screen app (not only Direct3D ones).
     const bool busy = state == QUNS_BUSY;
 
-    HMONITOR monitor = MonitorFromWindow(hTaskbarWnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO info{sizeof(info)};
     if (!GetMonitorInfo(monitor, &info)) {
         return false;
@@ -3675,10 +4092,18 @@ struct TrayIcon {
     // Stays the same across restarts, to remember it pinned: the program
     // and the icon's ID.
     std::wstring key;
+    // On the island: how much it's shown (growing in when it comes,
+    // shrinking away when it goes, kept meanwhile as `leaving`).
+    double shown = 1;
+    double shownVelocity = 0;
+    bool leaving = false;
 };
 
 SRWLOCK g_trayIconsLock = SRWLOCK_INIT;
 std::vector<TrayIcon> g_trayIcons;
+// Windows asked directly to add their icons again (see OnTrayNotify), once
+// each. Under g_trayIconsLock.
+std::vector<HWND> g_trayOwnersAsked;
 UINT g_trayIconSerial;
 // Tells the island they changed.
 constexpr UINT WM_APP_TRAY = WM_APP + 53;
@@ -3749,6 +4174,7 @@ void OnTrayNotify(const COPYDATASTRUCT* copyData) {
     }
 
     bool changed = false;
+    HWND askAgain = nullptr;
     AcquireSRWLockExclusive(&g_trayIconsLock);
     auto it = std::find_if(g_trayIcons.begin(), g_trayIcons.end(),
                            [&](const TrayIcon& icon) {
@@ -3762,8 +4188,23 @@ void OnTrayNotify(const COPYDATASTRUCT* copyData) {
         case NIM_ADD:
         case NIM_MODIFY: {
             if (it == g_trayIcons.end()) {
+                // A change to an icon added before the mod saw it (an app
+                // started before it, which didn't add its icons again when
+                // asked: the request is a broadcast, which doesn't reach
+                // message-only windows). With its picture, it's added; and
+                // its window is asked once, directly, to add it again (with
+                // its version, so clicks reach it the way it expects).
                 if (data->message == NIM_MODIFY) {
-                    break;
+                    if (!(nid.uFlags & NIF_ICON) || !nid.hIcon ||
+                        !IsWindow(owner)) {
+                        break;
+                    }
+                    if (std::find(g_trayOwnersAsked.begin(),
+                                  g_trayOwnersAsked.end(),
+                                  owner) == g_trayOwnersAsked.end()) {
+                        g_trayOwnersAsked.push_back(owner);
+                        askAgain = owner;
+                    }
                 }
                 TrayIcon icon;
                 icon.owner = owner;
@@ -3775,7 +4216,13 @@ void OnTrayNotify(const COPYDATASTRUCT* copyData) {
                 g_trayIcons.push_back(std::move(icon));
                 it = g_trayIcons.end() - 1;
             }
-            it->owner = owner;
+            // An icon known by its GUID may come without its window
+            // (H.NotifyIcon, used by WhatsApp, does that): the one it came
+            // with stays.
+            if (owner && IsWindow(owner)) {
+                it->owner = owner;
+                GetWindowThreadProcessId(owner, &it->processId);
+            }
             if (nid.uFlags & NIF_MESSAGE) {
                 it->callback = nid.uCallbackMessage;
             }
@@ -3814,7 +4261,15 @@ void OnTrayNotify(const COPYDATASTRUCT* copyData) {
         })) {
         changed = true;
     }
+    std::erase_if(g_trayOwnersAsked, [](HWND window) {
+        return !IsWindow(window);
+    });
     ReleaseSRWLockExclusive(&g_trayIconsLock);
+    if (askAgain) {
+        static const UINT taskbarCreated =
+            RegisterWindowMessage(L"TaskbarCreated");
+        PostMessage(askAgain, taskbarCreated, 0, 0);
+    }
     // Sent a moment later, once for all the changes until then: the app
     // that changed its icon is waiting for the taskbar meanwhile.
     if (changed && !g_trayIconsSendPending.exchange(true)) {
@@ -3971,6 +4426,116 @@ LRESULT OnTrayIconRectRequest(const COPYDATASTRUCT* copyData) {
     return result;
 }
 
+// Some apps never add their icons again when asked (Spotify ignores
+// TaskbarCreated) and rarely change them, so an icon seen before the mod was
+// reloaded (its settings saved, turned off and on, Windhawk updated) would be
+// lost while the app runs. The list is kept in the mod's storage when the
+// explorer part unloads, and taken back when it loads: the icons whose
+// window is still there, in the same process. Their picture is the
+// program's own icon until the app changes it.
+void KeepTrayIcons() {
+    if (!OwnsTaskbar()) {
+        return;
+    }
+    std::wstring value;
+    AcquireSRWLockShared(&g_trayIconsLock);
+    for (const auto& icon : g_trayIcons) {
+        WCHAR guid[64] = L"";
+        StringFromGUID2(icon.guid, guid, ARRAYSIZE(guid));
+        std::wstring tip = icon.tip;
+        std::replace_if(
+            tip.begin(), tip.end(),
+            [](WCHAR c) { return c == L'\n' || c == L'\r' || c == L'\t'; },
+            L' ');
+        value += std::to_wstring((UINT64)(ULONG_PTR)icon.owner) + L"\t" +
+                 std::to_wstring(icon.id) + L"\t" + guid + L"\t" +
+                 std::to_wstring(icon.hasGuid) + L"\t" +
+                 std::to_wstring(icon.callback) + L"\t" +
+                 std::to_wstring(icon.version) + L"\t" +
+                 std::to_wstring(icon.hidden) + L"\t" +
+                 std::to_wstring(icon.processId) + L"\t" + tip + L"\n";
+    }
+    ReleaseSRWLockShared(&g_trayIconsLock);
+    Wh_SetStringValue(L"trayIconsKept", value.c_str());
+}
+
+void TakeBackTrayIcons() {
+    WCHAR buffer[16384];
+    if (!OwnsTaskbar() ||
+        !Wh_GetStringValue(L"trayIconsKept", buffer, ARRAYSIZE(buffer))) {
+        return;
+    }
+    Wh_DeleteValue(L"trayIconsKept");
+    std::vector<TrayIcon> icons;
+    std::wstring_view rest = buffer;
+    while (!rest.empty()) {
+        const size_t end = rest.find(L'\n');
+        std::wstring_view line = rest.substr(0, end);
+        rest = end == std::wstring_view::npos ? std::wstring_view{}
+                                              : rest.substr(end + 1);
+        std::vector<std::wstring> fields;
+        size_t start = 0;
+        while (fields.size() < 8) {
+            const size_t tab = line.find(L'\t', start);
+            if (tab == std::wstring_view::npos) {
+                break;
+            }
+            fields.emplace_back(line.substr(start, tab - start));
+            start = tab + 1;
+        }
+        if (fields.size() < 8) {
+            continue;
+        }
+        TrayIcon icon;
+        icon.owner =
+            (HWND)(ULONG_PTR)_wcstoui64(fields[0].c_str(), nullptr, 10);
+        icon.id = wcstoul(fields[1].c_str(), nullptr, 10);
+        icon.hasGuid = fields[3] == L"1";
+        if (icon.hasGuid &&
+            FAILED(CLSIDFromString(fields[2].c_str(), &icon.guid))) {
+            continue;
+        }
+        icon.callback = wcstoul(fields[4].c_str(), nullptr, 10);
+        icon.version = wcstoul(fields[5].c_str(), nullptr, 10);
+        icon.hidden = fields[6] == L"1";
+        icon.processId = wcstoul(fields[7].c_str(), nullptr, 10);
+        icon.tip = std::wstring(line.substr(start));
+        DWORD processId = 0;
+        if (!IsWindow(icon.owner) ||
+            !GetWindowThreadProcessId(icon.owner, &processId) ||
+            processId != icon.processId) {
+            continue;
+        }
+        icon.key = TrayIconKey(icon);
+        const std::wstring program = icon.key.substr(0, icon.key.find(L'|'));
+        HICON picture = nullptr;
+        if (!program.empty() &&
+            ExtractIconEx(program.c_str(), 0, &picture, nullptr, 1) > 0 &&
+            picture) {
+            icon.icon = std::make_shared<OwnedIcon>(picture);
+        }
+        icons.push_back(std::move(icon));
+    }
+    if (icons.empty()) {
+        return;
+    }
+    AcquireSRWLockExclusive(&g_trayIconsLock);
+    for (auto& icon : icons) {
+        const bool known = std::any_of(
+            g_trayIcons.begin(), g_trayIcons.end(), [&](const TrayIcon& other) {
+                return icon.hasGuid ? other.hasGuid && other.guid == icon.guid
+                                    : !other.hasGuid &&
+                                          other.owner == icon.owner &&
+                                          other.id == icon.id;
+            });
+        if (!known) {
+            icon.serial = ++g_trayIconSerial;
+            g_trayIcons.push_back(std::move(icon));
+        }
+    }
+    ReleaseSRWLockExclusive(&g_trayIconsLock);
+}
+
 // Asks the apps to add their icons again (the message Windows sends when the
 // taskbar restarts), at most once while Explorer runs: the icons are kept
 // from then on, for the island to ask for them (kIpcHello). Only once the
@@ -3981,6 +4546,7 @@ std::atomic<bool> g_trayIconsRequested;
 bool AnyTaskbarSubclassed();
 
 void RequestTrayIcons() {
+    TakeBackTrayIcons();
     if (g_trayIconsRequested || !g_settings.showIsland ||
         !g_settings.islandTray || !OwnsTaskbar() ||
         !AnyTaskbarSubclassed()) {
@@ -4034,6 +4600,62 @@ void StopWatchingTaskbarPlace();
 void WatchIslandProcess(HWND island);
 void StopWatchingIslandProcess();
 
+// When an app's window closes, Windows gives the focus back to the window
+// that had it before: often the taskbar, clicked to open that app. A taskbar
+// that hides itself stays up while it has the focus, so it would stay until
+// the user clicked elsewhere. Then the focus goes to the next window, like
+// Alt+Esc (or the desktop), and the taskbar hides as usual.
+std::atomic<double> g_appClosedAt{0};
+
+bool IsWindowToFocus(HWND hWnd) {
+    if (!IsWindowVisible(hWnd) || IsIconic(hWnd) || IsShellWindow(hWnd)) {
+        return false;
+    }
+    const LONG_PTR exStyle = GetWindowLongPtr(hWnd, GWL_EXSTYLE);
+    if ((exStyle &
+         (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT)) ||
+        (GetWindow(hWnd, GW_OWNER) && !(exStyle & WS_EX_APPWINDOW))) {
+        return false;
+    }
+    BOOL cloaked = FALSE;
+    if (SUCCEEDED(DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked,
+                                        sizeof(cloaked))) &&
+        cloaked) {
+        return false;
+    }
+    RECT rect;
+    return GetWindowRect(hWnd, &rect) && rect.right > rect.left &&
+           rect.bottom > rect.top;
+}
+
+// On the taskbar's hide timer, right after an app closed. Returns whether
+// the focus was moved.
+bool HandFocusBack(HWND hWnd) {
+    const double now = NowSeconds();
+    if (g_unloading || !SlidesItself() || now - g_appClosedAt > 8 ||
+        now < g_keepShownUntil) {
+        return false;
+    }
+    const HWND foreground = GetForegroundWindow();
+    if ((foreground && foreground != hWnd) ||
+        UserIsReachingForTaskbar(hWnd)) {
+        return false;
+    }
+    g_appClosedAt = 0;
+    HWND next = nullptr;
+    for (HWND window = GetTopWindow(nullptr); window;
+         window = GetWindow(window, GW_HWNDNEXT)) {
+        if (IsWindowToFocus(window)) {
+            next = window;
+            break;
+        }
+    }
+    if (!next) {
+        next = FindWindow(L"Progman", nullptr);
+    }
+    return next && SetForegroundWindow(next);
+}
+
 // Also swallows the "show" timer while a full-screen app is in front, so the
 // mouse at the bottom edge doesn't bring the taskbar up. Other ways of showing
 // it, like the Windows key, aren't affected.
@@ -4042,6 +4664,13 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
                                      WPARAM wParam,
                                      LPARAM lParam,
                                      DWORD_PTR) {
+    // An app closed and the taskbar got the focus back (see HandFocusBack):
+    // once the focus moved, it tries to hide again right after.
+    if (uMsg == WM_TIMER && wParam == kHideTimerId && HandFocusBack(hWnd)) {
+        const LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        ScheduleTaskbarHide(hWnd, 50);
+        return result;
+    }
     if (uMsg == WM_TIMER && wParam == kUnhideTimerId && SlidesItself() &&
         g_settings.fullscreenGuard && IsFullscreenAppOnMonitor(hWnd)) {
         static ULONGLONG lastLogged;
@@ -4103,6 +4732,9 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
             }
             case kIpcAppIcon:
                 return (LRESULT)AppIconForIsland(copyData);
+            case kIpcAnimations:
+                LoadAnimationSettings();
+                return TRUE;
         }
     }
     if (uMsg == WM_COPYDATA) {
@@ -4136,6 +4768,19 @@ LRESULT CALLBACK TaskbandSubclassProc(HWND hWnd,
         wParam == kShellHookFlash) {
         g_lastFlashTime = NowSeconds();
         OnAppFlashed((HWND)lParam);
+    }
+    // An app's window closed: if that leaves the focus on the shown taskbar,
+    // its hide timer hands it on (see HandFocusBack), after any wait for an
+    // app opening.
+    if (g_shellHookMessage && uMsg == g_shellHookMessage &&
+        wParam == HSHELL_WINDOWDESTROYED && SlidesItself() && g_trayShown) {
+        g_appClosedAt = NowSeconds();
+        if (HWND taskbar = GetAncestor(hWnd, GA_ROOT)) {
+            const double keep = g_keepShownUntil - NowSeconds();
+            ScheduleTaskbarHide(
+                taskbar, std::max(300u, (UINT)(std::max(keep, 0.0) * 1000) +
+                                            150));
+        }
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
@@ -5247,15 +5892,47 @@ void FreeIslandAppIcons() {
     g_islandAppIcons.clear();
 }
 
+// A window brought back from minimized (see ActivateApp), checked a few
+// times after: some (consoles) stay minimized at first.
+thread_local HWND t_restoreWindow;
+thread_local int t_restoreTries;
+thread_local UINT_PTR t_restoreTimer;
+
+void CALLBACK RestoreCheckProc(HWND, UINT, UINT_PTR, DWORD) {
+    const HWND hWnd = t_restoreWindow;
+    if (!IsWindow(hWnd) || !IsIconic(hWnd) || ++t_restoreTries > 3) {
+        KillTimer(nullptr, t_restoreTimer);
+        t_restoreTimer = 0;
+        t_restoreWindow = nullptr;
+        return;
+    }
+    // Asked the way its own title bar does, then directly (not when it
+    // doesn't answer: that would wait for it).
+    if (t_restoreTries == 1) {
+        PostMessage(hWnd, WM_SYSCOMMAND, SC_RESTORE, 0);
+    } else if (!IsHungAppWindow(hWnd)) {
+        ShowWindow(hWnd, SW_RESTORE);
+    }
+}
+
+// Brings a window to the front: first the right to (the island or the
+// taskbar was just clicked), then restored if minimized. Restored first, a
+// console window could end up active but still minimized.
 void ActivateApp(HWND hWnd) {
     if (!IsWindow(hWnd)) {
         return;
     }
-    if (IsIconic(hWnd)) {
-        ShowWindowAsync(hWnd, SW_RESTORE);
-    }
     HWND popup = GetLastActivePopup(hWnd);
     SetForegroundWindow(popup && IsWindowVisible(popup) ? popup : hWnd);
+    if (IsIconic(hWnd)) {
+        ShowWindowAsync(hWnd, SW_RESTORE);
+        t_restoreWindow = hWnd;
+        t_restoreTries = 0;
+        if (t_restoreTimer) {
+            KillTimer(nullptr, t_restoreTimer);
+        }
+        t_restoreTimer = SetTimer(nullptr, 0, 150, RestoreCheckProc);
+    }
 }
 
 // Whether a window belongs to the app with this AppUserModelID. Apps without
@@ -5525,8 +6202,7 @@ bool RunAttentionIcon(HWND window, const AttentionRequest& request) {
         if (!keepRunning) {
             break;
         }
-        // Waits for the next frame.
-        DwmFlush();
+        WaitForAnimationFrame();
     }
 
     ShowWindow(window, SW_HIDE);
@@ -5810,7 +6486,12 @@ struct IslandSlot {
     float scale = 1;
     // Its group (a PillGroup), or -1 (the minimize button).
     int group = -1;
+    // A tray icon in the open list, which may be cut at its edges (see
+    // Island::m_trayScroll). The list's own rect is a slot of its own
+    // (kTrayListFont), not drawn.
+    bool inList = false;
 };
+constexpr int kTrayListFont = 20;
 
 constexpr GUID kCLSID_MMDeviceEnumerator = {
     0xbcde0395,
@@ -6347,28 +7028,6 @@ void WatchIslandProcess(HWND island) {
     ReleaseSRWLockExclusive(&g_islandWatchLock);
 }
 
-// Moves `value` towards `target` like a spring, over about `seconds`.
-// `damping` 1 settles without overshooting; lower values bounce a little, like
-// the iPhone's Dynamic Island. Returns true while it's still moving.
-bool SpringTowards(double& value, double& velocity, double target,
-                   double seconds, double dt, double damping = 1.0) {
-    const double omega = 8.0 / seconds;
-    constexpr double kStep = 1.0 / 480;
-    for (double remaining = dt; remaining > 0; remaining -= kStep) {
-        const double h = std::min(remaining, kStep);
-        const double acceleration = omega * omega * (target - value) -
-                                    2 * damping * omega * velocity;
-        velocity += acceleration * h;
-        value += velocity * h;
-    }
-    if (std::fabs(target - value) < 0.001 && std::fabs(velocity) < 0.01) {
-        value = target;
-        velocity = 0;
-        return false;
-    }
-    return true;
-}
-
 // A button pressed: it goes down quickly (staying down while held), and once
 // all the way down, springs back with a little overshoot. Timed rather than a
 // spring, so even a quick click shows the whole press.
@@ -6396,15 +7055,17 @@ struct PressAnimation {
     }
     // From 0 (up) to 1 (down); a bit under 0 while springing back.
     double Amount(double now) const {
-        if (!target) {
+        const double downSeconds = AnimationSeconds(kPressDown, true);
+        const double backSeconds = AnimationSeconds(kPressBack, true);
+        if (!target || downSeconds <= 0) {
             return 0;
         }
-        const double down = std::min((now - start) / kPressDown, 1.0);
+        const double down = std::min((now - start) / downSeconds, 1.0);
         const double eased = 1 - (1 - down) * (1 - down) * (1 - down);
         if (held || now < releaseAt) {
             return eased;
         }
-        const double back = (now - releaseAt) / kPressBack;
+        const double back = (now - releaseAt) / backSeconds;
         return back >= 1 ? 0 : 1 - SpringOut(back);
     }
     // Returns true while it moves (and forgets it when done).
@@ -6412,7 +7073,7 @@ struct PressAnimation {
         if (!target) {
             return false;
         }
-        if (!held && now >= releaseAt + kPressBack) {
+        if (!held && now >= releaseAt + AnimationSeconds(kPressBack, true)) {
             target = 0;
             return true;
         }
@@ -6487,6 +7148,17 @@ constexpr UINT_PTR kNetworkFrameTimerId = 18;
 constexpr UINT kNetworkFrameMs = 80;
 // Updates, looked for again.
 constexpr UINT_PTR kUpdatesTimerId = 15;
+// Where the mouse is, checked this often while the island follows it (several
+// monitors only).
+constexpr UINT_PTR kMonitorTimerId = 20;
+constexpr UINT kMonitorCheckMs = 250;
+// How far the island stays open while it glides to another monitor (its
+// dot, see Island::AppearFade).
+constexpr double kMoveDot = 0.2;
+// The island restarted again after a lost drawing device, while the driver
+// may still be installing (at most this often).
+constexpr UINT_PTR kDeviceRetryTimerId = 19;
+constexpr double kDeviceRetrySeconds = 2;
 constexpr UINT kUrgentSoundMaxMs = 60000;
 constexpr UINT kPinDelayMs = 2000;
 constexpr double kPinGrowSeconds = 0.22;
@@ -6965,6 +7637,20 @@ void DrawTextSelection(ID2D1RenderTarget* target,
 }
 
 // A layered window drawn with Direct2D into a 32-bit bitmap.
+// A real loss of the drawing device: the graphics driver was updated or
+// reset, or the GPU went away. Only these make the island start over (see
+// OnDrawingDeviceLost); any other drawing error only loses that frame.
+bool IsDrawingDeviceLost(HRESULT hr) {
+    return hr == D2DERR_RECREATE_TARGET || hr == DXGI_ERROR_DEVICE_REMOVED ||
+           hr == DXGI_ERROR_DEVICE_RESET || hr == DXGI_ERROR_DEVICE_HUNG ||
+           hr == DXGI_ERROR_DRIVER_INTERNAL_ERROR;
+}
+
+// Restarts the island, which makes everything drawn again from scratch (its
+// drawing targets, and every picture kept for them: app icons, covers,
+// cards...). Defined with the island.
+void OnDrawingDeviceLost();
+
 class LayeredCanvas {
    public:
     bool Create(ID2D1Factory* factory) {
@@ -7027,7 +7713,8 @@ class LayeredCanvas {
             m_size = size;
         }
         const RECT bounds{0, 0, size.cx, size.cy};
-        if (FAILED(target->BindDC(m_dc, &bounds))) {
+        if (const HRESULT hr = target->BindDC(m_dc, &bounds); FAILED(hr)) {
+            Failed(hr);
             return false;
         }
         target->BeginDraw();
@@ -7037,21 +7724,36 @@ class LayeredCanvas {
     }
 
     // Finishes drawing and puts it on the window, with an overall opacity.
-    void End(HWND hWnd, POINT position, float opacity) {
-        if (FAILED(target->EndDraw())) {
-            return;
+    // False if it couldn't be drawn (nothing changed on the screen).
+    bool End(HWND hWnd, POINT position, float opacity) {
+        if (const HRESULT hr = target->EndDraw(); FAILED(hr)) {
+            Failed(hr);
+            return false;
         }
+        m_lastError = S_OK;
         POINT source{0, 0};
         BLENDFUNCTION blend{AC_SRC_OVER, 0,
                             (BYTE)std::clamp((int)(opacity * 255), 0, 255),
                             AC_SRC_ALPHA};
         UpdateLayeredWindow(hWnd, nullptr, &position, &m_size, m_dc, &source, 0,
                             &blend, ULW_ALPHA);
+        return true;
     }
 
     winrt::com_ptr<ID2D1DCRenderTarget> target;
 
    private:
+    // Logged once (not every frame); a lost device restarts the island.
+    void Failed(HRESULT hr) {
+        if (hr != m_lastError) {
+            m_lastError = hr;
+            Wh_Log(L"Drawing failed: %08X", (unsigned)hr);
+        }
+        if (IsDrawingDeviceLost(hr)) {
+            OnDrawingDeviceLost();
+        }
+    }
+    HRESULT m_lastError = S_OK;
     HDC m_dc = nullptr;
     HBITMAP m_bitmap = nullptr;
     void* m_bits = nullptr;
@@ -7198,8 +7900,8 @@ struct HoverFades {
             if (++entry.unseen > 600) {
                 entry.on = false;
             }
-            if (SpringTowards(entry.amount, entry.velocity, entry.on ? 1 : 0,
-                              0.2, dt)) {
+            if (SpringDecoration(entry.amount, entry.velocity,
+                                 entry.on ? 1 : 0, 0.2, dt)) {
                 moving = true;
             }
         }
@@ -7320,6 +8022,15 @@ class Panel {
                        const SmoothScroll& scroll);
     // A dialog of its own is shown (the panel stays open behind it).
     bool m_dialogShown = false;
+    // Its contents changed a lot (another state, new data): they dip and
+    // come back (0 to 1), as the panel stretches to its new size.
+    void PulseContents() {
+        m_contentsIn = 0;
+        m_contentsInVelocity = 0;
+        StartIslandAnimation();
+    }
+    double m_contentsIn = 1;
+    double m_contentsInVelocity = 0;
     // Set by AnimateContents when only something that never stops moves
     // (scrolling text): drawn at a lower frame rate then, which
     // looks the same and costs much less.
@@ -7565,8 +8276,10 @@ bool Panel::Animate(double dt) {
                                       kPanelOpenDamping);
         }
         const bool hoverFading = m_hoverFades.Animate(dt);
-        const bool contents =
-            AnimateContents(dt) || hoverFading || g_themeChanging;
+        const bool pulsing = SpringDecoration(
+            m_contentsIn, m_contentsInVelocity, 1, 0.4, dt);
+        const bool contents = AnimateContents(dt) || hoverFading ||
+                              pulsing || g_themeChanging;
         // Another view, another size: it settles there without swinging.
         const bool width = SpringTowards(
             m_shownWidth, m_widthVelocity,
@@ -7781,7 +8494,8 @@ void Panel::Render() {
     // The panel's contents (laid out at m_size), centered in the shape as
     // it changes size, fading in and sliding down into place.
     const float contents =
-        std::clamp((progress - 0.45f) / 0.55f, 0.0f, 1.0f);
+        std::clamp((progress - 0.45f) / 0.55f, 0.0f, 1.0f) *
+        (0.25f + 0.75f * (float)std::clamp(m_contentsIn, 0.0, 1.0));
     const float contentLeft =
         std::round((to.left + to.right) / 2 - m_size.cx / 2.0f);
     const float contentTop = to.top;
@@ -9977,6 +10691,8 @@ enum class IslandPref {
     Shortcuts,
     Weather,
     Updates,
+    Animations,
+    FollowMouse,
 };
 
 struct IslandPrefInfo {
@@ -10060,6 +10776,10 @@ const IslandPrefInfo kIslandPrefs[] = {
     {IslandPref::Updates, L"islandUpdates", 0xE895,
      L"Updates (winget and Windows Update)",
      L"Atualizações (winget e Windows Update)"},
+    // Kept with the other animation settings (see SetAnimationChoice).
+    {IslandPref::Animations, nullptr, 0xE945, L"Animations", L"Animações"},
+    {IslandPref::FollowMouse, L"islandFollowMouse", 0xE962,
+     L"On the monitor with the mouse", L"No monitor onde está o mouse"},
 };
 
 // The groups of items on the pill, which can be put in another order in the
@@ -10247,8 +10967,71 @@ enum SettingSection {
     kSectionTrayMedia,
     kSectionClock,
     kSectionNotifications,
+    kSectionAnimations,
     kSectionCount
 };
+
+// The settings rows with a few choices.
+enum ChoiceId {
+    kChoiceAnimationLevel,
+    kChoiceFrameRate,
+    kChoiceMonitor,
+};
+
+int MonitorCount();
+// The monitor chosen for the island (when it doesn't follow the mouse), as
+// an index in MonitorCount's order.
+int ChosenMonitorIndex();
+void ChooseMonitor(int index);
+
+int ChoiceCount(int id) {
+    switch (id) {
+        case kChoiceAnimationLevel:
+            return 3;
+        case kChoiceFrameRate:
+            return 4;
+        default:
+            return std::clamp(MonitorCount(), 1, 6);
+    }
+}
+
+std::wstring ChoiceOption(int id, int index) {
+    switch (id) {
+        case kChoiceAnimationLevel:
+            return index == 0   ? Tr(L"All", L"Todas")
+                   : index == 1 ? Tr(L"Partial", L"Parciais")
+                                : Tr(L"None", L"Nenhuma");
+        case kChoiceFrameRate:
+            return index == 0 ? std::wstring(Tr(L"Screen", L"Tela"))
+                              : std::to_wstring(kFrameRates[index]);
+        default:
+            return std::to_wstring(index + 1);
+    }
+}
+
+int ChoiceValue(int id) {
+    switch (id) {
+        case kChoiceAnimationLevel:
+            return g_animationChoice.level;
+        case kChoiceFrameRate:
+            return g_animationChoice.rate;
+        default:
+            return ChosenMonitorIndex();
+    }
+}
+
+// Dimmed (and not pressable): the level without animations, the monitor
+// while following the mouse or with one monitor.
+bool ChoiceDisabled(int id) {
+    switch (id) {
+        case kChoiceAnimationLevel:
+            return !g_animationChoice.on;
+        case kChoiceFrameRate:
+            return false;
+        default:
+            return g_settings.islandFollowMouse || MonitorCount() < 2;
+    }
+}
 
 // Whether `text` has every word of `query` in it, ignoring case and accents
 // (so "notificacoes" finds "Notificações").
@@ -10280,6 +11063,31 @@ int GetIslandPref(IslandPref pref);
 void SetIslandPref(IslandPref pref, int value);
 void SetIslandSize(int percent, bool keep);
 void SetIslandGap(int pixels, bool keep);
+
+// How many tray icons the open list shows before it scrolls (see
+// Island::m_trayScroll): Windhawk's setting, unless it was changed in the
+// island since, the same way as the animations (see LoadAnimationSettings).
+constexpr int kTrayListMin = 4;
+constexpr int kTrayListMax = 40;
+constexpr int kTrayListDefault = 12;
+constexpr int kTrayListStep = 1;
+int g_trayListIcons = kTrayListDefault;
+
+void LoadTrayListSetting() {
+    const int windhawk = Wh_GetIntSetting(L"trayListIcons");
+    int value = windhawk;
+    if (const int island = Wh_GetIntValue(L"trayListIsland", 0); island > 0) {
+        if (Wh_GetIntValue(L"trayListBase", 0) == windhawk) {
+            value = island;
+        } else {
+            Wh_DeleteValue(L"trayListIsland");
+            Wh_DeleteValue(L"trayListBase");
+        }
+    }
+    g_trayListIcons = std::clamp(value, kTrayListMin, kTrayListMax);
+}
+
+void SetTrayListIcons(int icons, bool keep);
 
 // The media buttons on the pill (the setting, switched in the media panel).
 std::atomic<bool> g_mediaButtonsInPill{false};
@@ -10334,6 +11142,18 @@ struct IslandPlace {
 };
 IslandPlace g_islandPlace;
 std::vector<IslandPlace> g_appPlaces;
+// With several monitors, the place for all apps is kept for each (by its
+// device name): the island on another monitor takes that one's (see
+// UseMonitorPlace), or the last one used on a monitor without its own.
+struct MonitorPlace {
+    std::wstring device;
+    double x;
+    double y;
+};
+std::vector<MonitorPlace> g_monitorPlaces;
+// The monitor g_islandPlace is for (the island's).
+std::wstring g_placeMonitor;
+constexpr size_t kMaxMonitorPlaces = 8;
 constexpr size_t kMaxAppPlaces = 24;
 
 IslandPlace* FindAppPlace(const std::wstring& appId) {
@@ -10351,6 +11171,40 @@ IslandPlace* FindAppPlace(const std::wstring& appId) {
 void LoadPlaces() {
     g_islandPlace.x = std::clamp(Wh_GetIntValue(L"placeX", 500), 0, 1000) / 1000.0;
     g_islandPlace.y = std::clamp(Wh_GetIntValue(L"placeY", 0), 0, 1000) / 1000.0;
+    // Per monitor: x, y (thousandths) and the device, one per line.
+    g_monitorPlaces.clear();
+    {
+        WCHAR monitors[2048] = L"";
+        Wh_GetStringValue(L"monitorPlaces", monitors, ARRAYSIZE(monitors));
+        for (PCWSTR line = monitors; *line;) {
+            PCWSTR end = wcschr(line, L'\n');
+            const std::wstring text =
+                end ? std::wstring(line, end) : std::wstring(line);
+            const size_t tab1 = text.find(L'\t');
+            const size_t tab2 = tab1 == std::wstring::npos
+                                    ? tab1
+                                    : text.find(L'\t', tab1 + 1);
+            if (tab2 != std::wstring::npos && tab2 + 1 < text.size() &&
+                g_monitorPlaces.size() < kMaxMonitorPlaces) {
+                g_monitorPlaces.push_back(
+                    {text.substr(tab2 + 1),
+                     std::clamp(_wtoi(text.c_str()), 0, 1000) / 1000.0,
+                     std::clamp(_wtoi(text.c_str() + tab1 + 1), 0, 1000) /
+                         1000.0});
+            }
+            if (!end) {
+                break;
+            }
+            line = end + 1;
+        }
+    }
+    // Still on its monitor (the settings were read again).
+    for (const auto& place : g_monitorPlaces) {
+        if (place.device == g_placeMonitor) {
+            g_islandPlace.x = place.x;
+            g_islandPlace.y = place.y;
+        }
+    }
     g_appPlaces.clear();
     std::vector<WCHAR> value(16 * 1024);
     Wh_GetStringValue(L"appPlaces", value.data(), (size_t)value.size());
@@ -10400,6 +11254,24 @@ void LoadPlaces() {
 void SavePlaces() {
     Wh_SetIntValue(L"placeX", (int)std::lround(g_islandPlace.x * 1000));
     Wh_SetIntValue(L"placeY", (int)std::lround(g_islandPlace.y * 1000));
+    if (!g_placeMonitor.empty()) {
+        std::erase_if(g_monitorPlaces, [](const MonitorPlace& place) {
+            return place.device == g_placeMonitor;
+        });
+        g_monitorPlaces.insert(g_monitorPlaces.begin(),
+                               {g_placeMonitor, g_islandPlace.x,
+                                g_islandPlace.y});
+        if (g_monitorPlaces.size() > kMaxMonitorPlaces) {
+            g_monitorPlaces.resize(kMaxMonitorPlaces);
+        }
+        std::wstring monitors;
+        for (const auto& place : g_monitorPlaces) {
+            monitors += std::to_wstring(std::lround(place.x * 1000)) + L"\t" +
+                        std::to_wstring(std::lround(place.y * 1000)) + L"\t" +
+                        place.device + L"\n";
+        }
+        Wh_SetStringValue(L"monitorPlaces", monitors.c_str());
+    }
     std::wstring value;
     for (const auto& place : g_appPlaces) {
         value += std::to_wstring(std::lround(place.x * 1000)) + L"\t" +
@@ -10413,6 +11285,55 @@ void SavePlaces() {
     }
     Wh_SetStringValue(L"appPlaces", value.c_str());
 }
+
+// The island went to another monitor: its place for all apps is that
+// monitor's own, if it has one (otherwise the one it had stays).
+void UseMonitorPlace(const std::wstring& device) {
+    g_placeMonitor = device;
+    for (const auto& place : g_monitorPlaces) {
+        if (place.device == device) {
+            g_islandPlace.x = place.x;
+            g_islandPlace.y = place.y;
+        }
+    }
+}
+
+// The monitors, left to right (then top to bottom), as the island's settings
+// number them.
+struct MonitorEntry {
+    HMONITOR handle;
+    std::wstring device;
+    RECT rect;
+};
+
+BOOL CALLBACK ListMonitorProc(HMONITOR monitor, HDC, LPRECT, LPARAM param) {
+    MONITORINFOEX info{};
+    info.cbSize = sizeof(info);
+    if (GetMonitorInfo(monitor, &info)) {
+        ((std::vector<MonitorEntry>*)param)
+            ->push_back({monitor, info.szDevice, info.rcMonitor});
+    }
+    return TRUE;
+}
+
+std::vector<MonitorEntry> ListMonitors() {
+    std::vector<MonitorEntry> monitors;
+    EnumDisplayMonitors(nullptr, nullptr, ListMonitorProc, (LPARAM)&monitors);
+    std::sort(monitors.begin(), monitors.end(),
+              [](const MonitorEntry& a, const MonitorEntry& b) {
+                  return a.rect.left != b.rect.left ? a.rect.left < b.rect.left
+                                                    : a.rect.top < b.rect.top;
+              });
+    return monitors;
+}
+
+int MonitorCount() {
+    return GetSystemMetrics(SM_CMONITORS);
+}
+
+// The monitor chosen for the island (its device name), or empty for the
+// taskbar's (the main one).
+std::wstring g_islandMonitor;
 
 // Changed in the settings, or by dragging the pill: kept, and the pill
 // slides there (see Island::OnPlacesChanged).
@@ -10430,14 +11351,19 @@ bool IsDarkMode() {
     return light == 0;
 }
 
-DWORD WINAPI DarkModeThreadProc(LPVOID parameter) {
-    const DWORD light = parameter ? 0 : 1;
+// The two values are written at once, so quick clicks end in the last one;
+// only telling the windows (which may wait for them) is on a thread.
+void SetDarkMode(bool dark) {
+    const DWORD light = dark ? 0 : 1;
     for (PCWSTR name : {L"AppsUseLightTheme", L"SystemUsesLightTheme"}) {
         RegSetKeyValue(HKEY_CURRENT_USER,
                        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\"
                        L"Personalize",
                        name, REG_DWORD, &light, sizeof(light));
     }
+}
+
+DWORD WINAPI DarkModeThreadProc(LPVOID) {
     // Windows that don't answer are skipped.
     SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
                        (LPARAM)L"ImmersiveColorSet", SMTO_ABORTIFHUNG, 500,
@@ -10603,6 +11529,9 @@ constexpr UINT WM_APP_BRIGHTNESS = WM_APP + 63;
 // The screenshot shortcut, once the control center is gone.
 constexpr UINT WM_APP_SCREENSHOT = WM_APP + 64;
 constexpr UINT_PTR kScreenshotTimerId = kPanelScreenshotTimerId;
+// Checks night light after a change (see ControlPanel::SwitchNightLight).
+constexpr UINT_PTR kNightLightTimerId = 31;
+constexpr UINT kNightLightCheckMs = 800;
 
 // A radio's state for the control center.
 constexpr int kRadioUnknown = -1;
@@ -10879,7 +11808,8 @@ class ControlPanel : public Panel {
     // the panel's, like its own tile does).
     void SwitchDarkMode(bool dark) {
         m_darkMode = dark;
-        StartWorker(DarkModeThreadProc, dark ? (void*)1 : nullptr);
+        SetDarkMode(dark);
+        StartWorker(DarkModeThreadProc, nullptr);
     }
     // Called while open, to show changes made elsewhere.
     void Refresh() {
@@ -11002,6 +11932,7 @@ class ControlPanel : public Panel {
         SearchField,  // The settings' search box.
         SearchClear,  // Its "x".
         OrderChip,    // An item in the order strip (its PillGroup).
+        ChoiceSegment,  // A choice of a row (ChoiceId * 16 + its index).
     };
 
     struct Hit {
@@ -11255,8 +12186,24 @@ class ControlPanel : public Panel {
     // The mobile hotspot and airplane mode: like a radio.
     int m_hotspot = kRadioUnknown;
     int m_airplane = kRadioUnknown;
-    // Night light: 1 on, 0 off, -1 unavailable.
+    // One radio request runs at a time (see SwitchRadio): the state wanted
+    // for each kind meanwhile (Wi-Fi, Bluetooth, hotspot, airplane mode), or
+    // -1.
+    bool m_radioBusy = false;
+    // (A request whose answer never came, the panel's window gone, doesn't
+    // block the next ones for long.)
+    ULONGLONG m_radioBusySince = 0;
+    int m_radioWanted[4] = {-1, -1, -1, -1};
+    // Night light: 1 on, 0 off, -1 unavailable. Windows writes its state
+    // back a moment after a change, which can undo a quick second one: it's
+    // checked after a moment, and set again if it isn't what was asked last
+    // (see OnTimer).
     int m_nightLight = -1;
+    bool m_nightLightChecking = false;
+    ULONGLONG m_nightLightCheckSince = 0;
+    int m_nightLightTries = 0;
+    void SwitchNightLight();
+    bool OnTimer(UINT_PTR id) override;
     // The monitors' brightness, 0 to 100, or -1 (not known or not
     // adjustable).
     int m_brightness = -1;
@@ -11324,7 +12271,13 @@ class ControlPanel : public Panel {
     D2D1_RECT_F m_placeRow{}, m_placeGrid{}, m_appPlacesRow{};
     // The island's size: its row, slider and reset button.
     // The sliders: the island's size (0) and its room from the edges (1).
-    D2D1_RECT_F m_sizeRow[2]{}, m_sizeSlider[2]{}, m_sizeReset[2]{};
+    D2D1_RECT_F m_sizeRow[4]{}, m_sizeSlider[4]{}, m_sizeReset[4]{};
+    // The rows with a few choices (see ChoiceId): their segments, and the
+    // lit one sliding to the chosen one.
+    D2D1_RECT_F m_choiceRow[3]{};
+    std::vector<D2D1_RECT_F> m_choiceSegments[3];
+    double m_choiceKnob[3]{-1, -1, -1};
+    double m_choiceKnobVelocity[3]{};
     void SetIslandSizeAt(int slider, POINT pt, bool keep);
     // The island's settings: each row (an option, or a section's title) is
     // an entry, laid out in two columns (one on a narrow screen) with a line
@@ -11339,7 +12292,9 @@ class ControlPanel : public Panel {
         Place,
         AppPlaces,
         Order,
-        Pref
+        Pref,
+        // A row with a few choices (its ChoiceId).
+        Choice
     };
     struct SettingEntry {
         SettingKind kind;
@@ -11511,7 +12466,28 @@ class NotificationPanel : public Panel {
                 std::none_of(
                     m_motions.begin(), m_motions.end(),
                     [](const CardMotion& motion) { return motion.removing; })) {
+                std::vector<long long> before;
+                for (const auto& notification : m_notifications) {
+                    before.push_back(notification.id);
+                }
                 Load();
+                // New ones open their room and slide in from the side.
+                if (!before.empty()) {
+                    for (const auto& notification : m_notifications) {
+                        if (std::find(before.begin(), before.end(),
+                                      notification.id) == before.end()) {
+                            if (CardMotion* motion =
+                                    Motion(notification.id, true)) {
+                                motion->room = 0;
+                                motion->roomVelocity = 0;
+                                motion->offset = -std::round(60 * m_scale);
+                                motion->velocity = 0;
+                                motion->target = 0;
+                            }
+                        }
+                    }
+                    StartIslandAnimation();
+                }
             }
             Layout();
             Render();
@@ -11738,8 +12714,21 @@ class NotificationPanel : public Panel {
 // the playing app, the song or its state changes, reads it, and hands it to
 // the island; the island's buttons are sent back to it.
 
+// An app with media controls (playing or not), as the island lists them to
+// choose which one the pill and the panel control.
+struct MediaSource {
+    std::wstring appId;
+    std::wstring title;
+    bool playing = false;
+};
+
 struct MediaState {
     bool present = false;
+    // Every app with media controls, and which of them this is (-1 none);
+    // chosen by the user rather than Windows' current one.
+    std::vector<MediaSource> sources;
+    int sourceIndex = -1;
+    bool chosen = false;
     std::wstring appId;
     std::wstring title;
     std::wstring artist;
@@ -11768,6 +12757,11 @@ enum class MediaCommand { PlayPause, Previous, Next, Seek };
 
 SRWLOCK g_mediaLock = SRWLOCK_INIT;
 MediaState g_media;
+// The app chosen for the media (its ID, and which of its sessions when it
+// has several), or empty for the one Windows takes as current. Kept only
+// while the app has media; then back to Windows' choice.
+std::wstring g_mediaChosenApp;
+int g_mediaChosenOccurrence = 0;
 std::vector<std::pair<MediaCommand, double>> g_mediaCommands;
 HANDLE g_mediaThread;
 HANDLE g_mediaStopEvent;
@@ -11775,6 +12769,28 @@ HANDLE g_mediaChangedEvent;
 HANDLE g_mediaCommandEvent;
 // Tells the island it changed.
 constexpr UINT WM_APP_MEDIA = WM_APP + 54;
+
+// Chooses the media the island controls: an index in MediaState::sources,
+// or -1 for the one Windows takes as current.
+void ChooseMediaSource(const MediaState& state, int index) {
+    AcquireSRWLockExclusive(&g_mediaLock);
+    if (index < 0 || index >= (int)state.sources.size()) {
+        g_mediaChosenApp.clear();
+        g_mediaChosenOccurrence = 0;
+    } else {
+        g_mediaChosenApp = state.sources[index].appId;
+        g_mediaChosenOccurrence = 0;
+        for (int i = 0; i < index; i++) {
+            if (state.sources[i].appId == g_mediaChosenApp) {
+                g_mediaChosenOccurrence++;
+            }
+        }
+    }
+    ReleaseSRWLockExclusive(&g_mediaLock);
+    if (g_mediaChangedEvent) {
+        SetEvent(g_mediaChangedEvent);
+    }
+}
 
 void SendMediaCommand(MediaCommand command, double position = 0) {
     AcquireSRWLockExclusive(&g_mediaLock);
@@ -11813,6 +12829,16 @@ DWORD WINAPI MediaThreadProc(LPVOID) {
             std::wstring lastTitle;
             double titleChangedAt = 0;
             UINT thumbnailSerial = 0;
+            // Every session, watched for its title and its state (for the
+            // list of apps to choose from).
+            struct WatchedSession {
+                GlobalSystemMediaTransportControlsSession session{nullptr};
+                GlobalSystemMediaTransportControlsSession::
+                    MediaPropertiesChanged_revoker properties;
+                GlobalSystemMediaTransportControlsSession::
+                    PlaybackInfoChanged_revoker playback;
+            };
+            std::vector<WatchedSession> watched;
             SetEvent(g_mediaChangedEvent);
 
             const HANDLE events[] = {g_mediaStopEvent, g_mediaChangedEvent,
@@ -11855,8 +12881,84 @@ DWORD WINAPI MediaThreadProc(LPVOID) {
                         continue;
                     }
 
-                    // The playing app, its song and its state.
-                    auto current = manager.GetCurrentSession();
+                    // Every app with media, and the one used: the one
+                    // chosen while it's there, otherwise Windows' current.
+                    std::vector<GlobalSystemMediaTransportControlsSession> all;
+                    for (const auto& each : manager.GetSessions()) {
+                        all.push_back(each);
+                    }
+                    if (all.size() != watched.size() ||
+                        !std::equal(all.begin(), all.end(), watched.begin(),
+                                    [](const auto& a, const WatchedSession& b) {
+                                        return a == b.session;
+                                    })) {
+                        watched.clear();
+                        for (const auto& each : all) {
+                            WatchedSession entry;
+                            entry.session = each;
+                            entry.properties = each.MediaPropertiesChanged(
+                                winrt::auto_revoke, changed);
+                            entry.playback = each.PlaybackInfoChanged(
+                                winrt::auto_revoke, changed);
+                            watched.push_back(std::move(entry));
+                        }
+                    }
+                    std::vector<MediaSource> sources;
+                    for (const auto& each : all) {
+                        MediaSource source;
+                        source.appId = each.SourceAppUserModelId();
+                        try {
+                            if (auto info =
+                                    each.TryGetMediaPropertiesAsync().get()) {
+                                source.title = info.Title();
+                            }
+                        } catch (winrt::hresult_error const&) {
+                        }
+                        if (auto playback = each.GetPlaybackInfo()) {
+                            source.playing =
+                                playback.PlaybackStatus() ==
+                                GlobalSystemMediaTransportControlsSessionPlaybackStatus::
+                                    Playing;
+                        }
+                        sources.push_back(std::move(source));
+                    }
+                    AcquireSRWLockShared(&g_mediaLock);
+                    const std::wstring chosenApp = g_mediaChosenApp;
+                    const int chosenOccurrence = g_mediaChosenOccurrence;
+                    ReleaseSRWLockShared(&g_mediaLock);
+                    GlobalSystemMediaTransportControlsSession current{nullptr};
+                    bool chosen = false;
+                    if (!chosenApp.empty()) {
+                        int occurrence = 0;
+                        GlobalSystemMediaTransportControlsSession first{nullptr};
+                        for (size_t i = 0; i < all.size(); i++) {
+                            if (sources[i].appId != chosenApp) {
+                                continue;
+                            }
+                            if (!first) {
+                                first = all[i];
+                            }
+                            if (occurrence++ == chosenOccurrence) {
+                                current = all[i];
+                            }
+                        }
+                        if (!current) {
+                            current = first;
+                        }
+                        chosen = current != nullptr;
+                        if (!chosen) {
+                            // Gone: Windows' choice again.
+                            AcquireSRWLockExclusive(&g_mediaLock);
+                            if (g_mediaChosenApp == chosenApp) {
+                                g_mediaChosenApp.clear();
+                                g_mediaChosenOccurrence = 0;
+                            }
+                            ReleaseSRWLockExclusive(&g_mediaLock);
+                        }
+                    }
+                    if (!current) {
+                        current = manager.GetCurrentSession();
+                    }
                     if (current != session) {
                         session = current;
                         propertiesRevoker = {};
@@ -11872,6 +12974,13 @@ DWORD WINAPI MediaThreadProc(LPVOID) {
                         }
                     }
                     MediaState state;
+                    state.sources = std::move(sources);
+                    state.chosen = chosen;
+                    for (size_t i = 0; i < all.size(); i++) {
+                        if (all[i] == session) {
+                            state.sourceIndex = (int)i;
+                        }
+                    }
                     if (session) {
                         state.present = true;
                         state.appId = session.SourceAppUserModelId();
@@ -12008,6 +13117,8 @@ void StopMediaWatch() {
     AcquireSRWLockExclusive(&g_mediaLock);
     g_media = {};
     g_mediaCommands.clear();
+    g_mediaChosenApp.clear();
+    g_mediaChosenOccurrence = 0;
     ReleaseSRWLockExclusive(&g_mediaLock);
 }
 
@@ -12074,7 +13185,21 @@ class MediaPanel : public Panel {
         Volume,
         PillButtons,
         PillTitle,
+        Source,
     };
+    // With several apps with media: "Automatic" (Windows' choice) and each
+    // app, to choose which one is controlled; the one under the mouse.
+    std::vector<D2D1_RECT_F> m_sourceChips;
+    int SourceAt(POINT pt) const {
+        for (size_t i = 0; i < m_sourceChips.size(); i++) {
+            if (PointInRect(pt, m_sourceChips[i])) {
+                return (int)i;
+            }
+        }
+        return -1;
+    }
+    int m_sourceHover = -1;
+    winrt::com_ptr<IDWriteTextFormat> m_chipFormat;
     // A button pressed shrinks, and springs back when released.
     PressAnimation m_press;
     double m_playSwap = 0;
@@ -16893,6 +18018,7 @@ class WeatherPanel : public EditingPanel {
         }
         if (IsOpen()) {
             m_data = GetWeather();
+            PulseContents();
             Layout();
             Render();
         }
@@ -16990,6 +18116,7 @@ class WeatherPanel : public EditingPanel {
                 m_choosing = !m_choosing || !m_data.valid;
                 m_status.clear();
                 g_lastTyped = NowSeconds();
+                PulseContents();
                 Layout();
                 return true;
             case Part::Search:
@@ -17554,6 +18681,8 @@ struct AppUpdate {
     int state = 0;
     // Ticked, to update with the others ticked.
     bool ticked = false;
+    // Ignored (see g_ignoredUpdates): listed last, not counted.
+    bool ignored = false;
 };
 struct UpdatesData {
     bool checking = false;
@@ -17567,15 +18696,74 @@ struct UpdatesData {
 };
 SRWLOCK g_updatesLock = SRWLOCK_INIT;
 UpdatesData g_updates;
+// Apps whose updates are ignored (their winget IDs, value "updatesIgnored"):
+// like ones winget can't update, they'd keep the count on the pill forever.
+// Under g_updatesLock.
+std::vector<std::wstring> g_ignoredUpdates;
 // Tells the island the updates changed.
 constexpr UINT WM_APP_UPDATES = WM_APP + 68;
+// Windhawk's settings changed (see WhTool_ModSettingsChanged).
+constexpr UINT WM_APP_RELOAD_SETTINGS = WM_APP + 70;
+void LoadSettings();
 constexpr double kUpdatesCheckSeconds = 6 * 60 * 60;
 
 UpdatesData GetUpdates() {
     AcquireSRWLockShared(&g_updatesLock);
     UpdatesData data = g_updates;
+    for (auto& app : data.apps) {
+        app.ignored = std::find(g_ignoredUpdates.begin(),
+                                g_ignoredUpdates.end(),
+                                app.id) != g_ignoredUpdates.end();
+    }
     ReleaseSRWLockShared(&g_updatesLock);
+    // The ignored ones last.
+    std::stable_partition(data.apps.begin(), data.apps.end(),
+                          [](const AppUpdate& app) { return !app.ignored; });
     return data;
+}
+
+void LoadIgnoredUpdates() {
+    WCHAR value[4096] = L"";
+    Wh_GetStringValue(L"updatesIgnored", value, ARRAYSIZE(value));
+    std::vector<std::wstring> ids;
+    for (PCWSTR line = value; *line;) {
+        PCWSTR end = wcschr(line, L'\n');
+        std::wstring id = end ? std::wstring(line, end) : std::wstring(line);
+        if (!id.empty() && ids.size() < 64) {
+            ids.push_back(std::move(id));
+        }
+        if (!end) {
+            break;
+        }
+        line = end + 1;
+    }
+    AcquireSRWLockExclusive(&g_updatesLock);
+    g_ignoredUpdates = std::move(ids);
+    ReleaseSRWLockExclusive(&g_updatesLock);
+}
+
+// Ignores an app's updates, or shows them again; kept.
+void SetUpdateIgnored(const std::wstring& id, bool ignored) {
+    AcquireSRWLockExclusive(&g_updatesLock);
+    std::erase(g_ignoredUpdates, id);
+    if (ignored) {
+        g_ignoredUpdates.push_back(id);
+        if (g_ignoredUpdates.size() > 64) {
+            g_ignoredUpdates.erase(g_ignoredUpdates.begin());
+        }
+        // Not among the ticked ones anymore.
+        for (auto& app : g_updates.apps) {
+            if (app.id == id) {
+                app.ticked = false;
+            }
+        }
+    }
+    std::wstring value;
+    for (const auto& ignoredId : g_ignoredUpdates) {
+        value += ignoredId + L"\n";
+    }
+    ReleaseSRWLockExclusive(&g_updatesLock);
+    Wh_SetStringValue(L"updatesIgnored", value.c_str());
 }
 
 // A package ID as winget writes them: words joined by dots, nothing a
@@ -17903,9 +19091,25 @@ class UpdatesPanel : public EditingPanel {
    public:
     // Asks the island to look for updates again.
     std::function<void()> check;
+    // Tells the island the list changed (an app ignored or shown again).
+    std::function<void()> changed;
     void Refresh() {
         if (IsOpen()) {
-            m_data = GetUpdates();
+            UpdatesData data = GetUpdates();
+            // Another list (not only a box ticked): it comes in smoothly.
+            auto signature = [](const UpdatesData& updates) {
+                std::wstring text = std::to_wstring(updates.checking) +
+                                    std::to_wstring(updates.windows.size());
+                for (const auto& app : updates.apps) {
+                    text += app.id + std::to_wstring(app.ignored) +
+                            std::to_wstring(app.state);
+                }
+                return text;
+            };
+            if (signature(data) != signature(m_data)) {
+                PulseContents();
+            }
+            m_data = std::move(data);
             Layout();
             Render();
         }
@@ -17945,16 +19149,18 @@ class UpdatesPanel : public EditingPanel {
                 }
                 return true;
             case Part::All: {
-                // The ones ticked, or all.
+                // The ones ticked, or all (not the ignored ones).
                 std::vector<std::wstring> ids;
                 for (const auto& app : m_data.apps) {
-                    if (app.ticked) {
+                    if (app.ticked && !app.ignored) {
                         ids.push_back(app.id);
                     }
                 }
                 if (ids.empty()) {
                     for (const auto& app : m_data.apps) {
-                        ids.push_back(app.id);
+                        if (!app.ignored) {
+                            ids.push_back(app.id);
+                        }
                     }
                 }
                 UpdateInTerminal(ids);
@@ -17977,6 +19183,18 @@ class UpdatesPanel : public EditingPanel {
                     }
                     ReleaseSRWLockExclusive(&g_updatesLock);
                     Refresh();
+                }
+                return true;
+            case Part::Ignore:
+                if (hit.index >= 0 && hit.index < (int)m_data.apps.size()) {
+                    const AppUpdate& app = m_data.apps[hit.index];
+                    SetUpdateIgnored(app.id, !app.ignored);
+                    m_hover = {};
+                    Refresh();
+                    // The count on the pill.
+                    if (changed) {
+                        changed();
+                    }
                 }
                 return true;
             case Part::WingetTerminal:
@@ -18003,7 +19221,16 @@ class UpdatesPanel : public EditingPanel {
     }
 
    private:
-    enum class Part { None, Check, All, App, Tick, WingetTerminal, Windows };
+    enum class Part {
+        None,
+        Check,
+        All,
+        App,
+        Tick,
+        Ignore,
+        WingetTerminal,
+        Windows
+    };
     struct Hit {
         Part part = Part::None;
         int index = -1;
@@ -18015,7 +19242,12 @@ class UpdatesPanel : public EditingPanel {
     size_t TickedCount() const {
         return (size_t)std::count_if(
             m_data.apps.begin(), m_data.apps.end(),
-            [](const AppUpdate& app) { return app.ticked; });
+            [](const AppUpdate& app) { return app.ticked && !app.ignored; });
+    }
+    size_t CountedApps() const {
+        return (size_t)std::count_if(
+            m_data.apps.begin(), m_data.apps.end(),
+            [](const AppUpdate& app) { return !app.ignored; });
     }
 
     void Layout() {
@@ -18038,7 +19270,14 @@ class UpdatesPanel : public EditingPanel {
                  listY + std::round(3 * s), width - padding,
                  listY + section - std::round(3 * s)};
         listY += section;
+        m_ignoredTitle = {};
         for (size_t i = 0; i < m_data.apps.size(); i++) {
+            // The ignored ones under their own title.
+            if (m_data.apps[i].ignored && (i == 0 || !m_data.apps[i - 1].ignored)) {
+                m_ignoredTitle = {padding, listY, width - padding,
+                                  listY + section};
+                listY += section;
+            }
             m_appRows.push_back({padding, listY, width - padding, listY + row});
             listY += row;
         }
@@ -18074,6 +19313,14 @@ class UpdatesPanel : public EditingPanel {
         return {row.right - std::round(108 * s), row.top + std::round(8 * s),
                 row.right, row.bottom - std::round(8 * s)};
     }
+    // "Ignore" (or "Show again"), left of it.
+    D2D1_RECT_F IgnoreButton(const D2D1_RECT_F& row) const {
+        const float s = m_scale;
+        const D2D1_RECT_F button = AppButton(row);
+        const float size = button.bottom - button.top;
+        return {button.left - std::round(6 * s) - size, button.top,
+                button.left - std::round(6 * s), button.bottom};
+    }
     // The box to tick, at the row's start.
     D2D1_RECT_F TickBox(const D2D1_RECT_F& row) const {
         const float s = m_scale;
@@ -18090,15 +19337,20 @@ class UpdatesPanel : public EditingPanel {
         if (!ListPoint(pt, &inList)) {
             return {};
         }
-        if (m_data.apps.size() > 1 && PointInRect(inList, m_all)) {
+        if (CountedApps() > 1 && PointInRect(inList, m_all)) {
             return {Part::All};
         }
-        for (size_t i = 0; i < m_appRows.size(); i++) {
+        for (size_t i = 0; i < m_appRows.size() && i < m_data.apps.size();
+             i++) {
             if (PointInRect(inList, AppButton(m_appRows[i]))) {
                 return {Part::App, (int)i};
             }
+            if (PointInRect(inList, IgnoreButton(m_appRows[i]))) {
+                return {Part::Ignore, (int)i};
+            }
             // The box, or the app's name, ticks it.
-            if (m_data.apps.size() > 1 && PointInRect(inList, m_appRows[i])) {
+            if (CountedApps() > 1 && !m_data.apps[i].ignored &&
+                PointInRect(inList, m_appRows[i])) {
                 return {Part::Tick, (int)i};
             }
         }
@@ -18114,7 +19366,8 @@ class UpdatesPanel : public EditingPanel {
     UpdatesData m_data;
     Hit m_hover;
     D2D1_RECT_F m_header{}, m_checkButton{}, m_appsTitle{}, m_all{},
-        m_windowsTitle{}, m_windowsButton{}, m_wingetButton{};
+        m_windowsTitle{}, m_windowsButton{}, m_wingetButton{},
+        m_ignoredTitle{};
     std::vector<D2D1_RECT_F> m_appRows;
     size_t m_windowsRows = 0;
     float m_windowsTop = 0;
@@ -18150,16 +19403,24 @@ void UpdatesPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) 
     // Apps: updated in a terminal.
     std::wstring apps = Tr(L"Apps (winget, in a terminal)",
                            L"Apps (winget, no terminal)");
-    if (!m_data.apps.empty()) {
-        apps += L"  ·  " + std::to_wstring(m_data.apps.size());
+    const size_t counted = CountedApps();
+    if (counted) {
+        apps += L"  ·  " + std::to_wstring(counted);
     }
     brush->SetColor(Fg(0.6f));
     target->DrawText(apps.c_str(), (UINT32)apps.size(), m_smallFormat.get(),
                      {m_appsTitle.left, m_appsTitle.top,
-                      m_data.apps.size() > 1 ? m_all.left : m_appsTitle.right,
+                      counted > 1 ? m_all.left : m_appsTitle.right,
                       m_appsTitle.bottom},
                      brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
-    if (m_data.apps.size() > 1) {
+    if (m_ignoredTitle.bottom > m_ignoredTitle.top) {
+        PCWSTR ignored = Tr(L"Ignored (not counted)",
+                            L"Ignorados (não contam)");
+        brush->SetColor(Fg(0.5f));
+        target->DrawText(ignored, (UINT32)wcslen(ignored), m_smallFormat.get(),
+                         m_ignoredTitle, brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    }
+    if (counted > 1) {
         const size_t ticked = TickedCount();
         const std::wstring all =
             ticked ? Tr(L"Update ticked", L"Atualizar marcados") +
@@ -18190,13 +19451,15 @@ void UpdatesPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) 
                        m_hover.part == Part::WingetTerminal);
         }
     }
-    const bool ticking = m_data.apps.size() > 1;
     for (size_t i = 0; i < m_appRows.size() && i < m_data.apps.size(); i++) {
         const AppUpdate& app = m_data.apps[i];
         const D2D1_RECT_F& row = m_appRows[i];
         const D2D1_RECT_F button = AppButton(row);
+        const D2D1_RECT_F ignore = IgnoreButton(row);
+        // Ignored: dimmed, without a box.
+        const float dim = app.ignored ? 0.55f : 1.0f;
         float textLeft = row.left;
-        if (ticking) {
+        if (counted > 1 && !app.ignored) {
             // Its box.
             const D2D1_RECT_F square = TickBox(row);
             const float corner = std::round(4 * s);
@@ -18215,21 +19478,25 @@ void UpdatesPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) 
             }
             textLeft = square.right + std::round(10 * s);
         }
-        brush->SetColor(Fg(0.95f));
+        brush->SetColor(Fg(0.95f * dim));
         target->DrawText(app.name.c_str(), (UINT32)app.name.size(),
                          m_boldFormat.get(),
                          {textLeft, row.top + std::round(4 * s),
-                          button.left - std::round(8 * s),
+                          ignore.left - std::round(8 * s),
                           row.top + std::round(24 * s)},
                          brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
         const std::wstring versions = app.version + L"  →  " + app.available;
-        brush->SetColor(Fg(0.5f));
+        brush->SetColor(Fg(0.5f * dim));
         target->DrawText(versions.c_str(), (UINT32)versions.size(),
                          m_smallFormat.get(),
                          {textLeft, row.top + std::round(24 * s),
-                          button.left - std::round(8 * s),
+                          ignore.left - std::round(8 * s),
                           row.bottom - std::round(4 * s)},
                          brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        // Ignore it (an eye crossed out), or show it again (an eye).
+        DrawIconButton(target, brush, ignore, app.ignored ? 0xE7B3 : 0xED1A,
+                       m_hover.part == Part::Ignore && m_hover.index == (int)i,
+                       0.7f);
         const bool hover = m_hover.part == Part::App && m_hover.index == (int)i;
         // Opened in a terminal: can be opened again.
         DrawButton(target, brush, button,
@@ -18288,6 +19555,8 @@ class Island {
     void AnimationFrame();
     LRESULT HandleMessage(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
     void StartAnimating();
+    // The drawing device was lost (see OnDrawingDeviceLost).
+    void OnDeviceLost();
 
     // Shared with the control center.
     IMMDeviceEnumerator* Devices() { return m_devices.get(); }
@@ -18374,6 +19643,14 @@ class Island {
     void SayHello() {
         SendIpc(FindTaskbarWnd(), m_hwnd, kIpcHello, nullptr, 0);
     }
+    // Another monitor chosen, or following the mouse turned on or off.
+    void OnMonitorChoiceChanged();
+    // The monitor it's on now.
+    HMONITOR CurrentMonitor() const;
+    // Tells explorer the animation settings changed (the dock follows).
+    void SayAnimationsChanged() {
+        SendIpc(FindTaskbarWnd(), m_hwnd, kIpcAnimations, nullptr, 0);
+    }
     // Another place (or one changed): it slides there.
     void OnPlacesChanged();
     // The app in front changed (its place may be another).
@@ -18402,6 +19679,13 @@ class Island {
     // The screen's scaling (m_scale also has the island's size in it).
     float m_dpiScale = 1;
     void Layout();
+    // The room from the edges as shown (following the setting).
+    float GapShown() {
+        if (m_gapShown < 0) {
+            m_gapShown = g_settings.islandGap;
+        }
+        return (float)m_gapShown;
+    }
     void Render(bool force = false);
     void SetAppBarPosition();
     IslandItem HitTest(POINT pt, std::wstring* appId = nullptr) const;
@@ -18574,6 +19858,21 @@ class Island {
     double m_playSwap = 0;
     double m_playSwapVelocity = 0;
     void UpdateMediaShown();
+    // The next (1) or previous (-1) app with media, chosen. The dots under
+    // the cover show which one it is for a moment, then fade away.
+    void StepMediaSource(int step) {
+        const int count = (int)m_mediaShown.sources.size();
+        if (count < 2) {
+            return;
+        }
+        const int now = std::max(m_mediaShown.sourceIndex, 0);
+        ChooseMediaSource(m_mediaShown, ((now + step) % count + count) % count);
+        m_mediaDotsUntil = NowSeconds() + 1.5;
+        StartAnimating();
+    }
+    double m_mediaDots = 0;
+    double m_mediaDotsVelocity = 0;
+    double m_mediaDotsUntil = 0;
     bool m_appBar = false;
     // Windows' dark mode (for the light and dark mode button), and its icon
     // turning half a turn when it's switched (0 light, 1 dark).
@@ -18651,10 +19950,11 @@ class Island {
     // How far a value's change is (0 to 1; 1 when done).
     float UsageChange(int index) const {
         const double changedAt = m_usageChangedAt[index];
-        return changedAt ? (float)std::clamp(
-                               (NowSeconds() - changedAt) / kUsageChangeSeconds,
-                               0.0, 1.0)
-                         : 1.0f;
+        const double length = AnimationSeconds(kUsageChangeSeconds, true);
+        return changedAt && length > 0
+                   ? (float)std::clamp((NowSeconds() - changedAt) / length,
+                                       0.0, 1.0)
+                   : 1.0f;
     }
 
     float m_scale = 0;
@@ -18698,6 +19998,10 @@ class Island {
     // panels and banners open towards the screen's middle).
     bool m_vertical = false;
     bool m_sideLeft = true;
+    bool m_verticalKnown = false;
+    // Turning upright or back: closing into its dot (1), then turned (2,
+    // laid out the new way once), opening again.
+    int m_reshape = 0;
     // The clock's two lines when upright: the time and a short date.
     std::wstring m_clockTime;
     std::wstring m_clockDate;
@@ -18791,6 +20095,8 @@ class Island {
     // always, and the others, shown when the list is open (m_trayAmount from
     // 0 to 1, animated).
     std::vector<TrayIcon> m_trayIcons;
+    // Icons came once (later ones grow in).
+    bool m_trayIconsSeen = false;
     std::vector<std::wstring> m_trayPinned;
     // How pinned each icon is shown (0 in the list, 1 pinned), animated.
     struct PinState {
@@ -18813,6 +20119,39 @@ class Island {
     double m_trayBounceVelocity = 0;
     // The arrow turning from › to ‹ (0 to 1).
     double m_trayArrow = 0;
+    // With many icons, the list stops at a few and the wheel scrolls it
+    // (pixels along the pill); how far it can go, one icon's step, and
+    // whether icons are hidden before or after the shown ones.
+    double m_trayScroll = 0;
+    double m_trayScrollVelocity = 0;
+    double m_trayScrollTarget = 0;
+    float m_trayOverflow = 0;
+    float m_trayIconStep = 0;
+    bool m_trayMoreBefore = false;
+    bool m_trayMoreAfter = false;
+    // The open list's rect, when it doesn't show every icon.
+    const IslandSlot* TrayListSlot() const {
+        for (const auto& slot : m_slots) {
+            if (slot.font == kTrayListFont) {
+                return &slot;
+            }
+        }
+        return nullptr;
+    }
+    // The wheel over the tray: forward (positive) or back, in notches.
+    bool ScrollTrayList(double notches) {
+        if (!m_trayOpen || m_trayOverflow <= 0 ||
+            (m_hover != IslandItem::TrayIcon &&
+             m_hover != IslandItem::TrayPin &&
+             m_hover != IslandItem::Overflow)) {
+            return false;
+        }
+        m_trayScrollTarget =
+            std::clamp(m_trayScrollTarget + notches * 2 * m_trayIconStep, 0.0,
+                       (double)m_trayOverflow);
+        StartAnimating();
+        return true;
+    }
     double m_trayArrowVelocity = 0;
     // The tooltip waits a moment, like the taskbar's.
     std::wstring m_pendingTipKey;
@@ -18951,6 +20290,10 @@ class Island {
     TextEdit m_bannerEdit;
     double m_bannerAmount = 0;
     double m_bannerVelocity = 0;
+    // Another notification taking the banner's place: its contents fade in
+    // (1 to 0).
+    double m_bannerSwap = 0;
+    double m_bannerSwapVelocity = 0;
     winrt::com_ptr<IDWriteTextFormat> m_bannerAppFormat;
     winrt::com_ptr<IDWriteTextFormat> m_bannerTimeFormat;
     winrt::com_ptr<IDWriteTextFormat> m_bannerTitleFormat;
@@ -19003,6 +20346,60 @@ class Island {
     std::wstring m_batteryGlyph;
     std::wstring m_bellGlyph;
     std::wstring m_drawnKey;
+    // An icon changing (the volume, the battery, the bell, the microphone):
+    // the one before shrinks and fades out as the new one grows in (t from 1
+    // to 0).
+    struct GlyphSwap {
+        IslandItem item;
+        std::wstring shown;
+        std::wstring from;
+        double t;
+        double velocity;
+    };
+    std::vector<GlyphSwap> m_glyphSwaps;
+    // The red dots (updates waiting, unseen notifications) growing in and
+    // out, and the count shown while the updates' one goes.
+    double m_updatesDot = 0;
+    double m_updatesDotVelocity = 0;
+    int m_updatesDotCount = 0;
+    double m_unseenDot = 0;
+    double m_unseenDotVelocity = 0;
+    // The weather's room on the pill following what it shows, and what it
+    // showed before fading out (t from 1 to 0).
+    double m_weatherWidth = -1;
+    double m_weatherWidthVelocity = 0;
+    float m_weatherWidthTarget = 0;
+    std::wstring m_weatherBefore;
+    double m_weatherSwap = 0;
+    double m_weatherSwapVelocity = 0;
+    // The microphone's icon as last shown, so it shrinks away when the
+    // microphone goes.
+    std::wstring m_microphoneShown;
+    // The room from the screen's edges, and the clock kept in the middle (0
+    // to 1), following the settings smoothly.
+    double m_gapShown = -1;
+    double m_gapVelocity = 0;
+    double m_clockCenterAmount = -1;
+    double m_clockCenterVelocity = 0;
+    // A restart after a lost device waits for this timer (see OnDeviceLost).
+    bool m_deviceRetryPending = false;
+    // The monitor it's on (see WantedMonitor), and moving to another one: it
+    // closes into its dot (1), the dot glides there (2), and it opens again
+    // (m_moveT from 0 to 1 while gliding, from where it was).
+    HMONITOR m_monitorHandle = nullptr;
+    int m_monitorMove = 0;
+    HMONITOR m_moveTarget = nullptr;
+    POINT m_moveFrom{};
+    double m_moveT = 0;
+    double m_moveTVelocity = 0;
+    HMONITOR WantedMonitor() const;
+    // The mouse on another monitor goes there only once it stays a moment
+    // (not just passing over an edge).
+    HMONITOR m_wantedMonitor = nullptr;
+    double m_wantedSince = 0;
+    void CheckMonitor();
+    void SwitchMonitor(HMONITOR monitor);
+    void UpdateMonitorWatch();
 };
 
 LRESULT CALLBACK IslandWndProc(HWND hWnd, UINT msg, WPARAM wParam,
@@ -19380,13 +20777,57 @@ void ControlPanel::SwitchRadio(int kind, bool on) {
     if (!m_hwnd) {
         return;
     }
+    if (m_radioBusy && GetTickCount64() - m_radioBusySince < 15000) {
+        if (kind >= 0) {
+            m_radioWanted[kind] = on;
+        }
+        return;
+    }
     auto* request = new RadioRequest{m_hwnd, kind, on};
     if (HANDLE thread =
             CreateThread(nullptr, 0, RadioThreadProc, request, 0, nullptr)) {
         m_workers.push_back(thread);
+        m_radioBusy = true;
+        m_radioBusySince = GetTickCount64();
     } else {
         delete request;
     }
+}
+
+void ControlPanel::SwitchNightLight() {
+    if (m_nightLight < 0) {
+        return;
+    }
+    m_nightLight = m_nightLight == 1 ? 0 : 1;
+    if (m_nightLightChecking) {
+        return;
+    }
+    SetNightLight(m_nightLight == 1);
+    if (!m_hwnd) {
+        return;
+    }
+    m_nightLightChecking = true;
+    m_nightLightCheckSince = GetTickCount64();
+    m_nightLightTries = 0;
+    SetTimer(m_hwnd, kNightLightTimerId, kNightLightCheckMs, nullptr);
+}
+
+bool ControlPanel::OnTimer(UINT_PTR id) {
+    if (id != kNightLightTimerId || !m_nightLightChecking) {
+        return false;
+    }
+    const int now = GetNightLight();
+    if (now >= 0 && now != m_nightLight && ++m_nightLightTries < 4) {
+        SetNightLight(m_nightLight == 1);
+        SetTimer(m_hwnd, kNightLightTimerId, kNightLightCheckMs, nullptr);
+        return false;
+    }
+    m_nightLightChecking = false;
+    if (now >= 0) {
+        m_nightLight = now;
+    }
+    Layout();
+    return true;
 }
 
 void ControlPanel::StartWorker(LPTHREAD_START_ROUTINE proc, void* parameter) {
@@ -19567,7 +21008,13 @@ void ControlPanel::Update() {
         m_muted = muted;
     }
     m_doNotDisturb = IsIslandQuiet();
-    m_nightLight = GetNightLight();
+    if (m_nightLightChecking &&
+        GetTickCount64() - m_nightLightCheckSince > 5000) {
+        m_nightLightChecking = false;
+    }
+    if (!m_nightLightChecking) {
+        m_nightLight = GetNightLight();
+    }
 
     SYSTEM_POWER_STATUS power;
     m_hasBattery = GetSystemPowerStatus(&power) && !(power.BatteryFlag & 128) &&
@@ -20271,6 +21718,8 @@ float ControlPanel::SettingHeight(SettingKind kind) {
             return 44;
         case SettingKind::Order:
             return 66;
+        case SettingKind::Choice:
+            return 44;
         default:
             return 34;
     }
@@ -20285,6 +21734,7 @@ PCWSTR SettingSectionTitle(int section, bool english) {
         {L"Clock (the calendar shows it all)",
          L"Relógio (o calendário mostra tudo)"},
         {L"Notifications", L"Notificações"},
+        {L"Animations", L"Animações"},
     };
     return kTitles[std::clamp(section, 0, kSectionCount - 1)][english ? 0 : 1];
 }
@@ -20306,13 +21756,29 @@ std::wstring ControlPanel::SettingText(const SettingEntry& entry) const {
                 L"preto grafite claro destaque vidro";
             break;
         case SettingKind::Size:
-            text += entry.value
+            text += entry.value == 3
+                        ? L" Tray icons list scroll how many Ícones da "
+                          L"bandeja lista rolar quantos"
+                    : entry.value == 2
+                        ? L" Animation speed faster slower Velocidade das "
+                          L"animações mais rápido devagar"
+                    : entry.value
                         ? L" Distance from the edges gap margin room space "
                           L"Distância das bordas espaço margem"
                         : L" Size bigger smaller Tamanho maior menor";
             break;
         case SettingKind::Place:
             text += L" Place where position Posição onde lugar";
+            break;
+        case SettingKind::Choice:
+            text += entry.value == kChoiceAnimationLevel
+                        ? L" Level how many all partial none slower computer "
+                          L"Nível quantas todas parciais nenhuma computador "
+                          L"lento"
+                    : entry.value == kChoiceFrameRate
+                        ? L" Frame rate limit FPS Limite de quadros por "
+                          L"segundo"
+                        : L" Monitor screen display Monitor tela";
             break;
         case SettingKind::AppPlaces:
             text += L" Place and icons per app Posição e ícones por app";
@@ -20405,6 +21871,9 @@ void ControlPanel::LayoutSettings() {
             {(int)SettingKind::Pref, (int)IslandPref::VerticalSides,
              kSectionPlace},
             {(int)SettingKind::Size, 1, kSectionPlace},
+            {(int)SettingKind::Pref, (int)IslandPref::FollowMouse,
+             kSectionPlace},
+            {(int)SettingKind::Choice, kChoiceMonitor, kSectionPlace},
             {(int)SettingKind::Label, 0, kSectionPill},
             {(int)SettingKind::Order, 0, kSectionPill},
             {(int)SettingKind::Pref, (int)IslandPref::ClockCenter,
@@ -20430,6 +21899,7 @@ void ControlPanel::LayoutSettings() {
             {(int)SettingKind::Pref, (int)IslandPref::Tray, kSectionTrayMedia},
             {(int)SettingKind::Pref, (int)IslandPref::TrayOpen,
              kSectionTrayMedia},
+            {(int)SettingKind::Size, 3, kSectionTrayMedia},
             {(int)SettingKind::Pref, (int)IslandPref::Media, kSectionTrayMedia},
             {(int)SettingKind::Pref, (int)IslandPref::MediaButtons,
              kSectionTrayMedia},
@@ -20454,6 +21924,13 @@ void ControlPanel::LayoutSettings() {
              kSectionNotifications},
             {(int)SettingKind::Pref, (int)IslandPref::WebPictures,
              kSectionNotifications},
+            {(int)SettingKind::Label, 0, kSectionAnimations},
+            {(int)SettingKind::Pref, (int)IslandPref::Animations,
+             kSectionAnimations},
+            {(int)SettingKind::Choice, kChoiceAnimationLevel,
+             kSectionAnimations},
+            {(int)SettingKind::Size, 2, kSectionAnimations},
+            {(int)SettingKind::Choice, kChoiceFrameRate, kSectionAnimations},
         };
         for (const auto& spec : kSpecs) {
             m_settings.push_back(
@@ -20576,7 +22053,7 @@ void ControlPanel::LayoutSettings() {
                 break;
             }
             case SettingKind::Size: {
-                const int slider = entry.value ? 1 : 0;
+                const int slider = entry.value;
                 m_sizeRow[slider] = rect;
                 const float reset = std::round(28 * s);
                 m_sizeReset[slider] = {rect.right - std::round(2 * s) - reset,
@@ -20602,6 +22079,25 @@ void ControlPanel::LayoutSettings() {
             case SettingKind::AppPlaces:
                 m_appPlacesRow = rect;
                 break;
+            case SettingKind::Choice: {
+                // Right-aligned segments, as wide as the row allows.
+                const int id = entry.value;
+                const int count = ChoiceCount(id);
+                m_choiceRow[id] = rect;
+                const float segment = std::min(
+                    std::round(64 * s),
+                    std::floor((rect.right - rect.left) * 0.6f / count));
+                const float segmentTop = top + std::round(7 * s);
+                const float segmentBottom = top + height - std::round(7 * s);
+                const float right = rect.right - std::round(4 * s);
+                m_choiceSegments[id].clear();
+                for (int i = 0; i < count; i++) {
+                    const float left = right - segment * (count - i);
+                    m_choiceSegments[id].push_back(
+                        {left, segmentTop, left + segment, segmentBottom});
+                }
+                break;
+            }
             case SettingKind::Order:
                 m_orderStrip = {
                     rect.left + std::round(4 * s), top + std::round(6 * s),
@@ -20798,9 +22294,6 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
         return {};
     }
     if (m_view == View::Settings) {
-        if (PointInRect(pt, m_back)) {
-            return {Part::Back};
-        }
         if (!m_search.empty() && PointInRect(pt, m_searchClear)) {
             return {Part::SearchClear};
         }
@@ -20837,7 +22330,7 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
                     break;
                 }
                 case SettingKind::Size: {
-                    const int slider = entry.value ? 1 : 0;
+                    const int slider = entry.value;
                     if (PointInRect(list, m_sizeReset[slider])) {
                         return {Part::SizeReset, slider};
                     }
@@ -20869,6 +22362,17 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
                 case SettingKind::Pref:
                     if (!PrefDisabled((IslandPref)entry.value)) {
                         return {Part::SettingToggle, entry.value};
+                    }
+                    break;
+                case SettingKind::Choice:
+                    if (!ChoiceDisabled(entry.value)) {
+                        const auto& segments = m_choiceSegments[entry.value];
+                        for (size_t i = 0; i < segments.size(); i++) {
+                            if (PointInRect(list, segments[i])) {
+                                return {Part::ChoiceSegment,
+                                        entry.value * 16 + (int)i};
+                            }
+                        }
                     }
                     break;
                 case SettingKind::Label:
@@ -21131,7 +22635,7 @@ void ControlPanel::DrawMarquee(ID2D1RenderTarget* target,
         if (centered) {
             x += (width - textWidth) / 2;
         }
-    } else {
+    } else if (AnimationLevel() == 0) {
         // Pause, scroll to the end, pause, scroll back.
         m_marqueeActive = true;
         const double distance = textWidth - width;
@@ -21176,6 +22680,16 @@ bool ControlPanel::AnimateContents(double dt) {
     for (auto& knob : m_knobs) {
         if (SpringTowards(knob.value, knob.velocity, knob.target, 0.3, dt,
                           kBounceDamping)) {
+            moving = true;
+        }
+    }
+    for (int id = 0; id < 3; id++) {
+        const double chosen = ChoiceValue(id);
+        if (m_choiceKnob[id] < 0) {
+            m_choiceKnob[id] = chosen;
+        }
+        if (SpringTowards(m_choiceKnob[id], m_choiceKnobVelocity[id], chosen,
+                          0.35, dt, kBounceDamping)) {
             moving = true;
         }
     }
@@ -21342,7 +22856,11 @@ void ControlPanel::DrawHeader(ID2D1RenderTarget* target,
                               ID2D1SolidColorBrush* brush,
                               PCWSTR title,
                               int toggle) {
-    if (const float lit = Hover(m_back, m_hover.part == Part::Back);
+    // The settings open on their own (from the island's settings bubble):
+    // nothing to go back to there, Escape or a click outside closes them.
+    const bool back = m_view != View::Settings;
+    if (const float lit =
+            back ? Hover(m_back, m_hover.part == Part::Back) : 0.0f;
         lit > 0.01f) {
         const float inset = std::round(6 * m_scale);
         const D2D1_RECT_F back{m_back.left + inset, m_back.top + inset,
@@ -21352,15 +22870,18 @@ void ControlPanel::DrawHeader(ID2D1RenderTarget* target,
         target->FillRoundedRectangle({back, radius, radius}, brush);
     }
     brush->SetColor(Fg(0.95f));
-    target->DrawText(&kGlyphBack, 1, m_iconFormat.get(), m_back, brush);
+    if (back) {
+        target->DrawText(&kGlyphBack, 1, m_iconFormat.get(), m_back, brush);
+    }
     const float titleRight = toggle >= 0
                                  ? m_toggle.left - std::round(8 * m_scale)
                              : m_view == View::Settings && m_twoColumns
                                  ? m_searchField.left - std::round(8 * m_scale)
                                  : (float)m_size.cx - m_back.left;
     target->DrawText(title, (UINT32)wcslen(title), m_sectionFormat.get(),
-                     {m_back.right + std::round(4 * m_scale), m_back.top,
-                      titleRight, m_back.bottom},
+                     {back ? m_back.right + std::round(4 * m_scale)
+                           : m_back.left + std::round(6 * m_scale),
+                      m_back.top, titleRight, m_back.bottom},
                      brush);
     if (toggle >= 0) {
         DrawToggle(target, brush, m_toggle,
@@ -21782,13 +23303,26 @@ struct IslandSlider {
     int usual;
     int step;
 };
-constexpr IslandSlider kIslandSliders[2] = {
+constexpr IslandSlider kIslandSliders[4] = {
     {kIslandSizeMin, kIslandSizeMax, kIslandSizeDefault, kIslandSizeStep},
     {kIslandGapMin, kIslandGapMax, kIslandGapDefault, kIslandGapStep},
+    {kAnimationSpeedMin, kAnimationSpeedMax, kAnimationSpeedDefault,
+     kAnimationSpeedStep},
+    {kTrayListMin, kTrayListMax, kTrayListDefault, kTrayListStep},
 };
 
 void SetIslandSlider(int slider, int value, bool keep) {
-    if (slider == 1) {
+    if (slider == 3) {
+        SetTrayListIcons(value, keep);
+    } else if (slider == 2) {
+        AnimationChoice choice = g_animationChoice;
+        choice.speed = value;
+        SetAnimationChoice(choice, keep);
+        if (keep && g_island) {
+            g_island->SayAnimationsChanged();
+        }
+        StartIslandAnimation();
+    } else if (slider == 1) {
         SetIslandGap(value, keep);
     } else {
         SetIslandSize(value, keep);
@@ -21796,7 +23330,10 @@ void SetIslandSlider(int slider, int value, bool keep) {
 }
 
 int IslandSliderValue(int slider) {
-    return slider == 1 ? g_settings.islandGap : g_settings.islandSize;
+    return slider == 3   ? g_trayListIcons
+           : slider == 2 ? g_animationChoice.speed
+           : slider == 1 ? g_settings.islandGap
+                         : g_settings.islandSize;
 }
 
 void ControlPanel::SetIslandSizeAt(int slider, POINT pt, bool keep) {
@@ -22023,6 +23560,59 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
                 }
             }
             break;
+        case SettingKind::Choice:
+            // A few choices, the chosen one lit (sliding), like the style.
+            {
+                const int id = entry.value;
+                const auto& segments = m_choiceSegments[id];
+                if (segments.empty()) {
+                    break;
+                }
+                const float opacity = ChoiceDisabled(id) ? 0.4f : 1.0f;
+                const WCHAR glyph = id == kChoiceAnimationLevel ? 0xE9E9
+                                    : id == kChoiceFrameRate    ? 0xE916
+                                                                : 0xE7F4;
+                PCWSTR name =
+                    id == kChoiceAnimationLevel ? Tr(L"How many", L"Quantas")
+                    : id == kChoiceFrameRate
+                        ? Tr(L"Frames a second", L"Quadros por segundo")
+                        : Tr(L"Monitor", L"Monitor");
+                label(m_choiceRow[id], glyph, name, segments.front().left,
+                      opacity);
+                const D2D1_RECT_F track{segments.front().left,
+                                        segments.front().top,
+                                        segments.back().right,
+                                        segments.back().bottom};
+                const float radius = (track.bottom - track.top) / 2;
+                brush->SetColor(Fg(0.08f * opacity));
+                target->FillRoundedRectangle({track, radius, radius}, brush);
+                const float knob = (float)std::clamp(
+                    m_choiceKnob[id] < 0 ? (double)ChoiceValue(id)
+                                         : m_choiceKnob[id],
+                    -0.05, segments.size() - 0.95);
+                const float segmentWidth =
+                    segments.front().right - segments.front().left;
+                const float inset = std::round(2 * s);
+                const D2D1_RECT_F lit{
+                    segments.front().left + segmentWidth * knob + inset,
+                    track.top + inset,
+                    segments.front().right + segmentWidth * knob - inset,
+                    track.bottom - inset};
+                const float litRadius = (lit.bottom - lit.top) / 2;
+                const bool hover = m_hover.part == Part::ChoiceSegment &&
+                                   m_hover.index / 16 == id;
+                brush->SetColor(Fg((hover ? 0.26f : 0.2f) * opacity));
+                target->FillRoundedRectangle({lit, litRadius, litRadius},
+                                             brush);
+                for (size_t i = 0; i < segments.size(); i++) {
+                    const std::wstring option = ChoiceOption(id, (int)i);
+                    const bool chosen = ChoiceValue(id) == (int)i;
+                    brush->SetColor(Fg((chosen ? 0.95f : 0.55f) * opacity));
+                    target->DrawText(option.c_str(), (UINT32)option.size(),
+                                     m_linkFormat.get(), segments[i], brush);
+                }
+            }
+            break;
         case SettingKind::Theme:
             // The colors: a swatch each, the chosen one ringed in blue.
             {
@@ -22113,21 +23703,33 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
             // (the knob in steps), and a button to restore it, dimmed while
             // it's the usual one.
             {
-                const int slider = entry.value ? 1 : 0;
+                const int slider = entry.value;
                 const IslandSlider& info = kIslandSliders[slider];
                 const D2D1_RECT_F& sizeRow = m_sizeRow[slider];
                 const D2D1_RECT_F& sizeSlider = m_sizeSlider[slider];
                 const D2D1_RECT_F& sizeReset = m_sizeReset[slider];
                 const int size = IslandSliderValue(slider);
-                const bool bar = slider == 1 && g_settings.islandBar;
+                const bool bar = (slider == 1 && g_settings.islandBar) ||
+                                 (slider == 2 && AnimationLevel() >= 2);
                 const std::wstring name =
-                    slider == 1
+                    slider == 3
+                        ? std::wstring(Tr(L"Icons before scrolling",
+                                          L"Ícones antes de rolar")) +
+                              L" \u00B7 " + std::to_wstring(size)
+                    : slider == 2
+                        ? std::wstring(Tr(L"Speed", L"Velocidade")) +
+                              L" \u00B7 " + std::to_wstring(size) + L"%"
+                    : slider == 1
                         ? std::wstring(Tr(L"Edge distance", L"Distância da borda")) +
                               L" \u00B7 " + std::to_wstring(size) + L" px"
                         : std::wstring(Tr(L"Size", L"Tamanho")) + L" \u00B7 " +
                               std::to_wstring(size) + L"%";
-                label(sizeRow, slider == 1 ? 0xE9A6 : 0xE740, name.c_str(),
-                      sizeSlider.left, bar ? 0.4f : 1.0f);
+                label(sizeRow,
+                      slider == 3   ? 0xE8FD
+                      : slider == 2 ? 0xEC4A
+                      : slider == 1 ? 0xE9A6
+                                    : 0xE740,
+                      name.c_str(), sizeSlider.left, bar ? 0.4f : 1.0f);
                 const float inset = std::round(10 * s);
                 const float middle = (sizeSlider.top + sizeSlider.bottom) / 2;
                 const float thickness = std::round(4 * s);
@@ -23492,9 +25094,7 @@ bool ControlPanel::OnMouseUp(POINT pt) {
             }
             return true;
         case Part::NightLight:
-            if (m_nightLight >= 0 && SetNightLight(m_nightLight != 1)) {
-                m_nightLight = m_nightLight == 1 ? 0 : 1;
-            }
+            SwitchNightLight();
             return true;
         case Part::Shortcut:
             switch ((ControlId)hit.index) {
@@ -23516,9 +25116,7 @@ bool ControlPanel::OnMouseUp(POINT pt) {
                     SetView(View::Accessibility);
                     return true;
                 case ControlId::DarkMode:
-                    m_darkMode = !m_darkMode;
-                    StartWorker(DarkModeThreadProc,
-                                m_darkMode ? (void*)1 : nullptr);
+                    SwitchDarkMode(!m_darkMode);
                     return true;
                 case ControlId::Weather:
                     if (g_island) {
@@ -23662,6 +25260,23 @@ bool ControlPanel::OnMouseUp(POINT pt) {
         case Part::SizeReset:
             SetIslandSlider(hit.index, kIslandSliders[hit.index].usual, true);
             return true;
+        case Part::ChoiceSegment: {
+            const int id = hit.index / 16;
+            const int index = hit.index % 16;
+            if (id == kChoiceMonitor) {
+                ChooseMonitor(index);
+            } else {
+                AnimationChoice choice = g_animationChoice;
+                (id == kChoiceAnimationLevel ? choice.level : choice.rate) =
+                    index;
+                SetAnimationChoice(choice, true);
+                if (g_island) {
+                    g_island->SayAnimationsChanged();
+                }
+            }
+            StartIslandAnimation();
+            return true;
+        }
         case Part::SearchClear:
             m_search.clear();
             OnSearchChanged();
@@ -23906,6 +25521,10 @@ bool ControlPanel::OnKey(WPARAM key) {
         OnSearchChanged();
         return true;
     }
+    // The settings close (nothing behind them to go back to).
+    if (m_view == View::Settings) {
+        return false;
+    }
     if (key == VK_ESCAPE || key == VK_BACK) {
         SetView(m_view == View::Password    ? View::Wifi
                 : m_view == View::AppPlaces ? View::Settings
@@ -23997,16 +25616,36 @@ bool ControlPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
         PressKeys({VK_LWIN, VK_SHIFT, 'S'});
         return false;
     }
+    // A radio request's answers (the state after it), except for what was
+    // clicked again meanwhile (still shown as asked).
     if (msg == WM_APP_RADIOS) {
-        m_wifiRadio = (int)(INT_PTR)wParam;
-        m_bluetoothRadio = (int)(INT_PTR)lParam;
+        if (m_radioWanted[0] < 0) {
+            m_wifiRadio = (int)(INT_PTR)wParam;
+        }
+        if (m_radioWanted[1] < 0) {
+            m_bluetoothRadio = (int)(INT_PTR)lParam;
+        }
         Update();
         Layout();
         return true;
     }
     if (msg == WM_APP_HOTSPOT) {
-        m_hotspot = (int)(INT_PTR)wParam;
-        m_airplane = (int)(INT_PTR)lParam;
+        if (m_radioWanted[2] < 0) {
+            m_hotspot = (int)(INT_PTR)wParam;
+        }
+        if (m_radioWanted[3] < 0) {
+            m_airplane = (int)(INT_PTR)lParam;
+        }
+        // The request's last answer: the next one wanted goes.
+        m_radioBusy = false;
+        for (int kind = 0; kind < 4; kind++) {
+            if (m_radioWanted[kind] >= 0) {
+                const bool on = m_radioWanted[kind] == 1;
+                m_radioWanted[kind] = -1;
+                SwitchRadio(kind, on);
+                break;
+            }
+        }
         Layout();
         return true;
     }
@@ -26180,6 +27819,11 @@ bool NotificationPanel::AnimateContents(double dt) {
                           motion.removing ? 1.0 : kBounceDamping)) {
             cards = true;
         }
+        // A new one opening its room.
+        if (!motion.removing && motion.room < 1 &&
+            SpringTowards(motion.room, motion.roomVelocity, 1, 0.35, dt)) {
+            cards = true;
+        }
         if (motion.removing &&
             std::fabs(motion.offset) >= std::fabs(motion.target) * 0.85) {
             if (SpringTowards(motion.room, motion.roomVelocity, 0, 0.3, dt)) {
@@ -26192,7 +27836,8 @@ bool NotificationPanel::AnimateContents(double dt) {
     // Settled back in place: no longer moving.
     std::erase_if(m_motions, [&](const CardMotion& motion) {
         return !motion.removing && motion.offset == 0 &&
-               motion.velocity == 0 && motion.id != m_dragId;
+               motion.velocity == 0 && motion.room >= 1 &&
+               motion.id != m_dragId;
     });
     if (m_clearAllPending) {
         // All gone (it was kept when "Clear all" was clicked): the list
@@ -26720,6 +28365,8 @@ void MediaPanel::Prepare(float scale) {
                                   DWRITE_FONT_WEIGHT_NORMAL, 18 * scale);
         m_bigIconFormat = MakeFormat(L"Segoe Fluent Icons",
                                      DWRITE_FONT_WEIGHT_NORMAL, 26 * scale);
+        m_chipFormat = MakeFormat(L"Segoe UI Variable Text",
+                                  DWRITE_FONT_WEIGHT_NORMAL, 11.5f * scale);
     }
     Layout();
 }
@@ -26736,7 +28383,7 @@ void MediaPanel::OnOpen() {
 
 bool MediaPanel::AnimateContents(double dt) {
     bool moving = m_press.Animate(NowSeconds());
-    if (SpringTowards(m_playSwap, m_playSwapVelocity, 0, 0.4, dt,
+    if (SpringDecoration(m_playSwap, m_playSwapVelocity, 0, 0.4, dt,
                       kBounceDamping)) {
         moving = true;
     }
@@ -26798,6 +28445,20 @@ void MediaPanel::Layout() {
     const float width = std::round(kMediaWidth * s);
     const float padding = std::round(16 * s);
     float y = padding;
+    // The apps to choose from, on one row (two or more).
+    m_sourceChips.clear();
+    if (m_state.sources.size() > 1) {
+        const size_t count = std::min<size_t>(m_state.sources.size() + 1, 6);
+        const float gap = std::round(6 * s);
+        const float chipWidth =
+            std::floor((width - padding * 2 - gap * (count - 1)) / count);
+        const float chip = std::round(26 * s);
+        for (size_t i = 0; i < count; i++) {
+            const float left = padding + (chipWidth + gap) * i;
+            m_sourceChips.push_back({left, y, left + chipWidth, y + chip});
+        }
+        y += chip + std::round(12 * s);
+    }
     const float cover = std::round(64 * s);
     m_cover = {padding, y, padding + cover, y + cover};
     y += cover + std::round(14 * s);
@@ -26842,6 +28503,9 @@ MediaPanel::Part MediaPanel::HitTest(POINT pt) const {
         return PointInRect(pt, {r.left - 2, r.top - grow, r.right + 2,
                                 r.bottom + grow});
     };
+    if (SourceAt(pt) >= 0) {
+        return Part::Source;
+    }
     if (PointInRect(pt, m_previous)) {
         return Part::Previous;
     }
@@ -26915,6 +28579,50 @@ void MediaPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
     const float s = m_scale;
     const float width = (float)m_size.cx;
     const float padding = std::round(16 * s);
+
+    // The apps to choose from: the one controlled lit, with a dot for the
+    // ones playing.
+    for (size_t i = 0; i < m_sourceChips.size() && m_chipFormat; i++) {
+        const D2D1_RECT_F& chip = m_sourceChips[i];
+        const bool automatic = i == 0;
+        const int source = (int)i - 1;
+        const bool lit = automatic ? !m_state.chosen
+                                   : m_state.chosen &&
+                                         m_state.sourceIndex == source;
+        const float chipRadius = (chip.bottom - chip.top) / 2;
+        const float hover = Hover(chip, m_sourceHover == (int)i);
+        brush->SetColor(lit ? D2D1::ColorF(0.04f, 0.52f, 1.0f, 1)
+                            : Fg(0.08f + 0.08f * hover));
+        target->FillRoundedRectangle({chip, chipRadius, chipRadius}, brush);
+        std::wstring name;
+        bool playing = false;
+        if (automatic) {
+            name = Tr(L"Automatic", L"Automático");
+        } else if (source < (int)m_state.sources.size()) {
+            const MediaSource& entry = m_state.sources[source];
+            name = AppDisplayName(entry.appId);
+            if (name.empty()) {
+                name = entry.title;
+            }
+            playing = entry.playing;
+        }
+        float textLeft = chip.left + std::round(8 * s);
+        if (playing) {
+            const float dot = std::round(3 * s);
+            brush->SetColor(lit ? D2D1::ColorF(1, 1, 1, 1)
+                                : D2D1::ColorF(0.2f, 0.78f, 0.35f, 1));
+            target->FillEllipse({{textLeft + dot, (chip.top + chip.bottom) / 2},
+                                 dot,
+                                 dot},
+                                brush);
+            textLeft += dot * 2 + std::round(5 * s);
+        }
+        brush->SetColor(lit ? D2D1::ColorF(1, 1, 1, 1) : Fg(0.85f));
+        target->DrawText(name.c_str(), (UINT32)name.size(), m_chipFormat.get(),
+                         {textLeft, chip.top, chip.right - std::round(8 * s),
+                          chip.bottom},
+                         brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    }
 
     // The cover (or a note), rounded.
     const float radius = std::round(10 * s);
@@ -27157,10 +28865,12 @@ bool MediaPanel::OnMouseMove(POINT pt) {
         return true;
     }
     const Part hover = HitTest(pt);
-    if (hover == m_hover) {
+    const int source = SourceAt(pt);
+    if (hover == m_hover && source == m_sourceHover) {
         return false;
     }
     m_hover = hover;
+    m_sourceHover = source;
     StartIslandAnimation();
     return true;
 }
@@ -27170,6 +28880,7 @@ bool MediaPanel::OnMouseLeave() {
         m_press.Release();
         StartIslandAnimation();
     }
+    m_sourceHover = -1;
     if (m_hover == Part::None) {
         return false;
     }
@@ -27218,6 +28929,10 @@ bool MediaPanel::OnMouseUp(POINT pt) {
         StartIslandAnimation();
     }
     switch (HitTest(pt)) {
+        case Part::Source:
+            // 0 is "Automatic", then each app.
+            ChooseMediaSource(m_state, SourceAt(pt) - 1);
+            return true;
         case Part::PillButtons:
             SetIslandPref(IslandPref::MediaButtons, !g_mediaButtonsInPill);
             StartIslandAnimation();
@@ -27399,6 +29114,10 @@ int GetIslandPref(IslandPref pref) {
             return g_settings.islandWeather;
         case IslandPref::Updates:
             return g_settings.islandUpdates;
+        case IslandPref::Animations:
+            return g_animationChoice.on;
+        case IslandPref::FollowMouse:
+            return g_settings.islandFollowMouse;
     }
     return 0;
 }
@@ -27432,6 +29151,21 @@ void SetIslandGap(int pixels, bool keep) {
     }
 }
 
+void SetTrayListIcons(int icons, bool keep) {
+    icons = std::clamp(icons, kTrayListMin, kTrayListMax);
+    if (keep) {
+        Wh_SetIntValue(L"trayListIsland", icons);
+        Wh_SetIntValue(L"trayListBase", Wh_GetIntSetting(L"trayListIcons"));
+    }
+    if (icons == g_trayListIcons) {
+        return;
+    }
+    g_trayListIcons = icons;
+    if (g_island) {
+        g_island->OnPreferencesChanged();
+    }
+}
+
 void SetIslandSize(int percent, bool keep) {
     percent = std::clamp(percent, kIslandSizeMin, kIslandSizeMax);
     if (keep) {
@@ -27449,12 +29183,28 @@ void SetIslandSize(int percent, bool keep) {
 // Changed in the island (its thread): kept, and shown right away.
 void SetIslandPref(IslandPref pref, int value) {
     for (const auto& info : kIslandPrefs) {
-        if (info.pref == pref) {
+        if (info.pref == pref && info.key) {
             Wh_SetIntValue(info.key, value);
         }
     }
     const bool on = value != 0;
     switch (pref) {
+        case IslandPref::Animations: {
+            AnimationChoice choice = g_animationChoice;
+            choice.on = on;
+            SetAnimationChoice(choice, true);
+            if (g_island) {
+                g_island->SayAnimationsChanged();
+            }
+            StartIslandAnimation();
+            return;
+        }
+        case IslandPref::FollowMouse:
+            g_settings.islandFollowMouse = on;
+            if (g_island) {
+                g_island->OnMonitorChoiceChanged();
+            }
+            return;
         case IslandPref::Bar:
             if (g_settings.islandBar != on) {
                 g_settings.islandBar = on;
@@ -27924,10 +29674,169 @@ ID2D1Bitmap* Island::MediaCover() {
 float Island::TaskbarRoom() const {
     RECT rect;
     HWND taskbar = FindTaskbarWnd();
-    if (!taskbar || !GetWindowRect(taskbar, &rect)) {
+    const HMONITOR monitor = CurrentMonitor();
+    // Another monitor: its own taskbar's room, as Windows leaves it.
+    if (!taskbar ||
+        MonitorFromWindow(taskbar, MONITOR_DEFAULTTONEAREST) != monitor) {
+        MONITORINFO info{sizeof(info)};
+        return GetMonitorInfo(monitor, &info)
+                   ? (float)(info.rcMonitor.bottom - info.rcWork.bottom)
+                   : 0;
+    }
+    if (!GetWindowRect(taskbar, &rect)) {
         return 0;
     }
     return (float)(rect.bottom - rect.top);
+}
+
+HMONITOR Island::CurrentMonitor() const {
+    MONITORINFO info{sizeof(info)};
+    if (m_monitorHandle && GetMonitorInfo(m_monitorHandle, &info)) {
+        return m_monitorHandle;
+    }
+    HWND taskbar = FindTaskbarWnd();
+    return taskbar ? MonitorFromWindow(taskbar, MONITOR_DEFAULTTOPRIMARY)
+                   : MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+}
+
+// The monitor with the mouse (if chosen, with several), the one chosen, or
+// the taskbar's.
+HMONITOR Island::WantedMonitor() const {
+    if (g_settings.islandFollowMouse && MonitorCount() > 1) {
+        POINT pt;
+        if (GetCursorPos(&pt)) {
+            return MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+        }
+    }
+    if (!g_islandMonitor.empty()) {
+        for (const auto& monitor : ListMonitors()) {
+            if (monitor.device == g_islandMonitor) {
+                return monitor.handle;
+            }
+        }
+    }
+    HWND taskbar = FindTaskbarWnd();
+    return taskbar ? MonitorFromWindow(taskbar, MONITOR_DEFAULTTOPRIMARY)
+                   : MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+}
+
+void Island::UpdateMonitorWatch() {
+    if (g_settings.islandFollowMouse && MonitorCount() > 1) {
+        SetTimer(m_hwnd, kMonitorTimerId, kMonitorCheckMs, nullptr);
+    } else {
+        KillTimer(m_hwnd, kMonitorTimerId);
+    }
+}
+
+void Island::OnMonitorChoiceChanged() {
+    UpdateMonitorWatch();
+    CheckMonitor();
+}
+
+int ChosenMonitorIndex() {
+    const std::vector<MonitorEntry> monitors = ListMonitors();
+    HMONITOR chosen = nullptr;
+    for (const auto& monitor : monitors) {
+        if (monitor.device == g_islandMonitor) {
+            chosen = monitor.handle;
+        }
+    }
+    if (!chosen) {
+        HWND taskbar = FindTaskbarWnd();
+        chosen = taskbar ? MonitorFromWindow(taskbar, MONITOR_DEFAULTTOPRIMARY)
+                         : MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    }
+    for (size_t i = 0; i < monitors.size(); i++) {
+        if (monitors[i].handle == chosen) {
+            return (int)i;
+        }
+    }
+    return 0;
+}
+
+void ChooseMonitor(int index) {
+    const std::vector<MonitorEntry> monitors = ListMonitors();
+    if (index < 0 || index >= (int)monitors.size()) {
+        return;
+    }
+    g_islandMonitor = monitors[index].device;
+    Wh_SetStringValue(L"islandMonitor", g_islandMonitor.c_str());
+    if (g_island) {
+        g_island->OnMonitorChoiceChanged();
+    }
+}
+
+// On another monitor now: at its place there (that monitor's own), without
+// sliding to it.
+void Island::SwitchMonitor(HMONITOR monitor) {
+    m_monitorHandle = monitor;
+    MONITORINFOEX info{};
+    info.cbSize = sizeof(info);
+    if (GetMonitorInfo(monitor, &info)) {
+        UseMonitorPlace(info.szDevice);
+    }
+    const IslandPlace& place = CurrentPlace();
+    m_placeX = place.x;
+    m_placeY = place.y;
+    m_placeVelocityX = m_placeVelocityY = 0;
+    if (m_minimized && place.y > 0.001) {
+        SetMinimized(false);
+    }
+    Layout();
+    SetAppBarPosition();
+    m_drawnKey.clear();
+}
+
+// Goes to the monitor it should be on: closing into its dot, which glides
+// there and opens again (at once without animations, or while not shown).
+// Not while it's being used (a panel open, a reply typed, dragged, a banner
+// shown): checked again later.
+void Island::CheckMonitor() {
+    const HMONITOR wanted = WantedMonitor();
+    if (!m_monitorHandle) {
+        SwitchMonitor(wanted);
+        UpdateMonitorWatch();
+        return;
+    }
+    if (m_monitorMove == 1) {
+        if (wanted == m_monitorHandle) {
+            // Back where it is: it opens again there.
+            m_monitorMove = 0;
+            StartAnimating();
+        } else {
+            m_moveTarget = wanted;
+        }
+        return;
+    }
+    MONITORINFO info{sizeof(info)};
+    const bool gone = !GetMonitorInfo(m_monitorHandle, &info);
+    if (m_monitorMove || (wanted == m_monitorHandle && !gone)) {
+        m_wantedMonitor = nullptr;
+        return;
+    }
+    if (wanted != m_wantedMonitor) {
+        m_wantedMonitor = wanted;
+        m_wantedSince = NowSeconds();
+    }
+    if (!gone && g_settings.islandFollowMouse &&
+        NowSeconds() - m_wantedSince < 0.4) {
+        return;
+    }
+    if (!gone && (AnyPanelOpen() || m_bannerTyping || m_dragArmed ||
+                  m_bannerWanted)) {
+        return;
+    }
+    if (gone || !m_visible || m_away || !m_shownOnce ||
+        AnimationLevel() >= 2) {
+        SwitchMonitor(wanted);
+        Render(true);
+        return;
+    }
+    CloseAllPanels();
+    HideGearBubble();
+    m_monitorMove = 1;
+    m_moveTarget = wanted;
+    StartAnimating();
 }
 
 // Whether the app in front shows a group by its own choice.
@@ -28072,6 +29981,9 @@ void Island::FinishDrag() {
 // only for whether they're there), and not hidden for the app in front.
 bool Island::GroupWanted(PillGroup group) const {
     if (!OnlineGroupAllowed(group)) {
+        return false;
+    }
+    if (group == PillGroup::Microphone && m_microphoneGlyph.empty()) {
         return false;
     }
     if (const IslandPlace* place = FindAppPlace(m_placeApp)) {
@@ -28324,7 +30236,10 @@ void Island::StartUpdatesJob() {
 void Island::OnUpdates() {
     const UpdatesData updates = GetUpdates();
     int count = (int)updates.windows.size();
-    count += (int)updates.apps.size();
+    count += (int)std::count_if(updates.apps.begin(), updates.apps.end(),
+                                [](const AppUpdate& app) {
+                                    return !app.ignored;
+                                });
     m_updatesCount = count;
     m_updatesPanel.Refresh();
     Render();
@@ -28358,10 +30273,17 @@ void Island::UpdateWeatherWatch() {
 
 // The sky and the temperature now, on the pill.
 void Island::ShowWeather(const WeatherData& weather) {
-    m_weatherShown =
+    const std::wstring shown =
         weather.valid ? WeatherEmoji(weather.code, weather.day) + L"\t" +
                             Degrees(weather.temperature)
                       : std::wstring();
+    if (shown != m_weatherShown) {
+        m_weatherBefore = m_weatherShown;
+        m_weatherSwap = 1;
+        m_weatherSwapVelocity = 0;
+        StartAnimating();
+    }
+    m_weatherShown = shown;
 }
 
 // Asks for the weather (of a city typed, or of the one chosen), on its
@@ -28497,6 +30419,7 @@ bool Island::Create() {
         StartWeather(city);
     };
     m_updatesPanel.check = [this] { StartUpdatesJob(); };
+    m_updatesPanel.changed = [this] { OnUpdates(); };
     m_updatesStop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     UpdateClock();
     UpdateStatus();
@@ -29270,29 +31193,46 @@ void Island::UpdateFormats(float scale) {
 // Places the items and sizes the island around them: centered in the pill,
 // at the right end of the bar (like the macOS menu bar's status items).
 void Island::Layout() {
-    HWND taskbar = FindTaskbarWnd();
-    HMONITOR monitor =
-        taskbar ? MonitorFromWindow(taskbar, MONITOR_DEFAULTTOPRIMARY)
-                : MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    const HMONITOR monitor = CurrentMonitor();
     MONITORINFO info{sizeof(info)};
     GetMonitorInfo(monitor, &info);
     m_monitor = info.rcMonitor;
     // The screen's scaling, and the island's own size on top of it (the
     // panels keep the screen's).
-    m_dpiScale = (taskbar ? GetDpiForWindow(taskbar) : 96) / 96.0f;
+    UINT dpiX = 96;
+    UINT dpiY = 96;
+    if (FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY))) {
+        HWND taskbar = FindTaskbarWnd();
+        dpiX = taskbar ? GetDpiForWindow(taskbar) : 96;
+    }
+    m_dpiScale = dpiX / 96.0f;
     const float scale = m_dpiScale * g_settings.islandSize / 100.0f;
     UpdateFormats(scale);
     if (m_bannerWanted || m_bannerAmount > 0) {
         MeasureBanner();
     }
 
-    // Upright on the left or right edge, if chosen (not for the bar).
+    // Upright on the left or right edge, if chosen (not for the bar). Turning
+    // from one to the other, it closes into its dot first (see m_reshape).
     {
         const IslandPlace& place = CurrentPlace();
-        m_vertical = !m_bar && g_settings.islandVerticalSides &&
-                     (place.x < 0.001 || place.x > 0.999) && place.y > 0.001 &&
-                     place.y < 0.999;
-        m_sideLeft = place.x < 0.5;
+        const bool vertical = !m_bar && g_settings.islandVerticalSides &&
+                              (place.x < 0.001 || place.x > 0.999) &&
+                              place.y > 0.001 && place.y < 0.999;
+        if (!m_verticalKnown || m_reshape == 2 || !m_visible || m_away ||
+            AnimationLevel() >= 2) {
+            m_vertical = vertical;
+            m_verticalKnown = true;
+            m_reshape = 0;
+        } else if (vertical != m_vertical && !m_reshape) {
+            m_reshape = 1;
+            StartAnimating();
+        } else if (vertical == m_vertical && m_reshape == 1) {
+            m_reshape = 0;
+        }
+        if (m_vertical == vertical) {
+            m_sideLeft = place.x < 0.5;
+        }
     }
     // Across the pill (its height, or its width when upright).
     const float height = std::round(
@@ -29383,7 +31323,8 @@ void Island::Layout() {
                 if (g_settings.islandTray || PlaceShows(PillGroup::Tray)) {
                     bool unpinned = false;
                     for (const auto& icon : m_trayIcons) {
-                        unpinned = unpinned || !IsTrayPinned(icon.key);
+                        unpinned = unpinned ||
+                                   (!icon.leaving && !IsTrayPinned(icon.key));
                     }
                     if (unpinned) {
                         addIcon(IslandItem::Overflow, {kGlyphNext});
@@ -29394,11 +31335,46 @@ void Island::Layout() {
                         (float)std::clamp(m_trayAmount, 0.0, 1.0);
                     const float open =
                         (float)std::clamp(m_trayBounce, 0.0, 1.15);
+                    // Many icons: the list stops at the chosen number (see
+                    // g_trayListIcons; never more than ~60% of the screen)
+                    // and the wheel scrolls the rest; an icon cut at an
+                    // edge, fading, shows there are more that way.
+                    const float iconStep = iconSlot + spacing;
+                    const float along =
+                        (float)(m_vertical ? m_monitor.bottom - m_monitor.top
+                                           : m_monitor.right - m_monitor.left);
+                    const int fits =
+                        std::max(1, std::min(g_trayListIcons,
+                                             (int)(along * 0.6f / iconStep)));
+                    const float listMax = (fits + 0.5f) * iconStep;
+                    float listFull = 0;
+                    for (const auto& icon : m_trayIcons) {
+                        listFull +=
+                            iconStep * (1 - PinAmount(icon.key)) *
+                            std::min((float)std::clamp(icon.shown, 0.0, 1.15),
+                                     1.0f);
+                    }
+                    m_trayIconStep = iconStep;
+                    m_trayOverflow = std::max(0.0f, listFull - listMax);
+                    m_trayScrollTarget = std::clamp(m_trayScrollTarget, 0.0,
+                                                    (double)m_trayOverflow);
+                    m_trayScroll =
+                        std::clamp(m_trayScroll, 0.0, (double)m_trayOverflow);
+                    const float scroll = (float)m_trayScroll;
+                    m_trayMoreBefore = scroll > 0.5f;
+                    m_trayMoreAfter = scroll < m_trayOverflow - 0.5f;
+                    const float listStart = x;
+                    const float listEnd =
+                        listStart + std::min(listFull, listMax) * room;
+                    x = listStart - scroll * room;
                     // An icon being pinned shrinks out of the list as it grows
                     // among the pinned ones (and back when unpinned).
                     for (const auto& icon : m_trayIcons) {
                         const float unpinned = 1 - PinAmount(icon.key);
-                        const float iconRoom = room * unpinned;
+                        const float iconShown =
+                            (float)std::clamp(icon.shown, 0.0, 1.15);
+                        const float iconRoom =
+                            room * unpinned * std::min(iconShown, 1.0f);
                         if (iconRoom <= 0.001f) {
                             continue;
                         }
@@ -29406,9 +31382,20 @@ void Island::Layout() {
                                         {x, 0, x + iconSlot * iconRoom, height},
                                         icon.key,
                                         4};
-                        slot.scale = open * unpinned;
-                        m_slots.push_back(slot);
+                        slot.scale = open * unpinned * iconShown;
+                        slot.inList = true;
+                        if (slot.rect.right > listStart &&
+                            slot.rect.left < listEnd) {
+                            m_slots.push_back(slot);
+                        }
                         x += (iconSlot + spacing) * iconRoom;
+                    }
+                    x = listEnd;
+                    if (m_trayOverflow > 0 && listEnd - listStart >= 1) {
+                        m_slots.push_back({IslandItem::None,
+                                           {listStart, 0, listEnd, height},
+                                           L"",
+                                           kTrayListFont});
                     }
                     // With the list open, a faint line between it and the
                     // pinned ones.
@@ -29427,7 +31414,10 @@ void Island::Layout() {
                         x += (line + spacing) * room;
                     }
                     for (const auto& icon : m_trayIcons) {
-                        const float pinned = PinAmount(icon.key);
+                        const float iconShown =
+                            (float)std::clamp(icon.shown, 0.0, 1.15);
+                        const float pinned =
+                            PinAmount(icon.key) * std::min(iconShown, 1.0f);
                         if (pinned <= 0.001f) {
                             continue;
                         }
@@ -29435,7 +31425,7 @@ void Island::Layout() {
                                         {x, 0, x + iconSlot * pinned, height},
                                         icon.key,
                                         4};
-                        slot.scale = pinned;
+                        slot.scale = PinAmount(icon.key) * iconShown;
                         m_slots.push_back(slot);
                         x += (iconSlot + spacing) * pinned;
                     }
@@ -29618,8 +31608,11 @@ void Island::Layout() {
                 break;
             }
             case PillGroup::Microphone:
-                // (Nothing without a microphone.)
-                addIcon(IslandItem::Microphone, m_microphoneGlyph);
+                // (Nothing without a microphone: its icon shrinks away.)
+                if (!m_microphoneGlyph.empty()) {
+                    m_microphoneShown = m_microphoneGlyph;
+                }
+                addIcon(IslandItem::Microphone, m_microphoneShown);
                 break;
             case PillGroup::Notes:
                 addIcon(IslandItem::Notes, {kGlyphNote});
@@ -29634,9 +31627,19 @@ void Island::Layout() {
                 addIcon(IslandItem::Updates, {(WCHAR)0xE895});
                 break;
             case PillGroup::Weather:
-                // Its sky and temperature (a cloud until it comes).
+                // Its sky and temperature (a cloud until it comes); its room
+                // follows what it shows.
                 if (m_weatherShown.empty()) {
-                    addIcon(IslandItem::Weather, {(WCHAR)0xE753});
+                    m_weatherWidthTarget = iconSlot;
+                    if (m_weatherWidth < 0) {
+                        m_weatherWidth = iconSlot;
+                    }
+                    const float room = (float)m_weatherWidth;
+                    m_slots.push_back({IslandItem::Weather,
+                                       {x, 0, x + room, height},
+                                       {(WCHAR)0xE753},
+                                       1});
+                    x += room + spacing;
                 } else {
                     // The sky, and the temperature as wide as it is.
                     float temperatureWidth = std::round(26 * scale);
@@ -29652,9 +31655,13 @@ void Island::Layout() {
                         measure->GetMetrics(&metrics);
                         temperatureWidth = std::ceil(metrics.width);
                     }
-                    const float weatherWidth = std::round(20 * scale) +
-                                               temperatureWidth +
-                                               std::round(4 * scale);
+                    m_weatherWidthTarget = std::round(20 * scale) +
+                                           temperatureWidth +
+                                           std::round(4 * scale);
+                    if (m_weatherWidth < 0) {
+                        m_weatherWidth = m_weatherWidthTarget;
+                    }
+                    const float weatherWidth = (float)m_weatherWidth;
                     m_slots.push_back({IslandItem::Weather,
                                        {x, 0, x + weatherWidth, height},
                                        m_weatherShown,
@@ -29701,18 +31708,23 @@ void Island::Layout() {
             clockMiddle = (slot.rect.left + slot.rect.right) / 2;
         }
     }
-    if (g_settings.islandClockCenter && clockMiddle >= 0 && !m_bar) {
+    if (m_clockCenterAmount < 0) {
+        m_clockCenterAmount = g_settings.islandClockCenter ? 1 : 0;
+    }
+    const float centered = (float)std::clamp(m_clockCenterAmount, 0.0, 1.0);
+    if (centered > 0.001f && clockMiddle >= 0 && !m_bar) {
         const float before = clockMiddle;
         const float after = contentWidth - clockMiddle;
         if (before < after) {
+            const float shift = (after - before) * centered;
             for (auto& slot : m_slots) {
-                slot.rect.left += after - before;
-                slot.rect.right += after - before;
+                slot.rect.left += shift;
+                slot.rect.right += shift;
             }
-            clockMiddle += after - before;
-            contentWidth += after - before;
+            clockMiddle += shift;
+            contentWidth += shift;
         } else {
-            contentWidth += before - after;
+            contentWidth += (before - after) * centered;
         }
     }
     // Where each group starts, and each still sliding from where it was.
@@ -29784,7 +31796,7 @@ void Island::Layout() {
         }
         m_size = {(LONG)windowWidth, (LONG)windowHeight};
         m_pill = {pillLeft, shift, pillLeft + height, shift + length};
-        const float margin = std::round(g_settings.islandGap * m_dpiScale);
+        const float margin = std::round(GapShown() * m_dpiScale);
         m_roomLeft = (float)m_monitor.left + margin;
         m_roomTop = (float)m_monitor.top + margin;
         m_roomWidth = std::max(
@@ -29848,7 +31860,7 @@ void Island::Layout() {
     // right, inside the monitor, the chosen room from its edges (see
     // islandGap). Minimizing, the window goes up to the screen's top, where
     // the line is.
-    const float margin = std::round(g_settings.islandGap * m_dpiScale);
+    const float margin = std::round(GapShown() * m_dpiScale);
     m_roomLeft = (float)m_monitor.left + margin;
     m_roomTop = (float)m_monitor.top + margin;
     m_roomWidth =
@@ -30296,6 +32308,11 @@ void Island::ShowBanner() {
         StartAnimating();
         return;
     }
+    // Over one shown: the new one's contents fade in.
+    if (m_bannerWanted && m_bannerAmount > 0.5) {
+        m_bannerSwap = 1;
+        m_bannerSwapVelocity = 0;
+    }
     m_banner = std::move(next);
     m_bannerWanted = true;
     // Calls, alarms and reminders stay until closed, answered, or gone from
@@ -30394,6 +32411,15 @@ void Island::Render(bool force) {
         return;
     }
     Layout();
+    // Gliding to another monitor: from where the dot was.
+    if (m_monitorMove == 2) {
+        const double left = 1 - std::clamp(m_moveT, 0.0, 1.0);
+        const POINT to{
+            m_position.x + (LONG)std::lround((m_pill.left + m_pill.right) / 2),
+            m_position.y + (LONG)std::lround((m_pill.top + m_pill.bottom) / 2)};
+        m_position.x += (LONG)std::lround((m_moveFrom.x - to.x) * left);
+        m_position.y += (LONG)std::lround((m_moveFrom.y - to.y) * left);
+    }
 
     // Everything drawn, as a key: nothing to do if it didn't change.
     std::wstring key =
@@ -30404,7 +32430,8 @@ void Island::Render(bool force) {
         L"|" + std::to_wstring(m_position.y) + L"|" +
         std::to_wstring((int)(PeekAmount(NowSeconds()) * 1000)) + L"|" +
         std::to_wstring((int)(GearAmount(NowSeconds()) * 1000)) + L"|" +
-        std::to_wstring((int)(m_bannerAmount * 1000)) + L"|" + m_banner.appId +
+        std::to_wstring((int)(m_bannerAmount * 1000)) + L"|" +
+        std::to_wstring((int)(m_bannerSwap * 1000)) + L"|" + m_banner.appId +
         m_banner.title + m_banner.text + L"|" +
         std::to_wstring((int)(m_bannerOpen * 1000)) + L"|" +
         std::to_wstring((int)(m_bannerExpand * 1000)) + L"|" +
@@ -30438,6 +32465,8 @@ void Island::Render(bool force) {
         L"|" +
 
         std::to_wstring(m_mediaShown.thumbnailSerial) + L"|" +
+        std::to_wstring(m_mediaShown.sourceIndex) + L"/" +
+        std::to_wstring(m_mediaShown.sources.size()) + L"|" +
         std::to_wstring(m_vertical) + m_clockTime + L"|" +
         std::to_wstring(m_unseen) + L"|" + m_hoverFades.Signature() + L"|" +
         std::to_wstring(g_themeChangeStart) + L"|" +
@@ -30448,7 +32477,31 @@ void Island::Render(bool force) {
     for (const auto& slot : m_slots) {
         key += slot.text + L"|" + std::to_wstring((int)(slot.scale * 1000)) +
                L"|" + std::to_wstring((int)std::round(slot.rect.left)) + L"|";
+        // An icon changing: the one before goes as this one comes.
+        if (slot.item == IslandItem::Volume ||
+            slot.item == IslandItem::Battery ||
+            slot.item == IslandItem::Bell ||
+            slot.item == IslandItem::Microphone) {
+            auto swap = std::find_if(
+                m_glyphSwaps.begin(), m_glyphSwaps.end(),
+                [&](const GlyphSwap& entry) { return entry.item == slot.item; });
+            if (swap == m_glyphSwaps.end()) {
+                m_glyphSwaps.push_back({slot.item, slot.text, L"", 0, 0});
+            } else if (swap->shown != slot.text) {
+                swap->from = swap->shown;
+                swap->shown = slot.text;
+                swap->t = 1;
+                swap->velocity = 0;
+                StartAnimating();
+            }
+        }
     }
+    for (const auto& swap : m_glyphSwaps) {
+        key += std::to_wstring((int)(swap.t * 1000)) + L"|";
+    }
+    key += std::to_wstring((int)(m_updatesDot * 1000)) + L"|" +
+           std::to_wstring((int)(m_unseenDot * 1000)) + L"|" +
+           std::to_wstring((int)(m_weatherSwap * 1000)) + L"|";
     if (!force && key == m_drawnKey) {
         return;
     }
@@ -30640,7 +32693,8 @@ void Island::Render(bool force) {
     // title and the text.
     const float bannerContents =
         (float)std::clamp((m_bannerAmount - 0.45) / 0.55, 0.0, 1.0) *
-        appearContents;
+        appearContents *
+        (1 - (float)std::clamp(m_bannerSwap, 0.0, 1.0));
     if (!m_bar && bannerContents > 0.01f && m_bannerAppFormat &&
         m_bannerTimeFormat && m_bannerTitleFormat && m_bannerTextFormat) {
         const D2D1_RECT_F open = BannerRect();
@@ -30940,7 +32994,28 @@ void Island::Render(bool force) {
         }
     }
     if (contentOpacity > 0.01f) {
+        // A list icon cut at its edges is clipped to the list (see
+        // TrayListSlot), until the end of its drawing.
+        const IslandSlot* trayList = TrayListSlot();
+        struct ListClip {
+            ID2D1RenderTarget* target;
+            bool on;
+            ~ListClip() {
+                if (on) {
+                    target->PopAxisAlignedClip();
+                }
+            }
+        };
         for (const auto& slot : m_slots) {
+            if (slot.font == kTrayListFont) {
+                continue;
+            }
+            const bool clipped = slot.inList && trayList;
+            if (clipped) {
+                target->PushAxisAlignedClip(trayList->rect,
+                                            D2D1_ANTIALIAS_MODE_ALIASED);
+            }
+            const ListClip listClip{target, clipped};
             const bool hovered =
                 (slot.item == m_hover ||
                  (slot.item == IslandItem::TrayIcon &&
@@ -31099,6 +33174,28 @@ void Island::Render(bool force) {
                                       textRight, slot.rect.bottom + rise * swap},
                                      brush.get());
                 }
+                // Several apps with media, switched between: a dot each under
+                // the cover for a moment, the one shown lit.
+                const int sources = (int)m_mediaShown.sources.size();
+                const float dotsShown =
+                    title * (float)std::clamp(m_mediaDots, 0.0, 1.0);
+                if (sources > 1 && dotsShown > 0.01f) {
+                    const float dot = std::max(1.0f, 1.1f * scale);
+                    const float step = std::round(4 * scale);
+                    const float dotsY = std::min(
+                        cover.bottom + std::round(3 * scale),
+                        slot.rect.bottom - dot - 1);
+                    const float dotsLeft =
+                        coverCenter - step * (std::min(sources, 5) - 1) / 2.0f;
+                    for (int i = 0; i < std::min(sources, 5); i++) {
+                        brush->SetColor(
+                            Fg((i == m_mediaShown.sourceIndex ? 0.9f : 0.35f) *
+                               shown * dotsShown));
+                        target->FillEllipse(
+                            {{dotsLeft + step * i, dotsY}, dot, dot},
+                            brush.get());
+                    }
+                }
                 target->PopAxisAlignedClip();
                 continue;
             }
@@ -31189,21 +33286,47 @@ void Island::Render(bool force) {
                     }
                 }
                 const float emojiWidth = std::round(20 * scale);
-                if (m_weatherEmojiFormat) {
-                    brush->SetColor(Fg(shown));
-                    target->DrawText(
-                        emoji.c_str(), (UINT32)emoji.size(),
-                        m_weatherEmojiFormat.get(),
-                        {slot.rect.left, slot.rect.top,
-                         slot.rect.left + emojiWidth, slot.rect.bottom},
-                        brush.get(), D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+                // The weather before fading out, sliding up, as this one
+                // comes up from below.
+                const float swap =
+                    (float)std::clamp(m_weatherSwap, 0.0, 1.0);
+                auto drawWeather = [&](const std::wstring& emojiText,
+                                       const std::wstring& degrees,
+                                       float alpha, float shift) {
+                    if (alpha <= 0.004f) {
+                        return;
+                    }
+                    if (m_weatherEmojiFormat) {
+                        brush->SetColor(Fg(alpha));
+                        target->DrawText(
+                            emojiText.c_str(), (UINT32)emojiText.size(),
+                            m_weatherEmojiFormat.get(),
+                            {slot.rect.left, slot.rect.top + shift,
+                             slot.rect.left + emojiWidth,
+                             slot.rect.bottom + shift},
+                            brush.get(),
+                            D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+                    }
+                    brush->SetColor(Fg(0.95f * alpha));
+                    target->DrawText(degrees.c_str(), (UINT32)degrees.size(),
+                                     m_textFormat.get(),
+                                     {slot.rect.left + emojiWidth,
+                                      slot.rect.top + shift, slot.rect.right,
+                                      slot.rect.bottom + shift},
+                                     brush.get(),
+                                     D2D1_DRAW_TEXT_OPTIONS_CLIP);
+                };
+                if (swap > 0.004f && !m_weatherBefore.empty()) {
+                    const size_t beforeTab = m_weatherBefore.find(L'\t');
+                    drawWeather(
+                        m_weatherBefore.substr(0, beforeTab),
+                        beforeTab == std::wstring::npos
+                            ? std::wstring()
+                            : m_weatherBefore.substr(beforeTab + 1),
+                        shown * swap * swap, -(1 - swap) * 8 * scale);
                 }
-                brush->SetColor(Fg(0.95f * shown));
-                target->DrawText(temperature.c_str(),
-                                 (UINT32)temperature.size(), m_textFormat.get(),
-                                 {slot.rect.left + emojiWidth, slot.rect.top,
-                                  slot.rect.right, slot.rect.bottom},
-                                 brush.get());
+                drawWeather(emoji, temperature, shown * (1 - swap * swap),
+                            swap * 8 * scale);
                 continue;
             }
             if (slot.font == 8 && m_iconFormat) {
@@ -31257,8 +33380,24 @@ void Island::Render(bool force) {
                 const float centerY = (slot.rect.top + slot.rect.bottom) / 2;
                 const D2D1_RECT_F rect{centerX - size / 2, centerY - size / 2,
                                        centerX + size / 2, centerY + size / 2};
-                const float opacity =
-                    contentOpacity * std::clamp(shown, 0.0f, 1.0f);
+                float opacity = contentOpacity * std::clamp(shown, 0.0f, 1.0f);
+                // Fading towards an edge with more icons past it.
+                if (slot.inList && trayList) {
+                    const float center = m_vertical ? centerY : centerX;
+                    const float start =
+                        m_vertical ? trayList->rect.top : trayList->rect.left;
+                    const float end = m_vertical ? trayList->rect.bottom
+                                                 : trayList->rect.right;
+                    const float fade = kIslandIconSlot * scale * 1.2f;
+                    if (m_trayMoreBefore) {
+                        opacity *= std::clamp((center - start) / fade, 0.15f,
+                                              1.0f);
+                    }
+                    if (m_trayMoreAfter) {
+                        opacity *=
+                            std::clamp((end - center) / fade, 0.15f, 1.0f);
+                    }
+                }
                 if (ID2D1Bitmap* bitmap = icon ? GetTrayBitmap(*icon) : nullptr) {
                     target->DrawBitmap(bitmap, rect, opacity);
                 }
@@ -31339,7 +33478,38 @@ void Island::Render(bool force) {
                 glyphScale *=
                     1 - 0.55f * (float)std::clamp(m_playSwap, 0.0, 1.0);
             }
-            const float glyphOpacity = std::clamp(slot.scale, 0.0f, 1.0f);
+            float glyphOpacity = std::clamp(slot.scale, 0.0f, 1.0f);
+            // Another icon for it (see m_glyphSwaps): the one before shrinks
+            // and fades out as this one grows in.
+            if (slot.font == 1 || slot.font == 2) {
+                for (const auto& swap : m_glyphSwaps) {
+                    if (swap.item != slot.item || swap.t <= 0.004 ||
+                        swap.from.empty()) {
+                        continue;
+                    }
+                    const float t = (float)std::clamp(swap.t, 0.0, 1.0);
+                    const D2D1_POINT_2F middle{
+                        (slot.rect.left + slot.rect.right) / 2,
+                        (slot.rect.top + slot.rect.bottom) / 2};
+                    const float full = std::round(
+                        (slot.font == 2 ? kIslandSmallSlot : kIslandIconSlot) *
+                        scale);
+                    const float beforeScale =
+                        std::max(glyphScale, 0.0f) * (0.6f + 0.4f * t);
+                    target->SetTransform(D2D1::Matrix3x2F::Scale(
+                        beforeScale, beforeScale, middle));
+                    brush->SetColor(
+                        Fg(0.95f * contentOpacity * glyphOpacity * t * t));
+                    target->DrawText(swap.from.c_str(),
+                                     (UINT32)swap.from.size(), format,
+                                     {middle.x - full / 2, slot.rect.top,
+                                      middle.x + full / 2, slot.rect.bottom},
+                                     brush.get());
+                    target->SetTransform(D2D1::Matrix3x2F::Identity());
+                    glyphScale *= 1 - 0.4f * t;
+                    glyphOpacity *= 1 - t * t;
+                }
+            }
             const bool scaled = std::fabs(glyphScale - 1) > 0.001f;
             if (scaled) {
                 target->SetTransform(D2D1::Matrix3x2F::Scale(
@@ -31423,30 +33593,39 @@ void Island::Render(bool force) {
             target->DrawText(slot.text.c_str(), (UINT32)slot.text.size(),
                              format, glyphRect, brush.get());
             // Updates waiting: how many, on a red dot.
-            if (slot.item == IslandItem::Updates && m_updatesCount > 0) {
+            if (slot.item == IslandItem::Updates && m_updatesDot > 0.004 &&
+                m_updatesDotCount > 0) {
+                const float grow = (float)std::max(m_updatesDot, 0.0);
                 const float dot = 6 * scale;
                 const D2D1_POINT_2F at{
                     (slot.rect.left + slot.rect.right) / 2 + 6 * scale,
                     (slot.rect.top + slot.rect.bottom) / 2 - 5 * scale};
-                brush->SetColor(D2D1::ColorF(1.0f, 0.27f, 0.23f,
-                                             contentOpacity * glyphOpacity));
+                const float dotOpacity = contentOpacity * glyphOpacity *
+                                         std::min(grow, 1.0f);
+                D2D1_MATRIX_3X2_F before;
+                target->GetTransform(&before);
+                target->SetTransform(D2D1::Matrix3x2F::Scale(grow, grow, at) *
+                                     before);
+                brush->SetColor(D2D1::ColorF(1.0f, 0.27f, 0.23f, dotOpacity));
                 target->FillEllipse({at, dot, dot}, brush.get());
                 if (m_usageLabelFormat) {
                     const std::wstring count =
-                        m_updatesCount > 9 ? L"9+"
-                                           : std::to_wstring(m_updatesCount);
-                    brush->SetColor(D2D1::ColorF(1, 1, 1,
-                                                 contentOpacity * glyphOpacity));
+                        m_updatesDotCount > 9
+                            ? L"9+"
+                            : std::to_wstring(m_updatesDotCount);
+                    brush->SetColor(D2D1::ColorF(1, 1, 1, dotOpacity));
                     target->DrawText(count.c_str(), (UINT32)count.size(),
                                      m_usageLabelFormat.get(),
                                      {at.x - dot, at.y - dot, at.x + dot,
                                       at.y + dot},
                                      brush.get());
                 }
+                target->SetTransform(before);
             }
             // New notifications not looked at yet: a red dot on the bell.
-            if (slot.item == IslandItem::Bell && m_unseen) {
-                const float dot = 3 * scale;
+            if (slot.item == IslandItem::Bell && m_unseenDot > 0.004) {
+                const float dot =
+                    3 * scale * (float)std::max(m_unseenDot, 0.0);
                 const float centerX = (slot.rect.left + slot.rect.right) / 2;
                 const float centerY = (slot.rect.top + slot.rect.bottom) / 2;
                 brush->SetColor(D2D1::ColorF(1.0f, 0.27f, 0.23f,
@@ -31463,11 +33642,14 @@ void Island::Render(bool force) {
         }
     }
 
-    // Off the screen while away (over a full-screen app).
-    m_canvas.End(m_hwnd, m_away ? POINT{-32000, -32000} : m_position,
-                 m_away ? 0.0f
-                 : m_bar ? (float)std::clamp(m_appear, 0.0, 1.0)
-                         : AppearFade());
+    // Off the screen while away (over a full-screen app). Not drawn: tried
+    // again next time, even with nothing changed.
+    if (!m_canvas.End(m_hwnd, m_away ? POINT{-32000, -32000} : m_position,
+                      m_away ? 0.0f
+                      : m_bar ? (float)std::clamp(m_appear, 0.0, 1.0)
+                              : AppearFade())) {
+        m_drawnKey.clear();
+    }
     PublishTrayPlaces();
 }
 
@@ -31531,12 +33713,14 @@ float Island::GearAmount(double now) const {
         return 0;
     }
     const double t = now - m_gearShownAt;
-    float amount = t < kGearBubbleIn ? (float)SpringOut(t / kGearBubbleIn) : 1;
+    const double in = AnimationSeconds(kGearBubbleIn);
+    const double out = AnimationSeconds(kGearBubbleOut);
+    float amount = t < in ? (float)SpringOut(t / in) : 1;
     if (now >= m_gearHideAt) {
         amount = std::min(
-            amount,
-            1 - (float)EaseInOutCubic(
-                    std::min(1.0, (now - m_gearHideAt) / kGearBubbleOut)));
+            amount, out > 0 ? 1 - (float)EaseInOutCubic(std::min(
+                                      1.0, (now - m_gearHideAt) / out))
+                            : 0.0f);
     }
     return std::max(amount, 0.0f);
 }
@@ -31546,14 +33730,16 @@ float Island::PeekAmount(double now) {
         return 0;
     }
     const double t = now - m_peekStart;
-    if (t < kPeekIn) {
-        return (float)SpringOut(t / kPeekIn);
+    const double in = AnimationSeconds(kPeekIn);
+    const double out = AnimationSeconds(kPeekOut);
+    if (t < in) {
+        return (float)SpringOut(t / in);
     }
     if (t < kPeekHold) {
         return 1;
     }
-    if (t < kPeekHold + kPeekOut) {
-        return 1 - (float)EaseInOutCubic((t - kPeekHold) / kPeekOut);
+    if (t < kPeekHold + out) {
+        return 1 - (float)EaseInOutCubic((t - kPeekHold) / out);
     }
     return 0;
 }
@@ -31618,7 +33804,7 @@ void Island::StartAnimating() {
 
 void Island::AnimationFrame() {
     const double now = NowSeconds();
-    const double dt = std::clamp(now - m_lastFrame, 0.0, 0.05);
+    const double dt = AnimationDt(std::clamp(now - m_lastFrame, 0.0, 0.05));
     m_lastFrame = now;
 
     bool expanding =
@@ -31626,11 +33812,40 @@ void Island::AnimationFrame() {
                                     kCloseSeconds * 1.3, dt)
                     : SpringTowards(m_expand, m_expandVelocity, 1,
                                     kOpenSeconds, dt, kBounceDamping);
+    // Moving to another monitor: once closed into its dot, the dot glides
+    // there (see CheckMonitor).
+    if (m_monitorMove == 1 &&
+        (std::fabs(m_appear - kMoveDot) < 0.03 || !m_visible)) {
+        m_moveFrom = {
+            m_position.x + (LONG)std::lround((m_pill.left + m_pill.right) / 2),
+            m_position.y + (LONG)std::lround((m_pill.top + m_pill.bottom) / 2)};
+        SwitchMonitor(m_moveTarget);
+        m_monitorMove = 2;
+        m_moveT = 0;
+        m_moveTVelocity = 0;
+    }
+    if (m_monitorMove == 2) {
+        if (SpringTowards(m_moveT, m_moveTVelocity, 1, kOpenSeconds * 1.6,
+                          dt)) {
+            expanding = true;
+        } else {
+            m_monitorMove = 0;
+        }
+    }
+    // Turning upright or back, once closed into its dot.
+    if (m_reshape == 1 &&
+        (std::fabs(m_appear - kMoveDot) < 0.03 || !m_visible)) {
+        m_reshape = 2;
+        expanding = true;
+    }
     // Out of the dot (bouncing a little), or back into it.
-    if (m_visible ? SpringTowards(m_appear, m_appearVelocity, 1,
-                                  kAppearSeconds, dt, kPanelWidthDamping)
-                  : SpringTowards(m_appear, m_appearVelocity, 0,
-                                  kDisappearSeconds, dt)) {
+    if (m_visible && (m_monitorMove || m_reshape)
+            ? SpringTowards(m_appear, m_appearVelocity, kMoveDot,
+                            kDisappearSeconds * 0.6, dt)
+        : m_visible ? SpringTowards(m_appear, m_appearVelocity, 1,
+                                    kAppearSeconds, dt, kPanelWidthDamping)
+                    : SpringTowards(m_appear, m_appearVelocity, 0,
+                                    kDisappearSeconds, dt)) {
         expanding = true;
     } else if (!m_visible && !m_away) {
         m_away = true;
@@ -31670,11 +33885,33 @@ void Island::AnimationFrame() {
     if (trayRoom || trayBounce || trayArrow) {
         apps = true;
     }
+    // Closed, the list starts from its beginning next time.
+    if (!m_trayOpen && m_trayAmount <= 0.001) {
+        m_trayScroll = m_trayScrollTarget = m_trayScrollVelocity = 0;
+    } else if (SpringTowards(m_trayScroll, m_trayScrollVelocity,
+                             m_trayScrollTarget, 0.35, dt)) {
+        apps = true;
+    }
     for (auto& state : m_pinStates) {
         if (SpringTowards(state.amount, state.velocity,
                           IsTrayPinned(state.key) ? 1 : 0, kOpenSeconds, dt)) {
             apps = true;
         }
+    }
+    // Tray icons coming and going.
+    for (auto& icon : m_trayIcons) {
+        if (SpringTowards(icon.shown, icon.shownVelocity,
+                          icon.leaving ? 0.0 : 1.0, kOpenSeconds, dt,
+                          icon.leaving ? 1.0 : kBounceDamping)) {
+            apps = true;
+        }
+    }
+    if (std::erase_if(m_trayIcons, [](const TrayIcon& icon) {
+            return icon.leaving && icon.shown <= 0;
+        })) {
+        std::erase_if(m_trayBitmaps, [&](const auto& entry) {
+            return !FindTrayIcon(std::get<0>(entry));
+        });
     }
     std::erase_if(m_pinStates, [this](const PinState& state) {
         return state.velocity == 0 &&
@@ -31727,33 +33964,40 @@ void Island::AnimationFrame() {
                       dt)) {
         apps = true;
     }
-    if (SpringTowards(m_playSwap, m_playSwapVelocity, 0, 0.4, dt,
+    if (SpringDecoration(m_playSwap, m_playSwapVelocity, 0, 0.4, dt,
                       kBounceDamping)) {
         apps = true;
     }
-    if (SpringTowards(m_mediaSwap, m_mediaSwapVelocity, 0, 0.55, dt)) {
+    if (SpringDecoration(m_mediaSwap, m_mediaSwapVelocity, 0, 0.55, dt)) {
         apps = true;
     } else if (!m_mediaTitleBefore.empty()) {
         m_mediaTitleBefore.clear();
     }
-    if (SpringTowards(m_mediaCoverSwap, m_mediaCoverSwapVelocity, 0, 0.6,
+    if (SpringDecoration(m_mediaCoverSwap, m_mediaCoverSwapVelocity, 0, 0.6,
                       dt)) {
         apps = true;
     } else if (m_mediaCoverBefore) {
         m_mediaCoverBefore = nullptr;
     }
+    // Kept going while the dots wait to fade.
+    if (SpringTowards(m_mediaDots, m_mediaDotsVelocity,
+                      now < m_mediaDotsUntil ? 1 : 0,
+                      now < m_mediaDotsUntil ? 0.3 : 0.6, dt) ||
+        now < m_mediaDotsUntil) {
+        apps = true;
+    }
     if (SpringTowards(m_mediaTitleWidthShown, m_mediaTitleWidthVelocity,
                       m_mediaTitleWidth, 0.5, dt)) {
         apps = true;
     }
-    if (SpringTowards(m_themeTurn, m_themeTurnVelocity, m_darkMode ? 1 : 0,
+    if (SpringDecoration(m_themeTurn, m_themeTurnVelocity, m_darkMode ? 1 : 0,
                       0.5, dt, kBounceDamping)) {
         apps = true;
     }
-    if (SpringTowards(m_networkSwap, m_networkSwapVelocity, 0, 0.5, dt)) {
+    if (SpringDecoration(m_networkSwap, m_networkSwapVelocity, 0, 0.5, dt)) {
         apps = true;
     }
-    if (SpringTowards(m_clockSwap, m_clockSwapVelocity, 0, 0.45, dt)) {
+    if (SpringDecoration(m_clockSwap, m_clockSwapVelocity, 0, 0.45, dt)) {
         apps = true;
     } else if (!m_clockBefore.empty()) {
         m_clockBefore.clear();
@@ -31767,6 +34011,48 @@ void Island::AnimationFrame() {
         if (changedAt && now - changedAt < kUsageChangeSeconds) {
             apps = true;
         }
+    }
+    for (auto& swap : m_glyphSwaps) {
+        if (SpringDecoration(swap.t, swap.velocity, 0, 0.45, dt)) {
+            apps = true;
+        }
+    }
+    if (m_updatesCount > 0) {
+        m_updatesDotCount = m_updatesCount;
+    }
+    if (SpringTowards(m_updatesDot, m_updatesDotVelocity,
+                      m_updatesCount > 0 ? 1 : 0, kOpenSeconds, dt,
+                      m_updatesCount > 0 ? kBounceDamping : 1.0)) {
+        apps = true;
+    }
+    if (SpringTowards(m_unseenDot, m_unseenDotVelocity, m_unseen ? 1 : 0,
+                      kOpenSeconds, dt, m_unseen ? kBounceDamping : 1.0)) {
+        apps = true;
+    }
+    if (m_weatherWidth >= 0 &&
+        SpringTowards(m_weatherWidth, m_weatherWidthVelocity,
+                      m_weatherWidthTarget, 0.45, dt)) {
+        apps = true;
+    }
+    if (SpringDecoration(m_weatherSwap, m_weatherSwapVelocity, 0, 0.5, dt)) {
+        apps = true;
+    } else {
+        m_weatherBefore.clear();
+    }
+    if (m_gapShown >= 0 &&
+        SpringTowards(m_gapShown, m_gapVelocity, g_settings.islandGap,
+                      kOpenSeconds, dt)) {
+        apps = true;
+    }
+    if (m_clockCenterAmount >= 0 &&
+        SpringTowards(m_clockCenterAmount, m_clockCenterVelocity,
+                      g_settings.islandClockCenter ? 1 : 0, kOpenSeconds,
+                      dt)) {
+        apps = true;
+    }
+    if (!m_microphoneShown.empty() && m_microphoneGlyph.empty() &&
+        m_groupShown[(int)PillGroup::Microphone] <= 0) {
+        m_microphoneShown.clear();
     }
     // The banner's reply row, under the mouse or while typing.
     const bool wantRow =
@@ -31782,6 +34068,9 @@ void Island::AnimationFrame() {
         m_bannerWanted && (m_bannerTyping || BannerHovered());
     if (SpringTowards(m_bannerExpand, m_bannerExpandVelocity,
                       wantLines ? 1 : 0, kOpenSeconds, dt)) {
+        apps = true;
+    }
+    if (SpringDecoration(m_bannerSwap, m_bannerSwapVelocity, 0, 0.35, dt)) {
         apps = true;
     }
     // The banner: out like a panel, back without bouncing.
@@ -31964,9 +34253,10 @@ void Island::Tick() {
     // Windows' "Do not disturb" follows the island's own notifications (the
     // notification watch may become ready after the island).
     UpdateWindowsQuiet(true);
+    // On the monitor it should be on (another one chosen, unplugged...).
+    CheckMonitor();
     // Not over a full-screen app (a game or a video).
-    HWND taskbar = FindTaskbarWnd();
-    const bool show = !(taskbar && IsFullscreenAppOnMonitor(taskbar));
+    const bool show = !IsFullscreenAppOn(CurrentMonitor());
     if (show != m_visible) {
         m_visible = show;
         // Hidden once it has closed into the dot and faded (see
@@ -33244,14 +35534,42 @@ void Island::OnTrayAppWindow(HWND hWnd) {
 
 // Takes the tray icons from the taskbar.
 void Island::UpdateTrayIcons() {
-    AcquireSRWLockShared(&g_trayIconsLock);
+    std::vector<TrayIcon> before = std::move(m_trayIcons);
     m_trayIcons.clear();
+    AcquireSRWLockShared(&g_trayIconsLock);
     for (const auto& icon : g_trayIcons) {
         if (!icon.hidden && icon.icon) {
             m_trayIcons.push_back(icon);
         }
     }
     ReleaseSRWLockShared(&g_trayIconsLock);
+    // A new one grows in (not the first ones); one gone shrinks away where
+    // it was.
+    for (auto& icon : m_trayIcons) {
+        auto old = std::find_if(before.begin(), before.end(),
+                                [&](const TrayIcon& entry) {
+                                    return entry.key == icon.key;
+                                });
+        if (old != before.end()) {
+            icon.shown = old->shown;
+            icon.shownVelocity = old->shownVelocity;
+        } else if (m_trayIconsSeen) {
+            icon.shown = 0;
+            icon.shownVelocity = 0;
+        }
+    }
+    for (size_t i = 0; i < before.size(); i++) {
+        TrayIcon& old = before[i];
+        if (old.shown <= 0 || FindTrayIcon(old.key)) {
+            continue;
+        }
+        old.leaving = true;
+        m_trayIcons.insert(
+            m_trayIcons.begin() + std::min(i, m_trayIcons.size()),
+            std::move(old));
+    }
+    m_trayIconsSeen = true;
+    StartAnimating();
     // Bitmaps of icons that are gone.
     std::erase_if(m_trayBitmaps, [&](const auto& entry) {
         return !FindTrayIcon(std::get<0>(entry));
@@ -33335,7 +35653,8 @@ float Island::PinShown(double now) const {
     if (m_pinShownKey.empty()) {
         return 0;
     }
-    const double t = (now - m_pinShownAt) / kPinGrowSeconds;
+    const double grow = AnimationSeconds(kPinGrowSeconds);
+    const double t = grow > 0 ? (now - m_pinShownAt) / grow : 1;
     return t >= 1 ? 1.0f : (float)SpringOut(std::max(t, 0.0));
 }
 
@@ -33529,7 +35848,12 @@ IslandItem Island::HitTest(POINT pt, std::wstring* appId) const {
     if (!m_bar && m_minimized) {
         return IslandItem::Line;
     }
+    const IslandSlot* trayList = TrayListSlot();
     for (const auto& slot : m_slots) {
+        if (slot.font == kTrayListFont ||
+            (slot.inList && trayList && !PointInRect(pt, trayList->rect))) {
+            continue;
+        }
         if (pt.x >= slot.rect.left && pt.x < slot.rect.right &&
             pt.y >= slot.rect.top && pt.y < slot.rect.bottom) {
             if (appId && (slot.item == IslandItem::App ||
@@ -33572,17 +35896,50 @@ void CapturePillFor(Panel& panel) {
     }
 }
 
+// When the island last restarted for a lost device (kept across restarts).
+double g_deviceRestartAt = -100;
+
+void OnDrawingDeviceLost() {
+    if (g_island) {
+        g_island->OnDeviceLost();
+    }
+}
+
+// The graphics driver was updated or reset (the island's drawing target
+// fails from then on): the island starts over, which makes its targets and
+// every picture kept for them again. Not more than every 2 seconds, while
+// the driver may still be installing.
+void Island::OnDeviceLost() {
+    if (m_deviceRetryPending) {
+        return;
+    }
+    const double now = NowSeconds();
+    if (now - g_deviceRestartAt < kDeviceRetrySeconds) {
+        m_deviceRetryPending = true;
+        SetTimer(m_hwnd, kDeviceRetryTimerId,
+                 (UINT)(kDeviceRetrySeconds * 1000), nullptr);
+        return;
+    }
+    g_deviceRestartAt = now;
+    m_deviceRetryPending = true;
+    Wh_Log(L"The graphics device was lost, restarting the island");
+    RestartIslandSoon();
+}
+
 // Opens a panel out of the island, or closes it if it's open. Only one panel
 // is open at a time. The pill itself becomes the panel; on the bar, the panel
 // drops out of the clicked item.
 void Island::TogglePanel(Panel& panel, IslandItem item) {
     HideGearBubble();
     EndBannerTyping();
+    // A banner shown: it shrinks back into the pill (behind the panel); the
+    // panel opens out of the pill as it'll be without it (drawn so, for its
+    // picture, then the banner goes on from where it was).
+    double bannerLeft = 0;
     if (m_bannerWanted || m_bannerAmount > 0) {
         HideBanner();
+        bannerLeft = m_bannerAmount;
         m_bannerAmount = 0;
-        m_bannerVelocity = 0;
-        m_banner = {};
         Render(true);
     }
     for (Panel* other : Panels()) {
@@ -33642,6 +35999,10 @@ void Island::TogglePanel(Panel& panel, IslandItem item) {
                         m_position.y + from->rect.bottom},
                        false);
         }
+    }
+    if (bannerLeft > 0) {
+        m_bannerAmount = bannerLeft;
+        Render(true);
     }
     StartAnimating();
 }
@@ -33911,6 +36272,18 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
         case WM_APP_UPDATES:
             OnUpdates();
             return 0;
+        case WM_APP_RELOAD_SETTINGS:
+            LoadSettings();
+            OnPreferencesChanged();
+            UpdateMonitorWatch();
+            CheckMonitor();
+            return 0;
+        case WM_DISPLAYCHANGE:
+            // A monitor plugged in or out, or another resolution.
+            UpdateMonitorWatch();
+            CheckMonitor();
+            Relayout();
+            break;
         case WM_SETTINGCHANGE:
             // Light or dark mode switched (here or elsewhere): the button
             // turns to it.
@@ -33925,6 +36298,16 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             if (wParam == kIslandTimerId) {
                 Tick();
                 ScheduleTick();
+                return 0;
+            }
+            if (wParam == kMonitorTimerId) {
+                CheckMonitor();
+                return 0;
+            }
+            if (wParam == kDeviceRetryTimerId) {
+                KillTimer(m_hwnd, kDeviceRetryTimerId);
+                m_deviceRetryPending = false;
+                OnDeviceLost();
                 return 0;
             }
             if (wParam == kTrayAppTimerId) {
@@ -34318,7 +36701,27 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             Render();
             return 0;
 
+        case WM_MOUSEHWHEEL:
+            if (ScrollTrayList(GET_WHEEL_DELTA_WPARAM(wParam) / 120.0)) {
+                return 0;
+            }
+            if (m_hover == IslandItem::Media &&
+                m_mediaShown.sources.size() > 1) {
+                StepMediaSource(GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? 1 : -1);
+            }
+            return 0;
         case WM_MOUSEWHEEL:
+            // The wheel on a long tray list: it scrolls.
+            if (ScrollTrayList(-GET_WHEEL_DELTA_WPARAM(wParam) / 120.0)) {
+                return 0;
+            }
+            // Shift and the wheel on what's playing: another app's media.
+            if ((GET_KEYSTATE_WPARAM(wParam) & MK_SHIFT) &&
+                m_hover == IslandItem::Media &&
+                m_mediaShown.sources.size() > 1) {
+                StepMediaSource(GET_WHEEL_DELTA_WPARAM(wParam) < 0 ? 1 : -1);
+                return 0;
+            }
             // Over a reply on more lines than shown: it scrolls.
             if (m_hover == IslandItem::BannerReply && m_bannerReplyLines >= 5) {
                 EditTextWheel(m_bannerEdit, GET_WHEEL_DELTA_WPARAM(wParam));
@@ -34382,15 +36785,16 @@ DWORD WINAPI IslandThreadProc(LPVOID parameter) {
         g_island = &island;
         if (island.Create()) {
             island.Tick();
-            // While animating, a frame per display refresh; otherwise, only
-            // when there's something to do.
+            // While animating, a frame per display refresh (or fewer, see
+            // WaitForAnimationFrame); otherwise, only when there's something
+            // to do.
             for (;;) {
                 if (island.Animating()) {
                     if (!PumpMessages()) {
                         break;
                     }
                     island.AnimationFrame();
-                    DwmFlush();
+                    WaitForAnimationFrame();
                     continue;
                 }
                 if (GetMessage(&msg, nullptr, 0, 0) <= 0) {
@@ -34552,6 +36956,8 @@ bool HookTaskbarDllSymbols() {
 void LoadSettings() {
     LoadTheme();
     LoadPlaces();
+    LoadAnimationSettings();
+    LoadTrayListSetting();
     const auto taskbarMode = WindhawkUtils::StringSetting::make(L"taskbarMode");
     g_settings.taskbarMode =
         wcscmp(taskbarMode, L"windows") == 0
@@ -34628,6 +37034,7 @@ void LoadSettings() {
     g_settings.islandShortcuts = Wh_GetIntValue(L"islandShortcuts", 0) != 0;
     g_settings.islandWeather = Wh_GetIntValue(L"islandWeather", 0) != 0;
     g_settings.islandUpdates = Wh_GetIntValue(L"islandUpdates", 0) != 0;
+    LoadIgnoredUpdates();
     g_settings.islandOwnsNotifications =
         Wh_GetIntValue(L"islandOwnsNotifications", 0) != 0;
     g_islandQuiet = Wh_GetIntValue(L"islandQuiet", 0) != 0;
@@ -34638,6 +37045,13 @@ void LoadSettings() {
     g_settings.islandGap =
         std::clamp(Wh_GetIntValue(L"islandGap", kIslandGapDefault),
                    kIslandGapMin, kIslandGapMax);
+    g_settings.islandFollowMouse =
+        Wh_GetIntValue(L"islandFollowMouse", 0) != 0;
+    {
+        WCHAR device[64] = L"";
+        Wh_GetStringValue(L"islandMonitor", device, ARRAYSIZE(device));
+        g_islandMonitor = device;
+    }
     g_settings.magnification =
         std::clamp(Wh_GetIntSetting(L"icons.magnification"), 100, 200) / 100.0;
     g_settings.magnificationRange =
@@ -34702,6 +37116,7 @@ void ExplorerModBeforeUninit() {
     StopAttentionThread();
     ApplySettings();
     UnsubclassTaskbars();
+    KeepTrayIcons();
     StopWatchingIslandProcess();
     FreeIslandAppIcons();
     UpdateAutoHide();
@@ -34849,9 +37264,18 @@ void WhTool_ModSettingsChanged() {
 
     WaitForIslandRestart();
     AcquireSRWLockExclusive(&g_islandLifeLock);
-    StopIslandThread();
-    LoadSettings();
-    StartIslandThread();
+    // The island still on: it reads them again on its own thread and goes on
+    // as it is (a panel open, a reply being typed, an animation running).
+    // Turned on or off, it starts again (or stops).
+    const HWND island = g_islandWnd;
+    if (g_islandThread && island &&
+        (Wh_GetIntSetting(L"showIsland") != 0) == g_settings.showIsland) {
+        PostMessage(island, WM_APP_RELOAD_SETTINGS, 0, 0);
+    } else {
+        StopIslandThread();
+        LoadSettings();
+        StartIslandThread();
+    }
     ReleaseSRWLockExclusive(&g_islandLifeLock);
 }
 
