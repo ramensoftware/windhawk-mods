@@ -2,27 +2,41 @@
 // @id              enhanced-disk-usage
 // @name            Enhanced Disk Usage
 // @description     Enables the ability to customize the disk drive tiles in explorer, targeting the disk's usage bar, as well as the details that appear below.
-// @version         1.1.0
+// @version         1.2.0
 // @author          bbmaster123
 // @github          https://github.com/bbmaster123
 // @include         explorer.exe
-// @compilerOptions -lcomctl32 -lole32 -luuid -luser32 -lgdi32 -luxtheme -lshlwapi -lmsimg32 -lgdiplus
+// @compilerOptions -luser32 -lgdi32 -luxtheme -lshlwapi -lgdiplus
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-![Screenshot](https://raw.githubusercontent.com/bbmaster123/FWFU/refs/heads/main/Assets/screenshot.png)
+![Screenshot](https://raw.githubusercontent.com/bbmaster123/FWFU/refs/heads/main/Assets/screenshot-1.2.0.png)
 
 Enables the ability to customize the disk drive tiles in explorer, targeting the disk's usage bar, as well
 as the details that appear below.
 
-- custom colors with transparency for disk usage, track (background/unused), and outline
+New in 1.2.0
+- separate disk bar and text customization toggles
+- updated text formatting to support any subset of stats in any order
+- independent bold toggles for free, used, total, and both percentages
+- added used percentage (%p) and free percentage (%fp) stats
+- added unit normalization (ex show 1.5TB as 1536GB, or 512GB as 0.5TB)
+- optional unit precision (0-10 decimals when converting units) and separate percentage precision (0-10)
+
+Features
+- follow system accent color, or set custom colors with transparency for disk usage, track (background/unused), and outline
 - separate disk colors for when drive is near full
 - linear gradient support with configurable direction
 - rounded corners
 - glossy overlay toggle option (for a more Windows Aero-ish looking aesthetic)
-- height/width controls (inset) controls for disk bar and track
+- height/width (inset) controls for disk bar and track
 - custom disk usage text with font size adjustment, multi-line support, line-height adjustment, and more
+- named stat placeholders (%f for free, %u for used, %t for total, %p for used percentage, %fp for free percentage)
+
+Named placeholders can appear in any order or be repeated. Legacy `%s` placeholders
+still insert free, used, and total space in that order. Use `%%` for a literal
+percent sign. Values are estimated from Explorer's displayed, rounded sizes.
 
 ex.
 100GB free | 100GB/200GB
@@ -31,6 +45,9 @@ ex.
 
 // ==WindhawkModSettings==
 /*
+- enableBarCustomization: true
+  $name: Enable Disk Bar Customization
+  $description: Customize disk usage bars. Turn off to keep Windows' default bars while still customizing the text.
 - useAccentColor: false
   $name: Follow System Accent Color
   $description: Uses the system accent color for the disk usage bar gradient. Disable to use custom colors below
@@ -87,11 +104,42 @@ ex.
 - trackBorderOffset: 0
   $name: Border Offset (Quarter Pixels)
   $description: Adjusts the border position relative to the track in quarter pixels. Positive values expand outwards.
-- formatString: "%s free | %s used\\n%s Total"
+- enableTextCustomization: true
+  $name: Enable Text Customization
+  $description: Enables custom disk usage text display. If disabled, Windows default disk text is shown.
+- formatString: "%f free | %u used\\n%t Total"
   $name: Text Display Format
-  $description: custom disk usage text.%s for each disk usage stat, \n for new line
+  $description: (in any order) %f free | %u used | %t total | %p (used %) | %fp (free %). Legacy format using %s will continue to work as before. Use \n for new line.
+- unitGranularity: auto
+  $name: Unit Normalization
+  $description: Controls how units (GB, TB, etc.) are matched across free, used, and total stats
+  $options:
+    - auto: Auto (Windows default per stat)
+    - match-largest: Match Largest Unit
+    - match-smallest: Match Smallest Unit
+    - match-total: Match Total Drive Unit
+    - gb: Always GB
+    - mb: Always MB
+    - tb: Always TB
+- enableCustomDecimals: false
+  $name: Custom Unit Precision
+  $description: Enable custom decimal places for disk sizes. Converted values can show more digits, but are estimated from Explorer's rounded sizes.
+- decimalPlaces: 2
+  $name: Unit Decimal Places
+  $description: Converted sizes use 0 to 10 decimal places. Unconverted sizes use no more decimal places than Explorer shows. Values above 10 are capped at 10.
+- percentageDecimalPlaces: 2
+  $name: Percentage Decimal Places
+  $description: Used and free percentages use 0 to 10 decimal places; values above 10 are capped at 10. You can use -1 for automatic formatting. Percentages are estimated from Explorer's rounded sizes.
 - boldUsed: true
   $name: Bold Used Space Value
+- boldFree: false
+  $name: Bold Free Space Value
+- boldTotal: false
+  $name: Bold Total Space Value
+- boldUsedPercent: false
+  $name: Bold Used Percentage
+- boldFreePercent: false
+  $name: Bold Free Percentage
 - boldStyle: sans-serif
   $name: Text Style
   $options:
@@ -113,39 +161,65 @@ ex.
 */
 // ==/WindhawkModSettings==
 
-#include <commctrl.h>
+#include <windhawk_utils.h>
+#include <windows.h>
 #include <gdiplus.h>
-#include <shlobj.h>
 #include <shlwapi.h>
 #include <uxtheme.h>
 #include <windhawk_api.h>
-#include <windows.h>
 #include <algorithm>
+#include <atomic>
+#include <cmath>
 #include <cwchar>
-#include <shared_mutex>
+#include <charconv>
+#include <cwctype>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 using namespace Gdiplus;
 
 // --- Global State ---
 enum class BoldStyle { Serif, SansSerif };
+enum class UnitGranularity {
+    Auto,
+    MatchLargest,
+    MatchSmallest,
+    MatchTotal,
+    ForceGB,
+    ForceMB,
+    ForceTB
+};
+
 std::wstring g_formatString;
-bool g_boldUsed, g_removeSpace, g_showGloss, g_enableWordEllipsis,
-    g_roundFillBothSides, g_useAccentColor;
+wchar_t g_decimalSeparator = L'.', g_thousandsSeparator = L',';
+bool g_boldUsed, g_boldFree, g_boldTotal, g_boldUsedPercent,
+    g_boldFreePercent, g_removeSpace, g_showGloss, g_enableWordEllipsis,
+    g_roundFillBothSides, g_useAccentColor, g_enableBarCustomization,
+    g_enableTextCustomization,
+    g_enableCustomDecimals;
 int g_lineYOffset, g_accentColorGradientDelta;
-DWORD g_lastAccentColor = 0;
-int g_barYOffset, g_lineSpacing;
+int g_barYOffset, g_lineSpacing, g_decimalPlaces, g_percentageDecimalPlaces;
 int g_leftInset, g_rightInset, g_topInset, g_bottomInset;
 int g_trackLeftInset, g_trackRightInset, g_trackTopInset, g_trackBottomInset;
 int g_gradientDirection;
-ARGB g_barNormalStart, g_barNormalEnd, g_barFullStart, g_barFullEnd,
-    g_trackColor, g_borderColor;
+ARGB g_barNormalStart, g_barNormalEnd;
+ARGB g_barFullStart, g_barFullEnd, g_trackColor, g_borderColor;
 float g_borderThickness, g_trackBorderOffset, g_fillPadding, g_cornerRadius,
     g_fontSize;
 BoldStyle g_boldStyle;
+UnitGranularity g_unitGranularity = UnitGranularity::Auto;
 ULONG_PTR g_gdiplusToken;
+std::atomic<bool> g_unloading{false};
+std::atomic<unsigned> g_activeBarCalls{0};
+std::atomic<bool> g_settingsReloading{false};
+
+class ActiveBarCall {
+public:
+    ActiveBarCall() { ++g_activeBarCalls; }
+    ~ActiveBarCall() { --g_activeBarCalls; }
+    ActiveBarCall(const ActiveBarCall&) = delete;
+    ActiveBarCall& operator=(const ActiveBarCall&) = delete;
+};
 
 typedef int(WINAPI* DrawTextW_t)(HDC hdc,
                                  LPCWSTR lpchText,
@@ -175,60 +249,6 @@ typedef HRESULT(WINAPI* GetThemeClassList_t)(HTHEME hTheme,
                                              int cchClassList);
 GetThemeClassList_t GetThemeClassList_Ptr;
 
-std::shared_mutex g_themeClassMutex;
-std::unordered_map<HTHEME, std::wstring> g_themeClasses;
-
-typedef HTHEME(WINAPI* OpenThemeData_t)(HWND hwnd, LPCWSTR pszClassList);
-OpenThemeData_t OpenThemeData_Orig;
-HTHEME WINAPI OpenThemeData_Hook(HWND hwnd, LPCWSTR pszClassList) {
-    HTHEME hTheme = OpenThemeData_Orig(hwnd, pszClassList);
-    if (hTheme && pszClassList) {
-        std::unique_lock lock(g_themeClassMutex);
-        g_themeClasses[hTheme] = pszClassList;
-    }
-    return hTheme;
-}
-
-typedef HTHEME(WINAPI* OpenThemeDataEx_t)(HWND hwnd,
-                                          LPCWSTR pszClassList,
-                                          DWORD dwFlags);
-OpenThemeDataEx_t OpenThemeDataEx_Orig;
-HTHEME WINAPI OpenThemeDataEx_Hook(HWND hwnd,
-                                   LPCWSTR pszClassList,
-                                   DWORD dwFlags) {
-    HTHEME hTheme = OpenThemeDataEx_Orig(hwnd, pszClassList, dwFlags);
-    if (hTheme && pszClassList) {
-        std::unique_lock lock(g_themeClassMutex);
-        g_themeClasses[hTheme] = pszClassList;
-    }
-    return hTheme;
-}
-
-typedef HTHEME(WINAPI* OpenThemeDataForDpi_t)(HWND hwnd,
-                                              LPCWSTR pszClassList,
-                                              UINT dpi);
-OpenThemeDataForDpi_t OpenThemeDataForDpi_Orig;
-HTHEME WINAPI OpenThemeDataForDpi_Hook(HWND hwnd,
-                                       LPCWSTR pszClassList,
-                                       UINT dpi) {
-    HTHEME hTheme = OpenThemeDataForDpi_Orig(hwnd, pszClassList, dpi);
-    if (hTheme && pszClassList) {
-        std::unique_lock lock(g_themeClassMutex);
-        g_themeClasses[hTheme] = pszClassList;
-    }
-    return hTheme;
-}
-
-typedef HRESULT(WINAPI* CloseThemeData_t)(HTHEME hTheme);
-CloseThemeData_t CloseThemeData_Orig;
-HRESULT WINAPI CloseThemeData_Hook(HTHEME hTheme) {
-    if (hTheme) {
-        std::unique_lock lock(g_themeClassMutex);
-        g_themeClasses.erase(hTheme);
-    }
-    return CloseThemeData_Orig(hTheme);
-}
-
 // --- Helpers ---
 static ARGB ParseHexARGB(PCWSTR hex, ARGB fallback) {
     if (!hex || wcslen(hex) < 1)
@@ -236,6 +256,10 @@ static ARGB ParseHexARGB(PCWSTR hex, ARGB fallback) {
     std::wstring s(hex);
     if (s[0] == L'#')
         s = s.substr(1);
+    if (s.length() != 6 && s.length() != 8)
+        return fallback;
+    if (s.find_first_not_of(L"0123456789abcdefABCDEF") != std::wstring::npos)
+        return fallback;
     try {
         unsigned long val = std::stoul(s, nullptr, 16);
         if (s.length() == 6)
@@ -246,37 +270,39 @@ static ARGB ParseHexARGB(PCWSTR hex, ARGB fallback) {
     }
 }
 
-void RefreshAccentColorIfNeeded() {
+static void GetNormalBarColors(ARGB& start, ARGB& end) {
+    start = g_barNormalStart;
+    end = g_barNormalEnd;
     if (!g_useAccentColor)
         return;
     DWORD color = 0;
-    DWORD size = sizeof(DWORD);
+    DWORD size = sizeof(color);
     if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\DWM",
                      L"ColorizationColor", RRF_RT_DWORD, nullptr, &color,
-                     &size) == ERROR_SUCCESS) {
-        color |= 0xFF000000;
-        if (color != g_lastAccentColor) {
-            g_lastAccentColor = color;
-            g_barNormalStart = color;
+                     &size) != ERROR_SUCCESS)
+        return;
 
-            float multiplier =
-                1.0f - ((float)g_accentColorGradientDelta / 100.0f);
-            if (multiplier < 0.0f)
-                multiplier = 0.0f;
-            if (multiplier > 1.0f)
-                multiplier = 1.0f;
-
-            BYTE a = (color >> 24) & 0xFF;
-            BYTE r = (BYTE)(((color >> 16) & 0xFF) * multiplier);
-            BYTE g = (BYTE)(((color >> 8) & 0xFF) * multiplier);
-            BYTE b = (BYTE)((color & 0xFF) * multiplier);
-
-            g_barNormalEnd = (a << 24) | (r << 16) | (g << 8) | b;
-        }
-    }
+    color |= 0xFF000000;
+    float multiplier = std::clamp(
+        1.0f - (float)g_accentColorGradientDelta / 100.0f, 0.0f, 1.0f);
+    DWORD r = (DWORD)(((color >> 16) & 0xFF) * multiplier);
+    DWORD g = (DWORD)(((color >> 8) & 0xFF) * multiplier);
+    DWORD b = (DWORD)((color & 0xFF) * multiplier);
+    // Keep the pair local to this paint; other Explorer threads never write
+    // the settings or observe a partially updated gradient.
+    start = color;
+    end = 0xFF000000u | (r << 16) | (g << 8) | b;
 }
 
 void LoadSettings() {
+    wchar_t separator[8] = {};
+    if (GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SDECIMAL,
+                        separator, (int)std::size(separator)) > 1)
+        g_decimalSeparator = separator[0];
+    if (GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_STHOUSAND,
+                        separator, (int)std::size(separator)) > 1)
+        g_thousandsSeparator = separator[0];
+    g_enableBarCustomization = Wh_GetIntSetting(L"enableBarCustomization") != 0;
     PCWSTR s;
     s = Wh_GetStringSetting(L"barNormalStart");
     g_barNormalStart = ParseHexARGB(s, 0xFF2ECC71);
@@ -294,7 +320,7 @@ void LoadSettings() {
     g_trackColor = ParseHexARGB(s, 0x20000000);
     Wh_FreeStringSetting(s);
     s = Wh_GetStringSetting(L"borderColor");
-    g_borderColor = ParseHexARGB(s, 0x80FFFFFF);
+    g_borderColor = ParseHexARGB(s, 0x80BBBBBB);
     Wh_FreeStringSetting(s);
     g_gradientDirection = Wh_GetIntSetting(L"gradientDirection");
     g_cornerRadius = (float)Wh_GetIntSetting(L"cornerRadius") / 4.0f;
@@ -317,110 +343,182 @@ void LoadSettings() {
     if (s && s[0] != L'\0') {
         g_formatString = s;
     } else {
-        g_formatString = L"%s free | %s used\n%s total";
+        g_formatString = L"%f free | %u used\n%t Total";
     }
     Wh_FreeStringSetting(s);
+    if (g_formatString.size() > 4096)
+        g_formatString.resize(4096);
     size_t pos = 0;
     while ((pos = g_formatString.find(L"\\n", pos)) != std::wstring::npos) {
         g_formatString.replace(pos, 2, L"\n");
         pos += 1;
     }
+
+    s = Wh_GetStringSetting(L"unitGranularity");
+    if (s) {
+        if (wcscmp(s, L"match-largest") == 0)
+            g_unitGranularity = UnitGranularity::MatchLargest;
+        else if (wcscmp(s, L"match-smallest") == 0)
+            g_unitGranularity = UnitGranularity::MatchSmallest;
+        else if (wcscmp(s, L"match-total") == 0)
+            g_unitGranularity = UnitGranularity::MatchTotal;
+        else if (wcscmp(s, L"gb") == 0)
+            g_unitGranularity = UnitGranularity::ForceGB;
+        else if (wcscmp(s, L"mb") == 0)
+            g_unitGranularity = UnitGranularity::ForceMB;
+        else if (wcscmp(s, L"tb") == 0)
+            g_unitGranularity = UnitGranularity::ForceTB;
+        else
+            g_unitGranularity = UnitGranularity::Auto;
+        Wh_FreeStringSetting(s);
+    } else {
+        g_unitGranularity = UnitGranularity::Auto;
+    }
+
+    g_enableCustomDecimals = Wh_GetIntSetting(L"enableCustomDecimals") != 0;
+    g_decimalPlaces = std::clamp(Wh_GetIntSetting(L"decimalPlaces"), 0, 10);
+    g_percentageDecimalPlaces =
+        std::clamp(Wh_GetIntSetting(L"percentageDecimalPlaces"), -1, 10);
     g_boldUsed = Wh_GetIntSetting(L"boldUsed") != 0;
+    g_boldFree = Wh_GetIntSetting(L"boldFree") != 0;
+    g_boldTotal = Wh_GetIntSetting(L"boldTotal") != 0;
+    g_boldUsedPercent = Wh_GetIntSetting(L"boldUsedPercent") != 0;
+    g_boldFreePercent = Wh_GetIntSetting(L"boldFreePercent") != 0;
     g_removeSpace = Wh_GetIntSetting(L"removeSpace") != 0;
     g_enableWordEllipsis = Wh_GetIntSetting(L"enableWordEllipsis") != 0;
+    g_enableTextCustomization = Wh_GetIntSetting(L"enableTextCustomization") != 0;
     s = Wh_GetStringSetting(L"boldStyle");
     g_boldStyle = (s && wcscmp(s, L"serif") == 0) ? BoldStyle::Serif
                                                   : BoldStyle::SansSerif;
     Wh_FreeStringSetting(s);
-    g_lineYOffset = Wh_GetIntSetting(L"lineYOffset");
+    g_lineYOffset = std::clamp(Wh_GetIntSetting(L"lineYOffset"), -32768, 32767);
     g_barYOffset = Wh_GetIntSetting(L"barYOffset");
-    g_lineSpacing = Wh_GetIntSetting(L"lineSpacing");
+    g_lineSpacing = std::clamp(Wh_GetIntSetting(L"lineSpacing"), -4096, 4096);
     g_fontSize = (float)Wh_GetIntSetting(L"fontSize") / 4.0f;
     g_useAccentColor = Wh_GetIntSetting(L"useAccentColor") != 0;
     g_accentColorGradientDelta = Wh_GetIntSetting(L"accentColorGradientDelta");
 
-    g_lastAccentColor = 0;
-    if (g_useAccentColor) {
-        RefreshAccentColorIfNeeded();
-    }
 }
 
-std::wstring CleanNumericString(const std::wstring& s) {
-    std::wstring result;
-    bool start = false;
-    for (wchar_t c : s) {
-        wchar_t check = (c == 0xA0) ? L' ' : c;
-        if (!start) {
-            if (iswdigit(check) || check == L'.' || check == L',' ||
-                check == L'-') {
-                start = true;
-                result += (check == L',') ? L'.' : check;
-            }
-            continue;
-        }
-        if (check != L' ')
-            result += (check == L',') ? L'.' : check;
+static bool IsSizeSpace(wchar_t c) {
+    return c == L' ' || c == 0x00A0 || c == 0x202F;
+}
+
+static bool IsSizeNumericChar(wchar_t c) {
+    return (c >= L'0' && c <= L'9') || c == L'.' || c == L',' ||
+           c == L'\'' || c == 0x2019 || IsSizeSpace(c);
+}
+
+// Recognize common units first, then Finnish-style kt/Mt/Gt. Accepting any
+// two letters after a size prefix would mistake distances such as Km for bytes.
+static std::wstring UpperSizeUnit(const wchar_t* unit) {
+    std::wstring result = unit;
+    for (auto& c : result) {
+        if (c >= L'a' && c <= L'z')
+            c -= L'a' - L'A';
+        else if (c >= 0x0430 && c <= 0x044F)
+            c -= 0x20; // Cyrillic casing without a dependency on CRT locale.
     }
     return result;
 }
 
-bool IsValidUnitString(const wchar_t* u) {
-    size_t len = wcslen(u);
-    if (len == 0 || len > 10)
-        return false;
-
-    std::wstring up = u;
-    std::transform(up.begin(), up.end(), up.begin(), ::towupper);
-
-    if (up == L"B" || up == L"KB" || up == L"MB" || up == L"GB" ||
-        up == L"TB" || up == L"PB" || up == L"EB")
-        return true;
-    if (up == L"O" || up == L"KO" || up == L"MO" || up == L"GO" ||
-        up == L"TO" || up == L"PO" || up == L"EO")
-        return true;
-    if (up == L"\x0411" || up == L"\x041A\x0411" || up == L"\x041C\x0411" ||
-        up == L"\x0413\x0411" || up == L"\x0422\x0411" || up == L"\x041F\x0411")
-        return true;
-    if (up == L"BYTES" || up == L"BYTE")
-        return true;
-    if (up.find(L"\x0411\x0410\x0419\x0422") != std::wstring::npos)
-        return true;
-
-    if (len <= 2) {
-        for (size_t i = 0; i < len; ++i) {
-            if (!iswalpha(u[i]))
-                return false;
-        }
-        return true;
+double GetUnitMultiplier(const wchar_t* unit) {
+    // Finnish uses a lowercase t for a byte, and kt for a kilobyte.
+    if (wcscmp(unit, L"t") == 0)
+        return 1.0;
+    const std::wstring up = UpperSizeUnit(unit);
+    if (up == L"B" || up == L"O" || up == L"BYTE" || up == L"BYTES" ||
+        up == L"\x0411" || up == L"\x0411\x0410\x0419\x0422" ||
+        up == L"\x0411\x0410\x0419\x0422\x0410" ||
+        up == L"\x0411\x0410\x0419\x0422\x041E\x0412")
+        return 1.0;
+    static const wchar_t* const units[][3] = {
+        {L"KB", L"KO", L"\x041A\x0411"},
+        {L"MB", L"MO", L"\x041C\x0411"},
+        {L"GB", L"GO", L"\x0413\x0411"},
+        {L"TB", L"TO", L"\x0422\x0411"},
+        {L"PB", L"PO", L"\x041F\x0411"},
+        {L"EB", L"EO", L"\x042D\x0411"},
+    };
+    double multiplier = 1024.0;
+    for (const auto& group : units) {
+        for (const auto* name : group)
+            if (up == name)
+                return multiplier;
+        multiplier *= 1024.0;
     }
-
-    return false;
+    if (up.size() == 2 && (up[1] == L'T' || up[1] == L'\x0422')) {
+        static const wchar_t* const prefixes = L"KMGTPE";
+        static const wchar_t* const cyrillic = L"\x041A\x041C\x0413\x0422\x041F";
+        double value = 1024.0;
+        for (int i = 0; prefixes[i]; ++i, value *= 1024.0) {
+            if (up[0] == prefixes[i] || (i < 5 && up[0] == cyrillic[i]))
+                return value;
+        }
+    }
+    return 0.0;
 }
 
-double GetUnitMultiplier(const wchar_t* u) {
-    std::wstring up = u;
-    std::transform(up.begin(), up.end(), up.begin(), ::towupper);
+bool IsValidUnitString(const wchar_t* unit) {
+    return GetUnitMultiplier(unit) > 0.0;
+}
 
-    wchar_t prefix = 0;
-    for (wchar_t c : up) {
-        if (c != L' ' && c != L'.' && c != L',') {
-            prefix = c;
-            break;
+// Explorer uses the user's number separators. Parse digits explicitly so a
+// different process CRT locale cannot change the value, and EB cannot become
+// a floating-point exponent.
+static bool ParseSpaceValue(const std::wstring& text, double& value,
+                            std::wstring& unit, int* sourceDecimals = nullptr) {
+    size_t unitStart = 0;
+    while (unitStart < text.size() && IsSizeNumericChar(text[unitStart]))
+        ++unitStart;
+    unit = text.substr(unitStart);
+    if (!IsValidUnitString(unit.c_str()))
+        return false;
+
+    bool decimal = false, grouped = false;
+    int groupDigits = 0, fractionalDigits = 0;
+    double divisor = 1.0;
+    value = 0.0;
+    for (size_t i = 0; i < unitStart; ++i) {
+        wchar_t c = text[i];
+        if (c >= L'0' && c <= L'9') {
+            if (decimal) {
+                divisor *= 10.0;
+                value += (c - L'0') / divisor;
+                ++fractionalDigits;
+            } else {
+                value = value * 10.0 + (c - L'0');
+                ++groupDigits;
+            }
+            continue;
+        }
+        if (IsSizeSpace(c)) {
+            size_t next = i;
+            while (next < unitStart && IsSizeSpace(text[next]))
+                ++next;
+            if (next == unitStart)
+                break; // The space between the number and the unit.
+            i = next - 1;
+        }
+        if (c == g_decimalSeparator) {
+            if (decimal || groupDigits == 0 || (grouped && groupDigits != 3))
+                return false;
+            decimal = true;
+        } else if (c == g_thousandsSeparator || IsSizeSpace(c)) {
+            if (decimal || groupDigits == 0 || groupDigits > 3 ||
+                (grouped && groupDigits < 2))
+                return false;
+            grouped = true;
+            groupDigits = 0;
+        } else {
+            return false;
         }
     }
-
-    if (prefix == L'T' || prefix == L'\x0422')
-        return 1099511627776.0;
-    if (prefix == L'G' || prefix == L'\x0413')
-        return 1073741824.0;
-    if (prefix == L'M' || prefix == L'\x041C')
-        return 1048576.0;
-    if (prefix == L'K' || prefix == L'\x041A')
-        return 1024.0;
-    if (prefix == L'B' || prefix == L'\x0411' || prefix == L'O')
-        return 1.0;
-
-    return 0.0;
+    bool valid = groupDigits > 0 && (!grouped || groupDigits == 3) &&
+                 (!decimal || fractionalDigits > 0) && std::isfinite(value);
+    if (valid && sourceDecimals)
+        *sourceDecimals = fractionalDigits;
+    return valid;
 }
 
 std::wstring MakeBoldText(const std::wstring& s) {
@@ -474,9 +572,6 @@ static bool IsValidDiskBarWindow(HWND hwnd) {
                  wCls.find(L"propertycontrol") == std::wstring::npos)) {
                 return false;
             }
-            if (wCls == L"directuihwnd") {
-                return true;  // Fast exit if we hit the valid container
-            }
         }
         walk = GetParent(walk);
     }
@@ -484,7 +579,8 @@ static bool IsValidDiskBarWindow(HWND hwnd) {
 }
 
 thread_local static HDC g_lastBarDC = NULL;
-thread_local static RECT g_lastBarRect = {0};
+thread_local static RECT g_lastBarRect = {};
+thread_local static HTHEME g_lastBarTheme = NULL;
 
 static void BuildRoundedPath(GraphicsPath& path,
                              RectF rect,
@@ -492,7 +588,11 @@ static void BuildRoundedPath(GraphicsPath& path,
                              bool rL = true,
                              bool rR = true) {
     path.Reset();
-    float d = std::min(radius * 2.0f, rect.Height);
+    if (rect.Width <= 0.0f || rect.Height <= 0.0f)
+        return;
+    float d = std::min({std::max(0.0f, radius) * 2.0f,
+                        rect.Width, rect.Height});
+    radius = d / 2.0f;
     if (d < 1.0f) {
         path.AddRectangle(rect);
         return;
@@ -543,10 +643,8 @@ static void PaintEnhancedBar(HDC hdc,
                              LPCRECT pRect,
                              LPCRECT pClipRect,
                              int iStateId,
-                             bool isFill) {
-    if (g_useAccentColor) {
-        RefreshAccentColorIfNeeded();
-    }
+                             bool isFill,
+                             LPCRECT pTrackRect = nullptr) {
     float scale = 1.0f;
     static auto pGetDpiForWindow = (UINT(WINAPI*)(HWND))GetProcAddress(
         GetModuleHandleW(L"user32.dll"), "GetDpiForWindow");
@@ -557,12 +655,15 @@ static void PaintEnhancedBar(HDC hdc,
     } else {
         scale = (float)GetDeviceCaps(hdc, LOGPIXELSY) / 96.0f;
     }
+    if (scale <= 0.0f)
+        scale = 1.0f;
 
     Graphics graphics{hdc};
     if (pClipRect) {
         graphics.SetClip(Rect(pClipRect->left, pClipRect->top,
                               pClipRect->right - pClipRect->left,
-                              pClipRect->bottom - pClipRect->top));
+                              pClipRect->bottom - pClipRect->top),
+                         CombineModeIntersect);
     }
 
     graphics.SetSmoothingMode(SmoothingModeAntiAlias);
@@ -575,14 +676,13 @@ static void PaintEnhancedBar(HDC hdc,
     barRect.Y += (float)g_barYOffset;
 
     // 1. Calculate Track Geometry (The container)
-    // We try to derive the track from g_lastBarRect to ensure the Fill pass
-    // knows the full width for rounding its right side.
+    // Use a compatible track from this thread to round a full fill correctly.
     RectF trackRect;
-    if (isFill && g_lastBarRect.right > g_lastBarRect.left) {
-        trackRect.X = (float)g_lastBarRect.left;
-        trackRect.Y = (float)g_lastBarRect.top;
-        trackRect.Width = (float)(g_lastBarRect.right - g_lastBarRect.left);
-        trackRect.Height = (float)(g_lastBarRect.bottom - g_lastBarRect.top);
+    if (isFill && pTrackRect) {
+        trackRect.X = (float)pTrackRect->left;
+        trackRect.Y = (float)pTrackRect->top;
+        trackRect.Width = (float)(pTrackRect->right - pTrackRect->left);
+        trackRect.Height = (float)(pTrackRect->bottom - pTrackRect->top);
         trackRect.Y += (float)g_barYOffset;
     } else {
         trackRect = barRect;
@@ -590,26 +690,24 @@ static void PaintEnhancedBar(HDC hdc,
 
     trackRect.X += (float)g_trackLeftInset * scale;
     trackRect.Y += (float)g_trackTopInset * scale;
-    trackRect.Width -= (float)(g_trackLeftInset + g_trackRightInset) * scale;
-    trackRect.Height -= (float)(g_trackTopInset + g_trackBottomInset) * scale;
+    trackRect.Width -= ((float)g_trackLeftInset + g_trackRightInset) * scale;
+    trackRect.Height -= ((float)g_trackTopInset + g_trackBottomInset) * scale;
 
     if (trackRect.Width <= 0.1f || trackRect.Height <= 0.1f)
         return;
 
-    // 2. Paths
-    GraphicsPath trackPath;
-    BuildRoundedPath(trackPath, trackRect, (float)g_cornerRadius * scale);
-
-    RectF borderRect = trackRect;
-    float bOff = g_trackBorderOffset * scale;
-    if (bOff != 0) {
-        borderRect.Inflate(bOff, bOff);
-    }
-    GraphicsPath borderPath;
-    BuildRoundedPath(borderPath, borderRect, (float)g_cornerRadius * scale);
-
     if (!isFill) {
         // PASS A: Background
+        GraphicsPath trackPath;
+        BuildRoundedPath(trackPath, trackRect, (float)g_cornerRadius * scale);
+
+        RectF borderRect = trackRect;
+        float bOff = g_trackBorderOffset * scale;
+        if (bOff != 0)
+            borderRect.Inflate(bOff, bOff);
+        GraphicsPath borderPath;
+        BuildRoundedPath(borderPath, borderRect, (float)g_cornerRadius * scale);
+
         SolidBrush trBr{Color{g_trackColor}};
         graphics.FillPath(&trBr, &trackPath);
 
@@ -624,8 +722,8 @@ static void PaintEnhancedBar(HDC hdc,
         RectF fillRect = barRect;
         fillRect.X += (float)g_leftInset * scale;
         fillRect.Y += (float)g_topInset * scale;
-        fillRect.Width -= (float)(g_leftInset + g_rightInset) * scale;
-        fillRect.Height -= (float)(g_topInset + g_bottomInset) * scale;
+        fillRect.Width -= ((float)g_leftInset + g_rightInset) * scale;
+        fillRect.Height -= ((float)g_topInset + g_bottomInset) * scale;
 
         float fPad = g_fillPadding * scale;
         if (fPad != 0) {
@@ -637,7 +735,8 @@ static void PaintEnhancedBar(HDC hdc,
             if (!rR) {
                 // If fill reaches roughly the right side of the track, round it
                 // too
-                if (pRect->right >= g_lastBarRect.right - (int)(1 * scale)) {
+                if (pTrackRect &&
+                    pRect->right >= pTrackRect->right - (int)(1 * scale)) {
                     rR = true;
                 }
             }
@@ -646,8 +745,9 @@ static void PaintEnhancedBar(HDC hdc,
             BuildRoundedPath(fillPath, fillRect, (float)g_cornerRadius * scale,
                              true, rR);
 
-            ARGB c1 = (iStateId == 2) ? g_barFullStart : g_barNormalStart;
-            ARGB c2 = (iStateId == 2) ? g_barFullEnd : g_barNormalEnd;
+            ARGB c1 = g_barFullStart, c2 = g_barFullEnd;
+            if (iStateId != 2)
+                GetNormalBarColors(c1, c2);
             RectF gradRect = fillRect;
             gradRect.Inflate(0.5f, 0.5f);
             LinearGradientBrush br{gradRect, Color{c1}, Color{c2},
@@ -656,7 +756,7 @@ static void PaintEnhancedBar(HDC hdc,
             graphics.FillPath(&br, &fillPath);
 
             if (g_showGloss) {
-                graphics.SetClip(&fillPath);
+                graphics.SetClip(&fillPath, CombineModeIntersect);
                 RectF gRect = fillRect;
                 gRect.Y += 1.0f;
                 gRect.Height -= 2.0f;
@@ -674,20 +774,12 @@ static void PaintEnhancedBar(HDC hdc,
 static bool IsDiskBar(HTHEME hTheme,
                       HDC hdc,
                       int iPartId,
-                      int iStateId,
-                      LPCRECT pRect,
-                      bool logMismatches = false) {
-    if (!pRect) {
-        if (logMismatches)
-            Wh_Log(L"IsDiskBar: FAILED because pRect is NULL");
+                      LPCRECT pRect) {
+    if (!hTheme || !hdc || !pRect || pRect->right <= pRect->left ||
+        pRect->bottom <= pRect->top) {
         return false;
     }
     if (iPartId != 1 && iPartId != 5 && iPartId != 11) {
-        if (logMismatches)
-            Wh_Log(
-                L"IsDiskBar: FAILED because iPartId is %d (must be 1, 5, or "
-                L"11)",
-                iPartId);
         return false;
     }
 
@@ -709,60 +801,40 @@ static bool IsDiskBar(HTHEME hTheme,
         scale = (float)GetDeviceCaps(hdc, LOGPIXELSY) / 96.0f;
     }
 
+    if (scale <= 0.0f)
+        scale = 1.0f;
+
     // Logical Dimensioning
-    int h = pRect->bottom - pRect->top;
-    int w = pRect->right - pRect->left;
+    double h = (double)pRect->bottom - pRect->top;
+    double w = (double)pRect->right - pRect->left;
 
     // Normalize physical pixels to logical bounds
-    float logicalH = (float)h / scale;
-    float logicalW = (float)w / scale;
+    double logicalH = h / scale;
+    double logicalW = w / scale;
 
     if (iPartId == 5) {
         if (logicalH < 2.0f || logicalH > 16.5f) {
-            if (logMismatches)
-                Wh_Log(
-                    L"IsDiskBar: FAILED Part 5 because logicalH=%f is out of "
-                    L"bounds [2.0, 16.5]",
-                    logicalH);
             return false;
         }
     } else {
         if (logicalW < 30.0f) {
-            if (logMismatches)
-                Wh_Log(L"IsDiskBar: FAILED because logicalW=%f < 30.0",
-                       logicalW);
             return false;
         }
         if (logicalH < 4.0f || logicalH > 16.5f) {
-            if (logMismatches)
-                Wh_Log(
-                    L"IsDiskBar: FAILED because logicalH=%f is out of bounds "
-                    L"[4.0, 16.5]",
-                    logicalH);
             return false;
         }
     }
 
     if (GetThemeClassList_Ptr) {
-        wchar_t themeCls[256];
+        wchar_t themeCls[256] = {};
         if (SUCCEEDED(GetThemeClassList_Ptr(hTheme, themeCls, 256))) {
             std::wstring tCls(themeCls);
             std::transform(tCls.begin(), tCls.end(), tCls.begin(), ::towlower);
             if (tCls.find(L"progress") == std::wstring::npos) {
-                if (logMismatches)
-                    Wh_Log(
-                        L"IsDiskBar: FAILED because Theme Class List '%s' does "
-                        L"not contain 'progress'",
-                        themeCls);
                 return false;
             }
             if (tCls.find(L"scrollbar") != std::wstring::npos ||
                 tCls.find(L"header") != std::wstring::npos) {
-                if (logMismatches)
-                    Wh_Log(
-                        L"IsDiskBar: FAILED because Theme Class List '%s' "
-                        L"contains 'scrollbar' or 'header'",
-                        themeCls);
                 return false;
             }
         }
@@ -793,11 +865,6 @@ static bool IsDiskBar(HTHEME hTheme,
                     wCls.find(L"address") != std::wstring::npos ||
                     (wCls.find(L"property") != std::wstring::npos &&
                      wCls.find(L"propertycontrol") == std::wstring::npos)) {
-                    if (logMismatches)
-                        Wh_Log(
-                            L"IsDiskBar: FAILED due to excluded parent window "
-                            L"class: '%s'",
-                            cls);
                     return false;
                 }
             }
@@ -807,15 +874,20 @@ static bool IsDiskBar(HTHEME hTheme,
 
     // prevent navpane being styled
     if (!isPropertyControl && pRect->left < (int)(32 * scale)) {
-        if (logMismatches)
-            Wh_Log(L"IsDiskBar: FAILED because pRect->left (%d) < 32 * scale",
-                   pRect->left);
         return false;
     }
     return true;
 }
 
-// (Globals removed from here)
+// A fill may use only the immediately preceding compatible track on this thread.
+static bool HasMatchingTrack(HTHEME theme, HDC dc, LPCRECT fill) {
+    return dc == g_lastBarDC && theme == g_lastBarTheme &&
+           g_lastBarRect.right > g_lastBarRect.left &&
+           fill->left >= g_lastBarRect.left &&
+           fill->right <= g_lastBarRect.right &&
+           fill->top >= g_lastBarRect.top &&
+           fill->bottom <= g_lastBarRect.bottom;
+}
 
 HRESULT WINAPI HookedDrawThemeBackground(HTHEME hTheme,
                                          HDC hdc,
@@ -823,74 +895,248 @@ HRESULT WINAPI HookedDrawThemeBackground(HTHEME hTheme,
                                          int iStateId,
                                          LPCRECT pRect,
                                          LPCRECT pClipRect) {
-    bool isProgressSize = false;
-    if (pRect) {
-        int h = pRect->bottom - pRect->top;
-        int w = pRect->right - pRect->left;
-        if (h >= 3 && h <= 35 && w >= 15) {
-            isProgressSize = true;
+    // Increment before checking the stop flag. Cleanup sets the flag first,
+    // then waits for all calls that could have entered GDI+ to finish.
+    {
+        ActiveBarCall active;
+        try {
+            if (!g_unloading.load() && IsDiskBar(hTheme, hdc, iPartId, pRect)) {
+                if (iPartId == 5) {
+                    RECT track = g_lastBarRect;
+                    bool matching = HasMatchingTrack(hTheme, hdc, pRect);
+                    g_lastBarDC = nullptr;
+                    g_lastBarTheme = nullptr;
+                    PaintEnhancedBar(hdc, pRect, pClipRect, iStateId, true,
+                                     matching ? &track : nullptr);
+                } else {
+                    // Every paint must redraw the track, including a repaint at
+                    // exactly the same coordinates on a reused DC.
+                    g_lastBarDC = hdc;
+                    g_lastBarTheme = hTheme;
+                    g_lastBarRect = *pRect;
+                    PaintEnhancedBar(hdc, pRect, pClipRect, iStateId, false);
+                }
+                return S_OK;
+            }
+        } catch (...) {
+            Wh_Log(L"Bar customization failed; using the original drawing function");
         }
     }
-
-    if (isProgressSize) {
-        wchar_t themeCls[256] = L"Unknown";
-        if (GetThemeClassList_Ptr) {
-            GetThemeClassList_Ptr(hTheme, themeCls, 256);
-        }
-        wchar_t parentCls[256] = L"None";
-        HWND hwnd = NULL;
-        if (GetThemeWindow_Ptr)
-            hwnd = GetThemeWindow_Ptr(hTheme);
-        if (!hwnd)
-            hwnd = WindowFromDC(hdc);
-        if (hwnd)
-            GetClassNameW(hwnd, parentCls, 256);
-
-        bool isDisk = IsDiskBar(hTheme, hdc, iPartId, iStateId, pRect, false);
-        if (!isDisk) {
-            Wh_Log(L"--- HookedDrawThemeBackground (Potential Disk Bar) ---");
-            Wh_Log(
-                L"PartID=%d, StateID=%d, Rect=[l:%d, t:%d, r:%d, b:%d] (w=%d, "
-                L"h=%d), Class='%s', ParentWindow='%s'",
-                iPartId, iStateId, pRect->left, pRect->top, pRect->right,
-                pRect->bottom, pRect->right - pRect->left,
-                pRect->bottom - pRect->top, themeCls, parentCls);
-            // Run again with logging enabled to print the precise mismatch
-            IsDiskBar(hTheme, hdc, iPartId, iStateId, pRect, true);
-        } else {
-            Wh_Log(
-                L"IsDiskBar MATCH: PartID=%d, StateID=%d, Rect=[l:%d, t:%d, "
-                L"r:%d, b:%d] (w=%d, h=%d), Class='%s'",
-                iPartId, iStateId, pRect->left, pRect->top, pRect->right,
-                pRect->bottom, pRect->right - pRect->left,
-                pRect->bottom - pRect->top, themeCls);
-        }
-    }
-
-    if (IsDiskBar(hTheme, hdc, iPartId, iStateId, pRect, false)) {
-        bool first = !(hdc == g_lastBarDC && EqualRect(pRect, &g_lastBarRect));
-
-        if (iPartId == 5) {
-            // Fill
-            PaintEnhancedBar(hdc, pRect, pClipRect, iStateId, true);
-        } else if (iPartId == 1 || iPartId == 11) {
-            // Track / Background
-            g_lastBarDC = hdc;
-            g_lastBarRect = *pRect;
-            if (first)
-                PaintEnhancedBar(hdc, pRect, pClipRect, iStateId, false);
-        }
-
-        return S_OK;
-    }
+    g_lastBarDC = nullptr;
+    g_lastBarTheme = nullptr;
     return DrawThemeBackground_Orig(hTheme, hdc, iPartId, iStateId, pRect,
                                     pClipRect);
+}
+
+std::wstring GetLocalizedUnitName(double multiplier, const wchar_t* sampleUnit) {
+    std::wstring up = UpperSizeUnit(sampleUnit ? sampleUnit : L"");
+
+    bool isFrench = (up.find(L"O") != std::wstring::npos &&
+                     up.find(L"BYTE") == std::wstring::npos &&
+                     up.find(L"B") == std::wstring::npos);
+    bool isCyrillic = (up.find(L"\x0411") != std::wstring::npos);
+
+    // Preserve recognized Finnish and Cyrillic-T suffixes during conversion.
+    bool finnishByte = sampleUnit && wcscmp(sampleUnit, L"t") == 0;
+    if (finnishByte ||
+        (up.size() == 2 && (up[1] == L'T' || up[1] == L'\x0422') &&
+         GetUnitMultiplier(sampleUnit) > 0.0)) {
+        const wchar_t* prefixes = L"KMGTPE";
+        const wchar_t* cyrillic = L"\x041A\x041C\x0413\x0422\x041F\x042D";
+        bool useCyrillic = up[0] == L'\x041A' || up[0] == L'\x041C' ||
+                           up[0] == L'\x0413' || up[0] == L'\x0422' ||
+                           up[0] == L'\x041F';
+        wchar_t suffix = finnishByte ? L't' : sampleUnit[1];
+        if (multiplier == 1.0 && suffix == L't' && !useCyrillic)
+            return L"t";
+        for (int i = 0; prefixes[i]; ++i) {
+            double target = 1024.0;
+            for (int j = 0; j < i; ++j)
+                target *= 1024.0;
+            if (multiplier == target) {
+                wchar_t prefix = useCyrillic ? cyrillic[i] : prefixes[i];
+                if (!useCyrillic && suffix == L't' && i == 0)
+                    prefix = L'k';
+                return std::wstring(1, prefix) + suffix;
+            }
+        }
+    }
+
+    if (multiplier >= 1152921504606846976.0) {  // EB
+        if (isFrench)
+            return L"Eo";
+        if (isCyrillic)
+            return L"\x042D\x0411";
+        return L"EB";
+    }
+    if (multiplier >= 1125899906842624.0) {  // PB
+        if (isFrench)
+            return L"Po";
+        if (isCyrillic)
+            return L"\x041F\x0411";
+        return L"PB";
+    }
+    if (multiplier >= 1099511627776.0) {  // TB
+        if (isFrench)
+            return L"To";
+        if (isCyrillic)
+            return L"\x0422\x0411";
+        return L"TB";
+    }
+    if (multiplier >= 1073741824.0) {  // GB
+        if (isFrench)
+            return L"Go";
+        if (isCyrillic)
+            return L"\x0413\x0411";
+        return L"GB";
+    }
+    if (multiplier >= 1048576.0) {  // MB
+        if (isFrench)
+            return L"Mo";
+        if (isCyrillic)
+            return L"\x041C\x0411";
+        return L"MB";
+    }
+    if (multiplier >= 1024.0) {  // KB
+        if (isFrench)
+            return L"Ko";
+        if (isCyrillic)
+            return L"\x041A\x0411";
+        return L"KB";
+    }
+    if (isFrench)
+        return L"o";
+    if (isCyrillic)
+        return L"\x0411";
+    return L"B";
+}
+
+double GetDisplayUnitMultiplier(double bytes) {
+    if (bytes >= 1152921504606846976.0)
+        return 1152921504606846976.0;
+    if (bytes >= 1125899906842624.0)
+        return 1125899906842624.0;
+    if (bytes >= 1099511627776.0)
+        return 1099511627776.0;
+    if (bytes >= 1073741824.0)
+        return 1073741824.0;
+    if (bytes >= 1048576.0)
+        return 1048576.0;
+    if (bytes >= 1024.0)
+        return 1024.0;
+    return 1.0;
+}
+
+static std::wstring FormatFixedNumber(double value, int decimals,
+                                      bool trimZeros) {
+    char buffer[64];
+    auto formatted = std::to_chars(std::begin(buffer), std::end(buffer), value,
+                                    std::chars_format::fixed,
+                                    std::clamp(decimals, 0, 10));
+    if (formatted.ec != std::errc{})
+        return L"0";
+    std::string number(buffer, formatted.ptr);
+    if (trimZeros && number.find('.') != std::string::npos) {
+        while (!number.empty() && number.back() == '0')
+            number.pop_back();
+        if (!number.empty() && number.back() == '.')
+            number.pop_back();
+    }
+    std::wstring result(number.begin(), number.end());
+    std::replace(result.begin(), result.end(), L'.', g_decimalSeparator);
+    return result;
+}
+
+std::wstring FormatValueWithDecimals(double value, int decimals) {
+    if (decimals >= 0)
+        return FormatFixedNumber(value, decimals, false);
+    // Match Explorer's precision for typical values. Keep small converted
+    // fractions visible without implying more than roughly two useful digits.
+    int precision = value >= 100.0 ? 0 : value >= 10.0 ? 1 : 2;
+    if (value > 0.0 && value < 0.01)
+        precision = std::clamp(1 - (int)std::floor(std::log10(value)), 2, 10);
+    return FormatFixedNumber(value, precision, true);
+}
+
+std::wstring FormatPercentage(double percentage, int decimals) {
+    if (decimals >= 0)
+        return FormatFixedNumber(percentage, decimals, false) + L"%";
+    if (percentage > 0.0 && percentage < 1.0)
+        return FormatFixedNumber(percentage, 1, false) + L"%";
+    return FormatFixedNumber(std::round(percentage), 0, false) + L"%";
+}
+
+std::wstring ApplyPlaceholders(const std::wstring& fmt,
+                               const std::wstring& freeStr,
+                               const std::wstring& usedStr,
+                               const std::wstring& totalStr,
+                               const std::wstring& usedPctStr,
+                               const std::wstring& freePctStr) {
+    std::wstring result;
+    const std::wstring displayedFree =
+        g_boldFree ? MakeBoldText(freeStr) : freeStr;
+    const std::wstring displayedUsed =
+        g_boldUsed ? MakeBoldText(usedStr) : usedStr;
+    const std::wstring displayedTotal =
+        g_boldTotal ? MakeBoldText(totalStr) : totalStr;
+    const std::wstring displayedUsedPct =
+        g_boldUsedPercent ? MakeBoldText(usedPctStr) : usedPctStr;
+    const std::wstring displayedFreePct =
+        g_boldFreePercent ? MakeBoldText(freePctStr) : freePctStr;
+    int seqIndex = 0;
+    size_t i = 0;
+    while (i < fmt.length()) {
+        if (fmt[i] == L'%' && i + 1 < fmt.length()) {
+            wchar_t next = towlower(fmt[i + 1]);
+            if (next == L'f') {
+                if (i + 2 < fmt.length() && towlower(fmt[i + 2]) == L'p') {
+                    result += displayedFreePct;
+                    i += 3;
+                    continue;
+                } else {
+                    result += displayedFree;
+                    i += 2;
+                    continue;
+                }
+            } else if (next == L'u') {
+                result += displayedUsed;
+                i += 2;
+                continue;
+            } else if (next == L't') {
+                result += displayedTotal;
+                i += 2;
+                continue;
+            } else if (next == L'p') {
+                result += displayedUsedPct;
+                i += 2;
+                continue;
+            } else if (next == L's') {
+                if (seqIndex == 0) {
+                    result += displayedFree;
+                } else if (seqIndex == 1) {
+                    result += displayedUsed;
+                } else if (seqIndex == 2) {
+                    result += displayedTotal;
+                }
+                seqIndex++;
+                i += 2;
+                continue;
+            } else if (fmt[i + 1] == L'%') {
+                result += L'%';
+                i += 2;
+                continue;
+            }
+        }
+        result += fmt[i];
+        i++;
+    }
+    return result;
 }
 
 bool FindSpaceStats(const std::wstring& t, std::wstring& f, std::wstring& tot) {
     std::wstring nt = t;
     for (auto& c : nt) {
-        if (c == 0xA0)
+        if (IsSizeSpace(c))
             c = L' ';
     }
 
@@ -900,8 +1146,7 @@ bool FindSpaceStats(const std::wstring& t, std::wstring& f, std::wstring& tot) {
 
     size_t pos = num1_start;
     while (pos < nt.length() &&
-           (iswdigit(nt[pos]) || nt[pos] == L'.' || nt[pos] == L',' ||
-            nt[pos] == L' ' || nt[pos] == 0xA0))
+           IsSizeNumericChar(nt[pos]))
         pos++;
 
     size_t unit1_start = pos;
@@ -922,8 +1167,7 @@ bool FindSpaceStats(const std::wstring& t, std::wstring& f, std::wstring& tot) {
 
     pos = num2_start;
     while (pos < nt.length() &&
-           (iswdigit(nt[pos]) || nt[pos] == L'.' || nt[pos] == L',' ||
-            nt[pos] == L' ' || nt[pos] == 0xA0))
+           IsSizeNumericChar(nt[pos]))
         pos++;
 
     size_t unit2_start = pos;
@@ -951,11 +1195,24 @@ bool FindSpaceStats(const std::wstring& t, std::wstring& f, std::wstring& tot) {
     return true;
 }
 
-int WINAPI DrawTextW_Hook(HDC hdc, LPCWSTR psz, int cch, LPRECT prc, UINT fmt) {
-    if (!psz || !prc)
-        return DrawTextW_Orig(hdc, psz, cch, prc, fmt);
-
-    int len = (cch == -1) ? (int)wcslen(psz) : cch;
+bool ProcessDiskUsageText(HDC hdc,
+                          LPCWSTR psz,
+                          int cch,
+                          std::wstring& outCustomText) {
+    if (!psz)
+        return false;
+    if (cch < -1)
+        return false;
+    // A disk detail label is short. Bound work on every Explorer text call.
+    constexpr int kMaxDiskText = 512;
+    int len = cch;
+    if (cch == -1) {
+        len = 0;
+        while (len <= kMaxDiskText && psz[len] != L'\0')
+            ++len;
+    }
+    if (len <= 0 || len > kMaxDiskText)
+        return false;
     bool hasNum = false;
     for (int i = 0; i < len; ++i) {
         if (psz[i] >= L'0' && psz[i] <= L'9') {
@@ -964,166 +1221,300 @@ int WINAPI DrawTextW_Hook(HDC hdc, LPCWSTR psz, int cch, LPRECT prc, UINT fmt) {
         }
     }
     if (!hasNum)
-        return DrawTextW_Orig(hdc, psz, cch, prc, fmt);
+        return false;
 
-    // Target window verification
     if (hdc) {
         HWND hwnd = WindowFromDC(hdc);
         if (!IsValidDiskBarWindow(hwnd)) {
-            return DrawTextW_Orig(hdc, psz, cch, prc, fmt);
+            return false;
         }
     }
 
     std::wstring t(psz, len);
     std::wstring fs, ts;
-    if (FindSpaceStats(t, fs, ts)) {
-        if (g_removeSpace) {
-            fs.erase(std::remove(fs.begin(), fs.end(), L' '), fs.end());
-            ts.erase(std::remove(ts.begin(), ts.end(), L' '), ts.end());
-        }
-        std::wstring cf = CleanNumericString(fs), ct = CleanNumericString(ts);
-        double fv, tv;
-        wchar_t fu[16], tu[16];
-
-        if (swscanf(cf.c_str(), L"%lf %15s", &fv, fu) == 2 &&
-            swscanf(ct.c_str(), L"%lf %15s", &tv, tu) == 2) {
-            if (IsValidUnitString(fu) && IsValidUnitString(tu)) {
-                double um1 = GetUnitMultiplier(fu);
-                double um2 = GetUnitMultiplier(tu);
-                if (um1 > 0.0 && um2 > 0.0) {
-                    std::wstring us = std::wstring(StrFormatByteSizeW(
-                        (ULONGLONG)std::max(0.0, (tv * um2 - fv * um1)), fu,
-                        16));
-
-                    if (g_removeSpace)
-                        us.erase(std::remove(us.begin(), us.end(), L' '),
-                                 us.end());
-                    std::wstring fS = g_formatString;
-                    size_t p1 = fS.find(L"%s");
-                    size_t p2 = p1 != std::wstring::npos
-                                    ? fS.find(L"%s", p1 + 2)
-                                    : std::wstring::npos;
-                    size_t p3 = p2 != std::wstring::npos
-                                    ? fS.find(L"%s", p2 + 2)
-                                    : std::wstring::npos;
-
-                    if (p1 == std::wstring::npos || p2 == std::wstring::npos ||
-                        p3 == std::wstring::npos) {
-                        fS = L"%s free | %s used\n%s total";
-                        p1 = fS.find(L"%s");
-                        p2 = fS.find(L"%s", p1 + 2);
-                        p3 = fS.find(L"%s", p2 + 2);
-                    }
-
-                    std::wstring s1 = fS.substr(0, p1) + fs +
-                                      fS.substr(p1 + 2, p2 - p1 - 2),
-                                 s2 = g_boldUsed ? MakeBoldText(us) : us,
-                                 s3 = fS.substr(p2 + 2, p3 - p2 - 2) + ts +
-                                      fS.substr(p3 + 2);
-
-                    if (fmt & DT_CALCRECT) {
-                        std::wstring ft = s1 + s2 + s3;
-                        UINT calcFmt = fmt;
-                        if (ft.find(L'\n') != std::wstring::npos) {
-                            calcFmt &= ~DT_SINGLELINE;
-                        }
-                        return DrawTextW_Orig(hdc, ft.c_str(), (int)ft.length(),
-                                              prc, calcFmt);
-                    }
-
-                    int applyLineYOffset = g_lineYOffset;
-
-                    HFONT hOldFont = NULL;
-                    HFONT hNewFont = NULL;
-                    float scale = (float)GetDeviceCaps(hdc, LOGPIXELSY) / 96.0f;
-                    if (g_fontSize != 0.0f) {
-                        HFONT hCurrent = (HFONT)GetCurrentObject(hdc, OBJ_FONT);
-                        LOGFONTW lf;
-                        if (GetObjectW(hCurrent, sizeof(lf), &lf)) {
-                            int delta =
-                                (int)(g_fontSize * scale +
-                                      (g_fontSize >= 0.0f ? 0.5f : -0.5f));
-                            if (lf.lfHeight < 0)
-                                lf.lfHeight -= delta;
-                            else
-                                lf.lfHeight += delta;
-                            hNewFont = CreateFontIndirectW(&lf);
-                            if (hNewFont)
-                                hOldFont = (HFONT)SelectObject(hdc, hNewFont);
-                        }
-                    }
-
-                    std::wstring ft = s1 + s2 + s3;
-                    bool multiLine = (ft.find(L'\n') != std::wstring::npos);
-
-                    UINT dF = fmt | DT_NOPREFIX;
-                    if (!g_enableWordEllipsis) {
-                        dF &= ~(DT_END_ELLIPSIS | DT_PATH_ELLIPSIS |
-                                DT_WORD_ELLIPSIS);
-                    } else {
-                        dF |= DT_WORD_ELLIPSIS | DT_END_ELLIPSIS;
-                    }
-                    RECT r = *prc;
-                    r.top += applyLineYOffset;
-                    r.bottom += applyLineYOffset;
-
-                    int ft_ret = 0;
-                    if (multiLine) {
-                        std::vector<std::wstring> lines;
-                        size_t start_pos = 0, end_pos = 0;
-                        while ((end_pos = ft.find(L'\n', start_pos)) !=
-                               std::wstring::npos) {
-                            lines.push_back(
-                                ft.substr(start_pos, end_pos - start_pos));
-                            start_pos = end_pos + 1;
-                        }
-                        lines.push_back(ft.substr(start_pos));
-
-                        dF &= ~(DT_SINGLELINE | DT_VCENTER | DT_BOTTOM);
-                        dF |= DT_TOP | DT_SINGLELINE | DT_NOCLIP | DT_NOPREFIX;
-
-                        int totalHeight = 0;
-                        for (size_t i = 0; i < lines.size(); ++i) {
-                            RECT lr = r;
-                            lr.top += totalHeight;
-                            lr.bottom += 1000;
-                            if (fmt & DT_CALCRECT) {
-                                DrawTextW_Orig(hdc, lines[i].c_str(),
-                                               (int)lines[i].length(), &lr,
-                                               dF | DT_CALCRECT);
-                                totalHeight +=
-                                    (lr.bottom - lr.top) + g_lineSpacing;
-                            } else {
-                                RECT calcR = lr;
-                                DrawTextW_Orig(hdc, lines[i].c_str(),
-                                               (int)lines[i].length(), &calcR,
-                                               dF | DT_CALCRECT);
-                                DrawTextW_Orig(hdc, lines[i].c_str(),
-                                               (int)lines[i].length(), &lr, dF);
-                                totalHeight +=
-                                    (calcR.bottom - calcR.top) + g_lineSpacing;
-                            }
-                        }
-                        if (fmt & DT_CALCRECT) {
-                            prc->bottom =
-                                prc->top + totalHeight - g_lineSpacing;
-                        }
-                        ft_ret = totalHeight - g_lineSpacing;
-                    } else {
-                        ft_ret = DrawTextW_Orig(hdc, ft.c_str(),
-                                                (int)ft.length(), &r, dF);
-                    }
-
-                    if (hOldFont) {
-                        SelectObject(hdc, hOldFont);
-                        DeleteObject(hNewFont);
-                    }
-                    return ft_ret;
-                }
-            }
-        }
+    if (!FindSpaceStats(t, fs, ts)) {
+        return false;
     }
 
+    double fv = 0.0, tv = 0.0;
+    int freeDecimals = 0, totalDecimals = 0;
+    std::wstring fu, tu;
+    if (!ParseSpaceValue(fs, fv, fu, &freeDecimals) ||
+        !ParseSpaceValue(ts, tv, tu, &totalDecimals))
+        return false;
+
+    double um1 = GetUnitMultiplier(fu.c_str());
+    double um2 = GetUnitMultiplier(tu.c_str());
+
+    double freeBytes = fv * um1;
+    double totalBytes = tv * um2;
+    if (!std::isfinite(freeBytes) || !std::isfinite(totalBytes) ||
+        freeBytes < 0.0 || totalBytes <= 0.0 ||
+        freeBytes >= 9223372036854775808.0 ||
+        totalBytes >= 9223372036854775808.0) {
+        return false;
+    }
+    double usedBytes = std::max(0.0, totalBytes - freeBytes);
+
+    double usedPct =
+        (totalBytes > 0.0) ? (usedBytes / totalBytes) * 100.0 : 0.0;
+    double freePct =
+        std::clamp((freeBytes / totalBytes) * 100.0, 0.0, 100.0);
+
+    int effectiveDecimals = g_enableCustomDecimals ? g_decimalPlaces : -1;
+    int usedSourceDecimals = std::max(freeDecimals, totalDecimals);
+    auto unitDecimals = [effectiveDecimals](bool converted, int sourceDecimals) {
+        if (converted)
+            return effectiveDecimals;
+        return effectiveDecimals < 0 ? sourceDecimals
+                                     : std::min(effectiveDecimals, sourceDecimals);
+    };
+
+    std::wstring usedPctStr =
+        FormatPercentage(usedPct, g_percentageDecimalPlaces);
+    std::wstring freePctStr =
+        FormatPercentage(freePct, g_percentageDecimalPlaces);
+
+    std::wstring outFree, outUsed, outTotal;
+
+    if (g_unitGranularity == UnitGranularity::Auto) {
+        if (g_enableCustomDecimals) {
+            double usedMult = GetDisplayUnitMultiplier(usedBytes);
+            outFree = FormatValueWithDecimals(
+                          fv, unitDecimals(false, freeDecimals)) + L" " +
+                      GetLocalizedUnitName(um1, fu.c_str());
+            outTotal = FormatValueWithDecimals(
+                           tv, unitDecimals(false, totalDecimals)) + L" " +
+                       GetLocalizedUnitName(um2, tu.c_str());
+            bool usedConverted = um2 != usedMult ||
+                                 (freeBytes > 0.0 && um1 != usedMult);
+            outUsed = FormatValueWithDecimals(usedBytes / usedMult,
+                                              unitDecimals(usedConverted,
+                                                           usedSourceDecimals)) +
+                      L" " +
+                      GetLocalizedUnitName(usedMult, tu.c_str());
+        } else {
+            outFree = fs;
+            outTotal = ts;
+            wchar_t buf[64] = {};
+            if (!StrFormatByteSizeW((LONGLONG)usedBytes, buf, (UINT)std::size(buf)))
+                return false;
+            outUsed = buf;
+        }
+    } else {
+        double targetMult = um2;
+        if (g_unitGranularity == UnitGranularity::MatchLargest) {
+            targetMult = std::max({um1, um2,
+                                   usedBytes > 0.0
+                                       ? GetDisplayUnitMultiplier(usedBytes)
+                                       : 1.0});
+        } else if (g_unitGranularity == UnitGranularity::MatchSmallest) {
+            targetMult = std::min(um1, um2);
+            if (usedBytes > 0.0)
+                targetMult = std::min(targetMult,
+                                      GetDisplayUnitMultiplier(usedBytes));
+        } else if (g_unitGranularity == UnitGranularity::MatchTotal) {
+            targetMult = um2;
+        } else if (g_unitGranularity == UnitGranularity::ForceGB) {
+            targetMult = 1073741824.0;
+        } else if (g_unitGranularity == UnitGranularity::ForceMB) {
+            targetMult = 1048576.0;
+        } else if (g_unitGranularity == UnitGranularity::ForceTB) {
+            targetMult = 1099511627776.0;
+        }
+
+        std::wstring unitName = GetLocalizedUnitName(targetMult, tu.c_str());
+        std::wstring sep = g_removeSpace ? L"" : L" ";
+
+        outFree = FormatValueWithDecimals(freeBytes / targetMult,
+                                          unitDecimals(um1 != targetMult, freeDecimals)) +
+                  sep + unitName;
+        // When free space is zero, used space is the displayed total itself.
+        // A zero in another unit does not make that value a conversion.
+        bool usedConverted = um2 != targetMult ||
+                             (freeBytes > 0.0 && um1 != targetMult);
+        outUsed = FormatValueWithDecimals(usedBytes / targetMult,
+                                          unitDecimals(usedConverted,
+                                                       usedSourceDecimals)) +
+                  sep + unitName;
+        outTotal = FormatValueWithDecimals(totalBytes / targetMult,
+                                           unitDecimals(um2 != targetMult, totalDecimals)) +
+                   sep + unitName;
+    }
+
+    if (g_removeSpace) {
+        outFree.erase(std::remove(outFree.begin(), outFree.end(), L' '),
+                      outFree.end());
+        outUsed.erase(std::remove(outUsed.begin(), outUsed.end(), L' '),
+                      outUsed.end());
+        outTotal.erase(std::remove(outTotal.begin(), outTotal.end(), L' '),
+                       outTotal.end());
+    }
+
+    outCustomText = ApplyPlaceholders(g_formatString, outFree, outUsed,
+                                      outTotal, usedPctStr, freePctStr);
+    return true;
+}
+
+// Font selection is restored on every exit, including allocation failures.
+class AdjustedDiskFont {
+public:
+    explicit AdjustedDiskFont(HDC dc) : dc_(dc) {
+        if (g_fontSize == 0.0f)
+            return;
+        LOGFONTW lf{};
+        auto current = GetCurrentObject(dc, OBJ_FONT);
+        if (!current || GetObjectW(current, sizeof(lf), &lf) != sizeof(lf))
+            return;
+        double scale = (double)GetDeviceCaps(dc, LOGPIXELSY) / 96.0;
+        if (scale <= 0.0)
+            scale = 1.0;
+        double magnitude = std::clamp(
+            std::abs((double)lf.lfHeight) + std::round(g_fontSize * scale),
+            1.0, 4096.0);
+        lf.lfHeight = (LONG)(lf.lfHeight < 0 ? -magnitude : magnitude);
+        font_ = CreateFontIndirectW(&lf);
+        if (!font_)
+            return;
+        old_ = SelectObject(dc, font_);
+        if (!old_ || old_ == HGDI_ERROR) {
+            DeleteObject(font_);
+            font_ = nullptr;
+            old_ = nullptr;
+        }
+    }
+    ~AdjustedDiskFont() {
+        if (font_) {
+            SelectObject(dc_, old_);
+            DeleteObject(font_);
+        }
+    }
+    AdjustedDiskFont(const AdjustedDiskFont&) = delete;
+    AdjustedDiskFont& operator=(const AdjustedDiskFont&) = delete;
+private:
+    HDC dc_;
+    HFONT font_ = nullptr;
+    HGDIOBJ old_ = nullptr;
+};
+
+static int RenderFormattedDiskText(HDC hdc,
+                                   const std::wstring& ft,
+                                   LPRECT prc,
+                                   UINT fmt,
+                                   LPDRAWTEXTPARAMS pDtp,
+                                   bool isEx) {
+    AdjustedDiskFont font(hdc);
+    const bool measureOnly = (fmt & DT_CALCRECT) != 0;
+    // Caller-owned mutable strings are handled by the original hook path.
+    // Internal strings must never be modified by DrawText's ellipsis logic.
+    UINT flags = (fmt | DT_NOPREFIX) & ~DT_MODIFYSTRING;
+    if (g_enableWordEllipsis)
+        flags |= DT_WORD_ELLIPSIS | DT_END_ELLIPSIS;
+    else
+        flags &= ~(DT_END_ELLIPSIS | DT_PATH_ELLIPSIS | DT_WORD_ELLIPSIS);
+
+    auto draw = [&](const std::wstring& text, RECT& rect, UINT drawFlags,
+                    LPDRAWTEXTPARAMS params) {
+        if (isEx) {
+            std::vector<wchar_t> buffer(text.begin(), text.end());
+            buffer.push_back(L'\0');
+            return DrawTextExW_Orig(hdc, buffer.data(), (int)text.size(),
+                                    &rect, drawFlags, params);
+        }
+        return DrawTextW_Orig(hdc, text.c_str(), (int)text.size(),
+                              &rect, drawFlags);
+    };
+
+    if (ft.find(L'\n') == std::wstring::npos) {
+        RECT rect = *prc;
+        if (!measureOnly)
+            OffsetRect(&rect, 0, g_lineYOffset);
+        int result = draw(ft, rect, flags, pDtp);
+        if (measureOnly)
+            *prc = rect;
+        return result;
+    }
+
+    flags &= ~(DT_VCENTER | DT_BOTTOM | DT_WORDBREAK | DT_CALCRECT);
+    flags |= DT_TOP | DT_SINGLELINE | DT_NOCLIP;
+    struct Line {
+        std::wstring text;
+        int top;
+        int height;
+    };
+    std::vector<Line> lines;
+    int totalHeight = 0;
+    LONG maxWidth = 0;
+    size_t start = 0;
+    while (true) {
+        size_t end = ft.find(L'\n', start);
+        std::wstring text = ft.substr(start, end == std::wstring::npos
+                                              ? end : end - start);
+        RECT rect{prc->left, 0, prc->right, 0};
+        DRAWTEXTPARAMS params{};
+        if (pDtp)
+            params = *pDtp;
+        // Blank lines still occupy one line in the selected font.
+        int measured = draw(text.empty() ? L" " : text, rect,
+                            flags | DT_CALCRECT, pDtp ? &params : nullptr);
+        if (measured <= 0)
+            return 0;
+        int height = std::max<LONG>(1, rect.bottom - rect.top);
+        maxWidth = std::max(maxWidth, rect.right - rect.left);
+        lines.push_back({std::move(text), totalHeight, height});
+        if (end == std::wstring::npos) {
+            totalHeight += height;
+            break;
+        }
+        totalHeight += std::max(1, height + g_lineSpacing);
+        start = end + 1;
+    }
+
+    if (measureOnly) {
+        prc->right = prc->left + maxWidth;
+        prc->bottom = prc->top + totalHeight;
+    } else {
+        for (const auto& line : lines) {
+            RECT rect{prc->left, prc->top, prc->right,
+                      prc->top + line.height};
+            OffsetRect(&rect, 0, g_lineYOffset + line.top);
+            DRAWTEXTPARAMS params{};
+            if (pDtp)
+                params = *pDtp;
+            if (!line.text.empty())
+                draw(line.text, rect, flags, pDtp ? &params : nullptr);
+        }
+    }
+    return totalHeight;
+}
+
+thread_local static bool g_insideTextHook = false;
+class TextHookScope {
+public:
+    TextHookScope() { g_insideTextHook = true; }
+    ~TextHookScope() { g_insideTextHook = false; }
+    TextHookScope(const TextHookScope&) = delete;
+    TextHookScope& operator=(const TextHookScope&) = delete;
+};
+
+int WINAPI DrawTextW_Hook(HDC hdc,
+                          LPCWSTR psz,
+                          int cch,
+                          LPRECT prc,
+                          UINT fmt) {
+    if (!hdc || !psz || !prc ||
+        g_insideTextHook || g_unloading.load() || (fmt & DT_MODIFYSTRING))
+        return DrawTextW_Orig(hdc, psz, cch, prc, fmt);
+
+    TextHookScope scope;
+    try {
+        std::wstring customText;
+        if (ProcessDiskUsageText(hdc, psz, cch, customText))
+            return RenderFormattedDiskText(hdc, customText, prc, fmt,
+                                            nullptr, false);
+    } catch (...) {
+        Wh_Log(L"Text customization failed; using the original drawing function");
+    }
     return DrawTextW_Orig(hdc, psz, cch, prc, fmt);
 }
 
@@ -1133,188 +1524,24 @@ int WINAPI DrawTextExW_Hook(HDC hdc,
                             LPRECT prc,
                             UINT fmt,
                             LPDRAWTEXTPARAMS pDtp) {
-    if (!psz || !prc)
+    if (!hdc || !psz || !prc ||
+        g_insideTextHook || g_unloading.load() || (fmt & DT_MODIFYSTRING) ||
+        (pDtp && pDtp->cbSize != sizeof(*pDtp)))
         return DrawTextExW_Orig(hdc, psz, cch, prc, fmt, pDtp);
 
-    int len = (cch == -1) ? (int)wcslen(psz) : cch;
-    bool hasNum = false;
-    for (int i = 0; i < len; ++i) {
-        if (psz[i] >= L'0' && psz[i] <= L'9') {
-            hasNum = true;
-            break;
+    TextHookScope scope;
+    try {
+        std::wstring customText;
+        if (ProcessDiskUsageText(hdc, psz, cch, customText)) {
+            int result = RenderFormattedDiskText(hdc, customText, prc, fmt,
+                                                 pDtp, true);
+            if (pDtp && result > 0)
+                pDtp->uiLengthDrawn = cch == -1 ? (UINT)wcslen(psz) : (UINT)cch;
+            return result;
         }
+    } catch (...) {
+        Wh_Log(L"Text customization failed; using the original drawing function");
     }
-    if (!hasNum)
-        return DrawTextExW_Orig(hdc, psz, cch, prc, fmt, pDtp);
-
-    // Target window verification
-    if (hdc) {
-        HWND hwnd = WindowFromDC(hdc);
-        if (!IsValidDiskBarWindow(hwnd)) {
-            return DrawTextExW_Orig(hdc, psz, cch, prc, fmt, pDtp);
-        }
-    }
-
-    std::wstring t(psz, len);
-    std::wstring fs, ts;
-
-    if (FindSpaceStats(t, fs, ts)) {
-        if (g_removeSpace) {
-            fs.erase(std::remove(fs.begin(), fs.end(), L' '), fs.end());
-            ts.erase(std::remove(ts.begin(), ts.end(), L' '), ts.end());
-        }
-        std::wstring cf = CleanNumericString(fs), ct = CleanNumericString(ts);
-        double fv, tv;
-        wchar_t fu[16], tu[16];
-
-        if (swscanf(cf.c_str(), L"%lf %15s", &fv, fu) == 2 &&
-            swscanf(ct.c_str(), L"%lf %15s", &tv, tu) == 2) {
-            if (IsValidUnitString(fu) && IsValidUnitString(tu)) {
-                double um1 = GetUnitMultiplier(fu);
-                double um2 = GetUnitMultiplier(tu);
-                if (um1 > 0.0 && um2 > 0.0) {
-                    std::wstring us = std::wstring(StrFormatByteSizeW(
-                        (ULONGLONG)std::max(0.0, (tv * um2 - fv * um1)), fu,
-                        16));
-
-                    if (g_removeSpace)
-                        us.erase(std::remove(us.begin(), us.end(), L' '),
-                                 us.end());
-                    std::wstring fS = g_formatString;
-                    size_t p1 = fS.find(L"%s");
-                    size_t p2 = p1 != std::wstring::npos
-                                    ? fS.find(L"%s", p1 + 2)
-                                    : std::wstring::npos;
-                    size_t p3 = p2 != std::wstring::npos
-                                    ? fS.find(L"%s", p2 + 2)
-                                    : std::wstring::npos;
-
-                    if (p1 == std::wstring::npos || p2 == std::wstring::npos ||
-                        p3 == std::wstring::npos) {
-                        fS = L"%s free | %s used\n%s total";
-                        p1 = fS.find(L"%s");
-                        p2 = fS.find(L"%s", p1 + 2);
-                        p3 = fS.find(L"%s", p2 + 2);
-                    }
-
-                    std::wstring s1 = fS.substr(0, p1) + fs +
-                                      fS.substr(p1 + 2, p2 - p1 - 2),
-                                 s2 = g_boldUsed ? MakeBoldText(us) : us,
-                                 s3 = fS.substr(p2 + 2, p3 - p2 - 2) + ts +
-                                      fS.substr(p3 + 2);
-
-                    if (fmt & DT_CALCRECT) {
-                        std::wstring ft = s1 + s2 + s3;
-                        std::vector<wchar_t> b(ft.begin(), ft.end());
-                        b.push_back(0);
-                        UINT calcFmt = fmt;
-                        if (ft.find(L'\n') != std::wstring::npos) {
-                            calcFmt &= ~DT_SINGLELINE;
-                        }
-                        return DrawTextExW_Orig(hdc, b.data(), (int)ft.length(),
-                                                prc, calcFmt, pDtp);
-                    }
-
-                    int applyLineYOffset = g_lineYOffset;
-
-                    HFONT hOldFont = NULL;
-                    HFONT hNewFont = NULL;
-                    float scale = (float)GetDeviceCaps(hdc, LOGPIXELSY) / 96.0f;
-                    if (g_fontSize != 0.0f) {
-                        HFONT hCurrent = (HFONT)GetCurrentObject(hdc, OBJ_FONT);
-                        LOGFONTW lf;
-                        if (GetObjectW(hCurrent, sizeof(lf), &lf)) {
-                            int delta =
-                                (int)(g_fontSize * scale +
-                                      (g_fontSize >= 0.0f ? 0.5f : -0.5f));
-                            if (lf.lfHeight < 0)
-                                lf.lfHeight -= delta;
-                            else
-                                lf.lfHeight += delta;
-                            hNewFont = CreateFontIndirectW(&lf);
-                            if (hNewFont)
-                                hOldFont = (HFONT)SelectObject(hdc, hNewFont);
-                        }
-                    }
-
-                    std::wstring ft = s1 + s2 + s3;
-                    bool multiLine = (ft.find(L'\n') != std::wstring::npos);
-
-                    std::vector<wchar_t> b(ft.begin(), ft.end());
-                    b.push_back(0);
-
-                    UINT dF = fmt | DT_NOPREFIX;
-                    if (!g_enableWordEllipsis) {
-                        dF &= ~(DT_END_ELLIPSIS | DT_PATH_ELLIPSIS |
-                                DT_WORD_ELLIPSIS);
-                    } else {
-                        dF |= DT_WORD_ELLIPSIS | DT_END_ELLIPSIS;
-                    }
-                    RECT r = *prc;
-                    r.top += applyLineYOffset;
-                    r.bottom += applyLineYOffset;
-
-                    int ft_ret = 0;
-                    if (multiLine) {
-                        std::vector<std::wstring> lines;
-                        size_t start_pos = 0, end_pos = 0;
-                        while ((end_pos = ft.find(L'\n', start_pos)) !=
-                               std::wstring::npos) {
-                            lines.push_back(
-                                ft.substr(start_pos, end_pos - start_pos));
-                            start_pos = end_pos + 1;
-                        }
-                        lines.push_back(ft.substr(start_pos));
-
-                        dF &= ~(DT_SINGLELINE | DT_VCENTER | DT_BOTTOM);
-                        dF |= DT_TOP | DT_SINGLELINE | DT_NOCLIP | DT_NOPREFIX;
-
-                        int totalHeight = 0;
-                        for (size_t i = 0; i < lines.size(); ++i) {
-                            RECT lr = r;
-                            lr.top += totalHeight;
-                            lr.bottom += 1000;
-                            std::vector<wchar_t> bl(lines[i].begin(),
-                                                    lines[i].end());
-                            bl.push_back(0);
-                            if (fmt & DT_CALCRECT) {
-                                DrawTextExW_Orig(hdc, bl.data(),
-                                                 (int)lines[i].length(), &lr,
-                                                 dF | DT_CALCRECT, pDtp);
-                                totalHeight +=
-                                    (lr.bottom - lr.top) + g_lineSpacing;
-                            } else {
-                                RECT calcR = lr;
-                                DrawTextExW_Orig(hdc, bl.data(),
-                                                 (int)lines[i].length(), &calcR,
-                                                 dF | DT_CALCRECT, pDtp);
-                                DrawTextExW_Orig(hdc, bl.data(),
-                                                 (int)lines[i].length(), &lr,
-                                                 dF, pDtp);
-                                totalHeight +=
-                                    (calcR.bottom - calcR.top) + g_lineSpacing;
-                            }
-                        }
-                        if (fmt & DT_CALCRECT) {
-                            prc->bottom =
-                                prc->top + totalHeight - g_lineSpacing;
-                        }
-                        ft_ret = totalHeight - g_lineSpacing;
-                    } else {
-                        ft_ret = DrawTextExW_Orig(
-                            hdc, b.data(), (int)ft.length(), &r, dF, pDtp);
-                    }
-
-                    if (hOldFont) {
-                        SelectObject(hdc, hOldFont);
-                        DeleteObject(hNewFont);
-                    }
-                    return ft_ret;
-                }
-            }
-        }
-    }
-
     return DrawTextExW_Orig(hdc, psz, cch, prc, fmt, pDtp);
 }
 
@@ -1341,57 +1568,82 @@ void RefreshExplorer() {
     EnumWindows(RefreshExplorerCallback, 0);
 }
 
+static void ShutdownGdiPlus() {
+    if (g_gdiplusToken) {
+        GdiplusShutdown(g_gdiplusToken);
+        g_gdiplusToken = 0;
+    }
+}
+
 BOOL Wh_ModInit() {
-    GdiplusStartupInput gsi;
-    GdiplusStartup(&g_gdiplusToken, &gsi, NULL);
-    LoadSettings();
-    HMODULE uxtheme = GetModuleHandle(L"uxtheme.dll");
-    if (uxtheme) {
-        GetThemeWindow_Ptr =
-            (GetThemeWindow_t)GetProcAddress(uxtheme, "GetThemeWindow");
-        GetThemeClassList_Ptr =
-            (GetThemeClassList_t)GetProcAddress(uxtheme, "GetThemeClassList");
-
-        Wh_SetFunctionHook((void*)GetProcAddress(uxtheme, "OpenThemeData"),
-                           (void*)OpenThemeData_Hook,
-                           (void**)&OpenThemeData_Orig);
-        Wh_SetFunctionHook((void*)GetProcAddress(uxtheme, "OpenThemeDataEx"),
-                           (void*)OpenThemeDataEx_Hook,
-                           (void**)&OpenThemeDataEx_Orig);
-        Wh_SetFunctionHook((void*)GetProcAddress(uxtheme, "CloseThemeData"),
-                           (void*)CloseThemeData_Hook,
-                           (void**)&CloseThemeData_Orig);
-
-        Wh_SetFunctionHook(
-            (void*)GetProcAddress(uxtheme, "DrawThemeBackground"),
-            (void*)HookedDrawThemeBackground,
-            (void**)&DrawThemeBackground_Orig);
-    }
-
-    if (uxtheme) {
-        void* pOpenDpi = (void*)GetProcAddress(uxtheme, "OpenThemeDataForDpi");
-        if (pOpenDpi) {
-            Wh_SetFunctionHook(pOpenDpi, (void*)OpenThemeDataForDpi_Hook,
-                               (void**)&OpenThemeDataForDpi_Orig);
+    try {
+        LoadSettings();
+        if (g_enableBarCustomization) {
+            GdiplusStartupInput gsi;
+            if (GdiplusStartup(&g_gdiplusToken, &gsi, nullptr) != Ok) {
+                g_gdiplusToken = 0;
+                Wh_Log(L"GDI+ initialization failed");
+                return FALSE;
+            }
+            HMODULE uxtheme = GetModuleHandleW(L"uxtheme.dll");
+            if (uxtheme) {
+                GetThemeWindow_Ptr = (GetThemeWindow_t)GetProcAddress(
+                    uxtheme, "GetThemeWindow");
+                GetThemeClassList_Ptr = (GetThemeClassList_t)GetProcAddress(
+                    uxtheme, "GetThemeClassList");
+            }
+            // Referencing the imported function also ensures uxtheme stays
+            // loaded throughout the lifetime of this mod.
+            if (!WindhawkUtils::SetFunctionHook(DrawThemeBackground,
+                                    HookedDrawThemeBackground,
+                                    &DrawThemeBackground_Orig)) {
+                Wh_Log(L"Failed to hook DrawThemeBackground");
+                ShutdownGdiPlus();
+                return FALSE;
+            }
         }
+        if (g_enableTextCustomization) {
+            if (!WindhawkUtils::SetFunctionHook(DrawTextW, DrawTextW_Hook,
+                                    &DrawTextW_Orig) ||
+                !WindhawkUtils::SetFunctionHook(DrawTextExW, DrawTextExW_Hook,
+                                    &DrawTextExW_Orig)) {
+                Wh_Log(L"Failed to hook disk text drawing");
+                ShutdownGdiPlus();
+                return FALSE;
+            }
+        }
+        return TRUE;
+    } catch (...) {
+        // A failed Wh_ModInit is not followed by Wh_ModUninit.
+        ShutdownGdiPlus();
+        return FALSE;
     }
+}
 
-    HMODULE user32 = GetModuleHandle(L"user32.dll");
-    if (user32) {
-        Wh_SetFunctionHook((void*)GetProcAddress(user32, "DrawTextW"),
-                           (void*)DrawTextW_Hook, (void**)&DrawTextW_Orig);
-        Wh_SetFunctionHook((void*)GetProcAddress(user32, "DrawTextExW"),
-                           (void*)DrawTextExW_Hook, (void**)&DrawTextExW_Orig);
-    }
+void Wh_ModAfterInit() {
     RefreshExplorer();
-    return TRUE;
+}
+
+void Wh_ModBeforeUninit() {
+    g_unloading.store(true);
 }
 
 void Wh_ModUninit() {
-    GdiplusShutdown(g_gdiplusToken);
-    RefreshExplorer();
+    // Hooks have been disabled, but a paint already inside our hook may still
+    // be running. Windhawk's DLL stack drain happens AFTER this callback.
+    while (g_activeBarCalls.load() != 0)
+        Sleep(1);
+    ShutdownGdiPlus();
+    // The new instance refreshes once in Wh_ModAfterInit. On a full disable,
+    // there is no new instance, so restore the default view here.
+    if (!g_settingsReloading.load())
+        RefreshExplorer();
 }
-void Wh_ModSettingsChanged() {
-    LoadSettings();
-    RefreshExplorer();
+
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    // Settings remain immutable while hooks run; Windhawk performs a normal
+    // unload/reload to apply changes.
+    g_settingsReloading.store(true);
+    *bReload = TRUE;
+    return TRUE;
 }
