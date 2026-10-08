@@ -29,9 +29,11 @@ This mod addresses two issues that can occur when the private Windows 10 shell i
 
 The guard lasts 20 seconds by default. Each intercepted flyout can extend it by 15 seconds, up to four times the configured duration. No window is closed or destroyed.
 
-**Startup reliability.** When Explorer starts, Windhawk loads the mod before the taskbar and the language indicator exist, and window-creation hooks only become active after `Wh_ModInit` returns. A background rescan therefore attaches to the indicator as soon as it appears (every 250 ms for the first three minutes, then every three seconds), so the mod no longer needs to be toggled manually after logon.
+**Startup reliability.** When Explorer starts, Windhawk loads the mod before the taskbar and the language indicator exist, and window-creation hooks only become active after `Wh_ModInit` returns. A background rescan therefore attaches to the indicator as soon as it appears (every 250 ms, for the first three minutes only, after which it stops), so the mod no longer needs to be toggled manually after logon.
 
-The mod targets non-SystemRoot `explorer.exe` instances and limits the flyout sweep to the current process. System files are not replaced.
+The mod is loaded into `explorer.exe` processes but skips initialization in the system `%SystemRoot%\explorer.exe` (checked in code using the real image path, which Fake Explorer path does not alter), so it only acts in the private Windows 10 shell. The flyout sweep is limited to the current process. System files are not replaced.
+
+**Overlap with "Fix language indicator in Win10 taskbar under Win11 24H2+".** With `LanguageIndicatorColours` enabled, this mod paints the language indicator itself and Explorer's native paint (which that mod hooks) no longer runs for it, so you do not need both for the indicator. Disable `LanguageIndicatorColours` if you prefer to keep using the other mod for the indicator.
 */
 // ==/WindhawkModReadme==
 
@@ -1379,7 +1381,7 @@ static void LogCurrentSettings(const wchar_t* prefix) {
 // language indicator exist, and hooks set in Wh_ModInit become active only after
 // it returns. A one-shot EnumWindows in Wh_ModInit therefore finds nothing, and
 // windows created in the gap are missed by the CreateWindowExW hook. This thread
-// repeats the scan until the indicator is attached. TrackIndicatorWindow is
+// repeats the scan for the first three minutes, then exits. TrackIndicatorWindow is
 // idempotent, so repeated scans never subclass a window twice.
 static HANDLE g_rescanThread = nullptr;
 static HANDLE g_rescanStopEvent = nullptr;
@@ -1387,9 +1389,9 @@ static SRWLOCK g_rescanLock = SRWLOCK_INIT;
 
 static DWORD WINAPI IndicatorRescanThread(LPVOID) {
     const ULONGLONG start = GetTickCount64();
-    for (;;) {
-        const DWORD interval = (GetTickCount64() - start < 180000) ? 250 : 3000;
-        if (WaitForSingleObject(g_rescanStopEvent, interval) != WAIT_TIMEOUT) break;
+    // The rescan only covers the logon window; it ends after three minutes.
+    while (GetTickCount64() - start < 180000) {
+        if (WaitForSingleObject(g_rescanStopEvent, 250) != WAIT_TIMEOUT) break;
         if (g_unloading.load(std::memory_order_acquire)) break;
         if (ShouldTrackIndicatorWindows()) ArmIndicatorSubclass();
     }
@@ -1429,7 +1431,26 @@ static void StopIndicatorRescanThread() {
 }
 
 // --- Windhawk entry points --------------------------------------------------
+// True when this process is the system %SystemRoot%\explorer.exe. Uses the real
+// image path (QueryFullProcessImageNameW), which Fake Explorer path does not hook.
+static bool IsSystemExplorer() {
+    WCHAR systemPath[MAX_PATH];
+    UINT len = GetWindowsDirectoryW(systemPath, ARRAYSIZE(systemPath));
+    WCHAR path[MAX_PATH];
+    DWORD size = ARRAYSIZE(path);
+    if (!len || len >= ARRAYSIZE(systemPath) ||
+        wcscat_s(systemPath, L"\\explorer.exe") != 0 ||
+        !QueryFullProcessImageNameW(GetCurrentProcess(), 0, path, &size)) {
+        return false;
+    }
+    return _wcsicmp(path, systemPath) == 0;
+}
+
 BOOL Wh_ModInit() {
+    if (IsSystemExplorer()) {
+        Wh_Log(L"[lang] system explorer.exe detected; not loading");
+        return FALSE;
+    }
     g_unloading.store(false, std::memory_order_release);
     g_modStartTick.store(GetTickCount64(), std::memory_order_release);
     LoadLanguageSettings();
