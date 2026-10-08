@@ -3557,6 +3557,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "reviews": 0,
+        "trendingSorting": 0,
         "updated": 1791439329000,
         "users": 0
       },
@@ -5725,6 +5726,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "reviews": 0,
+        "trendingSorting": 0,
         "updated": 1791439344000,
         "users": 0
       },
@@ -12155,6 +12157,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "reviews": 0,
+        "trendingSorting": 0,
         "updated": 1791403224000,
         "users": 0
       },
@@ -13303,6 +13306,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "reviews": 0,
+        "trendingSorting": 0,
         "updated": 1791464659000,
         "users": 0
       },
@@ -16300,6 +16304,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "reviews": 0,
+        "trendingSorting": 0,
         "updated": 1791439339000,
         "users": 0
       },
