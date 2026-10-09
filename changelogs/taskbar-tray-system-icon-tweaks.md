@@ -1,3 +1,9 @@
+## 1.3.1 ([Oct 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0effe7425314f8f1970b4173b8350732520a4575/mods/taskbar-tray-system-icon-tweaks.wh.cpp))
+
+* Fixed "Show desktop" button tweaking compatibility with latest Windows 11 versions.
+* Fixed hidden system icons still leaving 4px in their place.
+* Improved compatibility with ARM64.
+
 ## 1.3 ([Apr 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/09fd5526dd87977cebb04f6734cfbb0e6aba48e7/mods/taskbar-tray-system-icon-tweaks.wh.cpp))
 
 * Added an option for a grayscale battery icon instead of its colored (e.g. green/yellow) variant.

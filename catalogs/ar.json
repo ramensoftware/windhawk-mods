@@ -15082,7 +15082,7 @@
         "ratingUsers": 958,
         "reviews": 0,
         "trendingSorting": -1.3999308291352808,
-        "updated": 1777134442000,
+        "updated": 1791547818000,
         "users": 80862
       },
       "metadata": {
@@ -15099,7 +15099,7 @@
         ],
         "name": "Taskbar tray system icon tweaks",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.3"
+        "version": "1.3.1"
       }
     },
     "taskbar-vd-switcher": {
