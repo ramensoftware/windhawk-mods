@@ -8,7 +8,8 @@
 // @homepage        https://github.com/chambber/tray-agenda
 // @license         MIT
 // @include         explorer.exe
-// @compilerOptions -lruntimeobject -luuid -luser32 -lwindowsapp -lshell32 -lwinhttp -lbcrypt -lcrypt32 -lws2_32 -ladvapi32 -lole32
+// @architecture    x86-64
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lruntimeobject -luuid -luser32 -lwindowsapp -lshell32 -lwinhttp -lbcrypt -lcrypt32 -lws2_32 -ladvapi32 -lole32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -84,14 +85,19 @@ other setting, so treat them as secrets.
   refresh token is encrypted with DPAPI for your Windows account.
 - The client secret you paste is stored in Windhawk's settings, like any other mod
   setting. For a Desktop-app client it is not a confidential secret.
-- Network traffic goes to Google over HTTPS and to the ICS feed hosts you configure
-  (HTTPS only, no credentials in the URL). Meeting links are shown only if they match a
-  strict allowlist: Google Meet, `zoom.us` and Microsoft Teams join URLs.
+- Network traffic goes to Google over HTTPS and to the ICS feed URLs you configure (HTTPS
+  only, no credentials in the URL; up to 4 redirects are followed, which may lead to other
+  HTTPS hosts). Nothing is sent until you configure an OAuth client and sign in, or add an
+  ICS URL. Meeting links are shown only if they match a strict allowlist: Google Meet,
+  `zoom.us` and Microsoft Teams join URLs.
+- Reminders are shown through File Explorer's notification entry, so the mod writes nothing
+  to the registry.
 - *Sign out ...* in the popup removes that account's stored token and revokes it at Google.
 
 ## Notes
 
-- Windows 11 only. Reminders follow your Windows notification and Focus settings.
+- Windows 11 only. Reminders follow your Windows notification and Focus settings. The widget
+  is shown on the primary taskbar only.
 - Taskbar XAML-root and tray insertion strategy is adapted from Salyts' MIT-licensed
   Taskbar Fluent Media Player Windhawk mod.
 */
@@ -145,7 +151,7 @@ other setting, so treat them as secrets.
   $description: ICS feeds carry no accept/decline status, so their timed events are treated as accepted for reminders.
 - poll_seconds: 300
   $name: Refresh interval, seconds
-  $description: How often Google Calendar is read. Values below 60 seconds are raised to 60.
+  $description: How often Google Calendar and the ICS feeds are read. Values below 60 seconds are raised to 60.
 - notifications_enabled: true
   $name: Reminder notifications
   $description: Show a native Windows notification before and at the start of accepted events.
@@ -157,7 +163,7 @@ other setting, so treat them as secrets.
   $description: Event titles are shortened before XAML trimming is applied.
 - show_location: true
   $name: Show location
-  $description: Show the event location on the second compact line when available.
+  $description: Show the event location in the popup when available.
 - use_24_hour_time: true
   $name: Use 24-hour time
   $description: Use 14:00 instead of 2:00 PM.
@@ -186,6 +192,7 @@ other setting, so treat them as secrets.
 #include <ws2tcpip.h>
 #include <windows.h>
 #include <bcrypt.h>
+#include <objbase.h>
 #include <dpapi.h>
 #include <shellapi.h>
 #include <winhttp.h>
@@ -213,9 +220,11 @@ other setting, so treat them as secrets.
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <cstdio>
+#include <cstring>
 #include <cwchar>
 #include <cwctype>
 #include <ctime>
@@ -223,9 +232,11 @@ other setting, so treat them as secrets.
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -323,16 +334,18 @@ struct AgendaSnapshot {
     std::vector<AgendaEntry> agenda;
 };
 
-[[clang::no_destroy]] std::mutex g_settingsMutex;
-[[clang::no_destroy]] ModSettings g_settings;
+std::mutex g_settingsMutex;
+ModSettings g_settings;
 
-[[clang::no_destroy]] std::mutex g_snapshotMutex;
-[[clang::no_destroy]] AgendaSnapshot g_snapshot;
+std::mutex g_snapshotMutex;
+AgendaSnapshot g_snapshot;
+std::atomic<uint64_t> g_snapshotGeneration{0};
+std::atomic<uint64_t> g_settingsGeneration{0};
 
 std::atomic<bool> g_unloading{false};
 std::atomic<bool> g_workerStop{false};
 HANDLE g_workerWakeEvent = nullptr;
-[[clang::no_destroy]] std::thread g_workerThread;
+[[clang::no_destroy]] std::optional<std::thread> g_workerThread;
 
 std::atomic<HWND> g_taskbarWnd{nullptr};
 [[clang::no_destroy]] Button g_agendaGrid{nullptr};
@@ -357,9 +370,6 @@ bool g_widgetHoverHasTokens = false;
 bool g_trayHovered = false;
 bool g_trayPopupOpen = false;
 [[clang::no_destroy]] Popup g_agendaPopup{nullptr};
-[[clang::no_destroy]] Button g_refreshFooterButton{nullptr};
-winrt::event_token g_refreshFooterToken{};
-bool g_refreshFooterHasToken = false;
 [[clang::no_destroy]] Button g_enterMeetingButton{nullptr};
 winrt::event_token g_enterMeetingToken{};
 bool g_enterMeetingHasToken = false;
@@ -506,6 +516,7 @@ void LoadSettings() {
 
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     g_settings = std::move(s);
+    g_settingsGeneration.fetch_add(1, std::memory_order_relaxed);
 }
 
 ModSettings SettingsCopy() {
@@ -890,6 +901,7 @@ AgendaSnapshot SnapshotWithAgeLimit(AgendaSnapshot snapshot,
 void PublishSnapshot(AgendaSnapshot snapshot) {
     std::lock_guard<std::mutex> lock(g_snapshotMutex);
     g_snapshot = std::move(snapshot);
+    g_snapshotGeneration.fetch_add(1, std::memory_order_relaxed);
 }
 
 AgendaSnapshot SnapshotCopy() {
@@ -915,8 +927,8 @@ constexpr char kCalendarListReadonlyScope[] =
     "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
 constexpr wchar_t kRefreshTokenValueName[] = L"google_refresh_token_v1";
 constexpr wchar_t kNotifiedValueName[] = L"notified_v1";
-constexpr wchar_t kToastAumid[] = L"TrayAgenda";
-constexpr wchar_t kToastDisplayName[] = L"Tray Agenda";
+// File Explorer's own AUMID is already registered, so no registry write is needed.
+constexpr wchar_t kToastAumid[] = L"Microsoft.Windows.Explorer";
 constexpr size_t kMaxApiResponseBytes = 4 * 1024 * 1024;
 constexpr size_t kMaxTokenResponseBytes = 64 * 1024;
 constexpr int kMaxCalendars = 16;
@@ -1153,7 +1165,7 @@ struct GoogleAccount {
 
 constexpr wchar_t kAccountsValueName[] = L"google_accounts_v1";
 constexpr size_t kMaxAccounts = 4;
-[[clang::no_destroy]] std::mutex g_accountsMutex;
+std::mutex g_accountsMutex;
 
 bool IsHexId(const std::string& id) {
     if (id.size() != 8) return false;
@@ -1213,12 +1225,6 @@ bool LoadRefreshToken(const std::string& id, std::string* token) {
     return true;
 }
 
-bool HasStoredRefreshToken(const std::string& id) {
-    if (!IsHexId(id)) return false;
-    char buffer[8192];
-    return Wh_GetBinaryValue(AccountTokenValueName(id).c_str(), buffer, sizeof(buffer)) != 0;
-}
-
 void ClearRefreshToken(const std::string& id) {
     if (IsHexId(id)) Wh_DeleteValue(AccountTokenValueName(id).c_str());
 }
@@ -1266,9 +1272,9 @@ enum class AuthState : int {
 
 std::atomic<int> g_authState{static_cast<int>(AuthState::SignedOut)};
 std::atomic<bool> g_signingIn{false};
-[[clang::no_destroy]] std::mutex g_authNoteMutex;
-[[clang::no_destroy]] std::wstring g_authNote;
-[[clang::no_destroy]] std::map<std::string, std::wstring> g_accountNotes;
+std::mutex g_authNoteMutex;
+std::wstring g_authNote;
+std::map<std::string, std::wstring> g_accountNotes;
 
 AuthState GetAuthState() {
     return static_cast<AuthState>(g_authState.load(std::memory_order_relaxed));
@@ -1330,8 +1336,8 @@ struct HttpResponse {
     std::wstring location;  // Location header of a 3xx response
 };
 
-[[clang::no_destroy]] std::mutex g_httpMutex;
-[[clang::no_destroy]] std::vector<HINTERNET> g_httpSessions;
+std::mutex g_httpMutex;
+std::vector<HINTERNET> g_httpSessions;
 
 // Closing a WinHTTP session handle cancels any request in flight on it, which
 // keeps mod unload from waiting on a slow network.
@@ -1486,8 +1492,8 @@ struct CachedAccessToken {
     std::string token;
     int64_t expiryUnix = 0;
 };
-[[clang::no_destroy]] std::mutex g_accessTokenMutex;
-[[clang::no_destroy]] std::map<std::string, CachedAccessToken> g_accessTokens;
+std::mutex g_accessTokenMutex;
+std::map<std::string, CachedAccessToken> g_accessTokens;
 
 void CacheAccessToken(const std::string& accountId, const std::string& token, int64_t expiresIn) {
     std::lock_guard<std::mutex> lock(g_accessTokenMutex);
@@ -1561,8 +1567,8 @@ std::wstring FetchPrimaryCalendarId(const std::string& accessToken) {
 // --- Interactive sign-in (system browser + loopback redirect + PKCE) -----------
 
 std::atomic<bool> g_signInCancel{false};
-[[clang::no_destroy]] std::thread g_signInThread;
-[[clang::no_destroy]] std::mutex g_signInMutex;
+[[clang::no_destroy]] std::optional<std::thread> g_signInThread;
+std::mutex g_signInMutex;
 
 struct ScopedSocket {
     SOCKET handle = INVALID_SOCKET;
@@ -1624,6 +1630,8 @@ std::string QueryParam(const std::string& target, const std::string& key) {
 }
 
 void SignInThreadProc() {
+    const bool comInitialized =
+        SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE));
     ModSettings settings = SettingsCopy();
     std::wstring failure;
     bool wsaStarted = false;
@@ -1716,9 +1724,8 @@ void SignInThreadProc() {
                 continue;
             }
             if (QueryParam(target, "state") != state) {
+                // Not our request (stray or forged): ignore it and keep waiting.
                 SendHtmlResponse(client.handle, 400, "Bad Request", "Sign-in state mismatch");
-                failure = L"Sign-in was rejected (state mismatch).";
-                gotAnswer = true;
                 continue;
             }
             if (!error.empty()) {
@@ -1786,10 +1793,11 @@ void SignInThreadProc() {
 
     if (wsaStarted) WSACleanup();
     SetAuthNote(success ? std::wstring() : failure);
-    if (!success) Wh_Log(L"Tray Agenda: sign-in failed (%s)", failure.c_str());
+    if (!success) Wh_Log(L"sign-in failed (%s)", failure.c_str());
     g_signingIn = false;
     ReevaluateAuthState(SettingsCopy());
     if (g_workerWakeEvent) SetEvent(g_workerWakeEvent);
+    if (comInitialized) CoUninitialize();
 }
 
 void StartSignIn() {
@@ -1805,17 +1813,20 @@ void StartSignIn() {
         SetAuthNote(L"The maximum number of Google accounts is already connected.");
         return;
     }
-    if (g_signInThread.joinable()) g_signInThread.join();
+    if (g_signInThread) {
+        if (g_signInThread->joinable()) g_signInThread->join();
+        g_signInThread.reset();
+    }
     g_signInCancel = false;
     g_refreshUiState = static_cast<int>(RefreshUiState::None);
     SetAuthNote(L"");
     g_signingIn = true;
     ReevaluateAuthState(settings);
-    g_signInThread = std::thread(SignInThreadProc);
+    g_signInThread.emplace(SignInThreadProc);
 }
 
-[[clang::no_destroy]] std::mutex g_revokeMutex;
-[[clang::no_destroy]] std::vector<std::string> g_revokeTokens;
+std::mutex g_revokeMutex;
+std::vector<std::string> g_revokeTokens;
 
 void SignOutAccount(const std::string& id) {
     std::string refresh;
@@ -2143,7 +2154,13 @@ FetchFailure GoogleGet(const ModSettings& settings, const GoogleAccount& account
 
 AgendaEntry::ResponseState ResponseStateFromAttendees(JsonObject const& item) {
     JsonArray attendees = JsonArrayOf(item, L"attendees");
-    if (!attendees) return AgendaEntry::ResponseState::Neutral;
+    if (!attendees) {
+        // Google returns no attendee list for events without guests. Such an event on the
+        // user's own calendar is the user's own event: treat it as accepted so it gets reminders.
+        bool own = JsonBool(JsonObjectOf(item, L"organizer"), L"self") ||
+                   JsonBool(JsonObjectOf(item, L"creator"), L"self");
+        return own ? AgendaEntry::ResponseState::Accepted : AgendaEntry::ResponseState::Neutral;
+    }
     int selfCount = 0;
     std::wstring status;
     for (uint32_t i = 0; i < attendees.Size(); ++i) {
@@ -2312,7 +2329,8 @@ FetchOutcome FetchGoogleEvents(const ModSettings& settings, int64_t now,
     const std::wstring timeMax = FormatRfc3339Utc(now + kFetchFutureSeconds);
     const std::string fields = UrlEncode(
         "items(id,iCalUID,status,eventType,summary,location,description,hangoutLink,"
-        "conferenceData(entryPoints(uri)),attendees(self,responseStatus),start,end),"
+        "conferenceData(entryPoints(uri)),attendees(self,responseStatus),organizer(self),"
+        "creator(self),start,end),"
         "nextPageToken");
     int succeeded = 0;
     FetchFailure firstFailure = FetchFailure::None;
@@ -2544,11 +2562,18 @@ bool WindowsZoneToUnix(const std::string& name, const IcsTime& t, int64_t* unix)
 
 // IANA zone ids ("America/Sao_Paulo") via Windows.Globalization.Calendar. The offset is found
 // by asking the calendar for the local wall time of a candidate instant.
+[[clang::no_destroy]] std::map<std::string, winrt::Windows::Globalization::Calendar> g_zoneCalendars;
+
+// Called on the worker thread before its WinRT apartment is torn down.
+void ClearZoneCalendars() {
+    g_zoneCalendars.clear();
+}
+
 bool IanaZoneToUnix(const std::string& tzid, const IcsTime& t, int64_t* unix) {
     using winrt::Windows::Globalization::Calendar;
     using winrt::Windows::Globalization::CalendarIdentifiers;
     using winrt::Windows::Globalization::ClockIdentifiers;
-    static std::map<std::string, Calendar>* cache = new std::map<std::string, Calendar>();
+    auto* cache = &g_zoneCalendars;
     try {
         auto it = cache->find(tzid);
         if (it == cache->end()) {
@@ -2781,7 +2806,7 @@ bool ParseIntStrict(const std::string& text, int* out) {
     return true;
 }
 
-bool ParseIcsRule(const std::string& text, const IcsTime& start, IcsRule* rule) {
+bool ParseIcsRule(const std::string& text, IcsRule* rule) {
     IcsRule out;
     for (const auto& part : SplitString(text, ';')) {
         size_t eq = part.find('=');
@@ -2831,7 +2856,6 @@ bool ParseIcsRule(const std::string& text, const IcsTime& start, IcsRule* rule) 
         out.freq != "YEARLY") {
         return false;
     }
-    (void)start;
     *rule = std::move(out);
     return true;
 }
@@ -2940,7 +2964,7 @@ std::vector<IcsOccurrence> ExpandIcsEvent(const IcsEvent& ev, int64_t winStart, 
     }
 
     IcsRule rule;
-    bool recurring = !ev.rrule.empty() && ParseIcsRule(ev.rrule, ev.start, &rule);
+    bool recurring = !ev.rrule.empty() && ParseIcsRule(ev.rrule, &rule);
     if (!recurring) {
         IcsOccurrence occ;
         if (makeOccurrence(ev.start, &occ) && overlaps(occ) && !excluded.count(occ.start)) {
@@ -3306,6 +3330,7 @@ bool SelectWidgetEntry(const std::vector<AgendaEntry>& agenda, int64_t now,
     std::vector<AgendaEntry> active, soon, upcoming;
     for (const auto& e : agenda) {
         if (e.allDay || e.endUnix <= now) continue;
+        if (e.responseState == AgendaEntry::ResponseState::Declined) continue;  // never headline
         if (e.startUnix <= now) active.push_back(e);
         else if (e.startUnix <= now + leadSeconds) soon.push_back(e);
         else if (e.startUnix <= now + kPreviewWindowSeconds) upcoming.push_back(e);
@@ -3363,7 +3388,7 @@ struct ToastItem {
     std::wstring url;
 };
 
-[[clang::no_destroy]] std::map<std::string, int64_t> g_notified;
+std::map<std::string, int64_t> g_notified;
 
 std::string NotificationKey(const AgendaEntry& e, const char* kind) {
     std::string raw = WideToUtf8(e.source) + '\x1f' + WideToUtf8(e.title) + '\x1f' +
@@ -3429,12 +3454,6 @@ std::wstring XmlEscape(const std::wstring& text) {
     return out;
 }
 
-void EnsureToastRegistration() {
-    std::wstring subKey = std::wstring(L"Software\\Classes\\AppUserModelId\\") + kToastAumid;
-    RegSetKeyValueW(HKEY_CURRENT_USER, subKey.c_str(), L"DisplayName", REG_SZ, kToastDisplayName,
-                    static_cast<DWORD>((wcslen(kToastDisplayName) + 1) * sizeof(wchar_t)));
-}
-
 bool ShowToast(const ToastItem& item) {
     try {
         std::wstring xml = L"<toast";
@@ -3455,7 +3474,7 @@ bool ShowToast(const ToastItem& item) {
             .Show(toast);
         return true;
     } catch (...) {
-        LogCaughtException(L"Tray Agenda: show toast");
+        LogCaughtException(L"show toast");
         return false;
     }
 }
@@ -3548,9 +3567,8 @@ void ProviderWorkerMain() {
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
         apartmentReady = true;
     } catch (...) {
-        LogCaughtException(L"Tray Agenda: worker apartment");
+        LogCaughtException(L"worker apartment");
     }
-    EnsureToastRegistration();
     LoadNotifiedState();
 
     int64_t nextFetch = 0;
@@ -3632,6 +3650,7 @@ void ProviderWorkerMain() {
         WaitForSingleObject(g_workerWakeEvent, waitMs);
     }
 
+    ClearZoneCalendars();
     if (apartmentReady) winrt::uninit_apartment();
 }
 
@@ -3639,7 +3658,10 @@ void ProviderShutdown() {
     g_signInCancel = true;
     AbortAllHttp();
     std::lock_guard<std::mutex> lock(g_signInMutex);
-    if (g_signInThread.joinable()) g_signInThread.join();
+    if (g_signInThread) {
+        if (g_signInThread->joinable()) g_signInThread->join();
+        g_signInThread.reset();
+    }
 }
 
 WindowThreadRunResult RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param) {
@@ -3667,7 +3689,7 @@ WindowThreadRunResult RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void
             proc(param);
             result.callbackSucceeded = true;
         } catch (...) {
-            LogCaughtException(L"Tray Agenda: RunFromWindowThread direct callback");
+            LogCaughtException(L"RunFromWindowThread direct callback");
         }
         return result;
     }
@@ -3687,7 +3709,7 @@ WindowThreadRunResult RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void
                         payload->callbackSucceeded = true;
                     } catch (...) {
                         payload->callbackSucceeded = false;
-                        LogCaughtException(L"Tray Agenda: RunFromWindowThread hook callback");
+                        LogCaughtException(L"RunFromWindowThread hook callback");
                     }
                 }
             }
@@ -3844,8 +3866,8 @@ struct InjectionTarget {
 };
 
 bool g_taskbarRootInjection = false;
-Grid g_taskbarRootGrid{nullptr};
-FrameworkElement g_taskbarAnchor{nullptr};
+[[clang::no_destroy]] Grid g_taskbarRootGrid{nullptr};
+[[clang::no_destroy]] FrameworkElement g_taskbarAnchor{nullptr};
 bool g_taskbarAfterAnchor = false;
 winrt::event_token g_taskbarLayoutToken{};
 bool g_taskbarLayoutHasToken = false;
@@ -3886,7 +3908,7 @@ InjectionTarget ResolveInjectionTarget(FrameworkElement const& root,
         if (rootGrid && anchor) {
             return {rootGrid, -1, true, anchor, after};
         }
-        Wh_Log(L"Tray Agenda: taskbar anchor unavailable for selected position; falling back");
+        Wh_Log(L"taskbar anchor unavailable for selected position; falling back");
         return {};
     }
 
@@ -3928,7 +3950,7 @@ InjectionTarget ResolveInjectionTarget(FrameworkElement const& root,
         return {trayPanel, slot};
     }
 
-    Wh_Log(L"Tray Agenda: tray anchor unavailable for selected position; falling back");
+    Wh_Log(L"tray anchor unavailable for selected position; falling back");
     return {};
 }
 
@@ -3967,7 +3989,7 @@ void UpdateTaskbarWidgetPosition() {
             g_agendaGrid.Margin({x, margin.Top, margin.Right, margin.Bottom});
         }
     } catch (...) {
-        Wh_Log(L"Tray Agenda: taskbar anchor position update failed");
+        Wh_Log(L"taskbar anchor position update failed");
     }
 }
 
@@ -4026,7 +4048,7 @@ void UpdateTrayVisual() {
             !active ? Color{0, 255, 255, 255}
                     : (dark ? Color{0x0F, 255, 255, 255} : Color{0x99, 255, 255, 255})));
     } catch (...) {
-        LogCaughtException(L"Tray Agenda: tray hover fill");
+        LogCaughtException(L"tray hover fill");
     }
 
     // The 1px elevation border is set on its own so a gradient failure can
@@ -4050,7 +4072,7 @@ void UpdateTrayVisual() {
         gradient.GradientStops().Append(bottom);
         g_trayVisual.BorderBrush(gradient);
     } catch (...) {
-        LogCaughtException(L"Tray Agenda: tray hover border");
+        LogCaughtException(L"tray hover border");
         try {
             g_trayVisual.BorderBrush(MakeBrush(active ? topColor : Color{0, 255, 255, 255}));
         } catch (...) {
@@ -4073,7 +4095,7 @@ Button BuildAgendaWidget() {
     try {
         outer.Style(MakeTrayButtonStyle());
     } catch (...) {
-        LogCaughtException(L"Tray Agenda: tray button style");
+        LogCaughtException(L"tray button style");
         outer.BorderThickness({0, 0, 0, 0});
         outer.Background(MakeBrush({0, 0, 0, 0}));
     }
@@ -4545,7 +4567,7 @@ bool ShowAgendaPopupAtTray(Button const& trayWidget, Popup const& popup,
         popup.IsOpen(true);
         return true;
     } catch (...) {
-        LogCaughtException(L"Tray Agenda: position agenda popup");
+        LogCaughtException(L"position agenda popup");
         return false;
     }
 }
@@ -4575,7 +4597,7 @@ void RevokePopupActionHandlers() {
     try {
         if (g_meetingSubmenu) g_meetingSubmenu.IsOpen(false);
     } catch (...) {
-        LogCaughtException(L"Tray Agenda: close meeting submenu");
+        LogCaughtException(L"close meeting submenu");
     }
     g_meetingSubmenu = nullptr;
 
@@ -4583,21 +4605,10 @@ void RevokePopupActionHandlers() {
         try {
             if (binding.button) binding.button.Click(binding.token);
         } catch (...) {
-            LogCaughtException(L"Tray Agenda: revoke agenda row handler");
+            LogCaughtException(L"revoke agenda row handler");
         }
     }
     g_rowActionBindings.clear();
-
-    try {
-        if (g_refreshFooterButton && g_refreshFooterHasToken) {
-            g_refreshFooterButton.Click(g_refreshFooterToken);
-        }
-    } catch (...) {
-        LogCaughtException(L"Tray Agenda: revoke refresh footer handler");
-    }
-    g_refreshFooterToken = {};
-    g_refreshFooterHasToken = false;
-    g_refreshFooterButton = nullptr;
 
 
     try {
@@ -4605,7 +4616,7 @@ void RevokePopupActionHandlers() {
             g_enterMeetingButton.Click(g_enterMeetingToken);
         }
     } catch (...) {
-        LogCaughtException(L"Tray Agenda: revoke meeting handler");
+        LogCaughtException(L"revoke meeting handler");
     }
     g_enterMeetingToken = {};
     g_enterMeetingHasToken = false;
@@ -4621,7 +4632,7 @@ void CloseAgendaPopup() {
             g_agendaPopup.Child(nullptr);
         }
     } catch (...) {
-        LogCaughtException(L"Tray Agenda: close agenda popup");
+        LogCaughtException(L"close agenda popup");
     }
     g_popupClosedToken = {};
     g_popupClosedHasToken = false;
@@ -4660,7 +4671,7 @@ void OpenMeetingBinding(int64_t startUnix, int64_t endUnix, int64_t generatedUni
         ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         if (g_agendaPopup) g_agendaPopup.IsOpen(false);
     } catch (...) {
-        LogCaughtException(L"Tray Agenda: open meeting");
+        LogCaughtException(L"open meeting");
     }
 }
 
@@ -4738,7 +4749,7 @@ void ShowMeetingSubmenu(Button const& source, int64_t startUnix, int64_t endUnix
         g_meetingSubmenu.VerticalOffset(y);
         g_meetingSubmenu.IsOpen(true);
     } catch (...) {
-        LogCaughtException(L"Tray Agenda: show meeting submenu");
+        LogCaughtException(L"show meeting submenu");
     }
 }
 
@@ -4987,7 +4998,7 @@ void ShowAgendaFlyout() {
             g_agendaPopup.IsOpen(false);
         }
     } catch (...) {
-        LogCaughtException(L"Tray Agenda: show flyout");
+        LogCaughtException(L"show flyout");
     }
 }
 
@@ -5028,11 +5039,7 @@ void UpdateAgendaWidgetFromSnapshot() {
             }
             std::wstring subject = LimitTitle(headline.title, settings.max_title_characters);
             compactTime = active ? L"now" : FormatRelativeToNow(headline.startUnix);
-            if (active) {
-                title = subject;
-            } else {
-                title = subject;
-            }
+            title = subject;
             AgendaSnapshot headlineSnapshot = snapshot;
             headlineSnapshot.location = headline.location;
             headlineSnapshot.source = headline.source;
@@ -5142,11 +5149,6 @@ void UpdateAgendaWidgetFromSnapshot() {
     SetText(kTimeName, compactTime, secondary, true);
     SetAccentColor(accentGlyph ? SourceAccentColor(compactSource, foreground)
                                : Dimmed(foreground, 105));
-
-    try {
-        g_agendaGrid.UpdateLayout();
-    } catch (...) {
-    }
 }
 
 bool StopUiTimer() {
@@ -5158,7 +5160,7 @@ bool StopUiTimer() {
             }
         }
     } catch (...) {
-        LogCaughtException(L"Tray Agenda: stop UI timer");
+        LogCaughtException(L"stop UI timer");
         return false;
     }
 
@@ -5168,16 +5170,31 @@ bool StopUiTimer() {
     return true;
 }
 
+std::tuple<uint64_t, uint64_t, int, int, int64_t> g_uiLastKey;
+bool g_uiLastKeyValid = false;
+
 void UiTimerTick(winrt::Windows::Foundation::IInspectable const&,
                  winrt::Windows::Foundation::IInspectable const&) {
     if (g_unloading || !g_agendaGrid) {
         return;
     }
 
+    // The widget only changes when a new snapshot or settings arrive, when the auth or
+    // refresh state changes, or as the clock moves ("in 12m"), so most ticks do nothing.
+    const auto key = std::make_tuple(g_snapshotGeneration.load(std::memory_order_relaxed),
+                                     g_settingsGeneration.load(std::memory_order_relaxed),
+                                     static_cast<int>(GetAuthState()),
+                                     g_refreshUiState.load(std::memory_order_relaxed),
+                                     NowUnix() / 15);
+    if (g_uiLastKeyValid && key == g_uiLastKey) {
+        return;
+    }
     try {
         UpdateAgendaWidgetFromSnapshot();
+        g_uiLastKey = key;
+        g_uiLastKeyValid = true;
     } catch (...) {
-        LogCaughtException(L"Tray Agenda: UI timer update");
+        LogCaughtException(L"UI timer update");
     }
 }
 
@@ -5189,6 +5206,7 @@ void StartUiTimer() {
     if (!StopUiTimer()) {
         return;
     }
+    g_uiLastKeyValid = false;
     try {
         g_uiTimer = DispatcherTimer();
         g_uiTimer.Interval(winrt::Windows::Foundation::TimeSpan{
@@ -5198,7 +5216,7 @@ void StartUiTimer() {
         g_uiTimer.Start();
     } catch (...) {
         StopUiTimer();
-        LogCaughtException(L"Tray Agenda: start UI timer");
+        LogCaughtException(L"start UI timer");
     }
 }
 
@@ -5207,11 +5225,11 @@ void WorkerThreadProc() {
 }
 
 void StartWorkerThread() {
-    if (g_workerThread.joinable()) {
+    if (g_workerThread) {
         return;
     }
     g_workerStop = false;
-    g_workerThread = std::thread(WorkerThreadProc);
+    g_workerThread.emplace(WorkerThreadProc);
 }
 
 void StopWorkerThread() {
@@ -5221,8 +5239,9 @@ void StopWorkerThread() {
     if (g_workerWakeEvent) {
         SetEvent(g_workerWakeEvent);
     }
-    if (g_workerThread.joinable()) {
-        g_workerThread.join();
+    if (g_workerThread) {
+        if (g_workerThread->joinable()) g_workerThread->join();
+        g_workerThread.reset();
     }
     ProviderShutdown();
 }
@@ -5274,13 +5293,13 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
                           ? FindWindowExW(hTaskbarWnd, nullptr, L"WorkerW", nullptr)
                           : reinterpret_cast<HWND>(GetPropW(hTaskbarWnd, L"TaskbandHWND"));
     if (!hTaskSwWnd) {
-        Wh_Log(L"Tray Agenda: could not find taskband host window");
+        Wh_Log(L"could not find taskband host window");
         return nullptr;
     }
 
     void* taskBand = reinterpret_cast<void*>(GetWindowLongPtrW(hTaskSwWnd, 0));
     if (!taskBand) {
-        Wh_Log(L"Tray Agenda: taskBand pointer is null");
+        Wh_Log(L"taskBand pointer is null");
         return nullptr;
     }
 
@@ -5289,7 +5308,7 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
     auto getTaskbarHost = isSecondary ? CSecondaryTaskBand_GetTaskbarHost_Original
                                       : CTaskBand_GetTaskbarHost_Original;
     if (!expectedVftable || !getTaskbarHost || !TaskbarHost_FrameHeight_Original) {
-        Wh_Log(L"Tray Agenda: required taskbar symbols were not resolved");
+        Wh_Log(L"required taskbar symbols were not resolved");
         return nullptr;
     }
 
@@ -5298,14 +5317,14 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
     int slot = 0;
     for (;; ++slot) {
         if (!IsReadableMemoryRange(taskBandForTaskListWndSite, sizeof(void*))) {
-            Wh_Log(L"Tray Agenda: unreadable taskBand slot %d", slot);
+            Wh_Log(L"unreadable taskBand slot %d", slot);
             return nullptr;
         }
         if (*reinterpret_cast<void**>(taskBandForTaskListWndSite) == expectedVftable) {
             break;
         }
         if (slot == kMaxSlotsToScan) {
-            Wh_Log(L"Tray Agenda: ITaskListWndSite vftable not found");
+            Wh_Log(L"ITaskListWndSite vftable not found");
             return nullptr;
         }
         taskBandForTaskListWndSite = reinterpret_cast<void**>(taskBandForTaskListWndSite) + 1;
@@ -5317,7 +5336,7 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
         if (taskbarHostSharedPtr[1] && Std_Ref_Decref_Original) {
             Std_Ref_Decref_Original(taskbarHostSharedPtr[1]);
         }
-        Wh_Log(L"Tray Agenda: TaskbarHost shared_ptr is empty");
+        Wh_Log(L"TaskbarHost shared_ptr is empty");
         return nullptr;
     }
 
@@ -5357,7 +5376,7 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
         if (taskbarHostSharedPtr[1] && Std_Ref_Decref_Original) {
             Std_Ref_Decref_Original(taskbarHostSharedPtr[1]);
         }
-        Wh_Log(L"Tray Agenda: unsupported TaskbarHost::FrameHeight pattern");
+        Wh_Log(L"unsupported TaskbarHost::FrameHeight pattern");
         return nullptr;
     }
 
@@ -5367,7 +5386,7 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
         if (taskbarHostSharedPtr[1] && Std_Ref_Decref_Original) {
             Std_Ref_Decref_Original(taskbarHostSharedPtr[1]);
         }
-        Wh_Log(L"Tray Agenda: taskbarElementIUnknown is null");
+        Wh_Log(L"taskbarElementIUnknown is null");
         return nullptr;
     }
 
@@ -5391,7 +5410,7 @@ bool RemoveAgendaWidget() {
     } catch (...) {
         popupClosed = false;
         cleanupSucceeded = false;
-        LogCaughtException(L"Tray Agenda: close agenda popup");
+        LogCaughtException(L"close agenda popup");
     }
 
     try {
@@ -5401,7 +5420,7 @@ bool RemoveAgendaWidget() {
     } catch (...) {
         taskbarLayoutRevoked = false;
         cleanupSucceeded = false;
-        LogCaughtException(L"Tray Agenda: revoke taskbar position handler");
+        LogCaughtException(L"revoke taskbar position handler");
     }
     if (taskbarLayoutRevoked) g_taskbarLayoutToken = {};
     g_taskbarLayoutHasToken = !taskbarLayoutRevoked;
@@ -5417,7 +5436,7 @@ bool RemoveAgendaWidget() {
     } catch (...) {
         clickHandlerRevoked = false;
         cleanupSucceeded = false;
-        LogCaughtException(L"Tray Agenda: revoke widget click handler");
+        LogCaughtException(L"revoke widget click handler");
     }
     if (clickHandlerRevoked) {
         g_widgetClickToken = {};
@@ -5428,7 +5447,7 @@ bool RemoveAgendaWidget() {
             g_agendaGrid.PointerExited(g_widgetExitToken);
         }
     } catch (...) {
-        LogCaughtException(L"Tray Agenda: revoke widget hover handlers");
+        LogCaughtException(L"revoke widget hover handlers");
     }
     g_widgetEnterToken = {};
     g_widgetExitToken = {};
@@ -5443,7 +5462,7 @@ bool RemoveAgendaWidget() {
             g_injectionParent = nullptr;
             g_agendaColumn = -1;
             if (!cleanupSucceeded) {
-                Wh_Log(L"Tray Agenda: cleanup incomplete (popup=%d, click=%d, taskbarPosition=%d)",
+                Wh_Log(L"cleanup incomplete (popup=%d, click=%d, taskbarPosition=%d)",
                        popupClosed ? 1 : 0, clickHandlerRevoked ? 1 : 0,
                        taskbarLayoutRevoked ? 1 : 0);
             }
@@ -5470,7 +5489,7 @@ bool RemoveAgendaWidget() {
             grid.ColumnDefinitions().RemoveAt(column);
         }
     } catch (...) {
-        Wh_Log(L"Tray Agenda: exception while removing widget");
+        Wh_Log(L"exception while removing widget");
         cleanupSucceeded = false;
     }
 
@@ -5478,7 +5497,7 @@ bool RemoveAgendaWidget() {
     g_injectionParent = nullptr;
     g_agendaColumn = -1;
     if (!cleanupSucceeded) {
-        Wh_Log(L"Tray Agenda: cleanup incomplete (popup=%d, click=%d, taskbarPosition=%d)",
+        Wh_Log(L"cleanup incomplete (popup=%d, click=%d, taskbarPosition=%d)",
                popupClosed ? 1 : 0, clickHandlerRevoked ? 1 : 0,
                taskbarLayoutRevoked ? 1 : 0);
     }
@@ -5496,7 +5515,7 @@ bool InjectAgendaWidget() {
         hWnd = FindCurrentProcessTaskbarWnd();
     }
     if (!hWnd) {
-        Wh_Log(L"Tray Agenda: taskbar window not found");
+        Wh_Log(L"taskbar window not found");
         return false;
     }
     g_taskbarWnd.store(hWnd, std::memory_order_relaxed);
@@ -5509,18 +5528,18 @@ bool InjectAgendaWidget() {
 
         auto root = xamlRoot.Content().try_as<FrameworkElement>();
         if (!root) {
-            Wh_Log(L"Tray Agenda: taskbar XAML root content missing");
+            Wh_Log(L"taskbar XAML root content missing");
             return false;
         }
 
         auto target = ResolveInjectionTarget(root, settings.position);
         if (!target.panel) {
             if (settings.position != L"tray_before_clock") {
-                Wh_Log(L"Tray Agenda: selected position unavailable; falling back to tray_before_clock");
+                Wh_Log(L"selected position unavailable; falling back to tray_before_clock");
                 target = ResolveInjectionTarget(root, L"tray_before_clock");
             }
             if (!target.panel) {
-                Wh_Log(L"Tray Agenda: tray_before_clock anchor unavailable");
+                Wh_Log(L"tray_before_clock anchor unavailable");
                 return false;
             }
         }
@@ -5589,7 +5608,7 @@ bool InjectAgendaWidget() {
         StartUiTimer();
         return true;
     } catch (...) {
-        Wh_Log(L"Tray Agenda: exception while injecting widget");
+        Wh_Log(L"exception while injecting widget");
         g_agendaGrid = nullptr;
         g_injectionParent = nullptr;
         g_agendaColumn = -1;
@@ -5616,7 +5635,7 @@ bool StopRetryTimer() {
             }
         }
     } catch (...) {
-        LogCaughtException(L"Tray Agenda: stop retry timer");
+        LogCaughtException(L"stop retry timer");
         return false;
     }
 
@@ -5653,7 +5672,7 @@ void ApplySettingsWithRetry(FrameworkElement xamlRootContent, int retryCount) {
                                    : nullptr;
     if (!systemTrayFrameGrid) {
         if (retryCount >= kMaxRetries) {
-            Wh_Log(L"Tray Agenda: SystemTrayFrameGrid not found after retries");
+            Wh_Log(L"SystemTrayFrameGrid not found after retries");
             return;
         }
 
@@ -5679,7 +5698,7 @@ void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     // down and before invoking the original rebuild path.
     HWND oldTaskbar = g_taskbarWnd.load(std::memory_order_relaxed);
     if (oldTaskbar && !CleanupTaskbarResources(oldTaskbar)) {
-        Wh_Log(L"Tray Agenda: taskbar rebuild started with incomplete cleanup");
+        Wh_Log(L"taskbar rebuild started with incomplete cleanup");
     }
     TrayUI_StartTaskbar_Original(pThis);
     try {
@@ -5689,7 +5708,7 @@ void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
 
         HWND hWnd = FindCurrentProcessTaskbarWnd();
         if (!hWnd) {
-            Wh_Log(L"Tray Agenda: TrayUI::StartTaskbar hook could not find taskbar window");
+            Wh_Log(L"TrayUI::StartTaskbar hook could not find taskbar window");
             return;
         }
 
@@ -5708,7 +5727,7 @@ void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
             SetEvent(g_workerWakeEvent);
         }
     } catch (...) {
-        LogCaughtException(L"Tray Agenda: TrayUI_StartTaskbar_Hook post-original logic");
+        LogCaughtException(L"TrayUI_StartTaskbar_Hook post-original logic");
     }
 }
 
@@ -5770,14 +5789,14 @@ bool CleanupTaskbarResources(HWND hWnd) {
     WindowThreadRunResult runResult = RunFromWindowThread(
         hWnd, CleanupTaskbarResourcesOnTaskbarThread, &cleanup);
     if (!runResult.Succeeded()) {
-        Wh_Log(L"Tray Agenda: taskbar cleanup marshal failed (dispatched=%d, ran=%d, callback=%d)",
+        Wh_Log(L"taskbar cleanup marshal failed (dispatched=%d, ran=%d, callback=%d)",
                runResult.dispatched ? 1 : 0, runResult.callbackRan ? 1 : 0,
                runResult.callbackSucceeded ? 1 : 0);
         return false;
     }
 
     if (!cleanup.Succeeded()) {
-        Wh_Log(L"Tray Agenda: taskbar cleanup incomplete (retryTimer=%d, uiTimer=%d, widget=%d)",
+        Wh_Log(L"taskbar cleanup incomplete (retryTimer=%d, uiTimer=%d, widget=%d)",
                cleanup.retryTimerStopped ? 1 : 0, cleanup.uiTimerStopped ? 1 : 0,
                cleanup.widgetRemoved ? 1 : 0);
         return false;
@@ -5795,12 +5814,12 @@ BOOL Wh_ModInit() {
 
     g_workerWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!g_workerWakeEvent) {
-        Wh_Log(L"Tray Agenda: failed to create worker wake event");
+        Wh_Log(L"failed to create worker wake event");
         return FALSE;
     }
 
     if (!HookTaskbarDllSymbols()) {
-        Wh_Log(L"Tray Agenda: failed to hook Taskbar.dll symbols");
+        Wh_Log(L"failed to hook Taskbar.dll symbols");
         CloseHandle(g_workerWakeEvent);
         g_workerWakeEvent = nullptr;
         return FALSE;
@@ -5836,7 +5855,7 @@ void Wh_ModAfterInit() {
 
             ApplySettingsWithRetry(content);
         } catch (...) {
-            LogCaughtException(L"Tray Agenda: after-init taskbar callback");
+            LogCaughtException(L"after-init taskbar callback");
         }
     }, hWnd);
 
@@ -5860,7 +5879,7 @@ void Wh_ModUninit() {
     }
 
     if (!taskbarCleanupSucceeded) {
-        Wh_Log(L"Tray Agenda: unsafe unload condition: taskbar-thread cleanup failed; skipping off-thread XAML/timer cleanup");
+        Wh_Log(L"unsafe unload condition: taskbar-thread cleanup failed; skipping off-thread XAML/timer cleanup");
     }
 
     if (g_workerWakeEvent) {
