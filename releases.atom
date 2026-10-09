@@ -2,12 +2,60 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-09T16:01:26.000Z</updated>
+    <updated>2026-10-09T21:03:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix Explorer Row Right-Click 1.0.0]]></title>
+        <id>https://windhawk.net/mods/fix-explorer-row-right-click#e2969bc12095d903c8e3fbf6da8c860e3b79d570</id>
+        <link href="https://windhawk.net/mods/fix-explorer-row-right-click"/>
+        <updated>2026-10-09T21:03:53.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fixexplorerrowrightclick">Fix Explorer Row Right-Click</h1>
+<p>Right-click anywhere on a file's row or item area to open its context menu, rather than having to click directly on the file name.</p>
+<h3 id="comparison">Comparison</h3>
+<p>| Before | After |
+| :---: | :---: |
+| <img src="https://i.imgur.com/ly9exsa.png" alt="Before" /> | <img src="https://i.imgur.com/PPW2Xtk.png" alt="After" /> |</p>
+<h3 id="features">Features</h3>
+<ul>
+<li><strong>Full row support:</strong> Right-clicking empty space across a row opens the selected file's context menu.</li>
+<li><strong>Selection safe:</strong> Preserves existing multi-item selections.</li>
+<li><strong>Folder background intact:</strong> Right-clicking below all files still opens the folder background menu.</li>
+</ul>]]></content>
+        <author>
+            <name>iMAboud</name>
+            <uri>https://github.com/iMAboud</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Animated Cross-Desktop Activation 0.6.0]]></title>
+        <id>https://windhawk.net/mods/animated-cross-desktop-window-animation#e52aa5b390cbd99ba2af1961bf2905efde59dd01</id>
+        <link href="https://windhawk.net/mods/animated-cross-desktop-window-animation"/>
+        <updated>2026-10-09T21:03:48.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="animatedcrossdesktopactivation">Animated Cross-Desktop Activation</h1>
+<p>Windows can jump to another virtual desktop without the normal desktop-switch
+animation when an application activates an existing window on that desktop.
+This mod intercepts only those activation-driven switches and replays them
+asynchronously through Windows' native virtual-desktop animation path.</p>
+<p>Intentional desktop navigation is left alone, including Win+Ctrl+Left/Right,
+Task View, touchpad gestures, and other normal virtual-desktop switch routes.</p>
+<p>Some applications briefly activate an old window on another desktop while they
+create the window that was actually requested on the current desktop. For apps
+listed in Settings, the mod holds the pending animated switch for a short grace
+period. If a new same-process window is added and becomes foreground on the
+current desktop during that period, the stale cross-desktop switch is discarded.
+No windows are moved between desktops.</p>
+<p>Windows Terminal is enabled for transient replacement suppression by default.</p>
+<p>Designed for Windows 11 24H2 and newer. Private shell interfaces and symbols can
+change in future Windows builds.</p>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteoni</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Per-App Titlebar Buttons 1.0]]></title>
         <id>https://windhawk.net/mods/per-app-titlebar-buttons#6a59d24ea77bc63bfb4e5e97fe3f41a2b1e81993</id>
@@ -2126,111 +2174,6 @@ update may rename it, in which case the mod will simply have no effect.</li>
         <author>
             <name>pajs</name>
             <uri>https://github.com/pajs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 Win+X restorer on Win11 24H2 1.0.0]]></title>
-        <id>https://windhawk.net/mods/windows-10-winx-restorer#3ee9f7c131cee7f86153433910a5ce62242c4744</id>
-        <link href="https://windhawk.net/mods/windows-10-winx-restorer"/>
-        <updated>2026-10-07T12:01:06.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows10winxrestoreronwin1124h2">Windows 10 Win+X restorer on Win11 24H2</h1>
-<p>This mod restores the power user menu (Win+X), without touching the registry and without replacing system files.</p>
-<p>Win+X opens the Windows 10 style menu of this mod on every chord; the native menu is not called into play.</p>
-<p>The menu is a recreation of the Windows 10 power user menu (Programs and Features, Power Options,
-Event Viewer, System, Device Manager, Network Connections, Disk Management, Computer Management,
-Terminal, Terminal (Admin), Task Manager, Settings, File Explorer, Run, Shut down or sign
-out, Desktop), localized in the same languages as the rebuilt Windows 10 shell menus.</p>
-<p>This mod has been tested on Windows 11 24H2.</p>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/winx.png" alt="winx.png" /></p>
-<h2 id="howitworks">How it works</h2>
-<ul>
-<li>A dedicated thread owns the low-level input hooks and only pumps messages. Nothing slow
-and nothing that can block runs on the hook thread, so Windows never removes the hook for
-exceeding <code>LowLevelHooksTimeout</code> and system input is never held up: a hook posts a private
-message and the thread does the work. The mouse hook looks at right button events only
-and resolves the Start button from the click with local queries, so a mouse move costs
-nothing.</li>
-<li>The menu opens on the taskbar the request came from: a right-click on the Start button of
-a secondary taskbar opens it there, while the Win+X chord opens it on the primary taskbar,
-as Windows 10 does.</li>
-<li>The menu is created on a thread of the mod, with an owner window of that thread: the
-taskbar thread is never used to show it, and no window of the shell is subclassed.
-<code>TrackPopupMenuEx</code> runs a modal loop on the thread that calls it, and doing that on the
-taskbar thread froze the private shell for as long as the menu was on screen (the
-desktop went black for seconds and the tray flyouts stopped answering).</li>
-<li>Only one menu can be open at a time, and the thread that shows it is joined when the
-mod is disabled or updated: an open menu is cancelled, so the mod is never unloaded
-while one of its threads is still running its code.</li>
-<li>Nothing is written to the registry. The mod acts only inside the Windows 10 shell
-process, i.e. an <code>explorer.exe</code> that is not <code>%SystemRoot%\explorer.exe</code>, and its hooks
-are armed only in the process that owns the taskbar (<code>Shell_TrayWnd</code>). The process
-image is read with <code>QueryFullProcessImageNameW</code>, which is not affected by the
-<code>GetModuleFileNameW</code> hook of the Fake Explorer path mod that the Windows 10 taskbar
-requires.</li>
-</ul>
-<h2 id="usingthekeyboard">Using the keyboard</h2>
-<p>The arrow keys and Enter work as in any menu. Pressing a letter chooses the entry whose label
-starts with that letter, when exactly one entry of the open menu does: the items are
-owner-drawn, so the mod answers <code>WM_MENUCHAR</code> itself. An ambiguous letter is ignored rather
-than guessed - in the power submenu, for example, R chooses Restart while S does nothing,
-because Sign out, Sleep and Shut down all start with it. The "Shut down or sign out" entry
-opens a submenu, which a letter does not choose: the arrows do.</p>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>While an elevated window has focus, the low-level hooks of a non-elevated Explorer do not
-receive keystrokes (UIPI), so Win+X reaches the native handler instead of this mod.</li>
-<li>Only the primary taskbar is used for the Win+X chord, which is what Windows 10 does.</li>
-</ul>
-<h2 id="requirements">Requirements</h2>
-<p>This mod requires the mod <a href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2">Win10 taskbar on Win11 24H2 or 25H2</a>:
-the Windows 10 taskbar must be present, and with it the mod Fake Explorer path, which that
-mod requires. In the Windows 11 shell this mod does nothing and is not kept loaded.</p>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Smooth Desktop Icons Auto-Hide 0.14.2]]></title>
-        <id>https://windhawk.net/mods/smooth-desktop-icons-auto-hide#710c26f9daae0dfec9e4d33374c67f9fd2a158f7</id>
-        <link href="https://windhawk.net/mods/smooth-desktop-icons-auto-hide"/>
-        <updated>2026-10-07T12:01:01.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="smoothdesktopiconsautohide">Smooth Desktop Icons Auto-Hide</h1>
-<p>Automatically hides desktop icons when you're not using the desktop and smoothly fades them back in when you are.</p>
-<p><img src="https://raw.githubusercontent.com/HeyOkay/SmoothDesktopAutoHide/main/assets/demo.gif" alt="Demo" /></p>
-<p><em>Dragging a file onto the desktop reveals the icons with a smooth fade-in; they fade out once the desktop loses focus.</em></p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Auto-hide.</strong> Icons fade out a few seconds after you leave the desktop. The countdown is paused while the desktop is the active surface, so icons never disappear while you're looking at them.</li>
-<li><strong>Click to show.</strong> A single click on empty desktop reveals the icons. Mouse movement alone never does.</li>
-<li><strong>Double-click to hide.</strong> Double-click empty desktop to hide the icons right away.</li>
-<li><strong>Drag & drop.</strong> Dragging a file onto the desktop reveals the icons before you drop it.</li>
-<li><strong>Win+D and Show desktop.</strong> Showing the desktop with <code>Win+D</code>, the taskbar's <strong>Show desktop</strong> button, or by minimizing the last window reveals the icons; leaving it starts a fresh countdown.</li>
-<li><strong>Smooth fade.</strong> Configurable duration, no wallpaper dimming, works on all Virtual Desktops.</li>
-<li><strong>Safe while hidden.</strong> Hidden icons can't be clicked and are deselected. Pressing a key on the desktop (including Delete, F2, Ctrl+A) reveals them instead of acting on invisible files.</li>
-</ul>
-<h2 id="howthisdiffersfromsimilarmods">How this differs from similar mods</h2>
-<ul>
-<li><strong><a href="https://windhawk.net/mods/zen-desktop-toggle-icons">ZenDesktop: Desktop Icon Toggle and Auto-Hide</a></strong> toggles icons by double-click and hides them after N seconds without any input anywhere in the system (<code>GetLastInputInfo()</code>), restoring them on any input. This mod instead ties auto-hide to the desktop itself: the countdown starts when the desktop stops being the active surface and is paused while you're on it. It also adds a smooth fade, reveals the icons with a <em>single</em> click on empty desktop, and reveals them when a file is dragged onto the desktop.</li>
-<li><strong><a href="https://windhawk.net/mods/desktop-icon-section-autohide">Desktop Icon Section Auto-Hide & Fluent Hover Reveal</a></strong> reveals icons on hover and offers modes, per-app pinning and click-and-hold peek. This mod deliberately does <strong>not</strong> react to mouse movement: icons appear only on an explicit action (click, drag, desktop activation) and stay while the desktop is in use. It has no modes or whitelist and only three settings.</li>
-</ul>
-<h2 id="howitworks">How it works</h2>
-<p>The desktop icon list is never hidden or made transparent as a window. Instead, the mod blends the icons, labels and selection highlights onto the wallpaper with the current opacity while Explorer paints them. Showing and hiding react to events (clicks, drag &amp; drop, the desktop becoming the active window) rather than constant polling, so the mod does nothing while idle. When the mod is disabled, everything is restored to Explorer's normal state.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Enable Auto-hide</strong> — hide icons automatically after leaving the desktop. When off, icons start visible and are hidden only by double-clicking empty desktop.</li>
-<li><strong>Hide after seconds</strong> — delay before icons are hidden (1–60, default 5).</li>
-<li><strong>Animation duration (ms)</strong> — fade duration (50–1000, default 250).</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>The paint-time opacity technique (blending icon and label drawing instead of making the ListView layered) follows <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/desktop-icon-section-autohide.wh.cpp">desktop-icon-section-autohide</a> by Piyush Das, which builds on <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/desktop-icons-transparency.wh.cpp">desktop-icons-transparency</a> by zed712969-crypto.</li>
-<li>Inspired by <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/zen-desktop-toggle-icons.wh.cpp">ZenDesktop: Desktop Icon Toggle and Auto-Hide</a> by Lanbo, including its desktop window discovery approach (CreateWindowExW hook, <code>Progman</code>/<code>WorkerW</code> enumeration, subclassing <code>SHELLDLL_DefView</code> and <code>SysListView32</code>).</li>
-</ul>]]></content>
-        <author>
-            <name>HeyOkay</name>
-            <uri>https://github.com/HeyOkay</uri>
         </author>
     </entry>
 </feed>

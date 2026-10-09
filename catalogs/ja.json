@@ -562,6 +562,33 @@
         "version": "1.0"
       }
     },
+    "animated-cross-desktop-window-animation": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791579828000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791579828000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "meteoni",
+        "compilerOptions": "-lole32",
+        "description": "Animates activation-driven virtual desktop switches and suppresses transient replacement-window switches.",
+        "github": "https://github.com/Meteoni",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Animated Cross-Desktop Activation",
+        "version": "0.6.0"
+      }
+    },
     "antigravity-portable": {
       "details": {
         "defaultSorting": 200,
@@ -6625,6 +6652,30 @@
         "version": "1.0"
       }
     },
+    "fix-explorer-row-right-click": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791579833000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791579833000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "iMAboud",
+        "compilerOptions": "-loleacc -loleaut32",
+        "description": "Fixes right-clicking on empty row space opening the folder background menu instead of the file menu.",
+        "github": "https://github.com/iMAboud",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Fix Explorer Row Right-Click",
+        "version": "1.0.0"
+      }
+    },
     "fix-explorer-white-flash": {
       "details": {
         "defaultSorting": 92880,
@@ -7559,7 +7610,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 0, 0, 2, 8],
         "ratingUsers": 10,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 16.7,
         "updated": 1791190807000,
         "users": 167

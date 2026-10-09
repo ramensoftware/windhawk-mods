@@ -2,12 +2,60 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-09T16:01:26.000Z</updated>
+    <updated>2026-10-09T21:03:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix Explorer Row Right-Click 1.0.0]]></title>
+        <id>https://windhawk.net/mods/fix-explorer-row-right-click#e2969bc12095d903c8e3fbf6da8c860e3b79d570</id>
+        <link href="https://windhawk.net/mods/fix-explorer-row-right-click"/>
+        <updated>2026-10-09T21:03:53.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fixexplorerrowrightclick">Fix Explorer Row Right-Click</h1>
+<p>Right-click anywhere on a file's row or item area to open its context menu, rather than having to click directly on the file name.</p>
+<h3 id="comparison">Comparison</h3>
+<p>| Before | After |
+| :---: | :---: |
+| <img src="https://i.imgur.com/ly9exsa.png" alt="Before" /> | <img src="https://i.imgur.com/PPW2Xtk.png" alt="After" /> |</p>
+<h3 id="features">Features</h3>
+<ul>
+<li><strong>Full row support:</strong> Right-clicking empty space across a row opens the selected file's context menu.</li>
+<li><strong>Selection safe:</strong> Preserves existing multi-item selections.</li>
+<li><strong>Folder background intact:</strong> Right-clicking below all files still opens the folder background menu.</li>
+</ul>]]></content>
+        <author>
+            <name>iMAboud</name>
+            <uri>https://github.com/iMAboud</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Animated Cross-Desktop Activation 0.6.0]]></title>
+        <id>https://windhawk.net/mods/animated-cross-desktop-window-animation#e52aa5b390cbd99ba2af1961bf2905efde59dd01</id>
+        <link href="https://windhawk.net/mods/animated-cross-desktop-window-animation"/>
+        <updated>2026-10-09T21:03:48.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="animatedcrossdesktopactivation">Animated Cross-Desktop Activation</h1>
+<p>Windows can jump to another virtual desktop without the normal desktop-switch
+animation when an application activates an existing window on that desktop.
+This mod intercepts only those activation-driven switches and replays them
+asynchronously through Windows' native virtual-desktop animation path.</p>
+<p>Intentional desktop navigation is left alone, including Win+Ctrl+Left/Right,
+Task View, touchpad gestures, and other normal virtual-desktop switch routes.</p>
+<p>Some applications briefly activate an old window on another desktop while they
+create the window that was actually requested on the current desktop. For apps
+listed in Settings, the mod holds the pending animated switch for a short grace
+period. If a new same-process window is added and becomes foreground on the
+current desktop during that period, the stale cross-desktop switch is discarded.
+No windows are moved between desktops.</p>
+<p>Windows Terminal is enabled for transient replacement suppression by default.</p>
+<p>Designed for Windows 11 24H2 and newer. Private shell interfaces and symbols can
+change in future Windows builds.</p>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteoni</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Per-App Titlebar Buttons 1.0]]></title>
         <id>https://windhawk.net/mods/per-app-titlebar-buttons#6a59d24ea77bc63bfb4e5e97fe3f41a2b1e81993</id>
@@ -1933,41 +1981,6 @@ keeps a minimum clickable size on purpose</li>
         <author>
             <name>sb4ssman</name>
             <uri>https://github.com/sb4ssman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Virtual Desktop Switcher 2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-vd-switcher#f9b3bde0d49096c5c76a161f2e3ca08ec5d7f976</id>
-        <link href="https://windhawk.net/mods/taskbar-vd-switcher"/>
-        <updated>2026-10-08T22:00:56.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added grouped settings and one nestable Arrangement expression; old renamed keys reset once</li>
-<li>Added native side-taskbar layouts and literal written arrangements</li>
-<li>Added experimental Windows 10 tray-window placement and compact automatic grids</li>
-<li>The Windows 10 backend waits on registry change notifications instead of polling Explorer, and keeps a hidden bar while its anchor is missing instead of forcing taskbar relayouts</li>
-<li>Hardened rebuild, settings, teardown and retry lifecycle handling</li>
-<li>Added DPI-aware preview fonts and bounded same-process caption reads</li>
-<li>Retained configurable labels/symbols/fonts, native checked states and hover previews</li>
-</ul>]]></content>
-        <author>
-            <name>sb4ssman</name>
-            <uri>https://github.com/sb4ssman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[D3D9 Flip Model Upgrade 1.1]]></title>
-        <id>https://windhawk.net/mods/d3d9-flip-model-upgrade#feb623294a194eecdb29c8459f4bdcd941466458</id>
-        <link href="https://windhawk.net/mods/d3d9-flip-model-upgrade"/>
-        <updated>2026-10-08T21:45:52.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the flip model conflicting with in-game overlays, such as the Steam overlay, which made games render incorrectly.</li>
-<li>Fixed managed vertex and index buffers not working with software vertex processing.</li>
-<li>Fixed the borderless conversion blocking on the thread the window belongs to.</li>
-<li>Added the SafeHook option, for games whose anti-tamper protection hangs or closes them with the mod enabled. It detects d3d9.dll loading with a Windows DLL load notification instead of hooking <code>LoadLibraryExW</code> in kernelbase.dll.</li>
-</ul>]]></content>
-        <author>
-            <name>tria</name>
-            <uri>https://github.com/triatomic</uri>
         </author>
     </entry>
 </feed>
