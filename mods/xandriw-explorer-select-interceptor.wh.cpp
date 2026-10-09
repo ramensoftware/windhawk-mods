@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id           xandriw-explorer-select-interceptor
 // @name         SameFolderOnly
-// @description  Reuses existing Explorer windows for supported same-folder and file-location requests, selecting files without duplicate windows.
+// @description  When an app opens a folder or uses Show in folder, reuse an existing Explorer window for that folder and select the requested file instead of opening a duplicate window.
 // @version      4.1.2
 // @author       XandriW
 // @github       https://github.com/xandri19wang
