@@ -2,7 +2,7 @@
 // @id              cursor-trail
 // @name            Simple Cursor Trail
 // @description     A fully customizable cursor trail overlay for the Windows desktop.
-// @version         1.1
+// @version         1.2
 // @author          Ulrizza
 // @github          https://github.com/Ulrizza
 // @license         MIT
@@ -90,7 +90,7 @@ Applies when Trail mode is Time based.
 
 ##### Tail duration
 
-How long each trail segment stays visible, in milliseconds. Minimum 20.
+How long each trail segment stays visible, in milliseconds. Minimum 20, maximum 10000.
 
 `100`  
 ![simpleLineOptions.timeBased.tail_duration = 100](https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.timeBased.tail_duration.100.gif)
@@ -107,7 +107,7 @@ Applies when Trail mode is Size based.
 
 ##### Tail length
 
-Maximum trail length in pixels. Minimum 20.
+Maximum trail length in pixels. Minimum 20, maximum 10000.
 
 `100`  
 ![simpleLineOptions.sizeBased.tail_size = 100](https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.sizeBased.tail_size.100.gif)
@@ -222,7 +222,7 @@ Applies when Trail mode is Time based.
 
 ##### Tail duration
 
-How long each cursor copy stays visible, in milliseconds. Minimum 20.
+How long each cursor copy stays visible, in milliseconds. Minimum 20, maximum 10000.
 
 `100`  
 ![ghostOptions.timeBased.tail_duration = 100](https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.timeBased.tail_duration.100.gif)
@@ -403,13 +403,13 @@ parts of the render loop.
   - timeBased:
     - tail_duration: 500
       $name: Tail duration
-      $description: How long each trail segment stays visible, in milliseconds. Minimum 20.
+      $description: How long each trail segment stays visible, in milliseconds. Minimum 20, maximum 10000.
     $name: Time based
     $description: Applies when Trail mode is Time based.
   - sizeBased:
     - tail_size: 2000
       $name: Tail length
-      $description: Maximum trail length in pixels. Minimum 20.
+      $description: Maximum trail length in pixels. Minimum 20, maximum 10000.
     - timeout: 2000
       $name: Timeout
       $description: Milliseconds of inactivity before the trail starts fading (using the Time based tail duration). 0 = trail always visible.
@@ -451,7 +451,7 @@ parts of the render loop.
   - timeBased:
     - tail_duration: 300
       $name: Tail duration
-      $description: How long each cursor copy stays visible, in milliseconds. Minimum 20.
+      $description: How long each cursor copy stays visible, in milliseconds. Minimum 20, maximum 10000.
     $name: Time based
     $description: Applies when Trail mode is Time based.
   - sizeBased:
@@ -707,7 +707,6 @@ struct Runtime {
     POINT lastCursorPos = { 0, 0 };           // previous raw cursor position (movement tracking)
     bool  lastCursorValid = false;
     bool  isFading = false;
-    HCURSOR lastSampledCursor = NULL;         // poll-thread-owned; last cursor image sampled
     POINT lastSamplePos = { 0, 0 };           // poll-thread-owned; last pushed sample (canvas coords)
     bool  lastSampleValid = false;            // poll-thread-owned; whether lastSamplePos is set
 
@@ -745,6 +744,7 @@ static const DWORD kIdleGraceMs       = 200; // inactivity before the render tim
 static const DWORD kIdlePollIntervalMs = 20; // poll interval while the overlay is idle
 static const DWORD kSampleIntervalMs  = 1;   // cursor poll interval while active
 static const DWORD kDisabledPollIntervalMs = 250; // poll interval while the trail is off
+static const DWORD kGamePollIntervalMs = 1000; // poll interval while a fullscreen game suppresses the trail
 
 ToggleEffect toggleEffect;
 
@@ -982,6 +982,14 @@ static void ParseFloatList(const wchar_t* key, const std::wstring& defaultToken,
     }
 }
 
+// Bounds for the trail-length settings. The result caps TrailPointBudget and
+// the time-based history, so an out-of-range value can't over-allocate (or make
+// reserve throw) every frame.
+static const int kMinTailDuration = 20;
+static const int kMaxTailDuration = 10000;   // 10 s
+static const int kMinLineTailSize = 20;
+static const int kMaxLineTailSize = 10000;   // px
+
 // Trail point/copy budget for the active style: the tail size in size_based
 // mode, the tail duration otherwise. Always at least 2.
 static size_t TrailPointBudget() {
@@ -1145,13 +1153,15 @@ void LoadSettings() {
         settings.antialiasing = Wh_GetIntSetting(L"simpleLineOptions.antialiasing") != 0;
     }
 
-    if (settings.tailDuration < 20) settings.tailDuration = 20;
+    if (settings.tailDuration < kMinTailDuration) settings.tailDuration = kMinTailDuration;
+    if (settings.tailDuration > kMaxTailDuration) settings.tailDuration = kMaxTailDuration;
     if (settings.isGhost) {
         // tail_size is a copy count for the ghost style.
         if (settings.tailSize < 2) settings.tailSize = 2;
         if (settings.tailSize > 512) settings.tailSize = 512;
     } else {
-        if (settings.tailSize < 20) settings.tailSize = 20;
+        if (settings.tailSize < kMinLineTailSize) settings.tailSize = kMinLineTailSize;
+        if (settings.tailSize > kMaxLineTailSize) settings.tailSize = kMaxLineTailSize;
     }
 
     // Parse width values (min 1, no upper clamp)
@@ -2241,12 +2251,16 @@ DWORD WINAPI PollThreadProc(LPVOID) {
 
     // Wait on the stop event to drive the loop. Sampling runs at
     // kSampleIntervalMs (1 ms) while the overlay is active, and slower while the
-    // overlay is idle (kIdlePollIntervalMs). When the trail is off via the
-    // hotkey there is nothing to sample, so poll at kDisabledPollIntervalMs; the
-    // hotkey still wakes the overlay directly.
+    // overlay is idle (kIdlePollIntervalMs). When there is nothing to sample —
+    // the trail is off via the hotkey, or a fullscreen game suppresses it — poll
+    // much slower; the game check below then runs once per wake, so a running
+    // game is re-checked at kGamePollIntervalMs. The hotkey still wakes the
+    // overlay directly.
     for (;;) {
         DWORD waitMs;
-        if (!runtime.trailEnabled.load()) {
+        if (runtime.isGameRunning.load()) {
+            waitMs = kGamePollIntervalMs;
+        } else if (!runtime.trailEnabled.load()) {
             waitMs = kDisabledPollIntervalMs;
         } else if (runtime.overlayIdle.load()) {
             waitMs = kIdlePollIntervalMs;
@@ -2328,17 +2342,6 @@ DWORD WINAPI PollThreadProc(LPVOID) {
                 }
                 continue;
             }
-
-            // For the line style, a cursor image change (e.g. arrow -> I-beam)
-            // must redraw even while the cursor is stationary so the trail head
-            // picks up the new image's visual center. Ghost copies keep their
-            // own latched image, so it only matters when a new copy spawns.
-            if (!settings.isGhost && sampleCursor && runtime.lastSampledCursor &&
-                sampleCursor != runtime.lastSampledCursor &&
-                !runtime.history.empty()) {
-                MarkContentChanged();
-            }
-            runtime.lastSampledCursor = sampleCursor;
 
             if (settings.sizeBased) {
                 if (settings.sizeTimeout > 0 && runtime.lastMovementTime > 0 &&
@@ -2565,9 +2568,6 @@ static void BuildTrailPoints(const POINT& pt, int vX, int vY,
                              std::vector<float>& ratios) {
     size_t kMaxPoints = TrailPointBudget();
 
-    smoothed.reserve(kMaxPoints);
-    cursors.reserve(kMaxPoints);
-
     // The front of the deque is the most recent sample (captured by the poll
     // thread at ~1ms intervals with the cursor-center offset already applied).
     // Using runtime.history.front() as the head guarantees monotonic ordering.
@@ -2591,13 +2591,19 @@ static void BuildTrailPoints(const POINT& pt, int vX, int vY,
         return;
     }
 
+    // Reserve for the points actually available, capped by the budget (kMaxPoints
+    // is bounded by the settings clamps), instead of the full budget each frame.
+    size_t n = runtime.history.size();
+    size_t cap = n < kMaxPoints ? n : kMaxPoints;
+    smoothed.reserve(cap);
+    cursors.reserve(cap);
+
     if (settings.isGhost) {
         // Ghost copies are latched at their spawn position by the poll thread
         // (spaced by ghostSpawnDist), so draw every history sample directly and
         // apply no render-time decimation. That keeps each copy fixed in place
         // instead of sliding along with the moving head.
         DWORD now = timeGetTime();
-        size_t n = runtime.history.size();
         ratios.reserve(n);
         size_t i = 0;
         for (const auto& s : runtime.history) {
