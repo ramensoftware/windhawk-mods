@@ -221,19 +221,6 @@ Instead of an executable path, you can set **Command** to one of these built-in 
     - separatorAfter: false
     - subItems:
       - - type: button
-        - name: Open in VS Code
-        - command: code.exe
-        - parameters: '%sel%'
-        - iconGlyph: ""
-        - separatorAfter: false
-        - subItems:
-          - - name: ""
-            - command: ""
-            - parameters: ""
-            - iconGlyph: ""
-            - hideIcon: false
-            - separatorAfter: false
-      - - type: button
         - name: Open Paint
         - command: mspaint.exe
         - parameters: ""
@@ -245,68 +232,6 @@ Instead of an executable path, you can set **Command** to one of these built-in 
         - parameters: ""
         - iconGlyph: 'shell:AppsFolder\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App'
         - separatorAfter: true
-      - - type: menu
-        - name: Commands
-        - command: ""
-        - parameters: ""
-        - iconGlyph: EC7A
-        - separatorAfter: false
-        - subItems:
-          - - name: vite
-            - command: cmd.exe
-            - parameters: /k vite
-            - iconGlyph: ""
-            - hideIcon: true
-            - separatorAfter: true
-          - - name: npm init
-            - command: cmd.exe
-            - parameters: /k npm init
-            - iconGlyph: ""
-            - hideIcon: true
-            - separatorAfter: false
-          - - name: npm install
-            - command: cmd.exe
-            - parameters: /k npm install
-            - iconGlyph: ""
-            - hideIcon: true
-            - separatorAfter: false
-          - - name: npm run dev
-            - command: cmd.exe
-            - parameters: /k npm run dev
-            - iconGlyph: ""
-            - hideIcon: true
-            - separatorAfter: false
-          - - name: npm run build
-            - command: cmd.exe
-            - parameters: /k npm run build
-            - iconGlyph: ""
-            - hideIcon: true
-            - separatorAfter: false
-          - - name: npm run start
-            - command: cmd.exe
-            - parameters: /k npm run start
-            - iconGlyph: ""
-            - hideIcon: true
-            - separatorAfter: false
-      - - type: menu
-        - name: AI
-        - command: ""
-        - parameters: ""
-        - iconGlyph: E794
-        - separatorAfter: false
-        - subItems:
-          - - name: Claude
-            - command: cmd.exe
-            - parameters: /k claude
-            - iconGlyph: ""
-            - hideIcon: true
-            - separatorAfter: false
-          - - name: Codex
-            - command: cmd.exe
-            - parameters: /k codex
-            - iconGlyph: ""
-            - hideIcon: true
-            - separatorAfter: false
   $name: Toolbar items
   $description: Custom buttons and dropdown menus added to the command bar.
 - placeOnSecondaryBar: true
@@ -549,14 +474,19 @@ namespace muxm = winrt::Microsoft::UI::Xaml::Media;
 
 // clang-format on
 
-constexpr PCWSTR kButtonNamePrefix = L"WindhawkActionButton";
-constexpr PCWSTR kNewPlusButtonName = L"WindhawkNewPlusButton";
-constexpr PCWSTR kContextMenuButtonName = L"WindhawkContextMenuButton";
+const std::wstring kButtonNamePrefix =
+    std::wstring(L"WH_") + WH_MOD_ID + L"_Btn";
+const std::wstring kNewPlusButtonName =
+    std::wstring(L"WH_") + WH_MOD_ID + L"_NewPlus";
+const std::wstring kContextMenuButtonName =
+    std::wstring(L"WH_") + WH_MOD_ID + L"_ContextMenu";
 
 struct CommandBarEntry {
     winrt::weak_ref<muxc::CommandBar> commandBar;
     winrt::event_token loadedToken{};
     winrt::event_token vectorChangedToken{};
+    mux::DispatcherTimer selectionTimer{nullptr};
+    winrt::event_token selectionTickToken{};
 };
 
 thread_local std::vector<CommandBarEntry> g_entries;
@@ -584,6 +514,18 @@ void TrackRevoker(T const& source, Revoker&& revoker) {
         std::make_shared<std::decay_t<Revoker>>(std::forward<Revoker>(revoker));
     g_revokers.push_back({winrt::weak_ref<wf::IInspectable>{source},
                           [held]() { held->revoke(); }});
+}
+
+void StopSelectionTimer(CommandBarEntry& entry) {
+    if (entry.selectionTimer) {
+        try {
+            entry.selectionTimer.Stop();
+            entry.selectionTimer.Tick(entry.selectionTickToken);
+        } catch (...) {
+        }
+        entry.selectionTimer = nullptr;
+        entry.selectionTickToken = {};
+    }
 }
 
 void RevokeHandlersForCurrentThread() {
@@ -1126,19 +1068,13 @@ HWND EnsureContextMenuOwnerWindow() {
 }
 
 void DismissOpenContextMenus() {
-    // Allow a maximum timeout of 2 seconds (200 * 10ms) to prevent infinite
-    // loops
-    for (int i = 0; g_openContextMenuCount > 0 && i < 200; i++) {
+    while (g_openContextMenuCount > 0) {
         {
             std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
             for (auto const& [threadId, hWnd] : g_contextMenuOwners) {
                 if (IsContextMenuOwnerWindow(threadId, hWnd))
                     PostMessageW(hWnd, WM_CANCELMODE, 0, 0);
             }
-        }
-        if (i > 0 && i % 100 == 0) {
-            Wh_Log(L"Still waiting for %d shell context menu(s)",
-                   g_openContextMenuCount.load());
         }
         Sleep(10);
     }
@@ -1536,8 +1472,9 @@ void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
         return;
 
     HWND hWnd = GetExplorerWindowForElement(elementForWindow);
+    PCWSTR cmd = item.command.c_str();
 
-    if (item.command == L"internal:TogglePreview") {
+    if (_wcsicmp(cmd, L"internal:TogglePreview") == 0) {
         INPUT inputs[4] = {};
         inputs[0].type = INPUT_KEYBOARD;
         inputs[0].ki.wVk = VK_MENU;
@@ -1553,7 +1490,7 @@ void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
         return;
     }
 
-    if (item.command == L"internal:ToggleDetails") {
+    if (_wcsicmp(cmd, L"internal:ToggleDetails") == 0) {
         INPUT inputs[6] = {};
         inputs[0].type = INPUT_KEYBOARD;
         inputs[0].ki.wVk = VK_MENU;
@@ -1574,7 +1511,7 @@ void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
         return;
     }
 
-    if (item.command == L"internal:FolderOptions") {
+    if (_wcsicmp(cmd, L"internal:FolderOptions") == 0) {
         RunShellWorkOnWorkerThread([]() {
             ShellExecuteW(nullptr, L"open", L"control.exe", L"folders", nullptr,
                           SW_SHOWNORMAL);
@@ -1582,32 +1519,23 @@ void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
         return;
     }
 
-    if (item.command == L"internal:OpenWith") {
+    if (_wcsicmp(cmd, L"internal:OpenWith") == 0) {
         ExplorerContext context = GetExplorerContext(hWnd);
         if (!context.selectedPath.empty() &&
             !DirectoryExists(context.selectedPath)) {
             std::wstring targetPath = context.selectedPath;
             RunShellWorkOnWorkerThread([hWnd, targetPath]() {
-                HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
-                if (!hShell32)
-                    hShell32 = LoadLibraryW(L"shell32.dll");
-                if (hShell32) {
-                    typedef void(WINAPI * OpenAs_RunDLL_t)(HWND, HINSTANCE,
-                                                           LPCWSTR, int);
-                    auto pOpenAs = (OpenAs_RunDLL_t)GetProcAddress(
-                        hShell32, "OpenAs_RunDLLW");
-                    if (pOpenAs) {
-                        pOpenAs(hWnd, nullptr, targetPath.c_str(),
-                                SW_SHOWNORMAL);
-                    }
-                }
+                OPENASINFO oai = {};
+                oai.pcszFile = targetPath.c_str();
+                oai.oaifInFlags = OAIF_EXEC | OAIF_ALLOW_REGISTRATION;
+                SHOpenWithDialog(hWnd, &oai);
             });
         }
         return;
     }
 
     ExplorerContext context = GetExplorerContext(hWnd);
-
+    context.shellView = nullptr;
     RunShellWorkOnWorkerThread(
         [hWnd, item, context]() { LaunchItemForWindow(hWnd, item, context); });
 }
@@ -2454,14 +2382,17 @@ muxc::IconElement CreateIconElement(std::wstring const& iconSetting,
 muxc::IconElement MakeCommandButtonIcon(ActionItem const& item) {
     if (item.hideIcon)
         return nullptr;
+
     PCWSTR defaultGlyph = L"";
-    if (item.command == L"internal:OpenWith")
+    PCWSTR cmd = item.command.c_str();
+
+    if (_wcsicmp(cmd, L"internal:OpenWith") == 0)
         defaultGlyph = L"\uE7AC";
-    else if (item.command == L"internal:TogglePreview")
+    else if (_wcsicmp(cmd, L"internal:TogglePreview") == 0)
         defaultGlyph = L"\uE8A1";
-    else if (item.command == L"internal:ToggleDetails")
+    else if (_wcsicmp(cmd, L"internal:ToggleDetails") == 0)
         defaultGlyph = L"\uE9F9";
-    else if (item.command == L"internal:FolderOptions")
+    else if (_wcsicmp(cmd, L"internal:FolderOptions") == 0)
         defaultGlyph = L"\uE713";
 
     return CreateIconElement(item.icon, item.command, defaultGlyph);
@@ -2674,18 +2605,56 @@ void SetVisibilityInternal(mux::UIElement const& element,
 // ============================================================================
 // Dynamic Contextual Buttons
 // ============================================================================
-bool ItemMatchesExtensionFilter(
-    const std::wstring& filterPattern,
-    const std::vector<std::wstring>& selectedPaths) {
+struct SelectionSummary {
+    size_t count = 0;
+    bool hasFiles = false;
+    bool hasFolders = false;
+    std::vector<std::wstring>
+        extensions;  // Clean lowercase extension without dot or quotes
+};
+
+SelectionSummary SummarizeSelection(const std::vector<std::wstring>& paths) {
+    SelectionSummary summary;
+    summary.count = paths.size();
+    summary.extensions.reserve(paths.size());
+
+    for (std::wstring path : paths) {
+        // Strip leading/trailing quotes and spaces first!
+        path = TrimQuotesAndSpaces(path);
+        if (path.empty())
+            continue;
+
+        DWORD attr = GetFileAttributesW(path.c_str());
+        bool isDir = (attr != INVALID_FILE_ATTRIBUTES) &&
+                     (attr & FILE_ATTRIBUTE_DIRECTORY);
+
+        if (isDir) {
+            summary.hasFolders = true;
+            summary.extensions.push_back(L"folder");
+        } else {
+            summary.hasFiles = true;
+            PCWSTR ext = PathFindExtensionW(path.c_str());
+            if (ext && *ext == L'.') {
+                summary.extensions.push_back(ToLower(ext + 1));
+            } else {
+                summary.extensions.push_back(L"");
+            }
+        }
+    }
+    return summary;
+}
+
+bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
+                                const SelectionSummary& summary) {
     std::wstring filter = TrimWhitespaceAndQuotes(filterPattern);
 
-    // Rule 1: Blank filter means always show (default behavior)
+    // Rule 1: Blank filter means always show
     if (filter.empty()) {
         return true;
     }
 
     // Rule 2: If a filter is specified but nothing is selected, hide the button
-    if (selectedPaths.empty()) {
+    if (summary.count == 0) {
         return false;
     }
 
@@ -2693,7 +2662,7 @@ bool ItemMatchesExtensionFilter(
     std::vector<std::wstring> negativeExts;
     bool matchAllExceptNegatives = false;
 
-    // Parse comma-separated tokens (supports separators: ',', ';', ' ')
+    // Parse filter tokens
     size_t start = 0;
     while (start < filter.size()) {
         size_t end = filter.find_first_of(L",; ", start);
@@ -2715,12 +2684,10 @@ bool ItemMatchesExtensionFilter(
             token.erase(token.begin());
         }
 
-        // Strip leading '.' if user typed ".txt" instead of "txt"
         if (!token.empty() && token.front() == L'.') {
             token.erase(token.begin());
         }
 
-        // Normalize folder aliases to "folder"
         if (token == L"dir" || token == L"directory" || token == L"folders") {
             token = L"folder";
         }
@@ -2733,8 +2700,6 @@ bool ItemMatchesExtensionFilter(
             continue;
         }
 
-        // "files" or "file" matches any file while automatically excluding
-        // folders
         if (isFileKeyword) {
             if (isNegative) {
                 negativeExts.push_back(L"file");
@@ -2752,32 +2717,18 @@ bool ItemMatchesExtensionFilter(
         }
     }
 
-    // Rule 3: Validate EVERY selected item strictly
-    for (const auto& path : selectedPaths) {
-        DWORD attr = GetFileAttributesW(path.c_str());
-        bool isDirectory = (attr != INVALID_FILE_ATTRIBUTES) &&
-                           (attr & FILE_ATTRIBUTE_DIRECTORY);
+    // Validate using the precomputed extensions
+    for (const auto& ext : summary.extensions) {
+        bool isDir = (ext == L"folder");
 
-        std::wstring ext;
-        if (isDirectory) {
-            ext = L"folder";
-        } else {
-            PCWSTR extPtr = PathFindExtensionW(path.c_str());
-            ext = extPtr ? ToLower(extPtr) : L"";
-            if (!ext.empty() && ext.front() == L'.') {
-                ext.erase(ext.begin());
-            }
-        }
-
-        // Strict Exclusion: abort if item matches a negative extension
+        // Strict Exclusion
         for (const auto& neg : negativeExts) {
-            if (ext == neg || (neg == L"file" && !isDirectory)) {
+            if (ext == neg || (neg == L"file" && !isDir)) {
                 return false;
             }
         }
 
-        // Strict Inclusion: if positive list exists, item must match at least
-        // one
+        // Strict Inclusion
         if (!matchAllExceptNegatives && !positiveExts.empty()) {
             bool matched = false;
             for (const auto& pos : positiveExts) {
@@ -2796,7 +2747,8 @@ bool ItemMatchesExtensionFilter(
 }
 
 void UpdateDynamicButtonStates(muxc::CommandBar const& commandBar,
-                               HWND hExplorerWnd) {
+                               HWND hExplorerWnd,
+                               const ExplorerContext* optContext = nullptr) {
     if (g_unloading || !commandBar)
         return;
 
@@ -2806,10 +2758,23 @@ void UpdateDynamicButtonStates(muxc::CommandBar const& commandBar,
     if (!hExplorerWnd)
         return;
 
-    ExplorerContext context = GetExplorerContext(hExplorerWnd);
+    ExplorerContext localContext;
+    const ExplorerContext& context =
+        optContext ? *optContext
+                   : (localContext = GetExplorerContext(hExplorerWnd));
+    // Classify selection ONCE in memory
+    SelectionSummary summary = SummarizeSelection(context.allSelectedPaths);
 
     auto commands = commandBar.PrimaryCommands();
     uint32_t count = commands.Size();
+
+    bool disabledInsteadOfHidden;
+    std::vector<ActionItem> currentItems;
+    {
+        std::lock_guard<std::mutex> lock(g_settings.mutex);
+        disabledInsteadOfHidden = g_settings.disabledInsteadOfHidden;
+        currentItems = g_settings.items;
+    }
 
     for (uint32_t i = 0; i < count; i++) {
         auto cmd = commands.GetAt(i);
@@ -2825,31 +2790,19 @@ void UpdateDynamicButtonStates(muxc::CommandBar const& commandBar,
         if (!button)
             continue;
 
-        size_t underscore = name.find(L'_');
+        size_t underscore = name.rfind(L'_');
         if (underscore == std::wstring::npos)
             continue;
 
         int itemIndex = _wtoi(name.c_str() + underscore + 1);
+        if (itemIndex < 0 || itemIndex >= (int)currentItems.size())
+            continue;
 
-        ActionItem item;
-        {
-            std::lock_guard<std::mutex> lock(g_settings.mutex);
-            if (itemIndex >= 0 && itemIndex < (int)g_settings.items.size()) {
-                item = g_settings.items[itemIndex];
-            } else {
-                continue;
-            }
-        }
+        const auto& item = currentItems[itemIndex];
 
-        // Evaluate dynamic filter rules
-        bool isVisible = ItemMatchesExtensionFilter(item.matchExtensions,
-                                                    context.allSelectedPaths);
-
-        bool disabledInsteadOfHidden;
-        {
-            std::lock_guard<std::mutex> lock(g_settings.mutex);
-            disabledInsteadOfHidden = g_settings.disabledInsteadOfHidden;
-        }
+        // Super fast memory evaluation
+        bool isVisible =
+            ItemMatchesExtensionFilter(item.matchExtensions, summary);
 
         if (disabledInsteadOfHidden) {
             button.Visibility(mux::Visibility::Visible);
@@ -3221,8 +3174,6 @@ void ApplyDefaultButtonVisibility(muxc::CommandBar const& commandBar,
             setVisibility(overflowSeparator, {ManagedKind::OverflowElement});
         }
     }
-
-    UpdateDynamicButtonStates(commandBar, nullptr);
 }
 
 muxc::AppBarButton CreateBareButton(int index,
@@ -3567,21 +3518,21 @@ void PopulateNewPlusMenu(
         openFolderItem.Text(L"Open templates folder");
         openFolderItem.Icon(CreateGlyphIcon(L""));
 
-        TrackRevoker(openFolderItem,
-                     openFolderItem.Click(
-                         winrt::auto_revoke, [folder = config.templateFolder](
-                                                 wf::IInspectable const&,
+        TrackRevoker(
+            openFolderItem,
+            openFolderItem.Click(
+                winrt::auto_revoke,
+                [folder = config.templateFolder](wf::IInspectable const&,
                                                  mux::RoutedEventArgs const&) {
-                             if (g_unloading)
-                                 return;
-                             RunShellWorkOnWorkerThread([folder]() {
-                                 if (!DirectoryExists(folder))
-                                     SHCreateDirectoryExW(
-                                         nullptr, folder.c_str(), nullptr);
-                                 ShellExecuteW(nullptr, L"open", folder.c_str(),
-                                               nullptr, nullptr, SW_SHOWNORMAL);
-                             });
-                         }));
+                    if (g_unloading)
+                        return;
+                    RunShellWorkOnWorkerThread([folder]() {
+                        if (DirectoryExists(folder)) {
+                            ShellExecuteW(nullptr, L"open", folder.c_str(),
+                                          nullptr, nullptr, SW_SHOWNORMAL);
+                        }
+                    });
+                }));
 
         items.Append(openFolderItem);
     }
@@ -3835,6 +3786,7 @@ void UpdateCommandBar(muxc::CommandBar const& commandBar) {
     }
 
     ApplyDefaultButtonVisibility(commandBar);
+    UpdateDynamicButtonStates(commandBar, nullptr);
 }
 
 void RemoveOurButtons(muxc::CommandBar const& commandBar) {
@@ -3896,18 +3848,6 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
                 }
             }));
 
-    TrackRevoker(
-        commandBar,
-        commandBar.PointerEntered(
-            winrt::auto_revoke, [](wf::IInspectable const& sender,
-                                   mux::Input::PointerRoutedEventArgs const&) {
-                if (g_unloading)
-                    return;
-                if (auto cb = sender.try_as<muxc::CommandBar>()) {
-                    UpdateDynamicButtonStates(cb, nullptr);
-                }
-            }));
-
     // Auto-refresh timer: detects file selection clicks
     mux::DispatcherTimer selectionTimer;
     selectionTimer.Interval(std::chrono::milliseconds(250));
@@ -3926,26 +3866,25 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
                 return;
 
             HWND hWnd = GetExplorerWindowForElement(cb);
-            if (!hWnd)
-                return;
-
-            if (GetForegroundWindow() != hWnd)
+            if (!hWnd || GetForegroundWindow() != hWnd)
                 return;
 
             ExplorerContext ctx = GetExplorerContext(hWnd);
-            std::wstring currentSel = ctx.selectedPath;
-
-            // Quick count + first item comparison
             std::wstring selectionSignature =
                 std::to_wstring(ctx.allSelectedPaths.size()) + L"|" +
                 ctx.selectedPath;
+
             if (selectionSignature != *lastSelectedPath) {
                 *lastSelectedPath = selectionSignature;
-                UpdateDynamicButtonStates(cb, hWnd);
+                UpdateDynamicButtonStates(cb, hWnd, &ctx);
             }
         });
 
     selectionTimer.Start();
+
+    // Store in entry so it can be cleanly stopped during unload
+    entry.selectionTimer = selectionTimer;
+    entry.selectionTickToken = timerToken;
 
     TrackRevoker(commandBar,
                  commandBar.Unloaded(
@@ -3972,6 +3911,7 @@ void RemoveButtonsForCurrentThread() {
     taken.swap(g_entries);
 
     for (auto& entry : taken) {
+        StopSelectionTimer(entry);
         auto commandBar = entry.commandBar.get();
         if (!commandBar)
             continue;
@@ -4423,7 +4363,8 @@ ActionItem LoadActionItem(PCWSTR prefix, int depth, bool* isEmpty) {
     item.icon = iconGlyph.get();
     item.hideIcon = Wh_GetIntSetting(L"%s.hideIcon", prefix) != 0;
     item.showLabel = Wh_GetIntSetting(L"%s.showLabel", prefix) != 0;
-    item.labelText = Wh_GetStringSetting(L"%s.labelText", prefix);
+    item.labelText =
+        WindhawkUtils::StringSetting::make(L"%s.labelText", prefix).get();
     item.separatorAfter = Wh_GetIntSetting(L"%s.separatorAfter", prefix) != 0;
 
     if (depth < kMaxMenuDepth) {
