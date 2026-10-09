@@ -2,12 +2,60 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-08T23:02:38.000Z</updated>
+    <updated>2026-10-09T00:03:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Reopen Programs at Sign-in 2.0.0]]></title>
+        <id>https://windhawk.net/mods/reopen-programs-at-sign-in#9da2ffcc4366a0e801ca4b4ec0474cf668771490</id>
+        <link href="https://windhawk.net/mods/reopen-programs-at-sign-in"/>
+        <updated>2026-10-09T00:03:37.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="reopenprogramsatsignin">Reopen Programs at Sign-in</h1>
+<p>While the mod is enabled, it keeps track of which programs have a window open.
+The next time you sign in to Windows, those programs are opened again. To turn
+the feature off, disable the mod.</p>
+<ul>
+<li>Only programs are reopened (one every 2 seconds, starting 15 seconds after
+sign-in by default). Documents/tabs depend on each program.</li>
+<li>Programs running as administrator and Windows components (File Explorer,
+Control Panel…) are not reopened.</li>
+<li>Programs that are already running (e.g. from Startup) are not opened twice.</li>
+<li>Nothing is reopened if the mod is enabled long after signing in, or if
+Explorer restarts during the day: only a fresh sign-in triggers it.</li>
+<li>Each Windows account keeps its own list.</li>
+</ul>
+<p>Windows has a similar built-in option (Settings → Accounts → Sign-in options →
+"Automatically save my restartable apps and restart them when I sign back in").
+It only restores apps that support it (e.g. Office, browsers); this mod reopens
+any program, using its executable path.</p>
+<hr />
+<h1 id="reabrirprogramasaoentrarportugus">Reabrir programas ao entrar (Português)</h1>
+<p>Enquanto o mod estiver ativado, ele anota quais programas têm janela aberta.
+Na próxima vez que você entrar no Windows, esses programas são abertos de novo.
+Para desligar a função, desative o mod.</p>
+<ul>
+<li>Só os programas são reabertos (um a cada 2 segundos, começando 15 segundos
+depois de entrar, por padrão). Documentos e abas dependem de cada programa.</li>
+<li>Programas abertos como administrador e componentes do Windows (Explorador de
+Arquivos, Painel de Controle…) não são reabertos.</li>
+<li>Programas que já estão abertos (por exemplo, os que iniciam com o Windows)
+não são abertos duas vezes.</li>
+<li>Nada é reaberto se o mod for ativado muito depois do login, nem se o Explorer
+reiniciar durante o dia: só um login novo dispara a restauração.</li>
+<li>Cada conta do Windows tem a sua própria lista.</li>
+</ul>
+<p>O Windows tem uma opção parecida (Configurações → Contas → Opções de entrada →
+"Salvar automaticamente meus aplicativos reiniciáveis e reiniciá-los quando eu
+entrar novamente"). Ela só restaura apps compatíveis (como Office e
+navegadores); este mod reabre qualquer programa, pelo caminho do executável.</p>]]></content>
+        <author>
+            <name>lima26x</name>
+            <uri>https://github.com/brdantas26</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Privacy Indicator Anchor 2.1]]></title>
         <id>https://windhawk.net/mods/privacy-indicator-anchor#74f43bd051f2419f240851cf106e6f77f5066731</id>
@@ -1687,70 +1735,6 @@ or ban your account. There are no guarantees for any game.</p>
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Everything & Power Tools in the Start Menu 1.0]]></title>
-        <id>https://windhawk.net/mods/start-everything#d2f3636c817d15b6a8c61f16b67ad7d9652adeb1</id>
-        <link href="https://windhawk.net/mods/start-everything"/>
-        <updated>2026-10-06T17:04:19.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="everythingpowertoolsinthestartmenu">Everything &amp; Power Tools in the Start Menu</h1>
-<p>A native replacement for Windows 11 Start Menu search, powered by voidtools Everything. Type in the Start Menu to search files, apps, and settings instantly. Windows Search stays out of the way: its window is never shown, and it cannot start the Edge WebView2 process behind its Bing-backed search panel. Win+S and the taskbar search icon open this search too.</p>
-<p><img src="https://raw.githubusercontent.com/bardelyne/start-everything/main/screenshot.png" alt="Everything & Power Tools in the Start Menu" /></p>
-<h2 id="keyfeatures">Key Features</h2>
-<ul>
-<li>Instant Everything Search: Queries voidtools Everything directly through its IPC interface for fast results across millions of files. The mod keeps no index of its own.</li>
-<li>Smart Apps and Settings Search: Fuzzy matching across Desktop applications, Microsoft Store / UWP packages, Control Panel applets, and Windows Settings URIs (ms-settings:) with sharp shell icons, made at the exact pixel size of your display.</li>
-<li>Learns your favorites: apps you open from here more often move up among results that match equally well. A clearly better match always stays on top. Can be turned off in the settings, which also forgets what was learned.</li>
-<li>On-Demand Animated Palette: The Start Menu stays completely clean and uncluttered when idle. The search palette slides in with a short ease-out animation the moment you type or click the search box, and collapses when emptied or on Escape.</li>
-<li>Windows Search Out of the Way: SearchHost keeps running for the shell, but its window is never shown and it cannot launch Edge WebView2, the web view behind its Bing-backed search panel.</li>
-<li>Inline Calculator: Type /c <expression> (e.g. /c 100 * 5, /c sqrt(144), /c 15% of 200, /c 2^10) to evaluate math expressions instantly. Press Enter to copy the result.</li>
-<li>Configurable Unit Conversions: Type /c <number> [unit] to convert units using formulas configured in Mod Settings. Users can add, edit, or delete conversion items individually from the settings UI.</li>
-<li>Network Interface Inspector: Type /ip to display all active Wi-Fi, Ethernet, and VPN network interfaces with their IP addresses, subnet masks, gateways, and hardware descriptions. Press Enter to copy the IP.</li>
-<li>Full Right-Click Context Menu: Right-click any file, folder, or application to Open, Run as Administrator, Open in terminal (folders), Properties, Create desktop shortcut, Cut/Copy (files), Copy path, or Open file location.</li>
-<li>Native Properties Dialogs: Properties opens through explorer.exe, the same dialog as in File Explorer.</li>
-<li>Opens in Front: Programs are started by Explorer, the way the stock Start menu starts them, so they come to the front even when they take a while to start or you move the mouse meanwhile.</li>
-<li>Explicit Web Search: Trigger web searches on demand using the '?' prefix (e.g. '?query'). Includes customizable keyword shortcuts such as '?yt' (YouTube), '?gh' (GitHub), '?w' (Wikipedia), and '?r' (Reddit).</li>
-<li>Start Menu Styler Compatibility: Automatically syncs background styles (Tinted Glass, Acrylic, custom theme colors) in real time without restarting the mod.</li>
-<li>Type Anywhere: Typing anywhere in the open Start Menu goes to the search box.</li>
-<li>Win+S and the Search Icon: Win+S and the taskbar search icon open the Start Menu with this search instead of the Windows search panel.</li>
-</ul>
-<h2 id="requirements">Requirements</h2>
-<ol>
-<li>Windows 11 (version 22H2+ x86-64).</li>
-<li>voidtools Everything (version 1.4 or 1.5a) running in the background.</li>
-</ol>
-<h2 id="taskbarsearch">Taskbar Search</h2>
-<p>The Windows key, the Start button, Win+S, and the taskbar search icon all open this search. The full taskbar search box is not supported, so set Search to "Search icon only" or "Hide":</p>
-<ol>
-<li>Right-click the Taskbar and select Taskbar settings (or Settings &gt; Personalization &gt; Taskbar).</li>
-<li>Under Taskbar items, set Search to "Search icon only" or "Hide".</li>
-</ol>
-<h2 id="keyboardshortcuts">Keyboard Shortcuts</h2>
-<ul>
-<li>Type any key: Automatically reveals the search palette, focuses the search box, and queries apps and files.</li>
-<li>Up / Down: Navigate through application, calculation, conversion, and file results.</li>
-<li>Tab / Shift + Tab: Move to the next / previous result, through the apps and on into the files.</li>
-<li>Left / Right: Switch between the Apps and Files columns. Right switches only with the cursor at the end of the query, so the arrows still move the cursor while you edit.</li>
-<li>Enter: Launch the selected application, copy calculation/conversion/IP result, or open item. Pressed before the results for what you typed are in, it opens the first one as soon as they arrive.</li>
-<li>Ctrl + Enter: Run the selected application or file as Administrator (triggers UAC).</li>
-<li>Shift + Enter: Open the selected result's context menu, the same one a right-click opens; navigate it with the arrow keys and Enter.</li>
-<li>Escape: Clear the current query and smoothly collapse the search palette back to pinned apps.</li>
-<li>Right-Click: Context menu with Open, Run as Administrator, Open in terminal, Properties, Create desktop shortcut, Cut/Copy (files), Copy path, and Open file location.</li>
-</ul>
-<p>Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start Menu. Use 'Create desktop shortcut' first, then right-click the shortcut on your desktop and select 'Pin to Taskbar' or 'Pin to Start'.</p>
-<h2 id="commandreference">Command Reference</h2>
-<ul>
-<li>/c <expression>: Calculate math expression (e.g. /c 100 * 5, /c sqrt(144), /c 15% of 200).</li>
-<li>/c <number>: Display all configured unit conversions and programmer radix (Hex, Bin, Oct).</li>
-<li>/c <number> <unit>: Targeted unit conversion (e.g. /c 100 km, /c 32 c, /c 50 lbs).</li>
-<li>/ip: List all active network interfaces and IP addresses.</li>
-<li>? <term>: Web search using default search engine.</li>
-<li>?<shortcut> <term>: Targeted web search (e.g. ?yt lo-fi, ?gh windhawk, ?w physics, ?r windows).</li>
-</ul>]]></content>
-        <author>
-            <name>bardelyne</name>
-            <uri>https://github.com/bardelyne</uri>
         </author>
     </entry>
 </feed>

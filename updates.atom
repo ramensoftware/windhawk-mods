@@ -2,12 +2,60 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-08T23:02:38.000Z</updated>
+    <updated>2026-10-09T00:03:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Reopen Programs at Sign-in 2.0.0]]></title>
+        <id>https://windhawk.net/mods/reopen-programs-at-sign-in#9da2ffcc4366a0e801ca4b4ec0474cf668771490</id>
+        <link href="https://windhawk.net/mods/reopen-programs-at-sign-in"/>
+        <updated>2026-10-09T00:03:37.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="reopenprogramsatsignin">Reopen Programs at Sign-in</h1>
+<p>While the mod is enabled, it keeps track of which programs have a window open.
+The next time you sign in to Windows, those programs are opened again. To turn
+the feature off, disable the mod.</p>
+<ul>
+<li>Only programs are reopened (one every 2 seconds, starting 15 seconds after
+sign-in by default). Documents/tabs depend on each program.</li>
+<li>Programs running as administrator and Windows components (File Explorer,
+Control Panel…) are not reopened.</li>
+<li>Programs that are already running (e.g. from Startup) are not opened twice.</li>
+<li>Nothing is reopened if the mod is enabled long after signing in, or if
+Explorer restarts during the day: only a fresh sign-in triggers it.</li>
+<li>Each Windows account keeps its own list.</li>
+</ul>
+<p>Windows has a similar built-in option (Settings → Accounts → Sign-in options →
+"Automatically save my restartable apps and restart them when I sign back in").
+It only restores apps that support it (e.g. Office, browsers); this mod reopens
+any program, using its executable path.</p>
+<hr />
+<h1 id="reabrirprogramasaoentrarportugus">Reabrir programas ao entrar (Português)</h1>
+<p>Enquanto o mod estiver ativado, ele anota quais programas têm janela aberta.
+Na próxima vez que você entrar no Windows, esses programas são abertos de novo.
+Para desligar a função, desative o mod.</p>
+<ul>
+<li>Só os programas são reabertos (um a cada 2 segundos, começando 15 segundos
+depois de entrar, por padrão). Documentos e abas dependem de cada programa.</li>
+<li>Programas abertos como administrador e componentes do Windows (Explorador de
+Arquivos, Painel de Controle…) não são reabertos.</li>
+<li>Programas que já estão abertos (por exemplo, os que iniciam com o Windows)
+não são abertos duas vezes.</li>
+<li>Nada é reaberto se o mod for ativado muito depois do login, nem se o Explorer
+reiniciar durante o dia: só um login novo dispara a restauração.</li>
+<li>Cada conta do Windows tem a sua própria lista.</li>
+</ul>
+<p>O Windows tem uma opção parecida (Configurações → Contas → Opções de entrada →
+"Salvar automaticamente meus aplicativos reiniciáveis e reiniciá-los quando eu
+entrar novamente"). Ela só restaura apps compatíveis (como Office e
+navegadores); este mod reabre qualquer programa, pelo caminho do executável.</p>]]></content>
+        <author>
+            <name>lima26x</name>
+            <uri>https://github.com/brdantas26</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Privacy Indicator Anchor 2.1]]></title>
         <id>https://windhawk.net/mods/privacy-indicator-anchor#74f43bd051f2419f240851cf106e6f77f5066731</id>
@@ -1313,48 +1361,6 @@ mod requires. In the Windows 11 shell this mod does nothing and is not kept load
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Smooth Desktop Icons Auto-Hide 0.14.2]]></title>
-        <id>https://windhawk.net/mods/smooth-desktop-icons-auto-hide#710c26f9daae0dfec9e4d33374c67f9fd2a158f7</id>
-        <link href="https://windhawk.net/mods/smooth-desktop-icons-auto-hide"/>
-        <updated>2026-10-07T12:01:01.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="smoothdesktopiconsautohide">Smooth Desktop Icons Auto-Hide</h1>
-<p>Automatically hides desktop icons when you're not using the desktop and smoothly fades them back in when you are.</p>
-<p><img src="https://raw.githubusercontent.com/HeyOkay/SmoothDesktopAutoHide/main/assets/demo.gif" alt="Demo" /></p>
-<p><em>Dragging a file onto the desktop reveals the icons with a smooth fade-in; they fade out once the desktop loses focus.</em></p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Auto-hide.</strong> Icons fade out a few seconds after you leave the desktop. The countdown is paused while the desktop is the active surface, so icons never disappear while you're looking at them.</li>
-<li><strong>Click to show.</strong> A single click on empty desktop reveals the icons. Mouse movement alone never does.</li>
-<li><strong>Double-click to hide.</strong> Double-click empty desktop to hide the icons right away.</li>
-<li><strong>Drag & drop.</strong> Dragging a file onto the desktop reveals the icons before you drop it.</li>
-<li><strong>Win+D and Show desktop.</strong> Showing the desktop with <code>Win+D</code>, the taskbar's <strong>Show desktop</strong> button, or by minimizing the last window reveals the icons; leaving it starts a fresh countdown.</li>
-<li><strong>Smooth fade.</strong> Configurable duration, no wallpaper dimming, works on all Virtual Desktops.</li>
-<li><strong>Safe while hidden.</strong> Hidden icons can't be clicked and are deselected. Pressing a key on the desktop (including Delete, F2, Ctrl+A) reveals them instead of acting on invisible files.</li>
-</ul>
-<h2 id="howthisdiffersfromsimilarmods">How this differs from similar mods</h2>
-<ul>
-<li><strong><a href="https://windhawk.net/mods/zen-desktop-toggle-icons">ZenDesktop: Desktop Icon Toggle and Auto-Hide</a></strong> toggles icons by double-click and hides them after N seconds without any input anywhere in the system (<code>GetLastInputInfo()</code>), restoring them on any input. This mod instead ties auto-hide to the desktop itself: the countdown starts when the desktop stops being the active surface and is paused while you're on it. It also adds a smooth fade, reveals the icons with a <em>single</em> click on empty desktop, and reveals them when a file is dragged onto the desktop.</li>
-<li><strong><a href="https://windhawk.net/mods/desktop-icon-section-autohide">Desktop Icon Section Auto-Hide & Fluent Hover Reveal</a></strong> reveals icons on hover and offers modes, per-app pinning and click-and-hold peek. This mod deliberately does <strong>not</strong> react to mouse movement: icons appear only on an explicit action (click, drag, desktop activation) and stay while the desktop is in use. It has no modes or whitelist and only three settings.</li>
-</ul>
-<h2 id="howitworks">How it works</h2>
-<p>The desktop icon list is never hidden or made transparent as a window. Instead, the mod blends the icons, labels and selection highlights onto the wallpaper with the current opacity while Explorer paints them. Showing and hiding react to events (clicks, drag &amp; drop, the desktop becoming the active window) rather than constant polling, so the mod does nothing while idle. When the mod is disabled, everything is restored to Explorer's normal state.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Enable Auto-hide</strong> — hide icons automatically after leaving the desktop. When off, icons start visible and are hidden only by double-clicking empty desktop.</li>
-<li><strong>Hide after seconds</strong> — delay before icons are hidden (1–60, default 5).</li>
-<li><strong>Animation duration (ms)</strong> — fade duration (50–1000, default 250).</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>The paint-time opacity technique (blending icon and label drawing instead of making the ListView layered) follows <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/desktop-icon-section-autohide.wh.cpp">desktop-icon-section-autohide</a> by Piyush Das, which builds on <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/desktop-icons-transparency.wh.cpp">desktop-icons-transparency</a> by zed712969-crypto.</li>
-<li>Inspired by <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/zen-desktop-toggle-icons.wh.cpp">ZenDesktop: Desktop Icon Toggle and Auto-Hide</a> by Lanbo, including its desktop window discovery approach (CreateWindowExW hook, <code>Progman</code>/<code>WorkerW</code> enumeration, subclassing <code>SHELLDLL_DefView</code> and <code>SysListView32</code>).</li>
-</ul>]]></content>
-        <author>
-            <name>HeyOkay</name>
-            <uri>https://github.com/HeyOkay</uri>
         </author>
     </entry>
 </feed>
