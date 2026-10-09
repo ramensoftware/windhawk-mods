@@ -413,7 +413,7 @@
         "ratingUsers": 50,
         "reviews": 0,
         "trendingSorting": 95,
-        "updated": 1791360095000,
+        "updated": 1791536618000,
         "users": 950
       },
       "metadata": {
@@ -428,7 +428,7 @@
         ],
         "license": "MIT",
         "name": "Alt+Tab Flip 3D (Vista Style)",
-        "version": "1.6.0"
+        "version": "1.7.0"
       }
     },
     "alt-tab-hide-ghost-windows": {
@@ -15069,7 +15069,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 0, 0, 2, 18],
         "ratingUsers": 20,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 0.4377877761834094,
         "updated": 1791496856000,
         "users": 338
@@ -16820,6 +16820,30 @@
         "version": "1.0.1"
       }
     },
+    "win10-volume-brightness-osd": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791536608000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791536608000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "AdmXP8",
+        "compilerOptions": "-lole32 -luuid -lgdi32 -luser32 -ldwmapi -ldxva2 -lshcore",
+        "description": "Replaces the Windows 11 volume/brightness OSD with the classic vertical Windows 10 flyout",
+        "github": "https://github.com/AdmXP8",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Windows 10 Style Volume & Brightness OSD",
+        "version": "1.0.0"
+      }
+    },
     "win11-accent-border": {
       "details": {
         "defaultSorting": 78786,
@@ -17811,6 +17835,33 @@
           "ShellHost.exe"
         ],
         "name": "Windows 10 Action Center Restorer on Windows 11 24H2+",
+        "version": "1.0.0"
+      }
+    },
+    "windows-10-language-flyout-guard-on-win11-24h2": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791536613000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791536613000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "babamohammed",
+        "compilerOptions": "-ladvapi32 -lcomctl32 -lgdi32 -luser32",
+        "description": "This mod hides the startup language flyout in the private Windows 10 shell on Windows 11 24H2+",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Windows 10 language flyout guard and indicator colours",
         "version": "1.0.0"
       }
     },

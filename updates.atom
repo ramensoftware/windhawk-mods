@@ -2,12 +2,133 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-09T00:03:37.000Z</updated>
+    <updated>2026-10-09T09:03:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Alt+Tab Flip 3D (Vista Style) 1.7.0]]></title>
+        <id>https://windhawk.net/mods/alt-tab-flip-3d#8a2982e08b1096b64c08a9623a90b5c94bd9555e</id>
+        <link href="https://windhawk.net/mods/alt-tab-flip-3d"/>
+        <updated>2026-10-09T09:03:38.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Minimized windows that sometimes stayed minimized when picked, like console windows (cmd), are now restored reliably (#5955).</li>
+<li>After a graphics driver update or reset, the switcher starts over by itself. Before, Alt+Tab could stop responding until the mod was restarted.</li>
+<li>On laptops with two GPUs, the switcher draws on the GPU the screen is connected to, so frames aren't copied between GPUs (#5956, #5982).</li>
+<li>New "Frame rate limit" and "Live window content" settings, to make the switcher lighter on slower PCs and laptops (#5956).</li>
+<li>No more double image while the switcher closes: the chosen window comes up right away, behind the switcher, and the desktop is uncovered only at the end of the animation (#5982).</li>
+<li>With both Alt+Tab and Win+Tab on, Win+Tab can use its own animation style.</li>
+<li>Four new styles: Cube, Sphere, Shuffle and Domino.</li>
+<li>The wallpaper background works with live wallpaper apps like Wallpaper Engine, which mark the background as a solid black color.</li>
+<li>Setting descriptions show their default values, and the middle-click setting explains what it does.</li>
+</ul>]]></content>
+        <author>
+            <name>caliberda</name>
+            <uri>https://github.com/cesarkali</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 language flyout guard and indicator colours 1.0.0]]></title>
+        <id>https://windhawk.net/mods/windows-10-language-flyout-guard-on-win11-24h2#0dd8f7845a96ec5ce9f7d47eed3d598151f32f24</id>
+        <link href="https://windhawk.net/mods/windows-10-language-flyout-guard-on-win11-24h2"/>
+        <updated>2026-10-09T09:03:33.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows10languageflyoutguardandindicatorcolours">Windows 10 language flyout guard and indicator colours</h1>
+<p>This mod addresses two issues that can occur when the private Windows 10 shell is used by the Windows 10 taskbar mod on Windows 11 24H2 and later:</p>
+<ul>
+<li><strong>A language flyout that opens at startup.</strong> For a limited time after the shell starts, the mod suppresses known language-switcher window classes in this Explorer process. It does not enumerate or hide windows owned by other processes. Clicking the language indicator manually is allowed through the guard.</li>
+<li><strong>The language indicator's orientation and appearance.</strong> The optional colour feature uses one theme-aware painter for the indicator's client area and reads the full active keyboard-layout ID, so variants such as Italian (142) display as <code>ITA 142</code> rather than being collapsed to <code>ITA IT</code>. It handles paint itself rather than allowing Explorer's legacy grey fill to overwrite the composited background, and it repaints on hover, press, theme, and layout state changes.</li>
+</ul>
+<h3 id="before">Before</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/before.png" alt="Before" /></p>
+<h3 id="after">After</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/after.png" alt="After" /></p>
+<p>The guard lasts 20 seconds by default. Each intercepted flyout can extend it by 15 seconds, up to four times the configured duration. No window is closed or destroyed.</p>
+<p><strong>Startup reliability.</strong> When Explorer starts, Windhawk loads the mod before the taskbar and the language indicator exist, and window-creation hooks only become active after <code>Wh_ModInit</code> returns. A background rescan therefore attaches to the indicator as soon as it appears (every 250 ms, for the first three minutes only, after which it stops), so the mod no longer needs to be toggled manually after logon.</p>
+<p>The mod is loaded into <code>explorer.exe</code> processes but skips initialization in the system <code>%SystemRoot%\explorer.exe</code> (checked in code using the real image path, which Fake Explorer path does not alter), so it only acts in the private Windows 10 shell. The flyout sweep is limited to the current process. System files are not replaced.</p>
+<p><strong>Overlap with "Fix language indicator in Win10 taskbar under Win11 24H2+".</strong> With <code>LanguageIndicatorColours</code> enabled, this mod paints the language indicator itself and Explorer's native paint (which that mod hooks) no longer runs for it, so you do not need both for the indicator. Disable <code>LanguageIndicatorColours</code> if you prefer to keep using the other mod for the indicator.</p>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 Style Volume & Brightness OSD 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win10-volume-brightness-osd#f4f41b1454168308bd15b4b57136b6a3dbec59fd</id>
+        <link href="https://windhawk.net/mods/win10-volume-brightness-osd"/>
+        <updated>2026-10-09T09:03:28.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows10stylevolumebrightnessosd">Windows 10 Style Volume &amp; Brightness OSD</h1>
+<p>Shows the classic vertical Windows 10 flyout (dark panel, grey track, white
+thumb, accent fill) for <strong>volume</strong> and <strong>brightness</strong>.</p>
+<h2 id="screenshots">Screenshots</h2>
+<h3 id="volumedesktop">Volume (desktop)</h3>
+<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/volosd8desk.png" alt="volumedesk" /></p>
+<h3 id="brightnessdesktop">Brightness (desktop)</h3>
+<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/bgtosd8desk.png" alt="brightnessdesk" /></p>
+<h3 id="volume">Volume</h3>
+<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/volosd8.png" alt="volume" /></p>
+<h3 id="brightness">Brightness</h3>
+<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/bgtosd8.png" alt="brightness" /></p>
+<h2 id="volume-1">Volume</h2>
+<ul>
+<li>The volume keys (up / down / mute) are captured with <code>RegisterHotKey</code>, so the
+flyout also appears when the volume is already 0 or 100.</li>
+<li>A low-level keyboard hook is used as a fallback signal. It makes the flyout
+appear (and the native OSD be suppressed) when a key does not reach the
+hotkey.</li>
+<li>Volume changes from any other source (WASAPI) also show the flyout.</li>
+<li>When muted, or at volume 0, a cross icon replaces the number.</li>
+</ul>
+<h2 id="brightness-1">Brightness</h2>
+<ul>
+<li><strong>Laptops:</strong> the mod listens to the system brightness notification. The
+Fn brightness keys keep working normally.</li>
+<li><strong>Desktop PCs / external monitors:</strong> enable "External monitor hotkeys". The
+mod then uses DDC/CI to change the brightness of the monitor under the mouse
+cursor with <strong>Ctrl+Alt+Up / Ctrl+Alt+Down</strong>.</li>
+<li>The hotkeys are registered system-wide while the option is on. Ctrl+Alt+Up /
+Down is also used by some applications (for example "add cursor above/below"
+in VS Code) and by the screen rotation hotkey of some Intel graphics drivers,
+so leave the option off if it conflicts. The flyout is shown on the monitor
+that is being adjusted.</li>
+<li>Brightness flyout trigger:</li>
+<li><em>On every brightness change</em> - shows the flyout whenever the system reports
+a new brightness (this includes automatic changes such as the ambient light
+sensor or an AC/battery switch). When the brightness is already at its
+minimum or maximum no change is reported, so the native OSD is used as a
+trigger instead; this needs "Suppress the native OSD" to be on.</li>
+<li><em>Only when the native OSD appears</em> - shows the flyout only when Windows
+would have shown its own OSD. Works at the minimum/maximum and ignores
+automatic changes. Depends on the native OSD detection described below.</li>
+</ul>
+<h2 id="mouse">Mouse</h2>
+<p>The flyout can be dragged with the mouse to change the volume, or the
+brightness of an external monitor (DDC/CI).</p>
+<h2 id="nativeosdsuppression">Native OSD suppression</h2>
+<p>The native OSD is hidden with ShowWindow/SetWindowPos hooks in explorer.exe.
+Every small <code>XamlExplorerHostIslandWindow</code> is treated as the native OSD, with
+one exception: the virtual desktop switcher shown when hovering the Task View
+button is recognised (band 7 and the thread description <code>MultitaskingView</code>, as
+in the taskbar-thumbnails mod) and left alone.</p>
+<p>Other small popups of that class, and hardware indicators that share the native
+flyout (for example airplane mode), can still be hidden as well. On a PC that
+reports a brightness value, the brightness flyout then appears in their place,
+because a native OSD without a recent volume event is assumed to be a
+brightness change.</p>
+<p>Enable logging in Windhawk to see the class, title, thread description, band
+and size of the windows that are treated as the OSD.</p>
+<h2 id="knownissues">Known issues</h2>
+<ul>
+<li>The OSD cannot appear over fullscreen UWP apps.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<p>Special thanks to babamohammed2022 for the base version of the mod.</p>]]></content>
+        <author>
+            <name>AdmXP8</name>
+            <uri>https://github.com/AdmXP8</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Reopen Programs at Sign-in 2.0.0]]></title>
         <id>https://windhawk.net/mods/reopen-programs-at-sign-in#9da2ffcc4366a0e801ca4b4ec0474cf668771490</id>
@@ -1257,110 +1378,6 @@ error messages.</p>]]></content>
         <author>
             <name>Nerdworld</name>
             <uri>https://github.com/nerdworldDE</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Snap Flyout Instant 1.0]]></title>
-        <id>https://windhawk.net/mods/snap-flyout-instant#cdf00260c67214c639a07a99665d02ed9e7b3ae8</id>
-        <link href="https://windhawk.net/mods/snap-flyout-instant"/>
-        <updated>2026-10-07T20:00:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="snapflyoutinstant">Snap Flyout Instant</h1>
-<p>Removes the delay before the snap layouts flyout appears when you hover the
-maximize button of a window in Windows 11.</p>
-<p>By default Windows waits 600 ms before showing the flyout. This mod shortens
-that wait to a value you choose (1 ms by default).</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Delay in milliseconds</strong>: time before the flyout is shown. Lower is faster.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The mod only shortens the timer that the shell creates right after the
-flyout's invoke timer starts, and only when it is created by the WinRT
-thread pool timer. Other timers in the shell are left alone.</li>
-<li>The mod looks up an internal symbol of <code>twinui.pcshell.dll</code>. A future Windows
-update may rename it, in which case the mod will simply have no effect.</li>
-<li>Tested on Windows 11 build 26300.9457.</li>
-</ul>]]></content>
-        <author>
-            <name>pajs</name>
-            <uri>https://github.com/pajs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Minimize to tray 1.1]]></title>
-        <id>https://windhawk.net/mods/minimize-to-tray#75d2189b53ab143eb28f441bdce8ecc5b6a0831d</id>
-        <link href="https://windhawk.net/mods/minimize-to-tray"/>
-        <updated>2026-10-07T12:01:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added custom process exclusion list</li>
-</ul>]]></content>
-        <author>
-            <name>0Allu</name>
-            <uri>https://github.com/0Allu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 Win+X restorer on Win11 24H2 1.0.0]]></title>
-        <id>https://windhawk.net/mods/windows-10-winx-restorer#3ee9f7c131cee7f86153433910a5ce62242c4744</id>
-        <link href="https://windhawk.net/mods/windows-10-winx-restorer"/>
-        <updated>2026-10-07T12:01:06.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows10winxrestoreronwin1124h2">Windows 10 Win+X restorer on Win11 24H2</h1>
-<p>This mod restores the power user menu (Win+X), without touching the registry and without replacing system files.</p>
-<p>Win+X opens the Windows 10 style menu of this mod on every chord; the native menu is not called into play.</p>
-<p>The menu is a recreation of the Windows 10 power user menu (Programs and Features, Power Options,
-Event Viewer, System, Device Manager, Network Connections, Disk Management, Computer Management,
-Terminal, Terminal (Admin), Task Manager, Settings, File Explorer, Run, Shut down or sign
-out, Desktop), localized in the same languages as the rebuilt Windows 10 shell menus.</p>
-<p>This mod has been tested on Windows 11 24H2.</p>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/winx.png" alt="winx.png" /></p>
-<h2 id="howitworks">How it works</h2>
-<ul>
-<li>A dedicated thread owns the low-level input hooks and only pumps messages. Nothing slow
-and nothing that can block runs on the hook thread, so Windows never removes the hook for
-exceeding <code>LowLevelHooksTimeout</code> and system input is never held up: a hook posts a private
-message and the thread does the work. The mouse hook looks at right button events only
-and resolves the Start button from the click with local queries, so a mouse move costs
-nothing.</li>
-<li>The menu opens on the taskbar the request came from: a right-click on the Start button of
-a secondary taskbar opens it there, while the Win+X chord opens it on the primary taskbar,
-as Windows 10 does.</li>
-<li>The menu is created on a thread of the mod, with an owner window of that thread: the
-taskbar thread is never used to show it, and no window of the shell is subclassed.
-<code>TrackPopupMenuEx</code> runs a modal loop on the thread that calls it, and doing that on the
-taskbar thread froze the private shell for as long as the menu was on screen (the
-desktop went black for seconds and the tray flyouts stopped answering).</li>
-<li>Only one menu can be open at a time, and the thread that shows it is joined when the
-mod is disabled or updated: an open menu is cancelled, so the mod is never unloaded
-while one of its threads is still running its code.</li>
-<li>Nothing is written to the registry. The mod acts only inside the Windows 10 shell
-process, i.e. an <code>explorer.exe</code> that is not <code>%SystemRoot%\explorer.exe</code>, and its hooks
-are armed only in the process that owns the taskbar (<code>Shell_TrayWnd</code>). The process
-image is read with <code>QueryFullProcessImageNameW</code>, which is not affected by the
-<code>GetModuleFileNameW</code> hook of the Fake Explorer path mod that the Windows 10 taskbar
-requires.</li>
-</ul>
-<h2 id="usingthekeyboard">Using the keyboard</h2>
-<p>The arrow keys and Enter work as in any menu. Pressing a letter chooses the entry whose label
-starts with that letter, when exactly one entry of the open menu does: the items are
-owner-drawn, so the mod answers <code>WM_MENUCHAR</code> itself. An ambiguous letter is ignored rather
-than guessed - in the power submenu, for example, R chooses Restart while S does nothing,
-because Sign out, Sleep and Shut down all start with it. The "Shut down or sign out" entry
-opens a submenu, which a letter does not choose: the arrows do.</p>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>While an elevated window has focus, the low-level hooks of a non-elevated Explorer do not
-receive keystrokes (UIPI), so Win+X reaches the native handler instead of this mod.</li>
-<li>Only the primary taskbar is used for the Win+X chord, which is what Windows 10 does.</li>
-</ul>
-<h2 id="requirements">Requirements</h2>
-<p>This mod requires the mod <a href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2">Win10 taskbar on Win11 24H2 or 25H2</a>:
-the Windows 10 taskbar must be present, and with it the mod Fake Explorer path, which that
-mod requires. In the Windows 11 shell this mod does nothing and is not kept loaded.</p>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

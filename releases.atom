@@ -2,12 +2,112 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-09T00:03:37.000Z</updated>
+    <updated>2026-10-09T09:03:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 language flyout guard and indicator colours 1.0.0]]></title>
+        <id>https://windhawk.net/mods/windows-10-language-flyout-guard-on-win11-24h2#0dd8f7845a96ec5ce9f7d47eed3d598151f32f24</id>
+        <link href="https://windhawk.net/mods/windows-10-language-flyout-guard-on-win11-24h2"/>
+        <updated>2026-10-09T09:03:33.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows10languageflyoutguardandindicatorcolours">Windows 10 language flyout guard and indicator colours</h1>
+<p>This mod addresses two issues that can occur when the private Windows 10 shell is used by the Windows 10 taskbar mod on Windows 11 24H2 and later:</p>
+<ul>
+<li><strong>A language flyout that opens at startup.</strong> For a limited time after the shell starts, the mod suppresses known language-switcher window classes in this Explorer process. It does not enumerate or hide windows owned by other processes. Clicking the language indicator manually is allowed through the guard.</li>
+<li><strong>The language indicator's orientation and appearance.</strong> The optional colour feature uses one theme-aware painter for the indicator's client area and reads the full active keyboard-layout ID, so variants such as Italian (142) display as <code>ITA 142</code> rather than being collapsed to <code>ITA IT</code>. It handles paint itself rather than allowing Explorer's legacy grey fill to overwrite the composited background, and it repaints on hover, press, theme, and layout state changes.</li>
+</ul>
+<h3 id="before">Before</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/before.png" alt="Before" /></p>
+<h3 id="after">After</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/after.png" alt="After" /></p>
+<p>The guard lasts 20 seconds by default. Each intercepted flyout can extend it by 15 seconds, up to four times the configured duration. No window is closed or destroyed.</p>
+<p><strong>Startup reliability.</strong> When Explorer starts, Windhawk loads the mod before the taskbar and the language indicator exist, and window-creation hooks only become active after <code>Wh_ModInit</code> returns. A background rescan therefore attaches to the indicator as soon as it appears (every 250 ms, for the first three minutes only, after which it stops), so the mod no longer needs to be toggled manually after logon.</p>
+<p>The mod is loaded into <code>explorer.exe</code> processes but skips initialization in the system <code>%SystemRoot%\explorer.exe</code> (checked in code using the real image path, which Fake Explorer path does not alter), so it only acts in the private Windows 10 shell. The flyout sweep is limited to the current process. System files are not replaced.</p>
+<p><strong>Overlap with "Fix language indicator in Win10 taskbar under Win11 24H2+".</strong> With <code>LanguageIndicatorColours</code> enabled, this mod paints the language indicator itself and Explorer's native paint (which that mod hooks) no longer runs for it, so you do not need both for the indicator. Disable <code>LanguageIndicatorColours</code> if you prefer to keep using the other mod for the indicator.</p>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 Style Volume & Brightness OSD 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win10-volume-brightness-osd#f4f41b1454168308bd15b4b57136b6a3dbec59fd</id>
+        <link href="https://windhawk.net/mods/win10-volume-brightness-osd"/>
+        <updated>2026-10-09T09:03:28.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows10stylevolumebrightnessosd">Windows 10 Style Volume &amp; Brightness OSD</h1>
+<p>Shows the classic vertical Windows 10 flyout (dark panel, grey track, white
+thumb, accent fill) for <strong>volume</strong> and <strong>brightness</strong>.</p>
+<h2 id="screenshots">Screenshots</h2>
+<h3 id="volumedesktop">Volume (desktop)</h3>
+<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/volosd8desk.png" alt="volumedesk" /></p>
+<h3 id="brightnessdesktop">Brightness (desktop)</h3>
+<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/bgtosd8desk.png" alt="brightnessdesk" /></p>
+<h3 id="volume">Volume</h3>
+<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/volosd8.png" alt="volume" /></p>
+<h3 id="brightness">Brightness</h3>
+<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/bgtosd8.png" alt="brightness" /></p>
+<h2 id="volume-1">Volume</h2>
+<ul>
+<li>The volume keys (up / down / mute) are captured with <code>RegisterHotKey</code>, so the
+flyout also appears when the volume is already 0 or 100.</li>
+<li>A low-level keyboard hook is used as a fallback signal. It makes the flyout
+appear (and the native OSD be suppressed) when a key does not reach the
+hotkey.</li>
+<li>Volume changes from any other source (WASAPI) also show the flyout.</li>
+<li>When muted, or at volume 0, a cross icon replaces the number.</li>
+</ul>
+<h2 id="brightness-1">Brightness</h2>
+<ul>
+<li><strong>Laptops:</strong> the mod listens to the system brightness notification. The
+Fn brightness keys keep working normally.</li>
+<li><strong>Desktop PCs / external monitors:</strong> enable "External monitor hotkeys". The
+mod then uses DDC/CI to change the brightness of the monitor under the mouse
+cursor with <strong>Ctrl+Alt+Up / Ctrl+Alt+Down</strong>.</li>
+<li>The hotkeys are registered system-wide while the option is on. Ctrl+Alt+Up /
+Down is also used by some applications (for example "add cursor above/below"
+in VS Code) and by the screen rotation hotkey of some Intel graphics drivers,
+so leave the option off if it conflicts. The flyout is shown on the monitor
+that is being adjusted.</li>
+<li>Brightness flyout trigger:</li>
+<li><em>On every brightness change</em> - shows the flyout whenever the system reports
+a new brightness (this includes automatic changes such as the ambient light
+sensor or an AC/battery switch). When the brightness is already at its
+minimum or maximum no change is reported, so the native OSD is used as a
+trigger instead; this needs "Suppress the native OSD" to be on.</li>
+<li><em>Only when the native OSD appears</em> - shows the flyout only when Windows
+would have shown its own OSD. Works at the minimum/maximum and ignores
+automatic changes. Depends on the native OSD detection described below.</li>
+</ul>
+<h2 id="mouse">Mouse</h2>
+<p>The flyout can be dragged with the mouse to change the volume, or the
+brightness of an external monitor (DDC/CI).</p>
+<h2 id="nativeosdsuppression">Native OSD suppression</h2>
+<p>The native OSD is hidden with ShowWindow/SetWindowPos hooks in explorer.exe.
+Every small <code>XamlExplorerHostIslandWindow</code> is treated as the native OSD, with
+one exception: the virtual desktop switcher shown when hovering the Task View
+button is recognised (band 7 and the thread description <code>MultitaskingView</code>, as
+in the taskbar-thumbnails mod) and left alone.</p>
+<p>Other small popups of that class, and hardware indicators that share the native
+flyout (for example airplane mode), can still be hidden as well. On a PC that
+reports a brightness value, the brightness flyout then appears in their place,
+because a native OSD without a recent volume event is assumed to be a
+brightness change.</p>
+<p>Enable logging in Windhawk to see the class, title, thread description, band
+and size of the windows that are treated as the OSD.</p>
+<h2 id="knownissues">Known issues</h2>
+<ul>
+<li>The OSD cannot appear over fullscreen UWP apps.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<p>Special thanks to babamohammed2022 for the base version of the mod.</p>]]></content>
+        <author>
+            <name>AdmXP8</name>
+            <uri>https://github.com/AdmXP8</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Reopen Programs at Sign-in 2.0.0]]></title>
         <id>https://windhawk.net/mods/reopen-programs-at-sign-in#9da2ffcc4366a0e801ca4b4ec0474cf668771490</id>
@@ -1619,122 +1719,6 @@ Windows об изменении настроек стандартные подп
         <author>
             <name>appEW</name>
             <uri>https://github.com/appEW</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[DXGI Flip Model Upgrade 1.0]]></title>
-        <id>https://windhawk.net/mods/dxgi-flip-model-upgrade#9db4af94bd5192d63c643e458ac38c88b2b297f3</id>
-        <link href="https://windhawk.net/mods/dxgi-flip-model-upgrade"/>
-        <updated>2026-10-06T22:05:09.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="dxgiflipmodelupgrade">DXGI Flip Model Upgrade</h1>
-<p><strong>Important: restart the game after this mod gets disabled, updated or
-reloaded while the game runs.</strong> The game keeps its upgraded swap chains, which
-need the mod for resizing and for keeping its render targets bound, so it may
-show a frozen or black picture, or fail. That includes mod updates that
-Windhawk installs automatically in the background. If you play with this mod
-enabled, consider turning off automatic updates for it.</p>
-<p>Many Direct3D 11 games present with the legacy <em>blt model</em>
-(<code>DXGI_SWAP_EFFECT_DISCARD</code> or <code>SEQUENTIAL</code>): in a window or borderless window,
-every frame is copied and composed by DWM, which adds latency and blocks
-Independent Flip. PresentMon reports them as <code>Composed: Copy with GPU GDI</code>.
-Many games also never enable tearing, so with VSync off they're still capped
-at the refresh rate in a window.</p>
-<p>This mod changes the swap chains the game creates:</p>
-<ul>
-<li><strong>Force flip model:</strong> blt model swap chains of Direct3D 11 games use the flip
-model instead (<code>FLIP_DISCARD</code> or <code>FLIP_SEQUENTIAL</code>). Once the game window
-covers the whole screen, DWM can promote it to <strong>Independent Flip</strong>.</li>
-<li><strong>Force allow tearing:</strong> flip model swap chains of Direct3D 11 and 12 games
-allow tearing, and frames presented with VSync off show immediately.</li>
-<li><strong>Maximum frame latency</strong>, <strong>Waitable swap chain</strong> and <strong>Force borderless</strong>
-are off by default, see their descriptions in the settings.</li>
-</ul>
-<p>Windows 11 has a similar system-wide option, "Optimizations for windowed
-games", for Direct3D 10 and 11. This mod applies per game, also works on
-Windows 10, and adds tearing.</p>
-<h2 id="howtoenablethemodforaprogram">How to enable the mod for a program</h2>
-<p>This mod doesn't target any process by default. In Windhawk, go to the mod's
-"Advanced" tab and scroll down to "Custom process inclusion list". In that box,
-put the filename of the game's <code>.exe</code>, then click "Save" and (re)start the game.
-Only swap chains created while the mod is loaded are changed.</p>
-<h2 id="howtoverify">How to verify</h2>
-<p>Use <a href="https://github.com/GameTechDev/PresentMon">PresentMon</a> (or an overlay that
-shows the presentation mode, such as RTSS). With the flip model, the game should
-show <code>Hardware: Independent Flip</code> or <code>Hardware Composed: Independent Flip</code> in
-borderless fullscreen, and <code>Composed: Flip</code> in a smaller window. With tearing
-and VSync off, the frame rate can go above the refresh rate. The log says what
-was changed for each swap chain, and why something wasn't.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>Not changed to the flip model: swap chains with a multisampled back buffer,
-swap chains created in exclusive fullscreen (those already get flip
-presentation through Fullscreen Optimizations), Direct3D 10 games, and back
-buffer formats the flip model doesn't support.</li>
-<li>sRGB back buffers aren't supported by the flip model, so their format becomes
-the non-sRGB one. Render target views the game creates for them still get the
-sRGB format, but a game that reads the back buffer format sees the other one.</li>
-<li>The flip model only shows what the game renders with Direct3D. Anything drawn
-into the game window with GDI disappears.</li>
-<li>Tearing doesn't apply in exclusive fullscreen.</li>
-<li>With <strong>Force borderless</strong>, the game runs at the desktop resolution, and its
-picture is stretched if it renders at another one. The game is told it's in
-fullscreen. Alt+Enter is turned off for those swap chains, as it would switch
-to exclusive fullscreen behind the mod's back.</li>
-<li>With <strong>Waitable swap chain</strong>, games that already use a waitable swap chain
-keep their own settings.</li>
-<li>If the game loads <code>dxgi.dll</code> only after it started, the mod's hooks are
-installed a moment after that, and a swap chain the game creates right away
-may keep the blt model. The log then shows no "Hooked" lines before that swap
-chain.</li>
-</ul>
-<h2 id="anticheat">Anti-cheat</h2>
-<p><strong>Don't use this mod in online games protected by anti-cheat.</strong> It loads code
-into the game and hooks DXGI and Direct3D 11 functions:
-<code>CreateDXGIFactory</code>, <code>CreateDXGIFactory1</code> and <code>CreateDXGIFactory2</code>,
-<code>IDXGIFactory::CreateSwapChain</code> and <code>IDXGIFactory2::CreateSwapChainForHwnd</code>,
-<code>IDXGISwapChain::Present</code>, <code>Present1</code>, <code>ResizeBuffers</code>, <code>ResizeBuffers1</code>,
-<code>SetFullscreenState</code>, <code>GetFullscreenState</code> and <code>ResizeTarget</code>,
-<code>IDXGIDevice1::SetMaximumFrameLatency</code> and
-<code>ID3D11Device::CreateRenderTargetView</code>. It hooks no Windows loader or kernel
-functions, such as <code>LoadLibraryExW</code> in <code>kernelbase.dll</code>: if <code>dxgi.dll</code> isn't
-loaded yet when the mod starts, the mod learns about it through a Windows DLL
-load notification, and a thread of the mod installs the hooks. With <strong>Force
-borderless</strong>, another thread changes the game window. Present hooks are also
-how cheats draw overlays, so anti-cheat software may block the game, kick you
-or ban your account. There are no guarantees for any game.</p>
-<p>Enable the mod's logging (Advanced → Debug logging) to see what happens.</p>]]></content>
-        <author>
-            <name>tria</name>
-            <uri>https://github.com/triatomic</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[ClassicWindowSwitcher 1.3]]></title>
-        <id>https://windhawk.net/mods/classic-window-switcher#ef7ebe709b53c0e14da6769f29a9a5b0501facb6</id>
-        <link href="https://windhawk.net/mods/classic-window-switcher"/>
-        <updated>2026-10-06T22:05:05.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicwindowswitcher">ClassicWindowSwitcher</h1>
-<ul>
-<li>This mod brings back the classic Alt+Tab dialog, even on Windows 11 24H2+, which removed the old switcher in win32kfull.sys.</li>
-<li>This is a direct port of my <a href="https://github.com/Ingan121/ClassicWindowSwitcher">ClassicWindowSwitcher</a>, which is a fork of valinet's <a href="https://github.com/valinet/sws">SimpleWindowSwitcher</a>.</li>
-<li>Please do not use this mod with other Alt+Tab mods. They might conflict with this mod.</li>
-<li>If you are using an alternative shell like Explorer7, have disabled the modern Alt+Tab UI with <code>AltTabSettings</code> registry, or if you prefer to have the classic Alt+Tab restored (on 24H2+) even without Explorer running, enable the last option in the mod settings.<ul>
-<li>If you enable this setting, you may have to restart Explorer after disabling this mod to get the modern switcher UI back.</li></ul></li>
-</ul>
-<p><img src="https://raw.githubusercontent.com/Ingan121/ClassicWindowSwitcher/refs/heads/master/cws.webp" alt="Animated Screenshot" /></p>
-<h2 id="differenceswiththeoriginalclassicswitcher">Differences with the original classic switcher</h2>
-<ul>
-<li>It works even on Windows 11 24H2 and later.</li>
-<li>It shows UWP icons properly.</li>
-<li>You can navigate through the items with a mouse, the mouse wheel, or arrow keys.<ul>
-<li>Press Ctrl+Alt+Tab to keep the switcher open after releasing the Alt key.</li></ul></li>
-<li>You can close a focused window by pressing the Del key while the switcher is active.</li>
-<li>It features many configurable options.<ul>
-<li>It can optionally show a per-application window list when you press Alt+Tilde.</li></ul></li>
-</ul>]]></content>
-        <author>
-            <name>Ingan121</name>
-            <uri>https://github.com/Ingan121</uri>
         </author>
     </entry>
 </feed>
