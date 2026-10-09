@@ -62,7 +62,7 @@ jump back to the previous window, or type a few letters to find another.
 
 In the hotkey panel, type to search: besides the open windows, the panel
 suggests **installed apps** (everything in the Start menu, Store apps
-included) and – if [Everything](https://www.voidtools.com/) is running –
+included) and – if Everything is running –
 **files and folders** from its index (most recently used first, or another
 order of your choice; a last row opens the full result list in Everything).
 How many apps and files to show is configurable. Press `Enter` to open the
