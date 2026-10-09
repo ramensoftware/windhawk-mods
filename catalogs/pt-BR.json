@@ -8464,6 +8464,37 @@
         "version": "1.0.0"
       }
     },
+    "mac-island-dock": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791540273000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791540273000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "caliberda",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -lcomctl32 -lgdi32 -lmsimg32 -ld2d1 -ldwrite -lwlanapi -luuid -lwindowscodecs -lversion -lbthprops -ldxva2 -lshlwapi -lwinhttp -lwinmm -liphlpapi -lshcore",
+        "description": "Uma ilha no topo da tela como a barra de menus do macOS e a Dynamic Island do iPhone (relógio, central de controle, notificações, mídia, ícones da bandeja) e uma dock como a do macOS no lugar da barra de tarefas (ou a barra do Windows, transparente ou como ela é)",
+        "github": "https://github.com/cesarkali",
+        "homepage": "https://caliberda.com.br",
+        "include": [
+          "windhawk.exe",
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Ilha e Dock estilo Mac",
+        "version": "1.0.0"
+      },
+      "metadataEnglish": {
+        "description": "An island at the top of the screen like the macOS menu bar and the iPhone's Dynamic Island (clock, control center, notifications, media, tray icons), and a macOS-like dock instead of the taskbar (or the Windows taskbar, transparent or as it is)",
+        "name": "Mac Island & Dock"
+      }
+    },
     "mac-magnifying-cursor": {
       "details": {
         "defaultSorting": 52740,

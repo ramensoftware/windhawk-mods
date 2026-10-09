@@ -2,12 +2,737 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-09T09:03:33.000Z</updated>
+    <updated>2026-10-09T10:04:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Mac Island & Dock 1.0.0]]></title>
+        <id>https://windhawk.net/mods/mac-island-dock#503f3543e6b770871324d79b725fe59b6ddc5555</id>
+        <link href="https://windhawk.net/mods/mac-island-dock"/>
+        <updated>2026-10-09T10:04:33.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="macislanddock">Mac Island &amp; Dock</h1>
+<p><strong>English</strong> | <a href="#português">Português</a></p>
+<p>The top of macOS and the iPhone's Dynamic Island on Windows 11: an island at
+the top of the screen with the clock, a control center, notifications and
+what's playing; and, if you want it, a dock like the one on macOS instead of
+the taskbar.</p>
+<p><img src="https://i.imgur.com/obcRfEh.gif" alt="The island minimized to a line and opened again" /></p>
+<p>| The control center | A new notification in the pill |
+| :---: | :---: |
+| <img src="https://i.imgur.com/YgHQ0Zs.gif" alt="The control center, and editing it" /> | <img src="https://i.imgur.com/8VlkvfE.gif" alt="A new notification in the pill" /> |</p>
+<h2 id="theisland">The island</h2>
+<ul>
+<li><strong>Always at the top</strong>: the clock, network, volume, battery and
+notifications, always visible (except in full screen): a black pill at the
+top center, which can be minimized to a thin line, or a full-width bar
+like the macOS menu bar, which keeps maximized windows below it. The mouse
+wheel on the volume changes it, and the bell turns into a moon while "Do
+not disturb" is on.</li>
+<li><strong>Apps with unread notifications</strong> (a count on their taskbar button, or a
+notification not looked at yet) show up on the island with a red dot, even
+while the taskbar is hidden, and the bell gets a red dot until the list is
+opened. Clicking an app opens it at its latest notification; a
+notification with nothing to open (like a script's) shows the list
+instead, scrolled to it. Opening the app in any way (from the island, the
+list or the taskbar) clears its notifications from the island and the
+list, and so does the app taking them away from the Windows notification
+center (like a message read on the phone).</li>
+<li><strong>Panels like the Dynamic Island</strong>: the pill itself stretches into a panel,
+sideways and then down, with a little bounce:</li>
+<li><strong>Calendar</strong> (the clock).</li>
+<li><strong>Control center</strong> (the network or the battery), like the one on
+macOS: Wi-Fi (on/off, the networks in reach, joining with a password),
+Bluetooth (on/off, the paired devices), "Do not disturb", night light,
+project (the four display modes), cast, live captions, accessibility
+(magnifier, narrator, color filters, sticky keys), the display's
+brightness (monitors with DDC/CI), the volume, the output device and the
+volume of each app, the battery, the mobile hotspot and airplane mode.</li>
+<li><strong>Sound</strong> (the volume): only the volume, the output device and the
+volume of each app, like the sound menu on macOS.</li>
+<li><strong>Notifications</strong> (the bell): the latest notifications Windows showed,
+in a list that takes up to half of the screen and scrolls smoothly;
+clicking one opens its app.</li>
+<li><strong>What's playing</strong> (the music note): the cover, the song, a timeline to
+jump in it, previous / play / next, and the volume (the mouse wheel too).
+The buttons, and the cover with the title, can also sit on the pill.
+With several apps with media (a paused Spotify and a browser playing,
+for example), a row at its top chooses which one the island controls
+("Automatic" follows Windows); on the pill, a dot under the cover for
+each, and Shift+wheel (or a sideways touchpad swipe) on it goes to the
+next one.</li>
+<li>The control center's controls can be chosen and ordered right in it
+("Edit", like on the iPhone: drag one to move it, "-" removes
+it, and the others are listed below to add), with shortcuts like dark
+mode, screenshot, lock, emoji, clipboard history, Task Manager,
+Calculator and File Explorer.</li>
+<li>The calendar keeps events, with reminders that show in the pill, and,
+if chosen, the public holidays of the country set in Windows.</li>
+<li><strong>Power</strong> (an optional button on the pill): sleep, restart, shut down,
+lock and sign out, like the macOS Apple menu. Restarting, shutting down
+and signing out ask first, and Windows closes the apps as usual.</li>
+<li><strong>Battery</strong> (the battery): only the battery and the power plan (and,
+with the balanced plan, Windows' power modes).</li>
+<li><strong>More on the pill</strong> (each one optional, off by default, in the island's
+settings):
+how much the processor, the memory and the video memory are used
+(clicking one shows its graphs and details), a button muting the
+microphone, a button switching light and dark mode, <strong>notes</strong> (with
+topics, copied with a click), <strong>tasks</strong> (in progress, and the last ten
+done below them),
+<strong>keyboard shortcuts</strong> to remember (recorded by pressing them, or
+imported from a file like komorebi's whkdrc), the <strong>weather</strong> (now, the
+next hours and the week, for a city typed in its panel) and <strong>updates</strong>
+(the apps with a newer version in winget, updated in a terminal: one,
+the ones ticked, or all; an app can be ignored, so one winget can't
+update doesn't keep the count on the pill, and shown again; and the
+Windows updates waiting). Notes, tasks
+and shortcuts also have buttons in the control center.</li>
+<li><strong>Colors</strong>: black, graphite, light, the Windows accent color, or glass.</li>
+<li><strong>The other apps' tray icons</strong> on the island: the pinned ones always, the
+others opening sideways from the "⋯" button. Clicking, double-clicking and
+right-clicking them works like on the taskbar (a double click opens the app,
+the right button shows its menu); the pin that shows after the mouse
+stays two seconds on an icon (or the middle button) pins it. With many
+icons, the list shows twelve at a time (a setting, in Windhawk and in the
+island; fewer on small screens): the icons at an edge with more past it
+fade out, and the mouse wheel (or a sideways swipe) over the icons scrolls
+the list.</li>
+<li><strong>New notifications in the pill</strong>: the pill opens with the app, the title
+and the text for a few seconds, like the iPhone's Dynamic Island (not with
+"Do not disturb"), with the sender's picture when the notification has one
+on this computer (like a contact's photo). Messaging apps that offer a reply box in their
+Windows notifications (like WhatsApp) can be answered right there; the
+reply wraps onto more lines (the wheel scrolls it), Shift+Enter starts a
+new line, the arrows move in it and Ctrl+Backspace deletes a word. Under the mouse, a long notification shows
+on up to three lines (in the list too).
+Its "x" deletes it (from the pill and the list); its arrow minimizes it,
+ignoring its app for a minute, like on Android (its notifications still go
+to the list, and only its icon on the island moves).</li>
+<li><strong>Notifications</strong> can be cleared from the island's list (all, or one by
+one); the gear at its top unfolds its switches ("Do not disturb", the
+banners in the pill, and showing what they say).</li>
+<li><strong>Anywhere on the screen</strong>: choose its place in the island's settings (or
+turn on
+dragging the pill, which then snaps to the middle and the corners of each
+edge); some apps can have a place of their own (for example, lower, so it
+doesn't cover a browser's tabs), and icons and a clock of their own
+(shown or hidden while they're in front, even ones turned off for all
+apps; a shorter clock for a smaller island), and it slides
+there while they're in
+front. On the lower half of the screen, its panels and banners open
+upwards; on the left and right edges it stands upright, and they open
+towards the middle.</li>
+<li><strong>Several monitors</strong>: the island stays on the main monitor, on another
+one chosen, or follows the monitor with the mouse; each monitor keeps its
+own place for it. Going to another monitor, it closes into its dot, which
+glides there and opens again.</li>
+<li><strong>Smooth everywhere</strong>: what it shows opens, closes, grows, shrinks and
+changes with springs (icons crossfade, new tray icons and notifications
+grow in, old ones shrink away). For slower computers, the "Animations"
+settings (in Windhawk and in the island, the same ones) turn them off,
+keep only the essential ones ("partial": the island, panels and banners
+opening and closing, without bounces, glows, color blends, counting
+numbers or scrolling text), change their speed, or limit the frames a
+second (about 90, 60 or 30; the animations keep their length).</li>
+<li><strong>The island's options are in the island</strong>: right-click the island (the
+pill or the minimized line) and click the gear that comes out under it
+(see below). Windhawk's settings turn the island on, set up the taskbar
+and the animations.</li>
+</ul>
+<h3 id="theislandssettings">The island's settings</h3>
+<p>A right click on the island (not on another app's icon or a notification)
+brings out a small bubble with a gear under it; clicking it opens the
+control center on the settings (with the bar style, the right click opens
+them right away). They show in two or three columns (one on small screens,
+scrolling). Typing anywhere in them searches them
+(accents don't matter); Ctrl+Backspace deletes a word, Esc clears the
+search, and Esc (or a click outside) closes them.</p>
+<p>| Section | What it sets |
+| :--- | :--- |
+| Look | The style (pill or bar), the colors, the size, and panels as wide as the island. |
+| Place | Where it sits (kept for each monitor); "Place and icons per app" (a place, icons and a clock of their own for some apps, added from the open apps); moving the pill by dragging it; standing upright on the left and right edges; its distance from the screen's edges; on the monitor with the mouse, or on the monitor chosen. |
+| On the pill | The order of its items (drag them in the little pill), the clock kept in the middle, and which items it shows: network, volume, battery, the bell, and (off by default) the power button, light and dark mode, the microphone, notes, tasks, keyboard shortcuts, the weather, updates, and the processor, memory and video memory use. |
+| Tray icons and media | The other apps' tray icons (keeping their list open, and how many it shows before it scrolls), what's playing, and its buttons and cover with the title on the pill. |
+| Clock | Seconds, the day of the week, the day and month, the year, and the holidays in the calendar (off by default). |
+| Notifications | "The island handles notifications and their sounds" (off by default, see the notes), new notifications in the pill (also while it's minimized), hiding the Windows banners, and downloading pictures from the web (off by default). |
+| Animations | On or off, how many (all, partial, none), their speed, and the frames a second. The same as in Windhawk's settings: the mod can't change Windhawk's, so a change here holds until one is changed in Windhawk. |</p>
+<h3 id="screenshots">Screenshots</h3>
+<p>| The calendar | What's playing | Notifications |
+| :---: | :---: | :---: |
+| <img src="https://i.imgur.com/BklN6j7.png" alt="The calendar" /> | <img src="https://i.imgur.com/mHmKd5L.png" alt="What's playing" /> | <img src="https://i.imgur.com/nmcC43L.png" alt="Notifications" /> |
+| <strong>The weather</strong> | <strong>Notes</strong> | <strong>Tasks</strong> |
+| <img src="https://i.imgur.com/5fxH29Y.png" alt="The weather" /> | <img src="https://i.imgur.com/Qj0NbXp.png" alt="Notes" /> | <img src="https://i.imgur.com/29Jdwf7.png" alt="Tasks" /> |
+| <strong>Updates</strong> | <strong>The processor's use</strong> | <strong>Power</strong> |
+| <img src="https://i.imgur.com/sL5ksJc.png" alt="Updates" /> | <img src="https://i.imgur.com/Vl5mLv0.png" alt="The processor's use" /> | <img src="https://i.imgur.com/lvMsIua.png" alt="Power" /> |</p>
+<p>| The island's settings | Keyboard shortcuts |
+| :---: | :---: |
+| <img src="https://i.imgur.com/tngYzwN.png" alt="The island's settings" /> | <img src="https://i.imgur.com/q75V4Sm.png" alt="Keyboard shortcuts" /> |</p>
+<p>The other apps' tray icons: their list open, and opening:</p>
+<p><img src="https://i.imgur.com/Xt2pVE9.png" alt="The tray icons' list open" /></p>
+<p><img src="https://i.imgur.com/ulHZh2A.gif" alt="The tray icons' list opening" /></p>
+<p>The bar style, at the top of the screen:</p>
+<p><img src="https://i.imgur.com/gtPY5YI.png" alt="The bar style" /></p>
+<p>| Colors | |
+| :--- | :---: |
+| Black | <img src="https://i.imgur.com/AQKn4nY.png" alt="Black" /> |
+| Graphite | <img src="https://i.imgur.com/J7r7GeH.png" alt="Graphite" /> |
+| Light | <img src="https://i.imgur.com/B6lsL49.png" alt="Light" /> |
+| The Windows accent color | <img src="https://i.imgur.com/Ilr8YHB.png" alt="Accent color" /> |
+| Glass | <img src="https://i.imgur.com/kAsBeR8.png" alt="Glass" /> |</p>
+<h2 id="thedockoptional">The dock (optional)</h2>
+<p>The "Taskbar" setting turns the Windows taskbar into a dock like the one on
+macOS; or keeps the Windows taskbar, transparent with only its apps (with a
+soft shadow rising from the bottom edge, the magnification and the bounces,
+sliding in and out with the mod's animation; it only comes up and takes
+clicks around its apps, so the rest of the bottom of the screen stays
+usable), or as it is (all of it, or only its apps).</p>
+<p><img src="https://i.imgur.com/z0FMhlK.gif" alt="The transparent taskbar, with only its apps" /></p>
+<ul>
+<li><strong>Compact and floating</strong>: only the app icons, centered, in a rounded pill
+that floats a little above the bottom edge.</li>
+<li><strong>Blurred background</strong>: the windows and the wallpaper behind it show
+through, blurred.</li>
+<li><strong>Magnification</strong>: the icons grow in a wave that follows the mouse.</li>
+<li><strong>Bouncing icons</strong>: an app's icon bounces while it opens, and when the app
+needs attention (a new message, for example). After clicking an app, the
+dock waits for it to open and bounce before hiding.</li>
+<li><strong>Notifications without the whole dock</strong>: when an app needs attention while
+the dock is hidden (a new count on its icon, or a flashing button), only its
+icon peeks out from the bottom edge, bounces, and goes away again. Clicking
+it opens the app. The whole dock, or nothing at all, can be chosen instead.
+On the transparent taskbar, an app asking for attention neither bounces
+nor brings the taskbar up: its button shows it once the taskbar is up.</li>
+<li><strong>Apps coming and going</strong>: an app opening grows into the dock, and the
+icons next to it slide over to make room (and back when one closes).</li>
+<li><strong>Dots under open apps</strong>, instead of the Windows line.</li>
+<li><strong>Hidden until you need it</strong>: the taskbar auto-hides, and springs in when
+the mouse reaches the bottom edge of the screen.</li>
+<li><strong>Out of the way in full screen</strong>: games and apps in full screen (exclusive
+or borderless) don't bring it up when the mouse hits the bottom edge.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Windows 11 only.</li>
+<li>The dock and the transparent taskbar are for a taskbar at the bottom. With
+the taskbar on the left, the right or the top (newer Windows 11 versions),
+it stays as Windows has it, and the island keeps working; they come back
+when it's at the bottom again.</li>
+<li><strong>The island without the dock</strong>: the "Taskbar" setting keeps the Windows
+taskbar as it is, or with only its apps (the island shows the clock, tray
+and notifications), to combine the island with other taskbar mods.</li>
+<li>The mod turns on the taskbar's auto-hide (the Windows setting) while it's
+enabled, and turns it back off when the mod is disabled (if it was off
+before), also after a crash, at the next start. This can be changed in
+the settings ("Hide the taskbar until the mouse reaches the bottom
+edge"). If Explorer isn't running when
+the mod is disabled, turn it off in Windows' taskbar settings.</li>
+<li><strong>Windows' own settings</strong>: the control center's switches and buttons
+change Windows' settings themselves, as Windows' quick settings do: dark
+mode, night light, the power plan and the power mode, the microphone's
+mute, the default output device, Wi-Fi networks (a network joined is
+saved by Windows, with its password), Sticky Keys and the other
+accessibility switches, the display mode (Project), the monitor's
+brightness, and the radios. They stay as set after the mod is disabled.</li>
+<li>Without the island, the system tray (clock, network, volume) stays at the
+right end of the taskbar, in its own pill, unless it's hidden in the
+settings.</li>
+<li><strong>Bigger magnification</strong>: the magnified icons can only grow up to the top
+of the taskbar. For room above the dock, make the taskbar taller with the
+<a href="https://windhawk.net/mods/taskbar-icon-size">Taskbar height and icon size</a>
+mod (for example, a height of 72 and the default icon size). The dock keeps
+its own height, and the space above it is left for the icons.</li>
+<li>Don't combine this mod with other mods that restyle the taskbar or change
+its auto-hide animation, such as Windows 11 Taskbar Styler themes or
+Taskbar Auto-Hide Instant Show, or with other dock mods. With the Windows
+taskbar "only the apps", Windows 11 Taskbar Styler can bring the tray back
+and make Explorer stop responding; for a transparent taskbar, use this
+mod's own "transparent" option instead.</li>
+<li><strong>Two processes</strong>: the dock (and what only the taskbar knows: the apps'
+badges and the tray icons the apps send it) runs in <code>explorer.exe</code>, since
+it changes the taskbar itself; the island runs in a <code>windhawk.exe</code> process
+of its own, so a problem in it can't take the taskbar and the desktop down.
+They tell each other what changed with window messages.</li>
+<li><strong>How some features work</strong>: Windows has no public API for a few of them, so
+the mod uses what Windows itself uses, and leaves a feature out when it
+doesn't find it as expected:</li>
+<li>New notifications (also when an app's count doesn't change, like a new
+message in a chat that's already unread) and the notification list are
+read, read-only, from the Windows notification database.</li>
+<li>Night light is switched through its state in the registry (CloudStore),
+checked before it's changed.</li>
+<li>The output device and airplane mode use interfaces of Windows (the same
+ones the volume tools and the quick settings use).</li>
+<li>Cast, live captions, the narrator and color filters are switched with
+their Windows shortcuts.</li>
+<li>"Do not disturb" is switched with the interface the Windows notification
+center uses.</li>
+<li>The tray icons are read as the apps send them to the taskbar. When the
+mod starts, it asks the apps to send them again, with the message Windows
+sends when the taskbar restarts; an app that changes an icon the mod
+hasn't seen yet (one started before it) is sent that message on its own.
+Some apps never send them again (Spotify): so that their icons aren't
+lost when the mod reloads (its settings saved, turned off and on), the
+list is kept in the mod's storage while it reloads, and taken back for
+the apps still running.
+Clearing notifications on the island only hides them there (the Windows
+notification database is only read).</li>
+<li>When the island takes a new notification (in the pill, or, with the bar
+style or a panel open, as its app's icon with the red dot and in the
+list), the Windows banner is moved off the screen (it can be kept in the
+island's settings); Windows places it again for the next notification.
+Windows 11
+shows its banners stacked in one window, so it's off the screen only
+while every banner in it is one the island shows: calls, alarms and
+reminders keep Windows' banner, with its buttons, and the others in the
+stack show with them. In full screen nothing shows on the island (the
+notification waits in the list), and, like with Windows' "Do not
+disturb", Windows' banners are left alone. With the pill's banners off,
+or minimized without them, the Windows banner stays.
+Windows shows its banners one after the other, late when many come, and
+plays their sounds then: the option "The island handles notifications
+and their sounds" (off by default) keeps Windows' "Do not disturb" on
+while the island runs, so Windows stays quiet and the island shows each
+notification and plays its sound (the one it asks for) as it comes.
+Calls, alarms and reminders then show in the pill too, ahead of the
+others (one on the pill gives way and shows again after them, with what
+was being typed): they stay until closed, with the buttons the island
+can press (an app's own, and "Dismiss"), and ring until closed, up to a
+minute. "Do not disturb" lets them through by default, so Windows may
+show its banner for one too (and plays its sound instead of the
+island's): the island then reads that banner through UI Automation (the
+accessibility tree, only that window) and, when it's the one on the
+pill, takes it over: Windows' banner is hidden while the pill shows it,
+and the pill's buttons are Windows' own ("Snooze" too), pressed on it
+when the pill's are. It comes back as soon as the pill stops showing
+it, or if anything doesn't match. The island's "Do not
+disturb" is then its own (the bell's moon), and Windows' is turned back
+off when the island stops (from explorer if the island's process ends
+unexpectedly, or at the next start after a crash); it's left alone if it
+was already on. If it's turned off from Windows, it's left off and the
+island works as usual until the option is turned on again.</li>
+<li>Replies go to the app the way Windows sends them from its own banners:
+through the notification handler the app registered.</li>
+<li>The mod only goes online for what's turned on in the island's settings
+(all of it off by default; an app's own icons can hide these items, but
+not turn them on): "Download pictures from the web" (a notification's
+picture that's on the web, like WhatsApp's contact photos, downloaded
+over https from the address the app put in it, like Windows does, and
+only for apps allowed to go online; otherwise the app's icon is shown),
+the weather (<a href="https://open-meteo.com">Open-Meteo</a>: the city typed, then
+its forecast every 30 minutes while it's on the pill), the holidays
+(<a href="https://date.nager.at">Nager.Date</a>: the country set in Windows, once a
+year) and updates (winget asks its community source, 20 seconds after
+the island starts unless it did in the last 6 hours, then every 6
+hours; the Windows updates are read, read-only and offline, from
+Windows' own last scan through the Windows Update Agent).</li>
+<li>Updates are only listed by the mod (it accepts no terms for you): an
+app is updated in a terminal, where "winget upgrade" shows what it does
+and asks for anything it needs, only when asked in the panel.</li>
+<li>The power modes are read and set with the functions of powrprof.dll
+that Windows' Settings uses; the power plans with the documented ones.</li>
+<li>The GPU's use comes from Windows' performance counters, and its
+temperature, fan and power from the display driver's own figures (left
+out when the driver doesn't give them).</li>
+<li>Sleep, restart, shut down and sign out use the Windows functions for
+them (with "Fast startup", shutting down works like the Start menu's).
+On PCs with Modern Standby, "Sleep" turns the screen off, which is what
+puts them to sleep.</li>
+<li><strong>Graphics driver updates</strong>: the island and its panels are drawn with
+Direct2D on layered windows. If the graphics driver is updated or reset,
+the island starts again by itself (every two seconds at most, while the
+driver is still installing), with everything drawn anew. The picture is
+copied to the window, so on laptops with two GPUs it doesn't matter which
+one draws it.</li>
+<li><strong>Similar mods</strong>: <a href="https://windhawk.net/mods/dynamic-island-for-windows">Dynamic Island for
+Windows</a> is a pill
+overlay that reacts to media, downloads and the clipboard; <a href="https://windhawk.net/mods/island-media-controls">Island Media
+Controls</a> puts media
+controls on the taskbar; <a href="https://windhawk.net/mods/windhawk-topbar">TopBar for
+Windows</a> adds a top bar with
+flyouts; <a href="https://windhawk.net/mods/taskbar-dock-animation">Taskbar Dock
+Animation</a> magnifies the
+taskbar icons. This mod brings the island (with the control center,
+notifications and tray icons) and the dock together, as one macOS-like top
+and bottom, without other mods.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>Mod by <strong>caliberda</strong> (<a href="https://caliberda.com.br">caliberda.com.br</a>,
+Instagram <a href="https://www.instagram.com/cesar.kali">@cesar.kali</a>).</li>
+<li>Requests and bug reports:
+<a href="mailto:julio@caliberda.com.br">julio@caliberda.com.br</a>.</li>
+<li>The code that reaches the taskbar's XAML is based on <strong>Taskbar tray
+auto-hide (show on hover)</strong> by m417z (GPL-3.0).</li>
+<li>Inspired by the <strong>macOS</strong> menu bar, Control Center and Dock, and the
+iPhone's <strong>Dynamic Island</strong> (Apple).</li>
+</ul>
+<hr />
+<h2 id="portugus">Português</h2>
+<p>O topo do macOS e a Dynamic Island do iPhone no Windows 11: uma ilha no topo
+da tela com o relógio, uma central de controle, as notificações e o que está
+tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.</p>
+<p><img src="https://i.imgur.com/obcRfEh.gif" alt="A ilha minimizada numa linha e aberta de novo" /></p>
+<p>| A central de controle | Uma notificação nova na pílula |
+| :---: | :---: |
+| <img src="https://i.imgur.com/YgHQ0Zs.gif" alt="A central de controle, e editando" /> | <img src="https://i.imgur.com/8VlkvfE.gif" alt="Uma notificação nova na pílula" /> |</p>
+<h3 id="ailha">A ilha</h3>
+<ul>
+<li><strong>Sempre no topo</strong>: o relógio, a rede, o volume, a bateria e as
+notificações, sempre visíveis (menos em tela cheia): uma pílula preta no
+centro do topo, que pode ser minimizada para uma linha fina, ou uma
+barra na largura toda, como a barra de menus do macOS, que deixa as janelas
+maximizadas abaixo dela. A roda do mouse no volume muda o volume, e o sino
+vira uma lua quando o "Não incomodar" está ligado.</li>
+<li><strong>Apps com notificações não lidas</strong> (um número no botão da barra, ou uma
+notificação ainda não vista) aparecem na ilha com um pontinho vermelho,
+mesmo com a barra escondida, e o sino ganha um pontinho vermelho até a
+lista ser aberta. Clicar num app abre a última notificação dele; uma
+notificação sem nada para abrir (como a de um script) mostra a lista, já
+nela. Abrir o app de qualquer jeito (pela ilha, pela lista ou pela barra)
+limpa as notificações dele da ilha e da lista, e o mesmo acontece quando o
+app as tira da central de notificações do Windows (como uma mensagem lida
+no celular).</li>
+<li><strong>Painéis como a Dynamic Island</strong>: a própria pílula se estica até virar um
+painel, para os lados e depois para baixo, com um leve balanço:</li>
+<li><strong>Calendário</strong> (o relógio).</li>
+<li><strong>Central de controle</strong> (a rede ou a bateria), como a do macOS:
+Wi-Fi (ligar/desligar, as redes ao alcance, conectar com senha),
+Bluetooth (ligar/desligar, os dispositivos pareados), "Não incomodar",
+luz noturna, projetar (os quatro modos de tela), transmitir, legendas ao
+vivo, acessibilidade (lupa, narrador, filtros de cor, teclas de
+aderência), o brilho da tela (monitores com DDC/CI), o volume, o
+dispositivo de saída e o volume de cada app, a bateria, o hotspot móvel e
+o modo avião.</li>
+<li><strong>Som</strong> (o volume): só o volume, o dispositivo de saída e o volume de
+cada app, como o menu de som do macOS.</li>
+<li><strong>Notificações</strong> (o sino): as últimas notificações que o Windows mostrou,
+numa lista que ocupa até metade da tela e rola suavemente; clicar numa
+abre o app dela.</li>
+<li><strong>O que está tocando</strong> (a nota musical): a capa, a música, uma linha do
+tempo para pular partes, voltar / tocar / avançar e o volume (a roda do
+mouse também). Os botões, e a capa com o título, também podem ficar na
+pílula. Com vários apps com mídia (um Spotify pausado e um navegador
+tocando, por exemplo), uma fileira no topo escolhe qual a ilha controla
+("Automático" segue o Windows); na pílula, um pontinho embaixo da capa
+para cada um, e Shift+roda (ou deslizar para o lado no touchpad) em cima
+dela passa para o próximo.</li>
+<li>Os controles da central de controle podem ser escolhidos e ordenados nela
+mesma ("Editar", como no iPhone: arraste um para mudar de
+lugar, o "-" tira, e os outros ficam listados embaixo para adicionar), com
+atalhos como modo escuro, captura de tela, bloquear, emojis, histórico da
+área de transferência, Gerenciador de Tarefas, Calculadora e Explorador de
+Arquivos.</li>
+<li>O calendário guarda eventos, com lembretes que aparecem na pílula, e,
+se escolhido, os feriados do país configurado no Windows.</li>
+<li><strong>Energia</strong> (um botão opcional na pílula): suspender, reiniciar,
+desligar, bloquear e sair, como o menu Apple do macOS. Reiniciar,
+desligar e sair perguntam antes, e o Windows fecha os apps como sempre.</li>
+<li><strong>Bateria</strong> (a bateria): só a bateria e o plano de energia (e, com o
+plano equilibrado, os modos de energia do Windows).</li>
+<li><strong>Mais na pílula</strong> (cada um opcional, desligado por padrão, nas
+configurações da ilha): o uso do processador, da memória e da memória de vídeo
+(clicar num mostra os gráficos e os detalhes), um botão que silencia o
+microfone, um botão que troca o modo claro e escuro, <strong>anotações</strong> (com
+tópicos, copiadas com um clique), <strong>tarefas</strong> (em andamento, e as dez
+últimas concluídas embaixo), <strong>atalhos do teclado</strong> para lembrar (gravados apertando as
+teclas, ou importados de um arquivo como o whkdrc do komorebi), o
+<strong>clima</strong> (agora, as próximas horas e a semana, da cidade digitada no
+painel) e <strong>atualizações</strong> (os apps com versão nova no winget,
+atualizados num terminal: um, os marcados, ou todos; um app pode ser
+ignorado, para um que o winget não consegue atualizar não deixar o
+contador da pílula preso, e voltar a ser mostrado; e as atualizações
+do Windows pendentes).
+Anotações, tarefas e atalhos também têm botões na central de controle.</li>
+<li><strong>Cores</strong>: preto, grafite, claro, a cor de destaque do Windows, ou vidro.</li>
+<li><strong>Os ícones dos outros apps na bandeja</strong>, na ilha: os fixados sempre, os
+outros abrindo para o lado pelo botão "⋯". Clicar, clicar duas vezes e
+clicar com o botão direito funcionam como na barra (o duplo clique abre o
+app, o botão direito mostra o menu dele); o alfinete que aparece depois de
+dois segundos com o mouse no ícone (ou o botão do meio) fixa o ícone. Com
+muitos ícones, a lista mostra doze por vez (uma configuração, no Windhawk
+e na ilha; menos em telas pequenas): os ícones numa ponta com mais depois
+dela vão sumindo, e a roda do mouse (ou deslizar para o lado) em cima dos
+ícones rola a lista.</li>
+<li><strong>Notificações novas na pílula</strong>: a pílula se abre com o app, o título e o
+texto por alguns segundos, como a Dynamic Island do iPhone (não com o "Não
+incomodar" ligado), com a foto de quem mandou quando a notificação tem uma
+neste computador (como a foto de um contato). Apps de mensagem que oferecem resposta nas
+notificações do Windows (como o WhatsApp) podem ser respondidos ali mesmo;
+a resposta quebra em mais linhas (a roda do mouse rola), Shift+Enter
+começa uma linha nova, as setas andam nela e Ctrl+Backspace apaga uma
+palavra. Com o mouse em cima, uma notificação
+longa aparece em até três linhas (na lista também).
+O "x" apaga a notificação (da pílula e da lista); a setinha a minimiza,
+ignorando o app dela por um minuto, como no Android (as notificações dele
+continuam indo para a lista, e só o ícone dele na ilha se mexe).</li>
+<li><strong>Notificações</strong> podem ser limpas na lista da ilha (todas, ou uma por uma);
+a engrenagem no topo dela abre as chaves dela ("Não incomodar", os avisos
+na pílula e mostrar o conteúdo).</li>
+<li><strong>Em qualquer lugar da tela</strong>: escolha a posição nas configurações da ilha
+(ou ligue
+mover a pílula arrastando; ela gruda no meio e nos cantos de cada borda);
+alguns apps podem ter uma posição só deles (por exemplo, mais abaixo, para
+não cobrir as abas do navegador) e ícones e relógio só deles (mostrados
+ou escondidos enquanto eles estão na frente, até os desligados para todos;
+um relógio mais curto deixa a ilha menor), e ela desliza para lá enquanto eles
+estão na frente. Na metade de baixo da tela, os painéis e os avisos abrem para
+cima; nas laterais ela fica em pé, e eles abrem para o meio.</li>
+<li><strong>Vários monitores</strong>: a ilha fica no monitor principal, num outro
+escolhido, ou segue o monitor onde está o mouse; cada monitor guarda a
+posição dela. Indo para outro monitor, ela se fecha no pontinho, que
+desliza até lá e se abre de novo.</li>
+<li><strong>Suave em tudo</strong>: o que ela mostra abre, fecha, cresce, diminui e muda
+com efeito de mola (os ícones trocam com transição, ícones da bandeja e
+notificações novas crescem, os que saem encolhem). Para computadores mais
+lentos, as configurações de "Animações" (no Windhawk e na ilha, as mesmas)
+desligam tudo, deixam só o essencial ("parciais": a ilha, os painéis e os
+avisos abrindo e fechando, sem quiques, brilhos, mistura de cores, números
+contando nem texto rolando), mudam a velocidade ou limitam os quadros por
+segundo (cerca de 90, 60 ou 30; as animações mantêm a duração).</li>
+<li><strong>As opções da ilha ficam na ilha</strong>: clique com o botão direito na ilha (na
+pílula ou na linha minimizada) e clique na engrenagem que sai embaixo dela
+(veja abaixo). As configurações do Windhawk ligam a ilha e ajustam a
+barra de tarefas e as animações.</li>
+</ul>
+<h4 id="asconfiguraesdailha">As configurações da ilha</h4>
+<p>Um clique com o botão direito na ilha (fora do ícone de outro app ou de uma
+notificação) faz sair um balãozinho com uma engrenagem embaixo dela; clicar
+nele abre a central de controle nas configurações (no estilo barra, o clique
+direito já abre as configurações). Elas aparecem em duas ou três colunas (uma
+em telas pequenas, rolando). Digitar em qualquer lugar delas
+faz uma busca (os acentos não importam); Ctrl+Backspace apaga uma
+palavra, o Esc limpa a busca, e o Esc (ou um clique fora) fecha.</p>
+<p>| Seção | O que ela ajusta |
+| :--- | :--- |
+| Aparência | O estilo (pílula ou barra), as cores, o tamanho, e painéis na largura da ilha. |
+| Posição | Onde ela fica (guardado para cada monitor); "Posição e ícones por app" (uma posição, ícones e relógio só de alguns apps, escolhidos entre os apps abertos); mover a pílula arrastando; ficar em pé nas laterais; a distância dela até as bordas da tela; no monitor onde está o mouse, ou no monitor escolhido. |
+| Na pílula | A ordem dos itens (arraste-os na pilulinha), o relógio no meio, e quais itens ela mostra: rede, volume, bateria, o sino, e (desligados por padrão) o botão de desligar, o modo claro e escuro, o microfone, anotações, tarefas, atalhos do teclado, o clima, atualizações, e o uso do processador, da memória e da memória de vídeo. |
+| Bandeja e mídia | Os ícones dos outros apps (manter a lista deles aberta, e quantos ela mostra antes de rolar), o que está tocando, e os botões e a capa com o título na pílula. |
+| Relógio | Segundos, o dia da semana, o dia e o mês, o ano, e os feriados no calendário (desligado por padrão). |
+| Notificações | "A ilha cuida das notificações e dos sons" (desligada por padrão, veja as observações), os avisos na pílula (também com ela minimizada), esconder os avisos do Windows e baixar fotos da internet (desligado por padrão). |
+| Animações | Ligadas ou não, quantas (todas, parciais, nenhuma), a velocidade e os quadros por segundo. As mesmas das configurações do Windhawk: o mod não consegue mudar as do Windhawk, então uma mudança aqui vale até uma delas mudar no Windhawk. |</p>
+<h4 id="imagens">Imagens</h4>
+<p>| O calendário | O que está tocando | Notificações |
+| :---: | :---: | :---: |
+| <img src="https://i.imgur.com/BklN6j7.png" alt="O calendário" /> | <img src="https://i.imgur.com/mHmKd5L.png" alt="O que está tocando" /> | <img src="https://i.imgur.com/nmcC43L.png" alt="Notificações" /> |
+| <strong>O clima</strong> | <strong>Anotações</strong> | <strong>Tarefas</strong> |
+| <img src="https://i.imgur.com/5fxH29Y.png" alt="O clima" /> | <img src="https://i.imgur.com/Qj0NbXp.png" alt="Anotações" /> | <img src="https://i.imgur.com/29Jdwf7.png" alt="Tarefas" /> |
+| <strong>Atualizações</strong> | <strong>O uso do processador</strong> | <strong>Energia</strong> |
+| <img src="https://i.imgur.com/sL5ksJc.png" alt="Atualizações" /> | <img src="https://i.imgur.com/Vl5mLv0.png" alt="O uso do processador" /> | <img src="https://i.imgur.com/lvMsIua.png" alt="Energia" /> |</p>
+<p>| As configurações da ilha | Atalhos do teclado |
+| :---: | :---: |
+| <img src="https://i.imgur.com/tngYzwN.png" alt="As configurações da ilha" /> | <img src="https://i.imgur.com/q75V4Sm.png" alt="Atalhos do teclado" /> |</p>
+<p>Os ícones dos outros apps na bandeja: a lista deles aberta, e abrindo:</p>
+<p><img src="https://i.imgur.com/Xt2pVE9.png" alt="A lista dos ícones da bandeja aberta" /></p>
+<p><img src="https://i.imgur.com/ulHZh2A.gif" alt="A lista dos ícones da bandeja abrindo" /></p>
+<p>O estilo barra, no topo da tela:</p>
+<p><img src="https://i.imgur.com/gtPY5YI.png" alt="O estilo barra" /></p>
+<p>| Cores | |
+| :--- | :---: |
+| Preto | <img src="https://i.imgur.com/AQKn4nY.png" alt="Preto" /> |
+| Grafite | <img src="https://i.imgur.com/J7r7GeH.png" alt="Grafite" /> |
+| Claro | <img src="https://i.imgur.com/B6lsL49.png" alt="Claro" /> |
+| A cor de destaque do Windows | <img src="https://i.imgur.com/Ilr8YHB.png" alt="Cor de destaque" /> |
+| Vidro | <img src="https://i.imgur.com/kAsBeR8.png" alt="Vidro" /> |</p>
+<h3 id="adockopcional">A dock (opcional)</h3>
+<p>A configuração "Barra de tarefas" transforma a barra do Windows numa dock como
+a do macOS; ou mantém a barra do Windows, transparente só com os apps (com uma
+sombra suave subindo da borda de baixo, a ampliação e os pulos, entrando e
+saindo com a animação do mod; ela só aparece e só pega os cliques em volta dos
+apps, então o resto da parte de baixo da tela continua clicável), ou como ela
+é (inteira, ou só com os apps).</p>
+<p><img src="https://i.imgur.com/z0FMhlK.gif" alt="A barra do Windows transparente, só com os apps" /></p>
+<ul>
+<li><strong>Compacta e flutuante</strong>: só os ícones dos apps, centralizados, numa pílula
+arredondada que flutua um pouco acima da borda de baixo.</li>
+<li><strong>Fundo desfocado</strong>: as janelas e o papel de parede aparecem atrás dela,
+desfocados.</li>
+<li><strong>Ampliação</strong>: os ícones crescem numa onda que acompanha o mouse.</li>
+<li><strong>Ícones que pulam</strong>: o ícone de um app pula enquanto ele abre, e quando o
+app pede atenção (uma mensagem nova, por exemplo). Depois de clicar num app,
+a dock espera ele abrir e pular antes de se esconder.</li>
+<li><strong>Notificações sem a dock inteira</strong>: quando um app pede atenção com a dock
+escondida (um número novo no ícone, ou o botão piscando), só o ícone dele
+aparece na borda de baixo, pula e some de novo.
+Clicar nele abre o app. Dá para escolher a dock inteira, ou nada, no lugar.
+Na barra transparente, um app pedindo atenção não pula nem faz a barra
+aparecer: o botão dele mostra isso quando a barra estiver à vista.</li>
+<li><strong>Apps chegando e saindo</strong>: um app abrindo cresce na dock, e os ícones do
+lado deslizam para abrir espaço (e voltam quando um fecha).</li>
+<li><strong>Pontinhos embaixo dos apps abertos</strong>, no lugar do traço do Windows.</li>
+<li><strong>Escondida até você precisar</strong>: a barra se oculta sozinha e entra com efeito
+de mola quando o mouse chega na borda de baixo da tela.</li>
+<li><strong>Fora do caminho em tela cheia</strong>: jogos e apps em tela cheia (exclusiva ou
+sem bordas) não fazem ela aparecer quando o mouse encosta embaixo.</li>
+</ul>
+<h3 id="observaes">Observações</h3>
+<ul>
+<li>Somente Windows 11.</li>
+<li>A dock e a barra transparente são para a barra embaixo. Com a barra na
+esquerda, na direita ou no topo (versões novas do Windows 11), ela fica como
+o Windows a deixa, e a ilha continua funcionando; elas voltam quando a barra
+volta para baixo.</li>
+<li><strong>A ilha sem a dock</strong>: a configuração "Barra de tarefas" mantém a barra do
+Windows como ela é, ou só com os apps (a ilha mostra o relógio, a bandeja e
+as notificações), para combinar a ilha com outros mods de barra.</li>
+<li>O mod liga o ocultar automaticamente da barra (a configuração do Windows)
+enquanto está ativo, e desliga de novo quando o mod é desativado (se estava
+desligado antes), também depois de um travamento, no próximo início. Dá
+para mudar isso nas configurações ("Esconder a barra até o mouse chegar na
+borda de baixo"). Se o Explorer não estiver rodando quando o mod for
+desativado, desligue nas configurações da barra de tarefas do Windows.</li>
+<li><strong>As configurações do próprio Windows</strong>: as chaves e os botões da central
+de controle mudam as configurações do próprio Windows, como as
+configurações rápidas dele: o modo escuro, a luz noturna, o plano e o
+modo de energia, o mudo do microfone, o dispositivo de saída padrão, as
+redes Wi-Fi (uma rede conectada fica salva pelo Windows, com a senha), as
+Teclas de Aderência e as outras chaves de acessibilidade, o modo de vídeo
+(Projetar), o brilho do monitor e os rádios. Elas continuam como ficaram
+depois que o mod é desativado.</li>
+<li>Sem a ilha, a bandeja do sistema (relógio, rede, volume) fica na ponta
+direita da barra, numa pílula própria, a não ser que seja escondida nas
+configurações.</li>
+<li><strong>Ampliação maior</strong>: os ícones ampliados só crescem até o topo da barra de
+tarefas. Para ter espaço acima da dock, deixe a barra mais alta com o mod
+<a href="https://windhawk.net/mods/taskbar-icon-size">Taskbar height and icon size</a>
+(por exemplo, altura 72 e o tamanho de ícone padrão). A dock mantém a altura
+dela, e o espaço acima fica para os ícones.</li>
+<li>Não use este mod junto com outros que mudam o visual da barra ou a animação
+de ocultar, como os temas do Windows 11 Taskbar Styler ou o Taskbar
+Auto-Hide Instant Show, nem com outros mods de dock. Com a barra do Windows
+"só com os apps", o Windows 11 Taskbar Styler pode trazer a bandeja de volta
+e fazer o Explorer parar de responder; para uma barra transparente, use a
+opção "transparente" deste mod.</li>
+<li><strong>Dois processos</strong>: a dock (e o que só a barra sabe: os contadores dos apps e
+os ícones que os apps mandam para a bandeja) roda no <code>explorer.exe</code>, porque
+mexe na própria barra; a ilha roda num processo <code>windhawk.exe</code> só dela, então
+um problema nela não derruba a barra e a área de trabalho. As duas partes
+avisam uma à outra o que mudou com mensagens de janela.</li>
+<li><strong>Como algumas funções funcionam</strong>: o Windows não tem API pública para
+algumas delas, então o mod usa o que o próprio Windows usa, e deixa a função
+de fora quando não encontra o que espera:</li>
+<li>As notificações novas (também quando o número de um app não muda, como uma
+mensagem nova numa conversa que já estava não lida) e a lista de
+notificações são lidas, somente leitura, do banco de notificações do
+Windows.</li>
+<li>A luz noturna é ligada e desligada pelo estado dela no registro
+(CloudStore), conferido antes de mudar.</li>
+<li>O dispositivo de saída e o modo avião usam interfaces do Windows (as mesmas
+que os programas de volume e as configurações rápidas usam).</li>
+<li>Transmitir, legendas ao vivo, narrador e filtros de cor são ligados pelos
+atalhos do Windows.</li>
+<li>O "Não incomodar" é ligado e desligado pela interface que a central de
+notificações do Windows usa.</li>
+<li>Os ícones da bandeja são lidos quando os apps os mandam para a barra.
+Quando o mod começa, ele pede aos apps que os mandem de novo, com a
+mensagem que o Windows manda quando a barra reinicia; um app que muda um
+ícone que o mod ainda não viu (aberto antes dele) recebe essa mensagem
+só para ele. Alguns apps nunca os mandam de novo (Spotify): para os
+ícones deles não se perderem quando o mod recarrega (configurações
+salvas, desligar e ligar), a lista fica guardada no armazenamento do mod
+enquanto ele recarrega e volta para os apps que ainda estão abertos.
+Limpar as
+notificações na ilha só as esconde ali (o banco de notificações do Windows
+é só lido).</li>
+<li>Quando a ilha pega uma notificação nova (na pílula, ou, no estilo barra ou
+com um painel aberto, como o ícone do app com o pontinho vermelho e na
+lista), o aviso do Windows é tirado da tela (dá para mantê-lo nas
+configurações da ilha); o Windows o coloca de novo na próxima
+notificação.
+O Windows 11 mostra os avisos empilhados numa janela só, então ela sai da
+tela só enquanto todos os avisos nela são da ilha: chamadas, alarmes e
+lembretes ficam com o aviso do Windows, com os botões dele, e os outros
+da pilha aparecem junto. Em tela cheia nada aparece na ilha (a
+notificação espera na lista) e, como com o "Não incomodar" do Windows, os
+avisos do Windows não são mexidos. Com os avisos na pílula desligados, ou minimizada sem eles, o
+aviso do Windows fica. O Windows mostra os avisos um depois do outro,
+atrasados quando chegam muitos, e toca os sons nessa hora: a opção "A
+ilha cuida das notificações e dos sons" (desligada por padrão) mantém o
+"Não incomodar" do Windows ligado enquanto a ilha roda, então o Windows
+fica quieto e a ilha mostra cada notificação e toca o som dela (o que
+ela pede) na hora. Chamadas, alarmes e lembretes também aparecem na
+pílula, na frente das outras (a que estiver na pílula dá lugar e volta
+depois delas, com o que estava sendo digitado): ficam até serem
+fechados, com os botões que a ilha consegue apertar (os do próprio app,
+e "Descartar"), e tocam até serem fechados, por até um minuto. O "Não
+incomodar" deixa esses passarem por padrão, então o Windows pode mostrar
+o aviso dele também (e tocar o som dele no lugar do da ilha): a ilha lê
+esse aviso pela Automação da Interface (a árvore de acessibilidade, só
+dessa janela) e, quando é o da pílula, assume: o aviso do Windows fica
+escondido enquanto a pílula o mostra, e os botões da pílula são os do
+Windows (o "Adiar" também), apertados nele quando os da pílula são. Ele
+volta assim que a pílula para de mostrá-lo, ou se algo não bater. O "Não incomodar" da ilha passa a ser o
+dela (a lua do sino), e o do Windows é desligado de novo quando a ilha
+para (pelo explorer, se o processo da ilha terminar de repente, ou no
+próximo início depois de um travamento); ele não é mexido se já estava
+ligado. Se for desligado pelo Windows, ele fica desligado e a ilha
+funciona como de costume até a opção ser ligada de novo.</li>
+<li>As respostas chegam ao app do jeito que o Windows as manda pelos avisos
+dele: pelo receptor de notificações que o app registrou.</li>
+<li>O mod só acessa a internet para o que for ligado nas configurações da
+ilha (tudo vem desligado; os ícones próprios de um app podem esconder
+esses itens, mas não ligá-los): "Baixar fotos da internet" (a imagem de uma notificação
+que está na internet, como as fotos dos contatos do WhatsApp, baixada
+por https do endereço que o app colocou nela, como o Windows faz, e só
+para apps com permissão de internet; senão, aparece o ícone do app), o
+clima (<a href="https://open-meteo.com">Open-Meteo</a>: a cidade digitada, depois a
+previsão dela a cada 30 minutos enquanto está na pílula), os feriados
+(<a href="https://date.nager.at">Nager.Date</a>: o país configurado no Windows, uma
+vez por ano) e as atualizações (o winget consulta a fonte da comunidade
+dele, 20 segundos depois que a ilha começa, a não ser que já tenha
+consultado nas últimas 6 horas, e depois a cada 6 horas; as atualizações
+do Windows são lidas, somente leitura e offline, da última verificação
+do próprio Windows, pelo Windows Update Agent).</li>
+<li>As atualizações só são listadas pelo mod (ele não aceita termos por
+você): um app é atualizado num terminal, onde o "winget upgrade" mostra
+o que faz e pede o que precisar, só quando pedido no painel.</li>
+<li>Os modos de energia são lidos e trocados pelas funções do powrprof.dll
+que as Configurações do Windows usam; os planos de energia, pelas
+documentadas.</li>
+<li>O uso da GPU vem dos contadores de desempenho do Windows, e a
+temperatura, a ventoinha e a energia dela, dos números do próprio driver
+de vídeo (ficam de fora quando o driver não os dá).</li>
+<li>Suspender, reiniciar, desligar e sair usam as funções do Windows para
+isso (com a "Inicialização rápida", desligar funciona como no menu
+Iniciar). Em PCs com Modern Standby, "Suspender" desliga a tela, que é o
+que põe esses PCs para dormir.</li>
+<li><strong>Atualização do driver de vídeo</strong>: a ilha e os painéis são desenhados
+com Direct2D em janelas em camadas. Se o driver de vídeo é atualizado ou
+reiniciado, a ilha começa de novo sozinha (no máximo a cada dois
+segundos, enquanto o driver ainda está instalando), com tudo desenhado de
+novo. A imagem é copiada para a janela, então em notebooks com duas placas
+de vídeo não importa qual delas desenha.</li>
+<li><strong>Mods parecidos</strong>: o <a href="https://windhawk.net/mods/dynamic-island-for-windows">Dynamic Island for
+Windows</a> é uma pílula
+que reage a mídia, downloads e área de transferência; o <a href="https://windhawk.net/mods/island-media-controls">Island Media
+Controls</a> põe controles de
+mídia na barra; o <a href="https://windhawk.net/mods/windhawk-topbar">TopBar for
+Windows</a> adiciona uma barra no
+topo com painéis; o <a href="https://windhawk.net/mods/taskbar-dock-animation">Taskbar Dock
+Animation</a> amplia os
+ícones da barra. Este mod junta a ilha (com a central de controle, as
+notificações e os ícones da bandeja) e a dock, num topo e numa base como os
+do macOS, sem precisar de outros mods.</li>
+</ul>
+<h3 id="crditos">Créditos</h3>
+<ul>
+<li>Mod feito por <strong>caliberda</strong> (<a href="https://caliberda.com.br">caliberda.com.br</a>,
+Instagram <a href="https://www.instagram.com/cesar.kali">@cesar.kali</a>).</li>
+<li>Pedidos e relatos de bugs:
+<a href="mailto:julio@caliberda.com.br">julio@caliberda.com.br</a>.</li>
+<li>O código que chega no XAML da barra de tarefas é baseado no <strong>Taskbar tray
+auto-hide (show on hover)</strong>, do m417z (GPL-3.0).</li>
+<li>Inspirado na barra de menus, na central de controle e na Dock do
+<strong>macOS</strong>, e na <strong>Dynamic Island</strong> do iPhone (Apple).</li>
+</ul>]]></content>
+        <author>
+            <name>caliberda</name>
+            <uri>https://github.com/cesarkali</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 10 language flyout guard and indicator colours 1.0.0]]></title>
         <id>https://windhawk.net/mods/windows-10-language-flyout-guard-on-win11-24h2#0dd8f7845a96ec5ce9f7d47eed3d598151f32f24</id>
@@ -1579,146 +2304,6 @@ After a theme change, re-login for the changes to take effect.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Picker 1.5.4]]></title>
-        <id>https://windhawk.net/mods/explorer-picker#e107837f61706174ee2d11039349466bb78d2fb6</id>
-        <link href="https://windhawk.net/mods/explorer-picker"/>
-        <updated>2026-10-07T07:00:02.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorerpicker">Explorer Picker</h1>
-<p>The Open, Save As and folder picker dialogs of every program are replaced with
-a real Explorer window (<code>explorer.exe</code>) with a File name / Files of type / Open /
-Cancel bar at the bottom. The folder tree, the toolbars, the address bar and
-the status bar are the same as in any other Explorer window, along with
-whatever other mods change them.</p>
-<blockquote>
-  <p><strong>Tested only on Windows 11 24H2 (build 26100).</strong> It has not been tried on any other version of Windows and may not work there.</p>
-</blockquote>
-<h2 id="screenshots">Screenshots / Скриншоты</h2>
-<p>The screenshots use a classic theme and additional Explorer mods.
-На скриншотах используются классическая тема и дополнительные моды Проводника.</p>
-<p><strong>Choosing a background photo / Выбор фотографии для фона</strong></p>
-<p><img src="https://raw.githubusercontent.com/appEW/windhawk-mods/eba5481bf58fc0a7354a1fe2a5c979d24a4a2685/EP1.png" alt="Choosing a background photo / Выбор фотографии для фона" /></p>
-<p><strong>Choosing a folder / Выбор папки</strong></p>
-<p><img src="https://raw.githubusercontent.com/appEW/windhawk-mods/eba5481bf58fc0a7354a1fe2a5c979d24a4a2685/EP2.png" alt="Choosing a folder / Выбор папки" /></p>
-<p><strong>Opening a file / Открытие файла</strong></p>
-<p><img src="https://raw.githubusercontent.com/appEW/windhawk-mods/eba5481bf58fc0a7354a1fe2a5c979d24a4a2685/EP3.png" alt="Opening a file / Открытие файла" /></p>
-<h2 id="howitworks">How it works</h2>
-<p>The one mod plays both parts:</p>
-<ul>
-<li>in <code>explorer.exe</code> it opens the picker window, builds the bar at the bottom
-and reads the current folder and the selection itself;</li>
-<li>in every other process it intercepts <code>GetOpenFileName</code> / <code>GetSaveFileName</code>
-(Unicode and ANSI) and <code>IFileOpenDialog</code> / <code>IFileSaveDialog</code>, passes the
-request to Explorer, and hands the result back to the program in the form it
-expects.</li>
-</ul>
-<p>Supported: opening one or several files, saving with a confirmation before
-replacing a file, picking a folder, file type filters, <code>IFileDialogEvents</code>
-events, the extra controls of <code>IFileDialogCustomize</code> (check boxes, combo boxes,
-radio buttons, edit boxes, buttons, labels, groups, menus), and the templates
-and hook procedures of old-style dialogs with their check boxes. System file
-pickers, including the Windows Background photo picker, and native application
-panels such as REAPER's project-saving options are supported. Application item
-filters are checked before accepting files; Explorer keeps its usual folder
-contents. Programs
-running as administrator use their native dialogs by default. The optional
-setting to replace those dialogs allows programs without administrator rights
-to influence the choice made by an administrator program.</p>
-<p>If a program asks for something Explorer cannot do, or Explorer is not
-available, the normal dialog is shown. The risky option below can ignore
-additional application features.</p>
-<h2 id="riskyignoreadditionalapplicationfeatures">Risky: ignore additional application features</h2>
-<p><strong>Ignore additional dialog features (risky)</strong> is <strong>disabled by default</strong>.
-When enabled, the picker omits application controls, native panels, previews
-and dialog-event callbacks, including application-specific acceptance checks.
-Old Win32 dialog hooks, templates and editable custom filters are also
-ignored. This lets Explorer replace dialogs whose additional features would
-otherwise require the native window. Extra options cannot be changed; the
-application may use its defaults or retained values instead.</p>
-<p><strong>Use at your own risk:</strong> application-specific behavior and validation can be
-lost, causing incorrect opening or saving, crashes or data loss. Ordinary
-file types, result buffers, item filters, path checks and overwrite
-confirmation remain supported. Unrepresentable results, required unsupported
-file-dialog behavior or an unavailable Explorer can still require the native
-dialog. Disabling the option restores the usual compatibility handling.</p>
-<p>By default, services, system accounts, critical processes, AppContainer
-processes, Chromium worker processes and Windhawk itself are skipped. Single
-programs can be excluded on the <em>Advanced</em> tab.</p>
-<p>The picker is an ordinary Explorer window: its size, navigation history and
-recent locations are handled by Explorer, just like those of other folder windows.
-Disabling the mod cancels active pickers and releases its windows and threads.
-Applications keep their original Windows COM dialog objects.</p>
-<p>The texts of the bar and of its messages follow the Windows display language:
-Russian on a Russian Windows, the wording of the English common dialog
-everywhere else. Application-provided captions keep the application's language.
-The panel updates its default captions when Windows notifies it of a settings
-change. Its font and spacing follow the window's DPI; long captions wrap and
-the rows grow to keep the text inside the controls.</p>
-<hr />
-<h2 id="">По-русски</h2>
-<p>Окна «Открыть», «Сохранить как» и «Выбор папки» всех программ заменяются
-настоящим окном Проводника (explorer.exe) с нижней панелью «Имя файла» /
-«Тип файлов» / «Открыть» / «Отмена». Дерево папок, панели инструментов,
-адресная строка и строка состояния — те же, что в обычном Проводнике.</p>
-<p>Один мод выполняет обе роли:</p>
-<ul>
-<li>в explorer.exe — открывает окно выбора, встраивает нижнюю панель и сам
-читает текущую папку и выделение;</li>
-<li>в остальных процессах — перехватывает <code>GetOpenFileName</code>/<code>GetSaveFileName</code>
-(Unicode и ANSI) и <code>IFileOpenDialog</code>/<code>IFileSaveDialog</code>, передаёт запрос в
-Проводник и возвращает программе результат в привычной для неё форме.</li>
-</ul>
-<p>Поддерживаются: один и несколько файлов, сохранение с подтверждением замены,
-выбор папки, фильтры типов, события <code>IFileDialogEvents</code>, дополнительные
-элементы <code>IFileDialogCustomize</code> (флажки, списки, переключатели, поля, кнопки,
-надписи, группы, меню), шаблоны/обработчики старых диалогов с флажками.
-Поддерживаются системный выбор фотографии для фона Windows и native-панели
-приложений, включая параметры сохранения проекта REAPER. Фильтр приложения
-проверяется перед принятием файлов; содержимое папки отображается как в
-обычном Проводнике.
-Программы с правами администратора по умолчанию используют штатные диалоги.
-Опциональное включение замены позволяет программам без прав администратора
-влиять на выбор файла программой с правами администратора.</p>
-<p>Если программа запрашивает то, что нельзя повторить в Проводнике, или
-Проводник недоступен, показывается обычное окно. Рискованная опция ниже позволяет
-игнорировать дополнительные функции приложения.</p>
-<h3 id="-1">Рискованно: игнорирование дополнительных функций приложения</h3>
-<p><strong>«Игнорировать дополнительные функции диалогов (рискованно)»</strong>
-<strong>по умолчанию выключено</strong>. При включении не показываются элементы приложения,
-native-панели и предпросмотр, не вызываются обработчики событий диалога, включая
-дополнительные проверки принятия файла. В старых Win32-диалогах также
-игнорируются hooks, шаблоны и редактируемые пользовательские фильтры. Поэтому
-Проводник может заменить окно даже при несовместимых дополнительных элементах.
-Изменить дополнительные параметры нельзя: приложение может использовать
-значения по умолчанию или ранее заданные значения.</p>
-<p><strong>Используйте на свой страх и риск:</strong> потеря специальных функций и проверок
-может привести к неправильному открытию/сохранению, сбоям или потере данных.
-Обычные типы файлов, буферы результата, фильтр допустимых элементов, проверка
-пути и подтверждение перезаписи сохраняются. Непредставимый результат,
-обязательные неподдерживаемые функции или недоступный Проводник по-прежнему
-могут потребовать штатный диалог. Выключение опции возвращает обычную обработку
-совместимости.</p>
-<p>По умолчанию пропускаются службы, системные учётные записи, критические
-процессы, AppContainer, дочерние процессы Chromium и сам Windhawk.
-Отдельные программы можно исключить на вкладке «Дополнительно».</p>
-<p>Окно выбора является обычным окном Проводника: размер, история переходов
-и недавние папки обрабатываются Проводником как в других окнах папок.
-Отключение мода отменяет открытые окна выбора и освобождает его окна и потоки.
-Приложения сохраняют исходные COM-объекты диалогов Windows.</p>
-<p>Надписи на нижней панели и тексты сообщений следуют языку интерфейса Windows:
-в русской Windows - по-русски, в остальных - как в английском стандартном окне
-выбора файла. Подписи, переданные приложением, сохраняют его язык. При уведомлении
-Windows об изменении настроек стандартные подписи панели обновляются. Шрифт и
-отступы следуют DPI окна; длинные подписи переносятся, а высота строк увеличивается,
-чтобы текст помещался в элементах.</p>
-<blockquote>
-  <p><strong>Проверено только на Windows 11 24H2 (сборка 26100).</strong> На других версиях Windows мод не проверялся и может не работать.</p>
-</blockquote>]]></content>
-        <author>
-            <name>appEW</name>
-            <uri>https://github.com/appEW</uri>
         </author>
     </entry>
 </feed>
