@@ -1,18 +1,18 @@
 // ==WindhawkMod==
 // @id              simple-window-switcher
-// @name            Simple Window Switcher
+// @name            WindowSwitcher++
 // @description     Customizable Alt+Tab replacement with live previews, application grouping, multiple layouts, animations, and precision touchpad controls
 // @version         3.0
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         windhawk.exe
 // @include         explorer.exe
-// @compilerOptions -ldwmapi -luxtheme -lgdi32 -lshlwapi -loleaut32 -lole32 -lcomctl32 -lgdiplus -lversion -lwinmm -ladvapi32 -lmsimg32 -lhid -lruntimeobject
+// @compilerOptions -ldwmapi -luxtheme -lgdi32 -lshlwapi -loleaut32 -lole32 -lcomctl32 -lgdiplus -lversion -lwinmm -ladvapi32 -lmsimg32 -lhid -lruntimeobject -lsecur32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Simple Window Switcher
+# WindowSwitcher++
 
 A customizable Alt+Tab replacement for Windows, based on the
 [Simple Window Switcher](https://github.com/valinet/sws) project, with additional
@@ -86,7 +86,7 @@ the upward launcher independently.
 
 | Gesture | Action |
 | --- | --- |
-| Three-finger horizontal swipe while closed | Open normal mode, drag to navigate, and lift all fingers to activate the selection. |
+| Three-finger horizontal swipe while closed | Open normal mode, drag to navigate, and release the gesture (including a stable one-finger anchor) to activate the selection. |
 | Three-finger upward swipe while closed | Open sticky mode when the upward launcher is enabled. |
 | Three-finger drag while open | Navigate entries and rows without wrapping past the spatial edges. In sticky mode, lifting after a drag leaves the switcher open. |
 | Fresh stationary three-finger tap in sticky mode | Activate the selection after lifting from the previous swipe. |
@@ -106,10 +106,13 @@ available to select or cancel.
 
 ## Compatibility and limitations
 
-- Touchpad swipe/tap controls require usable Raw HID contact reports. Legacy
-  mouse-only touchpads are not supported by the gesture reader; device and driver
-  reporting can affect recognition. Tap detection expects a short, stationary
-  contact: movement or staggered finger placement/lift can prevent recognition.
+- Raw HID contact reports provide continuous finger tracking and precise
+  three-finger release handling. When a driver temporarily withholds Raw HID,
+  the Explorer-side native PTP boundary fallback still handles native
+  three-finger invocation and coarse navigation; legacy mouse-only touchpads
+  remain unsupported for continuous tracking. Partial three-finger releases
+  use a short reland grace so an anchored finger can complete normal selection
+  without turning a transient contact-count report into a commit.
 - Suppressing Windows' three-finger actions during a session requires a supported
   foreground gesture controller. Additional Explorer-side filtering depends on
   matching Windows shell symbols and is available only on 64-bit architectures.
@@ -119,7 +122,9 @@ available to select or cancel.
   [Windows 11 24H2 and later](https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-touchpad_parameters_v1)),
   Windows' two-finger right-click tap is temporarily disabled during the active
   switcher session and its previous value is restored afterward. This is a live
-  change, without saving a Windows preference. If the API is unavailable or the
+  change, without saving a Windows preference. A recovery record lets the mod
+  retry restoration on its next start in the same Windows logon session after
+  an unexpected exit. If the API or recovery storage is unavailable, or the
   change fails, the fallback relies on receiving the corresponding mouse events;
   a tap outside the switcher can otherwise right-click or dismiss it.
 - Mica requires Windows 11. The automatic theme uses Mica on Windows 11 and
@@ -803,7 +808,7 @@ available to select or cancel.
 - Touchpad:
     - enabled: true
       $name: Enable Three-Finger Gestures
-      $description: Read precision-touchpad Raw HID reports and request three-finger manipulation and action control while the switcher owns the foreground. Windows Task View, Show desktop, native switching, and three-finger tap actions are blocked during supported active sessions. Horizontal swipes open the normal switcher; drag to navigate and lift all fingers to select. In sticky mode, dragging never commits; lift and make a fresh stationary three-finger tap to select. No legacy fallback is used.
+      $description: Read precision-touchpad Raw HID reports and request three-finger manipulation and action control while the switcher owns the foreground. Windows Task View, Show desktop, native switching, and three-finger tap actions are blocked during supported active sessions. Raw HID drives continuous tracking; the Explorer-side native PTP boundary fallback handles invocation when Raw HID is temporarily unavailable. Horizontal swipes open the normal switcher; drag to navigate and release the gesture, including with one finger anchored, to select. In sticky mode, dragging never commits; lift and make a fresh stationary three-finger tap to select. Legacy mouse-only touchpads remain unsupported.
     - stickyLaunch: true
       $name: Sticky Switcher from Upward Swipe
       $description: "When enabled, an upward three-finger swipe opens the switcher in sticky mode. Outside a switcher session, downward swipes and taps keep their configured Windows actions. When disabled, Windows also keeps its default outside upward gesture. Horizontal swipes open normal mode in either setting and commit on lift. Gesture takeover during an active session requires a supported foreground-only Windows controller."
@@ -852,6 +857,7 @@ available to select or cancel.
 #include <inspectable.h>
 #include <roapi.h>
 #include <appmodel.h>
+#include <ntsecapi.h>
 #include <hidusage.h>
 #include <hidpi.h>
 #include <vector>
@@ -867,6 +873,27 @@ available to select or cancel.
 
 #define SWS_CLASSNAME       L"WindhawkSWS_Switcher"
 #define SWS_MAIN_WINDOW_TITLE L"WindhawkSWS_InputEndpoint"
+// Optional selection notification consumed by compatible Windows Animations
+// builds. The token is published last, immediately before activation, and is
+// intentionally kept through visual teardown so a delayed foreground event
+// can still identify the committed selection.
+namespace SwsSelectionProtocol {
+    constexpr PCWSTR VersionProp = L"WindhawkSWS.SelectionProtocolV1";
+    constexpr PCWSTR TokenProp = L"WindhawkSWS.SelectionTokenV1";
+    constexpr PCWSTR TargetProp = L"WindhawkSWS.SelectionTargetV1";
+    constexpr PCWSTR SourceProp = L"WindhawkSWS.SelectionSourceV1";
+    constexpr PCWSTR TickProp = L"WindhawkSWS.SelectionTickV1";
+    constexpr PCWSTR ProcessProp = L"WindhawkSWS.SelectionProcessV1";
+    constexpr PCWSTR ThreadProp = L"WindhawkSWS.SelectionThreadV1";
+    constexpr PCWSTR RestoreProp = L"WindhawkSWS.SelectionRestoreV1";
+    constexpr PCWSTR OwnerRestoreMessageProp =
+        L"windows-animations.SwsRestoreMessageV1";
+    constexpr PCWSTR OwnerRestoreActiveProp =
+        L"windows-animations.SwsRestoreActiveV1";
+    constexpr PCWSTR OwnerAnimationProp =
+        L"windows-animations.AnimationSessionV1";
+    constexpr ULONG_PTR Version = 1;
+}
 #define SWS_ICON_SIZE       16
 // Lower bound (pre-DPI px) for the auto-fit "Shrink tasks to fit" row height so
 // thumbnails never collapse to an unusable size.
@@ -927,6 +954,10 @@ available to select or cancel.
 // The backstop must not end a raw session while the fingers are still down.
 // Every frame refreshes this, so only a lost reader or a missed lift can reach it.
 #define SWS_RAW_SESSION_LOST_TIMEOUT_MS 4000
+// A partial lift can be a genuine anchored release or a short reporting gap.
+// Wait briefly before committing at one remaining contact so a reland can
+// continue the same physical stroke without making 3->2 an accidental commit.
+#define SWS_RAW_PARTIAL_RELEASE_GRACE_MS 60u
 // A stationary two-finger tap is owned only by a visible, interactive session.
 // Keep its promoted mouse pair briefly after lift, without retaining foreground.
 #define SWS_RAW_TAP_MAX_MS 300
@@ -942,9 +973,12 @@ available to select or cancel.
 #define WM_SWS_TOUCHPAD_READER_CHANGED (WM_APP + 3)
 #define WM_SWS_CANCEL_INPUT (WM_APP + 4)
 #define WM_SWS_ICON_READY (WM_APP + 5)
-#define WM_SWS_TOUCHPAD_DIAGNOSTICS (WM_APP + 6)
-#define WM_SWS_TOUCHPAD_READER_DIAGNOSTICS (WM_APP + 7)
+#define WM_SWS_MOUSE_COMMAND (WM_APP + 9)
 #define WM_SWS_NATIVE_TOUCHPAD (WM_APP + 8)
+#define SWS_RAW_FRAME_QUEUE_FLAG 0x80000000u
+#define SWS_RAW_FRAME_QUEUE_INDEX_MASK 0xFFu
+#define SWS_RAW_FRAME_QUEUE_EPOCH_SHIFT 8u
+#define SWS_RAW_FRAME_QUEUE_EPOCH_MASK 0x007FFFFFu
 // Pointer-free IPC: WPARAM carries a 29-bit UI epoch and a 3-bit boundary
 // (Start left/up/right = 1/2/3, End = 5, Cancel = 6); LPARAM is a stroke token.
 #define SWS_NATIVE_TOUCHPAD_END 5u
@@ -954,17 +988,13 @@ available to select or cancel.
 // Let the reader adopt reports after a foreground/context handoff. This is a
 // single bounded wait, not a synthetic lift or a foreground retry loop.
 #define SWS_NATIVE_TOUCHPAD_HANDOFF_MS 50u
-#define SWS_NATIVE_TOUCHPAD_CANDIDATE_WAIT_MS 20u
 #define SWS_RAW_SWIPE_PROP L"WindhawkSWSRawSwipe"
 #define SWS_RAW_SWIPE_SESSION_PROP L"WindhawkSWSRawSwipeSession"
 #define SWS_RAW_SWIPE_UP_PROP L"WindhawkSWSRawSwipeUp"
-#define SWS_RAW_THREE_CANDIDATE_PROP L"WindhawkSWSRawThreeCandidate"
-#define SWS_RAW_THREE_CANDIDATE_MS 1000u
 // The tool publishes readiness independently of raw direction classification.
 // Bits 0/1 declare enabled/usable reader, bit 2 enables outside sticky-up.
 // Higher bits are an epoch: disable/reader loss invalidates existing decisions.
 #define SWS_NATIVE_SWIPE_POLICY_PROP L"WindhawkSWSNativeSwipePolicy"
-#define SWS_NATIVE_SWIPE_PROFILE_PROP L"WindhawkSWSNativeSwipeProfile"
 #define SWS_NATIVE_SWIPE_ACTIVE_PROP L"WindhawkSWSNativeSwipeActive"
 #define SWS_NATIVE_TOUCHPAD_EPOCH_PROP L"WindhawkSWSNativeTouchpadEpoch"
 // Explorer publishes source-gate availability on its own taskbar window so
@@ -1047,6 +1077,57 @@ struct OwnedWindowIcon {
     ~OwnedWindowIcon() { if (handle) DestroyIcon(handle); }
 };
 
+// DWM registrations are shared by live entries and transition snapshots. A
+// snapshot may borrow a registration from its source entry, so the raw handle
+// alone cannot identify the last owner. The shared record lets existing
+// explicit cleanup sites drop their references without invalidating borrowers.
+struct DwmThumbnailRegistration;
+static void ReleaseDwmThumbnailRegistration(DwmThumbnailRegistration* record);
+
+struct DwmThumbnailRegistration {
+    HTHUMBNAIL handle = nullptr;
+    explicit DwmThumbnailRegistration(HTHUMBNAIL value) : handle(value) {}
+    ~DwmThumbnailRegistration() { ReleaseDwmThumbnailRegistration(this); }
+};
+
+static std::map<HTHUMBNAIL, std::weak_ptr<DwmThumbnailRegistration>>
+    g_dwmThumbnailRegistrations;
+
+static std::shared_ptr<DwmThumbnailRegistration> AcquireDwmThumbnailRegistration(
+    HTHUMBNAIL handle) {
+    if (!handle) return {};
+    auto it = g_dwmThumbnailRegistrations.find(handle);
+    if (it != g_dwmThumbnailRegistrations.end()) {
+        if (auto existing = it->second.lock()) return existing;
+        g_dwmThumbnailRegistrations.erase(it);
+    }
+    auto record = std::make_shared<DwmThumbnailRegistration>(handle);
+    g_dwmThumbnailRegistrations[handle] = record;
+    return record;
+}
+
+struct DwmThumbnailRef {
+    std::shared_ptr<DwmThumbnailRegistration> registration;
+
+    DwmThumbnailRef() = default;
+    DwmThumbnailRef(HTHUMBNAIL handle)
+        : registration(AcquireDwmThumbnailRegistration(handle)) {}
+
+    operator HTHUMBNAIL() const {
+        return registration ? registration->handle : nullptr;
+    }
+    explicit operator bool() const { return registration && registration->handle; }
+
+    friend bool operator==(const DwmThumbnailRef& left,
+                           const DwmThumbnailRef& right) {
+        return static_cast<HTHUMBNAIL>(left) == static_cast<HTHUMBNAIL>(right);
+    }
+    friend bool operator!=(const DwmThumbnailRef& left,
+                           const DwmThumbnailRef& right) {
+        return !(left == right);
+    }
+};
+
 // Shared by live entries and transition snapshots; only the UI changes a cell.
 struct WindowIconCell {
     HWND hWnd = NULL;
@@ -1062,7 +1143,7 @@ struct WindowIconCell {
 };
 
 struct WindowEntry {
-    HWND hWnd; HICON hIcon; WCHAR title[256]; std::map<HWND, HTHUMBNAIL> hThumbs;
+    HWND hWnd; HICON hIcon; WCHAR title[256]; std::map<HWND, DwmThumbnailRef> hThumbs;
     std::shared_ptr<WindowIconCell> iconCell;
     RECT rcCell; RECT rcThumbActual; RECT rcThumbSlot;
     SIZE sourceSize;           // Raw DWM surface size
@@ -1256,7 +1337,9 @@ static bool IsNativeAltTabWindow(HWND hWnd) {
 
     // 2. Window Title check: Alt+Tab is always titled L"Task Switching"
     WCHAR title[64] = {0};
-    GetWindowTextW(hRoot, title, ARRAYSIZE(title));
+    // Read the cached caption: GetWindowTextW sends WM_GETTEXT for same-process
+    // windows and can reenter/block Explorer from its ShowWindow detour.
+    InternalGetWindowText(hRoot, title, ARRAYSIZE(title));
     if (wcscmp(title, L"Task Switching") != 0) {
         if (isIsland || isMultiView) {
             Wh_Log(L"SWS: Alt+Tab/TaskView candidate rejected (title): class=%s title='%s'", cls, title);
@@ -1325,6 +1408,7 @@ static bool IsNativeSwitcherWindow(HWND hWnd) {
 }
 static IVirtualDesktopManager* g_pVirtualDesktopManager = NULL;
 static bool g_showAllMonitors = false;
+// Installed, used and removed exclusively by MouseHookThread.
 static HHOOK g_hMouseHook = NULL;
 static HWINEVENTHOOK s_hWinEventHook = NULL;
 static HWINEVENTHOOK s_hForegroundEventHook = NULL;
@@ -2054,6 +2138,23 @@ static void InvalidateThumbCache(HTHUMBNAIL thumbnail) {
     g_lastThumbState.erase(thumbnail);
 }
 
+static void ReleaseDwmThumbnailRegistration(DwmThumbnailRegistration* record) {
+    if (!record || !record->handle) return;
+    HTHUMBNAIL handle = record->handle;
+    InvalidateThumbCache(handle);
+    HRESULT result = DwmUnregisterThumbnail(handle);
+    if (SUCCEEDED(result)) {
+        record->handle = nullptr;
+        auto it = g_dwmThumbnailRegistrations.find(handle);
+        if (it != g_dwmThumbnailRegistrations.end()) {
+            if (auto current = it->second.lock(); !current || current.get() == record) {
+                g_dwmThumbnailRegistrations.erase(it);
+            }
+        }
+        g_thumbSourceRects.erase(handle);
+    }
+}
+
 static HRESULT UpdateDwmThumbnail(HTHUMBNAIL thumbnail, const DWM_THUMBNAIL_PROPERTIES* properties) {
     // Direct layout/visibility writes invalidate the animation cache too.
     InvalidateThumbCache(thumbnail);
@@ -2067,8 +2168,23 @@ static HRESULT UpdateDwmThumbnail(HTHUMBNAIL thumbnail, const DWM_THUMBNAIL_PROP
 static inline HRESULT SafeDwmUnregisterThumbnail(HTHUMBNAIL h) {
     if (!h) return S_OK;
     InvalidateThumbCache(h);
+    // The handle may be borrowed by a transition snapshot or the saved app
+    // list. The shared registration releases it when the last holder goes
+    // away; unregistering here would invalidate those borrowers.
+    auto registration = g_dwmThumbnailRegistrations.find(h);
+    if (registration != g_dwmThumbnailRegistrations.end()) {
+        if (registration->second.lock()) return S_OK;
+        g_dwmThumbnailRegistrations.erase(registration);
+    }
     HRESULT result = DwmUnregisterThumbnail(h);
-    if (SUCCEEDED(result)) g_thumbSourceRects.erase(h);
+    if (SUCCEEDED(result)) {
+        auto it = g_dwmThumbnailRegistrations.find(h);
+        if (it != g_dwmThumbnailRegistrations.end()) {
+            if (auto current = it->second.lock()) current->handle = nullptr;
+            g_dwmThumbnailRegistrations.erase(it);
+        }
+        g_thumbSourceRects.erase(h);
+    }
     return result;
 }
 
@@ -2102,7 +2218,7 @@ static void UpdateHoverFromCursor(bool allowAnimation = true);
 static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation = true);
 static void GetOverflowState(bool& hasPrev, bool& hasNext);
 static void UpdateChevronLayout(HWND hWnd);
-static void RestoreWindowIfIconic(HWND hWnd);
+static bool RestoreWindowIfIconic(HWND hWnd);
 static void UpdateChevronAnimationTargets(bool immediate = false);
 static int HitTestChevron(HWND hWnd, int x, int y);
 static void EnterAppGroup();
@@ -2814,7 +2930,7 @@ struct OutgoingItemSnapshot {
     WCHAR title[256];
     HICON hIcon;
     std::shared_ptr<WindowIconCell> iconCell;
-    std::map<HWND, HTHUMBNAIL> hThumbs;
+    std::map<HWND, DwmThumbnailRef> hThumbs;
     int drawnIconX, drawnIconY, drawnIconSz;
     std::vector<HWND> groupWindows;
     SIZE sourceSize;
@@ -2858,7 +2974,7 @@ struct DepartingEntrySnapshot {
     HICON hIcon;
     std::shared_ptr<WindowIconCell> iconCell;
     WCHAR title[256];
-    std::map<HWND, HTHUMBNAIL> hThumbs;
+    std::map<HWND, DwmThumbnailRef> hThumbs;
     std::vector<HWND> groupWindows;
     SIZE sourceSize = {};
     RECT rcSourceCrop = {};
@@ -3383,7 +3499,12 @@ static void CommitLayoutTransition(HMONITOR monitor, bool scrollReflow = false) 
         SyncSelectionAnimationToLayout();
     }
     InvalidateStaticCache();
-    UpdateThumbnailAnimations();
+    // A scroll reflow has an outgoing DWM surface and must not publish the
+    // incoming zero/target rectangles before TriggerScrollAnimationEx has
+    // established the viewport transition. If scroll animation is disabled,
+    // the settled frame still needs to be submitted here.
+    bool animatedScroll = scrollReflow && animate && g_settings.enableScrollAnimation;
+    if (!animatedScroll) UpdateThumbnailAnimations();
 }
 
 static bool AdvanceItemTransitions(float dt) {
@@ -3632,40 +3753,24 @@ static int s_cachedScrollToW = 0, s_cachedScrollToH = 0;
 static bool s_scrollIconCanvasDirty = false;
 static bool s_iconRepaintPending = false;
 
-static void EnsureScrollBuffers(int w, int h) {
-    if (w <= 0 || h <= 0) return;
+static bool EnsureSwsDibSurface(HDC reference, int width, int height,
+                                HDC* dc, HBITMAP* bitmap, HBITMAP* oldBitmap,
+                                void** bits, int* cachedWidth, int* cachedHeight);
+
+static bool EnsureScrollBuffers(int w, int h) {
+    if (w <= 0 || h <= 0) return false;
     HDC hdcScreen = GetDC(NULL);
-    if (!s_cachedScrollFromDC || s_cachedScrollFromW != w || s_cachedScrollFromH != h) {
-        if (s_cachedScrollFromDC) {
-            if (s_cachedScrollFromOldBitmap) SelectObject(s_cachedScrollFromDC, s_cachedScrollFromOldBitmap);
-            if (s_cachedScrollFromBitmap) DeleteObject(s_cachedScrollFromBitmap);
-            DeleteDC(s_cachedScrollFromDC);
-        }
-        s_cachedScrollFromDC = CreateCompatibleDC(hdcScreen);
-        BITMAPINFO bmi = {};
-        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        bmi.bmiHeader.biWidth = w; bmi.bmiHeader.biHeight = -h;
-        bmi.bmiHeader.biPlanes = 1; bmi.bmiHeader.biBitCount = 32; bmi.bmiHeader.biCompression = BI_RGB;
-        s_cachedScrollFromBitmap = CreateDIBSection(s_cachedScrollFromDC, &bmi, DIB_RGB_COLORS, &s_cachedScrollFromBits, NULL, 0);
-        s_cachedScrollFromOldBitmap = (HBITMAP)SelectObject(s_cachedScrollFromDC, s_cachedScrollFromBitmap);
-        s_cachedScrollFromW = w; s_cachedScrollFromH = h;
-    }
-    if (!s_cachedScrollToDC || s_cachedScrollToW != w || s_cachedScrollToH != h) {
-        if (s_cachedScrollToDC) {
-            if (s_cachedScrollToOldBitmap) SelectObject(s_cachedScrollToDC, s_cachedScrollToOldBitmap);
-            if (s_cachedScrollToBitmap) DeleteObject(s_cachedScrollToBitmap);
-            DeleteDC(s_cachedScrollToDC);
-        }
-        s_cachedScrollToDC = CreateCompatibleDC(hdcScreen);
-        BITMAPINFO bmi = {};
-        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        bmi.bmiHeader.biWidth = w; bmi.bmiHeader.biHeight = -h;
-        bmi.bmiHeader.biPlanes = 1; bmi.bmiHeader.biBitCount = 32; bmi.bmiHeader.biCompression = BI_RGB;
-        s_cachedScrollToBitmap = CreateDIBSection(s_cachedScrollToDC, &bmi, DIB_RGB_COLORS, &s_cachedScrollToBits, NULL, 0);
-        s_cachedScrollToOldBitmap = (HBITMAP)SelectObject(s_cachedScrollToDC, s_cachedScrollToBitmap);
-        s_cachedScrollToW = w; s_cachedScrollToH = h;
-    }
+    if (!hdcScreen) return false;
+    bool fromReady = EnsureSwsDibSurface(
+        hdcScreen, w, h, &s_cachedScrollFromDC, &s_cachedScrollFromBitmap,
+        &s_cachedScrollFromOldBitmap, &s_cachedScrollFromBits,
+        &s_cachedScrollFromW, &s_cachedScrollFromH);
+    bool toReady = fromReady && EnsureSwsDibSurface(
+        hdcScreen, w, h, &s_cachedScrollToDC, &s_cachedScrollToBitmap,
+        &s_cachedScrollToOldBitmap, &s_cachedScrollToBits,
+        &s_cachedScrollToW, &s_cachedScrollToH);
     ReleaseDC(NULL, hdcScreen);
+    return fromReady && toReady;
 }
 
 static void InvalidateStaticCache() {
@@ -3695,7 +3800,12 @@ static HRGN GetCachedRoundRectRgn(int w, int h, int radius) {
 // Avoids allocating a fresh DC + DIB section per icon per frame during fades and
 // for dimmed minimized icons. Flushed below in FreeCachedBuffers(). The DIB stays
 // selected into its DC for the cache lifetime, and its pixel pointer is stable.
-struct IconAlphaScratch { HDC hdc = nullptr; HBITMAP dib = nullptr; void* bits = nullptr; };
+struct IconAlphaScratch {
+    HDC hdc = nullptr;
+    HBITMAP dib = nullptr;
+    HBITMAP oldBitmap = nullptr;
+    void* bits = nullptr;
+};
 static std::map<int, IconAlphaScratch> s_iconAlphaScratch;
 
 // UI-owned shadow records retain the exact icon allocation, even after its
@@ -3707,6 +3817,59 @@ struct WindowIconShadow {
 };
 static std::map<std::pair<HICON, int>, std::shared_ptr<WindowIconShadow>> s_iconShadowCache;
 static void SweepWindowIconShadows();
+
+// Allocate a replacement off-screen surface before releasing the old one.
+// A failed CreateCompatibleDC/CreateDIBSection must not publish a half-valid
+// cache or discard a surface that can still be used by the current frame.
+static bool EnsureSwsDibSurface(HDC reference, int width, int height,
+                                HDC* dc, HBITMAP* bitmap, HBITMAP* oldBitmap,
+                                void** bits, int* cachedWidth, int* cachedHeight) {
+    if (!reference || width <= 0 || height <= 0 || !dc || !bitmap ||
+        !oldBitmap || !bits || !cachedWidth || !cachedHeight) {
+        return false;
+    }
+    if (*dc && *bitmap && *bits && *cachedWidth == width && *cachedHeight == height) {
+        return true;
+    }
+
+    HDC replacementDc = CreateCompatibleDC(reference);
+    if (!replacementDc) return false;
+
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = width;
+    bmi.bmiHeader.biHeight = -height;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    void* replacementBits = nullptr;
+    HBITMAP replacementBitmap = CreateDIBSection(
+        replacementDc, &bmi, DIB_RGB_COLORS, &replacementBits, nullptr, 0);
+    if (!replacementBitmap || !replacementBits) {
+        if (replacementBitmap) DeleteObject(replacementBitmap);
+        DeleteDC(replacementDc);
+        return false;
+    }
+
+    HGDIOBJ replacementOld = SelectObject(replacementDc, replacementBitmap);
+    if (!replacementOld || replacementOld == HGDI_ERROR) {
+        DeleteObject(replacementBitmap);
+        DeleteDC(replacementDc);
+        return false;
+    }
+
+    if (*dc && *oldBitmap) SelectObject(*dc, *oldBitmap);
+    if (*bitmap) DeleteObject(*bitmap);
+    if (*dc) DeleteDC(*dc);
+
+    *dc = replacementDc;
+    *bitmap = replacementBitmap;
+    *oldBitmap = (HBITMAP)replacementOld;
+    *bits = replacementBits;
+    *cachedWidth = width;
+    *cachedHeight = height;
+    return true;
+}
 
 // Only actual presentation (or the scheduled scroll finish-copy) rebuilds a
 // canvas dirtied by icon results. Clearing first preserves reentrant dirties.
@@ -3797,7 +3960,10 @@ static void FreeCachedBuffers() {
         s_cachedScrollToH = 0;
     }
     for (auto& kv : s_iconAlphaScratch) {
-        if (kv.second.dib) DeleteObject(kv.second.dib); // still selected into hdc; deleting detaches it
+        if (kv.second.hdc && kv.second.oldBitmap) {
+            SelectObject(kv.second.hdc, kv.second.oldBitmap);
+        }
+        if (kv.second.dib) DeleteObject(kv.second.dib);
         if (kv.second.hdc) DeleteDC(kv.second.hdc);
     }
     s_iconAlphaScratch.clear();
@@ -3823,6 +3989,8 @@ static bool AreAnimationsGloballyEnabled() {
     return s_clientAreaAnimCached;
 }
 
+static bool s_animationTimerResolutionOwned = false;
+
 static void StartAnimationTicker() {
     if (!g_hSwitcher) return;
     // Entrance clocks belong to the presentation boundary. A pending-show
@@ -3830,6 +3998,9 @@ static void StartAnimationTicker() {
     // when another animation keeps g_animActive set.
     BeginEntranceAnimationClock();
     if (!g_animActive) {
+        // Keep ordinary waitable-timer/timeout fallbacks accurate, but do not
+        // retain a timer-resolution request while the switcher is idle.
+        s_animationTimerResolutionOwned = timeBeginPeriod(1) == TIMERR_NOERROR;
         // Use the cached interval on the animation-critical path. Refresh-rate
         // maintenance is performed at invocation/display-change boundaries,
         // never as a synchronous restart cost.
@@ -3845,6 +4016,10 @@ static void StartAnimationTicker() {
 }
 
 static void StopAnimationTicker() {
+    if (s_animationTimerResolutionOwned) {
+        timeEndPeriod(1);
+        s_animationTimerResolutionOwned = false;
+    }
     g_animActive = false;
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
 }
@@ -4051,7 +4226,7 @@ static void PreRenderScrollCanvases() {
     RECT rc; GetClientRect(g_hSwitcher, &rc);
     int w = rc.right, h = rc.bottom;
     if (w <= 0 || h <= 0) return;
-    EnsureScrollBuffers(w, h);
+    if (!EnsureScrollBuffers(w, h)) return;
 
     int radius = GetWindowCornerRadiusPx();
 
@@ -4197,6 +4372,10 @@ static void TriggerScrollAnimationEx(int dir, ScrollNavType type) {
 
     PreRenderScrollCanvases();
     g_scrollTransition.active = true;
+    // Submit frame zero only after the outgoing/incoming viewport is active.
+    // This keeps the DWM thumbnails aligned with the first dual-canvas frame
+    // instead of briefly applying the settled layout before the slide starts.
+    UpdateThumbnailAnimations();
 
     UpdateChevronAnimationTargets(false);
     StartAnimationTicker();
@@ -4389,6 +4568,15 @@ static void UpdateThumbnailAnimations() {
         SubmitAnimatedThumbnail(hThumb, sourceWindow, dst, alpha,
                                 sourceSize, sourceCrop, rcContentClip);
     };
+    auto outgoingOwnsThumbnail = [&](HTHUMBNAIL thumbnail) {
+        if (!g_scrollTransition.active) return false;
+        for (const auto& item : g_scrollTransition.outgoingItems) {
+            for (const auto& kv : item.hThumbs) {
+                if (static_cast<HTHUMBNAIL>(kv.second) == thumbnail) return true;
+            }
+        }
+        return false;
+    };
 
     // 1. Incoming items
     for (auto& w : g_windows) {
@@ -4396,6 +4584,10 @@ static void UpdateThumbnailAnimations() {
             w.rcThumbActual.top == 0 && w.rcThumbActual.bottom == 0) {
             for (const auto& kv : w.hThumbs) {
                 if (kv.second) {
+                    // During an active scroll, this handle is rendered by the
+                    // outgoing snapshot below. Hiding it here first creates a
+                    // visible FALSE -> TRUE DWM transition in frame zero.
+                    if (outgoingOwnsThumbnail(kv.second)) continue;
                     auto it = g_lastThumbState.find(kv.second);
                     if (it == g_lastThumbState.end() || it->second.visible) {
                         updateThumb(kv.second, w.hWnd, {}, 0, w.sourceSize, w.rcSourceCrop);
@@ -4420,7 +4612,7 @@ static void UpdateThumbnailAnimations() {
         if (!w.hThumbs.count(g_hSwitcher)) {
             HTHUMBNAIL hT = NULL;
             if (SUCCEEDED(DwmRegisterThumbnail(g_hSwitcher, w.hWnd, &hT))) {
-                w.hThumbs[g_hSwitcher] = hT;
+                w.hThumbs[g_hSwitcher] = DwmThumbnailRef(hT);
                 if (w.sourceSize.cx <= 0 || w.sourceSize.cy <= 0) {
                     SIZE src = {0}; DwmQueryThumbnailSourceSize(hT, &src);
                     w.sourceSize = src;
@@ -5317,7 +5509,6 @@ struct WindowIconWorkerState {
     std::atomic<bool> stop{false};
     HWND target = NULL;
     HANDLE wake = NULL;
-    HMODULE module = NULL;
     DWORD threadId = 0;
     size_t pending = 0;
     std::deque<WindowIconRequest> queue;
@@ -5352,7 +5543,7 @@ static bool IconResolutionCancelled() {
 
 // Worker-only. The three WM_GETICON waits plus Explorer IPC share a 1300ms
 // deadline, with cancellation between stages. Shell/file/COM calls themselves
-// have no Win32 hard timeout (see the bounded shutdown and module reference).
+// have no Win32 hard timeout (see bounded shutdown and dedicated-host exit).
 static bool GetWindowIconTimeout(HWND window, UINT message, WPARAM wParam,
                                  LPARAM lParam, DWORD timeout, DWORD_PTR* result) {
     *result = 0;
@@ -5646,7 +5837,6 @@ static DWORD WINAPI WindowIconWorkerThread(LPVOID parameter) {
     auto* holder = static_cast<std::shared_ptr<WindowIconWorkerState>*>(parameter);
     auto state = std::move(*holder);
     delete holder;
-    HMODULE module = state->module;
     s_resolvingIcons = state.get();
     HRESULT apartment = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     HRESULT cancellation = CoEnableCallCancellation(NULL);
@@ -5697,9 +5887,9 @@ static DWORD WINAPI WindowIconWorkerThread(LPVOID parameter) {
     if (SUCCEEDED(apartment)) CoUninitialize();
     s_resolvingIcons = nullptr;
     state.reset();
-    // Release the code reference atomically with thread exit; a timed-out shell
-    // call can safely finish after Windhawk has returned from mod teardown.
-    FreeLibraryAndExitThread(module, 0);
+    // This worker exists only in the dedicated tool host, which exits after
+    // WhTool_ModUninit. It does not manage Windhawk's module reference count.
+    return 0;
 }
 
 static void StartWindowIconWorker() {
@@ -5708,13 +5898,11 @@ static void StartWindowIconWorker() {
     auto state = std::make_shared<WindowIconWorkerState>();
     state->target = g_hSwitcher;
     state->wake = CreateEventW(NULL, TRUE, FALSE, NULL);
-    if (!state->wake || !GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-        reinterpret_cast<PCWSTR>(&WindowIconWorkerThread), &state->module)) return;
+    if (!state->wake) return;
     auto* holder = new std::shared_ptr<WindowIconWorkerState>(state);
     s_iconWorkerThread = CreateThread(NULL, 0, WindowIconWorkerThread, holder, 0, &state->threadId);
     if (!s_iconWorkerThread) {
         delete holder;
-        FreeLibrary(state->module);
         return;
     }
     AcquireSRWLockExclusive(&s_iconLifecycleLock);
@@ -5750,10 +5938,16 @@ static void StopWindowIconWorker() {
         ReleaseSRWLockExclusive(&state->lock);
     }
     if (s_iconWorkerThread) {
-        // Message waits are <=1300ms. In-process shell extensions/file I/O may
-        // exceed this; retain their private state/code instead of killing a
-        // thread, unloading executing code, or blocking mod unload indefinitely.
-        WaitForSingleObject(s_iconWorkerThread, SWS_ICON_SHUTDOWN_WAIT_MS);
+        // Message waits are <=1300ms, but arbitrary in-process shell/file calls
+        // are not all cancelable. Preserve private shared state on timeout;
+        // the dedicated host's ExitProcess follows the remaining UI teardown.
+        DWORD wait = WaitForSingleObject(s_iconWorkerThread, SWS_ICON_SHUTDOWN_WAIT_MS);
+        if (wait == WAIT_TIMEOUT) {
+            Wh_Log(L"SWS: icon worker did not finish within %u ms; tool process exit follows",
+                   SWS_ICON_SHUTDOWN_WAIT_MS);
+        } else if (wait != WAIT_OBJECT_0) {
+            Wh_Log(L"SWS: icon worker wait failed (result=%u error=%u)", wait, GetLastError());
+        }
         CloseHandle(s_iconWorkerThread);
         s_iconWorkerThread = NULL;
     }
@@ -6006,7 +6200,6 @@ static std::atomic<bool> g_touchpadGestureTakeoverAvailable{true};
 // descriptor used by the reported external device exposes five collections;
 // only that positively observed multi-collection profile requires raw proof
 // before an outside native gesture is claimed.
-static std::atomic<bool> g_touchpadNativeCandidateRequired{false};
 // The reader and the UI thread share the physical three-finger stroke phase.
 // The native Explorer hook cannot read this atomic directly; it uses the
 // timestamp candidate window property published from the same reader thread.
@@ -6053,6 +6246,66 @@ struct TouchpadInputDiagnostics {
 static TouchpadInputDiagnostics s_touchpadInputDiagnostics;
 static std::atomic<HWND> g_touchpadReaderWindow{nullptr};
 static std::wstring FormatTouchpadInputDiagnostics();
+
+// Raw HID is produced by one reader thread and consumed by the switcher UI.
+// Keep the transport bounded: if the UI cannot keep up, discard the affected
+// stroke and resynchronize instead of allowing the thread message queue to
+// grow until input and presentation stall together.
+struct RawTouchpadFrameSlot {
+    std::atomic<DWORD> published{0};
+    DWORD epoch = 0;
+    ULONG tips = 0;
+    ULONG packedPos = 0;
+    ULONGLONG captureTick = 0;
+};
+static constexpr DWORD SWS_RAW_FRAME_QUEUE_CAPACITY = 256;
+static RawTouchpadFrameSlot s_rawFrameQueue[SWS_RAW_FRAME_QUEUE_CAPACITY];
+static std::atomic<DWORD> s_rawFrameWrite{0};
+static std::atomic<DWORD> s_rawFrameRead{0};
+static std::atomic<DWORD> s_rawFrameEpoch{1};
+static std::atomic<bool> s_rawFrameGap{false};
+static ULONGLONG s_rawFrameDispatchTick = 0;
+
+static bool QueueRawTouchpadFrame(ULONG tips, ULONG packedPos, ULONGLONG captureTick) {
+    HWND hSwitcher = g_hSwitcher;
+    if (!hSwitcher || !g_WM_SWS_TOUCHPAD_FRAME || !IsWindow(hSwitcher)) {
+        s_rawFrameGap.store(true, std::memory_order_release);
+        return false;
+    }
+
+    const DWORD write = s_rawFrameWrite.load(std::memory_order_relaxed);
+    const DWORD read = s_rawFrameRead.load(std::memory_order_acquire);
+    if (write - read >= SWS_RAW_FRAME_QUEUE_CAPACITY) {
+        s_rawFrameGap.store(true, std::memory_order_release);
+        ++s_touchpadInputDiagnostics.postFailures;
+        s_touchpadInputDiagnostics.lastPostError.store(ERROR_NOT_ENOUGH_MEMORY);
+        return false;
+    }
+
+    const DWORD index = write % SWS_RAW_FRAME_QUEUE_CAPACITY;
+    DWORD epoch = s_rawFrameEpoch.load(std::memory_order_acquire) & SWS_RAW_FRAME_QUEUE_EPOCH_MASK;
+    if (!epoch) epoch = 1;
+    RawTouchpadFrameSlot& slot = s_rawFrameQueue[index];
+    slot.epoch = epoch;
+    slot.tips = tips;
+    slot.packedPos = packedPos;
+    slot.captureTick = captureTick;
+    slot.published.store(write + 1, std::memory_order_release);
+    s_rawFrameWrite.store(write + 1, std::memory_order_release);
+
+    const DWORD message = SWS_RAW_FRAME_QUEUE_FLAG |
+                          ((epoch & SWS_RAW_FRAME_QUEUE_EPOCH_MASK) <<
+                           SWS_RAW_FRAME_QUEUE_EPOCH_SHIFT) |
+                          (index & SWS_RAW_FRAME_QUEUE_INDEX_MASK);
+    if (!PostMessageW(hSwitcher, g_WM_SWS_TOUCHPAD_FRAME, (WPARAM)message, 0)) {
+        s_rawFrameGap.store(true, std::memory_order_release);
+        ++s_touchpadInputDiagnostics.postFailures;
+        s_touchpadInputDiagnostics.lastPostError.store(GetLastError());
+        return false;
+    }
+    ++s_touchpadInputDiagnostics.posted;
+    return true;
+}
 
 struct TouchpadProcessSecurity {
     DWORD integrity = 0;
@@ -6132,16 +6385,6 @@ static std::wstring FormatTouchpadForegroundDiagnostic(HWND foreground, HWND tar
     return text;
 }
 
-static void RequestTouchpadInputDiagnostics(HWND endpoint, UINT event) {
-    if (!endpoint) return;
-    // Diagnostic-only, asynchronous sampling. No cross-process pointers or
-    // waits; this message cannot launch, navigate, suppress, or activate SWS.
-    if (!PostMessageW(endpoint, WM_SWS_TOUCHPAD_DIAGNOSTICS, event, 0)) {
-        DWORD error = GetLastError();
-        Wh_Log(L"SWS: native input snapshot post failed (event=0x%X endpoint=%p error=%u)",
-               event, endpoint, error);
-    }
-}
 // Raw-frame gesture state; switcher thread only.
 // Three-finger strokes and visible-session two-finger taps are classified here;
 // ordinary panning remains outside this state machine.
@@ -6160,6 +6403,8 @@ static bool s_rawGestureSawThree = false;
 static bool s_rawGestureMoved = false;
 static bool s_rawTapEligible = false;
 static bool s_rawIgnoreUntilLift = false;
+static bool s_rawPartialReleasePending = false;
+static ULONGLONG s_rawPartialReleaseStartTick = 0;
 static bool s_rawSwipePassedToWindows = false;
 static bool s_rawTouchpadShieldActive = false;
 static bool s_rawTouchpadShieldReleasePending = false;
@@ -6176,6 +6421,101 @@ static HWND s_rawShieldRestoreForeground = NULL;
 static HWND s_touchpadActivationRetryTarget = NULL;
 static ULONGLONG s_touchpadActivationRetryDeadline = 0;
 static bool s_touchpadCommitActivation = false;
+static HWND s_switchAnimationSource = nullptr;
+static HWND s_switchAnimationTarget = nullptr;
+static DWORD s_switchAnimationProcess = 0;
+static DWORD s_switchAnimationThread = 0;
+static DWORD s_nextSwitchAnimationToken = 0;
+static bool s_switchAnimationRestoring = false;
+struct SwsOwnerRestoreRequest {
+    HWND window{};
+    DWORD processId{};
+    DWORD threadId{};
+    DWORD token{};
+    ULONGLONG submittedAt{};
+    bool nativeFallback{};
+};
+// At most the selected root and its active popup need an owner handoff.
+static SwsOwnerRestoreRequest s_ownerRestoreRequests[2]{};
+
+static void ClearSwsSwitchAnimationSelection() {
+    // Invalidate the commit marker first. A consumer which races this cleanup
+    // can then never treat a partially cleared payload as a new selection.
+    if (g_hSwitcher) RemovePropW(g_hSwitcher, SwsSelectionProtocol::TokenProp);
+    s_switchAnimationTarget = nullptr;
+    s_switchAnimationProcess = 0;
+    s_switchAnimationThread = 0;
+    s_switchAnimationRestoring = false;
+    for (auto& request : s_ownerRestoreRequests) request = {};
+    if (!g_hSwitcher) return;
+    RemovePropW(g_hSwitcher, SwsSelectionProtocol::TargetProp);
+    RemovePropW(g_hSwitcher, SwsSelectionProtocol::SourceProp);
+    RemovePropW(g_hSwitcher, SwsSelectionProtocol::TickProp);
+    RemovePropW(g_hSwitcher, SwsSelectionProtocol::ProcessProp);
+    RemovePropW(g_hSwitcher, SwsSelectionProtocol::ThreadProp);
+    RemovePropW(g_hSwitcher, SwsSelectionProtocol::RestoreProp);
+}
+
+static void PublishSwsSwitchAnimationSelection(HWND target,
+                                               bool restoring = false) {
+    DWORD processId = 0;
+    const DWORD threadId = GetWindowThreadProcessId(target, &processId);
+    if (!g_hSwitcher || !target || !threadId || !processId) {
+        ClearSwsSwitchAnimationSelection();
+        return;
+    }
+
+    // Activation retries belong to the same selection, not a second switch.
+    if (target == s_switchAnimationTarget &&
+        processId == s_switchAnimationProcess &&
+        threadId == s_switchAnimationThread &&
+        GetPropW(g_hSwitcher, SwsSelectionProtocol::TokenProp)) {
+        return;
+    }
+
+    restoring = restoring || s_switchAnimationRestoring;
+    ClearSwsSwitchAnimationSelection();
+    DWORD token = ++s_nextSwitchAnimationToken;
+    if (!token) token = ++s_nextSwitchAnimationToken;
+    DWORD tick = GetTickCount();
+    if (!tick) tick = 1;
+
+    // The token is the publication commit marker. Set it last, after every
+    // field which the Windows Animations consumer validates is present.
+    bool published =
+        s_switchAnimationSource &&
+        SetPropW(g_hSwitcher, SwsSelectionProtocol::TargetProp, target) &&
+        SetPropW(g_hSwitcher, SwsSelectionProtocol::SourceProp,
+                 s_switchAnimationSource) &&
+        SetPropW(g_hSwitcher, SwsSelectionProtocol::TickProp,
+                 reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(tick))) &&
+        SetPropW(g_hSwitcher, SwsSelectionProtocol::ProcessProp,
+                 reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(processId))) &&
+        SetPropW(g_hSwitcher, SwsSelectionProtocol::ThreadProp,
+                 reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(threadId)));
+    if (published) {
+        if (restoring) {
+            published = SetPropW(g_hSwitcher, SwsSelectionProtocol::RestoreProp,
+                                 reinterpret_cast<HANDLE>(1));
+        } else {
+            RemovePropW(g_hSwitcher, SwsSelectionProtocol::RestoreProp);
+        }
+    }
+    if (published) {
+        published = SetPropW(g_hSwitcher, SwsSelectionProtocol::TokenProp,
+                             reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(token)));
+    }
+    if (!published) {
+        ClearSwsSwitchAnimationSelection();
+        return;
+    }
+
+    s_switchAnimationTarget = target;
+    s_switchAnimationProcess = processId;
+    s_switchAnimationThread = threadId;
+    s_switchAnimationRestoring = restoring;
+}
+
 // A normal Alt session and a normal three-finger session are separate owners.
 // The switcher commits only after both owners have released.
 static bool s_altSessionOwner = false;
@@ -6217,29 +6557,25 @@ static void PublishNativeSwipePolicy() {
     bool enabled = g_touchpadGesturesEnabled.load();
     bool reader = g_touchpadReaderAvailable.load() && !g_touchpadReaderStopping.load();
     bool ready = enabled && reader;
-    if (s_nativeSwipePolicyReady && !ready) {
+    // Native Explorer PTP interception remains usable when raw HID temporarily
+    // disappears. Only the user toggle invalidates an in-flight native relay;
+    // raw-reader loss changes the informational readiness bit and activates the
+    // native-only fallback instead of releasing the shell gesture mid-stroke.
+    if (s_nativeSwipePolicyReady && !enabled) {
         s_nativeSwipePolicyEpoch = (s_nativeSwipePolicyEpoch + 1) & 0x1FFFFFFFu;
         if (!s_nativeSwipePolicyEpoch) s_nativeSwipePolicyEpoch = 1;
         s_nativeTouchpadRelayEpoch = (s_nativeTouchpadRelayEpoch + 1) & 0x1FFFFFFFu;
         if (!s_nativeTouchpadRelayEpoch) s_nativeTouchpadRelayEpoch = 1;
     }
-    s_nativeSwipePolicyReady = ready;
+    s_nativeSwipePolicyReady = enabled;
     if (g_hSwitcher) {
         DWORD policy = (s_nativeSwipePolicyEpoch << 3) | (enabled ? 1u : 0u) |
                        (reader ? 2u : 0u) |
                        (g_touchpadStickyLaunchEnabled.load() ? 4u : 0u);
-        bool profilePublished = true;
-        if (g_touchpadNativeCandidateRequired.load()) {
-            profilePublished = SetPropW(g_hSwitcher, SWS_NATIVE_SWIPE_PROFILE_PROP,
-                                        (HANDLE)(ULONG_PTR)1);
-        } else {
-            RemovePropW(g_hSwitcher, SWS_NATIVE_SWIPE_PROFILE_PROP);
-        }
         if (SetPropW(g_hSwitcher, SWS_NATIVE_SWIPE_POLICY_PROP,
                      (HANDLE)(ULONG_PTR)policy) &&
             SetPropW(g_hSwitcher, SWS_NATIVE_TOUCHPAD_EPOCH_PROP,
-                     (HANDLE)(ULONG_PTR)s_nativeTouchpadRelayEpoch.load()) &&
-            profilePublished) {
+                     (HANDLE)(ULONG_PTR)s_nativeTouchpadRelayEpoch.load())) {
             if (ready && g_touchpadSwitcherActive.load()) {
                 SetPropW(g_hSwitcher, SWS_NATIVE_SWIPE_ACTIVE_PROP,
                          (HANDLE)(ULONG_PTR)1);
@@ -6251,7 +6587,6 @@ static void PublishNativeSwipePolicy() {
             RemovePropW(g_hSwitcher, SWS_NATIVE_SWIPE_POLICY_PROP);
             RemovePropW(g_hSwitcher, SWS_NATIVE_SWIPE_ACTIVE_PROP);
             RemovePropW(g_hSwitcher, SWS_NATIVE_TOUCHPAD_EPOCH_PROP);
-            RemovePropW(g_hSwitcher, SWS_NATIVE_SWIPE_PROFILE_PROP);
         }
     }
     ReleaseSRWLockExclusive(&s_rawSwipeMarkerLock);
@@ -6263,8 +6598,6 @@ static void RemoveNativeSwipePolicy() {
         RemovePropW(g_hSwitcher, SWS_NATIVE_SWIPE_POLICY_PROP);
         RemovePropW(g_hSwitcher, SWS_NATIVE_SWIPE_ACTIVE_PROP);
         RemovePropW(g_hSwitcher, SWS_NATIVE_TOUCHPAD_EPOCH_PROP);
-        RemovePropW(g_hSwitcher, SWS_NATIVE_SWIPE_PROFILE_PROP);
-        RemovePropW(g_hSwitcher, SWS_RAW_THREE_CANDIDATE_PROP);
     }
     ReleaseSRWLockExclusive(&s_rawSwipeMarkerLock);
 }
@@ -6289,50 +6622,6 @@ static DWORD RawSwipeMarkerRemainingMs(HANDLE marker, ULONGLONG tick) {
                          ? SWS_RAW_SWIPE_LIFT_GRACE_MS
                          : SWS_RAW_SWIPE_OWNER_MS;
     return age < lifetime ? lifetime - age : 0;
-}
-
-static HANDLE EncodeRawThreeFingerCandidate(ULONGLONG tick) {
-    DWORD stamp = (DWORD)tick & SWS_RAW_SWIPE_TIMESTAMP_MASK;
-    if (!stamp) stamp = SWS_RAW_SWIPE_TIMESTAMP_MASK;
-    return (HANDLE)(ULONG_PTR)stamp;
-}
-
-static DWORD RawThreeFingerCandidateRemainingMs(HANDLE candidate, ULONGLONG tick) {
-    if (!candidate) return 0;
-    DWORD encoded = (DWORD)(ULONG_PTR)candidate;
-    DWORD age = ((DWORD)tick - (encoded & SWS_RAW_SWIPE_TIMESTAMP_MASK)) &
-                SWS_RAW_SWIPE_TIMESTAMP_MASK;
-    return age < SWS_RAW_THREE_CANDIDATE_MS
-               ? SWS_RAW_THREE_CANDIDATE_MS - age
-               : 0;
-}
-
-static void PublishRawThreeFingerCandidate(ULONGLONG tick) {
-    if (!g_hSwitcher) return;
-    AcquireSRWLockExclusive(&s_rawSwipeMarkerLock);
-    if (TouchpadHandlingEnabled() && g_touchpadReaderAvailable.load()) {
-        SetPropW(g_hSwitcher, SWS_RAW_THREE_CANDIDATE_PROP,
-                 EncodeRawThreeFingerCandidate(tick));
-    } else {
-        RemovePropW(g_hSwitcher, SWS_RAW_THREE_CANDIDATE_PROP);
-    }
-    ReleaseSRWLockExclusive(&s_rawSwipeMarkerLock);
-}
-
-static void ClearRawThreeFingerCandidateProperty() {
-    if (!g_hSwitcher) return;
-    AcquireSRWLockExclusive(&s_rawSwipeMarkerLock);
-    RemovePropW(g_hSwitcher, SWS_RAW_THREE_CANDIDATE_PROP);
-    ReleaseSRWLockExclusive(&s_rawSwipeMarkerLock);
-}
-
-// Explorer reads this property without taking the tool-process lock. Like the
-// existing raw-swipe marker, the value is only an expiring timestamp; a stale
-// or missing property fails open to Windows' native gesture handling.
-static bool FreshRawThreeFingerCandidate(HWND endpoint, ULONGLONG tick) {
-    return endpoint && RawThreeFingerCandidateRemainingMs(
-                             GetPropW(endpoint, SWS_RAW_THREE_CANDIDATE_PROP),
-                             tick) != 0;
 }
 
 #define SWS_RAW_THREE_PHASE_NONE 0u
@@ -6514,6 +6803,8 @@ static void ResetRawTwoFingerTap() {
 
 static void CancelRawTouchpadStroke() {
     ResetRawTwoFingerTap();
+    s_rawPartialReleasePending = false;
+    s_rawPartialReleaseStartTick = 0;
     CancelNativeTouchpadInvocation();
     if (!TouchpadHandlingEnabled() ||
         !g_touchpadReaderAvailable.load()) {
@@ -6548,8 +6839,28 @@ static bool TouchpadGestureTakeoverWanted();
 static bool UpdateTouchpadGestureTakeover(bool want);
 static bool RefreshTouchpadGestureKinds();
 
-// Hiding the shell window can synchronously move focus through another app.
-// Ignore only callbacks nested inside this recovery, never later user input.
+// UI-thread only. Focus notifications and WinEvents share one pending request.
+// The message owns no pointers, and an old session cannot consume a new request.
+static constexpr UINT WM_SWS_DEFERRED_FOCUS_RECOVERY = WM_APP + 10;
+struct SwsFocusRecoveryRequest {
+    ULONG_PTR generation = 0;
+    HWND shellWindow = nullptr;
+    DWORD processId = 0;
+    DWORD threadId = 0;
+    ULONGLONG rawSerial = 0;
+    bool focusLost = false;
+    bool unspecifiedFocus = false;
+};
+static ULONG_PTR s_swsFocusRecoveryGeneration = 1;
+static SwsFocusRecoveryRequest s_swsFocusRecoveryRequest;
+
+static void InvalidateSwsFocusRecoverySession() {
+    if (!++s_swsFocusRecoveryGeneration) ++s_swsFocusRecoveryGeneration;
+    s_swsFocusRecoveryRequest = {};
+}
+
+// Ignore only callbacks nested inside the deferred activation attempt, never
+// later user input or asynchronous notifications from the shell's hide request.
 struct ShellFocusRecoveryScope {
     bool previous = g_recoveringShellFocus;
     ShellFocusRecoveryScope() { g_recoveringShellFocus = true; }
@@ -6647,7 +6958,6 @@ static HICON ResolveIconFromAumid(const WCHAR* aumid, int desiredSizePx) {
 
 // Retries the Explorer-side symbol hook below; declared here because the IPC window (which
 // drives the retry timer) is created earlier in the file.
-static bool TryHookRaiseDesktop();
 static bool TryHookTwinuiAltTab();
 static bool TryHookExplorerSuppression();
 
@@ -7242,7 +7552,7 @@ static void RegisterThumbnailsEarly() {
         if (!w.hThumbs.count(g_hSwitcher)) {
             HTHUMBNAIL hT = NULL;
             if (SUCCEEDED(DwmRegisterThumbnail(g_hSwitcher, w.hWnd, &hT))) {
-                w.hThumbs[g_hSwitcher] = hT;
+                w.hThumbs[g_hSwitcher] = DwmThumbnailRef(hT);
                 SIZE src = {0}; DwmQueryThumbnailSourceSize(hT, &src);
                 w.sourceSize = src;
             }
@@ -7255,7 +7565,7 @@ static void RegisterThumbnailsEarly() {
         for (HWND m : g_hMirrorSwitchers) {
             if (!w.hThumbs.count(m)) {
                 HTHUMBNAIL hT = NULL;
-                if (SUCCEEDED(DwmRegisterThumbnail(m, w.hWnd, &hT))) w.hThumbs[m] = hT;
+                if (SUCCEEDED(DwmRegisterThumbnail(m, w.hWnd, &hT))) w.hThumbs[m] = DwmThumbnailRef(hT);
             }
         }
         UpdateEntrySourceCrop(w);
@@ -7275,7 +7585,7 @@ static void UpdateDockThumbnailDwm() {
         if (!selWnd.hThumbs.count(g_hSwitcher)) {
             HTHUMBNAIL hT = NULL;
             if (SUCCEEDED(DwmRegisterThumbnail(g_hSwitcher, selWnd.hWnd, &hT))) {
-                selWnd.hThumbs[g_hSwitcher] = hT;
+                selWnd.hThumbs[g_hSwitcher] = DwmThumbnailRef(hT);
                 if (selWnd.sourceSize.cx <= 0 || selWnd.sourceSize.cy <= 0) {
                     SIZE src = {0}; DwmQueryThumbnailSourceSize(hT, &src);
                     selWnd.sourceSize = src;
@@ -7287,7 +7597,7 @@ static void UpdateDockThumbnailDwm() {
             if (!selWnd.hThumbs.count(m)) {
                 HTHUMBNAIL hT = NULL;
                 if (SUCCEEDED(DwmRegisterThumbnail(m, selWnd.hWnd, &hT))) {
-                    selWnd.hThumbs[m] = hT;
+                    selWnd.hThumbs[m] = DwmThumbnailRef(hT);
                 }
             }
         }
@@ -7780,23 +8090,21 @@ static void ComputeLayout(HMONITOR hMon) {
             g_windows[ji].rcCell = {0, 0, 0, 0};
             g_windows[ji].rcThumbActual = {0, 0, 0, 0};
             g_windows[ji].rcThumbSlot = {0, 0, 0, 0};
-            // During dry-run layout passes (e.g. CyclePage page-map discovery),
-            // we do NOT destroy DWM thumbnail handles. Doing so on every scroll
-            // event triggers rapid DwmUnregister/Register cycles that cause
-            // visible flicker in the DWM compositor. The caller is responsible
-            // for proper cleanup when g_isDryRunLayout is false.
-            if (!g_isDryRunLayout) {
-                bool keep = false;
-                if (g_scrollTransition.preservingThumbnails) {
-                    for (const auto& snap : g_scrollTransition.outgoingItems) {
-                        if (snap.hWnd == g_windows[ji].hWnd) { keep = true; break; }
-                    }
-                }
-                if (!keep) {
-                    for (const auto& kv : g_windows[ji].hThumbs) {
-                        if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
-                    }
-                    g_windows[ji].hThumbs.clear();
+            // A session owns registrations for the complete entry list. Keep
+            // off-page handles hidden rather than unregistering them here and
+            // registering them again when the page comes back; transition
+            // snapshots and the saved app list may also retain these entries.
+            // Target calculation must not publish an intermediate hidden frame.
+            // CommitLayoutTransition/TriggerScrollAnimationEx submit the
+            // complete settled or outgoing/incoming frame after geometry is
+            // owned by the presentation transition.
+            if (!g_isDryRunLayout && !g_calculatingLayoutTargets) {
+                for (const auto& thumbnail : g_windows[ji].hThumbs) {
+                    if (!thumbnail.second) continue;
+                    DWM_THUMBNAIL_PROPERTIES properties = {};
+                    properties.dwFlags = DWM_TNP_VISIBLE;
+                    properties.fVisible = FALSE;
+                    UpdateDwmThumbnail(thumbnail.second, &properties);
                 }
             }
         }
@@ -8193,7 +8501,7 @@ static void RegisterThumbnails() {
         if (!w.hThumbs.count(g_hSwitcher)) {
             HTHUMBNAIL hT = NULL;
             if (SUCCEEDED(DwmRegisterThumbnail(g_hSwitcher, w.hWnd, &hT))) {
-                w.hThumbs[g_hSwitcher] = hT;
+                w.hThumbs[g_hSwitcher] = DwmThumbnailRef(hT);
                 SIZE src = {0}; DwmQueryThumbnailSourceSize(hT, &src);
                 w.sourceSize = src;
             }
@@ -8207,7 +8515,7 @@ static void RegisterThumbnails() {
         for (HWND m : g_hMirrorSwitchers) {
             if (!w.hThumbs.count(m)) {
                 HTHUMBNAIL hT = NULL;
-                if (SUCCEEDED(DwmRegisterThumbnail(m, w.hWnd, &hT))) w.hThumbs[m] = hT;
+                if (SUCCEEDED(DwmRegisterThumbnail(m, w.hWnd, &hT))) w.hThumbs[m] = DwmThumbnailRef(hT);
             }
         }
         
@@ -8262,6 +8570,14 @@ static void UnregisterThumbnails() {
         w.hThumbs.clear();
     }
     g_lastThumbState.clear();
+}
+
+static void ReleaseSavedAppListThumbnails() {
+    // Saved grouped entries can outlive g_windows during drill-in and must be
+    // released before the session is discarded. DwmThumbnailRef performs the
+    // final DWM unregister after any transition snapshot borrowers are gone.
+    for (auto& entry : g_savedAppList) entry.hThumbs.clear();
+    g_savedAppList.clear();
 }
 
 
@@ -8343,6 +8659,7 @@ static COLORREF GetIndicatorTextColor() {
 }
 
 static Gdiplus::Bitmap* CreateIconShadowBitmap(HICON hIcon, int width, int height, float shadowAlphaMult) {
+    if (!hIcon || width <= 0 || height <= 0) return nullptr;
     BITMAPINFO bmi = {};
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     bmi.bmiHeader.biWidth = width;
@@ -8365,9 +8682,22 @@ static Gdiplus::Bitmap* CreateIconShadowBitmap(HICON hIcon, int width, int heigh
     }
     
     HDC hdcMem = CreateCompatibleDC(hdc);
-    
+    if (!hdcMem) {
+        DeleteObject(hBmpBlack);
+        DeleteObject(hBmpWhite);
+        if (hdc) ReleaseDC(NULL, hdc);
+        return nullptr;
+    }
+
     // Draw on black
     HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, hBmpBlack);
+    if (!hOld || hOld == HGDI_ERROR) {
+        DeleteDC(hdcMem);
+        DeleteObject(hBmpBlack);
+        DeleteObject(hBmpWhite);
+        if (hdc) ReleaseDC(NULL, hdc);
+        return nullptr;
+    }
     memset(pBlackBits, 0, (size_t)width * height * 4);
     memset(pWhiteBits, 0, (size_t)width * height * 4);
     RECT rc = {0, 0, width, height};
@@ -8457,13 +8787,21 @@ static void DrawIconWithAlpha(HDC hdc, int x, int y, HICON hIcon, int size, floa
             if (s.hdc) DeleteDC(s.hdc);
             return;
         }
-        SelectObject(s.hdc, s.dib); // keep the DIB selected for the cache lifetime
+        HGDIOBJ oldBitmap = SelectObject(s.hdc, s.dib);
+        if (!oldBitmap || oldBitmap == HGDI_ERROR) {
+            DeleteObject(s.dib);
+            DeleteDC(s.hdc);
+            return;
+        }
+        s.oldBitmap = (HBITMAP)oldBitmap;
         it = s_iconAlphaScratch.emplace(size, s).first;
     }
 
     const IconAlphaScratch& s = it->second;
+    GdiFlush();
     ZeroMemory(s.bits, (size_t)size * size * 4);
     DrawIconEx(s.hdc, 0, 0, hIcon, size, size, 0, NULL, DI_NORMAL);
+    GdiFlush();
 
     DWORD* pPixels = (DWORD*)s.bits;
     for (int i = 0; i < size * size; ++i) {
@@ -10627,21 +10965,14 @@ static void PaintSwitcherOverlay() {
     if (w <= 0 || h <= 0) return;
 
     if (!s_cachedOverlayDC || s_cachedOverlayW != w || s_cachedOverlayH != h) {
-        if (s_cachedOverlayDC) {
-            if (s_cachedOverlayOldBitmap) SelectObject(s_cachedOverlayDC, s_cachedOverlayOldBitmap);
-            if (s_cachedOverlayBitmap) DeleteObject(s_cachedOverlayBitmap);
-            DeleteDC(s_cachedOverlayDC);
-        }
         HDC hdcScreen = GetDC(NULL);
-        s_cachedOverlayDC = CreateCompatibleDC(hdcScreen);
-        BITMAPINFO bmi = {}; bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        bmi.bmiHeader.biWidth = w; bmi.bmiHeader.biHeight = -h;
-        bmi.bmiHeader.biPlanes = 1; bmi.bmiHeader.biBitCount = 32; bmi.bmiHeader.biCompression = BI_RGB;
-        s_cachedOverlayBitmap = CreateDIBSection(s_cachedOverlayDC, &bmi, DIB_RGB_COLORS, &s_cachedOverlayBits, NULL, 0);
-        s_cachedOverlayOldBitmap = (HBITMAP)SelectObject(s_cachedOverlayDC, s_cachedOverlayBitmap);
-        s_cachedOverlayW = w;
-        s_cachedOverlayH = h;
+        if (!hdcScreen) return;
+        bool ready = EnsureSwsDibSurface(
+            hdcScreen, w, h, &s_cachedOverlayDC, &s_cachedOverlayBitmap,
+            &s_cachedOverlayOldBitmap, &s_cachedOverlayBits,
+            &s_cachedOverlayW, &s_cachedOverlayH);
         ReleaseDC(NULL, hdcScreen);
+        if (!ready) return;
     }
 
     int radius = GetWindowCornerRadiusPx();
@@ -10653,21 +10984,15 @@ static void PaintSwitcherOverlay() {
     if (!g_scrollTransition.active && !g_layoutTransition.active && !animatedDecoration) {
         // Ensure static overlay cache
         if (!s_cachedOverlayStaticDC || s_cachedOverlayStaticW != w || s_cachedOverlayStaticH != h) {
-            if (s_cachedOverlayStaticDC) {
-                if (s_cachedOverlayStaticOldBitmap) SelectObject(s_cachedOverlayStaticDC, s_cachedOverlayStaticOldBitmap);
-                if (s_cachedOverlayStaticBitmap) DeleteObject(s_cachedOverlayStaticBitmap);
-                DeleteDC(s_cachedOverlayStaticDC);
-            }
             HDC hdcScreen = GetDC(NULL);
-            s_cachedOverlayStaticDC = CreateCompatibleDC(hdcScreen);
-            BITMAPINFO bmi = {}; bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-            bmi.bmiHeader.biWidth = w; bmi.bmiHeader.biHeight = -h;
-            bmi.bmiHeader.biPlanes = 1; bmi.bmiHeader.biBitCount = 32; bmi.bmiHeader.biCompression = BI_RGB;
-            s_cachedOverlayStaticBitmap = CreateDIBSection(s_cachedOverlayStaticDC, &bmi, DIB_RGB_COLORS, &s_cachedOverlayStaticBits, NULL, 0);
-            s_cachedOverlayStaticOldBitmap = (HBITMAP)SelectObject(s_cachedOverlayStaticDC, s_cachedOverlayStaticBitmap);
-            s_cachedOverlayStaticW = w;
-            s_cachedOverlayStaticH = h;
+            if (!hdcScreen) return;
+            bool ready = EnsureSwsDibSurface(
+                hdcScreen, w, h, &s_cachedOverlayStaticDC,
+                &s_cachedOverlayStaticBitmap, &s_cachedOverlayStaticOldBitmap,
+                &s_cachedOverlayStaticBits, &s_cachedOverlayStaticW,
+                &s_cachedOverlayStaticH);
             ReleaseDC(NULL, hdcScreen);
+            if (!ready) return;
             g_overlayStaticDirty = true;
         }
 
@@ -10778,21 +11103,13 @@ static void PaintSwitcher() {
         if (w <= 0 || h <= 0) return;
 
         if (!s_cachedMemDC || s_cachedW != w || s_cachedH != h) {
-            if (s_cachedMemDC) {
-                if (s_cachedOldBitmap) SelectObject(s_cachedMemDC, s_cachedOldBitmap);
-                if (s_cachedBitmap) DeleteObject(s_cachedBitmap);
-                DeleteDC(s_cachedMemDC);
-            }
             HDC hdcScreen = GetDC(g_hSwitcher);
-            s_cachedMemDC = CreateCompatibleDC(hdcScreen);
-            BITMAPINFO bmi = {}; bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-            bmi.bmiHeader.biWidth = w; bmi.bmiHeader.biHeight = -h;
-            bmi.bmiHeader.biPlanes = 1; bmi.bmiHeader.biBitCount = 32; bmi.bmiHeader.biCompression = BI_RGB;
-            s_cachedBitmap = CreateDIBSection(s_cachedMemDC, &bmi, DIB_RGB_COLORS, &s_cachedMemBits, NULL, 0);
-            s_cachedOldBitmap = (HBITMAP)SelectObject(s_cachedMemDC, s_cachedBitmap);
-            s_cachedW = w;
-            s_cachedH = h;
+            if (!hdcScreen) return;
+            bool ready = EnsureSwsDibSurface(
+                hdcScreen, w, h, &s_cachedMemDC, &s_cachedBitmap,
+                &s_cachedOldBitmap, &s_cachedMemBits, &s_cachedW, &s_cachedH);
             ReleaseDC(g_hSwitcher, hdcScreen);
+            if (!ready) return;
         }
 
         int radius = GetWindowCornerRadiusPx();
@@ -10802,21 +11119,14 @@ static void PaintSwitcher() {
         SelectClipRgn(s_cachedMemDC, NULL);
         if (!g_scrollTransition.active) {
             if (!s_cachedStaticDC || s_cachedStaticW != w || s_cachedStaticH != h) {
-                if (s_cachedStaticDC) {
-                    if (s_cachedStaticOldBitmap) SelectObject(s_cachedStaticDC, s_cachedStaticOldBitmap);
-                    if (s_cachedStaticBitmap) DeleteObject(s_cachedStaticBitmap);
-                    DeleteDC(s_cachedStaticDC);
-                }
                 HDC hdcScreen = GetDC(g_hSwitcher);
-                s_cachedStaticDC = CreateCompatibleDC(hdcScreen);
-                BITMAPINFO bmi = {}; bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-                bmi.bmiHeader.biWidth = w; bmi.bmiHeader.biHeight = -h;
-                bmi.bmiHeader.biPlanes = 1; bmi.bmiHeader.biBitCount = 32; bmi.bmiHeader.biCompression = BI_RGB;
-                s_cachedStaticBitmap = CreateDIBSection(s_cachedStaticDC, &bmi, DIB_RGB_COLORS, &s_cachedStaticBits, NULL, 0);
-                s_cachedStaticOldBitmap = (HBITMAP)SelectObject(s_cachedStaticDC, s_cachedStaticBitmap);
-                s_cachedStaticW = w;
-                s_cachedStaticH = h;
+                if (!hdcScreen) return;
+                bool ready = EnsureSwsDibSurface(
+                    hdcScreen, w, h, &s_cachedStaticDC, &s_cachedStaticBitmap,
+                    &s_cachedStaticOldBitmap, &s_cachedStaticBits,
+                    &s_cachedStaticW, &s_cachedStaticH);
                 ReleaseDC(g_hSwitcher, hdcScreen);
+                if (!ready) return;
                 g_staticContentDirty = true;
             }
 
@@ -10949,15 +11259,15 @@ static void CancelPendingShow() {
     g_pendingSwitcherRect = { 0, 0, 0, 0 };
 }
 
-// Precision Touchpad & Mouse Wheel Sub-notch Accumulators
+// Mouse sub-notch remainders belong exclusively to the hook thread. The UI
+// resets them by publishing a new session generation, never by writing them.
 static int s_wheelDeltaAccum = 0;
 static int s_hwheelDeltaAccum = 0;
-static ULONGLONG s_lastTouchpadScrollTick = 0;
+static std::atomic<ULONGLONG> s_lastTouchpadScrollTick{0};
+static std::atomic<ULONGLONG> s_mouseCancelsCtrlTap{0};
 
 static void ResetScrollWheelAccumulators() {
-    s_wheelDeltaAccum = 0;
-    s_hwheelDeltaAccum = 0;
-    s_lastTouchpadScrollTick = 0;
+    s_lastTouchpadScrollTick.store(0, std::memory_order_release);
 }
 
 // Stable TOUCHPAD_PARAMETERS_V1 layout from the Windows SDK. The compiler's
@@ -11003,7 +11313,109 @@ static bool s_twoFingerTapRestoreOwned = false;
 static bool s_twoFingerTapParametersUnavailable = false;
 static DWORD s_twoFingerTapParameterError = ERROR_SUCCESS;
 
-static void UpdateTwoFingerTapOverride(bool want) {
+// Write-ahead recovery for a live-only Windows setting. AuthenticationId alone
+// is unique only until reboot; the logon time also prevents a stale record from
+// enabling a preference in a later logon. Store no snapshot of other settings.
+struct TwoFingerTapRecovery {
+    DWORD version;
+    DWORD restoreOwed;
+    LUID authenticationId;
+    LONGLONG logonTime;
+};
+static_assert(sizeof(TwoFingerTapRecovery) == 24);
+static constexpr PCWSTR SWS_TWO_FINGER_TAP_RECOVERY_VALUE = L"twoFingerTapRecovery";
+static TwoFingerTapRecovery s_twoFingerTapRecoverySession{};
+static bool s_twoFingerTapRecoveryChecked = false;
+static bool s_twoFingerTapRecoveryPending = false;
+
+static bool ReadTwoFingerTapRecoverySession() {
+    if (s_twoFingerTapRecoverySession.version) return true;
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return false;
+    TOKEN_STATISTICS statistics{};
+    DWORD bytes = 0;
+    BOOL queried = GetTokenInformation(token, TokenStatistics, &statistics,
+                                       sizeof(statistics), &bytes);
+    CloseHandle(token);
+    if (!queried) return false;
+    PSECURITY_LOGON_SESSION_DATA session = nullptr;
+    NTSTATUS status = LsaGetLogonSessionData(&statistics.AuthenticationId, &session);
+    bool valid = status == 0 && session && session->LogonTime.QuadPart != 0;
+    if (valid) {
+        s_twoFingerTapRecoverySession = {
+            1, 0, statistics.AuthenticationId, session->LogonTime.QuadPart,
+        };
+    }
+    if (session) LsaFreeReturnBuffer(session);
+    return valid;
+}
+
+static bool PrepareTwoFingerTapRecovery() {
+    if (s_twoFingerTapRecoveryChecked) return true;
+    TwoFingerTapRecovery recovery{};
+    size_t bytes = Wh_GetBinaryValue(SWS_TWO_FINGER_TAP_RECOVERY_VALUE,
+                                     &recovery, sizeof(recovery));
+    if (!bytes) {
+        s_twoFingerTapRecoveryChecked = true;
+        return true;
+    }
+    if (bytes != sizeof(recovery) || recovery.version != 1 ||
+        recovery.restoreOwed > 1) {
+        Wh_Log(L"SWS: unrecognized two-finger tap recovery record; leaving Windows settings alone");
+        return false;
+    }
+    if (!recovery.restoreOwed) {
+        s_twoFingerTapRecoveryChecked = true;
+        return true;
+    }
+    s_twoFingerTapRecoveryPending = true;
+    if (!ReadTwoFingerTapRecoverySession()) return false;
+    const auto& current = s_twoFingerTapRecoverySession;
+    bool sameLogon = recovery.authenticationId.LowPart == current.authenticationId.LowPart &&
+                     recovery.authenticationId.HighPart == current.authenticationId.HighPart &&
+                     recovery.logonTime == current.logonTime;
+    if (!sameLogon) {
+        // Windows reloads saved preferences for a new logon. Never replay a
+        // previous logon's temporary override against those preferences.
+        if (!Wh_DeleteValue(SWS_TWO_FINGER_TAP_RECOVERY_VALUE)) return false;
+        Wh_Log(L"SWS: discarded two-finger tap recovery from a previous logon");
+    } else {
+        s_twoFingerTapRestoreOwned = true;
+        Wh_Log(L"SWS: recovering an outstanding two-finger tap override");
+    }
+    s_twoFingerTapRecoveryPending = false;
+    s_twoFingerTapRecoveryChecked = true;
+    return true;
+}
+
+static bool SaveTwoFingerTapRecovery() {
+    if (!ReadTwoFingerTapRecoverySession()) return false;
+    auto recovery = s_twoFingerTapRecoverySession;
+    recovery.restoreOwed = 1;
+    return Wh_SetBinaryValue(SWS_TWO_FINGER_TAP_RECOVERY_VALUE,
+                              &recovery, sizeof(recovery));
+}
+
+static bool ClearTwoFingerTapRecovery() {
+    // A failed deletion must not leave an active record after a successful
+    // restore. A cleared record is safe to keep even if deletion then fails.
+    auto recovery = s_twoFingerTapRecoverySession;
+    recovery.restoreOwed = 0;
+    if (Wh_SetBinaryValue(SWS_TWO_FINGER_TAP_RECOVERY_VALUE,
+                          &recovery, sizeof(recovery))) {
+        Wh_DeleteValue(SWS_TWO_FINGER_TAP_RECOVERY_VALUE);
+        return true;
+    }
+    return Wh_DeleteValue(SWS_TWO_FINGER_TAP_RECOVERY_VALUE);
+}
+
+static void UpdateTwoFingerTapOverride(bool want, bool allowRetryTimer = true) {
+    if (!PrepareTwoFingerTapRecovery()) {
+        if (!want && allowRetryTimer && s_twoFingerTapRecoveryPending && g_hSwitcher) {
+            SetTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID, 100, nullptr);
+        }
+        return;
+    }
     if (want && g_touchpadTwoFingerTapSuppressed.load()) {
         if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID);
         return;
@@ -11022,7 +11434,17 @@ static void UpdateTwoFingerTapOverride(bool want) {
                                      sizeof(parameters), &parameters, 0);
     DWORD error = read ? ERROR_SUCCESS : GetLastError();
     if (read && want && !parameters.touchpadPresent) return;
-    if (read && (!want || parameters.twoFingerTapEnabled)) {
+    if (read && ((want && parameters.twoFingerTapEnabled) ||
+                 (!want && !parameters.twoFingerTapEnabled))) {
+        if (want) {
+            if (!SaveTwoFingerTapRecovery()) {
+                Wh_Log(L"SWS: cannot record two-finger tap recovery; keeping Windows' tap setting");
+                return;
+            }
+            // Retain recovery even if a failed SPI call leaves its effect
+            // uncertain. Release verifies the live bit before clearing it.
+            s_twoFingerTapRestoreOwned = true;
+        }
         // Read afresh on release, and change only our bit. Never restore a
         // snapshot of unrelated settings the user may have changed meanwhile.
         parameters.twoFingerTapEnabled = want ? FALSE : TRUE;
@@ -11030,8 +11452,16 @@ static void UpdateTwoFingerTapOverride(bool want) {
         BOOL set = SystemParametersInfoW(SWS_SPI_SETTOUCHPADPARAMETERS,
                                         sizeof(parameters), &parameters, 0);
         error = set ? ERROR_SUCCESS : GetLastError();
-        if (set) s_twoFingerTapRestoreOwned = want;
         read = set;
+    }
+    if (read && !want) {
+        g_touchpadTwoFingerTapSuppressed.store(false);
+        if (ClearTwoFingerTapRecovery()) {
+            s_twoFingerTapRestoreOwned = false;
+        } else {
+            read = FALSE;
+            error = ERROR_WRITE_FAULT;
+        }
     }
     if (read) {
         s_twoFingerTapParameterError = ERROR_SUCCESS;
@@ -11055,9 +11485,21 @@ static void UpdateTwoFingerTapOverride(bool want) {
                want ? L"override" : L"restore", error);
     }
     // A failed restore must retain ownership and retry, including while hidden.
-    if (!want && g_hSwitcher) {
+    if (!want && allowRetryTimer && g_hSwitcher) {
         SetTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID, 100, nullptr);
     }
+}
+
+static void RestoreTwoFingerTapOverrideBeforeExit() {
+    // No message pump is available after WM_QUIT. Bound the synchronous retry
+    // and leave the recovery record intact if Windows/storage still rejects it.
+    if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID);
+    for (int attempt = 0; attempt < 5; ++attempt) {
+        UpdateTwoFingerTapOverride(false, false);
+        if (!s_twoFingerTapRestoreOwned && !s_twoFingerTapRecoveryPending) return;
+        if (attempt < 4) Sleep(25);
+    }
+    Wh_Log(L"SWS: two-finger tap restoration remains pending for the next start");
 }
 
 static ULONGLONG EncodeRawTwoFingerTapMouseState(DWORD serial,
@@ -11070,35 +11512,119 @@ static DWORD RawTwoFingerTapMouseRemainingMs(ULONGLONG state, ULONGLONG now) {
     return state && remaining > 0 ? (DWORD)remaining : 0;
 }
 
-// Switcher-thread only. Once a down is consumed, its matching up must also be
+// A single atomic word is an immutable mouse-policy snapshot. The hook never
+// reads UI settings, flags, HWND lists or window geometry. Hit-testing is a UI
+// command so WindowFromPoint cannot make the low-level callback wait on a wndproc.
+enum : DWORD {
+    SWS_MOUSE_VISIBLE = 1u,
+    SWS_MOUSE_PENDING = 2u,
+    SWS_MOUSE_WHEEL = 4u,
+    SWS_MOUSE_REVERSE = 8u,
+};
+static std::atomic<ULONGLONG> s_mousePolicy{0};
+// These handles and UI generation are owned by SwitcherThread. They remain
+// valid until the hook thread has been joined, including on startup failure.
+static HANDLE s_mouseHookThread = nullptr;
+static HANDLE s_mouseHookStopEvent = nullptr;
+static HANDLE s_mousePolicyChanged = nullptr;
+static DWORD s_mouseUiGeneration = 0;
+static bool s_mouseUiSessionOpen = false;
+// Hook-thread only, fixed before the first hook is installed.
+static HWND s_mouseCommandTarget = nullptr;
+
+enum class MouseCommandKind { Activity, Button, Wheel };
+struct MouseCommand {
+    DWORD generation = 0;
+    MouseCommandKind kind = MouseCommandKind::Activity;
+    POINT point{};
+    int notches = 0;
+    int action = 0;
+    ULONGLONG tick = 0;
+};
+// One producer (hook), one consumer (UI). Each successful post names exactly
+// one slot: an earlier notification cannot consume a not-yet-posted command.
+// A full queue or a failed post passes the original input through to Windows.
+static constexpr DWORD kMouseCommandCapacity = 128;
+struct MouseCommandSlot {
+    std::atomic<DWORD> published{0};
+    MouseCommand command;
+};
+static MouseCommandSlot s_mouseCommands[kMouseCommandCapacity];
+static DWORD s_mouseCommandWrite = 0; // Hook-thread only.
+static std::atomic<DWORD> s_mouseCommandRead{0};
+static DWORD s_mouseHookPolicyGeneration = 0; // Hook-thread only.
+
+static bool QueueMouseCommand(const MouseCommand& command) {
+    DWORD index = s_mouseCommandWrite;
+    if (index - s_mouseCommandRead.load(std::memory_order_acquire) >=
+        kMouseCommandCapacity) return false;
+    auto& slot = s_mouseCommands[index % kMouseCommandCapacity];
+    slot.command = command;
+    slot.published.store(index, std::memory_order_release);
+    if (!PostMessageW(s_mouseCommandTarget, WM_SWS_MOUSE_COMMAND, index, 0)) {
+        return false;
+    }
+    ++s_mouseCommandWrite;
+    return true;
+}
+
+static bool TakeMouseCommand(DWORD index, MouseCommand* command) {
+    if (index != s_mouseCommandRead.load(std::memory_order_relaxed)) return false;
+    auto& slot = s_mouseCommands[index % kMouseCommandCapacity];
+    if (slot.published.load(std::memory_order_acquire) != index) return false;
+    *command = slot.command;
+    s_mouseCommandRead.store(index + 1, std::memory_order_release);
+    return true;
+}
+
+static void PublishMouseHookPolicy() {
+    DWORD flags = 0;
+    if (s_mouseUiSessionOpen && !g_isHidingSwitcher && !g_animExitActive) {
+        if (g_isVisible) flags |= SWS_MOUSE_VISIBLE;
+        if (g_isPendingShow) flags |= SWS_MOUSE_PENDING;
+    }
+    if (ScrollIs(L"always") || (ScrollIs(L"stickyOnly") && g_isSticky)) {
+        flags |= SWS_MOUSE_WHEEL;
+    }
+    if (g_settings.reverseScrollDirection) flags |= SWS_MOUSE_REVERSE;
+    auto action = [](const WCHAR* value) -> DWORD {
+        return wcscmp(value, L"selection") == 0 ? 1u :
+               wcscmp(value, L"page") == 0 ? 2u : 0u;
+    };
+    flags |= action(g_settings.scrollWheelAction) << 4;
+    flags |= action(g_settings.scrollSecondaryAction) << 6;
+    DWORD modifier = wcscmp(g_settings.scrollSecondaryModifier, L"shift") == 0 ? 1u :
+                     wcscmp(g_settings.scrollSecondaryModifier, L"ctrl") == 0 ? 2u :
+                     wcscmp(g_settings.scrollSecondaryModifier, L"alt") == 0 ? 3u : 0u;
+    flags |= modifier << 8;
+    ULONGLONG policy = ((ULONGLONG)s_mouseUiGeneration << 32) | flags;
+    if (s_mousePolicy.exchange(policy, std::memory_order_acq_rel) != policy &&
+        s_mousePolicyChanged) SetEvent(s_mousePolicyChanged);
+}
+
+static void RetireMouseUiSession() {
+    s_mouseUiSessionOpen = false;
+    s_mouseCancelsCtrlTap.store(0, std::memory_order_release);
+    if (!++s_mouseUiGeneration) ++s_mouseUiGeneration;
+    PublishMouseHookPolicy();
+}
+
+static void BeginMouseUiSession() {
+    if (s_mouseUiSessionOpen) return;
+    s_mouseUiSessionOpen = true;
+    s_mouseCancelsCtrlTap.store(0, std::memory_order_release);
+    if (!++s_mouseUiGeneration) ++s_mouseUiGeneration;
+    PublishMouseHookPolicy();
+}
+
+// Hook-thread only. Once a down is consumed, its matching up must also be
 // consumed, even if the raw lift closes the last entry or settings disable input.
 static DWORD s_rawTwoFingerMouseButtonSerial = 0;
 static ULONGLONG s_rawTwoFingerMouseButtonDeadline = 0;
 
 static void UpdateTwoFingerTapMouseHookLifetime() {
-    if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_RAW_TWO_TAP_MOUSE_TIMER_ID);
-    if (g_isVisible || g_isPendingShow) return;
-    ULONGLONG now = GetTickCount64();
-    DWORD remaining = 0;
-    if (TouchpadHandlingEnabled() && g_touchpadReaderAvailable.load()) {
-        remaining = RawTwoFingerTapMouseRemainingMs(
-            g_touchpadRawTwoFingerTapMouseState.load(std::memory_order_acquire), now);
-    }
-    if (s_rawTwoFingerMouseButtonDeadline > now) {
-        remaining = (std::max)(remaining,
-            (DWORD)(s_rawTwoFingerMouseButtonDeadline - now));
-    } else {
-        s_rawTwoFingerMouseButtonSerial = 0;
-        s_rawTwoFingerMouseButtonDeadline = 0;
-    }
-    if (g_hMouseHook && remaining && g_hSwitcher &&
-        SetTimer(g_hSwitcher, SWS_RAW_TWO_TAP_MOUSE_TIMER_ID, remaining, nullptr)) {
-        return;
-    }
-    if (g_hMouseHook) {
-        UnhookWindowsHookEx(g_hMouseHook);
-        g_hMouseHook = nullptr;
-    }
+    // UI publication only. The hook pump owns expiry, independently of UI timers.
+    PublishMouseHookPolicy();
 }
 
 static bool SuppressTwoFingerTapMouse(WPARAM message) {
@@ -11116,142 +11642,199 @@ static bool SuppressTwoFingerTapMouse(WPARAM message) {
         while ((DWORD)(state >> 32) == serial &&
                !g_touchpadRawTwoFingerTapMouseState.compare_exchange_weak(
                    state, 0, std::memory_order_acq_rel)) {}
-        UpdateTwoFingerTapMouseHookLifetime();
         return true;
     }
-    if (!TouchpadHandlingEnabled() || !g_touchpadReaderAvailable.load()) return false;
-    if (g_touchpadTwoFingerTapSuppressed.load()) return false;
+    if (!TouchpadHandlingEnabled() || !g_touchpadReaderAvailable.load() ||
+        g_touchpadTwoFingerTapSuppressed.load()) return false;
     ULONGLONG state = g_touchpadRawTwoFingerTapMouseState.load(
         std::memory_order_acquire);
     if (!RawTwoFingerTapMouseRemainingMs(state, now)) return false;
     s_rawTwoFingerMouseButtonSerial = (DWORD)(state >> 32);
     s_rawTwoFingerMouseButtonDeadline = now + SWS_RAW_TWO_TAP_MOUSE_PAIR_MS;
-    UpdateTwoFingerTapMouseHookLifetime();
     return true;
 }
 
-static long long TouchpadTraceAgeMs(ULONGLONG now, ULONGLONG tick) {
-    return tick ? (tick <= now ? (long long)(now - tick) : 0) : -1;
+static DWORD MousePolicyGeneration(ULONGLONG policy) {
+    return (DWORD)(policy >> 32);
 }
 
-static void LogTwoFingerTapMouseEvent(WPARAM message,
-                                      const MSLLHOOKSTRUCT& mouse,
-                                      ULONGLONG stateBefore,
-                                      DWORD pairSerialBefore,
-                                      bool consumed) {
-    ULONGLONG now = GetTickCount64();
-    HWND underCursor = WindowFromPoint(mouse.pt);
-    auto& stats = s_touchpadInputDiagnostics;
-    // Diagnostic only: record the hook payload and reader/UI snapshots. Mouse
-    // flags/extra-info are not assumed to identify touchpad input, and neither
-    // cursor position nor logging changes the ownership decision.
-    Wh_Log(L"SWS TAPTRACE mouse tick=%llu eventTick=%u eventAgeMs=%u message=0x%X consumed=%d flags=0x%X extra=0x%llX "
-           L"cursor=%d,%d under=%p inside=%d foreground=%p hook=%p visible=%d pending=%d exit=%d hiding=%d "
-           L"enabled=%d available=%d stopping=%d closeActive=%d candidateSerial=%u candidateRemainingMs=%u pairSerial=%u "
-           L"uiTips=%d uiTap=%d selected=%d raw=%u reports=%u frames=%u posted=%u uiFrames=%u readerTips=%u "
-           L"rawAgeMs=%lld frameAgeMs=%lld uiAgeMs=%lld",
-           (unsigned long long)now, mouse.time, (DWORD)now - mouse.time,
-           (UINT)message, consumed, mouse.flags, (unsigned long long)mouse.dwExtraInfo,
-           mouse.pt.x, mouse.pt.y, underCursor, IsSwitcherWindow(underCursor),
-           GetForegroundWindow(), g_hMouseHook, g_isVisible, g_isPendingShow,
-           g_animExitActive, g_isHidingSwitcher, g_touchpadGesturesEnabled.load(),
-           g_touchpadReaderAvailable.load(), g_touchpadReaderStopping.load(),
-           g_touchpadTwoFingerCloseActive.load(), (DWORD)(stateBefore >> 32),
-           RawTwoFingerTapMouseRemainingMs(stateBefore, now), pairSerialBefore,
-           s_rawGestureTips, s_rawTwoFingerTapActive, g_selectedIndex,
-           stats.rawMessages.load(), stats.hidReports.load(), stats.frames.load(),
-           stats.posted.load(), stats.uiFrames.load(), stats.lastTips.load(),
-           TouchpadTraceAgeMs(now, stats.lastRawTick.load()),
-           TouchpadTraceAgeMs(now, stats.lastFrameTick.load()),
-           TouchpadTraceAgeMs(now, stats.lastUiTick.load()));
+static DWORD MousePolicyFlags(ULONGLONG policy) {
+    return (DWORD)policy;
 }
 
 static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    ULONGLONG policy = s_mousePolicy.load(std::memory_order_acquire);
+    DWORD flags = MousePolicyFlags(policy);
+    DWORD generation = MousePolicyGeneration(policy);
     if (nCode == HC_ACTION) {
-        ULONGLONG stateBefore = g_touchpadRawTwoFingerTapMouseState.load(
-            std::memory_order_acquire);
-        DWORD pairSerialBefore = s_rawTwoFingerMouseButtonSerial;
         bool consumed = SuppressTwoFingerTapMouse(wParam);
-        if (wParam == WM_RBUTTONDOWN || wParam == WM_RBUTTONUP) {
-            LogTwoFingerTapMouseEvent(wParam, *(const MSLLHOOKSTRUCT*)lParam,
-                                     stateBefore, pairSerialBefore, consumed);
-        }
         if (consumed) {
-            g_ctrlTapPending = false;
+            if (flags & SWS_MOUSE_VISIBLE) {
+                s_mouseCancelsCtrlTap.store((ULONGLONG)generation << 32 | 1u,
+                                            std::memory_order_release);
+            }
             Wh_Log(L"SWS: consumed owned two-finger tap mouse event (message=0x%X)", (UINT)wParam);
             return 1;
         }
     }
-    if (nCode == HC_ACTION && g_isVisible &&
+    if (nCode == HC_ACTION && (flags & SWS_MOUSE_VISIBLE) &&
+        (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN ||
+         wParam == WM_MBUTTONDOWN || wParam == WM_MOUSEWHEEL ||
+         wParam == WM_MOUSEHWHEEL)) {
+        s_mouseCancelsCtrlTap.store((ULONGLONG)generation << 32 | 1u,
+                                    std::memory_order_release);
+    }
+    if (nCode == HC_ACTION && (flags & SWS_MOUSE_VISIBLE) &&
         (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN || wParam == WM_MBUTTONDOWN)) {
-        g_ctrlTapPending = false;
         auto* mouse = (MSLLHOOKSTRUCT*)lParam;
-        if (!IsSwitcherWindow(WindowFromPoint(mouse->pt))) {
-            Wh_Log(L"SWS TAPTRACE click-away tick=%llu message=0x%X cursor=%d,%d uiTips=%d uiTap=%d selected=%d",
-                   (unsigned long long)GetTickCount64(), (UINT)wParam,
-                   mouse->pt.x, mouse->pt.y, s_rawGestureTips,
-                   s_rawTwoFingerTapActive, g_selectedIndex);
-            PostMessageW(g_hSwitcher, WM_SWS_CANCEL_INPUT, 0, 0);
+        MouseCommand command;
+        command.generation = generation;
+        command.kind = MouseCommandKind::Activity;
+        command.point = mouse->pt;
+        command.tick = GetTickCount64();
+        if (QueueMouseCommand(command)) {
+            return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
         }
     }
-    if (nCode == HC_ACTION && g_isVisible && (wParam == WM_MOUSEWHEEL || wParam == WM_MOUSEHWHEEL)) {
+    if (nCode == HC_ACTION && (flags & SWS_MOUSE_VISIBLE) &&
+        (flags & SWS_MOUSE_WHEEL) && (wParam == WM_MOUSEWHEEL || wParam == WM_MOUSEHWHEEL)) {
         MSLLHOOKSTRUCT* pMouseStruct = (MSLLHOOKSTRUCT*)lParam;
-        g_ctrlTapPending = false;
-        bool ok = ScrollIs(L"always") || (ScrollIs(L"stickyOnly") && g_isSticky);
-        if (ok) {
-            bool modActive = false;
-            if (wcscmp(g_settings.scrollSecondaryModifier, L"shift") == 0) modActive = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-            else if (wcscmp(g_settings.scrollSecondaryModifier, L"ctrl") == 0) modActive = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-            else if (wcscmp(g_settings.scrollSecondaryModifier, L"alt") == 0) modActive = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-            const WCHAR* actionStr = modActive ? g_settings.scrollSecondaryAction : g_settings.scrollWheelAction;
-            int action = 0;
-            if (wcscmp(actionStr, L"selection") == 0) action = 1;
-            else if (wcscmp(actionStr, L"page") == 0) action = 2;
-            if (!action) {
-                // None passes every original packet, including sub-notch input.
-                // Do not carry partial owned motion across a pass-through action.
+        DWORD modifier = (flags >> 8) & 3u;
+        bool modActive = (modifier == 1 && (GetAsyncKeyState(VK_SHIFT) & 0x8000)) ||
+                         (modifier == 2 && (GetAsyncKeyState(VK_CONTROL) & 0x8000)) ||
+                         (modifier == 3 && (GetAsyncKeyState(VK_MENU) & 0x8000));
+        DWORD action = modActive ? ((flags >> 6) & 3u) : ((flags >> 4) & 3u);
+        if (!action) {
+            s_wheelDeltaAccum = s_hwheelDeltaAccum = 0;
+            return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
+        }
+        short rawDelta = (short)HIWORD(pMouseStruct->mouseData);
+        int& accumulator = wParam == WM_MOUSEWHEEL ? s_wheelDeltaAccum : s_hwheelDeltaAccum;
+        accumulator += rawDelta;
+        int notches = 0;
+        while (accumulator >= WHEEL_DELTA) {
+            notches += wParam == WM_MOUSEWHEEL ? -1 : 1;
+            accumulator -= WHEEL_DELTA;
+        }
+        while (accumulator <= -WHEEL_DELTA) {
+            notches += wParam == WM_MOUSEWHEEL ? 1 : -1;
+            accumulator += WHEEL_DELTA;
+        }
+        if (notches != 0) {
+            if (flags & SWS_MOUSE_REVERSE) notches = -notches;
+            MouseCommand command;
+            command.generation = generation;
+            command.kind = MouseCommandKind::Wheel;
+            command.notches = notches;
+            command.action = (int)action;
+            command.tick = GetTickCount64();
+            if (!QueueMouseCommand(command)) {
+                // Fail open: do not swallow the original packet or retain a
+                // partial owned motion after a queueing failure.
                 s_wheelDeltaAccum = s_hwheelDeltaAccum = 0;
                 return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
             }
-            short rawDelta = (short)HIWORD(pMouseStruct->mouseData);
-            int notches = 0;
-            if (wParam == WM_MOUSEWHEEL) {
-                s_wheelDeltaAccum += rawDelta;
-                while (s_wheelDeltaAccum >= WHEEL_DELTA) {
-                    notches--; // positive wheel = scroll up / previous
-                    s_wheelDeltaAccum -= WHEEL_DELTA;
-                }
-                while (s_wheelDeltaAccum <= -WHEEL_DELTA) {
-                    notches++; // negative wheel = scroll down / next
-                    s_wheelDeltaAccum += WHEEL_DELTA;
-                }
-            } else if (wParam == WM_MOUSEHWHEEL) {
-                s_hwheelDeltaAccum += rawDelta;
-                while (s_hwheelDeltaAccum >= WHEEL_DELTA) {
-                    notches++; // positive tilt = scroll right / next
-                    s_hwheelDeltaAccum -= WHEEL_DELTA;
-                }
-                while (s_hwheelDeltaAccum <= -WHEEL_DELTA) {
-                    notches--; // negative tilt = scroll left / previous
-                    s_hwheelDeltaAccum += WHEEL_DELTA;
-                }
-            }
-
-            if (notches != 0) {
-                if (g_settings.reverseScrollDirection) notches = -notches;
-                s_lastTouchpadScrollTick = GetTickCount64();
-                PostMessage(g_hSwitcher, WM_SWS_SCROLL, (WPARAM)notches, (LPARAM)action);
-                return 1;
-            } else {
-                // Absorbed sub-notch delta, swallow to prevent background window scrolling
-                s_lastTouchpadScrollTick = GetTickCount64();
-                return 1;
-            }
+            s_lastTouchpadScrollTick.store(command.tick, std::memory_order_release);
         } else {
-            s_wheelDeltaAccum = s_hwheelDeltaAccum = 0;
+            // Preserve the grace period for absorbed sub-notch motion.
+            s_lastTouchpadScrollTick.store(GetTickCount64(), std::memory_order_release);
         }
+        return 1;
     }
     return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
+}
+
+static bool MouseHookNeedsToRemainInstalled(ULONGLONG now) {
+    ULONGLONG policy = s_mousePolicy.load(std::memory_order_acquire);
+    if (MousePolicyFlags(policy) & SWS_MOUSE_VISIBLE) return true;
+    if (RawTwoFingerTapMouseRemainingMs(
+            g_touchpadRawTwoFingerTapMouseState.load(std::memory_order_acquire), now)) {
+        return true;
+    }
+    return s_rawTwoFingerMouseButtonDeadline > now;
+}
+
+static void ApplyMouseHookLifetime() {
+    ULONGLONG policy = s_mousePolicy.load(std::memory_order_acquire);
+    DWORD generation = MousePolicyGeneration(policy);
+    if (generation != s_mouseHookPolicyGeneration) {
+        s_wheelDeltaAccum = s_hwheelDeltaAccum = 0;
+        s_mouseHookPolicyGeneration = generation;
+    }
+    bool needed = MouseHookNeedsToRemainInstalled(GetTickCount64());
+    if (needed && !g_hMouseHook) {
+        g_hMouseHook = SetWindowsHookExW(
+            WH_MOUSE_LL, LowLevelMouseProc, GetModuleHandleW(NULL), 0);
+        if (!g_hMouseHook) {
+            Wh_Log(L"SWS: mouse hook installation failed (error=%u)", GetLastError());
+        }
+    } else if (!needed && g_hMouseHook) {
+        UnhookWindowsHookEx(g_hMouseHook);
+        g_hMouseHook = nullptr;
+        s_wheelDeltaAccum = s_hwheelDeltaAccum = 0;
+    }
+}
+
+static DWORD WINAPI MouseHookThread(LPVOID) {
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    for (;;) {
+        ApplyMouseHookLifetime();
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        HANDLE events[2] = { s_mouseHookStopEvent, s_mousePolicyChanged };
+        DWORD wake = MsgWaitForMultipleObjectsEx(
+            ARRAYSIZE(events), events, 50, QS_ALLINPUT,
+            MWMO_INPUTAVAILABLE);
+        if (wake == WAIT_OBJECT_0) break;
+        if (wake == WAIT_OBJECT_0 + 1) ResetEvent(s_mousePolicyChanged);
+    }
+    if (g_hMouseHook) {
+        UnhookWindowsHookEx(g_hMouseHook);
+        g_hMouseHook = nullptr;
+    }
+    s_wheelDeltaAccum = s_hwheelDeltaAccum = 0;
+    return 0;
+}
+
+static bool StartMouseHookThread(HWND commandTarget) {
+    if (s_mouseHookThread) return true;
+    s_mouseCommandTarget = commandTarget;
+    s_mouseHookStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    s_mousePolicyChanged = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!s_mouseHookStopEvent || !s_mousePolicyChanged) {
+        if (s_mousePolicyChanged) CloseHandle(s_mousePolicyChanged);
+        if (s_mouseHookStopEvent) CloseHandle(s_mouseHookStopEvent);
+        s_mousePolicyChanged = s_mouseHookStopEvent = nullptr;
+        s_mouseCommandTarget = nullptr;
+        return false;
+    }
+    s_mouseHookThread = CreateThread(nullptr, 0, MouseHookThread, nullptr, 0, nullptr);
+    if (!s_mouseHookThread) {
+        CloseHandle(s_mousePolicyChanged);
+        CloseHandle(s_mouseHookStopEvent);
+        s_mousePolicyChanged = s_mouseHookStopEvent = nullptr;
+        s_mouseCommandTarget = nullptr;
+        return false;
+    }
+    PublishMouseHookPolicy();
+    return true;
+}
+
+static void StopMouseHookThread() {
+    if (!s_mouseHookThread) return;
+    SetEvent(s_mouseHookStopEvent);
+    SetEvent(s_mousePolicyChanged);
+    WaitForSingleObject(s_mouseHookThread, INFINITE);
+    CloseHandle(s_mouseHookThread);
+    s_mouseHookThread = nullptr;
+    if (s_mousePolicyChanged) CloseHandle(s_mousePolicyChanged);
+    if (s_mouseHookStopEvent) CloseHandle(s_mouseHookStopEvent);
+    s_mousePolicyChanged = s_mouseHookStopEvent = nullptr;
+    s_mouseCommandTarget = nullptr;
+    s_mouseCommandRead.store(s_mouseCommandWrite, std::memory_order_release);
 }
 
 // Show the switcher, its overlay and the mirrors, then start the entrance animation.
@@ -11294,26 +11877,6 @@ static void PresentSwitcherWindows() {
     }
 }
 
-// A Task View window can briefly win the system-tools z-order after the raw
-// reader has already opened SWS. Restore our topmost presentation without
-// requiring foreground activation; the latter is unavailable across UIPI.
-static void ReassertVisibleSwitcherPresentation() {
-    if (!g_hSwitcher || !g_isVisible || !IsWindow(g_hSwitcher)) return;
-    RECT rc = {};
-    if (!GetWindowRect(g_hSwitcher, &rc) || rc.right <= rc.left || rc.bottom <= rc.top) {
-        return;
-    }
-    PositionPresentationWindow(g_hSwitcher, SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    BringWindowToTop(g_hSwitcher);
-    if (g_hCloseBtnWnd) {
-        AnchorPresentationOverlay();
-        PositionPresentationWindow(g_hCloseBtnWnd, SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    }
-    BOOL foreground = SetForegroundWindow(g_hSwitcher);
-    Wh_Log(L"SWS: reasserted visible switcher foreground=%d active=%d",
-           foreground, GetForegroundWindow() == g_hSwitcher);
-}
-
 static void RevealPendingSwitcher() {
     if (!g_isPendingShow || !g_hSwitcher) {
         return;
@@ -11330,12 +11893,8 @@ static void RevealPendingSwitcher() {
         ShowWindow(g_hSwitcher, SW_HIDE);
     }
     g_isVisible = true;
+    BeginMouseUiSession();
     RefreshTouchpadGestureKinds();
-    if (!g_hMouseHook) {
-        g_hMouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, GetModuleHandle(NULL), 0);
-        Wh_Log(L"SWS TAPTRACE mouse hook installed (reveal hook=%p error=%u)",
-               g_hMouseHook, g_hMouseHook ? ERROR_SUCCESS : GetLastError());
-    }
 
     // Re-resolve the final switcher rect before reading it.
     // CycleLinear (called from the WM_HOTKEY backward path during pending show)
@@ -11682,6 +12241,9 @@ static void ApplySwitcherRegion() {
 }
 
 static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSource = nullptr) {
+    const bool touchpadInvocation = g_isTouchpadGestureActive;
+    InvalidateSwsFocusRecoverySession();
+    ClearSwsSwitchAnimationSelection();
     // A new invocation supersedes a previous denied activation request.
     if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID);
     s_touchpadActivationRetryTarget = NULL;
@@ -11693,6 +12255,7 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
     PublishNativeSwipePolicy();
     HWND invocationWindow = GetAncestor(
         invocationSource ? invocationSource : GetForegroundWindow(), GA_ROOTOWNER);
+    s_switchAnimationSource = invocationWindow;
     g_sameAppSessionKey[0] = L'\0';
     if (g_isAltBacktickSameApp) {
         GetWindowGroupKey(invocationWindow, g_sameAppSessionKey, ARRAYSIZE(g_sameAppSessionKey));
@@ -11730,16 +12293,18 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
 
     g_layoutStartIndex = 0; // Always start from the first window on initial show
     g_drilledIn = false;
-    g_savedAppList.clear();
+    ReleaseSavedAppListThumbnails();
     g_consumeEscUp = false;
     g_drillInAfterReveal = false;
     g_selectedIndex = 0;
-    for (int i = 0; i < (int)g_windows.size(); ++i) {
-        const auto& e = g_windows[i];
-        if (e.hWnd == invocationWindow ||
-            std::find(e.groupWindows.begin(), e.groupWindows.end(), invocationWindow) != e.groupWindows.end()) {
-            g_selectedIndex = (i + 1) % (int)g_windows.size();
-            break;
+    if (!touchpadInvocation) {
+        for (int i = 0; i < (int)g_windows.size(); ++i) {
+            const auto& e = g_windows[i];
+            if (e.hWnd == invocationWindow ||
+                std::find(e.groupWindows.begin(), e.groupWindows.end(), invocationWindow) != e.groupWindows.end()) {
+                g_selectedIndex = (i + 1) % (int)g_windows.size();
+                break;
+            }
         }
     }
     g_hoverIndex = -1;
@@ -11876,12 +12441,8 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
         ShowWindow(g_hSwitcher, SW_HIDE);
     }
     g_isVisible = true;
+    BeginMouseUiSession();
     RefreshTouchpadGestureKinds();
-    if (!g_hMouseHook) {
-        g_hMouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, GetModuleHandle(NULL), 0);
-        Wh_Log(L"SWS TAPTRACE mouse hook installed (show hook=%p error=%u)",
-               g_hMouseHook, g_hMouseHook ? ERROR_SUCCESS : GetLastError());
-    }
 
     ApplyThemeToWindow(g_hSwitcher);
     ApplySwitcherRegion();
@@ -11918,14 +12479,15 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
 
 static void HideSwitcher() {
     if (g_isHidingSwitcher) return;
+    InvalidateSwsFocusRecoverySession();
     g_touchpadTwoFingerCloseActive.store(false);
     g_touchpadSwitcherActive.store(false);
     // A cancelled session must not let the still-held stroke re-enter through
     // the Explorer-side native source gate. The reader will publish the next
     // candidate only after a complete lift and a fresh contact edge.
-    ClearRawThreeFingerCandidateProperty();
     PublishNativeSwipePolicy();
     g_isHidingSwitcher = true;
+    PublishMouseHookPolicy();
     Wh_Log(L"SWS: hiding session (sticky=%d, raw=%d, tips=%d, foreground=%p)",
            g_isSticky, s_rawSessionOwned, s_rawGestureTips, GetForegroundWindow());
     CancelRawTouchpadStroke();
@@ -12013,6 +12575,7 @@ static void HideSwitcher() {
 
     g_isVisible = false;
     g_isPendingShow = false;
+    RetireMouseUiSession();
     // UI teardown is not the end of the already-owned tap's mouse pair.
     // The short timer keeps only its input filter alive, never its foreground.
     UpdateTwoFingerTapMouseHookLifetime();
@@ -12021,7 +12584,7 @@ static void HideSwitcher() {
     g_sameAppSessionKey[0] = L'\0';
     RefreshTouchpadGestureKinds();
     g_drilledIn = false;
-    g_savedAppList.clear();
+    ReleaseSavedAppListThumbnails();
     g_consumeEscUp = false;
     g_drillInAfterReveal = false;
     g_isPaginatedView = false;
@@ -12048,16 +12611,75 @@ static void HideSwitcher() {
 
 // Never wait synchronously on another application's window procedure. These
 // requests remain subject to UIPI; a queued restore is not proof of activation.
-static void RestoreWindowIfIconic(HWND hWnd) {
-    if (IsIconic(hWnd)) {
-        if (!ShowWindowAsync(hWnd, SW_RESTORE)) {
-            PostMessage(hWnd, WM_SYSCOMMAND, SC_RESTORE, 0);
+static bool RestoreWindowIfIconic(HWND hWnd) {
+    for (auto& request : s_ownerRestoreRequests) {
+        if (request.window != hWnd) continue;
+        DWORD processId = 0;
+        const DWORD threadId = GetWindowThreadProcessId(hWnd, &processId);
+        const DWORD currentToken = static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(
+            GetPropW(g_hSwitcher, SwsSelectionProtocol::TokenProp)));
+        if (processId != request.processId || threadId != request.threadId ||
+            currentToken != request.token) {
+            request = {};
+            return false;
+        }
+        if (request.nativeFallback) return false;
+
+        const ULONG_PTR ownerActive = reinterpret_cast<ULONG_PTR>(GetPropW(
+            hWnd, SwsSelectionProtocol::OwnerRestoreActiveProp));
+        const bool ownerRestoreActive = ownerActive == request.token;
+        const bool animationActive = GetPropW(
+            hWnd, SwsSelectionProtocol::OwnerAnimationProp) != nullptr;
+        if (IsIconic(hWnd) &&
+            GetTickCount64() - request.submittedAt >= 1000 &&
+            !ownerRestoreActive && !animationActive) {
+            request.nativeFallback = true;
+            if (!ShowWindowAsync(hWnd, SW_RESTORE)) {
+                PostMessageW(hWnd, WM_SYSCOMMAND, SC_RESTORE, 0);
+            }
+            return false;
+        }
+        return IsIconic(hWnd) || ownerRestoreActive || animationActive;
+    }
+
+    const DWORD token = static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(
+        GetPropW(g_hSwitcher, SwsSelectionProtocol::TokenProp)));
+    if (s_switchAnimationRestoring && token &&
+        reinterpret_cast<ULONG_PTR>(GetPropW(
+            hWnd, SwsSelectionProtocol::OwnerRestoreActiveProp)) == token) {
+        return true;
+    }
+    if (!IsIconic(hWnd)) return false;
+
+    const ULONG_PTR message = reinterpret_cast<ULONG_PTR>(GetPropW(
+        hWnd, SwsSelectionProtocol::OwnerRestoreMessageProp));
+    if (message >= 0xC000 && message <= 0xFFFF && token &&
+        s_switchAnimationRestoring) {
+        for (auto& request : s_ownerRestoreRequests) {
+            if (request.window) continue;
+            DWORD processId = 0;
+            const DWORD threadId = GetWindowThreadProcessId(hWnd, &processId);
+            if (threadId && processId &&
+                PostMessageW(hWnd, static_cast<UINT>(message), token,
+                             reinterpret_cast<LPARAM>(g_hSwitcher))) {
+                request = {hWnd, processId, threadId, token, GetTickCount64(), false};
+                Wh_Log(L"SWS: queued owner restore hwnd=%p token=%lu", hWnd,
+                       static_cast<unsigned long>(token));
+                return true;
+            }
+            break;
         }
     }
+
+    if (!ShowWindowAsync(hWnd, SW_RESTORE)) {
+        PostMessageW(hWnd, WM_SYSCOMMAND, SC_RESTORE, 0);
+    }
+    return false;
 }
 
 static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreWindows) {
     if (!hTarget || !IsWindow(hTarget)) {
+        ClearSwsSwitchAnimationSelection();
         s_touchpadCommitActivation = false;
         return;
     }
@@ -12071,8 +12693,35 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
     const bool retrying = s_touchpadActivationRetryTarget != NULL;
     HWND hPopup = GetLastActivePopup(hTarget);
     HWND hForegroundTarget = IsWindowVisible(hPopup) ? hPopup : hTarget;
-    RestoreWindowIfIconic(hTarget);
-    if (hForegroundTarget != hTarget) RestoreWindowIfIconic(hForegroundTarget);
+    SwsOwnerRestoreRequest rootFallback{};
+    if (s_touchpadActivationRetryTarget == hTarget) {
+        for (const auto& request : s_ownerRestoreRequests) {
+            if (request.window == hTarget && request.nativeFallback) {
+                rootFallback = request;
+                break;
+            }
+        }
+    }
+    PublishSwsSwitchAnimationSelection(
+        hForegroundTarget, IsIconic(hTarget) || IsIconic(hForegroundTarget));
+    if (rootFallback.window) {
+        bool retained = false;
+        for (const auto& request : s_ownerRestoreRequests) {
+            if (request.window == hTarget) retained = true;
+        }
+        if (!retained) {
+            for (auto& request : s_ownerRestoreRequests) {
+                if (request.window) continue;
+                request = rootFallback;
+                break;
+            }
+        }
+    }
+    bool ownerRestorePending = RestoreWindowIfIconic(hTarget);
+    if (hForegroundTarget != hTarget) {
+        ownerRestorePending = RestoreWindowIfIconic(hForegroundTarget) ||
+                              ownerRestorePending;
+    }
     if (s_touchpadCommitActivation && !retrying) {
         Wh_Log(L"SWS: touchpad commit context %s",
                FormatTouchpadForegroundDiagnostic(GetForegroundWindow(), hForegroundTarget).c_str());
@@ -12081,9 +12730,13 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
         // last-input eligibility while a different app owns the foreground).
         TapUnassignedKeyForForeground();
     }
-    BOOL foregroundOk = SetForegroundWindow(hForegroundTarget);
-    if (!foregroundOk) SwitchToThisWindow(hForegroundTarget, TRUE);
-    bool active = GetForegroundWindow() == hForegroundTarget;
+    BOOL foregroundOk = FALSE;
+    if (!ownerRestorePending) {
+        foregroundOk = SetForegroundWindow(hForegroundTarget);
+        if (!foregroundOk) SwitchToThisWindow(hForegroundTarget, TRUE);
+    }
+    bool active = !ownerRestorePending &&
+                  GetForegroundWindow() == hForegroundTarget;
     if (!retrying || active) {
         Wh_Log(L"SWS: activate %p -> SetForegroundWindow=%d active=%d", hForegroundTarget,
                foregroundOk, active);
@@ -12102,10 +12755,11 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
         if (!retrying) {
             // The absolute deadline is established once. Resetting it here on
             // each failed attempt made the 600 ms retry run for many seconds.
-            s_touchpadActivationRetryDeadline = GetTickCount64() + 600;
+            s_touchpadActivationRetryDeadline = GetTickCount64() +
+                (ownerRestorePending ? 3000 : 600);
             SetTimer(g_hSwitcher, SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID, 40, NULL);
         }
-        s_touchpadActivationRetryTarget = hForegroundTarget;
+        s_touchpadActivationRetryTarget = ownerRestorePending ? hTarget : hForegroundTarget;
     }
 }
 
@@ -12113,7 +12767,10 @@ static void StartExitAnimation(bool activateSelectedWindow) {
     if ((!g_isVisible && !g_isPendingShow) || g_animExitActive) return;
     g_touchpadTwoFingerCloseActive.store(false);
     UpdateTwoFingerTapOverride(false);
-    if (!activateSelectedWindow) s_touchpadCommitActivation = false;
+    if (!activateSelectedWindow) {
+        s_touchpadCommitActivation = false;
+        ClearSwsSwitchAnimationSelection();
+    }
     // A lift during cancellation must not commit; continuing the cancelled
     // stroke must not reopen the switcher before all fingers have lifted.
     CancelRawTouchpadStroke();
@@ -12135,6 +12792,7 @@ static void StartExitAnimation(bool activateSelectedWindow) {
         // Guard focus-change reentrancy and duplicate release events before
         // handing off. Activation must precede even non-animated teardown.
         g_animExitActive = true;
+        PublishMouseHookPolicy();
         if (activateSelectedWindow) ActivateExitedWindow(hTarget, restoreWindows);
         HideSwitcher();
         return;
@@ -12152,6 +12810,7 @@ static void StartExitAnimation(bool activateSelectedWindow) {
     g_animEntranceCurrentAlpha = 1.0f;
 
     g_animExitActive = true;
+    PublishMouseHookPolicy();
     RefreshTouchpadGestureKinds();
     // Decreasing p at the entrance speed gives a remaining duration of 167ms*p.
     g_animExitDuration = g_animEntranceDuration;
@@ -12352,6 +13011,7 @@ static void EnterAppGroup() {
         }
 
         // 4. Stash app list and populate drilled-in window entries
+        ReleaseSavedAppListThumbnails();
         g_savedAppList          = std::move(g_windows);
         g_savedSelectedIndex    = g_selectedIndex;
         g_savedLayoutStartIndex = g_layoutStartIndex;
@@ -12413,6 +13073,7 @@ static void EnterAppGroup() {
     } else {
         // ── Instant fallback path (animations disabled) ───────────────
         UnregisterThumbnails();
+        ReleaseSavedAppListThumbnails();
         g_savedAppList = std::move(g_windows);
         g_savedSelectedIndex = g_selectedIndex;
         g_savedLayoutStartIndex = g_layoutStartIndex;
@@ -14015,7 +14676,9 @@ static bool IsTaskViewWindow(HWND hWnd) {
     if (!explorer) return false;
 
     WCHAR title[64] = {0};
-    GetWindowTextW(hWnd, title, ARRAYSIZE(title));
+    // This classifier also runs inside Explorer's ShowWindow detour. Never
+    // synchronously dispatch WM_GETTEXT to a same-process shell window here.
+    InternalGetWindowText(hWnd, title, ARRAYSIZE(title));
     // Do not classify an arbitrary untitled XAML island as Task View.
     bool match = wcscmp(title, L"Task View") == 0 ||
                  (isMultiView && wcscmp(title, L"Task Switching") != 0);
@@ -14023,6 +14686,122 @@ static bool IsTaskViewWindow(HWND hWnd) {
 
     Wh_Log(L"SWS: multitasking island from a swipe: class=%s title='%s'", cls, title);
     return true;
+}
+
+static void QueueSwsFocusRecovery(HWND target, bool focusLost = false,
+                                  bool unspecifiedFocus = false,
+                                  bool shellRecovery = false) {
+    if (!g_hSwitcher || g_animExitActive || g_isHidingSwitcher ||
+        g_recoveringShellFocus) return;
+    bool posted = s_swsFocusRecoveryRequest.generation == s_swsFocusRecoveryGeneration;
+    if (!posted) {
+        s_swsFocusRecoveryRequest = {};
+        s_swsFocusRecoveryRequest.generation = s_swsFocusRecoveryGeneration;
+    }
+    auto& request = s_swsFocusRecoveryRequest;
+    HWND root = target ? GetAncestor(target, GA_ROOT) : nullptr;
+    if (shellRecovery && root && !IsSwitcherWindow(root)) {
+        request.shellWindow = root;
+        request.processId = 0;
+        request.threadId = GetWindowThreadProcessId(root, &request.processId);
+        request.rawSerial = RawThreeFingerStateSerial(
+            g_touchpadRawThreeFingerState.load(std::memory_order_acquire));
+    }
+    request.focusLost |= focusLost;
+    if (focusLost) request.unspecifiedFocus = unspecifiedFocus;
+    if (!posted && !PostMessageW(g_hSwitcher, WM_SWS_DEFERRED_FOCUS_RECOVERY,
+                                 request.generation, 0)) {
+        request = {}; // No synchronous fallback while focus is changing.
+    }
+}
+
+static bool SwsFocusRecoverySessionCurrent(const SwsFocusRecoveryRequest& request) {
+    DWORD processId = 0;
+    return request.generation == s_swsFocusRecoveryGeneration && g_hSwitcher &&
+           GetWindowThreadProcessId(g_hSwitcher, &processId) == GetCurrentThreadId() &&
+           processId == GetCurrentProcessId() && !g_animExitActive && !g_isHidingSwitcher &&
+           (g_isVisible || g_isPendingShow || s_rawTouchpadShieldActive);
+}
+
+static bool SwsFocusRecoveryStillOwned(const SwsFocusRecoveryRequest& request) {
+    DWORD processId = 0;
+    return SwsFocusRecoverySessionCurrent(request) && request.shellWindow &&
+           request.threadId && request.processId &&
+           GetWindowThreadProcessId(request.shellWindow, &processId) == request.threadId &&
+           processId == request.processId &&
+           request.processId != GetCurrentProcessId() &&
+           request.rawSerial == RawThreeFingerStateSerial(
+               g_touchpadRawThreeFingerState.load(std::memory_order_acquire)) &&
+           RawTouchpadShellSuppressionActive();
+}
+
+static HWND SwsFocusRecoveryForegroundRoot() {
+    HWND foreground = GetForegroundWindow();
+    return foreground ? GetAncestor(foreground, GA_ROOT) : nullptr;
+}
+
+static bool PreserveRawStrokeOnFocusLoss();
+
+static void RunSwsFocusRecovery(ULONG_PTR generation) {
+    if (generation != s_swsFocusRecoveryGeneration ||
+        generation != s_swsFocusRecoveryRequest.generation) return;
+    const auto request = s_swsFocusRecoveryRequest;
+    s_swsFocusRecoveryRequest = {};
+    if (!SwsFocusRecoverySessionCurrent(request) || g_recoveringShellFocus) return;
+
+    if (SwsFocusRecoveryStillOwned(request)) {
+        bool taskView = IsTaskViewWindow(request.shellWindow);
+        bool nativeSwitcher = !taskView && IsNativeSwitcherWindow(request.shellWindow);
+        HWND foreground = SwsFocusRecoveryForegroundRoot();
+        if ((taskView || nativeSwitcher) &&
+            (foreground == request.shellWindow || IsSwitcherWindow(foreground)) &&
+            SwsFocusRecoveryStillOwned(request)) {
+            ShellFocusRecoveryScope recovery;
+            if (taskView && SwsFocusRecoveryForegroundRoot() == request.shellWindow) {
+                // Keep the existing shell dismissal path, but inject only while the
+                // identified shell window still owns the foreground.
+                INPUT inputs[2] = {};
+                inputs[0].type = INPUT_KEYBOARD;
+                inputs[0].ki.wVk = VK_ESCAPE;
+                inputs[1] = inputs[0];
+                inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+                if (SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT))) {
+                    Wh_Log(L"SWS: dismissed Task View through the shell");
+                }
+            }
+            foreground = SwsFocusRecoveryForegroundRoot();
+            if (!SwsFocusRecoveryStillOwned(request) ||
+                (foreground != request.shellWindow && !IsSwitcherWindow(foreground))) return;
+            // Never synchronously enter the foreign HWND's window procedure.
+            ShowWindowAsync(request.shellWindow, SW_HIDE);
+            // The async hide can already have handed focus to an unrelated app.
+            // Only one activation attempt is allowed, while this exact shell HWND
+            // is still foreground; do not reveal a hidden shield or retry later.
+            if (SwsFocusRecoveryStillOwned(request) && IsWindowVisible(g_hSwitcher) &&
+                SwsFocusRecoveryForegroundRoot() == request.shellWindow) {
+                BringWindowToTop(g_hSwitcher);
+                SetForegroundWindow(g_hSwitcher);
+            }
+            return;
+        }
+    }
+
+    if (!request.focusLost || !SwsFocusRecoverySessionCurrent(request) ||
+        (!g_isVisible && !g_isPendingShow)) return;
+    HWND foreground = SwsFocusRecoveryForegroundRoot();
+    if (!foreground || IsSwitcherWindow(foreground)) return;
+    // Keep the existing live-stroke/release policy, without reactivating over an
+    // unrelated app. Dismissal is also deferred: disabled animations can hide now.
+    if (PreserveRawStrokeOnFocusLoss() || CombinedRawReleasePending()) return;
+    if (s_rawSessionOwned || g_isSticky) {
+        StartExitAnimation(false);
+        return;
+    }
+    if (g_isTouchpadGestureActive) return;
+    if (request.unspecifiedFocus &&
+        (IsNativeSwitcherWindow(foreground) ||
+         GetTickCount64() - s_lastTouchpadScrollTick.load(std::memory_order_acquire) < 1200)) return;
+    StartExitAnimation(false);
 }
 
 static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime) {
@@ -14038,35 +14817,8 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
 
     if ((event == EVENT_OBJECT_SHOW || event == 0x0003 /* EVENT_SYSTEM_FOREGROUND */) &&
         RawTouchpadShellSuppressionActive() && IsTaskViewWindow(hwnd)) {
-        ShellFocusRecoveryScope recovery;
-        Wh_Log(L"SWS: hid Task View shown by a 3-finger swipe");
-        // Hiding the window alone leaves the shell believing Task View is still open, which
-        // swallows the next 3-finger down (show desktop needs a second swipe). Escape is
-        // Task View's own dismiss key, so close it through the shell while it owns the
-        // foreground; the hide below then only cuts the closing animation short.
-        HWND hFg = GetForegroundWindow();
-        if (hFg && GetAncestor(hFg, GA_ROOT) == GetAncestor(hwnd, GA_ROOT)) {
-            INPUT inputs[2] = {};
-            inputs[0].type = INPUT_KEYBOARD;
-            inputs[0].ki.wVk = VK_ESCAPE;
-            inputs[1] = inputs[0];
-            inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
-            if (SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT))) {
-                Wh_Log(L"SWS: dismissed Task View through the shell");
-            }
-        } else {
-            Wh_Log(L"SWS: Task View was not foreground, hid it without dismissing");
-        }
-        ShowWindow(hwnd, SW_HIDE);
-        if (g_hSwitcher && g_isVisible) {
-            // Hiding the island can hand the foreground to the shell; keep the switcher
-            // visible and topmost even when UIPI prevents reactivation.
-            ReassertVisibleSwitcherPresentation();
-        } else if (g_hSwitcher && s_rawTouchpadShieldActive) {
-            ShowWindow(g_hSwitcher, 1);
-            BringWindowToTop(g_hSwitcher);
-            SetForegroundWindow(g_hSwitcher);
-        }
+        Wh_Log(L"SWS: queued Task View recovery for a 3-finger swipe");
+        QueueSwsFocusRecovery(hwnd, false, false, true);
         return;
     }
     // A hidden sticky shield can still race the native shell switcher. Handle
@@ -14074,15 +14826,7 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
     // as a visible window.
     if (event == EVENT_OBJECT_SHOW && RawTouchpadShellSuppressionActive() &&
         IsNativeSwitcherWindow(hwnd)) {
-        ShellFocusRecoveryScope recovery;
-        ShowWindow(hwnd, SW_HIDE);
-        if (g_isVisible && g_hSwitcher) {
-            ReassertVisibleSwitcherPresentation();
-        } else if (s_rawTouchpadShieldActive && g_hSwitcher) {
-            ShowWindow(g_hSwitcher, 1);
-            BringWindowToTop(g_hSwitcher);
-            SetForegroundWindow(g_hSwitcher);
-        }
+        QueueSwsFocusRecovery(hwnd, false, false, true);
         return;
     }
 
@@ -14201,9 +14945,7 @@ static void QueueCloseWindow(HWND hw) {
     }
     // A failed post is not an in-flight close and must remain retryable.
     BOOL posted = PostMessage(hw, WM_SYSCOMMAND, SC_CLOSE, 0);
-    DWORD error = posted ? ERROR_SUCCESS : GetLastError();
-    Wh_Log(L"SWS TAPTRACE close post tick=%llu window=%p posted=%d error=%u",
-           (unsigned long long)now, hw, posted, error);
+    if (!posted) Wh_Log(L"SWS: close request post failed (window=%p error=%u)", hw, GetLastError());
     if (posted) {
         s_pendingCloseWindows.push_back(hw);
         s_pendingCloseDeadlines[hw] = now + SWS_CLOSE_COOLDOWN_MS;
@@ -14335,7 +15077,7 @@ static void ScheduleRawTouchpadShieldRelease() {
 // Raw HID controls fallback invocation and navigation. The typed native PTP
 // boundaries can also invoke when Windows blocks background HID delivery.
 // Shell show/hide notifications are never interpreted as finger movement/lift.
-static void BeginTouchpadGesture(int step) {
+static void BeginTouchpadGesture(int step, bool sticky = false) {
     // Re-entrant: a new gesture must always be able to (re)open the switcher even if a
     // previous gesture left stale state. Force a clean slate if we are mid-exit.
     if (g_animExitActive) {
@@ -14343,9 +15085,9 @@ static void BeginTouchpadGesture(int step) {
         HideSwitcher();
     }
     g_isTouchpadGestureActive = true;
-    s_lastTouchpadScrollTick = GetTickCount64();
+    s_lastTouchpadScrollTick.store(GetTickCount64(), std::memory_order_release);
     if (!g_isVisible && !g_isPendingShow) {
-        ShowSwitcher(false, true);
+        ShowSwitcher(sticky, true);
     } else if (g_isPendingShow) {
         RevealPendingSwitcher();
     }
@@ -14604,8 +15346,7 @@ static void CompleteNativeTouchpadInvocation() {
     DWORD token = s_nativeTouchpadInvocation.token;
     DWORD tick = s_nativeTouchpadInvocation.completionTick;
     bool valid = s_nativeTouchpadInvocation.epoch == s_nativeTouchpadRelayEpoch.load() &&
-                 g_touchpadGesturesEnabled.load() && g_touchpadReaderAvailable.load() &&
-                 !g_touchpadReaderStopping.load();
+                 g_touchpadGesturesEnabled.load() && !g_touchpadReaderStopping.load();
     bool rawOwnsStroke = s_nativeTouchpadInvocation.rawAdopted &&
                         s_rawGestureSawThree && s_rawGestureTips > 0;
     CancelNativeTouchpadInvocation();
@@ -14629,9 +15370,8 @@ static void HandleNativeTouchpadBoundary(DWORD packet, DWORD token) {
     DWORD epoch = packet >> 3;
     DWORD policy = (DWORD)(ULONG_PTR)GetPropW(g_hSwitcher, SWS_NATIVE_SWIPE_POLICY_PROP);
     if (!token || !epoch || epoch != s_nativeTouchpadRelayEpoch.load() ||
-        !TouchpadHandlingEnabled() ||
-        !g_touchpadReaderAvailable.load() || g_touchpadReaderStopping.load() ||
-        (policy & 3u) != 3u) {
+        !TouchpadHandlingEnabled() || g_touchpadReaderStopping.load() ||
+        (policy & 1u) == 0) {
         return;
     }
     if (event == 1 || event == 2 || event == 3) {
@@ -14672,23 +15412,21 @@ static void HandleNativeTouchpadBoundary(DWORD packet, DWORD token) {
         ShowSwitcher(event == 2, true, source);
         if (!s_nativeTouchpadInvocation.token ||
             s_nativeTouchpadInvocation.epoch != s_nativeTouchpadRelayEpoch.load() ||
-            !TouchpadHandlingEnabled() ||
-            !g_touchpadReaderAvailable.load() || g_touchpadReaderStopping.load() || !g_isVisible ||
+            !TouchpadHandlingEnabled() || g_touchpadReaderStopping.load() || !g_isVisible ||
             GetForegroundWindow() != g_hSwitcher) {
             HideSwitcher();
             return;
         }
         PromoteRawTouchpadShieldToSession();
         PublishRawSwipe();
-        if (event != 2) {
-            int step = event == 3 ? 1 : -1;
-            if (g_settings.reverseScrollDirection) step = -step;
-            NavigateRawTouchpad(true, step, 0);
-        }
+        // The native boundary opens the switcher; it must not also apply a
+        // synthetic first navigation step. The touchpad starts at entry 0,
+        // and subsequent raw reports provide the actual drag movement.
         KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
         SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, SWS_RAW_SESSION_LOST_TIMEOUT_MS, nullptr);
-        Wh_Log(L"SWS: native PTP invoked (direction=%u token=%u epoch=%u rawAdopted=%d)",
-               event, token, epoch, s_nativeTouchpadInvocation.rawAdopted);
+        Wh_Log(L"SWS: native PTP invoked (direction=%u token=%u epoch=%u rawAdopted=%d rawReady=%d)",
+               event, token, epoch, s_nativeTouchpadInvocation.rawAdopted,
+               (policy & 2u) != 0);
         return;
     }
     if ((event != SWS_NATIVE_TOUCHPAD_END && event != SWS_NATIVE_TOUCHPAD_CANCEL) ||
@@ -14703,19 +15441,9 @@ static void HandleNativeTouchpadBoundary(DWORD packet, DWORD token) {
 }
 
 static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
-    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG now = s_rawFrameDispatchTick ? s_rawFrameDispatchTick : GetTickCount64();
     ++s_touchpadInputDiagnostics.uiFrames;
     s_touchpadInputDiagnostics.lastUiTick.store(now);
-    if ((int)tips != s_rawGestureTips) {
-        Wh_Log(L"SWS TAPTRACE ui tick=%llu eventTick=%u messageAgeMs=%u tips=%u previous=%d position=%u,%u "
-               L"tap=%d visible=%d pending=%d exit=%d ignore=%d nativeDiscard=%d selected=%d",
-               (unsigned long long)now, (DWORD)GetMessageTime(),
-               (DWORD)now - (DWORD)GetMessageTime(), tips, s_rawGestureTips,
-               packedPos & 0xFFFF, (packedPos >> 16) & 0xFFFF,
-               s_rawTwoFingerTapActive, g_isVisible, g_isPendingShow,
-               g_animExitActive, s_rawIgnoreUntilLift,
-               s_nativeTouchpadRawDiscardPending, g_selectedIndex);
-    }
     AdoptRawThreeFingerState();
     if (tips == 0 && s_altSessionOwner && s_combinedRawSeen) {
         s_combinedRawLiftHandled = true;
@@ -14724,7 +15452,7 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         if ((LONG)((DWORD)GetMessageTime() - s_nativeTouchpadRawDiscardTick) <= 0) return;
         s_nativeTouchpadRawDiscardPending = false;
     }
-    const int prevTips = s_rawGestureTips;
+    int prevTips = s_rawGestureTips;
     s_rawGestureTips = (int)tips;
 
     if (!TouchpadHandlingEnabled() ||
@@ -14756,6 +15484,27 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         PublishRawSwipe(true);
     }
 
+    // A fresh zero-to-three edge after the previous stroke has fully lifted is
+    // allowed to replace a visual exit. Do this before the blanket exit
+    // cancellation so rapid back-and-forth swipes cannot be swallowed behind
+    // an old animation. Never admit a partial continuation of the old stroke.
+    if (g_animExitActive && tips == SWS_RAW_SWIPE_FINGERS && prevTips == 0 &&
+        !s_rawIgnoreUntilLift && !s_rawSwipePassedToWindows) {
+        const bool reopenSticky = g_isSticky && !s_commitStarted;
+        HideSwitcher();
+        s_rawIgnoreUntilLift = false;
+        s_rawGestureTips = 0;
+        s_rawSessionOwned = false;
+        s_rawGestureSawThree = false;
+        s_rawGestureArmed = false;
+        s_rawTapEligible = false;
+        s_rawCommandEligible = false;
+        g_isTouchpadGestureActive = true;
+        BeginTouchpadGesture(0, reopenSticky);
+        s_rawSessionOwned = true;
+        prevTips = 0;
+    }
+
     if (g_animExitActive || (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0) {
         CancelRawTouchpadStroke();
         return;
@@ -14775,28 +15524,16 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         closeTwoFingerTap = s_rawTwoFingerTapActive && !s_rawTwoFingerTapMoved &&
                             now - s_rawTwoFingerTapStartTick <= SWS_RAW_TAP_MAX_MS &&
                             g_isVisible && !g_animExitActive;
-        if (s_rawTwoFingerTapActive) {
-            Wh_Log(L"SWS TAPTRACE ui tap release tick=%llu heldMs=%llu close=%d selected=%d",
-                   (unsigned long long)now,
-                   (unsigned long long)(now - s_rawTwoFingerTapStartTick),
-                   closeTwoFingerTap, g_selectedIndex);
-        }
         ResetRawTwoFingerTap();
     } else if (s_rawTwoFingerTapActive) {
         if (tips > 2 ||
             abs(frameX - s_rawTwoFingerTapOriginX) > SWS_RAW_TAP_SLOP ||
             abs(frameY - s_rawTwoFingerTapOriginY) > SWS_RAW_TAP_SLOP) {
-            Wh_Log(L"SWS TAPTRACE ui tap invalidated tick=%llu tips=%u delta=%d,%d slop=%d",
-                   (unsigned long long)now, tips,
-                   frameX - s_rawTwoFingerTapOriginX,
-                   frameY - s_rawTwoFingerTapOriginY, SWS_RAW_TAP_SLOP);
             ResetRawTwoFingerTap();
         } else if (tips == 2 && prevTips == 0) {
             ResetRawTwoFingerTap();
         }
     } else if (tips == 2 && prevTips == 0 && g_isVisible && !g_isPendingShow) {
-        Wh_Log(L"SWS TAPTRACE ui tap armed tick=%llu selected=%d",
-               (unsigned long long)now, g_selectedIndex);
         s_rawTwoFingerTapActive = true;
         s_rawTwoFingerTapMoved = false;
         s_rawTwoFingerTapStartTick = now;
@@ -14804,17 +15541,34 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         s_rawTwoFingerTapOriginY = frameY;
     }
 
+    if (tips >= 2 || tips == 0 || g_isSticky) {
+        s_rawPartialReleasePending = false;
+        s_rawPartialReleaseStartTick = 0;
+    } else if (tips == 1 && prevTips > 1 && s_rawSessionOwned &&
+               s_rawGestureSawThree && (g_isVisible || g_isPendingShow)) {
+        // A stable one-contact remainder is a completed normal-mode release,
+        // but a brief 3->1 report can be a reland in progress. Keep the
+        // logical stroke alive for a short grace window; a return to three
+        // contacts cancels this candidate and re-anchors navigation.
+        s_rawPartialReleasePending = true;
+        s_rawPartialReleaseStartTick = now;
+    }
+
     if (((s_rawSessionOwned && g_isTouchpadGestureActive) || s_rawTouchpadShieldActive) &&
         g_hSwitcher) {
-        SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
+        UINT timeout = SWS_RAW_SESSION_LOST_TIMEOUT_MS;
+        if (s_rawPartialReleasePending) {
+            ULONGLONG elapsed = now - s_rawPartialReleaseStartTick;
+            timeout = elapsed >= SWS_RAW_PARTIAL_RELEASE_GRACE_MS
+                          ? 1u
+                          : (UINT)(SWS_RAW_PARTIAL_RELEASE_GRACE_MS - elapsed);
+        }
+        SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, timeout, NULL);
     }
 
     if (tips == 0) {
         if (closeTwoFingerTap && g_selectedIndex >= 0 &&
             g_selectedIndex < (int)g_windows.size()) {
-            Wh_Log(L"SWS TAPTRACE ui close tick=%llu selected=%d window=%p",
-                   (unsigned long long)now, g_selectedIndex,
-                   g_windows[g_selectedIndex].hWnd);
             CloseSwitcherEntry(g_selectedIndex);
             return;
         }
@@ -14823,6 +15577,8 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         const bool isTap = hadThree && s_rawTapEligible && !s_rawGestureMoved &&
                            held <= SWS_RAW_TAP_MAX_MS;
         s_rawGestureArmed = false;
+        s_rawPartialReleasePending = false;
+        s_rawPartialReleaseStartTick = 0;
         s_rawGestureSawThree = false;
         s_rawTapEligible = false;
         s_rawSwipePassedToWindows = false;
@@ -15030,15 +15786,20 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
             s_rawGestureAnchorY = y;
             s_rawAppliedX = 0;
         }
-        if (g_settings.reverseScrollDirection) {
-            delta = -delta;
-        }
         s_rawGestureMoved = true;
-        if (!NavigateRawTouchpad(true, delta, dx)) {
-            // Do not accumulate outward travel while parked on a spatial edge.
-            s_rawGestureAnchorX = x;
-            s_rawGestureAnchorY = y;
-            s_rawAppliedX = 0;
+        // The opening report establishes entry 0 and the new drag origin.
+        // Only an already-open session navigates, but both paths must refresh
+        // the idle timer below after promoting the touchpad shield.
+        if (sessionOpen) {
+            if (g_settings.reverseScrollDirection) {
+                delta = -delta;
+            }
+            if (!NavigateRawTouchpad(true, delta, dx)) {
+                // Do not accumulate outward travel while parked on a spatial edge.
+                s_rawGestureAnchorX = x;
+                s_rawGestureAnchorY = y;
+                s_rawAppliedX = 0;
+            }
         }
     } else {
         // Require new travel for every vertical step. A stationary heartbeat
@@ -15138,30 +15899,92 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         }
     }
 
-    s_lastTouchpadScrollTick = GetTickCount64();
+    s_lastTouchpadScrollTick.store(GetTickCount64(), std::memory_order_release);
     if (g_hSwitcher) {
         SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
     }
 }
 
+static void HandleQueuedRawTouchpadFrame(WPARAM wParam) {
+    const DWORD message = (DWORD)wParam;
+    const DWORD messageEpoch = (message >> SWS_RAW_FRAME_QUEUE_EPOCH_SHIFT) &
+                                SWS_RAW_FRAME_QUEUE_EPOCH_MASK;
+    const DWORD currentEpoch = s_rawFrameEpoch.load(std::memory_order_acquire) &
+                               SWS_RAW_FRAME_QUEUE_EPOCH_MASK;
+    if (!messageEpoch || messageEpoch != currentEpoch) {
+        // A queued message from a stopped reader must not consume a frame from
+        // a newly started reader.
+        return;
+    }
+    const DWORD index = message & SWS_RAW_FRAME_QUEUE_INDEX_MASK;
+    const DWORD read = s_rawFrameRead.load(std::memory_order_acquire);
+    const DWORD write = s_rawFrameWrite.load(std::memory_order_acquire);
+
+    if (s_rawFrameGap.exchange(false, std::memory_order_acq_rel) ||
+        read >= write || index != read % SWS_RAW_FRAME_QUEUE_CAPACITY) {
+        // The queue has lost an ordering edge or a post. Cancel the physical
+        // stroke and discard all queued frames; the next frame is allowed to
+        // establish a fresh 0->contact transition.
+        CancelRawTouchpadStroke();
+        s_rawGestureTips = 0;
+        s_rawIgnoreUntilLift = true;
+        s_rawFrameRead.store(write, std::memory_order_release);
+        return;
+    }
+
+    RawTouchpadFrameSlot& slot = s_rawFrameQueue[index];
+    if (slot.epoch != currentEpoch ||
+        slot.published.load(std::memory_order_acquire) != read + 1) {
+        CancelRawTouchpadStroke();
+        s_rawGestureTips = 0;
+        s_rawIgnoreUntilLift = true;
+        s_rawFrameRead.store(write, std::memory_order_release);
+        return;
+    }
+
+    const ULONG tips = slot.tips;
+    const ULONG packedPos = slot.packedPos;
+    const ULONGLONG captureTick = slot.captureTick;
+    s_rawFrameRead.store(read + 1, std::memory_order_release);
+    s_rawFrameDispatchTick = captureTick;
+    HandleRawTouchpadFrame(tips, packedPos);
+    s_rawFrameDispatchTick = 0;
+}
+
 static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    if (uMsg == WM_SWS_NATIVE_TOUCHPAD) {
-        if (hWnd == g_hSwitcher) HandleNativeTouchpadBoundary((DWORD)wParam, (DWORD)lParam);
+    if (uMsg == WM_SWS_MOUSE_COMMAND) {
+        MouseCommand command;
+        if (!TakeMouseCommand((DWORD)wParam, &command) ||
+            command.generation != s_mouseUiGeneration || !s_mouseUiSessionOpen) {
+            return 0;
+        }
+        if (command.kind == MouseCommandKind::Activity) {
+            g_ctrlTapPending = false;
+            if (g_isVisible && !g_animExitActive &&
+                !IsSwitcherWindow(WindowFromPoint(command.point))) {
+                StartExitAnimation(false);
+            }
+            return 0;
+        }
+        if (command.kind == MouseCommandKind::Wheel) {
+            if (!g_isVisible || g_animExitActive) return 0;
+            s_lastTouchpadScrollTick.store(command.tick, std::memory_order_release);
+            int dir = command.notches;
+            if (command.action == 1) {
+                for (int k = 0; k < abs(dir); ++k) CycleLinear(dir > 0 ? 1 : -1);
+            } else if (command.action == 2) {
+                for (int k = 0; k < abs(dir); ++k) CyclePage(dir > 0 ? 1 : -1);
+            }
+            return 0;
+        }
         return 0;
     }
-    if (uMsg == WM_SWS_TOUCHPAD_DIAGNOSTICS) {
-        Wh_Log(L"SWS: native input snapshot event=0x%X %s", (UINT)wParam,
-               FormatTouchpadInputDiagnostics().c_str());
-        // The UI being responsive does not prove the separate reader pump is.
-        // Ask that thread to sample itself; a reply with unchanged raw counters
-        // distinguishes absent delivery from a stalled reader message pump.
-        HWND reader = g_touchpadReaderWindow.load();
-        if (reader && !PostMessageW(reader, WM_SWS_TOUCHPAD_READER_DIAGNOSTICS,
-                                   wParam, (LPARAM)(DWORD)GetTickCount64())) {
-            DWORD error = GetLastError();
-            Wh_Log(L"SWS: reader input snapshot post failed (event=0x%X reader=%p error=%u)",
-                   (UINT)wParam, reader, error);
-        }
+    if (uMsg == WM_SWS_DEFERRED_FOCUS_RECOVERY) {
+        if (hWnd == g_hSwitcher) RunSwsFocusRecovery((ULONG_PTR)wParam);
+        return 0;
+    }
+    if (uMsg == WM_SWS_NATIVE_TOUCHPAD) {
+        if (hWnd == g_hSwitcher) HandleNativeTouchpadBoundary((DWORD)wParam, (DWORD)lParam);
         return 0;
     }
     if (uMsg == WM_SWS_ICON_READY) {
@@ -15170,9 +15993,14 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     }
     const bool controlKey = wParam == VK_CONTROL || wParam == VK_LCONTROL || wParam == VK_RCONTROL;
     if (uMsg == WM_KEYDOWN || uMsg == WM_SYSKEYDOWN) {
+        if (controlKey) s_mouseCancelsCtrlTap.store(0, std::memory_order_release);
         if (!controlKey) g_ctrlTapPending = false;
     } else if ((uMsg == WM_KEYUP || uMsg == WM_SYSKEYUP) && controlKey) {
-        bool tap = g_ctrlTapPending;
+        ULONGLONG mouseCancel = s_mouseCancelsCtrlTap.exchange(
+            0, std::memory_order_acq_rel);
+        bool tap = g_ctrlTapPending &&
+                   !((DWORD)(mouseCancel >> 32) == s_mouseUiGeneration &&
+                     (mouseCancel & 1u));
         g_ctrlTapPending = false;
         if (tap && g_isVisible && !g_animExitActive && g_settings.showApplications) ToggleAppDrill();
         return 0;
@@ -15198,7 +16026,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     }
 
     if (g_WM_SWS_TOUCHPAD_FRAME && uMsg == g_WM_SWS_TOUCHPAD_FRAME) {
-        HandleRawTouchpadFrame((ULONG)wParam, (ULONG)lParam);
+        if ((DWORD)wParam & SWS_RAW_FRAME_QUEUE_FLAG) {
+            HandleQueuedRawTouchpadFrame(wParam);
+        } else {
+            HandleRawTouchpadFrame((ULONG)wParam, (ULONG)lParam);
+        }
         return 0;
     }
 
@@ -15236,7 +16068,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     HandleAltRelease();
                     return 0;
                 }
-                if (GetTickCount64() - s_lastTouchpadScrollTick < 1200) {
+                if (GetTickCount64() - s_lastTouchpadScrollTick.load(std::memory_order_acquire) < 1200) {
                     return 0; // Grace period while user is scrolling/gesturing with touchpad
                 }
                 KillTimer(hWnd, SWS_ALT_POLL_TIMER_ID);
@@ -15255,6 +16087,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     Wh_Log(L"SWS: selected-window activation retry ended");
                 }
                 KillTimer(hWnd, SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID);
+                ClearSwsSwitchAnimationSelection();
                 s_touchpadActivationRetryTarget = NULL;
                 s_touchpadActivationRetryDeadline = 0;
                 s_touchpadCommitActivation = false;
@@ -15316,6 +16149,27 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         if (wParam == SWS_TOUCHPAD_IDLE_TIMER_ID) {
             KillTimer(hWnd, SWS_TOUCHPAD_IDLE_TIMER_ID);
             AdoptRawThreeFingerState();
+            if (s_rawPartialReleasePending) {
+                ULONGLONG now = GetTickCount64();
+                if (!g_isSticky && !s_altSessionOwner &&
+                    s_rawSessionOwned && s_rawGestureTips <= 1 &&
+                    s_rawGestureSawThree && (g_isVisible || g_isPendingShow)) {
+                    ULONGLONG elapsed = now - s_rawPartialReleaseStartTick;
+                    if (elapsed < SWS_RAW_PARTIAL_RELEASE_GRACE_MS) {
+                        SetTimer(hWnd, SWS_TOUCHPAD_IDLE_TIMER_ID,
+                                 (UINT)(SWS_RAW_PARTIAL_RELEASE_GRACE_MS - elapsed),
+                                 NULL);
+                        return 0;
+                    }
+                    s_rawPartialReleasePending = false;
+                    s_rawPartialReleaseStartTick = 0;
+                    Wh_Log(L"SWS: anchored raw release -> committing at one remaining contact");
+                    EndTouchpadGesture();
+                    return 0;
+                }
+                s_rawPartialReleasePending = false;
+                s_rawPartialReleaseStartTick = 0;
+            }
             if (s_altSessionOwner && s_combinedRawSeen &&
                 !s_combinedRawLiftHandled) {
                 ULONGLONG readerTick =
@@ -15586,21 +16440,23 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             }
             if (!g_scrollTransition.active && w > 0 && h > 0) {
                 if (!s_cachedStaticDC || s_cachedStaticW != w || s_cachedStaticH != h) {
-                    if (s_cachedStaticDC) {
-                        if (s_cachedStaticOldBitmap) SelectObject(s_cachedStaticDC, s_cachedStaticOldBitmap);
-                        if (s_cachedStaticBitmap) DeleteObject(s_cachedStaticBitmap);
-                        DeleteDC(s_cachedStaticDC);
-                    }
                     HDC hdcScreen = GetDC(hWnd);
-                    s_cachedStaticDC = CreateCompatibleDC(hdcScreen);
-                    BITMAPINFO bmi = {}; bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-                    bmi.bmiHeader.biWidth = w; bmi.bmiHeader.biHeight = -h;
-                    bmi.bmiHeader.biPlanes = 1; bmi.bmiHeader.biBitCount = 32; bmi.bmiHeader.biCompression = BI_RGB;
-                    s_cachedStaticBitmap = CreateDIBSection(s_cachedStaticDC, &bmi, DIB_RGB_COLORS, &s_cachedStaticBits, NULL, 0);
-                    s_cachedStaticOldBitmap = (HBITMAP)SelectObject(s_cachedStaticDC, s_cachedStaticBitmap);
-                    s_cachedStaticW = w;
-                    s_cachedStaticH = h;
+                    if (!hdcScreen) {
+                        EndBufferedPaint(hBP, FALSE);
+                        EndPaint(hWnd, &ps);
+                        return 0;
+                    }
+                    bool ready = EnsureSwsDibSurface(
+                        hdcScreen, w, h, &s_cachedStaticDC,
+                        &s_cachedStaticBitmap, &s_cachedStaticOldBitmap,
+                        &s_cachedStaticBits, &s_cachedStaticW,
+                        &s_cachedStaticH);
                     ReleaseDC(hWnd, hdcScreen);
+                    if (!ready) {
+                        EndBufferedPaint(hBP, FALSE);
+                        EndPaint(hWnd, &ps);
+                        return 0;
+                    }
                     g_staticContentDirty = true;
                 }
                 if (g_staticContentDirty) {
@@ -15801,10 +16657,6 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
         return 0;
     case WM_SWS_CANCEL_INPUT:
-        Wh_Log(L"SWS TAPTRACE cancellation tick=%llu visible=%d pending=%d exit=%d tips=%d tap=%d selected=%d",
-               (unsigned long long)GetTickCount64(), g_isVisible, g_isPendingShow,
-               g_animExitActive, s_rawGestureTips, s_rawTwoFingerTapActive,
-               g_selectedIndex);
         if (g_isVisible || g_isPendingShow) StartExitAnimation(false);
         return 0;
     case WM_SWS_TOUCHPAD_READER_CHANGED:
@@ -15837,6 +16689,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         UpdateTouchpadGestureTakeover(TouchpadGestureTakeoverWanted());
         if (g_hSwitcher) ApplyThemeToWindow(g_hSwitcher);
         SWS_RegisterHotkeys();
+        PublishMouseHookPolicy();
         return 0;
     case WM_SETCURSOR:
         if (g_hoverChevron != 0 || g_isCloseHovered) {
@@ -16070,24 +16923,18 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     }
     case WM_ACTIVATE:
         if (LOWORD(wParam) == WA_INACTIVE && (g_isVisible || g_isPendingShow)) {
-            Wh_Log(L"SWS TAPTRACE deactivation tick=%llu newActive=%p foreground=%p tips=%d tap=%d selected=%d",
-                   (unsigned long long)GetTickCount64(), (HWND)lParam,
-                   GetForegroundWindow(), s_rawGestureTips, s_rawTwoFingerTapActive,
-                   g_selectedIndex);
             if (g_animExitActive || g_isHidingSwitcher || g_recoveringShellFocus) return 0;
             HWND hNewActive = (HWND)lParam;
             HWND hCheck = hNewActive ? hNewActive : GetForegroundWindow();
             if (RawTouchpadShellSuppressionActive() && hCheck && IsNativeSwitcherWindow(hCheck)) {
-                ShellFocusRecoveryScope recovery;
-                ShowWindow(hCheck, SW_HIDE);
-                BringWindowToTop(g_hSwitcher);
-                SetForegroundWindow(g_hSwitcher);
+                QueueSwsFocusRecovery(hCheck, false, false, true);
                 return 0;
             }
             if (RawTouchpadShellSuppressionActive() && hCheck && IsTaskViewWindow(hCheck)) {
                 // Task View can take focus after physical lift, before its SHOW
                 // event is delivered. Preserve only this identified shell race.
                 Wh_Log(L"SWS: retaining raw session for Task View recovery (tips=%d)", s_rawGestureTips);
+                QueueSwsFocusRecovery(hCheck, false, false, true);
                 return 0; // The WinEvent handler dismisses this shell interference.
             }
             if (PreserveRawStrokeOnFocusLoss()) {
@@ -16101,7 +16948,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 return 0;
             }
             if ((s_rawSessionOwned || g_isSticky) && hCheck && !IsSwitcherWindow(hCheck)) {
-                StartExitAnimation(false); // Intentional focus change: cancel with the normal close animation.
+                QueueSwsFocusRecovery(hCheck, true);
                 return 0;
             }
             if (g_isTouchpadGestureActive) {
@@ -16112,34 +16959,28 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 if (hFg == g_hSwitcher || hFg == g_hCloseBtnWnd || (hFg && IsNativeSwitcherWindow(hFg))) {
                     return 0;
                 }
-                if (GetTickCount64() - s_lastTouchpadScrollTick < 1200) {
+                if (GetTickCount64() - s_lastTouchpadScrollTick.load(std::memory_order_acquire) < 1200) {
                     return 0;
                 }
             }
             if (!IsSwitcherWindow(hNewActive)) {
-                StartExitAnimation(false);
+                QueueSwsFocusRecovery(hCheck, true, hNewActive == NULL);
             }
             return 0;
         }
         break;
     case WM_KILLFOCUS:
         if (g_isVisible || g_isPendingShow) {
-            Wh_Log(L"SWS TAPTRACE focus loss tick=%llu newFocus=%p foreground=%p tips=%d tap=%d selected=%d",
-                   (unsigned long long)GetTickCount64(), (HWND)wParam,
-                   GetForegroundWindow(), s_rawGestureTips, s_rawTwoFingerTapActive,
-                   g_selectedIndex);
             if (g_animExitActive || g_isHidingSwitcher || g_recoveringShellFocus) return 0;
             HWND hNewFocus = (HWND)wParam;
             HWND hCheck = hNewFocus ? hNewFocus : GetForegroundWindow();
             if (RawTouchpadShellSuppressionActive() && hCheck && IsNativeSwitcherWindow(hCheck)) {
-                ShellFocusRecoveryScope recovery;
-                ShowWindow(hCheck, SW_HIDE);
-                BringWindowToTop(g_hSwitcher);
-                SetForegroundWindow(g_hSwitcher);
+                QueueSwsFocusRecovery(hCheck, false, false, true);
                 return 0;
             }
             if (RawTouchpadShellSuppressionActive() && hCheck && IsTaskViewWindow(hCheck)) {
                 Wh_Log(L"SWS: retaining raw session for Task View recovery (tips=%d)", s_rawGestureTips);
+                QueueSwsFocusRecovery(hCheck, false, false, true);
                 return 0;
             }
             if (PreserveRawStrokeOnFocusLoss()) {
@@ -16153,7 +16994,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 return 0;
             }
             if ((s_rawSessionOwned || g_isSticky) && hCheck && !IsSwitcherWindow(hCheck)) {
-                StartExitAnimation(false);
+                QueueSwsFocusRecovery(hCheck, true);
                 return 0;
             }
             if (g_isTouchpadGestureActive) {
@@ -16164,12 +17005,12 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 if (hFg == g_hSwitcher || hFg == g_hCloseBtnWnd || (hFg && IsNativeSwitcherWindow(hFg))) {
                     return 0;
                 }
-                if (GetTickCount64() - s_lastTouchpadScrollTick < 1200) {
+                if (GetTickCount64() - s_lastTouchpadScrollTick.load(std::memory_order_acquire) < 1200) {
                     return 0;
                 }
             }
             if (!IsSwitcherWindow(hNewFocus)) {
-                StartExitAnimation(false);
+                QueueSwsFocusRecovery(hCheck, true, hNewFocus == NULL);
             }
             return 0;
         }
@@ -16825,6 +17666,9 @@ static XamlAltTabViewHost_Show_t XamlAltTabViewHost_Show_Original = nullptr;
 using CAltTabViewHost_Show_t = HRESULT(WINAPI*)(void* pThis, void* param1, int param2, void* param3);
 static CAltTabViewHost_Show_t CAltTabViewHost_Show_Original = nullptr;
 static bool s_twinuiAltTabHooksApplied = false;
+static bool s_twinuiAltTabSymbolsResolved = false;
+static void* s_twinuiAltTabTargets[2]{};
+static unsigned int s_twinuiAltTabQueuedMask = 0;
 static bool s_twinuiAltTabHookGaveUp = false;
 static int s_twinuiAltTabHookAttempts = 0;
 
@@ -16888,25 +17732,42 @@ static bool TryHookTwinuiAltTab() {
 }
 #else
 static bool QueueTwinuiShellHooks(HMODULE hTwinui) {
-    if (XamlAltTabViewHost_Show_Original && CAltTabViewHost_Show_Original) {
-        return true;
+    if (!s_twinuiAltTabSymbolsResolved) {
+        void* targets[2]{};
+        // twinui.pcshell.dll
+        WindhawkUtils::SYMBOL_HOOK altTabHooks[] = {
+            {
+                {LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
+                &targets[0], nullptr, true,
+            },
+            {
+                {LR"(public: virtual long __cdecl CAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
+                &targets[1], nullptr, true,
+            },
+        };
+        if (!WindhawkUtils::HookSymbols(hTwinui, altTabHooks, ARRAYSIZE(altTabHooks))) {
+            return false;
+        }
+        std::copy_n(targets, ARRAYSIZE(targets), s_twinuiAltTabTargets);
+        s_twinuiAltTabSymbolsResolved = true;
     }
-    // twinui.pcshell.dll
-    WindhawkUtils::SYMBOL_HOOK altTabHooks[] = {
-        {
-            {LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
-            &XamlAltTabViewHost_Show_Original, XamlAltTabViewHost_Show_Hook, true,
-        },
-        {
-            {LR"(public: virtual long __cdecl CAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
-            &CAltTabViewHost_Show_Original, CAltTabViewHost_Show_Hook, true,
-        },
-    };
-    // Submit only unresolved paths, so a retry never hooks a trampoline twice.
-    size_t first = XamlAltTabViewHost_Show_Original ? 1 : 0;
-    size_t count = ARRAYSIZE(altTabHooks) - first -
-                   (CAltTabViewHost_Show_Original ? 1 : 0);
-    return WindhawkUtils::HookSymbols(hTwinui, altTabHooks + first, count);
+    // Symbol success is independent of hook queue success. Keep the targets
+    // and retry only failed queue operations, never a trampoline or absent peer.
+    if (s_twinuiAltTabTargets[0] && !(s_twinuiAltTabQueuedMask & 1u) &&
+        WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<XamlAltTabViewHost_Show_t>(s_twinuiAltTabTargets[0]),
+            XamlAltTabViewHost_Show_Hook, &XamlAltTabViewHost_Show_Original)) {
+        s_twinuiAltTabQueuedMask |= 1u;
+    }
+    if (s_twinuiAltTabTargets[1] && !(s_twinuiAltTabQueuedMask & 2u) &&
+        WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<CAltTabViewHost_Show_t>(s_twinuiAltTabTargets[1]),
+            CAltTabViewHost_Show_Hook, &CAltTabViewHost_Show_Original)) {
+        s_twinuiAltTabQueuedMask |= 2u;
+    }
+    unsigned int wantedMask = (s_twinuiAltTabTargets[0] ? 1u : 0u) |
+                              (s_twinuiAltTabTargets[1] ? 2u : 0u);
+    return s_twinuiAltTabQueuedMask == wantedMask;
 }
 
 static bool TryHookTwinuiAltTab() {
@@ -16932,11 +17793,12 @@ static bool TryHookTwinuiAltTab() {
         Wh_Log(L"SWS: applying late twinui Alt+Tab/Task View hooks failed");
         return false;
     }
-    s_twinuiAltTabHooksApplied =
-        XamlAltTabViewHost_Show_Original || CAltTabViewHost_Show_Original;
+    // A successful optional lookup also establishes absence. Do not re-query
+    // missing symbols after resolution/apply completed, including zero matches.
+    s_twinuiAltTabHooksApplied = true;
     Wh_Log(L"SWS: twinui hooks applied (Alt+Tab=%d)",
-           s_twinuiAltTabHooksApplied);
-    return s_twinuiAltTabHooksApplied;
+           XamlAltTabViewHost_Show_Original || CAltTabViewHost_Show_Original);
+    return true;
 }
 #endif
 
@@ -16998,7 +17860,6 @@ struct NativeSwipePolicy {
     HWND endpoint = nullptr;
     DWORD value = 0;
     bool active = false;
-    bool candidateRequired = false;
     DWORD relayEpoch = 0;
 };
 
@@ -17009,8 +17870,6 @@ static NativeSwipePolicy ReadNativeSwipePolicy() {
         policy.value = (DWORD)(ULONG_PTR)GetPropW(
             policy.endpoint, SWS_NATIVE_SWIPE_POLICY_PROP);
         policy.active = GetPropW(policy.endpoint, SWS_NATIVE_SWIPE_ACTIVE_PROP) != nullptr;
-        policy.candidateRequired =
-            GetPropW(policy.endpoint, SWS_NATIVE_SWIPE_PROFILE_PROP) != nullptr;
         policy.relayEpoch = (DWORD)(ULONG_PTR)GetPropW(
             policy.endpoint, SWS_NATIVE_TOUCHPAD_EPOCH_PROP);
     }
@@ -17018,7 +17877,10 @@ static NativeSwipePolicy ReadNativeSwipePolicy() {
 }
 
 static bool NativeTouchpadPolicyReady(const NativeSwipePolicy& policy) {
-    return (policy.value & 3u) == 3u && !s_nativeSwipeShutdownRequested.load();
+    // The Explorer-side native PTP hook is the authoritative source when the
+    // raw HID stream is stale or unavailable. Bit 0 is the user setting; bit 1
+    // remains an informational raw-reader readiness bit for the UI/controller.
+    return (policy.value & 1u) != 0 && !s_nativeSwipeShutdownRequested.load();
 }
 
 // Grant only the current endpoint PID, never ASFW_ANY. This runs independently
@@ -17197,7 +18059,6 @@ static void __cdecl NativeSwipeFinish_Hook(void* pThis, const void* info,
         Wh_Log(L"SWS: native PTP end boundary deltaX=%d deltaY=%d velocityX=%d velocityY=%d generation=%llu",
                x, y, vx, vy, (unsigned long long)scope.state.generation);
     }
-    RequestTouchpadInputDiagnostics(scope.state.endpoint, 0x100);
     PostNativeSwipeCompletion(scope.state, SWS_NATIVE_TOUCHPAD_END);
     EndNativeSwipeState(pThis, generation);
 }
@@ -17207,31 +18068,8 @@ static void __cdecl NativeSwipeCancel_Hook(void* pThis) {
     ULONGLONG generation = state ? state->generation : 0;
     NativeSwipeScope scope(pThis, generation);
     NativeSwipeCancel_Original(pThis);
-    RequestTouchpadInputDiagnostics(scope.state.endpoint, 0x200);
     PostNativeSwipeCompletion(scope.state, SWS_NATIVE_TOUCHPAD_CANCEL);
     EndNativeSwipeState(pThis, generation);
-}
-
-static bool WaitForFreshRawThreeFingerCandidate(NativeSwipePolicy& policy,
-                                                DWORD* waitedMs) {
-    ULONGLONG start = GetTickCount64();
-    ULONGLONG deadline = start + SWS_NATIVE_TOUCHPAD_CANDIDATE_WAIT_MS;
-    bool found = false;
-    do {
-        policy = ReadNativeSwipePolicy();
-        if (policy.active) break;
-        if (NativeTouchpadPolicyReady(policy) && policy.endpoint &&
-            FreshRawThreeFingerCandidate(policy.endpoint, GetTickCount64())) {
-            found = true;
-            break;
-        }
-        if (GetTickCount64() >= deadline) break;
-        Sleep(1);
-    } while (true);
-    if (waitedMs) {
-        *waitedMs = (DWORD)(GetTickCount64() - start);
-    }
-    return found;
 }
 
 static HRESULT __cdecl NativeSwipeTarget_Hook(void* pThis, int type, int direction,
@@ -17265,16 +18103,8 @@ static HRESULT __cdecl NativeSwipeTarget_Hook(void* pThis, int type, int directi
         // state must not veto this PTP source gate. Outside down/tap stay native.
         bool reserved = direction == 1 || direction == 3 ||
                         (direction == 2 && (policy.value & 4u));
-        bool candidateRequired = policy.candidateRequired;
-        DWORD candidateWaitMs = 0;
-        bool candidate = policy.active || !candidateRequired;
-        if (!policy.active && reserved && candidateRequired) {
-            candidate = WaitForFreshRawThreeFingerCandidate(policy,
-                                                            &candidateWaitMs);
-            ready = NativeTouchpadPolicyReady(policy);
-        }
         bool suppress = ready && direction >= 1 && direction <= 4 &&
-                        (policy.active || (reserved && candidate));
+                        (policy.active || reserved);
         if (suppress && !policy.active) {
             state->relayToken = BeginNativeSwipeInvocation(policy, (UINT)direction);
             state->relayEpoch = policy.relayEpoch;
@@ -17290,21 +18120,22 @@ static HRESULT __cdecl NativeSwipeTarget_Hook(void* pThis, int type, int directi
         state->policyEpoch = policy.value >> 3;
         CommitNativeSwipeState(*state);
         if (suppress) {
-            Wh_Log(L"SWS: suppressed native PTP start (direction=%d active=%d candidateRequired=%d candidate=%d waitMs=%u)",
-                   direction, policy.active, candidateRequired, candidate,
-                   candidateWaitMs);
+            Wh_Log(L"SWS: suppressed native PTP start (direction=%d active=%d reserved=%d rawReady=%d nativeFallback=%d)",
+                   direction, policy.active, reserved, (policy.value & 2u) != 0,
+                   (policy.value & 2u) == 0);
         } else {
-            Wh_Log(L"SWS: native PTP start left to Windows (direction=%d active=%d ready=%d sticky=%d candidateRequired=%d candidate=%d waitMs=%u)",
+            Wh_Log(L"SWS: native PTP start left to Windows (direction=%d active=%d ready=%d sticky=%d reserved=%d)",
                    direction, policy.active, ready, (policy.value & 4u) != 0,
-                   candidateRequired, candidate, candidateWaitMs);
+                   reserved);
         }
         Wh_Log(L"SWS: native PTP start context %s",
                FormatTouchpadForegroundDiagnostic(GetForegroundWindow(), policy.endpoint).c_str());
-        RequestTouchpadInputDiagnostics(policy.endpoint, (UINT)direction);
     } else if (!ready || state->endpoint != policy.endpoint ||
                state->policyEpoch != (policy.value >> 3)) {
-        // Master-off/reader loss is immediate and irreversible for this stroke,
-        // including a disable/re-enable interval between native callbacks.
+        // A disabled policy, endpoint replacement, or explicit epoch change is
+        // immediate and irreversible for this stroke. Raw-reader loss alone
+        // does not change the policy epoch: the native-only fallback remains
+        // authoritative while the current PTP stroke is being completed.
         state->decision = NativeSwipeDecision::Allowed;
         CommitNativeSwipeState(*state);
     }
@@ -17426,7 +18257,7 @@ static bool TryHookNativeSwipe() {
 // The receiver of a member function arrives in ECX on x86, which a plain hook signature
 // cannot describe, and the 32-bit shell is only reachable on 32-bit Windows: skip the hook
 // there and keep the block on the 64-bit architectures.
-static bool TryHookRaiseDesktop() {
+static bool TryHookExplorerTouchpadActions() {
     static bool s_logged = false;
     if (!s_logged) {
         s_logged = true;
@@ -17437,10 +18268,6 @@ static bool TryHookRaiseDesktop() {
 #else
 using RaiseDesktop_t = void(__cdecl*)(void* pThis, int flags);
 static RaiseDesktop_t RaiseDesktop_Original = nullptr;
-static bool s_raiseDesktopHooked = false;
-static bool s_raiseDesktopHookQueued = false;
-static bool s_raiseDesktopHookGaveUp = false;
-static int s_raiseDesktopHookAttempts = 0;
 
 static void __cdecl RaiseDesktop_Hook(void* pThis, int flags) {
     // flags 2 and 3 are the touchpad swipe paths (as documented by the win-d-per-monitor
@@ -17482,44 +18309,6 @@ static void __cdecl RaiseDesktop_Hook(void* pThis, int flags) {
     RaiseDesktop_Original(pThis, flags);
 }
 
-// Returns true when the retry timer can stop (hook installed, or given up on).
-static bool TryHookRaiseDesktop() {
-    if (s_raiseDesktopHooked || s_raiseDesktopHookGaveUp) return true;
-    if (s_raiseDesktopHookQueued) {
-        // This thread starts in Wh_ModAfterInit. Hooks queued after ModInit
-        // must be explicitly applied, including a successful symbol retry.
-        if (!Wh_ApplyHookOperations()) return false;
-        s_raiseDesktopHooked = true;
-        Wh_Log(L"SWS: hooked CTray::_RaiseDesktop (raw touchpad swipe filtering active)");
-        return true;
-    }
-    HMODULE hExplorerModule = GetModuleHandleW(L"explorer.exe");
-    if (!hExplorerModule) return true;
-
-    s_raiseDesktopHookAttempts++;
-    if (s_raiseDesktopHookAttempts == 1 || (s_raiseDesktopHookAttempts % 5) == 0) {
-        Wh_Log(L"SWS: trying CTray::_RaiseDesktop hook attempt=%d",
-               s_raiseDesktopHookAttempts);
-    }
-    WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
-        {
-            {LR"(protected: void __cdecl CTray::_RaiseDesktop(enum RAISEDESKTOPFLAGS))"},
-            (void**)&RaiseDesktop_Original,
-            (void*)RaiseDesktop_Hook,
-        },
-    };
-    if (WindhawkUtils::HookSymbols(hExplorerModule, explorerExeHooks,
-                                   ARRAYSIZE(explorerExeHooks))) {
-        s_raiseDesktopHookQueued = true;
-        return TryHookRaiseDesktop();
-    }
-    if (s_raiseDesktopHookAttempts >= 30) {
-        s_raiseDesktopHookGaveUp = true;
-        Wh_Log(L"SWS: CTray::_RaiseDesktop not available, the show desktop swipe cannot be filtered");
-        return true;
-    }
-    return false;
-}
 #endif
 
 // Native PTP actions retain their input source here, before Search/media actions
@@ -17527,17 +18316,9 @@ static bool TryHookRaiseDesktop() {
 // public symbols/call sites: 0xF selects ThreeFingerTapEnabled, 0x10 four-finger.
 // Filtering downstream Start requests loses this provenance and can mistake an
 // injected Win key for explicit keyboard input (or block a real Start request).
-#if defined(_M_IX86)
-static bool TryHookTouchpadTap() {
-    return true; // Do not guess the private x86 member-function ABI.
-}
-#else
+#if !defined(_M_IX86)
 using HandlePTPTap_t = void(__cdecl*)(void* pThis, int settingIdentifier);
 static HandlePTPTap_t HandlePTPTap_Original = nullptr;
-static bool s_touchpadTapHooked = false;
-static bool s_touchpadTapHookQueued = false;
-static bool s_touchpadTapHookGaveUp = false;
-static int s_touchpadTapHookAttempts = 0;
 
 static void __cdecl HandlePTPTap_Hook(void* pThis, int settingIdentifier) {
     NativeSwipePolicy policy = ReadNativeSwipePolicy();
@@ -17554,45 +18335,67 @@ static void __cdecl HandlePTPTap_Hook(void* pThis, int settingIdentifier) {
     HandlePTPTap_Original(pThis, settingIdentifier);
 }
 
-static bool TryHookTouchpadTap() {
-    if (s_touchpadTapHooked || s_touchpadTapHookGaveUp) return true;
-    if (s_touchpadTapHookQueued) {
-        if (!Wh_ApplyHookOperations()) return false;
-        s_touchpadTapHooked = true;
-        Wh_Log(L"SWS: hooked CTray::HandlePTPTap (native three-finger action filtering active)");
-        return true;
-    }
+static bool s_explorerTouchpadSymbolsResolved = false;
+static bool s_explorerTouchpadHooksApplied = false;
+static bool s_explorerTouchpadHookGaveUp = false;
+static int s_explorerTouchpadHookAttempts = 0;
+static void* s_explorerTouchpadTargets[2]{};
+static unsigned int s_explorerTouchpadQueuedMask = 0;
+
+static bool TryHookExplorerTouchpadActions() {
+    if (s_explorerTouchpadHooksApplied || s_explorerTouchpadHookGaveUp) return true;
     HMODULE hExplorerModule = GetModuleHandleW(L"explorer.exe");
     if (!hExplorerModule) return false;
-    ++s_touchpadTapHookAttempts;
-    WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
-        {
-            {LR"(protected: void __cdecl CTray::HandlePTPTap(enum SETTING_IDENTIFIER))"},
-            &HandlePTPTap_Original, HandlePTPTap_Hook,
-        },
-    };
-    if (WindhawkUtils::HookSymbols(hExplorerModule, explorerExeHooks,
-                                   ARRAYSIZE(explorerExeHooks))) {
-        s_touchpadTapHookQueued = true;
-        return TryHookTouchpadTap();
+    if (!s_explorerTouchpadSymbolsResolved) {
+        // Resolve both optional paths in one cache request. No hook is queued
+        // during a failed lookup, and a known missing path is not re-requested.
+        void* targets[2]{};
+        WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
+            {{LR"(protected: void __cdecl CTray::_RaiseDesktop(enum RAISEDESKTOPFLAGS))"},
+             &targets[0], nullptr, true},
+            {{LR"(protected: void __cdecl CTray::HandlePTPTap(enum SETTING_IDENTIFIER))"},
+             &targets[1], nullptr, true},
+        };
+        if (!WindhawkUtils::HookSymbols(hExplorerModule, explorerExeHooks,
+                                        ARRAYSIZE(explorerExeHooks))) {
+            if (++s_explorerTouchpadHookAttempts >= 30) {
+                s_explorerTouchpadHookGaveUp = true;
+                Wh_Log(L"SWS: Explorer touchpad action symbols unavailable");
+            }
+            return s_explorerTouchpadHookGaveUp;
+        }
+        std::copy_n(targets, ARRAYSIZE(targets), s_explorerTouchpadTargets);
+        s_explorerTouchpadSymbolsResolved = true;
     }
-    if (s_touchpadTapHookAttempts >= 30) {
-        s_touchpadTapHookGaveUp = true;
-        Wh_Log(L"SWS: CTray::HandlePTPTap unavailable; native tap filtering requires foreground controller routing");
-        return true;
+    if (s_explorerTouchpadTargets[0] && !(s_explorerTouchpadQueuedMask & 1u) &&
+        WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<RaiseDesktop_t>(s_explorerTouchpadTargets[0]),
+            RaiseDesktop_Hook, &RaiseDesktop_Original)) {
+        s_explorerTouchpadQueuedMask |= 1u;
     }
-    return false;
+    if (s_explorerTouchpadTargets[1] && !(s_explorerTouchpadQueuedMask & 2u) &&
+        WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<HandlePTPTap_t>(s_explorerTouchpadTargets[1]),
+            HandlePTPTap_Hook, &HandlePTPTap_Original)) {
+        s_explorerTouchpadQueuedMask |= 2u;
+    }
+    if (s_explorerTouchpadQueuedMask && !Wh_ApplyHookOperations()) return false;
+    unsigned int wantedMask = (s_explorerTouchpadTargets[0] ? 1u : 0u) |
+                              (s_explorerTouchpadTargets[1] ? 2u : 0u);
+    if (s_explorerTouchpadQueuedMask != wantedMask) return false;
+    s_explorerTouchpadHooksApplied = true;
+    Wh_Log(L"SWS: Explorer touchpad action hooks applied (desktop=%d tap=%d)",
+           (wantedMask & 1u) != 0, (wantedMask & 2u) != 0);
+    return true;
 }
 #endif
 
 static bool TryHookExplorerSuppression() {
-    // Attempt each path independently. An unresolved swipe/Alt+Tab symbol must
-    // not postpone tap filtering while Explorer's symbol cache is loading.
-    bool tapReady = TryHookTouchpadTap();
-    bool desktopReady = TryHookRaiseDesktop();
+    // Other modules remain independent of Explorer's optional action hooks.
+    bool actionsReady = TryHookExplorerTouchpadActions();
     bool altTabReady = TryHookTwinuiAltTab();
     bool swipeReady = TryHookNativeSwipe();
-    return tapReady && desktopReady && altTabReady && swipeReady;
+    return actionsReady && altTabReady && swipeReady;
 }
 
 // Background thread for tool mod process
@@ -17753,17 +18556,16 @@ static bool RefreshTouchpadGestureKinds() {
     bool twoFingerActive =
         TouchpadHandlingEnabled() && g_touchpadReaderAvailable.load() &&
         g_isVisible && !g_animExitActive && !g_isHidingSwitcher;
-    if (g_touchpadTwoFingerCloseActive.exchange(twoFingerActive) != twoFingerActive) {
-        Wh_Log(L"SWS TAPTRACE lifetime tick=%llu closeActive=%d visible=%d pending=%d exit=%d hiding=%d hook=%p",
-               (unsigned long long)GetTickCount64(), twoFingerActive, g_isVisible,
-               g_isPendingShow, g_animExitActive, g_isHidingSwitcher, g_hMouseHook);
-    }
+    g_touchpadTwoFingerCloseActive.store(twoFingerActive);
     UpdateTwoFingerTapOverride(twoFingerActive);
     return UpdateTouchpadGestureTakeover(TouchpadGestureTakeoverWanted());
 }
 
 static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     Wh_Log(L"SwitcherThread starting");
+    // Recover before UI/runtime initialization can fail. Once the HWND exists,
+    // another attempt below supplies timer-based retries for transient failures.
+    UpdateTwoFingerTapOverride(false, false);
     // The switcher owns top-level windows whose coordinates are physical
     // monitor pixels. Keep this UI thread in PMv2 before creating any HWND so
     // Windows does not virtualize mixed-DPI monitor coordinates.
@@ -17815,6 +18617,12 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     g_hSwitcher = CreateSWSWindow(exStyle, SWS_CLASSNAME, SWS_MAIN_WINDOW_TITLE,
         dwStyle, 0, 0, 0, 0, NULL, NULL, GetModuleHandleW(NULL), NULL);
     if (!g_hSwitcher) { Wh_Log(L"Failed to create switcher window"); return 1; }
+    if (!StartMouseHookThread(g_hSwitcher)) {
+        Wh_Log(L"SWS: mouse hook thread startup failed; mouse containment disabled");
+    }
+    SetPropW(g_hSwitcher, SwsSelectionProtocol::VersionProp,
+             reinterpret_cast<HANDLE>(SwsSelectionProtocol::Version));
+    UpdateTwoFingerTapOverride(false);
     PublishNativeSwipePolicy();
     StartWindowIconWorker();
 
@@ -17852,7 +18660,6 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
 
     SWS_RegisterHotkeys();
 
-    timeBeginPeriod(1);
     UpdateRefreshRateTiming();
 
     #ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
@@ -17951,6 +18758,9 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     }
 
 thread_exit:
+    StopMouseHookThread();
+    g_touchpadTwoFingerCloseActive.store(false);
+    UpdateTwoFingerTapOverride(false, false);
     StopWindowIconWorker();
     if (hAnimTimer) {
         CloseHandle(hAnimTimer);
@@ -17972,15 +18782,11 @@ thread_exit:
     PublishNativeSwipePolicy();
     if (g_isVisible || g_isPendingShow) HideSwitcher();
     g_touchpadTwoFingerCloseActive.store(false);
-    UpdateTwoFingerTapOverride(false);
+    RestoreTwoFingerTapOverrideBeforeExit();
     g_touchpadRawTwoFingerTapMouseState.store(0);
     s_rawTwoFingerMouseButtonSerial = 0;
     s_rawTwoFingerMouseButtonDeadline = 0;
     if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_RAW_TWO_TAP_MOUSE_TIMER_ID);
-    if (g_hMouseHook) {
-        UnhookWindowsHookEx(g_hMouseHook);
-        g_hMouseHook = nullptr;
-    }
     FinishRawTouchpadShield();
     ReleaseTouchpadGestureTakeover();
     UnregisterThumbnails();
@@ -18006,7 +18812,6 @@ thread_exit:
     FinishAnimations();
     StopAnimationTicker();
     FreeCachedBuffers();
-    timeEndPeriod(1);
     Wh_Log(L"SwitcherThread exiting");
     return 0;
 }
@@ -18035,32 +18840,43 @@ struct TouchpadContact {
     bool tip;
 };
 
+// Reader state is owned by the device which produced the report. Keeping the
+// contact frame and stroke history together prevents an internal and external
+// touchpad from completing each other's hybrid frame or lift edge.
+struct TouchpadReaderStroke {
+    ULONG lastTips = 0;
+    bool markerStrokeOwned = false;
+    bool markerSessionOwned = false;
+    bool threeFingerStatePublished = false;
+    bool threeFingerStateBlocked = false;
+    ULONGLONG threeFingerSerial = 0;
+    DWORD twoFingerTapMouseSerial = 0;
+    ULONGLONG twoFingerTapStartTick = 0;
+    int twoFingerTapOriginX = 0;
+    int twoFingerTapOriginY = 0;
+    double lastX = -1.0;
+    double lastY = -1.0;
+    ULONGLONG lastPostTick = 0;
+};
+
 struct TouchpadDevice {
     std::vector<BYTE> preparsed;
     std::vector<USHORT> fingerCollections;
+    std::vector<TouchpadContact> frame;
+    ULONG frameExpected = 0;
+    TouchpadReaderStroke stroke;
     USHORT contactCountCollection = 0;
     double rangeX = 0.0;
     double rangeY = 0.0;
     bool hasContactCount = false;
-    bool candidateGated = false;
     bool valid = false;
 };
 
 static std::map<HANDLE, TouchpadDevice> g_touchpadDevices;
-static std::vector<TouchpadContact> g_touchpadFrame;
-static ULONG g_touchpadFrameExpected = 0;
+static HANDLE g_touchpadActiveDevice = nullptr;
 static HANDLE g_hTouchpadReaderThread = NULL;
 static HANDLE g_hTouchpadReaderStopEvent = NULL;
 static HANDLE g_hTouchpadReaderReadyEvent = NULL;
-
-static void UpdateNativeCandidateRequirement() {
-    bool required = std::any_of(
-        g_touchpadDevices.begin(), g_touchpadDevices.end(),
-        [](const auto& entry) {
-            return entry.second.valid && entry.second.candidateGated;
-        });
-    g_touchpadNativeCandidateRequired.store(required);
-}
 
 // Some devices declare a maximum which only fits unsigned.
 static double TouchpadLogicalRange(const HIDP_VALUE_CAPS& caps) {
@@ -18073,7 +18889,7 @@ static double TouchpadLogicalRange(const HIDP_VALUE_CAPS& caps) {
     return (double)(max - min);
 }
 
-static const TouchpadDevice* TouchpadDeviceFor(HANDLE hDevice) {
+static TouchpadDevice* TouchpadDeviceFor(HANDLE hDevice) {
     auto it = g_touchpadDevices.find(hDevice);
     if (it != g_touchpadDevices.end()) {
         return it->second.valid ? &it->second : NULL;
@@ -18123,12 +18939,6 @@ static const TouchpadDevice* TouchpadDeviceFor(HANDLE hDevice) {
     }
 
     dev.valid = !dev.fingerCollections.empty() && dev.rangeX > 0 && dev.rangeY > 0;
-    // The reported Apple driver publishes five logical finger collections.
-    // Laptop PTP devices observed by this reader use a single hybrid
-    // collection and must retain the old native-first timing.
-    dev.candidateGated = dev.valid && dev.hasContactCount &&
-                         dev.fingerCollections.size() >= 3;
-    UpdateNativeCandidateRequirement();
     if (g_touchpadReaderAvailable.load()) {
         PublishNativeSwipePolicy();
     }
@@ -18137,28 +18947,9 @@ static const TouchpadDevice* TouchpadDeviceFor(HANDLE hDevice) {
     return dev.valid ? &dev : NULL;
 }
 
-// Reader-thread state, reset after reader shutdown and on device removal. It
-// must not survive a disable/re-enable cycle as function-local static contacts.
-struct TouchpadReaderStroke {
-    ULONG lastTips = 0;
-    bool markerStrokeOwned = false;
-    bool markerSessionOwned = false;
-    bool threeFingerCandidatePublished = false;
-    bool threeFingerCandidateBlocked = false;
-    ULONGLONG threeFingerSerial = 0;
-    DWORD twoFingerTapMouseSerial = 0;
-    ULONGLONG twoFingerTapStartTick = 0;
-    int twoFingerTapOriginX = 0;
-    int twoFingerTapOriginY = 0;
-    double lastX = -1.0;
-    double lastY = -1.0;
-    ULONGLONG lastPostTick = 0;
-};
-static TouchpadReaderStroke s_touchpadReaderStroke;
-
-static void UpdateRawTwoFingerTapMouseEvidence(ULONG tips, ULONG previousTips,
-                                              ULONG packedPos, ULONGLONG now) {
-    auto& stroke = s_touchpadReaderStroke;
+static void UpdateRawTwoFingerTapMouseEvidence(TouchpadReaderStroke& stroke,
+                                               ULONG tips, ULONG previousTips,
+                                               ULONG packedPos, ULONGLONG now) {
     if (g_touchpadTwoFingerTapSuppressed.load()) {
         stroke.twoFingerTapMouseSerial = 0;
         g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
@@ -18210,16 +19001,20 @@ static void TouchpadReaderSetAvailable(bool available) {
     if (available && g_touchpadReaderStopping.load()) return;
     if (!available) {
         // Retire cross-process evidence now, not after a queued UI notification.
-        if (s_touchpadReaderStroke.threeFingerSerial) {
-            PublishRawThreeFingerState(s_touchpadReaderStroke.threeFingerSerial,
+        TouchpadReaderStroke* activeStroke = nullptr;
+        if (g_touchpadActiveDevice) {
+            auto it = g_touchpadDevices.find(g_touchpadActiveDevice);
+            if (it != g_touchpadDevices.end()) activeStroke = &it->second.stroke;
+        }
+        if (activeStroke && activeStroke->threeFingerSerial) {
+            PublishRawThreeFingerState(activeStroke->threeFingerSerial,
                                        SWS_RAW_THREE_PHASE_LOST,
                                        GetTickCount64());
         }
         ClearRawSwipeMarkerPropertyFromReader();
-        ClearRawThreeFingerCandidateProperty();
         g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
-        s_touchpadReaderStroke = {};
-        g_touchpadNativeCandidateRequired.store(false);
+        if (activeStroke) *activeStroke = {};
+        g_touchpadActiveDevice = nullptr;
     }
     bool changed = g_touchpadReaderAvailable.exchange(available) != available;
     if (changed || !available) PublishNativeSwipePolicy();
@@ -18261,19 +19056,18 @@ static void TouchpadReaderPrimeDevices() {
     }
 }
 
-static void TouchpadReaderProcessFrame(const TouchpadDevice& dev) {
+static void TouchpadReaderProcessFrame(TouchpadDevice& dev, HANDLE hDevice) {
     ++s_touchpadInputDiagnostics.frames;
     s_touchpadInputDiagnostics.lastFrameTick.store(GetTickCount64());
     if (!g_touchpadGesturesEnabled.load()) {
-        if (s_touchpadReaderStroke.threeFingerSerial) {
-            PublishRawThreeFingerState(s_touchpadReaderStroke.threeFingerSerial,
+        if (dev.stroke.threeFingerSerial) {
+            PublishRawThreeFingerState(dev.stroke.threeFingerSerial,
                                        SWS_RAW_THREE_PHASE_LOST,
                                        GetTickCount64());
         }
         ClearRawSwipeMarkerPropertyFromReader();
-        ClearRawThreeFingerCandidateProperty();
         g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
-        s_touchpadReaderStroke = {};
+        dev.stroke = {};
         return;
     }
     // Descriptor priming normally establishes readiness before this report.
@@ -18282,7 +19076,7 @@ static void TouchpadReaderProcessFrame(const TouchpadDevice& dev) {
     ULONG tips = 0;
     double cx = 0.0;
     double cy = 0.0;
-    for (const TouchpadContact& c : g_touchpadFrame) {
+    for (const TouchpadContact& c : dev.frame) {
         if (c.tip) {
             tips++;
             cx += c.x;
@@ -18296,24 +19090,27 @@ static void TouchpadReaderProcessFrame(const TouchpadDevice& dev) {
     }
     s_touchpadInputDiagnostics.lastTips.store(tips);
     ULONGLONG now = GetTickCount64();
-    auto& readerStroke = s_touchpadReaderStroke;
+    auto& readerStroke = dev.stroke;
+    if (tips > 0 && g_touchpadActiveDevice != hDevice &&
+        (readerStroke.lastTips == 0 || !g_touchpadActiveDevice)) {
+        // Prefer the device which starts a fresh contact sequence. Do not
+        // merge reports from two simultaneously active pads into one stroke.
+        g_touchpadActiveDevice = hDevice;
+    }
     ULONG previousTips = readerStroke.lastTips;
-    if (tips > 0 && previousTips == 0) {
+    const bool activeDevice = g_touchpadActiveDevice == hDevice;
+    if (activeDevice && tips > 0 && previousTips == 0) {
         // If a device skipped its zero-contact report, do not let the prior
-        // physical stroke authorize the next native gesture.
-        ClearRawThreeFingerCandidateProperty();
-        readerStroke.threeFingerCandidatePublished = false;
-        readerStroke.threeFingerCandidateBlocked = false;
+        // physical stroke extend into the next raw state sequence.
+        readerStroke.threeFingerStatePublished = false;
+        readerStroke.threeFingerStateBlocked = false;
     }
-    if (tips > SWS_RAW_SWIPE_FINGERS) {
-        readerStroke.threeFingerCandidateBlocked = true;
-        if (readerStroke.threeFingerCandidatePublished) {
-            ClearRawThreeFingerCandidateProperty();
-        }
+    if (activeDevice && tips > SWS_RAW_SWIPE_FINGERS) {
+        readerStroke.threeFingerStateBlocked = true;
     }
-    if (tips == SWS_RAW_SWIPE_FINGERS &&
-        !readerStroke.threeFingerCandidatePublished &&
-        !readerStroke.threeFingerCandidateBlocked) {
+    if (activeDevice && tips == SWS_RAW_SWIPE_FINGERS &&
+        !readerStroke.threeFingerStatePublished &&
+        !readerStroke.threeFingerStateBlocked) {
         ULONGLONG serial = g_touchpadRawThreeFingerNextSerial.fetch_add(
                                 1, std::memory_order_relaxed) + 1;
         if (!serial) {
@@ -18321,54 +19118,40 @@ static void TouchpadReaderProcessFrame(const TouchpadDevice& dev) {
                          1, std::memory_order_relaxed) + 1;
         }
         readerStroke.threeFingerSerial = serial;
-        readerStroke.threeFingerCandidatePublished = true;
+        readerStroke.threeFingerStatePublished = true;
         PublishRawThreeFingerState(serial, SWS_RAW_THREE_PHASE_LIVE, now);
-        PublishRawThreeFingerCandidate(now);
-        Wh_Log(L"SWS: raw three-finger candidate published (serial=%llu)",
+        Wh_Log(L"SWS: raw three-finger state published (serial=%llu)",
                (unsigned long long)serial);
-    } else if (readerStroke.threeFingerCandidatePublished && tips > 0) {
+    } else if (activeDevice && readerStroke.threeFingerStatePublished && tips > 0) {
         g_touchpadRawThreeFingerLastTick.store(now, std::memory_order_release);
     }
-    if (tips == 0) {
-        if (readerStroke.threeFingerCandidatePublished &&
+    if (activeDevice && tips == 0) {
+        if (readerStroke.threeFingerStatePublished &&
             readerStroke.threeFingerSerial) {
             PublishRawThreeFingerState(readerStroke.threeFingerSerial,
                                        SWS_RAW_THREE_PHASE_LIFTED, now);
         }
-        ClearRawThreeFingerCandidateProperty();
-        readerStroke.threeFingerCandidatePublished = false;
-        readerStroke.threeFingerCandidateBlocked = false;
+        readerStroke.threeFingerStatePublished = false;
+        readerStroke.threeFingerStateBlocked = false;
     }
     double nx = dev.rangeX > 0 ? cx / dev.rangeX : 0.0;
     double ny = dev.rangeY > 0 ? cy / dev.rangeY : 0.0;
     ULONG packedPos = ((ULONG)(nx * 65535.0) & 0xFFFF) | (((ULONG)(ny * 65535.0) & 0xFFFF) << 16);
-    DWORD tapSerialBefore = readerStroke.twoFingerTapMouseSerial;
-    UpdateRawTwoFingerTapMouseEvidence(tips, previousTips, packedPos, now);
-    if (tips != previousTips || tapSerialBefore != readerStroke.twoFingerTapMouseSerial) {
-        ULONGLONG tapState = g_touchpadRawTwoFingerTapMouseState.load(std::memory_order_acquire);
-        Wh_Log(L"SWS TAPTRACE reader tick=%llu tips=%u previous=%u contacts=%u position=%u,%u closeActive=%d "
-               L"serialBefore=%u serialAfter=%u candidateSerial=%u candidateRemainingMs=%u tapAgeMs=%lld "
-               L"origin=%d,%d raw=%u reports=%u frames=%u posted=%u",
-               (unsigned long long)now, tips, previousTips, (UINT)g_touchpadFrame.size(),
-               packedPos & 0xFFFF, (packedPos >> 16) & 0xFFFF,
-               g_touchpadTwoFingerCloseActive.load(), tapSerialBefore,
-               readerStroke.twoFingerTapMouseSerial, (DWORD)(tapState >> 32),
-               RawTwoFingerTapMouseRemainingMs(tapState, now),
-               TouchpadTraceAgeMs(now, readerStroke.twoFingerTapStartTick),
-               readerStroke.twoFingerTapOriginX, readerStroke.twoFingerTapOriginY,
-               s_touchpadInputDiagnostics.rawMessages.load(), s_touchpadInputDiagnostics.hidReports.load(),
-               s_touchpadInputDiagnostics.frames.load(), s_touchpadInputDiagnostics.posted.load());
+    if (g_touchpadActiveDevice == hDevice) {
+        UpdateRawTwoFingerTapMouseEvidence(readerStroke, tips, previousTips,
+                                           packedPos, now);
     }
 
-    if (!g_hSwitcher || !g_WM_SWS_TOUCHPAD_FRAME || !IsWindow(g_hSwitcher)) {
+    if (g_touchpadActiveDevice != hDevice ||
+        !g_hSwitcher || !g_WM_SWS_TOUCHPAD_FRAME || !IsWindow(g_hSwitcher)) {
         return;
     }
-    auto& s_lastTips = s_touchpadReaderStroke.lastTips;
-    auto& s_markerStrokeOwned = s_touchpadReaderStroke.markerStrokeOwned;
-    auto& s_markerSessionOwned = s_touchpadReaderStroke.markerSessionOwned;
-    auto& s_lastX = s_touchpadReaderStroke.lastX;
-    auto& s_lastY = s_touchpadReaderStroke.lastY;
-    auto& s_lastPostTick = s_touchpadReaderStroke.lastPostTick;
+    auto& s_lastTips = readerStroke.lastTips;
+    auto& s_markerStrokeOwned = readerStroke.markerStrokeOwned;
+    auto& s_markerSessionOwned = readerStroke.markerSessionOwned;
+    auto& s_lastX = readerStroke.lastX;
+    auto& s_lastY = readerStroke.lastY;
+    auto& s_lastPostTick = readerStroke.lastPostTick;
     double signedDx = cx - s_lastX;
     double signedDy = cy - s_lastY;
     double dx = signedDx < 0 ? -signedDx : signedDx;
@@ -18449,16 +19232,11 @@ static void TouchpadReaderProcessFrame(const TouchpadDevice& dev) {
     s_lastY = cy;
     s_lastPostTick = now;
 
-    if (PostMessageW(g_hSwitcher, g_WM_SWS_TOUCHPAD_FRAME, (WPARAM)tips, (LPARAM)packedPos)) {
-        ++s_touchpadInputDiagnostics.posted;
-    } else {
-        DWORD error = GetLastError();
-        s_touchpadInputDiagnostics.lastPostError.store(error);
-        ++s_touchpadInputDiagnostics.postFailures;
-    }
+    QueueRawTouchpadFrame(tips, packedPos, now);
 }
 
-static void TouchpadReaderOnReport(const TouchpadDevice& dev, PCHAR report, ULONG length) {
+static void TouchpadReaderOnReport(TouchpadDevice& dev, HANDLE hDevice,
+                                   PCHAR report, ULONG length) {
     PHIDP_PREPARSED_DATA preparsed = (PHIDP_PREPARSED_DATA)dev.preparsed.data();
 
     if (dev.hasContactCount) {
@@ -18469,9 +19247,9 @@ static void TouchpadReaderOnReport(const TouchpadDevice& dev, PCHAR report, ULON
             if (count > 0) {
                 // A nonzero count starts a new frame, including resync after
                 // a missed report. It counts reported contacts, not tip bits.
-                g_touchpadFrame.clear();
-                g_touchpadFrameExpected = count;
-            } else if (g_touchpadFrameExpected) {
+                dev.frame.clear();
+                dev.frameExpected = count;
+            } else if (dev.frameExpected) {
                 // Hybrid PTPs put the total only in the first report. A zero
                 // while contacts are pending continues that same frame; it
                 // is not a lift. Keep its contacts and announced count.
@@ -18480,12 +19258,12 @@ static void TouchpadReaderOnReport(const TouchpadDevice& dev, PCHAR report, ULON
                 // No frame is pending: this is a standalone empty report.
                 // Do not read unused contact slots as live fingers.
                 ++s_touchpadInputDiagnostics.emptyReports;
-                g_touchpadFrame.clear();
-                TouchpadReaderProcessFrame(dev);
+                dev.frame.clear();
+                TouchpadReaderProcessFrame(dev, hDevice);
                 return;
             }
         }
-        if (!g_touchpadFrameExpected) {
+        if (!dev.frameExpected) {
             return; // the rest of a frame whose start was missed
         }
     }
@@ -18495,7 +19273,7 @@ static void TouchpadReaderOnReport(const TouchpadDevice& dev, PCHAR report, ULON
         // slots with stale data. Only the announced contacts belong to this
         // frame, including contacts whose tip switch reports their release.
         if (dev.hasContactCount &&
-            g_touchpadFrame.size() >= g_touchpadFrameExpected) {
+            dev.frame.size() >= dev.frameExpected) {
             break;
         }
         ULONG x = 0;
@@ -18519,15 +19297,15 @@ static void TouchpadReaderOnReport(const TouchpadDevice& dev, PCHAR report, ULON
             tip = std::find(usages, usages + usageCount, SWS_HID_USAGE_TIP_SWITCH) != usages + usageCount;
         }
 
-        g_touchpadFrame.push_back({id, (LONG)x, (LONG)y, tip});
+        dev.frame.push_back({id, (LONG)x, (LONG)y, tip});
     }
 
     // Hybrid devices announce the contact count first and spread the contacts over
     // several reports; collect until the announced count is reached.
-    if (!dev.hasContactCount || g_touchpadFrame.size() >= g_touchpadFrameExpected) {
-        TouchpadReaderProcessFrame(dev);
-        g_touchpadFrame.clear();
-        g_touchpadFrameExpected = 0;
+    if (!dev.hasContactCount || dev.frame.size() >= dev.frameExpected) {
+        TouchpadReaderProcessFrame(dev, hDevice);
+        dev.frame.clear();
+        dev.frameExpected = 0;
     }
 }
 
@@ -18557,7 +19335,7 @@ static void TouchpadReaderOnRawInput(HRAWINPUT hRawInput) {
     }
     s_touchpadInputDiagnostics.hidReports.fetch_add(raw->data.hid.dwCount);
 
-    const TouchpadDevice* dev = TouchpadDeviceFor(raw->header.hDevice);
+    TouchpadDevice* dev = TouchpadDeviceFor(raw->header.hDevice);
     if (!dev) {
         ++s_touchpadInputDiagnostics.rejectedDevices;
         return;
@@ -18565,7 +19343,9 @@ static void TouchpadReaderOnRawInput(HRAWINPUT hRawInput) {
 
     const RAWHID& hid = raw->data.hid;
     for (DWORD i = 0; i < hid.dwCount; i++) {
-        TouchpadReaderOnReport(*dev, (PCHAR)hid.bRawData + (size_t)i * hid.dwSizeHid, hid.dwSizeHid);
+        TouchpadReaderOnReport(*dev, raw->header.hDevice,
+                               (PCHAR)hid.bRawData + (size_t)i * hid.dwSizeHid,
+                               hid.dwSizeHid);
     }
 }
 
@@ -18599,14 +19379,17 @@ static void TouchpadReaderOnDeviceChange(HANDLE hDevice, WPARAM change) {
     if (change != GIDC_REMOVAL) return;
     auto device = g_touchpadDevices.find(hDevice);
     if (device == g_touchpadDevices.end()) return;
-    s_touchpadReaderStroke = {};
+    if (g_touchpadActiveDevice == hDevice) {
+        if (device->second.stroke.threeFingerSerial) {
+            PublishRawThreeFingerState(device->second.stroke.threeFingerSerial,
+                                       SWS_RAW_THREE_PHASE_LOST,
+                                       GetTickCount64());
+        }
+        g_touchpadActiveDevice = nullptr;
+    }
     ClearRawSwipeMarkerPropertyFromReader();
-    ClearRawThreeFingerCandidateProperty();
     g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
     g_touchpadDevices.erase(device);
-    g_touchpadFrame.clear();
-    g_touchpadFrameExpected = 0;
-    UpdateNativeCandidateRequirement();
     if (g_touchpadReaderAvailable.load()) {
         PublishNativeSwipePolicy();
     }
@@ -18678,11 +19461,6 @@ static void TouchpadReaderLogRegistrations(const WCHAR* tag) {
 
 static LRESULT CALLBACK TouchpadReaderWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
-        case WM_SWS_TOUCHPAD_READER_DIAGNOSTICS:
-            Wh_Log(L"SWS: reader-thread input snapshot event=0x%X replyMs=%u foreground=%p %s",
-                   (UINT)wParam, (DWORD)GetTickCount64() - (DWORD)lParam,
-                   GetForegroundWindow(), FormatTouchpadInputDiagnostics().c_str());
-            return 0;
         case WM_INPUT:
             TouchpadReaderOnRawInput((HRAWINPUT)lParam);
             break;
@@ -18694,7 +19472,7 @@ static LRESULT CALLBACK TouchpadReaderWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
 }
 
 static DWORD WINAPI TouchpadReaderThread(LPVOID) {
-    s_touchpadReaderStroke = {};
+    g_touchpadActiveDevice = nullptr;
     // Same thread setup as the reference mod: PMv2 DPI for the window and high priority
     // so a busy frame cannot delay report parsing. The DPI call is resolved dynamically
     // to stay independent of the SDK's DPI headers.
@@ -18780,10 +19558,8 @@ static DWORD WINAPI TouchpadReaderThread(LPVOID) {
         rid.hwndTarget = NULL;
         RegisterRawInputDevices(&rid, 1, sizeof(rid));
     }
-    g_touchpadDevices.clear();
     TouchpadReaderSetAvailable(false);
-    g_touchpadFrame.clear();
-    g_touchpadFrameExpected = 0;
+    g_touchpadDevices.clear();
     g_touchpadReaderWindow.store(nullptr);
     DestroyWindow(hReaderWnd);
     UnregisterClassW(SWS_TOUCHPAD_READER_CLASSNAME, hInstance);
@@ -18799,6 +19575,13 @@ static void StartTouchpadReader() {
     if (g_hTouchpadReaderThread) {
         return;
     }
+    DWORD nextEpoch = (s_rawFrameEpoch.load(std::memory_order_relaxed) + 1) &
+                      SWS_RAW_FRAME_QUEUE_EPOCH_MASK;
+    if (!nextEpoch) nextEpoch = 1;
+    s_rawFrameEpoch.store(nextEpoch, std::memory_order_release);
+    s_rawFrameRead.store(0, std::memory_order_release);
+    s_rawFrameWrite.store(0, std::memory_order_release);
+    s_rawFrameGap.store(false, std::memory_order_release);
     g_touchpadReaderStopping.store(false);
     g_hTouchpadReaderStopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!g_hTouchpadReaderStopEvent) {
@@ -18860,7 +19643,6 @@ static void StopTouchpadReader() {
 
 BOOL WhTool_ModInit() {
     Wh_Log(L"Simple Window Switcher: WhTool_ModInit");
-    Wh_Log(L"SWS TAPTRACE diagnostics build 2: live two-finger override and mouse routing capture");
     if (!g_WM_SWS_TOUCHPAD_FRAME) {
         g_WM_SWS_TOUCHPAD_FRAME = RegisterWindowMessageW(L"Windhawk_SWS_TouchpadFrame");
     }
@@ -19020,7 +19802,7 @@ BOOL Wh_ModInit() {
             // Queue the same complete hook set on both initial and retry paths.
             // Windhawk applies initial hooks after Wh_ModInit returns.
             if (!QueueTwinuiShellHooks(hTwinui)) {
-                Wh_Log(L"SWS: twinui initial symbol lookup failed or still loading");
+                Wh_Log(L"SWS: twinui initial hook setup incomplete; late retries required");
             }
             Wh_Log(L"SWS: twinui hooks queued (Alt+Tab=%d)",
                    XamlAltTabViewHost_Show_Original || CAltTabViewHost_Show_Original);
