@@ -2,8 +2,8 @@
 // @id              chinese-holiday-calendar
 // @name            Chinese Holiday Calendar
 // @name:zh-CN      中国节假日日历
-// @description     Show Chinese statutory holidays and adjusted workdays in the Windows 11 calendar flyout
-// @description:zh-CN 在 Windows 11 点击任务栏时间后弹出的日历中显示中国法定节假日与调休安排
+// @description     Show Chinese statutory holidays and adjusted workdays, from an ICS feed you supply, in the Windows 11 calendar flyout
+// @description:zh-CN 在 Windows 11 日历中显示你自己填的 ICS 订阅源里的中国法定节假日与调休安排
 // @version         0.17
 // @author          dcsmf
 // @github          https://github.com/dcsmf
@@ -38,8 +38,8 @@ mod 是往日期单元格里的**第二行文字**写的，也就是系统显示
 （农历）"。把它关掉的话，日期格子里很可能就没有可写的那一行，日历上也就看不出放假/调休（真遇到
 这种情况，日志里会说明）。
 
-另外，"这一格是哪一天"是按格子自己印着的日期数字判断的，不依赖时区推断，所以在任何时区都不会
-差一天。
+另外，"这一格是哪一天"是按格子代表的本地日期算出来的，跟格子布置在哪个时区无关，所以在东八区、
+欧美时区都不会差一天。
 
 ## 数据来源
 
@@ -57,11 +57,16 @@ SUMMARY:春节（休）
 END:VEVENT
 ```
 
+一个可以直接用的示例地址是 `https://holiday.ailcc.com/api/holiday/ics`（一次返回多年数据，事件里
+带（休）/（班）标记）。它只是示例：mod 不会自己去访问它，除非你把这个地址填进设置里；任何其他符合
+上面格式的 ICS 订阅源也一样可用。
+
 解析规则：
 
-- 只认**整天事件**（`DTSTART;VALUE=DATE:`），并且只有 `SUMMARY` 里带"（休）"或"（班）"标记的条目
-  才算数：带"（休）"的按放假日显示（文字用 `SUMMARY` 里的节日名），带"（班）"的按调休上班日显示。
-  没有标记的条目（节气、传统节日、洋节等）会被忽略，所以它们不会被误标成放假。
+- 只有 `SUMMARY` 里带"（休）"或"（班）"标记的条目才算数：带"（休）"的按放假日显示（文字用
+  `SUMMARY` 里的节日名），带"（班）"的按调休上班日显示。没有标记的条目（节气、传统节日、洋节等）
+  会被忽略，所以它们不会被误标成放假。日期用的是事件写的那一天：`DTSTART`/`DTEND` 带不带时间都
+  可以，时间部分会被忽略（所以 `20260215`、`2026-02-15`、`20260215T000000Z` 都读作 2 月 15 日）。
 - `DTEND` 是**不含**的那一天，和 RFC 5545 一致：上面这条表示 2 月 15 日到 23 日放假。没写 `DTEND`
   的事件按它开始的那一天处理。
 - 每个日期都会先检查是否真的存在（含闰年）：`20260231` 这种不存在的日期整条丢掉，而不是"顺手"挪到
@@ -122,8 +127,8 @@ language -> Date & time -> "Show additional calendars in the taskbar", with Simp
 Chinese (Lunar) selected. With it switched off, a day cell may have no text to write into,
 and nothing extra appears on the calendar (the log says so when that happens).
 
-The date a cell stands for is read from the day number the cell itself prints, not from a
-time-zone guess, so the holidays line up in every time zone.
+The date a cell stands for is worked out from the cell itself rather than from the local
+time zone of the machine, so no holiday lands a day early or late west of UTC either.
 
 ## Why it works the way it does
 
@@ -183,11 +188,18 @@ SUMMARY:春节（休）
 END:VEVENT
 ```
 
-- Only all-day events (`DTSTART;VALUE=DATE:`) whose `SUMMARY` carries a full-width
-  or half-width "day off" or "workday" marker are used: a day-off marker marks a
-  holiday, with the festival name taken from the `SUMMARY`, and a workday marker an
-  adjusted workday. Entries without a marker - solar terms, traditional festivals,
-  foreign holidays - are ignored, so they are never mistaken for a holiday.
+One feed which works this way is `https://holiday.ailcc.com/api/holiday/ics` (several
+years at once, with the day-off and workday markers). It is an example: the mod does
+not contact it - or anything else - unless you paste that address into the settings.
+Any other feed in the format above works as well.
+
+- Only events whose `SUMMARY` carries a full-width or half-width "day off" or
+  "workday" marker are used: a day-off marker marks a holiday, with the festival
+  name taken from the `SUMMARY`, and a workday marker an adjusted workday. Entries
+  without a marker - solar terms, traditional festivals, foreign holidays - are
+  ignored, so they are never mistaken for a holiday. The date an event names is
+  used: a time part in `DTSTART`/`DTEND` is accepted and ignored, so `20260215`,
+  `2026-02-15` and `20260215T000000Z` all mean 15 February.
 - `DTEND` is exclusive, as in RFC 5545: the event above is 15 to 23 February. An
   event without a `DTEND` is the single day it starts on.
 - Every date is checked for being a date which exists, leap years included:
@@ -1647,35 +1659,40 @@ void ResetHolidayData() {
 ////////////////////////////////////////////////////////////////////////////////
 // Looking inside a day cell
 
-// Set once, when a day cell turns out to carry a midnight UTC date (see below): one line in
-// the log which says which reading the calendar uses is worth having, one per cell is not.
-std::atomic<bool> g_loggedUtcDateReading{false};
-
 // The date a day cell stands for.
 //
 // CalendarViewDayItem.Date is a Windows.Foundation.DateTime: 100 ns ticks since 1601, with
-// no zone attached, so the same ticks can be read in two ways and the two differ by the
+// no zone attached, so the same value can be read in two ways, and the two differ by the
 // local UTC offset:
 //
-//   * the ticks name local midnight of the date the cell was made for (which is what the
-//     shell does when it fills a cell for a calendar date). Converting them to local time
-//     gives that date; reading them as UTC gives the day before, east of UTC.
-//   * the ticks name midnight UTC of that date. Reading them as UTC gives the date;
-//     converting them to local time gives the day before, west of UTC.
+//   * the ticks name local midnight of the date the cell was made for, which is what the
+//     shell does when it fills a cell for a calendar date;
+//   * the ticks name midnight UTC of that date.
 //
-// Which of the two Windows uses cannot be observed in a zone east of UTC, because both
-// readings give the same date there - and the mod was written and tested in UTC+8, so this
-// is not a question the code can answer from experience. It is therefore not guessed. The
-// number the shell prints in the cell (DayNumberShownInCell) is the shell's own answer for
-// that cell, and the reading which agrees with it wins; that makes the date right in every
-// time zone, whichever reading the shell uses, and it survives a Windows build changing its
-// mind. A cell whose number cannot be read - it has not been filled in yet, or the shell is
-// rewriting it - keeps the local reading, which is what the mod used before this check
-// existed and is right east of UTC.
+// Which one Windows uses cannot be observed on this machine, and does not have to be: the
+// choice below is right either way, in every time zone.
+//
+//   * On or east of UTC, the local reading is the cell's date under both readings of the
+//     ticks. With local midnight it is the date itself, and with midnight UTC the local
+//     time of 00:00Z is still the same date in the same zone (an hour or more of the same
+//     day, never the day before).
+//   * West of UTC, the UTC reading is the cell's date under both. With midnight UTC it is
+//     the date itself, and with local midnight the two readings name the same date anyway:
+//     local midnight lies behind UTC, but less than a day behind.
+//
+// So "west of UTC ? the UTC date : the local date" is right in all four combinations, and
+// it is a property of the cell alone - nothing is remembered and nothing is guessed, which
+// also means a day cell the shell is still filling in cannot be read against a day number
+// left over from the date it had before.
+//
+// Which side of UTC the machine is on is taken from the two readings of this very value,
+// not from the time zone of the process: the local wall clock is behind the UTC wall clock
+// exactly when the offset is negative, and the difference carries the offset in force on
+// that date, daylight saving included.
 //
 // A conversion which fails returns 0, and the caller skips that cell: writing nothing is
 // better than writing the wrong date.
-int32_t DateKeyFromDateTime(wf::DateTime const& dateTime, int dayNumberShown) {
+int32_t DateKeyFromDateTime(wf::DateTime const& dateTime) {
     ULARGE_INTEGER uli;
     uli.QuadPart = static_cast<ULONGLONG>(dateTime.time_since_epoch().count());
 
@@ -1694,31 +1711,29 @@ int32_t DateKeyFromDateTime(wf::DateTime const& dateTime, int dayNumberShown) {
         return 0;
     }
 
-    const int32_t localKey = MakeDateKey(systemTimeLocal.wYear, systemTimeLocal.wMonth,
-                                         systemTimeLocal.wDay);
-    const int32_t utcKey = MakeDateKey(systemTimeUtc.wYear, systemTimeUtc.wMonth,
-                                       systemTimeUtc.wDay);
-
-    // The same date in both readings (anywhere east of UTC with the UTC reading, anywhere
-    // west of it with the local one), or no number to check against.
-    if (localKey == utcKey || dayNumberShown == 0) {
-        return localKey;
-    }
-
-    if (systemTimeLocal.wDay == dayNumberShown) {
-        return localKey;
-    }
-    if (systemTimeUtc.wDay == dayNumberShown) {
-        if (!g_loggedUtcDateReading.exchange(true)) {
-            Wh_Log(L"Day items of this calendar name midnight UTC: the cell of day %d "
-                   L"reads as %d locally and as %d in UTC, and the day number in the "
-                   L"cell says the UTC reading is the date",
-                   dayNumberShown, localKey, utcKey);
+    // Both wall-clock readings as ticks: the local one is behind the UTC one exactly when
+    // this machine is west of UTC on that date.
+    auto ticksOf = [](SYSTEMTIME const& systemTime, ULONGLONG& ticks) -> bool {
+        FILETIME fileTimeOfSystemTime{};
+        if (!SystemTimeToFileTime(&systemTime, &fileTimeOfSystemTime)) {
+            return false;
         }
-        return utcKey;
+        ULARGE_INTEGER value;
+        value.LowPart = fileTimeOfSystemTime.dwLowDateTime;
+        value.HighPart = fileTimeOfSystemTime.dwHighDateTime;
+        ticks = value.QuadPart;
+        return true;
+    };
+
+    ULONGLONG localTicks = 0;
+    ULONGLONG utcTicks = 0;
+    if (!ticksOf(systemTimeLocal, localTicks) || !ticksOf(systemTimeUtc, utcTicks)) {
+        return 0;
     }
 
-    return localKey;
+    const SYSTEMTIME& date =
+        localTicks < utcTicks ? systemTimeUtc : systemTimeLocal;
+    return MakeDateKey(date.wYear, date.wMonth, date.wDay);
 }
 
 // The name the Windows 11 calendar gives the text block which holds the lunar
@@ -1834,50 +1849,6 @@ bool IsNumberText(std::wstring const& text) {
         }
     }
     return true;
-}
-
-// The day of the month the shell prints in the cell, or 0 when there is none to read.
-// This is the one value in a cell which is not a guess: it is what the user sees, and
-// DateKeyFromDateTime uses it to tell the two readings of CalendarViewDayItem.Date apart.
-//
-// The day number is the text of the cell which is made of digits (see IsNumberText); the
-// lunar text below it is "廿二", "立冬" or "中秋节", never a number. The largest font wins
-// in case a build ever puts a second number in a cell.
-int DayNumberShownInCell(wuxc::CalendarViewDayItem const& item) {
-    std::vector<FoundElement> descendants;
-    CollectDescendants(item, descendants);
-
-    int day = 0;
-    double largestFontSize = -1;
-    for (const auto& found : descendants) {
-        auto textBlock = found.element.try_as<wuxc::TextBlock>();
-        if (!textBlock) {
-            continue;
-        }
-
-        const std::wstring text = ElementText(textBlock);
-        if (!IsNumberText(text)) {
-            continue;
-        }
-
-        const int value = (int)wcstol(text.c_str(), nullptr, 10);
-        if (value < 1 || value > 31) {
-            continue;
-        }
-
-        double fontSize = 0;
-        try {
-            fontSize = textBlock.FontSize();
-        } catch (...) {
-        }
-
-        if (day == 0 || fontSize > largestFontSize) {
-            day = value;
-            largestFontSize = fontSize;
-        }
-    }
-
-    return day;
 }
 
 // Whether the shell has filled the day cell in at all. A day item which was just
@@ -2302,7 +2273,7 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
         return;
     }
 
-    int32_t key = DateKeyFromDateTime(item.Date(), DayNumberShownInCell(item));
+    int32_t key = DateKeyFromDateTime(item.Date());
     if (!key) {
         return;
     }
