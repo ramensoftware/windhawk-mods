@@ -15,6 +15,10 @@
 /*
 # Tray Agenda
 
+![Tray widget](https://raw.githubusercontent.com/chambber/tray-agenda/55ec9a66eb459d45779657b0640f303dd7fff4c9/docs/widget.png)
+
+![Popup agenda](https://raw.githubusercontent.com/chambber/tray-agenda/55ec9a66eb459d45779657b0640f303dd7fff4c9/docs/popup.png)
+
 A compact agenda widget for the Windows 11 system tray, with a Notion-Calendar-style
 popup and native Windows reminders. It reads **Google Calendar** (up to 4 accounts) and
 **ICS feeds** directly. There is no helper program: the mod signs in with your own Google
