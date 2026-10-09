@@ -1029,9 +1029,10 @@ def validate_readme(path: Path, mod_source: str) -> int:
 
 # Must match the patterns in scripts/archive_mod_images.py, which archives the
 # README images at the URL-derived paths. The script's image pattern is this one
-# restricted to the supported hosts.
+# restricted to the supported hosts. The image description excludes brackets so
+# that an unclosed one doesn't extend into the next link or image.
 ARCHIVED_README_PATTERN = r'^//[ \t]+==WindhawkModReadme==[ \t]*$\s*/\*\s*([\s\S]+?)\s*\*/\s*^//[ \t]+==/WindhawkModReadme==[ \t]*$'
-ARCHIVED_IMAGE_URL_PATTERN = r'!\[[^\]]*\]\(\s*([^)]+?)\s*\)'
+ARCHIVED_IMAGE_URL_PATTERN = r'!\[[^\[\]]*\]\(\s*([^)]+?)\s*\)'
 ARCHIVED_IMAGE_HOSTS = ['i.imgur.com', 'raw.githubusercontent.com']
 
 # Images under this prefix are shown from their original URL instead of the
@@ -1105,8 +1106,19 @@ def validate_readme_images(path: Path, mod_source: str) -> int:
             ' image syntax: ![description](url)',
         )
 
+    image_matches = list(re.finditer(ARCHIVED_IMAGE_URL_PATTERN, readme))
+
+    image_starts = {match.start() for match in image_matches}
+    for match in re.finditer(r'!\[', readme):
+        if match.start() not in image_starts:
+            warnings += add_warning(
+                path,
+                line_of(match.start()),
+                'Malformed Markdown image, expected: ![description](url)',
+            )
+
     hosts = ', '.join(ARCHIVED_IMAGE_HOSTS)
-    for match in re.finditer(ARCHIVED_IMAGE_URL_PATTERN, readme):
+    for match in image_matches:
         url = match.group(1)
         line = line_of(match.start(1))
 
