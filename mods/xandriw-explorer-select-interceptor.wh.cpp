@@ -2,7 +2,7 @@
 // @id           xandriw-explorer-select-interceptor
 // @name         SameFolderOnly
 // @description  When an app opens a folder or uses Show in folder, reuse an existing Explorer window for that folder and select the requested file instead of opening a duplicate window.
-// @version      4.1.3
+// @version      4.1.4
 // @author       XandriW
 // @github       https://github.com/xandri19wang
 // @include      C:\Windows\explorer.exe
@@ -389,12 +389,13 @@ static bool HasAnyExplorerWindow() {
     return found != FALSE;
 }
 
-// Wh_ModInit can also run in an already-running Explorer process after
-// enabling/updating the mod. Never terminate a process hosting its own windows.
+// Wh_ModInit may also run in an existing Explorer process when the mod
+// is enabled or updated. Count visible windows only: fresh helpers may
+// already own hidden COM, IME or third-party mod windows.
 static BOOL CALLBACK OwnsWindowProc(HWND hwnd, LPARAM lParam) {
     DWORD ownerPid = 0;
     GetWindowThreadProcessId(hwnd, &ownerPid);
-    if (ownerPid == GetCurrentProcessId()) {
+    if (ownerPid == GetCurrentProcessId() && IsWindowVisible(hwnd)) {
         *reinterpret_cast<bool*>(lParam) = true;
         return FALSE;
     }
@@ -949,11 +950,10 @@ BOOL Wh_ModInit() {
 
     LoadComProcs();
 
+    // The initial visible-window check protects long-lived Explorer hosts.
+    // Do not re-check here: hidden windows may appear during COM operations.
     if (TryReuseExistingExplorer(request)) {
-        // Re-check just before exiting, in case this process acquired a
-        // top-level window while Shell COM was processing the request.
-        if (!OwnsTopLevelWindow())
-            ExitProcess(0);
+        ExitProcess(0);
     }
 
     return TRUE;
