@@ -18,6 +18,7 @@ This mod recreates the Windows 8/8.1 search panel with local-only results, inspi
 the Metro UI design language. This mod is a best-effort recreation of the Windows 8/8.1 Search Charm on
 Windows 10 and Windows 11. It does **not** replace system files, modify the
 registry, alter Windows Search, or modify native search binaries.
+This modification has been tested on Windows 11 24H2.
 
 ## Screenshot
 
