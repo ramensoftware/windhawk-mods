@@ -802,6 +802,7 @@ struct WmRuntime {
     RuleMonitor monitor = RuleMonitor::Any;
     std::wstring monitorId;
     bool followWindow = false;
+    uint64_t visibleGeneration = 0; // Counts a maximized arrival without admitting it.
   };
   std::unordered_map<HWND, PendingWindowRoute> pendingWindowRoutes;
   PendingOverflowSwitch pendingInitialPlacementSwitch{};
@@ -6845,7 +6846,13 @@ static void ArrangeWorkspace(
   if (IsAutomaticMode() && workspace.Layout() != TileLayout::Floating) {
     const size_t limit = AutomaticWindowLimitForMonitor(key.monitor);
     if (limit) {
-      std::vector<WindowRecord> visibleMembers;
+      struct VisibleMember {
+        HWND hwnd;
+        DWORD processId;
+        uint64_t generation;
+        bool awaitingInitialPlacement;
+      };
+      std::vector<VisibleMember> visibleMembers;
       size_t retainedSlots = 0;
       for (const auto& member : workspace.Records()) {
         const WindowRecord& record = member.second;
@@ -6855,19 +6862,42 @@ static void ArrangeWorkspace(
           const SuspensionReason physicalReason = GetPhysicalSuspensionReason(record.hwnd);
           if (physicalReason == SuspensionReason::Minimized ||
               physicalReason == SuspensionReason::Hidden || IsWindowCloaked(record.hwnd)) continue;
-          visibleMembers.push_back(record);
+          visibleMembers.push_back({record.hwnd, record.pid, record.tilingGeneration, false});
+        }
+      }
+      // Copy pending identities before desktop queries, which can deliver lifecycle events.
+      for (const auto& pending : g_wm.pendingWindowRoutes) {
+        const auto& request = pending.second;
+        if (request.visibleGeneration && IsEqualGUID(request.sourceDesktop, key.desktopId)) {
+          visibleMembers.push_back({pending.first, request.processId, request.visibleGeneration, true});
         }
       }
       std::sort(visibleMembers.begin(), visibleMembers.end(),
-                [](const WindowRecord& first, const WindowRecord& second) {
-                  return first.tilingGeneration < second.tilingGeneration;
+                [](const VisibleMember& first, const VisibleMember& second) {
+                  return first.generation < second.generation;
                 });
-      for (const WindowRecord& record : visibleMembers) {
+      for (const VisibleMember& member : visibleMembers) {
+        if (member.awaitingInitialPlacement) {
+          GUID owner{};
+          if (!GetWindowDesktopIdSafe(member.hwnd, &owner) || !IsEqualGUID(owner, key.desktopId)) continue;
+          DWORD liveProcessId = 0;
+          GetWindowThreadProcessId(member.hwnd, &liveProcessId);
+          if (!IsWindow(member.hwnd) || liveProcessId != member.processId ||
+              IsWindowTrackedInAnyState(member.hwnd) || IsWindowCloaked(member.hwnd) ||
+              GetPhysicalSuspensionReason(member.hwnd) != SuspensionReason::Maximized ||
+              GetWindowPhysicalMonitor(member.hwnd) != monitor || ShouldWindowStartFloating(member.hwnd)) continue;
+          const auto pending = g_wm.pendingWindowRoutes.find(member.hwnd);
+          if (pending == g_wm.pendingWindowRoutes.end() || pending->second.processId != member.processId ||
+              pending->second.visibleGeneration != member.generation) continue;
+          // Reserve its place in arrival order. Restoration still performs initial placement.
+          ++retainedSlots;
+          continue;
+        }
         const bool exceedsLimit = retainedSlots >= limit;
         ++retainedSlots;
         // Visible maximized members count, but are not restored just to move them.
-        if (exceedsLimit && !IsMoveSizeGestureInProgress(record.hwnd) &&
-            FloatAutomaticOverflowWindow(key, workspace, record.hwnd, L"count limit")) {
+        if (exceedsLimit && !IsMoveSizeGestureInProgress(member.hwnd) &&
+            FloatAutomaticOverflowWindow(key, workspace, member.hwnd, L"count limit")) {
           --retainedSlots;
         }
       }
@@ -8787,6 +8817,7 @@ static void AddPendingWorkspaceArrange(const GUID& desktopId, HMONITOR monitor) 
 static void RouteNewWindows(std::vector<HMONITOR>& monitors) {
   if (!g_wm.windowRoutingReady) return;
 
+  const HWND foregroundWindow = GetForegroundWindow();
   std::vector<HWND> candidates;
   ++Diagnostics::g_runtime.counters.enumWindowsPasses;
   EnumWindows(
@@ -8919,7 +8950,19 @@ static void RouteNewWindows(std::vector<HMONITOR>& monitors) {
       g_wm.pendingWindowRoutes.erase(hwnd);
       continue;
     }
-    if (GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None) continue;
+    const SuspensionReason suspensionReason = GetPhysicalSuspensionReason(hwnd);
+    if (suspensionReason != SuspensionReason::None) {
+      const auto pending = g_wm.pendingWindowRoutes.find(hwnd);
+      if (pending != g_wm.pendingWindowRoutes.end()) {
+        if (suspensionReason == SuspensionReason::Maximized) {
+          if (!pending->second.visibleGeneration) pending->second.visibleGeneration = Model::NextTilingGeneration();
+          AddPendingWorkspaceArrange(sourceDesktop, sourceMonitor);
+        } else {
+          pending->second.visibleGeneration = 0;
+        }
+      }
+      continue;
+    }
     // A frozen GUID must still exist; desktop reordering must not retarget it.
     if (changeDesktop) {
       std::vector<GUID> order;
@@ -8996,7 +9039,7 @@ static void RouteNewWindows(std::vector<HMONITOR>& monitors) {
       // Off-desktop windows stay unadmitted until the ordinary destination pass.
       // That pass enforces fit/limits, including when several windows arrive together.
       AddPendingWorkspaceArrange(request.targetDesktop, targetMonitor);
-      if (request.followWindow && (!g_wm.pendingInitialPlacementSwitch.hwnd || hwnd == GetForegroundWindow())) {
+      if (request.followWindow && (!g_wm.pendingInitialPlacementSwitch.hwnd || hwnd == foregroundWindow)) {
         g_wm.pendingInitialPlacementSwitch =
             {hwnd, processId, sourceDesktop, request.targetDesktop, {}, 0, input.dwTime};
       }
@@ -16252,4 +16295,3 @@ void Wh_ModUninit() {
   WhTool_ModUninit();
   ExitProcess(0);
 }
-  
