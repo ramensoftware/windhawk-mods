@@ -14,7 +14,7 @@
 # Winstant
 
 *Any window, instantly – right where you need it.*
-![Winstant](https://i.imgur.com/qvqqV2I.png)
+![Winstant](https://i.imgur.com/JUERjkh.png)
 
 Working with several windows of the same app – Excel workbooks, Windows
 Terminal sessions, Explorer folders, browser windows – usually means
