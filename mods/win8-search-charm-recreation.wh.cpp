@@ -5,17 +5,23 @@
 // @version         1.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
-// @license         GPL-3.0
+// @license         MIT
 // @include         explorer.exe
-// @compilerOptions -lgdi32 -luser32 -lshell32 -lole32 -lshlwapi -ldwmapi -luuid -loleaut32 -lcomctl32 -lshcore -ladvapi32 -fexceptions
+// @compilerOptions -lgdi32 -luser32 -lshell32 -lole32 -lshlwapi -ldwmapi -luuid -loleaut32 -lcomctl32 -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Windows 8/8.1 Search Charm
+# Windows 8/8.1 Search Charm Recreation
 
 This mod recreates the Windows 8/8.1 search panel with local-only results, inspired by
-the Metro UI design language.
+the Metro UI design language. This mod is a best-effort recreation of the Windows 8/8.1 Search Charm on
+Windows 10 and Windows 11. It does **not** replace system files, modify the
+registry, alter Windows Search, or modify native search binaries.
+
+## Screenshot 
+
+![Windows 8/8.1 Search Charm screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8search.png)
 
 ## Features
 
@@ -27,51 +33,40 @@ the Metro UI design language.
   - **User files** from Desktop, Documents, Downloads, Pictures, Music, Videos
   - **System entries** (Control Panel, Settings, Command Prompt, Task Manager, etc.)
 - **All/Apps/Settings/Files** filter, mimicking the Windows 8.1 search scope selector.
+- **Vertical scrollbar** in the results list (Windows 8 style): draggable thumb and
+  track paging, shown only when the results overflow the visible area.
 - **Keyboard shortcuts**: `Win+S` or `Win+Q` to open, `Ctrl+A` to select all,
   `Ctrl+V` to paste, arrow keys to navigate.
 - **Click outside** to close, `Esc` to dismiss.
 - **Per-monitor DPI** aware, with IME support for CJK input.
-- **Context menu** (right-click) with Open file location, Run as administrator, Copy path.
-  The context menu stays open until the search panel is closed or an entry is launched;
-  it is not dismissed on a timer.
-- **Native search suppression (virtualized)**: the native Windows Search service
-  (`WSearch`) is suppressed by *virtualizing* the registry. The value
-  `HKLM\SYSTEM\CurrentControlSet\Services\WSearch\Start` is reported as `4`
-  (disabled) to any process that queries it, **without ever writing to the real
-  registry**. This makes the suppression fully reversible and crash-safe: if the
-  mod or Windhawk is terminated, nothing has to be undone.
-- **Native search UI blocked**: `SearchHost.exe` / `SearchApp.exe` /
-  `SearchUI.exe` launches are also blocked as a second line of defense.
+- **Metro-style context menu** (right-click) with **Open**, Open file location,
+  Run as administrator, Copy path, and sort options (by name, by date installed,
+  by most used, by category). The menu is drawn with the Metro design language:
+  white background, no 3D borders, Segoe UI text, and the hover highlight uses
+  the system accent color, so it adapts to the user's personalization settings.
+- **Dedicated keyboard-hook thread**: the low-level `Win+S` / `Win+Q` hook has its
+  own message loop, so slow icon extraction, clipboard work, Shell execution, or
+  a UAC prompt on the panel thread cannot make Windows remove the keyboard hook.
+- **Main-shell only**: the mod loads only in the Explorer process that owns the
+  shell window, avoiding duplicate panels, hooks, and index scans when folder
+  windows run in separate Explorer processes.
 - **Z-band overlay**: uses `CreateWindowInBand` (when available) so the panel stays
   above the taskbar, Start menu, and fullscreen UWP apps.
 - **UI translations**: English, Italian, Spanish, French, Portuguese, German,
   Russian, Chinese (Simplified), Japanese, Korean.
 
-## Native search suppression (virtualized registry)
+## Native-search behavior
 
-Instead of writing `Start=4` into the real registry, this mod hooks the registry
-APIs (`RegOpenKeyExW/A`, `RegQueryValueExW/A`, `RegSetValueExW/A`, `RegEnumValueW/A`,
-`RegCreateKeyExW/A`, `RegCloseKey`) and, whenever a caller opens or reads the
-`WSearch` service key, returns a **virtual handle** that reports `Start=4`.
-
-The real registry is never modified. When the mod is unloaded, the virtual
-handles are closed and the real keys are released. Nothing has to be restored.
-
-- If the service is already running when the mod loads, the mod asks the SCM to
-  stop it (this is a runtime action, not a persistent registry change; the
-  service can be started again normally).
-- Writing `Start` through a virtual handle is a no-op (silently succeeds), so
-  other components cannot "fix" the value while the mod is active.
+When enabled in the settings, the dedicated keyboard hook consumes `Win+S` and/or
+`Win+Q` before Windows receives those shortcuts and posts a request to open this
+panel. This is the only interception required for those keys.
 
 ## Credits
 
-- **m417z** (https://github.com/m417z) — for the inspiration and the low-level
-  hooking techniques (`CreateProcessInternalW`) used in the "Search Menu Inspect
-  Helper" mod, which made reliable native search suppression possible.
 - **AdministratoX** — for the Metro UI interface template that inspired the
   visual layout and design language of this search panel.
-- The **z-band overlay** technique (`CreateWindowInBand`, `ZBID_UIACCESS`) and the
-  z-order diagnostic helpers are adapted from the "Windows 8 (8102) Charms" mod.
+- **Meteoni** — for the `IsMainExplorerProcess` pattern used to avoid loading the
+  mod in separate folder-window Explorer processes.
 
 */
 // ==/WindhawkModReadme==
@@ -83,7 +78,7 @@ handles are closed and the real keys are released. Nothing has to be restored.
   $description: This setting allows the mod to intercept Win+S and open this panel instead of Windows native search.
 - useWinQ: true
   $name: Open with Win+Q
-  $description: This setting allows the mod to ntercept Win+Q and open this panel.
+  $description: This setting allows the mod to intercept Win+Q and open this panel.
 - language: auto
   $name: Language
   $description: This setting modifies the UI language for the search panel. Automatic follows the Windows display language.
@@ -117,7 +112,7 @@ handles are closed and the real keys are released. Nothing has to be restored.
   $description: This setting modifies the duration of the panel closing animation in milliseconds.
 - closeOnClickOutside: true
   $name: Close when clicking outside
-  $description: This setting allows to close the search panel when clicking outside of it.
+  $description: This setting allows to close the panel when it loses activation, such as after clicking another window.
 - aboveTaskbar: true
   $name: Keep above the taskbar
   $description: This setting allows to maintain the panel above the taskbar in Z-order.
@@ -130,18 +125,12 @@ handles are closed and the real keys are released. Nothing has to be restored.
 - hotkeyCooldownMs: 400
   $name: Hotkey cooldown (ms)
   $description: This setting changes the minimum time between two Win+S/Q presses to prevent multiple openings.
-- blockNativeSearch: true
-  $name: Suppress native search
-  $description: This setting allows to block SearchHost.exe / SearchApp.exe launches when Windows search is requested, and virtualize the WSearch registry key so it reports Start=4 (disabled) without touching the real registry.
-- stopWSearchService: true
-  $name: Stop WSearch service if running
-  $description: When the mod loads, this setting makes the mod ask the Service Control Manager to stop the WSearch service if it is currently running. This is a runtime action, not a persistent change.
 - monitor: 0
   $name: Monitor
   $description: 0 = monitor under the cursor, 1 = first monitor, 2 = second monitor, and so on.
 - debugLog: false
   $name: Debug log
-  $description: This setting allows to write z-order diagnostics and registry-virtualization diagnostics to the Windhawk log (does not change how anything looks).
+  $description: This setting allows the mod to write z-order diagnostics to the Windhawk log (does not change how anything looks).
 */
 // ==/WindhawkModSettings==
 
@@ -162,6 +151,7 @@ handles are closed and the real keys are released. Nothing has to be restored.
 #include <algorithm>
 #include <strsafe.h>
 #include <atomic>
+#include <cwctype>
 #include <imm.h>
 
 extern "C" IMAGE_DOS_HEADER __ImageBase;
@@ -304,9 +294,13 @@ struct RateLimitedLog {
 enum Cat { CAT_APP = 0, CAT_SETTING = 1, CAT_FILE = 2 };
 struct Item { std::wstring name, lower, path; Cat cat; bool dir; };
 
+// Layout struct: needs to be fully defined before the g_cachedLay global.
+struct Lay { int mx, titleY, lblY, editY, editH, editR, btnW, listY, rowH, vis; };
+
 static const UINT WM_APP_TOGGLE = WM_APP + 1;
 static const UINT WM_APP_INDEX  = WM_APP + 2;
 static const wchar_t* kClass = L"Win81SearchCharmMod";
+static const wchar_t* kMenuClass = L"Win81SearchCharmMenu";
 static const ULONG_PTR kMagic = 0x53524348;
 static const COLORREF KEY = RGB(255, 0, 255);
 
@@ -321,9 +315,11 @@ static bool g_inMenu = false;
 static wchar_t g_pendingHigh = 0;
 
 static HWND g_wnd = NULL;
-static WinHandle g_thread, g_scanThread;
-static DWORD g_tid = 0;
-static HHOOK g_hook = NULL, g_mouseHook = NULL;
+static WinHandle g_uiThread, g_keyboardThread, g_scanThread;
+static WinHandle g_uiReady, g_keyboardReady;
+static DWORD g_uiTid = 0, g_keyboardTid = 0;
+static HHOOK g_hook = NULL;
+static volatile LONG g_uiStarted = 0, g_keyboardStarted = 0;
 static volatile LONG g_stop = 0, g_scanning = 0;
 static DWORD g_lastScan = 0, g_lastClick = 0, g_lastHotkey = 0;
 
@@ -335,8 +331,6 @@ static UINT g_swallowVk = 0;
 static bool g_closeOnClickOutside = true, g_aboveTaskbar = true;
 static bool g_useZBand = true;
 static int g_clickCooldownMs = 500, g_hotkeyCooldownMs = 400;
-static bool g_blockNativeSearch = true;
-static bool g_stopWSearchService = true;
 static int g_monitorChoice = 0;
 static bool g_debug = false;
 
@@ -360,17 +354,39 @@ static std::vector<std::wstring> g_recent;
 static bool g_dropdownOpen = false;
 static int g_dropdownHover = -1;
 
+// Scrollbar state
+static bool g_scrollDragging = false;
+static int  g_scrollDragY = 0;
+static int  g_scrollDragScroll = 0;
+
+// Metro context menu state
+static HWND g_menuWnd = NULL;
+static bool g_menuClassRegistered = false;
+static std::vector<std::wstring> g_menuItems;
+static std::vector<bool> g_menuIsSeparator;
+static int g_menuHover = -1;
+static int g_menuResult = 0;   // 0 = no selection, 1-based otherwise
+
+// Sort mode (context menu)
+enum { SORT_RELEVANCE = 0, SORT_NAME, SORT_DATE, SORT_MOST_USED, SORT_CATEGORY };
+static int g_sortMode = SORT_RELEVANCE;
+
+// Layout cache (Lay is fully defined above, so this global is valid)
+static Lay g_cachedLay = {};
+static int g_cachedLayW = -1;
+static int g_cachedLayH = -1;
+static double g_cachedLayScale = -1.0;
+
 static int S(int v) { return (int)(v * g_scale + 0.5); }
 
 // ---------------------------------------------------------------- forward declarations
-// WndProc uses these helpers; declare them before WndProc so the compiler
-// can see them regardless of the order in which the definitions appear.
 static void EnforceTopmost();
 static void OpenPane();
 static void ClosePane();
 static void DismissContextMenu();
 static bool InEditBox(int x, int y);
 static void Changed();
+static bool LaunchPath(const std::wstring& path);
 static void LaunchResult(int r);
 static void EnsureVisible();
 static std::wstring ClipText(HWND h);
@@ -380,24 +396,15 @@ static bool InDropdownArea(int x, int y);
 static void ShowContextMenu(HWND h, int x, int y, int r);
 
 // ---------------------------------------------------------------- z-band overlay (from 8102 Charms mod)
-//
-// CreateWindowInBand is an undocumented user32 export that lets a process create
-// a window in a specific Z-band. ZBID_UIACCESS (=2) is the band used by Task
-// Manager and the On-Screen Keyboard: it sits above the taskbar, the Start menu
-// and fullscreen UWP apps. This is what makes the search panel reliably visible
-// on top of everything, unlike a plain WS_EX_TOPMOST window.
-//
-// The band is selected at creation time; if the system refuses (older Windows
-// builds, sandboxed processes, etc.) we fall back to an ordinary topmost window.
 typedef HWND (WINAPI *CreateWindowInBand_t)(
     DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle,
     int X, int Y, int nWidth, int nHeight,
     HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam, DWORD dwBand);
 
 static CreateWindowInBand_t g_createInBand = NULL;
-static int g_band = -1;            // -1 = not tried yet, 0 = normal band, else the band that worked
-static const DWORD kBandUIAccess = 2;     // ZBID_UIACCESS
-static const DWORD kBandSystemTools = 16; // ZBID_SYSTEM_TOOLS
+static int g_band = -1;
+static const DWORD kBandUIAccess = 2;
+static const DWORD kBandSystemTools = 16;
 
 static HWND CreateOverlayWindow(const wchar_t* cls, int w, int h) {
     const DWORD ex = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED;
@@ -407,7 +414,7 @@ static HWND CreateOverlayWindow(const wchar_t* cls, int w, int h) {
     if (g_createInBand && g_useZBand && g_band != 0) {
         const DWORD bands[2] = { kBandUIAccess, kBandSystemTools };
         for (DWORD b : bands) {
-            if (g_band > 0 && (DWORD)g_band != b) continue; // reuse the band that already worked
+            if (g_band > 0 && (DWORD)g_band != b) continue;
             hw = g_createInBand(ex, cls, L"", WS_POPUP, 0, 0, w, h,
                                 NULL, NULL, hi, NULL, b);
             if (hw) {
@@ -429,7 +436,6 @@ static HWND CreateOverlayWindow(const wchar_t* cls, int w, int h) {
         hw = CreateWindowExW(ex, cls, L"", WS_POPUP, 0, 0, w, h, NULL, NULL, hi, NULL);
     return hw;
 }
-
 
 struct EnumCtx { RECT r; int idx; };
 static BOOL CALLBACK EnumTop(HWND w, LPARAM lp) {
@@ -491,6 +497,16 @@ static COLORREF PaneColor() {
     return RGB(8, 121, 0);
 }
 
+// Returns the system accent color (the same used by the Start screen and
+// Charms bar on Windows 8). Falls back to the Metro blue if DWM does not
+// provide a color.
+static COLORREF SystemAccentColor() {
+    DWORD c = 0; BOOL o = FALSE;
+    if (SUCCEEDED(DwmGetColorizationColor(&c, &o)))
+        return RGB((c >> 16) & 255, (c >> 8) & 255, c & 255);
+    return RGB(0, 120, 215);
+}
+
 static void LoadSettings() {
     g_useWinS = Wh_GetIntSetting(L"useWinS") != 0;
     g_useWinQ = Wh_GetIntSetting(L"useWinQ") != 0;
@@ -534,71 +550,79 @@ static void LoadSettings() {
     g_useZBand = Wh_GetIntSetting(L"useZBand") != 0;
     g_clickCooldownMs = std::min(2000, std::max(0, (int)Wh_GetIntSetting(L"clickCooldownMs")));
     g_hotkeyCooldownMs = std::min(2000, std::max(0, (int)Wh_GetIntSetting(L"hotkeyCooldownMs")));
-    g_blockNativeSearch = Wh_GetIntSetting(L"blockNativeSearch") != 0;
-    g_stopWSearchService = Wh_GetIntSetting(L"stopWSearchService") != 0;
     g_monitorChoice = std::max(0, (int)Wh_GetIntSetting(L"monitor"));
     g_debug = Wh_GetIntSetting(L"debugLog") != 0;
-    Wh_Log(L"[Settings] lang=%d monitor=%d colorMode=%d blockNative=%d stopSvc=%d zBand=%d debug=%d",
-           g_lang, g_monitorChoice, g_colorMode, g_blockNativeSearch ? 1 : 0,
-           g_stopWSearchService ? 1 : 0, g_useZBand ? 1 : 0, g_debug ? 1 : 0);
+    Wh_Log(L"[Settings] lang=%d monitor=%d colorMode=%d zBand=%d debug=%d",
+           g_lang, g_monitorChoice, g_colorMode, g_useZBand ? 1 : 0,
+           g_debug ? 1 : 0);
 }
 
 // Strings: 0=it,1=en,2=es,3=fr,4=pt,5=de,6=ru,7=zh,8=ja,9=ko
 static const wchar_t* T(int id) {
-    static const wchar_t* S[10][22] = {
+    static const wchar_t* S[10][27] = {
         { L"Cerca", L"Ovunque", L"Nessun risultato", L"Applicazione", L"Indicizzazione...",
           L"Pannello di controllo", L"Impostazioni", L"Esplora file", L"Prompt dei comandi",
           L"Task Manager", L"Programmi e funzionalità", L"File", L"Impostazioni", L"Applicazioni",
           L"Cronologia", L"Cerca \"%s\" sul Web", L"Apri percorso file", L"Esegui come amministratore",
-          L"Copia percorso", L"Ovunque", L"Applicazioni", L"Impostazioni" },
+          L"Copia percorso", L"Ovunque", L"Applicazioni", L"Impostazioni",
+          L"per nome", L"per data installazione", L"per uso frequente", L"per categoria", L"Apri" },
         { L"Search", L"Everywhere", L"No results", L"App", L"Indexing...",
           L"Control Panel", L"Settings", L"File Explorer", L"Command Prompt",
           L"Task Manager", L"Programs and Features", L"Files", L"Settings", L"Apps",
           L"History", L"Search \"%s\" on the Web", L"Open file location", L"Run as administrator",
-          L"Copy path", L"Everywhere", L"Apps", L"Settings" },
+          L"Copy path", L"Everywhere", L"Apps", L"Settings",
+          L"by name", L"by date installed", L"by most used", L"by category", L"Open" },
         { L"Buscar", L"En todas partes", L"Sin resultados", L"Aplicación", L"Indexando...",
           L"Panel de control", L"Configuración", L"Explorador de archivos", L"Símbolo del sistema",
           L"Administrador de tareas", L"Programas y características", L"Archivos", L"Configuración",
           L"Aplicaciones", L"Historial", L"Buscar \"%s\" en la Web", L"Abrir ubicación del archivo",
-          L"Ejecutar como administrador", L"Copiar ruta", L"En todas partes", L"Aplicaciones", L"Configuración" },
+          L"Ejecutar como administrador", L"Copiar ruta", L"En todas partes", L"Aplicaciones", L"Configuración",
+          L"por nombre", L"por fecha de instalación", L"por uso frecuente", L"por categoría", L"Abrir" },
         { L"Rechercher", L"Partout", L"Aucun résultat", L"Application", L"Indexation...",
           L"Panneau de configuration", L"Paramètres", L"Explorateur de fichiers", L"Invite de commandes",
           L"Gestionnaire des tâches", L"Programmes et fonctionnalités", L"Fichiers", L"Paramètres",
           L"Applications", L"Historique", L"Rechercher \"%s\" sur le Web", L"Ouvrir l'emplacement du fichier",
-          L"Exécuter en tant qu'administrateur", L"Copier le chemin", L"Partout", L"Applications", L"Paramètres" },
+          L"Exécuter en tant qu'administrateur", L"Copier le chemin", L"Partout", L"Applications", L"Paramètres",
+          L"par nom", L"par date d'installation", L"par utilisation fréquente", L"par catégorie", L"Ouvrir" },
         { L"Pesquisar", L"Em todo o lado", L"Sem resultados", L"Aplicativo", L"Indexando...",
           L"Painel de Controle", L"Configurações", L"Explorador de Arquivos", L"Prompt de Comando",
           L"Gerenciador de Tarefas", L"Programas e Recursos", L"Arquivos", L"Configurações",
           L"Aplicativos", L"Histórico", L"Pesquisar \"%s\" na Web", L"Abrir local do arquivo",
-          L"Executar como administrador", L"Copiar caminho", L"Em todo o lado", L"Aplicativos", L"Configurações" },
+          L"Executar como administrador", L"Copiar caminho", L"Em todo o lado", L"Aplicativos", L"Configurações",
+          L"por nome", L"por data de instalação", L"por uso frequente", L"por categoria", L"Abrir" },
         { L"Suchen", L"Überall", L"Keine Ergebnisse", L"App", L"Indizierung...",
           L"Systemsteuerung", L"Einstellungen", L"Datei-Explorer", L"Eingabeaufforderung",
           L"Task-Manager", L"Programme und Features", L"Dateien", L"Einstellungen", L"Apps",
           L"Verlauf", L"\"%s\" im Web suchen", L"Dateispeicherort öffnen", L"Als Administrator ausführen",
-          L"Pfad kopieren", L"Überall", L"Apps", L"Einstellungen" },
+          L"Pfad kopieren", L"Überall", L"Apps", L"Einstellungen",
+          L"nach Name", L"nach Installationsdatum", L"nach häufigster Nutzung", L"nach Kategorie", L"Öffnen" },
         { L"Поиск", L"Везде", L"Нет результатов", L"Приложение", L"Индексация...",
           L"Панель управления", L"Параметры", L"Проводник", L"Командная строка",
           L"Диспетчер задач", L"Программы и компоненты", L"Файлы", L"Параметры", L"Приложения",
           L"История", L"Искать \"%s\" в Интернете", L"Открыть расположение файла", L"Запуск от имени администратора",
-          L"Копировать путь", L"Везде", L"Приложения", L"Параметры" },
+          L"Копировать путь", L"Везде", L"Приложения", L"Параметры",
+          L"по имени", L"по дате установки", L"по частоте использования", L"по категории", L"Открыть" },
         { L"搜索", L"随处", L"无结果", L"应用", L"正在索引...",
           L"控制面板", L"设置", L"文件资源管理器", L"命令提示符",
           L"任务管理器", L"程序和功能", L"文件", L"设置", L"应用",
           L"历史记录", L"在 Web 上搜索 \"%s\"", L"打开文件位置", L"以管理员身份运行",
-          L"复制路径", L"随处", L"应用", L"设置" },
+          L"复制路径", L"随处", L"应用", L"设置",
+          L"按名称", L"按安装日期", L"按使用频率", L"按类别", L"打开" },
         { L"検索", L"すべての場所", L"結果なし", L"アプリ", L"インデックス作成中...",
           L"コントロール パネル", L"設定", L"ファイル エクスプローラー", L"コマンド プロンプト",
           L"タスク マネージャー", L"プログラムと機能", L"ファイル", L"設定", L"アプリ",
           L"履歴", L"Web で \"%s\" を検索", L"ファイルの場所を開く", L"管理者として実行",
-          L"パスをコピー", L"すべての場所", L"アプリ", L"設定" },
+          L"パスをコピー", L"すべての場所", L"アプリ", L"設定",
+          L"名前順", L"インストール日順", L"使用頻度順", L"カテゴリ順", L"開く" },
         { L"검색", L"모든 위치", L"결과 없음", L"앱", L"인덱싱 중...",
           L"제어판", L"설정", L"파일 탐색기", L"명령 프롬프트",
           L"작업 관리자", L"프로그램 및 기능", L"파일", L"설정", L"앱",
           L"기록", L"웹에서 \"%s\" 검색", L"파일 위치 열기", L"관리자 권한으로 실행",
-          L"경로 복사", L"모든 위치", L"앱", L"설정" }
+          L"경로 복사", L"모든 위치", L"앱", L"설정",
+          L"이름순", L"설치 날짜순", L"사용 빈도순", L"범주순", L"열기" }
     };
     int l = g_lang; if (l < 0 || l > 9) l = 1;
-    if (id < 0 || id > 21) return L"";
+    if (id < 0 || id > 26) return L"";
     return S[l][id];
 }
 
@@ -782,12 +806,6 @@ static void ScanDir(std::vector<Item>& out, const std::wstring& dir, int depth,
     } while (FindNextFileW(h.get(), &fd));
 }
 
-// Enumerates FOLDERID_AppsFolder to add modern (UWP/Store) apps.
-// Modern apps have no physical .lnk file: they only exist in the virtual
-// shell namespace exposed by FOLDERID_AppsFolder. The documented way to
-// enumerate them is to bind an IShellFolder to the folder and call
-// IShellFolder::EnumObjects, then use SHGDN_FORPARSING to obtain the
-// AppUserModelID (AUMID) used to launch the app.
 static void ScanAppsFolder(std::vector<Item>& out, std::set<std::wstring>& seen) {
     PWSTR appsFolderPath = nullptr;
     HRESULT hr = SHGetKnownFolderPath(FOLDERID_AppsFolder, 0, NULL, &appsFolderPath);
@@ -968,24 +986,95 @@ static void Refilter() {
                      + (it.dir ? 1 : 0);
             hits.push_back({ (int)i, rank });
         }
-        std::sort(hits.begin(), hits.end(), [&](const H& a, const H& b) {
-            if (a.rank != b.rank) return a.rank < b.rank;
-            return g_items[a.i].lower < g_items[b.i].lower;
-        });
+        if (g_sortMode == SORT_NAME) {
+            std::sort(hits.begin(), hits.end(), [&](const H& a, const H& b) {
+                return g_items[a.i].lower < g_items[b.i].lower;
+            });
+        } else if (g_sortMode == SORT_DATE) {
+            std::sort(hits.begin(), hits.end(), [&](const H& a, const H& b) {
+                WIN32_FILE_ATTRIBUTE_DATA fa, fb;
+                GetFileAttributesExW(g_items[a.i].path.c_str(), GetFileExInfoStandard, &fa);
+                GetFileAttributesExW(g_items[b.i].path.c_str(), GetFileExInfoStandard, &fb);
+                return CompareFileTime(&fa.ftLastWriteTime, &fb.ftLastWriteTime) > 0;
+            });
+        } else if (g_sortMode == SORT_MOST_USED) {
+            std::sort(hits.begin(), hits.end(), [&](const H& a, const H& b) {
+                WIN32_FILE_ATTRIBUTE_DATA fa, fb;
+                GetFileAttributesExW(g_items[a.i].path.c_str(), GetFileExInfoStandard, &fa);
+                GetFileAttributesExW(g_items[b.i].path.c_str(), GetFileExInfoStandard, &fb);
+                return CompareFileTime(&fa.ftLastAccessTime, &fb.ftLastAccessTime) > 0;
+            });
+        } else if (g_sortMode == SORT_CATEGORY) {
+            std::sort(hits.begin(), hits.end(), [&](const H& a, const H& b) {
+                return g_items[a.i].cat < g_items[b.i].cat;
+            });
+        } else {
+            std::sort(hits.begin(), hits.end(), [&](const H& a, const H& b) {
+                if (a.rank != b.rank) return a.rank < b.rank;
+                return g_items[a.i].lower < g_items[b.i].lower;
+            });
+        }
     }
     for (size_t i = 0; i < hits.size() && i < 300; i++) g_res.push_back(hits[i].i);
 }
 
-// ---------------------------------------------------------------- layout
-struct Lay { int mx, titleY, lblY, editY, editH, editR, btnW, listY, rowH, vis; };
+// ---------------------------------------------------------------- layout (cached)
 static Lay Layout() {
+    if (g_cachedLayW == g_w && g_cachedLayH == g_h && g_cachedLayScale == g_scale) {
+        return g_cachedLay;
+    }
     Lay l;
     l.mx = S(41); l.titleY = S(35); l.lblY = S(80);
     l.editY = S(110); l.editH = S(32);
     l.editR = g_w - S(40); l.btnW = S(32);
     l.listY = S(168); l.rowH = S(52);
     l.vis = std::max(1, (g_h - l.listY - S(20)) / l.rowH);
+    g_cachedLay = l;
+    g_cachedLayW = g_w;
+    g_cachedLayH = g_h;
+    g_cachedLayScale = g_scale;
     return l;
+}
+
+// ---------------------------------------------------------------- scrollbar
+static RECT ScrollTrackRect() {
+    RECT r;
+    r.left   = g_w - S(8);
+    r.right  = g_w - S(3);
+    r.top    = Layout().listY;
+    r.bottom = g_h - S(20);
+    if (r.bottom <= r.top) r.bottom = r.top + 1;
+    return r;
+}
+
+static RECT ScrollThumbRect() {
+    RECT track = ScrollTrackRect();
+    int total = (int)g_res.size();
+    int vis = Layout().vis;
+    RECT empty = { 0, 0, 0, 0 };
+    if (total <= vis || total <= 0) return empty;
+    int trackH = track.bottom - track.top;
+    if (trackH <= 0) return empty;
+    int thumbH = std::max(S(24), trackH * vis / total);
+    if (thumbH > trackH) thumbH = trackH;
+    int maxScroll = total - vis;
+    int scroll = std::min(std::max(0, g_scroll), maxScroll);
+    int thumbY = track.top + (trackH - thumbH) * scroll / std::max(1, maxScroll);
+    RECT r;
+    r.left = track.left;
+    r.right = track.right;
+    r.top = thumbY;
+    r.bottom = thumbY + thumbH;
+    return r;
+}
+
+static bool InScrollbarRegion(int x, int y) {
+    int total = (int)g_res.size();
+    if (total <= Layout().vis) return false;
+    RECT track = ScrollTrackRect();
+    int hitLeft  = track.left - S(7);
+    int hitRight = g_w;
+    return x >= hitLeft && x < hitRight && y >= track.top - S(4) && y < track.bottom + S(4);
 }
 
 // ---------------------------------------------------------------- painting
@@ -1037,6 +1126,12 @@ static void DoPaint(HWND h) {
         ScopedTextColor tc(mem.get(), RGB(255, 255, 255));
         const wchar_t mag[2] = { 0xE721, 0 };
         DrawTextW(mem.get(), mag, 1, &btn, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+        if (!g_query.empty()) {
+            RECT clearBtn = { L.editR - L.btnW - S(24) + ox, L.editY, L.editR - L.btnW + ox, L.editY + L.editH };
+            const wchar_t clearChar[2] = { 0xE10A, 0 };
+            DrawTextW(mem.get(), clearChar, 1, &clearBtn, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        }
     }
 
     {
@@ -1078,29 +1173,11 @@ static void DoPaint(HWND h) {
             TextOutW(mem.get(), L.mx + ox, L.listY, msg, lstrlenW(msg));
         }
 
-        struct HeaderInfo { const wchar_t* text; int y; };
-        HeaderInfo headers[8];
-        int headerCount = 0;
-
         int y = L.listY;
-        Cat lastCat = (Cat)-1;
         for (int r = g_scroll; r < (int)g_res.size() && r < g_scroll + L.vis; r++, y += L.rowH) {
             int idx = g_res[r];
             if (idx < 0 || idx >= (int)g_items.size()) continue;
             const Item& it = g_items[idx];
-
-            if (it.cat != lastCat) {
-                lastCat = it.cat;
-                if (headerCount < 8) {
-                    headers[headerCount].text = it.cat == CAT_APP ? T(20) :
-                                                it.cat == CAT_SETTING ? T(21) : T(11);
-                    // Section titles (Apps / Settings / Files) are drawn 3% higher
-                    // than before. Only the header text position is shifted; every
-                    // other element (icons, names, paths) keeps its original Y.
-                    headers[headerCount].y = y - S(14) - S(14) * 3 / 100;
-                    headerCount++;
-                }
-            }
 
             if (r == g_sel || r == g_hover) {
                 RECT band = { px, y, W, y + L.rowH };
@@ -1111,8 +1188,8 @@ static void DoPaint(HWND h) {
             if (ic)
                 DrawIconEx(mem.get(), L.mx + ox, y + (L.rowH - S(32)) / 2, ic, S(32), S(32), 0, NULL, DI_NORMAL);
             int tx = L.mx + ox + S(44);
-            RECT nr = { tx, y + S(6), W - S(16) + ox, y + S(28) };
-            RECT sr = { tx, y + S(28), W - S(16) + ox, y + S(48) };
+            RECT nr = { tx, y + S(6), W - S(20) + ox, y + S(28) };
+            RECT sr = { tx, y + S(28), W - S(20) + ox, y + S(48) };
 
             {
                 ScopedSelectedObject so(mem.get(), g_fName);
@@ -1136,11 +1213,17 @@ static void DoPaint(HWND h) {
             }
         }
 
-        for (int i = 0; i < headerCount; i++) {
-            ScopedSelectedObject so(mem.get(), g_fHeader);
-            ScopedTextColor tc(mem.get(), RGB(240, 248, 240));
-            RECT hr = { L.mx + ox, headers[i].y, W - S(16) + ox, headers[i].y + S(20) };
-            DrawTextW(mem.get(), headers[i].text, -1, &hr, DT_SINGLELINE | DT_NOPREFIX);
+        // Vertical scrollbar
+        {
+            RECT track = ScrollTrackRect();
+            RECT thumb = ScrollThumbRect();
+            if (thumb.bottom > thumb.top) {
+                GdiObj<HBRUSH> tb(CreateSolidBrush(Blend(pane, 12)));
+                FillRect(mem.get(), &track, tb.get());
+                int thumbShade = g_scrollDragging ? 65 : (g_hover == -2 ? 50 : 38);
+                GdiObj<HBRUSH> thb(CreateSolidBrush(Blend(pane, thumbShade)));
+                FillRect(mem.get(), &thumb, thb.get());
+            }
         }
     }
 
@@ -1193,24 +1276,280 @@ static void Tick() {
     RedrawWindow(g_wnd, NULL, NULL, RDW_INVALIDATE | RDW_NOERASE | RDW_UPDATENOW);
 }
 
-// ---------------------------------------------------------------- context menu
-//
-// The context menu is deliberately kept open until either the search panel
-// is closed or an entry is launched. There is no fixed timeout: the menu
-// blocks the UI thread inside TrackPopupMenu until the user makes a choice
-// or dismisses it by other means (Esc, click outside the menu itself).
-// Additionally, the menu is explicitly dismissed when the search panel is
-// closed or when a result is launched, so it cannot outlive the panel.
-static HMENU g_contextMenu = NULL;
-static bool  g_contextMenuActive = false;
+// ---------------------------------------------------------------- Metro context menu
+static int MenuItemHeight() { return S(34); }
+static int MenuPadY()       { return S(6);  }
+static int MenuPadX()       { return S(14); }
+static int MenuWidth()      { return S(220); }
 
+static void MenuPaint(HWND h) {
+    PAINTSTRUCT ps;
+    HDC dc = BeginPaint(h, &ps);
+    RECT rc; GetClientRect(h, &rc);
+
+    GdiObj<HBRUSH> bg(CreateSolidBrush(RGB(255, 255, 255)));
+    FillRect(dc, &rc, bg.get());
+
+    GdiObj<HPEN> border(CreatePen(PS_SOLID, 1, RGB(200, 200, 200)));
+    HGDIOBJ oldPen = SelectObject(dc, border.get());
+    HGDIOBJ oldBrush = SelectObject(dc, GetStockObject(NULL_BRUSH));
+    Rectangle(dc, rc.left, rc.top, rc.right, rc.bottom);
+    SelectObject(dc, oldBrush);
+    SelectObject(dc, oldPen);
+
+    HFONT font = CreateFontW(-S(15), 0, 0, 0, FW_NORMAL, 0, 0, 0,
+                             DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+    HGDIOBJ oldFont = SelectObject(dc, font);
+    SetBkMode(dc, TRANSPARENT);
+
+    int itemH = MenuItemHeight();
+    int padY = MenuPadY();
+    int padX = MenuPadX();
+
+    COLORREF accent = SystemAccentColor();
+
+    for (size_t i = 0; i < g_menuItems.size(); ++i) {
+        RECT r = { 1, padY + (int)i * itemH, rc.right - 1, padY + (int)(i + 1) * itemH };
+        bool isSep = g_menuIsSeparator[i];
+        bool hover = ((int)i == g_menuHover) && !isSep;
+
+        if (isSep) {
+            GdiObj<HBRUSH> sep(CreateSolidBrush(RGB(224, 224, 224)));
+            RECT sr = { padX, r.top + itemH / 2 - 1, rc.right - padX, r.top + itemH / 2 };
+            FillRect(dc, &sr, sep.get());
+            continue;
+        }
+
+        if (hover) {
+            GdiObj<HBRUSH> hb(CreateSolidBrush(accent));
+            FillRect(dc, &r, hb.get());
+            SetTextColor(dc, RGB(255, 255, 255));
+        } else {
+            SetTextColor(dc, RGB(32, 32, 32));
+        }
+
+        RECT tr = r;
+        tr.left += padX;
+        DrawTextW(dc, g_menuItems[i].c_str(), -1, &tr,
+                  DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+    }
+
+    SelectObject(dc, oldFont);
+    DeleteObject(font);
+    EndPaint(h, &ps);
+}
+
+static LRESULT CALLBACK MenuWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
+    switch (msg) {
+    case WM_PAINT:
+        MenuPaint(h);
+        return 0;
+    case WM_ERASEBKGND:
+        return 1;
+    case WM_MOUSEMOVE: {
+        int y = (short)HIWORD(lp);
+        int itemH = MenuItemHeight();
+        int padY = MenuPadY();
+        int idx = (y - padY) / itemH;
+        if (idx < 0 || idx >= (int)g_menuItems.size() || g_menuIsSeparator[idx])
+            idx = -1;
+        if (idx != g_menuHover) {
+            g_menuHover = idx;
+            InvalidateRect(h, NULL, FALSE);
+        }
+        return 0;
+    }
+    case WM_LBUTTONDOWN: {
+        int y = (short)HIWORD(lp);
+        int itemH = MenuItemHeight();
+        int padY = MenuPadY();
+        int idx = (y - padY) / itemH;
+        if (idx >= 0 && idx < (int)g_menuItems.size() && !g_menuIsSeparator[idx]) {
+            g_menuResult = idx + 1;
+        }
+        PostMessageW(h, WM_CLOSE, 0, 0);
+        return 0;
+    }
+    case WM_RBUTTONDOWN:
+        PostMessageW(h, WM_CLOSE, 0, 0);
+        return 0;
+    case WM_KEYDOWN:
+        if (wp == VK_ESCAPE) {
+            g_menuResult = 0;
+            PostMessageW(h, WM_CLOSE, 0, 0);
+        }
+        return 0;
+    case WM_KILLFOCUS:
+        PostMessageW(h, WM_CLOSE, 0, 0);
+        return 0;
+    case WM_CLOSE:
+        DestroyWindow(h);
+        return 0;
+    case WM_DESTROY:
+        if (g_menuWnd == h) g_menuWnd = NULL;
+        return 0;
+    }
+    return DefWindowProcW(h, msg, wp, lp);
+}
+
+static bool EnsureMenuClass() {
+    if (g_menuClassRegistered) return true;
+
+    WNDCLASSW wc = {};
+    wc.style = CS_DROPSHADOW;
+    wc.lpfnWndProc = MenuWndProc;
+    wc.hInstance = (HINSTANCE)&__ImageBase;
+    wc.hCursor = LoadCursorW(NULL, IDC_ARROW);
+    wc.lpszClassName = kMenuClass;
+    if (!RegisterClassW(&wc)) {
+        Wh_Log(L"[Menu] RegisterClassW failed, err=%u", (unsigned)GetLastError());
+        return false;
+    }
+
+    g_menuClassRegistered = true;
+    return true;
+}
+
+static void UnregisterMenuClass() {
+    if (g_menuClassRegistered) {
+        UnregisterClassW(kMenuClass, (HINSTANCE)&__ImageBase);
+        g_menuClassRegistered = false;
+    }
+}
+
+static void ShowContextMenu(HWND h, int x, int y, int r) {
+    if (r < 0 || r >= (int)g_res.size()) return;
+    std::wstring path;
+    { SrwGuard g(&g_lock, false); int idx = g_res[r]; if (idx >= 0 && idx < (int)g_items.size()) path = g_items[idx].path; }
+    if (path.empty()) return;
+
+    if (g_menuWnd) { DestroyWindow(g_menuWnd); g_menuWnd = NULL; }
+
+    g_menuItems.clear();
+    g_menuIsSeparator.clear();
+
+    // "open" is the documented Shell verb for executable and document files.
+    // ShellExecuteExW resolves the user's registered file association, so the
+    // same command opens .exe files and associated documents such as .txt.
+    g_menuItems.push_back(T(26)); g_menuIsSeparator.push_back(false);
+    g_menuItems.push_back(T(16)); g_menuIsSeparator.push_back(false);
+    g_menuItems.push_back(T(17)); g_menuIsSeparator.push_back(false);
+    g_menuItems.push_back(T(18)); g_menuIsSeparator.push_back(false);
+    g_menuItems.push_back(L"");   g_menuIsSeparator.push_back(true);
+    g_menuItems.push_back(T(22)); g_menuIsSeparator.push_back(false);
+    g_menuItems.push_back(T(23)); g_menuIsSeparator.push_back(false);
+    g_menuItems.push_back(T(24)); g_menuIsSeparator.push_back(false);
+    g_menuItems.push_back(T(25)); g_menuIsSeparator.push_back(false);
+
+    if (!EnsureMenuClass()) return;
+
+    int itemH = MenuItemHeight();
+    int padY = MenuPadY();
+    int w = MenuWidth();
+    int hgt = padY * 2 + (int)g_menuItems.size() * itemH;
+
+    int sw = GetSystemMetrics(SM_CXSCREEN);
+    int sh = GetSystemMetrics(SM_CYSCREEN);
+    if (x + w > sw) x = sw - w;
+    if (y + hgt > sh) y = sh - hgt;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+
+    g_inMenu = true;
+    g_menuHover = -1;
+    g_menuResult = 0;
+
+    HWND menu = CreateWindowExW(
+        WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+        kMenuClass, L"", WS_POPUP,
+        x, y, w, hgt,
+        h, NULL, (HINSTANCE)&__ImageBase, NULL);
+
+    if (!menu) {
+        Wh_Log(L"[Menu] CreateWindowExW failed, err=%u", (unsigned)GetLastError());
+        g_inMenu = false;
+        return;
+    }
+
+    g_menuWnd = menu;
+    ShowWindow(menu, SW_SHOW);
+    SetForegroundWindow(menu);
+    SetFocus(menu);
+
+    MSG msg;
+    while (g_menuWnd && GetMessageW(&msg, NULL, 0, 0)) {
+        if (msg.message == WM_QUIT) {
+            PostQuitMessage((int)msg.wParam);
+            break;
+        }
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    g_inMenu = false;
+    int cmd = g_menuResult;
+    g_menuResult = 0;
+
+    if (cmd >= 1 && cmd <= (int)g_menuItems.size()) {
+        // g_menuResult is the selected vector index plus one; keep that index
+        // intact so separators cannot shift the command selected by the user.
+        int vecIdx = cmd - 1;
+        if (g_menuIsSeparator[vecIdx]) vecIdx = -1;
+
+        if (vecIdx == 0) {
+            // Use the same documented Shell "open" verb as keyboard/left-click
+            // activation. This lets the Shell select the user's associated app.
+            LaunchPath(path);
+            ClosePane();
+        } else if (vecIdx == 1) {
+            wchar_t args[MAX_PATH + 16];
+            StringCchPrintfW(args, MAX_PATH + 16, L"/select,\"%s\"", path.c_str());
+            ShellExecuteW(NULL, L"open", L"explorer.exe", args, NULL, SW_SHOWNORMAL);
+        } else if (vecIdx == 2) {
+            SHELLEXECUTEINFOW sei = { sizeof(sei) };
+            sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+            sei.lpVerb = L"runas";
+            sei.lpFile = path.c_str();
+            sei.nShow = SW_SHOWNORMAL;
+            ShellExecuteExW(&sei);
+        } else if (vecIdx == 3) {
+            if (OpenClipboard(h)) {
+                EmptyClipboard();
+                size_t len = (path.size() + 1) * sizeof(wchar_t);
+                HGLOBAL g = GlobalAlloc(GMEM_MOVEABLE, len);
+                if (g) {
+                    void* locked = GlobalLock(g);
+                    if (locked) {
+                        memcpy(locked, path.c_str(), len);
+                        GlobalUnlock(g);
+                        if (!SetClipboardData(CF_UNICODETEXT, g)) GlobalFree(g);
+                    } else {
+                        GlobalFree(g);
+                    }
+                }
+                CloseClipboard();
+            }
+        } else if (vecIdx == 5) {
+            g_sortMode = SORT_NAME; Refilter(); InvalidateRect(h, NULL, FALSE);
+        } else if (vecIdx == 6) {
+            g_sortMode = SORT_DATE; Refilter(); InvalidateRect(h, NULL, FALSE);
+        } else if (vecIdx == 7) {
+            g_sortMode = SORT_MOST_USED; Refilter(); InvalidateRect(h, NULL, FALSE);
+        } else if (vecIdx == 8) {
+            g_sortMode = SORT_CATEGORY; Refilter(); InvalidateRect(h, NULL, FALSE);
+        }
+    }
+
+    if (g_wnd) {
+        SetForegroundWindow(g_wnd);
+        SetFocus(g_wnd);
+    }
+}
+
+// ---------------------------------------------------------------- dismiss/close
 static void DismissContextMenu() {
-    if (g_contextMenuActive && g_contextMenu) {
-        // Ask the menu to dismiss itself. The UI thread is currently blocked
-        // inside TrackPopupMenu for that menu; posting WM_CANCELMODE causes
-        // TrackPopupMenu to return, which lets us clean up.
-        if (g_wnd) PostMessageW(g_wnd, WM_CANCELMODE, 0, 0);
-        g_contextMenuActive = false;
+    if (g_menuWnd) {
+        PostMessageW(g_menuWnd, WM_CLOSE, 0, 0);
     }
 }
 
@@ -1221,10 +1560,6 @@ static void ClosePane() {
 }
 
 // ---------------------------------------------------------------- topmost enforcement
-// Re-raise the panel when needed. The 8102 Charms mod re-raises every so often
-// to survive other topmost windows popping on top; the search panel does the
-// same but stops early and falls back to plain topmost if it keeps getting
-// covered (which normally means a UIAccess window is deliberately on top).
 static int  g_raiseCount = 0;
 static DWORD g_raiseSince = 0;
 static bool g_gaveUp = false;
@@ -1238,13 +1573,11 @@ static void EnforceTopmost() {
         return;
     }
 
-    // Sample the center of the panel to check whether something covers it.
     RECT r; GetWindowRect(g_wnd, &r);
     POINT c = { (r.left + r.right) / 2, (r.top + r.bottom) / 2 };
     bool covered = (WindowFromPoint(c) != g_wnd);
 
     if (!covered) {
-        // Restore the band when we are not covered any more.
         SetWindowPos(g_wnd, HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW);
         g_raiseCount = 0;
@@ -1301,12 +1634,16 @@ static void OpenPane() {
         g_w = S(346);
         g_h = r.bottom - r.top;
 
+        // Invalidate the Layout cache since the panel dimensions changed.
+        g_cachedLayW = -1;
+
         SetWindowPos(g_wnd, HWND_TOPMOST, r.right - g_w, r.top, g_w, g_h,
                      SWP_NOACTIVATE | SWP_NOREDRAW);
 
         g_query.clear(); g_caret = true; g_selectAll = false; g_inMenu = false;
         g_dropdownOpen = false; g_scope = SCOPE_ALL;
         g_raiseCount = 0; g_raiseSince = 0; g_gaveUp = false;
+        g_scrollDragging = false;
         Refilter();
         if (!g_scanning && GetTickCount() - g_lastScan > 5 * 60 * 1000) StartScan();
         g_paneOff = g_w; g_contOff = S(160);
@@ -1430,468 +1767,6 @@ static std::wstring ClipText(HWND h) {
     return out;
 }
 
-static void ShowContextMenu(HWND h, int x, int y, int r) {
-    if (r < 0 || r >= (int)g_res.size()) return;
-    std::wstring path;
-    { SrwGuard g(&g_lock, false); int idx = g_res[r]; if (idx >= 0 && idx < (int)g_items.size()) path = g_items[idx].path; }
-    if (path.empty()) return;
-
-    g_inMenu = true;
-    SetForegroundWindow(h);
-
-    HMENU m = CreatePopupMenu();
-    if (!m) { g_inMenu = false; return; }
-    AppendMenuW(m, MF_STRING, 1, T(16));
-    AppendMenuW(m, MF_STRING, 2, T(17));
-    AppendMenuW(m, MF_STRING, 3, T(18));
-
-    g_contextMenu = m;
-    g_contextMenuActive = true;
-
-    int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTBUTTON, x, y, 0, h, NULL);
-
-    g_contextMenuActive = false;
-    g_contextMenu = NULL;
-    DestroyMenu(m);
-
-    g_inMenu = false;
-    PostMessageW(h, WM_NULL, 0, 0);
-
-    if (cmd == 1) {
-        wchar_t args[MAX_PATH + 16];
-        StringCchPrintfW(args, MAX_PATH + 16, L"/select,\"%s\"", path.c_str());
-        ShellExecuteW(NULL, L"open", L"explorer.exe", args, NULL, SW_SHOWNORMAL);
-    } else if (cmd == 2) {
-        SHELLEXECUTEINFOW sei = { sizeof(sei) };
-        sei.fMask = SEE_MASK_NOCLOSEPROCESS;
-        sei.lpVerb = L"runas";
-        sei.lpFile = path.c_str();
-        sei.nShow = SW_SHOWNORMAL;
-        ShellExecuteExW(&sei);
-    } else if (cmd == 3) {
-        if (OpenClipboard(h)) {
-            EmptyClipboard();
-            size_t len = (path.size() + 1) * sizeof(wchar_t);
-            HGLOBAL g = GlobalAlloc(GMEM_MOVEABLE, len);
-            if (g) {
-                void* locked = GlobalLock(g);
-                if (locked) {
-                    memcpy(locked, path.c_str(), len);
-                    GlobalUnlock(g);
-                    if (!SetClipboardData(CF_UNICODETEXT, g)) GlobalFree(g);
-                } else {
-                    GlobalFree(g);
-                }
-            }
-            CloseClipboard();
-        }
-    }
-}
-
-// ---------------------------------------------------------------- registry virtualization (WSearch)
-//
-// We never write to the real registry. Instead we hook the registry
-// APIs and, whenever a caller opens or reads the WSearch service key,
-// we hand back a *virtual* handle that reports Start=4 (disabled).
-//
-// The real key is still opened underneath (so that other values
-// remain accessible) but the caller never sees the real handle: it
-// sees a virtual one. When the caller closes the virtual handle we
-// also close the real one and forget the mapping.
-//
-// Writing Start through a virtual handle is a silent no-op, so nothing
-// can "repair" the value while the mod is loaded.
-//
-// On unload, every still-open virtual handle is closed along with its
-// real counterpart. Nothing has to be restored because nothing was
-// ever changed.
-
-static const wchar_t* kWSearchKeyPath   = L"SYSTEM\\CurrentControlSet\\Services\\WSearch";
-static const wchar_t* kWSearchKeySuffix = L"\\Services\\WSearch";
-static const wchar_t* kWSearchValueName = L"Start";
-static const DWORD    kWSearchDisabled  = 4; // SERVICE_DISABLED
-
-static CRITICAL_SECTION g_vkeyLock;
-static bool g_vkeyLockInit = false;
-static std::unordered_map<HKEY, HKEY> g_virtualToReal;
-static std::unordered_map<HKEY, HKEY> g_realToVirtual;
-static HKEY g_nextVirtualKey = (HKEY)0xDEAD0001;
-
-static bool IsWSearchKeyPath(const wchar_t* path) {
-    if (!path) return false;
-    size_t len = wcslen(path);
-    size_t suf = wcslen(kWSearchKeySuffix);
-    if (len >= suf) {
-        if (_wcsicmp(path + len - suf, kWSearchKeySuffix) == 0) return true;
-    }
-    if (_wcsicmp(path, kWSearchKeyPath) == 0) return true;
-    return false;
-}
-
-static bool IsWSearchValueName(const wchar_t* name) {
-    return name && _wcsicmp(name, kWSearchValueName) == 0;
-}
-
-static HKEY AllocateVirtualKey(HKEY realKey) {
-    EnterCriticalSection(&g_vkeyLock);
-    HKEY vk = g_nextVirtualKey++;
-    g_virtualToReal[vk] = realKey;
-    g_realToVirtual[realKey] = vk;
-    LeaveCriticalSection(&g_vkeyLock);
-    return vk;
-}
-
-static HKEY GetRealFromVirtual(HKEY vk) {
-    EnterCriticalSection(&g_vkeyLock);
-    auto it = g_virtualToReal.find(vk);
-    HKEY result = (it != g_virtualToReal.end()) ? it->second : NULL;
-    LeaveCriticalSection(&g_vkeyLock);
-    return result;
-}
-
-static bool IsVirtualKey(HKEY k) {
-    EnterCriticalSection(&g_vkeyLock);
-    bool found = g_virtualToReal.find(k) != g_virtualToReal.end();
-    LeaveCriticalSection(&g_vkeyLock);
-    return found;
-}
-
-// ---------------------------------------------------------------- registry hook typedefs
-using RegOpenKeyExW_t    = LSTATUS (WINAPI*)(HKEY, LPCWSTR, DWORD, REGSAM, PHKEY);
-using RegOpenKeyExA_t    = LSTATUS (WINAPI*)(HKEY, LPCSTR,  DWORD, REGSAM, PHKEY);
-using RegQueryValueExW_t = LSTATUS (WINAPI*)(HKEY, LPCWSTR, LPDWORD, LPDWORD, LPBYTE, LPDWORD);
-using RegQueryValueExA_t = LSTATUS (WINAPI*)(HKEY, LPCSTR,  LPDWORD, LPDWORD, LPBYTE, LPDWORD);
-using RegSetValueExW_t   = LSTATUS (WINAPI*)(HKEY, LPCWSTR, DWORD, DWORD, const BYTE*, DWORD);
-using RegSetValueExA_t   = LSTATUS (WINAPI*)(HKEY, LPCSTR,  DWORD, DWORD, const BYTE*, DWORD);
-using RegCloseKey_t      = LSTATUS (WINAPI*)(HKEY);
-using RegEnumValueW_t    = LSTATUS (WINAPI*)(HKEY, DWORD, LPWSTR, LPDWORD, LPDWORD, LPDWORD, LPBYTE, LPDWORD);
-using RegEnumValueA_t    = LSTATUS (WINAPI*)(HKEY, DWORD, LPSTR,  LPDWORD, LPDWORD, LPDWORD, LPBYTE, LPDWORD);
-using RegCreateKeyExW_t  = LSTATUS (WINAPI*)(HKEY, LPCWSTR, DWORD, LPWSTR, DWORD, REGSAM, LPSECURITY_ATTRIBUTES, PHKEY, LPDWORD);
-using RegCreateKeyExA_t  = LSTATUS (WINAPI*)(HKEY, LPCSTR,  DWORD, LPSTR,  DWORD, REGSAM, LPSECURITY_ATTRIBUTES, PHKEY, LPDWORD);
-
-static RegOpenKeyExW_t    RegOpenKeyExW_Original    = nullptr;
-static RegOpenKeyExA_t    RegOpenKeyExA_Original    = nullptr;
-static RegQueryValueExW_t RegQueryValueExW_Original = nullptr;
-static RegQueryValueExA_t RegQueryValueExA_Original = nullptr;
-static RegSetValueExW_t   RegSetValueExW_Original   = nullptr;
-static RegSetValueExA_t   RegSetValueExA_Original   = nullptr;
-static RegCloseKey_t      RegCloseKey_Original      = nullptr;
-static RegEnumValueW_t    RegEnumValueW_Original    = nullptr;
-static RegEnumValueA_t    RegEnumValueA_Original    = nullptr;
-static RegCreateKeyExW_t  RegCreateKeyExW_Original  = nullptr;
-static RegCreateKeyExA_t  RegCreateKeyExA_Original  = nullptr;
-
-// ---------------------------------------------------------------- registry hook implementations
-static LSTATUS WINAPI RegOpenKeyExW_Hook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions,
-                                          REGSAM samDesired, PHKEY phkResult) {
-    LSTATUS result = RegOpenKeyExW_Original(hKey, lpSubKey, ulOptions, samDesired, phkResult);
-    if (result == ERROR_SUCCESS && phkResult && *phkResult && g_blockNativeSearch &&
-        IsWSearchKeyPath(lpSubKey)) {
-        HKEY realKey = *phkResult;
-        HKEY vk = AllocateVirtualKey(realKey);
-        *phkResult = vk;
-        if (g_debug) Wh_Log(L"[RegVirt] RegOpenKeyExW WSearch -> virtual %p (real %p)", vk, realKey);
-    }
-    return result;
-}
-
-static LSTATUS WINAPI RegOpenKeyExA_Hook(HKEY hKey, LPCSTR lpSubKey, DWORD ulOptions,
-                                          REGSAM samDesired, PHKEY phkResult) {
-    LSTATUS result = RegOpenKeyExA_Original(hKey, lpSubKey, ulOptions, samDesired, phkResult);
-    if (result == ERROR_SUCCESS && phkResult && *phkResult && lpSubKey && g_blockNativeSearch) {
-        wchar_t wide[512] = {};
-        MultiByteToWideChar(CP_ACP, 0, lpSubKey, -1, wide, ARRAYSIZE(wide));
-        if (IsWSearchKeyPath(wide)) {
-            HKEY realKey = *phkResult;
-            HKEY vk = AllocateVirtualKey(realKey);
-            *phkResult = vk;
-            if (g_debug) Wh_Log(L"[RegVirt] RegOpenKeyExA WSearch -> virtual %p (real %p)", vk, realKey);
-        }
-    }
-    return result;
-}
-
-static LSTATUS WINAPI RegQueryValueExW_Hook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved,
-                                             LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData) {
-    if (g_blockNativeSearch && IsVirtualKey(hKey) && IsWSearchValueName(lpValueName)) {
-        if (lpType) *lpType = REG_DWORD;
-        if (lpData && lpcbData) {
-            if (*lpcbData >= sizeof(DWORD)) {
-                *(DWORD*)lpData = kWSearchDisabled;
-                *lpcbData = sizeof(DWORD);
-                if (g_debug) Wh_Log(L"[RegVirt] RegQueryValueExW Start -> virtualized to 4");
-                return ERROR_SUCCESS;
-            } else {
-                *lpcbData = sizeof(DWORD);
-                return ERROR_MORE_DATA;
-            }
-        }
-        return ERROR_SUCCESS;
-    }
-    return RegQueryValueExW_Original(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
-}
-
-static LSTATUS WINAPI RegQueryValueExA_Hook(HKEY hKey, LPCSTR lpValueName, LPDWORD lpReserved,
-                                             LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData) {
-    if (g_blockNativeSearch && IsVirtualKey(hKey) && lpValueName &&
-        _stricmp(lpValueName, "Start") == 0) {
-        if (lpType) *lpType = REG_DWORD;
-        if (lpData && lpcbData) {
-            if (*lpcbData >= sizeof(DWORD)) {
-                *(DWORD*)lpData = kWSearchDisabled;
-                *lpcbData = sizeof(DWORD);
-                if (g_debug) Wh_Log(L"[RegVirt] RegQueryValueExA Start -> virtualized to 4");
-                return ERROR_SUCCESS;
-            } else {
-                *lpcbData = sizeof(DWORD);
-                return ERROR_MORE_DATA;
-            }
-        }
-        return ERROR_SUCCESS;
-    }
-    return RegQueryValueExA_Original(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
-}
-
-static LSTATUS WINAPI RegSetValueExW_Hook(HKEY hKey, LPCWSTR lpValueName, DWORD Reserved,
-                                           DWORD dwType, const BYTE* lpData, DWORD cbData) {
-    if (g_blockNativeSearch && IsVirtualKey(hKey) && IsWSearchValueName(lpValueName)) {
-        if (g_debug) Wh_Log(L"[RegVirt] RegSetValueExW Start suppressed on virtual handle");
-        return ERROR_SUCCESS;
-    }
-    if (IsVirtualKey(hKey)) {
-        HKEY real = GetRealFromVirtual(hKey);
-        if (real) return RegSetValueExW_Original(real, lpValueName, Reserved, dwType, lpData, cbData);
-    }
-    return RegSetValueExW_Original(hKey, lpValueName, Reserved, dwType, lpData, cbData);
-}
-
-static LSTATUS WINAPI RegSetValueExA_Hook(HKEY hKey, LPCSTR lpValueName, DWORD Reserved,
-                                           DWORD dwType, const BYTE* lpData, DWORD cbData) {
-    if (g_blockNativeSearch && IsVirtualKey(hKey) && lpValueName &&
-        _stricmp(lpValueName, "Start") == 0) {
-        if (g_debug) Wh_Log(L"[RegVirt] RegSetValueExA Start suppressed on virtual handle");
-        return ERROR_SUCCESS;
-    }
-    if (IsVirtualKey(hKey)) {
-        HKEY real = GetRealFromVirtual(hKey);
-        if (real) return RegSetValueExA_Original(real, lpValueName, Reserved, dwType, lpData, cbData);
-    }
-    return RegSetValueExA_Original(hKey, lpValueName, Reserved, dwType, lpData, cbData);
-}
-
-static LSTATUS WINAPI RegCloseKey_Hook(HKEY hKey) {
-    if (IsVirtualKey(hKey)) {
-        HKEY real = GetRealFromVirtual(hKey);
-        EnterCriticalSection(&g_vkeyLock);
-        g_virtualToReal.erase(hKey);
-        if (real) g_realToVirtual.erase(real);
-        LeaveCriticalSection(&g_vkeyLock);
-        if (real) {
-            if (g_debug) Wh_Log(L"[RegVirt] RegCloseKey virtual %p -> real %p", hKey, real);
-            return RegCloseKey_Original(real);
-        }
-        return ERROR_SUCCESS;
-    }
-    return RegCloseKey_Original(hKey);
-}
-
-static LSTATUS WINAPI RegEnumValueW_Hook(HKEY hKey, DWORD dwIndex, LPWSTR lpValueName,
-                                          LPDWORD lpcchValueName, LPDWORD lpReserved,
-                                          LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData) {
-    if (g_blockNativeSearch && IsVirtualKey(hKey)) {
-        HKEY real = GetRealFromVirtual(hKey);
-        if (real) {
-            LSTATUS result = RegEnumValueW_Original(real, dwIndex, lpValueName,
-                                                     lpcchValueName, lpReserved,
-                                                     lpType, lpData, lpcbData);
-            if (result == ERROR_SUCCESS && lpValueName && IsWSearchValueName(lpValueName)) {
-                if (lpType) *lpType = REG_DWORD;
-                if (lpData && lpcbData && *lpcbData >= sizeof(DWORD)) {
-                    *(DWORD*)lpData = kWSearchDisabled;
-                    *lpcbData = sizeof(DWORD);
-                }
-                if (g_debug) Wh_Log(L"[RegVirt] RegEnumValueW Start -> virtualized to 4");
-            }
-            return result;
-        }
-    }
-    return RegEnumValueW_Original(hKey, dwIndex, lpValueName, lpcchValueName,
-                                   lpReserved, lpType, lpData, lpcbData);
-}
-
-static LSTATUS WINAPI RegEnumValueA_Hook(HKEY hKey, DWORD dwIndex, LPSTR lpValueName,
-                                          LPDWORD lpcchValueName, LPDWORD lpReserved,
-                                          LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData) {
-    if (g_blockNativeSearch && IsVirtualKey(hKey)) {
-        HKEY real = GetRealFromVirtual(hKey);
-        if (real) {
-            LSTATUS result = RegEnumValueA_Original(real, dwIndex, lpValueName,
-                                                     lpcchValueName, lpReserved,
-                                                     lpType, lpData, lpcbData);
-            if (result == ERROR_SUCCESS && lpValueName &&
-                _stricmp(lpValueName, "Start") == 0) {
-                if (lpType) *lpType = REG_DWORD;
-                if (lpData && lpcbData && *lpcbData >= sizeof(DWORD)) {
-                    *(DWORD*)lpData = kWSearchDisabled;
-                    *lpcbData = sizeof(DWORD);
-                }
-            }
-            return result;
-        }
-    }
-    return RegEnumValueA_Original(hKey, dwIndex, lpValueName, lpcchValueName,
-                                   lpReserved, lpType, lpData, lpcbData);
-}
-
-static LSTATUS WINAPI RegCreateKeyExW_Hook(HKEY hKey, LPCWSTR lpSubKey, DWORD Reserved,
-                                            LPWSTR lpClass, DWORD dwOptions, REGSAM samDesired,
-                                            LPSECURITY_ATTRIBUTES lpSecurityAttributes,
-                                            PHKEY phkResult, LPDWORD lpdwDisposition) {
-    LSTATUS result = RegCreateKeyExW_Original(hKey, lpSubKey, Reserved, lpClass, dwOptions,
-                                               samDesired, lpSecurityAttributes,
-                                               phkResult, lpdwDisposition);
-    if (result == ERROR_SUCCESS && phkResult && *phkResult && g_blockNativeSearch &&
-        IsWSearchKeyPath(lpSubKey)) {
-        HKEY realKey = *phkResult;
-        HKEY vk = AllocateVirtualKey(realKey);
-        *phkResult = vk;
-        if (g_debug) Wh_Log(L"[RegVirt] RegCreateKeyExW WSearch -> virtual %p (real %p)", vk, realKey);
-    }
-    return result;
-}
-
-static LSTATUS WINAPI RegCreateKeyExA_Hook(HKEY hKey, LPCSTR lpSubKey, DWORD Reserved,
-                                            LPSTR lpClass, DWORD dwOptions, REGSAM samDesired,
-                                            LPSECURITY_ATTRIBUTES lpSecurityAttributes,
-                                            PHKEY phkResult, LPDWORD lpdwDisposition) {
-    LSTATUS result = RegCreateKeyExA_Original(hKey, lpSubKey, Reserved, lpClass, dwOptions,
-                                               samDesired, lpSecurityAttributes,
-                                               phkResult, lpdwDisposition);
-    if (result == ERROR_SUCCESS && phkResult && *phkResult && lpSubKey && g_blockNativeSearch) {
-        wchar_t wide[512] = {};
-        MultiByteToWideChar(CP_ACP, 0, lpSubKey, -1, wide, ARRAYSIZE(wide));
-        if (IsWSearchKeyPath(wide)) {
-            HKEY realKey = *phkResult;
-            HKEY vk = AllocateVirtualKey(realKey);
-            *phkResult = vk;
-            if (g_debug) Wh_Log(L"[RegVirt] RegCreateKeyExA WSearch -> virtual %p (real %p)", vk, realKey);
-        }
-    }
-    return result;
-}
-
-// ---------------------------------------------------------------- WSearch service stop
-static void StopWSearchServiceIfRunning() {
-    if (!g_stopWSearchService) return;
-
-    SC_HANDLE hSCM = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
-    if (!hSCM) {
-        Wh_Log(L"[Svc] OpenSCManager failed (err=%lu)", GetLastError());
-        return;
-    }
-    SC_HANDLE hService = OpenServiceW(hSCM, L"WSearch", SERVICE_STOP | SERVICE_QUERY_STATUS);
-    if (!hService) {
-        Wh_Log(L"[Svc] OpenService(WSearch) failed (err=%lu)", GetLastError());
-        CloseServiceHandle(hSCM);
-        return;
-    }
-    SERVICE_STATUS status = {};
-    BOOL ok = ControlService(hService, SERVICE_CONTROL_STOP, &status);
-    DWORD err = GetLastError();
-    CloseServiceHandle(hService);
-    CloseServiceHandle(hSCM);
-
-    if (ok) {
-        Wh_Log(L"[Svc] WSearch stop requested");
-    } else if (err == ERROR_SERVICE_NOT_ACTIVE) {
-        Wh_Log(L"[Svc] WSearch was not running");
-    } else {
-        Wh_Log(L"[Svc] ControlService(STOP) failed (err=%lu)", err);
-    }
-}
-
-// ---------------------------------------------------------------- ShellExecuteExW hook
-using ShellExecuteExW_t = BOOL (WINAPI*)(SHELLEXECUTEINFOW*);
-static ShellExecuteExW_t ShellExecuteExW_Original = nullptr;
-
-static BOOL WINAPI ShellExecuteExW_Hook(SHELLEXECUTEINFOW* sei) {
-    if (sei && sei->lpFile && g_blockNativeSearch) {
-        const wchar_t* f = sei->lpFile;
-        if (_wcsnicmp(f, L"search-ms:", 10) == 0 ||
-            _wcsnicmp(f, L"ms-search:", 10) == 0) {
-            Wh_Log(L"[Block/Shell] native search URI: %s", f);
-            return FALSE;
-        }
-        const wchar_t* base = wcsrchr(f, L'\\');
-        base = base ? base + 1 : f;
-        if (_wcsicmp(base, L"SearchHost.exe") == 0 ||
-            _wcsicmp(base, L"SearchUI.exe") == 0 ||
-            _wcsicmp(base, L"SearchApp.exe") == 0) {
-            Wh_Log(L"[Block/Shell] native search executable: %s", f);
-            return FALSE;
-        }
-    }
-    if (!ShellExecuteExW_Original) return FALSE;
-    return ShellExecuteExW_Original(sei);
-}
-
-// ---------------------------------------------------------------- CreateProcessInternalW hook
-using CreateProcessInternalW_t = BOOL (WINAPI*)(
-    HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
-    LPSECURITY_ATTRIBUTES lpProcessAttributes, LPSECURITY_ATTRIBUTES lpThreadAttributes,
-    BOOL bInheritHandles, DWORD dwCreationFlags, LPVOID lpEnvironment,
-    LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo,
-    LPPROCESS_INFORMATION lpProcessInformation, PHANDLE hRestrictedUserToken);
-
-static CreateProcessInternalW_t CreateProcessInternalW_Original = nullptr;
-
-static bool LooksLikeNativeSearchLaunch(LPCWSTR appName, LPCWSTR cmdLine) {
-    if (appName) {
-        const wchar_t* base = wcsrchr(appName, L'\\');
-        base = base ? base + 1 : appName;
-        if (_wcsicmp(base, L"SearchHost.exe") == 0) return true;
-        if (_wcsicmp(base, L"SearchApp.exe") == 0) return true;
-        if (_wcsicmp(base, L"SearchUI.exe") == 0) return true;
-    }
-    if (cmdLine) {
-        if (StrStrIW(cmdLine, L"SearchHost.exe")) return true;
-        if (StrStrIW(cmdLine, L"SearchApp.exe")) return true;
-        if (StrStrIW(cmdLine, L"SearchUI.exe")) return true;
-        if (StrStrIW(cmdLine, L"--webview-exe-name=SearchHost.exe")) return true;
-        if (StrStrIW(cmdLine, L"--webview-exe-name=SearchApp.exe")) return true;
-    }
-    return false;
-}
-
-static BOOL WINAPI CreateProcessInternalW_Hook(
-    HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
-    LPSECURITY_ATTRIBUTES lpProcessAttributes, LPSECURITY_ATTRIBUTES lpThreadAttributes,
-    BOOL bInheritHandles, DWORD dwCreationFlags, LPVOID lpEnvironment,
-    LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo,
-    LPPROCESS_INFORMATION lpProcessInformation, PHANDLE hRestrictedUserToken)
-{
-    try {
-        if (g_blockNativeSearch && LooksLikeNativeSearchLaunch(lpApplicationName, lpCommandLine)) {
-            static RateLimitedLog log{L"native search process blocked", 10};
-            if (log.ShouldLog()) {
-                Wh_Log(L"[Block/Proc] blocked native search launch: app=%s cmd=%s",
-                       lpApplicationName ? lpApplicationName : L"(null)",
-                       lpCommandLine ? lpCommandLine : L"(null)");
-            }
-            SetLastError(ERROR_ACCESS_DENIED);
-            return FALSE;
-        }
-    } catch (...) {}
-    if (!CreateProcessInternalW_Original) {
-        SetLastError(ERROR_PROC_NOT_FOUND);
-        return FALSE;
-    }
-    return CreateProcessInternalW_Original(
-        hUserToken, lpApplicationName, lpCommandLine, lpProcessAttributes,
-        lpThreadAttributes, bInheritHandles, dwCreationFlags, lpEnvironment,
-        lpCurrentDirectory, lpStartupInfo, lpProcessInformation, hRestrictedUserToken);
-}
-
 // ---------------------------------------------------------------- window procedure
 static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     try {
@@ -1899,14 +1774,13 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_PAINT: DoPaint(h); return 0;
         case WM_ERASEBKGND: return 1;
         case WM_CANCELMODE:
-            // Forwarded to us by DismissContextMenu(): TrackPopupMenu is
-            // currently blocking on the UI thread, and WM_CANCELMODE makes
-            // it return. Nothing else to do here.
             return 0;
         case WM_TIMER:
             if (wp == 1) Tick();
             else if (wp == 2) { g_caret = !g_caret; if (IsWindowVisible(h)) InvalidateRect(h, NULL, FALSE); }
-            else if (wp == 3) { if (g_open) EnforceTopmost(); }
+            else if (wp == 3) {
+                if (g_open && !g_inMenu) EnforceTopmost();
+            }
             return 0;
         case WM_APP_TOGGLE:
             if (g_open) { DismissContextMenu(); ClosePane(); }
@@ -1947,7 +1821,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
             switch (wp) {
             case VK_ESCAPE:
-                if (g_contextMenuActive) { DismissContextMenu(); break; }
+                if (g_inMenu) { DismissContextMenu(); break; }
                 ClosePane(); break;
             case VK_BACK:
                 if (g_selectAll) { g_query.clear(); g_selectAll = false; Changed(); }
@@ -1965,6 +1839,18 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             case VK_DOWN: if (g_sel + 1 < (int)g_res.size()) { g_sel++; EnsureVisible(); InvalidateRect(h, NULL, FALSE); } break;
             case VK_HOME: g_sel = 0; EnsureVisible(); InvalidateRect(h, NULL, FALSE); break;
             case VK_END: g_sel = (int)g_res.size() - 1; EnsureVisible(); InvalidateRect(h, NULL, FALSE); break;
+            case VK_PRIOR: {
+                Lay L = Layout();
+                g_sel = std::max(0, g_sel - L.vis);
+                EnsureVisible(); InvalidateRect(h, NULL, FALSE);
+                break;
+            }
+            case VK_NEXT: {
+                Lay L = Layout();
+                g_sel = std::min((int)g_res.size() - 1, g_sel + L.vis);
+                EnsureVisible(); InvalidateRect(h, NULL, FALSE);
+                break;
+            }
             case 'V': if (ctrl) { g_query += ClipText(h); Changed(); } break;
             }
             return 0;
@@ -1982,10 +1868,32 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         }
         case WM_MOUSEMOVE: {
+            if (g_scrollDragging) {
+                RECT track = ScrollTrackRect();
+                RECT thumb = ScrollThumbRect();
+                int trackH = track.bottom - track.top;
+                int thumbH = thumb.bottom - thumb.top;
+                int total = (int)g_res.size();
+                int vis = Layout().vis;
+                int maxScroll = std::max(0, total - vis);
+                int travel = std::max(1, trackH - thumbH);
+                int y = (short)HIWORD(lp);
+                int delta = y - g_scrollDragY;
+                int newScroll = g_scrollDragScroll + delta * maxScroll / travel;
+                if (newScroll < 0) newScroll = 0;
+                if (newScroll > maxScroll) newScroll = maxScroll;
+                if (newScroll != g_scroll) { g_scroll = newScroll; InvalidateRect(h, NULL, FALSE); }
+                return 0;
+            }
+
             if (g_state != ST_IDLE) return 0;
-            TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, h, 0 };
+            TRACKMOUSEEVENT tme = { sizeof(TME_LEAVE), TME_LEAVE, h, 0 };
             TrackMouseEvent(&tme);
             int x = (short)LOWORD(lp), y = (short)HIWORD(lp);
+            if (InScrollbarRegion(x, y)) {
+                if (g_hover != -2) { g_hover = -2; InvalidateRect(h, NULL, FALSE); }
+                return 0;
+            }
             if (g_dropdownOpen) {
                 int idx = -1;
                 DropdownItemAt(x, y, &idx);
@@ -2002,6 +1910,15 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                 InvalidateRect(h, NULL, FALSE);
             }
             return 0;
+        case WM_LBUTTONUP: {
+            if (g_scrollDragging) {
+                g_scrollDragging = false;
+                ReleaseCapture();
+                InvalidateRect(h, NULL, FALSE);
+                return 0;
+            }
+            return 0;
+        }
         case WM_LBUTTONDOWN: {
             if (g_state != ST_IDLE || !g_open) return 0;
             DWORD now = GetTickCount();
@@ -2009,6 +1926,28 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             g_lastClick = now;
             int x = (short)LOWORD(lp), y = (short)HIWORD(lp);
             Lay L = Layout();
+
+            if (InScrollbarRegion(x, y)) {
+                RECT thumb = ScrollThumbRect();
+                int total = (int)g_res.size();
+                int vis = L.vis;
+                int maxScroll = std::max(0, total - vis);
+                if (thumb.bottom > thumb.top &&
+                    x >= thumb.left - S(7) && x < thumb.right &&
+                    y >= thumb.top && y < thumb.bottom) {
+                    g_scrollDragging = true;
+                    g_scrollDragY = y;
+                    g_scrollDragScroll = g_scroll;
+                    SetCapture(h);
+                } else if (y < thumb.top) {
+                    g_scroll = std::max(0, g_scroll - vis);
+                    InvalidateRect(h, NULL, FALSE);
+                } else if (y >= thumb.bottom) {
+                    g_scroll = std::min(maxScroll, g_scroll + vis);
+                    InvalidateRect(h, NULL, FALSE);
+                }
+                return 0;
+            }
 
             if (g_dropdownOpen) {
                 int idx = -1;
@@ -2033,6 +1972,14 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                 return 0;
             }
 
+            if (!g_query.empty() && x >= L.editR - L.btnW - S(24) && x < L.editR - L.btnW &&
+                y >= L.editY && y < L.editY + L.editH) {
+                g_query.clear();
+                g_selectAll = false;
+                Changed();
+                return 0;
+            }
+
             if (InEditBox(x, y)) {
                 g_selectAll = false;
                 InvalidateRect(h, NULL, FALSE);
@@ -2043,13 +1990,17 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         }
         case WM_RBUTTONUP: {
             if (g_state != ST_IDLE || !g_open) return 0;
-            int r = RowAt((short)HIWORD(lp));
+            int x = (short)LOWORD(lp);
+            int y = (short)HIWORD(lp);
+            if (InScrollbarRegion(x, y)) return 0;
+            int r = RowAt(y);
             if (r >= 0) { POINT pt; GetCursorPos(&pt); ShowContextMenu(h, pt.x, pt.y, r); }
             return 0;
         }
         case WM_DPICHANGED: {
             g_scale = HIWORD(wp) / 96.0;
             g_fontScale = 0;
+            g_cachedLayW = -1;   // invalidate Layout cache
             RECT* r = (RECT*)lp;
             SetWindowPos(h, NULL, r->left, r->top, r->right - r->left, r->bottom - r->top,
                          SWP_NOZORDER | SWP_NOACTIVATE);
@@ -2069,7 +2020,7 @@ static void MaskWinKey() {
     in[0].type = INPUT_KEYBOARD; in[0].ki.wVk = 0xE8; in[0].ki.dwExtraInfo = kMagic;
     in[1].type = INPUT_KEYBOARD; in[1].ki.wVk = 0xE8; in[1].ki.dwExtraInfo = kMagic;
     in[1].ki.dwFlags = KEYEVENTF_KEYUP;
-    SendInput(2, in, sizeof(INPUT));
+    SendInput(ARRAYSIZE(in), in, sizeof(INPUT));
 }
 
 static LRESULT CALLBACK KbProc(int code, WPARAM wp, LPARAM lp) {
@@ -2079,7 +2030,12 @@ static LRESULT CALLBACK KbProc(int code, WPARAM wp, LPARAM lp) {
             if (k->dwExtraInfo != kMagic) {
                 bool down = (wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN);
                 bool up = (wp == WM_KEYUP || wp == WM_SYSKEYUP);
-                if (up && g_swallowVk && k->vkCode == g_swallowVk) { g_swallowVk = 0; return 1; }
+                if (up && g_swallowVk && k->vkCode == g_swallowVk) {
+                    g_swallowVk = 0;
+                    return 1;
+                }
+                if (down && g_swallowVk && k->vkCode == g_swallowVk) return 1;
+
                 bool win = ((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) != 0;
                 bool other = (GetAsyncKeyState(VK_SHIFT) | GetAsyncKeyState(VK_CONTROL) |
                               GetAsyncKeyState(VK_MENU)) & 0x8000;
@@ -2087,10 +2043,15 @@ static LRESULT CALLBACK KbProc(int code, WPARAM wp, LPARAM lp) {
                     ((k->vkCode == 'S' && g_useWinS) || (k->vkCode == 'Q' && g_useWinQ))) {
                     DWORD now = GetTickCount();
                     if (now - g_lastHotkey < (DWORD)g_hotkeyCooldownMs) return 1;
+
                     g_lastHotkey = now;
                     g_swallowVk = k->vkCode;
                     MaskWinKey();
-                    if (g_wnd) PostMessageW(g_wnd, WM_APP_TOGGLE, 0, 0);
+
+                    // The panel belongs to the UI thread. Posting is deliberately the
+                    // only work performed here after recognizing the shortcut.
+                    HWND panel = g_wnd;
+                    if (panel) PostMessageW(panel, WM_APP_TOGGLE, 0, 0);
                     return 1;
                 }
             }
@@ -2101,176 +2062,270 @@ static LRESULT CALLBACK KbProc(int code, WPARAM wp, LPARAM lp) {
     return CallNextHookEx(g_hook, code, wp, lp);
 }
 
-// ---------------------------------------------------------------- mouse hook
-static LRESULT CALLBACK MouseProc(int code, WPARAM wp, LPARAM lp) {
-    try {
-        if (code == HC_ACTION && g_closeOnClickOutside && g_open && g_wnd && !g_inMenu &&
-            (wp == WM_LBUTTONDOWN || wp == WM_RBUTTONDOWN || wp == WM_MBUTTONDOWN)) {
-            const MSLLHOOKSTRUCT* m = (const MSLLHOOKSTRUCT*)lp;
-            if (m->dwExtraInfo != kMagic) {
-                DWORD now = GetTickCount();
-                if (now - g_lastClick >= (DWORD)g_clickCooldownMs) {
-                    RECT r;
-                    if (GetWindowRect(g_wnd, &r) && !PtInRect(&r, m->pt)) {
-                        g_lastClick = now;
-                        if (g_state == ST_IDLE) ClosePane();
-                    }
-                }
-            }
-        }
-    } catch (...) {}
-    return CallNextHookEx(g_mouseHook, code, wp, lp);
+static void SignalUiReady(bool started) {
+    InterlockedExchange(&g_uiStarted, started ? 1 : 0);
+    if (g_uiReady.get()) SetEvent(g_uiReady.get());
 }
+
+static void SignalKeyboardReady(bool started) {
+    InterlockedExchange(&g_keyboardStarted, started ? 1 : 0);
+    if (g_keyboardReady.get()) SetEvent(g_keyboardReady.get());
+}
+
+// This thread owns only the low-level keyboard hook and an otherwise empty
+// GetMessage loop. It never performs painting, scanning, shell execution, or
+// clipboard work, so Windows can keep delivering low-level callbacks promptly.
+static DWORD WINAPI KeyboardHookThread(LPVOID) {
+    MSG queued = {};
+    PeekMessageW(&queued, NULL, WM_USER, WM_USER, PM_NOREMOVE); // create the queue first
+
+    g_hook = SetWindowsHookExW(WH_KEYBOARD_LL, KbProc, (HINSTANCE)&__ImageBase, 0);
+    if (!g_hook) {
+        Wh_Log(L"[Hook] SetWindowsHookExW(WH_KEYBOARD_LL) failed, err=%u",
+               (unsigned)GetLastError());
+        SignalKeyboardReady(false);
+        return 0;
+    }
+
+    Wh_Log(L"[Hook] keyboard hook installed: %p", g_hook);
+    SignalKeyboardReady(true);
+
+    MSG msg;
+    int result = 0;
+    while ((result = GetMessageW(&msg, NULL, 0, 0)) > 0) {
+        // No window dispatch is needed on this thread. Retrieving messages is
+        // enough to service WH_KEYBOARD_LL callbacks and keeps this loop minimal.
+    }
+    if (result == -1)
+        Wh_Log(L"[Hook] GetMessageW failed, err=%u", (unsigned)GetLastError());
+
+    if (g_hook) {
+        UnhookWindowsHookEx(g_hook);
+        g_hook = NULL;
+    }
+    return 0;
+}
+
+class ScopedWindowClass {
+    HINSTANCE instance_;
+    const wchar_t* name_;
+    bool registered_ = false;
+public:
+    ScopedWindowClass(HINSTANCE instance, const wchar_t* name)
+        : instance_(instance), name_(name) {}
+    ~ScopedWindowClass() {
+        if (registered_) UnregisterClassW(name_, instance_);
+    }
+    bool Register(const WNDCLASSW& wc) {
+        registered_ = RegisterClassW(&wc) != 0;
+        return registered_;
+    }
+    ScopedWindowClass(const ScopedWindowClass&) = delete;
+    ScopedWindowClass& operator=(const ScopedWindowClass&) = delete;
+};
 
 // ---------------------------------------------------------------- UI thread
 static DWORD WINAPI UiThread(LPVOID) {
-    RunGuarded(L"the UI thread", [] {
+    // A queue exists before initialization can fail. This makes WM_QUIT reliable
+    // during an early unload and lets Wh_ModInit wait for the panel startup state.
+    MSG queued = {};
+    PeekMessageW(&queued, NULL, WM_USER, WM_USER, PM_NOREMOVE);
+
+    HINSTANCE hi = (HINSTANCE)&__ImageBase;
+    ScopedWindowClass panelClass(hi, kClass);
+    bool readySignaled = false;
+
+    try {
         SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         ScopedComApartment com(SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED)));
 
-        // Resolve CreateWindowInBand early so the panel is born in the right band.
         HMODULE user32 = GetModuleHandleW(L"user32.dll");
         if (user32)
             g_createInBand = (CreateWindowInBand_t)(void*)GetProcAddress(user32, "CreateWindowInBand");
         if (!g_createInBand)
             Wh_Log(L"[ZBand] CreateWindowInBand not available, using ordinary topmost windows");
 
-        g_hook = SetWindowsHookExW(WH_KEYBOARD_LL, KbProc, GetModuleHandleW(NULL), 0);
-        g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseProc, GetModuleHandleW(NULL), 0);
-        Wh_Log(L"[UI] hooks: kb=%p mouse=%p", g_hook, g_mouseHook);
-
-        HINSTANCE hi = (HINSTANCE)&__ImageBase;
         WNDCLASSW wc = {};
         wc.lpfnWndProc = WndProc;
         wc.hInstance = hi;
         wc.hCursor = LoadCursorW(NULL, IDC_ARROW);
         wc.lpszClassName = kClass;
-        RegisterClassW(&wc);
+        if (!panelClass.Register(wc)) {
+            Wh_Log(L"[UI] RegisterClassW failed, err=%u", (unsigned)GetLastError());
+            SignalUiReady(false);
+            readySignaled = true;
+            return 0;
+        }
+
         g_wnd = CreateOverlayWindow(kClass, 346, 600);
-        if (g_wnd) SetLayeredWindowAttributes(g_wnd, KEY, 255, LWA_COLORKEY);
         if (!g_wnd) {
             Wh_Log(L"[UI] could not create panel window, err=%u", (unsigned)GetLastError());
-            return;
+            SignalUiReady(false);
+            readySignaled = true;
+            return 0;
         }
+        SetLayeredWindowAttributes(g_wnd, KEY, 255, LWA_COLORKEY);
+
+        // Wh_ModInit waits for this signal before it enables the keyboard hook
+        // or returns. The window and message queue are both ready at this point.
+        SignalUiReady(true);
+        readySignaled = true;
 
         SetTimer(g_wnd, 3, 2000, NULL);
         StartScan();
 
-        MSG m;
-        while (GetMessageW(&m, NULL, 0, 0)) {
-            TranslateMessage(&m);
-            DispatchMessageW(&m);
+        MSG msg;
+        int result = 0;
+        while ((result = GetMessageW(&msg, NULL, 0, 0)) > 0) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
         }
+        if (result == -1)
+            Wh_Log(L"[UI] GetMessageW failed, err=%u", (unsigned)GetLastError());
+    } catch (...) {
+        Wh_Log(L"[UI] exception caught in UI thread");
+    }
 
-        if (g_hook) { UnhookWindowsHookEx(g_hook); g_hook = NULL; }
-        if (g_mouseHook) { UnhookWindowsHookEx(g_mouseHook); g_mouseHook = NULL; }
-        if (g_wnd) { DestroyWindow(g_wnd); g_wnd = NULL; }
-        for (auto& kv : g_icons) if (kv.second) DestroyIcon(kv.second);
-        g_icons.clear();
-        HFONT* f[] = { &g_fTitle, &g_fLabel, &g_fText, &g_fName, &g_fSub, &g_fGlyph, &g_fHeader };
-        for (auto p : f) if (*p) { DeleteObject(*p); *p = NULL; }
-        UnregisterClassW(kClass, hi);
-    });
+    if (!readySignaled) SignalUiReady(false);
+
+    if (g_menuWnd) {
+        DestroyWindow(g_menuWnd);
+        g_menuWnd = NULL;
+    }
+    g_inMenu = false;
+    if (g_wnd) {
+        KillTimer(g_wnd, 3);
+        HWND panel = g_wnd;
+        g_wnd = NULL;
+        DestroyWindow(panel);
+    }
+    for (auto& kv : g_icons) if (kv.second) DestroyIcon(kv.second);
+    g_icons.clear();
+    HFONT* f[] = { &g_fTitle, &g_fLabel, &g_fText, &g_fName, &g_fSub, &g_fGlyph, &g_fHeader };
+    for (auto p : f) if (*p) { DeleteObject(*p); *p = NULL; }
+    UnregisterMenuClass();
     return 0;
 }
 
-void Wh_ModSettingsChanged() { RunGuarded(L"applying settings", [] { LoadSettings(); }); }
+// The shell process owns GetShellWindow. If it is in the middle of restarting,
+// exclude the known folder-window command lines while waiting for its taskbar.
+static bool IsMainExplorerProcess() {
+    HWND shellWindow = GetShellWindow();
+    if (shellWindow) {
+        DWORD shellProcessId = 0;
+        GetWindowThreadProcessId(shellWindow, &shellProcessId);
+        if (shellProcessId == GetCurrentProcessId()) return true;
+    }
+
+    std::wstring commandLine = GetCommandLineW();
+    std::transform(commandLine.begin(), commandLine.end(), commandLine.begin(),
+                   [](wchar_t ch) { return (wchar_t)towlower(ch); });
+    return commandLine.find(L" /factory") == std::wstring::npos &&
+           commandLine.find(L" /separate") == std::wstring::npos &&
+           commandLine.find(L" -embedding") == std::wstring::npos;
+}
+
+static bool WaitForStartup(HANDLE readyEvent, const wchar_t* component) {
+    const DWORD wait = WaitForSingleObject(readyEvent, 10000);
+    if (wait == WAIT_OBJECT_0) return true;
+    Wh_Log(L"[Init] timed out waiting for %s (result=%u)", component, (unsigned)wait);
+    return false;
+}
+
+// Retry WM_QUIT while a thread is alive. A normal startup creates the message
+// queue before signaling readiness; retrying also covers an unload racing an
+// unsuccessful startup instead of waiting forever after one failed post.
+static void QuitAndJoinThread(WinHandle& thread, DWORD& threadId, const wchar_t* name) {
+    HANDLE handle = thread.get();
+    if (!handle) return;
+
+    while (WaitForSingleObject(handle, 0) == WAIT_TIMEOUT) {
+        if (threadId && PostThreadMessageW(threadId, WM_QUIT, 0, 0)) break;
+        Sleep(10);
+    }
+
+    if (WaitForSingleObject(handle, 0) == WAIT_TIMEOUT) {
+        Wh_Log(L"[Uninit] waiting for %s", name);
+        WaitForSingleObject(handle, INFINITE);
+    }
+    thread.reset();
+    threadId = 0;
+}
+
+static void StopInfrastructure() {
+    InterlockedExchange(&g_stop, 1);
+
+    // Stop the producer first so it cannot post work to a panel that is going away.
+    QuitAndJoinThread(g_keyboardThread, g_keyboardTid, L"keyboard-hook thread");
+    QuitAndJoinThread(g_uiThread, g_uiTid, L"UI thread");
+
+    if (g_scanThread.get()) {
+        WaitForSingleObject(g_scanThread.get(), INFINITE);
+        g_scanThread.reset();
+    }
+
+    g_uiReady.reset();
+    g_keyboardReady.reset();
+    InterlockedExchange(&g_uiStarted, 0);
+    InterlockedExchange(&g_keyboardStarted, 0);
+}
+
+void Wh_ModSettingsChanged() {
+    RunGuarded(L"applying settings", [] { LoadSettings(); });
+}
 
 BOOL Wh_ModInit() {
-    return RunGuarded(L"initializing the mod", [] {
-        LARGE_INTEGER f; QueryPerformanceFrequency(&f);
-        g_freq = f.QuadPart ? f.QuadPart : 1;
+    if (!IsMainExplorerProcess()) {
+        Wh_Log(L"[Init] not the main Explorer shell process; skipping");
+        return FALSE;
+    }
 
-        InitializeCriticalSection(&g_vkeyLock);
-        g_vkeyLockInit = true;
+    try {
+        LARGE_INTEGER f;
+        QueryPerformanceFrequency(&f);
+        g_freq = f.QuadPart ? f.QuadPart : 1;
+        InterlockedExchange(&g_stop, 0);
 
         LoadSettings();
 
-        // ------------------------------------------------------------
-        // Registry virtualization for WSearch (so the native search
-        // service appears disabled without ever touching the real
-        // registry). The real value is preserved automatically because
-        // we only ever hand out virtual handles.
-        // ------------------------------------------------------------
-        if (g_blockNativeSearch) {
-            HMODULE hAdvapi = GetModuleHandleW(L"advapi32.dll");
-            if (!hAdvapi) hAdvapi = LoadLibraryW(L"advapi32.dll");
-            if (hAdvapi) {
-                #define HOOK_REG(name) \
-                    { void* p = (void*)GetProcAddress(hAdvapi, #name); \
-                      if (p) { \
-                          Wh_SetFunctionHook(p, (void*)name##_Hook, (void**)&name##_Original); \
-                          Wh_Log(L"[Init] hooked " L## #name); \
-                      } else { \
-                          Wh_Log(L"[Init] could not resolve " L## #name); \
-                      } }
-
-                HOOK_REG(RegOpenKeyExW);
-                HOOK_REG(RegOpenKeyExA);
-                HOOK_REG(RegQueryValueExW);
-                HOOK_REG(RegQueryValueExA);
-                HOOK_REG(RegSetValueExW);
-                HOOK_REG(RegSetValueExA);
-                HOOK_REG(RegCloseKey);
-                HOOK_REG(RegEnumValueW);
-                HOOK_REG(RegEnumValueA);
-                HOOK_REG(RegCreateKeyExW);
-                HOOK_REG(RegCreateKeyExA);
-                #undef HOOK_REG
-            } else {
-                Wh_Log(L"[Init] advapi32.dll not available, registry virtualization disabled");
-            }
-
-            StopWSearchServiceIfRunning();
+        g_uiReady.reset(CreateEventW(NULL, TRUE, FALSE, NULL));
+        g_keyboardReady.reset(CreateEventW(NULL, TRUE, FALSE, NULL));
+        if (!g_uiReady.get() || !g_keyboardReady.get()) {
+            Wh_Log(L"[Init] CreateEventW failed, err=%u", (unsigned)GetLastError());
+            StopInfrastructure();
+            return FALSE;
         }
 
-        HMODULE hShell = GetModuleHandleW(L"shell32.dll");
-        if (hShell) {
-            void* p = (void*)GetProcAddress(hShell, "ShellExecuteExW");
-            if (p) {
-                Wh_SetFunctionHook(p, (void*)ShellExecuteExW_Hook, (void**)&ShellExecuteExW_Original);
-                Wh_Log(L"[Init] ShellExecuteExW hooked, original=%p", ShellExecuteExW_Original);
-            }
+        HANDLE rawUi = CreateThread(NULL, 0, UiThread, NULL, 0, &g_uiTid);
+        g_uiThread.reset(rawUi);
+        if (!g_uiThread.get() || !WaitForStartup(g_uiReady.get(), L"the UI thread") ||
+            InterlockedCompareExchange(&g_uiStarted, 0, 0) == 0) {
+            Wh_Log(L"[Init] UI thread did not create the panel");
+            StopInfrastructure();
+            return FALSE;
         }
 
-        HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
-        if (hKernelBase) {
-            void* p = (void*)GetProcAddress(hKernelBase, "CreateProcessInternalW");
-            if (p) {
-                Wh_SetFunctionHook(p, (void*)CreateProcessInternalW_Hook,
-                                   (void**)&CreateProcessInternalW_Original);
-                Wh_Log(L"[Init] CreateProcessInternalW hooked");
-            }
+        HANDLE rawKeyboard = CreateThread(NULL, 0, KeyboardHookThread, NULL, 0, &g_keyboardTid);
+        g_keyboardThread.reset(rawKeyboard);
+        if (!g_keyboardThread.get() ||
+            !WaitForStartup(g_keyboardReady.get(), L"the keyboard-hook thread") ||
+            InterlockedCompareExchange(&g_keyboardStarted, 0, 0) == 0) {
+            Wh_Log(L"[Init] keyboard hook was not installed");
+            StopInfrastructure();
+            return FALSE;
         }
 
-        DWORD tid = 0;
-        HANDLE raw = CreateThread(NULL, 0, UiThread, NULL, 0, &tid);
-        g_tid = tid;
-        g_thread.reset(raw);
-        return g_thread.get() != NULL;
-    }) ? TRUE : FALSE;
+        Wh_Log(L"[Init] initialized in the main Explorer shell process");
+        return TRUE;
+    } catch (...) {
+        g_exceptionCount.fetch_add(1);
+        Wh_Log(L"[Init] exception while initializing the mod");
+        StopInfrastructure();
+        return FALSE;
+    }
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"[Uninit] shutting down, exceptions=%u", g_exceptionCount.load());
-    InterlockedExchange(&g_stop, 1);
-    if (g_tid) PostThreadMessageW(g_tid, WM_QUIT, 0, 0);
-    if (g_thread.get()) { WaitForSingleObject(g_thread.get(), INFINITE); g_thread.reset(); }
-    if (g_scanThread.get()) { WaitForSingleObject(g_scanThread.get(), INFINITE); g_scanThread.reset(); }
-
-    // Release any virtual handles still open so we do not leak real
-    // registry handles. Nothing has to be "restored" because nothing
-    // was ever written to the real registry.
-    if (g_vkeyLockInit) {
-        EnterCriticalSection(&g_vkeyLock);
-        for (auto& kv : g_virtualToReal) {
-            if (kv.second && RegCloseKey_Original) RegCloseKey_Original(kv.second);
-        }
-        g_virtualToReal.clear();
-        g_realToVirtual.clear();
-        LeaveCriticalSection(&g_vkeyLock);
-        DeleteCriticalSection(&g_vkeyLock);
-        g_vkeyLockInit = false;
-    }
-    Wh_Log(L"[Uninit] all virtual registry handles released");
+    StopInfrastructure();
 }
