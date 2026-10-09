@@ -10462,6 +10462,30 @@
         "version": "1.2"
       }
     },
+    "per-app-titlebar-buttons": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791561686000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791561686000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Casket Pizza",
+        "description": "Hide selected native titlebar buttons for configured applications",
+        "github": "https://github.com/CasketPizza",
+        "include": [
+          "*"
+        ],
+        "license": "MIT",
+        "name": "Per-App Titlebar Buttons",
+        "version": "1.0"
+      }
+    },
     "per-app-ui-language": {
       "details": {
         "defaultSorting": 186,

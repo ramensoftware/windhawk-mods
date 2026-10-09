@@ -2,12 +2,48 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-09T11:00:31.000Z</updated>
+    <updated>2026-10-09T16:01:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Per-App Titlebar Buttons 1.0]]></title>
+        <id>https://windhawk.net/mods/per-app-titlebar-buttons#6a59d24ea77bc63bfb4e5e97fe3f41a2b1e81993</id>
+        <link href="https://windhawk.net/mods/per-app-titlebar-buttons"/>
+        <updated>2026-10-09T16:01:26.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="perapptitlebarbuttons">Per-app Titlebar Buttons</h1>
+<p>Hide or disable selected native Windows titlebar buttons on a per-application
+basis.</p>
+<p>Add one or more process names in the mod settings and choose whether to affect
+the Minimize, Maximize/Restore, and Close buttons for each application.</p>
+<p>Process names can be entered with or without the <code>.exe</code> extension. For example,
+both <code>taskmgr</code> and <code>taskmgr.exe</code> match Task Manager. Matching is
+case-insensitive, and a full executable path is also accepted.</p>
+<h2 id="nativetitlebarbehavior">Native titlebar behavior</h2>
+<p>Windows treats the Minimize and Maximize/Restore buttons as a pair. If only one
+of those style flags is removed, Windows may keep both buttons visible and show
+the affected button as disabled. Removing both flags removes the pair.</p>
+<p>These are native window style flags, so disabling Maximize also disables native
+maximize actions such as titlebar double-click and the Maximize system-menu
+command while the setting is active.</p>
+<p>Windows doesn't provide an independent window style flag for the Close button.
+If Close is selected while Minimize or Maximize/Restore is still available,
+the Close command is disabled.</p>
+<p>If Close is selected and the resulting window has neither Minimize nor
+Maximize/Restore available, the mod removes <code>WS_SYSMENU</code>. This removes the
+native caption button cluster, and also removes the titlebar icon and the
+Alt+Space system menu for that window while the setting is active.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>The mod targets standard native Win32 titlebars. Applications that draw their
+own titlebars, including some Chromium, Electron, and WinUI applications, may
+not respond to these settings.</p>]]></content>
+        <author>
+            <name>Casket Pizza</name>
+            <uri>https://github.com/CasketPizza</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Pointer Afterimage Motion Blur 1.0]]></title>
         <id>https://windhawk.net/mods/pointer-afterimage-motion-blur#fb5e852a66d521f2f6496b2dfb3d0d8de33e4268</id>
@@ -2195,165 +2231,6 @@ mod requires. In the Windows 11 shell this mod does nothing and is not kept load
         <author>
             <name>HeyOkay</name>
             <uri>https://github.com/HeyOkay</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Easy Notes 1.0.0]]></title>
-        <id>https://windhawk.net/mods/desktop-sticky-notes#a62876b77495715634ac44a4b15bbf55fdf1a490</id>
-        <link href="https://windhawk.net/mods/desktop-sticky-notes"/>
-        <updated>2026-10-07T08:01:30.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="easynotes">Easy Notes</h1>
-<p>Sticky notes for your Windows desktop. The notes sit above the wallpaper and
-desktop icons, but <strong>behind every application window</strong>, like part of the
-wallpaper you can write on. They never take focus by themselves, and they
-never show up in the taskbar or in Alt+Tab.</p>
-<p><img src="https://raw.githubusercontent.com/Torsion1035/easy-notes/main/screenshot.png" alt="Easy Notes: three notes and the Themes panel" /></p>
-<p>The mod runs in its own process, so it never runs inside Explorer.</p>
-<h2 id="modes">Modes</h2>
-<ul>
-<li><strong>Single</strong>: one note.</li>
-<li><strong>Multiple</strong>: as many notes as you want, for example one per department or
-client. Each note has its own title, and can have its own background color.</li>
-</ul>
-<p>Switching modes never deletes anything. Single mode shows the first note, and
-Multiple mode shows all of them. Switch with the <em>Mode</em> setting or from a
-note's <strong>…</strong> menu &gt; <em>Mode</em>; whichever you changed last wins.</p>
-<h2 id="thetoolpanel">The tool panel</h2>
-<p>Every note has a two-row tool panel at the top:</p>
-<ul>
-<li><strong>Row 1, the title bar</strong>: the note's title (drag it to move the note,
-double-click it to rename) and the <strong>…</strong> menu button on the right.</li>
-<li><strong>Row 2, the tool strip</strong>, left to right:</li>
-<li><strong>1.</strong>: auto-numbering on/off</li>
-<li><strong>checkbox icon</strong>: turn every line into a checkbox, or back into plain text</li>
-<li><strong>B</strong> and <strong>I</strong>: bold and italic for the selected text. They work while
-you're editing and are faded out otherwise.</li>
-<li><strong>Color circle</strong> (right end): drawn in the note's current background
-color, so it previews the note. Click it for the color menu.</li>
-</ul>
-<h3 id="menutitlebar">"…" menu (title bar)</h3>
-<ol>
-<li>Themes…</li>
-<li>Mode: Single / Multiple</li>
-<li>Auto-numbering (checked when on)</li>
-<li>All lines as checkboxes</li>
-<li>Height: Small / Medium / Large</li>
-<li>New note (disabled in Single mode)</li>
-<li>Delete note</li>
-<li>About Easy Notes (creator and MIT license)</li>
-</ol>
-<p>Right-clicking the title bar or the tool strip opens the same menu.</p>
-<h3 id="colormenucolorcircleinrow2">Color menu (Color circle in row 2)</h3>
-<ol>
-<li>Themes…</li>
-<li>Follow theme: clears this note's background override (checked when no
-override is set)</li>
-<li>Yellow, Green, Blue, Pink, Purple, Orange, Gray, each with a swatch. These
-set this note's background only.</li>
-<li>Custom (hex from settings): the <em>Custom color</em> hex code</li>
-</ol>
-<h3 id="rightclickmenuonthenotebody">Right-click menu on the note body</h3>
-<p>Cut, Copy, Paste, Bold, Italic, Themes…, Delete note. Cut, Copy, Paste, Bold
-and Italic work while you're editing and are shown disabled otherwise.</p>
-<h2 id="usingthenotes">Using the notes</h2>
-<p>| Action | How |
-|---|---|
-| Edit text | Click an empty part of a note's body. Press <strong>Esc</strong> or click elsewhere to finish. |
-| Rename | Double-click the title. <strong>Enter</strong> saves and <strong>Esc</strong> cancels. |
-| Bold / Italic | While editing, select text and click <strong>B</strong> / <strong>I</strong>, press <strong>Ctrl+B</strong> / <strong>Ctrl+I</strong>, or use the right-click menu. With nothing selected, it applies to what you type next. |
-| Checkbox item | Start a line with <code>[ ]</code> while editing. <code>[x]</code> marks it as done. In normal view, click the box to toggle it. Done items are struck through. |
-| Links | <code>http://</code>, <code>https://</code> and <code>www.</code> addresses are underlined. Click one to open it in your default browser. |
-| Auto-numbering | Click <strong>1.</strong> in the tool strip (off by default). Non-empty lines are numbered 1., 2., 3., … and the numbers update automatically. |
-| Checklist | Click the checkbox icon in the tool strip, or "…" &gt; <em>All lines as checkboxes</em>. |
-| Note color | Click the Color circle: <em>Follow theme</em>, a preset color, or <em>Custom (hex from settings)</em>. Text turns light automatically on dark colors. |
-| Theme | "…" &gt; <em>Themes…</em>, the Color circle &gt; <em>Themes…</em>, right-click &gt; <em>Themes…</em>, or the <em>Theme</em> setting. |
-| Height | "…" &gt; <em>Height</em> &gt; Small / Medium / Large. |
-| New / delete | "…" &gt; <em>New note</em> / <em>Delete note</em> (delete is also in the right-click menu). |
-| Move | Drag the title bar. Horizontal movement only switches columns, and vertical movement is free. A blue outline shows where the note will land. |
-| Scroll | Use the mouse wheel over a note whose text doesn't fit. |
-| Paste | Ctrl+V and <em>Paste</em> insert plain text: formatting copied from web pages is dropped. |</p>
-<h2 id="themes">Themes</h2>
-<p>Pick a theme in the <strong>Themes panel</strong> (open it with <em>Themes…</em> from the "…"
-menu, the Color circle or the right-click menu), or in the <em>Theme</em> setting.
-Both set the same thing, and whichever you changed last wins.</p>
-<p>The panel shows three sections:</p>
-<ul>
-<li><strong>Showa Tones</strong> (Wada colors): Hojicha, Yoru Kinari, Sakura Sumi, Kaki,
-Matcha Kuri, Ume</li>
-<li><strong>Right Now</strong> (2026 trend colors): Kumo, Tsuchi, Moegi, Fuji, Akane</li>
-<li><strong>Quiet Hours</strong> (minimal neutrals): <strong>Default</strong>, Shiro, Hai, Kinu, Sumi</li>
-</ul>
-<p><strong>Default</strong> is the solid color from the <em>Solid color</em> setting, and it's the
-theme on a fresh install.</p>
-<p>Each tile shows a miniature note in that theme's real colors (title bar, tool
-strip with icons, two lines of text). Hover a tile to see what the name means.
-A round dot in each tile's corner marks the selection: an empty ring for the
-others, a filled dot for the selected theme, which also gets an outline.</p>
-<p>Click a tile to apply it to every note immediately; it's saved right away.
-Notes with a background override go back to following the theme. You can
-also use the arrow keys to move between tiles, <strong>Space</strong> or <strong>Enter</strong> to
-select, and <strong>Esc</strong> to close. The panel also closes when you click anywhere
-outside it.</p>
-<h2 id="customcolors">Custom colors</h2>
-<p>The <em>Appearance</em> setting decides where the note look comes from:</p>
-<ul>
-<li><strong>Theme</strong> (default): the selected theme (see above).</li>
-<li><strong>Solid color</strong>: every note uses the <em>Solid color</em> hex code as its
-background. The title bar, tool strip and text colors are derived from it.</li>
-<li><strong>Custom (Jiyu builder)</strong>: Jiyu is the free-form theme. Set <em>Jiyu base
-color</em> (note background) and <em>Jiyu strip color</em> (tool strip). The title bar,
-icons and text are derived from those two. Jiyu is reachable only through
-this setting, not through the panel.</li>
-</ul>
-<p>In Solid and Custom mode the Themes panel opens dimmed, with a banner saying
-which mode is on. Clicking a tile then only saves your choice. It takes
-effect when <em>Appearance</em> is set back to <em>Theme</em>.</p>
-<p>A note's own background (Color circle) applies in every mode. It changes the
-background only; the title bar and tool strip keep the current look.</p>
-<p><em>Option text color</em> and <em>Option hover color</em> change the theme names and the
-hover highlight in the Themes panel. Leave them empty for automatic colors.</p>
-<h2 id="layoutmultiplemode">Layout (Multiple mode)</h2>
-<p>Notes are placed on an automatic column grid on the <strong>primary monitor's work
-area</strong>. The column count is <code>floor(available width / (column width + gap))</code>.
-The <em>Column width</em> setting ranges from 220 to 600. Every note is exactly one
-column wide, and its height is Small, Medium or Large. Notes in a column
-stack from top to bottom without overlapping. If you drop a note above (or
-onto the upper half of) another note, the notes below are pushed down. When
-the resolution or DPI changes, the grid reflows. If there are fewer columns
-than before, notes from removed columns move into the last column.</p>
-<h2 id="storage">Storage</h2>
-<p>Notes are saved shortly after each change, in the mod's own storage folder
-(in a subfolder per Windows user). Windhawk removes the folder together with
-the mod. The file is written to a temporary file first and then renamed, so a
-crash can't leave it half-written. If <code>notes.json</code> can't be read, nothing is
-overwritten. If it can't be parsed, it's copied to <code>notes.corrupt.json</code> before
-anything new is written. Mode, column width, colors, font size and opacity
-live in the mod settings.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>Notes only appear on the primary monitor.</li>
-<li>A column that has more notes than fit vertically runs off the bottom of the
-screen. Use smaller heights or more columns.</li>
-<li>Opacity below 100% uses a layered window. In that case the corners are
-rounded with a window region, so they aren't anti-aliased.</li>
-<li>The notes stay visible when you use Show desktop (Win+D). If a wallpaper
-tool or an Explorer restart rearranges the desktop windows, the mod checks
-every 2 seconds and puts the notes back above the desktop, so they may take
-a moment to return.</li>
-<li>Only bold and italic are supported; no underline, colors, sizes or images.
-Text dragged in from another app may show other formatting while you edit,
-but only bold and italic are kept.</li>
-<li>The menus use the standard Windows look. They don't follow the active theme.</li>
-<li>If the lowest window on screen belongs to an elevated program, the notes
-can't be placed relative to it. They then use the nearest window they can,
-and may stay in front of that elevated window.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>Created by <strong>Torsion</strong>.</p>
-<p>Licensed under the MIT License.</p>]]></content>
-        <author>
-            <name>Torsion</name>
-            <uri>https://github.com/Torsion1035</uri>
         </author>
     </entry>
 </feed>

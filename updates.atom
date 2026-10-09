@@ -2,12 +2,48 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-09T14:04:10.000Z</updated>
+    <updated>2026-10-09T16:01:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Per-App Titlebar Buttons 1.0]]></title>
+        <id>https://windhawk.net/mods/per-app-titlebar-buttons#6a59d24ea77bc63bfb4e5e97fe3f41a2b1e81993</id>
+        <link href="https://windhawk.net/mods/per-app-titlebar-buttons"/>
+        <updated>2026-10-09T16:01:26.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="perapptitlebarbuttons">Per-app Titlebar Buttons</h1>
+<p>Hide or disable selected native Windows titlebar buttons on a per-application
+basis.</p>
+<p>Add one or more process names in the mod settings and choose whether to affect
+the Minimize, Maximize/Restore, and Close buttons for each application.</p>
+<p>Process names can be entered with or without the <code>.exe</code> extension. For example,
+both <code>taskmgr</code> and <code>taskmgr.exe</code> match Task Manager. Matching is
+case-insensitive, and a full executable path is also accepted.</p>
+<h2 id="nativetitlebarbehavior">Native titlebar behavior</h2>
+<p>Windows treats the Minimize and Maximize/Restore buttons as a pair. If only one
+of those style flags is removed, Windows may keep both buttons visible and show
+the affected button as disabled. Removing both flags removes the pair.</p>
+<p>These are native window style flags, so disabling Maximize also disables native
+maximize actions such as titlebar double-click and the Maximize system-menu
+command while the setting is active.</p>
+<p>Windows doesn't provide an independent window style flag for the Close button.
+If Close is selected while Minimize or Maximize/Restore is still available,
+the Close command is disabled.</p>
+<p>If Close is selected and the resulting window has neither Minimize nor
+Maximize/Restore available, the mod removes <code>WS_SYSMENU</code>. This removes the
+native caption button cluster, and also removes the titlebar icon and the
+Alt+Space system menu for that window while the setting is active.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>The mod targets standard native Win32 titlebars. Applications that draw their
+own titlebars, including some Chromium, Electron, and WinUI applications, may
+not respond to these settings.</p>]]></content>
+        <author>
+            <name>Casket Pizza</name>
+            <uri>https://github.com/CasketPizza</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Everything & Power Tools in the Start Menu 1.1]]></title>
         <id>https://windhawk.net/mods/start-everything#32987307cbb3a539e5936bd080e412b2e4d000e5</id>
@@ -1932,92 +1968,6 @@ keeps a minimum clickable size on purpose</li>
         <author>
             <name>tria</name>
             <uri>https://github.com/triatomic</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 Action Center Restorer on Windows 11 24H2+ 1.0.0]]></title>
-        <id>https://windhawk.net/mods/windows-10-action-center-restorer#d3577d8bbf385b85aa9d48b2a05d3648d395839a</id>
-        <link href="https://windhawk.net/mods/windows-10-action-center-restorer"/>
-        <updated>2026-10-08T20:13:44.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows10actioncenterrestoreronwindows1124h2">Windows 10 Action Center Restorer on Windows 11 24H2+</h1>
-<p>This mod restores the Windows 10 Action Center on Windows 11 24H2+ <strong>without
-modifying the real Windows registry</strong>.</p>
-<p>While the mod is loaded, the following value is exposed virtually, only
-inside the processes the mod is injected into:</p>
-<pre><code>HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Control Center
-    UseLiteLayout = 1 (REG_DWORD)
-</code></pre>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win10actioncenter.png" alt="The restored Windows 10 Action Center" /></p>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li>Windows 11, version 24H2 or 25H2 (x86-64) - the versions this mod is written
-and tested for. It is not meant for Windows 10.</li>
-<li>Windhawk, with mod injection into system processes enabled. The mod is
-injected into <code>explorer.exe</code>, <code>ShellExperienceHost.exe</code> and <code>ShellHost.exe</code>.</li>
-<li>Strongly recommended, but not required: the Windows 10 taskbar, i.e. the mod
-<a href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2">Win10 taskbar on Win11 24H2 or 25H2</a>
-and, with it,
-<a href="https://windhawk.net/mods/fake-explorer-path">Fake Explorer path</a>, which
-that mod requires. The restored panel is opened and animated by the Windows
-10 shell: the tray button and Win+A, the slide animation and the shortened
-close timer are its paths (the shell's <code>twinui.pcshell.dll</code>). The virtual
-value is served in the shell hosts whatever taskbar is running, so the mod
-does not depend on the Windows 10 taskbar, but that is the setup it is
-written for.</li>
-</ul>
-<h2 id="howthevirtualizationworks">How the virtualization works</h2>
-<p>Microsoft's built-in registry virtualization (UAC virtualization) is not
-available for 64-bit processes, so the value is virtualized at the Win32
-registry API level (kernelbase.dll):</p>
-<ul>
-<li><code>RegGetValueW</code> - the API ShellExperienceHost actually uses to read
-<code>UseLiteLayout</code> (see ExplorerPatcher's <code>ShellExperienceHostPatches.cpp</code>).</li>
-<li><code>RegQueryValueExW</code> - for code that opens the key and queries the value.</li>
-<li><code>RegOpenKeyExW</code> - if the <code>Control Center</code> key doesn't exist, a read-only
-handle to an <strong>empty private application hive</strong> (<code>RegLoadAppKeyW</code>) is
-returned, so the key behaves exactly like an existing empty key that
-contains only <code>UseLiteLayout</code>. No real key is created and no other key's
-values are exposed.</li>
-<li><code>RegEnumValueW</code> / <code>RegQueryInfoKeyW</code> - keep enumeration and value counts
-consistent with the virtual value.</li>
-</ul>
-<p>Keys are identified by their real kernel path (<code>NtQueryKey</code>), so relative
-opens (e.g. <code>CurrentVersion</code> handle + <code>Control Center</code>), different casing
-and trailing backslashes are all handled, and there is no global
-"last opened handle" state that can be confused by handle reuse.</p>
-<p>The application hive is kept in the storage directory Windhawk gives the mod
-and removes together with it: the first time the virtual key is needed, an
-empty hive file (a few KB) plus the <code>.LOG1</code>/<code>.LOG2</code> transaction logs the
-registry maintains next to a loaded hive are created there. Nothing is
-written when the key is never opened.</p>
-<h2 id="applyingchanges">Applying changes</h2>
-<p><code>UseLiteLayout</code> is read when ShellExperienceHost (and parts of Explorer)
-start. When the mod is enabled, disabled, or the virtual value setting is
-toggled, the mod restarts ShellExperienceHost (like ExplorerPatcher does) -
-but only from the shell process that owns the taskbar. Folder windows,
-<code>explorer.exe /factory,... -Embedding</code> COM servers and the like run in
-explorer.exe processes of their own, and they must not kill a
-ShellExperienceHost that already reads the virtual value. It is started again
-automatically on demand. If the Win+A / tray button still opens the Windows
-11 panel after enabling the mod at runtime, restart Explorer once.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Virtual <code>UseLiteLayout=1</code>, no HKLM modification</li>
-<li>Fast Action Center close timer</li>
-<li>Slide-in / slide-out animations, also on the very first open/close after
-ShellExperienceHost starts (window identified by its thread description,
-system repositioning absorbed into the animation)</li>
-<li>No files are replaced under C:\Windows, and none are left behind either:
-the virtual key's hive lives in Windhawk's storage for this mod</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>AdmnistratoX - Fix for the animation of the Windows 10 Action Center</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
