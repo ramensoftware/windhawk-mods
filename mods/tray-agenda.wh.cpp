@@ -93,10 +93,13 @@ other setting, so treat them as secrets.
 - Reminders use their own notification identity, so they appear as "Tray Agenda". The first time a
   reminder is about to be shown, the mod writes `HKCU\Software\Classes\AppUserModelId\TrayAgenda`
   (display name only), and Windows adds
-  `HKCU\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\TrayAgenda`. Both are deleted when the mod is disabled or unloaded, and
-  leftovers from an unclean exit are deleted at the next start. Nothing is written if no reminder is
-  ever shown (for example with *Reminder notifications* off). Per-app notification choices made in
-  Windows Settings are discarded together with those keys; use the mod's own setting instead.
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\TrayAgenda`. Nothing is
+  written if no reminder is ever shown (for example with *Reminder notifications* off). Both keys are
+  deleted when the mod is disabled or unloaded. Explorer exiting (sign-out, shutdown, restart, crash)
+  does not run that path, so after a session with a reminder the keys stay until the mod next loads
+  into Explorer (and for good if the mod or Windhawk is removed while the mod is not loaded). For the
+  same reason, per-app notification choices made in Windows Settings are reset at every sign-in or
+  Explorer restart; use the mod's own *Reminder notifications* setting instead.
 - *Sign out ...* in the popup removes that account's stored token and revokes it at Google.
 
 ## Notes
@@ -255,7 +258,6 @@ namespace {
 
 constexpr wchar_t kWidgetName[] = L"TrayAgenda_Widget";
 constexpr wchar_t kTitleName[] = L"TrayAgenda_Title";
-constexpr wchar_t kDetailName[] = L"TrayAgenda_Detail";
 constexpr wchar_t kAccentName[] = L"TrayAgenda_Accent";
 constexpr wchar_t kTimeName[] = L"TrayAgenda_Time";
 
@@ -560,29 +562,6 @@ winrt::Windows::UI::Color ThemeForegroundColor() {
             winrt::Windows::UI::ViewManagement::UIColorType::Foreground);
     } catch (...) {
         return {255, 255, 255, 255};
-    }
-}
-
-winrt::Windows::UI::Color ThemeAccentColor() {
-    try {
-        winrt::Windows::UI::ViewManagement::UISettings uiSettings;
-        return uiSettings.GetColorValue(
-            winrt::Windows::UI::ViewManagement::UIColorType::Accent);
-    } catch (...) {
-        return {255, 0, 120, 212};
-    }
-}
-
-winrt::Windows::UI::Color ThemeBackgroundColor() {
-    try {
-        winrt::Windows::UI::ViewManagement::UISettings uiSettings;
-        return uiSettings.GetColorValue(
-            winrt::Windows::UI::ViewManagement::UIColorType::Background);
-    } catch (...) {
-        auto foreground = ThemeForegroundColor();
-        bool lightForeground = static_cast<int>(foreground.R) + foreground.G + foreground.B > 420;
-        return lightForeground ? winrt::Windows::UI::Color{255, 32, 32, 32}
-                               : winrt::Windows::UI::Color{255, 248, 248, 248};
     }
 }
 
@@ -930,7 +909,6 @@ constexpr char kGoogleAuthEndpoint[] = "https://accounts.google.com/o/oauth2/v2/
 constexpr char kEventsReadonlyScope[] = "https://www.googleapis.com/auth/calendar.events.readonly";
 constexpr char kCalendarListReadonlyScope[] =
     "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
-constexpr wchar_t kRefreshTokenValueName[] = L"google_refresh_token_v1";
 constexpr wchar_t kNotifiedValueName[] = L"notified_v1";
 // Notification identity. It is registered only when a reminder is about to be shown and removed
 // again when the mod unloads (see EnsureToastRegistration / RemoveToastRegistration).
@@ -2570,18 +2548,20 @@ bool WindowsZoneToUnix(const std::string& name, const IcsTime& t, int64_t* unix)
 
 // IANA zone ids ("America/Sao_Paulo") via Windows.Globalization.Calendar. The offset is found
 // by asking the calendar for the local wall time of a candidate instant.
-[[clang::no_destroy]] std::map<std::string, winrt::Windows::Globalization::Calendar> g_zoneCalendars;
+[[clang::no_destroy]] std::optional<std::map<std::string, winrt::Windows::Globalization::Calendar>>
+    g_zoneCalendars{std::in_place};
 
 // Called on the worker thread before its WinRT apartment is torn down.
 void ClearZoneCalendars() {
-    g_zoneCalendars.clear();
+    g_zoneCalendars.reset();
 }
 
 bool IanaZoneToUnix(const std::string& tzid, const IcsTime& t, int64_t* unix) {
     using winrt::Windows::Globalization::Calendar;
     using winrt::Windows::Globalization::CalendarIdentifiers;
     using winrt::Windows::Globalization::ClockIdentifiers;
-    auto* cache = &g_zoneCalendars;
+    if (!g_zoneCalendars) g_zoneCalendars.emplace();
+    auto* cache = &*g_zoneCalendars;
     try {
         auto it = cache->find(tzid);
         if (it == cache->end()) {
@@ -4312,15 +4292,6 @@ winrt::Windows::UI::Color SourceAccentColor(
     return kPalette[hash % ARRAYSIZE(kPalette)];
 }
 
-TextBlock FlyoutText(const std::wstring& text, double size, bool strong,
-                     winrt::Windows::UI::Color color) {
-    TextBlock block = MakeTextBlock(L"", size, strong);
-    block.Text(text);
-    block.Foreground(MakeBrush(color));
-    block.MaxWidth(420);
-    return block;
-}
-
 // Menu-style agenda popup (Notion Calendar tray menu look).
 constexpr double kMenuWidth = 400;
 constexpr double kMenuItemHeight = 30;
@@ -4829,7 +4800,14 @@ void ShowAgendaFlyout() {
                                static_cast<int64_t>(settings.notify_lead_minutes) *
                                    kSecondsPerMinute,
                                &headline)) {
-            headline = timed.front();
+            auto firstKept = std::find_if(timed.begin(), timed.end(), [](const AgendaEntry& e) {
+                return e.responseState != AgendaEntry::ResponseState::Declined;
+            });
+            if (firstKept != timed.end()) {
+                headline = *firstKept;
+            } else {
+                hasHeadline = false;
+            }
         }
 
         std::vector<AgendaEntry> rest;
@@ -4924,7 +4902,6 @@ void ShowAgendaFlyout() {
                                                           : FormatDayHeading(entry.startUnix);
                 AppendFlyoutHeading(list, label, pal);
             }
-            bool current = entry.isActive || (entry.startUnix <= now && now < entry.endUnix);
             list.Children().Append(MakeFlyoutRow(entry, settings, false,
                                                  snapshot.generatedUnix, pal));
         }
@@ -5270,6 +5247,23 @@ void StartWorkerThread() {
     }
     g_workerStop = false;
     g_workerThread.emplace(WorkerThreadProc);
+}
+
+std::atomic<bool> g_providerStarted{false};
+
+// Windhawk loads the mod into every explorer.exe (folder windows in their own process, COM
+// servers, ...). Only the process that hosts the taskbar runs the provider, so calendars are
+// polled once and reminders are shown once.
+void StartProviderInShellProcess() {
+    if (g_providerStarted.exchange(true)) {
+        return;
+    }
+    // A previous shell that never reached Wh_ModUninit (crash, killed Explorer) left its
+    // notification registration behind: remove it before registering again.
+    if (Wh_GetIntValue(kToastRegisteredFlag, 0) != 0) {
+        RemoveToastRegistration();
+    }
+    StartWorkerThread();
 }
 
 void StopWorkerThread() {
@@ -5753,6 +5747,7 @@ void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
         }
 
         g_taskbarWnd.store(hWnd, std::memory_order_relaxed);
+        StartProviderInShellProcess();
         auto xamlRoot = GetTaskbarXamlRoot(hWnd);
         if (!xamlRoot) {
             return;
@@ -5851,11 +5846,6 @@ BOOL Wh_ModInit() {
     g_unloading = false;
     g_workerStop = false;
     LoadSettings();
-    // A previous run that never reached Wh_ModUninit (crash, killed Explorer) left its
-    // notification registration behind: remove it.
-    if (Wh_GetIntValue(kToastRegisteredFlag, 0) != 0) {
-        RemoveToastRegistration();
-    }
 
     g_workerWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!g_workerWakeEvent) {
@@ -5874,13 +5864,12 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    StartWorkerThread();
-
     HWND hWnd = FindCurrentProcessTaskbarWnd();
     g_taskbarWnd.store(hWnd, std::memory_order_relaxed);
     if (!hWnd) {
         return;
     }
+    StartProviderInShellProcess();
 
     RunFromWindowThread(hWnd, [](void* param) {
         try {
@@ -5912,7 +5901,9 @@ void Wh_ModAfterInit() {
 void Wh_ModUninit() {
     g_unloading = true;
     StopWorkerThread();
-    RemoveToastRegistration();
+    if (g_providerStarted.load()) {
+        RemoveToastRegistration();
+    }
 
     HWND cachedHWnd = g_taskbarWnd.load(std::memory_order_relaxed);
     bool taskbarCleanupSucceeded = CleanupTaskbarResources(cachedHWnd);
