@@ -12059,7 +12059,7 @@
         "ratingUsers": 39,
         "reviews": 0,
         "trendingSorting": 27.54618989328851,
-        "updated": 1790625660000,
+        "updated": 1791554642000,
         "users": 1044
       },
       "metadata": {
@@ -12071,7 +12071,7 @@
           "windhawk.exe"
         ],
         "name": "Shake to Find Cursor",
-        "version": "1.3"
+        "version": "1.4"
       }
     },
     "shell-animation-disabler": {
@@ -12546,7 +12546,7 @@
         "ratingUsers": 27,
         "reviews": 0,
         "trendingSorting": 21.5,
-        "updated": 1791306259000,
+        "updated": 1791554650000,
         "users": 215
       },
       "metadata": {
@@ -12564,7 +12564,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Everything & Power Tools in the Start Menu",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "start-menu-all-apps": {
