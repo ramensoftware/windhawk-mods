@@ -586,7 +586,8 @@ def compile_mod(
             engine_lib_path /= '32'
         elif arch == Architecture.x86_64:
             engine_lib_path /= '64'
-        elif arch == Architecture.ARM64:
+        else:
+            assert arch == Architecture.ARM64
             engine_lib_path /= 'arm64'
         engine_lib_path /= 'windhawk.lib'
 
@@ -594,7 +595,8 @@ def compile_mod(
             compiler_target = 'i686-w64-mingw32'
         elif arch == Architecture.x86_64:
             compiler_target = 'x86_64-w64-mingw32'
-        elif arch == Architecture.ARM64:
+        else:
+            assert arch == Architecture.ARM64
             compiler_target = 'aarch64-w64-mingw32'
 
         cpp_version = 23
@@ -642,6 +644,8 @@ def compile_mod(
             f'-DWH_MOD_ID=L"{mod_info.id}"',
             f'-DWH_MOD_VERSION=L"{mod_info.version}"',
             engine_lib_path,
+			'-x',
+			'c++',
             mod_file_for_compilation,
             '-include',
             'windhawk_api.h',

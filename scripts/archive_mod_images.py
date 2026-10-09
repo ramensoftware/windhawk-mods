@@ -1,7 +1,9 @@
 import re
-import requests
 from pathlib import Path
 from typing import List
+from urllib.parse import unquote
+
+import requests
 
 URL_PATTERN = r"!\[[^\]]*\]\(\s*((?:https://i\.imgur\.com/|https://raw\.githubusercontent\.com)[^)]+?)\s*\)"
 SCRIPT_DIR = Path(__file__).parent
@@ -12,6 +14,14 @@ EXCLUDED_IMAGE_URLS = {
     # No longer available.
     "https://raw.githubusercontent.com/u3l6/force-chinese-ime/refs/heads/main/Before.png",
     "https://raw.githubusercontent.com/u3l6/force-chinese-ime/refs/heads/main/After.png",
+}
+
+# Temporary workaround: fetch a different URL than the one referenced in the
+# readme, keeping the original path for the saved image.
+FETCH_URL_WORKAROUNDS = {
+    # https://github.com/ramensoftware/windhawk-mods/pull/4512#discussion_r3531474802
+    # "https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-7.PNG": "https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-7.png",
+    # "https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-11.png": "https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-11.PNG",
 }
 
 session = requests.Session()
@@ -35,10 +45,21 @@ def image_url_to_path(url: str):
     if not url.startswith("https://"):
         raise ValueError(f"Unsupported URL: {url}")
 
-    return url[len("https://") :]
+    path = url[len("https://") :]
+    path = unquote(path)
+
+    if (
+        path.startswith("/")
+        or path.startswith("\\")
+        or re.search(r"(^|/|\\)\.\.", path)
+    ):
+        raise RuntimeError(f"Unsafe URL path: {path}")
+
+    return path
 
 
 def download_image(url: str, save_path: Path):
+    url = FETCH_URL_WORKAROUNDS.get(url, url)
     response = session.get(url, stream=True)
     response.raise_for_status()
 
@@ -62,6 +83,11 @@ def process_code_files(code_folder: Path, images_folder: Path):
 
     for url in image_urls:
         image_path = images_folder / image_url_to_path(url)
+        if not image_path.resolve().is_relative_to(images_folder.resolve()):
+            raise RuntimeError(
+                f"Image path {image_path} is outside of images folder {images_folder}"
+            )
+
         if not image_path.exists():
             download_image(url, image_path)
 

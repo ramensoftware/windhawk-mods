@@ -2,14 +2,14 @@
 // @id              taskbar-wheel-cycle
 // @name            Cycle taskbar buttons with mouse wheel
 // @description     Use the mouse wheel and/or keyboard shortcuts to cycle between taskbar buttons
-// @version         1.1.9
+// @version         1.1.11
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lversion
+// @compilerOptions -lcomctl32 -lgdi32 -lole32 -loleaut32 -lruntimeobject -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -33,9 +33,6 @@ and `Alt+]`, but they can be changed in the mod settings.
 Only Windows 10 64-bit and Windows 11 are supported. For older Windows versions
 check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 
-**Note:** To customize the old taskbar on Windows 11 (if using ExplorerPatcher
-or a similar tool), enable the relevant option in the mod's settings.
-
 ![Demonstration](https://i.imgur.com/FtpUjt1.gif)
 */
 // ==/WindhawkModReadme==
@@ -52,6 +49,13 @@ or a similar tool), enable the relevant option in the mod's settings.
   $name: Enable mouse wheel cycling
   $description: >-
     Disable to only use keyboard shortcuts for cycling between taskbar buttons.
+- customScrollRegions: ""
+  $name: Custom scroll regions
+  $description: >-
+    A comma-separated list of custom regions along the taskbar where scrolling
+    will cycle between taskbar buttons. If set, it will override the default
+    behavior of using the task list area for scrolling. Each region is a range
+    like "100-200" (pixels) or "20%-50%" (percentage of taskbar length).
 - cycleLeftKeyboardShortcut: Alt+VK_OEM_4
   $name: Cycle left keyboard shortcut
   $description: >-
@@ -84,6 +88,7 @@ or a similar tool), enable the relevant option in the mod's settings.
 
 #include <algorithm>
 #include <atomic>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -91,11 +96,18 @@ or a similar tool), enable the relevant option in the mod's settings.
 
 using namespace winrt::Windows::UI::Xaml;
 
+struct Region {
+    bool isPercentage;
+    int start;
+    int end;
+};
+
 struct {
     bool skipMinimizedWindows;
     bool wrapAround;
     bool reverseScrollingDirection;
     bool enableMouseWheelCycling;
+    std::vector<Region> customScrollRegions;
     WindhawkUtils::StringSetting cycleLeftKeyboardShortcut;
     WindhawkUtils::StringSetting cycleRightKeyboardShortcut;
     bool oldTaskbarOnWin11;
@@ -113,6 +125,8 @@ WinVersion g_winVersion;
 std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_initialized;
 std::atomic<bool> g_explorerPatcherInitialized;
+
+std::unordered_map<void*, void*> g_lastTaskListActiveTaskItem;
 
 HWND g_lastScrollTarget = nullptr;
 DWORD g_lastScrollTime;
@@ -158,16 +172,10 @@ HWND GetTaskBandWnd() {
 
 void* CTaskListWnd_vftable_ITaskListUI;
 void* CTaskListWnd_vftable_ITaskListSite;
-void* CTaskListWnd_vftable_ITaskListAcc;
 void* CImmersiveTaskItem_vftable;
 
 using CTaskListWnd_GetButtonGroupCount_t = int(WINAPI*)(void* pThis);
 CTaskListWnd_GetButtonGroupCount_t CTaskListWnd_GetButtonGroupCount;
-
-using CTaskListWnd_GetActiveBtn_t = HRESULT(WINAPI*)(void* pThis,
-                                                     void** taskGroup,
-                                                     int* buttonIndex);
-CTaskListWnd_GetActiveBtn_t CTaskListWnd_GetActiveBtn;
 
 using CTaskListWnd__GetTBGroupFromGroup_t = void*(WINAPI*)(void* pThis,
                                                            void* taskGroup,
@@ -427,66 +435,36 @@ LONG_PTR* TaskbarScroll(LONG_PTR lpMMTaskListLongPtr,
     int button_groups_count = (int)plp[0];
     LONG_PTR** button_groups = (LONG_PTR**)plp[1];
 
-    int button_group_index_active, button_index_active;
+    int button_group_index_active = -1;
+    int button_index_active = -1;
 
-    if (src_task_item) {
-        int i;
-        for (i = 0; i < button_groups_count; i++) {
+    LONG_PTR* taskItem = src_task_item;
+    if (!taskItem) {
+        auto it = g_lastTaskListActiveTaskItem.find((void*)lpMMTaskListLongPtr);
+        if (it != g_lastTaskListActiveTaskItem.end()) {
+            taskItem = (LONG_PTR*)it->second;
+        }
+    }
+
+    if (taskItem) {
+        for (int i = 0; i < button_groups_count; i++) {
             int button_group_type =
                 CTaskBtnGroup_GetGroupType(button_groups[i]);
             if (button_group_type == 1 || button_group_type == 3) {
                 int buttons_count = CTaskBtnGroup_GetNumItems(button_groups[i]);
-
-                int j;
-                for (j = 0; j < buttons_count; j++) {
-                    if ((LONG_PTR*)CTaskBtnGroup_GetTaskItem(
-                            button_groups[i], j) == src_task_item) {
+                for (int j = 0; j < buttons_count; j++) {
+                    if ((LONG_PTR*)CTaskBtnGroup_GetTaskItem(button_groups[i],
+                                                             j) == taskItem) {
                         button_group_index_active = i;
                         button_index_active = j;
                         break;
                     }
                 }
 
-                if (j < buttons_count) {
+                if (button_group_index_active != -1) {
                     break;
                 }
             }
-        }
-
-        if (i == button_groups_count) {
-            button_group_index_active = -1;
-            button_index_active = -1;
-        }
-    } else {
-        void* taskList_ITaskListAcc = QueryViaVtable(
-            (void*)lpMMTaskListLongPtr, CTaskListWnd_vftable_ITaskListAcc);
-
-        winrt::com_ptr<IUnknown> task_group_active;
-        CTaskListWnd_GetActiveBtn(taskList_ITaskListAcc,
-                                  task_group_active.put_void(),
-                                  &button_index_active);
-
-        LONG_PTR* button_group_active =
-            task_group_active ? (LONG_PTR*)CTaskListWnd__GetTBGroupFromGroup(
-                                    (void*)lpMMTaskListLongPtr,
-                                    task_group_active.get(), nullptr)
-                              : nullptr;
-
-        if (button_group_active && button_index_active >= 0) {
-            int i;
-            for (i = 0; i < button_groups_count; i++) {
-                if (button_groups[i] == button_group_active) {
-                    button_group_index_active = i;
-                    break;
-                }
-            }
-
-            if (i == button_groups_count) {
-                return nullptr;
-            }
-        } else {
-            button_group_index_active = -1;
-            button_index_active = -1;
         }
     }
 
@@ -582,6 +560,166 @@ HWND TaskListFromPoint(POINT pt) {
     return TaskListFromMMTaskbarWnd(hRootWnd);
 }
 
+#pragma region regions
+
+UINT GetDpiForWindowWithFallback(HWND hWnd) {
+    using GetDpiForWindow_t = UINT(WINAPI*)(HWND hwnd);
+    static GetDpiForWindow_t pGetDpiForWindow = []() {
+        HMODULE hUser32 = GetModuleHandle(L"user32.dll");
+        if (hUser32) {
+            return (GetDpiForWindow_t)GetProcAddress(hUser32,
+                                                     "GetDpiForWindow");
+        }
+
+        return (GetDpiForWindow_t) nullptr;
+    }();
+
+    int iDpi = 96;
+    if (pGetDpiForWindow) {
+        iDpi = pGetDpiForWindow(hWnd);
+    } else {
+        HDC hdc = GetDC(NULL);
+        if (hdc) {
+            iDpi = GetDeviceCaps(hdc, LOGPIXELSX);
+            ReleaseDC(NULL, hdc);
+        }
+    }
+
+    return iDpi;
+}
+
+// https://stackoverflow.com/a/54364173
+std::wstring_view TrimStringView(std::wstring_view s) {
+    s.remove_prefix(std::min(s.find_first_not_of(L" \t\r\v\n"), s.size()));
+    s.remove_suffix(
+        std::min(s.size() - s.find_last_not_of(L" \t\r\v\n") - 1, s.size()));
+    return s;
+}
+
+// https://stackoverflow.com/a/46931770
+std::vector<std::wstring_view> SplitStringView(std::wstring_view s,
+                                               std::wstring_view delimiter) {
+    size_t pos_start = 0, pos_end, delim_len = delimiter.length();
+    std::wstring_view token;
+    std::vector<std::wstring_view> res;
+
+    while ((pos_end = s.find(delimiter, pos_start)) !=
+           std::wstring_view::npos) {
+        token = s.substr(pos_start, pos_end - pos_start);
+        pos_start = pos_end + delim_len;
+        res.push_back(token);
+    }
+
+    res.push_back(s.substr(pos_start));
+    return res;
+}
+
+bool SvToInt(std::wstring_view s, int* result) {
+    if (s.empty()) {
+        return false;
+    }
+
+    int value = 0;
+    for (WCHAR c : s) {
+        if (c < L'0' || c > L'9') {
+            return false;
+        }
+        value = value * 10 + (c - L'0');
+    }
+
+    *result = value;
+    return true;
+}
+
+std::optional<Region> ParseRegion(std::wstring_view regionStr) {
+    auto parts = SplitStringView(regionStr, L"-");
+    if (parts.size() != 2) {
+        Wh_Log(L"Invalid region (expected start-end): %.*s",
+               (int)regionStr.size(), regionStr.data());
+        return std::nullopt;
+    }
+
+    auto startStr = TrimStringView(parts[0]);
+    auto endStr = TrimStringView(parts[1]);
+
+    bool startIsPercentage = !startStr.empty() && startStr.back() == L'%';
+    bool endIsPercentage = !endStr.empty() && endStr.back() == L'%';
+    if (startIsPercentage != endIsPercentage) {
+        Wh_Log(L"Invalid region (mixed percent and pixel): %.*s",
+               (int)regionStr.size(), regionStr.data());
+        return std::nullopt;
+    }
+
+    bool isPercentage = startIsPercentage;
+    if (isPercentage) {
+        startStr.remove_suffix(1);
+        endStr.remove_suffix(1);
+    }
+
+    int start;
+    int end;
+    if (!SvToInt(startStr, &start) || !SvToInt(endStr, &end)) {
+        Wh_Log(L"Invalid region (non-numeric values): %.*s",
+               (int)regionStr.size(), regionStr.data());
+        return std::nullopt;
+    }
+
+    if (start >= end) {
+        Wh_Log(L"Invalid region (start must be less than end): %.*s",
+               (int)regionStr.size(), regionStr.data());
+        return std::nullopt;
+    }
+
+    return Region{isPercentage, start, end};
+}
+
+bool HasCustomScrollRegions() {
+    return !g_settings.customScrollRegions.empty();
+}
+
+bool IsPointInsideCustomRegion(HWND hMMTaskbarWnd, POINT pt) {
+    RECT rc;
+    if (!GetWindowRect(hMMTaskbarWnd, &rc) || !PtInRect(&rc, pt)) {
+        return false;
+    }
+
+    bool isHorizontal = (rc.right - rc.left) >= (rc.bottom - rc.top);
+    int taskbarLength;
+    int cursorOffset;
+    if (isHorizontal) {
+        taskbarLength = rc.right - rc.left;
+        if (GetWindowLong(hMMTaskbarWnd, GWL_EXSTYLE) & WS_EX_LAYOUTRTL) {
+            cursorOffset = rc.right - pt.x;
+        } else {
+            cursorOffset = pt.x - rc.left;
+        }
+    } else {
+        taskbarLength = rc.bottom - rc.top;
+        cursorOffset = pt.y - rc.top;
+    }
+
+    UINT dpi = GetDpiForWindowWithFallback(hMMTaskbarWnd);
+
+    for (const auto& region : g_settings.customScrollRegions) {
+        int start, end;
+        if (region.isPercentage) {
+            start = MulDiv(taskbarLength, region.start, 100);
+            end = MulDiv(taskbarLength, region.end, 100);
+        } else {
+            start = MulDiv(region.start, dpi, 96);
+            end = MulDiv(region.end, dpi, 96);
+        }
+
+        if (cursorOffset >= start && cursorOffset <= end) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+#pragma endregion  // regions
+
 HWND GetTaskbarForMonitor(HWND hTaskbarWnd, HMONITOR monitor) {
     DWORD taskbarThreadId = 0;
     DWORD taskbarProcessId = 0;
@@ -591,7 +729,8 @@ HWND GetTaskbarForMonitor(HWND hTaskbarWnd, HMONITOR monitor) {
         return nullptr;
     }
 
-    if (MonitorFromWindow(hTaskbarWnd, MONITOR_DEFAULTTONEAREST) == monitor) {
+    HMONITOR taskbarMonitor = (HMONITOR)GetProp(hTaskbarWnd, L"TaskbarMonitor");
+    if (taskbarMonitor == monitor) {
         return hTaskbarWnd;
     }
 
@@ -607,7 +746,8 @@ HWND GetTaskbarForMonitor(HWND hTaskbarWnd, HMONITOR monitor) {
             return TRUE;
         }
 
-        if (MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST) != monitor) {
+        HMONITOR taskbarMonitor = (HMONITOR)GetProp(hWnd, L"TaskbarMonitor");
+        if (taskbarMonitor != monitor) {
             return TRUE;
         }
 
@@ -973,6 +1113,22 @@ enum {
     HOTKEY_UPDATE,
 };
 
+using CTaskListWnd__SetActiveItem_t = void(WINAPI*)(void* pThis,
+                                                    void* taskBtnGroup,
+                                                    int buttonIndex);
+CTaskListWnd__SetActiveItem_t CTaskListWnd__SetActiveItem_Original;
+void WINAPI CTaskListWnd__SetActiveItem_Hook(void* pThis,
+                                             void* taskBtnGroup,
+                                             int buttonIndex) {
+    Wh_Log(L">");
+
+    g_lastTaskListActiveTaskItem[pThis] =
+        taskBtnGroup ? CTaskBtnGroup_GetTaskItem(taskBtnGroup, buttonIndex)
+                     : nullptr;
+
+    CTaskListWnd__SetActiveItem_Original(pThis, taskBtnGroup, buttonIndex);
+}
+
 using CTaskBand_v_WndProc_t = LRESULT(
     WINAPI*)(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 CTaskBand_v_WndProc_t CTaskBand_v_WndProc_Original;
@@ -1062,7 +1218,8 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
             .y = GET_Y_LPARAM(lParam),
         };
 
-        if (PtInRect(&rc, pt)) {
+        if (HasCustomScrollRegions() ? IsPointInsideCustomRegion(hWnd, pt)
+                                     : PtInRect(&rc, pt)) {
             short delta = GET_WHEEL_DELTA_WPARAM(wParam);
 
             // Allows to steal focus.
@@ -1101,7 +1258,8 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
             .y = GET_Y_LPARAM(lParam),
         };
 
-        if (PtInRect(&rc, pt)) {
+        if (HasCustomScrollRegions() ? IsPointInsideCustomRegion(hWnd, pt)
+                                     : PtInRect(&rc, pt)) {
             short delta = GET_WHEEL_DELTA_WPARAM(wParam);
 
             // Allows to steal focus.
@@ -1169,6 +1327,11 @@ int TaskbarFrame_OnPointerWheelChanged_Hook(PVOID pThis, PVOID pArgs) {
         return original();
     }
 
+    if (HasCustomScrollRegions() &&
+        !IsPointInsideCustomRegion(GetAncestor(hMMTaskListWnd, GA_ROOT), pt)) {
+        return original();
+    }
+
     auto currentPoint = args.GetCurrentPoint(taskbarFrameElement);
     double delta = currentPoint.Properties().MouseWheelDelta();
     if (!delta) {
@@ -1193,6 +1356,20 @@ void LoadSettings() {
         Wh_GetIntSetting(L"reverseScrollingDirection");
     g_settings.enableMouseWheelCycling =
         Wh_GetIntSetting(L"enableMouseWheelCycling");
+
+    g_settings.customScrollRegions.clear();
+    PCWSTR customScrollRegions = Wh_GetStringSetting(L"customScrollRegions");
+    for (auto regionStr : SplitStringView(customScrollRegions, L",")) {
+        regionStr = TrimStringView(regionStr);
+        if (regionStr.empty()) {
+            continue;
+        }
+        if (auto region = ParseRegion(regionStr)) {
+            g_settings.customScrollRegions.push_back(*region);
+        }
+    }
+    Wh_FreeStringSetting(customScrollRegions);
+
     g_settings.cycleLeftKeyboardShortcut =
         WindhawkUtils::StringSetting::make(L"cycleLeftKeyboardShortcut");
     g_settings.cycleRightKeyboardShortcut =
@@ -1244,7 +1421,8 @@ bool HookTaskbarSymbols() {
     if (g_winVersion <= WinVersion::Win10) {
         module = GetModuleHandle(nullptr);
     } else {
-        module = LoadLibrary(L"taskbar.dll");
+        module = LoadLibraryEx(L"taskbar.dll", nullptr,
+                               LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!module) {
             Wh_Log(L"Couldn't load taskbar.dll");
             return false;
@@ -1262,20 +1440,12 @@ bool HookTaskbarSymbols() {
             &CTaskListWnd_vftable_ITaskListSite,
         },
         {
-            {LR"(const CTaskListWnd::`vftable'{for `ITaskListAcc'})"},
-            &CTaskListWnd_vftable_ITaskListAcc,
-        },
-        {
             {LR"(const CImmersiveTaskItem::`vftable'{for `ITaskItem'})"},
             &CImmersiveTaskItem_vftable,
         },
         {
             {LR"(public: virtual int __cdecl CTaskListWnd::GetButtonGroupCount(void))"},
             &CTaskListWnd_GetButtonGroupCount,
-        },
-        {
-            {LR"(public: virtual long __cdecl CTaskListWnd::GetActiveBtn(struct ITaskGroup * *,int *))"},
-            &CTaskListWnd_GetActiveBtn,
         },
         {
             {LR"(protected: struct ITaskBtnGroup * __cdecl CTaskListWnd::_GetTBGroupFromGroup(struct ITaskGroup *,int *))"},
@@ -1304,6 +1474,11 @@ bool HookTaskbarSymbols() {
         {
             {LR"(public: virtual void __cdecl CTaskListWnd::SwitchToItem(struct ITaskItem *))"},
             &CTaskListWnd_SwitchToItem_Original,
+        },
+        {
+            {LR"(protected: void __cdecl CTaskListWnd::_SetActiveItem(struct ITaskBtnGroup *,int))"},
+            &CTaskListWnd__SetActiveItem_Original,
+            CTaskListWnd__SetActiveItem_Hook,
         },
         {
             {LR"(protected: virtual __int64 __cdecl CTaskBand::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
@@ -1417,14 +1592,10 @@ bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
          &CTaskListWnd_vftable_ITaskListUI},
         {R"(??_7CTaskListWnd@@6BITaskListSite@@@)",
          &CTaskListWnd_vftable_ITaskListSite},
-        {R"(??_7CTaskListWnd@@6BITaskListAcc@@@)",
-         &CTaskListWnd_vftable_ITaskListAcc},
         {R"(??_7CImmersiveTaskItem@@6BITaskItem@@@)",
          &CImmersiveTaskItem_vftable},
         {R"(?GetButtonGroupCount@CTaskListWnd@@UEAAHXZ)",
          &CTaskListWnd_GetButtonGroupCount},
-        {R"(?GetActiveBtn@CTaskListWnd@@UEAAJPEAPEAUITaskGroup@@PEAH@Z)",
-         &CTaskListWnd_GetActiveBtn},
         {R"(?_GetTBGroupFromGroup@CTaskListWnd@@IEAAPEAUITaskBtnGroup@@PEAUITaskGroup@@PEAH@Z)",
          &CTaskListWnd__GetTBGroupFromGroup},
         {R"(?GetGroupType@CTaskBtnGroup@@UEAA?AW4eTBGROUPTYPE@@XZ)",
@@ -1438,6 +1609,9 @@ bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
          &CImmersiveTaskItem_GetWindow_Original},
         {R"(?SwitchToItem@CTaskListWnd@@UEAAXPEAUITaskItem@@@Z)",
          &CTaskListWnd_SwitchToItem_Original},
+        {R"(?_SetActiveItem@CTaskListWnd@@IEAAXPEAUITaskBtnGroup@@H@Z)",
+         &CTaskListWnd__SetActiveItem_Original,
+         CTaskListWnd__SetActiveItem_Hook},
         {R"(?v_WndProc@CTaskBand@@MEAA_JPEAUHWND__@@I_K_J@Z)",
          &CTaskBand_v_WndProc_Original, CTaskBand_v_WndProc_Hook},
         {R"(?WndProc@TrayUI@@UEAA_JPEAUHWND__@@I_K_JPEA_N@Z)",

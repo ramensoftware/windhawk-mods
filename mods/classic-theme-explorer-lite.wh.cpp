@@ -2,7 +2,7 @@
 // @id              classic-theme-explorer-lite
 // @name            Classic Theme Explorer Lite
 // @description     Classic Theme mitigations for Explorer ported from Explorer Patcher
-// @version         1.1.2
+// @version         1.3
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -16,7 +16,19 @@ Includes ClientEdge 3D border for folders if you use SysListView32.
 */
 // ==/WindhawkModReadme==
 
+// ==WindhawkModSettings==
+/*
+- clientedge_3d_borders: true
+  $name: 3D borders in folders
+  $description: Add 3D (ClientEdge) borders to folder windows (SysListView32)
+*/
+// ==/WindhawkModSettings==
+
 #include <uxtheme.h>
+
+struct {
+    bool clientedge_3d_borders;
+} settings;
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_Orig;
@@ -32,16 +44,18 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,LPCWSTR lpClassName,LPCWSTR lpW
         dwExStyle |= WS_EX_STATICEDGE;
     }
 
-//  Disable this block if you don't want 3D borders in folders
-    if ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"SysListView32"))
+    if (settings.clientedge_3d_borders)
     {
-        GetClassNameW(hWndParent, wszClassName, 200);
-        if (!wcscmp(wszClassName, L"SHELLDLL_DefView"))
+        if ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"SysListView32"))
         {
-            GetClassNameW(GetParent(hWndParent), wszClassName, 200);
-            if (wcscmp(wszClassName, L"Progman"))
+            GetClassNameW(hWndParent, wszClassName, 200);
+            if (!wcscmp(wszClassName, L"SHELLDLL_DefView"))
             {
-                dwExStyle |= WS_EX_CLIENTEDGE;
+                GetClassNameW(GetParent(hWndParent), wszClassName, 200);
+                if (wcscmp(wszClassName, L"Progman"))
+                {
+                    dwExStyle |= WS_EX_CLIENTEDGE;
+                }
             }
         }
     }
@@ -165,10 +179,10 @@ HRESULT GetThemeMarginsHook(HTHEME hTheme, HDC hdc, int iPartId, int iStateId, i
         pMargins->cxRightWidth = 0;
         pMargins->cyBottomHeight = 10;
     } else if (hTheme == (HTHEME)0xDEADBEFF && iPropId == TMT_CONTENTMARGINS && iPartId == 3 && iStateId == 0) {
-        pMargins->cxLeftWidth = 4; // GetSystemMetrics(SM_CXICONSPACING);
-        pMargins->cyTopHeight = 4; // GetSystemMetrics(SM_CYICONSPACING);
-        pMargins->cxRightWidth = 4; //GetSystemMetrics(SM_CXICONSPACING);
-        pMargins->cyBottomHeight = 4; // GetSystemMetrics(SM_CYICONSPACING);
+        pMargins->cxLeftWidth = 4;
+        pMargins->cyTopHeight = 4;
+        pMargins->cxRightWidth = 4;
+        pMargins->cyBottomHeight = 4;
     }
 
     HWND hShell_TrayWnd = FindWindowEx(NULL, NULL, L"Shell_TrayWnd", NULL);
@@ -209,7 +223,7 @@ HRESULT DrawThemeTextExHook(HTHEME hTheme, HDC hdc, int iPartId, int iStateId, L
     COLORREF fc = GetTextColor(hdc);
     int mode = SetBkMode(hdc, TRANSPARENT);
 
-        wchar_t text[200];
+    wchar_t text[200];
     GetWindowTextW(GetForegroundWindow(), text, 200);
 
     BOOL bIsActiveUnhovered = (iPartId == 5 && iStateId == 5);
@@ -295,7 +309,16 @@ HRESULT DrawThemeBackgroundHook(HTHEME hTheme, HDC hdc, int iPartId, int iStateI
     return pOriginalDrawThemeBackground(hTheme, hdc, iPartId, iStateId, pRect, pClipRect);
 }
 
+void Wh_ModSettingsChanged() {
+    settings.clientedge_3d_borders = Wh_GetIntSetting(L"clientedge_3d_borders");
+}
+
 BOOL Wh_ModInit() {
+
+    if (IsThemeActive()) return FALSE;
+
+    // Загрузка настроек
+    settings.clientedge_3d_borders = Wh_GetIntSetting(L"clientedge_3d_borders");
 
     HMODULE hUxtheme = GetModuleHandle(L"uxtheme.dll");
 

@@ -2,13 +2,13 @@
 // @id              icon-resource-redirect
 // @name            Resource Redirect
 // @description     Define alternative files for loading various resources (e.g. icons in imageres.dll) for simple theming without having to modify system files
-// @version         1.2.2
+// @version         1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         *
-// @compilerOptions -lcomctl32 -lole32 -loleaut32
+// @compilerOptions -lcomctl32 -lgdi32 -lole32 -loleaut32
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -26,14 +26,13 @@
 Define alternative files for loading various resources (e.g. icons in
 imageres.dll) for simple theming without having to modify system files.
 
-**Note**: This mod requires Windhawk v1.6 or newer.
-
 ## Icon themes
 
-A collection of community contributed icon theme packs can be found in the
-[Resource Redirect icon
-themes](https://github.com/ramensoftware/resource-redirect-icon-themes)
-repository. An icon theme can be selected in the mod's settings.
+An icon theme from the collection of community-contributed icon theme packs can
+be selected in the mod's settings. Screenshots of some of the icon themes can be
+found in the [Resource Redirect icon
+themes](https://github.com/ramensoftware/resource-redirect-icon-themes#themes)
+repository.
 
 An icon theme can also be installed manually by downloading it and specifying
 its path in the mod's settings. For details, refer to the guide in the
@@ -42,10 +41,24 @@ repository.
 A short demonstration can be found [here on
 YouTube](https://youtu.be/irzVmKHB83E).
 
+## Disable folder thumbnails
+
+The mod has an option to disable thumbnails in Explorer folders, making folders
+use a generic folder icon instead of showing a preview of their contents. Some
+icon themes may look better with this option enabled, while other themes have
+proper support for styling folder thumbnails. Folder thumbnails are only
+replaced when the "Redirect all loaded resources" option is enabled (see below).
+
+## Redirect all loaded resources (experimental)
+
+The option to redirect all resources can be enabled in the settings. In this
+case, redirection won't be limited to the resource types and loading methods
+listed above. This option might become the default in the future.
+
 ## Theme paths
 
 Theme paths can be set in the settings. A theme path is a folder with
-alternative resource files, and the `theme.ini` file that contains redirection
+alternative resource files and a `theme.ini` file that contains redirection
 rules. For example, the `theme.ini` file may contain the following:
 
 ```
@@ -54,8 +67,8 @@ rules. For example, the `theme.ini` file may contain the following:
 %SystemRoot%\System32\imageres.dll=imageres.dll
 ```
 
-In this case, the folder must also contain the `explorer.exe`, `imageres.dll`
-files which will be used as the redirection resource files.
+In this case, the folder must also contain the `explorer.exe` and `imageres.dll`
+files, which will be used as the redirection resource files.
 
 Alternatively, the theme path can be the `.ini` file itself.
 
@@ -69,18 +82,12 @@ The mod supports the following resource types and loading methods:
 * Cursors loaded with the `LoadCursorW` function.
 * Bitmaps loaded with the `LoadBitmapW` function.
 * Menus loaded with the `LoadMenuW` function.
-* Dialogs loaded with the `DialogBoxParamW`, `CreateDialogParamW` functions.
+* Dialogs loaded with the `DialogBoxParamW` and `CreateDialogParamW` functions.
 * Strings loaded with the `LoadStringW` function.
 * GDI+ images (e.g. PNGs) loaded with the `SHCreateStreamOnModuleResourceW`
   function.
 * DirectUI resources (usually `UIFILE` and `XML`) loaded with the
   `SetXMLFromResource` function.
-
-## Redirect all loaded resources (experimental)
-
-The option to redirect all resources can be enabled in the settings. In this
-case, redirection won't be limited to the resource types and loading methods
-listed above. This option might become the default in the future.
 
 ## Choosing the redirected resource file
 
@@ -279,7 +286,27 @@ The resource lookup order then becomes:
   - Windows 11 New Folders Purple|themes/icons/niivu/Windows%2011%20New%20Folders%20Purple.zip: Windows 11 New Folders Purple (by niivu)
   - Windows 11 New Folders Slate|themes/icons/niivu/Windows%2011%20New%20Folders%20Slate.zip: Windows 11 New Folders Slate (by niivu)
   - Windows 11 New Folders Yellow|themes/icons/niivu/Windows%2011%20New%20Folders%20Yellow.zip: Windows 11 New Folders Yellow (by niivu)
+  - PaneVista|themes/icons/SoftwareType/PaneVista.zip: 'PaneVista (by SoftwareType, credit: ImSwordQueen)'
   - Pane7|themes/icons/ImSwordQueen/Pane7.zip: Pane7 (by ImSwordQueen)
+  - Pane8.1|themes/icons/NicSonic/Pane8.1.zip: Pane8.1 (by NicSonic)
+  - Minecraft Axolotle|themes/icons/Wasiabbas4pk/Minecraft%20Axolotle.zip: 'Minecraft Axolotle (by WasiXGamer, credit: dalps/minecraft11)'
+  - Minecraft Fox|themes/icons/Wasiabbas4pk/Minecraft%20Fox.zip: 'Minecraft Fox (by WasiXGamer, credit: dalps/minecraft11)'
+  - Minecraft TNT|themes/icons/Wasiabbas4pk/Minecraft%20TNT.zip: 'Minecraft TNT (by WasiXGamer, credit: dalps/minecraft11)'
+  - Minecraft Panda|themes/icons/Wasiabbas4pk/Minecraft%20Panda.zip: 'Minecraft Panda (by WasiXGamer, credit: dalps/minecraft11)'
+  - Minecraft Creeper|themes/icons/Wasiabbas4pk/Minecraft%20Creeper.zip: 'Minecraft Creeper (by WasiXGamer, credit: dalps/minecraft11)'
+  - Minecraft Ender Dragon|themes/icons/Wasiabbas4pk/Minecraft%20Ender%20Dragon.zip: 'Minecraft Ender Dragon (by WasiXGamer, credit: dalps/minecraft11)'
+  - Minecraft Shulker (Blue)|themes/icons/Wasiabbas4pk/Minecraft%20Shulker%28Blue%29.zip: 'Minecraft Shulker (Blue) (by WasiXGamer, credit: dalps/minecraft11)'
+  - Minecraft Shulker (Black)|themes/icons/Wasiabbas4pk/Minecraft%20Shulker%28Black%29.zip: 'Minecraft Shulker (Black) (by WasiXGamer, credit: dalps/minecraft11)'
+- disableThumbnails: false
+  $name: Disable folder thumbnails
+  $description: >-
+    Make Explorer folders use a generic folder icon instead of showing
+    thumbnails of their contents. This works better with some icon themes.
+- allResourceRedirect: false
+  $name: Redirect all loaded resources (experimental)
+  $description: >-
+    Try to redirect all loaded resources, not only the supported resources
+    that are listed in the description.
 - themePaths: [""]
   $name: Theme paths
   $description: >-
@@ -296,17 +323,12 @@ The resource lookup order then becomes:
       $name: The redirection resource file
       $description: The custom resource file that will be used instead.
   $name: Redirection resource paths
-- allResourceRedirect: false
-  $name: Redirect all loaded resources (experimental)
-  $description: >-
-    Try to redirect all loaded resources, not only the supported resources
-    that are listed in the description.
 - themeFolder: ""
   $name: Theme folder (deprecated)
   $description: >-
     A folder with alternative resource files and theme.ini.
 
-    This option will be removed in the future, please use the new "Theme paths"
+    This option will be removed in the future. Please use the new "Theme paths"
     option above.
 */
 // ==/WindhawkModSettings==
@@ -332,12 +354,23 @@ The resource lookup order then becomes:
 #include <unordered_map>
 #include <vector>
 
+using namespace std::string_view_literals;
+
 #ifndef LR_EXACTSIZEONLY
 #define LR_EXACTSIZEONLY 0x10000
 #endif
 
+#ifndef STATUS_SUCCESS
+#define STATUS_SUCCESS ((NTSTATUS)0x00000000L)
+#endif
+
+#ifndef STATUS_BUFFER_TOO_SMALL
+#define STATUS_BUFFER_TOO_SMALL ((NTSTATUS)0xC0000023L)
+#endif
+
 struct {
     WindhawkUtils::StringSetting iconTheme;
+    std::atomic<bool> disableThumbnails;
     bool allResourceRedirect;
 } g_settings;
 
@@ -360,8 +393,28 @@ std::atomic<DWORD> g_operationCounter;
 HANDLE g_clearCachePromptThread;
 std::atomic<HWND> g_clearCachePromptWindow;
 
-constexpr WCHAR kClearCachePromptTitle[] =
-    L"Resource Redirect - Windhawk";
+// The resource operation count is used to mark recognized high level resource
+// operations, which will then be checked in the lower level hooks:
+// FindResourceExA, FindResourceExW, LoadResource, SizeofResource,
+// RtlLoadString. This allows handling recognized high level calls in a more
+// reliable way.
+//
+// Example: Consider LoadImageW for loading an icon. Internally, it reads two
+// resources: the icon group resource and the actual icon resource. If the
+// FindResourceExW hook runs for both resources, it might fall back for the icon
+// group, but redirect the actual icon resource, causing a mismatch. By handling
+// the redirection in LoadImageW, both operations are either redirected or not.
+thread_local int g_resourceOperationCount;
+
+auto resourceOperationCountScope() {
+    g_resourceOperationCount++;
+    return std::unique_ptr<decltype(g_resourceOperationCount),
+                           void (*)(decltype(g_resourceOperationCount)*)>{
+        &g_resourceOperationCount,
+        [](auto resourceOperationCount) { (*resourceOperationCount)--; }};
+}
+
+constexpr WCHAR kClearCachePromptTitle[] = L"Resource Redirect - Windhawk";
 constexpr WCHAR kClearCachePromptText[] =
     L"For some icons to be updated, the icon cache must be cleared. Do you "
     L"want to clear the icon cache now?\n\nIcon cache files will be deleted, "
@@ -758,6 +811,72 @@ bool RedirectModule(DWORD c,
     return false;
 }
 
+typedef struct {
+    int targetIndex;
+    int currentIndex;
+    LPWSTR foundName;
+} ENUMICONCTX;
+
+BOOL CALLBACK EnumIconsProc(HMODULE hModule,
+                            LPCWSTR lpszType,
+                            LPWSTR lpszName,
+                            LONG_PTR lParam) {
+    ENUMICONCTX* ctx = (ENUMICONCTX*)lParam;
+
+    if (ctx->currentIndex == ctx->targetIndex) {
+        ctx->foundName = lpszName;
+        return FALSE;  // Stop enumeration.
+    }
+
+    ctx->currentIndex++;
+    return TRUE;  // Continue.
+}
+
+LPWSTR GetIconGroupNameByIndex(HMODULE hModule, int index) {
+    ENUMICONCTX ctx = {
+        .targetIndex = index,
+        .currentIndex = 0,
+        .foundName = nullptr,
+    };
+    EnumResourceNames(hModule, RT_GROUP_ICON, EnumIconsProc, (LONG_PTR)&ctx);
+    return ctx.foundName;
+}
+
+typedef struct {
+    LPCWSTR targetName;
+    int currentIndex;
+    int foundIndex;
+} ENUMICONBYNAMECTX;
+
+BOOL CALLBACK EnumIconsByNameProc(HMODULE hModule,
+                                  LPCWSTR lpszType,
+                                  LPWSTR lpszName,
+                                  LONG_PTR lParam) {
+    ENUMICONBYNAMECTX* ctx = (ENUMICONBYNAMECTX*)lParam;
+
+    // Only compare string names, skip integer resource IDs.
+    if (!IS_INTRESOURCE(lpszName)) {
+        if (wcscmp(lpszName, ctx->targetName) == 0) {
+            ctx->foundIndex = ctx->currentIndex;
+            return FALSE;  // Stop enumeration.
+        }
+    }
+
+    ctx->currentIndex++;
+    return TRUE;  // Continue.
+}
+
+int GetIconIndexByGroupName(HMODULE hModule, LPCWSTR name) {
+    ENUMICONBYNAMECTX ctx = {
+        .targetName = name,
+        .currentIndex = 0,
+        .foundIndex = -1,
+    };
+    EnumResourceNames(hModule, RT_GROUP_ICON, EnumIconsByNameProc,
+                      (LONG_PTR)&ctx);
+    return ctx.foundIndex;
+}
+
 using PrivateExtractIconsW_t = decltype(&PrivateExtractIconsW);
 PrivateExtractIconsW_t PrivateExtractIconsW_Original;
 UINT WINAPI PrivateExtractIconsW_Hook(LPCWSTR szFileName,
@@ -768,6 +887,7 @@ UINT WINAPI PrivateExtractIconsW_Hook(LPCWSTR szFileName,
                                       UINT* piconid,
                                       UINT nIcons,
                                       UINT flags) {
+    auto resOp = resourceOperationCountScope();
     DWORD c = ++g_operationCounter;
 
     Wh_Log(L"[%u] > Icon index: %d, file name: %s", c, nIconIndex, szFileName);
@@ -785,11 +905,89 @@ UINT WINAPI PrivateExtractIconsW_Hook(LPCWSTR szFileName,
             Wh_Log(L"[%u] flags: 0x%08X", c, flags);
         },
         [&](PCWSTR fileNameRedirect) {
+            // nIconIndex can be either:
+            // * Negative: the icon id
+            // * Non-negative: The icon index (0 for first icon, etc.)
+            //
+            // Using the non-negative value for the redirected file is
+            // problematic as it might contain only part of the icons.
+            // Therefore, convert it to an id before proceeding.
+            int iconId = nIconIndex;
+            if (iconId >= 0) {
+                HMODULE module = LoadLibraryEx(szFileName, nullptr,
+                                               LOAD_LIBRARY_AS_DATAFILE);
+                if (module) {
+                    bool resolved = false;
+
+                    LPWSTR iconGroupName =
+                        GetIconGroupNameByIndex(module, iconId);
+                    if (!iconGroupName) {
+                        Wh_Log(L"[%u] Failed to get icon group name", c);
+                    } else if (!IS_INTRESOURCE(iconGroupName)) {
+                        Wh_Log(L"[%u] Icon group name is not an id: %s", c,
+                               iconGroupName);
+
+                        // Load redirect file and find the string name's index.
+                        HMODULE redirectModule =
+                            LoadLibraryEx(fileNameRedirect, nullptr,
+                                          LOAD_LIBRARY_AS_DATAFILE);
+                        if (redirectModule) {
+                            int redirectIndex = GetIconIndexByGroupName(
+                                redirectModule, iconGroupName);
+                            FreeLibrary(redirectModule);
+
+                            if (redirectIndex >= 0) {
+                                iconId = redirectIndex;
+                                resolved = true;
+                                Wh_Log(
+                                    L"[%u] Found icon group name in redirect "
+                                    L"file at index %d",
+                                    c, redirectIndex);
+                            } else {
+                                Wh_Log(
+                                    L"[%u] Icon group name not found in "
+                                    L"redirect file",
+                                    c);
+                            }
+                        } else {
+                            Wh_Log(
+                                L"[%u] Failed to load redirect file for icon "
+                                L"name lookup",
+                                c);
+                        }
+                    } else {
+                        iconId = -(WORD)(ULONG_PTR)iconGroupName;
+                        resolved = true;
+                        Wh_Log(L"[%u] Using icon group id %d", c, -iconId);
+                    }
+
+                    FreeLibrary(module);
+
+                    if (!resolved) {
+                        if (iconId == 0) {
+                            // Allow using index 0 as fallback for convenience,
+                            // which likely means that the exact match isn't
+                            // that important and the first icon will do.
+                            Wh_Log(L"[%u] Using icon index 0 as fallback", c);
+                        } else {
+                            Wh_Log(
+                                L"[%u] Failed to resolve icon group from "
+                                L"original index",
+                                c);
+                            return false;
+                        }
+                    }
+                } else {
+                    // May happen e.g. for .ico files.
+                    Wh_Log(L"[%u] Failed to get module handle", c);
+                }
+            }
+
             if (phicon) {
                 std::fill_n(phicon, nIcons, nullptr);
             }
 
-            result = PrivateExtractIconsW_Original(fileNameRedirect, nIconIndex,
+            result = PrivateExtractIconsW_Original(fileNameRedirect, iconId,
                                                    cxIcon, cyIcon, phicon,
                                                    piconid, nIcons, flags);
             if (result != 0xFFFFFFFF && result != 0) {
@@ -844,9 +1042,8 @@ UINT WINAPI PrivateExtractIconsW_Hook(LPCWSTR szFileName,
                 HICON testIcon = nullptr;
                 UINT testIconId;
                 UINT testResult = PrivateExtractIconsW_Original(
-                    fileNameRedirect, nIconIndex, LOWORD(cxIcon),
-                    LOWORD(cyIcon), &testIcon, &testIconId, 1,
-                    flags & ~LR_EXACTSIZEONLY);
+                    fileNameRedirect, iconId, LOWORD(cxIcon), LOWORD(cyIcon),
+                    &testIcon, &testIconId, 1, flags & ~LR_EXACTSIZEONLY);
 
                 if (testIcon) {
                     DestroyIcon(testIcon);
@@ -893,6 +1090,7 @@ HANDLE LoadImageAW_Hook(HINSTANCE hInst,
                         int cx,
                         int cy,
                         UINT fuLoad) {
+    auto resOp = resourceOperationCountScope();
     DWORD c = ++g_operationCounter;
 
     PCWSTR typeClarification = L"";
@@ -926,11 +1124,46 @@ HANDLE LoadImageAW_Hook(HINSTANCE hInst,
 
     HANDLE result;
     bool redirected;
+    DWORD lastError = 0;
 
     auto beforeFirstRedirectionFunction = [&]() {
         Wh_Log(L"[%u] Width: %d", c, cx);
         Wh_Log(L"[%u] Height: %d", c, cy);
         Wh_Log(L"[%u] Flags: 0x%08X", c, fuLoad);
+    };
+
+    // If `LR_EXACTSIZEONLY` is used and the exact size is missing, the function
+    // will return no result. If the replacement doesn't have this resource, we
+    // want to fall back to the original, but if it has other sizes, we prefer
+    // to return an error, hopefully the target app will try other sizes in this
+    // case.
+    auto handleExactSizeOnlyMiss =
+        [&](DWORD dwError, std::function<HANDLE(UINT)> loadFunc) -> bool {
+        if (!(fuLoad & LR_EXACTSIZEONLY) ||
+            (type != IMAGE_BITMAP && type != IMAGE_ICON &&
+             type != IMAGE_CURSOR)) {
+            return false;
+        }
+
+        HANDLE testResult = loadFunc(fuLoad & ~LR_EXACTSIZEONLY);
+        if (!testResult) {
+            return false;
+        }
+
+        if (!(fuLoad & LR_SHARED)) {
+            if (type == IMAGE_BITMAP) {
+                DeleteObject(testResult);
+            } else if (type == IMAGE_ICON) {
+                DestroyIcon((HICON)testResult);
+            } else {
+                DestroyCursor((HCURSOR)testResult);
+            }
+        }
+
+        result = nullptr;
+        lastError = dwError;
+        Wh_Log(L"[%u] Redirected successfully with error for exact size", c);
+        return true;
     };
 
     if (!hInst && (fuLoad & LR_LOADFROMFILE)) {
@@ -945,6 +1178,14 @@ HANDLE LoadImageAW_Hook(HINSTANCE hInst,
                 }
 
                 DWORD dwError = GetLastError();
+
+                if (handleExactSizeOnlyMiss(dwError, [&](UINT flags) {
+                        return (*Original)(hInst, fileNameRedirect, type, cx,
+                                           cy, flags);
+                    })) {
+                    return true;
+                }
+
                 Wh_Log(L"[%u] LoadImage failed with error %u", c, dwError);
                 return false;
             });
@@ -960,12 +1201,23 @@ HANDLE LoadImageAW_Hook(HINSTANCE hInst,
                 }
 
                 DWORD dwError = GetLastError();
+
+                if (handleExactSizeOnlyMiss(dwError, [&](UINT flags) {
+                        return (*Original)(hInstanceRedirect, name, type, cx,
+                                           cy, flags);
+                    })) {
+                    return true;
+                }
+
                 Wh_Log(L"[%u] LoadImage failed with error %u", c, dwError);
                 return false;
             });
     }
 
     if (redirected) {
+        if (!result) {
+            SetLastError(lastError);
+        }
         return result;
     }
 
@@ -998,6 +1250,7 @@ HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst,
 
 template <auto* Original, typename T>
 HICON LoadIconAW_Hook(HINSTANCE hInstance, const T* lpIconName) {
+    auto resOp = resourceOperationCountScope();
     DWORD c = ++g_operationCounter;
 
     WCHAR prefix[64];
@@ -1048,6 +1301,7 @@ HICON WINAPI LoadIconW_Hook(HINSTANCE hInstance, LPCWSTR lpIconName) {
 
 template <auto* Original, typename T>
 HCURSOR LoadCursorAW_Hook(HINSTANCE hInstance, const T* lpCursorName) {
+    auto resOp = resourceOperationCountScope();
     DWORD c = ++g_operationCounter;
 
     WCHAR prefix[64];
@@ -1099,6 +1353,7 @@ HCURSOR WINAPI LoadCursorW_Hook(HINSTANCE hInstance, LPCWSTR lpCursorName) {
 
 template <auto* Original, typename T>
 HBITMAP LoadBitmapAW_Hook(HINSTANCE hInstance, const T* lpBitmapName) {
+    auto resOp = resourceOperationCountScope();
     DWORD c = ++g_operationCounter;
 
     WCHAR prefix[64];
@@ -1150,6 +1405,7 @@ HBITMAP WINAPI LoadBitmapW_Hook(HINSTANCE hInstance, LPCWSTR lpBitmapName) {
 
 template <auto* Original, typename T>
 HMENU LoadMenuAW_Hook(HINSTANCE hInstance, const T* lpMenuName) {
+    auto resOp = resourceOperationCountScope();
     DWORD c = ++g_operationCounter;
 
     WCHAR prefix[64];
@@ -1202,6 +1458,7 @@ INT_PTR DialogBoxParamAW_Hook(HINSTANCE hInstance,
                               HWND hWndParent,
                               DLGPROC lpDialogFunc,
                               LPARAM dwInitParam) {
+    auto resOp = resourceOperationCountScope();
     DWORD c = ++g_operationCounter;
 
     WCHAR prefix[64];
@@ -1273,6 +1530,7 @@ HWND CreateDialogParamAW_Hook(HINSTANCE hInstance,
                               HWND hWndParent,
                               DLGPROC lpDialogFunc,
                               LPARAM dwInitParam) {
+    auto resOp = resourceOperationCountScope();
     DWORD c = ++g_operationCounter;
 
     WCHAR prefix[64];
@@ -1336,6 +1594,7 @@ int LoadStringAW_Hook(HINSTANCE hInstance,
                       UINT uID,
                       T* lpBuffer,
                       int cchBufferMax) {
+    auto resOp = resourceOperationCountScope();
     DWORD c = ++g_operationCounter;
 
     WCHAR prefix[64];
@@ -1458,6 +1717,10 @@ HRSRC WINAPI FindResourceExA_Hook(HMODULE hModule,
                                   LPCSTR lpType,
                                   LPCSTR lpName,
                                   WORD wLanguage) {
+    if (g_resourceOperationCount > 0) {
+        return FindResourceExA_Original(hModule, lpType, lpName, wLanguage);
+    }
+
     return FindResourceExAW_Hook<&FindResourceExA_Original>(hModule, lpType,
                                                             lpName, wLanguage);
 }
@@ -1468,6 +1731,10 @@ HRSRC WINAPI FindResourceExW_Hook(HMODULE hModule,
                                   LPCWSTR lpType,
                                   LPCWSTR lpName,
                                   WORD wLanguage) {
+    if (g_resourceOperationCount > 0) {
+        return FindResourceExW_Original(hModule, lpType, lpName, wLanguage);
+    }
+
     return FindResourceExAW_Hook<&FindResourceExW_Original>(hModule, lpType,
                                                             lpName, wLanguage);
 }
@@ -1497,6 +1764,10 @@ bool IsResourceHandlePartOfModule(HMODULE hModule, HRSRC hResInfo) {
 using LoadResource_t = decltype(&LoadResource);
 LoadResource_t LoadResource_Original;
 HGLOBAL WINAPI LoadResource_Hook(HMODULE hModule, HRSRC hResInfo) {
+    if (g_resourceOperationCount > 0) {
+        return LoadResource_Original(hModule, hResInfo);
+    }
+
     DWORD c = ++g_operationCounter;
 
     Wh_Log(L"[%u] > hModule=%p, hResInfo=%p", c, hModule, hResInfo);
@@ -1533,6 +1804,10 @@ HGLOBAL WINAPI LoadResource_Hook(HMODULE hModule, HRSRC hResInfo) {
 using SizeofResource_t = decltype(&SizeofResource);
 SizeofResource_t SizeofResource_Original;
 DWORD WINAPI SizeofResource_Hook(HMODULE hModule, HRSRC hResInfo) {
+    if (g_resourceOperationCount > 0) {
+        return SizeofResource_Original(hModule, hResInfo);
+    }
+
     DWORD c = ++g_operationCounter;
 
     Wh_Log(L"[%u] > hModule=%p, hResInfo=%p", c, hModule, hResInfo);
@@ -1589,6 +1864,12 @@ HRESULT NTAPI RtlLoadString_Hook(_In_ PVOID DllHandle,
                                  _Out_writes_(ReturnLanguageLen)
                                      PWSTR ReturnLanguageName,
                                  _Inout_opt_ PULONG ReturnLanguageLen) {
+    if (g_resourceOperationCount > 0) {
+        return RtlLoadString_Original(DllHandle, StringId, StringLanguage,
+                                      Flags, ReturnString, ReturnStringLen,
+                                      ReturnLanguageName, ReturnLanguageLen);
+    }
+
     DWORD c = ++g_operationCounter;
 
     Wh_Log(L"[%u] > string number: %u", c, StringId);
@@ -1633,6 +1914,7 @@ HRESULT WINAPI SHCreateStreamOnModuleResourceW_Hook(HMODULE hModule,
                                                     LPCWSTR pwszName,
                                                     LPCWSTR pwszType,
                                                     IStream** ppStream) {
+    auto resOp = resourceOperationCountScope();
     DWORD c = ++g_operationCounter;
 
     PCWSTR logTypeStr;
@@ -1721,6 +2003,7 @@ HRESULT __thiscall SetXMLFromResource_Hook(void* pThis,
                                            HMODULE hModule,
                                            HINSTANCE param4,
                                            HINSTANCE param5) {
+    auto resOp = resourceOperationCountScope();
     DWORD c = ++g_operationCounter;
 
     PCWSTR logTypeStr;
@@ -1798,6 +2081,7 @@ void* WINAPI DirectUI_CreateString_Hook(PCWSTR name, HINSTANCE hInstance) {
         return DirectUI_CreateString_Original(name, hInstance);
     }
 
+    auto resOp = resourceOperationCountScope();
     DWORD c = ++g_operationCounter;
 
     Wh_Log(L"[%u] > DUI string number: %u", c, (DWORD)(ULONG_PTR)name);
@@ -1831,226 +2115,6 @@ void* WINAPI DirectUI_CreateString_Hook(PCWSTR name, HINSTANCE hInstance) {
     }
 
     return DirectUI_CreateString_Original(name, hInstance);
-}
-
-// A workaround for https://github.com/mstorsjo/llvm-mingw/issues/459.
-// Separate mod implementation:
-// https://gist.github.com/m417z/f0cdf071868a6f31210e84dd0d444055.
-// This workaround will be included in Windhawk in future versions.
-#include <cxxabi.h>
-#include <locale.h>
-namespace ProcessShutdownMessageBoxFix {
-
-using _errno_t = decltype(&_errno);
-
-WCHAR errorMsg[1025];
-void** g_ppSetlocale;
-HMODULE g_msvcrtModule;
-_errno_t g_msvcrtErrno;
-bool g_msvcrtSetLocaleIsPatched;
-
-void** FindImportPtr(HMODULE hFindInModule,
-                     PCSTR pModuleName,
-                     PCSTR pImportName) {
-    IMAGE_DOS_HEADER* pDosHeader;
-    IMAGE_NT_HEADERS* pNtHeader;
-    ULONG_PTR ImageBase;
-    IMAGE_IMPORT_DESCRIPTOR* pImportDescriptor;
-    ULONG_PTR* pOriginalFirstThunk;
-    ULONG_PTR* pFirstThunk;
-    ULONG_PTR ImageImportByName;
-
-    // Init
-    pDosHeader = (IMAGE_DOS_HEADER*)hFindInModule;
-    pNtHeader = (IMAGE_NT_HEADERS*)((char*)pDosHeader + pDosHeader->e_lfanew);
-
-    if (!pNtHeader->OptionalHeader.DataDirectory[1].VirtualAddress)
-        return nullptr;
-
-    ImageBase = (ULONG_PTR)hFindInModule;
-    pImportDescriptor =
-        (IMAGE_IMPORT_DESCRIPTOR*)(ImageBase +
-                                   pNtHeader->OptionalHeader.DataDirectory[1]
-                                       .VirtualAddress);
-
-    // Search!
-    while (pImportDescriptor->OriginalFirstThunk) {
-        if (lstrcmpiA((char*)(ImageBase + pImportDescriptor->Name),
-                      pModuleName) == 0) {
-            pOriginalFirstThunk =
-                (ULONG_PTR*)(ImageBase + pImportDescriptor->OriginalFirstThunk);
-            ImageImportByName = *pOriginalFirstThunk;
-
-            pFirstThunk =
-                (ULONG_PTR*)(ImageBase + pImportDescriptor->FirstThunk);
-
-            while (ImageImportByName) {
-                if (!(ImageImportByName & IMAGE_ORDINAL_FLAG)) {
-                    if ((ULONG_PTR)pImportName & ~0xFFFF) {
-                        ImageImportByName += sizeof(WORD);
-
-                        if (lstrcmpA((char*)(ImageBase + ImageImportByName),
-                                     pImportName) == 0)
-                            return (void**)pFirstThunk;
-                    }
-                } else {
-                    if (((ULONG_PTR)pImportName & ~0xFFFF) == 0)
-                        if ((ImageImportByName & 0xFFFF) ==
-                            (ULONG_PTR)pImportName)
-                            return (void**)pFirstThunk;
-                }
-
-                pOriginalFirstThunk++;
-                ImageImportByName = *pOriginalFirstThunk;
-
-                pFirstThunk++;
-            }
-        }
-
-        pImportDescriptor++;
-    }
-
-    return nullptr;
-}
-
-using SetLocale_t = char*(__cdecl*)(int category, const char* locale);
-SetLocale_t SetLocale_Original;
-char* __cdecl SetLocale_Wrapper(int category, const char* locale) {
-    // A workaround for https://github.com/mstorsjo/llvm-mingw/issues/459.
-    errno_t* err = g_msvcrtErrno();
-    HMODULE module;
-    if (GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                              GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                          (PCWSTR)err, &module) &&
-        module == g_msvcrtModule) {
-        // Getting a process-wide errno from the module section instead of the
-        // thread errno from the heap means we have no PTD (Per-thread data) and
-        // setlocale will fail, likely with a message box and abort. Return NULL
-        // instead to let the caller handle it gracefully.
-        // Wh_Log(L"Returning NULL for setlocale");
-        return nullptr;
-    }
-
-    return SetLocale_Original(category, locale);
-}
-
-bool Init(HMODULE module) {
-    // Make sure the functions are in the import table.
-    void* p;
-    InterlockedExchangePointer(&p, (void*)__cxxabiv1::__cxa_throw);
-    InterlockedExchangePointer(&p, (void*)setlocale);
-
-    void** ppCxaThrow = FindImportPtr(module, "libc++.dll", "__cxa_throw");
-    if (!ppCxaThrow) {
-        wsprintf(errorMsg, L"No __cxa_throw");
-        return false;
-    }
-
-    void** ppSetlocale = FindImportPtr(module, "msvcrt.dll", "setlocale");
-    if (!ppSetlocale) {
-        wsprintf(errorMsg, L"No setlocale");
-        return false;
-    }
-
-    HMODULE libcppModule;
-    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           (PCWSTR)*ppCxaThrow, &libcppModule)) {
-        wsprintf(errorMsg, L"No libcpp module");
-        return false;
-    }
-
-    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           (PCWSTR)*ppSetlocale, &g_msvcrtModule)) {
-        wsprintf(errorMsg, L"No msvcrt module");
-        return false;
-    }
-
-    g_ppSetlocale = FindImportPtr(libcppModule, "msvcrt.dll", "setlocale");
-    if (!g_ppSetlocale) {
-        wsprintf(errorMsg, L"No setlocale for libc++.dll");
-        return false;
-    }
-
-    HMODULE msvcrtModuleForLibcpp;
-    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           (PCWSTR)*g_ppSetlocale, &msvcrtModuleForLibcpp)) {
-        wsprintf(errorMsg, L"No msvcrt module for libc++.dll");
-        return false;
-    }
-
-    if (msvcrtModuleForLibcpp != g_msvcrtModule) {
-        wsprintf(errorMsg, L"Bad msvcrt module, already patched? %p!=%p",
-                 msvcrtModuleForLibcpp, g_msvcrtModule);
-        return false;
-    }
-
-    g_msvcrtErrno = (_errno_t)GetProcAddress(msvcrtModuleForLibcpp, "_errno");
-    if (!g_msvcrtErrno) {
-        wsprintf(errorMsg, L"No _errno");
-        return false;
-    }
-
-    DWORD dwOldProtect;
-    if (!VirtualProtect(g_ppSetlocale, sizeof(*g_ppSetlocale), PAGE_READWRITE,
-                        &dwOldProtect)) {
-        wsprintf(errorMsg, L"VirtualProtect failed");
-        return false;
-    }
-
-    SetLocale_Original = (SetLocale_t)*g_ppSetlocale;
-    *g_ppSetlocale = (void*)SetLocale_Wrapper;
-    VirtualProtect(g_ppSetlocale, sizeof(*g_ppSetlocale), dwOldProtect,
-                   &dwOldProtect);
-
-    g_msvcrtSetLocaleIsPatched = true;
-    return true;
-}
-
-void LogErrorIfAny() {
-    if (*errorMsg) {
-        Wh_Log(L"%s", errorMsg);
-    }
-}
-
-void Uninit() {
-    if (!g_msvcrtSetLocaleIsPatched) {
-        return;
-    }
-
-    DWORD dwOldProtect;
-    VirtualProtect(g_ppSetlocale, sizeof(*g_ppSetlocale), PAGE_READWRITE,
-                   &dwOldProtect);
-    *g_ppSetlocale = (void*)SetLocale_Original;
-    VirtualProtect(g_ppSetlocale, sizeof(*g_ppSetlocale), dwOldProtect,
-                   &dwOldProtect);
-}
-
-}  // namespace ProcessShutdownMessageBoxFix
-
-BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved) {
-    switch (fdwReason) {
-        case DLL_PROCESS_ATTACH:
-            ProcessShutdownMessageBoxFix::Init(hinstDLL);
-            break;
-
-        case DLL_THREAD_ATTACH:
-        case DLL_THREAD_DETACH:
-            break;
-
-        case DLL_PROCESS_DETACH:
-            // Do not do cleanup if process termination scenario.
-            if (lpReserved) {
-                break;
-            }
-
-            ProcessShutdownMessageBoxFix::Uninit();
-            break;
-    }
-
-    return TRUE;
 }
 
 bool IsExplorerProcess() {
@@ -2368,15 +2432,25 @@ bool DownloadAndExtractIconTheme(std::wstring_view relativeUrl,
     return SUCCEEDED(hr);
 }
 
-bool EnsureIconThemeAvailable(const std::filesystem::path& storagePath,
-                              const std::filesystem::path& targetPath,
-                              std::wstring_view themeName,
-                              std::wstring_view relativeUrl) {
+std::filesystem::path EnsureIconThemeAvailable(
+    const std::filesystem::path& storagePath,
+    std::wstring_view themeName,
+    std::wstring_view relativeUrl,
+    PCWSTR themeFolderKey) {
     std::error_code ec;
-    if (std::filesystem::is_directory(targetPath, ec)) {
-        return true;
+
+    // Check if we have a stored folder name for this theme.
+    WCHAR storedFolderName[MAX_PATH];
+    Wh_GetStringValue(themeFolderKey, storedFolderName,
+                      ARRAYSIZE(storedFolderName));
+    if (*storedFolderName) {
+        auto storedPath = storagePath / storedFolderName;
+        if (std::filesystem::is_directory(storedPath, ec)) {
+            return storedPath;
+        }
     }
 
+    // Theme not available, need to find a usable folder and download.
     WCHAR lastErrorThemeName[256];
     Wh_GetStringValue(L"lastErrorThemeName", lastErrorThemeName,
                       ARRAYSIZE(lastErrorThemeName));
@@ -2397,8 +2471,43 @@ bool EnsureIconThemeAvailable(const std::filesystem::path& storagePath,
             (timeNow.QuadPart - timeLastError.QuadPart) / 10000000;
         if (elapsedSec < 60 * 60 * 4) {
             Wh_Log(L"Aborting due to error %u seconds ago", elapsedSec);
-            return false;
+            return std::filesystem::path();
         }
+    }
+
+    // Find a usable folder name.
+    std::filesystem::path targetPath;
+    std::wstring folderName;
+    for (int suffix = 0; suffix < 100; suffix++) {
+        if (suffix == 0) {
+            folderName = themeName;
+        } else {
+            folderName =
+                std::wstring(themeName) + L"_" + std::to_wstring(suffix + 1);
+        }
+
+        targetPath = storagePath / folderName;
+
+        if (!std::filesystem::is_directory(targetPath, ec)) {
+            // Folder doesn't exist, we can use it.
+            break;
+        }
+
+        // Folder exists, try to remove it.
+        Wh_Log(L"Folder exists, trying to remove: %s", targetPath.c_str());
+        std::filesystem::remove_all(targetPath, ec);
+
+        if (!std::filesystem::is_directory(targetPath, ec)) {
+            // Successfully removed.
+            break;
+        }
+
+        Wh_Log(L"Failed to remove folder, trying next name");
+    }
+
+    if (std::filesystem::is_directory(targetPath, ec)) {
+        Wh_Log(L"Failed to find a usable folder name");
+        return std::filesystem::path();
     }
 
     Wh_Log(L"Downloading from %.*s", static_cast<int>(relativeUrl.length()),
@@ -2420,10 +2529,13 @@ bool EnsureIconThemeAvailable(const std::filesystem::path& storagePath,
                           std::wstring(themeName).c_str());
         Wh_SetIntValue(L"lastErrorTimeHigh", (int)filetimeNow.dwHighDateTime);
         Wh_SetIntValue(L"lastErrorTimeLow", (int)filetimeNow.dwLowDateTime);
-        return false;
+        return std::filesystem::path();
     }
 
-    return true;
+    // Store the folder name on successful download and extract.
+    Wh_SetStringValue(themeFolderKey, folderName.c_str());
+
+    return targetPath;
 }
 
 std::wstring GetIconThemePath(std::wstring_view iconTheme) {
@@ -2444,10 +2556,17 @@ std::wstring GetIconThemePath(std::wstring_view iconTheme) {
 
     const auto storagePath = std::filesystem::path{storagePathBuffer};
 
-    auto targetPath = storagePath / themeName;
-    std::error_code ec;
-    if (std::filesystem::is_directory(targetPath, ec)) {
-        return targetPath;
+    auto themeFolderKey = L"themeFolder_" + std::wstring(themeName);
+
+    WCHAR storedFolderName[MAX_PATH];
+    Wh_GetStringValue(themeFolderKey.c_str(), storedFolderName,
+                      ARRAYSIZE(storedFolderName));
+    if (*storedFolderName) {
+        auto storedPath = storagePath / storedFolderName;
+        std::error_code ec;
+        if (std::filesystem::is_directory(storedPath, ec)) {
+            return storedPath;
+        }
     }
 
     auto lockFilePath = storagePath / L"_lock";
@@ -2458,10 +2577,8 @@ std::wstring GetIconThemePath(std::wstring_view iconTheme) {
         return std::wstring();
     }
 
-    if (!EnsureIconThemeAvailable(storagePath, targetPath, themeName,
-                                  relativeUrl)) {
-        targetPath.clear();
-    }
+    auto targetPath = EnsureIconThemeAvailable(
+        storagePath, themeName, relativeUrl, themeFolderKey.c_str());
 
     UnlockTempFileExclusive(lockFile);
     DeleteFile(lockFilePath.c_str());
@@ -2469,8 +2586,180 @@ std::wstring GetIconThemePath(std::wstring_view iconTheme) {
     return targetPath;
 }
 
+bool StartsWithCaseInsensitive(std::wstring_view str,
+                               std::wstring_view prefix) {
+    return str.size() >= prefix.size() &&
+           _wcsnicmp(str.data(), prefix.data(), prefix.size()) == 0;
+}
+
+// https://github.com/valinet/wh-mods/blob/61319815c7e018e392a08077dc364559548ade02/mods/valinet-unserver.wh.cpp#L95
+// https://stackoverflow.com/questions/937044/determine-path-to-registry-key-from-hkey-handle-in-c
+std::wstring GetPathFromHKEY(HKEY key) {
+    if (!key) {
+        return {};
+    }
+
+    using NtQueryKey_t = NTSTATUS(NTAPI*)(
+        HANDLE KeyHandle, int KeyInformationClass, PVOID KeyInformation,
+        ULONG Length, PULONG ResultLength);
+    static NtQueryKey_t pNtQueryKey = []() {
+        HMODULE hNtdll = GetModuleHandle(L"ntdll.dll");
+        if (hNtdll) {
+            return (NtQueryKey_t)GetProcAddress(hNtdll, "NtQueryKey");
+        }
+        return (NtQueryKey_t) nullptr;
+    }();
+
+    if (!pNtQueryKey) {
+        return {};
+    }
+
+    constexpr int kKeyNameInformation = 3;
+
+    ULONG size = 0;
+    NTSTATUS result = pNtQueryKey(key, kKeyNameInformation, nullptr, 0, &size);
+    if (result != STATUS_BUFFER_TOO_SMALL) {
+        return {};
+    }
+
+    std::vector<BYTE> buffer(size);
+    result = pNtQueryKey(key, kKeyNameInformation, buffer.data(), size, &size);
+    if (result != STATUS_SUCCESS || size < sizeof(ULONG)) {
+        return {};
+    }
+
+    // The buffer contains a KEY_NAME_INFORMATION structure:
+    // ULONG NameLength (4 bytes) + WCHAR Name[1].
+    ULONG nameLength = *reinterpret_cast<ULONG*>(buffer.data());
+    if (size < sizeof(ULONG) + nameLength) {
+        return {};
+    }
+
+    PCWSTR name = reinterpret_cast<PCWSTR>(buffer.data() + sizeof(ULONG));
+    return std::wstring(name, nameLength / sizeof(WCHAR));
+}
+
+bool MatchesClassSubkey(HKEY hKey, std::wstring_view classSubKey) {
+    std::wstring keyPath = GetPathFromHKEY(hKey);
+    std::wstring_view keyPathSuffix = keyPath;
+
+    constexpr std::wstring_view kRegistryMachinePrefix =
+        L"\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\"sv;
+    constexpr std::wstring_view kRegistryUserPrefix = L"\\REGISTRY\\USER\\"sv;
+
+    if (StartsWithCaseInsensitive(keyPathSuffix, kRegistryMachinePrefix)) {
+        // Remove "\REGISTRY\MACHINE\SOFTWARE\Classes\" prefix.
+        keyPathSuffix.remove_prefix(kRegistryMachinePrefix.size());
+    } else if (StartsWithCaseInsensitive(keyPathSuffix, kRegistryUserPrefix)) {
+        // Remove "\REGISTRY\USER\" prefix.
+        keyPathSuffix.remove_prefix(kRegistryUserPrefix.size());
+
+        // Remove "<SID>_Classes\" prefix for non-empty SID.
+        size_t firstBackslash = keyPathSuffix.find(L'\\');
+        if (firstBackslash == std::wstring_view::npos) {
+            return false;
+        }
+
+        constexpr std::wstring_view kClassesSuffix = L"_Classes"sv;
+        if (firstBackslash > kClassesSuffix.size() &&
+            _wcsnicmp(
+                keyPathSuffix.data() + firstBackslash - kClassesSuffix.size(),
+                kClassesSuffix.data(), kClassesSuffix.size()) == 0) {
+            keyPathSuffix.remove_prefix(firstBackslash + 1);
+        } else {
+            return false;
+        }
+    } else {
+        return false;
+    }
+
+    return keyPathSuffix.size() == classSubKey.size() &&
+           _wcsnicmp(keyPathSuffix.data(), classSubKey.data(),
+                     classSubKey.size()) == 0;
+}
+
+using RegQueryValueExW_t = decltype(&RegQueryValueExW);
+RegQueryValueExW_t RegQueryValueExW_Original;
+LSTATUS WINAPI RegQueryValueExW_Hook(HKEY hKey,
+                                     LPCWSTR lpValueName,
+                                     LPDWORD lpReserved,
+                                     LPDWORD lpType,
+                                     LPBYTE lpData,
+                                     LPDWORD lpcbData) {
+    // Disable thumbnails in Explorer folders by providing the "Logo" value for
+    // the "AllFolders\Shell" key. When this value is present, Explorer uses a
+    // generic folder icon instead of showing thumbnails of the folder contents.
+    // This is equivalent to setting the "Logo" value below to "imageres.dll,-3"
+    // (REG_SZ), but is applied dynamically by the mod:
+    //
+    // HKCU\Software\Classes\Local
+    // Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell
+    if (!g_settings.disableThumbnails) {
+        return RegQueryValueExW_Original(hKey, lpValueName, lpReserved, lpType,
+                                         lpData, lpcbData);
+    }
+
+    constexpr WCHAR kValueName[] = L"Logo";
+    constexpr std::wstring_view kClassSubkey =
+        L"Local Settings\\Software\\Microsoft\\Windows\\Shell\\Bags\\AllFolders\\Shell"sv;
+    constexpr std::wstring_view kReplacementData = L"imageres.dll,-3"sv;
+
+    // Save the original buffer size before calling the original function, as
+    // lpcbData is overwritten with the actual data size on output.
+    DWORD dataBufferSize = (lpData && lpcbData) ? *lpcbData : 0;
+
+    LSTATUS ret = RegQueryValueExW_Original(hKey, lpValueName, lpReserved,
+                                            lpType, lpData, lpcbData);
+    if (ret != ERROR_SUCCESS && ret != ERROR_MORE_DATA &&
+        ret != ERROR_FILE_NOT_FOUND) {
+        return ret;
+    }
+
+    if (!lpValueName || _wcsicmp(lpValueName, kValueName) != 0) {
+        return ret;
+    }
+
+    if (!MatchesClassSubkey(hKey, kClassSubkey)) {
+        return ret;
+    }
+
+    Wh_Log(L"Providing %s value to disable folder thumbnails", kValueName);
+
+    DWORD requiredSize = (kReplacementData.size() + 1) * sizeof(WCHAR);
+
+    if (lpType) {
+        *lpType = REG_SZ;
+    }
+
+    if (!lpData || !lpcbData) {
+        if (lpData && !lpcbData) {
+            // Shouldn't happen per documentation.
+            return ret;
+        }
+        if (lpcbData) {
+            *lpcbData = requiredSize;
+        }
+        return ERROR_SUCCESS;
+    }
+
+    if (dataBufferSize < requiredSize) {
+        Wh_Log(L"Not enough space for %s, available=%u", kValueName,
+               dataBufferSize);
+        *lpcbData = requiredSize;
+        return ERROR_MORE_DATA;
+    }
+
+    memcpy(lpData, kReplacementData.data(),
+           kReplacementData.size() * sizeof(WCHAR));
+    reinterpret_cast<PWSTR>(lpData)[kReplacementData.size()] = L'\0';
+    *lpcbData = requiredSize;
+
+    return ERROR_SUCCESS;
+}
+
 void LoadSettings() {
     g_settings.iconTheme = WindhawkUtils::StringSetting::make(L"iconTheme");
+    g_settings.disableThumbnails = Wh_GetIntSetting(L"disableThumbnails");
     g_settings.allResourceRedirect = Wh_GetIntSetting(L"allResourceRedirect");
 
     std::unordered_map<std::wstring, std::vector<std::wstring>> paths;
@@ -2627,6 +2916,12 @@ void LoadSettings() {
     }
 
     // Reverse the order to allow later entries override earlier ones.
+    for (auto& [key, vec] : paths) {
+        std::reverse(vec.begin(), vec.end());
+    }
+    for (auto& [key, vec] : pathsA) {
+        std::reverse(vec.begin(), vec.end());
+    }
     std::reverse(pathPatterns.begin(), pathPatterns.end());
     std::reverse(pathPatternsA.begin(), pathPatternsA.end());
 
@@ -2639,8 +2934,6 @@ void LoadSettings() {
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
-
-    ProcessShutdownMessageBoxFix::LogErrorIfAny();
 
     LoadSettings();
 
@@ -2667,65 +2960,63 @@ BOOL Wh_ModInit() {
                        (void*)PrivateExtractIconsW_Hook,
                        (void**)&PrivateExtractIconsW_Original);
 
-    if (!g_settings.allResourceRedirect) {
-        // The functions below use FindResourceEx, LoadResource, SizeofResource.
-        Wh_SetFunctionHook((void*)LoadImageA, (void*)LoadImageA_Hook,
-                           (void**)&LoadImageA_Original);
+    // The functions below use FindResourceEx, LoadResource, SizeofResource.
+    Wh_SetFunctionHook((void*)LoadImageA, (void*)LoadImageA_Hook,
+                       (void**)&LoadImageA_Original);
 
-        Wh_SetFunctionHook((void*)LoadImageW, (void*)LoadImageW_Hook,
-                           (void**)&LoadImageW_Original);
+    Wh_SetFunctionHook((void*)LoadImageW, (void*)LoadImageW_Hook,
+                       (void**)&LoadImageW_Original);
 
-        Wh_SetFunctionHook((void*)LoadIconA, (void*)LoadIconA_Hook,
-                           (void**)&LoadIconA_Original);
+    Wh_SetFunctionHook((void*)LoadIconA, (void*)LoadIconA_Hook,
+                       (void**)&LoadIconA_Original);
 
-        Wh_SetFunctionHook((void*)LoadIconW, (void*)LoadIconW_Hook,
-                           (void**)&LoadIconW_Original);
+    Wh_SetFunctionHook((void*)LoadIconW, (void*)LoadIconW_Hook,
+                       (void**)&LoadIconW_Original);
 
-        Wh_SetFunctionHook((void*)LoadCursorA, (void*)LoadCursorA_Hook,
-                           (void**)&LoadCursorA_Original);
+    Wh_SetFunctionHook((void*)LoadCursorA, (void*)LoadCursorA_Hook,
+                       (void**)&LoadCursorA_Original);
 
-        Wh_SetFunctionHook((void*)LoadCursorW, (void*)LoadCursorW_Hook,
-                           (void**)&LoadCursorW_Original);
+    Wh_SetFunctionHook((void*)LoadCursorW, (void*)LoadCursorW_Hook,
+                       (void**)&LoadCursorW_Original);
 
-        Wh_SetFunctionHook((void*)LoadBitmapA, (void*)LoadBitmapA_Hook,
-                           (void**)&LoadBitmapA_Original);
+    Wh_SetFunctionHook((void*)LoadBitmapA, (void*)LoadBitmapA_Hook,
+                       (void**)&LoadBitmapA_Original);
 
-        Wh_SetFunctionHook((void*)LoadBitmapW, (void*)LoadBitmapW_Hook,
-                           (void**)&LoadBitmapW_Original);
+    Wh_SetFunctionHook((void*)LoadBitmapW, (void*)LoadBitmapW_Hook,
+                       (void**)&LoadBitmapW_Original);
 
-        Wh_SetFunctionHook((void*)LoadMenuA, (void*)LoadMenuA_Hook,
-                           (void**)&LoadMenuA_Original);
+    Wh_SetFunctionHook((void*)LoadMenuA, (void*)LoadMenuA_Hook,
+                       (void**)&LoadMenuA_Original);
 
-        Wh_SetFunctionHook((void*)LoadMenuW, (void*)LoadMenuW_Hook,
-                           (void**)&LoadMenuW_Original);
+    Wh_SetFunctionHook((void*)LoadMenuW, (void*)LoadMenuW_Hook,
+                       (void**)&LoadMenuW_Original);
 
-        Wh_SetFunctionHook((void*)DialogBoxParamA, (void*)DialogBoxParamA_Hook,
-                           (void**)&DialogBoxParamA_Original);
+    Wh_SetFunctionHook((void*)DialogBoxParamA, (void*)DialogBoxParamA_Hook,
+                       (void**)&DialogBoxParamA_Original);
 
-        Wh_SetFunctionHook((void*)DialogBoxParamW, (void*)DialogBoxParamW_Hook,
-                           (void**)&DialogBoxParamW_Original);
+    Wh_SetFunctionHook((void*)DialogBoxParamW, (void*)DialogBoxParamW_Hook,
+                       (void**)&DialogBoxParamW_Original);
 
-        Wh_SetFunctionHook((void*)CreateDialogParamA,
-                           (void*)CreateDialogParamA_Hook,
-                           (void**)&CreateDialogParamA_Original);
+    Wh_SetFunctionHook((void*)CreateDialogParamA,
+                       (void*)CreateDialogParamA_Hook,
+                       (void**)&CreateDialogParamA_Original);
 
-        Wh_SetFunctionHook((void*)CreateDialogParamW,
-                           (void*)CreateDialogParamW_Hook,
-                           (void**)&CreateDialogParamW_Original);
+    Wh_SetFunctionHook((void*)CreateDialogParamW,
+                       (void*)CreateDialogParamW_Hook,
+                       (void**)&CreateDialogParamW_Original);
 
-        // The functions below use RtlLoadString.
-        Wh_SetFunctionHook((void*)LoadStringA, (void*)LoadStringA_u_Hook,
-                           (void**)&LoadStringA_u_Original);
+    // The functions below use RtlLoadString.
+    Wh_SetFunctionHook((void*)LoadStringA, (void*)LoadStringA_u_Hook,
+                       (void**)&LoadStringA_u_Original);
 
-        Wh_SetFunctionHook((void*)LoadStringW, (void*)LoadStringW_u_Hook,
-                           (void**)&LoadStringW_u_Original);
+    Wh_SetFunctionHook((void*)LoadStringW, (void*)LoadStringW_u_Hook,
+                       (void**)&LoadStringW_u_Original);
 
-        setKernelFunctionHook("LoadStringA", (void*)LoadStringA_k_Hook,
-                              (void**)&LoadStringA_k_Original);
+    setKernelFunctionHook("LoadStringA", (void*)LoadStringA_k_Hook,
+                          (void**)&LoadStringA_k_Original);
 
-        setKernelFunctionHook("LoadStringW", (void*)LoadStringW_k_Hook,
-                              (void**)&LoadStringW_k_Original);
-    }
+    setKernelFunctionHook("LoadStringW", (void*)LoadStringW_k_Hook,
+                          (void**)&LoadStringW_k_Original);
 
     if (g_settings.allResourceRedirect) {
         setKernelFunctionHook("FindResourceExA", (void*)FindResourceExA_Hook,
@@ -2745,68 +3036,76 @@ BOOL Wh_ModInit() {
         }
     }
 
-    // All of these end up calling FindResourceEx, LoadResource, SizeofResource.
-    if (!g_settings.allResourceRedirect) {
-        HMODULE shcoreModule =
-            LoadLibraryEx(L"shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if (shcoreModule) {
-            FARPROC pSHCreateStreamOnModuleResourceW =
-                GetProcAddress(shcoreModule, (PCSTR)109);
-            if (pSHCreateStreamOnModuleResourceW) {
-                Wh_SetFunctionHook(
-                    (void*)pSHCreateStreamOnModuleResourceW,
-                    (void*)SHCreateStreamOnModuleResourceW_Hook,
-                    (void**)&SHCreateStreamOnModuleResourceW_Original);
-            } else {
-                Wh_Log(L"Couldn't find SHCreateStreamOnModuleResourceW (#109)");
-            }
+    if (kernelBaseModule) {
+        auto pRegQueryValueExW = (RegQueryValueExW_t)GetProcAddress(
+            kernelBaseModule, "RegQueryValueExW");
+        if (pRegQueryValueExW) {
+            WindhawkUtils::SetFunctionHook(pRegQueryValueExW,
+                                           RegQueryValueExW_Hook,
+                                           &RegQueryValueExW_Original);
+        }
+    }
+
+    // The functions below use FindResourceEx, LoadResource, SizeofResource.
+    HMODULE shcoreModule =
+        LoadLibraryEx(L"shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (shcoreModule) {
+        FARPROC pSHCreateStreamOnModuleResourceW =
+            GetProcAddress(shcoreModule, (PCSTR)109);
+        if (pSHCreateStreamOnModuleResourceW) {
+            Wh_SetFunctionHook(
+                (void*)pSHCreateStreamOnModuleResourceW,
+                (void*)SHCreateStreamOnModuleResourceW_Hook,
+                (void**)&SHCreateStreamOnModuleResourceW_Original);
         } else {
-            Wh_Log(L"Couldn't load shcore.dll");
+            Wh_Log(L"Couldn't find SHCreateStreamOnModuleResourceW (#109)");
+        }
+    } else {
+        Wh_Log(L"Couldn't load shcore.dll");
+    }
+
+    HMODULE duiModule =
+        LoadLibraryEx(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (duiModule) {
+        PCSTR SetXMLFromResource_Name =
+            R"(?_SetXMLFromResource@DUIXmlParser@DirectUI@@IAEJPBG0PAUHINSTANCE__@@11@Z)";
+        FARPROC pSetXMLFromResource =
+            GetProcAddress(duiModule, SetXMLFromResource_Name);
+        if (!pSetXMLFromResource) {
+#ifdef _WIN64
+            PCSTR SetXMLFromResource_Name_Win10_x64 =
+                R"(?_SetXMLFromResource@DUIXmlParser@DirectUI@@IEAAJPEBG0PEAUHINSTANCE__@@11@Z)";
+            pSetXMLFromResource =
+                GetProcAddress(duiModule, SetXMLFromResource_Name_Win10_x64);
+#endif
         }
 
-        HMODULE duiModule =
-            LoadLibraryEx(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if (duiModule) {
-            PCSTR SetXMLFromResource_Name =
-                R"(?_SetXMLFromResource@DUIXmlParser@DirectUI@@IAEJPBG0PAUHINSTANCE__@@11@Z)";
-            FARPROC pSetXMLFromResource =
-                GetProcAddress(duiModule, SetXMLFromResource_Name);
-            if (!pSetXMLFromResource) {
-#ifdef _WIN64
-                PCSTR SetXMLFromResource_Name_Win10_x64 =
-                    R"(?_SetXMLFromResource@DUIXmlParser@DirectUI@@IEAAJPEBG0PEAUHINSTANCE__@@11@Z)";
-                pSetXMLFromResource = GetProcAddress(
-                    duiModule, SetXMLFromResource_Name_Win10_x64);
-#endif
-            }
+        if (pSetXMLFromResource) {
+            Wh_SetFunctionHook((void*)pSetXMLFromResource,
+                               (void*)SetXMLFromResource_Hook,
+                               (void**)&SetXMLFromResource_Original);
+        } else {
+            Wh_Log(L"Couldn't find SetXMLFromResource");
+        }
 
-            if (pSetXMLFromResource) {
-                Wh_SetFunctionHook((void*)pSetXMLFromResource,
-                                   (void*)SetXMLFromResource_Hook,
-                                   (void**)&SetXMLFromResource_Original);
-            } else {
-                Wh_Log(L"Couldn't find SetXMLFromResource");
-            }
-
-            PCSTR DirectUI_CreateString_Name =
+        PCSTR DirectUI_CreateString_Name =
 #ifdef _WIN64
-                R"(?CreateString@Value@DirectUI@@SAPEAV12@PEBGPEAUHINSTANCE__@@@Z)";
+            R"(?CreateString@Value@DirectUI@@SAPEAV12@PEBGPEAUHINSTANCE__@@@Z)";
 #else
-                R"(?CreateString@Value@DirectUI@@SGPAV12@PBGPAUHINSTANCE__@@@Z)";
+            R"(?CreateString@Value@DirectUI@@SGPAV12@PBGPAUHINSTANCE__@@@Z)";
 #endif
-            FARPROC pDirectUI_CreateString =
-                GetProcAddress(duiModule, DirectUI_CreateString_Name);
+        FARPROC pDirectUI_CreateString =
+            GetProcAddress(duiModule, DirectUI_CreateString_Name);
 
-            if (pDirectUI_CreateString) {
-                Wh_SetFunctionHook((void*)pDirectUI_CreateString,
-                                   (void*)DirectUI_CreateString_Hook,
-                                   (void**)&DirectUI_CreateString_Original);
-            } else {
-                Wh_Log(L"Couldn't find DirectUI::Value::CreateString");
-            }
+        if (pDirectUI_CreateString) {
+            Wh_SetFunctionHook((void*)pDirectUI_CreateString,
+                               (void*)DirectUI_CreateString_Hook,
+                               (void**)&DirectUI_CreateString_Original);
         } else {
-            Wh_Log(L"Couldn't load dui70.dll");
+            Wh_Log(L"Couldn't find DirectUI::Value::CreateString");
         }
+    } else {
+        Wh_Log(L"Couldn't load dui70.dll");
     }
 
     return TRUE;
@@ -2841,6 +3140,7 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
 
     auto prevIconTheme = std::move(g_settings.iconTheme);
+    bool prevDisableThumbnails = g_settings.disableThumbnails;
     int prevAllResourceRedirect = g_settings.allResourceRedirect;
 
     LoadSettings();
@@ -2853,7 +3153,8 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     FreeAndClearRedirectedModules();
 
     if (DoesCurrentProcessOwnTaskbar()) {
-        if (wcscmp(g_settings.iconTheme, prevIconTheme) != 0) {
+        if (wcscmp(g_settings.iconTheme, prevIconTheme) != 0 ||
+            g_settings.disableThumbnails != prevDisableThumbnails) {
             PromptToClearCache();
         }
 

@@ -2,7 +2,7 @@
 // @id              vscode-tweaker
 // @name            VSCode Tweaker
 // @description     Tweak Microsoft Visual Studio Code by injecting custom JavaScript and CSS code
-// @version         1.0.1
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -10,6 +10,14 @@
 // @include         code.exe
 // @compilerOptions -lshlwapi
 // ==/WindhawkMod==
+
+// Source code is published under The GNU General Public License v3.0.
+//
+// For bug reports and feature requests, please open an issue here:
+// https://github.com/ramensoftware/windhawk-mods/issues
+//
+// For pull requests, development takes place here:
+// https://github.com/m417z/my-windhawk-mods
 
 // ==WindhawkModReadme==
 /*
@@ -43,10 +51,10 @@ No files are modified on disk - to revert all changes, disable the mod and resta
     - Code: >-
         setInterval(()=>{
         var t='WINDHAWK!',
-        x=document.querySelector('.window-title'),
+        x=document.querySelector('.menubar-menu-button[aria-label="File"] > div'),
         y='textContent';
-        x[y]=x[y].replace(/( \| .)?$/,
-        ' | '+t[Math.floor(Date.now()/1000)%t.length])},1000)
+        x[y]=x[y].replace(/^(. \| )?/,
+        t[Math.floor(Date.now()/1000)%t.length]+' | ')},1000)
       $name: The snippet code
       $description: For code from a file, enter the source file path
   - - Type: css
@@ -106,6 +114,12 @@ struct {
     std::string newFileHash;
 } g_vscodeFiles[VSCODE_FILE_COUNT];
 
+bool g_useLegacyMd5Hash;
+
+thread_local bool g_creatingNewFiles;
+
+void EnsureNewFilesCreated();
+
 // https://gist.github.com/tomykaira/f0fd86b6c73063283afe550bc5d77594
 std::string Base64Encode(const BYTE* data, size_t in_len)
 {
@@ -146,10 +160,11 @@ std::string Base64Encode(const BYTE* data, size_t in_len)
     return ret;
 }
 
-// Calculates base64(md5(contents))
+// Calculates base64(md5(contents)) or base64(sha256(contents))
+// depending on the VSCode version (detected via g_useLegacyMd5Hash).
 // Based on: https://github.com/DownWithUp/SHA-ME
 // VSCode reference:
-// computeChecksum in build\gulpfile.vscode.js
+// computeChecksum in build\gulpfile.vscode.ts
 std::string FileHash(PCWSTR lpszFile)
 {
     HCRYPTPROV	hProv;
@@ -157,7 +172,9 @@ std::string FileHash(PCWSTR lpszFile)
     HANDLE		hFile;
     DWORD		dwBytesRead;
     BYTE		bReadFile[0x512];
-    BYTE		bHash[16];
+    ALG_ID      algId = g_useLegacyMd5Hash ? CALG_MD5 : CALG_SHA_256;
+    DWORD       hashSize = g_useLegacyMd5Hash ? 16 : 32;
+    BYTE		bHash[32];
     std::string ret;
 
     hFile = CreateFile(lpszFile, FILE_READ_ACCESS, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
@@ -168,7 +185,7 @@ std::string FileHash(PCWSTR lpszFile)
         CloseHandle(hFile);
         return ret;
     }
-    if (!CryptCreateHash(hProv, CALG_MD5, 0, 0, &hHash)) {
+    if (!CryptCreateHash(hProv, algId, 0, 0, &hHash)) {
         CloseHandle(hFile);
         CryptReleaseContext(hProv, 0);
         return ret;
@@ -179,9 +196,9 @@ std::string FileHash(PCWSTR lpszFile)
         }
         CryptHashData(hHash, bReadFile, dwBytesRead, 0);
     }
-    dwBytesRead = sizeof(bHash); // Repurpose variable
+    dwBytesRead = hashSize;
     if (CryptGetHashParam(hHash, HP_HASHVAL, bHash, &dwBytesRead, 0)) {
-        ret = Base64Encode(bHash, sizeof(bHash));
+        ret = Base64Encode(bHash, hashSize);
     }
     CryptReleaseContext(hProv, 0);
     CryptDestroyHash(hHash);
@@ -200,6 +217,12 @@ HANDLE WINAPI CreateFileWHook(
     DWORD dwFlagsAndAttributes,
     HANDLE hTemplateFile)
 {
+    if (g_creatingNewFiles) {
+        return pOriginalCreateFileW(
+            lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes,
+            dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+    }
+
     PCWSTR compareFileName = lpFileName;
     if (compareFileName[0] == '\\' &&
         compareFileName[1] == '\\' &&
@@ -210,6 +233,7 @@ HANDLE WINAPI CreateFileWHook(
 
     for (size_t i = 0; i < VSCODE_FILE_COUNT; i++) {
         if (wcsicmp(compareFileName, g_vscodeFiles[i].filePath) == 0) {
+            EnsureNewFilesCreated();
             Wh_Log(L"lpFileName = %s", compareFileName);
             Wh_Log(L"=>");
             Wh_Log(L"lpFileName = %s", g_vscodeFiles[i].newFilePath);
@@ -233,6 +257,11 @@ using GetFileAttributesExW_t = decltype(&GetFileAttributesExW);
 GetFileAttributesExW_t pOriginalGetFileAttributesExW;
 BOOL WINAPI GetFileAttributesExWHook(LPCWSTR lpFileName, GET_FILEEX_INFO_LEVELS fInfoLevelId, LPVOID lpFileInformation)
 {
+    if (g_creatingNewFiles) {
+        return pOriginalGetFileAttributesExW(
+            lpFileName, fInfoLevelId, lpFileInformation);
+    }
+
     PCWSTR compareFileName = lpFileName;
     if (compareFileName[0] == '\\' &&
         compareFileName[1] == '\\' &&
@@ -243,6 +272,7 @@ BOOL WINAPI GetFileAttributesExWHook(LPCWSTR lpFileName, GET_FILEEX_INFO_LEVELS 
 
     for (size_t i = 0; i < VSCODE_FILE_COUNT; i++) {
         if (wcsicmp(compareFileName, g_vscodeFiles[i].filePath) == 0) {
+            EnsureNewFilesCreated();
             Wh_Log(L"lpFileName = %s", compareFileName);
             Wh_Log(L"=>");
             Wh_Log(L"lpFileName = %s", g_vscodeFiles[i].newFilePath);
@@ -295,15 +325,14 @@ std::string wide_string_to_string(PCWSTR wide_string)
         return "";
     }
 
-    int size_needed = WideCharToMultiByte(CP_UTF8, 0, wide_string, -1, nullptr, 0, nullptr, nullptr);
+    int wide_string_len = static_cast<int>(wcslen(wide_string));
+    int size_needed = WideCharToMultiByte(CP_UTF8, 0, wide_string, wide_string_len, nullptr, 0, nullptr, nullptr);
     if (size_needed <= 0) {
         throw std::runtime_error("WideCharToMultiByte() failed: " + std::to_string(size_needed));
     }
 
-    size_needed--; // no need for the NULL terminator
-
     std::string result(size_needed, 0);
-    WideCharToMultiByte(CP_UTF8, 0, wide_string, size_needed, result.data(), size_needed, nullptr, nullptr);
+    WideCharToMultiByte(CP_UTF8, 0, wide_string, wide_string_len, result.data(), size_needed, nullptr, nullptr);
     return result;
 }
 
@@ -460,6 +489,49 @@ std::string CreateNewProductFile(WCHAR sourceFilePath[MAX_PATH], WCHAR targetFil
     return fileHash;
 }
 
+void EnsureNewFilesCreated()
+{
+    [[maybe_unused]] static bool created = [] {
+        g_creatingNewFiles = true;
+        struct Guard { ~Guard() { g_creatingNewFiles = false; } } guard;
+
+        Wh_Log(L"Creating new VSCode files");
+
+        // Detect hash algorithm from product.json before computing any hashes.
+        // MD5 hashes are ~22 base64 chars, SHA256 are ~43.
+        {
+            std::ifstream input(
+                g_vscodeFiles[VSCODE_FILE_PRODUCT_JSON].filePath);
+            std::string content((std::istreambuf_iterator<char>(input)),
+                                std::istreambuf_iterator<char>());
+            // Match a hash value for one of the known file paths.
+            std::regex hashRegex(
+                R"re("vs/workbench/workbench\.desktop\.main\.js"\s*:\s*"([A-Za-z0-9+/]+)")re");
+            std::smatch match;
+            if (std::regex_search(content, match, hashRegex)) {
+                std::string hash = match[1].str();
+                Wh_Log(L"Existing hash length: %zu", hash.size());
+                // base64(md5) = 22 chars, base64(sha256) = 43 chars.
+                g_useLegacyMd5Hash = hash.size() <= 30;
+            }
+        }
+
+        for (size_t i = 0; i < VSCODE_FILE_COUNT; i++) {
+            if (i != VSCODE_FILE_PRODUCT_JSON) {
+                g_vscodeFiles[i].newFileHash = CreateNewVscodeFile(
+                    g_vscodeFileTypes[i], g_vscodeFiles[i].filePath,
+                    g_vscodeFiles[i].newFilePath);
+            }
+        }
+
+        CreateNewProductFile(
+            g_vscodeFiles[VSCODE_FILE_PRODUCT_JSON].filePath,
+            g_vscodeFiles[VSCODE_FILE_PRODUCT_JSON].newFilePath);
+
+        return true;
+    }();
+}
+
 BOOL Wh_ModInit(void)
 {
     Wh_Log(L"Init");
@@ -468,18 +540,24 @@ BOOL Wh_ModInit(void)
     GetModuleFileName(nullptr, modulePath, ARRAYSIZE(modulePath));
     PathRemoveFileSpec(modulePath);
 
-    for (size_t i = 0; i < VSCODE_FILE_COUNT; i++) {
-        PathCombine(g_vscodeFiles[i].filePath, modulePath, g_vscodeFilePaths[i]);
-
-        if (i != VSCODE_FILE_PRODUCT_JSON) {
-            g_vscodeFiles[i].newFileHash = CreateNewVscodeFile(
-                g_vscodeFileTypes[i], g_vscodeFiles[i].filePath, g_vscodeFiles[i].newFilePath);
+    // New VSCode versions place resources under a version-ID subfolder.
+    // The ID is stored in the executable's string table.
+    WCHAR basePath[MAX_PATH];
+    wcscpy_s(basePath, modulePath);
+    WCHAR versionId[64];
+    int versionIdLen = LoadString(nullptr, 2, versionId, ARRAYSIZE(versionId));
+    if (versionIdLen > 0) {
+        WCHAR candidatePath[MAX_PATH];
+        PathCombine(candidatePath, modulePath, versionId);
+        if (GetFileAttributes(candidatePath) != INVALID_FILE_ATTRIBUTES) {
+            Wh_Log(L"Using version ID subfolder: %s", versionId);
+            wcscpy_s(basePath, candidatePath);
         }
     }
 
-    CreateNewProductFile(
-        g_vscodeFiles[VSCODE_FILE_PRODUCT_JSON].filePath,
-        g_vscodeFiles[VSCODE_FILE_PRODUCT_JSON].newFilePath);
+    for (size_t i = 0; i < VSCODE_FILE_COUNT; i++) {
+        PathCombine(g_vscodeFiles[i].filePath, basePath, g_vscodeFilePaths[i]);
+    }
 
     Wh_SetFunctionHook((void*)CreateFileW, (void*)CreateFileWHook, (void**)&pOriginalCreateFileW);
     Wh_SetFunctionHook((void*)GetFileAttributesExW, (void*)GetFileAttributesExWHook, (void**)&pOriginalGetFileAttributesExW);

@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-thumbnails
 // @name            Disable Taskbar Thumbnails
-// @description     Disable taskbar thumbnails on hover, or replace them with a list
-// @version         1.1.4
+// @description     Disable taskbar thumbnail and virtual desktop switcher hover flyouts, or replace thumbnails with a list
+// @version         1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -29,9 +29,6 @@ Disable taskbar thumbnails on hover, or replace them with a list.
 Only Windows 10 64-bit and Windows 11 are supported. For older Windows versions
 check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 
-**Note:** To customize the old taskbar on Windows 11 (if using ExplorerPatcher
-or a similar tool), enable the relevant option in the mod's settings.
-
 ![Demonstration](https://i.imgur.com/62DSgxs.png)
 */
 // ==/WindhawkModReadme==
@@ -39,16 +36,23 @@ or a similar tool), enable the relevant option in the mod's settings.
 // ==WindhawkModSettings==
 /*
 - mode: disabled
-  $name: Preview on hover
+  $name: Preview on hover or click
   $options:
-  - disabled: Disabled
+  - disabled: Disable on hover, thumbnails on click
+  - listOnClick: Disable on hover, list on click
   - list: List
   - thumbnails: Thumbnails
+- noVirtualDesktopSwitcherHover: false
+  $name: Disable virtual desktop switcher on hover
+  $description: >-
+    Disables the virtual desktop switcher flyout that appears when hovering
+    over the Task View button on the taskbar. Only works on Windows 11 with
+    the new taskbar.
 - noTooltips: false
   $name: Disable tooltips on hover
   $description: >-
     Only works for classic thumbnail previews, not for the new Windows 11
-    implementation of thumbnail previews
+    implementation of thumbnail previews.
 - oldTaskbarOnWin11: false
   $name: Customize the old taskbar on Windows 11
   $description: >-
@@ -65,12 +69,14 @@ or a similar tool), enable the relevant option in the mod's settings.
 
 enum class Mode {
     disabled,
+    listOnClick,
     list,
     thumbnails,
 };
 
 struct {
     Mode mode;
+    bool noVirtualDesktopSwitcherHover;
     bool noTooltips;
     bool oldTaskbarOnWin11;
 } g_settings;
@@ -99,9 +105,64 @@ struct HoverFlyoutWindowState {
 
 HoverFlyoutWindowState g_hoverFlyoutWindow;
 
+using GetWindowBand_t = BOOL(WINAPI*)(HWND hWnd, PDWORD pdwBand);
+GetWindowBand_t pGetWindowBand;
+
+// Detects the virtual desktop switcher flyout shown when hovering over the Task
+// View button on the taskbar.
+bool IsVirtualDesktopSwitcherHoverWindow(HWND hWnd) {
+    // Must be in the current process (explorer.exe).
+    DWORD dwProcessId = 0;
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, &dwProcessId);
+    if (!dwThreadId || dwProcessId != GetCurrentProcessId()) {
+        return false;
+    }
+
+    WCHAR className[64];
+    if (!GetClassName(hWnd, className, ARRAYSIZE(className)) ||
+        _wcsicmp(className, L"XamlExplorerHostIslandWindow") != 0) {
+        return false;
+    }
+
+    // The Alt+Tab window uses band ZBID_SYSTEM_TOOLS, the Win+Tab window uses
+    // band ZBID_IMMERSIVE_APPCHROME, the virtual desktop switcher uses band
+    // ZBID_IMMERSIVE_EDGY.
+    constexpr DWORD ZBID_IMMERSIVE_EDGY = 7;
+
+    DWORD band = 0;
+    if (!pGetWindowBand || !pGetWindowBand(hWnd, &band) ||
+        band != ZBID_IMMERSIVE_EDGY) {
+        return false;
+    }
+
+    // Check thread description for "MultitaskingView".
+    HANDLE hThread =
+        OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, dwThreadId);
+    if (!hThread) {
+        return false;
+    }
+
+    bool isMultitaskingView = false;
+    PWSTR description = nullptr;
+    if (SUCCEEDED(GetThreadDescription(hThread, &description)) && description) {
+        isMultitaskingView = wcscmp(description, L"MultitaskingView") == 0;
+        LocalFree(description);
+    }
+
+    CloseHandle(hThread);
+    return isMultitaskingView;
+}
+
 using ShowWindow_t = decltype(&ShowWindow);
 ShowWindow_t ShowWindow_Original;
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
+    if (g_settings.noVirtualDesktopSwitcherHover && nCmdShow != SW_HIDE &&
+        IsVirtualDesktopSwitcherHoverWindow(hWnd)) {
+        Wh_Log(L"> %08X - %d (virtual desktop switcher)",
+               (DWORD)(DWORD_PTR)hWnd, nCmdShow);
+        return TRUE;
+    }
+
     if (g_showTaskListButtonHoverFlyoutThreadId == GetCurrentThreadId() &&
         !g_inTransitionToFlyoutVisibleStickyState) {
         Wh_Log(L"> %08X - %d", (DWORD)(DWORD_PTR)hWnd, nCmdShow);
@@ -154,7 +215,8 @@ HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_Hook(void* pThis,
                                                            void* param1) {
     Wh_Log(L">");
 
-    if (g_settings.mode != Mode::disabled) {
+    if (g_settings.mode != Mode::disabled &&
+        g_settings.mode != Mode::listOnClick) {
         HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_Original(pThis,
                                                                        param1);
         return;
@@ -193,7 +255,8 @@ HoverFlyoutController_ShowTaskListButtonHoverFlyout_Hook(void* pThis,
                                                          int param4) {
     Wh_Log(L">");
 
-    if (g_settings.mode != Mode::disabled) {
+    if (g_settings.mode != Mode::disabled &&
+        g_settings.mode != Mode::listOnClick) {
         HoverFlyoutController_ShowTaskListButtonHoverFlyout_Original(
             pThis, param1, param2, param3, param4);
         return;
@@ -218,7 +281,8 @@ HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_Hook(void* pThis,
                                                               int param3) {
     Wh_Log(L">");
 
-    if (g_settings.mode != Mode::disabled) {
+    if (g_settings.mode != Mode::disabled &&
+        g_settings.mode != Mode::listOnClick) {
         HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_Original(
             pThis, param1, param2, param3);
         return;
@@ -240,7 +304,7 @@ bool WINAPI FlyoutFrame_CanFitAndUpdateScaleFactor_Hook(void* pThis,
                                                         void* param1) {
     Wh_Log(L">");
 
-    if (g_settings.mode == Mode::list) {
+    if (g_settings.mode == Mode::list || g_settings.mode == Mode::listOnClick) {
         return false;
     }
 
@@ -261,7 +325,8 @@ HRESULT WINAPI CTaskListWnd__DisplayExtendedUI_Hook(void* pThis,
     Wh_Log(L"> %x", flags);
 
     bool persistent = flags & 2;
-    if (!persistent && g_settings.mode == Mode::disabled) {
+    if (!persistent && (g_settings.mode == Mode::disabled ||
+                        g_settings.mode == Mode::listOnClick)) {
         return S_OK;
     }
 
@@ -283,7 +348,7 @@ BOOL WINAPI CTaskListThumbnailWnd__CanShowThumbnails_Hook(void* pThis,
                                                           int param3) {
     Wh_Log(L">");
 
-    if (g_settings.mode == Mode::list) {
+    if (g_settings.mode == Mode::list || g_settings.mode == Mode::listOnClick) {
         return FALSE;
     }
 
@@ -369,7 +434,8 @@ bool HookTaskbarSymbols() {
     if (g_winVersion <= WinVersion::Win10) {
         module = GetModuleHandle(nullptr);
     } else {
-        module = LoadLibrary(L"taskbar.dll");
+        module = LoadLibraryEx(L"taskbar.dll", nullptr,
+                               LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!module) {
             Wh_Log(L"Couldn't load taskbar.dll");
             return false;
@@ -382,16 +448,19 @@ bool HookTaskbarSymbols() {
             {LR"(protected: long __cdecl CTaskListWnd::_DisplayExtendedUI(struct ITaskBtnGroup *,int,unsigned long,int))"},
             &CTaskListWnd__DisplayExtendedUI_Original,
             CTaskListWnd__DisplayExtendedUI_Hook,
+            true,  // Removed in 10.0.26100.8313.
         },
         {
             {LR"(private: int __cdecl CTaskListThumbnailWnd::_CanShowThumbnails(class CDPA<struct ITaskThumbnail,class CTContainer_PolicyUnOwned<struct ITaskThumbnail> > const *,int,int))"},
             &CTaskListThumbnailWnd__CanShowThumbnails_Original,
             CTaskListThumbnailWnd__CanShowThumbnails_Hook,
+            true,  // In case it's removed in the future.
         },
         {
             {LR"(protected: void __cdecl CTaskListWnd::_ShowToolTip(enum ShowToolTipFlags))"},
             &CTaskListWnd__ShowToolTip_Original,
             CTaskListWnd__ShowToolTip_Hook,
+            true,  // Removed in 10.0.26100.8313.
         },
     };
 
@@ -590,12 +659,17 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 void LoadSettings() {
     PCWSTR mode = Wh_GetStringSetting(L"mode");
     g_settings.mode = Mode::disabled;
-    if (wcscmp(mode, L"list") == 0) {
+    if (wcscmp(mode, L"listOnClick") == 0) {
+        g_settings.mode = Mode::listOnClick;
+    } else if (wcscmp(mode, L"list") == 0) {
         g_settings.mode = Mode::list;
     } else if (wcscmp(mode, L"thumbnails") == 0) {
         g_settings.mode = Mode::thumbnails;
     }
     Wh_FreeStringSetting(mode);
+
+    g_settings.noVirtualDesktopSwitcherHover =
+        Wh_GetIntSetting(L"noVirtualDesktopSwitcherHover");
 
     g_settings.noTooltips = Wh_GetIntSetting(L"noTooltips");
 
@@ -650,6 +724,11 @@ BOOL Wh_ModInit() {
         WindhawkUtils::Wh_SetFunctionHookT(
             (EnableWindow_t)GetProcAddress(win32u, "NtUserEnableWindow"),
             EnableWindow_Hook, &EnableWindow_Original);
+
+        if (HMODULE user32 = GetModuleHandle(L"user32.dll")) {
+            pGetWindowBand =
+                (GetWindowBand_t)GetProcAddress(user32, "GetWindowBand");
+        }
     } else {
         if (!HookTaskbarSymbols()) {
             return FALSE;

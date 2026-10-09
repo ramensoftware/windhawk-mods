@@ -1,7 +1,7 @@
 ---
 name: Bug report
 about: Report a bug in a Windhawk mod
-title: ''
+title: '[Mod Name] Bug description'
 labels: mod-bug
 assignees: ''
 
@@ -13,3 +13,5 @@ https://github.com/ramensoftware/windhawk/wiki/Troubleshooting
 
 Include the mod name in the title, and tag the mod's author using their GitHub handle. Attach debug logs to the report.
 -->
+
+Mod author: @username (GitHub profile handle)

@@ -2,7 +2,7 @@
 // @id              cmd-folder-larp
 // @name            Command Prompt Folder Larp
 // @description     Make Command Prompt show different names for folders.
-// @version         1.0
+// @version         1.1
 // @author          Isabella Lulamoon (kawapure)
 // @github          https://github.com/kawapure
 // @twitter         https://twitter.com/kawaipure
@@ -41,6 +41,8 @@ This mod does not currently change the behaviour of `cd` or `dir` commands.
 #include <string>
 #include <algorithm>
 #include <vector>
+#include <stdarg.h>
+#include <strsafe.h>
 
 #define WHINIT_ASSERT(x)                                 \
 {                                                        \
@@ -53,7 +55,13 @@ This mod does not currently change the behaviour of `cd` or `dir` commands.
 
 #define KAWA_ASSERT(condition) [&]() { if (!(condition)) { Wh_Log(L"Assertion fail: %s", L## #condition); return false; } return true; }()
 
-thread_local bool g_fEnableGetCurrentDirectoryHooks = false;
+// Hook filter for the scope of PrintPrompt.
+thread_local bool g_fEnablePrintPromptHooks = false;
+
+// This is a pointer to the current directory on the stack of PrintPrompt_hook.
+// It will never ever be valid outside of a call to that function in particular.
+// Global variable exists to communicate to fixed-signature callee.
+thread_local LPCWSTR g_pszCurrentDirectory = nullptr;
 
 struct PathRedirection
 {
@@ -148,38 +156,98 @@ bool ApplyPathReplacementToString(LPWSTR szTarget, DWORD nBufferLength)
     return false;
 }
 
-DWORD (WINAPI *GetCurrentDirectoryW_orig)(DWORD nBufferLength, LPWSTR lpBuffer);
-DWORD WINAPI GetCurrentDirectoryW_hook(DWORD nBufferLength, LPWSTR lpBuffer)
+// Short and simple function which would have been harder to hook than to copy into here.
+HRESULT StringVPrintfWorkerW(
+        STRSAFE_LPWSTR pszDest,
+        size_t cchDest,
+        size_t *pcchNewDestLength, // Unused argument
+        STRSAFE_LPCWSTR pszFormat,
+        va_list argList)
 {
-    Wh_Log(L"Entered");
-    if (g_fEnableGetCurrentDirectoryHooks)
+    WCHAR wchLast = cchDest - 1;
+    int cch = _vsnwprintf(pszDest, cchDest - 1, pszFormat, argList);
+    if ( cch < 0 || cch > wchLast )
     {
-        WCHAR szBuffer[MAX_PATH] = { 0 };
-        GetCurrentDirectoryW_orig(ARRAYSIZE(szBuffer), szBuffer);
+        pszDest[wchLast] = 0;
+        return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+    }
+    else if ( cch == wchLast )
+    {
+        pszDest[wchLast] = 0;
+    }
+    return S_OK;
+}
 
-        ApplyPathReplacementToString(szBuffer, ARRAYSIZE(szBuffer));
+// This function is always __cdecl, even on x86-32, due to varadic arguments
+// being used.
+HRESULT (__cdecl *StringCchPrintfW_orig)(LPWSTR szBuffer, size_t size, LPCWSTR szTemplate, ...);
+HRESULT __cdecl StringCchPrintfW_hook(LPWSTR szBuffer, size_t size, LPCWSTR szTemplate, ...)
+{
+    va_list va;
+    va_start(va, szTemplate);
 
-        DWORD nResultLength = wcslen(szBuffer);
-
-        if (nResultLength + 1 > nBufferLength)
+    // Copy of the original validation, since we don't call the original
+    // function:
+    if (size - 1 > 0x7FFF'FFFE)
+    {
+        if (size)
         {
-            return GetCurrentDirectoryW_orig(nBufferLength, lpBuffer);
+            *szBuffer = 0;
         }
-
-        wcscpy_s(lpBuffer, nBufferLength, szBuffer);
-        return nResultLength;
+        return E_INVALIDARG;
     }
 
-    return GetCurrentDirectoryW_orig(nBufferLength, lpBuffer);
+    if (g_fEnablePrintPromptHooks)
+    {
+        // The directory string is only ever the first varadic argument in
+        // CMD's implementation. It's probably unsafe to generally assume
+        // a 64-bit word argument, but it's fine under the narrow filter
+        // applied here.
+        va_list vaMut; // va_arg shifts the internal pointer of the list,
+        va_start(vaMut, szTemplate);        // so a mutable copy is used.
+        LPCWSTR szFirstStringArgument = va_arg(vaMut, LPCWSTR);
+
+        if (
+            (szTemplate[0] == L'%' && szTemplate[1] == L's') &&
+            wcscmp(szFirstStringArgument, g_pszCurrentDirectory) == 0
+        )
+        {
+            WCHAR szPathBuffer[MAX_PATH] = { 0 };
+            wcscpy(szPathBuffer, szFirstStringArgument);
+
+            ApplyPathReplacementToString(szPathBuffer, ARRAYSIZE(szPathBuffer));
+
+            int out = StringCchPrintfW_orig(szBuffer, size, szTemplate, szPathBuffer, vaMut);
+            va_end(vaMut);
+            va_end(va);
+            return out;
+        }
+
+        va_end(vaMut);
+    }
+
+    HRESULT out = StringVPrintfWorkerW(szBuffer, size, 0 /* unused */, (STRSAFE_LPCWSTR)szTemplate, va);
+    va_end(va);
+    return out;
 }
 
 void (WINAPI *PrintPrompt_orig)();
 void WINAPI PrintPrompt_hook()
 {
     Wh_Log(L"Entered");
-    g_fEnableGetCurrentDirectoryHooks = true;
+    g_fEnablePrintPromptHooks = true;
+
+    // Set up hook filter and shared state for modifying behaviour of the original
+    // function and its callees.
+    WCHAR szCurrentDirectory[MAX_PATH] = { 0 };
+    GetCurrentDirectoryW(ARRAYSIZE(szCurrentDirectory), szCurrentDirectory);
+    g_pszCurrentDirectory = szCurrentDirectory;
+
     PrintPrompt_orig();
-    g_fEnableGetCurrentDirectoryHooks = false;
+
+    // Clear shared state; it is now invalid to access.
+    g_pszCurrentDirectory = nullptr;
+    g_fEnablePrintPromptHooks = false;
 }
 
 void (WINAPI *SetConsoleTitleW_orig)(LPCWSTR szTitle);
@@ -215,6 +283,17 @@ const WindhawkUtils::SYMBOL_HOOK g_rghookCmd[] = {
         },
         &PrintPrompt_orig,
         PrintPrompt_hook,
+    },
+    {
+        {
+#ifdef _WIN64
+            L"long __cdecl StringCchPrintfW(unsigned short *,unsigned __int64,unsigned short const *,...)",
+#else
+            L"long __cdecl StringCchPrintfW(unsigned short *,unsigned int,unsigned short const *,...)",
+#endif
+        },
+        &StringCchPrintfW_orig,
+        StringCchPrintfW_hook,
     },
 };
 
@@ -358,18 +437,6 @@ BOOL Wh_ModInit()
         Wh_Log(L"Could not find address of GetCurrentDirectoryW in kernel32.");
         return FALSE;
     }
-
-    if (!Wh_SetFunctionHook(
-        (void *)pfnGetCurrentDirectoryW,
-        (void *)GetCurrentDirectoryW_hook,
-        (void **)&GetCurrentDirectoryW_orig
-    ))
-    {
-        Wh_Log(L"Failed to hook GetCurrentDirectoryW.");
-        return FALSE;
-    }
-
-    WHINIT_ASSERT(GetCurrentDirectoryW_orig != nullptr);
 
     if (g_fRedirectTitle)
     {
