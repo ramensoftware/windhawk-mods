@@ -2,11 +2,15 @@
 // @id              winstant
 // @name            Winstant
 // @description     Any window, instantly – right where you need it. Switch, arrange and launch from the minimize button or a hotkey
+// @description:it-IT Qualsiasi finestra, all'istante, proprio dove ti serve. Cambia, disponi e avvia dal pulsante Riduci a icona o con una scorciatoia
+// @description:de-DE Jedes Fenster, sofort – genau dort, wo du es brauchst. Wechseln, anordnen und starten über die Minimieren-Schaltfläche oder ein Tastenkürzel
+// @description:fr-FR N'importe quelle fenêtre, instantanément, là où vous en avez besoin. Changez, organisez et lancez depuis le bouton Réduire ou un raccourci
+// @description:es-ES Cualquier ventana, al instante, justo donde la necesitas. Cambia, organiza y abre desde el botón Minimizar o un atajo
 // @version         1.5
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         windhawk.exe
-// @compilerOptions -ldwmapi -luser32 -lgdi32 -lgdiplus -lshcore -ladvapi32 -lshell32 -lversion -lole32 -lmsimg32
+// @compilerOptions -ldwmapi -luser32 -lgdi32 -lgdiplus -lshcore -ladvapi32 -lshell32 -lversion -lole32 -lmsimg32 -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -14,13 +18,11 @@
 # Winstant
 
 *Any window, instantly – right where you need it.*
-![Winstant](https://i.imgur.com/JUERjkh.png)
 
 Working with several windows of the same app – Excel workbooks, Windows
 Terminal sessions, Explorer folders, browser windows – usually means
 juggling them from the taskbar and then dragging the one you want back into
 place.
-
 
 This mod adds a small switcher to the **minimize button** of every window.
 Rest the mouse on it for a moment and a panel lists the **other windows of
@@ -36,15 +38,12 @@ The same panel is also a small **window manager**: it can list every open
 window, arrange windows in layouts, move them between monitors, and save
 and restore whole desktop arrangements.
 
-
-
 ## Quick start
-
+![Winstant_1](https://i.imgur.com/4u7KigX.png)
 1. Open two or more windows of the same app.
 2. Rest the mouse on the **minimize** button of one of them (about half a
    second).
 3. Click a window in the panel, or press its number.
-![Winstant_1](https://i.imgur.com/4u7KigX.png)
 
 Move the mouse away and the panel closes by itself.
 
@@ -55,7 +54,6 @@ jump back to the previous window, or type a few letters to find another.
 
 ## Launcher: apps and files
 ![Winstant_2]https://i.imgur.com/CRkqAsu.png
-
 In the hotkey panel, type to search: besides the open windows, the panel
 suggests **installed apps** (everything in the Start menu, Store apps
 included) and – if [Everything](https://www.voidtools.com/) is running –
@@ -93,10 +91,7 @@ Holding `Shift` while the panel appears switches to the other mode for that
 time.
 
 ## Arranging windows
-
 ![Winstant_2]https://i.imgur.com/qnOL6ii.png
-
-
 The bar at the bottom of the panel arranges windows on the current monitor:
 
 | Button | Layout |
@@ -188,11 +183,12 @@ into these languages.
 - Windows on other virtual desktops are not listed, and the mod doesn't
   move windows between virtual desktops (Windows has no supported way to do
   it).
-- and only when you save one: for each window the program path, window class, title, position, size and state, in the mod’s local storage provided by  Windhawk (nothing is written elsewhere or sent anywhere). Delete them from the bookmark menu; uninstalling the mod removes them.
-  
-  
-  
-  
+- Window numbers, colors and custom names are kept in memory only and are
+  lost when the window closes. The only thing stored is **saved layouts**, and
+  only when you save one: for each window the program path, window class,
+  title, position, size and state, in the mod's local storage provided by
+  Windhawk (nothing is written elsewhere or sent anywhere). Delete them from
+  the bookmark menu; uninstalling the mod removes them.
 - Opacity changes are undone when the mod is disabled.
 - The mod runs in its own background `windhawk.exe` process instead of
   being injected into `explorer.exe`, so it can never destabilize the shell.
@@ -899,6 +895,8 @@ into these languages.
 #include <shellscalingapi.h>
 #include <shlobj.h>
 #include <shobjidl.h>
+#include <commctrl.h>
+#include <windhawk_utils.h>
 
 #include <algorithm>
 using std::max;
@@ -3679,7 +3677,6 @@ struct Panel {
     HWND edit = nullptr;
     int editIndex = -1;     // entry being renamed
     bool namingLayout = false;
-    WNDPROC editOldProc = nullptr;
     HBRUSH editBrush = nullptr;
 
     POINT origin{};
@@ -5142,9 +5139,9 @@ void CloseEntry(Panel& p, int i) {
     RefreshHotFromCursor(p);
 }
 
-LRESULT CALLBACK EditSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK EditSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
+                                  DWORD_PTR) {
     Panel* p = g_panel;
-    WNDPROC old = p ? p->editOldProc : nullptr;
     switch (msg) {
         case WM_KEYDOWN:
             if (wParam == VK_RETURN || wParam == VK_ESCAPE) {
@@ -5158,9 +5155,11 @@ LRESULT CALLBACK EditSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
         case WM_KILLFOCUS:
             if (p) PostMessageW(p->hwnd, WM_APP_EDIT_DONE, 1, 0);
             break;
+        case WM_NCDESTROY:
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, EditSubclassProc);
+            break;
     }
-    return old ? CallWindowProcW(old, hwnd, msg, wParam, lParam)
-               : DefWindowProcW(hwnd, msg, wParam, lParam);
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
 HWND CreateInlineEdit(Panel& p, const RECT& r, const std::wstring& text) {
@@ -5176,7 +5175,7 @@ HWND CreateInlineEdit(Panel& p, const RECT& r, const std::wstring& text) {
     }
     SendMessageW(edit, WM_SETFONT, (WPARAM)g_font, FALSE);
     SendMessageW(edit, EM_SETSEL, 0, -1);
-    p.editOldProc = (WNDPROC)SetWindowLongPtrW(edit, GWLP_WNDPROC, (LONG_PTR)EditSubclassProc);
+    WindhawkUtils::SetWindowSubclassFromAnyThread(edit, EditSubclassProc, 0);
     SetFocus(edit);
     return edit;
 }
@@ -5224,7 +5223,7 @@ void EndRename(Panel& p, bool commit) {
     p.editIndex = -1;
     p.namingLayout = false;
     std::wstring text = Trim(GetWindowTitle(edit));
-    SetWindowLongPtrW(edit, GWLP_WNDPROC, (LONG_PTR)p.editOldProc);
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(edit, EditSubclassProc);
     DestroyWindow(edit);
 
     if (naming) {
