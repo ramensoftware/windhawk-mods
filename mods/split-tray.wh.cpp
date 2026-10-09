@@ -2315,9 +2315,9 @@ int g_attachTicksWaited = 0;
 // put in its taskbar: on every tick for the first ten seconds, which covers a
 // taskbar still being built, then every thirty. Each look walks hundreds of
 // the taskbar's elements on its thread, and a row that is not there - a layout
-// a Windows update changed - was looked for every two seconds for as long as
-// Explorer ran (from Windhawk's catalog review). A taskbar built again is
-// found sooner, through the IconView hook.
+// a Windows update changed - would be looked for that way for as long as
+// Explorer ran. A taskbar built again is found sooner, through the IconView
+// hook.
 bool AttachDueAfter(int ticksWaited) {
     return ticksWaited < 5 || ticksWaited % 15 == 0;
 }
@@ -3912,9 +3912,8 @@ HWND CreateTooltip(HWND owner) {
 //
 // `iconsMayHaveChanged` is false only for the timer's pass, which comes every
 // two seconds whether or not anything happened. A tray is then moved and
-// redrawn only if where it goes, or how, has changed: every pass put each
-// tray back on top of every other topmost window, and redrew it, from
-// Windhawk's catalog review.
+// redrawn only if where it goes, or how, has changed, so that it is not put
+// back on top of every other topmost window every two seconds.
 void SyncFloatingTrays(bool iconsMayHaveChanged = true) {
     std::map<int, TrayLayout> layouts;
     int opacity;
@@ -4661,9 +4660,7 @@ void ReleaseArrangeResources() {
 }
 
 // The arrange window's measurements, designed at 96 DPI and scaled for the
-// display it opens on, as the floating trays' are (ScaleForDpi). They were
-// fixed pixels, so on a display at 150% the window came out two thirds of the
-// size it should be (from Windhawk's catalog review).
+// display it opens on, as the floating trays' are (ScaleForDpi).
 struct ArrangeMetrics {
     int margin = 0;
     int listWidth = 0;
@@ -6610,7 +6607,7 @@ bool ElementOffsetFromFrameHeightArm64(const BYTE* code, size_t* offset) {
 }
 
 // For the architecture the mod was built for: Windhawk builds it for ARM64 on
-// an ARM64 PC (from Windhawk's catalog review).
+// an ARM64 PC.
 bool ElementOffsetFromFrameHeight(const BYTE* code, size_t* offset) {
 #if defined(_M_ARM64) || defined(__aarch64__)
     return ElementOffsetFromFrameHeightArm64(code, offset);
@@ -6795,11 +6792,9 @@ std::atomic<bool> g_systemTraySymbolsHooked{false};
 // Installing the hooks
 //
 // Each module's symbols are asked for once in the mod's life, whatever the
-// answer (from Windhawk's catalog review). Resolving them costs seconds of
-// processor time inside Explorer, and one that failed - after a Windows update
-// renamed a symbol, say - fails the same way every time it is asked again; they
-// were asked for every two seconds, for as long as Explorer ran, and from two
-// threads at once while the first answer was still coming.
+// answer (DECISIONS 96). Resolving them costs seconds of processor time inside
+// Explorer, and one that failed - after a Windows update renamed a symbol, say
+// - fails the same way every time it is asked again.
 //
 // taskbar.dll is loaded, if Explorer has not loaded it yet, and resolved in
 // Wh_ModInit. SystemTray.dll is resolved there too when the mod is loaded into
@@ -6936,9 +6931,9 @@ HMODULE GetCurrentModuleHandle() {
 // Rather than hardcode a path through it, the mod can print the subtree it is
 // looking at, so the element types and names it targets are chosen from what is
 // actually there. Off in the shipped mod: a developer turns it on by setting
-// g_dumpXamlTree and building. It was a setting, offered to every user, and the
-// dump holds up the taskbar for seconds while Explorer starts, long enough for
-// applications to lose icons (DECISIONS 51; from Windhawk's catalog review).
+// g_dumpXamlTree and building. It is not a setting: the dump holds up the
+// taskbar for seconds while Explorer starts, long enough for applications to
+// lose icons (DECISIONS 51).
 // ---------------------------------------------------------------------------
 
 bool g_dumpXamlTree = false;
@@ -9253,14 +9248,11 @@ bool IconScreenRect(uint64_t serial, RECT* out) {
 // ---------------------------------------------------------------------------
 // Attaching without waiting to be handed an element
 //
-// The mod used to reach the taskbar only through the IconView constructor hook,
-// which sees elements built after the hook is installed and nothing that already
-// exists. Loaded into a running Explorer, it finds every taskbar's tray built
-// already; and until 1.3.3 it resolved SystemTray.dll's symbols seconds after it
-// loaded - 8.2 s when measured - by when the secondary taskbar's tray was built
-// on a fresh start too. No element on it ever came through, EnsureEmbeddedPanel
-// was never called, and the mod sat there with a healthy log and no tray. It had
-// worked before only by winning that race.
+// The IconView constructor hook sees elements built after it is installed and
+// nothing that already exists, and a mod loaded into a running Explorer finds
+// every taskbar's tray built already. Reached only through the hook, no element
+// on it would ever come through, EnsureEmbeddedPanel would never be called, and
+// the mod would sit there with a healthy log and no tray (DECISIONS 36).
 //
 // So the tree is walked downwards from the target taskbar's XamlRoot instead,
 // which needs nothing to happen first, and it is retried on the timer.
@@ -9719,11 +9711,8 @@ void Wh_ModSettingsChanged() {
 }
 
 // Unloading waits for each of its steps to be done, however long that takes
-// (from Windhawk's catalog review, replacing DECISIONS 73's time limits).
-// Windhawk frees the module as soon as Wh_ModUninit returns, so no code of the
-// mod may be running, or still to run, by then; the mod used to give up on a
-// step after a few seconds and keep its module loaded for the rest of
-// Explorer's life instead. A blocking send to the taskbar's thread cannot
+// (DECISIONS 95). Windhawk frees the module as soon as Wh_ModUninit returns, so
+// no code of the mod may be running, or still to run, by then. A blocking send to the taskbar's thread cannot
 // deadlock here: the thread unloading runs on owns no window that thread could
 // be waiting on, and the tray thread, the one that sends to it, is stopped
 // before the hand-back.
