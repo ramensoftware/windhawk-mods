@@ -21,6 +21,7 @@ This mod hides file extensions during inline file renaming in File Explorer, Des
 * **Warning Prevention:**   Intercepts window messages (`WM_GETTEXT`) upon committing a rename to silently re-attach the original extension,
                             avoiding the native Windows "If you change a file name extension, the file might become unusable" warning prompt.
 
+Note: It doesn't inside
 ![Mod Demo](https://i.imgur.com/iy9dyzq.gif)
 */
 // ==/WindhawkModReadme==
@@ -35,9 +36,28 @@ This mod hides file extensions during inline file renaming in File Explorer, Des
 
 #include <windhawk_utils.h>
 
-// Global tracking map for active subclassed edit controls
+struct HiddenExt {
+    std::wstring ext;          // Hidden extension (e.g. ".gz", ".txt")
+    std::wstring shownDotExt;  // Extension remaining in shown base name (e.g. ".tar" in "archive.tar")
+};
+
 std::mutex g_editsMutex;
-std::unordered_map<HWND, std::wstring> g_hiddenExt;
+std::unordered_map<HWND, HiddenExt> g_hiddenExt;
+
+bool ShouldAppendExt(const std::wstring& text, const HiddenExt& h) {
+    if (text.empty() || text == L"." || text == L".." ||
+        text.find_first_of(L"\\/:*?\"") != std::wstring::npos) {
+        return false; // Path, wildcard, or quote: leave as typed
+    }
+
+    PCWSTR typedExt = PathFindExtensionW(text.c_str());
+    if (_wcsicmp(typedExt, h.ext.c_str()) == 0) {
+        return false; // Already ends with the hidden extension
+    }
+
+    // Append unless the user typed their own extension (e.g. .png when .jpg was hidden)
+    return !*typedExt || _wcsicmp(typedExt, h.shownDotExt.c_str()) == 0;
+}
 
 // Subclass procedure matching WindhawkUtils WH_SUBCLASSPROC (5 parameters)
 LRESULT CALLBACK RenameEditSubclassProc(
@@ -52,31 +72,24 @@ LRESULT CALLBACK RenameEditSubclassProc(
             LRESULT len = DefSubclassProc(hWnd, uMsg, wParam, lParam);
             if (len > 0 && wParam > 0 && lParam != 0) {
                 wchar_t* buf = (wchar_t*)lParam;
-                std::wstring ext;
+                HiddenExt h;
+                bool hasEntry = false;
                 {
                     std::lock_guard<std::mutex> lock(g_editsMutex);
                     auto it = g_hiddenExt.find(hWnd);
                     if (it != g_hiddenExt.end()) {
-                        ext = it->second;
+                        h = it->second;
+                        hasEntry = true;
                     }
                 }
 
-                if (!ext.empty()) {
-                    std::wstring full = buf;
-                    if (!full.empty()) {
-                        // Re-attach extension if the text does not already end with it
-                        bool alreadyHasExt = false;
-                        if (full.length() >= ext.length()) {
-                            std::wstring suffix = full.substr(full.length() - ext.length());
-                            if (_wcsicmp(suffix.c_str(), ext.c_str()) == 0) {
-                                alreadyHasExt = true;
-                            }
-                        }
-
-                        if (!alreadyHasExt) {
-                            full += ext;
-                            wcsncpy_s(buf, wParam, full.c_str(), _TRUNCATE);
-                            return wcslen(buf);
+                if (hasEntry) {
+                    std::wstring text = buf;
+                    if (ShouldAppendExt(text, h)) {
+                        std::wstring target = text + h.ext;
+                        if (wParam >= target.length() + 1) {
+                            wcsncpy_s(buf, wParam, target.c_str(), _TRUNCATE);
+                            return target.length();
                         }
                     }
                 }
@@ -87,32 +100,25 @@ LRESULT CALLBACK RenameEditSubclassProc(
         case WM_GETTEXTLENGTH: {
             LRESULT len = DefSubclassProc(hWnd, uMsg, wParam, lParam);
             if (len > 0) {
-                std::wstring ext;
+                HiddenExt h;
+                bool hasEntry = false;
                 {
                     std::lock_guard<std::mutex> lock(g_editsMutex);
                     auto it = g_hiddenExt.find(hWnd);
                     if (it != g_hiddenExt.end()) {
-                        ext = it->second;
+                        h = it->second;
+                        hasEntry = true;
                     }
                 }
-                if (!ext.empty()) {
+
+                if (hasEntry) {
                     int bufLen = (int)len + 1;
                     std::wstring currentText(bufLen, L'\0');
                     DefSubclassProc(hWnd, WM_GETTEXT, (WPARAM)bufLen, (LPARAM)&currentText[0]);
                     currentText.resize(wcslen(currentText.c_str()));
 
-                    if (!currentText.empty()) {
-                        bool alreadyHasExt = false;
-                        if (currentText.length() >= ext.length()) {
-                            std::wstring suffix = currentText.substr(currentText.length() - ext.length());
-                            if (_wcsicmp(suffix.c_str(), ext.c_str()) == 0) {
-                                alreadyHasExt = true;
-                            }
-                        }
-
-                        if (!alreadyHasExt) {
-                            return len + ext.length();
-                        }
+                    if (ShouldAppendExt(currentText, h)) {
+                        return len + h.ext.length();
                     }
                 }
             }
@@ -193,10 +199,9 @@ bool IsRenameEditControl(HWND hWnd) {
         return false;
     }
 
+    // Match only Explorer item views, Desktop, and Navigation pane
     if (HasAncestorClass(hWnd, L"SHELLDLL_DefView") ||
-        HasAncestorClass(hWnd, L"NamespaceTreeControl") ||
-        HasAncestorClass(hWnd, L"SysListView32") ||
-        HasAncestorClass(hWnd, L"DirectUIHWND")) {
+        HasAncestorClass(hWnd, L"NamespaceTreeControl")) {
 
         if (!HasAncestorClass(hWnd, L"Address Band Root") &&
             !HasAncestorClass(hWnd, L"TravelBand") &&
@@ -224,21 +229,31 @@ SetWindowTextW_t SetWindowTextW_Original = nullptr;
 
 BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
     if (lpString && (IsSaveDialogEditControl(hWnd) || IsRenameEditControl(hWnd))) {
-        LPCWSTR ext = PathFindExtensionW(lpString);
-        if (ext && *ext != L'\0' && wcslen(ext) > 1) {
-            std::wstring fullPath(lpString);
-            std::wstring baseName = fullPath.substr(0, fullPath.length() - wcslen(ext));
-            std::wstring extension(ext);
-
-            {
-                std::lock_guard<std::mutex> lock(g_editsMutex);
-                g_hiddenExt[hWnd] = extension;
-            }
-
-            WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, RenameEditSubclassProc, 0);
-
-            return SetWindowTextW_Original(hWnd, baseName.c_str());
+        PCWSTR ext = PathFindExtensionW(lpString);
+        if (wcschr(lpString, L'"') || !ext[0] || !ext[1]) {
+            std::lock_guard<std::mutex> lock(g_editsMutex);
+            g_hiddenExt.erase(hWnd); // Clear stale entry if there's no extension to hide
+            return SetWindowTextW_Original(hWnd, lpString);
         }
+
+        std::wstring fullPath(lpString);
+        std::wstring baseName = fullPath.substr(0, fullPath.length() - wcslen(ext));
+        std::wstring extension(ext);
+
+        PCWSTR baseExt = PathFindExtensionW(baseName.c_str());
+
+        HiddenExt h;
+        h.ext = extension;
+        h.shownDotExt = baseExt;
+
+        {
+            std::lock_guard<std::mutex> lock(g_editsMutex);
+            g_hiddenExt[hWnd] = h;
+        }
+
+        WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, RenameEditSubclassProc, 0);
+
+        return SetWindowTextW_Original(hWnd, baseName.c_str());
     }
 
     return SetWindowTextW_Original(hWnd, lpString);
@@ -258,7 +273,7 @@ void Wh_ModUninit() {
     std::vector<HWND> edits;
     {
         std::lock_guard<std::mutex> lock(g_editsMutex);
-        for (const auto& [hWnd, ext] : g_hiddenExt) {
+        for (const auto& [hWnd, h] : g_hiddenExt) {
             edits.push_back(hWnd);
         }
     }
