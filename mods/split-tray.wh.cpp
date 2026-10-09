@@ -2,13 +2,13 @@
 // @id              split-tray
 // @name            Split Tray
 // @description     A notification area on every display's taskbar: choose, per application, which tray its icon shows in
-// @version         1.3.2
+// @version         1.3.3
 // @author          Brandon Stonebridge
 // @github          https://github.com/st0nebridge
 // @homepage        https://github.com/st0nebridge/SplitTray
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lgdi32 -luser32 -lole32 -loleaut32 -lruntimeobject -lshlwapi -luiautomationcore
+// @compilerOptions -lcomctl32 -lgdi32 -luser32 -lole32 -loleaut32 -lruntimeobject -lshcore -luiautomationcore
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -174,7 +174,7 @@ to another tray is really gone from the main one - it is not an overlay.
   $description: A floating tray's background, as hex RRGGBB.
 - opacity: 235
   $name: Opacity
-  $description: A floating tray's opacity, 0 (invisible) to 255 (opaque).
+  $description: A floating tray's opacity, 16 (faint) to 255 (opaque).
 - alwaysOnTop: true
   $name: Keep floating trays above other windows
 - showTooltips: true
@@ -197,14 +197,6 @@ to another tray is really gone from the main one - it is not an overlay.
   $description: >-
     How many icons a tray in a taskbar shows before the rest move behind a
     "show hidden icons" chevron, as the native tray does. 0 shows all of them.
-- dumpXamlTree: false
-  $name: Log the taskbar's XAML tree
-  $description: >-
-    Diagnostic. Prints the structure of a taskbar's tray area to the mod log
-    once, which is how the elements this mod attaches to are identified after
-    a Windows update changes them. Leave it off otherwise: the dump holds up
-    the taskbar for seconds while Explorer starts, and applications whose
-    icons arrive in that time can lose them.
 - repopulateOnLoad: true
   $name: Collect existing icons on load
   $description: >-
@@ -233,13 +225,17 @@ to another tray is really gone from the main one - it is not an overlay.
 //
 // Sections 1-4 are pure functions of their inputs and are covered by
 // tests/regression, which compiles this file against stub Windhawk headers so
-// that the tested code is literally the shipped code.
+// that the tested code is literally the shipped code. The test suites, the
+// build tools and DECISIONS.md - cited in the comments as "DECISIONS 61" and
+// the like, for why a choice was made - are in the project's repository,
+// https://github.com/st0nebridge/SplitTray.
 // ============================================================================
 
 #include <windhawk_utils.h>
 
 #include <commctrl.h>
 #include <shellapi.h>
+#include <shellscalingapi.h>
 #include <uiautomation.h>
 #include <windowsx.h>
 
@@ -256,11 +252,10 @@ to another tray is really gone from the main one - it is not an overlay.
 #include <utility>
 #include <vector>
 
-// Section 10 lives below, but the tray thread's retry timer in section 6
-// drives it, so it is declared here.
+// Section 10 lives below, but the tray thread's timer in section 6 and the
+// subclass in section 8 call into it, so it is declared here.
 #ifndef SPLITTRAY_NO_XAML
 namespace SplitTrayXaml {
-void EnsureTaskbarXamlHooked();
 void OnIconStoreChanged();
 // Must run on the taskbar's UI thread. Finds each display's tray row by walking
 // down from its taskbar's XamlRoot, rather than waiting to be handed an element.
@@ -472,8 +467,8 @@ std::vector<BYTE> PayloadWithMessage(const std::vector<BYTE>& source, DWORD mess
 // An icon is put back into the shell - moved back from the secondary tray, or
 // restored when the mod unloads - by replaying a record as NIM_ADD. That record
 // used to be simply the last message seen, and the last message is usually a
-// partial NIM_MODIFY: the Claude usage monitor, for one, changes its picture and
-// its tooltip in separate modifies. Replayed as an add, that recreated an icon
+// partial NIM_MODIFY: some applications change their picture and their
+// tooltip in separate modifies. Replayed as an add, that recreated an icon
 // with a picture and nothing else - no callback, no tooltip, no executable path
 // (a modify never carries one) - and the picture handle had been destroyed by
 // then. Measured with real shell32: flags 0x2, callback 0, the icon dead. So
@@ -643,9 +638,9 @@ std::vector<BYTE> BalloonRecordFor(const std::vector<BYTE>& copy,
 // icon, and the caller then gets E_FAIL. Captured by the wire probe, see
 // tests/probe/probe-rect-output-26100.txt.
 //
-// It matters because Tauri's tray library - Telemachus and Desk Tray on this
-// machine - asks before it handles any click on its icon, and drops the click
-// when the answer is a failure. Explorer can only answer for icons it has.
+// It matters because Tauri's tray library, which many applications use, asks
+// before it handles any click on its icon, and drops the click when the answer
+// is a failure. Explorer can only answer for icons it has.
 // ---------------------------------------------------------------------------
 
 constexpr ULONG_PTR kIconRectCopyDataId = 3;
@@ -780,7 +775,6 @@ struct Settings {
     bool mirrorHiddenIcons = true;
     bool repopulateOnLoad = true;
     bool embedInTaskbar = true;
-    bool dumpXamlTree = false;
     int maxVisibleIcons = 8;
 };
 
@@ -896,7 +890,7 @@ Settings LoadSettings() {
     // executable ends the routing rules: "primary", or a display number.
     for (int i = 0; i <= 16; i++) {
         auto display = WindhawkUtils::StringSetting::make(L"extraTrays[%d].display", i);
-        if (!display.get() || !*display.get()) {
+        if (!*display.get()) {
             break;
         }
         ExtraTray extra;
@@ -910,7 +904,7 @@ Settings LoadSettings() {
 
     for (int i = 0;; i++) {
         auto exe = WindhawkUtils::StringSetting::make(L"perProcessRouting[%d].exe", i);
-        if (!exe.get() || !*exe.get()) {
+        if (!*exe.get()) {
             break;
         }
         auto dest = WindhawkUtils::StringSetting::make(
@@ -946,7 +940,6 @@ Settings LoadSettings() {
     s.mirrorHiddenIcons = Wh_GetIntSetting(L"mirrorHiddenIcons") != 0;
     s.repopulateOnLoad = Wh_GetIntSetting(L"repopulateOnLoad") != 0;
     s.embedInTaskbar = Wh_GetIntSetting(L"embedInTaskbar") != 0;
-    s.dumpXamlTree = Wh_GetIntSetting(L"dumpXamlTree") != 0;
     s.maxVisibleIcons = Clamp(Wh_GetIntSetting(L"maxVisibleIcons"), 0, 64);
 
     return s;
@@ -1051,15 +1044,8 @@ std::wstring MonitorIdentity(const wchar_t* device) {
 }
 
 UINT GetMonitorDpi(HMONITOR monitor) {
-    using GetDpiForMonitorProc = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
-    static GetDpiForMonitorProc proc = []() -> GetDpiForMonitorProc {
-        HMODULE shcore = LoadLibraryW(L"shcore.dll");
-        return shcore ? reinterpret_cast<GetDpiForMonitorProc>(
-                            GetProcAddress(shcore, "GetDpiForMonitor"))
-                      : nullptr;
-    }();
     UINT dpiX = 96, dpiY = 96;
-    if (proc && proc(monitor, 0 /* MDT_EFFECTIVE_DPI */, &dpiX, &dpiY) == S_OK) {
+    if (GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY) == S_OK) {
         return dpiX;
     }
     return 96;
@@ -1492,7 +1478,7 @@ struct MirroredIcon {
     // it every second - lands a NIM_MODIFY first, and a modify carries no
     // executable path, so the rules have nothing to match and the icon is filed
     // under the default tray. Sticky routing then made that guess permanent:
-    // measured on this machine, uID 2 happened to arrive as an add and moved,
+    // measured with SystemInformer, uID 2 happened to arrive as an add and moved,
     // while 3, 5 and 14 arrived as modifies and never did, however the rule was
     // written. The decision is now deferred until a message actually carries the
     // path, and applied through the same replay the settings use.
@@ -1514,8 +1500,8 @@ struct MirroredIcon {
 //
 // NIF_GUID only says the caller filled the flag in, not that it put anything in
 // the field, and applications do set the flag over an empty GUID. Treating that
-// as an identity makes every such icon the same icon: on this machine all four
-// of SystemInformer's icons and several of Explorer's own arrive that way, so
+// as an identity makes every such icon the same icon: all four of
+// SystemInformer's icons and several of Explorer's own arrive that way, so
 // the first one decided the tray for all of them and the other three inherited
 // it as a "sticky" decision. Measured, not supposed - the log prints the GUID.
 bool IsEmptyGuid(const GUID& guid) {
@@ -2058,10 +2044,6 @@ std::map<int, TrayLayout> g_floatingLayouts;
 // which trays still need a floating panel.
 std::set<HMONITOR> g_embeddedMonitors;
 
-// Each floating tray's window, by number. Created and destroyed on the tray
-// thread; kept here so other threads (and the tests) can find them.
-std::map<int, HWND> g_floatingWnds;
-
 std::atomic<uint64_t> g_nextSerial{1};
 
 // --- Trays, from the shared state. Each of these needs g_mutex held. --------
@@ -2180,8 +2162,6 @@ std::atomic<HWND> g_trayWnd{nullptr};
 std::atomic<HWND> g_shellTrayWnd{nullptr};
 HANDLE g_trayThread = nullptr;
 DWORD g_trayThreadId = 0;
-// Whether it was asked to end and did not (StopTrayThread).
-bool g_trayThreadStuck = false;
 // How far it got: set once its window exists, or once it has given up.
 enum class TrayThreadState { Starting, Running, GaveUp };
 std::atomic<TrayThreadState> g_trayThreadState{TrayThreadState::Starting};
@@ -2198,16 +2178,9 @@ HANDLE g_trayThreadHold = nullptr;
 // from then it passes everything on untouched until it is removed
 // (DECISIONS 68).
 std::atomic<bool> g_handedBack{false};
-// Whether unloading ended before that happened (HandBackToShell).
-bool g_handBackStuck = false;
-// How long unloading waits for the taskbar's thread at each step that needs
-// it (DECISIONS 73); the tests shorten it.
-DWORD g_taskbarWaitMs = 5000;
 // How many calls of the mod's subclass are under way on the taskbar's thread.
 // Unloading does not finish while there are any (DECISIONS 73).
 std::atomic<int> g_subclassDepth{0};
-// Whether the mod's panels could not be taken out of the taskbars in time.
-bool g_panelsStuck = false;
 
 // Messages posted to the mod's own tray window.
 constexpr UINT WM_ST_REFRESH = WM_APP + 0x101;   // icons changed, re-layout
@@ -2237,8 +2210,8 @@ UINT GetReplayMessage() {
 
 // Posted to Shell_TrayWnd to run an attach attempt on the taskbar's UI thread.
 //
-// Both taskbars are on the same thread - verified on this machine: Shell_TrayWnd
-// and Shell_SecondaryTrayWnd both report thread 93292 - so the window the mod
+// Both taskbars are on the same thread - Shell_TrayWnd and
+// Shell_SecondaryTrayWnd report the same thread - so the window the mod
 // already subclasses is a usable way onto the thread that owns the secondary
 // taskbar's XAML. XAML objects are thread-affine, so the timer cannot touch them
 // itself.
@@ -2333,6 +2306,22 @@ TaskbarShownBy TaskbarShownNow() {
 // Whether the last pass found the taskbar another process's. Tray thread only.
 bool g_taskbarElsewhere = false;
 
+// How many ticks of the timer a display's tray has waited to be put in its
+// taskbar (AttachDueAfter). Tray thread only.
+int g_attachTicksWaited = 0;
+
+// Whether the tray thread's timer asks the taskbar's thread to look for a
+// display's tray row again, `ticksWaited` ticks after one first waited to be
+// put in its taskbar: on every tick for the first ten seconds, which covers a
+// taskbar still being built, then every thirty. Each look walks hundreds of
+// the taskbar's elements on its thread, and a row that is not there - a layout
+// a Windows update changed - was looked for every two seconds for as long as
+// Explorer ran (from Windhawk's catalog review). A taskbar built again is
+// found sooner, through the IconView hook.
+bool AttachDueAfter(int ticksWaited) {
+    return ticksWaited < 5 || ticksWaited % 15 == 0;
+}
+
 // ---------------------------------------------------------------------------
 // The mod's window classes
 //
@@ -2359,18 +2348,7 @@ HINSTANCE ModuleInstance() {
 
 bool RegisterModClass(WNDCLASSEXW* wc) {
     wc->hInstance = ModuleInstance();
-    // One an earlier build registered against Explorer's module, which nothing
-    // ever took down. Harmless when there is none.
-    if (ModuleInstance() != GetModuleHandleW(nullptr)) {
-        UnregisterClassW(wc->lpszClassName, GetModuleHandleW(nullptr));
-    }
     if (RegisterClassExW(wc)) {
-        return true;
-    }
-    // Left by a load of this module that could not clean up. Reused, it would
-    // run that load's window procedure; replaced, it runs this one's.
-    if (GetLastError() == ERROR_CLASS_ALREADY_EXISTS &&
-        UnregisterClassW(wc->lpszClassName, wc->hInstance) && RegisterClassExW(wc)) {
         return true;
     }
     Wh_Log(L"could not register window class %s: %lu", wc->lpszClassName,
@@ -2401,6 +2379,11 @@ struct FloatingTray {
     bool focused = false;
     // What screen readers read, once one has asked (DECISIONS 85). Held.
     FloatingTrayUia* uia = nullptr;
+    // Where it was last put, whether on top, and how opaque: a pass of the
+    // timer that changes none of it moves and redraws nothing.
+    RECT placed = {};
+    bool placedOnTop = false;
+    int placedOpacity = -1;
 };
 
 std::map<int, FloatingTray> g_floatingTrays;  // tray thread only, by number
@@ -2463,10 +2446,12 @@ void SaveDisplaySlotsLocked() {
     WriteStoredString(kDisplaySlotsValue, joined);
 }
 
-// Recomputes which trays exist and how the floating ones are laid out. Caller
-// must hold g_mutex.
-void RecomputeGeometryLocked() {
-    const auto monitors = g_enumerateMonitors();
+// Recomputes which trays exist and how the floating ones are laid out, for
+// `monitors`. Caller must hold g_mutex, and asks Windows for the displays
+// (g_enumerateMonitors) before taking it: that takes a call per display, and
+// every application's tray message waits on the lock (from Windhawk's catalog
+// review).
+void RecomputeGeometryLocked(const std::vector<MonitorInfoEntry>& monitors) {
     LoadDisplaySlotsLocked();
     if (AssignDisplaySlots(monitors, &g_displaySlots)) {
         SaveDisplaySlotsLocked();
@@ -3924,14 +3909,21 @@ HWND CreateTooltip(HWND owner) {
 
 // Brings the floating panels in line with the trays: one for every tray that
 // floats, where its layout says, and none for any other. Tray thread only.
-void SyncFloatingTrays() {
+//
+// `iconsMayHaveChanged` is false only for the timer's pass, which comes every
+// two seconds whether or not anything happened. A tray is then moved and
+// redrawn only if where it goes, or how, has changed: every pass put each
+// tray back on top of every other topmost window, and redrew it, from
+// Windhawk's catalog review.
+void SyncFloatingTrays(bool iconsMayHaveChanged = true) {
     std::map<int, TrayLayout> layouts;
     int opacity;
     bool onTop;
     bool tooltips;
+    const auto monitors = g_enumerateMonitors();
     {
         std::lock_guard<std::mutex> lock(g_mutex);
-        RecomputeGeometryLocked();
+        RecomputeGeometryLocked(monitors);
         if (!g_unloading.load()) {
             layouts = g_floatingLayouts;
         }
@@ -3958,12 +3950,7 @@ void SyncFloatingTrays() {
             ++it;
             continue;
         }
-        const int number = it->first;
         HWND wnd = it->second.wnd;
-        {
-            std::lock_guard<std::mutex> lock(g_mutex);
-            g_floatingWnds.erase(number);
-        }
         if (wnd) {
             DestroyWindow(wnd);  // WM_DESTROY takes its tooltip with it
         }
@@ -3986,10 +3973,6 @@ void SyncFloatingTrays() {
                 continue;
             }
             SetWindowLongPtrW(tray.wnd, GWLP_USERDATA, number);
-            {
-                std::lock_guard<std::mutex> lock(g_mutex);
-                g_floatingWnds[number] = tray.wnd;
-            }
             Wh_Log(L"tray %d floats at (%d,%d) %dx%d", number, layout.x, layout.y,
                    layout.width, layout.height);
         }
@@ -4006,15 +3989,28 @@ void SyncFloatingTrays() {
             DestroyWindow(tray.tooltip);
             tray.tooltip = nullptr;
         }
-        SetLayeredWindowAttributes(tray.wnd, 0, static_cast<BYTE>(opacity), LWA_ALPHA);
-        SetWindowPos(tray.wnd, onTop ? HWND_TOPMOST : HWND_NOTOPMOST, layout.x, layout.y,
-                     layout.width, layout.height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
-        InvalidateRect(tray.wnd, nullptr, FALSE);
-        // Its icons may have come and gone: the keyboard stays on one that is
-        // there, and a screen reader is told to read the tray again.
-        KeepKeyboardInTray(tray, number);
-        if (tray.uia) {
-            tray.uia->ChildrenChanged();
+        if (opacity != tray.placedOpacity) {
+            SetLayeredWindowAttributes(tray.wnd, 0, static_cast<BYTE>(opacity), LWA_ALPHA);
+            tray.placedOpacity = opacity;
+        }
+        const RECT where = {layout.x, layout.y, layout.x + layout.width,
+                            layout.y + layout.height};
+        const bool moved = !EqualRect(&where, &tray.placed) || onTop != tray.placedOnTop;
+        if (moved) {
+            SetWindowPos(tray.wnd, onTop ? HWND_TOPMOST : HWND_NOTOPMOST, layout.x,
+                         layout.y, layout.width, layout.height,
+                         SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            tray.placed = where;
+            tray.placedOnTop = onTop;
+        }
+        if (moved || iconsMayHaveChanged) {
+            InvalidateRect(tray.wnd, nullptr, FALSE);
+            // Its icons may have come and gone: the keyboard stays on one that
+            // is there, and a screen reader is told to read the tray again.
+            KeepKeyboardInTray(tray, number);
+            if (tray.uia) {
+                tray.uia->ChildrenChanged();
+            }
         }
     }
 }
@@ -4026,8 +4022,6 @@ void DestroyFloatingTrays() {
         }
     }
     g_floatingTrays.clear();
-    std::lock_guard<std::mutex> lock(g_mutex);
-    g_floatingWnds.clear();
 }
 
 LRESULT CALLBACK ControllerProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -4049,10 +4043,13 @@ LRESULT CALLBACK ControllerProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 #ifndef SPLITTRAY_NO_XAML
             SplitTrayXaml::RequestEmbeddedRefresh();
 #endif
+            g_attachTicksWaited = 0;  // embedding may just have been turned on
             return 0;
 
-        case WM_ST_REFRESH:
         case WM_DISPLAYCHANGE:
+            g_attachTicksWaited = 0;  // a taskbar may come with the display
+            [[fallthrough]];
+        case WM_ST_REFRESH:
         case WM_SETTINGCHANGE:
             for (auto& [number, tray] : g_floatingTrays) {
                 tray.hotIndex = -1;
@@ -4162,14 +4159,14 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
         if (msg.message == WM_TIMER && msg.hwnd == hWnd) {
             EnsureShellTrayWindowSubclassed();
 #ifndef SPLITTRAY_NO_XAML
-            SplitTrayXaml::EnsureTaskbarXamlHooked();
             // The IconView constructor hook only catches elements built after it
-            // is installed, and resolving the symbols takes seconds - long
-            // enough that on a normal boot the other taskbars' trays are already
-            // built and the mod never sees an element on them at all. Asking
-            // again on the timer is the same remedy as DECISIONS 18, for the
-            // same shape of defect.
-            if (SplitTrayXaml::AnyDisplayTrayWaitingToEmbed()) {
+            // is installed: a mod loaded into a running Explorer finds the other
+            // taskbars' trays built already, and never sees an element on them
+            // at all. Asking on the timer is the same remedy as DECISIONS 18,
+            // for the same shape of defect.
+            if (!SplitTrayXaml::AnyDisplayTrayWaitingToEmbed()) {
+                g_attachTicksWaited = 0;
+            } else if (AttachDueAfter(g_attachTicksWaited++)) {
                 if (HWND tray = g_shellTrayWnd.load()) {
                     PostMessageW(tray, GetAttachMessage(), 0, 0);
                 }
@@ -4177,9 +4174,10 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
 #endif
             // Also wakes the taskbar's thread while any icon is waiting for
             // it: a wake-up can be lost - the taskbar was being recreated when
-            // it was posted - and one Explorer refused is asked again.
+            // it was posted - and one Explorer refused is asked again. A change
+            // of icons it finds posts a refresh of its own.
             ReplayRoutingChanges();
-            SyncFloatingTrays();
+            SyncFloatingTrays(false);
             continue;
         }
         TranslateMessage(&msg);
@@ -4232,7 +4230,7 @@ std::vector<int> g_arrangeTrays;          // the tray number each list shows
 // window freed the one list once per list, after the window had freed it
 // already.
 HIMAGELIST g_arrangeImages = nullptr;
-HFONT g_arrangeFont = nullptr;  // the shell's message font, made once
+HFONT g_arrangeFont = nullptr;  // the shell's message font, at the window's DPI
 std::vector<std::wstring> g_arrangeKeys;  // indexed by ListView item lParam
 std::vector<uint64_t> g_arrangeSerials;   // likewise: which icon each row is
 bool g_arrangeDragging = false;
@@ -4641,18 +4639,20 @@ LRESULT CALLBACK ArrangeWndProc(HWND hWnd, UINT msg, WPARAM wParam,
 
         case WM_NCDESTROY:
             // The last message, after the lists have gone: nothing that could
-            // still draw with the image list is left.
+            // still draw with the image list or the font is left. Both are
+            // made for the display the window opens on.
             if (g_arrangeImages) {
                 ImageList_Destroy(g_arrangeImages);
                 g_arrangeImages = nullptr;
             }
+            ReleaseArrangeResources();
             break;
     }
     return DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
-// What the arrange window keeps beyond its own lifetime, released when the
-// tray thread ends.
+// The arrange window's font, released as the window goes, and again as the
+// tray thread ends in case the window never got that far.
 void ReleaseArrangeResources() {
     if (g_arrangeFont) {
         DeleteObject(g_arrangeFont);
@@ -4660,8 +4660,34 @@ void ReleaseArrangeResources() {
     }
 }
 
-HWND CreateArrangeList(HWND parent, int id, int x, int y, int width,
-                       int height) {
+// The arrange window's measurements, designed at 96 DPI and scaled for the
+// display it opens on, as the floating trays' are (ScaleForDpi). They were
+// fixed pixels, so on a display at 150% the window came out two thirds of the
+// size it should be (from Windhawk's catalog review).
+struct ArrangeMetrics {
+    int margin = 0;
+    int listWidth = 0;
+    int columnWidth = 0;  // the list's one column, short of its scroll bar
+    int height = 0;
+    int labelHeight = 0;
+    int hintHeight = 0;
+    int icon = 0;
+};
+
+ArrangeMetrics ArrangeMetricsFor(UINT dpi) {
+    ArrangeMetrics m;
+    m.margin = ScaleForDpi(12, dpi);
+    m.listWidth = ScaleForDpi(250, dpi);
+    m.columnWidth = m.listWidth - ScaleForDpi(24, dpi);
+    m.height = ScaleForDpi(460, dpi);
+    m.labelHeight = ScaleForDpi(20, dpi);
+    m.hintHeight = ScaleForDpi(52, dpi);
+    m.icon = ScaleForDpi(16, dpi);
+    return m;
+}
+
+HWND CreateArrangeList(HWND parent, int id, int x, int y, int width, int height,
+                       int columnWidth) {
     HWND list = CreateWindowExW(
         WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"",
         WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS |
@@ -4677,7 +4703,7 @@ HWND CreateArrangeList(HWND parent, int id, int x, int y, int width,
     LVCOLUMNW column = {};
     column.mask = LVCF_TEXT | LVCF_WIDTH;
     column.pszText = const_cast<PWSTR>(L"Icon");
-    column.cx = width - 24;
+    column.cx = columnWidth;
     ListView_InsertColumn(list, 0, &column);
     return list;
 }
@@ -4697,28 +4723,29 @@ void ShowArrangeWindow() {
     const std::vector<int> trays = AvailableTrayNumbers();
     const int lists = static_cast<int>(trays.size());
 
-    constexpr int kMargin = 12;
-    constexpr int kListWidth = 250;
-    constexpr int kHeight = 460;
-    RECT frame = {0, 0, kMargin + lists * (kListWidth + kMargin), kHeight};
-    AdjustWindowRectEx(&frame, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, FALSE,
-                       WS_EX_TOOLWINDOW);
-    g_arrangeWnd = CreateWindowExW(
-        WS_EX_TOOLWINDOW, kArrangeClassName, L"Split Tray - arrange icons",
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, CW_USEDEFAULT, CW_USEDEFAULT,
-        frame.right - frame.left, frame.bottom - frame.top, nullptr, nullptr,
-        ModuleInstance(), nullptr);
+    // Made where Windows puts it, then sized for that display.
+    constexpr DWORD kStyle = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU;
+    constexpr DWORD kExStyle = WS_EX_TOOLWINDOW;
+    g_arrangeWnd = CreateWindowExW(kExStyle, kArrangeClassName,
+                                   L"Split Tray - arrange icons", kStyle, CW_USEDEFAULT,
+                                   CW_USEDEFAULT, 0, 0, nullptr, nullptr,
+                                   ModuleInstance(), nullptr);
     if (!g_arrangeWnd) {
         Wh_Log(L"could not create the arrange window: %lu", GetLastError());
         return;
     }
+    const UINT dpi = GetDpiForWindow(g_arrangeWnd);
+    const ArrangeMetrics m = ArrangeMetricsFor(dpi);
+    RECT frame = {0, 0, m.margin + lists * (m.listWidth + m.margin), m.height};
+    AdjustWindowRectExForDpi(&frame, kStyle, FALSE, kExStyle, dpi);
+    SetWindowPos(g_arrangeWnd, nullptr, 0, 0, frame.right - frame.left,
+                 frame.bottom - frame.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
 
     RECT client = {};
     GetClientRect(g_arrangeWnd, &client);
-    const int labelHeight = 20;
-    const int hintHeight = 52;
-    const int listTop = kMargin + labelHeight;
-    const int listHeight = client.bottom - listTop - kMargin - hintHeight - kMargin / 2;
+    const int listTop = m.margin + m.labelHeight;
+    const int listHeight =
+        client.bottom - listTop - m.margin - m.hintHeight - m.margin / 2;
 
     g_arrangeTrays = trays;
     g_arrangeLists.assign(trays.size(), nullptr);
@@ -4732,13 +4759,14 @@ void ShowArrangeWindow() {
             label[0] = static_cast<wchar_t>(towupper(label[0]));
             title += label;
         }
-        const int x = kMargin + i * (kListWidth + kMargin);
+        const int x = m.margin + i * (m.listWidth + m.margin);
         CreateWindowExW(0, L"STATIC", title.c_str(),
-                        WS_CHILD | WS_VISIBLE | SS_ENDELLIPSIS, x, kMargin,
-                        kListWidth, labelHeight, g_arrangeWnd, nullptr, nullptr,
+                        WS_CHILD | WS_VISIBLE | SS_ENDELLIPSIS, x, m.margin,
+                        m.listWidth, m.labelHeight, g_arrangeWnd, nullptr, nullptr,
                         nullptr);
-        g_arrangeLists[static_cast<size_t>(i)] = CreateArrangeList(
-            g_arrangeWnd, kArrangeListIdBase + i, x, listTop, kListWidth, listHeight);
+        g_arrangeLists[static_cast<size_t>(i)] =
+            CreateArrangeList(g_arrangeWnd, kArrangeListIdBase + i, x, listTop,
+                              m.listWidth, listHeight, m.columnWidth);
     }
 
     CreateWindowExW(0, L"STATIC",
@@ -4747,14 +4775,17 @@ void ShowArrangeWindow() {
                     L"an icon in its tray's overflow or brings it back. "
                     L"Double-click or Enter moves it between the primary tray "
                     L"and tray 2. Every choice is remembered.",
-                    WS_CHILD | WS_VISIBLE, kMargin, listTop + listHeight + 6,
-                    client.right - kMargin * 2, hintHeight, g_arrangeWnd,
-                    nullptr, nullptr, nullptr);
+                    WS_CHILD | WS_VISIBLE, m.margin,
+                    listTop + listHeight + ScaleForDpi(6, dpi),
+                    client.right - m.margin * 2, m.hintHeight, g_arrangeWnd, nullptr,
+                    nullptr, nullptr);
 
-    // Same font the rest of the shell uses; the default is the 1990s one.
+    // Same font the rest of the shell uses, at this display's size; the
+    // default is the 1990s one.
+    ReleaseArrangeResources();
     NONCLIENTMETRICSW metrics = {sizeof(metrics)};
-    if (!g_arrangeFont && SystemParametersInfoW(SPI_GETNONCLIENTMETRICS,
-                                                sizeof(metrics), &metrics, 0)) {
+    if (SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics,
+                                   0, dpi)) {
         g_arrangeFont = CreateFontIndirectW(&metrics.lfMessageFont);
     }
     if (g_arrangeFont) {
@@ -4767,7 +4798,7 @@ void ShowArrangeWindow() {
             reinterpret_cast<LPARAM>(g_arrangeFont));
     }
 
-    g_arrangeImages = ImageList_Create(16, 16, ILC_COLOR32 | ILC_MASK, 8, 8);
+    g_arrangeImages = ImageList_Create(m.icon, m.icon, ILC_COLOR32 | ILC_MASK, 8, 8);
     for (HWND list : g_arrangeLists) {
         ListView_SetImageList(list, g_arrangeImages, LVSIL_SMALL);
     }
@@ -5416,7 +5447,7 @@ void RecordShellHoldingLocked(MirroredIcon* icon, bool holds) {
 // tray library does not - loses its icon (DECISIONS 51). Asked here, every
 // refused add made two calls into Explorer in that burst instead of one; live,
 // with the question asked here, a log listener attached and the processor
-// busy, Telemachus's icon was lost in two loads of six. Caller holds g_mutex,
+// busy, a Tauri application's icon was lost in two loads of six. Caller holds g_mutex,
 // on the taskbar's thread.
 bool RecordShellAnswerLocked(const TrayNotification& n, bool taken) {
     for (auto* list : {&g_icons, &g_primaryOnly}) {
@@ -5560,6 +5591,7 @@ void ReplayRoutingChanges() {
 
     bool settle = false;
     bool changed = false;
+    const auto monitors = g_enumerateMonitors();
 
     {
         std::lock_guard<std::mutex> lock(g_mutex);
@@ -5567,7 +5599,7 @@ void ReplayRoutingChanges() {
         for (const auto& tray : g_trays) {
             wasAvailable.push_back(tray.available ? tray.number : -tray.number);
         }
-        RecomputeGeometryLocked();
+        RecomputeGeometryLocked(monitors);
         std::vector<int> nowAvailable;
         for (const auto& tray : g_trays) {
             nowAvailable.push_back(tray.available ? tray.number : -tray.number);
@@ -5604,7 +5636,7 @@ void ReplayRoutingChanges() {
                        [](const TrayTarget& tray) { return tray.available; })));
         }
         if (changed) {
-            RecomputeGeometryLocked();
+            RecomputeGeometryLocked(monitors);
         }
     }
 
@@ -5633,6 +5665,7 @@ void MoveIconToTray(std::wstring_view key, Destination destination) {
     bool settle = false;
     bool found = false;
     std::wstring label;
+    const auto monitors = g_enumerateMonitors();
 
     {
         std::lock_guard<std::mutex> lock(g_mutex);
@@ -5653,7 +5686,7 @@ void MoveIconToTray(std::wstring_view key, Destination destination) {
         // The icon copy is kept either way: the arrange window lists icons in
         // every tray and needs something to draw.
         ResplitStoreLocked();
-        RecomputeGeometryLocked();
+        RecomputeGeometryLocked(monitors);
     }
 
     if (settle) {
@@ -5670,10 +5703,11 @@ void MoveIconToTray(std::wstring_view key, Destination destination) {
 // between the lists and between the trays as needed. Runs on the tray thread.
 void ApplySettingsToTrackedIcons() {
     bool settle = false;
+    const auto monitors = g_enumerateMonitors();
 
     {
         std::lock_guard<std::mutex> lock(g_mutex);
-        RecomputeGeometryLocked();
+        RecomputeGeometryLocked(monitors);
 
         for (auto* list : {&g_icons, &g_primaryOnly}) {
             for (auto& icon : *list) {
@@ -5690,7 +5724,7 @@ void ApplySettingsToTrackedIcons() {
             }
         }
         ResplitStoreLocked();
-        RecomputeGeometryLocked();
+        RecomputeGeometryLocked(monitors);
     }
 
     if (settle) {
@@ -6033,7 +6067,7 @@ bool ApplyNotificationLocked(const TrayNotification& n,
 // Explorer answers Shell_NotifyIconGetRect for the icons it has, and an icon
 // that lives only in one of Split Tray's trays is not one of them. The question
 // failed, and Tauri's tray library, which asks before it handles any click,
-// dropped every click on such an icon: Telemachus gave no menu and no window
+// dropped every click on such an icon: a Tauri application gave no menu and no window
 // from the secondary tray, and worked again as soon as it was moved back. So
 // the mod answers for those icons, with where it drew them (DECISIONS 52).
 // ---------------------------------------------------------------------------
@@ -6132,10 +6166,10 @@ LRESULT CALLBACK ShellTrayWndSubclassProc(HWND hWnd,
             // Shell_NotifyIcon returns - so the delivery's copy can go after.
             return DeliverToShell(hWnd, senderWnd, record);
         });
-        // Once every icon is back, the subclass takes itself off, here: from
-        // the unloading thread that is a message this thread has to answer,
-        // and one that did not answer held unloading for as long as it did
-        // not (DECISIONS 73). On this thread it is a direct call.
+        // Once every icon is back, the subclass takes itself off, here, in the
+        // same call: no application's message can come between the two, and
+        // on this thread it is a direct call rather than one more message for
+        // this thread to answer (DECISIONS 73).
         if (g_handedBack.load()) {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, ShellTrayWndSubclassProc);
         }
@@ -6372,9 +6406,9 @@ bool SubclassShellTrayWindow() {
 // as soon as it attached - which on an Explorer start is about 3 seconds in,
 // against Explorer's own announcement at about 17. Everything registered twice,
 // the first time into a tray that was not ready and dropped it; and an icon
-// whose application answered only once was simply gone. Measured on this
-// machine: Desk Tray's "WhatsApp (default)" answered the mod and not Explorer,
-// was forwarded to the primary tray, and was not in it.
+// whose application answered only once was simply gone. Measured: a Tauri
+// application's icon answered the mod and not Explorer, was forwarded to the
+// primary tray, and was not in it.
 //
 // So the mod asks only when Explorer will not: when it was loaded into an
 // Explorer whose taskbar already existed, or when Explorer's announcement went
@@ -6512,16 +6546,6 @@ std::vector<CellShiftStep> PlanCellShift(size_t from, size_t to) {
     return steps;
 }
 
-// Where a TaskbarHost keeps its root XAML element, read out of the first
-// instructions of TaskbarHost::FrameHeight, which loads that very member:
-//
-//   48 83 EC xx    sub rsp, xx
-//   48 83 C1 nn    add rcx, nn    <- nn is the offset
-//
-// Any other code is a layout this mod does not know, and the answer is "no"
-// rather than a guess: the offset is dereferenced and called through, so a
-// guess that is wrong after a Windows update is a crash inside Explorer
-// (DECISIONS 61). The pattern comes from taskbar-start-button-position.
 // How good an anchor an element of the tray is for the tree walk, best first.
 // The row the tray goes into is found by walking up from the anchor
 // (FindTrayRow), so the anchor has to be below the row: a tray icon, not the
@@ -6541,7 +6565,18 @@ int AnchorPreference(std::wstring_view className, std::wstring_view name) {
     return 2;
 }
 
-bool ElementOffsetFromFrameHeight(const BYTE* code, size_t* offset) {
+// Where a TaskbarHost keeps its root XAML element, read out of the first
+// instructions of TaskbarHost::FrameHeight, which loads that very member.
+// Any other code is a layout this mod does not know, and the answer is "no"
+// rather than a guess: the offset is dereferenced and called through, so a
+// guess that is wrong after a Windows update is a crash inside Explorer
+// (DECISIONS 61). The patterns are the ones taskbar-start-button-position and
+// taskbar-multirow read.
+//
+// x64:
+//   48 83 EC xx    sub rsp, xx
+//   48 83 C1 nn    add rcx, nn    <- nn is the offset
+bool ElementOffsetFromFrameHeightX64(const BYTE* code, size_t* offset) {
     if (!code || !offset) {
         return false;
     }
@@ -6551,6 +6586,37 @@ bool ElementOffsetFromFrameHeight(const BYTE* code, size_t* offset) {
         return true;
     }
     return false;
+}
+
+// ARM64:
+//   D503237F       pacibsp
+//   A9BF7BFD       stp fp, lr, [sp, #-0x10]!   (any frame size)
+//   910003FD       mov fp, sp
+//   F84nnC08       ldr x8, [x0, #nn]!          <- nn is the offset
+bool ElementOffsetFromFrameHeightArm64(const BYTE* code, size_t* offset) {
+    if (!code || !offset) {
+        return false;
+    }
+    DWORD instructions[4];
+    memcpy(instructions, code, sizeof(instructions));
+    if (instructions[0] == 0xD503237F &&
+        (instructions[1] & 0xFFC07FFF) == 0xA9807BFD &&
+        instructions[2] == 0x910003FD &&
+        (instructions[3] & 0xFFF00FE0) == 0xF8400C00) {
+        *offset = (instructions[3] >> 12) & 0xFF;
+        return true;
+    }
+    return false;
+}
+
+// For the architecture the mod was built for: Windhawk builds it for ARM64 on
+// an ARM64 PC (from Windhawk's catalog review).
+bool ElementOffsetFromFrameHeight(const BYTE* code, size_t* offset) {
+#if defined(_M_ARM64) || defined(__aarch64__)
+    return ElementOffsetFromFrameHeightArm64(code, offset);
+#else
+    return ElementOffsetFromFrameHeightX64(code, offset);
+#endif
 }
 
 // Reading Explorer's private objects, at offsets nothing promises. After a
@@ -6624,6 +6690,16 @@ void* TaskListWndSiteOf(void* taskBand, void* wantedVftable) {
     return nullptr;
 }
 
+// Whether a module LoadLibraryExW just returned is SystemTray.dll, loaded to
+// run: its symbols are resolved then, before any of its code has run
+// (LoadLibraryExW_Hook). A module mapped as data or as a resource is not.
+bool IsSystemTrayLoad(HMODULE loaded, DWORD flags, HMODULE systemTray) {
+    constexpr DWORD kNotToRun = LOAD_LIBRARY_AS_DATAFILE |
+                                LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
+                                LOAD_LIBRARY_AS_IMAGE_RESOURCE;
+    return loaded && loaded == systemTray && (flags & kNotToRun) == 0;
+}
+
 }  // namespace SplitTray
 
 // ============================================================================
@@ -6686,8 +6762,9 @@ namespace SplitTrayXaml {
 void* g_CTaskBand_ITaskListWndSite_vftable = nullptr;
 void* g_CSecondaryTaskBand_ITaskListWndSite_vftable = nullptr;
 
-// GetTaskbarHost returns a std::shared_ptr by value, so on x64 it takes a
-// hidden pointer to the caller's two-pointer result slot.
+// GetTaskbarHost returns a std::shared_ptr by value, so it takes a hidden
+// pointer to the caller's two-pointer result slot, after `this` on x64 and
+// ARM64 alike.
 using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
 CTaskBand_GetTaskbarHost_t g_CTaskBand_GetTaskbarHost = nullptr;
 CTaskBand_GetTaskbarHost_t g_CSecondaryTaskBand_GetTaskbarHost = nullptr;
@@ -6708,24 +6785,34 @@ void* WINAPI IconView_IconView_Hook(void* pThis);
 
 // --- state ------------------------------------------------------------------
 
+// Whether each module's symbols have been asked for, and whether they resolved.
+std::atomic<bool> g_taskbarSymbolsTried{false};
 std::atomic<bool> g_taskbarSymbolsHooked{false};
+std::atomic<bool> g_systemTraySymbolsTried{false};
 std::atomic<bool> g_systemTraySymbolsHooked{false};
-std::atomic<bool> g_symbolFailureLogged{false};
 
 // ---------------------------------------------------------------------------
 // Installing the hooks
 //
-// Neither module is loaded when Windhawk injects, for the same reason the
-// taskbar window does not exist yet (DECISIONS.md 18), so this is retried from
-// the tray thread's timer rather than attempted once at startup.
+// Each module's symbols are asked for once in the mod's life, whatever the
+// answer (from Windhawk's catalog review). Resolving them costs seconds of
+// processor time inside Explorer, and one that failed - after a Windows update
+// renamed a symbol, say - fails the same way every time it is asked again; they
+// were asked for every two seconds, for as long as Explorer ran, and from two
+// threads at once while the first answer was still coming.
+//
+// taskbar.dll is loaded, if Explorer has not loaded it yet, and resolved in
+// Wh_ModInit. SystemTray.dll is resolved there too when the mod is loaded into
+// a running Explorer, and otherwise as Explorer loads it (LoadLibraryExW_Hook),
+// before any of its icons exist. Neither depends on embedInTaskbar, so turning
+// that on later finds them resolved.
+//
+// Each returns whether this call hooked anything, which a hook registered after
+// Wh_ModInit has to be applied for.
 // ---------------------------------------------------------------------------
 
-bool HookTaskbarSymbols() {
-    if (g_taskbarSymbolsHooked.load()) {
-        return true;
-    }
-    HMODULE module = GetModuleHandleW(L"taskbar.dll");
-    if (!module) {
+bool HookTaskbarSymbols(HMODULE module) {
+    if (!module || g_taskbarSymbolsTried.exchange(true)) {
         return false;
     }
 
@@ -6746,10 +6833,8 @@ bool HookTaskbarSymbols() {
 
     if (!WindhawkUtils::HookSymbols(module, taskbarDllHooks,
                                     ARRAYSIZE(taskbarDllHooks))) {
-        if (!g_symbolFailureLogged.exchange(true)) {
-            Wh_Log(L"[xaml] could not resolve taskbar.dll symbols; the embedded "
-                   L"tray cannot find which taskbar an element belongs to");
-        }
+        Wh_Log(L"[xaml] could not resolve taskbar.dll symbols; the trays float "
+               L"instead of going into the taskbars");
         return false;
     }
 
@@ -6758,12 +6843,8 @@ bool HookTaskbarSymbols() {
     return true;
 }
 
-bool HookSystemTraySymbols() {
-    if (g_systemTraySymbolsHooked.load()) {
-        return true;
-    }
-    HMODULE module = GetModuleHandleW(L"SystemTray.dll");
-    if (!module) {
+bool HookSystemTraySymbols(HMODULE module) {
+    if (!module || g_systemTraySymbolsTried.exchange(true)) {
         return false;
     }
 
@@ -6776,10 +6857,8 @@ bool HookSystemTraySymbols() {
 
     if (!WindhawkUtils::HookSymbols(module, systemTrayDllHooks,
                                     ARRAYSIZE(systemTrayDllHooks))) {
-        if (!g_symbolFailureLogged.exchange(true)) {
-            Wh_Log(L"[xaml] could not resolve the SystemTray.dll IconView "
-                   L"constructor; no tray elements will be seen");
-        }
+        Wh_Log(L"[xaml] could not resolve the SystemTray.dll IconView "
+               L"constructor; a taskbar built again is found on the timer only");
         return false;
     }
 
@@ -6856,8 +6935,13 @@ HMODULE GetCurrentModuleHandle() {
 // Explorer's taskbar XAML is undocumented and changes between Windows builds.
 // Rather than hardcode a path through it, the mod can print the subtree it is
 // looking at, so the element types and names it targets are chosen from what is
-// actually there. Off by default; turned on with the dumpXamlTree setting.
+// actually there. Off in the shipped mod: a developer turns it on by setting
+// g_dumpXamlTree and building. It was a setting, offered to every user, and the
+// dump holds up the taskbar for seconds while Explorer starts, long enough for
+// applications to lose icons (DECISIONS 51; from Windhawk's catalog review).
 // ---------------------------------------------------------------------------
+
+bool g_dumpXamlTree = false;
 
 std::wstring DescribeElement(wux::DependencyObject const& obj) {
     std::wstring description;
@@ -7408,12 +7492,7 @@ void OnTrayIconViewLoaded(wux::FrameworkElement const& iconView) {
         RefreshTray(*owner);
     }
 
-    bool dump;
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        dump = g_settings.dumpXamlTree;
-    }
-    if (dump && !g_loggedTargetStack) {
+    if (g_dumpXamlTree && !g_loggedTargetStack) {
         // Print from the tray frame down once, so the insertion point is chosen
         // from what is there rather than assumed.
         if (auto frame = AncestorNamed(iconView, L"SystemTrayFrameGrid")) {
@@ -9111,7 +9190,7 @@ void RefreshEmbeddedTray() {
 // ---------------------------------------------------------------------------
 
 // An element's bounds in screen pixels. The taskbar's XAML island fills the
-// taskbar window - measured on this machine, its content bridge has exactly
+// taskbar window - measured, its content bridge has exactly
 // the window's rect on both taskbars - so the window's corner is the island's.
 bool ElementScreenRect(EmbeddedTray const& tray, wux::FrameworkElement const& element,
                        RECT* out) {
@@ -9176,9 +9255,10 @@ bool IconScreenRect(uint64_t serial, RECT* out) {
 //
 // The mod used to reach the taskbar only through the IconView constructor hook,
 // which sees elements built after the hook is installed and nothing that already
-// exists. Resolving SystemTray.dll's symbols takes several seconds - measured at
-// 8.2s after Wh_ModInit on this machine - and by then the secondary taskbar's
-// tray is built and loaded. No element on it ever came through, EnsureEmbeddedPanel
+// exists. Loaded into a running Explorer, it finds every taskbar's tray built
+// already; and until 1.3.3 it resolved SystemTray.dll's symbols seconds after it
+// loaded - 8.2 s when measured - by when the secondary taskbar's tray was built
+// on a fresh start too. No element on it ever came through, EnsureEmbeddedPanel
 // was never called, and the mod sat there with a healthy log and no tray. It had
 // worked before only by winning that race.
 //
@@ -9384,29 +9464,60 @@ void RemovePanel(EmbeddedTray& tray) {
     }
 }
 
-// Called from the tray thread's timer until both modules are present.
-void EnsureTaskbarXamlHooked() {
-    if (g_unloading.load()) {
-        return;
+// ---------------------------------------------------------------------------
+// Resolving the symbols, once (Installing the hooks, above)
+// ---------------------------------------------------------------------------
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t g_LoadLibraryExW_Original = nullptr;
+
+// Hooked only while SystemTray.dll is still to be loaded, as Explorer starts:
+// its symbols are resolved as it arrives, on the thread that loads it, before
+// any tray icon exists for the IconView hook to miss. What the caller is told -
+// the module, and the error when there is none - is the original's.
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags) {
+    HMODULE module = g_LoadLibraryExW_Original(fileName, file, flags);
+    if (module && !g_systemTraySymbolsTried.load() && !g_unloading.load()) {
+        const DWORD error = GetLastError();
+        // Resolving takes seconds, and the mod may have begun to unload
+        // meanwhile; its hooks are not applied after that (DECISIONS 67).
+        if (SplitTray::IsSystemTrayLoad(module, flags,
+                                        GetModuleHandleW(L"SystemTray.dll")) &&
+            HookSystemTraySymbols(module) && !g_unloading.load()) {
+            Wh_ApplyHookOperations();
+        }
+        SetLastError(error);
     }
-    bool embed;
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        embed = g_settings.embedInTaskbar;
-    }
-    if (!embed) {
-        return;
-    }
-    if (g_taskbarSymbolsHooked.load() && g_systemTraySymbolsHooked.load()) {
-        return;
+    return module;
+}
+
+// From Wh_ModInit, whose hooks Windhawk applies once it returns: taskbar.dll,
+// loaded for the purpose if need be, and SystemTray.dll if Explorer has loaded
+// it already.
+void HookTaskbarModules(HMODULE taskbar, HMODULE systemTray) {
+    if (taskbar) {
+        HookTaskbarSymbols(taskbar);
+    } else {
+        Wh_Log(L"[xaml] taskbar.dll could not be loaded; the trays float instead "
+               L"of going into the taskbars");
     }
 
-    const bool taskbar = HookTaskbarSymbols();
-    const bool systemTray = HookSystemTraySymbols();
-    // Resolving symbols takes seconds, and the mod may have begun to unload
-    // meanwhile; its hooks are not to be applied after that (DECISIONS 67).
-    if ((taskbar || systemTray) && !g_unloading.load()) {
-        // Hooks registered after Wh_ModInit have to be applied explicitly.
+    if (systemTray) {
+        HookSystemTraySymbols(systemTray);
+    } else if (auto loadLibraryExW = reinterpret_cast<LoadLibraryExW_t>(GetProcAddress(
+                   GetModuleHandleW(L"kernelbase.dll"), "LoadLibraryExW"))) {
+        WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook,
+                                       &g_LoadLibraryExW_Original);
+    }
+}
+
+// From Wh_ModAfterInit: SystemTray.dll loaded after Wh_ModInit looked for it
+// and before the LoadLibraryExW hook took effect.
+void HookSystemTrayLoadedMeanwhile() {
+    if (g_systemTraySymbolsTried.load()) {
+        return;
+    }
+    if (HookSystemTraySymbols(GetModuleHandleW(L"SystemTray.dll"))) {
         Wh_ApplyHookOperations();
     }
 }
@@ -9492,24 +9603,21 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // Cleared explicitly rather than relying on the initial value: Windhawk can
-    // load a mod again in the same process after an unload, and a stale flag would
-    // leave every hook path silently disabled.
+    // Cleared explicitly rather than relying on the initial value: the tests
+    // load and unload the mod many times in one process, and a flag left set
+    // would leave every hook path silently disabled.
     g_unloading.store(false);
-    g_trayThreadStuck = false;
     g_handedBack.store(false);
-    g_handBackStuck = false;
-    g_panelsStuck = false;
 
+    const auto monitors = g_enumerateMonitors();
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         g_settings = LoadSettings();
-        RecomputeGeometryLocked();
+        RecomputeGeometryLocked(monitors);
         // Before any icon arrives and is decided by what is remembered.
         ForgetIconsLongUnseenLocked();
     }
 
-    const auto monitors = EnumerateMonitors();
     for (size_t i = 0; i < monitors.size(); i++) {
         Wh_Log(L"monitor %zu: work area (%d,%d)-(%d,%d) dpi=%u%s", i + 1,
                monitors[i].workArea.left, monitors[i].workArea.top,
@@ -9563,6 +9671,14 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+#ifndef SPLITTRAY_NO_XAML
+    // Once, here, rather than on the tray thread's timer; the hooks this
+    // registers are applied as Wh_ModInit returns.
+    SplitTrayXaml::HookTaskbarModules(
+        LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32),
+        GetModuleHandleW(L"SystemTray.dll"));
+#endif
+
     if (g_trayThreadState.load() != TrayThreadState::Running) {
         // Slower than the wait. It attaches from its own timer once it runs,
         // and if it gives up instead nothing was attached (DECISIONS 69).
@@ -9583,18 +9699,9 @@ void Wh_ModAfterInit() {
     // thread's timer keeps trying.
     EnsureShellTrayWindowSubclassed();
 
-    bool embed;
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        embed = g_settings.embedInTaskbar;
-    }
-    if (embed) {
 #ifndef SPLITTRAY_NO_XAML
-        // Neither SystemTray.dll nor taskbar.dll is necessarily loaded yet; the
-        // tray thread's timer keeps trying.
-        SplitTrayXaml::EnsureTaskbarXamlHooked();
+    SplitTrayXaml::HookSystemTrayLoadedMeanwhile();
 #endif
-    }
 }
 
 void Wh_ModSettingsChanged() {
@@ -9611,39 +9718,24 @@ void Wh_ModSettingsChanged() {
     }
 }
 
-// Sends `message` to the taskbar's thread and waits for it until `deadline`.
-// Returns whether it was answered in time (DECISIONS 73).
-//
-// One that was not is posted as well, to be handled once the thread gets to it:
-// a sent message that times out before it is handled is dropped, as the tests
-// found - the hand-back never came, and the subclass went on swallowing icons
-// into trays nothing drew. It is handled by the mod's code, so the module then
-// has to stay loaded. The messages sent this way carry nothing, and one handled
-// twice - begun as it was sent, and again as posted - does nothing the second
-// time.
-bool SendToTaskbarBy(HWND taskbar, UINT message, ULONGLONG deadline) {
-    const ULONGLONG now = GetTickCount64();
-    const DWORD wait = deadline > now ? static_cast<DWORD>(deadline - now) : 0;
-    DWORD_PTR result = 0;
-    if (SendMessageTimeoutW(taskbar, message, 0, 0, SMTO_NORMAL, wait, &result) != 0 ||
-        !IsWindow(taskbar)) {
-        return true;
-    }
-    PostMessageW(taskbar, message, 0, 0);
-    return false;
-}
+// Unloading waits for each of its steps to be done, however long that takes
+// (from Windhawk's catalog review, replacing DECISIONS 73's time limits).
+// Windhawk frees the module as soon as Wh_ModUninit returns, so no code of the
+// mod may be running, or still to run, by then; the mod used to give up on a
+// step after a few seconds and keep its module loaded for the rest of
+// Explorer's life instead. A blocking send to the taskbar's thread cannot
+// deadlock here: the thread unloading runs on owns no window that thread could
+// be waiting on, and the tray thread, the one that sends to it, is stopped
+// before the hand-back.
 
 // Takes the mod's panels out of the taskbars, on the taskbar's own thread:
-// XAML objects belong to it (DECISIONS 37). Returns false if that thread did
-// not answer in time (DECISIONS 73).
-bool RemoveEmbeddedTrays() {
+// XAML objects belong to it (DECISIONS 37).
+void RemoveEmbeddedTrays() {
 #ifndef SPLITTRAY_NO_XAML
     if (HWND taskbar = g_shellTrayWnd.load(); taskbar && IsWindow(taskbar)) {
-        return SendToTaskbarBy(taskbar, GetXamlRemoveMessage(),
-                               GetTickCount64() + g_taskbarWaitMs);
+        SendMessageW(taskbar, GetXamlRemoveMessage(), 0, 0);
     }
 #endif
-    return true;
 }
 
 // Stops the tray thread and waits for it to end (DECISIONS 59).
@@ -9651,28 +9743,19 @@ bool RemoveEmbeddedTrays() {
 // The shutdown goes to the thread's window, which does not exist yet when the
 // mod is unloaded as soon as it has loaded. It was posted only if the window
 // was already there, so an early unload lost it and the thread ran on. It is
-// now posted as soon as there is a window to post it to, until the thread has
-// ended or the time is up.
-bool StopTrayThread() {
+// now posted as soon as there is a window to post it to.
+void StopTrayThread() {
     if (!g_trayThread) {
-        return true;
+        return;
     }
-    constexpr DWORD kBudgetMs = 5000;
-    const ULONGLONG deadline = GetTickCount64() + kBudgetMs;
     bool posted = false;
-    for (;;) {
+    do {
         if (!posted) {
             if (HWND trayWnd = g_trayWnd.load()) {
                 posted = PostMessageW(trayWnd, WM_ST_SHUTDOWN, 0, 0) != FALSE;
             }
         }
-        if (WaitForSingleObject(g_trayThread, 20) == WAIT_OBJECT_0) {
-            break;
-        }
-        if (GetTickCount64() >= deadline) {
-            return false;
-        }
-    }
+    } while (WaitForSingleObject(g_trayThread, 20) == WAIT_TIMEOUT);
     CloseHandle(g_trayThread);
     g_trayThread = nullptr;
     // Its windows let go of what screen readers held of them as they went
@@ -9680,7 +9763,6 @@ bool StopTrayThread() {
     if (const int held = g_uiaObjects.load()) {
         Wh_Log(L"%d screen-reader object(s) still held as the tray thread ended", held);
     }
-    return true;
 }
 
 // Hands every icon back to Explorer (DECISIONS 68), and waits until the mod's
@@ -9689,34 +9771,22 @@ bool StopTrayThread() {
 // can arrive inside a round of settling there - Explorer may run a message
 // loop while it handles a record - and is then done once that round is over;
 // and a call of the subclass may still be under way below it, an application's
-// message Explorer was handling when it ran the loop. Returns false if the
-// thread was not done in time, not answering or still in the mod's code.
-//
-// Nothing here waits longer than the budget. The hand-back was asked for with
-// SendMessageW, before the wait began, and taking the subclass off from here
-// is a message that thread has to answer too, so a taskbar thread that did not
-// answer held unloading for as long as it did not. One that was not done in
-// time does all of it once it answers, with the module kept loaded for it.
-bool HandBackToShell() {
+// message Explorer was handling when it ran the loop - a menu, say, which is
+// waited for until it closes.
+void HandBackToShell() {
     HWND shellTrayWnd = g_shellTrayWnd.load();
-    bool done = true;
     if (shellTrayWnd && IsWindow(shellTrayWnd)) {
-        const ULONGLONG deadline = GetTickCount64() + g_taskbarWaitMs;
-        SendToTaskbarBy(shellTrayWnd, GetReplayMessage(), deadline);
-        auto left = [shellTrayWnd] {
-            return g_subclassDepth.load() == 0 &&
-                   (g_handedBack.load() || !IsWindow(shellTrayWnd));
-        };
-        while (!left() && GetTickCount64() < deadline) {
+        SendMessageW(shellTrayWnd, GetReplayMessage(), 0, 0);
+        while (g_subclassDepth.load() != 0 ||
+               (!g_handedBack.load() && IsWindow(shellTrayWnd))) {
             Sleep(10);
         }
         // With no call of the subclass under way and none to come, what is
         // left of the last is its return; a message answered after it finds
         // the thread out of the mod's code.
-        done = left() && SendToTaskbarBy(shellTrayWnd, WM_NULL, deadline);
+        SendMessageW(shellTrayWnd, WM_NULL, 0, 0);
     }
     g_shellTrayWnd.store(nullptr);
-    return done;
 }
 
 // Everything unloading does before the store can go: the mod's panels out of
@@ -9724,15 +9794,14 @@ bool HandBackToShell() {
 // The subclass keeps track of icons until that last step (DECISIONS 68).
 void PrepareToUnload() {
     g_unloading.store(true);
-    g_panelsStuck = !RemoveEmbeddedTrays();
-    g_trayThreadStuck = !StopTrayThread();
-    g_handBackStuck = !HandBackToShell();
+    RemoveEmbeddedTrays();
+    StopTrayThread();
+    HandBackToShell();
 }
 
-// Before Windhawk takes the mod's hooks out (DECISIONS 67). The tray thread
-// installs hooks of its own as the taskbar's modules appear
-// (EnsureTaskbarXamlHooked), so it is stopped here, while they are all still
-// in place, rather than left to install one after they have gone.
+// Everything is undone here, while the mod's hooks are still in place, and
+// Wh_ModUninit finds it done (DECISIONS 67). From here on LoadLibraryExW_Hook
+// resolves nothing.
 void Wh_ModBeforeUninit() {
     PrepareToUnload();
 }
@@ -9743,31 +9812,6 @@ void Wh_ModUninit() {
     // Done already, by a Windhawk that calls Wh_ModBeforeUninit.
     if (!g_unloading.load()) {
         PrepareToUnload();
-    }
-
-    if (g_trayThreadStuck || g_handBackStuck || g_panelsStuck) {
-        // The mod's code is still running, or will: the tray thread, or on the
-        // taskbar's thread a round of settling with the hand-back after it, or
-        // a message sent there that it has not answered yet. Keeping the
-        // module loaded until Explorer exits is a leak; unloading it under
-        // running code would take Explorer down with it. The store is left as
-        // it is, for that code.
-        const wchar_t* what =
-            g_trayThreadStuck ? L"the tray thread did not stop"
-            : g_panelsStuck   ? L"the taskbar did not take the mod's trays out in time"
-                              : L"the icons were not all back with Explorer in time";
-        HMODULE self = nullptr;
-        if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                                   GET_MODULE_HANDLE_EX_FLAG_PIN,
-                               reinterpret_cast<LPCWSTR>(&StopTrayThread), &self)) {
-            Wh_Log(L"%s; the mod stays loaded until Explorer exits rather than "
-                   L"unload code it is still running",
-                   what);
-        } else {
-            const DWORD error = GetLastError();
-            Wh_Log(L"%s, and the mod could not keep itself loaded: %lu", what, error);
-        }
-        return;
     }
 
     {
