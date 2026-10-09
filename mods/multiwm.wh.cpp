@@ -56,6 +56,7 @@ A small tray indicator shows the active workspace layout and provides quick acce
 ## Also check out
 - [Virtual Desktop Helper by u2x1](https://windhawk.net/mods/virtual-desktop-helper)
 - [Taskbar Desktop Indicator by Simon Benedict](https://windhawk.net/mods/taskbar-desktop-indicator)
+- [GNOME-like dynamic virtual desktops by Giggig](https://windhawk.net/mods/gnome-dynamic-desktops)
 
 */
 // ==/WindhawkModReadme==
@@ -150,7 +151,7 @@ A small tray indicator shows the active workspace layout and provides quick acce
       $description: Maximum tiled windows per monitor on each desktop. 0 means unlimited.
     - Action: float
       $name: Overflow Action
-      $description: Applies when tiled windows exceed the limit or cannot fit.
+      $description: Applies when tiled windows exceed the limit or cannot fit. Created virtual desktops stay after their windows close or MultiWM is turned off.
       $options:
         - float: Float window
         - new_desktop: New desktop after current
