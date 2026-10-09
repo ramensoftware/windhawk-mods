@@ -2,7 +2,7 @@
 // @id              explorer-folder-bookmarks-bar
 // @name            Explorer Folder Bookmarks Bar
 // @description     Adds a folder bookmarks bar under the address bar of Windows 11 File Explorer.
-// @version         0.8.34
+// @version         0.8.35
 // @author          Maxim Fomin
 // @github          https://github.com/MaxITService
 // @include         explorer.exe
@@ -473,8 +473,9 @@ struct UiCallbackScope {
     }
 };
 
-// Event handlers, file dialogs and recent-folder tracking can run a nested
-// message loop on an Explorer thread: COM calls to Explorer's shell, dialogs.
+// Event handlers, building a new window's bar, file dialogs and recent-folder
+// tracking can run a nested message loop on an Explorer thread: COM calls to
+// Explorer's shell, Shell icon lookups, dialogs.
 // The cleanup that unloading sends to each thread can be dispatched inside
 // such a loop, so unloading waits until no operation is on any stack, and no
 // new one starts once it has begun.
@@ -4447,8 +4448,10 @@ void TryInstallBar(const muxc::CommandBar& commandBar) {
 }
 
 void TrackCommandBar(const muxc::CommandBar& commandBar) try {
-    UiCallbackScope uiScope;
-    if (g_unloading || !commandBar ||
+    // Building the bar asks Shell for folder icons, so it is an operation
+    // unloading waits for, like an event handler.
+    OperationScope operation;
+    if (!operation.active || !commandBar ||
         commandBar.Name() != L"FileExplorerCommandBar") {
         return;
     }
