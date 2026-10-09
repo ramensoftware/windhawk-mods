@@ -1,14 +1,13 @@
 // ==WindhawkMod==
-// @id            remove-clock-cutout-background
-// @name          Remove Legacy Clock Square Cutout
-// @description   Removes the light square background behind the analog clock in StartAllBack and Date/Time dialogs with flicker-free OS composition.
-// @version       3.0.1
-// @author        awnaise
-// @github        https://github.com/awnaise
-// @include       explorer.exe
-// @include       control.exe
-// @include       rundll32.exe
-// @compilerOptions -lgdiplus -lcomctl32 -lgdi32 -luser32 -luxtheme
+// @id              remove-clock-cutout-background
+// @name            Remove Legacy Clock Square Cutout
+// @description     Removes the light square background behind the analog clock in StartAllBack and Date/Time dialogs with flicker-free OS composition.
+// @version         3.1.0
+// @author          awnaise
+// @github          https://github.com/awnaise
+// @include         explorer.exe
+// @include         rundll32.exe
+// @compilerOptions -lgdiplus -lcomctl32 -lgdi32 -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -22,8 +21,11 @@ masking with smart dark-mode dialog sampling.
 
 #include <windows.h>
 #include <commctrl.h>
-#include <uxtheme.h>
 #include <gdiplus.h>
+#include <windhawk_utils.h>
+#include <mutex>
+#include <unordered_map>
+#include <vector>
 
 using namespace Gdiplus;
 
@@ -32,15 +34,16 @@ static ULONG_PTR g_gdiplusToken = 0;
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 static CreateWindowExW_t pfnCreateWindowExWOriginal = NULL;
 
-using CreateWindowExA_t = decltype(&CreateWindowExA);
-static CreateWindowExA_t pfnCreateWindowExAOriginal = NULL;
-
 using ShowWindow_t = decltype(&ShowWindow);
 static ShowWindow_t pfnShowWindowOriginal = NULL;
 
 thread_local bool g_bInMask = false;
 
-// Known clock window classes that should ALWAYS be targeted
+// Global state tracking for subclassed windows: HWND -> added WS_EX_COMPOSITED flag
+std::mutex g_clockWindowsMutex;
+std::unordered_map<HWND, bool> g_clockWindows;
+
+// Known clock window classes that should strictly be targeted
 bool IsKnownClockClass(const wchar_t* szClass) {
     if (!szClass) return false;
     return (wcsicmp(szClass, L"ClockWndMain") == 0 ||
@@ -63,30 +66,13 @@ bool IsAnalogClockControl(HWND hwnd) {
     if (wcsstr(szClass, L"DigitalClock") != NULL) return false;
     if (wcsicmp(szClass, L"SysDateTimePick32") == 0) return false;
 
-    // Immediately accept known analog clock classes without sizing checks during window creation
-    if (IsKnownClockClass(szClass)) {
-        return true;
-    }
-
-    // Fallback fuzzy match for third-party taskbar replacement controls
-    if (wcsstr(szClass, L"Clock") != NULL ||
-        wcsstr(szClass, L"clock") != NULL ||
-        wcsstr(szClass, L"CLOCK") != NULL ||
-        wcsstr(szClass, L"TimeDate") != NULL) {
-        RECT rc;
-        if (GetClientRect(hwnd, &rc)) {
-            int w = rc.right - rc.left;
-            int h = rc.bottom - rc.top;
-            if (w >= 30 && h >= 30) return true;
-        }
-    }
-
-    return false;
+    // Strict class matching only to avoid painting over unrelated third-party controls
+    return IsKnownClockClass(szClass);
 }
 
 // Dynamically samples the parent container's actual background pixel color
 COLORREF GetParentBgColor(HWND hwnd) {
-    if (!hwnd || !IsWindow(hwnd)) return RGB(35, 37, 48);
+    if (!hwnd || !IsWindow(hwnd)) return GetSysColor(COLOR_3DFACE);
 
     HWND hParent = GetParent(hwnd);
     HWND hRoot = GetAncestor(hwnd, GA_ROOT);
@@ -133,11 +119,11 @@ COLORREF GetParentBgColor(HWND hwnd) {
         int w = rcChild.right - rcChild.left;
 
         POINT candidates[] = {
-            { rcParent.right - 30,    rcParent.bottom - 25 },
-            { rcParent.left + 30,     rcParent.bottom - 25 },
+            { rcParent.right - 30, rcParent.bottom - 25 },
+            { rcParent.left + 30,  rcParent.bottom - 25 },
             { rcChild.left + (w / 2), rcChild.bottom + 25 },
-            { rcParent.right - 30,    rcParent.top + 35 },
-            { rcRoot.left + 20,       rcRoot.bottom - 15 }
+            { rcParent.right - 30, rcParent.top + 35 },
+            { rcRoot.left + 20,    rcRoot.bottom - 15 }
         };
 
         for (const auto& pt : candidates) {
@@ -165,7 +151,7 @@ COLORREF GetParentBgColor(HWND hwnd) {
         }
     }
 
-    return RGB(35, 37, 48);
+    return GetSysColor(COLOR_3DFACE);
 }
 
 // Applies anti-aliased GDI+ corner mask
@@ -231,17 +217,9 @@ LRESULT CALLBACK ClockSubclassProc(
     UINT uMsg,
     WPARAM wParam,
     LPARAM lParam,
-    UINT_PTR uIdSubclass,
     DWORD_PTR dwRefData
 ) {
     switch (uMsg) {
-        case WM_CREATE:
-        case WM_SIZE:
-        case WM_WINDOWPOSCHANGED:
-        case WM_SHOWWINDOW:
-            SetWindowRgn(hwnd, NULL, TRUE);
-            break;
-
         case WM_ERASEBKGND: {
             HDC hdc = (HDC)wParam;
             if (hdc) {
@@ -285,46 +263,48 @@ LRESULT CALLBACK ClockSubclassProc(
             return res;
         }
 
-        case WM_NCDESTROY:
-            RemovePropW(hwnd, L"SAB_ClockSubclassed");
-            RemoveWindowSubclass(hwnd, ClockSubclassProc, uIdSubclass);
+        case WM_NCDESTROY: {
+            std::lock_guard<std::mutex> lock(g_clockWindowsMutex);
+            g_clockWindows.erase(hwnd);
             break;
+        }
     }
 
     return DefSubclassProc(hwnd, uMsg, wParam, lParam);
 }
 
-void AttachToClockWindow(HWND hwnd);
+void AttachIfClock(HWND hwnd) {
+    if (!IsAnalogClockControl(hwnd)) return;
+
+    DWORD exStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
+    bool addedComposited = !(exStyle & WS_EX_COMPOSITED);
+
+    {
+        std::lock_guard<std::mutex> lock(g_clockWindowsMutex);
+        if (!g_clockWindows.try_emplace(hwnd, addedComposited).second) return;
+    }
+
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, ClockSubclassProc, 0)) {
+        std::lock_guard<std::mutex> lock(g_clockWindowsMutex);
+        g_clockWindows.erase(hwnd);
+        return;
+    }
+
+    if (addedComposited) {
+        SetWindowLongW(hwnd, GWL_EXSTYLE, exStyle | WS_EX_COMPOSITED);
+    }
+
+    InvalidateRect(hwnd, NULL, TRUE);
+}
 
 BOOL CALLBACK EnumFlyoutChildrenProc(HWND hChild, LPARAM lParam) {
-    AttachToClockWindow(hChild);
+    AttachIfClock(hChild);
     return TRUE;
 }
 
 void AttachToClockWindow(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return;
-
-    if (IsAnalogClockControl(hwnd)) {
-        if (GetPropW(hwnd, L"SAB_ClockSubclassed") != NULL) return;
-        SetPropW(hwnd, L"SAB_ClockSubclassed", (HANDLE)1);
-
-        SetWindowRgn(hwnd, NULL, TRUE);
-
-        DWORD exStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
-        if (!(exStyle & WS_EX_COMPOSITED)) {
-            SetWindowLongW(hwnd, GWL_EXSTYLE, exStyle | WS_EX_COMPOSITED);
-        }
-
-        SetWindowSubclass(hwnd, ClockSubclassProc, (UINT_PTR)ClockSubclassProc, 0);
-
-        wchar_t szClass[256] = {0};
-        GetClassNameW(hwnd, szClass, 256);
-        Wh_Log(L"Clock mask attached: class=%s hwnd=%p", szClass, (void*)hwnd);
-
-        InvalidateRect(hwnd, NULL, TRUE);
-    }
-
-    // Recursively scan all sub-containers inside dialogs and tab controls
+    AttachIfClock(hwnd);
     EnumChildWindows(hwnd, EnumFlyoutChildrenProc, 0);
 }
 
@@ -333,21 +313,6 @@ HWND WINAPI HookedCreateWindowExW(
     int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam
 ) {
     HWND hwnd = pfnCreateWindowExWOriginal(
-        dwExStyle, lpClassName, lpWindowName, dwStyle,
-        X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam
-    );
-
-    if (hwnd) {
-        AttachToClockWindow(hwnd);
-    }
-    return hwnd;
-}
-
-HWND WINAPI HookedCreateWindowExA(
-    DWORD dwExStyle, LPCSTR lpClassName, LPCSTR lpWindowName, DWORD dwStyle,
-    int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam
-) {
-    HWND hwnd = pfnCreateWindowExAOriginal(
         dwExStyle, lpClassName, lpWindowName, dwStyle,
         X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam
     );
@@ -376,11 +341,12 @@ BOOL CALLBACK ResetWindowRegionsProc(HWND hwnd, LPARAM lParam) {
 
 BOOL Wh_ModInit() {
     GdiplusStartupInput gdiplusStartupInput;
-    GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, NULL);
+    if (GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, NULL) != Ok) {
+        return FALSE;
+    }
 
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)HookedCreateWindowExW, (void**)&pfnCreateWindowExWOriginal);
-    Wh_SetFunctionHook((void*)CreateWindowExA, (void*)HookedCreateWindowExA, (void**)&pfnCreateWindowExAOriginal);
-    Wh_SetFunctionHook((void*)ShowWindow, (void*)HookedShowWindow, (void**)&pfnShowWindowOriginal);
+    WindhawkUtils::SetFunctionHook(CreateWindowExW, HookedCreateWindowExW, &pfnCreateWindowExWOriginal);
+    WindhawkUtils::SetFunctionHook(ShowWindow, HookedShowWindow, &pfnShowWindowOriginal);
 
     EnumWindows(ResetWindowRegionsProc, 0);
     Wh_Log(L"Clock mask mod initialized successfully");
@@ -389,6 +355,22 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
+    std::vector<std::pair<HWND, bool>> windows;
+    {
+        std::lock_guard<std::mutex> lock(g_clockWindowsMutex);
+        windows.assign(g_clockWindows.begin(), g_clockWindows.end());
+        g_clockWindows.clear();
+    }
+
+    for (auto [hwnd, addedComposited] : windows) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, ClockSubclassProc);
+        if (addedComposited) {
+            SetWindowLongW(hwnd, GWL_EXSTYLE,
+                           GetWindowLongW(hwnd, GWL_EXSTYLE) & ~WS_EX_COMPOSITED);
+        }
+        InvalidateRect(hwnd, NULL, TRUE);
+    }
+
     if (g_gdiplusToken) {
         GdiplusShutdown(g_gdiplusToken);
         g_gdiplusToken = 0;
