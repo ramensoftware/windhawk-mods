@@ -16,6 +16,7 @@
 // ==WindhawkModReadme==
 /*
 # Winstant
+
 ![Winstant_1](https://i.imgur.com/4u7KigX.png)
 
 *Any window, instantly – right where you need it.*
@@ -40,29 +41,29 @@ window, arrange windows in layouts, move them between monitors, and save
 and restore whole desktop arrangements.
 
 ## Quick start
-![Winstant_2(https://i.imgur.com/CRkqAsu.png)
+
+![Winstant_2](https://i.imgur.com/CRkqAsu.png)
 
 1. Open two or more windows of the same app.
 2. Rest the mouse on the **minimize** button of one of them (about half a
    second).
-3. Click a window in the panel, or press its number.
+3. Click a window in the panel, or move the mouse into the panel and then
+   press its number.
 
 Move the mouse away and the panel closes by itself.
 
 Or press **Ctrl+Alt+Space** anywhere (optionally also a quick double tap of
-Ctrl, Shift or Alt, see the settings) to open the panel in the middle of the screen with every open window, most
-recently used first: press `Enter` to
+Ctrl, Shift or Alt, see the settings) to open the panel in the middle of the
+screen with every open window, most recently used first: press `Enter` to
 jump back to the previous window, or type a few letters to find another.
 
 ## Launcher: apps and files
 
-
-![Winstant_launcher(https://i.imgur.com/ZjowdlC.png)
-
+![Winstant_launcher](https://i.imgur.com/ZjowdlC.png)
 
 In the hotkey panel, type to search: besides the open windows, the panel
 suggests **installed apps** (everything in the Start menu, Store apps
-included) and – if Everything is running –
+included) and – if [Everything](https://www.voidtools.com/) is running –
 **files and folders** from its index (most recently used first, or another
 order of your choice; a last row opens the full result list in Everything).
 How many apps and files to show is configurable. Press `Enter` to open the
@@ -97,7 +98,8 @@ Holding `Shift` while the panel appears switches to the other mode for that
 time.
 
 ## Arranging windows
-![Winstant_2](https://i.imgur.com/qnOL6ii.png)
+
+![Winstant_3](https://i.imgur.com/qnOL6ii.png)
 
 The bar at the bottom of the panel arranges windows on the current monitor:
 
@@ -139,7 +141,7 @@ skipped – the mod never starts programs by itself.
 
 | Action | Mouse | Keyboard |
 |---|---|---|
-| Open the window here / switch to it | Click | `1`–`9`, or arrows + `Enter` |
+| Open the window here / switch to it | Click | `1`–`9`, or arrows + `Enter` (hover panel: move the mouse into it first) |
 | Most recently used windows | – | `Tab` / `Shift+Tab` |
 | Place it beside the current window | Two-panes button | `Ctrl+Enter` |
 | Select windows for layouts and actions | `Ctrl`+click | `Space` |
@@ -149,6 +151,10 @@ skipped – the mod never starts programs by itself.
 | Search by title or name | – | Just type |
 | Scroll a long list | Wheel / drag the scrollbar | `PgUp`/`PgDn`, `Home`/`End` |
 | Close the panel | Move away / click elsewhere | `Esc` (first clears the search) |
+
+The panel opened by hovering gets the keyboard only once the mouse moves into
+it (or you click it), so keys typed in the app you're working in never reach
+it. The panel opened with the hotkey takes the keyboard right away.
 
 ## Mouse wheel on the minimize button
 
