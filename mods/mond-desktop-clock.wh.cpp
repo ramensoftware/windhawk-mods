@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id mond-desktop-clock
 // @name Mond Desktop Clock
-// @description A Mond-inspired desktop clock with independent row alignment, custom spacing, and draggable desktop placement.
+// @description A desktop clock inspired by the Mond Rainmeter skin, with custom styling and draggable placement.
 // @version 3.4
 // @author Elmidin Mahmud
 // @github https://github.com/elmidin
@@ -13,23 +13,24 @@
 /*
 # Mond Desktop Clock
 
-A highly customized desktop clock widget overlay inspired by the Mond Rainmeter theme layout. It runs in a dedicated tool process, not in Explorer.
+A desktop clock overlay inspired by the [Mond Rainmeter skin by HipHopium](https://www.deviantart.com/hiphopium). It runs in a dedicated tool process, not in Explorer.
 
-This keeps Mond's three independently styled rows, letter spacing, per-row horizontal offsets, and direct drag placement in one compact widget. Those layout controls are not available in Desktop Live Overlay.
+The clock shows the weekday, date, and time in three independently styled rows. Drag it to position it; enable position locking to prevent accidental movement.
 
-- Interactive drag-and-drop placement (Left-click and hold text to move anywhere)
-- Position locking setting switch parameter
-- Large uppercase weekday in Anurati with custom visual kerning overrides
-- Mond-style double whitespace tracking alignment layers
-- Quicksand thin typeface configuration profiles
-- Fully independent horizontal shift parameters for date vs time fields
+![Mond Desktop Clock on the desktop](https://i.imgur.com/dj71eKl.png)
+
+- Drag-and-drop placement with a saved position shared across monitors
+- Independent font size, letter spacing, and horizontal alignment for each row
+- Anurati weekday lettering with per-letter colour controls
+- Quicksand bold date and time text, with separate colour settings
+- 12-hour or 24-hour time and an optional date row
 
 Fonts must be installed in Windows. Missing fonts are silently substituted by Windows.
 
 - [Quicksand](https://fonts.google.com/specimen/Quicksand)
 - [Anurati](https://www.dafont.com/anurati.font)
 
-Date and time can use separate text colours. Weekday letter colours are set by position (1-9), allowing each letter to be styled independently; blank colour overrides use the Default text colour. Colours accept #RRGGBB or #AARRGGBB; the alpha component in the latter form is ignored.
+Date and time can use separate text colours. Weekday letter colours are set by position (1-9); blank overrides use the Default text colour. Colours accept #RRGGBB or #AARRGGBB; the alpha component in the latter form is ignored.
 */
 // ==/WindhawkModReadme==
 
@@ -65,11 +66,11 @@ Date and time can use separate text colours. Weekday letter colours are set by p
   $name: Vertical Gap (Date to Time)
   $description: Vertical padding distance in DIPs between the date row and the time row.
 
-- dateLeftOffset: -65
+- dateLeftOffset: 0
   $name: Date horizontal offset
   $description: Moves the date row in DIPs. Positive shifts left.
 
-- timeLeftOffset: -35
+- timeLeftOffset: 0
   $name: Time horizontal offset
   $description: Moves the time row in DIPs, independently of the date. Positive shifts left.
 
@@ -79,11 +80,11 @@ Date and time can use separate text colours. Weekday letter colours are set by p
 
 - offsetX: 0
   $name: Horizontal position offset
-  $description: Initial horizontal offset from each monitor's centre, in DIPs. Updated when a clock is dragged; shared by all monitors.
+  $description: Initial horizontal offset from each monitor's centre, in DIPs. Dragged position is saved and shared by all monitors.
 
 - offsetY: 0
   $name: Vertical position offset
-  $description: Initial vertical offset from each monitor's centre, in DIPs. Updated when a clock is dragged; shared by all monitors.
+  $description: Initial vertical offset from each monitor's centre, in DIPs. Dragged position is saved and shared by all monitors.
 
 - timeFormat24: false
   $name: Use 24-hour time
@@ -158,15 +159,12 @@ static constexpr wchar_t kControllerClass[] = L"WindhawkMondDesktopClockControll
 static constexpr UINT kShutdownMessage = WM_APP + 1;
 static constexpr UINT kSettingsMessage = WM_APP + 2;
 static constexpr UINT_PTR kWatchTimerId = 1;
-static constexpr UINT_PTR kClockTimerId = 2;
 static constexpr UINT_PTR kRelayoutTimerId = 3;
 static constexpr UINT kWatchIntervalMs = 2000;
-static constexpr UINT kClockIntervalMs = 60000;
 using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
 
 struct Overlay {
   HWND hwnd = nullptr;
-  HMONITOR monitor = nullptr;
   UINT dpi = 96;
   HFONT dayFont = nullptr;
   HFONT timeFont = nullptr;
@@ -184,8 +182,11 @@ static HANDLE g_readyEvent = nullptr;
 static bool g_uiStartOk = false;
 static bool g_rebuilding = false;
 static bool g_inMoveLoop = false;
+static bool g_syncingPositions = false;
 static bool g_settingsUpdatePending = false;
+static bool g_rebuildPending = false;
 static int g_currentDay = -1;
+static int g_currentMinute = -1;
 static HMODULE g_shcore = nullptr;
 static GetDpiForMonitor_t g_getDpiForMonitor = nullptr;
 
@@ -337,7 +338,6 @@ static std::wstring CurrentDate() {
     return b;
 }
 
-// Fixed-width alignment metric logic block
 static void DrawCenteredSpaced(HDC dc, const std::wstring& text, int y, HFONT font,
                               int spacing, COLORREF color, int centreX) {
     HGDIOBJ oldFont = SelectObject(dc, font);
@@ -347,7 +347,7 @@ static void DrawCenteredSpaced(HDC dc, const std::wstring& text, int y, HFONT fo
     
     SIZE sz{};
     GetTextExtentPoint32W(dc, text.c_str(), (int)text.size(), &sz);
-    sz.cx += text.empty() ? 0 : spacing * (static_cast<int>(text.size()) - 1);
+    if (!text.empty()) sz.cx -= spacing;
     const int x = centreX - sz.cx / 2;
     TextOutW(dc, x, y, text.c_str(), (int)text.size());
     
@@ -355,14 +355,12 @@ static void DrawCenteredSpaced(HDC dc, const std::wstring& text, int y, HFONT fo
     SelectObject(dc, oldFont);
 }
 
-// Renders the Anurati weekday character-by-character to inject pixel-perfect visual kerning overrides
 static void DrawWeekdayWithKerning(HDC dc, const std::wstring& text, int y, HFONT font,
                                    int spacing, int kerning, const COLORREF* colors,
                                    int centreX) {
     HGDIOBJ oldFont = SelectObject(dc, font);
     SetBkMode(dc, TRANSPARENT);
     
-    // First pass: Calculate the width footprint of each individual letter
     std::vector<int> charWidths(text.size(), 0);
     int totalWidth = 0;
     for (size_t i = 0; i < text.size(); ++i) {
@@ -373,11 +371,8 @@ static void DrawWeekdayWithKerning(HDC dc, const std::wstring& text, int y, HFON
         totalWidth += sz.cx;
     }
     
-    // Total geometric layout box math including spacing variables
     if (text.size() > 0) {
         totalWidth += spacing * ((int)text.size() - 1);
-        
-        // Custom visual kerning override: pull the letter 'A' 14 pixels closer to the 'D' to fix the font gap quirk
         if (text.find(L"DA") != std::wstring::npos) {
             totalWidth -= kerning;
         }
@@ -385,10 +380,9 @@ static void DrawWeekdayWithKerning(HDC dc, const std::wstring& text, int y, HFON
     
     int currentX = centreX - totalWidth / 2;
     
-    // Second pass: Draw the text letters out onto the graphic back buffer natively
     for (size_t i = 0; i < text.size(); ++i) {
         wchar_t ch[2] = { text[i], L'\0' };
-      SetTextColor(dc, colors[i]);
+        SetTextColor(dc, colors[i]);
         
         // Visual Kerning Adjuster: If rendering the letter 'A' right after 'D', pull it closer to balance whitespace weights
         if (i > 0 && text[i] == L'A' && text[i-1] == L'D') {
@@ -481,6 +475,16 @@ static void Paint(Overlay* overlay) {
   ReleaseDC(hwnd, screen);
 }
 
+static void UpdateClock(bool force = false) {
+  SYSTEMTIME now{};
+  GetLocalTime(&now);
+  const int minute = now.wHour * 60 + now.wMinute;
+  if (!force && g_currentDay == now.wDay && g_currentMinute == minute) return;
+  g_currentDay = now.wDay;
+  g_currentMinute = minute;
+  for (Overlay* overlay : g_overlays) Paint(overlay);
+}
+
 static void DestroyOverlays() {
   for (Overlay* overlay : g_overlays) {
     if (overlay->hwnd) DestroyWindow(overlay->hwnd);
@@ -489,8 +493,6 @@ static void DestroyOverlays() {
   }
   g_overlays.clear();
 }
-
-static void RebuildOverlays();
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
   Overlay* overlay = reinterpret_cast<Overlay*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
@@ -501,29 +503,25 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(overlay));
   }
   switch (msg) {
-    case WM_ERASEBKGND:
-      return 1;
-    case WM_TIMER:
-      if (wp == kClockTimerId && overlay) {
-        Paint(overlay);
-        SetTimer(hwnd, kClockTimerId, kClockIntervalMs, nullptr);
-      }
-      return 0;
     case WM_NCHITTEST:
       if (g_settings.lockWidgetPosition) return HTTRANSPARENT;
       if (DefWindowProcW(hwnd, msg, wp, lp) == HTCLIENT) return HTCAPTION;
       break;
     case WM_WINDOWPOSCHANGING: {
       auto position = reinterpret_cast<WINDOWPOS*>(lp);
-      if (position && !(position->flags & SWP_NOZORDER) && g_desktopHost) {
-        position->hwndInsertAfter = DesktopInsertAfter(hwnd);
+      if (position && !(position->flags & SWP_NOZORDER)) {
+        if (g_desktopHost && IsWindow(g_desktopHost)) {
+          position->hwndInsertAfter = DesktopInsertAfter(hwnd);
+        } else {
+          position->flags |= SWP_NOZORDER;
+        }
       }
       break;
     }
     case WM_WINDOWPOSCHANGED: {
       auto position = reinterpret_cast<WINDOWPOS*>(lp);
       if (overlay && position && !(position->flags & SWP_NOMOVE) &&
-        !g_rebuilding) {
+          !g_rebuilding && !g_syncingPositions) {
         MONITORINFO info{sizeof(info)};
         HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
         RECT windowRect{};
@@ -533,6 +531,32 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
           int dpi = static_cast<int>(GetMonitorDpi(monitor, nullptr));
           g_settings.offsetX = MulDiv((windowRect.left + windowRect.right) / 2 - centerX, 96, dpi);
           g_settings.offsetY = MulDiv((windowRect.top + windowRect.bottom) / 2 - centerY, 96, dpi);
+
+          if (g_inMoveLoop) {
+            g_syncingPositions = true;
+            for (Overlay* other : g_overlays) {
+              if (other == overlay || !IsWindow(other->hwnd)) continue;
+              MONITORINFO otherInfo{sizeof(otherInfo)};
+              RECT otherRect{};
+              HMONITOR otherMonitor = MonitorFromWindow(
+                  other->hwnd, MONITOR_DEFAULTTONEAREST);
+              if (!GetMonitorInfoW(otherMonitor, &otherInfo) ||
+                  !GetWindowRect(other->hwnd, &otherRect)) {
+                continue;
+              }
+              int otherCenterX = otherInfo.rcMonitor.left +
+                  (otherInfo.rcMonitor.right - otherInfo.rcMonitor.left) / 2;
+              int otherCenterY = otherInfo.rcMonitor.top +
+                  (otherInfo.rcMonitor.bottom - otherInfo.rcMonitor.top) / 2;
+              int otherX = otherCenterX + Scale(g_settings.offsetX, other->dpi) -
+                  (otherRect.right - otherRect.left) / 2;
+              int otherY = otherCenterY + Scale(g_settings.offsetY, other->dpi) -
+                  (otherRect.bottom - otherRect.top) / 2;
+              SetWindowPos(other->hwnd, nullptr, otherX, otherY, 0, 0,
+                  SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+            g_syncingPositions = false;
+          }
         }
       }
       break;
@@ -555,7 +579,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
       if (overlay) Paint(overlay);
       return 0;
     case WM_DESTROY:
-      KillTimer(hwnd, kClockTimerId);
+      if (g_inMoveLoop) g_inMoveLoop = false;
       return 0;
     case WM_NCDESTROY:
       SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
@@ -568,7 +592,6 @@ static BOOL CALLBACK CreateOverlay(HMONITOR monitor, HDC dc, LPRECT, LPARAM) {
   MONITORINFO info{sizeof(info)};
   if (!GetMonitorInfoW(monitor, &info)) return TRUE;
   auto overlay = new Overlay;
-  overlay->monitor = monitor;
   overlay->dpi = GetMonitorDpi(monitor, dc);
   CreateFonts(overlay);
   HDC measureDc = CreateCompatibleDC(dc);
@@ -607,10 +630,6 @@ static BOOL CALLBACK CreateOverlay(HMONITOR monitor, HDC dc, LPRECT, LPARAM) {
     nullptr, nullptr, g_hinstance, overlay);
   if (overlay->hwnd) {
     g_overlays.push_back(overlay);
-    SYSTEMTIME now{};
-    GetLocalTime(&now);
-    UINT firstTick = kClockIntervalMs - now.wSecond * 1000 - now.wMilliseconds;
-    SetTimer(overlay->hwnd, kClockTimerId, firstTick, nullptr);
     ShowWindow(overlay->hwnd, SW_SHOWNOACTIVATE);
     Paint(overlay);
   } else {
@@ -625,7 +644,10 @@ static void RebuildOverlays() {
   g_rebuilding = true;
   DestroyOverlays();
   EnumDisplayMonitors(nullptr, nullptr, CreateOverlay, 0);
-  g_currentDay = [] { SYSTEMTIME time{}; GetLocalTime(&time); return static_cast<int>(time.wDay); }();
+  SYSTEMTIME now{};
+  GetLocalTime(&now);
+  g_currentDay = now.wDay;
+  g_currentMinute = now.wHour * 60 + now.wMinute;
   g_rebuilding = false;
 }
 static void LoadSettings() {
@@ -640,8 +662,8 @@ static void LoadSettings() {
   g_settings.dateLeftOffset = Wh_GetIntSetting(L"dateLeftOffset");
   g_settings.timeLeftOffset = Wh_GetIntSetting(L"timeLeftOffset");
   g_settings.lockWidgetPosition = Wh_GetIntSetting(L"lockWidgetPosition") != 0;
-  g_settings.offsetX = Wh_GetIntSetting(L"offsetX");
-  g_settings.offsetY = Wh_GetIntSetting(L"offsetY");
+  g_settings.offsetX = Wh_GetIntValue(L"offsetX", Wh_GetIntSetting(L"offsetX"));
+  g_settings.offsetY = Wh_GetIntValue(L"offsetY", Wh_GetIntSetting(L"offsetY"));
   g_settings.timeFormat24 = Wh_GetIntSetting(L"timeFormat24") != 0;
   g_settings.showDate = Wh_GetIntSetting(L"showDate") != 0;
   PCWSTR color = Wh_GetStringSetting(L"textColor");
@@ -678,10 +700,11 @@ static bool SameAppearanceSettings(const Settings& first, const Settings& second
           std::begin(second.weekdayLetterColors));
 }
 
-static void ApplySettings() {
+static void ApplySettings(bool forceRebuild = false) {
   Settings previous = g_settings;
   LoadSettings();
-  if (previous.lockWidgetPosition != g_settings.lockWidgetPosition &&
+  if (!forceRebuild &&
+      previous.lockWidgetPosition != g_settings.lockWidgetPosition &&
       SameAppearanceSettings(previous, g_settings)) {
     g_settings.offsetX = previous.offsetX;
     g_settings.offsetY = previous.offsetY;
@@ -700,10 +723,15 @@ static void ApplySettings() {
   RebuildOverlays();
 }
 
+static void ScheduleRebuild(HWND hwnd) {
+  g_rebuildPending = true;
+  SetTimer(hwnd, kRelayoutTimerId, 300, nullptr);
+}
+
 static LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
   if (g_taskbarCreatedMessage && msg == g_taskbarCreatedMessage) {
     g_desktopHost = FindDesktopHost();
-    RebuildOverlays();
+    ScheduleRebuild(hwnd);
     return 0;
   }
   switch (msg) {
@@ -714,14 +742,9 @@ static LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM
           [](Overlay* overlay) { return !IsWindow(overlay->hwnd); });
         if (host != g_desktopHost || missingWindow) {
           g_desktopHost = host;
-          RebuildOverlays();
+          ScheduleRebuild(hwnd);
         }
-        SYSTEMTIME time{};
-        GetLocalTime(&time);
-        if (g_currentDay != static_cast<int>(time.wDay)) {
-          g_currentDay = time.wDay;
-          for (Overlay* overlay : g_overlays) Paint(overlay);
-        }
+        UpdateClock();
         return 0;
       }
       if (wp == kRelayoutTimerId) {
@@ -732,19 +755,32 @@ static LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM
         }
         if (g_settingsUpdatePending) {
           g_settingsUpdatePending = false;
-          ApplySettings();
+          const bool rebuild = g_rebuildPending;
+          g_rebuildPending = false;
+          ApplySettings(rebuild);
           return 0;
         }
+        g_rebuildPending = false;
         RebuildOverlays();
         return 0;
       }
       break;
     case WM_DISPLAYCHANGE:
       g_desktopHost = FindDesktopHost();
-      RebuildOverlays();
+      ScheduleRebuild(hwnd);
       return 0;
     case WM_DPICHANGED:
-      RebuildOverlays();
+      ScheduleRebuild(hwnd);
+      return 0;
+    case WM_TIMECHANGE:
+    case WM_SETTINGCHANGE:
+      UpdateClock(true);
+      return 0;
+    case WM_POWERBROADCAST:
+      if (wp == PBT_APMRESUMEAUTOMATIC || wp == PBT_APMRESUMESUSPEND) {
+        UpdateClock(true);
+        return TRUE;
+      }
       return 0;
     case kSettingsMessage:
       if (g_inMoveLoop) {
@@ -752,7 +788,13 @@ static LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM
         SetTimer(hwnd, kRelayoutTimerId, 300, nullptr);
         return 0;
       }
-      ApplySettings();
+      g_settingsUpdatePending = false;
+      KillTimer(hwnd, kRelayoutTimerId);
+      {
+        const bool rebuild = g_rebuildPending;
+        g_rebuildPending = false;
+        ApplySettings(rebuild);
+      }
       return 0;
     case kShutdownMessage:
       KillTimer(hwnd, kWatchTimerId);
@@ -768,12 +810,6 @@ static LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM
 }
 
 static DWORD WINAPI UiThreadProc(void*) {
-  using SetThreadDpiAwarenessContext_t = HANDLE(WINAPI*)(HANDLE);
-  HMODULE user32 = GetModuleHandleW(L"user32.dll");
-  auto setDpiContext = user32 ? reinterpret_cast<SetThreadDpiAwarenessContext_t>(
-    GetProcAddress(user32, "SetThreadDpiAwarenessContext")) : nullptr;
-  if (setDpiContext) setDpiContext(reinterpret_cast<HANDLE>(static_cast<INT_PTR>(-4)));
-
   LoadSettings();
   WNDCLASSW windowClass{};
   windowClass.lpfnWndProc = WndProc;
@@ -868,94 +904,181 @@ void WhTool_ModSettingsChanged() {
     PostMessageW(controller, kSettingsMessage, 0, 0);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
-  Wh_Log(L">");
-  ExitThread(0);
+    Wh_Log(L">");
+    ExitThread(0);
 }
 
 BOOL Wh_ModInit() {
-  DWORD sessionId;
-  if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0)
-    return FALSE;
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
 
-  int argc = 0;
-  LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-  if (!argv) return FALSE;
-  bool excluded = false;
-  bool toolProcess = false;
-  bool currentToolProcess = false;
-  for (int i = 1; i < argc; i++) {
-    if (!wcscmp(argv[i], L"-service") || !wcscmp(argv[i], L"-service-start") ||
-      !wcscmp(argv[i], L"-service-stop")) {
-      excluded = true;
-      break;
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
     }
-  }
-  for (int i = 1; i < argc - 1; i++) {
-    if (!wcscmp(argv[i], L"-tool-mod")) {
-      toolProcess = true;
-      currentToolProcess = !wcscmp(argv[i + 1], WH_MOD_ID);
-      break;
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
     }
-  }
-  LocalFree(argv);
-  if (excluded) return FALSE;
-  if (currentToolProcess) {
-    g_toolModProcessMutex = CreateMutexW(nullptr, TRUE,
-                       L"windhawk-tool-mod_" WH_MOD_ID);
-    if (!g_toolModProcessMutex || GetLastError() == ERROR_ALREADY_EXISTS)
-      ExitProcess(1);
-    if (!WhTool_ModInit()) ExitProcess(1);
-    auto dosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandleW(nullptr));
-    auto ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(
-      reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew);
-    void* entryPoint = reinterpret_cast<BYTE*>(dosHeader) +
-               ntHeaders->OptionalHeader.AddressOfEntryPoint;
-    Wh_SetFunctionHook(entryPoint, reinterpret_cast<void*>(EntryPoint_Hook), nullptr);
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
     return TRUE;
-  }
-  if (toolProcess) return FALSE;
-  g_isToolModProcessLauncher = true;
-  return TRUE;
 }
 
 void Wh_ModAfterInit() {
-  if (!g_isToolModProcessLauncher) return;
-  WCHAR executablePath[MAX_PATH];
-  DWORD pathLength = GetModuleFileNameW(nullptr, executablePath, ARRAYSIZE(executablePath));
-  if (!pathLength || pathLength >= ARRAYSIZE(executablePath)) return;
-  WCHAR commandLine[MAX_PATH + 64];
-  swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", executablePath, WH_MOD_ID);
-  HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
-  if (!kernelModule) kernelModule = GetModuleHandleW(L"kernel32.dll");
-  if (!kernelModule) return;
-  using CreateProcessInternalW_t = BOOL(WINAPI*)(HANDLE, LPCWSTR, LPWSTR,
-    LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, WINBOOL, DWORD, LPVOID,
-    LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION, PHANDLE);
-  auto createProcessInternal = reinterpret_cast<CreateProcessInternalW_t>(
-    GetProcAddress(kernelModule, "CreateProcessInternalW"));
-  if (!createProcessInternal) return;
-  STARTUPINFOW startupInfo{};
-  startupInfo.cb = sizeof(startupInfo);
-  startupInfo.dwFlags = STARTF_FORCEOFFFEEDBACK;
-  PROCESS_INFORMATION processInfo{};
-  if (createProcessInternal(nullptr, executablePath, commandLine, nullptr, nullptr,
-                FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr,
-                &startupInfo, &processInfo, nullptr)) {
-    CloseHandle(processInfo.hProcess);
-    CloseHandle(processInfo.hThread);
-  }
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-  if (!g_isToolModProcessLauncher) WhTool_ModSettingsChanged();
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-  if (g_isToolModProcessLauncher) return;
-  WhTool_ModUninit();
-  ExitProcess(0);
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
