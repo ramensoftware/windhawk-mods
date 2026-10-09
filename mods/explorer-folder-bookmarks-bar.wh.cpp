@@ -2,7 +2,7 @@
 // @id              explorer-folder-bookmarks-bar
 // @name            Explorer Folder Bookmarks Bar
 // @description     Adds a folder bookmarks bar under the address bar of Windows 11 File Explorer.
-// @version         0.8.30
+// @version         0.8.31
 // @author          Maxim Fomin
 // @github          https://github.com/MaxITService
 // @include         explorer.exe
@@ -4568,8 +4568,7 @@ bool HookExplorerExtension(bool apply) {
     }
     // FileExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK hook[] = {{
-        {LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarManager::CommandBar(struct winrt::Microsoft::UI::Xaml::Controls::CommandBar const &))",
-         LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarManager::CommandBar(struct winrt::Microsoft::UI::Xaml::Controls::CommandBar const & __ptr64) __ptr64)"},
+        {LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarManager::CommandBar(struct winrt::Microsoft::UI::Xaml::Controls::CommandBar const &))"},
         &g_commandBarSetterOriginal, CommandBarSetterHook}};
     if (!WindhawkUtils::HookSymbols(module, hook, ARRAYSIZE(hook)) ||
         !g_commandBarSetterOriginal) {
