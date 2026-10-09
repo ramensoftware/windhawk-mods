@@ -24,6 +24,9 @@ the first movement or click.
 Cursor changes happen at runtime only: your cursor scheme is never
 written to the registry, and any mouse activity restores it right away.
 
+Only the system cursors are replaced. Applications that draw their own
+cursor, such as games or drawing tools, keep showing it.
+
 The mod runs in a dedicated Windhawk process (as a tool mod) and does
 not inject into other applications.
 */
@@ -49,11 +52,14 @@ std::atomic<int> g_idleSeconds{5};
 HANDLE g_stopEvent = nullptr;
 HANDLE g_threadHandle = nullptr;
 
-// The state below is only touched by the worker thread: both the
-// low-level mouse hook and the idle check run on that thread.
+// The state below is only touched by the worker thread: raw input
+// events and the idle check are processed on that thread.
 ULONGLONG g_lastActivity = 0;
 bool g_hidden = false;
 POINT g_lastPolledPos{};
+
+// Restores the cursors if the process dies while they are modified.
+LPTOP_LEVEL_EXCEPTION_FILTER g_previousExceptionFilter = nullptr;
 
 // OEM resource cursor IDs (see winuser.h). <windows.h> only declares the
 // OCR_* names when OEMRESOURCE is defined before its first inclusion, so
@@ -65,17 +71,18 @@ constexpr int kSystemCursorIds[] = {
     32514,  // OCR_WAIT
     32515,  // OCR_CROSS
     32516,  // OCR_UP
-    32640,  // OCR_SIZE
-    32641,  // OCR_ICON
     32642,  // OCR_SIZENWSE
     32643,  // OCR_SIZENESW
     32644,  // OCR_SIZEWE
     32645,  // OCR_SIZENS
     32646,  // OCR_SIZEALL
-    32647,  // OCR_ICOCUR
     32648,  // OCR_NO
     32649,  // OCR_HAND
     32650,  // OCR_APPSTARTING
+    32651,  // OCR_HELP
+    32631,  // NWPen (handwriting)
+    32671,  // Pin (location select)
+    32672,  // Person (person select)
 };
 
 void LoadSettings() {
@@ -101,6 +108,10 @@ HCURSOR CreateBlankCursor() {
 // SetSystemCursor takes ownership of the handle it receives (and
 // destroys it), so every system cursor gets its own copy.
 void HideCursors() {
+    // Remember that the cursors are modified, so the next start of this
+    // tool can put them back if the process dies without cleaning up.
+    Wh_SetIntValue(L"cursorsModified", 1);
+
     HCURSOR blank = CreateBlankCursor();
     if (!blank) {
         Wh_Log(L"CreateCursor failed");
@@ -109,8 +120,9 @@ void HideCursors() {
     for (int id : kSystemCursorIds) {
         HCURSOR copy =
             (HCURSOR)CopyImage(blank, IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE);
-        if (copy) {
-            SetSystemCursor(copy, id);
+        if (copy && !SetSystemCursor(copy, id)) {
+            // Ownership transfers only on success.
+            DestroyCursor(copy);
         }
     }
     DestroyCursor(blank);
@@ -120,42 +132,65 @@ void HideCursors() {
 // Reloads the current cursor scheme; runtime replacements are dropped.
 void RestoreCursors() {
     SystemParametersInfo(SPI_SETCURSORS, 0, nullptr, 0);
+    Wh_SetIntValue(L"cursorsModified", 0);
     Wh_Log(L"Cursors restored");
 }
 
-// Low-level hooks are always invoked on the thread that installed them,
-// while that thread pumps messages.
-LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION) {
-        g_lastActivity = GetTickCount64();
-        if (g_hidden) {
-            g_hidden = false;
-            RestoreCursors();
+// Cursors left transparent by a crash would stay that way, so restore
+// them as early as possible and pass the exception on.
+LONG WINAPI RestoreCursorsOnCrash(EXCEPTION_POINTERS* exceptionInfo) {
+    SystemParametersInfo(SPI_SETCURSORS, 0, nullptr, 0);
+    return g_previousExceptionFilter
+               ? g_previousExceptionFilter(exceptionInfo)
+               : EXCEPTION_CONTINUE_SEARCH;
+}
+
+// A press-and-hold without movement (holding a scrollbar arrow, pausing
+// mid-drag) is not an idle mouse: the cursors stay visible.
+bool IsMouseButtonHeld() {
+    constexpr int kButtons[] = {VK_LBUTTON, VK_RBUTTON, VK_MBUTTON,
+                                VK_XBUTTON1, VK_XBUTTON2};
+    for (int button : kButtons) {
+        if (GetAsyncKeyState(button) & 0x8000) {
+            return true;
         }
     }
-    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+    return false;
 }
 
 DWORD WINAPI WorkerThread(LPVOID /*param*/) {
     g_lastActivity = GetTickCount64();
     GetCursorPos(&g_lastPolledPos);
 
-    // The low-level hook needs a message pump, so it is installed on
-    // this thread and the idle check shares the same message loop.
-    HHOOK mouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc,
-                                       GetModuleHandle(nullptr), 0);
-    if (!mouseHook) {
-        Wh_Log(L"SetWindowsHookEx failed");
+    // Raw input delivers WM_INPUT for every mouse movement, button and
+    // wheel event to a message-only window. Unlike a low-level hook it
+    // is not part of the session's input path, so the work done here
+    // (replacing the cursors) can never delay the mouse, and Windows
+    // never drops the notification for being slow.
+    HWND hwnd = CreateWindowEx(0, L"STATIC", nullptr, 0, 0, 0, 0, 0,
+                               HWND_MESSAGE, nullptr, nullptr, nullptr);
+    if (!hwnd) {
+        Wh_Log(L"CreateWindowEx failed");
         return 1;
     }
-    Wh_Log(L"Mouse hook installed");
+
+    RAWINPUTDEVICE device{};
+    device.usUsagePage = 0x01;  // Generic desktop controls
+    device.usUsage = 0x02;      // Mouse
+    device.dwFlags = RIDEV_INPUTSINK;
+    device.hwndTarget = hwnd;
+    if (!RegisterRawInputDevices(&device, 1, sizeof(device))) {
+        Wh_Log(L"RegisterRawInputDevices failed: %u", GetLastError());
+        DestroyWindow(hwnd);
+        return 1;
+    }
+    Wh_Log(L"Raw input registered");
 
     bool stopping = false;
     while (!stopping) {
-        // Wake up on input (needed for the hook), on the stop event, or
-        // after roughly the interval used for the idle check. While the
-        // cursor is hidden the loop polls more often so that movement is
-        // noticed quickly even when the hook misses it (see below).
+        // Wake up on raw input, on the stop event, or after roughly the
+        // interval used for the idle check. While the cursor is hidden
+        // the loop runs more often so that movement is noticed quickly.
         DWORD wait =
             MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE,
                                        g_hidden ? 100 : 500, QS_ALLINPUT);
@@ -163,26 +198,42 @@ DWORD WINAPI WorkerThread(LPVOID /*param*/) {
             stopping = true;
         }
 
+        bool mouseActivity = false;
         MSG msg;
         while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_INPUT) {
+                mouseActivity = true;
+            }
             TranslateMessage(&msg);
-            DispatchMessage(&msg);
+            DispatchMessage(&msg);  // DefWindowProc frees the raw data.
         }
         if (stopping) {
             break;
         }
 
-        // Low-level hooks don't receive mouse input that is destined for
-        // windows running at a higher integrity level than this process
-        // (for example, the elevated Windhawk window), so the hook alone
-        // would miss movement over such windows: the mod would keep the
-        // cursor hidden while the user works there. Polling the cursor
-        // position covers that gap; it reads global state and needs no
-        // special privileges.
+        if (mouseActivity) {
+            g_lastActivity = GetTickCount64();
+            if (g_hidden) {
+                g_hidden = false;
+                RestoreCursors();
+            }
+        }
+
+        // Polling the cursor position is a safety net for the cases raw
+        // input doesn't cover, and it reads global state, so no special
+        // privileges are needed. When it fails, another desktop (the
+        // lock screen, a UAC prompt) has the input: activity there
+        // can't be observed, so the cursors must not stay hidden while
+        // the mod can't see the mouse.
         POINT polledPos;
-        if (GetCursorPos(&polledPos) &&
-            (polledPos.x != g_lastPolledPos.x ||
-             polledPos.y != g_lastPolledPos.y)) {
+        if (!GetCursorPos(&polledPos)) {
+            g_lastActivity = GetTickCount64();
+            if (g_hidden) {
+                g_hidden = false;
+                RestoreCursors();
+            }
+        } else if (polledPos.x != g_lastPolledPos.x ||
+                   polledPos.y != g_lastPolledPos.y) {
             g_lastPolledPos = polledPos;
             g_lastActivity = GetTickCount64();
             if (g_hidden) {
@@ -204,20 +255,14 @@ DWORD WINAPI WorkerThread(LPVOID /*param*/) {
 
         ULONGLONG now = GetTickCount64();
         if (!g_hidden &&
-            now - g_lastActivity >= (ULONGLONG)idleSeconds * 1000) {
+            now - g_lastActivity >= (ULONGLONG)idleSeconds * 1000 &&
+            !IsMouseButtonHeld()) {
             HideCursors();
             g_hidden = true;
-
-            // Input may have arrived while the cursors were being
-            // replaced; if so, show them again right away.
-            if (GetTickCount64() - g_lastActivity < 250) {
-                g_hidden = false;
-                RestoreCursors();
-            }
         }
     }
 
-    UnhookWindowsHookEx(mouseHook);
+    DestroyWindow(hwnd);
     if (g_hidden) {
         g_hidden = false;
         RestoreCursors();
@@ -229,6 +274,15 @@ DWORD WINAPI WorkerThread(LPVOID /*param*/) {
 BOOL WhTool_ModInit() {
     Wh_Log(L">");
     LoadSettings();
+
+    // The previous run ended while the cursors were modified (a crash or
+    // a process killed from Task Manager), so put the normal cursors back.
+    if (Wh_GetIntValue(L"cursorsModified", 0)) {
+        RestoreCursors();
+    }
+
+    g_previousExceptionFilter =
+        SetUnhandledExceptionFilter(RestoreCursorsOnCrash);
 
     g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     if (!g_stopEvent) {
@@ -253,9 +307,9 @@ void WhTool_ModSettingsChanged() {
 
 void WhTool_ModUninit() {
     Wh_Log(L">");
-    // Wait for the worker thread without a timeout: it may be inside the
-    // hook or restoring cursors, and unloading the mod while it runs
-    // would crash the process.
+    // Wait for the worker thread without a timeout: it may be inside
+    // HideCursors or RestoreCursors, and unloading the mod while it
+    // runs would crash the process.
     if (g_stopEvent) {
         SetEvent(g_stopEvent);
     }
@@ -268,6 +322,13 @@ void WhTool_ModUninit() {
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
     }
+
+    // Safety net in case the worker couldn't clean up in time.
+    if (Wh_GetIntValue(L"cursorsModified", 0)) {
+        RestoreCursors();
+    }
+
+    SetUnhandledExceptionFilter(g_previousExceptionFilter);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
