@@ -131,7 +131,6 @@ LRESULT CALLBACK RenameEditSubclassProc(
                 std::lock_guard<std::mutex> lock(g_editsMutex);
                 g_hiddenExt.erase(hWnd);
             }
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, RenameEditSubclassProc);
             break;
         }
     }
@@ -232,8 +231,10 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
     if (lpString && (IsSaveDialogEditControl(hWnd) || IsRenameEditControl(hWnd))) {
         PCWSTR ext = PathFindExtensionW(lpString);
         if (wcschr(lpString, L'"') || !ext[0] || !ext[1]) {
-            std::lock_guard<std::mutex> lock(g_editsMutex);
-            g_hiddenExt.erase(hWnd); // Clear stale entry if there's no extension to hide
+            {
+                std::lock_guard<std::mutex> lock(g_editsMutex);
+                g_hiddenExt.erase(hWnd); // Clear stale entry if there's no extension to hide
+            }
             return SetWindowTextW_Original(hWnd, lpString);
         }
 
@@ -252,7 +253,13 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
             g_hiddenExt[hWnd] = h;
         }
 
-        WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, RenameEditSubclassProc, 0);
+        if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, RenameEditSubclassProc, 0)) {
+            {
+                std::lock_guard<std::mutex> lock(g_editsMutex);
+                g_hiddenExt.erase(hWnd);
+            }
+            return SetWindowTextW_Original(hWnd, lpString);
+        }
 
         return SetWindowTextW_Original(hWnd, baseName.c_str());
     }
