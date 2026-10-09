@@ -7,7 +7,7 @@
 // @github          https://github.com/babamohammed2022
 // @license         GPL-3.0
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lgdi32 -lshell32 -ladvapi32 -luser32 -lwintrust -lcrypt32 -lwininet -lbcrypt -lcomctl32 -luuid -lwlanapi -lruntimeobject
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lgdi32 -lshell32 -ladvapi32 -luser32 -lwintrust -lcrypt32 -lwininet -lbcrypt -lcomctl32 -luuid -lwlanapi -lruntimeobject
 // @include         explorer.exe
 // @include         ShellExperienceHost.exe
 // ==/WindhawkMod==
@@ -169,14 +169,10 @@ left to dedicated mods.
 // and the flyout call chain follows what ExplorerPatcher (valinet) documented about the
 // Windows 10 shell.
 
-// winsock2.h belongs before windows.h, and here it is the first include of the file. The
-// compiler of the mod pulls windows.h in before the file, though, and windows.h brings MinGW's
-// winsock 1 with it: winsock2.h then reports "Please include winsock2.h before windows.h".
-// Nothing in this mod uses the socket API (the downloads go through WinINet), so the guard
-// winsock 1 has left behind is dropped before the header is read.
-#ifdef _WINSOCKAPI_
-#undef _WINSOCKAPI_
-#endif
+// winsock2.h belongs before windows.h. windows.h is compiled with WIN32_LEAN_AND_MEAN (see
+// @compilerOptions), so it does not pull MinGW's winsock 1 in and winsock2.h is happy to be
+// included here. Nothing in this mod uses the socket API (the downloads go through WinINet);
+// the header is kept because some of the shell headers below expect the winsock types.
 #include <winsock2.h>
 
 #include <windows.h>
