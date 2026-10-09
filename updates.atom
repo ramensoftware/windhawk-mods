@@ -2,12 +2,85 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-09T10:04:33.000Z</updated>
+    <updated>2026-10-09T11:00:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Pointer Afterimage Motion Blur 1.0]]></title>
+        <id>https://windhawk.net/mods/pointer-afterimage-motion-blur#fb5e852a66d521f2f6496b2dfb3d0d8de33e4268</id>
+        <link href="https://windhawk.net/mods/pointer-afterimage-motion-blur"/>
+        <updated>2026-10-09T11:00:31.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="pointerafterimagemotionblur">Pointer Afterimage Motion Blur</h1>
+<p>A live motion blur for the mouse pointer, everywhere in Windows. While the
+mouse moves, fading copies of your actual cursor are drawn along its recent
+path, so it looks like a camera motion blur rather than a trail. Unlike the
+smear ribbon of <a href="https://windhawk.net/mods/cursor-motion-blur">Cursor Motion Blur</a>
+or the particles of <a href="https://windhawk.net/mods/mouse-trail">Mouse Trail</a>, the
+blur is made of your own cursor picture.</p>
+<p><img src="https://raw.githubusercontent.com/sidlikesgrapess/CursorMotionBlur/main/assets/demo.gif" alt="Demo" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Uses your real cursor: your scheme, size and colour, and whatever shape it
+has right now (arrow, text, hand…).</li>
+<li>Right size on every monitor, including monitors with different scaling.</li>
+<li>Optionally hides the real pointer during very fast movement so only the blur
+shows; it comes back about 25 ms after you slow down.</li>
+<li>Pauses itself while a fullscreen app or game is in front.</li>
+<li>Runs in its own small Windhawk process: nothing is injected into other
+programs.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Trail opacity</strong>: how solid the blur is right behind the pointer. It always
+fades to nothing at the end of the trail.</li>
+<li><strong>Trail length</strong>: how far back in time the blur reaches, in ms. Longer means
+a longer streak.</li>
+<li><strong>Hide the real cursor when moving very fast</strong> (off by default): while you
+move fast, the system cursors are swapped for an invisible one, and your own
+cursors are put back as soon as you slow down and when the mod is disabled.</li>
+<li><strong>Hide above speed</strong>: the pointer speed that hides the real cursor, in cm/s
+as measured on your main monitor. It is the same hand speed on every
+monitor.</li>
+<li><strong>Pause in fullscreen apps and games</strong>: no blur while a fullscreen app is in
+front.</li>
+</ul>
+<h2 id="resourceuse">Resource use</h2>
+<ul>
+<li>No CPU while the mouse is still; typically well under 1% while it moves, and
+about 1.5 MB of memory at the default settings.</li>
+<li>While an administrator window (Task Manager, Windhawk…) is in front,
+Windows gives the mod no mouse input, so it checks the cursor on a timer.</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<ul>
+<li><strong>The cursor stays invisible</strong> (only possible with hiding on, e.g. if the
+process was killed mid-flick). Disable and re-enable the mod, or open
+Settings &gt; Bluetooth &amp; devices &gt; Mouse &gt; Additional mouse settings &gt; Pointers
+and click OK.</li>
+<li><strong>Another tool's custom cursors get reset.</strong> Restoring after hiding reloads
+the Windows cursor scheme, so turn hiding off if you use a tool that swaps
+the system cursors, such as the Shake to Find Cursor or macOS magnifying
+cursor mods.</li>
+<li><strong>No blur over the Start menu, Search or Task View.</strong> Windows keeps those
+above every app's windows, including the blur.</li>
+<li><strong>No blur in a game or video.</strong> That is the fullscreen pause; turn off
+"Pause in fullscreen apps and games" if you want it there.</li>
+<li><strong>The cursor hides too often or not at all.</strong> Raise or lower "Hide above
+speed", or turn hiding off.</li>
+<li><strong>The blur seems slightly behind the pointer at high speed.</strong> Windows draws
+the real pointer more directly than any window can be drawn, so every
+overlay is 1-2 frames behind. Hiding the real cursor when fast hides this.</li>
+<li>A standalone app version (no Windhawk needed) is on the
+<a href="https://github.com/sidlikesgrapess/CursorMotionBlur">homepage</a>.</li>
+</ul>]]></content>
+        <author>
+            <name>sidlikesgrapess</name>
+            <uri>https://github.com/sidlikesgrapess</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mac Island & Dock 1.0.0]]></title>
         <id>https://windhawk.net/mods/mac-island-dock#503f3543e6b770871324d79b725fe59b6ddc5555</id>
@@ -2048,20 +2121,6 @@ window positions it applies, and the result of each work-area change.</li>
         <author>
             <name>jcyrio</name>
             <uri>https://github.com/jcyrio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Custom Shortcuts 1.5.1]]></title>
-        <id>https://windhawk.net/mods/explorer-custom-shortcuts#4e4b6b8a851ea95542ae6d1cd07efb05ff07ab07</id>
-        <link href="https://windhawk.net/mods/explorer-custom-shortcuts"/>
-        <updated>2026-10-08T06:02:14.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Fix (Keyboard Shortcuts):</strong> Resolved an issue where invoking shortcuts with the <code>Alt</code> key (e.g., <code>Alt+C</code>) caused Explorer to get stuck in its menu/keytip accelerator loop, blocking standalone keys like <code>Delete</code> and <code>Backspace</code>.</li>
-<li><strong>Improvement (Settings):</strong> Cleaned up notification settings parsing with proper bounds clamping and safe default fallbacks.</li>
-</ul>]]></content>
-        <author>
-            <name>ArvindSaini978</name>
-            <uri>https://github.com/ArvindSaini978</uri>
         </author>
     </entry>
 </feed>

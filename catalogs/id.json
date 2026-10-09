@@ -10723,6 +10723,32 @@
         "version": "1.1"
       }
     },
+    "pointer-afterimage-motion-blur": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791543631000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791543631000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "sidlikesgrapess",
+        "compilerOptions": "-lgdi32 -lshell32 -lshcore -lwinmm",
+        "description": "A real motion blur for the mouse pointer, made of fading afterimages of your own cursor",
+        "github": "https://github.com/sidlikesgrapess",
+        "homepage": "https://github.com/sidlikesgrapess/CursorMotionBlur",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "Unlicense",
+        "name": "Pointer Afterimage Motion Blur",
+        "version": "1.0"
+      }
+    },
     "power-action-countdown": {
       "details": {
         "defaultSorting": 940,
