@@ -2,7 +2,7 @@
 // @id              cursor-trail
 // @name            Simple Cursor Trail
 // @description     A fully customizable cursor trail overlay for the Windows desktop.
-// @version         1.0
+// @version         1.1
 // @author          Ulrizza
 // @github          https://github.com/Ulrizza
 // @license         MIT
@@ -31,24 +31,18 @@ I cannot promise you anything because I don't have much free time but I enjoyed 
 2. Install **Simple Cursor Trail** from the Windhawk mods catalog, or import the
    source (`CursorTrail.cpp`) from this repository via the Windhawk mod editor.
 
-## The two styles
+## Styles
+
+This mod is intentionally minimal: it just draws a trail — no particles,
+physics, or extra effects.
 
 - **Simple line**: a polyline that follows the cursor; its width, color, and
   opacity can change from head to tail.
 - **Cursor ghost**: faded copies of the cursor image, each latched at the spot
-  where it spawned (they stay put and only fade out). Each copy keeps the exact
-  cursor image from when it was sampled, so an image change (e.g. arrow to
-  I-beam) appears gradually along the trail.
-
-## How it differs
-
-This mod is intentionally minimal: it just draws a trail — no particles,
-physics, or extra effects. It offers two styles:
-
-- **Simple line** — a line that follows the cursor, with customizable width,
-  color, and opacity.
-- **Cursor ghost** — faded copies of the real cursor image, left behind where
-  they spawned; directly inspired by the classic Windows cursor-trail feature.
+  where it spawned (they stay put and only fade out); directly inspired by the
+  classic Windows cursor-trail feature. Each copy keeps the exact cursor image
+  from when it was sampled, so an image change (e.g. arrow to I-beam) appears
+  gradually along the trail.
 
 By contrast, [Mouse Trail](https://windhawk.net/mods/mouse-trail) follows the
 cursor with special effects from a full D3D11 particle/physics engine, while
@@ -695,8 +689,7 @@ struct Runtime {
     HANDLE pollThread = NULL;
     HANDLE pollStopEvent = NULL;
     HANDLE overlayReadyEvent = NULL;          // signalled once the overlay window exists
-    std::atomic<bool> isGameRunning{false};   // set by render thread, read by poll thread
-    std::atomic<bool> cursorHidden{false};    // set by render thread, read by poll thread
+    std::atomic<bool> isGameRunning{false};   // set by poll thread, read by render and poll threads
     std::atomic<bool> renderScheduled{false}; // set by MMTimerCallback, cleared by overlay thread
     std::atomic<bool> trailEnabled{true};     // toggled by the enable/disable hotkey; read by both threads
     std::atomic<bool> overlayIdle{false};     // render timer stopped (set by overlay, read by poll)
@@ -724,7 +717,6 @@ struct Runtime {
     bool  needsFullClear = false;             // backbuffer just (re)created; clear the whole thing once
     unsigned long long renderedRevision = 0;  // render-thread-only; last content revision drawn
     unsigned renderedSettingsVersion = 0;     // render-thread-only; last settings version drawn
-    DWORD lastFullscreenCheck = 0;
 };
 
 // Transient circle effect played when the enable/disable hotkey toggles the
@@ -752,6 +744,7 @@ static const int   kRenderIntervalMs  = 8;   // ~125 Hz render timer
 static const DWORD kIdleGraceMs       = 200; // inactivity before the render timer stops
 static const DWORD kIdlePollIntervalMs = 20; // poll interval while the overlay is idle
 static const DWORD kSampleIntervalMs  = 1;   // cursor poll interval while active
+static const DWORD kDisabledPollIntervalMs = 250; // poll interval while the trail is off
 
 ToggleEffect toggleEffect;
 
@@ -1359,14 +1352,12 @@ void UpdateCursorCenterOffset() {
     CURSORINFO ci = { sizeof(CURSORINFO) };
     if (!GetCursorInfo(&ci) || !(ci.flags & CURSOR_SHOWING) || !ci.hCursor) {
         std::lock_guard<std::mutex> lock(cursor.offsetMutex);
-        runtime.cursorHidden.store(true);
         cursor.visualOffset = { 0, 0 };
         cursor.bmWidth = 0;
         cursor.bmHeight = 0;
         cursor.cachedCursor = NULL;
         return;
     }
-    runtime.cursorHidden.store(false);
 
     UINT dpiX = 96, dpiY = 96;
     GetCursorDpi(dpiX, dpiY);
@@ -2220,7 +2211,9 @@ static void EnterIdleIfInactive(DWORD now, bool idleAllowed) {
         timeEndPeriod(1);
         runtime.periodRaised = false;
     }
-    if (runtime.overlayHwnd) {
+    // Only hide the overlay when it shows nothing; a static trail must stay
+    // visible while the render timer is stopped.
+    if (runtime.overlayHwnd && !runtime.hasPrevDirty) {
         ShowWindow(runtime.overlayHwnd, SW_HIDE);
     }
 }
@@ -2237,26 +2230,50 @@ static void RequestOverlayWake() {
 
 // High-frequency cursor polling thread.
 // Runs at kSampleIntervalMs (1 ms) intervals while active, pushing sampled
-// positions into runtime.history. All D2D operations remain on the
-// overlay/render thread — this thread only touches runtime.history (under mutex),
-// GetCursorPos, and the atomic flags.
+// positions into runtime.history. It also runs the fullscreen-game check (the
+// render timer stops while idle, so this thread must keep watching). All D2D
+// operations remain on the overlay/render thread — this thread only touches
+// runtime.history (under mutex), GetCursorPos, IsGameRunning, and the atomic
+// flags.
 DWORD WINAPI PollThreadProc(LPVOID) {
-    // Match the overlay thread's DPI awareness so coordinate spaces agree.
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    // Last time the fullscreen-game check ran (poll-thread-owned).
+    DWORD lastGameCheck = GetTickCount();
 
     // Wait on the stop event to drive the loop. Sampling runs at
-    // kSampleIntervalMs (1 ms) while the overlay is active, and at a much slower
-    // kIdlePollIntervalMs while the overlay is idle so a stationary cursor
-    // doesn't keep waking the CPU.
+    // kSampleIntervalMs (1 ms) while the overlay is active, and slower while the
+    // overlay is idle (kIdlePollIntervalMs). When the trail is off via the
+    // hotkey there is nothing to sample, so poll at kDisabledPollIntervalMs; the
+    // hotkey still wakes the overlay directly.
     for (;;) {
-        DWORD waitMs = runtime.overlayIdle.load() ? kIdlePollIntervalMs
-                                                  : kSampleIntervalMs;
+        DWORD waitMs;
+        if (!runtime.trailEnabled.load()) {
+            waitMs = kDisabledPollIntervalMs;
+        } else if (runtime.overlayIdle.load()) {
+            waitMs = kIdlePollIntervalMs;
+        } else {
+            waitMs = kSampleIntervalMs;
+        }
         if (WaitForSingleObject(runtime.pollStopEvent, waitMs) != WAIT_TIMEOUT) {
             break;
         }
-        // Respect the game-running flag set by SmearTimerProc, and the
-        // enable/disable hotkey state. Drop the sample anchor so a fresh one is
-        // pushed when sampling resumes.
+
+        // Detect fullscreen games here rather than on the render thread: the
+        // render timer stops while the overlay is idle, but this thread keeps
+        // polling, so a game starting (erase the trail) or ending (resume) is
+        // still noticed. Publish the result and wake the overlay on a change.
+        DWORD tick = GetTickCount();
+        if (tick - lastGameCheck > 500) {
+            lastGameCheck = tick;
+            bool gameNow = IsGameRunning();
+            if (runtime.isGameRunning.exchange(gameNow) != gameNow) {
+                std::lock_guard<std::mutex> lock(runtime.historyMutex);
+                MarkContentChanged();
+            }
+        }
+
+        // Respect the enable/disable hotkey state and the game-running flag set
+        // above. Drop the sample anchor so a fresh one is pushed when sampling
+        // resumes.
         if (runtime.isGameRunning.load() || !runtime.trailEnabled.load()) {
             runtime.lastSampleValid = false;
             continue;
@@ -2296,20 +2313,36 @@ DWORD WINAPI PollThreadProc(LPVOID) {
             runtime.lastCursorPos = pt;
             runtime.lastCursorValid = true;
 
+            // === CURSOR HIDDEN — flush the trail at once ===
+            // The OS hides the pointer (e.g. Windows' hide-while-typing). Stop
+            // sampling and drop the whole trail immediately rather than letting
+            // it fade: a lingering trail (and, in Cursor ghost, a copy of the
+            // cursor image) at the pointer looks like the cursor never went away.
+            if (!sampleCursor) {
+                origin.lastCursorValid = false;
+                runtime.lastSampleValid = false;
+                runtime.isFading = false;
+                if (!runtime.history.empty()) {
+                    runtime.history.clear();
+                    MarkContentChanged();
+                }
+                continue;
+            }
+
             // For the line style, a cursor image change (e.g. arrow -> I-beam)
             // must redraw even while the cursor is stationary so the trail head
             // picks up the new image's visual center. Ghost copies keep their
             // own latched image, so it only matters when a new copy spawns.
             if (!settings.isGhost && sampleCursor && runtime.lastSampledCursor &&
-                sampleCursor != runtime.lastSampledCursor) {
+                sampleCursor != runtime.lastSampledCursor &&
+                !runtime.history.empty()) {
                 MarkContentChanged();
             }
             runtime.lastSampledCursor = sampleCursor;
 
             if (settings.sizeBased) {
-                if ((settings.sizeTimeout > 0 && runtime.lastMovementTime > 0 &&
-                     now - runtime.lastMovementTime > settings.sizeTimeout) ||
-                    runtime.cursorHidden.load()) {
+                if (settings.sizeTimeout > 0 && runtime.lastMovementTime > 0 &&
+                    now - runtime.lastMovementTime > settings.sizeTimeout) {
                     if (!runtime.isFading) {
                         runtime.isFading = true;
                         size_t n = runtime.history.size();
@@ -2356,16 +2389,6 @@ DWORD WINAPI PollThreadProc(LPVOID) {
                 }
             } else {
                 EvictByTime(now);
-            }
-
-            // === CURSOR HIDDEN — stop sampling so the trail fades out ===
-            // Eviction above has already run, so the trail retracts over the
-            // tail duration (size-based re-timestamped by the fade path). No
-            // new samples are pushed until the cursor is shown again.
-            if (runtime.cursorHidden.load()) {
-                origin.lastCursorValid = false;
-                runtime.lastSampleValid = false;
-                continue;
             }
 
             // === TRAIL ORIGIN — choose the offset for this sample ===
@@ -2884,14 +2907,6 @@ VOID CALLBACK SmearTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTim
     POINT pt;
     GetCursorPos(&pt);
 
-    // Periodically refresh the game-running detection and publish the result
-    // to the polling thread via the atomic flag.
-    if (dwTime - runtime.lastFullscreenCheck > 500) {
-        bool gameNow = IsGameRunning();
-        runtime.isGameRunning.store(gameNow);
-        runtime.lastFullscreenCheck = dwTime;
-    }
-
     // Read local copies of the atomic flags for consistent use within this
     // frame. The trail is suppressed (history cleared, overlay wiped) while a
     // fullscreen game runs or the enable/disable hotkey has it turned off.
@@ -2930,13 +2945,9 @@ VOID CALLBACK SmearTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTim
             }
         }
         if (nothingToDraw) {
-            // Nothing to draw. If the trail is suppressed because the user
-            // turned it off (not because a game is running), let the overlay
-            // go idle; the hotkey wakes it again. While a game is running we
-            // keep the timer alive so we notice when it exits.
-            if (!gameRunning) {
-                EnterIdleIfInactive(dwTime, true);
-            }
+            // Nothing to draw; let the overlay go idle. The poll thread keeps
+            // checking for games and the hotkey wakes us again.
+            EnterIdleIfInactive(dwTime, true);
             return;
         }
     } else {
@@ -3083,11 +3094,8 @@ VOID CALLBACK SmearTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTim
     }
 
     // If nothing changed this frame, release the render timer once the grace
-    // period has elapsed. Skipped while a game is running so game-exit
-    // detection keeps working.
-    if (!gameRunning) {
-        EnterIdleIfInactive(dwTime, !wantDraw);
-    }
+    // period has elapsed.
+    EnterIdleIfInactive(dwTime, !wantDraw);
 }
 
 // Custom window proc for the overlay. Handles WM_TIMER (posted by the
@@ -3180,9 +3188,6 @@ DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
     // Direct2D demands COM to be initialized on this thread before it will talk to us
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
 
-    // Enable per-monitor DPI awareness so mixed-DPI monitors scale correctly.
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &render.pD2DFactory);
 
     HINSTANCE hInstance = GetModuleHandle(NULL);
@@ -3204,7 +3209,7 @@ DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
     runtime.overlayHwnd = CreateWindowEx(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         CLASS_NAME,
-        L"SmearOverlay",
+        L"CursorTrailOverlay",
         WS_POPUP,
         screenX, screenY, screenW, screenH,
         NULL, NULL, hInstance, NULL
