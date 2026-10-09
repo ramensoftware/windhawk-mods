@@ -90,8 +90,13 @@ other setting, so treat them as secrets.
   HTTPS hosts). Nothing is sent until you configure an OAuth client and sign in, or add an
   ICS URL. Meeting links are shown only if they match a strict allowlist: Google Meet,
   `zoom.us` and Microsoft Teams join URLs.
-- Reminders are shown through File Explorer's notification entry, so the mod writes nothing
-  to the registry.
+- Reminders use their own notification identity, so they appear as "Tray Agenda". The first time a
+  reminder is about to be shown, the mod writes `HKCU\Software\Classes\AppUserModelId\TrayAgenda`
+  (display name only), and Windows adds
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\TrayAgenda`. Both are deleted when the mod is disabled or unloaded, and
+  leftovers from an unclean exit are deleted at the next start. Nothing is written if no reminder is
+  ever shown (for example with *Reminder notifications* off). Per-app notification choices made in
+  Windows Settings are discarded together with those keys; use the mod's own setting instead.
 - *Sign out ...* in the popup removes that account's stored token and revokes it at Google.
 
 ## Notes
@@ -927,8 +932,11 @@ constexpr char kCalendarListReadonlyScope[] =
     "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
 constexpr wchar_t kRefreshTokenValueName[] = L"google_refresh_token_v1";
 constexpr wchar_t kNotifiedValueName[] = L"notified_v1";
-// File Explorer's own AUMID is already registered, so no registry write is needed.
-constexpr wchar_t kToastAumid[] = L"Microsoft.Windows.Explorer";
+// Notification identity. It is registered only when a reminder is about to be shown and removed
+// again when the mod unloads (see EnsureToastRegistration / RemoveToastRegistration).
+constexpr wchar_t kToastAumid[] = L"TrayAgenda";
+constexpr wchar_t kToastDisplayName[] = L"Tray Agenda";
+constexpr wchar_t kToastRegisteredFlag[] = L"toast_registered";
 constexpr size_t kMaxApiResponseBytes = 4 * 1024 * 1024;
 constexpr size_t kMaxTokenResponseBytes = 64 * 1024;
 constexpr int kMaxCalendars = 16;
@@ -3454,7 +3462,39 @@ std::wstring XmlEscape(const std::wstring& text) {
     return out;
 }
 
+std::atomic<bool> g_toastRegistered{false};
+
+// Writes HKCU\Software\Classes\AppUserModelId\TrayAgenda so Windows attributes the toast to
+// "Tray Agenda". Called lazily, right before the first reminder is shown. The storage flag lets
+// the next start clean up after an unclean exit, when the unload path never ran.
+bool EnsureToastRegistration() {
+    if (g_toastRegistered.load()) return true;
+    Wh_SetIntValue(kToastRegisteredFlag, 1);
+    std::wstring subKey = std::wstring(L"Software\\Classes\\AppUserModelId\\") + kToastAumid;
+    LSTATUS status = RegSetKeyValueW(
+        HKEY_CURRENT_USER, subKey.c_str(), L"DisplayName", REG_SZ, kToastDisplayName,
+        static_cast<DWORD>((wcslen(kToastDisplayName) + 1) * sizeof(wchar_t)));
+    if (status != ERROR_SUCCESS) return false;
+    g_toastRegistered = true;
+    return true;
+}
+
+// Removes the key above and the per-app notification settings Windows creates under
+// HKCU\...\Notifications\Settings\TrayAgenda when the first toast is shown.
+void RemoveToastRegistration() {
+    RegDeleteTreeW(HKEY_CURRENT_USER,
+                   (std::wstring(L"Software\\Classes\\AppUserModelId\\") + kToastAumid).c_str());
+    RegDeleteTreeW(HKEY_CURRENT_USER,
+                   (std::wstring(L"Software\\Microsoft\\Windows\\CurrentVersion\\Notifications\\"
+                                 L"Settings\\") +
+                    kToastAumid)
+                       .c_str());
+    Wh_DeleteValue(kToastRegisteredFlag);
+    g_toastRegistered = false;
+}
+
 bool ShowToast(const ToastItem& item) {
+    if (!EnsureToastRegistration()) return false;
     try {
         std::wstring xml = L"<toast";
         if (!item.url.empty()) {
@@ -5811,6 +5851,11 @@ BOOL Wh_ModInit() {
     g_unloading = false;
     g_workerStop = false;
     LoadSettings();
+    // A previous run that never reached Wh_ModUninit (crash, killed Explorer) left its
+    // notification registration behind: remove it.
+    if (Wh_GetIntValue(kToastRegisteredFlag, 0) != 0) {
+        RemoveToastRegistration();
+    }
 
     g_workerWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!g_workerWakeEvent) {
@@ -5867,6 +5912,7 @@ void Wh_ModAfterInit() {
 void Wh_ModUninit() {
     g_unloading = true;
     StopWorkerThread();
+    RemoveToastRegistration();
 
     HWND cachedHWnd = g_taskbarWnd.load(std::memory_order_relaxed);
     bool taskbarCleanupSucceeded = CleanupTaskbarResources(cachedHWnd);
