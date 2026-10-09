@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id           hide-extension-during-rename
 // @name         Hide Extension during renaming
-// @description  Hides file extensions in Save As dialogs and during File Explorer/Desktop renaming.
+// @description  Hides file extensions in "Save As" dialogs and during File Explorer/Desktop renaming.
 // @version      1.0
 // @author       AuralSX
 // @github       https://github.com/AuralSX
@@ -11,9 +11,9 @@
 
 // ==WindhawkModReadme==
 /*
-Ever wanted to get rid of the extension when trying to save a file on your computer or rename something on your PC while keeping the file type intact?
+Ever wanted to get rid of a file extension when trying to save a file on your computer or rename something on your PC while keeping the file type intact?
 well your days of suffering are over because I give you the solution ma dudes and dudettes.
-This mod hides file extensions during inline file renaming in File Explorer, Desktop and "save as" operations.
+This mod hides file extensions during inline file renaming in File Explorer, Desktop and "Save As" operations.
 
 ### Key Features
 * **Save As Dialogs:**      Automatically hides file extensions from the default filename text box when saving files.
@@ -21,7 +21,8 @@ This mod hides file extensions during inline file renaming in File Explorer, Des
 * **Warning Prevention:**   Intercepts window messages (`WM_GETTEXT`) upon committing a rename to silently re-attach the original extension,
                             avoiding the native Windows "If you change a file name extension, the file might become unusable" warning prompt.
 
-Note: It doesn't inside
+> **Note:** This mod targets native Windows File Explorer, Desktop, and standard file dialogs. It does not handle inline renaming inside third-party apps like WinRAR or 7-Zip.
+
 ![Mod Demo](https://i.imgur.com/iy9dyzq.gif)
 */
 // ==/WindhawkModReadme==
