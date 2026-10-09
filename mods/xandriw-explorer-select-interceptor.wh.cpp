@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id           xandriw-explorer-select-interceptor
-// @name         Explorer Select Interceptor: Reuse Existing Window
-// @description  Intercepts explorer.exe /select and folder-open requests, reusing an existing Explorer window when possible.
+// @name         SameFolderOnly
+// @description  Reuses existing Explorer windows for supported same-folder and file-location requests, selecting files without duplicate windows.
 // @version      4.1.2
 // @author       XandriW
 // @github       https://github.com/xandri19wang
