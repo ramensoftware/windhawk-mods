@@ -18,10 +18,12 @@
 /*
 # 中国节假日日历
 
-Windows 11 的日历（点击任务栏右下角时间/日期弹出）默认只在数字下方显示农历或节气。这个 mod 会把
-中国法定节假日和调休安排写进日历的日期单元格：
+![Chinese Holiday Calendar View](https://i.imgur.com/SBafHNL.png)
 
-- **放假日**：文字换成接口返回的节日名（如"国庆节"，颜色默认蓝色）。
+Windows 11 的日历（点击任务栏右下角时间/日期弹出）默认只在数字下方显示农历或节气。这个 mod 会把
+你提供的节假日数据写进日历的日期单元格：
+
+- **放假日**：文字换成数据里的节日名（如"国庆节"，颜色默认蓝色）。
 - **调休上班日**：文字默认换成"补班"（颜色默认红色）。
 - 把"替换农历文字"关掉，就保留系统原本的农历/节气文字，只用颜色区分放假和调休。
 - 其余日期保持系统原本的农历/节气显示，完全不动。
@@ -29,28 +31,44 @@ Windows 11 的日历（点击任务栏右下角时间/日期弹出）默认只�
 日历里没有可以放额外元素的容器（日期单元格只有"日期数字 + 农历文字"两个文本），而且系统会在切换
 月份后异步重写农历文字，所以 mod 只用颜色和文字本身来表示放假/补班。
 
+## 使用前提
+
+mod 是往日期单元格里的**第二行文字**写的，也就是系统显示农历/节气的那一行，所以任务栏日历要打开
+"其他日历"这一行：设置 → 时间和语言 → 日期和时间 → "在任务栏中显示其他日历"，选中"简体中文
+（农历）"。把它关掉的话，日期格子里很可能就没有可写的那一行，日历上也就看不出放假/调休（真遇到
+这种情况，日志里会说明）。
+
+另外，"这一格是哪一天"是按格子自己印着的日期数字判断的，不依赖时区推断，所以在任何时区都不会
+差一天。
+
 ## 数据来源
 
-默认使用 [holiday.ailcc.com](https://holiday.ailcc.com/api/holiday/ics) 的 ICS 接口：
+**这个 mod 默认不联网，也不内置任何节假日数据，不存在内置的接口地址。** 它只读你在设置里填的那个
+地址；地址留空时，它一个请求也不发，日历保持系统原本的样子。
+
+要让它显示节假日，请填一个 **iCalendar（`.ics`）订阅地址**，并且这个订阅源的事件要带"休"/"班"标记，
+形如：
 
 ```
-https://holiday.ailcc.com/api/holiday/ics
+BEGIN:VEVENT
+DTSTART;VALUE=DATE:20260215
+DTEND;VALUE=DATE:20260224
+SUMMARY:春节（休）
+END:VEVENT
 ```
 
-这是一个 iCalendar（.ics）订阅源，一次返回多年数据，不需要按年份请求，接口地址可以改成任意其他
-ICS 订阅源。
+解析规则：
 
-订阅源里除了法定节假日，还包含节气、传统节日、洋节等事件，它们是不带"（休）"/"（班）"标记的普通
-条目。mod 只认带标记的条目，所以节气之类的日期不会被误标成放假。
-
-订阅源里的日期会先检查是否真的存在（含闰年）：像 `20260231` 这种不存在的日期会被整条丢掉，
-而不是"顺手"挪到 3 月 3 日去。
-
-事件没有 DTEND 时按单日事件处理（它开始的那一天）；写了 DTEND 却解析不出来、或者结束日期不比
-开始日期晚的，整条事件会被丢掉，日志里会有一条计数说明丢了几条——一个笔误不该悄悄变成"那天放假"。
-
-数据默认每 24 小时刷新一次；请求失败时保留上次的数据，10 分钟后重试。没有网络时，日历保持系统
-原本的样子。
+- 只认**整天事件**（`DTSTART;VALUE=DATE:`），并且只有 `SUMMARY` 里带"（休）"或"（班）"标记的条目
+  才算数：带"（休）"的按放假日显示（文字用 `SUMMARY` 里的节日名），带"（班）"的按调休上班日显示。
+  没有标记的条目（节气、传统节日、洋节等）会被忽略，所以它们不会被误标成放假。
+- `DTEND` 是**不含**的那一天，和 RFC 5545 一致：上面这条表示 2 月 15 日到 23 日放假。没写 `DTEND`
+  的事件按它开始的那一天处理。
+- 每个日期都会先检查是否真的存在（含闰年）：`20260231` 这种不存在的日期整条丢掉，而不是"顺手"挪到
+  3 月 3 日；写了 `DTEND` 却解析不出来、或结束日期不比开始日期晚的事件也会被丢掉（日志里有一条计数）。
+- 只在填了地址之后才会去取数据，之后默认每 24 小时（可改）刷新一次；请求失败时保留上次的数据，
+  10 分钟后重试。取不到数据（没填地址、没网、地址失效）时，日历保持系统原本的样子，不会变成一片
+  空白，也不会报错刷屏。
 
 ## 颜色
 
@@ -70,8 +88,10 @@ mod 每次都会重新遍历日历单元格的视觉树来定位"农历文字"�
 并在日志里打印一次单元格结构（元素类型、名称、文字、字号）供排查。
 
 mod 只替换农历文字的内容和颜色，不改动单元格的结构，也不会重复写入同一个单元格。系统在切换月份后
-会异步重写农历文字，有时连文字块本身都会换掉，所以 mod 会定期复查日历单元格：只有发现放假/补班的
-文字被系统覆盖时才会再写一次，其余单元格不做任何写入。
+会异步重写农历文字，有时连文字块本身都会换掉，所以 mod 会在日历变化之后的几秒内逐秒复查单元格：
+只有发现放假/补班的文字被系统覆盖时才会再写一次，其余单元格不做任何写入。复查由"单元格出现、
+日期变化、文字变化、数据或设置变化"触发，并且在连续几秒没有任何写入之后自己停下来——系统的日历
+即使关掉了也仍然被 shell 留着，定时器不能一直跑下去。
 
 ## 致谢
 
@@ -84,7 +104,8 @@ mod 只替换农历文字的内容和颜色，不改动单元格的结构，也�
 # Chinese Holiday Calendar (English)
 
 Shows Chinese statutory holidays and adjusted workdays inside the Windows 11
-calendar flyout, the one that opens when you click the taskbar clock.
+calendar flyout, the one that opens when you click the taskbar clock, using the
+holiday data you point it at.
 
 - **Days off**: the line under the day number is replaced with the holiday name
   from the data source (for example `国庆节`) and drawn in blue by default.
@@ -92,6 +113,17 @@ calendar flyout, the one that opens when you click the taskbar clock.
 - **Replace the lunar text = off**: keeps the system's own lunar date or solar
   term and only changes the colour.
 - **Every other day**: left exactly as the system draws it.
+
+## Requirements
+
+The mod writes into the **second line of a day cell** - the lunar date or solar term the
+system prints there - so the taskbar calendar has to show that line: Settings -> Time &
+language -> Date & time -> "Show additional calendars in the taskbar", with Simplified
+Chinese (Lunar) selected. With it switched off, a day cell may have no text to write into,
+and nothing extra appears on the calendar (the log says so when that happens).
+
+The date a cell stands for is read from the day number the cell itself prints, not from a
+time-zone guess, so the holidays line up in every time zone.
 
 ## Why it works the way it does
 
@@ -101,8 +133,12 @@ an element makes the shell rebuild the day cells over and over (measured: 470
 insertions in 37 seconds, and an empty calendar afterwards), so the mod says
 everything with the existing text and its colour. The shell also rewrites its own
 lunar text asynchronously after a month change, which is why the mod re-checks
-the visible cells once a second and only writes when a cell no longer shows what
-it wants.
+the visible cells once a second, for a few seconds after everything which can
+start such a rewrite, and only writes when a cell no longer shows what it wants.
+The re-check is started by a day cell appearing, by the date or the text of a cell
+changing, and by the data or the settings changing; it stops itself after five
+passes without a write, because the shell keeps the day cells of a closed flyout
+alive and a timer which only stopped when they went away would never stop.
 
 The colour of a day is written only into a cell the mod is marking, and the value
 the cell had before the first write is remembered (the local value of
@@ -119,37 +155,48 @@ colour the shell has set since.
 
 | Setting | Meaning |
 | --- | --- |
-| Enabled | Master switch. |
-| Data source (ICS) | Any iCalendar (.ics) URL. The default one returns several years at once. |
-| Refresh interval (hours) | How long fetched data is reused (default 24 h). |
+| Data source (ICS) | Any iCalendar (.ics) URL whose events carry a day-off or workday marker. Empty by default, and then the mod fetches nothing at all and the calendar is left as it is. |
+| Refresh interval (hours) | How long fetched data is reused (default 24 h). Only used while a data source is set. |
 | Replace the lunar text | On: replace the text (default). Off: keep the lunar text, colour only. |
 | Day-off text | Empty means the holiday name from the feed. `{name}` is expanded too. |
 | Adjusted-workday text | Default `补班`. Empty means keep the lunar text, colour only. `{name}` shows the name of the holiday the workday belongs to (a 国庆 workday would read `国庆节`). |
 | Day-off colour | `RRGGBB`, `#RRGGBB`, `AARRGGBB` or `#AARRGGBB`. |
 | Workday colour | Same as above. |
 
-Windhawk 1.7.3 has no colour picker for mod settings, so the colour has to be
-typed as a value; the `#! $format: colorRgb` annotation is only for Windhawk
-versions which do support a picker.
+Windhawk 1.7.3 has no colour picker for mod settings, so the two colours are typed
+by hand, in one of the forms above.
 
 ## Data source
 
-The default source is the ICS feed at
-[holiday.ailcc.com](https://holiday.ailcc.com/api/holiday/ics). It carries about
-400 events for 2024 to 2028; solar terms, traditional festivals and foreign
-holidays carry no full-width or half-width "day off"/"workday" marker and are
-ignored, so only statutory holidays and adjusted workdays get marked. The URL can
-be replaced with any other ICS feed. Data is fetched every 24 hours, a failed
-request keeps the previous data and is retried after 10 minutes, and a feed may
-describe at most 20000 dates in total.
+The mod ships with no holiday data and no built-in service address: it reads only
+the address you enter, and with an empty address (the default) it makes no request
+at all and the calendar stays exactly as Windows draws it.
 
-Every date a feed names is checked for being a date which exists, leap years
-included: an entry such as `20260231` is dropped instead of being walked into
-3 March.
+Enter the address of an **iCalendar (`.ics`) feed whose events carry a day-off or
+workday marker**, for example:
 
-An event without a `DTEND` is the single day it starts on. A `DTEND` which is
-there but cannot be parsed, or which is not after `DTSTART`, drops the whole
-event, and a log line counts the ones which were dropped that way.
+```
+BEGIN:VEVENT
+DTSTART;VALUE=DATE:20260215
+DTEND;VALUE=DATE:20260224
+SUMMARY:春节（休）
+END:VEVENT
+```
+
+- Only all-day events (`DTSTART;VALUE=DATE:`) whose `SUMMARY` carries a full-width
+  or half-width "day off" or "workday" marker are used: a day-off marker marks a
+  holiday, with the festival name taken from the `SUMMARY`, and a workday marker an
+  adjusted workday. Entries without a marker - solar terms, traditional festivals,
+  foreign holidays - are ignored, so they are never mistaken for a holiday.
+- `DTEND` is exclusive, as in RFC 5545: the event above is 15 to 23 February. An
+  event without a `DTEND` is the single day it starts on.
+- Every date is checked for being a date which exists, leap years included:
+  `20260231` is dropped instead of being walked into 3 March, and an event whose
+  `DTEND` cannot be parsed, or which is not after its `DTSTART`, is dropped as well
+  (a log line counts those).
+- Data is fetched once an address is set, and reused for 24 hours (configurable); a
+  failed request keeps the previous data and is retried after 10 minutes, and a
+  feed may describe at most 20000 dates in total.
 
 Deliberately not supported: recurrence rules (`RRULE`, `EXDATE` and
 `RECURRENCE-ID` are read as the single occurrence the event names, and a one-time
@@ -164,14 +211,6 @@ block the calendar names `LunarTextBlock`, falls back to the smallest text that
 has content, and remembers the element it wrote to by interface pointer so that a
 block the shell has already replaced is not written to any more.
 
-## Verification
-
-`selftest\selftest.cmd` compiles the mod together with a small test program and
-runs 51 assertions over the parsing code (date formats, dates which do not exist,
-folded ICS lines, escaping, exclusive `DTEND`, a `DTEND` which cannot be used, the
-date cap, ...). The source also starts with a design-notes section listing the
-trade-off behind every non-obvious decision.
-
 ## Credits
 
 The XAML injection part is ported from m417z's
@@ -182,22 +221,25 @@ The XAML injection part is ported from m417z's
 
 // ==WindhawkModSettings==
 /*
-- enabled: true
-  $name: Enable the mod
-  $name:zh-CN: 启用
-  $description: When turned off, the calendar is left untouched.
-  $description:zh-CN: 关闭后不会修改日历。
-- dataSourceUrl: "https://holiday.ailcc.com/api/holiday/ics"
-  $name: Data source (ICS)
-  $name:zh-CN: 数据接口（ICS）
+- dataSourceUrl: ""
+  $name: Data source (ICS, empty = no data)
+  $name:zh-CN: 数据来源（ICS 地址，留空则不显示节假日）
   $description: >-
-    An iCalendar (.ics) address. The default one returns several years of data at once.
-  $description:zh-CN: iCalendar（.ics）订阅地址，一次返回多年数据。
+    Empty by default: the mod then contacts nothing and the calendar is left as the system
+    drew it. Paste the address of an iCalendar (.ics) feed whose events carry a day-off or
+    workday marker, and the calendar is filled from it; the mod reads nothing else. The
+    address is the only thing the mod ever contacts.
+  $description:zh-CN: >-
+    默认为空：此时 mod 不联网、不显示任何节假日，日历保持系统原本的样子。
+    填入一个事件里带"休"/"班"标记的 iCalendar（.ics）订阅地址即可生效，
+    格式说明见 mod 介绍；除此之外 mod 不会访问任何地址。
 - refreshIntervalHours: 24
   $name: Refresh interval (hours)
   $name:zh-CN: 刷新间隔（小时）
-  $description: Fetched data is reused for this long before the source is asked again.
-  $description:zh-CN: 数据在这个时间内不会重复请求。
+  $description: >-
+    Only used while a data source is set: fetched data is reused for this long before the
+    source is asked again.
+  $description:zh-CN: 只在填了数据来源时有效：这段时间内不会重复请求。
 - replaceText: true
   $name: Replace the lunar text
   $name:zh-CN: 替换农历文字
@@ -249,372 +291,6 @@ The XAML injection part is ported from m417z's
 */
 // ==/WindhawkModSettings==
 
-// =============================================================================
-// Design notes (for whoever reviews this next, an AI or a person)
-//
-// The sections below are the decisions behind this mod, why they were made, and what
-// they cost. Several of the odd-looking parts are the way they are because of what
-// the shell was measured to do, not out of taste, so it is worth reading this before
-// changing them. Every log line named here can be seen in DbgView, or in the
-// DbgViewMini tab of the Windhawk editor.
-//
-// ---------------------------------------------------------------------------
-// 1. Scope
-//
-//    - One job: draw the Chinese statutory holidays and the adjusted workdays into
-//      the calendar which Windows 11 opens when the taskbar clock is clicked.
-//    - A day cell has no container to put an extra element in (see 3), so the mod
-//      says what it has to say with the text and the colour which are already there.
-//    - The data source is a configurable ICS feed (holiday.ailcc.com by default);
-//      what the parser can and cannot do is in 9.
-//    - The structure, the layout and the behaviour of the calendar are left alone,
-//      and switching the mod off restores them (see 13).
-//
-// ---------------------------------------------------------------------------
-// 2. Why the visual tree is injected into
-//
-//    - Windows has no public API to add anything to its own calendar, which lives
-//      inside ShellExperienceHost.exe (and ShellHost.exe on newer builds) and is
-//      drawn in XAML.
-//    - The injection (VisualTreeWatcher + TAP) is therefore taken from m417z's
-//      "Windows 11 Notification Center Styler"; the GPL notice below is for it.
-//    - The scaffolding (visualtreewatcher / tap / simplefactory / module / api, plus
-//      the CreateWindowInBand(Ex), RegOpenKeyExW and RegQueryValueExW hooks) is kept
-//      as close to upstream as it can be, so that it stays comparable when upstream
-//      is updated. The mod's own logic starts at "Calendar UI".
-//    - Two places deliberately differ from upstream, both to fix a weakness upstream
-//      has as well, and both are commented where they are:
-//        * The VisualTreeWatcher constructor takes its reference with AddRef before
-//          CreateThread. Upstream does it the other way round (create the thread,
-//          then AddRef), which leaves a window in which a fast thread gives back the
-//          last reference and the creating thread then AddRefs a freed object; the
-//          path where AdviseVisualTreeChange fails at once is the shortest one.
-//        * Every Wh_SetFunctionHook return value in Wh_ModInit is checked and
-//          reported by name. Upstream ignores them, and a hook which was not
-//          installed then shows up as "the injection sometimes does nothing", with
-//          no reason in the log. The two registry hooks get an extra "Initialization
-//          is incomplete" line, because the injection does not work without them,
-//          but Wh_ModInit still returns TRUE: a failed load would hide the rest of
-//          the log, and the mod does everything else without a window hook.
-//
-// ---------------------------------------------------------------------------
-// 3. What a day cell really contains (measured on Windows 11, 2026-10)
-//
-//       CalendarViewDayItem size=41x41
-//         TextBlock                        fontSize=14  text="20"     <- day number
-//         TextBlock #LunarTextBlock        fontSize=11  text="<lunar>" <- lunar date
-//         Border                           size=41x41                 <- sometimes
-//
-//    A cell holds two texts, the day number and one lunar text, and sometimes a
-//    border, so GetChildrenCount(dayItem) is 2 or 3. This comes from the structure
-//    snapshots LogDayItemStructure prints into the log, and is not a guess.
-//
-//    What follows from it:
-//    - A badge in the corner of the cell cannot be done. Inserting an element makes
-//      the shell rebuild its day cells, which triggers another insertion: 470
-//      insertions in 37 seconds were measured, and the calendar ended up empty.
-//      Putting an InlineUIContainer into the day number fails as well
-//      (Inlines().Append answers 0x80070057). Text and colour only.
-//    - There is nothing else in a cell to write to, so the mod rewrites the lunar text
-//      block and nothing else.
-//
-// ---------------------------------------------------------------------------
-// 4. State: one day cell is one DayCell, identified by an interface pointer
-//
-//    - The key is winrt::get_abi(item), the raw interface pointer. Comparing the
-//      elements instead does not work (two winrt references to the same XAML element
-//      compare unequal), and item.Tag belongs to the shell and is not the mod's to
-//      use. Several early bugs came from those two mistakes.
-//    - The state lives in t_cells, which is thread_local, because a XAML element can
-//      only be touched on the thread which owns it. A day item is held through a
-//      weak_ref: the mod lets go as soon as the shell destroys it, and the sweep
-//      drops the entries which are gone.
-//    - The shell recycles day items, giving the same item another date when the month
-//      changes, so a DayCell remembers its key (the date). A different key means the
-//      shell filled the cell in again, and the text and colour state of the old date
-//      is dropped (see 7).
-//
-// ---------------------------------------------------------------------------
-// 5. The lunar text block is looked up again on every pass, never cached for long
-//
-//    - The shell replaces those text blocks when the month changes, and a write to an
-//      element which is no longer in the calendar does nothing at all, which looks
-//      exactly like "the mod stopped working". FindLabelTextBlock therefore walks the
-//      cell again on every pass (three or four children, which is cheap), and prefers
-//      the element it wrote to last time if that element is still there, so that
-//      callbacks are not registered twice and writes are not repeated.
-//    - Only a text block whose text is not all digits is a candidate: the day number
-//      is the only all-digit text in a cell, while the lunar text is a lunar day, a
-//      solar term or a festival name. This rule replaced an earlier font-size
-//      heuristic which once wrote into a day number in a real log
-//      (Day 20260925: "1" -> "中秋节").
-//    - The name wins (LunarTextBlock); the font-size heuristic is only the fallback
-//      for a block which matches no name and is not a number either. Getting that
-//      wrong costs one cell, it does not break the structure.
-//
-// ---------------------------------------------------------------------------
-// 6. The one-second sweep is what the shell's asynchronous rewrite forced
-//
-//    - After a month change the shell rewrites the lunar text some time after the mod
-//      has written to it, and it may replace the text block as well, so the holiday
-//      name would be taken away again. Two things cover that:
-//      a) a Text property callback on the text block (OnLabelTextChanged), which
-//         applies to the cell again as soon as the text is written back;
-//      b) a sweep of the tracked day cells once a second, which also covers a text
-//         block which was replaced together with its callback.
-//    - The sweep writes only when a cell does not show what the mod wants, so an idle
-//      calendar costs a few dozen property reads per second and no layout passes.
-//      That is what makes one second acceptable; do not shorten it (it would touch
-//      the shell's elements more often) and do not remove it (it is what covers the
-//      case above).
-//    - The timer is a DispatcherQueueTimer on the UI thread which owns the day cells.
-//      It is stopped when the tracked list becomes empty (the calendar was closed, or
-//      the cells were recycled) and started again when a cell shows up.
-//
-// ---------------------------------------------------------------------------
-// 7. Saving and restoring: savedText, savedForeground and ownBrush
-//
-//    - savedText is only trustworthy while the same cell shows the same date in the
-//      same text block, so it is cleared when the key changes or the text block is
-//      replaced. It is written back only when the mod no longer wants to change the
-//      cell (replacement switched off, mod disabled, unloading).
-//    - The colour is not "another brush kept beside it": ReadLocalValue() is used to
-//      keep the local value of Foreground as it is, together with whether there was
-//      one at all. A local value is put back; no local value means ClearValue, so
-//      that the style and the inherited value apply again. Clearing alone is not
-//      enough: the shell's template sets Foreground as a local value on the element
-//      (which is how the days of the neighbouring months are dimmed), and clearing it
-//      drops the label to the colour of its parent instead of its own. An early
-//      version kept the brush in a weak_ref, which cannot be read back once the shell
-//      lets go of it, and fell back to ClearValue the same way.
-//    - The colour is saved before the first colour write, and not while replacing the
-//      text: the text and the colour are two independent settings, since the colour is
-//      written with "replace the lunar text" switched off as well, and reading
-//      Foreground on a cell which was already coloured gives back the mod's own brush.
-//    - "Is the colour on the label the mod's own?" is answered by object identity and
-//      not by the colour: every colour write creates a SolidColorBrush which is kept
-//      in ownBrush (a strong reference, so the object stays alive and its address
-//      cannot be reused by another brush), and the comparison is on the interface
-//      pointer. This blocks both directions of the mistake:
-//        * when saving: a brush of the mod's own is not stored as the original colour
-//          of the date. Without that, a recycled cell would have the colour written
-//          for the old date saved as the original colour of the new one, and the day
-//          would be restored to it later.
-//        * when restoring: only the colour the mod wrote is taken off. A colour the
-//          shell has set since, the dimmed neighbouring days being the example, is
-//          left alone, because clearing it would throw the shell's own value away.
-//    - A cell which the shell gives another date keeps ownBrush and the "the mod
-//      coloured this" flag, and drops only the saved local value: the text state
-//      belongs to the date, the colour state belongs to the text block element, and
-//      the shell does not touch a colour the mod put on the label while it changes the
-//      date. Only ownBrush recognises it, and that is what makes the rule above work.
-//    - Residual risk, recorded honestly: that judgement rests on ownBrush, and the
-//      state itself can be lost (CellFor drops the whole entry when a day item is
-//      destroyed and its address is taken by another one). If the shell then reuses a
-//      text block the mod has coloured, without re-applying the template's Foreground,
-//      the judgement fails once. Re-attaching a text block to a template does re-apply
-//      the template's value, which overwrites the mod's colour, so this is hard to
-//      hit; closing it completely would mean keeping every brush the mod has ever
-//      created in a global table, with the memory and the "when may it be dropped"
-//      question that brings.
-//    - IsOwnText() answers "is the text on this cell one the mod could have written".
-//      It stays because there is a window appliedText does not cover: when a cell is
-//      recycled for a new date, appliedText has been cleared while the cell still
-//      shows the holiday name the mod wrote, and a name which is not recognised as the
-//      mod's own would be saved as the shell's text and later restored onto a day
-//      which is not a holiday. The price is that the shell's own lunar text which
-//      happens to equal a holiday name (the real Mid-Autumn Festival, for example) is
-//      not saved, and in that case the text the mod wants to write is the same anyway,
-//      so nothing goes wrong.
-//
-// ---------------------------------------------------------------------------
-// 8. The tracked list: deduplication and a limit
-//
-//    - The shell reports a day item as added again whenever it puts the item back into
-//      the calendar, which is what a month change does. One session had "Day item
-//      added" 1085 times for the 42 cells on screen, so TrackDayItem deduplicates by
-//      identity, and a repeated report only moves the entry to the recent end.
-//    - The limit kMaxTrackedDayItems: a destroyed cell is normally recycled, but a
-//      shell which keeps cells in a pool would make the list grow forever. The limit
-//      bounds the cost of a sweep, and a cell which is dropped and shown again is
-//      reported as added again and comes back. Hitting the limit logs "Tracking is at
-//      its limit ...", which is how pooling is recognised.
-//    - The sweep indexes the list instead of iterating it: applying to a day item can
-//      add an entry, which would invalidate an iterator.
-//
-// ---------------------------------------------------------------------------
-// 9. The data layer: what the ICS parser does and does not do
-//
-//    Supported:
-//    - folded lines (RFC 5545: a continuation starts with a space or a tab)
-//    - escapes: \n \\ \, \; and both the full-width and the half-width form of the
-//      day-off and workday markers
-//    - DTSTART / DTEND / SUMMARY, with the parameter part (;VALUE=DATE;TZID=...)
-//      ignored
-//    - DTEND is exclusive, as in RFC 5545: 2/15 to 2/24 gives 2/15..2/23
-//    - an event without a DTEND is a single day, the one it starts on. A DTEND which
-//      is there but cannot be used is a different thing: it did not parse, or it does
-//      not come after DTSTART as RFC 5545 requires, and the whole event is then
-//      dropped, counted, and reported in one log line. Reading it as a single day
-//      would turn a typo in a feed into "this day is a holiday" in silence, and the
-//      whole point of the mod is that the days it shows are the right ones.
-//    - only entries which carry a day-off or a workday marker count: the feed also
-//      carries solar terms and traditional festivals without one, and those are not
-//      statutory holidays.
-//    Not supported, and said so rather than pretended otherwise:
-//    - RRULE / EXDATE / RECURRENCE-ID: only the occurrence the event names is read,
-//      with a one-time log line
-//    - time zone conversion: a date-time is read as the date it names. The default
-//      source is made of all-day ("VALUE=DATE") events, a source which writes
-//      00:00:00Z is still the same day at +8, and only a timestamp close to UTC
-//      midnight would differ by a day. To be added when it is actually needed.
-//    - at most kMaxHolidayDates = 20000 dates per source. The URL is user
-//      configurable, and an event written as "1900-01-01 to 2100-01-01" would keep
-//      the worker thread busy for tens of thousands of dates, holding up the next
-//      refresh and StopWorkerThread with it. The limit is therefore checked inside
-//      the loop, and hitting it logs "describes more than 20000 holiday dates".
-//
-// ---------------------------------------------------------------------------
-// 10. Dates: how they are represented and parsed
-//
-//    - A date is an int32 "yyyymmdd" (MakeDateKey). Integer comparison is then date
-//      comparison, and the same value serves as a map key and as a range endpoint
-//      (DTSTART < key < DTEND), which is one whole date type less. The price is that
-//      the value is not continuous (20260228 + 1 is not 20260301), so every
-//      day-by-day step has to go through NextDateKey() and never through arithmetic.
-//    - ParseDateKey accepts "20260215", "2026-02-15", "2026/2/15" and
-//      "20260215T000000Z"; a time which follows a date becomes a part of its own and
-//      is ignored. The compact form is recognised by "the first part has eight
-//      digits", not by "there is one part", which would miss the forms carrying a
-//      time.
-//    - Every date goes through IsValidDate: the year, the month and the day have to
-//      exist, leap years included. A date which does not exist returns 0 and the
-//      caller skips the event. It cannot be accepted and corrected later: a range is
-//      walked with NextDateKey, which normalises the "+1 day" of 2026-02-31 into
-//      2026-03-03, so the mod would invent dates the source never named. The year is
-//      limited to 1900..9999, which turns away a "19700101" placeholder and keeps
-//      MakeDateKey inside an int32.
-//    - DateKeyFromDateTime turns the XAML DateTime, 100 ns ticks since 1601, into a
-//      local date: CalendarViewDayItem.Date is UTC midnight, and it has to be turned
-//      into a local date to line up with the dates of the feed.
-//
-// ---------------------------------------------------------------------------
-// 11. The colour settings
-//
-//    - Six or eight hexadecimal digits (RRGGBB / #RRGGBB / AARRGGBB / #AARRGGBB).
-//      Windhawk 2.0 writes the eight-digit form "#FF4EA1FF", so both are accepted.
-//    - The settings carry a `#! $format: colorRgb` annotation. A search through the
-//      Windhawk 1.7.3 installation showed that neither its UI nor its engine knows
-//      that format, so it is a forward-compatible marker only and the colour is still
-//      typed by hand; it is kept so that an upgrade turns it into a picker.
-//    - An early version used the {red,green,blue} sub-key form, and leftovers such as
-//      offDayColor.red may still be in the registry. In 1.7.3 that form is three
-//      number boxes and awkward to use, hence the string form. Leftover keys are
-//      ignored when the settings are read.
-//
-// ---------------------------------------------------------------------------
-// 12. Threads
-//
-//    - The data is fetched on a worker thread of the mod's own (WorkerThreadProc),
-//      because it blocks on a network request, and the UI threads are told to redraw
-//      afterwards. Day cells are read and written only on the thread which owns them,
-//      which is what the thread_local state is for.
-//    - "Do something on the thread of that window" is spelled RunFromWindowThread
-//      (SendMessage plus a hook) or RunFromWindowThreadViaPostMessage (PostMessage
-//      plus a hook). ShellHost and ShellExperienceHost differ in their timing, and
-//      initialising when a ControlCenterWindow has just been created is too early
-//      there, which is why that one goes through the PostMessage version.
-//    - Refreshing: once every 24 hours by default, a failed request keeps the data
-//      which is already there and is retried after 10 minutes, and changing the
-//      settings clears the data only when the URL changed and reuses it otherwise,
-//      which keeps the calendar from flashing back to the lunar text and fetching
-//      again.
-//    - Every step of starting the worker thread and of handing a refresh over is
-//      checked: a failed CreateEvent or CreateThread closes the handles which were
-//      created and gives up on the start, with the mod keeping the data it has, and a
-//      failed SetEvent takes the pending flag back and records an attempt. Earlier
-//      versions ignored those return values, and one event which was not created left
-//      g_fetchPending true for good: every later refresh was dropped in silence, and
-//      switching the mod off and on again did not help.
-//    - A failed start is not permanent: RequestHolidayData asks for the thread again
-//      on every request, and does so before the "is the data still fresh" test, since
-//      a request which cannot be answered must not consume the refresh interval.
-//      StartWorkerThread serialises itself with g_workerThreadMutex, so two threads
-//      asking at the same time cannot create two threads and two event pairs. Unload
-//      sets g_shuttingDown first, so that a request arriving during it cannot start
-//      the thread again.
-//
-// ---------------------------------------------------------------------------
-// 13. Unloading and restoring
-//
-//    - Wh_ModUninit: set the shutdown flag, stop the worker thread, take the
-//      injection out, and then restore every cell on each window thread: unregister
-//      the two property callbacks, write the saved text and colour back, clear the
-//      state, stop the timer.
-//    - The restore assumes the cell is still alive. A cell the shell has destroyed
-//      does not need one, because the shell fills it in itself. The calendar is not
-//      guaranteed to look untouched the moment the mod is unloaded, since the shell
-//      needs a moment to repaint, but nothing broken is left behind: the mod never
-//      changes the element tree, it only writes text and a foreground colour.
-//
-// ---------------------------------------------------------------------------
-// 14. Known limits and things which were not verified (the honest list)
-//
-//    - The appearance can only be verified in the real Windows 11 shell. What can be
-//      verified here is the MSVC syntax and link check and the parser assertions of
-//      selftest (see 15).
-//    - The structure of a day cell depends on the Windows build. A build which
-//      changes its template can lead to "No text block to replace" (the log prints a
-//      structure snapshot once) or to the font-size fallback being used.
-//    - A badge in a cell cannot be done with the current structure, see 3.
-//    - A colour picker depends on the Windhawk version, see 11.
-//
-// ---------------------------------------------------------------------------
-// 15. How to verify it, without clicking the calendar
-//
-//    - C:\Users\yzfar\Desktop\hawk\selftest\selftest.cmd compiles the mod together
-//      with a small test program through MSVC (windhawk.h next to it is a stub of the
-//      API) and runs selftest.exe, which prints the result of 51 assertions over the
-//      date formats, folded lines, escapes, the exclusive DTEND, the date validation,
-//      the DTENDs which are dropped, the date cap and the {name} expansion. It exits
-//      with the number of failures, so 0 means all of them passed.
-//    - The compiler is vcvars64.bat of D:\Software\Microsoft Visual Studio\18\
-//      Community, with the WinRT headers of cppwinrt in Windows Kits 10.0.26100.0.
-//      Windhawk itself compiles with clang, so MSVC is only a check, which is where
-//      warnings such as C4068 (unknown pragma "clang") come from. They are expected,
-//      and the mod this was ported from has them as well.
-//    - The log lines worth looking at on a live system:
-//        Day <date>: "<old>" -> "<new>"      the text of a cell was written
-//        No text block to replace ...        no lunar text found, with a snapshot of
-//                                            the structure of the cell
-//        Tracking is at its limit ...        the shell is pooling day items
-//        The data source describes more than 20000 holiday dates   data was cut off
-//        events are dropped: their DTEND ...  a DTEND could not be used, with a count
-//        Initialization is incomplete: ...   a hook is missing, and the line names it
-//        There is no worker thread ...       a refresh could not be handed over
-//        Could not hand the refresh over ...
-//        Substituting the XAML debug key     the injection, and the suppressing of
-//        Reporting DisableCompositionDiag as set     the composition diagnostics
-//
-// ---------------------------------------------------------------------------
-// 16. The settings block
-//
-//    - Every setting carries the English text as $name and $description, which is what a
-//      language without a variant of its own falls back to, plus a ":zh-CN" variant with
-//      the Chinese text. That is the documented way to localise settings, and the mods of
-//      the official store are written the same way, with the base text in English.
-//    - The name of a setting (enabled, dataSourceUrl, ...) is the key a stored value is
-//      kept under, so a label may be localised but a name must never be changed: the
-//      settings a user already has would be lost.
-//    - The lines which begin with "#! " are annotations Windhawk 1.7.3 does not know;
-//      the marker makes them plain YAML comments to 1.7.3, and Windhawk 2.0 reads the
-//      line with the marker removed. A block which marks one annotation has to mark every
-//      annotation of that kind in it, which is why both colour settings carry the
-//      `#! $format: colorRgb` line.
-//    - The defaults are written here and in the Settings struct, so the two have to be
-//      changed together.
-//
-// =============================================================================
 //
 // Parts of the injection code below are ported from the "Windows 11 Notification
 // Center Styler" mod by m417z, which is licensed under GPL-3.0:
@@ -623,8 +299,7 @@ The XAML injection part is ported from m417z's
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
+// the Free Software Foundation, version 3 of the License.
 //
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -638,6 +313,7 @@ The XAML injection part is ported from m417z's
 
 #include <atomic>
 #include <cstdint>
+#include <mutex>
 #include <vector>
 
 #undef GetCurrentTime
@@ -699,6 +375,39 @@ void FlushDiagnosticsReleasesIfQuiet();
 void ForgetFakedDebugKeys();
 
 #pragma endregion  // winrt_hpp
+
+// The threads which call AdviseVisualTreeChange. That call goes to a thread of its own,
+// because calling it from the thread which initialises the diagnostics makes the app hang
+// in Advising::RunOnUIThread, and it reports the whole tree which already exists before it
+// returns. Upstream closes the handle at once and lets the thread run on: a mod which is
+// unloaded (disabled, updated, reloaded) while that walk is still going leaves the thread
+// to return into an unmapped module, which takes the shell down with it. The handles are
+// therefore kept here, and the unload waits for the walk to finish.
+//
+// Waiting in the constructor or in SetSite is not an option: SetSite runs on a thread the
+// advise call needs (the diagnostics initialisation of a UI thread), so waiting there
+// would deadlock. Wh_ModUninit runs on the engine thread, which the advise call does not
+// need, and is the one place where the wait is safe.
+std::mutex g_adviseThreadMutex;
+std::vector<HANDLE> g_adviseThreads;
+
+void RememberAdviseThread(HANDLE thread) {
+    std::lock_guard<std::mutex> lock(g_adviseThreadMutex);
+    g_adviseThreads.push_back(thread);
+}
+
+void WaitForAdviseThreads() {
+    std::vector<HANDLE> threads;
+    {
+        std::lock_guard<std::mutex> lock(g_adviseThreadMutex);
+        threads.swap(g_adviseThreads);
+    }
+
+    for (HANDLE thread : threads) {
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+    }
+}
 
 #pragma region visualtreewatcher_hpp
 
@@ -801,7 +510,10 @@ VisualTreeWatcher::VisualTreeWatcher(winrt::com_ptr<IUnknown> site)
         Release();
         return;
     }
-    CloseHandle(thread);
+
+    // The handle is kept rather than closed: the unload waits for this thread before the
+    // module is unmapped (see g_adviseThreads).
+    RememberAdviseThread(thread);
 }
 
 VisualTreeWatcher::~VisualTreeWatcher() {
@@ -847,6 +559,15 @@ HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation relation,
         }
     }
 
+    // This check comes before the handles of this report are queued, and that order is
+    // the whole point: QueueDiagnosticsRelease stamps the tick, so asking "have the
+    // reports been quiet for 200 ms" after queueing would be asking about an entry made
+    // a moment ago and would answer "no" every single time. The drain timer would then
+    // never be armed, and the leak this function exists to prevent - every element XAML
+    // ever reported being held by the diagnostics for the life of the process - would
+    // happen in full. Asked first, the question is about the previous report instead.
+    FlushDiagnosticsReleasesIfQuiet();
+
     // A tree discarded whole is never dismantled, so it reports no removals to
     // be released by; the queue is drained on the dispatcher instead, once the
     // walk which produced the reports has finished.
@@ -854,7 +575,6 @@ HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation relation,
     if (mutationType == Add) {
         QueueDiagnosticsRelease(relation.Parent);
     }
-    FlushDiagnosticsReleasesIfQuiet();
 
     return S_OK;
 } catch (...) {
@@ -959,6 +679,10 @@ struct SimpleFactory
 #pragma region module_cpp
 
 #include <combaseapi.h>
+
+// WindhawkUtils::StringSetting and WindhawkUtils::SetFunctionHook. The header ships with
+// the compiler Windhawk builds mods with.
+#include <windhawk_utils.h>
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdll-attribute-on-redeclaration"
@@ -1072,11 +796,14 @@ namespace wuxm = winrt::Windows::UI::Xaml::Media;
 // The snapshot of the settings. The defaults are written twice on purpose: here, for
 // a setting which cannot be read, and in the WindhawkModSettings YAML, which is what
 // the settings UI starts from, so the two have to be changed together. LoadSettings
-// replaces the whole snapshot through a shared_ptr, so the UI threads and the worker
-// thread each take an immutable copy and no lock is held for long.
+// publishes a whole new snapshot as a shared_ptr to an immutable object, and every
+// caller takes that pointer rather than a copy of the struct: a cell is looked at on
+// every pass of the sweep, and copying three strings for each of them is work with no
+// purpose behind it.
 struct Settings {
-    bool enabled = true;
-    std::wstring dataSourceUrl = L"https://holiday.ailcc.com/api/holiday/ics";
+    // Empty by default on purpose: the mod then contacts nothing at all and the
+    // calendar is left as the system drew it. The address is the user's to fill in.
+    std::wstring dataSourceUrl;
     int refreshIntervalHours = 24;
     bool replaceText = true;
     std::wstring offDayText;
@@ -1088,25 +815,26 @@ struct Settings {
 std::mutex g_settingsMutex;
 std::shared_ptr<const Settings> g_settings = std::make_shared<Settings>();
 
-Settings GetSettings() {
+std::shared_ptr<const Settings> GetSettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
-    return *g_settings;
+    return g_settings;
 }
 
+// Wh_GetStringSetting never answers null (a setting which cannot be read comes back as an
+// empty string, see windhawk_api.h), and the StringSetting wrapper frees the copy the
+// engine hands out, so there is nothing to check here and nothing to free by hand.
 std::wstring ReadStringSetting(PCWSTR name) {
-    PCWSTR value = Wh_GetStringSetting(name);
-    std::wstring result = value ? value : L"";
-    if (value) {
-        Wh_FreeStringSetting(value);
-    }
-    return result;
+    const WindhawkUtils::StringSetting value =
+        WindhawkUtils::StringSetting::make(name);
+    return std::wstring(value.get());
 }
 
-// Colour parsing, and why so many written forms are accepted: Windhawk 2.0's colour
-// picker writes "#FF4EA1FF" (eight digits, AARRGGBB), while a value typed by hand is
-// usually "4EA1FF" (six digits, no '#', taken as opaque). Both lengths, with or
-// without the '#', are accepted; a value which does not parse returns nullopt and the
-// caller falls back to the default colour instead of turning the calendar black.
+// Colour parsing, and why so many written forms are accepted: a colourRgb setting holds
+// "RRGGBB" without a '#' (that is what Windhawk's colour picker stores), while a value
+// typed by hand is often written with one, or as eight digits (AARRGGBB) by someone used
+// to CSS. Both lengths, with or without the '#', are accepted; a value which does not
+// parse returns nullopt and the caller falls back to the default colour instead of
+// turning the calendar black.
 std::optional<winrt::Windows::UI::Color> ParseHexColor(std::wstring const& text) {
     std::wstring value;
     for (wchar_t c : text) {
@@ -1161,7 +889,6 @@ winrt::Windows::UI::Color ReadColorSetting(PCWSTR name,
 void LoadSettings() {
     auto settings = std::make_shared<Settings>();
 
-    settings->enabled = Wh_GetIntSetting(L"enabled") != 0;
     settings->dataSourceUrl = ReadStringSetting(L"dataSourceUrl");
     settings->refreshIntervalHours = Wh_GetIntSetting(L"refreshIntervalHours");
     settings->replaceText = Wh_GetIntSetting(L"replaceText") != 0;
@@ -1175,9 +902,8 @@ void LoadSettings() {
     if (settings->refreshIntervalHours < 1) {
         settings->refreshIntervalHours = 1;
     }
-    if (settings->dataSourceUrl.empty()) {
-        settings->dataSourceUrl = Settings{}.dataSourceUrl;
-    }
+    // An empty address is a valid setting, not a missing one: it means "no data
+    // source", which is what the mod ships with.
 
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
@@ -1594,8 +1320,9 @@ bool ParseIcs(std::wstring const& text, HolidayMap& out) {
             summary = value;
         } else if (name == L"RRULE" || name == L"EXDATE" ||
                    name == L"RECURRENCE-ID") {
-            // A recurring event is read as the one occurrence it names. The
-            // default source doesn't use any of these fields.
+            // A recurring event is read as the one occurrence it names. The kind of
+            // feed the README describes - one event per holiday period - doesn't use
+            // any of these fields.
             hasRecurrence = true;
         }
     }
@@ -1637,11 +1364,13 @@ bool ParseHolidayData(std::wstring const& body, HolidayMap& out) {
 // Background fetching
 
 void SweepDayItems();
+void StartSweepTimer();
 void RefreshCalendarOnUiThreads();
 
-// The worker thread is created at initialisation, and a failed start is retried
-// from a refresh request (see RequestHolidayData). The mutex is what keeps two
-// threads which ask at the same time from creating two threads or two event pairs.
+// The worker thread exists only while a data source is set: it is created by the
+// first refresh request which has something to fetch, and a failed start is retried
+// by the next one (see RequestHolidayData). The mutex is what keeps two threads which
+// ask at the same time from creating two threads or two event pairs.
 std::mutex g_workerThreadMutex;
 std::atomic<HANDLE> g_hWorkerThread{nullptr};
 std::atomic<HANDLE> g_hWorkEvent{nullptr};
@@ -1659,38 +1388,31 @@ bool g_haveData = false;
 // whole refresh interval.
 constexpr ULONGLONG kFetchRetryDelayMs = 10 * 60 * 1000;
 
-std::wstring BuildUrl(std::wstring urlTemplate, int year) {
-    std::wstring yearText = std::to_wstring(year);
-    size_t pos;
-    while ((pos = urlTemplate.find(L"{year}")) != std::wstring::npos) {
-        urlTemplate.replace(pos, 6, yearText);
-    }
-    return urlTemplate;
-}
-
 // Fetching and parsing both happen on the worker thread: Wh_GetUrlContent blocks on
 // network I/O, and doing that on a UI thread would hold up the taskbar. A parse which
 // fails does not overwrite the data which is already there, so the calendar keeps
 // showing the last good result when the network or the API is down (g_haveData only
-// decides which retry delay applies).
+// decides which retry delay applies). An empty address is not a failure to report: it
+// means the mod has no data source, and RequestHolidayData never gets here then.
 bool FetchHolidayData() {
-    Settings settings = GetSettings();
+    const std::shared_ptr<const Settings> settings = GetSettings();
 
     {
         std::lock_guard<std::mutex> lock(g_fetchStateMutex);
         g_lastFetchAttemptTick = GetTickCount64();
     }
 
-    if (settings.dataSourceUrl.empty()) {
+    if (settings->dataSourceUrl.empty()) {
         return false;
     }
 
-    SYSTEMTIME now{};
-    GetLocalTime(&now);
-    std::wstring url = BuildUrl(settings.dataSourceUrl, now.wYear);
-    Wh_Log(L"Fetching %s", url.c_str());
+    // The address is used exactly as it was entered. It used to have a "{year}"
+    // placeholder expanded into it, which nothing documented and no caller could reach,
+    // so it is gone: a feed is expected to carry the years it has at once.
+    Wh_Log(L"Fetching %s", settings->dataSourceUrl.c_str());
 
-    const WH_URL_CONTENT* content = Wh_GetUrlContent(url.c_str(), nullptr);
+    const WH_URL_CONTENT* content =
+        Wh_GetUrlContent(settings->dataSourceUrl.c_str(), nullptr);
     if (!content) {
         Wh_Log(L"Wh_GetUrlContent returned null");
         return false;
@@ -1760,8 +1482,8 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
 // pending for good, so that every later refresh is dropped silently. On a failure
 // the handles which were created are closed again and the mod simply runs without
 // a worker thread: it keeps showing the data it already has, and RequestHolidayData
-// asks for the thread again on every refresh, so a start which failed at
-// initialisation is retried instead of lasting for the whole session.
+// asks for the thread again on every refresh, so a start which failed once is retried
+// instead of lasting for the whole session.
 void StartWorkerThread() {
     std::lock_guard<std::mutex> lock(g_workerThreadMutex);
 
@@ -1800,52 +1522,78 @@ void StartWorkerThread() {
     g_hWorkerThread.store(thread);
 }
 
+// The handles are taken out of the globals and the lock is dropped before the wait.
+// Waiting while holding g_workerThreadMutex is a deadlock: the worker thread may be
+// inside RefreshCalendarOnUiThreads, which waits for a UI thread, and that UI thread
+// may have passed the g_shuttingDown test of RequestHolidayData and be about to block
+// on this mutex in StartWorkerThread. The window is narrow - the unload has to land
+// between those two - but closing it costs nothing. Taking the handles first also
+// keeps the worker from being handed a new request while it is being stopped.
 void StopWorkerThread() {
-    std::lock_guard<std::mutex> lock(g_workerThreadMutex);
+    HANDLE workerThread;
+    HANDLE workEvent;
+    HANDLE stopEvent;
 
-    HANDLE workerThread = g_hWorkerThread.exchange(nullptr);
+    {
+        std::lock_guard<std::mutex> lock(g_workerThreadMutex);
 
-    if (HANDLE stopEvent = g_hStopEvent.load()) {
-        SetEvent(stopEvent);
+        workerThread = g_hWorkerThread.exchange(nullptr);
+        workEvent = g_hWorkEvent.exchange(nullptr);
+        stopEvent = g_hStopEvent.exchange(nullptr);
+
+        if (stopEvent) {
+            SetEvent(stopEvent);
+        }
     }
+
+    // The worker is joined rather than detached. Wh_GetUrlContent cannot be cancelled,
+    // so the unload waits for a request which is in flight (bounded by the engine's
+    // own timeout), but WorkerThreadProc is mod code and must not be left running into
+    // an image which is about to be unmapped.
     if (workerThread) {
         WaitForSingleObject(workerThread, INFINITE);
         CloseHandle(workerThread);
     }
-    if (HANDLE workEvent = g_hWorkEvent.exchange(nullptr)) {
+    if (workEvent) {
         CloseHandle(workEvent);
     }
-    if (HANDLE stopEvent = g_hStopEvent.exchange(nullptr)) {
+    if (stopEvent) {
         CloseHandle(stopEvent);
     }
 }
 
 // The decision whether a fetch is due lives here: no repeated request inside the
-// refresh interval, and a shorter 10 minute retry interval after a failure. "force" is
-// only for the case where the data has to be re-read at once, such as a changed URL;
-// the callers pass false today and get the same effect by clearing the attempt tick
-// through ResetHolidayData.
-void RequestHolidayData(bool force) {
-    Settings settings = GetSettings();
-    if (!settings.enabled || g_shuttingDown) {
+// refresh interval, and a shorter 10 minute retry interval after a failure. A caller
+// which has to re-read the data at once - a changed address, for example - does it by
+// clearing the attempt tick through ResetHolidayData rather than by a flag here.
+void RequestHolidayData() {
+    const std::shared_ptr<const Settings> settings = GetSettings();
+    if (g_shuttingDown) {
         return;
     }
 
-    // The worker thread is started once at initialisation; a start which failed
-    // there is retried here, on every request. This has to happen before the "is
-    // the data still fresh" test below, because a request which could not be
-    // answered must not consume the refresh interval. StartWorkerThread takes a
-    // lock, so a request from another thread cannot create a second one.
+    // No data source: nothing to fetch and no worker thread to create for it. This is
+    // the default state of the mod, and it is what keeps the mod from doing anything
+    // at all - no thread, no request - until an address is filled in.
+    if (settings->dataSourceUrl.empty()) {
+        return;
+    }
+
+    // The worker thread is started on the first request which has a data source; a
+    // start which failed is retried here, on every request. This has to happen before
+    // the "is the data still fresh" test below, because a request which could not be
+    // answered must not consume the refresh interval. StartWorkerThread takes a lock,
+    // so a request from another thread cannot create a second one.
     if (!g_hWorkerThread.load()) {
         StartWorkerThread();
     }
 
     const ULONGLONG refreshInterval =
-        static_cast<ULONGLONG>(settings.refreshIntervalHours) * 60ULL * 60ULL * 1000ULL;
+        static_cast<ULONGLONG>(settings->refreshIntervalHours) * 60ULL * 60ULL * 1000ULL;
 
     {
         std::lock_guard<std::mutex> lock(g_fetchStateMutex);
-        if (!force && g_lastFetchAttemptTick) {
+        if (g_lastFetchAttemptTick) {
             ULONGLONG interval = g_haveData ? refreshInterval : kFetchRetryDelayMs;
             if (GetTickCount64() - g_lastFetchAttemptTick < interval) {
                 return;
@@ -1899,11 +1647,35 @@ void ResetHolidayData() {
 ////////////////////////////////////////////////////////////////////////////////
 // Looking inside a day cell
 
-// CalendarViewDayItem.Date is UTC midnight (00:00Z). The date is therefore taken from
-// the local time: reading it as UTC would put every cell one day back on a machine
-// with a negative offset. A conversion which fails returns 0, and the caller skips
-// that cell - writing nothing is better than writing the wrong date.
-int32_t DateKeyFromDateTime(wf::DateTime const& dateTime) {
+// Set once, when a day cell turns out to carry a midnight UTC date (see below): one line in
+// the log which says which reading the calendar uses is worth having, one per cell is not.
+std::atomic<bool> g_loggedUtcDateReading{false};
+
+// The date a day cell stands for.
+//
+// CalendarViewDayItem.Date is a Windows.Foundation.DateTime: 100 ns ticks since 1601, with
+// no zone attached, so the same ticks can be read in two ways and the two differ by the
+// local UTC offset:
+//
+//   * the ticks name local midnight of the date the cell was made for (which is what the
+//     shell does when it fills a cell for a calendar date). Converting them to local time
+//     gives that date; reading them as UTC gives the day before, east of UTC.
+//   * the ticks name midnight UTC of that date. Reading them as UTC gives the date;
+//     converting them to local time gives the day before, west of UTC.
+//
+// Which of the two Windows uses cannot be observed in a zone east of UTC, because both
+// readings give the same date there - and the mod was written and tested in UTC+8, so this
+// is not a question the code can answer from experience. It is therefore not guessed. The
+// number the shell prints in the cell (DayNumberShownInCell) is the shell's own answer for
+// that cell, and the reading which agrees with it wins; that makes the date right in every
+// time zone, whichever reading the shell uses, and it survives a Windows build changing its
+// mind. A cell whose number cannot be read - it has not been filled in yet, or the shell is
+// rewriting it - keeps the local reading, which is what the mod used before this check
+// existed and is right east of UTC.
+//
+// A conversion which fails returns 0, and the caller skips that cell: writing nothing is
+// better than writing the wrong date.
+int32_t DateKeyFromDateTime(wf::DateTime const& dateTime, int dayNumberShown) {
     ULARGE_INTEGER uli;
     uli.QuadPart = static_cast<ULONGLONG>(dateTime.time_since_epoch().count());
 
@@ -1912,23 +1684,47 @@ int32_t DateKeyFromDateTime(wf::DateTime const& dateTime) {
     fileTime.dwHighDateTime = uli.HighPart;
 
     SYSTEMTIME systemTimeUtc{};
-    SYSTEMTIME systemTimeLocal{};
     if (!FileTimeToSystemTime(&fileTime, &systemTimeUtc)) {
         return 0;
     }
+
+    SYSTEMTIME systemTimeLocal{};
     if (!SystemTimeToTzSpecificLocalTime(nullptr, &systemTimeUtc,
                                          &systemTimeLocal)) {
         return 0;
     }
 
-    return MakeDateKey(systemTimeLocal.wYear, systemTimeLocal.wMonth,
-                       systemTimeLocal.wDay);
+    const int32_t localKey = MakeDateKey(systemTimeLocal.wYear, systemTimeLocal.wMonth,
+                                         systemTimeLocal.wDay);
+    const int32_t utcKey = MakeDateKey(systemTimeUtc.wYear, systemTimeUtc.wMonth,
+                                       systemTimeUtc.wDay);
+
+    // The same date in both readings (anywhere east of UTC with the UTC reading, anywhere
+    // west of it with the local one), or no number to check against.
+    if (localKey == utcKey || dayNumberShown == 0) {
+        return localKey;
+    }
+
+    if (systemTimeLocal.wDay == dayNumberShown) {
+        return localKey;
+    }
+    if (systemTimeUtc.wDay == dayNumberShown) {
+        if (!g_loggedUtcDateReading.exchange(true)) {
+            Wh_Log(L"Day items of this calendar name midnight UTC: the cell of day %d "
+                   L"reads as %d locally and as %d in UTC, and the day number in the "
+                   L"cell says the UTC reading is the date",
+                   dayNumberShown, localKey, utcKey);
+        }
+        return utcKey;
+    }
+
+    return localKey;
 }
 
 // The name the Windows 11 calendar gives the text block which holds the lunar
 // date or the solar term.
 // It is a strong hint rather than the only rule: another Windows build may name the
-// block differently, which is why FindLabelTextBlock has fallbacks (design note 5).
+// block differently, which is why FindLabelTextBlock has fallbacks.
 constexpr PCWSTR kLunarTextBlockName = L"LunarTextBlock";
 
 struct FoundElement {
@@ -2038,6 +1834,50 @@ bool IsNumberText(std::wstring const& text) {
         }
     }
     return true;
+}
+
+// The day of the month the shell prints in the cell, or 0 when there is none to read.
+// This is the one value in a cell which is not a guess: it is what the user sees, and
+// DateKeyFromDateTime uses it to tell the two readings of CalendarViewDayItem.Date apart.
+//
+// The day number is the text of the cell which is made of digits (see IsNumberText); the
+// lunar text below it is "廿二", "立冬" or "中秋节", never a number. The largest font wins
+// in case a build ever puts a second number in a cell.
+int DayNumberShownInCell(wuxc::CalendarViewDayItem const& item) {
+    std::vector<FoundElement> descendants;
+    CollectDescendants(item, descendants);
+
+    int day = 0;
+    double largestFontSize = -1;
+    for (const auto& found : descendants) {
+        auto textBlock = found.element.try_as<wuxc::TextBlock>();
+        if (!textBlock) {
+            continue;
+        }
+
+        const std::wstring text = ElementText(textBlock);
+        if (!IsNumberText(text)) {
+            continue;
+        }
+
+        const int value = (int)wcstol(text.c_str(), nullptr, 10);
+        if (value < 1 || value > 31) {
+            continue;
+        }
+
+        double fontSize = 0;
+        try {
+            fontSize = textBlock.FontSize();
+        } catch (...) {
+        }
+
+        if (day == 0 || fontSize > largestFontSize) {
+            day = value;
+            largestFontSize = fontSize;
+        }
+    }
+
+    return day;
 }
 
 // Whether the shell has filled the day cell in at all. A day item which was just
@@ -2194,6 +2034,10 @@ thread_local bool t_loggedMissingTextBlock = false;
 // Hitting the limit of tracked day items says that the shell is holding on to
 // day items which the calendar no longer shows, which is worth reporting once.
 thread_local bool t_loggedTrackLimit = false;
+// Set by whatever a pass over a cell actually writes - the text, the colour, or the
+// colour being taken back. SweepDayItems() uses it to tell "the shell is still rewriting
+// the cells" from "nothing has happened for a while", which is what stops the timer again.
+thread_local bool t_applyWrote = false;
 
 void ApplyToDayItem(wuxc::CalendarViewDayItem const& item);
 
@@ -2293,6 +2137,7 @@ wuxm::Brush SetForegroundIfDifferent(wuxc::TextBlock const& textBlock,
         }
         wuxm::SolidColorBrush brush(color);
         textBlock.Foreground(brush);
+        t_applyWrote = true;
         return brush;
     } catch (...) {
         return nullptr;
@@ -2359,6 +2204,7 @@ void RestoreForeground(wuxc::TextBlock const& label, DayCell const& cell) {
         } else {
             label.ClearValue(wuxc::TextBlock::ForegroundProperty());
         }
+        t_applyWrote = true;
     } catch (...) {
     }
 }
@@ -2377,6 +2223,9 @@ void OnLabelTextChanged(wux::DependencyObject const& sender) {
     }
     if (auto item = it->second.get()) {
         ApplyToDayItem(item);
+        // The shell has just written its own text over the mod's: the moment the sweep
+        // exists for, so it gets the full quiet period again.
+        StartSweepTimer();
     }
 }
 
@@ -2385,7 +2234,9 @@ void OnLabelTextChanged(wux::DependencyObject const& sender) {
 // not worth remembering as the shell's own.
 // appliedText cannot cover that window, because the shell recycles a cell by clearing
 // what it holds while the mod's own holiday name is still on it; the name is then the
-// only thing left to recognise. Design note 7 has the rest of the trade-off.
+// only thing left to recognise. The price is that a lunar text which happens to equal a
+// holiday name is not saved as the shell's own, which is harmless: the text the mod wants
+// to write is the same one.
 bool IsOwnText(std::wstring const& text, Settings const& settings) {
     if (text.empty()) {
         return false;
@@ -2412,10 +2263,9 @@ std::wstring ExpandName(std::wstring const& text, std::wstring const& name) {
         return {};
     }
 
-    // Every "{name}" is replaced, like the "{year}" of the URL template: a text
-    // which says it twice means it twice. The result is built up instead of
-    // replacing in place so that a name which itself contains "{name}" cannot
-    // send the loop around forever.
+    // Every "{name}" is replaced: a text which says it twice means it twice. The result
+    // is built up instead of replacing in place so that a name which itself contains
+    // "{name}" cannot send the loop around forever.
     std::wstring result;
     size_t pos = 0;
     for (;;) {
@@ -2436,7 +2286,7 @@ std::wstring ExpandName(std::wstring const& text, std::wstring const& name) {
 //   1) turn the cell's Date into a yyyymmdd key;
 //   2) look the key up, which says whether the day is a day off and what the holiday
 //      is called;
-//   3) find the lunar text block, anew on every pass (design note 5);
+//   3) find the lunar text block, anew on every pass;
 //   4) decide the text: keep it, use the holiday name, or use the fixed text from the
 //      settings;
 //   5) decide the colour: the day-off or the workday colour, and put the shell's own
@@ -2447,12 +2297,12 @@ std::wstring ExpandName(std::wstring const& text, std::wstring const& name) {
 // a layout pass and is reported back to the mod through the diagnostics, which is
 // where the flicker and the log spam of the early versions came from.
 void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
-    Settings settings = GetSettings();
+    const std::shared_ptr<const Settings> settings = GetSettings();
     if (!item) {
         return;
     }
 
-    int32_t key = DateKeyFromDateTime(item.Date());
+    int32_t key = DateKeyFromDateTime(item.Date(), DayNumberShownInCell(item));
     if (!key) {
         return;
     }
@@ -2491,9 +2341,7 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
     }
 
     HolidayInfo info;
-    // A disabled mod behaves like a day which is not a holiday: whatever the mod
-    // wrote is taken back.
-    bool hasInfo = settings.enabled && LookupHoliday(key, info);
+    const bool hasInfo = LookupHoliday(key, info);
 
     // The shell recycles day items, and a recycled item keeps whatever the mod
     // put into it, so a new date is applied to as well.
@@ -2506,6 +2354,7 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
                     if (auto dayItem =
                             sender.try_as<wuxc::CalendarViewDayItem>()) {
                         ApplyToDayItem(dayItem);
+                        StartSweepTimer();
                     }
                 });
         } catch (...) {
@@ -2519,7 +2368,10 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
     if (!label) {
         if (DayItemHasContent(item) && !t_loggedMissingTextBlock) {
             t_loggedMissingTextBlock = true;
-            Wh_Log(L"No text block to replace in the day cell of %d", key);
+            Wh_Log(L"No text block to replace in the day cell of %d - the cell has no "
+                   L"second line, which is where the mod writes, so the additional "
+                   L"calendar of the taskbar has to be switched on",
+                   key);
             LogDayItemStructure(item);
         }
         return;
@@ -2571,26 +2423,27 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
     std::wstring desired;
     // With "replace the lunar text" switched off, the cell keeps the text of the
     // shell and only the colour is written.
-    if (hasInfo && settings.replaceText) {
+    if (hasInfo && settings->replaceText) {
         if (info.isOffDay) {
-            desired = settings.offDayText.empty()
+            desired = settings->offDayText.empty()
                           ? info.name
-                          : ExpandName(settings.offDayText, info.name);
+                          : ExpandName(settings->offDayText, info.name);
         } else {
-            desired = ExpandName(settings.workdayText, info.name);
+            desired = ExpandName(settings->workdayText, info.name);
         }
     }
 
     std::wstring current = ElementText(label);
 
     if (!desired.empty() && current != desired) {
-        if (current != cell.appliedText && !IsOwnText(current, settings)) {
+        if (current != cell.appliedText && !IsOwnText(current, *settings)) {
             // The shell's own text is being replaced: remember it.
             cell.savedText = current;
             cell.hasSavedText = true;
         }
         try {
             label.Text(desired);
+            t_applyWrote = true;
             Wh_Log(L"Day %d: \"%s\" -> \"%s\"", key, current.c_str(),
                    desired.c_str());
         } catch (...) {
@@ -2601,6 +2454,7 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
         try {
             if (cell.hasSavedText) {
                 label.Text(cell.savedText);
+                t_applyWrote = true;
             }
         } catch (...) {
         }
@@ -2619,7 +2473,7 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
         SaveForeground(cell, label);
         cell.ownBrush = SetForegroundIfDifferent(
             label,
-            info.isOffDay ? settings.offDayColor : settings.workdayColor,
+            info.isOffDay ? settings->offDayColor : settings->workdayColor,
             cell.ownBrush);
         cell.hadColor = true;
     } else if (cell.hadColor) {
@@ -2635,25 +2489,52 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
 // The shell writes the lunar text of a day cell which it reused for another month
 // asynchronously - after the mod has put the holiday name there - and it may
 // replace the text block as well, in which case the mod's text and its text
-// callback are gone. The cells are therefore looked at again from time to time
-// while the calendar is alive. Only a cell whose text the shell took back is
-// written to, so a pass over an unchanged calendar costs a few comparisons.
+// callback are gone. The cells are therefore looked at again a few times after
+// everything which can start such a rewrite. Only a cell whose text the shell took
+// back is written to, so a pass over an unchanged calendar costs a few comparisons.
 thread_local winrt::Windows::System::DispatcherQueueTimer t_sweepTimer{nullptr};
 thread_local winrt::Windows::System::DispatcherQueueTimer::Tick_revoker
     t_sweepTimerRevoker;
 
 constexpr int kSweepIntervalMs = 1000;
 
-// Starts the periodic re-check, if it isn't running already. The timer is
-// stopped again once there are no day items left, and started again here when
-// the calendar is opened.
-// The interval is one second because the shell writes its lunar text "a moment later"
-// after a month change, and the case where it replaces the text block and the callback
-// with it is what the sweep covers. Since the UI is written only when a value differs,
-// an idle second costs a few dozen property reads and nothing else. Do not shorten the
-// interval, which would touch the shell's elements more often, and do not remove it,
-// which would miss that case.
-void EnsureSweepTimer() {
+// How many passes without a write end the sweep. One second per pass, so the calendar is
+// watched for about five seconds after the last write. Why a limit at all: the shell keeps
+// the day cells of the flyout alive after it is closed, so a timer which only stops when
+// the tracked list becomes empty would wake the shell process once a second for the rest
+// of the session. Why five seconds are enough: the rewrite the sweep exists for follows
+// an event the mod already sees - a day item being put back into the calendar, the date
+// of a cell changing, or the text of a cell changing - and each of those starts the timer
+// again with the full period. Do not shorten the interval, which would touch the shell's
+// elements more often, and do not drop the sweep, which is what covers a text block the
+// shell replaced together with its callback.
+constexpr int kSweepQuietTicksToStop = 5;
+
+thread_local int t_sweepQuietTicks = 0;
+
+void StopSweepTimer() {
+    t_sweepQuietTicks = 0;
+
+    if (t_sweepTimer) {
+        try {
+            t_sweepTimer.Stop();
+        } catch (...) {
+        }
+    }
+}
+
+// Starts the periodic re-check again, if it isn't running already, and gives the quiet
+// count a fresh start: this is called from everything which the shell's late rewrite
+// follows (see kSweepQuietTicksToStop). Nothing is started while no day item is tracked,
+// which is the state before the calendar was opened the first time and after the shell
+// has let go of all of them.
+void StartSweepTimer() {
+    if (t_dayItems.empty()) {
+        return;
+    }
+
+    t_sweepQuietTicks = 0;
+
     try {
         if (!t_sweepTimer) {
             auto dispatcherQueue =
@@ -2683,6 +2564,10 @@ void EnsureSweepTimer() {
 // Again, only a cell which does not show what the mod wants is written to, so a pass
 // over an unchanged calendar does nothing at all.
 void SweepDayItems() {
+    // Everything a pass writes sets this, so that a pass which only reads can be told
+    // from one which changed something (see kSweepQuietTicksToStop).
+    t_applyWrote = false;
+
     // The list is only indexed, never iterated over: applying to a day item can
     // put another one into it.
     for (size_t i = 0; i < t_dayItems.size();) {
@@ -2712,13 +2597,18 @@ void SweepDayItems() {
         }
     }
 
-    // No day items left: the calendar was closed, and the timer is started again
-    // when it is opened.
-    if (t_dayItems.empty() && t_sweepTimer) {
-        try {
-            t_sweepTimer.Stop();
-        } catch (...) {
-        }
+    // No day items left: the shell has let go of the calendar, and the timer is started
+    // again when one shows up. The second way out is the quiet count: a pass which wrote
+    // nothing is one more reason to believe the shell is done with rewriting the cells,
+    // and the timer stops once enough of them follow each other. Without that the timer
+    // would run for the rest of the session, because the shell keeps the day cells of a
+    // closed flyout alive.
+    if (t_dayItems.empty()) {
+        StopSweepTimer();
+    } else if (t_applyWrote) {
+        t_sweepQuietTicks = 0;
+    } else if (++t_sweepQuietTicks >= kSweepQuietTicksToStop) {
+        StopSweepTimer();
     }
 }
 
@@ -2726,13 +2616,13 @@ void SweepDayItems() {
 // into the calendar when the displayed month changes.
 // The shell re-reports a day item as added every time it puts one back, which a month
 // change does, so this is called repeatedly; TrackDayItem deduplicates, which keeps the
-// list from growing with use (design note 8).
+// list from growing with use.
 void HandleDayItemAdded(wuxc::CalendarViewDayItem const& item) {
     TrackDayItem(item);
 
     ApplyToDayItem(item);
-    EnsureSweepTimer();
-    RequestHolidayData(false);
+    StartSweepTimer();
+    RequestHolidayData();
 }
 
 // Undoes everything the mod did to the day cells of this thread: unregisters the two
@@ -2783,9 +2673,15 @@ void UninitializeDayItemsForCurrentThread() {
         }
     }
 
-    t_cells.clear();
-    t_dayItems.clear();
-    t_labelOwners.clear();
+    // Swapped with an empty container instead of cleared: clear() keeps the buckets and
+    // the capacity on a UI thread of the shell, which outlives the mod, so the memory of
+    // a full calendar would stay allocated after every unload. (Assigning "{}" would do
+    // the same, but for a map whose mapped type is a unique_ptr it picks the
+    // initializer-list assignment, which does not compile.)
+    decltype(t_cells)().swap(t_cells);
+    decltype(t_dayItems)().swap(t_dayItems);
+    decltype(t_labelOwners)().swap(t_labelOwners);
+    t_sweepQuietTicks = 0;
 
     try {
         if (t_sweepTimer) {
@@ -2817,8 +2713,8 @@ constexpr int kDiagnosticsReleaseDrainDelay = 50;
 // and the process only grows. The reference cannot be given back inside the report
 // callback, which arrives from inside XAML's own enter and leave walks, where dropping
 // the last reference destroys the element the walk is still visiting. The handles are
-// therefore queued first, and given back on a one-shot timer once the reports have been
-// quiet for 200 ms (plus the 50 ms delay of the timer itself), when the walk is over.
+// therefore queued, and given back on a one-shot timer once the reports have been quiet
+// for 200 ms (plus the 50 ms delay of the timer itself), when the walk is over.
 void FlushDiagnosticsReleases() {
     auto pending = std::move(g_pendingDiagnosticsRelease);
     g_pendingDiagnosticsRelease.clear();
@@ -2857,6 +2753,12 @@ void DrainDiagnosticsReleases() {
 // last reference to an element the walk is still visiting destroys it mid-walk.
 // The drain therefore waits on a one-shot timer, which the thread teardown can
 // stop, rather than on a dispatcher item, which it cannot.
+//
+// Called from OnVisualTreeChange *before* that report queues its own handles, so what
+// it measures is the gap since the previous report (see the comment there). A burst
+// whose last report is never followed by another one keeps its handles until the thread
+// reports something again, which is the same behaviour as upstream's; the alternative -
+// re-arming the timer on every queue - would put a timer call inside the walk.
 void FlushDiagnosticsReleasesIfQuiet() {
     if (g_pendingDiagnosticsRelease.empty() || g_diagnosticsReleaseDrainQueued ||
         GetTickCount64() - g_lastDiagnosticsReleaseQueueTick <
@@ -2947,6 +2849,13 @@ void InitializeSettingsAndTap() {
 }
 
 void UninitializeSettingsAndTap() {
+    // Before the watcher is taken out: a thread which is still inside
+    // AdviseVisualTreeChange would otherwise report the whole tree again right after
+    // UnadviseVisualTreeChange has taken the callback out, and those reports would arrive
+    // in a module which is being unmapped. Waiting is safe here, this runs on the engine
+    // thread (see g_adviseThreads).
+    WaitForAdviseThreads();
+
     if (g_visualTreeWatcher) {
         g_visualTreeWatcher->UnadviseVisualTreeChange();
         g_visualTreeWatcher = nullptr;
@@ -3337,7 +3246,15 @@ std::vector<HWND> GetCoreWnds() {
 
 void RefreshCalendarOnUiThreads() {
     for (HWND hCoreWnd : GetCoreWnds()) {
-        RunFromWindowThread(hCoreWnd, [](PVOID) { SweepDayItems(); }, nullptr);
+        RunFromWindowThread(
+            hCoreWnd,
+            [](PVOID) {
+                SweepDayItems();
+                // The shell rewrites the text of a cell after such a change as well, so
+                // the watch is armed again rather than only used once.
+                StartSweepTimer();
+            },
+            nullptr);
     }
 }
 
@@ -3348,21 +3265,31 @@ void RefreshCalendarOnUiThreads() {
 // not get installed shows up much later, as "the mod does nothing", which is far
 // harder to read than the line this writes. The name is a narrow string because
 // GetProcAddress takes one, and %S prints it from this wide format.
-bool InstallHook(HMODULE module, PCSTR functionName, void* hook, void** original) {
+//
+// The hook, the original and the target all carry the same Prototype, so the compiler
+// checks the signatures: the void* casts this had before let a hook whose signature had
+// drifted from the function it replaces compile, and that mistake shows up as a crash
+// inside the shell, not as an error here.
+template <typename Prototype>
+bool InstallHook(HMODULE module,
+                 PCSTR functionName,
+                 Prototype* hook,
+                 Prototype** original) {
     if (!module) {
         Wh_Log(L"Initialization is incomplete: the module of %S is not loaded",
                functionName);
         return false;
     }
 
-    void* target = (void*)GetProcAddress(module, functionName);
+    Prototype* target =
+        reinterpret_cast<Prototype*>(GetProcAddress(module, functionName));
     if (!target) {
         Wh_Log(L"Initialization is incomplete: %S is not in its module",
                functionName);
         return false;
     }
 
-    if (!Wh_SetFunctionHook(target, hook, original)) {
+    if (!WindhawkUtils::SetFunctionHook(target, hook, original)) {
         Wh_Log(L"Initialization is incomplete: the hook of %S could not be set",
                functionName);
         return false;
@@ -3373,8 +3300,7 @@ bool InstallHook(HMODULE module, PCSTR functionName, void* hook, void** original
 
 // Why the hooks are set here: CreateWindowInBand(Ex) has to be hooked before a window is
 // created, otherwise a window which existed before the mod was loaded, or one being made
-// while it loads, is missed and never gets its holiday marks. The worker thread which
-// fetches the data is started here as well.
+// while it loads, is missed and never gets its holiday marks.
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
@@ -3405,15 +3331,16 @@ BOOL Wh_ModInit() {
     }
 
     LoadSettings();
-    StartWorkerThread();
+    // No worker thread is started here: the thread is created by the first refresh
+    // request which has a data source to fetch, so a mod which is left without a data
+    // source never creates one (see RequestHolidayData).
 
     HMODULE user32Module =
         LoadLibraryEx(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    InstallHook(user32Module, "CreateWindowInBand", (void*)CreateWindowInBand_Hook,
-                (void**)&CreateWindowInBand_Original);
+    InstallHook(user32Module, "CreateWindowInBand", CreateWindowInBand_Hook,
+                &CreateWindowInBand_Original);
     InstallHook(user32Module, "CreateWindowInBandEx",
-                (void*)CreateWindowInBandEx_Hook,
-                (void**)&CreateWindowInBandEx_Original);
+                CreateWindowInBandEx_Hook, &CreateWindowInBandEx_Original);
 
     // These two are what makes the XAML diagnostics report the visual tree to the
     // mod: without them AdviseVisualTreeChange answers with an error (the watcher
@@ -3422,11 +3349,11 @@ BOOL Wh_ModInit() {
     // that a failing first one does not keep the second from being tried.
     HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
     const bool openKeyHook =
-        InstallHook(kernelBaseModule, "RegOpenKeyExW", (void*)RegOpenKeyExW_Hook,
-                    (void**)&RegOpenKeyExW_Original);
+        InstallHook(kernelBaseModule, "RegOpenKeyExW", RegOpenKeyExW_Hook,
+                    &RegOpenKeyExW_Original);
     const bool queryValueHook = InstallHook(
-        kernelBaseModule, "RegQueryValueExW", (void*)RegQueryValueExW_Hook,
-        (void**)&RegQueryValueExW_Original);
+        kernelBaseModule, "RegQueryValueExW", RegQueryValueExW_Hook,
+        &RegQueryValueExW_Original);
     if (!openKeyHook || !queryValueHook) {
         Wh_Log(L"Initialization is incomplete: the calendar will not be modified "
                L"without the registry hooks");
@@ -3455,9 +3382,9 @@ void Wh_ModAfterInit() {
         InitializeSettingsAndTap();
     }
 
-    // Fetch the data up front so that the calendar is populated the first time
-    // it is opened.
-    RequestHolidayData(false);
+    // Fetch the data up front so that the calendar is populated the first time it is
+    // opened. With no data source set - the default - this does nothing at all.
+    RequestHolidayData();
 }
 
 void Wh_ModUninit() {
@@ -3483,17 +3410,19 @@ void Wh_ModUninit() {
 // data instead would make the calendar fall back to the lunar text until the next fetch.
 // Data which is still inside the refresh interval is not fetched again either, so
 // changing a colour does not cost a request.
+// Emptying the address is a change like any other: it clears the data as well, so the
+// marks are taken off the calendar and nothing is fetched again.
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
-    const std::wstring previousUrl = GetSettings().dataSourceUrl;
+    const std::wstring previousUrl = GetSettings()->dataSourceUrl;
     LoadSettings();
-    const Settings settings = GetSettings();
+    const std::shared_ptr<const Settings> settings = GetSettings();
 
     // The holidays of one data source are not the holidays of another, but the
     // data of the same source is kept: dropping it would make the calendar fall
     // back to the lunar text until the next fetch is done.
-    if (settings.dataSourceUrl != previousUrl) {
+    if (settings->dataSourceUrl != previousUrl) {
         ResetHolidayData();
     }
 
@@ -3502,5 +3431,5 @@ void Wh_ModSettingsChanged() {
 
     // Data which is still fresh is not fetched again, so that changing a colour
     // doesn't cost a request.
-    RequestHolidayData(false);
+    RequestHolidayData();
 }
