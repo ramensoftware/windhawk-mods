@@ -16,6 +16,7 @@
 // ==WindhawkModReadme==
 /*
 # Winstant
+![Winstant_1](https://i.imgur.com/4u7KigX.png)
 
 *Any window, instantly – right where you need it.*
 
@@ -39,7 +40,8 @@ window, arrange windows in layouts, move them between monitors, and save
 and restore whole desktop arrangements.
 
 ## Quick start
-![Winstant_1](https://i.imgur.com/4u7KigX.png)
+![Winstant_2(https://i.imgur.com/CRkqAsu.png)
+
 1. Open two or more windows of the same app.
 2. Rest the mouse on the **minimize** button of one of them (about half a
    second).
@@ -47,13 +49,17 @@ and restore whole desktop arrangements.
 
 Move the mouse away and the panel closes by itself.
 
-Or press **Ctrl+Alt+Space** – or simply **tap Ctrl twice** – anywhere to
-open the panel in the middle of the screen with every open window, most
+Or press **Ctrl+Alt+Space** anywhere (optionally also a quick double tap of
+Ctrl, Shift or Alt, see the settings) to open the panel in the middle of the screen with every open window, most
 recently used first: press `Enter` to
 jump back to the previous window, or type a few letters to find another.
 
 ## Launcher: apps and files
-![Winstant_2]https://i.imgur.com/CRkqAsu.png
+
+
+![Winstant_launcher(https://i.imgur.com/ZjowdlC.png)
+
+
 In the hotkey panel, type to search: besides the open windows, the panel
 suggests **installed apps** (everything in the Start menu, Store apps
 included) and – if [Everything](https://www.voidtools.com/) is running –
@@ -91,7 +97,8 @@ Holding `Shift` while the panel appears switches to the other mode for that
 time.
 
 ## Arranging windows
-![Winstant_2]https://i.imgur.com/qnOL6ii.png
+![Winstant_2](https://i.imgur.com/qnOL6ii.png)
+
 The bar at the bottom of the panel arranges windows on the current monitor:
 
 | Button | Layout |
@@ -187,8 +194,10 @@ into these languages.
   lost when the window closes. The only thing stored is **saved layouts**, and
   only when you save one: for each window the program path, window class,
   title, position, size and state, in the mod's local storage provided by
-  Windhawk (nothing is written elsewhere or sent anywhere). Delete them from
-  the bookmark menu; uninstalling the mod removes them.
+  Windhawk. That storage is shared by the whole computer, so the layouts are
+  kept per Windows user (keyed by the user's SID): other users of the same
+  PC don't see yours. Nothing is written elsewhere or sent anywhere. Delete
+  them from the bookmark menu; uninstalling the mod removes them.
 - Opacity changes are undone when the mod is disabled.
 - The mod runs in its own background `windhawk.exe` process instead of
   being injected into `explorer.exe`, so it can never destabilize the shell.
@@ -508,7 +517,7 @@ into these languages.
     - modified: Modificados recientemente primero
     - recentChange: Cambiados recientemente primero
     - name: Por nombre
-  - tapKey: ctrl
+  - tapKey: "off"
     $name: Open the panel by tapping a key
     $name:it-IT: Apri il pannello premendo più volte un tasto
     $name:de-DE: Panel durch mehrfaches Antippen einer Taste öffnen
@@ -895,6 +904,7 @@ into these languages.
 #include <shellscalingapi.h>
 #include <shlobj.h>
 #include <shobjidl.h>
+#include <sddl.h>
 #include <commctrl.h>
 #include <windhawk_utils.h>
 
@@ -935,7 +945,7 @@ std::atomic<bool> g_wheelSwitch{true};
 std::atomic<UINT> g_hotkeyMods{0};
 std::atomic<UINT> g_hotkeyVk{0};
 std::atomic<bool> g_hotkeyActivate{true};
-std::atomic<int> g_tapKey{1};  // 0 off, 1 ctrl, 2 shift, 3 alt
+std::atomic<int> g_tapKey{0};  // 0 off, 1 ctrl, 2 shift, 3 alt
 std::atomic<int> g_tapCount{2};
 std::atomic<int> g_tapInterval{300};
 // Arranging
@@ -1082,8 +1092,8 @@ void LoadSettings() {
     g_hotkeyMods = mods;
     g_hotkeyVk = vk;
     g_hotkeyActivate = !StringSettingIs(L"switching.hotkeyAction", L"openHere");
-    int tapKey = 1;
-    if (StringSettingIs(L"switching.tapKey", L"off")) tapKey = 0;
+    int tapKey = 0;
+    if (StringSettingIs(L"switching.tapKey", L"ctrl")) tapKey = 1;
     if (StringSettingIs(L"switching.tapKey", L"shift")) tapKey = 2;
     if (StringSettingIs(L"switching.tapKey", L"alt")) tapKey = 3;
     g_tapKey = tapKey;
@@ -1576,7 +1586,7 @@ constexpr wchar_t kPillClassName[] = L"WhWinstantPill";
 
 constexpr UINT_PTR kTimerId = 1;          // hover polling (main window)
 constexpr UINT_PTR kSwTimerId = 2;        // panel auto-close (panel window)
-constexpr UINT_PTR kTagTimerId = 3;       // periodic tag refresh
+constexpr UINT_PTR kTapTimerId = 3;       // key-tap sequence expiry
 constexpr UINT_PTR kTagQuickTimerId = 4;  // debounced tag refresh
 constexpr UINT_PTR kOsdTimerId = 5;       // hide wheel OSD
 constexpr UINT kTickMs = 50;
@@ -1585,6 +1595,7 @@ constexpr UINT WM_APP_WHEEL = WM_APP + 1;
 constexpr UINT WM_APP_SETTINGS = WM_APP + 2;
 constexpr UINT WM_APP_EDIT_DONE = WM_APP + 3;
 constexpr UINT WM_APP_TAP = WM_APP + 4;
+constexpr UINT WM_APP_HOOK_WANT = WM_APP + 5;  // thread message to the hook thread
 
 constexpr DWORD kDwmUseDarkMode = 20;
 constexpr DWORD kDwmCornerPreference = 33;
@@ -2607,8 +2618,13 @@ struct TagEnumItem {
     std::wstring key;
 };
 
+// pid -> executable path, kept between tag refreshes so processes aren't
+// reopened every time; entries of processes without windows are dropped.
+std::vector<std::pair<DWORD, std::wstring>> g_tagPathCache;
+
 struct TagEnumContext {
     std::vector<std::pair<DWORD, std::wstring>> pathCache;
+    std::vector<DWORD> seenPids;
     std::vector<TagEnumItem> items;
     bool sameClassOnly;
 };
@@ -2619,6 +2635,7 @@ BOOL CALLBACK EnumTagWindowsProc(HWND hwnd, LPARAM lParam) {
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
     if (!pid) return TRUE;
+    ctx->seenPids.push_back(pid);
     std::wstring path = ToLower(PathForPid(ctx->pathCache, pid));
     if (path.empty()) return TRUE;
     std::wstring key = path;
@@ -2640,7 +2657,15 @@ void RefreshTags() {
 
     TagEnumContext ctx{};
     ctx.sameClassOnly = g_sameClassOnly;
+    ctx.pathCache = std::move(g_tagPathCache);
     EnumWindows(EnumTagWindowsProc, reinterpret_cast<LPARAM>(&ctx));
+    g_tagPathCache.clear();
+    for (auto& e : ctx.pathCache) {
+        if (std::find(ctx.seenPids.begin(), ctx.seenPids.end(), e.first) !=
+            ctx.seenPids.end()) {
+            g_tagPathCache.push_back(std::move(e));
+        }
+    }
 
     std::vector<HWND> wanted;
     std::vector<std::wstring> wantedApp;
@@ -2701,7 +2726,13 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
     if (!hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
     if (event == EVENT_OBJECT_LOCATIONCHANGE) {
         for (auto& t : g_tags) {
-            if (t.target == hwnd) PlaceTag(t);
+            if (t.target != hwnd) continue;
+            PlaceTag(t);
+            // Moved to a monitor with another DPI: re-render the pill.
+            UINT dpi = DpiForMonitor(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST));
+            if (dpi != t.dpi) {
+                if (HWND main = g_hwnd.load()) SetTimer(main, kTagQuickTimerId, 80, nullptr);
+            }
         }
         return;
     }
@@ -3039,14 +3070,40 @@ std::vector<std::wstring> Split(const std::wstring& s, wchar_t sep) {
     return parts;
 }
 
+// Windhawk's mod storage is machine-wide in a regular install, while a tool
+// mod runs once per signed-in session. Prefix every value name with the
+// current user's SID so each user only sees their own layouts.
+std::wstring UserValueName(const std::wstring& name) {
+    static const std::wstring prefix = [] {
+        std::wstring result;
+        HANDLE token;
+        if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+            alignas(TOKEN_USER) BYTE buf[256];
+            DWORD len;
+            PWSTR sid;
+            if (GetTokenInformation(token, TokenUser, buf, sizeof(buf), &len) &&
+                ConvertSidToStringSidW(((TOKEN_USER*)buf)->User.Sid, &sid)) {
+                result = std::wstring(sid) + L"_";
+                LocalFree(sid);
+            }
+            CloseHandle(token);
+        }
+        return result;
+    }();
+    return prefix + name;
+}
+
+std::wstring LayoutValueName(int i) {
+    return UserValueName(L"layout" + std::to_wstring(i));
+}
+
 std::vector<SavedLayout> LoadSavedLayouts() {
     std::vector<SavedLayout> layouts;
-    int count = Clamp(Wh_GetIntValue(L"layoutCount", 0), 0, kMaxSavedLayouts);
+    int count =
+        Clamp(Wh_GetIntValue(UserValueName(L"layoutCount").c_str(), 0), 0, kMaxSavedLayouts);
     std::vector<wchar_t> buf(1 << 17);  // 128K chars: room for ~200 windows
     for (int i = 0; i < count; i++) {
-        wchar_t name[32];
-        wsprintfW(name, L"layout%d", i);
-        if (!Wh_GetStringValue(name, buf.data(), buf.size())) continue;
+        if (!Wh_GetStringValue(LayoutValueName(i).c_str(), buf.data(), buf.size())) continue;
         std::vector<std::wstring> parts = Split(buf.data(), L';');
         SavedLayout layout;
         layout.name = UnescapeField(parts[0]);
@@ -3068,7 +3125,7 @@ std::vector<SavedLayout> LoadSavedLayouts() {
 }
 
 void StoreSavedLayouts(const std::vector<SavedLayout>& layouts) {
-    int oldCount = Wh_GetIntValue(L"layoutCount", 0);
+    int oldCount = Wh_GetIntValue(UserValueName(L"layoutCount").c_str(), 0);
     int count = std::min((int)layouts.size(), kMaxSavedLayouts);
     for (int i = 0; i < count; i++) {
         std::wstring s = EscapeField(layouts[i].name);
@@ -3079,16 +3136,12 @@ void StoreSavedLayouts(const std::vector<SavedLayout>& layouts) {
                  L"|" + std::to_wstring(it.rect.right) + L"|" +
                  std::to_wstring(it.rect.bottom);
         }
-        wchar_t name[32];
-        wsprintfW(name, L"layout%d", i);
-        Wh_SetStringValue(name, s.c_str());
+        Wh_SetStringValue(LayoutValueName(i).c_str(), s.c_str());
     }
     for (int i = count; i < oldCount; i++) {
-        wchar_t name[32];
-        wsprintfW(name, L"layout%d", i);
-        Wh_DeleteValue(name);
+        Wh_DeleteValue(LayoutValueName(i).c_str());
     }
-    Wh_SetIntValue(L"layoutCount", count);
+    Wh_SetIntValue(UserValueName(L"layoutCount").c_str(), count);
 }
 
 struct OpenWindow {
@@ -3686,6 +3739,11 @@ struct Panel {
     // foreground (e.g. right after the user clicked or maximized a window),
     // not the user leaving the panel.
     bool wasForeground = false;
+    // The hover panel opens without taking the keyboard focus, so typing in
+    // another window can't reach it; it activates once the mouse moves
+    // inside it (or on a click). The hotkey panel activates right away.
+    bool activateOnMouse = false;
+    POINT shownAt{};
     bool glass = false;  // see-through material active
 
     bool done = false;
@@ -5269,6 +5327,17 @@ void MoveHotMru(Panel& p, int delta) {
     EnsureVisible(p, order[next]);
 }
 
+void ActivatePanel(Panel& p) {
+    p.activateOnMouse = false;
+    ForceForeground(p.hwnd);
+    if (GetForegroundWindow() == p.hwnd) {
+        p.wasForeground = true;
+        SetFocus(p.hwnd);
+    } else {
+        Wh_Log(L"Panel shown without keyboard focus");
+    }
+}
+
 void OnPanelTick(Panel& p) {
     if (p.done) return;
     if (!p.wasForeground && GetForegroundWindow() == p.hwnd) {
@@ -5526,6 +5595,14 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd, 0};
                 TrackMouseEvent(&tme);
                 p.tracking = true;
+            }
+            if (p.activateOnMouse) {
+                // Ignore the synthetic move Windows sends when a window
+                // appears under a still cursor.
+                POINT cur;
+                if (GetCursorPos(&cur) && (cur.x != p.shownAt.x || cur.y != p.shownAt.y)) {
+                    ActivatePanel(p);
+                }
             }
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             if (p.dragThumb) {
@@ -5843,6 +5920,8 @@ void BuildFooter(Panel& p) {
 
 // Shows the panel. `source` is the window it was opened from (may be null
 // for the hotkey panel), `pt` the anchor point.
+void WantWheelHook(bool want);
+
 void ShowSwitcher(HWND source, POINT pt, bool hotkey) {
     bool shift = GetAsyncKeyState(VK_SHIFT) & 0x8000;
     bool showAll = hotkey || (g_showAll != (g_shiftInverts && shift));
@@ -5997,6 +6076,7 @@ void ShowSwitcher(HWND source, POINT pt, bool hotkey) {
     g_panel = &p;
     // The wheel-on-minimize-button shortcut only applies to the hover panel.
     g_panelSource = hotkey ? nullptr : source;
+    WantWheelHook(!hotkey && source);
     g_pendingWheelSource = nullptr;
     g_pendingWheelDelta = 0;
     g_panelOpen = true;
@@ -6012,16 +6092,18 @@ void ShowSwitcher(HWND source, POINT pt, bool hotkey) {
         p.glass = ApplyWindowChrome(p.hwnd, GetTheme().border);
 
         RegisterThumbs(p);
-        // Show without activating first, then ask for the foreground: if
-        // Windows refuses, the panel still stays up and works with the mouse.
+        // Show without activating. The hotkey panel then asks for the
+        // foreground (the user asked for it); if Windows refuses, the panel
+        // still stays up and works with the mouse. The hover panel waits for
+        // the mouse to move inside it, so keystrokes meant for the window
+        // being typed in never reach it.
         ShowWindow(p.hwnd, SW_SHOWNOACTIVATE);
         if (p.glass) RefreshMaterial(p.hwnd);
-        ForceForeground(p.hwnd);
-        if (GetForegroundWindow() == p.hwnd) {
-            p.wasForeground = true;
-            SetFocus(p.hwnd);
+        if (hotkey) {
+            ActivatePanel(p);
         } else {
-            Wh_Log(L"Panel shown without keyboard focus");
+            p.activateOnMouse = true;
+            GetCursorPos(&p.shownAt);
         }
         SetTimer(p.hwnd, kSwTimerId, 50, nullptr);
 
@@ -6134,72 +6216,9 @@ void ShowSwitcher(HWND source, POINT pt, bool hotkey) {
 HANDLE g_wheelThread = nullptr;
 DWORD g_wheelThreadId = 0;
 ULONGLONG g_lastWheel = 0;
-
-// Key-tap detection state (only touched on the input hook thread).
-int g_tapTaps = 0;
-bool g_tapKeyDown = false;
-bool g_tapDirty = false;  // another key/button was used while the tap key was down
-DWORD g_tapDownTime = 0;
-DWORD g_tapLastUpTime = 0;
-
-bool IsTapKey(DWORD vk) {
-    switch (g_tapKey.load()) {
-        case 1:
-            return vk == VK_LCONTROL || vk == VK_RCONTROL || vk == VK_CONTROL;
-        case 2:
-            return vk == VK_LSHIFT || vk == VK_RSHIFT || vk == VK_SHIFT;
-        case 3:
-            return vk == VK_LMENU || vk == VK_RMENU || vk == VK_MENU;
-    }
-    return false;
-}
-
-void ResetTaps() {
-    g_tapTaps = 0;
-    if (g_tapKeyDown) g_tapDirty = true;
-}
-
-// Recognizes quick taps of a lone modifier key (e.g. Ctrl, Ctrl) and asks
-// the main thread to open the panel. Keys are never swallowed.
-LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION && g_tapKey) {
-        auto* k = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
-        bool down = wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
-        bool up = wParam == WM_KEYUP || wParam == WM_SYSKEYUP;
-        if (IsTapKey(k->vkCode)) {
-            if (down && !g_tapKeyDown) {  // ignore auto-repeat
-                g_tapKeyDown = true;
-                g_tapDirty = false;
-                g_tapDownTime = k->time;
-                if (g_tapTaps && k->time - g_tapLastUpTime > (DWORD)g_tapInterval.load()) {
-                    g_tapTaps = 0;
-                }
-            } else if (up && g_tapKeyDown) {
-                g_tapKeyDown = false;
-                // A tap is short and alone; anything else starts over.
-                if (!g_tapDirty && k->time - g_tapDownTime < 400) {
-                    g_tapTaps++;
-                    g_tapLastUpTime = k->time;
-                    if (g_tapTaps >= g_tapCount.load()) {
-                        g_tapTaps = 0;
-                        if (HWND main = g_hwnd.load()) PostMessageW(main, WM_APP_TAP, 0, 0);
-                    }
-                } else {
-                    g_tapTaps = 0;
-                }
-            }
-        } else if (down) {
-            ResetTaps();
-        }
-    }
-    return CallNextHookEx(nullptr, nCode, wParam, lParam);
-}
+bool g_wheelHookWanted = false;  // main thread only
 
 LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION && (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN ||
-                               wParam == WM_MBUTTONDOWN || wParam == WM_XBUTTONDOWN)) {
-        ResetTaps();
-    }
     if (nCode == HC_ACTION && wParam == WM_MOUSEWHEEL && g_wheelSwitch) {
         auto* m = reinterpret_cast<MSLLHOOKSTRUCT*>(lParam);
         HWND main = g_hwnd.load();
@@ -6222,27 +6241,26 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
+// The mouse hook is only in the input chain while it can matter: while the
+// cursor rests on a minimize button or the hover panel is open. The main
+// thread asks for it with WM_APP_HOOK_WANT; the thread itself just waits.
 DWORD WINAPI WheelThreadProc(LPVOID param) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     MSG msg;
     PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);  // create the queue
-    // The mouse hook serves the wheel and resets key taps on clicks; the
-    // keyboard hook is only installed for key taps and only looks at
-    // modifier keys (nothing is recorded or swallowed).
-    HHOOK hook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, g_instance, 0);
-    Wh_Log(L"Mouse hook %s (error %u)", hook ? L"installed" : L"FAILED",
-           hook ? 0 : GetLastError());
-    HHOOK keyboardHook = nullptr;
-    if (g_tapKey) {
-        keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, g_instance, 0);
-        Wh_Log(L"Keyboard hook %s (error %u)", keyboardHook ? L"installed" : L"FAILED",
-               keyboardHook ? 0 : GetLastError());
-    }
     SetEvent((HANDLE)param);
+    HHOOK hook = nullptr;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (msg.message != WM_APP_HOOK_WANT) continue;
+        if (msg.wParam && !hook) {
+            hook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, g_instance, 0);
+            if (!hook) Wh_Log(L"Mouse hook FAILED (error %u)", GetLastError());
+        } else if (!msg.wParam && hook) {
+            UnhookWindowsHookEx(hook);
+            hook = nullptr;
+        }
     }
     if (hook) UnhookWindowsHookEx(hook);
-    if (keyboardHook) UnhookWindowsHookEx(keyboardHook);
     return 0;
 }
 
@@ -6252,6 +6270,142 @@ void StartWheelHook() {
     g_wheelThread = CreateThread(nullptr, 0, WheelThreadProc, ready, 0, &g_wheelThreadId);
     if (g_wheelThread) WaitForSingleObject(ready, INFINITE);
     CloseHandle(ready);
+    g_wheelHookWanted = false;
+}
+
+void WantWheelHook(bool want) {
+    if (!g_wheelThread || want == g_wheelHookWanted) return;
+    g_wheelHookWanted = want;
+    PostThreadMessageW(g_wheelThreadId, WM_APP_HOOK_WANT, want, 0);
+}
+
+// ===========================================================================
+// Key taps (raw input on the main window; nothing is hooked or swallowed)
+// ===========================================================================
+
+// Tap state, only touched on the main thread.
+int g_tapTaps = 0;
+bool g_tapKeyDown = false;
+bool g_tapDirty = false;  // another key/button was used while the tap key was down
+DWORD g_tapDownTime = 0;
+DWORD g_tapLastUpTime = 0;
+bool g_rawKeyboard = false;
+bool g_rawMouse = false;
+
+bool IsTapKey(USHORT vk) {
+    switch (g_tapKey.load()) {
+        case 1:
+            return vk == VK_LCONTROL || vk == VK_RCONTROL || vk == VK_CONTROL;
+        case 2:
+            return vk == VK_LSHIFT || vk == VK_RSHIFT || vk == VK_SHIFT;
+        case 3:
+            return vk == VK_LMENU || vk == VK_RMENU || vk == VK_MENU;
+    }
+    return false;
+}
+
+void RegisterRawDevice(USHORT usage, HWND target, bool on) {
+    RAWINPUTDEVICE d{};
+    d.usUsagePage = 0x01;  // generic desktop
+    d.usUsage = usage;     // 2 mouse, 6 keyboard
+    d.dwFlags = on ? RIDEV_INPUTSINK : RIDEV_REMOVE;
+    d.hwndTarget = on ? target : nullptr;
+    if (!RegisterRawInputDevices(&d, 1, sizeof(d))) {
+        Wh_Log(L"RegisterRawInputDevices(%u, %d) failed (error %u)", usage, (int)on,
+               GetLastError());
+    }
+}
+
+// Mouse buttons are only watched while a tap sequence is in progress, so
+// that a click (e.g. Ctrl+click) cancels it.
+void SetRawMouse(HWND hwnd, bool on) {
+    if (on == g_rawMouse) return;
+    g_rawMouse = on;
+    RegisterRawDevice(2, hwnd, on);
+}
+
+void EndTapSequence(HWND hwnd) {
+    g_tapTaps = 0;
+    KillTimer(hwnd, kTapTimerId);
+    if (!g_tapKeyDown) SetRawMouse(hwnd, false);
+}
+
+void ResetTaps(HWND hwnd) {
+    if (g_tapKeyDown) g_tapDirty = true;
+    EndTapSequence(hwnd);
+}
+
+void UpdateRawInput(HWND hwnd) {
+    bool want = g_tapKey != 0;
+    if (want != g_rawKeyboard) {
+        g_rawKeyboard = want;
+        RegisterRawDevice(6, hwnd, want);
+    }
+    if (!want) {
+        g_tapKeyDown = false;
+        EndTapSequence(hwnd);
+    }
+}
+
+void StopRawInput() {
+    if (g_rawMouse) RegisterRawDevice(2, nullptr, false);
+    if (g_rawKeyboard) RegisterRawDevice(6, nullptr, false);
+    g_rawMouse = g_rawKeyboard = false;
+}
+
+// Recognizes quick taps of a lone modifier key (e.g. Ctrl, Ctrl) and opens
+// the panel.
+void OnRawInput(HWND hwnd, HRAWINPUT handle) {
+    RAWINPUT ri;
+    UINT size = sizeof(ri);
+    if (GetRawInputData(handle, RID_INPUT, &ri, &size, sizeof(RAWINPUTHEADER)) == (UINT)-1) {
+        return;
+    }
+    if (ri.header.dwType == RIM_TYPEMOUSE) {
+        const USHORT downs = RI_MOUSE_LEFT_BUTTON_DOWN | RI_MOUSE_RIGHT_BUTTON_DOWN |
+                             RI_MOUSE_MIDDLE_BUTTON_DOWN | RI_MOUSE_BUTTON_4_DOWN |
+                             RI_MOUSE_BUTTON_5_DOWN;
+        if (ri.data.mouse.usButtonFlags & downs) ResetTaps(hwnd);
+        return;
+    }
+    if (ri.header.dwType != RIM_TYPEKEYBOARD || !g_tapKey) return;
+    const RAWKEYBOARD& k = ri.data.keyboard;
+    if (k.VKey == 0xFF) return;  // fake key (part of an escaped sequence)
+    // Fake Shift sent around navigation keys when NumLock is on.
+    if ((k.Flags & RI_KEY_E0) && (k.MakeCode == 0x2A || k.MakeCode == 0x36)) return;
+    bool up = k.Flags & RI_KEY_BREAK;
+    DWORD now = GetTickCount();
+    DWORD interval = (DWORD)g_tapInterval.load();
+
+    if (!IsTapKey(k.VKey)) {
+        if (!up) ResetTaps(hwnd);
+        return;
+    }
+    if (!up) {
+        if (g_tapKeyDown) return;  // auto-repeat
+        g_tapKeyDown = true;
+        g_tapDirty = false;
+        g_tapDownTime = now;
+        if (g_tapTaps && now - g_tapLastUpTime > interval) g_tapTaps = 0;
+        KillTimer(hwnd, kTapTimerId);
+        SetRawMouse(hwnd, true);
+        return;
+    }
+    if (!g_tapKeyDown) return;
+    g_tapKeyDown = false;
+    // A tap is short and alone; anything else starts over.
+    if (g_tapDirty || now - g_tapDownTime >= 400) {
+        EndTapSequence(hwnd);
+        return;
+    }
+    g_tapTaps++;
+    g_tapLastUpTime = now;
+    if (g_tapTaps >= g_tapCount.load()) {
+        EndTapSequence(hwnd);
+        PostMessageW(hwnd, WM_APP_TAP, 0, 0);
+    } else {
+        SetTimer(hwnd, kTapTimerId, interval, nullptr);  // the sequence expires
+    }
 }
 
 void StopWheelHook() {
@@ -6261,6 +6415,7 @@ void StopWheelHook() {
     CloseHandle(g_wheelThread);
     g_wheelThread = nullptr;
     g_wheelThreadId = 0;
+    g_wheelHookWanted = false;
 }
 
 void ResetHover();
@@ -6399,9 +6554,28 @@ void OnTick(HWND hwndOwner) {
         if (pt.y > frame.top + ScD(96, dpi)) root = nullptr;
     }
 
-    bool onMin = root && root != hwndOwner && IsSwitchableWindow(root) &&
-                 (HitTestIsMinButton(root, pt) || (hit != root && HitTestIsMinButton(hit, pt)) ||
-                  IsOverMinButtonByGeometry(root, pt));
+    // The hit test is cross-process: while neither the cursor nor the window
+    // under it has moved, reuse the previous answer.
+    static POINT lastPt{LONG_MIN, LONG_MIN};
+    static HWND lastHit = nullptr, lastRoot = nullptr;
+    static RECT lastRect{};
+    static bool lastOnMin = false;
+    RECT rootRect{};
+    if (root) GetWindowRect(root, &rootRect);
+    bool onMin;
+    if (pt.x == lastPt.x && pt.y == lastPt.y && hit == lastHit && root == lastRoot &&
+        EqualRect(&rootRect, &lastRect)) {
+        onMin = lastOnMin;
+    } else {
+        onMin = root && root != hwndOwner && IsSwitchableWindow(root) &&
+                (HitTestIsMinButton(root, pt) || (hit != root && HitTestIsMinButton(hit, pt)) ||
+                 IsOverMinButtonByGeometry(root, pt));
+        lastPt = pt;
+        lastHit = hit;
+        lastRoot = root;
+        lastRect = rootRect;
+        lastOnMin = onMin;
+    }
     if (!onMin) {
         g_suppressWnd = nullptr;
         g_onMinWnd = nullptr;
@@ -6483,20 +6657,23 @@ void ShowSwitcherFromHotkey(HWND hwndOwner) {
 void ApplyRuntimeSettings(HWND hwnd) {
     UpdateHotkey(hwnd);
     RefreshAppIndexAsync(false);
+    // Tags are kept current by the WinEvent hooks (show, hide, destroy,
+    // minimize, cloak, foreground and location changes): no polling.
     if (g_windowTags) {
         InstallWinEventHooks();
-        SetTimer(hwnd, kTagTimerId, 1000, nullptr);
         DestroyAllTags();
         RefreshTags();
     } else {
-        KillTimer(hwnd, kTagTimerId);
         UninstallWinEventHooks();
         DestroyAllTags();
+        g_tagPathCache.clear();
     }
-    // One input-hook thread serves both the wheel and the key taps; it's
-    // restarted so that only the hooks the settings need are installed.
+    // The wheel hook thread only exists when wheel switching is enabled, and
+    // even then the hook is installed on demand (see WantWheelHook). Key taps
+    // use raw input instead of a keyboard hook.
     StopWheelHook();
-    if (g_wheelSwitch || g_tapKey) StartWheelHook();
+    if (g_wheelSwitch) StartWheelHook();
+    UpdateRawInput(hwnd);
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -6505,9 +6682,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             switch (wParam) {
                 case kTimerId:
                     OnTick(hwnd);
+                    WantWheelHook(g_onMinWnd.load() != nullptr);
                     break;
-                case kTagTimerId:
-                    RefreshTags();
+                case kTapTimerId:
+                    KillTimer(hwnd, kTapTimerId);
+                    EndTapSequence(hwnd);
                     break;
                 case kTagQuickTimerId:
                     KillTimer(hwnd, kTagQuickTimerId);
@@ -6534,6 +6713,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_APP_SETTINGS:
             ApplyRuntimeSettings(hwnd);
             return 0;
+        case WM_INPUT:
+            OnRawInput(hwnd, (HRAWINPUT)lParam);
+            break;  // DefWindowProc does the cleanup
         case WM_APP_TAP:
             Wh_Log(L"Key taps");
             if (g_panelOpen) {
@@ -6619,7 +6801,8 @@ DWORD WINAPI ThreadProc(LPVOID) {
         }
 
         KillTimer(hwnd, kTimerId);
-        KillTimer(hwnd, kTagTimerId);
+        KillTimer(hwnd, kTapTimerId);
+        StopRawInput();
         if (g_hotkeyRegistered) UnregisterHotKey(hwnd, kHotkeyId);
         g_hotkeyRegistered = false;
         g_hwnd = nullptr;
