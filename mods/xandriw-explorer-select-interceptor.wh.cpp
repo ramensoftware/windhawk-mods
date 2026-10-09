@@ -2,7 +2,7 @@
 // @id           xandriw-explorer-select-interceptor
 // @name         SameFolderOnly
 // @description  When an app opens a folder or uses Show in folder, reuse an existing Explorer window for that folder and select the requested file instead of opening a duplicate window.
-// @version      4.1.2
+// @version      4.1.3
 // @author       XandriW
 // @github       https://github.com/xandri19wang
 // @include      C:\Windows\explorer.exe
@@ -33,14 +33,16 @@ Behavior
 3. If no usable Explorer window is found:
    - Let Explorer continue normally.
 
-Notes about Windows 11 tabs
-- Public ShellWindows automation usually exposes the active tab/browser, not every
-  inactive tab reliably.
-- Therefore, if the target folder exists only in an inactive tab, this mod may not
-  detect it. With ReuseAnyExplorerWindow enabled, it will reuse the current active
-  Explorer browser instead of opening a new window.
+Windows 11 tabs
+- ShellWindows can enumerate inactive tabs, which share the window handle of
+  their parent Explorer window. This mod checks each tab's Shell view visibility
+  and only reuses an active tab, so a request is not swallowed by a hidden tab.
+- If the target folder is only in a background tab, SameFolderOnly lets Explorer
+  handle the request normally (it does not automatically switch to that tab).
+- The optional ReuseAnyExplorerWindow fallback also skips inactive tabs.
 
-This mod should replace older dedup/quit/redirect experiments.
+Hold Shift (or your configured bypass key) to allow Explorer's normal behavior.
+Requests not launched through a supported explorer.exe command line are unaffected.
 */
 // ==/WindhawkModReadme==
 
@@ -92,6 +94,8 @@ This mod should replace older dedup/quit/redirect experiments.
 
 #include <windows.h>
 #include <shlobj.h>
+#include <shobjidl.h>
+#include <servprov.h>
 #include <exdisp.h>
 #include <string>
 #include <vector>
@@ -163,6 +167,15 @@ static const IID MY_IID_IShellWindows =
 
 static const IID MY_IID_IWebBrowser2 =
 { 0xd30c1661, 0xcdaf, 0x11d0, {0x8a, 0x3e, 0x00, 0xc0, 0x4f, 0xc9, 0xe2, 0x6e} };
+
+// Same shell interfaces and service GUID used by quick-explorer-switcher.
+// Inline constants keep this build independent of an additional uuid library.
+static const IID MY_IID_IServiceProvider =
+{ 0x6d5140c1, 0x7436, 0x11ce, {0x80, 0x34, 0x00, 0xaa, 0x00, 0x60, 0x09, 0xfa} };
+static const IID MY_IID_IShellBrowser =
+{ 0x000214e2, 0x0000, 0x0000, {0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46} };
+static const GUID MY_SID_STopLevelBrowser =
+{ 0x4c96be40, 0x915c, 0x11cf, {0x99, 0xd3, 0x00, 0xaa, 0x00, 0x4a, 0xe8, 0x37} };
 
 static const IID MY_IID_NULL =
 { 0x00000000, 0x0000, 0x0000, {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00} };
@@ -351,9 +364,8 @@ static void ActivateWindow(HWND hwnd) {
 
     if (IsIconic(hwnd))
         ShowWindow(hwnd, SW_RESTORE);
-    else
-        ShowWindow(hwnd, SW_SHOWNORMAL);
 
+    // A maximized window must stay maximized.
     SetForegroundWindow(hwnd);
 }
 
@@ -375,6 +387,24 @@ static bool HasAnyExplorerWindow() {
     BOOL found = FALSE;
     EnumWindows(EnumExplorerWindowProc, (LPARAM)&found);
     return found != FALSE;
+}
+
+// Wh_ModInit can also run in an already-running Explorer process after
+// enabling/updating the mod. Never terminate a process hosting its own windows.
+static BOOL CALLBACK OwnsWindowProc(HWND hwnd, LPARAM lParam) {
+    DWORD ownerPid = 0;
+    GetWindowThreadProcessId(hwnd, &ownerPid);
+    if (ownerPid == GetCurrentProcessId()) {
+        *reinterpret_cast<bool*>(lParam) = true;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static bool OwnsTopLevelWindow() {
+    bool ownsWindow = false;
+    EnumWindows(OwnsWindowProc, reinterpret_cast<LPARAM>(&ownsWindow));
+    return ownsWindow;
 }
 
 
@@ -660,6 +690,38 @@ static bool SelectFileInBrowser(IWebBrowser2* browser, const std::wstring& fullF
 }
 
 // ---------------- Explorer COM actions ----------------
+// IShellWindows can include background tabs; their view HWNDs are hidden.
+// Do not consider such entries for window reuse.
+static bool IsVisibleExplorerTab(IDispatch* disp) {
+    if (!disp)
+        return false;
+
+    // Preserve normal behavior if a shell implementation does not expose
+    // the service; when available, use its actual view visibility.
+    bool active = true;
+    IServiceProvider* provider = nullptr;
+    if (SUCCEEDED(disp->QueryInterface(MY_IID_IServiceProvider,
+                                      reinterpret_cast<void**>(&provider))) &&
+        provider) {
+        IShellBrowser* shellBrowser = nullptr;
+        if (SUCCEEDED(provider->QueryService(MY_SID_STopLevelBrowser,
+                                             MY_IID_IShellBrowser,
+                                             reinterpret_cast<void**>(&shellBrowser))) &&
+            shellBrowser) {
+            IShellView* view = nullptr;
+            if (SUCCEEDED(shellBrowser->QueryActiveShellView(&view)) && view) {
+                HWND viewHwnd = nullptr;
+                if (SUCCEEDED(view->GetWindow(&viewHwnd)) && viewHwnd)
+                    active = IsWindowVisible(viewHwnd) != FALSE;
+                view->Release();
+            }
+            shellBrowser->Release();
+        }
+        provider->Release();
+    }
+    return active;
+}
+
 struct ExplorerBrowser {
     IWebBrowser2* browser = nullptr;
     HWND hwnd = nullptr;
@@ -696,6 +758,13 @@ static bool EnumerateExplorerBrowsers(std::vector<ExplorerBrowser>& browsers) {
             IDispatch* pDisp = nullptr;
             if (S_OK != psw->Item(v, &pDisp) || !pDisp)
                 continue;
+
+            // A background tab has the same top-level HWND as its active tab.
+            // Its hidden shell view must not swallow a folder-open request.
+            if (!IsVisibleExplorerTab(pDisp)) {
+                pDisp->Release();
+                continue;
+            }
 
             IWebBrowser2* pWB = nullptr;
             if (SUCCEEDED(pDisp->QueryInterface(MY_IID_IWebBrowser2, (void**)&pWB)) && pWB) {
@@ -868,6 +937,11 @@ BOOL Wh_ModInit() {
     if (!ParseExplorerCommandLine(request))
         return TRUE;
 
+    // Only a new, windowless explorer.exe helper may intercept and exit.
+    // Mod updates can invoke Wh_ModInit inside existing Explorer processes.
+    if (OwnsTopLevelWindow())
+        return TRUE;
+
     // First Explorer window after boot has nothing to reuse.
     // Avoid loading COM / ShellWindows here to reduce conflicts with visual Explorer mods.
     if (gRequireExistingExplorerWindow && !HasAnyExplorerWindow())
@@ -876,7 +950,10 @@ BOOL Wh_ModInit() {
     LoadComProcs();
 
     if (TryReuseExistingExplorer(request)) {
-        ExitProcess(0);
+        // Re-check just before exiting, in case this process acquired a
+        // top-level window while Shell COM was processing the request.
+        if (!OwnsTopLevelWindow())
+            ExitProcess(0);
     }
 
     return TRUE;
