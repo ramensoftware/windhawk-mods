@@ -392,7 +392,12 @@ struct RowActionBinding {
     std::wstring title;
     std::wstring meetCode;
 };
-[[clang::no_destroy]] std::vector<RowActionBinding> g_rowActionBindings;
+[[clang::no_destroy]] std::optional<std::vector<RowActionBinding>> g_rowActionBindings{std::in_place};
+
+std::vector<RowActionBinding>& RowBindings() {
+    if (!g_rowActionBindings) g_rowActionBindings.emplace();
+    return *g_rowActionBindings;
+}
 
 enum class RefreshUiState : int {
     None = 0,
@@ -3942,8 +3947,7 @@ InjectionTarget ResolveInjectionTarget(FrameworkElement const& root,
     if (position == L"tray_left") return {trayPanel, 0};
     if (position == L"tray_right") return {trayPanel, TrayEndSlot(trayPanel)};
 
-    const bool after = position == L"tray_after_clock" ||
-                       position == L"tray_before_omni_right" ||
+    bool after = position == L"tray_before_omni_right" ||
                        position == L"tray_language_right" ||
                        position == L"tray_icons_right" ||
                        position == L"tray_hidden_icons_right" ||
@@ -3963,6 +3967,7 @@ InjectionTarget ResolveInjectionTarget(FrameworkElement const& root,
     auto anchor = FindTrayElement(trayPanel, anchorName);
     if (!anchor && (position == L"tray_before_clock" || position == L"tray_after_clock")) {
         anchor = FindTrayElement(trayPanel, L"ClockButton");
+        after = position == L"tray_after_clock";
     }
 
     slot = TrayInsertionSlot(trayPanel, anchor, after);
@@ -4253,26 +4258,6 @@ void SetAccentColor(winrt::Windows::UI::Color color) {
     }
 }
 
-void AppendDetailPart(std::wstring* detail, const std::wstring& part) {
-    if (!detail || part.empty()) {
-        return;
-    }
-    if (!detail->empty()) {
-        *detail += L" - ";
-    }
-    *detail += part;
-}
-
-std::wstring BuildEventDetail(const AgendaSnapshot& snapshot,
-                              const ModSettings& settings) {
-    std::wstring detail;
-    if (settings.show_location) {
-        AppendDetailPart(&detail, snapshot.location);
-    }
-    AppendDetailPart(&detail, snapshot.source);
-    return detail;
-}
-
 winrt::Windows::UI::Color SourceAccentColor(
     std::wstring_view source, winrt::Windows::UI::Color foreground) {
     if (source.empty()) {
@@ -4460,7 +4445,7 @@ FrameworkElement MakeFlyoutRow(const AgendaEntry& entry, const ModSettings& sett
             ShowMeetingSubmenu(binding.button, binding.startUnix, binding.endUnix,
                                binding.generatedUnix, binding.title, binding.meetCode);
         });
-    g_rowActionBindings.push_back(std::move(binding));
+    RowBindings().push_back(std::move(binding));
     return rowButton;
 }
 
@@ -4612,14 +4597,14 @@ void RevokePopupActionHandlers() {
     }
     g_meetingSubmenu = nullptr;
 
-    for (auto& binding : g_rowActionBindings) {
+    for (auto& binding : RowBindings()) {
         try {
             if (binding.button) binding.button.Click(binding.token);
         } catch (...) {
             LogCaughtException(L"revoke agenda row handler");
         }
     }
-    g_rowActionBindings.clear();
+    g_rowActionBindings.reset();
 
 
     try {
@@ -4882,7 +4867,7 @@ void ShowAgendaFlyout() {
                                            binding.generatedUnix, binding.title,
                                            binding.meetCode);
                     });
-                g_rowActionBindings.push_back(std::move(binding));
+                RowBindings().push_back(std::move(binding));
                 list.Children().Append(join);
             }
             if (settings.show_location && !headline.location.empty()) {
@@ -4944,7 +4929,7 @@ void ShowAgendaFlyout() {
                 [handler](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
                     handler();
                 });
-            g_rowActionBindings.push_back(std::move(binding));
+            RowBindings().push_back(std::move(binding));
             footer.Children().Append(button);
         };
         const std::vector<GoogleAccount> accounts = LoadAccounts();
@@ -5033,7 +5018,6 @@ void UpdateAgendaWidgetFromSnapshot() {
     }
 
     std::wstring title;
-    std::wstring detail;
     std::wstring compactSource;
     std::wstring compactTime = L"--";
     bool visible = true;
@@ -5051,20 +5035,12 @@ void UpdateAgendaWidgetFromSnapshot() {
             if (!hasHeadline) {
                 accentGlyph = false;
                 title = L"No upcoming meeting";
-                detail = L"Open agenda";
                 break;
             }
             std::wstring subject = LimitTitle(headline.title, settings.max_title_characters);
             compactTime = active ? L"now" : FormatRelativeToNow(headline.startUnix);
             title = subject;
-            AgendaSnapshot headlineSnapshot = snapshot;
-            headlineSnapshot.location = headline.location;
-            headlineSnapshot.source = headline.source;
             compactSource = headline.source;
-            detail = BuildEventDetail(headlineSnapshot, settings);
-            if (!snapshot.errorText.empty()) {
-                AppendDetailPart(&detail, L"Some calendars unavailable");
-            }
             break;
         }
         case AgendaStatus::Empty:
@@ -5074,10 +5050,6 @@ void UpdateAgendaWidgetFromSnapshot() {
             accentGlyph = false;
             title = snapshot.errorText.empty() ? L"No upcoming meeting"
                                                : L"Calendar data incomplete";
-            detail = snapshot.source.empty() ? L"Open agenda" : snapshot.source;
-            if (!snapshot.errorText.empty()) {
-                AppendDetailPart(&detail, L"Some calendars unavailable");
-            }
             break;
         case AgendaStatus::Stale:
             if (!settings.display_when_empty && !hasAgendaEntries) {
@@ -5085,7 +5057,6 @@ void UpdateAgendaWidgetFromSnapshot() {
             }
             accentGlyph = false;
             title = L"Calendar data is stale";
-            detail = snapshot.source.empty() ? L"Could not refresh from Google" : snapshot.source;
             break;
         case AgendaStatus::Error:
             if (!settings.display_when_empty && !hasAgendaEntries) {
@@ -5093,7 +5064,6 @@ void UpdateAgendaWidgetFromSnapshot() {
             }
             accentGlyph = false;
             title = snapshot.errorText.empty() ? L"Calendar error" : snapshot.errorText;
-            detail = snapshot.source.empty() ? L"Check Google Calendar access" : snapshot.source;
             break;
         case AgendaStatus::Unavailable:
         default:
@@ -5102,7 +5072,6 @@ void UpdateAgendaWidgetFromSnapshot() {
             }
             accentGlyph = false;
             title = snapshot.errorText.empty() ? L"Calendar unavailable" : snapshot.errorText;
-            detail = L"Waiting for first sync";
             break;
     }
 
@@ -5112,17 +5081,13 @@ void UpdateAgendaWidgetFromSnapshot() {
         accentGlyph = false;
         compactSource.clear();
         compactTime = L"--";
-        std::wstring note = GetAuthNote();
         if (authState == AuthState::NoClient) {
             title = L"Google client not set";
-            detail = L"Open the mod settings";
         } else if (authState == AuthState::SigningIn) {
             title = L"Waiting for Google sign-in";
-            detail = L"Finish in your browser";
             compactTime = L"...";
         } else {
             title = L"Sign in to Google Calendar";
-            detail = note.empty() ? std::wstring(L"Open agenda to sign in") : note;
         }
     }
 
@@ -5133,27 +5098,23 @@ void UpdateAgendaWidgetFromSnapshot() {
         accentGlyph = false;
         compactSource.clear();
         title = L"Refreshing calendar";
-        detail = L"Fetching from Google";
         compactTime = L"...";
     } else if (refreshState == RefreshUiState::NotReady) {
         visible = true;
         accentGlyph = false;
         compactSource.clear();
         title = L"Not signed in";
-        detail = L"Open agenda to sign in";
         compactTime = L"--";
     } else if (refreshState == RefreshUiState::TimedOut) {
         visible = true;
         accentGlyph = false;
         compactSource.clear();
         title = L"Refresh failed";
-        detail = L"Could not reach Google Calendar";
         compactTime = L"--";
     }
 
     title = LimitTitle(title, std::max(settings.max_title_characters + 24,
                                       settings.max_title_characters));
-    detail = SanitizeUiText(std::move(detail), 180);
 
     SetColumnVisible(visible);
     if (!visible) {
