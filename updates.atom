@@ -2,12 +2,53 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-10T15:04:40.000Z</updated>
+    <updated>2026-10-10T18:04:05.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar auto-hide after a delay 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-auto-hide-delay#20e2a0f534b32ec29c4cef9c98e878997a6fddc1</id>
+        <link href="https://windhawk.net/mods/taskbar-auto-hide-delay"/>
+        <updated>2026-10-10T18:04:05.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarautohideafteradelay">Taskbar auto-hide after a delay</h1>
+<p>Windows 11 (24H2) hides the auto-hide taskbar only when the pointer leaves
+the taskbar. If the taskbar becomes visible for another reason — for
+example, when a new window or dialog appears — no "pointer left" event ever
+fires, and the taskbar stays on screen indefinitely.</p>
+<p>The mod runs as a small background tool and watches the taskbars. As soon as
+a taskbar becomes visible while the mouse pointer is <strong>not</strong> over it, a
+countdown starts. When the countdown expires, the mod sends the taskbar its
+own hide message, so it slides away with the standard animation.</p>
+<p>If you move the pointer over the taskbar, the countdown is cancelled so the
+taskbar stays available while you interact with it.</p>
+<p>The mod does nothing if auto-hide is disabled in the Windows settings.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Hide delay (seconds)</strong> — how long the taskbar stays visible before it
+is hidden. Default: 3.</li>
+</ul>
+<h2 id="comparedtobettertaskbarautohide">Compared to Better Taskbar Autohide</h2>
+<p><a href="https://windhawk.net/mods/taskbar-autohide-better">Better Taskbar Autohide</a>
+covers a narrower case: it hooks the taskbar internals and only helps when
+Windows forces the taskbar to stay shown because an inactive window is
+notifying. This mod reacts to any reason the taskbar becomes visible —
+new windows, dialogs, notifications — and uses no hooks; the only internal
+detail it relies on is the taskbar's auto-hide timer ID, which has been
+stable for a long time and is also used by other taskbar mods.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>The mod doesn't use hooks, so it's designed to work together with other
+taskbar mods such as
+<a href="https://windhawk.net/mods/taskbar-auto-hide-when-maximized">Taskbar auto-hide when maximized</a>
+and
+<a href="https://windhawk.net/mods/taskbar-auto-hide-keyboard-only">Taskbar auto-hide keyboard only</a>.</p>]]></content>
+        <author>
+            <name>nikitor32</name>
+            <uri>https://github.com/nikitor32</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Split Tray 1.3.3]]></title>
         <id>https://windhawk.net/mods/split-tray#d73e9f74f445a07dd765cf6479498d20c421d2ff</id>
@@ -1373,54 +1414,6 @@ and size of the windows that are treated as the OSD.</p>
         <author>
             <name>AdmXP8</name>
             <uri>https://github.com/AdmXP8</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Reopen Programs at Sign-in 2.0.0]]></title>
-        <id>https://windhawk.net/mods/reopen-programs-at-sign-in#9da2ffcc4366a0e801ca4b4ec0474cf668771490</id>
-        <link href="https://windhawk.net/mods/reopen-programs-at-sign-in"/>
-        <updated>2026-10-09T00:03:37.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="reopenprogramsatsignin">Reopen Programs at Sign-in</h1>
-<p>While the mod is enabled, it keeps track of which programs have a window open.
-The next time you sign in to Windows, those programs are opened again. To turn
-the feature off, disable the mod.</p>
-<ul>
-<li>Only programs are reopened (one every 2 seconds, starting 15 seconds after
-sign-in by default). Documents/tabs depend on each program.</li>
-<li>Programs running as administrator and Windows components (File Explorer,
-Control Panel…) are not reopened.</li>
-<li>Programs that are already running (e.g. from Startup) are not opened twice.</li>
-<li>Nothing is reopened if the mod is enabled long after signing in, or if
-Explorer restarts during the day: only a fresh sign-in triggers it.</li>
-<li>Each Windows account keeps its own list.</li>
-</ul>
-<p>Windows has a similar built-in option (Settings → Accounts → Sign-in options →
-"Automatically save my restartable apps and restart them when I sign back in").
-It only restores apps that support it (e.g. Office, browsers); this mod reopens
-any program, using its executable path.</p>
-<hr />
-<h1 id="reabrirprogramasaoentrarportugus">Reabrir programas ao entrar (Português)</h1>
-<p>Enquanto o mod estiver ativado, ele anota quais programas têm janela aberta.
-Na próxima vez que você entrar no Windows, esses programas são abertos de novo.
-Para desligar a função, desative o mod.</p>
-<ul>
-<li>Só os programas são reabertos (um a cada 2 segundos, começando 15 segundos
-depois de entrar, por padrão). Documentos e abas dependem de cada programa.</li>
-<li>Programas abertos como administrador e componentes do Windows (Explorador de
-Arquivos, Painel de Controle…) não são reabertos.</li>
-<li>Programas que já estão abertos (por exemplo, os que iniciam com o Windows)
-não são abertos duas vezes.</li>
-<li>Nada é reaberto se o mod for ativado muito depois do login, nem se o Explorer
-reiniciar durante o dia: só um login novo dispara a restauração.</li>
-<li>Cada conta do Windows tem a sua própria lista.</li>
-</ul>
-<p>O Windows tem uma opção parecida (Configurações → Contas → Opções de entrada →
-"Salvar automaticamente meus aplicativos reiniciáveis e reiniciá-los quando eu
-entrar novamente"). Ela só restaura apps compatíveis (como Office e
-navegadores); este mod reabre qualquer programa, pelo caminho do executável.</p>]]></content>
-        <author>
-            <name>lima26x</name>
-            <uri>https://github.com/brdantas26</uri>
         </author>
     </entry>
 </feed>
