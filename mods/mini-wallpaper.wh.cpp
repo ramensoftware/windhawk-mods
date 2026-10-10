@@ -7,7 +7,6 @@
 // @github          https://github.com/Mirochill
 // @homepage        https://github.com/Mirochill/mini-wallpaper
 // @include         windhawk.exe
-// @architecture    x86-64
 // @compilerOptions -ldwmapi -lgdi32 -lgdiplus -lshell32 -lcomdlg32 -lole32 -loleaut32 -lstrmiids -lshlwapi -ld3d9
 // @license         MIT
 // ==/WindhawkMod==
@@ -882,7 +881,7 @@ HWND FindDesktopWorker() {
 
     HWND worker = nullptr;
     EnumWindows(
-        [](HWND hwnd, LPARAM lParam) -> BOOL {
+        [](HWND hwnd, LPARAM lParam) WINAPI -> BOOL {
             HWND shellView =
                 FindWindowExW(hwnd, nullptr, L"SHELLDLL_DefView", nullptr);
             if (shellView) {
