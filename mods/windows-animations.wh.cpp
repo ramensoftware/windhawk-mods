@@ -36,7 +36,6 @@
 > * **Browsers & Tray Apps:** Enable **"Animate windows hidden to the tray"** if you want close animations for apps such as Chrome, Edge, Discord, and Windhawk, because clicking the 'X' button may only hide their window or leave the app running instead of actually closing it.
 > * **MMC Consoles:** Services, Task Scheduler, Event Viewer, and other `mmc.exe` snap-ins are excluded and use native Windows transitions.
 > * **Excel:** Close animations use an unobscured screen snapshot, never `PrintWindow`. If the workbook window can't be captured safely, its close uses the native transition instead. When another workbook window remains open, Excel can finish closing while the captured image continues animating.
-> * **Donation:** If you enjoy the mod, please consider supporting its development with a donation. You can click the **`❤️Donate`** button above or scroll to the bottom of this page to see more donation methods. Your support helps motivate me to keep maintaining the mod and adding more animations.
 
 ---
 &nbsp;
@@ -61,7 +60,6 @@
 | Animation&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Preview |
 | --- | --- |
 | **Genie** | ![Genie](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/a7e46c466c7b88552d5d92cad113b652fbd3f10e/genie_preview.gif) |
-| **Windows 10** | *Preview coming soon* |
 | **Ink Splash** | ![Ink Splash](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ff3a17e818f2d08e43ee4f79059b4ccb3c663cb0/ink_splash.gif) |
 | **Scorch** | ![Scorch](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/b96dea88ab53f4b781e472d3683f645f4e368f8e/scorch.gif) |
 | **Splinter** | ![Splinter](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/b96dea88ab53f4b781e472d3683f645f4e368f8e/splinter.gif) |
@@ -156,6 +154,8 @@ Special thanks to [@Abdullah Masood](https://github.com/Abdullah-Masood-05) for 
       Disabled by default. Enable to use the restore animation when an application window first
       opens. Firefox-family browsers such as Firefox and Waterfox use an alpha-only compatibility
       path for their startup window that preserves session restore while keeping the launch animation.
+      Ordinary ShowWindowAsync launch requests keep their native asynchronous show without a launch
+      animation; retained tray-cloak recovery remains enabled.
   - random_effect: false
     $name: Shuffle animation styles
     $description: >-
@@ -201,6 +201,8 @@ Special thanks to [@Abdullah Masood](https://github.com/Abdullah-Masood-05) for 
       Show Desktop. Enable this to bypass the mod's minimize and restore animations for Show
       Desktop, including three-finger touchpad gestures, and let Windows animate the entire batch
       natively. Individual taskbar and title-bar minimize/restore operations remain animated.
+      Operations immediately after Show Desktop can also remain native during its short posted-work
+      scope (up to 1.5 seconds after the shell call, or 2 seconds for the Win+D key fallback).
   - gpu_acceleration: true
     $name: Hybrid GPU acceleration
     $description: >-
@@ -2807,17 +2809,21 @@ static bool HasExplicitSystemBackdrop(HWND hWnd, UINT* backdropOut = nullptr) {
     return present;
 }
 static bool IsTranslucentWindowsAccentBlurActive(HWND hWnd) {
-    if (!IsTranslucentWindowsModLoaded() ||
-        (!HasActiveWindowAccentPolicy(hWnd) &&
-         !GetCachedTranslucentWindowsAccentPolicy(hWnd))) {
+    // Reject ordinary windows before enumerating process modules. Keep the
+    // loaded-mod check dynamic so an old cached policy cannot revive an
+    // unloaded mod, and a mod enabled after injection can still be detected.
+    if (!GetCachedTranslucentWindowsAccentPolicy(hWnd) &&
+        !HasActiveWindowAccentPolicy(hWnd)) {
         return false;
     }
 
     UINT backdrop = 0;
-    return SUCCEEDED(DwmGetWindowAttribute(
-               hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop,
-               sizeof(backdrop))) &&
-           backdrop < 2;
+    if (FAILED(DwmGetWindowAttribute(
+            hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop,
+            sizeof(backdrop))) || backdrop >= 2) {
+        return false;
+    }
+    return IsTranslucentWindowsModLoaded();
 }
 static bool RequiresCpuClosePresentation(HWND hWnd) {
     // Explorer and explicit system-backdrop windows use the stable layered
@@ -2846,7 +2852,7 @@ static bool RefreshDwmChromeAfterUncloak(HWND hWnd,
     const bool accentBlur =
         !explicitBackdrop && IsTranslucentWindowsAccentBlurActive(hWnd);
     if (!explorerFrame && !explicitBackdrop && !accentBlur) {
-        if (IsDiagnosticLoggingEnabled() && IsTranslucentWindowsModLoaded()) {
+        if (IsDiagnosticLoggingEnabled()) {
             Wh_Log(L"DWM repair skipped hwnd=%p backdrop=%u accent_active=%d "
                    L"accent_cached=%d", hWnd, backdrop,
                    HasActiveWindowAccentPolicy(hWnd),
@@ -2913,7 +2919,8 @@ static bool RefreshDwmChromeAfterUncloak(HWND hWnd,
         if (accentBlur ||
             ((modernExplorerFrame || explicitBackdrop) &&
              (!IsFullscreenExplorerFrame(hWnd) ||
-              IsTranslucentWindowsAccentBlurActive(hWnd)))) {
+              (explicitBackdrop &&
+               IsTranslucentWindowsAccentBlurActive(hWnd))))) {
             margins = {-1, -1, -1, -1};
         }
         DwmExtendFrameIntoClientArea(hWnd, &margins);
@@ -11845,8 +11852,9 @@ static bool IsNativeShowDesktopPassthroughActive() {
         }
     }
 
-    // Forward-compatible fallback if Explorer's optional CTray symbol can't
-    // be resolved. Persist the observation so work posted behind the key-up
+    // Per-process Win+D fallback when no published scope has arrived yet,
+    // including when Explorer's optional CTray symbol can't be resolved.
+    // Persist the observation so work posted behind the key-up
     // still stays native. Touchpad gestures require the published scope from
     // RaiseDesktop_Hook and intentionally have no key-state fallback.
     const bool winDDown =
@@ -13365,12 +13373,33 @@ static bool IsShellTaskbarRestoreCall(HWND hWnd) {
         MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST));
     return hTray && IsCursorOverTaskbar(hTray);
 }
+
+// Internal probes, animation preparation, and cleanup must not become the
+// intercepted API's error result. Keep the caller's error when no native call
+// is needed; otherwise preserve the last native call's result through cleanup.
+class NativeApiLastErrorScope {
+    const DWORD entryError = GetLastError();
+    DWORD returnError = entryError;
+
+public:
+    ~NativeApiLastErrorScope() { SetLastError(returnError); }
+
+    template <typename Function, typename... Args>
+    auto Call(Function function, Args... args) -> decltype(function(args...)) {
+        SetLastError(entryError);
+        auto result = function(args...);
+        returnError = GetLastError();
+        return result;
+    }
+};
+
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
+    NativeApiLastErrorScope lastError;
     TransientTauriShowScope transientTauriShow(
         hWnd, IsTrayHideShowCommand(cmd));
     if (IsNativeShowDesktopPassthroughActive() &&
         (IsShowCmdForWinEvent(cmd) || cmd == SW_HIDE)) {
-        return ShowWindow_Original(hWnd, cmd);
+        return lastError.Call(ShowWindow_Original, hWnd, cmd);
     }
     PublishClassicShowDesktopOwnerProtocol(hWnd);
     if (IsOurWindow(hWnd) && IsTrayHideShowCommand(cmd) &&
@@ -13378,7 +13407,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
         EnsureWinEventThreadStarted();
         return ShowPersistentlyCloakedTrayWindow(
             hWnd, cmd, /*asynchronousSubmission=*/false,
-            [&]() { return ShowWindow_Original(hWnd, cmd); });
+            [&]() { return lastError.Call(ShowWindow_Original, hWnd, cmd); });
     }
     if (IsMinimizeCommand(cmd)) {
         const BOOL wasVisible = IsWindowVisible(hWnd);
@@ -13388,7 +13417,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
             if (RetargetLiveMinRestore(hWnd, false) == MinRestoreRetarget::Accepted) {
                 return wasVisible;
             }
-            return ShowWindow_Original(hWnd, cmd);
+            return lastError.Call(ShowWindow_Original, hWnd, cmd);
         }
         AddRefNativeMinimizeBarrier(barrier);
         const MinimizeKick kick = KickMinimizeAnimation(
@@ -13401,7 +13430,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
             CompleteNativeMinimizeBarrier(barrier, NativeMinimizeState::Cancelled);
             return wasVisible;
         }
-        const BOOL result = ShowWindow_Original(hWnd, cmd);
+        const BOOL result = lastError.Call(ShowWindow_Original, hWnd, cmd);
         CompleteNativeMinimizeBarrier(
             barrier, wasVisible ? NativeMinimizeState::SyncCompleted
                                 : NativeMinimizeState::Failed);
@@ -13420,11 +13449,11 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
                     hWnd,
                     static_cast<DWORD>(AnimConstants::MaximizedRestoreGuardMs));
             }
-            BOOL result = ShowWindow_Original(hWnd, cmd);
+            BOOL result = lastError.Call(ShowWindow_Original, hWnd, cmd);
             CommitRestoreAnimation(hWnd, restoreMaximized);
             return result;
         }
-        return ShowWindow_Original(hWnd, cmd);
+        return lastError.Call(ShowWindow_Original, hWnd, cmd);
     }
     if ((cmd == SW_RESTORE || cmd == SW_SHOWNORMAL) &&
         RetargetLiveMinRestore(hWnd, true) == MinRestoreRetarget::Accepted) return TRUE;
@@ -13435,15 +13464,15 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
         // free; the owning worker activates only after it safely uncloaks.
         return IsWindowVisible(hWnd);
     }
-    if (!IsOurWindow(hWnd)) return ShowWindow_Original(hWnd, cmd);
+    if (!IsOurWindow(hWnd)) return lastError.Call(ShowWindow_Original, hWnd, cmd);
     if (IsShowCmdForWinEvent(cmd)) {
         EnsureWinEventThreadStarted();
     }
     if (cmd == SW_HIDE) {
-        if (GetPropW(hWnd, kPropCloseBypass)) return ShowWindow_Original(hWnd, cmd);
+        if (GetPropW(hWnd, kPropCloseBypass)) return lastError.Call(ShowWindow_Original, hWnd, cmd);
         if (ShouldTreatHideAsClose(hWnd)) {
             return RunCallerOwnedHideAnimation(hWnd, [&]() {
-                return ShowWindow_Original(hWnd, cmd);
+                return lastError.Call(ShowWindow_Original, hWnd, cmd);
             });
         }
     }
@@ -13454,20 +13483,21 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
     if (PrepareLaunchAnim(hWnd, cmd, &originalStyle,
                           &launchSnapshotToken, &launchHiddenByCloak,
                           &launchAlphaOnlyCompatibility, L"ShowWindow")) {
-        BOOL result = ShowWindow_Original(hWnd, cmd);
+        BOOL result = lastError.Call(ShowWindow_Original, hWnd, cmd);
         CommitPreparedLaunchShow(
             hWnd, originalStyle, launchSnapshotToken, launchHiddenByCloak,
             launchAlphaOnlyCompatibility);
         return result;
     }
-    return ShowWindow_Original(hWnd, cmd);
+    return lastError.Call(ShowWindow_Original, hWnd, cmd);
 }
 BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
+    NativeApiLastErrorScope lastError;
     TransientTauriShowScope transientTauriShow(
         hWnd, IsTrayHideShowCommand(cmd));
     if (IsNativeShowDesktopPassthroughActive() &&
         (IsShowCmdForWinEvent(cmd) || cmd == SW_HIDE)) {
-        return ShowWindowAsync_Original(hWnd, cmd);
+        return lastError.Call(ShowWindowAsync_Original, hWnd, cmd);
     }
     PublishClassicShowDesktopOwnerProtocol(hWnd);
     if (IsOurWindow(hWnd) && IsTrayHideShowCommand(cmd) &&
@@ -13475,7 +13505,7 @@ BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
         EnsureWinEventThreadStarted();
         return ShowPersistentlyCloakedTrayWindow(
             hWnd, cmd, /*asynchronousSubmission=*/true,
-            [&]() { return ShowWindowAsync_Original(hWnd, cmd); });
+            [&]() { return lastError.Call(ShowWindowAsync_Original, hWnd, cmd); });
     }
     if (IsMinimizeCommand(cmd)) {
         const bool classicShowDesktop = IsClassicShowDesktopOperation();
@@ -13484,7 +13514,7 @@ BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
             if (RetargetLiveMinRestore(hWnd, false) == MinRestoreRetarget::Accepted) {
                 return TRUE;
             }
-            return ShowWindowAsync_Original(hWnd, cmd);
+            return lastError.Call(ShowWindowAsync_Original, hWnd, cmd);
         }
         AddRefNativeMinimizeBarrier(barrier);
         const MinimizeKick kick = TryMinimizeAnim(hWnd, barrier, cmd);
@@ -13496,7 +13526,7 @@ BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
             CompleteNativeMinimizeBarrier(barrier, NativeMinimizeState::Cancelled);
             return TRUE;
         }
-        const BOOL result = ShowWindowAsync_Original(hWnd, cmd);
+        const BOOL result = lastError.Call(ShowWindowAsync_Original, hWnd, cmd);
         CompleteNativeMinimizeBarrier(
             barrier, result ? NativeMinimizeState::AsyncSubmitted
                             : NativeMinimizeState::Failed);
@@ -13521,7 +13551,7 @@ BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
         uint64_t reservationGeneration = 0;
         if (!ReserveAsyncRestore(hWnd, &reservationGeneration)) {
             if (RetargetLiveMinRestore(hWnd, true) == MinRestoreRetarget::Accepted) return TRUE;
-            return ShowWindowAsync_Original(hWnd, cmd);
+            return lastError.Call(ShowWindowAsync_Original, hWnd, cmd);
         }
         if (restoreMaximized) {
             ArmMaximizedRestoreGuard(
@@ -13530,7 +13560,7 @@ BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
         }
         UpdateDwmTransitions(hWnd, FALSE);
         SetWindowCloak(hWnd, TRUE);
-        const BOOL result = ShowWindowAsync_Original(hWnd, cmd);
+        const BOOL result = lastError.Call(ShowWindowAsync_Original, hWnd, cmd);
         auto* restoreData = result
                                 ? new (std::nothrow) AsyncRestoreAnimData{
                                       hWnd, originalExStyle, reservationGeneration,
@@ -13543,47 +13573,32 @@ BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
         }
         return result;
     }
-    if (!IsOurWindow(hWnd)) return ShowWindowAsync_Original(hWnd, cmd);
+    if (!IsOurWindow(hWnd)) return lastError.Call(ShowWindowAsync_Original, hWnd, cmd);
     if (IsShowCmdForWinEvent(cmd)) {
         EnsureWinEventThreadStarted();
     }
     if (cmd == SW_HIDE) {
-        if (GetPropW(hWnd, kPropCloseBypass)) return ShowWindowAsync_Original(hWnd, cmd);
+        if (GetPropW(hWnd, kPropCloseBypass)) return lastError.Call(ShowWindowAsync_Original, hWnd, cmd);
         if (ShouldTreatHideAsClose(hWnd)) {
             if (RunCloseAnimation(hWnd, ANIM_DEFER_SW_HIDE)) return TRUE;
         }
     }
-    LONG_PTR originalStyle;
-    ULONG_PTR launchSnapshotToken = 0;
-    BOOL launchHiddenByCloak = FALSE;
-    BOOL launchAlphaOnlyCompatibility = FALSE;
-    if (PrepareLaunchAnim(hWnd, cmd, &originalStyle,
-                          &launchSnapshotToken, &launchHiddenByCloak,
-                          &launchAlphaOnlyCompatibility,
-                          L"ShowWindowAsync")) {
-        // PrepareLaunchAnim accepts only a window owned by this calling UI
-        // thread. Showing it synchronously is therefore safe and makes the
-        // surface available for PrintWindow before this hook returns. Calling
-        // ShowWindowAsync here would merely queue the show, making the
-        // immediate launch capture intermittently observe an invisible HWND.
-        ShowWindow_Original(hWnd, cmd);
-        CommitPreparedLaunchShow(
-            hWnd, originalStyle, launchSnapshotToken, launchHiddenByCloak,
-            launchAlphaOnlyCompatibility);
-        return TRUE;
-    }
-    return ShowWindowAsync_Original(hWnd, cmd);
+    // ShowWindowAsync queues the show even on the owning UI thread. Don't
+    // substitute ShowWindow for an immediate launch capture: that introduces
+    // synchronous callbacks into the caller's still-running handler.
+    return lastError.Call(ShowWindowAsync_Original, hWnd, cmd);
 }
 BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND insertAfter, int x, int y, int cx, int cy, UINT flags) {
+    NativeApiLastErrorScope lastError;
     TransientTauriShowScope transientTauriShow(
         hWnd, (flags & SWP_SHOWWINDOW) && !(flags & SWP_HIDEWINDOW));
     if (!(flags & (SWP_HIDEWINDOW | SWP_SHOWWINDOW))) {
-        return SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags);
+        return lastError.Call(SetWindowPos_Original, hWnd, insertAfter, x, y, cx, cy, flags);
     }
     if (IsNativeShowDesktopPassthroughActive()) {
-        return SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags);
+        return lastError.Call(SetWindowPos_Original, hWnd, insertAfter, x, y, cx, cy, flags);
     }
-    if (!IsOurWindow(hWnd)) return SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags);
+    if (!IsOurWindow(hWnd)) return lastError.Call(SetWindowPos_Original, hWnd, insertAfter, x, y, cx, cy, flags);
     PublishClassicShowDesktopOwnerProtocol(hWnd);
     if (flags & SWP_SHOWWINDOW) {
         EnsureWinEventThreadStarted();
@@ -13593,23 +13608,23 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND insertAfter, int x, int y, int cx,
         return ShowPersistentlyCloakedTrayWindow(
             hWnd, SW_SHOW, /*asynchronousSubmission=*/true,
             [&]() {
-                return SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy,
+                return lastError.Call(SetWindowPos_Original, hWnd, insertAfter, x, y, cx, cy,
                                              flags);
             });
     }
     if ((flags & SWP_HIDEWINDOW) && !GetPropW(hWnd, kPropCloseBypass) && ShouldTreatHideAsClose(hWnd)) {
         if (!(flags & SWP_ASYNCWINDOWPOS)) {
             return RunCallerOwnedHideAnimation(hWnd, [&]() {
-                return SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy,
+                return lastError.Call(SetWindowPos_Original, hWnd, insertAfter, x, y, cx, cy,
                                              flags);
             });
         }
-        BOOL applied = SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags & ~SWP_HIDEWINDOW);
+        BOOL applied = lastError.Call(SetWindowPos_Original, hWnd, insertAfter, x, y, cx, cy, flags & ~SWP_HIDEWINDOW);
         if (!applied) return FALSE;
         
         if (RunCloseAnimation(hWnd, ANIM_DEFER_SW_HIDE)) return TRUE;
         
-        return SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE | SWP_HIDEWINDOW);
+        return lastError.Call(SetWindowPos_Original, hWnd, insertAfter, x, y, cx, cy, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE | SWP_HIDEWINDOW);
     }
     if (flags & SWP_SHOWWINDOW) {
         LONG_PTR originalStyle;
@@ -13620,7 +13635,7 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND insertAfter, int x, int y, int cx,
                               &launchSnapshotToken, &launchHiddenByCloak,
                               &launchAlphaOnlyCompatibility,
                               L"SetWindowPos")) {
-            BOOL result = SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags);
+            BOOL result = lastError.Call(SetWindowPos_Original, hWnd, insertAfter, x, y, cx, cy, flags);
             if (!result) {
                 AbortPreparedLaunchAnim(hWnd, originalStyle,
                                         launchHiddenByCloak);
@@ -13632,7 +13647,7 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND insertAfter, int x, int y, int cx,
             return result;
         }
     }
-    return SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags);
+    return lastError.Call(SetWindowPos_Original, hWnd, insertAfter, x, y, cx, cy, flags);
 }
 BOOL WINAPI DestroyWindow_Hook(HWND hWnd) {
     bool animated = false;
@@ -13849,12 +13864,13 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
     return DefWindowProcW_Original(hWnd, msg, wParam, lParam);
 }
 BOOL WINAPI SetWindowPlacement_Hook(HWND hWnd, const WINDOWPLACEMENT* placement) {
+    NativeApiLastErrorScope lastError;
     TransientTauriShowScope transientTauriShow(
         hWnd, placement && IsTrayHideShowCommand(placement->showCmd));
     if (placement && IsNativeShowDesktopPassthroughActive() &&
         (IsShowCmdForWinEvent(placement->showCmd) ||
          placement->showCmd == SW_HIDE)) {
-        return SetWindowPlacement_Original(hWnd, placement);
+        return lastError.Call(SetWindowPlacement_Original, hWnd, placement);
     }
     PublishClassicShowDesktopOwnerProtocol(hWnd);
     if (placement && IsOurWindow(hWnd) &&
@@ -13864,7 +13880,7 @@ BOOL WINAPI SetWindowPlacement_Hook(HWND hWnd, const WINDOWPLACEMENT* placement)
         return ShowPersistentlyCloakedTrayWindow(
             hWnd, placement->showCmd, /*asynchronousSubmission=*/true,
             [&]() {
-                return SetWindowPlacement_Original(hWnd, placement);
+                return lastError.Call(SetWindowPlacement_Original, hWnd, placement);
             });
     }
     if (placement && IsMinimizeCommand(placement->showCmd)) {
@@ -13873,7 +13889,7 @@ BOOL WINAPI SetWindowPlacement_Hook(HWND hWnd, const WINDOWPLACEMENT* placement)
             if (RetargetLiveMinRestore(hWnd, false) == MinRestoreRetarget::Accepted) {
                 return TRUE;
             }
-            return SetWindowPlacement_Original(hWnd, placement);
+            return lastError.Call(SetWindowPlacement_Original, hWnd, placement);
         }
         AddRefNativeMinimizeBarrier(barrier);
         if (TryMinimizeAnim(hWnd, barrier, placement->showCmd) == MinimizeKick::Deferred) {
@@ -13884,7 +13900,7 @@ BOOL WINAPI SetWindowPlacement_Hook(HWND hWnd, const WINDOWPLACEMENT* placement)
             CompleteNativeMinimizeBarrier(barrier, NativeMinimizeState::Cancelled);
             return TRUE;
         }
-        const BOOL result = SetWindowPlacement_Original(hWnd, placement);
+        const BOOL result = lastError.Call(SetWindowPlacement_Original, hWnd, placement);
         CompleteNativeMinimizeBarrier(
             barrier, result ? NativeMinimizeState::SyncCompleted
                             : NativeMinimizeState::Failed);
@@ -13908,14 +13924,14 @@ BOOL WINAPI SetWindowPlacement_Hook(HWND hWnd, const WINDOWPLACEMENT* placement)
                 static_cast<DWORD>(AnimConstants::MaximizedRestoreGuardMs));
         }
         const LONG_PTR originalExStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
-        BOOL result = SetWindowPlacement_Original(hWnd, placement);
+        BOOL result = lastError.Call(SetWindowPlacement_Original, hWnd, placement);
         if (result) CommitRestoreAnimation(hWnd, restoreMaximized);
         else if (!IsAnimating(hWnd)) {
             UndoRisingHide(hWnd, originalExStyle, TRUE);
         }
         return result;
     }
-    if (!IsOurWindow(hWnd)) return SetWindowPlacement_Original(hWnd, placement);
+    if (!IsOurWindow(hWnd)) return lastError.Call(SetWindowPlacement_Original, hWnd, placement);
     if (placement && IsShowCmdForWinEvent(placement->showCmd)) {
         EnsureWinEventThreadStarted();
     }
@@ -13930,7 +13946,7 @@ BOOL WINAPI SetWindowPlacement_Hook(HWND hWnd, const WINDOWPLACEMENT* placement)
                 &launchAlphaOnlyCompatibility,
                 L"SetWindowPlacement")) {
             const BOOL result =
-                SetWindowPlacement_Original(hWnd, placement);
+                lastError.Call(SetWindowPlacement_Original, hWnd, placement);
             if (!result) {
                 AbortPreparedLaunchAnim(hWnd, originalStyle,
                                         launchHiddenByCloak);
@@ -13946,28 +13962,29 @@ BOOL WINAPI SetWindowPlacement_Hook(HWND hWnd, const WINDOWPLACEMENT* placement)
         ShouldTreatHideAsClose(hWnd)) {
         if (!(placement->flags & WPF_ASYNCWINDOWPLACEMENT)) {
             return RunCallerOwnedHideAnimation(hWnd, [&]() {
-                return SetWindowPlacement_Original(hWnd, placement);
+                return lastError.Call(SetWindowPlacement_Original, hWnd, placement);
             });
         }
         WINDOWPLACEMENT modified = *placement;
         modified.showCmd = SW_SHOWNA;
-        BOOL applied = SetWindowPlacement_Original(hWnd, &modified);
+        BOOL applied = lastError.Call(SetWindowPlacement_Original, hWnd, &modified);
         if (!applied) return FALSE;
         if (RunCloseAnimation(hWnd, ANIM_DEFER_SW_HIDE)) return TRUE;
-        return ShowWindow_Original(hWnd, SW_HIDE);
+        return lastError.Call(ShowWindow_Original, hWnd, SW_HIDE);
     }
-    return SetWindowPlacement_Original(hWnd, placement);
+    return lastError.Call(SetWindowPlacement_Original, hWnd, placement);
 }
 BOOL WINAPI CloseWindow_Hook(HWND hWnd) {
+    NativeApiLastErrorScope lastError;
     if (IsNativeShowDesktopPassthroughActive()) {
-        return CloseWindow_Original(hWnd);
+        return lastError.Call(CloseWindow_Original, hWnd);
     }
     NativeMinimizeBarrier* barrier = CreateNativeMinimizeBarrier();
     if (!barrier) {
         if (RetargetLiveMinRestore(hWnd, false) == MinRestoreRetarget::Accepted) {
             return TRUE;
         }
-        return CloseWindow_Original(hWnd);
+        return lastError.Call(CloseWindow_Original, hWnd);
     }
     AddRefNativeMinimizeBarrier(barrier);
     if (TryMinimizeAnim(hWnd, barrier) == MinimizeKick::Deferred) {
@@ -13978,7 +13995,7 @@ BOOL WINAPI CloseWindow_Hook(HWND hWnd) {
         CompleteNativeMinimizeBarrier(barrier, NativeMinimizeState::Cancelled);
         return TRUE;
     }
-    const BOOL result = CloseWindow_Original(hWnd);
+    const BOOL result = lastError.Call(CloseWindow_Original, hWnd);
     CompleteNativeMinimizeBarrier(
         barrier, result ? NativeMinimizeState::SyncCompleted
                         : NativeMinimizeState::Failed);
