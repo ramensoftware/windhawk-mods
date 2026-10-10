@@ -2,12 +2,253 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-10T19:00:55.000Z</updated>
+    <updated>2026-10-10T20:02:23.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Simple Cursor Trail 1.2]]></title>
+        <id>https://windhawk.net/mods/cursor-trail#11fb8bda590c23f2db86e393c419992247a817eb</id>
+        <link href="https://windhawk.net/mods/cursor-trail"/>
+        <updated>2026-10-10T20:02:23.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="simplecursortrail">Simple Cursor Trail</h1>
+<p>A fully customizable cursor trail for the Windows desktop.  </p>
+<h2 id="intro">Intro</h2>
+<p>I always liked the original Windows cursor trail, but it was too limited, so I made this one. I personally enjoy it very much so I want to share it 😊</p>
+<p>If you see any bug or want more settings/features, add an issue on the <a href="https://github.com/Ulrizza/WindHawk-CursorTrail">Github repo</a>!<br />
+I cannot promise you anything because I don't have much free time but I enjoyed making this plugin so I'll do my best 🤘</p>
+<p><strong>Disclaimer:</strong> I used AI to make this project, I just wanted a custom cursor trail and now I have it so I'm happy. If you are bothered by that, just don't install it.</p>
+<h2 id="installation">Installation</h2>
+<ol>
+<li>Install <a href="https://windhawk.net/">Windhawk</a>.</li>
+<li>Install <strong>Simple Cursor Trail</strong> from the Windhawk mods catalog, or import the
+source (<code>CursorTrail.cpp</code>) from this repository via the Windhawk mod editor.</li>
+</ol>
+<h2 id="styles">Styles</h2>
+<p>This mod is intentionally minimal: it just draws a trail — no particles,
+physics, or extra effects.</p>
+<ul>
+<li><strong>Simple line</strong>: a polyline that follows the cursor; its width, color, and
+opacity can change from head to tail.</li>
+<li><strong>Cursor ghost</strong>: faded copies of the cursor image, each latched at the spot
+where it spawned (they stay put and only fade out); directly inspired by the
+classic Windows cursor-trail feature. Each copy keeps the exact cursor image
+from when it was sampled, so an image change (e.g. arrow to I-beam) appears
+gradually along the trail.</li>
+</ul>
+<p>By contrast, <a href="https://windhawk.net/mods/mouse-trail">Mouse Trail</a> follows the
+cursor with special effects from a full D3D11 particle/physics engine, while
+<a href="https://windhawk.net/mods/cursor-motion-blur">Cursor Motion Blur</a> only smears
+the cursor at high speed.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Time based</strong> vs <strong>Size based</strong> trails.</li>
+<li><strong>Timing</strong>: tail duration and inactivity timeout.</li>
+<li><strong>Size</strong>: stroke width (Simple line) and copy size (Cursor ghost).</li>
+<li><strong>Color</strong>: head-to-tail gradients, blend width, and ghost
+recoloring.</li>
+<li><strong>Hotkey</strong>: toggle the trail on/off with a customizable global hotkey.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<h3 id="style">Style</h3>
+<p>Type of trail.</p>
+<p><code>style: simple_line</code>: a line whose width, color, and opacity can change along its length<br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/style.simple_line.gif" alt="style = simple_line" /></p>
+<p><code>style: cursor_ghost</code>: faded copies of the cursor image, each latched where it spawned<br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/style.cursor_ghost.gif" alt="style = cursor_ghost" /></p>
+<h3 id="simplelineoptions">Simple line options</h3>
+<p>Applies when Style is Simple line.</p>
+<h4 id="trailmode">Trail mode</h4>
+<p>How the trail disappears.</p>
+<p><code>simpleLineOptions.trail_mode: time_based</code>: each part of the trail fades after the Tail duration<br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.trail_mode.time_based.gif" alt="simpleLineOptions.trail_mode = time_based" /></p>
+<p><code>simpleLineOptions.trail_mode: size_based</code>: keeps a fixed trail length even when the cursor stops<br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.trail_mode.size_based.gif" alt="simpleLineOptions.trail_mode = size_based" /></p>
+<h4 id="timebased">Time based</h4>
+<p>Applies when Trail mode is Time based.</p>
+<h5 id="tailduration">Tail duration</h5>
+<p>How long each trail segment stays visible, in milliseconds. Minimum 20, maximum 10000.</p>
+<p><code>100</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.timeBased.tail_duration.100.gif" alt="simpleLineOptions.timeBased.tail_duration = 100" /></p>
+<p><code>300</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.timeBased.tail_duration.300.gif" alt="simpleLineOptions.timeBased.tail_duration = 300" /></p>
+<p><code>1000</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.timeBased.tail_duration.1000.gif" alt="simpleLineOptions.timeBased.tail_duration = 1000" /></p>
+<h4 id="sizebased">Size based</h4>
+<p>Applies when Trail mode is Size based.</p>
+<h5 id="taillength">Tail length</h5>
+<p>Maximum trail length in pixels. Minimum 20, maximum 10000.</p>
+<p><code>100</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.sizeBased.tail_size.100.gif" alt="simpleLineOptions.sizeBased.tail_size = 100" /></p>
+<p><code>500</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.sizeBased.tail_size.500.gif" alt="simpleLineOptions.sizeBased.tail_size = 500" /></p>
+<p><code>1000</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.sizeBased.tail_size.1000.gif" alt="simpleLineOptions.sizeBased.tail_size = 1000" /></p>
+<h5 id="timeout">Timeout</h5>
+<p>Milliseconds of inactivity before the trail starts fading (using the Time based tail duration). 0 = trail always visible.</p>
+<p><code>0</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.sizeBased.timeout.0.gif" alt="simpleLineOptions.sizeBased.timeout = 0" /></p>
+<p><code>500</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.sizeBased.timeout.500.gif" alt="simpleLineOptions.sizeBased.timeout = 500" /></p>
+<p><code>1000</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.sizeBased.timeout.1000.gif" alt="simpleLineOptions.sizeBased.timeout = 1000" /></p>
+<h4 id="width">Width</h4>
+<h5 id="valuesheadtotail">Values (head to tail)</h5>
+<p>Comma-separated stroke widths in pixels from head to tail (e.g. "2,1" for a tapered trail, or "10,1,10,1" for a pulsing trail). Each value gets an equal share; repeat to widen (e.g. "2,2,2,2,1" = 80% at 2, 20% at 1). Minimum 1.</p>
+<p><code>5</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.width.values.5.gif" alt="simpleLineOptions.width.values = 5" /></p>
+<p><code>5,0</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.width.values.5.0.gif" alt="simpleLineOptions.width.values = 5,0" /></p>
+<p><code>1,1,1,10</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.width.values.1.1.1.10.gif" alt="simpleLineOptions.width.values = 1,1,1,10" /></p>
+<p><code>10,1,10,1,10,1</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.width.values.10.1.10.1.10.1.gif" alt="simpleLineOptions.width.values = 10,1,10,1,10,1" /></p>
+<h4 id="color">Color</h4>
+<h5 id="valuesheadtotail-1">Values (head to tail)</h5>
+<p>Single hex (RRGGBB without #, e.g. 000000 for black) or comma-separated list for a gradient from head to tail (e.g. 000000,FF0000,FFFFFF for black-&gt;red-&gt;white). Each color gets an equal share; repeat to widen. Invalid entries fall back to black.</p>
+<p><code>FF0000</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.color.values.ff0000.gif" alt="simpleLineOptions.color.values = FF0000" /></p>
+<p><code>FF0000,FF7F00,FFFF00,7FFF00,00FF00,00FFFF,0000FF,4B0082,8B00FF</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.color.values.rainbow.gif" alt="simpleLineOptions.color.values = FF0000,FF7F00,FFFF00,7FFF00,00FF00,00FFFF,0000FF,4B0082,8B00FF" /></p>
+<h5 id="blendwidth">Blend width</h5>
+<p>Percentage of each transition spent blending (0 = pure bands, 100 = full gradient). 50 with red,blue gives 25% hard red, 50% blend, 25% hard blue. Only applies with two or more colors.</p>
+<p><code>0</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.color.blend_width.0.png" alt="simpleLineOptions.color.blend_width = 0" /><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.color.blend_width.0.gif" alt="simpleLineOptions.color.blend_width = 0" />  </p>
+<p><code>50</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.color.blend_width.50.png" alt="simpleLineOptions.color.blend_width = 50" /><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.color.blend_width.50.gif" alt="simpleLineOptions.color.blend_width = 50" />  </p>
+<p><code>100</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.color.blend_width.100.png" alt="simpleLineOptions.color.blend_width = 100" /><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.color.blend_width.100.gif" alt="simpleLineOptions.color.blend_width = 100" />  </p>
+<h4 id="opacity">Opacity</h4>
+<h5 id="valuesheadtotail-2">Values (head to tail)</h5>
+<p>Comma-separated opacity percentages (0-100) from head to tail (e.g. "100,0" for full fade, or "100,0,100" for a pulse). Each value gets an equal share; repeat to widen. Leave one value for uniform opacity.</p>
+<p><code>100</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.opacity.values.100.gif" alt="simpleLineOptions.opacity.values = 100" /></p>
+<p><code>100,0</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.opacity.values.100.0.gif" alt="simpleLineOptions.opacity.values = 100,0" /></p>
+<p><code>100,0,100</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.opacity.values.100.0.100.gif" alt="simpleLineOptions.opacity.values = 100,0,100" /></p>
+<h4 id="antialiasing">Antialiasing</h4>
+<p>Smooth the trail edges.</p>
+<p><code>on</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.antialiasing.on.gif" alt="simpleLineOptions.antialiasing = on" /></p>
+<p><code>off</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/simpleLineOptions.antialiasing.off.gif" alt="simpleLineOptions.antialiasing = off" /></p>
+<h3 id="cursorghostoptions">Cursor ghost options</h3>
+<p>Applies when Style is Cursor ghost.</p>
+<h4 id="trailmode-1">Trail mode</h4>
+<p>How the copies disappear.</p>
+<p><code>ghostOptions.trail_mode: time_based</code>: each copy fades after the Tail duration<br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.trail_mode.time_based.gif" alt="ghostOptions.trail_mode = time_based" /></p>
+<p><code>ghostOptions.trail_mode: size_based</code>: keeps a fixed number of copies even when the cursor stops<br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.trail_mode.size_based.gif" alt="ghostOptions.trail_mode = size_based" /></p>
+<h4 id="timebased-1">Time based</h4>
+<p>Applies when Trail mode is Time based.</p>
+<h5 id="tailduration-1">Tail duration</h5>
+<p>How long each cursor copy stays visible, in milliseconds. Minimum 20, maximum 10000.</p>
+<p><code>100</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.timeBased.tail_duration.100.gif" alt="ghostOptions.timeBased.tail_duration = 100" /></p>
+<p><code>300</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.timeBased.tail_duration.300.gif" alt="ghostOptions.timeBased.tail_duration = 300" /></p>
+<p><code>1000</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.timeBased.tail_duration.1000.gif" alt="ghostOptions.timeBased.tail_duration = 1000" /></p>
+<h4 id="sizebased-1">Size based</h4>
+<p>Applies when Trail mode is Size based.</p>
+<h5 id="copies">Copies</h5>
+<p>Number of cursor copies in the trail (Size based mode). Minimum 2, maximum 512.</p>
+<p><code>5</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.sizeBased.tail_size.5.gif" alt="ghostOptions.sizeBased.tail_size = 5" /></p>
+<p><code>20</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.sizeBased.tail_size.20.gif" alt="ghostOptions.sizeBased.tail_size = 20" /></p>
+<p><code>50</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.sizeBased.tail_size.50.gif" alt="ghostOptions.sizeBased.tail_size = 50" /></p>
+<h5 id="timeout-1">Timeout</h5>
+<p>Milliseconds of inactivity before the trail starts fading (using the Time based tail duration). 0 = trail always visible.</p>
+<p><code>500</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.sizeBased.timeout.500.gif" alt="ghostOptions.sizeBased.timeout = 500" /></p>
+<h4 id="copyspacing">Copy spacing</h4>
+<p>Extra distance in pixels added between cursor copies (0 = automatic, based on the copy count). Maximum 200.</p>
+<p><code>10</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.spacing.10.gif" alt="ghostOptions.spacing = 10" /></p>
+<p><code>25</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.spacing.25.gif" alt="ghostOptions.spacing = 25" /></p>
+<h4 id="size">Size</h4>
+<h5 id="valuesheadtotail-3">Values (head to tail)</h5>
+<p>Comma-separated size multipliers from head to tail (1 = same size, 0.8 = 80%, 2 = twice). Each value gets an equal share; repeat to widen (e.g. "1,0.5,1,0.5"). Avoid values above 1 (upscaled copies look pixelated); use the Windows cursor size setting to enlarge the cursor.</p>
+<p><code>1</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.size.values.1.png" alt="ghostOptions.size.values = 1" /></p>
+<p><code>1,0</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.size.values.1.0.png" alt="ghostOptions.size.values = 1,0" /></p>
+<p><code>1,0.2,1,0.2</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.size.values.1.02.1.02.png" alt="ghostOptions.size.values = 1,0.2,1,0.2" /></p>
+<h4 id="opacity-1">Opacity</h4>
+<h5 id="valuesheadtotail-4">Values (head to tail)</h5>
+<p>Comma-separated opacity percentages (0-100) from head to tail (e.g. "100,0" for full fade). Each value gets an equal share; repeat to widen.</p>
+<p><code>100,0</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.opacity.values.100.0.png" alt="ghostOptions.opacity.values = 100,0" /></p>
+<p><code>100,20,100,20</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.opacity.values.100.20.100.20.png" alt="ghostOptions.opacity.values = 100,20,100,20" /></p>
+<h4 id="color-1">Color</h4>
+<h5 id="valuesheadtotail-5">Values (head to tail)</h5>
+<p>Leave empty to keep the cursor's own colors. Otherwise a single hex (RRGGBB without #) or comma-separated list for a gradient from head to tail; pixels matching the Replace color are recolored to this value (FFFFFF makes white copies). Each color gets an equal share; repeat to widen. Invalid entries fall back to black. A single color disables Blend width.</p>
+<p><code>(empty)</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.color.values.empty.black.gif" alt="ghostOptions.color.values = empty" /><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.color.values.empty.pink.gif" alt="ghostOptions.color.values = empty" /><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.color.values.empty.green.gif" alt="ghostOptions.color.values = empty" />  </p>
+<p><code>ff0000</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.color.values.ff0000.gif" alt="ghostOptions.color.values = ff0000" /></p>
+<p><code>ff00ff,00ffff,ffff00</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.color.values.ff00ff.00ffff.ffff00.gif" alt="ghostOptions.color.values = ff00ff,00ffff,ffff00" /></p>
+<h5 id="blendwidth-1">Blend width</h5>
+<p>Percentage of each transition spent blending (0 = pure bands, 100 = full gradient). Only applies with two or more colors. (same principle as for the trail)</p>
+<h5 id="replace">Replace</h5>
+<p>Only used when Color &gt; Values is set.</p>
+<h6 id="mode">Mode</h6>
+<p>Which cursor pixels to recolor.</p>
+<p><code>ghostOptions.color.replace.mode: auto</code>: the cursor's enclosed center color (ignoring the outline/contour; falls back to the largest area when nothing is enclosed)<br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.color.replace.mode.auto.gif" alt="ghostOptions.color.replace.mode = auto" /></p>
+<p><code>ghostOptions.color.replace.mode: whole</code>: every non-transparent pixel<br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.color.replace.mode.whole.gif" alt="ghostOptions.color.replace.mode = whole" /></p>
+<p><code>ghostOptions.color.replace.mode: custom</code>: the Custom color defined in the next setting (see below for examples) </p>
+<h6 id="customcolor">Custom color</h6>
+<p>Original cursor color to replace with the Values color (used when Mode is Custom). Set 000000 to recolor a black cursor body, or FFFFFF to recolor a white outline.</p>
+<p><code>ffffff</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.color.replace.mode.custom.ffffff.gif" alt="ghostOptions.color.replace.mode = custom" /><br />
+<code>f7bb0e</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.color.replace.mode.custom.f7bb0e.gif" alt="ghostOptions.color.replace.mode = custom" /><br />
+<code>000000</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/ghostOptions.color.replace.mode.custom.000000.gif" alt="ghostOptions.color.replace.mode = custom" /></p>
+<h3 id="enabledisablehotkey">Enable/disable hotkey</h3>
+<h4 id="key">Key</h4>
+<p>Press to toggle the trail on or off. Format: Modifier+Key (e.g. Ctrl+Alt+T). Modifiers: Ctrl, Alt, Shift, Win. At least one modifier is required. Leave empty to disable the hotkey.</p>
+<h4 id="animation">Animation</h4>
+<p>Show a circle animation when the hotkey toggles the trail.<br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/hotkeyOptions.animate.gif" alt="hotkeyOptions.animate = on" /></p>
+<p>The animation is a circle outline (2px, in the cursor's color, centered on the trail start and following the cursor): it grows and fades out when disabling, and shrinks and fades in when enabling.  </p>
+<h3 id="trailoffset">Trail offset</h3>
+<p>Fine-tune the trail origin horizontally in pixels (auto-centered by default, 0 = no adjustment)</p>
+<p><code>0 0</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/tail_offset.0.0.gif" alt="tail_offset.x = -10" /></p>
+<p><code>15 15</code><br />
+<img src="https://raw.githubusercontent.com/Ulrizza/WindHawk-CursorTrail/main/images/tail_offset.15.15.gif" alt="tail_offset.y = +10" /></p>
+<h2 id="licence">Licence</h2>
+<p>This project is licensed under the MIT License. You're free to use, modify, and
+redistribute the code as long as you keep the original copyright notice and
+credit the author (Ulrizza). See <a href="https://github.com/Ulrizza/WindHawk-CursorTrail/blob/main/LICENSE">LICENSE</a> for the full text.</p>
+<p>Part of this mod is adapted from
+<a href="https://windhawk.net/mods/cursor-motion-blur">Cursor Motion Blur</a> by
+<a href="https://github.com/chrisc44890">TheatriChris</a>, Copyright (c) TheatriChris
+(MIT): the overlay-window scaffolding, the fullscreen-game detection, and
+parts of the render loop.</p>]]></content>
+        <author>
+            <name>Ulrizza</name>
+            <uri>https://github.com/Ulrizza</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Steam Games in Explorer 1.1]]></title>
         <id>https://windhawk.net/mods/explorer-steam-games#e86ece4b39234ad53c9e32916d196c1c932e3836</id>
@@ -1325,30 +1566,6 @@ auto-hide (show on hover)</strong>, do m417z (GPL-3.0).</li>
         <author>
             <name>caliberda</name>
             <uri>https://github.com/cesarkali</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 language flyout guard and indicator colours 1.0.0]]></title>
-        <id>https://windhawk.net/mods/windows-10-language-flyout-guard-on-win11-24h2#0dd8f7845a96ec5ce9f7d47eed3d598151f32f24</id>
-        <link href="https://windhawk.net/mods/windows-10-language-flyout-guard-on-win11-24h2"/>
-        <updated>2026-10-09T09:03:33.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows10languageflyoutguardandindicatorcolours">Windows 10 language flyout guard and indicator colours</h1>
-<p>This mod addresses two issues that can occur when the private Windows 10 shell is used by the Windows 10 taskbar mod on Windows 11 24H2 and later:</p>
-<ul>
-<li><strong>A language flyout that opens at startup.</strong> For a limited time after the shell starts, the mod suppresses known language-switcher window classes in this Explorer process. It does not enumerate or hide windows owned by other processes. Clicking the language indicator manually is allowed through the guard.</li>
-<li><strong>The language indicator's orientation and appearance.</strong> The optional colour feature uses one theme-aware painter for the indicator's client area and reads the full active keyboard-layout ID, so variants such as Italian (142) display as <code>ITA 142</code> rather than being collapsed to <code>ITA IT</code>. It handles paint itself rather than allowing Explorer's legacy grey fill to overwrite the composited background, and it repaints on hover, press, theme, and layout state changes.</li>
-</ul>
-<h3 id="before">Before</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/before.png" alt="Before" /></p>
-<h3 id="after">After</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/after.png" alt="After" /></p>
-<p>The guard lasts 20 seconds by default. Each intercepted flyout can extend it by 15 seconds, up to four times the configured duration. No window is closed or destroyed.</p>
-<p><strong>Startup reliability.</strong> When Explorer starts, Windhawk loads the mod before the taskbar and the language indicator exist, and window-creation hooks only become active after <code>Wh_ModInit</code> returns. A background rescan therefore attaches to the indicator as soon as it appears (every 250 ms, for the first three minutes only, after which it stops), so the mod no longer needs to be toggled manually after logon.</p>
-<p>The mod is loaded into <code>explorer.exe</code> processes but skips initialization in the system <code>%SystemRoot%\explorer.exe</code> (checked in code using the real image path, which Fake Explorer path does not alter), so it only acts in the private Windows 10 shell. The flyout sweep is limited to the current process. System files are not replaced.</p>
-<p><strong>Overlap with "Fix language indicator in Win10 taskbar under Win11 24H2+".</strong> With <code>LanguageIndicatorColours</code> enabled, this mod paints the language indicator itself and Explorer's native paint (which that mod hooks) no longer runs for it, so you do not need both for the indicator. Disable <code>LanguageIndicatorColours</code> if you prefer to keep using the other mod for the indicator.</p>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

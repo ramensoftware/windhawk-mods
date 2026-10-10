@@ -3305,6 +3305,31 @@
         "version": "1.1.1"
       }
     },
+    "cursor-trail": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791662543000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791662543000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Ulrizza",
+        "compilerOptions": "-ld2d1 -lole32 -lgdi32 -lshell32 -lwindowscodecs -lwinmm -lshcore",
+        "description": "A fully customizable cursor trail overlay for the Windows desktop.",
+        "github": "https://github.com/Ulrizza",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Simple Cursor Trail",
+        "version": "1.2"
+      }
+    },
     "custom-cmd-startup-text": {
       "details": {
         "defaultSorting": 5360,
