@@ -4,7 +4,7 @@
 // @name:zh-CN      中国节假日日历
 // @description     Show Chinese statutory holidays and adjusted workdays, from an ICS feed you supply, in the Windows 11 calendar flyout
 // @description:zh-CN 在 Windows 11 日历中显示你自己填的 ICS 订阅源里的中国法定节假日与调休安排
-// @version         0.17
+// @version         0.19
 // @author          dcsmf
 // @github          https://github.com/dcsmf
 // @include         ShellExperienceHost.exe
@@ -87,22 +87,29 @@ mod 只给自己标过的格子改颜色，并且在第一次改色之前记下�
 
 ## 关于识别
 
-mod 每次都会重新遍历日历单元格的视觉树来定位"农历文字"（Windows 11 里叫 `LunarTextBlock`）：单元格
-一共只有三四个子元素，走一遍很便宜，但可以保证不会往系统已经换掉的旧文本块里写字。日期数字是单元格
+日期单元格不是被"通知"来的：mod 在日历窗口自己的 UI 线程上直接读 XAML 树（`Window::Current()`
+往下走），每一轮复查都重新找一遍，所以不注入任何东西，也用不到 XAML 诊断。
+
+定位"农历文字"（Windows 11 里叫 `LunarTextBlock`）同样是每轮重新遍历单元格的视觉树：单元格一共
+只有三四个子元素，走一遍很便宜，但可以保证不会往系统已经换掉的旧文本块里写字。日期数字是单元格
 里唯一的纯数字文本，mod 永远不会动它。万一某个 Windows 版本改了模板结构，mod 会退回按字号自动识别，
 并在日志里打印一次单元格结构（元素类型、名称、文字、字号）供排查。
 
 mod 只替换农历文字的内容和颜色，不改动单元格的结构，也不会重复写入同一个单元格。系统在切换月份后
 会异步重写农历文字，有时连文字块本身都会换掉，所以 mod 会在日历变化之后的几秒内逐秒复查单元格：
-只有发现放假/补班的文字被系统覆盖时才会再写一次，其余单元格不做任何写入。复查由"单元格出现、
-日期变化、文字变化、数据或设置变化"触发，并且在连续几秒没有任何写入之后自己停下来——系统的日历
-即使关掉了也仍然被 shell 留着，定时器不能一直跑下去。
+只有发现放假/补班的文字被系统覆盖时才会再写一次，其余单元格不做任何写入。复查由"日历窗口出现或
+被显示、日期变化、文字变化、数据或设置变化"触发，并且在连续几秒没有任何写入之后自己停下来——
+系统的日历即使关掉了也仍然被 shell 留着，定时器不能一直跑下去。
 
 ## 致谢
 
-注入 XAML 视觉树的部分移植自 m417z 的
-[Windows 11 Notification Center Styler](https://github.com/m417z/my-windhawk-mods)（GPL-3.0），
-注入方式与 lonfro 的 "Agenda in Calendar View" 一致。
+日历窗口的定位方式来自 lonfro 的
+[Agenda in Calendar View](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/agenda-in-calendar-view.wh.cpp)
+（GPL-3.0），`RunFromWindowThread` 这类跨线程调用沿用 m417z 的
+[Windows 11 Notification Center Styler](https://github.com/m417z/my-windhawk-mods)。
+
+mod **不使用 XAML 诊断（`InitializeXamlDiagnosticsEx`）**，所以在同一个进程里可以和
+Windows 11 Notification Center Styler、UWPSpy 这类同样用诊断的工具一起用。
 
 ---
 
@@ -140,10 +147,11 @@ everything with the existing text and its colour. The shell also rewrites its ow
 lunar text asynchronously after a month change, which is why the mod re-checks
 the visible cells once a second, for a few seconds after everything which can
 start such a rewrite, and only writes when a cell no longer shows what it wants.
-The re-check is started by a day cell appearing, by the date or the text of a cell
-changing, and by the data or the settings changing; it stops itself after five
-passes without a write, because the shell keeps the day cells of a closed flyout
-alive and a timer which only stopped when they went away would never stop.
+The re-check is started by the calendar window appearing or being shown, by the date
+or the text of a cell changing, and by the data or the settings changing; it stops
+itself after five passes without a write, because the shell keeps the day cells of a
+closed flyout alive and a timer which only stopped when they went away would never
+stop.
 
 The colour of a day is written only into a cell the mod is marking, and the value
 the cell had before the first write is remembered (the local value of
@@ -215,19 +223,28 @@ Deliberately not supported: recurrence rules (`RRULE`, `EXDATE` and
 log line says so), UTC offset conversion (a date-time is taken as the date it
 names), and any badge or corner marker inside a cell.
 
-## How it finds the lunar text
+## How it finds the calendar
 
-The mod walks the three or four children of a day cell on every pass, never
-writes to the day number (it is the only all-digit text in a cell), prefers the
-block the calendar names `LunarTextBlock`, falls back to the smallest text that
-has content, and remembers the element it wrote to by interface pointer so that a
-block the shell has already replaced is not written to any more.
+Nothing reports a day cell to the mod: it reads the XAML tree of the calendar window on
+that window's own UI thread (`Window::Current()` and down) and finds the day cells again
+on every pass. Nothing is injected and no XAML diagnostics are involved.
+
+Inside a day cell, the mod walks the three or four children on every pass, never writes
+to the day number (it is the only all-digit text in a cell), prefers the block the
+calendar names `LunarTextBlock`, falls back to the smallest text that has content, and
+remembers the element it wrote to by interface pointer so that a block the shell has
+already replaced is not written to any more.
 
 ## Credits
 
-The XAML injection part is ported from m417z's
-[Windows 11 Notification Center Styler](https://github.com/m417z/my-windhawk-mods)
-(GPL-3.0); the injection approach matches lonfro's "Agenda in Calendar View".
+The way the calendar window is found follows lonfro's
+[Agenda in Calendar View](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/agenda-in-calendar-view.wh.cpp)
+(GPL-3.0); the cross-thread helpers such as `RunFromWindowThread` follow m417z's
+[Windows 11 Notification Center Styler](https://github.com/m417z/my-windhawk-mods).
+
+The mod does **not** use XAML Diagnostics (`InitializeXamlDiagnosticsEx`), so it can be
+used together with Windows 11 Notification Center Styler and tools such as UWPSpy, which
+use it themselves.
 */
 // ==/WindhawkModReadme==
 
@@ -304,8 +321,14 @@ The XAML injection part is ported from m417z's
 // ==/WindhawkModSettings==
 
 //
-// Parts of the injection code below are ported from the "Windows 11 Notification
-// Center Styler" mod by m417z, which is licensed under GPL-3.0:
+// The way the calendar window is found - hooking CreateWindowInBand(Ex), running on the
+// window's own UI thread and walking the XAML tree from Window::Current() - follows the
+// "Agenda in Calendar View" mod by lonfro, which is licensed under GPL-3.0:
+//
+//   Copyright (C) 2026 lonfro
+//
+// The helper which runs code on another window's thread is taken from the "Windows 11
+// Notification Center Styler" mod by m417z, also GPL-3.0:
 //
 //   Copyright (C) 2026 m417z
 //
@@ -321,8 +344,6 @@ The XAML injection part is ported from m417z's
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-#include <xamlom.h>
-
 #include <atomic>
 #include <cstdint>
 #include <mutex>
@@ -330,34 +351,19 @@ The XAML injection part is ported from m417z's
 
 #undef GetCurrentTime
 
+#include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Xaml.h>
 
-std::atomic<bool> g_initialized;
 thread_local bool g_initializedForThread;
 
-// The XAML composition diagnostics rebuild a process-wide visual tree walker
-// without any locking whenever a DirectComposition visual is added, so any UI
-// thread which adds one corrupts the heap while another thread is in the same
-// code. Only element mutations are needed here, and those are reported by an
-// unrelated code path, so the composition diagnostics are kept from being
-// created at all: XamlDiagnostics::CreateCompVisualDiag skips them when the
-// HKLM\Software\Microsoft\XAML\Debug\DisableCompositionDiag value is 1.
-// Windows.UI.Xaml.dll reads and caches the value once, from within
-// AdviseVisualTreeChange, so answering that single read is enough. The value is
-// not written to the registry, which would be a machine-wide side effect; the two
-// hooks below fake that one read instead.
-thread_local bool g_reportCompositionDiagAsDisabled;
-
-HMODULE GetCurrentModuleHandle() {
-    HMODULE module;
-    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           L"", &module)) {
-        return nullptr;
-    }
-
-    return module;
-}
+// What this mod deliberately does not do: it is not a consumer of the XAML Diagnostics
+// TAP (InitializeXamlDiagnosticsEx). Only one consumer of it can be active in a process
+// at a time, so a mod which uses it stops working as soon as the next one is enabled -
+// and the popular styling mods of this very process (Windows 11 Notification Center
+// Styler, for one) are consumers. The calendar window is reached the way "Agenda in
+// Calendar View" does it instead: CreateWindowInBand(Ex) and ShowWindow are hooked, the
+// mod runs on the window's own UI thread, and the XAML tree is read from
+// Window::Current() there (see CollectDayItemsOnCurrentThread).
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -378,404 +384,14 @@ namespace winrt {
 
 // alias some long namespaces for convenience
 namespace wf = winrt::Windows::Foundation;
+namespace wuc = winrt::Windows::UI::Core;
 namespace wux = winrt::Windows::UI::Xaml;
 
-// Defined after the mod's own types are known.
-void HandleDayItemAdded(wux::Controls::CalendarViewDayItem const& item);
-void QueueDiagnosticsRelease(InstanceHandle handle);
-void FlushDiagnosticsReleasesIfQuiet();
-void ForgetFakedDebugKeys();
-
 #pragma endregion  // winrt_hpp
-
-// The threads which call AdviseVisualTreeChange. That call goes to a thread of its own,
-// because calling it from the thread which initialises the diagnostics makes the app hang
-// in Advising::RunOnUIThread, and it reports the whole tree which already exists before it
-// returns. Upstream closes the handle at once and lets the thread run on: a mod which is
-// unloaded (disabled, updated, reloaded) while that walk is still going leaves the thread
-// to return into an unmapped module, which takes the shell down with it. The handles are
-// therefore kept here, and the unload waits for the walk to finish.
-//
-// Waiting in the constructor or in SetSite is not an option: SetSite runs on a thread the
-// advise call needs (the diagnostics initialisation of a UI thread), so waiting there
-// would deadlock. Wh_ModUninit runs on the engine thread, which the advise call does not
-// need, and is the one place where the wait is safe.
-std::mutex g_adviseThreadMutex;
-std::vector<HANDLE> g_adviseThreads;
-
-void RememberAdviseThread(HANDLE thread) {
-    std::lock_guard<std::mutex> lock(g_adviseThreadMutex);
-    g_adviseThreads.push_back(thread);
-}
-
-void WaitForAdviseThreads() {
-    std::vector<HANDLE> threads;
-    {
-        std::lock_guard<std::mutex> lock(g_adviseThreadMutex);
-        threads.swap(g_adviseThreads);
-    }
-
-    for (HANDLE thread : threads) {
-        WaitForSingleObject(thread, INFINITE);
-        CloseHandle(thread);
-    }
-}
-
-#pragma region visualtreewatcher_hpp
-
-// XamlDiagnostics implements this interface too, and xamlom.h does not declare
-// it. UnregisterInstance closes the runtime object cached for a handle, the
-// only reference the diagnostics keep to an element once it was reported.
-static constexpr GUID IID_IXamlDiagnosticsTestHooks = {
-    0x735941a2, 0x3ee3, 0x495a, {0x8d, 0xa9, 0x97, 0x26, 0x27, 0x00, 0x30, 0x75}};
-
-struct IXamlDiagnosticsTestHooks : IUnknown {
-    virtual HRESULT STDMETHODCALLTYPE UnregisterInstance(InstanceHandle handle) = 0;
-    virtual HRESULT STDMETHODCALLTYPE TryGetDispatcherQueueForObject(
-        InstanceHandle handle,
-        void** dispatcherQueue) = 0;
-};
-
-class VisualTreeWatcher
-    : public winrt::implements<VisualTreeWatcher,
-                               IVisualTreeServiceCallback2,
-                               winrt::non_agile> {
-   public:
-    VisualTreeWatcher(winrt::com_ptr<IUnknown> site);
-
-    VisualTreeWatcher(const VisualTreeWatcher&) = delete;
-    VisualTreeWatcher& operator=(const VisualTreeWatcher&) = delete;
-
-    VisualTreeWatcher(VisualTreeWatcher&&) = delete;
-    VisualTreeWatcher& operator=(VisualTreeWatcher&&) = delete;
-
-    ~VisualTreeWatcher();
-
-    void UnadviseVisualTreeChange();
-
-    void ReleaseDiagnosticsReference(InstanceHandle handle);
-
-   private:
-    HRESULT STDMETHODCALLTYPE OnVisualTreeChange(ParentChildRelation relation,
-                                                 VisualElement element,
-                                                 VisualMutationType mutationType) override;
-    HRESULT STDMETHODCALLTYPE OnElementStateChanged(InstanceHandle element,
-                                                    VisualElementState elementState,
-                                                    LPCWSTR context) noexcept override;
-
-    wf::IInspectable FromHandle(InstanceHandle handle) {
-        wf::IInspectable obj;
-        winrt::check_hresult(m_XamlDiagnostics->GetIInspectableFromHandle(
-            handle, reinterpret_cast<::IInspectable**>(winrt::put_abi(obj))));
-        return obj;
-    }
-
-    winrt::com_ptr<IXamlDiagnostics> m_XamlDiagnostics = nullptr;
-    winrt::com_ptr<IXamlDiagnosticsTestHooks> m_XamlDiagnosticsTestHooks = nullptr;
-};
-
-#pragma endregion  // visualtreewatcher_hpp
-
-#pragma region visualtreewatcher_cpp
-
-VisualTreeWatcher::VisualTreeWatcher(winrt::com_ptr<IUnknown> site)
-    : m_XamlDiagnostics(site.as<IXamlDiagnostics>()) {
-    Wh_Log(L"Constructing VisualTreeWatcher");
-
-    HRESULT hr = m_XamlDiagnostics->QueryInterface(
-        IID_IXamlDiagnosticsTestHooks, m_XamlDiagnosticsTestHooks.put_void());
-    if (FAILED(hr)) {
-        Wh_Log(L"IXamlDiagnosticsTestHooks is unavailable: %08X", hr);
-    }
-
-    // Calling AdviseVisualTreeChange from the current thread causes the app to
-    // hang in Advising::RunOnUIThread sometimes. Creating a new thread and
-    // calling it from there fixes it.
-    //
-    // The reference the new thread gives back at its end is taken before the thread
-    // exists: a thread which ran through before the creating thread got to AddRef
-    // would give back the last reference and leave the object freed, and the AddRef
-    // behind it would then write to freed memory. This is deliberately different
-    // from the mod this is ported from, which takes the reference afterwards.
-    AddRef();
-    HANDLE thread = CreateThread(
-        nullptr, 0,
-        [](LPVOID lpParam) -> DWORD {
-            auto watcher = reinterpret_cast<VisualTreeWatcher*>(lpParam);
-            auto service = watcher->m_XamlDiagnostics.as<IVisualTreeService3>();
-            g_reportCompositionDiagAsDisabled = true;
-            // Only the keys handed out for this call are answered below.
-            ForgetFakedDebugKeys();
-            HRESULT hr = service->AdviseVisualTreeChange(watcher);
-            g_reportCompositionDiagAsDisabled = false;
-            ForgetFakedDebugKeys();
-            watcher->Release();
-            if (FAILED(hr)) {
-                Wh_Log(L"AdviseVisualTreeChange error %08X", hr);
-            }
-            return 0;
-        },
-        this, 0, nullptr);
-    if (!thread) {
-        // The thread never took the reference over, so it is this thread's to drop.
-        Wh_Log(L"Failed to create the watcher thread (error %u)", GetLastError());
-        Release();
-        return;
-    }
-
-    // The handle is kept rather than closed: the unload waits for this thread before the
-    // module is unmapped (see g_adviseThreads).
-    RememberAdviseThread(thread);
-}
-
-VisualTreeWatcher::~VisualTreeWatcher() {
-    Wh_Log(L"Destructing VisualTreeWatcher");
-}
-
-void VisualTreeWatcher::UnadviseVisualTreeChange() {
-    Wh_Log(L"UnadviseVisualTreeChange VisualTreeWatcher");
-    HRESULT hr =
-        m_XamlDiagnostics.as<IVisualTreeService3>()->UnadviseVisualTreeChange(this);
-    if (FAILED(hr)) {
-        Wh_Log(L"UnadviseVisualTreeChange failed with error %08X", hr);
-    }
-}
-
-// Drops the reference the diagnostics hold for a reported element. Without it,
-// every element ever reported to the callback would stay alive for the lifetime
-// of the process.
-void VisualTreeWatcher::ReleaseDiagnosticsReference(InstanceHandle handle) {
-    if (!m_XamlDiagnosticsTestHooks) {
-        return;
-    }
-
-    HRESULT hr = m_XamlDiagnosticsTestHooks->UnregisterInstance(handle);
-    if (FAILED(hr)) {
-        Wh_Log(L"UnregisterInstance failed with error %08X", hr);
-    }
-}
-
-HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation relation,
-                                              VisualElement element,
-                                              VisualMutationType mutationType) try {
-    if (mutationType == Add && element.Type &&
-        wcsstr(element.Type, L"CalendarViewDayItem") && g_initializedForThread) {
-        try {
-            auto inspectable = FromHandle(element.Handle);
-            if (auto dayItem =
-                    inspectable.try_as<wux::Controls::CalendarViewDayItem>()) {
-                HandleDayItemAdded(dayItem);
-            }
-        } catch (...) {
-            Wh_Log(L"Error handling day item: %08X", winrt::to_hresult());
-        }
-    }
-
-    // This check comes before the handles of this report are queued, and that order is
-    // the whole point: QueueDiagnosticsRelease stamps the tick, so asking "have the
-    // reports been quiet for 200 ms" after queueing would be asking about an entry made
-    // a moment ago and would answer "no" every single time. The drain timer would then
-    // never be armed, and the leak this function exists to prevent - every element XAML
-    // ever reported being held by the diagnostics for the life of the process - would
-    // happen in full. Asked first, the question is about the previous report instead.
-    FlushDiagnosticsReleasesIfQuiet();
-
-    // A tree discarded whole is never dismantled, so it reports no removals to
-    // be released by; the queue is drained on the dispatcher instead, once the
-    // walk which produced the reports has finished.
-    QueueDiagnosticsRelease(element.Handle);
-    if (mutationType == Add) {
-        QueueDiagnosticsRelease(relation.Parent);
-    }
-
-    return S_OK;
-} catch (...) {
-    HRESULT hr = winrt::to_hresult();
-    Wh_Log(L"Error %08X", hr);
-
-    // Returning an error prevents (some?) further messages, always return
-    // success.
-    return S_OK;
-}
-
-HRESULT VisualTreeWatcher::OnElementStateChanged(InstanceHandle,
-                                                 VisualElementState,
-                                                 LPCWSTR) noexcept {
-    return S_OK;
-}
-
-#pragma endregion  // visualtreewatcher_cpp
-
-#pragma region tap_hpp
-
-#include <ocidl.h>
-
-winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
-
-// {C85D8CC7-5463-40E8-A432-F5916B6427E5}
-static constexpr CLSID CLSID_WindhawkTAP = {
-    0xc85d8cc7, 0x5463, 0x40e8, {0xa4, 0x32, 0xf5, 0x91, 0x6b, 0x64, 0x27, 0xe5}};
-
-class WindhawkTAP
-    : public winrt::implements<WindhawkTAP, IObjectWithSite, winrt::non_agile> {
-   public:
-    HRESULT STDMETHODCALLTYPE SetSite(IUnknown* pUnkSite) override;
-    HRESULT STDMETHODCALLTYPE GetSite(REFIID riid, void** ppvSite) noexcept override;
-
-   private:
-    winrt::com_ptr<IUnknown> site;
-};
-
-#pragma endregion  // tap_hpp
-
-#pragma region tap_cpp
-
-HRESULT WindhawkTAP::SetSite(IUnknown* pUnkSite) try {
-    // Only ever 1 VTW at once.
-    if (g_visualTreeWatcher) {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
-        g_visualTreeWatcher = nullptr;
-    }
-
-    site.copy_from(pUnkSite);
-
-    if (site) {
-        // Decrease refcount increased by InitializeXamlDiagnosticsEx.
-        FreeLibrary(GetCurrentModuleHandle());
-
-        g_visualTreeWatcher = winrt::make_self<VisualTreeWatcher>(site);
-    }
-
-    return S_OK;
-} catch (...) {
-    HRESULT hr = winrt::to_hresult();
-    Wh_Log(L"Error %08X", hr);
-    return hr;
-}
-
-HRESULT WindhawkTAP::GetSite(REFIID riid, void** ppvSite) noexcept {
-    return site.as(riid, ppvSite);
-}
-
-#pragma endregion  // tap_cpp
-
-#pragma region simplefactory_hpp
-
-#include <Unknwn.h>
-
-template <class T>
-struct SimpleFactory
-    : winrt::implements<SimpleFactory<T>, IClassFactory, winrt::non_agile> {
-    HRESULT STDMETHODCALLTYPE CreateInstance(IUnknown* pUnkOuter,
-                                             REFIID riid,
-                                             void** ppvObject) override try {
-        if (!pUnkOuter) {
-            *ppvObject = nullptr;
-            return winrt::make<T>().as(riid, ppvObject);
-        } else {
-            return CLASS_E_NOAGGREGATION;
-        }
-    } catch (...) {
-        HRESULT hr = winrt::to_hresult();
-        Wh_Log(L"Error %08X", hr);
-        return hr;
-    }
-
-    HRESULT STDMETHODCALLTYPE LockServer(BOOL) noexcept override {
-        return S_OK;
-    }
-};
-
-#pragma endregion  // simplefactory_hpp
-
-#pragma region module_cpp
-
-#include <combaseapi.h>
 
 // WindhawkUtils::StringSetting and WindhawkUtils::SetFunctionHook. The header ships with
 // the compiler Windhawk builds mods with.
 #include <windhawk_utils.h>
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdll-attribute-on-redeclaration"
-
-__declspec(dllexport)
-_Use_decl_annotations_ STDAPI DllGetClassObject(REFCLSID rclsid,
-                                                REFIID riid,
-                                                LPVOID* ppv) try {
-    if (rclsid == CLSID_WindhawkTAP) {
-        *ppv = nullptr;
-        return winrt::make<SimpleFactory<WindhawkTAP>>().as(riid, ppv);
-    } else {
-        return CLASS_E_CLASSNOTAVAILABLE;
-    }
-} catch (...) {
-    HRESULT hr = winrt::to_hresult();
-    Wh_Log(L"Error %08X", hr);
-    return hr;
-}
-
-__declspec(dllexport)
-_Use_decl_annotations_ STDAPI DllCanUnloadNow() {
-    if (winrt::get_module_lock()) {
-        return S_FALSE;
-    } else {
-        return S_OK;
-    }
-}
-
-#pragma clang diagnostic pop
-
-#pragma endregion  // module_cpp
-
-#pragma region api_cpp
-
-using PFN_INITIALIZE_XAML_DIAGNOSTICS_EX = decltype(&InitializeXamlDiagnosticsEx);
-
-HRESULT InjectWindhawkTAP() noexcept {
-    HMODULE module = GetCurrentModuleHandle();
-    if (!module) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    WCHAR location[MAX_PATH];
-    switch (GetModuleFileName(module, location, ARRAYSIZE(location))) {
-        case 0:
-        case ARRAYSIZE(location):
-            return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    const HMODULE wux(LoadLibraryEx(L"Windows.UI.Xaml.dll", nullptr,
-                                    LOAD_LIBRARY_SEARCH_SYSTEM32));
-    if (!wux) [[unlikely]] {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    const auto ixde = reinterpret_cast<PFN_INITIALIZE_XAML_DIAGNOSTICS_EX>(
-        GetProcAddress(wux, "InitializeXamlDiagnosticsEx"));
-    if (!ixde) [[unlikely]] {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    // I didn't find a better way than trying many connections until one works.
-    // Reference:
-    // https://github.com/microsoft/microsoft-ui-xaml/blob/d74a0332cf0d5e58f12eddce1070fa7a79b4c2db/src/dxaml/xcp/dxaml/lib/DXamlCore.cpp#L2782
-    HRESULT hr;
-    for (int i = 0; i < 10000; i++) {
-        WCHAR connectionName[256];
-        wsprintf(connectionName, L"VisualDiagConnection%d", i + 1);
-
-        hr = ixde(connectionName, GetCurrentProcessId(), L"", location,
-                  CLSID_WindhawkTAP, nullptr);
-        if (hr != HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
-            break;
-        }
-    }
-
-    return hr;
-}
-
-#pragma endregion  // api_cpp
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -796,6 +412,7 @@ HRESULT InjectWindhawkTAP() noexcept {
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.System.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
 
@@ -1973,19 +1590,23 @@ struct DayCell {
     bool busy = false;
 };
 
-// A day item of this thread, with the identity it is tracked by. The calendar
-// reports a day item as added again every time it is put back into the calendar,
-// which is what a month change does, so an item is tracked here only once.
+// A day item of this thread, with the identity it is tracked by. The walk comes across
+// the same day item on every pass - a month change puts the same ones back into the
+// calendar - so an item is tracked here only once.
 struct TrackedDayItem {
     void* id = nullptr;
     winrt::weak_ref<wuxc::CalendarViewDayItem> item{nullptr};
 };
 
-// The most day items to keep an eye on. A day item which the calendar no longer
-// shows is normally released, and is dropped on the next pass; a day item which
-// the shell keeps alive in a pool would stay forever, so the list is bounded. A
-// day item which is shown again is reported as added again, and tracked again.
-constexpr size_t kMaxTrackedDayItems = 128;
+// The most day items to keep an eye on. The walk finds every day item the calendar holds,
+// and the calendar holds more than the six weeks a month view shows: the first limit this
+// had (128, from when the calendar reported its cells one by one) was reached by a single
+// pass of the walk on a live flyout. A full list makes a pass drop the cells it found
+// first, so the limit has to leave room for the tree; what it is really for is the
+// opposite case - a shell which keeps day items alive in a pool the calendar no longer
+// shows. A day item which is gone is released and dropped on the next pass, and one which
+// is shown again is found again by the walk, and tracked again.
+constexpr size_t kMaxTrackedDayItems = 512;
 
 // The state of every day cell of this thread, keyed by the day item's identity.
 // Two references to the same XAML element compare unequal, and the element's Tag
@@ -2030,9 +1651,9 @@ DayCell& CellFor(wuxc::CalendarViewDayItem const& item) {
     return *entry;
 }
 
-// Remembers a day item the shell reported. A repeated report of a day item which
-// is already tracked only makes it the most recent one, so that the list holds
-// the day items the calendar used last.
+// Remembers a day item the walk found. Finding a day item which is already tracked
+// again only makes it the most recent one, so that the list holds the day items the
+// calendar used last.
 void TrackDayItem(wuxc::CalendarViewDayItem const& item) {
     void* id = winrt::get_abi(item);
 
@@ -2085,8 +1706,8 @@ bool IsOwnBrush(wuxc::TextBlock const& textBlock, wuxm::Brush const& ownBrush) {
 }
 
 // The foreground is written only when it differs: a write which changes nothing
-// still costs a layout pass, and every element mutation is reported back to the
-// mod.
+// still costs a layout pass, and it would count as a write for the sweep which is
+// watching the shell rewrite the cells (see kSweepQuietTicksToStop).
 // A new SolidColorBrush is created instead of the shell's brush being modified: the
 // shell may share one brush between several elements of a template, and changing it
 // would change them as well. The shell's own brush is kept as it is and put back on
@@ -2264,9 +1885,9 @@ std::wstring ExpandName(std::wstring const& text, std::wstring const& name) {
 //      colour back for a day which is not a holiday any more;
 //   6) remember what was written, so that it can be restored later.
 //
-// Nothing is written while the cell already shows the wanted value: every write costs
-// a layout pass and is reported back to the mod through the diagnostics, which is
-// where the flicker and the log spam of the early versions came from.
+// Nothing is written while the cell already shows the wanted value: every write costs a
+// layout pass, and a write which changed nothing would also keep the sweep running for
+// another round (see kSweepQuietTicksToStop).
 void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
     const std::shared_ptr<const Settings> settings = GetSettings();
     if (!item) {
@@ -2496,14 +2117,13 @@ void StopSweepTimer() {
 
 // Starts the periodic re-check again, if it isn't running already, and gives the quiet
 // count a fresh start: this is called from everything which the shell's late rewrite
-// follows (see kSweepQuietTicksToStop). Nothing is started while no day item is tracked,
-// which is the state before the calendar was opened the first time and after the shell
-// has let go of all of them.
+// follows (see kSweepQuietTicksToStop).
+// The re-check is also what finds the day cells, so a caller which knows that the
+// calendar can have changed - a window which appeared, an activation, a changed setting -
+// starts it even when no day item is tracked yet, which is the state before a calendar
+// was found for the first time. Nothing here reads the calendar: a caller which wants the
+// marks right away rather than on the next pass calls SweepDayItems() as well.
 void StartSweepTimer() {
-    if (t_dayItems.empty()) {
-        return;
-    }
-
     t_sweepQuietTicks = 0;
 
     try {
@@ -2511,6 +2131,7 @@ void StartSweepTimer() {
             auto dispatcherQueue =
                 winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
             if (!dispatcherQueue) {
+                Wh_Log(L"No dispatcher queue: the calendar cannot be watched");
                 return;
             }
 
@@ -2530,6 +2151,284 @@ void StartSweepTimer() {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Finding the calendar and its day cells
+
+// The CoreWindow of this thread, with the two events which say that the calendar can
+// have been opened. They are taken lazily and given back on the same thread: a handler
+// is a delegate into this module's image, so one which is left behind makes the shell
+// call into an unmapped module the next time the flyout is opened.
+struct CoreWindowTriggers {
+    wuc::CoreWindow coreWindow{nullptr};
+    winrt::event_token activatedToken{};
+    winrt::event_token visibilityChangedToken{};
+};
+
+thread_local CoreWindowTriggers t_windowTriggers;
+
+// The calls above arrive in bursts - an activation, a change of visibility and the
+// window being shown are one open - so they are debounced (see
+// OnCalendarOpenedOnCurrentThread).
+constexpr ULONGLONG kCalendarOpenedDebounceMs = 500;
+thread_local ULONGLONG t_lastCalendarOpenedTick = 0;
+
+void OnCalendarOpenedOnCurrentThread();
+
+// Takes the activation events of this thread's CoreWindow, once. A CoreWindow which is
+// not there yet is neither an error nor the end of it: the ShellHost target has none at
+// all, and when a CoreWindow is created the object is not necessarily there the moment
+// its window is (the window hook runs before XAML gets that far), so this is asked for
+// again on every pass of the sweep until it works.
+void RegisterCalendarTriggersOnCurrentThread() {
+    try {
+        if (t_windowTriggers.coreWindow) {
+            return;
+        }
+
+        auto coreWindow = wuc::CoreWindow::GetForCurrentThread();
+        if (!coreWindow) {
+            return;
+        }
+
+        // The window is remembered before the events are registered, so that a
+        // registration which throws halfway through still has the tokens it did get
+        // revoked when the thread is uninitialized.
+        t_windowTriggers.coreWindow = coreWindow;
+        t_windowTriggers.activatedToken = coreWindow.Activated(
+            [](wuc::CoreWindow const&, wuc::WindowActivatedEventArgs const& args) {
+                if (args.WindowActivationState() !=
+                    wuc::CoreWindowActivationState::Deactivated) {
+                    OnCalendarOpenedOnCurrentThread();
+                }
+            });
+        t_windowTriggers.visibilityChangedToken = coreWindow.VisibilityChanged(
+            [](wuc::CoreWindow const&,
+               wuc::VisibilityChangedEventArgs const& args) {
+                if (args.Visible()) {
+                    OnCalendarOpenedOnCurrentThread();
+                }
+            });
+
+        Wh_Log(L"Watching the window of thread %u", GetCurrentThreadId());
+    } catch (...) {
+        Wh_Log(L"Failed to register the window events: %08X", winrt::to_hresult());
+    }
+}
+
+// Gives the events back, on the thread which took them.
+void UnregisterCalendarTriggersOnCurrentThread() {
+    try {
+        auto coreWindow = t_windowTriggers.coreWindow;
+        if (coreWindow) {
+            if (t_windowTriggers.activatedToken.value != 0) {
+                coreWindow.Activated(t_windowTriggers.activatedToken);
+            }
+            if (t_windowTriggers.visibilityChangedToken.value != 0) {
+                coreWindow.VisibilityChanged(
+                    t_windowTriggers.visibilityChangedToken);
+            }
+        }
+    } catch (...) {
+    }
+
+    t_windowTriggers = {};
+}
+
+// A window which was just shown does not have its calendar yet: the day cells come with the
+// layout which follows. The root element is watched until they are found, which is what
+// makes the marks appear together with the calendar rather than up to one pass of the sweep
+// later - the walk of the sweep is the fallback for a window whose layout does not change
+// again, and for a flyout which keeps the day cells it already has.
+thread_local wux::FrameworkElement t_layoutUpdatedElement{nullptr};
+thread_local winrt::event_token t_layoutUpdatedToken{};
+thread_local ULONGLONG t_layoutUpdatedStartTick = 0;
+thread_local ULONGLONG t_lastLayoutUpdatedPassTick = 0;
+
+// How long a watch stays armed, and how often it is allowed to walk. The window is not
+// watched forever: a calendar which is not found in this time is not there, and the walk
+// is repeated by the sweep anyway.
+constexpr ULONGLONG kLayoutUpdatedWatchMs = 5000;
+constexpr ULONGLONG kLayoutUpdatedThrottleMs = 100;
+
+void RevokeLayoutUpdatedWatch() {
+    if (t_layoutUpdatedToken.value != 0) {
+        auto element = t_layoutUpdatedElement;
+        if (element) {
+            try {
+                element.LayoutUpdated(t_layoutUpdatedToken);
+            } catch (...) {
+            }
+        }
+    }
+
+    t_layoutUpdatedToken = {};
+    t_layoutUpdatedElement = nullptr;
+}
+
+void OnCalendarLayoutUpdatedOnCurrentThread() {
+    const ULONGLONG now = GetTickCount64();
+    if (now - t_layoutUpdatedStartTick > kLayoutUpdatedWatchMs) {
+        RevokeLayoutUpdatedWatch();
+        return;
+    }
+
+    // A layout pass of the shell arrives in bursts as well, and one walk per burst says
+    // the same thing as one walk per pass.
+    if (now - t_lastLayoutUpdatedPassTick < kLayoutUpdatedThrottleMs) {
+        return;
+    }
+    t_lastLayoutUpdatedPassTick = now;
+
+    SweepDayItems();
+
+    // Found: the marks are on the calendar, and the sweep is what watches it from here.
+    if (!t_dayItems.empty()) {
+        RevokeLayoutUpdatedWatch();
+    }
+}
+
+// Arms the watch above for the window of this thread. Called with every open, so that a
+// flyout which was closed and shown again is watched again; an armed watch is left alone.
+void WatchCalendarLayoutOnCurrentThread() {
+    if (t_layoutUpdatedToken.value != 0) {
+        return;
+    }
+
+    try {
+        auto window = wux::Window::Current();
+        if (!window) {
+            return;
+        }
+
+        auto root = window.Content().try_as<wux::FrameworkElement>();
+        if (!root) {
+            return;
+        }
+
+        t_layoutUpdatedElement = root;
+        t_layoutUpdatedStartTick = GetTickCount64();
+        t_lastLayoutUpdatedPassTick = 0;
+        t_layoutUpdatedToken = root.LayoutUpdated(
+            [](wf::IInspectable const&, wf::IInspectable const&) {
+                OnCalendarLayoutUpdatedOnCurrentThread();
+            });
+    } catch (...) {
+        RevokeLayoutUpdatedWatch();
+    }
+}
+
+// How far a walk over a window goes. The limits are wide for a tree the calendar is in -
+// the notification list above it can be long - and what they guard against is the window
+// which has no calendar at all (the hardware flyouts of the same process share this code)
+// and a tree the shell is changing while it is being read. A walk which stops at these
+// limits is a walk which found nothing, not a wrong answer, and the next pass tries again.
+constexpr size_t kMaxScannedElements = 16384;
+constexpr int kMaxScanDepth = 96;
+
+// A thread without a XAML window is worth reporting once: "the mod does nothing" is
+// otherwise hard to tell from "this month has no holidays".
+thread_local bool t_loggedNoWindow = false;
+
+void CollectDayItemsFromElement(wux::DependencyObject const& root,
+                                size_t& budget,
+                                int depth) {
+    if (!root || budget == 0 || depth > kMaxScanDepth) {
+        return;
+    }
+    budget--;
+
+    // A day cell is neither looked into nor looked past: what is inside it is the day
+    // number and the lunar text of that one day, and there is no calendar below it.
+    if (auto dayItem = root.try_as<wuxc::CalendarViewDayItem>()) {
+        TrackDayItem(dayItem);
+        return;
+    }
+
+    int count = 0;
+    try {
+        count = wuxm::VisualTreeHelper::GetChildrenCount(root);
+    } catch (...) {
+        return;
+    }
+
+    for (int childIndex = 0; childIndex < count; childIndex++) {
+        wux::DependencyObject child = nullptr;
+        try {
+            child = wuxm::VisualTreeHelper::GetChild(root, childIndex);
+        } catch (...) {
+            continue;
+        }
+
+        CollectDayItemsFromElement(child, budget, depth + 1);
+    }
+}
+
+// Finds the day cells of the calendar by walking the XAML tree of the window of this
+// thread, and tracks them: the pass which follows applies the holiday data to them.
+//
+// This walk is what replaced the XAML diagnostics. The diagnostics reported every day
+// cell as it appeared, which is precise, but it costs a diagnostics consumer for the
+// whole session and that is a consumer no other mod of this process can have. A walk on
+// every pass of the sweep costs a walk of the calendar tree for the few seconds the sweep
+// runs after a calendar can have changed, and it does not miss a cell the shell recycles,
+// because it does not remember cells: it looks at what is there.
+//
+// Runs on the UI thread of a calendar window.
+void CollectDayItemsOnCurrentThread() {
+    wux::Window window = nullptr;
+    try {
+        window = wux::Window::Current();
+    } catch (...) {
+        return;
+    }
+
+    if (!window) {
+        if (!t_loggedNoWindow) {
+            t_loggedNoWindow = true;
+            Wh_Log(L"No XAML window on thread %u", GetCurrentThreadId());
+        }
+        return;
+    }
+
+    try {
+        size_t budget = kMaxScannedElements;
+
+        if (auto content = window.Content()) {
+            CollectDayItemsFromElement(content, budget, 0);
+        }
+
+        // A flyout can be a popup rather than part of the window's content.
+        for (auto popup : wuxm::VisualTreeHelper::GetOpenPopups(window)) {
+            if (budget == 0) {
+                break;
+            }
+            if (auto child = popup.Child()) {
+                CollectDayItemsFromElement(child, budget, 0);
+            }
+        }
+    } catch (...) {
+    }
+}
+
+// Everything which says that the calendar of this thread can have been opened or changed:
+// a window which appeared, an activation, the window being shown, a changed setting. The
+// cells are marked right away rather than on the next pass of the sweep, so that the
+// flyout does not open with the marks missing for a second.
+// Runs on the UI thread of a calendar window.
+void OnCalendarOpenedOnCurrentThread() {
+    const ULONGLONG now = GetTickCount64();
+    if (now - t_lastCalendarOpenedTick < kCalendarOpenedDebounceMs) {
+        return;
+    }
+    t_lastCalendarOpenedTick = now;
+
+    RegisterCalendarTriggersOnCurrentThread();
+    SweepDayItems();
+    StartSweepTimer();
+    WatchCalendarLayoutOnCurrentThread();
+    RequestHolidayData();
+}
+
 // Applies the mod's data to every day item of this thread. Runs on every timer
 // tick, and after the data or the settings changed.
 // Again, only a cell which does not show what the mod wants is written to, so a pass
@@ -2538,6 +2437,12 @@ void SweepDayItems() {
     // Everything a pass writes sets this, so that a pass which only reads can be told
     // from one which changed something (see kSweepQuietTicksToStop).
     t_applyWrote = false;
+
+    // The day cells are looked for on every pass rather than remembered from a report, and
+    // the window events are asked for again until the CoreWindow of this thread is there
+    // to be watched.
+    RegisterCalendarTriggersOnCurrentThread();
+    CollectDayItemsOnCurrentThread();
 
     // The list is only indexed, never iterated over: applying to a day item can
     // put another one into it.
@@ -2568,32 +2473,18 @@ void SweepDayItems() {
         }
     }
 
-    // No day items left: the shell has let go of the calendar, and the timer is started
-    // again when one shows up. The second way out is the quiet count: a pass which wrote
-    // nothing is one more reason to believe the shell is done with rewriting the cells,
-    // and the timer stops once enough of them follow each other. Without that the timer
-    // would run for the rest of the session, because the shell keeps the day cells of a
-    // closed flyout alive.
-    if (t_dayItems.empty()) {
-        StopSweepTimer();
-    } else if (t_applyWrote) {
+    // A pass which wrote nothing is one more reason to believe the shell is done with
+    // rewriting the cells, and the timer stops once enough of them follow each other.
+    // Without that the timer would run for the rest of the session, because the shell
+    // keeps the day cells of a closed flyout alive.
+    // A pass which found no day item at all counts as a quiet one instead of stopping the
+    // timer on the spot: the calendar of a window which was just created is usually not
+    // built yet when it is first asked, and the pass which finds it comes later.
+    if (t_applyWrote) {
         t_sweepQuietTicks = 0;
     } else if (++t_sweepQuietTicks >= kSweepQuietTicksToStop) {
         StopSweepTimer();
     }
-}
-
-// Called for every day cell the shell creates, and for every one it puts back
-// into the calendar when the displayed month changes.
-// The shell re-reports a day item as added every time it puts one back, which a month
-// change does, so this is called repeatedly; TrackDayItem deduplicates, which keeps the
-// list from growing with use.
-void HandleDayItemAdded(wuxc::CalendarViewDayItem const& item) {
-    TrackDayItem(item);
-
-    ApplyToDayItem(item);
-    StartSweepTimer();
-    RequestHolidayData();
 }
 
 // Undoes everything the mod did to the day cells of this thread: unregisters the two
@@ -2665,121 +2556,6 @@ void UninitializeDayItemsForCurrentThread() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Diagnostics releases
-
-thread_local std::vector<InstanceHandle> g_pendingDiagnosticsRelease;
-thread_local ULONGLONG g_lastDiagnosticsReleaseQueueTick;
-thread_local bool g_diagnosticsReleaseDrainQueued;
-thread_local winrt::Windows::System::DispatcherQueueTimer
-    g_diagnosticsReleaseDrainTimer{nullptr};
-thread_local winrt::Windows::System::DispatcherQueueTimer::Tick_revoker
-    g_diagnosticsReleaseDrainTimerTickRevoker;
-
-// Long enough to sit out a tree being built.
-constexpr ULONGLONG kDiagnosticsReleaseDelay = 200;
-constexpr int kDiagnosticsReleaseDrainDelay = 50;
-
-// The diagnostics cache a strong reference for every element which was reported, and
-// give it back only through UnregisterInstance: without that, elements are never freed
-// and the process only grows. The reference cannot be given back inside the report
-// callback, which arrives from inside XAML's own enter and leave walks, where dropping
-// the last reference destroys the element the walk is still visiting. The handles are
-// therefore queued, and given back on a one-shot timer once the reports have been quiet
-// for 200 ms (plus the 50 ms delay of the timer itself), when the walk is over.
-void FlushDiagnosticsReleases() {
-    auto pending = std::move(g_pendingDiagnosticsRelease);
-    g_pendingDiagnosticsRelease.clear();
-
-    VisualTreeWatcher* watcher = g_visualTreeWatcher.get();
-    if (!watcher) {
-        return;
-    }
-
-    // A handle is queued once per report naming it, so a parent appears once
-    // per child.
-    std::sort(pending.begin(), pending.end());
-    pending.erase(std::unique(pending.begin(), pending.end()), pending.end());
-
-    for (InstanceHandle handle : pending) {
-        watcher->ReleaseDiagnosticsReference(handle);
-    }
-}
-
-void QueueDiagnosticsRelease(InstanceHandle handle) {
-    if (!handle) {
-        return;
-    }
-
-    g_pendingDiagnosticsRelease.push_back(handle);
-    g_lastDiagnosticsReleaseQueueTick = GetTickCount64();
-}
-
-void DrainDiagnosticsReleases() {
-    g_diagnosticsReleaseDrainQueued = false;
-    FlushDiagnosticsReleases();
-}
-
-// Reports arrive from inside XAML's own Enter and Leave walks, and a release
-// there re-enters the diagnostics while the tree is being mutated: dropping the
-// last reference to an element the walk is still visiting destroys it mid-walk.
-// The drain therefore waits on a one-shot timer, which the thread teardown can
-// stop, rather than on a dispatcher item, which it cannot.
-//
-// Called from OnVisualTreeChange *before* that report queues its own handles, so what
-// it measures is the gap since the previous report (see the comment there). A burst
-// whose last report is never followed by another one keeps its handles until the thread
-// reports something again, which is the same behaviour as upstream's; the alternative -
-// re-arming the timer on every queue - would put a timer call inside the walk.
-void FlushDiagnosticsReleasesIfQuiet() {
-    if (g_pendingDiagnosticsRelease.empty() || g_diagnosticsReleaseDrainQueued ||
-        GetTickCount64() - g_lastDiagnosticsReleaseQueueTick <
-            kDiagnosticsReleaseDelay) {
-        return;
-    }
-
-    try {
-        if (!g_diagnosticsReleaseDrainTimer) {
-            auto dispatcherQueue =
-                winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
-            if (!dispatcherQueue) {
-                Wh_Log(L"No dispatcher queue, elements will be held");
-                return;
-            }
-
-            g_diagnosticsReleaseDrainTimer = dispatcherQueue.CreateTimer();
-            g_diagnosticsReleaseDrainTimer.IsRepeating(false);
-            g_diagnosticsReleaseDrainTimer.Interval(
-                std::chrono::milliseconds{kDiagnosticsReleaseDrainDelay});
-            g_diagnosticsReleaseDrainTimerTickRevoker =
-                g_diagnosticsReleaseDrainTimer.Tick(
-                    winrt::auto_revoke,
-                    [](winrt::Windows::System::DispatcherQueueTimer const&,
-                       wf::IInspectable const&) { DrainDiagnosticsReleases(); });
-        }
-
-        g_diagnosticsReleaseDrainTimer.Start();
-        g_diagnosticsReleaseDrainQueued = true;
-    } catch (...) {
-        Wh_Log(L"Error %08X", winrt::to_hresult());
-    }
-}
-
-void StopDiagnosticsReleases() {
-    g_pendingDiagnosticsRelease.clear();
-
-    if (g_diagnosticsReleaseDrainTimer) {
-        try {
-            g_diagnosticsReleaseDrainTimer.Stop();
-        } catch (...) {
-        }
-    }
-
-    g_diagnosticsReleaseDrainTimerTickRevoker.revoke();
-    g_diagnosticsReleaseDrainTimer = nullptr;
-    g_diagnosticsReleaseDrainQueued = false;
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // Process plumbing
 
 enum class Target {
@@ -2795,6 +2571,10 @@ void InitializeForCurrentThread() {
     }
 
     g_initializedForThread = true;
+
+    // The events of this thread's window, taken here and asked for again on every pass of
+    // the sweep: a CoreWindow is not necessarily there yet when its window is.
+    RegisterCalendarTriggersOnCurrentThread();
 }
 
 void UninitializeForCurrentThread() {
@@ -2802,37 +2582,13 @@ void UninitializeForCurrentThread() {
         return;
     }
 
+    // On this thread: the window events are delegates into this module, and the day cells
+    // are XAML objects of the thread they were found on.
+    UnregisterCalendarTriggersOnCurrentThread();
+    RevokeLayoutUpdatedWatch();
     UninitializeDayItemsForCurrentThread();
-    StopDiagnosticsReleases();
 
     g_initializedForThread = false;
-}
-
-void InitializeSettingsAndTap() {
-    if (g_initialized.exchange(true)) {
-        return;
-    }
-
-    HRESULT hr = InjectWindhawkTAP();
-    if (FAILED(hr)) {
-        Wh_Log(L"Error %08X", hr);
-    }
-}
-
-void UninitializeSettingsAndTap() {
-    // Before the watcher is taken out: a thread which is still inside
-    // AdviseVisualTreeChange would otherwise report the whole tree again right after
-    // UnadviseVisualTreeChange has taken the callback out, and those reports would arrive
-    // in a module which is being unmapped. Waiting is safe here, this runs on the engine
-    // thread (see g_adviseThreads).
-    WaitForAdviseThreads();
-
-    if (g_visualTreeWatcher) {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
-        g_visualTreeWatcher = nullptr;
-    }
-
-    g_initialized = false;
 }
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
@@ -2943,36 +2699,43 @@ bool RunFromWindowThreadViaPostMessage(HWND hWnd,
     return true;
 }
 
-void OnWindowCreated(HWND hWnd, LPCWSTR lpClassName, PCSTR funcName) {
-    BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
-
+// Whether a window of this process is one the calendar is looked for in. The two targets
+// name their window differently: ShellExperienceHost uses the CoreWindow of the flyout,
+// ShellHost the ControlCenterWindow the newer builds moved it to.
+bool IsCalendarWindowClass(PCWSTR className) {
     switch (g_target) {
         case Target::ShellExperienceHost:
-            if (bTextualClassName &&
-                _wcsicmp(lpClassName, L"Windows.UI.Core.CoreWindow") == 0) {
-                Wh_Log(L"Initializing - created core window: %08X via %S",
-                       (DWORD)(ULONG_PTR)hWnd, funcName);
-                InitializeForCurrentThread();
-                InitializeSettingsAndTap();
-            }
-            break;
+            return _wcsicmp(className, L"Windows.UI.Core.CoreWindow") == 0;
 
         case Target::ShellHost:
-            if (bTextualClassName &&
-                _wcsicmp(lpClassName, L"ControlCenterWindow") == 0) {
-                Wh_Log(L"Initializing - created ControlCenterWindow: %08X via %S",
-                       (DWORD)(ULONG_PTR)hWnd, funcName);
-                // Initializing at this point is too early and doesn't work.
-                RunFromWindowThreadViaPostMessage(
-                    hWnd,
-                    [](PVOID) {
-                        InitializeForCurrentThread();
-                        InitializeSettingsAndTap();
-                    },
-                    nullptr);
-            }
-            break;
+            return _wcsicmp(className, L"ControlCenterWindow") == 0;
     }
+
+    return false;
+}
+
+void OnWindowCreated(HWND hWnd, LPCWSTR lpClassName, PCSTR funcName) {
+    // The class name is only a string when the caller passed one: the same call also
+    // accepts a numeric atom, which names no class to compare against.
+    BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
+    if (!bTextualClassName || !IsCalendarWindowClass(lpClassName)) {
+        return;
+    }
+
+    Wh_Log(L"Initializing - created calendar window: %08X via %S",
+           (DWORD)(ULONG_PTR)hWnd, funcName);
+
+    // Posted rather than sent, for the reason the ShellHost target always had: the window
+    // exists before its XAML does, so this runs once the thread is free to run it. The
+    // first pass of it usually finds nothing yet - the calendar is built when the flyout
+    // is opened - which is what the sweep it arms is for.
+    RunFromWindowThreadViaPostMessage(
+        hWnd,
+        [](PVOID) {
+            InitializeForCurrentThread();
+            OnCalendarOpenedOnCurrentThread();
+        },
+        nullptr);
 }
 
 using CreateWindowInBand_t = HWND(WINAPI*)(DWORD dwExStyle,
@@ -3053,123 +2816,42 @@ HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
     return hWnd;
 }
 
-using RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
-RegOpenKeyExW_t RegOpenKeyExW_Original;
-
-// The handles this hook hands out in place of the XAML debug key, which are the only
-// ones the RegQueryValueExW hook below answers. Remembering them is what keeps that
-// answer narrow: answering "1" for every query of a value named DisableCompositionDiag
-// would also answer any other code on the thread which happens to ask for that name. The
-// substituted key is a new handle value on every open, so there is no fixed HKEY to
-// compare against. The list is cleared before and after every AdviseVisualTreeChange, so
-// a handle which is closed and re-issued by the system cannot survive across one call,
-// and no RegCloseKey hook is needed either.
-//
-// The key is opened and queried from inside AdviseVisualTreeChange, which the mod calls
-// on a thread of its own, but the thread a query arrives on is not something to depend
-// on, so the handles are kept for every thread as well.
-std::mutex g_fakedDebugKeysMutex;
-std::vector<HKEY> g_fakedDebugKeys;
-thread_local std::vector<HKEY> t_fakedDebugKeys;
-
-void RememberFakedDebugKey(HKEY key) {
-    if (!key) {
+// The window being shown is the moment the flyout is opened, and it is the signal both
+// targets have in common: the newer builds moved the calendar into a window which is not
+// a CoreWindow, so the activation events are not available there. A hide is ignored - the
+// marks are not taken back when the flyout is closed, the shell repaints the cells itself.
+void OnWindowShown(HWND hWnd) {
+    DWORD dwProcessId = 0;
+    if (!hWnd || !GetWindowThreadProcessId(hWnd, &dwProcessId) ||
+        dwProcessId != GetCurrentProcessId()) {
         return;
     }
 
-    t_fakedDebugKeys.push_back(key);
-    std::lock_guard<std::mutex> lock(g_fakedDebugKeysMutex);
-    g_fakedDebugKeys.push_back(key);
+    WCHAR szClassName[32];
+    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0 ||
+        !IsCalendarWindowClass(szClassName)) {
+        return;
+    }
+
+    // Posted, not sent: this runs inside window management, and blocking it on the UI
+    // thread which is being told about its own window is a deadlock waiting to happen.
+    RunFromWindowThreadViaPostMessage(
+        hWnd, [](PVOID) { OnCalendarOpenedOnCurrentThread(); }, nullptr);
 }
 
-void ForgetFakedDebugKeys() {
-    t_fakedDebugKeys.clear();
-    std::lock_guard<std::mutex> lock(g_fakedDebugKeysMutex);
-    g_fakedDebugKeys.clear();
-}
+using ShowWindow_t = decltype(&ShowWindow);
+ShowWindow_t ShowWindow_Original;
 
-bool IsFakedDebugKey(HKEY key) {
-    for (HKEY faked : t_fakedDebugKeys) {
-        if (faked == key) {
-            return true;
-        }
+// The return value of ShowWindow says whether the window was visible before, not whether
+// the call worked, so it is passed through and not tested.
+BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
+    const BOOL wasVisible = ShowWindow_Original(hWnd, nCmdShow);
+
+    if (nCmdShow != SW_HIDE) {
+        OnWindowShown(hWnd);
     }
 
-    std::lock_guard<std::mutex> lock(g_fakedDebugKeysMutex);
-    for (HKEY faked : g_fakedDebugKeys) {
-        if (faked == key) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-LSTATUS WINAPI RegOpenKeyExW_Hook(HKEY hKey,
-                                  LPCWSTR lpSubKey,
-                                  DWORD ulOptions,
-                                  REGSAM samDesired,
-                                  PHKEY phkResult) {
-    LSTATUS result = RegOpenKeyExW_Original(hKey, lpSubKey, ulOptions,
-                                            samDesired, phkResult);
-    if (result == ERROR_SUCCESS || !g_reportCompositionDiagAsDisabled ||
-        hKey != HKEY_LOCAL_MACHINE || !lpSubKey ||
-        _wcsicmp(lpSubKey, L"Software\\Microsoft\\XAML\\Debug") != 0) {
-        return result;
-    }
-
-    // The key usually doesn't exist, and the value isn't queried unless the key
-    // could be opened, so hand out a key which does exist.
-    Wh_Log(L"Substituting the XAML debug key");
-    LSTATUS substituted = RegOpenKeyExW_Original(
-        HKEY_LOCAL_MACHINE, L"Software\\Microsoft", ulOptions, samDesired,
-        phkResult);
-    if (substituted == ERROR_SUCCESS && phkResult) {
-        RememberFakedDebugKey(*phkResult);
-    }
-    return substituted;
-}
-
-using RegQueryValueExW_t = decltype(&RegQueryValueExW);
-RegQueryValueExW_t RegQueryValueExW_Original;
-// "The value is 1" is answered only for a handle the mod faked itself. Every part of the
-// condition is needed: the flag says this is that one read, the value name says it is
-// that value, and the handle says it is the key the mod handed out.
-LSTATUS WINAPI RegQueryValueExW_Hook(HKEY hKey,
-                                     LPCWSTR lpValueName,
-                                     LPDWORD lpReserved,
-                                     LPDWORD lpType,
-                                     LPBYTE lpData,
-                                     LPDWORD lpcbData) {
-    if (!g_reportCompositionDiagAsDisabled || !lpValueName ||
-        _wcsicmp(lpValueName, L"DisableCompositionDiag") != 0 ||
-        !IsFakedDebugKey(hKey)) {
-        return RegQueryValueExW_Original(hKey, lpValueName, lpReserved, lpType,
-                                         lpData, lpcbData);
-    }
-
-    Wh_Log(L"Reporting DisableCompositionDiag as set");
-
-    if (lpType) {
-        *lpType = REG_DWORD;
-    }
-
-    if (lpData && (!lpcbData || *lpcbData < sizeof(DWORD))) {
-        if (lpcbData) {
-            *lpcbData = sizeof(DWORD);
-        }
-        return ERROR_MORE_DATA;
-    }
-
-    if (lpData) {
-        *reinterpret_cast<DWORD*>(lpData) = 1;
-    }
-
-    if (lpcbData) {
-        *lpcbData = sizeof(DWORD);
-    }
-
-    return ERROR_SUCCESS;
+    return wasVisible;
 }
 
 std::vector<HWND> GetCoreWnds() {
@@ -3194,18 +2876,8 @@ std::vector<HWND> GetCoreWnds() {
                 return TRUE;
             }
 
-            switch (g_target) {
-                case Target::ShellExperienceHost:
-                    if (_wcsicmp(szClassName, L"Windows.UI.Core.CoreWindow") == 0) {
-                        param.hWnds->push_back(hWnd);
-                    }
-                    break;
-
-                case Target::ShellHost:
-                    if (_wcsicmp(szClassName, L"ControlCenterWindow") == 0) {
-                        param.hWnds->push_back(hWnd);
-                    }
-                    break;
+            if (IsCalendarWindowClass(szClassName)) {
+                param.hWnds->push_back(hWnd);
             }
 
             return TRUE;
@@ -3269,9 +2941,9 @@ bool InstallHook(HMODULE module,
     return true;
 }
 
-// Why the hooks are set here: CreateWindowInBand(Ex) has to be hooked before a window is
-// created, otherwise a window which existed before the mod was loaded, or one being made
-// while it loads, is missed and never gets its holiday marks.
+// Why the hooks are set here: the window has to be hooked before it is created or shown,
+// otherwise a window which existed before the mod was loaded, or one being made while it
+// loads, is missed and never gets its holiday marks.
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
@@ -3312,45 +2984,30 @@ BOOL Wh_ModInit() {
                 &CreateWindowInBand_Original);
     InstallHook(user32Module, "CreateWindowInBandEx",
                 CreateWindowInBandEx_Hook, &CreateWindowInBandEx_Original);
-
-    // These two are what makes the XAML diagnostics report the visual tree to the
-    // mod: without them AdviseVisualTreeChange answers with an error (the watcher
-    // thread logs it) and the calendar is never touched. They are therefore reported
-    // as the hooks the mod depends on. The two calls are not combined with &&, so
-    // that a failing first one does not keep the second from being tried.
-    HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
-    const bool openKeyHook =
-        InstallHook(kernelBaseModule, "RegOpenKeyExW", RegOpenKeyExW_Hook,
-                    &RegOpenKeyExW_Original);
-    const bool queryValueHook = InstallHook(
-        kernelBaseModule, "RegQueryValueExW", RegQueryValueExW_Hook,
-        &RegQueryValueExW_Original);
-    if (!openKeyHook || !queryValueHook) {
-        Wh_Log(L"Initialization is incomplete: the calendar will not be modified "
-               L"without the registry hooks");
-    }
+    // The flyout being shown is what says that the calendar is about to be looked at
+    // again: the days of a month are drawn when it is opened, and the day cells of the
+    // last time can be gone by then.
+    InstallHook(user32Module, "ShowWindow", ShowWindow_Hook, &ShowWindow_Original);
 
     return TRUE;
 }
 
-// Initialised after the load: a window which is already there gets its
-// InitializeForCurrentThread here, so that a mod which is loaded after the window was
-// created is not missed, and the data is fetched up front so that the calendar has
-// content the first time it is opened.
+// Initialised after the load: a window which is already there gets its initialization and
+// its first pass here, so that a mod which is loaded after the window was created is not
+// missed, and the data is fetched up front so that the calendar has content the first time
+// it is opened.
 void Wh_ModAfterInit() {
     Wh_Log(L">");
-
-    bool initialize = false;
 
     for (auto hCoreWnd : GetCoreWnds()) {
         Wh_Log(L"Initializing for %08X", (DWORD)(ULONG_PTR)hCoreWnd);
         RunFromWindowThread(
-            hCoreWnd, [](PVOID) { InitializeForCurrentThread(); }, nullptr);
-        initialize = true;
-    }
-
-    if (initialize) {
-        InitializeSettingsAndTap();
+            hCoreWnd,
+            [](PVOID) {
+                InitializeForCurrentThread();
+                OnCalendarOpenedOnCurrentThread();
+            },
+            nullptr);
     }
 
     // Fetch the data up front so that the calendar is populated the first time it is
@@ -3366,8 +3023,10 @@ void Wh_ModUninit() {
     g_shuttingDown = true;
 
     StopWorkerThread();
-    UninitializeSettingsAndTap();
 
+    // One thread at a time, and on the thread which took the window events: the day cells
+    // are XAML objects of the thread they were found on, and the window events are
+    // delegates into this module, which is about to be unmapped.
     for (auto hCoreWnd : GetCoreWnds()) {
         Wh_Log(L"Uninitializing for %08X", (DWORD)(ULONG_PTR)hCoreWnd);
         RunFromWindowThread(
