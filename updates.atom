@@ -2,12 +2,244 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-10T12:00:29.000Z</updated>
+    <updated>2026-10-10T15:04:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Split Tray 1.3.3]]></title>
+        <id>https://windhawk.net/mods/split-tray#d73e9f74f445a07dd765cf6479498d20c421d2ff</id>
+        <link href="https://windhawk.net/mods/split-tray"/>
+        <updated>2026-10-10T15:04:40.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="splittray">Split Tray</h1>
+<p>Windows 11 shows the notification area - the system tray - on the main
+display only. Split Tray puts one on the taskbar of <strong>every other display</strong>,
+and lets you choose which tray each application's icon lives in.</p>
+<p><img src="https://raw.githubusercontent.com/st0nebridge/SplitTray/v1.3.1/docs/images/tray-2.png" alt="Tray 2 in the second display's taskbar: the chevron, five icons, and the clock" /></p>
+<h2 id="whatyouget">What you get</h2>
+<ul>
+<li>A tray inside each extra display's taskbar, beside the clock, where the
+native one would be. Icons work as in the real tray: left, right, double and
+middle clicks, context menus, tooltips, the popups some applications draw
+instead, the keyboard, and screen readers.</li>
+<li>Balloon notifications from icons in Split Tray's trays, shown by Windows as
+for any other icon.</li>
+<li>Per-application rules - "this program's icon goes to tray 3" - and a
+default for everything else.</li>
+<li>Move any icon by hand: <strong>Shift+right-click</strong> an icon in one of Split Tray's
+trays for its menu, or open <strong>Arrange icons</strong> to drag icons between every
+tray. Where you put an icon is remembered, until it has not been seen for a
+year.</li>
+<li>An overflow chevron for the icons you would rather not see all the time.</li>
+<li>Unplug a display and its icons go back to the main tray; plug it back in
+and they return. Every tray keeps its number meanwhile.</li>
+<li>Extra floating trays anywhere you like - for a display without a taskbar, or
+to try the mod out with one display. Screen readers reach them too.</li>
+</ul>
+<h2 id="traysarenumbered">Trays are numbered</h2>
+<p>Tray 1 is Windows' own tray on the main display. Split Tray's trays are 2 and
+up: one for each other display, left to right as the mod first sees them, then
+any extra trays in the order they are listed in the settings. Rules and the
+menus use these numbers.</p>
+<p>A display keeps its number while it is unplugged. A display seen for the first
+time takes the number of one that is not connected, so a laptop's external
+display is tray 2 whichever display it is.</p>
+<h2 id="howitworks">How it works</h2>
+<p>An application puts an icon in the tray by calling <code>Shell_NotifyIcon</code>, which
+sends a <code>WM_COPYDATA</code> message to Explorer's <code>Shell_TrayWnd</code>. Split Tray
+subclasses that window, so it sees every icon from every process and can pass
+each one on to the real tray, keep it for one of its own, or both. An icon sent
+to another tray is really gone from the main one - it is not an overlay.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Icons that already existed when the mod loaded are collected by asking
+applications to re-register (the standard <code>TaskbarCreated</code> broadcast). A few
+ignore it; their icons appear the next time they update.</li>
+<li>Windows shows balloon notifications only for icons Explorer holds. For an
+icon in one of Split Tray's trays, Explorer is given a hidden copy of it the
+first time it has one to show; the copy goes when the icon does.</li>
+<li>More displays connected at once than ever before move the extra trays'
+numbers up by one, to make room.</li>
+<li>A floating tray has the keyboard when an application gives the focus back to
+its icon, or a screen reader moves to it. No key of its own reaches one.</li>
+</ul>]]></content>
+        <author>
+            <name>Brandon Stonebridge</name>
+            <uri>https://github.com/st0nebridge</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 On Screen Keyboard Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-on-screen-keyboard-restorer#1b0eb213c65d27a65ec3d9f8263d252bce4b1b7f</id>
+        <link href="https://windhawk.net/mods/win7-on-screen-keyboard-restorer"/>
+        <updated>2026-10-10T15:04:36.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows7onscreenkeyboardrestorer">Windows 7 On Screen Keyboard Restorer</h1>
+<p>This modification tries to restore the original Windows 7 On-Screen Keyboard on Windows 10 and
+Windows 11: whenever the system <code>osk.exe</code> is about to start, the Windows 7
+<code>osk.exe</code> is started instead. This is a best effort restoration. The Windows 7
+files are downloaded from Microsoft's public symbol server and verified against
+pinned SHA-256 digests before they are used, and nothing is written to
+<code>System32</code>, to <code>Common Files</code>, or to Image File Execution Options. The files are
+kept in the mod's own storage folder (or in the folder of the <code>installFolder</code>
+setting), which Windhawk removes together with the mod, and no registry key is
+left behind.</p>
+<p>This modification has been tested on Windows 10 21H2 and Windows 11 24H2.</p>
+<h2 id="screenshotbefore">Screenshot (Before)</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/beforekeyboard.PNG" alt="Before" /></p>
+<h2 id="screenshotafter">Screenshot (After)</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/afterkeyboard.PNG" alt="After" /></p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod catches the keyboard before it opens and swaps it for
+the Windows 7 one. It does this in two ways: first, it watches the programs
+that usually launch the keyboard (Explorer, Start/Search, <code>control.exe</code> and a
+few others) and redirects the launch so the Windows 7 keyboard starts instead.
+Second, if the system keyboard still manages to open through some path that
+cannot be watched, the mod lets it open, then quietly closes it and starts the
+Windows 7 one in its place.</p>
+<p>Once the Windows 7 keyboard is running, the mod gives it the files it expects
+but cannot find on Windows 10/11: <code>TabSKB.dll</code> and <code>DUI70.dll</code> are pointed to
+local copies, the English texts and dialogs are supplied from inside the mod
+when the <code>.mui</code> file is missing, and the seven special key faces (Windows,
+menu, Enter and the four arrows) are drawn by the mod itself, because the
+modern <code>TipResX.dll</code> on this system has no pictures for them.</p>
+<h2 id="preparation">Preparation</h2>
+<p>Before the Windows 7 keyboard can run outside <code>System32</code>, two small edits are
+needed. First, <code>uiAccess="true"</code> is changed to <code>false</code> in its manifest: Windows
+only honors that flag for signed programs in protected folders, and otherwise
+refuses to start the program with error 740. Second, <code>DUI70.dll</code> is renamed to
+<code>DUI71.dll</code> so it does not collide with the system's own DirectUI, which has
+the same name but is incompatible. The trade-off is that, since the UIAccess
+flag is gone, the Windows 7 keyboard cannot type into elevated (administrator)
+windows.</p>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 legacy flyouts on Win11 24H2 restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/windows-10-legacy-flyouts-restorer#93f81f58254c7479e876d08cd3a6c639437d86c7</id>
+        <link href="https://windhawk.net/mods/windows-10-legacy-flyouts-restorer"/>
+        <updated>2026-10-10T15:04:31.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows10legacyflyoutsonwin1124h2restorer">Windows 10 legacy flyouts on Win11 24H2 restorer</h1>
+<p>This mod restores the Windows 10 network and battery flyouts (network icon with its menu, battery
+icon with the flyout, volume icon) on Windows 11 24H2. It does not patch the Windows 11 shell: it
+runs inside the <em>private</em> Windows 10 shell, so it <strong>requires</strong>
+<a href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2">Windows 10 taskbar on Win11 24H2</a> (by
+Anixx) to be installed and running. In that mod's terminology this mod is the tray half of the
+setup: it uses the same verified copy of the Windows 10 files, the same data folder, and it does
+not start anything by itself. Outside the private shell the mod loads and does nothing: no hook is
+installed, nothing is written, so the Windows 11 shell is never touched.</p>
+<p>What it does, inside the private shell:</p>
+<ul>
+<li>The Windows 10 tray modules (<code>pnidui.dll</code> for the network icon, <code>stobject.dll</code> for battery and
+volume) are downloaded from the Microsoft symbol server, verified by pinned SHA-256 and, by
+default, by Authenticode signature, then loaded. The strings those two modules ask their <code>.mui</code>
+for are served in memory, because this build ships no MUI for them.</li>
+<li>A left click on the network or the battery icon is consumed at the icon and turned into the
+authentic Windows 10 flyout request (<code>CLSID_ImmersiveShell</code> -&gt; <code>ShellExperienceManagerFactory</code>
+-&gt; the flyout experience of that icon). Right click, middle click and every other message pass
+through unchanged. The right-click menu of the network icon is built from the two entries
+<code>pnidui</code> itself expects, because its menu resource is gone in this build.</li>
+<li>The flyout window drawn by <code>ShellExperienceHost.exe</code> is made to use the Windows 10 template set,
+otherwise that host tears the flyout down a moment after it has built it.</li>
+</ul>
+<p>Not included on purpose: the three quick-action tiles (Wi-Fi, airplane mode, hotspot) keep the
+stock Windows 11 template, styling and behaviour; the Action Center button and its animation are
+left to dedicated mods.</p>
+<h2 id="behaviourworthknowing">Behaviour worth knowing</h2>
+<ul>
+<li><strong>Network pages are answered by the flyout.</strong> Inside the private shell, every launch of
+<code>ms-settings:network*</code>, <code>ms-settings:wifi</code>, <code>vpn</code>, <code>airplanemode</code>, <code>mobilehotspot</code>,
+<code>ms-availablenetworks:</code> or the network control-panel items is turned into a request for the
+Windows 10 flyout and reported as started, for <em>any</em> caller in that process - not only the
+tray icon. So Win+R with <code>ms-settings:wifi</code> in the Windows 10 shell opens the flyout instead of
+the Settings page. This is the point of the mod (that page does not exist in the Windows 10
+shell any more), but it is a global rewrite in that process.</li>
+<li><strong>The download stays.</strong> Files are fetched at run time from <code>msdl.microsoft.com</code> into the shared
+store; nothing else is fetched. A failed download is retried with a backoff (1 minute, doubling
+up to 15), never on every tick.</li>
+<li><strong>What is written and where it persists.</strong> The verified files go to the data folder. The tray
+state backup and one-time marker normally go to this mod's Windhawk storage; if that path is
+unavailable, the code falls back to the shared data folder. Windhawk removes its mod storage on
+uninstall, so copy the backup elsewhere first if you may need it later. The "Peek at desktop"
+toggle is process-local: this mod does not write <code>DisablePreviewDesktop</code> or <code>EnableAeroPeek</code>.
+While active, its registry-query hook supplies the toggled values to the private shell; on normal
+unload those virtual values are dropped and the shell is notified to reread the real settings. A
+crash cannot leave registry values changed by this menu. The optional tray reset
+(<code>ForceNetworkTrayResetTraySettings</code>) is a separate, deliberate, one-time deletion of shared
+shell state after a complete backup; it is not undone automatically - see its setting.</li>
+<li><strong>In <code>ShellExperienceHost.exe</code>.</strong> The template-set change is reverted when the mod is disabled.
+The module that was patched is also <em>pinned</em> (<code>GET_MODULE_HANDLE_EX_FLAG_PIN</code>), and there is no
+documented way to un-pin a module: <code>Windows.UI.QuickActions.dll</code> therefore stays loaded until
+<code>ShellExperienceHost.exe</code> ends. Nothing is written to disk and no other process is touched.</li>
+<li><strong>Architecture.</strong> <code>@architecture x86-64</code>: everything this mod does - the byte patterns of the
+tray modules, the QuickActions pattern, the import-table entry of <code>pnidui</code> - is written for x64.
+Note that on ARM64 Windhawk still loads an <code>x86-64</code> mod into <code>ShellExperienceHost.exe</code>
+natively; there the pattern does not match, so the mod logs that and writes nothing, but a
+flyout opened in that process will not be held open. Use an x64 Windows if you need this mod.</li>
+</ul>
+<h2 id="examplescreenshotbatteryflyout">Example Screenshot (Battery Flyout)</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/batteryflyoutexample.png" alt="Battery flyout example" /></p>
+<h2 id="credits">Credits</h2>
+<ul>
+<li><a href="https://github.com/Anixx">Anixx</a> - the Windows 10 taskbar mod whose verified files and data
+folder this mod shares, and whose tray-module loading it follows</li>
+<li>ExplorerPatcher (by valinet) - research for the Windows 10 flyouts running on Windows 11</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 Alt+Tab Restorer on Windows 11 1.0.0]]></title>
+        <id>https://windhawk.net/mods/windows-10-alt-tab-restorer#27544c27d9f89ef5ed88d77d4178f8c7aab6050c</id>
+        <link href="https://windhawk.net/mods/windows-10-alt-tab-restorer"/>
+        <updated>2026-10-10T15:04:26.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows10alttabrestorer">Windows 10 Alt+Tab Restorer</h1>
+<p>This mod restores the classic Windows 10 Alt+Tab switcher on Windows 11. This mod has been tested on Windows 11 24H2 and may function on other versions. If not, please open an issue to inform the author about it so that the mod can be enhanced.</p>
+<h2 id="screenshot">Screenshot</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/alttab.png" alt="Screenshot" /></p>
+<h2 id="whatitdoes">What it does</h2>
+<ul>
+<li>It restores the native Windows 10 Alt+Tab switcher when you press Alt+Tab.</li>
+<li>It uses the built-in Windows components, so no custom window or panel is drawn.</li>
+<li>It does not install a global keyboard hook.</li>
+<li>It does not write to the Windows registry. The only thing it stores is a small crash-guard value in Windhawk's own mod storage (see below).</li>
+</ul>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Windows 11</li>
+<li>64-bit <code>explorer.exe</code>.</li>
+<li>Windhawk installed.</li>
+</ul>
+<h2 id="howtouse">How to use</h2>
+<ol>
+<li>Install the mod in Windhawk and enable it.</li>
+<li>Press Alt+Tab. The Windows 10 style switcher should appear.</li>
+<li>To remove it, disable or uninstall the mod in Windhawk.</li>
+</ol>
+<h2 id="crashguard">Crash guard</h2>
+<p>Before the mod asks the shell to create the Windows 10 switcher, it records a marker in Windhawk's mod storage and clears it right after the call. If <code>explorer.exe</code> crashes while the switcher is being created, the marker is still set at the next start. The mod then stays disabled for that exact build of <code>twinui.pcshell.dll</code> and leaves the stock Alt+Tab alone, so that a bad build can never put the shell in a crash loop. A Windows update that replaces <code>twinui.pcshell.dll</code> re-enables the mod automatically. To re-enable it by hand, turn on <strong>Reset crash guard</strong> in the settings, restart the mod, then turn the option off again.</p>
+<h2 id="windows10explorerexe">Windows 10 explorer.exe</h2>
+<p>When the mod runs inside a Windows 10 <code>explorer.exe</code> that was placed in the Windhawk <code>LegacyStore</code> folder (for example by the <em>Win10 taskbar on Win11 24H2 or 25H2</em> mod), it is detected automatically and the call-site fallback is always used, whatever the setting below says.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Do not use this mod together with another Alt+Tab replacement mod.</li>
+<li>The mod only targets <code>explorer.exe</code> and only affects the Alt+Tab switcher.</li>
+<li>While the mod is active it answers reads of <code>HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\AltTabSettings</code> with 0, so the mod takes precedence over that setting. For the same reason it conflicts with the <strong>Legacy Alt+Tab dialog</strong> mod: enable one or the other.</li>
+<li>At start-up the mod logs the Windows build and the identity of <code>twinui.pcshell.dll</code>. Please include these lines when you report a problem.</li>
+<li>If Alt+Tab does not change, check the Windhawk log for the entries of this mod and open an issue to notify the author of the modification about the problem.</li>
+</ul>
+<p>The gate hook and the XAML to DirectComposition host redirect are the approach used by <a href="https://github.com/valinet/ExplorerPatcher">ExplorerPatcher</a> by valinet.</p>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cursor auto-hide on idle 1.0]]></title>
         <id>https://windhawk.net/mods/cursor-auto-hide#38431c1d52c473768fa80bae5ea0ba720aa74324</id>
@@ -1189,432 +1421,6 @@ navegadores); este mod reabre qualquer programa, pelo caminho do executável.</p
         <author>
             <name>lima26x</name>
             <uri>https://github.com/brdantas26</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Privacy Indicator Anchor 2.1]]></title>
-        <id>https://windhawk.net/mods/privacy-indicator-anchor#74f43bd051f2419f240851cf106e6f77f5066731</id>
-        <link href="https://windhawk.net/mods/privacy-indicator-anchor"/>
-        <updated>2026-10-08T23:02:38.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="privacyindicatoranchor">Privacy Indicator Anchor</h1>
-<p>A Windhawk mod for Windows 11 that reserves stable tray space for privacy and
-status indicators. Location, microphone, camera, and Copilot placeholders stay
-visible in the system tray: dim when idle, bright when active.</p>
-<p>The goal is to stop taskbar tray sections from shifting when Windows briefly
-shows or hides privacy indicators, especially when Windows Web Experience Pack
-or Widgets frequently access location.</p>
-<h2 id="gallery">Gallery</h2>
-<p>Idle location and microphone placeholders reserve their tray space without
-demanding attention:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/location-mic-availble-not-in-use.png" alt="Idle location and microphone placeholders" /></p>
-<p>All four unavailable indicators in a single row, arranged as
-<code>location | mic | camera | copilot</code>:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/all-4-disabled.png" alt="All four privacy indicators unavailable in one row" /></p>
-<p>The same four indicators in a compact block, which is what <code>auto</code> picks on a
-standard taskbar, where two rows of the default 16 px icons fit:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/all-4-disabled-grid.png" alt="All four unavailable indicators in a compact grid" /></p>
-<p>Activity highlighted in red — the microphone in use, and the slashed camera
-reporting attempted use while its hardware switch blocks it:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/camera-mic-in-use-highlighted.png" alt="Active microphone in red beside a red slashed camera blocked by its hardware switch" /></p>
-<p>The active glow treatment provides a more emphatic alternative:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/cam-mic-in-use-highlight-glow.png" alt="Active microphone and camera with glow" /></p>
-<p>Active or requested pathways can remain conspicuous even while blocked:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/requested-or-active-pathways-disabled.png" alt="Requested or active privacy pathways shown while blocked" /></p>
-<p>The location tooltip explains the access-denied reason and opens the matching
-Windows privacy page when clicked:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/location-tooltip-and-win-settings.png" alt="Location evidence tooltip and Windows Location settings" /></p>
-<p>Microphone evidence distinguishes an endpoint mute from privacy denial:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/mic-tooltip.png" alt="Microphone endpoint-mute evidence tooltip" /></p>
-<p>Supported camera drivers report their hardware privacy-control evidence:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/camera-tooltip.png" alt="Camera hardware privacy-control evidence tooltip" /></p>
-<p>Copilot reports its installation state and links to the relevant settings:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/copilot-tooltip.png" alt="Copilot installation-state tooltip" /></p>
-<p>All four indicators in a row on a Windows 11 side taskbar, alongside the clock
-and other tray mods. Live-tested and approved:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/win11-side-four-indicators.png" alt="Location, microphone, camera, and Copilot indicators on a Windows 11 side taskbar" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Persistent placeholder icons for location, microphone, camera, and Copilot</li>
-<li>Idle opacity setting so inactive icons can be subtle but still reserve space</li>
-<li>One nestable <strong>Arrangement</strong> expression places the icons in any shape —
-fitted to your taskbar height automatically, or written out by hand</li>
-<li>Turn any of the four icons off individually; Windows' own indicator for that
-device then stays visible, so nothing goes unreported</li>
-<li>Tray placement before icons, before OmniButton, before clock, after clock, or after Show Desktop</li>
-<li>Experimental placement immediately left or right of Start</li>
-<li>Per-icon and per-group pixel nudges inside the arrangement expression, plus a
-whole-group offset</li>
-<li>Independent idle, active, disabled, glow, and slash colors</li>
-<li>Steady, breathing, or radiating active emphasis with reach/speed controls</li>
-<li>Disabled slash overlays for blocked or unavailable privacy devices</li>
-<li>Hardware camera shutter/kill-switch detection on supported Windows 11 camera drivers</li>
-<li>Evidence-specific tooltips instead of a generic "hardware disabled" label</li>
-<li>Click-through to the relevant Windows privacy, input, camera, taskbar, or app settings</li>
-<li>Optional testing toggle to let Windows' native privacy indicators appear</li>
-</ul>
-<p>If you installed an unpublished 1.x build, re-apply your customizations once:
-2.x groups the settings and uses an Arrangement field; renamed keys cannot
-be migrated. Camera hardware monitoring is now opt-in and defaults to off.</p>
-<h2 id="thearrangementfield">The Arrangement field</h2>
-<p><code>Layout</code> → <code>Arrangement</code> decides how the icons are placed, and it is the only
-field that does. Its default value is the word <code>auto</code>:</p>
-<ul>
-<li><strong><code>auto</code></strong> fits the enabled icons to the available taskbar height. <code>Fill
-order</code> chooses whether they fill across rows or down columns; <code>Short row or
-column</code> aligns a ragged last group. The shape is worked out for you: the mod
-takes the narrowest grid that fits the height, preferring the one that wastes
-the fewest slots. A standard taskbar already fits two rows of the default
-16 px icons, so four icons become a 2×2 block, not a lopsided 3+1; write
-<code>location | mic | camera | copilot</code> for a single row instead.</li>
-<li><strong>Anything else</strong> is an arrangement you write. Names sit side by side with
-<code>|</code> and stack with <code>,</code>, and parentheses group them:</li>
-</ul>
-<pre><code class="text language-text">  location, camera | mic, copilot     a 2x2 block
-  location | mic | camera | copilot   a single row
-  location, mic, camera, copilot      a single column
-  location | (mic, camera) | copilot  a diamond
-</code></pre>
-<p>Order of operations: parentheses first, then <code>,</code>, then <code>|</code> — so
-  <code>a | b, c | d</code> is three columns with <code>b</code> stacked over <code>c</code>.</p>
-<p>The tokens are <code>location</code>, <code>mic</code> (or <code>microphone</code>), <code>camera</code>, and <code>copilot</code>,
-  and they are case-insensitive. A separator is always required —
-  <code>location (mic | camera)</code> is an error, not a shorthand.</p>
-<p><strong>Omitting a token hides that icon</strong>, exactly like turning it off in <code>Content</code>.</p>
-<p>Every time the layout is applied, the arrangement <code>auto</code> produced is written to
-the Windhawk log. Copy that line into the Arrangement field and you have the
-automatic layout as a starting point to edit — the automatic and manual paths
-are the same field and the same syntax. If what you write doesn't parse, the
-log says what was expected and where, and the automatic arrangement is used
-until you fix it.</p>
-<p><strong>Nudging.</strong> Append a pixel offset to any name to move just that icon:</p>
-<pre><code class="text language-text">location[+2,-1] | mic | camera   location moves 2px right and 1px up
-(mic, camera)[3,0] | location    the stacked pair moves 3px right
-</code></pre>
-<p>Expression nudges are clamped to ±100 pixels per axis.
-Offsets are cosmetic. Nothing else shifts, and the group's overall size does
-not change. To move the whole cluster instead, use <code>Adjust</code> → horizontal and
-vertical offset. Nudges and offsets are screen pixels on every taskbar edge —
-see <a href="#taskbar-position">Taskbar position</a>.</p>
-<p><strong>Enabling an icon later.</strong> An arrangement you write names the icons that
-existed when you wrote it. Turn another one on afterwards and it is in no
-group, so by default it is appended after your arrangement rather than
-vanishing — the log says when that happened. Set <code>Layout</code> → <code>Newly enabled
-icons</code> to <em>Leave them out</em> if you would rather your arrangement be the whole
-truth. <code>auto</code> always includes every enabled icon.</p>
-<h2 id="placement">Placement</h2>
-<p>The five tray positions reserve a dedicated system-tray column. The
-experimental <code>leftOfStart</code> and <code>rightOfStart</code> positions instead place the
-owned indicator group beside Start and reserve matching room in the centered
-taskbar items area. These Start-adjacent modes may need adjustment on future
-Windows builds or with other mods that also reposition Start.</p>
-<h2 id="taskbarposition">Taskbar position</h2>
-<p>Windows 11 can put the taskbar on any edge (Settings → Personalization →
-Taskbar → Taskbar behaviors, on builds that have the setting). The mod reads
-the edge Windows reports and rebuilds the group when the taskbar moves.</p>
-<ul>
-<li><strong>Top</strong> behaves exactly like bottom.</li>
-<li><strong>Left or right</strong>: an arrangement you write is laid out exactly as
-written - <code>|</code> side by side, <code>,</code> stacked - and every <code>[dx,dy]</code> nudge
-moves an icon <code>dx</code> right and <code>dy</code> down, on every edge. <code>auto</code> fits the
-taskbar's width instead of its height, filling rows first or columns
-first as set. Nothing is mirrored between left and right. <code>leftOfStart</code> and
-<code>rightOfStart</code> become above and below Start.</li>
-<li><a href="https://windhawk.net/mods/taskbar-vertical">Vertical Taskbar</a> in its default
-native mode is the same native side taskbar. With its "Use the native taskbar
-when possible" option off it rotates the tray elements this mod places,
-through the same <code>RenderTransform</code> property, so the mod detects that (the
-taskbar runs down a side while Windows still reports a horizontal edge) and
-leaves the tray completely untouched.</li>
-</ul>
-<h2 id="statesandcolors">States and colors</h2>
-<p>Each icon has four visual states: idle/available, active, disabled/unavailable,
-and active while disabled. The last state keeps the active treatment underneath
-the slash by default, so a muted or shuttered device still demands attention
-when Windows reports attempted use. <code>Surface</code> → <code>Emphasize blocked activity</code>
-can turn that combined treatment off.</p>
-<p>Every color setting — idle, active, disabled, glow, and slash — accepts
-<code>#RRGGBB</code> or <code>#AARRGGBB</code> hex (the alpha byte is honored, and the <code>#</code> is
-optional), the generics <code>accent</code>, <code>accentLight</code>, and <code>accentDark</code> for the
-Windows accent shades, or <code>transparent</code>. An empty color uses the system
-foreground, except an empty glow color, which follows the active color and then
-the Windows accent color.</p>
-<p>The glow can be a steady halo, a breathing pulse, or animated radiation rings.
-Its opacity, reach, and speed are independent controls. The effect is drawn
-inside the existing icon slot and never changes the taskbar width.</p>
-<p>For a deliberately striking treatment, start with <code>Glow style: Radiating
-rings</code>, <code>Glow opacity: 85</code>, <code>Glow reach: 260</code>, and <code>Glow cycle: 850</code>, then
-choose an active/glow color that fits the rest of the taskbar theme.</p>
-<h2 id="notes">Notes</h2>
-<p>Camera hardware-switch detection and the Copilot indicator are experimental
-because Windows exposes those states differently across devices and builds.</p>
-<p>Camera activity is detected from Windows webcam-usage records and any mirrored
-native privacy state. Hardware camera blocking uses Windows 11
-<code>CameraOcclusionInfo</code> when the camera driver supports it. Cameras without that
-driver capability retain software-access and device-availability checks, but
-their physical shutter or kill-switch state might not be detectable.</p>
-<p>Windows documents idle-camera occlusion reports as advisory rather than an
-absolute privacy guarantee. The tooltip therefore says "likely blocked" and
-names the camera-driver evidence.</p>
-<p><strong>This monitor is opt-in and defaults to OFF</strong>, under <code>Behavior</code> -&gt; <code>Monitor
-camera hardware privacy control</code>. It is the only thing that detects a physical
-shutter or kill switch, so with it off the camera icon still reports software
-access, device availability and in-use state, but a shutter will never
-register. The mod says so in its log and in the camera's own tooltip rather
-than leaving you to wonder. When enabled, it initializes the default camera
-controller in <code>SharedReadOnly</code> mode but never starts preview or frame capture.
-Turn it off if a particular camera activates its LED/indicator or behaves
-poorly while monitored. State changes use the driver's native event; a
-five-minute watchdog only checks that the subscription remains responsive. The
-controller is also released when the camera icon is turned off in <code>Content</code>.</p>
-<p>Privacy access, usage records, policies, packages, and device topology are
-monitored with Windows registry/device events rather than a three-second global
-sweep. Copilot process activity is checked separately once per minute, and a
-five-minute health reconciliation repairs any missed notification. Failed
-camera and registry-monitor setup backs off from seconds to thirty minutes;
-access-denied registry monitors remain disabled for the current mod session.</p>
-<p>Each icon is clickable. Location opens Location privacy settings. Microphone
-opens either microphone privacy or default-input settings according to the
-reported reason. Camera opens either camera privacy or camera-device settings.
-Copilot opens taskbar or installed-app settings.</p>
-<p><code>Behavior</code> -&gt; <code>Suppress Windows privacy indicators</code> is on by default, so the
-mod hides Windows' own pop-in indicators and mirrors their state into the
-stable placeholders. A native indicator is only ever hidden while this mod is
-showing a placeholder for that same device: if its icon is turned off in
-<code>Content</code>, if the placeholders could not be placed, or on a taskbar another
-mod is rotating, Windows' indicator stays exactly as Windows draws it. Turn the setting off
-temporarily when comparing against Windows' native tray glyphs during testing.
-Everything the mod changes on a native icon is restored to its exact prior
-value when the mod unloads.</p>]]></content>
-        <author>
-            <name>sb4ssman</name>
-            <uri>https://github.com/sb4ssman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock Spacer 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-spacer#cadc656d0e615a315d285713c49600f2709d2412</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-spacer"/>
-        <updated>2026-10-08T23:02:34.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarclockspacer">Taskbar Clock Spacer</h1>
-<p>Adds a <code>%s%</code> elastic spacer token to the Windows 11 taskbar clock, so clock items
-can be pushed apart to fill a fixed width instead of bunching together.</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-clock-spacer/assets/clock-spacer-working.png" alt="Clock Spacer distributing a custom clock across multiple rows" />
-<em>User-confirmed working configuration, September 9, 2026, with system stats,
-time, date, and weather arranged across a fixed-width clock.</em></p>
-<h2 id="tworequirementspleasereadbeforeinstalling">Two requirements — please read before installing</h2>
-<p><strong>1. This mod does nothing on its own.</strong> It is a companion for
-<a href="https://windhawk.net/mods/taskbar-clock-customization">Taskbar Clock Customization</a>.
-That mod produces the clock text; this mod only rearranges it. Install and
-configure that mod first.</p>
-<p><strong>2. The clock needs a fixed width.</strong> An elastic spacer distributes <em>leftover</em>
-width. If the clock sizes itself to its own text there is no leftover width,
-every gap computes to zero, and the result looks exactly as if the mod were not
-installed. Set a fixed width using either:</p>
-<ul>
-<li><strong>Max width</strong> in Taskbar Clock Customization's settings, or</li>
-<li><strong>Max clock width</strong> in this mod's settings.</li>
-</ul>
-<p>Either one works. 120 px is a reasonable starting point.</p>
-<p>Windows 11 only. This mod does not work on Windows 10.</p>
-<h2 id="trythebuiltinoptionfirst">Try the built-in option first</h2>
-<p>Taskbar Clock Customization 1.8 and later can spread a line across a fixed
-width on its own: set its <strong>Text alignment</strong> to <strong>Justified</strong>, use ordinary
-spaces where you want the gaps, and use a non-breaking space inside items you
-want kept together. If that looks right for your clock, you don't need this mod.</p>
-<p>What <code>%s%</code> does that <strong>Justified</strong> does not:</p>
-<ul>
-<li><strong>Gaps only where you put them.</strong> Justified stretches every space in the
-line, and can widen the spacing between characters — its author noted large
-gaps opening inside <code>MB/s</code>. With <code>%s%</code>, ordinary spaces and the characters
-inside each item are left exactly as they are.</li>
-<li><strong>Weighted gaps.</strong> <code>%s%%s%</code> takes twice the share of a single <code>%s%</code>.</li>
-<li><strong>A minimum gap.</strong> <strong>Minimum spacer width</strong> keeps every gap visible even when
-the text nearly fills the clock.</li>
-<li><strong>Gaps inside the weather.</strong> <code>{spacer}</code> works inside the Weather format, where
-the weather text arrives as one pre-formatted string.</li>
-</ul>
-<h2 id="whatitdoes">What it does</h2>
-<p>Put <code>%s%</code> between items in the clock's Top Line or Bottom Line format. Each <code>%s%</code>
-becomes a gap, and all leftover width is shared out evenly between the gaps.</p>
-<p>| Format | Result |
-| --- | --- |
-| <code>%time%%s%%date%</code> | time hugs the left edge, date hugs the right, gap fills the middle |
-| <code>%time%%s%%date%%s%%weekday%</code> | three items, two equal gaps |
-| <code>%time%%s%%date%%s%%s%%weekday%</code> | Double-spacer: more space is weighted between date and weekday |</p>
-<p>The first item always hugs the left edge and the last always hugs the right edge,
-so the line stays anchored as the text changes width.</p>
-<h3 id="spacersinsidetheweather">Spacers inside the weather</h3>
-<p>The weather service substitutes <code>%s</code> as its sunset token, so <code>%s%</code> cannot be
-written inside Taskbar Clock Customization's <strong>Weather format</strong>. Write
-<code>{spacer}</code> there instead, for example:</p>
-<pre><code>%c{spacer}🌡️%t{spacer}🌬️%w
-</code></pre>
-<p><code>{spacer}</code> passes through the weather service verbatim, arrives in the clock
-line, and becomes the same elastic gap as <code>%s%</code> — so weather items justify
-with the rest of the clock.</p>
-<h2 id="setup">Setup</h2>
-<ol>
-<li>Install <strong>Taskbar Clock Customization</strong> and set up your clock format.</li>
-<li>Set a <strong>Max width</strong> in its settings, for example <code>120</code>.</li>
-<li>Install this mod.</li>
-<li>Edit the clock mod's <strong>Top line</strong> or <strong>Bottom line</strong> to put <code>%s%</code> between
-items, for example <code>%time%%s%%date%</code>.</li>
-</ol>
-<p>The <code>%s%</code> token passes through Taskbar Clock Customization untouched and is
-interpreted here at display time.</p>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p><strong><code>%s%</code> disappears and nothing moves.</strong> This is the fixed-width problem in
-requirement 2 above. Set a <strong>Max width</strong> in Taskbar Clock Customization, or a
-<strong>Max clock width</strong> here. The mod also writes a one-line explanation to the
-Windhawk log the first time it detects this.</p>
-<p><strong>Nothing happens at all.</strong> Confirm Taskbar Clock Customization is installed and
-enabled, and that <code>%s%</code> is in its <strong>Top line</strong> or <strong>Bottom line</strong> setting — not in
-the tooltip, the middle line, or the weather format.</p>
-<p><strong>The spacer works but the clock is the wrong width.</strong> Adjust either the clock
-mod's <strong>Max width</strong> or this mod's <strong>Max clock width</strong>. The latter applies only
-to generated spacer rows, so leave it at <code>0</code> when you want the clock mod to
-own the whole clock width.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Max clock width</strong> — fixed width for generated spacer rows. When it is <code>0</code>,
-the mod uses a finite <strong>Max width</strong> already set on the shared clock panel by
-Taskbar Clock Customization. It does not constrain an unspaced native line.</li>
-<li><strong>Minimum spacer width</strong> — a floor, in pixels, for every gap. <code>0</code> (the default)
-leaves gaps fully elastic. A small value such as <code>8</code> guarantees a visible gap
-even before a fixed clock width is configured.</li>
-</ul>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li><code>%s%</code> is interpreted after Taskbar Clock Customization expands its format
-tokens, so it works in the top and bottom line formats. Inside the composite
-weather segment use <code>{spacer}</code> instead — the weather service would consume
-<code>%s%</code> as its sunset token.</li>
-<li>Lines without <code>%s%</code> are left completely alone — the mod is a no-op for them.</li>
-<li>A line hidden in Taskbar Clock Customization before this mod spaces it stays
-hidden, even when its format contains <code>%s%</code>. If you hide a line that is
-already spaced, turn this mod off and on to apply the hidden state. Do the
-same if a hidden line appears after Explorer starts. Both mods collapse the
-same source text block, so this mod cannot detect a second collapse of an
-already collapsed block. Unhiding takes effect on the next clock tick.</li>
-<li>Font, size, and color of the spaced segments follow the original clock text's
-current style, so the clock mod's style settings continue to apply.</li>
-</ul>
-<h2 id="howitworks">How it works</h2>
-<p>The mod hooks two system-tray symbols and watches the clock's time and date text
-blocks. <code>DateTimeIconContent::OnApplyTemplate</code> catches every clock that is
-templated from then on, including after Explorer rebuilds the taskbar;
-<code>BadgeIconContent::get_ViewModel</code> catches the clocks that were already on screen
-when the mod was enabled, on every monitor's taskbar. Between the two there is no
-clock left to search for, so the mod needs no visual-tree scan.</p>
-<p>When a line contains <code>%s%</code>, the source text block is collapsed and a generated
-panel is inserted in its place: each line becomes a Grid whose text segments sit
-in <code>Auto</code> columns separated by <code>Star</code> columns, and the star columns absorb the
-leftover width. When only the text changes — which happens every second — the
-existing segments are rewritten in place rather than rebuilt, so the visual tree
-stays stable.</p>
-<h2 id="relationshiptotaskbarclockcustomization">Relationship to Taskbar Clock Customization</h2>
-<p>The spacer was first offered as a patch to Taskbar Clock Customization itself
-(<a href="https://github.com/m417z/my-windhawk-mods/pull/68">m417z/my-windhawk-mods#68</a>).
-Its maintainer preferred an approach without generated layout elements and
-added the <strong>Justified</strong> text alignment described above, then judged creating
-extra text elements to be out of scope for that mod. This companion carries the
-explicit-gap approach separately and leaves Taskbar Clock Customization
-untouched.</p>]]></content>
-        <author>
-            <name>sb4ssman</name>
-            <uri>https://github.com/sb4ssman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Numpad Disabler 1.0.0]]></title>
-        <id>https://windhawk.net/mods/numpad-disabler#3546e14097d30b6a3251367d8ee803c2952173d9</id>
-        <link href="https://windhawk.net/mods/numpad-disabler"/>
-        <updated>2026-10-08T22:01:26.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="numpaddisabler">* Numpad Disabler</h1>
-<p>This mod selectively "deafens" a specific application so it cannot detect Numpad key presses.</p>
-<p>### 🎯 Common Use Cases</p>
-<ul>
-<li><p><strong>Gaming:</strong> Prevents game trainers, overlays, or macro tools in the background from activating when you use the Numpad inside your game.</p></li>
-<li><p><strong>Productivity:</strong> Stops specific background applications from hijacking or reacting to your Numpad inputs while you work.</p>
-<h3 id="performancestabilityguarantee">🛡️ Performance &amp; Stability Guarantee</h3>
-<p>By relying exclusively on Windhawk's native process filtering, this mod has zero performance overhead. It will not hook or interfere with your web browsers, Windows Explorer, or your main games unless you explicitly target them.</p>
-<h3 id="configurationguide">⚙️ Configuration Guide</h3>
-<p>The mod targets nothing by default. To choose which applications to block:</p></li>
-</ul>
-<ol>
-<li>Open the mod in Windhawk and go to the <strong>Advanced</strong> tab.</li>
-<li>Add the exact executable name(s) of the application(s) you want to block (e.g., <code>trainer.exe</code> or <code>macro_tool.exe</code>) to the <strong>Custom process inclusion list</strong>.</li>
-<li>Click Save. The mod takes effect immediately.</li>
-</ol>]]></content>
-        <author>
-            <name>osmanonurkoc</name>
-            <uri>https://github.com/osmanonurkoc</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fluid Wallpaper 1.0.0]]></title>
-        <id>https://windhawk.net/mods/fluid-wallpaper#8a03fd64b8f1f3bdf6d962520d4739cf783b531e</id>
-        <link href="https://windhawk.net/mods/fluid-wallpaper"/>
-        <updated>2026-10-08T22:01:22.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fluidwallpaper">Fluid Wallpaper</h1>
-<p><img src="https://i.imgur.com/rIzdlWv.jpeg" alt="Screenshot" />
-<a href="https://i.imgur.com/yXW45Vs.mp4">Watch the overview video in full quality</a></p>
-<p>An animated, interactive fluid simulation rendered on the GPU behind your
-desktop icons. The shaders are a Direct3D port of
-<a href="https://github.com/PavelDoGreat/WebGL-Fluid-Simulation">WebGL Fluid Simulation</a>
-by Pavel Dobryakov (MIT license).</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>One independent simulation per monitor, drawn behind the desktop icons.</li>
-<li>Autonomous color trails and periodic color bursts keep the fluid moving.</li>
-<li>Moving the mouse over the desktop stirs the fluid. No clicks are needed and
-no mouse hooks are installed; clicks always reach the desktop.</li>
-<li>Bloom, sun rays and shading effects, all configurable.</li>
-<li>Pauses automatically when the desktop can't be seen: when a monitor's
-desktop is fully covered by windows (maximized, full-screen or several
-windows side by side), when the session is locked or switched away, and when
-the display is turned off.</li>
-<li>Optional lower frame rate or pause on battery power and Energy Saver.</li>
-</ul>
-<p>To see the wallpaper, minimize your windows. Settings are applied live;
-changing a setting restarts the simulation.</p>
-<h2 id="howitworks">How it works</h2>
-<p>Each monitor gets a child window of Explorer's wallpaper host, without a
-redirection surface. The simulation runs in Direct3D 11 and its final pass is
-drawn straight into a DirectComposition swap chain attached to that window.
-Frames never leave the GPU. The same path is used on the classic desktop
-layout and on the Windows 11 24H2+ layout.</p>
-<p>The mod doesn't change your wallpaper settings, the registry or the order of
-Explorer's own windows. Disabling it removes its windows and reveals your
-normal wallpaper.</p>
-<h2 id="performancetips">Performance tips</h2>
-<ul>
-<li>Lighter: Maximum FPS 30, Dye resolution 512, Trails 2, Bloom off.</li>
-<li>Swirlier: Vorticity 50, Dye dissipation 60, Trail force 4500.</li>
-</ul>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p>If the wallpaper doesn't appear, open the mod log in Windhawk: the lines
-starting with "Desktop layout", "Direct3D" and "Monitor" describe what was
-found and created. Please include them when reporting a problem, together with
-your Windows build number.</p>
-<p>If the animation stays frozen while the desktop is visible, a window that
-looks hidden is probably reported as visible and covering it. Disable <strong>Pause
-when the desktop is covered</strong> in that case.</p>
-<h2 id="requirementsandlimitations">Requirements and limitations</h2>
-<ul>
-<li>Windows 10 or 11 and a GPU with Direct3D feature level 10.0 or later.</li>
-<li>Relies on the undocumented WorkerW desktop layout of Windows, which differs
-between Windows 10, Windows 11 and Windows 11 24H2 and later. Future Windows
-builds may change it.</li>
-<li>Below 30 FPS (including the battery option) the motion also slows down,
-because each simulation step is limited in length to stay stable.</li>
-<li>The transparent background and screenshot features of the web demo are not
-included.</li>
-<li>Some settings use integer scales; for example, 80 means 0.8.</li>
-</ul>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
         </author>
     </entry>
 </feed>

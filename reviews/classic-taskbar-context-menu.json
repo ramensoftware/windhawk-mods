@@ -1,0 +1,14 @@
+{
+  "modId": "classic-taskbar-context-menu",
+  "reviews": [
+    {
+      "authorName": "Anixx",
+      "content": "This mod is badly broken. Most of it's code does not even run. It would not pass the current mod submission criteria. It does not display correctly the second-level menus, a bug inherited from the utility it is based on. For the correct showing of the second-level menus, use the mod `Non-Immersive Taskbar Context Menu Lite`.",
+      "id": 50,
+      "modVersion": "1.0.3",
+      "parentId": null,
+      "timestamp": 1791642275,
+      "votes": 0
+    }
+  ]
+}

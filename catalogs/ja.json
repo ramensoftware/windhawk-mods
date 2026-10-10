@@ -2257,7 +2257,7 @@
         "rating": 8,
         "ratingBreakdown": [0, 0, 2, 0, 3],
         "ratingUsers": 5,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": -1.4008149473331695,
         "updated": 1677657525000,
         "users": 413
@@ -12543,6 +12543,35 @@
         "version": "1.0.2"
       }
     },
+    "split-tray": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791644680000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791644680000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Brandon Stonebridge",
+        "compilerOptions": "-lcomctl32 -lgdi32 -luser32 -lole32 -loleaut32 -lruntimeobject -lshcore -luiautomationcore",
+        "description": "A notification area on every display's taskbar: choose, per application, which tray its icon shows in",
+        "github": "https://github.com/st0nebridge",
+        "homepage": "https://github.com/st0nebridge/SplitTray",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Split Tray",
+        "version": "1.3.3"
+      }
+    },
     "spoof-light-dark-theme": {
       "details": {
         "defaultSorting": 5536,
@@ -17651,6 +17680,39 @@
         "version": "5.1.0"
       }
     },
+    "win7-on-screen-keyboard-restorer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791644676000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791644676000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "babamohammed",
+        "compilerOptions": "-lwinhttp -lshlwapi -luser32 -lgdi32 -lshell32 -ladvapi32 -lversion",
+        "description": "この mod は、Windows 10/11 のスクリーン キーボード (osk.exe) を Windows 7 のオリジナル版にリダイレクトします",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe",
+          "osk.exe",
+          "control.exe"
+        ],
+        "name": "Windows 7 スクリーン キーボード復元",
+        "version": "1.0.0"
+      },
+      "metadataEnglish": {
+        "description": "This mod redirects the Windows 10/11 On-Screen Keyboard (osk.exe) to the original Windows 7 one",
+        "name": "Windows 7 On Screen Keyboard Restorer"
+      }
+    },
     "win7-open-with-dialog": {
       "details": {
         "defaultSorting": 3285,
@@ -18021,6 +18083,33 @@
         "version": "1.0.0"
       }
     },
+    "windows-10-alt-tab-restorer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791644666000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791644666000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "babamohammed",
+        "description": "This mod restores the native Windows 10 Alt+Tab switcher on Windows 11",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-2.0",
+        "name": "Windows 10 Alt+Tab Restorer on Windows 11",
+        "version": "1.0.0"
+      }
+    },
     "windows-10-language-flyout-guard-on-win11-24h2": {
       "details": {
         "defaultSorting": 20,
@@ -18045,6 +18134,35 @@
           "explorer.exe"
         ],
         "name": "Windows 10 language flyout guard and indicator colours",
+        "version": "1.0.0"
+      }
+    },
+    "windows-10-legacy-flyouts-restorer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791644671000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791644671000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "babamohammed",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lgdi32 -lshell32 -ladvapi32 -luser32 -lwintrust -lcrypt32 -lwininet -lbcrypt -lcomctl32 -luuid -lwlanapi -lruntimeobject",
+        "description": "This mod restores the Windows 10 network and battery flyouts in the private Windows 10 shell running on Windows 11 24H2+",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe",
+          "ShellExperienceHost.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Windows 10 legacy flyouts on Win11 24H2 restorer",
         "version": "1.0.0"
       }
     },

@@ -2,12 +2,244 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-10T12:00:29.000Z</updated>
+    <updated>2026-10-10T15:04:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Split Tray 1.3.3]]></title>
+        <id>https://windhawk.net/mods/split-tray#d73e9f74f445a07dd765cf6479498d20c421d2ff</id>
+        <link href="https://windhawk.net/mods/split-tray"/>
+        <updated>2026-10-10T15:04:40.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="splittray">Split Tray</h1>
+<p>Windows 11 shows the notification area - the system tray - on the main
+display only. Split Tray puts one on the taskbar of <strong>every other display</strong>,
+and lets you choose which tray each application's icon lives in.</p>
+<p><img src="https://raw.githubusercontent.com/st0nebridge/SplitTray/v1.3.1/docs/images/tray-2.png" alt="Tray 2 in the second display's taskbar: the chevron, five icons, and the clock" /></p>
+<h2 id="whatyouget">What you get</h2>
+<ul>
+<li>A tray inside each extra display's taskbar, beside the clock, where the
+native one would be. Icons work as in the real tray: left, right, double and
+middle clicks, context menus, tooltips, the popups some applications draw
+instead, the keyboard, and screen readers.</li>
+<li>Balloon notifications from icons in Split Tray's trays, shown by Windows as
+for any other icon.</li>
+<li>Per-application rules - "this program's icon goes to tray 3" - and a
+default for everything else.</li>
+<li>Move any icon by hand: <strong>Shift+right-click</strong> an icon in one of Split Tray's
+trays for its menu, or open <strong>Arrange icons</strong> to drag icons between every
+tray. Where you put an icon is remembered, until it has not been seen for a
+year.</li>
+<li>An overflow chevron for the icons you would rather not see all the time.</li>
+<li>Unplug a display and its icons go back to the main tray; plug it back in
+and they return. Every tray keeps its number meanwhile.</li>
+<li>Extra floating trays anywhere you like - for a display without a taskbar, or
+to try the mod out with one display. Screen readers reach them too.</li>
+</ul>
+<h2 id="traysarenumbered">Trays are numbered</h2>
+<p>Tray 1 is Windows' own tray on the main display. Split Tray's trays are 2 and
+up: one for each other display, left to right as the mod first sees them, then
+any extra trays in the order they are listed in the settings. Rules and the
+menus use these numbers.</p>
+<p>A display keeps its number while it is unplugged. A display seen for the first
+time takes the number of one that is not connected, so a laptop's external
+display is tray 2 whichever display it is.</p>
+<h2 id="howitworks">How it works</h2>
+<p>An application puts an icon in the tray by calling <code>Shell_NotifyIcon</code>, which
+sends a <code>WM_COPYDATA</code> message to Explorer's <code>Shell_TrayWnd</code>. Split Tray
+subclasses that window, so it sees every icon from every process and can pass
+each one on to the real tray, keep it for one of its own, or both. An icon sent
+to another tray is really gone from the main one - it is not an overlay.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Icons that already existed when the mod loaded are collected by asking
+applications to re-register (the standard <code>TaskbarCreated</code> broadcast). A few
+ignore it; their icons appear the next time they update.</li>
+<li>Windows shows balloon notifications only for icons Explorer holds. For an
+icon in one of Split Tray's trays, Explorer is given a hidden copy of it the
+first time it has one to show; the copy goes when the icon does.</li>
+<li>More displays connected at once than ever before move the extra trays'
+numbers up by one, to make room.</li>
+<li>A floating tray has the keyboard when an application gives the focus back to
+its icon, or a screen reader moves to it. No key of its own reaches one.</li>
+</ul>]]></content>
+        <author>
+            <name>Brandon Stonebridge</name>
+            <uri>https://github.com/st0nebridge</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 On Screen Keyboard Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-on-screen-keyboard-restorer#1b0eb213c65d27a65ec3d9f8263d252bce4b1b7f</id>
+        <link href="https://windhawk.net/mods/win7-on-screen-keyboard-restorer"/>
+        <updated>2026-10-10T15:04:36.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows7onscreenkeyboardrestorer">Windows 7 On Screen Keyboard Restorer</h1>
+<p>This modification tries to restore the original Windows 7 On-Screen Keyboard on Windows 10 and
+Windows 11: whenever the system <code>osk.exe</code> is about to start, the Windows 7
+<code>osk.exe</code> is started instead. This is a best effort restoration. The Windows 7
+files are downloaded from Microsoft's public symbol server and verified against
+pinned SHA-256 digests before they are used, and nothing is written to
+<code>System32</code>, to <code>Common Files</code>, or to Image File Execution Options. The files are
+kept in the mod's own storage folder (or in the folder of the <code>installFolder</code>
+setting), which Windhawk removes together with the mod, and no registry key is
+left behind.</p>
+<p>This modification has been tested on Windows 10 21H2 and Windows 11 24H2.</p>
+<h2 id="screenshotbefore">Screenshot (Before)</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/beforekeyboard.PNG" alt="Before" /></p>
+<h2 id="screenshotafter">Screenshot (After)</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/afterkeyboard.PNG" alt="After" /></p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod catches the keyboard before it opens and swaps it for
+the Windows 7 one. It does this in two ways: first, it watches the programs
+that usually launch the keyboard (Explorer, Start/Search, <code>control.exe</code> and a
+few others) and redirects the launch so the Windows 7 keyboard starts instead.
+Second, if the system keyboard still manages to open through some path that
+cannot be watched, the mod lets it open, then quietly closes it and starts the
+Windows 7 one in its place.</p>
+<p>Once the Windows 7 keyboard is running, the mod gives it the files it expects
+but cannot find on Windows 10/11: <code>TabSKB.dll</code> and <code>DUI70.dll</code> are pointed to
+local copies, the English texts and dialogs are supplied from inside the mod
+when the <code>.mui</code> file is missing, and the seven special key faces (Windows,
+menu, Enter and the four arrows) are drawn by the mod itself, because the
+modern <code>TipResX.dll</code> on this system has no pictures for them.</p>
+<h2 id="preparation">Preparation</h2>
+<p>Before the Windows 7 keyboard can run outside <code>System32</code>, two small edits are
+needed. First, <code>uiAccess="true"</code> is changed to <code>false</code> in its manifest: Windows
+only honors that flag for signed programs in protected folders, and otherwise
+refuses to start the program with error 740. Second, <code>DUI70.dll</code> is renamed to
+<code>DUI71.dll</code> so it does not collide with the system's own DirectUI, which has
+the same name but is incompatible. The trade-off is that, since the UIAccess
+flag is gone, the Windows 7 keyboard cannot type into elevated (administrator)
+windows.</p>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 legacy flyouts on Win11 24H2 restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/windows-10-legacy-flyouts-restorer#93f81f58254c7479e876d08cd3a6c639437d86c7</id>
+        <link href="https://windhawk.net/mods/windows-10-legacy-flyouts-restorer"/>
+        <updated>2026-10-10T15:04:31.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows10legacyflyoutsonwin1124h2restorer">Windows 10 legacy flyouts on Win11 24H2 restorer</h1>
+<p>This mod restores the Windows 10 network and battery flyouts (network icon with its menu, battery
+icon with the flyout, volume icon) on Windows 11 24H2. It does not patch the Windows 11 shell: it
+runs inside the <em>private</em> Windows 10 shell, so it <strong>requires</strong>
+<a href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2">Windows 10 taskbar on Win11 24H2</a> (by
+Anixx) to be installed and running. In that mod's terminology this mod is the tray half of the
+setup: it uses the same verified copy of the Windows 10 files, the same data folder, and it does
+not start anything by itself. Outside the private shell the mod loads and does nothing: no hook is
+installed, nothing is written, so the Windows 11 shell is never touched.</p>
+<p>What it does, inside the private shell:</p>
+<ul>
+<li>The Windows 10 tray modules (<code>pnidui.dll</code> for the network icon, <code>stobject.dll</code> for battery and
+volume) are downloaded from the Microsoft symbol server, verified by pinned SHA-256 and, by
+default, by Authenticode signature, then loaded. The strings those two modules ask their <code>.mui</code>
+for are served in memory, because this build ships no MUI for them.</li>
+<li>A left click on the network or the battery icon is consumed at the icon and turned into the
+authentic Windows 10 flyout request (<code>CLSID_ImmersiveShell</code> -&gt; <code>ShellExperienceManagerFactory</code>
+-&gt; the flyout experience of that icon). Right click, middle click and every other message pass
+through unchanged. The right-click menu of the network icon is built from the two entries
+<code>pnidui</code> itself expects, because its menu resource is gone in this build.</li>
+<li>The flyout window drawn by <code>ShellExperienceHost.exe</code> is made to use the Windows 10 template set,
+otherwise that host tears the flyout down a moment after it has built it.</li>
+</ul>
+<p>Not included on purpose: the three quick-action tiles (Wi-Fi, airplane mode, hotspot) keep the
+stock Windows 11 template, styling and behaviour; the Action Center button and its animation are
+left to dedicated mods.</p>
+<h2 id="behaviourworthknowing">Behaviour worth knowing</h2>
+<ul>
+<li><strong>Network pages are answered by the flyout.</strong> Inside the private shell, every launch of
+<code>ms-settings:network*</code>, <code>ms-settings:wifi</code>, <code>vpn</code>, <code>airplanemode</code>, <code>mobilehotspot</code>,
+<code>ms-availablenetworks:</code> or the network control-panel items is turned into a request for the
+Windows 10 flyout and reported as started, for <em>any</em> caller in that process - not only the
+tray icon. So Win+R with <code>ms-settings:wifi</code> in the Windows 10 shell opens the flyout instead of
+the Settings page. This is the point of the mod (that page does not exist in the Windows 10
+shell any more), but it is a global rewrite in that process.</li>
+<li><strong>The download stays.</strong> Files are fetched at run time from <code>msdl.microsoft.com</code> into the shared
+store; nothing else is fetched. A failed download is retried with a backoff (1 minute, doubling
+up to 15), never on every tick.</li>
+<li><strong>What is written and where it persists.</strong> The verified files go to the data folder. The tray
+state backup and one-time marker normally go to this mod's Windhawk storage; if that path is
+unavailable, the code falls back to the shared data folder. Windhawk removes its mod storage on
+uninstall, so copy the backup elsewhere first if you may need it later. The "Peek at desktop"
+toggle is process-local: this mod does not write <code>DisablePreviewDesktop</code> or <code>EnableAeroPeek</code>.
+While active, its registry-query hook supplies the toggled values to the private shell; on normal
+unload those virtual values are dropped and the shell is notified to reread the real settings. A
+crash cannot leave registry values changed by this menu. The optional tray reset
+(<code>ForceNetworkTrayResetTraySettings</code>) is a separate, deliberate, one-time deletion of shared
+shell state after a complete backup; it is not undone automatically - see its setting.</li>
+<li><strong>In <code>ShellExperienceHost.exe</code>.</strong> The template-set change is reverted when the mod is disabled.
+The module that was patched is also <em>pinned</em> (<code>GET_MODULE_HANDLE_EX_FLAG_PIN</code>), and there is no
+documented way to un-pin a module: <code>Windows.UI.QuickActions.dll</code> therefore stays loaded until
+<code>ShellExperienceHost.exe</code> ends. Nothing is written to disk and no other process is touched.</li>
+<li><strong>Architecture.</strong> <code>@architecture x86-64</code>: everything this mod does - the byte patterns of the
+tray modules, the QuickActions pattern, the import-table entry of <code>pnidui</code> - is written for x64.
+Note that on ARM64 Windhawk still loads an <code>x86-64</code> mod into <code>ShellExperienceHost.exe</code>
+natively; there the pattern does not match, so the mod logs that and writes nothing, but a
+flyout opened in that process will not be held open. Use an x64 Windows if you need this mod.</li>
+</ul>
+<h2 id="examplescreenshotbatteryflyout">Example Screenshot (Battery Flyout)</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/batteryflyoutexample.png" alt="Battery flyout example" /></p>
+<h2 id="credits">Credits</h2>
+<ul>
+<li><a href="https://github.com/Anixx">Anixx</a> - the Windows 10 taskbar mod whose verified files and data
+folder this mod shares, and whose tray-module loading it follows</li>
+<li>ExplorerPatcher (by valinet) - research for the Windows 10 flyouts running on Windows 11</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 Alt+Tab Restorer on Windows 11 1.0.0]]></title>
+        <id>https://windhawk.net/mods/windows-10-alt-tab-restorer#27544c27d9f89ef5ed88d77d4178f8c7aab6050c</id>
+        <link href="https://windhawk.net/mods/windows-10-alt-tab-restorer"/>
+        <updated>2026-10-10T15:04:26.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows10alttabrestorer">Windows 10 Alt+Tab Restorer</h1>
+<p>This mod restores the classic Windows 10 Alt+Tab switcher on Windows 11. This mod has been tested on Windows 11 24H2 and may function on other versions. If not, please open an issue to inform the author about it so that the mod can be enhanced.</p>
+<h2 id="screenshot">Screenshot</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/alttab.png" alt="Screenshot" /></p>
+<h2 id="whatitdoes">What it does</h2>
+<ul>
+<li>It restores the native Windows 10 Alt+Tab switcher when you press Alt+Tab.</li>
+<li>It uses the built-in Windows components, so no custom window or panel is drawn.</li>
+<li>It does not install a global keyboard hook.</li>
+<li>It does not write to the Windows registry. The only thing it stores is a small crash-guard value in Windhawk's own mod storage (see below).</li>
+</ul>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Windows 11</li>
+<li>64-bit <code>explorer.exe</code>.</li>
+<li>Windhawk installed.</li>
+</ul>
+<h2 id="howtouse">How to use</h2>
+<ol>
+<li>Install the mod in Windhawk and enable it.</li>
+<li>Press Alt+Tab. The Windows 10 style switcher should appear.</li>
+<li>To remove it, disable or uninstall the mod in Windhawk.</li>
+</ol>
+<h2 id="crashguard">Crash guard</h2>
+<p>Before the mod asks the shell to create the Windows 10 switcher, it records a marker in Windhawk's mod storage and clears it right after the call. If <code>explorer.exe</code> crashes while the switcher is being created, the marker is still set at the next start. The mod then stays disabled for that exact build of <code>twinui.pcshell.dll</code> and leaves the stock Alt+Tab alone, so that a bad build can never put the shell in a crash loop. A Windows update that replaces <code>twinui.pcshell.dll</code> re-enables the mod automatically. To re-enable it by hand, turn on <strong>Reset crash guard</strong> in the settings, restart the mod, then turn the option off again.</p>
+<h2 id="windows10explorerexe">Windows 10 explorer.exe</h2>
+<p>When the mod runs inside a Windows 10 <code>explorer.exe</code> that was placed in the Windhawk <code>LegacyStore</code> folder (for example by the <em>Win10 taskbar on Win11 24H2 or 25H2</em> mod), it is detected automatically and the call-site fallback is always used, whatever the setting below says.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Do not use this mod together with another Alt+Tab replacement mod.</li>
+<li>The mod only targets <code>explorer.exe</code> and only affects the Alt+Tab switcher.</li>
+<li>While the mod is active it answers reads of <code>HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\AltTabSettings</code> with 0, so the mod takes precedence over that setting. For the same reason it conflicts with the <strong>Legacy Alt+Tab dialog</strong> mod: enable one or the other.</li>
+<li>At start-up the mod logs the Windows build and the identity of <code>twinui.pcshell.dll</code>. Please include these lines when you report a problem.</li>
+<li>If Alt+Tab does not change, check the Windhawk log for the entries of this mod and open an issue to notify the author of the modification about the problem.</li>
+</ul>
+<p>The gate hook and the XAML to DirectComposition host redirect are the approach used by <a href="https://github.com/valinet/ExplorerPatcher">ExplorerPatcher</a> by valinet.</p>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cursor auto-hide on idle 1.0]]></title>
         <id>https://windhawk.net/mods/cursor-auto-hide#38431c1d52c473768fa80bae5ea0ba720aa74324</id>
@@ -1915,243 +2147,6 @@ keeps a minimum clickable size on purpose</li>
         <author>
             <name>sb4ssman</name>
             <uri>https://github.com/sb4ssman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 Action Center Restorer on Windows 11 24H2+ 1.0.0]]></title>
-        <id>https://windhawk.net/mods/windows-10-action-center-restorer#d3577d8bbf385b85aa9d48b2a05d3648d395839a</id>
-        <link href="https://windhawk.net/mods/windows-10-action-center-restorer"/>
-        <updated>2026-10-08T20:13:44.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows10actioncenterrestoreronwindows1124h2">Windows 10 Action Center Restorer on Windows 11 24H2+</h1>
-<p>This mod restores the Windows 10 Action Center on Windows 11 24H2+ <strong>without
-modifying the real Windows registry</strong>.</p>
-<p>While the mod is loaded, the following value is exposed virtually, only
-inside the processes the mod is injected into:</p>
-<pre><code>HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Control Center
-    UseLiteLayout = 1 (REG_DWORD)
-</code></pre>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win10actioncenter.png" alt="The restored Windows 10 Action Center" /></p>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li>Windows 11, version 24H2 or 25H2 (x86-64) - the versions this mod is written
-and tested for. It is not meant for Windows 10.</li>
-<li>Windhawk, with mod injection into system processes enabled. The mod is
-injected into <code>explorer.exe</code>, <code>ShellExperienceHost.exe</code> and <code>ShellHost.exe</code>.</li>
-<li>Strongly recommended, but not required: the Windows 10 taskbar, i.e. the mod
-<a href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2">Win10 taskbar on Win11 24H2 or 25H2</a>
-and, with it,
-<a href="https://windhawk.net/mods/fake-explorer-path">Fake Explorer path</a>, which
-that mod requires. The restored panel is opened and animated by the Windows
-10 shell: the tray button and Win+A, the slide animation and the shortened
-close timer are its paths (the shell's <code>twinui.pcshell.dll</code>). The virtual
-value is served in the shell hosts whatever taskbar is running, so the mod
-does not depend on the Windows 10 taskbar, but that is the setup it is
-written for.</li>
-</ul>
-<h2 id="howthevirtualizationworks">How the virtualization works</h2>
-<p>Microsoft's built-in registry virtualization (UAC virtualization) is not
-available for 64-bit processes, so the value is virtualized at the Win32
-registry API level (kernelbase.dll):</p>
-<ul>
-<li><code>RegGetValueW</code> - the API ShellExperienceHost actually uses to read
-<code>UseLiteLayout</code> (see ExplorerPatcher's <code>ShellExperienceHostPatches.cpp</code>).</li>
-<li><code>RegQueryValueExW</code> - for code that opens the key and queries the value.</li>
-<li><code>RegOpenKeyExW</code> - if the <code>Control Center</code> key doesn't exist, a read-only
-handle to an <strong>empty private application hive</strong> (<code>RegLoadAppKeyW</code>) is
-returned, so the key behaves exactly like an existing empty key that
-contains only <code>UseLiteLayout</code>. No real key is created and no other key's
-values are exposed.</li>
-<li><code>RegEnumValueW</code> / <code>RegQueryInfoKeyW</code> - keep enumeration and value counts
-consistent with the virtual value.</li>
-</ul>
-<p>Keys are identified by their real kernel path (<code>NtQueryKey</code>), so relative
-opens (e.g. <code>CurrentVersion</code> handle + <code>Control Center</code>), different casing
-and trailing backslashes are all handled, and there is no global
-"last opened handle" state that can be confused by handle reuse.</p>
-<p>The application hive is kept in the storage directory Windhawk gives the mod
-and removes together with it: the first time the virtual key is needed, an
-empty hive file (a few KB) plus the <code>.LOG1</code>/<code>.LOG2</code> transaction logs the
-registry maintains next to a loaded hive are created there. Nothing is
-written when the key is never opened.</p>
-<h2 id="applyingchanges">Applying changes</h2>
-<p><code>UseLiteLayout</code> is read when ShellExperienceHost (and parts of Explorer)
-start. When the mod is enabled, disabled, or the virtual value setting is
-toggled, the mod restarts ShellExperienceHost (like ExplorerPatcher does) -
-but only from the shell process that owns the taskbar. Folder windows,
-<code>explorer.exe /factory,... -Embedding</code> COM servers and the like run in
-explorer.exe processes of their own, and they must not kill a
-ShellExperienceHost that already reads the virtual value. It is started again
-automatically on demand. If the Win+A / tray button still opens the Windows
-11 panel after enabling the mod at runtime, restart Explorer once.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Virtual <code>UseLiteLayout=1</code>, no HKLM modification</li>
-<li>Fast Action Center close timer</li>
-<li>Slide-in / slide-out animations, also on the very first open/close after
-ShellExperienceHost starts (window identified by its thread description,
-system repositioning absorbed into the animation)</li>
-<li>No files are replaced under C:\Windows, and none are left behind either:
-the virtual key's hive lives in Windhawk's storage for this mod</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>AdmnistratoX - Fix for the animation of the Windows 10 Action Center</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar collapse to running apps 1.0.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-collapse-to-running#cea2c56198ae53cf90c75bd464eeac04af0c6d2c</id>
-        <link href="https://windhawk.net/mods/taskbar-collapse-to-running"/>
-        <updated>2026-10-08T13:04:19.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarcollapsetorunningapps">Taskbar collapse to running apps</h1>
-<p>Hides pinned taskbar icons whose app is not running. Icons hide and unhide in
-place, so pinned order is never touched.</p>
-<p><img src="https://i.imgur.com/jgDv8Su.gif" alt="Demo" /></p>
-<p>*Hovering effect not included. Check out <strong>Taskbar Dock Animation</strong> by <strong>Ph0en1x-dev</strong>!
-**Same goes for the icon sizing and spacing. *<em>Taskbar height and icon size</em>* made by the OG, <strong>m417z</strong>.</p>
-<p>Running state is read straight from the taskbar's own buttons, so detection
-is exact and language-independent, and the mod reacts the moment an app opens
-or closes.</p>
-<h2 id="revealing">Revealing</h2>
-<ul>
-<li><strong>Click</strong> (default) — left-click empty taskbar to toggle; right-click stays
-Windows'.</li>
-<li><strong>Hover</strong> — rest the cursor on empty taskbar; collapses again a grace period
-after the cursor leaves.</li>
-<li><strong>Rest</strong> — hover, but only below <strong>Rest speed</strong>, so sweeping past does nothing.</li>
-<li><strong>Start</strong> — optional, off by default: everything shows while Start is open.</li>
-<li><strong>Hotkey</strong> (<code>Ctrl+Alt+T</code>) and the Collapse checkbox flip the whole mod,
-always instantly.</li>
-</ul>
-<p><strong>Padding around elements</strong> keeps reveals clear of every taskbar element,
-icons and tray alike; <strong>Reveal delay</strong> requires the cursor to stay put first.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>While collapse is on, Windows' own taskbar button animations are switched
-off; the mod animates the row itself.</li>
-<li>Built with Claude and tested on Windows 11 build 26200.</li>
-<li>Thanks to https://easings.net/ for the easing curve values.</li>
-</ul>]]></content>
-        <author>
-            <name>Lars</name>
-            <uri>https://github.com/LarsGudm</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Size on disk column in Explorer details 0.7.0]]></title>
-        <id>https://windhawk.net/mods/explorer-size-on-disk-column#f8eb145f3748a28fc5b1023f6f9cea084cbb7b88</id>
-        <link href="https://windhawk.net/mods/explorer-size-on-disk-column"/>
-        <updated>2026-10-08T06:02:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="sizeondiskcolumninexplorerdetails">Size on disk column in Explorer details</h1>
-<p>Adds a <strong>Size on disk</strong> column to File Explorer's details view. The value 
-matches the "Size on disk" figure in a file or folder's Properties dialog as 
-closely as possible.</p>
-<p><img src="https://raw.githubusercontent.com/stoilms/windhawk-explorer-size-on-disk-column/main/images/screenshot2.png" alt="Size on disk column showing sizes for files and folders" /></p>
-<h2 id="howtouse">How to use</h2>
-<ol>
-<li>Enable the mod and restart Explorer (or sign out and back in).</li>
-<li>Open a folder in <strong>Details</strong> view.</li>
-<li>Right-click any column header and tick <strong>Size on disk</strong>. 
-If it isn't in the short list, click <strong>More…</strong> and find it there.</li>
-</ol>
-<p><img src="https://raw.githubusercontent.com/stoilms/windhawk-explorer-size-on-disk-column/main/images/screenshot1.png" alt="Size on disk in the column header menu" /></p>
-<p>The values match the Properties dialog:</p>
-<p><img src="https://raw.githubusercontent.com/stoilms/windhawk-explorer-size-on-disk-column/main/images/screenshot3.png" alt="Properties dialog showing the same size on disk" /></p>
-<h2 id="howthevalueiscalculated">How the value is calculated</h2>
-<ul>
-<li><strong>Files:</strong> the file's allocation size, as reported by the file system. For
-NTFS-compressed, sparse and CompactOS/WOF-compressed files, the compressed
-size rounded up to the volume's cluster size is used instead. Cloud
-placeholders (OneDrive, etc.) report only what is stored locally and are
-never downloaded.</li>
-<li><strong>Folders:</strong> the sum of the size on disk of every file underneath,
-calculated manually by walking the folder tree. Junctions and symbolic links
-are not followed: they aren't counted inside a folder, and show no value
-themselves. OneDrive and other cloud folders are walked.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Folder calculation can be slow for large trees, so it always runs in the
-background, at low priority and at most two folders at a time. A folder's
-value appears as soon as its calculation finishes. Calculating a
-folder also caches its subfolders (all of them, or only the direct ones -
-see <strong>Remember subfolder sizes</strong>), so browsing into them is instant.
-Cached values are shown immediately and refreshed in the background.</li>
-<li>Cloud folders whose contents aren't on this PC yet are counted as 0 bytes
-without being listed, so OneDrive isn't asked to fetch anything.</li>
-<li>Network drives are skipped by default and the column stays empty there,
-because querying them can make Explorer stop responding on slow
-connections. Turn on <strong>Calculate sizes on network drives</strong> to include them.</li>
-<li>Only regular file-system folders are supported. Libraries, search results,
-zip folders and the Recycle Bin are not.</li>
-<li>Hard links are counted once per link, as the Properties dialog does.</li>
-</ul>
-<h2 id="showingthecolumnineveryfolder">Showing the column in every folder</h2>
-<p>With <strong>Add to default folder layouts</strong> enabled, the column is added to
-Explorer's built-in templates for regular file folders (general items,
-documents, pictures, music, videos, downloads, the user folder and OneDrive).
-Other views, such as Home, Gallery, libraries and search results, are left
-alone. Templates only apply to folders that
-don't have saved view settings, so after enabling it either reset saved views
-(Folder Options &gt; View &gt; <strong>Reset Folders</strong>) or set the column up in one folder
-and use Folder Options &gt; View &gt; <strong>Apply to Folders</strong> for each folder type.</p>
-<h2 id="howitworks">How it works</h2>
-<p>Windows already defines a hidden System.FileAllocationSize property, and
-Explorer's own getter for it (CFSFolder::_GetFileAllocationSize) just returns
-the logical size. The mod exposes the property as a column and replaces that
-getter with a real size on disk calculation.</p>]]></content>
-        <author>
-            <name>stoilms</name>
-            <uri>https://github.com/stoilms</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Compact Voice Access bar 1.0]]></title>
-        <id>https://windhawk.net/mods/voice-access-compact-bar#2e863acf5e0aa7cd11664eb955d11b85b3c4d5f5</id>
-        <link href="https://windhawk.net/mods/voice-access-compact-bar"/>
-        <updated>2026-10-08T06:02:19.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="compactvoiceaccessbar">Compact Voice Access bar</h1>
-<p>By default, Windows 11 Voice Access docks a bar across the full width of the
-monitor and reserves that strip of the screen, so every maximized window moves
-down to make room. This mod turns the bar into a compact window that floats
-near the top of the monitor, aligned to the left, center or right, and removes
-the reserved strip so other windows can use the whole screen again.</p>
-<p><img src="https://raw.githubusercontent.com/jcyrio/windhawk-voice-access-compact-bar/main/screenshot.jpg" alt="Before and after" /></p>
-<p>Requires Windows 11 with Voice Access. Keep Windhawk running while Voice Access
-is open. The mod takes effect the moment Voice Access docks its bar, so the
-full-width bar never flashes on screen, and it follows the bar if Voice Access
-recreates it, for example after a display change.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Compact placement</strong>: turn the compact window on or off. When it is off,
-the mod leaves Voice Access exactly as Windows positions it.</li>
-<li><strong>Window width</strong>: width of the compact window in pixels at 100% display
-scaling. The value is scaled automatically on high-DPI monitors. The window
-is kept at least 300 pixels wide and never wider than the monitor.</li>
-<li><strong>Distance from top</strong>: how far below the top edge of the monitor the compact
-window sits, in pixels at 100% display scaling.</li>
-<li><strong>Horizontal alignment</strong>: whether the compact window sits at the left edge,
-the center or the right edge of the monitor. Pick the side where it covers
-the least of your maximized windows.</li>
-</ul>
-<p>Settings take effect immediately. Disabling the mod, or turning compact
-placement off, restores the original full-width bar and its reserved strip.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The mod resizes the outer Voice Access window only. The contents of the bar
-are laid out by Voice Access itself, so a very narrow width may clip some of
-its controls. Widen the window if that happens.</li>
-<li>Enable Windhawk logging for the mod to see when it attaches to the bar, the
-window positions it applies, and the result of each work-area change.</li>
-</ul>]]></content>
-        <author>
-            <name>jcyrio</name>
-            <uri>https://github.com/jcyrio</uri>
         </author>
     </entry>
 </feed>
