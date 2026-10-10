@@ -29,7 +29,7 @@ Built from scratch in native C++ as a project to explore Windows APIs, graphics,
 
 ## Screenshot
 
-![OverhauldedWin Task Switcher](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/TaskManager.jpg)
+![OverhauldedWin Task Switcher](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/task-manager.jpg)
 
 ## Features
 
@@ -83,15 +83,15 @@ The central visualizer remains fixed while the cards move through the carousel, 
 
 ### Open / Close
 
-![OverhauldedWin Open Animation](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/Open_n'_Close.webp)
+![OverhauldedWin Open Animation](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/open-close.webp)
 
 ### Navigation
 
-![OverhauldedWin](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/Desplacement.webp)
+![OverhauldedWin](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/desplace.webp)
 
 ### Window Close
 
-![OverhauldedWin](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/abort.webp)
+![OverhauldedWin](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/window-close.webp)
 
 ## Background Execution
 
@@ -111,7 +111,7 @@ Some applications may behave differently than standard desktop windows, especial
 
 ### Native Windows Task Switcher
 
-When the **Windhawk window itself is in the foreground**, Windows keeps the native task switcher on top of Overhaulded when an `Alt + Tab` session is initiated.
+When the **Windhawk window (An any another high permission windows window) itself is in the foreground**, Windows keeps the native task switcher on top of Overhaulded when an `Alt + Tab` session is initiated.
 
 In this situation, the native Windows task switcher may appear over the Overhaulded interface, even though Overhaulded uses a "topmost" window and correctly handles keyboard input.
 
