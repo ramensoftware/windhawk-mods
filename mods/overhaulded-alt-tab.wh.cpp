@@ -6,6 +6,7 @@
 // @author          IMiloDev
 // @github          https://github.com/IMiloDev
 // @homepage        https://github.com/IMiloDev/OverhauldedWin
+// @include         windhawk-mod-uiaccess.exe
 // @include         windhawk.exe
 // @include         explorer.exe
 // @compilerOptions -lshell32
@@ -16,7 +17,7 @@
 # Overhaulded Task Switcher
  
 A modern, fluid and highly visual replacement for the native Windows Alt+Tab experience.
-
+ 
 Built from scratch in native C++ as a project to explore Windows APIs, graphics, animation systems and desktop customization. You can also see the original [GITHUB REPOSITORY](https://github.com/IMiloDev/OverhauldedWin) to send me issues.
 
 > **⚠️ DISCLAIMER**
@@ -898,7 +899,6 @@ static bool g_hotkeySession = false;     // solo input thread
 static int g_hotkeyReleaseCount = 0;     // solo input thread
 static HWND g_inputActivationTarget = nullptr; // solo input thread
 static int g_inputActivationRetryCount = 0;     // solo input thread
-static BOOL g_inputActivationLastGrantResult = FALSE; // solo input thread
 static BOOL g_inputActivationLastSetForegroundResult = FALSE; // solo input thread
 
 // Solo UI thread.
@@ -5681,6 +5681,11 @@ static void UnregisterSelectorClasses()
     g_classesRegistered = false;
 }
 
+static HWND g_selectorRegionAppliedWindow = nullptr;
+static int g_selectorRegionAppliedWidth = 0;
+static int g_selectorRegionAppliedHeight = 0;
+static int g_selectorRegionAppliedRadius = 0;
+
 static void UpdateSelectorSurfaceTransform()
 {
     if (!g_selector || !IsWindow(g_selector))
@@ -5690,6 +5695,12 @@ static void UpdateSelectorSurfaceTransform()
         // La expansión ocupa toda el área de trabajo; no redondear el HWND en
         // esta fase porque la tarjeta debe llegar hasta los bordes de la pantalla.
         SetWindowRgn(g_selector, nullptr, TRUE);
+        // SetWindowRgn(NULL) elimina la región, así que invalidar la caché
+        // para reaplicar las esquinas al volver al tamaño normal.
+        g_selectorRegionAppliedWindow = nullptr;
+        g_selectorRegionAppliedWidth = 0;
+        g_selectorRegionAppliedHeight = 0;
+        g_selectorRegionAppliedRadius = 0;
         return;
     }
 
@@ -5712,13 +5723,11 @@ static void ApplySelectorRoundedRegion(HWND hwnd)
 
     // La región solo depende del tamaño y del radio. Reaplicarla en cada frame
     // creaba un HRGN y forzaba una recomposición completa de la ventana.
-    static HWND appliedWindow = nullptr;
-    static int appliedWidth = 0;
-    static int appliedHeight = 0;
-    static int appliedRadius = 0;
     int radius = GetSelectorCornerRadiusPx(width, height);
-    if (appliedWindow == hwnd && appliedWidth == width &&
-        appliedHeight == height && appliedRadius == radius)
+    if (g_selectorRegionAppliedWindow == hwnd &&
+        g_selectorRegionAppliedWidth == width &&
+        g_selectorRegionAppliedHeight == height &&
+        g_selectorRegionAppliedRadius == radius)
         return;
 
     HRGN region = g_createRoundRectRgn(0, 0, width + 1, height + 1,
@@ -5727,10 +5736,10 @@ static void ApplySelectorRoundedRegion(HWND hwnd)
         return;
     if (SetWindowRgn(hwnd, region, TRUE))
     {
-        appliedWindow = hwnd;
-        appliedWidth = width;
-        appliedHeight = height;
-        appliedRadius = radius;
+        g_selectorRegionAppliedWindow = hwnd;
+        g_selectorRegionAppliedWidth = width;
+        g_selectorRegionAppliedHeight = height;
+        g_selectorRegionAppliedRadius = radius;
     }
     else if (g_deleteObject)
         g_deleteObject(region);
@@ -6132,18 +6141,16 @@ static bool TryActivateWindowOnInputThread(HWND target)
     if (IsIconic(target))
         ShowWindowAsync(target, SW_RESTORE);
 
-    g_inputActivationLastGrantResult = AllowSetForegroundWindow(ASFW_ANY);
     g_inputActivationLastSetForegroundResult = SetForegroundWindow(target);
     if (GetForegroundWindow() == target)
         return true;
 
-    // No se unen colas de entrada entre hilos. Se reintenta la ruta normal y se
-    // eleva la ventana en el z-order mientras Windows completa su restauración.
-    if (GetForegroundWindow() != target)
-    {
-        BringWindowToTop(target);
-        g_inputActivationLastSetForegroundResult = SetForegroundWindow(target);
-    }
+    // No se bloquea el input thread esperando al hilo de la ventana destino.
+    // SWP_ASYNCWINDOWPOS entrega el cambio de z-order de forma asíncrona.
+    SetWindowPos(target, HWND_TOP, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                     SWP_ASYNCWINDOWPOS);
+    g_inputActivationLastSetForegroundResult = SetForegroundWindow(target);
     return GetForegroundWindow() == target;
 }
 
@@ -6186,9 +6193,8 @@ static void InputRetryActivation(HWND control)
     }
     else if (g_inputActivationRetryCount == kMaxActivationRetries)
     {
-        Wh_Log(L"Foreground failed target=%p current=%p grant=%d set=%d after %d retries",
+        Wh_Log(L"Foreground failed target=%p current=%p set=%d after %d retries",
                target, GetForegroundWindow(),
-               g_inputActivationLastGrantResult,
                g_inputActivationLastSetForegroundResult,
                kMaxActivationRetries);
     }
@@ -6835,19 +6841,12 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
         }
         else if (up)
         {
-            // Alt+Tab confirma al soltar Tab. Ctrl+Alt+Tab conserva el
-            // selector abierto hasta Enter, clic o Escape.
-            const bool confirmOnTabRelease =
-                sessionActive && g_sessionModifier != ModifierSession::ControlAlt;
+            // Soltar Tab solo detiene la repetición; la selección se confirma
+            // al soltar Alt, o explícitamente con Enter/clic.
             g_tabDown = false;
             if (sessionActive)
             {
                 PostUiCommand(WM_UI_TAB_UP, static_cast<WPARAM>(g_inputSessionId), 0);
-            }
-            if (confirmOnTabRelease)
-            {
-                InputEndSession(WM_UI_CONFIRM);
-                return 1;
             }
             if (sessionActive || g_tabSuppressed)
             {
@@ -7429,7 +7428,6 @@ static const WCHAR kAltTabThreadName[] = L"Immersive Shell";
 static const DWORD kFindAltTabThreadIntervalMs = 2000;
 static const DWORD kFindAltTabThreadMaxIntervalMs = 60000;
 static const DWORD kWaitForTaskbarIntervalMs = 1000;
-static const DWORD kUnhookWaitMaxMs = 5000;
 
 // Hilo de explorer (hook) y su thread de vigilancia.
 static HHOOK g_messageHook = nullptr;
@@ -7573,20 +7571,12 @@ static void UnhookAltTabThread()
         g_messageHookThread = nullptr;
     }
 
-    // Las llamadas ya en curso en el hilo de explorer deben salir del módulo
-    // antes de descargarlo. Tras retirar el hook no pueden empezar otras. La
-    // espera es acotada para no bloquear la descarga si ese hilo estuviera
-    // detenido.
-    const ULONGLONG start = GetTickCount64();
+    // Las llamadas ya en curso en el hilo de Explorer deben salir del módulo
+    // antes de descargarlo. Tras retirar el hook no pueden empezar otras; el
+    // callback solo hace trabajo no bloqueante, por lo que esperamos a que
+    // finalicen todas antes de permitir la descarga.
     while (InterlockedCompareExchange(&g_messageHookCalls, 0, 0) > 0)
-    {
-        if (GetTickCount64() - start > kUnhookWaitMaxMs)
-        {
-            Wh_Log(L"Message hook calls did not return in time");
-            break;
-        }
         Sleep(1);
-    }
 }
 
 static DWORD WINAPI ExplorerThreadProc(LPVOID)
