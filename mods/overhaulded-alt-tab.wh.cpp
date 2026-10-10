@@ -1066,7 +1066,7 @@ static void ConfirmSelection();
 static void CleanupKeyboardState();
 static void EmergencyCloseSelector();
 static void StartSelectorClose(HWND target);
-static void StartSelectionExpansion(HWND target);
+static void StartSelectionExpansion(HWND target, bool targetWasMinimized);
 static void UpdateSelectionExpansion();
 static bool IsSelectionExpansionActive();
 static void UpdateSelectorMotion();
@@ -3816,7 +3816,7 @@ static float CalculateSelectionExpansionDurationMs(
     return 100.0f + 200.0f * std::max(0.0f, std::min(1.0f, distance));
 }
 
-static void StartSelectionExpansion(HWND target)
+static void StartSelectionExpansion(HWND target, bool targetWasMinimized)
 {
     if (!target || !IsWindow(target) || !g_selector ||
         !IsWindow(g_selector) || g_selectionExpansionActive)
@@ -3893,6 +3893,60 @@ static void StartSelectionExpansion(HWND target)
             visibleFrame.top < visibleFrame.bottom)
         {
             targetWindowRect = visibleFrame;
+        }
+    }
+    if (targetWasMinimized && IsIconic(target))
+    {
+        // La restauración ocurre en paralelo a la animación: no esperamos a que
+        // el hilo de la aplicación atienda ShowWindowAsync. GetWindowRect puede
+        // devolver el rectángulo del icono mientras tanto, así que usamos la
+        // posición normal guardada por Windows como destino temporal.
+        WINDOWPLACEMENT placement = {};
+        placement.length = sizeof(placement);
+        bool haveNormalRect = false;
+        if (GetWindowPlacement(target, &placement))
+        {
+            RECT normalRect = placement.rcNormalPosition;
+            if ((GetWindowLongPtrW(target, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) == 0)
+            {
+                // rcNormalPosition usa coordenadas de workspace. Trasladar el
+                // origen de workspace del monitor principal a coordenadas de pantalla.
+                POINT origin = { 0, 0 };
+                HMONITOR primary = MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
+                MONITORINFO primaryInfo = {};
+                primaryInfo.cbSize = sizeof(primaryInfo);
+                if (primary && GetMonitorInfoW(primary, &primaryInfo))
+                {
+                    const LONG offsetX = primaryInfo.rcWork.left - primaryInfo.rcMonitor.left;
+                    const LONG offsetY = primaryInfo.rcWork.top - primaryInfo.rcMonitor.top;
+                    OffsetRect(&normalRect, offsetX, offsetY);
+                }
+            }
+
+            if (placement.flags & WPF_RESTORETOMAXIMIZED)
+            {
+                targetWindowRect = monitorInfo.rcWork;
+                haveNormalRect = true;
+            }
+            else if (normalRect.left < normalRect.right &&
+                     normalRect.top < normalRect.bottom)
+            {
+                targetWindowRect = normalRect;
+                haveNormalRect = true;
+            }
+        }
+        if (!haveNormalRect)
+            targetWindowRect = monitorInfo.rcWork;
+
+        HMONITOR restoreMonitor = MonitorFromRect(
+            &targetWindowRect, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO restoreMonitorInfo = {};
+        restoreMonitorInfo.cbSize = sizeof(restoreMonitorInfo);
+        if (restoreMonitor && GetMonitorInfoW(restoreMonitor, &restoreMonitorInfo))
+        {
+            monitorInfo = restoreMonitorInfo;
+            if (haveNormalRect && (placement.flags & WPF_RESTORETOMAXIMIZED))
+                targetWindowRect = monitorInfo.rcWork;
         }
     }
     RECT expansionSourceRect = preview;
@@ -6246,7 +6300,10 @@ static void ConfirmSelection()
         ActivateWindow(target);
         return;
     }
-    StartSelectionExpansion(target);
+    const bool targetWasMinimized = IsIconic(target);
+    if (targetWasMinimized)
+        ShowWindowAsync(target, SW_RESTORE);
+    StartSelectionExpansion(target, targetWasMinimized);
 }
 
 static void CancelSelection()
