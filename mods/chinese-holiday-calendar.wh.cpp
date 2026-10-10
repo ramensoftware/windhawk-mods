@@ -4,7 +4,7 @@
 // @name:zh-CN      中国节假日日历
 // @description     Show Chinese statutory holidays and adjusted workdays, from an ICS feed you supply, in the Windows 11 calendar flyout
 // @description:zh-CN 在 Windows 11 日历中显示你自己填的 ICS 订阅源里的中国法定节假日与调休安排
-// @version         0.20
+// @version         0.21
 // @author          dcsmf
 // @github          https://github.com/dcsmf
 // @include         ShellExperienceHost.exe
@@ -2443,6 +2443,11 @@ void SweepDayItems() {
     // from one which changed something (see kSweepQuietTicksToStop).
     t_applyWrote = false;
 
+    // A pass arms state on this thread - the window events, the tracked cells and their
+    // callbacks, the timer which called it - so the thread is initialized first: the unload
+    // only takes apart what it finds on a thread which is marked as initialized.
+    InitializeForCurrentThread();
+
     // The day cells are looked for on every pass rather than remembered from a report, and
     // the window events are asked for again until the CoreWindow of this thread is there
     // to be watched.
@@ -2570,19 +2575,27 @@ enum class Target {
 
 Target g_target = Target::ShellExperienceHost;
 
-// The message RunFromWindowThreadViaPostMessage posts. Registered on the first use, and
-// kept here rather than inside that function because the unload asks for the same message:
-// a post which is still queued when the mod is unloaded has to be retrieved while this
-// module is still mapped (see DrainPendingRunFromWindowThreadPostsOnCurrentThread).
-UINT g_runFromWindowThreadViaPostMessageMsg = 0;
+// The message RunFromWindowThreadViaPostMessage posts. Registered by Wh_ModInit before any
+// hook of this mod can post, and kept here rather than inside that function because the
+// unload asks for the same message: a post which is still queued when the mod is unloaded
+// has to be retrieved while this module is still mapped (see
+// DrainPendingRunFromWindowThreadPostsOnCurrentThread). A read which saw the zero of a
+// registration which never happened would skip that drain, so the variable is atomic: the
+// hook procedures and the unload read it on other threads than the one which registers it.
+std::atomic<UINT> g_runFromWindowThreadViaPostMessageMsg{0};
 
+// Registers the message if it is not registered yet. Wh_ModInit calls this once, where there
+// is a single thread and no hook of this mod can be running; the registration left here is
+// the fallback for a load which never got that far.
 UINT RunFromWindowThreadViaPostMessageMsg() {
-    if (!g_runFromWindowThreadViaPostMessageMsg) {
-        g_runFromWindowThreadViaPostMessageMsg =
+    UINT message = g_runFromWindowThreadViaPostMessageMsg.load();
+    if (!message) {
+        message =
             RegisterWindowMessage(L"Windhawk_RunFromWindowThreadViaPostMessage_" WH_MOD_ID);
+        g_runFromWindowThreadViaPostMessageMsg.store(message);
     }
 
-    return g_runFromWindowThreadViaPostMessageMsg;
+    return message;
 }
 
 // The hooks of the posts which have not been retrieved yet. A post whose window is gone
@@ -2640,13 +2653,13 @@ void UnhookPendingPostHooks() {
 // this runs on a thread which is alive, and the sent messages of this thread are the other
 // RunFromWindowThread calls.
 void DrainPendingRunFromWindowThreadPostsOnCurrentThread() {
-    if (!g_runFromWindowThreadViaPostMessageMsg) {
+    const UINT message = g_runFromWindowThreadViaPostMessageMsg.load();
+    if (!message) {
         return;
     }
 
     MSG msg;
-    while (PeekMessage(&msg, nullptr, g_runFromWindowThreadViaPostMessageMsg,
-                       g_runFromWindowThreadViaPostMessageMsg, PM_REMOVE)) {
+    while (PeekMessage(&msg, nullptr, message, message, PM_REMOVE)) {
     }
 }
 
@@ -2755,7 +2768,8 @@ bool RunFromWindowThreadViaPostMessage(HWND hWnd,
         [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
             if (nCode == HC_ACTION && wParam == PM_REMOVE) {
                 MSG* msg = (MSG*)lParam;
-                if (msg->message == g_runFromWindowThreadViaPostMessageMsg) {
+                if (msg->message ==
+                    g_runFromWindowThreadViaPostMessageMsg.load()) {
                     auto* param = (RUN_FROM_WINDOW_THREAD_PARAM*)msg->lParam;
                     if (param) {
                         ForgetPendingPostHook(param->hook);
@@ -3080,6 +3094,11 @@ BOOL Wh_ModInit() {
     // No worker thread is started here: the thread is created by the first refresh
     // request which has a data source to fetch, so a mod which is left without a data
     // source never creates one (see RequestHolidayData).
+
+    // Registered here rather than on the first post: this runs on one thread, before any
+    // hook of this mod can post, so the message every other thread reads is written once
+    // and does not change afterwards (see RunFromWindowThreadViaPostMessageMsg).
+    RunFromWindowThreadViaPostMessageMsg();
 
     HMODULE user32Module =
         LoadLibraryEx(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
