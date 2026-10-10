@@ -6,8 +6,8 @@
 // @author          IMiloDev
 // @github          https://github.com/IMiloDev
 // @homepage        https://github.com/IMiloDev/OverhauldedWin
-// @include         windhawk-mod-uiaccess.exe
 // @include         windhawk.exe
+// @include         windhawk-mod-uiaccess.exe
 // @include         explorer.exe
 // @compilerOptions -lshell32
 // ==/WindhawkMod==
