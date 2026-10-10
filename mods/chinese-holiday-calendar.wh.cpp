@@ -4,7 +4,7 @@
 // @name:zh-CN      中国节假日日历
 // @description     Show Chinese statutory holidays and adjusted workdays, from an ICS feed you supply, in the Windows 11 calendar flyout
 // @description:zh-CN 在 Windows 11 日历中显示你自己填的 ICS 订阅源里的中国法定节假日与调休安排
-// @version         0.19
+// @version         0.20
 // @author          dcsmf
 // @github          https://github.com/dcsmf
 // @include         ShellExperienceHost.exe
@@ -395,7 +395,6 @@ namespace wux = winrt::Windows::UI::Xaml;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <cwctype>
@@ -405,8 +404,6 @@ namespace wux = winrt::Windows::UI::Xaml;
 #include <string>
 #include <unordered_map>
 #include <utility>
-
-#include <initguid.h>
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
@@ -2174,6 +2171,9 @@ thread_local ULONGLONG t_lastCalendarOpenedTick = 0;
 
 void OnCalendarOpenedOnCurrentThread();
 
+// Defined with the rest of the process plumbing.
+void InitializeForCurrentThread();
+
 // Takes the activation events of this thread's CoreWindow, once. A CoreWindow which is
 // not there yet is neither an error nor the end of it: the ShellHost target has none at
 // all, and when a CoreWindow is created the object is not necessarily there the moment
@@ -2416,6 +2416,11 @@ void CollectDayItemsOnCurrentThread() {
 // flyout does not open with the marks missing for a second.
 // Runs on the UI thread of a calendar window.
 void OnCalendarOpenedOnCurrentThread() {
+    // Every thread whose state this arms is initialized here, so that the unload takes that
+    // state apart again: this path is reached from a window which was shown, and that is not
+    // necessarily a window the CreateWindowInBand(Ex) hooks ever saw.
+    InitializeForCurrentThread();
+
     const ULONGLONG now = GetTickCount64();
     if (now - t_lastCalendarOpenedTick < kCalendarOpenedDebounceMs) {
         return;
@@ -2565,6 +2570,86 @@ enum class Target {
 
 Target g_target = Target::ShellExperienceHost;
 
+// The message RunFromWindowThreadViaPostMessage posts. Registered on the first use, and
+// kept here rather than inside that function because the unload asks for the same message:
+// a post which is still queued when the mod is unloaded has to be retrieved while this
+// module is still mapped (see DrainPendingRunFromWindowThreadPostsOnCurrentThread).
+UINT g_runFromWindowThreadViaPostMessageMsg = 0;
+
+UINT RunFromWindowThreadViaPostMessageMsg() {
+    if (!g_runFromWindowThreadViaPostMessageMsg) {
+        g_runFromWindowThreadViaPostMessageMsg =
+            RegisterWindowMessage(L"Windhawk_RunFromWindowThreadViaPostMessage_" WH_MOD_ID);
+    }
+
+    return g_runFromWindowThreadViaPostMessageMsg;
+}
+
+// The hooks of the posts which have not been retrieved yet. A post whose window is gone
+// before its thread retrieves it is dropped with its hook still installed, and a hook whose
+// procedure is in a module which is being unmapped takes the shell down with it, so
+// Wh_ModUninit unhooks whatever is left.
+//
+// The parameter of a post which is unhooked that way is left to the process: whether the
+// hook procedure is running at that moment cannot be told from here, and freeing a
+// parameter which it is about to free itself would be a double free.
+std::mutex g_pendingPostHooksMutex;
+std::vector<HHOOK> g_pendingPostHooks;
+
+void RememberPendingPostHook(HHOOK hook) {
+    std::lock_guard<std::mutex> lock(g_pendingPostHooksMutex);
+    g_pendingPostHooks.push_back(hook);
+}
+
+// Called from the hook procedure, before the callback runs: the hook is the procedure's own
+// from that point on, and an unload which runs at the same time must not unhook it as well.
+void ForgetPendingPostHook(HHOOK hook) {
+    std::lock_guard<std::mutex> lock(g_pendingPostHooksMutex);
+    for (auto it = g_pendingPostHooks.begin(); it != g_pendingPostHooks.end(); ++it) {
+        if (*it == hook) {
+            g_pendingPostHooks.erase(it);
+            break;
+        }
+    }
+}
+
+void UnhookPendingPostHooks() {
+    std::vector<HHOOK> hooks;
+    {
+        std::lock_guard<std::mutex> lock(g_pendingPostHooksMutex);
+        hooks.swap(g_pendingPostHooks);
+    }
+
+    for (HHOOK hook : hooks) {
+        Wh_Log(L"Unhooking a post which was never retrieved: %08X",
+               (DWORD)(ULONG_PTR)hook);
+        UnhookWindowsHookEx(hook);
+    }
+}
+
+// Retrieves the posts of RunFromWindowThreadViaPostMessage which are still queued for this
+// thread, so that their callbacks run now rather than after this thread was torn down: a
+// callback which ran then would arm the window events, a sweep timer, the layout watch and
+// the day cells of a thread the unload has already taken apart, nothing would take them
+// apart again, and the sweep timer it left behind would fire into the unmapped module.
+// Retrieving the message runs the WH_GETMESSAGE hook of the post, and that hook procedure is
+// what runs the callback, removes the hook and frees its parameter. The teardown which
+// follows in UninitializeForCurrentThread then sees whatever the callback armed.
+//
+// PeekMessage dispatches the sent messages of this thread as well, which is harmless here:
+// this runs on a thread which is alive, and the sent messages of this thread are the other
+// RunFromWindowThread calls.
+void DrainPendingRunFromWindowThreadPostsOnCurrentThread() {
+    if (!g_runFromWindowThreadViaPostMessageMsg) {
+        return;
+    }
+
+    MSG msg;
+    while (PeekMessage(&msg, nullptr, g_runFromWindowThreadViaPostMessageMsg,
+                       g_runFromWindowThreadViaPostMessageMsg, PM_REMOVE)) {
+    }
+}
+
 void InitializeForCurrentThread() {
     if (g_initializedForThread) {
         return;
@@ -2578,6 +2663,12 @@ void InitializeForCurrentThread() {
 }
 
 void UninitializeForCurrentThread() {
+    // Before the flag is looked at: a post which is still queued for this thread runs its
+    // callback here, while this module is still mapped, and the state that callback arms is
+    // then taken apart by the teardown below - which is why the callback initializes the
+    // thread it runs on (see OnCalendarOpenedOnCurrentThread).
+    DrainPendingRunFromWindowThreadPostsOnCurrentThread();
+
     if (!g_initializedForThread) {
         return;
     }
@@ -2646,14 +2737,13 @@ bool RunFromWindowThread(HWND hWnd,
 bool RunFromWindowThreadViaPostMessage(HWND hWnd,
                                        RunFromWindowThreadProc_t proc,
                                        PVOID procParam) {
-    static const UINT runFromWindowThreadRegisteredMsgViaPostMessage =
-        RegisterWindowMessage(L"Windhawk_RunFromWindowThreadViaPostMessage_" WH_MOD_ID);
-
     struct RUN_FROM_WINDOW_THREAD_PARAM {
         RunFromWindowThreadProc_t proc;
         PVOID procParam;
         HHOOK hook;
     };
+
+    const UINT message = RunFromWindowThreadViaPostMessageMsg();
 
     DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
     if (dwThreadId == 0) {
@@ -2665,10 +2755,10 @@ bool RunFromWindowThreadViaPostMessage(HWND hWnd,
         [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
             if (nCode == HC_ACTION && wParam == PM_REMOVE) {
                 MSG* msg = (MSG*)lParam;
-                if (msg->message ==
-                    runFromWindowThreadRegisteredMsgViaPostMessage) {
+                if (msg->message == g_runFromWindowThreadViaPostMessageMsg) {
                     auto* param = (RUN_FROM_WINDOW_THREAD_PARAM*)msg->lParam;
                     if (param) {
+                        ForgetPendingPostHook(param->hook);
                         param->proc(param->procParam);
                         UnhookWindowsHookEx(param->hook);
                         delete param;
@@ -2689,8 +2779,9 @@ bool RunFromWindowThreadViaPostMessage(HWND hWnd,
         .procParam = procParam,
         .hook = hook,
     };
-    if (!PostMessage(hWnd, runFromWindowThreadRegisteredMsgViaPostMessage, 0,
-                     (LPARAM)param)) {
+    RememberPendingPostHook(hook);
+    if (!PostMessage(hWnd, message, 0, (LPARAM)param)) {
+        ForgetPendingPostHook(hook);
         UnhookWindowsHookEx(hook);
         delete param;
         return false;
@@ -2715,6 +2806,12 @@ bool IsCalendarWindowClass(PCWSTR className) {
 }
 
 void OnWindowCreated(HWND hWnd, LPCWSTR lpClassName, PCSTR funcName) {
+    // Nothing is posted while the mod is being unloaded, for the same reason as in
+    // OnWindowShown.
+    if (g_shuttingDown) {
+        return;
+    }
+
     // The class name is only a string when the caller passed one: the same call also
     // accepts a numeric atom, which names no class to compare against.
     BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
@@ -2821,6 +2918,12 @@ HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
 // a CoreWindow, so the activation events are not available there. A hide is ignored - the
 // marks are not taken back when the flyout is closed, the shell repaints the cells itself.
 void OnWindowShown(HWND hWnd) {
+    // Nothing is posted while the mod is being unloaded: the post would have to be drained
+    // or unhooked again, and the calendar is not marked after this point anyway.
+    if (g_shuttingDown) {
+        return;
+    }
+
     DWORD dwProcessId = 0;
     if (!hWnd || !GetWindowThreadProcessId(hWnd, &dwProcessId) ||
         dwProcessId != GetCurrentProcessId()) {
@@ -2854,7 +2957,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     return wasVisible;
 }
 
-std::vector<HWND> GetCoreWnds() {
+std::vector<HWND> GetCalendarWindows() {
     struct ENUM_WINDOWS_PARAM {
         std::vector<HWND>* hWnds;
     };
@@ -2888,7 +2991,7 @@ std::vector<HWND> GetCoreWnds() {
 }
 
 void RefreshCalendarOnUiThreads() {
-    for (HWND hCoreWnd : GetCoreWnds()) {
+    for (HWND hCoreWnd : GetCalendarWindows()) {
         RunFromWindowThread(
             hCoreWnd,
             [](PVOID) {
@@ -2999,7 +3102,7 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    for (auto hCoreWnd : GetCoreWnds()) {
+    for (auto hCoreWnd : GetCalendarWindows()) {
         Wh_Log(L"Initializing for %08X", (DWORD)(ULONG_PTR)hCoreWnd);
         RunFromWindowThread(
             hCoreWnd,
@@ -3027,11 +3130,15 @@ void Wh_ModUninit() {
     // One thread at a time, and on the thread which took the window events: the day cells
     // are XAML objects of the thread they were found on, and the window events are
     // delegates into this module, which is about to be unmapped.
-    for (auto hCoreWnd : GetCoreWnds()) {
+    for (auto hCoreWnd : GetCalendarWindows()) {
         Wh_Log(L"Uninitializing for %08X", (DWORD)(ULONG_PTR)hCoreWnd);
         RunFromWindowThread(
             hCoreWnd, [](PVOID) { UninitializeForCurrentThread(); }, nullptr);
     }
+
+    // A post whose window is gone before its thread retrieved it is left with its hook
+    // installed, and the procedure of that hook is in this module.
+    UnhookPendingPostHooks();
 }
 
 // Changing the settings: only a changed data source clears the data which was fetched,
