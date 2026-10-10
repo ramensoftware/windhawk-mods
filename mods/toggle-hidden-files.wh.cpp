@@ -1,11 +1,12 @@
 // ==WindhawkMod==
 // @id           toggle-hidden-files
 // @name         Toggle Hidden Files
-// @description  Toggle the visibility of hidden files in Windows Explorer using Ctrl+H
-// @version      1.0.0
+// @description  Toggle the visibility of hidden files in Windows File Explorer using Ctrl+H
+// @version      1.0.1
 // @author       Asteski
 // @github       https://github.com/Asteski
 // @include      windhawk.exe
+// @compilerOptions -lshell32 -lole32 -loleaut32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
@@ -37,13 +38,13 @@ This mod allows you to toggle the visibility of hidden files in Windows Explorer
 3. **The setting will be applied immediately** to all Explorer windows
 
 ## Settings
-- **Also toggle protected OS files**: When enabled, Ctrl+H will also show/hide protected operating system files
+- **Also toggle protected OS files**: When enabled, Ctrl+H will also toggle visiblity of protected operating system files
 
 ## Technical Details
 - Only activates when Windows Explorer windows are in focus
 - Queues toggle work to a worker thread to keep input handling responsive
 - Uses Windows shell APIs to update hidden-file visibility live
-- Notifies the shell to refresh views after toggling
+- Explicitly refreshes Explorer folder views after toggling
 - Handles proper cleanup when the mod is unloaded
 */
 // ==/WindhawkModReadme==
@@ -52,10 +53,13 @@ This mod allows you to toggle the visibility of hidden files in Windows Explorer
 #include <shlobj.h>
 #include <shellapi.h>
 #include <stdio.h>
+#include <exdisp.h>
+#include <servprov.h>
+#include <atomic>
 
 // Settings structure
 struct {
-    bool toggleProtectedFiles;
+    std::atomic<bool> toggleProtectedFiles;
 } g_settings;
 
 // Global variables
@@ -64,8 +68,10 @@ HANDLE g_hookThread = nullptr;
 DWORD g_hookThreadId = 0;
 HANDLE g_hookThreadReadyEvent = nullptr;
 bool g_hookInstallSucceeded = false;
-
-constexpr UINT WM_APP_TOGGLE_HIDDEN_FILES = WM_APP + 1;
+HANDLE g_toggleThread = nullptr;
+HANDLE g_toggleEvent = nullptr;
+HANDLE g_stopToggleEvent = nullptr;
+bool g_hKeyDown = false;  // Accessed only on the keyboard hook thread.
 
 
 // Window context enumeration
@@ -81,6 +87,82 @@ bool ToggleHiddenFilesInShellState();
 bool IsCtrlHPressed(WPARAM wParam, LPARAM lParam);
 void LoadSettings();
 WindowContext GetCurrentWindowContext();
+void WhTool_ModUninit();
+
+// Use the same folder-view refresh that Explorer uses for F5. Association
+// notifications invalidate icon/thumbnail caches and aren't a folder refresh.
+void RefreshExplorerViews() {
+    IShellWindows* windows = nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_ShellWindows, nullptr,
+                                  CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&windows));
+    if (FAILED(hr)) {
+        Wh_Log(L"Can't enumerate Explorer windows: 0x%08X", hr);
+        return;
+    }
+
+    long count = 0;
+    hr = windows->get_Count(&count);
+    if (FAILED(hr)) {
+        Wh_Log(L"Can't get Explorer window count: 0x%08X", hr);
+    }
+    for (long i = 0; i < count; i++) {
+        VARIANT index{};
+        index.vt = VT_I4;
+        index.lVal = i;
+        IDispatch* dispatch = nullptr;
+        if (FAILED(windows->Item(index, &dispatch)) || !dispatch) {
+            continue;  // A window may have closed during enumeration.
+        }
+
+        IServiceProvider* provider = nullptr;
+        hr = dispatch->QueryInterface(IID_PPV_ARGS(&provider));
+        dispatch->Release();
+        if (FAILED(hr)) {
+            continue;
+        }
+
+        IShellBrowser* browser = nullptr;
+        hr = provider->QueryService(SID_STopLevelBrowser,
+                                     IID_PPV_ARGS(&browser));
+        provider->Release();
+        if (FAILED(hr)) {
+            continue;
+        }
+
+        IShellView* view = nullptr;
+        hr = browser->QueryActiveShellView(&view);
+        browser->Release();
+        if (SUCCEEDED(hr)) {
+            hr = view->Refresh();
+            view->Release();
+            if (FAILED(hr)) {
+                Wh_Log(L"Explorer view refresh failed: 0x%08X", hr);
+            }
+        }
+    }
+    windows->Release();
+}
+
+DWORD WINAPI ToggleThreadProc(LPVOID) {
+    // COM calls and folder enumeration can block. Keep them off the low-level
+    // hook thread so Windows doesn't time out and remove the keyboard hook.
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (FAILED(hr)) {
+        Wh_Log(L"Toggle worker COM initialization failed: 0x%08X", hr);
+    }
+    HANDLE events[] = {g_stopToggleEvent, g_toggleEvent};
+    while (WaitForMultipleObjects(ARRAYSIZE(events), events, FALSE, INFINITE) ==
+           WAIT_OBJECT_0 + 1) {
+        ToggleHiddenFilesInShellState();
+        if (SUCCEEDED(hr)) {
+            RefreshExplorerViews();
+        }
+    }
+    if (SUCCEEDED(hr)) {
+        CoUninitialize();
+    }
+    return 0;
+}
 
 // Get current window context based on focused window
 WindowContext GetCurrentWindowContext() {
@@ -119,7 +201,6 @@ bool ToggleHiddenFilesInShellState() {
     }
 
     SHGetSetSettings(&shellState, writeMask, TRUE);
-    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     return true;
 }
 
@@ -171,9 +252,8 @@ DWORD WINAPI HookThreadProc(LPVOID) {
     }
 
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (msg.message == WM_APP_TOGGLE_HIDDEN_FILES) {
-            ToggleHiddenFilesInShellState();
-        }
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
     }
 
     UnhookWindowsHookEx(g_hKeyboardHook);
@@ -185,14 +265,27 @@ DWORD WINAPI HookThreadProc(LPVOID) {
 // Keyboard hook procedure
 LRESULT CALLBACK KeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode >= 0) {
+        const auto* keyboard = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
+        if (keyboard->vkCode == 'H') {
+            if (wParam == WM_KEYUP || wParam == WM_SYSKEYUP) {
+                g_hKeyDown = false;
+            } else if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) {
+                const bool repeated = g_hKeyDown;
+                g_hKeyDown = true;
+                if (repeated && IsCtrlHPressed(wParam, lParam) &&
+                    GetCurrentWindowContext() == CONTEXT_EXPLORER) {
+                    return 1;
+                }
+                if (repeated) {
+                    return CallNextHookEx(g_hKeyboardHook, nCode, wParam, lParam);
+                }
+            }
+        }
         WindowContext context = GetCurrentWindowContext();
         
         // Only process if we're in Explorer windows
         if (context == CONTEXT_EXPLORER && IsCtrlHPressed(wParam, lParam)) {
-            if (g_hookThreadId != 0) {
-                PostThreadMessageW(g_hookThreadId, WM_APP_TOGGLE_HIDDEN_FILES,
-                                   0, 0);
-            }
+            SetEvent(g_toggleEvent);
             
             // Consume the key press
             return 1;
@@ -207,8 +300,22 @@ BOOL WhTool_ModInit() {
     // Load settings
     LoadSettings();
 
+    g_hKeyDown = false;
+    g_toggleEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_stopToggleEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_toggleEvent || !g_stopToggleEvent) {
+        WhTool_ModUninit();
+        return FALSE;
+    }
+    g_toggleThread = CreateThread(nullptr, 0, ToggleThreadProc, nullptr, 0, nullptr);
+    if (!g_toggleThread) {
+        WhTool_ModUninit();
+        return FALSE;
+    }
+
     g_hookThreadReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_hookThreadReadyEvent) {
+        WhTool_ModUninit();
         return FALSE;
     }
 
@@ -219,20 +326,13 @@ BOOL WhTool_ModInit() {
         CloseHandle(g_hookThreadReadyEvent);
         g_hookThreadReadyEvent = nullptr;
         g_hookThreadId = 0;
+        WhTool_ModUninit();
         return FALSE;
     }
 
     if (WaitForSingleObject(g_hookThreadReadyEvent, 5000) != WAIT_OBJECT_0 ||
         !g_hookInstallSucceeded) {
-        if (g_hookThreadId != 0) {
-            PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
-        }
-        WaitForSingleObject(g_hookThread, 5000);
-        CloseHandle(g_hookThread);
-        g_hookThread = nullptr;
-        g_hookThreadId = 0;
-        CloseHandle(g_hookThreadReadyEvent);
-        g_hookThreadReadyEvent = nullptr;
+        WhTool_ModUninit();
         return FALSE;
     }
 
@@ -254,12 +354,29 @@ void WhTool_ModUninit() {
     }
 
     if (g_hookThread) {
-        WaitForSingleObject(g_hookThread, 5000);
+        WaitForSingleObject(g_hookThread, INFINITE);
         CloseHandle(g_hookThread);
         g_hookThread = nullptr;
     }
 
     g_hookThreadId = 0;
+
+    if (g_stopToggleEvent) {
+        SetEvent(g_stopToggleEvent);
+    }
+    if (g_toggleThread) {
+        WaitForSingleObject(g_toggleThread, INFINITE);
+        CloseHandle(g_toggleThread);
+        g_toggleThread = nullptr;
+    }
+    if (g_toggleEvent) {
+        CloseHandle(g_toggleEvent);
+        g_toggleEvent = nullptr;
+    }
+    if (g_stopToggleEvent) {
+        CloseHandle(g_stopToggleEvent);
+        g_stopToggleEvent = nullptr;
+    }
 
     if (g_hookThreadReadyEvent) {
         CloseHandle(g_hookThreadReadyEvent);
