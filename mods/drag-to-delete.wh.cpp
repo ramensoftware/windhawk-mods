@@ -27,7 +27,6 @@ Drag files onto a floating target to move them to the Recycle Bin.
 
 using namespace Gdiplus;
 
-// --- Base Design Dimensions (at 96 DPI / 100%) ---
 static const int BASE_WND_WIDTH    = 200;
 static const int BASE_WND_HEIGHT   = 160;
 static const int BASE_TOP_Y        = 8;
@@ -38,7 +37,6 @@ static const float BASE_HIT_MARGIN = 16.0f;
 
 constexpr WCHAR kClassName[] = L"WindhawkDragToDeleteOverlay";
 
-// --- State Variables ---
 enum class AnimState { HIDDEN, VISIBLE, DROPPED };
 
 static HWND g_hOverlayWnd = nullptr;
@@ -58,7 +56,6 @@ static float g_lastRenderedScale = -1.0f;
 #define WM_ASYNC_DELETE      (WM_USER + 102)
 #define TIMER_ANIM 1
 
-// --- Helper: Module Handle ---
 HMODULE GetCurrentModuleHandle() {
     HMODULE hModule = nullptr;
     GetModuleHandleExW(
@@ -70,7 +67,6 @@ HMODULE GetCurrentModuleHandle() {
     return hModule;
 }
 
-// --- Helper: DPI Scaling ---
 static UINT GetWindowDpi(HWND hWnd) {
     static auto pfnGetDpiForWindow = (UINT(WINAPI*)(HWND))GetProcAddress(
         GetModuleHandleW(L"user32.dll"), "GetDpiForWindow");
@@ -91,28 +87,23 @@ static float GetDpiScale(HWND hWnd) {
     return (float)GetWindowDpi(hWnd) / 96.0f;
 }
 
-// Forward Declarations
 void RenderFrame(HWND hWnd);
 void MoveFilesToRecycleBin(const std::vector<wchar_t>& buffer);
 
-// --- Drawing Helper: Modern Vector Trash Can ---
 void DrawModernTrashIcon(Graphics& g, float cx, float cy, float scale, Color color) {
     SolidBrush brush(color);
     float s = scale;
 
-    // 1. Handle
     Pen handlePen(color, 2.5f * s);
     handlePen.SetStartCap(LineCapRound);
     handlePen.SetEndCap(LineCapRound);
     g.DrawLine(&handlePen, cx - 4.5f * s, cy - 16.5f * s, cx + 4.5f * s, cy - 16.5f * s);
 
-    // 2. Lid
     Pen lidPen(color, 3.5f * s);
     lidPen.SetStartCap(LineCapRound);
     lidPen.SetEndCap(LineCapRound);
     g.DrawLine(&lidPen, cx - 14.0f * s, cy - 12.0f * s, cx + 14.0f * s, cy - 12.0f * s);
 
-    // 3. Body
     GraphicsPath bodyPath;
     float topW = 12.0f * s;
     float botW = 9.5f * s;
@@ -129,7 +120,6 @@ void DrawModernTrashIcon(Graphics& g, float cx, float cy, float scale, Color col
     bodyPath.CloseFigure();
     g.FillPath(&brush, &bodyPath);
 
-    // 4. Vertical slot cutouts
     Pen slotPen(Color(180, 22, 22, 26), 1.8f * s);
     slotPen.SetStartCap(LineCapRound);
     slotPen.SetEndCap(LineCapRound);
@@ -138,7 +128,6 @@ void DrawModernTrashIcon(Graphics& g, float cx, float cy, float scale, Color col
     }
 }
 
-// --- Render Overlay Frame ---
 void RenderFrame(HWND hWnd) {
     if (g_animState == AnimState::HIDDEN || g_currentScale < 0.05f) return;
 
@@ -172,11 +161,9 @@ void RenderFrame(HWND hWnd) {
 
         float r = baseRadius * g_currentScale;
 
-        // Ambient soft shadow
         SolidBrush shadowBrush(Color(25, 0, 0, 0));
         g.FillEllipse(&shadowBrush, cx - r - 4.0f * dpiScale, cy - r - 1.0f * dpiScale, (r + 4.0f * dpiScale) * 2, (r + 4.0f * dpiScale) * 2 + 5.0f * dpiScale);
 
-        // Frosted glass circle body
         RectF glassRect(cx - r, cy - r, r * 2, r * 2);
         LinearGradientBrush glassBrush(
             PointF(cx, cy - r),
@@ -186,15 +173,12 @@ void RenderFrame(HWND hWnd) {
         );
         g.FillEllipse(&glassBrush, glassRect);
 
-        // Inner rim glaze
         Pen innerEdgePen(Color(35, 255, 255, 255), 1.0f * dpiScale);
         g.DrawEllipse(&innerEdgePen, cx - r + 0.5f, cy - r + 0.5f, (r - 0.5f) * 2, (r - 0.5f) * 2);
 
-        // Vector trash icon
         DrawModernTrashIcon(g, cx, cy, g_currentScale * dpiScale, Color(245, 248, 250));
     }
 
-    // Place at the top-center of the active monitor's work area
     int monLeft = g_targetWorkArea.left;
     int monWidth = g_targetWorkArea.right - g_targetWorkArea.left;
     int wndLeft = monLeft + (monWidth - wndWidth) / 2;
@@ -213,7 +197,6 @@ void RenderFrame(HWND hWnd) {
     ReleaseDC(nullptr, hdcScreen);
 }
 
-// --- IDropTarget Implementation ---
 class CRecycleDropTarget final : public IDropTarget {
     LONG m_refCount = 1;
     bool m_hasHDrop = false;
@@ -297,7 +280,6 @@ public:
         if (m_hasHDrop && canMove && IsOverTrash(pt)) {
             *pdwEffect = DROPEFFECT_MOVE;
 
-            // Extract file paths and post asynchronous delete message
             FORMATETC fmt = { CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
             STGMEDIUM stg;
             if (SUCCEEDED(pDataObj->GetData(&fmt, &stg))) {
@@ -320,7 +302,6 @@ public:
                 ReleaseStgMedium(&stg);
             }
 
-            // Immediately start pop-and-fade animation without blocking the source window
             g_currentScale = 1.25f;
             g_targetScale = 0.0f;
             g_animState = AnimState::DROPPED;
@@ -334,7 +315,6 @@ public:
 
 static CRecycleDropTarget* g_pDropTarget = nullptr;
 
-// --- Recycle Bin Deletion ---
 void MoveFilesToRecycleBin(const std::vector<wchar_t>& buffer) {
     if (buffer.empty()) return;
 
@@ -345,12 +325,10 @@ void MoveFilesToRecycleBin(const std::vector<wchar_t>& buffer) {
     SHFileOperationW(&fileOp);
 }
 
-// --- Window Procedure ---
 LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
         case WM_UPDATE_DRAG_STATE: {
             if (wParam != 0) {
-                // Center on the monitor under the cursor
                 POINT ptCursor;
                 GetCursorPos(&ptCursor);
                 HMONITOR hMon = MonitorFromPoint(ptCursor, MONITOR_DEFAULTTONEAREST);
@@ -386,7 +364,6 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
         case WM_TIMER: {
             if (wParam == TIMER_ANIM) {
-                // Snap when close enough to target scale to eliminate continuous rendering
                 if (abs((int)((g_targetScale - g_currentScale) * 1000.0f)) < 5) {
                     g_currentScale = g_targetScale;
                 } else {
@@ -417,7 +394,6 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
     return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
 
-// --- UI Thread ---
 DWORD WINAPI OverlayUIThread(LPVOID) {
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
@@ -475,7 +451,7 @@ DWORD WINAPI OverlayUIThread(LPVOID) {
     }
 
     if (g_hOverlayWnd) {
-        DestroyWindow(g_hOverlayWnd); // WM_DESTROY revokes the drop target
+        DestroyWindow(g_hOverlayWnd); 
         g_hOverlayWnd = nullptr;
     }
 
@@ -491,7 +467,6 @@ DWORD WINAPI OverlayUIThread(LPVOID) {
     return 0;
 }
 
-// --- Hooked DoDragDrop ---
 using DoDragDrop_t = decltype(&DoDragDrop);
 static DoDragDrop_t pOriginalDoDragDrop = nullptr;
 
@@ -515,7 +490,6 @@ HRESULT WINAPI Hooked_DoDragDrop(IDataObject* pDataObj, IDropSource* pDropSource
     return hr;
 }
 
-// --- Mod Lifecycle ---
 void Wh_ModUninit();
 
 BOOL Wh_ModInit() {
