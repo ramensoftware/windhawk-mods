@@ -19,6 +19,12 @@ A modern, fluid and highly visual replacement for the native Windows Alt+Tab exp
 
 Built from scratch in native C++ as a project to explore Windows APIs, graphics, animation systems and desktop customization. You can also see the original [GITHUB REPOSITORY](https://github.com/IMiloDev/OverhauldedWin) to send me issues.
 
+> **⚠️ DISCLAIMER**
+>
+> When an **elevated window** is focused, Windows may not deliver low-level keyboard input to a normal-privilege process (UIPI). Windhawk 2.0's UIAccess tool process is included to handle this case; the Explorer hotkey forwarder remains an experimental fallback.
+>
+> [Read more about this limitation →](#elevated-window-input)
+
 ## Screenshot
 
 ![OverhauldedWin Task Switcher](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/task-manager.jpg)
@@ -101,6 +107,10 @@ Overhaulded is still a pre-release project.
 
 Some applications may behave differently than standard desktop windows, especially those using unusual window structures, custom rendering, or multiple processes.
 
+### Elevated Window Input
+
+A standard-privilege process cannot reliably receive low-level keyboard events while an elevated window is focused because of Windows UIPI. On Windhawk 2.0, this mod includes `windhawk-mod-uiaccess.exe` so the tool process can use UIAccess for this scenario. The Explorer hotkey-forwarding component is retained as an experimental fallback. Behavior can still vary by Windows version and configuration; if Alt+Tab falls back to the native switcher, verify that the UIAccess-capable process is available and enabled.
+
 ---
 
 ## Controls
@@ -108,10 +118,12 @@ Some applications may behave differently than standard desktop windows, especial
 | Shortcut                                     | Action                        |
 | -------------------------------------------- | ----------------------------- |
 | `Alt + Tab`                                  | Move to the next window       |
-| `Alt gr+ Tab`                                | Move to the next window       |
+| `Alt + Shift + Tab`                          | Move to the previous window   |
+| `AltGr + Tab`                                | Move to the next window       |
 | `Alt + Tab` + release `Alt`                  | Activate the selected window  |
 | `Esc`                                        | Cancel the switcher           |
-| `Opened Task Switcher + Arrows`              | Additional navigation/control |
+| `Alt + Tab` + arrows                       | Navigate through the selector  |
+| `AltGr + Tab` + arrows                      | Navigate through the selector  |
 
 ## Compatibility
 
@@ -148,7 +160,7 @@ The project is continuously evolving as new ideas and technical improvements are
 
 This project is licensed under the **MIT License**.
 
-See the [LICENSE](https://github.com/IMiloDev/OverhauldedWin/blob/main/LICENSE) file for the complete license text.
+See the https://github.com/IMiloDev/OverhauldedWin/blob/main/LICENSE file for the complete license text.
 
 ---
 
@@ -205,6 +217,9 @@ See the [LICENSE](https://github.com/IMiloDev/OverhauldedWin/blob/main/LICENSE) 
         - SelectedColor: "#090A0B"
           $name: Selected card color
           $description: Base color of the selected card. Default Hex - #090A0B. An empty or invalid value uses the default.
+        - ExpandSelectedWindow: true
+          $name: Expand selected window
+          $description: Animates the selected card toward the selected window when confirmed.
       $name: Cards
   $name: Appearance
 - Background: "dwm"
@@ -222,9 +237,6 @@ See the [LICENSE](https://github.com/IMiloDev/OverhauldedWin/blob/main/LICENSE) 
       $description: DWM background opacity (0-100). Default - 20.
   $name: DWM background
 - ExperimentalSettings:
-    - ExpandSelectedWindow: true
-      $name: Expand selected window
-      $description: Animates the selected card toward the selected window when confirmed.
     - GeneralBackground: "none"
       $name: General Background
       $description: Experimental features may require additional GPU, CPU and RAM resources and may affect performance. Pattern Waves requires a background other than None.
@@ -711,6 +723,7 @@ typedef HRESULT (WINAPI* DwmGetWindowAttributeFn)(HWND, DWORD,
                                                    void*, DWORD);
 
 // Atributos y flags DWM usados por el glass y las miniaturas.
+static const DWORD kDwmWaExtendedFrameBounds = 9;
 static const DWORD kDwmWindowCornerPreference = 33;
 static const DWORD kDwmBorderColor = 34;
 static const DWORD kDwmColorNone = 0xFFFFFFFE;
@@ -765,7 +778,7 @@ enum class ModifierSession
     None,
     LeftAlt,
     RightAlt,
-    AltGr
+    ControlAlt
 };
 
 struct MediaAccent
@@ -878,8 +891,15 @@ static void InitHotkeyMessage();
 static const UINT_PTR kHotkeyPollTimerId = 1;
 static const UINT kHotkeyPollMs = 30;
 static const int kHotkeyReleaseTicks = 5;
+static const UINT_PTR kActivationRetryTimerId = 2;
+static const UINT kActivationRetryMs = 50;
+static const int kMaxActivationRetries = 20;
 static bool g_hotkeySession = false;     // solo input thread
 static int g_hotkeyReleaseCount = 0;     // solo input thread
+static HWND g_inputActivationTarget = nullptr; // solo input thread
+static int g_inputActivationRetryCount = 0;     // solo input thread
+static BOOL g_inputActivationLastGrantResult = FALSE; // solo input thread
+static BOOL g_inputActivationLastSetForegroundResult = FALSE; // solo input thread
 
 // Solo UI thread.
 static HWND g_selector = nullptr;
@@ -3845,7 +3865,8 @@ static void StartSelectionExpansion(HWND target)
         selectorClientOrigin.x = selectorRect.left;
         selectorClientOrigin.y = selectorRect.top;
     }
-    const RECT card = GetSlotCardRect(GetCarouselCenterSlot());
+    const int selectedSlot = GetCarouselCenterSlot();
+    const RECT preview = TransformSceneRect(GetSlotPreviewRect(selectedSlot));
     RECT targetWindowRect = {};
     if (!GetWindowRect(target, &targetWindowRect))
     {
@@ -3858,10 +3879,39 @@ static void StartSelectionExpansion(HWND target)
         ActivateWindow(target);
         return;
     }
+    // GetWindowRect puede incluir los bordes invisibles de redimensionado.
+    // DWMWA_EXTENDED_FRAME_BOUNDS da los límites físicos que realmente se ven,
+    // evitando que el thumbnail termine desplazado respecto a la ventana.
+    if (!IsIconic(target) && LoadDwmFunctions() && g_dwmGetWindowAttribute)
+    {
+        RECT visibleFrame = {};
+        if (SUCCEEDED(g_dwmGetWindowAttribute(
+                target, kDwmWaExtendedFrameBounds,
+                &visibleFrame, sizeof(visibleFrame))) &&
+            visibleFrame.left < visibleFrame.right &&
+            visibleFrame.top < visibleFrame.bottom)
+        {
+            targetWindowRect = visibleFrame;
+        }
+    }
+    RECT expansionSourceRect = preview;
+    if (selectedSlot >= 0 && selectedSlot < kMaxCarouselSlots)
+    {
+        const ThumbnailSlot& previewThumbnail = g_thumbnailSlots[selectedSlot];
+        if (previewThumbnail.sourceWidth > 0 && previewThumbnail.sourceHeight > 0)
+        {
+            // Reproduce exactamente el letterboxing usado al pintar la miniatura
+            // dentro de la tarjeta, para que el primer frame no salte lateralmente.
+            expansionSourceRect = ContainedRect(
+                preview, previewThumbnail.sourceWidth, previewThumbnail.sourceHeight);
+        }
+    }
     RECT work = monitorInfo.rcWork;
     const int workWidth = work.right - work.left;
     const int workHeight = work.bottom - work.top;
-    if (workWidth <= 0 || workHeight <= 0 || card.right <= card.left || card.bottom <= card.top)
+    if (workWidth <= 0 || workHeight <= 0 ||
+        expansionSourceRect.right <= expansionSourceRect.left ||
+        expansionSourceRect.bottom <= expansionSourceRect.top)
     {
         g_pendingActivationTarget = target;
         g_cleanupInProgress = true;
@@ -3879,10 +3929,10 @@ static void StartSelectionExpansion(HWND target)
     g_selectionExpansionSceneOffset = POINT{
         selectorClientOrigin.x - work.left, selectorClientOrigin.y - work.top };
     g_selectionExpansionStartRect = RECT{
-        selectorClientOrigin.x + card.left - work.left,
-        selectorClientOrigin.y + card.top - work.top,
-        selectorClientOrigin.x + card.right - work.left,
-        selectorClientOrigin.y + card.bottom - work.top };
+        selectorClientOrigin.x + expansionSourceRect.left - work.left,
+        selectorClientOrigin.y + expansionSourceRect.top - work.top,
+        selectorClientOrigin.x + expansionSourceRect.right - work.left,
+        selectorClientOrigin.y + expansionSourceRect.bottom - work.top };
     g_selectionExpansionDestinationRect = RECT{
         targetWindowRect.left - work.left,
         targetWindowRect.top - work.top,
@@ -3895,6 +3945,10 @@ static void StartSelectionExpansion(HWND target)
     g_uiTabDown = false;
     g_tabRepeatStarted = false;
     KillTimer(g_selector, kTabRepeatTimerId);
+    // Pattern Waves and the cursor spotlight belong to the task-switcher
+    // backdrop, which is removed for the selected-window expansion.
+    KillTimer(g_selector, kPatternTimerId);
+    g_backgroundSpotlightActive = false;
     UiSetInteractive(false);
     g_selectorAnimation = SelectorAnimationState::SelectionExpansion;
     // El HWND pasa a cubrir el monitor sin activar ni cambiar el orden Z.
@@ -3914,10 +3968,10 @@ static void StartSelectionExpansion(HWND target)
             selectorClientOrigin.x - clientAfterOrigin.x,
             selectorClientOrigin.y - clientAfterOrigin.y };
         g_selectionExpansionStartRect = RECT{
-            selectorClientOrigin.x + card.left - clientAfterOrigin.x,
-            selectorClientOrigin.y + card.top - clientAfterOrigin.y,
-            selectorClientOrigin.x + card.right - clientAfterOrigin.x,
-            selectorClientOrigin.y + card.bottom - clientAfterOrigin.y };
+            selectorClientOrigin.x + expansionSourceRect.left - clientAfterOrigin.x,
+            selectorClientOrigin.y + expansionSourceRect.top - clientAfterOrigin.y,
+            selectorClientOrigin.x + expansionSourceRect.right - clientAfterOrigin.x,
+            selectorClientOrigin.y + expansionSourceRect.bottom - clientAfterOrigin.y };
         g_selectionExpansionDestinationRect = RECT{
             targetWindowRect.left - clientAfterOrigin.x,
             targetWindowRect.top - clientAfterOrigin.y,
@@ -5032,6 +5086,16 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
         g_d2dDCRenderTarget->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
         // Clear completamente para dejar que DWM glass sea visible
         g_d2dDCRenderTarget->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
+        if (g_selectionExpansionActive)
+        {
+            // The selected window is a DWM thumbnail composed independently
+            // over this HWND. Clear the task-switcher UI immediately after
+            // selection, while that thumbnail continues its expansion.
+            const HRESULT drawResult = g_d2dDCRenderTarget->EndDraw();
+            if (drawResult == static_cast<HRESULT>(0x8899000C))
+                ReleaseD2DDeviceResources();
+            return;
+        }
         RECT sceneRect = { 0, 0, g_runtimeSelectorWidth, g_runtimeSelectorHeight };
         if (g_selectionExpansionActive)
             GetClientRect(hwnd, &sceneRect);
@@ -5388,6 +5452,19 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
         const HRESULT drawResult = g_d2dDCRenderTarget->EndDraw();
         if (drawResult == static_cast<HRESULT>(0x8899000C))  // D2DERR_RECREATE_TARGET
             ReleaseD2DDeviceResources();
+        return;
+    }
+
+    if (g_selectionExpansionActive)
+    {
+        // If Direct2D is unavailable, black is transparent over the DWM glass
+        // surface extended across the entire selector client area. The DWM
+        // thumbnail remains composed above it.
+        HGDIOBJ stockBrush = LoadGdiFunctions() && g_getStockObject
+            ? g_getStockObject(BLACK_BRUSH) : nullptr;
+        HBRUSH glassClearBrush = reinterpret_cast<HBRUSH>(stockBrush);
+        if (glassClearBrush)
+            FillRect(hdc, &clientRect, glassClearBrush);
         return;
     }
 
@@ -6044,44 +6121,77 @@ static void ActivateWindow(HWND target)
                            reinterpret_cast<WPARAM>(target), 0);
 }
 
-// Esta función solo se ejecuta desde InputThreadProc.
-static void ActivateWindowOnInputThread(HWND target)
+// Esta función solo se ejecuta desde el input thread. Repite la ruta completa
+// de activación porque algunas ventanas elevadas aún están restaurándose cuando
+// termina la expansión del selector.
+static bool TryActivateWindowOnInputThread(HWND target)
 {
     if (!target || !IsWindow(target))
-        return;
+        return false;
 
     if (IsIconic(target))
         ShowWindowAsync(target, SW_RESTORE);
 
-    // La activación se ejecuta en el hilo de entrada, que es el que recibe la
-    // pulsación de Alt+Tab. Primero se usa la ruta normal y se cede el permiso
-    // de foreground; esto cubre la mayoría de ventanas elevadas sin tocar
-    // Explorer.
-    AllowSetForegroundWindow(ASFW_ANY);
-    SetForegroundWindow(target);
+    g_inputActivationLastGrantResult = AllowSetForegroundWindow(ASFW_ANY);
+    g_inputActivationLastSetForegroundResult = SetForegroundWindow(target);
     if (GetForegroundWindow() == target)
-        return;
+        return true;
 
-    // Algunas ventanas con mayor integridad aceptan la restauración pero no
-    // el cambio de cola activa en el primer intento. Unir temporalmente las
-    // colas del hilo de entrada y de la ventana destino permite completar la
-    // activación sin suspender Explorer ni modificar su ciclo de mensajes.
-    DWORD targetThreadId = GetWindowThreadProcessId(target, nullptr);
-    DWORD inputThreadId = GetCurrentThreadId();
-    bool attached = targetThreadId != 0 && targetThreadId != inputThreadId &&
-                    AttachThreadInput(inputThreadId, targetThreadId, TRUE) != FALSE;
-    if (attached)
+    // No se unen colas de entrada entre hilos. Se reintenta la ruta normal y se
+    // eleva la ventana en el z-order mientras Windows completa su restauración.
+    if (GetForegroundWindow() != target)
     {
-        SetForegroundWindow(target);
-        SetActiveWindow(target);
-        SetFocus(target);
-        AttachThreadInput(inputThreadId, targetThreadId, FALSE);
+        BringWindowToTop(target);
+        g_inputActivationLastSetForegroundResult = SetForegroundWindow(target);
+    }
+    return GetForegroundWindow() == target;
+}
+
+// Esta función solo se ejecuta desde InputThreadProc / su WndProc.
+static void ActivateWindowOnInputThread(HWND control, HWND target)
+{
+    if (TryActivateWindowOnInputThread(target))
+    {
+        g_inputActivationTarget = nullptr;
+        g_inputActivationRetryCount = 0;
+        KillTimer(control, kActivationRetryTimerId);
+        return;
     }
 
-    // Un último intento después de separar las colas evita dejar una relación
-    // de entrada persistente si la ventana realizó su propia transición.
-    if (GetForegroundWindow() != target)
-        SetForegroundWindow(target);
+    // Restore/activation of an elevated or busy application may complete
+    // asynchronously. Retry briefly from the input thread instead of dropping
+    // the request after the expansion has hidden the selector.
+    g_inputActivationTarget = target;
+    g_inputActivationRetryCount = 0;
+    SetTimer(control, kActivationRetryTimerId, kActivationRetryMs, nullptr);
+}
+
+static void InputRetryActivation(HWND control)
+{
+    HWND target = g_inputActivationTarget;
+    if (!target || !IsWindow(target) ||
+        ++g_inputActivationRetryCount > kMaxActivationRetries)
+    {
+        g_inputActivationTarget = nullptr;
+        g_inputActivationRetryCount = 0;
+        KillTimer(control, kActivationRetryTimerId);
+        return;
+    }
+
+    if (TryActivateWindowOnInputThread(target))
+    {
+        g_inputActivationTarget = nullptr;
+        g_inputActivationRetryCount = 0;
+        KillTimer(control, kActivationRetryTimerId);
+    }
+    else if (g_inputActivationRetryCount == kMaxActivationRetries)
+    {
+        Wh_Log(L"Foreground failed target=%p current=%p grant=%d set=%d after %d retries",
+               target, GetForegroundWindow(),
+               g_inputActivationLastGrantResult,
+               g_inputActivationLastSetForegroundResult,
+               kMaxActivationRetries);
+    }
 }
 
 static void ConfirmSelection()
@@ -6453,7 +6563,7 @@ static bool SessionModifierReleased()
     if (g_sessionModifier == ModifierSession::RightAlt)
         return !g_altRightDown;
 
-    if (g_sessionModifier == ModifierSession::AltGr)
+    if (g_sessionModifier == ModifierSession::ControlAlt)
         return !g_altLeftDown && !g_altRightDown &&
                !g_ctrlLeftDown && !g_ctrlRightDown;
 
@@ -6475,12 +6585,12 @@ static void SendAltMenuMaskIfNeeded()
     g_altMenuMaskPending = false;
 }
 
-// El modo normal confirma al finalizar Alt; AltGr es deliberadamente persistente
-// y solo se cierra mediante Enter, clic o Escape.
+// El modo normal confirma al finalizar Alt; Ctrl+Alt es deliberadamente
+// persistente y solo se cierra mediante Enter, clic o Escape.
 static void OnModifierReleased()
 {
     if (InputSessionActive() &&
-        g_sessionModifier != ModifierSession::AltGr &&
+        g_sessionModifier != ModifierSession::ControlAlt &&
         SessionModifierReleased())
         InputEndSession(WM_UI_CONFIRM);
     g_altGrActive = IsAltGrPhysicallyDown();
@@ -6494,29 +6604,29 @@ static void OnModifierReleased()
 static bool StartInputSession(bool leftAlt, bool rightAlt, bool ctrlHeld,
                               bool shift, bool fromHotkey)
 {
-    const bool altGrHeld = rightAlt && ctrlHeld;
+    const bool controlAltHeld = ctrlHeld;
     LONG id = InterlockedIncrement(&g_nextSessionId);
     if (id == 0)
         id = InterlockedIncrement(&g_nextSessionId);
 
     g_inputSessionId = id;
     InterlockedExchange(&g_sessionActive, id);
-    g_sessionModifier = altGrHeld
-        ? ModifierSession::AltGr
+    g_sessionModifier = controlAltHeld
+        ? ModifierSession::ControlAlt
         : (leftAlt ? ModifierSession::LeftAlt : ModifierSession::RightAlt);
     // Si el Tab llegó por hotkey, el hook no lo vio: no hay un keyup que
     // esperar y no debe quedar marcado como pulsado/suprimido.
     g_tabDown = !fromHotkey;
     g_tabSuppressed = !fromHotkey;
-    g_altGrActive = altGrHeld;
-    g_altGrTaskSwitcherArmed = altGrHeld;
+    g_altGrActive = rightAlt && ctrlHeld;
+    g_altGrTaskSwitcherArmed = rightAlt && ctrlHeld;
 
     const bool posted = PostUiCommand(
         WM_UI_OPEN, static_cast<WPARAM>(id),
         (shift ? kUiOpenShift : 0) | (fromHotkey ? kUiOpenFromHotkey : 0));
     if (posted)
     {
-        g_altMenuMaskPending = !altGrHeld;
+        g_altMenuMaskPending = !g_altGrActive;
         return true;
     }
 
@@ -6725,10 +6835,10 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
         }
         else if (up)
         {
-            // Alt+Tab confirma al soltar Tab. Ctrl+Alt+Tab (AltGr) conserva
-            // el selector abierto hasta que el usuario pulse Enter o haga clic.
+            // Alt+Tab confirma al soltar Tab. Ctrl+Alt+Tab conserva el
+            // selector abierto hasta Enter, clic o Escape.
             const bool confirmOnTabRelease =
-                sessionActive && g_sessionModifier != ModifierSession::AltGr;
+                sessionActive && g_sessionModifier != ModifierSession::ControlAlt;
             g_tabDown = false;
             if (sessionActive)
             {
@@ -6917,6 +7027,11 @@ static LRESULT CALLBACK InputControlProc(HWND hwnd, UINT message, WPARAM wParam,
         InputPollHotkeySession(hwnd);
         return 0;
     }
+    if (message == WM_TIMER && wParam == kActivationRetryTimerId)
+    {
+        InputRetryActivation(hwnd);
+        return 0;
+    }
     return DefWindowProcW(hwnd, message, wParam, lParam);
 }
 
@@ -6997,6 +7112,7 @@ static DWORD WINAPI InputThreadProc(LPVOID)
             if (message.message == WM_IN_ACTIVATE)
             {
                 ActivateWindowOnInputThread(
+                    control,
                     reinterpret_cast<HWND>(message.wParam));
                 continue;
             }
@@ -7346,8 +7462,9 @@ static bool ForwardHotkey(WPARAM flags)
     // El selector lo necesita para tomar el foco si una ventana elevada lo tenía.
     DWORD processId = 0;
     GetWindowThreadProcessId(control, &processId);
-    if (processId)
-        AllowSetForegroundWindow(processId);
+    if (processId && !AllowSetForegroundWindow(processId))
+        Wh_Log(L"Explorer could not grant foreground permission to process %lu",
+               processId);
 
     return PostMessageW(control, g_hotkeyMessage, flags, 0) != FALSE;
 }
