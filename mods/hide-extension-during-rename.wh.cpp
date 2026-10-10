@@ -21,7 +21,10 @@ This mod hides file extensions during inline file renaming in File Explorer, Des
 * **Warning Prevention:**   Intercepts window messages (`WM_GETTEXT`) upon committing a rename to silently re-attach the original extension,
                             avoiding the native Windows "If you change a file name extension, the file might become unusable" warning prompt.
 
-> **Note:** This mod targets native Windows File Explorer, Desktop, and standard file dialogs. It does not handle inline renaming inside third-party apps like WinRAR or 7-Zip.
+**Things to Note:**
+1. This mod targets native Windows File Explorer, Desktop, and standard file dialogs. It does not handle inline renaming inside third-party apps (e.g., WinRAR, 7-Zip).
+2. If you want to change a file's extension, you can do so inside the file's properties.
+3. If you type a dot at the end of a file name followed by any Windows registered extension (e.g., changing `document.txt` to `document.pdf`), it will trigger the Windows extension change warning prompt, however non-registered extensions won't change the file type.
 
 ![Mod Demo](https://i.imgur.com/iy9dyzq.gif)
 */
@@ -38,12 +41,25 @@ This mod hides file extensions during inline file renaming in File Explorer, Des
 #include <windhawk_utils.h>
 
 struct HiddenExt {
-    std::wstring ext;          // Hidden extension (e.g. ".gz", ".txt")
+    std::wstring ext;          // Hidden extension (e.g. ".txt")
     std::wstring shownDotExt;  // Extension remaining in shown base name (e.g. ".tar" in "archive.tar")
 };
 
 std::mutex g_editsMutex;
 std::unordered_map<HWND, HiddenExt> g_hiddenExt;
+
+// Verify if an extension is a registered file type in the system registry
+bool IsRegisteredExtension(LPCWSTR ext) {
+    if (!ext || ext[0] != L'.' || ext[1] == L'\0') {
+        return false;
+    }
+    HKEY hKey = NULL;
+    if (RegOpenKeyExW(HKEY_CLASSES_ROOT, ext, 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        RegCloseKey(hKey);
+        return true;
+    }
+    return false;
+}
 
 bool ShouldAppendExt(const std::wstring& text, const HiddenExt& h) {
     if (h.ext.empty()) {
@@ -60,7 +76,13 @@ bool ShouldAppendExt(const std::wstring& text, const HiddenExt& h) {
         return false; // Already ends with the hidden extension
     }
 
-    // Append unless the user typed their own extension (e.g. .png when .jpg was hidden)
+    // If the user typed a dotted suffix (like v1.2 or .1) that is NOT a registered file type,
+    // treat it as part of the filename and STILL append the hidden extension without warnings.
+    if (*typedExt && !IsRegisteredExtension(typedExt)) {
+        return true; 
+    }
+
+    // Otherwise, append unless the user explicitly typed their own registered extension
     return !*typedExt || _wcsicmp(typedExt, h.shownDotExt.c_str()) == 0;
 }
 
@@ -203,7 +225,6 @@ bool IsRenameEditControl(HWND hWnd) {
         return false;
     }
 
-    // Match only Explorer item views, Desktop, and Navigation pane
     if (HasAncestorClass(hWnd, L"SHELLDLL_DefView") ||
         HasAncestorClass(hWnd, L"NamespaceTreeControl")) {
 
@@ -234,12 +255,13 @@ SetWindowTextW_t SetWindowTextW_Original = nullptr;
 BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
     if (lpString && (IsSaveDialogEditControl(hWnd) || IsRenameEditControl(hWnd))) {
         PCWSTR ext = PathFindExtensionW(lpString);
-        if (wcschr(lpString, L'"') || !ext[0] || !ext[1]) {
+        
+        if (wcschr(lpString, L'"') || !ext[0] || !ext[1] || !IsRegisteredExtension(ext)) {
             {
                 std::lock_guard<std::mutex> lock(g_editsMutex);
                 auto it = g_hiddenExt.find(hWnd);
                 if (it != g_hiddenExt.end()) {
-                    it->second = {}; // Keep subclass tracked so Wh_ModUninit cleans it up
+                    it->second = {}; 
                 }
             }
             return SetWindowTextW_Original(hWnd, lpString);
