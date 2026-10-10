@@ -7,7 +7,6 @@
 // @github          https://github.com/MaKra
 // @homepage        https://www.kraus.tk
 // @include         explorer.exe
-// @architecture    x86-64
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -39,6 +38,16 @@ written persistently, and disabling the mod takes effect immediately.
   checkboxes). If a state is not available, the dialog falls back to
   "Shut down".
 - The mod runs inside Explorer and does not start additional processes.
+- If Explorer terminates (crash, forced shutdown) while the dialog is open,
+  the preselection value remains set; it can be reset by changing the power
+  button action in Windows Settings.
+- Related mods: [Custom Shutdown Dialog](https://windhawk.net/mods/custom-shutdown-dialog)
+  replaces the dialog completely (both mods hook the same dialog entry
+  point), so this mod has nothing to preselect when both are enabled.
+  [Classic Taskbar and Start Menu Properties](https://windhawk.net/mods/classic-taskbar-properties)
+  writes the same registry value: changes made there are shown by the Alt+F4
+  dialog as well, but when the dialog opens, this mod's configured action is
+  applied transiently and the previous value is restored when it closes.
 
 ## Compatibility
 
@@ -114,8 +123,20 @@ void LoadSettings() {
 using ExitWindowsDialog_t = void(WINAPI *)(HWND);
 ExitWindowsDialog_t ExitWindowsDialog_Original;
 
+// Tracks an in-flight dialog so Wh_ModBeforeUninit can close it and wait for
+// the hook thread to leave the module before the engine unloads it (AI review
+// finding 2).
+volatile LONG g_inExitWindowsDialog = 0;
+DWORD g_dialogThreadId = 0;
+HANDLE g_dialogClosedEvent = nullptr;
+
 void WINAPI ExitWindowsDialog_Hook(HWND hwndOwner) {
     Wh_Log(L"> Alt+F4 dialog opening");
+    InterlockedExchange(&g_inExitWindowsDialog, 1);
+    g_dialogThreadId = GetCurrentThreadId();
+    if (g_dialogClosedEvent) {
+        ResetEvent(g_dialogClosedEvent);
+    }
 
     // Record the current state. Case A: value absent. Case B: value present
     // (REG_DWORD). A non-DWORD value is left untouched entirely (the
@@ -129,15 +150,15 @@ void WINAPI ExitWindowsDialog_Hook(HWND hwndOwner) {
                            RRF_RT_REG_DWORD, &type, (PVOID)&originalValue,
                            &size);
     if (res == ERROR_SUCCESS) {
-        if (type == REG_DWORD) {
-            originalExisted = true;
-        } else {
-            transientWriteSafe = false;
-            Wh_Log(L"Unexpected value type (%lu), skipping transient write", type);
-        }
-    } else if (res != ERROR_FILE_NOT_FOUND) {
+        // RRF_RT_REG_DWORD: success implies a REG_DWORD value.
+        originalExisted = true;
+    } else if (res == ERROR_FILE_NOT_FOUND) {
+        // Case A: value absent.
+    } else {
+        // Includes ERROR_UNSUPPORTED_TYPE for non-DWORD values.
         transientWriteSafe = false;
-        Wh_Log(L"RegGetValue failed (%ld), skipping transient write", res);
+        Wh_Log(L"RegGetValue: res=%ld type=%lu, skipping transient write", res,
+               type);
     }
 
     if (transientWriteSafe) {
@@ -146,13 +167,19 @@ void WINAPI ExitWindowsDialog_Hook(HWND hwndOwner) {
                                     KEY_SET_VALUE, &hKey);
         if (openRes == ERROR_SUCCESS) {
             DWORD action = (DWORD)g_settings.action;
-            RegSetValueEx(hKey, kRegistryValue, 0, REG_DWORD,
-                          (const BYTE *)&action, sizeof(action));
+            LONG writeRes = RegSetValueEx(hKey, kRegistryValue, 0, REG_DWORD,
+                                          (const BYTE *)&action, sizeof(action));
             RegCloseKey(hKey);
-            Wh_Log(L"Transient write: configured action 0x%08lX (original: %s"
-                   L" 0x%08lX)",
-                   action, originalExisted ? L"present" : L"absent",
-                   originalValue);
+            if (writeRes == ERROR_SUCCESS) {
+                Wh_Log(L"Transient write: configured action 0x%08lX (original: %s"
+                       L" 0x%08lX)",
+                       action, originalExisted ? L"present" : L"absent",
+                       originalValue);
+            } else {
+                transientWriteSafe = false;
+                Wh_Log(L"Transient write FAILED (%ld), skipping restore",
+                       writeRes);
+            }
         } else {
             transientWriteSafe = false;
             Wh_Log(L"RegOpenKeyEx failed (%ld), skipping transient write",
@@ -165,18 +192,35 @@ void WINAPI ExitWindowsDialog_Hook(HWND hwndOwner) {
     if (transientWriteSafe) {
         HKEY hKey;
         LONG openRes = RegOpenKeyEx(HKEY_CURRENT_USER, kRegistrySubKey, 0,
-                                    KEY_SET_VALUE | KEY_QUERY_VALUE, &hKey);
+                                    KEY_SET_VALUE, &hKey);
         if (openRes == ERROR_SUCCESS) {
             if (originalExisted) {
-                RegSetValueEx(hKey, kRegistryValue, 0, REG_DWORD,
-                              (const BYTE *)&originalValue, sizeof(originalValue));
-                Wh_Log(L"Restored original value 0x%08lX", originalValue);
+                LONG writeRes =
+                    RegSetValueEx(hKey, kRegistryValue, 0, REG_DWORD,
+                                  (const BYTE *)&originalValue,
+                                  sizeof(originalValue));
+                RegCloseKey(hKey);
+                if (writeRes == ERROR_SUCCESS) {
+                    Wh_Log(L"Restored original value 0x%08lX", originalValue);
+                } else {
+                    Wh_Log(L"Restore FAILED (%ld)", writeRes);
+                }
             } else {
-                RegDeleteValue(hKey, kRegistryValue);
-                Wh_Log(L"Restored original state: value removed");
+                LONG deleteRes = RegDeleteValue(hKey, kRegistryValue);
+                RegCloseKey(hKey);
+                if (deleteRes == ERROR_SUCCESS ||
+                    deleteRes == ERROR_FILE_NOT_FOUND) {
+                    Wh_Log(L"Restored original state: value removed");
+                } else {
+                    Wh_Log(L"Restore FAILED (%ld)", deleteRes);
+                }
             }
-            RegCloseKey(hKey);
         }
+    }
+
+    InterlockedExchange(&g_inExitWindowsDialog, 0);
+    if (g_dialogClosedEvent) {
+        SetEvent(g_dialogClosedEvent);
     }
 
     Wh_Log(L"< Alt+F4 dialog closed");
@@ -202,6 +246,7 @@ void InstallHooks() {
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
+    g_dialogClosedEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     LoadSettings();
     InstallHooks();
     return TRUE;
@@ -210,6 +255,40 @@ BOOL Wh_ModInit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
     LoadSettings();
+}
+
+// Finds the Alt+F4 dialog window (created by the original call on the hook
+// thread) and closes it, so the hook thread can finish the restore and leave
+// the module before the engine unloads it (AI review finding 2).
+static BOOL CALLBACK CloseDialogEnumProc(HWND hwnd, LPARAM) {
+    DWORD pid = 0;
+    DWORD tid = GetWindowThreadProcessId(hwnd, &pid);
+    if (tid == g_dialogThreadId && pid == GetCurrentProcessId()) {
+        wchar_t className[16];
+        if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) > 0 &&
+            wcscmp(className, L"#32770") == 0) {
+            PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        }
+    }
+    return TRUE;
+}
+
+void Wh_ModBeforeUninit() {
+    Wh_Log(L">");
+
+    // AI review finding 2: if the Alt+F4 dialog is open, the hook thread is
+    // blocked inside the original call and the restore is still pending.
+    // Closing the dialog lets the hook thread finish (restore included), so
+    // the engine can unload the module safely.
+    if (InterlockedCompareExchange(&g_inExitWindowsDialog, 0, 0) != 0) {
+        Wh_Log(L"Dialog is open - closing it so the hook can leave the module");
+
+        EnumWindows(CloseDialogEnumProc, 0);
+
+        if (g_dialogClosedEvent) {
+            WaitForSingleObject(g_dialogClosedEvent, 10000);
+        }
+    }
 }
 
 void Wh_ModUninit() {
