@@ -7,8 +7,7 @@
 // @github          https://github.com/Mirochill
 // @homepage        https://github.com/Mirochill/MiniTaskbar
 // @include         windhawk.exe
-// @architecture    x86-64
-// @compilerOptions -ldwmapi -loleacc -loleaut32 -lole32 -lgdi32 -lshell32
+// @compilerOptions -ldwmapi -loleacc -loleaut32 -lole32 -lgdi32 -lshell32 -luuid
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -309,7 +308,7 @@ HWND FindDescendantWindow(HWND root, PCWSTR className) {
 
     EnumChildWindows(
         root,
-        [](HWND hwnd, LPARAM lParam) -> BOOL {
+        [](HWND hwnd, LPARAM lParam) WINAPI -> BOOL {
             auto* data = reinterpret_cast<FindDescendantData*>(lParam);
             if (GetClassNameString(hwnd) == data->className) {
                 data->found = hwnd;
@@ -395,7 +394,7 @@ bool IsApplicationWindow(HWND hwnd) {
 int CountApplicationWindowsForTaskbar() {
     int count = 0;
     EnumWindows(
-        [](HWND hwnd, LPARAM lParam) -> BOOL {
+        [](HWND hwnd, LPARAM lParam) WINAPI -> BOOL {
             if (IsApplicationWindow(hwnd)) {
                 (*reinterpret_cast<int*>(lParam))++;
             }
