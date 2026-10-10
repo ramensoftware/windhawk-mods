@@ -17,22 +17,38 @@ When the mouse hasn't moved (or been clicked / scrolled) for the configured
 number of seconds, the system cursors are smoothly faded out. The moment any
 mouse activity happens, the cursors are restored immediately.
 
-By default, the cursor will fade out completely after 10 seconds of inactivity.
+![Cursor Idle Fade Demo](https://i.imgur.com/g5EWkMU.gif)
 
 ## How it works
 Windows has no "cursor opacity" setting, so the mod captures the current
 system cursors, then swaps them for progressively more transparent copies
 using `SetSystemCursor`. Mouse activity (movement, clicks and scrolling) is
 detected with raw input, so nothing is polled while the cursor is visible.
-While the cursor is faded, the mouse is also checked every 50 ms (see
-Limitations).
+While the cursor is faded, a slow watchdog (every 250 ms, or every 50 ms
+while an elevated app has focus, see Limitations) also checks the mouse and
+the input desktop.
 On activity the original cursors are put back with `SetSystemCursor` (which
-updates the cursor in place, so apps that cache cursor handles pick it up
-immediately). When the mod is unloaded the saved cursor scheme is also
-reloaded with `SPI_SETCURSORS`.
+updates the cursor on screen immediately), followed by a reload of the saved
+cursor scheme with `SPI_SETCURSORS`, so the scheme's own cursors are in place
+again.
 
 The mod runs in its own dedicated `windhawk.exe` process (a Windhawk "tool
 mod").
+
+## How this differs from similar mods
+
+* [Cursor auto-hide on idle](https://windhawk.net/mods/cursor-auto-hide)
+  hides the cursor outright once the idle delay has passed and shows it again
+  on the first movement or click. This mod fades the cursor out gradually
+  instead of making it vanish abruptly:
+  * The fade is smooth (eased) and its length is a setting. A fade duration of
+    0 hides the cursor instantly, like a plain auto-hide.
+  * The final opacity is a setting too, so the cursor can fade to, say, 20%
+    and stay findable instead of disappearing completely.
+
+  If you just want the cursor gone after a delay, that mod is the simpler
+  choice. This one is for people who prefer a soft fade, or want the cursor
+  dimmed rather than hidden.
 
 ## Limitations
 * Only the standard system cursors are faded (arrow, I-beam, hand, resize,
@@ -43,10 +59,8 @@ mod").
 * The faded copies are single-size bitmaps. With mixed-DPI monitors or a
   larger pointer size, the cursor may change size while it fades and snap
   back when restored.
-* Restoring puts back copies of the cursors captured right before the fade.
-  A custom animated (.ani) cursor assigned to one of the faded cursor types
-  may come back as a static frame until the cursor scheme is reloaded (the
-  scheme is reloaded when the mod is unloaded).
+* Restoring reloads your saved cursor scheme, so cursors changed temporarily
+  by another tool via `SetSystemCursor` revert to the saved scheme.
 * Windows doesn't deliver raw mouse input to a normal (non-elevated) process
   while an app running as administrator has focus (Task Manager, for
   example). In that case the mod falls back to checking the cursor position
@@ -61,9 +75,6 @@ If the mod's process is killed while the cursor is faded, the mod restores
 the cursors the next time it starts. You can also re-apply your cursor scheme
 in *Settings > Bluetooth & devices > Mouse > Additional mouse settings >
 Pointers*.
-
-![Cursor Fade Demo](https://i.imgur.com/lt8H6B0.gif)
-
 */
 // ==/WindhawkModReadme==
 
@@ -296,14 +307,19 @@ enum : UINT_PTR { TIMER_IDLE = 1, TIMER_FADE = 2, TIMER_WATCH = 3 };
 enum : UINT { WM_APP_SETTINGS = WM_APP + 1 };
 
 static const wchar_t kWindowClass[] = L"CursorIdleFadeMessageWindow";
-static const wchar_t kModifiedFlag[] = L"cursorsModified";
+// Storage is machine-wide, so the flag name includes the session ID.
+static WCHAR g_modifiedFlag[64] = L"cursorsModified";
 
 static State g_state = State::Visible;
 static ULONGLONG g_lastActivity = 0;
 static ULONGLONG g_fadeStart = 0;
 static POINT g_lastPt = {0, 0};
 
-static const UINT kWatchIntervalMs = 50;
+// Watchdog interval while faded. Raw input restores the cursor instantly in
+// the normal case; the watchdog covers a secure desktop (slow is enough) and
+// an elevated foreground app (raw input isn't delivered, so poll quickly).
+static const UINT kWatchIntervalMs = 250;
+static const UINT kWatchPolledIntervalMs = 50;
 static const UINT kPolledIdleIntervalMs = 200;
 
 // Raw input bookkeeping, to notice when Windows isn't delivering it to us.
@@ -345,6 +361,11 @@ static void RearmIdle(HWND hwnd) {
     ArmIdleTimer(hwnd, idle >= timeout ? 1 : timeout - idle);
 }
 
+static void ArmWatchTimer(HWND hwnd) {
+    SetTimer(hwnd, TIMER_WATCH,
+             PolledMode() ? kWatchPolledIntervalMs : kWatchIntervalMs, nullptr);
+}
+
 // Raw input is not delivered to a process while a window of a more
 // privileged process (e.g. an elevated Task Manager) has focus. A normal
 // process can't open the token of an elevated one, which is used as the
@@ -379,7 +400,12 @@ static void CALLBACK ForegroundChanged(HWINEVENTHOOK, DWORD, HWND, LONG, LONG,
     g_fgBlocked = blocked;
 
     HWND hwnd = g_hwnd.load();
-    if (hwnd && g_state == State::Visible) RearmIdle(hwnd);
+    if (!hwnd) return;
+    if (g_state == State::Visible) {
+        RearmIdle(hwnd);
+    } else if (g_state == State::Faded) {
+        ArmWatchTimer(hwnd);
+    }
 }
 
 static void FreeSnaps() {
@@ -389,35 +415,31 @@ static void FreeSnaps() {
     g_snaps.clear();
 }
 
-// Puts the original cursors back and clears the "modified" flag.
+// Puts the original cursors back, reloads the saved cursor scheme and clears
+// the "modified" flag.
 //
-// The cursors are restored with SetSystemCursor, like the fade itself: it
-// swaps the image in place, keeps the HCURSOR handles apps have cached valid,
-// and refreshes the cursor that is currently on screen. Reloading the scheme
-// with SPI_SETCURSORS alone does not refresh the on-screen cursor for apps
-// that only call SetCursor when their cursor changes, so the faded cursor
-// would stay invisible until another window took focus.
-//
-// reloadScheme additionally reloads the saved scheme (used on shutdown), and
-// is the fallback if any cursor could not be put back.
-static void RestoreCursorsNow(bool reloadScheme) {
-    bool allRestored = true;
+// The cursors are first restored with SetSystemCursor, like the fade itself:
+// it refreshes the cursor that is currently on screen. Reloading the scheme
+// with SPI_SETCURSORS alone doesn't do that for apps that only call SetCursor
+// when their cursor changes, so the faded cursor could stay invisible.
+// The scheme reload that follows brings back the scheme's own cursors
+// (animated or multi-resolution ones, which a plain copy can't preserve).
+static void RestoreCursorsNow() {
     for (CursorSnap& s : g_snaps) {
         if (!s.valid) continue;
         HCURSOR c = s.orig ? CopyCursor(s.orig) : nullptr;
         if (!c || !SetSystemCursor(c, s.id)) {
             if (c) DestroyCursor(c);
-            allRestored = false;
         }
     }
-    if (reloadScheme || !allRestored) {
-        SystemParametersInfoW(SPI_SETCURSORS, 0, nullptr, 0);
-    }
-    Wh_SetIntValue(kModifiedFlag, 0);
+    SystemParametersInfoW(SPI_SETCURSORS, 0, nullptr, 0);
+    Wh_SetIntValue(g_modifiedFlag, 0);
     FreeSnaps();
     g_lastFactor = -1;
     g_state = State::Visible;
 }
+
+static void OnActivity(HWND hwnd);
 
 // Checks the mouse directly, without raw input. GetCursorPos and
 // GetAsyncKeyState work no matter which app has focus, unlike raw input,
@@ -427,8 +449,6 @@ static void RestoreCursorsNow(bool reloadScheme) {
 // Returns false if the input desktop isn't ours (UAC prompt, lock screen).
 // Otherwise returns true and sets *active if the cursor moved since the last
 // check or a mouse button is down.
-static void OnActivity(HWND hwnd);
-
 static bool PollMouse(bool* active) {
     POINT pt;
     if (!GetCursorPos(&pt)) return false;
@@ -448,7 +468,7 @@ static bool PollMouse(bool* active) {
 static void Restore(HWND hwnd) {
     KillTimer(hwnd, TIMER_FADE);
     KillTimer(hwnd, TIMER_WATCH);
-    RestoreCursorsNow(false);
+    RestoreCursorsNow();
     g_lastActivity = GetTickCount64();
     GetCursorPos(&g_lastPt);
     ArmIdleTimer(hwnd, IdleTimeoutMs());
@@ -470,7 +490,7 @@ static void StartFade(HWND hwnd) {
     }
 
     // Remember that the cursors are modified, in case this process dies.
-    Wh_SetIntValue(kModifiedFlag, 1);
+    Wh_SetIntValue(g_modifiedFlag, 1);
 
     g_lastFactor = -1;
     g_fadeStart = GetTickCount64();
@@ -502,7 +522,7 @@ static void OnFadeTick(HWND hwnd) {
     if (t >= 1.0) {
         KillTimer(hwnd, TIMER_FADE);
         g_state = State::Faded;
-        SetTimer(hwnd, TIMER_WATCH, kWatchIntervalMs, nullptr);
+        ArmWatchTimer(hwnd);
     }
 }
 
@@ -694,7 +714,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     KillTimer(hwnd, TIMER_IDLE);
     KillTimer(hwnd, TIMER_FADE);
     KillTimer(hwnd, TIMER_WATCH);
-    if (g_state != State::Visible) RestoreCursorsNow(true);
+    if (g_state != State::Visible) RestoreCursorsNow();
     FreeSnaps();
 
     DestroyWindow(hwnd);
@@ -709,10 +729,15 @@ BOOL WhTool_ModInit() {
     Wh_Log(L">");
     LoadSettings();
 
+    DWORD sessionId = 0;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId)) {
+        swprintf_s(g_modifiedFlag, L"cursorsModified_%lu", sessionId);
+    }
+
     // Recover from an unclean exit that left the cursors faded.
-    if (Wh_GetIntValue(kModifiedFlag, 0)) {
+    if (Wh_GetIntValue(g_modifiedFlag, 0)) {
         SystemParametersInfoW(SPI_SETCURSORS, 0, nullptr, 0);
-        Wh_SetIntValue(kModifiedFlag, 0);
+        Wh_SetIntValue(g_modifiedFlag, 0);
     }
 
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
