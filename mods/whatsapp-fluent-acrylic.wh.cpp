@@ -2,7 +2,7 @@
 // @id              whatsapp-fluent-acrylic
 // @name            WhatsApp Fluent Acrylic
 // @description     Transparent Fluent acrylic/mica background for the WhatsApp desktop app
-// @version         1.1.1
+// @version         1.1.3
 // @author          Matrakalero
 // @github          https://github.com/Matrakalero
 // @include         WhatsApp.Root.exe
@@ -38,7 +38,7 @@ Changing settings also requires restarting WhatsApp this way.
 - **Backdrop**: acrylic, mica or mica alt.
 - **Panel tint / opacity**: color and strength of the single tint layer over
   the backdrop. Leave the color empty to follow WhatsApp's light/dark theme.
-- **Menu opacity / blur**: fill and blur radius of menus, dialogs and the
+- **Menu opacity / blur**: fill and blur radius of menus, dialogs, tooltips and the
   emoji/sticker panel.
 - **Image viewer opacity**: fill of the image and sticker viewer, which also
   blurs the chat behind it.
@@ -1131,13 +1131,15 @@ const wchar_t kScriptTemplate[] = LR"JS(
     html body [data-testid="conversation-panel-wrapper"] {
       background-color: transparent !important;
     }
-    [role="menu"], [role="listbox"], [role="dialog"], [role="application"] {
+    [role="menu"], [role="listbox"], [role="dialog"], [role="application"],
+    [role="tooltip"] {
       background-color: rgba(var(--WDS-surface-elevated-default-RGB, 29, 31, 31), ${MENU_ALPHA}) !important;
       backdrop-filter: blur(${MENU_BLUR}px) saturate(1.4) !important;
     }
     [role="menu"], [role="application"] { border-radius: 16px !important; }
-    #app .two:has(> * > [data-testid="drawer-left"] > * > *) > * > div:has(> #side),
-    #app .two:has(> * > [data-testid="drawer-middle"] > * > *) > * > div:has(> #main) {
+    [role="tooltip"] * { color: var(--WDS-content-default, #fafafa) !important; }
+    #app .two:has(> * > [data-testid="drawer-left"] [data-testid$="drawer"]) > * > div:has(> #side),
+    #app .two:has(> * > [data-testid="drawer-middle"] [data-testid$="drawer"]) > * > div:has(> #main) {
       opacity: 0 !important;
       pointer-events: none !important;
     }
