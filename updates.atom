@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-10T18:04:05.000Z</updated>
+    <updated>2026-10-10T19:00:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Steam Games in Explorer 1.1]]></title>
+        <id>https://windhawk.net/mods/explorer-steam-games#e86ece4b39234ad53c9e32916d196c1c932e3836</id>
+        <link href="https://windhawk.net/mods/explorer-steam-games"/>
+        <updated>2026-10-10T19:00:55.000Z</updated>
+        <content type="html"><![CDATA[<p>Added a “Position in the navigation pane” option. The entries can go above This PC (the default, same as before), at the top above Home, or at the bottom below Network. It only sets SortOrderIndex in the private hive, so still no writes to the real registry.</p>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar auto-hide after a delay 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-auto-hide-delay#20e2a0f534b32ec29c4cef9c98e878997a6fddc1</id>
@@ -1338,82 +1349,6 @@ auto-hide (show on hover)</strong>, do m417z (GPL-3.0).</li>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 Style Volume & Brightness OSD 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win10-volume-brightness-osd#f4f41b1454168308bd15b4b57136b6a3dbec59fd</id>
-        <link href="https://windhawk.net/mods/win10-volume-brightness-osd"/>
-        <updated>2026-10-09T09:03:28.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows10stylevolumebrightnessosd">Windows 10 Style Volume &amp; Brightness OSD</h1>
-<p>Shows the classic vertical Windows 10 flyout (dark panel, grey track, white
-thumb, accent fill) for <strong>volume</strong> and <strong>brightness</strong>.</p>
-<h2 id="screenshots">Screenshots</h2>
-<h3 id="volumedesktop">Volume (desktop)</h3>
-<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/volosd8desk.png" alt="volumedesk" /></p>
-<h3 id="brightnessdesktop">Brightness (desktop)</h3>
-<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/bgtosd8desk.png" alt="brightnessdesk" /></p>
-<h3 id="volume">Volume</h3>
-<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/volosd8.png" alt="volume" /></p>
-<h3 id="brightness">Brightness</h3>
-<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/bgtosd8.png" alt="brightness" /></p>
-<h2 id="volume-1">Volume</h2>
-<ul>
-<li>The volume keys (up / down / mute) are captured with <code>RegisterHotKey</code>, so the
-flyout also appears when the volume is already 0 or 100.</li>
-<li>A low-level keyboard hook is used as a fallback signal. It makes the flyout
-appear (and the native OSD be suppressed) when a key does not reach the
-hotkey.</li>
-<li>Volume changes from any other source (WASAPI) also show the flyout.</li>
-<li>When muted, or at volume 0, a cross icon replaces the number.</li>
-</ul>
-<h2 id="brightness-1">Brightness</h2>
-<ul>
-<li><strong>Laptops:</strong> the mod listens to the system brightness notification. The
-Fn brightness keys keep working normally.</li>
-<li><strong>Desktop PCs / external monitors:</strong> enable "External monitor hotkeys". The
-mod then uses DDC/CI to change the brightness of the monitor under the mouse
-cursor with <strong>Ctrl+Alt+Up / Ctrl+Alt+Down</strong>.</li>
-<li>The hotkeys are registered system-wide while the option is on. Ctrl+Alt+Up /
-Down is also used by some applications (for example "add cursor above/below"
-in VS Code) and by the screen rotation hotkey of some Intel graphics drivers,
-so leave the option off if it conflicts. The flyout is shown on the monitor
-that is being adjusted.</li>
-<li>Brightness flyout trigger:</li>
-<li><em>On every brightness change</em> - shows the flyout whenever the system reports
-a new brightness (this includes automatic changes such as the ambient light
-sensor or an AC/battery switch). When the brightness is already at its
-minimum or maximum no change is reported, so the native OSD is used as a
-trigger instead; this needs "Suppress the native OSD" to be on.</li>
-<li><em>Only when the native OSD appears</em> - shows the flyout only when Windows
-would have shown its own OSD. Works at the minimum/maximum and ignores
-automatic changes. Depends on the native OSD detection described below.</li>
-</ul>
-<h2 id="mouse">Mouse</h2>
-<p>The flyout can be dragged with the mouse to change the volume, or the
-brightness of an external monitor (DDC/CI).</p>
-<h2 id="nativeosdsuppression">Native OSD suppression</h2>
-<p>The native OSD is hidden with ShowWindow/SetWindowPos hooks in explorer.exe.
-Every small <code>XamlExplorerHostIslandWindow</code> is treated as the native OSD, with
-one exception: the virtual desktop switcher shown when hovering the Task View
-button is recognised (band 7 and the thread description <code>MultitaskingView</code>, as
-in the taskbar-thumbnails mod) and left alone.</p>
-<p>Other small popups of that class, and hardware indicators that share the native
-flyout (for example airplane mode), can still be hidden as well. On a PC that
-reports a brightness value, the brightness flyout then appears in their place,
-because a native OSD without a recent volume event is assumed to be a
-brightness change.</p>
-<p>Enable logging in Windhawk to see the class, title, thread description, band
-and size of the windows that are treated as the OSD.</p>
-<h2 id="knownissues">Known issues</h2>
-<ul>
-<li>The OSD cannot appear over fullscreen UWP apps.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>Special thanks to babamohammed2022 for the base version of the mod.</p>]]></content>
-        <author>
-            <name>AdmXP8</name>
-            <uri>https://github.com/AdmXP8</uri>
         </author>
     </entry>
 </feed>
