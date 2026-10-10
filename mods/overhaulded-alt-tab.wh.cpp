@@ -7,6 +7,7 @@
 // @github          https://github.com/IMiloDev
 // @homepage        https://github.com/IMiloDev/OverhauldedWin
 // @include         windhawk.exe
+// @include         windhawk-mod.exe
 // @include         windhawk-mod-uiaccess.exe
 // @include         explorer.exe
 // @compilerOptions -lshell32
@@ -17,12 +18,12 @@
 # Overhaulded Task Switcher
  
 A modern, fluid and highly visual replacement for the native Windows Alt+Tab experience.
- 
+
 Built from scratch in native C++ as a project to explore Windows APIs, graphics, animation systems and desktop customization. You can also see the original [GITHUB REPOSITORY](https://github.com/IMiloDev/OverhauldedWin) to send me issues.
 
 > **⚠️ DISCLAIMER**
 >
-> When an **elevated window** is focused, Windows may not deliver low-level keyboard input to a normal-privilege process (UIPI). Windhawk 2.0's UIAccess tool process is included to handle this case; the Explorer hotkey forwarder remains an experimental fallback.
+> When an **elevated window** is focused, Windows may not deliver low-level keyboard input to a normal-privilege process (UIPI). On Windhawk 2.0, this mod includes the UIAccess tool process (`windhawk-mod-uiaccess.exe`) to handle this scenario.
 >
 > [Read more about this limitation →](#elevated-window-input)
 
@@ -110,7 +111,7 @@ Some applications may behave differently than standard desktop windows, especial
 
 ### Elevated Window Input
 
-A standard-privilege process cannot reliably receive low-level keyboard events while an elevated window is focused because of Windows UIPI. On Windhawk 2.0, this mod includes `windhawk-mod-uiaccess.exe` so the tool process can use UIAccess for this scenario. The Explorer hotkey-forwarding component is retained as an experimental fallback. Behavior can still vary by Windows version and configuration; if Alt+Tab falls back to the native switcher, verify that the UIAccess-capable process is available and enabled.
+A standard-privilege process cannot reliably receive low-level keyboard events while an elevated window is focused because of Windows UIPI. On Windhawk 2.0, this mod includes `windhawk-mod-uiaccess.exe` so its tool process can use UIAccess for this scenario. On systems without the UIAccess-capable host, switching from an elevated window may be limited; if Alt+Tab falls back to the native switcher on Windhawk 2.0, verify that the UIAccess process is available and enabled.
 
 ---
 
