@@ -3,8 +3,8 @@
 // @name            Audio Hardware Volume Preset
 // @description     Sets audio playback devices to a configured volume whenever they connect
 // @version         1.1.0
-// @author          Community
-// @github          https://github.com/
+// @author          Dev-StudioCode
+// @github          https://github.com/Dev-StudioCode
 // @include         explorer.exe
 // @compilerOptions -lole32 -loleaut32
 // ==/WindhawkMod==
