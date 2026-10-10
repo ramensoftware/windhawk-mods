@@ -4,7 +4,7 @@
 // @name:zh-CN      Excel 滚轮切换工作表
 // @description     Scroll the sheet tab strip with the vertical wheel and switch sheets with the horizontal wheel
 // @description:zh-CN 使用原生箭头滚动标签栏，左右拨动一次切换一张工作表
-// @version         0.5.3
+// @version         0.5.4
 // @author          youareanimal
 // @github          https://github.com/youareanimal
 // @homepage        https://github.com/youareanimal/excel-wheel-scroll-sheets
@@ -29,7 +29,6 @@ For 64-bit desktop Excel on Windows:
 - Hidden sheets are skipped. Modified wheel input and ordinary vertical worksheet scrolling keep Excel's behavior.
 
 Settings allow direct sheet activation instead of tab scrolling, reversing direction, disabling horizontal switching, and optional wraparound.
-The settings labels below are currently in Chinese; the project README explains the controls.
 No macros are required. Activating a sheet can trigger existing workbook activation events, just like clicking a tab.
 Tested on one installation of 64-bit Microsoft 365 Excel; other Office versions and 32-bit Excel have not been tested.
 
@@ -67,27 +66,42 @@ Tested on one installation of 64-bit Microsoft 365 Excel; other Office versions 
 // ==WindhawkModSettings==
 /*
 - wheelAction: scroll
-  $name: 标签栏上下滚轮行为
+  $name: Vertical wheel over sheet tabs
+  $name:zh-CN: 标签栏上下滚轮行为
   $options:
+  - activate: Switch to the adjacent sheet
+  - scroll: Scroll the tab strip only
+  $options:zh-CN:
   - activate: 直接切换工作表
   - scroll: 只滚动标签栏，点击切换
 - smoothAnimation: true
-  $name: 使用 Excel 原生标签滚动
-  $description: 使用左下角左右箭头相同的滚动方式，动画速度由 Excel 决定。关闭后直接按标签滚动。
+  $name: Use Excel's native tab scrolling
+  $name:zh-CN: 使用 Excel 原生标签滚动
+  $description: Use Excel's native navigation arrows and animation. When disabled, scroll the tab strip directly.
+  $description:zh-CN: 使用左下角左右箭头相同的滚动方式，动画速度由 Excel 决定。关闭后直接按标签滚动。
 - horizontalGestureMs: 200
-  $name: 左右拨动防重复（毫秒）
-  $description: 同方向连续信号视为一次拨动，停顿达到此时长后可再次切换；反向拨动立即切换。默认 200；若一次拨动仍切换多张，可适当增加。
+  $name: Horizontal gesture quiet period (milliseconds)
+  $name:zh-CN: 左右拨动防重复（毫秒）
+  $description: Group repeated same-direction input until this quiet period elapses. Reversal switches immediately. Default 200; increase if one gesture still switches several sheets.
+  $description:zh-CN: 同方向连续信号视为一次拨动，停顿达到此时长后可再次切换；反向拨动立即切换。默认 200；若一次拨动仍切换多张，可适当增加。
 - horizontalSwitching: true
-  $name: 左右滚轮切换工作表
-  $description: 鼠标在单元格或底部工作表标签上时，向右切换下一张，向左切换上一张。关闭后恢复原有横向滚动。
+  $name: Switch sheets with the horizontal wheel
+  $name:zh-CN: 左右滚轮切换工作表
+  $description: Over the worksheet or sheet tabs, scroll right for the next visible sheet and left for the previous one. Disable to retain horizontal worksheet scrolling.
+  $description:zh-CN: 鼠标在单元格或底部工作表标签上时，向右切换下一张，向左切换上一张。关闭后恢复原有横向滚动。
 - reverseDirection: false
-  $name: 反转滚轮方向
+  $name: Reverse wheel direction
+  $name:zh-CN: 反转滚轮方向
 - throttleMs: 150
-  $name: 切换间隔（毫秒）
-  $description: 防止快速滚动时连续跳过多张工作表，设为 0 取消限制。
+  $name: Vertical sheet switching interval (milliseconds)
+  $name:zh-CN: 切换间隔（毫秒）
+  $description: Minimum interval for direct sheet activation using the vertical wheel over the tabs. Set to 0 to disable. Does not delay tab-strip scrolling.
+  $description:zh-CN: 仅用于标签栏上下滚轮直接切换工作表，防止快速滚动连续跳过多张；设为 0 取消限制。不影响标签栏滚动。
 - wrapAround: false
-  $name: 到达首尾时循环切换
-  $description: 仅用于“直接切换工作表”模式。开启后，最后一张的下一张为第一张，反之亦然。
+  $name: Wrap around at the first or last sheet
+  $name:zh-CN: 到达首尾时循环切换
+  $description: Applies to horizontal wheel switching and vertical direct-switching mode. Continue from the last visible sheet to the first, or vice versa.
+  $description:zh-CN: 用于左右滚轮切换及上下滚轮直接切换模式。开启后，最后一张的下一张为第一张，反之亦然。
 */
 // ==/WindhawkModSettings==
 
@@ -97,8 +111,8 @@ Tested on one installation of 64-bit Microsoft 365 Excel; other Office versions 
 #include <oleauto.h>
 #include <algorithm>
 #include <atomic>
-#include <string>
-#include <vector>
+#include <cstdlib>
+#include <windhawk_utils.h>
 
 std::atomic<bool> g_reverse{false}, g_wrap{false};
 std::atomic<bool> g_scrollTabs{false};
@@ -106,11 +120,9 @@ std::atomic<bool> g_horizontal{true};
 std::atomic<unsigned> g_throttle{150};
 std::atomic<bool> g_smooth{true};
 std::atomic<unsigned> g_horizontalGestureMs{200};
-// Numeric diagnostics use Windhawk's own optional logging and local storage.
-void RecordDiagnostic(PCWSTR name, int value) {
-    Wh_SetIntValue(name, value);
+// Debug output is handled by Windhawk logging; no synchronous mod-storage writes.
+void LogDiagnostic(PCWSTR name, int value) {
     Wh_Log(L"%ls=%d",name,value);
-
 }
 thread_local bool g_insideHook = false;
 thread_local HWND g_lastRoot = nullptr;
@@ -150,7 +162,7 @@ HRESULT InvokeMember(IDispatch* object, const wchar_t* name, WORD flags,
     return hr;
 }
 
-bool GetObject(IDispatch* parent, const wchar_t* name, ComPtr<IDispatch>& result,
+bool GetDispatchProperty(IDispatch* parent, const wchar_t* name, ComPtr<IDispatch>& result,
                VARIANT* argument = nullptr) {
     Variant value;
     if (FAILED(InvokeMember(parent, name, DISPATCH_PROPERTYGET,
@@ -171,41 +183,34 @@ bool GetNumber(IDispatch* parent, const wchar_t* name, LONG& result) {
     return true;
 }
 
-BOOL CALLBACK FindExcelDocument(HWND window, LPARAM data) {
-    wchar_t className[64]{};
-    GetClassNameW(window, className, ARRAYSIZE(className));
-    if (wcscmp(className, L"EXCEL7") != 0 || !IsWindowVisible(window)) return TRUE;
-    auto result = reinterpret_cast<ComPtr<IDispatch>*>(data);
-    HRESULT hr = AccessibleObjectFromWindow(window, OBJID_NATIVEOM,
-                                            IID_IDispatch,
-                                            reinterpret_cast<void**>(&result->p));
-    return FAILED(hr) || !result->p;
-}
-
-bool IsSheetTab(POINT point, HWND root) {
-    RECT rect{};
-    if (!GetWindowRect(root, &rect)) return false;
-    // Functional tabs are above the document; sheet tabs are below it.
-    if (point.y < rect.top + (rect.bottom - rect.top) / 2) return false;
-    ComPtr<IAccessible> object;
-    Variant child, role;
-    if (FAILED(AccessibleObjectFromPoint(point, &object.p, &child.value)) ||
-        !object.p) return false;
-    if (FAILED(object.p->get_accRole(child.value, &role.value))) return false;
-    if (role.value.vt == VT_I4 &&
-        (role.value.lVal == ROLE_SYSTEM_PAGETAB ||
-         role.value.lVal == ROLE_SYSTEM_PAGETABLIST)) return true;
-    return false;
-}
-
-bool IsWorksheetPoint(HWND window, HWND root) {
-    for (HWND current = window; current && current != root;
-         current = GetParent(current)) {
+// Only the workbook's native window in this Excel process is eligible.
+HWND GetWorksheetWindow(HWND window, HWND root) {
+    DWORD rootPid=0, windowPid=0;
+    GetWindowThreadProcessId(root,&rootPid);
+    if(rootPid!=GetCurrentProcessId() || GetAncestor(window,GA_ROOT)!=root)
+        return nullptr;
+    for(HWND current=window;current && current!=root;current=GetParent(current)) {
+        GetWindowThreadProcessId(current,&windowPid);
+        if(windowPid!=rootPid) return nullptr;
         wchar_t className[64]{};
-        GetClassNameW(current, className, ARRAYSIZE(className));
-        if (wcscmp(className, L"EXCEL7") == 0) return true;
+        GetClassNameW(current,className,ARRAYSIZE(className));
+        if(wcscmp(className,L"EXCEL7")==0) return current;
     }
-    return false;
+    return nullptr;
+}
+
+bool SameRect(const RECT& a,const RECT& b) {
+    return a.left==b.left && a.top==b.top &&
+           a.right==b.right && a.bottom==b.bottom;
+}
+bool ContainsRect(const RECT& outer,const RECT& inner) {
+    return inner.right>inner.left && inner.bottom>inner.top &&
+           inner.left>=outer.left && inner.top>=outer.top &&
+           inner.right<=outer.right && inner.bottom<=outer.bottom;
+}
+bool ContainsPoint(const RECT& rect,POINT point) {
+    return point.x>=rect.left && point.x<rect.right &&
+           point.y>=rect.top && point.y<rect.bottom;
 }
 
 bool GetAccessibleRect(IAccessible* object, VARIANT child, RECT& rect) {
@@ -223,73 +228,76 @@ bool NativeScrollTabs(IDispatch* excelWindow, int steps) {
         DISPATCH_METHOD,&result.value,&argument.value));
 }
 
-// Keep the two buttons immediately before the first visible sheet tab.
-// A left task pane can add earlier buttons and move the arrows past x=200.
+// The native sheet row is at the bottom of EXCEL7. Reject task-pane tabs
+// before doing any accessibility lookup, even if they belong to XLMAIN.
+bool IsSheetTab(POINT point,HWND worksheet,RECT& row) {
+    RECT hostRect{};
+    if(WindowFromPoint(point)!=worksheet || !GetWindowRect(worksheet,&hostRect))
+        return false;
+    LONG band=MulDiv(64,GetDpiForWindow(worksheet),96);
+    if(point.y<hostRect.bottom-band || !ContainsPoint(hostRect,point)) return false;
+    ComPtr<IAccessible> object;
+    Variant child,role;
+    RECT tab{};
+    if(FAILED(AccessibleObjectFromPoint(point,&object.p,&child.value)) ||
+       !object.p || FAILED(object.p->get_accRole(child.value,&role.value)) ||
+       role.value.vt!=VT_I4 ||
+       (role.value.lVal!=ROLE_SYSTEM_PAGETAB &&
+        role.value.lVal!=ROLE_SYSTEM_PAGETABLIST) ||
+       !GetAccessibleRect(object.p,child.value,tab) ||
+       !ContainsRect(hostRect,tab) || !ContainsPoint(tab,point) ||
+       tab.bottom-tab.top>band || tab.top<hostRect.bottom-band) return false;
+    row={hostRect.left,tab.top,hostRect.right,tab.bottom};
+    return true;
+}
+
 struct NativeArrowCandidates {
     RECT boxes[2]{};
     unsigned count=0;
-    void Add(const RECT& box) {
-        if(count) {
-            const RECT& last=boxes[count-1];
-            if(last.left==box.left && last.top==box.top &&
-               last.right==box.right && last.bottom==box.bottom) return;
-        }
-        if(count<2) boxes[count++]=box;
-        else { boxes[0]=boxes[1]; boxes[1]=box; }
-    }
-    const RECT* Select(int direction) const {
-        return count==2 ? &boxes[direction>0?1:0] : nullptr;
-    }
 };
 
-// The discovery algorithm starts at the wheel's sheet tab, not the left edge
-// of the window. Whole tab rectangles can be skipped in one accessibility call.
+// Scan from the EXCEL7 left edge, within the validated sheet row. The
+// first two native buttons are the arrows; a later overflow button is ignored.
+// A missing/foreign window is a hard boundary, never another search candidate.
 template<class Probe>
-bool FindNativeArrowPair(const RECT& rootRect, POINT point, Probe probe,
+bool FindNativeArrowPair(const RECT& searchRect,POINT point,Probe probe,
                          NativeArrowCandidates& arrows) {
-    RECT rightArrow{};
-    bool haveRight=false;
-    for(LONG x=point.x; x>rootRect.left; x-=4) {
+    arrows.count=0;
+    if(!ContainsPoint(searchRect,point)) return false;
+    for(LONG x=searchRect.left+1;x<=point.x && x<searchRect.right;x+=4) {
         LONG role=0;
         RECT box{};
         bool bounds=false;
-        if(!probe(POINT{x,point.y},role,box,bounds)) continue;
-        if(role==ROLE_SYSTEM_PAGETAB) {
-            if(bounds && box.left<=x) x=std::min(x,box.left);
-            continue;
-        }
-        if(role!=ROLE_SYSTEM_PUSHBUTTON || !bounds ||
-           box.bottom-box.top>80 || box.right-box.left>80) continue;
-        if(!haveRight) { rightArrow=box; haveRight=true; }
-        else {
-            arrows.Add(box); arrows.Add(rightArrow);
-            return true;
-        }
-        x=std::min(x,box.left);
+        if(!probe(POINT{x,point.y},role,box,bounds)) return false;
+        if(role==ROLE_SYSTEM_PAGETAB || role==ROLE_SYSTEM_PAGETABLIST)
+            return false; // Both arrows must precede the first tab.
+        if(role!=ROLE_SYSTEM_PUSHBUTTON) continue;
+        if(!bounds || !ContainsRect(searchRect,box) ||
+           !ContainsPoint(box,POINT{x,point.y})) return false;
+        if(arrows.count && box.left<arrows.boxes[0].right) return false;
+        arrows.boxes[arrows.count++]=box;
+        if(arrows.count==2) return true;
+        x=box.right-1;
     }
     return false;
 }
 
 struct NativeArrowCache {
-    HWND root=nullptr;
-    RECT rootRect{}, boxes[2]{};
-    HWND targets[2]{};
+    HWND worksheet=nullptr;
+    RECT hostRect{},row{},boxes[2]{};
     unsigned long long names[2]{};
-    static bool SameRect(const RECT& a,const RECT& b) {
-        return a.left==b.left && a.top==b.top &&
-               a.right==b.right && a.bottom==b.bottom;
+    bool valid=false,failed=false;
+    DWORD failedAt=0;
+    bool Matches(HWND current,const RECT& host,const RECT& currentRow) const {
+        return worksheet==current && SameRect(hostRect,host) && SameRect(row,currentRow);
     }
-    bool Matches(HWND current,const RECT& rect,POINT point) const {
-        return root==current && SameRect(rootRect,rect) &&
-            point.y>=boxes[0].top && point.y<boxes[0].bottom &&
-            point.y>=boxes[1].top && point.y<boxes[1].bottom;
+    bool IdentityMatches(unsigned index,const RECT& rect,unsigned long long name) const {
+        return SameRect(boxes[index],rect) && names[index]==name;
     }
-    bool IdentityMatches(unsigned index,const RECT& rect,HWND target,
-                         unsigned long long name) const {
-        return SameRect(boxes[index],rect) && targets[index]==target &&
-               names[index]==name;
+    bool FailedRecently(DWORD now) const {
+        return failed && DWORD(now-failedAt)<500;
     }
-    void Reset() { root=nullptr; }
+    void Reset() { worksheet=nullptr; valid=false; failed=false; }
 };
 thread_local NativeArrowCache g_nativeArrowCache;
 
@@ -300,11 +308,12 @@ struct NativeArrowTarget {
     HWND target=nullptr;
     unsigned long long name=0;
 };
-bool ReadNativeArrow(HWND root,const RECT& expected,NativeArrowTarget& arrow) {
+bool ReadNativeArrow(HWND worksheet,const RECT& row,const RECT& expected,NativeArrowTarget& arrow) {
+    if(!ContainsRect(row,expected)) return false;
     POINT center{(expected.left+expected.right)/2,
                  (expected.top+expected.bottom)/2};
     arrow.target=WindowFromPoint(center);
-    if(!arrow.target || GetAncestor(arrow.target,GA_ROOT)!=root) return false;
+    if(arrow.target!=worksheet) return false;
     if(FAILED(AccessibleObjectFromPoint(center,&arrow.object.p,
                                        &arrow.child.value)) ||
        !arrow.object.p) return false;
@@ -312,7 +321,7 @@ bool ReadNativeArrow(HWND root,const RECT& expected,NativeArrowTarget& arrow) {
     if(FAILED(arrow.object.p->get_accRole(arrow.child.value,&role.value)) ||
        role.value.vt!=VT_I4 || role.value.lVal!=ROLE_SYSTEM_PUSHBUTTON ||
        !GetAccessibleRect(arrow.object.p,arrow.child.value,arrow.box) ||
-       !NativeArrowCache::SameRect(expected,arrow.box)) return false;
+       !SameRect(expected,arrow.box)) return false;
     BSTR name=nullptr;
     if(SUCCEEDED(arrow.object.p->get_accName(arrow.child.value,&name)) && name) {
         arrow.name=14695981039346656037ULL;
@@ -328,66 +337,74 @@ bool ReadNativeArrow(HWND root,const RECT& expected,NativeArrowTarget& arrow) {
 bool InvokeNativeArrow(NativeArrowTarget& arrow,int steps) {
     for(int i=0;i<steps;++i) {
         Variant state;
-        arrow.object.p->get_accState(arrow.child.value,&state.value);
-        if(state.value.vt==VT_I4 && (state.value.lVal&STATE_SYSTEM_UNAVAILABLE))
+        if(FAILED(arrow.object.p->get_accState(arrow.child.value,&state.value)) ||
+           state.value.vt!=VT_I4) return false;
+        if(state.value.lVal&(STATE_SYSTEM_INVISIBLE|STATE_SYSTEM_OFFSCREEN)) return false;
+        if(state.value.lVal&STATE_SYSTEM_UNAVAILABLE)
             return true;
         HRESULT hr=arrow.object.p->accDoDefaultAction(arrow.child.value);
-        RecordDiagnostic(L"nativeArrowResult",hr);
+        LogDiagnostic(L"nativeArrowResult",hr);
         if(FAILED(hr)) return false;
     }
-    RecordDiagnostic(L"nativeArrowOutcome",1);
+    LogDiagnostic(L"nativeArrowOutcome",1);
     return true;
 }
 
 // Only geometry and fingerprints are cached, never COM interface pointers.
 // Every event checks both controls, so moved panes cannot reuse stale buttons.
-bool ScrollUsingNativeArrow(HWND root,POINT point,int direction,int steps) {
-    RECT rootRect{};
-    if(!GetWindowRect(root,&rootRect)) return false;
-    if(g_nativeArrowCache.Matches(root,rootRect,point)) {
+bool ScrollUsingNativeArrow(HWND worksheet,POINT point,int direction,int steps) {
+    RECT hostRect{},row{};
+    if(!GetWindowRect(worksheet,&hostRect) || !IsSheetTab(point,worksheet,row)) return false;
+    if(!g_nativeArrowCache.Matches(worksheet,hostRect,row)) g_nativeArrowCache.Reset();
+    if(g_nativeArrowCache.FailedRecently(GetTickCount())) return false;
+    if(g_nativeArrowCache.valid) {
         NativeArrowTarget cached[2];
         bool valid=true;
         for(unsigned i=0;i<2;++i) {
-            if(!ReadNativeArrow(root,g_nativeArrowCache.boxes[i],cached[i]) ||
-               !g_nativeArrowCache.IdentityMatches(i,cached[i].box,
-                    cached[i].target,cached[i].name)) { valid=false; break; }
+            if(!ReadNativeArrow(worksheet,row,g_nativeArrowCache.boxes[i],cached[i]) ||
+               !g_nativeArrowCache.IdentityMatches(i,cached[i].box,cached[i].name)) {
+                valid=false;break;
+            }
         }
-        if(valid) {
-            Wh_Log(L"Native arrow cache hit");
-            return InvokeNativeArrow(cached[direction>0?1:0],steps);
-        }
+        if(valid) return InvokeNativeArrow(cached[direction>0?1:0],steps);
     }
     g_nativeArrowCache.Reset();
+    g_nativeArrowCache.worksheet=worksheet;
+    g_nativeArrowCache.hostRect=hostRect;
+    g_nativeArrowCache.row=row;
+    auto fail=[&]() {
+        g_nativeArrowCache.failed=true;
+        g_nativeArrowCache.failedAt=GetTickCount();
+        return false;
+    };
     NativeArrowCandidates arrows;
-    unsigned probes=0;
+    // Even an unfamiliar Office build performs only a bounded initial scan.
+    RECT searchRect=row;
+    searchRect.right=std::min(row.right,row.left+MulDiv(256,GetDpiForWindow(worksheet),96));
+    POINT searchPoint{std::min(point.x,searchRect.right-1),point.y};
     auto probe=[&](POINT sample,LONG& role,RECT& box,bool& bounds) {
-        ++probes;
+        // This check happens BEFORE MSAA: never message a task-pane/foreign HWND.
+        if(WindowFromPoint(sample)!=worksheet) return false;
         ComPtr<IAccessible> object;
         Variant child,value;
         if(FAILED(AccessibleObjectFromPoint(sample,&object.p,&child.value)) ||
            !object.p || FAILED(object.p->get_accRole(child.value,&value.value)) ||
            value.value.vt!=VT_I4) return false;
         role=value.value.lVal;
-        bounds=(role==ROLE_SYSTEM_PAGETAB || role==ROLE_SYSTEM_PUSHBUTTON) &&
-                GetAccessibleRect(object.p,child.value,box);
+        bounds=role==ROLE_SYSTEM_PUSHBUTTON &&
+               GetAccessibleRect(object.p,child.value,box);
         return true;
     };
-    if(!FindNativeArrowPair(rootRect,point,probe,arrows)) {
-        RecordDiagnostic(L"nativeArrowOutcome",-1);
-        return false;
-    }
+    if(!FindNativeArrowPair(searchRect,searchPoint,probe,arrows)) return fail();
     NativeArrowTarget targets[2];
     for(unsigned i=0;i<2;++i) {
-        if(!ReadNativeArrow(root,arrows.boxes[i],targets[i])) return false;
+        if(!ReadNativeArrow(worksheet,row,arrows.boxes[i],targets[i])) return fail();
     }
-    g_nativeArrowCache.root=root;
-    g_nativeArrowCache.rootRect=rootRect;
     for(unsigned i=0;i<2;++i) {
         g_nativeArrowCache.boxes[i]=targets[i].box;
-        g_nativeArrowCache.targets[i]=targets[i].target;
         g_nativeArrowCache.names[i]=targets[i].name;
     }
-    RecordDiagnostic(L"nativeArrowProbeCount",probes);
+    g_nativeArrowCache.valid=true;
     return InvokeNativeArrow(targets[direction>0?1:0],steps);
 }
 
@@ -416,26 +433,25 @@ struct HorizontalGesture {
     void Reset() { active=false; fired=false; accumulated=0; }
 };
 thread_local HorizontalGesture g_horizontalGesture;
-thread_local int g_horizontalAccepted=0, g_horizontalSuppressed=0;
 
-bool ApplyWheelAction(HWND root, int direction, bool horizontal, POINT point, int steps) {
+bool ApplyWheelAction(HWND worksheet, int direction, bool horizontal, POINT point, int steps) {
     ComPtr<IDispatch> excelWindow, application, activeSheet, workbook, sheets;
-    EnumChildWindows(root, FindExcelDocument,
-                     reinterpret_cast<LPARAM>(&excelWindow));
-    if (!excelWindow.p || !GetObject(excelWindow.p, L"Application", application))
+    AccessibleObjectFromWindow(worksheet,OBJID_NATIVEOM,IID_IDispatch,
+                               reinterpret_cast<void**>(&excelWindow.p));
+    if (!excelWindow.p || !GetDispatchProperty(excelWindow.p, L"Application", application))
         return false;
     Variant ready;
     if (FAILED(InvokeMember(application.p, L"Ready", DISPATCH_PROPERTYGET,
                             &ready.value)) || ready.value.vt != VT_BOOL ||
         ready.value.boolVal == VARIANT_FALSE) return false;
     if (!horizontal && g_scrollTabs.load()) {
-        if (g_smooth.load() && ScrollUsingNativeArrow(root,point,direction,steps))
+        if (g_smooth.load() && ScrollUsingNativeArrow(worksheet,point,direction,steps))
             return true;
         return NativeScrollTabs(excelWindow.p,direction*steps);
     }
-    if (!GetObject(excelWindow.p, L"ActiveSheet", activeSheet) ||
-        !GetObject(activeSheet.p, L"Parent", workbook) ||
-        !GetObject(workbook.p, L"Sheets", sheets)) return false;
+    if (!GetDispatchProperty(excelWindow.p, L"ActiveSheet", activeSheet) ||
+        !GetDispatchProperty(activeSheet.p, L"Parent", workbook) ||
+        !GetDispatchProperty(workbook.p, L"Sheets", sheets)) return false;
     LONG index = 0, count = 0;
     if (!GetNumber(activeSheet.p, L"Index", index) ||
         !GetNumber(sheets.p, L"Count", count) || count < 2) return true;
@@ -450,7 +466,7 @@ bool ApplyWheelAction(HWND root, int direction, bool horizontal, POINT point, in
         argument.value.lVal = index;
         ComPtr<IDispatch> candidate;
         LONG visible = 0;
-        if (!GetObject(sheets.p, L"Item", candidate, &argument.value) ||
+        if (!GetDispatchProperty(sheets.p, L"Item", candidate, &argument.value) ||
             !GetNumber(candidate.p, L"Visible", visible)) return false;
         if (visible != -1) continue; // xlSheetVisible
         HRESULT hr = InvokeMember(candidate.p, L"Activate", DISPATCH_METHOD,
@@ -459,9 +475,9 @@ bool ApplyWheelAction(HWND root, int direction, bool horizontal, POINT point, in
         else {
             Wh_Log(L"Sheet activated: index=%d axis=%s", index,
                    horizontal ? L"horizontal" : L"vertical");
-            Wh_SetIntValue(L"lastActivatedSheetIndex", index);
-            Wh_SetIntValue(L"lastActivationAxis", horizontal ? 2 : 1);
-            Wh_SetIntValue(L"lastActivationPid", GetCurrentProcessId());
+
+
+
         }
         return SUCCEEDED(hr);
     }
@@ -487,13 +503,15 @@ LRESULT WINAPI DispatchMessageWHook(const MSG* message) {
         return g_originalDispatchMessageW(message);
     POINT point{GET_X_LPARAM(message->lParam), GET_Y_LPARAM(message->lParam)};
     HWND underMouse = WindowFromPoint(point);
-    if (GetAncestor(underMouse, GA_ROOT) != root)
+    HWND worksheet=GetWorksheetWindow(underMouse,root);
+    // Embedded child controls and docked/cross-process task panes retain input.
+    if(!worksheet || underMouse!=worksheet)
         return g_originalDispatchMessageW(message);
     g_insideHook = true;
     bool consumed = false;
     try {
-        if ((horizontal && IsWorksheetPoint(underMouse, root)) ||
-            IsSheetTab(point, root)) {
+        RECT tabRow{};
+        if (horizontal || IsSheetTab(point,worksheet,tabRow)) {
             ULONGLONG now = GetTickCount64();
             if (horizontal) {
                 int delta=GET_WHEEL_DELTA_WPARAM(message->wParam);
@@ -502,11 +520,11 @@ LRESULT WINAPI DispatchMessageWHook(const MSG* message) {
                     g_horizontalGestureMs.load())) {
                     int direction=delta>0?1:-1;
                     if(g_reverse.load()) direction=-direction;
-                    RecordDiagnostic(L"horizontalAccepted",++g_horizontalAccepted);
-                    consumed=ApplyWheelAction(root,direction,true,point,1);
+                    Wh_Log(L"Horizontal gesture accepted");
+                    consumed=ApplyWheelAction(worksheet,direction,true,point,1);
                     if (!consumed) g_horizontalGesture.Reset();
                 } else {
-                    RecordDiagnostic(L"horizontalSuppressed",++g_horizontalSuppressed);
+                    Wh_Log(L"Horizontal gesture repeat suppressed");
                 }
             } else {
             g_horizontalGesture.Reset();
@@ -520,13 +538,12 @@ LRESULT WINAPI DispatchMessageWHook(const MSG* message) {
             int steps = g_deltaRemainder / WHEEL_DELTA;
             g_deltaRemainder %= WHEEL_DELTA;
             consumed = true;
-            bool tabScroll=!horizontal && g_scrollTabs.load();
+            bool tabScroll=g_scrollTabs.load();
             if (steps != 0 && (tabScroll || g_lastSwitch == 0 ||
                 now - g_lastSwitch >= g_throttle.load())) {
                 int direction = steps > 0 ? -1 : 1;
-                if (horizontal) direction = -direction;
                 if (g_reverse.load()) direction = -direction;
-                consumed = ApplyWheelAction(root,direction,horizontal,point,
+                consumed = ApplyWheelAction(worksheet,direction,false,point,
                     tabScroll ? std::min(8,std::abs(steps)) : 1);
                 if (consumed) g_lastSwitch = now;
             }
@@ -540,25 +557,22 @@ LRESULT WINAPI DispatchMessageWHook(const MSG* message) {
 }
 
 void LoadSettings() {
-    PCWSTR action = Wh_GetStringSetting(L"wheelAction");
-    g_scrollTabs = action && wcscmp(action, L"scroll") == 0;
-    Wh_FreeStringSetting(action);
+    g_scrollTabs = wcscmp(WindhawkUtils::StringSetting::make(L"wheelAction"),L"scroll")==0;
     g_horizontal = Wh_GetIntSetting(L"horizontalSwitching") != 0;
     g_smooth = Wh_GetIntSetting(L"smoothAnimation") != 0;
     g_horizontalGestureMs = std::clamp(Wh_GetIntSetting(L"horizontalGestureMs"),150,2000);
     g_reverse = Wh_GetIntSetting(L"reverseDirection") != 0;
     g_wrap = Wh_GetIntSetting(L"wrapAround") != 0;
     g_throttle = std::clamp(Wh_GetIntSetting(L"throttleMs"), 0, 5000);
-    RecordDiagnostic(L"settingsSmooth",g_smooth.load());
-    RecordDiagnostic(L"horizontalGestureMs",g_horizontalGestureMs.load());
+    LogDiagnostic(L"settingsSmooth",g_smooth.load());
+    LogDiagnostic(L"horizontalGestureMs",g_horizontalGestureMs.load());
 }
 BOOL Wh_ModInit() {
     LoadSettings();
     Wh_Log(L"Excel sheet wheel mod initializing: horizontal=%d", g_horizontal.load());
-    BOOL hooked = Wh_SetFunctionHook(reinterpret_cast<void*>(DispatchMessageW),
-        reinterpret_cast<void*>(DispatchMessageWHook),
-        reinterpret_cast<void**>(&g_originalDispatchMessageW));
-    if (hooked) RecordDiagnostic(L"initializedPid", GetCurrentProcessId());
+    BOOL hooked=WindhawkUtils::SetFunctionHook(DispatchMessageW,DispatchMessageWHook,
+                                             &g_originalDispatchMessageW);
+    if (hooked) LogDiagnostic(L"initializedPid", GetCurrentProcessId());
     return hooked;
 }
 void Wh_ModAfterInit() {}
