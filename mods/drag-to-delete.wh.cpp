@@ -16,7 +16,6 @@
 Drag files onto a floating target to move them to the Recycle Bin.
 
 ![Demonstration](https://i.imgur.com/bKMRf5A.gif)
-
 */
 // ==/WindhawkModReadme==
 
@@ -46,14 +45,20 @@ static HANDLE g_readyEvent = nullptr;
 static LONG g_activeDrags = 0;
 static ULONG_PTR g_gdiplusToken = 0;
 
+static HANDLE g_hDeleteWorker = nullptr;
+static HANDLE g_hDeleteQueueEvent = nullptr;
+static HANDLE g_hDeleteStopEvent = nullptr;
+static CRITICAL_SECTION g_deleteCs;
+static std::vector<std::vector<wchar_t>> g_deleteQueue;
+
 static RECT g_targetWorkArea = {};
+static float g_currentDpiScale = 1.0f;
 static AnimState g_animState = AnimState::HIDDEN;
 static float g_currentScale = 0.0f;
 static float g_targetScale = 0.0f;
 static float g_lastRenderedScale = -1.0f;
 
 #define WM_UPDATE_DRAG_STATE (WM_USER + 101)
-#define WM_ASYNC_DELETE      (WM_USER + 102)
 #define TIMER_ANIM 1
 
 HMODULE GetCurrentModuleHandle() {
@@ -67,24 +72,25 @@ HMODULE GetCurrentModuleHandle() {
     return hModule;
 }
 
-static UINT GetWindowDpi(HWND hWnd) {
-    static auto pfnGetDpiForWindow = (UINT(WINAPI*)(HWND))GetProcAddress(
-        GetModuleHandleW(L"user32.dll"), "GetDpiForWindow");
-    if (pfnGetDpiForWindow && hWnd) {
-        UINT dpi = pfnGetDpiForWindow(hWnd);
-        if (dpi > 0) return dpi;
-    }
-    static auto pfnGetDpiForSystem = (UINT(WINAPI*)())GetProcAddress(
-        GetModuleHandleW(L"user32.dll"), "GetDpiForSystem");
-    if (pfnGetDpiForSystem) {
-        UINT dpi = pfnGetDpiForSystem();
-        if (dpi > 0) return dpi;
+static UINT GetMonitorDpi(HMONITOR hMon) {
+    if (hMon) {
+        static auto pfnGetDpiForMonitor = (HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*))
+            GetProcAddress(GetModuleHandleW(L"shcore.dll"), "GetDpiForMonitor");
+        if (!pfnGetDpiForMonitor) {
+            HMODULE hShcore = LoadLibraryW(L"shcore.dll");
+            if (hShcore) {
+                pfnGetDpiForMonitor = (HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*))
+                    GetProcAddress(hShcore, "GetDpiForMonitor");
+            }
+        }
+        if (pfnGetDpiForMonitor) {
+            UINT dpiX = 96, dpiY = 96;
+            if (SUCCEEDED(pfnGetDpiForMonitor(hMon, 0 /* MDT_EFFECTIVE_DPI */, &dpiX, &dpiY))) {
+                if (dpiX > 0) return dpiX;
+            }
+        }
     }
     return 96;
-}
-
-static float GetDpiScale(HWND hWnd) {
-    return (float)GetWindowDpi(hWnd) / 96.0f;
 }
 
 void RenderFrame(HWND hWnd);
@@ -131,7 +137,7 @@ void DrawModernTrashIcon(Graphics& g, float cx, float cy, float scale, Color col
 void RenderFrame(HWND hWnd) {
     if (g_animState == AnimState::HIDDEN || g_currentScale < 0.05f) return;
 
-    float dpiScale = GetDpiScale(hWnd);
+    float dpiScale = g_currentDpiScale;
     int wndWidth = (int)(BASE_WND_WIDTH * dpiScale);
     int wndHeight = (int)(BASE_WND_HEIGHT * dpiScale);
     int topY = (int)(BASE_TOP_Y * dpiScale);
@@ -204,7 +210,7 @@ class CRecycleDropTarget final : public IDropTarget {
     bool IsOverTrash(POINTL pt) {
         if (!g_hOverlayWnd) return false;
 
-        float dpiScale = GetDpiScale(g_hOverlayWnd);
+        float dpiScale = g_currentDpiScale;
         int wndWidth = (int)(BASE_WND_WIDTH * dpiScale);
         int topY = (int)(BASE_TOP_Y * dpiScale);
         float centerX = BASE_CENTER_X * dpiScale;
@@ -287,15 +293,19 @@ public:
                 if (hDrop) {
                     UINT fileCount = DragQueryFileW(hDrop, 0xFFFFFFFF, nullptr, 0);
                     if (fileCount > 0) {
-                        auto* pBuffer = new std::vector<wchar_t>();
+                        std::vector<wchar_t> buffer;
                         for (UINT i = 0; i < fileCount; i++) {
                             UINT len = DragQueryFileW(hDrop, i, nullptr, 0);
-                            size_t prevSize = pBuffer->size();
-                            pBuffer->resize(prevSize + len + 1);
-                            DragQueryFileW(hDrop, i, pBuffer->data() + prevSize, len + 1);
+                            size_t prevSize = buffer.size();
+                            buffer.resize(prevSize + len + 1);
+                            DragQueryFileW(hDrop, i, buffer.data() + prevSize, len + 1);
                         }
-                        pBuffer->push_back(L'\0'); // Double null terminator
-                        PostMessageW(g_hOverlayWnd, WM_ASYNC_DELETE, 0, (LPARAM)pBuffer);
+                        buffer.push_back(L'\0');
+
+                        EnterCriticalSection(&g_deleteCs);
+                        g_deleteQueue.push_back(std::move(buffer));
+                        LeaveCriticalSection(&g_deleteCs);
+                        SetEvent(g_hDeleteQueueEvent);
                     }
                     GlobalUnlock(stg.hGlobal);
                 }
@@ -325,6 +335,39 @@ void MoveFilesToRecycleBin(const std::vector<wchar_t>& buffer) {
     SHFileOperationW(&fileOp);
 }
 
+DWORD WINAPI DeleteWorkerThread(LPVOID) {
+    HANDLE handles[2] = { g_hDeleteStopEvent, g_hDeleteQueueEvent };
+    while (true) {
+        DWORD wait = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+        if (wait == WAIT_OBJECT_0) {
+            EnterCriticalSection(&g_deleteCs);
+            auto queueCopy = std::move(g_deleteQueue);
+            LeaveCriticalSection(&g_deleteCs);
+
+            for (const auto& item : queueCopy) {
+                MoveFilesToRecycleBin(item);
+            }
+            break;
+        } else if (wait == WAIT_OBJECT_0 + 1) {
+            while (true) {
+                std::vector<wchar_t> item;
+                EnterCriticalSection(&g_deleteCs);
+                if (!g_deleteQueue.empty()) {
+                    item = std::move(g_deleteQueue.front());
+                    g_deleteQueue.erase(g_deleteQueue.begin());
+                }
+                LeaveCriticalSection(&g_deleteCs);
+
+                if (item.empty()) break;
+                MoveFilesToRecycleBin(item);
+            }
+        } else {
+            break;
+        }
+    }
+    return 0;
+}
+
 LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
         case WM_UPDATE_DRAG_STATE: {
@@ -339,6 +382,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                     g_targetWorkArea = { 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN) };
                 }
 
+                g_currentDpiScale = (float)GetMonitorDpi(hMon) / 96.0f;
                 g_animState = AnimState::VISIBLE;
                 g_currentScale = 0.3f;
                 g_targetScale = 1.0f;
@@ -349,15 +393,6 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                 if (g_animState != AnimState::DROPPED) {
                     g_targetScale = 0.0f;
                 }
-            }
-            return 0;
-        }
-
-        case WM_ASYNC_DELETE: {
-            auto* pBuffer = reinterpret_cast<std::vector<wchar_t>*>(lParam);
-            if (pBuffer) {
-                MoveFilesToRecycleBin(*pBuffer);
-                delete pBuffer;
             }
             return 0;
         }
@@ -417,10 +452,12 @@ DWORD WINAPI OverlayUIThread(LPVOID) {
         return 0;
     }
 
-    float dpiScale = GetDpiScale(nullptr);
-    int wndWidth = (int)(BASE_WND_WIDTH * dpiScale);
-    int wndHeight = (int)(BASE_WND_HEIGHT * dpiScale);
-    int topY = (int)(BASE_TOP_Y * dpiScale);
+    HMONITOR hPrimary = MonitorFromPoint({ 0, 0 }, MONITOR_DEFAULTTOPRIMARY);
+    g_currentDpiScale = (float)GetMonitorDpi(hPrimary) / 96.0f;
+
+    int wndWidth = (int)(BASE_WND_WIDTH * g_currentDpiScale);
+    int wndHeight = (int)(BASE_WND_HEIGHT * g_currentDpiScale);
+    int topY = (int)(BASE_TOP_Y * g_currentDpiScale);
     int screenWidth = GetSystemMetrics(SM_CXSCREEN);
 
     g_hOverlayWnd = CreateWindowExW(
@@ -451,7 +488,7 @@ DWORD WINAPI OverlayUIThread(LPVOID) {
     }
 
     if (g_hOverlayWnd) {
-        DestroyWindow(g_hOverlayWnd); 
+        DestroyWindow(g_hOverlayWnd); // WM_DESTROY revokes the drop target
         g_hOverlayWnd = nullptr;
     }
 
@@ -493,17 +530,33 @@ HRESULT WINAPI Hooked_DoDragDrop(IDataObject* pDataObj, IDropSource* pDropSource
 void Wh_ModUninit();
 
 BOOL Wh_ModInit() {
+    InitializeCriticalSection(&g_deleteCs);
+    g_hDeleteQueueEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_hDeleteStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hDeleteQueueEvent || !g_hDeleteStopEvent) {
+        Wh_Log(L"Failed to create deletion worker events");
+        Wh_ModUninit();
+        return FALSE;
+    }
+
+    g_hDeleteWorker = CreateThread(nullptr, 0, DeleteWorkerThread, nullptr, 0, nullptr);
+    if (!g_hDeleteWorker) {
+        Wh_Log(L"Failed to create deletion worker thread (error: %lu)", GetLastError());
+        Wh_ModUninit();
+        return FALSE;
+    }
+
     g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_readyEvent) {
         Wh_Log(L"Failed to create ready event (error: %lu)", GetLastError());
+        Wh_ModUninit();
         return FALSE;
     }
 
     g_hUIThread = CreateThread(nullptr, 0, OverlayUIThread, nullptr, 0, &g_dwUIThreadId);
     if (!g_hUIThread) {
         Wh_Log(L"Failed to create overlay UI thread (error: %lu)", GetLastError());
-        CloseHandle(g_readyEvent);
-        g_readyEvent = nullptr;
+        Wh_ModUninit();
         return FALSE;
     }
 
@@ -518,7 +571,7 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     if (g_hUIThread) {
-        WaitForSingleObject(g_readyEvent, INFINITE);
+        if (g_readyEvent) WaitForSingleObject(g_readyEvent, INFINITE);
         PostThreadMessageW(g_dwUIThreadId, WM_QUIT, 0, 0);
         WaitForSingleObject(g_hUIThread, INFINITE);
         CloseHandle(g_hUIThread);
@@ -528,4 +581,20 @@ void Wh_ModUninit() {
         CloseHandle(g_readyEvent);
         g_readyEvent = nullptr;
     }
+
+    if (g_hDeleteWorker) {
+        if (g_hDeleteStopEvent) SetEvent(g_hDeleteStopEvent);
+        WaitForSingleObject(g_hDeleteWorker, INFINITE);
+        CloseHandle(g_hDeleteWorker);
+        g_hDeleteWorker = nullptr;
+    }
+    if (g_hDeleteStopEvent) {
+        CloseHandle(g_hDeleteStopEvent);
+        g_hDeleteStopEvent = nullptr;
+    }
+    if (g_hDeleteQueueEvent) {
+        CloseHandle(g_hDeleteQueueEvent);
+        g_hDeleteQueueEvent = nullptr;
+    }
+    DeleteCriticalSection(&g_deleteCs);
 }
