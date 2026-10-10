@@ -24,7 +24,7 @@ Removes the stock **Settings (gear)** button from the bottom bar of the Windows 
 Control Center panel and puts your own buttons there instead.
 
 `explorer.exe` is included only to launch actions: the panel host sends the click to a
-tiny hidden window inside Explorer, which runs the command (same idea as the Start menu mod).
+tiny hidden window inside Explorer, which runs the command.
 
 | Before | After |
 |--------|---------|
@@ -2129,7 +2129,7 @@ static int WINAPI ControlCenterView_OnGotFocus_Hook(void* pThis, void* args) {
 static void InstallDiscoveryHooks(HMODULE controlCenter, bool applyNow) {
     if (g_discoveryHooked.exchange(true)) return;
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK controlCenterDllHooks[] = {
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::ControlCenterView,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnGotFocus(void *))"},
             &ControlCenterView_OnGotFocus_Original,
@@ -2143,7 +2143,7 @@ static void InstallDiscoveryHooks(HMODULE controlCenter, bool applyNow) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(controlCenter, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(controlCenter, controlCenterDllHooks, ARRAYSIZE(controlCenterDllHooks))) {
         Wh_Log(L"Could not hook ControlCenterView; the footer will not be changed");
         return;
     }
