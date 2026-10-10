@@ -23,9 +23,6 @@
 Removes the stock **Settings (gear)** button from the bottom bar of the Windows 11
 Control Center panel and puts your own buttons there instead.
 
-**Supported:** Windows 11 25H2 (build 26200), where Control Center is hosted by
-`ShellHost.exe`. Older builds host it in `ShellExperienceHost.exe` and are **not supported**.
-
 `explorer.exe` is included only to launch actions: the panel host sends the click to a
 tiny hidden window inside Explorer, which runs the command (same idea as the Start menu mod).
 
@@ -206,6 +203,9 @@ Signs can be combined: `-*cmd:tasklist` runs cmd in a visible window as admin.
 #include <algorithm>
 #include <functional>
 #include <thread>
+#include <condition_variable>
+#include <map>
+#include <optional>
 #include <chrono>
 #include <memory>
 #include <string_view>
@@ -264,20 +264,12 @@ static const wchar_t* FALLBACK_ICON      = L"\uE783";
 static std::atomic<bool> g_unloading{false};
 static std::atomic<bool> g_closeFlyout{true};
 static std::atomic<bool> g_invertIconsSubmenus{false};
-static std::atomic<int>  g_activeActionThreads{0};
-
-struct ActiveThreadGuard {
-    ActiveThreadGuard()  { g_activeActionThreads.fetch_add(1, std::memory_order_relaxed); }
-    ~ActiveThreadGuard() { g_activeActionThreads.fetch_sub(1, std::memory_order_relaxed); }
-};
+static std::atomic<bool> g_stop{false};
 
 static std::mutex g_settingsMutex;
 
 static ULONG_PTR g_gdiplusToken = 0;
 static std::mutex g_gdipMutex;
-
-static std::mutex g_iconCacheMutex;
-static std::unordered_map<std::wstring, std::wstring> g_iconPngCache;
 
 struct Settings {
     wux::HorizontalAlignment alignment            = wux::HorizontalAlignment::Right;
@@ -309,6 +301,66 @@ static bool g_isExplorer = false;
 static HWND   g_proxyWindow   = NULL;
 static HANDLE g_proxyThread   = NULL;
 static DWORD  g_proxyThreadId = 0;
+static HANDLE g_proxyReady    = NULL;
+
+using WorkerClock = std::chrono::steady_clock;
+
+[[clang::no_destroy]] static std::optional<std::thread> g_worker;
+static std::mutex                                       g_queueMutex;
+static std::condition_variable                          g_queueCv;
+static std::multimap<WorkerClock::time_point, std::function<void()>> g_queue;
+
+static void Enqueue(std::function<void()> fn, DWORD delayMs = 0) {
+    {
+        std::lock_guard<std::mutex> lk(g_queueMutex);
+        if (g_stop.load()) return;
+        g_queue.emplace(WorkerClock::now() + std::chrono::milliseconds(delayMs), std::move(fn));
+    }
+    g_queueCv.notify_one();
+}
+
+static void WorkerMain() {
+    bool com = SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE));
+
+    std::unique_lock<std::mutex> lk(g_queueMutex);
+    while (!g_stop.load()) {
+        if (g_queue.empty()) {
+            g_queueCv.wait(lk);
+            continue;
+        }
+        auto first = g_queue.begin();
+        if (first->first > WorkerClock::now()) {
+            g_queueCv.wait_until(lk, first->first);
+            continue;
+        }
+        std::function<void()> fn = std::move(first->second);
+        g_queue.erase(first);
+        lk.unlock();
+        try { fn(); } catch (...) {}
+        lk.lock();
+    }
+    g_queue.clear();
+    lk.unlock();
+
+    if (com) CoUninitialize();
+}
+
+static void StartWorker() {
+    g_stop.store(false);
+    if (!g_worker) g_worker.emplace(WorkerMain);
+}
+
+static void StopWorker() {
+    {
+        std::lock_guard<std::mutex> lk(g_queueMutex);
+        g_stop.store(true);
+    }
+    g_queueCv.notify_all();
+    if (g_worker) {
+        g_worker->join();
+        g_worker.reset();
+    }
+}
 
 static std::wstring Trim(std::wstring s) {
     auto isSpace = [](wchar_t c) { return !!iswspace(c); };
@@ -530,23 +582,13 @@ static wuxmi::BitmapSource CreateBitmapSourceFromIcon(HICON hIcon) {
     return result;
 }
 
-static std::wstring SaveIconToPng(HICON hIcon) {
-    if (!hIcon) return L"";
+static bool SaveIconToPng(HICON hIcon, const std::wstring& pngPath) {
+    if (!hIcon) return false;
 
-    wchar_t tempDir[MAX_PATH], placeholder[MAX_PATH];
-    if (!GetTempPathW(MAX_PATH, tempDir)) return L"";
-    if (!GetTempFileNameW(tempDir, L"ICO", 0, placeholder)) return L"";
-
-    struct AutoDelete {
-        wchar_t path[MAX_PATH];
-        ~AutoDelete() { DeleteFileW(path); }
-    } guard;
-    wcscpy_s(guard.path, placeholder);
-
-    std::wstring pngPath = std::wstring(placeholder) + L".png";
+    std::wstring tmpPath = pngPath + L"." + std::to_wstring(GetCurrentProcessId()) + L".tmp";
 
     ICONINFO info{};
-    if (!GetIconInfo(hIcon, &info)) return L"";
+    if (!GetIconInfo(hIcon, &info)) return false;
 
     struct BitmapGuard {
         HBITMAP color, mask;
@@ -573,7 +615,7 @@ static std::wstring SaveIconToPng(HICON hIcon) {
     void* bits = nullptr;
     HBITMAP dib = CreateDIBSection(screenDC, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
 
-    std::wstring result;
+    bool result = false;
     if (dib && bits) {
         HBITMAP oldBmp = static_cast<HBITMAP>(SelectObject(memDC, dib));
         DrawIconEx(memDC, 0, 0, hIcon, bm.bmWidth, bm.bmHeight, 0, nullptr, DI_NORMAL);
@@ -586,8 +628,12 @@ static std::wstring SaveIconToPng(HICON hIcon) {
         if (srcBmp.GetLastStatus() == Gdiplus::Ok) {
             CLSID pngClsid;
             CLSIDFromString(L"{557CF406-1A04-11D3-9A73-0000F81EF32E}", &pngClsid);
-            if (srcBmp.Save(pngPath.c_str(), &pngClsid, nullptr) == Gdiplus::Ok)
-                result = pngPath;
+            if (srcBmp.Save(tmpPath.c_str(), &pngClsid, nullptr) == Gdiplus::Ok) {
+                result = MoveFileExW(tmpPath.c_str(), pngPath.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+                if (!result && GetFileAttributesW(pngPath.c_str()) != INVALID_FILE_ATTRIBUTES)
+                    result = true;
+            }
+            DeleteFileW(tmpPath.c_str());
         }
         DeleteObject(dib);
     }
@@ -611,17 +657,44 @@ static wuxmi::BitmapSource ResolveExeIconInMemory(const std::wstring& iconStr, i
     return bmpSource;
 }
 
+static std::wstring GetCachedIconPng(const std::wstring& exePath, int size) {
+    WIN32_FILE_ATTRIBUTE_DATA fad{};
+    if (!GetFileAttributesExW(exePath.c_str(), GetFileExInfoStandard, &fad)) return L"";
+
+    WCHAR dir[MAX_PATH]{};
+    if (!Wh_GetModStoragePath(dir, ARRAYSIZE(dir))) return L"";
+    CreateDirectoryW(dir, nullptr);
+
+    unsigned long long h = 1469598103934665603ULL;
+    auto mix = [&h](const void* p, size_t n) {
+        auto b = static_cast<const unsigned char*>(p);
+        for (size_t i = 0; i < n; ++i) { h ^= b[i]; h *= 1099511628211ULL; }
+    };
+    std::wstring key = ToLower(exePath);
+    mix(key.data(), key.size() * sizeof(wchar_t));
+    mix(&fad.ftLastWriteTime, sizeof(FILETIME));
+    mix(&size, sizeof(size));
+
+    wchar_t name[40];
+    swprintf_s(name, L"icon_%016llx.png", h);
+    std::wstring png = std::wstring(dir) + L"\\" + name;
+
+    if (GetFileAttributesW(png.c_str()) != INVALID_FILE_ATTRIBUTES) return png;
+
+    HICON hIcon = LoadIconFromExe(exePath, size);
+    if (!hIcon) return L"";
+    bool ok = SaveIconToPng(hIcon, png);
+    DestroyIcon(hIcon);
+    return ok ? png : L"";
+}
+
 static std::wstring ResolveExeIcon(const std::wstring& iconStr, int size) {
     if (iconStr.empty() || !IsExePath(iconStr)) return iconStr;
     if (GetFileAttributesW(iconStr.c_str()) == INVALID_FILE_ATTRIBUTES) {
         Wh_Log(L"Executable not found for icon: %s", iconStr.c_str());
         return L"";
     }
-    HICON hIcon = LoadIconFromExe(iconStr, size);
-    if (!hIcon) return L"";
-    std::wstring png = SaveIconToPng(hIcon);
-    DestroyIcon(hIcon);
-    return png;
+    return GetCachedIconPng(iconStr, size);
 }
 
 static std::wstring GlyphOrEmpty(const std::wstring& s) {
@@ -692,29 +765,7 @@ static wuxc::IconElement MakeMenuIcon(const std::wstring& iconStr) {
 
     if (IsExePath(iconStr)) {
         if (GetFileAttributesW(iconStr.c_str()) != INVALID_FILE_ATTRIBUTES) {
-            std::wstring pngPath;
-            bool haveCached = false;
-            {
-                std::lock_guard<std::mutex> lk(g_iconCacheMutex);
-                auto it = g_iconPngCache.find(iconStr);
-                if (it != g_iconPngCache.end() &&
-                    GetFileAttributesW(it->second.c_str()) != INVALID_FILE_ATTRIBUTES) {
-                    pngPath = it->second;
-                    haveCached = true;
-                }
-            }
-
-            if (!haveCached) {
-                HICON hIcon = LoadIconFromExe(iconStr, 16);
-                if (hIcon) {
-                    pngPath = SaveIconToPng(hIcon);
-                    DestroyIcon(hIcon);
-                    if (!pngPath.empty()) {
-                        std::lock_guard<std::mutex> lk(g_iconCacheMutex);
-                        g_iconPngCache[iconStr] = pngPath;
-                    }
-                }
-            }
+            std::wstring pngPath = GetCachedIconPng(iconStr, 16);
 
             if (!pngPath.empty()) {
                 try {
@@ -832,9 +883,9 @@ static bool PerformPresetAction(const std::wstring& action) {
     else if (key == L"videos")          OpenKnownFolder(L"videos");
     else if (key == L"network")         ShellExecuteW(nullptr, L"open", L"shell:NetworkPlacesFolder", nullptr, nullptr, SW_SHOWNORMAL);
     else if (key == L"personal_folder") OpenKnownFolder(L"profile");
-    else if (key == L"shutdown")        { EnableShutdownPrivilege(); ExitWindowsEx(EWX_SHUTDOWN | EWX_FORCE, SHTDN_REASON_MAJOR_OTHER); }
-    else if (key == L"restart")         { EnableShutdownPrivilege(); ExitWindowsEx(EWX_REBOOT  | EWX_FORCE, SHTDN_REASON_MAJOR_OTHER); }
-    else if (key == L"sign_out")        { EnableShutdownPrivilege(); ExitWindowsEx(EWX_LOGOFF  | EWX_FORCE, 0); }
+    else if (key == L"shutdown")        { EnableShutdownPrivilege(); ExitWindowsEx(EWX_SHUTDOWN, SHTDN_REASON_MAJOR_OTHER); }
+    else if (key == L"restart")         { EnableShutdownPrivilege(); ExitWindowsEx(EWX_REBOOT, SHTDN_REASON_MAJOR_OTHER); }
+    else if (key == L"sign_out")        { EnableShutdownPrivilege(); ExitWindowsEx(EWX_LOGOFF, 0); }
     else if (key == L"sleep")           SetSuspendState(FALSE, FALSE, FALSE);
     else if (key == L"hibernate")       SetSuspendState(TRUE,  FALSE, FALSE);
     else if (key == L"lock")            LockWorkStation();
@@ -856,6 +907,7 @@ static bool SearchRecursive(const std::wstring& root, const std::wstring& name,
 
     bool found = false;
     do {
+        if (g_stop.load()) break;
         if (!wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L"..")) continue;
 
         std::wstring full = root;
@@ -895,8 +947,10 @@ static bool SearchByName(const std::wstring& name, std::wstring& out) {
         if (GetKnownFolderPath(folder, p)) roots.push_back(std::move(p));
     }
 
-    for (const auto& r : roots)
+    for (const auto& r : roots) {
+        if (g_stop.load()) return false;
         if (SearchRecursive(r, name, 5, out)) return true;
+    }
     return false;
 }
 
@@ -1097,26 +1151,13 @@ static void ExecuteActionText(const std::vector<std::wstring>& commands) {
         std::wstring t = Trim(c);
         if (!t.empty()) cmds.push_back(std::move(t));
     }
-    if (cmds.empty()) return;
 
-    if (cmds.size() == 1) {
-        if (PerformPresetAction(cmds[0])) return;
-        std::thread([cmd = std::move(cmds[0])]() {
-            ActiveThreadGuard guard;
-            ExecuteSingleCommand(cmd);
-        }).detach();
-        return;
+    for (size_t i = 0; i < cmds.size() && !g_stop.load(); ++i) {
+        if (!PerformPresetAction(cmds[i]))
+            ExecuteSingleCommand(cmds[i]);
+        if (i + 1 < cmds.size())
+            Sleep(50);
     }
-
-    std::thread([cmds = std::move(cmds)]() {
-        ActiveThreadGuard guard;
-        for (size_t i = 0; i < cmds.size(); ++i) {
-            if (!PerformPresetAction(cmds[i]))
-                ExecuteSingleCommand(cmds[i]);
-            if (i + 1 < cmds.size())
-                Sleep(50);
-        }
-    }).detach();
 }
 
 static void SendEscapeKey() {
@@ -1128,14 +1169,7 @@ static void SendEscapeKey() {
 }
 
 static void ScheduleEscapeKeypress(DWORD delayMs = 100) {
-    auto fire = [delayMs]() {
-        std::thread([delayMs] { ActiveThreadGuard guard; Sleep(delayMs); SendEscapeKey(); }).detach();
-    };
-    try {
-        auto dq = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
-        if (dq) { dq.TryEnqueue(winrt::Windows::System::DispatcherQueuePriority::Low, fire); return; }
-    } catch (...) {}
-    fire();
+    Enqueue([] { SendEscapeKey(); }, delayMs);
 }
 
 static void CloseFlyoutAfterClick() {
@@ -1170,15 +1204,7 @@ static void ExecuteRegistered(int id) {
 }
 
 static void RunRegisteredAsync(int id) {
-    g_activeActionThreads.fetch_add(1, std::memory_order_relaxed);
-    try {
-        std::thread([id]() {
-            ExecuteRegistered(id);
-            g_activeActionThreads.fetch_sub(1, std::memory_order_relaxed);
-        }).detach();
-    } catch (...) {
-        g_activeActionThreads.fetch_sub(1, std::memory_order_relaxed);
-    }
+    Enqueue([id] { ExecuteRegistered(id); });
 }
 
 static LRESULT CALLBACK ProxyWndProc(HWND hWnd, UINT msg,
@@ -1199,31 +1225,41 @@ static LRESULT CALLBACK ProxyWndProc(HWND hWnd, UINT msg,
     }
 }
 
+static HINSTANCE GetModHandle() {
+    HMODULE module = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&GetModHandle), &module);
+    return module;
+}
+
 static DWORD WINAPI ProxyWindowThread(LPVOID) {
+    HINSTANCE inst = GetModHandle();
+
     WNDCLASSEXW wcex{};
     wcex.cbSize        = sizeof(wcex);
     wcex.lpfnWndProc   = ProxyWndProc;
-    wcex.hInstance     = GetModuleHandleW(nullptr);
+    wcex.hInstance     = inst;
     wcex.lpszClassName = PROXY_WINDOW_CLASS;
 
     if (!RegisterClassExW(&wcex)) {
-        DWORD err = GetLastError();
-        if (err != ERROR_CLASS_ALREADY_EXISTS) {
-            Wh_Log(L"Proxy: RegisterClassEx failed %lu", err);
-            return 1;
-        }
+        Wh_Log(L"Proxy: RegisterClassEx failed %lu", GetLastError());
+        SetEvent(g_proxyReady);
+        return 1;
     }
 
     g_proxyWindow = CreateWindowExW(
         0, PROXY_WINDOW_CLASS, PROXY_WINDOW_NAME, 0,
-        0, 0, 0, 0, HWND_MESSAGE, nullptr, GetModuleHandleW(nullptr), nullptr);
+        0, 0, 0, 0, HWND_MESSAGE, nullptr, inst, nullptr);
     if (!g_proxyWindow) {
         Wh_Log(L"Proxy: CreateWindowEx failed %lu", GetLastError());
-        UnregisterClassW(PROXY_WINDOW_CLASS, GetModuleHandleW(nullptr));
+        UnregisterClassW(PROXY_WINDOW_CLASS, inst);
+        SetEvent(g_proxyReady);
         return 1;
     }
 
     ChangeWindowMessageFilterEx(g_proxyWindow, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
+    SetEvent(g_proxyReady);
 
     MSG m{};
     while (GetMessageW(&m, nullptr, 0, 0)) {
@@ -1231,17 +1267,41 @@ static DWORD WINAPI ProxyWindowThread(LPVOID) {
         DispatchMessageW(&m);
     }
 
-    UnregisterClassW(PROXY_WINDOW_CLASS, GetModuleHandleW(nullptr));
+    UnregisterClassW(PROXY_WINDOW_CLASS, inst);
     g_proxyWindow = NULL;
     return 0;
 }
 
 static void StartProxyThread() {
     if (g_proxyThread) return;
-    g_proxyThread = CreateThread(nullptr, 0, ProxyWindowThread,
-                                 nullptr, 0, &g_proxyThreadId);
-    if (!g_proxyThread)
+
+    g_proxyReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_proxyReady) return;
+
+    g_proxyThread = CreateThread(nullptr, 0, ProxyWindowThread, nullptr, 0, &g_proxyThreadId);
+    if (!g_proxyThread) {
         Wh_Log(L"Proxy: CreateThread failed %lu", GetLastError());
+        CloseHandle(g_proxyReady);
+        g_proxyReady = NULL;
+        return;
+    }
+
+    HANDLE waitFor[] = { g_proxyReady, g_proxyThread };
+    WaitForMultipleObjects(ARRAYSIZE(waitFor), waitFor, FALSE, INFINITE);
+}
+
+static void StopProxyThread() {
+    if (g_proxyWindow)
+        PostMessageW(g_proxyWindow, WM_CLOSE, 0, 0);
+    if (g_proxyThread) {
+        WaitForSingleObject(g_proxyThread, INFINITE);
+        CloseHandle(g_proxyThread);
+        g_proxyThread = NULL;
+    }
+    if (g_proxyReady) {
+        CloseHandle(g_proxyReady);
+        g_proxyReady = NULL;
+    }
 }
 
 static void SendActionToProxy(int id) {
@@ -2069,7 +2129,7 @@ static int WINAPI ControlCenterView_OnGotFocus_Hook(void* pThis, void* args) {
 static void InstallDiscoveryHooks(HMODULE controlCenter, bool applyNow) {
     if (g_discoveryHooked.exchange(true)) return;
 
-    WindhawkUtils::SYMBOL_HOOK controlCenterDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::ControlCenterView,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnGotFocus(void *))"},
             &ControlCenterView_OnGotFocus_Original,
@@ -2083,7 +2143,7 @@ static void InstallDiscoveryHooks(HMODULE controlCenter, bool applyNow) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(controlCenter, controlCenterDllHooks, ARRAYSIZE(controlCenterDllHooks))) {
+    if (!WindhawkUtils::HookSymbols(controlCenter, hooks, ARRAYSIZE(hooks))) {
         Wh_Log(L"Could not hook ControlCenterView; the footer will not be changed");
         return;
     }
@@ -2136,6 +2196,8 @@ BOOL Wh_ModInit() {
     LoadSettings();
     BuildButtons();
 
+    StartWorker();
+
     if (g_isExplorer) {
         StartProxyThread();
         return TRUE;
@@ -2161,13 +2223,7 @@ void Wh_ModUninit() {
     g_unloading = true;
 
     if (g_isExplorer) {
-        if (g_proxyWindow)
-            PostMessageW(g_proxyWindow, WM_CLOSE, 0, 0);
-        if (g_proxyThread) {
-            WaitForSingleObject(g_proxyThread, 2000);
-            CloseHandle(g_proxyThread);
-            g_proxyThread = nullptr;
-        }
+        StopProxyThread();
     } else if (g_xamlThreadId.load() != 0) {
         bool restored = false;
         for (int attempt = 0; attempt < 25 && !restored; ++attempt) {
@@ -2179,13 +2235,5 @@ void Wh_ModUninit() {
         g_xamlThreadId.store(0);
     }
 
-    for (int waited = 0; waited < 2000 && g_activeActionThreads.load(std::memory_order_relaxed) > 0; waited += 20)
-        Sleep(20);
-
-    {
-        std::lock_guard<std::mutex> lk(g_iconCacheMutex);
-        for (const auto& [key, pngPath] : g_iconPngCache)
-            DeleteFileW(pngPath.c_str());
-        g_iconPngCache.clear();
-    }
+    StopWorker();
 }
