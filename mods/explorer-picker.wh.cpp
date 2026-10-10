@@ -4,7 +4,7 @@
 // @description     Replaces the Open, Save As and folder picker dialogs of every program with a real Explorer window that has a File name / Files of type bar at the bottom
 // @name:ru         Проводник вместо окон выбора файла
 // @description:ru  Заменяет окна «Открыть», «Сохранить как» и выбора папки во всех программах настоящим окном Проводника с полями «Имя файла» и «Тип файлов» внизу
-// @version         1.5.6
+// @version         1.5.7
 // @author          appEW
 // @github          https://github.com/appEW
 // @include         *
@@ -74,10 +74,12 @@ additional application features.
 ## Risky: ignore additional application features
 
 **Ignore additional dialog features (risky)** is **off by default**.
-When enabled, unsupported extra application controls or panels can be omitted.
-Supported controls, native panels and Unicode Win32 hooks are still handled
-normally. Application events, including OnFileOk/CDN_FILEOK, are retained:
-programs can perform the actual opening or saving in these callbacks.
+When enabled, fully supported extra controls and native panels are retained.
+If an optional extra feature, control or panel cannot be represented, the whole
+additional application UI can be omitted, including otherwise supported options.
+Application events, including OnFileOk/CDN_FILEOK, and supported Unicode Win32
+hooks are retained. Programs can perform the actual opening or saving in these
+callbacks.
 Unavailable extra options use their defaults or retained values instead.
 
 **Use at your own risk:** omitted extra options or previews can still cause
@@ -142,10 +144,12 @@ the rows grow to keep the text inside the controls.
 ### Рискованно: игнорирование дополнительных функций приложения
 
 **«Игнорировать дополнительные функции диалогов (рискованно)»**
-**по умолчанию выключено**. При включении можно пропустить неподдерживаемые
-дополнительные элементы или панели приложения. Поддерживаемые элементы,
-native-панели и Unicode Win32 hooks продолжают работать. События приложения,
-включая OnFileOk/CDN_FILEOK, сохраняются: программа может выполнять само
+**по умолчанию выключено**. Полностью поддерживаемые дополнительные элементы
+и native-панели сохраняются. Если дополнительную необязательную функцию,
+элемент или панель нельзя повторить, можно пропустить весь дополнительный
+интерфейс приложения, включая отдельно поддерживаемые параметры. События
+приложения и поддерживаемые Unicode Win32 hooks, включая OnFileOk/CDN_FILEOK,
+сохраняются: программа может выполнять само
 открытие или сохранение именно в этих обработчиках. Недоступные дополнительные
 параметры используют значения по умолчанию или ранее заданные значения.
 
@@ -195,8 +199,8 @@ Windows об изменении настроек стандартные подп
 - ignoreAppDialogFeatures: false
   $name: Ignore additional dialog features (risky)
   $name:ru: Игнорировать дополнительные функции диалогов (рискованно)
-  $description: Disabled by default. Omit unsupported extra application UI while retaining supported controls, panels and completion callbacks. The application may use default or retained extra options. Unrepresentable callback contracts still use the native dialog. Use at your own risk; incorrect opening or saving, crashes and data loss are possible.
-  $description:ru: По умолчанию выключено. Пропускать неподдерживаемый дополнительный интерфейс, сохраняя поддерживаемые элементы, панели и обработчики завершения. Дополнительные параметры используют значения по умолчанию или ранее заданные значения. Непредставимый контракт обработчика требует штатное окно. Используйте на свой страх и риск; возможны неправильное открытие или сохранение, сбои и потеря данных.
+  $description: Disabled by default. Retain fully supported extra controls and panels. If an optional feature is unsupported, the whole extra UI can be omitted, including otherwise supported controls. Completion callbacks and default or retained options are preserved. Unrepresentable callback contracts still use the native dialog. Use at your own risk; incorrect opening or saving, crashes and data loss are possible.
+  $description:ru: По умолчанию выключено. Полностью поддерживаемые дополнительные элементы и панели сохраняются. Если необязательная функция не поддерживается, можно пропустить весь дополнительный интерфейс, включая отдельно поддерживаемые элементы. Обработчики завершения и значения параметров сохраняются. Непредставимый контракт обработчика требует штатное окно. Используйте на свой страх и риск; возможны неправильное открытие или сохранение, сбои и потеря данных.
 - ansiApps: true
   $name: Old ANSI programs
   $name:ru: Старые ANSI-программы
@@ -1425,11 +1429,11 @@ bool ControllerAlive(State* s) {
   return IsWindow(s->controller) &&
          (!s->process || WaitForSingleObject(s->process, 0) == WAIT_TIMEOUT);
 }
-void AllowController(State* s) {
+void AllowController(HWND controller) {
   // Input in Explorer revokes the app's earlier foreground permission. Grant
   // it back before the app handles confirmation, controls or cancellation.
   DWORD process = 0;
-  GetWindowThreadProcessId(s->controller, &process);
+  GetWindowThreadProcessId(controller, &process);
   if (process)
     AllowSetForegroundWindow(process);
 }
@@ -1437,7 +1441,7 @@ void SendCancel(State* s) {
   if (!s->closing) {
     s->closing = true;
     Picker::Writer w;
-    AllowController(s);
+    AllowController(s->controller);
     Picker::Post(s->controller, s->footer, Picker::Cancel, w, 1000);
   }
 }
@@ -1461,7 +1465,7 @@ void SendCommand(State* s, DWORD kind, DWORD dropItem = Picker::None) {
   w.string(folder);
   w.strings(paths);
   w.number(dropItem);
-  AllowController(s);
+  AllowController(s->controller);
   Picker::Post(s->controller, s->footer, Picker::Command, w, 2000);
 }
 void SendControl(State* s,
@@ -1474,7 +1478,7 @@ void SendControl(State* s,
   w.number(action);
   w.number(value);
   w.string(text);
-  AllowController(s);
+  AllowController(s->controller);
   Picker::Post(s->controller, s->footer, Picker::ControlChange, w, 2000);
 }
 std::wstring Display(State* s,
@@ -2110,8 +2114,13 @@ LRESULT CALLBACK FooterProc(HWND h, UINT m, WPARAM w, LPARAM l) {
           auto text = r.string(), caption = r.string();
           if (!r.end())
             return FALSE;
+          // The prompt's modal loop can detach and delete s.
+          HWND controller = s->controller;
           // Owned by the picker frame, like the native dialog's own warnings.
-          return ShowPrompt(s->frame, kind, text.c_str(), caption.c_str());
+          int answer =
+              ShowPrompt(s->frame, kind, text.c_str(), caption.c_str());
+          AllowController(controller);
+          return answer;
         }
         case Picker::ShowMenu: {
           Picker::Reader r(copy->lpData, copy->cbData);
