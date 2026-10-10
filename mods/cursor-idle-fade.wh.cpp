@@ -50,6 +50,9 @@ mod").
   choice. This one is for people who prefer a soft fade, or want the cursor
   dimmed rather than hidden.
 
+  Both mods swap the same system cursors and reload the cursor scheme when
+  they restore, so they aren't meant to be enabled together. Pick one.
+
 ## Limitations
 * Only the standard system cursors are faded (arrow, I-beam, hand, resize,
   cross, help, etc.). Apps that draw their own cursor (some games, some
@@ -71,8 +74,9 @@ mod").
   takes the input, it is restored automatically.
 
 ## Recovery
-If the mod's process is killed while the cursor is faded, the mod restores
-the cursors the next time it starts. You can also re-apply your cursor scheme
+If the mod's process crashes while the cursor is faded, it tries to restore
+the cursors before it exits. If the process is killed instead, the mod
+restores the cursors the next time it starts. You can also re-apply your cursor scheme
 in *Settings > Bluetooth & devices > Mouse > Additional mouse settings >
 Pointers*.
 */
@@ -723,6 +727,21 @@ static DWORD WINAPI WorkerThread(LPVOID) {
 }
 
 // ---------------------------------------------------------------------------
+// Crash safety
+// ---------------------------------------------------------------------------
+static LPTOP_LEVEL_EXCEPTION_FILTER g_prevFilter = nullptr;
+
+// Best effort: if the process crashes while the cursor is faded, restore the
+// scheme so the user isn't left without a visible cursor. The previous filter
+// (if any) still runs afterwards.
+static LONG WINAPI CrashFilter(EXCEPTION_POINTERS* ep) {
+    if (g_state != State::Visible) {
+        SystemParametersInfoW(SPI_SETCURSORS, 0, nullptr, 0);
+    }
+    return g_prevFilter ? g_prevFilter(ep) : EXCEPTION_CONTINUE_SEARCH;
+}
+
+// ---------------------------------------------------------------------------
 // Tool mod callbacks
 // ---------------------------------------------------------------------------
 BOOL WhTool_ModInit() {
@@ -769,6 +788,8 @@ BOOL WhTool_ModInit() {
         g_thread = g_stopEvent = nullptr;
         return FALSE;
     }
+
+    g_prevFilter = SetUnhandledExceptionFilter(CrashFilter);
     return TRUE;
 }
 
@@ -790,6 +811,12 @@ void WhTool_ModUninit() {
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
     }
+
+    // Remove our filter, but leave any filter installed after ours alone.
+    LPTOP_LEVEL_EXCEPTION_FILTER current =
+        SetUnhandledExceptionFilter(g_prevFilter);
+    if (current != CrashFilter) SetUnhandledExceptionFilter(current);
+    g_prevFilter = nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
