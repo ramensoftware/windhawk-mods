@@ -15,24 +15,26 @@
 # Smooth Virtual Desktop Switching
 
 Adjusts the animation that finishes a native three- or four-finger touchpad
-swipe between virtual desktops after you lift your fingers. The same duration
-and curve also apply to Ctrl+Win+Left/Right Arrow desktop switches.
+swipe between virtual desktops after you lift your fingers. Ctrl+Win+Left/Right
+Arrow switches have a separately adjustable duration.
 
 ## Settings
 
-- **Release animation duration:** 750 ms by default, adjustable from 150 to 5000 ms.
-- **Constant-speed release:** a linear curve. Off by default.
-- **Use custom ease-out curve:** uses (0.22, 1, 0.36, 1) when constant speed is off.
-  Both options off preserves Windows' original curve.
-- **Debug logging:** optional Windhawk logs; no files are written.
+- **Touchpad transition duration (ms):** 750 by default, clamped to 150–5000.
+- **Keyboard transition duration (ms):** 750 by default, clamped to 150–5000.
+- **Transition curve:** Native Windows (default), Linear, or Ease-out (0.22, 1, 0.36, 1).
+- **Animate even when Windows animation effects are off:** enabled by default
+  to preserve the mod's original behavior. Turn this off to respect Windows'
+  animation preference. The system setting itself is never changed.
 
-Windows' gesture direction, finger tracking, and desktop selection threshold
-remain native. Keyboard shortcuts keep their native desktop selection; touchscreen
-swipes are not changed.
-The mod permits thumbnail animations during the release even if Windows'
-client-area animation preference is off; it does not change that system setting.
-For native keyboard cycling, the client-area animation query is overridden only
-on the calling thread while the desktop hotkey handler runs.
+Windows' gesture direction, finger tracking, and desktop selection remain native.
+Touchscreen swipes and taskbar visibility are unchanged. Use Windhawk's per-mod
+logging toggle for diagnostics.
+
+Keyboard hooks are optional: missing keyboard symbols leave touchpad support
+available. Keyboard animation preference overrides require both keyboard hooks.
+Long transitions may be interrupted by another native desktop switch. Windows
+controls interruption and transition delays; the mod does not queue switches.
 
 ## Compatibility
 
@@ -55,16 +57,20 @@ Windhawk debug logging and check for initialization or compatibility errors.
 // ==WindhawkModSettings==
 /*
 - durationMs: 750
-  $name: Release animation duration (ms)
-  $description: "Clamped to 150–5000 ms. Default: 750 ms; 2000 gives a two-second release."
-- linearRelease: false
-  $name: Constant-speed release
-  $description: Use a linear curve to make the full duration visible.
-- easeOut: false
-  $name: Use custom ease-out curve
-  $description: Off preserves the Windows curve; on uses (0.22, 1, 0.36, 1).
-- debugLogging: false
-  $name: Log gesture and transition calls
+  $name: Touchpad transition duration (ms)
+  $description: "Clamped to 150–5000 ms. Applies after lifting your fingers."
+- keyboardDurationMs: 750
+  $name: Keyboard transition duration (ms)
+  $description: "Clamped to 150–5000 ms. Applies to Ctrl+Win+Left/Right Arrow."
+- transitionCurve: native
+  $name: Transition curve
+  $options:
+  - native: Native Windows
+  - linear: Linear
+  - easeOut: Ease-out
+- forceAnimations: true
+  $name: Animate even when Windows animation effects are off
+  $description: Disable to respect the Windows animation preference.
 */
 // ==/WindhawkModSettings==
 
@@ -83,8 +89,12 @@ using AddTransition = HRESULT (*)(void*, unsigned, unsigned, TA_TIMINGFUNCTION*,
 WindowCommit g_originalCommit;
 AddTransition g_originalTransition;
 std::atomic<unsigned> g_duration{750};
-std::atomic<bool> g_easeOut{false}, g_logging{false};
-std::atomic<bool> g_linear{false};
+std::atomic<unsigned> g_keyboardDuration{750};
+enum class Curve { Native, Linear, EaseOut };
+std::atomic<Curve> g_curve{Curve::Native};
+std::atomic<bool> g_forceAnimations{true};
+bool g_keyboardHooksAvailable = false;
+thread_local unsigned g_hotkeyCommitDepth = 0;
 thread_local unsigned g_commitDepth = 0;
 thread_local unsigned g_keyboardDepth = 0;
 using HotkeyCommit = HRESULT (*)(void*, void*, float);
@@ -98,8 +108,8 @@ using AnimationsEnabledFunction = bool (*)(void*);
 AnimationsEnabledFunction g_animationsEnabledOriginal;
 bool AnimationsEnabledHook(void* self) {
     bool enabled = g_animationsEnabledOriginal(self);
-    if ((g_commitDepth || g_keyboardDepth) && !enabled) {
-        if (g_logging.load()) Wh_Log(L"Allowing animation inside desktop transition");
+    if (g_forceAnimations.load() && (g_commitDepth || g_keyboardDepth) && !enabled) {
+        Wh_Log(L"Allowing animation inside desktop transition");
         return true;
     }
     return enabled;
@@ -117,14 +127,14 @@ HRESULT CommitHook(void* self, void* handler, unsigned token,
                    float target, bool touch) {
     // FinishSwipe passes false; FinishTouchSwipe passes true.
     if (touch) return g_originalCommit(self, handler, token, target, touch);
-    if (g_logging.load())
         Wh_Log(L"gesture window commit: target=%f touch=%d token=%u", target, touch, token);
     DepthScope scope(g_commitDepth);
     return g_originalCommit(self, handler, token, target, touch);
 }
 
 HRESULT HotkeyCommitHook(void* self, void* animator, float target) {
-    if (g_logging.load()) Wh_Log(L"keyboard window commit: target=%f", target);
+    Wh_Log(L"keyboard window commit: target=%f", target);
+    DepthScope keyboardScope(g_hotkeyCommitDepth);
     DepthScope scope(g_commitDepth);
     return g_originalHotkeyCommit(self, animator, target);
 }
@@ -137,7 +147,7 @@ HRESULT CycleInDirectionHook(void* self, int direction) {
 }
 
 BOOL WINAPI SystemParametersInfoHook(UINT action, UINT param, PVOID value, UINT flags) {
-    if (g_keyboardDepth && action == SPI_GETCLIENTAREAANIMATION && value) {
+    if (g_keyboardHooksAvailable && g_forceAnimations.load() && g_keyboardDepth && action == SPI_GETCLIENTAREAANIMATION && value) {
         *static_cast<BOOL*>(value) = TRUE;
         return TRUE;
     }
@@ -153,13 +163,12 @@ HRESULT TransitionHook(void* self, unsigned delayMs, unsigned durationMs,
     // Instantaneous updates during dragging stay untouched.
     if (g_commitDepth && durationMs && timing &&
         timing->eTimingFunctionType == TTFT_CUBIC_BEZIER) {
-        unsigned chosen = g_duration.load();
-        if (g_logging.load())
-            Wh_Log(L"settle transition: delay=%u native=%u requested=%u dimensions=%u",
+        unsigned chosen = g_hotkeyCommitDepth ? g_keyboardDuration.load() : g_duration.load();
+                Wh_Log(L"settle transition: delay=%u native=%u requested=%u dimensions=%u",
                    delayMs, durationMs, chosen, count);
         durationMs = chosen;
-        if (g_linear.load()) timing = &linear.header;
-        else if (g_easeOut.load()) timing = &ease.header;
+        if (g_curve.load() == Curve::Linear) timing = &linear.header;
+        else if (g_curve.load() == Curve::EaseOut) timing = &ease.header;
     }
     return g_originalTransition(self, delayMs, durationMs, timing, storyboard,
                                 variable, values, count, force);
@@ -167,9 +176,12 @@ HRESULT TransitionHook(void* self, unsigned delayMs, unsigned durationMs,
 
 void LoadSettings() {
     g_duration = std::clamp(Wh_GetIntSetting(L"durationMs"), 150, 5000);
-    g_linear = Wh_GetIntSetting(L"linearRelease") != 0;
-    g_easeOut = Wh_GetIntSetting(L"easeOut") != 0;
-    g_logging = Wh_GetIntSetting(L"debugLogging") != 0;
+    g_keyboardDuration = std::clamp(Wh_GetIntSetting(L"keyboardDurationMs"), 150, 5000);
+    PCWSTR curve = Wh_GetStringSetting(L"transitionCurve");
+    g_curve = wcscmp(curve, L"linear") == 0 ? Curve::Linear :
+              wcscmp(curve, L"easeOut") == 0 ? Curve::EaseOut : Curve::Native;
+    Wh_FreeStringSetting(curve);
+    g_forceAnimations = Wh_GetIntSetting(L"forceAnimations") != 0;
 }
 
 BOOL Wh_ModInit() {
@@ -195,12 +207,12 @@ BOOL Wh_ModInit() {
              L"public: long __cdecl VirtualDesktopHotKeyWindow::Commit(struct IVirtualDesktopSwitchAnimator2 *,float)",
          },
          &g_originalHotkeyCommit,
-         HotkeyCommitHook},
+         HotkeyCommitHook, true},
         {{
              L"private: long __cdecl CVirtualDesktopHotkeyHandler::_CycleInDirection(enum VirtualDesktopSwitchDirection)",
          },
          &g_originalCycle,
-         CycleInDirectionHook},
+         CycleInDirectionHook, true},
     };
     WindhawkUtils::SYMBOL_HOOK twinuiDllHooks[] = {
         {{
@@ -219,15 +231,18 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Failed to hook required symbols; initialization aborted.");
         return FALSE;
     }
-    if (!WindhawkUtils::SetFunctionHook(SystemParametersInfoW,
+    g_keyboardHooksAvailable = g_originalHotkeyCommit && g_originalCycle;
+    if (!g_keyboardHooksAvailable) {
+        Wh_Log(L"Keyboard symbols unavailable; touchpad support remains active");
+    }
+    if (g_keyboardHooksAvailable && !WindhawkUtils::SetFunctionHook(SystemParametersInfoW,
                                         SystemParametersInfoHook,
                                         &g_originalSystemParametersInfo)) {
         Wh_Log(L"Failed to hook the desktop hotkey animation preference query");
-        return FALSE;
+        g_keyboardHooksAvailable = false;
     }
     Wh_Log(L"Smooth release initialized; duration=%u ms. Ready.", g_duration.load());
     return TRUE;
 }
 
 void Wh_ModSettingsChanged() { LoadSettings(); }
-void Wh_ModUninit() { Wh_Log(L"Smooth release unloaded; native behavior restored."); }
