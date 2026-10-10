@@ -2,10 +2,10 @@
 // @id           xandriw-explorer-select-interceptor
 // @name         SameFolderOnly
 // @description  When an app opens a folder or uses Show in folder, reuse an existing Explorer window for that folder and select the requested file instead of opening a duplicate window.
-// @version      4.1.4
+// @version      4.1.5
 // @author       XandriW
 // @github       https://github.com/xandri19wang
-// @include      C:\Windows\explorer.exe
+// @include      explorer.exe
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -48,9 +48,6 @@ Requests not launched through a supported explorer.exe command line are unaffect
 
 // ==WindhawkModSettings==
 /*
-- EnableInterceptor: true
-  $name: Enable explorer.exe interceptor
-
 - InterceptSelect: true
   $name: Intercept explorer.exe /select,file
 
@@ -63,14 +60,9 @@ Requests not launched through a supported explorer.exe command line are unaffect
   - SameFolderOnly: Do not reuse a random Explorer window
   - ReuseAnyExplorerWindow: Reuse any existing Explorer window
 
-- RequireExistingExplorerWindow: true
-  $name: Do nothing unless an Explorer window already exists
-
 - SelectAfterNavigateDelayMs: 750
   $name: Delay after navigating before selecting file (ms)
-
-- StartupIgnoreMs: 0
-  $name: Ignore requests during the first milliseconds after boot
+  $description: Only used with ReuseAnyExplorerWindow fallback mode when navigating to a different folder before selecting a file.
 
 - BypassModifier: Shift
   $name: Bypass key
@@ -103,13 +95,10 @@ Requests not launched through a supported explorer.exe command line are unaffect
 #include <cwctype>
 
 // ---------------- Settings ----------------
-static bool gEnableInterceptor = true;
 static bool gInterceptSelect = true;
 static bool gInterceptFolderOpen = true;
 static int  gFallbackMode = 0; // 0=SameFolderOnly, 1=ReuseAnyExplorerWindow
-static bool gRequireExistingExplorerWindow = true;
 static int  gSelectAfterNavigateDelayMs = 750;
-static int  gStartupIgnoreMs = 0;
 static int  gBypassModifier = 1; // 0=None, 1=Shift, 2=Ctrl, 3=Alt
 static bool gActivateExistingWindow = true;
 static bool gSuppressNewWindowIfSelectionFails = false;
@@ -892,7 +881,6 @@ static bool TryReuseExistingExplorer(const OpenRequest& request) {
 
 // ---------------- Settings ----------------
 static void LoadSettings() {
-    gEnableInterceptor = Wh_GetIntSetting(L"EnableInterceptor") != 0;
     gInterceptSelect = Wh_GetIntSetting(L"InterceptSelect") != 0;
     gInterceptFolderOpen = Wh_GetIntSetting(L"InterceptFolderOpen") != 0;
     if (PCWSTR fb = Wh_GetStringSetting(L"FallbackMode")) {
@@ -905,12 +893,7 @@ static void LoadSettings() {
         gFallbackMode = 0;
     }
 
-    gRequireExistingExplorerWindow = Wh_GetIntSetting(L"RequireExistingExplorerWindow") != 0;
     gSelectAfterNavigateDelayMs = ClampInt(Wh_GetIntSetting(L"SelectAfterNavigateDelayMs"), 0, 5000);
-
-    gStartupIgnoreMs = Wh_GetIntSetting(L"StartupIgnoreMs");
-    if (gStartupIgnoreMs < 0) gStartupIgnoreMs = 0;
-    if (gStartupIgnoreMs > 120000) gStartupIgnoreMs = 120000;
 
     gActivateExistingWindow = Wh_GetIntSetting(L"ActivateExistingWindow") != 0;
     gSuppressNewWindowIfSelectionFails = Wh_GetIntSetting(L"SuppressNewWindowIfSelectionFails") != 0;
@@ -928,10 +911,7 @@ static void LoadSettings() {
 BOOL Wh_ModInit() {
     LoadSettings();
 
-    if (!gEnableInterceptor || IsBypassHeld())
-        return TRUE;
-
-    if (gStartupIgnoreMs > 0 && GetTickCount() < (DWORD)gStartupIgnoreMs)
+    if (IsBypassHeld())
         return TRUE;
 
     OpenRequest request;
@@ -945,7 +925,7 @@ BOOL Wh_ModInit() {
 
     // First Explorer window after boot has nothing to reuse.
     // Avoid loading COM / ShellWindows here to reduce conflicts with visual Explorer mods.
-    if (gRequireExistingExplorerWindow && !HasAnyExplorerWindow())
+    if (!HasAnyExplorerWindow())
         return TRUE;
 
     LoadComProcs();
