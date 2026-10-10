@@ -38,7 +38,10 @@ Changing settings also requires restarting WhatsApp this way.
 - **Backdrop**: acrylic, mica or mica alt.
 - **Panel tint / opacity**: color and strength of the single tint layer over
   the backdrop. Leave the color empty to follow WhatsApp's light/dark theme.
-- **Menu opacity / blur**: fill and blur radius of menus and dialogs.
+- **Menu opacity / blur**: fill and blur radius of menus, dialogs and the
+  emoji/sticker panel.
+- **Image viewer opacity**: fill of the image and sticker viewer, which also
+  blurs the chat behind it.
 - **Hide chat wallpaper**: hides the doodle pattern behind conversations.
 - **Extra CSS**: custom CSS injected into WhatsApp, for further tweaks.
 
@@ -77,7 +80,10 @@ its internals and require an update of this mod.
   $description: Fill of menus and dialogs.
 - menuBlur: 28
   $name: Menu blur radius (px)
-  $description: Blur of the WhatsApp content behind menus and dialogs.
+  $description: Blur of the WhatsApp content behind menus, panels and viewers.
+- viewerOpacity: 75
+  $name: Image viewer opacity (0-100)
+  $description: Fill of the image and sticker viewer.
 - hideWallpaper: true
   $name: Hide chat wallpaper
   $description: Hides the doodle pattern behind conversations.
@@ -119,6 +125,7 @@ struct {
     int panelOpacity;
     int menuOpacity;
     int menuBlur;
+    int viewerOpacity;
     bool hideWallpaper;
     std::wstring extraCss;
 } g_settings;
@@ -1108,6 +1115,7 @@ const wchar_t kScriptTemplate[] = LR"JS(
   const ALPHA = __ALPHA__;
   const MENU_ALPHA = __MENU_ALPHA__;
   const MENU_BLUR = __MENU_BLUR__;
+  const VIEWER_ALPHA = __VIEWER_ALPHA__;
   const HIDE_WALLPAPER = __HIDE_WALLPAPER__;
   const EXTRA_CSS = __EXTRA_CSS__;
 
@@ -1123,11 +1131,15 @@ const wchar_t kScriptTemplate[] = LR"JS(
     html body [data-testid="conversation-panel-wrapper"] {
       background-color: transparent !important;
     }
-    [role="menu"], [role="listbox"], [role="dialog"] {
+    [role="menu"], [role="listbox"], [role="dialog"], [role="application"] {
       background-color: rgba(var(--WDS-surface-elevated-default-RGB, 29, 31, 31), ${MENU_ALPHA}) !important;
       backdrop-filter: blur(${MENU_BLUR}px) saturate(1.4) !important;
     }
-    [role="menu"] { border-radius: 16px !important; }
+    [role="menu"], [role="application"] { border-radius: 16px !important; }
+    [data-testid="media-viewer-modal"] {
+      background-color: rgba(var(--WDS-surface-default-RGB, 22, 23, 23), ${VIEWER_ALPHA}) !important;
+      backdrop-filter: blur(${MENU_BLUR}px) saturate(1.4) !important;
+    }
     ${HIDE_WALLPAPER ? `
     [data-asset-chat-background-dark], [data-asset-chat-background-light],
     [data-asset-chat-background], [data-asset-intro-image-dark],
@@ -1276,6 +1288,8 @@ void BuildScript() {
     ReplaceAll(g_script, L"__MENU_ALPHA__", buffer);
     ReplaceAll(g_script, L"__MENU_BLUR__",
                std::to_wstring(g_settings.menuBlur));
+    swprintf_s(buffer, L"%.2f", g_settings.viewerOpacity / 100.0);
+    ReplaceAll(g_script, L"__VIEWER_ALPHA__", buffer);
     ReplaceAll(g_script, L"__HIDE_WALLPAPER__",
                g_settings.hideWallpaper ? L"true" : L"false");
     ReplaceAll(g_script, L"__EXTRA_CSS__",
@@ -1307,6 +1321,7 @@ void LoadSettings() {
     g_settings.panelOpacity = Clamp(Wh_GetIntSetting(L"panelOpacity"), 0, 100);
     g_settings.menuOpacity = Clamp(Wh_GetIntSetting(L"menuOpacity"), 0, 100);
     g_settings.menuBlur = Clamp(Wh_GetIntSetting(L"menuBlur"), 0, 200);
+    g_settings.viewerOpacity = Clamp(Wh_GetIntSetting(L"viewerOpacity"), 0, 100);
     g_settings.hideWallpaper = Wh_GetIntSetting(L"hideWallpaper");
     g_settings.extraCss = GetString(L"extraCss");
 }
