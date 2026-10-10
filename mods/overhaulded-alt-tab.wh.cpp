@@ -7,6 +7,7 @@
 // @github          https://github.com/IMiloDev
 // @homepage        https://github.com/IMiloDev/OverhauldedWin
 // @include         windhawk.exe
+// @include         explorer.exe
 // @compilerOptions -lshell32
 // ==/WindhawkMod==
 
@@ -17,15 +18,6 @@
 A modern, fluid and highly visual replacement for the native Windows Alt+Tab experience.
 
 Built from scratch in native C++ as a project to explore Windows APIs, graphics, animation systems and desktop customization. You can also see the original [GITHUB REPOSITORY](https://github.com/IMiloDev/OverhauldedWin) to send me issues.
-
-> **⚠️ DISCLAIMER**
->
-> If the **Windhawk window is in the foreground**, the native Windows Task Switcher may appear above Overhaulded during `Alt + Tab`.
-> 
-> **Workaround:** Minimize or close the Windhawk window before using Overhaulded.
->
-> [Read more about this limitation →](#native-windows-task-switcher)
-> 
 
 ## Screenshot
 
@@ -109,18 +101,6 @@ Overhaulded is still a pre-release project.
 
 Some applications may behave differently than standard desktop windows, especially those using unusual window structures, custom rendering, or multiple processes.
 
-### Native Windows Task Switcher
-
-When the **Windhawk window (An any another high permission windows window) itself is in the foreground**, Windows keeps the native task switcher on top of Overhaulded when an `Alt + Tab` session is initiated.
-
-In this situation, the native Windows task switcher may appear over the Overhaulded interface, even though Overhaulded uses a "topmost" window and correctly handles keyboard input.
-
-This behavior is related to how the Windows Shell manages its native task switcher and window/composition priority during the `Alt + Tab` operation. Windows does not provide a reliable, documented, and guaranteed public API that allows forcing a third-party window (which does not take focus) to remain visually above the native task switcher.
-
-Behavior may vary depending on the Windows version and system configuration. This is a limitation of the Windows Shell, not a failure to detect or handle `Alt + Tab` input.
-
-I apologize in advance for the inconvenience. I am constantly looking for a way to fix this issue, but public documentation hasn't yielded a solution so far; while it isn't necessarily impossible, it is highly likely that this issue cannot be resolved without delving into sensitive Windows ecosystem code.
-
 ---
 
 ## Controls
@@ -131,7 +111,7 @@ I apologize in advance for the inconvenience. I am constantly looking for a way 
 | `Alt gr+ Tab`                                | Move to the next window       |
 | `Alt + Tab` + release `Alt`                  | Activate the selected window  |
 | `Esc`                                        | Cancel the switcher           |
-| `Alt gr + Tab + Arrows` `Alt + Tab + Arrows` | Additional navigation/control |
+| `Opened Task Switcher + Arrows`              | Additional navigation/control |
 
 ## Compatibility
 
@@ -168,7 +148,7 @@ The project is continuously evolving as new ideas and technical improvements are
 
 This project is licensed under the **MIT License**.
 
-See the https://github.com/IMiloDev/OverhauldedWin/blob/main/LICENSE file for the complete license text.
+See the [LICENSE](https://github.com/IMiloDev/OverhauldedWin/blob/main/LICENSE) file for the complete license text.
 
 ---
 
@@ -205,6 +185,13 @@ See the https://github.com/IMiloDev/OverhauldedWin/blob/main/LICENSE file for th
       - "100": 100%
       - "125": 125%
       - "150": 150%
+    - AnimationStyle: "Linear"
+      $name: Animation style
+      $description: Open and close animation. Linear is standard, Bouncy adds a pronounced bounce, and RCT is a CRT-style collapse and expansion.
+      $options:
+      - "Linear": Linear
+      - "Bouncy": Bouncy
+      - "RCT": RCT
     - Cards:
         - VisibleCards: "5"
           $name: Visible cards
@@ -218,13 +205,6 @@ See the https://github.com/IMiloDev/OverhauldedWin/blob/main/LICENSE file for th
         - SelectedColor: "#090A0B"
           $name: Selected card color
           $description: Base color of the selected card. Default Hex - #090A0B. An empty or invalid value uses the default.
-        - AnimationStyle: "Linear"
-          $name: Animation style
-          $description: Open and close animation. Linear is the standard animation, Bouncy opens with a pronounced bounce and RCT is a CRT-style collapse and expansion.
-          $options:
-          - "Linear": Linear
-          - "Bouncy": Bouncy
-          - "RCT": RCT
       $name: Cards
   $name: Appearance
 - Background: "dwm"
@@ -242,6 +222,9 @@ See the https://github.com/IMiloDev/OverhauldedWin/blob/main/LICENSE file for th
       $description: DWM background opacity (0-100). Default - 20.
   $name: DWM background
 - ExperimentalSettings:
+    - ExpandSelectedWindow: true
+      $name: Expand selected window
+      $description: Animates the selected card toward the selected window when confirmed.
     - GeneralBackground: "none"
       $name: General Background
       $description: Experimental features may require additional GPU, CPU and RAM resources and may affect performance. Pattern Waves requires a background other than None.
@@ -288,6 +271,7 @@ See the https://github.com/IMiloDev/OverhauldedWin/blob/main/LICENSE file for th
 #include <d2d1.h>
 #include <d2d1helper.h>
 #include <dwrite.h>
+#include <dwmapi.h>
 #include <vector>
 #include <string>
 #include <algorithm>
@@ -295,6 +279,7 @@ See the https://github.com/IMiloDev/OverhauldedWin/blob/main/LICENSE file for th
 #include <utility>
 #include <cwchar>
 #include <cstring>
+#include <tlhelp32.h>
 
 typedef DWORD (WINAPI* GetFileVersionInfoSizeWFn)(LPCWSTR, LPDWORD);
 typedef BOOL (WINAPI* GetFileVersionInfoWFn)(LPCWSTR, DWORD, DWORD, LPVOID);
@@ -409,13 +394,13 @@ static COLORREF g_cardNormalColor = RGB(5, 5, 7);
 static COLORREF g_cardSelectedColor = RGB(9, 10, 11);
 // Timer del failsafe: solo existe mientras el selector está abierto.
 static const UINT_PTR kActivityTimerId = 77;
-static const UINT_PTR kAnimTimerId = 88;
 static const UINT_PTR kTabRepeatTimerId = 89;
 static const UINT_PTR kSelectorMotionTimerId = 90;
 static const float kNavigationDuration = 180.0f;
 static const int kDefaultAnimationFps = 120;
 enum class AnimationStyle { Linear, Bouncy, Rct };
 static AnimationStyle g_animationStyle = AnimationStyle::Linear;
+static bool g_expandSelectedWindow = true;
 static int g_animationFps = kDefaultAnimationFps;
 
 static int GetCarouselCenterSlot() { return g_visibleCardCount / 2; }
@@ -428,30 +413,15 @@ static void LoadTaskSwitcherSettings()
 {
     auto read = [](PCWSTR key) {
         PCWSTR value = Wh_GetStringSetting(key);
-        std::wstring result(value ? value : L"");
-        if (value)
-            Wh_FreeStringSetting(value);
+        std::wstring result(value);
+        Wh_FreeStringSetting(value);
         return result;
     };
 
-    // Numeric options are integers in the settings schema. Installs that saved
-    // them while they were still declared as strings keep their stored value:
-    // a string value is parsed first, otherwise the integer is read. Either
-    // way the result is clamped to the valid range of the option.
-    auto readNumber = [&](PCWSTR key, int low, int high) {
-        std::wstring stored = read(key);
-        long value = 0;
-        bool parsed = false;
-        if (!stored.empty())
-        {
-            wchar_t* end = nullptr;
-            value = wcstol(stored.c_str(), &end, 10);
-            parsed = end != stored.c_str();
-        }
-        if (!parsed)
-            value = Wh_GetIntSetting(key);
-        return static_cast<int>(std::max(static_cast<long>(low),
-                                         std::min(static_cast<long>(high), value)));
+    // Numeric options use integer settings and are clamped to their valid ranges.
+    auto readNumber = [](PCWSTR key, int low, int high) {
+        const int value = Wh_GetIntSetting(key);
+        return std::max(low, std::min(high, value));
     };
 
     // The three 1.2.1 settings were flat keys. They are only consulted when the
@@ -480,10 +450,12 @@ static void LoadTaskSwitcherSettings()
         mode = read(L"PerformanceMode");
     g_animationFps = mode == L"balanced" ? 90 : kDefaultAnimationFps;
 
-    std::wstring style = read(L"Appearance.Cards.AnimationStyle");
+    std::wstring style = read(L"Appearance.AnimationStyle");
     g_animationStyle = style == L"Bouncy" ? AnimationStyle::Bouncy
                      : style == L"RCT" ? AnimationStyle::Rct
                      : AnimationStyle::Linear;
+    g_expandSelectedWindow =
+        Wh_GetIntSetting(L"Appearance.Cards.ExpandSelectedWindow") != 0;
 
     // Background is the base layer and ExperimentalSettings.GeneralBackground
     // controls the optional overlay. Any base value other than "none" uses the
@@ -639,12 +611,26 @@ static int g_runtimeSelectorHeight = kSelectorHeight;
 static float g_sceneScaleX = 1.0f;
 static float g_sceneScaleY = 1.0f;
 static float g_sceneOpacity = 1.0f;
+// Offset temporal usado cuando el HWND se amplía al área de trabajo.
+static POINT g_selectionExpansionSceneOffset = {};
+// Estado de la transición de confirmación. La ventana del selector se reutiliza
+// y se amplía al área de trabajo; las miniaturas DWM se interpolan desde la
+// tarjeta visible hasta ese destino, sin crear otro renderer ni otra ventana.
+static bool g_selectionExpansionActive = false;
+static bool g_selectionExpansionFinishPending = false;
+static float g_selectionExpansionDurationMs = 300.0f;
+static HWND g_selectionExpansionTarget = nullptr;
+static RECT g_selectionExpansionStartRect = {};
+static RECT g_selectionExpansionRect = {};
+static RECT g_selectionExpansionDestinationRect = {};
+static RECT g_selectionExpansionWorkRect = {};
+static double g_selectionExpansionStart = 0.0;
+static float g_selectionExpansionProgress = 0.0f;
 // Progreso común de la escena: 0 = oculta/colapsada, 1 = completamente abierta.
 // Escala, opacidad y apertura del carrusel se derivan de este único valor.
 static float g_scenePresence = 1.0f;
 static float g_closeStartPresence = 1.0f;
 static float g_carouselSpread = 1.0f;
-static float g_selectionTiltDirection = 0.0f;
 static float g_cardSnapScale = 1.0f;
 
 static int ScaleLayoutPx(float value)
@@ -693,6 +679,10 @@ static D2D1::Matrix3x2F GetSceneTransform()
         D2D1::SizeF(sx, sy),
         D2D1::Point2F(static_cast<float>(g_runtimeSelectorWidth) * 0.5f,
                       static_cast<float>(g_runtimeSelectorHeight) * 0.5f));
+    // El cambio de tamaño/movimiento del HWND no debe mover la escena de la
+    // tarjeta durante el primer frame de la expansión.
+    transform.dx += static_cast<float>(g_selectionExpansionSceneOffset.x);
+    transform.dy += static_cast<float>(g_selectionExpansionSceneOffset.y);
     return transform;
 }
 
@@ -710,87 +700,15 @@ static RECT TransformSceneRect(const RECT& source)
     return result;
 }
 
-typedef HANDLE HTHUMBNAIL;
-
-// Diseño de DWM_TIMING_INFO (dwmapi.h). Solo se leen qpcRefreshPeriod y
-// qpcVBlank; si el diseño no coincidiese, DwmGetCompositionTimingInfo falla y
-// se usa el pacing de intervalo fijo.
-struct DwmUnsignedRatioLocal
-{
-    UINT32 numerator;
-    UINT32 denominator;
-};
-struct DwmTimingInfoLocal
-{
-    UINT32 cbSize;
-    DwmUnsignedRatioLocal rateRefresh;
-    ULONGLONG qpcRefreshPeriod;
-    DwmUnsignedRatioLocal rateCompose;
-    ULONGLONG qpcVBlank;
-    ULONGLONG cRefresh;
-    UINT cDXRefresh;
-    ULONGLONG qpcCompose;
-    ULONGLONG cFrame;
-    UINT cDXPresent;
-    ULONGLONG cRefreshFrame;
-    ULONGLONG cFrameSubmitted;
-    UINT cDXPresentSubmitted;
-    ULONGLONG cFrameConfirmed;
-    UINT cDXPresentConfirmed;
-    ULONGLONG cRefreshConfirmed;
-    UINT cDXRefreshConfirmed;
-    ULONGLONG cFramesLate;
-    UINT cFramesOutstanding;
-    ULONGLONG cFrameDisplayed;
-    ULONGLONG qpcFrameDisplayed;
-    ULONGLONG cRefreshFrameDisplayed;
-    ULONGLONG cFrameComplete;
-    ULONGLONG qpcFrameComplete;
-    ULONGLONG cFramePending;
-    ULONGLONG qpcFramePending;
-    ULONGLONG cFramesDisplayed;
-    ULONGLONG cFramesComplete;
-    ULONGLONG cFramesPending;
-    ULONGLONG cFramesAvailable;
-    ULONGLONG cFramesDropped;
-    ULONGLONG cFramesMissed;
-    ULONGLONG cRefreshNextDisplayed;
-    ULONGLONG cRefreshNextPresented;
-    ULONGLONG cRefreshesDisplayed;
-    ULONGLONG cRefreshesPresented;
-    ULONGLONG cRefreshStarted;
-    ULONGLONG cPixelsReceived;
-    ULONGLONG cPixelsDrawn;
-    ULONGLONG cBuffersEmpty;
-};
-typedef HRESULT (WINAPI* DwmGetCompositionTimingInfoFn)(HWND, DwmTimingInfoLocal*);
-
-struct DwmThumbnailPropertiesLocal
-{
-    DWORD dwFlags;
-    RECT rcDestination;
-    RECT rcSource;
-    BYTE opacity;
-    BOOL fVisible;
-    BOOL fSourceClientAreaOnly;
-};
-
+typedef HRESULT (WINAPI* DwmGetCompositionTimingInfoFn)(HWND, DWM_TIMING_INFO*);
 typedef HRESULT (WINAPI* DwmRegisterThumbnailFn)(HWND, HWND, HTHUMBNAIL*);
 typedef HRESULT (WINAPI* DwmUnregisterThumbnailFn)(HTHUMBNAIL);
 typedef HRESULT (WINAPI* DwmUpdateThumbnailPropertiesFn)(
-    HTHUMBNAIL, const DwmThumbnailPropertiesLocal*);
+    HTHUMBNAIL, const DWM_THUMBNAIL_PROPERTIES*);
 typedef HRESULT (WINAPI* DwmSetWindowAttributeFn)(HWND, DWORD,
                                                    const void*, DWORD);
 typedef HRESULT (WINAPI* DwmGetWindowAttributeFn)(HWND, DWORD,
                                                    void*, DWORD);
-
-struct MARGINS
-{
-    int cxLeftWidth;
-    int cxRightWidth;
-    int cyTopHeight;
-    int cyBottomHeight;
-};
 
 // Atributos y flags DWM usados por el glass y las miniaturas.
 static const DWORD kDwmWindowCornerPreference = 33;
@@ -837,6 +755,7 @@ enum class SelectorAnimationState
     Opening,
     SelectionChange,
     CardExit,
+    SelectionExpansion,
     Open,
     Closing
 };
@@ -917,6 +836,9 @@ static volatile LONG g_nextSessionId = 0;
 static volatile LONG g_sessionActive = 0;
 // 1 mientras el selector acepta interacción de ratón (el UI thread lo gobierna).
 static volatile LONG g_uiSelectorOpen = 0;
+// 1 durante la expansión de confirmación; input y UI deben rechazar nuevas
+// sesiones para que otra pulsación no interrumpa la transición de 300 ms.
+static volatile LONG g_selectionTransitionActive = 0;
 static volatile LONG64 g_lastMousePt = 0;
 static volatile LONG g_mouseMovePending = 0;
 
@@ -933,6 +855,31 @@ static const UINT WM_UI_MOUSE_WHEEL = WM_APP + 9;  // wParam=delta (short)
 static const UINT WM_UI_SETTINGS = WM_APP + 10;
 static const UINT WM_IN_MOUSEHOOK = WM_APP + 20;   // wParam=1 instalar, 0 quitar
 static const UINT WM_IN_ACTIVATE = WM_APP + 21;     // wParam=target HWND
+
+// WM_UI_OPEN lParam: bit 0 = Shift pulsado (dirección inversa),
+// bit 1 = sesión iniciada por el hotkey reenviado desde Explorer.
+static const LPARAM kUiOpenShift = 1;
+static const LPARAM kUiOpenFromHotkey = 2;
+
+// Hotkey de Alt+Tab reenviado desde explorer.exe (ver sección EXPLORER).
+// Explorer localiza la ventana de control del input thread por clase y título:
+// FindWindow compara títulos sin enviar mensajes, así que el título publica si
+// la herramienta está lista para aceptar sesiones.
+static const WCHAR kInputControlClass[] = L"OverhauldedAltTabInput";
+static const WCHAR kInputControlTitleIdle[] = L"Overhaulded Alt+Tab";
+static const WCHAR kInputControlTitleReady[] = L"Overhaulded Alt+Tab (ready)";
+static const WCHAR kHotkeyMessageName[] = L"OverhauldedAltTab_Hotkey";
+static const WPARAM kHotkeyFlagBackwards = 1;
+static const WPARAM kHotkeyFlagCtrl = 2;
+static UINT g_hotkeyMessage = 0;
+static void InitHotkeyMessage();
+// Sondeo del Alt físico mientras dura una sesión iniciada por el hotkey (el
+// hook puede no ver la suelta de Alt si una ventana elevada tenía el foco).
+static const UINT_PTR kHotkeyPollTimerId = 1;
+static const UINT kHotkeyPollMs = 30;
+static const int kHotkeyReleaseTicks = 5;
+static bool g_hotkeySession = false;     // solo input thread
+static int g_hotkeyReleaseCount = 0;     // solo input thread
 
 // Solo UI thread.
 static HWND g_selector = nullptr;
@@ -989,9 +936,10 @@ static SelectorAnimationState g_selectorAnimation = SelectorAnimationState::None
 static double g_selectorAnimationStart = 0.0;
 static HWND g_pendingActivationTarget = nullptr;
 static HWND g_selectorOriginWindow = nullptr;
+// El selector tomó el foco (solo sesiones iniciadas por el hotkey de Explorer).
+static bool g_selectorFocusTaken = false;
 static bool g_cardExitActive = false;
 static int g_cardExitSlot = -1;
-static int g_cardExitGroupIndex = -1;
 static HWND g_cardExitTarget = nullptr;
 static float g_cardExitDirection = 1.0f;
 static double g_cardExitStart = 0.0;
@@ -1097,6 +1045,9 @@ static void ConfirmSelection();
 static void CleanupKeyboardState();
 static void EmergencyCloseSelector();
 static void StartSelectorClose(HWND target);
+static void StartSelectionExpansion(HWND target);
+static void UpdateSelectionExpansion();
+static bool IsSelectionExpansionActive();
 static void UpdateSelectorMotion();
 static void UpdateCarouselAnimation(HWND hwnd);
 static float GetCardExitProgress();
@@ -1106,6 +1057,7 @@ static void DestroySelector();
 static bool InitializePersistentSelector();
 static void HideSelectorForSession();
 static void ActivateWindow(HWND target);
+static HWND FocusRestoreTarget();
 static HWND GetNextGroupWindow(AppGroup& group);
 static void StartSlide(int steps);
 static void SelectNextSmooth(int steps = 1);
@@ -1526,6 +1478,39 @@ static std::wstring BaseNameWithoutExtension(const std::wstring& path)
     return name.empty() ? L"Application" : name;
 }
 
+// A 32-bit tool process is redirected from System32 to SysWOW64. Use the
+// Sysnative alias for metadata/icon APIs when the target path names a native
+// System32 executable, so 64-bit-only applications keep their real names/icons.
+static std::wstring GetNativeSystemPathForApi(const std::wstring& path)
+{
+#if defined(_WIN64)
+    return path;
+#else
+    BOOL wow64 = FALSE;
+    if (!IsWow64Process(GetCurrentProcess(), &wow64) || !wow64)
+        return path;
+
+    wchar_t windowsDirectory[MAX_PATH + 1] = {};
+    const UINT length = GetWindowsDirectoryW(windowsDirectory, ARRAYSIZE(windowsDirectory));
+    if (!length || length >= ARRAYSIZE(windowsDirectory))
+        return path;
+
+    std::wstring systemPrefix(windowsDirectory, length);
+    if (!systemPrefix.empty() && systemPrefix.back() != L'\\')
+        systemPrefix.push_back(L'\\');
+    systemPrefix += L"System32\\";
+    if (path.size() < systemPrefix.size() ||
+        _wcsnicmp(path.c_str(), systemPrefix.c_str(), systemPrefix.size()) != 0)
+        return path;
+
+    std::wstring nativePrefix(windowsDirectory, length);
+    if (!nativePrefix.empty() && nativePrefix.back() != L'\\')
+        nativePrefix.push_back(L'\\');
+    nativePrefix += L"Sysnative\\";
+    return nativePrefix + path.substr(systemPrefix.size());
+#endif
+}
+
 static std::wstring LowerAscii(std::wstring value)
 {
     for (size_t i = 0; i < value.size(); ++i)
@@ -1574,8 +1559,9 @@ static std::wstring GetFileDescription(const std::wstring& path)
         return std::wstring();
     }
 
+    const std::wstring apiPath = GetNativeSystemPathForApi(path);
     DWORD handle = 0;
-    DWORD size = getSize(path.c_str(), &handle);
+    DWORD size = getSize(apiPath.c_str(), &handle);
     if (size == 0 || size > 1024 * 1024)
     {
         FreeLibrary(version);
@@ -1583,7 +1569,7 @@ static std::wstring GetFileDescription(const std::wstring& path)
     }
     std::vector<BYTE> data(size);
     std::wstring description;
-    if (getInfo(path.c_str(), 0, size, data.data()))
+    if (getInfo(apiPath.c_str(), 0, size, data.data()))
     {
         struct Translation { WORD language; WORD codePage; };
         Translation* translations = nullptr;
@@ -2185,38 +2171,14 @@ static void RefreshWindowList()
         g_groups[i].mediaAccent = ExtractMediaAccentFromImage(g_groups[i].icon);
 }
 
-static const std::wstring& MakeSlotText(const AppGroup& group, bool selected)
+static const std::wstring& MakeSlotText(const AppGroup& group)
 {
-    (void)selected;
     return group.appName;
 }
 
-// Título que se dibuja en una card. Las cards de los extremos de la disposición
-// visual muestran como máximo kEdgeTitleChars caracteres seguidos de "...". La
-// posición se obtiene de la posición visual continua (slot + g_animOffset), no
-// del índice de grupo, así que sigue siendo correcta al navegar en cualquier
-// sentido. El texto original del grupo no se modifica: se devuelve una cadena
-// temporal reutilizada (sin asignaciones por frame una vez calentada).
-static const size_t kEdgeTitleChars = 5;
-static const std::wstring& MakeSlotDisplayText(const AppGroup& group, bool selected, int slot)
+static const std::wstring& MakeSlotDisplayText(const AppGroup& group)
 {
-    const std::wstring& full = MakeSlotText(group, selected);
-    const int lastSlot = GetCarouselSlotCount() - 1;
-    const int visualSlot = static_cast<int>(
-        floorf(static_cast<float>(slot) + g_animOffset + 0.5f));
-    const bool isEdge = visualSlot <= 0 || visualSlot >= lastSlot;
-    if (!isEdge || full.length() <= kEdgeTitleChars)
-        return full;
-
-    static std::wstring shortened;
-    size_t cut = kEdgeTitleChars;
-    if (IS_HIGH_SURROGATE(full[cut - 1]) && IS_LOW_SURROGATE(full[cut]))
-        --cut;  // no partir un par sustituto
-    while (cut > 0 && full[cut - 1] == L' ')
-        --cut;
-    shortened.assign(full, 0, cut);
-    shortened.append(L"...");
-    return shortened;
+    return MakeSlotText(group);
 }
 
 static const std::wstring& MakeCounterText()
@@ -2439,7 +2401,8 @@ static HICON GetApplicationIcon(HWND hwnd, const std::wstring& processPath, bool
             if (pExtractIconExW)
             {
                 HICON hLarge = nullptr;
-                if (pExtractIconExW(processPath.c_str(), 0, &hLarge, nullptr, 1) > 0 && hLarge)
+                const std::wstring apiPath = GetNativeSystemPathForApi(processPath);
+                if (pExtractIconExW(apiPath.c_str(), 0, &hLarge, nullptr, 1) > 0 && hLarge)
                 {
                     if (outOwnIcon)
                         *outOwnIcon = true;
@@ -2549,6 +2512,23 @@ static bool LoadD2DAndDWrite()
         {
             g_dwriteNormalFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
             g_dwriteNormalFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        }
+        // Match GDI's DT_END_ELLIPSIS while clipping to each card's true text area.
+        IDWriteInlineObject* ellipsisSign = nullptr;
+        IDWriteTextFormat* trimmingFormat = g_dwriteNormalFormat
+            ? g_dwriteNormalFormat : g_dwriteSelectedFormat;
+        if (trimmingFormat &&
+            SUCCEEDED(g_dwriteFactory->CreateEllipsisTrimmingSign(
+                trimmingFormat, &ellipsisSign)) &&
+            ellipsisSign)
+        {
+            const DWRITE_TRIMMING trimming = {
+                DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0 };
+            if (g_dwriteSelectedFormat)
+                g_dwriteSelectedFormat->SetTrimming(&trimming, ellipsisSign);
+            if (g_dwriteNormalFormat)
+                g_dwriteNormalFormat->SetTrimming(&trimming, ellipsisSign);
+            ellipsisSign->Release();
         }
         if (g_dwriteCounterFormat)
         {
@@ -3335,7 +3315,6 @@ static void CloseWindowForSlot(int slot)
     g_hoveredCloseButton = false;
     g_cardExitActive = true;
     g_cardExitSlot = slot;
-    g_cardExitGroupIndex = groupIndex;
     g_cardExitTarget = target;
     g_cardExitStart = FrameClockNow();
     g_cardExitProgress = 0.0f;
@@ -3498,11 +3477,14 @@ static void UpdateThumbnailProperties(int slot, const RECT& area, HWND source)
     slotState.sourceWidth = sourceWidth;
     slotState.sourceHeight = sourceHeight;
 
-    DwmThumbnailPropertiesLocal properties = {};
+    DWM_THUMBNAIL_PROPERTIES properties = {};
     properties.dwFlags = kDwmTnpRectDestination | kDwmTnpOpacity |
                          kDwmTnpVisible;
-    RECT destination = ContainedRect(area, sourceWidth, sourceHeight);
+    RECT destination = g_selectionExpansionActive
+        ? area : ContainedRect(area, sourceWidth, sourceHeight);
     RECT viewport = { 0, 0, g_runtimeSelectorWidth, g_runtimeSelectorHeight };
+    if (g_selectionExpansionActive && g_selector && IsWindow(g_selector))
+        GetClientRect(g_selector, &viewport);
     RECT clipped = {
         std::max(destination.left, viewport.left),
         std::max(destination.top, viewport.top),
@@ -3598,6 +3580,13 @@ static void UpdateThumbnailSlots()
         }
 
         RECT area = TransformSceneRect(GetSlotPreviewRect(slot));
+        if (g_selectionExpansionActive)
+        {
+            if (slot == GetCarouselCenterSlot())
+                area = g_selectionExpansionRect;
+            else
+                area = RECT{ 0, 0, 0, 0 };
+        }
         UpdateThumbnailProperties(slot, area, source);
     }
 }
@@ -3610,8 +3599,7 @@ static void StopCarouselAnimation()
     g_animStartTime = 0.0;
     if (g_selector && IsWindow(g_selector))
     {
-        KillTimer(g_selector, kAnimTimerId);
-        KillTimer(g_selector, kTabRepeatTimerId);
+            KillTimer(g_selector, kTabRepeatTimerId);
         DisarmFramePump();
     }
     g_tabRepeatStarted = false;
@@ -3621,11 +3609,9 @@ static void StopCarouselAnimation()
     g_sceneOpacity = 1.0f;
     g_scenePresence = 1.0f;
     g_carouselSpread = 1.0f;
-    g_selectionTiltDirection = 0.0f;
     g_cardSnapScale = 1.0f;
     g_cardExitActive = false;
     g_cardExitSlot = -1;
-    g_cardExitGroupIndex = -1;
     g_cardExitTarget = nullptr;
 }
 
@@ -3636,7 +3622,6 @@ static void StartSelectorClose(HWND target)
         return;
     g_cardExitActive = false;
     g_cardExitSlot = -1;
-    g_cardExitGroupIndex = -1;
     g_cardExitTarget = nullptr;
     g_pendingActivationTarget = target;
     // El cierre parte del progreso actual de la escena (incluso si la apertura
@@ -3755,12 +3740,248 @@ static float GetCardExitOffsetY()
     return g_cardExitDirection * ScaleLayoutPx(250.0f) * t * t * t;
 }
 
+static bool IsSelectionExpansionActive()
+{
+    return g_selectionExpansionActive &&
+           g_selectorAnimation == SelectorAnimationState::SelectionExpansion;
+}
+static RECT LerpRect(const RECT& a, const RECT& b, float t)
+{
+    RECT result = {};
+    result.left = static_cast<LONG>(roundf(a.left + (b.left - a.left) * t));
+    result.top = static_cast<LONG>(roundf(a.top + (b.top - a.top) * t));
+    result.right = static_cast<LONG>(roundf(a.right + (b.right - a.right) * t));
+    result.bottom = static_cast<LONG>(roundf(a.bottom + (b.bottom - a.bottom) * t));
+    return result;
+}
+
+// 100 ms for a target close to the preview and up to 300 ms for a large/far
+// target. Size and center travel are normalized to the work area; fullscreen
+// naturally reaches the maximum because it changes both preview dimensions.
+static float CalculateSelectionExpansionDurationMs(
+    const RECT& source, const RECT& destination, const RECT& work)
+{
+    const float workWidth = static_cast<float>(work.right - work.left);
+    const float workHeight = static_cast<float>(work.bottom - work.top);
+    if (workWidth <= 0.0f || workHeight <= 0.0f)
+        return 300.0f;
+
+    const float sourceWidth = static_cast<float>(source.right - source.left);
+    const float sourceHeight = static_cast<float>(source.bottom - source.top);
+    const float destinationWidth = static_cast<float>(destination.right - destination.left);
+    const float destinationHeight = static_cast<float>(destination.bottom - destination.top);
+    const float sourceCenterX = (source.left + source.right) * 0.5f;
+    const float sourceCenterY = (source.top + source.bottom) * 0.5f;
+    const float destinationCenterX = (destination.left + destination.right) * 0.5f;
+    const float destinationCenterY = (destination.top + destination.bottom) * 0.5f;
+
+    const float maxWidthChange = std::max(1.0f, std::max(sourceWidth, workWidth - sourceWidth));
+    const float maxHeightChange = std::max(1.0f, std::max(sourceHeight, workHeight - sourceHeight));
+    const float widthChange = std::min(1.0f,
+        fabsf(destinationWidth - sourceWidth) / maxWidthChange);
+    const float heightChange = std::min(1.0f,
+        fabsf(destinationHeight - sourceHeight) / maxHeightChange);
+    const float sizeDistance = sqrtf((widthChange * widthChange +
+                                      heightChange * heightChange) * 0.5f);
+
+    const float maxCenterDistance = std::max(1.0f,
+        sqrtf(workWidth * workWidth + workHeight * workHeight) * 0.5f);
+    const float centerDx = destinationCenterX - sourceCenterX;
+    const float centerDy = destinationCenterY - sourceCenterY;
+    const float positionDistance = std::min(1.0f,
+        sqrtf(centerDx * centerDx + centerDy * centerDy) / maxCenterDistance);
+
+    const float distance = std::max(sizeDistance, positionDistance);
+    return 100.0f + 200.0f * std::max(0.0f, std::min(1.0f, distance));
+}
+
+static void StartSelectionExpansion(HWND target)
+{
+    if (!target || !IsWindow(target) || !g_selector ||
+        !IsWindow(g_selector) || g_selectionExpansionActive)
+    {
+        // El llamador conserva la finalización inmediata como fallback.
+        g_pendingActivationTarget = target;
+        g_cleanupInProgress = true;
+        DestroySelector();
+        g_state = SelectorState::Idle;
+        g_cleanupInProgress = false;
+        CleanupKeyboardState();
+        ActivateWindow(target);
+        return;
+    }
+    HMONITOR monitor = MonitorFromWindow(target, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO monitorInfo = {};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    if (!monitor || !GetMonitorInfoW(monitor, &monitorInfo))
+    {
+        g_pendingActivationTarget = target;
+        g_cleanupInProgress = true;
+        DestroySelector();
+        g_state = SelectorState::Idle;
+        g_cleanupInProgress = false;
+        CleanupKeyboardState();
+        ActivateWindow(target);
+        return;
+    }
+    RECT selectorRect = {};
+    if (!GetWindowRect(g_selector, &selectorRect))
+    {
+        g_pendingActivationTarget = target;
+        g_cleanupInProgress = true;
+        DestroySelector();
+        g_state = SelectorState::Idle;
+        g_cleanupInProgress = false;
+        CleanupKeyboardState();
+        ActivateWindow(target);
+        return;
+    }
+    // El rectángulo de las tarjetas está en coordenadas cliente. No asumir
+    // que coincide con el borde externo del HWND: esa diferencia puede ser de
+    // unos píxeles en DPI por monitor o cuando DWM aplica sus bordes.
+    POINT selectorClientOrigin = { 0, 0 };
+    if (!ClientToScreen(g_selector, &selectorClientOrigin))
+    {
+        selectorClientOrigin.x = selectorRect.left;
+        selectorClientOrigin.y = selectorRect.top;
+    }
+    const RECT card = GetSlotCardRect(GetCarouselCenterSlot());
+    RECT targetWindowRect = {};
+    if (!GetWindowRect(target, &targetWindowRect))
+    {
+        g_pendingActivationTarget = target;
+        g_cleanupInProgress = true;
+        DestroySelector();
+        g_state = SelectorState::Idle;
+        g_cleanupInProgress = false;
+        CleanupKeyboardState();
+        ActivateWindow(target);
+        return;
+    }
+    RECT work = monitorInfo.rcWork;
+    const int workWidth = work.right - work.left;
+    const int workHeight = work.bottom - work.top;
+    if (workWidth <= 0 || workHeight <= 0 || card.right <= card.left || card.bottom <= card.top)
+    {
+        g_pendingActivationTarget = target;
+        g_cleanupInProgress = true;
+        DestroySelector();
+        g_state = SelectorState::Idle;
+        g_cleanupInProgress = false;
+        CleanupKeyboardState();
+        ActivateWindow(target);
+        return;
+    }
+    g_selectionExpansionActive = true;
+    g_selectionExpansionFinishPending = false;
+    g_selectionExpansionTarget = target;
+    g_selectionExpansionWorkRect = work;
+    g_selectionExpansionSceneOffset = POINT{
+        selectorClientOrigin.x - work.left, selectorClientOrigin.y - work.top };
+    g_selectionExpansionStartRect = RECT{
+        selectorClientOrigin.x + card.left - work.left,
+        selectorClientOrigin.y + card.top - work.top,
+        selectorClientOrigin.x + card.right - work.left,
+        selectorClientOrigin.y + card.bottom - work.top };
+    g_selectionExpansionDestinationRect = RECT{
+        targetWindowRect.left - work.left,
+        targetWindowRect.top - work.top,
+        targetWindowRect.right - work.left,
+        targetWindowRect.bottom - work.top };
+    g_selectionExpansionRect = g_selectionExpansionStartRect;
+    g_selectionExpansionProgress = 0.0f;
+    g_pendingActivationTarget = target;
+    InterlockedExchange(&g_selectionTransitionActive, 1);
+    g_uiTabDown = false;
+    g_tabRepeatStarted = false;
+    KillTimer(g_selector, kTabRepeatTimerId);
+    UiSetInteractive(false);
+    g_selectorAnimation = SelectorAnimationState::SelectionExpansion;
+    // El HWND pasa a cubrir el monitor sin activar ni cambiar el orden Z.
+    SetWindowPos(g_selector, HWND_TOPMOST, work.left, work.top,
+                 workWidth, workHeight, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    // Recalibrar contra el cliente real después del resize. Así el destino
+    // ocupa exactamente todos los píxeles que el renderer puede dibujar, sin
+    // desplazamiento lateral por marcos, DPI o coordenadas de monitor.
+    RECT clientAfterResize = {};
+    POINT clientAfterOrigin = { 0, 0 };
+    if (GetClientRect(g_selector, &clientAfterResize) &&
+        ClientToScreen(g_selector, &clientAfterOrigin))
+    {
+        g_selectionExpansionWorkRect = RECT{
+            0, 0, clientAfterResize.right, clientAfterResize.bottom };
+        g_selectionExpansionSceneOffset = POINT{
+            selectorClientOrigin.x - clientAfterOrigin.x,
+            selectorClientOrigin.y - clientAfterOrigin.y };
+        g_selectionExpansionStartRect = RECT{
+            selectorClientOrigin.x + card.left - clientAfterOrigin.x,
+            selectorClientOrigin.y + card.top - clientAfterOrigin.y,
+            selectorClientOrigin.x + card.right - clientAfterOrigin.x,
+            selectorClientOrigin.y + card.bottom - clientAfterOrigin.y };
+        g_selectionExpansionDestinationRect = RECT{
+            targetWindowRect.left - clientAfterOrigin.x,
+            targetWindowRect.top - clientAfterOrigin.y,
+            targetWindowRect.right - clientAfterOrigin.x,
+            targetWindowRect.bottom - clientAfterOrigin.y };
+        g_selectionExpansionRect = g_selectionExpansionStartRect;
+    }
+    g_selectionExpansionDurationMs = CalculateSelectionExpansionDurationMs(
+        g_selectionExpansionStartRect, g_selectionExpansionDestinationRect,
+        g_selectionExpansionWorkRect);
+    g_selectionExpansionStart = FrameClockNow();
+    UpdateSelectorSurfaceTransform();
+    UpdateThumbnailSlots();
+    RequestFrame();
+}
+static void UpdateSelectionExpansion()
+{
+    if (!IsSelectionExpansionActive())
+        return;
+    if (!g_selectionExpansionFinishPending)
+    {
+        const float raw = ElapsedFraction(g_selectionExpansionStart,
+                                           AnimationDuration(g_selectionExpansionDurationMs));
+        // Misma estrategia de desplazamiento agresivo usada por el renderer:
+        // respuesta inmediata, avance fuerte al inicio y llegada exacta al
+        // destino sin overshoot ni rebote adicional.
+        const float eased = EaseOutExp(raw, 7.0f);
+        g_selectionExpansionProgress = eased;
+        g_selectionExpansionRect = LerpRect(g_selectionExpansionStartRect,
+                                             g_selectionExpansionDestinationRect,
+                                             eased);
+        if (raw >= 1.0f)
+            g_selectionExpansionFinishPending = true;
+    }
+    else
+    {
+        HWND target = g_selectionExpansionTarget;
+        g_selectionExpansionActive = false;
+        InterlockedExchange(&g_selectionTransitionActive, 0);
+        g_selectionExpansionTarget = nullptr;
+        g_pendingActivationTarget = nullptr;
+        g_selectorAnimation = SelectorAnimationState::None;
+        g_cleanupInProgress = true;
+        DestroySelector();
+        g_state = SelectorState::Idle;
+        g_cleanupInProgress = false;
+        CleanupKeyboardState();
+        ActivateWindow(target);
+        return;
+    }
+    UpdateSelectorSurfaceTransform();
+    UpdateSelectorControls();
+}
 static void UpdateSelectorMotion()
 {
     if (!g_selector || !IsWindow(g_selector))
         return;
     if (g_selectorAnimation == SelectorAnimationState::Open && !g_animActive)
         return;
+    if (g_selectorAnimation == SelectorAnimationState::SelectionExpansion)
+    {
+        UpdateSelectionExpansion();
+        return;
+    }
     if (g_selectorAnimation == SelectorAnimationState::CardExit)
     {
         g_cardExitProgress = ElapsedFraction(g_cardExitStart, AnimationDuration(360.0f));
@@ -3770,7 +3991,6 @@ static void UpdateSelectorMotion()
             g_cardExitActive = false;
             g_cardExitProgress = 0.0f;
             g_cardExitSlot = -1;
-            g_cardExitGroupIndex = -1;
             g_cardExitTarget = nullptr;
             g_selectorAnimation = SelectorAnimationState::Open;
             if (target && IsWindow(target) && PostMessageW(target, WM_CLOSE, 0, 0))
@@ -3913,11 +4133,12 @@ static bool QueryVBlank(double& vblankMs, double& periodMs)
                 reinterpret_cast<DwmGetCompositionTimingInfoFn>(
                     GetProcAddress(g_dwmApi, "DwmGetCompositionTimingInfo"));
     }
-    if (!g_dwmGetCompositionTimingInfo || !g_selector)
+    if (!g_dwmGetCompositionTimingInfo)
         return false;
-    DwmTimingInfoLocal info = {};
+    DWM_TIMING_INFO info = {};
     info.cbSize = sizeof(info);
-    if (FAILED(g_dwmGetCompositionTimingInfo(g_selector, &info)))
+    // Windows 8.1 and newer require a null HWND for this query.
+    if (FAILED(g_dwmGetCompositionTimingInfo(nullptr, &info)))
         return false;
     const double toMs = 1000.0 / static_cast<double>(g_qpcFrequency > 0 ? g_qpcFrequency : 1);
     periodMs = static_cast<double>(info.qpcRefreshPeriod) * toMs;
@@ -3995,6 +4216,7 @@ static bool SceneIsAnimating()
            g_selectorAnimation == SelectorAnimationState::Opening ||
            g_selectorAnimation == SelectorAnimationState::SelectionChange ||
            g_selectorAnimation == SelectorAnimationState::CardExit ||
+           g_selectorAnimation == SelectorAnimationState::SelectionExpansion ||
            g_selectorAnimation == SelectorAnimationState::Closing;
 }
 
@@ -4141,7 +4363,7 @@ static void PaintSlotHeaderD2D(int slot, int groupIndex, bool selected, float di
 {
     RECT rc = GetSlotHeaderRect(slot);
     AppGroup& group = g_groups[groupIndex];
-    const std::wstring& text = MakeSlotDisplayText(group, selected, slot);
+    const std::wstring& text = MakeSlotDisplayText(group);
 
     int iconSize = ScaleLayoutPx(static_cast<float>(selected ? 20 : (distFromCenter < 1.5f ? 18 : 16)));
     int paddingLeft = ScaleLayoutPx(static_cast<float>(selected ? 10 : (distFromCenter < 1.5f ? 8 : 6)));
@@ -4211,7 +4433,7 @@ static void PaintSlotHeaderGDI(HDC hdc, int slot, int groupIndex, bool selected,
 {
     RECT rc = GetSlotHeaderRect(slot);
     AppGroup& group = g_groups[groupIndex];
-    const std::wstring& text = MakeSlotDisplayText(group, selected, slot);
+    const std::wstring& text = MakeSlotDisplayText(group);
 
     int iconSize = ScaleLayoutPx(static_cast<float>(selected ? 20 : (distFromCenter < 1.5f ? 18 : 16)));
     int paddingLeft = ScaleLayoutPx(static_cast<float>(selected ? 10 : (distFromCenter < 1.5f ? 8 : 6)));
@@ -4541,8 +4763,8 @@ static void DrawPatternWaves(const RECT& clientRect)
     if (width <= 0 || height <= 0)
         return;
 
-    const ULONGLONG drawStart = GetTickCount64();
-    UpdatePatternRenderCache(static_cast<float>(drawStart) / 1000.0f);
+    const double drawStartMs = QpcNowMs();
+    UpdatePatternRenderCache(static_cast<float>(drawStartMs / 1000.0));
     // La calidad adaptativa controla la cadencia, no la geometría del patrón.
     // Así una variación de rendimiento no cambia tamaño/posición de los dots.
     // Density controls the visual grid independently from the low-resolution
@@ -4623,18 +4845,17 @@ static void DrawPatternWaves(const RECT& clientRect)
     // No restablecer aquí el transform: el caller conserva el mismo transform
     // de escena para continuar dibujando cards/UI de forma consistente.
 
-    // Ajuste con histéresis fuerte. GetTickCount64 tiene una granularidad que
-    // puede convertir un render de 0 ms en 15/16 ms de una muestra a otra;
-    // reaccionar a una sola medición cambia el grid y produce saltos visuales.
-    // Esto solo modifica la densidad propia del fondo, nunca layout/transform UI.
-    ULONGLONG drawMs = GetTickCount64() - drawStart;
-    ULONGLONG now = GetTickCount64();
-    if (drawMs >= 12)
+    // QPC gives sub-millisecond draw-cost samples; hysteresis prevents isolated
+    // slow frames from changing the background quality and causing visual jumps.
+    // This only adjusts the background's own density, never the UI layout.
+    const double drawMs = QpcNowMs() - drawStartMs;
+    const ULONGLONG now = GetTickCount64();
+    if (drawMs >= 12.0)
     {
         ++g_patternSlowSamples;
         g_patternFastSamples = 0;
     }
-    else if (drawMs <= 4)
+    else if (drawMs <= 4.0)
     {
         ++g_patternFastSamples;
         g_patternSlowSamples = 0;
@@ -4812,6 +5033,8 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
         // Clear completamente para dejar que DWM glass sea visible
         g_d2dDCRenderTarget->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
         RECT sceneRect = { 0, 0, g_runtimeSelectorWidth, g_runtimeSelectorHeight };
+        if (g_selectionExpansionActive)
+            GetClientRect(hwnd, &sceneRect);
         g_d2dDCRenderTarget->PushAxisAlignedClip(
             D2D1::RectF(0.0f, 0.0f,
                         static_cast<float>(sceneRect.right),
@@ -4836,7 +5059,8 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
         // El background y el contenedor forman parte de la misma escena que
         // las cards: deben acompañar la escala de apertura/cierre y compartir
         // su pivote central.
-        if (sceneScaleX != 1.0f || sceneScaleY != 1.0f)
+        if (sceneScaleX != 1.0f || sceneScaleY != 1.0f ||
+            g_selectionExpansionActive)
         {
             g_d2dDCRenderTarget->SetTransform(GetSceneTransform());
         }
@@ -5134,7 +5358,27 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
             }
         }
 
-        PaintCounterD2D();
+        if (g_selectionExpansionActive && g_d2dDCRenderTarget)
+        {
+            // El rectángulo de expansión ya está expresado en coordenadas del
+            // cliente ampliado, no en la escena original trasladada.
+            g_d2dDCRenderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
+            const float p = g_selectionExpansionProgress;
+            const float radius = std::max(0.0f, DpiPx(14.0f) * (1.0f - p));
+            D2D1_ROUNDED_RECT expansionRect = D2D1::RoundedRect(
+                D2D1::RectF(static_cast<float>(g_selectionExpansionRect.left),
+                            static_cast<float>(g_selectionExpansionRect.top),
+                            static_cast<float>(g_selectionExpansionRect.right),
+                            static_cast<float>(g_selectionExpansionRect.bottom)),
+                radius, radius);
+            g_d2dBrush->SetColor(D2D1::ColorF(0.18f, 0.20f, 0.24f,
+                                               0.70f * (1.0f - p) + 0.18f));
+            g_d2dDCRenderTarget->DrawRoundedRectangle(&expansionRect,
+                                                       g_d2dBrush,
+                                                       DpiPx(1.5f));
+        }
+        if (!g_selectionExpansionActive)
+            PaintCounterD2D();
         if (sceneOpacityLayer)
         {
             g_d2dDCRenderTarget->PopLayer();
@@ -5364,6 +5608,13 @@ static void UpdateSelectorSurfaceTransform()
 {
     if (!g_selector || !IsWindow(g_selector))
         return;
+    if (g_selectionExpansionActive)
+    {
+        // La expansión ocupa toda el área de trabajo; no redondear el HWND en
+        // esta fase porque la tarjeta debe llegar hasta los bordes de la pantalla.
+        SetWindowRgn(g_selector, nullptr, TRUE);
+        return;
+    }
 
     // The selector HWND remains physically fixed. Opening/closing animations
     // are rendered entirely by D2D; no separate blur surface is used.
@@ -5540,20 +5791,26 @@ static void HideSelectorForSession()
 {
     if (!g_selector || !IsWindow(g_selector))
         return;
-
-    KillTimer(g_selector, kAnimTimerId);
+    InterlockedExchange(&g_selectionTransitionActive, 0);
     KillTimer(g_selector, kTabRepeatTimerId);
     DisarmFramePump();
     KillTimer(g_selector, kPatternTimerId);
     KillTimer(g_selector, kActivityTimerId);
     g_tabRepeatStarted = false;
     g_uiTabDown = false;
+    g_backgroundSpotlightActive = false;
 
     // No conservar superficies DWM registradas mientras el selector está oculto:
     // así ninguna miniatura puede sobrevivir visualmente al cierre. La siguiente
     // sesión las registra de nuevo mediante UpdateThumbnailSlots.
     UnregisterAllThumbnails();
     ShowWindow(g_selector, SW_HIDE);
+    if (g_selectorFocusTaken)
+    {
+        SetWindowLongPtrW(g_selector, GWL_EXSTYLE,
+                          GetWindowLongPtrW(g_selector, GWL_EXSTYLE) | WS_EX_NOACTIVATE);
+        g_selectorFocusTaken = false;
+    }
     UiSetInteractive(false);
     g_selectorAnimation = SelectorAnimationState::None;
     g_sceneScaleX = 1.0f;
@@ -5561,15 +5818,19 @@ static void HideSelectorForSession()
     g_sceneOpacity = 1.0f;
     g_scenePresence = 1.0f;
     g_carouselSpread = 1.0f;
-    g_selectionTiltDirection = 0.0f;
     g_cardSnapScale = 1.0f;
     g_animActive = false;
     g_animOffset = 0.0f;
     g_animStartOffset = 0.0f;
     g_cardExitActive = false;
     g_cardExitSlot = -1;
-    g_cardExitGroupIndex = -1;
     g_cardExitTarget = nullptr;
+    g_selectionExpansionActive = false;
+    g_selectionExpansionFinishPending = false;
+    g_selectionExpansionTarget = nullptr;
+    g_selectionExpansionDestinationRect = {};
+    g_selectionExpansionSceneOffset = {};
+    g_selectionExpansionProgress = 0.0f;
     g_hoveredSlot = -1;
     g_hoveredCloseButton = false;
     g_selectorOpening = false;
@@ -5594,8 +5855,7 @@ static void ShutdownPersistentSelector()
 
     if (g_selector && IsWindow(g_selector))
     {
-        KillTimer(g_selector, kAnimTimerId);
-        KillTimer(g_selector, kTabRepeatTimerId);
+            KillTimer(g_selector, kTabRepeatTimerId);
         DisarmFramePump();
         KillTimer(g_selector, kPatternTimerId);
         KillTimer(g_selector, kActivityTimerId);
@@ -5630,10 +5890,13 @@ static void EmergencyCloseSelector()
     LeaveActiveState(SelectorState::Canceling);
     if (g_selector && IsWindow(g_selector))
         KillTimer(g_selector, kTabRepeatTimerId);
+    HWND restoreFocus = FocusRestoreTarget();
     DestroySelector();
     g_state = SelectorState::Idle;
     g_cleanupInProgress = false;
     CleanupKeyboardState();
+    if (restoreFocus)
+        ActivateWindow(restoreFocus);
 }
 
 static void UpdateCarouselAnimation(HWND)
@@ -5676,7 +5939,6 @@ static void StartSlide(int steps)
         g_selectorAnimation = SelectorAnimationState::SelectionChange;
         g_selectorAnimationStart = FrameClockNow();
     }
-    g_selectionTiltDirection = steps > 0 ? -1.0f : 1.0f;
 
     int count = static_cast<int>(g_groups.size());
     g_selected = (g_selected + steps) % count;
@@ -5791,7 +6053,35 @@ static void ActivateWindowOnInputThread(HWND target)
     if (IsIconic(target))
         ShowWindowAsync(target, SW_RESTORE);
 
+    // La activación se ejecuta en el hilo de entrada, que es el que recibe la
+    // pulsación de Alt+Tab. Primero se usa la ruta normal y se cede el permiso
+    // de foreground; esto cubre la mayoría de ventanas elevadas sin tocar
+    // Explorer.
+    AllowSetForegroundWindow(ASFW_ANY);
     SetForegroundWindow(target);
+    if (GetForegroundWindow() == target)
+        return;
+
+    // Algunas ventanas con mayor integridad aceptan la restauración pero no
+    // el cambio de cola activa en el primer intento. Unir temporalmente las
+    // colas del hilo de entrada y de la ventana destino permite completar la
+    // activación sin suspender Explorer ni modificar su ciclo de mensajes.
+    DWORD targetThreadId = GetWindowThreadProcessId(target, nullptr);
+    DWORD inputThreadId = GetCurrentThreadId();
+    bool attached = targetThreadId != 0 && targetThreadId != inputThreadId &&
+                    AttachThreadInput(inputThreadId, targetThreadId, TRUE) != FALSE;
+    if (attached)
+    {
+        SetForegroundWindow(target);
+        SetActiveWindow(target);
+        SetFocus(target);
+        AttachThreadInput(inputThreadId, targetThreadId, FALSE);
+    }
+
+    // Un último intento después de separar las colas evita dejar una relación
+    // de entrada persistente si la ventana realizó su propia transición.
+    if (GetForegroundWindow() != target)
+        SetForegroundWindow(target);
 }
 
 static void ConfirmSelection()
@@ -5810,27 +6100,60 @@ static void ConfirmSelection()
     if (target && target == g_selectorOriginWindow)
     {
         LeaveActiveState(SelectorState::Canceling);
-        StartSelectorClose(nullptr);
+        StartSelectorClose(FocusRestoreTarget());
         return;
     }
 
-    // Confirmar una ventana no es una cancelación: no ejecutar el CRT.
-    // El selector se limpia inmediatamente y la ventana destino se activa.
-    g_cleanupInProgress = true;
-    DestroySelector();
-    g_state = SelectorState::Idle;
-    g_cleanupInProgress = false;
-    CleanupKeyboardState();
-    ActivateWindow(target);
+    // La confirmación conserva el selector visible y comienza la expansión de
+    // la tarjeta seleccionada. Si el monitor, el HWND o el renderer no pueden
+    // sostenerla, StartSelectionExpansion aplica el fallback inmediato.
+    if (!target || !IsWindow(target))
+    {
+        g_cleanupInProgress = true;
+        DestroySelector();
+        g_state = SelectorState::Idle;
+        g_cleanupInProgress = false;
+        CleanupKeyboardState();
+        ActivateWindow(target);
+        return;
+    }
+    if (!g_expandSelectedWindow)
+    {
+        // Modo directo: conservar la confirmación y la activación originales,
+        // pero sin ejecutar la expansión visual de 240 ms.
+        g_cleanupInProgress = true;
+        DestroySelector();
+        g_state = SelectorState::Idle;
+        g_cleanupInProgress = false;
+        CleanupKeyboardState();
+        ActivateWindow(target);
+        return;
+    }
+    StartSelectionExpansion(target);
 }
 
 static void CancelSelection()
 {
+    if (IsSelectionExpansionActive())
+    {
+        HWND restore = FocusRestoreTarget();
+        g_selectionExpansionActive = false;
+        InterlockedExchange(&g_selectionTransitionActive, 0);
+        g_selectionExpansionTarget = nullptr;
+        g_pendingActivationTarget = nullptr;
+        g_cleanupInProgress = true;
+        DestroySelector();
+        g_state = SelectorState::Idle;
+        g_cleanupInProgress = false;
+        CleanupKeyboardState();
+        ActivateWindow(restore);
+        return;
+    }
     if ((!IsSelectorActuallyActive() && !g_selector) || g_cleanupInProgress)
         return;
 
     LeaveActiveState(SelectorState::Canceling);
-    StartSelectorClose(nullptr);
+    StartSelectorClose(FocusRestoreTarget());
 }
 
 // COMANDOS EN EL UI THREAD
@@ -5840,8 +6163,39 @@ static bool UiCommandMatchesSession(WPARAM sessionId)
     return static_cast<LONG>(sessionId) == g_uiSessionId && IsSelectorActive();
 }
 
-static void UiOpen(LONG sessionId, bool shiftHeld)
+// Solo para sesiones iniciadas por el hotkey de Explorer: el foco estaba en una
+// ventana elevada, cuyas teclas el hook no ve. Explorer ya concedió
+// AllowSetForegroundWindow a este proceso, así que el selector toma el foco una
+// sola vez (sin reintentos) y el resto de la sesión vuelve a pasar por el hook.
+// WS_EX_NOACTIVATE se retira solo durante la sesión; HideSelectorForSession lo
+// restablece. Si falla, la sesión sigue con Tab (hotkey) y el sondeo de Alt.
+static void UiTakeForeground()
 {
+    if (!g_selector || !IsWindow(g_selector))
+        return;
+    LONG_PTR exStyle = GetWindowLongPtrW(g_selector, GWL_EXSTYLE);
+    SetWindowLongPtrW(g_selector, GWL_EXSTYLE, exStyle & ~WS_EX_NOACTIVATE);
+    g_selectorFocusTaken = SetForegroundWindow(g_selector) != FALSE;
+    if (!g_selectorFocusTaken)
+    {
+        SetWindowLongPtrW(g_selector, GWL_EXSTYLE, exStyle | WS_EX_NOACTIVATE);
+        Wh_Log(L"Selector could not take the foreground");
+    }
+}
+
+// Si el selector tomó el foco, cancelar debe devolverlo a la ventana de origen.
+static HWND FocusRestoreTarget()
+{
+    if (g_selectorFocusTaken && g_selectorOriginWindow &&
+        IsWindow(g_selectorOriginWindow))
+        return g_selectorOriginWindow;
+    return nullptr;
+}
+
+static void UiOpen(LONG sessionId, bool shiftHeld, bool fromHotkey)
+{
+    if (InterlockedCompareExchange(&g_selectionTransitionActive, 0, 0) != 0)
+        return;
     g_uiSessionId = sessionId;
     g_uiTabDown = false;
     g_state = SelectorState::SelectorActive;
@@ -5855,6 +6209,12 @@ static void UiOpen(LONG sessionId, bool shiftHeld)
     }
 
     UiSetInteractive(true);
+    if (fromHotkey)
+    {
+        // El hook no vio este Tab: no hay keyup que detenga un autorepeat.
+        UiTakeForeground();
+        return;
+    }
     g_uiTabDown = true;
     g_tabRepeatStarted = false;
     SetTimer(g_selector, kTabRepeatTimerId, kTabRepeatInitialDelayMs, nullptr);
@@ -5976,7 +6336,8 @@ static void HandleUiCommand(const MSG& msg)
     switch (msg.message)
     {
     case WM_UI_OPEN:
-        UiOpen(static_cast<LONG>(msg.wParam), msg.lParam != 0);
+        UiOpen(static_cast<LONG>(msg.wParam), (msg.lParam & kUiOpenShift) != 0,
+               (msg.lParam & kUiOpenFromHotkey) != 0);
         break;
 
     case WM_UI_TAB_DOWN:
@@ -6114,15 +6475,55 @@ static void SendAltMenuMaskIfNeeded()
     g_altMenuMaskPending = false;
 }
 
-// Al soltar modificadores: confirmar si termina la sesión y desarmar el bloqueo
-// de Ctrl+Alt+Flecha cuando AltGr ya no está pulsado.
+// El modo normal confirma al finalizar Alt; AltGr es deliberadamente persistente
+// y solo se cierra mediante Enter, clic o Escape.
 static void OnModifierReleased()
 {
-    if (InputSessionActive() && SessionModifierReleased())
+    if (InputSessionActive() &&
+        g_sessionModifier != ModifierSession::AltGr &&
+        SessionModifierReleased())
         InputEndSession(WM_UI_CONFIRM);
     g_altGrActive = IsAltGrPhysicallyDown();
     if (!InputSessionActive() && !g_altGrActive)
         g_altGrTaskSwitcherArmed = false;
+}
+
+// Alta de sesión compartida por el hook de teclado y por el hotkey reenviado
+// desde Explorer, para que ambos caminos no puedan divergir. Solo input thread.
+// Devuelve false (con el estado ya limpio) si el UI thread no aceptó la orden.
+static bool StartInputSession(bool leftAlt, bool rightAlt, bool ctrlHeld,
+                              bool shift, bool fromHotkey)
+{
+    const bool altGrHeld = rightAlt && ctrlHeld;
+    LONG id = InterlockedIncrement(&g_nextSessionId);
+    if (id == 0)
+        id = InterlockedIncrement(&g_nextSessionId);
+
+    g_inputSessionId = id;
+    InterlockedExchange(&g_sessionActive, id);
+    g_sessionModifier = altGrHeld
+        ? ModifierSession::AltGr
+        : (leftAlt ? ModifierSession::LeftAlt : ModifierSession::RightAlt);
+    // Si el Tab llegó por hotkey, el hook no lo vio: no hay un keyup que
+    // esperar y no debe quedar marcado como pulsado/suprimido.
+    g_tabDown = !fromHotkey;
+    g_tabSuppressed = !fromHotkey;
+    g_altGrActive = altGrHeld;
+    g_altGrTaskSwitcherArmed = altGrHeld;
+
+    const bool posted = PostUiCommand(
+        WM_UI_OPEN, static_cast<WPARAM>(id),
+        (shift ? kUiOpenShift : 0) | (fromHotkey ? kUiOpenFromHotkey : 0));
+    if (posted)
+    {
+        g_altMenuMaskPending = !altGrHeld;
+        return true;
+    }
+
+    InterlockedCompareExchange(&g_sessionActive, 0, id);
+    ClearSelectorKeyboardSession();
+    g_altGrTaskSwitcherArmed = false;
+    return false;
 }
 
 static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
@@ -6152,15 +6553,6 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
     bool isLeftCtrl = (vk == VK_LCONTROL) || (vk == VK_CONTROL && (key->flags & LLKHF_EXTENDED) == 0);
     bool isRightCtrl = (vk == VK_RCONTROL) || (vk == VK_CONTROL && (key->flags & LLKHF_EXTENDED) != 0);
 
-    // This tool mod runs inside windhawk.exe. Consume Alt only while its
-    // process owns the foreground window; all other applications retain the
-    // normal Alt behavior.
-    bool windhawkForeground = false;
-    HWND foreground = GetForegroundWindow();
-    DWORD foregroundProcessId = 0;
-    if (foreground && GetWindowThreadProcessId(foreground, &foregroundProcessId))
-        windhawkForeground = foregroundProcessId == GetCurrentProcessId();
-
     if (isLeftAlt)
     {
         if (down)
@@ -6169,15 +6561,10 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
         {
             g_altLeftDown = false;
             SendAltMenuMaskIfNeeded();
-            if (InputSessionActive() && SessionModifierReleased())
-                OnModifierReleased();
+            OnModifierReleased();
         }
         else
             g_altGrActive = IsAltGrPhysicallyDown();
-        if (windhawkForeground)
-        {
-            return 1;
-        }
         return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
     }
 
@@ -6189,15 +6576,10 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
         {
             g_altRightDown = false;
             SendAltMenuMaskIfNeeded();
-            if (InputSessionActive() && SessionModifierReleased())
-                OnModifierReleased();
+            OnModifierReleased();
         }
         else
             g_altGrActive = IsAltGrPhysicallyDown();
-        if (windhawkForeground)
-        {
-            return 1;
-        }
         return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
     }
 
@@ -6285,6 +6667,13 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
     {
         if (down)
         {
+            if (!sessionActive &&
+                InterlockedCompareExchange(&g_selectionTransitionActive, 0, 0) != 0)
+            {
+                // Consumir también el Tab inicial evita abrir el selector
+                // nativo mientras DWM presenta la ventana confirmada.
+                return 1;
+            }
             if (!sessionActive)
             {
                 // Alt izquierdo, Alt derecho y AltGr se distinguen a partir del
@@ -6303,50 +6692,22 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
 
                 if (leftAlt || rightAlt)
                 {
-                    LONG id = InterlockedIncrement(&g_nextSessionId);
-                    if (id == 0)
-                        id = InterlockedIncrement(&g_nextSessionId);
                     bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-
-                    g_inputSessionId = id;
-                    InterlockedExchange(&g_sessionActive, id);
-                    g_sessionModifier = altGrHeld
-                        ? ModifierSession::AltGr
-                        : (leftAlt ? ModifierSession::LeftAlt
-                                   : ModifierSession::RightAlt);
-                    g_tabDown = true;
-                    g_tabSuppressed = true;
-                    g_altGrActive = altGrHeld;
-                    g_altGrTaskSwitcherArmed = altGrHeld;
 
                     // La primera pulsación se consume EN ESTE MISMO callback.
                     // No esperamos a que el UI thread abra el selector antes de
                     // bloquearla: Windows nunca recibe este Tab como Alt+Tab.
-                    const bool posted = PostUiCommand(
-                        WM_UI_OPEN, static_cast<WPARAM>(id), shift ? 1 : 0);
-
-                    if (posted)
-                    {
-                        g_altMenuMaskPending = !altGrHeld;
+                    if (StartInputSession(leftAlt, rightAlt, ctrlHeld, shift, false))
                         return 1;
-                    }
 
                     // Para AltGr el bloqueo es deliberado incluso si el UI thread
                     // no está disponible. Es preferible perder esa pulsación a
                     // dejar que Windows abra su Task Switcher nativo.
                     if (altGrHeld)
-                    {
-                        InterlockedCompareExchange(&g_sessionActive, 0, id);
-                        ClearSelectorKeyboardSession();
-                        g_altGrTaskSwitcherArmed = false;
                         return 1;
-                    }
 
                     // Alt/Alt+Tab tradicional conserva su fallback anterior si
                     // nuestro UI no está disponible.
-                    InterlockedCompareExchange(&g_sessionActive, 0, id);
-                    ClearSelectorKeyboardSession();
-                    g_altGrTaskSwitcherArmed = false;
                     return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
                 }
             }
@@ -6364,10 +6725,19 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
         }
         else if (up)
         {
+            // Alt+Tab confirma al soltar Tab. Ctrl+Alt+Tab (AltGr) conserva
+            // el selector abierto hasta que el usuario pulse Enter o haga clic.
+            const bool confirmOnTabRelease =
+                sessionActive && g_sessionModifier != ModifierSession::AltGr;
             g_tabDown = false;
             if (sessionActive)
             {
                 PostUiCommand(WM_UI_TAB_UP, static_cast<WPARAM>(g_inputSessionId), 0);
+            }
+            if (confirmOnTabRelease)
+            {
+                InputEndSession(WM_UI_CONFIRM);
+                return 1;
             }
             if (sessionActive || g_tabSuppressed)
             {
@@ -6448,6 +6818,108 @@ static LRESULT CALLBACK MouseHook(int nCode, WPARAM wParam, LPARAM lParam)
     return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
 }
 
+// HOTKEY REENVIADO DESDE EXPLORER (input thread)
+//
+// El hook WH_KEYBOARD_LL no recibe las teclas mientras una ventana elevada tiene
+// el foco, y Windows abre entonces su selector nativo. Explorer sí recibe el
+// WM_HOTKEY y lo entrega a la ventana de control (ver sección EXPLORER). Se
+// procesa en el input thread, el mismo que ejecuta el hook, por lo que el
+// estado de sesión nunca se toca desde dos hilos.
+
+static void InputSyncModifiersFromSystem()
+{
+    g_altLeftDown = (GetAsyncKeyState(VK_LMENU) & 0x8000) != 0;
+    g_altRightDown = (GetAsyncKeyState(VK_RMENU) & 0x8000) != 0;
+    g_ctrlLeftDown = (GetAsyncKeyState(VK_LCONTROL) & 0x8000) != 0;
+    g_ctrlRightDown = (GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0;
+    g_altGrActive = IsAltGrPhysicallyDown();
+}
+
+static void InputHandleForwardedHotkey(HWND control, WPARAM flags)
+{
+    if (InterlockedCompareExchange(&g_shutdownRequested, 0, 0) != 0)
+        return;
+    if (InterlockedCompareExchange(&g_selectionTransitionActive, 0, 0) != 0)
+        return;
+
+    SyncInputSession();
+    const bool shift = (flags & kHotkeyFlagBackwards) != 0;
+
+    if (InputSessionActive())
+    {
+        // La sesión ya existe y el hook no vio esta pulsación (por eso llegó el
+        // hotkey): un único paso de navegación, sin segunda sesión.
+        PostUiCommand(WM_UI_NAVIGATE, static_cast<WPARAM>(g_inputSessionId),
+                      static_cast<LPARAM>(shift ? -1 : 1));
+        return;
+    }
+
+    // El hook pudo no ver los modificadores: se toman del estado real.
+    InputSyncModifiersFromSystem();
+    bool leftAlt = g_altLeftDown;
+    const bool rightAlt = g_altRightDown;
+    if (!leftAlt && !rightAlt)
+    {
+        // El hotkey garantiza que Alt está pulsado aunque no se lea todavía.
+        g_altLeftDown = true;
+        leftAlt = true;
+    }
+    const bool ctrlHeld = g_ctrlLeftDown || g_ctrlRightDown ||
+                          (flags & kHotkeyFlagCtrl) != 0;
+
+    if (!StartInputSession(leftAlt, rightAlt, ctrlHeld, shift, true))
+        return;
+
+    g_hotkeySession = true;
+    g_hotkeyReleaseCount = 0;
+    SetTimer(control, kHotkeyPollTimerId, kHotkeyPollMs, nullptr);
+}
+
+// Respaldo de la suelta de Alt: si el hook no la vio (el Alt se soltó antes de
+// que el selector tomara el foco), se confirma cuando el Alt físico lleva unos
+// instantes suelto.
+static void InputPollHotkeySession(HWND control)
+{
+    if (!g_hotkeySession || !InputSessionActive())
+    {
+        g_hotkeySession = false;
+        KillTimer(control, kHotkeyPollTimerId);
+        return;
+    }
+
+    const bool altHeld = (GetAsyncKeyState(VK_LMENU) & 0x8000) != 0 ||
+                         (GetAsyncKeyState(VK_RMENU) & 0x8000) != 0;
+    if (altHeld)
+    {
+        g_hotkeyReleaseCount = 0;
+        return;
+    }
+    if (++g_hotkeyReleaseCount < kHotkeyReleaseTicks)
+        return;
+
+    g_hotkeySession = false;
+    KillTimer(control, kHotkeyPollTimerId);
+    InputSyncModifiersFromSystem();
+    SendAltMenuMaskIfNeeded();
+    OnModifierReleased();
+}
+
+static LRESULT CALLBACK InputControlProc(HWND hwnd, UINT message, WPARAM wParam,
+                                         LPARAM lParam)
+{
+    if (g_hotkeyMessage != 0 && message == g_hotkeyMessage)
+    {
+        InputHandleForwardedHotkey(hwnd, wParam);
+        return 0;
+    }
+    if (message == WM_TIMER && wParam == kHotkeyPollTimerId)
+    {
+        InputPollHotkeySession(hwnd);
+        return 0;
+    }
+    return DefWindowProcW(hwnd, message, wParam, lParam);
+}
+
 // HILOS
 
 static DWORD WINAPI InputThreadProc(LPVOID)
@@ -6461,8 +6933,25 @@ static DWORD WINAPI InputThreadProc(LPVOID)
     InputResetKeyboardState();
 
     bool ok = false;
-    HWND control = CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 0, 0,
-                                   HWND_MESSAGE, nullptr, g_hModule, nullptr);
+    WNDCLASSEXW controlClass = {};
+    controlClass.cbSize = sizeof(controlClass);
+    controlClass.lpfnWndProc = InputControlProc;
+    controlClass.hInstance = g_hModule;
+    controlClass.lpszClassName = kInputControlClass;
+    const bool controlClassRegistered =
+        RegisterClassExW(&controlClass) != 0 ||
+        GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
+    HWND control = controlClassRegistered
+        ? CreateWindowExW(0, kInputControlClass, kInputControlTitleIdle, 0,
+                          0, 0, 0, 0, HWND_MESSAGE, nullptr, g_hModule, nullptr)
+        : nullptr;
+    if (control && g_hotkeyMessage != 0)
+    {
+        // Explorer publica el hotkey desde otro proceso: permitirlo aunque esta
+        // herramienta tenga otro nivel de integridad.
+        ChangeWindowMessageFilterEx(control, g_hotkeyMessage, MSGFLT_ALLOW,
+                                    nullptr);
+    }
     if (!control)
     {
         Wh_Log(L"Input control window creation failed: %lu", GetLastError());
@@ -6492,6 +6981,11 @@ static DWORD WINAPI InputThreadProc(LPVOID)
     }
     if (!ok && control)
         Wh_Log(L"Input thread initialization failed");
+
+    // Hooks instalados y UI thread ya listo (se inicia antes): explorer puede
+    // empezar a reenviar el hotkey.
+    if (ok && control)
+        SetWindowTextW(control, kInputControlTitleReady);
 
     InterlockedExchange(&g_inputInitOk, ok ? 1 : 0);
     SetEvent(g_inputReadyEvent);
@@ -6538,7 +7032,11 @@ static DWORD WINAPI InputThreadProc(LPVOID)
         }
     }
 
-    // El propio hilo retira sus hooks y destruye su ventana.
+    // El propio hilo retira sus hooks y destruye su ventana. Primero se vuelve a
+    // publicar "no listo" para que Explorer deje el hotkey al sistema.
+    if (control)
+        SetWindowTextW(control, kInputControlTitleIdle);
+    g_hotkeySession = false;
     if (g_keyboardHook)
     {
         UnhookWindowsHookEx(g_keyboardHook);
@@ -6552,6 +7050,8 @@ static DWORD WINAPI InputThreadProc(LPVOID)
     g_inputControlWnd = nullptr;
     if (control)
         DestroyWindow(control);
+    if (controlClassRegistered)
+        UnregisterClassW(kInputControlClass, g_hModule);
     return 0;
 }
 
@@ -6725,6 +7225,7 @@ BOOL WhTool_ModInit()
     InterlockedExchange(&g_uiSelectorOpen, 0);
     InterlockedExchange(&g_mouseMovePending, 0);
     g_state = SelectorState::Idle;
+    InitHotkeyMessage();
 
     // 1) UI thread: crea el selector y precalienta el renderer.
     DWORD uiThreadId = 0;
@@ -6796,6 +7297,297 @@ void WhTool_ModUninit()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// EXPLORER (solo en explorer.exe)
+//
+// El selector nativo lo abre un hotkey que explorer registra para sí mismo.
+// Normalmente el hook WH_KEYBOARD_LL se traga el Tab antes de que se procesen
+// los hotkeys, pero no recibe las teclas cuando una ventana elevada (Task
+// Manager, windhawk.exe elevado...) tiene el foco. Los hotkeys se entregan en
+// todos los casos, así que aquí se observa la recuperación de mensajes del hilo
+// "Immersive Shell" de explorer y el hotkey se entrega a Overhaulded en lugar de
+// abrir el selector nativo. Esta es la única parte del mod que corre en
+// explorer: no crea ventanas, ni D2D, ni hooks globales. El hilo se localiza
+// por su nombre y solo él lleva un hook de hilo (WH_GETMESSAGE).
+
+static const WCHAR kAltTabThreadName[] = L"Immersive Shell";
+static const DWORD kFindAltTabThreadIntervalMs = 2000;
+static const DWORD kFindAltTabThreadMaxIntervalMs = 60000;
+static const DWORD kWaitForTaskbarIntervalMs = 1000;
+static const DWORD kUnhookWaitMaxMs = 5000;
+
+// Hilo de explorer (hook) y su thread de vigilancia.
+static HHOOK g_messageHook = nullptr;
+static HANDLE g_messageHookThread = nullptr;    // para saber cuándo termina
+static volatile LONG g_messageHookCalls = 0;
+static HANDLE g_explorerStopEvent = nullptr;
+static HANDLE g_explorerThread = nullptr;
+static bool g_isExplorer = false;
+
+static void InitHotkeyMessage()
+{
+    if (!g_hotkeyMessage)
+        g_hotkeyMessage = RegisterWindowMessageW(kHotkeyMessageName);
+}
+
+// Entrega el hotkey a Overhaulded. Devuelve false si la herramienta no está
+// corriendo o no puede aceptar una sesión ahora; entonces abre el selector
+// nativo (comportamiento seguro).
+static bool ForwardHotkey(WPARAM flags)
+{
+    if (!g_hotkeyMessage)
+        return false;
+
+    HWND control = FindWindowExW(HWND_MESSAGE, nullptr, kInputControlClass,
+                                 kInputControlTitleReady);
+    if (!control)
+        return false;
+
+    // Explorer acaba de recibir el hotkey, así que puede ceder el foreground.
+    // El selector lo necesita para tomar el foco si una ventana elevada lo tenía.
+    DWORD processId = 0;
+    GetWindowThreadProcessId(control, &processId);
+    if (processId)
+        AllowSetForegroundWindow(processId);
+
+    return PostMessageW(control, g_hotkeyMessage, flags, 0) != FALSE;
+}
+
+static LRESULT CALLBACK GetMessageProc(int code, WPARAM wParam, LPARAM lParam)
+{
+    InterlockedIncrement(&g_messageHookCalls);
+
+    MSG* msg = reinterpret_cast<MSG*>(lParam);
+    if (code == HC_ACTION && wParam == PM_REMOVE && msg &&
+        msg->message == WM_HOTKEY && HIWORD(msg->lParam) == VK_TAB)
+    {
+        const UINT modifiers = LOWORD(msg->lParam);
+        // El mismo criterio que el hook: cualquier Tab con Alt (Shift invierte,
+        // Ctrl se reenvía para que se resuelva AltGr con el estado real). Win+Tab
+        // no es de Overhaulded.
+        if ((modifiers & MOD_ALT) != 0 && (modifiers & MOD_WIN) == 0)
+        {
+            WPARAM flags = 0;
+            if (modifiers & MOD_SHIFT)
+                flags |= kHotkeyFlagBackwards;
+            if (modifiers & MOD_CONTROL)
+                flags |= kHotkeyFlagCtrl;
+            if (ForwardHotkey(flags))
+            {
+                // Explorer recibe un mensaje vacío en lugar del hotkey, solo
+                // tras confirmar que la entrega se realizó.
+                msg->message = WM_NULL;
+            }
+        }
+    }
+
+    const LRESULT result = CallNextHookEx(nullptr, code, wParam, lParam);
+    InterlockedDecrement(&g_messageHookCalls);
+    return result;
+}
+
+// ID del hilo de explorer que recibe el hotkey, o 0 si ahora no existe.
+static DWORD FindAltTabThread()
+{
+    DWORD found = 0;
+    const DWORD processId = GetCurrentProcessId();
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (snapshot == INVALID_HANDLE_VALUE)
+        return found;
+
+    THREADENTRY32 entry = {};
+    entry.dwSize = sizeof(entry);
+    for (BOOL more = Thread32First(snapshot, &entry); more && !found;
+         more = Thread32Next(snapshot, &entry))
+    {
+        if (entry.th32OwnerProcessID != processId)
+            continue;
+        HANDLE thread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE,
+                                   entry.th32ThreadID);
+        if (!thread)
+            continue;
+        PWSTR name = nullptr;
+        if (SUCCEEDED(GetThreadDescription(thread, &name)) && name &&
+            wcscmp(name, kAltTabThreadName) == 0)
+        {
+            found = entry.th32ThreadID;
+        }
+        if (name)
+            LocalFree(name);
+        CloseHandle(thread);
+    }
+
+    CloseHandle(snapshot);
+    return found;
+}
+
+// Engancha el hilo que recibe el hotkey, si existe ahora.
+static bool HookAltTabThread()
+{
+    const DWORD threadId = FindAltTabThread();
+    if (!threadId)
+        return false;
+    HANDLE thread = OpenThread(SYNCHRONIZE, FALSE, threadId);
+    if (!thread)
+        return false;
+    // Hilo del mismo proceso: sin módulo (documentación de SetWindowsHookEx).
+    HHOOK hook = SetWindowsHookExW(WH_GETMESSAGE, GetMessageProc, nullptr, threadId);
+    if (!hook)
+    {
+        Wh_Log(L"SetWindowsHookEx(WH_GETMESSAGE) failed: %lu", GetLastError());
+        CloseHandle(thread);
+        return false;
+    }
+    Wh_Log(L"Hooked explorer thread %lu (%s)", threadId, kAltTabThreadName);
+    g_messageHook = hook;
+    g_messageHookThread = thread;
+    return true;
+}
+
+static void UnhookAltTabThread()
+{
+    if (g_messageHook)
+    {
+        UnhookWindowsHookEx(g_messageHook);
+        g_messageHook = nullptr;
+    }
+    if (g_messageHookThread)
+    {
+        CloseHandle(g_messageHookThread);
+        g_messageHookThread = nullptr;
+    }
+
+    // Las llamadas ya en curso en el hilo de explorer deben salir del módulo
+    // antes de descargarlo. Tras retirar el hook no pueden empezar otras. La
+    // espera es acotada para no bloquear la descarga si ese hilo estuviera
+    // detenido.
+    const ULONGLONG start = GetTickCount64();
+    while (InterlockedCompareExchange(&g_messageHookCalls, 0, 0) > 0)
+    {
+        if (GetTickCount64() - start > kUnhookWaitMaxMs)
+        {
+            Wh_Log(L"Message hook calls did not return in time");
+            break;
+        }
+        Sleep(1);
+    }
+}
+
+static DWORD WINAPI ExplorerThreadProc(LPVOID)
+{
+    // Solo el proceso de shell (el de la barra de tareas) recibe el hotkey. Con
+    // "carpetas en proceso separado" otros explorer.exe no tienen nada que hacer.
+    for (;;)
+    {
+        if (HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr))
+        {
+            DWORD processId = 0;
+            GetWindowThreadProcessId(taskbar, &processId);
+            if (processId != GetCurrentProcessId())
+            {
+                Wh_Log(L"Not the shell process, nothing to do");
+                return 0;
+            }
+            break;
+        }
+        // Explorer aún está arrancando.
+        if (WaitForSingleObject(g_explorerStopEvent, kWaitForTaskbarIntervalMs) != WAIT_TIMEOUT)
+            return 0;
+    }
+
+    // Engancha el hilo y vuelve a hacerlo si se recrea (reinicio de shell). Hasta
+    // que existe, se busca cada vez con menos frecuencia.
+    DWORD interval = kFindAltTabThreadIntervalMs;
+    bool loggedMissing = false;
+    for (;;)
+    {
+        if (!g_messageHook && !HookAltTabThread() && !loggedMissing)
+        {
+            Wh_Log(L"Explorer thread \"%s\" not found yet", kAltTabThreadName);
+            loggedMissing = true;
+        }
+
+        const HANDLE events[] = { g_explorerStopEvent, g_messageHookThread };
+        const DWORD result = WaitForMultipleObjects(
+            g_messageHook ? 2 : 1, events, FALSE,
+            g_messageHook ? INFINITE : interval);
+        if (result == WAIT_TIMEOUT)
+        {
+            interval = std::min(interval * 2, kFindAltTabThreadMaxIntervalMs);
+        }
+        else if (result == WAIT_OBJECT_0 + 1)
+        {
+            // El hilo terminó (su ID puede reutilizarse).
+            UnhookAltTabThread();
+            interval = kFindAltTabThreadIntervalMs;
+            loggedMissing = false;
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    UnhookAltTabThread();
+    return 0;
+}
+
+static void StopExplorerPart()
+{
+    if (g_explorerThread)
+    {
+        SetEvent(g_explorerStopEvent);
+        WaitForSingleObject(g_explorerThread, INFINITE);
+        CloseHandle(g_explorerThread);
+        g_explorerThread = nullptr;
+    }
+    if (g_explorerStopEvent)
+    {
+        CloseHandle(g_explorerStopEvent);
+        g_explorerStopEvent = nullptr;
+    }
+}
+
+// No espera nada, para no retrasar el arranque de explorer.
+static void StartExplorerPart()
+{
+    if (g_explorerThread)
+        return;  // nunca hilos de vigilancia duplicados
+
+    g_explorerStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_explorerStopEvent)
+        return;
+    g_explorerThread = CreateThread(nullptr, 0, ExplorerThreadProc, nullptr, 0, nullptr);
+    if (!g_explorerThread)
+    {
+        Wh_Log(L"CreateThread failed: %lu", GetLastError());
+        StopExplorerPart();
+    }
+}
+
+static bool IsExplorerProcess()
+{
+    WCHAR path[MAX_PATH];
+    const DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
+    if (!length || length == ARRAYSIZE(path))
+        return false;
+    PCWSTR name = wcsrchr(path, L'\\');
+    name = name ? name + 1 : path;
+    return _wcsicmp(name, L"explorer.exe") == 0;
+}
+
+static BOOL ExplorerModInit()
+{
+    InitHotkeyMessage();
+    StartExplorerPart();
+    return TRUE;
+}
+
+static void ExplorerModUninit()
+{
+    StopExplorerPart();
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
@@ -6818,6 +7610,13 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
+    // explorer.exe: solo el componente que reenvía el hotkey. No se crea
+    // selector, renderer ni hooks globales, y no se lanza el tool mod.
+    if (IsExplorerProcess()) {
+        g_isExplorer = true;
+        return ExplorerModInit();
+    }
+
     DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
         sessionId == 0) {
@@ -6958,6 +7757,11 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
+    // El componente de explorer no usa ajustes: no se reinicia nada.
+    if (g_isExplorer) {
+        return;
+    }
+
     if (g_isToolModProcessLauncher) {
         return;
     }
@@ -6966,6 +7770,11 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
+    if (g_isExplorer) {
+        ExplorerModUninit();
+        return;
+    }
+
     if (g_isToolModProcessLauncher) {
         return;
     }
