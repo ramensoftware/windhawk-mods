@@ -1,0 +1,14628 @@
+// ==WindhawkMod==
+// @id              mouse-trail
+// @name            Mouse Trail
+// @name:zh-CN      鼠标拖尾
+// @name:zh-TW      滑鼠拖尾
+// @name:ja-JP      マウストレイル
+// @name:ko-KR      마우스 트레일
+// @name:de-DE      Maus-Spur
+// @name:fr-FR      Traînée de souris
+// @name:es-ES      Estela del ratón
+// @name:ru-RU      След мыши
+// @name:pt-BR      Rastro do mouse
+// @name:it-IT      Scia del mouse
+// @description     Customizable cursor trail: D3D11 + DirectComposition, 23 color modes, 10 trail styles, low idle CPU.
+// @description:zh-CN 可定制鼠标拖尾：D3D11 渲染，23 颜色模式，10 拖尾样式，9 粒子形状，牛顿物理，向心力漩涡，音乐响应，2.5D，点击特效，DirectComposition 硬件加速，闲置低 CPU。
+// @description:zh-TW 可自訂滑鼠拖尾：D3D11 渲染，23 顏色模式，10 拖尾樣式，9 粒子形狀，牛頓物理，向心力漩渦，音樂響應，2.5D，點擊特效，DirectComposition 硬體加速，閒置低 CPU。
+// @description:ja-JP カスタマイズ可能なマウストレイル：D3D11、23 色モード、10 軌跡スタイル、9 粒子形状、ニュートン物理、渦、音楽連動、2.5D、クリック演出、DirectComposition、低負荷。
+// @description:ko-KR 커스텀 마우스 트레일: D3D11 + DirectComposition, 23색 모드, 10 궤적, 뉴턴 물리, 소용돌이, 음악 반응, 2.5D, 클릭 효과, 저전력.
+// @description:de-DE Anpassbare Maus-Spur: D3D11 + DirectComposition, 23 Farbmodi, 10 Spuren, niedrige CPU.
+// @description:fr-FR Traînée de souris: D3D11 + DirectComposition, 23 modes couleur, 10 styles, faible CPU.
+// @description:es-ES Estela de ratón: D3D11 + DirectComposition, 23 modos color, 10 estilos, baja CPU.
+// @description:ru-RU След мыши: D3D11 + DirectComposition, 23 цветовых режима, 10 стилей, низкий CPU.
+// @description:pt-BR Rastro do mouse: D3D11 + DirectComposition, 23 modos cor, 10 estilos, baixo CPU.
+// @description:it-IT Scia del mouse: D3D11 + DirectComposition, 23 modalità colore, 10 stili, bassa CPU.
+// @version         3.4.5.3
+// @author          MCheng404
+// @github          https://github.com/MCheng404
+// @license         MIT
+// @include         windhawk.exe
+// @compilerOptions -ld2d1 -ld3d11 -ldxgi -ldcomp -ldwmapi -lole32 -lgdi32 -lshell32 -ld3dcompiler -lavrt -lksuser -ldwrite
+// ==/WindhawkMod==
+// ==WindhawkModReadme==
+/*
+# Mouse Trail
+
+A highly customizable mouse cursor trail mod for Windhawk. Built on native D3D11 + DirectComposition hardware acceleration, featuring 23 color modes, 10 trail render styles, 9 particle shapes, a full Newtonian particle physics system (mass, gravity, collisions, electromagnetic forces, turbulence, fluid coupling), centripetal vortex orbital capture, music-reactive audio physics, 2.5D depth effects, click effects, and text/emoji particles. Runs as an isolated Tool Mod process — zero CPU when idle, full hardware acceleration when active.
+
+## Demos
+
+![Trail & Particles](https://raw.githubusercontent.com/MCheng404/windhawk-mods/mouse-trail-assets/mods/mouse-trail-assets/demo1.gif)
+
+![Centripetal Vortex](https://raw.githubusercontent.com/MCheng404/windhawk-mods/mouse-trail-assets/mods/mouse-trail-assets/demo2.gif)
+
+![Particle Physics](https://raw.githubusercontent.com/MCheng404/windhawk-mods/mouse-trail-assets/mods/mouse-trail-assets/demo3.gif)
+
+---
+
+### Rendering Architecture
+
+* **Native D3D11 Pipeline:** Custom HLSL vertex/pixel shaders with instanced particle rendering. Core trail, particle, and shape rendering does not depend on D2D1.
+* **DirectComposition Hardware Overlay:** Per-pixel alpha via premultiplied DXGI flip swap chain. Tear-free composition with the desktop compositor.
+* **2.5D Depth Effect:** Every particle carries a z-depth with perspective projection, simple lighting, and depth-based scaling (near = larger/brighter, far = smaller/dimmer).
+* **Dual-Thread Design:** UI thread runs the window message pump; render thread owns all D3D11/DComp work. Mouse input is never blocked by rendering.
+* **HDR Auto-Detection:** Detects HDR displays and uses R16G16B16A16_FLOAT automatically; falls back to SDR BGRA8.
+* **Device Loss Recovery:** Proactive `GetDeviceRemovedReason()` polling + `WM_POWERBROADCAST` wake handling. Full D3D/DComp stack rebuilds on GPU TDR, driver updates, GPU switches, or sleep/resume — no black frames.
+* **Display Change Handling:** Auto-resizes and repositions the overlay on monitor changes or resolution switches.
+* **Additive Blend Glow:** Trail, particle, and ripple glow layers use SrcAlpha + One additive blending for translucent halos.
+* **Fast-Move Interpolation:** When frame interval is ≤10ms, particles are interpolated along the cursor path to eliminate gaps during fast movement.
+* **Shader Quality Tiers:** Fast / Balanced / High. Balanced and High switch trail and particle edges to screen-space derivative anti-aliasing (edges are always ~1–2 px wide, independent of trail thickness or particle size).
+* **Configurable Downsampling:** SSAA supports 2x / 3x / 4x with four reconstruction filters — Bilinear (1 tap), Box (16 tap), Tent (9-tap equivalent), Lanczos (16 tap) — plus an adjustable unsharp pass.
+* **SDF Edge Sampling:** Particle outlines can be resolved with 2x2 or 4x rotated-grid sub-pixel samples of the shape SDF.
+* **Output Dither:** Ordered 4x4 / 8x8 Bayer or hash noise, added at sub-LSB amplitude to remove 8-bit gradient banding (auto-disabled in HDR).
+* **Text Atlas Supersampling:** Glyph atlas resolution multiplier (1x–4x) plus 4-tap rotated-grid atlas sampling for crisp text and emoji.
+
+### Trail Render Styles (10 modes)
+
+* **Tapered Ribbon:** Classic fading ribbon with glow, shadow, and head highlight
+* **Dot Chain:** Beads along the path with configurable density and size
+* **Function Curve:** Custom mathematical function deforms the trail (sine, damped, heartbeat, swirl, or user-defined formula)
+* **Wave Curve:** Animated sinusoidal wave deformation
+* **Shape Trail:** Spawns 9 selectable shapes (heart, star, hexagon, circle, diamond, triangle, flower, pentagon, hexagram, or random) along the path with random velocity, rotation, gravity, and configurable interval/size/count/lifetime
+* **Double Line:** Two parallel trail ribbons
+* **Dashed:** Constant-width segmented dashed line
+* **Spiral:** Spiral deformation along the cursor path
+* **Lightning:** Thin bright jagged main line with 35% probability random branch forks
+* **Feather:** Thin central shaft with angled side barbs and natural feather curvature
+
+### Color Modes (23 modes)
+
+Single / Flowing Gradient / Rainbow Flow / Warm Flow / Cool Flow / Neon Pulse / Velocity Color / Stripes / Fire / Aurora / Cursor Extract / Cursor Mix / Metallic Gold / Cyberpunk / Pastel / Hue Rotate / Dual Pulse / Sparkle / Heatmap / Phase Interference / Spectrum Split / Grain Jitter / Gradient Warp
+
+### Color Science
+
+* **WCAG 2.1 Accessibility:** `Accessibility Contrast` guarantees 3.0:1 (AA Large), 4.5:1 (AA) or 7.0:1 (AAA) against the sampled background, adjusting luminance without shifting hue. Independent of Trail Adaptive Contrast.
+* **Chroma-Preserving Adjustments:** Lighten/darken scale Rec.709 luma instead of lerping toward white, so saturated colors stay saturated; only a gamut-limited residual falls back to mixing.
+* **Single Source of Truth:** The luma convention and the shared color helpers exist once and are mirrored by a shared HLSL prelude, eliminating the previously duplicated (comment-synced) shader copies.
+
+### Gradient System
+
+* **Unlimited Colors:** Add any number of gradient colors (up to 16)
+* **OKLab Perceptual Interpolation:** No gray midpoints, perceptually uniform color transitions
+* **256-Color LUT:** Precomputed lookup table for zero-per-frame allocation
+* **Flowing Gradient:** Gradient animates along the trail over time
+
+### Cursor Color Shift (6 modes)
+
+Off / Complementary (180°) / Analogous (30°) / Triadic (120°) / Split Complement (150°) / Custom Angle
+
+### Visual Effects
+
+* **Bezier Smoothing:** Catmull-Rom spline interpolation for buttery-smooth curves
+* **Motion Blur:** History frame overlay with decreasing opacity (1–5 strength)
+* **Enhanced Glow:** Dual-layer halo (outer glow + inner bloom) with independent toggles
+* **Head Highlight + Trail Shadow:** Premium depth cues
+* **Speed-Reactive Width:** Trail widens when moving fast
+
+### Particle Physics System
+
+The mod ships a full Newtonian particle physics engine with independent toggles for every force:
+
+* **Particle Mass:** Each particle gets a random mass (Box-Muller normal distribution). Mass affects inertia (heavy = less drag, retains velocity), size (∝ mass^(1/3)), lifetime, and acceleration (a = F/m)
+* **Particle Gravity:** Newton's law of universal gravitation F = G·m₁·m₂/r² with Plummer softening. Supports 2-body (binary star) or N-body systems (2–10 dominant bodies)
+* **Centripetal Vortex:** Curved mouse motion captures particles into orbiting tracks. Angular momentum conservation, Kepler velocity gradient, orbital precession, and 3D orbital inclination. Particles fly outward when motion stops. Two physical models: Rankine vortex or custom
+* **Elastic Collisions:** Momentum + kinetic energy conservation with inverse-mass position correction
+* **Lorentz Force:** Charged particles circle in a magnetic field (F = q·v×B). Positive charge = counterclockwise, negative = clockwise
+* **Coulomb Force:** Like charges repel, opposite charges attract (F = k·q₁·q₂/r²). Activated alongside Lorentz force
+* **Brownian Motion / Turbulence:** Perlin-like spatially coherent noise field (not pure random jitter). Particles in nearby space receive similar forces, creating flowing turbulence
+* **Viscous Coupling:** Nearby particles (30px) drag each other's velocity, creating fluid-like cluster behavior
+* **Air Drag:** Linear low-speed drag + quadratic high-speed drag. Mass-based inertia and size-based air resistance (larger particles have more drag)
+* **Spin Physics:** Particles spin with rotational air damping (spin speed decays over time)
+* **Springs (Cloth):** Hooke's law springs between nearby particles with axial damping and soft cutoff
+* **Environmental Gravity:** Directional constant acceleration (angle + strength configurable)
+* **Environmental Wind:** Horizontal wind with gusts, direction sway, and high-frequency turbulence
+* **Cursor Attraction + Repulsion:** Force field around the cursor with configurable radius and falloff
+
+### Music Reactive Framework
+
+* **WASAPI Loopback Capture:** Real-time system audio capture (48kHz stereo)
+* **FFT Frequency Analysis:** Cooley-Tukey FFT (256/512/1024/2048 points) with Hann window
+* **Beat Detection:** Three methods — energy threshold, spectral flux, multi-band detection. Low-frequency weighted
+* **Frequency Band Analysis:** Bass / Mid / Treble energy levels
+* **BPM Estimation:** Real-time tempo estimation
+* **Music-Physics Linking:** Beat → velocity pulse, bass → particle size, volume → gravity strength, beat → vortex energy, multi-band → gravity / magnetic field / thermal noise
+* **Multi-Band Independent Linkage:** Bass links to gravity, mid links to magnetic field, treble links to thermal noise — all independently configurable
+
+### Text & Emoji Particles
+
+* Custom text released as particles (comma-separated phrases render as whole units)
+* Emoji support via Segoe UI Emoji font
+* Configurable font size
+* Color follows the active color mode
+
+### Click Effects
+
+* Starburst particle burst on click (count, radius, duration configurable)
+* Expanding ripple ring on click
+* Both toggleable independently
+
+### Localization
+
+* Settings UI fully localized in English, Simplified Chinese, Traditional Chinese, and Japanese
+* Every setting name, description, and dropdown option is translated
+
+### Performance
+
+* **Super Performance Mode:** Removes all particle/shape caps and fast-path downgrades
+* **Adaptive Backoff:** Render thread waits 1ms when active (~1000fps headroom), 16ms when idle (~60fps responsive)
+* **Game Detection:** Auto-hides in fullscreen DirectX games
+* **Zero CPU Idle:** Window hidden when cursor is stationary and no effects are active
+* **Background Sampling:** Desktop color sampling runs on a dedicated low-priority thread
+* **Frame Sync:** Syncs presentation to the compositor for tear-free output (adds one frame of latency). Turn it off for the lowest latency, accepting possible screen tearing.
+* **Hotkeys:** Optional runtime hotkeys using a modifier combo plus a key (e.g. `Alt` + `T`). Laptop Fn combinations work by binding the media key they report. Three toggles: master show/hide, trail on/off, particles on/off.
+* **Mixed-DPI Aware:** Detects the DPI of the monitor under the cursor so the overlay and text stay crisp and correctly sized across mixed-DPI setups.
+
+### Function Trail Variables
+
+Available in custom function formulas: `t` (normalized 0=head, 1=tail), `d` (distance from head in pixels), `time` (seconds). Functions: sin cos exp sqrt abs. Operators: + - * / ^.
+
+Examples: `sin(d * 0.15) * 8`, `sin(d * 0.25) * exp(0 - t * 2.5) * 10`.
+
+### Color Format
+
+Hex RGB, e.g. `FF0000`=red, `00FF00`=green, `0000FF`=blue, `FFD700`=gold.
+
+### Reporting Issues & Feedback
+
+Found a bug, have a feature request, or want to share a preset? Please open an issue on the project repository:
+
+**[github.com/MCheng404/mouse-trail](https://github.com/MCheng404/mouse-trail)**
+
+When reporting an issue, please include:
+* Windows build and display setup (single/mixed DPI, HDR on/off)
+* The mod version and any non-default settings that reproduce it
+* Whether the issue only appears in fullscreen games or on the desktop
+
+### Quick Start
+
+1. Install the mod from Windhawk and enable it.
+2. Move the mouse — a trail appears once it exceeds **General → Trigger Velocity**.
+3. Pick a style in **Trail → Trail Shape** and a palette in **Colors → Color Mode**.
+4. Enable **Particles → Particle Mode** for emitted particles; tune physics under **Physics & Forces**.
+5. Use **Hotkeys** to bind quick show/hide, trail and particle toggles (e.g. `Alt`+`T`).
+6. Open **Rendering & Quality** if you need a sharper look (AA, bloom, HDR) or want to trade quality for FPS.
+
+All settings are organized into collapsible sections in the settings dialog. Hover any control for its description; ranges and units are listed inline.
+
+*/
+// ==/WindhawkModReadme==
+// ==WindhawkModSettings==
+/*
+
+- General:
+  - trigger_velocity: 25
+    $name: Trigger Velocity
+    $name:zh-CN: 触发速度
+    $name:zh-TW: 觸發速度
+    $name:ja-JP: 発動速度
+    $description: Minimum mouse speed to activate the trail (pixels/frame).
+    $description:zh-CN: 激活拖尾所需的最低鼠标移动速度（像素/帧）。
+    $description:zh-TW: 啟動拖尾所需的最低滑鼠移動速度（像素/影格）。
+    $description:ja-JP: トレイルを発動する最低マウス速度（ピクセル/フレーム）。
+  - stop_velocity: 10
+    $name: Stop Velocity
+    $name:zh-CN: 停止速度
+    $name:zh-TW: 停止速度
+    $name:ja-JP: 停止速度
+    $description: Speed below which the trail fades out. Must be lower than Trigger Velocity.
+    $description:zh-CN: 低于此速度时拖尾开始淡出。必须低于触发速度。
+    $description:zh-TW: 低於此速度時拖尾開始淡出。必須低於觸發速度。
+    $description:ja-JP: この速度を下回るとトレイルがフェードアウトします。発動速度より低く設定してください。
+  - tail_length: 18
+    $name: Trail Length
+    $name:zh-CN: 拖尾长度
+    $name:zh-TW: 拖尾長度
+    $name:ja-JP: トレイル長
+    $description: Number of history points in the trail. Range 2-200.
+    $description:zh-CN: 拖尾保留的历史点数。范围 2-200。
+    $description:zh-TW: 拖尾保留的歷史點數。範圍 2-200。
+    $description:ja-JP: トレイルの履歴ポイント数。範囲 2-200。
+  - tail_offset_x: 6
+    $name: Tail Offset X
+    $name:zh-CN: 拖尾 X 偏移
+    $name:zh-TW: 拖尾 X 偏移
+    $name:ja-JP: Xオフセット
+    $description: Horizontal offset of trail origin from cursor (pixels).
+    $description:zh-CN: 拖尾起点相对光标的水平偏移（像素）。
+    $description:zh-TW: 拖尾起點相對游標的水平偏移（像素）。
+    $description:ja-JP: トレイル起点のカーソルからの水平オフセット（ピクセル）。
+  - tail_offset_y: 10
+    $name: Tail Offset Y
+    $name:zh-CN: 拖尾 Y 偏移
+    $name:zh-TW: 拖尾 Y 偏移
+    $name:ja-JP: Yオフセット
+    $description: Vertical offset of trail origin from cursor (pixels).
+    $description:zh-CN: 拖尾起点相对光标的垂直偏移（像素）。
+    $description:zh-TW: 拖尾起點相對游標的垂直偏移（像素）。
+    $description:ja-JP: トレイル起点のカーソルからの垂直オフセット（ピクセル）。
+  - trail_delay: 0
+    $name: Trail Delay
+    $name:zh-CN: 拖尾延迟
+    $name:zh-TW: 拖尾延遲
+    $name:ja-JP: トレイル遅延
+    $description: How much the trail head lags behind the cursor, as a time constant of roughly
+      25ms per step (0-10, 0=off). The lag is computed from real elapsed time, so it looks the same
+      at 60Hz and 144Hz.
+    $description:zh-CN: 拖尾头部滞后光标的程度，每档约 25 毫秒时间常数（0-10，0=关闭）。
+      滞后量按真实经过时间计算，因此 60Hz 与 144Hz 屏幕下观感一致。
+    $description:zh-TW: 拖尾頭部落後游標的程度，每檔約 25 毫秒時間常數（0-10，0=關閉）。
+      滯後量按真實經過時間計算，因此 60Hz 與 144Hz 螢幕下觀感一致。
+    $description:ja-JP: トレイル先端がカーソルから遅れる度合い。1 段階あたり約 25ms の時定数
+      （0-10、0=オフ）。実際の経過時間から計算するため、60Hz と 144Hz で見え方が同じです。
+  $name: General
+  $name:zh-CN: 基础设置
+  $name:zh-TW: 基礎設定
+  $name:ja-JP: 基本設定
+
+- Trail:
+  - trail_shape: double
+    $name: Trail Shape
+    $name:zh-CN: 拖尾形状
+    $name:zh-TW: 拖尾形狀
+    $name:ja-JP: トレイル形状
+    $options:
+    - tapered: Tapered Ribbon
+    - dots: Dot Chain
+    - function: Function Curve
+    - wave: Wave Curve
+    - shapes: Shape Trail
+    - double: Double Line
+    - dashed: Dashed
+    - spiral: Spiral
+    - lightning: Lightning
+    - feather: Feather
+    - none: None
+    $options:zh-CN:
+    - tapered: 锥形飘带
+    - dots: 圆点链
+    - function: 函数曲线
+    - wave: 波浪曲线
+    - shapes: 形状拖尾
+    - double: 双线拖尾
+    - dashed: 虚线拖尾
+    - spiral: 螺旋拖尾
+    - lightning: 闪电拖尾
+    - feather: 羽毛拖尾
+    - none: 无
+    $options:zh-TW:
+    - tapered: 錐形飄帶
+    - dots: 圓點鏈
+    - function: 函數曲線
+    - wave: 波浪曲線
+    - shapes: 形狀拖尾
+    - double: 雙線拖尾
+    - dashed: 虛線拖尾
+    - spiral: 螺旋拖尾
+    - lightning: 閃電拖尾
+    - feather: 羽毛拖尾
+    - none: 無
+    $options:ja-JP:
+    - tapered: テーパーリボン
+    - dots: ドットチェーン
+    - function: 関数カーブ
+    - wave: 波曲線
+    - shapes: シェイプトレイル
+    - double: ダブルライン
+    - dashed: ダッシュ
+    - spiral: スパイラル
+    - lightning: ライトニング
+    - feather: フェザー
+    - none: なし
+  - fadeout_mode: soft
+    $name: Fadeout Mode
+    $name:zh-CN: 淡出模式
+    $name:zh-TW: 淡出模式
+    $name:ja-JP: フェードアウト
+    $description: How the trail disappears when mouse stops.
+    $description:zh-CN: 鼠标停止后拖尾的消失方式。
+    $description:zh-TW: 滑鼠停止後拖尾的消失方式。
+    $description:ja-JP: マウス停止時のトレイルの消え方。
+    $options:
+    - hard: Hard Cut
+    - accelerate: Accelerated Shrink
+    - soft: Soft Fade
+    $options:zh-CN:
+    - hard: 硬截断
+    - accelerate: 加速收缩
+    - soft: 柔和淡出
+    $options:zh-TW:
+    - hard: 硬截斷
+    - accelerate: 加速收縮
+    - soft: 柔和淡出
+    $options:ja-JP:
+    - hard: ハードカット
+    - accelerate: 加速収縮
+    - soft: ソフトフェード
+  - enable_smooth_gradient: true
+    $name: Smooth Gradient
+    $name:zh-CN: 平滑渐变
+    $name:zh-TW: 平滑漸層
+    $name:ja-JP: スムーズグラデーション
+    $description: Smoothly interpolate between gradient colors. Turn off for stepped color bands.
+    $description:zh-CN: 在渐变色之间平滑插值过渡，关闭则为分段阶梯色带。
+    $description:zh-TW: 在漸層色之間平滑插值過渡，關閉則為分段階梯色帶。
+    $description:ja-JP: グラデーション色間を滑らかに補間します。オフで段階的な色帯になります。
+  - enable_speed_response: true
+    $name: Dynamic Width
+    $name:zh-CN: 动态宽度
+    $name:zh-TW: 動態寬度
+    $name:ja-JP: ダイナミック幅
+    $description: Trail width increases with speed and acceleration.
+    $description:zh-CN: 移动速度和加速度影响拖尾宽度，快速移动时更宽。
+    $description:zh-TW: 移動速度和加速度影響拖尾寬度，快速移動時更寬。
+    $description:ja-JP: 速度と加速度に応じてトレイル幅が変化します。
+  - enable_frame_sync: true
+    $name: Frame Sync (vsync)
+    $name:zh-CN: 帧同步 (vsync)
+    $name:zh-TW: 幀同步 (vsync)
+    $name:ja-JP: フレーム同期 (vsync)
+    $description: Sync presentation to the compositor for tear-free output (adds one frame of latency). Turn OFF for the lowest latency, accepting possible screen tearing.
+    $description:zh-CN: 与合成器同步呈现，保证无撕裂（多一帧延迟）。关闭可获得最低延迟，但可能出现画面撕裂。
+    $description:zh-TW: 與合成器同步呈現，保證無撕裂（多一幀延遲）。關閉可獲得最低延遲，但可能出現畫面撕裂。
+    $description:ja-JP: コンポジターと同期してティアリングのない表示を行います（1フレームの遅延が加わります）。オフにすると遅延が最小になりますが、ティアリングの可能性があります。
+  - enable_head_highlight: true
+    $name: Head Highlight
+    $name:zh-CN: 头部高光
+    $name:zh-TW: 頭部高光
+    $name:ja-JP: ヘッドハイライト
+    $description: Bright center dot at trail head for premium look.
+    $description:zh-CN: 拖尾头部添加明亮中心点，提升质感。
+    $description:zh-TW: 拖尾頭部添加明亮中心點，提升質感。
+    $description:ja-JP: トレイル先端に明るい中心点を追加。
+  - enable_trail_shadow: true
+    $name: Trail Shadow
+    $name:zh-CN: 拖尾阴影
+    $name:zh-TW: 拖尾陰影
+    $name:ja-JP: トレイルシャドウ
+    $description: Dark underlay shadow for depth perception.
+    $description:zh-CN: 拖尾底层绘制暗色阴影，增加立体感。
+    $description:zh-TW: 拖尾底層繪製暗色陰影，增加立體感。
+    $description:ja-JP: 奥行き感のための暗い下地シャドウ。
+  - enable_adaptive_contrast: false
+    $name: Adaptive Contrast
+    $name:zh-CN: 自适应对比度
+    $name:zh-TW: 自適應對比度
+    $name:ja-JP: 適応コントラスト
+    $description: Sample background brightness and adapt trail color luminance automatically, with a subtle soft edge for visibility on any background.
+    $description:zh-CN: 采样背景亮度自动微调拖尾颜色明暗，亮背景下压暗、暗背景提亮，并加一圈极细柔和边缘，确保任何背景下都清晰可见。
+    $description:zh-TW: 取樣背景亮度自動微調拖尾顏色明暗，亮背景下壓暗、暗背景提亮，並加一圈極細柔和邊緣，確保任何背景下都清晰可見。
+    $description:ja-JP: 背景の明るさをサンプリングして軌跡の色の輝度を自動調整します。明るい背景では暗く、暗い背景では明るく補正し、視認性のために控えめなソフトエッジも加えます。
+  - enable_bezier_smooth: true
+    $name: Bezier Smoothing
+    $name:zh-CN: 贝塞尔曲线平滑
+    $name:zh-TW: 貝茲曲線平滑
+    $name:ja-JP: ベジェ平滑
+    $description: Catmull-Rom spline interpolation for smoother curves.
+    $description:zh-CN: 使用 Catmull-Rom 样条插值，拖尾曲线更顺滑。
+    $description:zh-TW: 使用 Catmull-Rom 樣條插值，拖尾曲線更順滑。
+    $description:ja-JP: Catmull-Romスプライン補間で滑らかな曲線に。
+  - enable_motion_blur: true
+    $name: Motion Blur
+    $name:zh-CN: 运动模糊
+    $name:zh-TW: 運動模糊
+    $name:ja-JP: モーションブラー
+    $description: Overlay previous frames with decreasing opacity for motion blur.
+    $description:zh-CN: 以递减透明度叠加历史帧，制造运动模糊效果。
+    $description:zh-TW: 以遞減透明度疊加歷史影格，製造運動模糊效果。
+    $description:ja-JP: 過去フレームを減衰透明度で重畳しモーションブラー。
+  - motion_blur_strength: 3
+    $name: Motion Blur Strength
+    $name:zh-CN: 运动模糊强度
+    $name:zh-TW: 運動模糊強度
+    $name:ja-JP: ブラー強度
+    $description: Number of history frames to overlay (1-5).
+    $description:zh-CN: 叠加的历史帧数（1-5）。
+    $description:zh-TW: 疊加的歷史影格數（1-5）。
+    $description:ja-JP: 重畳する過去フレーム数（1-5）。
+  - enable_25d_effect: true
+    $name: 2.5D Depth Effect
+    $name:zh-CN: 2.5D 立体效果
+    $name:zh-TW: 2.5D 立體效果
+    $name:ja-JP: 2.5D効果
+    $description: Add per-vertex depth with perspective projection for a 2.5D look.
+    $description:zh-CN: 为顶点添加深度坐标和透视投影，营造 2.5D 立体感。
+    $description:zh-TW: 為頂點添加深度座標和透視投影，營造 2.5D 立體感。
+    $description:ja-JP: 頂点ごとに深度と透視投影を追加し2.5D表現。
+  - perspective_strength: 15
+    $name: Perspective Strength
+    $name:zh-CN: 透视强度
+    $name:zh-TW: 透視強度
+    $name:ja-JP: 遠近強度
+    $description: Strength of 2.5D perspective scaling (0-50).
+    $description:zh-CN: 2.5D 透视缩放强度（0-50）。
+    $description:zh-TW: 2.5D 透視縮放強度（0-50）。
+    $description:ja-JP: 2.5D遠近スケールの強さ（0-50）。
+  $name: Trail
+  $name:zh-CN: 拖尾外观
+  $name:zh-TW: 拖尾外觀
+  $name:ja-JP: トレイル外観
+
+- Colors:
+  - color_mode: pastel
+    $name: Color Mode
+    $name:zh-CN: 颜色模式
+    $name:zh-TW: 顏色模式
+    $name:ja-JP: カラーモード
+    $options:
+    - single: Single Color
+    - gradient: Flowing Gradient
+    - rainbow: Rainbow Flow
+    - warm: Warm Flow
+    - cool: Cool Flow
+    - neon: Neon Pulse
+    - velocity: Velocity Color
+    - stripes: Stripes
+    - fire: Fire
+    - aurora: Aurora
+    - cursor_extract: Cursor Extract
+    - cursor_mix: Cursor Mix
+    - metallic: Metallic Gold
+    - cyberpunk: Cyberpunk
+    - pastel: Pastel
+    - hue_rotate: Hue Rotate
+    - dual_pulse: Dual Pulse
+    - sparkle: Sparkle
+    - thermal: Thermal Heatmap
+    - interference: Wave Interference
+    - spectrum: Spectrum Split
+    - dither: Grain Dither
+    - warp: Gradient Warp
+    - oil_slick: Iridescent Oil Film
+    - vaporwave: Vaporwave
+    - bioluminescence: Bioluminescence
+    - clock_sky: Time-of-Day Sky
+    $options:zh-CN:
+    - single: 单色
+    - gradient: 流动渐变
+    - rainbow: 彩虹流动
+    - warm: 暖色调流动
+    - cool: 冷色调流动
+    - neon: 霓虹脉冲
+    - velocity: 速度变色
+    - stripes: 流动条纹
+    - fire: 火焰
+    - aurora: 极光
+    - cursor_extract: 光标取色
+    - cursor_mix: 光标混色
+    - metallic: 金属金
+    - cyberpunk: 赛博朋克
+    - pastel: 粉彩
+    - hue_rotate: 色相旋转
+    - dual_pulse: 双色脉冲
+    - sparkle: 星光闪烁
+    - thermal: 热力图
+    - interference: 波纹干涉
+    - spectrum: 色谱分裂
+    - dither: 颗粒抖动
+    - warp: 渐变扭曲
+    - oil_slick: 虹彩油膜
+    - vaporwave: 蒸汽波
+    - bioluminescence: 生物荧光
+    - clock_sky: 时令天色
+    $options:zh-TW:
+    - single: 單色
+    - gradient: 流動漸層
+    - rainbow: 彩虹流動
+    - warm: 暖色調流動
+    - cool: 冷色調流動
+    - neon: 霓虹脈衝
+    - velocity: 速度變色
+    - stripes: 流動條紋
+    - fire: 火焰
+    - aurora: 極光
+    - cursor_extract: 游標取色
+    - cursor_mix: 游標混色
+    - metallic: 金屬金
+    - cyberpunk: 賽博朋克
+    - pastel: 粉彩
+    - hue_rotate: 色相旋轉
+    - dual_pulse: 雙色脈衝
+    - sparkle: 星光閃爍
+    - thermal: 熱力圖
+    - interference: 波紋干涉
+    - spectrum: 色譜分裂
+    - dither: 顆粒抖動
+    - warp: 漸層扭曲
+    - oil_slick: 虹彩油膜
+    - vaporwave: 蒸氣波
+    - bioluminescence: 生物螢光
+    - clock_sky: 時令天色
+    $options:ja-JP:
+    - single: 単色
+    - gradient: 流動グラデ
+    - rainbow: レインボー
+    - warm: ウォーム
+    - cool: クール
+    - neon: ネオン
+    - velocity: 速度連動
+    - stripes: ストライプ
+    - fire: ファイア
+    - aurora: オーロラ
+    - cursor_extract: カーソル抽出
+    - cursor_mix: カーソル混合
+    - metallic: メタリックゴールド
+    - cyberpunk: サイバーパンク
+    - pastel: パステル
+    - hue_rotate: 色相回転
+    - dual_pulse: デュアルパルス
+    - sparkle: スパークル
+    - thermal: サーマル
+    - interference: 波干渉
+    - spectrum: スペクトル
+    - dither: ディザ
+    - warp: ワープ
+    - oil_slick: 虹彩油膜
+    - vaporwave: ヴェイパーウェイヴ
+    - bioluminescence: 生物発光
+    - clock_sky: 一日の空色
+  - custom_color: 00BFFF
+    $name: Custom Color
+    $name:zh-CN: 自定义颜色
+    $name:zh-TW: 自訂顏色
+    $name:ja-JP: カスタムカラー
+    $description: Primary color for single/neon/hue-rotate modes. Hex RGB.
+    $description:zh-CN: 单色/霓虹/色相旋转模式的主色，十六进制 RGB。
+    $description:zh-TW: 單色/霓虹/色相旋轉模式的主色，十六進位 RGB。
+    $description:ja-JP: 単色/ネオン/色相回転モードの基本色。Hex RGB。
+  - gradient_colors: FF6B35,00BFFF,FFD700
+    $name: Gradient Colors
+    $name:zh-CN: 渐变颜色
+    $name:zh-TW: 漸層顏色
+    $name:ja-JP: グラデーション色
+    $description: Any number of colors (max 16) for gradient mode, comma-separated hex RGB. Uses OKLab perceptual interpolation with 256-color LUT. Gradient flows along the trail over time.
+    $description:zh-CN: 渐变模式的颜色，任意数量（最多16种），逗号分隔十六进制RGB。使用OKLab感知均匀插值+256色LUT。渐变沿拖尾随时间流动。
+    $description:zh-TW: 漸層模式的顏色，任意數量（最多16種），逗號分隔十六進位RGB。使用OKLab感知均勻插值+256色LUT。漸層沿拖尾隨時間流動。
+    $description:ja-JP: グラデーションモードの色（最大16色）、カンマ区切りHex RGB。OKLab知覚補間+256色LUT使用。
+  - enable_cursor_color_shift: false
+    $name: Auto Color Shift
+    $name:zh-CN: 取色自动偏移
+    $name:zh-TW: 取色自動偏移
+    $name:ja-JP: 自動カラーシフト
+    $description: Auto hue shift for cursor extraction modes to ensure visibility.
+    $description:zh-CN: 光标取色模式下自动偏移色相，确保拖尾在任何背景上都醒目。
+    $description:zh-TW: 游標取色模式下自動偏移色相，確保拖尾在任何背景上都醒目。
+    $description:ja-JP: カーソル抽出モードで視認性を確保するため自動的に色相をシフトします。
+  - color_shift_mode: complementary
+    $name: Color Shift Mode
+    $name:zh-CN: 取色偏移模式
+    $name:zh-TW: 取色偏移模式
+    $name:ja-JP: カラーシフトモード
+    $options:
+    - off: Off
+    - complementary: Complementary (180°)
+    - analogous: Analogous (30°)
+    - triadic: Triadic (120°)
+    - split: Split Complement (150°)
+    - custom: Custom Angle
+    $options:zh-CN:
+    - off: 关闭
+    - complementary: 互补色(180°)
+    - analogous: 类似色(30°)
+    - triadic: 三角色(120°)
+    - split: 分裂互补(150°)
+    - custom: 自定义角度
+    $options:zh-TW:
+    - off: 關閉
+    - complementary: 互補色(180°)
+    - analogous: 類似色(30°)
+    - triadic: 三角色(120°)
+    - split: 分裂互補(150°)
+    - custom: 自訂角度
+    $options:ja-JP:
+    - off: オフ
+    - complementary: 補色(180°)
+    - analogous: 類似色(30°)
+    - triadic: 三色(120°)
+    - split: スプリット補色(150°)
+    - custom: カスタム
+  - color_shift_angle: 180
+    $name: Custom Shift Angle
+    $name:zh-CN: 自定义偏移角度
+    $name:zh-TW: 自訂偏移角度
+    $name:ja-JP: シフト角度
+    $description: Hue shift angle for custom mode. 0-360 degrees.
+    $description:zh-CN: 自定义模式下的色相偏移角度，0-360度。
+    $description:zh-TW: 自訂模式下的色相偏移角度，0-360度。
+    $description:ja-JP: カスタムモードの色相シフト角度。0-360度。
+  - contrast_target: off
+    $name: Accessibility Contrast
+    $name:zh-CN: 无障碍对比度
+    $name:zh-TW: 無障礙對比度
+    $name:ja-JP: アクセシビリティ コントラスト
+    $options:
+    - off: Off
+    - aa_large: WCAG AA Large (3.0)
+    - aa: WCAG AA (4.5)
+    - aaa: WCAG AAA (7.0)
+    $options:zh-CN:
+    - off: 关闭
+    - aa_large: WCAG AA 大字 (3.0)
+    - aa: WCAG AA 正文 (4.5)
+    - aaa: WCAG AAA (7.0)
+    $options:zh-TW:
+    - off: 關閉
+    - aa_large: WCAG AA 大字 (3.0)
+    - aa: WCAG AA 正文 (4.5)
+    - aaa: WCAG AAA (7.0)
+    $options:ja-JP:
+    - off: オフ
+    - aa_large: WCAG AA 大文字 (3.0)
+    - aa: WCAG AA 本文 (4.5)
+    - aaa: WCAG AAA (7.0)
+    $description: Guarantee a minimum contrast between trail colours and the sampled background brightness, without shifting hue. Independent of Trail Adaptive Contrast.
+    $description:zh-CN: 保证拖尾颜色与采样到的背景亮度之间不低于所选对比度比，且不改变色相。与「拖尾外观 → 自适应对比度」相互独立。
+    $description:zh-TW: 保證拖尾顏色與取樣到的背景亮度之間不低於所選對比度比，且不改變色相。與「拖尾外觀 → 自適應對比度」相互獨立。
+    $description:ja-JP: 軌跡の色とサンプリングした背景輝度のコントラスト比を下回らないように保証します（色相は変化しません）。「トレイル外観 → 適応コントラスト」とは独立しています。
+  $name: Colors
+  $name:zh-CN: 颜色
+  $name:zh-TW: 顏色
+  $name:ja-JP: カラー
+
+- Quality:
+  - enable_glow: true
+    $name: Micro Glow
+    $name:zh-CN: 微发光
+    $name:zh-TW: 微發光
+    $name:ja-JP: マイクログロー
+    $description: Soft outer glow around the trail.
+    $description:zh-CN: 拖尾外圈柔和发光效果。
+    $description:zh-TW: 拖尾外圈柔和發光效果。
+    $description:ja-JP: トレイル周囲のソフトなグロー。
+  - glow_intensity: 40
+    $name: Glow Intensity
+    $name:zh-CN: 发光强度
+    $name:zh-TW: 發光強度
+    $name:ja-JP: グロー強度
+    $description: Glow radius and brightness (0-100).
+    $description:zh-CN: 发光范围和亮度（0-100）。
+    $description:zh-TW: 發光範圍和亮度（0-100）。
+    $description:ja-JP: グローの半径と明るさ（0-100）。
+  - enhanced_glow: true
+    $name: Enhanced Glow
+    $name:zh-CN: 增强发光
+    $name:zh-TW: 增強發光
+    $name:ja-JP: 拡張グロー
+    $description: Dual-layer halo (outer + inner) for softer glow.
+    $description:zh-CN: 双层光晕（外晕+内辉），发光更柔和自然。
+    $description:zh-TW: 雙層光暈（外暈+內輝），發光更柔和自然。
+    $description:ja-JP: 二重ハロー（外側+内側）でより柔らかいグロー。
+  - enable_trail_stroke: true
+    $name: Trail Stroke
+    $name:zh-CN: 拖尾描边
+    $name:zh-TW: 拖尾描邊
+    $name:ja-JP: トレイルストローク
+    $description: Outline along the trail edges. Shares stroke color/alpha with particle stroke.
+    $description:zh-CN: 沿拖尾边缘的描边轮廓。描边颜色/透明度与粒子描边共用。
+    $description:zh-TW: 沿拖尾邊緣的描邊輪廓。描邊顏色/透明度與粒子描邊共用。
+    $description:ja-JP: トレイル縁のストローク。色/透明度は粒子ストロークと共用。
+  - trail_stroke_width: 20
+    $name: Trail Stroke Width
+    $name:zh-CN: 拖尾描边宽度
+    $name:zh-TW: 拖尾描邊寬度
+    $name:ja-JP: トレイルストローク幅
+    $description: Stroke thickness as percentage of trail half-width (0-50).
+    $description:zh-CN: 描边粗细，占拖尾半宽百分比（0-50）。
+    $description:zh-TW: 描邊粗細，佔拖尾半寬百分比（0-50）。
+    $description:ja-JP: ストローク太さ（トレイル半幅に対する%、0-50）。
+  - edge_softness: 50
+    $name: Edge Softness
+    $name:zh-CN: 边缘柔和度
+    $name:zh-TW: 邊緣柔和度
+    $name:ja-JP: エッジ柔軟度
+    $description: Trail edge anti-aliasing width (0=hard edge, 100=very soft).
+    $description:zh-CN: 拖尾边缘抗锯齿宽度（0=硬边，100=极柔和）。
+    $description:zh-TW: 拖尾邊緣反鋸齒寬度（0=硬邊，100=極柔和）。
+    $description:ja-JP: トレイル端のアンチエイリアス幅（0=硬い端、100=非常に柔らかい）。
+  - aa_mode: extra
+    $name: Anti-Aliasing
+    $name:zh-CN: 抗锯齿
+    $name:zh-TW: 反鋸齒
+    $name:ja-JP: アンチエイリアス
+    $description: Width of the soft band drawn along trail edges, widest (= softest) first. Extra = ~4px, can look blurry on small particles. Smooth = ~2px, the default. Crisp = ~1px, keeps shapes sharp. Off = hard edges with visible jaggies.
+    $description:zh-CN: 拖尾边缘柔化过渡带的宽度，由柔到硬依次为：强化≈4像素（小粒子上可能显得模糊）、平滑≈2像素（默认）、清晰≈1像素（保持形状锐利）、关闭=硬边（可见锯齿）。
+    $description:zh-TW: 拖尾邊緣柔化過渡帶的寬度，由柔到硬依次為：強化≈4像素（小粒子上可能顯得模糊）、平滑≈2像素（預設）、清晰≈1像素（保持形狀銳利）、關閉=硬邊（可見鋸齒）。
+    $description:ja-JP: 軌跡エッジに描くソフト遷移帯の幅。柔らかい順に エクストラ=約4px（小さいパーティクルではぼやけて見える）/ スムーズ=約2px（既定）/ クリスプ=約1px（形状がシャープ）/ オフ=ハードエッジ（ジャギーが目立つ）。
+    $options:
+    - off: Off
+    - smooth: Smooth
+    - crisp: Crisp
+    - extra: Extra Smooth
+    $options:zh-CN:
+    - off: 关闭
+    - smooth: 平滑
+    - crisp: 锐利
+    - extra: 超平滑
+    $options:zh-TW:
+    - off: 關閉
+    - smooth: 平滑
+    - crisp: 銳利
+    - extra: 超平滑
+    $options:ja-JP:
+    - off: オフ
+    - smooth: スムーズ
+    - crisp: シャープ
+    - extra: ウルトラスムーズ
+  - enable_msaa: true
+    $name: Enable MSAA
+    $name:zh-CN: 启用 MSAA
+    $name:zh-TW: 啟用 MSAA
+    $name:ja-JP: MSAAを有効化
+    $description: Multi-Sample Anti-Aliasing. Hardware edge smoothing.
+    $description:zh-CN: 硬件多重采样抗锯齿，平滑三角形边缘。
+    $description:zh-TW: 硬體多重採樣抗鋸齒，平滑三角形邊緣。
+    $description:ja-JP: ハードウェアMSAA。
+  - msaa_level: 4x
+    $name: MSAA Level
+    $name:zh-CN: MSAA 级别
+    $name:zh-TW: MSAA 等級
+    $name:ja-JP: MSAAレベル
+    $description: Hardware sample count per pixel, effective only when Enable MSAA is on. Higher values smooth the offscreen trail edges more but cost linear extra memory bandwidth and resolve time; 4x is usually enough.
+    $description:zh-CN: 每像素的硬件采样数，仅在启用 MSAA 时生效。数值越高，离屏拖尾边缘越平滑，但显存带宽与解析开销同比上升；通常 4x 已足够。
+    $description:zh-TW: 每像素的硬體取樣數，僅在啟用 MSAA 時生效。數值越高，離屏拖尾邊緣越平滑，但顯存頻寬與解析開銷同比上升；通常 4x 已足夠。
+    $description:ja-JP: 1ピクセルあたりのハードウェアサンプル数。MSAA有効時のみ適用されます。値を上げるほど離屏トレイルのエッジが滑らかになりますが、メモリ帯域と解決時間のコストも比例して増加します。通常は4xで十分です。
+    $options:
+    - 2x: 2x
+    - 4x: 4x
+    - 8x: 8x
+    $options:zh-CN:
+    - 2x: 2x
+    - 4x: 4x
+    - 8x: 8x
+    $options:zh-TW:
+    - 2x: 2x
+    - 4x: 4x
+    - 8x: 8x
+    $options:ja-JP:
+    - 2x: 2x
+    - 4x: 4x
+    - 8x: 8x
+  - enable_ssaa: false
+    $name: Enable SSAA
+    $name:zh-CN: 启用 SSAA
+    $name:zh-TW: 啟用 SSAA
+    $name:ja-JP: SSAAを有効化
+    $description: Supersample Anti-Aliasing. Render at higher resolution then downsample. Best quality but GPU intensive.
+    $description:zh-CN: 超采样抗锯齿，更高分辨率渲染再降采样。质量最高但耗 GPU。
+    $description:zh-TW: 超取樣反鋸齒。以高解析度渲染後縮小。畫質最佳但GPU負擔大。
+    $description:ja-JP: スーパーサンプリングAA。高解像度で描画してから縮小するため画質は最高ですが、GPU負荷も最大になります。
+  - ssaa_level: 2x
+    $name: SSAA Scale
+    $name:zh-CN: SSAA 缩放
+    $name:zh-TW: SSAA 倍率
+    $name:ja-JP: SSAAスケール
+    $description: Render resolution scale factor, effective only when Enable SSAA is on. 2x renders at twice the width and height, i.e. four times the pixels, so cost grows with the square of the value; pick the lowest level that still looks clean.
+    $description:zh-CN: 渲染分辨率缩放倍数，仅在启用 SSAA 时生效。2x 表示宽高各放大 2 倍，即像素量变为 4 倍，因此开销随倍数的平方增长；选择看起来干净的最低档即可。
+    $description:zh-TW: 渲染解析度縮放倍數，僅在啟用 SSAA 時生效。2x 表示寬高各放大 2 倍，即像素量變為 4 倍，因此開銷隨倍數的平方增長；選擇看起來乾淨的最低檔即可。
+    $description:ja-JP: レンダリング解像度の倍率。SSAA有効時のみ適用されます。2x は縦横それぞれ2倍、つまり画素数は4倍になるため、コストは倍率の二乗で増加します。見た目が綺麗な最小値を選んでください。
+    $options:
+    - 2x: 2x
+    - 3x: 3x
+    - 4x: 4x
+    $options:zh-CN:
+    - 2x: 2x
+    - 3x: 3x
+    - 4x: 4x
+    $options:zh-TW:
+    - 2x: 2x
+    - 3x: 3x
+    - 4x: 4x
+    $options:ja-JP:
+    - 2x: 2x
+    - 3x: 3x
+    - 4x: 4x
+  - ssaa_filter: box
+    $name: SSAA Downsample Filter
+    $name:zh-CN: SSAA 降采样滤波器
+    $name:zh-TW: SSAA 降採樣濾波器
+    $name:ja-JP: SSAAダウンサンプルフィルタ
+    $description: Reconstruction filter used when downsampling the supersampled buffer. Bilinear = 1 tap (fastest), Box = 16 taps (cleanest), Tent = 9-tap equivalent (smoothest), Lanczos = 16 taps (sharpest, slight ringing).
+    $description:zh-CN: 超采样缓冲降采样时使用的重建滤波器。Bilinear=1次采样（最快），Box=16次采样（最干净），Tent=等效9次采样（最平滑），Lanczos=16次采样（最锐利，轻微振铃）。
+    $description:zh-TW: 超取樣緩衝降採樣時使用的重建濾波器。Bilinear=1次取樣（最快），Box=16次取樣（最乾淨），Tent=等效9次取樣（最平滑），Lanczos=16次取樣（最銳利，輕微振鈴）。
+    $description:ja-JP: ダウンサンプル時の再構成フィルタ。Bilinear=1タップ（最速）、Box=16タップ、Tent=9タップ相当、Lanczos=16タップ（最シャープ）。
+    $options:
+    - bilinear: Bilinear (1 tap)
+    - box: Box (16 tap)
+    - tent: Tent (9 tap)
+    - lanczos: Lanczos (16 tap)
+    $options:zh-CN:
+    - bilinear: 双线性（1次采样）
+    - box: 方形（16次采样）
+    - tent: 帐篷（等效9次采样）
+    - lanczos: Lanczos（16次采样）
+    $options:zh-TW:
+    - bilinear: 雙線性（1次取樣）
+    - box: 方形（16次取樣）
+    - tent: 帳篷（等效9次取樣）
+    - lanczos: Lanczos（16次取樣）
+    $options:ja-JP:
+    - bilinear: バイリニア（1タップ）
+    - box: ボックス（16タップ）
+    - tent: テント（9タップ相当）
+    - lanczos: Lanczos（16タップ）
+  - ssaa_sharpness: 0
+    $name: SSAA Sharpen
+    $name:zh-CN: SSAA 降采样锐化
+    $name:zh-TW: SSAA 降採樣銳化
+    $name:ja-JP: SSAAシャープネス
+    $description: Unsharp amount applied after downsampling. 0 = neutral, higher values restore edge crispness lost by filtering.
+    $description:zh-CN: 降采样后叠加的非锐化掩模强度。0=中性，数值越高越能找回被滤波抹掉的边缘锐度。
+    $description:zh-TW: 降採樣後疊加的非銳化遮罩強度。0=中性，數值越高越能找回被濾波抹掉的邊緣銳度。
+    $description:ja-JP: ダウンサンプル後のアンシャープ量。0=ニュートラル、高いほどエッジが締まる。
+  - shader_quality: high
+    $name: Shader Quality
+    $name:zh-CN: 着色器质量
+    $name:zh-TW: 著色器品質
+    $name:ja-JP: シェーダー品質
+    $description: Fast = fixed-width edges (cheapest). Balanced = screen-space derivative AA (edges are always ~1px wide) + 4-tap text atlas sampling. High = derivative AA + 4-tap rotated SDF edge sampling for the smoothest particle outlines.
+    $description:zh-CN: 快速=固定宽度边缘（最省）。均衡=屏幕空间导数抗锯齿（边缘恒为约1像素宽）+ 文字图集4次采样。高=导数抗锯齿 + 粒子SDF 4次旋转网格边缘采样，轮廓最平滑。
+    $description:zh-TW: 快速=固定寬度邊緣（最省）。均衡=螢幕空間導數抗鋸齒（邊緣恆為約1像素寬）+ 文字圖集4次取樣。高=導數抗鋸齒 + 粒子SDF 4次旋轉網格邊緣取樣，輪廓最平滑。
+    $description:ja-JP: 高速=固定幅エッジ（最も軽量）。バランス=画面空間微分のAA（エッジは常に約1px幅）＋文字アトラス4タップ。高品質=微分AA＋SDFの回転グリッド4タップエッジサンプリングで、最も滑らかなパーティクル輪郭になります。
+    $options:
+    - fast: Fast
+    - balanced: Balanced
+    - high: High
+    $options:zh-CN:
+    - fast: 快速
+    - balanced: 均衡
+    - high: 高
+    $options:zh-TW:
+    - fast: 快速
+    - balanced: 均衡
+    - high: 高
+    $options:ja-JP:
+    - fast: 高速
+    - balanced: バランス
+    - high: 高品質
+  - sdf_sample_quality: 2x2
+    $name: Particle Edge Sampling
+    $name:zh-CN: 粒子边缘采样
+    $name:zh-TW: 粒子邊緣取樣
+    $name:ja-JP: パーティクルエッジサンプル
+    $description: Samples taken per pixel when evaluating the particle shape SDF. 2x2 and 4x add rotated-grid samples for smoother outlines (costs more GPU on large particles).
+    $description:zh-CN: 计算粒子形状SDF时每像素的采样次数。2x2 与 4x 采用旋转网格多次采样，轮廓更平滑（大粒子时GPU开销更大）。
+    $description:zh-TW: 計算粒子形狀SDF時每像素的取樣次數。2x2 與 4x 採用旋轉網格多次取樣，輪廓更平滑（大粒子時GPU開銷更大）。
+    $description:ja-JP: パーティクル形状のSDFを評価する際の1ピクセルあたりサンプル数。2x2 と 4x は回転グリッドサンプルを追加して輪郭を滑らかにします（大きなパーティクルではGPUコストが増加）。
+    $options:
+    - 1x: 1x
+    - 2x2: 2x2 Rotated
+    - 4x: 4x Rotated
+    $options:zh-CN:
+    - 1x: 1x
+    - 2x2: 2x2 旋转网格
+    - 4x: 4x 旋转网格
+    $options:zh-TW:
+    - 1x: 1x
+    - 2x2: 2x2 旋轉網格
+    - 4x: 4x 旋轉網格
+    $options:ja-JP:
+    - 1x: 1x
+    - 2x2: 2x2 回転グリッド
+    - 4x: 4x 回転グリッド
+  - dither_mode: ordered4
+    $name: Output Dither
+    $name:zh-CN: 输出抖动
+    $name:zh-TW: 輸出抖動
+    $name:ja-JP: 出力ディザ
+    $description: Breaks up gradient banding on 8-bit displays by adding a sub-LSB noise pattern. Auto-disabled in HDR mode.
+    $description:zh-CN: 叠加亚色阶噪声图案，消除 8bit 显示下的渐变色带。HDR 模式自动关闭。
+    $description:zh-TW: 疊加亞色階雜訊圖案，消除 8bit 顯示下的漸層色帶。HDR 模式自動關閉。
+    $description:ja-JP: 8bit表示のグラデーションバンディングをサブLSBノイズで低減します。HDRでは自動無効。
+    $options:
+    - off: Off
+    - ordered4: Ordered 4x4
+    - ordered8: Ordered 8x8
+    - hash: Hash Noise
+    $options:zh-CN:
+    - off: 关闭
+    - ordered4: 有序 4x4
+    - ordered8: 有序 8x8
+    - hash: 哈希噪声
+    $options:zh-TW:
+    - off: 關閉
+    - ordered4: 有序 4x4
+    - ordered8: 有序 8x8
+    - hash: 雜訊雜湊
+    $options:ja-JP:
+    - off: オフ
+    - ordered4: 有序 4x4
+    - ordered8: 有序 8x8
+    - hash: ハッシュノイズ
+  - dither_strength: 50
+    $name: Dither Strength
+    $name:zh-CN: 抖动强度
+    $name:zh-TW: 抖動強度
+    $name:ja-JP: ディザ強度
+    $description: Dither amplitude in 1/100 of a color step. 50 = half a color step (invisible, removes most banding).
+    $description:zh-CN: 抖动幅度，单位为 1/100 色阶。50=半个色阶（肉眼不可见，可消除大部分色带）。
+    $description:zh-TW: 抖動幅度，單位為 1/100 色階。50=半個色階（肉眼不可見，可消除大部分色帶）。
+    $description:ja-JP: ディザ振幅（1色階の1/100単位）。50=半色階で、目視できない程度ながらバンディングの大半を除去します。
+  - enable_temporal_blur: true
+    $name: Temporal Blur (Motion Blur)
+    $name:zh-CN: 时序模糊（运动模糊）
+    $name:zh-TW: 時序模糊（運動模糊）
+    $name:ja-JP: 時間ブラー（モーションブラー）
+    $description: Real temporal accumulation. Keeps the previous frames and blends them into the current frame, producing directional afterimages instead of stacked translucent outlines. Adds one fullscreen render target.
+    $description:zh-CN: 真正的时序累积。保留前几帧并与当前帧混合，形成带方向性的拖影残像，而非多层半透明描边叠加。需额外一张全屏渲染目标。
+    $description:zh-TW: 真正的時序累積。保留前幾幀並與當前幀混合，形成帶方向性的拖影殘像，而非多層半透明描邊疊加。需額外一張全屏渲染目標。
+    $description:ja-JP: 真の時間的蓄積。前フレームを保持して合成し、方向性のある残像を作ります（全画面RTを1枚追加）。
+  - temporal_blur_amount: 35
+    $name: Temporal Blur Amount
+    $name:zh-CN: 时序模糊强度
+    $name:zh-TW: 時序模糊強度
+    $name:ja-JP: 時間ブラー量
+    $description: How much of the previous frame is retained. Higher = longer trails. 95 keeps almost everything (very smeary).
+    $description:zh-CN: 上一帧被保留的比例。数值越高残像越长。95 几乎全部保留（拖影很重）。
+    $description:zh-TW: 上一幀被保留的比例。數值越高殘像越長。95 幾乎全部保留（拖影很重）。
+    $description:ja-JP: 前フレームの保持量。高いほど残像が長くなります。95はほぼ全保持。
+  - post_aa: 'off'
+    $name: Post-process Anti-aliasing
+    $name:zh-CN: 后处理抗锯齿
+    $name:zh-TW: 後處理反鋸齒
+    $name:ja-JP: 後処理アンチエイリアス
+    $description: Fullscreen edge anti-aliasing applied before presentation. Cheaper and more uniform than MSAA/SSAA and needs no multisampled offscreen target. FXAA Extreme finds longer edges at a slightly higher cost.
+    $description:zh-CN: 呈现前对整屏做边缘抗锯齿。比 MSAA/SSAA 更省、更均匀，且不需要多重采样离屏目标。FXAA 强化版会追踪更长的边缘，开销略高。
+    $description:zh-TW: 呈現前對整屏做邊緣反鋸齒。比 MSAA/SSAA 更省、更均勻，且不需要多重採樣離屏目標。FXAA 強化版會追蹤更長的邊緣，開銷略高。
+    $description:ja-JP: 提示前に全画面のエッジAAを適用します。MSAA/SSAAより軽量で均一、多重サンプリングのオフスクリーンターゲットも不要です。FXAA Extreme はより長いエッジを検出できますが、コストはやや高くなります。
+    $options:
+    - 'off': Off
+    - fxaa: FXAA
+    - fxaa_extreme: FXAA Extreme
+    $options:zh-CN:
+    - 'off': 关闭
+    - fxaa: FXAA
+    - fxaa_extreme: FXAA 强化
+    $options:zh-TW:
+    - 'off': 關閉
+    - fxaa: FXAA
+    - fxaa_extreme: FXAA 強化
+    $options:ja-JP:
+    - 'off': オフ
+    - fxaa: FXAA
+    - fxaa_extreme: FXAA 強化
+  - enable_bloom: true
+    $name: Bloom
+    $name:zh-CN: 泛光
+    $name:zh-TW: 泛光
+    $name:ja-JP: ブルーム
+    $description: Real bloom. Bright areas are extracted and blurred through a downsample/upsample chain, then added back. Produces soft halos and natural overexposure instead of simply widening the glow bands.
+    $description:zh-CN: 真正的泛光：提取亮部经降采样/上采样模糊链后加性叠加。得到柔和光晕与自然过曝，而非单纯加宽发光带。
+    $description:zh-TW: 真正的泛光：提取亮部經降採樣/上採樣模糊鏈後加性疊加。得到柔和光暈與自然過曝，而非單純加寬發光帶。
+    $description:ja-JP: 本物のブルーム。高輝度領域を抽出してダウンサンプル/アップサンプルのぼかし鎖で処理し、加算して戻します。単にグロー帯を広げるのではなく、柔らかいハローと自然な露出オーバーを得られます。
+  - bloom_threshold: 60
+    $name: Bloom Threshold
+    $name:zh-CN: 泛光阈值
+    $name:zh-TW: 泛光閾值
+    $name:ja-JP: ブルーム閾値
+    $description: Luminance above which pixels start contributing to the bloom. Lower = more of the trail blooms.
+    $description:zh-CN: 亮度超过该值才参与泛光。越低越多拖尾内容参与发光。
+    $description:zh-TW: 亮度超過該值才參與泛光。越低越多拖尾內容參與發光。
+    $description:ja-JP: この輝度を超えた画素がブルームに寄与します。値を下げるほど、軌跡のより広い範囲が発光します。
+  - bloom_intensity: 50
+    $name: Bloom Intensity
+    $name:zh-CN: 泛光强度
+    $name:zh-TW: 泛光強度
+    $name:ja-JP: ブルーム強度
+    $description: Strength of the bloom that is added back on top of the scene.
+    $description:zh-CN: 叠加回场景的泛光强度。
+    $description:zh-TW: 疊加回場景的泛光強度。
+    $description:ja-JP: シーンに加算されるブルームの強さ。
+  - hdr_mode: auto
+    $name: HDR Output
+    $name:zh-CN: HDR 输出
+    $name:zh-TW: HDR 輸出
+    $name:ja-JP: HDR出力
+    $description: How the FP16 swap chain is interpreted. Auto = use scRGB when the display reports HDR (correct colour space + linearisation, highlights may exceed 1.0). Off = legacy behaviour (gamma-encoded 0-1 only). HDR10 = 10-bit PQ output.
+    $description:zh-CN: FP16 交换链的解读方式。自动=检测到 HDR 显示器时使用 scRGB（正确色彩空间 + 线性化，高光可超过 1.0）。关闭=旧行为（仅 gamma 编码 0-1）。HDR10=10bit PQ 输出。
+    $description:zh-TW: FP16 交換鏈的解讀方式。自動=偵測到 HDR 顯示器時使用 scRGB（正確色彩空間 + 線性化，高光可超過 1.0）。關閉=舊行為（僅 gamma 編碼 0-1）。HDR10=10bit PQ 輸出。
+    $description:ja-JP: FP16スワップチェーンの解釈方法。自動=HDR時にscRGB（正しい色空間＋線形化）。オフ=従来動作。HDR10=10bit PQ出力。
+    $options:
+    - auto: Auto
+    - 'off': 'Off (Legacy)'
+    - scrgb: scRGB
+    - hdr10: HDR10 (PQ)
+    $options:zh-CN:
+    - auto: 自动
+    - 'off': 关闭（旧行为）
+    - scrgb: scRGB
+    - hdr10: HDR10 (PQ)
+    $options:zh-TW:
+    - auto: 自動
+    - 'off': 關閉（舊行為）
+    - scrgb: scRGB
+    - hdr10: HDR10 (PQ)
+    $options:ja-JP:
+    - auto: 自動
+    - 'off': オフ（従来動作）
+    - scrgb: scRGB
+    - hdr10: HDR10 (PQ)
+  - hdr_highlight_boost: 0
+    $name: HDR Highlight Boost
+    $name:zh-CN: HDR 高光增益
+    $name:zh-TW: HDR 高光增益
+    $name:ja-JP: HDRハイライトブースト
+    $description: Pushes bright pixels above 1.0 so they render as real HDR highlights (only has an effect on an HDR display with HDR Output enabled). 0 = unchanged.
+    $description:zh-CN: 把亮部像素推高到 1.0 以上，使其成为真正的 HDR 高光（仅在 HDR 显示器且开启 HDR 输出时生效）。0=不变。
+    $description:zh-TW: 把亮部像素推高到 1.0 以上，使其成為真正的 HDR 高光（僅在 HDR 顯示器且開啟 HDR 輸出時生效）。0=不變。
+    $description:ja-JP: 明るい画素を1.0超へ押し上げ、真のHDRハイライトにします（HDR表示＋HDR出力時のみ）。0=変化なし。
+  - hdr_tonemap: 'off'
+    $name: HDR Tone Mapping
+    $name:zh-CN: HDR 色调映射
+    $name:zh-TW: HDR 色調映射
+    $name:ja-JP: HDRトーンマッピング
+    $description: Compresses the boosted range back into display range so highlights roll off instead of clipping to white. ACES is filmic and slightly desaturates highlights; Reinhard is neutral.
+    $description:zh-CN: 把增益后的范围压回显示范围，使高光平缓滚降而非硬切到纯白。ACES 偏电影感、高光略去饱和；Reinhard 更中性。
+    $description:zh-TW: 把增益後的範圍壓回顯示範圍，使高光平緩滾降而非硬切到純白。ACES 偏電影感、高光略去飽和；Reinhard 更中性。
+    $description:ja-JP: ブースト後の範囲を表示範囲へ圧縮し、白飛びの代わりに緩やかに落とします。ACES=映画的、Reinhard=ニュートラル。
+    $options:
+    - 'off': Off
+    - reinhard: Reinhard
+    - aces: ACES (Filmic)
+    $options:zh-CN:
+    - 'off': 关闭
+    - reinhard: Reinhard
+    - aces: ACES（电影感）
+    $options:zh-TW:
+    - 'off': 關閉
+    - reinhard: Reinhard
+    - aces: ACES（電影感）
+    $options:ja-JP:
+    - 'off': オフ
+    - reinhard: Reinhard
+    - aces: ACES（映画的）
+  $name: Rendering & Quality
+  $name:zh-CN: 画质与发光
+  $name:zh-TW: 畫質與發光
+  $name:ja-JP: 画質とグロー
+
+- Particles:
+  - particle_mode: always
+    $name: Particle Mode
+    $name:zh-CN: 粒子模式
+    $name:zh-TW: 粒子模式
+    $name:ja-JP: パーティクルモード
+    $options:
+    - off: Off
+    - fadeout: On Fadeout
+    - always: Always (except idle)
+    $options:zh-CN:
+    - off: 关闭
+    - fadeout: 淡出时
+    - always: 始终（静止除外）
+    $options:zh-TW:
+    - off: 關閉
+    - fadeout: 淡出時
+    - always: 始終（靜止除外）
+    $options:ja-JP:
+    - off: オフ
+    - fadeout: フェードアウト時
+    - always: 常時（静止時除く）
+  - particle_origin: head
+    $name: Particle Origin
+    $name:zh-CN: 粒子释放位置
+    $name:zh-TW: 粒子釋放位置
+    $name:ja-JP: パーティクル起点
+    $description: Where on the trail particles are released.
+    $description:zh-CN: 粒子从拖尾的哪个位置释放。
+    $description:zh-TW: 粒子從拖尾的哪個位置釋放。
+    $description:ja-JP: トレイルのどこからパーティクルを放出するか。
+    $options:
+    - head: Head (cursor)
+    - middle: Middle
+    - tail: Tail
+    - custom: Custom Ratio
+    - random: Random Ratio
+    $options:zh-CN:
+    - head: 开头（光标处）
+    - middle: 中间
+    - tail: 结尾
+    - custom: 自定义比例
+    - random: 随机比例
+    $options:zh-TW:
+    - head: 開頭（游標處）
+    - middle: 中間
+    - tail: 結尾
+    - custom: 自訂比例
+    - random: 隨機比例
+    $options:ja-JP:
+    - head: 先端（カーソル位置）
+    - middle: 中間
+    - tail: 末端
+    - custom: カスタム比率
+    - random: ランダム比率
+  - particle_origin_ratio: 80
+    $name: Custom Origin Ratio
+    $name:zh-CN: 自定义释放比例
+    $name:zh-TW: 自訂釋放比例
+    $name:ja-JP: カスタム比率
+    $description: Position along trail (0=head, 100=tail). Custom origin only.
+    $description:zh-CN: 沿拖尾的位置比例（0=开头，100=结尾）。仅自定义位置生效。
+    $description:zh-TW: 沿拖尾的位置比例（0=開頭，100=結尾）。僅自訂位置生效。
+    $description:ja-JP: トレイル上の位置比率（0=先端、100=末端）。カスタム起点時のみ有効。
+  - particle_density: 5
+    $name: Particle Density
+    $name:zh-CN: 粒子密度
+    $name:zh-TW: 粒子密度
+    $name:ja-JP: パーティクル密度
+    $description: Number of particles per release (1-10).
+    $description:zh-CN: 每次释放的粒子数量（1-10）。
+    $description:zh-TW: 每次釋放的粒子數量（1-10）。
+    $description:ja-JP: 放出ごとのパーティクル数（1-10）。
+  - particle_size_multiplier: 150
+    $name: Particle Size
+    $name:zh-CN: 粒子大小
+    $name:zh-TW: 粒子大小
+    $name:ja-JP: パーティクルサイズ
+    $description: Size multiplier for particles (50-300).
+    $description:zh-CN: 粒子大小倍数（50-300）。
+    $description:zh-TW: 粒子大小倍數（50-300）。
+    $description:ja-JP: パーティクルサイズ倍率（50-300）。
+  - enable_particle_glow: true
+    $name: Particle Glow
+    $name:zh-CN: 粒子发光
+    $name:zh-TW: 粒子發光
+    $name:ja-JP: パーティクルグロー
+    $description: Soft outer halo around each particle.
+    $description:zh-CN: 每个粒子外圈绘制柔和光晕。
+    $description:zh-TW: 每個粒子外圈繪製柔和光暈。
+    $description:ja-JP: 各パーティクル周囲のソフトなハロー。
+  - particle_glow_intensity: 40
+    $name: Particle Glow Intensity
+    $name:zh-CN: 粒子发光强度
+    $name:zh-TW: 粒子發光強度
+    $name:ja-JP: グロー強度
+    $description: Particle glow size and brightness (0-100).
+    $description:zh-CN: 粒子发光范围和亮度（0-100）。
+    $description:zh-TW: 粒子發光範圍和亮度（0-100）。
+    $description:ja-JP: パーティクルグローの大きさと明るさ（0-100）。
+  - enable_particle_stroke: false
+    $name: Particle Stroke
+    $name:zh-CN: 粒子描边
+    $name:zh-TW: 粒子描邊
+    $name:ja-JP: パーティクルストローク
+    $description: Outline around text particles, layered with glow for clarity on light backgrounds.
+    $description:zh-CN: 文字粒子外圈描边，与发光叠加，浅色背景下保持清晰轮廓。
+    $description:zh-TW: 文字粒子外圈描邊，與發光疊加，淺色背景下保持清晰輪廓。
+    $description:ja-JP: テキスト粒子の外枠ストローク。グローと重ねて明るい背景でも輪郭を明瞭に。
+  - particle_stroke_width: 6
+    $name: Stroke Width
+    $name:zh-CN: 描边宽度
+    $name:zh-TW: 描邊寬度
+    $name:ja-JP: ストローク幅
+    $description: Stroke thickness in atlas pixels (0-10).
+    $description:zh-CN: 描边粗细，图集像素单位（0-10）。
+    $description:zh-TW: 描邊粗細，圖集像素單位（0-10）。
+    $description:ja-JP: ストローク太さ（アトラスピクセル、0-10）。
+  - particle_stroke_alpha: 80
+    $name: Stroke Alpha
+    $name:zh-CN: 描边透明度
+    $name:zh-TW: 描邊透明度
+    $name:ja-JP: ストローク透明度
+    $description: Stroke opacity (0-100).
+    $description:zh-CN: 描边不透明度（0-100）。
+    $description:zh-TW: 描邊不透明度（0-100）。
+    $description:ja-JP: ストローク不透明度（0-100）。
+  - particle_stroke_color: auto
+    $name: Stroke Color
+    $name:zh-CN: 描边颜色
+    $name:zh-TW: 描邊顏色
+    $name:ja-JP: ストローク色
+    $description: auto = darkened particle color, or a hex RGB like 101010.
+    $description:zh-CN: auto 表示粒子主色变暗；或填写十六进制 RGB，如 101010。
+    $description:zh-TW: auto 表示粒子主色變暗；或填寫十六進位 RGB，如 101010。
+    $description:ja-JP: auto は粒子色を暗くした色、または 101010 のような Hex RGB。
+  - particle_interval: 0
+    $name: Particle Interval
+    $name:zh-CN: 粒子释放间隔
+    $name:zh-TW: 粒子釋放間隔
+    $name:ja-JP: 放出間隔
+    $description: Minimum interval between releases (ms, 0-2000). 0 = every frame. Fast-move interpolation is enabled only at 10 ms or below and only on near-straight segments; above that no filler particles are inserted at all, so a sparse trail follows the real cursor path instead of drawing a straight line to it.
+    $description:zh-CN: 粒子释放的最小时间间隔（毫秒，0-2000），0=每帧生成。快速移动插值仅在间隔≤10ms 且这一段轨迹接近直线时启用；超过 10ms 完全不插入补间粒子，因此稀疏的拖尾会贴合光标的真实路径，而不是拉出一条直线。
+    $description:zh-TW: 粒子釋放的最小時間間隔（毫秒，0-2000），0=每影格生成。快速移動插值僅在間隔≤10ms 且這一段軌跡接近直線時啟用；超過 10ms 完全不插入補間粒子，因此稀疏的拖尾會貼合游標的真實路徑，而不是拉出一條直線。
+    $description:ja-JP: 放出間隔の最小値（ms、0-2000）。0=毎フレーム。高速移動補間は間隔が10ms以下かつ軌跡がほぼ直線の区間のみ有効。10msを超えると補間粒子を一切挿入しないため、まばらな軌跡でもカーソルへ直線を引かず実際の経路に沿います。
+  - particle_spawn_spread: 14
+    $name: Spawn Position Spread
+    $name:zh-CN: 生成位置扩散
+    $name:zh-TW: 生成位置擴散
+    $name:ja-JP: 生成位置拡散
+    $description: Random spread radius around each spawn point (px, 0-100). 0 = all particles launch from the exact same point; higher values distribute them over a wider area, reducing clustering.
+    $description:zh-CN: 每个释放点周围的随机扩散半径（像素，0-100）。0=所有粒子从同一点发射；数值越大分布越广，减少扎堆。
+    $description:zh-TW: 每個釋放點周圍的隨機擴散半徑（像素，0-100）。0=所有粒子從同一點發射；數值越大分布越廣，減少扎堆。
+    $description:ja-JP: 各放出点を中心としたランダム拡散半径（px、0-100）。0=全粒子が同一点から発生。値が大きいほど広く分布し、密集を抑えます。
+  - particle_acceleration: true
+    $name: Acceleration Effect
+    $name:zh-CN: 加速度影响
+    $name:zh-TW: 加速度影響
+    $name:ja-JP: 加速度エフェクト
+    $description: Particle initial velocity affected by mouse acceleration.
+    $description:zh-CN: 粒子初速度受鼠标加速度影响，速度变化越大飞散越快。
+    $description:zh-TW: 粒子初速度受滑鼠加速度影響，速度變化越大飛散越快。
+    $description:ja-JP: パーティクル初速度がマウス加速度の影響を受けます。
+  - particle_shape: flower
+    $name: Particle Shape
+    $name:zh-CN: 粒子形状
+    $name:zh-TW: 粒子形狀
+    $name:ja-JP: パーティクル形状
+    $options:
+    - random: Random Mix
+    - circle: Circle
+    - star: Star
+    - hexagram: Hexagram
+    - heart: Heart
+    - diamond: Diamond
+    - triangle: Triangle
+    - flower: Flower
+    - pentagon: Pentagon
+    - hexagon: Hexagon
+    - text: Text Character
+    $options:zh-CN:
+    - random: 随机混合
+    - circle: 仅圆形
+    - star: 仅五角星
+    - hexagram: 仅六芒星
+    - heart: 仅心形
+    - diamond: 仅菱形
+    - triangle: 仅三角形
+    - flower: 仅花朵
+    - pentagon: 仅五边形
+    - hexagon: 仅六边形
+    - text: 文字字符
+    $options:zh-TW:
+    - random: 隨機混合
+    - circle: 僅圓形
+    - star: 僅五角星
+    - hexagram: 僅六芒星
+    - heart: 僅心形
+    - diamond: 僅菱形
+    - triangle: 僅三角形
+    - flower: 僅花朵
+    - pentagon: 僅五邊形
+    - hexagon: 僅六邊形
+    - text: 文字字元
+    $options:ja-JP:
+    - random: ランダム
+    - circle: サークル
+    - star: スター
+    - hexagram: 六芒星
+    - heart: ハート
+    - diamond: ダイヤ
+    - triangle: トライアングル
+    - flower: フラワー
+    - pentagon: ペンタゴン
+    - hexagon: ヘキサゴン
+    - text: テキスト
+  - enable_particle_spin: true
+    $name: Particle Spin
+    $name:zh-CN: 粒子自旋转
+    $name:zh-TW: 粒子自旋轉
+    $name:ja-JP: スピン
+    $description: Enable random self-rotation for particles.
+    $description:zh-CN: 启用粒子随机自旋转效果。
+    $description:zh-TW: 啟用粒子隨機自旋轉效果。
+    $description:ja-JP: パーティクルのランダム自転を有効にします。
+  - particle_spin_speed: 30
+    $name: Spin Speed
+    $name:zh-CN: 自旋速度
+    $name:zh-TW: 自旋速度
+    $name:ja-JP: スピン速度
+    $description: Base rotation speed for particles (0-100). Each particle gets random variation ±50%. Very high speed can make asymmetric shapes appear round due to motion blur.
+    $description:zh-CN: 粒子基础自旋转速度（0-100），每个粒子有 ±50% 的随机差异。速度过高会导致三角形/星形等非对称形状因运动模糊看起来像圆形。
+    $description:zh-TW: 粒子基礎自旋轉速度（0-100），每個粒子有 ±50% 的隨機差異。速度過高會導致三角形/星形等非對稱形狀因運動模糊看起來像圓形。
+    $description:ja-JP: パーティクルの基本回転速度（0-100）。各パーティクルに±50%のランダム差があります。速度が高すぎると、三角形や星形などの非対称な形状もモーションブラーで円形に見えます。
+  - enable_particle_interaction: true
+    $name: Particle Interaction
+    $name:zh-CN: 粒子间相互作用
+    $name:zh-TW: 粒子間相互作用
+    $name:ja-JP: パーティクル相互作用
+    $description: Enable repulsion force between particles. Force scales with mass product, acceleration scales with 1/m. O(n²), auto-skipped when >500 particles.
+    $description:zh-CN: 启用粒子之间的排斥力。力与质量乘积成正比，加速度与质量成反比。O(n²)复杂度，粒子>500时自动跳过。
+    $description:zh-TW: 啟用粒子之間的排斥力。力與質量乘積成正比，加速度與質量成反比。O(n²)複雜度，粒子>500時自動跳過。
+    $description:ja-JP: パーティクル間の反発力を有効にします。力は質量の積に比例し、加速度は 1/m に比例します。計算量はO(n²)で、パーティクルが500個を超えると自動的にスキップされます。
+  - particle_repel_distance: 20
+    $name: Inter-Particle Repel Distance
+    $name:zh-CN: 粒子间排斥距离
+    $name:zh-TW: 粒子間排斥距離
+    $name:ja-JP: 粒子間反発距離
+    $description: Distance (px, 5-100) within which particles repel each other. Separate from Cursor Repulsion Radius. Force uses quadratic falloff — strongest at contact, zero at this boundary.
+    $description:zh-CN: 粒子之间产生排斥力的距离（像素，5-100）。与"光标排斥半径"是两套独立设置。力采用二次衰减：接触处最强，到达此距离时降为零。
+    $description:zh-TW: 粒子之間產生排斥力的距離（像素，5-100）。與"游標排斥半徑"是兩套獨立設置。力採用二次衰減：接觸處最強，到此距離時降為零。
+    $description:ja-JP: パーティクル同士が反発し合う距離（px、5-100）。「カーソル反発半径」とは別の設定です。力は二次減衰：接触点で最強、境界でゼロ。
+  - particle_inter_repel_force: 20
+    $name: Inter-Particle Repel Strength
+    $name:zh-CN: 粒子间排斥强度
+    $name:zh-TW: 粒子間排斥強度
+    $name:ja-JP: 粒子間反発強度
+    $description: Strength of inter-particle repulsion (0-100). Internal scale — value/12, so 60 ≈ 5.0 base force. Mass uses fourth-root scaling (1.5-2.7x for masses 5-50), force clamped at 20. Low (5-20) subtle separation, mid (20-60) visible pushing, high (60-100) strong scattering. Enable Debug Interaction to visualize repulsion links.
+    $description:zh-CN: 粒子之间排斥力的强度（0-100）。内部缩放为 值/12，即 60≈5.0 基础力。质量采用四次方根缩放（质量5-50时仅1.5-2.7倍），力上限20。低值（5-20）轻微分离，中值（20-60）明显推开，高值（60-100）强力散射。可开启"调试-粒子相互作用"可视化排斥连线。
+    $description:zh-TW: 粒子之間排斥力的強度（0-100）。內部縮放為 值/12，即 60≈5.0 基礎力。質量採用四次方根縮放（質量5-50時僅1.5-2.7倍），力上限20。低值（5-20）輕同分離，中值（20-60）明顯推開，高值（60-100）強力散射。可開啟"除錯-粒子相互作用"可視化排斥連線。
+    $description:ja-JP: パーティクル間反発力の強さ（0-100）。内部スケールは値/12、60で約5.0。質量は四乗根スケーリング（質量5-50で1.5-2.7倍）、力の上限は20。低値（5-20）は軽い分離、中値（20-60）ははっきりした押し合い、高値（60-100）は強い散乱。「デバッグ-粒子相互作用」で反発リンクを可視化できます。
+  - particle_repel_alignment: 0
+    $name: Alignment Damping
+    $name:zh-CN: 同向运动衰减
+    $name:zh-TW: 同向運動衰減
+    $name:ja-JP: 同向減衰
+    $description: When two particles move in roughly the same direction, reduce both repulsion strength and range (0-100). 0 = no reduction, 100 = repulsion fully canceled at perfect alignment. Helps particles form coherent streams instead of scattering apart.
+    $description:zh-CN: 当两个粒子运动方向接近一致时，同时降低排斥强度和排斥范围（0-100）。0=不衰减，100=完全同向时排斥归零。有助于粒子形成连贯的流束而非互相散开。
+    $description:zh-TW: 當兩個粒子運動方向接近一致時，同時降低排斥強度和排斥範圍（0-100）。0=不衰減，100=完全同向時排斥歸零。有助於粒子形成連貫的流束而非互相散開。
+    $description:ja-JP: 2つのパーティクルの進行方向がほぼ一致するとき、反発力と範囲の両方を低減（0-100）。0=低減なし、100=完全一致時に反発ゼロ。パーティクルがバラけずにまとまった流れを作るのに役立ちます。
+  - particle_attraction: 15
+    $name: Particle Attraction
+    $name:zh-CN: 粒子吸附强度
+    $name:zh-TW: 粒子吸附強度
+    $name:ja-JP: 吸引力
+    $description: How strongly particles are pulled toward the cursor (0-100). Linear scale, mass-independent. Only particles within 500px are affected, with strength fading to zero at the edge. Low (5-20) subtle following, mid (20-50) visible pull, high (50-100) strong magnetic snap.
+    $description:zh-CN: 粒子被吸向光标的强度（0-100）。线性缩放，与质量无关。仅 500px 范围内的粒子受影响，强度随距离衰减至零。低值（5-20）轻微跟随，中值（20-50）明显吸引，高值（50-100）强力磁吸。
+    $description:zh-TW: 粒子被吸向游標的強度（0-100）。線性縮放，與質量無關。僅 500px 範圍內的粒子受影響，強度隨距離衰減至零。低值（5-20）輕微跟隨，中值（20-50）明顯吸引，高值（50-100）強力磁吸。
+    $description:ja-JP: パーティクルがカーソルに引き寄せられる強さ（0-100）。線形スケール、質量に依存しません。500px以内のパーティクルのみ影響を受け、端部で強度がゼロまで減衰。低値（5-20）は軽い追従、中値（20-50）ははっきりした引き寄せ、高値（50-100）は強い磁気吸着。
+  - enable_particle_repel: true
+    $name: Cursor Repulsion
+    $name:zh-CN: 光标排斥力
+    $name:zh-TW: 游標排斥力
+    $name:ja-JP: カーソル反発
+    $description: Particles near cursor are repelled, creating orbiting motion.
+    $description:zh-CN: 粒子靠近光标时被排斥弹开，形成绕飞效果。
+    $description:zh-TW: 粒子靠近游標時被排斥彈開，形成繞飛效果。
+    $description:ja-JP: カーソル付近のパーティクルが反発され周回運動を生みます。
+  - particle_repel_radius: 50
+    $name: Cursor Repulsion Radius
+    $name:zh-CN: 光标排斥半径
+    $name:zh-TW: 游標排斥半徑
+    $name:ja-JP: カーソル反発半径
+    $description: Radius (px, 5-100) around cursor within which particles are pushed away. Separate from Inter-Particle Repel Distance. Creates orbiting motion around the cursor.
+    $description:zh-CN: 光标周围的排斥半径（像素，5-100），粒子进入此范围被弹开形成绕飞。与"粒子间排斥距离"是两套独立设置。
+    $description:zh-TW: 游標周圍的排斥半徑（像素，5-100），粒子進入此範圍被彈開形成繞飛。與"粒子間排斥距離"是兩套獨立設置。
+    $description:ja-JP: カーソル周囲の反発半径（px、5-100）。この範囲内のパーティクルが押し出され周回運動を生みます。「粒子間反発距離」とは別の設定です。
+  - particle_repel_force: 30
+    $name: Cursor Repulsion Strength
+    $name:zh-CN: 光标排斥强度
+    $name:zh-TW: 游標排斥強度
+    $name:ja-JP: カーソル反発強度
+    $description: Strength of cursor repulsion and random perturbation (0-100). Controls how hard particles are pushed away from the cursor and the amount of directional jitter.
+    $description:zh-CN: 光标排斥力和随机扰动的强度（0-100）。控制粒子被光标牌开的力度和方向抖动量。
+    $description:zh-TW: 游標排斥力和隨機擾動的強度（0-100）。控制粒子被游標彈開的力度和方向抖動量。
+    $description:ja-JP: カーソル反発力とランダム摂動の強さ（0-100）。パーティクルがカーソルから押し出される強さと方向ジッタ量を制御。
+  $name: Particles
+  $name:zh-CN: 粒子
+  $name:zh-TW: 粒子
+  $name:ja-JP: パーティクル
+
+- ShapesText:
+  - text_content: Hi
+    $name: Text Content
+    $name:zh-CN: 文字内容
+    $name:zh-TW: 文字內容
+    $name:ja-JP: テキスト内容
+    $description: Characters to scatter along the trail when particle shape is set to Text. Letters, digits,
+      CJK characters and emoji all work. Use ',' '，' '|' or '｜' to separate multiple entries; each entry
+      counts as one phrase and the phrases take turns appearing, and [tag] placeholders work too. Built-in
+      ones are [time], [day], [datetime] and [weekday]. An inline format such as [time:%H:%M] wins over
+      everything else. Escape with \[time] to get a literal "[time]"; an unknown id is kept verbatim so
+      typos stay visible.
+    $description:zh-CN: 粒子形状设为文字字符时沿拖尾散落的字符，支持字母、数字、汉字和 Emoji。多个词组之间用分隔符 ','、'，'、'|'
+      或 '｜' 隔开，每一段算一个词组，词组轮流出现。同时支持 [tag] 占位符：[time]、[day]、[datetime]、[weekday]。
+      内联格式优先级最高，例如 [time:%H:%M]。写 \[time] 会输出字面 "[time]"；未知标签原样保留，方便发现拼写错误。
+    $description:zh-TW: 粒子形狀設為文字字元時沿拖尾散落的字元，支援字母、數字、漢字和 Emoji。多個詞組之間用分隔符 ','、'，'、'|'
+      或 '｜' 隔開，每一段算一個詞組，詞組輪流出現。同時支援 [tag] 佔位符：[time]、[day]、[datetime]、[weekday]。
+      內聯格式優先級最高，例如 [time:%H:%M]。寫 \[time] 會輸出字面 "[time]"；未知標籤原樣保留，方便發現拼寫錯誤。
+    $description:ja-JP: パーティクル形状をテキストに設定したときに軌跡に散らばる文字。英数字、漢字、絵文字に対応します。
+      複数の語句は ',' '，' '|' '｜' で区切ります。区切った各エントリが1つのフレーズとなり、フレーズは順番に切り替わります。
+      タグ形式のプレースホルダにも対応（[time] [day] [datetime] [weekday]）。[time:%H:%M] のようなインライン形式が
+      最優先。\[time] と書くとリテラルの "[time]" になります。未知のタグはそのまま表示されるため誤字に気づけます。
+  - text_tag_mode: dynamic
+    $name: Tag Update Mode
+    $name:zh-CN: 标签更新模式
+    $name:zh-TW: 標籤更新模式
+    $name:ja-JP: タグ更新モード
+    $options:
+    - static: Static (freeze at read)
+    - dynamic: Dynamic (follow changes)
+    $options:zh-CN:
+    - static: 静态（读到即冻结）
+    - dynamic: 动态（跟随变化）
+    $options:zh-TW:
+    - static: 靜態（讀到即凍結）
+    - dynamic: 動態（跟隨變化）
+    $options:ja-JP:
+    - static: 静的（読み取り時に固定）
+    - dynamic: 動的（変化に追従）
+    $description: Whether [tag] values keep updating or are frozen at the value first read. Format priority
+      (highest first) is inline > this mode's per-tag setting > the ISO 8601 default. Switching back to
+      static re-freezes, since changing either mode or format invalidates the frozen values.
+    $description:zh-CN: 标签值的更新方式：是持续更新，还是冻结在首次读取到的值。格式优先级（高→低）：内联 > 本节的每标签
+      设置 > ISO 8601 默认。改回静态会重新冻结——修改模式或格式都会让已冻结的值失效。
+    $description:zh-TW: 標籤值的更新方式：是持續更新，還是凍結在首次讀取到的值。格式優先級（高→低）：內聯 > 本節的每標籤
+      設定 > ISO 8601 預設。改回靜態會重新凍結——修改模式或格式都會讓已凍結的值失效。
+    $description:ja-JP: タグ値の扱い：更新し続けるか、最初に読み取った値で固定するか。書式の優先度（高→低）はインライン >
+      このモードのタグ別設定 > ISO 8601 既定値。モードや書式を変更すると固定値は破棄される。
+  - text_tag_time_format: ''
+    $name: '[time] Format'
+    $name:zh-CN: '[time] 格式'
+    $name:zh-TW: '[time] 格式'
+    $name:ja-JP: '[time] 形式'
+    $description: strftime format for [time]. Empty uses ISO 8601 (HH:MM:SS). Supported specifiers are %H %I
+      %M %S %p %Y %y %m %b %B %d %a %A %j %U %W %w %c %x %X %z %Z %%, plus aliases %T(=HH:MM:SS) %R(=HH:MM)
+      %F(=YYYY-MM-DD) %D(=MM/DD/YY). Anything else renders empty and is logged. %a/%b use the C locale, so
+      they are always English.
+    $description:zh-CN: 时间格式：strftime 格式串，留空使用 ISO 8601（时:分:秒）。支持 %H %I %M %S %p %Y %y %m %b %B
+      %d %a %A %j %U %W %w %c %x %X %z %Z %%，以及别名 %T(=时:分:秒) %R(=时:分) %F(=年-月-日) %D(=月/日/年)。
+      其余说明符输出为空并写入日志。%a/%b 固定使用 C locale，输出恒为英文。
+    $description:zh-TW: 時間格式：strftime 格式串，留空使用 ISO 8601（時:分:秒）。支援 %H %I %M %S %p %Y %y %m %b %B
+      %d %a %A %j %U %W %w %c %x %X %z %Z %%，以及別名 %T(=時:分:秒) %R(=時:分) %F(=年-月-日) %D(=月/日/年)。
+      其餘說明符輸出為空並寫入日誌。%a/%b 固定使用 C locale，輸出恆為英文。
+    $description:ja-JP: 時刻書式：strftime 書式。空欄なら ISO 8601（時:分:秒）。%H %I %M %S %p %Y %y %m %b %B %d %a %A
+      %j %U %W %w %c %x %X %z %Z %% と別名 %T(=時:分:秒) %R(=時:分) %F(=年-月-日) %D(=月/日/年) に対応。
+      その他は空文字になりログに記録される。%a/%b は C ロケール固定。
+  - text_tag_day_format: ''
+    $name: '[day] Format'
+    $name:zh-CN: '[day] 格式'
+    $name:zh-TW: '[day] 格式'
+    $name:ja-JP: '[day] 形式'
+    $description: strftime format for [day]. Empty uses ISO 8601 (YYYY-MM-DD). Same supported set as [time];
+      %Y %m %d %b %B %a %A %j %U %W %w are the useful ones. Anything else renders empty and is logged.
+    $description:zh-CN: 日期格式：strftime 格式串，留空使用 ISO 8601（年-月-日）。支持集与时间格式相同，常用 %Y %m %d
+      %b %B %a %A %j %U %W %w。其余说明符输出为空并写入日志。
+    $description:zh-TW: 日期格式：strftime 格式串，留空使用 ISO 8601（年-月-日）。支援集與時間格式相同，常用 %Y %m %d
+      %b %B %a %A %j %U %W %w。其餘說明符輸出為空並寫入日誌。
+    $description:ja-JP: 日付書式：strftime 書式。空欄なら ISO 8601（年-月-日）。対応書式は時刻と共通、よく使うのは
+      %Y %m %d %b %B %a %A %j %U %W %w。その他は空文字になりログに記録される。
+  - text_font_size: 24
+    $name: Font Size
+    $name:zh-CN: 字号
+    $name:zh-TW: 字級
+    $name:ja-JP: フォントサイズ
+    $description: Character on-screen size in pixels (10-200) when particle shape is Text.
+    $description:zh-CN: 粒子形状设为文字字符时的字符屏幕大小（像素，10-200）。
+    $description:zh-TW: 粒子形狀設為文字字元時的螢幕大小（像素，10-200）。
+    $description:ja-JP: パーティクル形状をテキストに設定時の文字の画面サイズ（ピクセル、10-200）。
+  - text_atlas_ss: 2x
+    $name: Text Atlas Supersampling
+    $name:zh-CN: 文字图集超采样
+    $name:zh-TW: 文字圖集超取樣
+    $name:ja-JP: テキストアトラス超解像
+    $description: Resolution multiplier for the offscreen glyph atlas. Higher values keep text/emoji crisp when particles are large, at the cost of VRAM and rebuild time.
+    $description:zh-CN: 离屏字形图集的分辨率倍数。数值越高，大尺寸文字/Emoji 越清晰，代价是显存占用与重建耗时。
+    $description:zh-TW: 離屏字形圖集的解析度倍數。數值越高，大尺寸文字/Emoji 越清晰，代價是顯存佔用與重建耗時。
+    $description:ja-JP: グリフアトラスの解像度倍率。大きいほど大きな文字/絵文字が鮮明になります（VRAMと再構築時間が増加）。
+    $options:
+    - 1x: 1x
+    - 2x: 2x
+    - 3x: 3x
+    - 4x: 4x
+    $options:zh-CN:
+    - 1x: 1x
+    - 2x: 2x
+    - 3x: 3x
+    - 4x: 4x
+    $options:zh-TW:
+    - 1x: 1x
+    - 2x: 2x
+    - 3x: 3x
+    - 4x: 4x
+    $options:ja-JP:
+    - 1x: 1x
+    - 2x: 2x
+    - 3x: 3x
+    - 4x: 4x
+  - enable_text_chunk: true
+    $name: Long Text Chunking
+    $name:zh-CN: 长句分段
+    $name:zh-TW: 長句分段
+    $name:ja-JP: 長文分割
+    $description: Split long text into short chunks and cycle through them, instead of rendering one long straight string. Emoji are kept intact.
+    $description:zh-CN: 将长句切分成短段并循环切换显示，避免一整句又直又长。Emoji 表情不会被切断。
+    $description:zh-TW: 將長句切分成短段並循環切換顯示，避免一整句又直又長。Emoji 表情不會被切斷。
+    $description:ja-JP: 長い文を短いチャンクに分割して循環表示し、一直手に長く表示されるのを防ぎます。絵文字は分断されません。
+  - text_chunk_mode: particle
+    $name: Chunk Cycle Mode
+    $name:zh-CN: 分段轮播模式
+    $name:zh-TW: 分段輪播模式
+    $name:ja-JP: チャンク切替モード
+    $description: "Per Particle: each particle cycles chunks on its own age (scattered fragments). Global Sync: all particles show and switch the same chunk together."
+    $description:zh-CN: 逐粒子：每个粒子按自身存活时间独立切换（散落碎片感）。全局同步：所有粒子同一时刻一起显示并切换同一段。
+    $description:zh-TW: 逐粒子：每個粒子按自身存活時間獨立切換（散落碎片感）。全域同步：所有粒子同一時刻一起顯示並切換同一段。
+    $description:ja-JP: パーティクル毎：各パーティクルが独自の経過時間で切替（散らばる破片風）。全体同期：全パーティクルが同時に同じチャンクを表示・切替。
+    $options:
+    - particle: Per Particle
+    - global: Global Sync
+    $options:zh-CN:
+    - particle: 逐粒子
+    - global: 全局同步
+    $options:zh-TW:
+    - particle: 逐粒子
+    - global: 全域同步
+    $options:ja-JP:
+    - particle: パーティクル毎
+    - global: 全体同期
+  - text_chunk_max: 3
+    $name: Max Chars Per Chunk
+    $name:zh-CN: 每段最多字数
+    $name:zh-TW: 每段最多字數
+    $name:ja-JP: 1チャンクの最大文字数
+    $description: Maximum number of characters per chunk (1-8). Longer text is split at this width.
+    $description:zh-CN: 每段最多显示几个字（1-8），超过此长度的文字按此宽度切分。
+    $description:zh-TW: 每段最多顯示幾個字（1-8），超過此長度的文字按此寬度切分。
+    $description:ja-JP: 1チャンクあたりの最大文字数（1-8）。この幅で長文を分割します。
+  - text_chunk_delay: 600
+    $name: Chunk Switch Delay (ms)
+    $name:zh-CN: 分段切换延迟（毫秒）
+    $name:zh-TW: 分段切換延遲（毫秒）
+    $name:ja-JP: チャンク切替間隔（ミリ秒）
+    $description: Time each chunk stays before switching to the next (100-3000 ms).
+    $description:zh-CN: 每段停留多久后切换到下一段（100-3000 毫秒）。
+    $description:zh-TW: 每段停留多久後切換到下一段（100-3000 毫秒）。
+    $description:ja-JP: 次のチャンクへ切り替わるまでの表示時間（100-3000 ミリ秒）。
+  - text_offset_x: 0
+    $name: Text Offset X
+    $name:zh-CN: 文字水平偏移
+    $name:zh-TW: 文字水平偏移
+    $name:ja-JP: テキスト左右オフセット
+    $description: Horizontal spawn offset of text particles relative to the cursor (-100 to 100 px).
+    $description:zh-CN: 文字粒子相对光标的水平生成位置偏移（-100 到 100 像素）。
+    $description:zh-TW: 文字粒子相對游標的水平生成位置偏移（-100 到 100 像素）。
+    $description:ja-JP: テキストパーティクルのカーソルに対する左右の生成オフセット（-100〜100 px）。
+  - text_offset_y: 0
+    $name: Text Offset Y
+    $name:zh-CN: 文字垂直偏移
+    $name:zh-TW: 文字垂直偏移
+    $name:ja-JP: テキスト上下オフセット
+    $description: Vertical spawn offset of text particles relative to the cursor (-100 to 100 px).
+    $description:zh-CN: 文字粒子相对光标的垂直生成位置偏移（-100 到 100 像素）。
+    $description:zh-TW: 文字粒子相對游標的垂直生成位置偏移（-100 到 100 像素）。
+    $description:ja-JP: テキストパーティクルのカーソルに対する上下の生成オフセット（-100〜100 px）。
+  - missile_idle_explode: false
+    $name: Craft Explode When Idle
+    $name:zh-CN: 静止时引爆飞行器
+    $name:zh-TW: 靜止時引爆飛行器
+    $name:ja-JP: 静止時に機体を爆発
+    $description: Rocket / missile shapes detonate when the pointer has been still for the delay below.
+      Only applies to the craft shapes, not to hearts or stars.
+    $description:zh-CN: 鼠标静止达到下方延迟后，火箭/导弹/光纤导弹会引爆。仅作用于飞行器类形状，爱心等不受影响。
+    $description:zh-TW: 滑鼠靜止達到下方延遲後，火箭/飛彈/光纖飛彈會引爆。僅作用於飛行器類形狀，愛心等不受影響。
+    $description:ja-JP: ポインタが下の時間だけ静止すると、ロケット/ミサイル/光ファイバーミサイルが爆発します。
+      対象は機体シェイプのみで、ハートなどには影響しません。
+  - missile_idle_delay: 400
+    $name: Idle Detonation Delay
+    $name:zh-CN: 引爆延迟
+    $name:zh-TW: 引爆延遲
+    $name:ja-JP: 爆発までの時間
+    $description: How long the pointer must stay still before craft shapes detonate (ms, 100-5000).
+    $description:zh-CN: 鼠标需静止多久才引爆飞行器（毫秒，100-5000）。
+    $description:zh-TW: 滑鼠需靜止多久才引爆飛行器（毫秒，100-5000）。
+    $description:ja-JP: 機体が爆発するまでにポインタが静止している必要がある時間（ミリ秒、100-5000）。
+  - missile_explode_particles: 12
+    $name: Explosion Particles
+    $name:zh-CN: 爆炸粒子数
+    $name:zh-TW: 爆炸粒子數
+    $name:ja-JP: 爆発パーティクル数
+    $description: Particles thrown out by each detonation (0-40). Set 0 to release no particles.
+    $description:zh-CN: 每次爆炸抛出的粒子数量（0-40），设为 0 则不释放粒子。
+    $description:zh-TW: 每次爆炸拋出的粒子數量（0-40），設為 0 則不釋放粒子。
+    $description:ja-JP: 爆発ごとに放出されるパーティクル数（0-40）。0 にすると粒子を出しません。
+  - missile_explode_fx: both
+    $name: Explosion Effect
+    $name:zh-CN: 爆炸特效
+    $name:zh-TW: 爆炸特效
+    $name:ja-JP: 爆発エフェクト
+    $options:
+    - particles: Particles
+    - shockwave: Shockwave Ring
+    - both: Particles + Shockwave
+    $options:zh-CN:
+    - particles: 仅粒子
+    - shockwave: 仅冲击波
+    - both: 粒子 + 冲击波
+    $options:zh-TW:
+    - particles: 僅粒子
+    - shockwave: 僅衝擊波
+    - both: 粒子 + 衝擊波
+    $options:ja-JP:
+    - particles: パーティクルのみ
+    - shockwave: 衝撃波のみ
+    - both: パーティクル + 衝撃波
+    $description: What a detonation emits. The shockwave reuses the click ripple style, so it follows
+      Click Effect Style if you also enabled click ripples.
+    $description:zh-CN: 爆炸时释放什么。冲击波复用点击波纹的绘制，因此会跟随点击效果样式的设置。
+    $description:zh-TW: 爆炸時釋放什麼。衝擊波複用點擊波紋的繪製，因此會跟隨點擊效果樣式的設定。
+    $description:ja-JP: 爆発時に何を放出するか。衝撃波はクリック波紋の描画を再利用するため、
+      クリック効果スタイルの設定に従います。
+  - shape_type: heart
+    $name: Shape Type
+    $name:zh-CN: 拖尾形状类型
+    $name:zh-TW: 拖尾形狀類型
+    $name:ja-JP: シェイプタイプ
+    $description: Shape used for Shape Trail mode.
+    $description:zh-CN: 形状拖尾模式下使用的形状。
+    $description:zh-TW: 形狀拖尾模式下使用的形狀。
+    $description:ja-JP: シェイプトレイルモードで使用する形状。
+    $options:
+    - heart: Heart
+    - star: Star
+    - hexagon: Hexagon
+    - circle: Circle
+    - diamond: Diamond
+    - triangle: Triangle
+    - flower: Flower
+    - pentagon: Pentagon
+    - hexagram: Hexagram
+    - rocket: Space Rocket
+    - missile: Missile
+    - fiber_missile: Fiber Missile
+    - random: Random Mix
+    $options:zh-CN:
+    - heart: 爱心
+    - star: 五角星
+    - hexagon: 六边形
+    - circle: 圆形
+    - diamond: 菱形
+    - triangle: 三角形
+    - flower: 花朵
+    - pentagon: 五边形
+    - hexagram: 六芒星
+    - rocket: 太空火箭
+    - missile: 导弹
+    - fiber_missile: 光纤导弹
+    - random: 随机混合
+    $options:zh-TW:
+    - heart: 愛心
+    - star: 五角星
+    - hexagon: 六邊形
+    - circle: 圓形
+    - diamond: 菱形
+    - triangle: 三角形
+    - flower: 花朵
+    - pentagon: 五邊形
+    - hexagram: 六芒星
+    - rocket: 太空火箭
+    - missile: 導彈
+    - fiber_missile: 光纖導彈
+    - random: 隨機混合
+    $options:ja-JP:
+    - heart: ハート
+    - star: スター
+    - hexagon: 六角形
+    - circle: サークル
+    - diamond: ダイヤ
+    - triangle: トライアングル
+    - flower: フラワー
+    - pentagon: 五角形
+    - hexagram: 六芒星
+    - rocket: ロケット
+    - missile: ミサイル
+    - fiber_missile: 光ファイバーミサイル
+    - random: ランダム
+  - shape_interval: 30
+    $name: Shape Interval
+    $name:zh-CN: 形状生成间隔
+    $name:zh-TW: 形狀生成間隔
+    $name:ja-JP: シェイプ間隔
+    $description: Distance between shapes in pixels (10-100).
+    $description:zh-CN: 形状之间的间隔距离（像素，10-100）。
+    $description:zh-TW: 形狀之間的間隔距離（像素，10-100）。
+    $description:ja-JP: 形状間の距離（ピクセル、10-100）。
+  - shape_random_offset: true
+    $name: Random Position Offset
+    $name:zh-CN: 随机位置微调
+    $name:zh-TW: 隨機位置微調
+    $name:ja-JP: ランダムオフセット
+    $description: Add small random offset to each shape position.
+    $description:zh-CN: 为每个形状位置添加小范围随机偏移，更自然。
+    $description:zh-TW: 為每個形狀位置添加小範圍隨機偏移，更自然。
+    $description:ja-JP: 各形状位置に小さなランダムオフセットを追加。
+  - shape_count: 1
+    $name: Shape Count
+    $name:zh-CN: 每次生成数量
+    $name:zh-TW: 每次生成數量
+    $name:ja-JP: 生成数
+    $description: Number of shapes per spawn (1-5).
+    $description:zh-CN: 每次生成的形状数量（1-5）。
+    $description:zh-TW: 每次生成的形狀數量（1-5）。
+    $description:ja-JP: 生成ごとの形状数（1-5）。
+  - shape_size: 12
+    $name: Shape Size
+    $name:zh-CN: 形状大小
+    $name:zh-TW: 形狀大小
+    $name:ja-JP: 形状サイズ
+    $description: Base size of shapes in pixels (5-60). Larger values help the slender rocket/missile shapes.
+    $description:zh-CN: 形状的基础大小（像素，5-60）。火箭/导弹这类细长形状建议调大。
+    $description:zh-TW: 形狀的基礎大小（像素，5-60）。火箭/飛彈這類細長形狀建議調大。
+    $description:ja-JP: 形状の基本サイズ（ピクセル、5-60）。ロケット/ミサイルのような細長い形は大きめがおすすめ。
+  - shape_lifetime: 800
+    $name: Shape Lifetime
+    $name:zh-CN: 形状存活时间
+    $name:zh-TW: 形狀存活時間
+    $name:ja-JP: 形状寿命
+    $description: How long each shape lasts (ms, 200-2000).
+    $description:zh-CN: 每个形状的存活时间（毫秒，200-2000）。
+    $description:zh-TW: 每個形狀的存活時間（毫秒，200-2000）。
+    $description:ja-JP: 各形状の持続時間（ms、200-2000）。
+  - dots_multiplier: 2
+    $name: Dot Chain Density
+    $name:zh-CN: 圆点链密度
+    $name:zh-TW: 圓點鏈密度
+    $name:ja-JP: ドット密度
+    $description: Dot count multiplier (1-5), higher = more smaller dots.
+    $description:zh-CN: 圆点链的小球数量倍率（1-5），越大小球越多越密。
+    $description:zh-TW: 圓點鏈的小球數量倍率（1-5），越大小球越多越密。
+    $description:ja-JP: ドット数の倍率（1-5）。大きいほど小さなドットが密に。
+  - dot_chain_size: 100
+    $name: Dot Chain Size
+    $name:zh-CN: 圆点大小
+    $name:zh-TW: 圓點大小
+    $name:ja-JP: ドットサイズ
+    $description: Size multiplier for dot chain trail (50-300).
+    $description:zh-CN: 圆点链拖尾的大小倍数（50-300）。
+    $description:zh-TW: 圓點鏈拖尾的大小倍數（50-300）。
+    $description:ja-JP: ドットチェーントレイルのサイズ倍率（50-300）。
+  - function_preset: sine
+    $name: Function Preset
+    $name:zh-CN: 函数预设
+    $name:zh-TW: 函數預設
+    $name:ja-JP: 関数プリセット
+    $description: Preset formula for Function Curve mode.
+    $description:zh-CN: 函数曲线模式的预设公式。
+    $description:zh-TW: 函數曲線模式的預設公式。
+    $description:ja-JP: 関数カーブモードのプリセット公式。
+    $options:
+    - sine: Sine Wave
+    - damped: Damped
+    - beat: Heartbeat
+    - swirl: Swirl
+    - custom: Custom
+    $options:zh-CN:
+    - sine: 标准正弦
+    - damped: 阻尼衰减
+    - beat: 心跳脉冲
+    - swirl: 双频漩涡
+    - custom: 自定义公式
+    $options:zh-TW:
+    - sine: 標準正弦
+    - damped: 阻尼衰減
+    - beat: 心跳脈衝
+    - swirl: 雙頻漩渦
+    - custom: 自訂公式
+    $options:ja-JP:
+    - sine: サイン波
+    - damped: 減衰
+    - beat: ハートビート
+    - swirl: スワール
+    - custom: カスタム
+  - custom_function: sin(d * 0.15) * 8
+    $name: Custom Function
+    $name:zh-CN: 自定义函数公式
+    $name:zh-TW: 自訂函數公式
+    $name:ja-JP: カスタム関数
+    $description: "Variables: t(0-1) d(distance) time(sec); Functions: sin cos exp sqrt abs."
+    $description:zh-CN: "变量 t(0-1) d(距离) time(秒)；函数 sin cos exp sqrt abs。"
+    $description:zh-TW: "變數 t(0-1) d(距離) time(秒)；函數 sin cos exp sqrt abs。"
+    $description:ja-JP: "変数: t(0-1) d(距離) time(秒); 関数: sin cos exp sqrt abs。"
+  - wave_amplitude: 8
+    $name: Wave Amplitude
+    $name:zh-CN: 波浪幅度
+    $name:zh-TW: 波浪幅度
+    $name:ja-JP: 波の振幅
+    $description: Wave amplitude in pixels.
+    $description:zh-CN: 波浪曲线的振幅（像素）。
+    $description:zh-TW: 波浪曲線的振幅（像素）。
+    $description:ja-JP: 波の振幅（ピクセル）。
+  - wave_frequency: 15
+    $name: Wave Frequency
+    $name:zh-CN: 波浪频率
+    $name:zh-TW: 波浪頻率
+    $name:ja-JP: 波の周波数
+    $description: Wave frequency (3-60, higher = denser waves).
+    $description:zh-CN: 波浪曲线的频率（3-60，越大波浪越密）。
+    $description:zh-TW: 波浪曲線的頻率（3-60，越大波浪越密）。
+    $description:ja-JP: 波の周波数（3-60、大きいほど密）。
+  $name: Shapes & Text
+  $name:zh-CN: 形状与文字
+  $name:zh-TW: 形狀與文字
+  $name:ja-JP: 図形とテキスト
+
+- Physics:
+  - enable_centripetal: true
+    $name: Centripetal Vortex
+    $name:zh-CN: 向心力漩涡
+    $name:zh-TW: 向心力漩渦
+    $name:ja-JP: 求心ボルテックス
+    $description: Curved mouse motion captures particles into orbiting vortex. Includes angular momentum conservation, Kepler velocity gradient, orbital precession, 3D inclination.
+    $description:zh-CN: 鼠标做曲线运动时粒子被捕获形成旋转漩涡。物理模型：角动量守恒、开普勒速度梯度、轨道进动、3D轨道倾角。
+    $description:zh-TW: 滑鼠做曲線運動時粒子被捕獲形成旋轉漩渦。物理模型：角動量守恆、開普勒速度梯度、軌道進動、3D軌道傾角。
+    $description:ja-JP: 曲線的なマウス運動がパーティクルを捕捉し、周回するボルテックスを形成します。角運動量保存、ケプラー速度勾配、軌道の歳差運動、3D軌道傾斜を含む物理モデルです。
+  - centripetal_force: 20
+    $name: Vortex Force
+    $name:zh-CN: 漩涡强度
+    $name:zh-TW: 漩渦強度
+    $name:ja-JP: ボルテックス力
+    $description: Centripetal force strength, orbit speed and spring constraint (0-100).
+    $description:zh-CN: 向心力强度、轨道速度和弹簧约束（0-100）。
+    $description:zh-TW: 向心力強度、軌道速度和彈簧約束（0-100）。
+    $description:ja-JP: 求心力の強さ、軌道速度、バネ拘束（0-100）。
+  - centripetal_sensitivity: 40
+    $name: Detection Sensitivity
+    $name:zh-CN: 检测灵敏度
+    $name:zh-TW: 偵測靈敏度
+    $name:ja-JP: 検出感度
+    $description: How easily curved motion is detected (0-100, lower = more sensitive).
+    $description:zh-CN: 曲线运动检测灵敏度（0-100，越低越灵敏）。
+    $description:zh-TW: 曲線運動偵測靈敏度（0-100，越低越靈敏）。
+    $description:ja-JP: 曲線運動の検出感度（0-100、低いほど高感度）。
+  - centripetal_duration: 1500
+    $name: Vortex Duration
+    $name:zh-CN: 漩涡持续时间
+    $name:zh-TW: 漩渦持續時間
+    $name:ja-JP: ボルテックス持続時間
+    $description: How long vortex persists after curved motion stops (ms, 500-5000).
+    $description:zh-CN: 停止曲线运动后漩涡持续时间（毫秒，500-5000）。
+    $description:zh-TW: 停止曲線運動後漩渦持續時間（毫秒，500-5000）。
+    $description:ja-JP: 曲線運動停止後の持続時間（ms、500-5000）。
+  - vortex_max_count: 4
+    $name: Max Vortex Count
+    $name:zh-CN: 最大漩涡数量
+    $name:zh-TW: 最大漩渦數量
+    $name:ja-JP: 最大ボルテックス数
+    $description: Maximum simultaneous vortices (1-8). New vortex only spawns when an existing one fully decays.
+    $description:zh-CN: 同时存在的最大漩涡数量（1-8）。只有现有漩涡完全衰减后才能生成新漩涡。
+    $description:zh-TW: 同時存在的最大漩渦數量（1-8）。只有現有漩渦完全衰減後才能生成新漩渦。
+    $description:ja-JP: 同時に存在できるボルテックスの最大数（1-8）。既存のボルテックスが完全に減衰するまで、新しいボルテックスは生成されません。
+  - vortex_min_distance: 200
+    $name: Vortex Min Distance
+    $name:zh-CN: 漩涡最小间距
+    $name:zh-TW: 漩渦最小間距
+    $name:ja-JP: 最小距離
+    $description: Minimum distance between vortex centers (px, 50-500).
+    $description:zh-CN: 漩涡中心之间的最小距离（像素，50-500）。
+    $description:zh-TW: 漩渦中心之間的最小距離（像素，50-500）。
+    $description:ja-JP: ボルテックス中心間の最小距離（px、50-500）。
+  - vortex_drift: 30
+    $name: Vortex Center Drift
+    $name:zh-CN: 漩涡中心漂移
+    $name:zh-TW: 漩渦中心漂移
+    $name:ja-JP: 中心ドリフト
+    $description: How much vortex center follows mouse motion and forces (0-100).
+    $description:zh-CN: 漩涡中心受鼠标运动和力影响的漂移程度（0-100）。
+    $description:zh-TW: 漩渦中心受滑鼠運動和力影響的漂移程度（0-100）。
+    $description:ja-JP: ボルテックス中心がマウス運動と力に追従する度合い（0-100）。
+  - vortex_duration_speed: 20
+    $name: Duration Speed Boost
+    $name:zh-CN: 持续时间速度增益
+    $name:zh-TW: 持續時間速度增益
+    $name:ja-JP: 速度ブースト
+    $description: Extend vortex duration based on mouse speed (0-100).
+    $description:zh-CN: 鼠标速度对漩涡持续时间的延长比例（0-100）。
+    $description:zh-TW: 滑鼠速度對漩渦持續時間的延長比例（0-100）。
+    $description:ja-JP: マウス速度による持続時間延長（0-100）。
+  - vortex_phys_model: rankine
+    $name: Vortex Physics Model
+    $name:zh-CN: 漩涡物理模型
+    $name:zh-TW: 漩渦物理模型
+    $name:ja-JP: 物理モデル
+    $description: Velocity field used by each centripetal vortex, i.e. how tangential speed falls off with distance r. Rankine (default) = solid-body rotation inside the core and 1/r outside it, the classic engineering model. Lamb-Oseen = the same falloff smoothed by a viscous Gaussian core, the most physically realistic. Free = pure 1/r everywhere, fastest near the center. Solid = omega*r like a spinning disc. Kepler = sqrt(GM/r), so particles orbit like planets instead of swirling.
+    $description:zh-CN: 每个向心力漩涡使用的速度场模型，即切向速度随半径 r 如何衰减。Rankine（默认）= 涡核内刚体旋转、核外降为 1/r，最经典的工程模型。Lamb-Oseen = 用粘性高斯涡核把同一衰减曲线平滑过渡，物理上最真实。自由涡 = 全程 1/r，越靠近中心越快。刚体旋转 = ω·r，像旋转的圆盘。开普勒轨道 = 速度按 sqrt(GM/r) 衰减，粒子像行星绕行而非原地盘旋。
+    $description:zh-TW: 每個向心力漩渦使用的速度場模型，即切線速度隨半徑 r 如何衰減。Rankine（預設）= 渦核內剛體旋轉、核外降為 1/r，最經典的工程模型。Lamb-Oseen = 以粘性高斯渦核將同一衰減曲線平滑過渡，物理上最真實。自由渦 = 全程 1/r，越靠近中心越快。剛體旋轉 = ω·r，像旋轉的圓盤。克卜勒軌道 = 速度按 sqrt(GM/r) 衰減，粒子像行星繞行而非原地盤旋。
+    $description:ja-JP: 各求心ボルテックスが使う速度場モデル、すなわち接線速度が半径 r に対してどう減衰するか。Rankine（既定）= 渦核内は剛体回転、外側は 1/r という古典的な工学的モデル。Lamb-Oseen = 粘性ガウス渦核で同じ減衰を滑らかに繋いだ、物理的に最も現実的なモデル。自由渦 = 全区間で 1/r、中心に近いほど高速。剛体回転 = ω·r で円盤のように回転。ケプラー軌道 = 速度は sqrt(GM/r) で減衰し、パーティクルはその場で渦巻くのではなく惑星のように周回します。
+    $options:
+    - rankine: Rankine Vortex
+    - free: Free Vortex
+    - solid: Solid Body
+    - lamb: Lamb-Oseen
+    - kepler: Kepler Orbit
+    $options:zh-CN:
+    - rankine: Rankine涡
+    - free: 自由涡
+    - solid: 刚体旋转
+    - lamb: Lamb-Oseen涡
+    - kepler: 开普勒轨道
+    $options:zh-TW:
+    - rankine: Rankine渦
+    - free: 自由渦
+    - solid: 剛體旋轉
+    - lamb: Lamb-Oseen渦
+    - kepler: 開普勒軌道
+    $options:ja-JP:
+    - rankine: ランキン渦
+    - free: 自由渦
+    - solid: 剛体回転
+    - lamb: ラムオゼーン渦
+    - kepler: ケプラー軌道
+  - enable_particle_mass: true
+    $name: Particle Mass
+    $name:zh-CN: 粒子质量
+    $name:zh-TW: 粒子質量
+    $name:ja-JP: 粒子質量
+    $description: Enable random particle mass (normal distribution). Mass affects inertia, size, lifetime, gravity and repulsion.
+    $description:zh-CN: 启用粒子随机质量（正态分布）。质量影响惯性、大小、生命周期、引力和排斥力。
+    $description:zh-TW: 啟用粒子隨機質量（常態分佈）。質量影響慣性、大小、生命週期、引力和排斥力。
+    $description:ja-JP: ランダム粒子質量を有効化。質量は慣性、サイズ、寿命、重力、反発に影響。
+  - particle_mass_min: 5
+    $name: Min Mass
+    $name:zh-CN: 最小质量
+    $name:zh-TW: 最小質量
+    $name:ja-JP: 最小質量
+    $description: Minimum particle mass (1-50, value/10 = actual mass).
+    $description:zh-CN: 粒子最小质量（1-50，实际质量=数值/10）。
+    $description:zh-TW: 粒子最小質量（1-50，實際質量=數值/10）。
+    $description:ja-JP: 最小粒子質量（1-50、実際の質量=値/10）。
+  - particle_mass_max: 50
+    $name: Max Mass
+    $name:zh-CN: 最大质量
+    $name:zh-TW: 最大質量
+    $name:ja-JP: 最大質量
+    $description: Maximum particle mass (1-100, value/10 = actual mass).
+    $description:zh-CN: 粒子最大质量（1-100，实际质量=数值/10）。
+    $description:zh-TW: 粒子最大質量（1-100，實際質量=數值/10）。
+    $description:ja-JP: 最大粒子質量（1-100、実際の質量=値/10）。
+  - enable_particle_gravity: false
+    $name: Particle Gravity
+    $name:zh-CN: 粒子万有引力
+    $name:zh-TW: 粒子萬有引力
+    $name:ja-JP: 粒子重力
+    $description: Newtonian gravity between particles with Plummer softening.
+    $description:zh-CN: 粒子之间的牛顿万有引力，带Plummer软化。
+    $description:zh-TW: 粒子之間的牛頓萬有引力，帶Plummer軟化。
+    $description:ja-JP: プラマー軟化を伴うニュートン重力。
+  - gravity_strength: 50
+    $name: Gravity Strength
+    $name:zh-CN: 引力强度
+    $name:zh-TW: 引力強度
+    $name:ja-JP: 重力強度
+    $description: Gravitational constant G multiplier (0-100).
+    $description:zh-CN: 引力常数G倍率（0-100）。
+    $description:zh-TW: 引力常數G倍率（0-100）。
+    $description:ja-JP: 重力定数Gの倍率（0-100）。
+  - gravity_system: binary
+    $name: Gravity System
+    $name:zh-CN: 引力系统
+    $name:zh-TW: 引力系統
+    $name:ja-JP: 重力システム
+    $options:
+    - binary: Binary Star
+    - nbody: N-Body
+    $options:zh-CN:
+    - binary: 双星系统
+    - nbody: N体系统
+    $options:zh-TW:
+    - binary: 雙星系統
+    - nbody: N體系統
+    $options:ja-JP:
+    - binary: 連星
+    - nbody: N体
+    $description: Binary = two heaviest as attractors; N-Body = all attract each other (O(n²)).
+    $description:zh-CN: 双星=质量最大的两个粒子作为引力源；N体=所有粒子互相吸引。
+    $description:zh-TW: 雙星=質量最大的兩個粒子作為引力源；N體=所有粒子互相吸引。
+    $description:ja-JP: 連星=最も重い2つを引力源に; N体=全てが互いに引力。
+  - gravity_body_count: 3
+    $name: N-Body Count
+    $name:zh-CN: N体数量
+    $name:zh-TW: N體數量
+    $name:ja-JP: N体数
+    $description: Number of massive attractor bodies in N-Body mode (2-10).
+    $description:zh-CN: N体模式中的大质量引力源数量（2-10）。
+    $description:zh-TW: N體模式中的大質量引力源數量（2-10）。
+    $description:ja-JP: N体モードの大質量引力源の数（2-10）。
+  - enable_particle_collision: true
+    $name: Particle Collision
+    $name:zh-CN: 粒子碰撞
+    $name:zh-TW: 粒子碰撞
+    $name:ja-JP: 粒子衝突
+    $description: Elastic collisions between particles with momentum and energy conservation.
+    $description:zh-CN: 粒子之间的弹性碰撞，动量守恒+动能守恒。
+    $description:zh-TW: 粒子之間的彈性碰撞，動量守恆+動能守恆。
+    $description:ja-JP: 運動量とエネルギー保存を伴う弾性衝突。
+  - enable_lorentz_force: false
+    $name: Lorentz Force
+    $name:zh-CN: 洛伦兹力
+    $name:zh-TW: 洛倫茲力
+    $name:ja-JP: ローレンツ力
+    $description: Particles carry random charge. Magnetic field causes circular motion per F=q(v×B).
+    $description:zh-CN: 粒子带随机电荷。磁场使粒子做圆周运动：F=q(v×B)。
+    $description:zh-TW: 粒子帶隨機電荷。磁場使粒子做圓周運動：F=q(v×B)。
+    $description:ja-JP: 粒子がランダムな電荷を帯び、磁場で円運動します。
+  - lorentz_strength: 30
+    $name: Magnetic Field
+    $name:zh-CN: 磁场强度
+    $name:zh-TW: 磁場強度
+    $name:ja-JP: 磁場強度
+    $description: Magnetic field B strength for Lorentz force (0-100).
+    $description:zh-CN: 洛伦兹力的磁场B强度（0-100）。
+    $description:zh-TW: 洛倫茲力的磁場B強度（0-100）。
+    $description:ja-JP: ローレンツ力の磁場B強度（0-100）。
+  - enable_brownian_motion: true
+    $name: Brownian Motion
+    $name:zh-CN: 布朗运动
+    $name:zh-TW: 布朗運動
+    $name:ja-JP: ブラウン運動
+    $description: Random thermal noise force on particles, simulating molecular heat motion.
+    $description:zh-CN: 粒子受随机热噪声力，模拟分子热运动。
+    $description:zh-TW: 粒子受隨機熱噪聲力，模擬分子熱運動。
+    $description:ja-JP: 分子の熱運動を模擬するランダムな熱ノイズ力。
+  - brownian_strength: 50
+    $name: Thermal Noise
+    $name:zh-CN: 热噪声强度
+    $name:zh-TW: 熱噪聲強度
+    $name:ja-JP: 熱ノイズ強度
+    $description: Brownian motion force magnitude (0-100).
+    $description:zh-CN: 布朗运动力的大小（0-100）。
+    $description:zh-TW: 布朗運動力的大小（0-100）。
+    $description:ja-JP: ブラウン運動力の大きさ（0-100）。
+  - enable_env_gravity: true
+    $name: Environmental Gravity
+    $name:zh-CN: 环境重力
+    $name:zh-TW: 環境重力
+    $name:ja-JP: 環境重力
+    $description: Constant global acceleration field like gravity, mass-independent.
+    $description:zh-CN: 恒定全局加速度场，模拟重力，与质量无关。
+    $description:zh-TW: 恆定全域加速度場，模擬重力，與質量無關。
+    $description:ja-JP: 重力のような一定の全地球加速度場。質量非依存。
+  - env_gravity_strength: 25
+    $name: Gravity Strength
+    $name:zh-CN: 重力强度
+    $name:zh-TW: 重力強度
+    $name:ja-JP: 重力強度
+    $description: Gravity acceleration strength (0-100).
+    $description:zh-CN: 重力加速度强度（0-100）。
+    $description:zh-TW: 重力加速度強度（0-100）。
+    $description:ja-JP: 重力加速度の強さ（0-100）。
+  - env_gravity_angle: 145
+    $name: Gravity Direction
+    $name:zh-CN: 重力方向
+    $name:zh-TW: 重力方向
+    $name:ja-JP: 重力方向
+    $description: Gravity direction in degrees. 0=right, 90=down, 180=left, -90=up.
+    $description:zh-CN: 重力方向角度。0=向右，90=向下，180=向左，-90=向上。
+    $description:zh-TW: 重力方向角度。0=向右，90=向下，180=向左，-90=向上。
+    $description:ja-JP: 重力方向（度）。0=右、90=下、180=左、-90=上。
+  - enable_env_wind: true
+    $name: Wind Field
+    $name:zh-CN: 风场
+    $name:zh-TW: 風場
+    $name:ja-JP: 風場
+    $description: Global wind pushes particles. Light particles blow further.
+    $description:zh-CN: 全局风推动粒子，轻粒子被吹得更远。
+    $description:zh-TW: 全域風推動粒子，輕粒子被吹得更遠。
+    $description:ja-JP: 全体の風がパーティクルを押します。軽い粒子ほど遠くへ。
+  - wind_strength: 40
+    $name: Wind Strength
+    $name:zh-CN: 风力强度
+    $name:zh-TW: 風力強度
+    $name:ja-JP: 風力強度
+    $description: Base wind force (0-100).
+    $description:zh-CN: 基础风力（0-100）。
+    $description:zh-TW: 基礎風力（0-100）。
+    $description:ja-JP: 基本風力（0-100）。
+  - wind_turbulence: 60
+    $name: Wind Turbulence
+    $name:zh-CN: 风场湍流
+    $name:zh-TW: 風場湍流
+    $name:ja-JP: 乱流
+    $description: How much wind direction and speed fluctuate (0-100).
+    $description:zh-CN: 风向和风速的波动程度（0-100）。
+    $description:zh-TW: 風向和風速的波動程度（0-100）。
+    $description:ja-JP: 風向と風速の変動度合い（0-100）。
+  - enable_particle_spring: false
+    $name: Cloth Spring Net
+    $name:zh-CN: 布料弹簧网
+    $name:zh-TW: 布料彈簧網
+    $name:ja-JP: クロスバネ
+    $description: Soft springs between nearby particles. The cluster wobbles like cloth.
+    $description:zh-CN: 邻近粒子之间用软弹簧连接，快速甩鼠标时整团粒子像布料一样抖动。
+    $description:zh-TW: 鄰近粒子之間用軟彈簧連接，快速甩滑鼠時整團粒子像布料一樣抖動。
+    $description:ja-JP: 近隣粒子間の柔らかいバネ。クラスタが布のように揺れます。
+  - spring_strength: 40
+    $name: Spring Stiffness
+    $name:zh-CN: 弹簧刚度
+    $name:zh-TW: 彈簧剛度
+    $name:ja-JP: バネ剛性
+    $description: How strongly springs pull/push particles (0-100).
+    $description:zh-CN: 弹簧拉/推粒子的力度（0-100）。
+    $description:zh-TW: 彈簧拉/推粒子的力度（0-100）。
+    $description:ja-JP: バネが粒子を引く/押す強さ（0-100）。
+  - spring_distance: 50
+    $name: Spring Link Distance
+    $name:zh-CN: 弹簧连接距离
+    $name:zh-TW: 彈簧連接距離
+    $name:ja-JP: 接続距離
+    $description: Maximum distance at which nearby particles connect with a spring.
+    $description:zh-CN: 邻近粒子建立弹簧连接的最大距离（像素）。
+    $description:zh-TW: 鄰近粒子建立彈簧連接的最大距離（像素）。
+    $description:ja-JP: 近隣粒子がバネで接続する最大距離（px）。
+  $name: Physics & Forces
+  $name:zh-CN: 物理与力场
+  $name:zh-TW: 物理與力場
+  $name:ja-JP: 物理と力場
+
+- Music:
+  - enable_multi_band_link: true
+    $name: Multi-Band Link
+    $name:zh-CN: 多频段联动
+    $name:zh-TW: 多頻段聯動
+    $name:ja-JP: マルチバンド連動
+    $description: Link audio frequency bands to physics. Bass→Gravity, Mid→Magnetic Field, Treble→Thermal Noise.
+    $description:zh-CN: 将音频频段独立联动到物理：低频→引力，中频→磁场，高频→热噪声。
+    $description:zh-TW: 將音訊頻段獨立聯動到物理：低頻→引力，中頻→磁場，高頻→熱噪聲。
+    $description:ja-JP: オーディオ帯域を物理に連動：低音→重力、中音→磁場、高音→熱ノイズ。
+  - enable_music_reactive: false
+    $name: Music Reactive
+    $name:zh-CN: 音乐响应
+    $name:zh-TW: 音樂回應
+    $name:ja-JP: 音楽連動
+    $description: Enable WASAPI loopback audio capture, FFT analysis, beat detection.
+    $description:zh-CN: 启用WASAPI回环音频捕获、FFT频率分析、节拍检测。
+    $description:zh-TW: 啟用WASAPI迴環音訊擷取、FFT頻率分析、節拍偵測。
+    $description:ja-JP: WASAPIループバック、FFT分析、ビート検出を有効化。
+  - music_fft_size: fft512
+    $name: FFT Size
+    $name:zh-CN: FFT大小
+    $name:zh-TW: FFT大小
+    $name:ja-JP: FFTサイズ
+    $options:
+    - fft256: "256"
+    - fft512: "512"
+    - fft1024: "1024"
+    - fft2048: "2048"
+    $options:zh-CN:
+    - fft256: "256点"
+    - fft512: "512点"
+    - fft1024: "1024点"
+    - fft2048: "2048点"
+    $options:zh-TW:
+    - fft256: "256點"
+    - fft512: "512點"
+    - fft1024: "1024點"
+    - fft2048: "2048點"
+    $options:ja-JP:
+    - fft256: "256"
+    - fft512: "512"
+    - fft1024: "1024"
+    - fft2048: "2048"
+    $description: FFT window size. Larger = better frequency resolution, higher latency.
+    $description:zh-CN: FFT窗口大小。越大频率分辨率越好，延迟越高。
+    $description:zh-TW: FFT視窗大小。越大頻率解析度越好，延遲越高。
+    $description:ja-JP: FFTウィンドウサイズ。大きいほど周波数分解能が向上、遅延増加。
+  - music_sensitivity: 50
+    $name: Beat Sensitivity
+    $name:zh-CN: 节拍灵敏度
+    $name:zh-TW: 節拍靈敏度
+    $name:ja-JP: ビート感度
+    $description: Beat detection sensitivity (0-100). Lower = more sensitive.
+    $description:zh-CN: 节拍检测灵敏度（0-100）。越低越灵敏。
+    $description:zh-TW: 節拍偵測靈敏度（0-100）。越低越靈敏。
+    $description:ja-JP: ビート検出感度（0-100）。低いほど高感度。
+  - music_smoothing: 50
+    $name: Frequency Smoothing
+    $name:zh-CN: 频率平滑
+    $name:zh-TW: 頻率平滑
+    $name:ja-JP: 周波数スムージング
+    $description: Frequency band smoothing factor (0-100). Reduces jitter.
+    $description:zh-CN: 频段平滑系数（0-100）。减少抖动。
+    $description:zh-TW: 頻段平滑係數（0-100）。減少抖動。
+    $description:ja-JP: 周波数帯域の平滑化係数（0-100）。ジッタを低減。
+  - enable_music_physics: false
+    $name: Music Physics Link
+    $name:zh-CN: 音乐物理联动
+    $name:zh-TW: 音樂物理聯動
+    $name:ja-JP: 音楽物理連動
+    $description: Link music analysis to particle physics with beat detection and pulses.
+    $description:zh-CN: 将音乐分析联动到粒子物理，节拍检测和脉冲效果。
+    $description:zh-TW: 將音樂分析聯動到粒子物理，節拍偵測和脈衝效果。
+    $description:ja-JP: 音楽分析をビート検出とパルスによってパーティクル物理に連動させます。
+  - music_gravity_link: 15
+    $name: Volume→Gravity
+    $name:zh-CN: 音量→引力
+    $name:zh-TW: 音量→引力
+    $name:ja-JP: 音量→重力
+    $description: Audio volume boosts particle gravity strength (0-100).
+    $description:zh-CN: 总音量增强粒子引力强度（0-100）。
+    $description:zh-TW: 總音量增強粒子引力強度（0-100）。
+    $description:ja-JP: 音量が粒子重力強度を増幅（0-100）。
+  - music_beat_pulse: 5
+    $name: Beat→Velocity
+    $name:zh-CN: 节拍→速度
+    $name:zh-TW: 節拍→速度
+    $name:ja-JP: ビート→速度
+    $description: Beat triggers particle velocity burst (0-100).
+    $description:zh-CN: 节拍触发粒子速度爆发（0-100）。
+    $description:zh-TW: 節拍觸發粒子速度爆發（0-100）。
+    $description:ja-JP: ビートが粒子速度バーストを発生（0-100）。
+  - music_bass_size: 60
+    $name: Bass→Size
+    $name:zh-CN: 低频→大小
+    $name:zh-TW: 低頻→大小
+    $name:ja-JP: 低音→サイズ
+    $description: Bass energy increases particle size (0-100).
+    $description:zh-CN: 低频能量增大粒子大小（0-100）。
+    $description:zh-TW: 低頻能量增大粒子大小（0-100）。
+    $description:ja-JP: 低音エネルギーが粒子サイズを増加（0-100）。
+  - music_vortex_link: 20
+    $name: Beat→Vortex
+    $name:zh-CN: 节拍→漩涡
+    $name:zh-TW: 節拍→漩渦
+    $name:ja-JP: ビート→ボルテックス
+    $description: Beat energy injects into vortex strength (0-100).
+    $description:zh-CN: 节拍能量注入漩涡强度（0-100）。
+    $description:zh-TW: 節拍能量注入漩渦強度（0-100）。
+    $description:ja-JP: ビートエネルギーをボルテックス強度に注入（0-100）。
+  $name: Music Reactive
+  $name:zh-CN: 音乐联动
+  $name:zh-TW: 音樂連動
+  $name:ja-JP: 音楽連動
+
+- Click:
+  - enable_click_starburst: false
+    $name: Click Starburst
+    $name:zh-CN: 点击星爆
+    $name:zh-TW: 點擊星爆
+    $name:ja-JP: クリックスターバースト
+    $description: Particle burst from cursor on mouse click.
+    $description:zh-CN: 点击时从光标位置迸发粒子。
+    $description:zh-TW: 點擊時從游標位置迸發粒子。
+    $description:ja-JP: クリック時にカーソル位置からパーティクルが噴出。
+  - starburst_count: 8
+    $name: Starburst Count
+    $name:zh-CN: 星爆粒子数
+    $name:zh-TW: 星爆粒子數
+    $name:ja-JP: 星爆数
+    $description: Number of particles per click burst (4-20).
+    $description:zh-CN: 每次点击迸发的粒子数量（4-20）。
+    $description:zh-TW: 每次點擊迸發的粒子數量（4-20）。
+    $description:ja-JP: クリックごとのパーティクル数（4-20）。
+  - enable_click_effect: true
+    $name: Click Ripple
+    $name:zh-CN: 点击波纹
+    $name:zh-TW: 點擊波紋
+    $name:ja-JP: クリック波紋
+    $description: Expanding ripple ring on mouse click.
+    $description:zh-CN: 点击时产生扩散波纹环。
+    $description:zh-TW: 點擊時產生擴散波紋環。
+    $description:ja-JP: クリック時に波紋リングが拡大。
+  - click_style: ripple
+    $name: Click Effect Style
+    $name:zh-CN: 点击效果样式
+    $name:zh-TW: 點擊效果樣式
+    $name:ja-JP: クリック効果スタイル
+    $options:
+    - ripple: Ripple
+    - shockwave: Shockwave
+    - ink: Ink Bloom
+    - spark: Spark Star
+    - bloom: Petal Bloom
+    $options:zh-CN:
+    - ripple: 波纹
+    - shockwave: 冲击波
+    - ink: 墨晕
+    - spark: 星芒
+    - bloom: 花瓣绽放
+    $options:zh-TW:
+    - ripple: 波紋
+    - shockwave: 衝擊波
+    - ink: 墨暈
+    - spark: 星芒
+    - bloom: 花瓣綻放
+    $options:ja-JP:
+    - ripple: 波紋
+    - shockwave: 衝撃波
+    - ink: 墨のにじみ
+    - spark: 星芒
+    - bloom: 花びら
+    $description: Shape of the click feedback. Ripple is a clean expanding ring. Shockwave adds an
+      opening flash, a fast thick ring and radial sparks. Ink Bloom spreads an irregular ink blot with
+      splatter. Spark Star fires four main beams plus eight short ones. Petal Bloom opens six rotating
+      petals. All styles reuse Max Radius and Duration below.
+    $description:zh-CN: 点击反馈的形状。波纹是干净的扩散圆环；冲击波带开场闪光、快速粗环与径向火花；
+      墨晕扩散出不规则墨迹并带溅墨；星芒射出四道主芒与八道副芒；花瓣绽放展开六枚旋转花瓣。
+      所有样式共用下方的最大半径与持续时间。
+    $description:zh-TW: 點擊回饋的形狀。波紋是乾淨的擴散圓環；衝擊波帶開場閃光、快速粗環與徑向火花；
+      墨暈擴散出不規則墨跡並帶濺墨；星芒射出四道主芒與八道副芒；花瓣綻放展開六枚旋轉花瓣。
+      所有樣式共用下方的最大半徑與持續時間。
+    $description:ja-JP: クリック反馈のかたち。波紋はきれいな広がる円環、衝撃波は開始フラッシュと
+      速い太リング＋放射火花、墨のにじみは不規則な墨だまりと飛び散り、星芒は4本の主光条と8本の副光条、
+      花びらは6枚の回転する花びらを開きます。どのスタイルも下の最大半径と持続時間を共用します。
+  - click_max_radius: 40
+    $name: Ripple Max Radius
+    $name:zh-CN: 波纹最大半径
+    $name:zh-TW: 波紋最大半徑
+    $name:ja-JP: 最大半径
+    $description: Maximum ripple radius (pixels, 1-500).
+    $description:zh-CN: 点击波纹扩散的最大半径（像素，1-500）。
+    $description:zh-TW: 點擊波紋擴散的最大半徑（像素，1-500）。
+    $description:ja-JP: 波紋の最大半径（ピクセル、1-500）。
+  - click_duration: 300
+    $name: Ripple Duration
+    $name:zh-CN: 波纹持续时间
+    $name:zh-TW: 波紋持續時間
+    $name:ja-JP: 持続時間
+    $description: Ripple duration (ms, 1-3000).
+    $description:zh-CN: 点击波纹从出现到消失的时长（毫秒，1-3000）。
+    $description:zh-TW: 點擊波紋從出現到消失的時長（毫秒，1-3000）。
+    $description:ja-JP: 波紋の持続時間（ms、1-3000）。
+  $name: Click Effects
+  $name:zh-CN: 点击效果
+  $name:zh-TW: 點擊效果
+  $name:ja-JP: クリック効果
+
+- AnimFX:
+  - fx_bloom_pulse: false
+    $name: Bloom Breathing
+    $name:zh-CN: 泛光呼吸
+    $name:zh-TW: 泛光呼吸
+    $name:ja-JP: ブルーム呼吸
+    $description: Modulates Bloom Intensity above. The base value still sets the average;
+      this only makes it rise and fall.
+    $description:zh-CN: 调制上方的「泛光强度」。基础值决定平均值，本项只让它在平均值上下起伏。
+    $description:zh-TW: 調制上方的「泛光強度」。基礎值決定平均值，本項只讓它在平均值上下起伏。
+    $description:ja-JP: 上の「ブルーム強度」を変調します。基本値が平均値となり、本項目はその上下動だけを担当します。
+  - fx_glow_breath: false
+    $name: Glow Breathing
+    $name:zh-CN: 外发光呼吸
+    $name:zh-TW: 外發光呼吸
+    $name:ja-JP: グロー呼吸
+    $description: Modulates Glow Intensity above (requires Glow to be enabled).
+    $description:zh-CN: 调制上方的「发光强度」（需先开启发光）。
+    $description:zh-TW: 調制上方的「發光強度」（需先開啟發光）。
+    $description:ja-JP: 上の「グロー強度」を変調します（グローの有効化が必要）。
+  - fx_edge_flow: false
+    $name: Edge Softness Flow
+    $name:zh-CN: 边缘柔和流动
+    $name:zh-TW: 邊緣柔和流動
+    $name:ja-JP: エッジの柔らかさ
+    $description: Modulates Edge Softness above.
+    $description:zh-CN: 调制上方的「边缘柔和度」。
+    $description:zh-TW: 調制上方的「邊緣柔和度」。
+    $description:ja-JP: 上の「エッジの柔らかさ」を変調します。
+  - fx_dither_shimmer: false
+    $name: Dither Shimmer
+    $name:zh-CN: 颗粒抖动闪烁
+    $name:zh-TW: 顆粒抖動閃爍
+    $name:ja-JP: ディザのきらめき
+    $description: Modulates Dither Strength above. Works best with the Flicker wave.
+    $description:zh-CN: 调制上方的「抖动强度」。搭配「闪烁」波形效果最好。
+    $description:zh-TW: 調制上方的「抖動強度」。搭配「閃爍」波形效果最好。
+    $description:ja-JP: 上の「ディザ強度」を変調します。「ちらつき」波形との併用が最適です。
+  - fx_anim_speed: 100
+    $name: Animation Speed
+    $name:zh-CN: 动画速度
+    $name:zh-TW: 動畫速度
+    $name:ja-JP: アニメ速度
+    $description: Speed of every animation in this group (10-400, 100 is about half a cycle per second).
+    $description:zh-CN: 本组所有动画的速度（10-400，100 约为每秒半个周期）。
+    $description:zh-TW: 本組所有動畫的速度（10-400，100 約為每秒半個週期）。
+    $description:ja-JP: このグループの全アニメの速度（10-400、100 は約 0.5Hz）。
+  - fx_anim_amount: 50
+    $name: Animation Amount
+    $name:zh-CN: 动画幅度
+    $name:zh-TW: 動畫幅度
+    $name:ja-JP: アニメ幅度
+    $description: How far the animations in this group swing (0-100). Set 0 and they all stay static.
+    $description:zh-CN: 本组动画的摆动幅度（0-100）。设为 0 则全部保持静态。
+    $description:zh-TW: 本組動畫的擺動幅度（0-100）。設為 0 則全部保持靜態。
+    $description:ja-JP: このグループのアニメの振れ幅（0-100）。0 にするとすべて静止します。
+  - fx_stroke_flow: false
+    $name: Stroke Width Flow
+    $name:zh-CN: 描边宽度流动
+    $name:zh-TW: 描邊寬度流動
+    $name:ja-JP: ストローク幅の流れ
+    $description: The trail outline width breathes, which pairs well with Glow Breathing.
+    $description:zh-CN: 拖尾描边宽度随时间呼吸，与外发光呼吸搭配观感最好。
+    $description:zh-TW: 拖尾描邊寬度隨時間呼吸，與外發光呼吸搭配觀感最好。
+    $description:ja-JP: トレイルの輪郭幅が呼吸します。グロー呼吸と組み合わせると効果的です。
+  - fx_bloom_thr_wave: false
+    $name: Bloom Threshold Wave
+    $name:zh-CN: 泛光阈值波动
+    $name:zh-TW: 泛光閾值波動
+    $name:ja-JP: ブルーム閾値の波
+    $description: The bloom cutoff rises and falls, so bright areas swell and dim instead of pulsing evenly.
+    $description:zh-CN: 泛光阈值上下起伏，明亮区域会忽胀忽收，而不是整体均匀明暗。
+    $description:zh-TW: 泛光閾值上下起伏，明亮區域會忽脹忽收，而不是整體均勻明暗。
+    $description:ja-JP: ブルームの閾値が上下し、明るい部分が膨らんだり縮んだりします。
+  - fx_blur_pulse: false
+    $name: Temporal Blur Pulse
+    $name:zh-CN: 时域模糊脉动
+    $name:zh-TW: 時域模糊脈動
+    $name:ja-JP: 時間ぼかしの脈動
+    $description: How much of the previous frame is kept pulses, so ghosting thickens and thins.
+    $description:zh-CN: 上一帧的保留比例随时间起伏，拖影会时浓时淡。
+    $description:zh-TW: 上一幀的保留比例隨時間起伏，拖影會時濃時淡。
+    $description:ja-JP: 前フレームの保持率が変動し、残像が濃くなったり薄くなったりします。
+  - fx_hdr_shimmer: false
+    $name: HDR Highlight Shimmer
+    $name:zh-CN: HDR 高光闪烁
+    $name:zh-TW: HDR 高光閃爍
+    $name:ja-JP: HDR ハイライトのきらめき
+    $description: The highlight boost shimmers, so the brightest parts sparkle.
+    $description:zh-CN: 高光增益随时间闪烁，最亮的部分会闪动。
+    $description:zh-TW: 高光增益隨時間閃爍，最亮的部分會閃動。
+    $description:ja-JP: ハイライトのゲインがきらめき、最も明るい部分がまたたきます。
+  - fx_anim_wave: sine
+    $name: Animation Wave
+    $name:zh-CN: 动画波形
+    $name:zh-TW: 動畫波形
+    $name:ja-JP: アニメ波形
+    $options:
+    - sine: Sine
+    - pulse: Pulse
+    - triangle: Triangle
+    - flicker: Flicker
+    $options:zh-CN:
+    - sine: 正弦
+    - pulse: 脉冲
+    - triangle: 三角
+    - flicker: 闪烁
+    $options:zh-TW:
+    - sine: 正弦
+    - pulse: 脈衝
+    - triangle: 三角
+    - flicker: 閃爍
+    $options:ja-JP:
+    - sine: サイン
+    - pulse: パルス
+    - triangle: 三角
+    - flicker: ちらつき
+    $description: Shape of the animation curve for everything in this group. Sine is the smoothest,
+      pulse has a fast attack and slow decay, triangle moves at a constant rate, flicker jumps
+      randomly (best for Dither Shimmer).
+    $description:zh-CN: 本组所有动画的曲线形状。正弦最平滑，脉冲快起慢落，三角匀速往返，
+      闪烁为随机跳变（最适合颗粒抖动闪烁）。
+    $description:zh-TW: 本組所有動畫的曲線形狀。正弦最平滑，脈衝快起慢落，三角勻速往返，
+      閃爍為隨機跳變（最適合顆粒抖動閃爍）。
+    $description:ja-JP: このグループの全アニメの曲線形状。サインが最も滑らか、パルスは立ち上がりが速く、
+      三角は等速、ちらつきはランダムに跳ねます（ディザに最適）。
+  $name: Shader Animations
+  $name:zh-CN: 着色器动画
+  $name:zh-TW: 著色器動畫
+  $name:ja-JP: シェーダーアニメーション
+- System:
+  - super_performance_mode: false
+    $name: Super Performance Mode
+    $name:zh-CN: 超级性能模式
+    $name:zh-TW: 超級效能模式
+    $name:ja-JP: スーパーパフォーマンス
+    $description: Lifts the caps and turns on a faster physics path, for high-end PCs only. Caps raised
+      are particles 500 to 1200 and trail shapes 150 to 400, and the polygon-to-circle render fallback
+      is delayed from 100 to 300 particles so detailed shapes survive longer. It also enables a uniform
+      grid that cuts the O(n²) pair loop to O(n·k), worth about 1.67ms to 0.3ms per frame at 1200
+      particles. No quality setting is weakened - text and emoji particles still take the full path.
+    $description:zh-CN: 解除上限并启用更快的物理路径，仅供高性能电脑。上限放宽为：粒子 500→1200、拖尾形状 150→400；
+      多边形降级为圆形的渲染回退阈值由 100 推迟到 300，细节形状能保持更久。同时启用均匀网格，
+      把 O(n²) 配对循环降到 O(n·k)，1200 粒子时每帧约 1.67ms 降到 0.3ms 量级。不削弱任何画质参数，
+      文字与 Emoji 粒子仍走完整路径。
+    $description:zh-TW: 解除上限並啟用更快的物理路徑，僅供高效能電腦。上限放寬為：粒子 500→1200、拖尾形狀 150→400；
+      多邊形降級為圓形的渲染回退閾值由 100 推遲到 300，細節形狀能維持更久。同時啟用均勻網格，
+      把 O(n²) 配對迴圈降到 O(n·k)，1200 粒子時每幀約 1.67ms 降到 0.3ms 量級。不削弱任何畫質參數，
+      文字與 Emoji 粒子仍走完整路徑。
+    $description:ja-JP: 上限を解除し、より高速な物理経路を有効化します。ハイエンドPC専用。上限は
+      パーティクル 500→1200、トレイル形状 150→400 に緩和され、多角形から円への描画フォールバックも
+      100→300 個に繰り下がるため、細かい形状がより長く保たれます。さらに均一グリッドで O(n²) の
+      ペア探索を O(n·k) に短縮し、1200 個でも 1フレーム約 1.67ms が 0.3ms 程度になります。
+      画質パラメータは一切弱めません。文字・絵文字パーティクルは引き続き完全な経路を使います。
+  - dpi_scale_mode: auto
+    $name: DPI Awareness
+    $name:zh-CN: DPI 感知
+    $name:zh-TW: DPI 感知
+    $name:ja-JP: DPI対応
+    $description: Auto detects the DPI of the monitor the cursor is on and keeps the overlay, offscreen bitmaps and swap chain consistent across mixed-DPI setups. Fixed assumes 100% (legacy behaviour).
+    $description:zh-CN: 自动检测光标所在显示器的 DPI，使覆盖层、离屏位图与交换链在混合 DPI 环境下保持一致。固定=按 100% 处理（旧行为）。
+    $description:zh-TW: 自動偵測游標所在顯示器的 DPI，使覆蓋層、離屏位圖與交換鏈在混合 DPI 環境下保持一致。固定=按 100% 處理（舊行為）。
+    $description:ja-JP: カーソルがあるモニターのDPIを自動検出し、オーバーレイ・オフスクリーンビットマップ・スワップチェーンを整合させます。固定=100%扱い（従来動作）。
+    $options:
+    - auto: Auto
+    - fixed: Fixed (100%)
+    $options:zh-CN:
+    - auto: 自动
+    - fixed: 固定（100%）
+    $options:zh-TW:
+    - auto: 自動
+    - fixed: 固定（100%）
+    $options:ja-JP:
+    - auto: 自動
+    - fixed: 固定（100%）
+  - dpi_scale_text: true
+    $name: DPI Scale Text
+    $name:zh-CN: 文字随 DPI 缩放
+    $name:zh-TW: 文字隨 DPI 縮放
+    $name:ja-JP: 文字のDPIスケーリング
+    $description: Scale text/emoji atlas size by the monitor DPI so text keeps the same physical size when it moves between a 100% and a 150%/200% monitor. Off keeps the pixel size constant.
+    $description:zh-CN: 按显示器 DPI 缩放文字/Emoji 图集尺寸，使文字在 100% 与 150%/200% 显示器之间移动时保持相同的物理大小。关闭则保持像素尺寸不变。
+    $description:zh-TW: 按顯示器 DPI 縮放文字/Emoji 圖集尺寸，使文字在 100% 與 150%/200% 顯示器之間移動時保持相同的物理大小。關閉則保持像素尺寸不變。
+    $description:ja-JP: モニターDPIに応じて文字/絵文字アトラスを拡縮し、100%と150%/200%間で物理サイズを保ちます。オフ=ピクセルサイズ固定。
+  $name: System & Performance
+  $name:zh-CN: 系统与性能
+  $name:zh-TW: 系統與效能
+  $name:ja-JP: システムと性能
+
+- Hotkeys:
+  - hotkey_modifier: alt_shift
+    $name: Hotkey Modifier Combo
+    $name:zh-CN: 热键组合键
+    $name:zh-TW: 熱鍵組合鍵
+    $name:ja-JP: ホットキー修飾キー
+    $description: Modifier combo that must be held together with the key below. None means no modifier is required, so the key fires on its own. Exactly this combo must be held - the other modifiers must be released. Leave the key fields empty to disable a hotkey.
+    $description:zh-CN: 必须与下方按键同时按住的组合键。选择「无」表示不需要组合键，单按该键即可触发。必须恰好按住该组合——其它修饰键需处于松开状态。把按键留空即可关闭对应热键。
+    $description:zh-TW: 必須與下方按鍵同時按住的組合鍵。選擇「無」表示不需要組合鍵，單按該鍵即可觸發。必須恰好按住該組合——其它修飾鍵需處於鬆開狀態。把按鍵留空即可關閉對應熱鍵。
+    $description:ja-JP: 下のキーと同時に押す修飾キーの組み合わせ。「なし」は修飾キー不要（単独キーで発動）。ちょうどこの組み合わせのときだけ反応し、他の修飾キーは離しておく必要があります。キー欄を空にするとそのホットキーは無効。
+    $options:
+    - none: None (Bare key)
+    - alt: Alt
+    - alt_ctrl: Alt + Ctrl
+    - alt_shift: Alt + Shift
+    - alt_ctrl_shift: Alt + Ctrl + Shift
+    $options:zh-CN:
+    - none: 无（不需要组合键，单键触发）
+    - alt: Alt
+    - alt_ctrl: Alt + Ctrl
+    - alt_shift: Alt + Shift
+    - alt_ctrl_shift: Alt + Ctrl + Shift
+    $options:zh-TW:
+    - none: 無（不需要組合鍵，單鍵觸發）
+    - alt: Alt
+    - alt_ctrl: Alt + Ctrl
+    - alt_shift: Alt + Shift
+    - alt_ctrl_shift: Alt + Ctrl + Shift
+    $options:ja-JP:
+    - none: なし（修飾キー不要・単独キー）
+    - alt: Alt
+    - alt_ctrl: Alt + Ctrl
+    - alt_shift: Alt + Shift
+    - alt_ctrl_shift: Alt + Ctrl + Shift
+  - hotkey_toggle_key: ""
+    $name: Show / Hide Hotkey Key
+    $name:zh-CN: 显示/消失热键按键
+    $name:zh-TW: 顯示/消失熱鍵按鍵
+    $name:ja-JP: 表示/非表示キー
+    $description: "Key pressed together with the combo above to show/hide the whole effect. Accepts a single character (A-Z, 0-9), F1-F24, or a name: space enter tab esc up down left right home end pgup pgdn ins del media_play media_next media_prev media_stop vol_up vol_down vol_mute browser_back browser_forward. Fn combinations work too - laptops emit those as media keys, so bind them by name. Empty = off."
+    $description:zh-CN: 与上方组合键同时按下以显示/隐藏整个特效的按键。可填：单个字符（A-Z、0-9）、F1-F24，或名称：space enter tab esc up down left right home end pgup pgdn ins del media_play media_next media_prev media_stop vol_up vol_down vol_mute browser_back browser_forward。Fn 组合键同样可用——笔记本会把 Fn 组合上报为多媒体键，用上面的名称绑定即可。留空=关闭。
+    $description:zh-TW: 與上方組合鍵同時按下以顯示/隱藏整個特效的按鍵。可填：單一字元（A-Z、0-9）、F1-F24，或名稱：space enter tab esc up down left right home end pgup pgdn ins del media_play media_next media_prev media_stop vol_up vol_down vol_mute browser_back browser_forward。Fn 組合鍵同樣可用——筆電會把 Fn 組合上報為多媒體鍵，用上面的名稱綁定即可。留空=關閉。
+    $description:ja-JP: 上の修飾キーと同時押しでエフェクト全体を表示/非表示にするキー。1文字(A-Z,0-9)、F1-F24、または名前(space enter tab esc up down left right home end pgup pgdn ins del media_play media_next media_prev media_stop vol_up vol_down vol_mute)を指定。Fn組み合わせも可能（メディアキーとして報告されます）。空=無効。
+  - hotkey_trail_key: ""
+    $name: Hide Trail Hotkey Key
+    $name:zh-CN: 隐藏拖尾热键按键
+    $name:zh-TW: 隱藏拖尾熱鍵按鍵
+    $name:ja-JP: トレイル非表示キー
+    $description: Key pressed with the same combo to toggle the trail ribbon on/off. Same key names as above. Empty = off.
+    $description:zh-CN: 与同一组合键同时按下以开关拖尾飘带。按键名称同上。留空=关闭。
+    $description:zh-TW: 與同一組合鍵同時按下以開關拖尾飄帶。按鍵名稱同上。留空=關閉。
+    $description:ja-JP: 同じ修飾キーと同時押しでトレイルを切り替えます。キー名は上と同じ。空=無効。
+  - hotkey_particles_key: ""
+    $name: Hide Particles Hotkey Key
+    $name:zh-CN: 隐藏粒子热键按键
+    $name:zh-TW: 隱藏粒子熱鍵按鍵
+    $name:ja-JP: パーティクル非表示キー
+    $description: Key pressed with the same combo to toggle particles on/off. Same key names as above. Empty = off.
+    $description:zh-CN: 与同一组合键同时按下以开关粒子。按键名称同上。留空=关闭。
+    $description:zh-TW: 與同一組合鍵同時按下以開關粒子。按鍵名稱同上。留空=關閉。
+    $description:ja-JP: 同じ修飾キーと同時押しでパーティクルを切り替えます。キー名は上と同じ。空=無効。
+  $name: Hotkeys
+  $name:zh-CN: 热键
+  $name:zh-TW: 熱鍵
+  $name:ja-JP: ホットキー
+
+- Debug:
+  - enable_debug_velocity: false
+    $name: Debug Velocity Vectors
+    $name:zh-CN: 调试-速度向量
+    $name:zh-TW: 除錯-速度向量
+    $name:ja-JP: デバッグ速度ベクトル
+    $description: Draw green velocity arrows on each particle.
+    $description:zh-CN: 在每个粒子上绘制绿色速度箭头。
+    $description:zh-TW: 在每個粒子上繪製綠色速度箭頭。
+    $description:ja-JP: 各パーティクルに緑の速度矢印を描画。
+  - enable_debug_force: false
+    $name: Debug Force Vectors
+    $name:zh-CN: 调试-受力向量
+    $name:zh-TW: 除錯-受力向量
+    $name:ja-JP: デバッグ力ベクトル
+    $description: Draw red force vectors on each particle.
+    $description:zh-CN: 在每个粒子上绘制红色受力向量。
+    $description:zh-TW: 在每個粒子上繪製紅色受力向量。
+    $description:ja-JP: 各パーティクルに赤の力ベクトルを描画。
+  - enable_debug_vortex: false
+    $name: Debug Vortex Center
+    $name:zh-CN: 调试-漩涡中心
+    $name:zh-TW: 除錯-漩渦中心
+    $name:ja-JP: デバッグ渦中心
+    $description: Draw blue vortex center, orbit rings and strength indicator.
+    $description:zh-CN: 绘制蓝色漩涡中心、轨道环和强度指示。
+    $description:zh-TW: 繪製藍色漩渦中心、軌道環和強度指示。
+    $description:ja-JP: 青いボルテックス中心、軌道リング、強度インジケータを描画。
+  - enable_debug_gravity: false
+    $name: Debug Gravity Sources
+    $name:zh-CN: 调试-引力源
+    $name:zh-TW: 除錯-引力源
+    $name:ja-JP: デバッグ重力源
+    $description: Draw yellow gravity source markers and influence radius.
+    $description:zh-CN: 绘制黄色引力源标记和影响范围。
+    $description:zh-TW: 繪製黃色引力源標記和影響範圍。
+    $description:ja-JP: 黄色い重力源マーカーと影響半径を描画。
+  - enable_debug_collision: false
+    $name: Debug Collision Radius
+    $name:zh-CN: 调试-碰撞半径
+    $name:zh-TW: 除錯-碰撞半徑
+    $name:ja-JP: デバッグ衝突半径
+    $description: Draw collision radius on each particle.
+    $description:zh-CN: 绘制每个粒子的碰撞半径。
+    $description:zh-TW: 繪製每個粒子的碰撞半徑。
+    $description:ja-JP: 各パーティクルに衝突半径を描画。
+  - enable_debug_spring: false
+    $name: Debug Spring Links
+    $name:zh-CN: 调试-弹簧连线
+    $name:zh-TW: 除錯-彈簧連線
+    $name:ja-JP: デバッグバネ線
+    $description: Draw cloth spring connections between particles.
+    $description:zh-CN: 绘制粒子间的布料弹簧连接。
+    $description:zh-TW: 繪製粒子間的布料彈簧連接。
+    $description:ja-JP: パーティクル間のバネ接続を描画。
+  - enable_debug_interaction: false
+    $name: Debug Particle Interaction
+    $name:zh-CN: 调试-粒子相互作用
+    $name:zh-TW: 除錯-粒子相互作用
+    $name:ja-JP: デバッグ粒子相互作用
+    $description: Draw magenta repulsion links between interacting particle pairs. Line width and opacity scale with force strength.
+    $description:zh-CN: 绘制粒子间相互排斥的品红色连线。线宽和透明度随力的强度变化。
+    $description:zh-TW: 繪製粒子間相互排斥的品紅色連線。線寬和透明度隨力的強度變化。
+    $description:ja-JP: 相互作用するパーティクル間にマゼンタの反発リンクを描画。線幅と透明度が力の強さに応じて変化。
+  - enable_debug_spawn: false
+    $name: Debug Spawn Points
+    $name:zh-CN: 调试-生成点
+    $name:zh-TW: 除錯-生成點
+    $name:ja-JP: デバッグ生成点
+    $description: Draw recent particle spawn positions as orange dots, plus the spawn spread radius circle at the cursor.
+    $description:zh-CN: 用橙色点绘制最近的粒子生成位置，并在光标处显示生成扩散半径圆。
+    $description:zh-TW: 用橙色點繪製最近的粒子生成位置，並在游標處顯示生成擴散半徑圓。
+    $description:ja-JP: 最近のパーティクル生成位置をオレンジのドットで描画し、カーソル位置に生成拡散半径サークルを表示。
+  - enable_debug_path: false
+    $name: Debug Trail Path
+    $name:zh-CN: 调试-拖尾路径
+    $name:zh-TW: 除錯-拖尾路徑
+    $name:ja-JP: デバッグ軌跡パス
+    $description: Draw the smoothed cursor path (white dots) and raw history points (gray) to inspect trail geometry and interpolation.
+    $description:zh-CN: 绘制平滑后的光标路径（白点）和原始历史点（灰点），用于检查拖尾几何和补插。
+    $description:zh-TW: 繪製平滑後的游標路徑（白點）和原始歷史點（灰點），用於檢查拖尾幾何和補插。
+    $description:ja-JP: 平滑化されたカーソルパス（白ドット）と生の履歴点（グレー）を描画し、軌跡の形状と補間を確認。
+  $name: Debug Overlays
+  $name:zh-CN: 调试
+  $name:zh-TW: 除錯
+  $name:ja-JP: デバッグ
+
+*/
+// ==/WindhawkModSettings==
+#include <windows.h>
+#include <d2d1_1.h>
+#include <dwrite.h>
+#include <d3d11.h>
+#include <dxgi1_2.h>
+// v3.4.2.2：IDXGISwapChain3 / DXGI_COLOR_SPACE_TYPE（SetColorSpace1 需要）
+#include <dxgi1_4.h>
+#include <dcomp.h>
+#include <dwmapi.h>
+#include <d3dcompiler.h>
+#include <math.h>
+#include <shellapi.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <deque>
+#include <string>
+#include <vector>
+#include <unordered_map>
+#include <atomic>
+#include <algorithm>
+#include <ctime>
+#include <clocale>
+#include <locale>
+// WASAPI 音频捕获
+#include <mmdeviceapi.h>
+#include <audioclient.h>
+#include <avrt.h>
+#include <functiondiscoverykeys_devpkey.h>
+
+#define GRAD_STOPS 12
+
+// ===================== 颜色工具 =====================
+// 数值约定 / Numeric conventions: 通道均为 0~1 浮点，alpha 恒为 1（拖尾画刷基色不透明）。
+constexpr int kGradLUTSize = 256;  // 渐变查找表条目数
+constexpr int kMaxGradColors = 16;        // 渐变色点上限（与 g_gradColors 长度一致）/ max stops (matches g_gradColors length)
+constexpr float kColorEpsilon = 0.02f;  // 颜色近似相等阈值：用于跳过无谓的画刷重建
+// 常用不透明基色
+static const D2D1_COLOR_F kColorWhite = {1.0f, 1.0f, 1.0f, 1.0f};
+static const D2D1_COLOR_F kColorBlack = {0.0f, 0.0f, 0.0f, 1.0f};
+
+static D2D1_COLOR_F HSVtoRGB(float h, float s, float v) {
+    h = fmodf(h, 360.0f);
+    if (h < 0)
+        h += 360.0f;
+    float c = v * s, x = c * (1.0f - fabsf(fmodf(h / 60.0f, 2.0f) - 1.0f)), m = v - c;
+    float r, g, b;
+    if (h < 60) {
+        r = c;
+        g = x;
+        b = 0;
+    } else if (h < 120) {
+        r = x;
+        g = c;
+        b = 0;
+    } else if (h < 180) {
+        r = 0;
+        g = c;
+        b = x;
+    } else if (h < 240) {
+        r = 0;
+        g = x;
+        b = c;
+    } else if (h < 300) {
+        r = x;
+        g = 0;
+        b = c;
+    } else {
+        r = c;
+        g = 0;
+        b = x;
+    }
+    return D2D1::ColorF(r + m, g + m, b + m, 1.0f);
+}
+
+// RGB→HSV：h 返回 0~360，s/v 返回 0~1
+static void RGBtoHSV(D2D1_COLOR_F c, float &h, float &s, float &v) {
+    float mx = fmaxf(fmaxf(c.r, c.g), c.b);
+    float mn = fminf(fminf(c.r, c.g), c.b);
+    v = mx;
+    float d = mx - mn;
+    s = (mx == 0.0f) ? 0.0f : d / mx;
+    if (d == 0.0f)
+        h = 0.0f;
+    else if (mx == c.r)
+        h = fmodf((c.g - c.b) / d, 6.0f);
+    else if (mx == c.g)
+        h = (c.b - c.r) / d + 2.0f;
+    else
+        h = (c.r - c.g) / d + 4.0f;
+    h *= 60.0f;
+    if (h < 0.0f) h += 360.0f;
+}
+
+// 逐通道线性插值
+static D2D1_COLOR_F LerpColor(D2D1_COLOR_F a, D2D1_COLOR_F b, float t) {
+    return D2D1::ColorF(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, 1.0f);
+}
+// 提亮：委托 mtcolor::Lighten（保持色相与彩度）。
+// 旧实现是 lerp(色, 白, t)，会把高饱和色洗成粉白；新的实现只抬 Rec.709 亮度、保住彩度，
+// 与 GPU 侧 SetLuma 同口径。实现见下方「mtcolor：语义化颜色系统」。
+namespace mtcolor {
+D2D1_COLOR_F Lighten(D2D1_COLOR_F c, float amount);
+}  // namespace mtcolor
+static D2D1_COLOR_F LighterColor(D2D1_COLOR_F c, float amount = 0.55f) {
+    return mtcolor::Lighten(c, amount);
+}
+
+// 渐变颜色系统全局变量
+D2D1_COLOR_F g_gradColors[16] = {{1.0f, 0.42f, 0.21f, 1.0f}, {0.0f, 0.75f, 1.0f, 1.0f}, {1.0f, 0.84f, 0.0f, 1.0f}};
+int g_gradColorCount = 3;
+D2D1_COLOR_F g_gradientLUT[256];  // 预计算256色查找表
+bool g_gradientLUTDirty = true;  // LUT需要重建标记
+float g_gradientFlowSpeed = 0.15f;  // 流动速度（相位/秒）/ Flow speed (phase per second)
+
+// ===== OKLab 感知均匀颜色空间转换 / OKLab perceptually-uniform color space conversion =====
+// OKLab是W3C推荐的CSS默认渐变插值空间，感知均匀、无灰暗中点
+struct OKLab { float L, a, b; };
+// sRGB 传输函数： electrophotonic transfer function (EOTF
+// 以文件作用域 inline 函数共享，避免在两个转换里各写一份 lambda（语义逐位一致）。
+static inline float SrgbToLinear(float c) {
+    return c <= 0.04045f ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f);
+}
+static inline float LinearToSrgb(float c) {
+    return c <= 0.0031308f ? 12.92f * c : 1.055f * powf(c, 1.0f / 2.4f) - 0.055f;
+}
+static OKLab RGBtoOKLab(float r, float g, float b) {
+    // sRGB → linear / sRGB转线性空间
+    float lr = SrgbToLinear(r), lg = SrgbToLinear(g), lb = SrgbToLinear(b);
+    // linear RGB → LMS / 线性RGB转LMS锥细胞响应空间
+    float l = 0.4122214708f * lr + 0.5363325363f * lg + 0.0514459929f * lb;
+    float m = 0.2119034982f * lr + 0.6806995451f * lg + 0.1073969566f * lb;
+    float s = 0.0883024619f * lr + 0.2817188376f * lg + 0.6299787005f * lb;
+    // LMS → OKLab（立方根）
+    l = cbrtf(l); m = cbrtf(m); s = cbrtf(s);
+    return { 0.2104542553f * l + 0.7936177850f * m - 0.0040720468f * s,
+             1.9779984951f * l - 2.4285922050f * m + 0.4505937099f * s,
+             0.0259040371f * l + 0.7827717662f * m - 0.8086757660f * s };
+}
+static D2D1_COLOR_F OKLabtoRGB(float L, float a, float b) {
+    // OKLab → LMS / OKLab转回LMS空间
+    float l = L + 0.3963377774f * a + 0.2158037573f * b;
+    float m = L - 0.1055613458f * a - 0.0638541728f * b;
+    float s = L - 0.0894841775f * a - 1.2914855480f * b;
+    l = l * l * l; m = m * m * m; s = s * s * s;
+    // LMS → linear RGB / LMS转回线性RGB
+    float lr =  4.0767416621f * l - 3.3077115913f * m + 0.2309699292f * s;
+    float lg = -1.2684380046f * l + 2.6097574011f * m - 0.3413193965f * s;
+    float lb = -0.0041960863f * l - 0.7034186147f * m + 1.7076147010f * s;
+    // linear → sRGB，并夹紧到 [0,1]（OKLab 插值可能越界出 sRGB 色域）
+    lr = fminf(fmaxf(LinearToSrgb(lr), 0), 1);
+    lg = fminf(fmaxf(LinearToSrgb(lg), 0), 1);
+    lb = fminf(fmaxf(LinearToSrgb(lb), 0), 1);
+    return D2D1::ColorF(lr, lg, lb, 1.0f);
+}
+// OKLab 空间插值（感知均匀，无灰暗中点）/ OKLab-space interpolation (perceptually uniform, no muddy midpoint)
+static D2D1_COLOR_F LerpColorOKLab(D2D1_COLOR_F a, D2D1_COLOR_F b, float t) {
+    OKLab ca = RGBtoOKLab(a.r, a.g, a.b), cb = RGBtoOKLab(b.r, b.g, b.b);
+    return OKLabtoRGB(ca.L + (cb.L - ca.L) * t, ca.a + (cb.a - ca.a) * t, ca.b + (cb.b - ca.b) * t);
+}
+
+// ===================== mtcolor：颜色科学工具 / mtcolor: colour science utilities =====================
+//
+// 存在目的：此前颜色逻辑是散落各处的裸值 —— 23 个颜色模式里内嵌 RGB/HSV 立即数、亮度权重 CPU 用 Rec.601
+// 而 GPU 用 Rec.709、同一个 SetLuma 在两段 HLSL 里一式两份靠注释「手动保持同步」。本命名空间把颜色
+// 收拢成一套可被数值验证的纯函数工具集。
+// Why this exists: the colour logic used to be scattered raw literals — hand-written RGB/HSV constants across
+// 23 colour modes, Rec.601 luma weights on the CPU vs Rec.709 on the GPU, and two hand-synced copies of SetLuma.
+// mtcolor turns colour into a verified set of pure functions with a single source of truth.
+//
+// ---- 三条硬约束 / three hard constraints ----
+//   C1 单一事实源：亮度口径、对比度算法、共用色学 helper 各只有一处定义，且 CPU 与 GPU 必须口径一致。
+//   C2 可验证：本层所有数值函数都是无副作用的纯函数。
+//   C3 改亮度口径必须先改 kLuma709 与其 HLSL 孪生实现（见 g_psShader 前导宏）。
+namespace mtcolor {
+
+// ---------------- 第 1 层：原语 / primitives ----------------
+
+// Rec.709 亮度权重。**同时**用于 CPU 与 GPU（HLSL 的 SetLuma），两边必须逐位一致。
+// 注意：这里施加于 gamma 编码值（而非线性光）——严格意义上 Rec.709 权重本应用于线性光。
+// 之所以保留这个近似，是因为它是既有的 GPU 行为，两边对齐的价值高于单点理论正确性。
+// 需要 WCAG 意义上的**相对亮度**时请用 RelativeLuminance（会做线性化），不要用本函数。
+// Rec.709 luma weights, shared verbatim with the GPU SetLuma. NOTE: applied to gamma-encoded values rather than
+// linear light. Strictly speaking Rec.709 belongs to linear light, but this approximation is the established GPU
+// behaviour and cross-side consistency is worth more than local theoretical purity. Use RelativeLuminance
+// (which linearises) whenever WCAG relative luminance is actually required.
+constexpr float kLuma709R = 0.2126f;
+constexpr float kLuma709G = 0.7152f;
+constexpr float kLuma709B = 0.0722f;
+
+// WCAG 2.1 相对亮度公式里的常数
+constexpr float kWcagBlackLevel = 0.05f;  // 公式里的 (L + 0.05) 偏移
+constexpr float kMinContrast = 1.0f;  // 同色相等时的对比度下界
+
+// 感知近似亮度：作用于 gamma 编码值，与 GPU SetLuma 口径一致
+inline float LumaEncoded(D2D1_COLOR_F c) {
+    return kLuma709R * c.r + kLuma709G * c.g + kLuma709B * c.b;
+}
+
+// WCAG 2.1 相对亮度：先做 sRGB→线性变换再加权，这才是对比度比公式要求的 L
+inline float RelativeLuminance(D2D1_COLOR_F c) {
+    return kLuma709R * SrgbToLinear(c.r) + kLuma709G * SrgbToLinear(c.g) + kLuma709B * SrgbToLinear(c.b);
+}
+
+// WCAG 2.1 对比度比，返回 1~21
+inline float ContrastRatio(D2D1_COLOR_F a, D2D1_COLOR_F b) {
+    const float la = RelativeLuminance(a);
+    const float lb = RelativeLuminance(b);
+    const float hi = fmaxf(la, lb);
+    const float lo = fminf(la, lb);
+    return (hi + kWcagBlackLevel) / (lo + kWcagBlackLevel);
+}
+
+// 最大通道值
+inline float MaxChannel(D2D1_COLOR_F c) {
+    return fmaxf(fmaxf(c.r, c.g), c.b);
+}
+
+// 保持色相与彩度地改写感知亮度：先按 Rec.709 取亮度，再整色等比缩放落到目标亮度。
+// 单通道溢出时整体回压而非逐通道 clamp —— 后者会改变色相。
+// 这是 HLSL 里同名 SetLuma 的 CPU 孪生实现，改动必须成对进行（见 E4）。
+//
+// ⚠ 色域天花板：等比缩放只能走到「最大通道刚好到 1.0」。若原色已有通道处于 1.0（如 #00BFFF），
+//   再提亮就必然溢出、回压常数反而把它打回原值 —— 此时本函数无法抬升亮度。
+//   因此调用方一般应当使用 LumaToward()，而不是直接使用本函数。
+inline D2D1_COLOR_F SetLuma(D2D1_COLOR_F c, float target) {
+    const float y = LumaEncoded(c);
+    if (y < 1e-4f)
+        return D2D1::ColorF(target, target, target, c.a);
+    const float k = target / y;
+    const D2D1_COLOR_F o = D2D1::ColorF(c.r * k, c.g * k, c.b * k, c.a);
+    const float m = MaxChannel(o);
+    return (m > 1.0f) ? D2D1::ColorF(o.r / m, o.g / m, o.b / m, c.a) : o;
+}
+
+inline float Clamp01(float v) {
+    return (v < 0.0f) ? 0.0f : ((v > 1.0f) ? 1.0f : v);
+}
+
+// 逐通道混合。放在本命名空间内而非复用外层的 LerpColor，是为了让抽取出来生成测试时
+// 依赖面最小（只需要 D2D1_COLOR_F 与数学函数）/ Kept inside the namespace rather than reusing the outer
+inline D2D1_COLOR_F MixToward(D2D1_COLOR_F from, D2D1_COLOR_F to, float t) {
+    t = Clamp01(t);
+    return D2D1::ColorF(from.r + (to.r - from.r) * t, from.g + (to.g - from.g) * t,
+                        from.b + (to.b - from.b) * t, from.a);
+}
+
+// 亮度导向的统一入口：优先走保色路径，撞到色域天花板后用「朝锚点混合」补齐剩余缺口。
+// 朝白/黑混合在 HSV 意义上严格保持色相，只降饱和度 —— 因此这是在既定亮度目标下
+// 饱和度损失最小的补齐方式，且一定是最后手段（缺口多大就补多少，不多补）。
+// Single entry point for luma targeting. Prefers the chroma-preserving path; when it hits the gamut ceiling the
+// residual gap is closed by mixing toward the anchor. Mixing toward white/black preserves hue exactly and only
+// costs saturation, so this is the minimum-loss completion for a given target — and only by the residual amount.
+inline D2D1_COLOR_F LumaToward(D2D1_COLOR_F c, float target) {
+    target = Clamp01(target);
+    const D2D1_COLOR_F o = SetLuma(c, target);
+    const float y1 = LumaEncoded(o);
+    if (fabsf(y1 - target) <= 1e-4f)
+        return o;  // 保色路径一次性达成
+    const D2D1_COLOR_F anchor = (target > y1) ? kColorWhite : kColorBlack;
+    const float anchorY = LumaEncoded(anchor);
+    const float denom = (target > y1) ? (anchorY - y1) : (y1 - anchorY);
+    if (denom < 1e-5f)
+        return o;
+    return MixToward(o, anchor, (target - y1) / denom);
+}
+
+// 内侧高光：替代旧的 lerp(色, 白, t)。amount: 0=不变，1=拉到纯白。
+// 旧写法对任何颜色都以固定比例洗白；新写法先尝试只抬亮度（保住饱和度），
+// 只有在色域不允许时才按缺口补充最小量的白色。
+inline D2D1_COLOR_F Lighten(D2D1_COLOR_F c, float amount) {
+    const float y0 = LumaEncoded(c);
+    return LumaToward(c, y0 + (1.0f - y0) * Clamp01(amount));
+}
+
+// 二值收缩逼近目标对比度：在不破坏色相的前提下，找出「改动最小」的亮度调整量。
+// t 参数化「从原亮度到极值」的路径，沿路径 f(t) = (对比度 ≥ target) 单调，因此可以二分。
+inline D2D1_COLOR_F AdjustLumaForContrast(D2D1_COLOR_F fg, D2D1_COLOR_F bg, float targetRatio) {
+    const float y0 = LumaEncoded(fg);
+    // 朝「与背景对比更强」的那一端走
+    const bool goWhite = ContrastRatio(kColorWhite, bg) >= ContrastRatio(kColorBlack, bg);
+    const float extreme = goWhite ? 1.0f : 0.0f;
+    float tBest = 1.0f;
+    float tLo = 0.0f, tHi = 1.0f;
+    for (int i = 0; i < 16; i++) {
+        const float tMid = (tLo + tHi) * 0.5f;
+        // 用 LumaToward 而非 SetLuma：撞到色域天花板时后者会原地返回，导致二分认为「走不动」
+        const D2D1_COLOR_F cand = LumaToward(fg, y0 + (extreme - y0) * tMid);
+        if (ContrastRatio(cand, bg) >= targetRatio) {
+            tBest = tMid;
+            tHi = tMid;
+        } else {
+            tLo = tMid;
+        }
+    }
+    return LumaToward(fg, y0 + (extreme - y0) * tBest);
+}
+
+// 确保前景对给定背景达到目标对比度（WCAG AA 正文=4.5，AA 大字=3.0，AAA=7.0）。
+// 已达标则原样返回 —— 这是一个「保证下限」的算子，不是「无条件改写」。
+inline D2D1_COLOR_F EnsureContrast(D2D1_COLOR_F fg, D2D1_COLOR_F bg, float targetRatio) {
+    if (targetRatio <= kMinContrast)
+        return fg;  // 目标等于下界时无意义，直接短路
+    if (ContrastRatio(fg, bg) >= targetRatio)
+        return fg;
+    return AdjustLumaForContrast(fg, bg, targetRatio);
+}
+
+// 可访问性目标档位：直接对齐 WCAG 2.1，不用「0.42」这种来路不明的系数。
+enum class ContrastLevel : int { Off = 0, AaLarge = 1, Aa = 2, Aaa = 3, Count };
+
+inline float TargetRatioOf(ContrastLevel level) {
+    switch (level) {
+        case ContrastLevel::AaLarge: return 3.0f;  // AA 大号文本
+        case ContrastLevel::Aa:      return 4.5f;  // AA 正文
+        case ContrastLevel::Aaa:     return 7.0f;   // AAA
+        default:                     return kMinContrast;
+    }
+}
+
+}  // namespace mtcolor
+
+// 预计算256色渐变LUT（OKLab空间，多色点均匀分布）/ Precompute 256-entry gradient LUT (OKLab, evenly distributed color stops)
+// 仅在 g_gradientLUTDirty 时调用；每条路径都必须清掉脏标记，否则会退化为每次采样都重建。
+static void RebuildGradientLUT() {
+    if (g_gradColorCount < 1) {
+        // 退化：无色点，整表填白（不能只填 [0]，否则其余条目是未初始化值）
+        for (int i = 0; i < kGradLUTSize; i++) g_gradientLUT[i] = kColorWhite;
+        g_gradientLUTDirty = false;
+        return;
+    }
+    if (g_gradColorCount == 1) {
+        for (int i = 0; i < kGradLUTSize; i++) g_gradientLUT[i] = g_gradColors[0];
+        g_gradientLUTDirty = false;
+        return;
+    }
+    for (int i = 0; i < kGradLUTSize; i++) {
+        float pos = (float)i / (kGradLUTSize - 1) * (g_gradColorCount - 1);
+        int idx = (int)pos;  // pos >= 0，截断即向下取整
+        float frac = pos - idx;
+        if (idx >= g_gradColorCount - 1) { g_gradientLUT[i] = g_gradColors[g_gradColorCount - 1]; continue; }
+        g_gradientLUT[i] = LerpColorOKLab(g_gradColors[idx], g_gradColors[idx + 1], frac);
+    }
+    g_gradientLUTDirty = false;
+}
+// 从LUT采样渐变颜色（支持流动相位）/ Sample gradient from LUT (supports flowing phase)
+// ratio 与 flowPhase 相加后按 1 取模，实现沿拖尾循环流动
+static D2D1_COLOR_F SampleGradientLUT(float ratio, float flowPhase) {
+    if (g_gradientLUTDirty) RebuildGradientLUT();
+    float pos = fmodf(ratio + flowPhase, 1.0f);
+    if (pos < 0) pos += 1.0f;
+    int idx = (int)(pos * (kGradLUTSize - 1) + 0.5f);
+    if (idx < 0) idx = 0;
+    if (idx > kGradLUTSize - 1) idx = kGradLUTSize - 1;
+    return g_gradientLUT[idx];
+}
+// 安全获取渐变颜色（循环索引，负索引也回绕）/ Safe gradient color access (wrapping index, handles negatives)
+static D2D1_COLOR_F GetGradColor(int idx) {
+    if (g_gradColorCount <= 0) return kColorWhite;
+    int m = idx % g_gradColorCount;
+    if (m < 0) m += g_gradColorCount;  // C++ 的 % 对负数返回负值，需回绕
+    return g_gradColors[m];
+}
+// 单个十六进制字符的数值，非法返回 -1
+constexpr int HexDigitValue(WCHAR c) {
+    if (c >= L'0' && c <= L'9') return c - L'0';
+    if (c >= L'a' && c <= L'f') return c - L'a' + 10;
+    if (c >= L'A' && c <= L'F') return c - L'A' + 10;
+    return -1;
+}
+// 解析 6 位十六进制颜色（不支持 # 前缀）；非法输入返回 fallback
+// 单遍扫描同时完成校验与取值
+static D2D1_COLOR_F ParseHexColor(PCWSTR hex, D2D1_COLOR_F fallback) {
+    if (!hex || !*hex)
+        return fallback;
+    DWORD val = 0;
+    int len = 0;
+    for (; hex[len]; len++) {
+        int d = HexDigitValue(hex[len]);
+        if (d < 0)
+            return fallback;
+        val = val * 16 + (DWORD)d;
+    }
+    if (len != 6)
+        return fallback;
+    return D2D1::ColorF(((val >> 16) & 0xFF) / 255.0f, ((val >> 8) & 0xFF) / 255.0f, (val & 0xFF) / 255.0f, 1.0f);
+}
+// 解析逗号分隔的十六进制颜色列表；任一 token 非法时保留该位置的原颜色
+static void ParseGradientColors(PCWSTR input) {
+    if (!input || !*input)
+        return;
+    WCHAR buf[512];
+    wcsncpy_s(buf, input, 511);
+    buf[511] = 0;
+    int idx = 0;
+    WCHAR *ctx = nullptr;
+    WCHAR *tok = wcstok_s(buf, L",", &ctx);
+    while (tok && idx < kMaxGradColors) {
+        while (*tok == L' ' || *tok == L'\t')
+            tok++;
+        g_gradColors[idx] = ParseHexColor(tok, g_gradColors[idx]);
+        idx++;
+        tok = wcstok_s(nullptr, L",", &ctx);
+    }
+    if (idx > 0) g_gradColorCount = idx;
+    g_gradientLUTDirty = true;
+}
+
+// ===================== 数学表达式解析器 =====================
+enum ExprTokType { ET_NUM, ET_VAR, ET_FUNC, ET_OP, ET_LPAREN, ET_RPAREN };
+struct ExprToken {
+    ExprTokType type;
+    float num;
+    char name[16];
+};
+
+static std::vector<ExprToken> g_exprRPN;
+static bool g_exprValid = false;
+
+// 表达式引擎常量
+constexpr int kExprStackCap = 64;     // 求值栈容量（RPN 求值栈，硬上限）/ RPN eval stack capacity (hard cap)
+constexpr int kExprNameLen = 16;      // token 名字缓冲长度（与 ExprToken::name 一致）/ token name buffer length
+constexpr int kExprBufSize = 512;  // 预处理缓冲长度
+constexpr float kExprPi = 3.14159265f;  // π（表达式内建常量 pi）/ built-in constant pi
+constexpr float kExprE = 2.7182818f;    // e（表达式内建常量 e）/ built-in constant e
+constexpr float kExprEps = 0.0001f;  // log/^ 的输入保护量，避免 0 与负底数
+static const char *const kExprOperators = "+-*/^";  // 支持的二元运算符
+
+// 运算符优先级（数值越大越先结合）；非运算符返回 0
+constexpr int OpPrec(char op) {
+    if (op == '+' || op == '-')
+        return 1;
+    if (op == '*' || op == '/')
+        return 2;
+    if (op == '^')
+        return 4;
+    return 0;
+}
+// 是否为受支持的二元运算符
+static bool IsExprOperator(char c) {
+    return c != '\0' && strchr(kExprOperators, c) != nullptr;
+}
+// 构造一个无名 token
+static ExprToken MakeExprToken(ExprTokType type, float num) {
+    ExprToken t = {};
+    t.type = type;
+    t.num = num;
+    return t;
+}
+
+// 词法分析：把预处理后的字符串切成 token 序列
+static void TokenizeExpression(const char *buf, std::vector<ExprToken> &tokens) {
+    int i = 0;
+    while (buf[i]) {
+        if (isdigit((unsigned char)buf[i]) || buf[i] == '.') {
+            // 数字字面量：整数部分逐位乘 10，小数部分逐位除以 div
+            float val = 0;
+            bool hasDot = false;
+            float div = 1;
+            while (isdigit((unsigned char)buf[i]) || buf[i] == '.') {
+                if (buf[i] == '.')
+                    hasDot = true;
+                else if (hasDot) {
+                    div *= 10;
+                    val += (buf[i] - '0') / div;
+                } else
+                    val = val * 10 + (buf[i] - '0');
+                i++;
+            }
+            tokens.push_back(MakeExprToken(ET_NUM, val));
+        } else if (isalpha((unsigned char)buf[i])) {
+            // 标识符：紧跟 '(' 视为函数调用，否则视为变量
+            char name[kExprNameLen] = {0};
+            int j = 0;
+            while (isalnum((unsigned char)buf[i]) && j < kExprNameLen - 1)
+                name[j++] = buf[i++];
+            ExprToken tok = MakeExprToken(buf[i] == '(' ? ET_FUNC : ET_VAR, 0);
+            strcpy_s(tok.name, name);
+            tokens.push_back(tok);
+        } else if (buf[i] == '(') {
+            tokens.push_back(MakeExprToken(ET_LPAREN, 0));
+            i++;
+        } else if (buf[i] == ')') {
+            tokens.push_back(MakeExprToken(ET_RPAREN, 0));
+            i++;
+        } else if (IsExprOperator(buf[i])) {
+            ExprToken tok = MakeExprToken(ET_OP, 0);
+            tok.name[0] = buf[i];
+            tok.name[1] = 0;
+            tokens.push_back(tok);
+            i++;
+        } else
+            i++;  // 未知字符直接跳过
+    }
+}
+
+// 调度场算法：中缀 token 序列 → 逆波兰式
+static void BuildExprRPN(const std::vector<ExprToken> &tokens, std::vector<ExprToken> &output) {
+    std::vector<ExprToken> stack;
+    for (const ExprToken &tok : tokens) {
+        if (tok.type == ET_NUM || tok.type == ET_VAR) {
+            output.push_back(tok);
+        } else if (tok.type == ET_FUNC) {
+            stack.push_back(tok);
+        } else if (tok.type == ET_OP) {
+            // 左结合：栈顶优先级 >= 当前则先弹出；左括号与函数名不弹出
+            while (!stack.empty() && stack.back().type != ET_LPAREN && stack.back().type != ET_FUNC &&
+                   OpPrec(stack.back().name[0]) >= OpPrec(tok.name[0])) {
+                output.push_back(stack.back());
+                stack.pop_back();
+            }
+            stack.push_back(tok);
+        } else if (tok.type == ET_LPAREN) {
+            stack.push_back(tok);
+        } else if (tok.type == ET_RPAREN) {
+            while (!stack.empty() && stack.back().type != ET_LPAREN) {
+                output.push_back(stack.back());
+                stack.pop_back();
+            }
+            if (!stack.empty())
+                stack.pop_back();  // 丢弃配对的左括号
+            if (!stack.empty() && stack.back().type == ET_FUNC) {
+                output.push_back(stack.back());
+                stack.pop_back();
+            }
+        }
+    }
+    while (!stack.empty()) {
+        output.push_back(stack.back());
+        stack.pop_back();
+    }
+}
+
+// 编译表达式为逆波兰式；空输入/空结果时 g_exprValid=false（求值退化为 0）
+static void CompileExpression(const char *expr) {
+    g_exprValid = false;
+    g_exprRPN.clear();
+    if (!expr || !*expr)
+        return;
+    // 预处理：去空白，并把一元负号改写为 "0-"，使其按二元减法处理
+    char buf[kExprBufSize];
+    int bi = 0;
+    bool expectVal = true;
+    for (int i = 0; expr[i] && bi < kExprBufSize - 2; i++) {
+        char c = expr[i];
+        if (c == '-' && expectVal) {
+            buf[bi++] = '0';
+            buf[bi++] = '-';
+            expectVal = false;
+            continue;
+        }
+        if (c == ' ' || c == '\t')
+            continue;
+        buf[bi++] = c;
+        expectVal = (c == '(' || IsExprOperator(c));
+    }
+    buf[bi] = 0;
+    std::vector<ExprToken> tokens;
+    TokenizeExpression(buf, tokens);
+    std::vector<ExprToken> output;
+    BuildExprRPN(tokens, output);
+    g_exprRPN = output;
+    g_exprValid = !g_exprRPN.empty();
+}
+
+// 变量/内建常量求值：未知名字返回 0
+static float EvalExprVariable(const char *name, float t, float d, float time) {
+    if (strcmp(name, "t") == 0)    return t;
+    if (strcmp(name, "d") == 0)    return d;
+    if (strcmp(name, "time") == 0) return time;
+    if (strcmp(name, "pi") == 0)   return kExprPi;
+    if (strcmp(name, "e") == 0)    return kExprE;
+    return 0;
+}
+// 单参函数求值：未知函数名返回 0
+static float EvalExprFunction(const char *name, float a) {
+    if (strcmp(name, "sin") == 0)  return sinf(a);
+    if (strcmp(name, "cos") == 0)  return cosf(a);
+    if (strcmp(name, "tan") == 0)  return tanf(a);
+    if (strcmp(name, "exp") == 0)  return expf(a);
+    if (strcmp(name, "sqrt") == 0) return sqrtf(fabsf(a));
+    if (strcmp(name, "abs") == 0)  return fabsf(a);
+    if (strcmp(name, "log") == 0)  return logf(fabsf(a) + kExprEps);  // 0/负输入保护
+    return 0;
+}
+// 求值已编译的逆波兰式；表达式非法时返回 0
+static float EvalExpression(float t, float d, float time) {
+    if (!g_exprValid || g_exprRPN.empty())
+        return 0;
+    float stk[kExprStackCap];
+    int sp = 0;
+    for (const ExprToken &tok : g_exprRPN) {
+        if (sp >= kExprStackCap - 1)
+            break;  // 栈满：放弃剩余 token，返回当前栈顶
+        if (tok.type == ET_NUM)
+            stk[sp++] = tok.num;
+        else if (tok.type == ET_VAR)
+            stk[sp++] = EvalExprVariable(tok.name, t, d, time);
+        else if (tok.type == ET_OP) {
+            if (sp < 2) {
+                sp = 0;  // 操作数不足：表达式非法
+                break;
+            }
+            float b = stk[--sp], a = stk[--sp], r = 0;
+            switch (tok.name[0]) {
+                case '+': r = a + b; break;
+                case '-': r = a - b; break;
+                case '*': r = a * b; break;
+                case '/': r = (b != 0) ? a / b : 0; break;  // 除零保护
+                case '^': r = powf(fabsf(a) + kExprEps, b); break;  // 负底数/零底数保护
+            }
+            stk[sp++] = r;
+        } else if (tok.type == ET_FUNC) {
+            if (sp < 1) {
+                sp = 0;  // 缺少实参
+                break;
+            }
+            float a = stk[--sp];
+            stk[sp++] = EvalExprFunction(tok.name, a);
+        }
+    }
+    return sp > 0 ? stk[sp - 1] : 0;
+}
+
+// ===================== 全局状态 =====================
+HWND g_overlayHwnd = NULL;
+// 自定义消息：在 UI 线程显示/隐藏覆盖窗口（渲染线程通过 PostMessage 发送，避免跨线程窗口操作）
+constexpr UINT WM_APP_SHOW_OVERLAY = WM_USER + 101;
+constexpr UINT WM_APP_HIDE_OVERLAY = WM_USER + 102;
+// 请求在窗口所属线程重新注册热键（RegisterHotKey 的线程亲和性要求，见 HotkeyRequestReregister）
+constexpr UINT WM_APP_REHOTKEY = WM_USER + 103;
+HANDLE g_threadHandle = NULL;       // UI 线程句柄
+HANDLE g_readyEvent = NULL;         // 窗口创建完成事件
+HANDLE g_renderExitEvent = NULL;    // 渲染线程退出事件
+HANDLE g_renderThread = NULL;       // 渲染线程句柄
+std::deque<POINT> g_history;
+POINT g_lastPos = {0, 0};
+
+int g_trailDelay = 0;
+// 拖尾滞后位置。必须是浮点：整数保存会让亚像素增量被反复截断，留下追不上的固定偏差。
+float g_lagFX = 0.0f, g_lagFY = 0.0f;
+DWORD g_lagLastT = 0;
+POINT g_lagPos = {0, 0};  // 仅供外部读取的整数快照
+bool g_lagInited = false;
+
+float g_fadeAlpha = 1.0f;
+
+D2D1_COLOR_F g_cursorExtractedColor = {0.5f, 0.5f, 0.5f, 1.0f};
+bool g_cursorColorShift = true;
+int g_colorShiftMode = 1;       // 0=off, 1=complementary(180), 2=analogous(30), 3=triadic(120), 4=split(150), 5=custom
+int g_colorShiftAngle = 180;    // 自定义偏移角度
+// 取色偏移的饱和度/亮度保底。此前声明成可写的全局变量，却没有任何设置项读取它们 ——
+// 名不副实的可调参数最容易误导后来者（改了值以为生效，其实永远是写死的）。
+// 明确为 constexpr：现在这份就是唯一取值，想让它可配置就应当新增设置项并在此读取。
+// Saturation/value floors for the cursor-extract shift. These were mutable globals with no setting feeding
+// them — a knob that looks tunable but is not. Marked constexpr to state the intent plainly; making them
+// configurable means adding a setting and reading it here.
+constexpr float g_colorShiftSatBoost = 0.55f;  // 饱和度保底
+constexpr float g_colorShiftValBoost = 0.72f;  // 亮度保底
+static DWORD s_lastColorExtract = 0;
+
+// ===================== 后台采样线程（GDI 回读剥离，避免阻塞渲染线程 vsync）=====================
+// GetDC(NULL)/BitBlt 在 DWM 下触发全屏 GPU→CPU 回读，放在独立低优先级线程执行
+static HANDLE g_bgSampleThread = NULL;
+static HANDLE g_bgSampleExitEvent = NULL;
+static CRITICAL_SECTION g_sampleCS;
+static std::vector<D2D1_POINT_2F> g_samplePath;
+static int g_sampleVX = 0, g_sampleVY = 0;
+static POINT g_sampleCursor = {0, 0};
+static DWORD g_sampleTime = 0;
+static bool g_sampleHasPath = false;
+static int g_sampleColorMode = 0;
+static bool g_sampleAdaptive = false;
+
+// ===================== 渲染设备（D3D11 + D2D1 Device + DirectComposition）=====================
+ID3D11Device *g_pD3DDevice = nullptr;
+ID3D11DeviceContext *g_pD3DContext = nullptr;
+IDXGIDevice *g_pDXGIDevice = nullptr;
+ID2D1Factory1 *g_pD2DFactory = nullptr;
+// DirectWrite 文字粒子云
+IDWriteFactory *g_dwFactory = nullptr;
+IDWriteTextFormat *g_pTextFormat = nullptr;  // 文字粒子格式
+// 已删除：g_textPoints / g_textPointsDirty / g_textSpacing / g_enableTextParticles 与 BuildTextPoints() 前向声明。
+// 它们是「文字轮廓采样点云」方案的遗留物，被现有的字符图集（char atlas）方案取代后无人引用：
+// BuildTextPoints 只有声明没有定义，四个变量写了也没有任何读取方。
+// Removed: g_textPoints / g_textPointsDirty / g_textSpacing / g_enableTextParticles and the BuildTextPoints()
+// forward declaration — leftovers of the superseded "text outline point cloud" approach (now the char atlas).
+// BuildTextPoints had a declaration but no definition; the four variables had no readers at all.
+wchar_t g_textContent[256] = L"Hi";  // 文字内容
+int g_textFontSize = 120;  // 字号
+bool g_enableTextChunk = true;  // 长句分段开关
+int  g_textChunkMode = 0;                       // 0=逐粒子 particle, 1=全局同步 global
+int  g_textChunkMax = 3;  // 每段最多码点数
+int  g_textChunkDelay = 600;  // 分段切换延迟(ms)
+int  g_textOffsetX = 0;  // 文字相对光标 X 偏移
+int  g_textOffsetY = 0;  // 文字相对光标 Y 偏移
+ID2D1Device *g_pD2DDevice = nullptr;
+ID2D1DeviceContext *g_pD2DDC = nullptr;
+IDXGISwapChain1 *g_pSwapChain = nullptr;
+bool g_isHDRMode = false;  // 当前是否HDR模式
+DXGI_FORMAT g_swapChainFormat = DXGI_FORMAT_B8G8R8A8_UNORM;  // 当前交换链格式
+ID2D1Bitmap1 *g_pD2DTargetBitmap = nullptr;
+ID3D11RenderTargetView *g_pCachedRTV = nullptr;  // 缓存的后台缓冲 RTV（随交换链重建，避免每帧创建）
+int g_msaaSamples = 1;  // MSAA 采样数 1=off
+ID3D11Texture2D *g_pMSAATexture = nullptr;  // MSAA 离屏渲染纹理
+ID3D11RenderTargetView *g_pMSAARTV = nullptr;  // MSAA RTV / MSAA render target view
+int g_ssaaScale = 1;  // SSAA 缩放倍数 1=off
+int g_createdMsaaSamples = 1;  // 离屏纹理实际创建时的 MSAA 配置
+int g_createdSsaaScale = 1;  // 离屏纹理实际创建时的 SSAA 配置
+int g_renderW = 0, g_renderH = 0;  // 实际渲染分辨率（SSAA 时放大）/ Actual render resolution (scaled for SSAA)
+ID3D11Texture2D *g_pSSAATexture = nullptr;  // SSAA 离屏渲染纹理
+ID3D11RenderTargetView *g_pSSAARTV = nullptr;  // SSAA RTV
+ID3D11ShaderResourceView *g_pSSAASRV = nullptr;  // SSAA SRV (for blit)
+ID3D11Texture2D *g_pSSAAResolveTexture = nullptr;  // MSAA resolve 目标（仅MSAA+SSAA时）/ MSAA resolve target (only when MSAA+SSAA)
+ID3D11ShaderResourceView *g_pSSAAResolveSRV = nullptr;  // resolve 纹理 SRV
+ID3D11VertexShader *g_pBlitVS = nullptr;
+ID3D11PixelShader *g_pBlitPS = nullptr;
+ID3D11Buffer *g_pBlitVB = nullptr;  // 全屏四边形 VB
+ID3D11InputLayout *g_pBlitLayout = nullptr;  // blit 输入布局
+ID3D11SamplerState *g_pBlitSampler = nullptr;
+ID3D11Buffer *g_pBlitCB = nullptr;  // blit 常量缓冲（v3.4.2.1：降采样参数）/ blit constant buffer (downsample params)
+// ===== v3.4.2.2 后处理链资源（R1/R2/R3/R5）/ post-processing chain resources =====
+// 着色器与常量缓冲属于「与尺寸无关」的资源：在 InitNativeRendering 创建、ReleaseNativeRendering 释放。
+ID3D11PixelShader *g_pTemporalPS = nullptr;  // R1 时序混合
+ID3D11PixelShader *g_pFXAAPS = nullptr;  // R2 后处理抗锯齿
+ID3D11PixelShader *g_pBloomThresholdPS = nullptr;  // R3 亮部提取+降采样
+ID3D11PixelShader *g_pBloomBlurPS = nullptr;  // R3 可分离高斯模糊
+ID3D11PixelShader *g_pBloomCompositePS = nullptr;  // R3 泛光叠加
+ID3D11PixelShader *g_pHDREncodePS = nullptr;  // R5 HDR 线性化+传输函数编码
+ID3D11Buffer *g_pPostCB = nullptr;                  // 后处理常量缓冲（64 字节 = 16 float，布局见着色器）/ post CB
+// 以下渲染目标与尺寸/格式相关：由 EnsurePostTargets 惰性创建，在 RecreateSwapChain 与
+// ReleaseAllRenderResources 中释放。仅在对应特效开启时分配。
+ID3D11Texture2D *g_pSceneTex = nullptr;             // 降采样输出（场景）/ downsample output (scene)
+ID3D11RenderTargetView *g_pSceneRTV = nullptr;
+ID3D11ShaderResourceView *g_pSceneSRV = nullptr;
+ID3D11Texture2D *g_pPostTex = nullptr;  // 后处理 ping-pong 目标
+ID3D11RenderTargetView *g_pPostRTV = nullptr;
+ID3D11ShaderResourceView *g_pPostSRV = nullptr;
+ID3D11Texture2D *g_pHistoryTex = nullptr;           // R1 历史帧（仅时序模糊开启时分配）/ R1 history
+ID3D11RenderTargetView *g_pHistoryRTV = nullptr;
+ID3D11ShaderResourceView *g_pHistorySRV = nullptr;
+// R3 泛光两级：索引 0/1 = 1/2 分辨率乒乓，索引 2/3 = 1/4 分辨率乒乓
+static const int kPostBloomLevels = 4;
+ID3D11Texture2D *g_pBloomTex[kPostBloomLevels] = {nullptr, nullptr, nullptr, nullptr};
+ID3D11RenderTargetView *g_pBloomRTV[kPostBloomLevels] = {nullptr, nullptr, nullptr, nullptr};
+ID3D11ShaderResourceView *g_pBloomSRV[kPostBloomLevels] = {nullptr, nullptr, nullptr, nullptr};
+// 后处理目标当前尺寸/格式（用于惰性重建）/ current post target size & format (for lazy recreation)
+int g_postRTW = 0, g_postRTH = 0;
+int g_postRTFormat = 0;  // DXGI_FORMAT 以 int 保存
+bool g_postRTsFresh = false;  // 目标刚重建：历史帧需要清除为透明黑
+IDCompositionDevice *g_pDCompDevice = nullptr;
+IDCompositionTarget *g_pDCompTarget = nullptr;
+IDCompositionVisual *g_pDCompVisual = nullptr;
+ID2D1SolidColorBrush *g_pSolidOuterBrush = nullptr;
+ID2D1SolidColorBrush *g_pSolidInnerBrush = nullptr;
+ID2D1SolidColorBrush *g_pShadowBrush = nullptr;
+ID2D1LinearGradientBrush *g_pGradOuterBrush = nullptr;
+ID2D1LinearGradientBrush *g_pGradInnerBrush = nullptr;
+ID2D1GradientStopCollection *g_pGradOuterStops = nullptr;
+ID2D1GradientStopCollection *g_pGradInnerStops = nullptr;
+// 每帧动态创建的 mesh（ID2D1Mesh 只写一次，不能复用 Open）
+ID2D1Mesh *g_pShadowMesh = nullptr;
+ID2D1Mesh *g_pGlow2Mesh = nullptr;
+ID2D1Mesh *g_pGlowMesh = nullptr;
+ID2D1Mesh *g_pOuterMesh = nullptr;
+ID2D1Mesh *g_pInnerMesh = nullptr;
+
+int g_cachedVW = 0, g_cachedVH = 0;
+int g_virtX = 0, g_virtY = 0, g_virtW = 0, g_virtH = 0;  // 虚拟屏幕尺寸缓存，WM_DISPLAYCHANGE 时更新
+
+// ===================== 设置缓存 =====================
+float g_triggerVelocity = 25.0f, g_stopVelocity = 10.0f;
+int g_tailOffsetX = 6, g_tailOffsetY = 10, g_tailLength = 10;
+bool g_enableSmoothGradient = true;
+int g_fadeoutMode = 2;  // 0=hard 1=accelerate 2=soft
+bool g_enableSpeedResponse = true;
+bool g_enableFrameSync = true;  // 帧同步开关（vsync
+bool g_enhancedGlow = true;
+bool g_enableHeadHighlight = true;
+bool g_adaptiveContrast = false;   // 自适应对比度
+int g_contrastTarget = 0;    // 0=off 1=aa_large 2=aa 3=aaa —— Colors.contrast_target
+    // 后台采样线程写、渲染线程（UpdateConstantBuffer/顶点构造）读，改为 atomic 消除数据竞争（UB）
+    std::atomic<float> g_bgLuminance{0.5f};  // 背景亮度缓存（0=暗，1=亮）/ cached bg luminance (0=dark, 1=bright)
+
+DWORD g_lastBgSample = 0;          // 上次背景采样时间
+bool g_enableTrailShadow = true;
+int g_trailShape = 0;
+int g_dotsMultiplier = 2;
+int g_dotChainSize = 100;         // 圆点链大小倍数（百分比）
+int g_particleSizeMultiplier = 100; // 粒子大小倍数（百分比）
+bool g_enableParticleGlow = true;   // 粒子发光开关
+int g_particleGlowIntensity = 40;   // 粒子发光强度（0-100）
+// 粒子描边参数（文字字符模式，与发光叠加）/ Particle stroke params (text-char mode, layered with glow)
+bool g_enableParticleStroke = true;  // 描边开关
+int g_particleStrokeWidth = 3;                   // 描边宽度（图集像素，0-10）/ stroke width (atlas px, 0-10)
+int g_particleStrokeAlpha = 80;                  // 描边透明度（0-100）/ stroke alpha (0-100)
+int g_particleStrokeColorMode = 0;  // 0=auto(主色变暗) 1=custom
+D2D1_COLOR_F g_particleStrokeColor = {0.10f, 0.10f, 0.12f, 1.0f};  // 自定义描边颜色
+int g_functionPreset = 0;
+char g_customFunction[256] = "sin(d * 0.15) * 8";
+int g_waveAmplitude = 8, g_waveFrequency = 15;
+bool g_enableGlow = true;
+int g_glowIntensity = 40;
+bool g_enableTrailStroke = true;  // 拖尾描边开关
+int g_trailStrokeWidth = 12;       // 拖尾描边宽度（占拖尾半宽百分比 0-50）/ trail stroke width (% of half-width, 0-50)
+int g_edgeSoftness = 50;  // 拖尾边缘柔和度（0=硬边，100=极柔和）
+int g_aaMode = 1;  // 抗锯齿模式 0=off 1=smooth 2=crisp 3=extra
+// ---- v3.4.2.1 着色器质量与采样设置 / Shader quality & sampling settings ----
+int g_shaderQuality = 1;      // 着色器质量 0=fast 1=balanced 2=high
+int g_ssaaFilter = 1;         // SSAA 降采样滤波器 0=bilinear 1=box(16tap) 2=tent(9tap) 3=lanczos(16tap)
+int g_ssaaSharpness = 0;      // SSAA 降采样锐化强度（0-100）/ downsample sharpen amount (0-100)
+int g_sdfSamples = 1;         // 粒子 SDF 边缘采样数 1=单点 2=2x2 旋转网格 4=4x 旋转网格
+int g_ditherMode = 1;         // 输出抖动 0=off 1=4x4 有序 2=8x8 有序 3=哈希噪声
+int g_ditherStrength = 50;    // 抖动强度（0-100，100≈1个色阶）/ dither strength (0-100, 100 ≈ 1 color step)
+float g_textAtlasSS = 2.0f;   // 文字图集超采样倍数（1/2/3/4）/ text atlas supersample factor
+int g_colorMode = 0;
+D2D1_COLOR_F g_customColor = {0.0f, 0.75f, 1.0f, 1.0f};
+int g_particleMode = 1;
+int g_particleOrigin = 2;  // 0=head 1=middle 2=tail 3=custom
+int g_particleOriginRatio = 80;
+float g_particleAttraction = 0.032f;
+bool g_enableParticleRepel = true;
+int g_particleRepelRadius = 25;
+float g_particleRepelForce = 0.9f;
+int g_particleDensity = 3;
+int g_particleInterval = 50;
+bool g_particleAccel = true;
+// 粒子形状编码 P
+// [!] 本项目存在两套并存且互不相同的形状编码：本套用于「浮动粒子」（对应 HLSL shapeSDF 与 g_particleShape），
+//   另一套是 g_shapeType 的「形状拖尾」编码 T（0=heart ... 2=hexagon ... 3=circle ... 8=hexagram）。
+//   索引 0/2/3/8 在两套里含义两两互换（0:circle↔heart、2:hexagram↔hexagon、3:heart↔circle、8:hexagon↔hexagram），
+//   其余保持一致。两套各自自洽、都能正常工作，但**严禁跨套照搬序号**——曾因此在 shapeSDF 里把
+//   6=flower 误判成三角形分支，导致「花朵渲染成三角形」的线上回归。
+// This project carries two coexisting shape encodings. This one (P) drives floating particles (HLSL shapeSDF);
+// g_shapeType uses a different one (T). Indices 0/2/3/8 swap meaning between them; everything else matches.
+// Both are internally consistent, but NEVER copy an index across them — doing so once made shapeSDF route
+// 6=flower into the triangle branch, shipping the "flower renders as triangle" regression.
+int g_particleShape = 9;
+bool g_enableParticleSpin = true;  // 粒子自旋转
+int g_particleSpinSpeed = 30;  // 粒子自旋速度（0-100）
+bool g_enableParticleInteraction = true;  // 粒子间相互作用
+int g_interParticleRepelDistance = 25;  // 粒子间排斥距离（像素）
+int g_particleSpawnSpread = 30;  // 生成位置扩散半径（像素）
+float g_interParticleRepelForce = 0.15f;  // 粒子间排斥力强度
+int g_particleRepelAlignment = 50;  // 同向运动衰减（0-100）
+// 粒子质量系统
+bool g_enableParticleMass = true;
+float g_particleMassMin = 0.5f;
+float g_particleMassMax = 2.0f;
+// 粒子万有引力系统
+bool g_enableParticleGravity = false;
+float g_gravityStrength = 0.5f;  // 引力常数G（0-1）/ Gravitational constant G (0-1)
+int g_gravitySystem = 0;  // 0=双星, 1=N体
+int g_gravityBodyCount = 3;  // N体数量
+// 引力天体（双星/N体的大质量粒子索引）/ Gravity bodies (high-mass particle indices for binary/N-body)
+std::vector<int> g_gravityBodies;
+// 引力计算复用工作缓冲（避免每帧堆分配）/ Reusable scratch buffers for gravity
+// g_gravityMassIdx 已删除：声明后从未被读写（同类缓冲 g_gravityBodies/g_gravityBodyFlag 均在用）。
+std::vector<bool> g_gravityBodyFlag;
+
+// ===================== 音乐响应系统（v3.4 基础设施）===================== / Music reactive system (v3.4 infrastructure, visual effects TBD)
+struct MusicState {
+    bool initialized = false;
+    bool capturing = false;
+    // WASAPI 接口
+    IMMDeviceEnumerator *pEnumerator = nullptr;
+    IMMDevice *pDevice = nullptr;
+    IAudioClient *pAudioClient = nullptr;
+    IAudioCaptureClient *pCaptureClient = nullptr;
+    HANDLE hCaptureThread = nullptr;
+    HANDLE hStopEvent = nullptr;
+    std::atomic<bool> captureRunning{false};
+    // 音频格式
+    WAVEFORMATEX *pWaveFormat = nullptr;
+    UINT32 bufferFrames = 0;
+    // FFT 数据
+    int fftSize = 512;
+    std::vector<float> fftInput;       // 时域输入（环形缓冲）
+    std::vector<float> fftOutput;      // 频域输出（幅度）
+    std::vector<float> fftSmoothed;    // 平滑后的频域
+    std::vector<float> windowFunction; // Hann 窗函数
+    std::vector<float> fftWorkReal;    // FFT工作缓冲（实部，复用避免每帧分配）
+    std::vector<float> fftWorkImag;    // FFT工作缓冲（虚部，复用避免每帧分配）
+    int fftWritePos = 0;               // 环形缓冲写入位置
+    // 节拍检测
+    float beatEnergy = 0;  // 当前帧能量
+    float beatAvgEnergy = 0;           // 平均能量（历史）/ Average energy (history)
+    float beatThreshold = 0;  // 节拍阈值
+    bool beatDetected = false;  // 当前帧是否检测到节拍
+    float beatIntensity = 0;           // 节拍强度（0-1）/ Beat intensity (0-1)
+    DWORD lastBeatTime = 0;  // 上次节拍时间
+    float bpmEstimate = 0;  // BPM估计
+    std::deque<DWORD> beatHistory;  // 节拍时间历史
+    // 频谱通量检测
+    std::vector<float> prevSpectrum;   // 上一帧频谱
+    float spectralFlux = 0;            // 当前频谱通量
+    float avgSpectralFlux = 0;         // 平均频谱通量
+    // 多频段节拍
+    float bassBeatEnergy = 0;          // 低频节拍能量
+    float bassBeatAvg = 0;             // 低频平均能量
+    bool bassBeat = false;             // 低频节拍
+    float midBeatEnergy = 0;           // 中频节拍能量
+    float midBeatAvg = 0;              // 中频平均能量
+    bool midBeat = false;              // 中频节拍
+    float trebleBeatEnergy = 0;        // 高频节拍能量
+    float trebleBeatAvg = 0;           // 高频平均能量
+    bool trebleBeat = false;           // 高频节拍
+    // 频段数据（低/中/高）/ Frequency band data (bass/mid/treble)
+    float bassLevel = 0;  // 低频 (20-250Hz)
+    float midLevel = 0;  // 中频 (250-2000Hz)
+    float trebleLevel = 0;  // 高频 (2000-20000Hz)
+    float overallLevel = 0;  // 总音量
+};
+MusicState g_music;
+bool g_enableMusicReactive = false;
+int g_musicFftSize = 512;
+float g_musicSensitivity = 0.5f;
+float g_musicSmoothing = 0.5f;
+// 音乐物理联动
+bool g_enableMusicPhysics = false;
+float g_musicGravityLink = 0.5f;   // 音量→引力
+float g_musicBeatPulse = 0.5f;     // 节拍→速度
+float g_musicBassSize = 0.5f;      // 低频→大小
+float g_musicVortexLink = 0.5f;    // 节拍→漩涡
+float g_musicBeatPulseAmount = 0;  // 当前节拍脉冲量（衰减）
+float g_musicBassSizeBoost = 0;    // 当前低频大小增益（平滑）
+// 高级物理系统
+bool g_enableParticleCollision = false;
+bool g_enableLorentzForce = false;
+float g_lorentzStrength = 0.3f;    // 磁场强度
+bool g_enableBrownianMotion = false;
+float g_brownianStrength = 0.2f;   // 热噪声强度
+bool g_enableMultiBandLink = false;
+// 环境力场：全局重力 + 风场
+bool g_enableEnvGravity = false;
+float g_envGravityStrength = 0.3f;  // 重力加速度（像素/帧2）/ gravity accel (px/frame^2)
+float g_envGravityAngle = 1.5708f;  // 重力方向弧度，默认90度向下
+bool g_enableEnvWind = false;
+float g_windStrength = 0.2f;  // 风力基准强度
+float g_windTurbulence = 0.5f;  // 湍流程度 0-1
+float g_windX = 0, g_windY = 0;     // 当前风向量（每帧更新）/ current wind vector (updated per frame)
+// 布料弹簧网：邻近粒子间软弹簧，形成果冻/布料抖动
+bool g_enableParticleSpring = false;
+float g_springK = 0.02f;  // 弹簧刚度
+float g_springMaxDist = 50.0f;      // 建立弹簧的最大距离（像素）/ max distance to form spring (px)
+std::vector<int> g_springLinkCount;  // 每粒子当前帧弹簧连接数（防中心过压）/ per-particle spring link count (anti center over-constraint)
+// 物理可视化调试（独立开关）/ Physics debug visualization (individual toggles)
+bool g_debugVelocity = false;   // 速度向量
+bool g_debugForce = false;      // 受力向量
+bool g_debugVortex = false;     // 漩涡中心/轨道
+bool g_debugGravity = false;    // 引力源
+bool g_debugCollision = false;  // 碰撞半径
+bool g_debugSpring = false;     // 弹簧连线
+bool g_debugInteraction = false; // 粒子相互作用连线
+bool g_debugSpawn = false;       // 生成点
+bool g_debugPath = false;        // 拖尾路径
+struct DebugSpawnPoint { float x, y; DWORD time; };
+[[clang::no_destroy]] static std::vector<DebugSpawnPoint> g_debugSpawnPoints;
+// 多频段联动状态
+float g_bassGravityBoost = 0;      // 低频→引力
+float g_midRepelBoost = 0;         // 中频→排斥力
+float g_trebleNoiseBoost = 0;      // 高频→噪声
+
+// 向心力漩涡系统
+bool g_enableCentripetal = false;
+float g_centripetalForce = 0.5f;  // 向心力强度（0-1）
+float g_centripetalSensitivity = 0.5f;  // 检测灵敏度（0-1，越低越灵敏）
+int g_centripetalDuration = 1500;  // 漩涡持续时间（ms）
+int g_vortexMaxCount = 2;      // 最大同时存在的漩涡数量（1-8）
+float g_vortexMinDistance = 200.0f;  // 漩涡之间最小间距（像素）
+float g_vortexDrift = 0.3f;     // 漩涡中心漂移程度（0-1）
+float g_vortexDurationSpeed = 0.2f;  // 持续时间速度增益（0-1）
+int g_vortexPhysModel = 0;      // 漩涡物理模型：0=Rankine, 1=自由涡, 2=刚体旋转, 3=Lamb-Oseen, 4=开普勒
+
+#define MAX_VORTICES 8
+// 单个漩涡实例
+struct Vortex {
+    bool active;           // 是否活跃（包括衰减阶段）
+    float centerX, centerY; // 漩涡中心
+    float driftX, driftY;   // 中心漂移速度
+    float radius;          // 轨道半径（涡核外边界）
+    float coreRadius;      // 涡核半径（Rankine涡内边界，内部刚体旋转）
+    float angularVel;      // 角速度（涡核内刚体旋转角速度）
+    float circulation;     // 环量Γ（自由涡强度，v_θ = Γ/(2πr)）
+    float strength;        // 强度（0-1，平滑过渡）
+    float pressureGradient; // 径向压力梯度强度（中心低压吸力）
+    bool isCircling;       // 是否在维持（鼠标还在圆周运动）
+    DWORD startTime;       // 创建时间
+    int actualDuration;    // 实际持续时间（受速度影响）
+    float orbitTilt;       // 轨道倾角
+    float orbitTiltVel;    // 倾角变化速度
+    float orbitPhase;      // 轨道相位
+    float stretchRate;     // 涡管拉伸率（鼠标加速度导致，增强涡量）
+};
+Vortex g_vortices[MAX_VORTICES] = {};
+
+// 圆周运动检测状态（位置历史共享，检测后分配到漩涡槽位）/ Circular motion detection state (position history shared, assigned to vortex slot after detection)
+struct CircleDetect {
+    float historyX[20];  // 位置历史
+    float historyY[20];
+    int historyCount;
+    float angularVel;  // 角速度（弧度/帧）
+    float circleCenterX, circleCenterY;  // 估算圆心
+    float circleRadius;  // 估算半径
+    bool isCircling;  // 是否在做圆周运动
+    DWORD lastCircleTime;  // 上次检测到圆周运动的时间
+} g_circleDetect = {};
+ID2D1PathGeometry *g_pStarGeom = nullptr;
+ID2D1PathGeometry *g_pHexagramGeom = nullptr;
+ID2D1PathGeometry *g_pHeartGeom = nullptr;
+// 多元素拼接形状（11 火箭 / 12 导弹 / 13 光纤导弹）在 D2D 回退路径下的几何：
+// 按 [形状槽位][部件] 分开建，才能给机身/暗部/尾焰/高光分别着色。
+// ===== 形状拖尾 =====
+struct TrailShape {
+    float x, y;
+    float vx, vy;
+    float size;
+    float rotation;      // 当前旋转角度
+    float rotSpeed;      // 旋转速度
+    int shapeType;       // 0=heart 1=star 2=hexagon 3=circle 4=diamond 5=triangle 6=flower 7=pentagon 8=hexagram
+    DWORD startTime;
+    float lifetime;
+    D2D1_COLOR_F color;
+};
+std::vector<TrailShape> g_trailShapes;
+float g_lastShapeX = 0, g_lastShapeY = 0;
+// 上一次形状的飞行方向：火箭/导弹/光纤导弹要朝运动方向飞，间隔位移太小时用它兜底
+float g_lastShapeDirX = 1.0f, g_lastShapeDirY = 0.0f;
+bool g_hasLastShapePos = false;
+// ===== 飞行器（火箭/导弹/光纤导弹）静止引爆 v3.4.5.1 =====
+bool g_missileIdleExplode = false;  // 鼠标静止时是否引爆
+int g_missileIdleDelay = 400;         // 静止多久后引爆（毫秒）/ how long stopped before detonation (ms)
+int g_missileExplodeParticles = 12;  // 每次爆炸释放的粒子数
+int g_missileExplodeFx = 2;  // 0=仅粒子 1=仅冲击波 2=两者
+// ===== 着色器效果动画 v3.4.5.1（独立折叠组 AnimFX）=====
+// 这些效果原本是静态的：开了就是恒定强度。给它们各自一个呼吸/流动/闪烁的调制，观感会活很多。
+bool g_fxBloomPulse = false;  // 泛光呼吸
+bool g_fxGlowBreath = false;  // 外发光呼吸
+bool g_fxEdgeFlow = false;  // 边缘柔和度流动
+bool g_fxDitherShimmer = false;  // 颗粒抖动闪烁
+bool g_fxStrokeFlow = false;  // 描边宽度流动
+bool g_fxBloomThrWave = false;  // 泛光阈值波动
+bool g_fxBlurPulse = false;  // 时域模糊脉动
+bool g_fxHdrShimmer = false;  // HDR 高光闪烁
+int g_fxAnimSpeed = 100;          // 动画速度（%，100 ≈ 0.5Hz）/ animation speed (%, 100 ≈ 0.5Hz)
+int g_fxAnimAmount = 50;          // 动画幅度（%）/ animation amount (%)
+int g_fxAnimWave = 0;  // 波形：0=正弦 1=脉冲 2=三角 3=闪烁
+
+// 波形整形：把 0~1 相位映射成 0~1 取值。除正弦外提供脉冲（快起慢落）、三角、闪烁
+// （伪随机阶跃，适合抖动/噪点）—— 单一正弦用久了显得机械。
+static float FxShape(float phase01, int wave) {
+    switch (wave) {
+    case 1: {  // 脉冲：快起慢落
+        return (phase01 < 0.30f) ? (phase01 / 0.30f) : (1.0f - (phase01 - 0.30f) / 0.70f);
+    }
+    case 2:  // 三角：匀速往返
+        return (phase01 < 0.5f) ? (phase01 * 2.0f) : (2.0f - phase01 * 2.0f);
+    case 3: {  // 闪烁：按相位哈希出的阶跃值
+        float n = sinf(phase01 * 91.17f) * 43758.5453f;
+        return n - floorf(n);
+    }
+    default:  // 正弦
+        return 0.5f + 0.5f * sinf(phase01 * 6.2831853f);
+    }
+}
+static float FxWave(DWORD dwTime, float phase) {
+    float hz = ((float)g_fxAnimSpeed / 100.0f) * 0.5f;
+    float p = (float)dwTime * 0.001f * hz + phase;
+    p -= floorf(p);  // 归到 0~1
+    return FxShape(p, g_fxAnimWave);
+}
+// 每个效果的调制系数。渲染子函数拿不到 dwTime，所以在每帧开头统一刷新，供各处直接读取。
+float g_fxBloomMul = 1.0f, g_fxGlowMul = 1.0f, g_fxEdgeMul = 1.0f, g_fxDitherMul = 1.0f;
+float g_fxStrokeMul = 1.0f, g_fxBloomThrMul = 1.0f, g_fxBlurMul = 1.0f, g_fxHdrMul = 1.0f;
+static void UpdateFxAnimations(DWORD dwTime) {
+    g_fxBloomMul  = (!g_fxBloomPulse || g_fxAnimAmount <= 0)
+        ? 1.0f : 1.0f + (FxWave(dwTime, 0.00f) - 0.5f) * 2.0f * ((float)g_fxAnimAmount / 100.0f);
+    g_fxGlowMul   = (!g_fxGlowBreath || g_fxAnimAmount <= 0)
+        ? 1.0f : 1.0f + (FxWave(dwTime, 0.33f) - 0.5f) * 2.0f * ((float)g_fxAnimAmount / 100.0f);
+    g_fxEdgeMul   = (!g_fxEdgeFlow || g_fxAnimAmount <= 0)
+        ? 1.0f : 1.0f + (FxWave(dwTime, 0.66f) - 0.5f) * 2.0f * ((float)g_fxAnimAmount / 100.0f);
+    g_fxDitherMul = (!g_fxDitherShimmer || g_fxAnimAmount <= 0)
+        ? 1.0f : 1.0f + (FxWave(dwTime, 0.15f) - 0.5f) * 2.0f * ((float)g_fxAnimAmount / 100.0f);
+    g_fxStrokeMul = (!g_fxStrokeFlow || g_fxAnimAmount <= 0)
+        ? 1.0f : 1.0f + (FxWave(dwTime, 0.42f) - 0.5f) * 2.0f * ((float)g_fxAnimAmount / 100.0f);
+    g_fxBloomThrMul = (!g_fxBloomThrWave || g_fxAnimAmount <= 0)
+        ? 1.0f : 1.0f + (FxWave(dwTime, 0.58f) - 0.5f) * 2.0f * ((float)g_fxAnimAmount / 100.0f);
+    g_fxBlurMul = (!g_fxBlurPulse || g_fxAnimAmount <= 0)
+        ? 1.0f : 1.0f + (FxWave(dwTime, 0.77f) - 0.5f) * 2.0f * ((float)g_fxAnimAmount / 100.0f);
+    g_fxHdrMul = (!g_fxHdrShimmer || g_fxAnimAmount <= 0)
+        ? 1.0f : 1.0f + (FxWave(dwTime, 0.88f) - 0.5f) * 2.0f * ((float)g_fxAnimAmount / 100.0f);
+}
+// 强度类参数：调制后夹回 0~1，不能溢出
+static float FxApply(float base, float mul) {
+    return fminf(fmaxf(base * mul, 0.0f), 1.0f);
+}
+// 形状拖尾编码 T
+// [!] 与 g_particleShape 的粒子编码 P **不是同一套**（P: 0=circle 2=hexagram 3=heart 8=hexagon）。
+//   两者索引 0/2/3/8 含义互换，切勿互相套用；详见 g_particleShape 处的对照说明。
+int g_shapeType = 0;
+int g_shapeInterval = 30;     // 生成间隔（像素）
+bool g_shapeRandomOffset = true;
+int g_shapeCount = 1;         // 每次生成数量
+float g_shapeSize = 12.0f;
+int g_shapeLifetime = 800;    // 存活时间 ms
+bool g_superPerformanceMode = false;  // 超级性能模式：无视性能上限
+// ===== v3.4.2.2 新增：渲染质量扩展 / DPI / 热键 / 进程载体 =====
+// ----- 渲染质量扩展（R1/R2/R3/R5）----- / rendering quality extensions
+bool g_enableTemporalBlur = false;   // R1 时序模糊（真正的运动模糊）/ temporal accumulation
+int g_temporalBlurAmount = 55;  // R1 保留比例 0-95
+int g_postAA = 0;                    // R2 后处理抗锯齿 0=off 1=fxaa 2=fxaa_extreme
+bool g_enableBloom = false;  // R3 泛光开关
+int g_bloomThreshold = 60;  // R3 泛光阈值 0-100
+int g_bloomIntensity = 50;  // R3 泛光强度 0-100
+int g_hdrMode = 0;                   // R5 HDR 输出 0=auto 1=off 2=scrgb 3=hdr10
+int g_hdrHighlightBoost = 0;         // R5 高光增益 0-200（%）/ highlight boost
+int g_hdrTonemap = 0;                // R5 色调映射 0=off 1=reinhard 2=aces
+bool g_hdrColorSpaceApplied = false;  // 运行时：交换链色彩空间是否已设置成功
+// ----- DPI 感知（I2）----- / DPI awareness
+int g_dpiScaleMode = 0;              // 0=auto 1=fixed(100%)
+bool g_dpiScaleText = false;  // 文字图集是否随显示器 DPI 缩放
+// 跨线程共享（UI 线程 WM_DPICHANGED/WM_DISPLAYCHANGE 写，渲染线程 UpdateMonitorDpiScale 也写、BuildCharAtlas 读），
+// 改成 atomic 消除数据竞争（UB）。atomic<float> 的隐式转换让所有既有 float 用法保持可编译。
+// Shared across threads (written by the UI thread on WM_DPICHANGED/WM_DISPLAYCHANGE and by the render thread in
+// UpdateMonitorDpiScale, read by BuildCharAtlas): atomic removes the data race (UB). Implicit conversion keeps
+// every existing float use compiling; varargs call sites must use .load() explicitly.
+std::atomic<float> g_monitorDpiScale{1.0f};  // 运行时：光标所在显示器的 DPI 比例
+// ----- 热键（I5）：运行时可切换的可见性开关（不持久化）/ hotkeys: runtime visibility toggles (not persisted)
+std::atomic<bool> g_effectsVisible{true};  // 显示/消失总开关
+std::atomic<bool> g_trailVisible{true};  // 拖尾显示
+std::atomic<bool> g_particlesVisible{true};  // 粒子显示
+int g_hotkeyModifier = 0;            // 0=none 1=alt 2=alt_ctrl 3=alt_shift 4=alt_ctrl_shift
+wchar_t g_hotkeyToggleKey[32] = L"";  // 显示/消失按键原始文本
+wchar_t g_hotkeyTrailKey[32] = L"";  // 拖尾开关按键
+wchar_t g_hotkeyParticlesKey[32] = L"";  // 粒子开关按键
+int g_hotkeyToggleVK = 0;            // 解析后的虚拟键码（0=未配置）/ resolved VK (0 = unbound)
+int g_hotkeyTrailVK = 0;
+int g_hotkeyParticlesVK = 0;
+bool g_enableBezierSmooth = true;     // 贝塞尔曲线平滑
+bool g_enableMotionBlur = false;      // 运动模糊
+int g_motionBlurStrength = 3;         // 运动模糊强度（叠加帧数）
+bool g_enable25DEffect = true;        // 2.5D 立体效果
+int g_perspectiveStrength = 15;       // 透视强度（0-50）
+// 运动模糊历史帧缓冲区
+struct TrailFrame {
+    std::vector<D2D1_POINT_2F> path;
+    DWORD time;
+};
+std::vector<TrailFrame> g_trailHistory;
+std::atomic<bool> g_settingsDirty{false};  // 设置变更标记，渲染线程中消费
+std::atomic<bool> g_deviceLost{false};      // 设备丢失标记，渲染循环中重建
+DWORD g_lastParticleTime = 0;
+float g_lastParticleX = 0, g_lastParticleY = 0;
+bool g_hasLastParticlePos = false;
+// 上一段「释放位移」的单位方向。快速移动插值时用它构造贝塞尔切线，
+// 使补出的点贴合弧线路径而不是硬拽成一条直线。
+float g_lastParticleDirX = 0.0f, g_lastParticleDirY = 0.0f;
+float g_prevVelocity = 0;
+bool g_enableClickStarburst = true;
+int g_starburstCount = 8;
+bool g_enableClickEffect = true;
+int g_clickMaxRadius = 40, g_clickDuration = 300;
+// 点击效果风格：0=波纹 1=冲击波 2=墨晕 3=星芒 4=花瓣绽放
+int g_clickStyle = 0;
+
+// ===================== 粒子系统 =====================
+struct Particle {
+    float x, y, vx, vy, size;
+    float z;            // 3D 深度（生成时随机，避免每帧闪烁）
+    float mass;         // 质量（影响惯性、大小、生命周期、引力）
+    float charge;       // 电荷（洛伦兹力用，正/负）
+    float rotation;     // 当前旋转角度（弧度）
+    float spinSpeed;    // 自旋转速度（弧度/帧）
+    DWORD startTime;
+    int lifetime;
+    D2D1_COLOR_F color;
+    D2D1_COLOR_F endColor;
+    int shapeType;
+    float charIndex;  // 字符图集索引
+    int chunkStart;  // 所属词组的起始图集格
+    int chunkCount;   // 所属词组占用的格数（>1 时启用轮播）/ atlas cells of owning phrase (>1 enables cycling)
+    float colorOffset[3]; // 随机偏色（RGB，约 ±20/255），生成后不变
+    float vortexBrightness[3]; // 漩涡亮度调制（向心力/3D效果），与色差分离
+    float debugForceX, debugForceY; // 调试用：本帧总受力（物理可视化）
+};
+std::vector<Particle> g_particles;
+struct Ripple {
+    POINT pos;
+    DWORD startTime;
+};
+std::vector<Ripple> g_ripples;
+bool g_prevLButton = false, g_prevRButton = false;
+
+// ===================== 颜色缓存 =====================
+struct GradData {
+    D2D1_GRADIENT_STOP outer[GRAD_STOPS];
+    D2D1_GRADIENT_STOP inner[GRAD_STOPS];
+    D2D1_COLOR_F solidOuter, solidInner;
+};
+static GradData s_cachedGrad = {};
+static bool s_gradValid = false;
+
+// 颜色近似相等（忽略 alpha）：用于判断渐变是否需要重建画刷
+static bool ColorApproxEq(D2D1_COLOR_F a, D2D1_COLOR_F b) {
+    return fabsf(a.r - b.r) < kColorEpsilon && fabsf(a.g - b.g) < kColorEpsilon && fabsf(a.b - b.b) < kColorEpsilon;
+}
+static bool GradApproxEq(const GradData &a, const GradData &b) {
+    for (int i = 0; i < GRAD_STOPS; i++) {
+        if (!ColorApproxEq(a.outer[i].color, b.outer[i].color))
+            return false;
+        if (!ColorApproxEq(a.inner[i].color, b.inner[i].color))
+            return false;
+    }
+    return true;
+}
+
+// 写入一对（outer/inner）渐变停止点：两者共用同一比例与 alpha
+// 每帧对 GRAD_STOPS 个停止点调用，保持为无分配的平凡内联形式
+static void SetGradStopPair(GradData &out, int i, float ratio, D2D1_COLOR_F co, D2D1_COLOR_F ci, float alpha) {
+    out.outer[i] = {ratio, D2D1::ColorF(co.r, co.g, co.b, alpha)};
+    out.inner[i] = {ratio, D2D1::ColorF(ci.r, ci.g, ci.b, alpha)};
+}
+
+// P1-3（读侧）helper：g_cursorExtractedColor 由后台取色线程异步发布（写侧可能已改为双缓冲 + 原子索引，或仍为普通变量）。
+// 这里整块 memcpy 出一个本地快照，保证同一次配色里用到的 r/g/b/a 四个分量来自同一批发布结果，
+// 避免读到「一半旧一半新」的撕裂颜色。用 memcpy 而非字段赋值，是为了同时兼容写侧的普通 / volatile / atomic 三种类型声明。
+static D2D1_COLOR_F SnapshotCursorExtractedColor() {
+    D2D1_COLOR_F snap;
+    memcpy(&snap, (const void*)&g_cursorExtractedColor, sizeof(snap));  // 整块取值
+    return snap;
+}
+
+static void ComputeColors(int mode, DWORD time, float velocity, GradData &out) {
+    float t = time / 1000.0f;
+    D2D1_COLOR_F headOuter, headInner, tailOuter, tailInner;
+    switch (mode) {
+        case 0:
+            headOuter = tailOuter = g_customColor;
+            headInner = tailInner = LighterColor(g_customColor);
+            break;
+        case 1: {  // 流动渐变：任意数量颜色，OKLab插值，颜色沿拖尾流动
+            float phase = fmodf(t * g_gradientFlowSpeed, 1.0f);
+            headOuter = SampleGradientLUT(0.0f, phase);
+            tailOuter = SampleGradientLUT(1.0f, phase);
+            headInner = LighterColor(headOuter, 0.5f);
+            tailInner = LighterColor(tailOuter, 0.5f);
+            break;
+        }
+        case 2: {  // 彩虹流动：多频率色相旋转 + 速度驱动饱和度
+            float speedBoost = fminf(velocity / 50.0f, 1.0f);
+            float h = fmodf(t * (40 + speedBoost * 60), 360);
+            float h2 = fmodf(h + 200 + speedBoost * 40, 360);
+            float sat = 0.75f + speedBoost * 0.2f;
+            headOuter = HSVtoRGB(h, sat, 1.0f);
+            tailOuter = HSVtoRGB(h2, sat * 0.9f, 0.95f);
+            headInner = HSVtoRGB(h, sat * 0.35f, 1.0f);
+            tailInner = HSVtoRGB(h2, sat * 0.3f, 0.95f);
+            break;
+        }
+        case 3: {  // 暖色调流动：红橙黄范围 + 火焰式亮度脉动
+            float h = fmodf(t * 25, 60) - 15;  // -15~45: 红-橙-黄更广范围
+            // 亮度波动先归一化到 [-1,1] 再映射，保证 v 恒不超过 1。
+            // 原式最大可到 1.08，而 HSVtoRGB 不做 clamp，通道会各自截到 1：
+            // 结果是最亮的瞬间反而掉饱和发白 —— 火焰的色感在最该浓烈时最淡。
+            // Normalise the wave to [-1,1] first so v never exceeds 1. The old form peaked at 1.08 and
+            // HSVtoRGB does not clamp, so channels saturated independently: the brightest moment lost
+            // the most colour - the flame was whitest exactly when it should read hottest.
+            float flicker = 0.84f + 0.16f * ((0.15f * sinf(t * 8.0f) + 0.08f * sinf(t * 17.0f)) / 0.23f);
+            headOuter = HSVtoRGB(h, 0.95f, flicker);
+            tailOuter = HSVtoRGB(fmodf(h + 25, 360), 0.85f, flicker * 0.85f);
+            headInner = HSVtoRGB(h + 10, 0.5f, 1.0f);
+            tailInner = HSVtoRGB(fmodf(h + 35, 360), 0.4f, 0.95f);
+            break;
+        }
+        case 4: {  // 冷色调流动：青蓝紫 + 冰晶式亮度闪烁
+            float h = 160 + fmodf(t * 20, 130);  // 160~290: 青-蓝-紫更广
+            // 同上：原式最大 1.05 会溢出掉饱和。归一化后恒在 0.80~1.00。
+            float shimmer = 0.90f + 0.10f * ((0.1f * sinf(t * 6.0f) + 0.05f * sinf(t * 13.0f)) / 0.15f);
+            headOuter = HSVtoRGB(h, 0.75f, shimmer);
+            tailOuter = HSVtoRGB(fmodf(h + 50, 360), 0.7f, shimmer * 0.9f);
+            headInner = HSVtoRGB(h, 0.3f, 1.0f);
+            tailInner = HSVtoRGB(fmodf(h + 50, 360), 0.25f, 0.98f);
+            break;
+        }
+        case 5: {  // 霓虹脉冲：强对比亮度脉冲 + 色相微偏移 + 速度增强
+            float speedBoost = fminf(velocity / 60.0f, 1.0f);
+            float p = 0.5f + 0.5f * sinf(t * (3.5f + speedBoost * 2.5f));
+            float sharpPulse = p * p * (3 - 2 * p);  // smoothstep 更锐利
+            D2D1_COLOR_F c = g_customColor;
+            float hueShift = sharpPulse * 20.0f;
+            float h, s, v; RGBtoHSV(c, h, s, v);
+            headOuter = HSVtoRGB(fmodf(h + hueShift, 360), s, 0.3f + sharpPulse * 0.7f);
+            tailOuter = HSVtoRGB(fmodf(h - hueShift, 360), s * 0.8f, sharpPulse * 0.4f);
+            headInner = LighterColor(headOuter, 0.5f);
+            tailInner = LighterColor(tailOuter, 0.5f);
+            break;
+        }
+        case 6: {  // 速度变色：非线性映射蓝→青→绿→黄→橙→红，速度越快越鲜艳
+            float sn = fminf(powf(velocity / 70.0f, 0.55f), 1.0f);
+            float h = 240 - sn * 240;  // 蓝240→红0
+            float sat = 0.7f + sn * 0.25f;  // 速度越快越饱和
+            float val = 0.85f + sn * 0.15f;
+            headOuter = HSVtoRGB(h, sat, val);
+            tailOuter = HSVtoRGB(fmodf(h + 40, 360), sat * 0.8f, val * 0.85f);
+            headInner = HSVtoRGB(h, sat * 0.35f, 1.0f);
+            tailInner = HSVtoRGB(fmodf(h + 40, 360), sat * 0.25f, 0.95f);
+            break;
+        }
+        case 7:
+            headOuter = GetGradColor(0);
+            tailOuter = GetGradColor(1);
+            headInner = LighterColor(GetGradColor(0));
+            tailInner = LighterColor(GetGradColor(1));
+            break;
+        case 8: {  // 火焰：多频率湍流 + 速度增强火焰高度
+            float speedBoost = fminf(velocity / 50.0f, 1.0f);
+            float turbulence = 0.75f + 0.25f * sinf(t * (10 + speedBoost * 8)) * sinf(t * 5.5f) + 0.12f * sinf(t * (20 + speedBoost * 10));
+            float core = 0.9f + 0.1f * sinf(t * 15);
+            headOuter = D2D1::ColorF(1.0f * turbulence, (0.65f + speedBoost * 0.15f) * turbulence, 0.1f * core, 1);
+            tailOuter = D2D1::ColorF(0.85f, 0.12f, 0.0f, 1);
+            headInner = D2D1::ColorF(1.0f, 0.92f + speedBoost * 0.08f, 0.55f + speedBoost * 0.2f, 1);
+            tailInner = D2D1::ColorF(0.95f, 0.35f, 0.05f, 1);
+            break;
+        }
+        case 9: {  // 极光：三层色相波动 + 柔和饱和度过渡 + 速度增强
+            float speedBoost = fminf(velocity / 60.0f, 1.0f);
+            float h1 = 125 + 45 * sinf(t * 0.5f) + 25 * sinf(t * 1.1f + 0.7f) + 10 * sinf(t * 2.3f);
+            float h2 = 255 + 55 * sinf(t * 0.4f + 1.2f) + 20 * sinf(t * 0.9f + 2.0f) + 8 * sinf(t * 1.8f);
+            float sat1 = 0.55f + 0.2f * sinf(t * 0.7f) + speedBoost * 0.15f;
+            float sat2 = 0.5f + 0.2f * sinf(t * 0.6f + 1.0f) + speedBoost * 0.15f;
+            headOuter = HSVtoRGB(h1, sat1, 0.95f);
+            tailOuter = HSVtoRGB(h2, sat2, 0.9f);
+            headInner = HSVtoRGB(180, 0.25f, 1.0f);
+            tailInner = HSVtoRGB(fmodf(h2 + 30, 360), 0.2f, 0.98f);
+            break;
+        }
+        case 10: {
+            // P1-3（读侧）：写侧由后台线程发布，读侧先取快照避免撕裂
+            D2D1_COLOR_F ec = SnapshotCursorExtractedColor();
+            headOuter = tailOuter = ec;
+            headInner = tailInner = LighterColor(ec, 0.6f);
+            break;
+        }
+        case 11: {
+            // P1-3（读侧）：一次快照供头/尾两处复用，保证 mixed 与 mixedTail 取自同一批发布结果，
+            // 不会出现「头用新批次、尾用旧批次」的混合撕裂。/ one snapshot shared by head & tail, same published batch
+            const D2D1_COLOR_F ec = SnapshotCursorExtractedColor();
+            D2D1_COLOR_F mixed = LerpColor(ec, g_customColor, 0.5f);
+            D2D1_COLOR_F mixedTail = LerpColor(ec, GetGradColor(2), 0.5f);
+            headOuter = mixed;
+            tailOuter = mixedTail;
+            headInner = LighterColor(mixed, 0.55f);
+            tailInner = LighterColor(mixedTail, 0.55f);
+            break;
+        }
+        case 12: {  // 金属金：高光扫过效果 + 速度增强光泽
+            float speedBoost = fminf(velocity / 50.0f, 1.0f);
+            float shine = 0.6f + 0.4f * sinf(t * (2.0f + speedBoost * 1.5f)) + 0.12f * sinf(t * (6.0f + speedBoost * 3.0f));
+            float sweep = 0.5f + 0.5f * sinf(t * 1.2f);  // 高光扫过
+            headOuter = D2D1::ColorF(1.0f * shine, 0.8f * shine, 0.08f * shine, 1);
+            tailOuter = D2D1::ColorF(0.5f, 0.35f, 0.04f, 1);
+            headInner = D2D1::ColorF(1.0f, 0.9f + sweep * 0.1f, 0.5f + sweep * 0.3f, 1);
+            tailInner = D2D1::ColorF(0.8f, 0.6f, 0.2f, 1);
+            break;
+        }
+        case 13: {  // 赛博朋克：紫青强对比 + glitch式快速脉冲 + 速度增强
+            float speedBoost = fminf(velocity / 50.0f, 1.0f);
+            float pulse = 0.5f + 0.5f * sinf(t * (4.0f + speedBoost * 3.0f));
+            float pulse2 = 0.5f + 0.5f * sinf(t * (4.0f + speedBoost * 3.0f) + 1.5f);
+            float glitch = 0.9f + 0.1f * sinf(t * 30.0f) * (speedBoost > 0.5f ? 1.0f : 0.0f);  // 高速时glitch闪烁
+            headOuter = HSVtoRGB(285 + pulse * 35, 0.9f, glitch);
+            tailOuter = HSVtoRGB(170 - pulse2 * 20, 0.9f, glitch * 0.95f);
+            headInner = HSVtoRGB(310, 0.5f, 1.0f);
+            tailInner = HSVtoRGB(160, 0.5f, 1.0f);
+            break;
+        }
+        case 14: {  // 粉彩：低饱和高亮度 + 柔和色相流动 + 速度微增饱和
+            float speedBoost = fminf(velocity / 80.0f, 1.0f);
+            float h = fmodf(t * 15, 360);
+            float sat = 0.25f + speedBoost * 0.15f;  // 速度越快越鲜艳
+            headOuter = HSVtoRGB(h, sat, 1.0f);
+            tailOuter = HSVtoRGB(fmodf(h + 70, 360), sat, 0.98f);
+            headInner = HSVtoRGB(h, sat * 0.5f, 1.0f);
+            tailInner = HSVtoRGB(fmodf(h + 70, 360), sat * 0.5f, 1.0f);
+            break;
+        }
+        case 15: {  // 色相旋转：基于自定义颜色 + 速度驱动旋转速度 + 头尾大色差
+            float speedBoost = fminf(velocity / 50.0f, 1.0f);
+            float h, s, v;
+            RGBtoHSV(g_customColor, h, s, v);
+            float rotSpeed = 30 + speedBoost * 60;  // 速度越快旋转越快
+            float h1 = fmodf(h + t * rotSpeed, 360);
+            float h2 = fmodf(h1 + 160 + speedBoost * 40, 360);  // 高速时色差更大
+            headOuter = HSVtoRGB(h1, s, v);
+            tailOuter = HSVtoRGB(h2, s * 0.9f, v * 0.95f);
+            headInner = HSVtoRGB(h1, s * 0.4f, v);
+            tailInner = HSVtoRGB(h2, s * 0.35f, v * 0.95f);
+            break;
+        }
+        case 16: {  // 双色脉冲：smoothstep脉冲 + 速度增强频率 + 中间色过渡
+            float speedBoost = fminf(velocity / 60.0f, 1.0f);
+            float pulse = 0.5f + 0.5f * sinf(t * (2.5f + speedBoost * 2.0f));
+            float smoothPulse = pulse * pulse * (3 - 2 * pulse);
+            headOuter = LerpColor(GetGradColor(0), GetGradColor(2), smoothPulse);
+            tailOuter = LerpColor(GetGradColor(2), GetGradColor(0), smoothPulse);
+            headInner = LighterColor(headOuter, 0.45f);
+            tailInner = LighterColor(tailOuter, 0.45f);
+            break;
+        }
+        case 17: {  // 星光闪烁：随机亮度闪烁 + 色相微变 + 速度增强闪烁频率
+            float speedBoost = fminf(velocity / 60.0f, 1.0f);
+            float sparkle = (rand() % 100) / 100.0f;
+            float sparkle2 = (rand() % 100) / 100.0f;
+            float baseH = fmodf(t * (30 + speedBoost * 30), 360);
+            float bright1 = 0.4f + sparkle * 0.6f;
+            float bright2 = 0.3f + sparkle2 * 0.5f;
+            headOuter = HSVtoRGB(baseH, 0.8f, bright1);
+            tailOuter = HSVtoRGB(fmodf(baseH + 100, 360), 0.8f, bright2);
+            headInner = HSVtoRGB(baseH, 0.3f, 1.0f);
+            tailInner = HSVtoRGB(fmodf(baseH + 100, 360), 0.3f, 1.0f);
+            break;
+        }
+        case 18: {  // 热力图：速度映射黑体辐射色温 + 余温延迟 + 强对比
+            static float heatLag = 0.0f;  // 余温延迟
+            float targetHeat = fminf(powf(velocity / 80.0f, 0.5f), 1.0f);
+            heatLag += (targetHeat - heatLag) * 0.15f;  // 缓慢冷却
+            float heat = fmaxf(targetHeat, heatLag * 0.8f);
+            float heatTail = heat * 0.35f;
+            auto thermal = [](float h) -> D2D1_COLOR_F {
+                if (h < 0.2f) { float k = h / 0.2f; return D2D1::ColorF(0.02f, 0.05f, 0.35f + k * 0.35f, 1); }
+                else if (h < 0.45f) { float k = (h - 0.2f) / 0.25f; return D2D1::ColorF(0.05f + k * 0.55f, 0.1f, 0.7f - k * 0.45f, 1); }
+                else if (h < 0.7f) { float k = (h - 0.45f) / 0.25f; return D2D1::ColorF(0.6f + k * 0.35f, 0.1f + k * 0.5f, 0.25f - k * 0.15f, 1); }
+                else { float k = (h - 0.7f) / 0.3f; return D2D1::ColorF(0.95f, 0.6f + k * 0.35f, 0.1f + k * 0.85f, 1); }
+            };
+            headOuter = thermal(heat);
+            tailOuter = thermal(heatTail);
+            headInner = LighterColor(headOuter, 0.5f);
+            tailInner = LighterColor(tailOuter, 0.5f);
+            break;
+        }
+        case 19: {  // 相位干涉：三波叠加干涉 + 速度增强频率 + 饱和度脉动
+            float speedBoost = fminf(velocity / 50.0f, 1.0f);
+            float wave1 = sinf(t * (2.0f + speedBoost * 2.0f)) * 0.5f + 0.5f;
+            float wave2 = sinf(t * (3.3f + speedBoost * 2.5f) + 1.2f) * 0.5f + 0.5f;
+            float wave3 = sinf(t * (5.0f + speedBoost * 3.0f) + 2.5f) * 0.5f + 0.5f;
+            float interfere = wave1 * wave2 + (1 - wave1) * (1 - wave2);
+            interfere = interfere * 0.7f + wave3 * 0.3f;  // 三波混合
+            float h1 = fmodf(interfere * 360 + t * (15 + speedBoost * 25), 360);
+            float h2 = fmodf(h1 + 130 + sinf(t * 1.5f) * 50, 360);
+            float sat = 0.55f + interfere * 0.4f;
+            headOuter = HSVtoRGB(h1, sat, 1.0f);
+            tailOuter = HSVtoRGB(h2, sat, 0.9f);
+            headInner = HSVtoRGB(h1, sat * 0.35f, 1.0f);
+            tailInner = HSVtoRGB(h2, sat * 0.3f, 0.95f);
+            break;
+        }
+        case 20: {  // 色谱分裂：速度驱动头尾色相分裂 + 分裂时饱和度增强 + 摆动
+            float speedBoost = fminf(velocity / 40.0f, 1.0f);
+            float h, s, v;
+            RGBtoHSV(g_customColor, h, s, v);
+            float split = speedBoost * 200.0f;  // 0~200度分裂，更明显
+            float wobble = sinf(t * (1.5f + speedBoost)) * (20.0f + speedBoost * 20.0f);
+            float satBoost = 1.0f + speedBoost * 0.3f;  // 分裂时更饱和
+            headOuter = HSVtoRGB(fmodf(h + split * 0.5f + wobble + 360, 360), fminf(s * satBoost, 1.0f), v);
+            tailOuter = HSVtoRGB(fmodf(h - split * 0.5f - wobble + 360, 360), fminf(s * satBoost * 0.9f, 1.0f), v * 0.9f);
+            headInner = HSVtoRGB(fmodf(h + split * 0.5f + wobble + 360, 360), s * 0.35f, v);
+            tailInner = HSVtoRGB(fmodf(h - split * 0.5f - wobble + 360, 360), s * 0.3f, v * 0.9f);
+            break;
+        }
+        case 21: {  // 颗粒抖动：时间流动噪点 + 速度增强幅度 + 有序抖动图案
+            float speedBoost = fminf(velocity / 40.0f, 1.0f);
+            float jitterAmp = (0.2f + speedBoost * 0.4f);  // 幅度更大
+            float baseH, baseS, baseV;
+            RGBtoHSV(g_customColor, baseH, baseS, baseV);
+            // 时间流动噪点：不同帧有不同噪点，形成流动感
+            float timeSeed = fmodf(t * 10.0f, 100.0f);
+            float n1 = (sinf(timeSeed * 12.9898f + 78.233f) * 43758.5453f); n1 = n1 - floorf(n1);
+            float n2 = (sinf(timeSeed * 39.3468f + 11.135f) * 24634.6345f); n2 = n2 - floorf(n2);
+            float n3 = (sinf(timeSeed * 27.1453f + 45.854f) * 34634.6345f); n3 = n3 - floorf(n3);
+            n1 = (n1 - 0.5f) * 2 * jitterAmp;
+            n2 = (n2 - 0.5f) * 2 * jitterAmp;
+            n3 = (n3 - 0.5f) * 2 * jitterAmp * 0.6f;
+            headOuter = HSVtoRGB(fmodf(baseH + n1 * 80 + 360, 360), fminf(fmaxf(baseS + n2, 0), 1), fminf(fmaxf(baseV + n3, 0.15f), 1));
+            tailOuter = HSVtoRGB(fmodf(baseH + 80 + n2 * 80 + 360, 360), fminf(fmaxf(baseS + n1, 0), 1), fminf(fmaxf(baseV * 0.8f + n3, 0.15f), 1));
+            headInner = LighterColor(headOuter, 0.45f);
+            tailInner = LighterColor(tailOuter, 0.45f);
+            break;
+        }
+        case 22: {  // 渐变扭曲：双正弦相位扭曲 + 速度增强扭曲幅度 + LUT流动
+            // P1-13：原先这里算出的 warp 只写进全局 g_gradientWarp（全文无任何读取点，纯死状态），已连同该全局变量一起删除。
+            // 真正参与着色的 warp 在下方每个色标处按 ratio 现算（见 mode == 22 分支），保持原有的 LUT 相位扭曲效果不变。
+            headOuter = GetGradColor(0);
+            tailOuter = GetGradColor(g_gradColorCount - 1);
+            headInner = LighterColor(GetGradColor(0));
+            tailInner = LighterColor(GetGradColor(g_gradColorCount - 1));
+            break;
+        }
+        case 23: {  // 虹彩油膜：薄膜干涉式色相扫过，青-品红-金高饱和循环
+            float speedBoost = fminf(velocity / 40.0f, 1.0f);
+            float d = t * (0.35f + speedBoost * 0.55f);
+            // 三层不同频率的正弦叠加，让色相做"非均匀"的扫过 —— 单一频率会像普通彩虹
+            float a1 = 0.5f + 0.5f * sinf(d * 2.1f);
+            float a2 = 0.5f + 0.5f * sinf(d * 3.7f + 1.7f);
+            float a3 = 0.5f + 0.5f * sinf(d * 1.3f + 3.1f);
+            float hHead = fmodf(178.0f + a1 * 150.0f + a2 * 62.0f, 360.0f);
+            float hTail = fmodf(298.0f + a2 * 95.0f + a3 * 72.0f, 360.0f);
+            float sheen = fminf(0.82f + 0.18f * a3, 1.0f);
+            headOuter = HSVtoRGB(hHead, 0.88f, sheen);
+            tailOuter = HSVtoRGB(hTail, 0.82f, fminf(sheen * 0.92f, 1.0f));
+            headInner = HSVtoRGB(fmodf(hHead + 38.0f, 360.0f), 0.42f, 1.0f);
+            tailInner = HSVtoRGB(fmodf(hTail + 38.0f, 360.0f), 0.36f, 0.98f);
+            break;
+        }
+        case 24: {  // 蒸汽波：品红-紫 与 青-薄荷 两组复古霓虹来回摆动
+            float speedBoost = fminf(velocity / 50.0f, 1.0f);
+            float w = sinf(t * (0.5f + speedBoost * 0.6f));
+            float hHead = fmodf(302.0f + w * 44.0f, 360.0f);            // 258~346 紫~品红
+            float hTail = fmodf(188.0f - w * 26.0f + 360.0f, 360.0f);   // 162~214 薄荷~青
+            float glow = fminf(0.9f + 0.1f * sinf(t * 4.0f), 1.0f);
+            headOuter = HSVtoRGB(hHead, 0.86f, glow);
+            tailOuter = HSVtoRGB(hTail, 0.80f, fminf(glow * 0.95f, 1.0f));
+            headInner = HSVtoRGB(fmodf(hHead + 22.0f, 360.0f), 0.45f, 1.0f);
+            tailInner = HSVtoRGB(fmodf(hTail - 18.0f + 360.0f, 360.0f), 0.40f, 0.98f);
+            break;
+        }
+        case 25: {  // 生物荧光：青绿主色 + 呼吸式发光脉冲，越快越亮
+            float speedBoost = fminf(velocity / 45.0f, 1.0f);
+            float breathe = 0.5f + 0.5f * sinf(t * 1.6f);
+            float pulse = 0.5f + 0.5f * sinf(t * (2.2f + speedBoost * 3.0f));
+            float lum = fminf((0.5f + 0.5f * breathe) * (0.72f + 0.28f * pulse + speedBoost * 0.18f), 1.0f);
+            float hHead = 168.0f + sinf(t * 0.7f) * 22.0f;
+            float hTail = 194.0f + sinf(t * 0.5f + 2.0f) * 18.0f;
+            headOuter = HSVtoRGB(hHead, 0.95f, lum);
+            tailOuter = HSVtoRGB(hTail, 0.90f, fminf(lum * 0.85f, 1.0f));
+            headInner = HSVtoRGB(hHead, 0.34f, 1.0f);
+            tailInner = HSVtoRGB(hTail, 0.30f, 0.98f);
+            break;
+        }
+        case 26: {  // 时令天色：按系统本地时间在一天的天色之间插值
+            SYSTEMTIME st;
+            GetLocalTime(&st);
+            float hour = (float)st.wHour + (float)st.wMinute / 60.0f + (float)st.wSecond / 3600.0f;
+            // 关键帧：深夜 → 黎明 → 清晨 → 正午 → 午后 → 黄昏 → 深夜
+            static const float kT[7] = {0.0f, 5.5f, 8.0f, 12.0f, 17.0f, 19.5f, 24.0f};
+            static const float kH[7] = {232.0f, 22.0f, 42.0f, 205.0f, 202.0f, 18.0f, 232.0f};
+            static const float kS[7] = {0.60f, 0.58f, 0.28f, 0.62f, 0.58f, 0.72f, 0.60f};
+            static const float kV[7] = {0.38f, 0.82f, 0.98f, 1.00f, 0.96f, 0.84f, 0.38f};
+            int segIdx = 0;
+            for (int i = 0; i < 6; i++)
+                if (hour >= kT[i]) segIdx = i;
+            float span = kT[segIdx + 1] - kT[segIdx];
+            float f = (span > 1e-3f) ? (hour - kT[segIdx]) / span : 0.0f;
+            f = fminf(fmaxf(f, 0.0f), 1.0f);
+            f = f * f * (3.0f - 2.0f * f);  // smoothstep：避免跨过关键帧时颜色跳变
+            // 色相必须走【最短弧】：直接线性插值会绕远路。
+            // 例如深夜(232°)→黎明(22°)，中点直线插值是 127°（绿），而最短弧经过 360° 得到 307°（紫）。
+            // 实测 02:45 / 18:15 / 21:45 都会插出绿色天色，正是这个错误。
+            // Hue must interpolate along the SHORTEST arc. Straight linear interpolation takes the
+            // long way: midnight(232) -> dawn(22) gives 127 (green) at the midpoint, while the short
+            // arc through 360 gives 307 (purple). Measured: 02:45 / 18:15 / 21:45 all turned green.
+            float dh = kH[segIdx + 1] - kH[segIdx];
+            if (dh > 180.0f) dh -= 360.0f;
+            else if (dh < -180.0f) dh += 360.0f;
+            float h = kH[segIdx] + dh * f;
+            if (h < 0.0f) h += 360.0f;
+            else if (h >= 360.0f) h -= 360.0f;
+            float s = kS[segIdx] + (kS[segIdx + 1] - kS[segIdx]) * f;
+            float v = kV[segIdx] + (kV[segIdx + 1] - kV[segIdx]) * f;
+            headOuter = HSVtoRGB(h, s, v);
+            tailOuter = HSVtoRGB(fmodf(h + 26.0f, 360.0f), fminf(s * 0.92f, 1.0f), fminf(v * 0.88f, 1.0f));
+            headInner = HSVtoRGB(fmodf(h + 12.0f, 360.0f), fminf(s * 0.45f, 1.0f), 1.0f);
+            tailInner = HSVtoRGB(fmodf(h + 38.0f, 360.0f), fminf(s * 0.40f, 1.0f), 0.98f);
+            break;
+        }
+        default:
+            headOuter = tailOuter = kColorBlack;
+            headInner = tailInner = kColorWhite;
+            break;
+    }
+    out.solidOuter = headOuter;
+    out.solidInner = headInner;
+
+    // ---- 可访问性：统一的对比度下限（23 个颜色模式共用这一个入口，无需逐模式改）----
+    if (g_contrastTarget > 0) {
+        const float target = mtcolor::TargetRatioOf(static_cast<mtcolor::ContrastLevel>(g_contrastTarget));
+        // 采样只提供了背景**亮度**，没有色度信息。取同亮度的中性灰作为背景的代理：
+        // 灰是最坏情况吗？不是 —— 但它是仅知亮度时唯一无偏的假设，且不会引入色相偏好。
+        const D2D1_COLOR_F bg = mtcolor::SetLuma(kColorWhite, g_bgLuminance.load(std::memory_order_relaxed));
+        headOuter = mtcolor::EnsureContrast(headOuter, bg, target);
+        tailOuter = mtcolor::EnsureContrast(tailOuter, bg, target);
+        headInner = mtcolor::EnsureContrast(headInner, bg, target);
+        tailInner = mtcolor::EnsureContrast(tailInner, bg, target);
+    }
+    // 模式1 的流动相位只依赖时间：提到循环外，每帧少算 (GRAD_STOPS-1) 次 fmodf
+    const float flowPhase1 = (mode == 1) ? fmodf(t * g_gradientFlowSpeed * 1.5f, 1.0f) : 0.0f;
+    for (int i = 0; i < GRAD_STOPS; i++) {
+        float ratio = (float)i / (GRAD_STOPS - 1);
+        float alpha = 0.86f * powf(1.0f - ratio, 1.4f);
+        if (mode == 7) {
+            float phase = fmodf(ratio * 4.0f + t * 2.0f, 1.0f);
+            bool stripe = phase < 0.5f;
+            SetGradStopPair(out, i, ratio, stripe ? headOuter : tailOuter, stripe ? headInner : tailInner, alpha);
+        } else if (mode == 8) {
+            float fr = ratio * ratio;
+            SetGradStopPair(out, i, ratio, LerpColor(headOuter, tailOuter, fr), LerpColor(headInner, tailInner, fr), alpha);
+        } else if (mode == 1) {
+            // 流动渐变：OKLab LUT采样，颜色沿拖尾流动
+            D2D1_COLOR_F co = SampleGradientLUT(ratio, flowPhase1);
+            SetGradStopPair(out, i, ratio, co, LighterColor(co, 0.45f), alpha);
+        } else if (mode == 22) {
+            // 渐变扭曲：LUT采样 + 双正弦相位扭曲
+            float warp = 0.5f + 0.4f * sinf(t * 1.5f + ratio * 4.0f) + 0.2f * sinf(t * 3.7f + ratio * 7.0f + 0.8f);
+            float phase = fmodf(t * g_gradientFlowSpeed + warp * 0.5f, 1.0f);
+            D2D1_COLOR_F co = SampleGradientLUT(ratio, phase);
+            SetGradStopPair(out, i, ratio, co, LighterColor(co, 0.45f), alpha);
+        } else {
+            SetGradStopPair(out, i, ratio, LerpColor(headOuter, tailOuter, ratio), LerpColor(headInner, tailInner, ratio), alpha);
+        }
+    }
+}
+
+static void ReleaseGradientBrushes() {
+    if (g_pGradInnerBrush) {
+        g_pGradInnerBrush->Release();
+        g_pGradInnerBrush = nullptr;
+    }
+    if (g_pGradOuterBrush) {
+        g_pGradOuterBrush->Release();
+        g_pGradOuterBrush = nullptr;
+    }
+    if (g_pGradInnerStops) {
+        g_pGradInnerStops->Release();
+        g_pGradInnerStops = nullptr;
+    }
+    if (g_pGradOuterStops) {
+        g_pGradOuterStops->Release();
+        g_pGradOuterStops = nullptr;
+    }
+    s_gradValid = false;
+}
+
+// 更新单个渐变画刷的起止点（outer/inner 共用）/ Update one gradient brush's endpoints (shared by outer/inner)
+static void SetGradientBrushEndpoints(ID2D1LinearGradientBrush *brush, D2D1_POINT_2F headPt, D2D1_POINT_2F tailPt) {
+    if (!brush)
+        return;
+    brush->SetStartPoint(headPt);
+    brush->SetEndPoint(tailPt);
+}
+
+static void UpdateColorBrushes(const GradData &data, D2D1_POINT_2F headPt, D2D1_POINT_2F tailPt) {
+    if (g_pSolidOuterBrush)
+        g_pSolidOuterBrush->SetColor(data.solidOuter);
+    if (g_pSolidInnerBrush)
+        g_pSolidInnerBrush->SetColor(data.solidInner);
+    bool needRebuild = !s_gradValid || !GradApproxEq(s_cachedGrad, data);
+    if (needRebuild && g_pD2DDC) {
+        ReleaseGradientBrushes();
+        g_pD2DDC->CreateGradientStopCollection(data.outer, GRAD_STOPS, &g_pGradOuterStops);
+        g_pD2DDC->CreateGradientStopCollection(data.inner, GRAD_STOPS, &g_pGradInnerStops);
+        g_pD2DDC->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(headPt, tailPt), g_pGradOuterStops,
+                                            &g_pGradOuterBrush);
+        g_pD2DDC->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(headPt, tailPt), g_pGradInnerStops,
+                                            &g_pGradInnerBrush);
+        s_cachedGrad = data;
+        s_gradValid = true;
+    }
+    SetGradientBrushEndpoints(g_pGradOuterBrush, headPt, tailPt);
+    // 注意：下方 inner 画刷的端点更新位于授权区间之外（原文件 3561~3564），保持原样以免合并冲突。
+    if (g_pGradInnerBrush) {
+        g_pGradInnerBrush->SetStartPoint(headPt);
+        g_pGradInnerBrush->SetEndPoint(tailPt);
+    }
+}
+
+// ===================== D3D11 原生渲染（v3）=====================
+
+// ---- HLSL 共用常量缓冲布局导言 / HLSL shared constant-buffer layout prelude ----
+// 此前 cbuffer ConstantBuffer 在 4 段着色器里各写一遍（vs
+// 而 C++ 侧 UpdateConstantBuffer() 又用裸下标 data[73]、data[87] ... 往同一块内存里写。
+// 三段关系全靠人肉对齐：改一个字段要同时改 5 处，漏一处不会报错 —— 只会静默画错。
+// 更微妙的是下标 73/74 在 vs 里叫 _pad1/_pad2、在 ps 与粒子里却叫 atlasRows/atlasCols，
+// 同一槽位两种语义，靠"反正读的是同一批字节"侥幸成立。
+// The cbuffer used to be hand-written four times, while the C++ side wrote the same bytes through raw indices
+// (data[73], data[87], ...). Five places had to be edited in lockstep, and a miss fails silently. Worse, slots
+// 73/74 were named _pad1/_pad2 in the VS but atlasRows/atlasCols in the PS/particle shaders — one slot, two
+// meanings, working only because both read the same bytes.
+// 现在：HLSL 侧只此一份；C++ 侧改用 ShaderConstants 镜像结构体（带 static_assert 钉住布局），
+// 并由 _check_cb_layout.py 校验两侧字段顺序逐项一致 —— 漂移会在构建期/校验期暴露。
+#define MT_HLSL_CONSTANT_BUFFER R"(
+cbuffer ConstantBuffer : register(b0) {
+    float2 screenSize;
+    float perspective;
+    float pad0;
+    float4 gradient[16];
+    int gradientCount;
+    float bgLuminance;
+    float adaptiveFlag;
+    float smoothFlag;
+    float edgeSoftness;
+    // 注意：这两个槽位是 vs 的 padding，同时被 ps / 粒子着色器当作图集尺寸使用。
+    // 同一批字节两种解读是有意为之（省一个寄存器），但改名必须同时考虑两套语义。
+    float atlasRows;
+    float atlasCols;
+    float aaMode;
+    float textAspect;
+    float strokeStepU;
+    float strokeStepV;
+    float strokeEnabled;
+    float strokeAlphaMul;
+    float strokeColorMode;
+    float strokeColorR;
+    float strokeColorG;
+    float strokeColorB;
+    float strokeColorMul;
+    float strokeWidthPx;
+    float trailStrokeEnabled;
+    float trailStrokeHalf;
+    float shaderQuality;
+    float sdfSamples;
+    float ditherMode;
+    float ditherStrength;
+    float pixelScale;
+    float noiseSeed;
+    float pad3;
+    float4 padTail[4];
+};
+)"
+
+// ---- HLSL 共用色学导言 / HLSL shared colour-science prelude ----
+// 此前 SetLuma 在 g_psShader / g_particlePS 里一式两份、自适应对比度算法同样一式两份，
+// 全靠注释写「改动时请同步另一处」—— 这种靠自觉的约束早晚会对不上。
+// Rec.709 权重更是散落在 4 个着色器里各写一遍。
+// 现在抽成本宏，凡需要色学的着色器在前缀位置引用即可；_extract_shaders.py 会把它展开后再离线编译，
+// 所以 fxc 看到的仍是完整源码（不会因为引入宏就让检查悄悄漏掉某个着色器）。
+// Previously SetLuma and the adaptive-contrast algorithm were each duplicated across two shaders and kept
+// "in sync" by a comment — a constraint of that kind drifts sooner or later. The Rec.709 weights were also
+// hand-written in four separate shaders. Shaders that need colour science now reference this macro;
+// _extract_shaders.py expands it before running fxc, so the compiler still sees complete source.
+//
+// ⚠ 与 CPU 侧的孪生关系：本宏里的权重与算法是 mtcolor（C++）的 GPU 孪生实现。
+//   改任何一处都必须同步另一处，并跑 _color_system_test.cpp。见 mtcolor 头部的约束 E4。
+#define MT_HLSL_COLOR_COMMON R"(
+static const float3 LUMA709 = float3(0.2126, 0.7152, 0.0722);
+
+float Luma709(float3 c) { return dot(c, LUMA709); }
+
+// 保持色相与彩度地改写感知明度
+// ⚠ 存在色域天花板：最大通道顶到 1.0 就无法再提亮，等比回压会把颜色原样送回。
+float3 SetLuma(float3 c, float target) {
+    float y = Luma709(c);
+    if (y < 1e-4) return float3(target, target, target);
+    float3 o = c * (target / y);
+    float m = max(o.r, max(o.g, o.b));
+    return (m > 1.0) ? (o / m) : o;
+}
+
+// 亮度导向统一入口：先走保色路径，撞到色域天花板后按缺口朝锚点混合补齐。
+// 朝白/黑混合只降饱和度、不动色相，因此是给定亮度目标下损失最小的补齐方式。
+float3 LumaToward(float3 c, float target) {
+    target = saturate(target);
+    float3 o = SetLuma(c, target);
+    float y1 = Luma709(o);
+    if (abs(y1 - target) <= 1e-4) return o;
+    float3 anchor = (target > y1) ? float3(1.0, 1.0, 1.0) : float3(0.0, 0.0, 0.0);
+    float anchorY = Luma709(anchor);
+    float denom = (target > y1) ? (anchorY - y1) : (y1 - anchorY);
+    if (denom < 1e-5) return o;
+    return lerp(o, anchor, saturate((target - y1) / denom));
+}
+
+// 自适应对比度强度常数。此前是散落的字面量 0.30 / 0.42 / 0.55，看不出含义也无从调优。
+// 提亮、压暗、描边加深各自的上限集中在这里命名。
+static const float kAdaptiveLiftOnDark   = 0.30;  // 暗背景最大提亮比例
+static const float kAdaptiveDimOnBright  = 0.42;  // 亮背景最大压暗比例
+static const float kAdaptiveStrokeDeepen = 0.55;  // 亮背景描边最大加深比例
+
+// 自适应对比度 v2：保持色相/彩度的明度调整，CPU 侧对应 mtcolor::EnsureContrast 的诉求。
+// strokeActive=1 表示已开描边 —— 此时主体保持原色，由描边承担轮廓对比。
+float3 ApplyAdaptiveContrast(float3 rgb, float bgLuminance, float strokeActive) {
+    float bgDelta  = bgLuminance - 0.5;
+    float isBright = step(0.0, bgDelta);
+    // 强度曲线必须是凸的：sqrt 这类凹曲线会放大中间调（bg≈0.7 时反而压得比线性更狠）。
+    // k² 让中间调几乎不干预，只在接近纯白/纯黑背景时才发力。
+    float k = abs(bgDelta) * 2.0;
+    float t = k * k;
+    float y = Luma709(rgb);
+    // 用 LumaToward 而非 SetLuma：后者碰到 channel=1.0 的亮饱和色（如默认 #00BFFF）会原地返回，
+    // 暗背景提亮等于失效。 Has gamut fallback; plain SetLuma would silently no-op on such colours.
+    float3 lit3 = LumaToward(rgb, y + (1.0 - y) * t * kAdaptiveLiftOnDark);
+    float3 dim3 = SetLuma(rgb, y * (1.0 - t * kAdaptiveDimOnBright));
+    float3 dimAdj = lerp(dim3, rgb, strokeActive);
+    return lerp(lit3, dimAdj, isBright);
+}
+
+// 亮背景改为加深描边来提供对比（替代 v1 对主体的整体压暗），主体颜色得以保留。
+float3 ApplyAdaptiveStroke(float3 strokeRgb, float bgLuminance) {
+    float ks = saturate(bgLuminance - 0.5) * 2.0;
+    float ts = ks * ks;
+    return SetLuma(strokeRgb, Luma709(strokeRgb) * (1.0 - ts * kAdaptiveStrokeDeepen));
+}
+
+// ---- 输出抖动：把 8bit 量化误差打散成有序/随机图案，消除渐变色带 ----
+// 此前 Bayer2/4/8、HashNoise2D、ApplyDither 在 g_psShader 与 g_particlePS 里各写一遍，
+// 与 SetLuma 属于同一类重复。
+float Bayer2(float x, float y) {
+    return (x < 0.5) ? ((y < 0.5) ? 0.0 : 3.0) : ((y < 0.5) ? 2.0 : 1.0);
+}
+float Bayer4(float2 ip) {
+    float2 lo = fmod(ip, 2.0);
+    float2 hi = fmod(floor(ip * 0.5), 2.0);
+    return 4.0 * Bayer2(lo.x, lo.y) + Bayer2(hi.x, hi.y);
+}
+float Bayer8(float2 ip) {
+    float2 lo = fmod(ip, 4.0);
+    float2 hi = fmod(floor(ip * 0.25), 2.0);
+    return 4.0 * Bayer4(lo) + Bayer2(hi.x, hi.y);
+}
+float HashNoise2D(float2 p, float seed) {
+    float3 p3 = frac(float3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33 + seed);
+    return frac((p3.x + p3.y) * p3.z) * 2.0 - 1.0;
+}
+float3 ApplyDither(float3 rgb, float2 screenPos, float mode, float strength, float pixelScale, float seed) {
+    if (mode < 0.5 || pixelScale <= 0.0) return rgb;
+    float n = 0.0;
+    if (mode < 1.5)      n = Bayer4(floor(screenPos)) * 0.0625;   // /16
+    else if (mode < 2.5) n = Bayer8(floor(screenPos)) * 0.015625; // /64
+    else                 n = HashNoise2D(floor(screenPos), seed);
+    return rgb + (n - 0.5) * 2.0 * strength * pixelScale;
+}
+)"
+
+// ---- HLSL 着色器（v3.4.2.1 调优：屏幕空间导数AA + 有序抖动去色带 + 可配置降采样滤波 + SDF多采样）----
+static const char* g_vsShader = MT_HLSL_CONSTANT_BUFFER
+R"(
+
+struct VS_INPUT {
+    float3 pos : POSITION;  // x, y, z(深度)
+    float4 color : COLOR;
+    float u : TEXCOORD0;  // 沿路径比例 0~1
+    float v : TEXCOORD1;  // 垂直路径方向 -1~1
+};
+
+struct VS_OUTPUT {
+    float4 pos : SV_POSITION;
+    float4 color : COLOR;
+    float u : TEXCOORD0;
+    float v : TEXCOORD1;
+    float depth : TEXCOORD2;
+};
+
+VS_OUTPUT VSMain(VS_INPUT input) {
+    VS_OUTPUT output;
+    // 2.5D 透视：根据深度 z 相对于屏幕中心缩放
+    float scale = 1.0 + input.pos.z * perspective;
+    float2 center = screenSize * 0.5;
+    float2 screenPos = center + (input.pos.xy - center) * scale;
+    // 屏幕坐标 → 裁剪空间
+    float2 ndc = float2(
+        (screenPos.x / screenSize.x) * 2.0 - 1.0,
+        1.0 - (screenPos.y / screenSize.y) * 2.0
+    );
+    output.pos = float4(ndc, 0.0, 1.0);
+    output.color = input.color;
+    output.u = input.u;
+    output.v = input.v;
+    output.depth = input.pos.z;
+    return output;
+}
+)";
+
+static const char* g_psShader = MT_HLSL_CONSTANT_BUFFER
+MT_HLSL_COLOR_COMMON
+R"(
+
+struct PS_INPUT {
+    float4 pos : SV_POSITION;
+    float4 color : COLOR;
+    float u : TEXCOORD0;
+    float v : TEXCOORD1;
+    float depth : TEXCOORD2;
+};
+
+
+float4 PSMain(PS_INPUT input) : SV_TARGET {
+    // 抗锯齿边缘：根据aaMode调整边缘过渡宽度
+    float absV = abs(input.v);
+    float edgeFade;
+    if (aaMode < 0.5) {
+        // off：硬边
+        edgeFade = (absV < 1.0) ? 1.0 : 0.0;
+    } else {
+        // 边缘宽度倍率：smooth=2.0 crisp=1.0 extra=4.0（单位：像素）/ width multiplier in pixels
+        float k = (aaMode < 1.5) ? 2.0 : ((aaMode < 2.5) ? 1.0 : 4.0);
+        float inner;
+        if (shaderQuality > 0.5) {
+            // 屏幕空间导数：过渡带恒为 k 像素宽，与拖尾粗细无关（细拖尾不再糊、粗拖尾不再硬）
+            float px = max(fwidth(input.v), 1e-5);
+            inner = 1.0 - px * k * (0.35 + edgeSoftness * 0.9);
+        } else {
+            // 快速路径：v 空间固定宽度（v3.4.2 行为）/ Fast path: fixed width in v space
+            float kv = (aaMode < 1.5) ? 0.5 : ((aaMode < 2.5) ? 0.15 : 0.8);
+            inner = 1.0 - edgeSoftness * kv;
+        }
+        inner = min(inner, 0.995);  // 防止 smoothstep 退化
+        edgeFade = smoothstep(1.0, inner, absV);
+    }
+    // Early discard: 完全在边缘外的像素直接丢弃
+    if (edgeFade <= 0.001) discard;
+    // 渐变采样：GPU硬件插值，无断层
+    float4 gradColor = input.color;
+    float3 tint = float3(1, 1, 1);  // 单色模式：顶点颜色即最终颜色
+    if (gradientCount > 1) {
+        float t = input.u * (gradientCount - 1);
+        int idx = (int)t;
+        float frac = t - idx;
+        if (idx >= gradientCount - 1) {
+            gradColor = gradient[gradientCount - 1];
+        } else if (smoothFlag > 0.5) {
+            // smoothstep 过渡比线性lerp更自然
+            float s = frac * frac * (3.0 - 2.0 * frac);
+            gradColor = lerp(gradient[idx], gradient[idx + 1], s);
+        } else {
+            gradColor = gradient[idx];  // 阶梯色
+        }
+        gradColor.a *= input.color.a;
+        tint = input.color.rgb;  // 渐变模式：顶点RGB作为亮度调制
+    }
+    // 合并圆柱光照 + 2.5D深度光照：中心(v=0)最亮，深度越大越亮
+    float tubeLight = (0.88 + 0.12 * (1.0 - absV)) * (1.0 + input.depth * 0.3);
+    float3 rgb = gradColor.rgb * tint * tubeLight;
+    // 自适应对比度 v2：保持色相的明度调整
+    // v1 的三个问题：① 直接线性乘 RGB，高饱和色被压脏 ② 亮背景最极端时压到原亮度的 30%
+    // ③ 中间调（bgDelta≈0.1~0.3）就开始大幅改写颜色。
+    // v2：保色；soft-knee 让中间调几乎不干预；最大压暗量 0.70 → 0.42；
+    // 并且开启描边时不再压暗主体 —— 描边已提供轮廓对比，改由描边承担（见下方描边加深）。
+    // 实现已收敛到 MT_HLSL_COLOR_COMMON 里的 ApplyAdaptiveContrast()，与粒子着色器共用同一份。
+    // v1 issues: it muddied saturated hues, could dim all the way down to 30%, and reacted too strongly
+    // to midtones. v2 keeps chroma, spares midtones (max darken 0.70 -> 0.42), and leaves the body alone
+    // when a stroke is enabled so that the stroke supplies the contrast instead. The implementation now
+    // lives in ApplyAdaptiveContrast() inside MT_HLSL_COLOR_COMMON, shared with the particle shader.
+    if (adaptiveFlag > 0.5) {
+        rgb = ApplyAdaptiveContrast(rgb, bgLuminance, trailStrokeEnabled);
+    }
+    // 拖尾描边：边缘环带（|v| 接近 1）用描边色，与主体平滑叠加
+    if (trailStrokeEnabled > 0.5) {
+        float half = trailStrokeHalf;
+        float strokeEdge = 0.05;
+        float strokeBand = smoothstep(1.0 - half - strokeEdge, 1.0 - half + strokeEdge, absV);
+        float3 strokeRgb = (strokeColorMode > 0.5) ? float3(strokeColorR, strokeColorG, strokeColorB) : rgb * strokeColorMul;
+        // 自适应对比度下，亮背景改为加深描边来提供对比（替代 v1 对主体的整体压暗）：
+        // 主体颜色得以保留，轮廓反而更清晰。
+        if (adaptiveFlag > 0.5) {
+            // 描边加深同样用凸曲线，只在浅色背景发力
+            strokeRgb = ApplyAdaptiveStroke(strokeRgb, bgLuminance);
+        }
+        rgb = lerp(rgb, strokeRgb, strokeBand * strokeAlphaMul);
+    }
+    // 输出非预乘alpha：混合状态SRC_ALPHA/INV_SRC_ALPHA会自动完成预乘
+    float alpha = gradColor.a * edgeFade;
+    rgb = ApplyDither(rgb, input.pos.xy, ditherMode, ditherStrength, pixelScale, noiseSeed);
+    return float4(rgb, alpha);
+}
+)";
+
+// 粒子实例着色器（v3.4.2.1 调优：导数AA + SDF旋转网格多采样 + 4tap文字图集采样 + 输出抖动）
+static const char* g_particleVS = MT_HLSL_CONSTANT_BUFFER
+R"(
+
+struct VS_INPUT {
+    float2 quadPos : POSITION;
+    float3 instancePos : TEXCOORD0; // x, y, z
+    float4 instanceColor : TEXCOORD1;
+    float instanceSize : TEXCOORD2;
+    float instanceShape : TEXCOORD3;
+    float instanceRot : TEXCOORD4;
+    float instanceCharIdx : TEXCOORD5;
+};
+
+struct VS_OUTPUT {
+    float4 pos : SV_POSITION;
+    float2 uv : TEXCOORD0;
+    float4 color : COLOR;
+    float depth : TEXCOORD1;
+    float shape : TEXCOORD2;
+    float size : TEXCOORD3;  // 传递大小给PS用于自适应软边缘
+    float charIdx : TEXCOORD4;
+};
+
+VS_OUTPUT VSMain(VS_INPUT input) {
+    VS_OUTPUT output;
+    // 2.5D 透视缩放
+    float scale = 1.0 + input.instancePos.z * perspective;
+    float finalSize = input.instanceSize * scale;  // 预计算最终大小
+    // 文字粒子：按宽高比拉伸 X，避免长句被压缩成正方形
+    float textScaleX = (input.instanceShape > 9.5) ? textAspect : 1.0;
+    float2 stretchedPos = float2(input.quadPos.x * textScaleX, input.quadPos.y);
+    // 自旋转：只旋转顶点位置，不旋转uv（同时旋转会抵消）/ Self-rotation: rotate vertices only, not uv
+    float cosR = cos(input.instanceRot);
+    float sinR = sin(input.instanceRot);
+    float2 rotatedPos = float2(
+        stretchedPos.x * cosR - stretchedPos.y * sinR,
+        stretchedPos.x * sinR + stretchedPos.y * cosR
+    );
+    float2 worldPos = input.instancePos.xy + rotatedPos * finalSize;
+    // 屏幕坐标 → NDC（fused multiply-add）/ Screen → NDC (fused multiply-add)
+    float2 ndc = float2(
+        worldPos.x / screenSize.x * 2.0 - 1.0,
+        1.0 - worldPos.y / screenSize.y * 2.0
+    );
+    output.pos = float4(ndc, 0.0, 1.0);
+    output.uv = input.quadPos * 0.5 + 0.5;  // uv不旋转，形状遮罩随四边形旋转
+    output.color = input.instanceColor;
+    output.depth = input.instancePos.z;
+    output.shape = input.instanceShape;
+    output.size = finalSize;  // 透视后的实际大小
+    output.charIdx = input.instanceCharIdx;
+    return output;
+}
+)";
+
+static const char* g_particlePS = MT_HLSL_CONSTANT_BUFFER
+MT_HLSL_COLOR_COMMON
+R"(
+
+Texture2D charAtlasTex : register(t0);
+SamplerState charAtlasSampler : register(s0);
+
+struct PS_INPUT {
+    float4 pos : SV_POSITION;
+    float2 uv : TEXCOORD0;
+    float4 color : COLOR;
+    float depth : TEXCOORD1;
+    float shape : TEXCOORD2;
+    float size : TEXCOORD3;
+    float charIdx : TEXCOORD4;
+};
+
+// 形状SDF：接收预计算的p和r，避免重复计算
+// 分支顺序按「是否需要 atan2」分组：先用一次区间测试把 心形/菱形/三角形 分流出去，
+// 让它们不落在 atan2 所在的公共块里（原来的 if-else 链会把 atan2 放在所有形状之前，
+// 这三个形状白白每样本多算 ~23 条指令；SDF 多采样时会放大 2~4 倍）。
+// Branches are grouped by whether atan2 is needed: one range test routes heart/diamond/triangle
+// away before the atan2 block, so they no longer pay for it per sample (the old chain computed
+// atan2 for every non-circle shape, wasting ~23 instructions per sample, ×N with multi-sampling).
+float shapeSDF(float2 p, float r, float shapeType) {
+    // 圆形快速路径：最常用形状，跳过atan2和分支
+    if (shapeType < 0.5) {
+        return 0.5 - r;
+    }
+    // 无需极坐标角度的形状组
+    // 上界必须是 5.5（覆盖 3=心形 / 4=菱形 / 5=三角形）。
+    // 写成 6.5 会把 6=花形 吞进本组并落到下面的三角形兜底分支（曾造成花朵渲染成三角形）。
+    if (shapeType >= 2.5 && shapeType < 5.5) {
+        if (shapeType < 3.5) {
+            // 心形：复用p*2，用x*x*x替代pow避免负数底数UB
+            float2 hp = p * 2.0;
+            hp.y = -hp.y;
+            float t = hp.x*hp.x + hp.y*hp.y - 1.0;
+            float heart = t * t * t - hp.x*hp.x * hp.y*hp.y*hp.y;
+            return -heart * 0.12;
+        }
+        if (shapeType < 4.5) {
+            return 0.5 - (abs(p.x) + abs(p.y));                    // diamond / 菱形
+        }
+        // 等边三角形（顶点在上）/ Equilateral triangle (point up)
+        float2 tp = p * 2.0;
+        tp.y = -tp.y;
+        return min(tp.y + 0.5, min(1.0 - tp.y - 1.732 * tp.x, 1.0 - tp.y + 1.732 * tp.x)) * 0.35;
+    }
+    // 需要极坐标角度的形状组
+    float a = atan2(p.y, p.x);
+    if (shapeType < 1.5) {
+        return 0.5 * (0.4 + 0.6 * abs(cos(a * 2.5))) - r;          // star / 星形
+    }
+    if (shapeType < 2.5) {
+        return 0.5 * (0.5 + 0.5 * abs(cos(a * 3.0))) - r;          // hexagram / 六角星
+    }
+    if (shapeType < 6.5) {
+        return 0.5 * (0.6 + 0.4 * cos(a * 5.0)) - r;               // flower / 花形
+    }
+    if (shapeType < 7.5) {
+        // 五边形：预计算PI常量
+        float pentR = 0.425 / cos(fmod(a + 3.14159, 1.25664) - 0.62832);
+        return pentR - r;                                          // pentagon / 五边形
+    }
+    // 六边形：预计算PI常量
+    float hexR = 0.435 / cos(fmod(a + 3.14159, 1.04720) - 0.52360);
+    return hexR - r;                                               // hexagon / 六边形
+}
+
+// 直接由 uv 求 SDF（多采样时复用）/ SDF from uv directly (reused by multi-sampling)
+float shapeSDFAt(float2 uv, float shapeType) {
+    float2 p = uv - 0.5;
+    return shapeSDF(p, length(p), shapeType);
+}
+
+
+float4 PSMain(PS_INPUT input) : SV_TARGET {
+    // 文字字符形状：采样字符图集纹理
+    if (input.shape > 9.5) {
+        int idx = (int)input.charIdx;
+        int cols = (int)atlasCols;
+        int row = idx / cols;
+        int col = idx % cols;
+        float2 cellUV = input.uv;
+        float2 atlasUV = float2((col + cellUV.x) / atlasCols, (row + cellUV.y) / atlasRows);
+        float4 tex;
+        if (shaderQuality > 0.5) {
+            // 4次旋转网格采样：缩小显示时抑制字形走样（等效于轻量三线性）/ 4-tap rotated grid: suppresses glyph aliasing when minified
+            float2 a1 = fwidth(atlasUV) * float2( 0.125,  0.375);
+            float2 a2 = fwidth(atlasUV) * float2( 0.375, -0.125);
+            tex = 0.25 * (charAtlasTex.Sample(charAtlasSampler, atlasUV + a1)
+                        + charAtlasTex.Sample(charAtlasSampler, atlasUV - a1)
+                        + charAtlasTex.Sample(charAtlasSampler, atlasUV + a2)
+                        + charAtlasTex.Sample(charAtlasSampler, atlasUV - a2));
+        } else {
+            tex = charAtlasTex.Sample(charAtlasSampler, atlasUV);
+        }
+        // 文字描边：采样8邻域最大alpha（膨胀字形），减去中心alpha得到轮廓环，与发光叠加
+        if (strokeEnabled > 0.5) {
+            float aMax = tex.a;
+            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2( strokeStepU, 0.0)).a);
+            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2(-strokeStepU, 0.0)).a);
+            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2(0.0,  strokeStepV)).a);
+            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2(0.0, -strokeStepV)).a);
+            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2( strokeStepU,  strokeStepV)).a);
+            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2(-strokeStepU,  strokeStepV)).a);
+            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2( strokeStepU, -strokeStepV)).a);
+            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2(-strokeStepU, -strokeStepV)).a);
+            float outline = saturate(aMax - tex.a);  // 轮廓环，仅字形边缘附近非零
+            // 描边颜色：auto=主色变暗，custom=自定义RGB
+            float3 strokeRgb = (strokeColorMode > 0.5)
+                ? float3(strokeColorR, strokeColorG, strokeColorB)
+                : input.color.rgb * strokeColorMul;
+            float strokeA = outline * strokeAlphaMul;  // 描边环透明度
+            float total = max(tex.a, strokeA);
+            if (total <= 0.001) discard;
+            float fillRatio = tex.a / max(total, 0.0001);  // 填充占比，字形内部≈1，边缘环≈0
+            float3 rgb = lerp(strokeRgb, input.color.rgb, fillRatio);
+            rgb = ApplyDither(rgb, input.pos.xy, ditherMode, ditherStrength, pixelScale, noiseSeed);
+            return float4(rgb, input.color.a * total);
+        }
+        if (tex.a <= 0.01) discard;
+        float3 rgb = input.color.rgb;
+        rgb = ApplyDither(rgb, input.pos.xy, ditherMode, ditherStrength, pixelScale, noiseSeed);
+        float alpha = input.color.a * tex.a;
+        return float4(rgb, alpha);
+    }
+    float2 p = input.uv - 0.5;
+    float r = length(p);
+    // 先算 SDF 与屏幕空间导数，再做 early discard（discard 后取导数在部分硬件上未定义）
+    float sdf = shapeSDF(p, r, input.shape);
+    float sdfGrad = fwidth(sdf);
+    float2 uvGrad = fwidth(input.uv);
+    // Early discard：最大形状半径约0.5+边缘余量，超出直接跳过后续计算
+    if (r > 0.62) discard;
+    // SDF软边缘抗锯齿，边缘宽度随aaMode和粒子大小自适应
+    float edge;
+    if (aaMode < 0.5) {
+        // off：硬边
+        edge = 0.003;
+    } else {
+        float k = (aaMode < 1.5) ? 2.0 : ((aaMode < 2.5) ? 1.0 : 3.5);
+        if (shaderQuality > 0.5) {
+            // 屏幕空间导数：边缘过渡恒为约 k/2 像素，大小粒子一致
+            edge = clamp(sdfGrad * k * 0.5, 0.002, 0.25);
+        } else {
+            edge = clamp(0.025 * (input.size / 12.0) * k * 0.5, 0.004, 0.12);
+        }
+    }
+    // 主体覆盖率：解析覆盖率抗锯齿（analytic coverage AA）
+    // sdf 是有符号距离（内部为正），一个像素跨多少个 SDF 单位由 sdfGrad=fwidth(sdf) 给出，
+    // 因此盒式滤波的一阶精确覆盖率就是 saturate(0.5 + sdf / sdfGrad) —— 这是解析解，
+    // 不需要像旧实现那样用 2/4 次额外的 shapeSDF() 求值去逼近。
+    // 相比旧的 smoothstep(-edge, edge, sdf)：矩形滤波的覆盖率是线性的，smoothstep 的三次曲线
+    // 会把边缘切得过软；解析式在数学上更正确，且指令更少（无 clamp / 无多项式）。
+    // Analytic coverage AA: coverage of the box filter is saturate(0.5 + sdf/fwidth(sdf)), which is
+    // exact to first order — extra shapeSDF() samples are only needed to compensate for curvature,
+    // not to approximate the coverage itself. Compared with the old smoothstep(-edge,edge,sdf), this is
+    // mathematically correct for a box filter and cheaper (no clamp, no polynomial).
+//
+    // aaMode 仍生效，映射为过渡带宽（单位：像素）/ aaMode still drives the transition width in pixels:
+    //   off 0.24 / smooth 1.0 / crisp 0.5 / extra 1.75 —— 保持原有的软硬次序。
+    float covK = (aaMode < 0.5) ? 0.12 : ((aaMode < 1.5) ? 1.0 : ((aaMode < 2.5) ? 0.5 : 1.75));
+    float covGrad = max(sdfGrad * covK, 1e-5);
+    float mask = saturate(0.5 + sdf / covGrad);
+    // 高精度开关：额外做旋转网格超采样。解析式是一阶近似，对 SDF 曲率大的地方（星形尖角、
+    // 六边形折角）仍有误差，此时可用此项补偿。默认关闭 —— 每次要多 2~4 次 shapeSDF() 求值。
+    if (sdfSamples > 1.5 && shaderQuality > 0.5) {
+        if (sdfSamples < 2.5) {
+            float2 o = uvGrad * 0.25;
+            mask = 0.5 * (saturate(0.5 + shapeSDFAt(input.uv + o, input.shape) / covGrad)
+                        + saturate(0.5 + shapeSDFAt(input.uv - o, input.shape) / covGrad));
+        } else {
+            float2 o1 = uvGrad * float2( 0.125,  0.375);
+            float2 o2 = uvGrad * float2( 0.375, -0.125);
+            mask = 0.25 * (saturate(0.5 + shapeSDFAt(input.uv + o1, input.shape) / covGrad)
+                         + saturate(0.5 + shapeSDFAt(input.uv - o1, input.shape) / covGrad)
+                         + saturate(0.5 + shapeSDFAt(input.uv + o2, input.shape) / covGrad)
+                         + saturate(0.5 + shapeSDFAt(input.uv - o2, input.shape) / covGrad));
+        }
+    }
+    // 描边轮廓环（|sdf| 环带，形状边缘），非文字形状同样生效
+    float outline = 0.0;
+    if (strokeEnabled > 0.5) {
+        float sdfHalf = strokeWidthPx / (input.size * 2.0 + 0.001);   // 单侧半宽（SDF 单位）/ one-side half width (SDF units)
+        float strokeEdge = max(edge, 0.004);
+        outline = 1.0 - smoothstep(sdfHalf - strokeEdge, sdfHalf + strokeEdge, abs(sdf));
+    }
+    float strokeA = outline * strokeAlphaMul;
+    float total = max(mask, strokeA);
+    if (total <= 0.001) discard;
+    // 合并径向光照 + 2.5D深度光照
+    float radialLight = max(1.0 - r * 0.3, 0.6) * (1.0 + input.depth * 0.25);
+    float3 rgb = input.color.rgb * radialLight;
+    // 自适应对比度 v2：保持色相的明度调整
+    // v1 直接线性乘 RGB 会把高饱和色压脏，且亮背景最极端时压到原亮度的 30%；
+    // v2 保色 + soft-knee（最大压暗 0.70→0.42），并在开启描边时保留主体原色。
+    // 实现收敛到 MT_HLSL_COLOR_COMMON 的 ApplyAdaptiveContrast()，与拖尾着色器共用同一份
+    // —— 不再存在「两处手写副本靠注释保持同步」的风险。
+    // v1 muddied saturated hues and could dim to 30%; v2 keeps chroma, spares midtones, and preserves the body
+    // colour when a stroke is enabled. Now shares ApplyAdaptiveContrast() from MT_HLSL_COLOR_COMMON with the
+    // trail shader — no more two hand-maintained copies.
+    if (adaptiveFlag > 0.5) {
+        rgb = ApplyAdaptiveContrast(rgb, bgLuminance, strokeEnabled);
+    }
+    // 描边合成：边缘环带用描边色，内部用填充色
+    if (strokeEnabled > 0.5) {
+        float3 strokeRgb = (strokeColorMode > 0.5) ? float3(strokeColorR, strokeColorG, strokeColorB) : rgb * strokeColorMul;
+        // 自适应对比度下，亮背景改为加深描边来提供对比（替代 v1 对主体的整体压暗）。
+        if (adaptiveFlag > 0.5) {
+            // 描边加深同样用凸曲线，只在浅色背景发力
+            strokeRgb = ApplyAdaptiveStroke(strokeRgb, bgLuminance);
+        }
+        float fillRatio = mask / max(total, 0.0001);
+        rgb = lerp(strokeRgb, rgb, fillRatio);
+    }
+    // 输出非预乘alpha：混合状态SRC_ALPHA/INV_SRC_ALPHA自动完成预乘
+    float alpha = input.color.a * total;
+    rgb = ApplyDither(rgb, input.pos.xy, ditherMode, ditherStrength, pixelScale, noiseSeed);
+    return float4(rgb, alpha);
+}
+)";
+
+// SSAA 降采样着色器：全屏四边形采样离屏纹理（v3.4.2.1：可配置重建滤波器 + 非锐化掩模）
+static const char* g_blitVS = R"(
+struct VS_IN { float2 pos : POSITION; float2 uv : TEXCOORD0; };
+struct VS_OUT { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
+VS_OUT VSMain(VS_IN input) {
+    VS_OUT o;
+    o.pos = float4(input.pos, 0.0, 1.0);
+    o.uv = input.uv;
+    return o;
+}
+)";
+
+static const char* g_blitPS = R"(
+cbuffer BlitConstants : register(b0) {
+    float2 texelSize;  // 1/源宽, 1/源高
+    float filterMode;   // 0=bilinear 1=box 2=tent 3=lanczos
+    float sharpness;  // 非锐化掩模强度
+    float scale;        // 降采样倍率（源像素/目标像素）/ downsample factor
+    float3 _padBlit;  // 补齐到 32 字节
+};
+
+Texture2D offscreenTex : register(t0);
+SamplerState offscreenSampler : register(s0);
+struct VS_OUT { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
+
+// Lanczos2 核权重（编译期常量，a=2）/ Lanczos2 kernel weights (compile-time constants, a=2)
+// 采样位置固定为 ±0.5 / ±1.5，因此四个权重与像素无关 —— 预计算后由 fxc 折叠，
+// 省去原实现里每像素 4 次 Lanczos2() 调用（= 8 次 sin + 分支 + 除法）。
+// The tap positions are fixed at ±0.5/±1.5, so the four weights do not depend on the pixel;
+// precomputing them lets fxc fold the constants and removes 8 sin() per pixel.
+//   Lanczos2(x) = 2*sin(πx)*sin(πx/2)/(πx)²
+static const float LANCZOS2_W05 = 0.5731591683;   // Lanczos2(±0.5)
+static const float LANCZOS2_W15 = -0.0636843520;  // Lanczos2(±1.5)
+// 权重和 = (Σw)²，同样为编译期常量
+static const float LANCZOS2_WSUM = 1.0382583535;
+
+float4 PSMain(VS_OUT input) : SV_TARGET {
+    float2 uv = input.uv;
+    float S = max(scale, 1.0);
+    // 1:1 拷贝（仅MSAA）或用户选择双线性：单次采样
+    if (S <= 1.001 || filterMode < 0.5) {
+        return offscreenTex.Sample(offscreenSampler, uv);
+    }
+    float2 t = texelSize;
+    float4 c;
+    if (filterMode < 1.5) {
+        // Box：4x4 网格 16 次采样，均匀覆盖 1 个目标像素的 SxS 源像素
+        float2 q = t * (S * 0.125);  // ±S/8, ±3S/8 源像素
+        c  = offscreenTex.Sample(offscreenSampler, uv + float2(-3.0*q.x, -3.0*q.y));
+        c += offscreenTex.Sample(offscreenSampler, uv + float2(-q.x,    -3.0*q.y));
+        c += offscreenTex.Sample(offscreenSampler, uv + float2( q.x,    -3.0*q.y));
+        c += offscreenTex.Sample(offscreenSampler, uv + float2( 3.0*q.x,-3.0*q.y));
+        c += offscreenTex.Sample(offscreenSampler, uv + float2(-3.0*q.x, -q.y));
+        c += offscreenTex.Sample(offscreenSampler, uv + float2(-q.x,    -q.y));
+        c += offscreenTex.Sample(offscreenSampler, uv + float2( q.x,    -q.y));
+        c += offscreenTex.Sample(offscreenSampler, uv + float2( 3.0*q.x,-q.y));
+        c += offscreenTex.Sample(offscreenSampler, uv + float2(-3.0*q.x, q.y));
+        c += offscreenTex.Sample(offscreenSampler, uv + float2(-q.x,     q.y));
+        c += offscreenTex.Sample(offscreenSampler, uv + float2( q.x,     q.y));
+        c += offscreenTex.Sample(offscreenSampler, uv + float2( 3.0*q.x, q.y));
+        c += offscreenTex.Sample(offscreenSampler, uv + float2(-3.0*q.x, 3.0*q.y));
+        c += offscreenTex.Sample(offscreenSampler, uv + float2(-q.x,     3.0*q.y));
+        c += offscreenTex.Sample(offscreenSampler, uv + float2( q.x,     3.0*q.y));
+        c += offscreenTex.Sample(offscreenSampler, uv + float2( 3.0*q.x, 3.0*q.y));
+        c *= 0.0625;
+    } else if (filterMode < 2.5) {
+        // Tent：4 次双线性采样等价 3x3 帐篷核 {1,2,1;2,4,2;1,2,1}/16（半径 S/2）
+        float2 q = t * (S * 0.25);
+        c  = offscreenTex.Sample(offscreenSampler, uv + float2(-q.x, -q.y));
+        c += offscreenTex.Sample(offscreenSampler, uv + float2( q.x, -q.y));
+        c += offscreenTex.Sample(offscreenSampler, uv + float2(-q.x,  q.y));
+        c += offscreenTex.Sample(offscreenSampler, uv + float2( q.x,  q.y));
+        c *= 0.25;
+    } else {
+        // Lanczos2：4x4 网格，权重按 Lanczos 核计算并归一化
+        float2 q = t * (S * 0.5);  // ±0.5S, ±1.5S 源像素
+        const float w[4] = { LANCZOS2_W15, LANCZOS2_W05, LANCZOS2_W05, LANCZOS2_W15 };
+        c = 0.0;
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < 4; j++) {
+                float wt = w[i] * w[j];
+                c += offscreenTex.Sample(offscreenSampler,
+                     uv + float2(q.x * (2.0 * (float)i - 3.0), q.y * (2.0 * (float)j - 3.0))) * wt;
+            }
+        }
+        c /= LANCZOS2_WSUM;
+    }
+    // 非锐化掩模：找回滤波抹掉的边缘锐度（半径=1目标像素）/ Unsharp mask (radius = 1 dest pixel)
+    if (sharpness > 0.001) {
+        float2 q = t * S;
+        float4 blur = 0.25 * (offscreenTex.Sample(offscreenSampler, uv + float2(-q.x, 0.0))
+                            + offscreenTex.Sample(offscreenSampler, uv + float2( q.x, 0.0))
+                            + offscreenTex.Sample(offscreenSampler, uv + float2(0.0, -q.y))
+                            + offscreenTex.Sample(offscreenSampler, uv + float2(0.0,  q.y)));
+        c = max(c + (c - blur) * sharpness, 0.0);
+    }
+    return c;
+}
+)";
+
+// ===================== v3.4.2.2 后处理链着色器 / post-processing chain shaders (R1/R2/R3/R5) =====================
+// 全部以 ps_4_0 编译，共用同一个常量缓冲 g_pPostCB（64 字节 = 16 float）：
+// cb[0..1]  = texelSize.xy        源纹理纹素尺寸 = 1/源分辨率
+// cb[2..3]  = outTexelSize.xy     目标纹理纹素尺寸 = 1/输出分辨率
+// cb[4..7]  = param0              各通道语义见下方各着色器注释
+// cb[8..11] = param1              保留
+// cb[12..15]= param2/param3       保留
+// 已用 fxc 导出汇编核对：texelSize→cb0[0].xy，outTexelSize→cb0[0].zw，param0→cb0[1]。
+
+// R1 时序混合：当前帧与历史帧在预乘 alpha 空间直接插值
+static const char* g_postTemporalPS = R"(
+cbuffer PostConstants : register(b0) {
+    float2 texelSize;  // cb0[0].xy  1/源分辨率
+    float2 outTexelSize;  // cb0[0].zw  1/目标分辨率
+    float4 param0;        // cb0[1]     x = k（上一帧保留比例 0..1）/ x = k (history retained 0..1)
+    float4 param1;  // cb0[2]     保留
+    float4 param2;  // cb0[3]     保留
+    float4 param3;  // cb0[4]     保留
+};
+
+Texture2D curTex : register(t0);
+Texture2D histTex : register(t1);
+SamplerState postSampler : register(s0);
+
+struct VS_OUT { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
+
+float4 PSMain(VS_OUT input) : SV_TARGET {
+    float4 cur  = curTex.Sample(postSampler, input.uv);
+    float4 hist = histTex.Sample(postSampler, input.uv);
+    float k = saturate(param0.x);
+    // 预乘 alpha 线性插值保持预乘不变式
+    return lerp(cur, hist, k);
+}
+)";
+
+// R2 后处理抗锯齿（FXAA 风格）：亮度边缘检测 + 沿边方向混合，运行在伽马编码图像上
+static const char* g_postFXAAPS = R"(
+cbuffer PostConstants : register(b0) {
+    float2 texelSize;  // cb0[0].xy  1/源分辨率
+    float2 outTexelSize;  // cb0[0].zw  1/目标分辨率
+    float4 param0;        // cb0[1]     x = 质量档位（1=标准，2=强化）/ x = quality (1=normal, 2=extreme)
+    float4 param1;  // cb0[2]     保留
+    float4 param2;  // cb0[3]     保留
+    float4 param3;  // cb0[4]     保留
+};
+
+Texture2D srcTex : register(t0);
+SamplerState srcSampler : register(s0);
+
+struct VS_OUT { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
+
+// Rec.601 亮度
+float Luma(float3 c) {
+    return dot(c, float3(0.299, 0.587, 0.114));
+}
+
+float4 PSMain(VS_OUT input) : SV_TARGET {
+    float2 uv = input.uv;
+    float2 inv = outTexelSize;  // 屏幕纹素尺寸
+
+    float4 cM = srcTex.Sample(srcSampler, uv);
+    float4 cNW = srcTex.Sample(srcSampler, uv + float2(-inv.x, -inv.y));
+    float4 cNE = srcTex.Sample(srcSampler, uv + float2( inv.x, -inv.y));
+    float4 cSW = srcTex.Sample(srcSampler, uv + float2(-inv.x,  inv.y));
+    float4 cSE = srcTex.Sample(srcSampler, uv + float2( inv.x,  inv.y));
+    float4 cN  = srcTex.Sample(srcSampler, uv + float2(0.0,   -inv.y));
+    float4 cS  = srcTex.Sample(srcSampler, uv + float2(0.0,    inv.y));
+    float4 cW  = srcTex.Sample(srcSampler, uv + float2(-inv.x, 0.0));
+    float4 cE  = srcTex.Sample(srcSampler, uv + float2( inv.x, 0.0));
+
+    float lumaM  = Luma(cM.rgb);
+    float lumaNW = Luma(cNW.rgb);
+    float lumaNE = Luma(cNE.rgb);
+    float lumaSW = Luma(cSW.rgb);
+    float lumaSE = Luma(cSE.rgb);
+    float lumaN  = Luma(cN.rgb);
+    float lumaS  = Luma(cS.rgb);
+    float lumaW  = Luma(cW.rgb);
+    float lumaE  = Luma(cE.rgb);
+
+    float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
+    float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
+    lumaMin = min(lumaMin, min(min(lumaN, lumaS), min(lumaW, lumaE)));
+    lumaMax = max(lumaMax, max(max(lumaN, lumaS), max(lumaW, lumaE)));
+
+    // 对比度不足时直接返回原像素（大面积透明区域会走这里，开销最低）
+    if ((lumaMax - lumaMin) < max(0.0312, lumaMax * 0.125)) return cM;
+
+    // (1) 边缘方向：由 2x2 四角亮度差决定
+    float2 dir;
+    dir.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
+    dir.y =  ((lumaNW + lumaSW) - (lumaNE + lumaSE));
+
+    float dirReduce = max((lumaNW + lumaNE + lumaSW + lumaSE) * (0.25 * 0.125), 1.0 / 128.0);
+    float rcpDirMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);
+    dir = min(float2(8.0, 8.0), max(float2(-8.0, -8.0), dir * rcpDirMin)) * inv;
+
+    // (2) 强化档：沿边缘方向步进搜索边缘长度，用它限制混合跨度（搜索更多步）
+    float2 blendDir = dir;
+    if (param0.x > 1.5) {
+        float2 pixDir = dir / inv;  // 像素空间方向
+        pixDir = pixDir / max(length(pixDir), 1e-6);
+        float2 stepUV = pixDir * inv;  // 每步 1 屏幕纹素
+        float lenPos = 0.0;
+        float lenNeg = 0.0;
+        // 循环内用 SampleLevel 显式指定 mip，避免导数在变长循环中未定义
+        [loop] for (int i = 1; i <= 8; i++) {
+            float l = Luma(srcTex.SampleLevel(srcSampler, uv + stepUV * (float)i, 0.0).rgb);
+            if (l < lumaMin || l > lumaMax) break;
+            lenPos += 1.0;
+        }
+        [loop] for (int j = 1; j <= 8; j++) {
+            float l = Luma(srcTex.SampleLevel(srcSampler, uv - stepUV * (float)j, 0.0).rgb);
+            if (l < lumaMin || l > lumaMax) break;
+            lenNeg += 1.0;
+        }
+        float edgeLen = min(min(lenPos, lenNeg), 8.0);
+        blendDir = pixDir * inv * (edgeLen + 0.5);
+    }
+
+    // (3) 沿边缘取 4 个样本做三角滤波（标准档 2+2，强化档跨度由边缘长度决定）
+    float4 rgbA = 0.5 * (srcTex.Sample(srcSampler, uv + blendDir * (-1.0 / 6.0))
+                       + srcTex.Sample(srcSampler, uv + blendDir * ( 1.0 / 6.0)));
+    float4 rgbB = rgbA * 0.5 + 0.25 * (srcTex.Sample(srcSampler, uv + blendDir * (-0.5))
+                                     + srcTex.Sample(srcSampler, uv + blendDir * ( 0.5)));
+
+    float lumaB = Luma(rgbB.rgb);
+    if ((lumaB < lumaMin) || (lumaB > lumaMax)) return rgbA;
+    return rgbB;
+}
+)";
+
+// R3 泛光第 1 步：软膝亮部提取 + 4 抽头盒式降采样到 1/2 分辨率
+static const char* g_postBloomThresholdPS = MT_HLSL_COLOR_COMMON
+R"(
+cbuffer PostConstants : register(b0) {
+    float2 texelSize;  // cb0[0].xy  1/源分辨率
+    float2 outTexelSize;  // cb0[0].zw  1/目标分辨率
+    float4 param0;        // cb0[1]     x = 阈值 threshold，y = 软膝宽度 knee
+    float4 param1;  // cb0[2]     保留
+    float4 param2;  // cb0[3]     保留
+    float4 param3;  // cb0[4]     保留
+};
+
+Texture2D srcTex : register(t0);
+SamplerState srcSampler : register(s0);
+
+struct VS_OUT { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
+
+float4 PSMain(VS_OUT input) : SV_TARGET {
+    float2 t = texelSize;
+    // 4 抽头盒式：每个目标像素覆盖 2x2 源像素
+    float4 c = 0.25 * (srcTex.Sample(srcSampler, input.uv + float2(-t.x, -t.y))
+                     + srcTex.Sample(srcSampler, input.uv + float2( t.x, -t.y))
+                     + srcTex.Sample(srcSampler, input.uv + float2(-t.x,  t.y))
+                     + srcTex.Sample(srcSampler, input.uv + float2( t.x,  t.y)));
+
+    // 场景已是伽马编码，直接在显示空间取亮度（Rec.709 权重）
+    float luma = Luma709(c.rgb);
+    float thr = param0.x;
+    float knee = max(param0.y, 1e-4);
+
+    // 软膝：阈值附近平滑过渡，避免亮度硬切造成的色带
+    float soft = clamp(luma - thr + knee, 0.0, 2.0 * knee);
+    soft = soft * soft / (4.0 * knee);
+    float contrib = max(soft, luma - thr) / max(luma, 1e-4);
+
+    // 预乘 alpha 一并缩放，保持 rgb <= a 的预乘关系
+    return float4(c.rgb * contrib, c.a * contrib);
+}
+)";
+
+// R3 泛光第 2 步：可分离高斯模糊（9 抽头，权重和 = 1）
+static const char* g_postBloomBlurPS = R"(
+cbuffer PostConstants : register(b0) {
+    float2 texelSize;  // cb0[0].xy  1/源分辨率
+    float2 outTexelSize;  // cb0[0].zw  1/目标分辨率
+    float4 param0;        // cb0[1]     xy = 模糊方向（纹素单位）/ xy = blur direction in texels
+    float4 param1;  // cb0[2]     保留
+    float4 param2;  // cb0[3]     保留
+    float4 param3;  // cb0[4]     保留
+};
+
+Texture2D srcTex : register(t0);
+SamplerState srcSampler : register(s0);
+
+struct VS_OUT { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
+
+float4 PSMain(VS_OUT input) : SV_TARGET {
+    float2 t = texelSize * param0.xy;  // 每步 UV 偏移
+    // 双线性折半采样：把相隔 1 纹素的相邻两抽头合并成一次带权双线性取样，
+    // 9 抽头高斯因此只需 5 次取样，合成核与原实现逐权重一致（取样数 -44%）。
+    // Bilinear tap-pairing: adjacent taps 1 texel apart are folded into one weighted bilinear
+    // fetch, so the 9-tap Gaussian costs only 5 fetches with an identical effective kernel.
+    //   tap@1(w=0.1945946) + tap@2(w=0.1216216) → w=0.3162162162 @ 1.3846153846 texels
+    //   tap@3(w=0.0540541) + tap@4(w=0.0162162) → w=0.0702702703 @ 3.2307692308 texels
+    float4 c = srcTex.Sample(srcSampler, input.uv) * 0.2270270270;
+    c += (srcTex.Sample(srcSampler, input.uv + t * 1.3846153846)
+        + srcTex.Sample(srcSampler, input.uv - t * 1.3846153846)) * 0.3162162162;
+    c += (srcTex.Sample(srcSampler, input.uv + t * 3.2307692308)
+        + srcTex.Sample(srcSampler, input.uv - t * 3.2307692308)) * 0.0702702703;
+    return c;
+}
+)";
+
+// R3 泛光第 3 步：两级泛光上采样后加性叠加回场景
+// 注意：只在 RGB 上做加性叠加，alpha 原样保留 —— 预乘 alpha 下 alpha=0 处的泛光在
+// DComp 合成时天然表现为纯加性光晕，同时满足「alpha 精确保留」的要求。
+static const char* g_postBloomCompositePS = R"(
+cbuffer PostConstants : register(b0) {
+    float2 texelSize;  // cb0[0].xy  1/源分辨率
+    float2 outTexelSize;  // cb0[0].zw  1/目标分辨率
+    float4 param0;        // cb0[1]     x = 泛光强度（0..1）/ x = bloom intensity (0..1)
+    float4 param1;  // cb0[2]     保留
+    float4 param2;  // cb0[3]     保留
+    float4 param3;  // cb0[4]     保留
+};
+
+Texture2D sceneTex : register(t0);  // 原始场景
+Texture2D bloomHalfTex : register(t1);  // 1/2 分辨率泛光
+Texture2D bloomQuarterTex : register(t2);  // 1/4 分辨率泛光
+SamplerState postSampler : register(s0);
+
+struct VS_OUT { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
+
+float4 PSMain(VS_OUT input) : SV_TARGET {
+    float4 scene = sceneTex.Sample(postSampler, input.uv);
+    // 双线性上采样回到全分辨率
+    float4 b0 = bloomHalfTex.Sample(postSampler, input.uv);
+    float4 b1 = bloomQuarterTex.Sample(postSampler, input.uv);
+    // 两级权重和为 1，泛光能量与原亮部能量相当
+    float k = param0.x;
+    float3 bloom = (b0.rgb * 0.65 + b1.rgb * 0.35) * k;
+    return float4(scene.rgb + bloom, scene.a);
+}
+)";
+
+// R5 HDR 编码（链的最后一趟）：sRGB 伽马解码 → 高光增益 → 色调映射 → 传输函数编码
+static const char* g_postHDREncodePS = R"(
+cbuffer PostConstants : register(b0) {
+    float2 texelSize;  // cb0[0].xy  1/源分辨率
+    float2 outTexelSize;  // cb0[0].zw  1/目标分辨率
+    float4 param0;        // cb0[1]     x = 色彩空间（1=scRGB 2=HDR10/PQ），y = 增益倍率，z = 色调映射（0/1/2）
+                          //            x = colour space (1=scRGB 2=HDR10/PQ), y = boost multiplier, z = tonemap
+    float4 param1;  // cb0[2]     保留
+    float4 param2;  // cb0[3]     保留
+    float4 param3;  // cb0[4]     保留
+};
+
+Texture2D sceneTex : register(t0);
+SamplerState srcSampler : register(s0);
+
+struct VS_OUT { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
+
+// sRGB EOTF（精确分段）/ sRGB EOTF (accurate piecewise)
+float3 SRGBToLinear(float3 c) {
+    float3 lo = c / 12.92;
+    float3 hi = pow((c + 0.055) / 1.055, 2.4);
+    return lerp(lo, hi, step(0.04045, c));
+}
+
+// ST.2084 (PQ) OETF（逆 EOTF），输入为归一化亮度 N = L
+float3 PQEncode(float3 N) {
+    float m1 = 0.1593017578125;
+    float m2 = 78.84375;
+    float c1 = 0.8359375;
+    float c2 = 18.8515625;
+    float c3 = 18.6875;
+    float3 Np = pow(max(N, 0.0), m1);
+    return pow((c1 + c2 * Np) / (1.0 + c3 * Np), m2);
+}
+
+// ACES 电影感近似（Narkowicz）/ ACES filmic approximation (Narkowicz)
+float3 ACESFilm(float3 x) {
+    float a = 2.51;
+    float b = 0.03;
+    float c = 2.43;
+    float d = 0.59;
+    float e = 0.14;
+    return saturate((x * (a * x + b)) / (x * (c * x + d) + e));
+}
+
+float4 PSMain(VS_OUT input) : SV_TARGET {
+    float4 c = sceneTex.Sample(srcSampler, input.uv);
+    // 全透明像素（整屏绝大多数，前景只是细拖尾）提前返回，跳过 EOTF/增益/色调映射/PQ。
+    // rgb 与 a 同时为 0 时所有后续运算的输出恒为 0，因此这是精确等价的早退。
+    if (dot(c, c) == 0.0) return c;
+    // 伽马编码 → 线性
+    float3 lin = SRGBToLinear(max(c.rgb, 0.0));
+
+    // 高光增益：boost = 0 时为精确空操作
+    lin *= (1.0 + param0.y);
+
+    // 色调映射：仅在启用时执行
+    if (param0.z > 0.5) {
+        if (param0.z < 1.5) {
+            lin = lin / (1.0 + lin);  // 扩展 Reinhard
+        } else {
+            lin = ACESFilm(lin);            // ACES
+        }
+    }
+
+    float3 outCol;
+    if (param0.x < 1.5) {
+        // scRGB（RGB_FULL_G10_NONE_P709）：线性输出，1.0 = SDR 参考白（DWM 按 SDR 白电平换算）
+        outCol = lin;
+    } else {
+        // HDR10（RGB_FULL_G2084_NONE_P2020）：PQ 编码，1.0 线性 = 203 nit SDR 参考白
+        outCol = PQEncode(lin * (203.0 / 10000.0));
+    }
+
+    // alpha 精确保留：交换链是预乘 alpha，颜色运算不触碰 alpha
+    return float4(outCol, c.a);
+}
+)";
+
+// ---- 顶点结构（v3.3：添加 v 垂直坐标用于软边缘和管光）----
+struct VertexPosColor {
+    float x, y, z;     // 位置 + 深度（2.5D）
+    float r, g, b, a;  // 颜色
+    float u;           // 沿路径比例 0~1（用于渐变采样）
+    float v;           // 垂直路径方向 -1~1（左边缘=-1，右边缘=1，用于软边缘和圆柱光照）
+};
+
+struct ParticleInstance {
+    float x, y, z;  // 位置 + 深度
+    float r, g, b, a;  // 颜色
+    float size;       // 大小（半径）/ Size (radius)
+    float shapeType;  // 0=circle,1=star,2=hexagram,3=heart,4=diamond,5=triangle,6=flower,7=pentagon,8=hexagon (与HLSL shapeSDF一致
+    float rotation;   // 旋转角度（弧度）/ Rotation (radians)
+    float charIndex;  // 字符图集索引
+};
+
+// ---- 原生渲染资源 ----
+ID3D11VertexShader* g_pNativeVS = nullptr;
+ID3D11PixelShader* g_pNativePS = nullptr;
+ID3D11VertexShader* g_pParticleVS = nullptr;
+ID3D11PixelShader* g_pParticlePS = nullptr;
+ID3D11InputLayout* g_pNativeLayout = nullptr;
+ID3D11InputLayout* g_pParticleLayout = nullptr;
+ID3D11Buffer* g_pConstantBuffer = nullptr;
+ID3D11Buffer* g_pTrailVB = nullptr;       // 拖尾带顶点缓冲（动态）
+ID3D11Buffer* g_pParticleQuadVB = nullptr; // 粒子四边形顶点缓冲
+ID3D11Buffer* g_pParticleInstanceBuf = nullptr; // 粒子实例缓冲（动态）
+ID3D11BlendState* g_pAlphaBlend = nullptr;
+ID3D11BlendState* g_pAdditiveBlend = nullptr;  // 加法混合状态（发光用）/ Additive blend state (for glow effects)
+ID3D11RasterizerState* g_pRasterState = nullptr;
+ID3D11Texture2D* g_pCharAtlasTex = nullptr;  // 字符图集纹理
+ID3D11ShaderResourceView* g_pCharAtlasSRV = nullptr;  // 字符图集 SRV
+ID3D11SamplerState* g_pCharAtlasSampler = nullptr;  // 字符图集采样器
+// [tag] 动态刷新用的 D2D 绘制目标，与 g_pCharAtlasTex 生命周期严格一致
+IDXGISurface* g_pCharAtlasSurface = nullptr;  // 纹理的 DXGI 表面
+ID2D1Bitmap1* g_pCharAtlasBmp = nullptr;  // 绑定在该表面上的 D2D 位图
+
+// ---- 常量与缓存（性能优化用）/ Constants & caches (for optimization) ----
+// 拖尾带顶点缓冲容量，必须与 g_pTrailVB 的创建大小保持一致
+static const int kMaxTrailVertices = 4096;
+
+// ===================== 常量缓冲布局镜像 / constant-buffer layout mirror =====================
+// 这是 HLSL 侧 MT_HLSL_CONSTANT_BUFFER 的 C++ 孪生结构体。
+// 此前 UpdateConstantBuffer() 用裸下标 data[73] / data[87] / data[94] 写这块内存，
+// 改一个字段要在 HLSL 的 4 份拷贝 + C++ 的下标注释之间人肉对齐，漏改不报错、只会静默画错。
+// 现在字段有名字，sizeof 与关键字段的 offsetof 由 static_assert 钉住，
+// 字段顺序另由 _check_cb_layout.py 与 HLSL 逐项比对。
+// C++ twin of the HLSL MT_HLSL_CONSTANT_BUFFER. Used to be written through raw indices (data[73], data[87]...);
+// now fields are named and the size plus key offsets are pinned by static_assert, with field order cross-checked
+// against the HLSL side by _check_cb_layout.py.
+//
+// HLSL cbuffer 以 16 字节（4 float）为寄存器单位打包；这里全部成员都是 4 字节对齐的标量，
+// 顺序一致即布局一致，编译器不会插入额外填充。
+struct ShaderConstants {
+    float screenSize[2];
+    float perspective;
+    float pad0;
+    float gradient[16][4];
+    int   gradientCount;
+    float bgLuminance;
+    float adaptiveFlag;
+    float smoothFlag;
+    float edgeSoftness;
+    // vs 视作 padding，ps / 粒子着色器视作图集尺寸（同一批字节两种解读，见 HLSL 侧注释）
+    float atlasRows;
+    float atlasCols;
+    float aaMode;
+    float textAspect;
+    float strokeStepU;
+    float strokeStepV;
+    float strokeEnabled;
+    float strokeAlphaMul;
+    float strokeColorMode;
+    float strokeColorR;
+    float strokeColorG;
+    float strokeColorB;
+    float strokeColorMul;
+    float strokeWidthPx;
+    float trailStrokeEnabled;
+    float trailStrokeHalf;
+    float shaderQuality;
+    float sdfSamples;
+    float ditherMode;
+    float ditherStrength;
+    float pixelScale;
+    float noiseSeed;
+    float pad3;
+    float padTail[4][4];
+};
+// 448 字节 = 112 个 float，必须与 g_pConstantBuffer 的 ByteWidth 一致
+static_assert(sizeof(ShaderConstants) == 448, "ShaderConstants must be 448 bytes (112 floats)");
+// 钉住关键槽位：这些偏移量一旦漂移，症状是「画错但不报错」，最难查
+static_assert(offsetof(ShaderConstants, gradientCount) == 272, "gradientCount must sit at byte 272 (float #68)");
+static_assert(offsetof(ShaderConstants, atlasRows) == 292, "atlasRows must sit at byte 292 (float #73)");
+static_assert(offsetof(ShaderConstants, noiseSeed) == 376, "noiseSeed must sit at byte 376 (float #94)");
+// noiseSeed 的 float 下标：HLSL 侧为 cb0[23].z（一个寄存器 4 float → 23*4+2 = 94）
+static constexpr int kCbSeedFloatIndex = offsetof(ShaderConstants, noiseSeed) / static_cast<int>(sizeof(float));
+static_assert(kCbSeedFloatIndex == 94, "noiseSeed float index must remain 94");
+
+// 常量缓冲上次上传内容的缓存：内容未变化时跳过昂贵的 Map/Unmap
+static ShaderConstants g_cbCache = {};
+static bool g_cbCacheValid = false;   // 缓存是否有效（设备重建后置 false）/ cache validity (cleared on device reset)
+// 强制下次重传常量缓冲（设备丢失/交换链重建等需要重新上传的场景）/ force re-upload next time (device loss
+static void InvalidateConstantBuffer() { g_cbCacheValid = false; }
+int g_charAtlasCols = 0;  // 图集列数
+int g_charAtlasRows = 0;  // 图集行数
+int g_charAtlasCellW = 0;  // 单元格宽
+int g_charAtlasCellH = 0;  // 单元格高
+float g_textAspectRatio = 1.0f;  // 文字宽高比
+// 同上：UI 线程（设置变更/WM_DPICHANGED）置位，渲染线程（RenderFrame 里重建图集后）清位，必须是原子的
+std::atomic<bool> g_charAtlasDirty{true};                    // 图集脏标记（设置变更时重建）/ atlas dirty flag (rebuild on settings change)
+std::vector<std::wstring> g_atlasChars;                // 图集格子列表（分段后为各片段）/ atlas cell list (chunks after splitting)
+std::vector<int> g_phraseChunkStart;  // 每个原始词组在图集中的起始格
+std::vector<int> g_phraseChunkCount;  // 每个原始词组占用的格数
+DWORD g_globalChunkClock = 0;  // 全局同步轮播时钟起点(ms)
+// ===================== 文字内容 [tag] 标签系统 / text content [tag] system =====================
+// 设计目标：新增标签只需要在注册表里加一行，解析/展开/动态刷新逻辑一概不用改。
+//
+// 语法：                    语法说明（变量一览见 $description）
+//   [time]                 用所在的 defaultFmt（ISO 8601）
+//   [time:%H:%M]           内联格式，优先级最高
+//   [time] + text_tag_time_format   用户设置级格式，优先级次之
+//   \[time]                转义，输出字面 "[time]"
+//   [nosuch]               未知标签原样保留，方便用户发现拼写错误
+//
+// 为什么 [time] 需要文章所述那种动态刷新策略：图集是烘焙好的位图，值一变就必须重画，
+// 而全量重建要走 CreateTexture2D + QueryInterface(IDXGISurface) + CreateBitmapFromDxgiSurface，
+// 每秒一次足以造成周期性掉帧。因此动态模式只在「值真的变了」时重画，且复用已分配的资源。
+// The atlas is a baked bitmap, so a changing value forces a redraw; a full rebuild goes through
+// CreateTexture2D + QueryInterface(IDXGISurface) + CreateBitmapFromDxgiSurface, which once per second
+// is enough to cause periodic frame drops. Dynamic mode therefore redraws only when a value actually
+// changes, and reuses the already-allocated resources.
+
+// 标签的用户级格式来自哪个设置项；None 表示该标签不提供单独设置。
+enum class TagFmtSlot { None, Time, Day };
+
+// 少数标签的值 CRT 的 strftime 算不出来（见下），需要自带解析器。
+typedef std::wstring (*TagResolver)(const struct tm& tmv);
+
+struct TextTagDef {
+    const wchar_t* id;           // 标签名（小写）/ tag id (lowercase)
+    const wchar_t* defaultFmt;  // 默认 strftime 格式串
+    TagFmtSlot slot;  // 用户级格式来源
+    TagResolver resolve;  // 非空则忽略 fmt
+};
+
+// ISO 8601 星期：1=周一 … 7=周日。%u 是 C99/glibc 扩展，本工具链链接的 CRT 不支持
+// （实测 wcsftime(L"%u") 返回 0），只能自己算：tm_wday 是 0=周日，位移一次即可。
+// ISO 8601 weekday: 1=Monday .. 7=Sunday. %u is a C99/glibc extension unsupported by the CRT this
+// toolchain links against (wcsftime(L"%u") returns 0 in practice), so it must be derived manually:
+// tm_wday is 0=Sunday, hence the shift.
+static std::wstring ResolveIsoWeekday(const struct tm& tmv) {
+    int iso = ((tmv.tm_wday + 6) % 7) + 1;
+    wchar_t b[2] = { (wchar_t)(L'0' + iso), 0 };
+    return std::wstring(b);
+}
+
+// 注册表
+// 新增标签 = 加一行。/ adding a tag = adding one line.
+static const TextTagDef g_textTagDefs[] = {
+    { L"time",     L"%H:%M:%S",          TagFmtSlot::Time, nullptr },  // ISO 8601 时间式
+    { L"day",      L"%Y-%m-%d",          TagFmtSlot::Day,  nullptr },  // ISO 8601 日期式
+    { L"datetime", L"%Y-%m-%dT%H:%M:%S", TagFmtSlot::None, nullptr },  // ISO 8601 完整
+    { L"weekday",  L"%u",                TagFmtSlot::None, ResolveIsoWeekday },  // ISO 星期 1=周一
+};
+
+// 用户设置的每标签格式（由 LoadSettings 填充）/ per-tag user formats (filled by LoadSettings)
+// 定长而非 std::wstring：这两个变量由 UI 线程写、渲染线程读，std::wstring 的赋值可能触发堆重分配，
+// 使渲染线程手里的指针悬空。定长缓冲最多读到一个撕裂的字符串，下一帧自愈，与 g_textContent 惯例一致。
+// Fixed-size rather than std::wstring: these are written by the UI thread and read by the render thread,
+// and a std::wstring assignment can reallocate the heap buffer out from under the reader. Fixed buffers
+// can at worst yield a torn string for one frame, matching how g_textContent already behaves.
+wchar_t g_textTagTimeFmt[64] = L"";  // 空串 = 用 ISO 8601 默认
+wchar_t g_textTagDayFmt[64] = L"";  // 空串 = 用 ISO 8601 默认
+int g_textTagMode = 1;   // 0=static（读到即冻结）/ static (freeze at read)  1=dynamic（跟随变化）/ dynamic
+// 静态模式冻结值：key = "id" 或 "id:fmt"，值 = 首次求值结果
+static std::unordered_map<std::wstring, std::wstring> g_tagFrozenCache;
+// 冻结缓存失效请求。UI 线程（LoadSettings）置位，渲染线程执行真正的 clear——两个线程同时触碰
+// unordered_map / vector 是实打实的 UAF，不是可以容忍的撕裂。
+// Invalidation request for the cache. The UI thread (LoadSettings) sets it; the render thread performs
+// the real clear - two threads touching the same unordered_map / vector at once is a genuine UAF, not
+// a tolerable tear.
+std::atomic<bool> g_tagCacheDirty{false};
+
+// POSIX 等价别名：本工具链链接的 CRT 不支持这几个说明符（实测 wcsftime 返回 0），
+// 而它们是 POSIX 明确定义为"等价于"另一串的标准写法，就地展开后语义完全一致。
+// 没有这一层，用户写 "%T" 会得到**空字符串**而不是时间——一个静默且极难排查的坑。
+// POSIX equivalence aliases: the CRT this toolchain links against does not implement these
+// specifiers (wcsftime returns 0), yet POSIX defines them as equivalent to the strings below, so
+// inlining them is semantically identical. Without this, "%T" would silently render an empty string.
+static const struct { const wchar_t* from; const wchar_t* to; } kPosixAliases[] = {
+    { L"%T", L"%H:%M:%S" },   // POSIX: 等价于 %H:%M:%S
+    { L"%F", L"%Y-%m-%d" },   // POSIX / ISO 8601: 等价于 %Y-%m-%d
+    { L"%R", L"%H:%M" },      // POSIX: 等价于 %H:%M
+    { L"%D", L"%m/%d/%y" },   // POSIX: 等价于 %m/%d/%y
+    { L"%e", L"%d" },         // POSIX 是空格填充，这里退化为零填充（CRT 无 %_ d）
+};
+// 只在「未被 %% 转义」的位置替换，避免把字面 "%%T" 误伤成 "%T"
+static std::wstring NormalizeStrftimeAliases(const std::wstring& fmt) {
+    std::wstring out;
+    for (size_t i = 0; i < fmt.size();) {
+        if (fmt[i] == L'%' && i + 1 < fmt.size() && fmt[i + 1] == L'%') {
+            out += L"%%"; i += 2; continue;  // 转义的字面 %
+        }
+        bool hit = false;
+        if (fmt[i] == L'%' && i + 1 < fmt.size()) {
+            wchar_t pair[3] = { L'%', fmt[i + 1], 0 };
+            for (const auto& a : kPosixAliases) {
+                if (wcscmp(pair, a.from) == 0) { out += a.to; hit = true; break; }
+            }
+        }
+        if (hit) { i += 2; continue; }
+        out += fmt[i++];
+    }
+    return out;
+}
+
+// 标签求值：返回 false 表示 id 未知（调用方按"原样保留"处理）
+static bool EvalTextTag(const std::wstring& id, bool hasInlineFmt, const std::wstring& inlineFmt,
+                        std::wstring& out) {
+    const TextTagDef* def = nullptr;
+    for (const auto& d : g_textTagDefs) {
+        if (id == d.id) { def = &d; break; }
+    }
+    if (!def) return false;
+    // 静态模式：命中冻结缓存就直接返回旧值。
+    // key 需要带上内联格式，否则 "[time:%H]" 与 "[time]" 会错误地共用同一个值。
+    std::wstring key;
+    if (g_textTagMode == 0) {
+        key = def->id;
+        if (hasInlineFmt) { key += L':'; key += inlineFmt; }
+        auto it = g_tagFrozenCache.find(key);
+        if (it != g_tagFrozenCache.end()) { out = it->second; return true; }
+    }
+    // 自带解析器的标签忽略一切格式串（它的值 CRT 算不出来）/ resolver-driven tags ignore the format
+    if (def->resolve) {
+        time_t nowT = time(nullptr);
+        struct tm resolverTm{};
+        localtime_s(&resolverTm, &nowT);
+        out = def->resolve(resolverTm);
+        if (g_textTagMode == 0) g_tagFrozenCache[key] = out;
+        return true;
+    }
+    std::wstring fmt;
+    if (hasInlineFmt) {  // 内联优先
+        fmt = inlineFmt;
+    } else if (def->slot == TagFmtSlot::Time) {
+        fmt = g_textTagTimeFmt;
+    } else if (def->slot == TagFmtSlot::Day) {
+        fmt = g_textTagDayFmt;
+    }
+    if (fmt.empty()) fmt = def->defaultFmt;  // 兜底到 ISO 8601
+    if (fmt.empty()) { out.clear(); return true; }
+    fmt = NormalizeStrftimeAliases(fmt);                // %T/%F/%R/%D/%e -> CRT 认识的形式
+    // C locale：让 %a/%b（星期/月份缩写）输出确定，不受系统区域设置影响
+    std::locale prevLocale = std::locale::global(std::locale("C"));
+    time_t now = time(nullptr);
+    struct tm tmv{};
+    localtime_s(&tmv, &now);
+    wchar_t buf[128];
+    buf[0] = 0;
+    size_t n = wcsftime(buf, 128, fmt.c_str(), &tmv);
+    std::locale::global(prevLocale);
+    // 非法/不受支持的说明符会让 wcsftime 返回 0。空串比残留的旧值安全，但要给用户留下线索，
+    // 否则 "%typo" 之类的拼写错误在屏幕上完全看不出原因。
+    if (n == 0) {
+        buf[0] = 0;
+        Wh_Log(L"[TextTag] unsupported strftime format for [%ls]: \"%ls\" -> empty", def->id, fmt.c_str());
+    }
+    out.assign(buf);
+    if (g_textTagMode == 0) g_tagFrozenCache[key] = out;
+    return true;
+}
+
+// 把 "xxx[time]yyy" 展开
+static std::wstring ExpandTextTags(const std::wstring& in) {
+    std::wstring out;
+    for (size_t i = 0; i < in.size();) {
+        wchar_t c = in[i];
+        if (c == L'\\' && i + 1 < in.size() && in[i + 1] == L'[') {
+            out.push_back(L'[');                        // 转义：\[ → [
+            i += 2;
+            continue;
+        }
+        if (c != L'[') { out.push_back(c); ++i; continue; }
+        size_t close = in.find(L']', i + 1);
+        if (close == std::wstring::npos) { out.push_back(c); ++i; continue; }  // 无闭合，按普通字符处理
+        std::wstring body = in.substr(i + 1, close - i - 1);
+        if (body.empty()) { out.push_back(c); ++i; continue; }
+        std::wstring id = body;
+        bool hasInline = false;
+        std::wstring inlineFmt;
+        size_t colon = body.find(L':');
+        if (colon != std::wstring::npos) {
+            // 内联格式允许自身包含 ':'（如 %H:%M），所以第一个冒号之后整段都是格式串
+            id = body.substr(0, colon);
+            inlineFmt = body.substr(colon + 1);
+            hasInline = true;
+        }
+        std::wstring val;
+        if (EvalTextTag(id, hasInline, inlineFmt, val)) {
+            out += val;
+        } else {
+            // 未知标签原样输出，让用户能看见自己写错了什么
+            out += L'['; out += body; out += L']';
+        }
+        i = close + 1;
+    }
+    return out;
+}
+
+// 动态模式下记录上一次展开后的每个原始词组，用于判断是否需要重画
+static std::vector<std::wstring> g_lastExpandedPhrases;
+
+// 码点计数：代理对(Emoji)算一个码点
+static int TextCodePointLen(const std::wstring &s) {
+    int n = 0;
+    for (size_t k = 0; k < s.size();) {
+        wchar_t c = s[k];
+        k += (c >= 0xD800 && c <= 0xDBFF && k + 1 < s.size()) ? 2 : 1;
+        n++;
+    }
+    return n;
+}
+// 按码点边界切分长词组，绝不在代理对(Emoji)中间切开
+static std::vector<std::wstring> TextSplitChunks(const std::wstring &s, int maxCP) {
+    std::vector<std::wstring> out;
+    size_t start = 0, k = 0; int cp = 0;
+    while (k < s.size()) {
+        wchar_t c = s[k];
+        size_t adv = (c >= 0xD800 && c <= 0xDBFF && k + 1 < s.size()) ? 2 : 1;
+        k += adv; cp++;
+        if (cp >= maxCP) { out.push_back(s.substr(start, k - start)); start = k; cp = 0; }
+    }
+    if (start < s.size()) out.push_back(s.substr(start));
+    return out;
+}
+// 切分 text_content 并展开 [tag]：BuildCharAtlas 与动态刷新共用，避免两处逻辑走偏
+static void SplitAndExpandPhrases(std::vector<std::wstring> &out) {
+    out.clear();
+    wchar_t buffer[256];
+    int bi = 0;
+    for (int i = 0; g_textContent[i] != 0 && i < 255; i++) {
+        wchar_t ch = g_textContent[i];
+        if (ch == L',' || ch == L'，' || ch == L'|' || ch == L'｜') {
+            if (bi > 0) { buffer[bi] = 0; out.push_back(buffer); bi = 0; }
+            continue;
+        }
+        if (bi < 255) buffer[bi++] = ch;
+    }
+    if (bi > 0) { buffer[bi] = 0; out.push_back(buffer); }
+    if (out.empty()) out.push_back(L" ");
+    for (auto &ph : out) ph = ExpandTextTags(ph);
+}
+// 由词组表生成图集格子 + 词组→格子区间 + 最长码点数
+static void BuildCellsFromPhrases(const std::vector<std::wstring> &phrases,
+                                  std::vector<std::wstring> &cells,
+                                  std::vector<int> &chunkStart, std::vector<int> &chunkCount,
+                                  int &maxPhraseLen) {
+    cells.clear(); chunkStart.clear(); chunkCount.clear();
+    maxPhraseLen = 1;
+    for (const auto &ph : phrases) {
+        int cellStart = (int)cells.size();
+        chunkStart.push_back(cellStart);
+        if (g_enableTextChunk && TextCodePointLen(ph) > g_textChunkMax) {
+            std::vector<std::wstring> chunks = TextSplitChunks(ph, g_textChunkMax);
+            for (auto &ck : chunks) cells.push_back(ck);
+        } else {
+            cells.push_back(ph);
+        }
+        chunkCount.push_back((int)cells.size() - cellStart);
+    }
+    // 必须按 **格子(cells)** 而非词组(phrases) 求最长：启用分块后格子最大长度受
+    // text_chunk_max 限制，按词组算会把格子撑得比实际需要的宽（改变既有布局）。
+    // Must max over the CELLS, not the phrases: with chunking on, cell length is capped by
+    // text_chunk_max, so maxing over phrases would make cells wider than needed (changing the
+    // existing layout).
+    maxPhraseLen = 1;
+    for (const auto &s : cells) { int l = TextCodePointLen(s); if (l > maxPhraseLen) maxPhraseLen = l; }
+}
+
+// 由渲染线程消费"请清空 [tag] 缓存"的请求（UI 线程只负责置位 g_tagCacheDirty）
+static void ConsumeTagCacheInvalidation() {
+    if (!g_tagCacheDirty.exchange(false)) return;
+    g_tagFrozenCache.clear();
+    g_lastExpandedPhrases.clear();  // 强制下一轮重新比对，否则可能漏掉一次更新
+}
+// 动态刷新的三种结果
+enum class RedrawOutcome {
+    NoChange,  // 值没变，无需任何动作
+    Redrawn,  // 已就地重画图集内容
+    NeedRebuild,  // 结果宽度变化，必须重建布局
+};
+
+// 释放 D2D 绘制目标（surface + bitmap）。必须在释放 g_pCharAtlasTex 之前调用，
+// 因为 bitmap 持有 surface、surface 持有纹理。
+static void ReleaseCharAtlasTarget() {
+    if (g_pD2DDC && g_pCharAtlasBmp) {
+        // 若当前 target 正是图集位图，先解绑，避免 DC 持有已释放的 target
+        ID2D1Image *pCur = nullptr;
+        g_pD2DDC->GetTarget(&pCur);
+        if (pCur) {
+            bool same = (pCur == static_cast<ID2D1Image*>(g_pCharAtlasBmp));
+            pCur->Release();
+            if (same) g_pD2DDC->SetTarget(nullptr);
+        }
+    }
+    if (g_pCharAtlasBmp) { g_pCharAtlasBmp->Release(); g_pCharAtlasBmp = nullptr; }
+    if (g_pCharAtlasSurface) { g_pCharAtlasSurface->Release(); g_pCharAtlasSurface = nullptr; }
+}
+
+// 把 g_atlasChars 的当前内容重画到已缓存的图上。资源（纹理/SRV/surface/bitmap）全部复用，
+// 只做一次 SetTarget + BeginDraw + Clear + N×DrawText + EndDraw。
+static void RedrawCharAtlas() {
+    if (!g_pD2DDC || !g_pCharAtlasBmp || !g_pTextFormat) return;
+    if (!g_pSolidOuterBrush) { Wh_Log(L"[CharAtlas] g_pSolidOuterBrush null, redraw aborted"); return; }
+
+    ID2D1Image *pOldTarget = nullptr;
+    g_pD2DDC->GetTarget(&pOldTarget);
+    g_pD2DDC->SetTarget(g_pCharAtlasBmp);
+    g_pD2DDC->BeginDraw();
+    g_pD2DDC->Clear(D2D1::ColorF(0, 0, 0, 0));
+
+    // 白色 + 不透明：图集只存形状与覆盖率，实际着色交给 shader 按粒子颜色相乘
+    g_pSolidOuterBrush->SetColor(D2D1::ColorF(1, 1, 1, 1));
+    g_pSolidOuterBrush->SetOpacity(1.0f);
+
+    for (int i = 0; i < (int)g_atlasChars.size(); i++) {
+        int row = i / g_charAtlasCols;
+        int col = i % g_charAtlasCols;
+        float cellX = (float)(col * g_charAtlasCellW);
+        float cellY = (float)(row * g_charAtlasCellH);
+        D2D1_RECT_F rc = { cellX, cellY, cellX + (float)g_charAtlasCellW, cellY + (float)g_charAtlasCellH };
+        // DrawText + ENABLE_COLOR_FONT 渲染彩色 emoji
+        g_pD2DDC->DrawText(g_atlasChars[i].c_str(), (UINT32)g_atlasChars[i].length(),
+            g_pTextFormat, &rc, g_pSolidOuterBrush,
+            D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+    }
+
+    HRESULT hrDraw = g_pD2DDC->EndDraw();
+    // 恢复原 target：主渲染也用同一个 DC，不恢复会让后续帧画到图集上
+    g_pD2DDC->SetTarget(pOldTarget);
+    if (pOldTarget) pOldTarget->Release();
+    if (FAILED(hrDraw)) Wh_Log(L"[CharAtlas] EndDraw failed: 0x%08X", hrDraw);
+}
+
+// 构建字符图集：把所有字符渲染到一张 D3D11 纹理
+static void BuildCharAtlas() {
+    Wh_Log(L"[CharAtlas] BuildCharAtlas called, dev=%p factory=%p fmt=%p", g_pD3DDevice, g_pD2DFactory, g_pTextFormat);
+    // v3.4.2.2 DPI：开启 dpi_scale_text 时，图集按光标显示器 DPI 放大，保证跨混合 DPI 显示器时文字物理尺寸恒定
+    float effFontSize = g_dpiScaleText ? (float)g_textFontSize * g_monitorDpiScale : (float)g_textFontSize;
+    if (effFontSize < 1.0f) effFontSize = 1.0f;
+    // 重建文字格式（字号可能已变化）/ Recreate text format (font size may have changed)
+    if (g_pTextFormat) { g_pTextFormat->Release(); g_pTextFormat = nullptr; }
+    if (g_dwFactory) {
+        g_dwFactory->CreateTextFormat(L"Segoe UI Emoji", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+            (float)(effFontSize * 2.0f), L"en-us", &g_pTextFormat);
+        if (!g_pTextFormat) g_dwFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+            (float)(effFontSize * 2.0f), L"en-us", &g_pTextFormat);
+        if (g_pTextFormat) {
+            g_pTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            g_pTextFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        }
+    }
+    if (!g_pD3DDevice || !g_pD2DFactory || !g_pTextFormat) { Wh_Log(L"[CharAtlas] early return null deps"); return; }
+    ConsumeTagCacheInvalidation();  // 必须在展开之前，否则本轮还会用到旧缓存
+    // 切分 text_content + 展开 [tag]
+    std::vector<std::wstring> phrases;
+    SplitAndExpandPhrases(phrases);
+    g_lastExpandedPhrases = phrases;
+
+    // 展开为图集格子：超长词组切成多格，并记录词组→格子区间
+    int maxPhraseLen = 1;
+    BuildCellsFromPhrases(phrases, g_atlasChars, g_phraseChunkStart, g_phraseChunkCount, maxPhraseLen);
+    // 重置全局同步轮播时钟
+    g_globalChunkClock = GetTickCount();
+
+    // 图集布局：16列，行数按格子数算
+    int phraseCount = (int)g_atlasChars.size();
+    g_charAtlasCols = 16;
+    // 格子少时减少列数，避免图集过宽
+    if (phraseCount < g_charAtlasCols) g_charAtlasCols = phraseCount;
+    g_charAtlasRows = ((int)g_atlasChars.size() + g_charAtlasCols - 1) / g_charAtlasCols;
+    if (g_charAtlasRows < 1) g_charAtlasRows = 1;
+    float SS = g_textAtlasSS;  // 超采样倍数（v3.4.2.1 可配置）/ supersampling factor (configurable)
+    if (SS < 1.0f) SS = 1.0f;
+    if (SS > 4.0f) SS = 4.0f;
+    g_charAtlasCellW = (int)(effFontSize * maxPhraseLen * SS + 16);
+    g_charAtlasCellH = (int)(effFontSize * SS + 8);
+    g_textAspectRatio = (g_charAtlasCellH > 0) ? (float)g_charAtlasCellW / (float)g_charAtlasCellH : 1.0f;
+    UINT atlasW = (UINT)(g_charAtlasCols * g_charAtlasCellW);
+    UINT atlasH = (UINT)(g_charAtlasRows * g_charAtlasCellH);
+    // 钳制到 D3D11 纹理上限，必要时降低超采样
+    const UINT maxTexDim = D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION;
+    while ((atlasW > maxTexDim || atlasH > maxTexDim) && SS > 1.0f) {
+        SS -= 0.5f;
+        g_charAtlasCellW = (int)(effFontSize * maxPhraseLen * SS + 16);
+        g_charAtlasCellH = (int)(effFontSize * SS + 8);
+        g_textAspectRatio = (g_charAtlasCellH > 0) ? (float)g_charAtlasCellW / (float)g_charAtlasCellH : 1.0f;
+        atlasW = (UINT)(g_charAtlasCols * g_charAtlasCellW);
+        atlasH = (UINT)(g_charAtlasRows * g_charAtlasCellH);
+    }
+
+    // 创建 D3D11 纹理
+    // surface/bitmap 一并释放：它们绑定在这张纹理上，不能跨纹理复用
+    ReleaseCharAtlasTarget();
+    if (g_pCharAtlasTex) { g_pCharAtlasTex->Release(); g_pCharAtlasTex = nullptr; }
+    if (g_pCharAtlasSRV) { g_pCharAtlasSRV->Release(); g_pCharAtlasSRV = nullptr; }
+
+    D3D11_TEXTURE2D_DESC texDesc = {};
+    texDesc.Width = atlasW;
+    texDesc.Height = atlasH;
+    texDesc.MipLevels = 1;
+    texDesc.ArraySize = 1;
+    texDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    texDesc.SampleDesc.Count = 1;
+    texDesc.Usage = D3D11_USAGE_DEFAULT;
+    texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+    texDesc.CPUAccessFlags = 0;
+    if (FAILED(g_pD3DDevice->CreateTexture2D(&texDesc, nullptr, &g_pCharAtlasTex))) { Wh_Log(L"[CharAtlas] CreateTexture2D FAILED"); return; }
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format = texDesc.Format;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MipLevels = 1;
+    if (FAILED(g_pD3DDevice->CreateShaderResourceView(g_pCharAtlasTex, &srvDesc, &g_pCharAtlasSRV))) { Wh_Log(L"[CharAtlas] CreateSRV FAILED");
+        g_pCharAtlasTex->Release(); g_pCharAtlasTex = nullptr; return;
+    }
+
+    // 绑定 D2D 绘制目标。这一对 surface/bitmap **缓存下来**，供 [tag] 动态刷新复用：
+    // 每秒重建一次走完 QueryInterface + CreateBitmapFromDxgiSurface 足以造成周期性掉帧。
+    if (FAILED(g_pCharAtlasTex->QueryInterface(__uuidof(IDXGISurface), (void**)&g_pCharAtlasSurface))) {
+        Wh_Log(L"[CharAtlas] QueryInterface(IDXGISurface) FAILED"); return;
+    }
+    D2D1_BITMAP_PROPERTIES1 bmpProps = D2D1::BitmapProperties1(
+        D2D1_BITMAP_OPTIONS_TARGET,
+        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+    if (FAILED(g_pD2DDC->CreateBitmapFromDxgiSurface(g_pCharAtlasSurface, &bmpProps, &g_pCharAtlasBmp))) {
+        Wh_Log(L"[CharAtlas] CreateBitmapFromDxgiSurface FAILED");
+        ReleaseCharAtlasTarget();
+        return;
+    }
+    RedrawCharAtlas();
+    Wh_Log(L"[CharAtlas] built OK, atlasW=%d atlasH=%d phrases=%d cols=%d rows=%d cellW=%d", atlasW, atlasH, (int)g_atlasChars.size(), g_charAtlasCols, g_charAtlasRows, g_charAtlasCellW);
+}
+
+// [tag] 动态跟随：值变了才重画，且**只重画内容不重建资源**（纹理/SRV/surface/bitmap 全部复用）。
+static RedrawOutcome UpdateCharAtlasTagsImpl() {
+    if (g_textTagMode == 0) return RedrawOutcome::NoChange;  // 静态：值已冻结
+    if (!g_pD2DDC || !g_pCharAtlasBmp || !g_pSolidOuterBrush || g_atlasChars.empty())
+        return RedrawOutcome::NoChange;
+    std::vector<std::wstring> phrases;
+    SplitAndExpandPhrases(phrases);
+    if (phrases == g_lastExpandedPhrases) return RedrawOutcome::NoChange;   // 值没变，什么都不做
+    int maxPhraseLen = 1;
+    std::vector<std::wstring> cells;
+    std::vector<int> cStart, cCount;
+    BuildCellsFromPhrases(phrases, cells, cStart, cCount, maxPhraseLen);
+    // 结构变了（格子数/最长码点变化）就必须全量重建，否则只重画内容即可
+    int curMax = 1;
+    for (const auto &s : g_atlasChars) { int l = TextCodePointLen(s); if (l > curMax) curMax = l; }
+    if (cells.size() != g_atlasChars.size() || maxPhraseLen != curMax)
+        return RedrawOutcome::NeedRebuild;
+    g_atlasChars.swap(cells);
+    g_phraseChunkStart.swap(cStart);
+    g_phraseChunkCount.swap(cCount);
+    g_lastExpandedPhrases = phrases;
+    RedrawCharAtlas();
+    return RedrawOutcome::Redrawn;
+}
+// 渲染线程入口：节流 + 执行刷新
+static void UpdateCharAtlasTags() {
+    if (g_particleShape != 10) return;
+    ConsumeTagCacheInvalidation();
+    if (g_textTagMode == 0) return;  // 静态：值已冻结
+    static DWORD s_lastTagCheckMs = 0;
+    DWORD now = GetTickCount();
+    // 最细的时间标签按秒变化，250ms 足够细，同时避免每帧都去取系统时间
+    if (now - s_lastTagCheckMs < 250) return;
+    s_lastTagCheckMs = now;
+    RedrawOutcome oc = UpdateCharAtlasTagsImpl();
+    if (oc == RedrawOutcome::NeedRebuild) {
+        // 例如 9:59:59 -> 10:00:00 导致位数变多：必须按新宽度重建布局
+        BuildCharAtlas();
+    }
+}
+static void ReleaseNativeRendering();  // 前向声明，供 InitNativeRendering 失败清理调用
+
+static bool CompileShader(const char* source, const char* entry, const char* target, ID3DBlob** blob) {
+    ID3DBlob* error = nullptr;
+    HRESULT hr = D3DCompile(source, strlen(source), nullptr, nullptr, nullptr, entry, target,
+                            D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, blob, &error);
+    if (FAILED(hr)) {
+        if (error) {
+            Wh_Log(L"NativeD3D: shader compile failed: %S", (char*)error->GetBufferPointer());
+            error->Release();
+        }
+        return false;
+    }
+    if (error) error->Release();
+    return true;
+}
+
+// ===================== v3.4.2.2 后处理链辅助函数 / post-processing chain helpers =====================
+// 后处理链是否需要运行（不含「必须写后台缓冲」的 HDR 编码趟）
+static bool NeedPostChain() {
+    if (g_enableBloom) return true;
+    if (g_enableTemporalBlur) return true;
+    if (g_postAA != 0) return true;
+    return false;
+}
+
+// HDR 编码是否为必须的最后一趟（仅当线性色彩空间已成功生效时才需要）
+static bool NeedHDREncode() {
+    return g_hdrColorSpaceApplied;
+}
+
+// 释放全部后处理渲染目标（幂等，可在多条恢复路径重复调用）/ release all post targets (idempotent)
+static void ReleasePostTargets() {
+    if (g_pSceneSRV) { g_pSceneSRV->Release(); g_pSceneSRV = nullptr; }
+    if (g_pSceneRTV) { g_pSceneRTV->Release(); g_pSceneRTV = nullptr; }
+    if (g_pSceneTex) { g_pSceneTex->Release(); g_pSceneTex = nullptr; }
+    if (g_pPostSRV) { g_pPostSRV->Release(); g_pPostSRV = nullptr; }
+    if (g_pPostRTV) { g_pPostRTV->Release(); g_pPostRTV = nullptr; }
+    if (g_pPostTex) { g_pPostTex->Release(); g_pPostTex = nullptr; }
+    if (g_pHistorySRV) { g_pHistorySRV->Release(); g_pHistorySRV = nullptr; }
+    if (g_pHistoryRTV) { g_pHistoryRTV->Release(); g_pHistoryRTV = nullptr; }
+    if (g_pHistoryTex) { g_pHistoryTex->Release(); g_pHistoryTex = nullptr; }
+    for (int i = 0; i < kPostBloomLevels; i++) {
+        if (g_pBloomSRV[i]) { g_pBloomSRV[i]->Release(); g_pBloomSRV[i] = nullptr; }
+        if (g_pBloomRTV[i]) { g_pBloomRTV[i]->Release(); g_pBloomRTV[i] = nullptr; }
+        if (g_pBloomTex[i]) { g_pBloomTex[i]->Release(); g_pBloomTex[i] = nullptr; }
+    }
+    g_postRTW = 0;
+    g_postRTH = 0;
+    g_postRTFormat = 0;
+    g_postRTsFresh = false;
+}
+
+// 创建单个后处理颜色目标（RTV + SRV，非 MSAA，与交换链同格式）
+static bool CreatePostColorTarget(int w, int h, DXGI_FORMAT fmt,
+                                  ID3D11Texture2D **tex, ID3D11RenderTargetView **rtv,
+                                  ID3D11ShaderResourceView **srv) {
+    if (!g_pD3DDevice || w < 1 || h < 1) return false;
+    D3D11_TEXTURE2D_DESC d = {};
+    d.Width = (UINT)w;
+    d.Height = (UINT)h;
+    d.MipLevels = 1;
+    d.ArraySize = 1;
+    d.Format = fmt;
+    d.SampleDesc.Count = 1;
+    d.SampleDesc.Quality = 0;
+    d.Usage = D3D11_USAGE_DEFAULT;
+    d.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    d.MiscFlags = 0;
+    if (FAILED(g_pD3DDevice->CreateTexture2D(&d, nullptr, tex)) || !*tex) return false;
+    if (FAILED(g_pD3DDevice->CreateRenderTargetView(*tex, nullptr, rtv)) || !*rtv) return false;
+    if (FAILED(g_pD3DDevice->CreateShaderResourceView(*tex, nullptr, srv)) || !*srv) return false;
+    return true;
+}
+
+// 惰性保证后处理链所需目标存在且尺寸/格式正确；全部特效关闭时释放目标（零占用）
+// 说明：本函数同时被 RecreateSwapChain（尺寸变化）和渲染路径（设置运行中变化）调用，
+// 因此设置切换无需重建交换链也能立即生效。
+static bool EnsurePostTargets(int w, int h) {
+    if (!g_pD3DDevice) return false;
+    bool needChain = NeedPostChain();
+    bool needHDR = NeedHDREncode();
+    if (!needChain && !needHDR) {
+        // 全部关闭：释放（仅在确实有目标存在时才做释放遍历，保证关闭态几乎零开销）
+        if (g_postRTFormat != 0) ReleasePostTargets();
+        return false;
+    }
+    if (w < 1 || h < 1) return false;
+
+    bool needHist = g_enableTemporalBlur;  // 历史帧仅在时序模糊开启时分配
+    bool needBloom = g_enableBloom;
+    bool missing = (!g_pSceneTex || !g_pSceneRTV || !g_pSceneSRV)
+                || (needChain && (!g_pPostTex || !g_pPostRTV || !g_pPostSRV))
+                || (needHist && (!g_pHistoryTex || !g_pHistoryRTV || !g_pHistorySRV));
+    if (needBloom && !missing) {
+        for (int i = 0; i < kPostBloomLevels; i++) {
+            if (!g_pBloomTex[i] || !g_pBloomRTV[i] || !g_pBloomSRV[i]) { missing = true; break; }
+        }
+    }
+    bool sameTarget = (g_postRTW == w && g_postRTH == h && g_postRTFormat == (int)g_swapChainFormat);
+    if (sameTarget && !missing) return true;
+
+    ReleasePostTargets();
+    if (!CreatePostColorTarget(w, h, g_swapChainFormat, &g_pSceneTex, &g_pSceneRTV, &g_pSceneSRV)) {
+        Wh_Log(L"PostChain: scene target creation failed");
+        ReleasePostTargets();
+        return false;
+    }
+    if (needChain) {
+        if (!CreatePostColorTarget(w, h, g_swapChainFormat, &g_pPostTex, &g_pPostRTV, &g_pPostSRV)) {
+            Wh_Log(L"PostChain: ping-pong target creation failed");
+            ReleasePostTargets();
+            return false;
+        }
+    }
+    if (needHist) {
+        if (!CreatePostColorTarget(w, h, g_swapChainFormat, &g_pHistoryTex, &g_pHistoryRTV, &g_pHistorySRV)) {
+            Wh_Log(L"PostChain: history target creation failed");
+            ReleasePostTargets();
+            return false;
+        }
+    }
+    if (needBloom) {
+        int hw = w / 2; if (hw < 1) hw = 1;
+        int hh = h / 2; if (hh < 1) hh = 1;
+        int qw = w / 4; if (qw < 1) qw = 1;
+        int qh = h / 4; if (qh < 1) qh = 1;
+        for (int i = 0; i < kPostBloomLevels; i++) {
+            int bw = (i < 2) ? hw : qw;
+            int bh = (i < 2) ? hh : qh;
+            if (!CreatePostColorTarget(bw, bh, g_swapChainFormat, &g_pBloomTex[i], &g_pBloomRTV[i], &g_pBloomSRV[i])) {
+                Wh_Log(L"PostChain: bloom target %d creation failed", i);
+                ReleasePostTargets();
+                return false;
+            }
+        }
+    }
+    g_postRTW = w;
+    g_postRTH = h;
+    g_postRTFormat = (int)g_swapChainFormat;
+    g_postRTsFresh = true;  // 新目标内容未定义：历史帧必须清除
+    Wh_Log(L"PostChain: targets ready (%dx%d, fmt=%d, bloom=%d, temporal=%d)",
+           w, h, (int)g_swapChainFormat, (int)needBloom, (int)needHist);
+    return true;
+}
+
+// 绘制一次全屏四边形后处理通道：不透明覆盖、最多绑定 3 个 SRV、写入指定常量缓冲
+// reuseState=true 时跳过与上一趟完全相同的管线状态（输入布局/拓扑/顶点缓冲/VS/采样器），
+// 只切换 RTV / PS / SRV / CB —— 后处理链连续多趟之间这些状态从不变化。
+// With reuseState=true the pipeline state identical to the previous pass (input layout / topology /
+// vertex buffer / VS / sampler) is skipped: only RTV, PS, SRVs and CB are rebound. Consecutive
+// post passes never change those states.
+static void DrawPostPass(ID3D11RenderTargetView *rtv, ID3D11PixelShader *ps,
+                         ID3D11ShaderResourceView *const *srvs, int srvCount,
+                         ID3D11Buffer *cbBuf, const float *cbData, int cbFloats,
+                         bool reuseState = false) {
+    if (!g_pD3DContext || !rtv || !ps) return;
+    if (!g_pBlitVB || !g_pBlitLayout || !g_pBlitVS || !g_pBlitSampler) return;
+    g_pD3DContext->OMSetRenderTargets(1, &rtv, nullptr);
+    g_pD3DContext->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);  // 不透明覆盖
+    if (!reuseState) {
+        g_pD3DContext->IASetInputLayout(g_pBlitLayout);
+        g_pD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+        UINT stride = 16, offset = 0;
+        g_pD3DContext->IASetVertexBuffers(0, 1, &g_pBlitVB, &stride, &offset);
+        g_pD3DContext->VSSetShader(g_pBlitVS, nullptr, 0);
+        g_pD3DContext->PSSetSamplers(0, 1, &g_pBlitSampler);
+    }
+    g_pD3DContext->PSSetShader(ps, nullptr, 0);
+    // 固定绑定 3 个槽位（未使用的置空），避免上一趟残留的 SRV 与本次 RTV 形成读写别名
+    ID3D11ShaderResourceView *bindSrv[3] = {nullptr, nullptr, nullptr};
+    for (int i = 0; i < srvCount && i < 3 && srvs; i++) bindSrv[i] = srvs[i];
+    g_pD3DContext->PSSetShaderResources(0, 3, bindSrv);
+    if (cbBuf && cbData && cbFloats > 0) {
+        D3D11_MAPPED_SUBRESOURCE m;
+        if (SUCCEEDED(g_pD3DContext->Map(cbBuf, 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) {
+            memcpy(m.pData, cbData, (size_t)cbFloats * sizeof(float));
+            g_pD3DContext->Unmap(cbBuf, 0);
+        }
+        g_pD3DContext->PSSetConstantBuffers(0, 1, &cbBuf);
+    }
+    g_pD3DContext->Draw(4, 0);
+}
+
+// 执行后处理链：泛光 → 时序累积 → FXAA → HDR 编码，最后一趟不透明写入后台缓冲
+// 顺序说明
+//   - FXAA 需要「最终分辨率、已完成合成的图像」，因此放在泛光/时序之后；
+//   - HDR 编码是颜色空间的最后一步（线性化/增益/色调映射/传输函数），必须最后执行。
+//   - 时序累积放在泛光之后，使泛光光晕也被累积进残像，避免泛光闪烁。
+static void RunPostChain(ID3D11RenderTargetView *pBackRTV, int w, int h) {
+    if (!g_pD3DContext || !pBackRTV || !g_pSceneRTV || !g_pSceneSRV || w < 1 || h < 1) return;
+
+    float cb[16];
+    // 视口固定为输出分辨率；显式绑定光栅化状态（CULL_NONE），保证全屏四边形不会被剔除
+    D3D11_VIEWPORT vp = {0, 0, (float)w, (float)h, 0, 1};
+    g_pD3DContext->RSSetViewports(1, &vp);
+    g_pD3DContext->RSSetState(g_pRasterState);
+
+    ID3D11ShaderResourceView *cur = g_pSceneSRV;  // 当前全分辨率图像
+    bool curIsScene = true;  // cur 是否指向 scene 纹理
+
+    // 各趟共用同一套全屏管线状态：首趟完整绑定，之后每趟复用，省下重复的 IA/VB/VS/采样器设置
+    bool postStateBound = false;
+    auto PostPass = [&](ID3D11RenderTargetView *rtv, ID3D11PixelShader *ps,
+                        ID3D11ShaderResourceView *const *srvs, int n,
+                        ID3D11Buffer *cbBuf, const float *cbData, int cbFloats) {
+        DrawPostPass(rtv, ps, srvs, n, cbBuf, cbData, cbFloats, postStateBound);
+        postStateBound = true;
+    };
+
+    // ---- R3 泛光 / bloom：亮部提取 → 1/2 与 1/4 两级模糊 → 加性叠加 ----
+    if (g_enableBloom && g_pBloomThresholdPS && g_pBloomBlurPS && g_pBloomCompositePS
+        && g_pBloomRTV[0] && g_pBloomSRV[0] && g_pBloomRTV[1] && g_pBloomSRV[1]
+        && g_pBloomRTV[2] && g_pBloomSRV[2] && g_pBloomRTV[3] && g_pBloomSRV[3]) {
+        int hw = w / 2; if (hw < 1) hw = 1;
+        int hh = h / 2; if (hh < 1) hh = 1;
+        int qw = w / 4; if (qw < 1) qw = 1;
+        int qh = h / 4; if (qh < 1) qh = 1;
+        // 泛光阈值波动：阈值起伏会让光斑忽亮忽淡
+        float thr = FxApply(g_bloomThreshold / 100.0f, g_fxBloomThrMul);
+        float knee = fmaxf(thr * 0.5f, 0.02f);
+
+        // 1a. 亮部提取 + 降采样到 1/2
+        memset(cb, 0, sizeof(cb));
+        cb[0] = 1.0f / (float)w;  cb[1] = 1.0f / (float)h;
+        cb[2] = 1.0f / (float)hw; cb[3] = 1.0f / (float)hh;
+        cb[4] = thr; cb[5] = knee;
+        PostPass(g_pBloomRTV[0], g_pBloomThresholdPS, &cur, 1, g_pPostCB, cb, 16);
+
+        // 1b/1c. 1/2 分辨率水平 + 垂直高斯
+        memset(cb, 0, sizeof(cb));
+        cb[0] = 1.0f / (float)hw; cb[1] = 1.0f / (float)hh;
+        cb[4] = 1.0f; cb[5] = 0.0f;
+        PostPass(g_pBloomRTV[1], g_pBloomBlurPS, &g_pBloomSRV[0], 1, g_pPostCB, cb, 16);
+        cb[4] = 0.0f; cb[5] = 1.0f;
+        PostPass(g_pBloomRTV[0], g_pBloomBlurPS, &g_pBloomSRV[1], 1, g_pPostCB, cb, 16);
+
+        // 1d. 1/2 → 1/4 降采样（复用 SSAA blit：filterMode = 0 即单次双线性采样）
+        {
+            float bd[8];
+            bd[0] = 1.0f / (float)hw; bd[1] = 1.0f / (float)hh;
+            bd[2] = 0.0f;  // filterMode 0 = 单次采样
+            bd[3] = 0.0f;   // sharpness
+            bd[4] = 1.0f;   // scale（filterMode 0 时不参与运算）/ unused when filterMode == 0
+            bd[5] = 0.0f; bd[6] = 0.0f; bd[7] = 0.0f;
+            PostPass(g_pBloomRTV[2], g_pBlitPS, &g_pBloomSRV[0], 1, g_pBlitCB, bd, 8);
+        }
+
+        // 1e/1f. 1/4 分辨率水平 + 垂直高斯
+        memset(cb, 0, sizeof(cb));
+        cb[0] = 1.0f / (float)qw; cb[1] = 1.0f / (float)qh;
+        cb[4] = 1.0f; cb[5] = 0.0f;
+        PostPass(g_pBloomRTV[3], g_pBloomBlurPS, &g_pBloomSRV[2], 1, g_pPostCB, cb, 16);
+        cb[4] = 0.0f; cb[5] = 1.0f;
+        PostPass(g_pBloomRTV[2], g_pBloomBlurPS, &g_pBloomSRV[3], 1, g_pPostCB, cb, 16);
+
+        // 1g. 把两级泛光加性叠加回场景
+        {
+            ID3D11RenderTargetView *dstRTV = curIsScene ? g_pPostRTV : g_pSceneRTV;
+            ID3D11ShaderResourceView *dstSRV = curIsScene ? g_pPostSRV : g_pSceneSRV;
+            if (dstRTV) {
+                ID3D11ShaderResourceView *srvs[3] = {cur, g_pBloomSRV[0], g_pBloomSRV[2]};
+                memset(cb, 0, sizeof(cb));
+                // 泛光呼吸：启用后强度随时间脉动（夹在 0~1，不会溢出）
+                cb[4] = FxApply(g_bloomIntensity / 100.0f, g_fxBloomMul);
+                PostPass(dstRTV, g_pBloomCompositePS, srvs, 3, g_pPostCB, cb, 16);
+                cur = dstSRV;
+                curIsScene = !curIsScene;
+            }
+        }
+    }
+
+    // ---- R1 时序累积 / temporal accumulation ----
+    if (g_enableTemporalBlur && g_pTemporalPS && g_pHistoryRTV && g_pHistorySRV && g_pHistoryTex) {
+        // 目标刚重建、或拖尾刚从空闲状态重新出现时，把历史帧清除为透明黑，避免首帧出现残留
+        if (g_postRTsFresh || g_history.size() <= 1) {
+            float histClear[4] = {0, 0, 0, 0};
+            g_pD3DContext->ClearRenderTargetView(g_pHistoryRTV, histClear);
+        }
+        g_postRTsFresh = false;
+
+        ID3D11RenderTargetView *dstRTV = curIsScene ? g_pPostRTV : g_pSceneRTV;
+        ID3D11ShaderResourceView *dstSRV = curIsScene ? g_pPostSRV : g_pSceneSRV;
+        if (dstRTV) {
+            ID3D11ShaderResourceView *srvs[2] = {cur, g_pHistorySRV};
+            memset(cb, 0, sizeof(cb));
+            cb[4] = fminf(FxApply(g_temporalBlurAmount / 100.0f, g_fxBlurMul), 0.95f);  // k = 上一帧保留比例, clamp to avoid freezing
+            PostPass(dstRTV, g_pTemporalPS, srvs, 2, g_pPostCB, cb, 16);
+            cur = dstSRV;
+            curIsScene = !curIsScene;
+
+            // 把结果写入历史纹理供下一帧使用（读 dstSRV、写 historyRTV，是两张不同纹理，不会读写别名）
+            float bd[8];
+            bd[0] = 1.0f / (float)w; bd[1] = 1.0f / (float)h;
+            bd[2] = 0.0f; bd[3] = 0.0f; bd[4] = 1.0f;
+            bd[5] = 0.0f; bd[6] = 0.0f; bd[7] = 0.0f;
+            PostPass(g_pHistoryRTV, g_pBlitPS, &cur, 1, g_pBlitCB, bd, 8);
+        }
+    }
+
+    // ---- R2 后处理抗锯齿 / FXAA（在伽马编码空间、最终分辨率上执行）- ----
+    if (g_postAA != 0 && g_pFXAAPS) {
+        ID3D11RenderTargetView *dstRTV = curIsScene ? g_pPostRTV : g_pSceneRTV;
+        ID3D11ShaderResourceView *dstSRV = curIsScene ? g_pPostSRV : g_pSceneSRV;
+        if (dstRTV) {
+            memset(cb, 0, sizeof(cb));
+            cb[2] = 1.0f / (float)w;   // outTexelSize.x
+            cb[3] = 1.0f / (float)h;   // outTexelSize.y
+            cb[4] = (g_postAA >= 2) ? 2.0f : 1.0f;  // 质量档位
+            PostPass(dstRTV, g_pFXAAPS, &cur, 1, g_pPostCB, cb, 16);
+            cur = dstSRV;
+            curIsScene = !curIsScene;
+        }
+    }
+
+    // ---- R5 HDR 编码（最后一趟）/ HDR encode (final pass) ----
+    // 线性色彩空间生效时，伽马编码场景必须先线性化再按目标传输函数编码；
+    // 否则只需把最终图像 1:1 不透明拷贝到后台缓冲。
+    if (NeedHDREncode() && g_pHDREncodePS) {
+        memset(cb, 0, sizeof(cb));
+        cb[2] = 1.0f / (float)w;
+        cb[3] = 1.0f / (float)h;
+        cb[4] = (g_swapChainFormat == DXGI_FORMAT_R10G10B10A2_UNORM) ? 2.0f : 1.0f;  // 1=scRGB 2=PQ
+        // HDR 高光增益原值域 0~2（hdr_highlight_boost 0-200%），所以这里【不能】用会夹到 1 的
+        // FxApply，否则只要超过 50% 就被截断、把用户的设置改小。只乘系数并留出余量。
+        cb[5] = fminf((g_hdrHighlightBoost / 100.0f) * g_fxHdrMul, 4.0f);  // 0..2 增益倍率
+        cb[6] = (float)g_hdrTonemap;               // 0=off 1=reinhard 2=aces
+        PostPass(pBackRTV, g_pHDREncodePS, &cur, 1, g_pPostCB, cb, 16);
+    } else if (g_pBlitPS) {
+        float bd[8];
+        bd[0] = 1.0f / (float)w; bd[1] = 1.0f / (float)h;
+        bd[2] = 0.0f; bd[3] = 0.0f; bd[4] = 1.0f;
+        bd[5] = 0.0f; bd[6] = 0.0f; bd[7] = 0.0f;
+        PostPass(pBackRTV, g_pBlitPS, &cur, 1, g_pBlitCB, bd, 8);
+    }
+
+    // 解绑 SRV，避免残留引用
+    ID3D11ShaderResourceView *nullSrv[3] = {nullptr, nullptr, nullptr};
+    g_pD3DContext->PSSetShaderResources(0, 3, nullSrv);
+}
+
+static bool InitNativeRendering() {
+    if (!g_pD3DDevice) return false;
+    ReleaseNativeRendering();  // 幂等：清理可能的残留对象
+
+    // 编译着色器
+    // bvsBlob/bpsBlob 必须声明在 do 之外：blit 着色器编译/创建失败时会 break，若声明在 do 内部
+    // 则 break 会跳过它们各自的 Release，造成 ID3DBlob 泄漏。统一放到函数末尾释放。
+    ID3DBlob *vsBlob = nullptr, *psBlob = nullptr;
+    ID3DBlob *pvsBlob = nullptr, *ppsBlob = nullptr;
+    ID3DBlob *bvsBlob = nullptr, *bpsBlob = nullptr;
+    bool ok = false;
+    do {
+        if (!CompileShader(g_vsShader, "VSMain", "vs_4_0", &vsBlob)) break;
+        if (!CompileShader(g_psShader, "PSMain", "ps_4_0", &psBlob)) break;
+        if (!CompileShader(g_particleVS, "VSMain", "vs_4_0", &pvsBlob)) break;
+        if (!CompileShader(g_particlePS, "PSMain", "ps_4_0", &ppsBlob)) break;
+
+        if (FAILED(g_pD3DDevice->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &g_pNativeVS))) break;
+        if (FAILED(g_pD3DDevice->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &g_pNativePS))) break;
+        if (FAILED(g_pD3DDevice->CreateVertexShader(pvsBlob->GetBufferPointer(), pvsBlob->GetBufferSize(), nullptr, &g_pParticleVS))) break;
+        if (FAILED(g_pD3DDevice->CreatePixelShader(ppsBlob->GetBufferPointer(), ppsBlob->GetBufferSize(), nullptr, &g_pParticlePS))) break;
+
+        // 编译 SSAA blit 着色器（blob 已在 do 外声明）/ Compile SSAA blit shaders (blobs declared above)
+        if (!CompileShader(g_blitVS, "VSMain", "vs_4_0", &bvsBlob)) break;
+        if (!CompileShader(g_blitPS, "PSMain", "ps_4_0", &bpsBlob)) break;
+        if (FAILED(g_pD3DDevice->CreateVertexShader(bvsBlob->GetBufferPointer(), bvsBlob->GetBufferSize(), nullptr, &g_pBlitVS))) break;
+        if (FAILED(g_pD3DDevice->CreatePixelShader(bpsBlob->GetBufferPointer(), bpsBlob->GetBufferSize(), nullptr, &g_pBlitPS))) break;
+
+        // blit 输入布局（POSITION float2 + TEXCOORD0 float2）/ blit input layout (POSITION float2 + TEXCOORD0 float2)
+        {
+            D3D11_INPUT_ELEMENT_DESC blitLayoutDesc[] = {
+                {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 8, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            };
+            g_pD3DDevice->CreateInputLayout(blitLayoutDesc, 2, bvsBlob->GetBufferPointer(),
+                                            bvsBlob->GetBufferSize(), &g_pBlitLayout);
+        }
+
+        // 创建全屏四边形 VB（NDC 坐标 + UV）/ Create fullscreen quad VB (NDC coords + UV)
+        {
+            float quadVerts[] = {
+                -1.0f, -1.0f,  0.0f, 1.0f,
+                 1.0f, -1.0f,  1.0f, 1.0f,
+                -1.0f,  1.0f,  0.0f, 0.0f,
+                 1.0f,  1.0f,  1.0f, 0.0f,
+            };
+            D3D11_BUFFER_DESC vbDesc = {};
+            vbDesc.Usage = D3D11_USAGE_DEFAULT;
+            vbDesc.ByteWidth = sizeof(quadVerts);
+            vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+            D3D11_SUBRESOURCE_DATA vbInit = {};
+            vbInit.pSysMem = quadVerts;
+            g_pD3DDevice->CreateBuffer(&vbDesc, &vbInit, &g_pBlitVB);
+        }
+        // 创建双线性采样器
+        {
+            D3D11_SAMPLER_DESC sampDesc = {};
+            sampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+            sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+            sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+            sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+            sampDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+            g_pD3DDevice->CreateSamplerState(&sampDesc, &g_pBlitSampler);
+        }
+        // v3.4.2.1：blit 常量缓冲（texelSize
+        {
+            D3D11_BUFFER_DESC bcbDesc = {};
+            bcbDesc.ByteWidth = 32;  // 8 float，16字节对齐
+            bcbDesc.Usage = D3D11_USAGE_DYNAMIC;
+            bcbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            bcbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+            g_pD3DDevice->CreateBuffer(&bcbDesc, nullptr, &g_pBlitCB);
+        }
+
+        // v3.4.2.2：后处理链着色器（R1/R2/R3/R5）+ 共用常量缓冲（与尺寸无关，仅此处创建）
+        // 编译/创建失败不会中断原生渲染初始化，只是渲染时自动跳过对应通道（优雅降级）。
+        {
+            struct PostShaderDef { const char *src; ID3D11PixelShader **out; const char *name; };
+            PostShaderDef defs[6] = {
+                { g_postTemporalPS,       &g_pTemporalPS,       "temporal" },
+                { g_postFXAAPS,           &g_pFXAAPS,           "fxaa" },
+                { g_postBloomThresholdPS, &g_pBloomThresholdPS, "bloom_threshold" },
+                { g_postBloomBlurPS,      &g_pBloomBlurPS,      "bloom_blur" },
+                { g_postBloomCompositePS, &g_pBloomCompositePS, "bloom_composite" },
+                { g_postHDREncodePS,      &g_pHDREncodePS,      "hdr_encode" },
+            };
+            for (int i = 0; i < 6; i++) {
+                ID3DBlob *postBlob = nullptr;
+                if (!CompileShader(defs[i].src, "PSMain", "ps_4_0", &postBlob)) {
+                    Wh_Log(L"NativeD3D: post shader '%S' compile failed, pass disabled", defs[i].name);
+                    continue;
+                }
+                if (FAILED(g_pD3DDevice->CreatePixelShader(postBlob->GetBufferPointer(),
+                                                           postBlob->GetBufferSize(), nullptr, defs[i].out))) {
+                    Wh_Log(L"NativeD3D: post shader '%S' creation failed, pass disabled", defs[i].name);
+                }
+                postBlob->Release();
+            }
+            // 后处理共用常量缓冲：64 字节 = 16 float（布局见着色器内注释）
+            D3D11_BUFFER_DESC pcbDesc = {};
+            pcbDesc.ByteWidth = 64;
+            pcbDesc.Usage = D3D11_USAGE_DYNAMIC;
+            pcbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            pcbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+            g_pD3DDevice->CreateBuffer(&pcbDesc, nullptr, &g_pPostCB);
+        }
+
+        // 输入布局：通用顶点（位置+深度+颜色+u坐标+v坐标）/ Input layout: generic vertex (pos+depth+color+u+v)
+        D3D11_INPUT_ELEMENT_DESC layoutDesc[] = {
+            {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"TEXCOORD", 0, DXGI_FORMAT_R32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"TEXCOORD", 1, DXGI_FORMAT_R32_FLOAT, 0, 32, D3D11_INPUT_PER_VERTEX_DATA, 0},
+        };
+        if (FAILED(g_pD3DDevice->CreateInputLayout(layoutDesc, 4, vsBlob->GetBufferPointer(),
+                                                   vsBlob->GetBufferSize(), &g_pNativeLayout)))
+            break;
+
+        // 输入布局：粒子实例（位置+深度+颜色+大小+形状+旋转）/ Input layout: particle instance (pos+depth+color+size+shape+rot)
+        D3D11_INPUT_ELEMENT_DESC particleLayout[] = {
+            {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+            {"TEXCOORD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+            {"TEXCOORD", 2, DXGI_FORMAT_R32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+            {"TEXCOORD", 3, DXGI_FORMAT_R32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+            {"TEXCOORD", 4, DXGI_FORMAT_R32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+            {"TEXCOORD", 5, DXGI_FORMAT_R32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+        };
+        if (FAILED(g_pD3DDevice->CreateInputLayout(particleLayout, 7, pvsBlob->GetBufferPointer(),
+                                                   pvsBlob->GetBufferSize(), &g_pParticleLayout)))
+            break;
+
+        // 常量缓冲（包含屏幕尺寸、透视、渐变停止点）/ Constant buffer (screen size, perspective, gradient stops)
+        D3D11_BUFFER_DESC cbDesc = {};
+        cbDesc.ByteWidth = 448;  // v3.4.2.1：扩展到 112 float（新增质量/采样参数），对齐到 16 字节
+        cbDesc.Usage = D3D11_USAGE_DYNAMIC;
+        cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        if (FAILED(g_pD3DDevice->CreateBuffer(&cbDesc, nullptr, &g_pConstantBuffer))) break;
+
+        // 拖尾带顶点缓冲（动态，最大 4096 顶点）/ Trail strip vertex buffer (dynamic, max 4096 verts)
+        D3D11_BUFFER_DESC vbDesc = {};
+        vbDesc.ByteWidth = sizeof(VertexPosColor) * kMaxTrailVertices;
+        vbDesc.Usage = D3D11_USAGE_DYNAMIC;
+        vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        vbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        if (FAILED(g_pD3DDevice->CreateBuffer(&vbDesc, nullptr, &g_pTrailVB))) break;
+
+        // 粒子四边形（两个三角形组成的正方形）/ Particle quad (square made of two triangles)
+        float quadVerts[] = {
+            -1, -1,  1, -1,  -1, 1,
+             1, -1,  1,  1,  -1, 1,
+        };
+        D3D11_BUFFER_DESC quadDesc = {};
+        quadDesc.ByteWidth = sizeof(quadVerts);
+        quadDesc.Usage = D3D11_USAGE_IMMUTABLE;
+        quadDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        D3D11_SUBRESOURCE_DATA quadData = {quadVerts, 0, 0};
+        if (FAILED(g_pD3DDevice->CreateBuffer(&quadDesc, &quadData, &g_pParticleQuadVB))) break;
+
+        // 粒子实例缓冲（动态，最大 2000 实例）/ Particle instance buffer (dynamic, max 2000 instances per layer)
+        D3D11_BUFFER_DESC instDesc = {};
+        instDesc.ByteWidth = sizeof(ParticleInstance) * 4000;  // 发光层+正常层各最多2000
+        instDesc.Usage = D3D11_USAGE_DYNAMIC;
+        instDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        instDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        if (FAILED(g_pD3DDevice->CreateBuffer(&instDesc, nullptr, &g_pParticleInstanceBuf))) break;
+
+        // Alpha 混合状态
+        D3D11_BLEND_DESC blendDesc = {};
+        blendDesc.RenderTarget[0].BlendEnable = TRUE;
+        blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+        blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+        blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+        blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+        blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+        blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+        blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+        if (FAILED(g_pD3DDevice->CreateBlendState(&blendDesc, &g_pAlphaBlend))) break;
+
+        // 加法混合状态（发光用）/ Additive blend state (for glow effects)
+        D3D11_BLEND_DESC addBlendDesc = {};
+        addBlendDesc.RenderTarget[0].BlendEnable = TRUE;
+        addBlendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+        addBlendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;  // 加法混合
+        addBlendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+        addBlendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+        addBlendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
+        addBlendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+        addBlendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+        if (FAILED(g_pD3DDevice->CreateBlendState(&addBlendDesc, &g_pAdditiveBlend))) break;
+
+        // 光栅化状态
+        D3D11_RASTERIZER_DESC rastDesc = {};
+        rastDesc.FillMode = D3D11_FILL_SOLID;
+        rastDesc.CullMode = D3D11_CULL_NONE;
+        rastDesc.DepthClipEnable = FALSE;
+        rastDesc.MultisampleEnable = TRUE;
+        if (FAILED(g_pD3DDevice->CreateRasterizerState(&rastDesc, &g_pRasterState))) break;
+
+        // 字符图集采样器（线性过滤，边缘钳制）/ Char atlas sampler (linear filter, clamp)
+        D3D11_SAMPLER_DESC samplerDesc = {};
+        samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+        samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+        samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+        samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+        samplerDesc.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
+        samplerDesc.MinLOD = 0;
+        samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+        if (FAILED(g_pD3DDevice->CreateSamplerState(&samplerDesc, &g_pCharAtlasSampler))) break;
+
+        ok = true;
+    } while (false);
+
+    // 编译 blob 无论成败都释放
+    if (vsBlob) vsBlob->Release();
+    if (psBlob) psBlob->Release();
+    if (pvsBlob) pvsBlob->Release();
+    if (ppsBlob) ppsBlob->Release();
+    if (bvsBlob) bvsBlob->Release();
+    if (bpsBlob) bpsBlob->Release();
+
+    if (!ok) {
+        Wh_Log(L"NativeD3D: init failed, releasing partial resources");
+        ReleaseNativeRendering();
+        return false;
+    }
+    Wh_Log(L"NativeD3D: initialized successfully");
+    BuildCharAtlas();  // 构建字符图集
+    // v3.4.2.2：若交换链已就绪则立刻准备后处理目标，否则由渲染路径惰性创建
+    if (g_cachedVW > 0 && g_cachedVH > 0) EnsurePostTargets(g_cachedVW, g_cachedVH);
+    return true;
+}
+
+static void ReleaseNativeRendering() {
+    if (g_pNativeVS) { g_pNativeVS->Release(); g_pNativeVS = nullptr; }
+    if (g_pNativePS) { g_pNativePS->Release(); g_pNativePS = nullptr; }
+    if (g_pParticleVS) { g_pParticleVS->Release(); g_pParticleVS = nullptr; }
+    // 必须先于 g_pCharAtlasTex 释放：bitmap 持有 surface、surface 持有纹理，顺序反了会导致释放时
+    // 仍在引用已销毁的纹理。/ Must precede g_pCharAtlasTex: the bitmap holds the surface and the
+    ReleaseCharAtlasTarget();
+    if (g_pCharAtlasSRV) { g_pCharAtlasSRV->Release(); g_pCharAtlasSRV = nullptr; }
+    if (g_pCharAtlasTex) { g_pCharAtlasTex->Release(); g_pCharAtlasTex = nullptr; }
+    if (g_pParticlePS) { g_pParticlePS->Release(); g_pParticlePS = nullptr; }
+    if (g_pNativeLayout) { g_pNativeLayout->Release(); g_pNativeLayout = nullptr; }
+    if (g_pParticleLayout) { g_pParticleLayout->Release(); g_pParticleLayout = nullptr; }
+    if (g_pConstantBuffer) { g_pConstantBuffer->Release(); g_pConstantBuffer = nullptr; }
+    InvalidateConstantBuffer();  // 常量缓冲已释放，重置缓存避免用旧内容跳过新缓冲上传
+    if (g_pTrailVB) { g_pTrailVB->Release(); g_pTrailVB = nullptr; }
+    if (g_pParticleQuadVB) { g_pParticleQuadVB->Release(); g_pParticleQuadVB = nullptr; }
+    if (g_pParticleInstanceBuf) { g_pParticleInstanceBuf->Release(); g_pParticleInstanceBuf = nullptr; }
+    if (g_pAlphaBlend) { g_pAlphaBlend->Release(); g_pAlphaBlend = nullptr; }
+    if (g_pAdditiveBlend) { g_pAdditiveBlend->Release(); g_pAdditiveBlend = nullptr; }
+    if (g_pRasterState) { g_pRasterState->Release(); g_pRasterState = nullptr; }
+    if (g_pCharAtlasSampler) { g_pCharAtlasSampler->Release(); g_pCharAtlasSampler = nullptr; }
+    if (g_pBlitCB) { g_pBlitCB->Release(); g_pBlitCB = nullptr; }
+    // v3.4.2.2 后处理链：着色器/常量缓冲 与 尺寸相关目标一并释放（幂等，可重复调用）
+    if (g_pTemporalPS) { g_pTemporalPS->Release(); g_pTemporalPS = nullptr; }
+    if (g_pFXAAPS) { g_pFXAAPS->Release(); g_pFXAAPS = nullptr; }
+    if (g_pBloomThresholdPS) { g_pBloomThresholdPS->Release(); g_pBloomThresholdPS = nullptr; }
+    if (g_pBloomBlurPS) { g_pBloomBlurPS->Release(); g_pBloomBlurPS = nullptr; }
+    if (g_pBloomCompositePS) { g_pBloomCompositePS->Release(); g_pBloomCompositePS = nullptr; }
+    if (g_pHDREncodePS) { g_pHDREncodePS->Release(); g_pHDREncodePS = nullptr; }
+    if (g_pPostCB) { g_pPostCB->Release(); g_pPostCB = nullptr; }
+    ReleasePostTargets();
+}
+
+// P1-3（读侧）helper：g_bgLuminance 由后台背景采样线程异步发布，读侧先取本地快照再写入 cbuffer，
+// 避免读到跨批次撕裂的中间值。用 memcpy 取值是为了同时兼容写侧的普通 float / volatile float / atomic<float> 三种类型。
+static float SnapshotBgLuminance() {
+    float snap = 0.5f;
+    memcpy(&snap, (const void*)&g_bgLuminance, sizeof(snap));  // 整块取值
+    return snap;
+}
+
+// P2-6 helper：cbuffer 第 94 个 float（HLSL 侧 noiseSeed = cb0[23].z，cb0 一个寄存器 = 4 个 float）的种子派生。
+// 原做法 data[94] = (GetTickCount() >> 2) & 255：每 ~4ms 变一次，而活动期两次渲染间隔只有 1~3ms，
+//   → 「内容未变则跳过 Map/Unmap」的签名缓存几乎必然失效，每帧都要重传 448 字节。
+// 新做法：改为由「内容变更帧序号」派生 —— 只有 CB 内容真正变化时才推进序号（通常每帧一次），
+//   内容完全没变时复用上次种子，使整块缓冲与缓存逐字节相同，从而命中缓存跳过 Map/Unmap。
+static float ResolveNoiseSeed(bool contentUnchanged, float lastSeed) {
+    static unsigned int s_cbFrameSeq = 0;  // 帧序号：仅在内容变化时推进
+    if (contentUnchanged) return lastSeed;  // 内容未变：沿用上次种子，保证 memcmp 能命中缓存
+    ++s_cbFrameSeq;  // 内容变化（一般每帧一次）：种子推进 → 噪声/抖动图案仍逐帧不同
+    return (float)(s_cbFrameSeq & 255u);  // 与原实现同量纲 0~255
+}
+
+static void UpdateConstantBuffer(int width, int height, const GradData* cols = nullptr, bool force = false) {
+    if (!g_pConstantBuffer || !g_pD3DContext) return;
+    // 具名字段替代裸下标：data[73] 这种写法要靠注释才知道写的是什么，改名/插入字段时极易错位。
+    ShaderConstants buf = {};
+    // 未写入的项保持 0（与缓存比较时一致）/ keep unwritten entries 0 for consistent compare
+    memset(&buf, 0, sizeof(buf));
+
+    buf.screenSize[0] = (float)width;
+    buf.screenSize[1] = (float)height;
+    buf.perspective = g_enable25DEffect ? (float)g_perspectiveStrength / 100.0f : 0.0f;
+    buf.pad0 = 0.0f;
+
+    int gradCount = 0;
+    if (cols) {
+        for (int i = 0; i < GRAD_STOPS; i++) {
+            buf.gradient[i][0] = cols->outer[i].color.r;
+            buf.gradient[i][1] = cols->outer[i].color.g;
+            buf.gradient[i][2] = cols->outer[i].color.b;
+            buf.gradient[i][3] = cols->outer[i].color.a;
+        }
+        gradCount = GRAD_STOPS;
+    }
+    buf.gradientCount = gradCount;
+    // P1-3（读侧）：写侧由后台采样线程发布，读侧取快照避免撕裂
+    buf.bgLuminance = SnapshotBgLuminance();
+    buf.adaptiveFlag = g_adaptiveContrast ? 1.0f : 0.0f;
+    buf.smoothFlag = g_enableSmoothGradient ? 1.0f : 0.0f;
+    buf.edgeSoftness = FxApply(g_edgeSoftness / 100.0f, g_fxEdgeMul);  // 0=硬边，1=极柔和
+    buf.atlasRows = (float)(g_charAtlasRows > 0 ? g_charAtlasRows : 16);
+    buf.atlasCols = (float)(g_charAtlasCols > 0 ? g_charAtlasCols : 16);
+    buf.aaMode = (float)g_aaMode;
+    buf.textAspect = g_textAspectRatio;
+    {
+        float atlasWpx = (float)((g_charAtlasCols > 0 ? g_charAtlasCols : 16) * (g_charAtlasCellW > 0 ? g_charAtlasCellW : 64));
+        float atlasHpx = (float)((g_charAtlasRows > 0 ? g_charAtlasRows : 16) * (g_charAtlasCellH > 0 ? g_charAtlasCellH : 64));
+        float sw = (float)(g_particleStrokeWidth > 0 ? g_particleStrokeWidth : 0);
+        buf.strokeStepU = sw / atlasWpx;
+        buf.strokeStepV = sw / atlasHpx;
+        buf.strokeEnabled = (g_enableParticleStroke && sw > 0.0f) ? 1.0f : 0.0f;
+        buf.strokeAlphaMul = g_particleStrokeAlpha / 100.0f;
+        buf.strokeColorMode = (float)g_particleStrokeColorMode;
+        buf.strokeColorR = g_particleStrokeColor.r;
+        buf.strokeColorG = g_particleStrokeColor.g;
+        buf.strokeColorB = g_particleStrokeColor.b;
+        buf.strokeColorMul = 0.30f;  // auto 模式变暗系数
+        // SDF 形状描边单侧屏幕像素（图集 px → 屏幕 px 约 ÷2）/ one-side screen px (atlas px → screen px ≈ /2)
+        buf.strokeWidthPx = g_particleStrokeWidth * 0.5f;
+        buf.trailStrokeEnabled = g_enableTrailStroke ? 1.0f : 0.0f;
+        // 描边宽度流动：描边像在"呼吸"，配合发光会有流动感
+        buf.trailStrokeHalf = FxApply((float)(g_trailStrokeWidth > 0 ? g_trailStrokeWidth : 0) / 100.0f, g_fxStrokeMul);
+        buf.shaderQuality = (float)g_shaderQuality;              // 0=fast 1=balanced 2=high
+        buf.sdfSamples = (float)(g_shaderQuality > 0 ? g_sdfSamples : 1);  // fast 强制 1x
+        buf.ditherMode = (float)g_ditherMode;                    // 0=off 1=4x4 2=8x8 3=hash
+        buf.ditherStrength = FxApply(g_ditherStrength / 100.0f, g_fxDitherMul);          // 抖动幅度（色阶比例）/ dither amplitude
+        // HDR 为浮点格式，量化误差可忽略，直接关闭抖动
+        buf.pixelScale = g_isHDRMode ? 0.0f : (1.0f / 255.0f);
+        // P2-6：noiseSeed 不在块内直接取值 —— 需要先把「除自己以外的整块」与上次上传内容比对后
+        // 才能决定是推进还是复用，解析见下方
+        buf.pad3 = 0.0f;
+    }
+
+    // ---- P2-6：noiseSeed 按「内容变更帧序号」派生 / derive the seed from the content-change frame sequence ----
+    // 原来每 ~4ms 就变一次，让签名缓存形同虚设；现在只有 CB 内容真正变了才推进（一般每帧一次），
+    // 内容未变时复用旧种子，整块与 g_cbCache 逐字节相同 → 下面的 memcmp 命中 → 跳过昂贵的 Map/Unmap。
+    {
+        const size_t headBytes = (size_t)kCbSeedFloatIndex * sizeof(float);
+        const size_t tailBytes = sizeof(buf) - headBytes - sizeof(float);
+        const char* pNew = reinterpret_cast<const char*>(&buf);
+        const char* pOld = reinterpret_cast<const char*>(&g_cbCache);
+        // 只有 g_cbCacheValid 且「除种子自身外」的所有项都一致才算内容未变，所以拆成两段 memcmp
+        bool contentUnchanged = g_cbCacheValid &&
+            memcmp(pNew, pOld, headBytes) == 0 &&
+            memcmp(pNew + headBytes + sizeof(float), pOld + headBytes + sizeof(float), tailBytes) == 0;
+        buf.noiseSeed = ResolveNoiseSeed(contentUnchanged, g_cbCache.noiseSeed);
+    }
+
+    // 签名比对：若常量缓冲内容自上次上传后完全未变（含逐帧种子），则跳过昂贵的 Map/Unmap。
+    if (!force && g_cbCacheValid && memcmp(&buf, &g_cbCache, sizeof(buf)) == 0)
+        return;
+
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    if (SUCCEEDED(g_pD3DContext->Map(g_pConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
+        memcpy(mapped.pData, &buf, sizeof(buf));
+        g_pD3DContext->Unmap(g_pConstantBuffer, 0);
+        memcpy(&g_cbCache, &buf, sizeof(buf));
+        g_cbCacheValid = true;
+    }
+}
+
+// 前向声明：NativeRenderTrail / NativeRenderLineTrail 在本定义之前调用本函数
+static void SetNativeRenderState(int screenW, int screenH, D3D11_PRIMITIVE_TOPOLOGY topology, const GradData* cols);
+
+// 粒子 Instanced Rendering（v3 原生渲染，含发光层；一次 Map 写两层）
+static void NativeRenderParticles(int screenW, int screenH) {
+    if (!g_pParticleVS || !g_pParticlePS || !g_pParticleInstanceBuf || g_particles.empty()) return;
+    static bool loggedNative = false;
+    if (!loggedNative) { Wh_Log(L"[CharAtlas] NativeRenderParticles called, g_particleShape=%d, particles=%d", g_particleShape, (int)g_particles.size()); loggedNative = true; }
+
+
+    // 3D深度排序：z大的（后面）先渲染，z小的（前面）后渲染覆盖，实现前后遮挡
+    // 仅在漩涡活跃时排序，避免普通模式下的性能开销
+    bool anyVortexActive = false;
+    for (int i = 0; i < g_vortexMaxCount; i++) {
+        if (g_vortices[i].active && g_vortices[i].strength > 0.1f) { anyVortexActive = true; break; }
+    }
+    if (anyVortexActive && g_particles.size() < 800) {
+        std::sort(g_particles.begin(), g_particles.end(), [](const Particle &a, const Particle &b) {
+            return a.z > b.z;
+        });
+    }
+
+    DWORD now = GetTickCount();
+    const int MAX_PER_LAYER = 2000;
+
+    // 一次 Map，依次写入发光层（offset 0）和正常层（offset MAX_PER_LAYER）
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    if (FAILED(g_pD3DContext->Map(g_pParticleInstanceBuf, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
+    ParticleInstance* instances = (ParticleInstance*)mapped.pData;
+
+    int glowCount = 0, normalCount = 0;
+    float gi = g_particleGlowIntensity / 100.0f;
+    float glowSize = 1.6f + gi * 0.8f;
+    float glowAlpha = 0.2f + gi * 0.2f;
+    float glowColorMul = 1.2f + gi * 0.3f;
+
+    // 单次遍历同时填充两层，消除重复遍历和重复 Map
+    float sizeMul = g_particleSizeMultiplier / 100.0f;  // 预计算
+    // 循环不变量外提：音乐低频增益每帧只算一次
+    const float musicSizeBoost = g_enableMusicPhysics ? (1.0f + g_musicBassSizeBoost * 0.5f) : 1.0f;
+    for (auto &p : g_particles) {
+        float progress = (float)(now - p.startTime) / p.lifetime;
+        if (progress < 0 || progress >= 1) continue;
+        float lifeAlpha = (1.0f - progress);
+        // 颜色二次衰减：前期保持亮度，后期快速变暗，避免粒子中期就发黑
+        float colorFade = progress * progress;
+        // 预计算颜色偏移（colorOffset + vortexBrightness合并）/ Precompute color offset (colorOffset + vortexBrightness merged)
+        float rOff = p.colorOffset[0] + p.vortexBrightness[0];
+        float gOff = p.colorOffset[1] + p.vortexBrightness[1];
+        float bOff = p.colorOffset[2] + p.vortexBrightness[2];
+        D2D1_COLOR_F pc = D2D1::ColorF(
+            p.color.r + (p.endColor.r - p.color.r) * colorFade + rOff,
+            p.color.g + (p.endColor.g - p.color.g) * colorFade + gOff,
+            p.color.b + (p.endColor.b - p.color.b) * colorFade + bOff, 1.0f);
+        float sizeScale = sinf(progress * 3.14159f) * 0.7f + 0.3f;
+        float baseSize;
+        if (p.shapeType == 10) {
+            // 文字粒子：字号直接决定屏幕大小
+            baseSize = (float)g_textFontSize * 0.5f * sizeMul * sizeScale * musicSizeBoost;
+        } else {
+            baseSize = p.size * 2.0f * sizeMul * sizeScale * musicSizeBoost;
+        }
+
+        // 发光层 / Glow layer（文字字符模式用柔和发光与描边叠加，避免浅色背景刺眼）/ text-char uses soft glow layered with stroke
+        if (g_enableParticleGlow && glowCount < MAX_PER_LAYER) {
+            ParticleInstance& gl = instances[glowCount++];
+            gl.x = p.x; gl.y = p.y; gl.z = p.z;
+            float glowSizeUse = glowSize, glowAlphaUse = glowAlpha, glowMulUse = glowColorMul;
+            if (p.shapeType == 10) {
+                // 文字粒子：收敛尺寸、降低亮度增益，与描边平滑叠加
+                glowSizeUse = 1.25f + gi * 0.35f;
+                glowAlphaUse = 0.10f + gi * 0.12f;
+                glowMulUse = 1.0f;
+            }
+            gl.r = pc.r * glowMulUse; gl.g = pc.g * glowMulUse; gl.b = pc.b * glowMulUse;
+            gl.a = lifeAlpha * 0.8f * glowAlphaUse;
+            gl.size = baseSize * glowSizeUse;
+            gl.shapeType = (float)p.shapeType;
+            gl.rotation = p.rotation;
+            gl.charIndex = p.charIndex;
+        }
+        // 正常层
+        if (normalCount < MAX_PER_LAYER) {
+            ParticleInstance& nm = instances[MAX_PER_LAYER + normalCount++];
+            nm.x = p.x; nm.y = p.y; nm.z = p.z;
+            nm.r = pc.r; nm.g = pc.g; nm.b = pc.b;
+            nm.a = lifeAlpha * 0.8f;
+            nm.size = baseSize;
+            nm.shapeType = (float)p.shapeType;
+            nm.rotation = p.rotation;
+            nm.charIndex = p.charIndex;
+        }
+    }
+    g_pD3DContext->Unmap(g_pParticleInstanceBuf, 0);
+    if (glowCount == 0 && normalCount == 0) return;
+
+    // 设置渲染状态
+    UpdateConstantBuffer(screenW, screenH);
+    g_pD3DContext->IASetInputLayout(g_pParticleLayout);
+    g_pD3DContext->VSSetShader(g_pParticleVS, nullptr, 0);
+    g_pD3DContext->PSSetShader(g_pParticlePS, nullptr, 0);
+    g_pD3DContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    g_pD3DContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    // 绑定字符图集纹理（文字形状用）/ Bind char atlas texture (for text shape)
+    if (g_particleShape == 10 && g_pCharAtlasSRV) {
+        g_pD3DContext->PSSetShaderResources(0, 1, &g_pCharAtlasSRV);
+        g_pD3DContext->PSSetSamplers(0, 1, &g_pCharAtlasSampler);
+    }
+    g_pD3DContext->RSSetState(g_pRasterState);
+    g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
+
+    UINT stride = 2 * sizeof(float);
+    UINT vbOffset = 0;
+    g_pD3DContext->IASetVertexBuffers(0, 1, &g_pParticleQuadVB, &stride, &vbOffset);
+    stride = sizeof(ParticleInstance);
+    g_pD3DContext->IASetVertexBuffers(1, 1, &g_pParticleInstanceBuf, &stride, &vbOffset);
+    g_pD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+    // 发光层（实例起始 0），加法混合
+    if (glowCount > 0) {
+        g_pD3DContext->OMSetBlendState(g_pAdditiveBlend, nullptr, 0xFFFFFFFF);
+        g_pD3DContext->DrawInstanced(6, glowCount, 0, 0);
+    }
+    // 正常层（实例起始 MAX_PER_LAYER），Alpha混合
+    if (normalCount > 0) {
+        g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
+        g_pD3DContext->DrawInstanced(6, normalCount, 0, MAX_PER_LAYER);
+    }
+    // 解绑纹理和采样器，避免影响其他渲染
+    { ID3D11ShaderResourceView *nullSRV = nullptr; g_pD3DContext->PSSetShaderResources(0, 1, &nullSRV); }
+    { ID3D11SamplerState *nullSampler = nullptr; g_pD3DContext->PSSetSamplers(0, 1, &nullSampler); }
+}
+
+// 拖尾带顶点缓冲渲染（v3 原生渲染）/ Trail strip vertex buffer rendering (v3 native)
+// 共享条带几何体构建：锥形渐变宽度(tapered) 与 常量宽度(constant) 共用，消除 NativeRenderTrail / NativeRenderLineTrail 的重复代码。
+// 写入 2*N 个顶点（每个点左右各一），返回实际写入的顶点数
+static int BuildNativeStrip(
+    VertexPosColor* dst, int maxVtx,
+    const std::vector<D2D1_POINT_2F>& pts,
+    const std::vector<float>& nx, const std::vector<float>& ny,
+    bool tapered,  // true=锥形渐变宽度, false=常量宽度
+    float widthMul,  // 锥形模式基础宽度倍率
+    float widthScale,  // 锥形模式单层宽度缩放
+    float constWidth,     // 常量模式宽度（半宽 = constWidth*0.5）/ width (constant mode)
+    float r, float g, float b, float fadeAlpha, float aMul,
+    float offX, float offY, bool headOnly) {
+    size_t sl = pts.size();
+    int count = (int)sl * 2;
+    if (count > maxVtx) count = maxVtx;   // 缓冲区不足时截断（与 NativeRenderLineTrail 原行为一致）/ truncate if buffer too small (matches original LineTrail)
+    if (count < 0) count = 0;
+    VertexPosColor* p = dst;
+    float invSlMinus1 = (sl > 1) ? 1.0f / (float)(sl - 1) : 0.0f;
+    for (int i = 0; i < count; i += 2) {
+        size_t idx = (size_t)(i / 2);
+        float ratio = (float)idx * invSlMinus1;
+        float ow, a;
+        if (tapered) {
+            float taper = powf(1.0f - ratio, 1.3f);
+            ow = (idx == sl - 1) ? 0.5f * widthScale : 10.0f * taper * widthMul * widthScale;
+            a = fadeAlpha * aMul;
+            if (headOnly)
+                a *= (ratio < 0.25f) ? 0.0f : ((ratio > 0.85f) ? 1.0f : (ratio - 0.25f) / 0.6f);
+        } else {
+            ow = constWidth * 0.5f;
+            a = fadeAlpha * (1.0f - ratio * 0.3f);
+        }
+        p[0] = {pts[idx].x + offX + nx[idx]*ow, pts[idx].y + offY + ny[idx]*ow, 0.0f, r, g, b, a, ratio, 1.0f};
+        p[1] = {pts[idx].x + offX - nx[idx]*ow, pts[idx].y + offY - ny[idx]*ow, 0.0f, r, g, b, a, ratio, -1.0f};
+        p += 2;
+    }
+    return count;
+}
+
+// 常量宽度线渲染（虚线/闪电/羽毛用）/ Constant-width line rendering (for dashed/lightning/feather)
+static void NativeRenderLineTrail(const std::vector<D2D1_POINT_2F>& pts, float width,
+                                  const GradData& cols, float fadeAlpha, int screenW, int screenH) {
+    if (!g_pNativeVS || !g_pNativePS || !g_pTrailVB || pts.size() < 2) return;
+    size_t sl = pts.size();
+    // 静态复用缓冲：避免每帧两次堆分配（仅渲染线程访问）/ Static scratch: avoids two heap allocations per frame (render thread only)
+    // 入口先 clear() 保证不跨调用残留，resize 复用保留容量（不产生新分配）
+    static std::vector<float> s_nx, s_ny;
+    s_nx.clear(); s_nx.resize(sl);
+    s_ny.clear(); s_ny.resize(sl);
+    std::vector<float>& nx = s_nx;
+    std::vector<float>& ny = s_ny;
+    for (size_t i = 0; i < sl; ++i) {
+        float ddx, ddy;
+        if (i == 0) { ddx = pts[1].x - pts[0].x; ddy = pts[1].y - pts[0].y; }
+        else if (i == sl - 1) { ddx = pts[i].x - pts[i-1].x; ddy = pts[i].y - pts[i-1].y; }
+        else { ddx = pts[i+1].x - pts[i-1].x; ddy = pts[i+1].y - pts[i-1].y; }
+        float ln = sqrtf(ddx*ddx + ddy*ddy);
+        if (ln > 0) { ddx /= ln; ddy /= ln; } else { ddx = 1; ddy = 0; }
+        nx[i] = -ddy; ny[i] = ddx;
+    }
+
+    // 统一绑定原生渲染状态（含常量缓冲上传）/ Bind native state (incl. constant buffer upload)
+    SetNativeRenderState(screenW, screenH, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP, &cols);
+
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    if (FAILED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
+    VertexPosColor* p = (VertexPosColor*)mapped.pData;
+    int count = BuildNativeStrip(p, kMaxTrailVertices, pts, nx, ny, false, 0.0f, 0.0f, width,
+                                 cols.solidOuter.r, cols.solidOuter.g, cols.solidOuter.b, fadeAlpha, 1.0f, 0, 0, false);
+    g_pD3DContext->Unmap(g_pTrailVB, 0);
+    g_pD3DContext->Draw(count, 0);
+}
+
+// 预计算形状局部顶点（消除每帧 cos/sin/pow 重复计算）
+// 形状顶点缓存。多元素拼接的复杂形状（火箭/导弹/光纤导弹）需要给不同部件不同着色，
+// 因此额外带一个 part 数组，每个顶点一个部件号。
+struct ShapeVertsCache { const float* verts; int count; const unsigned char* part; };
+// 部件语义
+//   0 主体（拖尾基色） 1 尾焰/发光（偏暖橙） 2 暗部（基色压暗） 3 高光（接近白）
+enum { kPartBody = 0, kPartFlame = 1, kPartShadow = 2, kPartHi = 3,
+       kPartGlow2 = 4, kPartGlow3 = 5, kPartGlow4 = 6, kPartGlow5 = 7 };
+// 旧形状（0-8）整体就是主体，共用一个全 0 的 part 数组
+static unsigned char g_partAllBody[72] = {0};
+
+// 把一个凸多边形以扇形三角化追加进顶点缓存，并返回新的顶点数。
+// cap 是该数组能容纳的顶点数。写满就拒绝追加（返回原 n），
+// 而不是越界写进相邻内存 —— 那种错误不会立刻崩，只会损坏别的数据。
+static int EmitPartPoly(float *v, unsigned char *p, int n, int cap,
+                        const float *pts, int npts, unsigned char part) {
+    if (n + (npts - 2) * 3 > cap) return n;  // 容量不足，放弃本次追加
+    for (int i = 1; i < npts - 1; i++) {
+        int o = n * 2;
+        v[o + 0] = pts[0];           v[o + 1] = pts[1];
+        v[o + 2] = pts[i * 2];       v[o + 3] = pts[i * 2 + 1];
+        v[o + 4] = pts[(i + 1) * 2]; v[o + 5] = pts[(i + 1) * 2 + 1];
+        p[n] = part; p[n + 1] = part; p[n + 2] = part;
+        n += 3;
+    }
+    return n;
+}
+
+// 形状拖尾的生命周期透明度曲线：前 10% 淡入，后 30% 淡出，中间满不透明。
+// 此前这条曲线在两条渲染路径里各写一遍（原生 D3D 顶点路径 ×0.7、D2D 几何路径 ×0.85）：
+// 只改其中一处，就会让两条路径的淡入淡出手感不一致，而这种差异很难归因。
+// 现在曲线只此一份，各路径再乘自己的整体不透明系数。
+// Shape trail life-opacity curve: 10% fade in, last 30% fade out, opaque in between. Previously duplicated in
+// both render paths (native D3D ×0.7, D2D ×0.85); changing one silently desynchronised the two. One curve now,
+// each path applies its own overall opacity factor.
+static float ShapeLifeAlpha(float progress) {
+    if (progress < 0.1f) return progress * 10.0f;  // 淡入
+    if (progress > 0.7f) return (1.0f - progress) / 0.3f;  // 淡出
+    return 1.0f;
+}
+
+static ShapeVertsCache GetShapeVerts(int shapeType) {
+    // 形状编号：0=heart 1=star 2=hexagon 3=circle 4=diamond 5=triangle 6=flower 7=pentagon 8=hexagram
+    static float circleVerts[72 * 2];   // 24段 × 3顶点
+    static float starVerts[30 * 2];     // 5角 × 2三角 × 3
+    static float hexVerts[18 * 2];      // 6边 × 3三角（扇形填充）
+    static float heartVerts[72 * 2];    // 24段 × 3
+    static float diamondVerts[12 * 2];  // 4边 × 3三角
+    static float triVerts[3 * 2];       // 1三角
+    static float flowerVerts[30 * 2];   // 5瓣 × 2三角 × 3
+    static float pentVerts[15 * 2];     // 5边 × 3三角
+    static float hexagramVerts[36 * 2]; // 6角 × 2三角 × 3 = 36 顶点（原按 60 分配，多了 24 个未使用）
+    // ==== 多元素拼接形状 v3.4.5.1 ====
+    // 统一朝向约定：机头指向 +X，于是 rotation = atan2(dy,dx) 就能让它们朝运动方向飞。
+    // 顶点数 = Σ(多边形边数-2)*3：火箭 6+3+3+3+3+3=24，导弹 18，光纤导弹 30
+    static float rocketVerts[24 * 2];
+    static unsigned char rocketPart[24];
+    static float missileVerts[18 * 2];
+    static unsigned char missilePart[18];
+    // 光纤导弹分段更多：弹体等 18 顶点 + 亮芯 6 + 锥形外晕 5 段×6 = 54
+    static float fiberVerts[54 * 2];
+    static unsigned char fiberPart[54];
+    // 顶点数由生成过程回填，不再硬编码：几何一改而 count 忘改的话，多出来的顶点会被
+    // 静默丢弃（不崩不报错，只是少画一截），排查起来很费劲。已因此漏画过光纤外晕的后 4 段。
+    // Vertex counts are filled in by the generation pass instead of being hardcoded; a stale count
+    // silently drops vertices (no crash, no warning, just missing geometry). That bug already cost
+    // us the last 4 segments of the fiber glow.
+    static int rocketCount = 0, missileCount = 0, fiberCount = 0;
+    static bool inited = false;
+    if (!inited) {
+        inited = true;
+        const int seg = 24;
+        // 圆形
+        for (int i = 0; i < seg; i++) {
+            float a1 = (i / (float)seg) * 6.28318f;
+            float a2 = ((i + 1) / (float)seg) * 6.28318f;
+            int idx = i * 6;
+            circleVerts[idx]=0; circleVerts[idx+1]=0;
+            circleVerts[idx+2]=cosf(a1); circleVerts[idx+3]=sinf(a1);
+            circleVerts[idx+4]=cosf(a2); circleVerts[idx+5]=sinf(a2);
+        }
+        // 五角星
+        for (int i = 0; i < 5; i++) {
+            float a1 = (i / 5.0f) * 6.28318f - 1.5708f;
+            float a2 = ((i + 0.5f) / 5.0f) * 6.28318f - 1.5708f;
+            float a3 = ((i + 1) / 5.0f) * 6.28318f - 1.5708f;
+            int idx = i * 12;
+            starVerts[idx]=0; starVerts[idx+1]=0;
+            starVerts[idx+2]=cosf(a1); starVerts[idx+3]=sinf(a1);
+            starVerts[idx+4]=0.4f*cosf(a2); starVerts[idx+5]=0.4f*sinf(a2);
+            starVerts[idx+6]=0; starVerts[idx+7]=0;
+            starVerts[idx+8]=0.4f*cosf(a2); starVerts[idx+9]=0.4f*sinf(a2);
+            starVerts[idx+10]=cosf(a3); starVerts[idx+11]=sinf(a3);
+        }
+        // 六边形（扇形填充）/ Hexagon (triangle fan)
+        for (int i = 0; i < 6; i++) {
+            float a1 = (i / 6.0f) * 6.28318f - 1.5708f;
+            float a2 = ((i + 1) / 6.0f) * 6.28318f - 1.5708f;
+            int idx = i * 6;
+            hexVerts[idx]=0; hexVerts[idx+1]=0;
+            hexVerts[idx+2]=cosf(a1); hexVerts[idx+3]=sinf(a1);
+            hexVerts[idx+4]=cosf(a2); hexVerts[idx+5]=sinf(a2);
+        }
+        // 心形
+        for (int i = 0; i < seg; i++) {
+            float t = (i / (float)seg) * 6.28318f;
+            float t2 = ((i + 1) / (float)seg) * 6.28318f;
+            float x1 = powf(sinf(t), 3);
+            float y1 = -(13*cosf(t) - 5*cosf(2*t) - 2*cosf(3*t) - cosf(4*t)) / 16.0f;
+            float x2 = powf(sinf(t2), 3);
+            float y2 = -(13*cosf(t2) - 5*cosf(2*t2) - 2*cosf(3*t2) - cosf(4*t2)) / 16.0f;
+            int idx = i * 6;
+            heartVerts[idx]=0; heartVerts[idx+1]=0;
+            heartVerts[idx+2]=x1; heartVerts[idx+3]=y1;
+            heartVerts[idx+4]=x2; heartVerts[idx+5]=y2;
+        }
+        // 菱形
+        for (int i = 0; i < 4; i++) {
+            float a1 = (i / 4.0f) * 6.28318f - 1.5708f;
+            float a2 = ((i + 1) / 4.0f) * 6.28318f - 1.5708f;
+            int idx = i * 6;
+            diamondVerts[idx]=0; diamondVerts[idx+1]=0;
+            diamondVerts[idx+2]=cosf(a1); diamondVerts[idx+3]=sinf(a1);
+            diamondVerts[idx+4]=cosf(a2); diamondVerts[idx+5]=sinf(a2);
+        }
+        // 三角形（顶点在上）/ Triangle (point up)
+        triVerts[0]=0; triVerts[1]=-1;
+        triVerts[2]=-0.866f; triVerts[3]=0.5f;
+        triVerts[4]=0.866f; triVerts[5]=0.5f;
+        // 花朵（5瓣）/ Flower (5 petals)
+        for (int i = 0; i < 5; i++) {
+            float a1 = (i / 5.0f) * 6.28318f;
+            float a2 = a1 + 0.35f;
+            float a3 = a1 - 0.35f;
+            int idx = i * 12;
+            flowerVerts[idx]=0; flowerVerts[idx+1]=0;
+            flowerVerts[idx+2]=0.7f*cosf(a2); flowerVerts[idx+3]=0.7f*sinf(a2);
+            // idx+4/+5 原先从未写入（静态数组残留 0），导致每瓣的第一个三角形退化为零面积，
+            // 五瓣花画出来只有 5 条窄条。补上瓣尖 a1，与第二个三角形对称。
+            flowerVerts[idx+4]=cosf(a1); flowerVerts[idx+5]=sinf(a1);
+            flowerVerts[idx+6]=0; flowerVerts[idx+7]=0;
+            flowerVerts[idx+8]=0.7f*cosf(a3); flowerVerts[idx+9]=0.7f*sinf(a3);
+            flowerVerts[idx+10]=cosf(a1); flowerVerts[idx+11]=sinf(a1);
+        }
+        // 五边形（扇形填充）/ Pentagon (triangle fan)
+        for (int i = 0; i < 5; i++) {
+            float a1 = (i / 5.0f) * 6.28318f - 1.5708f;
+            float a2 = ((i + 1) / 5.0f) * 6.28318f - 1.5708f;
+            int idx = i * 6;
+            pentVerts[idx]=0; pentVerts[idx+1]=0;
+            pentVerts[idx+2]=cosf(a1); pentVerts[idx+3]=sinf(a1);
+            pentVerts[idx+4]=cosf(a2); pentVerts[idx+5]=sinf(a2);
+        }
+        // 六芒星（六角星）/ Hexagram (6-pointed star)
+        for (int i = 0; i < 6; i++) {
+            float a1 = (i / 6.0f) * 6.28318f - 1.5708f;
+            float a2 = ((i + 0.5f) / 6.0f) * 6.28318f - 1.5708f;
+            float a3 = ((i + 1) / 6.0f) * 6.28318f - 1.5708f;
+            int idx = i * 12;
+            hexagramVerts[idx]=0; hexagramVerts[idx+1]=0;
+            hexagramVerts[idx+2]=cosf(a1); hexagramVerts[idx+3]=sinf(a1);
+            hexagramVerts[idx+4]=0.5f*cosf(a2); hexagramVerts[idx+5]=0.5f*sinf(a2);
+            hexagramVerts[idx+6]=0; hexagramVerts[idx+7]=0;
+            hexagramVerts[idx+8]=0.5f*cosf(a2); hexagramVerts[idx+9]=0.5f*sinf(a2);
+            hexagramVerts[idx+10]=cosf(a3); hexagramVerts[idx+11]=sinf(a3);
+        }
+        // ---- 11 太空火箭：机身 + 头锥 + 双尾翼 + 尾焰 + 舷窗 ----
+        {
+            const float body[] = {-0.15f,-0.30f,  0.87f,-0.30f,  0.87f,0.30f,  -0.15f,0.30f};
+            const float nose[] = { 0.87f,-0.30f,  1.38f, 0.00f,  0.87f,0.30f};
+            const float finU[] = {-0.15f,-0.30f,  0.21f,-0.30f, -0.30f,-0.81f};
+            const float finD[] = {-0.15f, 0.30f,  0.21f, 0.30f, -0.30f, 0.81f};
+            const float flame[]= {-0.21f,-0.22f, -0.21f, 0.22f, -1.05f, 0.00f};
+            const float win[]  = { 0.30f, 0.00f,  0.45f,-0.15f,  0.60f, 0.00f,  0.45f,0.15f};
+            int n = 0;
+            n = EmitPartPoly(rocketVerts, rocketPart, n, 24, body,  4, kPartBody);
+            n = EmitPartPoly(rocketVerts, rocketPart, n, 24, nose,  3, kPartBody);
+            n = EmitPartPoly(rocketVerts, rocketPart, n, 24, finU,  3, kPartShadow);
+            n = EmitPartPoly(rocketVerts, rocketPart, n, 24, finD,  3, kPartShadow);
+            n = EmitPartPoly(rocketVerts, rocketPart, n, 24, flame, 3, kPartFlame);
+            n = EmitPartPoly(rocketVerts, rocketPart, n, 24, win,   4, kPartHi);
+            rocketCount = n;
+        }
+        // ---- 12 导弹：细长弹体 + 尖头 + 十字尾翼 + 长尾焰 ----
+        {
+            const float body[] = {-0.48f,-0.20f,  0.72f,-0.20f,  0.72f,0.20f, -0.48f,0.20f};
+            const float nose[] = { 0.72f,-0.20f,  1.32f, 0.00f,  0.72f,0.20f};
+            const float finU[] = {-0.48f,-0.20f, -0.03f,-0.20f, -0.51f,-0.66f};
+            const float finD[] = {-0.48f, 0.20f, -0.03f, 0.20f, -0.51f, 0.66f};
+            const float flame[]= {-0.51f,-0.17f, -0.51f, 0.17f, -1.50f, 0.00f};
+            int n = 0;
+            n = EmitPartPoly(missileVerts, missilePart, n, 18, body,  4, kPartBody);
+            n = EmitPartPoly(missileVerts, missilePart, n, 18, nose,  3, kPartBody);
+            n = EmitPartPoly(missileVerts, missilePart, n, 18, finU,  3, kPartShadow);
+            n = EmitPartPoly(missileVerts, missilePart, n, 18, finD,  3, kPartShadow);
+            n = EmitPartPoly(missileVerts, missilePart, n, 18, flame, 3, kPartFlame);
+            missileCount = n;
+        }
+        // ---- 13 光纤导弹：弹体 + 尖头 + 尾翼 + 尾焰 + 身后拖曳的光纤（双层：外晕 + 亮芯）----
+        {
+            const float body[]  = {-0.36f,-0.18f,  0.75f,-0.18f,  0.75f,0.18f, -0.36f,0.18f};
+            const float nose[]  = { 0.75f,-0.18f,  1.38f, 0.00f,  0.75f,0.18f};
+            const float finU[]  = {-0.36f,-0.18f,  0.03f,-0.18f, -0.39f,-0.60f};
+            const float finD[]  = {-0.36f, 0.18f,  0.03f, 0.18f, -0.39f, 0.60f};
+            const float flame[] = {-0.39f,-0.15f, -0.39f, 0.15f, -1.20f, 0.00f};
+            // 光纤 v2：旧版是一根等宽、等亮、末端齐平切断的实心条，视觉上非常突兀。
+            // 现在锥形收细，并分 5 段用不同 part（透明度递减）从弹体自然渐隐进背景。
+            static const float kFxX[6] = {-0.45f,-1.10f,-1.75f,-2.40f,-2.85f,-3.20f};
+            static const float kFxW[6] = { 0.090f, 0.075f, 0.058f, 0.040f, 0.024f, 0.012f};
+            static const unsigned char kFxPart[5] = {kPartHi, kPartGlow2, kPartGlow3, kPartGlow4, kPartGlow5};
+            int n = 0;
+            n = EmitPartPoly(fiberVerts, fiberPart, n, 54, body,  4, kPartBody);
+            n = EmitPartPoly(fiberVerts, fiberPart, n, 54, nose,  3, kPartBody);
+            n = EmitPartPoly(fiberVerts, fiberPart, n, 54, finU,  3, kPartShadow);
+            n = EmitPartPoly(fiberVerts, fiberPart, n, 54, finD,  3, kPartShadow);
+            n = EmitPartPoly(fiberVerts, fiberPart, n, 54, flame, 3, kPartFlame);
+            const float core[] = {-0.45f,-0.030f, -1.60f,-0.020f, -1.60f,0.020f, -0.45f,0.030f};
+            n = EmitPartPoly(fiberVerts, fiberPart, n, 54, core, 4, kPartHi);
+            for (int seg = 0; seg < 5; seg++) {
+                float quad[] = {kFxX[seg],   -kFxW[seg],
+                                kFxX[seg+1], -kFxW[seg+1],
+                                kFxX[seg+1],  kFxW[seg+1],
+                                kFxX[seg],    kFxW[seg]};
+                n = EmitPartPoly(fiberVerts, fiberPart, n, 54, quad, 4, kFxPart[seg]);
+            }
+            fiberCount = n;
+        }
+    }
+    switch (shapeType) {
+        case 0: return {heartVerts, 72, g_partAllBody};
+        case 1: return {starVerts, 30, g_partAllBody};
+        case 2: return {hexVerts, 18, g_partAllBody};
+        case 3: return {circleVerts, 72, g_partAllBody};
+        case 4: return {diamondVerts, 12, g_partAllBody};
+        case 5: return {triVerts, 3, g_partAllBody};
+        case 6: return {flowerVerts, 30, g_partAllBody};
+        case 7: return {pentVerts, 15, g_partAllBody};
+        // 36 而不是 60：循环只写 6 角 × 6 顶点。多给的 count 会把未初始化顶点当成几何画出来。
+        case 8: return {hexagramVerts, 36, g_partAllBody};
+        case 11: return {rocketVerts, rocketCount, rocketPart};
+        case 12: return {missileVerts, missileCount, missilePart};
+        case 13: return {fiberVerts, fiberCount, fiberPart};
+        default: return {circleVerts, 72, g_partAllBody};
+    }
+}
+
+// ===== 形状生命周期动画 v3.4.5.1：入场 / 中间 / 出场 =====
+// 旧行为只有"前20%放大、后30%缩小"，无位移与旋转，像凭空出现再原地消失。现在：入场从机尾
+// 冲入并带过冲与摆动，中段呼吸，出场沿机头加速飞离。flameMul 为尾焰长度倍率（点火最猛、
+// 巡航摇曳、离场熄火）。
+static void ShapeAnimAt(float progress, float rot, float size,
+                        float &scale, float &rotAdd, float &offX, float &offY, float &flameMul) {
+    const float kIn = 0.22f, kOut = 0.70f;
+    float hx = cosf(rot), hy = sinf(rot);
+    scale = 1.0f; rotAdd = 0.0f; offX = 0.0f; offY = 0.0f; flameMul = 1.0f;
+    if (progress < kIn) {
+        float t = progress / kIn;
+        // easeOutBack：轻微过冲，像被弹射出来
+        float u = t - 1.0f;
+        scale = 1.0f + 2.70158f * u * u * u + 1.70158f * u * u;
+        if (scale < 0.0f) scale = 0.0f;
+        // 从机尾方向冲入（二次衰减，越接近就位越慢）/ dash in from behind (quadratic ease)
+        float back = size * 2.6f * (1.0f - t) * (1.0f - t);
+        offX = -hx * back; offY = -hy * back;
+        rotAdd = 0.38f * (1.0f - t) * (1.0f - t);
+        // 点火：起始尾焰接近 3 倍长，随后收敛
+        flameMul = 1.0f + 1.9f * (1.0f - t);
+    } else if (progress > kOut) {
+        float t = (progress - kOut) / (1.0f - kOut);
+        scale = fmaxf(1.0f - t * 0.75f, 0.12f);
+        // 沿机头方向加速飞离
+        float fwd = size * 2.8f * t * t;
+        offX = hx * fwd; offY = hy * fwd;
+        // 熄火：尾焰收短
+        flameMul = 1.0f - 0.65f * t;
+    } else {
+        // 中段：呼吸缩放 + 姿态微摆，避免"定格"感
+        scale = 1.0f + 0.05f * sinf(progress * 24.0f);
+        rotAdd = 0.05f * sinf(progress * 17.0f);
+        flameMul = 1.0f + 0.24f * sinf(progress * 29.0f);
+    }
+}
+
+// 按部件取色：主体用拖尾基色，尾焰偏暖橙并提亮，暗部压暗，高光接近白。
+static void ShapePartColor(int part, float cr, float cg, float cb,
+                           float &r, float &g, float &b, float &aMul) {
+    aMul = 1.0f;
+    switch (part) {
+    case kPartFlame:  // 尾焰：向暖橙偏移并提亮
+        r = fminf(cr * 0.45f + 0.78f, 1.6f);
+        g = fminf(cg * 0.40f + 0.42f, 1.4f);
+        b = cb * 0.22f;
+        return;
+    case kPartShadow:  // 暗部
+        r = cr * 0.55f; g = cg * 0.55f; b = cb * 0.55f;
+        return;
+    case kPartGlow2: aMul = 0.70f; break;
+    case kPartGlow3: aMul = 0.45f; break;
+    case kPartGlow4: aMul = 0.25f; break;
+    case kPartGlow5: aMul = 0.10f; break;
+    default:  // 主体与高光（舷窗/亮芯）不透明
+        if (part == kPartHi) {
+            r = fminf(cr * 0.35f + 0.80f, 1.8f);
+            g = fminf(cg * 0.35f + 0.86f, 1.8f);
+            b = fminf(cb * 0.35f + 0.95f, 1.8f);
+        } else {
+            r = cr; g = cg; b = cb;
+        }
+        return;
+    }
+    // 光纤渐隐段：颜色同高光，靠透明度递减消失进背景
+    r = fminf(cr * 0.35f + 0.80f, 1.8f);
+    g = fminf(cg * 0.35f + 0.86f, 1.8f);
+    b = fminf(cb * 0.35f + 0.95f, 1.8f);
+}
+
+// D2D 回退路径：为多元素形状按部件构建 PathGeometry（每个三角形一个 figure，WINDING 填充
+// 对分离与重叠都成立）。
+// ===== 老形状的"性格"动效 v3.4.5.1 =====
+// 老形状原先共用同一套缩放进出，显得千篇一律。现在每类形状有专属小动作（心跳、自转闪烁、
+// 花瓣开合、呼吸…），两条渲染路径都必须调用它。
+static void ShapeTypeFx(int shapeType, float progress,
+                        float &scaleMul, float &rotExtra, float &brightMul) {
+    scaleMul = 1.0f; rotExtra = 0.0f; brightMul = 1.0f;
+    switch (shapeType) {
+    case 0:  // heart：心跳双脉冲
+        scaleMul  = 1.0f + 0.07f * sinf(progress * 42.0f) * (0.55f + 0.45f * sinf(progress * 12.0f));
+        brightMul = 1.0f + 0.10f * sinf(progress * 42.0f);
+        break;
+    case 1: case 8:   // star / hexagram：加速自转 + 尖角闪烁 / fast spin + sparkle
+        rotExtra  = progress * 4.2f;
+        brightMul = 1.0f + 0.20f * sinf(progress * 49.0f);
+        break;
+    case 6:  // flower：花瓣开合
+        scaleMul = 1.0f + 0.09f * sinf(progress * 19.0f);
+        break;
+    case 3:  // circle：呼吸
+        scaleMul = 1.0f + 0.06f * sinf(progress * 23.0f);
+        break;
+    default:  // 其余多边形：轻微姿态摇摆
+        rotExtra = 0.10f * sinf(progress * 15.0f);
+        break;
+    }
+    // 所有形状共用的轻微亮度呼吸
+    brightMul += 0.05f * sinf(progress * 21.0f + (float)shapeType * 0.7f);
+}
+
+// 拖尾长度驱动的特效强度 0~1：拖尾越长，尾焰与光纤拉得越长、元件越张扬。
+float g_trailFxIntensity = 0.0f;
+static void UpdateTrailFxIntensity(const std::vector<D2D1_POINT_2F> &smoothed) {
+    // 以路径点数相对拖尾长度设置的占比为准，速度再补一点余量
+    float ratio = (g_tailLength > 0) ? ((float)smoothed.size() / (float)g_tailLength) : 0.0f;
+    if (ratio > 1.0f) ratio = 1.0f;
+    g_trailFxIntensity = ratio;
+}
+
+// 形状拖尾原生渲染（v3）：直接生成世界坐标顶点，一次绘制
+// 公共D3D11渲染状态设置（统一绑定输入布局/着色器/常量缓冲/光栅化/混合/顶点缓冲）
+static void SetNativeRenderState(int screenW, int screenH, D3D11_PRIMITIVE_TOPOLOGY topology, const GradData* cols = nullptr) {
+    UpdateConstantBuffer(screenW, screenH, cols);
+    g_pD3DContext->IASetInputLayout(g_pNativeLayout);
+    g_pD3DContext->VSSetShader(g_pNativeVS, nullptr, 0);
+    g_pD3DContext->PSSetShader(g_pNativePS, nullptr, 0);
+    g_pD3DContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    g_pD3DContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    g_pD3DContext->RSSetState(g_pRasterState);
+    g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
+    UINT stride = sizeof(VertexPosColor);
+    UINT offset = 0;
+    g_pD3DContext->IASetVertexBuffers(0, 1, &g_pTrailVB, &stride, &offset);
+    g_pD3DContext->IASetPrimitiveTopology(topology);
+}
+
+// ===================== 渲染抽象层 v3.4.5.3（MtDraw）=====================
+// 同一视觉效果过去要在 D3D11 与 D2D 两套代码里各写一遍（NativeRenderXxx
+// 反复出现"只改了一条路径"（点击风格、形状动画都栽过）。这里借鉴 Dear ImGui 的 DrawList：
+// 上层只描述"要画什么"、不碰 GPU，由后端决定"怎么画"。图元用语义级而非裸三角形
+// （裸三角形对 D3D 直通，但 D2D 没有批量接口、重建代价高）。渐进迁移中。
+
+// 图元种类
+enum class MtPrim : unsigned char {
+    Poly = 0,   // 实心多边形（本地坐标 xy 顶点表，扇形三角化）/ filled polygon (local-space xy)
+    Ring = 1,   // 圆环带（半径 + 宽度）/ ring band (radius + width)
+    Disc = 2,   // 实心圆（半径）/ filled disc
+    Spoke = 3,  // 放射光条（角度 + 起止半径 + 宽度）/ radial spoke (angle + r0..r1 + width)
+    Strip = 4,  // 沿路径的条带（路径点 + 法线，锥形或常量宽）/ band along a path (points + normals)
+};
+
+struct MtDraw {
+    MtPrim kind = MtPrim::Poly;
+    const float *verts = nullptr;  // Poly 用：本地坐标 xy 数组
+    int vertCount = 0;              // Poly 的顶点数（不是浮点个数）/ Poly vertex count (not floats)
+    float cx = 0.0f, cy = 0.0f;  // 世界坐标中心
+    float scale = 1.0f;  // 缩放
+    float rot = 0.0f;               // 旋转（弧度）/ rotation (radians)
+    float radius = 0.0f;            // Ring / Disc
+    float width = 0.0f;             // Ring / Spoke
+    float ang = 0.0f;               // Spoke
+    float r0 = 0.0f, r1 = 0.0f;     // Spoke
+    float r = 1.0f, g = 1.0f, b = 1.0f, a = 1.0f;  // 颜色与透明度
+    bool additive = false;  // 加法混合
+    // Strip 用：路径点与法线（世界坐标，已含偏移）/ for Strip: path points and normals (world space)
+    const float *path = nullptr;
+    const float *nrm = nullptr;
+    int pathCount = 0;
+    bool tapered = false;  // true=锥形渐变宽
+    float widthMul = 1.0f;          // 锥形模式基础宽度倍率
+    float widthScale = 1.0f;        // 锥形模式单层宽度缩放
+    float constWidth = 10.0f;       // 常量模式宽度
+    float offX = 0.0f, offY = 0.0f; // Strip：整体偏移（阴影层用）/ Strip: global offset (shadow layer)
+    bool headOnly = false;          // Strip：只在头部显示（用于头部高亮）/ Strip: head-only fade
+    // D2D 后端的 geometry 缓存键：>=0 按此键缓存，<0 表示顶点每帧都在变、每次重建。
+    // 需要动态拉伸时，把拉伸量【量化】成有限档位并入这个键，就能既动态又命中缓存。
+    int cacheKey = -1;
+};
+
+// 当前批次的渐变（D3D 上传到常量缓冲供 PS 采样；D2D 用于逐段近似着色）
+static const GradData *g_mtGrad = nullptr;
+
+// 条带上第 i 个点的半宽。两个后端共用同一份公式 —— 先前各写一遍，改一处漏一处就会让
+// D3D 与 D2D 的锥形宽度对不上。
+static inline float MtStripHalfW(const MtDraw &d, int i) {
+    if (!d.tapered) return d.constWidth * 0.5f;
+    if (i >= d.pathCount - 1) return 0.5f * d.widthScale;
+    float ratio = (float)i / (float)(d.pathCount - 1);
+    return 10.0f * powf(1.0f - ratio, 1.3f) * d.widthMul * d.widthScale;
+}
+
+// ---- D3D11 后端：图元 -> 三角形 -> 顶点缓冲，最后一次性提交 ----
+namespace mtb {
+    struct Layer { int offset, count; bool additive; D3D11_PRIMITIVE_TOPOLOGY topo; };
+    static std::vector<VertexPosColor> s_verts;
+    static std::vector<Layer> s_layers;
+    static std::unordered_map<int, ID2D1PathGeometry *> s_keyCache;
+
+    static void D3DBegin() {
+        s_verts.clear();
+        s_layers.clear();
+    }
+    static void D3DDraw(const MtDraw &d) {
+        int start = (int)s_verts.size();
+        float cs = cosf(d.rot), sn = sinf(d.rot);
+        // 本地坐标 -> 世界坐标（缩放 + 旋转 + 平移）
+        auto push2 = [&](float lx, float ly, float v) {
+            lx *= d.scale; ly *= d.scale;
+            s_verts.push_back({d.cx + lx * cs - ly * sn, d.cy + lx * sn + ly * cs,
+                               0.0f, d.r, d.g, d.b, d.a, 0.5f, v});
+        };
+        switch (d.kind) {
+        case MtPrim::Poly: {
+            if (!d.verts || d.vertCount < 3) return;
+            // Triangle list: pass through as-is (each group of 3 verts = one triangle)
+            for (int i = 0; i + 2 < d.vertCount; i += 3) {
+                push2(d.verts[i * 2], d.verts[i * 2 + 1], 0.0f);
+                push2(d.verts[(i + 1) * 2], d.verts[(i + 1) * 2 + 1], 0.0f);
+                push2(d.verts[(i + 2) * 2], d.verts[(i + 2) * 2 + 1], 0.0f);
+            }
+            break;
+        }
+        case MtPrim::Ring: {
+            // 环带：外圈 v=+1，内圈 v=-1，交给 PS 做软边
+            const int seg = 24;
+            for (int i = 0; i <= seg; i++) {
+                float th = (float)i / (float)seg * 6.2831853f;
+                float c = cosf(th), s = sinf(th);
+                push2(c * (d.radius + d.width), s * (d.radius + d.width), 1.0f);
+                push2(c * d.radius, s * d.radius, -1.0f);
+            }
+            break;
+        }
+        case MtPrim::Disc: {
+            const int seg = 24;
+            for (int i = 0; i < seg; i++) {
+                float a1 = (float)i / (float)seg * 6.2831853f;
+                float a2 = (float)(i + 1) / (float)seg * 6.2831853f;
+                push2(0.0f, 0.0f, 0.0f);
+                push2(cosf(a1) * d.radius, sinf(a1) * d.radius, 0.0f);
+                push2(cosf(a2) * d.radius, sinf(a2) * d.radius, 0.0f);
+            }
+            break;
+        }
+        case MtPrim::Spoke: {
+            float ca = cosf(d.ang), sa = sinf(d.ang);
+            float nx = -sa, ny = ca;  // 垂直于光条
+            float hw = d.width * 0.5f;
+            push2(ca * d.r0 + nx * hw, sa * d.r0 + ny * hw, 1.0f);
+            push2(ca * d.r0 - nx * hw, sa * d.r0 - ny * hw, -1.0f);
+            push2(ca * d.r1 + nx * hw, sa * d.r1 + ny * hw, 1.0f);
+            push2(ca * d.r1 - nx * hw, sa * d.r1 - ny * hw, -1.0f);
+            break;
+        }
+        case MtPrim::Strip: {
+            // 沿路径的条带：每个路径点两个顶点（左/右，v=±1 交给 PS 做软边），
+            // u = ratio 供渐变采样。宽度按锥形或常量。
+            if (!d.path || !d.nrm || d.pathCount < 2) return;
+            int pc = d.pathCount;
+            if ((int)s_verts.size() + pc * 2 > kMaxTrailVertices)
+                pc = (kMaxTrailVertices - (int)s_verts.size()) / 2;   // 缓冲区不够时截断
+            if (pc < 2) return;
+            float inv = 1.0f / (float)(d.pathCount - 1);
+            for (int i = 0; i < pc; i++) {
+                float ratio = (float)i * inv;
+                float ow = MtStripHalfW(d, i);
+                float px = d.path[i * 2] + d.offX, py = d.path[i * 2 + 1] + d.offY;
+                float nx = d.nrm[i * 2], ny = d.nrm[i * 2 + 1];
+                float a = d.a;
+                if (d.headOnly)  // 头部高亮：只在头部一段显示
+                    a *= (ratio < 0.25f) ? 0.0f : ((ratio > 0.85f) ? 1.0f : (ratio - 0.25f) / 0.6f);
+                s_verts.push_back({px + nx * ow, py + ny * ow, 0.0f, d.r, d.g, d.b, a, ratio, 1.0f});
+                s_verts.push_back({px - nx * ow, py - ny * ow, 0.0f, d.r, d.g, d.b, a, ratio, -1.0f});
+            }
+            break;
+        }
+        }
+        int n = (int)s_verts.size() - start;
+        if (n > 0) {
+            D3D11_PRIMITIVE_TOPOLOGY topo = (d.kind == MtPrim::Poly || d.kind == MtPrim::Disc)
+                ? D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST
+                : D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+            s_layers.push_back({start, n, d.additive, topo});
+        }
+    }
+    static void D3DEnd(int screenW, int screenH, const GradData *grad = nullptr) {
+        if (s_verts.empty() || !g_pTrailVB) return;
+        if (s_verts.size() > kMaxTrailVertices) s_verts.resize(kMaxTrailVertices);
+        D3D11_MAPPED_SUBRESOURCE mapped;
+        if (FAILED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
+        memcpy(mapped.pData, s_verts.data(), s_verts.size() * sizeof(VertexPosColor));
+        g_pD3DContext->Unmap(g_pTrailVB, 0);
+        // 把渐变一并上传：Strip 图元的 u=ratio 由 PS 采样渐变，才能画出彩色拖尾
+        for (const Layer &L : s_layers) {
+            SetNativeRenderState(screenW, screenH, L.topo, grad);
+            g_pD3DContext->OMSetBlendState(L.additive ? g_pAdditiveBlend : g_pAlphaBlend,
+                                           nullptr, 0xFFFFFFFF);
+            g_pD3DContext->Draw((UINT)L.count, (UINT)L.offset);
+        }
+        g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
+    }
+
+    // ---- D2D 后端：按图元种类用对应的高级 API ----
+    static ID2D1PathGeometry *BuildPolyGeom(const float *verts, int count) {
+        ID2D1PathGeometry *geom = nullptr;
+        if (FAILED(g_pD2DFactory->CreatePathGeometry(&geom))) return nullptr;
+        ID2D1GeometrySink *sink = nullptr;
+        if (FAILED(geom->Open(&sink))) { geom->Release(); return nullptr; }
+        sink->SetFillMode(D2D1_FILL_MODE_WINDING);
+        for (int i = 0; i + 2 < count; i += 3) {
+            D2D1_POINT_2F pts[3] = {
+                D2D1::Point2F(verts[i * 2],       verts[i * 2 + 1]),
+                D2D1::Point2F(verts[(i + 1) * 2], verts[(i + 1) * 2 + 1]),
+                D2D1::Point2F(verts[(i + 2) * 2], verts[(i + 2) * 2 + 1]),
+            };
+            sink->BeginFigure(pts[0], D2D1_FIGURE_BEGIN_FILLED);
+            sink->AddLines(pts + 1, 2);
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+        }
+        sink->Close();
+        sink->Release();
+        return geom;
+    }
+
+    static ID2D1PathGeometry *PolyGeom(const float *verts, int count, int cacheKey = -1) {
+        // 只有显式给了 cacheKey 才缓存。不要按顶点指针缓存 —— 调用方可能用同一个
+        // static buffer 每帧生成不同内容（指针不变、内容在变），那样会命中过期的 geometry。
+        if (cacheKey < 0) return BuildPolyGeom(verts, count);
+        // keyCache is now in mtb namespace scope (see below)
+        auto it = s_keyCache.find(cacheKey);
+        if (it != s_keyCache.end()) return it->second;
+        ID2D1PathGeometry *g = BuildPolyGeom(verts, count);
+        if (g) s_keyCache[cacheKey] = g;
+        return g;
+    }
+    static void D2DDraw(const MtDraw &d) {
+        if (!g_pD2DDC) return;
+        D2D1_MATRIX_3X2_F oldT;
+        g_pD2DDC->GetTransform(&oldT);
+        g_pD2DDC->SetTransform(D2D1::Matrix3x2F::Rotation(d.rot * 57.2958f) *
+                               D2D1::Matrix3x2F::Scale(d.scale, d.scale) *
+                               D2D1::Matrix3x2F::Translation(d.cx, d.cy) * oldT);
+        g_pSolidOuterBrush->SetColor(D2D1::ColorF(d.r, d.g, d.b));
+        g_pSolidOuterBrush->SetOpacity(d.a);
+        switch (d.kind) {
+        case MtPrim::Poly: {
+            ID2D1PathGeometry *geom = PolyGeom(d.verts, d.vertCount, d.cacheKey);
+            if (geom) g_pD2DDC->FillGeometry(geom, g_pSolidOuterBrush);
+            break;
+        }
+        case MtPrim::Ring:
+            g_pD2DDC->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(0, 0), d.radius, d.radius),
+                                  g_pSolidOuterBrush, d.width);
+            break;
+        case MtPrim::Disc:
+            g_pD2DDC->FillEllipse(D2D1::Ellipse(D2D1::Point2F(0, 0), d.radius, d.radius),
+                                  g_pSolidOuterBrush);
+            break;
+        case MtPrim::Spoke: {
+            // 光条用 4 点多边形（D2D 没有直接的"线段加宽"填充 API）
+            float ca = cosf(d.ang), sa = sinf(d.ang);
+            float nx = -sa * d.width * 0.5f, ny = ca * d.width * 0.5f;
+            float pts[8] = {ca * d.r0 + nx, sa * d.r0 + ny,
+                            ca * d.r1 + nx, sa * d.r1 + ny,
+                            ca * d.r1 - nx, sa * d.r1 - ny,
+                            ca * d.r0 - nx, sa * d.r0 - ny};
+            ID2D1PathGeometry *geom = nullptr;
+            if (SUCCEEDED(g_pD2DFactory->CreatePathGeometry(&geom))) {
+                ID2D1GeometrySink *sink = nullptr;
+                if (SUCCEEDED(geom->Open(&sink))) {
+                    sink->SetFillMode(D2D1_FILL_MODE_WINDING);
+                    D2D1_POINT_2F p[4] = {D2D1::Point2F(pts[0], pts[1]), D2D1::Point2F(pts[2], pts[3]),
+                                          D2D1::Point2F(pts[4], pts[5]), D2D1::Point2F(pts[6], pts[7])};
+                    sink->BeginFigure(p[0], D2D1_FIGURE_BEGIN_FILLED);
+                    sink->AddLines(p + 1, 3);
+                    sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+                    sink->Close();
+                    sink->Release();
+                    g_pD2DDC->FillGeometry(geom, g_pSolidOuterBrush);
+                }
+                geom->Release();
+            }
+            break;
+        }
+        case MtPrim::Strip: {
+            // 条带：左边界正序 + 右边界逆序，围成闭合多边形。
+            // D2D 没有顶点渐变采样，所以按 ratio 分段，每段取该处渐变颜色 —— 与原生路径
+            // PS 用 u=ratio 采样同一套 LUT，观感基本一致。
+            if (!d.path || !d.nrm || d.pathCount < 2) break;
+            int pc = d.pathCount;
+            float inv = 1.0f / (float)(pc - 1);
+            auto halfW = [&](int i) -> float { return MtStripHalfW(d, i); };
+            std::vector<D2D1_POINT_2F> outline;
+            auto fillSeg = [&](int i0, int i1) {
+                outline.clear();
+                outline.reserve((size_t)(i1 - i0 + 1) * 2);
+                for (int i = i0; i <= i1; i++) {
+                    float ow = halfW(i);
+                    outline.push_back(D2D1::Point2F(d.path[i * 2] + d.offX + d.nrm[i * 2] * ow,
+                                                    d.path[i * 2 + 1] + d.offY + d.nrm[i * 2 + 1] * ow));
+                }
+                for (int i = i1; i >= i0; i--) {
+                    float ow = halfW(i);
+                    outline.push_back(D2D1::Point2F(d.path[i * 2] + d.offX - d.nrm[i * 2] * ow,
+                                                    d.path[i * 2 + 1] + d.offY - d.nrm[i * 2 + 1] * ow));
+                }
+                if (outline.size() < 3) return;
+                ID2D1PathGeometry *geom = nullptr;
+                if (SUCCEEDED(g_pD2DFactory->CreatePathGeometry(&geom))) {
+                    ID2D1GeometrySink *sink = nullptr;
+                    if (SUCCEEDED(geom->Open(&sink))) {
+                        sink->SetFillMode(D2D1_FILL_MODE_WINDING);
+                        sink->BeginFigure(outline[0], D2D1_FIGURE_BEGIN_FILLED);
+                        sink->AddLines(outline.data() + 1, (UINT32)(outline.size() - 1));
+                        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+                        sink->Close();
+                        sink->Release();
+                        g_pD2DDC->FillGeometry(geom, g_pSolidOuterBrush);
+                    }
+                    geom->Release();
+                }
+            };
+            if (g_mtGrad) {
+                const int kSegs = 8;
+                for (int s = 0; s < kSegs; s++) {
+                    int i0 = (int)((float)s / (float)kSegs * (float)(pc - 1));
+                    int i1 = (int)((float)(s + 1) / (float)kSegs * (float)(pc - 1));
+                    if (i1 <= i0) i1 = i0 + 1;
+                    if (i1 > pc - 1) i1 = pc - 1;
+                    float ratioMid = ((float)i0 + (float)i1) * 0.5f * inv;
+                    // 与 D3D 侧一致：渐变色 × 顶点 RGB 调制（阴影层用 0,0,0、发光层用 >1）
+                    D2D1_COLOR_F base = SampleGradientLUT(ratioMid, 0.0f);
+                    g_pSolidOuterBrush->SetColor(D2D1::ColorF(base.r * d.r, base.g * d.g, base.b * d.b, 1.0f));
+                    // 头部高亮：按该段的比例裁剪透明度，与 D3D 侧的顶点 alpha 一致
+                    float am = 1.0f;
+                    if (d.headOnly)
+                        am = (ratioMid < 0.25f) ? 0.0f
+                                                : ((ratioMid > 0.85f) ? 1.0f : (ratioMid - 0.25f) / 0.6f);
+                    g_pSolidOuterBrush->SetOpacity(d.a * am);
+                    if (am > 0.001f) fillSeg(i0, i1);
+                }
+            } else {
+                g_pSolidOuterBrush->SetColor(D2D1::ColorF(d.r, d.g, d.b));
+                fillSeg(0, pc - 1);
+            }
+            break;
+        }
+        }
+        g_pD2DDC->SetTransform(oldT);
+        g_pSolidOuterBrush->SetOpacity(1.0f);
+    }
+}
+
+// 统一入口：按当前生效的后端分发。g_pNativeVS 非空即原生 D3D 路径（与 RenderFrame 的分流一致）。
+static inline bool MtUsingNative() { return g_pNativeVS != nullptr; }
+static inline void MtBegin(int screenW, int screenH, const GradData *grad = nullptr) {
+    g_mtGrad = grad;
+    if (MtUsingNative()) mtb::D3DBegin();
+    (void)screenW; (void)screenH;
+}
+static inline void MtPrimDraw(const MtDraw &d) {
+    if (MtUsingNative()) mtb::D3DDraw(d);
+    else mtb::D2DDraw(d);
+}
+static inline void MtEnd(int screenW, int screenH) {
+    if (MtUsingNative()) mtb::D3DEnd(screenW, screenH, g_mtGrad);
+    g_mtGrad = nullptr;
+}
+
+// ===================== 形状拖尾（抽象层统一实现 v3.4.5.3）=====================
+// 过去 D3D 一份、D2D 一份，部件着色和动画要写两遍 —— D2D 那份还漏过部件级拉伸，
+// 导致点火尾焰、摇曳、光纤自适应拉长只在原生路径生效。现在只有这一份。
+static void DrawTrailShapes(int screenW, int screenH, DWORD dwTime) {
+    if (g_trailShapes.empty()) return;
+
+    // 按部件分组收集顶点（同一部件一次提交，便于分别着色）
+    static std::vector<float> s_pv;
+
+    MtBegin(screenW, screenH);
+    for (auto &s : g_trailShapes) {
+        float progress = (float)(dwTime - s.startTime) / s.lifetime;
+        if (progress < 0 || progress >= 1) continue;
+
+        // 生命周期动画 + 老形状特征动效（两条路径共用同一套）
+        float aScale, aRot, aOffX, aOffY, aFlame;
+        ShapeAnimAt(progress, s.rotation, s.size, aScale, aRot, aOffX, aOffY, aFlame);
+        float fxScale, fxRot, fxBright;
+        ShapeTypeFx(s.shapeType, progress, fxScale, fxRot, fxBright);
+
+        // 飞行器细长，同等 size 下视觉面积远小于爱心，给一点尺寸补偿
+        float craftMul = (s.shapeType >= 11 && s.shapeType <= 13) ? 1.25f : 1.0f;
+        float scale = aScale * s.size * craftMul * fxScale;
+        float rot = s.rotation + aRot + fxRot;
+        float bx = s.x + aOffX, by = s.y + aOffY;
+        // 两路径统一取原生路径的整体不透明度（默认路径观感不变）
+        float lifeAlpha = ShapeLifeAlpha(progress) * 0.7f;
+
+        ShapeVertsCache sv = GetShapeVerts(s.shapeType);
+        // 部件级动态拉伸：尾焰摇曳、光纤随拖尾长度加长
+        float flameStretch = (1.0f + 0.28f * sinf(progress * 31.0f + s.x * 0.05f)) * aFlame;
+        float fiberStretch = 1.0f + g_trailFxIntensity * 1.1f;
+
+        for (int part = 0; part < 8; part++) {
+            s_pv.clear();
+            float stretch = 1.0f;
+            for (int i = 0; i < sv.count; i++) {
+                unsigned char p = sv.part ? sv.part[i] : kPartBody;
+                if (p != part) continue;
+                float lx = sv.verts[i * 2], ly = sv.verts[i * 2 + 1];
+                if (part == kPartFlame) {
+                    lx *= flameStretch;
+                    stretch = flameStretch;
+                } else if (part == kPartHi && s.shapeType == 13 && lx < -1.0f) {
+                    lx *= fiberStretch;
+                    stretch = fiberStretch;
+                }
+                s_pv.push_back(lx);
+                s_pv.push_back(ly);
+            }
+            if (s_pv.empty()) continue;
+
+            float pr, pg, pb, paMul;
+            ShapePartColor(part, s.color.r, s.color.g, s.color.b, pr, pg, pb, paMul);
+            pr = fminf(pr * fxBright, 1.0f);
+            pg = fminf(pg * fxBright, 1.0f);
+            pb = fminf(pb * fxBright, 1.0f);
+
+            MtDraw d;
+            d.kind = MtPrim::Poly;
+            d.verts = s_pv.data();
+            d.vertCount = (int)s_pv.size() / 2;
+            d.cx = bx; d.cy = by;
+            d.scale = scale; d.rot = rot;
+            d.r = pr; d.g = pg; d.b = pb;
+            d.a = lifeAlpha * paMul;
+            d.additive = false;
+            // 量化拉伸并并入缓存键：D2D 才能既支持动态拉伸又命中 geometry 缓存
+            int q = (int)((stretch - 0.5f) * 24.0f);
+            if (q < 0) q = 0;
+            if (q > 47) q = 47;
+            d.cacheKey = s.shapeType * 10000 + part * 100 + q;
+            MtPrimDraw(d);
+        }
+    }
+    MtEnd(screenW, screenH);
+}
+
+// ===================== 锥形拖尾带（抽象层统一实现 v3.4.5.3）=====================
+// 层次与原生 NativeRenderTrail 一一对应：阴影 → 自适应边缘 → 外发光×3 → 主体 → 头部高亮。
+// 渐变由 MtBegin 传入（D3D 走 PS 的 u 采样，D2D 按 ratio 分 8 段近似）。
+// 意义：D2D 回退路径原本根本没有拖尾带（原生渲染失败时拖尾直接消失），现已补齐。
+static void DrawTrailBand(const std::vector<D2D1_POINT_2F> &smoothed,
+                          const GradData &cols, float widthMul, float fadeAlpha,
+                          int screenW, int screenH) {
+    size_t sl = smoothed.size();
+    if (sl < 2) return;
+    // 法线（交错 nx,ny，与原生 BuildNativeStrip 的切向→法向一致）
+    static std::vector<float> s_nrm;
+    s_nrm.clear();
+    s_nrm.reserve(sl * 2);
+    for (size_t i = 0; i < sl; i++) {
+        float ddx, ddy;
+        if (i == 0) { ddx = smoothed[1].x - smoothed[0].x; ddy = smoothed[1].y - smoothed[0].y; }
+        else if (i == sl - 1) { ddx = smoothed[i].x - smoothed[i - 1].x; ddy = smoothed[i].y - smoothed[i - 1].y; }
+        else { ddx = smoothed[i + 1].x - smoothed[i - 1].x; ddy = smoothed[i + 1].y - smoothed[i - 1].y; }
+        float ln = sqrtf(ddx * ddx + ddy * ddy);
+        if (ln > 0) { ddx /= ln; ddy /= ln; }
+        s_nrm.push_back(-ddy);
+        s_nrm.push_back(ddx);
+    }
+    D2D1_COLOR_F c = cols.outer[0].color;
+
+    MtDraw d;
+    d.kind = MtPrim::Strip;
+    d.path = (const float *)smoothed.data();   // D2D1_POINT_2F = {float x,y}，内存布局与 float[2] 兼容
+    d.nrm = s_nrm.data();
+    d.pathCount = (int)sl;
+    d.tapered = true;
+    d.widthMul = widthMul;
+    d.widthScale = 1.0f;
+    // 渐变模式下顶点 RGB 是【亮度调制】（PS: gradColor.rgb * tint），1,1,1 = 直接用渐变原色。
+    // 若这里填头部色会与渐变相乘导致双重着色。阴影/发光等层才需要填 0,0,0 或 >1 的调制值。
+    d.r = d.g = d.b = 1.0f;
+
+    // 传入渐变：D3D 由 PS 按顶点 u 采样，D2D 按 ratio 分段近似
+    MtBegin(screenW, screenH, &cols);
+
+    // 层次与原生 NativeRenderTrail 一一对应：阴影 → 自适应边缘 → 外发光×3 → 主体 → 头部高亮
+    // 1. 拖尾阴影（右下偏移深色投影）/ trail shadow (offset dark projection)
+    if (g_enableTrailShadow) {
+        d.widthScale = 1.0f;
+        d.r = d.g = d.b = 0.0f;  // 0,0,0 = 渐变被完全乘黑
+        d.a = fadeAlpha * 0.18f;
+        d.offX = 1.5f; d.offY = 2.0f;
+        d.additive = false; d.headOnly = false;
+        MtPrimDraw(d);
+    }
+    // 2. 自适应柔和边缘（亮背景用深色边缘、暗背景用浅色）/ adaptive soft edge
+    if (g_adaptiveContrast) {
+        float edgeV = g_bgLuminance > 0.5f ? (0.02f + (1.0f - g_bgLuminance) * 0.06f)
+                                           : (1.2f + g_bgLuminance * 0.8f);
+        d.widthScale = 1.18f;
+        d.r = d.g = d.b = edgeV;
+        d.a = fadeAlpha * 0.22f;
+        d.offX = 0.0f; d.offY = 0.0f;
+        MtPrimDraw(d);
+    }
+    // 3. 外发光三层（宽淡→中→窄亮），加法混合
+    if (g_enableGlow) {
+        float gi = FxApply(g_glowIntensity / 100.0f, g_fxGlowMul);
+        d.r = d.g = d.b = 1.0f;
+        d.additive = true;
+        d.widthScale = 2.6f + gi * 1.4f; d.a = fadeAlpha * (0.04f + gi * 0.05f); MtPrimDraw(d);
+        d.widthScale = 1.7f + gi * 0.7f; d.a = fadeAlpha * (0.09f + gi * 0.09f); MtPrimDraw(d);
+        if (g_enhancedGlow) {
+            d.widthScale = 1.25f + gi * 0.35f;
+            d.r = d.g = d.b = 1.15f;  // >1 提亮
+            d.a = fadeAlpha * (0.14f + gi * 0.10f);
+            MtPrimDraw(d);
+        }
+    }
+    // 4. 主体带（1,1,1 = 渐变原色直接通过）/ main band
+    d.widthScale = 1.0f;
+    d.r = d.g = d.b = 1.0f;
+    d.a = fadeAlpha;
+    d.additive = false;
+    MtPrimDraw(d);
+    // 5. 头部高亮（只在头部一段）/ head highlight (head only)
+    if (g_enableHeadHighlight) {
+        d.widthScale = 0.35f;
+        d.r = d.g = d.b = 1.25f;
+        d.a = fadeAlpha * 0.75f;
+        d.headOnly = true;
+        MtPrimDraw(d);
+    }
+    MtEnd(screenW, screenH);
+}
+
+// 波纹原生渲染
+// ===================== 点击效果（抽象层统一实现 v3.4.5.3）=====================
+// 过去 D3D 与 D2D 各有一份实现，
+// 点击风格就栽在"只改了 D2D 那一份、默认生效的原生路径没改"，用户切换毫无反应。
+// 现在只有这一份，两个后端由抽象层分发，观感天然一致。
+static void DrawClickEffects(int screenW, int screenH, DWORD dwTime, const GradData &cols, int vX, int vY) {
+    if (!g_enableClickEffect || g_ripples.empty()) return;
+    // 用渐变头部色（最亮的色）作为波纹纯色
+    const D2D1_COLOR_F rc = cols.outer[0].color;
+    float cr = rc.r, cg = rc.g, cb = rc.b;
+
+    // 不规则轮廓与椭圆都先用 Poly 在调用侧生成顶点，两个后端都能画
+    static std::vector<float> s_poly;
+    auto polyRing = [&](float radius, float width, int seg, float wobAmp, float wobPhase) -> int {
+        s_poly.clear();
+        s_poly.reserve(seg * 4);
+        for (int i = 0; i < seg; i++) {
+            float t0 = (float)i / (float)seg * 6.2831853f;
+            float t1 = (float)(i + 1) / (float)seg * 6.2831853f;
+            float w0 = 1.0f + wobAmp * (0.62f * sinf(t0 * 5.0f + wobPhase) + 0.38f * sinf(t0 * 3.0f - wobPhase * 0.65f));
+            float w1 = 1.0f + wobAmp * (0.62f * sinf(t1 * 5.0f + wobPhase) + 0.38f * sinf(t1 * 3.0f - wobPhase * 0.65f));
+            float c0 = cosf(t0), s0 = sinf(t0), c1 = cosf(t1), s1 = sinf(t1);
+            // 一段环带拆成两个三角形（外0 外1 内1 / 外0 内1 内0）
+            s_poly.push_back(c0 * (radius + width) * w0); s_poly.push_back(s0 * (radius + width) * w0);
+            s_poly.push_back(c1 * (radius + width) * w1); s_poly.push_back(s1 * (radius + width) * w1);
+            s_poly.push_back(c1 * radius * w1);           s_poly.push_back(s1 * radius * w1);
+            s_poly.push_back(c0 * (radius + width) * w0); s_poly.push_back(s0 * (radius + width) * w0);
+            s_poly.push_back(c1 * radius * w1);           s_poly.push_back(s1 * radius * w1);
+            s_poly.push_back(c0 * radius * w0);           s_poly.push_back(s0 * radius * w0);
+        }
+        return (int)s_poly.size() / 2;
+    };
+    // 墨晕的顶点同时取决于 progress（相位）与 radius（尺寸），两者都要量化进缓存键，
+    // 否则要么画错、要么每帧重建 geometry。
+    auto InkKey = [&](float progress, float radius) -> int {
+        int qp = (int)(progress * 64.0f);
+        if (qp > 63) qp = 63;
+        int qr = (int)(radius * 0.25f);
+        if (qr > 199) qr = 199;
+        return qp * 200 + qr;
+    };
+    auto polyEllipse = [&](float rx, float ry, int seg) -> int {
+        s_poly.clear();
+        s_poly.reserve(seg * 6);
+        for (int i = 0; i < seg; i++) {
+            float a1 = (float)i / (float)seg * 6.2831853f;
+            float a2 = (float)(i + 1) / (float)seg * 6.2831853f;
+            s_poly.push_back(0); s_poly.push_back(0);
+            s_poly.push_back(cosf(a1) * rx); s_poly.push_back(sinf(a1) * ry);
+            s_poly.push_back(cosf(a2) * rx); s_poly.push_back(sinf(a2) * ry);
+        }
+        return (int)s_poly.size() / 2;
+    };
+
+    MtBegin(screenW, screenH);
+    for (auto &r : g_ripples) {
+        float progress = (float)(dwTime - r.startTime) / g_clickDuration;
+        if (progress < 0 || progress >= 1) continue;
+        float eased = 1.0f - powf(1.0f - progress, 2.0f);   // easeOut：先快后慢
+        float radius = g_clickMaxRadius * eased;
+        float alpha = (1.0f - progress) * 0.9f;
+
+        MtDraw d;
+        d.cx = (float)(r.pos.x - vX);
+        d.cy = (float)(r.pos.y - vY);
+        d.scale = 1.0f;
+        d.rot = 0.0f;
+
+        switch (g_clickStyle) {
+        default:
+        case 0: {  // 波纹
+            float w = 5.0f + progress * 4.0f;
+            d.kind = MtPrim::Ring; d.radius = radius; d.width = w * 2.5f;
+            d.r = cr; d.g = cg; d.b = cb; d.a = alpha * 0.35f; d.additive = true;
+            MtPrimDraw(d);
+            d.width = w; d.a = alpha; d.additive = false;
+            MtPrimDraw(d);
+            d.radius = radius - w * 0.3f; d.width = w * 0.5f;
+            d.r = cr * 1.4f; d.g = cg * 1.4f; d.b = cb * 1.4f; d.a = alpha * 0.6f;
+            MtPrimDraw(d);
+            break;
+        }
+        case 1: {  // 冲击波
+            float w = 6.0f + progress * 5.0f;
+            if (progress < 0.3f) {
+                d.kind = MtPrim::Disc; d.radius = radius * 0.42f + 2.0f;
+                d.r = cr; d.g = cg; d.b = cb;
+                d.a = (1.0f - progress / 0.3f) * alpha * 0.9f; d.additive = true;
+                MtPrimDraw(d);
+            }
+            d.kind = MtPrim::Ring; d.radius = radius; d.width = w;
+            d.a = alpha; d.additive = true;
+            MtPrimDraw(d);
+            d.radius = radius * 1.35f; d.width = 2.0f; d.a = alpha * 0.45f; d.additive = false;
+            MtPrimDraw(d);
+            d.kind = MtPrim::Spoke; d.width = 3.0f;
+            d.r = cr * 1.3f; d.g = cg * 1.3f; d.b = cb * 1.3f;
+            d.a = alpha * 0.9f; d.additive = true;
+            for (int i = 0; i < 8; i++) {
+                d.ang = (float)i * 0.78539816f + progress * 0.6f;
+                d.r0 = radius * 0.85f; d.r1 = radius * 1.18f;
+                MtPrimDraw(d);
+            }
+            break;
+        }
+        case 2: {  // 墨晕
+            float w = 4.0f + progress * 3.0f;
+            d.kind = MtPrim::Poly;
+            d.r = cr; d.g = cg; d.b = cb;
+            // 内部淡墨
+            d.vertCount = polyRing(radius * 0.92f, radius * 0.30f, 28, 0.28f, progress * 4.0f);
+            d.verts = s_poly.data();
+            d.a = alpha * 0.20f; d.additive = true;
+            d.cacheKey = 200000 + InkKey(progress, radius);
+            MtPrimDraw(d);
+            // 不规则主轮廓
+            d.vertCount = polyRing(radius, w, 28, 0.28f, progress * 4.0f);
+            d.verts = s_poly.data();
+            d.a = alpha; d.additive = false;
+            d.cacheKey = 250000 + InkKey(progress, radius);
+            MtPrimDraw(d);
+            // 溅墨点
+            d.kind = MtPrim::Disc;
+            for (int i = 0; i < 4; i++) {
+                float ang = (float)i * 1.7f + progress * 1.2f;
+                float dr = radius * (1.15f + 0.12f * (float)(i % 2));
+                d.cx = (float)(r.pos.x - vX) + cosf(ang) * dr;
+                d.cy = (float)(r.pos.y - vY) + sinf(ang) * dr;
+                d.radius = fmaxf(radius * 0.08f, 1.0f);
+                d.a = alpha * 0.6f;
+                MtPrimDraw(d);
+            }
+            break;
+        }
+        case 3: {  // 星芒
+            float beam = g_clickMaxRadius * (1.0f - progress) * 1.45f;
+            d.kind = MtPrim::Spoke; d.additive = true;
+            d.r = cr; d.g = cg; d.b = cb;
+            d.a = alpha;
+            for (int i = 0; i < 4; i++) {  // 主芒
+                d.ang = (float)i * 1.5707963f;
+                d.r0 = 0.0f; d.r1 = beam; d.width = 4.0f;
+                MtPrimDraw(d);
+            }
+            d.a = alpha * 0.8f; d.width = 2.5f;
+            for (int i = 0; i < 8; i++) {  // 副芒
+                d.ang = (float)i * 0.78539816f + 0.39269908f;
+                d.r0 = beam * 0.35f; d.r1 = beam * 0.58f;
+                MtPrimDraw(d);
+            }
+            d.kind = MtPrim::Disc; d.radius = fmaxf(beam * 0.16f, 1.5f);
+            d.a = alpha;
+            MtPrimDraw(d);
+            break;
+        }
+        case 4: {  // 花瓣绽放
+            d.kind = MtPrim::Poly;
+            d.r = cr; d.g = cg; d.b = cb; d.a = alpha * 0.9f; d.additive = false;
+            for (int i = 0; i < 6; i++) {
+                float ang = (float)i * 6.2831853f / 6.0f + progress * 0.9f;
+                d.cx = (float)(r.pos.x - vX) + cosf(ang) * radius * 0.55f;
+                d.cy = (float)(r.pos.y - vY) + sinf(ang) * radius * 0.55f;
+                d.rot = ang;
+                d.vertCount = polyEllipse(radius * 0.5f, radius * 0.19f, 16);
+                d.verts = s_poly.data();
+                // 花瓣尺寸只随 radius 变，把它量化进缓存键即可命中缓存
+                int qr = (int)(radius * 0.25f);
+                if (qr > 199) qr = 199;
+                d.cacheKey = 300000 + qr;
+                MtPrimDraw(d);
+            }
+            d.kind = MtPrim::Disc; d.rot = 0.0f;
+            d.cx = (float)(r.pos.x - vX); d.cy = (float)(r.pos.y - vY);
+            d.radius = radius * 0.22f; d.a = alpha * 0.55f; d.additive = true;
+            MtPrimDraw(d);
+            break;
+        }
+        }
+    }
+    MtEnd(screenW, screenH);
+}
+
+static D2D1_POINT_2F GetPointOnPath(const std::vector<D2D1_POINT_2F> &path, float ratio);
+
+// 圆点链渲染：离散圆点，每个点是一个独立的四边形
+static void NativeRenderDotChain(const std::vector<D2D1_POINT_2F>& path, float dotSize,
+                                 const GradData& cols, float fadeAlpha, int screenW, int screenH) {
+    if (!g_pNativeVS || !g_pNativePS || !g_pTrailVB || path.size() < 2) return;
+
+    // 顶点数组静态复用：容量在帧间保留，避免每帧两次堆分配
+    static std::vector<VertexPosColor> verts;
+    static std::vector<VertexPosColor> shadowVerts;
+    verts.clear();
+    shadowVerts.clear();
+    if (verts.capacity() < path.size() * 6) verts.reserve(path.size() * 6);
+    if (shadowVerts.capacity() < path.size() * 6) shadowVerts.reserve(path.size() * 6);
+    const float SH_DX = 1.5f, SH_DY = 2.0f;
+
+    for (size_t i = 0; i < path.size(); i++) {
+        float ratio = (float)i / (path.size() - 1);
+        float taper = powf(1.0f - ratio, 1.3f);
+        float size = dotSize * taper;
+        if (size < 0.5f) continue;
+
+        float x = path[i].x, y = path[i].y;
+        // 从渐变采样颜色
+        D2D1_GRADIENT_STOP gs = cols.outer[(int)(ratio * (GRAD_STOPS - 1))];
+        float r = gs.color.r, g = gs.color.g, b = gs.color.b;
+
+        // 阴影圆点（向右下偏移的深色投影，受 enable_trail_shadow 控制）/ Shadow dot (offset dark projection, controlled by enable_trail_shadow)
+        if (g_enableTrailShadow) {
+            float sx = x + SH_DX, sy = y + SH_DY, sa = fadeAlpha * 0.18f;
+            shadowVerts.push_back({sx - size, sy - size, 0, 0, 0, 0, sa, ratio});
+            shadowVerts.push_back({sx + size, sy - size, 0, 0, 0, 0, sa, ratio});
+            shadowVerts.push_back({sx - size, sy + size, 0, 0, 0, 0, sa, ratio});
+            shadowVerts.push_back({sx + size, sy - size, 0, 0, 0, 0, sa, ratio});
+            shadowVerts.push_back({sx + size, sy + size, 0, 0, 0, 0, sa, ratio});
+            shadowVerts.push_back({sx - size, sy + size, 0, 0, 0, 0, sa, ratio});
+        }
+
+        verts.push_back({x - size, y - size, 0, r, g, b, fadeAlpha, ratio});
+        verts.push_back({x + size, y - size, 0, r, g, b, fadeAlpha, ratio});
+        verts.push_back({x - size, y + size, 0, r, g, b, fadeAlpha, ratio});
+        verts.push_back({x + size, y - size, 0, r, g, b, fadeAlpha, ratio});
+        verts.push_back({x + size, y + size, 0, r, g, b, fadeAlpha, ratio});
+        verts.push_back({x - size, y + size, 0, r, g, b, fadeAlpha, ratio});
+    }
+
+    if (verts.empty() && shadowVerts.empty()) return;
+    if (verts.size() > kMaxTrailVertices) verts.resize(kMaxTrailVertices);
+    if (shadowVerts.size() > kMaxTrailVertices) shadowVerts.resize(kMaxTrailVertices);
+
+    // 统一绑定原生渲染状态（含常量缓冲上传，重复上传已被签名缓存跳过）/ Bind native state (incl. CB upload; redundant uploads skipped by signature cache)
+    SetNativeRenderState(screenW, screenH, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, &cols);
+
+    // 先画阴影，再画主体
+    auto drawList = [&](const std::vector<VertexPosColor>& v) {
+        if (v.empty()) return;
+        D3D11_MAPPED_SUBRESOURCE mapped;
+        if (SUCCEEDED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
+            memcpy(mapped.pData, v.data(), v.size() * sizeof(VertexPosColor));
+            g_pD3DContext->Unmap(g_pTrailVB, 0);
+            g_pD3DContext->Draw((UINT)v.size(), 0);
+        }
+    };
+    drawList(shadowVerts);
+    drawList(verts);
+}
+
+// 整数钳制辅助函数
+static inline int ClampInt(int v, int lo, int hi) {
+    return v < lo ? lo : (v > hi ? hi : v);
+}
+
+// ===== 物理可视化调试（D2D1叠加绘制）===== / Physics debug visualization: each element has independent toggle
+static void RenderPhysicsDebugD2D(DWORD dwTime, const std::vector<D2D1_POINT_2F>& smoothed) {
+    if (!g_pD2DDC) return;
+    // 所有调试都关闭则直接返回
+    if (!g_debugVelocity && !g_debugForce && !g_debugVortex && !g_debugGravity && !g_debugCollision && !g_debugSpring && !g_debugInteraction && !g_debugSpawn && !g_debugPath) return;
+
+    // 动画相位（每10秒循环）/ animation phase (10s loop)
+    float animT = (float)(dwTime % 10000) / 10000.0f;
+    // 创建画刷（调试功能，每帧创建可接受）/ Create brushes (debug feature, per-frame creation acceptable)
+    ID2D1SolidColorBrush *brushGreen = nullptr, *brushRed = nullptr,
+                        *brushBlue = nullptr, *brushYellow = nullptr,
+                        *brushCyan = nullptr, *brushCyanFill = nullptr,
+                        *brushSpringLoose = nullptr, *brushSpringTaut = nullptr;
+    if (g_debugVelocity)
+        g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(0.0f, 1.0f, 0.0f, 0.95f), &brushGreen);
+    if (g_debugForce)
+        g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.2f, 0.2f, 0.95f), &brushRed);
+    if (g_debugVortex)
+        g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.6f, 1.0f, 0.9f), &brushBlue);
+    if (g_debugGravity)
+        g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 0.0f, 0.95f), &brushYellow);
+    if (g_debugCollision) {
+        g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(0.0f, 1.0f, 1.0f, 0.9f), &brushCyan);
+        g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(0.0f, 1.0f, 1.0f, 0.18f), &brushCyanFill);
+    }
+    if (g_debugSpring) {
+        g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(0.2f, 0.4f, 1.0f, 0.55f), &brushSpringLoose);
+        g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.3f, 0.2f, 0.85f), &brushSpringTaut);
+    }
+    ID2D1SolidColorBrush *brushMagenta = nullptr, *brushOrange = nullptr,
+                        *brushOrangeFill = nullptr, *brushWhite = nullptr, *brushGray = nullptr;
+    if (g_debugInteraction)
+        g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.0f, 1.0f, 0.85f), &brushMagenta);
+    if (g_debugSpawn) {
+        g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.65f, 0.0f, 0.95f), &brushOrange);
+        g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.65f, 0.0f, 0.12f), &brushOrangeFill);
+    }
+    if (g_debugPath) {
+        g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.9f), &brushWhite);
+        g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(0.5f, 0.5f, 0.5f, 0.6f), &brushGray);
+    }
+
+    const float VEC_SCALE = 4.0f;  // 速度向量缩放
+    const float FORCE_SCALE = 10.0f; // 受力向量缩放（增大更明显）/ Force vector scale (larger for visibility)
+
+    // 1. 粒子级调试：速度向量、受力向量、碰撞半径
+    if (g_debugVelocity || g_debugForce || g_debugCollision) {
+        for (auto &p : g_particles) {
+            float progress = (float)(dwTime - p.startTime) / p.lifetime;
+            if (progress < 0 || progress >= 1) continue;
+
+            D2D1_POINT_2F pos = D2D1::Point2F(p.x, p.y);
+
+            // 碰撞半径：半透明填充 + 脉动高亮轮廓（青色，与实际碰撞半径一致）/ Collision radius: pulsing outline, matches actual
+            if (g_debugCollision) {
+                float colRadius = (p.shapeType == 10)
+                    ? (g_textFontSize * 0.5f * (g_particleSizeMultiplier / 100.0f) * 0.5f) * sqrtf(1.0f + g_textAspectRatio * g_textAspectRatio)
+                    : p.size * (g_particleSizeMultiplier / 100.0f);
+                g_pD2DDC->FillEllipse(D2D1::Ellipse(pos, colRadius, colRadius), brushCyanFill);
+                float pulseW = 1.6f + 0.9f * sinf(dwTime * 0.006f + p.x * 0.08f + p.y * 0.08f);
+                g_pD2DDC->DrawEllipse(D2D1::Ellipse(pos, colRadius, colRadius), brushCyan, pulseW);
+            }
+
+            // 速度向量：绿色线段 + 箭头 + 流动光点
+            if (g_debugVelocity) {
+                float vLen = sqrtf(p.vx * p.vx + p.vy * p.vy);
+                if (vLen > 0.1f) {
+                    D2D1_POINT_2F vEnd = D2D1::Point2F(p.x + p.vx * VEC_SCALE, p.y + p.vy * VEC_SCALE);
+                    g_pD2DDC->DrawLine(pos, vEnd, brushGreen, 2.0f);
+                    float angle = atan2f(p.vy, p.vx);
+                    float arrowLen = 5.0f;
+                    D2D1_POINT_2F a1 = D2D1::Point2F(vEnd.x - cosf(angle - 0.4f) * arrowLen,
+                                                      vEnd.y - sinf(angle - 0.4f) * arrowLen);
+                    D2D1_POINT_2F a2 = D2D1::Point2F(vEnd.x - cosf(angle + 0.4f) * arrowLen,
+                                                      vEnd.y - sinf(angle + 0.4f) * arrowLen);
+                    g_pD2DDC->DrawLine(vEnd, a1, brushGreen, 2.0f);
+                    g_pD2DDC->DrawLine(vEnd, a2, brushGreen, 2.0f);
+                    // 沿向量流动的光点
+                    float dotPh = fmodf(animT * 2.5f + p.x * 0.013f + p.y * 0.017f, 1.0f);
+                    D2D1_POINT_2F dotP = D2D1::Point2F(pos.x + (vEnd.x - pos.x) * dotPh,
+                                                        pos.y + (vEnd.y - pos.y) * dotPh);
+                    g_pD2DDC->FillEllipse(D2D1::Ellipse(dotP, 2.5f, 2.5f), brushGreen);
+                }
+            }
+
+            // 受力向量：红色线段 + 箭头 + 流动光点
+            if (g_debugForce) {
+                float fLen = sqrtf(p.debugForceX * p.debugForceX + p.debugForceY * p.debugForceY);
+                if (fLen > 0.02f) {
+                    D2D1_POINT_2F fEnd = D2D1::Point2F(p.x + p.debugForceX * FORCE_SCALE,
+                                                        p.y + p.debugForceY * FORCE_SCALE);
+                    g_pD2DDC->DrawLine(pos, fEnd, brushRed, 1.8f);
+                    float angle = atan2f(p.debugForceY, p.debugForceX);
+                    float arrowLen = 4.0f;
+                    D2D1_POINT_2F a1 = D2D1::Point2F(fEnd.x - cosf(angle - 0.4f) * arrowLen,
+                                                      fEnd.y - sinf(angle - 0.4f) * arrowLen);
+                    D2D1_POINT_2F a2 = D2D1::Point2F(fEnd.x - cosf(angle + 0.4f) * arrowLen,
+                                                      fEnd.y - sinf(angle + 0.4f) * arrowLen);
+                    g_pD2DDC->DrawLine(fEnd, a1, brushRed, 1.8f);
+                    g_pD2DDC->DrawLine(fEnd, a2, brushRed, 1.8f);
+                    // 沿力向量流动的光点
+                    float dotPh = fmodf(animT * 3.0f + p.x * 0.019f + p.y * 0.011f, 1.0f);
+                    D2D1_POINT_2F dotP = D2D1::Point2F(pos.x + (fEnd.x - pos.x) * dotPh,
+                                                        pos.y + (fEnd.y - pos.y) * dotPh);
+                    g_pD2DDC->FillEllipse(D2D1::Ellipse(dotP, 2.2f, 2.2f), brushRed);
+                }
+            }
+        }
+    }
+
+    // 1.5 弹簧连线调试：遍历粒子对，按张力着色
+    if (g_debugSpring && g_enableParticleSpring && g_particles.size() >= 2) {
+        int pc = (int)g_particles.size();
+        float springRestDbg = g_springMaxDist * 0.5f;
+        for (int i = 0; i < pc; i++) {
+            for (int j = i + 1; j < pc; j++) {
+                float dx = g_particles[i].x - g_particles[j].x;
+                float dy = g_particles[i].y - g_particles[j].y;
+                float d2 = dx * dx + dy * dy;
+                if (d2 < 0.25f || d2 > g_springMaxDist * g_springMaxDist) continue;
+                float dist = sqrtf(d2);
+                float tension = (dist - springRestDbg) / g_springMaxDist;  // -0.5..~0.5
+                float t = fminf(fmaxf(tension * 2.0f + 0.5f, 0.0f), 1.0f);  // 0=松弛蓝, 1=绷紧红
+                D2D1_POINT_2F a = D2D1::Point2F(g_particles[i].x, g_particles[i].y);
+                D2D1_POINT_2F b = D2D1::Point2F(g_particles[j].x, g_particles[j].y);
+                if (t < 0.5f)
+                    g_pD2DDC->DrawLine(a, b, brushSpringLoose, 1.2f);
+                else {
+                    g_pD2DDC->DrawLine(a, b, brushSpringTaut, 1.6f);
+                    // 绷紧弹簧上的能量脉冲
+                    float pulsePh = fmodf(animT * 3.5f + i * 0.3f + j * 0.17f, 1.0f);
+                    D2D1_POINT_2F pp = D2D1::Point2F(a.x + (b.x - a.x) * pulsePh,
+                                                     a.y + (b.y - a.y) * pulsePh);
+                    g_pD2DDC->FillEllipse(D2D1::Ellipse(pp, 2.8f, 2.8f), brushSpringTaut);
+                }
+            }
+        }
+    }
+
+    // 2. 漩涡中心和轨道（蓝色）：遍历所有活跃漩涡
+    if (g_debugVortex && g_enableCentripetal) {
+        ID2D1SolidColorBrush *brushBlueGlow = nullptr;
+        g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.6f, 1.0f, 0.10f), &brushBlueGlow);
+        for (int vi = 0; vi < g_vortexMaxCount; vi++) {
+            Vortex &v = g_vortices[vi];
+            if (!v.active || v.strength <= 0.02f) continue;
+
+            D2D1_POINT_2F center = D2D1::Point2F(v.centerX, v.centerY);
+            int rotDir = (v.angularVel >= 0.0f) ? 1 : -1;
+            float pulse = 0.85f + 0.15f * sinf(v.orbitPhase * 3.0f);
+
+            // 外发光
+            float glowR = v.coreRadius * 3.5f + v.strength * 60.0f;
+            g_pD2DDC->FillEllipse(D2D1::Ellipse(center, glowR, glowR), brushBlueGlow);
+
+            // 轨道环（3层），每层带4个切向箭头表示旋转方向
+            float orbitRs[3] = {
+                v.coreRadius * 1.8f + 10.0f,
+                v.coreRadius * 3.0f + 22.0f,
+                v.coreRadius * 4.8f + 38.0f
+            };
+            for (int ri = 0; ri < 3; ri++) {
+                float r = orbitRs[ri] * (0.9f + v.strength * 0.25f) * pulse;
+                g_pD2DDC->DrawEllipse(D2D1::Ellipse(center, r, r), brushBlue, 1.0f);
+                for (int k = 0; k < 4; k++) {
+                    float ang = v.orbitPhase + k * 1.5707963f;
+                    float px = center.x + cosf(ang) * r;
+                    float py = center.y + sinf(ang) * r;
+                    float tx = -sinf(ang) * rotDir;
+                    float ty = cosf(ang) * rotDir;
+                    float arrowLen = 7.0f + v.strength * 4.0f;
+                    D2D1_POINT_2F tip = D2D1::Point2F(px + tx * arrowLen, py + ty * arrowLen);
+                    g_pD2DDC->DrawLine(D2D1::Point2F(px, py), tip, brushBlue, 1.8f);
+                    float wing = 3.5f;
+                    g_pD2DDC->DrawLine(tip, D2D1::Point2F(tip.x - tx * wing - ty * wing * 0.6f,
+                                                           tip.y - ty * wing + tx * wing * 0.6f), brushBlue, 1.4f);
+                    g_pD2DDC->DrawLine(tip, D2D1::Point2F(tip.x - tx * wing + ty * wing * 0.6f,
+                                                           tip.y - ty * wing - tx * wing * 0.6f), brushBlue, 1.4f);
+                }
+            }
+
+            // 涡核环（Rankine内边界）/ core ring
+            g_pD2DDC->DrawEllipse(D2D1::Ellipse(center, v.coreRadius, v.coreRadius), brushBlue, 2.0f);
+
+            // 强度环：线宽随强度
+            float strR = v.coreRadius + 6.0f + v.strength * 12.0f;
+            g_pD2DDC->DrawEllipse(D2D1::Ellipse(center, strR, strR), brushBlue, 1.0f + v.strength * 3.0f);
+
+            // 中心十字 + 实心点
+            g_pD2DDC->DrawLine(D2D1::Point2F(center.x - 12, center.y),
+                               D2D1::Point2F(center.x + 12, center.y), brushBlue, 2.0f);
+            g_pD2DDC->DrawLine(D2D1::Point2F(center.x, center.y - 12),
+                               D2D1::Point2F(center.x, center.y + 12), brushBlue, 2.0f);
+            g_pD2DDC->FillEllipse(D2D1::Ellipse(center, 3.0f, 3.0f), brushBlue);
+
+            // 漂移速度向量
+            float dvLen = sqrtf(v.driftX * v.driftX + v.driftY * v.driftY);
+            if (dvLen > 0.05f) {
+                D2D1_POINT_2F dEnd = D2D1::Point2F(center.x + v.driftX * 8.0f,
+                                                    center.y + v.driftY * 8.0f);
+                g_pD2DDC->DrawLine(center, dEnd, brushBlue, 1.5f);
+            }
+        }
+        // 漩涡间合并连线：接近中的漩涡之间画能量流
+        for (int mi = 0; mi < g_vortexMaxCount; mi++) {
+            if (!g_vortices[mi].active) continue;
+            for (int mj = mi + 1; mj < g_vortexMaxCount; mj++) {
+                if (!g_vortices[mj].active) continue;
+                Vortex &va = g_vortices[mi], &vb = g_vortices[mj];
+                float mdx = va.centerX - vb.centerX, mdy = va.centerY - vb.centerY;
+                float mdist = sqrtf(mdx*mdx + mdy*mdy);
+                float mergeR = (va.coreRadius + vb.coreRadius) * 1.8f;
+                if (mdist < mergeR && mdist > 0.1f) {
+                    D2D1_POINT_2F ma = D2D1::Point2F(va.centerX, va.centerY);
+                    D2D1_POINT_2F mb = D2D1::Point2F(vb.centerX, vb.centerY);
+                    float linkAlpha = 1.0f - mdist / mergeR;
+                    g_pD2DDC->DrawLine(ma, mb, brushBlue, 1.0f + linkAlpha * 2.0f);
+                    // 沿连线流动的能量点
+                    float lp = fmodf(animT * 2.0f + mi * 0.5f, 1.0f);
+                    D2D1_POINT_2F lep = D2D1::Point2F(ma.x + (mb.x - ma.x) * lp,
+                                                      ma.y + (mb.y - ma.y) * lp);
+                    g_pD2DDC->FillEllipse(D2D1::Ellipse(lep, 3.0f, 3.0f), brushBlue);
+                }
+            }
+        }
+        if (brushBlueGlow) brushBlueGlow->Release();
+    }
+
+    // 2.5 粒子相互作用（品红连线）/ 2.5 Particle interaction (magenta links)
+    if (g_debugInteraction && g_enableParticleInteraction) {
+        int pc = (int)g_particles.size();
+        float repelDist = (float)g_interParticleRepelDistance;
+        float repelDistSq = repelDist * repelDist;
+        for (int i = 0; i < pc; i++) {
+            for (int j = i + 1; j < pc; j++) {
+                float dx = g_particles[i].x - g_particles[j].x;
+                float dy = g_particles[i].y - g_particles[j].y;
+                float d2 = dx * dx + dy * dy;
+                if (d2 >= repelDistSq || d2 < 0.01f) continue;
+                float dist = sqrtf(d2);
+                float falloff = 1.0f - dist / repelDist;
+                float strength = falloff * falloff;  // 与物理公式一致
+                float lw = 0.8f + strength * 2.5f;
+                D2D1_POINT_2F a = D2D1::Point2F(g_particles[i].x, g_particles[i].y);
+                D2D1_POINT_2F b = D2D1::Point2F(g_particles[j].x, g_particles[j].y);
+                g_pD2DDC->DrawLine(a, b, brushMagenta, lw);
+                // 连线中点的能量脉冲
+                float pulsePh = fmodf(animT * 4.0f + i * 0.37f + j * 0.19f, 1.0f);
+                D2D1_POINT_2F mp = D2D1::Point2F(a.x + (b.x - a.x) * pulsePh,
+                                                  a.y + (b.y - a.y) * pulsePh);
+                g_pD2DDC->FillEllipse(D2D1::Ellipse(mp, 1.5f + strength * 2.0f, 1.5f + strength * 2.0f), brushMagenta);
+            }
+        }
+    }
+
+    // 2.6 生成点调试（橙色）/ 2.6 Spawn points debug (orange)
+    if (g_debugSpawn) {
+        // 清理过期生成点（>800ms）/ prune old spawn points (>800ms)
+        while (!g_debugSpawnPoints.empty() && dwTime - g_debugSpawnPoints.front().time > 800)
+            g_debugSpawnPoints.erase(g_debugSpawnPoints.begin());
+        // 绘制每个生成点，透明度随年龄衰减
+        for (auto &sp : g_debugSpawnPoints) {
+            float age = (float)(dwTime - sp.time) / 800.0f;
+            if (age >= 1.0f) continue;
+            float alpha = 1.0f - age;
+            D2D1_POINT_2F spPos = D2D1::Point2F(sp.x, sp.y);
+            float r = 3.0f + age * 4.0f;  // 随年龄扩大
+            // 用临时画刷控制透明度
+            ID2D1SolidColorBrush *tmpBrush = nullptr;
+            g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.65f, 0.0f, alpha * 0.9f), &tmpBrush);
+            g_pD2DDC->DrawEllipse(D2D1::Ellipse(spPos, r, r), tmpBrush, 1.5f);
+            g_pD2DDC->FillEllipse(D2D1::Ellipse(spPos, 2.0f, 2.0f), tmpBrush);
+            if (tmpBrush) tmpBrush->Release();
+        }
+        // 在光标处绘制生成扩散半径圆
+        if (!smoothed.empty()) {
+            D2D1_POINT_2F cursorPos = smoothed[0];
+            float spreadR = (float)g_particleSpawnSpread;
+            if (spreadR > 0.5f) {
+                g_pD2DDC->FillEllipse(D2D1::Ellipse(cursorPos, spreadR, spreadR), brushOrangeFill);
+                float dashPulse = 0.7f + 0.3f * sinf(dwTime * 0.008f);
+                g_pD2DDC->DrawEllipse(D2D1::Ellipse(cursorPos, spreadR, spreadR), brushOrange, 1.5f * dashPulse);
+            }
+        }
+    }
+
+    // 2.7 拖尾路径调试（白=平滑路径, 灰=原始历史）/ 2.7 Trail path debug (white=smoothed, gray=raw history)
+    if (g_debugPath) {
+        // 原始历史点
+        for (auto &hp : g_history) {
+            g_pD2DDC->FillEllipse(D2D1::Ellipse(D2D1::Point2F(hp.x, hp.y), 1.8f, 1.8f), brushGray);
+        }
+        // 平滑路径点 + 连线
+        for (size_t i = 0; i < smoothed.size(); i++) {
+            g_pD2DDC->FillEllipse(D2D1::Ellipse(smoothed[i], 2.5f, 2.5f), brushWhite);
+            if (i > 0) {
+                g_pD2DDC->DrawLine(smoothed[i - 1], smoothed[i], brushWhite, 1.0f);
+            }
+        }
+        // 路径头部标记
+        if (!smoothed.empty()) {
+            g_pD2DDC->DrawEllipse(D2D1::Ellipse(smoothed[0], 6.0f, 6.0f), brushWhite, 2.0f);
+        }
+    }
+
+    // 3. 引力源（黄色双圆）/ 3. Gravity sources (yellow double circles)
+    if (g_debugGravity && g_enableParticleGravity) {
+        int n = (int)g_particles.size();
+        int bodyCount = (g_gravitySystem == 0) ? 2 : ClampInt(g_gravityBodyCount, 2, 10);
+        int drawCount = bodyCount < n ? bodyCount : n;
+        // 找出质量最大的bodyCount个粒子作为引力源
+        std::vector<int> indices(n);
+        for (int i = 0; i < n; i++) indices[i] = i;
+        std::partial_sort(indices.begin(), indices.begin() + drawCount, indices.end(),
+                          [&](int a, int b) { return g_particles[a].mass > g_particles[b].mass; });
+        for (int i = 0; i < drawCount; i++) {
+            Particle &p = g_particles[indices[i]];
+            D2D1_POINT_2F pos = D2D1::Point2F(p.x, p.y);
+            float r = 6 + p.mass * 0.5f;
+            g_pD2DDC->FillEllipse(D2D1::Ellipse(pos, r * 0.6f, r * 0.6f), brushYellow);
+            g_pD2DDC->DrawEllipse(D2D1::Ellipse(pos, r, r), brushYellow, 2.0f);
+            g_pD2DDC->DrawEllipse(D2D1::Ellipse(pos, r * 5, r * 5), brushYellow, 0.8f);
+            // 引力场轨道上的绕行点
+            for (int s = 0; s < 2; s++) {
+                float orbAng = animT * 6.28318f * 1.2f + i * 3.14159f + s * 3.14159f;
+                D2D1_POINT_2F sp = D2D1::Point2F(pos.x + cosf(orbAng) * r * 5.0f,
+                                                  pos.y + sinf(orbAng) * r * 5.0f);
+                g_pD2DDC->FillEllipse(D2D1::Ellipse(sp, 2.5f, 2.5f), brushYellow);
+            }
+        }
+    }
+
+    if (brushGreen) brushGreen->Release();
+    if (brushRed) brushRed->Release();
+    if (brushBlue) brushBlue->Release();
+    if (brushYellow) brushYellow->Release();
+    if (brushCyan) brushCyan->Release();
+    if (brushCyanFill) brushCyanFill->Release();
+    if (brushSpringLoose) brushSpringLoose->Release();
+    if (brushSpringTaut) brushSpringTaut->Release();
+    if (brushMagenta) brushMagenta->Release();
+    if (brushOrange) brushOrange->Release();
+    if (brushOrangeFill) brushOrangeFill->Release();
+    if (brushWhite) brushWhite->Release();
+    if (brushGray) brushGray->Release();
+}
+
+static bool NativeRenderFrame(int screenW, int screenH, const std::vector<D2D1_POINT_2F>& smoothed,
+                              bool tailVisible, const GradData& cols, float widthMul, float fadeAlpha,
+                              DWORD dwTime, int vX, int vY) {
+    if (!g_pNativeVS || !g_pD3DContext || !g_pCachedRTV) return false;
+
+    // v3.4.2.2 热键：拖尾可见性（关闭时跳过拖尾带/动态模糊/形状拖尾，但路径历史 g_history 保留）
+    bool trailOn = g_trailVisible.load(std::memory_order_relaxed);
+
+    // 复用静态临时缓冲，避免每帧堆分配（仅渲染线程访问，线程安全）/ Reuse static scratch buffers to avoid per-frame heap allocation (render-thread only)
+    static std::vector<D2D1_POINT_2F> s_dots, s_line1, s_line2, s_segment, s_branch, s_barb;
+    // 批量线段绘制用的法线暂存（供 LineSegBatch 复用，避免每段堆分配）/ Normal scratch for LineSegBatch
+    static std::vector<float> s_bnx, s_bny;
+
+    // 图集脏标记重建（在任何状态绑定前）/ Rebuild atlas on dirty flag (before any state binding)
+    if (g_charAtlasDirty && g_particleShape == 10) { BuildCharAtlas(); g_charAtlasDirty = false; }
+    // [tag] 动态跟随：内部做了 250ms 节流，且值没变时直接返回，稳态开销可忽略。
+    // 必须排在 BuildCharAtlas 之后——否则刚重建完的 g_lastExpandedPhrases 会被判定为"没变"，
+    // 但反过来若这里触发了 NeedRebuild，下一帧的 dirty 分支不会再跑，所以 UpdateCharAtlasTags
+    // 内部会自行调用 BuildCharAtlas（见函数实现）。
+    // Dynamic [tag] follow: throttled to 250ms internally and returns immediately when nothing changed.
+    // Must run after BuildCharAtlas: when it reports NeedRebuild it calls BuildCharAtlas itself, since
+    // the dirty branch above will not run again next frame.
+    UpdateCharAtlasTags();
+
+    // 清空渲染目标（透明黑），RTV 随交换链缓存，避免每帧创建 COM 对象
+    float clearColor[4] = {0, 0, 0, 0};
+    g_pD3DContext->ClearRenderTargetView(g_pCachedRTV, clearColor);
+    g_pD3DContext->OMSetRenderTargets(1, &g_pCachedRTV, nullptr);
+
+    // 设置视口（SSAA 时使用放大后的渲染分辨率）/ Set viewport (use scaled resolution for SSAA)
+    int renderW = screenW, renderH = screenH;
+    if (g_ssaaScale > 1) {
+        renderW = screenW * g_ssaaScale;
+        renderH = screenH * g_ssaaScale;
+    }
+    g_renderW = renderW;
+    g_renderH = renderH;
+    D3D11_VIEWPORT vp = {0, 0, (float)renderW, (float)renderH, 0, 1};
+    g_pD3DContext->RSSetViewports(1, &vp);
+
+    // 1. 粒子渲染（Instanced）/ 1. Particle rendering (instanced)
+    // 文字形状(10)走D2D路径，跳过GPU instanced渲染
+    if (!g_particles.empty()) {
+        NativeRenderParticles(screenW, screenH);
+    }
+
+    // ===== 常量宽度线段批量绘制器（羽毛 / 虚线 / 闪电的小段）=====
+    // 这三种样式原先逐段调用 NativeRenderLineTrail，每段都要重算法线、堆分配、Map/Unmap 与 Draw；
+    // tail_length=200 时羽毛样式每帧约 800 段，即约 800 次 Map/Unmap，帧率掉到个位数。
+    // 改为整批共用一次 Map：顶点顺序写入，累积 Layer{offset,count} 后统一 Draw。
+    // 视觉等价：每段仍是独立的 TRIANGLESTRIP（Draw 的 StartVertexLocation 隔开），数值与顺序不变。
+    // Batched constant-width segments (feather / dashed / lightning): one Map per batch instead of
+    // ~800 per frame at tail_length=200. Every segment stays an independent TRIANGLESTRIP, so
+    // vertex values, order and blending are identical to per-segment drawing.
+    struct LineSegBatch {
+        // 单批层数上限：最短的段是 2 点 = 4 顶点，4096/4 = 1024，层数与 VB 容量同时耗尽
+        enum { MAX_LAYERS = 1024 };
+        enum { MAX_VTX = kMaxTrailVertices };
+        struct Layer { int offset, count; };
+        Layer layers[MAX_LAYERS];
+        int layerCount = 0;
+        VertexPosColor* dst = nullptr;  // 当前 Map 的写入指针
+        int vtxOffset = 0;  // 本批已写入顶点数
+        bool mapped = false;
+        bool mapFailed = false;
+        float r = 0, g = 0, b = 0;
+        int screenW = 0, screenH = 0;
+
+        // 绑定渲染状态（常量缓冲重复上传已被签名缓存跳过）/ Bind state (redundant CB uploads are skipped by the signature cache)
+        void open(const GradData& cols, int sw, int sh) {
+            r = cols.solidOuter.r; g = cols.solidOuter.g; b = cols.solidOuter.b;
+            screenW = sw; screenH = sh;
+            SetNativeRenderState(screenW, screenH, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP, &cols);
+        }
+        // 保证处于已 Map 状态
+        bool ensure() {
+            if (mapped) return true;
+            if (mapFailed) return false;
+            D3D11_MAPPED_SUBRESOURCE ms;
+            if (FAILED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &ms))) {
+                mapFailed = true;
+                return false;
+            }
+            dst = (VertexPosColor*)ms.pData;
+            vtxOffset = 0;
+            layerCount = 0;
+            mapped = true;
+            return true;
+        }
+        // 收尾当前批：Unmap 后按累积顺序绘制
+        void flush() {
+            if (!mapped) return;
+            g_pD3DContext->Unmap(g_pTrailVB, 0);
+            mapped = false;
+            for (int i = 0; i < layerCount; i++)
+                g_pD3DContext->Draw(layers[i].count, layers[i].offset);
+            layerCount = 0;
+        }
+        // 追加一个常量宽度段；本批放不下就先 flush 再重开一批
+        void push(const std::vector<D2D1_POINT_2F>& pts, float width, float fadeAlpha,
+                  std::vector<float>& nx, std::vector<float>& ny) {
+            size_t sl = pts.size();
+            if (sl < 2) return;
+            if (!ensure()) return;
+            int need = (int)sl * 2;
+            if (vtxOffset + need > (int)MAX_VTX || layerCount >= (int)MAX_LAYERS) {
+                flush();               // 已写入的层先画掉，再 DISCARD 重开（GPU 已取走，安全）/ draw what we have, then DISCARD (GPU already consumed it)
+                if (!ensure()) return;
+            }
+            // 段内法线：与原 NativeRenderLineTrail 完全相同的中心差分
+            nx.resize(sl); ny.resize(sl);
+            for (size_t i = 0; i < sl; ++i) {
+                float ddx, ddy;
+                if (i == 0) { ddx = pts[1].x - pts[0].x; ddy = pts[1].y - pts[0].y; }
+                else if (i == sl - 1) { ddx = pts[i].x - pts[i-1].x; ddy = pts[i].y - pts[i-1].y; }
+                else { ddx = pts[i+1].x - pts[i-1].x; ddy = pts[i+1].y - pts[i-1].y; }
+                float ln = sqrtf(ddx*ddx + ddy*ddy);
+                if (ln > 0) { ddx /= ln; ddy /= ln; } else { ddx = 1; ddy = 0; }
+                nx[i] = -ddy; ny[i] = ddx;
+            }
+            int c = BuildNativeStrip(dst + vtxOffset, (int)MAX_VTX - vtxOffset, pts, nx, ny,
+                                     false, 0.0f, 0.0f, width, r, g, b, fadeAlpha, 1.0f, 0, 0, false);
+            if (c > 0) { layers[layerCount++] = {vtxOffset, c}; vtxOffset += c; }
+        }
+        void close() { flush(); }
+    };
+
+    // 2. 拖尾带渲染（顶点缓冲）/ 2. Trail strip rendering (vertex buffer)
+    // 锥形(0)、函数曲线(2)、波形曲线(3)、螺旋(7)、闪电(8)、羽毛(9) 直接渲染
+    // 点链(1) 用小锥形段近似
+    // 双线(5) 渲染两条偏移的带
+    // 虚线(6) 分段渲染
+    // 形状拖尾(4) 不渲染带
+    if (trailOn && tailVisible && !smoothed.empty() && g_trailShape != 4 && g_trailShape != 10) {  // v3.4.2.2 热键：拖尾关闭时跳过步骤 2
+        if (g_trailShape == 1) {
+            // 点链：沿路径生成离散圆点
+            std::vector<D2D1_POINT_2F>& dots = s_dots; dots.clear();
+            int dotCount = (int)smoothed.size() * g_dotsMultiplier;
+            if (dotCount > 200) dotCount = 200;
+            for (int i = 0; i < dotCount; i++) {
+                float t = i / (float)(dotCount - 1);
+                D2D1_POINT_2F p = GetPointOnPath(smoothed, t);
+                dots.push_back(p);
+            }
+            float dotSize = 4.0f * widthMul * (g_dotChainSize / 100.0f);
+            NativeRenderDotChain(dots, dotSize, cols, fadeAlpha, screenW, screenH);
+        } else if (g_trailShape == 5) {
+            // 双线拖尾：渲染两条偏移的带
+            std::vector<D2D1_POINT_2F>& line1 = s_line1; line1.clear();
+            std::vector<D2D1_POINT_2F>& line2 = s_line2; line2.clear();
+            float offset = 4.0f;
+            for (size_t i = 0; i < smoothed.size(); i++) {
+                float ddx, ddy;
+                if (i == 0) { ddx = smoothed[1].x - smoothed[0].x; ddy = smoothed[1].y - smoothed[0].y; }
+                else if (i == smoothed.size() - 1) { ddx = smoothed[i].x - smoothed[i-1].x; ddy = smoothed[i].y - smoothed[i-1].y; }
+                else { ddx = smoothed[i+1].x - smoothed[i-1].x; ddy = smoothed[i+1].y - smoothed[i-1].y; }
+                float ln = sqrtf(ddx*ddx + ddy*ddy);
+                if (ln > 0) { ddx /= ln; ddy /= ln; }
+                float nx = -ddy, ny = ddx;
+                line1.push_back({smoothed[i].x + nx * offset, smoothed[i].y + ny * offset});
+                line2.push_back({smoothed[i].x - nx * offset, smoothed[i].y - ny * offset});
+            }
+            DrawTrailBand(line1, cols, widthMul * 0.5f, fadeAlpha, screenW, screenH);
+            DrawTrailBand(line2, cols, widthMul * 0.5f, fadeAlpha, screenW, screenH);
+        } else if (g_trailShape == 6) {
+            // 虚线拖尾：常量宽度分段线，避免锥形段变成三角形
+            // 所有短段（约 smoothed/10 ≈ 80 段）合并进一次 Map：Map/Unmap 次数 80→1
+            std::vector<D2D1_POINT_2F>& segment = s_segment; segment.clear();
+            int segLen = 6, gapLen = 4;
+            LineSegBatch batch;
+            batch.open(cols, screenW, screenH);
+            for (size_t i = 0; i < smoothed.size(); i++) {
+                segment.push_back(smoothed[i]);
+                if ((int)(i + 1) % (segLen + gapLen) == 0) {
+                    if (segment.size() >= 2)
+                        batch.push(segment, 6.0f * widthMul, fadeAlpha, s_bnx, s_bny);
+                    segment.clear();
+                    i += gapLen;
+                }
+            }
+            if (segment.size() >= 2)
+                batch.push(segment, 6.0f * widthMul, fadeAlpha, s_bnx, s_bny);
+            batch.close();
+        } else if (g_trailShape == 8) {
+            // 闪电拖尾：细亮锯齿线 + 分支
+            NativeRenderLineTrail(smoothed, 3.0f * widthMul, cols, fadeAlpha, screenW, screenH);
+            // 随机分支：在路径中间点向外发射短线
+            // 分支段（3 点 = 6 顶点）批量写入：Map/Unmap 次数 分支数→1（约 90→1）
+            LineSegBatch batch;
+            batch.open(cols, screenW, screenH);
+            for (size_t i = 2; i + 2 < smoothed.size(); i += 3) {
+                if ((rand() / (float)RAND_MAX) > 0.35f) continue;
+                float dx = smoothed[i+1].x - smoothed[i-1].x;
+                float dy = smoothed[i+1].y - smoothed[i-1].y;
+                float ln = sqrtf(dx*dx + dy*dy);
+                if (ln < 0.001f) continue;
+                float nx = -dy / ln, ny = dx / ln;
+                float blen = 15.0f + (rand() / (float)RAND_MAX) * 25.0f;
+                float side = ((rand() / (float)RAND_MAX) > 0.5f) ? 1.0f : -1.0f;
+                std::vector<D2D1_POINT_2F>& branch = s_branch; branch.clear();
+                branch.push_back(smoothed[i]);
+                branch.push_back({smoothed[i].x + nx * side * blen * 0.5f + dx * 0.3f,
+                                  smoothed[i].y + ny * side * blen * 0.5f + dy * 0.3f});
+                branch.push_back({smoothed[i].x + nx * side * blen,
+                                  smoothed[i].y + ny * side * blen});
+                batch.push(branch, 1.5f * widthMul, fadeAlpha * 0.6f, s_bnx, s_bny);
+            }
+            batch.close();
+        } else if (g_trailShape == 9) {
+            // 羽毛拖尾：细主轴 + 两侧斜向羽枝
+            NativeRenderLineTrail(smoothed, 2.5f * widthMul, cols, fadeAlpha, screenW, screenH);
+            // 羽枝：每隔几个点向两侧画斜短线
+            // 羽枝段（2 点 = 4 顶点）批量写入：Map/Unmap 次数 约 800→2（见报告「顶点缓冲容量核算」）
+            LineSegBatch batch;
+            batch.open(cols, screenW, screenH);
+            for (size_t i = 1; i + 1 < smoothed.size(); i += 2) {
+                float dx = smoothed[i+1].x - smoothed[i-1].x;
+                float dy = smoothed[i+1].y - smoothed[i-1].y;
+                float ln = sqrtf(dx*dx + dy*dy);
+                if (ln < 0.001f) continue;
+                float nx = -dy / ln, ny = dx / ln;
+                float barbLen = 10.0f * (1.0f - (float)i / smoothed.size()) + 3.0f;
+                // 羽枝向后倾斜（沿路径反方向）/ Barbs angle backward along path
+                float bx = -dx / ln, by = -dy / ln;
+                for (int side = -1; side <= 1; side += 2) {
+                    std::vector<D2D1_POINT_2F>& barb = s_barb; barb.clear();
+                    barb.push_back(smoothed[i]);
+                    barb.push_back({smoothed[i].x + nx * side * barbLen + bx * barbLen * 0.4f,
+                                    smoothed[i].y + ny * side * barbLen + by * barbLen * 0.4f});
+                    batch.push(barb, 1.0f * widthMul, fadeAlpha * 0.5f, s_bnx, s_bny);
+                }
+            }
+            batch.close();
+        } else {
+            // 锥形/函数/波形/螺旋
+            DrawTrailBand(smoothed, cols, widthMul, fadeAlpha, screenW, screenH);
+        }
+    }
+
+    // 3. 点击波纹环渲染（顶点缓冲）/ 3. Click ripple ring rendering (vertex buffer)
+    if (g_enableClickEffect && !g_ripples.empty()) {
+        DrawClickEffects(screenW, screenH, dwTime, cols, vX, vY);
+    }
+
+    // 4. 运动模糊：绘制历史路径（透明度递减）/ 4. Motion blur: draw history paths (decreasing alpha)
+    if (trailOn && g_enableMotionBlur && tailVisible && !g_trailHistory.empty() && g_trailShape != 10) {  // v3.4.2.2 热键：拖尾关闭时跳过步骤 4
+        for (size_t h = 0; h < g_trailHistory.size(); h++) {
+            float histAlpha = fadeAlpha * (0.15f + 0.1f * (float)h / g_trailHistory.size());
+            if (histAlpha < 0.02f) continue;
+            const std::vector<D2D1_POINT_2F>& histPath = g_trailHistory[h].path;
+            if (histPath.size() < 2) continue;
+            DrawTrailBand(histPath, cols, widthMul, histAlpha, screenW, screenH);
+        }
+    }
+
+    // 5. 形状拖尾渲染（顶点缓冲）/ 5. Shape trail rendering (vertex buffer)
+    if (trailOn && !g_trailShapes.empty()) {  // v3.4.2.2 热键：拖尾关闭时跳过步骤 5
+        DrawTrailShapes(screenW, screenH, dwTime);
+    }
+
+    // 恢复 D2D1 状态（如果后续还有 D2D1 渲染）/ Restore D2D1 state (if more D2D1 rendering follows)
+    g_pD2DDC->SetTarget(g_pD2DTargetBitmap);
+    return true;
+}
+
+static inline float Rand01() {
+    return rand() / (float)RAND_MAX;
+}
+// 获取粒子数量上限
+static inline int GetParticleCap() {
+    return g_superPerformanceMode ? 1200 : 500;
+}
+
+// ===== 快速移动补插：是否允许插入中间粒子 ===== / Fast-motion filler: are we allowed to insert in-between points
+// 补插是用"上一段进入方向 + 当前弦"构造的二次贝塞尔去**猜**两次释放之间鼠标走过的形状。
+// 猜得准不准取决于这段有多长、弯了多少；猜不准时补出来的粒子既不跟着轨迹走，
+// 又比不补更显眼（一条连向光标的串珠）。所以这里给出两条准入判据，任一条不满足就不补。
+// Filler insertion GUESSES the path between two releases with a quadratic Bezier built from the
+// incoming direction and the current chord. Accuracy depends on how long the segment is and how much
+// it turns; when the guess is wrong the filler neither follows the trajectory nor looks incidental -
+// it reads as a string of beads aimed at the cursor. Two admission gates; failing either means no filler.
+//
+// 判据 1 —— 释放必须足够密集
+//   间隔越大，两次释放之间隔的帧越多，真实轨迹拐了几个弯完全无从得知。
+//   此时任何补插都退化成"从上个点连一条线到光标"，正是用户实测到的现象。
+static const DWORD kFillMaxIntervalMs = 10;  // 与 particle_interval 的设置说明保持一致
+//
+// 判据 2 —— 估计的轨迹偏离必须可忽略
+//   把这段真实轨迹近似为**匀速转弯**的圆弧（这是我们能拿到的最合理模型）：设进入方向与当前弦
+//   的夹角为 φ，则整段的总转角约 2φ。代入贝塞尔中点到该圆弧中点的距离可得
+// 误差 ≈ dist · φ²
+//   （φ=0.2rad 时 ≈ 2% 弦长，φ=1rad 时 ≈ 13% 弦长，与数值验证一致）
+//   误差超过粒子半径量级就说明这段的曲率已经大到猜不准了。
+//   Model the real segment as a CONSTANT-TURN arc (the most reasonable model available). With phi =
+//   angle between the incoming direction and the current chord, total turn is ~2*phi, and the distance
+//   from the Bezier midpoint to the true arc midpoint works out to
+//       error ~ dist * phi^2 / 2
+//   (phi=0.2rad -> ~2% of chord; phi=1rad -> ~13%, matching numeric checks). Beyond particle-radius
+//   scale the curvature is too high for the guess to hold.
+//   φ 取不到（历史方向未知）时按最保守处理：不补。
+static bool CanInsertFillers(float dist, float dx, float dy, float prevDirX, float prevDirY,
+                             float tolerancePx) {
+    if (g_particleInterval > (int)kFillMaxIntervalMs) return false;
+    float dirLen = sqrtf(prevDirX * prevDirX + prevDirY * prevDirY);
+    if (dirLen < 0.5f) return false;  // 方向历史未知
+    if (dist < 1e-3f) return false;
+    float cx = dx / dist, cy = dy / dist;
+    float nx = prevDirX / dirLen, ny = prevDirY / dirLen;
+    float dot = nx * cx + ny * cy;
+    if (dot > 1.0f) dot = 1.0f;
+    if (dot < -1.0f) dot = -1.0f;
+    float phi = acosf(dot);
+    // 超过 90° 说明方向近似反向（急转/折返），模型不再适用，同样不补
+    if (phi > 2.268928f) return false;  // 130°：允许更急的弯
+    float estErr = 0.5f * dist * phi * phi;
+    return estErr <= tolerancePx * 3.5f;  // 容限放宽3.5倍，快速移动时更多段能补
+}
+static inline float Hash01(int n) {
+    uint32_t u = (uint32_t)n;
+    u = (u << 13) ^ u;
+    return (float)(((u * (u * u * 15731u + 789221u) + 1376312589u) & 0x7fffffffu) / 2147483647.0);
+}
+static void SpawnParticles(float x, float y, int count, float speedMin, float speedMax, float sizeMin, float sizeMax,
+                           int lifeMin, int lifeMax, D2D1_COLOR_F color, DWORD time, bool radial = false,
+                           int shapeType = -1) {
+    // 容量保护：剩余可生成数量不足时截断，避免瞬时超过粒子上限造成内存/性能尖峰
+    int cap = GetParticleCap();
+    int room = cap - (int)g_particles.size();
+    if (room <= 0) return;
+    if (count > room) count = room;
+    // 调试：记录生成点（仅当开启时，限制40个）/ debug: record spawn point (only when enabled, cap at 40)
+    if (g_debugSpawn) {
+        g_debugSpawnPoints.push_back({x, y, time});
+        if (g_debugSpawnPoints.size() > 40) g_debugSpawnPoints.erase(g_debugSpawnPoints.begin());
+    }
+    D2D1_COLOR_F endCol = D2D1::ColorF(color.r * 0.35f, color.g * 0.35f, color.b * 0.35f, 1.0f);  // 结束色不要太暗
+    // 预计算公共因子，避免循环内重复计算
+    float massMean = (g_particleMassMin + g_particleMassMax) * 0.5f;
+    float massStddev = (g_particleMassMax - g_particleMassMin) * 0.25f;
+    float baseSpin = (float)g_particleSpinSpeed / 100.0f * 0.3f;
+    float twoPi = 6.2831853f;
+    // radial放射模式加随机起始相位，避免粒子数过少时方向总从0°（右侧）开始、下半圈无粒子
+    float radialPhase = radial ? (Rand01() * twoPi) : 0.0f;
+    for (int i = 0; i < count; i++) {
+        float angle = radial ? (radialPhase + i / (float)count * twoPi) : (Rand01() * twoPi);
+        float speed = speedMin + Rand01() * (speedMax - speedMin);
+        int st = shapeType;
+        if (st < 0) {
+            st = g_particleShape;
+            if (st == 9)  // random: 0-8 shapes / 随机：0-8种形状
+                st = (int)(Rand01() * 9.0f);
+        }
+        // 生成位置随机偏移：在生成点周围分布，避免所有粒子从同一点发射
+        float spawnAngle = Rand01() * twoPi;
+        float spawnRadius = Rand01() * (float)g_particleSpawnSpread;  // 可调节的随机扩散半径
+        float px = x + cosf(spawnAngle) * spawnRadius;
+        float py = y + sinf(spawnAngle) * spawnRadius;
+        if (st == 10) { px += (float)g_textOffsetX; py += (float)g_textOffsetY; }  // text particle spawn offset vs cursor
+        Particle p;
+        p.x = px; p.y = py;
+        p.vx = cosf(angle) * speed; p.vy = sinf(angle) * speed;
+        // 随机质量：正态分布（Box-Muller变换）/ Random mass: normal distribution (Box-Muller transform)
+        float mass = 1.0f;
+        if (g_enableParticleMass) {
+            float u1 = fmaxf(Rand01(), 0.001f);
+            float u2 = Rand01();
+            float z = sqrtf(-2.0f * logf(u1)) * cosf(twoPi * u2);
+            mass = massMean + z * massStddev;
+            mass = fmaxf(g_particleMassMin, fminf(g_particleMassMax, mass));
+        }
+        p.mass = mass;
+        // 随机电荷：50%正，50%负（洛伦兹力用）/ Random charge: 50% positive, 50% negative (for Lorentz force)
+        p.charge = (Rand01() > 0.5f) ? 1.0f : -1.0f;
+        // 体积∝质量，半径∝质量^(1/3)，用快速近似替代powf
+        float massSizeFactor = 1.0f;
+        if (g_enableParticleMass) {
+            float m = mass * 0.1f;  // 归一化到0.5-2.0范围
+            massSizeFactor = 0.7f + m * 0.3f;  // 线性近似cube root，足够接近且更快
+        }
+        p.size = (sizeMin + Rand01() * (sizeMax - sizeMin)) * massSizeFactor;
+        p.startTime = time;
+        // 质量大的粒子生命周期更长（惯性大，消散慢）/ Heavier particles live longer (more inertia, slower dissipation)
+        int baseLife = lifeMin + (int)(Rand01() * (lifeMax - lifeMin));
+        p.lifetime = g_enableParticleMass ? (int)(baseLife * (0.7f + mass * 0.3f)) : baseLife;
+        p.color = color;
+        p.endColor = endCol;
+        p.shapeType = st;
+        p.charIndex = 0;
+        p.chunkStart = 0;
+        p.chunkCount = 1;
+        if (st == 10 && !g_phraseChunkStart.empty()) {
+            // 随机选一个原始词组并记录其格子区间，初始显示第一段
+            int phraseCount = (int)g_phraseChunkStart.size();
+            // 两个数组必须同长度，取较小值兜底，防止图集中途重建不一致时越界读
+            if (phraseCount > (int)g_phraseChunkCount.size()) phraseCount = (int)g_phraseChunkCount.size();
+            if (phraseCount <= 0) phraseCount = 1;
+            int pi = (int)(Rand01() * (float)phraseCount);
+            if (pi >= phraseCount) pi = phraseCount - 1;
+            p.chunkStart = g_phraseChunkStart[pi];
+            p.chunkCount = g_phraseChunkCount[pi];
+            if (p.chunkCount < 1) p.chunkCount = 1;
+            p.charIndex = (float)p.chunkStart;
+        }
+        p.z = (Rand01() - 0.5f) * 0.8f;
+        p.rotation = Rand01() * twoPi;
+        // 随机自旋转速度，每个粒子有 ±50% 差异
+        float variation = (Rand01() - 0.5f) * baseSpin;
+        p.spinSpeed = baseSpin + variation;
+        // 用一次随机数生成三个颜色偏移（减少Rand01调用）/ Generate three color offsets from one random call (reduce Rand01 calls)
+        float r1 = Rand01() - 0.5f;
+        float r2 = Rand01() - 0.5f;
+        float r3 = Rand01() - 0.5f;
+        p.colorOffset[0] = r1 * 0.16f;
+        p.colorOffset[1] = r2 * 0.16f;
+        p.colorOffset[2] = r3 * 0.16f;
+        p.vortexBrightness[0] = 0;
+        p.vortexBrightness[1] = 0;
+        p.vortexBrightness[2] = 0;
+        p.debugForceX = 0;
+        p.debugForceY = 0;
+        g_particles.push_back(p);
+    }
+}
+
+// ===================== 音乐响应系统（v3.4 基础设施）===================== / Music reactive system (v3.4 infrastructure, visual effects TBD)
+
+// Cooley-Tukey radix-2 FFT（原地，输入输出交替存储）/ Cooley-Tukey radix-2 FFT (in-place)
+static void FFT(std::vector<float> &real, std::vector<float> &imag, bool inverse = false) {
+    int n = (int)real.size();
+    if (n <= 1) return;
+    // radix-2 前提：长度必须是 2 的幂，否则位反转与蝶形会写越界（曾因 fftSize 非法导致内存踩踏）
+    if ((n & (n - 1)) != 0) return;
+    // 实部/虚部长度必须一致，否则蝶形会越界读写
+    if ((int)imag.size() != n) return;
+    // 位反转排序
+    for (int i = 1, j = 0; i < n; i++) {
+        int bit = n >> 1;
+        for (; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if (i < j) {
+            std::swap(real[i], real[j]);
+            std::swap(imag[i], imag[j]);
+        }
+    }
+    // 蝶形运算
+    for (int len = 2; len <= n; len <<= 1) {
+        float ang = (inverse ? 2.0f : -2.0f) * 3.14159265358979f / len;
+        float wlenR = cosf(ang), wlenI = sinf(ang);
+        for (int i = 0; i < n; i += len) {
+            float wR = 1, wI = 0;
+            for (int j = 0; j < len / 2; j++) {
+                float uR = real[i + j], uI = imag[i + j];
+                float vR = real[i + j + len / 2] * wR - imag[i + j + len / 2] * wI;
+                float vI = real[i + j + len / 2] * wI + imag[i + j + len / 2] * wR;
+                real[i + j] = uR + vR;
+                imag[i + j] = uI + vI;
+                real[i + j + len / 2] = uR - vR;
+                imag[i + j + len / 2] = uI - vI;
+                float nextWR = wR * wlenR - wI * wlenI;
+                wI = wR * wlenI + wI * wlenR;
+                wR = nextWR;
+            }
+        }
+    }
+    if (inverse) {
+        for (int i = 0; i < n; i++) { real[i] /= n; imag[i] /= n; }
+    }
+}
+
+// 初始化Hann窗函数
+static void InitWindowFunction(std::vector<float> &window, int size) {
+    if (size < 2) { window.clear(); return; }  // size==1 会让 i/(size-1) 除零
+    window.resize(size);
+    for (int i = 0; i < size; i++) {
+        window[i] = 0.5f * (1.0f - cosf(2.0f * 3.14159265358979f * i / (size - 1)));
+    }
+}
+
+// WASAPI 音频捕获线程
+static DWORD WINAPI MusicCaptureThread(LPVOID param) {
+    MusicState *m = &g_music;
+    // 设置MMCSS优先级
+    DWORD taskIndex = 0;
+    HANDLE hAvrt = AvSetMmThreadCharacteristicsW(L"Audio", &taskIndex);
+    while (m->captureRunning.load()) {
+        // 等待捕获缓冲区就绪
+        // 环形缓冲未就绪时不能进入下面逻辑：fftSize 为 0 会让 "% m->fftSize" 除零崩溃，缓冲未按预期分配则会越界写
+        if (!m->pCaptureClient || m->pWaveFormat == nullptr || m->fftSize <= 1 ||
+            m->fftInput.size() < (size_t)m->fftSize) {
+            Sleep(1);  // 停一会儿再试，避免空转打满一个核
+            continue;
+        }
+        UINT32 packetLength = 0;
+        HRESULT hr = m->pCaptureClient->GetNextPacketSize(&packetLength);
+        if (FAILED(hr) || packetLength == 0) {
+            WaitForSingleObject(m->hStopEvent, 5);
+            continue;
+        }
+        // 读取捕获数据
+        BYTE *pData = nullptr;
+        UINT32 numFrames = 0;
+        DWORD flags = 0;
+        hr = m->pCaptureClient->GetBuffer(&pData, &numFrames, &flags, nullptr, nullptr);
+        if (SUCCEEDED(hr) && pData && numFrames > 0) {
+            int channels = m->pWaveFormat->nChannels;
+            if (channels < 1) channels = 1;  // 声道除零保护
+            int bytesPerSample = m->pWaveFormat->wBitsPerSample / 8;
+            bool isSilent = (flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0;
+            // 转换为单声道浮点样本并写入环形缓冲
+            // 环形缓冲写指针由本线程推进、由渲染线程（MusicUpdate）读取，必须原子访问，否则是数据竞争（UB）。
+            // 这里用 std::atomic_ref<int> 就地原子化：不改 MusicState 的字段类型（少改一处共享结构，降低合并风险），
+            // 代价是所有访问点都必须走 atomic_ref。
+            // 音频回调路径不加锁（会丢缓冲区/爆音）：写指针只在整包处理完后发布一次，
+            // 循环内用局部变量推进，既减少原子操作次数，也让渲染线程看到的是"整包已写入"的一致位置。
+            // The ring write pos is advanced here and read by MusicUpdate, so it must be atomic (data race = UB).
+            // std::atomic_ref<int> atomises it in place so MusicState's field type stays untouched (fewer shared
+            // edits); the price is that every access must go through atomic_ref. No lock on the audio capture
+            // path (that would drop buffers): the pos is published once per packet and the loop advances a local.
+            std::atomic_ref<int> writePos(m->fftWritePos);
+            int wp = writePos.load(std::memory_order_relaxed);
+            for (UINT32 i = 0; i < numFrames; i++) {
+                float sample = 0;
+                if (!isSilent) {
+                    if (bytesPerSample == 4) {
+                        // 32-bit float / 32位浮点
+                        float *pFloat = (float*)(pData + i * channels * bytesPerSample);
+                        for (int c = 0; c < channels; c++) sample += pFloat[c];
+                        sample /= channels;
+                    } else if (bytesPerSample == 2) {
+                        // 16-bit integer / 16位整数
+                        short *pShort = (short*)(pData + i * channels * bytesPerSample);
+                        for (int c = 0; c < channels; c++) sample += pShort[c];
+                        sample /= (channels * 32768.0f);
+                    }
+                    // 钳制到[-1,1]，防止异常样本污染FFT
+                    if (sample > 1.0f) sample = 1.0f; else if (sample < -1.0f) sample = -1.0f;
+                }
+                m->fftInput[wp] = sample;
+                wp = (wp + 1) % m->fftSize;
+            }
+            // 整包写完后再发布一次（release 保证上面的样本写入对读到该位置的渲染线程可见）
+            writePos.store(wp, std::memory_order_release);
+            m->pCaptureClient->ReleaseBuffer(numFrames);
+        }
+    }
+    if (hAvrt) AvRevertMmThreadCharacteristics(hAvrt);
+    return 0;
+}
+
+// CoInitializeEx/CoUninitialize 必须配对且在同一线程。音乐对象可能在「工具初始化线程」创建、在「渲染线程」停止，
+// 所以用 thread_local（放在函数内，不新增全局变量）记录本线程是否为音乐模块新增过一次 COM 引用：
+// 只有 CoInitializeEx 返回 S_OK 才是新增，返回 S_FALSE 说明本线程早已被别人初始化（例如渲染线程自己），
+// 此时若在停止时 CoUninitialize 会偷掉别人的引用计数，导致该线程后续 COM/D2D 调用失败。
+// CoInitializeEx/CoUninitialize must pair up on the same thread. Music objects can be created on the tool-init
+// thread and stopped on the render thread, so a function-local thread_local records whether THIS thread added a
+// COM reference for music: only S_OK means we added one; S_FALSE means someone else already initialized this
+// thread (e.g. the render thread itself) and calling CoUninitialize later would steal their reference count,
+// breaking subsequent COM/D2D calls on that thread.
+static bool &MusicComOwnedRef() {
+    static thread_local bool owned = false;
+    return owned;
+}
+// 确保本线程 COM 可用；失败返回 false（失败时不得 CoUninitialize）/ Ensure COM is usable; false on failure (never CoUninitialize then)
+static bool MusicComEnsureInit() {
+    HRESULT hrCo = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    if (FAILED(hrCo)) { Wh_Log(L"Music: CoInitializeEx failed 0x%08X", hrCo); return false; }
+    if (hrCo == S_OK) MusicComOwnedRef() = true;
+    return true;
+}
+// 与 MusicComEnsureInit 配对，幂等
+static void MusicComRelease() {
+    bool &owned = MusicComOwnedRef();
+    if (owned) { CoUninitialize(); owned = false; }
+}
+
+// 启动音乐捕获
+static bool MusicStartCapture() {
+    MusicState *m = &g_music;
+    if (m->capturing) return true;
+    // 确保COM已初始化 / Ensure COM is initialized（配对见 MusicStopCapture/MusicComRelease）
+    if (!MusicComEnsureInit()) return false;
+    REFERENCE_TIME hnsRequestedDuration = 10000000; // 1秒缓冲（提前声明，避免 goto 跨越初始化）
+    // 创建设备枚举器
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                  __uuidof(IMMDeviceEnumerator), (void**)&m->pEnumerator);
+    if (FAILED(hr)) { Wh_Log(L"Music: CoCreateInstance failed 0x%08X", hr); MusicComRelease(); return false; }
+    // 获取默认渲染设备（用于loopback）/ Get default render device for loopback
+    hr = m->pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &m->pDevice);
+    if (FAILED(hr)) { Wh_Log(L"Music: GetDefaultAudioEndpoint failed 0x%08X", hr); goto fail; }
+    // 激活音频客户端
+    hr = m->pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&m->pAudioClient);
+    if (FAILED(hr)) { Wh_Log(L"Music: Activate failed 0x%08X", hr); goto fail; }
+    // 获取混合格式
+    hr = m->pAudioClient->GetMixFormat(&m->pWaveFormat);
+    if (FAILED(hr)) { Wh_Log(L"Music: GetMixFormat failed 0x%08X", hr); goto fail; }
+    // 初始化loopback捕获
+    hr = m->pAudioClient->Initialize(AUDCLNT_SHAREMODE_SHARED,
+                                     AUDCLNT_STREAMFLAGS_LOOPBACK,
+                                     hnsRequestedDuration, 0, m->pWaveFormat, nullptr);
+    if (FAILED(hr)) { Wh_Log(L"Music: Initialize loopback failed 0x%08X", hr); goto fail; }
+    // 获取缓冲区大小
+    hr = m->pAudioClient->GetBufferSize(&m->bufferFrames);
+    if (FAILED(hr)) { Wh_Log(L"Music: GetBufferSize failed 0x%08X", hr); goto fail; }
+    // 获取捕获客户端
+    hr = m->pAudioClient->GetService(__uuidof(IAudioCaptureClient), (void**)&m->pCaptureClient);
+    if (FAILED(hr)) { Wh_Log(L"Music: GetService capture failed 0x%08X", hr); goto fail; }
+    // 初始化FFT缓冲
+    m->fftSize = g_musicFftSize;
+    // FFT 必须是 2 的幂且在合理区间：非 2 的幂会让 FFT() 的蝶形越界写，0 会让环形缓冲取模除零
+    if (m->fftSize < 64) m->fftSize = 64;
+    if (m->fftSize > 4096) m->fftSize = 4096;
+    if ((m->fftSize & (m->fftSize - 1)) != 0) m->fftSize = 512;
+    m->fftInput.assign(m->fftSize, 0.0f);
+    m->fftOutput.assign(m->fftSize / 2, 0.0f);
+    m->fftSmoothed.assign(m->fftSize / 2, 0.0f);
+    m->fftWorkReal.assign(m->fftSize, 0.0f);
+    m->fftWorkImag.assign(m->fftSize, 0.0f);
+    InitWindowFunction(m->windowFunction, m->fftSize);
+    // 捕获线程尚未启动时用原子方式复位写指针（与捕获线程的 atomic_ref 访问保持一致）
+    std::atomic_ref<int>(m->fftWritePos).store(0, std::memory_order_relaxed);
+    // 启动捕获
+    hr = m->pAudioClient->Start();
+    if (FAILED(hr)) { Wh_Log(L"Music: Start failed 0x%08X", hr); goto fail; }
+    // 创建捕获线程
+    // 先创建事件再起线程：事件句柄为 NULL 时线程里的 WaitForSingleObject 会立刻返回 WAIT_FAILED，变成 100% CPU 空转
+    m->hStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!m->hStopEvent) { Wh_Log(L"Music: capture event creation failed"); goto fail; }
+    m->captureRunning.store(true);
+    m->hCaptureThread = CreateThread(nullptr, 0, MusicCaptureThread, nullptr, 0, nullptr);
+    if (!m->hCaptureThread) { Wh_Log(L"Music: capture thread creation failed"); goto fail; }
+    m->capturing = true;
+    m->initialized = true;
+    Wh_Log(L"Music: capture started, %d Hz, %d channels, FFT %d",
+           m->pWaveFormat->nSamplesPerSec, m->pWaveFormat->nChannels, m->fftSize);
+    return true;
+
+fail:
+    // 统一失败清理：释放所有已分配资源，避免COM泄漏
+    m->captureRunning.store(false);  // 先停线程再释放 COM 接口
+    if (m->hCaptureThread) {
+        // 等待必须成功：超时说明线程仍在使用下面的 COM 接口，释放会让它在下一次调用时崩溃
+        if (WaitForSingleObject(m->hCaptureThread, 1000) != WAIT_OBJECT_0)
+            Wh_Log(L"Music: capture thread did not stop in 1s on cleanup");
+        CloseHandle(m->hCaptureThread);
+        m->hCaptureThread = nullptr;
+    }
+    if (m->hStopEvent) { CloseHandle(m->hStopEvent); m->hStopEvent = nullptr; }
+    if (m->pAudioClient) { m->pAudioClient->Release(); m->pAudioClient = nullptr; }
+    if (m->pCaptureClient) { m->pCaptureClient->Release(); m->pCaptureClient = nullptr; }
+    if (m->pDevice) { m->pDevice->Release(); m->pDevice = nullptr; }
+    if (m->pEnumerator) { m->pEnumerator->Release(); m->pEnumerator = nullptr; }
+    if (m->pWaveFormat) { CoTaskMemFree(m->pWaveFormat); m->pWaveFormat = nullptr; }
+    MusicComRelease();
+    return false;
+}
+
+// 停止音乐捕获
+static void MusicStopCapture() {
+    MusicState *m = &g_music;
+    if (!m->capturing) return;
+    m->captureRunning.store(false);
+    if (m->hStopEvent) { SetEvent(m->hStopEvent); }
+    if (m->hCaptureThread) {
+        // 必须等线程真正退出：否则下面的 Release() 会让仍在运行的线程在下一次调用时访问已释放的接口
+        if (WaitForSingleObject(m->hCaptureThread, 2000) != WAIT_OBJECT_0)
+            Wh_Log(L"Music: capture thread did not stop in 2s");
+        CloseHandle(m->hCaptureThread);
+        m->hCaptureThread = nullptr;
+    }
+    if (m->hStopEvent) { CloseHandle(m->hStopEvent); m->hStopEvent = nullptr; }
+    if (m->pAudioClient) { m->pAudioClient->Stop(); m->pAudioClient->Release(); m->pAudioClient = nullptr; }
+    if (m->pCaptureClient) { m->pCaptureClient->Release(); m->pCaptureClient = nullptr; }
+    if (m->pDevice) { m->pDevice->Release(); m->pDevice = nullptr; }
+    if (m->pEnumerator) { m->pEnumerator->Release(); m->pEnumerator = nullptr; }
+    if (m->pWaveFormat) { CoTaskMemFree(m->pWaveFormat); m->pWaveFormat = nullptr; }
+    m->capturing = false;
+    m->initialized = false;
+    // 与 MusicStartCapture 配对；只有本线程确实新增过 COM 引用时才释放
+    MusicComRelease();
+    Wh_Log(L"Music: capture stopped");
+}
+
+// 每帧更新音乐分析（FFT + 节拍检测 + 频段分析）/ Per-frame music analysis (FFT + beat detection + frequency bands)
+static void MusicUpdate(DWORD dwTime) {
+    MusicState *m = &g_music;
+    if (!m->capturing || !m->initialized) return;
+    int n = m->fftSize;
+    // FFT 长度必须合法（2 的幂且非空），否则 "% n" 除零、FFT() 也会越界写
+    if (n < 64 || (n & (n - 1)) != 0) return;
+    // 缓冲一致性：任一缓冲尺寸不对就按当前 FFT 大小校正，避免 resize 前后混用导致越界
+    if (m->fftInput.size() != (size_t)n) return;  // 采集线程尚未就绪，本帧直接跳过
+    if ((int)m->fftWorkReal.size() != n) {
+        m->fftWorkReal.assign(n, 0.0f);
+        m->fftWorkImag.assign(n, 0.0f);
+    }
+    if ((int)m->windowFunction.size() != n) InitWindowFunction(m->windowFunction, n);
+    if ((int)m->fftOutput.size() != n / 2) m->fftOutput.assign(n / 2, 0.0f);
+    if ((int)m->fftSmoothed.size() != n / 2) m->fftSmoothed.assign(n / 2, 0.0f);
+    // 从环形缓冲复制数据并加窗，同时计算maxSample（合并两次遍历）/ Copy from ring buffer and apply window, compute maxSample in same pass
+    float maxSample = 0;
+    // 先对写指针做一次原子快照：捕获线程会持续推进它，若在循环里反复读，每次都可能拿到不同位置，
+    // 拼出来的窗口会重复/跳过样本（表现为频谱抖动、低频忽大忽小）。快照 + acquire 与写侧的 release 配对。
+    // Take one atomic snapshot of the write pos: the capture thread keeps advancing it, so reading it inside the
+    // loop would mix positions and duplicate/skip samples (spectrum jitter). The acquire pairs with the writer's
+    // release store.
+    int wp = std::atomic_ref<int>(m->fftWritePos).load(std::memory_order_acquire);
+    for (int i = 0; i < n; i++) {
+        int idx = (wp + i) % n;
+        float sample = m->fftInput[idx];
+        m->fftWorkReal[i] = sample * m->windowFunction[i];
+        m->fftWorkImag[i] = 0.0f;
+        float absSample = fabsf(sample);
+        if (absSample > maxSample) maxSample = absSample;
+    }
+    // 执行FFT
+    FFT(m->fftWorkReal, m->fftWorkImag, false);
+    // 计算幅度谱
+    // 平滑系数上限0.95，避免100%时新数据权重为0导致频谱冻结
+    float smoothFactor = fminf(g_musicSmoothing * 0.01f, 0.95f); // 0~0.95
+    float totalEnergy = 0;
+    for (int i = 0; i < n / 2; i++) {
+        float mag = sqrtf(m->fftWorkReal[i] * m->fftWorkReal[i] + m->fftWorkImag[i] * m->fftWorkImag[i]) / n;
+        m->fftOutput[i] = mag;
+        // 平滑
+        m->fftSmoothed[i] = m->fftSmoothed[i] * smoothFactor + mag * (1.0f - smoothFactor);
+        totalEnergy += mag * mag;
+    }
+    // 频段分析 / Frequency band analysis（预计算频段边界索引，避免每帧算freq）
+    if (m->pWaveFormat) {
+        float sampleRate = (float)m->pWaveFormat->nSamplesPerSec;
+        // 采样率异常时兜底，避免 freqPerBin 为 0 时的除零与非法频段索引
+        float freqPerBin = (sampleRate > 0.0f) ? (sampleRate / n) : 1.0f;
+        // 预计算频段边界：bass<250Hz, mid<2000Hz, treble<20000Hz
+        int bassEnd = (int)(250.0f / freqPerBin) + 1;
+        int midEnd = (int)(2000.0f / freqPerBin) + 1;
+        int trebleEnd = (int)(20000.0f / freqPerBin) + 1;
+        if (bassEnd > n / 2) bassEnd = n / 2;
+        if (midEnd > n / 2) midEnd = n / 2;
+        if (trebleEnd > n / 2) trebleEnd = n / 2;
+        m->bassLevel = 0; m->midLevel = 0; m->trebleLevel = 0;
+        for (int i = 1; i < bassEnd; i++) m->bassLevel += m->fftSmoothed[i];
+        for (int i = bassEnd; i < midEnd; i++) m->midLevel += m->fftSmoothed[i];
+        for (int i = midEnd; i < trebleEnd; i++) m->trebleLevel += m->fftSmoothed[i];
+        int bassCount = bassEnd - 1;
+        int midCount = midEnd - bassEnd;
+        int trebleCount = trebleEnd - midEnd;
+        if (bassCount > 0) m->bassLevel /= bassCount;
+        if (midCount > 0) m->midLevel /= midCount;
+        if (trebleCount > 0) m->trebleLevel /= trebleCount;
+    }
+    m->overallLevel = sqrtf(totalEnergy / ((float)n * 0.5f));
+
+    // ===== 多方式节拍检测 / Multi-method beat detection =====
+    // 设置语义：值越低越灵敏。g=0(最灵敏)阈值1.15，g=1(最不灵敏)阈值2.2
+    float sensitivity = 1.15f + g_musicSensitivity * 1.05f;
+    // 额外触发门限同样随灵敏度提高，避免三个检测器 OR 叠加导致高设置仍频繁误触发
+    float energyGate = 1.05f + g_musicSensitivity * 0.45f;
+    float fluxGate = 1.10f + g_musicSensitivity * 0.50f;
+    float bassGate = 1.08f + g_musicSensitivity * 0.50f;
+
+    // 方式1：总能量阈值法
+    m->beatEnergy = totalEnergy;
+    m->beatAvgEnergy = m->beatAvgEnergy * 0.92f + totalEnergy * 0.08f;
+    m->beatThreshold = m->beatAvgEnergy * sensitivity;
+    bool energyBeat = (totalEnergy > m->beatThreshold) && (totalEnergy > m->beatAvgEnergy * energyGate);
+
+    // 方式2：频谱通量法（相邻帧频谱变化量）/ Method 2: Spectral flux
+    if (m->prevSpectrum.size() != (size_t)(n / 2)) {
+        m->prevSpectrum.assign(n / 2, 0.0f);
+    }
+    float flux = 0;
+    for (int i = 0; i < n / 2; i++) {
+        float diff = m->fftSmoothed[i] - m->prevSpectrum[i];
+        if (diff > 0) flux += diff;  // 只计正变化（能量增加）/ Count only positive changes (energy increase)
+        m->prevSpectrum[i] = m->fftSmoothed[i];
+    }
+    m->spectralFlux = flux;
+    m->avgSpectralFlux = m->avgSpectralFlux * 0.9f + flux * 0.1f;
+    bool fluxBeat = (flux > m->avgSpectralFlux * sensitivity) && (flux > m->avgSpectralFlux * fluxGate);
+
+    // 方式3：多频段节拍检测
+    m->bassBeatEnergy = m->bassLevel;
+    m->bassBeatAvg = m->bassBeatAvg * 0.9f + m->bassLevel * 0.1f;
+    m->bassBeat = (m->bassLevel > m->bassBeatAvg * sensitivity) && (m->bassLevel > m->bassBeatAvg * bassGate);
+
+    m->midBeatEnergy = m->midLevel;
+    m->midBeatAvg = m->midBeatAvg * 0.9f + m->midLevel * 0.1f;
+    m->midBeat = (m->midLevel > m->midBeatAvg * sensitivity * 1.1f);
+
+    m->trebleBeatEnergy = m->trebleLevel;
+    m->trebleBeatAvg = m->trebleBeatAvg * 0.9f + m->trebleLevel * 0.1f;
+    m->trebleBeat = (m->trebleLevel > m->trebleBeatAvg * sensitivity * 1.2f);
+
+    // 综合判断：任一方式触发即算节拍，低频节拍权重最高
+    bool newBeat = energyBeat || fluxBeat || m->bassBeat;
+    // 节拍强度：综合多种触发方式
+    float intensity = 0;
+    if (energyBeat) intensity += 0.4f * fminf(totalEnergy / fmaxf(m->beatAvgEnergy, 0.001f), 2.0f);
+    if (fluxBeat) intensity += 0.3f * fminf(flux / fmaxf(m->avgSpectralFlux, 0.001f), 2.0f);
+    if (m->bassBeat) intensity += 0.5f * fminf(m->bassLevel / fmaxf(m->bassBeatAvg, 0.001f), 2.5f);
+    if (m->midBeat) intensity += 0.2f;
+    if (m->trebleBeat) intensity += 0.15f;
+    m->beatIntensity = fminf(intensity, 1.0f);
+
+    // 节拍去抖（最小间隔120ms = 500BPM上限）/ Beat debounce
+    if (newBeat && (dwTime - m->lastBeatTime) > 120) {
+        m->beatDetected = true;
+        m->lastBeatTime = dwTime;
+        m->beatHistory.push_back(dwTime);
+        if (m->beatHistory.size() > 16) m->beatHistory.pop_front();
+        // BPM估计
+        if (m->beatHistory.size() >= 4) {
+            float avgInterval = 0;
+            for (size_t i = 1; i < m->beatHistory.size(); i++) {
+                avgInterval += (m->beatHistory[i] - m->beatHistory[i-1]);
+            }
+            avgInterval /= (m->beatHistory.size() - 1);
+            if (avgInterval > 0) m->bpmEstimate = 60000.0f / avgInterval;
+        }
+    } else {
+        m->beatDetected = false;
+    }
+
+    // ===== 音乐物理联动状态更新（优化持续能力）===== / Music-physics linkage state update (optimized persistence)
+    if (g_enableMusicPhysics) {
+        // 节拍脉冲：触发时叠加（而非替换），缓慢衰减，延长作用时间
+        if (m->beatDetected) {
+            float pulseAdd = m->beatIntensity * g_musicBeatPulse * 1.5f;
+            g_musicBeatPulseAmount = fminf(g_musicBeatPulseAmount + pulseAdd, 1.5f);  // 叠加，上限1.5
+        } else {
+            g_musicBeatPulseAmount *= 0.94f;  // 缓慢衰减（约0.5秒作用时间）/ Slow decay (~0.5s effect duration)
+        }
+        // 低频大小增益：平滑跟随bassLevel，攻击快释放慢
+        float bassTarget = fminf(m->bassLevel * 15.0f, 1.0f) * g_musicBassSize;
+        float bassLerp = (bassTarget > g_musicBassSizeBoost) ? 0.3f : 0.08f;
+        g_musicBassSizeBoost += (bassTarget - g_musicBassSizeBoost) * bassLerp;
+        // 多频段联动：低频→引力，中频→排斥力，高频→噪声
+        if (g_enableMultiBandLink) {
+            float bgTarget = fminf(m->bassLevel * 12.0f, 1.0f);
+            g_bassGravityBoost += (bgTarget - g_bassGravityBoost) * 0.15f;
+            float mrTarget = fminf(m->midLevel * 20.0f, 1.0f);
+            g_midRepelBoost += (mrTarget - g_midRepelBoost) * 0.15f;
+            float tnTarget = fminf(m->trebleLevel * 50.0f, 1.0f);
+            g_trebleNoiseBoost += (tnTarget - g_trebleNoiseBoost) * 0.2f;
+        } else {
+            g_bassGravityBoost *= 0.9f;
+            g_midRepelBoost *= 0.9f;
+            g_trebleNoiseBoost *= 0.9f;
+        }
+    } else {
+        g_musicBeatPulseAmount *= 0.85f;
+        g_musicBassSizeBoost *= 0.9f;
+        g_bassGravityBoost *= 0.9f;
+        g_midRepelBoost *= 0.9f;
+        g_trebleNoiseBoost *= 0.9f;
+    }
+}
+
+// 沿路径获取指定比例（0=头，1=尾）的坐标
+// Catmull-Rom 样条插值：生成更平滑的曲线
+// Catmull-Rom 样条平滑 v3.4.5.1
+// 旧实现用的是 uniform 参数化（t 按 0/1/2/3 等距），当鼠标忽快忽慢、采样点疏密不均时
+// 会明显【过冲甚至自己打结】（急转弯处甩出一个尖角）。这里改成 centripetal（向心）参数化：
+// 节点间隔取 |Δp|^0.5，数学上保证曲线段内无尖点、无自交，是样条插值的标准做法。
+// The old version used uniform parameterisation (knots spaced 0/1/2/3). With uneven sampling - the
+// pointer speeding up and slowing down - that overshoots and can even self-intersect on sharp turns.
+// This uses centripetal parameterisation (knot spacing |dp|^0.5), which provably avoids cusps and
+// self-intersections; it is the standard choice for spline interpolation.
+// 端点也不再简单复制首/末点（那会让头部切线为 0、拖尾头看起来发平），改为线性外推。
+static float CrKnotSpan(const D2D1_POINT_2F &a, const D2D1_POINT_2F &b, float alpha) {
+    float dx = b.x - a.x, dy = b.y - a.y;
+    float d = sqrtf(dx * dx + dy * dy);
+    return powf(fmaxf(d, 1e-4f), alpha);
+}
+// Barry–Goldman 金字塔求值，支持非均匀节点
+static D2D1_POINT_2F CrEval(const D2D1_POINT_2F &p0, const D2D1_POINT_2F &p1,
+                            const D2D1_POINT_2F &p2, const D2D1_POINT_2F &p3,
+                            float t0, float t1, float t2, float t3, float t) {
+    auto lerpP = [](const D2D1_POINT_2F &a, const D2D1_POINT_2F &b, float u) {
+        return D2D1::Point2F(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u);
+    };
+    D2D1_POINT_2F A1 = lerpP(p0, p1, (t - t0) / fmaxf(t1 - t0, 1e-6f));
+    D2D1_POINT_2F A2 = lerpP(p1, p2, (t - t1) / fmaxf(t2 - t1, 1e-6f));
+    D2D1_POINT_2F A3 = lerpP(p2, p3, (t - t2) / fmaxf(t3 - t2, 1e-6f));
+    D2D1_POINT_2F B1 = lerpP(A1, A2, (t - t0) / fmaxf(t2 - t0, 1e-6f));
+    D2D1_POINT_2F B2 = lerpP(A2, A3, (t - t1) / fmaxf(t3 - t1, 1e-6f));
+    return lerpP(B1, B2, (t - t1) / fmaxf(t2 - t1, 1e-6f));
+}
+static void CatmullRomSmooth(const std::vector<D2D1_POINT_2F> &input, std::vector<D2D1_POINT_2F> &output, int segments = 4) {
+    if (input.size() < 3) {
+        output = input;
+        return;
+    }
+    const float kAlpha = 0.5f;   // centripetal / 向心参数化
+    const size_t n = input.size();
+    output.clear();
+    output.push_back(input.front());
+    for (size_t i = 0; i < n - 1; i++) {
+        D2D1_POINT_2F p1 = input[i], p2 = input[i + 1];
+        D2D1_POINT_2F p0 = (i > 0) ? input[i - 1]
+                                   : D2D1::Point2F(2.0f * p1.x - p2.x, 2.0f * p1.y - p2.y);
+        D2D1_POINT_2F p3 = (i + 2 < n) ? input[i + 2]
+                                       : D2D1::Point2F(2.0f * p2.x - p1.x, 2.0f * p2.y - p1.y);
+        float t0 = 0.0f;
+        float t1 = t0 + CrKnotSpan(p0, p1, kAlpha);
+        float t2 = t1 + CrKnotSpan(p1, p2, kAlpha);
+        float t3 = t2 + CrKnotSpan(p2, p3, kAlpha);
+        // 重合点之间不必细分
+        if (t2 - t1 < 1e-5f) {
+            output.push_back(p2);
+            continue;
+        }
+        for (int s = 1; s <= segments; s++) {
+            float u = (float)s / (float)segments;
+            float t = t1 + (t2 - t1) * u;
+            output.push_back(CrEval(p0, p1, p2, p3, t0, t1, t2, t3, t));
+        }
+    }
+}
+
+static D2D1_POINT_2F GetPointOnPath(const std::vector<D2D1_POINT_2F> &path, float ratio) {
+    if (path.empty())
+        return D2D1::Point2F(0, 0);
+    if (path.size() == 1)
+        return path[0];
+    if (ratio <= 0)
+        return path[0];
+    if (ratio >= 1)
+        return path.back();
+    float totalLen = 0;
+    for (size_t i = 1; i < path.size(); i++) {
+        float dx = path[i].x - path[i - 1].x, dy = path[i].y - path[i - 1].y;
+        totalLen += sqrtf(dx * dx + dy * dy);
+    }
+    float targetDist = ratio * totalLen, acc = 0;
+    for (size_t i = 1; i < path.size(); i++) {
+        float dx = path[i].x - path[i - 1].x, dy = path[i].y - path[i - 1].y;
+        float segLen = sqrtf(dx * dx + dy * dy);
+        if (acc + segLen >= targetDist) {
+            float t = segLen > 0 ? (targetDist - acc) / segLen : 0;
+            return D2D1::Point2F(path[i - 1].x + dx * t, path[i - 1].y + dy * t);
+        }
+        acc += segLen;
+    }
+    return path.back();
+}
+
+static void WStrToUTF8(PCWSTR wstr, char *out, int outSize) {
+    if (!wstr || outSize <= 0) {
+        if (outSize > 0)
+            out[0] = 0;
+        return;
+    }
+    out[0] = 0;
+    int written = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, out, outSize, NULL, NULL);
+    if (written <= 0)
+        out[0] = 0;
+}
+
+// ===== 调试日志辅助函数前向声明（定义在下方「设置加载」之前）=====
+// 默认参数写在这里，定义处不再重复
+
+
+// ===================== 设置加载 =====================
+// ===== v3.4.2.2 派生状态钩子 / v3.4.2.2 derived-state hooks =====
+// 这两个函数由对应模块填充：热键模块负责把配置文本解析成虚拟键码，进程载体模块负责解析目标载体名。
+// 保留空实现，避免模块缺失时链接失败
+// 键名 -> 虚拟键码解析（大小写不敏感）/ Key name -> VK resolution (case-insensitive)
+// 支持：单字符 a-z / 0-9、F1-F24、名称表、以及数字转义 0x5A / vk:90；空串或未知 = 0（不绑定）
+// 注意：media_* / browser_* / sleep 的虚拟键码正是笔记本 Fn 组合上报的码（Fn 本身不上报独立 VK），
+// 因此把热键绑定到这些名字即可支持「Fn + 任意键」组合。
+static int ResolveHotkeyVK(PCWSTR raw) {
+    if (!raw || !raw[0]) return 0;  // 空 = 不绑定
+    wchar_t s[32];
+    int n = 0;
+    for (; raw[n] && n < 31; n++) {
+        wchar_t c = raw[n];
+        if (c >= L'A' && c <= L'Z') c = (wchar_t)(c - L'A' + L'a');  // 统一小写
+        s[n] = c;
+    }
+    s[n] = 0;
+
+    // 数字转义：0x5A（十六进制）或 vk:90（十进制）/ numeric escape: 0x5A (hex) or vk:90 (decimal)
+    if (s[0] == L'0' && s[1] == L'x') {
+        int v = (int)wcstol(s + 2, nullptr, 16);
+        return (v > 0 && v < 256) ? v : 0;
+    }
+    if (s[0] == L'v' && s[1] == L'k' && s[2] == L':') {
+        int v = (int)wcstol(s + 3, nullptr, 10);
+        return (v > 0 && v < 256) ? v : 0;
+    }
+
+    // 单字符：a-z
+    if (s[0] && !s[1]) {
+        // 直接用字面量：VK_A / VK_0 并非在所有 Windows SDK 的 winuser.h 中都有定义
+        if (s[0] >= L'a' && s[0] <= L'z') return 0x41 + (s[0] - L'a');  // 'A' = 0x41
+        if (s[0] >= L'0' && s[0] <= L'9') return 0x30 + (s[0] - L'0');  // '0' = 0x30
+    }
+
+    // F1-F24 / function keys
+    if (s[0] == L'f' && s[1]) {
+        int v = (int)wcstol(s + 1, nullptr, 10);
+        if (v >= 1 && v <= 24) return VK_F1 + (v - 1);
+    }
+
+    // 名称表 / name table（含同义写法）/ (includes synonyms)
+    static const struct { const wchar_t *name; int vk; } kHotkeyNames[] = {
+        { L"space", VK_SPACE }, { L"enter", VK_RETURN }, { L"return", VK_RETURN },
+        { L"tab", VK_TAB }, { L"esc", VK_ESCAPE }, { L"backspace", VK_BACK },
+        { L"up", VK_UP }, { L"down", VK_DOWN }, { L"left", VK_LEFT }, { L"right", VK_RIGHT },
+        { L"home", VK_HOME }, { L"end", VK_END },
+        { L"pgup", VK_PRIOR }, { L"pageup", VK_PRIOR }, { L"pgdn", VK_NEXT }, { L"pagedown", VK_NEXT },
+        { L"ins", VK_INSERT }, { L"insert", VK_INSERT }, { L"del", VK_DELETE }, { L"delete", VK_DELETE },
+        // 媒体/音量/浏览器/睡眠：Fn 组合上报的虚拟键码
+        { L"media_play", VK_MEDIA_PLAY_PAUSE }, { L"media_next", VK_MEDIA_NEXT_TRACK },
+        { L"media_prev", VK_MEDIA_PREV_TRACK }, { L"media_stop", VK_MEDIA_STOP },
+        { L"vol_up", VK_VOLUME_UP }, { L"vol_down", VK_VOLUME_DOWN }, { L"vol_mute", VK_VOLUME_MUTE },
+        { L"browser_back", VK_BROWSER_BACK }, { L"browser_forward", VK_BROWSER_FORWARD },
+        { L"browser_home", VK_BROWSER_HOME }, { L"browser_refresh", VK_BROWSER_REFRESH },
+        { L"browser_search", VK_BROWSER_SEARCH }, { L"browser_favorites", VK_BROWSER_FAVORITES },
+        { L"sleep", VK_SLEEP }, { L"printscreen", VK_SNAPSHOT }, { L"pause", VK_PAUSE },
+        { L"scrolllock", VK_SCROLL }, { L"numlock", VK_NUMLOCK }, { L"capslock", VK_CAPITAL },
+        { L"apps", VK_APPS },
+        { L"oem_comma", VK_OEM_COMMA }, { L"oem_period", VK_OEM_PERIOD },
+        { L"oem_minus", VK_OEM_MINUS }, { L"oem_plus", VK_OEM_PLUS },
+        { L"oem_1", VK_OEM_1 }, { L"oem_2", VK_OEM_2 }, { L"oem_3", VK_OEM_3 }, { L"oem_4", VK_OEM_4 },
+        { L"oem_5", VK_OEM_5 }, { L"oem_6", VK_OEM_6 }, { L"oem_7", VK_OEM_7 }, { L"oem_8", VK_OEM_8 },
+    };
+    for (size_t i = 0; i < sizeof(kHotkeyNames) / sizeof(kHotkeyNames[0]); i++) {
+        if (wcscmp(s, kHotkeyNames[i].name) == 0) return kHotkeyNames[i].vk;
+    }
+    return 0;  // 未知 -> 不绑定
+}
+// ===== 备用热键通道：RegisterHotKey（v3.4.2.2 新增）/ Fallback hotkey channel =====
+// 轮询通道依赖 GetAsyncKeyState，既可能被其它进程抢走转换位，也受渲染帧率限制；
+// RegisterHotKey 由系统直接把 WM_HOTKEY 投递到覆盖层窗口，与时序无关，是 Windows 官方做法。
+// 限制：RegisterHotKey 只支持标准修饰键（Alt/Ctrl/Shift/Win），媒体键/浏览器键/音量键注册会失败，
+// 那类按键（也就是笔记本 Fn 组合上报的键）仍然只走轮询通道。
+// Polling relies on GetAsyncKeyState: its transition bit can be stolen by another process and it is bound to the
+// render frame rate. RegisterHotKey makes the OS deliver WM_HOTKEY straight to the overlay window, which is
+// timing-independent and the sanctioned Windows way. Limitation: RegisterHotKey only supports the standard
+// modifiers; media/browser/volume keys cannot be registered (those are what laptop Fn combos report) and stay on
+// the polling channel.
+static const int kHotkeyIdToggle = 0xA701;
+static const int kHotkeyIdTrail = 0xA702;
+static const int kHotkeyIdParticles = 0xA703;
+
+// 双通道去重：同一次物理按键会被两条通道同时看到（系统中枢 WM_HOTKEY + 轮询），各触发一次就等于
+// 切换两次、净效果为零 —— 表现就是「热键按了没反应」。所以：
+//   ① 某个键成功注册给系统通道后，轮询通道对该键**只记录不动作**；
+//   ② 再加 250ms 去抖作为兜底（防止同一帧内两边都命中）。
+// De-duplication across the two channels: one physical press is seen by both (OS WM_HOTKEY + polling) and two
+// toggles cancel out, which looks exactly like "the hotkey does nothing". Therefore:
+//   (1) once a key is registered with the OS channel, polling only logs it, never acts;
+//   (2) plus a 250 ms debounce as a safety net for both channels firing in the same frame.
+static std::atomic<bool> g_hotkeyOSOwned[3] = { {false}, {false}, {false} };
+static std::atomic<DWORD> g_hotkeyLastAction[3] = { {0}, {0}, {0} };
+
+// idx: 0=toggle 1=trail 2=particles；via 用于日志区分是哪条通道生效的
+static bool HotkeyTryAct(int idx, const wchar_t* via) {
+    (void)via;  // 仅用于日志区分通道
+    DWORD nowT = GetTickCount();
+    // 去抖改成 CAS：原先「先读再写」在两线程同时命中时会双双通过，一次按键被切两次、净效果为零
+    DWORD prev = g_hotkeyLastAction[idx].load(std::memory_order_relaxed);
+    if (nowT - prev < 250) return false;
+    if (!g_hotkeyLastAction[idx].compare_exchange_strong(prev, nowT, std::memory_order_relaxed)) return false;
+    // 可见性翻转必须用原子 exchange：读-改-写分离同样会导致两条通道各切一次
+    if (idx == 0) {
+        bool cur = g_effectsVisible.load(std::memory_order_relaxed);
+        g_effectsVisible.exchange(!cur, std::memory_order_relaxed);
+    } else if (idx == 1) {
+        bool cur = g_trailVisible.load(std::memory_order_relaxed);
+        g_trailVisible.exchange(!cur, std::memory_order_relaxed);
+    } else {
+        bool cur = g_particlesVisible.load(std::memory_order_relaxed);
+        g_particlesVisible.exchange(!cur, std::memory_order_relaxed);
+    }
+    return true;
+}
+
+static UINT HotkeyModFlags() {
+    switch (g_hotkeyModifier) {
+        case 1: return MOD_ALT;
+        case 2: return MOD_ALT | MOD_CONTROL;
+        case 3: return MOD_ALT | MOD_SHIFT;
+        case 4: return MOD_ALT | MOD_CONTROL | MOD_SHIFT;
+        default: return 0;  // none：不需要组合键
+    }
+}
+
+// RegisterHotKey 支持不了的键：媒体/音量/浏览器系列（Fn 组合上报的就是这些）
+static bool HotkeyVKIsRegisterable(int vk) {
+    if (vk == 0) return false;
+    if (vk >= 0xA6 && vk <= 0xB3) return false;  // 浏览器/音量/媒体系列
+    if (vk == VK_SLEEP || vk == VK_LAUNCH_MAIL || vk == VK_LAUNCH_APP1 || vk == VK_LAUNCH_APP2 ||
+        vk == VK_LAUNCH_MEDIA_SELECT)
+        return false;
+    return true;
+}
+
+// 注册/重注册全部热键（先注销再注册，天然幂等）/ Register (re-register) all hotkeys; unregister first, so it is idempotent
+static void HotkeyRegisterAll() {
+    for (int i = 0; i < 3; i++) g_hotkeyOSOwned[i].store(false);
+    if (!g_overlayHwnd) return;
+    // 注销必须在窗口所属线程才算数；从其它线程调用会静默失败，随后 RegisterHotKey 返回
+    // 0x580 (ERROR_HOTKEY_ALREADY_REGISTERED) —— 实测踩过，所以这里把失败也记下来。
+    // Unregister only takes effect on the window's owning thread; from another thread it fails silently and the
+    // following RegisterHotKey returns 0x580 (ERROR_HOTKEY_ALREADY_REGISTERED) - hit this in practice, so the
+    // failure is logged.
+    const int ids[3] = { kHotkeyIdToggle, kHotkeyIdTrail, kHotkeyIdParticles };
+    for (int i = 0; i < 3; i++) {
+        UnregisterHotKey(g_overlayHwnd, ids[i]);
+    }
+    UINT mods = HotkeyModFlags();
+    int vks[3] = { g_hotkeyToggleVK, g_hotkeyTrailVK, g_hotkeyParticlesVK };
+    const wchar_t* names[3] = { L"toggle", L"trail", L"particles" };
+    for (int i = 0; i < 3; i++) {
+        if (vks[i] == 0) continue;
+        if (mods == 0) {
+            // 关键安全约束：RegisterHotKey 注册「无修饰键」的组合会把该键从**所有程序**手里抢走
+            // （前台程序再也收不到这个键）。单键触发的热键只走轮询通道，不做系统注册。
+            // Critical safety constraint: registering a bare key with RegisterHotKey steals that key from EVERY
+            // application (the foreground program stops receiving it). Bare-key hotkeys therefore stay on the
+            // polling channel only and are never registered with the OS.
+            continue;
+        }
+        if (!HotkeyVKIsRegisterable(vks[i])) {
+            continue;
+        }
+        SetLastError(0);
+        if (RegisterHotKey(g_overlayHwnd, ids[i], mods, (UINT)vks[i])) {
+            g_hotkeyOSOwned[i].store(true);
+        }
+    }
+}
+
+// WM_HOTKEY 处理：由 UI 线程收到
+static bool HotkeyHandleId(int id) {
+    if (id == kHotkeyIdToggle) return HotkeyTryAct(0, L"WM_HOTKEY");
+    if (id == kHotkeyIdTrail) return HotkeyTryAct(1, L"WM_HOTKEY");
+    if (id == kHotkeyIdParticles) return HotkeyTryAct(2, L"WM_HOTKEY");
+    return false;
+}
+
+// 热键注册有线程亲和性：只有创建窗口的那个线程才能可靠地注销+重新注册。
+// HotkeyOnSettingsLoaded 由渲染线程调用（RenderFrame → LoadSettings），所以直接在那里注册会失败
+// （实测 err=0x580 ERROR_HOTKEY_ALREADY_REGISTERED，旧注册没被释放），必须转交给 UI 线程执行。
+// Hotkey registration is thread-affine: only the thread that created the window can reliably unregister and
+// re-register. HotkeyOnSettingsLoaded runs on the render thread (RenderFrame → LoadSettings), where registering
+// fails in practice (err=0x580 ERROR_HOTKEY_ALREADY_REGISTERED, the old registration was never released), so the
+// work is handed over to the UI thread.
+static void HotkeyRequestReregister() {
+    if (!g_overlayHwnd) return;  // 窗口还没建：建窗后 OverlayThreadProc 会直接注册
+    if (GetWindowThreadProcessId(g_overlayHwnd, nullptr) == GetCurrentThreadId()) {
+        HotkeyRegisterAll();  // 已在 UI 线程，直接做
+        return;
+    }
+    if (!PostMessageW(g_overlayHwnd, WM_APP_REHOTKEY, 0, 0))
+        return;
+}
+
+static void HotkeyOnSettingsLoaded() {
+    // 诊断：先记录 Windhawk 实际交付的原始文本（这是区分「设置没传进来」与「解析不认」的唯一依据）
+    {
+        PCWSTR r_mod = Wh_GetStringSetting(L"Hotkeys.hotkey_modifier");
+        PCWSTR r_tog = Wh_GetStringSetting(L"Hotkeys.hotkey_toggle_key");
+        PCWSTR r_tra = Wh_GetStringSetting(L"Hotkeys.hotkey_trail_key");
+        PCWSTR r_par = Wh_GetStringSetting(L"Hotkeys.hotkey_particles_key");
+        if (r_mod) Wh_FreeStringSetting(r_mod);
+        if (r_tog) Wh_FreeStringSetting(r_tog);
+        if (r_tra) Wh_FreeStringSetting(r_tra);
+        if (r_par) Wh_FreeStringSetting(r_par);
+    }
+    // 修饰键语义（v3.4.2.2 修正）：none(0) = 不需要组合键，单键即可触发；按键留空 = 该热键关闭。
+    // 旧实现把 none 当成「全部禁用」，导致只填了按键却没选组合键的用户完全没有反应。
+    // Modifier semantics (fixed in v3.4.2.2): none(0) = no modifier required, a bare key works; an empty key
+    // disables that hotkey. The old code treated none as "disable everything", so users who filled in a key but
+    // left the combo at its default got nothing at all.
+    g_hotkeyToggleVK = ResolveHotkeyVK(g_hotkeyToggleKey);
+    g_hotkeyTrailVK = ResolveHotkeyVK(g_hotkeyTrailKey);
+    g_hotkeyParticlesVK = ResolveHotkeyVK(g_hotkeyParticlesKey);
+
+    static const wchar_t* kComboName[5] = { L"none (bare key)", L"Alt", L"Alt+Ctrl", L"Alt+Shift", L"Alt+Ctrl+Shift" };
+    int combo = (g_hotkeyModifier >= 0 && g_hotkeyModifier <= 4) ? g_hotkeyModifier : 0;
+
+    // 每次都记录（LoadSettings 调用频率很低，不节流，避免漏掉关键信息）
+    if (!g_hotkeyToggleVK && !g_hotkeyTrailVK && !g_hotkeyParticlesVK) {
+    } else {
+    }
+    // 重新注册系统热键；窗口已存在时会转交给 UI 线程执行（线程亲和性要求），窗口未建时由
+    // OverlayThreadProc 建窗后直接注册。
+    HotkeyRequestReregister();
+}
+// 前向声明：诊断函数定义在文件末尾的进程载体模块里，这里提前声明
+
+
+void LoadSettings() {
+    g_triggerVelocity = (float)Wh_GetIntSetting(L"General.trigger_velocity");
+    g_stopVelocity = (float)Wh_GetIntSetting(L"General.stop_velocity");
+    g_tailOffsetX = Wh_GetIntSetting(L"General.tail_offset_x");
+    g_tailOffsetY = Wh_GetIntSetting(L"General.tail_offset_y");
+    g_tailLength = Wh_GetIntSetting(L"General.tail_length");
+    g_trailDelay = Wh_GetIntSetting(L"General.trail_delay");
+    {
+        PCWSTR fstr = Wh_GetStringSetting(L"Trail.fadeout_mode");
+        if (fstr) {
+            if (wcscmp(fstr, L"hard") == 0)
+                g_fadeoutMode = 0;
+            else if (wcscmp(fstr, L"accelerate") == 0)
+                g_fadeoutMode = 1;
+            else
+                g_fadeoutMode = 2;
+            Wh_FreeStringSetting(fstr);
+        }
+    }
+    g_enableSpeedResponse = Wh_GetIntSetting(L"Trail.enable_speed_response") != 0;
+    g_enhancedGlow = Wh_GetIntSetting(L"Quality.enhanced_glow") != 0;
+    g_enableHeadHighlight = Wh_GetIntSetting(L"Trail.enable_head_highlight") != 0;
+    g_adaptiveContrast = Wh_GetIntSetting(L"Trail.enable_adaptive_contrast") != 0;
+    g_dotsMultiplier = Wh_GetIntSetting(L"ShapesText.dots_multiplier");
+    g_waveAmplitude = Wh_GetIntSetting(L"ShapesText.wave_amplitude");
+    g_waveFrequency = Wh_GetIntSetting(L"ShapesText.wave_frequency");
+    // 飞行器（火箭/导弹/光纤导弹）静止引爆
+    g_missileIdleExplode = Wh_GetIntSetting(L"ShapesText.missile_idle_explode") != 0;
+    g_missileIdleDelay = Wh_GetIntSetting(L"ShapesText.missile_idle_delay");
+    if (g_missileIdleDelay < 100) g_missileIdleDelay = 100;
+    if (g_missileIdleDelay > 5000) g_missileIdleDelay = 5000;
+    g_missileExplodeParticles = Wh_GetIntSetting(L"ShapesText.missile_explode_particles");
+    if (g_missileExplodeParticles < 0) g_missileExplodeParticles = 0;
+    if (g_missileExplodeParticles > 40) g_missileExplodeParticles = 40;
+    {
+        PCWSTR fxStr = Wh_GetStringSetting(L"ShapesText.missile_explode_fx");
+        if (wcscmp(fxStr, L"particles") == 0) g_missileExplodeFx = 0;
+        else if (wcscmp(fxStr, L"shockwave") == 0) g_missileExplodeFx = 1;
+        else g_missileExplodeFx = 2;  // both
+        Wh_FreeStringSetting(fxStr);
+    }
+    g_enableGlow = Wh_GetIntSetting(L"Quality.enable_glow") != 0;
+    g_glowIntensity = Wh_GetIntSetting(L"Quality.glow_intensity");
+    g_edgeSoftness = Wh_GetIntSetting(L"Quality.edge_softness");
+    // 抗锯齿模式
+    {
+        PCWSTR aaStr = Wh_GetStringSetting(L"Quality.aa_mode");
+        if (aaStr) {
+            if (wcscmp(aaStr, L"off") == 0) g_aaMode = 0;
+            else if (wcscmp(aaStr, L"crisp") == 0) g_aaMode = 2;
+            else if (wcscmp(aaStr, L"extra") == 0) g_aaMode = 3;
+            else g_aaMode = 1;  // smooth default
+            Wh_FreeStringSetting(aaStr);
+        }
+    }
+    // MSAA 级别
+    bool enableMsaa = Wh_GetIntSetting(L"Quality.enable_msaa") != 0;
+    if (enableMsaa) {
+        PCWSTR msaaStr = Wh_GetStringSetting(L"Quality.msaa_level");
+        if (msaaStr) {
+            if (wcscmp(msaaStr, L"2x") == 0) g_msaaSamples = 2;
+            else if (wcscmp(msaaStr, L"4x") == 0) g_msaaSamples = 4;
+            else if (wcscmp(msaaStr, L"8x") == 0) g_msaaSamples = 8;
+            else g_msaaSamples = 4;
+            Wh_FreeStringSetting(msaaStr);
+        }
+    } else {
+        g_msaaSamples = 1;
+    }
+    // SSAA 缩放
+    bool enableSsaa = Wh_GetIntSetting(L"Quality.enable_ssaa") != 0;
+    if (enableSsaa) {
+        PCWSTR ssaaStr = Wh_GetStringSetting(L"Quality.ssaa_level");
+        if (ssaaStr) {
+            if (wcscmp(ssaaStr, L"4x") == 0) g_ssaaScale = 4;
+            else if (wcscmp(ssaaStr, L"3x") == 0) g_ssaaScale = 3;  // v3.4.2.1 新增 3x
+            else g_ssaaScale = 2;
+            Wh_FreeStringSetting(ssaaStr);
+        }
+    } else {
+        g_ssaaScale = 1;
+    }
+    // v3.4.2.1：着色器质量与采样设置
+    {
+        PCWSTR qStr = Wh_GetStringSetting(L"Quality.shader_quality");
+        if (qStr) {
+            if (wcscmp(qStr, L"fast") == 0) g_shaderQuality = 0;
+            else if (wcscmp(qStr, L"high") == 0) g_shaderQuality = 2;
+            else g_shaderQuality = 1;  // balanced default
+            Wh_FreeStringSetting(qStr);
+        }
+    }
+    {
+        PCWSTR fStr = Wh_GetStringSetting(L"Quality.ssaa_filter");
+        if (fStr) {
+            if (wcscmp(fStr, L"bilinear") == 0) g_ssaaFilter = 0;
+            else if (wcscmp(fStr, L"tent") == 0) g_ssaaFilter = 2;
+            else if (wcscmp(fStr, L"lanczos") == 0) g_ssaaFilter = 3;
+            else g_ssaaFilter = 1;  // box default
+            Wh_FreeStringSetting(fStr);
+        }
+    }
+    {
+        int shVal = Wh_GetIntSetting(L"Quality.ssaa_sharpness");
+        g_ssaaSharpness = ClampInt(shVal, 0, 100);
+    }
+    {
+        PCWSTR sStr = Wh_GetStringSetting(L"Quality.sdf_sample_quality");
+        if (sStr) {
+            if (wcscmp(sStr, L"4x") == 0) g_sdfSamples = 4;
+            else if (wcscmp(sStr, L"2x2") == 0) g_sdfSamples = 2;
+            else g_sdfSamples = 1;
+            Wh_FreeStringSetting(sStr);
+        }
+    }
+    {
+        PCWSTR dStr = Wh_GetStringSetting(L"Quality.dither_mode");
+        if (dStr) {
+            if (wcscmp(dStr, L"off") == 0) g_ditherMode = 0;
+            else if (wcscmp(dStr, L"ordered8") == 0) g_ditherMode = 2;
+            else if (wcscmp(dStr, L"hash") == 0) g_ditherMode = 3;
+            else g_ditherMode = 1;  // ordered4 default
+            Wh_FreeStringSetting(dStr);
+        }
+    }
+    {
+        int dsVal = Wh_GetIntSetting(L"Quality.dither_strength");
+        g_ditherStrength = ClampInt(dsVal, 0, 100);
+    }
+    g_enableSmoothGradient = Wh_GetIntSetting(L"Trail.enable_smooth_gradient") != 0;
+    g_enableFrameSync = Wh_GetIntSetting(L"Trail.enable_frame_sync") != 0;
+    g_enableTrailShadow = Wh_GetIntSetting(L"Trail.enable_trail_shadow") != 0;
+    g_particleDensity = Wh_GetIntSetting(L"Particles.particle_density");
+    g_particleInterval = Wh_GetIntSetting(L"Particles.particle_interval");
+    g_particleAccel = Wh_GetIntSetting(L"Particles.particle_acceleration") != 0;
+    g_particleOriginRatio = Wh_GetIntSetting(L"Particles.particle_origin_ratio");
+    int attrVal = Wh_GetIntSetting(L"Particles.particle_attraction");
+    if (attrVal < 0)
+        attrVal = 0;
+    if (attrVal > 100)
+        attrVal = 100;
+    // 线性映射：0-100 → 0-0.125，全程有区分度。value=5→0.00625, value=50→0.0625, value=100→0.125
+    g_particleAttraction = attrVal / 800.0f;
+    g_enableParticleRepel = Wh_GetIntSetting(L"Particles.enable_particle_repel") != 0;
+    g_particleRepelRadius = Wh_GetIntSetting(L"Particles.particle_repel_radius");
+    if (g_particleRepelRadius < 5)
+        g_particleRepelRadius = 5;
+    if (g_particleRepelRadius > 100)
+        g_particleRepelRadius = 100;
+    int repelVal = Wh_GetIntSetting(L"Particles.particle_repel_force");
+    if (repelVal < 0)
+        repelVal = 0;
+    if (repelVal > 100)
+        repelVal = 100;
+    g_particleRepelForce = (repelVal / 100.0f) * 3.0f;  // 0-100 → 0-3.0 像素/帧
+    // 向心力漩涡设置
+    g_enableCentripetal = Wh_GetIntSetting(L"Physics.enable_centripetal") != 0;
+    int cfVal = Wh_GetIntSetting(L"Physics.centripetal_force");
+    cfVal = ClampInt(cfVal, 0, 100);
+    g_centripetalForce = cfVal / 100.0f;
+    int csVal = Wh_GetIntSetting(L"Physics.centripetal_sensitivity");
+    csVal = ClampInt(csVal, 0, 100);
+    g_centripetalSensitivity = csVal / 100.0f;
+    int cdVal = Wh_GetIntSetting(L"Physics.centripetal_duration");
+    if (cdVal < 500) cdVal = 500; if (cdVal > 5000) cdVal = 5000;
+    g_centripetalDuration = cdVal;
+    int vmcVal = Wh_GetIntSetting(L"Physics.vortex_max_count");
+    vmcVal = ClampInt(vmcVal, 1, MAX_VORTICES);
+    g_vortexMaxCount = vmcVal;
+    int vmdVal = Wh_GetIntSetting(L"Physics.vortex_min_distance");
+    vmdVal = ClampInt(vmdVal, 50, 500);
+    g_vortexMinDistance = (float)vmdVal;
+    int vdVal = Wh_GetIntSetting(L"Physics.vortex_drift");
+    vdVal = ClampInt(vdVal, 0, 100);
+    g_vortexDrift = vdVal / 100.0f;
+    int vdsVal = Wh_GetIntSetting(L"Physics.vortex_duration_speed");
+    vdsVal = ClampInt(vdsVal, 0, 100);
+    g_vortexDurationSpeed = vdsVal / 100.0f;
+    g_vortexPhysModel = 0;
+    {
+        PCWSTR modelStr = Wh_GetStringSetting(L"Physics.vortex_phys_model");
+        if (modelStr) {
+            if (wcscmp(modelStr, L"rankine") == 0) g_vortexPhysModel = 0;
+            else if (wcscmp(modelStr, L"free") == 0) g_vortexPhysModel = 1;
+            else if (wcscmp(modelStr, L"solid") == 0) g_vortexPhysModel = 2;
+            else if (wcscmp(modelStr, L"lamb") == 0) g_vortexPhysModel = 3;
+            else if (wcscmp(modelStr, L"kepler") == 0) g_vortexPhysModel = 4;
+            Wh_FreeStringSetting(modelStr);
+        }
+    }
+    // 粒子质量系统设置
+    g_enableParticleMass = Wh_GetIntSetting(L"Physics.enable_particle_mass") != 0;
+    g_particleMassMin = (float)Wh_GetIntSetting(L"Physics.particle_mass_min") / 10.0f;
+    if (g_particleMassMin < 0.1f) g_particleMassMin = 0.1f;
+    g_particleMassMax = (float)Wh_GetIntSetting(L"Physics.particle_mass_max") / 10.0f;
+    if (g_particleMassMax < 0.1f) g_particleMassMax = 0.1f;
+    if (g_particleMassMax < g_particleMassMin) g_particleMassMax = g_particleMassMin;
+    // 粒子万有引力设置
+    g_enableParticleGravity = Wh_GetIntSetting(L"Physics.enable_particle_gravity") != 0;
+    int gsVal = Wh_GetIntSetting(L"Physics.gravity_strength");
+    gsVal = ClampInt(gsVal, 0, 100);
+    g_gravityStrength = gsVal / 100.0f;
+    PCWSTR gstr = Wh_GetStringSetting(L"Physics.gravity_system");
+    if (gstr) {
+        if (wcscmp(gstr, L"nbody") == 0) g_gravitySystem = 1;
+        else g_gravitySystem = 0;
+        Wh_FreeStringSetting(gstr);
+    }
+    g_gravityBodyCount = Wh_GetIntSetting(L"Physics.gravity_body_count");
+    if (g_gravityBodyCount < 2) g_gravityBodyCount = 2;
+    if (g_gravityBodyCount > 10) g_gravityBodyCount = 10;
+    // 音乐响应设置
+    g_enableMusicReactive = Wh_GetIntSetting(L"Music.enable_music_reactive") != 0;
+    PCWSTR fftStr = Wh_GetStringSetting(L"Music.music_fft_size");
+    if (fftStr) {
+        if (wcscmp(fftStr, L"fft256") == 0) g_musicFftSize = 256;
+        else if (wcscmp(fftStr, L"fft512") == 0) g_musicFftSize = 512;
+        else if (wcscmp(fftStr, L"fft1024") == 0) g_musicFftSize = 1024;
+        else if (wcscmp(fftStr, L"fft2048") == 0) g_musicFftSize = 2048;
+        else g_musicFftSize = 512;
+        Wh_FreeStringSetting(fftStr);
+    } else {
+        g_musicFftSize = 512;
+    }
+    int msVal = Wh_GetIntSetting(L"Music.music_sensitivity");
+    msVal = ClampInt(msVal, 0, 100);
+    g_musicSensitivity = msVal / 100.0f;
+    int msmVal = Wh_GetIntSetting(L"Music.music_smoothing");
+    msmVal = ClampInt(msmVal, 0, 100);
+    g_musicSmoothing = msmVal / 100.0f;
+    // 音乐物理联动设置
+    g_enableMusicPhysics = Wh_GetIntSetting(L"Music.enable_music_physics") != 0;
+    int mglVal = Wh_GetIntSetting(L"Music.music_gravity_link");
+    mglVal = ClampInt(mglVal, 0, 100);
+    g_musicGravityLink = mglVal / 100.0f;
+    int mbpVal = Wh_GetIntSetting(L"Music.music_beat_pulse");
+    mbpVal = ClampInt(mbpVal, 0, 100);
+    g_musicBeatPulse = mbpVal / 100.0f;
+    int mbsVal = Wh_GetIntSetting(L"Music.music_bass_size");
+    mbsVal = ClampInt(mbsVal, 0, 100);
+    g_musicBassSize = mbsVal / 100.0f;
+    int mvlVal = Wh_GetIntSetting(L"Music.music_vortex_link");
+    mvlVal = ClampInt(mvlVal, 0, 100);
+    g_musicVortexLink = mvlVal / 100.0f;
+    // 高级物理系统设置
+    g_enableParticleCollision = Wh_GetIntSetting(L"Physics.enable_particle_collision") != 0;
+    g_enableLorentzForce = Wh_GetIntSetting(L"Physics.enable_lorentz_force") != 0;
+    int lsVal = Wh_GetIntSetting(L"Physics.lorentz_strength");
+    lsVal = ClampInt(lsVal, 0, 100);
+    g_lorentzStrength = lsVal / 100.0f;
+    g_enableBrownianMotion = Wh_GetIntSetting(L"Physics.enable_brownian_motion") != 0;
+    int bsVal = Wh_GetIntSetting(L"Physics.brownian_strength");
+    bsVal = ClampInt(bsVal, 0, 100);
+    g_brownianStrength = bsVal / 100.0f;
+    g_enableMultiBandLink = Wh_GetIntSetting(L"Music.enable_multi_band_link") != 0;
+    // 环境力场设置
+    g_enableEnvGravity = Wh_GetIntSetting(L"Physics.enable_env_gravity") != 0;
+    int egsVal = Wh_GetIntSetting(L"Physics.env_gravity_strength");
+    if (egsVal < 0) egsVal = 0; if (egsVal > 100) egsVal = 100;
+    g_envGravityStrength = egsVal / 100.0f * 0.8f;  // 0-100 -> 0-0.8 px/frame^2
+    int egaVal = Wh_GetIntSetting(L"Physics.env_gravity_angle");
+    if (egaVal < -180) egaVal = -180; if (egaVal > 180) egaVal = 180;
+    g_envGravityAngle = egaVal * 3.14159f / 180.0f;  // deg -> rad
+    g_enableEnvWind = Wh_GetIntSetting(L"Physics.enable_env_wind") != 0;
+    int wsVal = Wh_GetIntSetting(L"Physics.wind_strength");
+    if (wsVal < 0) wsVal = 0; if (wsVal > 100) wsVal = 100;
+    g_windStrength = wsVal / 100.0f * 0.6f;
+    int wtVal = Wh_GetIntSetting(L"Physics.wind_turbulence");
+    if (wtVal < 0) wtVal = 0; if (wtVal > 100) wtVal = 100;
+    g_windTurbulence = wtVal / 100.0f;
+    // 布料弹簧设置
+    g_enableParticleSpring = Wh_GetIntSetting(L"Physics.enable_particle_spring") != 0;
+    int skVal = Wh_GetIntSetting(L"Physics.spring_strength");
+    if (skVal < 0) skVal = 0; if (skVal > 100) skVal = 100;
+    g_springK = skVal / 100.0f * 0.05f;  // 0-100 -> 0-0.05 (damping handles stability)
+    int sdVal = Wh_GetIntSetting(L"Physics.spring_distance");
+    if (sdVal < 10) sdVal = 10; if (sdVal > 150) sdVal = 150;
+    g_springMaxDist = (float)sdVal;
+    // 文字粒子形状设置
+    PCWSTR pText = Wh_GetStringSetting(L"ShapesText.text_content");
+    wchar_t oldText[256];
+    wcscpy_s(oldText, g_textContent);
+    if (pText) { wcsncpy_s(g_textContent, pText, _TRUNCATE); Wh_FreeStringSetting(pText); }
+    // 文本内容变了没有：决定静态模式要不要重新读取冻结值（见下方 [tag] 段）
+    const bool tagTextChanged = wcscmp(oldText, g_textContent) != 0;
+    int tfsVal = Wh_GetIntSetting(L"ShapesText.text_font_size");
+    if (tfsVal < 10) tfsVal = 10; if (tfsVal > 200) tfsVal = 200;
+    g_textFontSize = tfsVal;
+    // 文字图集超采样倍数（v3.4.2.1）/ text atlas supersample factor
+    {
+        PCWSTR pSS = Wh_GetStringSetting(L"ShapesText.text_atlas_ss");
+        float ss = 2.0f;
+        if (pSS) {
+            if (wcscmp(pSS, L"1x") == 0) ss = 1.0f;
+            else if (wcscmp(pSS, L"3x") == 0) ss = 3.0f;
+            else if (wcscmp(pSS, L"4x") == 0) ss = 4.0f;
+            else ss = 2.0f;
+            Wh_FreeStringSetting(pSS);
+        }
+        g_textAtlasSS = ss;
+    }
+    // 长句分段轮播设置
+    g_enableTextChunk = Wh_GetIntSetting(L"ShapesText.enable_text_chunk") != 0;
+    int tcmVal = 3;
+    PCWSTR pChunkMode = Wh_GetStringSetting(L"ShapesText.text_chunk_mode");
+    if (pChunkMode) {
+        if (wcscmp(pChunkMode, L"global") == 0) tcmVal = 1; else tcmVal = 0;
+        Wh_FreeStringSetting(pChunkMode);
+    }
+    g_textChunkMode = tcmVal;
+    int tcmMax = Wh_GetIntSetting(L"ShapesText.text_chunk_max");
+    if (tcmMax < 1) tcmMax = 1; if (tcmMax > 8) tcmMax = 8;
+    g_textChunkMax = tcmMax;
+    int tcdVal = Wh_GetIntSetting(L"ShapesText.text_chunk_delay");
+    if (tcdVal < 100) tcdVal = 100; if (tcdVal > 3000) tcdVal = 3000;
+    g_textChunkDelay = tcdVal;
+    int toxVal = Wh_GetIntSetting(L"ShapesText.text_offset_x");
+    if (toxVal < -100) toxVal = -100; if (toxVal > 100) toxVal = 100;
+    g_textOffsetX = toxVal;
+    int toyVal = Wh_GetIntSetting(L"ShapesText.text_offset_y");
+    if (toyVal < -100) toyVal = -100; if (toyVal > 100) toyVal = 100;
+    g_textOffsetY = toyVal;
+    // ---- 文字内容 [tag] 标签系统设置 / text content [tag] settings ----
+    {
+        // 用户传空串表示"用默认(ISO 8601)"
+        PCWSTR pTagMode = Wh_GetStringSetting(L"ShapesText.text_tag_mode");
+        int newMode = 1;   // 默认 dynamic
+        if (pTagMode) {
+            if (wcscmp(pTagMode, L"static") == 0) newMode = 0; else newMode = 1;
+            Wh_FreeStringSetting(pTagMode);
+        }
+        wchar_t newTimeFmt[64] = L"", newDayFmt[64] = L"";
+        PCWSTR pTimeFmt = Wh_GetStringSetting(L"ShapesText.text_tag_time_format");
+        if (pTimeFmt) { wcsncpy_s(newTimeFmt, pTimeFmt, _TRUNCATE); Wh_FreeStringSetting(pTimeFmt); }
+        PCWSTR pDayFmt = Wh_GetStringSetting(L"ShapesText.text_tag_day_format");
+        if (pDayFmt) { wcsncpy_s(newDayFmt, pDayFmt, _TRUNCATE); Wh_FreeStringSetting(pDayFmt); }
+        // 模式或格式一变，静态冻结值就必须作废：
+        //   - static -> dynamic：旧冻结值会把动态跟随卡死在第一帧
+        //   - 修改格式：已冻结的字符串是按旧格式算出来的，继续用会显示过期内容
+        // Changing mode or format invalidates the frozen values: with static->dynamic the stale values
+        // would freeze the dynamic follower on frame one, and a format edit would keep showing strings
+        // computed with the previous format.
+        bool tagCfgChanged = (newMode != g_textTagMode) ||
+                             (wcscmp(newTimeFmt, g_textTagTimeFmt) != 0) ||
+                             (wcscmp(newDayFmt, g_textTagDayFmt) != 0);
+        g_textTagMode = newMode;
+        wcsncpy_s(g_textTagTimeFmt, newTimeFmt, _TRUNCATE);
+        wcsncpy_s(g_textTagDayFmt, newDayFmt, _TRUNCATE);
+        // 真正的清空交给渲染线程执行（原因见 g_tagCacheDirty 声明处）/ the actual clear is done by the
+        // 改了 text_content 也要重读：否则用户把 "Hi" 改成「现在是[time]」之后，屏幕上留着的
+        // 还是该标签第一次被求值时冻结的旧时间。
+        // Editing text_content must also re-read: otherwise turning "Hi" into "现在是[time]" still shows
+        if (tagCfgChanged || tagTextChanged) g_tagCacheDirty.store(true);
+    }
+    g_charAtlasDirty = true;  // 文字设置变更，标记图集需重建
+    // 注意：派生状态钩子必须放在 LoadSettings 的**最末尾**——热键与进程载体的设置在函数后半段才读取，
+    // 提前调用会用上一轮的旧值解析，导致热键 VK 永远是 0（v3.4.2.2 修）。
+    // NOTE: the derived-state hooks must run at the VERY END of LoadSettings - the hotkey and process-host
+    // settings are read in the second half of this function, so calling them earlier resolves VK codes from
+    // stale values and the hotkeys can never fire (fixed in v3.4.2.2).
+    // 物理可视化调试（独立开关）/ Physics visualization debug (independent toggles)
+    g_debugVelocity = Wh_GetIntSetting(L"Debug.enable_debug_velocity") != 0;
+    g_debugForce = Wh_GetIntSetting(L"Debug.enable_debug_force") != 0;
+    g_debugVortex = Wh_GetIntSetting(L"Debug.enable_debug_vortex") != 0;
+    g_debugGravity = Wh_GetIntSetting(L"Debug.enable_debug_gravity") != 0;
+    g_debugCollision = Wh_GetIntSetting(L"Debug.enable_debug_collision") != 0;
+    g_debugSpring = Wh_GetIntSetting(L"Debug.enable_debug_spring") != 0;
+    g_debugInteraction = Wh_GetIntSetting(L"Debug.enable_debug_interaction") != 0;
+    g_debugSpawn = Wh_GetIntSetting(L"Debug.enable_debug_spawn") != 0;
+    g_debugPath = Wh_GetIntSetting(L"Debug.enable_debug_path") != 0;
+    // 音乐捕获：音乐响应或音乐物理联动任一开启即需要捕获音频，全部关闭才停止
+    bool musicWanted = g_enableMusicReactive || g_enableMusicPhysics;
+    if (musicWanted && !g_music.capturing) {
+        MusicStartCapture();
+    } else if (!musicWanted && g_music.capturing) {
+        MusicStopCapture();
+    }
+    PCWSTR pstr = Wh_GetStringSetting(L"Particles.particle_mode");
+    if (pstr) {
+        if (wcscmp(pstr, L"off") == 0)
+            g_particleMode = 0;
+        else if (wcscmp(pstr, L"always") == 0)
+            g_particleMode = 2;
+        else
+            g_particleMode = 1;
+        Wh_FreeStringSetting(pstr);
+    }
+    PCWSTR pshape = Wh_GetStringSetting(L"Particles.particle_shape");
+    if (pshape) {
+        // 形状编码与HLSL shapeSDF一致：0=circle,1=star,2=hexagram,3=heart,4=diamond,5=triangle,6=flower,7=pentagon,8=hexagon,9=random
+        if (wcscmp(pshape, L"circle") == 0)
+            g_particleShape = 0;
+        else if (wcscmp(pshape, L"star") == 0)
+            g_particleShape = 1;
+        else if (wcscmp(pshape, L"hexagram") == 0)
+            g_particleShape = 2;
+        else if (wcscmp(pshape, L"heart") == 0)
+            g_particleShape = 3;
+        else if (wcscmp(pshape, L"diamond") == 0)
+            g_particleShape = 4;
+        else if (wcscmp(pshape, L"triangle") == 0)
+            g_particleShape = 5;
+        else if (wcscmp(pshape, L"flower") == 0)
+            g_particleShape = 6;
+        else if (wcscmp(pshape, L"pentagon") == 0)
+            g_particleShape = 7;
+        else if (wcscmp(pshape, L"hexagon") == 0)
+            g_particleShape = 8;
+        else if (wcscmp(pshape, L"text") == 0)
+            g_particleShape = 10;  // text / 文字字符
+        else
+            g_particleShape = 9;  // random / 随机混合
+        Wh_FreeStringSetting(pshape);
+        Wh_Log(L"[CharAtlas] particle_shape parsed, g_particleShape=%d", g_particleShape);
+    }
+    g_enableParticleSpin = Wh_GetIntSetting(L"Particles.enable_particle_spin") != 0;
+    g_particleSpinSpeed = Wh_GetIntSetting(L"Particles.particle_spin_speed");
+    if (g_particleSpinSpeed < 0) g_particleSpinSpeed = 0;
+    if (g_particleSpinSpeed > 100) g_particleSpinSpeed = 100;
+    g_enableParticleInteraction = Wh_GetIntSetting(L"Particles.enable_particle_interaction") != 0;
+    g_interParticleRepelDistance = Wh_GetIntSetting(L"Particles.particle_repel_distance");
+    if (g_interParticleRepelDistance < 5) g_interParticleRepelDistance = 5;
+    if (g_interParticleRepelDistance > 100) g_interParticleRepelDistance = 100;
+    g_particleSpawnSpread = Wh_GetIntSetting(L"Particles.particle_spawn_spread");
+    if (g_particleSpawnSpread < 0) g_particleSpawnSpread = 0;
+    if (g_particleSpawnSpread > 100) g_particleSpawnSpread = 100;
+    int interRepelVal = Wh_GetIntSetting(L"Particles.particle_inter_repel_force");
+    if (interRepelVal < 1) interRepelVal = 1;
+    if (interRepelVal > 100) interRepelVal = 100;
+    g_interParticleRepelForce = interRepelVal / 12.0f;  // 0-100 -> 0-8.33, default 60 -> 5.0
+    g_particleRepelAlignment = Wh_GetIntSetting(L"Particles.particle_repel_alignment");
+    if (g_particleRepelAlignment < 0) g_particleRepelAlignment = 0;
+    if (g_particleRepelAlignment > 100) g_particleRepelAlignment = 100;
+    g_enableClickStarburst = Wh_GetIntSetting(L"Click.enable_click_starburst") != 0;
+    g_starburstCount = Wh_GetIntSetting(L"Click.starburst_count");
+    g_enableClickEffect = Wh_GetIntSetting(L"Click.enable_click_effect") != 0;
+    g_clickMaxRadius = Wh_GetIntSetting(L"Click.click_max_radius");
+    g_clickDuration = Wh_GetIntSetting(L"Click.click_duration");
+    // 点击效果风格
+    {
+        PCWSTR csStr = Wh_GetStringSetting(L"Click.click_style");
+        if (csStr) {
+            if (wcscmp(csStr, L"shockwave") == 0) g_clickStyle = 1;
+            else if (wcscmp(csStr, L"ink") == 0) g_clickStyle = 2;
+            else if (wcscmp(csStr, L"spark") == 0) g_clickStyle = 3;
+            else if (wcscmp(csStr, L"bloom") == 0) g_clickStyle = 4;
+            else g_clickStyle = 0;   // ripple default
+            Wh_FreeStringSetting(csStr);
+        } else {
+            g_clickStyle = 0;
+        }
+    }
+
+    PCWSTR str = Wh_GetStringSetting(L"Trail.trail_shape");
+    if (str) {
+        if (wcscmp(str, L"dots") == 0)
+            g_trailShape = 1;
+        else if (wcscmp(str, L"function") == 0)
+            g_trailShape = 2;
+        else if (wcscmp(str, L"wave") == 0)
+            g_trailShape = 3;
+        else if (wcscmp(str, L"shapes") == 0)
+            g_trailShape = 4;
+        else if (wcscmp(str, L"double") == 0)
+            g_trailShape = 5;
+        else if (wcscmp(str, L"dashed") == 0)
+            g_trailShape = 6;
+        else if (wcscmp(str, L"spiral") == 0)
+            g_trailShape = 7;
+        else if (wcscmp(str, L"lightning") == 0)
+            g_trailShape = 8;
+        else if (wcscmp(str, L"feather") == 0)
+            g_trailShape = 9;
+        else if (wcscmp(str, L"none") == 0)
+            g_trailShape = 10;
+        else
+            g_trailShape = 0;
+        Wh_FreeStringSetting(str);
+    }
+    // 形状拖尾设置
+    str = Wh_GetStringSetting(L"ShapesText.shape_type");
+    if (str) {
+        if (wcscmp(str, L"star") == 0)
+            g_shapeType = 1;
+        else if (wcscmp(str, L"hexagon") == 0)
+            g_shapeType = 2;
+        else if (wcscmp(str, L"circle") == 0)
+            g_shapeType = 3;
+        else if (wcscmp(str, L"diamond") == 0)
+            g_shapeType = 4;
+        else if (wcscmp(str, L"triangle") == 0)
+            g_shapeType = 5;
+        else if (wcscmp(str, L"flower") == 0)
+            g_shapeType = 6;
+        else if (wcscmp(str, L"pentagon") == 0)
+            g_shapeType = 7;
+        else if (wcscmp(str, L"hexagram") == 0)
+            g_shapeType = 8;
+        else if (wcscmp(str, L"random") == 0)
+            g_shapeType = 9;
+        // v3.4.5.1 多元素拼接形状：10 留空（文字粒子占用该编号）
+        else if (wcscmp(str, L"rocket") == 0)
+            g_shapeType = 11;
+        else if (wcscmp(str, L"missile") == 0)
+            g_shapeType = 12;
+        else if (wcscmp(str, L"fiber_missile") == 0)
+            g_shapeType = 13;
+        else
+            g_shapeType = 0;  // heart
+        Wh_FreeStringSetting(str);
+    }
+    g_shapeInterval = Wh_GetIntSetting(L"ShapesText.shape_interval");
+    if (g_shapeInterval < 10) g_shapeInterval = 10;
+    if (g_shapeInterval > 100) g_shapeInterval = 100;
+    g_shapeRandomOffset = Wh_GetIntSetting(L"ShapesText.shape_random_offset") != 0;
+    g_shapeCount = Wh_GetIntSetting(L"ShapesText.shape_count");
+    if (g_shapeCount < 1) g_shapeCount = 1;
+    if (g_shapeCount > 5) g_shapeCount = 5;
+    g_shapeSize = (float)Wh_GetIntSetting(L"ShapesText.shape_size");
+    if (g_shapeSize < 5) g_shapeSize = 5;
+    // 上限由 30 提到 60：火箭/导弹是细长多边形，30 像素下细节根本看不清
+    if (g_shapeSize > 60) g_shapeSize = 60;
+    g_shapeLifetime = Wh_GetIntSetting(L"ShapesText.shape_lifetime");
+    if (g_shapeLifetime < 200) g_shapeLifetime = 200;
+    if (g_shapeLifetime > 2000) g_shapeLifetime = 2000;
+    g_superPerformanceMode = Wh_GetIntSetting(L"System.super_performance_mode") != 0;
+    // ===== v3.4.2.2 新增设置读取 / reads for the v3.4.2.2 additions =====
+    // 渲染质量扩展（R1/R2/R3/R5）/ rendering quality extensions
+    g_enableTemporalBlur = Wh_GetIntSetting(L"Quality.enable_temporal_blur") != 0;
+    g_temporalBlurAmount = ClampInt(Wh_GetIntSetting(L"Quality.temporal_blur_amount"), 0, 95);
+    {
+        PCWSTR s = Wh_GetStringSetting(L"Quality.post_aa");
+        if (s) {
+            if (wcscmp(s, L"fxaa") == 0) g_postAA = 1;
+            else if (wcscmp(s, L"fxaa_extreme") == 0) g_postAA = 2;
+            else g_postAA = 0;
+            Wh_FreeStringSetting(s);
+        }
+    }
+    g_enableBloom = Wh_GetIntSetting(L"Quality.enable_bloom") != 0;
+    g_bloomThreshold = ClampInt(Wh_GetIntSetting(L"Quality.bloom_threshold"), 0, 100);
+    g_bloomIntensity = ClampInt(Wh_GetIntSetting(L"Quality.bloom_intensity"), 0, 100);
+    // 着色器效果动画（独立折叠组 AnimFX）/ shader effect animations
+    g_fxBloomPulse = Wh_GetIntSetting(L"AnimFX.fx_bloom_pulse") != 0;
+    g_fxGlowBreath = Wh_GetIntSetting(L"AnimFX.fx_glow_breath") != 0;
+    g_fxEdgeFlow = Wh_GetIntSetting(L"AnimFX.fx_edge_flow") != 0;
+    g_fxDitherShimmer = Wh_GetIntSetting(L"AnimFX.fx_dither_shimmer") != 0;
+    g_fxStrokeFlow = Wh_GetIntSetting(L"AnimFX.fx_stroke_flow") != 0;
+    g_fxBloomThrWave = Wh_GetIntSetting(L"AnimFX.fx_bloom_thr_wave") != 0;
+    g_fxBlurPulse = Wh_GetIntSetting(L"AnimFX.fx_blur_pulse") != 0;
+    g_fxHdrShimmer = Wh_GetIntSetting(L"AnimFX.fx_hdr_shimmer") != 0;
+    {
+        PCWSTR wv = Wh_GetStringSetting(L"AnimFX.fx_anim_wave");
+        if (wv) {
+            if (wcscmp(wv, L"pulse") == 0) g_fxAnimWave = 1;
+            else if (wcscmp(wv, L"triangle") == 0) g_fxAnimWave = 2;
+            else if (wcscmp(wv, L"flicker") == 0) g_fxAnimWave = 3;
+            else g_fxAnimWave = 0;   // sine
+            Wh_FreeStringSetting(wv);
+        } else {
+            g_fxAnimWave = 0;
+        }
+    }
+    g_fxAnimSpeed = ClampInt(Wh_GetIntSetting(L"AnimFX.fx_anim_speed"), 10, 400);
+    g_fxAnimAmount = ClampInt(Wh_GetIntSetting(L"AnimFX.fx_anim_amount"), 0, 100);
+    {
+        PCWSTR s = Wh_GetStringSetting(L"Quality.hdr_mode");
+        if (s) {
+            // "off" 与 "false" 都接受：YAML 1.1 会把裸 off 解析成布尔 false，取决于解析器版本
+            if (wcscmp(s, L"off") == 0 || wcscmp(s, L"false") == 0) g_hdrMode = 1;
+            else if (wcscmp(s, L"scrgb") == 0) g_hdrMode = 2;
+            else if (wcscmp(s, L"hdr10") == 0) g_hdrMode = 3;
+            else g_hdrMode = 0;  // auto
+            Wh_FreeStringSetting(s);
+        }
+    }
+    g_hdrHighlightBoost = ClampInt(Wh_GetIntSetting(L"Quality.hdr_highlight_boost"), 0, 200);
+    {
+        PCWSTR s = Wh_GetStringSetting(L"Quality.hdr_tonemap");
+        if (s) {
+            if (wcscmp(s, L"reinhard") == 0) g_hdrTonemap = 1;
+            else if (wcscmp(s, L"aces") == 0) g_hdrTonemap = 2;
+            else g_hdrTonemap = 0;
+            Wh_FreeStringSetting(s);
+        }
+    }
+    // DPI 感知（I2）/ DPI awareness
+    {
+        PCWSTR s = Wh_GetStringSetting(L"System.dpi_scale_mode");
+        if (s) {
+            if (wcscmp(s, L"fixed") == 0) g_dpiScaleMode = 1;
+            else g_dpiScaleMode = 0;  // auto
+            Wh_FreeStringSetting(s);
+        }
+    }
+    g_dpiScaleText = Wh_GetIntSetting(L"System.dpi_scale_text") != 0;
+    // 热键（I5）：这里只读取原始配置，虚拟键码解析与派生状态由热键模块完成
+    {
+        PCWSTR s = Wh_GetStringSetting(L"Hotkeys.hotkey_modifier");
+        if (s) {
+            if (wcscmp(s, L"alt") == 0) g_hotkeyModifier = 1;
+            else if (wcscmp(s, L"alt_ctrl") == 0) g_hotkeyModifier = 2;
+            else if (wcscmp(s, L"alt_shift") == 0) g_hotkeyModifier = 3;
+            else if (wcscmp(s, L"alt_ctrl_shift") == 0) g_hotkeyModifier = 4;
+            else g_hotkeyModifier = 0;  // none
+            Wh_FreeStringSetting(s);
+        }
+    }
+    {
+        PCWSTR s = Wh_GetStringSetting(L"Hotkeys.hotkey_toggle_key");
+        if (s) { wcsncpy_s(g_hotkeyToggleKey, s, _TRUNCATE); Wh_FreeStringSetting(s); }
+        else g_hotkeyToggleKey[0] = 0;
+    }
+    {
+        PCWSTR s = Wh_GetStringSetting(L"Hotkeys.hotkey_trail_key");
+        if (s) { wcsncpy_s(g_hotkeyTrailKey, s, _TRUNCATE); Wh_FreeStringSetting(s); }
+        else g_hotkeyTrailKey[0] = 0;
+    }
+    {
+        PCWSTR s = Wh_GetStringSetting(L"Hotkeys.hotkey_particles_key");
+        if (s) { wcsncpy_s(g_hotkeyParticlesKey, s, _TRUNCATE); Wh_FreeStringSetting(s); }
+        else g_hotkeyParticlesKey[0] = 0;
+    }
+    g_enableBezierSmooth = Wh_GetIntSetting(L"Trail.enable_bezier_smooth") != 0;
+    g_enableMotionBlur = Wh_GetIntSetting(L"Trail.enable_motion_blur") != 0;
+    g_motionBlurStrength = Wh_GetIntSetting(L"Trail.motion_blur_strength");
+    if (g_motionBlurStrength < 1) g_motionBlurStrength = 1;
+    if (g_motionBlurStrength > 5) g_motionBlurStrength = 5;
+    g_enable25DEffect = Wh_GetIntSetting(L"Trail.enable_25d_effect") != 0;
+    g_perspectiveStrength = Wh_GetIntSetting(L"Trail.perspective_strength");
+    if (g_perspectiveStrength < 0) g_perspectiveStrength = 0;
+    if (g_perspectiveStrength > 50) g_perspectiveStrength = 50;
+    str = Wh_GetStringSetting(L"ShapesText.function_preset");
+    if (str) {
+        if (wcscmp(str, L"damped") == 0)
+            g_functionPreset = 1;
+        else if (wcscmp(str, L"beat") == 0)
+            g_functionPreset = 2;
+        else if (wcscmp(str, L"swirl") == 0)
+            g_functionPreset = 3;
+        else if (wcscmp(str, L"custom") == 0)
+            g_functionPreset = 4;
+        else
+            g_functionPreset = 0;
+        Wh_FreeStringSetting(str);
+    }
+    str = Wh_GetStringSetting(L"ShapesText.custom_function");
+    if (str) {
+        WStrToUTF8(str, g_customFunction, 256);
+        Wh_FreeStringSetting(str);
+    }
+    str = Wh_GetStringSetting(L"Colors.color_mode");
+    if (str) {
+        if (wcscmp(str, L"single") == 0)
+            g_colorMode = 0;
+        else if (wcscmp(str, L"gradient") == 0)
+            g_colorMode = 1;
+        else if (wcscmp(str, L"rainbow") == 0)
+            g_colorMode = 2;
+        else if (wcscmp(str, L"warm") == 0)
+            g_colorMode = 3;
+        else if (wcscmp(str, L"cool") == 0)
+            g_colorMode = 4;
+        else if (wcscmp(str, L"neon") == 0)
+            g_colorMode = 5;
+        else if (wcscmp(str, L"velocity") == 0)
+            g_colorMode = 6;
+        else if (wcscmp(str, L"stripes") == 0)
+            g_colorMode = 7;
+        else if (wcscmp(str, L"fire") == 0)
+            g_colorMode = 8;
+        else if (wcscmp(str, L"aurora") == 0)
+            g_colorMode = 9;
+        else if (wcscmp(str, L"cursor_extract") == 0)
+            g_colorMode = 10;
+        else if (wcscmp(str, L"cursor_mix") == 0)
+            g_colorMode = 11;
+        else if (wcscmp(str, L"metallic") == 0)
+            g_colorMode = 12;
+        else if (wcscmp(str, L"cyberpunk") == 0)
+            g_colorMode = 13;
+        else if (wcscmp(str, L"pastel") == 0)
+            g_colorMode = 14;
+        else if (wcscmp(str, L"oil_slick") == 0)
+            g_colorMode = 23;
+        else if (wcscmp(str, L"vaporwave") == 0)
+            g_colorMode = 24;
+        else if (wcscmp(str, L"bioluminescence") == 0)
+            g_colorMode = 25;
+        else if (wcscmp(str, L"clock_sky") == 0)
+            g_colorMode = 26;
+        else if (wcscmp(str, L"hue_rotate") == 0)
+            g_colorMode = 15;
+        else if (wcscmp(str, L"dual_pulse") == 0)
+            g_colorMode = 16;
+        else if (wcscmp(str, L"sparkle") == 0)
+            g_colorMode = 17;
+        else if (wcscmp(str, L"thermal") == 0)
+            g_colorMode = 18;
+        else if (wcscmp(str, L"interference") == 0)
+            g_colorMode = 19;
+        else if (wcscmp(str, L"spectrum") == 0)
+            g_colorMode = 20;
+        else if (wcscmp(str, L"dither") == 0)
+            g_colorMode = 21;
+        else if (wcscmp(str, L"warp") == 0)
+            g_colorMode = 22;
+        else
+            g_colorMode = 0;
+        Wh_FreeStringSetting(str);
+    }
+    str = Wh_GetStringSetting(L"Particles.particle_origin");
+    if (str) {
+        if (wcscmp(str, L"head") == 0)
+            g_particleOrigin = 0;
+        else if (wcscmp(str, L"middle") == 0)
+            g_particleOrigin = 1;
+        else if (wcscmp(str, L"custom") == 0)
+            g_particleOrigin = 3;
+        else if (wcscmp(str, L"random") == 0)
+            g_particleOrigin = 4;
+        else
+            g_particleOrigin = 2;  // tail
+        Wh_FreeStringSetting(str);
+    }
+    g_cursorColorShift = Wh_GetIntSetting(L"Colors.enable_cursor_color_shift") != 0;
+    str = Wh_GetStringSetting(L"Colors.color_shift_mode");
+    if (str) {
+        if (wcscmp(str, L"off") == 0) g_colorShiftMode = 0;
+        else if (wcscmp(str, L"complementary") == 0) g_colorShiftMode = 1;
+        else if (wcscmp(str, L"analogous") == 0) g_colorShiftMode = 2;
+        else if (wcscmp(str, L"triadic") == 0) g_colorShiftMode = 3;
+        else if (wcscmp(str, L"split") == 0) g_colorShiftMode = 4;
+        else if (wcscmp(str, L"custom") == 0) g_colorShiftMode = 5;
+        else g_colorShiftMode = 1;
+        Wh_FreeStringSetting(str);
+    }
+    g_colorShiftAngle = Wh_GetIntSetting(L"Colors.color_shift_angle");
+    if (g_colorShiftAngle < 0) g_colorShiftAngle = 0;
+    if (g_colorShiftAngle > 360) g_colorShiftAngle = 360;
+    // ---- Accessibility contrast target ----
+    {
+        PCWSTR contrastStr = Wh_GetStringSetting(L"Colors.contrast_target");
+        if (contrastStr) {
+            if (wcscmp(contrastStr, L"aa_large") == 0) g_contrastTarget = 1;
+            else if (wcscmp(contrastStr, L"aa") == 0) g_contrastTarget = 2;
+            else if (wcscmp(contrastStr, L"aaa") == 0) g_contrastTarget = 3;
+            else g_contrastTarget = 0;   // off
+            Wh_FreeStringSetting(contrastStr);
+        }
+    }
+    str = Wh_GetStringSetting(L"Colors.custom_color");
+    if (str) {
+        g_customColor = ParseHexColor(str, D2D1::ColorF(0, .75f, 1));
+        Wh_FreeStringSetting(str);
+    }
+    str = Wh_GetStringSetting(L"Colors.gradient_colors");
+    if (str) {
+        ParseGradientColors(str);
+        Wh_FreeStringSetting(str);
+    }
+
+    if (g_triggerVelocity <= 0)
+        g_triggerVelocity = 25;
+    if (g_stopVelocity <= 0)
+        g_stopVelocity = 10;
+    // 迟滞区间要求停止阈值低于触发阈值，否则激活后会立即停止；钳制为触发阈值的80%
+    if (g_stopVelocity >= g_triggerVelocity)
+        g_stopVelocity = fmaxf(1.0f, g_triggerVelocity * 0.8f);
+    if (g_tailLength < 2)
+        g_tailLength = 10;
+    if (g_tailLength > 200)
+        g_tailLength = 200;
+    if (g_trailDelay < 0)
+        g_trailDelay = 0;
+    if (g_trailDelay > 10)
+        g_trailDelay = 10;
+    if (g_dotsMultiplier < 1)
+        g_dotsMultiplier = 1;
+    if (g_dotsMultiplier > 5)
+        g_dotsMultiplier = 5;
+    g_dotChainSize = Wh_GetIntSetting(L"ShapesText.dot_chain_size");
+    if (g_dotChainSize < 50) g_dotChainSize = 50;
+    if (g_dotChainSize > 300) g_dotChainSize = 300;
+    g_particleSizeMultiplier = Wh_GetIntSetting(L"Particles.particle_size_multiplier");
+    g_enableParticleGlow = Wh_GetIntSetting(L"Particles.enable_particle_glow") != 0;
+    g_particleGlowIntensity = Wh_GetIntSetting(L"Particles.particle_glow_intensity");
+    if (g_particleSizeMultiplier < 50) g_particleSizeMultiplier = 50;
+    if (g_particleSizeMultiplier > 300) g_particleSizeMultiplier = 300;
+    if (g_particleGlowIntensity < 0) g_particleGlowIntensity = 0;
+    if (g_particleGlowIntensity > 100) g_particleGlowIntensity = 100;
+    g_enableParticleStroke = Wh_GetIntSetting(L"Particles.enable_particle_stroke") != 0;
+    g_particleStrokeWidth = Wh_GetIntSetting(L"Particles.particle_stroke_width");
+    g_particleStrokeAlpha = Wh_GetIntSetting(L"Particles.particle_stroke_alpha");
+    if (g_particleStrokeWidth < 0) g_particleStrokeWidth = 0;
+    if (g_particleStrokeWidth > 10) g_particleStrokeWidth = 10;
+    if (g_particleStrokeAlpha < 0) g_particleStrokeAlpha = 0;
+    if (g_particleStrokeAlpha > 100) g_particleStrokeAlpha = 100;
+    {
+        PCWSTR psc = Wh_GetStringSetting(L"Particles.particle_stroke_color");
+        if (psc) {
+            if (wcscmp(psc, L"auto") == 0) {
+                g_particleStrokeColorMode = 0;
+            } else {
+                g_particleStrokeColorMode = 1;
+                // Fallback on parse failure: neutral grey.
+                g_particleStrokeColor = ParseHexColor(
+                    psc, D2D1::ColorF(0x808090));
+            }
+            Wh_FreeStringSetting(psc);
+        }
+    }
+    if (g_waveAmplitude < 1)
+        g_waveAmplitude = 1;
+    if (g_waveAmplitude > 40)
+        g_waveAmplitude = 40;
+    if (g_waveFrequency < 3)
+        g_waveFrequency = 3;
+    if (g_waveFrequency > 60)
+        g_waveFrequency = 60;
+    if (g_glowIntensity < 0)
+        g_glowIntensity = 0;
+    if (g_glowIntensity > 100)
+        g_glowIntensity = 100;
+    g_enableTrailStroke = Wh_GetIntSetting(L"Quality.enable_trail_stroke") != 0;
+    g_trailStrokeWidth = Wh_GetIntSetting(L"Quality.trail_stroke_width");
+    if (g_trailStrokeWidth < 0) g_trailStrokeWidth = 0;
+    if (g_trailStrokeWidth > 50) g_trailStrokeWidth = 50;
+    if (g_edgeSoftness < 0) g_edgeSoftness = 0;
+    if (g_edgeSoftness > 100) g_edgeSoftness = 100;
+    if (g_particleDensity < 1)
+        g_particleDensity = 1;
+    if (g_particleDensity > 10)
+        g_particleDensity = 10;
+    if (g_particleInterval < 0)
+        g_particleInterval = 0;
+    if (g_particleInterval > 2000)
+        g_particleInterval = 2000;
+    if (g_particleOriginRatio < 0)
+        g_particleOriginRatio = 0;
+    if (g_particleOriginRatio > 100)
+        g_particleOriginRatio = 100;
+    if (g_starburstCount < 4)
+        g_starburstCount = 4;
+    if (g_starburstCount > 20)
+        g_starburstCount = 20;
+    if (g_clickMaxRadius <= 0)
+        g_clickMaxRadius = 40;
+    if (g_clickMaxRadius > 500)
+        g_clickMaxRadius = 500;
+    if (g_clickDuration <= 0)
+        g_clickDuration = 300;
+    if (g_clickDuration > 3000)
+        g_clickDuration = 3000;
+
+    const char *presetExprs[] = {
+        "sin(d * 0.15) * 8",
+        "sin(d * 0.25) * exp(0 - t * 2.5) * 10",
+        "abs(sin(d * 0.22)) ^ 3 * 12",
+        "sin(d * 0.1 + time * 2) * cos(d * 0.05) * 9",
+    };
+    if (g_functionPreset == 4)
+        CompileExpression(g_customFunction);
+    else
+        CompileExpression(presetExprs[g_functionPreset]);
+
+    s_gradValid = false;
+    g_lagInited = false;
+    g_fadeAlpha = 1.0f;
+
+    // 根据颜色模式动态设置屏幕捕获排除（仅光标取色模式需要排除自己）/ Dynamically set capture exclusion based on color mode (only cursor-extract needs self-exclusion)
+    if (g_overlayHwnd) {
+        if (g_colorMode == 10 || g_colorMode == 11)  // cursor_extract or cursor_mix
+            SetWindowDisplayAffinity(g_overlayHwnd, WDA_EXCLUDEFROMCAPTURE);
+        else
+            SetWindowDisplayAffinity(g_overlayHwnd, WDA_NONE);
+    }
+
+    // ===== LoadSettings 最末尾：刷新派生状态（热键虚拟键码、进程载体名）=====
+    // 必须放在这里：上面才是热键与进程载体设置的读取点，提前调用会拿到旧值
+    HotkeyOnSettingsLoaded();
+}
+
+// ===================== 游戏检测 / Game Detection =====================
+// 检测前台窗口是否为全屏应用（游戏/视频等）/ Detect if foreground window is fullscreen (game/video)
+// 实现方式：窗口尺寸匹配 + 光标裁剪 + 光标隐藏 + D3D 全屏状态
+bool CheckForegroundFullscreen() {
+    HWND fg = GetForegroundWindow();
+    if (!fg || fg == GetDesktopWindow())
+        return false;
+
+    // 缓存桌面窗口句柄，每 500ms 刷新（Explorer 重启后失效）/ Cache desktop window handles, refresh every 500ms (invalid after Explorer restart)
+    static DWORD s_cacheTime = 0;
+    static HWND s_progman = nullptr, s_workerw = nullptr;
+    DWORD tick = GetTickCount();
+    if (tick - s_cacheTime > 500 || !s_progman) {
+        s_progman = FindWindowW(L"Progman", NULL);
+        s_workerw = FindWindowW(L"WorkerW", NULL);
+        s_cacheTime = tick;
+    }
+    if (fg == s_progman || fg == s_workerw)
+        return false;
+
+    // 1. 系统 D3D 全屏状态检测
+    QUERY_USER_NOTIFICATION_STATE quns;
+    if (SUCCEEDED(SHQueryUserNotificationState(&quns)) && quns == QUNS_RUNNING_D3D_FULL_SCREEN)
+        return true;
+
+    // 2. 窗口尺寸与显示器匹配
+    // 窗口可能在取值瞬间被销毁（GetWindowRect 失败），此时 RECT 未初始化，拿它与显示器比较会误判为全屏
+    RECT rcWnd = {};
+    if (!GetWindowRect(fg, &rcWnd)) return false;
+    HMONITOR hMon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = {sizeof(mi)};
+    if (!GetMonitorInfo(hMon, &mi))
+        return false;
+    bool sizeMatch = rcWnd.left <= mi.rcMonitor.left && rcWnd.top <= mi.rcMonitor.top &&
+                     rcWnd.right >= mi.rcMonitor.right && rcWnd.bottom >= mi.rcMonitor.bottom;
+    if (!sizeMatch)
+        return false;
+
+    // 3. 光标裁剪（游戏通常会限制光标在窗口内）/ 3. Cursor clip (games usually confine cursor to window)
+    RECT rcClip;
+    if (GetClipCursor(&rcClip)) {
+        int vW = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        int vH = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        if ((rcClip.right - rcClip.left) < vW || (rcClip.bottom - rcClip.top) < vH)
+            return true;
+    }
+
+    // 4. 光标隐藏（全屏游戏通常隐藏光标）/ 4. Cursor hidden (fullscreen games usually hide cursor)
+    CURSORINFO ci = {sizeof(CURSORINFO)};
+    if (GetCursorInfo(&ci) && ci.flags == 0)
+        return true;
+
+    return false;
+}
+
+// 取色色相偏移：色相整体旋转一个角度，并给饱和度/亮度做保底，确保拖尾在任何背景上都醒目。
+// 支持设置里提到的全部 6 种模式（互补 180° / 类似 30° / 三角色 120° / 分裂互补 150° / 自定义 / 关闭）。
+static D2D1_COLOR_F ShiftToComplementary(D2D1_COLOR_F c) {
+    float h, s, v;
+    // 原先这里逐字复制了 RGBtoHSV 的函数体。既然 RGBtoHSV 就在同一文件的上方，
+    // 复制等于埋一颗树霉菌：改了一处、另一处不动，两种水源地的不一致最难查。
+    RGBtoHSV(c, h, s, v);
+
+    // 根据偏移模式计算偏移角度
+    float shiftAngle = 0.0f;
+    switch (g_colorShiftMode) {
+        case 1: shiftAngle = 180.0f; break;  // 互补色
+        case 2: shiftAngle = 30.0f; break;   // 类似色
+        case 3: shiftAngle = 120.0f; break;  // 三角色
+        case 4: shiftAngle = 150.0f; break;  // 分裂互补
+        case 5: shiftAngle = (float)g_colorShiftAngle; break;  // 自定义
+        default: shiftAngle = 0.0f; break;   // 关闭
+    }
+    h = fmodf(h + shiftAngle, 360.0f);
+    s = fmaxf(s, g_colorShiftSatBoost);  // 饱和度保底
+    v = fmaxf(v, g_colorShiftValBoost);  // 亮度保底
+    return HSVtoRGB(h, s, v);
+}
+
+// 后台采样线程写、渲染线程（ComputeColors）读的取色结果必须原子发布。
+// D2D1_COLOR_F 是 4 个 float 的聚合体，无法整体原子写（16 字节原子会退化为加锁、且可能引入 libatomic 依赖），
+// 因此用 std::atomic_ref<float> 逐分量原子发布：每个分量对齐到 4 字节，生成的是无锁的普通原子 store。
+// 取舍：变量名与类型完全不变，读侧（不在本次白名单）一行都不用改；代价是读侧仍可能看到"两次更新混合"的
+// 颜色（例如 r 已更新而 g 尚未更新），但每个分量都是完整值，不会出现撕裂值，也不再有 UB。
+// 彻底消除混合需要读侧配合的双缓冲 + 原子索引，见报告「给 orchestrator 的读侧约定」。
+// The sampled colour is written by the background sampler thread and read by the render thread (ComputeColors),
+// so it must be published atomically. D2D1_COLOR_F is a 4-float aggregate that cannot be written as one atomic
+// unit (a 16-byte atomic degrades to a lock and may need libatomic), so each component is stored atomically via
+// std::atomic_ref<float> (4-byte aligned, lock-free plain atomic stores). Trade-off: the variable name and type
+// are unchanged so the reader needs no edit; the reader may still see a colour mixed across two updates, but
+// every component is a whole value — no tearing, no UB.
+static inline void PublishCursorColor(const D2D1_COLOR_F &src) {
+    std::atomic_ref<float>(g_cursorExtractedColor.r).store(src.r, std::memory_order_release);
+    std::atomic_ref<float>(g_cursorExtractedColor.g).store(src.g, std::memory_order_release);
+    std::atomic_ref<float>(g_cursorExtractedColor.b).store(src.b, std::memory_order_release);
+    std::atomic_ref<float>(g_cursorExtractedColor.a).store(src.a, std::memory_order_release);
+}
+
+static void ExtractCursorColor(POINT pt, DWORD dwTime) {
+    // 100ms 一次：GetDC(NULL) 在 DWM 下触发全屏回读，过于频繁会与渲染线程冲突掉帧
+    if (dwTime - s_lastColorExtract < 100)
+        return;
+    s_lastColorExtract = dwTime;
+    HDC hdcScreen = GetDC(NULL);
+    if (hdcScreen) {
+        COLORREF col = GetPixel(hdcScreen, pt.x + 2, pt.y + 4);
+        ReleaseDC(NULL, hdcScreen);
+        if (col != CLR_INVALID) {
+            D2D1_COLOR_F newColor =
+                D2D1::ColorF(GetRValue(col) / 255.0f, GetGValue(col) / 255.0f, GetBValue(col) / 255.0f, 1.0f);
+            if (g_cursorColorShift)
+                newColor = ShiftToComplementary(newColor);
+            // 先在局部算出完整结果，再一次原子发布：不能把中间状态写进跨线程共享变量
+            // （本函数是唯一的写者，这里的读取不与任何写并发；渲染线程侧的读取由 orchestrator 负责同步）
+            // Compute the full result locally, then publish it in one go: never leave an intermediate state in a
+            // cross-thread variable (this function is the only writer, so this read races with nothing; the
+            // render-thread read side is orchestrated separately).
+            D2D1_COLOR_F published = LerpColor(g_cursorExtractedColor, newColor, 0.22f);
+            PublishCursorColor(published);
+        }
+    }
+}
+
+// ===================== 自适应对比度：背景亮度采样 / Adaptive Contrast: Background Luminance Sampling =====================
+// 沿拖尾路径、在路径法线两侧偏移采样屏幕像素（避开拖尾自身），计算平均亮度（0=暗，1=亮）/ Sample screen pixels offset along path normals (avoid self), compute avg luminance (0=dark, 1=bright)
+// 限制采样频率避免性能开销，采样结果用于自适应明度
+static void SampleBackgroundLuminance(const std::vector<D2D1_POINT_2F>& path, DWORD dwTime, int vX, int vY) {
+    if (path.size() < 2) return;
+    // 500ms 一次：GetDC(NULL) 在 DWM 下会触发全屏 GPU→CPU 回读，过于频繁会与渲染线程的 DwmFlush 互斥阻塞导致掉帧
+    if (dwTime - g_lastBgSample < 500) return;
+    g_lastBgSample = dwTime;
+
+    const float OFFSET = 10.0f;  // 沿法线偏移像素，需大于拖尾最大宽度以避开自身
+    // 收集采样点：沿路径均匀 3 处，每处取法线两侧各 1 点（共最多 6 点）/ Collect sample points: 3 evenly along path, 1 point each side of normal (max 6 total)
+    struct Pt { int x, y; };
+    Pt pts[6];
+    int nPts = 0;
+    size_t n = path.size();
+    int step = (int)n / 3;
+    if (step < 1) step = 1;
+    for (size_t i = 0; i < n && nPts < 6; i += step) {
+        size_t i0 = (i == 0) ? 0 : i - 1;
+        size_t i1 = (i == n - 1) ? n - 1 : i + 1;
+        float dx = path[i1].x - path[i0].x;
+        float dy = path[i1].y - path[i0].y;
+        float ln = sqrtf(dx * dx + dy * dy);
+        if (ln < 0.001f) continue;
+        float nx = -dy / ln, ny = dx / ln;  // 单位法线
+        float bx = path[i].x + vX, by = path[i].y + vY;
+        pts[nPts++] = {(int)(bx + nx * OFFSET), (int)(by + ny * OFFSET)};
+        pts[nPts++] = {(int)(bx - nx * OFFSET), (int)(by - ny * OFFSET)};
+    }
+    if (nPts == 0) return;
+
+    // 计算采样点包围盒
+    int minX = pts[0].x, maxX = pts[0].x, minY = pts[0].y, maxY = pts[0].y;
+    for (int i = 1; i < nPts; ++i) {
+        if (pts[i].x < minX) minX = pts[i].x;
+        if (pts[i].x > maxX) maxX = pts[i].x;
+        if (pts[i].y < minY) minY = pts[i].y;
+        if (pts[i].y > maxY) maxY = pts[i].y;
+    }
+    int w = maxX - minX + 1, h = maxY - minY + 1;
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    // 限制 DIB 尺寸，避免极端情况下分配过大
+    if (w > 128) w = 128;
+    if (h > 128) h = 128;
+
+    HDC hdcScreen = GetDC(NULL);
+    if (!hdcScreen) return;
+
+    // 创建 top-down 32bpp DIB（biHeight 为负表示自上而下，避免坐标翻转）/ Create top-down 32bpp DIB (negative biHeight = top-down, avoids coordinate flip)
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = w;
+    bmi.bmiHeader.biHeight = -h;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    void* pBits = nullptr;
+    HBITMAP hBmp = CreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, &pBits, nullptr, 0);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    // 位图/兼容DC创建失败（GDI 资源耗尽、参数异常）时必须直接返回，否则下面会
+    // ① 用 NULL DC 调 SelectObject / ② 解引用空的 pBits 读像素，两者都会崩溃。
+    if (!hBmp || !hdcMem || !pBits) {
+        if (hdcMem) DeleteDC(hdcMem);
+        if (hBmp) DeleteObject(hBmp);
+        ReleaseDC(NULL, hdcScreen);
+        return;
+    }
+    HGDIOBJ oldBmp = SelectObject(hdcMem, hBmp);
+
+    // 一次 BitBlt 批量回读包围盒区域，替代多次 GetPixel（每次 GetPixel 都会单独触发 DWM 往返）/ Single BitBlt batch readback of bbox, replaces multiple GetPixel (each triggers separate DWM roundtrip)
+    BitBlt(hdcMem, 0, 0, w, h, hdcScreen, minX, minY, SRCCOPY);
+
+    float totalLum = 0.0f;
+    int samples = 0;
+    const BYTE* pSrc = (const BYTE*)pBits;
+    for (int i = 0; i < nPts; ++i) {
+        int dx = pts[i].x - minX, dy = pts[i].y - minY;
+        if (dx < 0 || dx >= w || dy < 0 || dy >= h) continue;  // 超出 DIB 范围（被尺寸限制裁剪）则跳过
+        const BYTE* px = pSrc + (dy * w + dx) * 4;  // 32bpp BGRA，top-down
+        // 感知亮度改用 Rec.709（经 mtcolor::LumaEncoded）。
+        // 原先这里是 Rec.601 权重，而 GPU 侧自适应对比度用的是 Rec.709 —— CPU 算出的「背景亮度」
+        // 与 GPU 判定亮/暗背景用的量并不是同一个口径，等于两边在各自说一套。
+        // Perceived luminance now uses Rec.709 via mtcolor::LumaEncoded. This used to be Rec.601 while the GPU's
+        // adaptive contrast weights Rec.709 — the CPU's "background luminance" and the quantity the GPU uses to
+        // decide light vs dark were measuring different things.
+        const D2D1_COLOR_F pxCol = D2D1::ColorF(px[2] / 255.0f, px[1] / 255.0f, px[0] / 255.0f, 1.0f);
+        float lum = mtcolor::LumaEncoded(pxCol);
+        totalLum += lum;
+        samples++;
+    }
+
+    SelectObject(hdcMem, oldBmp);
+    DeleteObject(hBmp);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcScreen);
+
+    if (samples > 0) {
+        float avgLum = totalLum / samples;
+        // 平滑过渡，避免亮度跳变
+        // 先算好再原子写回：g_bgLuminance 由后台采样线程写、渲染线程读（UpdateConstantBuffer / 顶点构造）
+        float newLum = g_bgLuminance.load(std::memory_order_relaxed) * 0.7f + avgLum * 0.3f;
+        g_bgLuminance.store(newLum, std::memory_order_release);
+    }
+}
+
+// 后台采样线程：把 GDI 回读（GetDC/BitBlt）从渲染线程剥离，避免阻塞 vsync
+// 渲染线程只负责写入最新输入，本线程定期读取并执行慢操作，结果写回全局变量供渲染线程读取
+static DWORD WINAPI BgSamplerThreadProc(LPVOID) {
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+    if (!g_bgSampleExitEvent) return 0;  // 退出事件缺失时不能进循环：WaitForSingleObject(NULL) 会立刻返回，变成满核空转
+    // 输入缓冲放在循环外复用，避免每 50ms 至少一次堆分配
+    std::vector<D2D1_POINT_2F> path;
+    while (WaitForSingleObject(g_bgSampleExitEvent, 50) != WAIT_OBJECT_0) {
+        // 复制输入（锁内，vector 复制很快）
+        int vX, vY; POINT cursor; DWORD dwTime; bool hasPath; int colorMode; bool adaptive;
+        EnterCriticalSection(&g_sampleCS);
+        path = g_samplePath;
+        vX = g_sampleVX; vY = g_sampleVY;
+        cursor = g_sampleCursor; dwTime = g_sampleTime;
+        hasPath = g_sampleHasPath;
+        colorMode = g_sampleColorMode;
+        adaptive = g_sampleAdaptive;
+        LeaveCriticalSection(&g_sampleCS);
+
+        if (!hasPath) continue;
+
+        // 慢操作全部在锁外执行，不阻塞渲染线程
+        if (adaptive) {
+            SampleBackgroundLuminance(path, dwTime, vX, vY);
+        }
+        if (colorMode == 10 || colorMode == 11) {
+            ExtractCursorColor(cursor, dwTime);
+        }
+    }
+    return 0;
+}
+
+// ===================== 轨迹变形 / Trail Deformation =====================
+// 螺旋变形：沿路径法线方向应用螺旋偏移
+// 计算路径上某点的法线单位向量
+static inline void GetPathNormal(const std::vector<D2D1_POINT_2F> &pts, size_t i, float &nx, float &ny) {
+    float dx, dy;
+    // 至少需要两个点才能求方向，单点路径一律返回单位法线，避免 pts[1] 越界读
+    if (pts.size() < 2) { nx = 0; ny = 1; return; }
+    if (i == 0) { dx = pts[1].x - pts[0].x; dy = pts[1].y - pts[0].y; }
+    else if (i == pts.size() - 1) { dx = pts[i].x - pts[i-1].x; dy = pts[i].y - pts[i-1].y; }
+    else { dx = pts[i+1].x - pts[i-1].x; dy = pts[i+1].y - pts[i-1].y; }
+    float len = sqrtf(dx*dx + dy*dy);
+    if (len > 0.001f) { nx = -dy / len; ny = dx / len; }
+    else { nx = 0; ny = 1; }
+}
+
+// 螺旋变形：沿路径法线方向应用正弦螺旋偏移，尾部衰减
+static void ApplySpiralDeformation(std::vector<D2D1_POINT_2F> &pts, DWORD dwTime) {
+    if (pts.size() < 3) return;
+    float phase = dwTime * 0.005f;
+    for (size_t i = 0; i < pts.size(); ++i) {
+        float ratio = (float)i / (pts.size() - 1);
+        float spiral = sinf(ratio * 12.0f + phase) * (1.0f - ratio) * 15.0f;
+        float nx, ny;
+        GetPathNormal(pts, i, nx, ny);
+        pts[i].x += nx * spiral;
+        pts[i].y += ny * spiral;
+    }
+}
+
+// 闪电变形：沿路径应用随机锯齿，使用统一随机数生成器
+static void ApplyLightningDeformation(std::vector<D2D1_POINT_2F> &pts, DWORD dwTime) {
+    if (pts.size() < 3) return;
+    std::vector<D2D1_POINT_2F> result;
+    result.reserve(pts.size() * 2);
+    for (size_t i = 0; i < pts.size() - 1; ++i) {
+        result.push_back(pts[i]);
+        // 在每两点之间插入一个随机偏移的中点
+        float mx = (pts[i].x + pts[i+1].x) * 0.5f;
+        float my = (pts[i].y + pts[i+1].y) * 0.5f;
+        float dx = pts[i+1].x - pts[i].x, dy = pts[i+1].y - pts[i].y;
+        float len = sqrtf(dx*dx + dy*dy);
+        if (len > 0.001f) {
+            float nx = -dy / len, ny = dx / len;
+            float offset = (Rand01() - 0.5f) * 16.0f;  // 统一随机数，范围-8~8
+            result.push_back({mx + nx * offset, my + ny * offset});
+        }
+    }
+    result.push_back(pts.back());
+    pts = result;
+}
+
+// 羽毛变形：主轴轻微弯曲，模拟羽毛弧度
+static void ApplyFeatherDeformation(std::vector<D2D1_POINT_2F> &pts, DWORD dwTime) {
+    if (pts.size() < 3) return;
+    float phase = dwTime * 0.003f;
+    for (size_t i = 0; i < pts.size(); ++i) {
+        float ratio = (float)i / (pts.size() - 1);
+        float curve = sinf(ratio * 3.0f + phase) * (1.0f - ratio) * 6.0f;
+        float nx, ny;
+        GetPathNormal(pts, i, nx, ny);
+        pts[i].x += nx * curve;
+        pts[i].y += ny * curve;
+    }
+}
+
+static void ApplyWaveDeformation(std::vector<D2D1_POINT_2F> &pts, DWORD dwTime) {
+    if (pts.size() < 3)
+        return;
+    float freq = g_waveFrequency / 100.0f, amp = (float)g_waveAmplitude;
+    float phase = dwTime * 0.004f, dist = 0;
+    for (size_t i = 0; i < pts.size(); ++i) {
+        if (i > 0) {
+            float ddx = pts[i].x - pts[i - 1].x, ddy = pts[i].y - pts[i - 1].y;
+            dist += sqrtf(ddx * ddx + ddy * ddy);
+        }
+        float nx, ny;
+        GetPathNormal(pts, i, nx, ny);
+        float taper = 1.0f - (float)i / (pts.size() - 1) * 0.65f;
+        float wave = sinf(dist * freq + phase) * amp * taper;
+        pts[i].x += nx * wave;
+        pts[i].y += ny * wave;
+    }
+}
+
+static void ApplyFunctionDeformation(std::vector<D2D1_POINT_2F> &pts, DWORD dwTime) {
+    if (pts.size() < 3 || !g_exprValid)
+        return;
+    float time = dwTime / 1000.0f, dist = 0;
+    float totalDist = 0;
+    for (size_t i = 1; i < pts.size(); i++) {
+        float ddx = pts[i].x - pts[i - 1].x, ddy = pts[i].y - pts[i - 1].y;
+        totalDist += sqrtf(ddx * ddx + ddy * ddy);
+    }
+    for (size_t i = 0; i < pts.size(); ++i) {
+        if (i > 0) {
+            float ddx = pts[i].x - pts[i - 1].x, ddy = pts[i].y - pts[i - 1].y;
+            dist += sqrtf(ddx * ddx + ddy * ddy);
+        }
+        float nx, ny;
+        GetPathNormal(pts, i, nx, ny);
+        float t = totalDist > 0 ? dist / totalDist : 0;
+        float offset = EvalExpression(t, dist, time);
+        // 钳制偏移范围，避免表达式异常导致飞点
+        offset = fmaxf(-60.0f, fminf(60.0f, offset));
+        pts[i].x += nx * offset;
+        pts[i].y += ny * offset;
+    }
+}
+
+struct DotInfo {
+    D2D1_POINT_2F pos;
+    float radius;
+    D2D1_COLOR_F outer;
+    D2D1_COLOR_F inner;
+    float alpha;
+};
+
+// ===================== 交换链/目标位图重建 / Swap Chain/Target Bitmap Reconstruction =====================
+// 检测当前是否HDR模式（通过尝试创建HDR格式交换链来自动探测）/ Detect HDR mode (auto-probe by attempting HDR format swap chain)
+static bool DetectHDRMode() {
+    // 旧实现读 HKLM\...\GraphicsDrivers\Configuration\*\AdvancedColorEnabled 与 ATIDXGISupport：
+    // ① 前者是驱动安装期写下的配置快照，不是 Windows 实际生效的 HDR 开关，auto 模式下几乎恒为 false；
+    // ② ATIDXGISupport 分支读到值后什么都不做，是彻底的死分支。
+    // 改用 DisplayConfigGetDeviceInfo + DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO：这是系统"设置→显示→使用 HDR"
+    // 真正写入/读取的位置，返回的 advancedColorEnabled 就是当前会话实际生效的高级颜色状态。
+    // （旧版 dxgi.h 没有 IDXGIOutput6，所以不走 IDXGIOutput6::GetDesc1 路线。）
+    // Old impl read HKLM...AdvancedColorEnabled (a driver-install-time snapshot, not the live HDR switch, so auto
+    // mode nearly always returned false) plus a dead ATIDXGISupport branch that did nothing with the value.
+    // Now use DisplayConfigGetDeviceInfo + DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO, which is the state Windows
+    // itself toggles in Settings → Display → Use HDR. (The bundled dxgi.h has no IDXGIOutput6.)
+    // 只查当前活动的显示路径：已拔掉的显示器仍留在配置里，会把 HDR 判断带偏。
+    UINT32 numPaths = 0, numModes = 0;
+    if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &numPaths, &numModes) != ERROR_SUCCESS)
+        return false;
+    if (numPaths == 0 || numModes == 0) return false;
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths(numPaths);
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes(numModes);
+    // numPaths/numModes 是输入输出参数：QueryDisplayConfig 会把实际写入的数量回填，循环必须用它而不是原值
+    if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &numPaths, paths.data(), &numModes, modes.data(),
+                           nullptr) != ERROR_SUCCESS)
+        return false;
+    bool hdr = false;
+    for (UINT32 i = 0; i < numPaths && i < (UINT32)paths.size(); i++) {
+        DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO colorInfo = {};
+        colorInfo.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO;
+        colorInfo.header.size = sizeof(colorInfo);
+        colorInfo.header.adapterId = paths[i].sourceInfo.adapterId;
+        colorInfo.header.id = paths[i].sourceInfo.id;
+        if (DisplayConfigGetDeviceInfo(&colorInfo.header) != ERROR_SUCCESS)
+            continue;  // 单个路径查询失败不影响其它显示器
+        // advancedColorSupported 必须同时为真：只报告"已启用"会命中驱动误报的机器
+        if (colorInfo.advancedColorEnabled && colorInfo.advancedColorSupported) {
+            hdr = true;
+            break;
+        }
+    }
+    return hdr;
+}
+
+// 单像素字节数（仅列出本项目实际会用到的交换链格式）/ Bytes per pixel for the swap chain formats this mod actually uses
+static UINT64 SwapFormatBytesPerPixel(DXGI_FORMAT fmt) {
+    switch (fmt) {
+        case DXGI_FORMAT_R16G16B16A16_FLOAT:  // HDR scRGB 线性空间
+            return 8;
+        default:                                // B8G8R8A8_UNORM 与 R10G10B10A2_UNORM 均为 4 字节
+            return 4;
+    }
+}
+
+static void RecreateSwapChain(int vW, int vH) {
+    // 尺寸合法性保护：显示器切换/分辨率变化瞬间可能取到0或负值，避免创建无效交换链
+    if (vW < 1 || vH < 1) return;
+    if (g_pD2DDC)
+        g_pD2DDC->SetTarget(nullptr);
+    if (g_pCachedRTV) {
+        g_pCachedRTV->Release();
+        g_pCachedRTV = nullptr;
+    }
+    if (g_pD2DTargetBitmap) {
+        g_pD2DTargetBitmap->Release();
+        g_pD2DTargetBitmap = nullptr;
+    }
+    if (g_pSwapChain) {
+        g_pSwapChain->Release();
+        g_pSwapChain = nullptr;
+    }
+    if (!g_pDXGIDevice || !g_pD3DDevice || !g_pD2DDC)
+        return;
+
+    // 检测HDR模式，选择合适的交换链格式（v3.4.2.2：遵循 g_hdrMode）
+    // g_hdrMode: 0=auto 1=off 2=scrgb(强制 FP16+scRGB) 3=hdr10(强制 10bit+PQ)
+    bool useScRGB = false;
+    bool useHDR10 = false;
+    bool hdrDetected = DetectHDRMode();
+    if (g_hdrMode == 1) {
+        // 关闭：永远不设置色彩空间，保持旧的 FP16/BGRA8 行为
+        useScRGB = false; useHDR10 = false;
+    } else if (g_hdrMode == 2) {
+        useScRGB = true;   // 用户强制 scRGB（即使检测为 SDR）/ user forced scRGB even on SDR
+    } else if (g_hdrMode == 3) {
+        useHDR10 = true;  // 用户强制 HDR10/PQ
+    } else {
+        useScRGB = hdrDetected;  // auto：仅在检测到 HDR 时使用 scRGB
+    }
+    // D2D 目标位图不支持 10bit 格式时提前回退，避免创建后失败导致覆盖层不可见
+    if (useHDR10 && g_pD2DDC) {
+        if (!g_pD2DDC->IsDxgiFormatSupported(DXGI_FORMAT_R10G10B10A2_UNORM)) {
+            Wh_Log(L"RecreateSwapChain: D2D cannot use R10G10B10A2 as a target, falling back to SDR");
+            useHDR10 = false;
+            useScRGB = false;  // 保守回退：使用 SDR BGRA8
+        }
+    }
+    g_isHDRMode = useScRGB || useHDR10;
+    g_hdrColorSpaceApplied = false;  // 重建时复位，成功设置色彩空间后再置 true
+    if (useHDR10) {
+        // HDR10：10bit PQ 交换链（DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 仅支持该格式）
+        g_swapChainFormat = DXGI_FORMAT_R10G10B10A2_UNORM;
+    } else if (useScRGB) {
+        // scRGB：R16G16B16A16_FLOAT 线性色彩空间
+        g_swapChainFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    } else {
+        g_swapChainFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
+    }
+
+    IDXGIFactory2 *pFactory = nullptr;
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory2), (void **)&pFactory)))
+        return;
+
+    DXGI_SWAP_CHAIN_DESC1 desc = {};
+    desc.Width = vW;
+    desc.Height = vH;
+    desc.Format = g_swapChainFormat;
+    desc.SampleDesc.Count = 1;
+    desc.SampleDesc.Quality = 0;
+    desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    desc.BufferCount = 2;
+    desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+    desc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
+    desc.Flags = 0;
+
+    HRESULT hr = pFactory->CreateSwapChainForComposition(g_pD3DDevice, &desc, nullptr, &g_pSwapChain);
+    pFactory->Release();
+    // 设备丢失不能靠「下一帧再试」修复：带着坏设备重试只会让覆盖层永久黑屏，交给渲染线程的整体恢复流程
+    if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
+        Wh_Log(L"RecreateSwapChain: device removed/reset (0x%08X), triggering recovery", hr);
+        g_deviceLost.store(true);
+        return;
+    }
+    if (FAILED(hr) || !g_pSwapChain) {
+        // HDR格式创建失败，回退到SDR格式
+        if (g_isHDRMode) {
+            Wh_Log(L"RecreateSwapChain: HDR format failed, falling back to SDR");
+            g_isHDRMode = false;
+            g_swapChainFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
+            desc.Format = g_swapChainFormat;
+            IDXGIFactory2 *pFactory2 = nullptr;
+            if (SUCCEEDED(CreateDXGIFactory1(__uuidof(IDXGIFactory2), (void **)&pFactory2))) {
+                hr = pFactory2->CreateSwapChainForComposition(g_pD3DDevice, &desc, nullptr, &g_pSwapChain);
+                pFactory2->Release();
+            }
+        }
+        if (FAILED(hr) || !g_pSwapChain) {
+            Wh_Log(L"RecreateSwapChain: CreateSwapChainForComposition failed: 0x%08X (%dx%d)", hr, vW, vH);
+            return;
+        }
+    }
+
+    // v3.4.2.2：显式设置交换链色彩空间（旧代码依赖 DWM 自动识别，HDR 余量无法利用）
+    // so the HDR headroom was never usable). 失败时仅记录日志并继续旧行为（优雅回退，强制要求）。
+    if (g_isHDRMode) {
+        IDXGISwapChain3 *pSwapChain3 = nullptr;
+        if (SUCCEEDED(g_pSwapChain->QueryInterface(__uuidof(IDXGISwapChain3), (void **)&pSwapChain3)) && pSwapChain3) {
+            DXGI_COLOR_SPACE_TYPE cs = useHDR10 ? DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020
+                                               : DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709;
+            HRESULT csHr = pSwapChain3->SetColorSpace1(cs);
+            pSwapChain3->Release();
+            if (SUCCEEDED(csHr)) {
+                g_hdrColorSpaceApplied = true;
+                Wh_Log(L"RecreateSwapChain: colour space set (space=%d)", (int)cs);
+            } else {
+                g_hdrColorSpaceApplied = false;
+                Wh_Log(L"RecreateSwapChain: SetColorSpace1 failed: 0x%08X, keeping legacy behaviour", csHr);
+            }
+        } else {
+            g_hdrColorSpaceApplied = false;
+            Wh_Log(L"RecreateSwapChain: IDXGISwapChain3 unavailable, keeping legacy behaviour");
+        }
+    }
+
+    IDXGISurface *pSurface = nullptr;
+    if (FAILED(g_pSwapChain->GetBuffer(0, __uuidof(IDXGISurface), (void **)&pSurface))) {
+        Wh_Log(L"RecreateSwapChain: GetBuffer failed, triggering recovery");
+        g_deviceLost.store(true);  // 后台缓冲都取不到，设备几乎肯定已丢失
+        return;
+    }
+
+    D2D1_BITMAP_PROPERTIES1 bmpProps = {};
+    bmpProps.pixelFormat = D2D1::PixelFormat(g_swapChainFormat, D2D1_ALPHA_MODE_PREMULTIPLIED);
+    // 这里故意固定 96 DPI：D2D 位图 DPI 会改变 D2D 绘制坐标系的比例，而物理可视化调试叠加层
+    // 以及所有 D2D 回退绘制都按物理像素坐标工作，改动会整体缩放它们。DPI 感知只通过文字图集与
+    // 窗口尺寸实现，不通过这里。
+    // Deliberately left at 96 DPI: a D2D bitmap DPI rescales D2D's drawing coordinate space, but the
+    // physics-debug overlay and all D2D fallback drawing work in physical pixels; changing it would
+    // scale them all. DPI awareness is handled via the text atlas and the window size, not here.
+    bmpProps.dpiX = 96.0f;
+    bmpProps.dpiY = 96.0f;
+    bmpProps.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+
+    hr = g_pD2DDC->CreateBitmapFromDxgiSurface(pSurface, &bmpProps, &g_pD2DTargetBitmap);
+    pSurface->Release();
+    // v3.4.2.2：HDR 格式无法作为 D2D 目标位图时回退到 SDR BGRA8（否则覆盖层会完全不可见）
+    if (FAILED(hr) && g_isHDRMode) {
+        Wh_Log(L"RecreateSwapChain: D2D target failed for HDR format (0x%08X), retrying as SDR", hr);
+        if (g_pSwapChain) { g_pSwapChain->Release(); g_pSwapChain = nullptr; }
+        g_isHDRMode = false;
+        g_hdrColorSpaceApplied = false;  // 新交换链未设置色彩空间
+        g_swapChainFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
+        bmpProps.pixelFormat = D2D1::PixelFormat(g_swapChainFormat, D2D1_ALPHA_MODE_PREMULTIPLIED);
+        IDXGIFactory2 *pFactorySdr = nullptr;
+        if (SUCCEEDED(CreateDXGIFactory1(__uuidof(IDXGIFactory2), (void **)&pFactorySdr))) {
+            DXGI_SWAP_CHAIN_DESC1 descSdr = desc;
+            descSdr.Format = g_swapChainFormat;
+            if (FAILED(pFactorySdr->CreateSwapChainForComposition(g_pD3DDevice, &descSdr, nullptr, &g_pSwapChain)))
+                g_pSwapChain = nullptr;
+            pFactorySdr->Release();
+        }
+        hr = E_FAIL;
+        if (g_pSwapChain) {
+            IDXGISurface *pSurfaceSdr = nullptr;
+            if (SUCCEEDED(g_pSwapChain->GetBuffer(0, __uuidof(IDXGISurface), (void **)&pSurfaceSdr))) {
+                hr = g_pD2DDC->CreateBitmapFromDxgiSurface(pSurfaceSdr, &bmpProps, &g_pD2DTargetBitmap);
+                pSurfaceSdr->Release();
+            }
+        }
+    }
+    if (FAILED(hr)) {
+        Wh_Log(L"RecreateSwapChain: CreateBitmapFromDxgiSurface failed: 0x%08X", hr);
+        if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET || hr == D2DERR_RECREATE_TARGET)
+            g_deviceLost.store(true);  // 同上：换其它路径重试无意义，整体重来
+        return;
+    }
+    Wh_Log(L"RecreateSwapChain: swap chain ready (%dx%d), HDR=%d, format=%d", vW, vH, g_isHDRMode, (int)g_swapChainFormat);
+
+    // 从后台缓冲 bitmap 取底层 texture，创建缓存的渲染目标视图
+    // （RTV 自持底层资源引用，临时 surface/texture 用完即可释放）
+    {
+        IDXGISurface *pRtvSurface = nullptr;
+        ID3D11Texture2D *pRtvTexture = nullptr;
+        if (SUCCEEDED(g_pD2DTargetBitmap->GetSurface(&pRtvSurface)) &&
+            SUCCEEDED(pRtvSurface->QueryInterface(__uuidof(ID3D11Texture2D), (void **)&pRtvTexture))) {
+            g_pD3DDevice->CreateRenderTargetView(pRtvTexture, nullptr, &g_pCachedRTV);
+            pRtvTexture->Release();
+            pRtvSurface->Release();
+        }
+    }
+
+    // MSAA + SSAA 离屏渲染纹理创建
+    // 注意：g_pCachedRTV 可能为空（上面 CreateRenderTargetView 失败），后续释放前必须判空
+    if (g_pMSAATexture) { g_pMSAATexture->Release(); g_pMSAATexture = nullptr; }
+    if (g_pMSAARTV) { g_pMSAARTV->Release(); g_pMSAARTV = nullptr; }
+    if (g_pSSAATexture) { g_pSSAATexture->Release(); g_pSSAATexture = nullptr; }
+    if (g_pSSAARTV) { g_pSSAARTV->Release(); g_pSSAARTV = nullptr; }
+    if (g_pSSAASRV) { g_pSSAASRV->Release(); g_pSSAASRV = nullptr; }
+    if (g_pSSAAResolveTexture) { g_pSSAAResolveTexture->Release(); g_pSSAAResolveTexture = nullptr; }
+    if (g_pSSAAResolveSRV) { g_pSSAAResolveSRV->Release(); g_pSSAAResolveSRV = nullptr; }
+    // v3.4.2.2：后处理链目标随交换链尺寸变化一并释放，稍后按新尺寸/格式重建
+    ReleasePostTargets();
+
+    int renderW = vW, renderH = vH;
+    bool useSSAA = (g_ssaaScale > 1);
+    bool useMSAA = (g_msaaSamples > 1);
+
+    if (useSSAA) {
+        renderW = vW * g_ssaaScale;
+        renderH = vH * g_ssaaScale;
+        // 钳制到 D3D11 纹理上限
+        const UINT maxDim = D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION;
+        if ((UINT)renderW > maxDim || (UINT)renderH > maxDim) {
+            Wh_Log(L"SSAA: %dx exceeds texture limit, disabling SSAA", g_ssaaScale);
+            useSSAA = false;
+            g_ssaaScale = 1;
+            renderW = vW; renderH = vH;
+        }
+    }
+
+    // ============ AA 组合资源预算 / Combined MSAA×SSAA resource budget ============
+    // MSAA 与 SSAA 是乘性叠加的，上面的单侧维度上限（16384）拦不住两者的组合爆炸。
+    // 反例：3840x2160 + SSAA 4x + MSAA 8x → 15360x8640 纹理 × 8 样本 × 4B ≈ 4.2 GB，
+    // 尺寸刚好没超 16384 却远超显存承受能力，CreateTexture2D 会返回 DXGI_ERROR_DEVICE_REMOVED，
+    // 表现为覆盖层永久黑屏（后续每帧都在已丢失的设备上重试，无法自愈）。
+    // Counter-example: 3840x2160 + SSAA 4x + MSAA 8x → ~4.2 GB; the size stays under 16384 so the
+    // dimension check passes, but CreateTexture2D returns DXGI_ERROR_DEVICE_REMOVED — a permanently
+    // black overlay, since every later frame retries on the lost device and never recovers.
+    // 因此按离屏纹理的字节占用做钳制，在创建之前完成降级。
+    {
+        const UINT64 bytesPerPixel = SwapFormatBytesPerPixel(g_swapChainFormat);
+        // 256 MB：单块 MSAA 离屏表面的合理上界，留足余量给主机后台与其它全屏应用
+        const UINT64 budgetBytes = 256ull * 1024ull * 1024ull;
+        // 先降 MSAA（4 档，粒度细，且 MSAA 只作用于几何轮廓，对本模组的收益窄于 SSAA），再降 SSAA
+        bool shedSomething = false;
+        while ((useMSAA || useSSAA) &&
+               (UINT64)renderW * (UINT64)renderH * (UINT64)(useMSAA ? g_msaaSamples : 1) * bytesPerPixel > budgetBytes) {
+            if (useMSAA && g_msaaSamples > 4) {
+                g_msaaSamples = 4;
+            } else if (useMSAA && g_msaaSamples > 2) {
+                g_msaaSamples = 2;
+            } else if (useMSAA) {
+                useMSAA = false;
+                g_msaaSamples = 1;
+            } else if (g_ssaaScale > 3) {
+                g_ssaaScale = 3;
+                renderW = vW * g_ssaaScale;
+                renderH = vH * g_ssaaScale;
+            } else if (g_ssaaScale > 2) {
+                g_ssaaScale = 2;
+                renderW = vW * g_ssaaScale;
+                renderH = vH * g_ssaaScale;
+            } else {
+                useSSAA = false;
+                g_ssaaScale = 1;
+                renderW = vW; renderH = vH;
+            }
+            shedSomething = true;
+        }
+        if (shedSomething) {
+            Wh_Log(L"AA budget: clamped to %dx%d RT (MSAA %dx, SSAA %dx)",
+                   renderW, renderH, useMSAA ? g_msaaSamples : 1, g_ssaaScale);
+        }
+    }
+
+    // 创建离屏渲染纹理（可能带 MSAA）/ Create offscreen RT (possibly with MSAA)
+    UINT msaaQuality = 0;
+    if (useMSAA) {
+        HRESULT hrCheck = g_pD3DDevice->CheckMultisampleQualityLevels(
+            g_swapChainFormat, g_msaaSamples, &msaaQuality);
+        if (FAILED(hrCheck) || msaaQuality == 0) {
+            Wh_Log(L"MSAA: %dx not supported, disabling", g_msaaSamples);
+            useMSAA = false;
+            g_msaaSamples = 1;
+        }
+    }
+
+    D3D11_TEXTURE2D_DESC rtDesc = {};
+    rtDesc.Width = renderW;
+    rtDesc.Height = renderH;
+    rtDesc.MipLevels = 1;
+    rtDesc.ArraySize = 1;
+    rtDesc.Format = g_swapChainFormat;
+    rtDesc.SampleDesc.Count = useMSAA ? g_msaaSamples : 1;
+    rtDesc.SampleDesc.Quality = useMSAA ? (msaaQuality - 1) : 0;
+    rtDesc.Usage = D3D11_USAGE_DEFAULT;
+    rtDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
+    rtDesc.CPUAccessFlags = 0;
+    rtDesc.MiscFlags = 0;
+
+    bool msAAOk = false;
+    if (useMSAA) {
+        // MSAA 离屏纹理
+        if (SUCCEEDED(g_pD3DDevice->CreateTexture2D(&rtDesc, nullptr, &g_pMSAATexture))) {
+            g_pD3DDevice->CreateRenderTargetView(g_pMSAATexture, nullptr, &g_pMSAARTV);
+        }
+        // MSAA resolve 目标（非 MSAA 同尺寸纹理）/ MSAA resolve target (non-MSAA same size)
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.SampleDesc.Quality = 0;
+        rtDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+        if (SUCCEEDED(g_pD3DDevice->CreateTexture2D(&rtDesc, nullptr, &g_pSSAAResolveTexture))) {
+            g_pD3DDevice->CreateShaderResourceView(g_pSSAAResolveTexture, nullptr, &g_pSSAAResolveSRV);
+        }
+        if (g_pMSAARTV && g_pSSAAResolveSRV) {
+            // g_pCachedRTV 可能为空（前面 CreateRenderTargetView 失败过），必须先判断再 Release
+            if (g_pCachedRTV) g_pCachedRTV->Release();
+            g_pCachedRTV = g_pMSAARTV;
+            g_pMSAARTV->AddRef();
+            msAAOk = true;
+            Wh_Log(L"MSAA: %dx + SSAA: %dx enabled", g_msaaSamples, g_ssaaScale);
+        } else {
+            Wh_Log(L"MSAA: offscreen creation failed, disabling MSAA");
+            if (g_pMSAATexture) { g_pMSAATexture->Release(); g_pMSAATexture = nullptr; }
+            if (g_pMSAARTV) { g_pMSAARTV->Release(); g_pMSAARTV = nullptr; }
+            g_msaaSamples = 1;
+        }
+    }
+    if (!msAAOk && useSSAA) {
+        // 纯 SSAA 离屏纹理（带 SRV 供 blit）/ Pure SSAA offscreen (with SRV for blit)
+        rtDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+        if (SUCCEEDED(g_pD3DDevice->CreateTexture2D(&rtDesc, nullptr, &g_pSSAATexture))) {
+            g_pD3DDevice->CreateRenderTargetView(g_pSSAATexture, nullptr, &g_pSSAARTV);
+            g_pD3DDevice->CreateShaderResourceView(g_pSSAATexture, nullptr, &g_pSSAASRV);
+            if (g_pSSAARTV && g_pSSAASRV) {
+                if (g_pCachedRTV) g_pCachedRTV->Release();  // 同 MSAA 分支：先判空再释放
+                g_pCachedRTV = g_pSSAARTV;
+                g_pSSAARTV->AddRef();
+                Wh_Log(L"SSAA: %dx enabled (%dx%d)", g_ssaaScale, renderW, renderH);
+            }
+        }
+        if (!g_pSSAARTV || !g_pSSAASRV) {
+            Wh_Log(L"SSAA: offscreen creation failed, disabling SSAA");
+            useSSAA = false;
+            g_ssaaScale = 1;
+            if (g_pSSAATexture) { g_pSSAATexture->Release(); g_pSSAATexture = nullptr; }
+            if (g_pSSAARTV) { g_pSSAARTV->Release(); g_pSSAARTV = nullptr; }
+            if (g_pSSAASRV) { g_pSSAASRV->Release(); g_pSSAASRV = nullptr; }
+        }
+    }
+    // 记录离屏资源实际使用的 AA 配置，供渲染循环检测运行时切换
+    g_createdMsaaSamples = g_msaaSamples;
+    g_createdSsaaScale = g_ssaaScale;
+
+    if (g_pDCompVisual) {
+        g_pDCompVisual->SetContent(g_pSwapChain);
+    }
+    if (g_pDCompDevice) {
+        g_pDCompDevice->Commit();
+    }
+    g_cachedVW = vW;
+    g_cachedVH = vH;
+    InvalidateConstantBuffer();  // 交换链重建后强制下次重传（分辨率/格式可能已变）/ force re-upload next frame (size/format may have changed)
+    // v3.4.2.2：按新的输出分辨率/格式重建后处理链目标（全部特效关闭时本调用会直接释放，不分配）
+    EnsurePostTargets(vW, vH);
+}
+
+// ===================== Mesh tessellation 辅助函数 =====================
+// ID2D1Mesh 只写一次（第二次 Open 会失败），所以每帧创建新 mesh，旧的在更新时释放
+// 单一实现：根据 left/right 四边形带 + 可选头部椭圆帽生成三角形网格，消除两个函数的重复代码。
+static void CreateMeshFromTriangles(ID2D1DeviceContext *dc, ID2D1Mesh **mesh,
+                                   const std::vector<D2D1_POINT_2F> &left,
+                                   const std::vector<D2D1_POINT_2F> &right,
+                                   bool addCap, D2D1_POINT_2F capCenter, float capRadius) {
+    if (*mesh) {
+        (*mesh)->Release();
+        *mesh = nullptr;
+    }
+    if (!dc)
+        return;
+    dc->CreateMesh(mesh);
+    if (!*mesh)
+        return;
+    ID2D1TessellationSink *pSink = nullptr;
+    (*mesh)->Open(&pSink);
+    if (!pSink) {
+        (*mesh)->Release();
+        *mesh = nullptr;
+        return;
+    }
+    std::vector<D2D1_TRIANGLE> tris;
+    // 四边形带
+    if (left.size() >= 2 && right.size() >= 2) {
+        size_t n = (std::min)(left.size(), right.size());
+        tris.reserve((n - 1) * 2 + (addCap ? 24 : 0));
+        for (size_t i = 0; i < n - 1; i++) {
+            tris.push_back({left[i], right[i], left[i + 1]});
+            tris.push_back({right[i], right[i + 1], left[i + 1]});
+        }
+    }
+    // 头部椭圆（三角形扇，24 段）/ Head cap ellipse (triangle fan, 24 segments)
+    if (addCap && capRadius > 0.1f) {
+        const int SEG = 24;
+        for (int i = 0; i < SEG; i++) {
+            float a1 = (float)i / SEG * 6.2831853f;
+            float a2 = (float)(i + 1) / SEG * 6.2831853f;
+            D2D1_POINT_2F p1 = {capCenter.x + cosf(a1) * capRadius, capCenter.y + sinf(a1) * capRadius};
+            D2D1_POINT_2F p2 = {capCenter.x + cosf(a2) * capRadius, capCenter.y + sinf(a2) * capRadius};
+            tris.push_back({capCenter, p1, p2});
+        }
+    }
+    if (!tris.empty()) {
+        pSink->AddTriangles(tris.data(), (UINT32)tris.size());
+    }
+    pSink->Close();
+    pSink->Release();
+}
+
+// 四边形带网格（无头部帽）/ Quad strip mesh (no cap)
+static void CreateMeshFromQuadStrip(ID2D1DeviceContext *dc, ID2D1Mesh **mesh,
+                                    const std::vector<D2D1_POINT_2F> &left,
+                                    const std::vector<D2D1_POINT_2F> &right) {
+    if (!dc || left.size() < 2 || right.size() < 2)
+        return;
+    CreateMeshFromTriangles(dc, mesh, left, right, false, {0, 0}, 0.0f);
+}
+
+// 四边形带 + 头部椭圆帽，合并创建一个 mesh
+static void CreateMeshFromQuadStripWithCap(ID2D1DeviceContext *dc, ID2D1Mesh **mesh,
+                                           const std::vector<D2D1_POINT_2F> &left,
+                                           const std::vector<D2D1_POINT_2F> &right,
+                                           D2D1_POINT_2F capCenter, float capRadius) {
+    if (!dc)
+        return;
+    CreateMeshFromTriangles(dc, mesh, left, right, true, capCenter, capRadius);
+}
+
+// ===================== 渲染子函数 / Render Sub-functions =====================
+
+// 粒子渲染（主体含发光模拟 + 多形状 + 颜色渐变）/ Particle rendering (body with glow simulation + multi-shape + color gradient)
+// 粒子形状几何（D2D 用）：把【粒子编码】映射到【拖尾编码】再复用其顶点表。
+// 两套编码不同（粒子 2=hexagram、拖尾 2=hexagon），必须显式映射 —— 照搬序号是本文件栽过的坑。
+static ID2D1PathGeometry *GetParticleShapeGeom(int pshape) {
+    // 粒子: 0=circle 1=star 2=hexagram 3=heart 4=diamond 5=triangle 6=flower 7=pentagon 8=hexagon
+    // 拖尾: 3=circle 1=star 8=hexagram 0=heart 4=diamond 5=triangle 6=flower 7=pentagon 2=hexagon
+    static const int kMap[9] = {3, 1, 8, 0, 4, 5, 6, 7, 2};
+    if (pshape < 0 || pshape > 8) return nullptr;
+    int tshape = kMap[pshape];
+    ShapeVertsCache sv = GetShapeVerts(tshape);
+    if (!sv.verts || sv.count < 3) return nullptr;
+    return mtb::PolyGeom(sv.verts, sv.count, 900000 + tshape);
+}
+
+static void RenderParticles(DWORD dwTime) {
+    if (g_particles.empty()) return;
+    bool particleFastPath = (g_particleShape != 10) && (g_particles.size() > (g_superPerformanceMode ? 300 : 100));
+    float sizeMul = g_particleSizeMultiplier / 100.0f;  // 与原生渲染一致
+    float musicSizeBoost = g_enableMusicPhysics ? (1.0f + g_musicBassSizeBoost * 0.5f) : 1.0f;
+    for (auto &p : g_particles) {
+        float progress = (float)(dwTime - p.startTime) / p.lifetime;
+        if (progress < 0 || progress >= 1) continue;
+        float lifeAlpha = (1.0f - progress);
+        // 颜色二次衰减，与原生渲染一致
+        float colorFade = progress * progress;
+        // 色差 + 漩涡亮度，与原生渲染一致
+        float rOff = p.colorOffset[0] + p.vortexBrightness[0];
+        float gOff = p.colorOffset[1] + p.vortexBrightness[1];
+        float bOff = p.colorOffset[2] + p.vortexBrightness[2];
+        D2D1_COLOR_F pc = D2D1::ColorF(p.color.r + (p.endColor.r - p.color.r) * colorFade + rOff,
+                                       p.color.g + (p.endColor.g - p.color.g) * colorFade + gOff,
+                                       p.color.b + (p.endColor.b - p.color.b) * colorFade + bOff, 1.0f);
+        g_pSolidOuterBrush->SetColor(pc);
+        g_pSolidOuterBrush->SetOpacity(lifeAlpha * 0.65f);
+        // 生命周期大小曲线 + 粒子大小倍数 + 低频增益，与原生渲染baseSize公式一致
+        float sizeScale = sinf(progress * 3.14159f) * 0.7f + 0.3f;
+        float bodySize = p.size * 2.0f * sizeMul * sizeScale * musicSizeBoost;
+        // 形状几何：覆盖全部 9 种粒子形状（原先只支持 star/hexagram，其余降级为圆点）。
+        // 文字粒子(10) 仍走 GPU 字符图集，这里不处理，落到圆点分支。
+        ID2D1PathGeometry *pgeom = particleFastPath ? nullptr : GetParticleShapeGeom(p.shapeType);
+        if (pgeom) {
+            D2D1_MATRIX_3X2_F oldT;
+            g_pD2DDC->GetTransform(&oldT);
+            // 与原生渲染一致：形状随粒子自旋
+            g_pD2DDC->SetTransform(D2D1::Matrix3x2F::Rotation(p.rotation * 57.2958f) *
+                                   D2D1::Matrix3x2F::Scale(bodySize, bodySize) *
+                                   D2D1::Matrix3x2F::Translation(p.x, p.y));
+            g_pD2DDC->FillGeometry(pgeom, g_pSolidOuterBrush);
+            g_pD2DDC->SetTransform(oldT);
+        } else {
+            g_pD2DDC->FillEllipse(D2D1::Ellipse(D2D1::Point2F(p.x, p.y), bodySize, bodySize), g_pSolidOuterBrush);
+        }
+    }
+    g_pSolidOuterBrush->SetOpacity(1.0f);
+}
+
+// 形状拖尾渲染（爱心/五角星/六角形/圆形，带出生动画）/ Shape trail rendering (heart/star/hexagram/circle, with birth animation)
+// 运动模糊历史帧渲染（仅锥形带，简化外带，透明度递减）/ Motion blur history frame rendering (cone strip only, simplified outer band, decreasing alpha)
+static void RenderMotionBlur(float widthMul, const GradData &cols, float fadeAlpha) {
+    if (!g_enableMotionBlur || g_trailShape != 0 || g_trailHistory.size() <= 1) return;
+    g_pD2DDC->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
+    // 静态暂存：运动模糊每帧最多 5 段历史，原本每段各分配两个向量
+    static std::vector<D2D1_POINT_2F> hloBuf, hroBuf;
+    for (size_t h = 0; h < g_trailHistory.size() - 1; h++) {
+        auto &histPath = g_trailHistory[h].path;
+        if (histPath.size() < 2) continue;
+        float histAlpha = 0.22f * (1.0f - (float)h / g_trailHistory.size()) * fadeAlpha;
+        std::vector<D2D1_POINT_2F> &hlo = hloBuf, &hro = hroBuf;
+        hlo.clear(); hro.clear();
+        hlo.reserve(histPath.size()); hro.reserve(histPath.size());
+        for (size_t i = 0; i < histPath.size(); i++) {
+            float ddx, ddy;
+            if (i == 0) { ddx = histPath[0].x - histPath[1].x; ddy = histPath[0].y - histPath[1].y; }
+            else if (i == histPath.size() - 1) { ddx = histPath[i-1].x - histPath[i].x; ddy = histPath[i-1].y - histPath[i].y; }
+            else { ddx = histPath[i-1].x - histPath[i+1].x; ddy = histPath[i-1].y - histPath[i+1].y; }
+            float ln = sqrtf(ddx*ddx + ddy*ddy);
+            if (ln > 0) { ddx /= ln; ddy /= ln; } else { ddx = 1; ddy = 0; }
+            float nx = -ddy, ny = ddx;
+            float ratio = (float)i / (histPath.size() - 1);
+            float ow = 10.0f * powf(1.0f - ratio, 1.3f) * widthMul;
+            if (i == histPath.size() - 1) ow = 0;
+            hlo.push_back(D2D1::Point2F(histPath[i].x + nx*ow, histPath[i].y + ny*ow));
+            hro.push_back(D2D1::Point2F(histPath[i].x - nx*ow, histPath[i].y - ny*ow));
+        }
+        ID2D1Mesh *pHistMesh = nullptr;
+        CreateMeshFromQuadStrip(g_pD2DDC, &pHistMesh, hlo, hro);
+        if (pHistMesh) {
+            g_pSolidOuterBrush->SetColor(cols.solidOuter);
+            g_pSolidOuterBrush->SetOpacity(histAlpha);
+            g_pD2DDC->FillMesh(pHistMesh, g_pSolidOuterBrush);
+            pHistMesh->Release();
+        }
+    }
+    g_pSolidOuterBrush->SetOpacity(1.0f);
+    g_pD2DDC->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+}
+
+// 点击波纹渲染（外圈填充+描边，内圈描边）/ Click ripple rendering (outer ring fill+stroke, inner ring stroke)
+// 点击效果风格：0=波纹 1=冲击波 2=墨晕 3=星芒 4=花瓣绽放
+// ===== 向心力漩涡：每帧上下文（把 RenderFrame 的局部变量打包传给辅助函数，避免传一长串参数）=====
+struct VortexFrameContext {
+    DWORD dwTime;  // GetTickCount() 当前时间
+    int vX, vY;  // 虚拟屏幕偏移
+    float velocity;     // 光标速度（像素/帧）/ cursor velocity (px/frame)
+    float accel;  // 加速度 = velocity - g_prevVelocity
+    float accelAbs;     // |accel| / |acceleration|
+    float cursorX;      // 粒子坐标空间光标位置 X = (renderPos.x - vX) + g_tailOffsetX
+    float cursorY;      // 粒子坐标空间光标位置 Y = (renderPos.y - vY) + g_tailOffsetY
+};
+
+// ===== 向心力漩涡：曲线运动检测（圆周运动即任意曲线的一段，曲率中心=漩涡中心）=====
+static void VortexDetectCurvedMotion(const VortexFrameContext &ctx,
+                                     bool &detected, float &detCX, float &detCY,
+                                     float &detRadius, float &detAngVel) {
+    CircleDetect &cd = g_circleDetect;
+    // 记录位置历史（环形缓冲），使用粒子坐标空间
+    float histX = ctx.cursorX;
+    float histY = ctx.cursorY;
+    if (cd.historyCount < 20) {
+        cd.historyX[cd.historyCount] = histX;
+        cd.historyY[cd.historyCount] = histY;
+        cd.historyCount++;
+    } else {
+        for (int i = 0; i < 19; i++) {
+            cd.historyX[i] = cd.historyX[i + 1];
+            cd.historyY[i] = cd.historyY[i + 1];
+        }
+        cd.historyX[19] = histX;
+        cd.historyY[19] = histY;
+    }
+
+    detected = false;
+    detCX = 0; detCY = 0; detRadius = 0; detAngVel = 0;
+
+    // 加速度越高越灵敏
+    float accelBoost = fminf(ctx.accelAbs / 10.0f, 1.0f);
+    float minVel = 3.0f - accelBoost * 2.0f;
+    if (cd.historyCount >= 5 && ctx.velocity > minVel) {
+        int start = cd.historyCount - 5;
+        float sumCX = 0, sumCY = 0, sumRadius = 0, sumAngVel = 0;
+        int validCount = 0;
+        for (int tri = 0; tri < 3; tri++) {
+            float x1 = cd.historyX[start + tri], y1 = cd.historyY[start + tri];
+            float x2 = cd.historyX[start + tri + 1], y2 = cd.historyY[start + tri + 1];
+            float x3 = cd.historyX[start + tri + 2], y3 = cd.historyY[start + tri + 2];
+            float ax = x2 - x1, ay = y2 - y1;
+            float bx = x3 - x1, by = y3 - y1;
+            float cross = ax * by - ay * bx;
+            if (fabsf(cross) < 0.5f) continue;
+            float d = 2.0f * cross;
+            float aLenSq = ax * ax + ay * ay;
+            float bLenSq = bx * bx + by * by;
+            float cx = x1 + (by * aLenSq - ay * bLenSq) / d;
+            float cy = y1 + (ax * bLenSq - bx * aLenSq) / d;
+            float radius = sqrtf((x1 - cx) * (x1 - cx) + (y1 - cy) * (y1 - cy));
+            if (radius < 20 || radius > 400) continue;
+            float angVel = (ctx.velocity / radius) * (cross > 0 ? 1.0f : -1.0f);
+            sumCX += cx; sumCY += cy; sumRadius += radius; sumAngVel += angVel;
+            validCount++;
+        }
+        if (validCount >= 2) {
+            float avgCX = sumCX / validCount;
+            float avgCY = sumCY / validCount;
+            float avgRadius = sumRadius / validCount;
+            float avgAngVel = sumAngVel / validCount;
+            // 与上一帧曲率中心做指数平滑，防止跳动
+            if (cd.circleRadius > 0.0f && (ctx.dwTime - cd.lastCircleTime) < 600) {
+                avgCX = cd.circleCenterX * 0.55f + avgCX * 0.45f;
+                avgCY = cd.circleCenterY * 0.55f + avgCY * 0.45f;
+                avgRadius = cd.circleRadius * 0.6f + avgRadius * 0.4f;
+                avgAngVel = cd.angularVel * 0.5f + avgAngVel * 0.5f;
+            }
+            float curvatureThreshold = (1.0f - g_centripetalSensitivity) * 200.0f + 50.0f;
+            if (avgRadius < curvatureThreshold) {
+                detected = true;
+                detCX = avgCX; detCY = avgCY;
+                detRadius = avgRadius; detAngVel = avgAngVel;
+                cd.isCircling = true;
+                cd.circleCenterX = avgCX;
+                cd.circleCenterY = avgCY;
+                cd.circleRadius = avgRadius;
+                cd.angularVel = avgAngVel;
+                cd.lastCircleTime = ctx.dwTime;
+            }
+        }
+    }
+}
+
+// ===== 向心力漩涡：更新现有漩涡或创建新漩涡 =====
+static void VortexUpdateOrCreate(const VortexFrameContext &ctx,
+                                bool detected, float detCX, float detCY,
+                                float detRadius, float detAngVel,
+                                int activeVortexCount) {
+    if (!detected) return;
+    float accelBoost = fminf(ctx.accelAbs / 10.0f, 1.0f);
+    float curvatureThreshold = (1.0f - g_centripetalSensitivity) * 200.0f + 50.0f;
+    float curvatureBoost = fminf((curvatureThreshold - detRadius) / curvatureThreshold, 1.0f);
+    float boostRate = 0.06f + curvatureBoost * 0.1f + accelBoost * 0.08f;
+
+    // 先检查是否有现有活跃漩涡接近检测位置（在minDistance范围内），有则更新它
+    bool updatedExisting = false;
+    for (int i = 0; i < g_vortexMaxCount; i++) {
+        Vortex &v = g_vortices[i];
+        if (!v.active) continue;
+        float dx = v.centerX - detCX, dy = v.centerY - detCY;
+        float distSq = dx * dx + dy * dy;
+        if (distSq < (g_vortexMinDistance * 1.8f) * (g_vortexMinDistance * 1.8f)) {
+            // 更新现有漩涡：平滑移动中心，增强强度（捕获半径扩大到1.8倍，减少新建）/ Update existing vortex: wider capture radius to reduce re-creation
+            v.centerX += (detCX - v.centerX) * 0.1f;
+            v.centerY += (detCY - v.centerY) * 0.1f;
+            // 给漂移速度一个推动力（沿曲率中心到光标的方向）/ Give drift velocity a push (along direction from curvature center to cursor)
+            if (g_vortexDrift > 0.01f && ctx.velocity > 1.0f) {
+                float pullDx = detCX - v.centerX;
+                float pullDy = detCY - v.centerY;
+                float pullDist = sqrtf(pullDx * pullDx + pullDy * pullDy);
+                if (pullDist > 0.1f) {
+                    v.driftX += (pullDx / pullDist) * ctx.velocity * g_vortexDrift * 0.03f;
+                    v.driftY += (pullDy / pullDist) * ctx.velocity * g_vortexDrift * 0.03f;
+                }
+            }
+            v.radius = detRadius;
+            v.coreRadius = detRadius * 0.3f;
+            v.isCircling = true;
+            v.strength += (1.0f - v.strength) * boostRate;
+            v.angularVel = detAngVel * (0.7f + g_centripetalForce * 0.5f) * (1.0f + accelBoost * 0.4f);
+            v.circulation = v.angularVel * v.coreRadius * v.coreRadius * 6.28318f;
+            v.pressureGradient = 0.3f + v.strength * 0.5f;
+            // 涡管拉伸：鼠标加速度拉伸涡管，增强涡量（流体力学涡度方程）/ Vortex tube stretching: mouse accel stretches tube, boosts vorticity
+            // 上限 0.25：限制单帧强度增幅(≤0.125)与涡核收缩(≤2.5%/帧)，避免加速度突刺导致涡核瞬塌
+            v.stretchRate = fminf(ctx.accelAbs * 0.01f, 0.25f);
+            v.orbitPhase += v.angularVel;
+            // 持续运动延长实际持续时间（补充能量）/ Continuous motion extends actual duration (energy replenishment)
+            float speedFactor = fminf(ctx.velocity / 15.0f, 1.0f);
+            v.actualDuration += (int)(speedFactor * g_vortexDurationSpeed * 10);
+            if (v.actualDuration > g_centripetalDuration * 3) v.actualDuration = g_centripetalDuration * 3;
+            updatedExisting = true;
+            break;
+        }
+    }
+
+    // 没有可更新的现有漩涡：尝试创建新漩涡
+    if (!updatedExisting && activeVortexCount < g_vortexMaxCount) {
+        // 创建冷却：近期刚创建过漩涡且检测点离它不远时，不新建（防频繁跳动）/ creation cooldown to avoid flicker
+        bool recentCreate = false;
+        for (int ci = 0; ci < g_vortexMaxCount; ci++) {
+            Vortex &cv = g_vortices[ci];
+            if (!cv.active) continue;
+            if ((int)(ctx.dwTime - cv.startTime) < 450) {
+                float cdx = cv.centerX - detCX, cdy = cv.centerY - detCY;
+                if (cdx*cdx + cdy*cdy < (g_vortexMinDistance * 2.5f) * (g_vortexMinDistance * 2.5f)) {
+                    recentCreate = true; break;
+                }
+            }
+        }
+        if (recentCreate) return;
+        // 检查与所有活跃漩涡的距离
+        bool tooClose = false;
+        for (int i = 0; i < g_vortexMaxCount; i++) {
+            Vortex &v = g_vortices[i];
+            if (!v.active) continue;
+            float dx = v.centerX - detCX, dy = v.centerY - detCY;
+            float distSq = dx * dx + dy * dy;
+            if (distSq < g_vortexMinDistance * g_vortexMinDistance) {
+                tooClose = true;
+                break;
+            }
+        }
+        if (!tooClose) {
+            // 找到第一个空槽位
+            for (int i = 0; i < g_vortexMaxCount; i++) {
+                if (!g_vortices[i].active) {
+                    Vortex &v = g_vortices[i];
+                    v.active = true;
+                    v.centerX = detCX;
+                    v.centerY = detCY;
+                    v.driftX = 0; v.driftY = 0;
+                    v.radius = detRadius;
+                    v.coreRadius = detRadius * 0.3f;  // 涡核半径=轨道半径的30%
+                    v.angularVel = detAngVel * (0.7f + g_centripetalForce * 0.5f) * (1.0f + accelBoost * 0.4f);
+                    v.circulation = v.angularVel * v.coreRadius * v.coreRadius * 6.28318f;  // Γ=2πωR²
+                    v.strength = 0.1f;
+                    v.strength += (1.0f - v.strength) * boostRate;
+                    v.pressureGradient = 0.5f;
+                    v.isCircling = true;
+                    v.startTime = ctx.dwTime;
+                    v.stretchRate = 0;
+                    // 实际持续时间受速度影响：速度越快持续越久
+                    float speedFactor = fminf(ctx.velocity / 15.0f, 1.0f);
+                    v.actualDuration = (int)(g_centripetalDuration * (1.0f + speedFactor * g_vortexDurationSpeed));
+                    v.orbitTilt = 0.4f + Rand01() * 0.5f;
+                    v.orbitTiltVel = (Rand01() - 0.5f) * 0.005f;
+                    v.orbitPhase = 0;
+                    break;
+                }
+            }
+        }
+    }
+}
+
+// ===== 向心力漩涡：音乐联动，节拍给漩涡注入能量 =====
+static void VortexMusicInject(const VortexFrameContext &ctx, int activeVortexCount) {
+    if (!(g_enableMusicPhysics && g_musicBeatPulseAmount > 0.1f)) return;
+    float beatVortexBoost = g_musicBeatPulseAmount * g_musicVortexLink * 0.3f;
+    // 找到最近的活跃漩涡并增强
+    int nearestIdx = -1;
+    float nearestDist = 1e9f;
+    float cursorX = ctx.cursorX;
+    float cursorY = ctx.cursorY;
+    for (int i = 0; i < g_vortexMaxCount; i++) {
+        if (!g_vortices[i].active) continue;
+        float dx = g_vortices[i].centerX - cursorX;
+        float dy = g_vortices[i].centerY - cursorY;
+        float d = dx * dx + dy * dy;
+        if (d < nearestDist) { nearestDist = d; nearestIdx = i; }
+    }
+    if (nearestIdx >= 0) {
+        Vortex &v = g_vortices[nearestIdx];
+        v.strength += (1.0f - v.strength) * beatVortexBoost;
+    } else if (activeVortexCount < g_vortexMaxCount) {
+        // 没有活跃漩涡，在光标位置创建一个
+        for (int i = 0; i < g_vortexMaxCount; i++) {
+            if (!g_vortices[i].active) {
+                Vortex &v = g_vortices[i];
+                v.active = true;
+                v.centerX = cursorX;
+                v.centerY = cursorY;
+                v.driftX = 0; v.driftY = 0;
+                v.radius = 60.0f + g_music.bassLevel * 200.0f;
+                v.coreRadius = v.radius * 0.3f;
+                v.angularVel = (g_music.bpmEstimate > 0) ? (g_music.bpmEstimate / 60.0f * 6.28f / 60.0f) : 0.05f;
+                v.circulation = v.angularVel * v.coreRadius * v.coreRadius * 6.28318f;
+                v.strength = 0.2f;
+                v.strength += (1.0f - v.strength) * beatVortexBoost;
+                v.pressureGradient = 0.5f;
+                v.isCircling = true;
+                v.startTime = ctx.dwTime;
+                v.stretchRate = 0;
+                // 音乐触发的漩涡持续时间受低频能量影响
+                float bassFactor = fminf(g_music.bassLevel * 2.0f, 1.0f);
+                v.actualDuration = (int)(g_centripetalDuration * (1.0f + bassFactor * g_vortexDurationSpeed));
+                v.orbitTilt = 0.4f + Rand01() * 0.5f;
+                v.orbitTiltVel = (Rand01() - 0.5f) * 0.005f;
+                v.orbitPhase = 0;
+                break;
+            }
+        }
+    }
+}
+
+// ===== 向心力漩涡：动力学更新（诱导速度 + 合并湮灭 + 中心漂移 + 衰减 + 轨道倾角）=====
+static void VortexUpdateDynamics(const VortexFrameContext &ctx) {
+    CircleDetect &cd = g_circleDetect;
+    // 停止运动后：所有漩涡的isCircling设为false，开始衰减
+    if (cd.isCircling && ctx.velocity < 2.0f) {
+        cd.isCircling = false;
+        cd.lastCircleTime = ctx.dwTime;
+        for (int i = 0; i < g_vortexMaxCount; i++) {
+            if (g_vortices[i].active) g_vortices[i].isCircling = false;
+        }
+    }
+
+    float cursorX = ctx.cursorX;
+    float cursorY = ctx.cursorY;
+
+    // 第一步：计算所有漩涡的诱导速度（二维涡旋动力学）/ Step 1: compute induced velocity for all vortices (2D vortex dynamics)
+    // 同号涡：互相诱导绕共同中心旋转；异号涡：成对平移
+    float inducedX[8] = {0}, inducedY[8] = {0};
+    for (int i = 0; i < g_vortexMaxCount; i++) {
+        if (!g_vortices[i].active) continue;
+        for (int j = 0; j < g_vortexMaxCount; j++) {
+            if (i == j || !g_vortices[j].active) continue;
+            Vortex &vi = g_vortices[i];
+            Vortex &vj = g_vortices[j];
+            float dx = vi.centerX - vj.centerX;
+            float dy = vi.centerY - vj.centerY;
+            float dist = sqrtf(dx * dx + dy * dy);
+            if (dist < 1.0f) continue;
+            // 点涡诱导速度：v = Γ/(2πd)，方向垂直于连线
+            // Γ的符号由angularVel决定
+            float inducedSpeed = fabsf(vj.circulation) / (6.28318f * dist) * vj.strength * 0.3f;
+            // 垂直于连线方向（逆时针为正）/ Perpendicular to connecting line (counterclockwise positive)
+            float perpX = -dy / dist, perpY = dx / dist;
+            // 同号涡：诱导速度使它们绕转；异号涡：诱导速度使它们平移
+            int sameDir = (vi.angularVel >= 0) == (vj.angularVel >= 0) ? 1 : -1;
+            inducedX[i] += perpX * inducedSpeed * sameDir;
+            inducedY[i] += perpY * inducedSpeed * sameDir;
+        }
+    }
+
+    // 第二步：检测同号涡合并和异号涡湮灭
+    bool merged[8] = {false};
+    for (int i = 0; i < g_vortexMaxCount; i++) {
+        if (!g_vortices[i].active || merged[i]) continue;
+        for (int j = i + 1; j < g_vortexMaxCount; j++) {
+            if (!g_vortices[j].active || merged[j]) continue;
+            Vortex &vi = g_vortices[i];
+            Vortex &vj = g_vortices[j];
+            float dx = vi.centerX - vj.centerX;
+            float dy = vi.centerY - vj.centerY;
+            float dist = sqrtf(dx * dx + dy * dy);
+            bool sameDir = (vi.angularVel >= 0) == (vj.angularVel >= 0);
+
+            if (sameDir && dist < (vi.coreRadius + vj.coreRadius) * 1.8f) {
+                // 同号涡渐进合并：先互相吸引、逐步转移环量，接近耗尽时才吸收
+                float wi = vi.strength, wj = vj.strength;
+                float totalStrength = fmaxf(wi + wj, 0.001f);
+                float nx = (vi.centerX - vj.centerX) / fmaxf(dist, 0.1f);
+                float ny = (vi.centerY - vj.centerY) / fmaxf(dist, 0.1f);
+                float closeness = 1.0f - dist / ((vi.coreRadius + vj.coreRadius) * 1.8f);
+                // 较弱的j被拉向i，越近拉力越大
+                float pull = 0.10f + closeness * 0.25f;
+                vj.centerX += nx * pull * 6.0f;
+                vj.centerY += ny * pull * 6.0f;
+                // 逐步转移环量和强度
+                float transfer = 0.06f + closeness * 0.08f;
+                float circTransfer = vj.circulation * transfer;
+                vi.circulation += circTransfer;
+                vj.circulation -= circTransfer;
+                float strTransfer = vj.strength * transfer;
+                vi.strength = fminf(vi.strength + strTransfer * 0.6f, 1.0f);
+                vj.strength *= (1.0f - transfer);
+                // i的涡核和半径逐步长大到目标值
+                float targetCore = fmaxf(sqrtf(vi.coreRadius * vi.coreRadius + vj.coreRadius * vj.coreRadius) * 1.2f, 1.0f);
+                float targetRadius = (vi.radius * wi + vj.radius * wj) / totalStrength;
+                vi.coreRadius += (targetCore - vi.coreRadius) * 0.06f;
+                vi.radius += (targetRadius - vi.radius) * 0.06f;
+                float coreI = fmaxf(vi.coreRadius, 0.5f);
+                float coreJ = fmaxf(vj.coreRadius, 0.5f);
+                vi.angularVel = vi.circulation / (coreI * coreI * 6.28318f);
+                vj.angularVel = vj.circulation / (coreJ * coreJ * 6.28318f);
+                vi.driftX += (vj.driftX - vi.driftX) * 0.05f;
+                vi.driftY += (vj.driftY - vi.driftY) * 0.05f;
+                // 接近耗尽或几乎重合时完成合并
+                if (vj.strength < 0.06f || dist < 3.0f) {
+                    vi.centerX = (vi.centerX * vi.strength + vj.centerX * vj.strength) / fmaxf(vi.strength + vj.strength, 0.001f);
+                    vi.centerY = (vi.centerY * vi.strength + vj.centerY * vj.strength) / fmaxf(vi.strength + vj.strength, 0.001f);
+                    vi.circulation += vj.circulation;
+                    vi.coreRadius = targetCore;
+                    vi.radius = targetRadius;
+                    vi.angularVel = vi.circulation / (targetCore * targetCore * 6.28318f);
+                    vi.strength = fminf((vi.strength + vj.strength) * 0.7f, 1.0f);
+                    vi.pressureGradient = (vi.pressureGradient + vj.pressureGradient) * 0.5f;
+                    vi.isCircling = vi.isCircling || vj.isCircling;
+                    vi.actualDuration = (vi.actualDuration + vj.actualDuration) / 2;
+                    merged[j] = true;
+                }
+            } else if (!sameDir && dist < (vi.coreRadius + vj.coreRadius) * 1.2f) {
+                // 异号涡湮灭：强度抵消，较弱的消失
+                if (vi.strength > vj.strength) {
+                    vi.strength -= vj.strength * 0.8f;
+                    vi.circulation -= vj.circulation * 0.8f;
+                    if (vi.strength < 0.05f) vi.strength = 0.05f;
+                    merged[j] = true;
+                } else {
+                    vj.strength -= vi.strength * 0.8f;
+                    vj.circulation -= vi.circulation * 0.8f;
+                    if (vj.strength < 0.05f) vj.strength = 0.05f;
+                    merged[i] = true;
+                    break;
+                }
+            }
+        }
+    }
+    // 应用合并/湮灭删除
+    for (int i = 0; i < g_vortexMaxCount; i++) {
+        if (merged[i]) {
+            g_vortices[i].active = false;
+            g_vortices[i].strength = 0;
+        }
+    }
+
+    // 第三步：应用漂移、诱导速度和其他更新
+    for (int i = 0; i < g_vortexMaxCount; i++) {
+        Vortex &v = g_vortices[i];
+        if (!v.active) continue;
+
+        // 1. 漩涡中心漂移：受鼠标速度和位置影响
+        if (g_vortexDrift > 0.01f) {
+            float dx = cursorX - v.centerX;
+            float dy = cursorY - v.centerY;
+            float dist = sqrtf(dx * dx + dy * dy);
+            if (dist > 1.0f && dist < 500.0f) {
+                float pullStrength = g_vortexDrift * 0.02f * (1.0f - dist / 500.0f);
+                v.driftX += (dx / dist) * pullStrength * ctx.velocity * 0.1f;
+                v.driftY += (dy / dist) * pullStrength * ctx.velocity * 0.1f;
+            }
+            v.driftX *= 0.95f;
+            v.driftY *= 0.95f;
+            v.centerX += v.driftX;
+            v.centerY += v.driftY;
+        }
+
+        // 2. 应用涡旋诱导速度（同号绕转，异号平移）/ 2. Apply induced velocity (same-sign rotation, opposite-sign translation)
+        v.centerX += inducedX[i];
+        v.centerY += inducedY[i];
+
+        // 3. 持续时间结束：强制开始衰减
+        if (ctx.dwTime - v.startTime > (DWORD)v.actualDuration) {
+            v.isCircling = false;
+        }
+
+        // 3.5 涡管拉伸增强
+        if (v.isCircling && v.stretchRate > 0.001f) {
+            v.strength += v.stretchRate * 0.5f;
+            if (v.strength > 1.0f) v.strength = 1.0f;
+            v.coreRadius *= (1.0f - v.stretchRate * 0.1f);
+            if (v.coreRadius < v.radius * 0.1f) v.coreRadius = v.radius * 0.1f;
+            v.angularVel = v.circulation / (v.coreRadius * v.coreRadius * 6.28318f);
+            v.stretchRate *= 0.9f;
+        }
+
+        // 4. 衰减（多阶段：保持→减速→消散）/ 4. Multi-stage decay: hold -> wind-down -> dissipate
+        if (!v.isCircling && v.strength > 0) {
+            float decayRate, angVelDecay, coreTarget, coreRate;
+            if (v.strength > 0.5f) {
+                // 阶段1：缓慢衰减，角速度开始下降，涡核微扩
+                decayRate = 0.965f; angVelDecay = 0.975f;
+                coreTarget = v.radius * 0.35f; coreRate = 0.03f;
+            } else if (v.strength > 0.15f) {
+                // 阶段2：加速衰减，角速度快速下降，涡核开始扩张
+                decayRate = 0.93f; angVelDecay = 0.94f;
+                coreTarget = v.radius * 0.55f; coreRate = 0.05f;
+            } else {
+                // 阶段3：快速消散，角速度骤降，涡核显著扩张
+                decayRate = 0.87f; angVelDecay = 0.86f;
+                coreTarget = v.radius * 0.85f; coreRate = 0.09f;
+            }
+            v.strength *= decayRate;
+            v.angularVel *= angVelDecay;
+            v.coreRadius += (coreTarget - v.coreRadius) * coreRate;
+            v.pressureGradient *= 0.96f;
+            // 环量与角速度/涡核保持一致
+            float coreD = fmaxf(v.coreRadius, 0.5f);
+            v.circulation = v.angularVel * coreD * coreD * 6.28318f;
+            if (v.strength < 0.012f) {
+                v.active = false;
+                v.strength = 0;
+            }
+        }
+
+        // 5. 轨道倾角
+        if (v.strength > 0.1f) {
+            v.orbitTilt += v.orbitTiltVel;
+            if (v.orbitTilt < 0.2f || v.orbitTilt > 1.2f) v.orbitTiltVel = -v.orbitTiltVel;
+            v.orbitTilt = fmaxf(0.2f, fminf(1.2f, v.orbitTilt));
+        }
+    }
+
+    // 清除完全没有活跃漩涡时的粒子漩涡亮度
+    bool anyActive = false;
+    for (int i = 0; i < g_vortexMaxCount; i++) {
+        if (g_vortices[i].active && g_vortices[i].strength > 0.05f) { anyActive = true; break; }
+    }
+    if (!anyActive) {
+        // 不重置historyCount，让位置历史自然积累
+        for (auto &p : g_particles) {
+            p.vortexBrightness[0] = 0;
+            p.vortexBrightness[1] = 0;
+            p.vortexBrightness[2] = 0;
+        }
+    }
+}
+
+// ===== 向心力漩涡：对粒子施加力（Rankine/开普勒等模型 + 牛顿第三定律反作用）=====
+static void VortexApplyToParticles() {
+    if (g_particles.empty()) return;
+    for (int vi = 0; vi < g_vortexMaxCount; vi++) {
+        Vortex &v = g_vortices[vi];
+        if (!v.active || v.strength <= 0.05f) continue;
+
+        float force = g_centripetalForce * v.strength;
+        float influenceRadius = v.radius * 4.0f;
+        float decaying = v.isCircling ? 0.0f : 1.0f;
+        float invCore = 1.0f / fmaxf(v.coreRadius, 1.0f);
+        float circOver2Pi = v.circulation / 6.28318f;  // Γ/(2π)
+        int rotDir = v.angularVel >= 0 ? 1 : -1;
+
+        // 粒子反作用力累积（牛顿第三定律）/ Particle reaction force accumulation (Newton's third law)
+        float reactionX = 0, reactionY = 0;
+        int affectedCount = 0;
+
+        for (auto &p : g_particles) {
+            float dx = v.centerX - p.x;
+            float dy = v.centerY - p.y;
+            float dist = sqrtf(dx * dx + dy * dy);
+            if (dist > 2.0f && dist < influenceRadius) {
+                float nx = dx / dist, ny = dy / dist;  // 径向（指向中心）
+                float tx = -ny * rotDir, ty = nx * rotDir;  // 切向（旋转方向）
+                float radialVel = p.vx * nx + p.vy * ny;
+                float tangentVel = p.vx * tx + p.vy * ty;
+
+                // 记录施加给粒子的总力，用于反作用力计算
+                float forceOnParticleX = 0, forceOnParticleY = 0;
+
+                // 1. 根据物理模型计算目标切向速度
+                float targetTangentVel;
+                switch (g_vortexPhysModel) {
+                    case 1: {  // 自由涡：纯角动量守恒，vθ=Γ/(2πr)
+                        targetTangentVel = circOver2Pi / dist;
+                        break;
+                    }
+                    case 2: {  // 刚体旋转：整体匀速旋转，vθ=ω·r
+                        targetTangentVel = v.angularVel * dist;
+                        break;
+                    }
+                    case 3: {  // Lamb-Oseen涡：粘性高斯涡核
+                        float gauss = 1.0f - expf(-(dist * dist) / (2.0f * v.coreRadius * v.coreRadius));
+                        targetTangentVel = (circOver2Pi / dist) * gauss;
+                        break;
+                    }
+                    case 4: {  // 开普勒轨道：行星模型 v=sqrt(GM/r)
+                        float GM = v.angularVel * v.angularVel * v.radius * v.radius * v.radius;
+                        targetTangentVel = sqrtf(fmaxf(GM / fmaxf(dist, 5.0f), 0.5f));
+                        break;
+                    }
+                    case 0:  // Rankine涡（默认）/ Rankine vortex (default)
+                    default: {
+                        if (dist <= v.coreRadius) {
+                            targetTangentVel = v.angularVel * dist;
+                        } else {
+                            targetTangentVel = circOver2Pi / dist;
+                        }
+                        break;
+                    }
+                }
+
+                // 2. 径向压力梯度力（中心低压吸力，根据物理模型变化）/ 2. Radial pressure gradient force (center low-pressure suction)
+                float pressureForce;
+                switch (g_vortexPhysModel) {
+                    case 1:  // 自由涡：伯努利方程，压力∝1/r²
+                        pressureForce = force * v.pressureGradient * (v.coreRadius * v.coreRadius) / (dist * dist);
+                        break;
+                    case 2:  // 刚体旋转：离心力平衡，压力∝r
+                        pressureForce = force * v.pressureGradient * (dist / v.radius);
+                        break;
+                    case 4:  // 开普勒：引力∝1/r²
+                        pressureForce = force * v.pressureGradient * (v.radius * v.radius) / (dist * dist);
+                        break;
+                    case 3:  // Lamb-Oseen：高斯过渡
+                    case 0:  // Rankine（默认）/ Rankine (default)
+                    default:
+                        if (dist <= v.coreRadius) {
+                            pressureForce = force * v.pressureGradient * (dist * invCore);
+                        } else {
+                            pressureForce = force * v.pressureGradient * (v.coreRadius / dist);
+                        }
+                        break;
+                }
+                float effectivePressure = pressureForce * (1.0f - decaying * 0.85f);
+                forceOnParticleX += nx * effectivePressure;
+                forceOnParticleY += ny * effectivePressure;
+                p.vx += nx * effectivePressure;
+                p.vy += ny * effectivePressure;
+
+                // 3. 衰减时离心甩出
+                if (decaying > 0.5f) {
+                    float centrifugal = force * 3.5f * (1.0f - dist / influenceRadius * 0.5f);
+                    forceOnParticleX -= nx * centrifugal;
+                    forceOnParticleY -= ny * centrifugal;
+                    p.vx -= nx * centrifugal;
+                    p.vy -= ny * centrifugal;
+                }
+
+                // 4. 活跃阶段：角动量守恒驱动 + 粘性阻尼
+                if (v.isCircling) {
+                    float tangentError = targetTangentVel - tangentVel;
+                    float viscosity;
+                    switch (g_vortexPhysModel) {
+                        case 1: viscosity = 0.02f; break;
+                        case 2: viscosity = 0.2f; break;
+                        case 3: viscosity = 0.04f + 0.1f * expf(-(dist * dist) / (2.0f * v.coreRadius * v.coreRadius)); break;
+                        case 4: viscosity = 0.08f; break;
+                        case 0: default: viscosity = dist <= v.coreRadius ? 0.15f : 0.04f; break;
+                    }
+                    float tangentForce = tangentError * viscosity * force;
+                    forceOnParticleX += tx * tangentForce;
+                    forceOnParticleY += ty * tangentForce;
+                    p.vx += tx * tangentForce;
+                    p.vy += ty * tangentForce;
+
+                    float radialDamping = -radialVel * 0.04f * force;
+                    forceOnParticleX += nx * radialDamping;
+                    forceOnParticleY += ny * radialDamping;
+                    p.vx += nx * radialDamping;
+                    p.vy += ny * radialDamping;
+
+                    // 软弹簧约束
+                    float massOrbitFactor = g_enableParticleMass ? powf(p.mass, 0.333f) : 1.0f;
+                    float targetRadius;
+                    switch (g_vortexPhysModel) {
+                        case 1: targetRadius = v.radius * 0.8f * massOrbitFactor; break;
+                        case 2: targetRadius = v.radius * 0.7f * massOrbitFactor; break;
+                        case 3: targetRadius = v.coreRadius * 1.5f * massOrbitFactor; break;
+                        case 4: targetRadius = v.radius * 0.6f * massOrbitFactor; break;
+                        case 0: default: targetRadius = v.coreRadius * 2.0f * massOrbitFactor; break;
+                    }
+                    float radiusError = dist - targetRadius;
+                    if (fabsf(radiusError) > 2.0f) {
+                        // n 指向漩涡中心，所以"沿 n 为正"就是朝中心。
+                        // 粒子比目标半径远时 radiusError>0，必须往回拉，力沿 +n；
+                        // 比目标半径近时才沿 -n 往外推 —— 故弹簧项是 +radiusError。
+                        // 曾写成 -radiusError：偏离越大推力越大，粒子被一路甩出影响半径，
+                        // 轨道约束等同于反向失效（与碰撞那个符号错误是同一类问题）。
+                        // n points at the vortex centre, so +n is inwards. A particle farther out than
+                        // the target radius (radiusError>0) must be pulled back: +n. Only a particle
+                        // inside the target radius gets pushed out. Hence +radiusError. It used to be
+                        // -radiusError, which flung particles out of the influence radius entirely -
+                        // the same class of sign mistake as the one in the collision impulse.
+                        float springForce = radiusError * 0.006f * force;
+                        springForce -= radialVel * 0.015f * force;
+                        forceOnParticleX += nx * springForce;
+                        forceOnParticleY += ny * springForce;
+                        p.vx += nx * springForce;
+                        p.vy += ny * springForce;
+                    }
+
+                    float orbitAngle = atan2f(p.y - v.centerY, p.x - v.centerX);
+                    float precession = 0.0015f * force * sinf(orbitAngle * 2.0f);
+                    forceOnParticleX += tx * precession;
+                    forceOnParticleY += ty * precession;
+                    p.vx += tx * precession;
+                    p.vy += ty * precession;
+                }
+
+                // 5. 3D轨道倾角 + 亮度
+                if (v.isCircling) {
+                    float orbitAngle = atan2f(p.y - v.centerY, p.x - v.centerX);
+                    float depthFactor = sinf(orbitAngle) * sinf(v.orbitTilt);
+                    // z以0为中心振荡，轨道倾角产生前后景深
+                    float targetZ = depthFactor * 0.45f;
+                    p.z += (targetZ - p.z) * 0.15f;
+                    float speed = sqrtf(p.vx * p.vx + p.vy * p.vy);
+                    float energyBoost = fminf(speed / 12.0f, 1.0f);
+                    float coreBoost = dist <= v.coreRadius ? 0.15f : 0.0f;
+                    float depthBrightness = (1.0f - p.z) * 0.2f;
+                    p.vortexBrightness[0] = fmaxf(p.vortexBrightness[0], energyBoost * 0.1f + depthBrightness + coreBoost);
+                    p.vortexBrightness[1] = fmaxf(p.vortexBrightness[1], energyBoost * 0.1f + depthBrightness + coreBoost);
+                    p.vortexBrightness[2] = fmaxf(p.vortexBrightness[2], energyBoost * 0.1f + depthBrightness + coreBoost);
+                } else {
+                    // 漩涡衰减：z回归0
+                    p.z += (0.0f - p.z) * 0.1f;
+                    p.vortexBrightness[0] *= 0.9f;
+                    p.vortexBrightness[1] *= 0.9f;
+                    p.vortexBrightness[2] *= 0.9f;
+                }
+
+                // 累积反作用力（牛顿第三定律：粒子对漩涡的力 = -漩涡对粒子的力）/ Accumulate reaction force (Newton's third law)
+                // 粒子质量越大，反作用力越强
+                float particleMass = g_enableParticleMass ? p.mass : 1.0f;
+                reactionX -= forceOnParticleX * particleMass * 0.02f;
+                reactionY -= forceOnParticleY * particleMass * 0.02f;
+                // 额外：粒子动量对漩涡中心的推动
+                reactionX += p.vx * particleMass * 0.0005f;
+                reactionY += p.vy * particleMass * 0.0005f;
+                affectedCount++;
+            }
+        }
+
+        // 应用粒子反作用力到漩涡中心漂移
+        if (affectedCount > 0 && g_vortexDrift > 0.01f) {
+            // 反作用力系数：粒子越多影响越大（sqrt归一化，避免过度）/ Reaction coefficient: sqrt normalized
+            float countFactor = sqrtf((float)affectedCount) * 0.3f;
+            float reactionScale = g_vortexDrift * countFactor;
+            v.driftX += reactionX * reactionScale;
+            v.driftY += reactionY * reactionScale;
+            // 限制漂移速度，避免飞出去
+            float driftSpeed = sqrtf(v.driftX * v.driftX + v.driftY * v.driftY);
+            float maxDrift = 5.0f * g_vortexDrift;
+            if (driftSpeed > maxDrift) {
+                v.driftX = v.driftX / driftSpeed * maxDrift;
+                v.driftY = v.driftY / driftSpeed * maxDrift;
+            }
+        }
+    }
+}
+
+// ===== 粒子万有引力：共享引力源结构与成对引力计算 =====
+struct SoGravitySource {
+    float x, y, mass;  // 引力源位置与质量
+};
+
+// 单对引力累加：把引力源 s 对点(px,py)的加速度增量写入 ax,ay（截断在 sqrt 之前）/ Accumulate acceleration from source s onto (px,py); cutoff applied before sqrt
+static inline void GravityAccumulate(const SoGravitySource &s, float px, float py,
+                                     float G, float softeningSq, float maxDistSq,
+                                     float &ax, float &ay) {
+    float dx = s.x - px;
+    float dy = s.y - py;
+    float distSq = dx * dx + dy * dy + softeningSq;
+    if (distSq > maxDistSq) return;  // 截断提前（sqrt 之前）/ cutoff before sqrt
+    float dist = sqrtf(distSq);
+    float accel = G * s.mass / distSq;
+    ax += (dx / dist) * accel;
+    ay += (dy / dist) * accel;
+}
+
+// ===================== 主绘制循环 / Main Render Loop =====================
+// 简易Perlin噪声：空间连贯湍流场
+static float HashNoise(int x, int y, int seed) {
+    // 旧实现用 int 做累加：x*374761393 在 x≈77 时就超过 INT_MAX，随后 (n ^ (n>>13)) * 1274126177 同样溢出，
+    // 而 C++ 有符号整型溢出是未定义行为——不同优化级别/编译器下会算出完全不同的哈希，表现为湍流场随机跳变。
+    // 改为全程 uint32_t 无符号运算（无符号回绕是标准明确定义的），常量加 u 后缀保证常量类型也是无符号，
+    // 乘法前显式转换避免 int*int 先溢出再转无符号。
+    // Old impl accumulated into int: x*374761393 exceeds INT_MAX at x≈77 and (n ^ (n>>13)) * 1274126177
+    // overflows as well; signed overflow is UB in C++, so the hash differed per compiler/optimisation level.
+    // All math is now uint32_t (unsigned wrap-around is well defined), constants carry the u suffix and each
+    // operand is converted before the multiply so no int*int overflow happens first.
+    uint32_t n = (uint32_t)x * 374761393u + (uint32_t)y * 668265263u + (uint32_t)seed * 2246822519u;
+    n = (n ^ (n >> 13)) * 1274126177u;
+    // 取值语义完全不变：(n & 1023) / 1023 线性映射到 [-1,1]，CoherentNoise 的插值约定无需改动
+    return ((n & 1023u) / 1023.0f) * 2.0f - 1.0f;
+}
+static float CoherentNoise(float x, float y, float t, int seed) {
+    int xi = (int)floorf(x), yi = (int)floorf(y);
+    float xf = x - xi, yf = y - yi;
+    float u = xf * xf * (3.0f - 2.0f * xf);
+    float v = yf * yf * (3.0f - 2.0f * yf);
+    int ti = (int)(t * 10.0f);
+    float a = HashNoise(xi, yi, seed + ti);
+    float b = HashNoise(xi + 1, yi, seed + ti);
+    float c = HashNoise(xi, yi + 1, seed + ti);
+    float d = HashNoise(xi + 1, yi + 1, seed + ti);
+    return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+}
+
+// ===================== 热键轮询（I5）/ Hotkey polling (I5) =====================
+// 在渲染线程每帧轮询：不使用 RegisterHotKey，也不安装 WH_KEYBOARD_LL 钩子
+// （全局钩子是稳定性风险，且无法可靠看到 Fn 上报的码）。
+static void PollHotkeys() {
+    int vks[3] = { g_hotkeyToggleVK, g_hotkeyTrailVK, g_hotkeyParticlesVK };
+    static const wchar_t* kNames[3] = { L"toggle", L"trail", L"particles" };
+    bool anyBound = (vks[0] || vks[1] || vks[2]);
+
+    // 首帧记录一次：证明渲染线程在跑、且轮询函数真的被调用了
+    static bool s_pollStarted = false;
+    if (!s_pollStarted) {
+        s_pollStarted = true;
+    }
+    if (!anyBound) {
+        // 每 10 秒重记一次：如果用户改了设置但工具进程没收到新值，这里会一直为空，据此可定位
+        static DWORD s_lastUnboundLog = 0;
+        DWORD now = GetTickCount();
+        if (now - s_lastUnboundLog > 10000) {
+            s_lastUnboundLog = now;
+        }
+        return;
+    }
+
+    // 修饰键判定：需要的键必须按下，不需要的键必须抬起（这样 Alt+T 不会在 Alt+Ctrl+T 时也触发）
+    // 同时读 VK_MENU 与 VK_LMENU/VK_RMENU：个别键盘/布局下只有左右键码会被更新，只查通用码会漏判
+    bool altDown = ((GetAsyncKeyState(VK_MENU) | GetAsyncKeyState(VK_LMENU) | GetAsyncKeyState(VK_RMENU)) & 0x8000) != 0;
+    bool ctrlDown = ((GetAsyncKeyState(VK_CONTROL) | GetAsyncKeyState(VK_LCONTROL) | GetAsyncKeyState(VK_RCONTROL)) & 0x8000) != 0;
+    bool shiftDown = ((GetAsyncKeyState(VK_SHIFT) | GetAsyncKeyState(VK_LSHIFT) | GetAsyncKeyState(VK_RSHIFT)) & 0x8000) != 0;
+    bool wantAlt = (g_hotkeyModifier == 1 || g_hotkeyModifier == 2 || g_hotkeyModifier == 4);
+    bool wantCtrl = (g_hotkeyModifier == 2 || g_hotkeyModifier == 4);
+    bool wantShift = (g_hotkeyModifier == 3 || g_hotkeyModifier == 4);
+    bool modOK = (altDown == wantAlt) && (ctrlDown == wantCtrl) && (shiftDown == wantShift);
+
+    bool downNow[3] = { false, false, false };
+    bool freshBit[3] = { false, false, false };
+    for (int i = 0; i < 3; i++) {
+        if (!vks[i]) continue;
+        SHORT st = GetAsyncKeyState(vks[i]);
+        downNow[i] = (st & 0x8000) != 0;
+        freshBit[i] = (st & 0x0001) != 0;
+    }
+
+    // 状态变化即时记录：这是判断「系统到底有没有把按键报告给本进程」的关键证据，
+    // 只有变化时才写，所以正常情况下日志量极小。
+    static unsigned s_prevMask = 0xFFFFFFFFu;
+    unsigned mask = (altDown ? 1u : 0u) | (ctrlDown ? 2u : 0u) | (shiftDown ? 4u : 0u) |
+                    (downNow[0] ? 8u : 0u) | (downNow[1] ? 16u : 0u) | (downNow[2] ? 32u : 0u);
+    if (mask != s_prevMask) {
+        if (s_prevMask != 0xFFFFFFFFu) {  // 跳过首次（全是 0，没意义）/ skip the first all-zero sample
+        }
+        s_prevMask = mask;
+    }
+
+    // 心跳：每 30 秒记一次当前状态，**不依赖按键变化**，用来证明轮询通道确实活着
+    static DWORD s_lastHeartbeat = GetTickCount();
+    DWORD nowTick = GetTickCount();
+    if (nowTick - s_lastHeartbeat >= 30000) {
+        s_lastHeartbeat = nowTick;
+    }
+
+    // 一行缓存上一帧的修饰键状态：快速轻点时修饰键可能已先松开，允许「本帧或上一帧」匹配即可靠检测
+    static bool s_prevModOK = false;
+    bool comboOK = modOK || s_prevModOK;
+    s_prevModOK = modOK;
+
+    // 触发判定同时用两个来源，任一成立即算按下（v3.4.2.2 加固）：
+    //   1) 自维护边沿检测：本帧为按下、上一帧为抬起 —— 不依赖系统状态，最可靠
+    //   2) 系统转换位 0x0001：能捕捉「两次轮询之间快速按下又松开」的轻点
+    // 只靠 0x0001 是不行的：文档明确说明该位可能被其它进程的 GetAsyncKeyState 抢走。
+    // Two independent sources, either one counts (hardened in v3.4.2.2):
+    //   1) our own edge detection (down now, up on the previous poll) - most reliable, no system dependency
+    //   2) the system transition bit 0x0001 - catches a fast tap released between two polls
+    // Relying on 0x0001 alone is not enough: the docs state another process can steal that bit.
+    static bool s_prevDown[3] = { false, false, false };
+    for (int i = 0; i < 3; i++) {
+        if (!vks[i]) { s_prevDown[i] = false; continue; }
+        bool edge = downNow[i] && !s_prevDown[i];
+        s_prevDown[i] = downNow[i];
+        bool pressed = edge || freshBit[i];
+        if (!pressed) continue;
+        if (!comboOK) continue;
+        // 该键已注册给系统通道时，轮询只记录不动作，避免一次按键被切换两次（=看起来没反应）
+        if (g_hotkeyOSOwned[i].load()) continue;
+        HotkeyTryAct(i, L"poll");
+    }
+}
+
+// ===================== DPI 感知（I2）/ DPI awareness (I2) =====================
+// 动态加载 shcore!GetDpiForMonitor，避免引入 shcore.lib 链接依赖；GetDpiForWindow 同样动态解析，
+// 这样 Win7/8（无该 API）上解析失败会安全回退到 96。
+typedef HRESULT(WINAPI *GetDpiForMonitor_t)(HMONITOR, int, UINT *, UINT *);
+typedef UINT(WINAPI *GetDpiForWindow_t)(HWND);
+
+static void UpdateMonitorDpiScale() {
+    static GetDpiForMonitor_t s_pGetDpiForMonitor = nullptr;
+    static GetDpiForWindow_t s_pGetDpiForWindow = nullptr;
+    static HMODULE s_hShcore = nullptr;
+    static bool s_resolved = false;
+    if (!s_resolved) {
+        s_resolved = true;  // 函数指针只解析一次
+        s_hShcore = LoadLibraryW(L"shcore.dll");
+        if (s_hShcore)
+            s_pGetDpiForMonitor = (GetDpiForMonitor_t)GetProcAddress(s_hShcore, "GetDpiForMonitor");
+        HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+        if (hUser32)
+            s_pGetDpiForWindow = (GetDpiForWindow_t)GetProcAddress(hUser32, "GetDpiForWindow");
+        Wh_Log(L"[DPI] resolve: shcore=%d GetDpiForMonitor=%d GetDpiForWindow=%d", s_hShcore ? 1 : 0,
+               s_pGetDpiForMonitor ? 1 : 0, s_pGetDpiForWindow ? 1 : 0);
+    }
+
+    UINT dpi = 0;
+    POINT pt;
+    GetCursorPos(&pt);
+    HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    if (s_pGetDpiForMonitor && hMon) {
+        UINT dx = 0, dy = 0;
+        // MONITOR_DPI_TYPE 以 int 传入，0 = MDT_EFFECTIVE_DPI
+        if (SUCCEEDED(s_pGetDpiForMonitor(hMon, 0, &dx, &dy)) && dx > 0) dpi = dx;
+    }
+    if (dpi == 0 && s_pGetDpiForWindow && g_overlayHwnd)
+        dpi = s_pGetDpiForWindow(g_overlayHwnd);  // 回退 1：窗口 DPI（user32）/ fallback 1: window DPI (user32)
+    if (dpi == 0) dpi = 96;  // 回退 2：96
+
+    // 固定(100%)模式强制 1.0；否则 scale = dpi/96，并钳制到 [0.5, 4.0]
+    float scale = (g_dpiScaleMode == 1) ? 1.0f : (float)dpi / 96.0f;
+    if (scale < 0.5f) scale = 0.5f;
+    if (scale > 4.0f) scale = 4.0f;
+    // 三个全局变量跨线程共享（本函数同时会被 UI 线程与渲染线程调用），必须原子读写：
+    // 先取一次快照再比较，避免「读到的值在比较与写回之间被另一线程改写」造成的抖动与数据竞争（UB）。
+    // These globals are shared across threads (this function runs on both the UI and the render thread), so all
+    // accesses are atomic: take one snapshot before comparing so the compare-then-write cannot be invalidated
+    // by the other thread mid-way (and so there is no data race / UB at all).
+    float oldScale = g_monitorDpiScale.load();
+    if (fabsf(scale - oldScale) > 0.001f) {
+        g_monitorDpiScale.store(scale);
+        g_charAtlasDirty.store(true);  // 比例变化 -> 文字图集需按新 DPI 重建
+        Wh_Log(L"[DPI] monitor dpi=%u scale=%.3f (mode=%d scaleText=%d)", dpi, scale, g_dpiScaleMode,
+               g_dpiScaleText ? 1 : 0);
+    }
+}
+
+// 光标切到其他显示器时才重算：MonitorFromPoint 很便宜，但仍缓存上一次 HMONITOR 避免重复 DPI 查询
+static void UpdateMonitorDpiScaleIfMoved(POINT pt) {
+    static HMONITOR s_lastMon = nullptr;
+    HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    if (hMon != s_lastMon) {
+        s_lastMon = hMon;
+        UpdateMonitorDpiScale();
+    }
+}
+
+static void RenderFrame() {
+    // 设置变更时在渲染线程中重载（避免 UI 线程与渲染线程竞争全局变量）/ Reload settings on render thread when changed (avoid UI/render thread race on globals)
+    if (g_settingsDirty.exchange(false)) {
+        LoadSettings();
+    }
+    // v3.4.2.2 热键轮询：必须在任何提前 return 之前，这样窗口隐藏时空闲帧也能响应热键
+    PollHotkeys();
+    DWORD dwTime = GetTickCount();
+    POINT pt;
+    GetCursorPos(&pt);
+    // v3.4.2.2 DPI：光标移到其他显示器时按需重算（复用上面的 pt，避免多一次系统调用）
+    UpdateMonitorDpiScaleIfMoved(pt);
+    int dx = pt.x - g_lastPos.x, dy = pt.y - g_lastPos.y;
+    float velocity = sqrtf((float)(dx * dx + dy * dy));
+    g_lastPos = pt;
+
+    // 光标取色和背景采样已移至后台线程（BgSamplerThreadProc），避免 GDI 回读阻塞渲染线程
+    // 这里只把最新输入写入共享结构，后台线程定期读取执行
+
+    POINT renderPos = pt;
+    if (g_trailDelay > 0) {
+        // ===== 延迟跟随 v3.4.5.1 =====
+        // 旧实现有两个缺陷，合起来就是"渲染和鼠标有偏差"：① g_lagPos 是整数，每帧
+        // (int)((pt-lag)*ease) 截断亚像素增量，差值剩 1px 时 (int)(1*ease)==0，永远追不上；
+        // ② ease 是"每帧固定比例"，滞后程度随帧率变。
+        // 现在：浮点状态 + 按真实经过时间指数收敛（帧率无关）+ 亚像素内吸附消除残差。
+        // Old version: integer state truncated sub-pixel deltas (a 1px gap never closed) and a
+        // per-frame ease made lag depend on the refresh rate. Now: float state, time-based decay,
+        // sub-pixel snap.
+        if (!g_lagInited) {
+            g_lagFX = (float)pt.x; g_lagFY = (float)pt.y;
+            g_lagLastT = dwTime;
+            g_lagInited = true;
+        }
+        float dtSec = (float)(dwTime - g_lagLastT) * 0.001f;
+        g_lagLastT = dwTime;
+        if (dtSec < 0.0f) dtSec = 0.0f;
+        if (dtSec > 0.25f) dtSec = 0.25f;  // 长时间停顿后不要一帧跳到位
+        float tau = 0.025f * (float)g_trailDelay;   // 时间常数：1 -> 25ms，10 -> 250ms
+        float a = 1.0f - expf(-dtSec / fmaxf(tau, 1e-4f));
+        g_lagFX += ((float)pt.x - g_lagFX) * a;
+        g_lagFY += ((float)pt.y - g_lagFY) * a;
+        // 亚像素内直接吸附，彻底消掉残差
+        if (fabsf((float)pt.x - g_lagFX) < 0.5f) g_lagFX = (float)pt.x;
+        if (fabsf((float)pt.y - g_lagFY) < 0.5f) g_lagFY = (float)pt.y;
+        g_lagPos.x = (int)lroundf(g_lagFX);
+        g_lagPos.y = (int)lroundf(g_lagFY);
+        renderPos = g_lagPos;
+    } else {
+        g_lagInited = false;
+    }
+
+    GradData cols;
+    ComputeColors(g_colorMode, dwTime, velocity, cols);
+
+    float widthMul = 1.0f;
+    if (g_enableSpeedResponse) {
+        float sf = fminf(velocity / 80.0f, 1.0f);
+        float accel = fabsf(velocity - g_prevVelocity);
+        float af = fminf(accel / 30.0f, 1.0f);
+        widthMul = 1.0f + sf * 0.3f + af * 0.15f;
+    }
+
+    // 每帧刷新一次效果动画系数（各渲染子函数直接读全局值）
+    UpdateFxAnimations(dwTime);
+    int vX = g_virtX, vY = g_virtY;
+
+    static DWORD lastFsCheck = 0;
+    static bool isGameCached = false, trailActive = false;
+    static int idleFrameCount = 0, fadeoutFrame = 0;
+    static bool surfaceDirty = false;
+    static bool gameHidden = false;
+    static bool isWindowVisible = false;  // 窗口初始隐藏，首次有内容绘制时才显示
+    static int hideDelayCounter = 0;
+    // v3.4.2.2 热键可见性开关：每帧只读一次 atomic 并复用，避免每帧多次原子读（RenderFrame 最高约 1000fps）
+    bool effectsOn = g_effectsVisible.load(std::memory_order_relaxed);  // 总开关
+    bool trailOn = effectsOn && g_trailVisible.load(std::memory_order_relaxed);  // 拖尾（含运动模糊/形状拖尾）
+    bool particlesOn = effectsOn && g_particlesVisible.load(std::memory_order_relaxed);  // 粒子
+    if (dwTime - lastFsCheck > 500) {
+        isGameCached = CheckForegroundFullscreen();
+        lastFsCheck = dwTime;
+        // auto 主题随背景亮度刷新令牌（2Hz 低频重算，不在这里做就得每帧算）。
+    }
+
+    // 点击检测（游戏中跳过，避免全屏游戏内生成不必要的效果）/ Click detection (skip in game to avoid unnecessary effects in fullscreen)
+    bool lDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+    bool rDown = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+    if (!isGameCached) {
+        if (effectsOn && g_enableClickEffect) {  // 总开关关闭时不生成点击波纹
+            if (lDown && !g_prevLButton) {
+                g_ripples.push_back({pt, dwTime});
+                g_ripples.push_back({pt, dwTime + 120});  // 延迟副波纹，双环效果
+            }
+            if (rDown && !g_prevRButton) {
+                g_ripples.push_back({pt, dwTime});
+                g_ripples.push_back({pt, dwTime + 120});
+            }
+        }
+        if (particlesOn && g_enableClickStarburst) {  // 粒子关闭时也不生成点击星爆粒子
+            if ((lDown && !g_prevLButton) || (rDown && !g_prevRButton)) {
+                SpawnParticles((float)(pt.x - vX), (float)(pt.y - vY), g_starburstCount, 2.5f, 5.5f, 2.5f, 5.0f, 250, 450,
+                               cols.solidOuter, dwTime, true);
+            }
+        }
+    }
+    g_prevLButton = lDown;
+    g_prevRButton = rDown;
+
+    if (!g_ripples.empty())
+        g_ripples.erase(std::remove_if(g_ripples.begin(), g_ripples.end(),
+                                       [&](const Ripple &r) { return dwTime - r.startTime > (DWORD)g_clickDuration; }),
+                        g_ripples.end());
+
+    int vW = g_virtW, vH = g_virtH;
+
+    if (isGameCached) {
+        // 游戏中隐藏覆盖层窗口，避免全屏顶层窗口阻挡游戏的独立翻转/MPO
+        if (!gameHidden) {
+            PostMessageW(g_overlayHwnd, WM_APP_HIDE_OVERLAY, 0, 0);
+            gameHidden = true;
+            isWindowVisible = false;  // 同步窗口可见状态，避免退出游戏后窗口不显示
+        }
+        if (trailActive || !g_history.empty() || !g_ripples.empty() || !g_particles.empty() || surfaceDirty) {
+            trailActive = false;
+            g_history.clear();
+            g_ripples.clear();
+            g_particles.clear();
+            g_fadeAlpha = 1.0f;
+            fadeoutFrame = 0;
+        } else {
+            // 游戏隐藏期间同步速度基线，避免退出游戏后首帧出现加速度突刺
+            g_prevVelocity = velocity;
+            return;
+        }
+    } else {
+        gameHidden = false;  // 退出游戏后重置，允许窗口重新显示
+        // 拖尾激活状态机：基于速度阈值 + 低速持续时间 + 实际移动距离
+        static float accumulatedDist = 0.0f;
+        static float lastVel = 0.0f;
+        static int triggerConfirm = 0;  // 触发确认帧数
+        static float lastTriggerPosX = 0, lastTriggerPosY = 0;
+        float accel = velocity - lastVel;
+        lastVel = velocity;
+
+        if (!trailActive) {
+            // 未激活：速度超过阈值 或 加速度突增 时触发
+            bool speedOK = (velocity > g_triggerVelocity);
+            bool accelOK = (accel > 8.0f && velocity > g_triggerVelocity * 0.6f);  // 加速度触发更严格
+            if (speedOK || accelOK) {
+                triggerConfirm++;
+                if (triggerConfirm >= 2) {  // 连续2帧确认，避免单帧抖动误触
+                    trailActive = true;
+                    idleFrameCount = 0;
+                    accumulatedDist = 0.0f;
+                    triggerConfirm = 0;
+                    lastTriggerPosX = renderPos.x;
+                    lastTriggerPosY = renderPos.y;
+                }
+            } else {
+                triggerConfirm = 0;
+            }
+        } else {
+            // 已激活：速度低于停止阈值时计数
+            if (velocity < g_stopVelocity) {
+                idleFrameCount++;
+                // 计算实际移动距离（而非速度累积）/ Track actual movement distance (not velocity accumulation)
+                float movedDist = sqrtf((renderPos.x - lastTriggerPosX) * (renderPos.x - lastTriggerPosX) +
+                                        (renderPos.y - lastTriggerPosY) * (renderPos.y - lastTriggerPosY));
+                lastTriggerPosX = renderPos.x;
+                lastTriggerPosY = renderPos.y;
+                accumulatedDist += movedDist;
+                // 低速超过4帧 或 低速2帧且几乎没移动 时停止
+                if (idleFrameCount > 4 || (idleFrameCount > 1 && accumulatedDist < 1.5f)) {
+                    trailActive = false;
+                    g_hasLastShapePos = false;
+                    accumulatedDist = 0.0f;
+                }
+            } else {
+                idleFrameCount = 0;
+                accumulatedDist = 0.0f;
+                lastTriggerPosX = renderPos.x;
+                lastTriggerPosY = renderPos.y;
+            }
+        }
+        if (trailActive) {
+            POINT np = {renderPos.x - vX, renderPos.y - vY};
+            g_history.push_front(np);
+            while (g_history.size() > (size_t)g_tailLength)
+                g_history.pop_back();
+            fadeoutFrame = 0;
+            // 移动时 alpha 快速恢复到 1.0
+            g_fadeAlpha += (1.0f - g_fadeAlpha) * 0.4f;
+            if (g_fadeAlpha > 1.0f)
+                g_fadeAlpha = 1.0f;
+        } else {
+            // ===== 淡出模式：硬截断 / 加速收缩 / 软截断 / Fadeout modes: hard cut / accelerated shrink / soft cut =====
+            switch (g_fadeoutMode) {
+                case 0:  // 硬截断：立即清除所有状态，避免下次绘制残留
+                    g_history.clear();
+                    g_particles.clear();
+                    g_trailShapes.clear();
+                    g_trailHistory.clear();
+                    g_hasLastParticlePos = false;
+                    g_lastParticleDirX = 0.0f;
+                    g_lastParticleDirY = 0.0f;
+                    g_fadeAlpha = 1.0f;
+                    fadeoutFrame = 0;
+                    break;
+                case 1: {  // 加速收缩：前慢后快，每帧 pop 数量平缓递增
+                    fadeoutFrame++;
+                    int popCount = 1 + fadeoutFrame / 5;  // 帧1-5:1, 6-10:2, 11-15:3...
+                    if (popCount > 4)
+                        popCount = 4;  // 上限 4，避免后期飞太快
+                    for (int i = 0; i < popCount && !g_history.empty(); i++)
+                        g_history.pop_back();
+                    if (g_history.size() <= 1)
+                        g_history.clear();
+                    g_fadeAlpha = 1.0f;
+                    break;
+                }
+                case 2:  // 软截断：基于剩余长度的淡出曲线 + 拖尾收缩同步，杜绝末端硬切
+                    fadeoutFrame++;
+                    if (!g_history.empty())
+                        g_history.pop_back();
+                    // alpha 由剩余点数比例决定：点数越少越透明，pow 曲线让头部保持饱满、尾部加速消失
+                    if (g_history.size() >= 2) {
+                        float lenRatio = (float)g_history.size() / (float)g_tailLength;
+                        g_fadeAlpha = powf(lenRatio, 1.4f);
+                    } else {
+                        g_fadeAlpha = 0;
+                        g_history.clear();
+                    }
+                    break;
+            }
+        }
+    }
+
+    // ===== 提前计算 smoothed 路径（粒子释放和渲染共用）=====
+    // 静态暂存缓冲：避免每帧重新堆分配
+    static std::vector<D2D1_POINT_2F> s_smoothed, s_bezierOut, s_ns;
+    std::vector<D2D1_POINT_2F> &smoothed = s_smoothed;
+    smoothed.clear();
+    smoothed.reserve(g_tailLength * 4);  // 预分配，避免多次扩容
+    bool havePath = (g_history.size() >= 2);
+    if (havePath) {
+        for (auto &p : g_history)
+            smoothed.push_back(D2D1::Point2F((float)p.x + g_tailOffsetX, (float)p.y + g_tailOffsetY));
+        if (g_enableBezierSmooth) {
+            // Catmull-Rom 样条平滑（更顺滑的曲线）
+            std::vector<D2D1_POINT_2F> &bezierOut = s_bezierOut;
+            bezierOut.clear();
+            bezierOut.reserve(smoothed.size() * 4);
+            CatmullRomSmooth(smoothed, bezierOut, 4);
+            smoothed.swap(bezierOut);  // swap替代拷贝，O(1)
+        } else {
+            // 原线性插值平滑
+            std::vector<D2D1_POINT_2F> &ns = s_ns;
+            ns.clear();
+            ns.reserve(smoothed.size() * 3);
+            for (int iter = 0; iter < 2; ++iter) {
+                if (smoothed.size() < 3)
+                    break;
+                ns.clear();
+                ns.push_back(smoothed.front());
+                for (size_t i = 0; i < smoothed.size() - 1; ++i) {
+                    D2D1_POINT_2F p0 = smoothed[i], p1 = smoothed[i + 1];
+                    ns.push_back(D2D1::Point2F(.75f * p0.x + .25f * p1.x, .75f * p0.y + .25f * p1.y));
+                    ns.push_back(D2D1::Point2F(.25f * p0.x + .75f * p1.x, .25f * p0.y + .75f * p1.y));
+                }
+                ns.push_back(smoothed.back());
+                smoothed.swap(ns);  // swap替代拷贝
+            }
+        }
+        if (g_trailShape == 2)
+            ApplyFunctionDeformation(smoothed, dwTime);
+        else if (g_trailShape == 3)
+            ApplyWaveDeformation(smoothed, dwTime);
+        else if (g_trailShape == 7)
+            ApplySpiralDeformation(smoothed, dwTime);
+        else if (g_trailShape == 8)
+            ApplyLightningDeformation(smoothed, dwTime);
+        else if (g_trailShape == 9)
+            ApplyFeatherDeformation(smoothed, dwTime);
+    }
+
+    // ===== 把最新输入交给后台采样线程（GDI 回读在后台线程执行，不阻塞渲染）===== / Pass latest input to background sampler thread (GDI readback runs in background, doesn't block render)
+    // P1-8：把整条路径的拷贝移出临界区，锁内只做 O(1) 的 swap，缩短持锁时间。
+    //       消费侧 BgSamplerThreadProc 在锁内做 path = g_samplePath 的完整拷贝；渲染线程最高约 1000fps，
+    //       若每帧都持锁拷贝约 1600 点（≈12.8 KB），两个线程会频繁互相阻塞。移出后锁的持有时间是常数。
+    // P1-8: move the whole path copy out of the critical section; inside the lock only an O(1) swap runs.
+    //       The consumer (BgSamplerThreadProc) does a full `path = g_samplePath` copy under the lock; the render thread
+    //       runs at up to ~1000fps, so copying ~1600 points (~12.8 KB) per frame under the lock makes the two threads
+    //       contend. After the change the lock hold time is constant.
+    // s_sampleScratch 与 g_samplePath 轮换容量：稳态下零堆分配（复用已有 static 暂存缓冲写法）
+    static std::vector<D2D1_POINT_2F> s_sampleScratch;
+    s_sampleScratch = smoothed;  // 拷贝在锁外完成
+    EnterCriticalSection(&g_sampleCS);
+    g_samplePath.swap(s_sampleScratch);  // O(1)：不逐元素拷贝、不重新分配
+    g_sampleVX = vX; g_sampleVY = vY;
+    g_sampleCursor = pt; g_sampleTime = dwTime;
+    g_sampleHasPath = havePath;
+    g_sampleColorMode = g_colorMode;
+    g_sampleAdaptive = g_adaptiveContrast || (g_contrastTarget > 0);
+    LeaveCriticalSection(&g_sampleCS);
+
+    // ===== v3.4.2.2 热键：拖尾/粒子可见性状态切换时清理一次，避免关闭后残留 / Hotkey: clear trail/particle state once on toggle-off to avoid leftovers
+    static bool s_lastTrailVisible = true;
+    static bool s_lastParticlesVisible = true;
+    if (!trailOn && s_lastTrailVisible) {
+        g_trailHistory.clear();  // 运动模糊历史
+        g_trailShapes.clear();  // 形状拖尾
+    }
+    s_lastTrailVisible = trailOn;
+    if (!particlesOn && s_lastParticlesVisible) {
+        g_particles.clear();  // 粒子
+    }
+    s_lastParticlesVisible = particlesOn;
+
+    // ===== 运动模糊：保存当前路径到历史缓冲区（仅锥形带模式，避免切换形状后残留旧帧）===== / Motion blur: save current path to history buffer (cone strip only, avoid stale frames after shape switch)
+    if (trailOn && g_enableMotionBlur && havePath && g_trailShape == 0) {
+        TrailFrame frame;
+        frame.path = smoothed;
+        frame.time = dwTime;
+        g_trailHistory.push_back(frame);
+        while ((int)g_trailHistory.size() > g_motionBlurStrength)
+            g_trailHistory.erase(g_trailHistory.begin());
+    } else if ((!g_enableMotionBlur || g_trailShape != 0) && !g_trailHistory.empty()) {
+        g_trailHistory.clear();
+    }
+
+
+    // ===== 粒子释放（基于 smoothed 路径的指定位置）===== / Particle spawn (based on specified position on smoothed path)
+    // ===== 粒子模式判定（必须与设置项标签严格一致）===== / Particle mode gate (must match the option labels)
+    //   fadeout「淡出时 / On Fadeout」            : 鼠标停下、拖尾正在收缩淡出的那段期间才释放。
+    //   always「始终（静止除外）/ Always (except idle)」: 只要还在移动就释放，静止一概不释放。
+    // 旧实现两处都写反了：fadeout 取 trailActive（=移动中）→ 一直释放；
+    // always 取常量 true → 连静止时也在释放。这正好对应用户报告的两个现象。
+    bool trailFadingOut = !trailActive && g_fadeAlpha > 0.02f && !g_history.empty();
+    // 速度自适应释放间隔：快速移动时间隔缩短，保持粒子密度；微小抖动避免机械规律
+    float adaptiveInterval = (float)g_particleInterval;
+    if (g_particleInterval > 0 && velocity > 2.0f) {
+        float speedFactor = 1.0f + fminf(velocity * 0.018f, 2.5f);  // up to ~3.5x faster
+        adaptiveInterval = (float)g_particleInterval / speedFactor;
+    }
+    adaptiveInterval *= (0.88f + Rand01() * 0.24f);
+    if (adaptiveInterval < 0.0f) adaptiveInterval = 0.0f;
+    // 距离补充：自上次释放后光标移动超过阈值时，即使间隔未到也释放（防高速缝隙）
+    bool distanceReady = false;
+    if (g_hasLastParticlePos && g_particleInterval > 0) {
+        float ddx = 0, ddy = 0;
+        if (!smoothed.empty()) { ddx = smoothed[0].x - g_lastParticleX; ddy = smoothed[0].y - g_lastParticleY; }
+        if (ddx*ddx + ddy*ddy > 1225.0f) distanceReady = true;  // 35px threshold
+    }
+    if (particlesOn && g_particleMode > 0 && havePath &&
+        (dwTime - g_lastParticleTime >= (DWORD)adaptiveInterval || distanceReady)) {
+        bool spawnOK = (g_particleMode == 1) ? trailFadingOut : trailActive;
+        if (spawnOK) {
+            float ratio;
+            switch (g_particleOrigin) {
+                case 0:
+                    ratio = 0.0f;
+                    break;  // head
+                case 1:
+                    ratio = 0.5f;
+                    break;  // middle
+                case 3:
+                    ratio = g_particleOriginRatio / 100.0f;
+                    break;  // custom
+                case 4:
+                    ratio = Rand01();
+                    break;  // random
+                default:
+                    ratio = 1.0f;
+                    break;  // tail
+            }
+            D2D1_POINT_2F origin = GetPointOnPath(smoothed, ratio);
+            float speedMul = 1.0f;
+            if (g_particleAccel) {
+                float accel = velocity - g_prevVelocity;
+                speedMul = 1.0f + fabsf(accel) * 0.07f;
+                if (speedMul > 3.5f)
+                    speedMul = 3.5f;
+            }
+            // ===== 快速移动插值：沿轨迹补点，消除缝隙 ===== / Fast-motion interpolation: fill the path
+            // 准入条件见 CanInsertFillers()：释放间隔必须够密，且这段的曲率小到可以猜准。
+            // 间隔一大就退化成"连一条直线到光标"，宁可不补 —— 这是用户实测反馈的直接来源。
+            // Admission rules are in CanInsertFillers(): releases must be dense and the curvature low
+            // enough to guess. A long interval degenerates into a straight line to the cursor, which is
+            // why we would rather not insert at all - this came straight from observed behavior.
+            float avgParticleSize = 3.25f * (g_particleSizeMultiplier / 100.0f);
+            float spawnStep = avgParticleSize * 2.0f;  // 目标步距：约 2 倍粒子直径
+            if (spawnStep < 1.0f) spawnStep = 1.0f;
+            int interpCount = g_particleDensity;
+            if (interpCount < 1) interpCount = 1;
+            if (g_hasLastParticlePos) {
+                float dx = origin.x - g_lastParticleX;
+                float dy = origin.y - g_lastParticleY;
+                float dist = sqrtf(dx * dx + dy * dy);
+                DWORD timeSinceLast = dwTime - g_lastParticleTime;
+                // 间隔过长说明中途停止过（或被开关挡住过），只重建基线，
+                // 不能把静止期间的位移当成"快速移动"补出一长串粒子。
+                if (timeSinceLast > 800) {
+                    g_hasLastParticlePos = false;
+                    g_lastParticleDirX = 0.0f;
+                    g_lastParticleDirY = 0.0f;
+                } else if (dist > spawnStep &&
+                           CanInsertFillers(dist, dx, dy, g_lastParticleDirX, g_lastParticleDirY,
+                                            avgParticleSize)) {
+                    // 步数 = 距离/目标步距，再由粒子预算压缩。原先的固定 25 会让步距失控。
+                    int cap = GetParticleCap();
+                    size_t usedNow = g_particles.size();
+                    size_t budget = (usedNow + 16 >= (size_t)cap) ? 0 : ((size_t)cap - usedNow - 16);
+                    int steps = (int)(dist / spawnStep);
+                    // 步数上限 56 由"稳态粒子数"反推而来：默认 20 次释放/秒 × 每次 ≤56 个
+                    // × 平均寿命 0.35s ≈ 392 < cap 500。若放得更宽，稳态会摸到 cap，
+                    // 而 trim 会从队首（最老 = 最远端）删，等于把刚补好的缝隙又抠出来。
+                    // The 56-step ceiling comes from the steady state: ~20 spawns/s x <=56 each
+                    // x 0.35s mean lifetime ≈ 392 < cap 500. Higher would hit the cap, and trim
+                    // erases from the FRONT (oldest = far end), re-opening the gap we just filled.
+                    if (steps > 80) steps = 80;
+                    if (steps < 1) steps = 1;
+                    // 剩余容量不足时，先靠上面压低「每点粒子数」保住点密度，实在不够才截点数
+                    if ((size_t)steps > budget) steps = (int)budget;
+                    if (steps < 1) steps = 1;
+                    // 实际步距被压缩后必然大于目标步距
+                    float stepLen = dist / (steps + 1);
+                    // 单次补插的粒子总预算：点数越多每点越少。原因是粒子达上限后 trim 从
+                    // **队首**（最老 = 最远端）删除，恰好会把用来补远端缝隙的粒子先删掉，
+                    // 反而把缝隙重新制造出来。
+                    // Budget the whole burst: more points means fewer particles each. Once at cap, trim
+                    // erases from the FRONT (oldest = far end), deleting precisely the particles that
+                    // were filling the far-end gap and recreating it.
+                    const size_t kInterpBudget = 72;
+                    float countScale = 1.0f;
+                    if ((size_t)steps * (size_t)interpCount > kInterpBudget)
+                        countScale = (float)kInterpBudget / (float)((size_t)steps * (size_t)interpCount);
+                    // 二次贝塞尔控制点：由「上一段的进入方向」推出，使切线连续 —— 直线移动时
+                    // 自动退化为直线，弧线甩动时贴合弧线。偏移量再钳制到弦长的 25% 以内，
+                    // 避免急转弯时过冲。
+                    // Quadratic Bezier control point derived from the incoming direction so the tangent is
+                    // continuous: it degenerates to a straight line on straight moves and hugs the arc on
+                    // curved ones. The offset is clamped to 25% of the chord to avoid overshoot on hard turns.
+                    float midX = g_lastParticleX + dx * 0.5f;
+                    float midY = g_lastParticleY + dy * 0.5f;
+                    float cxRaw = g_lastParticleX + g_lastParticleDirX * dist * 0.5f;
+                    float cyRaw = g_lastParticleY + g_lastParticleDirY * dist * 0.5f;
+                    float offX = cxRaw - midX, offY = cyRaw - midY;
+                    float offLen = sqrtf(offX * offX + offY * offY);
+                    float maxOff = dist * 0.25f;
+                    if (offLen > maxOff && offLen > 1e-6f) {
+                        float s = maxOff / offLen;
+                        cxRaw = midX + offX * s;
+                        cyRaw = midY + offY * s;
+                    }
+                    for (int i = 1; i <= steps; i++) {
+                        float t = (float)i / (steps + 1);  // 0=上一位置(远), 1=当前位置(近)
+                        float mt = 1.0f - t;
+                        float bx = mt * mt * g_lastParticleX + 2.0f * mt * t * cxRaw + t * t * origin.x;
+                        float by = mt * mt * g_lastParticleY + 2.0f * mt * t * cyRaw + t * t * origin.y;
+                        // jitter 只是打散"完美串珠"，量随实际步距缩放
+                        float jitter = avgParticleSize * 0.7f + stepLen * 0.10f;
+                        float ix = bx + (Rand01() - 0.5f) * jitter;
+                        float iy = by + (Rand01() - 0.5f) * jitter;
+                        // 补插粒子与正常粒子同尺寸
+                        int countFactor = (int)(interpCount * (0.4f + t * 0.6f) * countScale + 0.5f);
+                        if (countFactor < 1) countFactor = 1;
+                        int lifeFactor = (int)(300 + t * 400);
+                        // 插值点粒子速度稍大，沿移动方向有拖尾感
+                        float spdMul = 1.0f + (1.0f - t) * 0.5f;
+                        SpawnParticles(ix, iy, countFactor, 0.4f * speedMul * spdMul, 2.5f * speedMul * spdMul,
+                                       2.0f, 4.5f, lifeFactor,
+                                       lifeFactor + 200, cols.solidOuter, dwTime);
+                    }
+                }
+                // 记录本段位移方向，供下一次插值构造切线
+                if (dist > 1e-3f) {
+                    g_lastParticleDirX = dx / dist;
+                    g_lastParticleDirY = dy / dist;
+                }
+            }
+            SpawnParticles(origin.x, origin.y, g_particleDensity, 0.3f * speedMul, 2.0f * speedMul, 2.0f, 4.5f, 300,
+                           700, cols.solidOuter, dwTime);
+            g_lastParticleX = origin.x;
+            g_lastParticleY = origin.y;
+            g_hasLastParticlePos = true;
+            g_lastParticleTime = dwTime;
+        }
+    }
+    // 按拖尾长度刷新特效强度（尾焰/光纤的自适应拉伸要用）
+    UpdateTrailFxIntensity(smoothed);
+    // ===== 形状拖尾生成（沿路径按间隔生成爱心/五角星等，带随机方向加速度）=====
+    if (trailOn && g_trailShape == 4 && havePath) {
+        float curX = smoothed[0].x, curY = smoothed[0].y;
+        if (!g_hasLastShapePos) {
+            g_lastShapeX = curX;
+            g_lastShapeY = curY;
+            g_hasLastShapePos = true;
+        }
+        float dx = curX - g_lastShapeX, dy = curY - g_lastShapeY;
+        float dist = sqrtf(dx * dx + dy * dy);
+        if (dist >= (float)g_shapeInterval) {
+            for (int i = 0; i < g_shapeCount; i++) {
+                float sx = curX, sy = curY;
+                if (g_shapeRandomOffset) {
+                    sx += (Rand01() - 0.5f) * g_shapeSize * 1.5f;
+                    sy += (Rand01() - 0.5f) * g_shapeSize * 1.5f;
+                }
+                int st = g_shapeType;
+                if (st == 9) {  // random：0-8 旧形状 + 11-13 新形状（跳过 10=文字）
+                    int r = (int)(Rand01() * 12.0f);
+                    st = (r < 9) ? r : (r + 2);   // 9,10,11 -> 11,12,13
+                }
+                // 火箭/导弹/光纤导弹是"飞行器"：必须朝运动方向飞，且不再随机自旋，
+                // 否则会看到横着飞甚至倒着飞的导弹。其余形状沿用随机方向与自旋。
+                const bool isCraft = (st == 11 || st == 12 || st == 13);
+                float dirX, dirY;
+                float dlen = sqrtf(dx * dx + dy * dy);
+                if (dlen > 0.5f) {
+                    dirX = dx / dlen; dirY = dy / dlen;
+                    g_lastShapeDirX = dirX; g_lastShapeDirY = dirY;
+                } else {
+                    dirX = g_lastShapeDirX; dirY = g_lastShapeDirY;
+                }
+                float heading = atan2f(dirY, dirX);
+                // 发射散布角：齐射时略有差异才自然
+                float angle = isCraft ? heading + (Rand01() - 0.5f) * 0.12f
+                                      : Rand01() * 6.2831853f;
+                float speed = isCraft ? (1.2f + Rand01() * 1.6f)  // 沿航向推进
+                                      : (0.5f + Rand01() * 1.5f);
+                float rotSpeed = isCraft ? 0.0f : (Rand01() - 0.5f) * 0.1f;
+                float startRot = isCraft ? angle : 0.0f;
+                g_trailShapes.push_back({sx, sy, cosf(angle) * speed, sinf(angle) * speed,
+                                         g_shapeSize, startRot, rotSpeed, st, dwTime,
+                                         (float)g_shapeLifetime, cols.solidOuter});
+            }
+            g_lastShapeX = curX;
+            g_lastShapeY = curY;
+        }
+    } else {
+        g_hasLastShapePos = false;
+    }
+    // 形状总数上限（超级性能模式下提高上限）/ Shape total cap (higher in super performance mode)
+    int shapeCap = g_superPerformanceMode ? 400 : 150;
+    if (g_trailShapes.size() > (size_t)shapeCap) {
+        g_trailShapes.erase(g_trailShapes.begin(), g_trailShapes.begin() + (g_trailShapes.size() - shapeCap));
+    }
+    // 粒子总数上限，防止参数拉满时性能崩溃（超级性能模式下提高上限）/ Particle total cap, prevent perf collapse when params maxed (higher in super performance mode)
+    int particleCap = GetParticleCap();
+    if (g_particles.size() > (size_t)particleCap) {
+        g_particles.erase(g_particles.begin(), g_particles.begin() + (g_particles.size() - particleCap));
+    }
+    // 先捕获上一帧速度再覆盖：加速度必须用「覆盖前」的值计算，否则 vortex 的 accel 恒为 0
+    float prevFrameVelocity = g_prevVelocity;
+    g_prevVelocity = velocity;
+
+    // ===== 音乐响应：FFT分析 + 节拍检测 + 物理联动状态更新 ===== / Music reactive: FFT analysis + beat detection + physics-link state update
+    // 音乐响应或物理联动任一开启都需要运行分析（物理联动依赖节拍/频段数据）/ Run analysis if either reactive or physics link is on (physics link depends on beat/band data)
+    if (g_enableMusicReactive || g_enableMusicPhysics) {
+        MusicUpdate(dwTime);
+    }
+
+    // ===== 向心力漩涡：多漩涡系统 + 圆周运动检测 + 粒子轨道捕获 ===== / Centripetal vortex: multi-vortex system + circular motion detection + particle orbit capture
+    // 力施加前保存速度快照到debugForce字段，供帧末计算总受力 F=mΔv（涵盖漩涡/排斥/引力/阻力/光标等全部力）/ Save velocity snapshot before any force, for total-force debug F=mΔv at frame end (covers vortex/repulsion/gravity/drag/cursor etc.)
+    if (g_debugForce) {
+        for (auto &p : g_particles) { p.debugForceX = p.vx; p.debugForceY = p.vy; }
+    }
+    if (g_enableCentripetal) {
+        // 打包每帧上下文，调用分解后的辅助函数（保持原有更新顺序与数值行为）/ Pack per-frame context, call decomposed helpers (preserve order & numeric behavior)
+        VortexFrameContext vctx;
+        vctx.dwTime = dwTime;
+        vctx.vX = vX; vctx.vY = vY;
+        vctx.velocity = velocity;
+        // 加速度 = 本帧速度 - 上一帧速度（用捕获值，修复此前恒为 0 的 Bug）
+        vctx.accel = velocity - prevFrameVelocity;
+        vctx.accelAbs = fabsf(vctx.accel);
+        vctx.cursorX = (float)(renderPos.x - vX) + (float)g_tailOffsetX;
+        vctx.cursorY = (float)(renderPos.y - vY) + (float)g_tailOffsetY;
+        // 统计当前活跃漩涡数量（在检测/创建之前，与原始行为一致）/ Count active vortices BEFORE detection/create (matches original)
+        int activeVortexCount = 0;
+        for (int i = 0; i < g_vortexMaxCount; i++) {
+            if (g_vortices[i].active) activeVortexCount++;
+        }
+        bool detected = false; float detCX = 0, detCY = 0, detRadius = 0, detAngVel = 0;
+        VortexDetectCurvedMotion(vctx, detected, detCX, detCY, detRadius, detAngVel);
+        VortexUpdateOrCreate(vctx, detected, detCX, detCY, detRadius, detAngVel, activeVortexCount);
+        VortexMusicInject(vctx, activeVortexCount);
+        VortexUpdateDynamics(vctx);
+        VortexApplyToParticles();
+    } else {
+        // 漩涡功能关闭：衰减残留的漩涡亮度和z深度，避免关闭后效果残留
+        for (auto &p : g_particles) {
+            p.vortexBrightness[0] *= 0.9f;
+            p.vortexBrightness[1] *= 0.9f;
+            p.vortexBrightness[2] *= 0.9f;
+            p.z += (0.0f - p.z) * 0.1f;
+        }
+    }
+
+    // ===== 粒子间排斥力 + 弹性碰撞（与质量相关）=====
+    if ((g_enableParticleInteraction || g_enableParticleCollision || g_enableParticleSpring) && !g_particles.empty()) {
+        int pcount = (int)g_particles.size();
+        // 已移除 pcount <= maxCalc 守卫：粒子数超限时不再跳过整个相互作用循环
+        float repelDist = (float)g_interParticleRepelDistance;
+            // 弹簧可能在更大距离生效，扩大双循环距离范围
+            float pairRange = g_enableParticleSpring ? fmaxf(repelDist, g_springMaxDist) : repelDist;
+            float pairRangeSq = pairRange * pairRange;
+            float springRest = g_springMaxDist * 0.5f;  // 弹簧自然长度
+            // 碰撞半径的循环不变量：sizeMulCol 与文字粒子的半径只依赖全局设置，一帧内恒定。
+            // 原本写在 i<j 内层，于是每对粒子都重算一次除法（500 粒子 ≈ 12.5 万对 = 12.5 万次除法/帧）。
+            // 提到循环外是逐位等价的：表达式与运算顺序都没变，只是不再重复求值。
+            // Collision-radius loop invariants: sizeMulCol and the text-particle radius depend only on
+            // global settings, constant for the whole frame. They used to sit inside the i<j loop, so
+            // every pair recomputed the division (~125k pairs = 125k divisions per frame at 500
+            // particles). Hoisting is bit-exact: same expression, same order, evaluated once.
+            float colSizeMul = g_enableParticleCollision ? (g_particleSizeMultiplier / 100.0f) : 0.0f;
+            float colTextRadius = g_enableParticleCollision
+                ? (g_textFontSize * 0.5f * colSizeMul * 0.5f)
+                  * sqrtf(1.0f + g_textAspectRatio * g_textAspectRatio)
+                : 0.0f;
+            const int MAX_SPRING_LINKS = 5;  // 每粒子最多弹簧连接数，防中心过压
+            float softEndDist = g_springMaxDist * 0.9f;  // 软化区起点
+            float softRange = g_springMaxDist - softEndDist;
+            if (g_enableParticleSpring) {
+                g_springLinkCount.assign(pcount, 0);
+            }
+            // ===== 超级性能模式：均匀网格，把 O(n²) 配对降到 O(n·k) =====
+            // 解除上限后粒子可达 1200，朴素双循环实测 1.67ms/帧（16.67ms 预算的 10%）。
+            // 格子边长取作用距离 pairRange，只需查自身格 + 8 邻格。
+            // 【不是逐位等价，也无法做到】—— 算法本身顺序依赖：碰撞的位置修正对每对粒子立即生效
+            // （Gauss-Seidel 式），换遍历顺序必然换结果（密集碰撞实测 ~1px/帧，见 _grid_test 第 5 节）。
+            // 不是漏对/重对 —— 被处理的对集合已验证严格一致。只在"要性能、接受微观差异"的此档启用。
+            // Uniform grid for super-performance mode. NOT bit-exact and cannot be: collision position
+            // correction applies immediately per pair (Gauss-Seidel), so traversal order changes the
+            // result (~1px/frame in dense collisions). The processed PAIR SET is verified identical.
+            const int kGridMinCount = 400;  // 粒子太少时建网格反而更贵
+            bool useGrid = g_superPerformanceMode && pcount >= kGridMinCount && pairRange > 1.0f;
+            static std::vector<int> s_cellOf, s_cellStart, s_sorted, s_fill;
+            int gw = 0, gh = 0;
+            if (useGrid) {
+                float minX = g_particles[0].x, maxX = minX, minY = g_particles[0].y, maxY = minY;
+                for (int i = 1; i < pcount; i++) {
+                    float x = g_particles[i].x, y = g_particles[i].y;
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                }
+                float invCell = 1.0f / pairRange;
+                gw = (int)((maxX - minX) * invCell) + 1;
+                gh = (int)((maxY - minY) * invCell) + 1;
+                // 退化保护：粒子极度分散时格子数会爆炸，此时退回朴素循环
+                if (gw > 0 && gh > 0 && (long long)gw * gh <= 65536LL) {
+                    int ncell = gw * gh;
+                    s_cellOf.resize((size_t)pcount);
+                    s_cellStart.assign((size_t)ncell + 1, 0);
+                    for (int i = 0; i < pcount; i++) {
+                        int cx = (int)((g_particles[i].x - minX) * invCell);
+                        int cy = (int)((g_particles[i].y - minY) * invCell);
+                        if (cx < 0) cx = 0;
+                        if (cx >= gw) cx = gw - 1;
+                        if (cy < 0) cy = 0;
+                        if (cy >= gh) cy = gh - 1;
+                        int c = cy * gw + cx;
+                        s_cellOf[i] = c;
+                        s_cellStart[c + 1]++;  // 先当计数用，随即做前缀和
+                    }
+                    for (int c = 0; c < ncell; c++) s_cellStart[c + 1] += s_cellStart[c];
+                    s_sorted.resize((size_t)pcount);
+                    s_fill.assign(s_cellStart.begin(), s_cellStart.end());  // 写入游标
+                    for (int i = 0; i < pcount; i++) s_sorted[(size_t)s_fill[(size_t)s_cellOf[i]]++] = i;
+                } else {
+                    useGrid = false;
+                }
+            }
+            // 配对处理体：网格路径与朴素路径共用同一个 body，避免两处逻辑走偏
+            auto processPair = [&](int i, int j) {
+                    float dx = g_particles[i].x - g_particles[j].x;
+                    float dy = g_particles[i].y - g_particles[j].y;
+                    float distSq = dx * dx + dy * dy;
+                    if (distSq < pairRangeSq) {
+                        float dist, nx, ny;
+                        if (distSq > 0.01f) {
+                            dist = sqrtf(distSq);
+                            nx = dx / dist; ny = dy / dist;
+                        } else {
+                            // 重合粒子：随机方向，避免除零
+                            float ra = Rand01() * 6.2831853f;
+                            nx = cosf(ra); ny = sinf(ra);
+                            dist = 0.1f;
+                        }
+                        // 同向运动衰减：速度方向接近一致时降低排斥强度和距离
+                        float alignReduce = 1.0f;
+                        if (g_particleRepelAlignment > 0) {
+                            float viLen2 = g_particles[i].vx * g_particles[i].vx + g_particles[i].vy * g_particles[i].vy;
+                            float vjLen2 = g_particles[j].vx * g_particles[j].vx + g_particles[j].vy * g_particles[j].vy;
+                            if (viLen2 > 0.01f && vjLen2 > 0.01f) {
+                                float viLen = sqrtf(viLen2), vjLen = sqrtf(vjLen2);
+                                float dot = (g_particles[i].vx * g_particles[j].vx + g_particles[i].vy * g_particles[j].vy) / (viLen * vjLen);
+                                if (dot > 0.0f) {
+                                    // dot=0 无衰减, dot=1 衰减 setting/100
+                                    alignReduce = 1.0f - dot * (g_particleRepelAlignment / 100.0f);
+                                    if (alignReduce < 0.0f) alignReduce = 0.0f;
+                                }
+                            }
+                        }
+                        float effRepelDist = repelDist * alignReduce;
+                        // 排斥力
+                        if (g_enableParticleInteraction && dist < effRepelDist) {
+                            float falloff = 1.0f - dist / effRepelDist;
+                            // 四次方根质量系数：质量5-50时仅1.5-2.7倍，避免低值顶上限、高值无区分
+                            float massFactor = g_enableParticleMass ? sqrtf(sqrtf(g_particles[i].mass * g_particles[j].mass)) : 1.0f;
+                            // 二次衰减替代 1/dist：避免近距离奇点爆炸，中距离力更均匀可见
+                            float force = falloff * falloff * g_interParticleRepelForce * massFactor * alignReduce;
+                            if (force > 20.0f) force = 20.0f;  // 防止近距离爆炸
+                            float invMassI = g_enableParticleMass ? (1.0f / g_particles[i].mass) : 1.0f;
+                            float invMassJ = g_enableParticleMass ? (1.0f / g_particles[j].mass) : 1.0f;
+                            g_particles[i].vx += nx * force * invMassI;
+                            g_particles[i].vy += ny * force * invMassI;
+                            g_particles[j].vx -= nx * force * invMassJ;
+                            g_particles[j].vy -= ny * force * invMassJ;
+                        }
+                        // 弹性碰撞：距离小于两粒子半径之和时
+                        if (g_enableParticleCollision) {
+                            // 碰撞半径 = 视觉半径（p.size 本身就是半径，需乘大小倍数）/ collision radius = visual radius
+                            // colSizeMul / colTextRadius 是外层循环不变量，见上面的说明
+                            float radiusI = (g_particles[i].shapeType == 10)
+                                ? colTextRadius
+                                : g_particles[i].size * colSizeMul;
+                            float radiusJ = (g_particles[j].shapeType == 10)
+                                ? colTextRadius
+                                : g_particles[j].size * colSizeMul;
+                            float minDist = radiusI + radiusJ;
+                            if (dist < minDist) {
+                                // 位置修正：按质量反比分配位移，重粒子移动少、轻粒子移动多
+                                float overlap = minDist - dist;
+                                float mi = g_enableParticleMass ? g_particles[i].mass : 1.0f;
+                                float mj = g_enableParticleMass ? g_particles[j].mass : 1.0f;
+                                float totalMass = mi + mj;
+                                float overlapI = overlap * (mj / totalMass);
+                                float overlapJ = overlap * (mi / totalMass);
+                                g_particles[i].x += nx * overlapI;
+                                g_particles[i].y += ny * overlapI;
+                                g_particles[j].x -= nx * overlapJ;
+                                g_particles[j].y -= ny * overlapJ;
+                                // 弹性碰撞（动量守恒+动能守恒）/ Elastic collision (momentum + kinetic energy conservation)
+                                // 相对速度在法向上的分量
+//
+                                // ====== 符号约定：改这一行之前务必先读完 ======
+                                // n = (Pi-Pj)/dist 指向 i，于是 d|Pi-Pj|/dt = (vi-vj)·n = vn。
+                                // vn < 0 → 间距在缩小 → 正在接近 → 应当施加冲量
+                                // vn > 0 → 间距在扩大 → 正在分离 → 绝不能再施加
+                                // 此处曾写成 vn>0，效果是"凡是想分开的粒子都被拽回来"：粒子一多、
+                                // 重叠一多就成片粘住再也分不开，即用户反馈的"碰撞量子纠缠"。
+                                // 数值验证见 _collide_test.cpp 第 1/3 节。
+                                // It used to read vn>0, which dragged every separating pair back together:
+                                // with enough overlapping particles they clump and can never separate -
+                                // the reported "quantum entanglement". See _collide_test.cpp sections 1 and 3.
+                                float dvx = g_particles[i].vx - g_particles[j].vx;
+                                float dvy = g_particles[i].vy - g_particles[j].vy;
+                                float vn = dvx * nx + dvy * ny;
+                                if (vn < 0.0f) {  // 正在接近才碰撞
+                                    float impulse = (2.0f * vn) / totalMass;
+                                    g_particles[i].vx -= impulse * mj * nx;
+                                    g_particles[i].vy -= impulse * mj * ny;
+                                    g_particles[j].vx += impulse * mi * nx;
+                                    g_particles[j].vy += impulse * mi * ny;
+                                }
+                            }
+                        }
+                        // 粘性耦合：邻近粒子间的速度拖拽（流体效应）/ Viscous coupling: velocity drag between nearby particles (fluid effect)
+                        if (g_enableBrownianMotion && dist < 30.0f) {
+                            float viscosity = 0.003f * (1.0f - dist / 30.0f);
+                            float dvx = (g_particles[i].vx - g_particles[j].vx) * viscosity;
+                            float dvy = (g_particles[i].vy - g_particles[j].vy) * viscosity;
+                            g_particles[i].vx -= dvx;
+                            g_particles[i].vy -= dvy;
+                            g_particles[j].vx += dvx;
+                            g_particles[j].vy += dvy;
+                        }
+                        // 布料弹簧力：胡克 + 沿连线阻尼 + 邻居上限 + 软化截止
+                        if (g_enableParticleSpring && dist < g_springMaxDist && dist > 0.5f
+                            && g_springLinkCount[i] < MAX_SPRING_LINKS && g_springLinkCount[j] < MAX_SPRING_LINKS) {
+                            float displacement = dist - springRest;
+                            // 软化截止：接近最大连接距离时力平滑归零，防硬截止弹射
+                            float fade = 1.0f;
+                            if (dist > softEndDist) fade = (g_springMaxDist - dist) / softRange;
+                            float springForce = g_springK * displacement * fade;
+                            // 沿连线的相对速度（i 相对 j 远离 j 的速度分量）/ relative velocity along axis (i receding from j)
+                            float dvx = g_particles[i].vx - g_particles[j].vx;
+                            float dvy = g_particles[i].vy - g_particles[j].vy;
+                            float vn = dvx * nx + dvy * ny;
+                            // 阻尼系数与刚度成比例，快速耗散沿连线振荡
+                            float damper = g_springK * 14.0f * fade;
+                            float fmag = springForce + damper * vn;
+                            g_springLinkCount[i]++;
+                            g_springLinkCount[j]++;
+                            // 限幅，防止极端情况力爆炸
+                            if (fmag > 1.5f) fmag = 1.5f;
+                            if (fmag < -1.5f) fmag = -1.5f;
+                            float imi = g_enableParticleMass ? (1.0f / g_particles[i].mass) : 1.0f;
+                            float imj = g_enableParticleMass ? (1.0f / g_particles[j].mass) : 1.0f;
+                            g_particles[i].vx -= nx * fmag * imi;
+                            g_particles[i].vy -= ny * fmag * imi;
+                            g_particles[j].vx += nx * fmag * imj;
+                            g_particles[j].vy += ny * fmag * imj;
+                        }
+                    }
+            };
+            if (useGrid) {
+                // 只枚举"格子相邻"的对；j > i 保证每对恰好处理一次
+                for (int i = 0; i < pcount; i++) {
+                    int c = s_cellOf[(size_t)i];
+                    int cx = c % gw, cy = c / gw;
+                    int y0 = (cy > 0) ? cy - 1 : 0, y1 = (cy + 1 < gh) ? cy + 1 : gh - 1;
+                    int x0 = (cx > 0) ? cx - 1 : 0, x1 = (cx + 1 < gw) ? cx + 1 : gw - 1;
+                    for (int gy = y0; gy <= y1; gy++) {
+                        int rowBase = gy * gw;
+                        for (int gx = x0; gx <= x1; gx++) {
+                            int nc = rowBase + gx;
+                            int s0 = s_cellStart[(size_t)nc], s1 = s_cellStart[(size_t)nc + 1];
+                            for (int k = s0; k < s1; k++) {
+                                int j = s_sorted[(size_t)k];
+                                if (j > i) processPair(i, j);
+                            }
+                        }
+                    }
+                }
+            } else {
+                for (int i = 0; i < pcount; i++)
+                    for (int j = i + 1; j < pcount; j++) processPair(i, j);
+            }
+    }
+
+    // ===== 粒子万有引力系统（牛顿万有引力定律 + 牛顿第二定律 + Plummer软化）===== / Particle gravity system (Newton's law of gravitation + 2nd law + Plummer softening)
+    if (g_enableParticleGravity && g_particles.size() >= 2) {
+        int pcount = (int)g_particles.size();
+        int bodyCount = g_gravitySystem == 0 ? 2 : (int)fminf((float)g_gravityBodyCount, (float)pcount);
+        if (bodyCount > pcount) bodyCount = pcount;
+        if (bodyCount < 1) bodyCount = 1;
+
+        // 有界 top-K 选择（按质量降序），O(n·K)，无堆分配
+        static const int MAX_GRAVITY_SRC = 10;  // K ≤ 10（设置已钳制）/ K <= 10 (settings clamp)
+        if (bodyCount > MAX_GRAVITY_SRC) bodyCount = MAX_GRAVITY_SRC;
+        SoGravitySource srcBuf[MAX_GRAVITY_SRC];
+        struct MassIdx { float mass; int idx; };
+        MassIdx topK[MAX_GRAVITY_SRC];
+        int topKCount = 0;
+        for (int i = 0; i < pcount; i++) {
+            float m = g_particles[i].mass;
+            if (topKCount < bodyCount) {
+                int pos = topKCount++;
+                topK[pos].mass = m; topK[pos].idx = i;
+                while (pos > 0 && topK[pos].mass > topK[pos - 1].mass) {
+                    MassIdx tmp = topK[pos]; topK[pos] = topK[pos - 1]; topK[pos - 1] = tmp;
+                    pos--;
+                }
+            } else if (m > topK[bodyCount - 1].mass) {
+                int pos = bodyCount - 1;
+                topK[pos].mass = m; topK[pos].idx = i;
+                while (pos > 0 && topK[pos].mass > topK[pos - 1].mass) {
+                    MassIdx tmp = topK[pos]; topK[pos] = topK[pos - 1]; topK[pos - 1] = tmp;
+                    pos--;
+                }
+            }
+        }
+        g_gravityBodies.clear();
+        int srcCount = 0;
+        for (int k = 0; k < bodyCount; k++) {
+            int idx = topK[k].idx;
+            g_gravityBodies.push_back(idx);
+            srcBuf[srcCount].x = g_particles[idx].x;
+            srcBuf[srcCount].y = g_particles[idx].y;
+            srcBuf[srcCount].mass = g_particles[idx].mass;
+            srcCount++;
+        }
+
+        float G = g_gravityStrength * 50.0f;
+        if (g_enableMusicPhysics && g_musicGravityLink > 0) {
+            float volumeBoost = 1.0f + fminf(g_music.overallLevel * 20.0f, 2.0f) * g_musicGravityLink;
+            G *= volumeBoost;
+        }
+        // 多频段联动：低频增强引力
+        if (g_enableMultiBandLink) {
+            G *= (1.0f + g_bassGravityBoost * 1.5f);
+        }
+        // Plummer软化半径：避免近距离引力奇点
+        float softening = 8.0f;
+        float softeningSq = softening * softening;
+        float maxDist = 400.0f;  // 引力截断距离
+        float maxDistSq = maxDist * maxDist;
+
+        // 引力源互作用（N体）：利用 F_ij = -F_ji 对称性只算 i<j，复用共享计算
+        float srcAx[MAX_GRAVITY_SRC] = {0}, srcAy[MAX_GRAVITY_SRC] = {0};
+        for (int bi = 0; bi < srcCount; bi++) {
+            for (int bj = bi + 1; bj < srcCount; bj++) {
+                // 力：bi 受 bj 吸引
+                GravityAccumulate(srcBuf[bj], srcBuf[bi].x, srcBuf[bi].y, G, softeningSq, maxDistSq, srcAx[bi], srcAy[bi]);
+                // 反向力：bj 受 bi 吸引（牛顿第三定律，对称）
+                GravityAccumulate(srcBuf[bi], srcBuf[bj].x, srcBuf[bj].y, G, softeningSq, maxDistSq, srcAx[bj], srcAy[bj]);
+            }
+        }
+        for (int bi = 0; bi < srcCount; bi++) {
+            g_particles[g_gravityBodies[bi]].vx += srcAx[bi] * 0.5f;  // 引力源运动减半（避免太剧烈）/ Gravity source movement halved (avoid too violent)
+            g_particles[g_gravityBodies[bi]].vy += srcAy[bi] * 0.5f;
+        }
+
+        // 用bool数组标记引力源，O(1)查找替代线性查找（复用缓冲避免每帧分配）/ Mark gravity sources with bool array, O(1) lookup replaces linear search (reuse buffer)
+        g_gravityBodyFlag.assign(pcount, false);
+        for (int bi = 0; bi < srcCount; bi++) {
+            g_gravityBodyFlag[g_gravityBodies[bi]] = true;
+        }
+        // 计算所有粒子受到引力源的引力（读取连续缓存 srcBuf）/ Compute gravity from sources on all particles (read contiguous cached srcBuf)
+        for (int i = 0; i < pcount; i++) {
+            if (g_gravityBodyFlag[i]) continue;  // 引力源已计算
+            float ax = 0, ay = 0;
+            for (int bi = 0; bi < srcCount; bi++) {
+                GravityAccumulate(srcBuf[bi], g_particles[i].x, g_particles[i].y, G, softeningSq, maxDistSq, ax, ay);
+            }
+            g_particles[i].vx += ax;
+            g_particles[i].vy += ay;
+        }
+    }
+
+    // ===== 粒子物理：空气阻力 + 速度上限 + 光标排斥/吸附 + 音乐脉冲 =====
+    // 风场随时间演化：基准水平方向 + 阵风 + 方向摆动
+    if (g_enableEnvWind) {
+        float wt = dwTime * 0.001f;
+        float gust = g_windStrength * (0.5f + 0.5f * sinf(wt * 0.9f));           // 阵风包络
+        float sway = g_windTurbulence * 0.7f * sinf(wt * 0.4f + 1.3f);          // 风向摆动（弧度）
+        float jitter = g_windTurbulence * 0.25f * sinf(wt * 2.1f);              // 高频小抖动
+        g_windX = cosf(sway) * gust + jitter;
+        g_windY = sinf(sway) * gust * 0.25f + g_windTurbulence * 0.15f * sinf(wt * 1.3f + 4.0f);
+    } else {
+        g_windX = 0; g_windY = 0;
+    }
+    float attractTargetX = (float)(renderPos.x - vX + g_tailOffsetX);
+    float attractTargetY = (float)(renderPos.y - vY + g_tailOffsetY);
+    // 拖尾吸附常量（供下方"拖尾吸附"段使用）/ trail-attraction constants (used by the block below)
+    const float kAttractRadius = 500.0f;                        // 作用半径（像素）/ radius (px)
+    const float kAttractRadiusSq = kAttractRadius * kAttractRadius;
+    const float kInvAttractRadius = 1.0f / kAttractRadius;
+    const float kAttractDeadZoneSq = 4.0f;  // 2px 死区：贴上路径就停手，免抖动
+    const float kAttractVelGain = 0.06f;  // 位移→速度换算，≈阻力系数量级
+    const int kTrailSampleStep = 3;  // 拖尾最近点搜索的稀疏步长
+    const float MAX_SPEED = 25.0f;  // 速度上限（像素/帧）/ Speed cap (pixels/frame)
+    const float MAX_SPEED_SQ = MAX_SPEED * MAX_SPEED;
+    // v3.4.2.2 热键：粒子隐藏时整个逐粒子物理更新（阻力/风/引力/排斥/吸附等速度更新）直接跳过
+    if (particlesOn)
+    for (auto &p : g_particles) {
+        // 质量影响惯性：质量大的空气阻力小，速度保持更久
+        float invMass = g_enableParticleMass ? (1.0f / p.mass) : 1.0f;
+        // 预计算到光标的距离（音乐脉冲和光标排斥共用）/ Precompute distance to cursor (shared by music pulse and cursor repulsion)
+        float toCursorDx = p.x - attractTargetX;
+        float toCursorDy = p.y - attractTargetY;
+        float toCursorDistSq = toCursorDx * toCursorDx + toCursorDy * toCursorDy;
+        // 空气阻力模型：F_drag = -k * v（低速线性阻力）+ 高速二次阻力
+        float speedSq = p.vx * p.vx + p.vy * p.vy;
+        float speed = sqrtf(speedSq);
+        float dragCoeff = g_enableParticleMass ? (0.04f / fmaxf(p.mass, 0.2f)) : 0.05f;
+        float linearDrag = 1.0f - dragCoeff;
+        float quadraticDrag = speed > 10.0f ? (1.0f - dragCoeff * 0.5f * (speed - 10.0f) / 15.0f) : 1.0f;
+        float totalDrag = fmaxf(fminf(linearDrag * quadraticDrag, 0.98f), 0.80f);
+        p.vx *= totalDrag;
+        p.vy *= totalDrag;
+        // 环境重力：等效原理，加速度与质量无关（不乘invMass）/ Environmental gravity: equivalence principle, accel mass-independent (no invMass)
+        if (g_enableEnvGravity) {
+            p.vx += cosf(g_envGravityAngle) * g_envGravityStrength;
+            p.vy += sinf(g_envGravityAngle) * g_envGravityStrength;
+        }
+        // 环境风：表面力，轻粒子被吹得更远（乘invMass，像羽毛vs石头）/ Environmental wind: surface force, light particles blow further (x invMass, feather vs stone)
+        if (g_enableEnvWind) {
+            p.vx += g_windX * invMass;
+            p.vy += g_windY * invMass;
+        }
+        // 音乐节拍脉冲：每拍给粒子一个径向速度爆发（从光标向外）/ Music beat pulse: radial velocity burst per beat (outward from cursor)
+        if (g_enableMusicPhysics && g_musicBeatPulseAmount > 0.01f && toCursorDistSq > 1.0f) {
+            float pdist = sqrtf(toCursorDistSq);
+            float pulseForce = g_musicBeatPulseAmount * 8.0f * invMass;
+            p.vx += (toCursorDx / pdist) * pulseForce;
+            p.vy += (toCursorDy / pdist) * pulseForce;
+        }
+        // 光标周围排斥力：加速度=F/m，质量大的加速度小
+        if (g_enableParticleRepel && g_particleRepelForce > 0 && toCursorDistSq < (float)g_particleRepelRadius * g_particleRepelRadius && toCursorDistSq > 0.25f) {
+            float rdist = sqrtf(toCursorDistSq);
+            float nx = toCursorDx / rdist, ny = toCursorDy / rdist;
+            float falloff = 1.0f - rdist / (float)g_particleRepelRadius;
+            float force = falloff * g_particleRepelForce;
+            float accel = force * invMass;
+            p.vx += nx * accel;
+            p.vy += ny * accel;
+            float perturb = force * 0.65f * invMass;
+            float angle = Rand01() * 6.28318f;
+            p.vx += cosf(angle) * perturb;
+            p.vy += sinf(angle) * perturb;
+        }
+        // 洛伦兹力：带电粒子在磁场中做圆周运动 F = q(v × B)
+        // 2D中：F = q * B * (-vy, vx)。
+        // 注意屏幕坐标系 y 轴【向下】，所以正电荷在视觉上是【顺时针】旋转、负电荷逆时针 ——
+        // 与数学坐标系（y 向上）下的说法正好相反。别按数学直觉去"修正"这个符号。
+        // 这里唯一必须成立的物理约束是 v·F = 0：力恒垂直于速度，只转向不加速（不做功）。
+        // In 2D: F = q*B*(-vy, vx). Screen space has y pointing DOWN, so a positive charge visually
+        // rotates CLOCKWISE and a negative one counter-clockwise - the opposite of the y-up reading.
+        // Do not "fix" this sign from math intuition. The one invariant that must hold is v.F = 0:
+        // the force stays perpendicular to velocity, turning it without doing work.
+        if (g_enableLorentzForce) {
+            float B = g_lorentzStrength * 0.5f;
+            // 多频段联动：中频增强磁场
+            if (g_enableMultiBandLink) B *= (1.0f + g_midRepelBoost * 0.5f);
+            float lx = -p.vy * B * p.charge;
+            float ly = p.vx * B * p.charge;
+            p.vx += lx * invMass;
+            p.vy += ly * invMass;
+        }
+        // 布朗运动：空间连贯湍流场（Perlin-like），比纯随机更自然
+        if (g_enableBrownianMotion) {
+            float noise = g_brownianStrength * 0.5f;
+            if (g_enableMultiBandLink) noise *= (1.0f + g_trebleNoiseBoost * 2.0f);
+            float nx = CoherentNoise(p.x * 0.02f, p.y * 0.02f, dwTime * 0.001f, 1);
+            float ny = CoherentNoise(p.x * 0.02f + 100.0f, p.y * 0.02f + 100.0f, dwTime * 0.001f, 2);
+            p.vx += nx * noise * invMass;
+            p.vy += ny * noise * invMass;
+        }
+        // 库仑力：同号电荷相斥，异号电荷相吸（粒子间）/ Coulomb force: like charges repel, opposite attract (between particles)
+        // P1-7 核查结论：本循环【不可】与上方的「排斥/碰撞/粘性/弹簧」i<j 配对循环合并。
+        //   1) 粒子集合/使能条件不同：配对循环由 Interaction|Collision|Spring 三个开关控制，且与 particlesOn 无关；
+        //      本循环由 particlesOn && g_enableLorentzForce && |p.charge|>0.01 控制；开关组合不同则集合不同。
+        //   2) 中间存在顺序依赖：本循环位于逐个粒子更新循环内部，读到的是「部分已更新」状态——下标更小的粒子已经完成
+        //      积分（末尾 p.x += p.vx）并已施加阻力/重力/风/音乐脉冲/光标排斥/洛伦兹/布朗；而配对循环在所有逐粒子
+        //      更新之前运行，且会做 MAX_SPRING_LINKS 限流。合并后各力的施加时机、所受阻力与限幅都不同。
+        //   => 合并会改变物理行为，故保留现状，只做「位等价」的低成本优化。
+        // P1-7 verdict: this loop MUST NOT be merged with the repulsion/collision/viscous/spring i<j pair loop above.
+        //   1) Different enable conditions -> different particle sets in some toggle combinations.
+        //   2) Order dependence: this loop sits inside the per-particle update loop and reads partially-updated state
+        //      (lower-index particles are already integrated and already got drag/gravity/wind/pulse/repel/Lorentz/Brownian),
+        //      while the pair loop runs before any of that and applies MAX_SPRING_LINKS throttling.
+        //   => Merging would change physics, so keep as-is and apply only bit-exact cheap optimizations.
+        if (g_enableLorentzForce && fabsf(p.charge) > 0.01f) {
+            // 循环不变量提到标量局部：循环体内不修改 p.x/p.y/p.charge，故提前取值结果逐位等价；
+            // 同时解除 q 与 p 同属 g_particles 造成的可能别名，编译器不必每轮重载成员。
+            const float cpx = p.x, cpy = p.y, cpq = p.charge;
+            for (auto &q : g_particles) {
+                if (&q == &p) continue;
+                float dx = q.x - cpx, dy = q.y - cpy;
+                float dSq = dx*dx + dy*dy;
+                if (dSq < 4.0f || dSq > 40000.0f) continue;
+                float d = sqrtf(dSq);
+                // 库仑力 F = k·q_p·q_q/r²，作用在连线上。dx,dy 是【从 p 指向 q】的向量，于是：
+                //   同号 (q_p·q_q > 0) → 相斥 → p 应沿【远离 q】的方向 = -(dx,dy)
+                //   异号 (q_p·q_q < 0) → 相吸 → p 应沿【朝向 q】的方向 = +(dx,dy)
+                // 两者可以合成 -(q_p·q_q)·(dx,dy)/...，也就是这里必须写 -= 而不是 +=。
+                // 曾写成 +=，效果是同号电荷互相吸引、异号电荷互相排斥 —— 与物理、也与本段注释完全相反。
+                // Coulomb force acts along the line. dx,dy point from p to q, hence like charges must
+                // push p AWAY from q = -(dx,dy) and opposite charges pull it in = +(dx,dy); both fold
+                // into -(q_p*q_q)*(dx,dy), i.e. this must be -=. It used to be +=, which made like
+                // charges attract and opposite charges repel - the exact inverse of the comment here.
+//
+                // 顺带把 3 次除法并成 1 次：原本 dx/d、dy/d、.../dSq 各一次。
+                float invD = 1.0f / d;
+                float kq = 800.0f * cpq * q.charge * invD * invD * invD * invMass;
+                p.vx -= dx * kq;
+                p.vy -= dy * kq;
+            }
+        }
+        // 空气阻力受粒子大小影响：大粒子迎风面积大，阻力更大
+        if (g_enableParticleMass && p.size > 2.0f) {
+            float sizeDrag = 1.0f - fminf(p.size * 0.002f, 0.02f);
+            p.vx *= sizeDrag;
+            p.vy *= sizeDrag;
+        }
+        // ===== 拖尾吸附 / Trail attraction =====
+        // 目标不是"光标这一个点"，而是【拖尾路径上离粒子最近的位置】：粒子被拖尾带走、
+        // 沿拖尾分布，而不是径向汇聚到光标上 —— 这正是"和拖尾一起作用"的意思。
+//
+        // 必须施加速度、不能直接改位置。直接位移会让位置与速度脱节：这一帧被拉过去，
+        // 下一帧速度又把它带走，来回拉锯 —— 表现就是用户反馈的"吸起来一断一断的"。
+        if (g_particleAttraction > 0.0f) {
+            // 第一步：粒子到【拖尾路径】的最近距离 —— 决定它是否在作用范围内。
+            //        用"到拖尾"而不是"到光标"判定，才能覆盖"拖尾沿线"的粒子，
+            //        而不只是光标周围那一小撮。
+            float nearestD2 = toCursorDistSq;      // 退化为"到光标"（拖尾为空时）
+            int nearestIdx = -1;
+            if (smoothed.size() >= 2) {
+                for (size_t si = 0; si < smoothed.size(); si += kTrailSampleStep) {
+                    float sdx = smoothed[si].x - p.x, sdy = smoothed[si].y - p.y;
+                    float sd2 = sdx * sdx + sdy * sdy;
+                    if (sd2 < nearestD2) { nearestD2 = sd2; nearestIdx = (int)si; }
+                }
+            }
+            if (nearestD2 < kAttractRadiusSq) {
+                // 第二步：目标是【沿拖尾朝光标方向前瞻】的那个点，而不是"最近点"本身。
+                //        粒子本来就生成在拖尾上（GetPointOnPath），最近点距离≈0，
+                //        若以最近点为目标则力恒为 0 —— 这正是"完全吸不动"的原因。
+                //        前瞻让粒子顺着拖尾被输送到光标：既吸向光标，又与拖尾同向。
+                // Step 2: the target is a point LOOKING AHEAD ALONG THE TRAIL TOWARD THE CURSOR, not
+                //         the nearest point itself. Particles spawn on the trail, so the nearest point
+                //         is ~0 away and the force would be zero - that was "no attraction at all".
+                //         Looking ahead carries them along the trail to the cursor.
+                //        smoothed[0] 就是光标端，所以朝光标 = 索引减小方向。
+                float tgtX = attractTargetX, tgtY = attractTargetY;
+                if (nearestIdx >= 0) {
+                    int look = (int)(smoothed.size() / 5);
+                    if (look < 4) look = 4;
+                    int tgtIdx = nearestIdx - look;
+                    if (tgtIdx < 0) tgtIdx = 0;                 // 索引 0 即光标
+                    tgtX = smoothed[(size_t)tgtIdx].x;
+                    tgtY = smoothed[(size_t)tgtIdx].y;
+                }
+                float ddx = tgtX - p.x, ddy = tgtY - p.y;
+                float d2 = ddx * ddx + ddy * ddy;
+                if (d2 > kAttractDeadZoneSq) {
+                    float d = sqrtf(d2);
+                    // 衰减按"到拖尾的距离"算：离拖尾越远越弱，符合"拖尾一定范围内"的语义
+                    float falloff = 1.0f - sqrtf(nearestD2) * kInvAttractRadius;
+                    // 原实现是每帧位移 attraction*falloff*dist；改成施加速度后会被空气阻力衰减，
+                    // 稳态速度 ≈ accel/dragCoeff，故乘一个阻力量级的增益以保持观感相当。
+                    // The old code offset the position by attraction*falloff*dist each frame. As a velocity
+                    // it is damped by drag instead, so the steady-state speed is accel/dragCoeff; scale by
+                    // a drag-magnitude gain to keep the feel comparable.
+                    float accel = g_particleAttraction * falloff * d * kAttractVelGain;
+                    p.vx += (ddx / d) * accel;
+                    p.vy += (ddy / d) * accel;
+                }
+            }
+        }
+        // 速度上限：避免粒子飞太快（必须在所有力施加完毕后重新计算，不能用阻力前的旧速度）/ Speed cap: recompute after ALL forces applied, not pre-drag old speed
+        float finalSpeedSq = p.vx * p.vx + p.vy * p.vy;
+        if (finalSpeedSq > MAX_SPEED_SQ) {
+            float finalSpeed = sqrtf(finalSpeedSq);
+            float scale = MAX_SPEED / finalSpeed;
+            p.vx *= scale;
+            p.vy *= scale;
+        }
+        p.x += p.vx;
+        p.y += p.vy;
+        // 调试：记录本帧总受力 F = m * Δv（快照在所有力施加前保存，涵盖全部力）/ Debug: total force F=m*Δv (snapshot taken before all forces, covers everything)
+        if (g_debugForce) {
+            float snapVx = p.debugForceX, snapVy = p.debugForceY;
+            p.debugForceX = p.mass * (p.vx - snapVx);
+            p.debugForceY = p.mass * (p.vy - snapVy);
+        }
+        if (g_enableParticleSpin) {
+            p.rotation += p.spinSpeed;
+            p.spinSpeed *= 0.995f;  // 旋转空气阻尼
+        }
+        // 文字分段轮播：逐粒子模式按自身存活时间，全局模式按统一时钟
+        if (p.shapeType == 10 && p.chunkCount > 1) {
+            DWORD chunkBase = (g_textChunkMode == 1) ? g_globalChunkClock : p.startTime;
+            DWORD chunkElapsed = dwTime - chunkBase;
+            int chunkSlot = (int)(chunkElapsed / (DWORD)g_textChunkDelay) % p.chunkCount;
+            if (chunkSlot < 0) chunkSlot = 0;
+            p.charIndex = (float)(p.chunkStart + chunkSlot);
+        }
+        // （光标吸附已上移到速度积分之前，见下方"拖尾吸附"段
+        //  position integration, see the trail-attraction block below）
+        // 质量影响亮度：大质量粒子更亮（通过vortexBrightness叠加）/ Mass affects brightness: heavier particles brighter (via vortexBrightness)
+        if (g_enableParticleMass && p.mass > 1.2f) {
+            float massBrightness = (p.mass - 1.0f) * 0.08f;
+            p.vortexBrightness[0] = fmaxf(p.vortexBrightness[0], massBrightness);
+            p.vortexBrightness[1] = fmaxf(p.vortexBrightness[1], massBrightness);
+            p.vortexBrightness[2] = fmaxf(p.vortexBrightness[2], massBrightness);
+        }
+    }
+    if (!g_particles.empty())
+        g_particles.erase(std::remove_if(g_particles.begin(), g_particles.end(),
+                                         [&](const Particle &p) { return dwTime - p.startTime > (DWORD)p.lifetime; }),
+                          g_particles.end());
+    // 形状拖尾物理更新（速度衰减 + 旋转 + 微重力）/ Shape trail physics update (velocity decay + rotation + micro-gravity)
+    for (auto &s : g_trailShapes) {
+        s.x += s.vx;
+        s.y += s.vy;
+        // 飞行器有推进：几乎不减速、几乎不受重力，否则导弹会像纸片一样飘落
+        bool isCraft = (s.shapeType == 11 || s.shapeType == 12 || s.shapeType == 13);
+        float drag = isCraft ? 0.995f : 0.96f;
+        s.vx *= drag;
+        s.vy *= drag;
+        s.vy += isCraft ? 0.004f : 0.02f;  // 微重力，形状缓慢下落
+        s.rotation += s.rotSpeed;  // 旋转
+        s.rotSpeed *= 0.98f;  // 旋转阻尼
+    }
+    // ===== 飞行器静止引爆 v3.4.5.1 =====
+    // 火箭/导弹/光纤导弹在光标静止一段时间后引爆，只作用于这三类，爱心之类不受影响。
+    if (g_missileIdleExplode && !g_trailShapes.empty()) {
+        static DWORD craftIdleStart = 0;
+        static bool craftWasIdle = false;
+        bool idle = (velocity < g_stopVelocity);  // 静止判定沿用拖尾的停止阈值
+        if (idle) {
+            if (!craftWasIdle) { craftIdleStart = dwTime; craftWasIdle = true; }
+        } else {
+            craftWasIdle = false;
+            craftIdleStart = 0;
+        }
+        if (idle && craftIdleStart != 0 && (DWORD)(dwTime - craftIdleStart) >= (DWORD)g_missileIdleDelay) {
+            size_t w = 0;
+            for (size_t i = 0; i < g_trailShapes.size(); i++) {
+                TrailShape s = g_trailShapes[i];
+                if (s.shapeType != 11 && s.shapeType != 12 && s.shapeType != 13) {
+                    g_trailShapes[w++] = s;  // 非飞行器原样保留
+                    continue;
+                }
+                // 释放粒子
+                if (g_missileExplodeFx != 1 && g_missileExplodeParticles > 0 && particlesOn) {
+                    SpawnParticles(s.x, s.y, g_missileExplodeParticles, 2.0f, 6.0f, 2.0f, 5.0f,
+                                   300, 650, s.color, dwTime);
+                }
+                // 冲击波：复用点击波纹，位置要换算回虚拟屏幕坐标系
+                if (g_missileExplodeFx != 0) {
+                    POINT pt = { (long)(s.x + vX), (long)(s.y + vY) };
+                    g_ripples.push_back({pt, dwTime});
+                }
+            }
+            g_trailShapes.resize(w);  // 被引爆的飞行器从列表移除
+            craftIdleStart = 0;
+            craftWasIdle = false;
+        }
+    }
+    // 形状拖尾过期清理
+    if (!g_trailShapes.empty())
+        g_trailShapes.erase(std::remove_if(g_trailShapes.begin(), g_trailShapes.end(),
+                                            [&](const TrailShape &s) { return dwTime - s.startTime > (DWORD)s.lifetime; }),
+                             g_trailShapes.end());
+
+    bool tailVisible = trailOn && (trailActive || g_history.size() >= 2) && g_fadeAlpha > 0.02f;
+    bool isDrawing = tailVisible || !g_ripples.empty() || !g_particles.empty() || !g_trailShapes.empty();
+
+    // v3.4.2.2 热键总开关：关闭时抑制全部效果（等同「无内容可画」），切换瞬间清理一次状态并隐藏窗口
+    static bool s_lastEffectsVisible = true;
+    if (!effectsOn) {
+        if (s_lastEffectsVisible) {
+            // 仅在状态切换时清理一次，避免每帧开销
+            g_history.clear();
+            g_particles.clear();
+            g_ripples.clear();
+            g_trailShapes.clear();
+            g_trailHistory.clear();
+            g_fadeAlpha = 1.0f;
+            fadeoutFrame = 0;
+            trailActive = false;
+            if (isWindowVisible) {
+                PostMessageW(g_overlayHwnd, WM_APP_HIDE_OVERLAY, 0, 0);
+                isWindowVisible = false;
+            }
+            s_lastEffectsVisible = false;
+        }
+        isDrawing = false;  // 强制「无内容」状态
+    } else {
+        s_lastEffectsVisible = true;
+    }
+
+    if (isDrawing) {
+        hideDelayCounter = 0;
+        if (!isWindowVisible) {
+            // 通过 PostMessage 在 UI 线程显示窗口（不激活），点击穿透由 WM_NCHITTEST 返回 HTTRANSPARENT 实现
+            PostMessageW(g_overlayHwnd, WM_APP_SHOW_OVERLAY, 0, 0);
+            isWindowVisible = true;
+        }
+    } else if (!surfaceDirty) {
+        hideDelayCounter++;
+        if (hideDelayCounter >= 3 && isWindowVisible) {
+            PostMessageW(g_overlayHwnd, WM_APP_HIDE_OVERLAY, 0, 0);
+            isWindowVisible = false;
+        }
+    } else {
+        hideDelayCounter = 0;
+    }
+    if (!isDrawing && !surfaceDirty)
+        return;
+
+    if (!g_pSwapChain || !g_pD2DTargetBitmap || g_cachedVW != vW || g_cachedVH != vH
+        || g_createdMsaaSamples != g_msaaSamples || g_createdSsaaScale != g_ssaaScale) {
+        RecreateSwapChain(vW, vH);
+    }
+    if (!g_pD2DDC || !g_pD2DTargetBitmap)
+        return;
+
+    // v3：原生 D3D11 渲染路径（锥形拖尾 + 粒子）/ v3: native D3D11 render path (conical trail + particles)
+    bool useNative = (g_pNativeVS != nullptr);  // 文字形状(10)也走GPU字符图集
+    if (useNative) {
+        bool nativeOK = NativeRenderFrame(vW, vH, smoothed, tailVisible, cols, widthMul, g_fadeAlpha, dwTime, vX, vY);
+        if (nativeOK) {
+            // 原生渲染成功：所有效果（拖尾、粒子、形状、点击、运动模糊）均用 D3D11 原生渲染
+            {
+                ID3D11Texture2D *pBackBuffer = nullptr;
+                ID3D11RenderTargetView *pSwapRTV = nullptr;
+                HRESULT hrBuf = g_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&pBackBuffer);
+
+                if (SUCCEEDED(hrBuf) && g_msaaSamples > 1 && g_pMSAATexture && g_pSSAAResolveTexture) {
+                    // MSAA resolve 到非 MSAA 纹理
+                    g_pD3DContext->ResolveSubresource(g_pSSAAResolveTexture, 0, g_pMSAATexture, 0, g_swapChainFormat);
+                }
+
+                // v3.4.2.2：判断后处理链是否需要运行。需要时降采样先写入 sceneRT，链走完后再写后台缓冲；
+                // 全部特效关闭时保持原行为（降采样直接写后台缓冲，零额外开销）。
+                // v3.4.2.2: decide whether the post chain runs. When it does, the downsample first writes into
+                // sceneRT and the chain finally writes the back buffer; with everything off we keep the original
+                // behaviour (downsample straight into the back buffer, zero added cost).
+                bool postWanted = (NeedPostChain() || NeedHDREncode());
+                bool postActive = false;
+                if (postWanted) {
+                    postActive = (EnsurePostTargets(vW, vH) && g_pSceneRTV != nullptr);
+                } else {
+                    EnsurePostTargets(vW, vH);  // 释放不再需要的后处理目标
+                }
+
+                if ((g_msaaSamples > 1 && g_pSSAAResolveSRV) || (g_ssaaScale > 1 && g_pSSAASRV)) {
+                    // SSAA/MSAA 降采样 blit（postActive 时写入 sceneRT，否则沿用直接写后台缓冲）
+                    g_pD3DDevice->CreateRenderTargetView(pBackBuffer, nullptr, &pSwapRTV);
+                    if (!pSwapRTV) { if (pBackBuffer) pBackBuffer->Release(); pBackBuffer = nullptr; goto present_skip_blit; }
+                    ID3D11ShaderResourceView *pBlitSRV = (g_msaaSamples > 1) ? g_pSSAAResolveSRV : g_pSSAASRV;
+                    ID3D11RenderTargetView *pBlitDst = postActive ? g_pSceneRTV : pSwapRTV;
+
+                    // 保存当前状态
+                    ID3D11RenderTargetView *pOldRTV = nullptr;
+                    ID3D11ShaderResourceView *pOldSRV = nullptr;
+                    ID3D11VertexShader *pOldVS = nullptr;
+                    ID3D11PixelShader *pOldPS = nullptr;
+                    ID3D11Buffer *pOldVB = nullptr;
+                    UINT oldStride = 0, oldOffset = 0;
+                    D3D11_VIEWPORT oldVP; UINT numVP = 1;
+                    g_pD3DContext->OMGetRenderTargets(1, &pOldRTV, nullptr);
+                    g_pD3DContext->PSGetShaderResources(0, 1, &pOldSRV);
+                    g_pD3DContext->VSGetShader(&pOldVS, nullptr, nullptr);
+                    g_pD3DContext->PSGetShader(&pOldPS, nullptr, nullptr);
+                    g_pD3DContext->IAGetVertexBuffers(0, 1, &pOldVB, &oldStride, &oldOffset);
+                    g_pD3DContext->RSGetViewports(&numVP, &oldVP);
+
+                    // 清除目标为透明黑，避免旧帧残留
+                    float clearBlack[4] = {0, 0, 0, 0};
+                    g_pD3DContext->ClearRenderTargetView(pBlitDst, clearBlack);
+
+                    // 保存混合状态
+                    ID3D11BlendState *pOldBlend = nullptr;
+                    FLOAT oldBlendFactor[4] = {1,1,1,1};
+                    UINT oldSampleMask = 0;
+                    g_pD3DContext->OMGetBlendState(&pOldBlend, oldBlendFactor, &oldSampleMask);
+
+                    // 设置 blit 状态（不透明混合，完全覆盖目标）/ Set blit state (opaque blend, fully overwrite the target)
+                    D3D11_VIEWPORT blitVP = {0, 0, (float)g_cachedVW, (float)g_cachedVH, 0, 1};
+                    g_pD3DContext->RSSetViewports(1, &blitVP);
+                    g_pD3DContext->OMSetRenderTargets(1, &pBlitDst, nullptr);
+                    g_pD3DContext->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);  // 不透明覆盖
+                    g_pD3DContext->IASetInputLayout(g_pBlitLayout);
+                    g_pD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+                    UINT stride = 16, offset = 0;
+                    g_pD3DContext->IASetVertexBuffers(0, 1, &g_pBlitVB, &stride, &offset);
+                    g_pD3DContext->VSSetShader(g_pBlitVS, nullptr, 0);
+                    g_pD3DContext->PSSetShader(g_pBlitPS, nullptr, 0);
+                    g_pD3DContext->PSSetShaderResources(0, 1, &pBlitSRV);
+                    g_pD3DContext->PSSetSamplers(0, 1, &g_pBlitSampler);
+                    // v3.4.2.1：写入降采样参数（texelSize
+                    if (g_pBlitCB) {
+                        D3D11_MAPPED_SUBRESOURCE bm;
+                        if (SUCCEEDED(g_pD3DContext->Map(g_pBlitCB, 0, D3D11_MAP_WRITE_DISCARD, 0, &bm))) {
+                            float *bd = (float *)bm.pData;
+                            float srcW = (float)((g_renderW > 0) ? g_renderW : g_cachedVW);
+                            float srcH = (float)((g_renderH > 0) ? g_renderH : g_cachedVH);
+                            if (srcW < 1.0f) srcW = 1.0f;
+                            if (srcH < 1.0f) srcH = 1.0f;
+                            float scl = (g_ssaaScale > 1) ? (float)g_ssaaScale : 1.0f;
+                            bd[0] = 1.0f / srcW;                                              // texelSize.x
+                            bd[1] = 1.0f / srcH;                                              // texelSize.y
+                            bd[2] = (float)((g_ssaaScale > 1) ? g_ssaaFilter : 0);             // filterMode（1:1时强制单采样）
+                            bd[3] = (g_ssaaScale > 1) ? (g_ssaaSharpness / 100.0f) : 0.0f;    // sharpness
+                            bd[4] = scl;                                                      // scale
+                            bd[5] = 0.0f; bd[6] = 0.0f; bd[7] = 0.0f;
+                            g_pD3DContext->Unmap(g_pBlitCB, 0);
+                        }
+                        g_pD3DContext->PSSetConstantBuffers(0, 1, &g_pBlitCB);
+                    }
+                    g_pD3DContext->Draw(4, 0);
+
+                    // 恢复混合状态
+                    g_pD3DContext->OMSetBlendState(pOldBlend, oldBlendFactor, oldSampleMask);
+                    if (pOldBlend) pOldBlend->Release();
+
+                    // 恢复状态
+                    g_pD3DContext->RSSetViewports(1, &oldVP);
+                    g_pD3DContext->OMSetRenderTargets(1, &pOldRTV, nullptr);
+                    g_pD3DContext->VSSetShader(pOldVS, nullptr, 0);
+                    g_pD3DContext->PSSetShader(pOldPS, nullptr, 0);
+                    g_pD3DContext->IASetVertexBuffers(0, 1, &pOldVB, &oldStride, &oldOffset);
+                    if (pOldRTV) pOldRTV->Release();
+                    if (pOldSRV) pOldSRV->Release();
+                    if (pOldVS) pOldVS->Release();
+                    if (pOldPS) pOldPS->Release();
+                    if (pOldVB) pOldVB->Release();
+
+                    // v3.4.2.2：状态恢复完成后运行后处理链，链的最后一趟不透明写回后台缓冲
+                    if (postActive) {
+                        RunPostChain(pSwapRTV, vW, vH);
+                    }
+                    if (pSwapRTV) pSwapRTV->Release();
+                } else if (postWanted && postActive) {
+                    // 未启用 MSAA/SSAA：原生渲染直接写入了后台缓冲，先整体拷贝到 sceneRT 再走后处理链
+                    g_pD3DDevice->CreateRenderTargetView(pBackBuffer, nullptr, &pSwapRTV);
+                    if (pSwapRTV && g_pSceneTex) {
+                        // 先解绑后台缓冲 RTV：避免它同时作为拷贝源被读取
+                        ID3D11RenderTargetView *pNullRTV = nullptr;
+                        g_pD3DContext->OMSetRenderTargets(1, &pNullRTV, nullptr);
+                        g_pD3DContext->CopyResource(g_pSceneTex, pBackBuffer);
+                        RunPostChain(pSwapRTV, vW, vH);
+                    }
+                    if (pSwapRTV) { pSwapRTV->Release(); pSwapRTV = nullptr; }
+                }
+                if (pBackBuffer) pBackBuffer->Release();
+            }
+            present_skip_blit:
+            // 物理可视化调试：用 D2D1 叠加绘制速度/受力向量、漩涡、引力源等（在 blit 之后，避免被清掉）/ Physics debug overlay AFTER blit
+            if (g_debugVelocity || g_debugForce || g_debugVortex || g_debugGravity || g_debugCollision || g_debugSpring || g_debugInteraction || g_debugSpawn || g_debugPath) {
+                g_pD2DDC->SetTarget(g_pD2DTargetBitmap);
+                g_pD2DDC->BeginDraw();
+                RenderPhysicsDebugD2D(dwTime, smoothed);
+                g_pD2DDC->EndDraw();
+            }
+
+            if (g_pSwapChain) {
+                HRESULT presHr = g_pSwapChain->Present(g_enableFrameSync ? 1 : 0, 0);  // 同步间隔 0 = 立即呈现（可能撕裂），1 = 等待 vsync
+                if (presHr == DXGI_ERROR_DEVICE_REMOVED || presHr == DXGI_ERROR_DEVICE_RESET) {
+                    g_deviceLost.store(true);
+                    return;
+                }
+            }
+            if (g_pDCompDevice) g_pDCompDevice->Commit();
+            if (!trailActive && g_history.empty() && g_ripples.empty() && g_particles.empty() && g_trailShapes.empty())
+                surfaceDirty = false;
+            return;
+        } else if (tailVisible || !g_history.empty() || !g_particles.empty() || !g_ripples.empty() || !g_trailShapes.empty()) {
+            // 原生渲染失败但有内容要渲染，可能是设备丢失，触发恢复
+            g_deviceLost.store(true);
+            return;
+        }
+        // 原生渲染失败且无内容，回退到 D2D1（通常是空闲帧）/ Native render failed and no content, fallback to D2D1 (usually idle frame)
+    }
+
+    g_pD2DDC->SetTarget(g_pD2DTargetBitmap);
+    g_pD2DDC->BeginDraw();
+    g_pD2DDC->Clear(D2D1::ColorF(0, 0, 0, 0));
+
+    // ===== 粒子渲染 =====
+    if (!g_particles.empty()) {
+        RenderParticles(dwTime);
+        surfaceDirty = true;
+    }
+
+    // ===== 拖尾带渲染（锥形，D2D 回退路径由此获得拖尾）=====
+    if (trailOn && tailVisible && havePath && (g_trailShape == 0 || g_trailShape == 2 || g_trailShape == 3 || g_trailShape == 7)) {
+        DrawTrailBand(smoothed, cols, widthMul, g_fadeAlpha, 0, 0);
+        surfaceDirty = true;
+    }
+
+    // ===== 形状拖尾渲染 =====
+    if (trailOn && !g_trailShapes.empty()) {  // v3.4.2.2 热键：拖尾关闭时不绘制形状拖尾
+        // 屏幕尺寸对 D2D 后端无意义（不走顶点缓冲）
+    DrawTrailShapes(0, 0, dwTime);
+        surfaceDirty = true;
+    }
+
+    // ===== 运动模糊历史帧渲染 =====
+    if (trailOn && g_enableMotionBlur && tailVisible && havePath && g_trailHistory.size() > 1 && g_trailShape != 10) {  // v3.4.2.2 热键：拖尾关闭时跳过动态模糊
+        RenderMotionBlur(widthMul, cols, g_fadeAlpha);
+        surfaceDirty = true;
+    }
+
+    // ===== 拖尾（复用已计算的 smoothed 路径）=====
+    if (trailOn && tailVisible && havePath && g_trailShape != 4 && g_trailShape != 10) {  // v3.4.2.2 热键：拖尾关闭时不绘制拖尾带
+        UpdateColorBrushes(cols, smoothed[0], smoothed.back());
+        float glowR = g_enableGlow ? (g_glowIntensity / 100.0f) * 7.0f : 0;
+        float glowO = g_enableGlow ? (g_glowIntensity / 100.0f) * 0.28f : 0;
+        bool useEnhancedGlow = g_enhancedGlow && glowR > 0.1f;
+        float fa = g_fadeAlpha;
+        const float SHADOW_DX = 1.5f, SHADOW_DY = 2.0f;
+
+        if (g_trailShape == 1) {
+            // ===== 类锥形圆链 =====
+            float totalLen = 0;
+            for (size_t i = 1; i < smoothed.size(); i++) {
+                float ddx = smoothed[i].x - smoothed[i - 1].x, ddy = smoothed[i].y - smoothed[i - 1].y;
+                totalLen += sqrtf(ddx * ddx + ddy * ddy);
+            }
+            float mult = (float)g_dotsMultiplier;
+            float spacing = 2.4f / mult;
+            float maxR = 9.0f / sqrtf(mult) * widthMul;
+            int dotCount = (int)(totalLen / spacing);
+            if (dotCount < 3)
+                dotCount = 3;
+            if (dotCount > 150)
+                dotCount = 150;
+            // 静态暂存：沿用 smoothed 的做法，避免圆点模式每帧一次 vector 分配
+            static std::vector<DotInfo> dots;
+            dots.clear();
+            dots.reserve(dotCount + 1);
+            for (int di = 0; di <= dotCount; di++) {
+                float frac = (float)di / dotCount;
+                float targetDist = frac * totalLen, acc = 0;
+                D2D1_POINT_2F pos = smoothed[0];
+                float nx = 0, ny = 1;
+                for (size_t i = 1; i < smoothed.size(); i++) {
+                    float ddx = smoothed[i].x - smoothed[i - 1].x, ddy = smoothed[i].y - smoothed[i - 1].y;
+                    float segLen = sqrtf(ddx * ddx + ddy * ddy);
+                    if (acc + segLen >= targetDist) {
+                        float t = segLen > 0 ? (targetDist - acc) / segLen : 0;
+                        pos = D2D1::Point2F(smoothed[i - 1].x + ddx * t, smoothed[i - 1].y + ddy * t);
+                        if (segLen > 0.001f) {
+                            nx = -ddy / segLen;
+                            ny = ddx / segLen;
+                        }
+                        break;
+                    }
+                    acc += segLen;
+                    pos = smoothed[i];
+                    if (segLen > 0.001f) {
+                        nx = -ddy / segLen;
+                        ny = ddx / segLen;
+                    }
+                }
+                float sizeJit = 0.78f + Hash01(di * 7 + 1) * 0.44f;
+                float opJit = 0.65f + Hash01(di * 13 + 5) * 0.55f;
+                float posJit = (Hash01(di * 3 + 9) - 0.5f) * 2.5f;
+                float dr = maxR * powf(1.0f - frac, 1.6f) * sizeJit;
+                if (dr < 0.3f)
+                    continue;
+                pos.x += nx * posJit;
+                pos.y += ny * posJit;
+                int idx = (int)(frac * (GRAD_STOPS - 1) + 0.5f);
+                if (idx >= GRAD_STOPS)
+                    idx = GRAD_STOPS - 1;
+                D2D1_COLOR_F dco = cols.outer[idx].color, dci = cols.inner[idx].color;
+                float da = 0.86f * powf(1.0f - frac, 1.4f) * opJit * fa;
+                if (g_enableSmoothGradient)
+                    da *= (1.0f - frac * 0.3f);
+                dots.push_back({pos, dr, dco, dci, da});
+            }
+            if (g_enableTrailShadow && !dots.empty()) {
+                g_pShadowBrush->SetOpacity(0.18f * fa);
+                for (auto &d : dots) {
+                    D2D1_POINT_2F sp = D2D1::Point2F(d.pos.x + SHADOW_DX, d.pos.y + SHADOW_DY);
+                    g_pD2DDC->FillEllipse(D2D1::Ellipse(sp, d.radius * 1.1f, d.radius * 1.1f), g_pShadowBrush);
+                }
+            }
+            if (dots.size() >= 2) {
+                for (size_t i = 0; i < dots.size() - 1; i++) {
+                    float lineW = (dots[i].radius + dots[i + 1].radius) * 0.65f;
+                    if (lineW < 0.5f)
+                        continue;
+                    D2D1_COLOR_F midColor = LerpColor(dots[i].outer, dots[i + 1].outer, 0.5f);
+                    g_pSolidOuterBrush->SetColor(midColor);
+                    g_pSolidOuterBrush->SetOpacity((dots[i].alpha + dots[i + 1].alpha) * 0.45f);
+                    g_pD2DDC->DrawLine(dots[i].pos, dots[i + 1].pos, g_pSolidOuterBrush, lineW);
+                }
+                g_pSolidOuterBrush->SetOpacity(1.0f);
+            }
+            int glowCutoff = (int)(dots.size() * 0.6f);
+            for (size_t di = 0; di < dots.size(); di++) {
+                auto &d = dots[di];
+                if (di < (size_t)glowCutoff) {
+                    if (useEnhancedGlow) {
+                        g_pSolidOuterBrush->SetColor(d.outer);
+                        g_pSolidOuterBrush->SetOpacity(glowO * 0.35f * d.alpha / fa);
+                        g_pD2DDC->FillEllipse(D2D1::Ellipse(d.pos, d.radius + glowR * 1.6f, d.radius + glowR * 1.6f),
+                                              g_pSolidOuterBrush);
+                        g_pSolidOuterBrush->SetOpacity(glowO * 0.7f * d.alpha / fa);
+                        g_pD2DDC->FillEllipse(D2D1::Ellipse(d.pos, d.radius + glowR * 0.7f, d.radius + glowR * 0.7f),
+                                              g_pSolidOuterBrush);
+                    } else if (glowR > 0.1f) {
+                        g_pSolidOuterBrush->SetColor(d.outer);
+                        g_pSolidOuterBrush->SetOpacity(glowO * d.alpha / fa);
+                        g_pD2DDC->FillEllipse(D2D1::Ellipse(d.pos, d.radius + glowR * 0.7f, d.radius + glowR * 0.7f),
+                                              g_pSolidOuterBrush);
+                    }
+                }
+                g_pSolidOuterBrush->SetColor(d.outer);
+                g_pSolidOuterBrush->SetOpacity(d.alpha);
+                g_pD2DDC->FillEllipse(D2D1::Ellipse(d.pos, d.radius, d.radius), g_pSolidOuterBrush);
+                g_pSolidInnerBrush->SetColor(d.inner);
+                g_pSolidInnerBrush->SetOpacity(d.alpha * 0.9f);
+                g_pD2DDC->FillEllipse(D2D1::Ellipse(d.pos, d.radius * 0.58f, d.radius * 0.58f), g_pSolidInnerBrush);
+            }
+            g_pSolidOuterBrush->SetOpacity(1);
+            g_pSolidInnerBrush->SetOpacity(1);
+            surfaceDirty = true;
+        } else {
+            // ===== 多边形带状 =====
+            size_t sl = smoothed.size();
+            // 静态暂存缓冲：这 8 个向量原本每帧各分配/释放一次（带状拖尾是 D2D 回退路径的热路径）
+            static std::vector<D2D1_POINT_2F> lo, ro, lc, rc, gl, gr, gl2, gr2;
+            lo.clear(); ro.clear(); lc.clear(); rc.clear(); gl.clear(); gr.clear(); gl2.clear(); gr2.clear();
+            lo.reserve(sl); ro.reserve(sl); lc.reserve(sl); rc.reserve(sl);
+            if (glowR > 0.1f) { gl.reserve(sl); gr.reserve(sl); if (useEnhancedGlow) { gl2.reserve(sl); gr2.reserve(sl); } }
+            for (size_t i = 0; i < sl; ++i) {
+                float ddx, ddy;
+                if (i == 0) {
+                    ddx = smoothed[0].x - smoothed[1].x;
+                    ddy = smoothed[0].y - smoothed[1].y;
+                } else if (i == sl - 1) {
+                    ddx = smoothed[i - 1].x - smoothed[i].x;
+                    ddy = smoothed[i - 1].y - smoothed[i].y;
+                } else {
+                    ddx = smoothed[i - 1].x - smoothed[i + 1].x;
+                    ddy = smoothed[i - 1].y - smoothed[i + 1].y;
+                }
+                float ln = sqrtf(ddx * ddx + ddy * ddy);
+                if (ln > 0) {
+                    ddx /= ln;
+                    ddy /= ln;
+                } else {
+                    ddx = 1;
+                    ddy = 0;
+                }
+                float nx = -ddy, ny = ddx, ratio = (float)i / (sl - 1);
+                float taper = powf(1.0f - ratio, 1.3f);
+                float ow = 10.0f * taper * widthMul;
+                float cw = 6.0f * taper * widthMul;
+                if (i == sl - 1) {
+                    ow = 0;
+                    cw = 0;
+                }
+                lo.push_back(D2D1::Point2F(smoothed[i].x + nx * ow, smoothed[i].y + ny * ow));
+                ro.push_back(D2D1::Point2F(smoothed[i].x - nx * ow, smoothed[i].y - ny * ow));
+                lc.push_back(D2D1::Point2F(smoothed[i].x + nx * cw, smoothed[i].y + ny * cw));
+                rc.push_back(D2D1::Point2F(smoothed[i].x - nx * cw, smoothed[i].y - ny * cw));
+                if (glowR > 0.1f) {
+                    float gw = ow + glowR * (1.0f - ratio * 0.3f);
+                    gl.push_back(D2D1::Point2F(smoothed[i].x + nx * gw, smoothed[i].y + ny * gw));
+                    gr.push_back(D2D1::Point2F(smoothed[i].x - nx * gw, smoothed[i].y - ny * gw));
+                    if (useEnhancedGlow) {
+                        float gw2 = ow + glowR * 1.8f * (1.0f - ratio * 0.2f);
+                        gl2.push_back(D2D1::Point2F(smoothed[i].x + nx * gw2, smoothed[i].y + ny * gw2));
+                        gr2.push_back(D2D1::Point2F(smoothed[i].x - nx * gw2, smoothed[i].y - ny * gw2));
+                    }
+                }
+            }
+            // FillMesh 不支持抗锯齿，临时切换到别名模式
+            g_pD2DDC->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
+            // ===== 阴影层（mesh）=====
+            if (g_enableTrailShadow && lo.size() >= 2) {
+                std::vector<D2D1_POINT_2F> slo, sro;
+                slo.reserve(lo.size());
+                sro.reserve(ro.size());
+                for (size_t i = 0; i < lo.size(); i++) {
+                    slo.push_back(D2D1::Point2F(lo[i].x + SHADOW_DX, lo[i].y + SHADOW_DY));
+                    sro.push_back(D2D1::Point2F(ro[i].x + SHADOW_DX, ro[i].y + SHADOW_DY));
+                }
+                CreateMeshFromQuadStrip(g_pD2DDC, &g_pShadowMesh, slo, sro);
+                if (g_pShadowMesh) {
+                    g_pShadowBrush->SetOpacity(0.18f * fa);
+                    g_pD2DDC->FillMesh(g_pShadowMesh, g_pShadowBrush);
+                }
+            }
+            // ===== 增强发光层（mesh）=====
+            if (useEnhancedGlow && gl2.size() >= 2) {
+                CreateMeshFromQuadStrip(g_pD2DDC, &g_pGlow2Mesh, gl2, gr2);
+                if (g_pGlow2Mesh) {
+                    g_pSolidOuterBrush->SetColor(cols.solidOuter);
+                    g_pSolidOuterBrush->SetOpacity(glowO * 0.3f * fa);
+                    g_pD2DDC->FillMesh(g_pGlow2Mesh, g_pSolidOuterBrush);
+                }
+            }
+            // ===== 外发光层（mesh）=====
+            if (glowR > 0.1f && gl.size() >= 2) {
+                CreateMeshFromQuadStrip(g_pD2DDC, &g_pGlowMesh, gl, gr);
+                if (g_pGlowMesh) {
+                    g_pSolidOuterBrush->SetColor(cols.solidOuter);
+                    g_pSolidOuterBrush->SetOpacity(useEnhancedGlow ? glowO * 0.65f * fa : glowO * fa);
+                    g_pD2DDC->FillMesh(g_pGlowMesh, g_pSolidOuterBrush);
+                }
+            }
+            // ===== 外带 + 内带（mesh，含头部椭圆帽）=====
+            float headR = 10.0f * widthMul, innerHeadR = 6.0f * widthMul;
+            CreateMeshFromQuadStripWithCap(g_pD2DDC, &g_pOuterMesh, lo, ro, smoothed[0], headR);
+            CreateMeshFromQuadStripWithCap(g_pD2DDC, &g_pInnerMesh, lc, rc, smoothed[0], innerHeadR);
+            ID2D1Brush *ob = g_pSolidOuterBrush, *ib = g_pSolidInnerBrush;
+            if (g_enableSmoothGradient && g_pGradOuterBrush && g_pGradInnerBrush) {
+                ob = g_pGradOuterBrush;
+                ib = g_pGradInnerBrush;
+            } else {
+                g_pSolidOuterBrush->SetOpacity(.86f * fa);
+                g_pSolidInnerBrush->SetOpacity(.86f * fa);
+            }
+            if (g_pOuterMesh) g_pD2DDC->FillMesh(g_pOuterMesh, ob);
+            if (g_pInnerMesh) g_pD2DDC->FillMesh(g_pInnerMesh, ib);
+            g_pSolidOuterBrush->SetOpacity(1);
+            g_pSolidInnerBrush->SetOpacity(1);
+            // 恢复抗锯齿模式（头部高光用 FillEllipse，支持抗锯齿）
+            g_pD2DDC->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+            if (g_enableHeadHighlight) {
+                g_pSolidInnerBrush->SetColor(D2D1::ColorF(1, 1, 1, 1));
+                g_pSolidInnerBrush->SetOpacity(0.85f * fa);
+                g_pD2DDC->FillEllipse(D2D1::Ellipse(smoothed[0], 2.8f, 2.8f), g_pSolidInnerBrush);
+                g_pSolidInnerBrush->SetOpacity(1.0f);
+            }
+            surfaceDirty = true;
+        }
+    }
+
+    // ===== 点击波纹渲染 =====
+    if (g_enableClickEffect && !g_ripples.empty()) {
+        // 屏幕尺寸对 D2D 后端无意义（它不走顶点缓冲），传 0 即可
+        DrawClickEffects(0, 0, dwTime, cols, vX, vY);
+        surfaceDirty = true;
+    }
+
+    HRESULT hr = g_pD2DDC->EndDraw();
+    if (hr == D2DERR_RECREATE_TARGET || hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
+        Wh_Log(L"RenderFrame: device lost (0x%08X), scheduling recovery", hr);
+        g_deviceLost.store(true);
+        return;
+    }
+    if (g_pSwapChain) {
+        HRESULT presHr = g_pSwapChain->Present(g_enableFrameSync ? 1 : 0, 0);  // 同步间隔 0 = 立即呈现（可能撕裂），1 = 等待 vsync
+        if (presHr == DXGI_ERROR_DEVICE_REMOVED || presHr == DXGI_ERROR_DEVICE_RESET) {
+            Wh_Log(L"RenderFrame: Present device lost (0x%08X), scheduling recovery", presHr);
+            g_deviceLost.store(true);
+            return;
+        }
+    }
+    if (g_pDCompDevice)
+        g_pDCompDevice->Commit();
+    if (!trailActive && g_history.empty() && g_ripples.empty() && g_particles.empty() && g_trailShapes.empty())
+        surfaceDirty = false;
+}
+
+
+// ===================== 粒子形状几何 =====================
+static void CreateStarGeometry(ID2D1Factory *factory, ID2D1PathGeometry **geom) {
+    factory->CreatePathGeometry(geom);
+    ID2D1GeometrySink *sink = nullptr;
+    (*geom)->Open(&sink);
+    sink->SetFillMode(D2D1_FILL_MODE_WINDING);
+    sink->BeginFigure(D2D1::Point2F(0, -1), D2D1_FIGURE_BEGIN_FILLED);
+    for (int i = 1; i < 10; i++) {
+        float angle = i * 3.14159265f / 5.0f - 1.5707963f;
+        float r = (i % 2 == 0) ? 1.0f : 0.42f;
+        sink->AddLine(D2D1::Point2F(cosf(angle) * r, sinf(angle) * r));
+    }
+    sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+    sink->Close();
+    sink->Release();
+}
+
+static void CreateHexagramGeometry(ID2D1Factory *factory, ID2D1PathGeometry **geom) {
+    factory->CreatePathGeometry(geom);
+    ID2D1GeometrySink *sink = nullptr;
+    (*geom)->Open(&sink);
+    sink->SetFillMode(D2D1_FILL_MODE_WINDING);
+    sink->BeginFigure(D2D1::Point2F(0, -1), D2D1_FIGURE_BEGIN_FILLED);
+    sink->AddLine(D2D1::Point2F(0.866f, 0.5f));
+    sink->AddLine(D2D1::Point2F(-0.866f, 0.5f));
+    sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+    sink->BeginFigure(D2D1::Point2F(0, 1), D2D1_FIGURE_BEGIN_FILLED);
+    sink->AddLine(D2D1::Point2F(-0.866f, -0.5f));
+    sink->AddLine(D2D1::Point2F(0.866f, -0.5f));
+    sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+    sink->Close();
+    sink->Release();
+}
+
+static void CreateHeartGeometry(ID2D1Factory *factory, ID2D1PathGeometry **geom) {
+    factory->CreatePathGeometry(geom);
+    ID2D1GeometrySink *sink = nullptr;
+    (*geom)->Open(&sink);
+    sink->SetFillMode(D2D1_FILL_MODE_WINDING);
+    const int N = 48;
+    for (int i = 0; i < N; i++) {
+        float t = (float)i / N * 6.2831853f;
+        float x = 16.0f * powf(sinf(t), 3.0f);
+        float y = -(13.0f * cosf(t) - 5.0f * cosf(2.0f * t) - 2.0f * cosf(3.0f * t) - cosf(4.0f * t));
+        x /= 17.0f;
+        y /= 17.0f;
+        if (i == 0)
+            sink->BeginFigure(D2D1::Point2F(x, y), D2D1_FIGURE_BEGIN_FILLED);
+        else
+            sink->AddLine(D2D1::Point2F(x, y));
+    }
+    sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+    sink->Close();
+    sink->Release();
+}
+
+// ===================== 设备丢失恢复 =====================
+static void ReleaseAllRenderResources() {
+    if (g_pTextFormat) { g_pTextFormat->Release(); g_pTextFormat = nullptr; }
+    ReleaseGradientBrushes();
+    if (g_pShadowBrush) { g_pShadowBrush->Release(); g_pShadowBrush = nullptr; }
+    if (g_pSolidInnerBrush) { g_pSolidInnerBrush->Release(); g_pSolidInnerBrush = nullptr; }
+    if (g_pSolidOuterBrush) { g_pSolidOuterBrush->Release(); g_pSolidOuterBrush = nullptr; }
+    if (g_pMSAARTV) { g_pMSAARTV->Release(); g_pMSAARTV = nullptr; }
+    if (g_pMSAATexture) { g_pMSAATexture->Release(); g_pMSAATexture = nullptr; }
+    if (g_pSSAAResolveSRV) { g_pSSAAResolveSRV->Release(); g_pSSAAResolveSRV = nullptr; }
+    if (g_pSSAAResolveTexture) { g_pSSAAResolveTexture->Release(); g_pSSAAResolveTexture = nullptr; }
+    if (g_pSSAASRV) { g_pSSAASRV->Release(); g_pSSAASRV = nullptr; }
+    if (g_pSSAARTV) { g_pSSAARTV->Release(); g_pSSAARTV = nullptr; }
+    if (g_pSSAATexture) { g_pSSAATexture->Release(); g_pSSAATexture = nullptr; }
+    // v3.4.2.2 后处理链渲染目标：与 MSAA/SSAA 目标同样在设备仍存活时释放
+    ReleasePostTargets();
+    if (g_pBlitSampler) { g_pBlitSampler->Release(); g_pBlitSampler = nullptr; }
+    if (g_pBlitVB) { g_pBlitVB->Release(); g_pBlitVB = nullptr; }
+    if (g_pBlitLayout) { g_pBlitLayout->Release(); g_pBlitLayout = nullptr; }
+    if (g_pBlitPS) { g_pBlitPS->Release(); g_pBlitPS = nullptr; }
+    if (g_pBlitVS) { g_pBlitVS->Release(); g_pBlitVS = nullptr; }
+    if (g_pCachedRTV) { g_pCachedRTV->Release(); g_pCachedRTV = nullptr; }
+    if (g_pD2DTargetBitmap) { g_pD2DTargetBitmap->Release(); g_pD2DTargetBitmap = nullptr; }
+    if (g_pSwapChain) { g_pSwapChain->Release(); g_pSwapChain = nullptr; }
+    if (g_pDCompTarget && g_pDCompVisual) {
+        g_pDCompTarget->SetRoot(nullptr);  // 清除根视觉对象，避免旧内容残留
+    }
+    if (g_pDCompVisual) { g_pDCompVisual->Release(); g_pDCompVisual = nullptr; }
+    if (g_pDCompTarget) { g_pDCompTarget->Release(); g_pDCompTarget = nullptr; }
+    if (g_pDCompDevice) { g_pDCompDevice->Release(); g_pDCompDevice = nullptr; }
+    if (g_pShadowMesh) { g_pShadowMesh->Release(); g_pShadowMesh = nullptr; }
+    if (g_pGlow2Mesh) { g_pGlow2Mesh->Release(); g_pGlow2Mesh = nullptr; }
+    if (g_pGlowMesh) { g_pGlowMesh->Release(); g_pGlowMesh = nullptr; }
+    if (g_pOuterMesh) { g_pOuterMesh->Release(); g_pOuterMesh = nullptr; }
+    if (g_pInnerMesh) { g_pInnerMesh->Release(); g_pInnerMesh = nullptr; }
+    if (g_pD2DDC) { g_pD2DDC->Release(); g_pD2DDC = nullptr; }
+    if (g_pD2DDevice) { g_pD2DDevice->Release(); g_pD2DDevice = nullptr; }
+    if (g_pStarGeom) { g_pStarGeom->Release(); g_pStarGeom = nullptr; }
+    if (g_pHexagramGeom) { g_pHexagramGeom->Release(); g_pHexagramGeom = nullptr; }
+    if (g_pHeartGeom) { g_pHeartGeom->Release(); g_pHeartGeom = nullptr; }
+    // Release cached D2D path geometries before releasing the factory
+    for (auto &kv : mtb::s_keyCache) { if (kv.second) kv.second->Release(); }
+    mtb::s_keyCache.clear();
+    if (g_pD2DFactory) { g_pD2DFactory->Release(); g_pD2DFactory = nullptr; }
+    if (g_dwFactory) { g_dwFactory->Release(); g_dwFactory = nullptr; }
+    if (g_pDXGIDevice) { g_pDXGIDevice->Release(); g_pDXGIDevice = nullptr; }
+    if (g_pD3DContext) { g_pD3DContext->Release(); g_pD3DContext = nullptr; }
+    if (g_pD3DDevice) { g_pD3DDevice->Release(); g_pD3DDevice = nullptr; }
+    g_cachedVW = 0;
+    g_cachedVH = 0;
+    g_trailHistory.clear();  // 清除运动模糊历史帧，避免恢复后渲染旧坐标
+    g_history.clear();       // 清除拖尾历史
+    g_particles.clear();     // 清除粒子
+    g_ripples.clear();       // 清除点击波纹
+    g_trailShapes.clear();   // 清除形状拖尾
+    ReleaseNativeRendering();  // 释放 D3D11 原生渲染资源（内部也会再次释放后处理目标，幂等）
+}
+
+// 创建 D3D11 设备（硬件优先，WARP 回退）+ D2D1/DWrite 设备 + 三个画刷 + 三个形状几何。
+// 这是「首次初始化」与「设备丢失恢复」共用的唯一实现。
+// 此前这两条路径各手写了一遍约 40 行的同样序列 —— 在恢复路径上尤其危险：
+// 修好一处、漏了另一处，表现为「重启后正常、TDR 恢复后渲染异常」这类最难复现的问题。
+// Single implementation shared by first-time init and device-loss recovery. Previously the two paths each
+// hand-wrote the same ~40-line sequence; a fix applied to one but not the other shows up as "works after restart,
+// broken after a TDR recovery" — among the hardest failures to reproduce.
+static bool CreateD3DAndD2DDevices(const wchar_t* logTag) {
+    // ---- D3D11 设备 ----
+    D3D_FEATURE_LEVEL fl = D3D_FEATURE_LEVEL_11_0;
+    UINT createFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_SINGLETHREADED;
+    D3D_FEATURE_LEVEL featureLevels[] = {
+        D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0,
+        D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0,
+    };
+    if (FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, createFlags, featureLevels,
+                                 ARRAYSIZE(featureLevels), D3D11_SDK_VERSION, &g_pD3DDevice, &fl, &g_pD3DContext))) {
+        D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, createFlags, featureLevels, ARRAYSIZE(featureLevels),
+                          D3D11_SDK_VERSION, &g_pD3DDevice, &fl, &g_pD3DContext);
+    }
+    if (!g_pD3DDevice) {
+        Wh_Log(L"%s: D3D11 device creation FAILED", logTag);
+        return false;
+    }
+    Wh_Log(L"%s: D3D11 device created (feature level %d)", logTag, fl);
+    g_pD3DDevice->QueryInterface(__uuidof(IDXGIDevice), (void **)&g_pDXGIDevice);
+
+    // ---- D2D1 设备 + 设备上下文 ----
+    D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory1), nullptr, (void **)&g_pD2DFactory);
+    {
+        HRESULT hrDW = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), (IUnknown**)&g_dwFactory);
+        if (FAILED(hrDW)) { Wh_Log(L"DWriteCreateFactory FAILED: 0x%08x", hrDW); g_dwFactory = nullptr; }
+    }
+    if (g_dwFactory && !g_pTextFormat) {
+        g_dwFactory->CreateTextFormat(L"Segoe UI Emoji", nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+            (float)g_textFontSize, L"en-us", &g_pTextFormat);
+        if (!g_pTextFormat) g_dwFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+            (float)g_textFontSize, L"en-us", &g_pTextFormat);
+        if (g_pTextFormat) {
+            g_pTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            g_pTextFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        }
+    }
+    if (g_pD2DFactory && g_pDXGIDevice) {
+        g_pD2DFactory->CreateDevice(g_pDXGIDevice, &g_pD2DDevice);
+        if (g_pD2DDevice) g_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &g_pD2DDC);
+    }
+    if (!g_pD2DDC) {
+        Wh_Log(L"%s: D2D1 DC creation FAILED", logTag);
+        return false;
+    }
+    g_pD2DDC->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    g_pD2DDC->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+    g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 1), &g_pSolidOuterBrush);
+    g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 1), &g_pSolidInnerBrush);
+    g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 0.18f), &g_pShadowBrush);
+    if (g_pD2DFactory) {
+        CreateStarGeometry(g_pD2DFactory, &g_pStarGeom);
+        CreateHexagramGeometry(g_pD2DFactory, &g_pHexagramGeom);
+        CreateHeartGeometry(g_pD2DFactory, &g_pHeartGeom);
+    }
+    return true;
+}
+
+static bool InitAllRenderResources() {
+    if (!CreateD3DAndD2DDevices(L"Recover"))
+        return false;
+
+    // ---- DirectComposition ----
+    if (g_pDXGIDevice) {
+        DCompositionCreateDevice(g_pDXGIDevice, __uuidof(IDCompositionDevice), (void **)&g_pDCompDevice);
+    }
+    if (g_pDCompDevice) {
+        g_pDCompDevice->CreateTargetForHwnd(g_overlayHwnd, TRUE, &g_pDCompTarget);
+        g_pDCompDevice->CreateVisual(&g_pDCompVisual);
+        if (g_pDCompTarget && g_pDCompVisual) g_pDCompTarget->SetRoot(g_pDCompVisual);
+        Wh_Log(L"Recover: DComp device ready");
+    }
+
+    // ---- 交换链 ----
+    RecreateSwapChain(g_virtW, g_virtH);
+
+    // ---- D3D11 原生渲染初始化（v3）----
+    InitNativeRendering();
+
+    Wh_Log(L"Recover: resources reinitialized");
+    return true;
+}
+
+// ===================== 覆盖层线程 =====================
+static void UpdateVirtualScreenCache() {
+    g_virtX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    g_virtY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    g_virtW = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    g_virtH = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    // 高度减 1 避免与 DWM 合成边界完全重合导致的渲染问题
+    if (g_virtH > 1) g_virtH -= 1;
+}
+static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == WM_HOTKEY) {
+        // 系统热键通道：由系统直接投递，与轮询时序无关
+        int id = (int)wParam;
+        HotkeyHandleId(id);
+        return 0;
+    }
+    if (msg == WM_POWERBROADCAST && wParam == PBT_APMRESUMEAUTOMATIC) {
+        // 从睡眠/休眠唤醒后，GPU设备状态可能失效，主动触发资源重建
+        Wh_Log(L"OverlayWndProc: wake from sleep, forcing device recovery");
+        g_deviceLost.store(true);
+        return TRUE;
+    }
+    if (msg == WM_DISPLAYCHANGE) {
+        // 分辨率/显示器变化时更新缓存并调整窗口大小和位置
+        UpdateVirtualScreenCache();
+        UpdateMonitorDpiScale();  // v3.4.2.2 DPI：显示器/分辨率变化后重算 DPI 比例
+        // 不用 SWP_SHOWWINDOW，避免空闲隐藏状态下被意外显示
+        // 去掉 SWP_NOZORDER：分辨率变化后重新置顶，防止被其他顶层窗口盖住
+        SetWindowPos(hwnd, HWND_TOPMOST, g_virtX, g_virtY, g_virtW, g_virtH, SWP_NOACTIVATE);
+        return 0;
+    }
+    if (msg == WM_DPICHANGED) {
+        // v3.4.2.2 DPI：DPI 变化 -> 更新虚拟屏幕缓存、重定位覆盖层、标记文字图集重建、重算比例
+        UpdateVirtualScreenCache();
+        // 去掉 SWP_NOZORDER：DPI 变化后重新置顶
+        SetWindowPos(hwnd, HWND_TOPMOST, g_virtX, g_virtY, g_virtW, g_virtH, SWP_NOACTIVATE);
+        g_charAtlasDirty = true;
+        UpdateMonitorDpiScale();
+        return 0;
+    }
+    if (msg == WM_APP_REHOTKEY) {
+        // 设置变更导致热键配置变化：在窗口所属线程重新注册
+        HotkeyRegisterAll();
+        return 0;
+    }
+    if (msg == WM_APP_SHOW_OVERLAY) {
+        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        // 显示时立即重新置顶：重启/游戏退出后其他顶层窗口可能已盖在上面
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        return 0;
+    }
+    if (msg == WM_APP_HIDE_OVERLAY) {
+        ShowWindow(hwnd, SW_HIDE);
+        return 0;
+    }
+    if (msg == WM_TIMER && wParam == 1) {
+        // 每 2 秒重新置顶：防止重启后其他顶层窗口（任务栏/全屏应用等）长期盖住覆盖层
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        return 0;
+    }
+    if (msg == WM_MOUSEACTIVATE) {
+        // 阻止窗口被鼠标点击激活
+        return MA_NOACTIVATEANDEAT;
+    }
+    if (msg == WM_NCHITTEST) {
+        // 双保险：WS_EX_LAYERED|WS_EX_TRANSPARENT 已由内核做色键命中测试，这里再返回 HTTRANSPARENT
+        return HTTRANSPARENT;
+    }
+    return DefWindowProc(hwnd, msg, wParam, lParam);
+}
+DWORD WINAPI RenderThreadProc(LPVOID);  // 前向声明
+DWORD WINAPI OverlayThreadProc(LPVOID) {
+    // 只有 S_OK 表示本线程真的新增了一次 COM 引用，S_FALSE 说明宿主线程早已初始化，
+    // 那种情况下在线程结束时 CoUninitialize 会偷掉宿主的引用计数，破坏宿主后续 COM 调用。
+    HRESULT hrCo = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    bool coOwned = (hrCo == S_OK);
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
+    // ---- 窗口（UI 线程创建，DComp 在渲染线程创建）----
+    HINSTANCE hi = GetModuleHandle(NULL);
+    const wchar_t CN[] = L"MouseTrailClass";
+    WNDCLASS wc = {};
+    wc.lpfnWndProc = OverlayWndProc;
+    wc.hInstance = hi;
+    wc.lpszClassName = CN;
+    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);  // 黑色背景用于 LWA_COLORKEY 色键透明
+    RegisterClass(&wc);
+    UpdateVirtualScreenCache();
+    int sx = g_virtX, sy = g_virtY;
+    int sw = g_virtW, sh = g_virtH;
+    g_overlayHwnd = CreateWindowEx(
+        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, CN,
+        L"MouseTrailOverlay", WS_POPUP, sx, sy, sw, sh, NULL, NULL, hi, NULL);
+    if (!g_overlayHwnd) {
+        if (g_readyEvent) SetEvent(g_readyEvent);
+        if (coOwned) CoUninitialize();
+        return 0;
+    }
+    // 黑色色键透明：重定向表面为黑色 -> 全部抠除透明且点击穿透（WS_EX_TRANSPARENT 需要 WS_EX_LAYERED 才生效）
+    // DComp 视觉树由 DWM 独立合成，彩色拖尾不受色键影响；睡眠唤醒 DComp 丢失时回退表面也是透明的，不会黑屏
+    SetLayeredWindowAttributes(g_overlayHwnd, RGB(0, 0, 0), 255, LWA_COLORKEY);
+    // 屏幕捕获排除在 LoadSettings 中根据颜色模式动态设置
+    // v3.4.2.2 DPI：窗口就绪后立即确定光标所在显示器的 DPI 比例
+    UpdateMonitorDpiScale();
+    // g_monitorDpiScale 已改为 std::atomic<float>：变参函数（Wh_Log）不能传非平凡可拷贝对象，必须显式 .load()
+    Wh_Log(L"[DPI] overlay start: scale=%.3f mode=%d scaleText=%d", (double)g_monitorDpiScale.load(), g_dpiScaleMode,
+           g_dpiScaleText ? 1 : 0);
+    // 不立即 ShowWindow，等渲染线程首次有内容绘制时再显示，避免渲染失败时全屏透明窗口残留
+
+    // v3.4.2.2：窗口就绪后注册系统热键（RegisterHotKey 需要一个窗口句柄）——此时 LoadSettings 早已跑过，
+    // 所以这是首次真正注册的机会；之后每次设置变更会在 HotkeyOnSettingsLoaded 里重注册。
+    // v3.4.2.2: register the system hotkeys now that the window exists (RegisterHotKey needs a window handle).
+    // LoadSettings already ran, so this is the first real chance; later settings changes re-register from
+    // HotkeyOnSettingsLoaded.
+    HotkeyRegisterAll();
+
+    // v3.4.2.2：周期性重新置顶定时器（2 秒），防止重启后其他顶层窗口盖住覆盖层
+    SetTimer(g_overlayHwnd, 1, 2000, NULL);
+
+    // 通知渲染线程窗口已就绪
+    if (g_readyEvent) SetEvent(g_readyEvent);
+
+    // 启动渲染线程
+    g_renderExitEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    g_renderThread = CreateThread(NULL, 0, RenderThreadProc, NULL, 0, NULL);
+    if (!g_renderThread) {
+    }
+
+    // ---- 消息循环（纯 UI 线程，不做渲染）----
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    // ---- 通知渲染线程退出并等待 ----
+    Wh_Log(L"OverlayThread: message loop ended, stopping render thread");
+    if (g_renderExitEvent) SetEvent(g_renderExitEvent);
+    if (g_renderThread) {
+        DWORD wr = WaitForSingleObject(g_renderThread, 5000);
+        if (wr == WAIT_TIMEOUT) {
+            // 渲染线程 5s 未退出（可能卡在 GPU 调用），再宽限 2s；仍不退出则强制终止，避免卸载永久挂起
+            Wh_Log(L"OverlayThread: render thread did not exit in 5s, waiting 2s more");
+            if (WaitForSingleObject(g_renderThread, 2000) == WAIT_TIMEOUT) {
+                Wh_Log(L"OverlayThread: render thread stuck, terminating as last resort");
+                TerminateThread(g_renderThread, 1);
+                WaitForSingleObject(g_renderThread, 1000);
+            }
+        }
+        CloseHandle(g_renderThread);
+        g_renderThread = nullptr;
+    }
+
+    KillTimer(g_overlayHwnd, 1);
+    DestroyWindow(g_overlayHwnd);
+    g_overlayHwnd = nullptr;
+    UnregisterClass(CN, hi);
+    if (coOwned) CoUninitialize();
+    return 0;
+}
+
+// ===================== 渲染线程（D3D11 + D2D + DComp，独立于 UI 线程）=====================
+DWORD WINAPI RenderThreadProc(LPVOID) {
+    // 同 OverlayThreadProc：只有 S_OK 才在退出时 CoUninitialize
+    HRESULT hrCo = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    bool coOwned = (hrCo == S_OK);
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    srand((unsigned)GetTickCount());
+
+    // 等待 UI 线程创建窗口
+    if (g_readyEvent) WaitForSingleObject(g_readyEvent, INFINITE);
+    if (!g_overlayHwnd) {
+        Wh_Log(L"RenderThread: window not ready, exiting");
+        if (coOwned) CoUninitialize();
+        return 0;
+    }
+
+    // ---- D3D11 + D2D1/DWrite 设备（与设备丢失恢复路径共用同一实现）----
+    if (!CreateD3DAndD2DDevices(L"RenderThread")) {
+        if (coOwned) CoUninitialize();
+        return 0;
+    }
+    Wh_Log(L"RenderThread: D2D1 DC created");
+    // mesh 每帧动态创建（ID2D1Mesh 只写一次），此处不预创建
+
+    // ---- D3D11 原生渲染初始化（v3）----
+    if (!InitNativeRendering()) {
+        Wh_Log(L"RenderThread: Native D3D11 rendering init FAILED, falling back to D2D1");
+    }
+
+    // ---- DirectComposition（DComp API 线程安全，可在渲染线程创建）----
+    if (g_pDXGIDevice) {
+        DCompositionCreateDevice(g_pDXGIDevice, __uuidof(IDCompositionDevice), (void **)&g_pDCompDevice);
+    }
+    if (g_pDCompDevice) {
+        g_pDCompDevice->CreateTargetForHwnd(g_overlayHwnd, TRUE, &g_pDCompTarget);
+        g_pDCompDevice->CreateVisual(&g_pDCompVisual);
+        if (g_pDCompTarget && g_pDCompVisual) g_pDCompTarget->SetRoot(g_pDCompVisual);
+        Wh_Log(L"RenderThread: DComp device ready");
+    } else {
+        Wh_Log(L"RenderThread: DCompositionCreateDevice FAILED");
+    }
+
+    // ---- 交换链 ----
+    RecreateSwapChain(g_virtW, g_virtH);
+    GetCursorPos(&g_lastPos);
+
+    // ---- 后台采样线程（把 GDI 回读从渲染线程剥离，避免阻塞 vsync）----
+    InitializeCriticalSection(&g_sampleCS);
+    g_bgSampleExitEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    g_bgSampleThread = CreateThread(NULL, 0, BgSamplerThreadProc, NULL, 0, NULL);
+    if (g_bgSampleThread)
+        Wh_Log(L"RenderThread: background sampler thread started");
+    else
+        Wh_Log(L"RenderThread: failed to create background sampler thread");
+
+    Wh_Log(L"RenderThread: entering render loop");
+    // ---- 渲染循环（设备丢失恢复 + 空闲退避）----
+    DWORD waitMs = 1;
+    int frameCount = 0;
+    while (WaitForSingleObject(g_renderExitEvent, waitMs) != WAIT_OBJECT_0) {
+        // 主动检测设备丢失（每120帧检查一次，避免 Present 黑帧）
+        if (!g_deviceLost.load() && g_pD3DDevice) {
+            frameCount++;
+            if (frameCount >= 120) {
+                frameCount = 0;
+                HRESULT dr = g_pD3DDevice->GetDeviceRemovedReason();
+                if (dr != S_OK) {
+                    Wh_Log(L"RenderThread: proactive device lost detected (0x%08X)", dr);
+                    g_deviceLost.store(true);
+                }
+            }
+        }
+        // 设备丢失恢复
+        if (g_deviceLost.exchange(false)) {
+            Wh_Log(L"RenderThread: recovering from device loss");
+            ReleaseAllRenderResources();
+            if (!InitAllRenderResources()) {
+                Wh_Log(L"RenderThread: recovery FAILED, retrying in 1s");
+                g_deviceLost.store(true);
+                Sleep(1000);
+                continue;
+            }
+            Wh_Log(L"RenderThread: recovery complete");
+        }
+        RenderFrame();
+        // 帧同步说明：本模组交换链为 FLIP_SEQUENTIAL，RenderFrame 内的 Present(1, 0)（SyncInterval=1）
+        // 本身就已经等到下一个 vsync。此处原先额外调用一次 DwmFlush() 属于「第二次」合成器同步 ——
+        // 每帧多一次 DWM 往返、约多 1 帧延迟，并会与 Present 争抢同一把 DWM 锁。已删除。
+        // 关闭帧同步（g_enableFrameSync=false）时 Present 走 SyncInterval=0，同样无需 DwmFlush。
+        // Frame sync: with a FLIP_SEQUENTIAL swap chain, Present(1,0) already waits for the next vsync.
+        // The extra DwmFlush() here was a SECOND compositor sync per frame (~1 extra frame of latency) and
+        // contended with Present for the same DWM lock, so it was removed.
+        bool isActive = !g_history.empty() || !g_particles.empty() || !g_ripples.empty() || !g_trailShapes.empty();
+        // 空闲退避：有拖尾/粒子/效果时 1ms，空闲时 16ms（~60fps 响应）
+        waitMs = isActive ? 1 : 16;
+    }
+
+    // ---- 清理渲染资源（复用统一清理，保证与设备丢失恢复路径一致，含 SetRoot(nullptr)）---- / Cleanup render resources (reuse unified cleanup, consistent with device loss recovery path, including SetRoot(nullptr))
+    Wh_Log(L"RenderThread: exiting, cleaning up");
+    // 先停止后台采样线程，再释放渲染资源
+    if (g_bgSampleExitEvent) SetEvent(g_bgSampleExitEvent);
+    if (g_bgSampleThread) {
+        if (WaitForSingleObject(g_bgSampleThread, 3000) == WAIT_TIMEOUT) {
+            Wh_Log(L"RenderThread: background sampler thread timed out, terminating");
+            TerminateThread(g_bgSampleThread, 1);
+            WaitForSingleObject(g_bgSampleThread, 1000);
+        }
+        CloseHandle(g_bgSampleThread);
+        g_bgSampleThread = NULL;
+    }
+    if (g_bgSampleExitEvent) { CloseHandle(g_bgSampleExitEvent); g_bgSampleExitEvent = NULL; }
+    DeleteCriticalSection(&g_sampleCS);
+    // 停止音乐捕获（其 COM 引用由 MusicComOwnedRef 按线程记账，可安全跨线程调用）
+    MusicStopCapture();
+    ReleaseAllRenderResources();
+    if (coOwned) CoUninitialize();
+    return 0;
+}
+
+
+
+BOOL WhTool_ModInit() {
+    LoadSettings();
+    g_readyEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    g_threadHandle = CreateThread(NULL, 0, OverlayThreadProc, NULL, 0, NULL);
+    if (!g_threadHandle) {
+        if (g_readyEvent) { CloseHandle(g_readyEvent); g_readyEvent = NULL; }
+        return FALSE;
+    }
+    return TRUE;
+}
+void WhTool_ModUninit() {
+    if (g_threadHandle) {
+        if (g_readyEvent)
+            WaitForSingleObject(g_readyEvent, INFINITE);
+        if (g_overlayHwnd)
+            PostMessage(g_overlayHwnd, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_threadHandle, INFINITE);
+        CloseHandle(g_threadHandle);
+        g_threadHandle = NULL;
+    }
+    if (g_renderExitEvent) {
+        CloseHandle(g_renderExitEvent);
+        g_renderExitEvent = NULL;
+    }
+    if (g_readyEvent) {
+        CloseHandle(g_readyEvent);
+        g_readyEvent = NULL;
+    }
+}
+void WhTool_ModSettingsChanged() {
+    g_settingsDirty.store(true);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+BOOL Wh_ModInit() {
+    // Deny load in session 0, as it's not necessary, and may cause issues.
+    DWORD sessionId = 0;
+    BOOL gotSession = ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
+    if (gotSession && sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR *argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 || wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+    LocalFree(argv);
+    if (isExcluded) {
+        return FALSE;
+    }
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running");
+            ExitProcess(1);
+        }
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+        IMAGE_DOS_HEADER *dosHeader = (IMAGE_DOS_HEADER *)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS *ntHeaders = (IMAGE_NT_HEADERS *)((BYTE *)dosHeader + dosHeader->e_lfanew);
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void *entryPoint = (BYTE *)dosHeader + entryPointRVA;
+        Wh_SetFunctionHook(entryPoint, (void *)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+    if (isToolModProcess) {
+        return FALSE;
+    }
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            return;
+    }
+    WCHAR commandLine[MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+    using CreateProcessInternalW_t = BOOL(WINAPI *)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine, LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles, DWORD dwCreationFlags, LPVOID lpEnvironment,
+        LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine, nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+    WhTool_ModSettingsChanged();
+}
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+    WhTool_ModUninit();
+    ExitProcess(0);
+}

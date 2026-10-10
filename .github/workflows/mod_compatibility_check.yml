@@ -23,14 +23,18 @@ jobs:
           # '1.5.1',
           '1.6.1',
           '1.7.3',
-          '2.0.0-alpha.1',
+          '2.0.0-alpha.7',
         ]
         # exclude:
         #   # Exclude 1.5.1, which is quite old, for everyone but m417z.
         #   - version: ${{ (github.event_name == 'pull_request' && github.event.pull_request.user.login != 'm417z') && '1.5.1' }}
     steps:
+      # The test merge commit and its parents, which are diffed to list the
+      # changed files.
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
@@ -63,42 +67,52 @@ jobs:
           extract_path="${{ runner.temp }}\windhawk"
           echo "Extracting $installer_path to $extract_path"
           MSYS_NO_PATHCONV=1 "$installer_path" /S /PORTABLE $installer_args "/D=$extract_path"
-      - name: Get changed files
-        if: github.event_name == 'pull_request'
-        id: changed-files
-        uses: tj-actions/changed-files@v47
       - name: Compile mod
         if: github.event_name == 'pull_request'
-        env:
-          ADDED_FILES_COUNT: ${{ steps.changed-files.outputs.added_files_count }}
-          MODIFIED_FILES_COUNT: ${{ steps.changed-files.outputs.modified_files_count }}
-          ALL_CHANGED_AND_MODIFIED_FILES: ${{ steps.changed-files.outputs.all_changed_and_modified_files }}
-          ALL_CHANGED_AND_MODIFIED_FILES_COUNT: ${{ steps.changed-files.outputs.all_changed_and_modified_files_count }}
         run: |
-          a=ADDED_FILES_COUNT
-          b=MODIFIED_FILES_COUNT
-          c=ALL_CHANGED_AND_MODIFIED_FILES_COUNT
-          if [[ ( ($a -eq 0 && $b -eq 1) || ($a -eq 1 && $b -eq 0) ) && $c -eq 1 ]]; then
-            echo "Compiling $ALL_CHANGED_AND_MODIFIED_FILES"
+          # The checkout is GitHub's test merge commit, whose first parent is the
+          # tip of the base branch. The diff goes through a file so that a git
+          # failure fails the step.
+          changes_path="${{ runner.temp }}/changes"
+          git diff-tree -r -z --no-renames --name-status HEAD^1 HEAD > "$changes_path"
+          mapfile -d '' -t changes < "$changes_path"
+          if [[ ${#changes[@]} -eq 2 && ${changes[0]} =~ ^[AM]$ ]]; then
+            mod_file=${changes[1]}
+            echo "Compiling $mod_file"
             windhawk_path="${{ runner.temp }}\windhawk"
             if [[ "${{ matrix.version }}" == 1.* ]]; then
               python -u scripts/compile_mod.py -w "$windhawk_path" \
-                -f "$ALL_CHANGED_AND_MODIFIED_FILES" \
+                -f "$mod_file" \
                 -o32 "${{ runner.temp }}\mod_32.dll" \
                 -o64 "${{ runner.temp }}\mod_64.dll" \
                 -oarm64 "${{ runner.temp }}\mod_arm64.dll"
             else
               # Compile via the CLI (--disabled builds the mod without activating
-              # it). WINDHAWK_LOG_COMPILER_WARNINGS=1 surfaces clang warnings,
-              # which the CLI hides on a successful compile by default. Two passes:
-              # with WINDHAWK_ARM64_ENABLED=1 the CLI drops the x86-64 build for a
-              # mod whose targets are all common system processes, so the first
-              # pass (arm64 off) covers x86/x86-64 and the second (arm64 on) covers
-              # arm64.
+              # it). --arch all builds the union of every machine scenario:
+              # x86/x86-64 plus arm64, without the x86-64 build being skipped for a
+              # mod whose targets are all common system processes. --strict
+              # rejects metadata and settings that are only accepted for forward
+              # compatibility, such as reserved keys or an unknown $format.
               cli="$windhawk_path\windhawk-cli.exe"
-              MSYS_NO_PATHCONV=1 WINDHAWK_LOG_COMPILER_WARNINGS=1 "$cli" --app-root "$windhawk_path" \
-                mod install --disabled --file "$ALL_CHANGED_AND_MODIFIED_FILES"
-              MSYS_NO_PATHCONV=1 WINDHAWK_ARM64_ENABLED=1 WINDHAWK_LOG_COMPILER_WARNINGS=1 "$cli" --app-root "$windhawk_path" \
-                mod install --disabled --file "$ALL_CHANGED_AND_MODIFIED_FILES"
+              result="${{ runner.temp }}/compile_result.json"
+              if ! MSYS_NO_PATHCONV=1 "$cli" --json \
+                mod install --disabled --arch all --strict --file "$mod_file" \
+                > "$result"; then
+                # Compiler diagnostics are streamed to stderr, but the failure
+                # summary goes to stdout in JSON mode, and a failure that produced
+                # no diagnostics (bad metadata, for example) has no stderr output
+                # at all.
+                jq -r '"::error::\(.error.code): \(.error.message)"' "$result" \
+                  || cat "$result"
+                exit 1
+              fi
+
+              # The CLI exits with 0 for a compile that only produced warnings, and
+              # omits the "warnings" key when there were none. The warning text
+              # itself is printed to stderr above.
+              if jq -e '.data.warnings' "$result" > /dev/null; then
+                echo "::error::The mod compiled with warnings"
+                exit 1
+              fi
             fi
           fi

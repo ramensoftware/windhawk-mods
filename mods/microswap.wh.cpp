@@ -2,13 +2,13 @@
 // @id              microswap
 // @name            MicSwitch
 // @description     Tray icon to cycle between multiple preferred microphones. Supports up to 6 devices with click or scroll to swap.
-// @version         2.0.1
+// @version         2.1.0
 // @author          BlackPaw
 // @github          https://github.com/BlackPaw21
 // @donateUrl       https://ko-fi.com/blackpaw21
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -loleaut32 -lcomdlg32 -ladvapi32 -lcomctl32
+// @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -loleaut32 -lcomdlg32 -ladvapi32 -lcomctl32 -lwinmm
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -64,6 +64,17 @@ Enable **Advanced Mode** in the Windhawk settings panel (gear icon → Settings 
 
 ## Changelog
 
+### v2.1.0
+- **Live input meter:** Added a live microphone level meter inside the volume slider popup (reflects active mic levels while an application is using the microphone).
+- **Mute sound cues:** Optional Windows sound cues when toggling mute state.
+- **Actual endpoint mute state:** Accurately reflects endpoint mute state directly from WASAPI notifications.
+- **Settings focus restoration:** Re-opening Mod Settings while already running brings the existing window to the foreground.
+- **Bluetooth auto-reconnect:** Automatically reconnects Bluetooth microphones and headsets when powered back on without requiring manual re-selection in settings.
+- **Persistent disconnected devices:** Disconnected microphones are remembered in settings instead of being removed or unselected on save.
+- **Explorer restart recovery:** Tray icon restores cleanly after Windows Explorer updates or restarts.
+- **Multi-monitor volume slider:** Volume slider popup is properly clamped to the bottom edge of secondary monitors.
+- **Security:** Hardened DLL search paths to prevent library hijacking.
+
 ### v2.0.1
 - **New:** Persistent Mute toggle in dashboard settings. When checked, mute state survives device cycles (USB replug, sleep/wake, driver resets).
 - **Fixed:** Persistent mute now survives device cycling — mute is re-applied to the newly defaulted device after switching.
@@ -117,6 +128,37 @@ Enable **Advanced Mode** in the Windhawk settings panel (gear icon → Settings 
 #include <shellapi.h>
 #include <shobjidl.h>
 #include <endpointvolume.h>
+#include <mmsystem.h>
+// Guarded declaration for IAudioMeterInformation so it's skipped once the
+// toolchain header provides a full definition — matches mic-mute-hotkey-overlay.
+#ifndef __IAudioMeterInformation_INTERFACE_DEFINED__
+#define __IAudioMeterInformation_INTERFACE_DEFINED__
+MIDL_INTERFACE("c02216f6-8c67-4b5b-9d00-d008e73e0064")
+IAudioMeterInformation : public IUnknown {
+   public:
+    virtual HRESULT STDMETHODCALLTYPE GetPeakValue(float* pfPeak) = 0;
+    virtual HRESULT STDMETHODCALLTYPE
+    GetMeteringChannelCount(UINT* pnChannelCount) = 0;
+    virtual HRESULT STDMETHODCALLTYPE
+    GetChannelsPeakValues(UINT32 u32ChannelCount, float* afPeakValues) = 0;
+    virtual HRESULT STDMETHODCALLTYPE
+    QueryHardwareSupport(DWORD* pdwHardwareSupportMask) = 0;
+};
+#ifdef __CRT_UUID_DECL
+__CRT_UUID_DECL(IAudioMeterInformation,
+                 0xc02216f6,
+                 0x8c67,
+                 0x4b5b,
+                 0x9d,
+                 0x00,
+                 0xd0,
+                 0x08,
+                 0xe7,
+                 0x3e,
+                 0x00,
+                 0x64)
+#endif
+#endif
 #include <commctrl.h>
 #include <dwmapi.h>
 
@@ -126,6 +168,7 @@ Enable **Advanced Mode** in the Windhawk settings panel (gear icon → Settings 
 #include <functiondiscoverykeys_devpkey.h>
 #include <commdlg.h>
 #include <algorithm>
+#include <cmath>
 #include <vector>
 #include <string>
 
@@ -138,14 +181,14 @@ static const GUID MICSWITCH_TRAY_GUID =
 #define WM_TRAY_CALLBACK     (WM_USER + 1)
 #define WM_UPDATE_TRAY_STATE (WM_USER + 2)
 #define WM_TRAY_SCROLL       (WM_USER + 3)  // wParam = direction (+1 or -1)
-#define WM_UPDATE_HOOK_STATE (WM_USER + 4)
-#define WM_SHOW_FILE_PICKER  (WM_USER + 5)  // lParam = bitmask of slots needing pickers
-#define WM_RELOAD_ICONS      (WM_USER + 6)  // reload icons on tray thread (eliminates cross-thread handle race)
 #define WM_RELOAD_ALL              (WM_USER + 7)  // full reload after dashboard save
 #define WM_PRIORITY_DEVICE_ACTIVE  (WM_USER + 8)  // lParam = heap-alloc'd WCHAR* device ID
 #define WM_REBIND_VOLUME_CALLBACK  (WM_USER + 9)  // rebind IAudioEndpointVolumeCallback after default-device change
 #define WM_REFRESH_DEVICE_LIST     (WM_USER + 10) // refresh dashboard device combos after hot-plug
+#define WM_EXTERNAL_MUTE           (WM_USER + 11) // current capture endpoint mute changed outside this mod
+#define WM_ACTIVATE_DASHBOARD      (WM_USER + 12) // activate and bring existing dashboard to foreground
 #define TRAY_RECT_INIT_TIMER 99   // one-shot retry timer for Shell_NotifyIconGetRect
+#define TRAY_WATCHDOG_TIMER  100  // periodic watchdog timer to verify tray icon presence
 
 // Sentinel context GUID — distinguishes volume changes triggered by our own
 // VolumePopup slider from external (volume keys / other apps)
@@ -158,6 +201,12 @@ static const GUID kVolumeChangeCtx =
 #define IDC_BTN_KOFI         9002
 #define MENU_SOUND_SETTINGS  9003
 #define IDC_PERSISTENT_MUTE  9004
+#define IDC_SOUND_CUES 9007
+
+static bool ReadSoundCues() {
+    WCHAR text[8] = {};
+    return Wh_GetStringValue(L"soundCues", text, ARRAYSIZE(text)) && text[0] == L'1';
+}
 
 // With NOTIFYICON_VERSION_4 active Windows changes the tray notifications:
 //   left-click  → NIN_SELECT       (instead of / alongside WM_LBUTTONUP)
@@ -214,7 +263,9 @@ static int    g_deviceSlotCount = 2;
 static bool   g_isMutedByUs     = false;
 static WCHAR  g_mutedDeviceId[512] = {};
 static bool   g_persistentMute = false;  // re-apply mute after device cycles
-// ─────────────────────────────────────────────────────────────────────────────
+static LONG g_bindingGeneration = 0; // tray thread only
+static WCHAR g_boundCaptureId[512] = {};
+static bool g_cuesEnabled = false; // tray COM thread only
 
 // Priority device list — up to MAX_DEVICE_SLOTS entries, index 0 = highest priority.
 // Written on main/tray thread under no lock (only touched during reload or init).
@@ -328,6 +379,7 @@ namespace MicSwitchGui {
             HICON hPreviewIcon = nullptr;
             std::wstring id, name, iconKey;
             WCHAR customPath[MAX_PATH] = {};
+            bool isOffline = false;
         } slots[6];
 
         HWND hCountCombo = nullptr;
@@ -336,6 +388,7 @@ namespace MicSwitchGui {
         HWND hCancelBtn  = nullptr;
         HWND hKoFiBtn    = nullptr;
         HWND hPersistMuteBtn = nullptr;
+        HWND hSoundCues = nullptr;
 
         UINT dpi = 96;
         bool advancedMode = false;
@@ -397,7 +450,7 @@ namespace MicSwitchGui {
     // Apply DarkMode_CFD theme to a combo so its dropdown renders dark on Win10+.
     static void DarkCombo(HWND h) {
         HMODULE ux = GetModuleHandleW(L"uxtheme.dll");
-        if (!ux) ux = LoadLibraryW(L"uxtheme.dll");
+        if (!ux) ux = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!ux) return;
         using Fn = HRESULT(WINAPI*)(HWND, LPCWSTR, LPCWSTR);
         auto fn = reinterpret_cast<Fn>(GetProcAddress(ux, "SetWindowTheme"));
@@ -441,9 +494,11 @@ namespace MicSwitchGui {
 
         int chkY = btnY + Sc(28,d) + Sc(6,d);
         SetWindowPos(s->hPersistMuteBtn, nullptr, sx+Sc(12,d), chkY, Sc(180,d), Sc(22,d), SWP_NOZORDER|SWP_NOACTIVATE);
+        int cuesY = chkY + Sc(27,d);
+        SetWindowPos(s->hSoundCues, nullptr, sx+Sc(12,d), cuesY, Sc(280,d), Sc(22,d), SWP_NOZORDER|SWP_NOACTIVATE);
 
         int prioPanelH = Sc(32,d) + MAX_DEVICE_SLOTS * Sc(kPrioRowH,d) + Sc(12,d);
-        int slotsPanelH = chkY + Sc(22,d) + Sc(12,d);
+        int slotsPanelH = cuesY + Sc(22,d) + Sc(12,d);
         int clientH = prioPanelH > slotsPanelH ? prioPanelH : slotsPanelH;
 
         RECT rc = {0, 0, Sc(s->advancedMode ? kCW : kSW, d), clientH};
@@ -540,6 +595,46 @@ namespace MicSwitchGui {
             s.slots[i].iconKey = ikBuf[0] ? ikBuf : L"mic_classic";
             Wh_GetStringValue(kPth, s.slots[i].customPath, MAX_PATH);
             s.slots[i].hPreviewIcon = LoadSlotPreview(s.slots[i].iconKey, s.slots[i].customPath);
+            s.slots[i].isOffline = false;
+        }
+
+        for (int i = 0; i < 6; i++) {
+            if (!s.slots[i].id.empty()) {
+                bool found = false;
+                for (auto& dev : s.activeDevices) {
+                    if (dev.id == s.slots[i].id) {
+                        found = true;
+                        s.slots[i].name = dev.name;
+                        break;
+                    }
+                }
+                if (!found && !s.slots[i].name.empty()) {
+                    int matchCount = 0;
+                    size_t matchIdx = 0;
+                    for (size_t d = 0; d < s.activeDevices.size(); d++) {
+                        if (s.activeDevices[d].name == s.slots[i].name) {
+                            matchCount++;
+                            matchIdx = d;
+                        }
+                    }
+                    if (matchCount == 1) {
+                        const auto& candId = s.activeDevices[matchIdx].id;
+                        bool usedElsewhere = false;
+                        for (int k = 0; k < MAX_DEVICE_SLOTS; k++) {
+                            if (k != i && s.slots[k].id == candId) {
+                                usedElsewhere = true;
+                                break;
+                            }
+                        }
+                        if (!usedElsewhere) {
+                            found = true;
+                            s.slots[i].id = candId;
+                            s.slots[i].name = s.activeDevices[matchIdx].name;
+                        }
+                    }
+                }
+                if (!found) s.slots[i].isOffline = true;
+            }
         }
 
         for (int i = 0; i < MAX_DEVICE_SLOTS; i++) {
@@ -621,12 +716,21 @@ namespace MicSwitchGui {
                 s->slots[i].hDevCombo = CreateWindowExW(WS_EX_CLIENTEDGE, L"COMBOBOX", nullptr,
                     WS_CHILD|CBS_DROPDOWNLIST, 0, 0, 10, 300,
                     hWnd, (HMENU)(UINT_PTR)(200+i), hInst, nullptr);
+                int sel = -1;
                 for (int j = 0; j < (int)s->activeDevices.size(); j++) {
                     int idx = (int)SendMessageW(s->slots[i].hDevCombo, CB_ADDSTRING,
                                                 0, (LPARAM)s->activeDevices[j].name.c_str());
                     if (s->slots[i].id == s->activeDevices[j].id)
-                        SendMessageW(s->slots[i].hDevCombo, CB_SETCURSEL, idx, 0);
+                        sel = idx;
                 }
+                if (s->slots[i].isOffline && !s->slots[i].name.empty()) {
+                    WCHAR offLabel[320];
+                    swprintf_s(offLabel, L"%s (Disconnected)", s->slots[i].name.c_str());
+                    int idx = (int)SendMessageW(s->slots[i].hDevCombo, CB_ADDSTRING,
+                                                0, (LPARAM)offLabel);
+                    sel = idx;
+                }
+                if (sel >= 0) SendMessageW(s->slots[i].hDevCombo, CB_SETCURSEL, sel, 0);
                 DarkCombo(s->slots[i].hDevCombo);
 
                 s->slots[i].hIconCombo = CreateWindowExW(WS_EX_CLIENTEDGE, L"COMBOBOX", nullptr,
@@ -701,16 +805,24 @@ namespace MicSwitchGui {
             s->hPersistMuteBtn = CreateWindowExW(0, L"BUTTON", L"Persistent Mute",
                 WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, 0, 0, 10, 10,
                 hWnd, (HMENU)IDC_PERSISTENT_MUTE, hInst, nullptr);
+            s->hSoundCues = CreateWindowExW(0, L"BUTTON", L"Sound cues for mute changes",
+                WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, 0, 0, 10, 10,
+                hWnd, (HMENU)IDC_SOUND_CUES, hInst, nullptr);
             {
                 HMODULE ux = GetModuleHandleW(L"uxtheme.dll");
                 if (ux) {
                     using Fn = HRESULT(WINAPI*)(HWND, LPCWSTR, LPCWSTR);
                     auto fn = (Fn)GetProcAddress(ux, "SetWindowTheme");
-                    if (fn) fn(s->hPersistMuteBtn, L"", L"");
+                    if (fn) {
+                        fn(s->hPersistMuteBtn, L"", L"");
+                        fn(s->hSoundCues, L"", L"");
+                    }
                 }
             }
-            if (g_persistentMute)
+            if (g_persistentMute) {
                 SendMessageW(s->hPersistMuteBtn, BM_SETCHECK, BST_CHECKED, 0);
+            }
+            SendMessageW(s->hSoundCues, BM_SETCHECK, ReadSoundCues() ? BST_CHECKED : BST_UNCHECKED, 0);
 
             EnumChildWindows(hWnd, ApplyFontProc, reinterpret_cast<LPARAM>(s->hFont));
             UpdateSlotVisibility(s);  // also calls LayoutControls → positions everything
@@ -718,7 +830,7 @@ namespace MicSwitchGui {
             // Request dark title bar from DWM (Win10 1903+, silently fails earlier)
             {
                 HMODULE dwm = GetModuleHandleW(L"dwmapi.dll");
-                if (!dwm) dwm = LoadLibraryW(L"dwmapi.dll");
+                if (!dwm) dwm = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
                 if (dwm) {
                     using DwmFn = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
                     auto fn = reinterpret_cast<DwmFn>(GetProcAddress(dwm, "DwmSetWindowAttribute"));
@@ -738,7 +850,7 @@ namespace MicSwitchGui {
         case WM_PAINT: {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hWnd, &ps);
-            SelectObject(hdc, s->hFont);
+            HFONT hOldFont = (HFONT)SelectObject(hdc, s->hFont);
             SetBkMode(hdc, TRANSPARENT);
             RECT cr; GetClientRect(hWnd, &cr);
             UINT d = s->dpi;
@@ -819,6 +931,7 @@ namespace MicSwitchGui {
                 }
             }
 
+            SelectObject(hdc, hOldFont);
             EndPaint(hWnd, &ps);
             return 0;
         }
@@ -826,7 +939,7 @@ namespace MicSwitchGui {
         // ── Dark theming for child controls ───────────────────────────────────
         case WM_CTLCOLORSTATIC:
             if (s) {
-                SetTextColor((HDC)wParam, (HWND)lParam == s->hPersistMuteBtn ? kClrText : kClrDim);
+                SetTextColor((HDC)wParam, ((HWND)lParam == s->hPersistMuteBtn || (HWND)lParam == s->hSoundCues) ? kClrText : kClrDim);
                 SetBkColor((HDC)wParam, kClrBg);
                 return (LRESULT)s->hBgBrush;
             }
@@ -841,7 +954,7 @@ namespace MicSwitchGui {
             break;
         case WM_CTLCOLORBTN:
             if (s) {
-                if ((HWND)lParam == s->hPersistMuteBtn) {
+                if ((HWND)lParam == s->hPersistMuteBtn || (HWND)lParam == s->hSoundCues) {
                     SetTextColor((HDC)wParam, kClrText);
                     SetBkColor((HDC)wParam, kClrBg);
                 }
@@ -880,9 +993,10 @@ namespace MicSwitchGui {
             WCHAR txt[64] = {}; GetWindowTextW(dis->hwndItem, txt, 64);
             SetTextColor(dis->hDC, kClrText);
             SetBkMode(dis->hDC, TRANSPARENT);
-            SelectObject(dis->hDC, s->hFont);
+            HFONT hOldFont = (HFONT)SelectObject(dis->hDC, s->hFont);
             DrawTextW(dis->hDC, txt, -1, &dis->rcItem,
                       DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            SelectObject(dis->hDC, hOldFont);
 
             if (dis->itemState & ODS_FOCUS) DrawFocusRect(dis->hDC, &dis->rcItem);
             return TRUE;
@@ -1013,6 +1127,7 @@ namespace MicSwitchGui {
                 }
                 BOOL pmChecked = SendMessageW(s->hPersistMuteBtn, BM_GETCHECK, 0, 0);
                 Wh_SetStringValue(L"persistentMute", pmChecked ? L"1" : L"0");
+                Wh_SetStringValue(L"soundCues", SendMessageW(s->hSoundCues, BM_GETCHECK, 0, 0) == BST_CHECKED ? L"1" : L"0");
 
                 if (s->hTrayHwnd && IsWindow(s->hTrayHwnd)) PostMessageW(s->hTrayHwnd, WM_RELOAD_ALL, 0, 0);
                 DestroyWindow(hWnd);
@@ -1091,43 +1206,129 @@ namespace MicSwitchGui {
                 pEnum->Release();
             }
 
-            // Helper: translate old-device index to new-device index by ID
-            auto findNewIdx = [&](int oldIdx) -> int {
-                if (oldIdx < 0 || oldIdx >= (int)oldDevices.size()) return -1;
-                for (size_t j = 0; j < s->activeDevices.size(); j++)
-                    if (s->activeDevices[j].id == oldDevices[oldIdx].id) return (int)j;
-                return -1;
-            };
-
-            // Repopulate slot device combos
+            // Repopulate slot device combos: first sync current user selection into slot data
             for (int i = 0; i < 6; i++) {
+                int oldSel = savedSlotSel[i];
+                if (oldSel >= 0 && oldSel < (int)oldDevices.size()) {
+                    s->slots[i].id   = oldDevices[oldSel].id;
+                    s->slots[i].name = oldDevices[oldSel].name;
+                }
+            }
+
+            for (int i = 0; i < 6; i++) {
+                bool found = false;
+                int foundIdx = -1;
+                if (!s->slots[i].id.empty()) {
+                    for (size_t j = 0; j < s->activeDevices.size(); j++) {
+                        if (s->activeDevices[j].id == s->slots[i].id) {
+                            found = true;
+                            foundIdx = (int)j;
+                            s->slots[i].name = s->activeDevices[j].name;
+                            break;
+                        }
+                    }
+                    if (!found && !s->slots[i].name.empty()) {
+                        int matchCount = 0;
+                        size_t matchIdx = 0;
+                        for (size_t d = 0; d < s->activeDevices.size(); d++) {
+                            if (s->activeDevices[d].name == s->slots[i].name) {
+                                matchCount++;
+                                matchIdx = d;
+                            }
+                        }
+                        if (matchCount == 1) {
+                            const auto& candId = s->activeDevices[matchIdx].id;
+                            bool usedElsewhere = false;
+                            for (int k = 0; k < 6; k++) {
+                                if (k != i && s->slots[k].id == candId) {
+                                    usedElsewhere = true;
+                                    break;
+                                }
+                            }
+                            if (!usedElsewhere) {
+                                found = true;
+                                foundIdx = (int)matchIdx;
+                                s->slots[i].id = candId;
+                                s->slots[i].name = s->activeDevices[matchIdx].name;
+                            }
+                        }
+                    }
+                }
+                s->slots[i].isOffline = !found && !s->slots[i].id.empty();
+
                 SendMessageW(s->slots[i].hDevCombo, CB_RESETCONTENT, 0, 0);
-                int newSel = findNewIdx(savedSlotSel[i]);
+                int newSel = -1;
                 for (int j = 0; j < (int)s->activeDevices.size(); j++) {
                     int idx = (int)SendMessageW(s->slots[i].hDevCombo, CB_ADDSTRING, 0,
                                                 (LPARAM)s->activeDevices[j].name.c_str());
-                    if (s->slots[i].id == s->activeDevices[j].id) newSel = idx;
+                    if (found && j == foundIdx) newSel = idx;
                 }
-                if (newSel >= 0) SendMessageW(s->slots[i].hDevCombo, CB_SETCURSEL, newSel, 0);
+                if (s->slots[i].isOffline) {
+                    const WCHAR* displayName = !s->slots[i].name.empty() ? s->slots[i].name.c_str() : L"Unknown Device";
+                    WCHAR offLabel[320];
+                    swprintf_s(offLabel, L"%s (Disconnected)", displayName);
+                    int idx = (int)SendMessageW(s->slots[i].hDevCombo, CB_ADDSTRING, 0,
+                                                (LPARAM)offLabel);
+                    newSel = idx;
+                }
+                if (newSel >= 0) {
+                    SendMessageW(s->slots[i].hDevCombo, CB_SETCURSEL, newSel, 0);
+                    InvalidateRect(s->slots[i].hDevCombo, nullptr, TRUE);
+                }
             }
 
             // Repopulate priority device combos (index 0 = "None")
             for (int i = 0; i < MAX_DEVICE_SLOTS; i++) {
+                int oldSel = savedPrioSel[i];
+                if (oldSel == 0) {
+                    s->prioSlots[i].id.clear();
+                    s->prioSlots[i].name.clear();
+                    s->prioSlots[i].isOffline = false;
+                } else if (oldSel > 0 && (oldSel - 1) < (int)oldDevices.size()) {
+                    s->prioSlots[i].id   = oldDevices[oldSel - 1].id;
+                    s->prioSlots[i].name = oldDevices[oldSel - 1].name;
+                }
+
+                bool prioFound = false;
+                int prioFoundIdx = -1;
+                if (!s->prioSlots[i].id.empty()) {
+                    for (size_t j = 0; j < s->activeDevices.size(); j++) {
+                        if (s->activeDevices[j].id == s->prioSlots[i].id) {
+                            prioFound = true;
+                            prioFoundIdx = (int)j;
+                            s->prioSlots[i].name = s->activeDevices[j].name;
+                            break;
+                        }
+                    }
+                }
+                s->prioSlots[i].isOffline = !prioFound && !s->prioSlots[i].id.empty();
+
                 SendMessageW(s->prioSlots[i].hDevCombo, CB_RESETCONTENT, 0, 0);
                 SendMessageW(s->prioSlots[i].hDevCombo, CB_ADDSTRING, 0, (LPARAM)L"None");
                 int newSel = 0; // default "None"
-                if (savedPrioSel[i] > 0) {
-                    int ns = findNewIdx(savedPrioSel[i] - 1);
-                    if (ns >= 0) newSel = ns + 1;
-                }
                 for (int j = 0; j < (int)s->activeDevices.size(); j++) {
-                    SendMessageW(s->prioSlots[i].hDevCombo, CB_ADDSTRING, 0,
-                                (LPARAM)s->activeDevices[j].name.c_str());
+                    int idx = (int)SendMessageW(s->prioSlots[i].hDevCombo, CB_ADDSTRING, 0,
+                                                (LPARAM)s->activeDevices[j].name.c_str());
+                    if (prioFound && j == prioFoundIdx) newSel = idx;
+                }
+                if (s->prioSlots[i].isOffline) {
+                    const WCHAR* displayName = !s->prioSlots[i].name.empty() ? s->prioSlots[i].name.c_str() : L"Unknown Device";
+                    WCHAR offLabel[320];
+                    swprintf_s(offLabel, L"%s (offline)", displayName);
+                    int idx = (int)SendMessageW(s->prioSlots[i].hDevCombo, CB_ADDSTRING, 0,
+                                                (LPARAM)offLabel);
+                    newSel = idx;
                 }
                 SendMessageW(s->prioSlots[i].hDevCombo, CB_SETCURSEL, newSel, 0);
+                InvalidateRect(s->prioSlots[i].hDevCombo, nullptr, TRUE);
             }
             return 0;
         }
+
+        case WM_ACTIVATE_DASHBOARD:
+            if (IsIconic(hWnd)) ShowWindow(hWnd, SW_RESTORE);
+            SetForegroundWindow(hWnd);
+            return 0;
 
         // ── Cleanup ───────────────────────────────────────────────────────────
         case WM_DESTROY:
@@ -1222,8 +1423,14 @@ namespace MicSwitchGui {
     }
 
     HANDLE LaunchDashboard(HWND hTrayHwnd) {
-        if (InterlockedCompareExchange(&g_guiRunning, 1, 0) != 0)
+        if (InterlockedCompareExchange(&g_guiRunning, 1, 0) != 0) {
+            HWND hDash = (HWND)InterlockedCompareExchangePointer(
+                (volatile PVOID*)&g_dashboardHwnd, nullptr, nullptr);
+            if (hDash && IsWindow(hDash)) {
+                PostMessageW(hDash, WM_ACTIVATE_DASHBOARD, 0, 0);
+            }
             return nullptr;
+        }
         HANDLE h = CreateThread(nullptr, 0, GuiThreadProc,
                                 reinterpret_cast<LPVOID>(hTrayHwnd), 0, nullptr);
         if (!h) InterlockedExchange(&g_guiRunning, 0);
@@ -1263,6 +1470,80 @@ void LoadDeviceSelections() {
         Wh_GetStringValue(keyId,   tmpIds[i],   512);
         Wh_GetStringValue(keyName, tmpNames[i], 256);
     }
+
+    // In-memory name re-match for offline slots at startup or reload.
+    HRESULT hrCo = CoInitialize(nullptr);
+    bool needsUninit = SUCCEEDED(hrCo);
+    IMMDeviceEnumerator* pEnum = nullptr;
+    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+                                   CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
+                                   (void**)&pEnum))) {
+        IMMDeviceCollection* pColl = nullptr;
+        if (SUCCEEDED(pEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &pColl))) {
+            UINT count = 0;
+            pColl->GetCount(&count);
+            struct ActiveDev { std::wstring id, name; };
+            std::vector<ActiveDev> activeDevs;
+            for (UINT i = 0; i < count; i++) {
+                IMMDevice* pDev = nullptr;
+                if (SUCCEEDED(pColl->Item(i, &pDev))) {
+                    LPWSTR pId = nullptr;
+                    if (SUCCEEDED(pDev->GetId(&pId))) {
+                        IPropertyStore* pStore = nullptr;
+                        if (SUCCEEDED(pDev->OpenPropertyStore(STGM_READ, &pStore))) {
+                            PROPVARIANT v; PropVariantInit(&v);
+                            if (SUCCEEDED(pStore->GetValue(PKEY_Device_FriendlyName, &v)) && v.pwszVal) {
+                                activeDevs.push_back({pId, v.pwszVal});
+                            }
+                            PropVariantClear(&v);
+                            pStore->Release();
+                        }
+                        CoTaskMemFree(pId);
+                    }
+                    pDev->Release();
+                }
+            }
+            pColl->Release();
+
+            // Re-match inactive slots if friendly name matches uniquely among active endpoints
+            for (int i = 0; i < MAX_DEVICE_SLOTS; i++) {
+                if (tmpIds[i][0] && tmpNames[i][0]) {
+                    bool isActive = false;
+                    for (const auto& dev : activeDevs) {
+                        if (dev.id == tmpIds[i]) {
+                            isActive = true;
+                            break;
+                        }
+                    }
+                    if (!isActive) {
+                        int matchCount = 0;
+                        size_t matchIdx = 0;
+                        for (size_t d = 0; d < activeDevs.size(); d++) {
+                            if (activeDevs[d].name == tmpNames[i]) {
+                                matchCount++;
+                                matchIdx = d;
+                            }
+                        }
+                        if (matchCount == 1) {
+                            const auto& candId = activeDevs[matchIdx].id;
+                            bool usedElsewhere = false;
+                            for (int k = 0; k < MAX_DEVICE_SLOTS; k++) {
+                                if (k != i && wcscmp(tmpIds[k], candId.c_str()) == 0) {
+                                    usedElsewhere = true;
+                                    break;
+                                }
+                            }
+                            if (!usedElsewhere) {
+                                lstrcpynW(tmpIds[i], candId.c_str(), 512);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        pEnum->Release();
+    }
+    if (needsUninit) CoUninitialize();
 
     EnterCriticalSection(&g_stateLock);
     for (int i = 0; i < MAX_DEVICE_SLOTS; i++) {
@@ -1367,118 +1648,98 @@ static void RefreshTrayIconRect() {
 }
 
 // ─── Mute helpers ─────────────────────────────────────────────────────────────
-// Every function requires COM already initialized on the calling thread.
+// COM is initialized on each calling thread. A failed read remains unknown.
+static BOOL GetMicMute(PCWSTR deviceId, BOOL* muted,
+                       WCHAR* resolvedId = nullptr, size_t capacity = 0) {
+    if (!muted) return FALSE;
+    IMMDeviceEnumerator* pEnum = nullptr;
+    if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                __uuidof(IMMDeviceEnumerator), (void**)&pEnum))) return FALSE;
+    IMMDevice* pDevice = nullptr;
+    HRESULT hr = deviceId && deviceId[0] ? pEnum->GetDevice(deviceId, &pDevice) :
+        pEnum->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pDevice);
+    pEnum->Release();
+    if (FAILED(hr) || !pDevice) return FALSE;
+    if (resolvedId && capacity) {
+        LPWSTR id = nullptr;
+        hr = pDevice->GetId(&id);
+        if (SUCCEEDED(hr) && id) lstrcpynW(resolvedId, id, (int)capacity);
+        CoTaskMemFree(id);
+        if (FAILED(hr)) { pDevice->Release(); return FALSE; }
+    }
+    IAudioEndpointVolume* pVol = nullptr;
+    hr = pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL,
+                           nullptr, (void**)&pVol);
+    pDevice->Release();
+    if (FAILED(hr) || !pVol) return FALSE;
+    hr = pVol->GetMute(muted);
+    pVol->Release();
+    return SUCCEEDED(hr);
+}
 
 static BOOL ApplyMute(PCWSTR deviceId, BOOL mute) {
     IMMDeviceEnumerator* pEnum = nullptr;
     if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
-                                __uuidof(IMMDeviceEnumerator), (void**)&pEnum)))
-        return FALSE;
-
+                                __uuidof(IMMDeviceEnumerator), (void**)&pEnum))) return FALSE;
     IMMDevice* pDevice = nullptr;
-    HRESULT hr = (deviceId && deviceId[0])
-                 ? pEnum->GetDevice(deviceId, &pDevice)
-                 : pEnum->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pDevice);
+    HRESULT hr = deviceId && deviceId[0] ? pEnum->GetDevice(deviceId, &pDevice) :
+        pEnum->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pDevice);
     pEnum->Release();
     if (FAILED(hr) || !pDevice) return FALSE;
-
     IAudioEndpointVolume* pVol = nullptr;
-    hr = pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, (void**)&pVol);
+    hr = pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL,
+                           nullptr, (void**)&pVol);
     pDevice->Release();
     if (FAILED(hr) || !pVol) return FALSE;
-
-    pVol->SetMute(mute, nullptr);
+    hr = pVol->SetMute(mute, &kVolumeChangeCtx);
     pVol->Release();
-    return TRUE;
+    return SUCCEEDED(hr);
 }
 
-
-// Call from tray thread (COM already initialized) or worker thread (has its own COM).
 static void RestoreMute() {
+    WCHAR ownedId[512] = {};
     EnterCriticalSection(&g_stateLock);
-    if (!g_isMutedByUs) { LeaveCriticalSection(&g_stateLock); return; }
-    WCHAR localId[512];
-    lstrcpynW(localId, g_mutedDeviceId, 512);
-    g_isMutedByUs      = false;
+    if (g_isMutedByUs) lstrcpynW(ownedId, g_mutedDeviceId, ARRAYSIZE(ownedId));
+    LeaveCriticalSection(&g_stateLock);
+    if (!ownedId[0]) return;
+    BOOL actual = FALSE;
+    if (!GetMicMute(ownedId, &actual) || (actual && !ApplyMute(ownedId, FALSE))) return;
+    EnterCriticalSection(&g_stateLock);
+    g_isMutedByUs = false;
     g_mutedDeviceId[0] = L'\0';
     LeaveCriticalSection(&g_stateLock);
-    ApplyMute(localId, FALSE);
-    Wh_SetStringValue(L"MutedDeviceId", L"");
 }
 
-// For callers that lack a COM apartment (main thread callbacks).
 static void RestoreMuteExternal() {
-    EnterCriticalSection(&g_stateLock);
-    bool wasMuted = g_isMutedByUs;
-    WCHAR localId[512] = {};
-    if (wasMuted) {
-        lstrcpynW(localId, g_mutedDeviceId, 512);
-        g_isMutedByUs      = false;
-        g_mutedDeviceId[0] = L'\0';
-    }
-    LeaveCriticalSection(&g_stateLock);
-    if (wasMuted) {
-        HRESULT hrCo = CoInitialize(nullptr);
-        if (SUCCEEDED(hrCo) || hrCo == RPC_E_CHANGED_MODE) {
-            ApplyMute(localId, FALSE);
-            if (SUCCEEDED(hrCo)) CoUninitialize();
-        }
-        Wh_SetStringValue(L"MutedDeviceId", L"");
-    }
+    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(hrCo) && hrCo != RPC_E_CHANGED_MODE) return;
+    RestoreMute();
+    if (SUCCEEDED(hrCo)) CoUninitialize();
 }
 
-// Called from TrayWndProc — tray thread has COM initialized by TrayThreadProc.
-// Checks the actual device mute state rather than relying solely on g_isMutedByUs,
-// so external mute changes (via Windows Sound settings) don't invert toggle behavior.
+static void PlayMuteCue(bool muted) {
+    if (g_cuesEnabled)
+        PlaySoundW(muted ? L"SystemExclamation" : L"SystemAsterisk", nullptr,
+                   SND_ALIAS | SND_ASYNC | SND_NODEFAULT);
+}
+
 static void ToggleMuteCurrentDevice() {
-    IMMDeviceEnumerator* pEnum = nullptr;
-    if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
-                                __uuidof(IMMDeviceEnumerator), (void**)&pEnum)))
-        return;
-
-    IMMDevice* pDefault = nullptr;
-    if (FAILED(pEnum->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pDefault))) {
-        pEnum->Release();
+    BOOL actual = FALSE;
+    WCHAR id[512] = {};
+    if (!GetMicMute(nullptr, &actual, id, ARRAYSIZE(id))) {
+        Wh_Log(L"Could not read microphone mute state");
         return;
     }
-
-    LPWSTR pId = nullptr;
-    if (FAILED(pDefault->GetId(&pId))) {
-        pDefault->Release(); pEnum->Release();
+    BOOL requested = !actual;
+    if (!ApplyMute(id, requested)) {
+        Wh_Log(L"SetMute failed for current microphone");
         return;
     }
-
-    IAudioEndpointVolume* pVol = nullptr;
-    HRESULT hr = pDefault->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL,
-                                    nullptr, (void**)&pVol);
-    if (FAILED(hr) || !pVol) {
-        CoTaskMemFree(pId); pDefault->Release(); pEnum->Release();
-        return;
-    }
-
-    BOOL actualMuted = FALSE;
-    pVol->GetMute(&actualMuted);
-
-    if (actualMuted) {
-        pVol->SetMute(FALSE, nullptr);
-        EnterCriticalSection(&g_stateLock);
-        g_isMutedByUs      = false;
-        g_mutedDeviceId[0] = L'\0';
-        LeaveCriticalSection(&g_stateLock);
-        Wh_SetStringValue(L"MutedDeviceId", L"");
-    } else {
-        pVol->SetMute(TRUE, nullptr);
-        EnterCriticalSection(&g_stateLock);
-        lstrcpynW(g_mutedDeviceId, pId, 512);
-        g_isMutedByUs = true;
-        LeaveCriticalSection(&g_stateLock);
-        Wh_SetStringValue(L"MutedDeviceId", pId);
-    }
-
-    pVol->Release();
-    CoTaskMemFree(pId);
-    pDefault->Release();
-    pEnum->Release();
+    PlayMuteCue(requested != FALSE);
+    EnterCriticalSection(&g_stateLock);
+    g_isMutedByUs = requested;
+    lstrcpynW(g_mutedDeviceId, requested ? id : L"", ARRAYSIZE(g_mutedDeviceId));
+    LeaveCriticalSection(&g_stateLock);
 }
 
 // ─── Device-state check ───────────────────────────────────────────────────────
@@ -1592,8 +1853,11 @@ public:
 // we still refresh on those so the tooltip reflects the new value.
 class VolNotifier : public IAudioEndpointVolumeCallback {
     volatile LONG m_ref;
+    LONG m_generation;
+    volatile LONG m_lastMute;
 public:
-    VolNotifier() : m_ref(1) {}
+    VolNotifier(LONG generation, LONG initialMute)
+        : m_ref(1), m_generation(generation), m_lastMute(initialMute) {}
     virtual ~VolNotifier() = default;
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
@@ -1612,10 +1876,17 @@ public:
         return static_cast<ULONG>(r);
     }
 
-    HRESULT STDMETHODCALLTYPE OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA) override {
+    HRESULT STDMETHODCALLTYPE OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA data) override {
+        if (!data) return E_POINTER;
+        LONG previous = InterlockedExchange(&m_lastMute, data->bMuted ? 1 : 0);
         HWND hwnd = (HWND)InterlockedCompareExchangePointer(
             (volatile PVOID*)&g_trayHwnd, nullptr, nullptr);
-        if (hwnd && IsWindow(hwnd)) PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
+        if (hwnd && IsWindow(hwnd)) {
+            if (previous != (data->bMuted ? 1 : 0) &&
+                !IsEqualGUID(data->guidEventContext, kVolumeChangeCtx))
+                PostMessageW(hwnd, WM_EXTERNAL_MUTE, (WPARAM)m_generation, (LPARAM)data->bMuted);
+            PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
+        }
         return S_OK;
     }
 };
@@ -1632,13 +1903,24 @@ static void BindEndpointVolume() {
     if (SUCCEEDED(pDev->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL,
                                  nullptr, (void**)&pVol)) && pVol) {
         g_pEndpointVol = pVol;
-        if (!g_pVolNotifier) g_pVolNotifier = new VolNotifier();
+        LPWSTR id = nullptr;
+        g_boundCaptureId[0] = L'\0';
+        if (SUCCEEDED(pDev->GetId(&id)) && id) {
+            lstrcpynW(g_boundCaptureId, id, ARRAYSIZE(g_boundCaptureId));
+            CoTaskMemFree(id);
+        }
+        BOOL initialMute = FALSE;
+        LONG generation = ++g_bindingGeneration;
+        if (!g_pVolNotifier) g_pVolNotifier = new VolNotifier(generation,
+            SUCCEEDED(g_pEndpointVol->GetMute(&initialMute)) ? (initialMute ? 1 : 0) : -1);
         g_pEndpointVol->RegisterControlChangeNotify(g_pVolNotifier);
     }
     pDev->Release();
 }
 
 static void UnbindEndpointVolume() {
+    ++g_bindingGeneration;
+    g_boundCaptureId[0] = L'\0';
     if (g_pEndpointVol && g_pVolNotifier) {
         g_pEndpointVol->UnregisterControlChangeNotify(g_pVolNotifier);
     }
@@ -1744,21 +2026,23 @@ static HICON CreateMutedOverlayIcon(HICON hBase) {
 
 static WCHAR s_lastDev[256]  = {};
 static HICON s_lastIcon      = nullptr;
-static bool  s_lastMuted     = false;
+static int   s_lastMuted     = -1;
 static int   s_lastVolume    = -1;
 
 void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
     // Snapshot shared state under lock (no COM inside the lock).
     WCHAR localDevIds[MAX_DEVICE_SLOTS][512] = {};
     int   localSlotCount;
-    bool  localMuted;
+    int   localMuted = -1;
 
     EnterCriticalSection(&g_stateLock);
     localSlotCount = g_deviceSlotCount;
     for (int i = 0; i < MAX_DEVICE_SLOTS; i++)
         lstrcpynW(localDevIds[i], g_cachedDevId[i], 512);
-    localMuted = g_isMutedByUs;
     LeaveCriticalSection(&g_stateLock);
+    BOOL actualMute = FALSE;
+    if ((g_pEndpointVol && SUCCEEDED(g_pEndpointVol->GetMute(&actualMute))) ||
+        GetMicMute(nullptr, &actualMute)) localMuted = actualMute ? 1 : 0;
 
     WCHAR currentDev[256] = L"Unknown Device";
     WCHAR currentId[512]  = {};
@@ -1853,10 +2137,12 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
 
     if (configuredCount < 2)
         swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"MicSwitch: Right-click to configure");
-    else if (localMuted && currentVolume >= 0)
+    else if (localMuted < 0)
+        swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"Mic: %.85s (mute unknown)", currentDev);
+    else if (localMuted == 1 && currentVolume >= 0)
         swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"Mic: %.82s (%d%%, Muted)",
                    currentDev, currentVolume);
-    else if (localMuted)
+    else if (localMuted == 1)
         swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"Mic: %.102s (Muted)", currentDev);
     else if (currentVolume >= 0)
         swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"Mic: %.92s (%d%%)",
@@ -1864,12 +2150,25 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
     else
         swprintf_s(nid.szTip, ARRAYSIZE(nid.szTip), L"Mic: %.112s", currentDev);
 
-    HICON hOverlay = localMuted ? CreateMutedOverlayIcon(currentIcon) : nullptr;
+    HICON hOverlay = localMuted == 1 ? CreateMutedOverlayIcon(currentIcon) : nullptr;
     nid.hIcon = hOverlay ? hOverlay : currentIcon;
-    Shell_NotifyIconW(isAdd ? NIM_ADD : NIM_MODIFY, &nid);
+    BOOL res = Shell_NotifyIconW(isAdd ? NIM_ADD : NIM_MODIFY, &nid);
+    if (!res && !isAdd) {
+        // Explorer or taskbar may have recreated the tray without TaskbarCreated broadcast
+        if (Shell_NotifyIconW(NIM_ADD, &nid)) {
+            NOTIFYICONDATAW nidVer = {sizeof(nidVer)};
+            nidVer.hWnd      = hWnd;
+            nidVer.uID       = TRAY_ICON_ID;
+            nidVer.uFlags    = NIF_GUID;
+            nidVer.guidItem  = MICSWITCH_TRAY_GUID;
+            nidVer.uVersion  = NOTIFYICON_VERSION_4;
+            Shell_NotifyIconW(NIM_SETVERSION, &nidVer);
+            res = TRUE;
+        }
+    }
     if (hOverlay) { DestroyIcon(hOverlay); }
 
-    if (isAdd) {
+    if (isAdd && res) {
         NOTIFYICONDATAW nidVer = {sizeof(nidVer)};
         nidVer.hWnd      = hWnd;
         nidVer.uID       = TRAY_ICON_ID;
@@ -1877,6 +2176,12 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
         nidVer.guidItem  = MICSWITCH_TRAY_GUID;
         nidVer.uVersion  = NOTIFYICON_VERSION_4;
         Shell_NotifyIconW(NIM_SETVERSION, &nidVer);
+    }
+
+    if (!res) {
+        // Clear cached state so the next tick or event retries icon registration
+        s_lastIcon = nullptr;
+        s_lastDev[0] = L'\0';
     }
 
     RefreshTrayIconRect();
@@ -2088,7 +2393,7 @@ namespace VolumePopup {
 static constexpr WCHAR    kClass[]    = L"MicSwitchVolumePopup";
 static constexpr WCHAR    kLabel[]    = L"Mic Level";
 static constexpr int      kW         = 240;
-static constexpr int      kH         = 72;
+static constexpr int      kH         = 100;
 static constexpr int      kPadX      = 16;   // left/right padding
 static constexpr int      kTitleY    = 12;   // title row top Y
 static constexpr int      kTitleH    = 18;   // title row height
@@ -2112,6 +2417,8 @@ static int    g_value    = 0;
 static bool   g_dragging = false;
 static bool   g_hover    = false;
 static HFONT  g_font     = nullptr;
+static IAudioMeterInformation* g_meter = nullptr;
+static int g_peak = -1;
 
 static int ValueToThumbX() {
     return kPadX + (g_value * (kW - 2 * kPadX)) / 100;
@@ -2160,7 +2467,16 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 }
             }
         }
-        SetTimer(hWnd, kVolTimerId, 16, nullptr);
+        if (g_notifEnum) {
+            IMMDevice* device = nullptr;
+            if (SUCCEEDED(g_notifEnum->GetDefaultAudioEndpoint(eCapture, eMultimedia, &device)) && device) {
+                device->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, nullptr,
+                                 reinterpret_cast<void**>(&g_meter));
+                device->Release();
+            }
+        }
+        g_peak = -1;
+        SetTimer(hWnd, kVolTimerId, 50, nullptr);
         return 0;
     }
 
@@ -2213,12 +2529,14 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         int tBot   = kTrackY + kTrackH / 2;
         int tX     = ValueToThumbX();
 
-        SelectObject(hMem, GetStockObject(NULL_PEN));
+        HPEN oldTrackPen = (HPEN)SelectObject(hMem, GetStockObject(NULL_PEN));
+        HBRUSH oldTrackBrush = (HBRUSH)GetCurrentObject(hMem, OBJ_BRUSH);
 
         // Unfilled portion
         HBRUSH hbTrack = CreateSolidBrush(kTrackBg);
         SelectObject(hMem, hbTrack);
         RoundRect(hMem, tLeft, tTop, tRight, tBot, kTrackH, kTrackH);
+        SelectObject(hMem, oldTrackBrush);
         DeleteObject(hbTrack);
 
         // Accent-filled (left of thumb)
@@ -2226,6 +2544,7 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             HBRUSH hbFill = CreateSolidBrush(kTrackFill);
             SelectObject(hMem, hbFill);
             RoundRect(hMem, tLeft, tTop, tX, tBot, kTrackH, kTrackH);
+            SelectObject(hMem, oldTrackBrush);
             DeleteObject(hbFill);
         }
 
@@ -2234,7 +2553,27 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         HBRUSH hbThumb = CreateSolidBrush(kThumbCol);
         SelectObject(hMem, hbThumb);
         Ellipse(hMem, tX - r, kTrackY - r, tX + r, kTrackY + r);
+        SelectObject(hMem, oldTrackBrush);
         DeleteObject(hbThumb);
+        SelectObject(hMem, oldTrackPen);
+
+        HFONT meterOldFont = (HFONT)SelectObject(hMem, g_font ? g_font : GetStockObject(DEFAULT_GUI_FONT));
+        SetTextColor(hMem, kTextSec);
+        TextOutW(hMem, kPadX, 74, L"Input", 5);
+        if (g_peak >= 0) {
+            int active = (g_peak * 10 + 99) / 100;
+            for (int i = 0; i < 10; ++i) {
+                RECT segment = {66 + i * 16, 76, 79 + i * 16, 85};
+                COLORREF color = i < active ? (i < 7 ? RGB(0, 190, 110) :
+                    i < 9 ? RGB(235, 165, 45) : RGB(220, 65, 65)) : kTrackBg;
+                HBRUSH brush = CreateSolidBrush(color);
+                FillRect(hMem, &segment, brush);
+                DeleteObject(brush);
+            }
+        } else {
+            TextOutW(hMem, 66, 74, L"Unavailable", 11);
+        }
+        SelectObject(hMem, meterOldFont);
 
         // ── Blit ──────────────────────────────────────────────────────
         BitBlt(hdc, 0, 0, kW, kH, hMem, 0, 0, SRCCOPY);
@@ -2330,6 +2669,29 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 
     case WM_TIMER:
         if (wParam == kVolTimerId) {
+            float rawPeak = 0.0f;
+            int rawVal = -1;
+            if (g_meter && SUCCEEDED(g_meter->GetPeakValue(&rawPeak))) {
+                if (rawPeak <= 0.005f) {
+                    rawVal = 0;
+                } else {
+                    float norm = (rawPeak - 0.005f) / 0.995f;
+                    float scaled = sqrtf(std::max(0.0f, std::min(1.0f, norm)));
+                    rawVal = (int)(scaled * 100.0f + 0.5f);
+                }
+            }
+            int next = g_peak;
+            if (rawVal < 0) {
+                next = -1;
+            } else if (g_peak < 0 || rawVal >= g_peak) {
+                next = rawVal;
+            } else {
+                next = std::max(0, g_peak - 8);
+            }
+            if (next != g_peak) {
+                g_peak = next;
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
             if (g_volumeDirty) { g_volumeDirty = false; ApplyVolume(); }
         }
         return 0;
@@ -2356,6 +2718,10 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 
     case WM_DESTROY:
         KillTimer(hWnd, kVolTimerId);
+        if (g_meter) {
+            g_meter->Release();
+            g_meter = nullptr;
+        }
         if (g_volumeDirty) { g_volumeDirty = false; ApplyVolume(); }
         if (g_font) { DeleteObject(g_font); g_font = nullptr; }
         g_hwnd        = nullptr;
@@ -2392,9 +2758,10 @@ static void Show(HWND hTrayWnd, int volPct) {
     MONITORINFO mi = { sizeof(mi) };
     if (GetMonitorInfo(hm, &mi)) {
         RECT& wa = mi.rcWork;
-        if (x < wa.left)       x = wa.left;
-        if (x + kW > wa.right) x = wa.right - kW;
-        if (y < wa.top)        y = g_trayIconRect.bottom + 8;
+        if (x < wa.left)        x = wa.left;
+        if (x + kW > wa.right)  x = wa.right - kW;
+        if (y < wa.top)         y = g_trayIconRect.bottom + 8;
+        if (y + kH > wa.bottom) y = wa.bottom - kH - 4;
     }
 
     g_trayWnd = hTrayWnd;
@@ -2427,6 +2794,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
 
 static void SpawnCycleThread(int direction) {
     if (g_workerThread) {
+        WaitForSingleObject(g_workerThread, 3000);
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
     }
@@ -2440,19 +2808,161 @@ static void SpawnCycleThread(int direction) {
 // ─── Priority device routing ──────────────────────────────────────────────────
 
 static void HandlePriorityDeviceConnected(HWND hWnd, const WCHAR* devId) {
-    // Snapshot all shared state under the lock before doing any work.
+    if (!devId || !devId[0]) return;
+
+    // Query friendly name and verify data flow of the newly connected device
+    WCHAR activeFriendlyName[256] = {};
+    IMMDeviceEnumerator* pEnum = nullptr;
+    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                   __uuidof(IMMDeviceEnumerator), (void**)&pEnum))) {
+        IMMDevice* pDev = nullptr;
+        if (SUCCEEDED(pEnum->GetDevice(devId, &pDev))) {
+            EDataFlow flow = eAll;
+            IMMEndpoint* pEndpoint = nullptr;
+            if (SUCCEEDED(pDev->QueryInterface(__uuidof(IMMEndpoint), (void**)&pEndpoint))) {
+                pEndpoint->GetDataFlow(&flow);
+                pEndpoint->Release();
+            }
+            if (flow != eCapture) {
+                pDev->Release();
+                pEnum->Release();
+                return;  // render endpoints never belong in a mic slot
+            }
+
+            IPropertyStore* pStore = nullptr;
+            if (SUCCEEDED(pDev->OpenPropertyStore(STGM_READ, &pStore))) {
+                PROPVARIANT v; PropVariantInit(&v);
+                if (SUCCEEDED(pStore->GetValue(PKEY_Device_FriendlyName, &v)) && v.pwszVal) {
+                    lstrcpynW(activeFriendlyName, v.pwszVal, 256);
+                }
+                PropVariantClear(&v);
+                pStore->Release();
+            }
+            pDev->Release();
+        }
+    }
+
+    bool slotUpdated = false;
+    int updateSlotIdx = -1;
+    WCHAR updateDevId[512] = {};
+    WCHAR updateDevName[256] = {};
+
+    WCHAR snapIds[MAX_DEVICE_SLOTS][512] = {};
+    WCHAR snapNames[MAX_DEVICE_SLOTS][256] = {};
+    int slotCount = 0;
+    int exactMatch = -1;
+
+    EnterCriticalSection(&g_stateLock);
+    slotCount = g_deviceSlotCount;
+    for (int s = 0; s < slotCount; s++) {
+        lstrcpynW(snapIds[s], g_cachedDevId[s], 512);
+        lstrcpynW(snapNames[s], g_cachedDevName[s], 256);
+        if (snapIds[s][0] && wcscmp(snapIds[s], devId) == 0) {
+            exactMatch = s;
+        }
+    }
+
+    if (exactMatch >= 0) {
+        if (activeFriendlyName[0] && wcscmp(g_cachedDevName[exactMatch], activeFriendlyName) != 0) {
+            lstrcpynW(g_cachedDevName[exactMatch], activeFriendlyName, 256);
+            updateSlotIdx = exactMatch;
+            lstrcpynW(updateDevName, activeFriendlyName, 256);
+        }
+        slotUpdated = true;
+        LeaveCriticalSection(&g_stateLock);
+    } else {
+        LeaveCriticalSection(&g_stateLock);
+
+        if (activeFriendlyName[0]) {
+            // Count how many active capture endpoints share this friendly name.
+            // If multiple active devices have the same name (e.g. 2 identical USB mics),
+            // do not rematch automatically to avoid taking over the wrong slot.
+            int activeNameCount = 0;
+            if (pEnum) {
+                IMMDeviceCollection* pColl = nullptr;
+                if (SUCCEEDED(pEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &pColl))) {
+                    UINT total = 0;
+                    pColl->GetCount(&total);
+                    for (UINT i = 0; i < total; i++) {
+                        IMMDevice* pD = nullptr;
+                        if (SUCCEEDED(pColl->Item(i, &pD))) {
+                            IPropertyStore* pS = nullptr;
+                            if (SUCCEEDED(pD->OpenPropertyStore(STGM_READ, &pS))) {
+                                PROPVARIANT v; PropVariantInit(&v);
+                                if (SUCCEEDED(pS->GetValue(PKEY_Device_FriendlyName, &v)) && v.pwszVal) {
+                                    if (wcscmp(v.pwszVal, activeFriendlyName) == 0) {
+                                        activeNameCount++;
+                                    }
+                                }
+                                PropVariantClear(&v);
+                                pS->Release();
+                            }
+                            pD->Release();
+                        }
+                    }
+                    pColl->Release();
+                }
+            }
+
+            if (activeNameCount == 1) {
+                // Name rematch fallback: only if the slot's stored ID is inactive and matches uniquely.
+                // (devId is already known not to be in use because exactMatch < 0).
+                int matchIdx = -1;
+                int matchCount = 0;
+                for (int s = 0; s < slotCount; s++) {
+                    if (snapNames[s][0] && wcscmp(snapNames[s], activeFriendlyName) == 0) {
+                        if (!pEnum || !IsDeviceActive(pEnum, snapIds[s])) {
+                            matchCount++;
+                            matchIdx = s;
+                        }
+                    }
+                }
+                if (matchCount == 1 && matchIdx >= 0) {
+                    EnterCriticalSection(&g_stateLock);
+                    lstrcpynW(g_cachedDevId[matchIdx], devId, 512);
+                    lstrcpynW(g_cachedDevName[matchIdx], activeFriendlyName, 256);
+                    LeaveCriticalSection(&g_stateLock);
+
+                    updateSlotIdx = matchIdx;
+                    lstrcpynW(updateDevId, devId, 512);
+                    lstrcpynW(updateDevName, activeFriendlyName, 256);
+                    slotUpdated = true;
+                }
+            }
+        }
+    }
+
+    if (pEnum) pEnum->Release();
+
+    if (updateSlotIdx >= 0) {
+        if (updateDevId[0]) {
+            WCHAR kId[32];
+            swprintf_s(kId, L"Device%dId", updateSlotIdx + 1);
+            Wh_SetStringValue(kId, updateDevId);
+        }
+        if (updateDevName[0]) {
+            WCHAR kNm[32];
+            swprintf_s(kNm, L"Device%dName", updateSlotIdx + 1);
+            Wh_SetStringValue(kNm, updateDevName);
+        }
+    }
+
+    if (slotUpdated) {
+        PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
+    }
+
+    // Snapshot all shared state under the lock before doing priority list work.
     EnterCriticalSection(&g_stateLock);
     int priorityCount = g_priorityCount;
     WCHAR localPrio[MAX_DEVICE_SLOTS][512] = {};
     for (int i = 0; i < priorityCount; i++)
         lstrcpynW(localPrio[i], g_priorityDevIds[i], 512);
-    int slotCount = g_deviceSlotCount;
     WCHAR localIds[MAX_DEVICE_SLOTS][512] = {};
     for (int i = 0; i < slotCount; i++)
         lstrcpynW(localIds[i], g_cachedDevId[i], 512);
     LeaveCriticalSection(&g_stateLock);
 
-    if (!devId || !devId[0] || priorityCount == 0) return;
+    if (priorityCount == 0) return;
 
     // Find rank of the newly connected device in the priority list.
     int newRank = -1;
@@ -2597,58 +3107,15 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 
     } else if (msg == WM_UPDATE_TRAY_STATE) {
         UpdateTrayTip(hWnd, FALSE);
-
-    } else if (msg == WM_UPDATE_HOOK_STATE) {
-        RAWINPUTDEVICE rid = { 1, 2, RIDEV_INPUTSINK, hWnd };
-        RegisterRawInputDevices(&rid, 1, sizeof(rid));
-
-    } else if (msg == WM_RELOAD_ICONS) {
-        // Run icon reload on tray thread to eliminate cross-thread handle race.
-        WCHAR prev[MAX_DEVICE_SLOTS][32] = {};
-        for (int i = 0; i < MAX_DEVICE_SLOTS; i++)
-            wcscpy_s(prev[i], 32, g_lastIconSetting[i]);
-
-        LoadUserIconsAndSettings();
-        PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
-
-        DWORD pickerSlots = 0;
-        for (int i = 0; i < g_deviceSlotCount; i++) {
-            WCHAR key[16];
-            swprintf_s(key, L"icon%d", i + 1);
-            WCHAR icoVal[32] = {};
-            Wh_GetStringValue(key, icoVal, 32);
-            BOOL isCustom  = (wcscmp(icoVal,  L"custom") == 0);
-            BOOL wasCustom = (wcscmp(prev[i], L"custom") == 0);
-            if (isCustom && !wasCustom)
-                pickerSlots |= (1u << i);
-        }
-        if (pickerSlots)
-            PostMessageW(hWnd, WM_SHOW_FILE_PICKER, 0, (LPARAM)pickerSlots);
-
-    } else if (msg == WM_SHOW_FILE_PICKER) {
-        DWORD slots = (DWORD)lParam;
-        for (int slot = 1; slots; slot++, slots >>= 1) {
-            if (!(slots & 1)) continue;
-            WCHAR path[MAX_PATH] = {};
-            WCHAR title[64];
-            swprintf_s(title, L"Select Icon for Device %d", slot);
-            OPENFILENAMEW ofn = {sizeof(ofn)};
-            ofn.hwndOwner = hWnd;
-            ofn.lpstrFilter = L"Icon Files (*.ico)\0*.ico\0All Files (*.*)\0*.*\0";
-            ofn.nFilterIndex = 1;
-            ofn.lpstrFile = path;
-            ofn.nMaxFile = MAX_PATH;
-            ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
-            ofn.lpstrTitle = title;
-            if (GetOpenFileNameW(&ofn)) {
-                WCHAR customPathKey[32];
-                swprintf_s(customPathKey, L"icon%d_custom_path", slot);
-                Wh_SetStringValue(customPathKey, path);
-                LoadUserIconsAndSettings();
-                PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
+    } else if (msg == WM_EXTERNAL_MUTE) {
+        if ((LONG)wParam == g_bindingGeneration && g_boundCaptureId[0]) {
+            EnterCriticalSection(&g_stateLock);
+            if (g_isMutedByUs && wcscmp(g_mutedDeviceId, g_boundCaptureId) == 0) {
+                g_isMutedByUs = false;
+                g_mutedDeviceId[0] = L'\0';
             }
+            LeaveCriticalSection(&g_stateLock);
         }
-
     } else if (msg == WM_PRIORITY_DEVICE_ACTIVE) {
         WCHAR* devId = reinterpret_cast<WCHAR*>(lParam);
         if (devId) {
@@ -2662,6 +3129,7 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 
     } else if (msg == WM_REBIND_VOLUME_CALLBACK) {
         // Default device changed — re-bind to new endpoint.
+        if (VolumePopup::g_hwnd) DestroyWindow(VolumePopup::g_hwnd);
         UnbindEndpointVolume();
         BindEndpointVolume();
 
@@ -2685,7 +3153,6 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
                     EnterCriticalSection(&g_stateLock);
                     lstrcpynW(g_mutedDeviceId, newDevId, 512);
                     LeaveCriticalSection(&g_stateLock);
-                    Wh_SetStringValue(L"MutedDeviceId", newDevId);
                     CoTaskMemFree(newDevId);
                 }
                 pNewDefault->Release();
@@ -2706,12 +3173,26 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         LoadDeviceSelections();
         LoadPriorityList();
         LoadUserIconsAndSettings();
+        g_cuesEnabled = ReadSoundCues();
         s_lastIcon = nullptr;  // icon handles were recreated; force UpdateTrayTip to refresh
         UpdateTrayTip(hWnd, FALSE);
-        PostMessageW(hWnd, WM_UPDATE_HOOK_STATE, 0, 0);
+
+    } else if (msg == WM_TIMER) {
+        if (wParam == TRAY_WATCHDOG_TIMER) {
+            NOTIFYICONIDENTIFIER nii = {sizeof(nii)};
+            nii.guidItem = MICSWITCH_TRAY_GUID;
+            RECT rc = {};
+            if (FAILED(Shell_NotifyIconGetRect(&nii, &rc)) || rc.right <= rc.left) {
+                // Icon was lost or explorer restarted silently — reset cache and try modify-then-add fallback
+                s_lastIcon = nullptr;
+                UpdateTrayTip(hWnd, FALSE);
+            }
+        }
+        return 0;
 
     } else if (msg == WM_CLOSE) {
         // Orderly shutdown: remove tray icon, then destroy window.
+        KillTimer(hWnd, TRAY_WATCHDOG_TIMER);
         NOTIFYICONDATAW nid = {sizeof(nid)};
         nid.hWnd     = hWnd;
         nid.uID      = TRAY_ICON_ID;
@@ -2793,7 +3274,9 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
         RegisterRawInputDevices(&rid, 1, sizeof(rid));
     }
 
+    g_cuesEnabled = ReadSoundCues();
     UpdateTrayTip(g_trayHwnd, TRUE);
+    SetTimer(g_trayHwnd, TRAY_WATCHDOG_TIMER, 30000, nullptr);
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) { DispatchMessageW(&msg); }
@@ -2809,7 +3292,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     }
     // Unregister Raw Input (harmless if not registered).
     {
-        RAWINPUTDEVICE rid = { 1, 2, RIDEV_REMOVE, nullptr };
+        RAWINPUTDEVICE rid = {1, 2, RIDEV_REMOVE, nullptr};
         RegisterRawInputDevices(&rid, 1, sizeof(rid));
     }
     VolumePopup::UnregisterClass();
@@ -2873,17 +3356,8 @@ BOOL WhTool_ModInit() {
         }
     }
 
-    // If a previous run muted a device and was killed before unmuting, clean it up.
-    WCHAR savedMutedId[512] = {};
-    Wh_GetStringValue(L"MutedDeviceId", savedMutedId, 512);
-    if (savedMutedId[0] != L'\0') {
-        HRESULT hrCo = CoInitialize(nullptr);
-        if (SUCCEEDED(hrCo) || hrCo == RPC_E_CHANGED_MODE) {
-            ApplyMute(savedMutedId, FALSE);
-            if (SUCCEEDED(hrCo)) CoUninitialize();
-        }
-        Wh_SetStringValue(L"MutedDeviceId", L"");
-    }
+    // Legacy markers do not prove ownership. Purge without changing microphone state.
+    Wh_DeleteValue(L"MutedDeviceId");
 
     // Load persistent mute setting.
     {
@@ -2907,13 +3381,13 @@ void WhTool_ModSettingsChanged() {
     LoadPriorityList();
     HWND hwnd = (HWND)InterlockedCompareExchangePointer((volatile PVOID*)&g_trayHwnd, nullptr, nullptr);
     if (hwnd && IsWindow(hwnd)) {
-        PostMessageW(hwnd, WM_RELOAD_ICONS, 0, 0);
-        PostMessageW(hwnd, WM_UPDATE_HOOK_STATE, 0, 0);
+        PostMessageW(hwnd, WM_RELOAD_ALL, 0, 0);
     }
 }
 
 void WhTool_ModUninit() {
     Wh_Log(L"MicSwitch Mod Uninit");
+    PlaySoundW(nullptr, nullptr, 0);
     RestoreMuteExternal();
 
     // Send WM_CLOSE so TrayWndProc can delete the tray icon
@@ -2929,6 +3403,7 @@ void WhTool_ModUninit() {
         }
         g_trayThread = nullptr;
     }
+
     if (g_guiThread) {
         // Ask the dashboard's message loop to quit, then wait for it.
         // PostThreadMessageW with WM_QUIT causes GetMessageW to return 0,
@@ -3001,7 +3476,7 @@ BOOL Wh_ModInit() {
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
@@ -3034,7 +3509,7 @@ BOOL Wh_ModInit() {
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
-            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
@@ -3050,7 +3525,7 @@ BOOL Wh_ModInit() {
         }
 
         IMAGE_DOS_HEADER* dosHeader =
-            (IMAGE_DOS_HEADER*)GetModuleHandleW(nullptr);
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders =
             (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
@@ -3075,8 +3550,8 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileNameW(nullptr, currentProcessPath,
-                               ARRAYSIZE(currentProcessPath))) {
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
             Wh_Log(L"GetModuleFileName failed");
@@ -3089,9 +3564,9 @@ void Wh_ModAfterInit() {
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
-    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
-        kernelModule = GetModuleHandleW(L"kernel32.dll");
+        kernelModule = GetModuleHandle(L"kernel32.dll");
         if (!kernelModule) {
             Wh_Log(L"No kernelbase.dll/kernel32.dll");
             return;
@@ -3114,8 +3589,8 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    STARTUPINFOW si{
-        .cb = sizeof(STARTUPINFOW),
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
     PROCESS_INFORMATION pi;

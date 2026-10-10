@@ -2,7 +2,7 @@
 // @id              taskbar-disappearing-tray-icons-fix
 // @name            Disappearing Tray Icons Fix
 // @description     Fixes missing system tray icons by broadcasting TaskbarCreated when the taskbar initializes.
-// @version         1.1
+// @version         1.2
 // @author          Alchemy
 // @github          https://github.com/alchemyyy
 // @license         MIT
@@ -38,6 +38,9 @@ message after a defined delay, giving apps another chance to register their tray
 icons. This mod can also run a passive rebroadcast to catch bizarre instances of this
 occurring while the taskbar is running.
 
+Processes can be excluded from receiving the rebroadcast by adding their executable
+names to the excluded processes setting.
+
 ## GDI Leak Fix
 
 When passive broadcast is enabled, this mod hooks icon creation APIs to track and
@@ -59,18 +62,27 @@ Only the explorer.exe instance that owns the taskbar will activate this mod.
 - intervalSeconds: 5
   $name: Broadcast interval (seconds)
   $description: How often to broadcast in passive mode
+- excludedProcesses: [""]
+  $name: Excluded processes
+  $description: >-
+    Executable names that must not receive TaskbarCreated. For example: steam.exe
+    Matching is case-insensitive.
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <atomic>
-#include <vector>
 #include <mutex>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 struct {
     std::atomic<int> initialDelaySeconds;
     std::atomic<bool> passiveBroadcast;
     std::atomic<int> intervalSeconds;
+    std::vector<std::wstring> excludedProcessNames;
 } g_settings;
 
 UINT g_taskbarCreatedMsg = 0;
@@ -175,6 +187,123 @@ void DestroyTrackedIcons() {
 
 // ============================================================================
 
+constexpr DWORD PROCESS_PATH_INITIAL_CAPACITY = MAX_PATH;
+constexpr DWORD PROCESS_PATH_MAXIMUM_CAPACITY = 32768;
+constexpr WCHAR EXECUTABLE_NAME_TRIM_CHARACTERS[] = L" \t\r\n";
+
+struct FilteredBroadcastContext {
+    UINT message;
+    const std::vector<std::wstring>* excludedProcessNames;
+    std::unordered_map<DWORD, bool> excludedProcessCache;
+    DWORD postedWindowCount;
+    DWORD excludedWindowCount;
+    DWORD failedWindowCount;
+};
+
+std::wstring NormalizeExecutableName(PCWSTR value) {
+    if (!value) {
+        return {};
+    }
+
+    std::wstring executableName(value);
+    size_t firstCharacter =
+        executableName.find_first_not_of(EXECUTABLE_NAME_TRIM_CHARACTERS);
+    if (firstCharacter == std::wstring::npos) {
+        return {};
+    }
+
+    size_t lastCharacter =
+        executableName.find_last_not_of(EXECUTABLE_NAME_TRIM_CHARACTERS);
+    executableName =
+        executableName.substr(firstCharacter, lastCharacter - firstCharacter + 1);
+
+    size_t lastSeparator = executableName.find_last_of(L"\\/");
+    if (lastSeparator != std::wstring::npos) {
+        executableName.erase(0, lastSeparator + 1);
+    }
+
+    return executableName;
+}
+
+std::wstring GetProcessExecutableName(DWORD processID) {
+    HANDLE processHandle =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processID);
+    if (!processHandle) {
+        return {};
+    }
+
+    DWORD pathCapacity = PROCESS_PATH_INITIAL_CAPACITY;
+    while (pathCapacity <= PROCESS_PATH_MAXIMUM_CAPACITY) {
+        std::wstring processPath(pathCapacity, L'\0');
+        DWORD pathLength = pathCapacity;
+        if (QueryFullProcessImageNameW(processHandle, 0, processPath.data(),
+                                       &pathLength)) {
+            CloseHandle(processHandle);
+            processPath.resize(pathLength);
+            return NormalizeExecutableName(processPath.c_str());
+        }
+
+        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER ||
+            pathCapacity == PROCESS_PATH_MAXIMUM_CAPACITY) {
+            break;
+        }
+
+        pathCapacity =
+            pathCapacity > PROCESS_PATH_MAXIMUM_CAPACITY / 2
+                ? PROCESS_PATH_MAXIMUM_CAPACITY
+                : pathCapacity * 2;
+    }
+
+    CloseHandle(processHandle);
+    return {};
+}
+
+bool IsProcessExcluded(DWORD processID,
+                       FilteredBroadcastContext* broadcastContext) {
+    std::unordered_map<DWORD, bool>::const_iterator cachedResult =
+        broadcastContext->excludedProcessCache.find(processID);
+    if (cachedResult != broadcastContext->excludedProcessCache.end()) {
+        return cachedResult->second;
+    }
+
+    std::wstring executableName = GetProcessExecutableName(processID);
+    bool excluded = false;
+    if (!executableName.empty()) {
+        for (const std::wstring& excludedProcessName :
+             *broadcastContext->excludedProcessNames) {
+            if (CompareStringOrdinal(executableName.c_str(), -1,
+                                     excludedProcessName.c_str(), -1,
+                                     TRUE) == CSTR_EQUAL) {
+                excluded = true;
+                break;
+            }
+        }
+    }
+
+    broadcastContext->excludedProcessCache.emplace(processID, excluded);
+    return excluded;
+}
+
+BOOL CALLBACK PostTaskbarCreatedCallback(HWND window, LPARAM parameter) {
+    FilteredBroadcastContext* broadcastContext =
+        reinterpret_cast<FilteredBroadcastContext*>(parameter);
+
+    DWORD processID = 0;
+    if (GetWindowThreadProcessId(window, &processID) &&
+        IsProcessExcluded(processID, broadcastContext)) {
+        broadcastContext->excludedWindowCount++;
+        return TRUE;
+    }
+
+    if (PostMessageW(window, broadcastContext->message, 0, 0)) {
+        broadcastContext->postedWindowCount++;
+    } else {
+        broadcastContext->failedWindowCount++;
+    }
+
+    return TRUE;
+}
+
 void BroadcastTaskbarCreated() {
     if (!g_taskbarCreatedMsg) {
         Wh_Log(L"ERROR: TaskbarCreated message not registered");
@@ -185,8 +314,35 @@ void BroadcastTaskbarCreated() {
         DestroyTrackedIcons();
     }
 
-    Wh_Log(L"Broadcasting TaskbarCreated (msg=%u)", g_taskbarCreatedMsg);
-    PostMessageW(HWND_BROADCAST, g_taskbarCreatedMsg, 0, 0);
+    if (g_settings.excludedProcessNames.empty()) {
+        Wh_Log(L"Broadcasting TaskbarCreated (msg=%u)", g_taskbarCreatedMsg);
+        if (!PostMessageW(HWND_BROADCAST, g_taskbarCreatedMsg, 0, 0)) {
+            Wh_Log(L"Failed to broadcast TaskbarCreated (error: %lu)",
+                   GetLastError());
+        }
+        return;
+    }
+
+    FilteredBroadcastContext broadcastContext{
+        g_taskbarCreatedMsg,
+        &g_settings.excludedProcessNames,
+        {},
+        0,
+        0,
+        0,
+    };
+
+    if (!EnumWindows(PostTaskbarCreatedCallback,
+                     reinterpret_cast<LPARAM>(&broadcastContext))) {
+        Wh_Log(L"Failed to enumerate windows for TaskbarCreated (error: %lu)",
+               GetLastError());
+        return;
+    }
+
+    Wh_Log(L"Posted TaskbarCreated to %lu windows; excluded %lu; failed %lu",
+           broadcastContext.postedWindowCount,
+           broadcastContext.excludedWindowCount,
+           broadcastContext.failedWindowCount);
 }
 
 void LoadSettings() {
@@ -196,6 +352,28 @@ void LoadSettings() {
     g_settings.initialDelaySeconds.store(initialDelay < 1 ? 5 : initialDelay);
     g_settings.intervalSeconds.store(interval < 1 ? 5 : interval);
     g_settings.passiveBroadcast.store(Wh_GetIntSetting(L"passiveBroadcast") != 0);
+
+    g_settings.excludedProcessNames.clear();
+    for (int index = 0;; index++) {
+        PCWSTR setting =
+            Wh_GetStringSetting(L"excludedProcesses[%d]", index);
+        if (!setting || !*setting) {
+            if (setting) {
+                Wh_FreeStringSetting(setting);
+            }
+            break;
+        }
+
+        std::wstring executableName = NormalizeExecutableName(setting);
+        Wh_FreeStringSetting(setting);
+
+        if (executableName.empty()) {
+            continue;
+        }
+
+        Wh_Log(L"Excluding TaskbarCreated from %s", executableName.c_str());
+        g_settings.excludedProcessNames.push_back(std::move(executableName));
+    }
 }
 
 DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
