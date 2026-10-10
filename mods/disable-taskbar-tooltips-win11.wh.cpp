@@ -3,7 +3,7 @@
 // @name            Disable Taskbar Tooltips (Win11)
 // @description     Hides the hover tooltips of Windows 11 taskbar buttons (apps, Start, Search, and more), and optionally the system tray
 // @version         1.2
-// @author          Grok Bot
+// @author          enrkc
 // @github          https://github.com/enrkc
 // @include         explorer.exe
 // @architecture    x86-64
@@ -63,10 +63,12 @@ return immediately.
 
 ## First load
 
-On first load, Windhawk downloads the debug symbols for `Windows.UI.Xaml.dll`
-(about 350 MB). This can take a few minutes, and tooltips keep appearing
-until it finishes. The result is cached, so later loads are instant. Restart
-Explorer once afterwards if some buttons still show tooltips.
+On first load, Windhawk downloads the debug symbols (PDB) for
+`Windows.UI.Xaml.dll`, about 350 MB. The download happens again whenever a
+Windows update changes that DLL. It can take a few minutes, and the result is
+cached, so later loads are instant. If the mod loads while Explorer is
+starting, the taskbar may appear only after the download finishes on that
+first start.
 
 ## Comparison with Hide Taskbar Tooltips
 
@@ -106,9 +108,7 @@ code was written by Grok Bot.
 
 namespace {
 
-struct {
-    bool hideTrayTooltips;
-} g_settings;
+std::atomic<bool> g_hideTrayTooltips;
 
 std::atomic<bool> g_xamlModuleHooked;
 
@@ -152,6 +152,10 @@ using ToolTipService_OnOwnerEnterInternal_t = HRESULT(WINAPI*)(void* pOwner,
                                                                int mode);
 ToolTipService_OnOwnerEnterInternal_t
     ToolTipService_OnOwnerEnterInternal_Original;
+
+// static HRESULT DirectUI::ToolTipService::CancelAutomaticToolTip()
+using ToolTipService_CancelAutomaticToolTip_t = HRESULT(WINAPI*)();
+ToolTipService_CancelAutomaticToolTip_t ToolTipService_CancelAutomaticToolTip;
 HRESULT WINAPI ToolTipService_OnOwnerEnterInternal_Hook(void* pOwner,
                                                         void* pSource,
                                                         int mode) {
@@ -165,8 +169,14 @@ HRESULT WINAPI ToolTipService_OnOwnerEnterInternal_Hook(void* pOwner,
 
         if (kind == TooltipOwnerKind::Taskbar ||
             (kind == TooltipOwnerKind::SystemTray &&
-             g_settings.hideTrayTooltips)) {
-            // Don't schedule the automatic tooltip for this element.
+             g_hideTrayTooltips)) {
+            // Don't schedule the automatic tooltip for this element. Like
+            // when the pointer leaves an element, close a tooltip that's
+            // still open for another element, or cancel one that's pending.
+            // The original function would close it before scheduling its own.
+            if (ToolTipService_CancelAutomaticToolTip) {
+                ToolTipService_CancelAutomaticToolTip();
+            }
             return S_OK;
         }
     }
@@ -181,6 +191,12 @@ bool HookXamlModuleSymbols(HMODULE module) {
             {LR"(private: static long __cdecl DirectUI::ToolTipService::OnOwnerEnterInternal(struct IInspectable *,struct IInspectable *,enum DirectUI::AutomaticToolTipInputMode))"},
             &ToolTipService_OnOwnerEnterInternal_Original,
             ToolTipService_OnOwnerEnterInternal_Hook,
+        },
+        {
+            {LR"(public: static long __cdecl DirectUI::ToolTipService::CancelAutomaticToolTip(void))"},
+            &ToolTipService_CancelAutomaticToolTip,
+            nullptr,
+            true,
         },
     };
 
@@ -218,7 +234,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 }
 
 void LoadSettings() {
-    g_settings.hideTrayTooltips = Wh_GetIntSetting(L"hideTrayTooltips");
+    g_hideTrayTooltips = Wh_GetIntSetting(L"hideTrayTooltips");
 }
 
 }  // namespace
