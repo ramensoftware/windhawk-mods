@@ -2,7 +2,7 @@
 // @id              app-owned-frame
 // @name            App Owned Frame
 // @description     Restores DWM clipping for selected custom-frame applications without changing their window styles or resizing.
-// @version         1.41
+// @version         1.42
 // @author          appEW
 // @github          https://github.com/appEW
 // @license         MIT
@@ -18,104 +18,97 @@
 /*
 # App Owned Frame
 
-The classic-theme fallback can exile a custom-frame window from DWM's normal
-non-client rendering. On Windows 11 this exposes the Mica-filled resize gutter
-and the normally hidden outside edges of a maximized window.
+Some applications draw their own title bar. With the Windows classic theme,
+they can show an extra white border or a second system title bar. When maximized,
+their hidden frame edges can also become visible on the neighbouring monitor.
 
-This mod runs one controller in Explorer. It restores normal compositor
-handling and suppresses DWM's decorative border for the chosen applications.
-It keeps their styles, native maximize/restore, window region, geometry and
-client layout intact. A per-program native hit-test option in the same mod lets
-Windows handle resize cursors and presses directly. It is enabled for Discord
-by default; Claude and ChatGPT remain external-only until separately enabled.
-The invisible resize gutters remain available for ordinary mouse resizing.
-Optional resize grab areas extend into the visible window. All four corners
-have the same square size; all four edge strips have the same half-size depth.
-A low-level mouse hook handles only left-button presses in these perimeter zones
-of an external-only foreground restored target. It posts the native size
-command and does not process mouse movement, create helper windows or inject
-into the application. Normal native capture and resizing handle the rest.
-The initial press remains in the normal input stream. The native size command
-is deferred until the button is down; a released quick click is not resized.
-There is no hover cursor override in this external mode; the native resize
-cursor appears when dragging begins. Controller updates pause during resizing.
+This mod keeps the application's own frame and restores normal maximized-window
+clipping. It does not remove resizable-window styles, replace the application's
+buttons, change the client layout or run its own resize loop.
 
-The optional per-program native-resize setting is for Chrome_WidgetWin_1
-windows and their Chrome_RenderWidgetHostHWND content windows. In a resize zone,
-both return the same native resize code. A non-client press in that zone goes
-directly to the main window's default procedure: Chromium's client view cannot
-consume it instead of starting the native size loop. Only resize hit testing,
-resize-cursor selection and that perimeter press are changed; caption buttons
-and the interior remain native.
-No subclass, input injection or resize loop is added. Frame insets are cached
-per window identity and monitor, not queried from DWM on each mouse movement.
-This mode also requires the executable in Advanced inclusion settings.
-The app's DPI context is never changed by the native hit-test hook. Geometry is
-captured in the incoming window context and normalized to physical pixels.
+## Requirements
 
-Only main resizable windows with custom-frame geometry are handled. Menus,
-tool windows, owned dialogs and windows with a normal caption inset are skipped.
-Choose executable filenames or full paths in Settings; wildcards are supported.
-Windows belonging to another user are never modified.
-Each entry has a frame-geometry mode: automatic, compact custom client,
-wider resize-only gutter, or off. Automatic also recognizes symmetric Qt-like
-resize gutters without depending on the executable name or window class.
-Off excludes the entry and restores tracked state, including hidden windows.
+- Windows 11, build 22000 or later, with Explorer running.
+- An already enabled classic theme, for example
+  [Classic Theme](https://windhawk.net/mods/classic-theme-enable) or
+  [Classic Theme Enable with extended compatibility](https://windhawk.net/mods/classic-theme-enable-with-extended-compatibility).
+  This mod is a compatibility fix, not a classic-theme enabler.
 
-Photoshop and Resolve additionally need suppression of legacy GDI caption
-painting. The same mod loads in these two applications and intercepts only
-default-procedure drawing messages of their custom main windows. It does not
-subclass windows or touch NCCALCSIZE, MINMAXINFO, styles, regions or hit testing.
-Native-caption dialogs are left alone.
-For custom captions that retain a real resize gutter, an optional per-program
-legacyGutterColor fills only that allocated non-client gutter with a flat color.
-The controller also supplies the same DWM caption color for a residual top
-caption strip that DWM can composite over window-DC painting. This is not a
-new caption: no caption geometry, buttons or client pixels are changed.
-The client and its buttons are excluded from the DC as well as from the fill
-rectangles. No styles, regions, frame sizes, margins, input or DPI contexts are
-changed. Resolve defaults to #17181a; the option is off for other apps. Empty or
-invalid colors disable it. This is neutral gutter painting, not a change to the
-application's theme or a replacement caption.
-For another legacy custom-frame program,
-enable its legacy-paint setting AND add the executable to this mod's Advanced
-inclusion list. Discord is already included for native resize, not legacy paint.
-Do not add Claude or ChatGPT there without separately testing native-resize mode.
+## Default application profiles
 
-Requires Windows 11 build 22000 or later and a running Explorer. The controller
-responds to window events and also reconciles state periodically. The original
-effective non-client mode is restored on disable. Windows cannot query the
-original border colour through DwmGetWindowAttribute on the tested build, so
-disable restores the documented default border colour, not a custom colour.
-An opt-in gutter's DWM caption color is restored to its queried original value
-when readable, otherwise to DWMWA_COLOR_DEFAULT. The tested Windows build does
-not expose custom caption-color readback; that custom value cannot be recovered.
+| Application | Default treatment |
+| --- | --- |
+| Discord | Remove the extra white frame; use the normal resize cursor with wider grips. |
+| ChatGPT and Claude | Fix the outer frame and maximized clipping without loading this mod into the app. |
+| Photoshop | Keep its own title bar and prepare it during startup. |
+| DaVinci Resolve | Keep its own title bar and colour a remaining resize gutter to match the dark UI. |
 
-Experimental per-program dwmCaptionPaint delegates real WM_NCPAINT and
-WM_NCACTIVATE to DwmDefWindowProc without permitting legacy GDI frame paint.
-If DWM declines the paint message it remains suppressed. No fake events,
-geometry/style changes, timer, helper window or hover/resize hook is added.
-This is an isolated startup experiment, not a verified first-start glyph fix.
+These profiles were tested on the submitter's setup. App updates, Windows
+versions and other frame/DPI mods can affect the result.
 
-Per-program earlyDwm can preserve non-client composition before the app's real
-custom-caption margin initialization. It is enabled for Photoshop, not Resolve
-or Electron. It requires legacyPaint and Advanced inclusion and takes priority
-over dwmCaptionPaint. No margin replay or synthetic resize/maximize is used.
-State is reserved before changing composition; a failed reservation leaves the
-original request untouched. Disable/destroy cleanup defers an active transaction
-until its original call finishes, with composition calls outside the state lock.
-This opt-in mode has passed repeated Photoshop Home starts on the tested setup;
-it is not a guarantee for arbitrary custom-frame apps or Windows versions.
+## Adding or excluding an application
 
-The Explorer controller holds a worker-owned mutex, not just a named handle.
-An overlapping Explorer waits without rejecting mod initialization and takes
-over after the previous controller exits. Waiting is cancellable on unload.
-After an abrupt controller exit, attributes are re-read from the windows;
-original values which existed only in the dead process cannot be recovered.
+1. Open this mod's **Settings** tab and add the executable filename or full path
+   under **Applications with their own frame**. Wildcards `*` and `?` are supported.
+2. Leave **Frame geometry** on **Automatic** initially. Use **Off** to exclude an
+   entry without deleting it. Only main resizable windows with an app-drawn title
+   bar are handled; ordinary Windows captions, dialogs and tool windows are skipped.
+3. For an extra classic title bar like Photoshop or Resolve, enable
+   **Use the application's own title bar**. Open this mod's **Advanced** tab,
+   add the executable to the **Custom process inclusion list**, and save.
+4. For Chromium/Electron apps, **Native resize hit testing** is optional and also
+   requires that Advanced inclusion entry. Enable it only after testing the app.
+   Discord is included by default. Do not add Claude or ChatGPT to that list
+   merely to fix their border; their default profiles intentionally stay external.
 
-The classic-theme enabling mod remains responsible for the system-wide theme.
-This mod changes only the selected windows; it does not hook DWM/winlogon or
-change application/system light and dark settings.
+The application list chooses which windows to treat. The Advanced inclusion
+list is needed only for features which load code into the application.
+When an enabled feature needs different hooks, saving settings reloads this
+mod in that process. Changing the grip size or colour does not require an app restart.
+
+## Easier resizing
+
+**Easier resizing from all corners and edges** widens the grab areas without
+drawing a frame. All four corners use the same size; edges use half that size.
+The size is in pixels at 100% scale and is adjusted for the window's monitor.
+
+Discord's native mode provides the usual hover resize cursor. For external-only
+apps the cursor changes when the drag starts, not while hovering. Larger grips
+extend into the window and can overlap the edge of a scrollbar or caption button;
+reduce the size or disable wider grips if this makes an app control hard to click.
+
+## Other options and limitations
+
+- **Residual resize gutter color** paints only the remaining frame gutter, not
+  client content. Resolve defaults to `#17181a`; leave it empty to disable.
+- **Prepare the custom title bar at startup** is enabled for Photoshop. Other
+  apps must opt in after testing. It takes priority over the experimental
+  **Delegate caption painting to DWM** option.
+- **Remove system backdrop from the frame** is for a remaining bright material
+  edge and requires Windows 11 build 22621 or later.
+- Explorer supplies the external frame correction. A clean mod disable restores
+  the captured state, but border/caption colours which Windows cannot read back
+  return to the system default. After an Explorer crash, original values held
+  only by that process cannot be recovered.
+- This does not fix unrelated application rendering bugs, DPI-projection bugs
+  or conflicts with another mod which keeps rewriting the same frame state.
+  No application/system light or dark setting is changed.
+
+## Screenshots
+
+Before: without the mod. After: with the mod. Provided by the submitter.
+
+### Discord
+
+| Before | After |
+| --- | --- |
+| ![Discord without the mod](https://raw.githubusercontent.com/appEW/windhawk-mods/1e9ac8a344e1c10d659226d0cb77f9eca7134042/beforeDS.png) | ![Discord with the mod](https://raw.githubusercontent.com/appEW/windhawk-mods/1e9ac8a344e1c10d659226d0cb77f9eca7134042/afterDS.png) |
+
+### Photoshop
+
+| Before | After |
+| --- | --- |
+| ![Photoshop without the mod](https://raw.githubusercontent.com/appEW/windhawk-mods/1e9ac8a344e1c10d659226d0cb77f9eca7134042/beforePH.png) | ![Photoshop with the mod](https://raw.githubusercontent.com/appEW/windhawk-mods/1e9ac8a344e1c10d659226d0cb77f9eca7134042/afterPH.png) |
 */
 // ==/WindhawkModReadme==
 
@@ -128,7 +121,7 @@ change application/system light and dark settings.
     - frameGeometry: auto
       $name: Frame geometry
       $name:ru: Тип собственной рамки
-      $description: Auto accepts custom client frames and symmetric resize-only gutters (including Qt). Ordinary captions, owned dialogs and tool windows are skipped. Off excludes this entry without deleting it.
+      $description: Automatic detects main windows with an app-drawn title bar. Ordinary Windows title bars, dialogs and pop-ups are ignored. Off excludes this app without deleting its entry.
       $description:ru: Авто — собственная клиентская рамка или симметричный отступ растягивания, в том числе Qt. Обычные заголовки, диалоги и служебные окна исключены. «Не обрабатывать» отключает запись без удаления.
       $options:
       - auto: Automatic (custom client or resize-only gutter)
@@ -136,10 +129,10 @@ change application/system light and dark settings.
       - resizeGutter: Custom caption with a wider resize gutter
       - off: Do not process
     - legacyPaint: false
-      $name: Suppress legacy default-procedure painting
-      $name:ru: Подавлять классическую отрисовку DefWindowProc
-      $description: For Photoshop/Resolve-like custom frames only. Also requires the app in Advanced inclusion settings. Not needed for Electron.
-      $description:ru: Только для рамок типа Photoshop/Resolve; программа также должна быть в списке включения на вкладке Advanced. Для Electron не нужно.
+      $name: Use the application's own title bar
+      $name:ru: Использовать собственный заголовок программы
+      $description: Removes an extra classic title bar in apps like Photoshop and Resolve. Also add the executable to this mod's Advanced tab, Custom process inclusion list. Not needed for Electron.
+      $description:ru: Убирает лишний классический заголовок в программах типа Photoshop и Resolve. Также добавьте exe на вкладке Advanced этого мода в Custom process inclusion list. Для Electron не нужно.
     - legacyGutterColor: ""
       $name: Residual resize gutter color (empty disables)
       $name:ru: Цвет остаточного системного отступа (пусто — выключено)
@@ -151,10 +144,10 @@ change application/system light and dark settings.
       $description: Experimental for legacy custom captions; requires legacyPaint and Advanced inclusion. Uses real messages only. No geometry, style or maximize changes.
       $description:ru: Эксперимент для собственных legacy-заголовков; нужны legacyPaint и включение Advanced. Только реальные сообщения. Не меняет размер, стиль или максимизацию.
     - earlyDwm: false
-      $name: Preserve DWM before custom-caption initialization
-      $name:ru: Сохранять DWM до инициализации собственного заголовка
-      $description: Opt-in startup experiment for legacy custom captions. Prevents observed NC exile, or clears it before the app's real margin request. Requires Advanced inclusion. Takes priority over dwmCaptionPaint; no replay, style, size or maximize changes.
-      $description:ru: Эксперимент первого запуска для legacy-рамок. Отменяет наблюдаемый NC exile до реального запроса рамки приложения. Нужен Advanced. Приоритетнее dwmCaptionPaint; без повторов margin, смены стиля, размера или максимизации.
+      $name: Prepare the custom title bar at startup
+      $name:ru: Подготавливать собственный заголовок при запуске
+      $description: Enabled for Photoshop; test before enabling for another app. Requires Use the application's own title bar and Advanced inclusion. Takes priority over Delegate caption painting to DWM. Does not resize or maximize the window.
+      $description:ru: Включено для Photoshop; для других программ сначала проверьте результат. Нужны собственный заголовок и список Advanced. Приоритетнее отрисовки заголовка DWM; не растягивает и не разворачивает окно.
     - removeBackdrop: true
       $name: Remove system backdrop from the frame
       $name:ru: Убирать системный фон DWM в рамке
@@ -350,6 +343,8 @@ std::atomic<bool> legacyPaintEnabled{false};
 std::atomic<COLORREF> legacyGutterColor{kNoBorder};
 thread_local bool paintingLegacyGutter = false;
 bool legacyProcess = false;
+// Hook availability is fixed at init; runtime feature flags may change later.
+bool legacyHooksInstalled = false;
 std::atomic<bool> dwmCaptionEnabled{false};
 constexpr wchar_t kDwmCaptionIdentity[] = L"Windhawk.AppOwnedFrame.DwmCaption.1.Identity";
 constexpr wchar_t kDwmCaptionPrefix[] = L"Windhawk.AppOwnedFrame.DwmCaption.1.";
@@ -1751,6 +1746,7 @@ BOOL Wh_ModInit() {
                 !Wh_SetFunctionHook(reinterpret_cast<void*>(DwmExtendFrameIntoClientArea),
                     reinterpret_cast<void*>(EarlyMargins),reinterpret_cast<void**>(&earlyMarginsOriginal)))
                 return FALSE;
+            legacyHooksInstalled = true;
         }
         if (nativeResizeProcess) {
             // Existing classes are hooked during init. Registration handles
@@ -1791,11 +1787,29 @@ void Wh_ModAfterInit() {
     Wh_Log(L"Controller candidate ready: thread=%lu", workerId.load());
 }
 
-void Wh_ModSettingsChanged() {
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    *bReload = FALSE;
     LoadSettings();
-    if (legacyProcess) { RefreshLegacySettings(); return; }
+    if (legacyProcess) {
+        bool legacyRequested, nativeRequested;
+        {
+            std::lock_guard lock(settingsMutex);
+            legacyRequested = MatchList(currentPath.c_str(), configuredLegacyPrograms);
+            nativeRequested = MatchList(currentPath.c_str(), configuredNativeResizePrograms);
+        }
+        // Changing flags alone can't install a missing hook. Let the engine
+        // drain/remove the old hooks and rerun init with the requested set.
+        if (legacyRequested != legacyHooksInstalled ||
+            nativeRequested != nativeResizeProcess) {
+            *bReload = TRUE;
+            return TRUE;
+        }
+        RefreshLegacySettings();
+        return TRUE;
+    }
     const DWORD thread = workerId.load();
     if (thread) PostThreadMessageW(thread, kReconfigure, 0, 0);
+    return TRUE;
 }
 
 void Wh_ModBeforeUninit() {
