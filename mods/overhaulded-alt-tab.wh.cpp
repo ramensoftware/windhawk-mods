@@ -888,16 +888,16 @@ static const WPARAM kHotkeyFlagBackwards = 1;
 static const WPARAM kHotkeyFlagCtrl = 2;
 static UINT g_hotkeyMessage = 0;
 static void InitHotkeyMessage();
-// Sondeo del Alt físico mientras dura una sesión iniciada por el hotkey (el
-// hook puede no ver la suelta de Alt si una ventana elevada tenía el foco).
-static const UINT_PTR kHotkeyPollTimerId = 1;
-static const UINT kHotkeyPollMs = 30;
-static const int kHotkeyReleaseTicks = 5;
+// Sondeo del Alt físico durante sesiones Alt/AltGr: el hook puede perder el
+// key-up cuando el foreground es una ventana elevada.
+static const UINT_PTR kModifierReleasePollTimerId = 1;
+static const UINT kModifierReleasePollMs = 30;
+static const int kModifierReleaseTicks = 5;
 static const UINT_PTR kActivationRetryTimerId = 2;
 static const UINT kActivationRetryMs = 50;
 static const int kMaxActivationRetries = 20;
-static bool g_hotkeySession = false;     // solo input thread
-static int g_hotkeyReleaseCount = 0;     // solo input thread
+static bool g_modifierReleasePolling = false;     // solo input thread
+static int g_modifierReleaseCount = 0;     // solo input thread
 static HWND g_inputActivationTarget = nullptr; // solo input thread
 static int g_inputActivationRetryCount = 0;     // solo input thread
 static BOOL g_inputActivationLastSetForegroundResult = FALSE; // solo input thread
@@ -1445,6 +1445,31 @@ static void InputResetKeyboardState()
 static bool IsAltGrPhysicallyDown()
 {
     return g_altRightDown && (g_ctrlLeftDown || g_ctrlRightDown);
+}
+
+// Reconcile cached hook state against the actual keyboard state. If a burst of
+// input caused a modifier key-up callback to be missed, stale Alt/AltGr state
+// must not make a later bare Tab start (or keep navigating) the selector.
+static bool InputSessionActive();
+static void SendAltMenuMaskIfNeeded();
+static void OnModifierReleased();
+
+static void InputReconcileModifiersFromSystem()
+{
+    const bool hadAlt = g_altLeftDown || g_altRightDown;
+
+    g_altLeftDown = (GetAsyncKeyState(VK_LMENU) & 0x8000) != 0;
+    g_altRightDown = (GetAsyncKeyState(VK_RMENU) & 0x8000) != 0;
+    g_ctrlLeftDown = (GetAsyncKeyState(VK_LCONTROL) & 0x8000) != 0;
+    g_ctrlRightDown = (GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0;
+    g_altGrActive = IsAltGrPhysicallyDown();
+
+    // A missed Alt key-up can also leave Windows' system-menu state unmasked.
+    if (hadAlt && !g_altLeftDown && !g_altRightDown)
+        SendAltMenuMaskIfNeeded();
+
+    if (!g_altGrActive && !InputSessionActive())
+        g_altGrTaskSwitcherArmed = false;
 }
 
 static void ClearSelectorKeyboardSession()
@@ -6605,6 +6630,12 @@ static void InputEndSession(UINT command)
     if (id == 0)
         return;
     InterlockedCompareExchange(&g_sessionActive, 0, id);
+    if (g_modifierReleasePolling)
+    {
+        g_modifierReleasePolling = false;
+        if (g_inputControlWnd)
+            KillTimer(g_inputControlWnd, kModifierReleasePollTimerId);
+    }
     ClearSelectorKeyboardSession();
     PostUiCommand(command, static_cast<WPARAM>(id), 0);
 }
@@ -6649,13 +6680,11 @@ static void SendAltMenuMaskIfNeeded()
     g_altMenuMaskPending = false;
 }
 
-// El modo normal confirma al finalizar Alt; Ctrl+Alt es deliberadamente
-// persistente y solo se cierra mediante Enter, clic o Escape.
+// Todas las sesiones de modificador se confirman al soltarse. El polling
+// cubre los key-up que pueden perderse ante ventanas con privilegios elevados.
 static void OnModifierReleased()
 {
-    if (InputSessionActive() &&
-        g_sessionModifier != ModifierSession::ControlAlt &&
-        SessionModifierReleased())
+    if (InputSessionActive() && SessionModifierReleased())
         InputEndSession(WM_UI_CONFIRM);
     g_altGrActive = IsAltGrPhysicallyDown();
     if (!InputSessionActive() && !g_altGrActive)
@@ -6675,9 +6704,14 @@ static bool StartInputSession(bool leftAlt, bool rightAlt, bool ctrlHeld,
 
     g_inputSessionId = id;
     InterlockedExchange(&g_sessionActive, id);
-    g_sessionModifier = controlAltHeld
-        ? ModifierSession::ControlAlt
-        : (leftAlt ? ModifierSession::LeftAlt : ModifierSession::RightAlt);
+    // AltGr is physically Ctrl + RightAlt. Track its RightAlt as the primary
+    // release key; other Ctrl+Alt sessions complete when both modifiers are up.
+    const bool altGrSession = rightAlt && ctrlHeld && !leftAlt;
+    g_sessionModifier = altGrSession
+        ? ModifierSession::RightAlt
+        : (controlAltHeld ? ModifierSession::ControlAlt
+                          : (leftAlt ? ModifierSession::LeftAlt
+                                     : ModifierSession::RightAlt));
     // Si el Tab llegó por hotkey, el hook no lo vio: no hay un keyup que
     // esperar y no debe quedar marcado como pulsado/suprimido.
     g_tabDown = !fromHotkey;
@@ -6691,6 +6725,21 @@ static bool StartInputSession(bool leftAlt, bool rightAlt, bool ctrlHeld,
     if (posted)
     {
         g_altMenuMaskPending = !g_altGrActive;
+        // Poll every Alt-based session, not only forwarded Explorer hotkeys.
+        // This is the release fallback when an elevated foreground prevents the
+        // low-level hook from observing Alt/AltGr key-up.
+        if (g_inputControlWnd)
+        {
+            g_modifierReleasePolling = true;
+            g_modifierReleaseCount = 0;
+            if (!SetTimer(g_inputControlWnd, kModifierReleasePollTimerId,
+                          kModifierReleasePollMs, nullptr))
+            {
+                g_modifierReleasePolling = false;
+                Wh_Log(L"SetTimer for modifier-release polling failed: %lu",
+                       GetLastError());
+            }
+        }
         return true;
     }
 
@@ -6785,7 +6834,18 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
         return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
     }
 
-    const bool sessionActive = InputSessionActive();
+    // Modifier-up callbacks can be lost while the system is under heavy input
+    // load. Every non-modifier event is a safe point to reconcile the cached
+    // state; unlike the current event, these modifier states are already settled.
+    InputReconcileModifiersFromSystem();
+    bool sessionActive = InputSessionActive();
+    if (sessionActive && SessionModifierReleased())
+    {
+        // Recover the normal Alt release path if its low-level callback was
+        // missed. A bare Tab following it must not act on a stale selector session.
+        OnModifierReleased();
+        sessionActive = InputSessionActive();
+    }
 
     if (vk == VK_ESCAPE && down && sessionActive)
     {
@@ -6985,13 +7045,12 @@ static LRESULT CALLBACK MouseHook(int nCode, WPARAM wParam, LPARAM lParam)
     return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
 }
 
-// HOTKEY REENVIADO DESDE EXPLORER (input thread)
+// HOTKEY REENVIADO DESDE EXPLORER Y SONDEO DE MODIFICADORES (input thread)
 //
-// El hook WH_KEYBOARD_LL no recibe las teclas mientras una ventana elevada tiene
-// el foco, y Windows abre entonces su selector nativo. Explorer sí recibe el
-// WM_HOTKEY y lo entrega a la ventana de control (ver sección EXPLORER). Se
-// procesa en el input thread, el mismo que ejecuta el hook, por lo que el
-// estado de sesión nunca se toca desde dos hilos.
+// El hook WH_KEYBOARD_LL no recibe de forma fiable las teclas mientras una
+// ventana elevada tiene el foco. Explorer reenvía el WM_HOTKEY; un timer del
+// input thread consulta además el estado físico de Alt para no depender del
+// evento key-up del hook al confirmar Alt/AltGr.
 
 static void InputSyncModifiersFromSystem()
 {
@@ -7002,7 +7061,7 @@ static void InputSyncModifiersFromSystem()
     g_altGrActive = IsAltGrPhysicallyDown();
 }
 
-static void InputHandleForwardedHotkey(HWND control, WPARAM flags)
+static void InputHandleForwardedHotkey(WPARAM flags)
 {
     if (InterlockedCompareExchange(&g_shutdownRequested, 0, 0) != 0)
         return;
@@ -7037,36 +7096,33 @@ static void InputHandleForwardedHotkey(HWND control, WPARAM flags)
     if (!StartInputSession(leftAlt, rightAlt, ctrlHeld, shift, true))
         return;
 
-    g_hotkeySession = true;
-    g_hotkeyReleaseCount = 0;
-    SetTimer(control, kHotkeyPollTimerId, kHotkeyPollMs, nullptr);
+    // StartInputSession owns the shared modifier-release polling setup.
 }
 
-// Respaldo de la suelta de Alt: si el hook no la vio (el Alt se soltó antes de
-// que el selector tomara el foco), se confirma cuando el Alt físico lleva unos
-// instantes suelto.
-static void InputPollHotkeySession(HWND control)
+// Respaldo de la suelta de Alt/AltGr: si el hook no vio el key-up, confirma
+// cuando GetAsyncKeyState indica que Alt lleva varios ticks físicos suelto.
+static void InputPollModifierRelease(HWND control)
 {
-    if (!g_hotkeySession || !InputSessionActive())
+    if (!g_modifierReleasePolling || !InputSessionActive())
     {
-        g_hotkeySession = false;
-        KillTimer(control, kHotkeyPollTimerId);
+        g_modifierReleasePolling = false;
+        KillTimer(control, kModifierReleasePollTimerId);
         return;
     }
 
-    const bool altHeld = (GetAsyncKeyState(VK_LMENU) & 0x8000) != 0 ||
-                         (GetAsyncKeyState(VK_RMENU) & 0x8000) != 0;
-    if (altHeld)
-    {
-        g_hotkeyReleaseCount = 0;
-        return;
-    }
-    if (++g_hotkeyReleaseCount < kHotkeyReleaseTicks)
-        return;
-
-    g_hotkeySession = false;
-    KillTimer(control, kHotkeyPollTimerId);
+    // Do not depend on low-level key-up delivery: query the physical key state
+    // on each tick, including both Ctrl and Alt for AltGr/Ctrl+Alt sessions.
     InputSyncModifiersFromSystem();
+    if (!SessionModifierReleased())
+    {
+        g_modifierReleaseCount = 0;
+        return;
+    }
+    if (++g_modifierReleaseCount < kModifierReleaseTicks)
+        return;
+
+    g_modifierReleasePolling = false;
+    KillTimer(control, kModifierReleasePollTimerId);
     SendAltMenuMaskIfNeeded();
     OnModifierReleased();
 }
@@ -7076,12 +7132,12 @@ static LRESULT CALLBACK InputControlProc(HWND hwnd, UINT message, WPARAM wParam,
 {
     if (g_hotkeyMessage != 0 && message == g_hotkeyMessage)
     {
-        InputHandleForwardedHotkey(hwnd, wParam);
+        InputHandleForwardedHotkey(wParam);
         return 0;
     }
-    if (message == WM_TIMER && wParam == kHotkeyPollTimerId)
+    if (message == WM_TIMER && wParam == kModifierReleasePollTimerId)
     {
-        InputPollHotkeySession(hwnd);
+        InputPollModifierRelease(hwnd);
         return 0;
     }
     if (message == WM_TIMER && wParam == kActivationRetryTimerId)
@@ -7209,7 +7265,7 @@ static DWORD WINAPI InputThreadProc(LPVOID)
     // publicar "no listo" para que Explorer deje el hotkey al sistema.
     if (control)
         SetWindowTextW(control, kInputControlTitleIdle);
-    g_hotkeySession = false;
+    g_modifierReleasePolling = false;
     if (g_keyboardHook)
     {
         UnhookWindowsHookEx(g_keyboardHook);
