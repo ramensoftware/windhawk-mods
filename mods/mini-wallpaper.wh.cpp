@@ -6,7 +6,7 @@
 // @author          Mirochill
 // @github          https://github.com/Mirochill
 // @homepage        https://github.com/Mirochill/mini-wallpaper
-// @include         explorer.exe
+// @include         windhawk.exe
 // @architecture    x86-64
 // @compilerOptions -ldwmapi -lgdi32 -lgdiplus -lshell32 -lcomdlg32 -lole32 -loleaut32 -lstrmiids -lshlwapi -ld3d9
 // @license         MIT
@@ -70,10 +70,6 @@ directory. The original file is never modified.
   $name: Optimized max FPS
   $description: FPS cap for generated WMV wallpaper copies.
 
-- crf: 23
-  $name: Legacy quality value
-  $description: Kept for cache fingerprint compatibility. WMV cache output uses a fixed bitrate.
-
 - muteAudio: true
   $name: Mute audio
   $description: Mute video playback.
@@ -103,6 +99,8 @@ directory. The original file is never modified.
 #include <algorithm>
 #include <atomic>
 #include <cstdio>
+#include <chrono>
+#include <future>
 #include <string>
 #include <vector>
 
@@ -112,6 +110,7 @@ constexpr PCWSTR kWallpaperWindowClass = L"MiniWallpaperWindhawkWindow";
 constexpr UINT kMsgTrayCallback = WM_APP + 1;
 constexpr UINT kMsgGraphEvent = WM_APP + 2;
 constexpr UINT kMsgReloadSettings = WM_APP + 3;
+constexpr UINT_PTR kPrepareTimerId = 3;
 constexpr UINT_PTR kGifTimerId = 1;
 constexpr UINT_PTR kAttachTimerId = 2;
 constexpr UINT kTrayIconId = 1;
@@ -130,7 +129,6 @@ struct Settings {
     bool optimizeMedia = true;
     std::wstring ffmpegPath;
     int maxFps = 30;
-    int crf = 23;
     bool muteAudio = true;
     bool showTrayIcon = true;
     bool autoOpenPicker = true;
@@ -146,11 +144,11 @@ enum class PlaybackKind {
 Settings g_settings;
 SRWLOCK g_settingsLock = SRWLOCK_INIT;
 std::atomic<bool> g_stopWorker = false;
+std::atomic<bool> g_cancelPreparation = false;
+std::future<std::wstring> g_preparation;
+std::wstring g_requestedPath;
 HANDLE g_workerThread = nullptr;
 DWORD g_workerThreadId = 0;
-bool g_isToolModProcessLauncher = false;
-bool g_modActive = false;
-HANDLE g_toolModProcessMutex = nullptr;
 
 HWND g_wallpaperWindow = nullptr;
 UINT g_taskbarCreatedMessage = 0;
@@ -240,7 +238,6 @@ void LoadSettings() {
     next.optimizeMedia = Wh_GetIntSetting(L"optimizeMedia") != 0;
     next.ffmpegPath = ExpandPath(GetStringSettingValue(L"ffmpegPath"));
     next.maxFps = ClampInt(Wh_GetIntSetting(L"maxFps"), 1, 120);
-    next.crf = ClampInt(Wh_GetIntSetting(L"crf"), 0, 51);
     next.muteAudio = Wh_GetIntSetting(L"muteAudio") != 0;
     next.showTrayIcon = Wh_GetIntSetting(L"showTrayIcon") != 0;
     next.autoOpenPicker = Wh_GetIntSetting(L"autoOpenPicker") != 0;
@@ -384,11 +381,11 @@ std::wstring OptimizedFileName(const std::wstring& source,
     RECT screen = GetVirtualScreenRect();
 
     wchar_t fingerprint[4096]{};
-    swprintf_s(fingerprint, L"%s|%lu|%lu|%lu|%lu|%d|%d|%d|%d",
+    swprintf_s(fingerprint, L"%s|%lu|%lu|%lu|%lu|%d|%d|%d",
                source.c_str(), data.nFileSizeHigh, data.nFileSizeLow,
                data.ftLastWriteTime.dwHighDateTime,
                data.ftLastWriteTime.dwLowDateTime, RectWidth(screen),
-               RectHeight(screen), settings.maxFps, settings.crf);
+               RectHeight(screen), settings.maxFps);
 
     wchar_t fileName[64]{};
     swprintf_s(fileName, L"%016llx.wmv", Fnv1a64(fingerprint));
@@ -408,7 +405,19 @@ bool RunHiddenProcess(const std::wstring& commandLine) {
         return false;
     }
 
-    WaitForSingleObject(processInfo.hProcess, INFINITE);
+    DWORD waitResult;
+    do {
+        waitResult = WaitForSingleObject(processInfo.hProcess, 100);
+        if (g_cancelPreparation.load() || g_stopWorker.load() ||
+            waitResult == WAIT_FAILED) {
+            // Only terminate the FFmpeg child created by this invocation.
+            TerminateProcess(processInfo.hProcess, 1);
+            WaitForSingleObject(processInfo.hProcess, INFINITE);
+            CloseHandle(processInfo.hThread);
+            CloseHandle(processInfo.hProcess);
+            return false;
+        }
+    } while (waitResult == WAIT_TIMEOUT);
     DWORD exitCode = 1;
     GetExitCodeProcess(processInfo.hProcess, &exitCode);
     CloseHandle(processInfo.hThread);
@@ -768,14 +777,18 @@ void ApplyPlaybackPauseState() {
     }
 }
 
-bool SetWallpaperPath(const std::wstring& inputPath, bool persist) {
-    Settings settings = GetSettingsSnapshot();
-    std::wstring path = ExpandPath(inputPath);
-    if (!FileExists(path)) {
-        return false;
+void CancelPreparation() {
+    g_cancelPreparation = true;
+    if (g_preparation.valid()) {
+        g_preparation.get();
     }
+    if (g_wallpaperWindow) {
+        KillTimer(g_wallpaperWindow, kPrepareTimerId);
+    }
+}
 
-    path = PrepareWallpaper(path, settings);
+bool StartPreparedWallpaper(const std::wstring& path) {
+    Settings settings = GetSettingsSnapshot();
     std::wstring extension = GetExtension(path);
 
     bool started = false;
@@ -792,9 +805,28 @@ bool SetWallpaperPath(const std::wstring& inputPath, bool persist) {
     }
 
     g_activePath = path;
+    return true;
+}
+
+bool SetWallpaperPath(const std::wstring& inputPath, bool persist) {
+    Settings settings = GetSettingsSnapshot();
+    std::wstring path = ExpandPath(inputPath);
+    if (!FileExists(path)) {
+        return false;
+    }
+
+    CancelPreparation();
+    g_cancelPreparation = false;
+    g_requestedPath = path;
     if (persist) {
+        // Persist the original source, so cache changes don't lose the selection.
         Wh_SetStringValue(L"wallpaperPath", path.c_str());
     }
+    g_preparation = std::async(std::launch::async, [path, settings]() {
+        SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        return PrepareWallpaper(path, settings);
+    });
+    SetTimer(g_wallpaperWindow, kPrepareTimerId, 50, nullptr);
     return true;
 }
 
@@ -1080,6 +1112,18 @@ LRESULT CALLBACK WallpaperWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
         }
 
         case WM_TIMER:
+            if (wParam == kPrepareTimerId) {
+                if (g_preparation.valid() &&
+                    g_preparation.wait_for(std::chrono::milliseconds(0)) ==
+                        std::future_status::ready) {
+                    std::wstring path = g_preparation.get();
+                    KillTimer(hwnd, kPrepareTimerId);
+                    if (!StartPreparedWallpaper(path) && path != g_requestedPath) {
+                        StartPreparedWallpaper(g_requestedPath);
+                    }
+                }
+                return 0;
+            }
             if (wParam == kGifTimerId) {
                 AdvanceGifFrame();
                 return 0;
@@ -1146,6 +1190,7 @@ LRESULT CALLBACK WallpaperWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
             break;
 
         case WM_DESTROY:
+            CancelPreparation();
             RemoveTrayIcon();
             StopPlayback();
             g_wallpaperWindow = nullptr;
@@ -1236,6 +1281,7 @@ void WhTool_ModSettingsChanged() {
 
 void WhTool_ModUninit() {
     g_stopWorker = true;
+    g_cancelPreparation = true;
     if (g_wallpaperWindow) {
         PostMessageW(g_wallpaperWindow, WM_CLOSE, 0, 0);
     }
@@ -1247,173 +1293,185 @@ void WhTool_ModUninit() {
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
     }
-    if (g_toolModProcessMutex) {
-        CloseHandle(g_toolModProcessMutex);
-        g_toolModProcessMutex = nullptr;
-    }
-}
-
-void WINAPI EntryPoint_Hook() {
-    ExitThread(0);
-}
-
-enum class ToolProcessKind {
-    NormalExplorer,
-    OtherToolMod,
-    CurrentToolMod,
-    Excluded,
-};
-
-ToolProcessKind GetToolProcessKind() {
-    int argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    if (!argv) {
-        return ToolProcessKind::NormalExplorer;
-    }
-
-    ToolProcessKind kind = ToolProcessKind::NormalExplorer;
-    for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0 ||
-            wcscmp(argv[i], L"-service-start") == 0 ||
-            wcscmp(argv[i], L"-service-stop") == 0) {
-            kind = ToolProcessKind::Excluded;
-            break;
-        }
-    }
-
-    if (kind == ToolProcessKind::NormalExplorer) {
-        for (int i = 1; i < argc - 1; i++) {
-            if (wcscmp(argv[i], L"-tool-mod") == 0) {
-                kind = wcscmp(argv[i + 1], WH_MOD_ID) == 0
-                           ? ToolProcessKind::CurrentToolMod
-                           : ToolProcessKind::OtherToolMod;
-                break;
-            }
-        }
-    }
-
-    LocalFree(argv);
-    return kind;
-}
-
-bool CommandLineHasNoArguments() {
-    int argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    if (!argv) {
-        return false;
-    }
-
-    bool result = argc <= 1;
-    LocalFree(argv);
-    return result;
-}
-
-bool CurrentProcessOwnsWindow(HWND hwnd) {
-    if (!hwnd) {
-        return false;
-    }
-
-    DWORD windowProcessId = 0;
-    GetWindowThreadProcessId(hwnd, &windowProcessId);
-    return windowProcessId == GetCurrentProcessId();
-}
-
-bool IsShellExplorerProcess() {
-    HWND shellWindow = GetShellWindow();
-    HWND taskbarWindow = FindWindowW(L"Shell_TrayWnd", nullptr);
-
-    if (CurrentProcessOwnsWindow(shellWindow) ||
-        CurrentProcessOwnsWindow(taskbarWindow)) {
-        return true;
-    }
-
-    if (!shellWindow && !taskbarWindow) {
-        return CommandLineHasNoArguments();
-    }
-
-    return false;
-}
-
-bool ShouldRunInThisProcess() {
-    return GetToolProcessKind() == ToolProcessKind::NormalExplorer &&
-           IsShellExplorerProcess();
-}
-
-bool LaunchToolModProcess() {
-    WCHAR currentProcessPath[MAX_PATH]{};
-    DWORD length = GetModuleFileNameW(nullptr, currentProcessPath,
-                                      ARRAYSIZE(currentProcessPath));
-    if (length == 0 || length == ARRAYSIZE(currentProcessPath)) {
-        return false;
-    }
-
-    WCHAR commandLine[MAX_PATH + 64]{};
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
-               WH_MOD_ID);
-
-    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
-    if (!kernelModule) {
-        kernelModule = GetModuleHandleW(L"kernel32.dll");
-    }
-    if (!kernelModule) {
-        return false;
-    }
-
-    using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES,
-        WINBOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW,
-        LPPROCESS_INFORMATION, PHANDLE);
-
-    auto createProcessInternal =
-        reinterpret_cast<CreateProcessInternalW_t>(
-            GetProcAddress(kernelModule, "CreateProcessInternalW"));
-    if (!createProcessInternal) {
-        return false;
-    }
-
-    STARTUPINFOW startupInfo{};
-    startupInfo.cb = sizeof(startupInfo);
-    startupInfo.dwFlags = STARTF_FORCEOFFFEEDBACK;
-    PROCESS_INFORMATION processInfo{};
-    if (!createProcessInternal(nullptr, currentProcessPath, commandLine, nullptr,
-                               nullptr, FALSE, NORMAL_PRIORITY_CLASS, nullptr,
-                               nullptr, &startupInfo, &processInfo, nullptr)) {
-        return false;
-    }
-
-    CloseHandle(processInfo.hThread);
-    CloseHandle(processInfo.hProcess);
-    return true;
 }
 
 }  // namespace
 
-BOOL Wh_ModInit() {
-    if (!ShouldRunInThisProcess()) {
-        return TRUE;
-    }
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
-    g_modActive = true;
-    if (!WhTool_ModInit()) {
-        g_modActive = false;
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
         return FALSE;
     }
 
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_modActive) {
-        WhTool_ModSettingsChanged();
+    if (g_isToolModProcessLauncher) {
+        return;
     }
+
+    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    if (g_modActive) {
-        WhTool_ModUninit();
-        g_modActive = false;
+    if (g_isToolModProcessLauncher) {
+        return;
     }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
