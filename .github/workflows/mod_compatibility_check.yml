@@ -23,7 +23,7 @@ jobs:
           # '1.5.1',
           '1.6.1',
           '1.7.3',
-          '2.0.0-alpha.6',
+          '2.0.0-alpha.7',
         ]
         # exclude:
         #   # Exclude 1.5.1, which is quite old, for everyone but m417z.
@@ -90,11 +90,13 @@ jobs:
               # Compile via the CLI (--disabled builds the mod without activating
               # it). --arch all builds the union of every machine scenario:
               # x86/x86-64 plus arm64, without the x86-64 build being skipped for a
-              # mod whose targets are all common system processes.
+              # mod whose targets are all common system processes. --strict
+              # rejects metadata and settings that are only accepted for forward
+              # compatibility, such as reserved keys or an unknown $format.
               cli="$windhawk_path\windhawk-cli.exe"
               result="${{ runner.temp }}/compile_result.json"
               if ! MSYS_NO_PATHCONV=1 "$cli" --json \
-                mod install --disabled --arch all --file "$mod_file" \
+                mod install --disabled --arch all --strict --file "$mod_file" \
                 > "$result"; then
                 # Compiler diagnostics are streamed to stderr, but the failure
                 # summary goes to stdout in JSON mode, and a failure that produced
