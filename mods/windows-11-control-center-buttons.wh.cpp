@@ -10,7 +10,6 @@
 // @license             MIT
 // @include             ShellHost.exe
 // @include             windhawk.exe
-// @architecture        x86-64
 // @compilerOptions     -lole32 -loleaut32 -lruntimeobject -lshlwapi -lshell32 -luuid -luser32 -lwtsapi32 -lpowrprof -lgdi32 -lgdiplus -lshcore
 // ==/WindhawkMod==
 
@@ -293,11 +292,6 @@ struct ActionItem {
 static Settings                g_settings;
 static std::vector<ActionItem> g_buttons;
 static std::vector<std::vector<std::wstring>> g_actionRegistry;
-
-enum class Role { None, Injector, Launcher, Tool };
-static Role g_role = Role::None;
-
-static HANDLE g_toolModProcessMutex = nullptr;
 
 static HWND   g_proxyWindow   = NULL;
 static HANDLE g_proxyThread   = NULL;
@@ -916,6 +910,47 @@ static bool PerformPresetAction(const std::wstring& action) {
     return true;
 }
 
+static bool IsWow64() {
+    static const bool wow64 = [] {
+        BOOL b = FALSE;
+        IsWow64Process(GetCurrentProcess(), &b);
+        return b != FALSE;
+    }();
+    return wow64;
+}
+
+static std::wstring WindowsDir() {
+    WCHAR dir[MAX_PATH]{};
+    UINT n = GetWindowsDirectoryW(dir, ARRAYSIZE(dir));
+    return (n > 0 && n < ARRAYSIZE(dir)) ? std::wstring(dir, n) : std::wstring();
+}
+
+static std::wstring SystemBinaryPath(PCWSTR relativePath) {
+    return WindowsDir() + (IsWow64() ? L"\\Sysnative\\" : L"\\System32\\") + relativePath;
+}
+
+static std::wstring MapSystem32ForWow64(const std::wstring& s) {
+    if (!IsWow64()) return s;
+    std::wstring windir = WindowsDir();
+    if (windir.empty()) return s;
+
+    size_t start = (!s.empty() && s[0] == L'"') ? 1 : 0;
+    std::wstring work = s;
+    if (start < s.size() && s[start] == L'%') {
+        WCHAR buf[MAX_PATH * 2]{};
+        DWORD n = ExpandEnvironmentStringsW(s.c_str(), buf, ARRAYSIZE(buf));
+        if (n > 0 && n <= ARRAYSIZE(buf)) work.assign(buf, n - 1);
+    }
+
+    std::wstring prefix = windir + L"\\System32\\";
+    if (work.size() >= start + prefix.size() &&
+        _wcsnicmp(work.c_str() + start, prefix.c_str(), prefix.size()) == 0) {
+        work.replace(start, prefix.size(), windir + L"\\Sysnative\\");
+        return work;
+    }
+    return s;
+}
+
 static bool SearchRecursive(const std::wstring& root, const std::wstring& name,
                              int depth, std::wstring& out) {
     if (depth < 0) return false;
@@ -951,11 +986,18 @@ static bool SearchRecursive(const std::wstring& root, const std::wstring& name,
 
 static bool SearchByName(const std::wstring& name, std::wstring& out) {
     wchar_t buf[MAX_PATH * 4]{};
+    if (IsWow64()) {
+        std::wstring sysnative = WindowsDir() + L"\\Sysnative";
+        if (SearchPathW(sysnative.c_str(), name.c_str(), nullptr, ARRAYSIZE(buf), buf, nullptr)) {
+            out = buf; return true;
+        }
+    }
     if (SearchPathW(nullptr, name.c_str(), nullptr, ARRAYSIZE(buf), buf, nullptr)) {
         out = buf; return true;
     }
 
     std::vector<std::wstring> roots;
+    if (IsWow64()) roots.push_back(WindowsDir() + L"\\Sysnative");
     auto addEnvDir = [&](const wchar_t* var) {
         wchar_t tmp[MAX_PATH * 2]{};
         if (GetEnvironmentVariableW(var, tmp, ARRAYSIZE(tmp))) roots.emplace_back(tmp);
@@ -1084,7 +1126,7 @@ static ParsedAction ParseActionSigns(const std::wstring& raw) {
 }
 
 static bool ExecuteProcess(const std::wstring& cmd, bool useCmdExe, bool showWindow) {
-    std::wstring line = useCmdExe ? (L"cmd.exe /C " + cmd) : cmd;
+    std::wstring line = useCmdExe ? (L"\"" + SystemBinaryPath(L"cmd.exe") + L"\" /C " + cmd) : cmd;
     std::vector<wchar_t> buf(line.begin(), line.end());
     buf.push_back(L'\0');
 
@@ -1115,11 +1157,12 @@ static void ExecuteSingleCommand(const std::wstring& cmd) {
 
     if (StartsWithCI(action, L"cmd:")) {
         std::wstring command = Trim(action.substr(4));
+        std::wstring cmdExe = SystemBinaryPath(L"cmd.exe");
         if (showWindow)
-            ShellExecuteW(nullptr, verb, L"cmd.exe",
+            ShellExecuteW(nullptr, verb, cmdExe.c_str(),
                           (L"/K " + command).c_str(), nullptr, SW_NORMAL);
         else
-            ShellExecuteW(nullptr, verb, L"cmd.exe",
+            ShellExecuteW(nullptr, verb, cmdExe.c_str(),
                           (L"/C " + command).c_str(), nullptr, SW_HIDE);
         return;
     }
@@ -1131,7 +1174,8 @@ static void ExecuteSingleCommand(const std::wstring& cmd) {
             std::wstring ps = Trim(action.substr(psLen));
             std::wstring args = L"-NoProfile -ExecutionPolicy Bypass -Command " + ps;
             if (showWindow) args = L"-NoExit " + args;
-            ShellExecuteW(nullptr, verb, L"powershell.exe",
+            std::wstring psExe = SystemBinaryPath(L"WindowsPowerShell\\v1.0\\powershell.exe");
+            ShellExecuteW(nullptr, verb, psExe.c_str(),
                           args.c_str(), nullptr, showWindow ? SW_NORMAL : SW_HIDE);
             return;
         }
@@ -1149,7 +1193,7 @@ static void ExecuteSingleCommand(const std::wstring& cmd) {
     }
 
     if (!action.empty() && action.front() == L'"') {
-        ShellExecuteW(nullptr, verb, StripOuterQuotes(action).c_str(),
+        ShellExecuteW(nullptr, verb, MapSystem32ForWow64(StripOuterQuotes(action)).c_str(),
                       nullptr, nullptr, SW_SHOWNORMAL);
         return;
     }
@@ -1160,14 +1204,14 @@ static void ExecuteSingleCommand(const std::wstring& cmd) {
         std::wstring resolved;
         if (GetKnownFolderPath(tgt.c_str(), resolved) ||
             SearchByName(tgt, resolved))
-            ShellExecuteW(nullptr, verb, resolved.c_str(),
+            ShellExecuteW(nullptr, verb, MapSystem32ForWow64(resolved).c_str(),
                           nullptr, nullptr, SW_SHOWNORMAL);
         else
             Wh_Log(L"~search: '%s' not found", tgt.c_str());
         return;
     }
 
-    ExecuteProcess(action, false, showWindow);
+    ExecuteProcess(MapSystem32ForWow64(action), false, showWindow);
 }
 
 static void ExecuteActionText(const std::vector<std::wstring>& commands) {
@@ -1818,7 +1862,7 @@ struct Injection {
     winrt::weak_ref<wuxc::StackPanel>      container;
 };
 
-[[clang::no_destroy]] static std::vector<Injection> g_injections;
+static std::vector<Injection> g_injections;
 static std::atomic<DWORD> g_xamlThreadId{0};
 [[clang::no_destroy]] static wux::DispatcherTimer g_earlyInject{nullptr};
 [[clang::no_destroy]] static wux::DispatcherTimer g_retryTimer{nullptr};
@@ -2047,11 +2091,29 @@ static BOOL CALLBACK FirstThreadWindow(HWND hwnd, LPARAM lParam) {
     return FALSE;
 }
 
+struct RunParam { const std::function<void()>* fn; bool ran; };
+static UINT g_runMsg = 0;
+
+static LRESULT CALLBACK RunOnXamlThreadHookProc(int code, WPARAM wParam, LPARAM lParam) {
+    if (code == HC_ACTION) {
+        auto* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
+        if (cwp->message == g_runMsg && cwp->lParam) {
+            auto* p = reinterpret_cast<RunParam*>(cwp->lParam);
+            if (!p->ran) {
+                p->ran = true;
+                try { (*p->fn)(); } catch (...) {}
+            }
+        }
+    }
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
 static bool RunOnXamlThread(const std::function<void()>& fn) {
-    static const UINT kRunMsg = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+    if (!g_runMsg)
+        g_runMsg = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
     DWORD threadId = g_xamlThreadId.load();
-    if (!threadId || !kRunMsg) return false;
+    if (!threadId || !g_runMsg) return false;
 
     if (threadId == GetCurrentThreadId()) {
         try { fn(); } catch (...) { return false; }
@@ -2062,28 +2124,11 @@ static bool RunOnXamlThread(const std::function<void()>& fn) {
     EnumThreadWindows(threadId, FirstThreadWindow, reinterpret_cast<LPARAM>(&target));
     if (!target) return false;
 
-    struct RunParam { const std::function<void()>* fn; bool ran; };
-
-    HHOOK hook = SetWindowsHookExW(
-        WH_CALLWNDPROC,
-        [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT {
-            if (code == HC_ACTION) {
-                auto* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
-                if (cwp->message == kRunMsg && cwp->lParam) {
-                    auto* p = reinterpret_cast<RunParam*>(cwp->lParam);
-                    if (!p->ran) {
-                        p->ran = true;
-                        try { (*p->fn)(); } catch (...) {}
-                    }
-                }
-            }
-            return CallNextHookEx(nullptr, code, wParam, lParam);
-        },
-        nullptr, threadId);
+    HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, RunOnXamlThreadHookProc, nullptr, threadId);
     if (!hook) return false;
 
     RunParam param{ &fn, false };
-    SendMessageW(target, kRunMsg, 0, reinterpret_cast<LPARAM>(&param));
+    SendMessageW(target, g_runMsg, 0, reinterpret_cast<LPARAM>(&param));
     UnhookWindowsHookEx(hook);
     return param.ran;
 }
@@ -2216,185 +2261,26 @@ static void StartControlCenterWatch() {
     WindhawkUtils::SetFunctionHook(target, LoadLibraryExW_Hook, &LoadLibraryExW_Original);
 }
 
-static bool ToolInit() {
+static bool g_isShellHost = false;
+
+static BOOL ShellHost_ModInit() {
     LoadSettings();
     BuildButtons();
     StartWorker();
-    StartProxyThread();
-    return g_proxyWindow != NULL;
-}
-
-static void ToolUninit() {
-    g_unloading = true;
-    StopProxyThread();
-    StopWorker();
-    ShutdownGdiplus();
-}
-
-static void WINAPI EntryPoint_Hook() {
-    Wh_Log(L">");
-    ExitThread(0);
-}
-
-BOOL Wh_ModInit() {
-    Wh_Log(L"Wh_ModInit");
-
-    if (IsShellHostProcess()) {
-        g_role = Role::Injector;
-        LoadSettings();
-        BuildButtons();
-        StartWorker();
-        StartControlCenterWatch();
-        return TRUE;
-    }
-
-    DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0)
-        return FALSE;
-
-    bool isExcluded = false;
-    bool isToolModProcess = false;
-    bool isCurrentToolModProcess = false;
-    int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    if (!argv) {
-        Wh_Log(L"CommandLineToArgvW failed");
-        return FALSE;
-    }
-    for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0 ||
-            wcscmp(argv[i], L"-service-start") == 0 ||
-            wcscmp(argv[i], L"-service-stop") == 0) {
-            isExcluded = true;
-            break;
-        }
-    }
-    for (int i = 1; i < argc - 1; i++) {
-        if (wcscmp(argv[i], L"-tool-mod") == 0) {
-            isToolModProcess = true;
-            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) isCurrentToolModProcess = true;
-            break;
-        }
-    }
-    LocalFree(argv);
-
-    if (isExcluded) return FALSE;
-
-    if (isCurrentToolModProcess) {
-        g_toolModProcessMutex = CreateMutexW(nullptr, FALSE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex) {
-            Wh_Log(L"CreateMutex failed");
-            ExitProcess(1);
-        }
-
-        DWORD w = WaitForSingleObject(g_toolModProcessMutex, 5000);
-        if (w != WAIT_OBJECT_0 && w != WAIT_ABANDONED) {
-            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-            ExitProcess(1);
-        }
-
-        g_role = Role::Tool;
-        if (!ToolInit()) {
-            ToolUninit();
-            ExitProcess(1);
-        }
-
-        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandleW(nullptr);
-        IMAGE_NT_HEADERS* ntHeaders =
-            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-        void* entryPoint = (BYTE*)dosHeader + ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
-        return TRUE;
-    }
-
-    if (isToolModProcess) return FALSE;
-
-    g_role = Role::Launcher;
+    StartControlCenterWatch();
     return TRUE;
 }
 
-static void LaunchToolProcess() {
-    WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileNameW(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
-        case 0:
-        case ARRAYSIZE(currentProcessPath):
-            Wh_Log(L"GetModuleFileName failed");
-            return;
-    }
-
-    WCHAR commandLine[MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
-
-    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
-    if (!kernelModule) {
-        kernelModule = GetModuleHandleW(L"kernel32.dll");
-        if (!kernelModule) {
-            Wh_Log(L"No kernelbase.dll/kernel32.dll");
-            return;
-        }
-    }
-
-    using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
-        LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
-        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-        LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation,
-        PHANDLE hRestrictedUserToken);
-    auto pCreateProcessInternalW = (CreateProcessInternalW_t)GetProcAddress(
-        kernelModule, "CreateProcessInternalW");
-    if (!pCreateProcessInternalW) {
-        Wh_Log(L"No CreateProcessInternalW");
-        return;
-    }
-
-    STARTUPINFOW si{ .cb = sizeof(STARTUPINFOW), .dwFlags = STARTF_FORCEOFFFEEDBACK };
-    PROCESS_INFORMATION pi;
-    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine, nullptr,
-                                 nullptr, FALSE, NORMAL_PRIORITY_CLASS, nullptr,
-                                 nullptr, &si, &pi, nullptr)) {
-        Wh_Log(L"CreateProcess failed");
-        return;
-    }
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
+static void ShellHost_ModAfterInit() {
+    if (g_discoveryHooked.load()) return;
+    if (HMODULE module = GetModuleHandleW(L"ControlCenter.dll"))
+        InstallDiscoveryHooks(module, /*applyNow=*/true);
 }
 
-void Wh_ModAfterInit() {
-    switch (g_role) {
-        case Role::Injector:
-            if (!g_discoveryHooked.load())
-                if (HMODULE module = GetModuleHandleW(L"ControlCenter.dll"))
-                    InstallDiscoveryHooks(module, /*applyNow=*/true);
-            break;
-        case Role::Launcher:
-            LaunchToolProcess();
-            break;
-        default:
-            break;
-    }
-}
-
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
-    *bReload = TRUE;
-    return TRUE;
-}
-
-void Wh_ModUninit() {
+static void ShellHost_ModUninit() {
     Wh_Log(L"Wh_ModUninit");
-
-    switch (g_role) {
-        case Role::Tool:
-            ToolUninit();
-            ExitProcess(0);
-            return;
-        case Role::Launcher:
-            return;
-        default:
-            break;
-    }
-
     g_unloading = true;
+
     if (g_xamlThreadId.load() != 0) {
         bool restored = false;
         for (int attempt = 0; attempt < 25 && !restored; ++attempt) {
@@ -2408,4 +2294,215 @@ void Wh_ModUninit() {
 
     StopWorker();
     ShutdownGdiplus();
+}
+
+BOOL WhTool_ModInit() {
+    LoadSettings();
+    BuildButtons();
+    StartWorker();
+    StartProxyThread();
+    if (!g_proxyWindow) {
+        StopProxyThread();
+        StopWorker();
+        return FALSE;
+    }
+    return TRUE;
+}
+
+void WhTool_ModSettingsChanged() {
+    LoadSettings();
+    BuildButtons();
+}
+
+void WhTool_ModUninit() {
+    g_unloading = true;
+    StopProxyThread();
+    StopWorker();
+    ShutdownGdiplus();
+}
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    if (IsShellHostProcess()) {
+        g_isShellHost = true;
+        return ShellHost_ModInit();
+    }
+
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (g_isShellHost) {
+        ShellHost_ModAfterInit();
+        return;
+    }
+
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    if (g_isShellHost) {
+        *bReload = TRUE;
+        return TRUE;
+    }
+
+    if (g_isToolModProcessLauncher) {
+        return TRUE;
+    }
+
+    WhTool_ModSettingsChanged();
+    return TRUE;
+}
+
+void Wh_ModUninit() {
+    if (g_isShellHost) {
+        ShellHost_ModUninit();
+        return;
+    }
+
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
