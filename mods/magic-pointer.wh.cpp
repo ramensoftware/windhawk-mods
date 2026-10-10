@@ -2,13 +2,11 @@
 // @id              magic-pointer
 // @name            Magic Pointer
 // @description     Shake the mouse cursor to summon a Googlebook-style Magic Pointer, then point at or select anything on screen and ask Gemini AI about it
-// @version         1.0
+// @version         1.0.1
 // @author          Rono
 // @github          https://github.com/rono-zeroseven
 // @include         windhawk.exe
-// @include         windhawk-mod.exe
-// @include         windhawk-mod-uiaccess.exe
-// @compilerOptions -luser32 -lgdi32 -lshell32 -ladvapi32 -lole32 -loleaut32 -luuid -lwinhttp -lwindowscodecs -limm32
+// @compilerOptions -luser32 -lgdi32 -lshell32 -ladvapi32 -lole32 -loleaut32 -lwinhttp -limm32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -18,6 +16,10 @@
 The Magic Pointer from Google's Googlebooks, on Windows: an AI mouse cursor.
 Wiggle the mouse, then point at anything on screen, select it, and ask Gemini
 about it, search it with Google Lens, copy its text or translate it.
+
+![Magic Pointer with a sample selection and question](https://raw.githubusercontent.com/rono-zeroseven/windhawk-mods/0a3b052e38da866ce5312754be9bec0e5364caea/assets/magic-pointer/preview.png)
+
+*Native preview with a sample selection; browser actions work without an API key.*
 
 ## How to use
 
@@ -37,7 +39,8 @@ on its own when the mouse stays still for a while.
 
 Add a free Gemini API key (https://aistudio.google.com/apikey) in the
 settings and answers stream right into the card. You can ask follow-up
-questions, and Gemini suggests up to three things to do with each selection.
+questions. Enable **Smart suggestions** to have Gemini suggest up to three
+things to do with each selection; this is off by default.
 Drag over an answer to select text, then press Ctrl+C or right-click to copy.
 The **Copy** button copies the whole answer, including while it is streaming.
 
@@ -71,6 +74,45 @@ Every selection is read with the OCR built into Windows 10 and 11, entirely
 on your PC. Copy the text with the **Aa** button, and Gemini gets it as extra
 context. OCR uses the languages installed in Windows.
 
+## Privacy and temporary files
+
+Summoning the pointer, selecting an area and copying its image or text stay
+on your PC with the default settings. The mod contacts Google's services
+when you use these features:
+
+* With an API key, **Send**, a suggestion chip or **Translate** sends your
+  selected regions as JPEG images (up to 1536 pixels on the longest side),
+  their UI Automation names and recognized text, your question and the card's
+  conversation to `generativelanguage.googleapis.com` over HTTPS. Follow-up
+  questions include the selections and conversation again.
+* **Smart suggestions** is off by default. If you enable it with an API key,
+  every selection is uploaded as soon as you make or add it, even if you only
+  intend to copy its text or search it with Lens. The suggestion request sends
+  the selection images and text, without the card's conversation.
+* **Ask in Gemini** (also **Send** without an API key) opens
+  `gemini.google.com/app` and puts your question and selection PNG files into
+  a new draft. Attaching files can upload them before you send the draft; the
+  mod leaves sending the message to you.
+* **Search with Google Lens** opens a temporary local HTML page containing
+  your selection as a PNG (up to 1000 pixels on the longest side). That page
+  immediately uploads the image to `lens.google.com/v3/upload` when it opens.
+
+Under Google's [Gemini API terms](https://ai.google.dev/gemini-api/terms),
+free-tier submissions and responses, including images, may be used to improve
+Google's products and machine learning, and may be read by human reviewers in
+most regions. The terms describe regional exceptions and different treatment
+for paid services. Avoid sending sensitive, confidential or personal content
+through the free tier.
+
+Browser handoff PNGs (`gemini-selection-*.png`) and Lens HTML pages are written
+temporarily to the mod's Windhawk storage folder, normally under
+`%ProgramData%\Windhawk`. This folder is shared across Windows accounts.
+PNGs are scheduled for deletion after 30 minutes and Lens pages after 10
+minutes; both are also deleted when the mod is disabled. Files left by an
+interrupted process are cleaned up on the next start once they expire. A file held open by another program may delay
+deletion. **Copy image** and browser handoff also put the selection on the
+Windows clipboard; clipboard history follows your Windows settings.
+
 ## Look and feel
 
 * The card and the hint sit on Windows' live frosted glass (acrylic) with
@@ -93,6 +135,9 @@ in any app on the *Excluded apps* list (for example `RobloxPlayerBeta.exe`,
 
 * Runs as a *tool mod* in its own background process. It doesn't inject into
   other programs and never changes your system cursors.
+* Uses Windhawk's standard host without requesting UIAccess. Highlighting
+  controls and browser handoff are subject to Windows' restrictions on
+  interacting with elevated apps.
 * Works on every Windows version Windhawk runs on, on x64, ARM64 and 32-bit
   systems, and supports multiple monitors with per-monitor display scaling.
 * Shakes are detected from raw mouse input, so nothing runs while the mouse is
@@ -211,9 +256,11 @@ in any app on the *Excluded apps* list (for example `RobloxPlayerBeta.exe`,
   - gemini-flash-latest: Gemini Flash (latest) - newest Flash, slow to start
   - gemini-3.1-pro-preview: Gemini 3.1 Pro (preview) - most capable, paid plan
   - gemini-pro-latest: Gemini Pro (latest) - most capable, paid plan
-- suggestions: true
+- suggestions: false
   $name: Smart suggestions
-  $description: Show up to three Gemini suggestions for each selection (needs an API key)
+  $description: >-
+    Automatically upload each selection's image and text to Google for up to
+    three suggestions (needs an API key). Off by default
 - suggestionsModel: gemini-flash-lite-latest
   $name: Suggestions model
   $description: A fast model works best here; suggestions then show up in about a second
@@ -323,9 +370,6 @@ T GetProc(PCWSTR module, const char* name) {
     HMODULE handle = GetModuleHandleW(module);
     if (!handle) {
         handle = LoadLibraryExW(module, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if (!handle && GetLastError() == ERROR_INVALID_PARAMETER) {
-            handle = LoadLibraryW(module);  // Windows 7 without KB2533623.
-        }
     }
     if (!handle) {
         return nullptr;
@@ -483,16 +527,6 @@ inline double EaseOutBack(double t) {
 
 ////////////////////////////////////////////////////////////////////////////////
 // Monitors and DPI
-
-void MakeThreadDpiAware() {
-    using SetThreadDpiAwarenessContext_t =
-        DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
-    static auto setContext = GetProc<SetThreadDpiAwarenessContext_t>(
-        L"user32.dll", "SetThreadDpiAwarenessContext");
-    if (setContext) {
-        setContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    }
-}
 
 UINT GetMonitorDpi(HMONITOR monitor) {
     using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
@@ -982,14 +1016,14 @@ struct Settings {
     std::wstring browserPath;
     std::wstring apiKey;
     std::wstring model;
-    bool suggestions = true;
+    bool suggestions = false;
     std::wstring suggestionsModel;
     std::wstring translateTo;
 };
 
 std::wstring GetStringSetting(PCWSTR name) {
     PCWSTR value = Wh_GetStringSetting(name);
-    std::wstring result = value ? value : L"";
+    std::wstring result = value;
     Wh_FreeStringSetting(value);
     return Trim(result);
 }
@@ -2106,7 +2140,7 @@ class TextPainter {
 ////////////////////////////////////////////////////////////////////////////////
 // Icons, drawn on a 16x16 design grid centered at (cx, cy)
 
-enum class Icon { Close, Copy, Search, External, Send, Plus, Reply, Check, Translate };
+enum class Icon { Close, Copy, Search, External, Send, Plus, Translate };
 
 void DrawIcon(Surface& s, Icon icon, float cx, float cy, float scale, Color c) {
     const float u = scale;  // One design unit.
@@ -2147,16 +2181,6 @@ void DrawIcon(Surface& s, Icon icon, float cx, float cy, float scale, Color c) {
             StrokeLine(s, P(8, 2.5f), P(8, 13.5f), w, c);
             StrokeLine(s, P(2.5f, 8), P(13.5f, 8), w, c);
             break;
-        case Icon::Reply:
-            StrokeLine(s, P(3, 2.5f), P(3, 8), w, c);
-            StrokeLine(s, P(3, 8.6f), P(13, 8.6f), w, c);
-            StrokeLine(s, P(9.8f, 5.4f), P(13, 8.6f), w, c);
-            StrokeLine(s, P(9.8f, 11.8f), P(13, 8.6f), w, c);
-            break;
-        case Icon::Check:
-            StrokeLine(s, P(3, 8.5f), P(6.5f, 12), w, c);
-            StrokeLine(s, P(6.5f, 12), P(13, 4.5f), w, c);
-            break;
         case Icon::Translate:
             StrokeLine(s, P(1, 14), P(4.5f, 6), w * 0.85f, c);
             StrokeLine(s, P(4.5f, 6), P(8, 14), w * 0.85f, c);
@@ -2177,10 +2201,7 @@ enum class Glyph : wchar_t {
     Send = 0xE725,
     Add = 0xE710,
     Camera = 0xE722,
-    Check = 0xE73E,
     Text = 0xE8D2,
-    Photo = 0xE91B,
-    Reply = 0xE97A,
     Translate = 0xE8C1,
 };
 
@@ -2219,18 +2240,11 @@ void DrawGlyph(Surface& s,
         case Glyph::Add:
             icon = Icon::Plus;
             break;
-        case Glyph::Check:
-            icon = Icon::Check;
-            break;
-        case Glyph::Reply:
-            icon = Icon::Reply;
-            break;
         case Glyph::Translate:
             icon = Icon::Translate;
             break;
         case Glyph::Copy:
         case Glyph::Text:
-        case Glyph::Photo:
             icon = Icon::Copy;
             break;
     }
@@ -2483,7 +2497,6 @@ Color GlassTint(bool dark) {
 }
 
 class GlassPanel {
-    friend struct MagicPointerVisualTests;
   public:
     bool Create(bool activatable, bool clickThrough, PCWSTR className, void* param) {
         if (panel_.Hwnd()) {
@@ -3100,7 +3113,6 @@ class PointerCursors {
 constexpr WCHAR kHintText[] = L"Select anything to ask Gemini";
 
 class HintPill {
-    friend struct MagicPointerVisualTests;
   public:
     void Show(POINT cursor, float scale, bool dark, double now) {
         if (!panel_.Create(false, true, kLayerWindowClass, nullptr)) {
@@ -3333,7 +3345,6 @@ float OutlineCoverage(float x, float y, float l, float t, float r, float b,
 }
 
 class GlowFrame {
-    friend struct MagicPointerVisualTests;
   public:
     void Show(const RECT& rect, FrameStyle style, float scale, double now, bool animate) {
         if (!window_.Hwnd() && !window_.Create(true, false, kLayerWindowClass, nullptr)) return;
@@ -3368,9 +3379,6 @@ class GlowFrame {
         visible_ = true;
         if (restyle) {
             Render(now);
-            dirty_ = false;
-        } else {
-            dirty_ = true;
         }
     }
 
@@ -3417,7 +3425,6 @@ class GlowFrame {
             }
         }
         Render(now);
-        dirty_ = false;
         return 1000.0 / 60.0;
     }
 
@@ -3530,7 +3537,7 @@ class GlowFrame {
         }
     }
 
-    void Render(double now, bool parallel = true) {
+    void Render(double now) {
         const float l = current_[0];
         const float t = current_[1];
         const float r = std::max(current_[2], l + 1);
@@ -3585,7 +3592,7 @@ class GlowFrame {
         if (rebuild) {
             workers_.ForRows(0, count, [&](int i) {
                 BuildBloom(blooms_[i], parts[i], l, t, r, b, radius, border, tight, wide);
-            }, parallel && count > 1 &&
+            }, count > 1 &&
                static_cast<uint64_t>(outerRect.right - outerRect.left) *
                    (outerRect.bottom - outerRect.top) >= 300000, 1);
         }
@@ -3679,7 +3686,6 @@ class GlowFrame {
     FrameStyle style_ = FrameStyle::Hover;
     float scale_ = 1.0f;
     bool visible_ = false;
-    bool dirty_ = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3700,7 +3706,6 @@ RippleWave EvaluateRippleWave(float distance, float sigma, float strength) {
 }
 
 class Ripple {
-    friend struct MagicPointerVisualTests;
   public:
     static constexpr double kDurationMs = 1650.0;
 
@@ -3784,7 +3789,7 @@ class Ripple {
         uint32_t lightAlpha;
     };
 
-    void Render(double now, bool parallel = true) {
+    void Render(double now) {
         const float t = static_cast<float>(std::clamp((now - start_) / kDurationMs, 0.0, 1.0));
         const float elapsed = static_cast<float>(now - start_);
         const int w = surface_.Width();
@@ -3862,7 +3867,7 @@ class Ripple {
                     BlendOver(row[x], ScalePremultiplied(colors[hue], wave.lightAlpha));
                 }
             }
-        }, parallel && static_cast<uint64_t>(w) * h >= 500000);
+        }, static_cast<uint64_t>(w) * h >= 500000);
         window_.Present(surface_, monitor_.left, monitor_.top, 255);
     }
 
@@ -3935,7 +3940,6 @@ bool RenderSelectionDimMask(Surface& mask, RECT screen, RECT opening, float feat
 }
 
 class InputOverlay {
-    friend struct MagicPointerVisualTests;
   public:
     bool Create() {
         hwnd_ = CreateWindowExW(
@@ -4552,7 +4556,6 @@ class ElementPicker {
     }
 
     void Run() {
-        MakeThreadDpiAware();
         const HRESULT coInit = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
         ComPtr<IUIAutomation> automation;
@@ -5096,6 +5099,7 @@ bool CopyImageFileToClipboard(HWND owner, const std::vector<std::wstring>& paths
 }
 
 std::wstring g_storageDir;
+extern std::atomic<bool> g_stopping;
 constexpr double kGeminiFileLifetimeMs = 30.0 * 60 * 1000;
 struct TemporaryGeminiFile { std::wstring path; double expires; };
 std::mutex g_geminiFilesMutex;
@@ -5118,7 +5122,8 @@ double CleanupGeminiFiles(double now) {
     return next;
 }
 
-void DeleteExpiredGeminiFiles() {
+void DeleteExpiredGeminiFiles(bool all = false) {
+    std::lock_guard<std::mutex> lock(g_geminiFilesMutex);
     if (g_storageDir.empty()) return;
     WIN32_FIND_DATAW data{};
     HANDLE find = FindFirstFileW((g_storageDir + L"\\gemini-selection-*.png").c_str(), &data);
@@ -5128,8 +5133,8 @@ void DeleteExpiredGeminiFiles() {
     auto ticks = [](FILETIME time) { return (static_cast<uint64_t>(time.dwHighDateTime) << 32) | time.dwLowDateTime; };
     do {
         if (!(data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
-            ticks(current) >= ticks(data.ftLastWriteTime) &&
-            ticks(current) - ticks(data.ftLastWriteTime) >= static_cast<uint64_t>(kGeminiFileLifetimeMs * 10000)) {
+            (all || (ticks(current) >= ticks(data.ftLastWriteTime) &&
+             ticks(current) - ticks(data.ftLastWriteTime) >= static_cast<uint64_t>(kGeminiFileLifetimeMs * 10000)))) {
             DeleteFileW((g_storageDir + L"\\" + data.cFileName).c_str());
         }
     } while (FindNextFileW(find, &data));
@@ -5141,6 +5146,10 @@ std::wstring WriteGeminiImageFile(const Image& image, HWND notify) {
         image.pixels.size() != static_cast<size_t>(image.width) * image.height) return {};
     std::vector<uint8_t> png;
     if (!EncodePng(image, png) || png.size() > MAXDWORD) return {};
+    // Serialize file creation with shutdown cleanup so an in-flight handoff
+    // cannot leave a new screenshot behind after the mod is disabled.
+    std::lock_guard<std::mutex> lock(g_geminiFilesMutex);
+    if (g_stopping) return {};
     static std::atomic<unsigned> sequence{0};
     const std::wstring path = g_storageDir + L"\\gemini-selection-" +
         std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(GetTickCount64()) +
@@ -5152,10 +5161,7 @@ std::wstring WriteGeminiImageFile(const Image& image, HWND notify) {
     const bool ok = WriteFile(file, png.data(), static_cast<DWORD>(png.size()), &written, nullptr) && written == png.size();
     CloseHandle(file);  // Close before Chrome opens the file.
     if (!ok) { DeleteFileW(path.c_str()); return {}; }
-    {
-        std::lock_guard<std::mutex> lock(g_geminiFilesMutex);
-        g_geminiFiles.push_back({path, NowMs() + kGeminiFileLifetimeMs});
-    }
+    g_geminiFiles.push_back({path, NowMs() + kGeminiFileLifetimeMs});
     if (notify) PostMessageW(notify, WM_APP_TEMP_FILE, 0, 0);
     return path;
 }
@@ -5292,38 +5298,45 @@ struct KnownBrowser {
     PCWSTR id;         // The value of the Browser setting.
     PCWSTR process;    // The program whose windows are the browser's.
     PCWSTR program;    // What gets started; differs when a launcher starts it.
-    PCWSTR places[3];  // Where it installs when Windows has no record of it.
+    PCWSTR places[4];  // Where it installs when Windows has no record of it.
 };
 
 constexpr KnownBrowser kBrowsers[] = {
     {L"chrome", L"chrome.exe", L"chrome.exe",
      {L"%ProgramFiles%\\Google\\Chrome\\Application",
       L"%ProgramFiles(x86)%\\Google\\Chrome\\Application",
-      L"%LOCALAPPDATA%\\Google\\Chrome\\Application"}},
+      L"%LOCALAPPDATA%\\Google\\Chrome\\Application",
+      L"%ProgramW6432%\\Google\\Chrome\\Application"}},
     {L"edge", L"msedge.exe", L"msedge.exe",
      {L"%ProgramFiles(x86)%\\Microsoft\\Edge\\Application",
-      L"%ProgramFiles%\\Microsoft\\Edge\\Application", nullptr}},
+      L"%ProgramFiles%\\Microsoft\\Edge\\Application",
+      L"%ProgramW6432%\\Microsoft\\Edge\\Application", nullptr}},
     {L"firefox", L"firefox.exe", L"firefox.exe",
      {L"%ProgramFiles%\\Mozilla Firefox", L"%ProgramFiles(x86)%\\Mozilla Firefox",
-      nullptr}},
+      L"%ProgramW6432%\\Mozilla Firefox", nullptr}},
     {L"brave", L"brave.exe", L"brave.exe",
      {L"%ProgramFiles%\\BraveSoftware\\Brave-Browser\\Application",
       L"%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\Application",
-      L"%ProgramFiles(x86)%\\BraveSoftware\\Brave-Browser\\Application"}},
+      L"%ProgramFiles(x86)%\\BraveSoftware\\Brave-Browser\\Application",
+      L"%ProgramW6432%\\BraveSoftware\\Brave-Browser\\Application"}},
     {L"zen", L"zen.exe", L"zen.exe",
      {L"%ProgramFiles%\\Zen Browser", L"%LOCALAPPDATA%\\Zen Browser",
-      L"%LOCALAPPDATA%\\Programs\\Zen Browser"}},
+      L"%LOCALAPPDATA%\\Programs\\Zen Browser", L"%ProgramW6432%\\Zen Browser"}},
     {L"opera", L"opera.exe", L"launcher.exe",
-     {L"%LOCALAPPDATA%\\Programs\\Opera", L"%ProgramFiles%\\Opera", nullptr}},
+     {L"%LOCALAPPDATA%\\Programs\\Opera", L"%ProgramFiles%\\Opera",
+      L"%ProgramW6432%\\Opera", nullptr}},
     {L"vivaldi", L"vivaldi.exe", L"vivaldi.exe",
      {L"%LOCALAPPDATA%\\Vivaldi\\Application", L"%ProgramFiles%\\Vivaldi\\Application",
-      nullptr}},
+      L"%ProgramW6432%\\Vivaldi\\Application", nullptr}},
     {L"librewolf", L"librewolf.exe", L"librewolf.exe",
-     {L"%ProgramFiles%\\LibreWolf", L"%LOCALAPPDATA%\\LibreWolf", nullptr}},
+     {L"%ProgramFiles%\\LibreWolf", L"%LOCALAPPDATA%\\LibreWolf",
+      L"%ProgramW6432%\\LibreWolf", nullptr}},
     {L"waterfox", L"waterfox.exe", L"waterfox.exe",
-     {L"%ProgramFiles%\\Waterfox", L"%LOCALAPPDATA%\\Waterfox", nullptr}},
+     {L"%ProgramFiles%\\Waterfox", L"%LOCALAPPDATA%\\Waterfox",
+      L"%ProgramW6432%\\Waterfox", nullptr}},
     {L"floorp", L"floorp.exe", L"floorp.exe",
-     {L"%ProgramFiles%\\Ablaze Floorp", L"%LOCALAPPDATA%\\Ablaze Floorp", nullptr}},
+     {L"%ProgramFiles%\\Ablaze Floorp", L"%LOCALAPPDATA%\\Ablaze Floorp",
+      L"%ProgramW6432%\\Ablaze Floorp", nullptr}},
 };
 
 bool IsKnownBrowserName(const std::wstring& name) {
@@ -5338,7 +5351,6 @@ bool IsKnownBrowserName(const std::wstring& name) {
 
 struct BrowserTarget {
     std::wstring file;       // What to start. Empty: the Windows default browser.
-    std::wstring arguments;  // Goes before the address on the command line.
     std::wstring process;    // Name of the program whose windows are the browser's.
     bool anyKnown = false;   // Windows of well-known browsers count as well.
 };
@@ -5503,9 +5515,7 @@ BrowserTarget SelectedBrowser() {
 
 bool OpenWithBrowser(const std::wstring& target, BrowserTarget& browser) {
     if (!browser.file.empty()) {
-        std::wstring parameters = browser.arguments;
-        if (!parameters.empty()) parameters += L' ';
-        parameters += L'"' + target + L'"';
+        const std::wstring parameters = L'"' + target + L'"';
         if ((IsProcessElevated() && ShellExecuteThroughExplorer(browser.file, parameters)) ||
             reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", browser.file.c_str(),
                                                     parameters.c_str(), nullptr,
@@ -6052,35 +6062,6 @@ HWND FindNewGeminiWindow(IUIAutomation* automation, const BrowserTarget& browser
     return minimized;
 }
 
-bool DismissBrowserNotice(IUIAutomation* automation, HWND browser) {
-    ComPtr<IUIAutomationElement> root;
-    ComPtr<IUIAutomationCondition> condition;
-    ComPtr<IUIAutomationElementArray> buttons;
-    VARIANT type;
-    VariantInit(&type);
-    type.vt = VT_I4;
-    type.lVal = UIA_ButtonControlTypeId;
-    int count = 0;
-    if (FAILED(automation->ElementFromHandle(browser, root.Put())) || !root ||
-        FAILED(automation->CreatePropertyCondition(UIA_ControlTypePropertyId, type, condition.Put())) ||
-        FAILED(root->FindAll(TreeScope_Descendants, condition.Get(), buttons.Put())) || !buttons ||
-        FAILED(buttons->get_Length(&count))) return false;
-    ComPtr<IUIAutomationElement> notNow;
-    bool setsDefault = false;
-    for (int i = 0; i < std::min(count, 256); i++) {
-        ComPtr<IUIAutomationElement> button;
-        if (FAILED(buttons->GetElement(i, button.Put())) || !button) continue;
-        const std::wstring name = Lowercase(CurrentElementString(button.Get(), UIA_NamePropertyId));
-        if (name == L"not now") notNow = std::move(button);
-        else if (name.find(L"primary browser") != std::wstring::npos || name.find(L"default browser") != std::wstring::npos) setsDefault = true;
-    }
-    ComPtr<IUIAutomationInvokePattern> invoke;
-    return notNow && setsDefault &&
-           SUCCEEDED(notNow->GetCurrentPatternAs(UIA_InvokePatternId, __uuidof(IUIAutomationInvokePattern),
-                                                  invoke.PutVoid())) &&
-           invoke && SUCCEEDED(invoke->Invoke());
-}
-
 std::wstring BrowserDraftStatus(size_t total, size_t added, bool questionTyped, bool clipboardOurs) {
     const bool several = total > 1;
     const std::wstring images = several ? L"images" : L"image";
@@ -6229,7 +6210,7 @@ DWORD WINAPI BrowserHandoffThreadProc(LPVOID param) {
     const std::shared_ptr<BrowserHandoffJob> job = *holder;
     auto result = std::make_unique<BrowserHandoffMessage>();
     result->id = job->id;
-    const HRESULT coInit = CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_DISABLE_OLE1DDE);
+    const HRESULT coInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     if (!job->images.empty() && SUCCEEDED(coInit) && !job->canceled && !g_stopping) {
         for (const auto& image : job->images) {
             const std::wstring path = WriteGeminiImageFile(*image, job->notify);
@@ -6257,8 +6238,6 @@ DWORD WINAPI BrowserHandoffThreadProc(LPVOID param) {
     double blankSince = -1;  // When the window began to show no page.
     double lastRestart = 0;  // When the UI Automation client last started over.
     bool everSawDocument = false;
-    int notices = 0;
-    double lastNotice = 0;
     const double launchedAt = NowMs();
     double lastPush = launchedAt;
     int pushes = 0;
@@ -6292,11 +6271,6 @@ DWORD WINAPI BrowserHandoffThreadProc(LPVOID param) {
             if (blankSince < 0) {
                 blankSince = now;
                 lastRestart = now;
-            }
-            if (now - blankSince > 2500 && notices < 3 && now - lastNotice > 2000) {
-                lastNotice = now;
-                notices++;
-                DismissBrowserNotice(automation.Get(), foreground);
             }
             if (now - lastRestart > 1200) {
                 if (ComPtr<IUIAutomation> fresh = CreateAutomation()) automation = std::move(fresh);
@@ -6936,7 +6910,7 @@ std::wstring SanitizeModel(std::wstring model) {
     return result;
 }
 
-enum class Thinking { Minimal, Low, NoBudget, Default };
+enum class Thinking { Minimal, Low, LimitedBudget, Default };
 
 struct ModelQuirks {
     std::wstring model;
@@ -6948,8 +6922,16 @@ std::mutex g_quirksMutex;
 std::vector<ModelQuirks> g_quirks;
 std::vector<std::wstring> g_missingModels;
 
-Thinking FirstThinking(bool suggestions) {
-    return suggestions ? Thinking::Minimal : Thinking::Low;
+Thinking FirstThinking(const std::wstring& model, bool suggestions) {
+    // Gemini 3.8 Flash and Pro reject "minimal". Latest aliases can also
+    // move to a model with different thinking support, so prefer "low".
+    const bool supportsMinimal =
+        model == L"gemini-flash-lite-latest" ||
+        model == L"gemini-3.5-flash-lite" ||
+        model == L"gemini-3.1-flash-lite" ||
+        model == L"gemini-3.6-flash" ||
+        model == L"gemini-3-flash-preview";
+    return suggestions && supportsMinimal ? Thinking::Minimal : Thinking::Low;
 }
 
 Thinking GetThinking(const std::wstring& model, bool suggestions) {
@@ -6959,16 +6941,16 @@ Thinking GetThinking(const std::wstring& model, bool suggestions) {
             return quirks.thinking;
         }
     }
-    return FirstThinking(suggestions);
+    return FirstThinking(model, suggestions);
 }
 
-Thinking NextThinking(Thinking thinking, bool suggestions) {
+Thinking NextThinking(Thinking thinking) {
     switch (thinking) {
         case Thinking::Minimal:
             return Thinking::Low;
         case Thinking::Low:
-            return suggestions ? Thinking::NoBudget : Thinking::Default;
-        case Thinking::NoBudget:
+            return Thinking::LimitedBudget;
+        case Thinking::LimitedBudget:
         case Thinking::Default:
             break;
     }
@@ -7085,15 +7067,18 @@ std::string BuildRequestBody(const GeminiJob& job,
         case Thinking::Low:
             body += "\"thinkingConfig\":{\"thinkingLevel\":\"low\"},";
             break;
-        case Thinking::NoBudget:
-            body += "\"thinkingConfig\":{\"thinkingBudget\":0},";
+        case Thinking::LimitedBudget:
+            // Positive budgets also work with models that cannot turn off
+            // thinking; never retry a Gemini 3 request with a zero budget.
+            body += "\"thinkingConfig\":{\"thinkingBudget\":1024},";
             break;
         case Thinking::Default:
             break;
     }
     if (job.suggestions) {
         body += "\"responseMimeType\":\"application/json\",";
-        body += "\"maxOutputTokens\":400,";
+        // This limit includes thought tokens as well as the three chips.
+        body += "\"maxOutputTokens\":2048,";
     }
     if (body.back() == ',') {
         body.pop_back();
@@ -7546,7 +7531,9 @@ DWORD WINAPI GeminiThreadProc(LPVOID param) {
     }
     Thinking thinking = GetThinking(model, job.suggestions);
 
-    for (int attempt = 0; attempt < 6 && !job.canceled; attempt++) {
+    // At most four thinking settings for each of the two possible models.
+    constexpr int kMaxAttempts = 8;
+    for (int attempt = 0; attempt < kMaxAttempts && !job.canceled; attempt++) {
         const std::wstring path =
             L"/v1beta/models/" + model + L":streamGenerateContent?alt=sse";
         const std::string body = BuildRequestBody(job, images, thinking);
@@ -7607,6 +7594,7 @@ DWORD WINAPI GeminiThreadProc(LPVOID param) {
         }
 
         if (result.status == 200) {
+            SetThinking(model, job.suggestions, thinking);
             sse.Finish(onEvent);
             Wh_Log(L"%s %s: first text after %d ms, done after %d ms",
                    model.c_str(), job.suggestions ? L"suggestions" : L"answer",
@@ -7652,16 +7640,17 @@ DWORD WINAPI GeminiThreadProc(LPVOID param) {
         }
 
         const std::string apiMessage = ApiErrorMessage(result.body);
-        if (result.status == 400 && thinking != Thinking::Default &&
+        if (attempt + 1 < kMaxAttempts && result.status == 400 &&
+            thinking != Thinking::Default &&
             (ContainsNoCase(apiMessage, "thinking") ||
              ContainsNoCase(apiMessage, "budget"))) {
-            thinking = NextThinking(thinking, job.suggestions);
+            thinking = NextThinking(thinking);
             Wh_Log(L"%s: trying another thinking setting (%d)", model.c_str(),
                    static_cast<int>(thinking));
-            SetThinking(model, job.suggestions, thinking);
             continue;
         }
-        if (result.status == 404 && !fallback.empty() && model != fallback) {
+        if (attempt + 1 < kMaxAttempts && result.status == 404 &&
+            !fallback.empty() && model != fallback) {
             Wh_Log(L"%s doesn't exist, using %s", model.c_str(), fallback.c_str());
             SetModelMissing(model);
             model = fallback;
@@ -7701,46 +7690,6 @@ std::shared_ptr<GeminiJob> StartGeminiJob(std::shared_ptr<GeminiJob> job) {
     }
     CloseHandle(thread);
     return job;
-}
-
-struct PrewarmJob {
-    std::wstring apiKey;
-    std::wstring model;
-};
-
-double g_lastPrewarm = -1e9;
-
-DWORD WINAPI PrewarmThreadProc(LPVOID param) {
-    std::unique_ptr<PrewarmJob> job(static_cast<PrewarmJob*>(param));
-    const double start = NowMs();
-    HttpResult result = SendToGemini(
-        L"GET", L"/v1beta/models/" + job->model, job->apiKey, std::string(),
-        nullptr, nullptr, 10000, [](const char*, size_t) {});
-    if (result.status == 404) {
-        SetModelMissing(job->model);
-    }
-    Wh_Log(L"Connected to Gemini in %d ms (%u)", static_cast<int>(NowMs() - start),
-           result.status);
-    g_helperThreads--;
-    return 0;
-}
-
-void PrewarmGemini(const std::wstring& apiKey, const std::wstring& model) {
-    const std::wstring name = SanitizeModel(model);
-    const double now = NowMs();
-    if (apiKey.empty() || name.empty() || now - g_lastPrewarm < 45000) {
-        return;
-    }
-    g_lastPrewarm = now;
-    auto* job = new PrewarmJob{apiKey, name};
-    g_helperThreads++;
-    HANDLE thread = CreateThread(nullptr, 0, PrewarmThreadProc, job, 0, nullptr);
-    if (thread) {
-        CloseHandle(thread);
-    } else {
-        g_helperThreads--;
-        delete job;
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -7957,7 +7906,6 @@ std::vector<TextBlock> ParseMarkdown(const std::wstring& text) {
 }
 
 class AskCard {
-    friend struct MagicPointerVisualTests;
   public:
     bool Create() { return panel_.Create(true, false, kCardWindowClass, this); }
 
@@ -10380,12 +10328,6 @@ void ActivatePointer(POINT pt, double now) {
     now = NowMs();
     g_cursors.StartPop(now);
     g_overlay.Show(g_settings.dim);
-    if (!g_settings.apiKey.empty()) {
-        PrewarmGemini(g_settings.apiKey,
-                      g_settings.suggestions && !g_settings.suggestionsModel.empty()
-                          ? g_settings.suggestionsModel
-                          : g_settings.model);
-    }
     g_state = PointerState::Pointing;
     UpdatePointerCursor(now);
     g_escapeRegistered =
@@ -10905,7 +10847,6 @@ void UnregisterWindowClasses() {
 #endif
 
 DWORD WINAPI WorkerThreadProc(LPVOID) {
-    MakeThreadDpiAware();
     const HRESULT coInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     g_fonts.Init();
     g_glow = ParseGlowColor(g_settings.glowColor);
@@ -11016,8 +10957,6 @@ BOOL WhTool_ModInit() {
     WCHAR storage[MAX_PATH];
     if (Wh_GetModStoragePath(storage, ARRAYSIZE(storage))) {
         g_storageDir = storage;
-    } else if (GetTempPathW(ARRAYSIZE(storage), storage)) {
-        g_storageDir = std::wstring(storage) + L"MagicPointer";
     }
     if (!g_storageDir.empty()) {
         CreateDirectoryW(g_storageDir.c_str(), nullptr);
@@ -11062,6 +11001,7 @@ void WhTool_ModUninit() {
     if (g_helperThreads == 0) {
         CloseGeminiSession();
     }
+    DeleteExpiredGeminiFiles(true);
     DeleteOldLensPages(true);
 }
 
@@ -11197,9 +11137,10 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    STARTUPINFO si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
     PROCESS_INFORMATION pi;
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
