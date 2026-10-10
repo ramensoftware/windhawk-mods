@@ -4,7 +4,7 @@
 // @description     Replaces the Open, Save As and folder picker dialogs of every program with a real Explorer window that has a File name / Files of type bar at the bottom
 // @name:ru         Проводник вместо окон выбора файла
 // @description:ru  Заменяет окна «Открыть», «Сохранить как» и выбора папки во всех программах настоящим окном Проводника с полями «Имя файла» и «Тип файлов» внизу
-// @version         1.5.4
+// @version         1.5.5
 // @author          appEW
 // @github          https://github.com/appEW
 // @include         *
@@ -73,20 +73,22 @@ additional application features.
 
 ## Risky: ignore additional application features
 
-**Ignore additional dialog features (risky)** is **disabled by default**.
-When enabled, the picker omits application controls, native panels, previews
-and dialog-event callbacks, including application-specific acceptance checks.
-Old Win32 dialog hooks, templates and editable custom filters are also
-ignored. This lets Explorer replace dialogs whose additional features would
-otherwise require the native window. Extra options cannot be changed; the
-application may use its defaults or retained values instead.
+**Ignore additional dialog features (risky)** is **off by default**.
+When enabled, unsupported extra application controls or panels can be omitted.
+Supported controls, native panels and Unicode Win32 hooks are still handled
+normally. Application events, including OnFileOk/CDN_FILEOK, are retained:
+programs can perform the actual opening or saving in these callbacks.
+Unavailable extra options use their defaults or retained values instead.
 
-**Use at your own risk:** application-specific behavior and validation can be
-lost, causing incorrect opening or saving, crashes or data loss. Ordinary
-file types, result buffers, item filters, path checks and overwrite
-confirmation remain supported. Unrepresentable results, required unsupported
-file-dialog behavior or an unavailable Explorer can still require the native
-dialog. Disabling the option restores the usual compatibility handling.
+**Use at your own risk:** omitted extra options or previews can still cause
+incorrect opening or saving, crashes or data loss. Ordinary file types,
+result buffers, item filters, application acceptance checks, path checks and
+overwrite confirmation remain supported. Unrepresentable results, required
+unsupported behavior or an unavailable Explorer still require the native
+dialog. ANSI hooks/templates and Unicode hook contracts which cannot be
+retained use the native dialog even with this option enabled. Editable custom
+filters can be omitted only when no application hook/template is lost.
+Disabling the option restores strict extra-feature compatibility handling.
 
 By default, services, system accounts, critical processes, AppContainer
 processes, Chromium worker processes and Windhawk itself are skipped. Single
@@ -140,21 +142,23 @@ the rows grow to keep the text inside the controls.
 ### Рискованно: игнорирование дополнительных функций приложения
 
 **«Игнорировать дополнительные функции диалогов (рискованно)»**
-**по умолчанию выключено**. При включении не показываются элементы приложения,
-native-панели и предпросмотр, не вызываются обработчики событий диалога, включая
-дополнительные проверки принятия файла. В старых Win32-диалогах также
-игнорируются hooks, шаблоны и редактируемые пользовательские фильтры. Поэтому
-Проводник может заменить окно даже при несовместимых дополнительных элементах.
-Изменить дополнительные параметры нельзя: приложение может использовать
-значения по умолчанию или ранее заданные значения.
+**по умолчанию выключено**. При включении можно пропустить неподдерживаемые
+дополнительные элементы или панели приложения. Поддерживаемые элементы,
+native-панели и Unicode Win32 hooks продолжают работать. События приложения,
+включая OnFileOk/CDN_FILEOK, сохраняются: программа может выполнять само
+открытие или сохранение именно в этих обработчиках. Недоступные дополнительные
+параметры используют значения по умолчанию или ранее заданные значения.
 
-**Используйте на свой страх и риск:** потеря специальных функций и проверок
-может привести к неправильному открытию/сохранению, сбоям или потере данных.
-Обычные типы файлов, буферы результата, фильтр допустимых элементов, проверка
-пути и подтверждение перезаписи сохраняются. Непредставимый результат,
-обязательные неподдерживаемые функции или недоступный Проводник по-прежнему
-могут потребовать штатный диалог. Выключение опции возвращает обычную обработку
-совместимости.
+**Используйте на свой страх и риск:** потеря дополнительных параметров или
+предпросмотра может привести к неправильному открытию/сохранению, сбоям или
+потере данных. Типы файлов, буферы результата, фильтр допустимых элементов,
+проверки принятия файла приложением, проверка пути и подтверждение перезаписи
+сохраняются. Непредставимые результаты, обязательные неподдерживаемые функции
+или недоступный Проводник по-прежнему требуют штатный диалог. ANSI hooks/шаблоны
+и Unicode hooks, чей контракт невозможно сохранить, используют штатное окно
+даже при включённой опции. Редактируемый пользовательский фильтр можно пропустить
+только без потери hooks/шаблонов приложения. Выключение опции возвращает строгую
+проверку совместимости дополнительных функций.
 
 По умолчанию пропускаются службы, системные учётные записи, критические
 процессы, AppContainer, дочерние процессы Chromium и сам Windhawk.
@@ -191,8 +195,8 @@ Windows об изменении настроек стандартные подп
 - ignoreAppDialogFeatures: false
   $name: Ignore additional dialog features (risky)
   $name:ru: Игнорировать дополнительные функции диалогов (рискованно)
-  $description: Disabled by default. Replace dialogs even with unsupported application controls. Omit extra options, previews and application event callbacks, including additional acceptance checks; ignore old Win32 hooks, templates and editable custom filters. The application may use default or retained values. Use at your own risk; incorrect opening or saving, crashes and data loss are possible.
-  $description:ru: По умолчанию выключено. Заменять диалоги даже с неподдерживаемыми элементами приложения. Пропускать дополнительные параметры, предпросмотр и обработчики событий приложения, включая дополнительные проверки принятия файла; игнорировать старые Win32 hooks, шаблоны и редактируемые пользовательские фильтры. Приложение может использовать значения по умолчанию или ранее заданные значения. Используйте на свой страх и риск; возможны неправильное открытие или сохранение, сбои и потеря данных.
+  $description: Disabled by default. Omit unsupported extra application UI while retaining supported controls, panels and completion callbacks. The application may use default or retained extra options. Unrepresentable callback contracts still use the native dialog. Use at your own risk; incorrect opening or saving, crashes and data loss are possible.
+  $description:ru: По умолчанию выключено. Пропускать неподдерживаемый дополнительный интерфейс, сохраняя поддерживаемые элементы, панели и обработчики завершения. Дополнительные параметры используют значения по умолчанию или ранее заданные значения. Непредставимый контракт обработчика требует штатное окно. Используйте на свой страх и риск; возможны неправильное открытие или сохранение, сбои и потеря данных.
 - ansiApps: true
   $name: Old ANSI programs
   $name:ru: Старые ANSI-программы
@@ -2304,9 +2308,12 @@ bool Attach(HWND frame, const Pending& p) {
   w.number(p.id);
   w.number(static_cast<DWORD>(reinterpret_cast<UINT_PTR>(frame) & 0xFFFFFFFF));
   Picker::Post(s->controller, s->footer, Picker::Ready, w, 2000);
-  SendState(s, true);
+  // Ready grants this exact Explorer process foreground permission before
+  // activation. Notify application callbacks only after focus is assigned;
+  // those callbacks can close the picker or unload the mod.
   SetForegroundWindow(frame);
   SetFocus(s->name);
+  SendState(s, true);
   return true;
 }
 // Windows 11 opens folder windows in a separate "explorer.exe /factory"
@@ -3317,6 +3324,14 @@ struct Controller {
           footer = sender;
           frame = GetAncestor(sender, GA_ROOT);
           bound = true;
+          // The service can hand the request to a different Explorer process.
+          // Only the requesting application has foreground rights; grant
+          // them to the process which actually owns the completed picker.
+          DWORD hostProcess = 0;
+          GetWindowThreadProcessId(frame, &hostProcess);
+          BOOL granted = hostProcess && AllowSetForegroundWindow(hostProcess);
+          Wh_Log(L"Picker foreground permission: process %lu granted=%d",
+                 hostProcess, granted);
           Wh_Log(L"Picker window ready: frame %p", frame);
           return TRUE;
         }
@@ -4150,6 +4165,7 @@ class Session final : public Ctl::Target {
       L"ExplorerPicker.Legacy.Custom.V6";
   OPENFILENAMEW* ofn;
   bool save;
+  bool ignoreControls, omittingControls = false;
   LPOFNHOOKPROC applicationHook;
   DWORD originalFlags;
   HWND native = nullptr, child = nullptr;
@@ -4195,11 +4211,18 @@ class Session final : public Ctl::Target {
   }
   bool Refresh() {
     Controls next;
-    if (!next.Read(native, child) || !controls.SameIdentity(next)) {
-      Revert();
-      return false;
+    if (!omittingControls) {
+      if (!next.Read(native, child) || !controls.SameIdentity(next)) {
+        if (!ignoreControls) {
+          Revert();
+          return false;
+        }
+        omittingControls = true;
+        controls = {};
+      } else {
+        controls = std::move(next);
+      }
     }
-    controls = std::move(next);
     request.controls = controls.checks;
     request.okLabel = Text(GetDlgItem(native, IDOK));
     request.nameLabel = Text(GetDlgItem(native, stc3));
@@ -4283,8 +4306,12 @@ class Session final : public Ctl::Target {
     request.index = ofn->nFilterIndex ? ofn->nFilterIndex : 1;
     if (request.index > (std::max)(size_t(1), request.filters.size()))
       return false;
-    if (!controls.Read(native, child))
-      return false;
+    if (!controls.Read(native, child)) {
+      if (!ignoreControls)
+        return false;
+      omittingControls = true;
+      controls = {};
+    }
     request.controls = controls.checks;
     request.okLabel = Text(GetDlgItem(native, IDOK));
     request.nameLabel = Text(GetDlgItem(native, stc3));
@@ -4456,9 +4483,10 @@ class Session final : public Ctl::Target {
   }
 
  public:
-  Session(OPENFILENAMEW* p, bool isSave)
+  Session(OPENFILENAMEW* p, bool isSave, bool ignoreExtraControls = false)
       : ofn(p),
         save(isSave),
+        ignoreControls(ignoreExtraControls),
         applicationHook((p->Flags & OFN_ENABLEHOOK) ? p->lpfnHook : nullptr),
         originalFlags(p->Flags) {}
   const Picker::Request* UiState() const override { return &request; }
@@ -4760,10 +4788,10 @@ BOOL Wide(LPOPENFILENAMEW ofn, bool save) {
     return NativeLegacyDialog;
   }
   const bool ignoreFeatures = Wh_GetIntSetting(L"ignoreAppDialogFeatures") != 0;
-  if (!ignoreFeatures && PickerLegacy::Eligible(ofn, save)) {
+  if (PickerLegacy::Eligible(ofn, save)) {
     Ctl::PickerGuard guard;
     overrideError = false;
-    PickerLegacy::Session session(ofn, save);
+    PickerLegacy::Session session(ofn, save, ignoreFeatures);
     BOOL result = session.Run(original);
     if (session.Error()) {
       overrideError = true;
@@ -4772,6 +4800,13 @@ BOOL Wide(LPOPENFILENAMEW ofn, bool save) {
     if (result == NativeLegacyDialog)
       return result;
     return result != FALSE;
+  }
+  // Hooks can perform the opening/saving inside CDN_FILEOK. If their native
+  // contract cannot be retained, never report a plain picker's success while
+  // silently omitting that application operation.
+  if (ignoreFeatures && ofn && (ofn->Flags & PickerLegacy::CustomFlags)) {
+    overrideError = false;
+    return NativeLegacyDialog;
   }
   if (!PickerLegacy::Plain(ofn, save, ignoreFeatures)) {
     if (ofn)
@@ -4878,6 +4913,7 @@ BOOL Ansi(LPOPENFILENAMEA a, bool save) {
       (a->lStructSize != sizeof(OPENFILENAMEA) &&
        a->lStructSize != OPENFILENAME_SIZE_VERSION_400A) ||
       !a->lpstrFile || a->nMaxFile < 2 ||
+      (a->Flags & PickerLegacy::CustomFlags) ||
       (a->lStructSize == sizeof(OPENFILENAMEA) &&
        (a->FlagsEx & ~OFN_EX_NOPLACESBAR)) ||
       (a->Flags & ~(PickerLegacy::CommonFlags |
@@ -5123,7 +5159,7 @@ class FileDialogState final : public Ctl::Target {
   IFileDialogCustomize* customization = nullptr;
   IFileDialog2* dialog2 = nullptr;
   bool custom = false, advanced = false, showing = false;
-  bool requiredNative = false, ignoreFeatures = false;
+  bool requiredNative = false, ignoreFeatures = false, omittingFeatures = false;
   mutable Picker::Request basicUi;
   bool nativePanelNeeded = false;
   Picker::Request request;
@@ -5148,6 +5184,8 @@ class FileDialogState final : public Ctl::Target {
       Wh_Log(L"COM unsupported feature: %ls", what);
     advanced = true;
     requiredNative |= required;
+    if (showing && ignoreFeatures && !requiredNative)
+      omittingFeatures = true;
   }
   void Changed() {
     if (showing && controller)
@@ -5315,16 +5353,26 @@ class FileDialogState final : public Ctl::Target {
         return;
       }
       if (!child) {
-        if (GetTickCount64() >= deadline ||
-            (!timer &&
-             !(timer = SetTimer(root, reinterpret_cast<UINT_PTR>(this), 25,
-                                nullptr))))
+        if (GetTickCount64() < deadline &&
+            (timer || (timer = SetTimer(root, reinterpret_cast<UINT_PTR>(this),
+                                        25, nullptr))))
+          return;
+        if (!state.ignoreFeatures) {
           Reveal();
-        return;
+          return;
+        }
+        state.omittingFeatures = true;
       }
       StopTimer();
-      if (!controls.Read(root, child) || controls.checks.empty() ||
-          !Refresh()) {
+      if (!state.omittingFeatures &&
+          (!controls.Read(root, child) || controls.checks.empty())) {
+        if (!state.ignoreFeatures) {
+          Reveal();
+          return;
+        }
+        state.omittingFeatures = true;
+      }
+      if (!Refresh()) {
         Reveal();
         return;
       }
@@ -5407,8 +5455,19 @@ class FileDialogState final : public Ctl::Target {
     const Picker::Request* UiState() const { return &ui; }
     bool Refresh() {
       PickerLegacy::Controls next;
+      if (state.omittingFeatures) {
+        ui = state.request;
+        ui.controls.clear();
+        return true;
+      }
       if (state.advanced || !next.Read(root, child) ||
           !controls.SameIdentity(next)) {
+        if (state.ignoreFeatures && !state.requiredNative) {
+          state.omittingFeatures = true;
+          ui = state.request;
+          ui.controls.clear();
+          return true;
+        }
         if (running)
           Reveal();
         return false;
@@ -5518,7 +5577,7 @@ class FileDialogState final : public Ctl::Target {
   }
   bool NativePhase() const { return panel && !custom; }
   const Picker::Request* UiState() const override {
-    if (ignoreFeatures) {
+    if (omittingFeatures) {
       basicUi = request;
       basicUi.controls.clear();
       return &basicUi;
@@ -5549,17 +5608,16 @@ class FileDialogState final : public Ctl::Target {
     } refreshPanel{panel};
     if (e.kind == Ctl::RefreshEvent)
       return S_OK;
-    if (ignoreFeatures && e.kind == Ctl::ControlEvent)
+    if (omittingFeatures && e.kind == Ctl::ControlEvent)
       return E_INVALIDARG;
     // Hold a snapshot: callbacks may call Unadvise, including on themselves.
     Snapshot snapshot;
-    // Risk mode deliberately omits application callbacks. They can create a
-    // native panel or depend on controls which aren't present in this mode.
-    if (!ignoreFeatures)
-      for (auto& s : sinks) {
-        s.events->AddRef();
-        snapshot.list.push_back(s.events);
-      }
+    // Completion and navigation events are part of the application contract.
+    // OnFileOk can perform the actual open/save, not just extra validation.
+    for (auto& s : sinks) {
+      s.events->AddRef();
+      snapshot.list.push_back(s.events);
+    }
     custom = true;
     if (e.kind == Ctl::ControlEvent) {
       if (panel && panel->Active() && panel->Owns(e.control))
@@ -5740,6 +5798,7 @@ class FileDialogState final : public Ctl::Target {
         (Ctl::Elevated() && !Wh_GetIntSetting(L"elevatedApps")))
       return NativeDialog;
     ignoreFeatures = Wh_GetIntSetting(L"ignoreAppDialogFeatures") != 0;
+    omittingFeatures = false;
     ClearResult();
     custom = false;
     FILEOPENDIALOGOPTIONS options = 0;
@@ -5756,7 +5815,8 @@ class FileDialogState final : public Ctl::Target {
       return NativeDialog;
     }
     if (ignoreFeatures)
-      Wh_Log(L"COM application controls and callbacks ignored (risky option)");
+      Wh_Log(L"COM unsupported additional UI may be ignored (risky option)");
+    omittingFeatures = ignoreFeatures && advanced;
     request.mode = Save                               ? Picker::Save
                    : (options & FOS_PICKFOLDERS)      ? Picker::Folder
                    : (options & FOS_ALLOWMULTISELECT) ? Picker::Multi
@@ -5794,7 +5854,7 @@ class FileDialogState final : public Ctl::Target {
     {
       Ctl::PickerGuard guard;
       showing = true;
-      if (nativePanelNeeded && !ignoreFeatures) {
+      if (nativePanelNeeded) {
         Panel session(*this, owner);
         panel = &session;
         hr = session.Run(original, object);
