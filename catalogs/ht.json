@@ -9225,7 +9225,7 @@
         "ratingUsers": 14,
         "reviews": 1,
         "trendingSorting": 0,
-        "updated": 1788621181000,
+        "updated": 1791619231000,
         "users": 76
       },
       "metadata": {
@@ -9241,7 +9241,7 @@
         ],
         "license": "MIT",
         "name": "MultiWM",
-        "version": "1.13.20"
+        "version": "1.13.58"
       }
     },
     "mute-in-background": {

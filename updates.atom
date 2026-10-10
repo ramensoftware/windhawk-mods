@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-09T21:03:53.000Z</updated>
+    <updated>2026-10-10T08:00:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MultiWM 1.13.58]]></title>
+        <id>https://windhawk.net/mods/multiwm#9195db122f6e8340b19d69aa1b776a49930d8434</id>
+        <link href="https://windhawk.net/mods/multiwm"/>
+        <updated>2026-10-10T08:00:31.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated BSP to Dwindle layout with adaptive splits and reversible growth direction.</li>
+<li>Starting-layout rules based on desktop name, desktop number, or monitor.</li>
+<li>Number / Constraint-based tiled-window limits, including separate limits for each monitor.</li>
+<li>Overflow handling: float the window or move it to a new desktop with an animated switch. Optionally try another monitor first.</li>
+<li>Window rules to open apps on a chosen monitor or virtual desktop.</li>
+<li>Configurable tray-click action and an option to disable toasts.</li>
+<li>Improved settings with conditional fields, sliders, and file pickers on Windhawk 2.0, while remaining compatible with older versions.</li>
+<li>Bug fixes and improvements</li>
+</ul>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteoni</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix Explorer Row Right-Click 1.0.0]]></title>
         <id>https://windhawk.net/mods/fix-explorer-row-right-click#e2969bc12095d903c8e3fbf6da8c860e3b79d570</id>
@@ -1675,308 +1695,6 @@ new File Explorer window (or restart File Explorer once).</p>]]></content>
 <li>Published settings on the taskbar thread and filtered length-only edge events</li>
 <li>Gave the icon worker its own snapshot of the folder list and button size, so a settings save cannot race its Shell icon extraction</li>
 <li>Cleaned up unused helpers, initialization handles and comments</li>
-</ul>]]></content>
-        <author>
-            <name>sb4ssman</name>
-            <uri>https://github.com/sb4ssman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[OmniButton Customizer 2.1]]></title>
-        <id>https://windhawk.net/mods/omnibutton-customizer#7f1699f246d7b9245d2eff5ebd0fb9329c67f746</id>
-        <link href="https://windhawk.net/mods/omnibutton-customizer"/>
-        <updated>2026-10-08T22:01:02.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="omnibuttoncustomizer">OmniButton Customizer</h1>
-<p>A <a href="https://windhawk.net">Windhawk</a> mod for Windows 11 that takes the native
-OmniButton — the network / volume / battery cluster that opens Quick Settings —
-and lets you arrange its items into any shape you like, hide the ones you don't
-want, and restyle each one independently. It works on a taskbar at any edge of
-the screen.</p>
-<p>These native icons are compound and a little weird — each is several glyphs
-layered on top of one another, each with its own built-in visual origin — so a
-mathematically correct grid does not necessarily look like one. <code>auto</code> gets the
-shape right, but it does not make pleasing arrangements; expect to adjust.
-Where an example below shows its arrangement, that is the real string, nudges
-and all.</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-auto.png" alt="All four items as a 2×2 block on a single-height taskbar" />
-<em>Straight out of the box: <code>Arrangement</code> left at <code>auto</code>, which fits the four
-native items to the taskbar height and settles on a 2×2 block.</em></p>
-<h2 id="showcase">Showcase</h2>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-arranged-2x2.png" alt="The same 2×2 block, written by hand" />
-<em>The same shape written out and optically corrected. The parentheses matter,
-because <code>,</code> binds tighter than <code>|</code>:</em></p>
-<pre><code class="text language-text">(network[-6,2] | volume[-2,4]), (battery[1,0] | percent[4,-2])
-</code></pre>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-diamond-adjusted-with-hover.png" alt="The four items arranged as a diamond, with the native tooltip showing" />
-<em>A diamond — volume on top, battery below, network and the percentage on the
-sides. No parentheses needed this time. It is still the native button, so the
-tooltip and the click through to Quick Settings work as they always did:</em></p>
-<pre><code class="text language-text">network[4,-2] | volume[2,-4], battery[0,4] | percent[0,-2]
-</code></pre>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-arranged-2-over-1.png" alt="Network and volume above a centered battery" />
-<em>Three items with the percentage left out: two across the top, the battery
-centered below. <code>Short row or column</code> decides how a ragged last group lines up.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-arranged-reverse.png" alt="The items in a single row" />
-<em>A single row, in an order you choose rather than the native one.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-compact-stack.png" alt="A tight two-high stack" />
-<em>Pulled in close with a negative <code>Size</code> → <code>Item spacing</code> — the setting that
-tightens a cluster.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/single-height-stacked-with-percent-emphasis.png" alt="A tight cluster with an enlarged battery percentage" />
-<em>The percentage enlarged with <code>Surface</code> → <code>Battery percentage size</code>.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/with-colors.png" alt="A recolored battery percentage in a busy tray" />
-<em>Per-item color — here the battery percentage. An empty color leaves an item
-exactly as Windows drew it.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/double-height-arranged-vertical.png" alt="All four items arranged vertically on a double-height taskbar" />
-<em>A single column on a double-height taskbar, alongside several other tray and
-taskbar mods in a dense two-row tray:</em></p>
-<pre><code class="text language-text">network[-2,6], volume[0,2], battery[0,0], percent[2,-6]
-</code></pre>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/top-2x2.png" alt="A 2x2 block on a taskbar at the top of the screen" />
-<em>A taskbar at the top: arrangements work exactly as they do at the bottom.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/side-left-single-row.png" alt="All four items in one evenly spaced row on a left taskbar" />
-<em>A taskbar on the left, with the four items nudged onto evenly spaced points
-across the button:</em></p>
-<pre><code class="text language-text">percent[-12,-1] | battery[-3,0] | volume[8,0] | wifi[14,0]
-</code></pre>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/side-left-stacked.png" alt="A three-row arrangement on a left taskbar" />
-<em>Rows stack on a side taskbar too. Windows gives the button a fixed height
-there; the mod grows it to fit.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/omnibutton-customizer/assets/side-right-diamond.png" alt="Battery over its percentage between network and volume on a right taskbar" />
-<em>A taskbar on the right: the battery over its percentage, between network and
-volume, with <code>Adjust</code> → <code>Horizontal padding</code> at 8:</em></p>
-<pre><code class="text language-text">wifi[-16,0] | (battery[-1,2], percent) | volume[16,0]
-</code></pre>
-<h2 id="features">Features</h2>
-<ul>
-<li>Arrange network, volume, battery, and the battery percentage into any grid —
-automatically fitted to your taskbar height, or written out by hand</li>
-<li>Turn any of the four items off individually</li>
-<li>Writes no Windows settings and no registry values — it arranges the taskbar
-and nothing else</li>
-<li>Independent color and opacity per item, plus size and font family on the
-battery percentage, the one item that is really a single piece of text</li>
-<li>Per-item and per-group pixel nudges inside the arrangement expression</li>
-<li>Group padding and offset for positioning the cluster inside the button</li>
-<li>Keeps the native button in its native tray position, so other mods' "before
-OmniButton" anchors still mean what they always did</li>
-<li>No XAML Diagnostics, so it coexists with Windows 11 Taskbar Styler</li>
-</ul>
-<p>If you installed an unpublished 1.x build from the pull request, re-apply your
-customizations once: 2.x uses grouped settings and the Arrangement field, and
-Windhawk cannot migrate renamed setting keys.</p>
-<h2 id="thearrangementfield">The Arrangement field</h2>
-<p><code>Layout</code> → <code>Arrangement</code> decides how the items are placed, and it is the only
-field that does. Its default value is the word <code>auto</code>:</p>
-<ul>
-<li><strong><code>auto</code></strong> fits the available items to the taskbar height. <code>Fill order</code>
-chooses whether they fill across rows or down columns; <code>Short row or column</code>
-aligns a ragged last group. The shape is worked out for you: the mod takes
-the narrowest grid that fits the height, preferring the one that wastes the
-fewest slots — four items on a standard taskbar become a 2×2 block, not a
-lopsided 3+1.</li>
-<li><strong>Anything else</strong> is an arrangement you write. Names sit side by side with
-<code>|</code> and stack with <code>,</code>, and parentheses group them:</li>
-</ul>
-<pre><code class="text language-text">  network, battery | volume, percent     a 2x2 block
-  network | volume | battery | percent   a single row
-  network, volume, battery, percent      a single column
-  network | volume | (battery, percent)  battery stacked over its percentage
-  network | (volume, battery) | percent  a diamond
-</code></pre>
-<p>Order of operations: parentheses first, then <code>,</code>, then <code>|</code> — so
-  <code>a | b, c | d</code> is three columns with <code>b</code> stacked over <code>c</code>, and a 2×2 block
-  is <code>(a | b), (c | d)</code> or <code>a, c | b, d</code>.</p>
-<p>The tokens are <code>network</code> (or <code>wifi</code>), <code>volume</code>, <code>battery</code>, and <code>percent</code>,
-  and they are case-insensitive. A name the mod does not know is ignored and
-  logged. <code>network</code> is the one native slot whose glyph changes
-  between Wi-Fi, Ethernet, disconnected, airplane-mode, and VPN states. A
-  separator is always required — <code>network (volume | battery)</code> is an error,
-  not a shorthand for <code>network | (volume | battery)</code>.</p>
-<p><strong>Omitting a token hides that item</strong>, exactly like turning it off in <code>Content</code>.
-Items Windows isn't showing at all — the battery on a desktop PC, for one — are
-skipped silently whether you name them or not.</p>
-<p>Every time the layout is applied, the arrangement <code>auto</code> produced is written to
-the Windhawk log. Copy that line into the Arrangement field and you have the
-automatic layout as a starting point to edit — the automatic and manual paths
-are the same field and the same syntax. If what you write doesn't parse, the
-log says what was expected and where, and the automatic arrangement is used
-until you fix it.</p>
-<p><strong>Nudging.</strong> Append a pixel offset to any name to move just that item:</p>
-<pre><code class="text language-text">network[+2,-1] | volume | battery   network moves 2px right and 1px up
-(battery, percent)[3,0] | network   the stacked pair moves 3px right
-</code></pre>
-<p>Each expression nudge is clamped to ±100 pixels on each axis; the whole-group
-Adjust offsets are clamped to ±40. Offsets are cosmetic. Nothing else shifts, and the group's overall size does
-not change. To move the whole cluster instead, use <code>Adjust</code> → horizontal and
-vertical offset. These replace the eight per-item nudge settings that 1.x had.
-Nudges and offsets are screen pixels on every taskbar edge — see
-<a href="#other-taskbar-positions">Other taskbar positions</a>.</p>
-<p><strong>The percentage arriving late.</strong> An arrangement you write names the items that
-existed when you wrote it. Turn the battery percentage on afterwards and it is
-in no group, so by default it is appended after your arrangement rather than
-vanishing — the log says when that happened, so you can fold it in when you
-next edit. Set <code>Layout</code> → <code>Items your arrangement does not name</code> to <em>Leave it
-out</em> if you would rather your arrangement be the whole truth. <code>auto</code> always
-includes every enabled item.</p>
-<h2 id="thebatterypercentage">The battery percentage</h2>
-<p><strong>Whether the percentage exists is Windows' decision, not this mod's.</strong> Turn it
-on or off in <strong>Settings → System → Power & battery → Battery percentage</strong>. This
-mod does not write that setting, or any other Windows setting.</p>
-<p><code>Content</code> → <code>Battery percentage</code> hides the percentage from the arrangement,
-exactly like the three toggles above it hide their own items. All four mean the
-same thing, and none of them reaches outside the taskbar. If Windows isn't
-showing the percentage, there is nothing here to arrange or hide and the toggle
-does nothing.</p>
-<p><em>An earlier version did drive the Windows setting. It was removed: even with
-the correct registry value and a change broadcast, Explorer only sometimes
-re-read it and the Settings page never refreshed, so the control worked once
-and then appeared dead. A switch that behaves that way is worse than no switch.</em></p>
-<p>Because the percentage genuinely appears and disappears in the native tree,
-the mod watches for it and re-applies the arrangement when it shows up or goes
-away, rather than leaving a briefly unstyled percentage sitting in the cluster.</p>
-<p><strong>It is text, so it does not use <code>Item width</code>.</strong> "9%", "80%", and "100%" are
-three different widths, and a font change moves them again. The percentage's
-cell is measured from the text it actually contains — never narrower than
-<code>Item width</code>, wider when it needs to be — so it cannot be clipped at the edge
-of the group. If the value grows past the cell that was reserved for it, the
-layout is re-applied at the new width. Every other item is a glyph and does
-use <code>Item width</code>.</p>
-<h2 id="settings">Settings</h2>
-<h3 id="content">Content</h3>
-<p>| Setting | Default | Description |
-|---------|---------|-------------|
-| Network | On | Wi-Fi, Ethernet, disconnected, airplane-mode, and VPN states share this one native slot |
-| Volume | On | |
-| Battery | On | Absent on machines without a battery |
-| Battery percentage | On | Hides it from the arrangement. Windows decides whether it exists — Settings → System → Power &amp; battery |</p>
-<h3 id="layout">Layout</h3>
-<p>| Setting | Default | Description |
-|---------|---------|-------------|
-| Arrangement | <code>auto</code> | <code>auto</code>, or an arrangement you write — see above |
-| Fill order | Fill rows first | Used by <code>auto</code> |
-| Short row or column | Center | Used by <code>auto</code>; start, center, or end |
-| Items your arrangement does not name | Add it after | Or leave it out; only applies to a written arrangement |</p>
-<h3 id="size">Size</h3>
-<p>| Setting | Default | Description |
-|---------|---------|-------------|
-| Item width | 0 (fit) | 0 reserves exactly the width each item needs; a number puts every item in a fixed box of that width. Clamped to 0–80 |
-| Item height | 24 px | Clamped to 16–80 |
-| Item spacing | 0 px | Gap between items along each axis; negative pulls them together. Clamped to −16–40 |</p>
-<p><strong>How to make the cluster tight.</strong> Two settings change the space <em>between</em> the
-icons, and horizontal padding is not one of them:</p>
-<ul>
-<li><strong><code>Item width</code></strong> is the box each glyph is centered in. A native tray glyph is
-about 16px wide, so a 32px box is 16px of dead space per item — barely
-noticeable in a 2×2 block, and half the button in a single row. <code>0</code> sizes
-every item to its own content, which is why it is the default.</li>
-<li><strong><code>Item spacing</code></strong> is the gap between those boxes, and it goes negative if you
-want them closer than touching.</li>
-<li><strong><code>Horizontal padding</code></strong> is <em>outside</em> the whole group. It cannot change the
-distance between two items, and no value of it ever will.</li>
-</ul>
-<p>If the button looks far bigger than the icons in it, <code>Item width</code> is almost
-always the reason.</p>
-<h3 id="adjust">Adjust</h3>
-<p>| Setting | Default | Description |
-|---------|---------|-------------|
-| Horizontal padding | 4 px | Reserved on both sides of the group; clamped to 0–24. <strong>Not cosmetic — see below</strong> |
-| Vertical padding | 0 px | Reserved above and below the group; clamped to 0–24 |
-| Horizontal offset | 0 px | Moves the group; reserves no space; clamped to ±40 |
-| Vertical offset | 0 px | Moves the group up (negative) or down (positive); clamped to ±40 |</p>
-<p><strong>Why horizontal padding defaults to 4 and not 0.</strong> The mod zeroes the
-OmniButton's own padding so the arrangement owns the entire content area — and
-the button has rounded corners. An item arranged flush against that edge has
-its last pixels shaved by the curve, which is exactly what used to clip the
-"%" off the battery percentage. Those few pixels are the group's breathing
-room, not decoration. Setting it to 0 is supported, but expect edge items to
-touch the button's rounded border.</p>
-<p>It is <em>outer</em> padding: it reserves space at the two ends of the group and can
-never change the gap between two items. <code>Item width</code> and <code>Item spacing</code> do
-that.</p>
-<h3 id="surface">Surface</h3>
-<p>| Setting | Default | Description |
-|---------|---------|-------------|
-| Network / Volume / Battery / Battery percentage color | <em>(native)</em> | Empty preserves the native color |
-| Network / Volume / Battery / Battery percentage opacity | -1 | -1 is the native opacity; otherwise 0–100% |
-| Battery percentage size | 0 pt | 0 is the native size; clamped to 0–64 |
-| Battery percentage font family | <em>(native)</em> | Empty preserves the native font |</p>
-<p><strong>Why only the percentage has a size and a font.</strong> Because only the percentage
-is a single piece of text. Each of the other three is a <strong>stack of glyphs
-layered exactly on top of one another</strong> — network and volume are three deep
-(Windows calls them Underlay, Base, and AccentOverlay), the battery is two, an
-outline and a fill. That stacking is how one icon shows signal strength, a mute
-slash, or a charge level.</p>
-<p>Resize or re-font one layer of a stack and it stops coinciding with the others:
-you get a larger glyph ghosting over the original rather than a bigger icon. So
-those two controls are not offered for items that are stacked, and the mod
-works out which is which by counting the glyphs rather than assuming.</p>
-<p>Color and opacity work on all four. Color is applied where every layer inherits
-it, so a stack recolors as one — except the battery, whose layers have no
-shared parent to write to; there the outline recolors reliably and the fill only
-on some Windows builds. The log says what it found. Opacity applies to the whole
-item rather than to any glyph inside it, so it is always safe.</p>
-<p>All color settings accept <code>#RRGGBB</code> or <code>#AARRGGBB</code> hex (the alpha byte is
-honored), the generics <code>accent</code>, <code>accentLight</code>, and <code>accentDark</code> for the
-Windows accent shades, or <code>transparent</code> for a fully transparent glyph — nothing
-drawn, the item still present and clickable. Leaving a color empty keeps the
-native color.</p>
-<h2 id="othertaskbarmods">Other taskbar mods</h2>
-<p><strong><a href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks">Tray system icon tweaks</a></strong>
-has its own <code>hideNetworkIcon</code> / <code>hideVolumeIcon</code> / <code>hideBatteryIcon</code> switches,
-which cover the same three icons as this mod's <code>Content</code> switches. They are not
-aware of each other: if an icon is hidden there and enabled here, this mod
-reserves an arrangement cell for something Windows is not drawing. Pick one
-mod to own the show/hide decision.</p>
-<p><strong><a href="https://windhawk.net/mods/taskbar-multi-tray">Multiple taskbars</a>.</strong> This mod
-resolves the primary <code>Shell_TrayWnd</code> only, so OmniButtons on secondary-monitor
-taskbars keep their native arrangement. The primary one is arranged normally.</p>
-<p>The mod deliberately does not move the native <code>ControlCenterButton</code> across tray
-columns. Keeping it where Windows put it is what lets other mods' semantic
-anchors — "before OmniButton", "before clock" — keep their established meaning.
-Moving it would need a shared placement lease so two mods couldn't claim
-contradictory anchor order, so this mod offers no placement setting at all.</p>
-<h2 id="othertaskbarpositions">Other taskbar positions</h2>
-<p>Windows 11 can put the taskbar on any edge (Settings → Personalization →
-Taskbar → Taskbar behaviors, on builds that have the setting). This mod reads
-the edge Windows reports and follows a move while it is running. The last four
-screenshots in the <a href="#showcase">Showcase</a> are the top, left and right edges.</p>
-<p><strong>Top — the same as bottom.</strong> Everything is positioned relative to the
-taskbar's own layout, never to screen coordinates, so a taskbar at the top
-gets the same arrangement in a different place. This also covers
-<a href="https://windhawk.net/mods/taskbar-on-top">Taskbar on top</a>.</p>
-<p><strong>Left or right — your arrangement as written.</strong> An arrangement you write is
-laid out exactly as written on every edge: <code>|</code> side by side, <code>,</code> stacked, and
-<code>[dx,dy]</code> always moves an item <code>dx</code> right and <code>dy</code> down. The horizontal and
-vertical settings in <code>Adjust</code> stay horizontal and vertical, and nothing is
-mirrored between left and right. Only <code>auto</code> changes: it fits the taskbar's
-width instead of its height. Windows makes the OmniButton a fixed height on a
-side taskbar, so the mod raises its minimum height to fit the arrangement.</p>
-<p><strong><a href="https://windhawk.net/mods/taskbar-vertical">Vertical Taskbar</a> — supported
-in its default native mode</strong>, which uses the same native side taskbar. With
-its "Use the native taskbar when possible" option turned off, it rotates a
-horizontal taskbar instead, writing <code>RenderTransform</code> on the very OmniButton
-elements this mod moves. One property cannot have two owners, so this mod
-detects that case (the taskbar runs down a side while Windows still reports a
-horizontal edge), leaves the native OmniButton completely untouched, and says
-so in the Windhawk log.</p>
-<h2 id="taskbarstyler">Taskbar Styler</h2>
-<p>Does not use XAML Diagnostics, so it is compatible with Windows 11 Taskbar
-Styler. The mod leases the native elements' dependency properties and restores
-each one's exact prior local value when it unloads.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>The items may not appear arranged until the mod injects on the first tray
-icon load; the retry loop runs up to 5 times at 2-second intervals</li>
-<li>A glyph's color, size, and font wait for its XAML template to expand. That
-normally happens within a few layout passes; if an item's template never
-produces a text glyph, the log says so and the item keeps its native
-appearance</li>
-<li>Turning the battery percentage on or off in Windows Settings sometimes needs
-the next Explorer start before the taskbar reflects it. That is Windows, not
-this mod — the arrangement follows whatever ends up on screen</li>
-<li>Switching every item off under <code>Content</code> leaves a small blank button rather
-than nothing at all. That button is still the way into Quick Settings, so it
-keeps a minimum clickable size on purpose</li>
 </ul>]]></content>
         <author>
             <name>sb4ssman</name>
