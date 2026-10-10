@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-10T11:03:39.000Z</updated>
+    <updated>2026-10-10T12:00:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Cursor auto-hide on idle 1.0]]></title>
+        <id>https://windhawk.net/mods/cursor-auto-hide#38431c1d52c473768fa80bae5ea0ba720aa74324</id>
+        <link href="https://windhawk.net/mods/cursor-auto-hide"/>
+        <updated>2026-10-10T12:00:29.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="cursorautohideonidle">Cursor auto-hide on idle</h1>
+<p>The mouse cursor usually stays on screen even when you are not using the
+mouse, covering videos, text and presentations.</p>
+<p>This mod hides the cursor after it has not moved for a configurable
+number of seconds (5 by default). The cursor reappears immediately on
+the first movement or click.</p>
+<p>Cursor changes happen at runtime only: your cursor scheme is never
+written to the registry, and any mouse activity restores it right away.</p>
+<p>Only the system cursors are replaced. Applications that draw their own
+cursor, such as games or drawing tools, keep showing it.</p>
+<p>The mod runs in a dedicated Windhawk process (as a tool mod) and does
+not inject into other applications.</p>]]></content>
+        <author>
+            <name>nikitor32</name>
+            <uri>https://github.com/nikitor32</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove Legacy Clock Square Cutout 3.1.0]]></title>
         <id>https://windhawk.net/mods/remove-clock-cutout-background#4e183d31eb36e9e1eb2dc144291f6e94d5981daa</id>
@@ -1590,110 +1612,6 @@ because each simulation step is limited in length to stay stable.</li>
 included.</li>
 <li>Some settings use integer scales; for example, 80 means 0.8.</li>
 </ul>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Steam Games in Explorer 1.0]]></title>
-        <id>https://windhawk.net/mods/explorer-steam-games#06f757037dab9ee0cd3ed270f4546ed5cde55c02</id>
-        <link href="https://windhawk.net/mods/explorer-steam-games"/>
-        <updated>2026-10-08T22:01:17.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="steamgamesinexplorer">Steam Games in Explorer</h1>
-<p><img src="https://i.imgur.com/xz3s5xn.png" alt="Screenshot" /></p>
-<p>Adds your installed <strong>Steam</strong> games to the File Explorer navigation pane, with
-launch, install folder, save and screenshot folders, playtime and automatic
-collections.</p>
-<p><strong>Epic Games</strong>, <strong>GOG</strong> and <strong>Xbox / PC Game Pass</strong> are supported as
-<strong>experimental</strong> (off by default, see below).</p>
-<p>Choose between one entry per platform or a single <strong>Games</strong> entry with a
-subfolder per platform.</p>
-<h2 id="turnonthecommentscolumn">⚠️ Turn on the "Comments" column</h2>
-<p>Playtime, last played date, size on disk and pending updates are shown in the
-<strong>Comments</strong> column, which File Explorer hides by default. To see them:</p>
-<ol>
-<li>Open the <strong>Steam</strong> folder in the navigation pane and switch to
-<strong>View → Details</strong>.</li>
-<li>Right-click any column header (e.g. "Name") and tick <strong>Comments</strong>.
-If it's not in the list, click <strong>More…</strong>, find <strong>Comments</strong> and tick it.</li>
-</ol>
-<p>File Explorer remembers the choice for that folder (repeat it in the ★
-collection folders if they don't pick it up). Without this column the
-mod still works, but you'll only see the information in the tooltip when
-hovering a game.</p>
-<h2 id="experimentallaunchers">Experimental launchers</h2>
-<p>Epic Games, GOG and Xbox / PC Game Pass support is built on the files those
-launchers keep on disk, but it has not been tested widely yet. Turn them on in
-the settings and please report any game that is missing, wrong or doesn't
-launch in the mod's GitHub discussion or issues.</p>
-<h2 id="contextmenu">Context menu</h2>
-<ul>
-<li><strong>Double-click / Play</strong>: launches the game.</li>
-<li><strong>Open install folder</strong>.</li>
-<li><strong>Open save folder</strong> (Steam games with Steam Cloud).</li>
-<li><strong>Open screenshot folder</strong> (screenshots taken with Steam).</li>
-<li><strong>Steam ▸</strong>: Library, Store page, Community hub, Guides, Achievements,
-Verify integrity of game files, Uninstall.</li>
-<li><strong>GOG ▸</strong>: Open in GOG Galaxy (when Galaxy is installed).</li>
-</ul>
-<p>On Windows 11 these entries are under "Show more options" (or Shift+F10),
-unless you use a mod that restores the classic context menu.</p>
-<h2 id="collections">Collections</h2>
-<p>Inside each platform folder, each one can be turned on or off:
-★ Recently played, ★ Never played, ★ Not played in N months, ★ Largest,
-★ Update pending. A collection only appears when it is not empty (playtime and
-last played date are only available for Steam).</p>
-<h2 id="columnsdetailsview">Columns (Details view)</h2>
-<ul>
-<li><strong>Comments</strong> (must be enabled, see above): playtime, last played, size on
-disk, pending updates.</li>
-<li><strong>Date modified</strong> = last played, <strong>Date created</strong> = install date.</li>
-</ul>
-<h2 id="notinstalledgamesoptional">Not installed games (optional)</h2>
-<p>A ★ Not installed collection inside Steam lists the games in your Steam
-library that are not installed. Double-click (or right-click → Install) opens
-Steam's install dialog. The list comes from Steam's local cache (library
-artwork and <code>appinfo.vdf</code>), so no account or API key is needed; it may include
-games borrowed through Steam Family and miss games you never opened in the
-library.</p>
-<h2 id="covers">Covers</h2>
-<p>With "Game icons: Cover", Steam and Xbox games use their cover art as icon:
-with "Large icons" view the folder looks like a game library.</p>
-<h2 id="language">Language</h2>
-<p>Folder names, menu entries and comments follow the Windows display language:
-English, Italian, Spanish, French, German, Portuguese, Polish and Russian.
-Other languages use English.</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod has two parts:</p>
-<ul>
-<li>A background process (a dedicated Windhawk process, not Explorer) reads the
-launchers' files and keeps a real folder with the shortcuts and a hidden
-<code>.data</code> folder up to date.</li>
-<li>Inside <code>explorer.exe</code> the mod only hooks registry reads, so that Explorer
-sees the navigation pane entries and the games' file types (the context
-menu). Their definitions live in a private registry hive file in the mod's
-storage, loaded with <code>RegLoadAppKey</code>: it isn't part of the system registry
-and no other program can see it.</li>
-</ul>
-<p><strong>The mod doesn't write to the system registry.</strong> Disabling or removing it
-makes the navigation pane entries and menu entries disappear right away, even
-if a process crashed before. The private hive file (<code>&lt;user&gt;-shell.hiv</code> in the
-mod's storage) is mod data like the shortcuts; if File Explorer still has it
-open when the mod is removed, it may stay there until Explorer restarts and can
-then be deleted by hand. These entries only appear in File Explorer windows,
-not in other programs' Open/Save dialogs.</p>
-<p>By default the shortcut folder is in the mod's own Windhawk storage (one
-subfolder per Windows user), so Windhawk deletes it when the mod is removed;
-you can choose another location in the settings. With "Delete the shortcut
-folder when the mod is disabled or removed" (on by default) the folder is
-deleted when the mod is disabled too; everything is rebuilt when the mod is
-enabled again (this also happens when the mod is updated). Only files created
-by the mod are deleted. If you change the shortcut folder, the old one is
-cleaned up the same way.</p>
-<p>The mod never writes into game or launcher folders.</p>
-<p>If the entries don't show up right after enabling or updating the mod, open a
-new File Explorer window (or restart File Explorer once).</p>]]></content>
         <author>
             <name>HaVeN80</name>
             <uri>https://github.com/haven80</uri>

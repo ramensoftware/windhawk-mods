@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-10T11:03:39.000Z</updated>
+    <updated>2026-10-10T12:00:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Cursor auto-hide on idle 1.0]]></title>
+        <id>https://windhawk.net/mods/cursor-auto-hide#38431c1d52c473768fa80bae5ea0ba720aa74324</id>
+        <link href="https://windhawk.net/mods/cursor-auto-hide"/>
+        <updated>2026-10-10T12:00:29.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="cursorautohideonidle">Cursor auto-hide on idle</h1>
+<p>The mouse cursor usually stays on screen even when you are not using the
+mouse, covering videos, text and presentations.</p>
+<p>This mod hides the cursor after it has not moved for a configurable
+number of seconds (5 by default). The cursor reappears immediately on
+the first movement or click.</p>
+<p>Cursor changes happen at runtime only: your cursor scheme is never
+written to the registry, and any mouse activity restores it right away.</p>
+<p>Only the system cursors are replaced. Applications that draw their own
+cursor, such as games or drawing tools, keep showing it.</p>
+<p>The mod runs in a dedicated Windhawk process (as a tool mod) and does
+not inject into other applications.</p>]]></content>
+        <author>
+            <name>nikitor32</name>
+            <uri>https://github.com/nikitor32</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove Legacy Clock Square Cutout 3.1.0]]></title>
         <id>https://windhawk.net/mods/remove-clock-cutout-background#4e183d31eb36e9e1eb2dc144291f6e94d5981daa</id>
@@ -2130,47 +2152,6 @@ window positions it applies, and the result of each work-area change.</li>
         <author>
             <name>jcyrio</name>
             <uri>https://github.com/jcyrio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Icon Arrangement 0.1.1]]></title>
-        <id>https://windhawk.net/mods/desktop-icon-arrangement#eed1976809b0ae229cbcc61a3861bf6d7390ee08</id>
-        <link href="https://windhawk.net/mods/desktop-icon-arrangement"/>
-        <updated>2026-10-08T06:02:09.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="desktopiconarrangement">Desktop Icon Arrangement</h1>
-<p>Experimental mod for Windows 11. Turn off <strong>View > Auto arrange icons</strong>
-on the desktop before enabling it. <strong>Align icons to grid</strong> can stay enabled.</p>
-<p>The mod remembers the current layout. When a new desktop item appears, it
-restores the positions of existing items and puts the new item in a free column
-to their right. Further new items fill this area from top to bottom, then move
-to the next column. If that area is full, it tries other monitors and free gaps.
-When there is insufficient space for a whole batch, Windows keeps its layout.</p>
-<p>This also applies to files dropped on the desktop: their drop location is
-replaced by the configured placement. Moving existing icons remains possible.
-Changing <strong>First column for new icons</strong> lets you choose a fixed starting column;
-0 calculates it from your arrangement whenever a fresh baseline is established.</p>
-<p>This is a corrective mod, not an interception of Explorer's insertion code.
-Icons may briefly move before the next check (250 ms by default during desktop
-activity). A short follow-up period corrects delayed rearrangements by Explorer.
-Desktop mouse gestures end follow-up corrections when no new items appear.
-Positions are kept in memory, and Explorer
-stores changes through its normal desktop API. Disabling the mod stops future
-corrections and leaves the current arrangement in place.</p>
-<p>The mod runs in a dedicated Windhawk process. Shell notifications from the user
-and public desktop folders trigger brief checks for changes. The saved layout
-is also refreshed while the desktop is active and once when it loses focus.
-Otherwise, a fallback check runs every five seconds. Missed notifications can
-therefore delay a correction. Mouse gestures in other apps do not pause it.</p>
-<p>Icon size, monitor layout, grid spacing, view mode, auto-arrange and starting
-column changes establish a fresh baseline, as does reconnecting after an
-Explorer restart. The mod does not restore layouts from earlier sessions.
-Renames reported by Shell notifications retain their positions; undelivered or
-late rename notifications can make a renamed item look like a new item.</p>
-<p>Enable logging for this mod in Windhawk to see connection, correction and
-error messages.</p>]]></content>
-        <author>
-            <name>Nerdworld</name>
-            <uri>https://github.com/nerdworldDE</uri>
         </author>
     </entry>
 </feed>

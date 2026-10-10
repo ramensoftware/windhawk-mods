@@ -3219,6 +3219,29 @@
         "version": "1.0.1"
       }
     },
+    "cursor-auto-hide": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791633629000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791633629000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "nikitor32",
+        "description": "Hides the mouse cursor after a configurable idle timeout and shows it again as soon as the mouse moves or a button is clicked",
+        "github": "https://github.com/nikitor32",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Cursor auto-hide on idle",
+        "version": "1.0"
+      }
+    },
     "cursor-motion-blur": {
       "details": {
         "defaultSorting": 31482,
