@@ -26,12 +26,10 @@ Adds customizable, app-style keyboard shortcuts to Windows File Explorer with pa
 * **Smart Explorer Arguments** — Pass active folder paths, selected file names, extensions, or file lists directly into your custom apps or scripts.
 * **Flexible Run Modes** — Run an application once with all selected items, or launch it individually for each selected file or folder.
 * **Built-in Shell Actions** — Quick built-in commands to create text files, folders, or shortcuts, copy paths/names, toggle view settings, or open advanced dialogs.
-* **On-Screen Action Popups** — Shows a clean, brief notification on your screen whenever background actions finish. Automatically matches your Windows accent color and Dark/Light theme, and can be disabled in settings.
-
-![Toast Notification Preview](https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/refs/heads/master/toast-preview.png)
-
 * **Typing & Rename Protection** — Shortcuts automatically pause while you are renaming a file, typing in the address bar, searching, or interacting with dialogs so they never interfere with your typing.
-
+* **On-Screen Action Popups** — Shows a clean, brief notification on your screen whenever background actions finish. Automatically matches your Windows accent color and Dark/Light theme, and can be disabled in settings.
+  
+  ![Toast Notification Preview](https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/refs/heads/master/toast-preview.png)
 
 > **Windows 10 Ribbon Note:** Default shortcuts using `Alt` (such as `Alt+H` or `Alt+C`) take precedence over Windows 10 Explorer ribbon access keys. You can remap or disable these bindings in the mod settings if you rely on ribbon mnemonics.
 
@@ -1103,7 +1101,6 @@ void ShowActionToast(HWND hOwner,
         pt.y += ScaleDPI(12);
     }
 
-    // Change CLASS_NAME to TOAST_CLASS_NAME and hInstance to g_hInstance
     HWND hwnd =
         CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED |
                             WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
@@ -1280,7 +1277,7 @@ bool SetClipboardTextHelper(const std::wstring& text) {
 
     bool opened = false;
     for (int i = 0; i < 5; ++i) {
-        if (OpenClipboard(nullptr)) {  // Use nullptr instead of rootHwnd
+        if (OpenClipboard(nullptr)) {
             opened = true;
             break;
         }
@@ -2599,22 +2596,9 @@ int WINAPI TranslateAcceleratorW_Hook(HWND hWnd,
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing mod...");
-    // Get this mod's own DLL instance handle safely
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                        (PCWSTR)&Wh_ModInit, &g_hInstance);
-
-    // Register the toast window class once
-    WNDCLASSEXW wc = {sizeof(wc)};
-    wc.lpfnWndProc = DefWindowProcW;
-    wc.hInstance = g_hInstance;
-    wc.lpszClassName = TOAST_CLASS_NAME;
-    RegisterClassExW(&wc);
-
-    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
-    Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr);
-
-    LoadSettings();
 
     if (!WindhawkUtils::SetFunctionHook(TranslateAcceleratorW,
                                         TranslateAcceleratorW_Hook,
@@ -2622,6 +2606,19 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Failed to hook TranslateAcceleratorW");
         return FALSE;
     }
+
+    WNDCLASSEXW wc = {sizeof(wc)};
+    wc.lpfnWndProc = DefWindowProcW;
+    wc.hInstance = g_hInstance;
+    wc.lpszClassName = TOAST_CLASS_NAME;
+    if (!RegisterClassExW(&wc)) {
+        Wh_Log(L"RegisterClassExW failed (%lu)", GetLastError());
+    }
+
+    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+    Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr);
+
+    LoadSettings();
 
     Wh_Log(L"Mod initialized successfully.");
     return TRUE;
