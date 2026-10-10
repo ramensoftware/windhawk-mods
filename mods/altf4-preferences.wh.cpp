@@ -6,8 +6,8 @@
 // @author          Marco Kraus
 // @github          https://github.com/MaKra
 // @homepage        https://www.kraus.tk
-// @include         windhawk.exe
-// @compilerOptions -lpowrprof -lshell32
+// @include         explorer.exe
+// @architecture    x86-64
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -19,35 +19,26 @@ Sets the action which is preselected in the classic **"Shut Down Windows"**
 dialog that appears when pressing `Alt+F4` on the desktop.
 
 Instead of always starting with "Shut down", the dialog can preselect any of
-its actions: 
- * Shut down
- * Restart
- * Sign out
- * Switch user
- * Sleep
- * Hibernate
+its actions: Shut down, Restart, Sign out, Switch user, Sleep, or Hibernate.
 
 ## How it works
 
 The dialog's preselected action follows the Start menu power button action,
 stored per user in the registry value
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Start_PowerButtonAction`.
-This mod writes that value according to the mod settings. The previous state is
-restored whenever the mod is disabled or uninstalled in Windhawk - if the value
-did not exist before, it is removed again.
-
-Changes apply immediately: the dialog reads the value each time it opens, no
-restart of Explorer or Windows is needed.
+The mod makes the configured action visible to the dialog transiently while
+the dialog is open and restores the previous state when it closes. Nothing is
+written persistently, and disabling the mod takes effect immediately.
 
 ## Notes
 
-- The same registry value also defines the default action of the Start menu
-  power button; this side effect is inherent to the mechanism.
+- The Start menu power button is not affected by the transient change: the
+  preselection change exists only while the Alt+F4 dialog is open.
 - Sleep and Hibernate only appear in the dialog if they are enabled under
   Control Panel -> Power Options -> System Settings ("Shutdown settings"
-  checkboxes). If a state is not available, Windows falls back to "Shut down".
-- This mod runs in a dedicated windhawk.exe process (tool mod) instead of
-  being injected into Explorer.
+  checkboxes). If a state is not available, the dialog falls back to
+  "Shut down".
+- The mod runs inside Explorer and does not start additional processes.
 
 ## Compatibility
 
@@ -70,15 +61,8 @@ Works on Windows 10 and Windows 11. Tested on Windows 11 26H2 (build 26300).
 */
 // ==/WindhawkModSettings==
 
-#include <stdio.h>
 #include <windhawk_api.h>
-
-// PowrProf availability queries. Declared manually to be independent of the
-// toolchain header state; both are exported by powrprof.dll since Windows XP.
-extern "C" {
-BOOL WINAPI IsPwrSuspendAllowed(void);
-BOOL WINAPI IsPwrHibernateAllowed(void);
-}
+#include <windhawk_utils.h>
 
 // Enum values are the registry values of Start_PowerButtonAction (hex).
 enum class DefaultAction : DWORD {
@@ -90,20 +74,13 @@ enum class DefaultAction : DWORD {
     SwitchUser = 0x100,
 };
 
-constexpr PCWSTR kRegistrySubKey = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced";
-constexpr PCWSTR kRegistryValue  = L"Start_PowerButtonAction";
-
-// Mod storage keys (Windhawk local storage, not the registry).
-constexpr PCWSTR kStorageApplied        = L"applied";
-constexpr PCWSTR kStorageOriginalExists = L"originalExists";
-constexpr PCWSTR kStorageOriginalValue  = L"originalValue";
+constexpr PCWSTR kRegistrySubKey =
+    L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced";
+constexpr PCWSTR kRegistryValue = L"Start_PowerButtonAction";
 
 struct {
     DefaultAction action;
 } g_settings;
-
-HANDLE g_stopEvent;
-HANDLE g_keepAliveThread;
 
 DefaultAction ParseDefaultAction(PCWSTR action) {
     if (wcscmp(action, L"restart") == 0)
@@ -120,375 +97,121 @@ DefaultAction ParseDefaultAction(PCWSTR action) {
 }
 
 void LoadSettings() {
-    PCWSTR action = Wh_GetStringSetting(L"DefaultAction");
+    WindhawkUtils::StringSetting action =
+        WindhawkUtils::StringSetting::make(L"DefaultAction");
     g_settings.action = ParseDefaultAction(action);
-    Wh_Log(L"Settings: DefaultAction=%s (0x%08lX)", action, (unsigned long)g_settings.action);
-    Wh_FreeStringSetting(action);
+    Wh_Log(L"Settings: DefaultAction=%s (0x%08lX)", (PCWSTR)action,
+           (unsigned long)g_settings.action);
 }
 
-// Returns true on success. On a successful query, *exists reports whether the
-// value is present and *value contains the current data (0 if absent).
-bool QueryStartPowerButtonAction(bool* exists, DWORD* value) {
-    *exists = false;
-    *value = 0;
+// Bisection result: the shell32!ExitWindowsDialog (ordinal 60) hook is stable
+// (verified in Explorer, including Alt+F4). Built on top of it: the transient
+// write - while the dialog is open, the configured action is written so the
+// dialog (which reads the value live) preselects it; on dialog close the
+// recorded original state is restored. Net registry change: zero. No shared
+// bookkeeping: the record/restore happens synchronously on the dialog thread
+// of the logged-on user.
+using ExitWindowsDialog_t = void(WINAPI *)(HWND);
+ExitWindowsDialog_t ExitWindowsDialog_Original;
 
-    HKEY hKey;
-    LONG res = RegOpenKeyEx(HKEY_CURRENT_USER, kRegistrySubKey, 0, KEY_QUERY_VALUE, &hKey);
-    if (res != ERROR_SUCCESS) {
-        Wh_Log(L"RegOpenKeyEx failed (%ld)", res);
-        return false;
-    }
+void WINAPI ExitWindowsDialog_Hook(HWND hwndOwner) {
+    Wh_Log(L"> Alt+F4 dialog opening");
 
+    // Record the current state. Case A: value absent. Case B: value present
+    // (REG_DWORD). A non-DWORD value is left untouched entirely (the
+    // transient write is skipped).
+    DWORD originalValue = 0;
+    bool originalExisted = false;
+    bool transientWriteSafe = true;
     DWORD type = 0;
     DWORD size = sizeof(DWORD);
-    DWORD data = 0;
-    res = RegQueryValueEx(hKey, kRegistryValue, nullptr, &type, (LPBYTE)&data, &size);
-    RegCloseKey(hKey);
-
-    if (res == ERROR_FILE_NOT_FOUND) {
-        return true;
-    }
-    if (res != ERROR_SUCCESS) {
-        Wh_Log(L"RegQueryValueEx failed (%ld)", res);
-        return false;
-    }
-    if (type != REG_DWORD) {
-        Wh_Log(L"Unexpected value type (%lu), ignoring", type);
-        return false;
-    }
-
-    *exists = true;
-    *value = data;
-    return true;
-}
-
-bool WriteStartPowerButtonAction(DWORD value) {
-    HKEY hKey;
-    LONG res = RegOpenKeyEx(HKEY_CURRENT_USER, kRegistrySubKey, 0, KEY_SET_VALUE, &hKey);
-    if (res != ERROR_SUCCESS) {
-        Wh_Log(L"RegOpenKeyEx failed (%ld)", res);
-        return false;
-    }
-
-    res = RegSetValueEx(hKey, kRegistryValue, 0, REG_DWORD, (const BYTE*)&value, sizeof(value));
-    RegCloseKey(hKey);
-
-    if (res != ERROR_SUCCESS) {
-        Wh_Log(L"RegSetValueEx failed (%ld)", res);
-        return false;
-    }
-
-    return true;
-}
-
-bool DeleteStartPowerButtonAction() {
-    HKEY hKey;
-    LONG res = RegOpenKeyEx(HKEY_CURRENT_USER, kRegistrySubKey, 0, KEY_SET_VALUE, &hKey);
-    if (res != ERROR_SUCCESS) {
-        Wh_Log(L"RegOpenKeyEx failed (%ld)", res);
-        return false;
-    }
-
-    res = RegDeleteValue(hKey, kRegistryValue);
-    RegCloseKey(hKey);
-
-    if (res != ERROR_SUCCESS && res != ERROR_FILE_NOT_FOUND) {
-        Wh_Log(L"RegDeleteValue failed (%ld)", res);
-        return false;
-    }
-
-    return true;
-}
-
-// Restores the state recorded before the mod first applied its value:
-// writes back the original value (Case B) or deletes the value it created
-// (Case A). Called when the mod is unloaded (disabled/uninstalled/reloaded);
-// only acts if the mod recorded having applied something.
-void RestoreOriginal() {
-    if (Wh_GetIntValue(kStorageApplied, 0) == 0) {
-        return;
-    }
-
-    bool exists = Wh_GetIntValue(kStorageOriginalExists, 1) != 0;
-    DWORD value = (DWORD)Wh_GetIntValue(kStorageOriginalValue, 0);
-
-    bool ok;
-    if (exists) {
-        ok = WriteStartPowerButtonAction(value);
-        Wh_Log(L"Restoring original value: 0x%08lX (%s)", value, ok ? L"ok" : L"FAILED");
-    } else {
-        ok = DeleteStartPowerButtonAction();
-        Wh_Log(L"Restoring original state: value removed (%s)", ok ? L"ok" : L"FAILED");
-    }
-
-    if (ok) {
-        Wh_SetIntValue(kStorageApplied, 0);
-    }
-}
-
-void ApplyDefaultAction() {
-    if (Wh_GetIntValue(kStorageApplied, 0) == 0) {
-        bool exists;
-        DWORD value;
-        if (!QueryStartPowerButtonAction(&exists, &value)) {
-            Wh_Log(L"Cannot record original state, not applying");
-            return;
+    LONG res = RegGetValue(HKEY_CURRENT_USER, kRegistrySubKey, kRegistryValue,
+                           RRF_RT_REG_DWORD, &type, (PVOID)&originalValue,
+                           &size);
+    if (res == ERROR_SUCCESS) {
+        if (type == REG_DWORD) {
+            originalExisted = true;
+        } else {
+            transientWriteSafe = false;
+            Wh_Log(L"Unexpected value type (%lu), skipping transient write", type);
         }
-
-        Wh_SetIntValue(kStorageOriginalExists, exists ? 1 : 0);
-        Wh_SetIntValue(kStorageOriginalValue, (int)value);
-        Wh_SetIntValue(kStorageApplied, 1);
-        Wh_Log(L"Recorded original state: %s (0x%08lX)", exists ? L"present" : L"absent",
-               value);
+    } else if (res != ERROR_FILE_NOT_FOUND) {
+        transientWriteSafe = false;
+        Wh_Log(L"RegGetValue failed (%ld), skipping transient write", res);
     }
 
-    if (g_settings.action == DefaultAction::Sleep && !IsPwrSuspendAllowed()) {
-        Wh_Log(L"WARNING: Sleep is not currently available (Power Options > System "
-               L"Settings). Windows will fall back to Shut down.");
-    }
-    if (g_settings.action == DefaultAction::Hibernate && !IsPwrHibernateAllowed()) {
-        Wh_Log(L"WARNING: Hibernate is not currently available (Power Options > System "
-               L"Settings). Windows will fall back to Shut down.");
+    if (transientWriteSafe) {
+        HKEY hKey;
+        LONG openRes = RegOpenKeyEx(HKEY_CURRENT_USER, kRegistrySubKey, 0,
+                                    KEY_SET_VALUE, &hKey);
+        if (openRes == ERROR_SUCCESS) {
+            DWORD action = (DWORD)g_settings.action;
+            RegSetValueEx(hKey, kRegistryValue, 0, REG_DWORD,
+                          (const BYTE *)&action, sizeof(action));
+            RegCloseKey(hKey);
+            Wh_Log(L"Transient write: configured action 0x%08lX (original: %s"
+                   L" 0x%08lX)",
+                   action, originalExisted ? L"present" : L"absent",
+                   originalValue);
+        } else {
+            transientWriteSafe = false;
+            Wh_Log(L"RegOpenKeyEx failed (%ld), skipping transient write",
+                   openRes);
+        }
     }
 
-    DWORD action = (DWORD)g_settings.action;
-    if (WriteStartPowerButtonAction(action)) {
-        Wh_Log(L"Default action applied: 0x%08lX", action);
+    ExitWindowsDialog_Original(hwndOwner);
+
+    if (transientWriteSafe) {
+        HKEY hKey;
+        LONG openRes = RegOpenKeyEx(HKEY_CURRENT_USER, kRegistrySubKey, 0,
+                                    KEY_SET_VALUE | KEY_QUERY_VALUE, &hKey);
+        if (openRes == ERROR_SUCCESS) {
+            if (originalExisted) {
+                RegSetValueEx(hKey, kRegistryValue, 0, REG_DWORD,
+                              (const BYTE *)&originalValue, sizeof(originalValue));
+                Wh_Log(L"Restored original value 0x%08lX", originalValue);
+            } else {
+                RegDeleteValue(hKey, kRegistryValue);
+                Wh_Log(L"Restored original state: value removed");
+            }
+            RegCloseKey(hKey);
+        }
     }
+
+    Wh_Log(L"< Alt+F4 dialog closed");
 }
 
-DWORD WINAPI KeepAliveThreadProc(LPVOID) {
-    WaitForSingleObject(g_stopEvent, INFINITE);
-    return 0;
-}
-
-BOOL WhTool_ModInit() {
-    Wh_Log(L">");
-    LoadSettings();
-    ApplyDefaultAction();
-
-    // Keep the tool process alive so settings changes reach us. The process
-    // entry point is hooked by the tool mod runtime below and the main thread
-    // ends there; this thread holds the process open.
-    g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-    if (!g_stopEvent) {
-        Wh_Log(L"CreateEvent failed");
-        return FALSE;
+void InstallHooks() {
+    HMODULE shell32Module = GetModuleHandle(L"shell32.dll");
+    if (shell32Module) {
+        auto pExitWindowsDialog = (ExitWindowsDialog_t)GetProcAddress(
+            shell32Module, (LPCSTR)(uintptr_t)60);
+        if (pExitWindowsDialog) {
+            WindhawkUtils::SetFunctionHook(pExitWindowsDialog,
+                                           ExitWindowsDialog_Hook,
+                                           &ExitWindowsDialog_Original);
+            Wh_Log(L"ExitWindowsDialog hook installed (shell32 ordinal 60)");
+        } else {
+            Wh_Log(L"ExitWindowsDialog (shell32 ordinal 60) not found");
+        }
+    } else {
+        Wh_Log(L"shell32.dll not loaded");
     }
-
-    g_keepAliveThread = CreateThread(nullptr, 0, KeepAliveThreadProc, nullptr, 0, nullptr);
-    if (!g_keepAliveThread) {
-        Wh_Log(L"CreateThread failed");
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
-void WhTool_ModSettingsChanged() {
-    Wh_Log(L">");
-    LoadSettings();
-    ApplyDefaultAction();
-}
-
-void WhTool_ModUninit() {
-    Wh_Log(L">");
-
-    // Restore the state recorded before the mod first applied its value: the
-    // native Windhawk enable/disable toggle (and uninstalling) is the off
-    // switch. Uninit also runs on reload cycles (e.g. mod updates), where the
-    // mod simply re-applies on the next init.
-    RestoreOriginal();
-
-    if (g_stopEvent) {
-        SetEvent(g_stopEvent);
-    }
-    if (g_keepAliveThread) {
-        WaitForSingleObject(g_keepAliveThread, INFINITE);
-        CloseHandle(g_keepAliveThread);
-        g_keepAliveThread = nullptr;
-    }
-    if (g_stopEvent) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod implementation for mods which don't need to inject to other
-// processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
-//
-// The mod will load and run in a dedicated windhawk.exe process.
-//
-// Paste the code below as part of the mod code, and use these callbacks:
-// * WhTool_ModInit
-// * WhTool_ModSettingsChanged
-// * WhTool_ModUninit
-//
-// Currently, other callbacks are not supported.
-
-bool g_isToolModProcessLauncher;
-HANDLE g_toolModProcessMutex;
-
-void WINAPI EntryPoint_Hook() {
-    Wh_Log(L">");
-    ExitThread(0);
 }
 
 BOOL Wh_ModInit() {
-    DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
-        sessionId == 0) {
-        return FALSE;
-    }
-
-    bool isExcluded = false;
-    bool isToolModProcess = false;
-    bool isCurrentToolModProcess = false;
-    int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
-    if (!argv) {
-        Wh_Log(L"CommandLineToArgvW failed");
-        return FALSE;
-    }
-
-    for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0 ||
-            wcscmp(argv[i], L"-service-start") == 0 ||
-            wcscmp(argv[i], L"-service-stop") == 0) {
-            isExcluded = true;
-            break;
-        }
-    }
-
-    for (int i = 1; i < argc - 1; i++) {
-        if (wcscmp(argv[i], L"-tool-mod") == 0) {
-            isToolModProcess = true;
-            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
-                isCurrentToolModProcess = true;
-            }
-            break;
-        }
-    }
-
-    LocalFree(argv);
-
-    if (isExcluded) {
-        return FALSE;
-    }
-
-    if (isCurrentToolModProcess) {
-        g_toolModProcessMutex =
-            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex) {
-            Wh_Log(L"CreateMutex failed");
-            ExitProcess(1);
-        }
-
-        if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-            ExitProcess(1);
-        }
-
-        if (!WhTool_ModInit()) {
-            ExitProcess(1);
-        }
-
-        IMAGE_DOS_HEADER* dosHeader =
-            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS* ntHeaders =
-            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-
-        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
-
-        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
-        return TRUE;
-    }
-
-    if (isToolModProcess) {
-        return FALSE;
-    }
-
-    g_isToolModProcessLauncher = true;
+    Wh_Log(L">");
+    LoadSettings();
+    InstallHooks();
     return TRUE;
 }
 
-void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileName(nullptr, currentProcessPath,
-                              ARRAYSIZE(currentProcessPath))) {
-        case 0:
-        case ARRAYSIZE(currentProcessPath):
-            Wh_Log(L"GetModuleFileName failed");
-            return;
-    }
-
-    WCHAR
-    commandLine[MAX_PATH + 2 +
-                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
-               WH_MOD_ID);
-
-    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
-    if (!kernelModule) {
-        kernelModule = GetModuleHandle(L"kernel32.dll");
-        if (!kernelModule) {
-            Wh_Log(L"No kernelbase.dll/kernel32.dll");
-            return;
-        }
-    }
-
-    using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
-        LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
-        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-        LPSTARTUPINFOW lpStartupInfo,
-        LPPROCESS_INFORMATION lpProcessInformation,
-        PHANDLE hRestrictedUserToken);
-    CreateProcessInternalW_t pCreateProcessInternalW =
-        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
-                                                 "CreateProcessInternalW");
-    if (!pCreateProcessInternalW) {
-        Wh_Log(L"No CreateProcessInternalW");
-        return;
-    }
-
-    STARTUPINFO si{
-        .cb = sizeof(STARTUPINFO),
-        .dwFlags = STARTF_FORCEOFFFEEDBACK,
-    };
-    PROCESS_INFORMATION pi;
-    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                 nullptr, nullptr, &si, &pi, nullptr)) {
-        Wh_Log(L"CreateProcess failed");
-        return;
-    }
-
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-}
-
 void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WhTool_ModSettingsChanged();
+    Wh_Log(L">");
+    LoadSettings();
 }
 
 void Wh_ModUninit() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WhTool_ModUninit();
-    ExitProcess(0);
+    Wh_Log(L">");
 }
