@@ -82,8 +82,8 @@ Tested on one installation of 64-bit Microsoft 365 Excel; other Office versions 
 - horizontalGestureMs: 200
   $name: Horizontal gesture quiet period (milliseconds)
   $name:zh-CN: 左右拨动防重复（毫秒）
-  $description: Group repeated same-direction input until this quiet period elapses. Reversal switches immediately. Default 200; increase if one gesture still switches several sheets.
-  $description:zh-CN: 同方向连续信号视为一次拨动，停顿达到此时长后可再次切换；反向拨动立即切换。默认 200；若一次拨动仍切换多张，可适当增加。
+  $description: Group repeated same-direction input until this quiet period elapses. Reversal switches immediately. Valid range: 150–2000 ms (values outside are clamped); default 200.
+  $description:zh-CN: 同方向连续信号视为一次拨动，停顿达到此时长后可再次切换；反向拨动立即切换。有效范围 150–2000 毫秒（超出会被限制）；默认 200。
 - horizontalSwitching: true
   $name: Switch sheets with the horizontal wheel
   $name:zh-CN: 左右滚轮切换工作表
@@ -138,6 +138,9 @@ struct Variant {
 };
 template<class T> struct ComPtr {
     T* p = nullptr;
+    ComPtr() = default;
+    ComPtr(const ComPtr&) = delete;
+    ComPtr& operator=(const ComPtr&) = delete;
     ~ComPtr() { if (p) p->Release(); }
 };
 
@@ -251,6 +254,16 @@ bool IsSheetTab(POINT point,HWND worksheet,RECT& row) {
     return true;
 }
 
+// The bottom band contains both tabs and the horizontal scroll bar. The
+// scroll bar must retain Excel's WM_MOUSEHWHEEL behavior even on EXCEL7.
+bool IsHorizontalSwitchTarget(HWND worksheet,POINT point,RECT& row) {
+    RECT hostRect{};
+    if(!GetWindowRect(worksheet,&hostRect) || !ContainsPoint(hostRect,point))
+        return false;
+    LONG band=MulDiv(64,GetDpiForWindow(worksheet),96);
+    return point.y<hostRect.bottom-band || IsSheetTab(point,worksheet,row);
+}
+
 struct NativeArrowCandidates {
     RECT boxes[2]{};
     unsigned count=0;
@@ -352,9 +365,11 @@ bool InvokeNativeArrow(NativeArrowTarget& arrow,int steps) {
 
 // Only geometry and fingerprints are cached, never COM interface pointers.
 // Every event checks both controls, so moved panes cannot reuse stale buttons.
-bool ScrollUsingNativeArrow(HWND worksheet,POINT point,int direction,int steps) {
-    RECT hostRect{},row{};
-    if(!GetWindowRect(worksheet,&hostRect) || !IsSheetTab(point,worksheet,row)) return false;
+bool ScrollUsingNativeArrow(HWND worksheet,POINT point,const RECT& row,
+                            int direction,int steps) {
+    RECT hostRect{};
+    if(!GetWindowRect(worksheet,&hostRect) ||
+       !ContainsRect(hostRect,row) || !ContainsPoint(row,point)) return false;
     if(!g_nativeArrowCache.Matches(worksheet,hostRect,row)) g_nativeArrowCache.Reset();
     if(g_nativeArrowCache.FailedRecently(GetTickCount())) return false;
     if(g_nativeArrowCache.valid) {
@@ -434,7 +449,19 @@ struct HorizontalGesture {
 };
 thread_local HorizontalGesture g_horizontalGesture;
 
-bool ApplyWheelAction(HWND worksheet, int direction, bool horizontal, POINT point, int steps) {
+// RTL can place the sheet arrows on the right and scrollbar buttons on the
+// left. Only use left-edge arrow discovery in a known left-to-right layout.
+// A missing COM property also falls back to Excel's safe tab-scroll API.
+bool IsLeftToRightTabLayout(IDispatch* excelWindow,HWND worksheet) {
+    if (GetWindowLongPtrW(worksheet,GWL_EXSTYLE)&WS_EX_LAYOUTRTL) return false;
+    Variant rtl;
+    return SUCCEEDED(InvokeMember(excelWindow,L"DisplayRightToLeft",
+                                  DISPATCH_PROPERTYGET,&rtl.value)) &&
+           rtl.value.vt==VT_BOOL && rtl.value.boolVal==VARIANT_FALSE;
+}
+
+bool ApplyWheelAction(HWND worksheet, int direction, bool horizontal, POINT point,
+                      int steps,const RECT& tabRow) {
     ComPtr<IDispatch> excelWindow, application, activeSheet, workbook, sheets;
     AccessibleObjectFromWindow(worksheet,OBJID_NATIVEOM,IID_IDispatch,
                                reinterpret_cast<void**>(&excelWindow.p));
@@ -445,7 +472,8 @@ bool ApplyWheelAction(HWND worksheet, int direction, bool horizontal, POINT poin
                             &ready.value)) || ready.value.vt != VT_BOOL ||
         ready.value.boolVal == VARIANT_FALSE) return false;
     if (!horizontal && g_scrollTabs.load()) {
-        if (g_smooth.load() && ScrollUsingNativeArrow(worksheet,point,direction,steps))
+        if (g_smooth.load() && IsLeftToRightTabLayout(excelWindow.p,worksheet) &&
+            ScrollUsingNativeArrow(worksheet,point,tabRow,direction,steps))
             return true;
         return NativeScrollTabs(excelWindow.p,direction*steps);
     }
@@ -475,9 +503,6 @@ bool ApplyWheelAction(HWND worksheet, int direction, bool horizontal, POINT poin
         else {
             Wh_Log(L"Sheet activated: index=%d axis=%s", index,
                    horizontal ? L"horizontal" : L"vertical");
-
-
-
         }
         return SUCCEEDED(hr);
     }
@@ -511,7 +536,9 @@ LRESULT WINAPI DispatchMessageWHook(const MSG* message) {
     bool consumed = false;
     try {
         RECT tabRow{};
-        if (horizontal || IsSheetTab(point,worksheet,tabRow)) {
+        bool eligible = horizontal ? IsHorizontalSwitchTarget(worksheet,point,tabRow)
+                                   : IsSheetTab(point,worksheet,tabRow);
+        if (eligible) {
             ULONGLONG now = GetTickCount64();
             if (horizontal) {
                 int delta=GET_WHEEL_DELTA_WPARAM(message->wParam);
@@ -521,7 +548,7 @@ LRESULT WINAPI DispatchMessageWHook(const MSG* message) {
                     int direction=delta>0?1:-1;
                     if(g_reverse.load()) direction=-direction;
                     Wh_Log(L"Horizontal gesture accepted");
-                    consumed=ApplyWheelAction(worksheet,direction,true,point,1);
+                    consumed=ApplyWheelAction(worksheet,direction,true,point,1,tabRow);
                     if (!consumed) g_horizontalGesture.Reset();
                 } else {
                     Wh_Log(L"Horizontal gesture repeat suppressed");
@@ -544,10 +571,12 @@ LRESULT WINAPI DispatchMessageWHook(const MSG* message) {
                 int direction = steps > 0 ? -1 : 1;
                 if (g_reverse.load()) direction = -direction;
                 consumed = ApplyWheelAction(worksheet,direction,false,point,
-                    tabScroll ? std::min(8,std::abs(steps)) : 1);
+                    tabScroll ? std::min(8,std::abs(steps)) : 1,tabRow);
                 if (consumed) g_lastSwitch = now;
             }
             }
+        } else if (horizontal) {
+            g_horizontalGesture.Reset();
         }
     } catch (...) {
         Wh_Log(L"Wheel handler failed; preserving Excel's normal behavior");
