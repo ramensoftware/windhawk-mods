@@ -4,7 +4,7 @@
 // @description    Disables theming (enables Classic theme)
 // @version        1.2.8
 // @author         Anixx
-// @github 			https://github.com/Anixx
+// @github         https://github.com/Anixx
 // @include        winlogon.exe
 // @compilerOptions -lntdll
 // ==/WindhawkMod==
@@ -112,7 +112,7 @@ install this mod:
 20. To have the classic 3D borders in Notepad and other programs, install this mod:
 [*Clientedge Everywhere*](https://windhawk.net/mods/clientedge-in-apps).
 
-21. To fix the ribbon appearance an apps that use it, install this mod:
+21. To fix the ribbon appearance in apps that use it, install this mod:
 [*Basic/Classic Theme Ribbon Fix*](https://windhawk.net/mods/basic-classic-theme-ribbon-fix).
 
 22. To have the Windows XP-like file picker dialog, install this mod:
@@ -184,7 +184,7 @@ from Classic Theme, install this mod and follow the instructions there:
 42. To fix the black box in the file copy/move conflict dialogs on Win11, install this mod:
 [*Fix File Conflict Dialog Checkbox Background*](https://windhawk.net/mods/fix-conflict-dialog-checkbox-bg)
 
-To customize the color scheme, you can use the [Desktp Architect](https://www.themeworld.com/themes/utilities.html) 
+To customize the color scheme, you can use the [Desktop Architect](https://www.themeworld.com/themes/utilities.html) 
 utility, but make sure to install and run it in Windows 2000 or XP compatibility mode (in Windows XP mode
 it will require the UAC authorization). Alternatively you can use the 
 [*New Classic Theme Configurator*](https://gitlab.com/ftortoriello/WinClassicThemeConfig).
@@ -321,11 +321,18 @@ void Wh_ModUninit() {
 
     if (g_hThread) {
         g_bStopThread = TRUE;
+        // The thread doesn't wait on anything the engine thread holds, so an
+        // unbounded wait can't deadlock here. Giving up early would risk the
+        // engine unloading our code while the thread is still executing it,
+        // which would crash winlogon.exe (a critical process) and bugcheck
+        // the system.
         WaitForSingleObject(g_hThread, INFINITE);
         CloseHandle(g_hThread);
         g_hThread = NULL;
     }
 
+    // Restore the original DACL so that disabling/uninstalling the mod
+    // actually stops affecting newly started programs.
     if (g_originalSd) {
         HANDLE hSection;
         if (OpenThemeSection(WRITE_DAC, &hSection)) {
