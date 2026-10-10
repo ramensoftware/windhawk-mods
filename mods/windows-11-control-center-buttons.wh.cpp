@@ -2069,7 +2069,7 @@ static int WINAPI ControlCenterView_OnGotFocus_Hook(void* pThis, void* args) {
 static void InstallDiscoveryHooks(HMODULE controlCenter, bool applyNow) {
     if (g_discoveryHooked.exchange(true)) return;
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK controlCenterDllHooks[] = {
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::ControlCenterView,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnGotFocus(void *))"},
             &ControlCenterView_OnGotFocus_Original,
@@ -2083,7 +2083,7 @@ static void InstallDiscoveryHooks(HMODULE controlCenter, bool applyNow) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(controlCenter, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(controlCenter, controlCenterDllHooks, ARRAYSIZE(controlCenterDllHooks))) {
         Wh_Log(L"Could not hook ControlCenterView; the footer will not be changed");
         return;
     }
