@@ -60,6 +60,7 @@
 | Animation&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Preview |
 | --- | --- |
 | **Genie** | ![Genie](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/a7e46c466c7b88552d5d92cad113b652fbd3f10e/genie_preview.gif) |
+| **Windows 10** | *Preview coming soon* |
 | **Ink Splash** | ![Ink Splash](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ff3a17e818f2d08e43ee4f79059b4ccb3c663cb0/ink_splash.gif) |
 | **Scorch** | ![Scorch](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/b96dea88ab53f4b781e472d3683f645f4e368f8e/scorch.gif) |
 | **Splinter** | ![Splinter](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/b96dea88ab53f4b781e472d3683f645f4e368f8e/splinter.gif) |
@@ -154,8 +155,8 @@ Special thanks to [@Abdullah Masood](https://github.com/Abdullah-Masood-05) for 
       Disabled by default. Enable to use the restore animation when an application window first
       opens. Firefox-family browsers such as Firefox and Waterfox use an alpha-only compatibility
       path for their startup window that preserves session restore while keeping the launch animation.
-      Ordinary ShowWindowAsync launch requests keep their native asynchronous show without a launch
-      animation; retained tray-cloak recovery remains enabled.
+      Some apps that open their window asynchronously show it without a launch animation.
+      Windows hidden to the tray still become visible normally when reopened.
   - random_effect: false
     $name: Shuffle animation styles
     $description: >-
@@ -201,8 +202,8 @@ Special thanks to [@Abdullah Masood](https://github.com/Abdullah-Masood-05) for 
       Show Desktop. Enable this to bypass the mod's minimize and restore animations for Show
       Desktop, including three-finger touchpad gestures, and let Windows animate the entire batch
       natively. Individual taskbar and title-bar minimize/restore operations remain animated.
-      Operations immediately after Show Desktop can also remain native during its short posted-work
-      scope (up to 1.5 seconds after the shell call, or 2 seconds for the Win+D key fallback).
+      Operations immediately after Show Desktop can also use native animations for up to 1.5 seconds,
+      or up to 2 seconds when the mod detects Show Desktop through the Win+D keyboard shortcut.
   - gpu_acceleration: true
     $name: Hybrid GPU acceleration
     $description: >-
@@ -13650,6 +13651,7 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND insertAfter, int x, int y, int cx,
     return lastError.Call(SetWindowPos_Original, hWnd, insertAfter, x, y, cx, cy, flags);
 }
 BOOL WINAPI DestroyWindow_Hook(HWND hWnd) {
+    NativeApiLastErrorScope lastError;
     bool animated = false;
     if (GetWindowThreadProcessId(hWnd, NULL) == GetCurrentThreadId() &&
         g_closeAnimation.load(std::memory_order_relaxed) &&
@@ -13661,7 +13663,7 @@ BOOL WINAPI DestroyWindow_Hook(HWND hWnd) {
         animated = RunCloseAnimation(hWnd, WM_DESTROY);
         if (!animated) RemovePropW(hWnd, kPropCloseBypass);
     }
-    BOOL result = DestroyWindow_Original(hWnd);
+    BOOL result = lastError.Call(DestroyWindow_Original, hWnd);
     if (!result && animated && IsWindow(hWnd)) {
         RemovePropW(hWnd, kPropCloseBypass);
         RemovePropW(hWnd, kPropClosed);
