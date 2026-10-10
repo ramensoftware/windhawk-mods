@@ -46,6 +46,10 @@ std::mutex g_editsMutex;
 std::unordered_map<HWND, HiddenExt> g_hiddenExt;
 
 bool ShouldAppendExt(const std::wstring& text, const HiddenExt& h) {
+    if (h.ext.empty()) {
+        return false; // Nothing hidden for this control
+    }
+
     if (text.empty() || text == L"." || text == L".." ||
         text.find_first_of(L"\\/:*?\"") != std::wstring::npos) {
         return false; // Path, wildcard, or quote: leave as typed
@@ -233,7 +237,10 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
         if (wcschr(lpString, L'"') || !ext[0] || !ext[1]) {
             {
                 std::lock_guard<std::mutex> lock(g_editsMutex);
-                g_hiddenExt.erase(hWnd); // Clear stale entry if there's no extension to hide
+                auto it = g_hiddenExt.find(hWnd);
+                if (it != g_hiddenExt.end()) {
+                    it->second = {}; // Keep subclass tracked so Wh_ModUninit cleans it up
+                }
             }
             return SetWindowTextW_Original(hWnd, lpString);
         }
