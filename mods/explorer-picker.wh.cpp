@@ -4,7 +4,7 @@
 // @description     Replaces the Open, Save As and folder picker dialogs of every program with a real Explorer window that has a File name / Files of type bar at the bottom
 // @name:ru         Проводник вместо окон выбора файла
 // @description:ru  Заменяет окна «Открыть», «Сохранить как» и выбора папки во всех программах настоящим окном Проводника с полями «Имя файла» и «Тип файлов» внизу
-// @version         1.5.5
+// @version         1.5.6
 // @author          appEW
 // @github          https://github.com/appEW
 // @include         *
@@ -1425,10 +1425,19 @@ bool ControllerAlive(State* s) {
   return IsWindow(s->controller) &&
          (!s->process || WaitForSingleObject(s->process, 0) == WAIT_TIMEOUT);
 }
+void AllowController(State* s) {
+  // Input in Explorer revokes the app's earlier foreground permission. Grant
+  // it back before the app handles confirmation, controls or cancellation.
+  DWORD process = 0;
+  GetWindowThreadProcessId(s->controller, &process);
+  if (process)
+    AllowSetForegroundWindow(process);
+}
 void SendCancel(State* s) {
   if (!s->closing) {
     s->closing = true;
     Picker::Writer w;
+    AllowController(s);
     Picker::Post(s->controller, s->footer, Picker::Cancel, w, 1000);
   }
 }
@@ -1452,6 +1461,7 @@ void SendCommand(State* s, DWORD kind, DWORD dropItem = Picker::None) {
   w.string(folder);
   w.strings(paths);
   w.number(dropItem);
+  AllowController(s);
   Picker::Post(s->controller, s->footer, Picker::Command, w, 2000);
 }
 void SendControl(State* s,
@@ -1464,6 +1474,7 @@ void SendControl(State* s,
   w.number(action);
   w.number(value);
   w.string(text);
+  AllowController(s);
   Picker::Post(s->controller, s->footer, Picker::ControlChange, w, 2000);
 }
 std::wstring Display(State* s,
@@ -3806,8 +3817,7 @@ inline bool Plain(const OPENFILENAMEW* p,
                   bool save,
                   bool ignoreFeatures = false) {
   return p && SizeValid(p->lStructSize) && p->lpstrFile && p->nMaxFile >= 2 &&
-         FlagsExValid(p) &&
-         !(p->Flags & ~(CommonFlags | (ignoreFeatures ? CustomFlags : 0))) &&
+         FlagsExValid(p) && !(p->Flags & ~CommonFlags) &&
          (ignoreFeatures || !p->lpstrCustomFilter) &&
          // Old-style multi-select returns space separated short names.
          (!(p->Flags & OFN_ALLOWMULTISELECT) ||
@@ -4815,9 +4825,8 @@ BOOL Wide(LPOPENFILENAMEW ofn, bool save) {
     overrideError = false;
     return NativeLegacyDialog;
   }
-  if (ignoreFeatures &&
-      ((ofn->Flags & PickerLegacy::CustomFlags) || ofn->lpstrCustomFilter))
-    Wh_Log(L"Win32 dialog application features ignored (risky option)");
+  if (ignoreFeatures && ofn->lpstrCustomFilter)
+    Wh_Log(L"Win32 dialog custom filter ignored (risky option)");
   ActiveSession active;
   if (!active)
     return FALSE;
@@ -4916,17 +4925,15 @@ BOOL Ansi(LPOPENFILENAMEA a, bool save) {
       (a->Flags & PickerLegacy::CustomFlags) ||
       (a->lStructSize == sizeof(OPENFILENAMEA) &&
        (a->FlagsEx & ~OFN_EX_NOPLACESBAR)) ||
-      (a->Flags & ~(PickerLegacy::CommonFlags |
-                    (ignoreFeatures ? PickerLegacy::CustomFlags : 0))) ||
+      (a->Flags & ~PickerLegacy::CommonFlags) ||
       (!ignoreFeatures && a->lpstrCustomFilter) ||
       ((a->Flags & OFN_ALLOWMULTISELECT) &&
        (save || !(a->Flags & OFN_EXPLORER)))) {
     overrideError = false;
     return NativeLegacyDialog;
   }
-  if (ignoreFeatures &&
-      ((a->Flags & PickerLegacy::CustomFlags) || a->lpstrCustomFilter))
-    Wh_Log(L"ANSI dialog application features ignored (risky option)");
+  if (ignoreFeatures && a->lpstrCustomFilter)
+    Wh_Log(L"ANSI dialog custom filter ignored (risky option)");
   size_t len = strnlen(a->lpstrFile, a->nMaxFile);
   if (len >= a->nMaxFile) {
     overrideError = false;
