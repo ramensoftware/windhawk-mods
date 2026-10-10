@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              drag-to-delete
 // @name            Drag to Delete
-// @description     Modern drop file to recycle bin.
+// @description     Drag files onto a floating target to move them to the Recycle Bin.
 // @version         1.0.0
 // @author          iMAboud
 // @github          https://github.com/iMAboud
@@ -11,68 +11,108 @@
 
 // ==WindhawkModReadme==
 /*
-# Drag to Recycle Bin (Modern Glass Edition)
+# Drag to Delete
 
-Displays a floating circle at the top center of the screen when dragging files. Drag and drop any file or folder onto the icon to quickly move it to the Recycle Bin.
+Drag files onto a floating target to move them to the Recycle Bin.
 
 ![Demonstration](https://i.imgur.com/bKMRf5A.gif)
 
 */
 // ==/WindhawkModReadme==
 
-#include <windows.h>
 #include <shlobj.h>
 #include <gdiplus.h>
 #include <vector>
-#include <windhawk_api.h>
+#include <windhawk_utils.h>
 
 using namespace Gdiplus;
 
-// --- Dimensions & Layout ---
-static const int WND_WIDTH  = 200;
-static const int WND_HEIGHT = 160;
-static const int WND_TOP_Y  = 8;
-static const float CENTER_X = 100.0f;
-static const float CENTER_Y = 50.0f;
-static const float BASE_RADIUS = 34.0f;
+// --- Base Design Dimensions (at 96 DPI / 100%) ---
+static const int BASE_WND_WIDTH    = 200;
+static const int BASE_WND_HEIGHT   = 160;
+static const int BASE_TOP_Y        = 8;
+static const float BASE_CENTER_X   = 100.0f;
+static const float BASE_CENTER_Y   = 50.0f;
+static const float BASE_RADIUS     = 34.0f;
+static const float BASE_HIT_MARGIN = 16.0f;
+
+constexpr WCHAR kClassName[] = L"WindhawkDragToDeleteOverlay";
 
 // --- State Variables ---
 enum class AnimState { HIDDEN, VISIBLE, DROPPED };
 
 static HWND g_hOverlayWnd = nullptr;
 static HANDLE g_hUIThread = nullptr;
+static DWORD g_dwUIThreadId = 0;
+static HANDLE g_readyEvent = nullptr;
 static LONG g_activeDrags = 0;
 static ULONG_PTR g_gdiplusToken = 0;
 
+static RECT g_targetWorkArea = {};
 static AnimState g_animState = AnimState::HIDDEN;
 static float g_currentScale = 0.0f;
 static float g_targetScale = 0.0f;
+static float g_lastRenderedScale = -1.0f;
 
 #define WM_UPDATE_DRAG_STATE (WM_USER + 101)
+#define WM_ASYNC_DELETE      (WM_USER + 102)
 #define TIMER_ANIM 1
+
+// --- Helper: Module Handle ---
+HMODULE GetCurrentModuleHandle() {
+    HMODULE hModule = nullptr;
+    GetModuleHandleExW(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        (LPCWSTR)GetCurrentModuleHandle,
+        &hModule
+    );
+    return hModule;
+}
+
+// --- Helper: DPI Scaling ---
+static UINT GetWindowDpi(HWND hWnd) {
+    static auto pfnGetDpiForWindow = (UINT(WINAPI*)(HWND))GetProcAddress(
+        GetModuleHandleW(L"user32.dll"), "GetDpiForWindow");
+    if (pfnGetDpiForWindow && hWnd) {
+        UINT dpi = pfnGetDpiForWindow(hWnd);
+        if (dpi > 0) return dpi;
+    }
+    static auto pfnGetDpiForSystem = (UINT(WINAPI*)())GetProcAddress(
+        GetModuleHandleW(L"user32.dll"), "GetDpiForSystem");
+    if (pfnGetDpiForSystem) {
+        UINT dpi = pfnGetDpiForSystem();
+        if (dpi > 0) return dpi;
+    }
+    return 96;
+}
+
+static float GetDpiScale(HWND hWnd) {
+    return (float)GetWindowDpi(hWnd) / 96.0f;
+}
 
 // Forward Declarations
 void RenderFrame(HWND hWnd);
-void MoveFilesToRecycleBin(IDataObject* pDataObject);
+void MoveFilesToRecycleBin(const std::vector<wchar_t>& buffer);
 
 // --- Drawing Helper: Modern Vector Trash Can ---
 void DrawModernTrashIcon(Graphics& g, float cx, float cy, float scale, Color color) {
     SolidBrush brush(color);
     float s = scale;
 
-    // 1. Handle (top rounded pill)
+    // 1. Handle
     Pen handlePen(color, 2.5f * s);
     handlePen.SetStartCap(LineCapRound);
     handlePen.SetEndCap(LineCapRound);
     g.DrawLine(&handlePen, cx - 4.5f * s, cy - 16.5f * s, cx + 4.5f * s, cy - 16.5f * s);
 
-    // 2. Lid (horizontal rounded bar)
+    // 2. Lid
     Pen lidPen(color, 3.5f * s);
     lidPen.SetStartCap(LineCapRound);
     lidPen.SetEndCap(LineCapRound);
     g.DrawLine(&lidPen, cx - 14.0f * s, cy - 12.0f * s, cx + 14.0f * s, cy - 12.0f * s);
 
-    // 3. Body (tapered bucket with rounded bottom corners)
+    // 3. Body
     GraphicsPath bodyPath;
     float topW = 12.0f * s;
     float botW = 9.5f * s;
@@ -102,13 +142,21 @@ void DrawModernTrashIcon(Graphics& g, float cx, float cy, float scale, Color col
 void RenderFrame(HWND hWnd) {
     if (g_animState == AnimState::HIDDEN || g_currentScale < 0.05f) return;
 
+    float dpiScale = GetDpiScale(hWnd);
+    int wndWidth = (int)(BASE_WND_WIDTH * dpiScale);
+    int wndHeight = (int)(BASE_WND_HEIGHT * dpiScale);
+    int topY = (int)(BASE_TOP_Y * dpiScale);
+    float cx = BASE_CENTER_X * dpiScale;
+    float cy = BASE_CENTER_Y * dpiScale;
+    float baseRadius = BASE_RADIUS * dpiScale;
+
     HDC hdcScreen = GetDC(nullptr);
     HDC hdcMem = CreateCompatibleDC(hdcScreen);
 
     BITMAPINFO bmi = {};
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = WND_WIDTH;
-    bmi.bmiHeader.biHeight = -WND_HEIGHT; // Top-down DIB
+    bmi.bmiHeader.biWidth = wndWidth;
+    bmi.bmiHeader.biHeight = -wndHeight;
     bmi.bmiHeader.biPlanes = 1;
     bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
@@ -118,17 +166,15 @@ void RenderFrame(HWND hWnd) {
     HGDIOBJ hOldBitmap = SelectObject(hdcMem, hBitmap);
 
     {
-        Bitmap bmp(WND_WIDTH, WND_HEIGHT, WND_WIDTH * 4, PixelFormat32bppPARGB, (BYTE*)pBits);
+        Bitmap bmp(wndWidth, wndHeight, wndWidth * 4, PixelFormat32bppPARGB, (BYTE*)pBits);
         Graphics g(&bmp);
         g.SetSmoothingMode(SmoothingModeAntiAlias);
 
-        float r = BASE_RADIUS * g_currentScale;
-        float cx = CENTER_X;
-        float cy = CENTER_Y;
+        float r = baseRadius * g_currentScale;
 
         // Ambient soft shadow
         SolidBrush shadowBrush(Color(25, 0, 0, 0));
-        g.FillEllipse(&shadowBrush, cx - r - 4.0f, cy - r - 1.0f, (r + 4.0f) * 2, (r + 4.0f) * 2 + 5.0f);
+        g.FillEllipse(&shadowBrush, cx - r - 4.0f * dpiScale, cy - r - 1.0f * dpiScale, (r + 4.0f * dpiScale) * 2, (r + 4.0f * dpiScale) * 2 + 5.0f * dpiScale);
 
         // Frosted glass circle body
         RectF glassRect(cx - r, cy - r, r * 2, r * 2);
@@ -140,18 +186,23 @@ void RenderFrame(HWND hWnd) {
         );
         g.FillEllipse(&glassBrush, glassRect);
 
-        // Chamfer / subtle rim glaze
-        Pen innerEdgePen(Color(35, 255, 255, 255), 1.0f);
+        // Inner rim glaze
+        Pen innerEdgePen(Color(35, 255, 255, 255), 1.0f * dpiScale);
         g.DrawEllipse(&innerEdgePen, cx - r + 0.5f, cy - r + 0.5f, (r - 0.5f) * 2, (r - 0.5f) * 2);
 
         // Vector trash icon
-        DrawModernTrashIcon(g, cx, cy, g_currentScale, Color(245, 248, 250));
+        DrawModernTrashIcon(g, cx, cy, g_currentScale * dpiScale, Color(245, 248, 250));
     }
 
-    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-    POINT ptDst = { (screenWidth - WND_WIDTH) / 2, WND_TOP_Y };
+    // Place at the top-center of the active monitor's work area
+    int monLeft = g_targetWorkArea.left;
+    int monWidth = g_targetWorkArea.right - g_targetWorkArea.left;
+    int wndLeft = monLeft + (monWidth - wndWidth) / 2;
+    int wndTop = g_targetWorkArea.top + topY;
+
+    POINT ptDst = { wndLeft, wndTop };
     POINT ptSrc = { 0, 0 };
-    SIZE wndSize = { WND_WIDTH, WND_HEIGHT };
+    SIZE wndSize = { wndWidth, wndHeight };
     BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
 
     UpdateLayeredWindow(hWnd, hdcScreen, &ptDst, &wndSize, hdcMem, &ptSrc, 0, &blend, ULW_ALPHA);
@@ -165,12 +216,28 @@ void RenderFrame(HWND hWnd) {
 // --- IDropTarget Implementation ---
 class CRecycleDropTarget final : public IDropTarget {
     LONG m_refCount = 1;
+    bool m_hasHDrop = false;
 
     bool IsOverTrash(POINTL pt) {
-        int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-        float dx = (float)(pt.x - (screenWidth - WND_WIDTH) / 2) - CENTER_X;
-        float dy = (float)(pt.y - WND_TOP_Y) - CENTER_Y;
-        float hitRadius = BASE_RADIUS * g_currentScale + 16.0f;
+        if (!g_hOverlayWnd) return false;
+
+        float dpiScale = GetDpiScale(g_hOverlayWnd);
+        int wndWidth = (int)(BASE_WND_WIDTH * dpiScale);
+        int topY = (int)(BASE_TOP_Y * dpiScale);
+        float centerX = BASE_CENTER_X * dpiScale;
+        float centerY = BASE_CENTER_Y * dpiScale;
+        float baseRadius = BASE_RADIUS * dpiScale;
+        float hitMargin = BASE_HIT_MARGIN * dpiScale;
+
+        int monLeft = g_targetWorkArea.left;
+        int monWidth = g_targetWorkArea.right - g_targetWorkArea.left;
+        int wndLeft = monLeft + (monWidth - wndWidth) / 2;
+        int wndTop = g_targetWorkArea.top + topY;
+
+        float dx = (float)(pt.x - wndLeft) - centerX;
+        float dy = (float)(pt.y - wndTop) - centerY;
+        float hitRadius = baseRadius * g_currentScale + hitMargin;
+
         return (dx * dx + dy * dy) <= (hitRadius * hitRadius);
     }
 
@@ -194,8 +261,11 @@ public:
 
     HRESULT STDMETHODCALLTYPE DragEnter(IDataObject* pDataObj, DWORD, POINTL pt, DWORD* pdwEffect) override {
         FORMATETC fmt = { CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
-        if (pDataObj->QueryGetData(&fmt) == S_OK && IsOverTrash(pt)) {
-            if (pdwEffect) *pdwEffect = DROPEFFECT_MOVE;
+        m_hasHDrop = (pDataObj && pDataObj->QueryGetData(&fmt) == S_OK);
+
+        bool canMove = pdwEffect && (*pdwEffect & DROPEFFECT_MOVE);
+        if (m_hasHDrop && canMove && IsOverTrash(pt)) {
+            *pdwEffect = DROPEFFECT_MOVE;
             g_targetScale = 1.2f;
         } else {
             if (pdwEffect) *pdwEffect = DROPEFFECT_NONE;
@@ -205,8 +275,9 @@ public:
     }
 
     HRESULT STDMETHODCALLTYPE DragOver(DWORD, POINTL pt, DWORD* pdwEffect) override {
-        if (IsOverTrash(pt)) {
-            if (pdwEffect) *pdwEffect = DROPEFFECT_MOVE;
+        bool canMove = pdwEffect && (*pdwEffect & DROPEFFECT_MOVE);
+        if (m_hasHDrop && canMove && IsOverTrash(pt)) {
+            *pdwEffect = DROPEFFECT_MOVE;
             g_targetScale = 1.2f;
         } else {
             if (pdwEffect) *pdwEffect = DROPEFFECT_NONE;
@@ -216,20 +287,47 @@ public:
     }
 
     HRESULT STDMETHODCALLTYPE DragLeave() override {
+        m_hasHDrop = false;
         g_targetScale = 1.0f;
         return S_OK;
     }
 
     HRESULT STDMETHODCALLTYPE Drop(IDataObject* pDataObj, DWORD, POINTL pt, DWORD* pdwEffect) override {
-        if (IsOverTrash(pt)) {
-            if (pdwEffect) *pdwEffect = DROPEFFECT_MOVE;
-            MoveFilesToRecycleBin(pDataObj);
-            g_currentScale = 1.25f; // Pop feedback on drop
-            g_targetScale = 0.0f;   // Shrink away
+        bool canMove = pdwEffect && (*pdwEffect & DROPEFFECT_MOVE);
+        if (m_hasHDrop && canMove && IsOverTrash(pt)) {
+            *pdwEffect = DROPEFFECT_MOVE;
+
+            // Extract file paths and post asynchronous delete message
+            FORMATETC fmt = { CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+            STGMEDIUM stg;
+            if (SUCCEEDED(pDataObj->GetData(&fmt, &stg))) {
+                HDROP hDrop = (HDROP)GlobalLock(stg.hGlobal);
+                if (hDrop) {
+                    UINT fileCount = DragQueryFileW(hDrop, 0xFFFFFFFF, nullptr, 0);
+                    if (fileCount > 0) {
+                        auto* pBuffer = new std::vector<wchar_t>();
+                        for (UINT i = 0; i < fileCount; i++) {
+                            UINT len = DragQueryFileW(hDrop, i, nullptr, 0);
+                            size_t prevSize = pBuffer->size();
+                            pBuffer->resize(prevSize + len + 1);
+                            DragQueryFileW(hDrop, i, pBuffer->data() + prevSize, len + 1);
+                        }
+                        pBuffer->push_back(L'\0'); // Double null terminator
+                        PostMessageW(g_hOverlayWnd, WM_ASYNC_DELETE, 0, (LPARAM)pBuffer);
+                    }
+                    GlobalUnlock(stg.hGlobal);
+                }
+                ReleaseStgMedium(&stg);
+            }
+
+            // Immediately start pop-and-fade animation without blocking the source window
+            g_currentScale = 1.25f;
+            g_targetScale = 0.0f;
             g_animState = AnimState::DROPPED;
         } else {
             if (pdwEffect) *pdwEffect = DROPEFFECT_NONE;
         }
+        m_hasHDrop = false;
         return S_OK;
     }
 };
@@ -237,37 +335,14 @@ public:
 static CRecycleDropTarget* g_pDropTarget = nullptr;
 
 // --- Recycle Bin Deletion ---
-void MoveFilesToRecycleBin(IDataObject* pDataObject) {
-    if (!pDataObject) return;
+void MoveFilesToRecycleBin(const std::vector<wchar_t>& buffer) {
+    if (buffer.empty()) return;
 
-    FORMATETC fmt = { CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
-    STGMEDIUM stg;
-    if (SUCCEEDED(pDataObject->GetData(&fmt, &stg))) {
-        HDROP hDrop = (HDROP)GlobalLock(stg.hGlobal);
-        if (hDrop) {
-            UINT fileCount = DragQueryFileW(hDrop, 0xFFFFFFFF, nullptr, 0);
-            std::vector<wchar_t> buffer;
-
-            for (UINT i = 0; i < fileCount; i++) {
-                UINT len = DragQueryFileW(hDrop, i, nullptr, 0);
-                size_t prevSize = buffer.size();
-                buffer.resize(prevSize + len + 1);
-                DragQueryFileW(hDrop, i, buffer.data() + prevSize, len + 1);
-            }
-            buffer.push_back(L'\0'); // Double null terminator
-
-            GlobalUnlock(stg.hGlobal);
-            ReleaseStgMedium(&stg);
-
-            SHFILEOPSTRUCTW fileOp = {};
-            fileOp.wFunc = FO_DELETE;
-            fileOp.pFrom = buffer.data();
-            fileOp.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT;
-            SHFileOperationW(&fileOp);
-        } else {
-            ReleaseStgMedium(&stg);
-        }
-    }
+    SHFILEOPSTRUCTW fileOp = {};
+    fileOp.wFunc = FO_DELETE;
+    fileOp.pFrom = buffer.data();
+    fileOp.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_WANTNUKEWARNING | FOF_SILENT;
+    SHFileOperationW(&fileOp);
 }
 
 // --- Window Procedure ---
@@ -275,9 +350,21 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
     switch (uMsg) {
         case WM_UPDATE_DRAG_STATE: {
             if (wParam != 0) {
+                // Center on the monitor under the cursor
+                POINT ptCursor;
+                GetCursorPos(&ptCursor);
+                HMONITOR hMon = MonitorFromPoint(ptCursor, MONITOR_DEFAULTTONEAREST);
+                MONITORINFO mi = { sizeof(mi) };
+                if (GetMonitorInfoW(hMon, &mi)) {
+                    g_targetWorkArea = mi.rcWork;
+                } else {
+                    g_targetWorkArea = { 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN) };
+                }
+
                 g_animState = AnimState::VISIBLE;
                 g_currentScale = 0.3f;
                 g_targetScale = 1.0f;
+                g_lastRenderedScale = -1.0f;
                 ShowWindow(hWnd, SW_SHOWNOACTIVATE);
                 SetTimer(hWnd, TIMER_ANIM, 16, nullptr);
             } else {
@@ -288,9 +375,23 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
             return 0;
         }
 
+        case WM_ASYNC_DELETE: {
+            auto* pBuffer = reinterpret_cast<std::vector<wchar_t>*>(lParam);
+            if (pBuffer) {
+                MoveFilesToRecycleBin(*pBuffer);
+                delete pBuffer;
+            }
+            return 0;
+        }
+
         case WM_TIMER: {
             if (wParam == TIMER_ANIM) {
-                g_currentScale += (g_targetScale - g_currentScale) * 0.25f;
+                // Snap when close enough to target scale to eliminate continuous rendering
+                if (abs((int)((g_targetScale - g_currentScale) * 1000.0f)) < 5) {
+                    g_currentScale = g_targetScale;
+                } else {
+                    g_currentScale += (g_targetScale - g_currentScale) * 0.25f;
+                }
 
                 if (g_targetScale == 0.0f && g_currentScale < 0.05f) {
                     g_animState = AnimState::HIDDEN;
@@ -299,7 +400,10 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                     return 0;
                 }
 
-                RenderFrame(hWnd);
+                if (g_currentScale != g_lastRenderedScale) {
+                    g_lastRenderedScale = g_currentScale;
+                    RenderFrame(hWnd);
+                }
             }
             return 0;
         }
@@ -307,7 +411,6 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
         case WM_DESTROY: {
             KillTimer(hWnd, TIMER_ANIM);
             RevokeDragDrop(hWnd);
-            PostQuitMessage(0);
             return 0;
         }
     }
@@ -316,44 +419,80 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
 // --- UI Thread ---
 DWORD WINAPI OverlayUIThread(LPVOID) {
-    OleInitialize(nullptr);
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    SetEvent(g_readyEvent);
 
+    OleInitialize(nullptr);
+    GdiplusStartupInput gdiplusInput;
+    GdiplusStartup(&g_gdiplusToken, &gdiplusInput, nullptr);
+
+    HINSTANCE hInstance = GetCurrentModuleHandle();
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(WNDCLASSEXW);
     wc.lpfnWndProc = OverlayWndProc;
-    wc.hInstance = GetModuleHandle(nullptr);
-    wc.lpszClassName = L"WindhawkDragToDeleteOverlay";
-    RegisterClassExW(&wc);
+    wc.hInstance = hInstance;
+    wc.lpszClassName = kClassName;
 
+    if (!RegisterClassExW(&wc)) {
+        Wh_Log(L"Failed to register overlay window class (error: %lu)", GetLastError());
+        GdiplusShutdown(g_gdiplusToken);
+        OleUninitialize();
+        return 0;
+    }
+
+    float dpiScale = GetDpiScale(nullptr);
+    int wndWidth = (int)(BASE_WND_WIDTH * dpiScale);
+    int wndHeight = (int)(BASE_WND_HEIGHT * dpiScale);
+    int topY = (int)(BASE_TOP_Y * dpiScale);
     int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+
     g_hOverlayWnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-        wc.lpszClassName, nullptr, WS_POPUP,
-        (screenWidth - WND_WIDTH) / 2, WND_TOP_Y,
-        WND_WIDTH, WND_HEIGHT,
-        nullptr, nullptr, wc.hInstance, nullptr
+        kClassName, nullptr, WS_POPUP,
+        (screenWidth - wndWidth) / 2, topY,
+        wndWidth, wndHeight,
+        nullptr, nullptr, hInstance, nullptr
     );
 
-    g_pDropTarget = new CRecycleDropTarget();
-    RegisterDragDrop(g_hOverlayWnd, g_pDropTarget);
-
-    MSG msg;
-    while (GetMessage(&msg, nullptr, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
+    if (!g_hOverlayWnd) {
+        Wh_Log(L"Failed to create overlay window (error: %lu)", GetLastError());
+        UnregisterClassW(kClassName, hInstance);
+        GdiplusShutdown(g_gdiplusToken);
+        OleUninitialize();
+        return 0;
     }
+
+    g_pDropTarget = new CRecycleDropTarget();
+    HRESULT hrDrop = RegisterDragDrop(g_hOverlayWnd, g_pDropTarget);
+    if (FAILED(hrDrop)) {
+        Wh_Log(L"RegisterDragDrop failed with HRESULT 0x%08X", hrDrop);
+    }
+
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    if (g_hOverlayWnd) {
+        DestroyWindow(g_hOverlayWnd); // WM_DESTROY revokes the drop target
+        g_hOverlayWnd = nullptr;
+    }
+
+    UnregisterClassW(kClassName, hInstance);
 
     if (g_pDropTarget) {
         g_pDropTarget->Release();
         g_pDropTarget = nullptr;
     }
 
+    GdiplusShutdown(g_gdiplusToken);
     OleUninitialize();
     return 0;
 }
 
 // --- Hooked DoDragDrop ---
-using DoDragDrop_t = HRESULT (WINAPI *)(IDataObject*, IDropSource*, DWORD, LPDWORD);
+using DoDragDrop_t = decltype(&DoDragDrop);
 static DoDragDrop_t pOriginalDoDragDrop = nullptr;
 
 HRESULT WINAPI Hooked_DoDragDrop(IDataObject* pDataObj, IDropSource* pDropSource, DWORD dwOKEffects, LPDWORD pdwEffect) {
@@ -364,45 +503,55 @@ HRESULT WINAPI Hooked_DoDragDrop(IDataObject* pDataObj, IDropSource* pDropSource
     }
 
     if (bIsFileDrag && InterlockedIncrement(&g_activeDrags) == 1 && g_hOverlayWnd) {
-        PostMessage(g_hOverlayWnd, WM_UPDATE_DRAG_STATE, 1, 0);
+        PostMessageW(g_hOverlayWnd, WM_UPDATE_DRAG_STATE, 1, 0);
     }
 
     HRESULT hr = pOriginalDoDragDrop(pDataObj, pDropSource, dwOKEffects, pdwEffect);
 
     if (bIsFileDrag && InterlockedDecrement(&g_activeDrags) == 0 && g_hOverlayWnd) {
-        PostMessage(g_hOverlayWnd, WM_UPDATE_DRAG_STATE, 0, 0);
+        PostMessageW(g_hOverlayWnd, WM_UPDATE_DRAG_STATE, 0, 0);
     }
 
     return hr;
 }
 
 // --- Mod Lifecycle ---
+void Wh_ModUninit();
+
 BOOL Wh_ModInit() {
-    GdiplusStartupInput gdiplusInput;
-    GdiplusStartup(&g_gdiplusToken, &gdiplusInput, nullptr);
+    g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_readyEvent) {
+        Wh_Log(L"Failed to create ready event (error: %lu)", GetLastError());
+        return FALSE;
+    }
 
-    g_hUIThread = CreateThread(nullptr, 0, OverlayUIThread, nullptr, 0, nullptr);
+    g_hUIThread = CreateThread(nullptr, 0, OverlayUIThread, nullptr, 0, &g_dwUIThreadId);
+    if (!g_hUIThread) {
+        Wh_Log(L"Failed to create overlay UI thread (error: %lu)", GetLastError());
+        CloseHandle(g_readyEvent);
+        g_readyEvent = nullptr;
+        return FALSE;
+    }
 
-    HMODULE hOle32 = GetModuleHandleW(L"ole32.dll");
-    if (!hOle32) hOle32 = LoadLibraryW(L"ole32.dll");
-
-    void* pDoDragDrop = (void*)GetProcAddress(hOle32, "DoDragDrop");
-    if (pDoDragDrop) {
-        Wh_SetFunctionHook(pDoDragDrop, (void*)Hooked_DoDragDrop, (void**)&pOriginalDoDragDrop);
+    if (!WindhawkUtils::SetFunctionHook(DoDragDrop, Hooked_DoDragDrop, &pOriginalDoDragDrop)) {
+        Wh_Log(L"Failed to hook DoDragDrop");
+        Wh_ModUninit();
+        return FALSE;
     }
 
     return TRUE;
 }
 
 void Wh_ModUninit() {
-    if (g_hOverlayWnd) {
-        PostMessage(g_hOverlayWnd, WM_CLOSE, 0, 0);
-    }
     if (g_hUIThread) {
-        WaitForSingleObject(g_hUIThread, 2000);
+        WaitForSingleObject(g_readyEvent, INFINITE);
+        PostThreadMessageW(g_dwUIThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_hUIThread, INFINITE);
         CloseHandle(g_hUIThread);
+        g_hUIThread = nullptr;
     }
-    if (g_gdiplusToken) {
-        GdiplusShutdown(g_gdiplusToken);
+    if (g_readyEvent) {
+        CloseHandle(g_readyEvent);
+        g_readyEvent = nullptr;
     }
 }
