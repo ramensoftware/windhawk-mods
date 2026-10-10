@@ -59,7 +59,7 @@ You can assign any hotkey directly to built-in commands by setting the path to o
 | :--- | :--- | :--- |
 | `internal:copyPath` | `Ctrl + Shift + C` *(Disabled)* | Copies full path(s) to clipboard. |
 | `internal:copyName` | `Alt + C` | Copies filename(s) including extensions. |
-| `internal:copyUnixPath` | — | Copies full path(s) with forward slashes (`/`) for WSL, Git, or Python. |
+| `internal:copyUnixPath` | — | Copies full path(s) with forward slashes (/) for Git Bash, Python, or scripts. |
 | `internal:copyFolderPath` | — | Copies the active directory path directly, ignoring file selections. |
 
 #### Navigation & Dialogs
@@ -277,15 +277,6 @@ While related mods exist in the Windhawk repository, **Explorer Custom Shortcuts
     - shift: false
     - alt: true
     - path: "internal:openWith"
-    - args: ""
-    - mode: "batch"
-  - - name: "Create New Smart File"
-    - enabled: false
-    - key: "N"
-    - ctrl: true
-    - shift: true
-    - alt: false
-    - path: "internal:newSmartFile"
     - args: ""
     - mode: "batch"
   $name: "Custom Shortcuts"
