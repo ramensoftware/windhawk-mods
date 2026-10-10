@@ -9,7 +9,7 @@
 // @homepage            https://github.com/Salyts/Windows-11-Control-Center-Buttons
 // @license             MIT
 // @include             ShellHost.exe
-// @include             explorer.exe
+// @include             windhawk.exe
 // @architecture        x86-64
 // @compilerOptions     -lole32 -loleaut32 -lruntimeobject -lshlwapi -lshell32 -luuid -luser32 -lwtsapi32 -lpowrprof -lgdi32 -lgdiplus -lshcore
 // ==/WindhawkMod==
@@ -20,11 +20,9 @@
 
 • **[Report a bug or suggest a feature](https://github.com/Salyts/Windows-11-Control-Center-Buttons/issues)** · **[Discussion on Discord](https://discord.com/channels/923944342991818753/1558419938820227123)** · **[Support](https://ko-fi.com/salyts)**
 
-Removes the stock **Settings (gear)** button from the bottom bar of the Windows 11
-Control Center panel and puts your own buttons there instead.
+Removes the stock **Settings (gear)** button from the bottom bar of the Windows 11 Control Center panel and puts your own buttons there instead.
 
-`explorer.exe` is included only to launch actions: the panel host sends the click to a
-tiny hidden window inside Explorer, which runs the command.
+Actions are run by a dedicated Windhawk tool-mod process (`windhawk.exe -tool-mod`), the panel host sends the click to a tiny hidden window inside that process, which runs the command.
 
 | Before | After |
 |--------|---------|
@@ -48,7 +46,7 @@ tiny hidden window inside Explorer, which runs the command.
 | `" "` | `"C:\Program Files\Windhawk\windhawk.exe"` | Opens a file or folder by absolute path. |
 | `~` | `~Downloads` or `~windhawk.exe` | Opens a folder or file by name. |
 | `cmd:` | `cmd:control` | Runs a command through `cmd.exe`. |
-| `shell:` | `shell:shutdown /r /f /t 0` | Runs through `powershell.exe`. |
+| `ps:` or `powershell:` | `ps:shutdown /r /f /t 0` | Runs through `powershell.exe` |
 | `press:` | `press:Win+E` or `press:0x5B;0x45` | Keyboard key press using [Win32 key code](https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). |
 | `web:` | `web:https://windhawk.net/` | Opens a URL in the default browser. |
 | `ms-settings:` | `ms-settings:bluetooth` | Opens a Windows Settings page. |
@@ -56,8 +54,8 @@ tiny hidden window inside Explorer, which runs the command.
 ### Modifier signs (prepend to any action)
 | Sign | Example | Description |
 |------|---------|-------------|
-| `-` | `-"C:\Program Files\app.exe"` or `-shell:shutdown /r /f /t 0` | Runs as administrator. |
-| `*` | `*cmd:tasklist` or `*shell:Get-Process` | Execution with a terminal window. (only for `cmd:` and `shell:` prefixes). |
+| `-` | `-"C:\Program Files\app.exe"` or `-ps:shutdown /r /f /t 0` | Runs as administrator. |
+| `*` | `*cmd:tasklist` or `*ps:Get-Process` | Execution with a terminal window. (only for `cmd:` and `ps:` prefixes). |
 
 Signs can be combined: `-*cmd:tasklist` runs cmd in a visible window as admin.
 
@@ -296,7 +294,10 @@ static Settings                g_settings;
 static std::vector<ActionItem> g_buttons;
 static std::vector<std::vector<std::wstring>> g_actionRegistry;
 
-static bool g_isExplorer = false;
+enum class Role { None, Injector, Launcher, Tool };
+static Role g_role = Role::None;
+
+static HANDLE g_toolModProcessMutex = nullptr;
 
 static HWND   g_proxyWindow   = NULL;
 static HANDLE g_proxyThread   = NULL;
@@ -417,13 +418,26 @@ static std::wstring MakeFileUri(const std::wstring& path) {
     std::wstring result;
     result.reserve(path.size() + 8);
     result = L"file:///";
-    for (wchar_t c : path) {
-        if (c == L'\\') {
+    static const char kHex[] = "0123456789ABCDEF";
+    std::string utf8;
+    int need = WideCharToMultiByte(CP_UTF8, 0, path.c_str(), static_cast<int>(path.size()),
+                                   nullptr, 0, nullptr, nullptr);
+    if (need > 0) {
+        utf8.resize(static_cast<size_t>(need));
+        WideCharToMultiByte(CP_UTF8, 0, path.c_str(), static_cast<int>(path.size()),
+                            utf8.data(), need, nullptr, nullptr);
+    }
+    for (unsigned char c : utf8) {
+        if (c == '\\' || c == '/') {
             result += L'/';
-        } else if (c == L' ') {
-            result += L"%20";
+        } else if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+                   (c >= '0' && c <= '9') || c == '-' || c == '.' ||
+                   c == '_' || c == '~' || c == ':') {
+            result += static_cast<wchar_t>(c);
         } else {
-            result += c;
+            result += L'%';
+            result += static_cast<wchar_t>(kHex[c >> 4]);
+            result += static_cast<wchar_t>(kHex[c & 0xF]);
         }
     }
     return result;
@@ -490,6 +504,14 @@ static void EnsureGdiplus() {
     if (g_gdiplusToken == 0) {
         Gdiplus::GdiplusStartupInput input;
         Gdiplus::GdiplusStartup(&g_gdiplusToken, &input, nullptr);
+    }
+}
+
+static void ShutdownGdiplus() {
+    std::lock_guard<std::mutex> lk(g_gdipMutex);
+    if (g_gdiplusToken != 0) {
+        Gdiplus::GdiplusShutdown(g_gdiplusToken);
+        g_gdiplusToken = 0;
     }
 }
 
@@ -1102,13 +1124,17 @@ static void ExecuteSingleCommand(const std::wstring& cmd) {
         return;
     }
 
-    if (StartsWithCI(action, L"shell:")) {
-        std::wstring ps = Trim(action.substr(6));
-        std::wstring args = L"-NoProfile -ExecutionPolicy Bypass -Command " + ps;
-        if (showWindow) args = L"-NoExit " + args;
-        ShellExecuteW(nullptr, verb, L"powershell.exe",
-                      args.c_str(), nullptr, showWindow ? SW_NORMAL : SW_HIDE);
-        return;
+    {
+        size_t psLen = StartsWithCI(action, L"powershell:") ? 11
+                     : StartsWithCI(action, L"ps:")         ? 3 : 0;
+        if (psLen) {
+            std::wstring ps = Trim(action.substr(psLen));
+            std::wstring args = L"-NoProfile -ExecutionPolicy Bypass -Command " + ps;
+            if (showWindow) args = L"-NoExit " + args;
+            ShellExecuteW(nullptr, verb, L"powershell.exe",
+                          args.c_str(), nullptr, showWindow ? SW_NORMAL : SW_HIDE);
+            return;
+        }
     }
 
     if (StartsWithCI(action, L"ms-settings:")) {
@@ -1503,10 +1529,10 @@ static void BuildButtons() {
     g_actionRegistry = std::move(reg);
 }
 
-static bool IsExplorerProcess() {
+static bool IsShellHostProcess() {
     WCHAR path[MAX_PATH]{};
     GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
-    return ToLower(path).find(L"explorer.exe") != std::wstring::npos;
+    return ToLower(path).find(L"shellhost.exe") != std::wstring::npos;
 }
 
 static std::wstring ToW(winrt::hstring const& h) { return std::wstring(h.c_str(), h.size()); }
@@ -1657,14 +1683,15 @@ static wux::FrameworkElement FindGearButton(wux::FrameworkElement const& footer)
     return best;
 }
 
-[[clang::no_destroy]] static std::vector<std::shared_ptr<void>> g_revokers;
-[[clang::no_destroy]] static std::vector<std::shared_ptr<void>> g_menuRevokers;
+[[clang::no_destroy]] static std::optional<std::vector<std::shared_ptr<void>>> g_revokers{std::in_place};
+[[clang::no_destroy]] static std::optional<std::vector<std::shared_ptr<void>>> g_menuRevokers{std::in_place};
 [[clang::no_destroy]] static wux::DispatcherTimer::Tick_revoker g_earlyTick;
 [[clang::no_destroy]] static wux::DispatcherTimer::Tick_revoker g_retryTick;
 
 template <class R>
-static void Keep(std::vector<std::shared_ptr<void>>& bag, R&& r) {
-    bag.push_back(std::make_shared<std::decay_t<R>>(std::forward<R>(r)));
+static void Keep(std::optional<std::vector<std::shared_ptr<void>>>& bag, R&& r) {
+    if (!bag) return;
+    bag->push_back(std::make_shared<std::decay_t<R>>(std::forward<R>(r)));
 }
 
 template <class TParent>
@@ -1698,7 +1725,7 @@ static void ShowMenu(winrt::weak_ref<wuxc::Button> const& weakBtn,
                      const std::vector<ActionItem>& items, bool invertIcons) {
     auto btn = weakBtn.get();
     if (!btn || items.empty()) return;
-    g_menuRevokers.clear();
+    if (g_menuRevokers) g_menuRevokers->clear();
     wuxc::MenuFlyout flyout;
     FillMenu(flyout, items, invertIcons);
     flyout.ShowAt(btn);
@@ -1986,8 +2013,8 @@ static void AttachInjector(wux::FrameworkElement const& view) {
 static void RemoveInjections() {
     StopRetry();
     g_earlyTick.revoke();
-    g_revokers.clear();
-    g_menuRevokers.clear();
+    g_revokers.reset();
+    g_menuRevokers.reset();
     if (g_earlyInject) {
         g_earlyInject.Stop();
         g_earlyInject = nullptr;
@@ -2189,28 +2216,163 @@ static void StartControlCenterWatch() {
     WindhawkUtils::SetFunctionHook(target, LoadLibraryExW_Hook, &LoadLibraryExW_Original);
 }
 
-BOOL Wh_ModInit() {
-    Wh_Log(L"Wh_ModInit");
-    g_isExplorer = IsExplorerProcess();
-
+static bool ToolInit() {
     LoadSettings();
     BuildButtons();
-
     StartWorker();
+    StartProxyThread();
+    return g_proxyWindow != NULL;
+}
 
-    if (g_isExplorer) {
-        StartProxyThread();
+static void ToolUninit() {
+    g_unloading = true;
+    StopProxyThread();
+    StopWorker();
+    ShutdownGdiplus();
+}
+
+static void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    Wh_Log(L"Wh_ModInit");
+
+    if (IsShellHostProcess()) {
+        g_role = Role::Injector;
+        LoadSettings();
+        BuildButtons();
+        StartWorker();
+        StartControlCenterWatch();
         return TRUE;
     }
 
-    StartControlCenterWatch();
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0)
+        return FALSE;
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) isCurrentToolModProcess = true;
+            break;
+        }
+    }
+    LocalFree(argv);
+
+    if (isExcluded) return FALSE;
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex = CreateMutexW(nullptr, FALSE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        DWORD w = WaitForSingleObject(g_toolModProcessMutex, 5000);
+        if (w != WAIT_OBJECT_0 && w != WAIT_ABANDONED) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        g_role = Role::Tool;
+        if (!ToolInit()) {
+            ToolUninit();
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandleW(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+        void* entryPoint = (BYTE*)dosHeader + ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) return FALSE;
+
+    g_role = Role::Launcher;
     return TRUE;
 }
 
+static void LaunchToolProcess() {
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileNameW(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR commandLine[MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandleW(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    auto pCreateProcessInternalW = (CreateProcessInternalW_t)GetProcAddress(
+        kernelModule, "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFOW si{ .cb = sizeof(STARTUPINFOW), .dwFlags = STARTF_FORCEOFFFEEDBACK };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine, nullptr,
+                                 nullptr, FALSE, NORMAL_PRIORITY_CLASS, nullptr,
+                                 nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
 void Wh_ModAfterInit() {
-    if (g_isExplorer || g_discoveryHooked.load()) return;
-    if (HMODULE module = GetModuleHandleW(L"ControlCenter.dll"))
-        InstallDiscoveryHooks(module, /*applyNow=*/true);
+    switch (g_role) {
+        case Role::Injector:
+            if (!g_discoveryHooked.load())
+                if (HMODULE module = GetModuleHandleW(L"ControlCenter.dll"))
+                    InstallDiscoveryHooks(module, /*applyNow=*/true);
+            break;
+        case Role::Launcher:
+            LaunchToolProcess();
+            break;
+        default:
+            break;
+    }
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
@@ -2220,11 +2382,20 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
 
 void Wh_ModUninit() {
     Wh_Log(L"Wh_ModUninit");
-    g_unloading = true;
 
-    if (g_isExplorer) {
-        StopProxyThread();
-    } else if (g_xamlThreadId.load() != 0) {
+    switch (g_role) {
+        case Role::Tool:
+            ToolUninit();
+            ExitProcess(0);
+            return;
+        case Role::Launcher:
+            return;
+        default:
+            break;
+    }
+
+    g_unloading = true;
+    if (g_xamlThreadId.load() != 0) {
         bool restored = false;
         for (int attempt = 0; attempt < 25 && !restored; ++attempt) {
             restored = RunOnXamlThread(&RemoveInjections);
@@ -2236,4 +2407,5 @@ void Wh_ModUninit() {
     }
 
     StopWorker();
+    ShutdownGdiplus();
 }
