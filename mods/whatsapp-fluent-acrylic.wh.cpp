@@ -2,7 +2,7 @@
 // @id              whatsapp-fluent-acrylic
 // @name            WhatsApp Fluent Acrylic
 // @description     Transparent Fluent acrylic/mica background for the WhatsApp desktop app
-// @version         1.0.0
+// @version         1.1.0
 // @author          Matrakalero
 // @github          https://github.com/Matrakalero
 // @include         WhatsApp.Root.exe
