@@ -7,7 +7,6 @@
 // @github          https://github.com/Mirochill
 // @homepage        https://github.com/Mirochill/MiniSnip
 // @include         windhawk.exe
-// @architecture    x86-64
 // @compilerOptions -ldwmapi -lgdi32 -lmsimg32 -lshell32
 // @license         MIT
 // ==/WindhawkMod==
