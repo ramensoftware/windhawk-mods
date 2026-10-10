@@ -2,12 +2,54 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-10T08:00:31.000Z</updated>
+    <updated>2026-10-10T11:03:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove Legacy Clock Square Cutout 3.1.0]]></title>
+        <id>https://windhawk.net/mods/remove-clock-cutout-background#4e183d31eb36e9e1eb2dc144291f6e94d5981daa</id>
+        <link href="https://windhawk.net/mods/remove-clock-cutout-background"/>
+        <updated>2026-10-10T11:03:39.000Z</updated>
+        <content type="html"><![CDATA[<p>Removes the light square background behind the analog clock in StartAllBack
+and classic Windows Date/Time flyouts (timedate.cpl) using OS-level 
+double buffering (WS<em>EX</em>COMPOSITED) and GDI+ sub-pixel anti-aliased corner 
+masking with smart dark-mode dialog sampling.</p>
+<h3 id="screenshots">Screenshots</h3>
+<h4 id="startallbackclockflyout">StartAllBack Clock Flyout</h4>
+<p><strong>Before:</strong>
+<img src="https://i.imgur.com/f4Ku2hE.png" alt="Before Flyout" /></p>
+<p><strong>After:</strong>
+<img src="https://i.imgur.com/IYWKYWx.png" alt="After Flyout" /></p>
+<h4 id="datetimedialogtimedatecpl">Date &amp; Time Dialog (timedate.cpl)</h4>
+<p><strong>Before:</strong>
+<img src="https://i.imgur.com/xzkz1NF.png" alt="Before Date and Time" /></p>
+<p><strong>After:</strong>
+<img src="https://i.imgur.com/ug6TxAf.png" alt="After Date and Time" /></p>]]></content>
+        <author>
+            <name>awnaise</name>
+            <uri>https://github.com/awnaise</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Better Volume Mixer 1.5.0]]></title>
+        <id>https://windhawk.net/mods/better-volume-mixer#51d6eb53674112a53b9d2d880d983944a39b140b</id>
+        <link href="https://windhawk.net/mods/better-volume-mixer"/>
+        <updated>2026-10-10T11:03:34.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Apps playing on several devices now show as one row (fixes duplicates).</li>
+<li>Added a setting to swap between Windows 10 and 11 visual styles.</li>
+<li>Added a frosted glass background effect and a window border setting.</li>
+<li>Compact and normal modes use less space.</li>
+<li>Improved animations</li>
+</ul>]]></content>
+        <author>
+            <name>0Allu</name>
+            <uri>https://github.com/0Allu</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[MultiWM 1.13.58]]></title>
         <id>https://windhawk.net/mods/multiwm#9195db122f6e8340b19d69aa1b776a49930d8434</id>
@@ -1655,50 +1697,6 @@ new File Explorer window (or restart File Explorer once).</p>]]></content>
         <author>
             <name>HaVeN80</name>
             <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Tray Utility Customizer 2.1]]></title>
-        <id>https://windhawk.net/mods/tray-utility-customizer#a2316b7fb9a4d8fe2d9c952113454b20b05079b9</id>
-        <link href="https://windhawk.net/mods/tray-utility-customizer"/>
-        <updated>2026-10-08T22:01:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for Windows 11 26200.9457 / KB5129195, where <code>SystemTrayFrameGrid</code> became a <code>StackPanel</code>; both panel shapes are classified at runtime and never cached</li>
-<li>Fixed restore-on-disable on an ordered tray panel, where host markers recorded a column that no longer meant anything; hosts now return to their marker's live child index</li>
-<li>Moved the whole settings surface to grouped keys; 1.x settings do not migrate</li>
-<li>Replaced the layout expression, primary axis, group alignment and twelve per-icon nudge settings with one <code>Arrangement</code> field; <code>|</code> is always horizontal and <code>,</code> always vertical</li>
-<li>Added <code>auto</code>, which fits the enabled utilities to the taskbar height and logs its generated expression</li>
-<li>Added per-utility <code>Content</code> switches and a <code>Layout.NewItems</code> policy</li>
-<li>Added <code>Adjust.PadX</code> / <code>PadY</code> / <code>OffsetX</code> / <code>OffsetY</code></li>
-<li>Computed row capacity in DIPs from the real DPI, fixing the automatic shape at 125% and 150% scaling</li>
-<li>Added support for Windows 11's native left and right taskbars: the arrangement follows the edge Windows reports, re-arranges on a move between edges, and keeps Windows' own side-taskbar cells intact; a taskbar another mod rotates is still left untouched</li>
-<li>A written arrangement that names no utility Windows is showing now waits for one to appear</li>
-<li>With Emoji hidden, the lone-icon Emoji fallback no longer claims the touch keyboard's host</li>
-<li>The microphone, camera and location in-use indicators no longer trigger a re-layout of a tray host the mod is not arranging</li>
-<li>A re-arrangement that finds the tray mid-change, such as during a move between edges, now retries instead of leaving the native layout in place</li>
-<li>Restored borrowed elements to their exact previous local value, clearing the property when it had none</li>
-</ul>]]></content>
-        <author>
-            <name>sb4ssman</name>
-            <uri>https://github.com/sb4ssman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Folder Menus 2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-folder-menus#349f08bd4bd7132006ca8b2a9ce5c928b6d4f91c</id>
-        <link href="https://windhawk.net/mods/taskbar-folder-menus"/>
-        <updated>2026-10-08T22:01:08.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added native side-taskbar layouts with literal manual arrangements</li>
-<li>Made taskbar construction wake the icon worker without joining it</li>
-<li>Added cancellation checks between targets and cached every failed icon target until settings reload</li>
-<li>Published settings on the taskbar thread and filtered length-only edge events</li>
-<li>Gave the icon worker its own snapshot of the folder list and button size, so a settings save cannot race its Shell icon extraction</li>
-<li>Cleaned up unused helpers, initialization handles and comments</li>
-</ul>]]></content>
-        <author>
-            <name>sb4ssman</name>
-            <uri>https://github.com/sb4ssman</uri>
         </author>
     </entry>
 </feed>

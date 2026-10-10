@@ -1,3 +1,11 @@
+## 1.5.0 ([Oct 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/51d6eb53674112a53b9d2d880d983944a39b140b/mods/better-volume-mixer.wh.cpp))
+
+* Apps playing on several devices now show as one row (fixes duplicates).
+* Added a setting to swap between Windows 10 and 11 visual styles.
+* Added a frosted glass background effect and a window border setting.
+* Compact and normal modes use less space.
+* Improved animations
+
 ## 1.4.5 ([Sep 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/14421073fc04b8f47e5c9e58c2c5466281146cde/mods/better-volume-mixer.wh.cpp))
 
 * Added master mute indicator to the mixer and tray icon

@@ -411,7 +411,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 0, 0, 3, 55],
         "ratingUsers": 58,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 126.2,
         "updated": 1791536618000,
         "users": 1262
@@ -944,7 +944,7 @@
         "ratingUsers": 43,
         "reviews": 0,
         "trendingSorting": 17.416074554707535,
-        "updated": 1790586314000,
+        "updated": 1791630214000,
         "users": 1778
       },
       "metadata": {
@@ -959,7 +959,7 @@
         ],
         "license": "MIT",
         "name": "Better Volume Mixer",
-        "version": "1.4.5"
+        "version": "1.5.0"
       }
     },
     "block-smb-quick-access": {
@@ -8494,7 +8494,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 0, 0, 1, 6],
         "ratingUsers": 7,
-        "reviews": 0,
+        "reviews": 2,
         "trendingSorting": 0,
         "updated": 1791540273000,
         "users": 89
@@ -11359,6 +11359,31 @@
         ],
         "name": "Remember the folder windows' positions",
         "version": "1.2"
+      }
+    },
+    "remove-clock-cutout-background": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791630219000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791630219000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "awnaise",
+        "compilerOptions": "-lgdiplus -lcomctl32 -lgdi32 -luser32",
+        "description": "Removes the light square background behind the analog clock in StartAllBack and Date/Time dialogs with flicker-free OS composition.",
+        "github": "https://github.com/awnaise",
+        "include": [
+          "explorer.exe",
+          "rundll32.exe"
+        ],
+        "name": "Remove Legacy Clock Square Cutout",
+        "version": "3.1.0"
       }
     },
     "remove-command-bar": {

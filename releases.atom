@@ -2,12 +2,37 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-09T21:03:53.000Z</updated>
+    <updated>2026-10-10T11:03:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove Legacy Clock Square Cutout 3.1.0]]></title>
+        <id>https://windhawk.net/mods/remove-clock-cutout-background#4e183d31eb36e9e1eb2dc144291f6e94d5981daa</id>
+        <link href="https://windhawk.net/mods/remove-clock-cutout-background"/>
+        <updated>2026-10-10T11:03:39.000Z</updated>
+        <content type="html"><![CDATA[<p>Removes the light square background behind the analog clock in StartAllBack
+and classic Windows Date/Time flyouts (timedate.cpl) using OS-level 
+double buffering (WS<em>EX</em>COMPOSITED) and GDI+ sub-pixel anti-aliased corner 
+masking with smart dark-mode dialog sampling.</p>
+<h3 id="screenshots">Screenshots</h3>
+<h4 id="startallbackclockflyout">StartAllBack Clock Flyout</h4>
+<p><strong>Before:</strong>
+<img src="https://i.imgur.com/f4Ku2hE.png" alt="Before Flyout" /></p>
+<p><strong>After:</strong>
+<img src="https://i.imgur.com/IYWKYWx.png" alt="After Flyout" /></p>
+<h4 id="datetimedialogtimedatecpl">Date &amp; Time Dialog (timedate.cpl)</h4>
+<p><strong>Before:</strong>
+<img src="https://i.imgur.com/xzkz1NF.png" alt="Before Date and Time" /></p>
+<p><strong>After:</strong>
+<img src="https://i.imgur.com/ug6TxAf.png" alt="After Date and Time" /></p>]]></content>
+        <author>
+            <name>awnaise</name>
+            <uri>https://github.com/awnaise</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix Explorer Row Right-Click 1.0.0]]></title>
         <id>https://windhawk.net/mods/fix-explorer-row-right-click#e2969bc12095d903c8e3fbf6da8c860e3b79d570</id>
@@ -2146,34 +2171,6 @@ error messages.</p>]]></content>
         <author>
             <name>Nerdworld</name>
             <uri>https://github.com/nerdworldDE</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Snap Flyout Instant 1.0]]></title>
-        <id>https://windhawk.net/mods/snap-flyout-instant#cdf00260c67214c639a07a99665d02ed9e7b3ae8</id>
-        <link href="https://windhawk.net/mods/snap-flyout-instant"/>
-        <updated>2026-10-07T20:00:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="snapflyoutinstant">Snap Flyout Instant</h1>
-<p>Removes the delay before the snap layouts flyout appears when you hover the
-maximize button of a window in Windows 11.</p>
-<p>By default Windows waits 600 ms before showing the flyout. This mod shortens
-that wait to a value you choose (1 ms by default).</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Delay in milliseconds</strong>: time before the flyout is shown. Lower is faster.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The mod only shortens the timer that the shell creates right after the
-flyout's invoke timer starts, and only when it is created by the WinRT
-thread pool timer. Other timers in the shell are left alone.</li>
-<li>The mod looks up an internal symbol of <code>twinui.pcshell.dll</code>. A future Windows
-update may rename it, in which case the mod will simply have no effect.</li>
-<li>Tested on Windows 11 build 26300.9457.</li>
-</ul>]]></content>
-        <author>
-            <name>pajs</name>
-            <uri>https://github.com/pajs</uri>
         </author>
     </entry>
 </feed>

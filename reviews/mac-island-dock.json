@@ -1,0 +1,23 @@
+{
+  "modId": "mac-island-dock",
+  "reviews": [
+    {
+      "authorName": "fad",
+      "content": "the mod is great but misses some tweaks:\n- brightness  control is not functionable \n- wifi name & icon should be displayed instead of ethernet\n- for all panels , add display on hover and minimize with duration on mouse unfocus\n- add expand on hover option for system tray icons, it would be much easier \n- make island elements & system tray icons draggable, so their position/order can be changed, \n- drag tray icon can be dragged outside the tray icon list and drop next island main element (eg: next to wifi/sound icon....)\n- add battery percentage\n- for style: system accent color, glassmorphism, blurry background\n- adjust icon size for sound and battery icon; they looks too smaller than the others\ni preciate your work.",
+      "id": 47,
+      "modVersion": "1.0.0",
+      "parentId": null,
+      "timestamp": 1791589213,
+      "votes": 0
+    },
+    {
+      "authorName": "Walter White",
+      "content": "This is insane. hope it gets better with future updates. like windhawk blur support.",
+      "id": 49,
+      "modVersion": "1.0.0",
+      "parentId": null,
+      "timestamp": 1791609644,
+      "votes": 0
+    }
+  ]
+}
