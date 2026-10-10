@@ -194,10 +194,8 @@ it will require the UAC authorization). Alternatively you can use the
 
 #include <iostream>
 #include <sddl.h>
-#include <winnt.h>
 #include <winternl.h>
 #include <aclapi.h>
-#include <securitybaseapi.h>
 
 extern "C" NTSTATUS NTAPI NtOpenSection(
     OUT PHANDLE SectionHandle,
@@ -208,7 +206,12 @@ extern "C" NTSTATUS NTAPI NtOpenSection(
 HANDLE g_hThread = NULL;
 volatile BOOL g_bStopThread = FALSE;
 
-BOOL TrySetThemeSectionSecurity() {
+// Original DACL of the theme section, saved before we replace it, so that
+// disabling/uninstalling the mod can restore it. Obtained via GetSecurityInfo,
+// must be freed with LocalFree.
+PSECURITY_DESCRIPTOR g_originalSd = NULL;
+
+BOOL OpenThemeSection(ACCESS_MASK desiredAccess, PHANDLE phSection) {
     DWORD sessionId;
     ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
 
@@ -221,34 +224,54 @@ BOOL TrySetThemeSectionSecurity() {
     OBJECT_ATTRIBUTES objectAttributes;
     InitializeObjectAttributes(&objectAttributes, &sectionObjectName, OBJ_CASE_INSENSITIVE, NULL, NULL);
 
-    HANDLE hSection;
-    NTSTATUS status = NtOpenSection(&hSection, WRITE_DAC, &objectAttributes);
-
+    NTSTATUS status = NtOpenSection(phSection, desiredAccess, &objectAttributes);
     if (!NT_SUCCESS(status)) {
         Wh_Log(L"NtOpenSection failed: 0x%X", status);
         return FALSE;
     }
 
-    LPCWSTR sddl = L"O:BAG:SYD:(A;;RC;;;IU)(A;;DCSWRPSDRCWDWO;;;SY)";
-    PSECURITY_DESCRIPTOR psd = NULL;
+    return TRUE;
+}
 
-    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, SDDL_REVISION_1, &psd, NULL)) {
+BOOL TrySetThemeSectionSecurity() {
+    HANDLE hSection;
+    if (!OpenThemeSection(READ_CONTROL | WRITE_DAC, &hSection)) {
+        return FALSE;
+    }
+
+    PSECURITY_DESCRIPTOR originalSd = NULL;
+    DWORD err = GetSecurityInfo(hSection, SE_KERNEL_OBJECT,
+                                 DACL_SECURITY_INFORMATION, NULL, NULL,
+                                 NULL, NULL, &originalSd);
+    if (err != ERROR_SUCCESS) {
+        Wh_Log(L"GetSecurityInfo failed: %lu, will retry", err);
         CloseHandle(hSection);
         return FALSE;
     }
 
-    BOOL result = SetKernelObjectSecurity(
-        hSection,
-        DACL_SECURITY_INFORMATION,
-        psd
-    );
+    LPCWSTR sddl = L"O:BAG:SYD:(A;;RC;;;IU)(A;;DCSWRPSDRCWDWO;;;SY)";
+    PSECURITY_DESCRIPTOR psd = NULL;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, SDDL_REVISION_1, &psd, NULL)) {
+        LocalFree(originalSd);
+        CloseHandle(hSection);
+        return FALSE;
+    }
 
+    BOOL result = SetKernelObjectSecurity(hSection, DACL_SECURITY_INFORMATION, psd);
     Wh_Log(L"SetKernelObjectSecurity result: %u", result);
 
     LocalFree(psd);
     CloseHandle(hSection);
 
-    return result;
+    if (!result) {
+
+        LocalFree(originalSd);
+        return FALSE;
+    }
+
+
+    g_originalSd = originalSd;
+    return TRUE;
 }
 
 DWORD WINAPI RetryThreadProc(LPVOID lpParam) {
@@ -295,11 +318,25 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
-    
+
     if (g_hThread) {
         g_bStopThread = TRUE;
-        WaitForSingleObject(g_hThread, 2000);
+        WaitForSingleObject(g_hThread, INFINITE);
         CloseHandle(g_hThread);
         g_hThread = NULL;
+    }
+
+    if (g_originalSd) {
+        HANDLE hSection;
+        if (OpenThemeSection(WRITE_DAC, &hSection)) {
+            BOOL result = SetKernelObjectSecurity(hSection, DACL_SECURITY_INFORMATION, g_originalSd);
+            Wh_Log(L"Restore original DACL result: %u", result);
+            CloseHandle(hSection);
+        } else {
+            Wh_Log(L"Failed to reopen theme section to restore DACL");
+        }
+
+        LocalFree(g_originalSd);
+        g_originalSd = NULL;
     }
 }
