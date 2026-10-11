@@ -206,31 +206,22 @@ Fonts must be installed in Windows. Missing fonts are silently substituted by Wi
 
 - weekdayLetterColor1: ""
   $name: Weekday letter 1 colour
-  #! $format: colorRgb
 - weekdayLetterColor2: ""
   $name: Weekday letter 2 colour
-  #! $format: colorRgb
 - weekdayLetterColor3: ""
   $name: Weekday letter 3 colour
-  #! $format: colorRgb
 - weekdayLetterColor4: ""
   $name: Weekday letter 4 colour
-  #! $format: colorRgb
 - weekdayLetterColor5: ""
   $name: Weekday letter 5 colour
-  #! $format: colorRgb
 - weekdayLetterColor6: ""
   $name: Weekday letter 6 colour
-  #! $format: colorRgb
 - weekdayLetterColor7: ""
   $name: Weekday letter 7 colour
-  #! $format: colorRgb
 - weekdayLetterColor8: ""
   $name: Weekday letter 8 colour
-  #! $format: colorRgb
 - weekdayLetterColor9: ""
   $name: Weekday letter 9 colour
-  #! $format: colorRgb
 
 - customLetterStyles:
     - weekday:
