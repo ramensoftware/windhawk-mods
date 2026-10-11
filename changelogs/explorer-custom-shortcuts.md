@@ -1,3 +1,13 @@
+## 1.6.0 ([Oct 11, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b60ad5890be359ed15f9b610f1649afba7bb4e05/mods/explorer-custom-shortcuts.wh.cpp))
+
+* **Feature (Internal Commands)**: Added `internal:newSmartFile` to create a blank, extensionless file that enters inline rename directly for quick creation of code and config files (`.js`, `.py`, `.json`, `.cpp`, `.md`, etc.).
+* **Feature (Internal Commands)**: Added `internal:touchFile` to update the `Last Modified` timestamp of selected files or folders to the current time.
+* **Feature (Internal Commands)**: Added `internal:copyUnixPath` to copy path(s) using forward slashes (`/`) for Git, Python, and terminal environments.
+* **Feature (Internal Commands)**: Added `internal:copyFolderPath` to explicitly copy the current folder path directly, ignoring any active item selections.
+* **Improvement (Toasts)**: Registered the toast notification window class once in `Wh_ModInit` with the mod's own module handle and clean it up in `Wh_ModUninit`.
+* **Improvement (Settings & Docs)**: Clarified the `toasts.position` setting description to specify anchor placement relative to the active Explorer window.
+* **Improvement (Documentation)**: Reorganized all internal commands in `ExecuteInternalCommand` to mirror the README documentation tables 1:1, and added a preview screenshot of action toasts.
+
 ## 1.5.1 ([Oct 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4e4b6b8a851ea95542ae6d1cd07efb05ff07ab07/mods/explorer-custom-shortcuts.wh.cpp))
 
 * **Fix (Keyboard Shortcuts):** Resolved an issue where invoking shortcuts with the `Alt` key (e.g., `Alt+C`) caused Explorer to get stuck in its menu/keytip accelerator loop, blocking standalone keys like `Delete` and `Backspace`.

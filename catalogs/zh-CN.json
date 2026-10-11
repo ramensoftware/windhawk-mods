@@ -1371,6 +1371,39 @@
         "version": "1.5"
       }
     },
+    "chinese-holiday-calendar": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791723793000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791723793000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "dcsmf",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+        "description": "在 Windows 11 日历中显示你自己填的 ICS 订阅源里的中国法定节假日与调休安排",
+        "github": "https://github.com/dcsmf",
+        "include": [
+          "ShellExperienceHost.exe",
+          "ShellHost.exe"
+        ],
+        "license": "GPL-3.0-only",
+        "name": "中国节假日日历",
+        "version": "0.21"
+      },
+      "metadataEnglish": {
+        "description": "Show Chinese statutory holidays and adjusted workdays, from an ICS feed you supply, in the Windows 11 calendar flyout",
+        "name": "Chinese Holiday Calendar"
+      }
+    },
     "chinese-ime-fixed-mode": {
       "details": {
         "defaultSorting": 790,
@@ -5171,7 +5204,7 @@
         "ratingUsers": 5,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791439334000,
+        "updated": 1791723802000,
         "users": 26
       },
       "metadata": {
@@ -5187,7 +5220,7 @@
         ],
         "license": "MIT",
         "name": "Explorer Custom Shortcuts",
-        "version": "1.5.1"
+        "version": "1.6.0"
       }
     },
     "explorer-details-better-file-sizes": {
@@ -5687,7 +5720,7 @@
         "ratingUsers": 3,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791356402000,
+        "updated": 1791723798000,
         "users": 21
       },
       "metadata": {
@@ -5703,7 +5736,7 @@
           "*"
         ],
         "name": "Explorer Picker",
-        "version": "1.5.4"
+        "version": "1.5.7"
       }
     },
     "explorer-real-folder-paths": {
