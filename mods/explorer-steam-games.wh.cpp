@@ -2,7 +2,7 @@
 // @id              explorer-steam-games
 // @name            Steam Games in Explorer
 // @description     Your Steam games in the File Explorer navigation pane: launch, open folders, playtime, collections (Epic, GOG and Xbox experimental)
-// @version         1.0
+// @version         1.1
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         windhawk.exe
@@ -129,6 +129,13 @@ new File Explorer window (or restart File Explorer once).
   $options:
   - perPlatform: One entry per platform
   - single: A single entry with a subfolder per platform
+- position: aboveThisPC
+  $name: Position in the navigation pane
+  $description: Open a new File Explorer window to see the change.
+  $options:
+  - aboveThisPC: Above This PC
+  - top: At the top
+  - bottom: At the bottom
 - singleNodeName: ""
   $name: Name of the single entry
   $description: Leave empty for "Games" in the Windows language
@@ -364,6 +371,7 @@ const std::vector<ActionDef> kGogActions = {
 
 struct Settings {
     bool singleNode = false;
+    DWORD sortBase = 0x42;
     std::wstring singleNodeName;
     bool enabled[P_COUNT] = {};
     LangId lang = L_EN;
@@ -982,11 +990,13 @@ bool BuildHive(const Settings& s) {
     for (int p = P_COUNT - 1; p >= 0; p--) {
         if (s.enabled[p]) firstEnabled = p;
     }
+    // SortOrderIndex sets where the entries go in the navigation pane.
+    DWORD sortBase = s.sortBase;
     RegisterNode(kClsidAll, s.singleNodeName.empty() ? Tr(S_GAMES) : s.singleNodeName,
-                 PlatformIcon(firstEnabled), root, 0x42);
+                 PlatformIcon(firstEnabled), root, sortBase);
     for (int p = 0; p < P_COUNT; p++) {
         RegisterNode(kPlatforms[p].clsid, kPlatforms[p].folder, PlatformIcon(p),
-                     root + L"\\" + kPlatforms[p].folder, 0x42 + p);
+                     root + L"\\" + kPlatforms[p].folder, sortBase + p);
     }
     // Empty stand-ins, used when the real keys don't exist (see the hooks).
     HKEY h;
@@ -2832,6 +2842,8 @@ std::wstring StringSetting(PCWSTR name) {
 void LoadSettings() {
     Settings s;
     s.singleNode = StringSetting(L"layout") == L"single";
+    std::wstring position = StringSetting(L"position");
+    s.sortBase = position == L"top" ? 0xFF00 : position == L"bottom" ? 0x7F7F : 0x42;
     s.singleNodeName = StringSetting(L"singleNodeName");
     for (int p = 0; p < P_COUNT; p++) {
         s.enabled[p] = Wh_GetIntSetting(kPlatforms[p].setting) != 0;

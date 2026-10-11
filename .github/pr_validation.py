@@ -840,7 +840,8 @@ class ModMetadataValidator:
 
     def validate_tool_mod(self):
         """Validate the metadata of a tool mod: one that targets windhawk.exe
-        with a WhTool_ModInit entry point, or any windhawk-*.exe process."""
+        with a WhTool_ModInit entry point or a -tool-mod launcher, or any
+        windhawk-*.exe process."""
         prop = self.property('include')
         if not prop:
             return
@@ -849,9 +850,13 @@ class ModMetadataValidator:
         windhawk_includes = {
             x for x in includes if re.fullmatch(r'windhawk(-[\w-]+)?\.exe', x)
         }
+        defines_tool_mod_init = (
+            re.search(r'\bWhTool_ModInit\s*\([^)]*\)\s*\{', self.mod_source)
+            is not None
+        )
         is_tool_mod = any(x != 'windhawk.exe' for x in windhawk_includes) or (
             'windhawk.exe' in windhawk_includes
-            and re.search(r'\bWhTool_ModInit\b', self.mod_source) is not None
+            and (defines_tool_mod_init or '-tool-mod' in self.mod_source)
         )
         if not is_tool_mod:
             return
@@ -861,6 +866,12 @@ class ModMetadataValidator:
                 'Tool mods must @@ exactly one of the following combinations of'
                 ' Windhawk processes:\n'
                 + '\n'.join(f'* {", ".join(x)}' for x in TOOL_MOD_ALLOWED_INCLUDES)
+            )
+        elif windhawk_includes == {'windhawk.exe'} and not defines_tool_mod_init:
+            prop.warn(
+                'Tool mods which @@ only windhawk.exe must define'
+                ' WhTool_ModInit, use the tool mod template:'
+                ' https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process'
             )
 
         arch_prop = self.property('architecture')
@@ -1029,9 +1040,10 @@ def validate_readme(path: Path, mod_source: str) -> int:
 
 # Must match the patterns in scripts/archive_mod_images.py, which archives the
 # README images at the URL-derived paths. The script's image pattern is this one
-# restricted to the supported hosts.
+# restricted to the supported hosts. The image description excludes brackets so
+# that an unclosed one doesn't extend into the next link or image.
 ARCHIVED_README_PATTERN = r'^//[ \t]+==WindhawkModReadme==[ \t]*$\s*/\*\s*([\s\S]+?)\s*\*/\s*^//[ \t]+==/WindhawkModReadme==[ \t]*$'
-ARCHIVED_IMAGE_URL_PATTERN = r'!\[[^\]]*\]\(\s*([^)]+?)\s*\)'
+ARCHIVED_IMAGE_URL_PATTERN = r'!\[[^\[\]]*\]\(\s*([^)]+?)\s*\)'
 ARCHIVED_IMAGE_HOSTS = ['i.imgur.com', 'raw.githubusercontent.com']
 
 # Images under this prefix are shown from their original URL instead of the
@@ -1105,8 +1117,19 @@ def validate_readme_images(path: Path, mod_source: str) -> int:
             ' image syntax: ![description](url)',
         )
 
+    image_matches = list(re.finditer(ARCHIVED_IMAGE_URL_PATTERN, readme))
+
+    image_starts = {match.start() for match in image_matches}
+    for match in re.finditer(r'!\[', readme):
+        if match.start() not in image_starts:
+            warnings += add_warning(
+                path,
+                line_of(match.start()),
+                'Malformed Markdown image, expected: ![description](url)',
+            )
+
     hosts = ', '.join(ARCHIVED_IMAGE_HOSTS)
-    for match in re.finditer(ARCHIVED_IMAGE_URL_PATTERN, readme):
+    for match in image_matches:
         url = match.group(1)
         line = line_of(match.start(1))
 

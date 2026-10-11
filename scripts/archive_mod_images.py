@@ -5,7 +5,7 @@ from urllib.parse import unquote
 
 import requests
 
-URL_PATTERN = r"!\[[^\]]*\]\(\s*((?:https://i\.imgur\.com/|https://raw\.githubusercontent\.com)[^)]+?)\s*\)"
+URL_PATTERN = r"!\[[^\[\]]*\]\(\s*((?:https://i\.imgur\.com/|https://raw\.githubusercontent\.com)[^)]+?)\s*\)"
 SCRIPT_DIR = Path(__file__).parent
 CODE_FOLDER_PATH = SCRIPT_DIR.parent / "mods"
 IMAGES_FOLDER_PATH = SCRIPT_DIR.parent / "images"
