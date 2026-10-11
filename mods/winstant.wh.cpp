@@ -1,12 +1,16 @@
-// ==WindhawkMod== 
+// ==WindhawkMod==
 // @id              winstant
 // @name            Winstant
 // @description     Any window, instantly – right where you need it. Switch, arrange and launch from the minimize button or a hotkey
+// @description:it-IT Qualsiasi finestra, all'istante, proprio dove ti serve. Cambia, disponi e avvia dal pulsante Riduci a icona o con una scorciatoia
+// @description:de-DE Jedes Fenster, sofort – genau dort, wo du es brauchst. Wechseln, anordnen und starten über die Minimieren-Schaltfläche oder ein Tastenkürzel
+// @description:fr-FR N'importe quelle fenêtre, instantanément, là où vous en avez besoin. Changez, organisez et lancez depuis le bouton Réduire ou un raccourci
+// @description:es-ES Cualquier ventana, al instante, justo donde la necesitas. Cambia, organiza y abre desde el botón Minimizar o un atajo
 // @version         1.5
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         windhawk.exe
-// @compilerOptions -ldwmapi -luser32 -lgdi32 -lgdiplus -lshcore -ladvapi32 -lshell32 -lversion -lole32 -lmsimg32 -lcomctl32
+// @compilerOptions -ldwmapi -luser32 -lgdi32 -lgdiplus -lshcore -ladvapi32 -lshell32 -lversion -lole32 -lmsimg32 -lcomctl32 -loleaut32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -916,6 +920,9 @@ into these languages.
 #include <shellscalingapi.h>
 #include <shlobj.h>
 #include <shobjidl.h>
+#include <exdisp.h>
+#include <servprov.h>
+#include <shldisp.h>
 #include <sddl.h>
 #include <commctrl.h>
 #include <windhawk_utils.h>
@@ -1683,10 +1690,17 @@ std::wstring FileNameOf(const std::wstring& path) {
 // windhawk.exe may be a 32-bit process: reading files under System32 would
 // then be redirected to the 32-bit copies in SysWOW64. Sysnative reaches the
 // real System32 (only for reading files; paths are kept as they are).
+bool IsWow64Self() {
+    static const bool wow64 = [] {
+        BOOL value = FALSE;
+        return IsWow64Process(GetCurrentProcess(), &value) && value;
+    }();
+    return wow64;
+}
+
 std::wstring NativeFilePath(const std::wstring& path) {
     static const std::wstring system32 = [] {
-        BOOL wow64 = FALSE;
-        if (!IsWow64Process(GetCurrentProcess(), &wow64) || !wow64) return std::wstring();
+        if (!IsWow64Self()) return std::wstring();
         wchar_t dir[MAX_PATH];
         UINT len = GetSystemWindowsDirectoryW(dir, MAX_PATH);
         if (!len || len >= MAX_PATH) return std::wstring();
@@ -1791,24 +1805,15 @@ bool CanControlWindow(HWND hwnd) {
     return IsWindow(hwnd) && !IsHungAppWindow(hwnd) && !IsAboveUs(hwnd);
 }
 
-// Brings hwnd to the foreground. Windows only lets a background process do
-// this in some cases (foreground lock), so when the plain call is refused we
-// briefly attach to the foreground thread's input queue, which is the
-// standard workaround. The attachment is released immediately.
+// Brings hwnd to the foreground. Windows allows this to the process that
+// received the last input event; the empty input makes that us when the
+// action came from raw input (key taps) or the mouse hook (wheel). It never
+// attaches to the foreground thread's input queue: sharing it could freeze
+// both apps.
 void ForceForeground(HWND hwnd) {
-    if (SetForegroundWindow(hwnd) && GetForegroundWindow() == hwnd) return;
-    HWND fg = GetForegroundWindow();
-    DWORD cur = GetCurrentThreadId();
-    DWORD fgThread = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
-    bool attached = false;
-    if (fgThread && fgThread != cur) {
-        attached = AttachThreadInput(cur, fgThread, TRUE);
-    }
-    BringWindowToTop(hwnd);
+    INPUT input{};
+    SendInput(1, &input, sizeof(INPUT));
     SetForegroundWindow(hwnd);
-    if (attached) {
-        AttachThreadInput(cur, fgThread, FALSE);
-    }
     if (GetForegroundWindow() != hwnd) {
         Wh_Log(L"Couldn't bring %p to the foreground", hwnd);
     }
@@ -3594,14 +3599,87 @@ void DrawBitmapIcon(HDC dc, HBITMAP bmp, int x, int y, int size) {
     DeleteDC(mem);
 }
 
+// Has Explorer (64-bit) run ShellExecute for us, via the desktop's shell
+// view. See Raymond Chen, "How can I launch an unelevated process from my
+// elevated process and vice versa?".
+bool ShellExecuteViaExplorer(const std::wstring& file, const wchar_t* params) {
+    // SID_STopLevelBrowser
+    static const GUID kSidTopLevelBrowser = {
+        0x4c96be40, 0x915c, 0x11cf, {0x99, 0xd3, 0x00, 0xaa, 0x00, 0x4a, 0xe8, 0x37}};
+    bool ok = false;
+    IShellWindows* windows = nullptr;
+    IDispatch* desktop = nullptr;
+    IServiceProvider* provider = nullptr;
+    IShellBrowser* browser = nullptr;
+    IShellView* view = nullptr;
+    IDispatch* background = nullptr;
+    IShellFolderViewDual* folderView = nullptr;
+    IDispatch* application = nullptr;
+    IShellDispatch2* shell = nullptr;
+    VARIANT empty;
+    VariantInit(&empty);
+    long desktopHwnd = 0;
+    if (SUCCEEDED(CoCreateInstance(__uuidof(ShellWindows), nullptr, CLSCTX_LOCAL_SERVER,
+                                   IID_PPV_ARGS(&windows))) &&
+        windows->FindWindowSW(&empty, &empty, SWC_DESKTOP, &desktopHwnd, SWFO_NEEDDISPATCH,
+                              &desktop) == S_OK &&
+        desktop && SUCCEEDED(desktop->QueryInterface(IID_PPV_ARGS(&provider))) &&
+        SUCCEEDED(provider->QueryService(kSidTopLevelBrowser, IID_PPV_ARGS(&browser))) &&
+        SUCCEEDED(browser->QueryActiveShellView(&view)) && view &&
+        SUCCEEDED(view->GetItemObject(SVGIO_BACKGROUND, IID_PPV_ARGS(&background))) &&
+        SUCCEEDED(background->QueryInterface(IID_PPV_ARGS(&folderView))) &&
+        SUCCEEDED(folderView->get_Application(&application)) && application &&
+        SUCCEEDED(application->QueryInterface(IID_PPV_ARGS(&shell)))) {
+        BSTR fileStr = SysAllocString(file.c_str());
+        VARIANT args;
+        VariantInit(&args);
+        if (params) {
+            args.vt = VT_BSTR;
+            args.bstrVal = SysAllocString(params);
+        }
+        VARIANT show;
+        VariantInit(&show);
+        show.vt = VT_I4;
+        show.lVal = SW_SHOWNORMAL;
+        ok = fileStr && SUCCEEDED(shell->ShellExecute(fileStr, args, empty, empty, show));
+        SysFreeString(fileStr);
+        VariantClear(&args);
+    }
+    for (IUnknown* u : std::initializer_list<IUnknown*>{
+             shell, application, folderView, background, view, browser, provider, desktop,
+             windows}) {
+        if (u) u->Release();
+    }
+    return ok;
+}
+
+bool IsExecutablePath(const std::wstring& path) {
+    std::wstring name = ToLower(FileNameOf(path));
+    for (const wchar_t* ext : {L".exe", L".com", L".bat", L".cmd", L".msc", L".cpl"}) {
+        size_t n = wcslen(ext);
+        if (name.size() > n && name.compare(name.size() - n, n, ext) == 0) return true;
+    }
+    return false;
+}
+
 void ShellOpen(const std::wstring& file, const wchar_t* params = nullptr) {
     // Our process had the foreground a moment ago; let the new app take it.
     AllowSetForegroundWindow(ASFW_ANY);
+    std::wstring target = file;
+    if (IsWow64Self()) {
+        // A 32-bit windhawk.exe would be subject to WOW64 file-system
+        // redirection (System32 -> SysWOW64): let the 64-bit Explorer launch
+        // files, folders and Start-menu apps alike.
+        if (ShellExecuteViaExplorer(file, params)) return;
+        // No Explorer shell running: at least start 64-bit System32
+        // programs (Sysnative works for executables, not for documents).
+        if (IsExecutablePath(file)) target = NativeFilePath(file);
+    }
     SHELLEXECUTEINFOW sei{};
     sei.cbSize = sizeof(sei);
     sei.fMask = SEE_MASK_FLAG_NO_UI;
     sei.lpVerb = L"open";
-    sei.lpFile = file.c_str();
+    sei.lpFile = target.c_str();
     sei.lpParameters = params;
     sei.nShow = SW_SHOWNORMAL;
     if (!ShellExecuteExW(&sei)) {
@@ -3613,6 +3691,12 @@ void LaunchApp(const std::wstring& id) { ShellOpen(L"shell:AppsFolder\\" + id); 
 
 // Selects the file in a File Explorer window (reusing a running Explorer).
 void OpenFileLocation(const std::wstring& path) {
+    if (IsWow64Self()) {
+        // Parsing the path here would go through WOW64 redirection.
+        std::wstring params = L"/select,\"" + path + L"\"";
+        AllowSetForegroundWindow(ASFW_ANY);
+        if (ShellExecuteViaExplorer(L"explorer.exe", params.c_str())) return;
+    }
     PIDLIST_ABSOLUTE pidl = nullptr;
     if (SUCCEEDED(SHParseDisplayName(path.c_str(), nullptr, &pidl, 0, nullptr)) && pidl) {
         SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
