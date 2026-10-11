@@ -16,20 +16,17 @@
 /*
 # Tray overflow list
 
-Changes the Windows 11 notification-area overflow menu into a vertical list.
+Changes the Windows 11 notification-area overflow popup into a vertical list.
 
-Features:
-
-- Shows each tray icon in a separate row.
-- Displays the icon name beside the icon.
-- Preserves the original tray-icon click and context-menu behavior.
+- Displays the tray icon and its name.
 - Preserves the native popup padding and theme.
-- Supports vertical scrolling when the list becomes too tall.
+- Preserves the original tray icon control and input handling.
+- Uses event-driven updates instead of a permanent timer.
+- Supports dynamic tray icons added while the popup is open.
+- Releases XAML objects on their owning UI thread.
 
-The mod only changes the layout of the notification-area overflow popup.
-It does not modify tray-icon registration or notification behavior.
-
-Changing settings may require reopening the overflow popup.
+The implementation targets Windows 11 Explorer and uses undocumented
+SystemTray/XAML implementation details.
 */
 // ==/WindhawkModReadme==
 
@@ -37,7 +34,7 @@ Changing settings may require reopening the overflow popup.
 /*
 - listWidth: 300
   $name: List width
-  $description: Width of the tray overflow list in pixels.
+  $description: Width of the list content in pixels.
 
 - rowHeight: 40
   $name: Row height
@@ -45,19 +42,19 @@ Changing settings may require reopening the overflow popup.
 
 - iconAreaWidth: 40
   $name: Icon area width
-  $description: Width reserved for the tray icon in each row.
-
-- maxHeight: 840
-  $name: Maximum popup height
-  $description: Maximum height of the popup in pixels.
-
-- scrollbarReserve: 9
-  $name: Scrollbar width reserve
-  $description: Width reserved for the vertical scrollbar in pixels.
+  $description: Width reserved for the tray icon.
 
 - fontSize: 13
   $name: Label font size
-  $description: Font size of tray icon names.
+  $description: Font size used for tray icon names.
+
+- maxHeight: 840
+  $name: Maximum popup height
+  $description: Maximum height of the overflow popup.
+
+- scrollbarReserve: 9
+  $name: Scrollbar reserve
+  $description: Width reserved for the vertical scrollbar.
 */
 // ==/WindhawkModSettings==
 
@@ -71,6 +68,7 @@ Changing settings may require reopening the overflow popup.
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -96,11 +94,6 @@ namespace M = winrt::Windows::UI::Xaml::Media;
 
 namespace {
 
-constexpr double kLabelGap = 4.0;
-constexpr double kLabelRightInset = 12.0;
-
-constexpr double kScreenVerticalReserve = 96.0;
-
 struct Settings {
     double listWidth = 300.0;
     double rowHeight = 40.0;
@@ -112,20 +105,25 @@ struct Settings {
 
 Settings g_settings;
 
-constexpr UINT_PTR kTimerId = 1;
-constexpr UINT kTimerPeriodMs = 250;
+constexpr double kLabelGap = 4.0;
+constexpr double kLabelRightInset = 12.0;
+constexpr double kScreenVerticalReserve = 96.0;
+
 constexpr UINT kCleanupMessage = WM_APP + 0x517;
 
 constexpr wchar_t kWindowClass[] =
-    L"Windhawk.TrayOverflowList.PrivateWindow.0_4";
+    L"Windhawk.TrayOverflowList.PrivateWindow.1_0";
 
 constexpr wchar_t kLabelName[] =
     L"WindhawkTrayOverflowListLabel";
 
-const double kAuto =
+constexpr wchar_t kIconViewClass[] =
+    L"SystemTray.NotifyIconView";
+
+constexpr double kAuto =
     std::numeric_limits<double>::quiet_NaN();
 
-const double kInfinity =
+constexpr double kInfinity =
     std::numeric_limits<double>::infinity();
 
 std::atomic<bool> g_stopping{false};
@@ -139,8 +137,45 @@ std::mutex g_windowsMutex;
 using InitializeFn = void(WINAPI*)(void*);
 InitializeFn g_initializeOriginal = nullptr;
 
+using IconViewCtorFn = void*(WINAPI*)(void*);
+IconViewCtorFn g_iconViewCtorOriginal = nullptr;
+
 using LoadLibraryExWFn = decltype(&LoadLibraryExW);
 LoadLibraryExWFn g_loadLibraryExWOriginal = nullptr;
+
+struct State;
+
+void LoadSettings() {
+    g_settings.listWidth = std::clamp(
+        static_cast<double>(Wh_GetIntSetting(L"listWidth")),
+        160.0,
+        800.0);
+
+    g_settings.rowHeight = std::clamp(
+        static_cast<double>(Wh_GetIntSetting(L"rowHeight")),
+        24.0,
+        96.0);
+
+    g_settings.iconAreaWidth = std::clamp(
+        static_cast<double>(Wh_GetIntSetting(L"iconAreaWidth")),
+        16.0,
+        96.0);
+
+    g_settings.fontSize = std::clamp(
+        static_cast<double>(Wh_GetIntSetting(L"fontSize")),
+        8.0,
+        32.0);
+
+    g_settings.maxHeight = std::clamp(
+        static_cast<double>(Wh_GetIntSetting(L"maxHeight")),
+        200.0,
+        2000.0);
+
+    g_settings.scrollbarReserve = std::clamp(
+        static_cast<double>(Wh_GetIntSetting(L"scrollbarReserve")),
+        0.0,
+        32.0);
+}
 
 void LogException(PCWSTR operation) noexcept {
     HRESULT hr = winrt::to_hresult();
@@ -151,50 +186,6 @@ void LogException(PCWSTR operation) noexcept {
         static_cast<unsigned int>(hr));
 }
 
-void LoadSettings() {
-    g_settings.listWidth =
-        std::clamp(
-            static_cast<double>(
-                Wh_GetIntSetting(L"listWidth")),
-            160.0,
-            800.0);
-
-    g_settings.rowHeight =
-        std::clamp(
-            static_cast<double>(
-                Wh_GetIntSetting(L"rowHeight")),
-            24.0,
-            96.0);
-
-    g_settings.iconAreaWidth =
-        std::clamp(
-            static_cast<double>(
-                Wh_GetIntSetting(L"iconAreaWidth")),
-            16.0,
-            96.0);
-
-    g_settings.fontSize =
-        std::clamp(
-            static_cast<double>(
-                Wh_GetIntSetting(L"fontSize")),
-            8.0,
-            32.0);
-
-    g_settings.maxHeight =
-        std::clamp(
-            static_cast<double>(
-                Wh_GetIntSetting(L"maxHeight")),
-            200.0,
-            2000.0);
-
-    g_settings.scrollbarReserve =
-        std::clamp(
-            static_cast<double>(
-                Wh_GetIntSetting(L"scrollbarReserve")),
-            0.0,
-            32.0);
-}
-
 bool SameObject(
     WF::IInspectable const& first,
     WF::IInspectable const& second) {
@@ -203,23 +194,10 @@ bool SameObject(
         return !first && !second;
     }
 
-    auto firstIdentity = first.as<IUnknown>();
-    auto secondIdentity = second.as<IUnknown>();
+    auto firstUnknown = first.as<IUnknown>();
+    auto secondUnknown = second.as<IUnknown>();
 
-    return firstIdentity.get() == secondIdentity.get();
-}
-
-bool EqualDouble(double first, double second) {
-    return first == second ||
-           (std::isnan(first) && std::isnan(second));
-}
-
-double HorizontalExtent(X::Thickness const& value) {
-    return value.Left + value.Right;
-}
-
-double VerticalExtent(X::Thickness const& value) {
-    return value.Top + value.Bottom;
+    return firstUnknown.get() == secondUnknown.get();
 }
 
 X::FrameworkElement FindDirectChild(
@@ -231,27 +209,28 @@ X::FrameworkElement FindDirectChild(
         return nullptr;
     }
 
-    int count = M::VisualTreeHelper::GetChildrenCount(parent);
+    int count =
+        M::VisualTreeHelper::GetChildrenCount(parent);
 
     for (int i = 0; i < count; ++i) {
-        auto element =
+        auto child =
             M::VisualTreeHelper::GetChild(parent, i)
                 .try_as<X::FrameworkElement>();
 
-        if (!element) {
+        if (!child) {
             continue;
         }
 
-        if (name && element.Name() != name) {
+        if (name && child.Name() != name) {
             continue;
         }
 
         if (className &&
-            winrt::get_class_name(element) != className) {
+            winrt::get_class_name(child) != className) {
             continue;
         }
 
-        return element;
+        return child;
     }
 
     return nullptr;
@@ -266,17 +245,18 @@ X::FrameworkElement FindDescendant(
         return nullptr;
     }
 
-    int count = M::VisualTreeHelper::GetChildrenCount(parent);
+    int count =
+        M::VisualTreeHelper::GetChildrenCount(parent);
 
     for (int i = 0; i < count; ++i) {
-        auto child = M::VisualTreeHelper::GetChild(parent, i);
-        auto element = child.try_as<X::FrameworkElement>();
+        auto child =
+            M::VisualTreeHelper::GetChild(parent, i);
 
-        if (element && element.Name() == kLabelName) {
-            continue;
-        }
+        auto element =
+            child.try_as<X::FrameworkElement>();
 
         if (element &&
+            element.Name() != kLabelName &&
             winrt::get_class_name(element) == className) {
             return element;
         }
@@ -290,10 +270,31 @@ X::FrameworkElement FindDescendant(
     return nullptr;
 }
 
-std::wstring NormalizeText(winrt::hstring const& source) {
+bool IsDescendantOf(
+    X::DependencyObject const& child,
+    X::DependencyObject const& possibleParent) {
+
+    auto current = child;
+
+    while (current) {
+        if (SameObject(current, possibleParent)) {
+            return true;
+        }
+
+        current = M::VisualTreeHelper::GetParent(current);
+    }
+
+    return false;
+}
+
+std::wstring NormalizeText(
+    winrt::hstring const& source) {
+
     std::wstring text(source.c_str(), source.size());
 
-    auto newline = text.find_first_of(L"\r\n");
+    auto newline =
+        text.find_first_of(L"\r\n");
+
     if (newline != std::wstring::npos) {
         text.resize(newline);
     }
@@ -304,13 +305,18 @@ std::wstring NormalizeText(winrt::hstring const& source) {
         }
     }
 
-    auto first = text.find_first_not_of(L' ');
+    auto first =
+        text.find_first_not_of(L' ');
+
     if (first == std::wstring::npos) {
         return {};
     }
 
-    auto last = text.find_last_not_of(L' ');
-    text = text.substr(first, last - first + 1);
+    auto last =
+        text.find_last_not_of(L' ');
+
+    text =
+        text.substr(first, last - first + 1);
 
     if (text.size() > 256) {
         text.resize(256);
@@ -327,24 +333,33 @@ std::wstring ReadInspectableText(
         return {};
     }
 
-    if (auto value = object.try_as<WF::IPropertyValue>()) {
-        if (value.Type() == WF::PropertyType::String) {
-            return NormalizeText(value.GetString());
+    if (auto value =
+            object.try_as<WF::IPropertyValue>()) {
+
+        if (value.Type() ==
+            WF::PropertyType::String) {
+            return NormalizeText(
+                value.GetString());
         }
     }
 
-    if (auto block = object.try_as<C::TextBlock>()) {
+    if (auto block =
+            object.try_as<C::TextBlock>()) {
         return NormalizeText(block.Text());
     }
 
-    if (auto tooltip = object.try_as<C::ToolTip>()) {
+    if (auto tooltip =
+            object.try_as<C::ToolTip>()) {
         return ReadInspectableText(
-            tooltip.Content(), depth + 1);
+            tooltip.Content(),
+            depth + 1);
     }
 
-    if (auto content = object.try_as<C::ContentControl>()) {
+    if (auto content =
+            object.try_as<C::ContentControl>()) {
         return ReadInspectableText(
-            content.Content(), depth + 1);
+            content.Content(),
+            depth + 1);
     }
 
     return {};
@@ -360,21 +375,24 @@ std::wstring ReadIconName(
         return {};
     }
 
-    auto name = NormalizeText(
-        A::AutomationProperties::GetName(element));
+    auto automationName =
+        NormalizeText(
+            A::AutomationProperties::GetName(element));
 
-    if (!name.empty()) {
-        return name;
+    if (!automationName.empty()) {
+        return automationName;
     }
 
-    name = ReadInspectableText(
-        C::ToolTipService::GetToolTip(element));
+    auto tooltipText =
+        ReadInspectableText(
+            C::ToolTipService::GetToolTip(element));
 
-    if (!name.empty()) {
-        return name;
+    if (!tooltipText.empty()) {
+        return tooltipText;
     }
 
-    int count = M::VisualTreeHelper::GetChildrenCount(element);
+    int count =
+        M::VisualTreeHelper::GetChildrenCount(element);
 
     for (int i = 0; i < count; ++i) {
         auto child =
@@ -385,7 +403,8 @@ std::wstring ReadIconName(
             continue;
         }
 
-        name = ReadIconName(child, depth + 1);
+        auto name =
+            ReadIconName(child, depth + 1);
 
         if (!name.empty()) {
             return name;
@@ -395,11 +414,33 @@ std::wstring ReadIconName(
     return {};
 }
 
+double HorizontalExtent(
+    X::Thickness const& thickness) {
+
+    return thickness.Left + thickness.Right;
+}
+
+double VerticalExtent(
+    X::Thickness const& thickness) {
+
+    return thickness.Top + thickness.Bottom;
+}
+
 struct SavedProperty {
     winrt::weak_ref<X::FrameworkElement> element;
     X::DependencyProperty property{nullptr};
     WF::IInspectable localValue{nullptr};
     D::Binding binding{nullptr};
+};
+
+struct LoadedHandler {
+    winrt::weak_ref<X::FrameworkElement> element;
+    winrt::event_token token{};
+};
+
+struct NameHandler {
+    winrt::weak_ref<X::FrameworkElement> element;
+    winrt::event_token token{};
 };
 
 struct LabelEntry {
@@ -418,6 +459,8 @@ struct State {
     C::ItemsControl items{nullptr};
 
     std::vector<SavedProperty> savedProperties;
+    std::vector<LoadedHandler> loadedHandlers;
+    std::vector<NameHandler> nameHandlers;
     std::vector<LabelEntry> labels;
 
     uint32_t originalChildIndex = 0;
@@ -425,7 +468,9 @@ struct State {
     bool updating = false;
     bool disabled = false;
 
-    explicit State(C::Grid const& value) : root(value) {}
+    explicit State(C::Grid const& rootGrid)
+        : root(rootGrid) {
+    }
 
     void SaveProperty(
         X::FrameworkElement const& element,
@@ -447,9 +492,11 @@ struct State {
 
         if (auto expression =
                 element.GetBindingExpression(property)) {
-            saved.binding = expression.ParentBinding();
+            saved.binding =
+                expression.ParentBinding();
         } else {
-            saved.localValue = element.ReadLocalValue(property);
+            saved.localValue =
+                element.ReadLocalValue(property);
         }
 
         savedProperties.push_back(std::move(saved));
@@ -461,8 +508,15 @@ struct State {
         X::DependencyProperty const& property,
         T const& value) {
 
+        if (!element) {
+            return;
+        }
+
         SaveProperty(element, property);
-        element.SetValue(property, winrt::box_value(value));
+
+        element.SetValue(
+            property,
+            winrt::box_value(value));
     }
 
     void SetDouble(
@@ -470,39 +524,56 @@ struct State {
         X::DependencyProperty const& property,
         double value) {
 
-        double current =
-            winrt::unbox_value<double>(
-                element.GetValue(property));
+        if (!element) {
+            return;
+        }
 
-        if (!EqualDouble(current, value)) {
+        auto currentValue =
+            element.GetValue(property);
+
+        double current = 0.0;
+
+        try {
+            current =
+                winrt::unbox_value<double>(
+                    currentValue);
+        } catch (...) {
+            current = 0.0;
+        }
+
+        if (current != value &&
+            !(std::isnan(current) &&
+              std::isnan(value))) {
             SetProperty(element, property, value);
         }
     }
 
-    void AutoWidth(X::FrameworkElement const& element) {
-        SetDouble(
+    void SetAutoWidth(
+        X::FrameworkElement const& element) {
+
+        SetProperty(
+            element,
+            X::FrameworkElement::WidthProperty(),
+            kAuto);
+
+        SetProperty(
             element,
             X::FrameworkElement::MinWidthProperty(),
             0.0);
 
-        SetDouble(
+        SetProperty(
             element,
             X::FrameworkElement::MaxWidthProperty(),
             kInfinity);
-
-        SetDouble(
-            element,
-            X::FrameworkElement::WidthProperty(),
-            kAuto);
     }
 
-    void PruneExpiredEntries() {
+    void PruneEntries() {
         savedProperties.erase(
             std::remove_if(
                 savedProperties.begin(),
                 savedProperties.end(),
-                [](SavedProperty const& entry) {
-                    return !entry.element.get();
+                [](SavedProperty const& value) {
+                    return !value.element.get();
                 }),
             savedProperties.end());
 
@@ -510,10 +581,10 @@ struct State {
             std::remove_if(
                 labels.begin(),
                 labels.end(),
-                [](LabelEntry const& entry) {
-                    return !entry.icon.get() ||
-                           !entry.container.get() ||
-                           !entry.label.get();
+                [](LabelEntry const& value) {
+                    return !value.icon.get() ||
+                           !value.container.get() ||
+                           !value.label.get();
                 }),
             labels.end());
     }
@@ -532,11 +603,13 @@ struct State {
             M::VisualTreeHelper::GetParent(control)
                 .try_as<C::Grid>();
 
-        if (!parent || !SameObject(parent, rootGrid)) {
+        if (!parent ||
+            !SameObject(parent, rootGrid)) {
             return false;
         }
 
         uint32_t index = 0;
+
         if (!parent.Children().IndexOf(control, index)) {
             return false;
         }
@@ -561,20 +634,26 @@ struct State {
         newScroll.VerticalContentAlignment(
             X::VerticalAlignment::Top);
 
-        // Existing padding, margins and borders are left untouched.
+        /*
+         * Do not modify padding, margin or border here.
+         * These values belong to the native popup layout.
+         */
         C::Grid::SetRow(
-            newScroll, C::Grid::GetRow(control));
+            newScroll,
+            C::Grid::GetRow(control));
 
         C::Grid::SetColumn(
-            newScroll, C::Grid::GetColumn(control));
+            newScroll,
+            C::Grid::GetColumn(control));
 
         C::Grid::SetRowSpan(
-            newScroll, C::Grid::GetRowSpan(control));
+            newScroll,
+            C::Grid::GetRowSpan(control));
 
         C::Grid::SetColumnSpan(
-            newScroll, C::Grid::GetColumnSpan(control));
+            newScroll,
+            C::Grid::GetColumnSpan(control));
 
-        // Record the transaction before modifying the visual tree.
         scroll = newScroll;
         items = control;
         scrollParent = parent;
@@ -587,18 +666,25 @@ struct State {
         return true;
     }
 
-    double HeightLimit(C::Grid const& rootGrid) {
+    double HeightLimit(
+        C::Grid const& rootGrid) {
+
         POINT cursor{};
         GetCursorPos(&cursor);
 
         HMONITOR monitor =
-            MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
+            MonitorFromPoint(
+                cursor,
+                MONITOR_DEFAULTTONEAREST);
 
-        MONITORINFO info{sizeof(info)};
+        MONITORINFO info{
+            sizeof(MONITORINFO)};
 
         double scale = 1.0;
+
         if (auto xamlRoot = rootGrid.XamlRoot()) {
-            scale = xamlRoot.RasterizationScale();
+            scale =
+                xamlRoot.RasterizationScale();
         }
 
         if (!(scale > 0.0)) {
@@ -611,14 +697,16 @@ struct State {
 
         double workHeight =
             static_cast<double>(
-                info.rcWork.bottom - info.rcWork.top) /
+                info.rcWork.bottom -
+                info.rcWork.top) /
             scale;
 
         return std::max(
             g_settings.rowHeight,
             std::min(
                 g_settings.maxHeight,
-                workHeight - kScreenVerticalReserve));
+                workHeight -
+                    kScreenVerticalReserve));
     }
 
     C::TextBlock GetOrCreateLabel(
@@ -640,26 +728,35 @@ struct State {
         }
 
         C::TextBlock label;
+
         label.Name(kLabelName);
         label.FontSize(g_settings.fontSize);
 
-        label.TextWrapping(X::TextWrapping::NoWrap);
-        label.TextTrimming(X::TextTrimming::CharacterEllipsis);
+        label.TextWrapping(
+            X::TextWrapping::NoWrap);
 
-        label.VerticalAlignment(X::VerticalAlignment::Center);
-        label.HorizontalAlignment(X::HorizontalAlignment::Stretch);
+        label.TextTrimming(
+            X::TextTrimming::CharacterEllipsis);
 
-        label.Margin(X::Thickness{
-            g_settings.iconAreaWidth + kLabelGap,
-            0.0,
-            kLabelRightInset,
-            0.0
-        });
+        label.VerticalAlignment(
+            X::VerticalAlignment::Center);
+
+        label.HorizontalAlignment(
+            X::HorizontalAlignment::Stretch);
+
+        label.Margin(
+            X::Thickness{
+                g_settings.iconAreaWidth +
+                    kLabelGap,
+                0.0,
+                kLabelRightInset,
+                0.0});
 
         label.IsHitTestVisible(false);
 
         A::AutomationProperties::SetAccessibilityView(
-            label, AP::AccessibilityView::Raw);
+            label,
+            AP::AccessibilityView::Raw);
 
         int columns = std::max(
             1,
@@ -676,11 +773,14 @@ struct State {
         C::Grid::SetColumnSpan(label, columns);
         C::Grid::SetRowSpan(label, rows);
 
-        if (auto control = icon.try_as<C::Control>()) {
+        if (auto control =
+                icon.try_as<C::Control>()) {
+
             D::Binding foreground;
 
             foreground.Source(control);
-            foreground.Path(X::PropertyPath(L"Foreground"));
+            foreground.Path(
+                X::PropertyPath(L"Foreground"));
             foreground.Mode(D::BindingMode::OneWay);
 
             label.SetBinding(
@@ -688,19 +788,124 @@ struct State {
                 foreground);
         }
 
-        labels.push_back(LabelEntry{
-            winrt::make_weak(icon),
-            winrt::make_weak(container),
-            winrt::make_weak(label)
-        });
+        labels.push_back(
+            LabelEntry{
+                winrt::make_weak(icon),
+                winrt::make_weak(container),
+                winrt::make_weak(label)});
 
         container.Children().Append(label);
+
         return label;
     }
 
-    void StyleIcon(X::FrameworkElement const& icon) {
+    void RegisterIconEvents(
+        X::FrameworkElement const& icon) {
+
+        if (!icon) {
+            return;
+        }
+
+        bool loadedRegistered = false;
+
+        for (const auto& item : loadedHandlers) {
+            auto element = item.element.get();
+
+            if (element &&
+                SameObject(element, icon)) {
+                loadedRegistered = true;
+                break;
+            }
+        }
+
+        if (!loadedRegistered) {
+            auto weakIcon =
+                winrt::make_weak(icon);
+
+            auto token = icon.Loaded(
+                [this, weakIcon](
+                    WF::IInspectable const&,
+                    X::RoutedEventArgs const&) {
+
+                    if (disabled ||
+                        g_stopping.load()) {
+                        return;
+                    }
+
+                    try {
+                        if (auto loadedIcon = weakIcon.get()) {
+                            StyleIcon(loadedIcon);
+                            SizeViewport(root.get(), items);
+                        }
+                    } catch (...) {
+                        LogException(
+                            L"Icon Loaded handler");
+                    }
+                });
+
+            loadedHandlers.push_back(
+                LoadedHandler{
+                    winrt::make_weak(icon),
+                    token});
+        }
+
+        bool nameRegistered = false;
+
+        for (const auto& item : nameHandlers) {
+            auto element = item.element.get();
+
+            if (element &&
+                SameObject(element, icon)) {
+                nameRegistered = true;
+                break;
+            }
+        }
+
+        if (!nameRegistered) {
+            auto weakIcon =
+                winrt::make_weak(icon);
+
+            auto token =
+                icon.RegisterPropertyChangedCallback(
+                    A::AutomationProperties::NameProperty(),
+                    [this, weakIcon](
+                        X::DependencyObject const&,
+                        X::DependencyProperty const&) {
+
+                        if (disabled ||
+                            g_stopping.load()) {
+                            return;
+                        }
+
+                        try {
+                            if (auto changedIcon =
+                                    weakIcon.get()) {
+                                StyleIcon(changedIcon);
+                            }
+                        } catch (...) {
+                            LogException(
+                                L"Icon name handler");
+                        }
+                    });
+
+            nameHandlers.push_back(
+                NameHandler{
+                    winrt::make_weak(icon),
+                    token});
+        }
+    }
+
+    void StyleIcon(
+        X::FrameworkElement const& icon) {
+
+        if (!icon) {
+            return;
+        }
+
         auto container =
-            FindDirectChild(icon, L"ContainerGrid")
+            FindDirectChild(
+                icon,
+                L"ContainerGrid")
                 .try_as<C::Grid>();
 
         if (!container) {
@@ -708,228 +913,250 @@ struct State {
         }
 
         auto presenter =
-            FindDirectChild(container, L"ContentPresenter");
+            FindDirectChild(
+                container,
+                L"ContentPresenter");
 
         if (!presenter) {
             return;
         }
 
-        auto name = ReadIconName(icon);
+        auto name =
+            ReadIconName(icon);
+
         if (name.empty()) {
             name = L"Notification icon";
         }
 
-        // Let the icon fit the row slot, including its original margins.
-        AutoWidth(icon);
+        SetAutoWidth(icon);
 
         SetProperty(
             icon,
-            X::FrameworkElement::HorizontalAlignmentProperty(),
+            X::FrameworkElement::
+                HorizontalAlignmentProperty(),
             X::HorizontalAlignment::Stretch);
 
-        SetDouble(
+        SetProperty(
             icon,
-            X::FrameworkElement::HeightProperty(),
+            X::FrameworkElement::
+                HeightProperty(),
             g_settings.rowHeight);
 
-        // A fixed-width inner Grid would overflow a padded outer control.
-        // Stretch it inside the original control's content area instead.
-        AutoWidth(container);
+        SetAutoWidth(container);
 
         SetProperty(
             container,
-            X::FrameworkElement::HorizontalAlignmentProperty(),
+            X::FrameworkElement::
+                HorizontalAlignmentProperty(),
             X::HorizontalAlignment::Stretch);
 
-        SetDouble(
+        SetProperty(
             container,
-            X::FrameworkElement::HeightProperty(),
-            kAuto);
+            X::FrameworkElement::
+                HeightProperty(),
+            g_settings.rowHeight);
 
-        if (auto control = icon.try_as<C::Control>()) {
-            SetProperty(
-                control,
-                C::Control::HorizontalContentAlignmentProperty(),
-                X::HorizontalAlignment::Stretch);
-        }
-
-        SetDouble(
+        SetProperty(
             presenter,
-            X::FrameworkElement::MinWidthProperty(),
+            X::FrameworkElement::
+                MinWidthProperty(),
             0.0);
 
-        SetDouble(
+        SetProperty(
             presenter,
-            X::FrameworkElement::MaxWidthProperty(),
-            kInfinity);
-
-        SetDouble(
-            presenter,
-            X::FrameworkElement::WidthProperty(),
+            X::FrameworkElement::
+                WidthProperty(),
             g_settings.iconAreaWidth);
 
         SetProperty(
             presenter,
-            X::FrameworkElement::HorizontalAlignmentProperty(),
+            X::FrameworkElement::
+                HorizontalAlignmentProperty(),
             X::HorizontalAlignment::Left);
 
         SetProperty(
             presenter,
-            X::FrameworkElement::VerticalAlignmentProperty(),
+            X::FrameworkElement::
+                VerticalAlignmentProperty(),
             X::VerticalAlignment::Center);
 
-        auto label = GetOrCreateLabel(icon, container);
+        if (auto control =
+                icon.try_as<C::Control>()) {
 
-        // Only our new label receives additional spacing.
-        auto presenterMargin = presenter.Margin();
+            SetProperty(
+                control,
+                C::Control::
+                    HorizontalContentAlignmentProperty(),
+                X::HorizontalAlignment::Stretch);
+        }
+
+        auto label =
+            GetOrCreateLabel(icon, container);
+
+        label.FontSize(g_settings.fontSize);
 
         X::Thickness desiredMargin{
-            std::max(0.0, presenterMargin.Left) +
-                g_settings.iconAreaWidth +
-                std::max(0.0, presenterMargin.Right) +
+            g_settings.iconAreaWidth +
                 kLabelGap,
             0.0,
             kLabelRightInset,
-            0.0
-        };
+            0.0};
 
-        auto currentMargin = label.Margin();
-
-        if (currentMargin.Left != desiredMargin.Left ||
-            currentMargin.Right != desiredMargin.Right) {
-            label.Margin(desiredMargin);
-        }
+        label.Margin(desiredMargin);
 
         if (label.Text() != name) {
             label.Text(name);
         }
+
+        RegisterIconEvents(icon);
     }
 
-    void ConfigureWidths(
+    void ConfigureLayout(
         C::Grid const& rootGrid,
         C::ItemsControl const& control,
         C::WrapGrid const& wrapGrid) {
 
-        // Fixed row slots, but auto-sized surrounding boxes.
-        // XAML includes each box's own padding/border/margin in Measure.
-        AutoWidth(rootGrid);
-        AutoWidth(control);
-        AutoWidth(wrapGrid);
+        /*
+         * RootGrid and all ancestors keep their original padding.
+         * Only the list content receives a fixed row width.
+         */
+        SetAutoWidth(rootGrid);
+        SetAutoWidth(control);
+        SetAutoWidth(wrapGrid);
 
         SetProperty(
             control,
-            X::FrameworkElement::HorizontalAlignmentProperty(),
+            X::FrameworkElement::
+                HorizontalAlignmentProperty(),
             X::HorizontalAlignment::Left);
 
         SetProperty(
             wrapGrid,
-            X::FrameworkElement::HorizontalAlignmentProperty(),
+            X::FrameworkElement::
+                HorizontalAlignmentProperty(),
             X::HorizontalAlignment::Left);
 
-        auto current =
-            M::VisualTreeHelper::GetParent(wrapGrid);
+        SetProperty(
+            wrapGrid,
+            C::WrapGrid::
+                OrientationProperty(),
+            C::Orientation::Horizontal);
 
-        // Release stale width constraints in the ItemsControl template.
-        // Never walk above the ItemsControl or alter ancestor spacing.
-        for (int depth = 0; current && depth < 16; ++depth) {
-            if (SameObject(current, control)) {
-                break;
-            }
+        SetProperty(
+            wrapGrid,
+            C::WrapGrid::
+                MaximumRowsOrColumnsProperty(),
+            1);
 
-            if (auto element =
-                    current.try_as<X::FrameworkElement>()) {
-                AutoWidth(element);
-            }
+        SetProperty(
+            wrapGrid,
+            C::WrapGrid::
+                ItemWidthProperty(),
+            g_settings.listWidth);
 
-            current = M::VisualTreeHelper::GetParent(current);
-        }
+        SetProperty(
+            wrapGrid,
+            C::WrapGrid::
+                ItemHeightProperty(),
+            g_settings.rowHeight);
     }
 
     void SizeViewport(
         C::Grid const& rootGrid,
         C::ItemsControl const& control) {
 
-        const float infinity =
-            std::numeric_limits<float>::infinity();
-
-        // DesiredSize includes the control's own layout spacing.
-        // Do not add control.Padding(), control.Margin() or parent
-        // padding to this width again.
-        control.Measure(WF::Size{infinity, infinity});
-
-        WF::Size desired = control.DesiredSize();
-
-        double contentWidth = desired.Width;
-        double contentHeight = desired.Height;
-
-        if (!std::isfinite(contentWidth) ||
-            !std::isfinite(contentHeight)) {
-            Wh_Log(L"Invalid ItemsControl desired size");
+        if (!scroll || !control) {
             return;
         }
 
-        contentWidth = std::max(contentWidth, g_settings.listWidth);
+        double maxHeight =
+            HeightLimit(rootGrid);
 
-        double maximumHeight = HeightLimit(rootGrid);
+        const float infinity =
+            std::numeric_limits<float>::infinity();
 
-        // Width/MaxHeight exclude the ScrollViewer's own Margin.
-        // Only its own padding and border belong in these dimensions.
-        double horizontalChrome =
+        control.Measure(
+            WF::Size{
+                infinity,
+                infinity});
+
+        auto desired =
+            control.DesiredSize();
+
+        double desiredWidth =
+            std::max(
+                g_settings.listWidth,
+                static_cast<double>(
+                    desired.Width));
+
+        double desiredHeight =
+            static_cast<double>(
+                desired.Height);
+
+        double scrollChromeWidth =
             HorizontalExtent(scroll.Padding()) +
             HorizontalExtent(scroll.BorderThickness());
 
-        double verticalChrome =
+        double scrollChromeHeight =
             VerticalExtent(scroll.Padding()) +
             VerticalExtent(scroll.BorderThickness());
 
-        double availableContentHeight =
-            std::max(0.0, maximumHeight - verticalChrome);
+        double availableHeight =
+            std::max(
+                0.0,
+                maxHeight -
+                    scrollChromeHeight);
 
         bool needsScrollBar =
-            contentHeight > availableContentHeight + 0.5;
+            desiredHeight >
+            availableHeight + 0.5;
 
-        double viewportWidth = std::ceil(
-            contentWidth +
-            horizontalChrome +
-            (needsScrollBar ? g_settings.scrollbarReserve : 0.0));
+        /*
+         * Do not add ancestor padding here. The popup presenter already
+         * owns that padding. Adding it again causes the right side to
+         * overflow while the left side appears too wide.
+         */
+        double viewportWidth =
+            desiredWidth +
+            scrollChromeWidth +
+            (needsScrollBar
+                 ? g_settings.scrollbarReserve
+                 : 0.0);
 
-        if (!EqualDouble(scroll.Width(), viewportWidth)) {
-            scroll.Width(viewportWidth);
-        }
-
-        if (!EqualDouble(scroll.MaxHeight(), maximumHeight)) {
-            scroll.MaxHeight(maximumHeight);
-        }
-
-        // RootGrid remains Auto. Its original padding, plus all outer
-        // borders/presenters, is accounted for by normal XAML layout.
+        scroll.Width(viewportWidth);
+        scroll.MaxHeight(maxHeight);
     }
 
     void ApplyLayout() {
-        if (updating || disabled || g_stopping.load()) {
+        if (updating ||
+            disabled ||
+            g_stopping.load()) {
             return;
         }
 
         auto rootGrid = root.get();
 
-        if (!rootGrid || !rootGrid.IsLoaded()) {
+        if (!rootGrid ||
+            !rootGrid.IsLoaded()) {
             return;
         }
 
         updating = true;
 
-        struct ResetFlag {
-            bool& flag;
-            ~ResetFlag() { flag = false; }
+        struct ResetUpdating {
+            bool& value;
+
+            ~ResetUpdating() {
+                value = false;
+            }
         } reset{updating};
 
         auto control = items;
 
         if (!control) {
             control =
-                FindDirectChild(
+                FindDescendant(
                     rootGrid,
-                    nullptr,
                     L"Windows.UI.Xaml.Controls.ItemsControl")
                     .try_as<C::ItemsControl>();
         }
@@ -939,76 +1166,50 @@ struct State {
         }
 
         auto wrapGrid =
-            control.ItemsPanelRoot().try_as<C::WrapGrid>();
+            control.ItemsPanelRoot()
+                .try_as<C::WrapGrid>();
 
         if (!wrapGrid) {
             return;
         }
 
-        if (!EnsureScrollViewer(rootGrid, control)) {
+        if (!EnsureScrollViewer(
+                rootGrid,
+                control)) {
             return;
         }
 
-        PruneExpiredEntries();
-
-        if (wrapGrid.Orientation() != C::Orientation::Horizontal) {
-            SetProperty(
-                wrapGrid,
-                C::WrapGrid::OrientationProperty(),
-                C::Orientation::Horizontal);
-        }
-
-        if (wrapGrid.MaximumRowsOrColumns() != 1) {
-            SetProperty(
-                wrapGrid,
-                C::WrapGrid::MaximumRowsOrColumnsProperty(),
-                1);
-        }
-
-        SetDouble(
-            wrapGrid,
-            C::WrapGrid::ItemWidthProperty(),
-            g_settings.listWidth);
-
-        SetDouble(
-            wrapGrid,
-            C::WrapGrid::ItemHeightProperty(),
-            g_settings.rowHeight);
-
-        ConfigureWidths(rootGrid, control, wrapGrid);
+        PruneEntries();
+        ConfigureLayout(
+            rootGrid,
+            control,
+            wrapGrid);
 
         int count =
-            M::VisualTreeHelper::GetChildrenCount(wrapGrid);
+            M::VisualTreeHelper::
+                GetChildrenCount(wrapGrid);
 
         for (int i = 0; i < count; ++i) {
             auto child =
-                M::VisualTreeHelper::GetChild(wrapGrid, i);
+                M::VisualTreeHelper::
+                    GetChild(wrapGrid, i);
 
             auto icon =
                 FindDescendant(
                     child,
-                    L"SystemTray.NotifyIconView");
+                    kIconViewClass);
 
             if (!icon) {
                 continue;
             }
 
-            if (auto element = child.try_as<X::FrameworkElement>()) {
-                AutoWidth(element);
-
+            if (auto presenter =
+                    child.try_as<C::ContentPresenter>()) {
                 SetProperty(
-                    element,
-                    X::FrameworkElement::HorizontalAlignmentProperty(),
+                    presenter,
+                    C::ContentPresenter::
+                        HorizontalContentAlignmentProperty(),
                     X::HorizontalAlignment::Stretch);
-
-                if (auto presenter =
-                        element.try_as<C::ContentPresenter>()) {
-                    SetProperty(
-                        presenter,
-                        C::ContentPresenter::
-                            HorizontalContentAlignmentProperty(),
-                        X::HorizontalAlignment::Stretch);
-                }
             }
 
             StyleIcon(icon);
@@ -1020,15 +1221,47 @@ struct State {
     void Restore() noexcept {
         disabled = true;
 
-        for (auto const& entry : labels) {
+        for (const auto& item : loadedHandlers) {
             try {
-                auto container = entry.container.get();
-                auto label = entry.label.get();
+                auto element = item.element.get();
+
+                if (element) {
+                    element.Loaded(item.token);
+                }
+            } catch (...) {
+                LogException(L"Remove Loaded handler");
+            }
+        }
+
+        loadedHandlers.clear();
+
+        for (const auto& item : nameHandlers) {
+            try {
+                auto element = item.element.get();
+
+                if (element) {
+                    element.UnregisterPropertyChangedCallback(
+                        A::AutomationProperties::NameProperty(),
+                        item.token.value);
+                }
+            } catch (...) {
+                LogException(L"Remove name handler");
+            }
+        }
+
+        nameHandlers.clear();
+
+        for (const auto& item : labels) {
+            try {
+                auto container = item.container.get();
+                auto label = item.label.get();
 
                 if (container && label) {
                     uint32_t index = 0;
 
-                    if (container.Children().IndexOf(label, index)) {
+                    if (container.Children().IndexOf(
+                            label,
+                            index)) {
                         container.Children().RemoveAt(index);
                     }
                 }
@@ -1040,22 +1273,29 @@ struct State {
         labels.clear();
 
         for (auto it = savedProperties.rbegin();
-             it != savedProperties.rend(); ++it) {
+             it != savedProperties.rend();
+             ++it) {
 
             try {
                 auto element = it->element.get();
+
                 if (!element) {
                     continue;
                 }
 
                 if (it->binding) {
-                    element.SetBinding(it->property, it->binding);
+                    element.SetBinding(
+                        it->property,
+                        it->binding);
                 } else if (SameObject(
                                it->localValue,
-                               X::DependencyProperty::UnsetValue())) {
+                               X::DependencyProperty::
+                                   UnsetValue())) {
                     element.ClearValue(it->property);
                 } else {
-                    element.SetValue(it->property, it->localValue);
+                    element.SetValue(
+                        it->property,
+                        it->localValue);
                 }
             } catch (...) {
                 LogException(L"Restore property");
@@ -1068,27 +1308,35 @@ struct State {
             auto parent = scrollParent.get();
 
             if (parent && scroll && items) {
-                uint32_t targetIndex = originalChildIndex;
                 uint32_t currentIndex = 0;
+                uint32_t targetIndex = originalChildIndex;
 
-                if (parent.Children().IndexOf(scroll, currentIndex)) {
+                if (parent.Children().IndexOf(
+                        scroll,
+                        currentIndex)) {
                     targetIndex = currentIndex;
                     parent.Children().RemoveAt(currentIndex);
                 }
 
-                if (SameObject(scroll.Content(), items)) {
+                if (SameObject(
+                        scroll.Content(),
+                        items)) {
                     scroll.Content(nullptr);
                 }
 
-                if (!M::VisualTreeHelper::GetParent(items)) {
+                if (!M::VisualTreeHelper::
+                        GetParent(items)) {
                     targetIndex = std::min(
-                        targetIndex, parent.Children().Size());
+                        targetIndex,
+                        parent.Children().Size());
 
-                    parent.Children().InsertAt(targetIndex, items);
+                    parent.Children().InsertAt(
+                        targetIndex,
+                        items);
                 }
             }
         } catch (...) {
-            LogException(L"Restore items parent");
+            LogException(L"Restore visual tree");
         }
 
         items = nullptr;
@@ -1102,7 +1350,81 @@ struct OwnedWindow {
     std::unique_ptr<State> state;
 };
 
-std::vector<OwnedWindow> g_ownedWindows;
+[[clang::no_destroy]]
+std::optional<std::vector<OwnedWindow>> g_ownedWindows{
+    std::in_place
+};
+
+bool IsRootAlive(State const& state) {
+    auto root = state.root.get();
+
+    return root && root.IsLoaded();
+}
+
+State* FindStateForIcon(
+    X::FrameworkElement const& icon) {
+
+    if (!g_ownedWindows) {
+        return nullptr;
+    }
+
+    DWORD threadId =
+        GetCurrentThreadId();
+
+    for (auto& owned : *g_ownedWindows) {
+        if (!owned.state ||
+            owned.state->threadId != threadId) {
+            continue;
+        }
+
+        auto root =
+            owned.state->root.get();
+
+        if (root &&
+            IsDescendantOf(icon, root)) {
+            return owned.state.get();
+        }
+    }
+
+    return nullptr;
+}
+
+void RegisterDynamicIcon(
+    X::FrameworkElement const& icon) {
+
+    if (!icon || !g_ownedWindows) {
+        return;
+    }
+
+    auto weakIcon =
+        winrt::make_weak(icon);
+
+    icon.Loaded(
+        [weakIcon](
+            WF::IInspectable const&,
+            X::RoutedEventArgs const&) {
+
+            try {
+                auto loadedIcon = weakIcon.get();
+
+                if (!loadedIcon) {
+                    return;
+                }
+
+                auto state =
+                    FindStateForIcon(loadedIcon);
+
+                if (!state || state->disabled) {
+                    return;
+                }
+
+                state->ApplyLayout();
+            } catch (...) {
+                LogException(
+                    L"Dynamic icon Loaded handler");
+            }
+        });
+}
 
 LRESULT CALLBACK HelperWindowProc(
     HWND window,
@@ -1110,12 +1432,19 @@ LRESULT CALLBACK HelperWindowProc(
     WPARAM wParam,
     LPARAM lParam) {
 
-    auto state = reinterpret_cast<State*>(
-        GetWindowLongPtrW(window, GWLP_USERDATA));
+    auto state =
+        reinterpret_cast<State*>(
+            GetWindowLongPtrW(
+                window,
+                GWLP_USERDATA));
 
     if (message == WM_NCCREATE) {
-        auto create = reinterpret_cast<CREATESTRUCTW*>(lParam);
-        state = static_cast<State*>(create->lpCreateParams);
+        auto create =
+            reinterpret_cast<CREATESTRUCTW*>(lParam);
+
+        state =
+            static_cast<State*>(
+                create->lpCreateParams);
 
         SetWindowLongPtrW(
             window,
@@ -1125,26 +1454,9 @@ LRESULT CALLBACK HelperWindowProc(
         return TRUE;
     }
 
-    if (message == WM_TIMER && wParam == kTimerId) {
-        if (state && !g_stopping.load()) {
-            try {
-                state->ApplyLayout();
-            } catch (...) {
-                LogException(L"Apply layout");
-                state->Restore();
-                KillTimer(window, kTimerId);
-            }
-        }
-
-        return 0;
-    }
-
     if (message == kCleanupMessage) {
-        KillTimer(window, kTimerId);
-
         if (state) {
             state->Restore();
-            state->root = {};
         }
 
         DestroyWindow(window);
@@ -1152,72 +1464,120 @@ LRESULT CALLBACK HelperWindowProc(
     }
 
     if (message == WM_NCDESTROY) {
-        if (state && !state->disabled) {
-            state->Restore();
-        }
-
-        SetWindowLongPtrW(window, GWLP_USERDATA, 0);
+        SetWindowLongPtrW(
+            window,
+            GWLP_USERDATA,
+            0);
     }
 
-    return DefWindowProcW(window, message, wParam, lParam);
+    return DefWindowProcW(
+        window,
+        message,
+        wParam,
+        lParam);
 }
 
-void ObserveOverflowRoot(C::Grid const& root) {
-    std::lock_guard lock(g_windowsMutex);
+void ObserveOverflowRoot(
+    C::Grid const& root) {
 
-    if (g_stopping.load()) {
+    if (!root ||
+        !g_ownedWindows ||
+        g_stopping.load()) {
         return;
     }
 
-    DWORD threadId = GetCurrentThreadId();
+    std::lock_guard lock(g_windowsMutex);
 
-    for (auto const& owned : g_ownedWindows) {
-        if (owned.state->threadId != threadId) {
+    DWORD threadId =
+        GetCurrentThreadId();
+
+    /*
+     * Remove states whose overflow root has been destroyed.
+     * Cleanup runs on this same taskbar UI thread.
+     */
+    for (auto it = g_ownedWindows->begin();
+         it != g_ownedWindows->end();) {
+
+        if (!it->state ||
+            it->state->threadId != threadId) {
+            ++it;
             continue;
         }
 
-        auto existing = owned.state->root.get();
+        auto oldRoot =
+            it->state->root.get();
 
-        if (existing && SameObject(existing, root)) {
-            if (!owned.state->disabled && IsWindow(owned.window)) {
-                PostMessageW(owned.window, WM_TIMER, kTimerId, 0);
+        if (!oldRoot ||
+            !oldRoot.IsLoaded()) {
+
+            it->state->Restore();
+
+            if (IsWindow(it->window)) {
+                DestroyWindow(it->window);
             }
+
+            it =
+                g_ownedWindows->erase(it);
+
+            continue;
+        }
+
+        if (SameObject(oldRoot, root)) {
+            try {
+                it->state->ApplyLayout();
+            } catch (...) {
+                LogException(L"Refresh overflow layout");
+            }
+
             return;
         }
+
+        ++it;
     }
 
-    auto state = std::make_unique<State>(root);
+    auto state =
+        std::make_unique<State>(root);
 
-    HWND window = CreateWindowExW(
-        0,
-        kWindowClass,
-        L"",
-        0,
-        0, 0, 0, 0,
-        HWND_MESSAGE,
-        nullptr,
-        g_self,
-        state.get());
+    HWND window =
+        CreateWindowExW(
+            0,
+            kWindowClass,
+            L"",
+            0,
+            0,
+            0,
+            0,
+            0,
+            HWND_MESSAGE,
+            nullptr,
+            g_self,
+            state.get());
 
     if (!window) {
-        Wh_Log(L"CreateWindowExW failed: %u", GetLastError());
+        Wh_Log(
+            L"CreateWindowExW failed: %u",
+            GetLastError());
         return;
     }
 
-    if (!SetTimer(window, kTimerId, kTimerPeriodMs, nullptr)) {
-        DWORD error = GetLastError();
-        DestroyWindow(window);
-        Wh_Log(L"SetTimer failed: %u", error);
-        return;
+    State* statePointer = state.get();
+
+    g_ownedWindows->push_back(
+        OwnedWindow{
+            window,
+            std::move(state)});
+
+    try {
+        statePointer->ApplyLayout();
+    } catch (...) {
+        LogException(L"Initial overflow layout");
+        statePointer->Restore();
     }
-
-    g_ownedWindows.push_back(
-        OwnedWindow{window, std::move(state)});
-
-    PostMessageW(window, WM_TIMER, kTimerId, 0);
 }
 
-C::Grid ReadOverflowRoot(void* instance) {
+C::Grid ReadOverflowRoot(
+    void* instance) {
+
     if (!instance) {
         return nullptr;
     }
@@ -1225,11 +1585,10 @@ C::Grid ReadOverflowRoot(void* instance) {
     IUnknown* candidate = nullptr;
     SIZE_T bytesRead = 0;
 
-    const auto address =
+    const BYTE* address =
         reinterpret_cast<const BYTE*>(instance) +
         5 * sizeof(void*);
 
-    // Protects the memory read, not the undocumented COM object layout.
     if (!ReadProcessMemory(
             GetCurrentProcess(),
             address,
@@ -1243,14 +1602,21 @@ C::Grid ReadOverflowRoot(void* instance) {
 
     C::Grid root{nullptr};
 
-    HRESULT result = candidate->QueryInterface(
-        winrt::guid_of<C::Grid>(),
-        winrt::put_abi(root));
+    HRESULT result =
+        candidate->QueryInterface(
+            winrt::guid_of<C::Grid>(),
+            winrt::put_abi(root));
 
-    return SUCCEEDED(result) ? root : nullptr;
+    if (FAILED(result)) {
+        return nullptr;
+    }
+
+    return root;
 }
 
-void WINAPI InitializeHook(void* instance) {
+void WINAPI InitializeHook(
+    void* instance) {
+
     g_initializeOriginal(instance);
 
     if (g_stopping.load()) {
@@ -1258,7 +1624,8 @@ void WINAPI InitializeHook(void* instance) {
     }
 
     try {
-        if (auto root = ReadOverflowRoot(instance)) {
+        if (auto root =
+                ReadOverflowRoot(instance)) {
             ObserveOverflowRoot(root);
         }
     } catch (...) {
@@ -1266,22 +1633,68 @@ void WINAPI InitializeHook(void* instance) {
     }
 }
 
-unsigned GetModuleMajorVersion(HMODULE module) {
-    HRSRC resource = FindResourceW(
-        module,
-        MAKEINTRESOURCEW(VS_VERSION_INFO),
-        RT_VERSION);
+void* WINAPI IconViewCtorHook(
+    void* instance) {
+
+    void* result =
+        g_iconViewCtorOriginal(instance);
+
+    if (!result ||
+        g_stopping.load()) {
+        return result;
+    }
+
+    try {
+        auto unknown =
+            *reinterpret_cast<IUnknown**>(
+                reinterpret_cast<BYTE*>(instance) +
+                sizeof(void*));
+
+        if (!unknown) {
+            return result;
+        }
+
+        X::FrameworkElement icon{nullptr};
+
+        HRESULT queryResult =
+            unknown->QueryInterface(
+                winrt::guid_of<X::FrameworkElement>(),
+                winrt::put_abi(icon));
+
+        if (SUCCEEDED(queryResult) &&
+            icon) {
+            RegisterDynamicIcon(icon);
+        }
+    } catch (...) {
+        LogException(L"IconView constructor");
+    }
+
+    return result;
+}
+
+unsigned GetModuleMajorVersion(
+    HMODULE module) {
+
+    HRSRC resource =
+        FindResourceW(
+            module,
+            MAKEINTRESOURCEW(VS_VERSION_INFO),
+            RT_VERSION);
 
     if (!resource) {
         return 0;
     }
 
-    HGLOBAL loaded = LoadResource(module, resource);
+    HGLOBAL loaded =
+        LoadResource(module, resource);
+
     if (!loaded) {
         return 0;
     }
 
-    void* data = LockResource(loaded);
+    void* data =
+        LockResource(loaded);
+
     if (!data) {
         return 0;
     }
@@ -1295,7 +1708,7 @@ unsigned GetModuleMajorVersion(HMODULE module) {
             reinterpret_cast<void**>(&info),
             &size) ||
         !info ||
-        size < sizeof(*info)) {
+        size < sizeof(VS_FIXEDFILEINFO)) {
         return 0;
     }
 
@@ -1303,22 +1716,29 @@ unsigned GetModuleMajorVersion(HMODULE module) {
 }
 
 HMODULE FindSystemTrayModule() {
-    if (auto module = GetModuleHandleW(L"SystemTray.dll")) {
+    if (auto module =
+            GetModuleHandleW(L"SystemTray.dll")) {
         return module;
     }
 
-    if (auto module = GetModuleHandleW(L"Taskbar.View.dll")) {
-        unsigned major = GetModuleMajorVersion(module);
+    if (auto module =
+            GetModuleHandleW(L"Taskbar.View.dll")) {
 
-        if (major != 0 && major < 2604) {
+        unsigned major =
+            GetModuleMajorVersion(module);
+
+        if (major == 0 || major < 2604) {
             return module;
         }
     }
 
-    return GetModuleHandleW(L"ExplorerExtensions.dll");
+    return GetModuleHandleW(
+        L"ExplorerExtensions.dll");
 }
 
-bool InstallSystemTraySymbols(HMODULE module) {
+bool InstallSystemTraySymbols(
+    HMODULE module) {
+
     // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
@@ -1328,6 +1748,13 @@ bool InstallSystemTraySymbols(HMODULE module) {
             &g_initializeOriginal,
             InitializeHook,
         },
+        {
+            {
+                LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"
+            },
+            &g_iconViewCtorOriginal,
+            IconViewCtorHook,
+        },
     };
 
     return WindhawkUtils::HookSymbols(
@@ -1336,25 +1763,36 @@ bool InstallSystemTraySymbols(HMODULE module) {
         ARRAYSIZE(hooks));
 }
 
-void TryInstallHooks(bool applyOperations) {
-    if (g_stopping.load() || g_hookState.load() != 0) {
+void TryInstallHooks(
+    bool applyOperations) {
+
+    if (g_stopping.load() ||
+        g_hookState.load() != 0) {
         return;
     }
 
-    HMODULE module = FindSystemTrayModule();
+    HMODULE module =
+        FindSystemTrayModule();
+
     if (!module) {
         return;
     }
 
     int expected = 0;
-    if (!g_hookState.compare_exchange_strong(expected, 1)) {
+
+    if (!g_hookState.compare_exchange_strong(
+            expected,
+            1)) {
         return;
     }
 
     try {
         if (!InstallSystemTraySymbols(module)) {
             g_hookState.store(-1);
-            Wh_Log(L"Unsupported SystemTray symbols");
+
+            Wh_Log(
+                L"SystemTray symbols not found");
+
             return;
         }
 
@@ -1363,7 +1801,9 @@ void TryInstallHooks(bool applyOperations) {
         }
 
         g_hookState.store(2);
-        Wh_Log(L"Tray overflow hook installed");
+
+        Wh_Log(
+            L"Tray overflow hooks installed");
     } catch (...) {
         g_hookState.store(-1);
         LogException(L"Install hooks");
@@ -1376,13 +1816,18 @@ HMODULE WINAPI LoadLibraryExWHook(
     DWORD flags) {
 
     HMODULE module =
-        g_loadLibraryExWOriginal(fileName, file, flags);
+        g_loadLibraryExWOriginal(
+            fileName,
+            file,
+            flags);
 
     if (module &&
-        !(flags & (
-            LOAD_LIBRARY_AS_DATAFILE |
-            LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
-            LOAD_LIBRARY_AS_IMAGE_RESOURCE))) {
+        !(flags &
+          LOAD_LIBRARY_AS_DATAFILE) &&
+        !(flags &
+          LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE) &&
+        !(flags &
+          LOAD_LIBRARY_AS_IMAGE_RESOURCE)) {
         TryInstallHooks(true);
     }
 
@@ -1392,26 +1837,42 @@ HMODULE WINAPI LoadLibraryExWHook(
 void StopAndRestore() {
     g_stopping.store(true);
 
+    if (!g_ownedWindows) {
+        return;
+    }
+
     std::vector<HWND> windows;
 
     {
         std::lock_guard lock(g_windowsMutex);
 
-        for (auto const& owned : g_ownedWindows) {
+        for (const auto& owned : *g_ownedWindows) {
             windows.push_back(owned.window);
         }
     }
 
-    // Synchronous cleanup keeps callbacks from surviving DLL unload.
+    /*
+     * Restore and destroy every helper window synchronously on the
+     * taskbar UI thread before releasing the owning vector.
+     */
     for (HWND window : windows) {
         if (IsWindow(window)) {
-            SendMessageW(window, kCleanupMessage, 0, 0);
+            SendMessageW(
+                window,
+                kCleanupMessage,
+                0,
+                0);
         }
     }
 
     {
         std::lock_guard lock(g_windowsMutex);
-        g_ownedWindows.clear();
+
+        /*
+         * g_ownedWindows contains strong XAML references. Its storage must
+         * be released only after Restore() ran on the UI thread.
+         */
+        g_ownedWindows.reset();
     }
 }
 
@@ -1423,29 +1884,46 @@ BOOL Wh_ModInit() {
     if (!GetModuleHandleExW(
             GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                 GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            reinterpret_cast<LPCWSTR>(&HelperWindowProc),
+            reinterpret_cast<LPCWSTR>(
+                &HelperWindowProc),
             &g_self)) {
         return FALSE;
     }
 
     WNDCLASSW windowClass{};
-    windowClass.lpfnWndProc = HelperWindowProc;
-    windowClass.hInstance = g_self;
-    windowClass.lpszClassName = kWindowClass;
 
-    g_windowClass = RegisterClassW(&windowClass);
+    windowClass.lpfnWndProc =
+        HelperWindowProc;
+
+    windowClass.hInstance =
+        g_self;
+
+    windowClass.lpszClassName =
+        kWindowClass;
+
+    g_windowClass =
+        RegisterClassW(&windowClass);
 
     if (!g_windowClass) {
-        Wh_Log(L"RegisterClassW failed: %u", GetLastError());
+        Wh_Log(
+            L"RegisterClassW failed: %u",
+            GetLastError());
+
         return FALSE;
     }
 
-    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+    HMODULE kernelBase =
+        GetModuleHandleW(
+            L"kernelbase.dll");
 
-    auto loadLibrary = kernelBase
-        ? reinterpret_cast<LoadLibraryExWFn>(
-              GetProcAddress(kernelBase, "LoadLibraryExW"))
-        : nullptr;
+    auto loadLibrary =
+        kernelBase
+            ? reinterpret_cast<
+                  LoadLibraryExWFn>(
+                  GetProcAddress(
+                      kernelBase,
+                      "LoadLibraryExW"))
+            : nullptr;
 
     if (!loadLibrary ||
         !WindhawkUtils::SetFunctionHook(
@@ -1453,16 +1931,24 @@ BOOL Wh_ModInit() {
             LoadLibraryExWHook,
             &g_loadLibraryExWOriginal)) {
 
-        UnregisterClassW(kWindowClass, g_self);
+        UnregisterClassW(
+            kWindowClass,
+            g_self);
+
         g_windowClass = 0;
+
         return FALSE;
     }
 
     TryInstallHooks(false);
 
     if (g_hookState.load() == -1) {
-        UnregisterClassW(kWindowClass, g_self);
+        UnregisterClassW(
+            kWindowClass,
+            g_self);
+
         g_windowClass = 0;
+
         return FALSE;
     }
 
@@ -1473,29 +1959,40 @@ void Wh_ModAfterInit() {
     TryInstallHooks(true);
 }
 
-void Wh_ModSettingsChanged() {
-    LoadSettings();
-
-    std::lock_guard lock(g_windowsMutex);
-
-    for (const auto& owned : g_ownedWindows) {
-        if (owned.window && IsWindow(owned.window)) {
-            PostMessageW(
-                owned.window,
-                WM_TIMER,
-                kTimerId,
-                0);
-        }
-    }
-}
-
 void Wh_ModBeforeUninit() {
     StopAndRestore();
 }
 
 void Wh_ModUninit() {
     if (g_windowClass) {
-        UnregisterClassW(kWindowClass, g_self);
+        UnregisterClassW(
+            kWindowClass,
+            g_self);
+
         g_windowClass = 0;
+    }
+}
+
+void Wh_ModSettingsChanged() {
+    LoadSettings();
+
+    if (!g_ownedWindows) {
+        return;
+    }
+
+    std::lock_guard lock(g_windowsMutex);
+
+    for (auto& owned : *g_ownedWindows) {
+        if (!owned.state ||
+            owned.state->disabled) {
+            continue;
+        }
+
+        try {
+            owned.state->ApplyLayout();
+        } catch (...) {
+            LogException(
+                L"Apply settings");
+        }
     }
 }
