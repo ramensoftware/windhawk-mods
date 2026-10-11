@@ -34,7 +34,6 @@ Designed for Windows 11 with the WinAppSDK (WinUI 3) File Explorer.
 * **Batch Spawning (`%sel_each%`)** — Automatically launch an application instance for each highlighted item with built-in safety throttling.
 * **Secondary Command Bar Placement** — Dock custom actions on the right side of the command bar (next to the Details/Preview pane toggles) for a clean dual-toolbar layout.
 * **Theme-Aware Icons** — Support fluent Segoe glyphs, local `.exe` / `.dll` / `.ico` paths, Store apps (`shell:AppsFolder\...`), and dual Light/Dark icons via `LightPath | DarkPath` syntax.
-* **Integrated Shell Context Menu** — Append a dedicated toolbar button that triggers the full native Windows context menu (with full Nilesoft Shell support).
 * **Open on Hover** — Open dropdown menus smoothly on cursor hover.
 
 ---
@@ -87,9 +86,9 @@ Instead of an executable path, you can set **Command** to one of these built-in 
 * **vs. `explorer-command-bar` (DanRotaru)**: 
   The original mod provides static command buttons and hides built-in buttons. **Dynamic Explorer Command Bar** extends this with real-time selection-based extension filtering, per-item execution (`%sel_each%`), secondary toolbar placement, dual Light/Dark icons, and an expanded token engine (`%files`, `%folders`, `%n`, `%ext`, `%c`, `%d_name`, `%p`).
 * **vs. `explorer-custom-shortcuts` (ArvindSaini978)**:
-  While *Explorer Custom Shortcuts* provides background keyboard hotkeys, this mod brings that dynamic parameter evaluation into the visual Windows 11 UI toolbar with clickable actions and dropdown flyouts.
+  While *Explorer Custom Shortcuts* provides background keyboard hotkeys, this mod brings dynamic parameter evaluation directly to the visual WinUI command bar.
 * **vs. `explorer-folder-bookmarks-bar` (Maxim Fomin)**:
-  *Explorer Folder Bookmarks Bar* adds a dedicated horizontal folder shortcut strip. This mod focuses on customizable action buttons, command execution, and deep integration into the native command bar.
+  *Explorer Folder Bookmarks Bar* adds a dedicated horizontal folder strip. This mod focuses on customizable action buttons, command execution, and deep integration into the native command bar.
 
 ---
 
@@ -242,18 +241,6 @@ Instead of an executable path, you can set **Command** to one of these built-in 
 - disabledInsteadOfHidden: false
   $name: Disable buttons instead of hiding them
   $description: Gray out inactive buttons instead of removing them from the toolbar.
-- contextMenuItem:
-  - enabled: false
-    $name: Add the context menu item
-  - useNilesoftShell: false
-    $name: Let File Explorer show the menu (for Nilesoft Shell)
-  - showLabel: false
-    $name: Show the item label
-  - buttonLabel: Context menu
-    $name: Item label
-  - buttonIcon: E8FD
-    $name: Item icon glyph or icon path
-  $name: Context menu item
 - openMenuOnHover: false
   $name: Open menus on hover
 - menuHoverDelay: 400
@@ -293,6 +280,14 @@ Instead of an executable path, you can set **Command** to one of these built-in 
 #include <vector>
 
 std::atomic<bool> g_unloading;
+std::atomic<int> g_pendingDispatches{0};
+
+struct PendingDispatchScope {
+    PendingDispatchScope() { g_pendingDispatches++; }
+    ~PendingDispatchScope() { g_pendingDispatches--; }
+    PendingDispatchScope(const PendingDispatchScope&) = delete;
+    PendingDispatchScope& operator=(const PendingDispatchScope&) = delete;
+};
 
 static constexpr CLSID kCLSID_ShellWindows = {
     0x9ba05972,
@@ -320,14 +315,6 @@ struct ActionItem {
     std::vector<ActionItem> subItems;
 };
 
-struct ContextMenuItemSettings {
-    bool enabled = false;
-    bool useNilesoftShell = false;
-    bool showLabel = false;
-    std::wstring buttonLabel = L"Context menu";
-    std::wstring buttonIcon;
-};
-
 struct {
     std::mutex mutex;
     bool placeOnSecondaryBar = true;
@@ -335,7 +322,6 @@ struct {
     bool openMenuOnHover = false;
     int menuHoverDelay = 400;
     std::vector<ActionItem> items;
-    ContextMenuItemSettings contextMenuItem;
 } g_settings;
 
 // clang-format off
@@ -368,16 +354,16 @@ namespace muxm = winrt::Microsoft::UI::Xaml::Media;
 
 const std::wstring kButtonNamePrefix =
     std::wstring(L"WH_") + WH_MOD_ID + L"_Btn";
-const std::wstring kContextMenuButtonName =
-    std::wstring(L"WH_") + WH_MOD_ID + L"_ContextMenu";
 
 struct CommandBarEntry {
     winrt::weak_ref<muxc::CommandBar> commandBar;
     mux::DispatcherTimer selectionTimer{nullptr};
     winrt::event_token selectionTickToken{};
     HWND cachedTabWnd = nullptr;
+    winrt::com_ptr<IShellBrowser> cachedBrowser{nullptr};
     winrt::com_ptr<IShellView> cachedShellView{nullptr};
     int lastSelectionCount = -1;
+    int lastFocusedItem = -1;
 };
 
 thread_local std::vector<CommandBarEntry> g_entries;
@@ -417,9 +403,11 @@ void StopSelectionTimer(CommandBarEntry& entry) {
         entry.selectionTimer = nullptr;
         entry.selectionTickToken = {};
     }
+    entry.cachedBrowser = nullptr;
     entry.cachedShellView = nullptr;
     entry.cachedTabWnd = nullptr;
     entry.lastSelectionCount = -1;
+    entry.lastFocusedItem = -1;
 }
 
 void RevokeHandlersForCurrentThread() {
@@ -453,14 +441,19 @@ std::wstring ToLower(std::wstring str) {
     return str;
 }
 
-std::wstring TrimQuotesAndSpaces(std::wstring str) {
+std::wstring TrimWhitespaceAndQuotes(std::wstring str) {
     size_t first = str.find_first_not_of(L" \t");
     if (first == std::wstring::npos)
-        return std::wstring();
+        return L"";
     size_t last = str.find_last_not_of(L" \t");
     str = str.substr(first, last - first + 1);
     if (str.size() >= 2 && str.front() == L'"' && str.back() == L'"') {
         str = str.substr(1, str.size() - 2);
+        first = str.find_first_not_of(L" \t");
+        if (first == std::wstring::npos)
+            return L"";
+        last = str.find_last_not_of(L" \t");
+        str = str.substr(first, last - first + 1);
     }
     return str;
 }
@@ -522,11 +515,12 @@ struct ExplorerContext {
 };
 
 // ============================================================================
-// Shell View & Selection Inspection (Direct Focus Traversal & CF_HDROP)
+// Shell Browser & Selection Inspection
 // ============================================================================
 
-winrt::com_ptr<IShellView> GetActiveShellViewFromFocus(HWND hExplorerWnd,
-                                                       HWND hCapturedFocus) {
+winrt::com_ptr<IShellBrowser> GetActiveShellBrowser(
+    HWND hExplorerWnd,
+    HWND hCapturedFocus = nullptr) {
     winrt::com_ptr<IShellWindows> shellWindows;
     if (FAILED(CoCreateInstance(kCLSID_ShellWindows, nullptr, CLSCTX_ALL,
                                 IID_PPV_ARGS(shellWindows.put()))) ||
@@ -600,41 +594,23 @@ winrt::com_ptr<IShellView> GetActiveShellViewFromFocus(HWND hExplorerWnd,
                 continue;
         }
 
-        IShellView* pShellView = nullptr;
-        if (SUCCEEDED(shellBrowser->QueryActiveShellView(&pShellView)) &&
-            pShellView) {
-            winrt::com_ptr<IShellView> sv;
-            sv.attach(pShellView);
-            return sv;
-        }
+        return shellBrowser;
     }
 
     return nullptr;
 }
 
 winrt::com_ptr<IShellView> GetActiveShellView(HWND hExplorerWnd) {
-    return GetActiveShellViewFromFocus(GetAncestor(hExplorerWnd, GA_ROOT),
-                                       GetFocus());
-}
-
-bool ShellViewHasSelection(winrt::com_ptr<IShellView> const& shellView) {
-    auto folderView = shellView.try_as<IFolderView>();
-    if (!folderView)
-        return false;
-    int count = 0;
-    return SUCCEEDED(folderView->ItemCount(SVGIO_SELECTION, &count)) &&
-           count > 0;
-}
-
-HWND FindShellViewWindow(HWND hExplorerWnd) {
-    HWND hTabWnd =
-        FindWindowExW(hExplorerWnd, nullptr, L"ShellTabWindowClass", nullptr);
-    if (hTabWnd) {
-        if (HWND hView =
-                FindWindowExW(hTabWnd, nullptr, L"SHELLDLL_DefView", nullptr))
-            return hView;
+    if (auto browser = GetActiveShellBrowser(GetAncestor(hExplorerWnd, GA_ROOT),
+                                             GetFocus())) {
+        IShellView* pView = nullptr;
+        if (SUCCEEDED(browser->QueryActiveShellView(&pView)) && pView) {
+            winrt::com_ptr<IShellView> sv;
+            sv.attach(pView);
+            return sv;
+        }
     }
-    return FindWindowExW(hExplorerWnd, nullptr, L"SHELLDLL_DefView", nullptr);
+    return nullptr;
 }
 
 std::vector<std::wstring> GetSelectedPathsHDROP(IShellView* psv) {
@@ -673,8 +649,7 @@ ExplorerContext GetExplorerContext(HWND hExplorerWnd) {
     if (!hExplorerWnd)
         return result;
 
-    HWND hRoot = GetAncestor(hExplorerWnd, GA_ROOT);
-    result.shellView = GetActiveShellViewFromFocus(hRoot, GetFocus());
+    result.shellView = GetActiveShellView(hExplorerWnd);
     if (!result.shellView)
         return result;
 
@@ -729,277 +704,6 @@ HWND GetExplorerWindowForElement(mux::FrameworkElement const& element) {
 }
 
 // ============================================================================
-// Shell Context Menu Handlers
-// ============================================================================
-
-bool RequestShellViewContextMenu(HWND hExplorerWnd) {
-    HWND hViewWnd = FindShellViewWindow(hExplorerWnd);
-    if (!hViewWnd) {
-        Wh_Log(L"No shell view window for %08X",
-               (DWORD)(ULONG_PTR)hExplorerWnd);
-        return false;
-    }
-    return PostMessageW(hViewWnd, WM_CONTEXTMENU, (WPARAM)hViewWnd,
-                        (LPARAM)-1) != FALSE;
-}
-
-winrt::com_ptr<IContextMenu> GetShellContextMenu(HWND hExplorerWnd,
-                                                 bool* isItemMenu) {
-    *isItemMenu = false;
-    auto shellView = GetActiveShellView(hExplorerWnd);
-    if (!shellView) {
-        Wh_Log(L"No shell view for window %08X",
-               (DWORD)(ULONG_PTR)hExplorerWnd);
-        return nullptr;
-    }
-
-    *isItemMenu = ShellViewHasSelection(shellView);
-    UINT viewObject = *isItemMenu ? SVGIO_SELECTION : SVGIO_BACKGROUND;
-
-    winrt::com_ptr<IContextMenu> contextMenu;
-    HRESULT hr = shellView->GetItemObject(viewObject, __uuidof(IContextMenu),
-                                          contextMenu.put_void());
-    if (FAILED(hr) || !contextMenu) {
-        Wh_Log(L"GetItemObject(%u) failed: %08X", viewObject, hr);
-        return nullptr;
-    }
-    return contextMenu;
-}
-
-constexpr UINT kContextMenuFirstCmdId = 1;
-constexpr UINT kContextMenuLastCmdId = 0x7FFF;
-thread_local IContextMenu2* g_trackedContextMenu2;
-thread_local IContextMenu3* g_trackedContextMenu3;
-thread_local bool g_contextMenuIsOpen;
-std::atomic<int> g_openContextMenuCount;
-
-struct OpenContextMenuScope {
-    OpenContextMenuScope() { g_openContextMenuCount++; }
-    ~OpenContextMenuScope() { g_openContextMenuCount--; }
-    OpenContextMenuScope(const OpenContextMenuScope&) = delete;
-    OpenContextMenuScope& operator=(const OpenContextMenuScope&) = delete;
-};
-
-LRESULT CALLBACK ContextMenuOwnerWndProc(HWND hWnd,
-                                         UINT uMsg,
-                                         WPARAM wParam,
-                                         LPARAM lParam) {
-    switch (uMsg) {
-        case WM_INITMENUPOPUP:
-        case WM_DRAWITEM:
-        case WM_MEASUREITEM:
-            if (g_trackedContextMenu3) {
-                LRESULT result = 0;
-                if (SUCCEEDED(g_trackedContextMenu3->HandleMenuMsg2(
-                        uMsg, wParam, lParam, &result)))
-                    return result;
-            } else if (g_trackedContextMenu2 &&
-                       SUCCEEDED(g_trackedContextMenu2->HandleMenuMsg(
-                           uMsg, wParam, lParam))) {
-                return uMsg == WM_INITMENUPOPUP ? 0 : TRUE;
-            }
-            break;
-        case WM_MENUCHAR:
-            if (g_trackedContextMenu3) {
-                LRESULT result = 0;
-                if (SUCCEEDED(g_trackedContextMenu3->HandleMenuMsg2(
-                        uMsg, wParam, lParam, &result)) &&
-                    result)
-                    return result;
-            }
-            break;
-    }
-    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
-}
-
-HINSTANCE GetCurrentModuleHandle() {
-    HINSTANCE hInst = nullptr;
-    GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                          GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                      (LPCWSTR)&GetCurrentModuleHandle, &hInst);
-    return hInst;
-}
-
-std::wstring ContextMenuOwnerClassName() {
-    return std::wstring(L"WindhawkContextMenuOwner_") + WH_MOD_ID;
-}
-
-std::atomic<bool> g_contextMenuOwnerClassRegistered;
-std::mutex g_contextMenuOwnersMutex;
-std::unordered_map<DWORD, HWND> g_contextMenuOwners;
-
-bool IsContextMenuOwnerWindow(DWORD threadId, HWND hWnd) {
-    if (!IsWindow(hWnd) || GetWindowThreadProcessId(hWnd, nullptr) != threadId)
-        return false;
-    WCHAR className[128];
-    return GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
-           _wcsicmp(className, ContextMenuOwnerClassName().c_str()) == 0;
-}
-
-void RegisterContextMenuOwnerClass() {
-    std::wstring className = ContextMenuOwnerClassName();
-    WNDCLASSEXW wc{};
-    wc.cbSize = sizeof(wc);
-    wc.lpfnWndProc = ContextMenuOwnerWndProc;
-    wc.hInstance = GetCurrentModuleHandle();
-    wc.lpszClassName = className.c_str();
-    if (!RegisterClassExW(&wc)) {
-        DWORD error = GetLastError();
-        Wh_Log(L"RegisterClassEx failed: %u%s", error,
-               error == ERROR_CLASS_ALREADY_EXISTS
-                   ? L" - context menu class already exists"
-                   : L"");
-        return;
-    }
-    g_contextMenuOwnerClassRegistered = true;
-}
-
-HWND EnsureContextMenuOwnerWindow() {
-    DWORD threadId = GetCurrentThreadId();
-    {
-        std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
-        auto it = g_contextMenuOwners.find(threadId);
-        if (it != g_contextMenuOwners.end() &&
-            IsContextMenuOwnerWindow(threadId, it->second)) {
-            return it->second;
-        }
-        if (it != g_contextMenuOwners.end())
-            g_contextMenuOwners.erase(it);
-    }
-
-    if (!g_contextMenuOwnerClassRegistered)
-        return nullptr;
-
-    HWND hWnd = CreateWindowExW(0, ContextMenuOwnerClassName().c_str(), nullptr,
-                                0, 0, 0, 0, 0, nullptr, nullptr,
-                                GetCurrentModuleHandle(), nullptr);
-    if (!hWnd) {
-        Wh_Log(L"CreateWindowEx failed: %u", GetLastError());
-        return nullptr;
-    }
-
-    std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
-    g_contextMenuOwners[threadId] = hWnd;
-    return hWnd;
-}
-
-void DismissOpenContextMenus() {
-    while (g_openContextMenuCount > 0) {
-        {
-            std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
-            for (auto const& [threadId, hWnd] : g_contextMenuOwners) {
-                if (IsContextMenuOwnerWindow(threadId, hWnd))
-                    PostMessageW(hWnd, WM_CANCELMODE, 0, 0);
-            }
-        }
-        Sleep(10);
-    }
-}
-
-void DestroyContextMenuOwnerWindowForCurrentThread() {
-    if (g_contextMenuIsOpen)
-        return;
-    HWND hWnd = nullptr;
-    {
-        std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
-        auto it = g_contextMenuOwners.find(GetCurrentThreadId());
-        if (it == g_contextMenuOwners.end())
-            return;
-        hWnd = it->second;
-        g_contextMenuOwners.erase(it);
-    }
-    DestroyWindow(hWnd);
-}
-
-void InvokeShellContextMenuCommand(
-    winrt::com_ptr<IContextMenu> const& contextMenu,
-    UINT cmdId,
-    HWND hExplorerWnd,
-    POINT point) {
-    CMINVOKECOMMANDINFOEX info{};
-    info.cbSize = sizeof(info);
-    info.fMask = CMIC_MASK_UNICODE | CMIC_MASK_PTINVOKE;
-    info.hwnd = hExplorerWnd;
-    info.lpVerb = (LPCSTR)(UINT_PTR)(cmdId - kContextMenuFirstCmdId);
-    info.lpVerbW = (LPCWSTR)(UINT_PTR)(cmdId - kContextMenuFirstCmdId);
-    info.nShow = SW_SHOWNORMAL;
-    info.ptInvoke = point;
-    if (GetKeyState(VK_CONTROL) & 0x8000)
-        info.fMask |= CMIC_MASK_CONTROL_DOWN;
-    if (GetKeyState(VK_SHIFT) & 0x8000)
-        info.fMask |= CMIC_MASK_SHIFT_DOWN;
-    HRESULT hr = contextMenu->InvokeCommand((CMINVOKECOMMANDINFO*)&info);
-    if (FAILED(hr))
-        Wh_Log(L"InvokeCommand failed: %08X", hr);
-}
-
-void ShowShellContextMenu(HWND hExplorerWnd, POINT point) {
-    if (g_contextMenuIsOpen || g_unloading)
-        return;
-    OpenContextMenuScope openScope;
-
-    bool useNilesoftShell;
-    {
-        std::lock_guard<std::mutex> lock(g_settings.mutex);
-        useNilesoftShell = g_settings.contextMenuItem.useNilesoftShell;
-    }
-
-    if (useNilesoftShell && RequestShellViewContextMenu(hExplorerWnd))
-        return;
-
-    HWND hOwnerWnd = EnsureContextMenuOwnerWindow();
-    if (!hOwnerWnd)
-        return;
-
-    bool isItemMenu = false;
-    auto contextMenu = GetShellContextMenu(hExplorerWnd, &isItemMenu);
-    if (!contextMenu)
-        return;
-
-    HMENU hMenu = CreatePopupMenu();
-    if (!hMenu)
-        return;
-
-    UINT flags = isItemMenu ? CMF_CANRENAME : CMF_NORMAL;
-    if (GetKeyState(VK_SHIFT) & 0x8000)
-        flags |= CMF_EXTENDEDVERBS;
-
-    HRESULT hr = contextMenu->QueryContextMenu(hMenu, 0, kContextMenuFirstCmdId,
-                                               kContextMenuLastCmdId, flags);
-    if (FAILED(hr)) {
-        Wh_Log(L"QueryContextMenu failed: %08X", hr);
-        DestroyMenu(hMenu);
-        return;
-    }
-
-    if (g_unloading) {
-        DestroyMenu(hMenu);
-        return;
-    }
-
-    auto contextMenu2 = contextMenu.try_as<IContextMenu2>();
-    auto contextMenu3 = contextMenu.try_as<IContextMenu3>();
-    g_trackedContextMenu2 = contextMenu2.get();
-    g_trackedContextMenu3 = contextMenu3.get();
-    g_contextMenuIsOpen = true;
-
-    UINT cmdId = (UINT)TrackPopupMenuEx(
-        hMenu, TPM_RETURNCMD | TPM_LEFTBUTTON | TPM_RIGHTBUTTON | TPM_LEFTALIGN,
-        point.x, point.y, hOwnerWnd, nullptr);
-
-    g_contextMenuIsOpen = false;
-    g_trackedContextMenu2 = nullptr;
-    g_trackedContextMenu3 = nullptr;
-
-    if (cmdId >= kContextMenuFirstCmdId && cmdId <= kContextMenuLastCmdId &&
-        !g_unloading) {
-        InvokeShellContextMenuCommand(contextMenu, cmdId, hExplorerWnd, point);
-    }
-
-    DestroyMenu(hMenu);
-}
-
-// ============================================================================
 // Parameter Placeholders & Process Execution
 // ============================================================================
 
@@ -1043,7 +747,6 @@ std::wstring BuildParameters(std::wstring parameters,
     if (parameters.empty())
         return parameters;
 
-    // Partition selected paths into files and folders
     std::vector<std::wstring> filesOnly;
     std::vector<std::wstring> foldersOnly;
     for (const auto& item : context.allSelectedPaths) {
@@ -1056,7 +759,6 @@ std::wstring BuildParameters(std::wstring parameters,
         }
     }
 
-    // 1. %files and %folders
     std::wstring formattedFiles = FormatSelectedItemsQuoted(filesOnly);
     ReplacePlaceholder(parameters, L"\"%files\"", formattedFiles);
     ReplacePlaceholder(parameters, L"%files", formattedFiles);
@@ -1065,7 +767,6 @@ std::wstring BuildParameters(std::wstring parameters,
     ReplacePlaceholder(parameters, L"\"%folders\"", formattedFolders);
     ReplacePlaceholder(parameters, L"%folders", formattedFolders);
 
-    // 2. %n (Selected filenames only, without parent directory path)
     if (parameters.find(L"%n") != std::wstring::npos) {
         std::vector<std::wstring> names;
         for (const auto& p : context.allSelectedPaths) {
@@ -1077,7 +778,6 @@ std::wstring BuildParameters(std::wstring parameters,
         ReplacePlaceholder(parameters, L"%n", quotedNames);
     }
 
-    // 3. %ext (Extension of first selected item)
     if (parameters.find(L"%ext") != std::wstring::npos) {
         std::wstring ext = L"";
         if (!context.allSelectedPaths.empty()) {
@@ -1089,11 +789,9 @@ std::wstring BuildParameters(std::wstring parameters,
         ReplacePlaceholder(parameters, L"%ext", ext);
     }
 
-    // 4. %c (Count of selected items)
     ReplacePlaceholder(parameters, L"%c",
                        std::to_wstring(context.allSelectedPaths.size()));
 
-    // 5. %d_name (Name of current folder only)
     if (parameters.find(L"%d_name") != std::wstring::npos) {
         std::wstring dir = context.folderPath;
         while (!dir.empty() && (dir.back() == L'\\' || dir.back() == L'/'))
@@ -1102,8 +800,6 @@ std::wstring BuildParameters(std::wstring parameters,
         ReplacePlaceholder(parameters, L"%d_name", namePtr ? namePtr : L"");
     }
 
-    // 6. Retain original %sel% compatibility (Must be before %path%
-    // early-return)
     if (parameters.find(L"%sel%") != std::wstring::npos) {
         if (context.allSelectedPaths.empty())
             return std::wstring();
@@ -1113,20 +809,16 @@ std::wstring BuildParameters(std::wstring parameters,
         ReplacePlaceholder(parameters, L"%sel%", formatted);
     }
 
-    // Replace %path% BEFORE %p to prevent %p from eating the "%p" in "%path%"
     if (!ReplacePlaceholder(parameters, L"%path%", context.folderPath)) {
         return std::wstring();
     }
 
-    // 7. %p (Parent folder directory path)
     if (parameters.find(L"%p") != std::wstring::npos) {
         std::wstring parent = context.folderPath;
         while (!parent.empty() &&
                (parent.back() == L'\\' || parent.back() == L'/'))
             parent.pop_back();
         std::wstring p;
-        // If already at drive root (e.g. "C:"), fallback to the root itself
-        // ("C:\")
         if (parent.length() == 2 && parent[1] == L':') {
             p = parent + L'\\';
         } else {
@@ -1141,8 +833,6 @@ std::wstring BuildParameters(std::wstring parameters,
         if (!p.empty()) {
             ReplacePlaceholder(parameters, L"%p", p);
         } else {
-            // If in a non-filesystem folder, cleanly erase %p instead of
-            // leaving raw text
             size_t pos = parameters.find(L"%p");
             while (pos != std::wstring::npos) {
                 parameters.replace(pos, 2, L"");
@@ -1180,7 +870,6 @@ void LaunchItemForWindow(HWND hExplorerWnd,
     Wh_Log(L"Launching %s for window %08X, path: %s", item.command.c_str(),
            (DWORD)(ULONG_PTR)hExplorerWnd, capturedContext.folderPath.c_str());
 
-    // %sel_each%: run an individual process instance per selected item
     if (item.parameters.find(L"%sel_each%") != std::wstring::npos) {
         if (capturedContext.allSelectedPaths.empty()) {
             std::wstring param = item.parameters;
@@ -1722,23 +1411,6 @@ bool IsSystemDarkModeActive() {
     return useLightTheme == 0;
 }
 
-std::wstring TrimWhitespaceAndQuotes(std::wstring str) {
-    size_t first = str.find_first_not_of(L" \t");
-    if (first == std::wstring::npos)
-        return L"";
-    size_t last = str.find_last_not_of(L" \t");
-    str = str.substr(first, last - first + 1);
-    if (str.size() >= 2 && str.front() == L'"' && str.back() == L'"') {
-        str = str.substr(1, str.size() - 2);
-        first = str.find_first_not_of(L" \t");
-        if (first == std::wstring::npos)
-            return L"";
-        last = str.find_last_not_of(L" \t");
-        str = str.substr(first, last - first + 1);
-    }
-    return str;
-}
-
 std::wstring ResolveThemedIconString(const std::wstring& rawSetting) {
     size_t pipePos = rawSetting.find(L'|');
 
@@ -1814,8 +1486,7 @@ bool IsOurElement(muxc::ICommandBarElement const& command) {
     if (!element)
         return false;
     std::wstring_view name{element.Name()};
-    return name.starts_with(kButtonNamePrefix) ||
-           name == kContextMenuButtonName;
+    return name.starts_with(kButtonNamePrefix);
 }
 
 bool HasElement(muxc::CommandBar const& commandBar,
@@ -1832,8 +1503,6 @@ bool HasElement(muxc::CommandBar const& commandBar,
 // ============================================================================
 struct SelectionSummary {
     size_t count = 0;
-    bool hasFiles = false;
-    bool hasFolders = false;
     std::vector<std::wstring> extensions;
 };
 
@@ -1865,12 +1534,10 @@ SelectionSummary SummarizeSelection(IShellView* psv) {
                 item->GetAttributes(SFGAO_FOLDER | SFGAO_STREAM, &attrs))) {
             bool isFolder = (attrs & SFGAO_FOLDER) && !(attrs & SFGAO_STREAM);
             if (isFolder) {
-                summary.hasFolders = true;
                 summary.extensions.push_back(L"folder");
             } else {
-                summary.hasFiles = true;
                 PWSTR displayName = nullptr;
-                if (SUCCEEDED(item->GetDisplayName(SIGDN_NORMALDISPLAY,
+                if (SUCCEEDED(item->GetDisplayName(SIGDN_PARENTRELATIVEPARSING,
                                                    &displayName)) &&
                     displayName) {
                     PCWSTR ext = PathFindExtensionW(displayName);
@@ -1891,13 +1558,10 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
                                 const SelectionSummary& summary) {
     std::wstring filter = TrimWhitespaceAndQuotes(filterPattern);
 
-    // Rule 1: Blank filter or '*' means always show regardless of selection
     if (filter.empty() || filter == L"*") {
         return true;
     }
 
-    // Rule 2: If a specific filter is set but nothing is selected, hide the
-    // button
     if (summary.count == 0) {
         return false;
     }
@@ -1906,7 +1570,6 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
     std::vector<std::wstring> negativeExts;
     bool matchAllExceptNegatives = false;
 
-    // Parse filter tokens
     size_t start = 0;
     while (start < filter.size()) {
         size_t end = filter.find_first_of(L",; ", start);
@@ -1961,18 +1624,15 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
         }
     }
 
-    // Validate using the precomputed extensions
     for (const auto& ext : summary.extensions) {
         bool isDir = (ext == L"folder");
 
-        // Strict Exclusion
         for (const auto& neg : negativeExts) {
             if (ext == neg || (neg == L"file" && !isDir)) {
                 return false;
             }
         }
 
-        // Strict Inclusion
         if (!matchAllExceptNegatives && !positiveExts.empty()) {
             bool matched = false;
             for (const auto& pos : positiveExts) {
@@ -2007,7 +1667,6 @@ void UpdateDynamicButtonStates(muxc::CommandBar const& commandBar,
         optContext ? *optContext
                    : (localContext = GetExplorerContext(hExplorerWnd));
 
-    // Fast in-memory classification using cached shell item attributes
     SelectionSummary summary = SummarizeSelection(context.shellView.get());
 
     auto commands = commandBar.PrimaryCommands();
@@ -2045,7 +1704,6 @@ void UpdateDynamicButtonStates(muxc::CommandBar const& commandBar,
 
         const auto& item = currentItems[itemIndex];
 
-        // Super fast memory evaluation
         bool isVisible =
             ItemMatchesExtensionFilter(item.matchExtensions, summary);
 
@@ -2058,7 +1716,6 @@ void UpdateDynamicButtonStates(muxc::CommandBar const& commandBar,
             button.Visibility(targetVis);
             button.IsEnabled(isVisible);
 
-            // Keep trailing separator in sync with button visibility
             std::wstring sepName =
                 kButtonNamePrefix + L"_Sep_" + std::to_wstring(itemIndex);
             for (uint32_t j = 0; j < count; j++) {
@@ -2075,7 +1732,7 @@ void UpdateDynamicButtonStates(muxc::CommandBar const& commandBar,
 }
 
 // ============================================================================
-// CommandBar Layout, Visibility & Management
+// CommandBar Layout & Management
 // ============================================================================
 
 void UpdateCommandBar(muxc::CommandBar const& commandBar);
@@ -2307,80 +1964,6 @@ muxc::AppBarButton CreateMenuButton(ActionItem const& item,
     return button;
 }
 
-void OpenContextMenuForElement(mux::FrameworkElement const& element) {
-    if (g_unloading || !element)
-        return;
-    HWND hExplorerWnd = GetExplorerWindowForElement(element);
-    if (!hExplorerWnd) {
-        Wh_Log(L"No File Explorer window for the context menu item");
-        return;
-    }
-    POINT point{};
-    GetCursorPos(&point);
-    ShowShellContextMenu(hExplorerWnd, point);
-}
-
-muxc::AppBarButton CreateContextMenuButton(bool openOnHover, int hoverDelayMs) {
-    ContextMenuItemSettings settings;
-    {
-        std::lock_guard<std::mutex> lock(g_settings.mutex);
-        settings = g_settings.contextMenuItem;
-    }
-
-    muxc::AppBarButton button;
-    button.Name(kContextMenuButtonName);
-    button.Label(settings.buttonLabel.c_str());
-    button.LabelPosition(settings.showLabel
-                             ? muxc::CommandBarLabelPosition::Default
-                             : muxc::CommandBarLabelPosition::Collapsed);
-    button.Icon(
-        CreateIconElement(settings.buttonIcon, std::wstring(), L"\uE8FD"));
-
-    if (!settings.showLabel && !settings.buttonLabel.empty()) {
-        muxc::ToolTipService::SetToolTip(
-            button, winrt::box_value(winrt::hstring{settings.buttonLabel}));
-    }
-
-    TrackRevoker(
-        button,
-        button.Click(winrt::auto_revoke, [](wf::IInspectable const& sender,
-                                            mux::RoutedEventArgs const&) {
-            OpenContextMenuForElement(sender.try_as<mux::FrameworkElement>());
-        }));
-
-    if (openOnHover) {
-        auto open = [weakButton = winrt::make_weak(button)]() {
-            if (auto button = weakButton.get())
-                OpenContextMenuForElement(button);
-        };
-        SetUpOpenOnHover(button, hoverDelayMs, open);
-    }
-
-    return button;
-}
-
-void EnsureContextMenuButton(muxc::CommandBar const& commandBar) {
-    bool enabled, openMenuOnHover;
-    int menuHoverDelay;
-    {
-        std::lock_guard<std::mutex> lock(g_settings.mutex);
-        enabled = g_settings.contextMenuItem.enabled;
-        openMenuOnHover = g_settings.openMenuOnHover;
-        menuHoverDelay = g_settings.menuHoverDelay;
-    }
-
-    if (!enabled ||
-        HasElement(commandBar, [](muxc::ICommandBarElement const& command) {
-            auto element = command.try_as<mux::FrameworkElement>();
-            return element && element.Name() == kContextMenuButtonName;
-        }))
-        return;
-
-    Wh_Log(L"Adding the context menu item");
-    commandBar.PrimaryCommands().Append(
-        CreateContextMenuButton(openMenuOnHover, menuHoverDelay));
-}
-
 void EnsureActionButtons(muxc::CommandBar const& commandBar) {
     if (g_unloading)
         return;
@@ -2467,7 +2050,6 @@ void UpdateCommandBar(muxc::CommandBar const& commandBar) {
         if (!placeOnSecondary) {
             EnsureActionButtons(commandBar);
         }
-        EnsureContextMenuButton(commandBar);
     } else if (commandBar.Name() == L"FileExplorerSecondaryCommandBar") {
         if (placeOnSecondary) {
             commandBar.DefaultLabelPosition(
@@ -2540,8 +2122,6 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
                 }
             }));
 
-    // Check if dynamic filters are active and whether this bar hosts our
-    // buttons
     bool placeOnSecondary;
     bool hasFilters = false;
     {
@@ -2560,18 +2140,14 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
             ? (commandBar.Name() == L"FileExplorerSecondaryCommandBar")
             : (commandBar.Name() == L"FileExplorerCommandBar");
 
-    // Only run the timer if this bar hosts custom buttons AND dynamic filters
-    // are used
     if (isOurTargetBar && hasFilters) {
         mux::DispatcherTimer selectionTimer;
         selectionTimer.Interval(std::chrono::milliseconds(250));
 
         auto weakBar = winrt::make_weak(commandBar);
-        auto lastSig = std::make_shared<std::wstring>(L"init");
 
-        auto timerToken =
-            selectionTimer.Tick([weakBar, lastSig](wf::IInspectable const&,
-                                                   wf::IInspectable const&) {
+        auto timerToken = selectionTimer.Tick(
+            [weakBar](wf::IInspectable const&, wf::IInspectable const&) {
                 if (g_unloading)
                     return;
 
@@ -2583,7 +2159,6 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
                 if (!hWnd || GetForegroundWindow() != hWnd)
                     return;
 
-                // Find our entry to use cached view
                 CommandBarEntry* currentEntry = nullptr;
                 for (auto& ent : g_entries) {
                     if (ent.commandBar.get() == cb) {
@@ -2594,46 +2169,47 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
                 if (!currentEntry)
                     return;
 
-                // Identify active tab without walking IShellWindows
                 HWND hActiveTab = FindWindowExW(
                     hWnd, nullptr, L"ShellTabWindowClass", nullptr);
                 if (hActiveTab != currentEntry->cachedTabWnd ||
-                    !currentEntry->cachedShellView) {
+                    !currentEntry->cachedBrowser) {
                     currentEntry->cachedTabWnd = hActiveTab;
-                    currentEntry->cachedShellView = GetActiveShellView(hWnd);
+                    currentEntry->cachedBrowser = GetActiveShellBrowser(hWnd);
+                    currentEntry->cachedShellView = nullptr;
                 }
 
-                if (!currentEntry->cachedShellView)
+                if (!currentEntry->cachedBrowser)
                     return;
 
-                int selCount = 0;
-                auto fv = currentEntry->cachedShellView.try_as<IFolderView>();
-                if (!fv || FAILED(fv->ItemCount(SVGIO_SELECTION, &selCount))) {
-                    // Cached view became invalid, reset to force refetch next
-                    // tick
+                winrt::com_ptr<IShellView> view;
+                if (FAILED(currentEntry->cachedBrowser->QueryActiveShellView(
+                        view.put())) ||
+                    !view) {
+                    currentEntry->cachedBrowser = nullptr;
                     currentEntry->cachedShellView = nullptr;
                     return;
                 }
 
-                // Early exit: avoid walking context or allocations if selection
-                // remains empty
-                if (selCount == 0 && currentEntry->lastSelectionCount == 0)
+                auto fv = view.try_as<IFolderView>();
+                int count = 0, focused = -1;
+                if (!fv || FAILED(fv->ItemCount(SVGIO_SELECTION, &count)))
                     return;
 
-                currentEntry->lastSelectionCount = selCount;
+                fv->GetFocusedItem(&focused);
 
-                ExplorerContext ctx = GetExplorerContext(hWnd);
-                std::wstring fullSig =
-                    std::to_wstring(ctx.allSelectedPaths.size()) + L"|";
-                for (const auto& p : ctx.allSelectedPaths) {
-                    fullSig += p;
-                    fullSig += L";";
+                if (view == currentEntry->cachedShellView &&
+                    count == currentEntry->lastSelectionCount &&
+                    focused == currentEntry->lastFocusedItem) {
+                    return;
                 }
 
-                if (fullSig != *lastSig) {
-                    *lastSig = fullSig;
-                    UpdateDynamicButtonStates(cb, hWnd, &ctx);
-                }
+                currentEntry->cachedShellView = view;
+                currentEntry->lastSelectionCount = count;
+                currentEntry->lastFocusedItem = focused;
+
+                ExplorerContext ctx;
+                ctx.shellView = view;
+                UpdateDynamicButtonStates(cb, hWnd, &ctx);
             });
 
         selectionTimer.Start();
@@ -2677,7 +2253,6 @@ void RemoveButtonsForCurrentThread() {
     }
 
     g_threadScanned = false;
-    DestroyContextMenuOwnerWindowForCurrentThread();
 }
 
 void RefreshButtonsForCurrentThread() {
@@ -2772,10 +2347,14 @@ void ScheduleXamlRootScan(mux::UIElement const& element) try {
         ScanXamlRootForCommandBars(element);
         return;
     }
-    dispatcherQueue.TryEnqueue([weakElement = winrt::make_weak(element)]() {
-        if (auto element = weakElement.get())
-            ScanXamlRootForCommandBars(element);
-    });
+    auto pending = std::make_shared<PendingDispatchScope>();
+    dispatcherQueue.TryEnqueue(
+        [weakElement = winrt::make_weak(element), pending]() {
+            if (g_unloading)
+                return;
+            if (auto element = weakElement.get())
+                ScanXamlRootForCommandBars(element);
+        });
 } catch (...) {
     Wh_Log(L"Error %08X", winrt::to_hresult().value);
 }
@@ -2816,7 +2395,12 @@ void ScheduleCurrentThreadScan() try {
         ScanCurrentThreadForCommandBars();
         return;
     }
-    dispatcherQueue.TryEnqueue([]() { ScanCurrentThreadForCommandBars(); });
+    auto pending = std::make_shared<PendingDispatchScope>();
+    dispatcherQueue.TryEnqueue([pending]() {
+        if (g_unloading)
+            return;
+        ScanCurrentThreadForCommandBars();
+    });
 } catch (...) {
     Wh_Log(L"Error %08X", winrt::to_hresult().value);
 }
@@ -2835,7 +2419,6 @@ void WINAPI CommandBarManager_CommandBar_Hook(void* pThis, void* commandBar) {
     if (g_unloading || !commandBar)
         return;
     try {
-        EnsureContextMenuOwnerWindow();
         auto const& element =
             *reinterpret_cast<muxc::CommandBar const*>(commandBar);
         if (!element)
@@ -3155,20 +2738,6 @@ void LoadSettings() {
     int menuHoverDelay = Wh_GetIntSetting(L"menuHoverDelay");
     g_settings.menuHoverDelay = menuHoverDelay >= 0 ? menuHoverDelay : 0;
 
-    g_settings.contextMenuItem = ContextMenuItemSettings{};
-    g_settings.contextMenuItem.enabled =
-        Wh_GetIntSetting(L"contextMenuItem.enabled") != 0;
-    g_settings.contextMenuItem.useNilesoftShell =
-        Wh_GetIntSetting(L"contextMenuItem.useNilesoftShell") != 0;
-    g_settings.contextMenuItem.showLabel =
-        Wh_GetIntSetting(L"contextMenuItem.showLabel") != 0;
-    g_settings.contextMenuItem.buttonLabel =
-        WindhawkUtils::StringSetting::make(L"contextMenuItem.buttonLabel")
-            .get();
-    g_settings.contextMenuItem.buttonIcon = TrimQuotesAndSpaces(
-        WindhawkUtils::StringSetting::make(L"contextMenuItem.buttonIcon")
-            .get());
-
     g_settings.items.clear();
     for (int i = 0; i < 100; i++) {
         WCHAR prefix[64];
@@ -3205,7 +2774,6 @@ BOOL Wh_ModInit() {
                                        &LoadLibraryExW_Original);
     }
 
-    RegisterContextMenuOwnerClass();
     return TRUE;
 }
 
@@ -3226,7 +2794,10 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {
     Wh_Log(L">");
     g_unloading = true;
-    DismissOpenContextMenus();
+
+    while (g_pendingDispatches > 0) {
+        Sleep(10);
+    }
 
     for (HWND hWnd : GetFileExplorerWnds()) {
         Wh_Log(L"Removing buttons for window %08X", (DWORD)(ULONG_PTR)hWnd);
@@ -3241,45 +2812,6 @@ void Wh_ModUninit() {
     {
         std::lock_guard<std::mutex> lock(g_iconCacheMutex);
         g_iconCache.clear();
-    }
-
-    {
-        std::vector<std::pair<DWORD, HWND>> leftovers;
-        {
-            std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
-            leftovers.assign(g_contextMenuOwners.begin(),
-                             g_contextMenuOwners.end());
-        }
-
-        for (auto const& [threadId, hWnd] : leftovers) {
-            if (!IsContextMenuOwnerWindow(threadId, hWnd)) {
-                std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
-                g_contextMenuOwners.erase(threadId);
-                continue;
-            }
-            Wh_Log(
-                L"Destroying leftover context menu owner window of thread %u",
-                threadId);
-            if (!RunFromWindowThread(
-                    hWnd,
-                    [](PVOID) {
-                        DestroyContextMenuOwnerWindowForCurrentThread();
-                    },
-                    nullptr)) {
-                Wh_Log(L"Couldn't reach thread %u", threadId);
-            }
-        }
-    }
-
-    if (g_contextMenuOwnerClassRegistered) {
-        if (!UnregisterClassW(ContextMenuOwnerClassName().c_str(),
-                              GetCurrentModuleHandle())) {
-            std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
-            Wh_Log(
-                L"UnregisterClass failed: %u, %zu owner window(s) left behind",
-                GetLastError(), g_contextMenuOwners.size());
-        }
-        g_contextMenuOwnerClassRegistered = false;
     }
 
     {
