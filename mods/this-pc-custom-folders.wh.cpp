@@ -2,11 +2,11 @@
 // @id              this-pc-custom-folders
 // @name            This PC Custom Folders
 // @description     Add folders and native application, website or protocol shortcuts to This PC
-// @version         1.6.6
+// @version         1.6.8
 // @author          Casket Pizza
 // @github          https://github.com/CasketPizza
-// @include         explorer.exe
-// @compilerOptions -lole32 -loleaut32 -lshell32
+// @include         windhawk.exe
+// @compilerOptions -lole32 -loleaut32 -lshell32 -ladvapi32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -15,6 +15,8 @@
 ## Make This PC your own
 
 Add your favourite folders, programs, websites and app links directly to **This PC** in File Explorer. Keep the usual drives, storage bars and automatically detected USB devices.
+
+![This PC Custom Folders example](https://i.imgur.com/Xap2SRh.png)
 
 ### Getting started
 
@@ -31,8 +33,9 @@ Add your favourite folders, programs, websites and app links directly to **This 
 | Application | `C:\Program Files\Example\app.exe` | Network locations |
 | Website | `https://example.com` | Network locations |
 | App protocol | `steam://open/main` | Network locations |
+| Existing shortcut | `C:\\Path\\Example.lnk` or `.url` | Network locations |
 
-Folders use Windows shell registrations. Applications use native `.lnk` shortcuts, while websites and protocols use `.url` shortcuts for normal double-click and Enter behaviour. App and link entries always appear in **Network locations**, regardless of the Group setting.
+Folders use Windows shell registrations. Applications, websites and protocols use native `.lnk` launchers in **Network locations**. Website/protocol launchers call Windows' registered URL handler, so they follow the user's default browser or protocol association. Existing `.lnk` and `.url` files can also be used directly as the Path and are copied into Network locations as managed shortcuts. App and link entries always appear in **Network locations**, regardless of the Group setting.
 
 ### Import shortcuts quickly
 
@@ -41,13 +44,16 @@ Enable **Shortcut capture hotkey**, select a `.lnk` or `.url` shortcut in Explor
 ### Icons and sorting
 
 - **Icon file:** Supply an `.ico` path, or a `.dll` / `.exe` containing icons. For DLL/EXE files, set **Icon reference** to an index (or a negative resource ID). Leave Icon file blank for the automatic icon.
-- **Sort Order:** Lower numbers appear earlier within **Folders** and **Network locations**; numbering is independent per group. **Devices and drives** does not support this ordering. Default: `100`.
+- **Sort Order:** Lower numbers appear earlier for **folder targets** placed in **Folders** or **Network locations**; numbering is independent per group. Launcher entries (`.lnk` / `.url`) are sorted by Explorer by name, and **Devices and drives** doesn't support this ordering. Default: `100`.
 - Folder groups are **Folders** (the default), **Network locations**, and **Devices and drives**. Arbitrary custom group names aren't supported.
 
 ### Notes and cleanup
 
-- Up to **64 entries** are supported. Folder paths must point to real directories; `shell:` locations are not supported as folder targets.
-- Entries are managed per Windows user and removed when the mod is disabled or uninstalled. An ownership ledger supports cleanup of older registrations.
+- Up to **64 entries** are supported. `shell:` locations are not supported as folder targets.
+- The mod runs in a dedicated Windhawk tool process, so configuration work isn't performed inside Explorer and multiple Explorer processes don't race to manage the same entries.
+- To provide native This PC and Network locations integration, the mod writes per-user shell registrations under `HKCU\Software\Classes\CLSID` and `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\NameSpace`, and creates managed `.lnk` / `.url` files in the user's **Network Shortcuts** folder.
+- These registrations and shortcut files are normally removed on a clean disable while the tool process is running. Because they're persistent Windows shell state, an abrupt process termination, crash, shutdown, or removal while the tool process isn't running can leave managed entries behind. Re-enabling the mod and then disabling it cleanly will remove entries that are still recorded in Windhawk's mod storage.
+- The ownership ledger itself is stored in Windhawk's mod storage and is scoped by Windows user SID; the mod no longer creates its own registry key for bookkeeping.
 - If Explorer displays stale names or icons, close and reopen **This PC**. The mod does not fix file-list refresh issues inside destination folders.
 */
 // ==/WindhawkModReadme==
@@ -66,7 +72,7 @@ Enable **Shortcut capture hotkey**, select a `.lnk` or `.url` shortcut in Explor
       $description: 'Example: Documents. Optional when importing a shortcut.'
     - path: ''
       $name: Path
-      $description: 'Example: C:\Users\YourName\Documents. Optional when importing a shortcut.'
+      $description: 'Folder, .exe, website/protocol URL, or existing .lnk/.url shortcut. Optional when importing a shortcut.'
     - icon: ''
       $name: Icon file
       $description: 'Example: %SystemRoot%\System32\imageres.dll. Supports .ico, .dll and .exe; leave empty to use the automatic icon.'
@@ -81,7 +87,7 @@ Enable **Shortcut capture hotkey**, select a `.lnk` or `.url` shortcut in Explor
       $description: 'Example: C:\Program Files\Example. Optional for application launchers.'
     - sortOrder: '100'
       $name: Sort Order
-      $description: Lower numbers first within Folders and Network locations. Values are independent per group and can be reused. Not supported in Devices and drives. Defaults to 100.
+      $description: Lower numbers first for folder targets in Folders and Network locations. Launcher entries are sorted by name. Values are independent per group and can be reused. Not supported in Devices and drives. Defaults to 100.
     - group: folders
       $name: Group (folders only)
       $description: 'Defaults to Folders group if left unselected. Applies only to folder targets; applications and links always appear in Network locations.'
@@ -90,16 +96,17 @@ Enable **Shortcut capture hotkey**, select a `.lnk` or `.url` shortcut in Explor
         - network: Network locations (below drives)
         - other: Devices and drives
   $name: Custom folders
-  $description: Import string overrides manual Name, Path and Icon fields. Group applies only to folders; executable and URL shortcuts always appear in Network locations. Sort Order is not supported in Devices and drives.
+  $description: Import string overrides manual Name, Path and Icon fields. Group applies only to folders; executable, URL and shortcut-file launchers always appear in Network locations and are sorted by name. Sort Order is not supported in Devices and drives.
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <sddl.h>
 #include <shlobj.h>
+#include <shellapi.h>
 #include <shobjidl.h>
 #include <exdisp.h>
 #include <shldisp.h>
-#include <objbase.h>
 #include <cwctype>
 #include <cerrno>
 #include <cstdlib>
@@ -108,7 +115,7 @@ Enable **Shortcut capture hotkey**, select a `.lnk` or `.url` shortcut in Explor
 #include <initializer_list>
 #include <set>
 #include <algorithm>
-#include <unordered_set>
+#include <array>
 
 namespace {
 // Local CLSID values avoid requiring UUID import libraries in Windhawk's linker.
@@ -116,23 +123,24 @@ constexpr GUID kShellWindowsClsid =
     {0x9BA05972, 0xF6A8, 0x11CF, {0xA4, 0x42, 0x00, 0xA0, 0xC9, 0x0A, 0x8F, 0x39}};
 constexpr GUID kShellLinkClsid =
     {0x00021401, 0x0000, 0x0000, {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
+constexpr GUID kNetHoodFolderId =
+    {0xC5ABBF53, 0xE17F, 0x4121, {0x89, 0x00, 0x86, 0x62, 0x6F, 0xC2, 0xC9, 0x73}};
 constexpr int kMaxFolders = 64;
 constexpr wchar_t kMarker[] = L"CasketPizza.ThisPCCustomFolders.v1";
 constexpr wchar_t kNamespaceRoot[] =
     L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\MyComputer\\NameSpace\\";
 constexpr wchar_t kClassesRoot[] = L"Software\\Classes\\CLSID\\";
-constexpr wchar_t kLedgerRoot[] = L"Software\\CasketPizza\\ThisPCCustomFolders\\Managed";
+constexpr wchar_t kLegacyLedgerRoot[] = L"Software\\CasketPizza\\ThisPCCustomFolders\\Managed";
 constexpr wchar_t kFolderHandler[] = L"{0E5AAE11-A475-4c5b-AB00-C66DE400274E}";
 
-struct Folder { std::wstring name, path, icon, iconRef, group, args, workingDir; DWORD sortOrder = 100; };
+enum class EntryKind { Folder, Executable, Uri, ShortcutFile, Invalid };
 
-// Legacy IDs (v1.0-v1.5.1) are position-based; retained solely for migration/cleanup.
-std::wstring GetId(int i) {
-    wchar_t buf[64];
-    swprintf_s(buf, L"{EFB8C3A1-82E1-4D91-B4E0-%012llX}",
-              0xC45700000000ULL + static_cast<unsigned>(i));
-    return buf;
-}
+struct Folder {
+    std::wstring name, path, icon, iconRef, group, args, workingDir;
+    DWORD sortOrder = 100;
+    EntryKind kind = EntryKind::Invalid;
+};
+
 
 // A different shell identity for different item metadata prevents Explorer from
 // retaining the display name/icon of a previous occupant of a settings row.
@@ -369,14 +377,35 @@ bool IsExe(const std::wstring& path) {
     auto dot = path.find_last_of(L'.');
     return dot != std::wstring::npos && !_wcsicmp(path.c_str()+dot, L".exe");
 }
-// Never turn missing UNC paths into accidental shortcuts.
-enum class EntryKind { Folder, Executable, Uri, Invalid };
+
+bool HasExtension(const std::wstring& path, const wchar_t* extension) {
+    const size_t length = wcslen(extension);
+    return path.size() >= length &&
+           _wcsicmp(path.c_str() + path.size() - length, extension) == 0;
+}
+
+bool IsShortcutFile(const std::wstring& path) {
+    return HasExtension(path, L".lnk") || HasExtension(path, L".url");
+}
 EntryKind Kind(const Folder& f) {
     if (IsUri(f.path)) return EntryKind::Uri;
-    if (DirectoryExists(f.path)) return EntryKind::Folder;
-    if (FileExists(f.path) && IsExe(f.path)) return EntryKind::Executable;
-    if (StartsWith(f.path, L"\\\\") && !FileExists(f.path)) return EntryKind::Folder;
-    return EntryKind::Invalid;
+
+    // UNC paths are folder targets by syntax unless they explicitly name a
+    // supported launcher file.
+    if (StartsWith(f.path, L"\\\\") &&
+        !IsExe(f.path) && !IsShortcutFile(f.path)) {
+        return EntryKind::Folder;
+    }
+
+    if (IsShortcutFile(f.path))
+        return FileExists(f.path) ? EntryKind::ShortcutFile
+                                  : EntryKind::Invalid;
+
+    if (IsExe(f.path))
+        return FileExists(f.path) ? EntryKind::Executable
+                                  : EntryKind::Invalid;
+
+    return DirectoryExists(f.path) ? EntryKind::Folder : EntryKind::Invalid;
 }
 
 bool PutString(HKEY key, LPCWSTR name, const std::wstring& value,
@@ -391,9 +420,12 @@ bool PutDword(HKEY key, LPCWSTR name, DWORD value) {
                           reinterpret_cast<const BYTE*>(&value), sizeof(value)) == ERROR_SUCCESS;
 }
 
+constexpr REGSAM kRegistryView = KEY_WOW64_64KEY;
+
 bool OpenKey(const std::wstring& path, HKEY* key) {
     return RegCreateKeyExW(HKEY_CURRENT_USER, path.c_str(), 0, nullptr, 0,
-                           KEY_READ | KEY_WRITE, nullptr, key, nullptr) == ERROR_SUCCESS;
+                           KEY_READ | KEY_WRITE | kRegistryView, nullptr, key,
+                           nullptr) == ERROR_SUCCESS;
 }
 
 void SetStringAt(const std::wstring& path, LPCWSTR name,
@@ -405,19 +437,13 @@ void SetStringAt(const std::wstring& path, LPCWSTR name,
     } else Wh_Log(L"Unable to create %s", path.c_str());
 }
 
-void SetDwordAt(const std::wstring& path, LPCWSTR name, DWORD val) {
-    HKEY key;
-    if (OpenKey(path, &key)) {
-        if (!PutDword(key, name, val)) Wh_Log(L"Unable to write %s", path.c_str());
-        RegCloseKey(key);
-    } else Wh_Log(L"Unable to create %s", path.c_str());
-}
 
 bool ReadStringAt(const std::wstring& path, LPCWSTR name,
                   std::wstring* output) {
     HKEY key;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, path.c_str(), 0, KEY_READ,
-                      &key) != ERROR_SUCCESS) return false;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, path.c_str(), 0,
+                      KEY_READ | kRegistryView, &key) != ERROR_SUCCESS)
+        return false;
     wchar_t value[2048]{};
     DWORD cb = sizeof(value), type = 0;
     LONG result = RegQueryValueExW(key, name, nullptr, &type,
@@ -433,16 +459,196 @@ bool ReadStringAt(const std::wstring& path, LPCWSTR name,
 bool KeyExists(const std::wstring& path) {
     HKEY key;
     LONG status = RegOpenKeyExW(HKEY_CURRENT_USER, path.c_str(), 0,
-                                KEY_READ, &key);
+                                KEY_READ | kRegistryView, &key);
     if (status == ERROR_SUCCESS) RegCloseKey(key);
     return status == ERROR_SUCCESS;
 }
 
-// The ledger survives settings edits: changing or removing a row does not
-// erase the information needed to clean up its previous registration.
+// Ownership is kept in Windhawk local storage instead of a custom registry
+// key. Windhawk storage is machine-wide, so use the current user's SID as part
+// of the value name.
+struct LedgerState {
+    std::set<std::wstring> ids;
+    std::array<std::wstring, kMaxFolders> shortcutNames;
+};
+
+LedgerState gLedger;
+std::wstring gLedgerValueName;
+
+std::wstring CurrentUserSidString() {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return L"";
+
+    DWORD size = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+    if (!size) {
+        CloseHandle(token);
+        return L"";
+    }
+
+    std::vector<BYTE> buffer(size);
+    if (!GetTokenInformation(token, TokenUser, buffer.data(), size, &size)) {
+        CloseHandle(token);
+        return L"";
+    }
+    CloseHandle(token);
+
+    const TOKEN_USER* user =
+        reinterpret_cast<const TOKEN_USER*>(buffer.data());
+    LPWSTR sidText = nullptr;
+    if (!ConvertSidToStringSidW(user->User.Sid, &sidText)) return L"";
+
+    std::wstring result = sidText;
+    LocalFree(sidText);
+    return result;
+}
+
+wchar_t HexDigit(unsigned value) {
+    return value < 10 ? static_cast<wchar_t>(L'0' + value)
+                      : static_cast<wchar_t>(L'A' + value - 10);
+}
+
+std::wstring HexEncode(const std::wstring& value) {
+    std::wstring out;
+    out.reserve(value.size() * 4);
+    for (wchar_t ch : value) {
+        unsigned v = static_cast<unsigned>(ch);
+        out += HexDigit((v >> 12) & 0xF);
+        out += HexDigit((v >> 8) & 0xF);
+        out += HexDigit((v >> 4) & 0xF);
+        out += HexDigit(v & 0xF);
+    }
+    return out;
+}
+
+int HexValue(wchar_t ch) {
+    if (ch >= L'0' && ch <= L'9') return ch - L'0';
+    if (ch >= L'A' && ch <= L'F') return ch - L'A' + 10;
+    if (ch >= L'a' && ch <= L'f') return ch - L'a' + 10;
+    return -1;
+}
+
+bool HexDecode(const std::wstring& value, std::wstring* output) {
+    if (value.size() % 4 != 0) return false;
+    output->clear();
+    output->reserve(value.size() / 4);
+    for (size_t i = 0; i < value.size(); i += 4) {
+        int a = HexValue(value[i]);
+        int b = HexValue(value[i + 1]);
+        int c = HexValue(value[i + 2]);
+        int d = HexValue(value[i + 3]);
+        if (a < 0 || b < 0 || c < 0 || d < 0) return false;
+        output->push_back(static_cast<wchar_t>(
+            (a << 12) | (b << 8) | (c << 4) | d));
+    }
+    return true;
+}
+
+void SaveLedger() {
+    if (gLedgerValueName.empty()) return;
+
+    std::wstring serialized;
+    for (const auto& id : gLedger.ids) {
+        serialized += L"I\t" + id + L"\n";
+    }
+    for (int i = 0; i < kMaxFolders; ++i) {
+        if (!gLedger.shortcutNames[i].empty()) {
+            serialized += L"S\t" + std::to_wstring(i) + L"\t" +
+                          HexEncode(gLedger.shortcutNames[i]) + L"\n";
+        }
+    }
+
+    if (serialized.empty()) {
+        Wh_DeleteValue(gLedgerValueName.c_str());
+    } else if (!Wh_SetStringValue(gLedgerValueName.c_str(),
+                                  serialized.c_str())) {
+        Wh_Log(L"Unable to save ownership ledger");
+    }
+}
+
+void LoadLedger() {
+    gLedger = {};
+    const std::wstring sid = CurrentUserSidString();
+    if (sid.empty()) {
+        Wh_Log(L"Unable to determine current user SID");
+        return;
+    }
+
+    gLedgerValueName = L"managed-" + sid;
+
+    std::vector<wchar_t> buffer(65536);
+    const size_t length = Wh_GetStringValue(
+        gLedgerValueName.c_str(), buffer.data(), buffer.size());
+    if (!length) return;
+
+    std::wstring serialized(buffer.data(), length);
+    size_t at = 0;
+    while (at < serialized.size()) {
+        size_t end = serialized.find(L'\n', at);
+        if (end == std::wstring::npos) end = serialized.size();
+        std::wstring line = serialized.substr(at, end - at);
+        at = end + 1;
+
+        if (line.rfind(L"I\t", 0) == 0) {
+            std::wstring id = line.substr(2);
+            if (id.size() == 38 && id.front() == L'{' && id.back() == L'}')
+                gLedger.ids.insert(std::move(id));
+            continue;
+        }
+
+        if (line.rfind(L"S\t", 0) == 0) {
+            size_t tab = line.find(L'\t', 2);
+            if (tab == std::wstring::npos) continue;
+            int index = _wtoi(line.substr(2, tab - 2).c_str());
+            if (index < 0 || index >= kMaxFolders) continue;
+            std::wstring name;
+            if (HexDecode(line.substr(tab + 1), &name))
+                gLedger.shortcutNames[index] = std::move(name);
+        }
+    }
+}
+
+// Migrate the development/pre-catalog registry ledger once, then remove it.
+void MigrateLegacyLedger() {
+    HKEY ledger = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, kLegacyLedgerRoot, 0, KEY_READ,
+                      &ledger) != ERROR_SUCCESS) {
+        return;
+    }
+
+    for (DWORD i = 0;; ++i) {
+        wchar_t name[256]{};
+        DWORD nameLen = ARRAYSIZE(name);
+        wchar_t value[512]{};
+        DWORD valueBytes = sizeof(value);
+        DWORD type = 0;
+        LONG result = RegEnumValueW(
+            ledger, i, name, &nameLen, nullptr, &type,
+            reinterpret_cast<BYTE*>(value), &valueBytes);
+        if (result == ERROR_NO_MORE_ITEMS) break;
+        if (result != ERROR_SUCCESS) continue;
+        if (type != REG_SZ && type != REG_EXPAND_SZ) continue;
+
+        std::wstring valueName(name, nameLen);
+        if (valueName.size() == 38 &&
+            valueName.front() == L'{' &&
+            valueName.back() == L'}') {
+            gLedger.ids.insert(valueName);
+        } else if (valueName.rfind(L"Shortcut_", 0) == 0) {
+            int index = _wtoi(valueName.c_str() + 9);
+            if (index >= 0 && index < kMaxFolders && value[0])
+                gLedger.shortcutNames[index] = value;
+        }
+    }
+    RegCloseKey(ledger);
+
+    SaveLedger();
+    RegDeleteTreeW(HKEY_CURRENT_USER,
+                   L"Software\\CasketPizza\\ThisPCCustomFolders");
+}
+
 bool ListedAsOurs(const std::wstring& id) {
-    std::wstring marker;
-    return ReadStringAt(kLedgerRoot, id.c_str(), &marker) && marker == kMarker;
+    return gLedger.ids.count(id) != 0;
 }
 
 bool HasOwnerMarker(const std::wstring& cls) {
@@ -451,30 +657,37 @@ bool HasOwnerMarker(const std::wstring& cls) {
            marker == kMarker;
 }
 
-// For v1.0-v1.1 leftovers, accept only our reserved GUID *and* their actual
-// shell-folder handler/TargetFolderPath layout.  Never remove an arbitrary
-// registry class merely because it has an ID in our numeric range.
-bool LooksLikeLegacyEntry(const std::wstring& id) {
-    std::wstring cls = std::wstring(kClassesRoot) + id;
-    std::wstring ns = std::wstring(kNamespaceRoot) + id;
-    std::wstring handler, target;
-    return KeyExists(ns) &&
-           ReadStringAt(cls + L"\\Instance", L"CLSID", &handler) &&
-           _wcsicmp(handler.c_str(), kFolderHandler) == 0 &&
-           ReadStringAt(cls + L"\\Instance\\InitPropertyBag",
-                        L"TargetFolderPath", &target) && !target.empty();
-}
-
 bool TrackedId(const std::wstring& id) {
     const std::wstring cls = std::wstring(kClassesRoot) + id;
-    return ListedAsOurs(id) || HasOwnerMarker(cls) || LooksLikeLegacyEntry(id);
+    return ListedAsOurs(id) || HasOwnerMarker(cls);
 }
 
 void DeleteTreeLogged(const std::wstring& path) {
-    LONG status = RegDeleteTreeW(HKEY_CURRENT_USER, path.c_str());
+    const size_t slash = path.find_last_of(L'\\');
+    if (slash == std::wstring::npos) return;
+
+    const std::wstring parentPath = path.substr(0, slash);
+    const std::wstring childName = path.substr(slash + 1);
+
+    HKEY parent = nullptr;
+    LONG status = RegOpenKeyExW(
+        HKEY_CURRENT_USER, parentPath.c_str(), 0,
+        DELETE | KEY_ENUMERATE_SUB_KEYS | KEY_QUERY_VALUE | KEY_SET_VALUE |
+        kRegistryView, &parent);
+    if (status == ERROR_FILE_NOT_FOUND || status == ERROR_PATH_NOT_FOUND)
+        return;
+    if (status != ERROR_SUCCESS) {
+        Wh_Log(L"Registry parent open failed (%ld): %s",
+               status, parentPath.c_str());
+        return;
+    }
+
+    status = RegDeleteTreeW(parent, childName.c_str());
+    RegCloseKey(parent);
     if (status != ERROR_SUCCESS && status != ERROR_FILE_NOT_FOUND &&
-        status != ERROR_PATH_NOT_FOUND)
+        status != ERROR_PATH_NOT_FOUND) {
         Wh_Log(L"Registry removal failed (%ld): %s", status, path.c_str());
+    }
 }
 
 void RemoveId(const std::wstring& id) {
@@ -484,71 +697,50 @@ void RemoveId(const std::wstring& id) {
     DeleteTreeLogged(ns);
     DeleteTreeLogged(cls);
     if (!KeyExists(cls) && !KeyExists(ns)) {
-        HKEY ledger = nullptr;
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, kLedgerRoot, 0, KEY_SET_VALUE,
-                          &ledger) == ERROR_SUCCESS) {
-            RegDeleteValueW(ledger, id.c_str());
-            RegCloseKey(ledger);
-        }
+        gLedger.ids.erase(id);
+        SaveLedger();
     }
 }
-void RemoveEntry(int i) { RemoveId(GetId(i)); }
 
-// Read managed GUIDs from the independent ownership ledger. Never enumerate
-// arbitrary HKCU CLSIDs for deletion. Keep the list separate while deleting.
 std::vector<std::wstring> ManagedIds() {
-    std::vector<std::wstring> ids;
-    HKEY ledger = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kLedgerRoot, 0, KEY_READ,
-                      &ledger) != ERROR_SUCCESS) return ids;
-    for (DWORD i = 0; ; ++i) {
-        wchar_t name[256]{}; DWORD len = ARRAYSIZE(name);
-        LONG result = RegEnumValueW(ledger, i, name, &len, nullptr,
-                                    nullptr, nullptr, nullptr);
-        if (result == ERROR_NO_MORE_ITEMS) break;
-        if (result != ERROR_SUCCESS) { Wh_Log(L"Ledger enumeration error: %ld", result); break; }
-        std::wstring id(name, len);
-        if (id.size() == 38 && id.front() == L'{' && id.back() == L'}')
-            ids.push_back(id);
-    }
-    RegCloseKey(ledger);
-    return ids;
+    return std::vector<std::wstring>(gLedger.ids.begin(), gLedger.ids.end());
 }
 
 bool MarkManaged(const std::wstring& id) {
-    HKEY key = nullptr;
-    if (!OpenKey(kLedgerRoot, &key)) return false;
-    bool ok = PutString(key, id.c_str(), kMarker);
-    RegCloseKey(key);
-    return ok;
+    gLedger.ids.insert(id);
+    SaveLedger();
+    return ListedAsOurs(id);
 }
 
-// Launcher filenames follow the display name. An independent per-slot ledger
-// tracks their previous filenames for cleanup when names change.
 std::wstring ShortcutFolder() {
-    wchar_t path[MAX_PATH]{};
-    if (FAILED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, path))) return L"";
-    return std::wstring(path) + L"\\Microsoft\\Windows\\Network Shortcuts";
+    PWSTR path = nullptr;
+    if (FAILED(SHGetKnownFolderPath(kNetHoodFolderId, 0, nullptr, &path)))
+        return L"";
+    std::wstring result = path;
+    CoTaskMemFree(path);
+    return result;
 }
+
 std::wstring SafeName(std::wstring name) {
     for (auto& ch : name) {
         if (wcschr(L"<>:\"/\\|?*", ch) || ch < 32) ch = L'_';
     }
-    while (!name.empty() && (name.back() == L'.' || name.back() == L' ')) name.pop_back();
+    while (!name.empty() && (name.back() == L'.' || name.back() == L' '))
+        name.pop_back();
     if (name.empty()) name = L"Shortcut";
     if (name.size() > 100) name.resize(100);
     return name;
 }
-std::wstring ShortcutPath(int index, bool url, const std::wstring& name) {
+
+std::wstring ShortcutPath(bool url, const std::wstring& name) {
     const std::wstring dir = ShortcutFolder();
     if (dir.empty()) return L"";
-    // Per-slot ledger holds exact last created filename; no GUID exposed in UI.
     return dir + L"\\" + SafeName(name) + (url ? L".url" : L".lnk");
 }
+
 std::wstring LedgerShortcutName(int i) {
-    std::wstring name;
-    ReadStringAt(kLedgerRoot, (L"Shortcut_" + std::to_wstring(i)).c_str(), &name);
-    return name;
+    if (i < 0 || i >= kMaxFolders) return L"";
+    return gLedger.shortcutNames[i];
 }
 // Use the shortcut's own metadata as an ownership guard. Even a user-created
 // file with the same filename is not removed unless it carries our marker.
@@ -586,88 +778,145 @@ void RemoveShortcut(int i) {
     auto name = LedgerShortcutName(i);
     if (name.empty()) return;
     for (bool url : {false, true}) {
-        const auto path = ShortcutPath(i, url, name);
+        const auto path = ShortcutPath(url, name);
         if (!path.empty() && OwnedShortcut(path, url) && !DeleteFileW(path.c_str()))
             Wh_Log(L"Unable to remove managed shortcut %s (%lu)", path.c_str(), GetLastError());
     }
     // Keep ledger if an owned file persists, to allow retry on next reload.
     bool remaining = false;
-    for (bool url : {false, true}) remaining |= OwnedShortcut(ShortcutPath(i,url,name),url);
-    if (!remaining) {
-        HKEY key = nullptr;
-        if (RegOpenKeyExW(HKEY_CURRENT_USER,kLedgerRoot,0,KEY_SET_VALUE,&key)==ERROR_SUCCESS) {
-            RegDeleteValueW(key,(L"Shortcut_"+std::to_wstring(i)).c_str());
-            RegCloseKey(key);
-        }
+    for (bool url : {false, true}) remaining |= OwnedShortcut(ShortcutPath(url,name),url);
+    if (!remaining && i >= 0 && i < kMaxFolders) {
+        gLedger.shortcutNames[i].clear();
+        SaveLedger();
     }
 }
-void RemoveAll(int i) { RemoveEntry(i); RemoveShortcut(i); }
+void RemoveAll(int i) { RemoveShortcut(i); }
 bool CreateLauncher(int i, const Folder& f, EntryKind kind) {
     ScopedCom com;
-    const bool url = kind == EntryKind::Uri;
-    auto path = ShortcutPath(i, url, f.name);
+
+    const bool sourceShortcut = kind == EntryKind::ShortcutFile;
+    const bool outputUrl =
+        sourceShortcut && HasExtension(f.path, L".url");
+
+    auto path = ShortcutPath(outputUrl, f.name);
     if (path.empty()) return false;
+
     if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) {
-        Wh_Log(L"Launcher filename collision (not overwriting): %s", path.c_str());
+        Wh_Log(L"Launcher filename collision (not overwriting): %s",
+               path.c_str());
         return false;
     }
-    // Never overwrite another user shortcut with the same name.
-    if (url) {
-        // Windows Internet Shortcut .url handles http(s) and installed protocols.
-        // Stage the entire internet shortcut first. Failed writes never leave an
-        // unowned or half-populated file at the final destination.
-        const std::wstring staging = path + L".tmp." + std::to_wstring(GetCurrentProcessId()) +
-            L"." + std::to_wstring(GetCurrentThreadId());
-        if (GetFileAttributesW(staging.c_str()) != INVALID_FILE_ATTRIBUTES) {
-            Wh_Log(L"Staging file already exists: %s", staging.c_str());
-            return false;
+
+    const std::wstring staging =
+        path + L".tmp." + std::to_wstring(GetCurrentProcessId()) + L"." +
+        std::to_wstring(GetCurrentThreadId());
+
+    if (GetFileAttributesW(staging.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        Wh_Log(L"Staging file already exists: %s", staging.c_str());
+        return false;
+    }
+
+    bool ok = false;
+
+    if (sourceShortcut && outputUrl) {
+        // Preserve an existing Internet Shortcut, but add our ownership marker
+        // to the staged copy so cleanup never deletes an unrelated file.
+        ok = CopyFileW(f.path.c_str(), staging.c_str(), TRUE) != FALSE;
+        if (ok) {
+            ok = WritePrivateProfileStringW(
+                     L"InternetShortcut",
+                     L"ThisPCCustomFoldersOwner",
+                     kMarker,
+                     staging.c_str()) != FALSE;
         }
-        bool ok = WritePrivateProfileStringW(L"InternetShortcut", L"URL", f.path.c_str(), staging.c_str()) &&
-            WritePrivateProfileStringW(L"InternetShortcut", L"ThisPCCustomFoldersOwner", kMarker, staging.c_str());
-        if (ok && !f.icon.empty()) {
-            ok = WritePrivateProfileStringW(L"InternetShortcut", L"IconFile", f.icon.c_str(), staging.c_str()) &&
-                 WritePrivateProfileStringW(L"InternetShortcut", L"IconIndex",
-                     f.iconRef.empty() ? L"0" : f.iconRef.c_str(), staging.c_str());
+        if (ok) {
+            ok = WritePrivateProfileStringW(
+                     nullptr, nullptr, nullptr, staging.c_str()) != FALSE;
         }
-        if (ok) ok = WritePrivateProfileStringW(nullptr, nullptr, nullptr, staging.c_str());
-        if (ok) ok = MoveFileExW(staging.c_str(), path.c_str(), MOVEFILE_WRITE_THROUGH);
-        if (!ok) {
-            Wh_Log(L"Could not publish URL shortcut: %s (%lu)", path.c_str(), GetLastError());
-            DeleteFileW(staging.c_str());
-            return false;
-        }
-        // Shortcut display name uses filename; Windows hides .url extension.
     } else {
         IShellLinkW* link = nullptr;
-        if (FAILED(CoCreateInstance(kShellLinkClsid, nullptr, CLSCTX_INPROC_SERVER,
-                                    IID_PPV_ARGS(&link)))) return false;
-        link->SetPath(f.path.c_str());
-        link->SetDescription(kMarker);
-        if (!f.args.empty()) link->SetArguments(f.args.c_str());
-        if (!f.workingDir.empty()) link->SetWorkingDirectory(f.workingDir.c_str());
-        if (!f.icon.empty()) link->SetIconLocation(f.icon.c_str(), _wtoi(f.iconRef.c_str()));
+        if (FAILED(CoCreateInstance(kShellLinkClsid, nullptr,
+                                    CLSCTX_INPROC_SERVER,
+                                    IID_PPV_ARGS(&link)))) {
+            return false;
+        }
+
         IPersistFile* persistence = nullptr;
         HRESULT hr = E_FAIL;
-        if (SUCCEEDED(link->QueryInterface(IID_PPV_ARGS(&persistence)))) {
-            // Save to a staged file and publish only when the shortcut is complete.
-            const std::wstring staging = path + L".tmp." +
-                std::to_wstring(GetCurrentProcessId()) + L"." +
-                std::to_wstring(GetCurrentThreadId());
-            if (GetFileAttributesW(staging.c_str()) == INVALID_FILE_ATTRIBUTES) {
-                hr = persistence->Save(staging.c_str(), TRUE);
-                if (SUCCEEDED(hr) && !MoveFileExW(staging.c_str(), path.c_str(), MOVEFILE_WRITE_THROUGH))
-                    hr = HRESULT_FROM_WIN32(GetLastError());
-                if (FAILED(hr)) DeleteFileW(staging.c_str());
+
+        if (sourceShortcut) {
+            // Load an existing .lnk and republish it as a managed copy.
+            if (SUCCEEDED(link->QueryInterface(IID_PPV_ARGS(&persistence)))) {
+                hr = persistence->Load(f.path.c_str(), STGM_READ);
+                if (SUCCEEDED(hr)) {
+                    link->SetDescription(kMarker);
+                    if (!f.icon.empty()) {
+                        link->SetIconLocation(
+                            f.icon.c_str(), _wtoi(f.iconRef.c_str()));
+                    }
+                    hr = persistence->Save(staging.c_str(), TRUE);
+                }
             }
-            persistence->Release();
+        } else {
+            if (kind == EntryKind::Uri) {
+                // A .lnk works more reliably in Network Shortcuts than a .url.
+                // FileProtocolHandler asks Windows to invoke the registered
+                // handler for http(s), steam:, mailto:, and other protocols.
+                const std::wstring handler =
+                    Expand(L"%SystemRoot%\\System32\\rundll32.exe");
+                const std::wstring arguments =
+                    L"url.dll,FileProtocolHandler \"" + f.path + L"\"";
+
+                link->SetPath(handler.c_str());
+                link->SetArguments(arguments.c_str());
+            } else {
+                link->SetPath(f.path.c_str());
+                if (!f.args.empty())
+                    link->SetArguments(f.args.c_str());
+                if (!f.workingDir.empty())
+                    link->SetWorkingDirectory(f.workingDir.c_str());
+            }
+
+            link->SetDescription(kMarker);
+
+            if (!f.icon.empty()) {
+                link->SetIconLocation(
+                    f.icon.c_str(), _wtoi(f.iconRef.c_str()));
+            }
+
+            if (SUCCEEDED(link->QueryInterface(IID_PPV_ARGS(&persistence)))) {
+                hr = persistence->Save(staging.c_str(), TRUE);
+            }
         }
+
+        if (persistence) persistence->Release();
         link->Release();
-        if (FAILED(hr)) return false;
+
+        ok = SUCCEEDED(hr);
     }
-    SetStringAt(kLedgerRoot, (L"Shortcut_" + std::to_wstring(i)).c_str(), f.name);
-    Wh_Log(L"Created managed Network locations shortcut: %s -> %s", f.name.c_str(), f.path.c_str());
+
+    if (ok) {
+        ok = MoveFileExW(staging.c_str(), path.c_str(),
+                         MOVEFILE_WRITE_THROUGH) != FALSE;
+    }
+
+    if (!ok) {
+        Wh_Log(L"Could not publish launcher: %s (%lu)",
+               path.c_str(), GetLastError());
+        DeleteFileW(staging.c_str());
+        return false;
+    }
+
+    if (i >= 0 && i < kMaxFolders) {
+        gLedger.shortcutNames[i] = f.name;
+        SaveLedger();
+    }
+
+    Wh_Log(L"Created managed Network locations shortcut: %s -> %s",
+           f.name.c_str(), f.path.c_str());
     return true;
 }
+
 void NotifyExplorer() {
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     // Request an update for This PC itself, not only the shortcut directory.
@@ -685,30 +934,44 @@ void Apply() {
     std::vector<Folder> folders;
     if (!Load(folders)) return; // Keep valid current entries on invalid JSON.
 
+    for (Folder& f : folders) {
+        f.kind = Kind(f);
+    }
+
     // Reject duplicate folder identities and launcher filenames before making changes.
     std::set<std::wstring> folderIds;
     std::set<std::wstring> launcherNames;
     for (size_t i = 0; i < folders.size(); ++i) {
         const Folder& f = folders[i];
-        const EntryKind kind = Kind(f);
+        const EntryKind kind = f.kind;
         if (kind == EntryKind::Folder) {
             if (!folderIds.insert(StableId(f)).second) {
                 Wh_Log(L"Duplicate folder entry %s; keeping existing registrations", f.name.c_str());
                 return;
             }
-        } else if (kind == EntryKind::Executable || kind == EntryKind::Uri) {
-            std::wstring key = SafeName(f.name) +
-                (kind == EntryKind::Uri ? L".url" : L".lnk");
-            std::transform(key.begin(), key.end(), key.begin(), [](wchar_t c) { return static_cast<wchar_t>(towlower(c)); });
+        } else if (kind == EntryKind::Executable ||
+                   kind == EntryKind::Uri ||
+                   kind == EntryKind::ShortcutFile) {
+            const bool outputUrl =
+                kind == EntryKind::ShortcutFile &&
+                HasExtension(f.path, L".url");
+            std::wstring key =
+                SafeName(f.name) + (outputUrl ? L".url" : L".lnk");
+            std::transform(
+                key.begin(), key.end(), key.begin(),
+                [](wchar_t c) {
+                    return static_cast<wchar_t>(towlower(c));
+                });
             if (!launcherNames.insert(key).second) {
-                Wh_Log(L"Duplicate launcher name %s; keeping existing registrations", f.name.c_str());
+                Wh_Log(L"Duplicate launcher name %s; keeping existing registrations",
+                       f.name.c_str());
                 return;
             }
         }
     }
     std::set<std::wstring> desired;
     for (const Folder& f : folders)
-        if (Kind(f) == EntryKind::Folder) desired.insert(StableId(f));
+        if (f.kind == EntryKind::Folder) desired.insert(StableId(f));
 
     // Migrate/remove all old position-based registrations. Launcher shortcuts
     // still use the per-row cleanup ledger but never share the folder CLSID.
@@ -718,7 +981,7 @@ void Apply() {
 
     for (size_t i = 0; i < folders.size(); ++i) {
         const Folder& f = folders[i];
-        EntryKind kind = Kind(f);
+        EntryKind kind = f.kind;
         if (kind == EntryKind::Invalid) {
             Wh_Log(L"Skipped invalid or unsupported target: %s", f.path.c_str());
             continue;
@@ -737,19 +1000,24 @@ void Apply() {
                 Wh_Log(L"Unowned CLSID collision (skipped): %s", id.c_str());
                 continue;
             }
-            // The sort order is intentionally excluded from StableId: update it
-            // in place without forcing a new shell identity or cache churn.
-            if (KeyExists(cls) && KeyExists(ns)) {
+
+            if (!KeyExists(cls) || !KeyExists(ns)) {
+                Wh_Log(L"Repairing partial registration for %s", f.name.c_str());
+                RemoveId(id);
+            } else {
+                // The sort order is intentionally excluded from StableId: update it
+                // in place without forcing a new shell identity or cache churn.
                 HKEY key = nullptr;
-                if (RegOpenKeyExW(HKEY_CURRENT_USER, cls.c_str(), 0, KEY_SET_VALUE, &key) == ERROR_SUCCESS) {
+                if (RegOpenKeyExW(HKEY_CURRENT_USER, cls.c_str(), 0,
+                                  KEY_SET_VALUE | kRegistryView, &key) == ERROR_SUCCESS) {
                     if (!PutDword(key, L"SortOrderIndex", f.sortOrder))
                         Wh_Log(L"Could not update Sort Order for %s", f.name.c_str());
                     RegCloseKey(key);
                 } else {
                     Wh_Log(L"Could not open existing entry to update Sort Order: %s", f.name.c_str());
                 }
+                continue;
             }
-            continue;
         }
         if (!MarkManaged(id)) {
             Wh_Log(L"Cannot record ownership of %s; skipping", id.c_str());
@@ -899,17 +1167,25 @@ void CaptureShortcut() {
         return;
     }
     if (file.size() >= 4 && _wcsicmp(file.c_str() + file.size()-4, L".url") == 0) {
-        wchar_t url[32768]{}, icon[32768]{}, index[32]{};
-        GetPrivateProfileStringW(L"InternetShortcut", L"URL", L"", url, ARRAYSIZE(url), file.c_str());
-        GetPrivateProfileStringW(L"InternetShortcut", L"IconFile", L"", icon, ARRAYSIZE(icon), file.c_str());
-        GetPrivateProfileStringW(L"InternetShortcut", L"IconIndex", L"0", index, ARRAYSIZE(index), file.c_str());
-        if (!IsUri(url)) { Wh_Log(L"Shortcut capture: .url is missing a valid URL"); return; }
+        std::vector<wchar_t> url(32768), icon(32768);
+        wchar_t index[32]{};
+        GetPrivateProfileStringW(L"InternetShortcut", L"URL", L"",
+                                 url.data(), static_cast<DWORD>(url.size()),
+                                 file.c_str());
+        GetPrivateProfileStringW(L"InternetShortcut", L"IconFile", L"",
+                                 icon.data(), static_cast<DWORD>(icon.size()),
+                                 file.c_str());
+        GetPrivateProfileStringW(L"InternetShortcut", L"IconIndex", L"0",
+                                 index, ARRAYSIZE(index), file.c_str());
+        if (!IsUri(url.data())) {
+            Wh_Log(L"Shortcut capture: .url is missing a valid URL");
+            return;
+        }
         std::wstring name = file.substr(file.find_last_of(L"\\/")+1);
         name.resize(name.size()-4);
         std::wstring json = L"{\"name\":\"" + EscapeJson(name) +
-            L"\",\"path\":\"" + EscapeJson(url) + L"\",\"icon\":\"" +
-            EscapeJson(icon) + L"\",\"ref\":" + std::to_wstring(_wtoi(index)) +
-            L",\"type\":\"launcher\"}";
+            L"\",\"path\":\"" + EscapeJson(url.data()) + L"\",\"icon\":\"" +
+            EscapeJson(icon.data()) + L"\",\"ref\":" + std::to_wstring(_wtoi(index)) + L"}";
         if (!PutClipboardText(json)) Wh_Log(L"Shortcut capture: clipboard unavailable");
         return;
     }
@@ -919,23 +1195,28 @@ void CaptureShortcut() {
     IPersistFile* persist = nullptr;
     if (SUCCEEDED(link->QueryInterface(IID_PPV_ARGS(&persist)))) {
         if (SUCCEEDED(persist->Load(file.c_str(), STGM_READ))) {
-            wchar_t target[32768]{};
-            wchar_t icon[32768]{};
+            std::vector<wchar_t> target(32768);
+            std::vector<wchar_t> icon(32768);
+            std::vector<wchar_t> arguments(32768);
+            std::vector<wchar_t> workingDir(32768);
             int iconIndex = 0;
-            wchar_t arguments[32768]{}, workingDir[32768]{};
             WIN32_FIND_DATAW data{};
-            link->GetPath(target, ARRAYSIZE(target), &data, SLGP_RAWPATH);
-            link->GetIconLocation(icon, ARRAYSIZE(icon), &iconIndex);
-            link->GetArguments(arguments, ARRAYSIZE(arguments));
-            link->GetWorkingDirectory(workingDir, ARRAYSIZE(workingDir));
+            link->GetPath(target.data(), static_cast<int>(target.size()),
+                          &data, SLGP_RAWPATH);
+            link->GetIconLocation(icon.data(), static_cast<int>(icon.size()),
+                                  &iconIndex);
+            link->GetArguments(arguments.data(),
+                               static_cast<int>(arguments.size()));
+            link->GetWorkingDirectory(workingDir.data(),
+                                      static_cast<int>(workingDir.size()));
             std::wstring name = file.substr(file.find_last_of(L"\\/") + 1);
             if (name.size() >= 4) name.resize(name.size() - 4);
             if (target[0]) {
                 std::wstring json = L"{\"name\":\"" + EscapeJson(name) +
-                    L"\",\"path\":\"" + EscapeJson(target) + L"\",\"icon\":\"" +
-                    EscapeJson(icon) + L"\",\"ref\":" + std::to_wstring(iconIndex) +
-                    L",\"args\":\"" + EscapeJson(arguments) + L"\",\"workingDir\":\"" +
-                    EscapeJson(workingDir) + L"\"}";
+                    L"\",\"path\":\"" + EscapeJson(target.data()) + L"\",\"icon\":\"" +
+                    EscapeJson(icon.data()) + L"\",\"ref\":" + std::to_wstring(iconIndex) +
+                    L",\"args\":\"" + EscapeJson(arguments.data()) + L"\",\"workingDir\":\"" +
+                    EscapeJson(workingDir.data()) + L"\"}";
                 if (PutClipboardText(json)) Wh_Log(L"Shortcut copied: %s", file.c_str());
                 else Wh_Log(L"Shortcut capture: clipboard unavailable");
             } else Wh_Log(L"Shortcut capture: target path unavailable for %s", file.c_str());
@@ -945,18 +1226,31 @@ void CaptureShortcut() {
     link->Release();
 }
 
-DWORD WINAPI HotkeyThread(void*) {
+DWORD WINAPI HotkeyThread(void* parameter) {
+    HANDLE readyEvent = static_cast<HANDLE>(parameter);
+
     HRESULT init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    if (FAILED(init)) return 0;
+    if (FAILED(init)) {
+        SetEvent(readyEvent);
+        return 0;
+    }
+
     MSG msg;
     PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
-    if (!RegisterHotKey(nullptr, kHotkey, MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, 'C')) {
+    SetEvent(readyEvent);
+
+    if (!RegisterHotKey(nullptr, kHotkey, MOD_CONTROL | MOD_ALT | MOD_SHIFT |
+                        MOD_NOREPEAT, 'C')) {
         Wh_Log(L"Shortcut hotkey Ctrl+Alt+Shift+C could not be registered");
-        CoUninitialize(); return 0;
+        CoUninitialize();
+        return 0;
     }
+
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (msg.message == WM_HOTKEY && msg.wParam == kHotkey) CaptureShortcut();
+        if (msg.message == WM_HOTKEY && msg.wParam == kHotkey)
+            CaptureShortcut();
     }
+
     UnregisterHotKey(nullptr, kHotkey);
     CoUninitialize();
     return 0;
@@ -964,13 +1258,12 @@ DWORD WINAPI HotkeyThread(void*) {
 
 void StopHotkey() {
     if (!gHotkeyThread) return;
-    if (WaitForSingleObject(gHotkeyThread, 0) == WAIT_TIMEOUT) {
-        if (!PostThreadMessageW(gHotkeyThreadId, WM_QUIT, 0, 0))
-            Wh_Log(L"Hotkey thread quit message failed (%lu)", GetLastError());
-        // Never unload a DLL while its thread is still executing mod code.
-        // A shortcut capture already in progress must finish first.
-        WaitForSingleObject(gHotkeyThread, INFINITE);
+
+    while (!PostThreadMessageW(gHotkeyThreadId, WM_QUIT, 0, 0) &&
+           WaitForSingleObject(gHotkeyThread, 10) == WAIT_TIMEOUT) {
     }
+
+    WaitForSingleObject(gHotkeyThread, INFINITE);
     CloseHandle(gHotkeyThread);
     gHotkeyThread = nullptr;
     gHotkeyThreadId = 0;
@@ -978,21 +1271,237 @@ void StopHotkey() {
 
 void UpdateHotkey() {
     const bool enabled = Wh_GetIntSetting(L"enableShortcutCapture") != 0;
-    if (!enabled) { StopHotkey(); return; }
-    if (gHotkeyThread && WaitForSingleObject(gHotkeyThread, 0) == WAIT_TIMEOUT) return;
-    StopHotkey();
-    gHotkeyThread = CreateThread(nullptr, 0, HotkeyThread, nullptr, 0, &gHotkeyThreadId);
-    if (!gHotkeyThread) Wh_Log(L"Cannot start hotkey thread (%lu)", GetLastError());
-}
+    if (!enabled) {
+        StopHotkey();
+        return;
+    }
 
+    if (gHotkeyThread &&
+        WaitForSingleObject(gHotkeyThread, 0) == WAIT_TIMEOUT) {
+        return;
+    }
+
+    StopHotkey();
+
+    HANDLE readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!readyEvent) {
+        Wh_Log(L"Cannot create hotkey ready event (%lu)", GetLastError());
+        return;
+    }
+
+    gHotkeyThread = CreateThread(nullptr, 0, HotkeyThread, readyEvent, 0,
+                                 &gHotkeyThreadId);
+    if (!gHotkeyThread) {
+        Wh_Log(L"Cannot start hotkey thread (%lu)", GetLastError());
+        CloseHandle(readyEvent);
+        return;
+    }
+
+    const DWORD waitResult = WaitForSingleObject(readyEvent, 5000);
+    if (waitResult != WAIT_OBJECT_0) {
+        Wh_Log(L"Hotkey thread failed to initialize");
+        StopHotkey();
+    }
+
+    CloseHandle(readyEvent);
+}
 } // namespace
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
+    LoadLedger();
+    MigrateLegacyLedger();
     Apply();
     UpdateHotkey();
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() { Apply(); UpdateHotkey(); }
+void WhTool_ModSettingsChanged() {
+    Apply();
+    UpdateHotkey();
+}
 
-void Wh_ModUninit() { StopHotkey(); Cleanup(); }
+void WhTool_ModUninit() {
+    StopHotkey();
+    Cleanup();
+}
+
+
+// --- Windhawk Tool Mod Boilerplate (Do not modify) ---
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
+}
