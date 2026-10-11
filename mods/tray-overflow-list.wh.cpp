@@ -1319,7 +1319,8 @@ HMODULE FindSystemTrayModule() {
 }
 
 bool InstallSystemTraySymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks[] = {
         {
             {
                 LR"(private: void __cdecl winrt::SystemTray::OverflowXamlIslandManager::InitializeIfNeeded(void))"
@@ -1330,7 +1331,9 @@ bool InstallSystemTraySymbols(HMODULE module) {
     };
 
     return WindhawkUtils::HookSymbols(
-        module, hooks, ARRAYSIZE(hooks));
+        module,
+        systemTrayDllHooks,
+        ARRAYSIZE(systemTrayDllHooks));
 }
 
 void TryInstallHooks(bool applyOperations) {
