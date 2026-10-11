@@ -7,34 +7,36 @@
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -luuid
+// @compilerOptions -lversion
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
 # Win10 Taskbar Search State Refresh
 
-This mod tries to address an issue where the legacy Windows 10 taskbar, running inside a Windows 11
+This mod addresses an issue where the legacy Windows 10 taskbar, running inside a Windows 11
 system, does not always redraw when the taskbar Search setting (hidden / icon / box) is changed.
-It monitors the setting and triggers the taskbar to apply it, verifying the result and retrying
-with progressively stronger methods. This modification has been tested on Windows 11 24H2.
+It monitors the setting and triggers the taskbar to apply it immediately. This modification has
+been tested on Windows 11 24H2.
 
-Note: This mod is best-effort because the message the Windows 10 taskbar actually responds to may differ between
-builds, which is why each attempt and its measured result are logged.
+Note: for a complete Windows 10 taskbar experience on Windows 11 24H2 / 25H2, install the
+[Windows 10 taskbar on Windows 11 24H2](https://windhawk.net/mods/win10-taskbar-on-win11-24h2)
+mod first. That mod downloads and runs the Windows 10 explorer.exe (10.0.19039) as the shell;
+this mod only works on top of that shell and does nothing on the stock Windows 11 taskbar.
 
 ## How it works
 - It monitors `HKCU\Software\Microsoft\Windows\CurrentVersion\Search\SearchboxTaskbarMode`
   (0 = hidden, 1 = icon, 2 = box, 3 = icon and label) via a registry notification, with a
   one-second poll as a fallback in case a notification is missed.
-- When the value changes (and once shortly after startup), up to N attempts are performed. Each
-  attempt applies a stronger method, then waits and checks the taskbar:
-  1. `WM_SETTINGCHANGE` ("TraySettings") sent to the taskbar window(s).
-  2. The same message broadcast to all top-level windows and sent to every child window of the taskbar.
-  3. A work-area setting change, a frame refresh, and a full redraw of the taskbar.
-  4. Steps 1 and 2 repeated after a longer delay (explorer may have been busy).
-- Verification uses UI Automation: the search element (AutomationId `4103`) must be missing or
-  off-screen for "hidden", approximately as wide as the taskbar is tall for "icon", and wider for
-  "box". Vertical taskbars cannot be verified, so only two attempts are made there.
-- Every step and measurement is written to the Windhawk log with the prefix `[SearchRefresh]`.
+- When the value changes, it sends `WM_SETTINGCHANGE` with `"TraySettings"` to `Shell_TrayWnd`
+  and `Shell_SecondaryTrayWnd` of this process. This is the single method that reliably makes
+  the Windows 10 taskbar reload its settings, including the search mode, on shell build
+  10.0.19039. The message is sent twice with a short gap so a momentarily busy explorer still
+  catches it.
+- The message is never broadcast system-wide: only the taskbar windows of this process are
+  targeted. No fake `SPI_SETWORKAREA` and no UI Automation are used.
+- The startup refresh is skipped on a normal explorer start (the taskbar reads the value itself
+  when it is created) and only runs when the mod is enabled while the taskbar is already running.
+- Every refresh is written to the Windhawk log.
 
 ## "Search icon and label" (approximation)
 The Windows 10 taskbar only supports three states: hidden, icon, and box. "Search icon and label"
@@ -47,13 +49,12 @@ choice. It is an approximation, not a true "icon and label" layout. It can be di
 
 ## Settings
 - `labelAsBox`: treat "Search icon and label" as the search box (see above).
-- `verify`: check the taskbar after each attempt and stop as soon as it matches. When off, only two attempts are made.
-- `maxAttempts`: maximum number of attempts per change (1-8).
 
 ## Limitations
 - This mod never restarts explorer and never writes to the registry. The "icon and label" mapping is
   performed by adjusting the value as returned to explorer.exe (RegQueryValueExW / RegGetValueW);
   if the taskbar reads the value by other means, the mapping will not take effect.
+- The mod does nothing on the stock Windows 11 shell (build 22000+); it exits at load time.
 */
 // ==/WindhawkModReadme==
 
@@ -62,18 +63,11 @@ choice. It is an approximation, not a true "icon and label" layout. It can be di
 - labelAsBox: true
   $name: Treat "icon and label" as search box
   $description: This setting controls whether "Search icon and label" is treated as the search box. The Windows 10 taskbar has no "Search icon and label" mode, so when on, that choice is shown as the search box (an approximation). The registry value is not modified.
-- verify: true
-  $name: Verify and retry
-  $description: This setting controls whether the taskbar is checked after each attempt and the process stops as soon as it matches the setting. When off, only two attempts are made.
-- maxAttempts: 4
-  $name: Maximum attempts
-  $description: This setting controls the maximum number of refresh attempts per change (1-8).
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
-#include <uiautomation.h>
-#include <wrl/client.h>
+#include <winver.h>
 
 #include <algorithm>
 #include <atomic>
@@ -82,40 +76,25 @@ choice. It is an approximation, not a true "icon and label" layout. It can be di
 #include <string>
 #include <vector>
 
-using Microsoft::WRL::ComPtr;
-
 namespace {
 
 constexpr wchar_t kSearchKeyPath[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Search";
 constexpr wchar_t kModeValueName[] = L"SearchboxTaskbarMode";
-constexpr wchar_t kSearchAutomationId[] = L"4103";
+constexpr DWORD kFirstWindows11Build = 22000;
 
 std::atomic<bool> g_stopping{false};
-std::atomic<bool> g_verify{true};
-std::atomic<int> g_maxAttempts{4};
 std::atomic<bool> g_labelAsBox{true};
 std::atomic<int> g_remapLogCount{0};
 HANDLE g_stopEvent = nullptr;
 HANDLE g_resyncEvent = nullptr;
 HANDLE g_worker = nullptr;
-
-enum class SearchVisual { Unknown, Hidden, Icon, Box };
-
-const wchar_t* VisualName(SearchVisual visual) {
-    switch (visual) {
-        case SearchVisual::Hidden: return L"hidden";
-        case SearchVisual::Icon: return L"icon";
-        case SearchVisual::Box: return L"box";
-        default: return L"unknown";
-    }
-}
+bool g_taskbarExistedAtInit = false;
 
 using RegQueryValueExW_t = LONG (WINAPI*)(HKEY, LPCWSTR, LPDWORD, LPDWORD, LPBYTE, LPDWORD);
 using RegGetValueW_t = LSTATUS (WINAPI*)(HKEY, LPCWSTR, LPCWSTR, DWORD, LPDWORD, PVOID, LPDWORD);
 RegQueryValueExW_t g_origRegQueryValueExW = nullptr;
 RegGetValueW_t g_origRegGetValueW = nullptr;
 
-// Reports "icon and label" (3) as "box" (2) to explorer. The registry itself is untouched.
 void RemapLabelMode(LPCWSTR valueName, DWORD type, void* data, DWORD size) {
     if (!data || size != sizeof(DWORD) || type != REG_DWORD || !valueName) return;
     if (!g_labelAsBox.load() || _wcsicmp(valueName, kModeValueName) != 0) return;
@@ -144,18 +123,12 @@ LSTATUS WINAPI RegGetValueW_Hook(HKEY key, LPCWSTR subKey, LPCWSTR value, DWORD 
     return result;
 }
 
-// Reads the real value (bypassing our own remapping hook).
 int ReadSearchMode() {
     DWORD value = 0, size = sizeof(value);
     const RegGetValueW_t getValue = g_origRegGetValueW ? g_origRegGetValueW : RegGetValueW;
     const LONG result = getValue(HKEY_CURRENT_USER, kSearchKeyPath, kModeValueName,
                                  RRF_RT_REG_DWORD, nullptr, &value, &size);
     return result == ERROR_SUCCESS ? static_cast<int>(value) : -1;
-}
-
-// What the Windows 10 taskbar can actually show for a registry value.
-int EffectiveMode(int mode) {
-    return (mode == 3 && g_labelAsBox.load()) ? 2 : mode;
 }
 
 BOOL CALLBACK CollectTrayProc(HWND hwnd, LPARAM lParam) {
@@ -176,186 +149,75 @@ std::vector<HWND> FindTrays() {
     return trays;
 }
 
-BOOL CALLBACK CollectChildProc(HWND hwnd, LPARAM lParam) {
-    reinterpret_cast<std::vector<HWND>*>(lParam)->push_back(hwnd);
-    return TRUE;
-}
-
-void SendSettingChange(HWND hwnd, WPARAM wParam, const wchar_t* area) {
-    DWORD_PTR result = 0;
-    SendMessageTimeoutW(hwnd, WM_SETTINGCHANGE, wParam, reinterpret_cast<LPARAM>(area),
-                        SMTO_ABORTIFHUNG, 2000, &result);
-}
-
-void RunRefreshStep(int step) {
+void RefreshTaskbar() {
     const std::vector<HWND> trays = FindTrays();
     if (trays.empty()) {
-        Wh_Log(L"[SearchRefresh] step %d: no taskbar window found in this process", step + 1);
+        Wh_Log(L"[SearchRefresh] refresh: no taskbar window found in this process");
         return;
     }
-    switch (step) {
-    case 0:
-        for (HWND tray : trays) SendSettingChange(tray, 0, L"TraySettings");
-        break;
-    case 1:
-        SendSettingChange(HWND_BROADCAST, 0, L"TraySettings");
-        for (HWND tray : trays) {
-            std::vector<HWND> children;
-            EnumChildWindows(tray, CollectChildProc, reinterpret_cast<LPARAM>(&children));
-            for (HWND child : children) SendSettingChange(child, 0, L"TraySettings");
-        }
-        break;
-    case 2:
-        for (HWND tray : trays) {
-            SendSettingChange(tray, SPI_SETWORKAREA, nullptr);
-            SetWindowPos(tray, nullptr, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
-                SWP_FRAMECHANGED | SWP_ASYNCWINDOWPOS);
-            RedrawWindow(tray, nullptr, nullptr,
-                RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
-        }
-        break;
-    default:
-        RunRefreshStep(0);
-        RunRefreshStep(1);
-        return;
-    }
-    Wh_Log(L"[SearchRefresh] step %d sent to %d taskbar window(s)", step + 1, static_cast<int>(trays.size()));
-}
-
-SearchVisual MeasureSearchVisual(IUIAutomation* uia) {
-    const std::vector<HWND> trays = FindTrays();
-    HWND primary = nullptr;
     for (HWND tray : trays) {
-        wchar_t className[64]{};
-        if (GetClassNameW(tray, className, ARRAYSIZE(className)) &&
-            wcscmp(className, L"Shell_TrayWnd") == 0) { primary = tray; break; }
+        DWORD_PTR result = 0;
+        SendMessageTimeoutW(tray, WM_SETTINGCHANGE, 0,
+                            reinterpret_cast<LPARAM>(L"TraySettings"),
+                            SMTO_ABORTIFHUNG, 2000, &result);
     }
-    if (!primary) return SearchVisual::Unknown;
-
-    ComPtr<IUIAutomationElement> root;
-    if (FAILED(uia->ElementFromHandle(primary, root.GetAddressOf())) || !root)
-        return SearchVisual::Unknown;
-    RECT rootRect{};
-    if (FAILED(root->get_CurrentBoundingRectangle(&rootRect))) return SearchVisual::Unknown;
-    const int rootWidth = rootRect.right - rootRect.left;
-    const int rootHeight = rootRect.bottom - rootRect.top;
-    if (rootWidth <= 0 || rootHeight <= 0 || rootHeight > rootWidth)
-        return SearchVisual::Unknown;  // vertical or not yet laid out
-
-    VARIANT value;
-    VariantInit(&value);
-    value.vt = VT_BSTR;
-    value.bstrVal = SysAllocString(kSearchAutomationId);
-    ComPtr<IUIAutomationCondition> condition;
-    const HRESULT conditionHr = uia->CreatePropertyCondition(
-        UIA_AutomationIdPropertyId, value, condition.GetAddressOf());
-    VariantClear(&value);
-    if (FAILED(conditionHr) || !condition) return SearchVisual::Unknown;
-
-    ComPtr<IUIAutomationElement> search;
-    if (FAILED(root->FindFirst(TreeScope_Descendants, condition.Get(), search.GetAddressOf())))
-        return SearchVisual::Unknown;
-    if (!search) {
-        Wh_Log(L"[SearchRefresh] measured: search element not present");
-        return SearchVisual::Hidden;
-    }
-    BOOL offscreen = FALSE;
-    search->get_CurrentIsOffscreen(&offscreen);
-    RECT rect{};
-    search->get_CurrentBoundingRectangle(&rect);
-    const int width = rect.right - rect.left;
-    Wh_Log(L"[SearchRefresh] measured: element width=%d, taskbar thickness=%d, offscreen=%d",
-           width, rootHeight, static_cast<int>(offscreen));
-    if (offscreen || width <= 0) return SearchVisual::Hidden;
-    return width <= rootHeight * 2 ? SearchVisual::Icon : SearchVisual::Box;
+    Wh_Log(L"[SearchRefresh] refresh sent to %d taskbar window(s)",
+           static_cast<int>(trays.size()));
 }
 
-void ApplyRefresh(int mode, const wchar_t* reason) {
-    const int effective = EffectiveMode(mode);
-    const SearchVisual expected =
-        effective == 0 ? SearchVisual::Hidden :
-        effective == 1 ? SearchVisual::Icon :
-        effective == 2 ? SearchVisual::Box : SearchVisual::Unknown;
-
-    ComPtr<IUIAutomation> uia;
-    if (g_verify.load()) {
-        CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER,
-                         IID_PPV_ARGS(uia.GetAddressOf()));
-    }
-    const bool canVerify = uia && expected != SearchVisual::Unknown;
-    const int maxAttempts = std::clamp(g_maxAttempts.load(), 1, 8);
-    const int limit = canVerify ? maxAttempts : (std::min)(2, maxAttempts);
-    Wh_Log(L"[SearchRefresh] %s: mode=%d (effective %d, expected %s), verification %s, up to %d attempt(s)",
-           reason, mode, effective, VisualName(expected), canVerify ? L"on" : L"off", limit);
-
-    if (canVerify && MeasureSearchVisual(uia.Get()) == expected) {
-        Wh_Log(L"[SearchRefresh] taskbar already matches the setting");
-        return;
-    }
-
-    for (int attempt = 0; attempt < limit && !g_stopping.load(); ++attempt) {
-        RunRefreshStep(attempt % 4);
-        if (WaitForSingleObject(g_stopEvent, 500 + 300 * attempt) == WAIT_OBJECT_0) return;
-        if (!canVerify) continue;
-        const SearchVisual actual = MeasureSearchVisual(uia.Get());
-        Wh_Log(L"[SearchRefresh] attempt %d: taskbar shows %s", attempt + 1, VisualName(actual));
-        if (actual == expected) {
-            Wh_Log(L"[SearchRefresh] setting applied after %d attempt(s)", attempt + 1);
-            return;
-        }
-    }
-    if (canVerify && !g_stopping.load())
-        Wh_Log(L"[SearchRefresh] setting NOT confirmed after %d attempt(s)", limit);
+void ApplyRefresh(const wchar_t* reason) {
+    Wh_Log(L"[SearchRefresh] %s: refreshing taskbar", reason);
+    RefreshTaskbar();
+    if (WaitForSingleObject(g_stopEvent, 300) == WAIT_OBJECT_0) return;
+    RefreshTaskbar();
 }
 
 DWORD WINAPI WorkerProc(void*) {
-    const HRESULT coHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    {
-        HANDLE notifyEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-        HKEY key = nullptr;
-        auto arm = [&]() {
-            if (!notifyEvent) return;
-            if (!key && RegOpenKeyExW(HKEY_CURRENT_USER, kSearchKeyPath, 0,
-                                      KEY_NOTIFY | KEY_QUERY_VALUE, &key) != ERROR_SUCCESS)
-                key = nullptr;
-            if (key && RegNotifyChangeKeyValue(key, FALSE, REG_NOTIFY_CHANGE_LAST_SET,
-                                               notifyEvent, TRUE) != ERROR_SUCCESS) {
-                RegCloseKey(key);
-                key = nullptr;
-            }
-        };
+    HANDLE notifyEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    HKEY key = nullptr;
+    auto arm = [&]() {
+        if (!notifyEvent) return;
+        if (!key && RegOpenKeyExW(HKEY_CURRENT_USER, kSearchKeyPath, 0,
+                                  KEY_NOTIFY | KEY_QUERY_VALUE, &key) != ERROR_SUCCESS)
+            key = nullptr;
+        if (key && RegNotifyChangeKeyValue(key, FALSE, REG_NOTIFY_CHANGE_LAST_SET,
+                                           notifyEvent, TRUE) != ERROR_SUCCESS) {
+            RegCloseKey(key);
+            key = nullptr;
+        }
+    };
 
-        // Give the taskbar time to come up (and the hooks time to be applied) before the first read.
-        if (WaitForSingleObject(g_stopEvent, 2000) != WAIT_OBJECT_0) {
-            int lastMode = ReadSearchMode();
-            ApplyRefresh(lastMode, L"startup");
-            arm();
-            HANDLE handles[3] = {g_stopEvent, g_resyncEvent, notifyEvent};
-            const DWORD count = notifyEvent ? 3 : 2;
-            while (!g_stopping.load()) {
-                const DWORD wait = WaitForMultipleObjects(count, handles, FALSE, 1000);
-                if (wait == WAIT_OBJECT_0) break;
-                if (wait == WAIT_OBJECT_0 + 1) {
-                    ApplyRefresh(lastMode, L"settings changed");
-                } else if (wait == WAIT_OBJECT_0 + 2) {
-                    if (WaitForSingleObject(g_stopEvent, 150) == WAIT_OBJECT_0) break;  // debounce
-                    arm();
-                } else if (!key) {
-                    arm();  // key missing earlier: retry on the poll tick
-                }
-                const int mode = ReadSearchMode();
-                if (mode != lastMode) {
-                    Wh_Log(L"[SearchRefresh] SearchboxTaskbarMode changed: %d -> %d", lastMode, mode);
-                    lastMode = mode;
-                    ApplyRefresh(mode, L"setting changed");
-                }
+    if (WaitForSingleObject(g_stopEvent, 2000) != WAIT_OBJECT_0) {
+        int lastMode = ReadSearchMode();
+        if (g_taskbarExistedAtInit) {
+            ApplyRefresh(L"startup");
+        } else {
+            Wh_Log(L"[SearchRefresh] startup: taskbar not yet running, skipping initial refresh");
+        }
+        arm();
+        HANDLE handles[3] = {g_stopEvent, g_resyncEvent, notifyEvent};
+        const DWORD count = notifyEvent ? 3 : 2;
+        while (!g_stopping.load()) {
+            const DWORD wait = WaitForMultipleObjects(count, handles, FALSE, 1000);
+            if (wait == WAIT_OBJECT_0) break;
+            if (wait == WAIT_OBJECT_0 + 1) {
+                ApplyRefresh(L"settings changed");
+            } else if (wait == WAIT_OBJECT_0 + 2) {
+                if (WaitForSingleObject(g_stopEvent, 150) == WAIT_OBJECT_0) break;
+                arm();
+            } else if (!key) {
+                arm();
+            }
+            const int mode = ReadSearchMode();
+            if (mode != lastMode) {
+                Wh_Log(L"[SearchRefresh] SearchboxTaskbarMode changed: %d -> %d", lastMode, mode);
+                lastMode = mode;
+                ApplyRefresh(L"setting changed");
             }
         }
-        if (key) RegCloseKey(key);
-        if (notifyEvent) CloseHandle(notifyEvent);
     }
-    if (SUCCEEDED(coHr)) CoUninitialize();
+    if (key) RegCloseKey(key);
+    if (notifyEvent) CloseHandle(notifyEvent);
     return 0;
 }
 
@@ -374,9 +236,28 @@ bool IsMainExplorerProcess() {
            command.find(L" -embedding") == std::wstring::npos;
 }
 
+bool IsWindows10TaskbarShell() {
+    const HMODULE module = GetModuleHandleW(nullptr);
+    if (!module) return false;
+    wchar_t path[MAX_PATH]{};
+    if (!GetModuleFileNameW(module, path, ARRAYSIZE(path))) return false;
+    DWORD handle = 0;
+    const DWORD size = GetFileVersionInfoSizeW(path, &handle);
+    if (!size) return false;
+    std::vector<BYTE> data(size);
+    if (!GetFileVersionInfoW(path, 0, size, data.data())) return false;
+    VS_FIXEDFILEINFO* info = nullptr;
+    UINT len = 0;
+    if (!VerQueryValueW(data.data(), L"\\", reinterpret_cast<LPVOID*>(&info), &len) ||
+        !info || len < sizeof(VS_FIXEDFILEINFO)) {
+        return false;
+    }
+    const DWORD build = HIWORD(info->dwFileVersionLS);
+    Wh_Log(L"[SearchRefresh] main module build = %u", build);
+    return build < kFirstWindows11Build;
+}
+
 void LoadSettings() {
-    g_verify = Wh_GetIntSetting(L"verify") != 0;
-    g_maxAttempts = Wh_GetIntSetting(L"maxAttempts");
     g_labelAsBox = Wh_GetIntSetting(L"labelAsBox") != 0;
 }
 
@@ -387,8 +268,16 @@ BOOL Wh_ModInit() {
         Wh_Log(L"[SearchRefresh] not the Explorer shell process; skipping this instance");
         return FALSE;
     }
+    if (!IsWindows10TaskbarShell()) {
+        Wh_Log(L"[SearchRefresh] main module is not the Windows 10 shell (build >= 22000); "
+               L"install the Windows 10 taskbar mod first, this mod does nothing here");
+        return FALSE;
+    }
     LoadSettings();
     g_stopping = false;
+    g_taskbarExistedAtInit = !FindTrays().empty();
+    if (g_taskbarExistedAtInit)
+        Wh_Log(L"[SearchRefresh] taskbar window already present at init; startup refresh enabled");
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_resyncEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!g_stopEvent || !g_resyncEvent) {
@@ -431,12 +320,6 @@ void Wh_ModUninit() {
         CloseHandle(g_worker);
         g_worker = nullptr;
     }
-    if (g_stopEvent) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
-    }
-    if (g_resyncEvent) {
-        CloseHandle(g_resyncEvent);
-        g_resyncEvent = nullptr;
-    }
+    if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
+    if (g_resyncEvent) { CloseHandle(g_resyncEvent); g_resyncEvent = nullptr; }
 }
