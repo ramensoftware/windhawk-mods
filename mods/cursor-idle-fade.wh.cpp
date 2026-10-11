@@ -87,7 +87,7 @@ Pointers*.
 
 // ==WindhawkModSettings==
 /*
-- idleTimeout: 3
+- idleTimeout: 10
   $name: Idle time before fading starts (seconds)
 - fadeDuration: 600
   $name: Fade duration (milliseconds)
@@ -109,7 +109,7 @@ Pointers*.
 // Settings (written by the Windhawk thread, read by the worker thread)
 // ---------------------------------------------------------------------------
 struct {
-    std::atomic<int> idleSeconds{3};
+    std::atomic<int> idleSeconds{10};
     std::atomic<int> fadeMs{600};
     std::atomic<int> minOpacity{0};
 } g_settings;
