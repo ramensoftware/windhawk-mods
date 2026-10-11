@@ -2,13 +2,13 @@
 // @id              windows-11-dock-control
 // @name            Windows 11 Taskbar Dock
 // @description     Dock auto-hide policies and smooth native slide animations, alongside Taskbar Styler
-// @version         1.2.2
+// @version         1.2.3
 // @author          Stheno
 // @github          https://github.com/sth3no
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -lversion -lcomctl32
+// @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -lversion -lcomctl32 -lshell32
 // ==/WindhawkMod==
 // Derived from m417z's taskbar-auto-hide-when-maximized and taskbar-auto-hide-speed.
 // Motion research: Bo0ii (Instant Show), jinSeong-P (Auto-Hide Motion).
@@ -42,6 +42,10 @@ and slides back when you reach the bottom edge of the screen.
 - Optional foreground-window filtering, app exceptions and primary-monitor mode.
 
 ## Quick start
+
+First enable **Automatically hide the taskbar** in Windows Settings →
+Personalization → Taskbar → Taskbar behaviors. The mod requires that setting at
+load time; it does not write it or prevent you from changing it.
 
 Start with **Dock visibility → Hide when a window is maximized** and **Smooth slide**.
 The defaults are 280 ms to reveal, 220 ms to hide, and a reveal zone covering the
@@ -82,13 +86,35 @@ auto-hide speed, Auto-Hide Instant Show and Auto-Hide Motion.
 Overshoot and bounce apply to reveal; hiding uses a smooth accelerating slide
 (or constant speed with Linear). Custom slides apply to the bottom taskbar and run even if Windows animations are
 disabled. Choose **Instant** if you prefer reduced motion. Custom movement uses an
-approximately 16 ms timer; Windows animation speed and legacy frame-rate settings
-apply to **Windows default animation** instead. Fullscreen windows suppress the
+approximately 16 ms timer during reveal. While a taskbar is hidden, optional edge
+detection polls every 75 ms; the timer stops when neither motion nor edge polling
+is needed. Hide animation completes synchronously before Explorer hides its XAML
+content, briefly occupying that taskbar's UI thread (220 ms by default). Windows
+animation speed and legacy frame-rate settings apply to **Windows default animation**
+instead. Fullscreen windows suppress the
 additional edge detector when recognized; Windows retains its native behavior.
 
 The reveal zone follows a percentage of the monitor, not the live visual width of
 your Styler theme. Hover magnification is not included. On disable, the mod restores
-the previous auto-hide setting and the animation durations it changed.
+the composition animation durations it changed. Windows auto-hide remains under
+your control. Diagnostics use Windhawk's built-in logging.
+
+## Related mods
+
+This is an integrated alternative to the existing
+[auto-hide policy](https://windhawk.net/mods/taskbar-auto-hide-when-maximized),
+[auto-hide speed](https://windhawk.net/mods/taskbar-auto-hide-speed),
+[Auto-Hide Instant Show](https://windhawk.net/mods/taskbar-autohide-instant-show)
+and [custom activation area](https://windhawk.net/mods/taskbar-auto-hide-custom-activation-area)
+mods. Those mods already cover most of these features, including motion curves and
+centered activation; these are not claimed as new features here.
+
+The integration coordinates policy changes, timer-driven reveal, synchronous hide,
+and pointer suppression outside the reveal zone in one lifecycle. It offers one
+settings surface for this setup, with Taskbar Styler handling appearance separately.
+It is not intended to run alongside the alternatives above. Sharing the integration
+upstream would reduce maintenance duplication; catalog inclusion and the preferred
+scope remain a maintainer decision.
 
 ## Credits
 
@@ -99,7 +125,8 @@ and [Taskbar auto-hide speed](https://github.com/ramensoftware/windhawk-mods/blo
 Window-motion and timer research references include Bo0ii's
 [Auto-Hide Instant Show](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-autohide-instant-show.wh.cpp)
 and jinSeong-P's
-[Auto-Hide Motion](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-autohide-motion.wh.cpp).
+[Auto-Hide Motion](https://github.com/jinSeong-P/windhawk-floating-dock/blob/main/mods/taskbar-autohide-motion.wh.cpp)
+(GPL-3.0, reference snapshot version 1.0.8).
 Distributed under GPL-3.0.
 */
 // ==/WindhawkModReadme==
@@ -123,13 +150,16 @@ Distributed under GPL-3.0.
   - native: Windows default animation
 - showDurationMs: 280
   $name: Reveal duration (ms)
-  $description: 60 to 1500. Custom animations run even when Windows animations are disabled.
+  $description: 60 to 1500. Applies to custom slides, which run even when Windows animations are disabled.
 - hideDurationMs: 220
   $name: Hide duration (ms)
+  $description: 60 to 1500. Applies to custom slides. The taskbar thread remains occupied during this interval.
 - revealDelayMs: 80
   $name: Bottom edge dwell before reveal (ms)
+  $description: 0 to 2000.
 - hideDelayMs: 350
   $name: Delay after pointer leaves (ms)
+  $description: 50 to 5000. Also applies to policy-triggered hides.
 - edgeDetection: true
   $name: Reveal at the bottom edge of every monitor
   $description: Also handles empty secondary monitors. Fullscreen apps keep their native behavior.
@@ -143,14 +173,14 @@ Distributed under GPL-3.0.
   $name: Center reveal zone width (percent)
   $description: 5 to 100 percent of each monitor's width. Only used with Center. For click-through beside a visible dock, enable Click-through taskbar in Taskbar Styler.
 - showSpeedup: 175
-  $name: Windows animation speed (percent)
-  $description: 100 is Windows default. Valid range 10 to 1000.
+  $name: Windows reveal animation speed (percent)
+  $description: Only for Windows default animation. 100 is default; valid range 10 to 1000.
 - hideSpeedup: 200
-  $name: Hide speed (percent)
-  $description: 100 is Windows default. Valid range 10 to 1000.
+  $name: Windows hide animation speed (percent)
+  $description: Only for Windows default animation. 100 is default; valid range 10 to 1000.
 - frameRate: 90
   $name: Legacy animation frame rate
-  $description: 15 to 240. Modern Windows 11 uses the compositor frame rate.
+  $description: Only for the legacy Windows default animation, 15 to 240. Modern Windows 11 uses the compositor frame rate.
 - foregroundWindowOnly: false
   $name: Only react to the foreground window
 - excludedPrograms: [""]
@@ -161,9 +191,6 @@ Distributed under GPL-3.0.
 - oldTaskbarOnWin11: false
   $name: Legacy taskbar support
   $description: For ExplorerPatcher. Leave disabled on the native Windows 11 taskbar.
-- diagnosticLogging: false
-  $name: Diagnostic logging for troubleshooting
-  $description: Writes a bounded motion log to windhawk-dock-motion.log in the Windows temporary folder. Normally leave disabled.
 */
 // ==/WindhawkModSettings==
 #include <windhawk_utils.h>
@@ -177,11 +204,14 @@ Distributed under GPL-3.0.
 #include <unordered_set>
 #include <winrt/Windows.UI.Composition.h>
 #include <commctrl.h>
+#include <shellapi.h>
 #include <algorithm>
 #include <cmath>
 #include <vector>
-#include <cstdarg>
-namespace DockWindowMotion { void Trace(PCWSTR, ...); bool HandleTaskbarMessage(HWND, UINT, WPARAM); bool SuppressPointerReveal(HWND, UINT, WPARAM); bool AllowEdgeReveal(HWND); }
+#include <memory>
+namespace DockWindowMotion { bool HandleTaskbarMessage(HWND, UINT, WPARAM); bool SuppressPointerReveal(HWND, UINT, WPARAM); bool AllowEdgeReveal(HWND); }
+bool HookCombinedTaskbarSymbols(HMODULE);
+bool HookCombinedTaskbarViewSymbols(HMODULE);
 UINT GetDockEdgeRevealMessage() { static UINT msg = RegisterWindowMessageW(L"Windhawk_DockEdge_" WH_MOD_ID); return msg; }
 bool IsCustomDockMotion();
 #if NTDDI_VERSION < 0x06020000
@@ -189,7 +219,7 @@ DECLARE_HANDLE(CO_MTA_USAGE_COOKIE);
 #endif
 WINOLEAPI CoIncrementMTAUsage(CO_MTA_USAGE_COOKIE*);
 WINOLEAPI CoDecrementMTAUsage(CO_MTA_USAGE_COOKIE);
-namespace DockMotion { void HandleLoadedModuleIfExplorerPatcher(HMODULE); void HandleLoadedModuleIfTaskbarView(HMODULE, LPCWSTR); }
+namespace DockMotion { void HandleLoadedModuleIfExplorerPatcher(HMODULE); }
 namespace DockPolicy {
 
 
@@ -223,8 +253,7 @@ std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_initialized;
 std::atomic<bool> g_explorerPatcherInitialized;
 
-bool g_wasAutoHideProcessed;
-bool g_wasAutoHideDisabled;
+std::atomic<bool> g_autoHideAvailable = true;
 std::mutex g_winEventHookThreadMutex;
 std::atomic<HANDLE> g_winEventHookThread;
 std::unordered_map<void*, HWND> g_taskbarsKeptShown;
@@ -682,6 +711,7 @@ bool ShouldKeepTaskbarShown(HWND hTaskbarWnd, HMONITOR monitor) {
         return true;
     }
 
+    if (!g_autoHideAvailable) return true;
     if (g_settings.mode == Mode::always) return false;
 
     // Always show taskbar when MultitaskingView (Win+Tab) is active.
@@ -753,7 +783,7 @@ void* QueryViaVtableBackwards(void* object, void* vtable) {
 DWORD WINAPI WinEventHookThread(LPVOID lpThreadParameter);
 
 void AdjustTaskbar(HWND hMMTaskbarWnd, bool clearPendingWhenDone = false) {
-    if (g_settings.mode != Mode::never) {
+    if (g_settings.mode != Mode::never && g_settings.mode != Mode::always) {
         if (!g_winEventHookThread) {
             std::lock_guard<std::mutex> guard(g_winEventHookThreadMutex);
 
@@ -943,7 +973,7 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
     if (Msg == GetDockEdgeRevealMessage() && !DockWindowMotion::AllowEdgeReveal(hWnd)) return 0;
     if (Msg == WM_WINDOWPOSCHANGING || Msg == WM_WINDOWPOSCHANGED) {
         auto pos = reinterpret_cast<WINDOWPOS*>(lParam);
-        DockWindowMotion::Trace(L"WndPos hwnd=%p msg=%X x=%d y=%d cx=%d cy=%d flags=%X", hWnd, Msg, pos->x, pos->y, pos->cx, pos->cy, pos->flags);
+        Wh_Log(L"WndPos hwnd=%p msg=%X x=%d y=%d cx=%d cy=%d flags=%X", hWnd, Msg, pos->x, pos->y, pos->cx, pos->cy, pos->flags);
     }
 
     if (Msg == GetDockEdgeRevealMessage()) {
@@ -959,14 +989,6 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
         g_taskbarsKeptShown.erase(
             QueryViaVtableBackwards(pThis, TrayUI_vftable_IInspectable));
         g_taskbarToViewCoordinator.erase(hWnd);
-    } else if (Msg == kHandleTrayPrivateSettingMessage) {
-        // Prevent auto-hide from being disabled while the mod is loaded.
-        if ((DWORD)wParam == 4) {
-            BOOL bSetAutoHideEnabled = (BOOL)lParam;
-            if (!bSetAutoHideEnabled) {
-                return 0;
-            }
-        }
     } else if (Msg == g_getTaskbarRectRegisteredMsg) {
         HMONITOR monitor = (HMONITOR)wParam;
         RECT* rect = (RECT*)lParam;
@@ -980,17 +1002,6 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
             SetRectEmpty(rect);
         }
     } else if (Msg == g_updateTaskbarStateRegisteredMsg) {
-        if (!g_wasAutoHideProcessed) {
-            g_wasAutoHideProcessed = true;
-            g_wasAutoHideDisabled =
-                !SendMessage(hWnd, kHandleTrayPrivateSettingMessage,
-                             kTrayPrivateSettingAutoHideGet, 0);
-            if (g_wasAutoHideDisabled) {
-                SendMessage(hWnd, kHandleTrayPrivateSettingMessage,
-                            kTrayPrivateSettingAutoHideSet, TRUE);
-            }
-        }
-
         HMONITOR monitor = TrayUI_GetStuckMonitor_Original(pThis);
         bool keepShown = ShouldKeepTaskbarShown(hWnd, monitor);
 
@@ -1027,6 +1038,11 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
     LRESULT ret =
         TrayUI_WndProc_Original(pThis, hWnd, Msg, wParam, lParam, flag);
 
+    if (Msg == kHandleTrayPrivateSettingMessage &&
+        wParam == kTrayPrivateSettingAutoHideSet) {
+        g_autoHideAvailable = lParam != 0;
+        AdjustAllTaskbars();
+    }
     return ret;
 }
 
@@ -1043,7 +1059,7 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
     if (Msg == GetDockEdgeRevealMessage() && !DockWindowMotion::AllowEdgeReveal(hWnd)) return 0;
     if (Msg == WM_WINDOWPOSCHANGING || Msg == WM_WINDOWPOSCHANGED) {
         auto pos = reinterpret_cast<WINDOWPOS*>(lParam);
-        DockWindowMotion::Trace(L"WndPos hwnd=%p msg=%X x=%d y=%d cx=%d cy=%d flags=%X", hWnd, Msg, pos->x, pos->y, pos->cx, pos->cy, pos->flags);
+        Wh_Log(L"WndPos hwnd=%p msg=%X x=%d y=%d cx=%d cy=%d flags=%X", hWnd, Msg, pos->x, pos->y, pos->cx, pos->cy, pos->flags);
     }
 
     if (Msg == GetDockEdgeRevealMessage()) {
@@ -1280,28 +1296,7 @@ DWORD WINAPI WinEventHookThread(LPVOID lpThreadParameter) {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // Taskbar.View.dll
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
-        {
-            {LR"(public: bool __cdecl winrt::Taskbar::implementation::ViewCoordinator::ShouldTaskbarBeExpanded(unsigned __int64,bool))"},
-            &ViewCoordinator_ShouldTaskbarBeExpanded_Original,
-            ViewCoordinator_ShouldTaskbarBeExpanded_Hook,
-            true,
-        },
-        {
-            {LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::UpdateIsExpanded(unsigned __int64,enum TaskbarTipTest::TaskbarExpandCollapseReason))"},
-            &ViewCoordinator_UpdateIsExpanded_Original,
-            nullptr,
-            true,
-        },
-    };
-
-    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
-        Wh_Log(L"HookSymbols failed");
-        return false;
-    }
-
-    return true;
+    return HookCombinedTaskbarViewSymbols(module);
 }
 
 HMODULE GetTaskbarViewModuleHandle() {
@@ -1520,7 +1515,6 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (module) {
         DockMotion::HandleLoadedModuleIfExplorerPatcher(module);
-        DockMotion::HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
         HandleLoadedModuleIfExplorerPatcher(module);
         HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
     }
@@ -1541,77 +1535,7 @@ bool HookTaskbarSymbols() {
         }
     }
 
-    // Taskbar.dll, explorer.exe
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
-        {
-            {
-                // Windows 11.
-                LR"(const TrayUI::`vftable'{for `IInspectable'})",
-
-                // Windows 10.
-                LR"(const TrayUI::`vftable'{for `ITrayDeskBand'})",
-            },
-            &TrayUI_vftable_IInspectable,
-        },
-        {
-            {LR"(const TrayUI::`vftable'{for `ITrayComponentHost'})"},
-            &TrayUI_vftable_ITrayComponentHost,
-        },
-        {
-            {LR"(const CSecondaryTray::`vftable'{for `ISecondaryTray'})"},
-            &CSecondaryTray_vftable_ISecondaryTray,
-        },
-        {
-            {LR"(public: virtual struct HMONITOR__ * __cdecl TrayUI::GetStuckMonitor(void))"},
-            &TrayUI_GetStuckMonitor_Original,
-        },
-        {
-            {LR"(public: virtual struct HMONITOR__ * __cdecl CSecondaryTray::GetMonitor(void))"},
-            &CSecondaryTray_GetMonitor_Original,
-        },
-        {
-            {LR"(public: virtual bool __cdecl TrayUI::GetStuckRectForMonitor(struct HMONITOR__ *,struct tagRECT *))"},
-            &TrayUI_GetStuckRectForMonitor_Original,
-            nullptr,
-            true,  // Windows 11.
-        },
-        {
-            {LR"(public: virtual struct tagRECT __cdecl TrayUI::GetStuckRectForMonitor(struct HMONITOR__ *))"},
-            &TrayUI_GetStuckRectForMonitor_Win10_Original,
-            nullptr,
-            true,  // Windows 10.
-        },
-        {
-            {LR"(public: void __cdecl TrayUI::_Hide(void))"},
-            &TrayUI__Hide_Original,
-            TrayUI__Hide_Hook,
-        },
-        {
-            {LR"(private: void __cdecl CSecondaryTray::_AutoHide(bool))"},
-            &CSecondaryTray__AutoHide_Original,
-            CSecondaryTray__AutoHide_Hook,
-        },
-        {
-            {LR"(public: virtual void __cdecl TrayUI::Unhide(enum TrayCommon::TrayUnhideFlags,enum TrayCommon::UnhideRequest))"},
-            &TrayUI_Unhide_Original,
-        },
-        {
-            {LR"(private: void __cdecl CSecondaryTray::_Unhide(enum TrayCommon::TrayUnhideFlags,enum TrayCommon::UnhideRequest))"},
-            &CSecondaryTray__Unhide_Original,
-        },
-        {
-            {LR"(public: virtual __int64 __cdecl TrayUI::WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64,bool *))"},
-            &TrayUI_WndProc_Original,
-            TrayUI_WndProc_Hook,
-        },
-        {
-            {LR"(private: virtual __int64 __cdecl CSecondaryTray::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
-            &CSecondaryTray_v_WndProc_Original,
-            CSecondaryTray_v_WndProc_Hook,
-        },
-    };
-
-    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
+    return HookCombinedTaskbarSymbols(module);
 }
 
 void LoadSettings() {
@@ -1758,44 +1682,10 @@ void Wh_ModUninit() {
         g_winEventHookThread = nullptr;
     }
 
-    if (g_wasAutoHideDisabled) {
-        HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
-        if (hTaskbarWnd) {
-            SendMessage(hTaskbarWnd, kHandleTrayPrivateSettingMessage,
-                        kTrayPrivateSettingAutoHideSet, FALSE);
-        }
-    }
+
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
-    Wh_Log(L">");
 
-    bool prevForegroundWindowOnly = g_settings.foregroundWindowOnly;
-    bool prevOldTaskbarOnWin11 = g_settings.oldTaskbarOnWin11;
-
-    LoadSettings();
-
-    if (g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11) {
-        *bReload = TRUE;
-        return TRUE;
-    }
-
-    if (g_settings.mode == Mode::never ||
-        prevForegroundWindowOnly != g_settings.foregroundWindowOnly) {
-        std::lock_guard<std::mutex> guard(g_winEventHookThreadMutex);
-
-        if (g_winEventHookThread) {
-            PostThreadMessage(GetThreadId(g_winEventHookThread), WM_APP, 0, 0);
-            WaitForSingleObject(g_winEventHookThread, INFINITE);
-            CloseHandle(g_winEventHookThread);
-            g_winEventHookThread = nullptr;
-        }
-    }
-
-    AdjustAllTaskbars();
-
-    return TRUE;
-}
 
 }
 namespace DockMotion {
@@ -1830,10 +1720,10 @@ int g_slideWindowSpeedup;
 double g_slideWindowStartTime;
 double g_slideWindowLastFrameStartTime;
 
-winrt::Windows::UI::Composition::KeyFrameAnimation g_collapseAnimation =
+[[clang::no_destroy]] winrt::Windows::UI::Composition::KeyFrameAnimation g_collapseAnimation =
     nullptr;
 winrt::Windows::Foundation::TimeSpan g_collapseOriginalDuration;
-winrt::Windows::UI::Composition::KeyFrameAnimation g_expandAnimation = nullptr;
+[[clang::no_destroy]] winrt::Windows::UI::Composition::KeyFrameAnimation g_expandAnimation = nullptr;
 winrt::Windows::Foundation::TimeSpan g_expandOriginalDuration;
 
 void SetAnimationDuration(
@@ -1932,7 +1822,7 @@ void WINAPI TrayUI_SlideWindow_Hook(void* pThis,
                                     bool animate) {
     Wh_Log(L">");
 
-    DockWindowMotion::Trace(L"Slide hwnd=%p show=%d animate=%d rect=%ld,%ld,%ld,%ld", hWnd, show, animate, rect->left, rect->top, rect->right, rect->bottom);
+    Wh_Log(L"Slide hwnd=%p show=%d animate=%d rect=%ld,%ld,%ld,%ld", hWnd, show, animate, rect->left, rect->top, rect->right, rect->bottom);
     g_slideWindowSpeedup =
         show ? g_settings.showSpeedup : g_settings.hideSpeedup;
     g_slideWindowStartTime = TimerGetSeconds();
@@ -1985,28 +1875,7 @@ void WINAPI Sleep_Hook(DWORD dwMilliseconds) {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // Taskbar.View.dll
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
-        {
-            {LR"(public: struct std::pair<struct winrt::Windows::UI::Composition::KeyFrameAnimation,struct winrt::WindowsUdk::UI::Composition::AnimationLastFrameTelemetry> __cdecl winrt::Taskbar::implementation::SharedAnimations::TaskbarCollapseAnimation(void)const )"},
-            &SharedAnimations_TaskbarCollapseAnimation_Original,
-            SharedAnimations_TaskbarCollapseAnimation_Hook,
-            true,  // For the new Windows 11 animation.
-        },
-        {
-            {LR"(public: struct std::pair<struct winrt::Windows::UI::Composition::KeyFrameAnimation,struct winrt::WindowsUdk::UI::Composition::AnimationLastFrameTelemetry> __cdecl winrt::Taskbar::implementation::SharedAnimations::TaskbarExpandAnimation(void)const )"},
-            &SharedAnimations_TaskbarExpandAnimation_Original,
-            SharedAnimations_TaskbarExpandAnimation_Hook,
-            true,  // For the new Windows 11 animation.
-        },
-    };
-
-    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
-        Wh_Log(L"HookSymbols failed");
-        return false;
-    }
-
-    return true;
+    return HookCombinedTaskbarViewSymbols(module);
 }
 
 HMODULE GetTaskbarViewModuleHandle() {
@@ -2018,17 +1887,7 @@ HMODULE GetTaskbarViewModuleHandle() {
     return module;
 }
 
-void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
-    if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded &&
-        GetTaskbarViewModuleHandle() == module &&
-        !g_taskbarViewDllLoaded.exchange(true)) {
-        Wh_Log(L"Loaded %s", lpLibFileName);
 
-        if (HookTaskbarViewDllSymbols(module)) {
-            Wh_ApplyHookOperations();
-        }
-    }
-}
 
 bool HookTaskbarSymbols() {
     HMODULE module;
@@ -2043,21 +1902,7 @@ bool HookTaskbarSymbols() {
         }
     }
 
-    // Taskbar.dll, explorer.exe
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
-        {
-            {LR"(public: virtual void __cdecl TrayUI::SlideWindow(struct HWND__ *,struct tagRECT const *,struct HMONITOR__ *,bool,bool))"},
-            &TrayUI_SlideWindow_Original,
-            TrayUI_SlideWindow_Hook,
-        },
-    };
-
-    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
-        Wh_Log(L"HookSymbols failed");
-        return false;
-    }
-
-    return true;
+    return HookCombinedTaskbarSymbols(module);
 }
 
 VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
@@ -2226,17 +2071,7 @@ void HandleLoadedModuleIfExplorerPatcher(HMODULE module) {
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 LoadLibraryExW_t LoadLibraryExW_Original;
-HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
-                                   HANDLE hFile,
-                                   DWORD dwFlags) {
-    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-    if (module) {
-        HandleLoadedModuleIfExplorerPatcher(module);
-        HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
-    }
 
-    return module;
-}
 
 void LoadSettings() {
     g_settings.showSpeedup = std::clamp(Wh_GetIntSetting(L"showSpeedup"), 10, 1000);
@@ -2315,18 +2150,6 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded) {
-        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-            if (!g_taskbarViewDllLoaded.exchange(true)) {
-                Wh_Log(L"Got Taskbar.View.dll");
-
-                if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
-                    Wh_ApplyHookOperations();
-                }
-            }
-        }
-    }
-
     // Try again in case there's a race between the previous attempt and the
     // LoadLibraryExW hook.
     if (!g_explorerPatcherInitialized) {
@@ -2344,66 +2167,156 @@ void Wh_ModUninit() {
     if (g_expandAnimation) {
         g_expandAnimation.Duration(g_expandOriginalDuration);
     }
+    g_collapseAnimation = nullptr;
+    g_expandAnimation = nullptr;
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
-    Wh_Log(L">");
 
-    bool prevOldTaskbarOnWin11 = g_settings.oldTaskbarOnWin11;
-
-    LoadSettings();
-
-    if (g_collapseAnimation) {
-        SetAnimationDuration(
-            g_collapseAnimation,
-            IsCustomDockMotion() ? winrt::Windows::Foundation::TimeSpan{10000} : g_collapseOriginalDuration * 100 / g_settings.hideSpeedup);
-    }
-
-    if (g_expandAnimation) {
-        SetAnimationDuration(g_expandAnimation, IsCustomDockMotion() ? winrt::Windows::Foundation::TimeSpan{10000} : g_expandOriginalDuration * 100 / g_settings.showSpeedup);
-    }
-
-    *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11;
-
-    return TRUE;
-}
 
 }
+bool HookCombinedTaskbarViewSymbols(HMODULE module) {
+    using namespace DockPolicy;
+    using namespace DockMotion;
+    static std::mutex mutex;
+    static HMODULE resolved = nullptr;
+    std::lock_guard<std::mutex> guard(mutex);
+    if (resolved == module) return true;
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {LR"(public: bool __cdecl winrt::Taskbar::implementation::ViewCoordinator::ShouldTaskbarBeExpanded(unsigned __int64,bool))"},
+            &ViewCoordinator_ShouldTaskbarBeExpanded_Original,
+            ViewCoordinator_ShouldTaskbarBeExpanded_Hook,
+            true,
+        },
+        {
+            {LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::UpdateIsExpanded(unsigned __int64,enum TaskbarTipTest::TaskbarExpandCollapseReason))"},
+            &ViewCoordinator_UpdateIsExpanded_Original,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(public: struct std::pair<struct winrt::Windows::UI::Composition::KeyFrameAnimation,struct winrt::WindowsUdk::UI::Composition::AnimationLastFrameTelemetry> __cdecl winrt::Taskbar::implementation::SharedAnimations::TaskbarCollapseAnimation(void)const )"},
+            &SharedAnimations_TaskbarCollapseAnimation_Original,
+            SharedAnimations_TaskbarCollapseAnimation_Hook,
+            true,  // For the new Windows 11 animation.
+        },
+        {
+            {LR"(public: struct std::pair<struct winrt::Windows::UI::Composition::KeyFrameAnimation,struct winrt::WindowsUdk::UI::Composition::AnimationLastFrameTelemetry> __cdecl winrt::Taskbar::implementation::SharedAnimations::TaskbarExpandAnimation(void)const )"},
+            &SharedAnimations_TaskbarExpandAnimation_Original,
+            SharedAnimations_TaskbarExpandAnimation_Hook,
+            true,  // For the new Windows 11 animation.
+        },
+    };
+    if (!WindhawkUtils::HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) return false;
+    resolved = module;
+    return true;
+}
+
+bool HookCombinedTaskbarSymbols(HMODULE module) {
+    using namespace DockPolicy;
+    using namespace DockMotion;
+    static std::mutex mutex;
+    static HMODULE resolved = nullptr;
+    std::lock_guard<std::mutex> guard(mutex);
+    if (resolved == module) return true;
+    // explorer.exe, taskbar.dll
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {
+                // Windows 11.
+                LR"(const TrayUI::`vftable'{for `IInspectable'})",
+
+                // Windows 10.
+                LR"(const TrayUI::`vftable'{for `ITrayDeskBand'})",
+            },
+            &TrayUI_vftable_IInspectable,
+        },
+        {
+            {LR"(const TrayUI::`vftable'{for `ITrayComponentHost'})"},
+            &TrayUI_vftable_ITrayComponentHost,
+        },
+        {
+            {LR"(const CSecondaryTray::`vftable'{for `ISecondaryTray'})"},
+            &CSecondaryTray_vftable_ISecondaryTray,
+        },
+        {
+            {LR"(public: virtual struct HMONITOR__ * __cdecl TrayUI::GetStuckMonitor(void))"},
+            &TrayUI_GetStuckMonitor_Original,
+        },
+        {
+            {LR"(public: virtual struct HMONITOR__ * __cdecl CSecondaryTray::GetMonitor(void))"},
+            &CSecondaryTray_GetMonitor_Original,
+        },
+        {
+            {LR"(public: virtual bool __cdecl TrayUI::GetStuckRectForMonitor(struct HMONITOR__ *,struct tagRECT *))"},
+            &TrayUI_GetStuckRectForMonitor_Original,
+            nullptr,
+            true,  // Windows 11.
+        },
+        {
+            {LR"(public: virtual struct tagRECT __cdecl TrayUI::GetStuckRectForMonitor(struct HMONITOR__ *))"},
+            &TrayUI_GetStuckRectForMonitor_Win10_Original,
+            nullptr,
+            true,  // Windows 10.
+        },
+        {
+            {LR"(public: void __cdecl TrayUI::_Hide(void))"},
+            &TrayUI__Hide_Original,
+            TrayUI__Hide_Hook,
+        },
+        {
+            {LR"(private: void __cdecl CSecondaryTray::_AutoHide(bool))"},
+            &CSecondaryTray__AutoHide_Original,
+            CSecondaryTray__AutoHide_Hook,
+        },
+        {
+            {LR"(public: virtual void __cdecl TrayUI::Unhide(enum TrayCommon::TrayUnhideFlags,enum TrayCommon::UnhideRequest))"},
+            &TrayUI_Unhide_Original,
+        },
+        {
+            {LR"(private: void __cdecl CSecondaryTray::_Unhide(enum TrayCommon::TrayUnhideFlags,enum TrayCommon::UnhideRequest))"},
+            &CSecondaryTray__Unhide_Original,
+        },
+        {
+            {LR"(public: virtual __int64 __cdecl TrayUI::WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64,bool *))"},
+            &TrayUI_WndProc_Original,
+            TrayUI_WndProc_Hook,
+        },
+        {
+            {LR"(private: virtual __int64 __cdecl CSecondaryTray::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
+            &CSecondaryTray_v_WndProc_Original,
+            CSecondaryTray_v_WndProc_Hook,
+        },
+        {
+            {LR"(public: virtual void __cdecl TrayUI::SlideWindow(struct HWND__ *,struct tagRECT const *,struct HMONITOR__ *,bool,bool))"},
+            &TrayUI_SlideWindow_Original,
+            TrayUI_SlideWindow_Hook,
+        },
+    };
+    if (!WindhawkUtils::HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) return false;
+    resolved = module;
+    return true;
+}
+
 // Window movement follows the SetWindowPos pattern used by Bo0ii's
 // taskbar-autohide-instant-show (upstream snapshot retained). This layer
 // owns only taskbar position during a slide; Taskbar Styler owns XAML styles.
 namespace DockWindowMotion {
 
-std::atomic<unsigned> g_traceCount = 0;
-bool g_traceEnabled = false;
-void Trace(PCWSTR format, ...) {
-    if (!g_traceEnabled || g_traceCount.fetch_add(1) >= 600) return;
-    WCHAR line[640]{}, path[MAX_PATH]{};
-    va_list args; va_start(args, format);
-    int count = _vsnwprintf(line, ARRAYSIZE(line)-3, format, args);
-    va_end(args);
-    if (count < 0) count = ARRAYSIZE(line)-3;
-    line[count++] = L'\r'; line[count++] = L'\n';
-    DWORD length = GetTempPathW(ARRAYSIZE(path), path);
-    if (!length || length + 32 >= ARRAYSIZE(path)) return;
-    wcscat(path, L"windhawk-dock-motion.log");
-    HANDLE file = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE,
-        nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) return;
-    DWORD written;
-    WriteFile(file, line, count * sizeof(WCHAR), &written, nullptr);
-    CloseHandle(file);
-}
 enum class Animation { Native, None, Linear, Smooth, Overshoot, Bounce };
 Animation g_animation = Animation::Smooth;
 int g_showDuration = 280, g_hideDuration = 220;
 int g_revealDelay = 80, g_hideDelay = 350;
 bool g_edgeDetection = true, g_primaryOnly = false;
+bool g_alwaysVisible = false;
 bool g_centerRevealOnly = true;
 int g_revealWidthPercent = 30;
 std::atomic<bool> g_unloading = false;
 std::atomic<bool> g_ready = false;
+std::atomic<unsigned> g_activePositionCalls = 0;
 thread_local UINT_PTR g_timer = 0;
+thread_local UINT g_timerInterval = 0;
 thread_local HWND g_timerWindow = nullptr;
 thread_local bool g_applyingFrame = false;
 struct Motion {
@@ -2548,10 +2461,30 @@ void RevealAtEdge(ULONGLONG now) {
     }
 }
 
+void EnsureTimer(HWND candidate = nullptr, HWND excluded = nullptr);
+UINT DesiredTimerInterval() {
+    if (g_unloading || !g_ready) return 0;
+    if (!g_motions.empty()) return 16;
+    if (!g_edgeDetection || g_alwaysVisible) return 0;
+    bool hidden = false;
+    EnumThreadWindows(GetCurrentThreadId(), [](HWND window, LPARAM param) -> BOOL {
+        RECT rect{};
+        MONITORINFO info{sizeof(info)};
+        if (IsTaskbar(window) && GetWindowRect(window, &rect) &&
+            GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &info) &&
+            (!g_primaryOnly || (info.dwFlags & MONITORINFOF_PRIMARY)) &&
+            IsHidden(rect, info.rcMonitor)) {
+            *reinterpret_cast<bool*>(param) = true;
+            return FALSE;
+        }
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&hidden));
+    return hidden ? 75 : 0;
+}
 void CALLBACK Tick(HWND, UINT, UINT_PTR, DWORD) {
     if (g_unloading) return;
     static thread_local int ticks = 0;
-    if (ticks++ < 2) Trace(L"Tick tid=%lu timer=%llu motions=%llu", GetCurrentThreadId(), g_timer, g_motions.size());
+    if (ticks++ < 2) Wh_Log(L"Tick tid=%lu timer=%llu motions=%llu", GetCurrentThreadId(), g_timer, g_motions.size());
     ULONGLONG now = GetTickCount64();
     // SetWindowPos dispatches window messages synchronously. A message can
     // replace a motion, clear the map, or start a nested hide wait. Never hold
@@ -2573,12 +2506,12 @@ void CALLBACK Tick(HWND, UINT, UINT_PTR, DWORD) {
             current->second.generation == motion.generation) g_motions.erase(current);
     }
     RevealAtEdge(now);
+    EnsureTimer();
 }
 UINT MotionTimerId() {
     static UINT id = RegisterWindowMessageW(L"Windhawk_DockMotionTimer_" WH_MOD_ID);
     return id;
 }
-void EnsureTimer(HWND candidate = nullptr, HWND excluded = nullptr);
 LRESULT CALLBACK MotionTimerSubclass(HWND window, UINT message, WPARAM wParam,
                                     LPARAM lParam, UINT_PTR id, DWORD_PTR) {
     // TrayUI's internal WndProc is not the outer taskbar window procedure:
@@ -2591,37 +2524,49 @@ LRESULT CALLBACK MotionTimerSubclass(HWND window, UINT message, WPARAM wParam,
     if (message == WM_NCDESTROY) {
         RemoveWindowSubclass(window, MotionTimerSubclass, id);
         if (window == g_timerWindow) {
-            KillTimer(window, g_timer);
-            g_timer = 0; g_timerWindow = nullptr;
+            if (g_timer) KillTimer(window, g_timer);
+            g_timer = 0; g_timerInterval = 0; g_timerWindow = nullptr;
             if (g_ready) EnsureTimer(nullptr, window);
         }
     }
-    return DefSubclassProc(window, message, wParam, lParam);
+    LRESULT result = DefSubclassProc(window, message, wParam, lParam);
+    if (message == WM_WINDOWPOSCHANGED && g_ready) EnsureTimer();
+    return result;
 }
 void EnsureTimer(HWND candidate, HWND excluded) {
-    if (g_timer || g_unloading) return;
-    struct Search { HWND found; HWND excluded; } search{candidate, excluded};
-    if (!candidate) EnumThreadWindows(GetCurrentThreadId(), [](HWND window, LPARAM param) -> BOOL {
+    if (g_unloading) return;
+    struct Search { HWND found; HWND excluded; } search{g_timerWindow ? g_timerWindow : candidate, excluded};
+    if (!search.found) EnumThreadWindows(GetCurrentThreadId(), [](HWND window, LPARAM param) -> BOOL {
         auto& search = *reinterpret_cast<Search*>(param);
         if (window == search.excluded || !IsTaskbar(window)) return TRUE;
         search.found = window;
         return FALSE;
     }, reinterpret_cast<LPARAM>(&search));
     candidate = search.found;
-    if (candidate) {
+    if (candidate && !g_timerWindow) {
         if (!SetWindowSubclass(candidate, MotionTimerSubclass, MotionTimerId(), 0)) {
             Wh_Log(L"Cannot install dock timer subclass: %lu", GetLastError());
             return;
         }
         // No TIMERPROC pointer is stored in the message queue. Removing the
         // subclass on unload also makes any pending private WM_TIMER harmless.
-        g_timer = SetTimer(candidate, MotionTimerId(), 16, nullptr);
-        if (g_timer) g_timerWindow = candidate;
-        else RemoveWindowSubclass(candidate, MotionTimerSubclass, MotionTimerId());
+        g_timerWindow = candidate;
+    }
+    if (!g_timerWindow) return;
+    UINT interval = DesiredTimerInterval();
+    if (!interval) {
+        if (g_timer) KillTimer(g_timerWindow, g_timer);
+        g_timer = 0; g_timerInterval = 0;
+    } else if (!g_timer || interval != g_timerInterval) {
+        UINT_PTR timer = SetTimer(g_timerWindow, MotionTimerId(), interval, nullptr);
+        if (!timer && g_timer) KillTimer(g_timerWindow, g_timer);
+        g_timer = timer;
+        g_timerInterval = g_timer ? interval : 0;
     }
 }
 bool HandleTaskbarMessage(HWND window, UINT message, WPARAM wParam) {
     if (message == WM_CREATE && g_ready) EnsureTimer(window);
+    if (message == WM_WINDOWPOSCHANGED && g_ready) EnsureTimer(window);
     if (message == WM_NCDESTROY) {
         g_motions.erase(window);
         if (auto waiting = g_hideWaits.find(window); waiting != g_hideWaits.end()) waiting->second->cancelled = true;
@@ -2642,33 +2587,27 @@ UINT_PTR WINAPI SetTimer_Hook(HWND window, UINT_PTR id, UINT delay, TIMERPROC pr
 }
 void WaitForHide(HWND window, std::shared_ptr<HideWait> const& state, ULONGLONG deadline) {
     // Explorer hides the XAML content as soon as its native hide returns.
-    // Keep that call on the stack until our movement finishes. Pump the UI
-    // thread, following the synchronous hide handoff in Autohide Motion.
-    MSG message{};
+    // Finish the slide synchronously, like the upstream native/Instant Show
+    // hide. Do not dispatch queued input, reveal or unload work inside _Hide.
     while (!g_unloading && !state->cancelled && g_motions.contains(window)) {
         ULONGLONG now = GetTickCount64();
         if (now >= deadline) break;
-        DWORD result = MsgWaitForMultipleObjectsEx(0, nullptr,
-            static_cast<DWORD>(std::min<ULONGLONG>(25, deadline - now)),
-            QS_ALLINPUT, MWMO_INPUTAVAILABLE);
-        if (result == WAIT_FAILED) break;
-        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
-            if (message.message == WM_QUIT) {
-                PostQuitMessage(static_cast<int>(message.wParam));
-                return;
-            }
-            TranslateMessage(&message);
-            DispatchMessageW(&message);
-            if (g_unloading || state->cancelled || GetTickCount64() >= deadline) return;
-        }
+        Tick(nullptr, 0, 0, 0);
+        if (!g_motions.contains(window)) break;
+        DockMotion::Sleep_Original(static_cast<DWORD>(std::min<ULONGLONG>(16, deadline - now)));
     }
 }
 BOOL WINAPI SetWindowPos_Hook(HWND window, HWND after, int x, int y, int cx, int cy, UINT flags) {
-    if (IsTaskbar(window) && !g_applyingFrame)
-        Trace(L"SetWindowPos hwnd=%p tid=%lu owner=%lu rect=%d,%d,%d,%d flags=%X ready=%d", window,
+    struct ActiveCall {
+        ActiveCall() { ++g_activePositionCalls; }
+        ~ActiveCall() { --g_activePositionCalls; }
+    } activeCall;
+    const bool taskbar = IsTaskbar(window);
+    if (taskbar && !g_applyingFrame)
+        Wh_Log(L"SetWindowPos hwnd=%p tid=%lu owner=%lu rect=%d,%d,%d,%d flags=%X ready=%d", window,
             GetCurrentThreadId(), GetWindowThreadProcessId(window, nullptr), x,y,cx,cy, flags, bool(g_ready));
     if (g_unloading || !g_ready || g_applyingFrame || g_animation == Animation::Native ||
-        !IsTaskbar(window) || (flags & SWP_NOMOVE) || (flags & SWP_HIDEWINDOW) ||
+        !taskbar || (flags & SWP_NOMOVE) || (flags & SWP_HIDEWINDOW) ||
         GetWindowThreadProcessId(window, nullptr) != GetCurrentThreadId())
         return g_setWindowPosOriginal(window, after, x, y, cx, cy, flags);
     RECT current{};
@@ -2688,7 +2627,7 @@ BOOL WINAPI SetWindowPos_Hook(HWND window, HWND after, int x, int y, int cx, int
     int height = current.bottom - current.top;
     bool atBottom = current.top >= info.rcMonitor.bottom - height - 4 &&
         end.top >= info.rcMonitor.bottom - height - 4;
-    Trace(L"Position cur=%ld end=%ld currentHidden=%d endHidden=%d transition=%d atBottom=%d", current.top, end.top, currentHidden, endHidden, transition, atBottom);
+    Wh_Log(L"Position cur=%ld end=%ld currentHidden=%d endHidden=%d transition=%d atBottom=%d", current.top, end.top, currentHidden, endHidden, transition, atBottom);
     if (!transition || !atBottom || current.left != end.left || current.right != end.right ||
         height != end.bottom - end.top || g_animation == Animation::None) {
         if (auto waiting = g_hideWaits.find(window); waiting != g_hideWaits.end()) waiting->second->cancelled = true;
@@ -2700,31 +2639,29 @@ BOOL WINAPI SetWindowPos_Hook(HWND window, HWND after, int x, int y, int cx, int
     }
     g_motions.erase(window);
     if (endHidden) {
-        EnsureTimer(window);
-        if (!g_timer) return g_setWindowPosOriginal(window, after, x, y, cx, cy, flags);
         auto wait = std::make_shared<HideWait>();
         g_hideWaits[window] = wait;
         ULONGLONG started = GetTickCount64();
         g_motions[window] = {current, end, started, g_hideDuration, false, ++g_motionGeneration};
-        Trace(L"Hide BEFORE native commit hwnd=%p from=%ld to=%ld duration=%d", window, current.top, end.top, g_hideDuration);
+        Wh_Log(L"Hide BEFORE native commit hwnd=%p from=%ld to=%ld duration=%d", window, current.top, end.top, g_hideDuration);
         WaitForHide(window, wait, started + g_hideDuration + 100);
         if (auto found = g_hideWaits.find(window); found != g_hideWaits.end() && found->second == wait)
             g_hideWaits.erase(found);
         if (wait->cancelled && !g_unloading) {
-            Trace(L"Hide cancelled by a newer position request hwnd=%p", window);
+            Wh_Log(L"Hide cancelled by a newer position request hwnd=%p", window);
             return TRUE;
         }
         g_motions.erase(window);
-        Trace(L"Hide native commit hwnd=%p elapsed=%llu", window, GetTickCount64() - started);
+        Wh_Log(L"Hide native commit hwnd=%p elapsed=%llu", window, GetTickCount64() - started);
         return g_setWindowPosOriginal(window, after, x, y, cx, cy, flags);
     }
     BOOL result = g_setWindowPosOriginal(window, after, x, y, cx, cy, flags);
     if (!result) return result;
-    EnsureTimer(window);
-    if (!g_timer) return result;
-    ApplyFrame(window, current);
     g_motions[window] = {current, end, GetTickCount64(), g_showDuration, true, ++g_motionGeneration};
-    Trace(L"Motion START hwnd=%p from=%ld to=%ld timer=%llu", window, current.top, end.top, g_timer);
+    EnsureTimer(window);
+    if (!g_timer) { g_motions.erase(window); return result; }
+    ApplyFrame(window, current);
+    Wh_Log(L"Motion START hwnd=%p from=%ld to=%ld timer=%llu", window, current.top, end.top, g_timer);
     Wh_Log(L"Dock motion HWND=%p monitor=%p show=%d duration=%d", window, monitor, !endHidden, endHidden ? g_hideDuration : g_showDuration);
     return result;
 }
@@ -2755,9 +2692,11 @@ void UpdateThread(bool cleanup) {
     if (cleanup) {
         if (g_timer) KillTimer(g_timerWindow, g_timer);
         if (g_timerWindow) RemoveWindowSubclass(g_timerWindow, MotionTimerSubclass, MotionTimerId());
-        g_timer = 0; g_timerWindow = nullptr;
+        g_timer = 0; g_timerInterval = 0; g_timerWindow = nullptr;
         auto motions = std::move(g_motions);
-        g_motions.clear();
+        decltype(g_motions){}.swap(g_motions);
+        for (auto const& [window, wait] : g_hideWaits) wait->cancelled = true;
+        decltype(g_hideWaits){}.swap(g_hideWaits);
         for (auto const& [window, motion] : motions) if (IsTaskbar(window)) ApplyFrame(window, motion.end);
         g_edgeMonitor = nullptr;
     } else EnsureTimer();
@@ -2771,8 +2710,7 @@ void VisitThreads(bool cleanup) {
     for (HWND window : windows) RunOnThread(window, UpdateThread, cleanup);
 }
 bool Init() {
-    g_traceEnabled = Wh_GetIntSetting(L"diagnosticLogging") != 0;
-    Trace(L"INIT " WH_MOD_VERSION L" pid=%lu tid=%lu", GetCurrentProcessId(), GetCurrentThreadId());
+    Wh_Log(L"INIT " WH_MOD_VERSION L" pid=%lu tid=%lu", GetCurrentProcessId(), GetCurrentThreadId());
     PCWSTR setting = Wh_GetStringSetting(L"animationType");
     g_animation = Animation::Smooth;
     if (wcscmp(setting, L"native") == 0) g_animation = Animation::Native;
@@ -2786,6 +2724,9 @@ bool Init() {
     g_revealDelay = std::clamp(Wh_GetIntSetting(L"revealDelayMs"), 0, 2000);
     g_hideDelay = std::clamp(Wh_GetIntSetting(L"hideDelayMs"), 50, 5000);
     g_edgeDetection = Wh_GetIntSetting(L"edgeDetection") != 0;
+    PCWSTR mode = Wh_GetStringSetting(L"mode");
+    g_alwaysVisible = wcscmp(mode, L"never") == 0;
+    Wh_FreeStringSetting(mode);
     g_primaryOnly = Wh_GetIntSetting(L"primaryMonitorOnly") != 0;
     PCWSTR zone = Wh_GetStringSetting(L"revealZone");
     g_centerRevealOnly = !zone || wcscmp(zone, L"full") != 0;
@@ -2796,12 +2737,23 @@ bool Init() {
         WindhawkUtils::SetFunctionHook(SetTimer, SetTimer_Hook, &g_setTimerOriginal);
 }
 void AfterInit() { g_ready = true; VisitThreads(false); }
-void BeforeUninit() { g_unloading = true; g_ready = false; VisitThreads(true); }
+void BeforeUninit() {
+    g_unloading = true; g_ready = false;
+    VisitThreads(true);
+    // A synchronous window callback may have delivered cleanup before the
+    // surrounding move hook has returned. Drain those calls before DLL unload.
+    while (g_activePositionCalls.load() != 0) Sleep(1);
+}
 }
 
 bool IsCustomDockMotion() { return DockWindowMotion::g_animation != DockWindowMotion::Animation::Native; }
 
 BOOL Wh_ModInit() {
+    APPBARDATA appbar{sizeof(appbar)};
+    if (!(SHAppBarMessage(ABM_GETSTATE, &appbar) & ABS_AUTOHIDE)) {
+        Wh_Log(L"Enable Automatically hide the taskbar in Windows Settings before enabling this mod");
+        return FALSE;
+    }
     if (!DockWindowMotion::Init()) return FALSE;
     if (!DockPolicy::Wh_ModInit()) return FALSE;
     if (!DockMotion::Wh_ModInit()) {
