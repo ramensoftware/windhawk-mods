@@ -197,6 +197,11 @@ it will require the UAC authorization). Alternatively you can use the
 #include <winternl.h>
 #include <aclapi.h>
 
+#include <iostream>
+#include <sddl.h>
+#include <winternl.h>
+#include <aclapi.h>
+
 extern "C" NTSTATUS NTAPI NtOpenSection(
     OUT PHANDLE SectionHandle,
     IN ACCESS_MASK DesiredAccess,
@@ -206,10 +211,13 @@ extern "C" NTSTATUS NTAPI NtOpenSection(
 HANDLE g_hThread = NULL;
 volatile BOOL g_bStopThread = FALSE;
 
-// Original DACL of the theme section, saved before we replace it, so that
-// disabling/uninstalling the mod can restore it. Obtained via GetSecurityInfo,
-// must be freed with LocalFree.
-PSECURITY_DESCRIPTOR g_originalSd = NULL;
+// DACL, который блокирует доступ обычным процессам к ThemeSection,
+// тем самым отключая визуальные стили (включает классическую тему).
+static LPCWSTR LOCKDOWN_SDDL = L"O:BAG:SYD:(A;;RC;;;IU)(A;;DCSWRPSDRCWDWO;;;SY)";
+
+// Штатный DACL ThemeSection, при котором темы работают нормально.
+// Используется для восстановления при выключении/удалении мода.
+static LPCWSTR RESTORE_SDDL = L"O:BAG:SYD:(A;;CCLCRC;;;IU)(A;;CCDCLCSWRPSDRCWDWO;;;SY)";
 
 BOOL OpenThemeSection(ACCESS_MASK desiredAccess, PHANDLE phSection) {
     DWORD sessionId;
@@ -233,45 +241,30 @@ BOOL OpenThemeSection(ACCESS_MASK desiredAccess, PHANDLE phSection) {
     return TRUE;
 }
 
-BOOL TrySetThemeSectionSecurity() {
+BOOL SetThemeSectionSddl(LPCWSTR sddl) {
     HANDLE hSection;
-    if (!OpenThemeSection(READ_CONTROL | WRITE_DAC, &hSection)) {
+    if (!OpenThemeSection(WRITE_DAC, &hSection)) {
         return FALSE;
     }
 
-    PSECURITY_DESCRIPTOR originalSd = NULL;
-    DWORD err = GetSecurityInfo(hSection, SE_KERNEL_OBJECT,
-                                 DACL_SECURITY_INFORMATION, NULL, NULL,
-                                 NULL, NULL, &originalSd);
-    if (err != ERROR_SUCCESS) {
-        Wh_Log(L"GetSecurityInfo failed: %lu, will retry", err);
-        CloseHandle(hSection);
-        return FALSE;
-    }
-
-    LPCWSTR sddl = L"O:BAG:SYD:(A;;RC;;;IU)(A;;DCSWRPSDRCWDWO;;;SY)";
     PSECURITY_DESCRIPTOR psd = NULL;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, SDDL_REVISION_1, &psd, NULL)) {
-        LocalFree(originalSd);
         CloseHandle(hSection);
         return FALSE;
     }
 
     BOOL result = SetKernelObjectSecurity(hSection, DACL_SECURITY_INFORMATION, psd);
-    Wh_Log(L"SetKernelObjectSecurity result: %u", result);
 
     LocalFree(psd);
     CloseHandle(hSection);
 
-    if (!result) {
+    return result;
+}
 
-        LocalFree(originalSd);
-        return FALSE;
-    }
-
-
-    g_originalSd = originalSd;
-    return TRUE;
+BOOL TrySetThemeSectionSecurity() {
+    BOOL result = SetThemeSectionSddl(LOCKDOWN_SDDL);
+    Wh_Log(L"SetKernelObjectSecurity result: %u", result);
+    return result;
 }
 
 DWORD WINAPI RetryThreadProc(LPVOID lpParam) {
@@ -280,12 +273,12 @@ DWORD WINAPI RetryThreadProc(LPVOID lpParam) {
 
     for (int attempt = 1; attempt <= MAX_ATTEMPTS && !g_bStopThread; attempt++) {
         Wh_Log(L"Attempt %d/%d", attempt, MAX_ATTEMPTS);
-        
+
         if (TrySetThemeSectionSecurity()) {
             Wh_Log(L"Success on attempt %d", attempt);
             return 0;
         }
-        
+
         if (attempt < MAX_ATTEMPTS && !g_bStopThread) {
             Sleep(RETRY_DELAY);
         }
@@ -298,16 +291,14 @@ DWORD WINAPI RetryThreadProc(LPVOID lpParam) {
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
-    // Сначала пробуем сразу — может, секция уже доступна
     if (TrySetThemeSectionSecurity()) {
         Wh_Log(L"Success on first try");
         return TRUE;
     }
 
-    // Если не получилось, запускаем фоновый поток для повторных попыток
     g_bStopThread = FALSE;
     g_hThread = CreateThread(NULL, 0, RetryThreadProc, NULL, 0, NULL);
-    
+
     if (g_hThread == NULL) {
         Wh_Log(L"Failed to create retry thread");
         return FALSE;
@@ -321,29 +312,11 @@ void Wh_ModUninit() {
 
     if (g_hThread) {
         g_bStopThread = TRUE;
-        // The thread doesn't wait on anything the engine thread holds, so an
-        // unbounded wait can't deadlock here. Giving up early would risk the
-        // engine unloading our code while the thread is still executing it,
-        // which would crash winlogon.exe (a critical process) and bugcheck
-        // the system.
         WaitForSingleObject(g_hThread, INFINITE);
         CloseHandle(g_hThread);
         g_hThread = NULL;
     }
 
-    // Restore the original DACL so that disabling/uninstalling the mod
-    // actually stops affecting newly started programs.
-    if (g_originalSd) {
-        HANDLE hSection;
-        if (OpenThemeSection(WRITE_DAC, &hSection)) {
-            BOOL result = SetKernelObjectSecurity(hSection, DACL_SECURITY_INFORMATION, g_originalSd);
-            Wh_Log(L"Restore original DACL result: %u", result);
-            CloseHandle(hSection);
-        } else {
-            Wh_Log(L"Failed to reopen theme section to restore DACL");
-        }
-
-        LocalFree(g_originalSd);
-        g_originalSd = NULL;
-    }
+    BOOL result = SetThemeSectionSddl(RESTORE_SDDL);
+    Wh_Log(L"Restore original DACL result: %u", result);
 }
