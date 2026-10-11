@@ -202,6 +202,7 @@ other setting, so treat them as secrets.
 #include <bcrypt.h>
 #include <objbase.h>
 #include <dpapi.h>
+#include <sddl.h>
 #include <shellapi.h>
 #include <winhttp.h>
 #include <windhawk_utils.h>
@@ -330,14 +331,8 @@ struct AgendaSnapshot {
     bool validSnapshot = false;
     bool isV2 = false;
     AgendaStatus status = AgendaStatus::Unavailable;
-    std::wstring title;
-    std::wstring location;
-    std::wstring source;
     std::wstring errorText;
     int64_t generatedUnix = 0;
-    int64_t startUnix = 0;
-    int64_t endUnix = 0;
-    bool allDay = false;
     std::vector<AgendaEntry> agenda;
 };
 
@@ -561,6 +556,16 @@ SolidColorBrush MakeBrush(winrt::Windows::UI::Color color) {
 }
 
 winrt::Windows::UI::Color ThemeForegroundColor() {
+    try {
+        // The taskbar follows the Windows mode, while UISettings reflects the app mode, so ask
+        // the widget's own XAML tree when it exists.
+        if (g_agendaGrid) {
+            return g_agendaGrid.ActualTheme() == ElementTheme::Dark
+                       ? winrt::Windows::UI::Color{255, 255, 255, 255}
+                       : winrt::Windows::UI::Color{255, 0, 0, 0};
+        }
+    } catch (...) {
+    }
     try {
         winrt::Windows::UI::ViewManagement::UISettings uiSettings;
         return uiSettings.GetColorValue(
@@ -878,7 +883,6 @@ AgendaSnapshot SnapshotWithAgeLimit(AgendaSnapshot snapshot,
 
     if (stale) {
         snapshot.status = AgendaStatus::Stale;
-        snapshot.allDay = false;
         if (snapshot.errorText.empty()) {
             snapshot.errorText = L"Agenda snapshot is stale";
         }
@@ -1149,6 +1153,32 @@ bool DpapiUnprotect(const std::string& blob, std::string* plain) {
     return true;
 }
 
+// Windhawk's mod storage is machine-wide (HKLM), while every signed-in Windows user runs their
+// own explorer.exe with this mod. All stored values therefore carry the user's SID.
+std::wstring g_userKey;  // set once in Wh_ModInit, before any thread starts
+
+std::wstring CurrentUserSid() {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return L"";
+    DWORD size = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+    std::vector<BYTE> buffer(size);
+    std::wstring result;
+    if (size && GetTokenInformation(token, TokenUser, buffer.data(), size, &size)) {
+        LPWSTR text = nullptr;
+        if (ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(buffer.data())->User.Sid, &text)) {
+            result = text;
+            LocalFree(text);
+        }
+    }
+    CloseHandle(token);
+    return result;
+}
+
+std::wstring UserValueName(PCWSTR base) {
+    return std::wstring(base) + L"_" + g_userKey;
+}
+
 struct GoogleAccount {
     std::string id;      // 8 hex chars derived from the account email
     std::wstring label;  // account email (or a fallback name)
@@ -1169,7 +1199,7 @@ bool IsHexId(const std::string& id) {
 std::vector<GoogleAccount> LoadAccountsLocked() {
     std::vector<GoogleAccount> accounts;
     wchar_t buffer[2048];
-    size_t chars = Wh_GetStringValue(kAccountsValueName, buffer, ARRAYSIZE(buffer));
+    size_t chars = Wh_GetStringValue(UserValueName(kAccountsValueName).c_str(), buffer, ARRAYSIZE(buffer));
     if (!chars) return accounts;
     std::string data = WideToUtf8(std::wstring(buffer, chars));
     size_t pos = 0;
@@ -1195,11 +1225,11 @@ void SaveAccountsLocked(const std::vector<GoogleAccount>& accounts) {
     for (const auto& a : accounts) {
         data += a.id + "=" + UrlEncode(WideToUtf8(a.label)) + ";";
     }
-    Wh_SetStringValue(kAccountsValueName, Utf8ToWide(data).c_str());
+    Wh_SetStringValue(UserValueName(kAccountsValueName).c_str(), Utf8ToWide(data).c_str());
 }
 
 std::wstring AccountTokenValueName(const std::string& id) {
-    return L"google_rt_" + Utf8ToWide(id);
+    return UserValueName(L"google_rt") + L"_" + Utf8ToWide(id);
 }
 
 bool LoadRefreshToken(const std::string& id, std::string* token) {
@@ -3395,7 +3425,7 @@ std::string NotificationKey(const AgendaEntry& e, const char* kind) {
 void LoadNotifiedState() {
     g_notified.clear();
     wchar_t buffer[8192];
-    size_t chars = Wh_GetStringValue(kNotifiedValueName, buffer, ARRAYSIZE(buffer));
+    size_t chars = Wh_GetStringValue(UserValueName(kNotifiedValueName).c_str(), buffer, ARRAYSIZE(buffer));
     if (!chars) return;
     std::string data = WideToUtf8(std::wstring(buffer, chars));
     size_t pos = 0;
@@ -3429,7 +3459,7 @@ void SaveNotifiedState() {
             for (const auto& [key, ts] : g_notified) data += key + "=" + std::to_string(ts) + ";";
         }
     }
-    Wh_SetStringValue(kNotifiedValueName, Utf8ToWide(data).c_str());
+    Wh_SetStringValue(UserValueName(kNotifiedValueName).c_str(), Utf8ToWide(data).c_str());
 }
 
 std::wstring XmlEscape(const std::wstring& text) {
@@ -3454,7 +3484,7 @@ std::atomic<bool> g_toastRegistered{false};
 // the next start clean up after an unclean exit, when the unload path never ran.
 bool EnsureToastRegistration() {
     if (g_toastRegistered.load()) return true;
-    Wh_SetIntValue(kToastRegisteredFlag, 1);
+    Wh_SetIntValue(UserValueName(kToastRegisteredFlag).c_str(), 1);
     std::wstring subKey = std::wstring(L"Software\\Classes\\AppUserModelId\\") + kToastAumid;
     LSTATUS status = RegSetKeyValueW(
         HKEY_CURRENT_USER, subKey.c_str(), L"DisplayName", REG_SZ, kToastDisplayName,
@@ -3474,7 +3504,7 @@ void RemoveToastRegistration() {
                                  L"Settings\\") +
                     kToastAumid)
                        .c_str());
-    Wh_DeleteValue(kToastRegisteredFlag);
+    Wh_DeleteValue(UserValueName(kToastRegisteredFlag).c_str());
     g_toastRegistered = false;
 }
 
@@ -5216,12 +5246,15 @@ std::atomic<bool> g_providerStarted{false};
 // servers, ...). Only the process that hosts the taskbar runs the provider, so calendars are
 // polled once and reminders are shown once.
 void StartProviderInShellProcess() {
+    if (g_userKey.empty()) {
+        return;  // without the user's SID the per-user storage cannot be addressed safely
+    }
     if (g_providerStarted.exchange(true)) {
         return;
     }
     // A previous shell that never reached Wh_ModUninit (crash, killed Explorer) left its
     // notification registration behind: remove it before registering again.
-    if (Wh_GetIntValue(kToastRegisteredFlag, 0) != 0) {
+    if (Wh_GetIntValue(UserValueName(kToastRegisteredFlag).c_str(), 0) != 0) {
         RemoveToastRegistration();
     }
     StartWorkerThread();
@@ -5806,6 +5839,10 @@ bool CleanupTaskbarResources(HWND hWnd) {
 BOOL Wh_ModInit() {
     g_unloading = false;
     g_workerStop = false;
+    g_userKey = CurrentUserSid();
+    if (g_userKey.empty()) {
+        Wh_Log(L"could not read the user SID; the calendar provider stays off");
+    }
     LoadSettings();
 
     g_workerWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
