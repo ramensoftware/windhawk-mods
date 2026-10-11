@@ -58,7 +58,10 @@ mod").
   cross, help, etc.). Apps that draw their own cursor (some games, some
   browsers/design tools) are not affected.
 * The animated busy/working cursors are left alone on purpose.
-* Cursors that are purely monochrome (classic inverting style) are not faded.
+* Monochrome cursors can't be made partially transparent. With the default
+  Windows cursor scheme this includes the text (I-beam) and precision
+  (crosshair) cursors. They stay unchanged until the fade passes 50% and then
+  disappear; if *Final opacity* is 50 or more, they stay visible.
 * The faded copies are single-size bitmaps. With mixed-DPI monitors or a
   larger pointer size, the cursor may change size while it fades and snap
   back when restored.
@@ -84,7 +87,7 @@ Pointers*.
 
 // ==WindhawkModSettings==
 /*
-- idleTimeout: 10
+- idleTimeout: 3
   $name: Idle time before fading starts (seconds)
 - fadeDuration: 600
   $name: Fade duration (milliseconds)
@@ -106,7 +109,7 @@ Pointers*.
 // Settings (written by the Windhawk thread, read by the worker thread)
 // ---------------------------------------------------------------------------
 struct {
-    std::atomic<int> idleSeconds{10};
+    std::atomic<int> idleSeconds{3};
     std::atomic<int> fadeMs{600};
     std::atomic<int> minOpacity{0};
 } g_settings;
@@ -137,15 +140,20 @@ static const DWORD kCursorIds[] = {
     32648,  // OCR_NO
     32649,  // OCR_HAND
     32651,  // OCR_HELP
+    32631,  // pen
+    32671,  // location select (pin)
+    32672,  // person select
 };
 
 struct CursorSnap {
     DWORD id = 0;
     bool valid = false;
     HCURSOR orig = nullptr;  // untouched copy, used to restore in place
-    // true: color channels are independent of alpha (scale alpha only).
-    // false: color channels are premultiplied (scale all channels).
-    bool straightAlpha = false;
+    // Monochrome cursor (no color bitmap, e.g. the default I-beam). It can't
+    // be partially transparent, so it is replaced by a blank cursor once the
+    // fade passes 50%. w/h/hotspot are kept for building that blank cursor.
+    bool mono = false;
+    bool monoBlanked = false;
     int w = 0, h = 0;
     DWORD xHot = 0, yHot = 0;
     std::vector<uint32_t> px;  // 32-bit BGRA, top-down
@@ -191,14 +199,10 @@ static bool CaptureCursor(DWORD id, CursorSnap& s) {
 
             if (r1 == h && r2 == h) {
                 bool anyAlpha = false;
-                bool straight = false;
                 for (uint32_t p : s.px) {
-                    uint32_t a = p >> 24;
-                    if (a) anyAlpha = true;
-                    // A channel brighter than alpha can't be premultiplied.
-                    if (((p >> 16) & 0xFF) > a || ((p >> 8) & 0xFF) > a ||
-                        (p & 0xFF) > a) {
-                        straight = true;
+                    if (p >> 24) {
+                        anyAlpha = true;
+                        break;
                     }
                 }
                 if (!anyAlpha) {
@@ -210,9 +214,7 @@ static bool CaptureCursor(DWORD id, CursorSnap& s) {
                         else
                             s.px[i] = 0;
                     }
-                    straight = true;
                 }
-                s.straightAlpha = straight;
                 s.id = id;
                 s.w = w;
                 s.h = h;
@@ -221,6 +223,23 @@ static bool CaptureCursor(DWORD id, CursorSnap& s) {
                 s.orig = CopyCursor(cur);
                 ok = true;
             }
+        }
+    }
+
+    else if (!ii.hbmColor && ii.hbmMask) {
+        // Monochrome cursor: the mask bitmap holds the AND mask on top of
+        // the XOR mask, so it is twice as tall as the cursor.
+        BITMAP bm{};
+        if (GetObjectW(ii.hbmMask, sizeof(bm), &bm) && bm.bmWidth > 0 &&
+            bm.bmHeight >= 2) {
+            s.mono = true;
+            s.id = id;
+            s.w = bm.bmWidth;
+            s.h = bm.bmHeight / 2;
+            s.xHot = ii.xHotspot;
+            s.yHot = ii.yHotspot;
+            s.orig = CopyCursor(cur);
+            ok = true;
         }
     }
 
@@ -248,13 +267,11 @@ static HCURSOR BuildCursor(const CursorSnap& s, int factor256) {
             // Fully transparent: zero everything so it can't be XOR-drawn
             // if Windows falls back to the mask path.
             dst[i] = 0;
-        } else if (s.straightAlpha) {
-            dst[i] = (a << 24) | (p & 0x00FFFFFFu);
         } else {
-            uint32_t r = (((p >> 16) & 0xFF) * factor256) >> 8;
-            uint32_t g = (((p >> 8) & 0xFF) * factor256) >> 8;
-            uint32_t b = ((p & 0xFF) * factor256) >> 8;
-            dst[i] = (a << 24) | (r << 16) | (g << 8) | b;
+            // Cursor bitmaps use straight (non-premultiplied) alpha, like
+            // .cur/.ico files, so only alpha is scaled; scaling the color
+            // channels too would turn a white fill grey.
+            dst[i] = (a << 24) | (p & 0x00FFFFFFu);
         }
     }
 
@@ -279,19 +296,55 @@ static HCURSOR BuildCursor(const CursorSnap& s, int factor256) {
     return result;
 }
 
+// Fully transparent monochrome cursor: AND mask all ones, XOR mask all zeros.
+static HCURSOR BuildBlankMonoCursor(const CursorSnap& s) {
+    int rowBytes = ((s.w + 15) / 16) * 2;
+    size_t half = (size_t)rowBytes * s.h;
+    std::vector<BYTE> bits(half * 2, 0x00);
+    std::fill(bits.begin(), bits.begin() + half, 0xFF);
+    HBITMAP mask = CreateBitmap(s.w, s.h * 2, 1, 1, bits.data());
+    if (!mask) return nullptr;
+
+    ICONINFO ii{};
+    ii.fIcon = FALSE;
+    ii.xHotspot = s.xHot;
+    ii.yHotspot = s.yHot;
+    ii.hbmMask = mask;
+    ii.hbmColor = nullptr;
+    HCURSOR result = (HCURSOR)CreateIconIndirect(&ii);
+    DeleteObject(mask);
+    return result;
+}
+
 static int g_lastFactor = -1;
+
+static void InstallCursor(HCURSOR c, DWORD id) {
+    // On success the system takes ownership of the handle.
+    if (c && !SetSystemCursor(c, id)) DestroyCursor(c);
+}
 
 static void ApplyOpacity(double opacity) {
     int f = (int)(opacity * 256.0 + 0.5);
     f = std::clamp(f, 0, 256);
     if (f == g_lastFactor) return;
     g_lastFactor = f;
-    for (const CursorSnap& s : g_snaps) {
+    for (CursorSnap& s : g_snaps) {
         if (!s.valid) continue;
-        HCURSOR c = BuildCursor(s, f);
-        if (!c) continue;
-        // On success the system takes ownership of the handle.
-        if (!SetSystemCursor(c, s.id)) DestroyCursor(c);
+
+        if (s.mono) {
+            // Can't be partially transparent: blank below 50%, original above.
+            bool shouldBlank = f < 128;
+            if (shouldBlank && !s.monoBlanked) {
+                InstallCursor(BuildBlankMonoCursor(s), s.id);
+                s.monoBlanked = true;
+            } else if (!shouldBlank && s.monoBlanked && s.orig) {
+                InstallCursor(CopyCursor(s.orig), s.id);
+                s.monoBlanked = false;
+            }
+            continue;
+        }
+
+        InstallCursor(BuildCursor(s, f), s.id);
     }
 }
 
