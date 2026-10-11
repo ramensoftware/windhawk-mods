@@ -12500,6 +12500,33 @@
         "version": "1.0.3"
       }
     },
+    "smooth-virtual-desktop-switching": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791752597000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791752597000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "enesky",
+        "description": "Smooth native touchpad and Ctrl+Win+Arrow virtual desktop transitions.",
+        "github": "https://github.com/enesky",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Smooth Virtual Desktop Switching",
+        "version": "1.0.0"
+      }
+    },
     "snap-commander": {
       "details": {
         "defaultSorting": 4680,
