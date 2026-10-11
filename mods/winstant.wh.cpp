@@ -2,10 +2,6 @@
 // @id              winstant
 // @name            Winstant
 // @description     Any window, instantly – right where you need it. Switch, arrange and launch from the minimize button or a hotkey
-// @description:it-IT Qualsiasi finestra, all'istante, proprio dove ti serve. Cambia, disponi e avvia dal pulsante Riduci a icona o con una scorciatoia
-// @description:de-DE Jedes Fenster, sofort – genau dort, wo du es brauchst. Wechseln, anordnen und starten über die Minimieren-Schaltfläche oder ein Tastenkürzel
-// @description:fr-FR N'importe quelle fenêtre, instantanément, là où vous en avez besoin. Changez, organisez et lancez depuis le bouton Réduire ou un raccourci
-// @description:es-ES Cualquier ventana, al instante, justo donde la necesitas. Cambia, organiza y abre desde el botón Minimizar o un atajo
 // @version         1.5
 // @author          HaVeN80
 // @github          https://github.com/haven80
@@ -81,9 +77,11 @@ long as that window is open:
 - **Live preview** – in list view, hovering an entry shows a live thumbnail
   of that window, framed in its color. Grid view shows live thumbnails of
   all windows at once.
-- **Window tags** – a small colored pill with the number (and custom name)
-  is drawn in the title bar of every app that has two or more windows open,
-  next to the caption buttons. It doesn't block clicks.
+- **Window tags** (off by default) – a small colored pill with the number
+  (and custom name) is drawn in the title bar of every app that has two or
+  more windows open, next to the caption buttons. It doesn't block clicks,
+  and it's left out where the app draws tabs or buttons at that spot
+  (browsers, Windows Terminal, File Explorer with tabs).
 - **Custom names** – press `F2` or use the right-click menu to give a window
   a name such as "Server", "Logs" or "Build". The name shows up in the
   panel, in the preview and in the window tag.
@@ -204,7 +202,15 @@ into these languages.
   kept per Windows user (keyed by the user's SID): other users of the same
   PC don't see yours. Nothing is written elsewhere or sent anywhere. Delete
   them from the bookmark menu; uninstalling the mod removes them.
-- Opacity changes are undone when the mod is disabled.
+- Opacity changes are undone when the mod is disabled (the window's own
+  transparency settings are put back). Windows that draw their own
+  transparency can't be changed, so the Opacity menu is greyed out for them.
+- Windows of programs running as administrator can't be moved, resized or
+  changed by a mod that doesn't run as administrator (Windows blocks it).
+  They are still listed: picking one switches to it where it is, and the
+  actions that would change it are greyed out or skipped. The same goes for
+  windows that are not responding.
+- "Close the others" asks for confirmation when no windows are selected.
 - The mod runs in its own background `windhawk.exe` process instead of
   being injected into `explorer.exe`, so it can never destabilize the shell.
 - Tested on Windows 11 (100% and higher display scaling). It's designed to
@@ -629,7 +635,7 @@ into these languages.
   $name:fr-FR: Disposition
   $name:es-ES: Organización
 - tags:
-  - enabled: true
+  - enabled: false
     $name: Window tags
     $name:it-IT: Etichette sulle finestre
     $name:de-DE: Fenster-Etiketten
@@ -920,6 +926,7 @@ using std::min;
 #include <gdiplus.h>
 
 #include <atomic>
+#include <climits>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -973,11 +980,9 @@ int Clamp(int v, int lo, int hi) {
 
 bool GetBoolSetting(PCWSTR name) { return Wh_GetIntSetting(name) != 0; }
 
-bool StringSettingIs(PCWSTR name, PCWSTR value) {
-    PCWSTR s = Wh_GetStringSetting(name);
-    bool result = s && wcscmp(s, value) == 0;
-    if (s) Wh_FreeStringSetting(s);
-    return result;
+// Reads a string setting once (WindhawkUtils::StringSetting frees it).
+std::wstring GetStringSetting(PCWSTR name) {
+    return WindhawkUtils::StringSetting::make(name).get();
 }
 
 std::wstring Trim(const std::wstring& s, const wchar_t* chars = L" \t") {
@@ -1038,6 +1043,8 @@ bool ParseHotkey(const std::wstring& text, UINT* mods, UINT* vk) {
                         {L"left", VK_LEFT},       {L"right", VK_RIGHT},
                         {L"`", VK_OEM_3},         {L"backquote", VK_OEM_3},
                         {L"backspace", VK_BACK},  {L"pause", VK_PAUSE},
+                        {L"+", VK_OEM_PLUS},      {L"plus", VK_OEM_PLUS},
+                        {L"-", VK_OEM_MINUS},     {L"minus", VK_OEM_MINUS},
                     };
                     for (auto& n : names) {
                         if (tok == n.name) *vk = n.vk;
@@ -1057,9 +1064,9 @@ void LoadAppearanceSettings();
 void LoadSettings() {
     // Panel
     g_hoverDelay = Clamp(Wh_GetIntSetting(L"panel.hoverDelay"), 100, 5000);
-    g_showAll = StringSettingIs(L"panel.showWindows", L"all");
+    g_showAll = GetStringSetting(L"panel.showWindows") == L"all";
     g_shiftInverts = GetBoolSetting(L"panel.shiftInverts");
-    g_gridView = StringSettingIs(L"panel.viewMode", L"grid");
+    g_gridView = GetStringSetting(L"panel.viewMode") == L"grid";
     g_showPreview = GetBoolSetting(L"panel.showPreview");
     g_closeButton = GetBoolSetting(L"panel.closeButton");
     g_renaming = GetBoolSetting(L"panel.renaming");
@@ -1069,18 +1076,21 @@ void LoadSettings() {
     g_includeMinimized = GetBoolSetting(L"panel.includeMinimized");
 
     int lang = 0;
-    if (StringSettingIs(L"panel.language", L"en")) lang = LANG_ENGLISH;
-    if (StringSettingIs(L"panel.language", L"it")) lang = LANG_ITALIAN;
-    if (StringSettingIs(L"panel.language", L"de")) lang = LANG_GERMAN;
-    if (StringSettingIs(L"panel.language", L"fr")) lang = LANG_FRENCH;
-    if (StringSettingIs(L"panel.language", L"es")) lang = LANG_SPANISH;
+    std::wstring sLanguage = GetStringSetting(L"panel.language");
+    if (sLanguage == L"en") lang = LANG_ENGLISH;
+    if (sLanguage == L"it") lang = LANG_ITALIAN;
+    if (sLanguage == L"de") lang = LANG_GERMAN;
+    if (sLanguage == L"fr") lang = LANG_FRENCH;
+    if (sLanguage == L"es") lang = LANG_SPANISH;
     g_languageSetting = lang;
 
     // Switching
     OriginalAction action = OriginalAction::None;
-    if (StringSettingIs(L"switching.originalWindowAction", L"minimize")) {
+    std::wstring sOriginalWindowAction =
+        GetStringSetting(L"switching.originalWindowAction");
+    if (sOriginalWindowAction == L"minimize") {
         action = OriginalAction::Minimize;
-    } else if (StringSettingIs(L"switching.originalWindowAction", L"swap")) {
+    } else if (sOriginalWindowAction == L"swap") {
         action = OriginalAction::Swap;
     }
     g_originalAction = (int)action;
@@ -1089,19 +1099,18 @@ void LoadSettings() {
         Clamp(Wh_GetIntSetting(L"switching.animationDuration"), 80, 600);
     g_wheelSwitch = GetBoolSetting(L"switching.wheelSwitch");
     UINT mods = 0, vk = 0;
-    if (PCWSTR s = Wh_GetStringSetting(L"switching.hotkey")) {
-        if (*s && !ParseHotkey(s, &mods, &vk)) {
-            Wh_Log(L"Hotkey '%s' not understood", s);
-        }
-        Wh_FreeStringSetting(s);
+    std::wstring hotkey = GetStringSetting(L"switching.hotkey");
+    if (!hotkey.empty() && !ParseHotkey(hotkey, &mods, &vk)) {
+        Wh_Log(L"Hotkey '%s' not understood", hotkey.c_str());
     }
     g_hotkeyMods = mods;
     g_hotkeyVk = vk;
-    g_hotkeyActivate = !StringSettingIs(L"switching.hotkeyAction", L"openHere");
+    g_hotkeyActivate = GetStringSetting(L"switching.hotkeyAction") != L"openHere";
     int tapKey = 0;
-    if (StringSettingIs(L"switching.tapKey", L"ctrl")) tapKey = 1;
-    if (StringSettingIs(L"switching.tapKey", L"shift")) tapKey = 2;
-    if (StringSettingIs(L"switching.tapKey", L"alt")) tapKey = 3;
+    std::wstring sTapKey = GetStringSetting(L"switching.tapKey");
+    if (sTapKey == L"ctrl") tapKey = 1;
+    if (sTapKey == L"shift") tapKey = 2;
+    if (sTapKey == L"alt") tapKey = 3;
     g_tapKey = tapKey;
     g_tapCount = Clamp(Wh_GetIntSetting(L"switching.tapCount"), 2, 3);
     int interval = Wh_GetIntSetting(L"switching.tapInterval");
@@ -1119,12 +1128,11 @@ void LoadSettings() {
     g_windowTags = GetBoolSetting(L"tags.enabled");
     std::vector<std::wstring> list;
     for (int i = 0;; i++) {
-        PCWSTR app = Wh_GetStringSetting(L"tags.apps[%d]", i);
-        if (!app) break;
-        bool end = !*app;
-        std::wstring item = Trim(app, L" \t\"");
-        Wh_FreeStringSetting(app);
-        if (end) break;
+        wchar_t name[32];
+        wsprintfW(name, L"tags.apps[%d]", i);
+        std::wstring raw = GetStringSetting(name);
+        if (raw.empty()) break;  // past the end of the list
+        std::wstring item = Trim(raw, L" \t\"");
         if (item.empty()) continue;
         CharLowerBuffW(&item[0], (DWORD)item.size());
         list.push_back(item);
@@ -1187,6 +1195,7 @@ struct Strings {
     const wchar_t* menuOpenLocation;
     const wchar_t* menuCopyPath;
     const wchar_t* showAllFmt;  // Show all %d results in Everything
+    const wchar_t* closeOthersFmt;  // Close the other %d windows of this app?
 };
 
 constexpr Strings kStringsEn = {
@@ -1234,6 +1243,7 @@ constexpr Strings kStringsEn = {
     L"Open file location",
     L"Copy path",
     L"Show all %d results in Everything",
+    L"Close the other %d windows of this app?",
 };
 
 constexpr Strings kStringsIt = {
@@ -1281,6 +1291,7 @@ constexpr Strings kStringsIt = {
     L"Apri percorso file",
     L"Copia percorso",
     L"Mostra tutti i %d risultati in Everything",
+    L"Chiudere le altre %d finestre di questa app?",
 };
 
 constexpr Strings kStringsDe = {
@@ -1328,6 +1339,7 @@ constexpr Strings kStringsDe = {
     L"Dateispeicherort öffnen",
     L"Pfad kopieren",
     L"Alle %d Ergebnisse in Everything anzeigen",
+    L"Die anderen %d Fenster dieser App schließen?",
 };
 
 constexpr Strings kStringsFr = {
@@ -1375,6 +1387,7 @@ constexpr Strings kStringsFr = {
     L"Ouvrir l'emplacement du fichier",
     L"Copier le chemin",
     L"Afficher les %d résultats dans Everything",
+    L"Fermer les %d autres fenêtres de cette application ?",
 };
 
 constexpr Strings kStringsEs = {
@@ -1422,6 +1435,7 @@ constexpr Strings kStringsEs = {
     L"Abrir ubicación del archivo",
     L"Copiar ruta",
     L"Mostrar los %d resultados en Everything",
+    L"¿Cerrar las otras %d ventanas de esta aplicación?",
 };
 
 const Strings* g_str = &kStringsEn;
@@ -1492,55 +1506,53 @@ int ParseHexColor(PCWSTR text) {
 
 void LoadAppearanceSettings() {
     int theme = 0;
-    if (StringSettingIs(L"appearance.theme", L"light")) theme = 1;
-    if (StringSettingIs(L"appearance.theme", L"dark")) theme = 2;
+    std::wstring sTheme = GetStringSetting(L"appearance.theme");
+    if (sTheme == L"light") theme = 1;
+    if (sTheme == L"dark") theme = 2;
     g_themeMode = theme;
 
     Backdrop backdrop = Backdrop::None;
-    if (StringSettingIs(L"appearance.backdrop", L"acrylic")) backdrop = Backdrop::Acrylic;
-    if (StringSettingIs(L"appearance.backdrop", L"mica")) backdrop = Backdrop::Mica;
-    if (StringSettingIs(L"appearance.backdrop", L"micaAlt")) backdrop = Backdrop::MicaAlt;
+    std::wstring sBackdrop = GetStringSetting(L"appearance.backdrop");
+    if (sBackdrop == L"acrylic") backdrop = Backdrop::Acrylic;
+    if (sBackdrop == L"mica") backdrop = Backdrop::Mica;
+    if (sBackdrop == L"micaAlt") backdrop = Backdrop::MicaAlt;
     g_backdrop = (int)backdrop;
     g_tintOpacity = Clamp(Wh_GetIntSetting(L"appearance.tintOpacity"), 0, 100);
 
-    PCWSTR bg = Wh_GetStringSetting(L"appearance.backgroundColor");
-    g_customBg = ParseHexColor(bg);
-    if (bg) Wh_FreeStringSetting(bg);
-    PCWSTR accent = Wh_GetStringSetting(L"appearance.accentColor");
-    g_customAccent = ParseHexColor(accent);
-    if (accent) Wh_FreeStringSetting(accent);
+    g_customBg = ParseHexColor(GetStringSetting(L"appearance.backgroundColor").c_str());
+    g_customAccent = ParseHexColor(GetStringSetting(L"appearance.accentColor").c_str());
 
     int palette = 0;
-    if (StringSettingIs(L"appearance.palette", L"pastel")) palette = 1;
-    if (StringSettingIs(L"appearance.palette", L"vivid")) palette = 2;
-    if (StringSettingIs(L"appearance.palette", L"accent")) palette = 3;
+    std::wstring sPalette = GetStringSetting(L"appearance.palette");
+    if (sPalette == L"pastel") palette = 1;
+    if (sPalette == L"vivid") palette = 2;
+    if (sPalette == L"accent") palette = 3;
     g_paletteMode = palette;
 
     int border = 0;
-    if (StringSettingIs(L"appearance.border", L"accent")) border = 1;
-    if (StringSettingIs(L"appearance.border", L"none")) border = 2;
+    std::wstring sBorder = GetStringSetting(L"appearance.border");
+    if (sBorder == L"accent") border = 1;
+    if (sBorder == L"none") border = 2;
     g_borderMode = border;
 
     int corners = 0;
-    if (StringSettingIs(L"appearance.corners", L"small")) corners = 1;
-    if (StringSettingIs(L"appearance.corners", L"square")) corners = 2;
+    std::wstring sCorners = GetStringSetting(L"appearance.corners");
+    if (sCorners == L"small") corners = 1;
+    if (sCorners == L"square") corners = 2;
     g_cornerMode = corners;
 
-    g_badgeCircle = StringSettingIs(L"appearance.badgeShape", L"circle");
+    g_badgeCircle = GetStringSetting(L"appearance.badgeShape") == L"circle";
 
     int density = 1;
-    if (StringSettingIs(L"appearance.density", L"compact")) density = 0;
-    if (StringSettingIs(L"appearance.density", L"comfortable")) density = 2;
+    std::wstring sDensity = GetStringSetting(L"appearance.density");
+    if (sDensity == L"compact") density = 0;
+    if (sDensity == L"comfortable") density = 2;
     g_density = density;
 
     int scale = Wh_GetIntSetting(L"appearance.fontSize");
     g_fontScale = scale ? Clamp(scale, 80, 150) : 100;
 
-    std::wstring family;
-    if (PCWSTR f = Wh_GetStringSetting(L"appearance.fontFamily")) {
-        family = Trim(f);
-        Wh_FreeStringSetting(f);
-    }
+    std::wstring family = Trim(GetStringSetting(L"appearance.fontFamily"));
     if (family.size() >= LF_FACESIZE) family.clear();
     AcquireSRWLockExclusive(&g_fontLock);
     g_fontFamily = family;
@@ -1668,7 +1680,31 @@ std::wstring FileNameOf(const std::wstring& path) {
     return p == std::wstring::npos ? path : path.substr(p + 1);
 }
 
-std::wstring GetFileDescription(const std::wstring& path) {
+// windhawk.exe may be a 32-bit process: reading files under System32 would
+// then be redirected to the 32-bit copies in SysWOW64. Sysnative reaches the
+// real System32 (only for reading files; paths are kept as they are).
+std::wstring NativeFilePath(const std::wstring& path) {
+    static const std::wstring system32 = [] {
+        BOOL wow64 = FALSE;
+        if (!IsWow64Process(GetCurrentProcess(), &wow64) || !wow64) return std::wstring();
+        wchar_t dir[MAX_PATH];
+        UINT len = GetSystemWindowsDirectoryW(dir, MAX_PATH);
+        if (!len || len >= MAX_PATH) return std::wstring();
+        std::wstring result(dir, len);
+        if (result.back() != L'\\') result += L'\\';
+        return result + L"System32\\";
+    }();
+    if (system32.empty() || path.size() <= system32.size() ||
+        CompareStringOrdinal(path.c_str(), (int)system32.size(), system32.c_str(),
+                             (int)system32.size(), TRUE) != CSTR_EQUAL) {
+        return path;
+    }
+    return system32.substr(0, system32.size() - 9) + L"Sysnative\\" +
+           path.substr(system32.size());
+}
+
+std::wstring GetFileDescription(const std::wstring& originalPath) {
+    std::wstring path = NativeFilePath(originalPath);
     DWORD handle = 0;
     DWORD size = GetFileVersionInfoSizeW(path.c_str(), &handle);
     if (!size) return {};
@@ -1715,6 +1751,44 @@ bool IsSwitchableWindow(HWND hwnd) {
     if (exStyle & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) return false;
     if (GetWindow(hwnd, GW_OWNER) && !(exStyle & WS_EX_APPWINDOW)) return false;
     return GetWindowTextLengthW(hwnd) > 0;
+}
+
+DWORD ProcessIntegrity(HANDLE process) {
+    DWORD rid = 0;
+    HANDLE token;
+    if (!OpenProcessToken(process, TOKEN_QUERY, &token)) return 0;
+    alignas(TOKEN_MANDATORY_LABEL) BYTE buf[64];
+    DWORD len;
+    if (GetTokenInformation(token, TokenIntegrityLevel, buf, sizeof(buf), &len)) {
+        PSID sid = ((TOKEN_MANDATORY_LABEL*)buf)->Label.Sid;
+        rid = *GetSidSubAuthority(sid, *GetSidSubAuthorityCount(sid) - 1);
+    }
+    CloseHandle(token);
+    return rid;
+}
+
+// True when the window belongs to a process with a higher integrity level
+// (e.g. an app running as administrator while Windhawk doesn't): Windows
+// then blocks moving, resizing and restyling it from here (UIPI).
+bool IsAboveUs(HWND hwnd) {
+    static const DWORD ours = ProcessIntegrity(GetCurrentProcess());
+    if (ours >= SECURITY_MANDATORY_HIGH_RID) return false;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (!pid) return true;
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) return true;
+    DWORD theirs = ProcessIntegrity(process);
+    CloseHandle(process);
+    // An elevated process's token can't be opened from a lower level.
+    return theirs == 0 || theirs > ours;
+}
+
+// Moving, showing or restyling another thread's window waits for that
+// thread, so a hung window would freeze the panel; an elevated one would
+// silently ignore us. Such windows are skipped by every action.
+bool CanControlWindow(HWND hwnd) {
+    return IsWindow(hwnd) && !IsHungAppWindow(hwnd) && !IsAboveUs(hwnd);
 }
 
 // Brings hwnd to the foreground. Windows only lets a background process do
@@ -1892,6 +1966,7 @@ RECT ScreenToWorkspace(const RECT& rc) {
 }
 
 void RestoreNoActivate(HWND hwnd, const RECT* normalRect) {
+    if (!CanControlWindow(hwnd)) return;
     WINDOWPLACEMENT wp{};
     wp.length = sizeof(wp);
     GetWindowPlacement(hwnd, &wp);
@@ -1902,9 +1977,10 @@ void RestoreNoActivate(HWND hwnd, const RECT* normalRect) {
 }
 
 void ApplyLayout(HWND hwnd, const WinLayout& l) {
+    if (!CanControlWindow(hwnd)) return;
     switch (l.state) {
         case WinState::Minimized:
-            ShowWindow(hwnd, SW_SHOWMINNOACTIVE);
+            ShowWindowAsync(hwnd, SW_SHOWMINNOACTIVE);
             break;
 
         case WinState::Maximized: {
@@ -2194,7 +2270,8 @@ HICON GetWindowIcon(HWND hwnd, const std::wstring& path, bool* owns) {
     if (HICON h = (HICON)GetClassLongPtrW(hwnd, GCLP_HICON)) return h;
     if (!path.empty()) {
         HICON small = nullptr;
-        if (ExtractIconExW(path.c_str(), 0, nullptr, &small, 1) > 0 && small) {
+        if (ExtractIconExW(NativeFilePath(path).c_str(), 0, nullptr, &small, 1) > 0 &&
+            small) {
             *owns = true;
             return small;
         }
@@ -2289,10 +2366,20 @@ bool AnimateGhost(HWND target, const RECT& from, const RECT& to, int durationMs,
 // Switching and tiling
 // ===========================================================================
 
+void ActivateWindow(HWND hwnd);
+
 void SwitchTo(HWND source, HWND target, int animMs) {
     WinLayout src = CaptureLayout(source);
     WinLayout tgt = CaptureLayout(target);
     auto action = (OriginalAction)g_originalAction.load();
+
+    bool canMove = CanControlWindow(target);
+    if (!canMove) {
+        // Elevated or not responding: just switch to it where it is.
+        ActivateWindow(target);
+        Wh_Log(L"Can't move %p, activated it in place", target);
+        return;
+    }
 
     Ghost ghost;
     if (animMs > 0 && tgt.state != WinState::Minimized &&
@@ -2307,8 +2394,8 @@ void SwitchTo(HWND source, HWND target, int animMs) {
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOOWNERZORDER);
     ForceForeground(target);
 
-    if (action == OriginalAction::Minimize) {
-        ShowWindow(source, SW_SHOWMINNOACTIVE);
+    if (action == OriginalAction::Minimize && CanControlWindow(source)) {
+        ShowWindowAsync(source, SW_SHOWMINNOACTIVE);
         ForceForeground(target);
     }
 
@@ -2330,6 +2417,7 @@ RECT FrameToWindowRect(HWND hwnd, const RECT& cell) {
 }
 
 void PlaceFrame(HWND hwnd, const RECT& cell) {
+    if (!CanControlWindow(hwnd)) return;
     if (IsIconic(hwnd) || IsZoomed(hwnd)) RestoreNoActivate(hwnd, &cell);
     RECT r = FrameToWindowRect(hwnd, cell);
     SetWindowPos(hwnd, HWND_TOP, r.left, r.top, r.right - r.left, r.bottom - r.top,
@@ -2375,7 +2463,7 @@ void PairWindows(HWND source, HWND target, bool toRight, int animMs) {
     PlaceFrame(source, srcCell);
 
     Ghost ghost;
-    if (animMs > 0 && !IsIconic(target)) {
+    if (animMs > 0 && !IsIconic(target) && CanControlWindow(target)) {
         RECT from;
         GetWindowRect(target, &from);
         RECT to = IsZoomed(target) ? tgtCell : FrameToWindowRect(target, tgtCell);
@@ -2553,6 +2641,7 @@ struct Tag {
     std::wstring label;
     UINT dpi;
     SIZE size;
+    bool covered;  // the app draws tabs or buttons where the tag would go
 };
 std::vector<Tag> g_tags;
 std::vector<HWINEVENTHOOK> g_winEventHooks;
@@ -2595,7 +2684,7 @@ bool ComputeTagPos(const Tag& t, POINT* out) {
 
 void PlaceTag(Tag& t) {
     POINT p;
-    if (!ComputeTagPos(t, &p)) {
+    if (t.covered || !ComputeTagPos(t, &p)) {
         if (IsWindowVisible(t.wnd)) ShowWindow(t.wnd, SW_HIDE);
         return;
     }
@@ -2611,6 +2700,30 @@ void PlaceTag(Tag& t) {
         after = HWND_TOP;
     }
     SetWindowPos(t.wnd, after, p.x, p.y, 0, 0, flags);
+}
+
+// Apps that draw tabs into the title bar (browsers, Windows Terminal, File
+// Explorer) may have a tab or the new-tab button where the tag would sit:
+// only show it over plain caption.
+bool IsCaptionAt(HWND hwnd, POINT pt) {
+    auto test = [hwnd](POINT q) {
+        DWORD_PTR result = 0;
+        return SendMessageTimeoutW(hwnd, WM_NCHITTEST, 0, MAKELPARAM((short)q.x, (short)q.y),
+                                   SMTO_ABORTIFHUNG | SMTO_BLOCK, 50, &result) &&
+               (LRESULT)result == HTCAPTION;
+    };
+    if (test(pt)) return true;
+    POINT logical = pt;  // DPI-unaware windows expect logical coordinates
+    return PhysicalToLogicalPointForPerMonitorDPI(hwnd, &logical) &&
+           (logical.x != pt.x || logical.y != pt.y) && test(logical);
+}
+
+bool IsTagSpotFree(const Tag& t, POINT pos) {
+    int y = pos.y + t.size.cy / 2;
+    for (int x : {pos.x + 2, pos.x + t.size.cx / 2, pos.x + t.size.cx - 2}) {
+        if (!IsCaptionAt(t.target, {x, y})) return false;
+    }
+    return true;
 }
 
 void DestroyAllTags() {
@@ -2713,7 +2826,7 @@ void RefreshTags() {
         if (!tag) {
             HWND wnd = CreatePillWindow(false);
             if (!wnd) continue;
-            g_tags.push_back({h, wnd, 0, L"", 0, {}});
+            g_tags.push_back({h, wnd, 0, L"", 0, {}, false});
             tag = &g_tags.back();
             render = true;
         }
@@ -2723,6 +2836,9 @@ void RefreshTags() {
             tag->dpi = dpi;
             tag->size = RenderPill(tag->wnd, number, label, ColorForNumber(number), dpi, 235);
         }
+        POINT pos;
+        tag->covered = false;
+        if (ComputeTagPos(*tag, &pos)) tag->covered = !IsTagSpotFree(*tag, pos);
         PlaceTag(*tag);
     }
 }
@@ -2734,11 +2850,9 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
         for (auto& t : g_tags) {
             if (t.target != hwnd) continue;
             PlaceTag(t);
-            // Moved to a monitor with another DPI: re-render the pill.
-            UINT dpi = DpiForMonitor(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST));
-            if (dpi != t.dpi) {
-                if (HWND main = g_hwnd.load()) SetTimer(main, kTagQuickTimerId, 80, nullptr);
-            }
+            // Once the move/resize settles, check the spot again (tabs may
+            // have reflowed) and re-render if the monitor's DPI changed.
+            if (HWND main = g_hwnd.load()) SetTimer(main, kTagQuickTimerId, 80, nullptr);
         }
         return;
     }
@@ -2759,7 +2873,7 @@ void InstallWinEventHooks() {
     };
     for (auto& r : ranges) {
         HWINEVENTHOOK h = SetWinEventHook(r[0], r[1], nullptr, WinEventProc, 0, 0,
-                                          WINEVENT_OUTOFCONTEXT);
+                                          WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
         if (h) g_winEventHooks.push_back(h);
     }
 }
@@ -2809,7 +2923,8 @@ void StartMruTracking() {
     EnumWindows(SeedMruProc, 0);  // z-order is a good first guess
     g_foregroundHook =
         SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
-                        ForegroundEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+                        ForegroundEventProc, 0, 0,
+                        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 }
 
 void StopMruTracking() {
@@ -2822,13 +2937,14 @@ void StopMruTracking() {
 // ===========================================================================
 
 void ActivateWindow(HWND hwnd) {
-    if (IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
+    if (IsIconic(hwnd)) ShowWindowAsync(hwnd, SW_RESTORE);
     ForceForeground(hwnd);
 }
 
 // Moves a window to another monitor, keeping its relative position and size
 // within the work area (and its maximized/minimized state).
 void MoveToMonitor(HWND hwnd, HMONITOR target) {
+    if (!CanControlWindow(hwnd)) return;
     HMONITOR current = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
     if (current == target) return;
     MONITORINFO from{}, to{};
@@ -2893,8 +3009,26 @@ std::vector<HMONITOR> GetMonitors() {
 struct OpacityChange {
     HWND hwnd;
     bool addedLayered;
+    // The app's own layered attributes, put back when restoring.
+    COLORREF key;
+    BYTE alpha;
+    DWORD flags;
 };
 std::vector<OpacityChange> g_opacityChanges;
+
+// A layered window whose attributes can't be read draws itself with
+// UpdateLayeredWindow; changing its alpha would break its rendering.
+bool CanChangeOpacity(HWND hwnd) {
+    if (!CanControlWindow(hwnd)) return false;
+    if (!(GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED)) return true;
+    for (auto& c : g_opacityChanges) {
+        if (c.hwnd == hwnd) return true;
+    }
+    COLORREF key;
+    BYTE alpha;
+    DWORD flags;
+    return GetLayeredWindowAttributes(hwnd, &key, &alpha, &flags);
+}
 
 int GetOpacityPercent(HWND hwnd) {
     if (!(GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED)) return 100;
@@ -2907,41 +3041,54 @@ int GetOpacityPercent(HWND hwnd) {
     return (alpha * 100 + 127) / 255;
 }
 
+void RestoreOpacity(const OpacityChange& c) {
+    if (c.addedLayered) {
+        SetWindowLongPtrW(c.hwnd, GWL_EXSTYLE,
+                          GetWindowLongPtrW(c.hwnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
+    } else if (c.flags) {
+        SetLayeredWindowAttributes(c.hwnd, c.key, c.alpha, c.flags);
+    } else {
+        SetLayeredWindowAttributes(c.hwnd, 0, 255, LWA_ALPHA);
+    }
+}
+
 void SetOpacityPercent(HWND hwnd, int percent) {
+    if (!CanChangeOpacity(hwnd)) return;
     OpacityChange* change = nullptr;
     for (auto& c : g_opacityChanges) {
         if (c.hwnd == hwnd) change = &c;
     }
-    LONG_PTR ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
     if (percent >= 100) {
         if (!change) return;  // never touched by us
-        SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
-        if (change->addedLayered) {
-            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex & ~WS_EX_LAYERED);
-        }
+        RestoreOpacity(*change);
         g_opacityChanges.erase(g_opacityChanges.begin() + (change - g_opacityChanges.data()));
         return;
     }
     if (!change) {
-        g_opacityChanges.push_back({hwnd, !(ex & WS_EX_LAYERED)});
-        if (!(ex & WS_EX_LAYERED)) SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex | WS_EX_LAYERED);
+        LONG_PTR ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        OpacityChange c{hwnd, !(ex & WS_EX_LAYERED), 0, 255, 0};
+        if (ex & WS_EX_LAYERED) {
+            GetLayeredWindowAttributes(hwnd, &c.key, &c.alpha, &c.flags);
+        } else {
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex | WS_EX_LAYERED);
+        }
+        g_opacityChanges.push_back(c);
+        change = &g_opacityChanges.back();
     }
-    SetLayeredWindowAttributes(hwnd, 0, (BYTE)(percent * 255 / 100), LWA_ALPHA);
+    // Keep the app's color key, if it uses one.
+    SetLayeredWindowAttributes(hwnd, change->key, (BYTE)(percent * 255 / 100),
+                               LWA_ALPHA | (change->flags & LWA_COLORKEY));
 }
 
 void RestoreAllOpacity() {
     for (auto& c : g_opacityChanges) {
-        if (!IsWindow(c.hwnd)) continue;
-        SetLayeredWindowAttributes(c.hwnd, 0, 255, LWA_ALPHA);
-        if (c.addedLayered) {
-            SetWindowLongPtrW(c.hwnd, GWL_EXSTYLE,
-                              GetWindowLongPtrW(c.hwnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
-        }
+        if (IsWindow(c.hwnd) && !IsHungAppWindow(c.hwnd)) RestoreOpacity(c);
     }
     g_opacityChanges.clear();
 }
 
 void ToggleTopmost(HWND hwnd) {
+    if (!CanControlWindow(hwnd)) return;
     bool topmost = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST;
     SetWindowPos(hwnd, topmost ? HWND_NOTOPMOST : HWND_TOPMOST, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -3249,13 +3396,14 @@ void RestoreSavedLayout(const SavedLayout& layout) {
     for (int i = (int)layout.items.size() - 1; i >= 0; i--) {
         if (match[i] < 0) continue;
         HWND h = open[match[i]].hwnd;
+        if (!CanControlWindow(h)) continue;
         const SavedItem& it = layout.items[i];
         if (IsIconic(h) || IsZoomed(h)) RestoreNoActivate(h, &it.rect);
         SetWindowPos(h, HWND_TOP, it.rect.left, it.rect.top, it.rect.right - it.rect.left,
                      it.rect.bottom - it.rect.top,
                      SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
-        if (it.state == 1) ShowWindow(h, SW_MAXIMIZE);
-        if (it.state == 2) ShowWindow(h, SW_SHOWMINNOACTIVE);
+        if (it.state == 1) ShowWindowAsync(h, SW_MAXIMIZE);
+        if (it.state == 2) ShowWindowAsync(h, SW_SHOWMINNOACTIVE);
         placed.push_back(h);
     }
     for (int i = 0; i < (int)layout.items.size(); i++) {
@@ -3463,9 +3611,13 @@ void ShellOpen(const std::wstring& file, const wchar_t* params = nullptr) {
 
 void LaunchApp(const std::wstring& id) { ShellOpen(L"shell:AppsFolder\\" + id); }
 
+// Selects the file in a File Explorer window (reusing a running Explorer).
 void OpenFileLocation(const std::wstring& path) {
-    std::wstring params = L"/select,\"" + path + L"\"";
-    ShellOpen(L"explorer.exe", params.c_str());
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    if (SUCCEEDED(SHParseDisplayName(path.c_str(), nullptr, &pidl, 0, nullptr)) && pidl) {
+        SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
+        CoTaskMemFree(pidl);
+    }
 }
 
 void CopyTextToClipboard(HWND owner, const std::wstring& text) {
@@ -3610,9 +3762,26 @@ void OpenEverythingSearch(const std::wstring& search) {
     ShellOpen(exe, params.c_str());
 }
 
-HICON LoadFileIcon(const std::wstring& path) {
+// True for paths on a local fixed drive. Anything else (network shares,
+// mapped or removable drives) may block for a long time when touched.
+bool IsLocalFixedPath(const std::wstring& path) {
+    if (path.size() < 3 || path[1] != L':' || path[2] != L'\\') return false;
+    wchar_t root[4] = {path[0], L':', L'\\', 0};
+    return GetDriveTypeW(root) == DRIVE_FIXED;
+}
+
+HICON LoadFileIcon(const std::wstring& path, bool isFolder) {
     SHFILEINFOW sfi{};
-    if (SHGetFileInfoW(path.c_str(), 0, &sfi, sizeof(sfi), SHGFI_ICON | SHGFI_LARGEICON)) {
+    UINT flags = SHGFI_ICON | SHGFI_LARGEICON;
+    DWORD attributes = 0;
+    std::wstring file = NativeFilePath(path);
+    if (!IsLocalFixedPath(path)) {
+        // Icon by extension / folder type, without touching the disk.
+        flags |= SHGFI_USEFILEATTRIBUTES;
+        attributes = isFolder ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_NORMAL;
+        file = path;
+    }
+    if (SHGetFileInfoW(file.c_str(), attributes, &sfi, sizeof(sfi), flags)) {
         return sfi.hIcon;
     }
     return nullptr;
@@ -3620,8 +3789,9 @@ HICON LoadFileIcon(const std::wstring& path) {
 
 void LoadLauncherSettings() {
     int mode = 1;
-    if (StringSettingIs(L"switching.searchApps", L"off")) mode = 0;
-    if (StringSettingIs(L"switching.searchApps", L"always")) mode = 2;
+    std::wstring sSearchApps = GetStringSetting(L"switching.searchApps");
+    if (sSearchApps == L"off") mode = 0;
+    if (sSearchApps == L"always") mode = 2;
     g_searchApps = mode;
     g_everything = GetBoolSetting(L"switching.everything");
     int maxApps = Wh_GetIntSetting(L"switching.maxApps");
@@ -3630,10 +3800,11 @@ void LoadLauncherSettings() {
     g_maxFiles = maxFiles ? Clamp(maxFiles, 3, 30) : 8;
     // EVERYTHING_IPC_SORT_* values from everything_ipc.h.
     int sort = 26;  // DATE_RUN_DESCENDING
-    if (StringSettingIs(L"switching.fileSort", L"name")) sort = 1;
-    if (StringSettingIs(L"switching.fileSort", L"modified")) sort = 14;
-    if (StringSettingIs(L"switching.fileSort", L"runCount")) sort = 20;
-    if (StringSettingIs(L"switching.fileSort", L"recentChange")) sort = 22;
+    std::wstring sFileSort = GetStringSetting(L"switching.fileSort");
+    if (sFileSort == L"name") sort = 1;
+    if (sFileSort == L"modified") sort = 14;
+    if (sFileSort == L"runCount") sort = 20;
+    if (sFileSort == L"recentChange") sort = 22;
     g_fileSort = sort;
 }
 
@@ -5050,11 +5221,11 @@ HBITMAP CachedAppBitmap(Panel& p, const std::wstring& id) {
     return bmp;
 }
 
-HICON CachedFileIcon(Panel& p, const std::wstring& path) {
+HICON CachedFileIcon(Panel& p, const std::wstring& path, bool isFolder) {
     for (auto& f : p.fileIcons) {
         if (f.first == path) return f.second;
     }
-    HICON icon = LoadFileIcon(path);
+    HICON icon = LoadFileIcon(path, isFolder);
     p.fileIcons.push_back({path, icon});
     return icon;
 }
@@ -5112,7 +5283,7 @@ void BuildEntries(Panel& p) {
         if (!f.empty()) {
             for (auto& r : p.fileResults) {
                 Entry e{nullptr, r.folder, r.name, r.fullPath, 0, 0, AccentColor(), false,
-                        CachedFileIcon(p, r.fullPath), false, p.fileSection, false, 100000};
+                        CachedFileIcon(p, r.fullPath, r.isFolder), false, p.fileSection, false, 100000};
                 e.kind = EntryFile;
                 p.entries.push_back(e);
                 sec.matches++;
@@ -5453,10 +5624,13 @@ void ShowEntryMenu(Panel& p, int i, POINT screenPt) {
         kOpacityBase = 200,
     };
     bool activateOnly = !p.source || (p.hotkeyMode && g_hotkeyActivate);
+    // Elevated or hung windows can't be moved or restyled from here.
+    UINT ctl = CanControlWindow(hwnd) ? 0 : MF_GRAYED;
+    UINT opacityFlag = CanChangeOpacity(hwnd) ? 0 : MF_GRAYED;
     HMENU menu = CreatePopupMenu();
     AppendMenuW(menu, MF_STRING, kOpen, activateOnly ? g_str->menuSwitchTo : g_str->menuOpenHere);
     SetMenuDefaultItem(menu, kOpen, FALSE);
-    if (g_pairButton && p.source) AppendMenuW(menu, MF_STRING, kPair, g_str->menuPair);
+    if (g_pairButton && p.source) AppendMenuW(menu, MF_STRING | ctl, kPair, g_str->menuPair);
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
 
     std::vector<HMONITOR> monitors = GetMonitors();
@@ -5473,10 +5647,11 @@ void ShowEntryMenu(Panel& p, int i, POINT screenPt) {
             AppendMenuW(sub, MF_STRING | (monitors[m] == current ? MF_CHECKED | MF_GRAYED : 0),
                         kMonitorBase + m, label.c_str());
         }
-        AppendMenuW(menu, MF_POPUP, (UINT_PTR)sub, g_str->menuMoveTo);
+        AppendMenuW(menu, MF_POPUP | ctl, (UINT_PTR)sub, g_str->menuMoveTo);
     }
     bool topmost = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST;
-    AppendMenuW(menu, MF_STRING | (topmost ? MF_CHECKED : 0), kTopmost, g_str->menuTopmost);
+    AppendMenuW(menu, MF_STRING | ctl | (topmost ? MF_CHECKED : 0), kTopmost,
+                g_str->menuTopmost);
     {
         HMENU sub = CreatePopupMenu();
         int current = GetOpacityPercent(hwnd);
@@ -5485,13 +5660,13 @@ void ShowEntryMenu(Panel& p, int i, POINT screenPt) {
             AppendMenuW(sub, MF_STRING | (checked ? MF_CHECKED : 0), kOpacityBase + pct,
                         (std::to_wstring(pct) + L" %").c_str());
         }
-        AppendMenuW(menu, MF_POPUP, (UINT_PTR)sub, g_str->menuOpacity);
+        AppendMenuW(menu, MF_POPUP | opacityFlag, (UINT_PTR)sub, g_str->menuOpacity);
     }
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kSelect,
                 IsSelected(p, hwnd) ? g_str->menuDeselect : g_str->menuSelect);
     if (g_renaming) AppendMenuW(menu, MF_STRING, kRename, g_str->menuRename);
-    if (!IsIconic(hwnd)) AppendMenuW(menu, MF_STRING, kMinimize, g_str->menuMinimize);
+    if (!IsIconic(hwnd)) AppendMenuW(menu, MF_STRING | ctl, kMinimize, g_str->menuMinimize);
     AppendMenuW(menu, MF_STRING, kClose, g_str->menuClose);
 
     UINT cmd = TrackPanelMenu(p, menu, screenPt);
@@ -5514,7 +5689,7 @@ void ShowEntryMenu(Panel& p, int i, POINT screenPt) {
     } else if (cmd == kRename) {
         BeginRename(p, i);
     } else if (cmd == kMinimize) {
-        ShowWindow(hwnd, SW_SHOWMINNOACTIVE);
+        ShowWindowAsync(hwnd, SW_SHOWMINNOACTIVE);
         for (auto* list : {&p.all, &p.entries}) {
             for (auto& e : *list) {
                 if (e.hwnd == hwnd) e.minimized = true;
@@ -5895,13 +6070,23 @@ void RunAction(const Panel& p, Act act) {
             break;
         }
         case Act::MinimizeOthers:
-            for (HWND h : targets) ShowWindow(h, SW_SHOWMINNOACTIVE);
+            for (HWND h : targets) ShowWindowAsync(h, SW_SHOWMINNOACTIVE);
             if (p.source) ForceForeground(p.source);
             break;
         case Act::BringHere:
             for (HWND h : targets) MoveToMonitor(h, monitor);
             break;
         case Act::CloseOthers:
+            // Without a selection this closes every other window of the app
+            // (some, like File Explorer, without asking): confirm first.
+            if (p.selected.empty() && targets.size() > 1) {
+                std::wstring text = Format(g_str->closeOthersFmt, (int)targets.size());
+                if (MessageBoxW(nullptr, text.c_str(), L"Winstant",
+                                MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2 | MB_TOPMOST |
+                                    MB_SETFOREGROUND) != IDYES) {
+                    break;
+                }
+            }
             for (HWND h : targets) PostMessageW(h, WM_SYSCOMMAND, SC_CLOSE, 0);
             break;
         case Act::SavedLayouts:
@@ -6091,8 +6276,11 @@ void ShowSwitcher(HWND source, POINT pt, bool hotkey) {
                              nullptr);
     if (p.hwnd) {
         g_panelHwnd = p.hwnd;
-        // Everything may run elevated: let its replies through.
-        if (launcherFiles) {
+        // UIPI only blocks messages from a lower to a higher integrity level:
+        // this matters only when Windhawk runs elevated and Everything
+        // doesn't. (The reply is validated before use.)
+        if (launcherFiles &&
+            ProcessIntegrity(GetCurrentProcess()) >= SECURITY_MANDATORY_HIGH_RID) {
             ChangeWindowMessageFilterEx(p.hwnd, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
         }
         p.glass = ApplyWindowChrome(p.hwnd, GetTheme().border);
@@ -6251,7 +6439,6 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
 // cursor rests on a minimize button or the hover panel is open. The main
 // thread asks for it with WM_APP_HOOK_WANT; the thread itself just waits.
 DWORD WINAPI WheelThreadProc(LPVOID param) {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     MSG msg;
     PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);  // create the queue
     SetEvent((HANDLE)param);
@@ -6380,7 +6567,9 @@ void OnRawInput(HWND hwnd, HRAWINPUT handle) {
     // Fake Shift sent around navigation keys when NumLock is on.
     if ((k.Flags & RI_KEY_E0) && (k.MakeCode == 0x2A || k.MakeCode == 0x36)) return;
     bool up = k.Flags & RI_KEY_BREAK;
-    DWORD now = GetTickCount();
+    // When the input was posted, not when we got to it (the main thread may
+    // have been busy, e.g. animating a switch).
+    DWORD now = (DWORD)GetMessageTime();
     DWORD interval = (DWORD)g_tapInterval.load();
 
     if (!IsTapKey(k.VKey)) {
@@ -6763,7 +6952,6 @@ void RegisterWindowClass(const wchar_t* name, WNDPROC proc, UINT style) {
 }
 
 DWORD WINAPI ThreadProc(LPVOID) {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     // Shell APIs (app icons, launching, file icons) need COM.
     HRESULT hrCom = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
