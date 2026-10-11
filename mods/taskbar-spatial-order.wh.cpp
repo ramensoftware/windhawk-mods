@@ -65,10 +65,10 @@ minimised is left alone. The settings can change both and exclude apps.
 
 ## Limitations
 
-- Windows 11 24H2 and later, with its own taskbar, tested on build 26300. The
-  mod relies on internal taskbar functions found through Windows debug
-  symbols, which an update can change; if one is missing or looks unexpected,
-  the mod logs it and does nothing.
+- Windows 11 24H2 and later, with its own taskbar, tested on build 26300;
+  older versions are untested. The mod relies on internal taskbar functions
+  found through Windows debug symbols, which an update can change; if one is
+  missing or looks unexpected, the mod logs it and does nothing.
 - A button that moves is taken off the taskbar and put back, which can show
   as a brief animation. Only buttons that are out of place move, and they keep
   their progress bar, overlay badge and thumbnail toolbar buttons.
@@ -353,6 +353,9 @@ using CTaskListWnd_TaskNotify_t = HRESULT(WINAPI*)(void* pThis,
 CTaskListWnd_TaskNotify_t CTaskListWnd_TaskDestroyed;
 CTaskListWnd_TaskNotify_t CTaskListWnd_TaskInclusionChanged;
 
+// Counts windows joining and leaving groups (see OnGroupChanged).
+std::atomic<UINT> g_groupChanges;
+
 // The ranks of the buttons to move, in increasing order: all but a longest
 // increasing subsequence, so that as few buttons as possible move.
 std::vector<int> RanksToMove(std::vector<int> ranks) {
@@ -387,7 +390,10 @@ std::vector<int> RanksToMove(std::vector<int> ranks) {
 // lands next to a button that is already in place, and the group always keeps
 // at least one button: a group that loses all its buttons is rebuilt at the
 // end of the taskbar.
-int FixButtonOrder(const Taskbar& taskbar, void* taskGroup, HDPA items) {
+int FixButtonOrder(const Taskbar& taskbar,
+                   void* taskGroup,
+                   HDPA items,
+                   UINT groupChanges) {
     std::optional<std::vector<int>> ranks =
         ButtonRanks(taskbar.buttonGroup, items);
     if (!ranks) {
@@ -396,8 +402,10 @@ int FixButtonOrder(const Taskbar& taskbar, void* taskGroup, HDPA items) {
 
     int moved = 0;
     for (int rank : RanksToMove(*ranks)) {
-        // Explorer could change the lists while it handles the calls below.
-        if (CTaskBtnGroup_GetNumItems(taskbar.buttonGroup) < 2 ||
+        // Explorer could change the lists while it handles the calls below,
+        // and a window joining or leaving a group can free this button group.
+        if (g_groupChanges != groupChanges ||
+            CTaskBtnGroup_GetNumItems(taskbar.buttonGroup) < 2 ||
             rank >= items->cpItems) {
             Wh_Log(L"Lists changed while moving buttons");
             break;
@@ -512,6 +520,7 @@ std::mutex g_trackedWindowsMutex;
 std::unordered_set<HWND> g_trackedWindows;
 
 void SortGroup(const Group& group, std::unordered_set<HWND>& trackedWindows) {
+    UINT groupChanges = g_groupChanges;
     HDPA items = (HDPA)((void**)group.taskGroup)[g_itemsSlot];
     int count = items ? items->cpItems : 0;
     if (count < 2) {
@@ -559,16 +568,21 @@ void SortGroup(const Group& group, std::unordered_set<HWND>& trackedWindows) {
     }
 
     for (const Taskbar& taskbar : group.taskbars) {
-        if (int moved = FixButtonOrder(taskbar, group.taskGroup, items)) {
+        // A window that joined or left a group during the moves on another
+        // taskbar can have freed this one's button group.
+        if (g_groupChanges != groupChanges) {
+            Wh_Log(L"Lists changed while moving buttons");
+            return;
+        }
+
+        if (int moved =
+                FixButtonOrder(taskbar, group.taskGroup, items, groupChanges)) {
             Wh_Log(L"%s: moved %d buttons on taskbar %p",
                    ProcessName(windows[0].hWnd).c_str(), moved,
                    taskbar.taskList);
         }
     }
 }
-
-// Counts windows joining and leaving groups (see OnGroupChanged).
-std::atomic<UINT> g_groupChanges;
 
 void SortAllGroups() {
     UINT groupChanges = g_groupChanges;
