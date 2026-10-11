@@ -11,30 +11,37 @@
 
 // ==WindhawkModReadme==
 /*
-# Mond Desktop Clock
 
 A universal desktop clock widget inspired by the [Mond Rainmeter skin by HipHopium](https://www.deviantart.com/hiphopium). It runs in a dedicated tool process, not in Explorer.
 
+---
+**Differentiating Feature Set**
+While many desk clock widgets offer customizable styles, Mond provides unparalleled granular control over every character. Unlike standard overlays, we allow for **per-letter customization**, letting you set unique colors and shadows for individual characters within the day, date, or time (e.g., coloring only the 'S' in September). This level of detail, combined with multi-row support and precise offset controls, makes Mond a highly flexible styling tool.
+
+---
 The clock shows the weekday, date, and time in three independently styled rows. Drag it to position it; enable position locking to prevent accidental movement.
 
 ![Mond Desktop Clock on the desktop](https://i.imgur.com/dj71eKl.png)
 
 ![Mond Desktop Clock alternate layout](https://i.imgur.com/ux3bwti.png)
 
-- Drag-and-drop placement with a saved position shared across monitors
-- Independent font families, sizes, bold/italic styling, letter spacing, and horizontal alignment for each row
-- Weekday, date, or time can be selected as the large heading and moved to the top
-- Per-character text and shadow colours for weekday, date, and time
-- Anurati lettering with adjustable shadows; Anurati and Quicksand are the defaults
-- Adjustable shadows for the weekday, date, and time rows
-- 12-hour or 24-hour time and an optional date row
+**Key Features & Advanced Customization:**
+*   **Three Independent Rows:** Display Weekday, Date, and Time in separate, independently configurable rows.
+*   **Granular Letter Control:** Set individual colors and shadow offsets for every single character in the day, date, or time.
+*   **Advanced Typography:** Full control over font families (Quicksand, Anurati, etc.), size, bold/italic styling, letter spacing, and per-row horizontal offsets.
+*   **Layout Flexibility:** Select a "Main Heading" row to automatically reorder the display (e.g., Date on top, Weekday below).
+*   **Position Management:** Drag-and-drop placement with saved positions shared across all monitors connected to your PC.
 
-Fonts must be installed in Windows. Missing fonts are silently substituted by Windows.
+**Styling & Fonts:**
+Fonts must be installed in Windows. Missing fonts are silently substituted by Windows. We support advanced typography using:
+*   [Quicksand](https://fonts.google.com/specimen/Quicksand)
+*   [Anurati](https://www.dafont.com/anurati.font)
 
-- [Quicksand](https://fonts.google.com/specimen/Quicksand)
-- [Anurati](https://www.dafont.com/anurati.font)
-
-Weekday, date, and time have separate text and shadow colours. Letter colours and shadows are set independently for each row; blank overrides use that row's text or shadow colour. The date displays without a comma. Colours accept #RRGGBB or #AARRGGBB; the alpha component in the latter form is ignored.
+**Coloring & Formatting:**
+*   Separate text and shadow colors are available for the overall row, but individual letter overrides take precedence.
+*   Per-letter styles are indexed by 1-based character position from left to right (including spaces).
+*   The date displays without a comma.
+*   Colours accept `#RRGGBB` or `#AARRGGBB`; the alpha component in the latter form is ignored.
 */
 // ==/WindhawkModReadme==
 
@@ -117,7 +124,7 @@ Weekday, date, and time have separate text and shadow colours. Letter colours an
 
 - dateFontFamily: Quicksand
   $name: Date font
-  $description: Anurati digits and punctuation are rendered in Quicksand for readability.
+  $description: When Anurati is selected, digits and punctuation are rendered in Quicksand for readability.
   $options:
     - Anurati: Anurati
     - Quicksand: Quicksand
@@ -146,7 +153,7 @@ Weekday, date, and time have separate text and shadow colours. Letter colours an
 
 - timeFontFamily: Quicksand
   $name: Time font
-  $description: Anurati digits and punctuation are rendered in Quicksand for readability.
+  $description: When Anurati is selected, digits and punctuation are rendered in Quicksand for readability.
   $options:
     - Anurati: Anurati
     - Quicksand: Quicksand
@@ -170,17 +177,17 @@ Weekday, date, and time have separate text and shadow colours. Letter colours an
 - timeLetterSpacing: 4
   $name: Time letter spacing
 
-- dayTextColor: "#FFFFFFFF"
+- dayTextColor: "#FFFFFF"
   $name: Weekday text colour
   $description: Leave blank to use white.
   #! $format: colorRgb
 
-- dateTextColor: "#FFFFFFFF"
+- dateTextColor: "#FFFFFF"
   $name: Date text colour
   $description: Leave blank to use white.
   #! $format: colorRgb
 
-- timeTextColor: "#FFFFFFFF"
+- timeTextColor: "#FFFFFF"
   $name: Time text colour
   $description: Leave blank to use white.
   #! $format: colorRgb
@@ -447,12 +454,6 @@ Weekday, date, and time have separate text and shadow colours. Letter colours an
         - shadow8: ""
           $name: Time letter 8 shadow
           #! $format: colorRgb
-        - color9: ""
-          $name: Time letter 9 colour
-          #! $format: colorRgb
-        - shadow9: ""
-          $name: Time letter 9 shadow
-          #! $format: colorRgb
       $name: Time letter colours and shadows
   $name: Custom colours per letter
 */
@@ -478,7 +479,7 @@ static constexpr UINT_PTR kRelayoutTimerId = 3;
 static constexpr UINT kWatchIntervalMs = 2000;
 static constexpr size_t kWeekdayCharacterCount = 9;
 static constexpr size_t kDateCharacterCount = 17;
-static constexpr size_t kTimeCharacterCount = 9;
+static constexpr size_t kTimeCharacterCount = 8;
 static constexpr size_t kMaxHeaderCharacters = kDateCharacterCount;
 using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
 
@@ -560,14 +561,13 @@ struct Settings {
 static Settings g_settings;
 
 static COLORREF ParseColor(const wchar_t* s) {
-    if (!s) return RGB(255, 255, 255);
-    if (*s == L'#') ++s;
-    const size_t n = wcslen(s);
-    const unsigned long v = wcstoul(s, nullptr, 16);
-    if (n == 8 || n == 6) {
-        return RGB((v >> 16) & 255, (v >> 8) & 255, v & 255);
-    }
-    return RGB(255, 255, 255);
+  if (*s == L'#') ++s;
+  const size_t n = wcslen(s);
+  const unsigned long v = wcstoul(s, nullptr, 16);
+  if (n == 8 || n == 6) {
+    return RGB((v >> 16) & 255, (v >> 8) & 255, v & 255);
+  }
+  return RGB(255, 255, 255);
 }
 
 static COLORREF LoadColorSetting(const wchar_t* name, COLORREF fallback) {
@@ -579,7 +579,7 @@ static COLORREF LoadColorSetting(const wchar_t* name, COLORREF fallback) {
 
 static int LoadShadowOffset(const wchar_t* name, int fallback) {
   PCWSTR value = Wh_GetStringSetting(name);
-  const int result = !*value || _wcsicmp(value, L"default") == 0
+  const int result = !*value
       ? fallback : std::clamp(_wtoi(value), 0, 20);
   Wh_FreeStringSetting(value);
   return result;
@@ -603,23 +603,11 @@ static void DeleteFonts(Overlay* overlay) {
   overlay->timeFallbackFont = overlay->dateFallbackFont = nullptr;
 }
 
-static int DayDisplayFontSize() {
-  return g_settings.dayFontSize;
-}
-
-static int DateDisplayFontSize() {
-  return g_settings.dateFontSize;
-}
-
-static int TimeDisplayFontSize() {
-  return g_settings.timeFontSize;
-}
-
 static void CreateFonts(Overlay* overlay) {
   DeleteFonts(overlay);
-  int daySize = MulDiv(DayDisplayFontSize(), overlay->dpi, 96);
-  int timeSize = MulDiv(TimeDisplayFontSize(), overlay->dpi, 96);
-  int dateSize = MulDiv(DateDisplayFontSize(), overlay->dpi, 96);
+  int daySize = MulDiv(g_settings.dayFontSize, overlay->dpi, 96);
+  int timeSize = MulDiv(g_settings.timeFontSize, overlay->dpi, 96);
+  int dateSize = MulDiv(g_settings.dateFontSize, overlay->dpi, 96);
   overlay->dayFont = CreateFontW(-daySize, 0, 0, 0,
       g_settings.dayBold ? FW_BOLD : FW_NORMAL, g_settings.dayItalic,
       FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
@@ -635,11 +623,11 @@ static void CreateFonts(Overlay* overlay) {
       FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
       CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH,
       g_settings.dateFontFamily.c_str());
-    overlay->timeFallbackFont = CreateFontW(-timeSize, 0, 0, 0,
+  overlay->timeFallbackFont = CreateFontW(-timeSize, 0, 0, 0,
       g_settings.timeBold ? FW_BOLD : FW_NORMAL, g_settings.timeItalic,
       FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
       CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Quicksand");
-    overlay->dateFallbackFont = CreateFontW(-dateSize, 0, 0, 0,
+  overlay->dateFallbackFont = CreateFontW(-dateSize, 0, 0, 0,
       g_settings.dateBold ? FW_BOLD : FW_NORMAL, g_settings.dateItalic,
       FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
       CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Quicksand");
@@ -696,92 +684,47 @@ static int WeekdayKerning(UINT dpi) {
 }
 
 static std::wstring CurrentWeekday() {
-    SYSTEMTIME st{};
-    GetLocalTime(&st);
-    static const wchar_t* names[] = {
-        L"SUNDAY", L"MONDAY", L"TUESDAY", L"WEDNESDAY",
-        L"THURSDAY", L"FRIDAY", L"SATURDAY"};
-    return names[st.wDayOfWeek];
+  SYSTEMTIME st{};
+  GetLocalTime(&st);
+  static const wchar_t* names[] = {
+      L"SUNDAY", L"MONDAY", L"TUESDAY", L"WEDNESDAY",
+      L"THURSDAY", L"FRIDAY", L"SATURDAY"};
+  return names[st.wDayOfWeek];
 }
 
 static std::wstring CurrentTime() {
-    SYSTEMTIME st{};
-    GetLocalTime(&st);
-    wchar_t b[64]{};
-    if (g_settings.timeFormat24) {
-      swprintf_s(b, L"%02u:%02u", st.wHour, st.wMinute);
-    } else {
-        unsigned h = st.wHour % 12;
-        if (!h) h = 12;
-      swprintf_s(b, L"%u:%02u %s", h, st.wMinute,
-                   st.wHour >= 12 ? L"PM" : L"AM");
-    }
-    return b;
+  SYSTEMTIME st{};
+  GetLocalTime(&st);
+  wchar_t b[64]{};
+  if (g_settings.timeFormat24) {
+    swprintf_s(b, L"%02u:%02u", st.wHour, st.wMinute);
+  } else {
+    unsigned h = st.wHour % 12;
+    if (!h) h = 12;
+    swprintf_s(b, L"%u:%02u %s", h, st.wMinute,
+               st.wHour >= 12 ? L"PM" : L"AM");
+  }
+  return b;
 }
 
 static std::wstring CurrentDate() {
-    SYSTEMTIME st{};
-    GetLocalTime(&st);
-    wchar_t b[64]{};
-    static const wchar_t* months[] = {
+  SYSTEMTIME st{};
+  GetLocalTime(&st);
+  wchar_t b[64]{};
+  static const wchar_t* months[] = {
       L"January", L"February", L"March", L"April", L"May", L"June",
       L"July", L"August", L"September", L"October", L"November", L"December"};
-    const unsigned month = std::clamp<unsigned>(st.wMonth, 1, 12);
-    swprintf_s(b, L"%02u %s %04u", st.wDay, months[month - 1], st.wYear);
-    return b;
+  const unsigned month = std::clamp<unsigned>(st.wMonth, 1, 12);
+  swprintf_s(b, L"%02u %s %04u", st.wDay, months[month - 1], st.wYear);
+  return b;
 }
 
 static HFONT FontForCharacter(HFONT font,
                               HFONT fallbackFont,
                               wchar_t character) {
-  return fallbackFont && (character < L'A' || character > L'Z')
+  return fallbackFont && !iswalpha(character)
       ? fallbackFont
       : font;
-}
-
-static void DrawCenteredSpaced(HDC dc, const std::wstring& text, int y, HFONT font,
-                               int spacing, COLORREF color, int centreX,
-                               HFONT fallbackFont = nullptr) {
-  HGDIOBJ oldFont = SelectObject(dc, font);
-  SetTextColor(dc, color);
-  SetBkMode(dc, TRANSPARENT);
-
-  if (fallbackFont) {
-    SetTextCharacterExtra(dc, 0);
-    int totalWidth = 0;
-    for (wchar_t character : text) {
-      HGDIOBJ previousFont = SelectObject(
-          dc, FontForCharacter(font, fallbackFont, character));
-      SIZE size{};
-      GetTextExtentPoint32W(dc, &character, 1, &size);
-      totalWidth += size.cx;
-      SelectObject(dc, previousFont);
-    }
-    if (!text.empty()) totalWidth += spacing * (static_cast<int>(text.size()) - 1);
-    int currentX = centreX - totalWidth / 2;
-    for (wchar_t character : text) {
-      HGDIOBJ previousFont = SelectObject(
-          dc, FontForCharacter(font, fallbackFont, character));
-      SIZE size{};
-      GetTextExtentPoint32W(dc, &character, 1, &size);
-      TextOutW(dc, currentX, y, &character, 1);
-      currentX += size.cx + spacing;
-      SelectObject(dc, previousFont);
-    }
-    SelectObject(dc, oldFont);
-    return;
-  }
-
-  SetTextCharacterExtra(dc, spacing);
-
-  SIZE sz{};
-  GetTextExtentPoint32W(dc, text.c_str(), (int)text.size(), &sz);
-  if (!text.empty()) sz.cx -= spacing;
-  const int x = centreX - sz.cx / 2;
-  TextOutW(dc, x, y, text.c_str(), (int)text.size());
-
-  SetTextCharacterExtra(dc, 0);
-  SelectObject(dc, oldFont);
 }
 
 static void DrawHeaderCharacters(HDC dc, const std::wstring& text, int y,
@@ -915,7 +858,7 @@ static void Paint(Overlay* overlay) {
     const std::wstring* text = &day;
     HFONT font = overlay->dayFont;
     HFONT fallbackFont = nullptr;
-    int fontSize = DayDisplayFontSize();
+    int fontSize = g_settings.dayFontSize;
     int spacing = Scale(g_settings.dayLetterSpacing, overlay->dpi);
     int leftOffset = 0;
     int shadowOffsetDip = g_settings.dayCustomShadowOffset;
@@ -929,7 +872,7 @@ static void Paint(Overlay* overlay) {
       font = overlay->dateFont;
       fallbackFont = g_settings.dateFontFamily == L"Anurati"
           ? overlay->dateFallbackFont : nullptr;
-      fontSize = DateDisplayFontSize();
+      fontSize = g_settings.dateFontSize;
       spacing = Scale(g_settings.dateLetterSpacing, overlay->dpi);
       leftOffset = g_settings.dateLeftOffset;
       shadowOffsetDip = g_settings.dateCustomShadowOffset;
@@ -942,7 +885,7 @@ static void Paint(Overlay* overlay) {
       font = overlay->timeFont;
       fallbackFont = g_settings.timeFontFamily == L"Anurati"
           ? overlay->timeFallbackFont : nullptr;
-      fontSize = TimeDisplayFontSize();
+      fontSize = g_settings.timeFontSize;
       spacing = Scale(g_settings.timeLetterSpacing, overlay->dpi);
       leftOffset = g_settings.timeLeftOffset;
       shadowOffsetDip = g_settings.timeCustomShadowOffset;
@@ -1011,7 +954,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
   }
   switch (msg) {
     case WM_NCHITTEST:
-      if (g_settings.lockWidgetPosition) return HTTRANSPARENT;
       if (DefWindowProcW(hwnd, msg, wp, lp) == HTCLIENT) return HTCAPTION;
       break;
     case WM_WINDOWPOSCHANGING: {
@@ -1039,29 +981,29 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
           g_settings.offsetX = MulDiv((windowRect.left + windowRect.right) / 2 - centerX, 96, dpi);
           g_settings.offsetY = MulDiv((windowRect.top + windowRect.bottom) / 2 - centerY, 96, dpi);
 
-            g_syncingPositions = true;
-            for (Overlay* other : g_overlays) {
+          g_syncingPositions = true;
+          for (Overlay* other : g_overlays) {
             if (other == overlay || !IsWindow(other->hwnd)) continue;
             MONITORINFO otherInfo{sizeof(otherInfo)};
             RECT otherRect{};
             HMONITOR otherMonitor = MonitorFromWindow(
-              other->hwnd, MONITOR_DEFAULTTONEAREST);
+                other->hwnd, MONITOR_DEFAULTTONEAREST);
             if (!GetMonitorInfoW(otherMonitor, &otherInfo) ||
-              !GetWindowRect(other->hwnd, &otherRect)) {
+                !GetWindowRect(other->hwnd, &otherRect)) {
               continue;
             }
             int otherCenterX = otherInfo.rcMonitor.left +
-              (otherInfo.rcMonitor.right - otherInfo.rcMonitor.left) / 2;
+                (otherInfo.rcMonitor.right - otherInfo.rcMonitor.left) / 2;
             int otherCenterY = otherInfo.rcMonitor.top +
-              (otherInfo.rcMonitor.bottom - otherInfo.rcMonitor.top) / 2;
+                (otherInfo.rcMonitor.bottom - otherInfo.rcMonitor.top) / 2;
             int otherX = otherCenterX + Scale(g_settings.offsetX, other->dpi) -
-              (otherRect.right - otherRect.left) / 2;
+                (otherRect.right - otherRect.left) / 2;
             int otherY = otherCenterY + Scale(g_settings.offsetY, other->dpi) -
-              (otherRect.bottom - otherRect.top) / 2;
+                (otherRect.bottom - otherRect.top) / 2;
             SetWindowPos(other->hwnd, nullptr, otherX, otherY, 0, 0,
-              SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
           }
-            g_syncingPositions = false;
+          g_syncingPositions = false;
         }
       }
       break;
@@ -1081,9 +1023,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_DPICHANGED:
       if (HWND controller = g_controller.load())
         SetTimer(controller, kRelayoutTimerId, 300, nullptr);
-      return 0;
-    case WM_SETTINGCHANGE:
-      if (overlay) Paint(overlay);
       return 0;
     case WM_DESTROY:
       if (g_inMoveLoop) g_inMoveLoop = false;
@@ -1131,9 +1070,9 @@ static BOOL CALLBACK CreateOverlay(HMONITOR monitor, HDC dc, LPRECT, LPARAM) {
       static_cast<int>(g_settings.showDate) +
       static_cast<int>(g_settings.showTime);
   int heightDip = 40;
-  if (g_settings.showWeekday) heightDip += DayDisplayFontSize();
-  if (g_settings.showDate) heightDip += DateDisplayFontSize();
-  if (g_settings.showTime) heightDip += TimeDisplayFontSize();
+  if (g_settings.showWeekday) heightDip += g_settings.dayFontSize;
+  if (g_settings.showDate) heightDip += g_settings.dateFontSize;
+  if (g_settings.showTime) heightDip += g_settings.timeFontSize;
   if (visibleRows > 1) {
     heightDip += g_settings.gapDayToDate;
     if (visibleRows > 2) heightDip += g_settings.gapDateToTime;
@@ -1170,6 +1109,7 @@ static void RebuildOverlays() {
   g_currentMinute = now.wHour * 60 + now.wMinute;
   g_rebuilding = false;
 }
+
 static void LoadSettings() {
   g_settings.dayFontFamily = LoadStringSetting(L"dayFontFamily", L"Anurati");
   g_settings.timeFontFamily = LoadStringSetting(L"timeFontFamily", L"Quicksand");
@@ -1235,52 +1175,53 @@ static void LoadSettings() {
   g_settings.dayTextColor = LoadColorSetting(L"dayTextColor", RGB(255, 255, 255));
   g_settings.dateTextColor = LoadColorSetting(L"dateTextColor", RGB(255, 255, 255));
   g_settings.timeTextColor = LoadColorSetting(L"timeTextColor", RGB(255, 255, 255));
-    std::fill_n(g_settings.weekdayLetterColors, kMaxHeaderCharacters,
-      g_settings.dayTextColor);
-    std::fill_n(g_settings.weekdayLetterShadowColors, kMaxHeaderCharacters,
-      g_settings.dayShadowColor);
-    std::fill_n(g_settings.dateLetterColors, kMaxHeaderCharacters,
-      g_settings.dateTextColor);
-    std::fill_n(g_settings.dateLetterShadowColors, kMaxHeaderCharacters,
-      g_settings.dateShadowColor);
-    std::fill_n(g_settings.timeLetterColors, kMaxHeaderCharacters,
-      g_settings.timeTextColor);
-    std::fill_n(g_settings.timeLetterShadowColors, kMaxHeaderCharacters,
-      g_settings.timeShadowColor);
 
-    for (size_t i = 0; i < kWeekdayCharacterCount; ++i) {
+  std::fill_n(g_settings.weekdayLetterColors, kMaxHeaderCharacters,
+              g_settings.dayTextColor);
+  std::fill_n(g_settings.weekdayLetterShadowColors, kMaxHeaderCharacters,
+              g_settings.dayShadowColor);
+  std::fill_n(g_settings.dateLetterColors, kMaxHeaderCharacters,
+              g_settings.dateTextColor);
+  std::fill_n(g_settings.dateLetterShadowColors, kMaxHeaderCharacters,
+              g_settings.dateShadowColor);
+  std::fill_n(g_settings.timeLetterColors, kMaxHeaderCharacters,
+              g_settings.timeTextColor);
+  std::fill_n(g_settings.timeLetterShadowColors, kMaxHeaderCharacters,
+              g_settings.timeShadowColor);
+
+  for (size_t i = 0; i < kWeekdayCharacterCount; ++i) {
     wchar_t settingName[64];
     wchar_t legacyName[32];
     swprintf_s(legacyName, L"weekdayLetterColor%u",
-      static_cast<unsigned>(i + 1));
+               static_cast<unsigned>(i + 1));
     g_settings.weekdayLetterColors[i] =
-      LoadColorSetting(legacyName, g_settings.dayTextColor);
+        LoadColorSetting(legacyName, g_settings.dayTextColor);
     swprintf_s(settingName, L"customLetterStyles.weekday.shadow%u",
-      static_cast<unsigned>(i + 1));
+               static_cast<unsigned>(i + 1));
     g_settings.weekdayLetterShadowColors[i] =
-      LoadColorSetting(settingName, g_settings.dayShadowColor);
-    }
-    for (size_t i = 0; i < kDateCharacterCount; ++i) {
+        LoadColorSetting(settingName, g_settings.dayShadowColor);
+  }
+  for (size_t i = 0; i < kDateCharacterCount; ++i) {
     wchar_t settingName[64];
     swprintf_s(settingName, L"customLetterStyles.date.color%u",
-      static_cast<unsigned>(i + 1));
+               static_cast<unsigned>(i + 1));
     g_settings.dateLetterColors[i] =
-      LoadColorSetting(settingName, g_settings.dateTextColor);
+        LoadColorSetting(settingName, g_settings.dateTextColor);
     swprintf_s(settingName, L"customLetterStyles.date.shadow%u",
-      static_cast<unsigned>(i + 1));
+               static_cast<unsigned>(i + 1));
     g_settings.dateLetterShadowColors[i] =
-      LoadColorSetting(settingName, g_settings.dateShadowColor);
-    }
-    for (size_t i = 0; i < kTimeCharacterCount; ++i) {
+        LoadColorSetting(settingName, g_settings.dateShadowColor);
+  }
+  for (size_t i = 0; i < kTimeCharacterCount; ++i) {
     wchar_t settingName[64];
     swprintf_s(settingName, L"customLetterStyles.time.color%u",
-      static_cast<unsigned>(i + 1));
+               static_cast<unsigned>(i + 1));
     g_settings.timeLetterColors[i] =
-      LoadColorSetting(settingName, g_settings.timeTextColor);
+        LoadColorSetting(settingName, g_settings.timeTextColor);
     swprintf_s(settingName, L"customLetterStyles.time.shadow%u",
-      static_cast<unsigned>(i + 1));
+               static_cast<unsigned>(i + 1));
     g_settings.timeLetterShadowColors[i] =
-      LoadColorSetting(settingName, g_settings.timeShadowColor);
+        LoadColorSetting(settingName, g_settings.timeShadowColor);
   }
 }
 
@@ -1318,24 +1259,24 @@ static bool SameAppearanceSettings(const Settings& first, const Settings& second
       first.dateShadowColor == second.dateShadowColor &&
       first.dateTextColor == second.dateTextColor &&
       first.timeTextColor == second.timeTextColor &&
-        std::equal(std::begin(first.weekdayLetterColors),
-          std::end(first.weekdayLetterColors),
-          std::begin(second.weekdayLetterColors)) &&
-        std::equal(std::begin(first.weekdayLetterShadowColors),
-          std::end(first.weekdayLetterShadowColors),
-          std::begin(second.weekdayLetterShadowColors)) &&
-        std::equal(std::begin(first.dateLetterColors),
-          std::end(first.dateLetterColors),
-          std::begin(second.dateLetterColors)) &&
-        std::equal(std::begin(first.dateLetterShadowColors),
-          std::end(first.dateLetterShadowColors),
-          std::begin(second.dateLetterShadowColors)) &&
-        std::equal(std::begin(first.timeLetterColors),
-          std::end(first.timeLetterColors),
-          std::begin(second.timeLetterColors)) &&
-        std::equal(std::begin(first.timeLetterShadowColors),
-          std::end(first.timeLetterShadowColors),
-          std::begin(second.timeLetterShadowColors));
+      std::equal(std::begin(first.weekdayLetterColors),
+                 std::end(first.weekdayLetterColors),
+                 std::begin(second.weekdayLetterColors)) &&
+      std::equal(std::begin(first.weekdayLetterShadowColors),
+                 std::end(first.weekdayLetterShadowColors),
+                 std::begin(second.weekdayLetterShadowColors)) &&
+      std::equal(std::begin(first.dateLetterColors),
+                 std::end(first.dateLetterColors),
+                 std::begin(second.dateLetterColors)) &&
+      std::equal(std::begin(first.dateLetterShadowColors),
+                 std::end(first.dateLetterShadowColors),
+                 std::begin(second.dateLetterShadowColors)) &&
+      std::equal(std::begin(first.timeLetterColors),
+                 std::end(first.timeLetterColors),
+                 std::begin(second.timeLetterColors)) &&
+      std::equal(std::begin(first.timeLetterShadowColors),
+                 std::end(first.timeLetterShadowColors),
+                 std::begin(second.timeLetterShadowColors));
 }
 
 static void ApplySettings(bool forceRebuild = false) {
