@@ -1,3 +1,8 @@
+## 1.2.8 ([Oct 11, 2026](https://github.com/ramensoftware/windhawk-mods/blob/dbea5d2e6a76c803eb7b33b5dbe77a0e37adc78c/mods/classic-theme-enable.wh.cpp))
+
+* Add a new fix for 24H2, 25H2, 26H2 build 9444+ to readme
+* Improve stability
+
 ## 1.2.7 ([Jul 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3e2632c748381ea643ee5c3d4ef6f9eb62e69c28/mods/classic-theme-enable.wh.cpp))
 
 add conflict dialog fix to the readme

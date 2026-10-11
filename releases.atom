@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-11T19:00:50.000Z</updated>
+    <updated>2026-10-11T20:01:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Drag to Delete 1.0.0]]></title>
+        <id>https://windhawk.net/mods/drag-to-delete#e0fb78e5479452c6e429b883817632946f47a367</id>
+        <link href="https://windhawk.net/mods/drag-to-delete"/>
+        <updated>2026-10-11T20:01:52.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="dragtodelete">Drag to Delete</h1>
+<p>Drag files onto a floating target to move them to the Recycle Bin.</p>
+<p><img src="https://i.imgur.com/bKMRf5A.gif" alt="Demonstration" /></p>]]></content>
+        <author>
+            <name>iMAboud</name>
+            <uri>https://github.com/iMAboud</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Control Center Buttons 1.0.0]]></title>
         <id>https://windhawk.net/mods/windows-11-control-center-buttons#4a5ac03d9dd76ed8af9db1980382c5ff182b6755</id>
@@ -1904,205 +1917,6 @@ navegadores); este mod reabre qualquer programa, pelo caminho do executável.</p
         <author>
             <name>lima26x</name>
             <uri>https://github.com/brdantas26</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Privacy Indicator Anchor 2.1]]></title>
-        <id>https://windhawk.net/mods/privacy-indicator-anchor#74f43bd051f2419f240851cf106e6f77f5066731</id>
-        <link href="https://windhawk.net/mods/privacy-indicator-anchor"/>
-        <updated>2026-10-08T23:02:38.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="privacyindicatoranchor">Privacy Indicator Anchor</h1>
-<p>A Windhawk mod for Windows 11 that reserves stable tray space for privacy and
-status indicators. Location, microphone, camera, and Copilot placeholders stay
-visible in the system tray: dim when idle, bright when active.</p>
-<p>The goal is to stop taskbar tray sections from shifting when Windows briefly
-shows or hides privacy indicators, especially when Windows Web Experience Pack
-or Widgets frequently access location.</p>
-<h2 id="gallery">Gallery</h2>
-<p>Idle location and microphone placeholders reserve their tray space without
-demanding attention:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/location-mic-availble-not-in-use.png" alt="Idle location and microphone placeholders" /></p>
-<p>All four unavailable indicators in a single row, arranged as
-<code>location | mic | camera | copilot</code>:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/all-4-disabled.png" alt="All four privacy indicators unavailable in one row" /></p>
-<p>The same four indicators in a compact block, which is what <code>auto</code> picks on a
-standard taskbar, where two rows of the default 16 px icons fit:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/all-4-disabled-grid.png" alt="All four unavailable indicators in a compact grid" /></p>
-<p>Activity highlighted in red — the microphone in use, and the slashed camera
-reporting attempted use while its hardware switch blocks it:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/camera-mic-in-use-highlighted.png" alt="Active microphone in red beside a red slashed camera blocked by its hardware switch" /></p>
-<p>The active glow treatment provides a more emphatic alternative:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/cam-mic-in-use-highlight-glow.png" alt="Active microphone and camera with glow" /></p>
-<p>Active or requested pathways can remain conspicuous even while blocked:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/requested-or-active-pathways-disabled.png" alt="Requested or active privacy pathways shown while blocked" /></p>
-<p>The location tooltip explains the access-denied reason and opens the matching
-Windows privacy page when clicked:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/location-tooltip-and-win-settings.png" alt="Location evidence tooltip and Windows Location settings" /></p>
-<p>Microphone evidence distinguishes an endpoint mute from privacy denial:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/mic-tooltip.png" alt="Microphone endpoint-mute evidence tooltip" /></p>
-<p>Supported camera drivers report their hardware privacy-control evidence:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/camera-tooltip.png" alt="Camera hardware privacy-control evidence tooltip" /></p>
-<p>Copilot reports its installation state and links to the relevant settings:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/copilot-tooltip.png" alt="Copilot installation-state tooltip" /></p>
-<p>All four indicators in a row on a Windows 11 side taskbar, alongside the clock
-and other tray mods. Live-tested and approved:</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/win11-side-four-indicators.png" alt="Location, microphone, camera, and Copilot indicators on a Windows 11 side taskbar" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Persistent placeholder icons for location, microphone, camera, and Copilot</li>
-<li>Idle opacity setting so inactive icons can be subtle but still reserve space</li>
-<li>One nestable <strong>Arrangement</strong> expression places the icons in any shape —
-fitted to your taskbar height automatically, or written out by hand</li>
-<li>Turn any of the four icons off individually; Windows' own indicator for that
-device then stays visible, so nothing goes unreported</li>
-<li>Tray placement before icons, before OmniButton, before clock, after clock, or after Show Desktop</li>
-<li>Experimental placement immediately left or right of Start</li>
-<li>Per-icon and per-group pixel nudges inside the arrangement expression, plus a
-whole-group offset</li>
-<li>Independent idle, active, disabled, glow, and slash colors</li>
-<li>Steady, breathing, or radiating active emphasis with reach/speed controls</li>
-<li>Disabled slash overlays for blocked or unavailable privacy devices</li>
-<li>Hardware camera shutter/kill-switch detection on supported Windows 11 camera drivers</li>
-<li>Evidence-specific tooltips instead of a generic "hardware disabled" label</li>
-<li>Click-through to the relevant Windows privacy, input, camera, taskbar, or app settings</li>
-<li>Optional testing toggle to let Windows' native privacy indicators appear</li>
-</ul>
-<p>If you installed an unpublished 1.x build, re-apply your customizations once:
-2.x groups the settings and uses an Arrangement field; renamed keys cannot
-be migrated. Camera hardware monitoring is now opt-in and defaults to off.</p>
-<h2 id="thearrangementfield">The Arrangement field</h2>
-<p><code>Layout</code> → <code>Arrangement</code> decides how the icons are placed, and it is the only
-field that does. Its default value is the word <code>auto</code>:</p>
-<ul>
-<li><strong><code>auto</code></strong> fits the enabled icons to the available taskbar height. <code>Fill
-order</code> chooses whether they fill across rows or down columns; <code>Short row or
-column</code> aligns a ragged last group. The shape is worked out for you: the mod
-takes the narrowest grid that fits the height, preferring the one that wastes
-the fewest slots. A standard taskbar already fits two rows of the default
-16 px icons, so four icons become a 2×2 block, not a lopsided 3+1; write
-<code>location | mic | camera | copilot</code> for a single row instead.</li>
-<li><strong>Anything else</strong> is an arrangement you write. Names sit side by side with
-<code>|</code> and stack with <code>,</code>, and parentheses group them:</li>
-</ul>
-<pre><code class="text language-text">  location, camera | mic, copilot     a 2x2 block
-  location | mic | camera | copilot   a single row
-  location, mic, camera, copilot      a single column
-  location | (mic, camera) | copilot  a diamond
-</code></pre>
-<p>Order of operations: parentheses first, then <code>,</code>, then <code>|</code> — so
-  <code>a | b, c | d</code> is three columns with <code>b</code> stacked over <code>c</code>.</p>
-<p>The tokens are <code>location</code>, <code>mic</code> (or <code>microphone</code>), <code>camera</code>, and <code>copilot</code>,
-  and they are case-insensitive. A separator is always required —
-  <code>location (mic | camera)</code> is an error, not a shorthand.</p>
-<p><strong>Omitting a token hides that icon</strong>, exactly like turning it off in <code>Content</code>.</p>
-<p>Every time the layout is applied, the arrangement <code>auto</code> produced is written to
-the Windhawk log. Copy that line into the Arrangement field and you have the
-automatic layout as a starting point to edit — the automatic and manual paths
-are the same field and the same syntax. If what you write doesn't parse, the
-log says what was expected and where, and the automatic arrangement is used
-until you fix it.</p>
-<p><strong>Nudging.</strong> Append a pixel offset to any name to move just that icon:</p>
-<pre><code class="text language-text">location[+2,-1] | mic | camera   location moves 2px right and 1px up
-(mic, camera)[3,0] | location    the stacked pair moves 3px right
-</code></pre>
-<p>Expression nudges are clamped to ±100 pixels per axis.
-Offsets are cosmetic. Nothing else shifts, and the group's overall size does
-not change. To move the whole cluster instead, use <code>Adjust</code> → horizontal and
-vertical offset. Nudges and offsets are screen pixels on every taskbar edge —
-see <a href="#taskbar-position">Taskbar position</a>.</p>
-<p><strong>Enabling an icon later.</strong> An arrangement you write names the icons that
-existed when you wrote it. Turn another one on afterwards and it is in no
-group, so by default it is appended after your arrangement rather than
-vanishing — the log says when that happened. Set <code>Layout</code> → <code>Newly enabled
-icons</code> to <em>Leave them out</em> if you would rather your arrangement be the whole
-truth. <code>auto</code> always includes every enabled icon.</p>
-<h2 id="placement">Placement</h2>
-<p>The five tray positions reserve a dedicated system-tray column. The
-experimental <code>leftOfStart</code> and <code>rightOfStart</code> positions instead place the
-owned indicator group beside Start and reserve matching room in the centered
-taskbar items area. These Start-adjacent modes may need adjustment on future
-Windows builds or with other mods that also reposition Start.</p>
-<h2 id="taskbarposition">Taskbar position</h2>
-<p>Windows 11 can put the taskbar on any edge (Settings → Personalization →
-Taskbar → Taskbar behaviors, on builds that have the setting). The mod reads
-the edge Windows reports and rebuilds the group when the taskbar moves.</p>
-<ul>
-<li><strong>Top</strong> behaves exactly like bottom.</li>
-<li><strong>Left or right</strong>: an arrangement you write is laid out exactly as
-written - <code>|</code> side by side, <code>,</code> stacked - and every <code>[dx,dy]</code> nudge
-moves an icon <code>dx</code> right and <code>dy</code> down, on every edge. <code>auto</code> fits the
-taskbar's width instead of its height, filling rows first or columns
-first as set. Nothing is mirrored between left and right. <code>leftOfStart</code> and
-<code>rightOfStart</code> become above and below Start.</li>
-<li><a href="https://windhawk.net/mods/taskbar-vertical">Vertical Taskbar</a> in its default
-native mode is the same native side taskbar. With its "Use the native taskbar
-when possible" option off it rotates the tray elements this mod places,
-through the same <code>RenderTransform</code> property, so the mod detects that (the
-taskbar runs down a side while Windows still reports a horizontal edge) and
-leaves the tray completely untouched.</li>
-</ul>
-<h2 id="statesandcolors">States and colors</h2>
-<p>Each icon has four visual states: idle/available, active, disabled/unavailable,
-and active while disabled. The last state keeps the active treatment underneath
-the slash by default, so a muted or shuttered device still demands attention
-when Windows reports attempted use. <code>Surface</code> → <code>Emphasize blocked activity</code>
-can turn that combined treatment off.</p>
-<p>Every color setting — idle, active, disabled, glow, and slash — accepts
-<code>#RRGGBB</code> or <code>#AARRGGBB</code> hex (the alpha byte is honored, and the <code>#</code> is
-optional), the generics <code>accent</code>, <code>accentLight</code>, and <code>accentDark</code> for the
-Windows accent shades, or <code>transparent</code>. An empty color uses the system
-foreground, except an empty glow color, which follows the active color and then
-the Windows accent color.</p>
-<p>The glow can be a steady halo, a breathing pulse, or animated radiation rings.
-Its opacity, reach, and speed are independent controls. The effect is drawn
-inside the existing icon slot and never changes the taskbar width.</p>
-<p>For a deliberately striking treatment, start with <code>Glow style: Radiating
-rings</code>, <code>Glow opacity: 85</code>, <code>Glow reach: 260</code>, and <code>Glow cycle: 850</code>, then
-choose an active/glow color that fits the rest of the taskbar theme.</p>
-<h2 id="notes">Notes</h2>
-<p>Camera hardware-switch detection and the Copilot indicator are experimental
-because Windows exposes those states differently across devices and builds.</p>
-<p>Camera activity is detected from Windows webcam-usage records and any mirrored
-native privacy state. Hardware camera blocking uses Windows 11
-<code>CameraOcclusionInfo</code> when the camera driver supports it. Cameras without that
-driver capability retain software-access and device-availability checks, but
-their physical shutter or kill-switch state might not be detectable.</p>
-<p>Windows documents idle-camera occlusion reports as advisory rather than an
-absolute privacy guarantee. The tooltip therefore says "likely blocked" and
-names the camera-driver evidence.</p>
-<p><strong>This monitor is opt-in and defaults to OFF</strong>, under <code>Behavior</code> -&gt; <code>Monitor
-camera hardware privacy control</code>. It is the only thing that detects a physical
-shutter or kill switch, so with it off the camera icon still reports software
-access, device availability and in-use state, but a shutter will never
-register. The mod says so in its log and in the camera's own tooltip rather
-than leaving you to wonder. When enabled, it initializes the default camera
-controller in <code>SharedReadOnly</code> mode but never starts preview or frame capture.
-Turn it off if a particular camera activates its LED/indicator or behaves
-poorly while monitored. State changes use the driver's native event; a
-five-minute watchdog only checks that the subscription remains responsive. The
-controller is also released when the camera icon is turned off in <code>Content</code>.</p>
-<p>Privacy access, usage records, policies, packages, and device topology are
-monitored with Windows registry/device events rather than a three-second global
-sweep. Copilot process activity is checked separately once per minute, and a
-five-minute health reconciliation repairs any missed notification. Failed
-camera and registry-monitor setup backs off from seconds to thirty minutes;
-access-denied registry monitors remain disabled for the current mod session.</p>
-<p>Each icon is clickable. Location opens Location privacy settings. Microphone
-opens either microphone privacy or default-input settings according to the
-reported reason. Camera opens either camera privacy or camera-device settings.
-Copilot opens taskbar or installed-app settings.</p>
-<p><code>Behavior</code> -&gt; <code>Suppress Windows privacy indicators</code> is on by default, so the
-mod hides Windows' own pop-in indicators and mirrors their state into the
-stable placeholders. A native indicator is only ever hidden while this mod is
-showing a placeholder for that same device: if its icon is turned off in
-<code>Content</code>, if the placeholders could not be placed, or on a taskbar another
-mod is rotating, Windows' indicator stays exactly as Windows draws it. Turn the setting off
-temporarily when comparing against Windows' native tray glyphs during testing.
-Everything the mod changes on a native icon is restored to its exact prior
-value when the mod unloads.</p>]]></content>
-        <author>
-            <name>sb4ssman</name>
-            <uri>https://github.com/sb4ssman</uri>
         </author>
     </entry>
 </feed>

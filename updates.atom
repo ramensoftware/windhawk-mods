@@ -2,12 +2,39 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-11T19:00:50.000Z</updated>
+    <updated>2026-10-11T20:01:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Theme 1.2.8]]></title>
+        <id>https://windhawk.net/mods/classic-theme-enable#dbea5d2e6a76c803eb7b33b5dbe77a0e37adc78c</id>
+        <link href="https://windhawk.net/mods/classic-theme-enable"/>
+        <updated>2026-10-11T20:01:56.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add a new fix for 24H2, 25H2, 26H2 build 9444+ to readme</li>
+<li>Improve stability</li>
+</ul>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Drag to Delete 1.0.0]]></title>
+        <id>https://windhawk.net/mods/drag-to-delete#e0fb78e5479452c6e429b883817632946f47a367</id>
+        <link href="https://windhawk.net/mods/drag-to-delete"/>
+        <updated>2026-10-11T20:01:52.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="dragtodelete">Drag to Delete</h1>
+<p>Drag files onto a floating target to move them to the Recycle Bin.</p>
+<p><img src="https://i.imgur.com/bKMRf5A.gif" alt="Demonstration" /></p>]]></content>
+        <author>
+            <name>iMAboud</name>
+            <uri>https://github.com/iMAboud</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Control Center Buttons 1.0.0]]></title>
         <id>https://windhawk.net/mods/windows-11-control-center-buttons#4a5ac03d9dd76ed8af9db1980382c5ff182b6755</id>
@@ -998,48 +1025,6 @@ masking with smart dark-mode dialog sampling.</p>
         <author>
             <name>0Allu</name>
             <uri>https://github.com/0Allu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MultiWM 1.13.58]]></title>
-        <id>https://windhawk.net/mods/multiwm#9195db122f6e8340b19d69aa1b776a49930d8434</id>
-        <link href="https://windhawk.net/mods/multiwm"/>
-        <updated>2026-10-10T08:00:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated BSP to Dwindle layout with adaptive splits and reversible growth direction.</li>
-<li>Starting-layout rules based on desktop name, desktop number, or monitor.</li>
-<li>Number / Constraint-based tiled-window limits, including separate limits for each monitor.</li>
-<li>Overflow handling: float the window or move it to a new desktop with an animated switch. Optionally try another monitor first.</li>
-<li>Window rules to open apps on a chosen monitor or virtual desktop.</li>
-<li>Configurable tray-click action and an option to disable toasts.</li>
-<li>Improved settings with conditional fields, sliders, and file pickers on Windhawk 2.0, while remaining compatible with older versions.</li>
-<li>Bug fixes and improvements</li>
-</ul>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteoni</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix Explorer Row Right-Click 1.0.0]]></title>
-        <id>https://windhawk.net/mods/fix-explorer-row-right-click#e2969bc12095d903c8e3fbf6da8c860e3b79d570</id>
-        <link href="https://windhawk.net/mods/fix-explorer-row-right-click"/>
-        <updated>2026-10-09T21:03:53.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fixexplorerrowrightclick">Fix Explorer Row Right-Click</h1>
-<p>Right-click anywhere on a file's row or item area to open its context menu, rather than having to click directly on the file name.</p>
-<h3 id="comparison">Comparison</h3>
-<p>| Before | After |
-| :---: | :---: |
-| <img src="https://i.imgur.com/ly9exsa.png" alt="Before" /> | <img src="https://i.imgur.com/PPW2Xtk.png" alt="After" /> |</p>
-<h3 id="features">Features</h3>
-<ul>
-<li><strong>Full row support:</strong> Right-clicking empty space across a row opens the selected file's context menu.</li>
-<li><strong>Selection safe:</strong> Preserves existing multi-item selections.</li>
-<li><strong>Folder background intact:</strong> Right-clicking below all files still opens the folder background menu.</li>
-</ul>]]></content>
-        <author>
-            <name>iMAboud</name>
-            <uri>https://github.com/iMAboud</uri>
         </author>
     </entry>
 </feed>

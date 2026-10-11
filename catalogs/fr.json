@@ -2382,7 +2382,7 @@
         "ratingUsers": 16,
         "reviews": 0,
         "trendingSorting": -0.7522931768893752,
-        "updated": 1783833372000,
+        "updated": 1791748916000,
         "users": 271
       },
       "metadata": {
@@ -2394,7 +2394,7 @@
           "winlogon.exe"
         ],
         "name": "Classic Theme",
-        "version": "1.2.7"
+        "version": "1.2.8"
       }
     },
     "classic-theme-enable-with-extended-compatibility": {
@@ -4485,6 +4485,30 @@
         ],
         "name": "Dot Hide",
         "twitter": "https://twitter.com/realgam3",
+        "version": "1.0.0"
+      }
+    },
+    "drag-to-delete": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791748912000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791748912000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "iMAboud",
+        "compilerOptions": "-lole32 -lgdi32 -lshell32 -lgdiplus",
+        "description": "Drag files onto a floating target to move them to the Recycle Bin.",
+        "github": "https://github.com/iMAboud",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Drag to Delete",
         "version": "1.0.0"
       }
     },
