@@ -1,3 +1,13 @@
+## 1.3.7 ([Oct 11, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b54d0b4fdde083aa1d4e4e708a17153288a2e114/mods/windows-animations.wh.cpp))
+
+* Fix `Windows 10 Task View (Win+Tab) getting stuck` and blocking desktop input by preserving Win32 last-error state.
+* Add support for confirmed selections in compatible `Simple Window Switcher` builds, including touchpad gestures. Minimized selections use the restore animation.
+* Change `Optimize Show Desktop` to use **Windows’ native batch animations**, including touchpad gestures.
+* Avoid blank launch animations for provisional packaged-app window frames.
+* Improve `Excel` close compatibility with safe screen-only capture and reduced blocking while other workbook windows remain open.
+* Improve Explorer backdrop and acrylic restoration, including F11 and Translucent Windows compatibility.
+* Simplify animation lifecycle handling, improve GPU resource cleanup, and refresh the documentation.
+
 ## 1.3.6 ([Sep 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/11cdbe16e5bde3004e8dfa71168d5f2de0d5c2ac/mods/windows-animations.wh.cpp))
 
 * Add donation support, introduced in version 1.3.5 but omitted from the previous changelog.

@@ -5295,7 +5295,7 @@
         "ratingUsers": 21,
         "reviews": 0,
         "trendingSorting": 3.8068422930747503,
-        "updated": 1790676157000,
+        "updated": 1791720124000,
         "users": 226
       },
       "metadata": {
@@ -5303,15 +5303,15 @@
           "x86-64"
         ],
         "author": "Maxim Fomin",
-        "compilerOptions": "-lole32 -loleaut32 -lshell32 -luuid -lruntimeobject -lwindowscodecs",
-        "description": "Adds an adaptive folder bookmarks bar to newly opened Windows 11 File Explorer windows.",
+        "compilerOptions": "-ladvapi32 -lole32 -loleaut32 -lshell32 -luuid -lruntimeobject -lwindowscodecs -lcomctl32",
+        "description": "Adds a folder bookmarks bar under the address bar of Windows 11 File Explorer.",
         "github": "https://github.com/MaxITService",
         "include": [
           "explorer.exe"
         ],
         "license": "MIT",
         "name": "Explorer Folder Bookmarks Bar",
-        "version": "0.7.8"
+        "version": "0.8.35"
       }
     },
     "explorer-folder-hover-menu": {
@@ -8570,7 +8570,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 0, 0, 5, 19],
         "ratingUsers": 24,
-        "reviews": 2,
+        "reviews": 3,
         "trendingSorting": 44,
         "updated": 1791540273000,
         "users": 440
@@ -18525,7 +18525,7 @@
         "ratingUsers": 921,
         "reviews": 1,
         "trendingSorting": 56.74885694725986,
-        "updated": 1790416952000,
+        "updated": 1791720130000,
         "users": 75130
       },
       "metadata": {
@@ -18553,7 +18553,7 @@
         ],
         "license": "MIT",
         "name": "Windows Animations",
-        "version": "1.3.6"
+        "version": "1.3.7"
       }
     },
     "windows-update-control-panel-restorer": {
