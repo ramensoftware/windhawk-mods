@@ -7,22 +7,54 @@
 // @github          https://github.com/babamohammed2022
 // @license         GPL-3.0
 // @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -lole32 -luser32 -lgdi32 -ldwmapi -lshell32 -luxtheme -loleaut32 -luuid -lshcore -lmsimg32 -lcomctl32 -lshlwapi -ladvapi32 -lgdiplus -lwindowsapp
+// @compilerOptions -lole32 -luser32 -lgdi32 -ldwmapi -lshell32 -loleaut32 -luuid -lshcore -lcomctl32 -lshlwapi -ladvapi32 -lgdiplus -lpowrprof -lsecur32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Windows 10 1507 Start Menu
-A best-effort recreation of the Windows 10 RTM Start menu, rebuilt from scratch and hosted inside a resizable custom window that aims to reproduce the functionality of the original 2015 experience without relying on undocumented shell internals.
-This modification has been tested on Windows 10 21H2 and Windows 11 24H2 and Windows 11 25H2.
-## Overview
-This mod exposes app lists, local search, account and power menus, and fully customizable tiles, so the menu can be tailored to closely match the original layout or adjusted freely by the user. Apps and tiles can be dragged with a live preview, where tile snapping preserves the grab point, avoids collisions through automatic reflow, and provides centered press feedback; layouts persist across deactivation, and the tile grid clips cleanly to its viewport so nothing overflows or overlaps. The supplied neutral avatar image is used only when no usable Windows or configured profile photo is available, since real account photos always take precedence and ensure the correct picture is shown whenever one exists. Actions are ordered Explorer, Settings, Power, All apps, matching the familiar Windows 10 arrangement, and unavailable saved tiles are retained safely rather than being discarded, so a temporarily missing app does not permanently break the layout. The mod relies on documented APIs and Windhawk storage wherever possible, ships with no ads and no native frame, and provides a reversible slide animation, fixed 95% opacity, DPI-aware sizing, and full keyboard navigation for accessibility. Default tile groups include only apps actually found on the system, which means missing legacy apps can make a group smaller or entirely absent — an installation dependency rather than a defect of the mod itself. It initializes asynchronously after the primary Explorer taskbar is ready, so it does not block Explorer while its shell windows are still starting up. At sign-in, Windhawk itself must be running with this mod enabled: the standard install normally starts automatically, but portable installs need a Startup-folder shortcut to `windhawk.exe -tray-only` to guarantee the mod loads at logon.
+# Windows 10 1507 (RTM) Start Menu Recreation
+
+This mod is a best-effort recreation of the Windows 10 RTM (1507) Start menu. The mod does not
+theme or modify the native Start menu: it builds its own menu window inside
+Explorer and opens it instead of the native one.
+
+![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win10startmenu.png)
+
+This modification has been tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.
+
+## Features
+
+* **App lists**: Most used, Recently added, All apps (A–Z with folders) and
+  type-to-search. The list is refreshed automatically when shortcuts are added or
+  removed from the Start menu folders, and periodically for Store apps.
+* **Tiles**: default groups built from the apps actually installed, drag and drop
+  with live preview and collision-free reflow, pin/unpin, four tile sizes, and a
+  purely cosmetic simulated "live tile" flip (no network, no real data).
+* **Account and power menus**, Explorer pinned places, lock, sign out, sleep,
+  hibernate (only when available), shut down and restart.
+* **Resizable** window with a reversible slide animation, 95% opacity and
+  per-monitor DPI awareness.
+* **Keyboard**: Win key opens/closes the menu; typing searches; Enter launches the
+  first result; Esc closes. There is no arrow-key navigation yet.
+* Layout, window size and launch counts are stored in Windhawk's mod storage.
+  Nothing is written outside of it.
+
+## Notes
+
+* Default tile groups include only apps found on the system. A missing legacy app
+  makes a group smaller or absent; that is expected, not a defect.
+* The menu is opened by intercepting the Win key and clicks on the Start button
+  with low-level hooks that run on a dedicated thread. Clicks are only intercepted
+  when a taskbar window is actually under the cursor, so fullscreen apps covering
+  the taskbar keep receiving their clicks.
+* At sign-in, Windhawk must be running with this mod enabled. Portable installs
+  need a Startup-folder shortcut to `windhawk.exe -tray-only`.
 
 ## Credits
-AdmnistratoX - Testing on Windows 11 25H2 and providing technical references
-m417z - Windows 11 Start Menu Styler (Technical Reference)
-bbmaster123 - Windows 10 theme for Windows 11 Start Menu Styler (Technical Reference)
+
+* AdmnistratoX - Testing on Windows 11 25H2 and providing technical references
+* m417z - Windows 11 Start Menu Styler (technical reference)
+* bbmaster123 - Windows 10 theme for Windows 11 Start Menu Styler (technical reference)
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -47,106 +79,50 @@ bbmaster123 - Windows 10 theme for Windows 11 Start Menu Styler (Technical Refer
   $description: This setting defines how many milliseconds elapse between each simulated live tile flip when live tile animation is enabled. Lower values make the tiles cycle more rapidly and feel busier, while higher values produce a calmer, more subdued effect. The default of 4000 ms matches the pacing used by the original Windows 10 live tiles.
 - menuWidthOverride: 0
   $name: Menu width override in px (0 = default)
-  $description: This setting overrides the width of the Start menu in pixels. A value of 0 keeps the default width determined by the system and the current layout, while any positive value forces the menu to that exact width. This is useful for replicating the narrower Start menu proportions seen in early Windows 10 builds.
+  $description: This setting overrides the width of the Start menu in pixels (measured at 100% scaling). A value of 0 keeps the default width, or the width the menu was last resized to. Any positive value forces the menu to that width, even if the menu was resized by dragging its edge. This is useful for replicating the narrower Start menu proportions seen in early Windows 10 builds.
 - profilePicturePath: ""
   $name: Profile picture file path (empty = use Windows account picture, then bundled avatar fallback)
   $description: This setting specifies a custom file path to an image that will be used as the profile picture shown in the Start menu. When left empty, the mod falls back to the Windows account picture, and if that is unavailable it uses the bundled fallback avatar shipped with the mod, ensuring a picture is always displayed.
 - privacyMode: false
   $name: Privacy mode (hide account name)
-  $description: This setting hides the Windows account name in the Start menu and replaces it with a generic placeholder label, which is useful when taking screenshots, recording videos, or streaming without exposing personal information. When enabled, the account name is replaced with the generic label "Utente".
+  $description: This setting hides the Windows account name in the Start menu and replaces it with a generic placeholder label, which is useful when taking screenshots, recording videos, or streaming without exposing personal information. When enabled, the account name is replaced with a localized generic label (for example "User" on English Windows).
 - tileLayout: ""
-  $name: Tile layout (serialized, empty = default)
-  $description: This setting stores a serialized representation of the Start menu tile layout, allowing custom tile arrangements to be saved and restored between sessions. When left empty, the mod uses the default layout derived from the current system configuration, so users who never customise the layout are unaffected by this setting.
+  $name: Import tile layout (one-time, empty = none)
+  $description: Paste a serialized tile layout here (a "WHSM2#..." string) to import it. The layout is applied once, the first time the value changes; after that, your own tile drags, resizes and pins take precedence again. The current layout is otherwise saved automatically in Windhawk's mod storage, so most users can leave this empty.
 */
 // ==/WindhawkModSettings==
 /*
- ==============================================================================
- PROJECT ARCHITECTURE
- ==============================================================================
-
- 1. ANCHORING TO THE START BUTTON AND THE TASKBAR:
-    - Start button rectangle detection with a three-tier fallback strategy:
-      1) UI Automation (IUIAutomation): locates the element with AutomationId="StartButton"
-         inside the taskbar HWND. This is the recommended approach for Windows 11
-         and for the modern XAML Island taskbar.
-      2) Win32 child HWND search (FindWindowEx by class/title "Start" or "Button"):
-         ideal and extremely fast on native Windows 10 and classic taskbars.
-      3) Geometric fallback via SHAppBarMessage(ABM_GETTASKBARPOS): derives the taskbar
-         rectangle and its edge (ABE_BOTTOM, ABE_TOP, ABE_LEFT, ABE_RIGHT), computing
-         the Start button coordinate at the primary extremity.
-    - Monitor and Work Area:
-      Determines the adjacent HMONITOR via MonitorFromRect and reads rcWork (MONITORINFO).
-      The menu is positioned in exact contact with the edge of the taskbar (or of the button)
-      and clamped within the work area margins to prevent any overflow.
-    - Dynamic DPI:
-      Intercepts WM_DPICHANGED, recalculates fonts and all metrics through Metrics::Scale(),
-      preserving visual fidelity at any DPI (100%, 125%, 150%, 200%).
-
- 2. CLICK / WIN KEY INTERCEPTION AND NATIVE MENU SUPPRESSION:
-    - Windows Key (Win Key):
-      A Low-Level Keyboard Hook (WH_KEYBOARD_LL) is employed on a dedicated thread
-      equipped with its own Win32 message loop. This isolation guarantees that the
-      Windows kernel timeout (LowLevelHooksTimeout, typically 1s) is never exceeded,
-      even in the presence of heavy I/O operations.
-      The hook tracks whether the Win key was pressed alone:
-      - If another key is typed while Win is held (e.g. Win+R, Win+E, Win+X),
-        the combination is treated as "chorded" and allowed to pass through untouched.
-      - If the Win key is released with no intermediate keys (a bare tap), the hook injects
-        an inert key (0xFF) via SendInput and suppresses the release (return 1). In this
-        manner, Windows Shell never detects the isolated Win key tap and does not open the
-        native menu. An asynchronous message (WM_APP_TOGGLE) is then dispatched to open
-        our own menu.
-    - Start button click and outside click (Light Dismiss):
-      A Low-Level Mouse Hook (WH_MOUSE_LL), again on the dedicated thread, intercepts
-      WM_LBUTTONDOWN:
-      - If the point falls within the Start button rectangle, the click is swallowed
-        (return 1) and our menu is toggled.
-      - If our menu is open and the click occurs outside of it, the hook dispatches
-        a close message (WM_APP_HIDE) without blocking the click, allowing the user
-        to interact directly with the window or desktop beneath.
-    - System message suppression:
-      `Shell_TrayWnd` is subclassed to intercept WM_SYSCOMMAND with SC_TASKLIST,
-      neutralising any internal opening command of the native shell.
-    - Known limitations:
-      Elevated-privilege windows (UAC / Administrator) may block low-level hooks
-      due to the Windows UIPI mechanism until focus returns to a medium-integrity
-      or shell window.
-
- 3. SIMULATED TILES AND LIVE TILES:
-    - Dual face (Front: Icon + App name, Back: Local dynamic information).
-    - No internet connection whatsoever: all data is simulated and derived locally
-      (sample Weather, real current date for the Calendar, local notification count
-      for Mail).
-    - 3D Flip animation:
-      Simulated through cosine deformation (cos(progress * PI)) around the horizontal
-      central axis of the tile, rendered in a GDI double buffer on compatible memory.
-      Perfectly fluid at 40fps, lightweight, and fully disableable from the settings.
-
- 4. RAII AND SAFETY:
-    - Every Win32 resource (HWND, HDC, HBITMAP, HFONT, HICON, HHOOK, HANDLE, COM) is
-      encapsulated in dedicated RAII classes (UniqueRes, ComPtr, ScopedDC,
-      ScopedSelectObject).
-    - Every call, callback, WndProc, and thread is protected by try/catch blocks
-      (GUARDED), ensuring that no C++ exception can ever propagate into the
-      explorer.exe process.
-
- This architecture stands as a testament to disciplined engineering: each subsystem
- is deliberately isolated, each resource meticulously owned, and each failure mode
- gracefully contained. The result is a recreation that is not merely faithful to the
- original Windows 10 1507 Start menu, but demonstrably superior in its robustness,
- its clarity of design, and its unwavering respect for the host process it inhabits.
- ==============================================================================
+ Overview of how the mod works
+ ----------------------------
+ * Anchoring: the Start button rectangle is read from the Win32 "Start" child
+   window (Windows 10), from UI Automation (AutomationId "StartButton", Windows 11
+   XAML taskbar) or, as a last resort, derived from the taskbar rectangle. Primary
+   and secondary taskbars are both handled. The menu is placed against the
+   taskbar edge, clamped to the monitor work area, and laid out at that monitor's
+   DPI (GetDpiForMonitor / WM_DPICHANGED).
+ * Opening the menu: a WH_KEYBOARD_LL hook turns a bare Win tap into a toggle of
+   the custom menu (an inert key, VK 0xE8, is injected before the Win release so
+   the native menu is not opened; the release itself is passed through). A
+   WH_MOUSE_LL hook swallows a left click on the Start button only when the
+   window under the cursor belongs to a taskbar. Both hooks live on a dedicated
+   thread that does nothing but pump messages, so slow work on the UI thread can
+   never trip LowLevelHooksTimeout. WH_GETMESSAGE hooks on the Progman and
+   taskbar threads drop WM_SYSCOMMAND/SC_TASKLIST. The cached Start rectangles are
+   recomputed on the UI thread when the mouse enters a taskbar, when the menu
+   opens, and on display/work-area changes; there is no periodic UIA polling.
+ * Tiles: front face = icon + name; back face = app name + today's date (no
+   fabricated content). The flip is a cosine deformation drawn into a GDI double
+   buffer.
+ * Lifetime: the menu window, catalog, GDI+ objects and hooks are created and
+   destroyed on the mod's own threads. Globals with non-trivial teardown are
+   marked [[clang::no_destroy]] and released explicitly when the UI thread exits,
+   so nothing runs under the loader lock when Explorer exits.
 */
 
-#ifndef UNICODE
-#define UNICODE
-#endif
-#ifndef _UNICODE
-#define _UNICODE
-#endif
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#define SECURITY_WIN32
 
 #include <windows.h>
 #include <windowsx.h>
@@ -160,22 +136,10 @@ bbmaster123 - Windows 10 theme for Windows 11 Start Menu Styler (Technical Refer
 #include <sddl.h>
 #include <uiautomation.h>
 #include <uxtheme.h>
-// Windows SDK / Windhawk Clang builds get the documented C++/WinRT user-picture
-// fallback. MinGW is used here as a secondary syntax checker and has no C++/WinRT
-// projection headers; it still checks all Win32/Shell paths and the account folder.
-#if !defined(__MINGW32__) && defined(__has_include)
-#  if __has_include(<winrt/Windows.Foundation.h>) && \
-      __has_include(<winrt/Windows.System.h>) && \
-      __has_include(<winrt/Windows.Storage.Streams.h>)
-#    define WH_HAS_CPPWINRT_USER_PICTURE 1
-#    include <winrt/Windows.Foundation.h>
-#    include <winrt/Windows.System.h>
-#    include <winrt/Windows.Storage.Streams.h>
-#  endif
-#endif
-#ifndef WH_HAS_CPPWINRT_USER_PICTURE
-#  define WH_HAS_CPPWINRT_USER_PICTURE 0
-#endif
+#include <shellscalingapi.h>
+#include <powrprof.h>
+#include <security.h>
+#include <windhawk_utils.h>
 #include <wrl/client.h>
 
 #include <algorithm>
@@ -187,6 +151,7 @@ bbmaster123 - Windows 10 theme for Windows 11 Start Menu Styler (Technical Refer
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -200,14 +165,19 @@ static HICON g_stockFolderIcon = nullptr;
 static HICON g_stockAppIcon = nullptr;
 // Populated and used on the menu UI thread only. Cleared before catalog icon
 // handles are replaced, so a recycled HICON value cannot return a stale bitmap.
-static std::unordered_map<HICON, std::unique_ptr<Gdiplus::Bitmap>> g_iconBitmapCache;
+// [[clang::no_destroy]]: the GDI+ bitmaps are released explicitly by the UI
+// thread before GdiplusShutdown; the automatic destructor must not run at
+// process exit (see the Windhawk wiki, "Global objects and process shutdown").
+[[clang::no_destroy]] static std::optional<
+    std::unordered_map<HICON, std::unique_ptr<Gdiplus::Bitmap>>>
+    g_iconBitmapCache{std::in_place};
 static void DrawAppIconOrFallback(HDC dc, HICON icon, int x, int y, int size);
 
 constexpr UINT WM_APP_TOGGLE = WM_APP + 101;
 constexpr UINT WM_APP_HIDE = WM_APP + 102;
 constexpr UINT WM_APP_REFRESH = WM_APP + 103;
 constexpr UINT WM_APP_PROFILE_PHOTO_READY = WM_APP + 104;
-constexpr UINT WM_APP_METRO_POPUP_RESULT = WM_APP + 105;
+constexpr UINT WM_APP_REFRESH_ANCHOR = WM_APP + 105;
 constexpr UINT_PTR TIMER_LIVE_FLIP = 2001;
 constexpr UINT_PTR TIMER_LIVE_TICK = 2002;
 constexpr UINT_PTR TIMER_MENU_ANIMATION = 2003;
@@ -231,7 +201,7 @@ static RECT OffsetTowardTaskbar(RECT rect, UINT taskbarEdge, LONG distance) {
     return rect;
 }
 
-// Identificativi comandi menu contestuale
+// Context menu command identifiers
 constexpr UINT IDM_OPEN_APP         = 3001;
 constexpr UINT IDM_RUNAS_ADMIN      = 3002;
 constexpr UINT IDM_OPEN_LOCATION    = 3003;
@@ -256,7 +226,7 @@ constexpr UINT IDM_EXPLORER_DOWNLOADS = 3302;
 constexpr UINT IDM_EXPLORER_DOCUMENTS = 3303;
 constexpr UINT IDM_EXPLORER_PICTURES = 3304;
 
-// ===================== GESTIONE ERRORI =====================
+// ===================== ERROR HANDLING =====================
 #define GUARDED(label, ...)                                                     \
     try {                                                                        \
         __VA_ARGS__                                                              \
@@ -266,7 +236,7 @@ constexpr UINT IDM_EXPLORER_PICTURES = 3304;
         Wh_Log(L"[%s] Unknown exception caught", label);                         \
     }
 
-// ===================== WRAPPER RAII =====================
+// ===================== RAII WRAPPERS =====================
 template <typename T, typename Deleter>
 class UniqueRes {
     T h_{};
@@ -296,7 +266,6 @@ struct DelIcon { void operator()(HICON h)   const { DestroyIcon(h); } };
 struct DelWnd  { void operator()(HWND h)    const { DestroyWindow(h); } };
 struct DelHnd  { void operator()(HANDLE h)  const { CloseHandle(h); } };
 struct DelDC   { void operator()(HDC h)     const { DeleteDC(h); } };
-struct DelHook { void operator()(HHOOK h)   const { UnhookWindowsHookEx(h); } };
 
 using UniqueBitmap = UniqueRes<HBITMAP, DelObj>;
 using UniqueFont   = UniqueRes<HFONT, DelObj>;
@@ -307,7 +276,6 @@ using UniqueIcon   = UniqueRes<HICON, DelIcon>;
 using UniqueHwnd   = UniqueRes<HWND, DelWnd>;
 using UniqueHandle = UniqueRes<HANDLE, DelHnd>;
 using UniqueMemDC  = UniqueRes<HDC, DelDC>;
-using UniqueHook   = UniqueRes<HHOOK, DelHook>;
 
 // FromHICON can lose semitransparent edge pixels on some legacy Shell icons.
 // Copy the documented ICONINFO color bitmap and, when its alpha plane is empty,
@@ -497,13 +465,13 @@ static void DrawAppIconOrFallback(HDC dc, HICON icon, int x, int y, int size) {
     if (!icon) icon=g_stockAppIcon;
     if (!icon) return;
 
-    if (g_gdiplusToken) {
-        auto it = g_iconBitmapCache.find(icon);
-        if (it == g_iconBitmapCache.end()) {
+    if (g_gdiplusToken && g_iconBitmapCache) {
+        auto it = g_iconBitmapCache->find(icon);
+        if (it == g_iconBitmapCache->end()) {
             auto bitmap = CreateGdiplusBitmapFromIcon(icon);
-            if (bitmap) it = g_iconBitmapCache.emplace(icon, std::move(bitmap)).first;
+            if (bitmap) it = g_iconBitmapCache->emplace(icon, std::move(bitmap)).first;
         }
-        if (it != g_iconBitmapCache.end()) {
+        if (it != g_iconBitmapCache->end()) {
             Gdiplus::Graphics graphics(dc);
             if (graphics.GetLastStatus() == Gdiplus::Ok) {
                 graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBilinear);
@@ -517,15 +485,16 @@ static void DrawAppIconOrFallback(HDC dc, HICON icon, int x, int y, int size) {
     DrawIconEx(dc, x, y, icon, size, size, 0, nullptr, DI_NORMAL);
 }
 
-// Il buffer trasferito dal worker e' protetto da mutex; bitmap e stream restano
-// invece confinati al thread UI. L'ordine di distruzione mantiene vivo lo stream
-// finche' GDI+ usa l'immagine.
+// The byte buffer handed over by the worker is protected by a mutex; the bitmap
+// and its stream stay confined to the UI thread. The destruction order keeps the
+// stream alive for as long as GDI+ uses the image.
 static std::mutex g_profilePhotoMutex;
 static std::mutex g_profilePhotoPathMutex;
 static std::wstring g_profilePhotoPath;
 static std::vector<BYTE> g_profilePhotoPending;
 static ComPtr<IStream> g_profilePhotoStream;
-static std::unique_ptr<Gdiplus::Bitmap> g_profilePhoto;
+// Released explicitly by the UI thread before GdiplusShutdown; never at process exit.
+[[clang::no_destroy]] static std::unique_ptr<Gdiplus::Bitmap> g_profilePhoto;
 // Bundled copy of the supplied neutral profile-avatar PNG. Keeping its stream alive is
 // required for the lifetime of the GDI+ Bitmap created from it.
 static const BYTE g_defaultProfileAvatarPng[] = {
@@ -935,7 +904,7 @@ static const BYTE g_defaultProfileAvatarPng[] = {
     0xAE, 0x42, 0x60, 0x82,
 };
 static ComPtr<IStream> g_defaultProfileAvatarStream;
-static std::unique_ptr<Gdiplus::Bitmap> g_defaultProfileAvatar;
+[[clang::no_destroy]] static std::unique_ptr<Gdiplus::Bitmap> g_defaultProfileAvatar;
 static UniqueHandle g_profilePhotoThread;
 static std::atomic<bool> g_profilePhotoStop{ false };
 
@@ -1014,22 +983,19 @@ public:
     ScopedBkMode& operator=(const ScopedBkMode&) = delete;
 };
 
-class ScopedWindowClass {
-    HINSTANCE instance_;
-    std::wstring name_;
-    bool registered_ = false;
-public:
-    ScopedWindowClass(HINSTANCE inst, const wchar_t* name) : instance_(inst), name_(name) {}
-    ~ScopedWindowClass() {
-        if (registered_) UnregisterClassW(name_.c_str(), instance_);
-    }
-    bool Register(const WNDCLASSW& wc) {
-        registered_ = RegisterClassW(&wc) != 0;
-        return registered_;
-    }
-};
 
-// ===================== IMPOSTAZIONI =====================
+// ===================== SETTINGS =====================
+// Windhawk string values are limited only by the backing store; the layout of
+// a very large tile grid stays well below this buffer.
+constexpr size_t kStorageStringMaxChars = 256 * 1024;
+
+static std::wstring ReadStorageString(const wchar_t* name) {
+    std::vector<wchar_t> buffer(kStorageStringMaxChars, L'\0');
+    const size_t chars = Wh_GetStringValue(name, buffer.data(), buffer.size());
+    if (chars == 0 || chars >= buffer.size()) return {};
+    return std::wstring(buffer.data(), chars);
+}
+
 struct Settings {
     bool classicAccent = false;
     bool liveTiles = true;
@@ -1039,12 +1005,15 @@ struct Settings {
     int  widthOverride = 0;
     bool privacyMode = false;
     std::wstring profilePicturePath;
+    // Layout to apply to the tile grid. Either the stored layout from mod
+    // storage, or a layout pasted in the tileLayout setting that has not been
+    // imported yet (see tileLayoutImportPending).
     std::wstring tileLayout;
+    bool tileLayoutImportPending = false;
 
     void Load() {
-        const wchar_t* accent = Wh_GetStringSetting(L"accentMode");
-        classicAccent = (accent && _wcsicmp(accent, L"classic") == 0);
-        Wh_FreeStringSetting(accent);
+        using WindhawkUtils::StringSetting;
+        classicAccent = _wcsicmp(StringSetting::make(L"accentMode").get(), L"classic") == 0;
 
         liveTiles = Wh_GetIntSetting(L"liveTileAnimation") != 0;
         menuAnimation = Wh_GetIntSetting(L"menuAnimation") != 0;
@@ -1057,28 +1026,29 @@ struct Settings {
         if (widthOverride < 0 || widthOverride > 3000) widthOverride = 0;
         privacyMode = Wh_GetIntSetting(L"privacyMode") != 0;
 
-        const wchar_t* profilePath = Wh_GetStringSetting(L"profilePicturePath");
-        profilePicturePath = profilePath ? profilePath : L"";
-        Wh_FreeStringSetting(profilePath);
+        profilePicturePath = StringSetting::make(L"profilePicturePath").get();
         { std::lock_guard<std::mutex> lock(g_profilePhotoPathMutex); g_profilePhotoPath = profilePicturePath; }
 
-        const wchar_t* layout = Wh_GetStringSetting(L"tileLayout");
-        tileLayout = layout ? layout : L"";
-        Wh_FreeStringSetting(layout);
-        if (tileLayout.empty()) {
-            std::vector<wchar_t> savedLayout(65536, L'\0');
-            const size_t chars = Wh_GetStringValue(L"startMenuLayout", savedLayout.data(), savedLayout.size());
-            if (chars > 0 && chars < savedLayout.size()) tileLayout.assign(savedLayout.data(), chars);
+        // The tileLayout setting is a one-time import: it is applied only when its
+        // value differs from the last value that was imported, so changing an
+        // unrelated option never discards the user's own tile edits.
+        const std::wstring importLayout = StringSetting::make(L"tileLayout").get();
+        tileLayoutImportPending = false;
+        if (!importLayout.empty() && importLayout != ReadStorageString(L"tileLayoutImported")) {
+            tileLayout = importLayout;
+            tileLayoutImportPending = true;
+        } else {
+            tileLayout = ReadStorageString(L"startMenuLayout");
         }
 
-        Wh_Log(L"[Settings] Loaded: classicAccent=%d, liveTiles=%d, menuAnimation=%d, appTileColors=%d, privacyMode=%d, interval=%d ms, widthOverride=%d",
+        Wh_Log(L"[Settings] Loaded: classicAccent=%d, liveTiles=%d, menuAnimation=%d, appTileColors=%d, privacyMode=%d, interval=%d ms, widthOverride=%d, layoutImport=%d",
                classicAccent ? 1 : 0, liveTiles ? 1 : 0,
                menuAnimation ? 1 : 0, appTileColors ? 1 : 0, privacyMode ? 1 : 0,
-               liveTileIntervalMs, widthOverride);
+               liveTileIntervalMs, widthOverride, tileLayoutImportPending ? 1 : 0);
     }
 };
 
-// ===================== DPI E METRICHE DI LAYOUT =====================
+// ===================== DPI AND LAYOUT METRICS =====================
 struct Metrics {
     UINT dpi = 96;
 
@@ -1086,7 +1056,7 @@ struct Metrics {
         return MulDiv(v, (int)dpi, 96);
     }
 
-    // Costanti geometriche base (a 96 DPI)
+    // Base geometry constants (at 96 DPI)
     static constexpr int BASE_LEFT_COL_W        = 224;
     static constexpr int BASE_USER_HEADER_H     = 52;
     static constexpr int BASE_PLACE_ITEM_H      = 38;
@@ -1095,7 +1065,7 @@ struct Metrics {
     static constexpr int BASE_ICON_SIZE         = 24;
     static constexpr int BASE_PLACE_ICON_SIZE   = 20;
 
-    // Metriche griglia Tile (96 DPI)
+    // Tile grid metrics (96 DPI)
     static constexpr int BASE_TILE_SMALL        = 48;
     static constexpr int BASE_TILE_GAP          = 4;
     static constexpr int BASE_TILE_MEDIUM       = 100;
@@ -1107,9 +1077,9 @@ struct Metrics {
     static constexpr int BASE_GROUP_PAD_Y       = 10;
     static constexpr int BASE_COLUMNS_PER_GROUP = 3;
 
-    // Dimensioni totali del menu (96 DPI)
-    // 2 colonne di gruppi = 2 * (3 * 100 + 2 * 4) + 16 + 24 = 656 px per le tile
-    // Menu totale: 224 (colonna sinistra) + 656 = 880 px
+    // Overall menu size (96 DPI)
+    // 2 group columns = 2 * (3 * 100 + 2 * 4) + 16 + 24 = 656 px for the tiles
+    // Whole menu: 224 (left column) + 656 = 880 px
     static constexpr int BASE_DEFAULT_MENU_W    = 880;
     static constexpr int BASE_DEFAULT_MENU_H    = 620;
     static constexpr int BASE_SCROLLBAR_W       = 8;
@@ -1137,7 +1107,7 @@ static RECT FitRectToWorkArea(const RECT& candidate, const RECT& workArea,
     return RECT{ left, top, left + width, top + height };
 }
 
-// ===================== HELPER DI COLORE E DWM =====================
+// ===================== COLOR AND DWM HELPERS =====================
 static COLORREF GetSystemAccentColor(bool forceClassic) {
     if (forceClassic) {
         return RGB(0, 120, 215); // Classic Windows 10 1507 default blue
@@ -1150,7 +1120,7 @@ static COLORREF GetSystemAccentColor(bool forceClassic) {
     return RGB(0, 120, 215);
 }
 
-// ===================== MODELLO DATI APP E TILE =====================
+// ===================== APP AND TILE DATA MODEL =====================
 enum class TileSize { Small, Medium, Wide, Large };
 
 struct AppEntry {
@@ -1158,9 +1128,10 @@ struct AppEntry {
     std::wstring path;
     std::wstring aumid;
     std::wstring folder;
+    std::wstring target; // raw shortcut target (shortcut entries only), used for identity matching
     FILETIME lastModified{};
     int launchCount = 0;
-    HICON hIcon = nullptr; // Riferimento all'icona nella cache
+    HICON hIcon = nullptr; // Reference to the icon in the catalog cache
 };
 
 struct FolderGroup {
@@ -1180,13 +1151,15 @@ struct Tile {
     std::wstring aumid;
     std::wstring path;
     TileSize size = TileSize::Medium;
-    int col = 0; // colonna in unità tile (0, 1, 2)
-    int row = 0; // riga in unità tile (0, 1, 2, ...)
+    int col = 0; // column in tile units (0, 1, 2)
+    int row = 0; // row in tile units (0, 1, 2, ...)
     HICON hIcon = nullptr;
-    COLORREF appColor = RGB(0, 120, 215); // campionato dall'icona una volta, fuori dal paint loop
-    bool available = true; // stato runtime, non serializzato: tile persistite non vengono eliminate se stale
+    COLORREF appColor = RGB(0, 120, 215); // sampled from the icon once, outside the paint loop
+    bool available = true; // runtime state, not serialized: persisted tiles are kept even when stale
 
-    // Simulazione Live Tile
+    // Simulated live tile. The back face shows neutral local information only
+    // (app name, today's date, time); the live* strings are kept for layout
+    // (de)serialization compatibility and are no longer displayed.
     bool isLive = false;
     std::wstring liveTitle;
     std::wstring liveSubtitle;
@@ -1204,12 +1177,19 @@ struct TileGroup {
 // Resolve a shortcut's own icon resource only when its Shell image-list entry
 // is the generic .lnk glyph. This follows the same target/icon-location idea used
 // by OpenStartScreen, but uses native documented Shell COM and HICON ownership.
-static HICON GetShortcutIconNoOverlay(LPCWSTR shortcut) {
+// Loads the shortcut and returns its icon (never the composite .lnk image with
+// the arrow overlay). The raw, unresolved target path is returned in
+// `targetOut` so callers can identify the app without a slow IShellLink::Resolve.
+static HICON GetShortcutIconNoOverlay(LPCWSTR shortcut, std::wstring* targetOut = nullptr) {
     if (!shortcut || !*shortcut) return nullptr;
     ComPtr<IShellLinkW> link;
     if (FAILED(CoCreateInstance(CLSID_ShellLink,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&link)))) return nullptr;
     ComPtr<IPersistFile> file;
     if (FAILED(link.As(&file)) || FAILED(file->Load(shortcut,STGM_READ))) return nullptr;
+    if (targetOut) {
+        wchar_t rawTarget[MAX_PATH]={};
+        if (SUCCEEDED(link->GetPath(rawTarget,ARRAYSIZE(rawTarget),nullptr,SLGP_RAWPATH))) *targetOut=rawTarget;
+    }
     wchar_t iconPath[MAX_PATH]={}; int iconIndex=0;
     if (SUCCEEDED(link->GetIconLocation(iconPath,ARRAYSIZE(iconPath),&iconIndex))&&iconPath[0]) {
         wchar_t expanded[MAX_PATH]={}; DWORD n=ExpandEnvironmentStringsW(iconPath,expanded,ARRAYSIZE(expanded));
@@ -1230,9 +1210,9 @@ static HICON GetShortcutIconNoOverlay(LPCWSTR shortcut) {
     }
     return nullptr;
 }
-// ===================== CATALOGO APPLICAZIONI =====================
-// Estrae un'icona Shell tramite il provider dell'oggetto, evitando di affidarsi
-// esclusivamente alla cache SHGetFileInfo per gli elementi virtuali di AppsFolder.
+// ===================== APP CATALOG =====================
+// Extracts a Shell icon through the item's own icon provider instead of relying
+// solely on the SHGetFileInfo cache for virtual AppsFolder items.
 static HICON ExtractShellIconFromPidl(PCIDLIST_ABSOLUTE pidl) {
     if (!pidl) return nullptr;
     ComPtr<IShellFolder> parent;
@@ -1275,66 +1255,6 @@ static bool GetKnownFolderPathString(REFKNOWNFOLDERID folderId, std::wstring& re
     return !result.empty();
 }
 
-static bool GetPersistentLayoutPath(std::wstring& directory, std::wstring& file) {
-    if (!GetKnownFolderPathString(FOLDERID_LocalAppData, directory)) return false;
-    directory += L"\\Win10StartMenuRecreation";
-    if (!CreateDirectoryW(directory.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
-        return false;
-    file = directory + L"\\tile-layout-v1.txt";
-    return true;
-}
-
-static bool LoadPersistentTileLayout(std::wstring& serialized) {
-    std::wstring directory, file;
-    if (!GetPersistentLayoutPath(directory, file)) return false;
-    UniqueHandle input(CreateFileW(file.c_str(), GENERIC_READ,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
-        FILE_ATTRIBUTE_NORMAL, nullptr));
-    if (!input) return false;
-    LARGE_INTEGER size{};
-    if (!GetFileSizeEx(input.get(), &size) || size.QuadPart <= 0 || size.QuadPart > 4 * 1024 * 1024)
-        return false;
-    std::string bytes(static_cast<size_t>(size.QuadPart), '\0');
-    DWORD read = 0;
-    if (!ReadFile(input.get(), bytes.data(), static_cast<DWORD>(bytes.size()), &read, nullptr) ||
-        read != bytes.size()) return false;
-    const int chars = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, bytes.data(),
-        static_cast<int>(bytes.size()), nullptr, 0);
-    if (chars <= 0 || chars > 2 * 1024 * 1024) return false;
-    serialized.resize(static_cast<size_t>(chars));
-    return MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, bytes.data(),
-        static_cast<int>(bytes.size()), serialized.data(), chars) == chars;
-}
-
-static bool SavePersistentTileLayout(const std::wstring& serialized) {
-    std::wstring directory, file;
-    if (!GetPersistentLayoutPath(directory, file)) return false;
-    if (serialized.size() > 2 * 1024 * 1024) return false;
-    const int bytesNeeded = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
-        serialized.data(), static_cast<int>(serialized.size()), nullptr, 0, nullptr, nullptr);
-    if (bytesNeeded < 0) return false;
-    std::string bytes(static_cast<size_t>(bytesNeeded), '\0');
-    if (bytesNeeded && WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
-        serialized.data(), static_cast<int>(serialized.size()), bytes.data(), bytesNeeded,
-        nullptr, nullptr) != bytesNeeded) return false;
-    const std::wstring temp = file + L".tmp";
-    UniqueHandle output(CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
-        FILE_ATTRIBUTE_NORMAL, nullptr));
-    if (!output) return false;
-    DWORD written = 0;
-    const bool wrote = bytes.empty() ||
-        (WriteFile(output.get(), bytes.data(), static_cast<DWORD>(bytes.size()), &written, nullptr) &&
-         written == bytes.size());
-    const bool flushed = wrote && FlushFileBuffers(output.get());
-    output.reset();
-    if (!flushed || !MoveFileExW(temp.c_str(), file.c_str(),
-        MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        DeleteFileW(temp.c_str());
-        return false;
-    }
-    return true;
-}
-
 class AppCatalog {
 public:
     void Refresh() {
@@ -1342,26 +1262,27 @@ public:
         iconCache_.clear();
         std::set<std::wstring> seenPaths;
 
-        // 1. Scansione collegamenti utente con Known Folder API documentata.
+        // 1. User shortcuts (documented Known Folder API).
         std::wstring userPrograms;
         if (GetKnownFolderPathString(FOLDERID_Programs, userPrograms)) {
             ScanDirectory(userPrograms, L"", seenPaths);
         }
 
-        // 2. Scansione collegamenti comuni.
+        // 2. Common (all users) shortcuts.
         std::wstring commonPrograms;
         if (GetKnownFolderPathString(FOLDERID_CommonPrograms, commonPrograms)) {
             ScanDirectory(commonPrograms, L"", seenPaths);
         }
 
-        // 3. Scansione app UWP / Store da FOLDERID_AppsFolder
+        // 3. UWP / Store apps from FOLDERID_AppsFolder
         ScanAppsFolder(seenPaths);
 
-        // Ordina alfabeticamente
+        // Sort alphabetically
         std::sort(apps_.begin(), apps_.end(), [](const AppEntry& a, const AppEntry& b) {
             return _wcsicmp(a.name.c_str(), b.name.c_str()) < 0;
         });
 
+        ApplyLaunchCounts();
         BuildSections();
         Wh_Log(L"[Catalog] Refreshed: total %u apps catalogued", (unsigned)apps_.size());
     }
@@ -1381,14 +1302,34 @@ public:
         return nullptr;
     }
 
+    // Launch counts are keyed by path (shortcut entries) or AUMID (AppsFolder
+    // entries) and persisted in mod storage, so Most used survives Explorer
+    // restarts. BuildSections() preserves the expanded state of folders.
     void RecordLaunch(const std::wstring& pathOrAumid) {
+        if (pathOrAumid.empty()) return;
+        int& count = launchCounts_[pathOrAumid];
+        ++count;
         for (auto& a : apps_) {
             if (a.path == pathOrAumid || (!a.aumid.empty() && a.aumid == pathOrAumid)) {
-                a.launchCount++;
+                a.launchCount = count;
                 break;
             }
         }
+        SaveLaunchCounts();
         BuildSections();
+    }
+
+    // Folder headers in All apps are toggled through the catalog so the
+    // expanded state can be preserved when the sections are rebuilt.
+    void ToggleFolder(size_t sectionIndex, size_t folderIndex) {
+        if (sectionIndex >= sections_.size()) return;
+        auto& folders = sections_[sectionIndex].folders;
+        if (folderIndex >= folders.size()) return;
+        FolderGroup& folder = folders[folderIndex];
+        folder.expanded = !folder.expanded;
+        const std::wstring key = FolderKey(sections_[sectionIndex].letter, folder.name);
+        if (folder.expanded) expandedFolders_.insert(key);
+        else expandedFolders_.erase(key);
     }
 
 private:
@@ -1397,6 +1338,74 @@ private:
     std::vector<AppEntry> mostUsed_;
     std::vector<AppEntry> recentlyAdded_;
     std::unordered_map<std::wstring, UniqueIcon> iconCache_;
+    std::unordered_map<std::wstring, int> launchCounts_;
+    std::set<std::wstring> expandedFolders_;
+    bool launchCountsLoaded_ = false;
+
+    // Case-insensitive match of a token against the AUMID (prefix, e.g. the
+    // package family name) or against the shortcut's target/file name.
+    static bool MatchesIdentityToken(const AppEntry& a, const wchar_t* token) {
+        const size_t tokenLen = wcslen(token);
+        if (!a.aumid.empty() && _wcsnicmp(a.aumid.c_str(), token, tokenLen) == 0) return true;
+        if (a.aumid.empty() && !a.path.empty()) {
+            if (StrStrIW(a.path.c_str(), token)) return true;
+            if (!a.target.empty() && StrStrIW(a.target.c_str(), token)) return true;
+        }
+        return false;
+    }
+
+    static std::wstring FolderKey(wchar_t letter, const std::wstring& name) {
+        std::wstring key(1, letter);
+        key += L'|';
+        key += name;
+        return key;
+    }
+
+    // Storage format: "<key>=<count>\n" per entry; keys never contain '\n'
+    // and the '=' separator is searched from the end because paths may contain it.
+    void LoadLaunchCounts() {
+        if (launchCountsLoaded_) return;
+        launchCountsLoaded_ = true;
+        launchCounts_.clear();
+        const std::wstring stored = ReadStorageString(L"startMenuLaunchCounts");
+        size_t pos = 0;
+        while (pos < stored.size()) {
+            size_t lineEnd = stored.find(L'\n', pos);
+            if (lineEnd == std::wstring::npos) lineEnd = stored.size();
+            const std::wstring line = stored.substr(pos, lineEnd - pos);
+            pos = lineEnd + 1;
+            const size_t sep = line.rfind(L'=');
+            if (sep == std::wstring::npos || sep == 0) continue;
+            const int count = _wtoi(line.c_str() + sep + 1);
+            if (count > 0) launchCounts_[line.substr(0, sep)] = count;
+        }
+    }
+
+    void SaveLaunchCounts() {
+        // Keep the store bounded: only the 64 most launched entries matter.
+        std::vector<std::pair<std::wstring, int>> entries(launchCounts_.begin(), launchCounts_.end());
+        std::sort(entries.begin(), entries.end(),
+                  [](const auto& a, const auto& b) { return a.second > b.second; });
+        if (entries.size() > 64) entries.resize(64);
+        std::wstring out;
+        for (const auto& [key, count] : entries) {
+            out += key;
+            out += L'=';
+            out += std::to_wstring(count);
+            out += L'\n';
+        }
+        if (!Wh_SetStringValue(L"startMenuLaunchCounts", out.c_str()))
+            Wh_Log(L"[Catalog] failed to persist launch counts");
+    }
+
+    void ApplyLaunchCounts() {
+        LoadLaunchCounts();
+        for (auto& a : apps_) {
+            auto it = launchCounts_.find(a.path);
+            if (it == launchCounts_.end() && !a.aumid.empty()) it = launchCounts_.find(a.aumid);
+            a.launchCount = it != launchCounts_.end() ? it->second : 0;
+        }
+    }
 
     HICON CacheIcon(const std::wstring& key, HICON hIcon) {
         if (!hIcon) return nullptr;
@@ -1439,12 +1448,14 @@ private:
                     // Resolve the shortcut's explicit IconLocation or target icon.
                     // Do not ask the Shell for the .lnk's composite image, which
                     // may include the shortcut-arrow overlay.
-                    HICON hIcon = GetShortcutIconNoOverlay(fullPath.c_str());
+                    std::wstring target;
+                    HICON hIcon = GetShortcutIconNoOverlay(fullPath.c_str(), &target);
                     if (hIcon) hIcon=CacheIcon(fullPath,hIcon);
 
                     AppEntry entry;
                     entry.name = baseName;
                     entry.path = fullPath;
+                    entry.target = std::move(target);
                     entry.folder = subFolder;
                     entry.lastModified = fd.ftLastWriteTime;
                     entry.hIcon = hIcon;
@@ -1492,8 +1503,8 @@ private:
                                 HICON hIcon = nullptr;
                                 PIDLIST_ABSOLUTE parsedPidl = nullptr;
                                 if (SUCCEEDED(SHParseDisplayName(shellPath.c_str(), nullptr, &parsedPidl, 0, nullptr)) && parsedPidl) {
-                                    // SHParseDisplayName restituisce memoria COM; il rilascio avviene
-                                    // anche in caso di errori intermedi/uscite anticipate.
+                                    // SHParseDisplayName returns COM memory; it is released on
+                                    // every path, including intermediate errors and early exits.
                                     struct PidlScope { PIDLIST_ABSOLUTE p; ~PidlScope(){ if (p) CoTaskMemFree(p); } } pidlScope{parsedPidl};
                                     hIcon = CacheIcon(shellPath, ExtractShellIconFromPidl(parsedPidl));
                                 }
@@ -1556,38 +1567,57 @@ private:
                     FolderGroup group;
                     group.name = fg.first;
                     group.apps = fg.second;
+                    group.expanded = expandedFolders_.count(FolderKey(ch, group.name)) != 0;
                     sec.folders.push_back(std::move(group));
                 }
             }
             sections_.push_back(std::move(sec));
         }
 
-        // Calcola Più usate (Most Used): prime 6 per launchCount
+        // Most used: top 6 by launch count.
         std::vector<AppEntry> sorted = apps_;
         std::sort(sorted.begin(), sorted.end(), [](const AppEntry& a, const AppEntry& b) {
             return a.launchCount > b.launchCount;
         });
         mostUsed_.clear();
         for (size_t i = 0; i < sorted.size() && i < 6; ++i) {
+            if (sorted[i].launchCount <= 0) break;
             mostUsed_.push_back(sorted[i]);
         }
 
-        // Se non ci sono lanci registrati, popola le Più usate con app di sistema note
-        if (mostUsed_.empty() || mostUsed_[0].launchCount == 0) {
-            mostUsed_.clear();
-            const wchar_t* defaults[] = { L"Microsoft Edge", L"Esplora file", L"Impostazioni", L"Calcolatrice", L"Foto", L"Blocco note" };
-            for (const auto* defName : defaults) {
-                for (const auto& a : apps_) {
-                    if (a.name.find(defName) != std::wstring::npos) {
-                        mostUsed_.push_back(a);
-                        break;
-                    }
-                }
+        // Until enough launches were recorded, fill Most used with well-known
+        // system apps, matched by AUMID / executable name so the list does not
+        // depend on the display language.
+        if (mostUsed_.size() < 6) {
+            struct DefaultApp { const wchar_t* tokens[4]; };
+            static const DefaultApp defaults[] = {
+                {{L"MSEdge", L"Microsoft.MicrosoftEdge", L"msedge.exe", nullptr}},
+                {{L"Microsoft.Windows.Explorer", L"explorer.exe", nullptr, nullptr}},
+                {{L"windows.immersivecontrolpanel", nullptr, nullptr, nullptr}},
+                {{L"Microsoft.WindowsCalculator", L"calc.exe", nullptr, nullptr}},
+                {{L"Microsoft.Windows.Photos", nullptr, nullptr, nullptr}},
+                {{L"Microsoft.WindowsNotepad", L"Microsoft.Notepad", L"notepad.exe", nullptr}},
+            };
+            auto alreadyListed = [this](const AppEntry& a) {
+                for (const auto& m : mostUsed_)
+                    if (m.path == a.path && m.aumid == a.aumid) return true;
+                return false;
+            };
+            for (const auto& def : defaults) {
                 if (mostUsed_.size() >= 6) break;
+                const AppEntry* match = nullptr;
+                for (const wchar_t* token : def.tokens) {
+                    if (!token) break;
+                    for (const auto& a : apps_) {
+                        if (MatchesIdentityToken(a, token)) { match = &a; break; }
+                    }
+                    if (match) break;
+                }
+                if (match && !alreadyListed(*match)) mostUsed_.push_back(*match);
             }
         }
 
-        // Calcola Aggiunte di recente (ultimi file modificati)
+        // Recently added: most recently modified entries.
         std::sort(sorted.begin(), sorted.end(), [](const AppEntry& a, const AppEntry& b) {
             return CompareFileTime(&a.lastModified, &b.lastModified) > 0;
         });
@@ -1598,9 +1628,9 @@ private:
     }
 };
 
-// Convalida i target delle tile classiche. La presenza del .lnk non basta:
-// risolviamo il collegamento in modo silenzioso e verifichiamo il target; per
-// scorciatoie di namespace conserviamo il caso valido quando hanno un PIDL.
+// Validates classic tile targets. The presence of the .lnk is not enough: the
+// shortcut is resolved silently and its target checked; namespace shortcuts are
+// accepted when they carry a PIDL.
 static bool IsUsableTileFileTarget(const std::wstring& path) {
     if (path.empty()) return false;
     const DWORD attributes = GetFileAttributesW(path.c_str());
@@ -1640,7 +1670,7 @@ static bool IsUsableCatalogApp(const AppEntry& app) {
     return IsUsableTileFileTarget(app.path);
 }
 
-// ===================== GESTIONE LAYOUT TILE =====================
+// ===================== TILE LAYOUT =====================
 class TileLayout {
 public:
     std::vector<TileGroup> groups;
@@ -1648,7 +1678,7 @@ public:
     void LoadDefault(const AppCatalog& catalog) {
         groups.clear();
 
-        // Gruppo 1: "Applicazioni" (Life at a glance)
+        // Group 1: "Apps" (Life at a glance)
         TileGroup g1;
         g1.title = L"Applicazioni";
 
@@ -1657,18 +1687,12 @@ public:
         tMail.size = TileSize::Medium;
         tMail.col = 0; tMail.row = 0;
         tMail.isLive = true;
-        tMail.liveTitle = L"Posta di Outlook";
-        tMail.liveSubtitle = L"Nessuna nuova email";
-        tMail.liveDetail = L"Posta in arrivo sincronizzata";
 
         Tile tCal;
         tCal.name = L"Calendario";
         tCal.size = TileSize::Wide;
         tCal.col = 1; tCal.row = 0;
         tCal.isLive = true;
-        tCal.liveTitle = L"Calendario";
-        tCal.liveSubtitle = L"Nessun evento in programma";
-        tCal.liveDetail = L"Tutto tranquillo per oggi";
 
         Tile tEdge;
         tEdge.name = L"Microsoft Edge";
@@ -1680,28 +1704,22 @@ public:
         tPhotos.size = TileSize::Medium;
         tPhotos.col = 1; tPhotos.row = 1;
         tPhotos.isLive = true;
-        tPhotos.liveTitle = L"Foto";
-        tPhotos.liveSubtitle = L"Raccolta immagini";
-        tPhotos.liveDetail = L"Momenti recenti";
 
         Tile tWeather;
         tWeather.name = L"Meteo";
         tWeather.size = TileSize::Wide;
         tWeather.col = 1; tWeather.row = 2;
         tWeather.isLive = true;
-        tWeather.liveTitle = L"Meteo";
-        tWeather.liveSubtitle = L"Roma, 21\u00B0 Sereno";
-        tWeather.liveDetail = L"Max 24\u00B0  Min 14\u00B0";
 
-        // Aggiunge una tile predefinita solo se l'app e' presente nel catalogo
-        // installato (AppsFolder o collegamenti Start); evita tile finte/non avviabili.
+        // A default tile is added only when the app exists in the installed
+        // catalog (AppsFolder or Start shortcuts): no fake or unlaunchable tiles.
         if (AttachAppDetails(tMail, catalog)) g1.tiles.push_back(tMail);
         if (AttachAppDetails(tCal, catalog)) g1.tiles.push_back(tCal);
         if (AttachAppDetails(tEdge, catalog)) g1.tiles.push_back(tEdge);
         if (AttachAppDetails(tPhotos, catalog)) g1.tiles.push_back(tPhotos);
         if (AttachAppDetails(tWeather, catalog)) g1.tiles.push_back(tWeather);
 
-        // Gruppo 2: "Tempo libero" (Play and explore)
+        // Group 2: "Play and explore"
         TileGroup g2;
         g2.title = L"Tempo libero";
 
@@ -1997,19 +2015,41 @@ public:
 
 };
 
-// ===================== ANCORAGGIO E POSIZIONAMENTO =====================
+// ===================== ANCHORING AND POSITIONING =====================
 struct StartAnchor {
     RECT startButton{};
     UINT edge = ABE_BOTTOM;
     HMONITOR monitor = nullptr;
-    int method = 0; // 1=Win32 "Start", 2=UIA, 3=fallback geometrico
+    int method = 0; // 1=Win32 "Start" child, 2=UI Automation, 3=geometric fallback
     RECT taskbarRect{};
     HWND taskbarHwnd = nullptr;
     RECT workArea{};
 };
 
-static bool GetStartAnchor(StartAnchor& out) {
-    HWND hTray = FindWindowW(L"Shell_TrayWnd", nullptr);
+static bool IsTaskbarClassName(const wchar_t* cls) {
+    return _wcsicmp(cls, L"Shell_TrayWnd") == 0 || _wcsicmp(cls, L"Shell_SecondaryTrayWnd") == 0;
+}
+
+static bool IsTaskbarWindow(HWND hwnd) {
+    if (!hwnd) return false;
+    wchar_t cls[64]{};
+    return GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) > 0 && IsTaskbarClassName(cls);
+}
+
+// Secondary taskbars are not reported by ABM_GETTASKBARPOS: derive the edge from
+// the taskbar rectangle relative to its monitor.
+static UINT DeriveTaskbarEdge(const RECT& taskbar, const RECT& monitor) {
+    const LONG w = taskbar.right - taskbar.left;
+    const LONG h = taskbar.bottom - taskbar.top;
+    if (w >= h) return (taskbar.top - monitor.top) <= (monitor.bottom - taskbar.bottom) ? ABE_TOP : ABE_BOTTOM;
+    return (taskbar.left - monitor.left) <= (monitor.right - taskbar.right) ? ABE_LEFT : ABE_RIGHT;
+}
+
+// Locates the Start button of `taskbar` (primary taskbar when null). Called on
+// the UI thread only; may use UI Automation on Windows 11.
+static bool GetStartAnchor(StartAnchor& out, HWND taskbar = nullptr) {
+    HWND hTray = taskbar ? taskbar : FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (hTray && !IsWindow(hTray)) hTray = nullptr;
     out.taskbarHwnd = hTray;
     if (!hTray) {
         POINT pt{ 0, 0 };
@@ -2020,31 +2060,37 @@ static bool GetStartAnchor(StartAnchor& out) {
         out.edge = ABE_BOTTOM;
         out.taskbarRect = { mi.rcMonitor.left, mi.rcWork.bottom, mi.rcMonitor.right, mi.rcMonitor.bottom };
         out.startButton = { mi.rcMonitor.left, mi.rcWork.bottom, mi.rcMonitor.left + 48, mi.rcMonitor.bottom };
+        out.method = 3;
         return false;
     }
 
-    // 1. Lettura posizione taskbar tramite SHAppBarMessage
+    // 1. Taskbar rectangle and edge
+    GetWindowRect(hTray, &out.taskbarRect);
+    wchar_t cls[64]{};
+    GetClassNameW(hTray, cls, ARRAYSIZE(cls));
     APPBARDATA abd{ sizeof(abd) };
     abd.hWnd = hTray;
-    if (SHAppBarMessage(ABM_GETTASKBARPOS, &abd)) {
+    if (_wcsicmp(cls, L"Shell_TrayWnd") == 0 && SHAppBarMessage(ABM_GETTASKBARPOS, &abd)) {
         out.edge = abd.uEdge;
         out.taskbarRect = abd.rc;
     } else {
-        GetWindowRect(hTray, &out.taskbarRect);
-        out.edge = ABE_BOTTOM;
+        HMONITOR mon = MonitorFromWindow(hTray, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi{ sizeof(mi) };
+        GetMonitorInfoW(mon, &mi);
+        out.edge = DeriveTaskbarEdge(out.taskbarRect, mi.rcMonitor);
     }
 
-    // 2. Lettura rettangolo pulsante Start
+    // 2. Start button rectangle
     bool foundButton = false;
 
-    // Metodo A: finestra Win32 figlia (Windows 10 nativo / taskbar classica)
+    // Method A: Win32 child window (Windows 10 / classic taskbar)
     HWND hStart = FindWindowExW(hTray, nullptr, L"Start", nullptr);
     if (!hStart) {
         HWND hChild = nullptr;
         while ((hChild = FindWindowExW(hTray, hChild, nullptr, nullptr)) != nullptr) {
-            wchar_t cls[64] = {};
-            GetClassNameW(hChild, cls, ARRAYSIZE(cls));
-            if (_wcsicmp(cls, L"Start") == 0 || _wcsicmp(cls, L"Button") == 0) {
+            wchar_t childCls[64] = {};
+            GetClassNameW(hChild, childCls, ARRAYSIZE(childCls));
+            if (_wcsicmp(childCls, L"Start") == 0 || _wcsicmp(childCls, L"Button") == 0) {
                 hStart = hChild;
                 break;
             }
@@ -2058,7 +2104,7 @@ static bool GetStartAnchor(StartAnchor& out) {
         }
     }
 
-    // Metodo B: UI Automation (Windows 11 XAML taskbar)
+    // Method B: UI Automation (Windows 11 XAML taskbar)
     if (!foundButton) {
         ComPtr<IUIAutomation> uia;
         if (SUCCEEDED(CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&uia))) && uia) {
@@ -2083,9 +2129,9 @@ static bool GetStartAnchor(StartAnchor& out) {
         }
     }
 
-    // Metodo C: Fallback geometrico
+    // Method C: geometric fallback (square at the taskbar's leading end)
     if (!foundButton) {
-        int btnW = 48; out.method = 3; (void)btnW;
+        out.method = 3;
         switch (out.edge) {
             case ABE_BOTTOM:
             case ABE_TOP:
@@ -2104,7 +2150,7 @@ static bool GetStartAnchor(StartAnchor& out) {
         }
     }
 
-    // Calcolo Monitor e Area di Lavoro
+    // Monitor and work area
     out.monitor = MonitorFromRect(&out.startButton, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi{ sizeof(mi) };
     GetMonitorInfoW(out.monitor, &mi);
@@ -2112,7 +2158,23 @@ static bool GetStartAnchor(StartAnchor& out) {
     return true;
 }
 
-static POINT ComputeMenuOrigin(const StartAnchor& anchor, SIZE menuSize, const Metrics& m) {
+// Effective DPI of the monitor the menu will be shown on. Explorer keeps the
+// system DPI it started with, so GetDeviceCaps(LOGPIXELSX) must not be used.
+static UINT GetAnchorDpi(const StartAnchor& anchor) {
+    UINT dpiX = 0, dpiY = 0;
+    if (anchor.monitor && SUCCEEDED(GetDpiForMonitor(anchor.monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)) && dpiX > 0)
+        return dpiX;
+    HDC screen = GetDC(nullptr);
+    UINT dpi = 96;
+    if (screen) {
+        const int logical = GetDeviceCaps(screen, LOGPIXELSX);
+        if (logical > 0) dpi = static_cast<UINT>(logical);
+        ReleaseDC(nullptr, screen);
+    }
+    return dpi;
+}
+
+static POINT ComputeMenuOrigin(const StartAnchor& anchor, SIZE menuSize) {
     POINT pt{};
     switch (anchor.edge) {
         case ABE_BOTTOM:
@@ -2133,7 +2195,7 @@ static POINT ComputeMenuOrigin(const StartAnchor& anchor, SIZE menuSize, const M
             break;
     }
 
-    // Limita l'origine entro l'area di lavoro del monitor
+    // Clamp the origin to the monitor work area
     if (pt.x + menuSize.cx > anchor.workArea.right) {
         pt.x = anchor.workArea.right - menuSize.cx;
     }
@@ -2150,53 +2212,28 @@ static POINT ComputeMenuOrigin(const StartAnchor& anchor, SIZE menuSize, const M
     return pt;
 }
 
-// Legacy modeless popup renderer retained during migration. Context-menu callsites
-// now use ImmersiveStartMenu::Track (owner-drawn HMENU); this legacy path is unused
-// and is kept only to avoid deleting unrelated rendering code in the same patch.
-struct MetroPopupItem { std::wstring text; UINT command; bool separator=false; int glyph=0; bool heading=false; int shellImageIndex=-1; };
-static const wchar_t kMetroPopupClass[] = L"Win10_1507_MetroPopup";
-static HWND g_metroPopupWnd=nullptr, g_metroPopupOwner=nullptr;
-static HINSTANCE g_metroPopupInstance=nullptr;
-static bool g_metroPopupClassRegistered=false, g_metroPopupActive=false;
-static std::vector<MetroPopupItem> g_metroPopupItems;
-static int g_metroPopupHover=-1, g_metroPopupEnd=0, g_metroPopupScale=96;
-static bool g_metroPopupOutside=false;
-static UINT g_metroPopupCommand=0;
-static std::unique_ptr<Gdiplus::Font> g_metroPopupFont;
-static int MetroItemHeight(){return MulDiv(34,g_metroPopupScale,96);}
-static int MetroPadY(){return MulDiv(6,g_metroPopupScale,96);}
+// Items of the context menus (owner-drawn HMENU, see ImmersiveStartMenu).
+struct MetroPopupItem { std::wstring text; UINT command; bool separator=false; bool heading=false; };
 
-static void MetroFinish(HWND hwnd,int reason,UINT command){
-    if (!g_metroPopupEnd) {
-        g_metroPopupEnd = reason;
-        g_metroPopupCommand = command;
-        if (g_metroPopupOwner)
-            PostMessageW(g_metroPopupOwner, WM_APP_METRO_POPUP_RESULT, command, static_cast<LPARAM>(reason));
-    }
-    const int endReason = g_metroPopupEnd;
-    HWND owner = g_metroPopupOwner;
-    if (IsWindow(hwnd)) DestroyWindow(hwnd);
-    if (g_metroPopupWnd == hwnd) g_metroPopupWnd = nullptr;
-    g_metroPopupOwner = nullptr;
-    g_metroPopupActive = false;
-    g_metroPopupItems.clear();
-    g_metroPopupHover = -1;
-    g_metroPopupOutside = (endReason == 2);
-    g_metroPopupFont.reset();
-    if (endReason != 2 && owner && IsWindow(owner)) {
-        SetForegroundWindow(owner);
-        SetFocus(owner);
-    }
-}
+// ===================== START BUTTON CACHE (shared with the hook thread) =====================
+// The low-level mouse hook must decide synchronously, without COM/UIA, whether
+// a click lands on a Start button. The UI thread computes the rectangles of the
+// Start buttons of every taskbar and publishes them here. They are refreshed
+// when the mouse enters a taskbar, when the menu is shown, and on display/work
+// area changes (no periodic polling).
+struct CachedStartButton {
+    HWND taskbar = nullptr;
+    RECT taskbarRect{};
+    RECT startRect{};
+    bool reliable = false; // false when the geometric fallback was used
+};
+static SRWLOCK g_startCacheLock = SRWLOCK_INIT;
+static std::vector<CachedStartButton> g_startCache; // guarded by g_startCacheLock
+static std::atomic<ULONGLONG> g_startCacheTick{ 0 };
 
+static void RefreshStartRects(bool logIt);
 
-
-
-
-static void UnregisterMetroPopupClass(){if(g_metroPopupClassRegistered&&g_metroPopupInstance){UnregisterClassW(kMetroPopupClass,g_metroPopupInstance);g_metroPopupClassRegistered=false;g_metroPopupInstance=nullptr;}}
-
-
-// ===================== AVVIO APPLICAZIONI E COMANDI =====================
+// ===================== APP LAUNCH AND COMMANDS =====================
 static bool LaunchApplication(const std::wstring& path, const std::wstring& aumid) {
     if (!aumid.empty()) {
         ComPtr<IApplicationActivationManager> aam;
@@ -2242,12 +2279,7 @@ static void ExecutePowerAction(int cmd) {
         }
     }
     if(cmd==IDM_POWER_SLEEP||cmd==IDM_POWER_HIBERNATE){
-        HMODULE power=GetModuleHandleW(L"powrprof.dll"); bool loaded=false;
-        if(!power){power=LoadLibraryW(L"powrprof.dll");loaded=power!=nullptr;}
-        using SetSuspendStateFn=BOOLEAN(WINAPI*)(BOOLEAN,BOOLEAN,BOOLEAN);
-        auto suspend=power?reinterpret_cast<SetSuspendStateFn>(GetProcAddress(power,"SetSuspendState")):nullptr;
-        if(!suspend||!suspend(cmd==IDM_POWER_HIBERNATE,FALSE,FALSE))Wh_Log(L"[Power] SetSuspendState failed (error=%u)",GetLastError());
-        if(loaded&&power)FreeLibrary(power);
+        if(!SetSuspendState(cmd==IDM_POWER_HIBERNATE,FALSE,FALSE))Wh_Log(L"[Power] SetSuspendState failed (error=%u)",GetLastError());
     }else if(cmd==IDM_POWER_SHUTDOWN||cmd==IDM_POWER_RESTART){
         UINT flags=cmd==IDM_POWER_RESTART?EWX_REBOOT:EWX_SHUTDOWN;
         if(!ExitWindowsEx(flags,SHTDN_REASON_MAJOR_APPLICATION|SHTDN_REASON_MINOR_OTHER|SHTDN_REASON_FLAG_PLANNED))Wh_Log(L"[Power] ExitWindowsEx failed (error=%u)",GetLastError());
@@ -2255,11 +2287,18 @@ static void ExecutePowerAction(int cmd) {
     if(token){if(restore&&previousSize)AdjustTokenPrivileges(token,FALSE,&previous,0,nullptr,nullptr);CloseHandle(token);}
 }
 
-// Rettangolo del pulsante Start in cache (letto dagli hook sul thread UI)
-static RECT g_startRect{};
-static bool g_startRectValid = false;
+// Which power entries make sense on this machine (like the native menu).
+// IsPwrSuspendAllowed/IsPwrHibernateAllowed (powrprof) already account for the
+// supported S-states, modern standby and the presence of the hibernation file.
+struct PowerMenuAvailability { bool sleep = true; bool hibernate = true; };
+static PowerMenuAvailability QueryPowerMenuAvailability() {
+    PowerMenuAvailability result;
+    result.sleep = IsPwrSuspendAllowed() != FALSE;
+    result.hibernate = IsPwrHibernateAllowed() != FALSE;
+    return result;
+}
 
-// ===================== FINESTRA DEL MENU START =====================
+// ===================== START MENU WINDOW =====================
 // Owner-drawn opaque context-menu port, structurally following the supplied
 // ImmersiveMenu (LoadApi/OpenMenuTheme/Begin/End/Prepare/Measure/Draw/OwnerProc/Track).
 // Unlike the Start window, these popup menus are not layered and are always dark.
@@ -2456,9 +2495,7 @@ enum class UiText : size_t {
     Large, EnableLive, DisableLive, RunAsAdmin, OpenLocation, Open, PinToStart,
     EditAccount, Lock, SignOut, Sleep, Shutdown, Restart, Hibernate,
     TileMail, TileCalendar, TilePhotos, TileWeather, TileGrooveMusic, TileMoviesTV,
-    TileCalculator, LiveOutlookMail, LiveNoEmail, LiveInboxSynced, LiveNoCalendarEvent,
-    LiveCalmToday, LivePhotoCollection, LiveRecentMoments, LiveRomeWeather,
-    LiveTemperatureRange, Count
+    TileCalculator, Count
 };
 
 // Translation columns follow the requested order: Italian, English, Spanish, French,
@@ -2494,7 +2531,7 @@ static const wchar_t* Ui(UiText text) {
         {L"Applicazioni",L"Apps",L"Aplicaciones",L"Applications",L"\u0628\u0631\u0646\u0627\u0645\u0647\u200C\u0647\u0627",L"\u0627\u0644\u062A\u0637\u0628\u064A\u0642\u0627\u062A",L"Aplica\u00E7\u00F5es",L"\u5E94\u7528",L"\u30A2\u30D7\u30EA",L"Aplikacje",L"\u041F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F"},
         {L"Tempo libero",L"Play and explore",L"Jugar y explorar",L"Divertissement",L"\u0633\u0631\u06AF\u0631\u0645\u06CC \u0648 \u06A9\u0634\u0641",L"\u0627\u0644\u0644\u0639\u0628 \u0648\u0627\u0644\u0627\u0633\u062A\u0643\u0634\u0627\u0641",L"Divers\u00E3o e descoberta",L"\u5A31\u4E50\u4E0E\u63A2\u7D22",L"\u904A\u3073\u3068\u63A2\u7D22",L"Rozrywka i odkrywanie",L"\u0418\u0433\u0440\u044B \u0438 \u043E\u0442\u043A\u0440\u044B\u0442\u0438\u044F"},
         {L"Fissati",L"Pinned",L"Ancladas",L"\u00C9pingl\u00E9es",L"\u0633\u0646\u062C\u0627\u0642\u200C\u0634\u062F\u0647",L"\u0645\u062B\u0628\u062A",L"Fixados",L"\u5DF2\u56FA\u5B9A",L"\u30D4\u30F3\u7559\u3081\u6E08\u307F",L"Przypi\u0119te",L"Закрепленные"},
-        {L"Stacca da Start",L"Unpin from Start",L"Desanclar de Inicio",L"D\u00E9tacher de l\u2019\u00E9cran de d\u00E9marrage",L"\u0628\u0631\u062F\u0627\u0634\u062A\u0646 \u0627\u0632 \u0645\u0646\u0648\u06CC \u0634\u0631\u0648\u0639",L"\u0625\u0644\u063A\u0627\u0621 \u0627\u0644\u062A\u062B\u0628\u064A\u062A \u0645\u0646 \u0627\u0628\u062F\u0623",L"Desafixar do Iniciar",L"\u4ECE\u201C\u5F00\u59CB\u201D\u53D6\u6D88\u56FA\u5B9A",L"\u30B9\u30BF\u30FC\u30C8\u304B\u3089\u30D4\u30F3\u7559\u3081\u3092\u5916\u3059",L"Odepnij od menu Start",L"Открепить от начального экрана"},
+        {L"Rimuovi da Start",L"Unpin from Start",L"Desanclar de Inicio",L"D\u00E9tacher de l\u2019\u00E9cran de d\u00E9marrage",L"\u0628\u0631\u062F\u0627\u0634\u062A\u0646 \u0627\u0632 \u0645\u0646\u0648\u06CC \u0634\u0631\u0648\u0639",L"\u0625\u0644\u063A\u0627\u0621 \u0627\u0644\u062A\u062B\u0628\u064A\u062A \u0645\u0646 \u0627\u0628\u062F\u0623",L"Desafixar do Iniciar",L"\u4ECE\u201C\u5F00\u59CB\u201D\u53D6\u6D88\u56FA\u5B9A",L"\u30B9\u30BF\u30FC\u30C8\u304B\u3089\u30D4\u30F3\u7559\u3081\u3092\u5916\u3059",L"Odepnij od menu Start",L"Открепить от начального экрана"},
         {L"Ridimensiona",L"Resize",L"Cambiar tama\u00F1o",L"Redimensionner",L"\u062A\u063A\u06CC\u06CC\u0631 \u0627\u0646\u062F\u0627\u0632\u0647",L"\u062A\u063A\u064A\u064A\u0631 \u0627\u0644\u062D\u062C\u0645",L"Redimensionar",L"\u8C03\u6574\u5927\u5C0F",L"\u30B5\u30A4\u30BA\u5909\u66F4",L"Zmie\u0144 rozmiar",L"Изменить размер"},
         {L"Piccola",L"Small",L"Peque\u00F1a",L"Petite",L"\u06A9\u0648\u0686\u06A9",L"\u0635\u063A\u064A\u0631",L"Pequena",L"\u5C0F",L"\u5C0F\u3055\u3044",L"Ma\u0142y",L"Маленькая"},
         {L"Media",L"Medium",L"Mediana",L"Moyenne",L"\u0645\u062A\u0648\u0633\u0637",L"\u0645\u062A\u0648\u0633\u0637",L"M\u00E9dia",L"\u4E2D",L"\u4E2D",L"\u015Aredni",L"Средняя"},
@@ -2520,15 +2557,6 @@ static const wchar_t* Ui(UiText text) {
         {L"Groove Musica",L"Groove Music",L"Groove Música",L"Groove Musique",L"Groove Music",L"Groove Music",L"Groove Música",L"Groove \u97F3\u4E50",L"Groove \u30DF\u30E5\u30FC\u30B8\u30C3\u30AF",L"Groove Muzyka",L"Groove Музыка"},
         {L"Film e TV",L"Movies & TV",L"Películas y TV",L"Films et TV",L"\u0641\u06CC\u0644\u0645 \u0648 \u062A\u0644\u0648\u06CC\u0632\u06CC\u0648\u0646",L"\u0627\u0644\u0623\u0641\u0644\u0627\u0645 \u0648\u0627\u0644\u062A\u0644\u0641\u0632\u064A\u0648\u0646",L"Filmes e TV",L"\u7535\u5F71\u548C\u7535\u89C6",L"\u6620\u753B\u3068\u30C6\u30EC\u30D3",L"Filmy i TV",L"Фильмы и ТВ"},
         {L"Calcolatrice",L"Calculator",L"Calculadora",L"Calculatrice",L"\u062D\u0627\u0633\u0628",L"\u0627\u0644\u062D\u0627\u0633\u0628\u0629",L"Calculadora",L"\u8BA1\u7B97\u5668",L"\u96FB\u5353",L"Kalkulator",L"Калькулятор"},
-        {L"Posta di Outlook",L"Outlook Mail",L"Correo de Outlook",L"Courrier Outlook",L"\u067E\u0633\u062A Outlook",L"\u0628\u0631\u064A\u062F Outlook",L"Correio do Outlook",L"Outlook \u90AE\u4EF6",L"Outlook \u30E1\u30FC\u30EB",L"Poczta Outlook",L"Почта Outlook"},
-        {L"Nessuna nuova email",L"No new email",L"No hay correos nuevos",L"Aucun nouveau message",L"\u0627\u06CC\u0645\u06CC\u0644 \u062C\u062F\u06CC\u062F\u06CC \u0646\u06CC\u0633\u062A",L"\u0644\u0627 \u0628\u0631\u064A\u062F \u062C\u062F\u064A\u062F",L"Sem novos emails",L"\u6CA1\u6709\u65B0\u90AE\u4EF6",L"\u65B0\u7740\u30E1\u30FC\u30EB\u306F\u3042\u308A\u307E\u305B\u3093",L"Brak nowych wiadomości",L"Нет новых писем"},
-        {L"Posta in arrivo sincronizzata",L"Inbox synced",L"Bandeja de entrada sincronizada",L"Boîte de réception synchronisée",L"\u062F\u0631\u06CC\u0627\u0641\u062A \u0647\u0627 \u0647\u0645\u06AF\u0627\u0645 \u200C\u0634\u062F",L"\u062A\u0645\u062A \u0645\u0632\u0627\u0645\u0646\u0629 \u0627\u0644\u0648\u0627\u0631\u062F",L"Caixa de entrada sincronizada",L"\u6536\u4EF6\u7BB1\u5DF2\u540C\u6B65",L"\u53D7\u4FE1\u30C8\u30EC\u30A4\u3092\u540C\u671F\u6E08\u307F",L"Skrzynka odbiorcza zsynchronizowana",L"Входящие синхронизированы"},
-        {L"Nessun evento in programma",L"No upcoming events",L"No hay eventos próximos",L"Aucun événement à venir",L"\u0631\u0648\u06CC\u062F\u0627\u062F\u06CC \u062F\u0631 \u067E\u06CC\u0634 \u0646\u06CC\u0633\u062A",L"\u0644\u0627 \u0623\u062D\u062F\u0627\u062B \u0642\u0627\u062F\u0645\u0629",L"Sem eventos futuros",L"\u6CA1\u6709\u5373\u5C06\u5230\u6765\u7684\u65E5\u7A0B",L"\u4E88\u5B9A\u306E\u30A4\u30D9\u30F3\u30C8\u306F\u3042\u308A\u307E\u305B\u3093",L"Brak nadchodzących wydarzeń",L"Нет предстоящих событий"},
-        {L"Tutto tranquillo per oggi",L"All clear for today",L"Todo tranquilo por hoy",L"Rien de prévu aujourd’hui",L"\u0627\u0645\u0631\u0648\u0632 \u0647\u0645\u0647 \u0686\u06CC\u0632 \u0622\u0631\u0627\u0645 \u0627\u0633\u062A",L"\u0643\u0644 \u0634\u064A\u0621 \u0647\u0627\u062F\u0626 \u0627\u0644\u064A\u0648\u0645",L"Tudo tranquilo por hoje",L"\u4ECA\u5929\u4E00\u5207\u5B89\u597D",L"\u4ECA\u65E5\u306F\u7A4F\u3084\u304B\u3067\u3059",L"Dziś wszystko spokojnie",L"Сегодня всё спокойно"},
-        {L"Raccolta immagini",L"Photo collection",L"Colección de fotos",L"Collection de photos",L"\u06A9\u0644\u06A9\u0633\u06CC\u0648\u0646 \u0639\u06A9\u0633",L"\u0645\u062C\u0645\u0648\u0639\u0629 \u0627\u0644\u0635\u0648\u0631",L"Coleção de fotografias",L"\u7167\u7247\u96C6",L"\u5199\u771F\u30B3\u30EC\u30AF\u30B7\u30E7\u30F3",L"Kolekcja zdjęć",L"Коллекция фотографий"},
-        {L"Momenti recenti",L"Recent moments",L"Momentos recientes",L"Moments récents",L"\u0644\u062D\u0638\u0647\u200C\u0647\u0627\u06CC \u0627\u062E\u06CC\u0631",L"\u0644\u062D\u0638\u0627\u062A \u0623\u062E\u064A\u0631\u0629",L"Momentos recentes",L"\u8FD1\u671F\u77AC\u95F4",L"\u6700\u8FD1\u306E\u30E2\u30FC\u30E1\u30F3\u30C8",L"Ostatnie chwile",L"Недавние моменты"},
-        {L"Roma, 21° Sereno",L"Rome, 21° Clear",L"Roma, 21° Despejado",L"Rome, 21° Dégagé",L"\u0631\u0645، ۲۱° \u0622\u0641\u062A\u0627\u0628\u06CC",L"\u0631\u0648\u0645\u0627، ٢١° \u0635\u0627\u0641",L"Roma, 21° Céu limpo",L"\u7F57\u9A6C\uFF0C21° \u6674",L"\u30ED\u30FC\u30DE 21° \u6674\u308C",L"Rzym, 21° Bezchmurnie",L"Рим, 21° Ясно"},
-        {L"Max 24°  Min 14°",L"High 24°  Low 14°",L"Máx. 24°  Mín. 14°",L"Max. 24°  Min. 14°",L"\u0628\u06CC\u0634\u06CC\u0646\u0647 ۲۴°  \u06A9\u0645\u06CC\u0646\u0647 ۱۴°",L"\u0627\u0644\u0639\u0638\u0645\u0649 ٢٤°  \u0627\u0644\u0635\u063A\u0631\u0649 ١٤°",L"Máx. 24°  Mín. 14°",L"\u6700\u9AD824°  \u6700\u4F4E14°",L"\u6700\u9AD824°  \u6700\u4F4E14°",L"Maks. 24°  Min. 14°",L"Макс. 24°  Мин. 14°"},
     };
     const size_t index = static_cast<size_t>(text);
     return index < _countof(strings) ? strings[index][GetUiLanguageIndex()] : L"";
@@ -2545,39 +2573,46 @@ static const wchar_t* TranslateTileCaption(const std::wstring& caption) {
     return caption.c_str();
 }
 
-static const wchar_t* TranslateLiveTileText(const std::wstring& text) {
-    if (_wcsicmp(text.c_str(), L"Posta di Outlook") == 0) return Ui(UiText::LiveOutlookMail);
-    if (_wcsicmp(text.c_str(), L"Nessuna nuova email") == 0) return Ui(UiText::LiveNoEmail);
-    if (_wcsicmp(text.c_str(), L"Posta in arrivo sincronizzata") == 0) return Ui(UiText::LiveInboxSynced);
-    if (_wcsicmp(text.c_str(), L"Nessun evento in programma") == 0) return Ui(UiText::LiveNoCalendarEvent);
-    if (_wcsicmp(text.c_str(), L"Tutto tranquillo per oggi") == 0) return Ui(UiText::LiveCalmToday);
-    if (_wcsicmp(text.c_str(), L"Raccolta immagini") == 0) return Ui(UiText::LivePhotoCollection);
-    if (_wcsicmp(text.c_str(), L"Momenti recenti") == 0) return Ui(UiText::LiveRecentMoments);
-    if (_wcsicmp(text.c_str(), L"Roma, 21\u00B0 Sereno") == 0) return Ui(UiText::LiveRomeWeather);
-    if (_wcsicmp(text.c_str(), L"Max 24\u00B0  Min 14\u00B0") == 0) return Ui(UiText::LiveTemperatureRange);
-    return TranslateTileCaption(text);
-}
 
 class StartMenuWindow {
 public:
     StartMenuWindow() = default;
     ~StartMenuWindow() {
         Destroy();
-        UnregisterMetroPopupClass();
-        if (hInst_) {
-            UnregisterClassW(L"Win10_1507_StartMenuRestorer_WndClass", hInst_);
+        if (classRegistered_ && hInst_) {
+            UnregisterClassW(kWindowClassName, hInst_);
+            classRegistered_ = false;
         }
     }
 
+    static constexpr const wchar_t* kWindowClassName = L"Win10_1507_StartMenuRestorer_WndClass";
+
+    // The class is registered under the mod's own module handle, so a class left
+    // behind by a previous instance (same name, different module) is never
+    // reused with a dangling WndProc. Registration failure fails Create().
     bool Create(HINSTANCE hInstance) {
-        hInst_ = hInstance ? hInstance : GetModuleHandle(nullptr);
+        hInst_ = hInstance;
         WNDCLASSW wc{};
         wc.style = CS_DBLCLKS;
         wc.lpfnWndProc = WndProc;
         wc.hInstance = hInst_;
-        wc.lpszClassName = L"Win10_1507_StartMenuRestorer_WndClass";
+        wc.lpszClassName = kWindowClassName;
         wc.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
-        RegisterClassW(&wc);
+        if (!RegisterClassW(&wc)) {
+            DWORD error = GetLastError();
+            if (error == ERROR_CLASS_ALREADY_EXISTS) {
+                // Stale registration from a previous instance of this module
+                // (e.g. after a crash): drop it and register the current WndProc.
+                UnregisterClassW(kWindowClassName, hInst_);
+                if (RegisterClassW(&wc)) error = ERROR_SUCCESS;
+                else error = GetLastError();
+            }
+            if (error != ERROR_SUCCESS) {
+                Wh_Log(L"[StartMenu] RegisterClass failed: %u", error);
+                return false;
+            }
+        }
+        classRegistered_ = true;
 
         // Keep Start above ordinary applications. A per-frame window region clips
         // the moving edge so the taskbar remains visually in front during the slide.
@@ -2603,10 +2638,8 @@ public:
         }
         InitFonts();
         catalog_.Refresh();
+        lastCatalogScanTick_ = GetTickCount64();
         layout_.LoadDefault(catalog_);
-        std::wstring diskLayout;
-        if (LoadPersistentTileLayout(diskLayout) && layout_.Deserialize(diskLayout, catalog_))
-            Wh_Log(L"[TileLayout] restored persistent layout from LocalAppData");
         NormalizeTileLayout();
 
         const size_t savedSizeChars = Wh_GetStringValue(L"startMenuWindowSize", savedWindowSize_, ARRAYSIZE(savedWindowSize_));
@@ -2625,8 +2658,6 @@ public:
 
     void Destroy() {
         if (hwnd_) {
-            if (g_metroPopupActive && g_metroPopupOwner == hwnd_.get())
-                MetroFinish(g_metroPopupWnd, 3, 0);
             StopAllAppsArrowRepeat(true);
             KillTimer(hwnd_.get(), TIMER_LIVE_FLIP);
             KillTimer(hwnd_.get(), TIMER_LIVE_TICK);
@@ -2642,35 +2673,35 @@ public:
     HWND GetHwnd() const { return hwnd_.get(); }
     bool IsVisible() const { return visible_; }
 
-    void Toggle() {
+    // `taskbar` is the taskbar whose Start button was activated (nullptr = primary).
+    void Toggle(HWND taskbar = nullptr) {
         if (visible_) Hide();
-        else Show();
+        else Show(taskbar);
     }
 
-    void Show() {
+    void Show(HWND taskbar = nullptr) {
         if (!hwnd_) return;
         GUARDED(L"Show", {
             StartAnchor anchor;
-            GetStartAnchor(anchor);
+            GetStartAnchor(anchor, taskbar);
+            requestedTaskbar_ = anchor.taskbarHwnd;
 
-            // Determina DPI
-            ScopedDC menuDc(hwnd_.get());
-            if (menuDc) {
-                const int dpi = GetDeviceCaps(menuDc.get(), LOGPIXELSX);
-                if (dpi > 0) metrics_.dpi = static_cast<UINT>(dpi);
-            }
+            // Lay out at the DPI of the monitor the menu is shown on.
+            const UINT targetDpi = GetAnchorDpi(anchor);
+            if (targetDpi > 0) metrics_.dpi = targetDpi;
             ApplyWindowOpacity();
             InitFonts();
 
-            int menuW = hasUserSized_
-                ? metrics_.Scale(savedWidth96_)
-                : ((settings_.widthOverride > 0) ? metrics_.Scale(settings_.widthOverride)
-                                                 : metrics_.Scale(Metrics::BASE_DEFAULT_MENU_W));
+            // The explicit width override wins over a saved drag-resize width;
+            // the saved height is kept.
+            int menuW = (settings_.widthOverride > 0) ? metrics_.Scale(settings_.widthOverride)
+                      : hasUserSized_ ? metrics_.Scale(savedWidth96_)
+                      : metrics_.Scale(Metrics::BASE_DEFAULT_MENU_W);
             int menuH = hasUserSized_ ? metrics_.Scale(savedHeight96_)
                                       : metrics_.Scale(Metrics::BASE_DEFAULT_MENU_H);
 
-            // Clamp alla work area senza alterare le dimensioni tile (che restano
-            // comandate esclusivamente da TileSize e dal menu contestuale).
+            // Clamp to the work area without altering tile sizes (which are
+            // controlled exclusively by TileSize and the context menu).
             const int maxW = (std::max)(1L, anchor.workArea.right - anchor.workArea.left);
             const int maxH = (std::max)(1L, anchor.workArea.bottom - anchor.workArea.top);
             const int minW = (std::min)(metrics_.Scale(540), maxW);
@@ -2679,9 +2710,11 @@ public:
             menuH = (std::max)(minH, (std::min)(menuH, maxH));
 
             SIZE sz{ menuW, menuH };
-            POINT pt = ComputeMenuOrigin(anchor, sz, metrics_);
+            POINT pt = ComputeMenuOrigin(anchor, sz);
 
-            if (anchor.method != 3) { g_startRect = anchor.startButton; g_startRectValid = true; }
+            // Publish fresh Start rectangles for the hook thread, unless the
+            // mouse hook just had them refreshed.
+            if (GetTickCount64() - g_startCacheTick.load() > 1000) RefreshStartRects(false);
             showTick_ = GetTickCount64();
             Wh_Log(L"[StartMenu] Show: pos=(%ld,%ld) size=%dx%d anchorMethod=%d edge=%u", pt.x, pt.y, menuW, menuH, anchor.method, (unsigned)anchor.edge);
             visible_ = true;
@@ -2721,7 +2754,6 @@ public:
                 SetTimer(hwnd_.get(), TIMER_LIVE_FLIP, settings_.liveTileIntervalMs, nullptr);
             }
 
-            AllowSetForegroundWindow(ASFW_ANY);
             BOOL fgOk = SetForegroundWindow(hwnd_.get());
             SetFocus(hwnd_.get());
             Wh_Log(L"[StartMenu] SetForegroundWindow=%d, foreground is menu=%d", fgOk ? 1 : 0, GetForegroundWindow() == hwnd_.get() ? 1 : 0);
@@ -2732,10 +2764,6 @@ public:
     void Hide() {
         if (!visible_ || !hwnd_) return;
         GUARDED(L"Hide", {
-            if (g_metroPopupActive && g_metroPopupOwner == hwnd_.get()) {
-                pendingContext_ = PendingContext::None;
-                MetroFinish(g_metroPopupWnd, 3, 0);
-            }
             StopAllAppsArrowRepeat(true);
             KillTimer(hwnd_.get(), TIMER_LIVE_FLIP);
             KillTimer(hwnd_.get(), TIMER_LIVE_TICK);
@@ -2752,15 +2780,32 @@ public:
                 ClearTaskbarWindowRegion();
             }
             Wh_Log(L"[StartMenu] Hide");
+            // Refresh the app list once the menu is out of the way: either a
+            // change notification arrived while it was open, or the catalog is
+            // old enough that Store apps may have been installed or removed.
+            constexpr ULONGLONG kStaleCatalogMs = 15ull * 60 * 1000;
+            if (catalogRefreshPending_ || GetTickCount64() - lastCatalogScanTick_ > kStaleCatalogMs)
+                PostMessageW(hwnd_.get(), WM_APP_REFRESH, 0, 0);
         })
     }
 
     void ApplySettings(const Settings& s) {
         settings_ = s;
         if (!settings_.menuAnimation && menuAnimationActive_) CompleteMenuAnimation();
-        if (!settings_.tileLayout.empty()) {
-            layout_.Deserialize(settings_.tileLayout, catalog_);
+        // Apply a layout only on first creation (restore from storage) or when a
+        // new layout was pasted into the tileLayout setting. Other settings
+        // changes leave the user's current tile arrangement untouched.
+        if (!settings_.tileLayout.empty() && (!layoutApplied_ || settings_.tileLayoutImportPending)) {
+            if (layout_.Deserialize(settings_.tileLayout, catalog_)) {
+                if (settings_.tileLayoutImportPending) {
+                    Wh_Log(L"[TileLayout] imported layout from the tileLayout setting");
+                    Wh_SetStringValue(L"tileLayoutImported", settings_.tileLayout.c_str());
+                }
+            } else {
+                Wh_Log(L"[TileLayout] stored/imported layout could not be parsed; keeping current layout");
+            }
         }
+        layoutApplied_ = true;
         NormalizeTileLayout();
         PersistTileLayout();
         if (hwnd_) ApplyWindowOpacity();
@@ -2846,12 +2891,23 @@ public:
             Wh_Log(L"[StartMenu] failed to persist custom window size");
     }
 
+    // Full rescan of the app catalog (Programs folders + AppsFolder). Launch
+    // counts come from storage and expanded folders are preserved by the catalog.
+    void RefreshCatalog() {
+        catalogRefreshPending_ = false;
+        lastCatalogScanTick_ = GetTickCount64();
+        if (g_iconBitmapCache) g_iconBitmapCache->clear();
+        catalog_.Refresh();
+        layout_.RefreshInstalledApps(catalog_);
+        searchResults_.clear();
+        if (!searchQuery_.empty()) FilterSearch();
+        if (hwnd_) InvalidateRect(hwnd_.get(), nullptr, FALSE);
+    }
+
     void PersistTileLayout() {
         const std::wstring serialized = layout_.Serialize();
         if (!Wh_SetStringValue(L"startMenuLayout", serialized.c_str()))
-            Wh_Log(L"[TileLayout] failed to save layout to Windhawk local storage");
-        if (!SavePersistentTileLayout(serialized))
-            Wh_Log(L"[TileLayout] failed to save persistent LocalAppData layout");
+            Wh_Log(L"[TileLayout] failed to save layout to Windhawk mod storage");
     }
 
     const AppEntry* GetListAppByIndex(int index) const {
@@ -3100,6 +3156,11 @@ private:
     POINT customResizeStartPoint_{};
     RECT customResizeStartRect_{};
     bool hasUserSized_ = false;
+    bool classRegistered_ = false;
+    bool layoutApplied_ = false;      // stored/imported layout applied once per window
+    bool catalogRefreshPending_ = false; // refresh requested while the menu was open
+    ULONGLONG lastCatalogScanTick_ = 0;
+    HWND requestedTaskbar_ = nullptr; // taskbar whose Start button was clicked (0 = primary)
     int savedWidth96_ = Metrics::BASE_DEFAULT_MENU_W;
     int savedHeight96_ = Metrics::BASE_DEFAULT_MENU_H;
     wchar_t savedWindowSize_[64]{};
@@ -3385,9 +3446,6 @@ private:
                 }
                 return 0;
             }
-            case WM_APP_METRO_POPUP_RESULT:
-                HandleMetroPopupResult(static_cast<UINT>(wParam), static_cast<int>(lParam));
-                return 0;
             case WM_PAINT: {
                 ScopedPaint paint(hwnd);
                 if (paint.get()) Render(paint.get(), paint.PaintRect());
@@ -3404,16 +3462,14 @@ private:
                 return 1;
 
             case WM_ACTIVATE:
-                if (g_metroPopupActive) return 0;
                 if (LOWORD(wParam) == WA_INACTIVE) {
-                    // finestra/popup Metro puo' rubare il focus per un istante
+                    // a context popup can steal the focus for an instant
                     if (GetTickCount64() - showTick_ > 300) Hide();
                     else Wh_Log(L"[StartMenu] WM_ACTIVATE(inactive) ignored during grace period");
                 }
                 return 0;
 
             case WM_KILLFOCUS:
-                if (g_metroPopupActive) return 0;
                 if (GetTickCount64() - showTick_ > 300) Hide();
                 return 0;
 
@@ -3613,10 +3669,11 @@ private:
                 return HTCLIENT;
             case WM_GETMINMAXINFO: {
                 auto* mmi = reinterpret_cast<MINMAXINFO*>(lParam);
-                StartAnchor a;
-                GetStartAnchor(a);
-                const LONG workW = (std::max)(1L, a.workArea.right - a.workArea.left);
-                const LONG workH = (std::max)(1L, a.workArea.bottom - a.workArea.top);
+                MONITORINFO mi{ sizeof(mi) };
+                HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+                if (!GetMonitorInfoW(monitor, &mi)) SystemParametersInfoW(SPI_GETWORKAREA, 0, &mi.rcWork, 0);
+                const LONG workW = (std::max)(1L, mi.rcWork.right - mi.rcWork.left);
+                const LONG workH = (std::max)(1L, mi.rcWork.bottom - mi.rcWork.top);
                 // Match the original layout's monitor-bounded sizing behavior:
                 // the minimum must never exceed the available work area.
                 mmi->ptMinTrackSize.x = (std::min)(static_cast<LONG>(metrics_.Scale(540)), workW);
@@ -3647,7 +3704,7 @@ private:
 
             case WM_APP_TOGGLE:
                 Wh_Log(L"[StartMenu] WM_APP_TOGGLE received (visible=%d)", visible_ ? 1 : 0);
-                Toggle();
+                Toggle(reinterpret_cast<HWND>(lParam));
                 return 0;
 
             case WM_APP_HIDE:
@@ -3655,16 +3712,23 @@ private:
                 return 0;
 
             case WM_APP_REFRESH:
-                if (g_metroPopupActive && g_metroPopupOwner == hwnd) {
-                    pendingContext_ = PendingContext::None;
-                    MetroFinish(g_metroPopupWnd, 3, 0);
-                }
-                g_iconBitmapCache.clear();
-                catalog_.Refresh();
-                layout_.RefreshInstalledApps(catalog_);
-                searchResults_.clear();
-                if (!searchQuery_.empty()) FilterSearch();
-                InvalidateRect(hwnd, nullptr, FALSE);
+                // Posted by the Programs-folder watcher and by the stale-catalog
+                // check. Defer while the menu is open so the lists don't change
+                // under the user's cursor.
+                if (visible_ || menuAnimationActive_) { catalogRefreshPending_ = true; return 0; }
+                RefreshCatalog();
+                return 0;
+
+            case WM_APP_REFRESH_ANCHOR:
+                RefreshStartRects(false);
+                return 0;
+
+            case WM_DISPLAYCHANGE:
+                PostMessageW(hwnd, WM_APP_REFRESH_ANCHOR, 0, 0);
+                return 0;
+
+            case WM_SETTINGCHANGE:
+                if (wParam == SPI_SETWORKAREA) PostMessageW(hwnd, WM_APP_REFRESH_ANCHOR, 0, 0);
                 return 0;
         }
         return DefWindowProcW(hwnd, uMsg, wParam, lParam);
@@ -3811,10 +3875,10 @@ private:
         int area = -1, idx = -1, grp = -1;
         HitTest(pt, area, idx, grp);
 
-        if (area == 0) { // Clic su intestazione utente -> Menu Account
+        if (area == 0) { // Click on the user header -> account menu
             ShowUserMenu(pt);
-        } else if (area == 1) { // Esplora file, Impostazioni, Alimentazione, Tutte le app
-            if (idx == 0) { // Esplora file; the far-right chevron opens its pinned places
+        } else if (area == 1) { // File Explorer, Settings, Power, All apps
+            if (idx == 0) { // File Explorer; the far-right chevron opens its pinned places
                 const int leftW = metrics_.Scale(Metrics::BASE_LEFT_COL_W);
                 if (x >= leftW - metrics_.Scale(38)) {
                     ShowExplorerJumpList();
@@ -3822,38 +3886,29 @@ private:
                     Hide();
                     ShellExecuteW(nullptr, L"open", L"explorer.exe", nullptr, nullptr, SW_SHOWNORMAL);
                 }
-            } else if (idx == 1) { // Impostazioni
+            } else if (idx == 1) { // Settings
                 Hide();
                 ShellExecuteW(nullptr, L"open", L"ms-settings:", nullptr, nullptr, SW_SHOWNORMAL);
-            } else if (idx == 2) { // Alimentazione
+            } else if (idx == 2) { // Power
                 ShowPowerMenu(pt);
-            } else if (idx == 3) { // Tutte le app / Indietro
+            } else if (idx == 3) { // All apps / Back
                 if (viewMode_ == ViewMode::Normal) viewMode_ = ViewMode::AllApps;
                 else if (viewMode_ == ViewMode::AllAppsAlphabet) viewMode_ = ViewMode::AllApps;
                 else viewMode_ = ViewMode::Normal;
                 InvalidateRect(hwnd_.get(), nullptr, FALSE);
             }
-        } else if (area == 2) { // Elenco App / Cartelle
+        } else if (area == 2) { // App list / folders
             if (viewMode_ == ViewMode::Normal) {
                 if (idx >= 0 && idx < (int)catalog_.MostUsed().size()) {
-                    const auto& app = catalog_.MostUsed()[idx];
-                    Hide();
-                    catalog_.RecordLaunch(app.path.empty() ? app.aumid : app.path);
-                    LaunchApplication(app.path, app.aumid);
+                    LaunchCatalogEntry(catalog_.MostUsed()[idx]);
                 } else if (idx >= (int)catalog_.MostUsed().size() &&
                            idx < (int)(catalog_.MostUsed().size() + catalog_.RecentlyAdded().size())) {
                     int recentIdx = idx - (int)catalog_.MostUsed().size();
-                    const auto& app = catalog_.RecentlyAdded()[recentIdx];
-                    Hide();
-                    catalog_.RecordLaunch(app.path.empty() ? app.aumid : app.path);
-                    LaunchApplication(app.path, app.aumid);
+                    LaunchCatalogEntry(catalog_.RecentlyAdded()[recentIdx]);
                 }
             } else if (viewMode_ == ViewMode::Search) {
                 if (idx >= 0 && idx < (int)searchResults_.size()) {
-                    const auto& app = searchResults_[idx];
-                    Hide();
-                    catalog_.RecordLaunch(app.path.empty() ? app.aumid : app.path);
-                    LaunchApplication(app.path, app.aumid);
+                    LaunchCatalogEntry(searchResults_[idx]);
                 }
             } else if (viewMode_ == ViewMode::AllApps) {
                 HandleAllAppsClick(idx);
@@ -3864,7 +3919,7 @@ private:
         } else if (area == 6 && viewMode_ == ViewMode::AllAppsAlphabet && grp >= 0) {
             viewMode_ = ViewMode::AllApps;
             ScrollToAllAppsSection(grp);
-        } else if (area == 3) { // Clic su una Tile
+        } else if (area == 3) { // Click on a tile
             if (grp >= 0 && grp < (int)layout_.groups.size()) {
                 auto& group = layout_.groups[grp];
                 if (idx >= 0 && idx < (int)group.tiles.size()) {
@@ -3882,11 +3937,11 @@ private:
         int area = -1, idx = -1, grp = -1;
         HitTest(pt, area, idx, grp);
 
-        if (area == 0) { // Menu contestuale intestazione account
+        if (area == 0) { // Account header context menu
             ShowUserMenu(pt);
-        } else if (area == 3 && grp >= 0 && idx >= 0) { // Menu contestuale Tile
+        } else if (area == 3 && grp >= 0 && idx >= 0) { // Tile context menu
             ShowTileContextMenu(pt, grp, idx);
-        } else if (area == 2 && idx >= 0) { // Menu contestuale App
+        } else if (area == 2 && idx >= 0) { // App context menu
             ShowAppContextMenu(pt, idx);
         }
     }
@@ -3913,12 +3968,59 @@ private:
         return true;
     }
 
+    // Scrollbar palette (dark, like the 1507 All apps list).
+    static constexpr COLORREF kScrollRail      = RGB(31, 31, 31);
+    static constexpr COLORREF kScrollThumb     = RGB(118, 118, 118);
+    static constexpr COLORREF kScrollThumbHot  = RGB(190, 190, 190);
+    static constexpr COLORREF kScrollArrow     = RGB(190, 190, 190);
+    static constexpr COLORREF kScrollArrowDim  = RGB(85, 85, 85);
+    static constexpr COLORREF kScrollArrowHot  = RGB(255, 255, 255);
+
+    // DrawFrameControl(DFC_SCROLL) always paints with the system 3D colors
+    // (COLOR_BTNFACE, embossed glyph for DFCS_INACTIVE) and ignores the DC
+    // colors, which produced light boxes and doubled arrows on the dark menu.
+    // Draw a small antialiased triangle instead, with the menu's own palette.
+    void DrawScrollArrow(HDC hdc, const RECT& button, bool up, COLORREF color) {
+        const int w = button.right - button.left, h = button.bottom - button.top;
+        if (w <= 0 || h <= 0 || !g_gdiplusToken) return;
+        const float arrowW = static_cast<float>(std::max(5, std::min(w - 4, metrics_.Scale(7))));
+        const float arrowH = arrowW / 2.0f;
+        const float cx = button.left + w / 2.0f;
+        const float cy = button.top + h / 2.0f;
+        Gdiplus::PointF pts[3];
+        if (up) {
+            pts[0] = { cx - arrowW / 2, cy + arrowH / 2 };
+            pts[1] = { cx + arrowW / 2, cy + arrowH / 2 };
+            pts[2] = { cx, cy - arrowH / 2 };
+        } else {
+            pts[0] = { cx - arrowW / 2, cy - arrowH / 2 };
+            pts[1] = { cx + arrowW / 2, cy - arrowH / 2 };
+            pts[2] = { cx, cy + arrowH / 2 };
+        }
+        Gdiplus::Graphics g(hdc);
+        if (g.GetLastStatus() != Gdiplus::Ok) return;
+        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+        Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(color), GetGValue(color), GetBValue(color)));
+        g.FillPolygon(&brush, pts, 3);
+    }
+
+    void DrawScrollThumb(HDC hdc, RECT thumb, bool hot) {
+        // Leave a 1 px gutter on both sides so the thumb never touches the
+        // column border or the list text.
+        const int gutter = std::max(1, metrics_.Scale(1));
+        InflateRect(&thumb, -gutter, 0);
+        if (thumb.right <= thumb.left || thumb.bottom <= thumb.top) return;
+        UniqueBrush brush(CreateSolidBrush(hot ? kScrollThumbHot : kScrollThumb));
+        FillRect(hdc, &thumb, brush.get());
+    }
+
     void DrawMainListScrollbar(HDC hdc, const RECT&) {
         RECT track{},thumb{}; int maxScroll=0;
         if (!GetMainListScrollGeometry(track,thumb,maxScroll)) return;
-        UniqueBrush bt(CreateSolidBrush(RGB(30,30,30)));
-        UniqueBrush bh(CreateSolidBrush(mainListScrollDragging_?RGB(220,220,220):RGB(125,125,125)));
-        FillRect(hdc,&track,bt.get()); InflateRect(&thumb,-metrics_.Scale(1),0); FillRect(hdc,&thumb,bh.get());
+        UniqueBrush rail(CreateSolidBrush(kScrollRail));
+        FillRect(hdc,&track,rail.get());
+        DrawScrollThumb(hdc, thumb, mainListScrollDragging_);
     }
 
     bool BeginMainListScroll(int x, int y) {
@@ -3972,9 +4074,11 @@ private:
 
     void StopAllAppsArrowRepeat(bool releaseCapture) {
         if (hwnd_) KillTimer(hwnd_.get(), TIMER_ALL_APPS_SCROLL_REPEAT);
+        const bool wasPressed = allAppsScrollArrowPressed_;
         allAppsScrollRepeatDirection_ = 0;
         allAppsScrollArrowPressed_ = false;
         if (releaseCapture && hwnd_ && GetCapture() == hwnd_.get()) ReleaseCapture();
+        if (wasPressed && hwnd_) InvalidateRect(hwnd_.get(), nullptr, FALSE); // clear the pressed arrow highlight
     }
 
     void ScrollAllAppsArrowStep() {
@@ -4121,10 +4225,7 @@ private:
             }
         } else if (vk == VK_RETURN) {
             if (viewMode_ == ViewMode::Search && !searchResults_.empty()) {
-                const auto& app = searchResults_[0];
-                Hide();
-                catalog_.RecordLaunch(app.path.empty() ? app.aumid : app.path);
-                LaunchApplication(app.path, app.aumid);
+                LaunchCatalogEntry(searchResults_[0]);
             }
         }
     }
@@ -4144,7 +4245,7 @@ private:
         }
     }
 
-    // ===================== RENDERING DOPPIO BUFFER =====================
+    // ===================== DOUBLE-BUFFERED RENDERING =====================
     void Render(HDC hdc, const RECT& rcPaint) {
         RECT rcClient{};
         GetClientRect(hwnd_.get(), &rcClient);
@@ -4234,7 +4335,7 @@ private:
         int leftW = rcLeft.right - rcLeft.left;
         int userH = metrics_.Scale(Metrics::BASE_USER_HEADER_H);
 
-        // 1. Intestazione Utente (in alto)
+        // 1. User header (top)
         RECT rcUser = { 0, 0, leftW, userH };
         RECT paintClip{}, headerIntersection{};
         const bool headerNeedsPaint = GetClipBox(hdc, &paintClip) != ERROR &&
@@ -4244,8 +4345,8 @@ private:
             FillRect(hdc, &rcUser, brHov.get());
         }
 
-        // Foto reale dell'account (caricata fuori dal thread UI). Se la Shell non
-        // espone una foto valida, viene mantenuto il fallback classico senza bloccare il menu.
+        // Real account photo (loaded off the UI thread). If the Shell exposes no
+        // valid photo, the bundled fallback is kept without blocking the menu.
         const int avSize = metrics_.Scale(32);
         const int avX = metrics_.Scale(16);
         const int avY = (userH - avSize) / 2;
@@ -4259,12 +4360,19 @@ private:
             // than substitute the old hand-drawn approximation.
         }
 
-        // Nome utente: la modalità privacy evita anche di leggere il nome reale.
+        // User name: privacy mode avoids even reading the real name. Like the
+        // native menu, prefer the display name over the logon name.
         wchar_t actualUserName[256] = {};
         const wchar_t* userNameToDisplay = Ui(UiText::DefaultUser);
         if (headerNeedsPaint && !settings_.privacyMode) {
-            DWORD nameLen = ARRAYSIZE(actualUserName);
-            if (GetUserNameW(actualUserName, &nameLen)) userNameToDisplay = actualUserName;
+            ULONG displayLen = ARRAYSIZE(actualUserName);
+            if (GetUserNameExW(NameDisplay, actualUserName, &displayLen) && actualUserName[0]) {
+                userNameToDisplay = actualUserName;
+            } else {
+                DWORD nameLen = ARRAYSIZE(actualUserName);
+                actualUserName[0] = 0;
+                if (GetUserNameW(actualUserName, &nameLen)) userNameToDisplay = actualUserName;
+            }
         }
 
         RECT rcName = { avX + avSize + metrics_.Scale(12), 0, leftW - metrics_.Scale(8), userH };
@@ -4295,7 +4403,7 @@ private:
         }
         }
 
-        // 2. Barra Inferiore: ordine richiesto 1507 / progetto (Explorer, Settings, Power, All apps).
+        // 2. Bottom bar: 1507 order (Explorer, Settings, Power, All apps).
         int placeH = metrics_.Scale(Metrics::BASE_PLACE_ITEM_H);
         int bottomH = BottomPlaceItemCount() * placeH;
         int bottomY = rcLeft.bottom - bottomH;
@@ -4317,7 +4425,7 @@ private:
                 FillRect(hdc, &rcItem, brHov.get());
             }
 
-            // Disegna icona stilizzata del collegamento
+            // Draw the stylized glyph of the place
             DrawPlaceGlyph(hdc, i, rcItem);
 
             RECT rcText = { metrics_.Scale(52), rcItem.top,
@@ -4329,7 +4437,7 @@ private:
                 DrawExplorerJumpChevron(hdc, rcItem);
         }
 
-        // 3. Sezione Centrale Scorrevole (Più usate / Tutte le app / Ricerca)
+        // 3. Scrollable middle section (Most used / All apps / Search)
         RECT rcScroll = { 0, userH, leftW, bottomY };
         UniqueRegion rgnClip(CreateRectRgn(rcScroll.left, rcScroll.top, rcScroll.right, rcScroll.bottom));
         SelectClipRgn(hdc, rgnClip.get());
@@ -4383,7 +4491,7 @@ private:
         pen.SetEndCap(Gdiplus::LineCapRound);
         pen.SetLineJoin(Gdiplus::LineJoinRound);
 
-        if (index == 3) { // Tutte le app (lista) o Indietro (solo icona freccia)
+        if (index == 3) { // All apps (list glyph) or Back (arrow glyph only)
             if (viewMode_ == ViewMode::AllApps || viewMode_ == ViewMode::AllAppsAlphabet) {
                 // Every coordinate is expressed on the same 16 px grid as the glyph.
                 const REAL midY = y + 8.0f * u;
@@ -4399,12 +4507,12 @@ private:
                                       x + sz, ly + 1.25f * u);
                 }
             }
-        } else if (index == 2) { // Alimentazione
+        } else if (index == 2) { // Power
             graphics.DrawArc(&pen, x + 2.0f * u, y + 2.0f * u,
                              sz - 4.0f * u, sz - 4.0f * u, 315.0f, 270.0f);
             graphics.DrawLine(&pen, x + sz / 2.0f, y + 1.0f * u,
                               x + sz / 2.0f, y + sz / 2.0f + 0.5f * u);
-        } else if (index == 1) { // Impostazioni: ingranaggio geometrico
+        } else if (index == 1) { // Settings: geometric gear
             Gdiplus::PointF teeth[16];
             const REAL cx = x + sz / 2.0f, cy = y + sz / 2.0f;
             for (int i = 0; i < 16; ++i) {
@@ -4416,7 +4524,7 @@ private:
             gear.AddPolygon(teeth, ARRAYSIZE(teeth));
             graphics.DrawPath(&pen, &gear);
             graphics.DrawEllipse(&pen, cx - sz * 0.13f, cy - sz * 0.13f, sz * 0.26f, sz * 0.26f);
-        } else if (index == 0) { // Esplora file: cartella con arco anteriore
+        } else if (index == 0) { // File Explorer: folder with front flap
             Gdiplus::PointF folderPts[] = {
                 {x + 0.5f * u,  y + 1.5f * u},
                 {x + 6.5f * u,  y + 1.5f * u},
@@ -4554,7 +4662,7 @@ private:
             curY += headH;
             totalH += headH;
 
-            // App sciolte
+            // Loose apps
             for (const auto& a : sec.apps) {
                 if (curY + itemH >= rcArea.top && curY <= rcArea.bottom) {
                     RECT rcItem = { 0, curY, rcArea.right, curY + itemH };
@@ -4575,7 +4683,7 @@ private:
                 renderIdx++;
             }
 
-            // Cartelle
+            // Folders
             for (const auto& f : sec.folders) {
                 if (curY + itemH >= rcArea.top && curY <= rcArea.bottom) {
                     RECT rcF = { 0, curY, rcArea.right, curY + itemH };
@@ -4594,7 +4702,7 @@ private:
                     ScopedTextColor sC(hdc, RGB(255, 255, 255));
                     DrawTextW(hdc, f.name.c_str(), -1, &rcText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
-                    // Chevron (▾ se espansa, ▸ se chiusa)
+                    // Chevron (▾ when expanded, ▸ when collapsed)
                     RECT rcChev = { rcArea.right - metrics_.Scale(20), curY, rcArea.right - metrics_.Scale(4), curY + itemH };
                     DrawTextW(hdc, f.expanded ? L"\u25BE" : L"\u25B8", -1, &rcChev, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
                 }
@@ -4602,7 +4710,7 @@ private:
                 totalH += itemH;
                 renderIdx++;
 
-                // Sotto-app se la cartella è espansa
+                // Child apps when the folder is expanded
                 if (f.expanded) {
                     for (const auto& sub : f.apps) {
                         if (curY + itemH >= rcArea.top && curY <= rcArea.bottom) {
@@ -4629,27 +4737,27 @@ private:
         }
         totalAllAppsH_ = totalH;
 
-        // Barra con thumb proportional, paging cliccabile e trascinabile.
-        // Aggiornata con il viewport effettivo della colonna, anche dopo resize/DPI.
+        // Scrollbar with a proportional thumb, clickable paging and dragging.
+        // Updated from the column's actual viewport, also after resize/DPI changes.
         const int visibleH = rcArea.bottom - rcArea.top;
         const int currentMaxScroll = std::max(0, totalAllAppsH_ - visibleH);
         allAppsScrollY_ = std::max(0, std::min(allAppsScrollY_, currentMaxScroll));
         RECT rcTrack{}, rcThumb{}, rcUpButton{}, rcDownButton{}; int maxScroll = 0;
         if (GetAllAppsScrollGeometry(rcTrack, rcThumb, maxScroll, &rcUpButton, &rcDownButton)) {
-            UniqueBrush brTrack(CreateSolidBrush(RGB(30, 30, 30)));
-            UniqueBrush brButton(CreateSolidBrush(RGB(30, 30, 30)));
-            UniqueBrush brThumb(CreateSolidBrush(allAppsScrollDragging_ ? RGB(220, 220, 220) : RGB(125, 125, 125)));
-            FillRect(hdc, &rcTrack, brTrack.get());
-            FillRect(hdc, &rcUpButton, brButton.get());
-            FillRect(hdc, &rcDownButton, brButton.get());
-            const UINT upState = DFCS_SCROLLUP | DFCS_FLAT |
-                (allAppsScrollY_ <= 0 ? DFCS_INACTIVE : 0);
-            const UINT downState = DFCS_SCROLLDOWN | DFCS_FLAT |
-                (allAppsScrollY_ >= maxScroll ? DFCS_INACTIVE : 0);
-            DrawFrameControl(hdc, &rcUpButton, DFC_SCROLL, upState);
-            DrawFrameControl(hdc, &rcDownButton, DFC_SCROLL, downState);
-            InflateRect(&rcThumb, -metrics_.Scale(1), 0);
-            FillRect(hdc, &rcThumb, brThumb.get());
+            // Rail and buttons share one flat dark background: no seams between
+            // the arrow buttons and the track.
+            UniqueBrush rail(CreateSolidBrush(kScrollRail));
+            RECT rcBar{ rcTrack.left, rcUpButton.top, rcTrack.right, rcDownButton.bottom };
+            FillRect(hdc, &rcBar, rail.get());
+            const bool upDisabled = allAppsScrollY_ <= 0;
+            const bool downDisabled = allAppsScrollY_ >= maxScroll;
+            const bool upPressed = allAppsScrollArrowPressed_ && allAppsScrollRepeatDirection_ < 0;
+            const bool downPressed = allAppsScrollArrowPressed_ && allAppsScrollRepeatDirection_ > 0;
+            DrawScrollArrow(hdc, rcUpButton, true,
+                upDisabled ? kScrollArrowDim : upPressed ? kScrollArrowHot : kScrollArrow);
+            DrawScrollArrow(hdc, rcDownButton, false,
+                downDisabled ? kScrollArrowDim : downPressed ? kScrollArrowHot : kScrollArrow);
+            DrawScrollThumb(hdc, rcThumb, allAppsScrollDragging_);
         }
     }
 
@@ -4845,7 +4953,7 @@ private:
         RECT drawRc = rcTile;
         bool drawBack = tile.showBack;
 
-        // Se la tile è in rotazione 3D, applica deformazione verticale coseno
+        // While the tile flips, apply the vertical cosine deformation
         if (tile.flipping) {
             float p = tile.flipProgress;
             float scaleY = 1.0f;
@@ -4881,7 +4989,7 @@ private:
         UniqueBrush tileBrush(CreateSolidBrush(accent));
         if (tileBrush) FillRect(hdc, &drawRc, tileBrush.get());
 
-        // Bordo bianco da 2px al passaggio del mouse
+        // 2 px white border on hover
         if (hovered) {
             UniquePen pWhite(CreatePen(PS_SOLID, 2, RGB(255, 255, 255)));
             HBRUSH brNull = static_cast<HBRUSH>(GetStockObject(NULL_BRUSH));
@@ -4893,21 +5001,26 @@ private:
         }
 
         if (drawBack && tile.isLive) {
-            // Retro Live Tile (dati dinamici)
+            // Back face: neutral local information only (app name, today's date
+            // and the current time). Nothing is fabricated.
             ScopedTextColor sCol(hdc, RGB(255, 255, 255));
+            wchar_t dateText[128]{}, timeText[64]{};
+            GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, DATE_LONGDATE, nullptr, nullptr, dateText, ARRAYSIZE(dateText), nullptr);
+            GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, nullptr, nullptr, timeText, ARRAYSIZE(timeText));
+
             RECT rcLiveTitle = { drawRc.left + metrics_.Scale(8), drawRc.top + metrics_.Scale(8), drawRc.right - metrics_.Scale(8), drawRc.top + metrics_.Scale(24) };
             ScopedSelectObject sFB(hdc, fontBold_.get());
-            DrawTextW(hdc, TranslateLiveTileText(tile.liveTitle), -1, &rcLiveTitle, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+            DrawTextW(hdc, TranslateTileCaption(tile.name), -1, &rcLiveTitle, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
 
             RECT rcLiveSub = { drawRc.left + metrics_.Scale(8), drawRc.top + metrics_.Scale(26), drawRc.right - metrics_.Scale(8), drawRc.top + metrics_.Scale(50) };
             ScopedSelectObject sFT(hdc, fontTitle_.get());
-            DrawTextW(hdc, TranslateLiveTileText(tile.liveSubtitle), -1, &rcLiveSub, DT_LEFT | DT_WORDBREAK | DT_END_ELLIPSIS);
+            DrawTextW(hdc, dateText, -1, &rcLiveSub, DT_LEFT | DT_WORDBREAK | DT_END_ELLIPSIS);
 
             RECT rcLiveDet = { drawRc.left + metrics_.Scale(8), drawRc.bottom - metrics_.Scale(22), drawRc.right - metrics_.Scale(8), drawRc.bottom - metrics_.Scale(4) };
             ScopedSelectObject sFS(hdc, fontSmall_.get());
-            DrawTextW(hdc, TranslateLiveTileText(tile.liveDetail), -1, &rcLiveDet, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+            DrawTextW(hdc, timeText, -1, &rcLiveDet, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
         } else {
-            // Fronte standard (icona al centro/sinistra e nome in basso a sinistra)
+            // Standard front face (centered/left icon, name at the bottom left)
             int icSz = metrics_.Scale(tile.size == TileSize::Small ? 20 : 32);
             int icX = drawRc.left + ((drawRc.right - drawRc.left) - icSz) / 2;
             int icY = drawRc.top + ((drawRc.bottom - drawRc.top) - icSz) / 2;
@@ -5033,16 +5146,16 @@ private:
 
         if (pt.x < leftW) {
             if (pt.y < userH) {
-                outArea = 0; // Utente
+                outArea = 0; // User
                 return;
             }
             if (pt.y >= bottomY) {
                 const bool allAppsView = viewMode_ == ViewMode::AllApps || viewMode_ == ViewMode::AllAppsAlphabet;
-                outArea = 1; // Collegamenti
+                outArea = 1; // Places
                 outIndex = allAppsView ? 3 : (pt.y - bottomY) / placeH;
                 return;
             }
-            outArea = 2; // Elenco App
+            outArea = 2; // App list
             int relY = pt.y - userH;
             if (viewMode_ == ViewMode::Normal) {
                 outIndex = HitTestNormal(relY);
@@ -5067,7 +5180,7 @@ private:
             return;
         }
 
-        // Colonna Tile
+        // Tile column
         int startX = leftW + metrics_.Scale(Metrics::BASE_GROUP_PAD_X);
         int startY = metrics_.Scale(Metrics::BASE_GROUP_PAD_Y);
         int groupW = Metrics::BASE_COLUMNS_PER_GROUP * metrics_.Scale(Metrics::BASE_TILE_MEDIUM) +
@@ -5096,33 +5209,35 @@ private:
         }
     }
 
+    // Copies the identity of the entry first: RecordLaunch() rebuilds the
+    // catalog sections, which would invalidate a reference into them.
+    void LaunchCatalogEntry(const AppEntry& entry) {
+        const std::wstring path = entry.path, aumid = entry.aumid;
+        Hide();
+        catalog_.RecordLaunch(path.empty() ? aumid : path);
+        LaunchApplication(path, aumid);
+    }
+
     void HandleAllAppsClick(int clickIdx) {
         int idx = 0;
-        for (auto& sec : const_cast<std::vector<LetterSection>&>(catalog_.Sections())) {
-            for (auto& a : sec.apps) {
-                if (idx == clickIdx) {
-                    Hide();
-                    catalog_.RecordLaunch(a.path.empty() ? a.aumid : a.path);
-                    LaunchApplication(a.path, a.aumid);
-                    return;
-                }
+        const auto& sections = catalog_.Sections();
+        for (size_t si = 0; si < sections.size(); ++si) {
+            const auto& sec = sections[si];
+            for (const auto& a : sec.apps) {
+                if (idx == clickIdx) { LaunchCatalogEntry(a); return; }
                 idx++;
             }
-            for (auto& f : sec.folders) {
+            for (size_t fi = 0; fi < sec.folders.size(); ++fi) {
+                const auto& f = sec.folders[fi];
                 if (idx == clickIdx) {
-                    f.expanded = !f.expanded;
+                    catalog_.ToggleFolder(si, fi);
                     InvalidateRect(hwnd_.get(), nullptr, FALSE);
                     return;
                 }
                 idx++;
                 if (f.expanded) {
-                    for (auto& sub : f.apps) {
-                        if (idx == clickIdx) {
-                            Hide();
-                            catalog_.RecordLaunch(sub.path.empty() ? sub.aumid : sub.path);
-                            LaunchApplication(sub.path, sub.aumid);
-                            return;
-                        }
+                    for (const auto& sub : f.apps) {
+                        if (idx == clickIdx) { LaunchCatalogEntry(sub); return; }
                         idx++;
                     }
                 }
@@ -5130,10 +5245,8 @@ private:
         }
     }
 
-    // ===================== MENU CONTESTUALI: HMENU owner-draw ImmersiveStartMenu =====================
-    bool ShowMetroMenuAt(POINT pt,const std::vector<MetroPopupItem>& items,
-                         bool keyboard=false, bool darkTheme=false) {
-        (void)keyboard; (void)darkTheme; // context popups are always forced dark.
+    // ===================== CONTEXT MENUS: owner-drawn HMENU (ImmersiveStartMenu) =====================
+    bool ShowMetroMenuAt(POINT pt,const std::vector<MetroPopupItem>& items) {
         UniqueMenu menu(CreatePopupMenu());
         if(!menu) return false;
         for(const auto& item:items) {
@@ -5159,21 +5272,21 @@ private:
 
     void ShowExplorerJumpList() {
         std::vector<MetroPopupItem> menu = {
-            {Ui(UiText::Pinned), 0, false, 0, true},
-            {GetKnownFolderLocalizedDisplayName(FOLDERID_Desktop, L"Desktop"), IDM_EXPLORER_DESKTOP, false, 0, false},
-            {GetKnownFolderLocalizedDisplayName(FOLDERID_Downloads, L"Downloads"), IDM_EXPLORER_DOWNLOADS, false, 0, false},
-            {GetKnownFolderLocalizedDisplayName(FOLDERID_Documents, L"Documents"), IDM_EXPLORER_DOCUMENTS, false, 0, false},
-            {GetKnownFolderLocalizedDisplayName(FOLDERID_Pictures, L"Pictures"), IDM_EXPLORER_PICTURES, false, 0, false},
+            {Ui(UiText::Pinned), 0, false, true},
+            {GetKnownFolderLocalizedDisplayName(FOLDERID_Desktop, L"Desktop"), IDM_EXPLORER_DESKTOP},
+            {GetKnownFolderLocalizedDisplayName(FOLDERID_Downloads, L"Downloads"), IDM_EXPLORER_DOWNLOADS},
+            {GetKnownFolderLocalizedDisplayName(FOLDERID_Documents, L"Documents"), IDM_EXPLORER_DOCUMENTS},
+            {GetKnownFolderLocalizedDisplayName(FOLDERID_Pictures, L"Pictures"), IDM_EXPLORER_PICTURES},
         };
         RECT client{};
         if (!GetClientRect(hwnd_.get(), &client)) return;
-        const int popupHeight = 2 * MetroPadY() + static_cast<int>(menu.size()) * MetroItemHeight();
+        const int popupHeight = 2 * metrics_.Scale(6) + static_cast<int>(menu.size()) * metrics_.Scale(34);
         // Attach the flyout beside the Explorer chevron and align its bottom with
         // the menu's bottom edge, like the pinned-places panel in the reference.
         POINT popupPoint{metrics_.Scale(Metrics::BASE_LEFT_COL_W) - metrics_.Scale(5),
                          static_cast<int>(client.bottom) - popupHeight};
         pendingContext_ = PendingContext::ExplorerPlaces;
-        if (!ShowMetroMenuAt(popupPoint, menu, false, true)) ClearPendingContext();
+        if (!ShowMetroMenuAt(popupPoint, menu)) ClearPendingContext();
     }
 
     void ClearPendingContext() {
@@ -5204,9 +5317,11 @@ private:
         }
         AppendMenuW(menu.get(),MF_STRING,IDM_TOGGLE_LIVE,
             tile.isLive?Ui(UiText::DisableLive):Ui(UiText::EnableLive));
-        AppendMenuW(menu.get(),MF_SEPARATOR,0,nullptr);
-        AppendMenuW(menu.get(),MF_STRING,IDM_RUNAS_ADMIN,Ui(UiText::RunAsAdmin));
-        AppendMenuW(menu.get(),MF_STRING,IDM_OPEN_LOCATION,Ui(UiText::OpenLocation));
+        if (IsFileBackedEntry(tile.path)) {
+            AppendMenuW(menu.get(),MF_SEPARATOR,0,nullptr);
+            AppendMenuW(menu.get(),MF_STRING,IDM_RUNAS_ADMIN,Ui(UiText::RunAsAdmin));
+            AppendMenuW(menu.get(),MF_STRING,IDM_OPEN_LOCATION,Ui(UiText::OpenLocation));
+        }
         pendingContext_=PendingContext::Tile; pendingGroup_=grp; pendingTile_=idx;
         TrackImmersiveMenu(menu.get(),pt,false);
     }
@@ -5247,10 +5362,15 @@ private:
         }
         if (!app) return;
         std::vector<MetroPopupItem> menu = {
-            {Ui(UiText::Open), IDM_OPEN_APP, false},
-            {Ui(UiText::PinToStart), IDM_PIN_TO_START, false},
-            {Ui(UiText::RunAsAdmin), IDM_RUNAS_ADMIN, false},
-            {Ui(UiText::OpenLocation), IDM_OPEN_LOCATION, false}};
+            {Ui(UiText::Open), IDM_OPEN_APP},
+            {Ui(UiText::PinToStart), IDM_PIN_TO_START}};
+        // "Run as administrator" / "Open file location" only make sense for
+        // shortcut entries; AppsFolder (shell:AppsFolder\<AUMID>) items have no
+        // file to elevate or to select in Explorer.
+        if (IsFileBackedEntry(app->path)) {
+            menu.push_back({Ui(UiText::RunAsAdmin), IDM_RUNAS_ADMIN});
+            menu.push_back({Ui(UiText::OpenLocation), IDM_OPEN_LOCATION});
+        }
         pendingContext_ = PendingContext::App;
         pendingAppName_ = app->name;
         pendingAppPath_ = app->path;
@@ -5258,14 +5378,23 @@ private:
         if (!ShowMetroMenuAt(pt, menu)) ClearPendingContext();
     }
 
+    static bool IsFileBackedEntry(const std::wstring& path) {
+        return !path.empty() && _wcsnicmp(path.c_str(), L"shell:", 6) != 0;
+    }
+
     void ShowUserMenu(POINT pt) {
-        std::vector<MetroPopupItem> menu={{Ui(UiText::EditAccount),IDM_USER_SETTINGS,false},{Ui(UiText::Lock),IDM_USER_LOCK,false},{Ui(UiText::SignOut),IDM_USER_SIGNOUT,false}};
+        std::vector<MetroPopupItem> menu={{Ui(UiText::EditAccount),IDM_USER_SETTINGS},{Ui(UiText::Lock),IDM_USER_LOCK},{Ui(UiText::SignOut),IDM_USER_SIGNOUT}};
         pendingContext_=PendingContext::User;
         if(!ShowMetroMenuAt(pt,menu))ClearPendingContext();
     }
 
     void ShowPowerMenu(POINT pt) {
-        std::vector<MetroPopupItem> menu={{Ui(UiText::Sleep),IDM_POWER_SLEEP,false},{Ui(UiText::Shutdown),IDM_POWER_SHUTDOWN,false},{Ui(UiText::Restart),IDM_POWER_RESTART,false},{Ui(UiText::Hibernate),IDM_POWER_HIBERNATE,false}};
+        const PowerMenuAvailability power = QueryPowerMenuAvailability();
+        std::vector<MetroPopupItem> menu;
+        if (power.sleep) menu.push_back({Ui(UiText::Sleep),IDM_POWER_SLEEP});
+        menu.push_back({Ui(UiText::Shutdown),IDM_POWER_SHUTDOWN});
+        menu.push_back({Ui(UiText::Restart),IDM_POWER_RESTART});
+        if (power.hibernate) menu.push_back({Ui(UiText::Hibernate),IDM_POWER_HIBERNATE});
         pendingContext_=PendingContext::Power;
         if(!ShowMetroMenuAt(pt,menu))ClearPendingContext();
     }
@@ -5392,36 +5521,42 @@ private:
 
 };
 
-// ===================== THREAD UI, HOOK E SOPPRESSIONE =====================
-// Architettura (modellata su OpenShell, adattata a Windhawk):
-//  - Il menu, il catalogo, l'icona cache e TUTTI gli hook vivono su UN SOLO thread
-//    dedicato con il proprio ciclo di messaggi (prima la finestra era creata sul thread
-//    di Wh_ModInit, che non pompa messaggi: WM_APP_TOGGLE non veniva mai consegnato).
-//  - Tasto Win: hook WH_KEYBOARD_LL; sul tap isolato si inietta un tasto inerte (marcato
-//    con dwExtraInfo) PRIMA di lasciar passare il rilascio di Win, cosi' Windows annulla
-//    l'apertura del menu nativo senza lasciare il tasto Win "incastrato".
-//  - Come OpenShell: hook WH_GETMESSAGE sui thread di Progman/Shell_TrayWnd per
-//    intercettare WM_SYSCOMMAND/SC_TASKLIST (apertura classica del menu Start).
-//  - Click sul pulsante Start: WH_MOUSE_LL che usa solo un rettangolo in cache
-//    (aggiornato da un timer sul thread UI): nessuna chiamata UIA/COM dentro l'hook.
-//  - Debounce di 250 ms tra le varie sorgenti per evitare doppi toggle.
-static std::unique_ptr<StartMenuWindow> g_menu; // proprieta' esclusiva del thread UI
+// ===================== UI THREAD, HOOKS AND NATIVE-MENU SUPPRESSION =====================
+// Threads owned by the mod:
+//  - UI thread: owns the menu window, the catalog, the icon cache and GDI+. All
+//    slow work (catalog scans, .lnk resolution, UI Automation) happens here.
+//  - Hook thread: installs WH_KEYBOARD_LL / WH_MOUSE_LL and only pumps messages,
+//    so the hook procedures always return quickly (LowLevelHooksTimeout).
+//  - Watcher thread: waits on change notifications for the Programs folders and
+//    asks the UI thread to rescan the catalog.
+//  - Profile-photo worker: loads the account picture in the background.
+//  - WH_GETMESSAGE hooks on the Progman / taskbar threads drop
+//    WM_SYSCOMMAND/SC_TASKLIST (classic Start activation) and toggle our menu.
+//  - A 250 ms debounce avoids double toggles across sources.
+// g_menu has a non-trivial destructor (DestroyWindow, UnregisterClass, GDI
+// objects) and is released explicitly by the UI thread; see the Windhawk wiki
+// page "Global objects and process shutdown".
+[[clang::no_destroy]] static std::unique_ptr<StartMenuWindow> g_menu; // UI thread only
 static Settings g_settings;
 
 constexpr UINT WM_APP_SETTINGS_CHANGED = WM_APP + 110;
 constexpr ULONG_PTR KEY_MARKER = 0x57484B31;
-constexpr WORD VK_DUMMY = 0xE8; // tasto non assegnato
+constexpr WORD VK_DUMMY = 0xE8; // unassigned virtual key
 
-static bool g_winPressed = false;   // usati solo dall'hook tastiera (thread UI)
+static bool g_winPressed = false;   // keyboard hook state (hook thread only)
 static bool g_winChorded = false;
-static bool g_swallowMouseUp = false;
-static bool g_warnedInvalidRect = false;
+static bool g_swallowMouseUp = false; // mouse hook state (hook thread only)
+static ULONGLONG g_lastAnchorRequestTick = 0; // hook thread only
 
 static std::atomic<ULONGLONG> g_lastToggleTick{ 0 };
 static std::atomic<DWORD> g_uiThreadId{ 0 };
+static std::atomic<DWORD> g_hookThreadId{ 0 };
 static std::atomic<HWND> g_menuHwnd{ nullptr };
 static std::atomic<bool> g_stopRequested{ false };
 static std::atomic<bool> g_settingsChangedPending{ false };
+
+extern "C" IMAGE_DOS_HEADER __ImageBase;
+static HINSTANCE GetModInstance() { return reinterpret_cast<HINSTANCE>(&__ImageBase); }
 
 struct FindHandleScope {
     HANDLE h = INVALID_HANDLE_VALUE;
@@ -5545,8 +5680,8 @@ static bool LoadImageFilesFromDirectory(const std::wstring& directory, std::vect
 }
 
 static std::vector<BYTE> ExtractAccountPicturePayload(const std::vector<BYTE>& file) {
-    // I file .accountpicture-ms contengono in genere due immagini concatenate.
-    // Cerchiamo marker JPEG/PNG e validiamo la decodifica finale tramite GDI+.
+    // .accountpicture-ms files usually contain two concatenated images. Look for
+    // JPEG/PNG markers and validate the final decode with GDI+.
     std::vector<BYTE> best;
     const BYTE pngSig[] = {0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a};
     for (size_t i = 0; i + 8 < file.size(); ++i) {
@@ -5564,8 +5699,7 @@ static std::vector<BYTE> ExtractAccountPicturePayload(const std::vector<BYTE>& f
 }
 
 static bool LoadShellAccountPhoto(std::vector<BYTE>& result) {
-    // Microsoft documents CoInitializeEx as a prerequisite for known-folder APIs.
-    // This scope is ended before the separate C++/WinRT apartment is initialized.
+    // CoInitializeEx is documented as a prerequisite for the known-folder APIs.
     ScopedCom com;
     if (!com.IsOk()) return false;
     PWSTR rawFolder = nullptr;
@@ -5599,42 +5733,6 @@ static bool LoadShellAccountPhoto(std::vector<BYTE>& result) {
     return false;
 }
 
-#if WH_HAS_CPPWINRT_USER_PICTURE
-static bool LoadWinrtAccountPhoto(std::vector<BYTE>& result) {
-    try {
-        winrt::init_apartment(winrt::apartment_type::multi_threaded);
-        struct ApartmentScope { ~ApartmentScope(){ winrt::uninit_apartment(); } } apartment;
-        auto reference = winrt::Windows::System::User::GetDefault()
-            .GetPictureAsync(winrt::Windows::System::UserPictureSize::Size424x424).get();
-        if (!reference) {
-            Wh_Log(L"[Profile] User.GetPictureAsync returned null (no accessible account image)");
-            return false;
-        }
-        auto stream = reference.OpenReadAsync().get();
-        const auto size = stream.Size();
-        if (!size || size > 32ull * 1024 * 1024) return false;
-        winrt::Windows::Storage::Streams::DataReader reader(stream);
-        reader.LoadAsync(static_cast<uint32_t>(size)).get();
-        result.resize(static_cast<size_t>(size));
-        reader.ReadBytes(winrt::array_view<uint8_t>(result));
-        Wh_Log(L"[Profile] Windows.System.User returned %u picture bytes", static_cast<unsigned>(result.size()));
-        return !result.empty();
-    } catch (...) {
-        // GetPictureAsync has the documented userAccountInformation capability
-        // requirement; an Explorer-hosted Windhawk mod may not receive it.
-        Wh_Log(L"[Profile] User.GetPictureAsync failed (API/capability unavailable)");
-        return false;
-    }
-}
-
-#else
-// This build lacks the C++/WinRT projections required by the documented
-// account-picture API; keep the file-based/explicit path active and report why.
-static bool LoadWinrtAccountPhoto(std::vector<BYTE>&) {
-    Wh_Log(L"[Profile] C++/WinRT User.GetPictureAsync is unavailable in this build");
-    return false;
-}
-#endif
 
 static bool InitializeDefaultProfileAvatar() {
     if (!g_gdiplusToken) return false;
@@ -5647,15 +5745,17 @@ static bool InitializeDefaultProfileAvatar() {
         Wh_Log(L"[Profile] Could not create a stream for the bundled fallback avatar");
         return false;
     }
-       g_defaultProfileAvatar.reset(::new (std::nothrow) Gdiplus::Bitmap(
-    g_defaultProfileAvatarStream.Get(), FALSE));
+    // GDI+ objects must be allocated with GdiplusBase::operator new (GdipAlloc):
+    // a global `::new` would pair a CRT allocation with GdipFree on delete and
+    // crash when the bitmap is released at unload.
+    g_defaultProfileAvatar.reset(new Gdiplus::Bitmap(g_defaultProfileAvatarStream.Get(), FALSE));
     if (!g_defaultProfileAvatar || g_defaultProfileAvatar->GetLastStatus() != Gdiplus::Ok ||
-    !g_defaultProfileAvatar->GetWidth() || !g_defaultProfileAvatar->GetHeight()) {
-    Wh_Log(L"[Profile] GDI+ could not decode the bundled fallback avatar");
-    g_defaultProfileAvatar.reset();
-    g_defaultProfileAvatarStream.Reset();
-    return false;
-}
+        !g_defaultProfileAvatar->GetWidth() || !g_defaultProfileAvatar->GetHeight()) {
+        Wh_Log(L"[Profile] GDI+ could not decode the bundled fallback avatar");
+        g_defaultProfileAvatar.reset();
+        g_defaultProfileAvatarStream.Reset();
+        return false;
+    }
     return true;
 }
 
@@ -5669,17 +5769,14 @@ static DWORD WINAPI ProfilePhotoWorker(void*) {
     } else {
         if (!explicitPath.empty())
             Wh_Log(L"[Profile] Configured profilePicturePath could not be read; trying Windows account sources");
-        // First try the per-user registry image paths used by Win7Taskbar, then
-        // the roaming AccountPictures directory and known-folder/WinRT fallbacks.
+        // First try the per-user registry image paths, then the roaming
+        // AccountPictures directory and the known-folder fallback.
         if (!LoadRegistryAccountPhoto(bytes)) {
             std::wstring roaming;
             bool loadedRoaming = GetKnownFolderPathString(FOLDERID_RoamingAppData, roaming) &&
                 LoadImageFilesFromDirectory(roaming + L"\\Microsoft\\Windows\\AccountPictures", bytes);
-            if (!loadedRoaming && !LoadShellAccountPhoto(bytes)) {
-                Wh_Log(L"[Profile] Account registry, roaming and known-folder paths had no usable photo; trying User.GetPictureAsync");
-                if (!LoadWinrtAccountPhoto(bytes))
-                    Wh_Log(L"[Profile] No account photo source yielded an image; avatar remains fallback");
-            }
+            if (!loadedRoaming && !LoadShellAccountPhoto(bytes))
+                Wh_Log(L"[Profile] No account photo source yielded an image; avatar remains fallback");
         }
     }
     if (!bytes.empty() && !g_profilePhotoStop.load()) {
@@ -5712,14 +5809,17 @@ static void RestartProfilePhotoWorker() {
 }
 
 static UniqueHandle g_hUiThread;
+static UniqueHandle g_hHookThread;
+static UniqueHandle g_hWatcherThread;
+static UniqueHandle g_hookReadyEvent;
+static UniqueHandle g_watcherStopEvent;
 
-static HHOOK g_hKbdHook = nullptr;
-static HHOOK g_hMouseHook = nullptr;
-static HHOOK g_hProgHook = nullptr;
-static HHOOK g_hTrayHook = nullptr;
-static UINT_PTR g_anchorTimer = 0;
+static HHOOK g_hKbdHook = nullptr;   // hook thread
+static HHOOK g_hMouseHook = nullptr; // hook thread
+static HHOOK g_hProgHook = nullptr;  // UI thread
+static HHOOK g_hTrayHook = nullptr;  // UI thread
 
-static void RequestToggle(const wchar_t* source) {
+static void RequestToggle(const wchar_t* source, HWND taskbar = nullptr) {
     ULONGLONG now = GetTickCount64();
     ULONGLONG last = g_lastToggleTick.load();
     if (now - last < 250) {
@@ -5733,36 +5833,68 @@ static void RequestToggle(const wchar_t* source) {
         return;
     }
     Wh_Log(L"[Toggle] request from %s", source);
-    PostMessageW(h, WM_APP_TOGGLE, 0, 0);
+    PostMessageW(h, WM_APP_TOGGLE, 0, reinterpret_cast<LPARAM>(taskbar));
 }
 
-static void RefreshStartRect(bool logIt) {
-    StartAnchor a;
-    bool ok = GetStartAnchor(a);
-    bool reliable = ok && a.method != 3; // il fallback geometrico non e' affidabile
-    RECT old = g_startRect;
-    g_startRect = a.startButton;
-    g_startRectValid = reliable;
-    if (!reliable && !g_warnedInvalidRect) {
-        g_warnedInvalidRect = true;
-        Wh_Log(L"[Anchor] Start button NOT found reliably (method=%d); mouse clicks on Start will not be intercepted, only the Win key", a.method);
+// UI thread: recompute the Start button rectangle of every taskbar and publish
+// the result for the mouse hook.
+static void RefreshStartRects(bool logIt) {
+    std::vector<CachedStartButton> fresh;
+    std::vector<HWND> taskbars;
+    if (HWND primary = FindWindowW(L"Shell_TrayWnd", nullptr)) taskbars.push_back(primary);
+    HWND secondary = nullptr;
+    while ((secondary = FindWindowExW(nullptr, secondary, L"Shell_SecondaryTrayWnd", nullptr)) != nullptr)
+        taskbars.push_back(secondary);
+
+    for (HWND taskbar : taskbars) {
+        StartAnchor a;
+        if (!GetStartAnchor(a, taskbar)) continue;
+        CachedStartButton entry;
+        entry.taskbar = taskbar;
+        entry.taskbarRect = a.taskbarRect;
+        entry.startRect = a.startButton;
+        entry.reliable = a.method != 3; // the geometric fallback is not trusted for click capture
+        fresh.push_back(entry);
+        if (logIt)
+            Wh_Log(L"[Anchor] taskbar=%p method=%d rect=(%ld,%ld,%ld,%ld) edge=%u valid=%d",
+                   taskbar, a.method, a.startButton.left, a.startButton.top, a.startButton.right,
+                   a.startButton.bottom, (unsigned)a.edge, entry.reliable ? 1 : 0);
+        if (!entry.reliable && logIt)
+            Wh_Log(L"[Anchor] Start button NOT found reliably on taskbar %p; its clicks will not be intercepted, only the Win key", taskbar);
     }
-    if (logIt || !EqualRect(&old, &g_startRect)) {
-        Wh_Log(L"[Anchor] method=%d rect=(%ld,%ld,%ld,%ld) edge=%u valid=%d",
-               a.method, a.startButton.left, a.startButton.top, a.startButton.right, a.startButton.bottom,
-               (unsigned)a.edge, reliable ? 1 : 0);
-    }
+
+    AcquireSRWLockExclusive(&g_startCacheLock);
+    g_startCache.swap(fresh);
+    ReleaseSRWLockExclusive(&g_startCacheLock);
+    g_startCacheTick = GetTickCount64();
 }
 
-static VOID CALLBACK AnchorTimerProc(HWND, UINT, UINT_PTR, DWORD) {
-    GUARDED(L"AnchorTimer", { RefreshStartRect(false); })
+// Hook thread helpers: read-only lookups in the published cache.
+static bool PointInAnyTaskbar(POINT pt) {
+    AcquireSRWLockShared(&g_startCacheLock);
+    bool inside = false;
+    for (const auto& e : g_startCache) {
+        if (PtInRect(&e.taskbarRect, pt)) { inside = true; break; }
+    }
+    ReleaseSRWLockShared(&g_startCacheLock);
+    return inside;
+}
+
+static bool FindStartButtonAt(POINT pt, HWND& taskbarOut) {
+    AcquireSRWLockShared(&g_startCacheLock);
+    bool hit = false;
+    for (const auto& e : g_startCache) {
+        if (e.reliable && PtInRect(&e.startRect, pt)) { taskbarOut = e.taskbar; hit = true; break; }
+    }
+    ReleaseSRWLockShared(&g_startCacheLock);
+    return hit;
 }
 
 static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
         auto* kbd = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
         if (kbd->dwExtraInfo == KEY_MARKER) {
-            return CallNextHookEx(nullptr, nCode, wParam, lParam); // evento iniettato da noi
+            return CallNextHookEx(nullptr, nCode, wParam, lParam); // event injected by us
         }
         bool isWin = (kbd->vkCode == VK_LWIN || kbd->vkCode == VK_RWIN);
         bool down = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
@@ -5770,7 +5902,7 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
 
         if (down) {
             if (isWin) {
-                if (!g_winPressed) { // ignora l'autorepeat
+                if (!g_winPressed) { // ignore auto-repeat
                     g_winPressed = true;
                     g_winChorded = false;
                 }
@@ -5783,7 +5915,7 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
             g_winChorded = false;
             if (tap) {
                 Wh_Log(L"[Key] isolated Win tap detected");
-                // Tasto inerte PRIMA del rilascio di Win: annulla il menu nativo.
+                // Inert key BEFORE the Win release: cancels the native menu.
                 INPUT inp[2]{};
                 inp[0].type = INPUT_KEYBOARD;
                 inp[0].ki.wVk = VK_DUMMY;
@@ -5794,7 +5926,7 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
                 inp[1].ki.dwExtraInfo = KEY_MARKER;
                 SendInput(2, inp, sizeof(INPUT));
                 RequestToggle(L"Win key");
-                // il rilascio di Win passa normalmente (niente tasto incastrato)
+                // the Win release passes through normally (no stuck key)
             }
         }
     }
@@ -5802,23 +5934,41 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
 }
 
 static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION && (wParam == WM_LBUTTONDOWN || wParam == WM_LBUTTONUP)) {
+    if (nCode == HC_ACTION) {
         auto* ms = reinterpret_cast<MSLLHOOKSTRUCT*>(lParam);
-        POINT pt = ms->pt;
-        if (wParam == WM_LBUTTONDOWN) {
-            if (g_startRectValid && PtInRect(&g_startRect, pt)) {
-                g_swallowMouseUp = true;
-                Wh_Log(L"[Mouse] click on Start button at (%ld,%ld)", pt.x, pt.y);
-                RequestToggle(L"Start click");
-                return 1; // impedisce al menu nativo di aprirsi
-            }
-            if (g_menu && g_menu->IsVisible()) {
-                RECT rcMenu{};
-                if (GetWindowRect(g_menu->GetHwnd(), &rcMenu) && !PtInRect(&rcMenu, pt)) {
-                    PostMessageW(g_menu->GetHwnd(), WM_APP_HIDE, 0, 0); // light dismiss
+        const POINT pt = ms->pt;
+        if (wParam == WM_MOUSEMOVE) {
+            // Ask the UI thread for fresh Start rectangles while the pointer is over
+            // a taskbar (throttled), so a centered Windows 11 taskbar whose icons
+            // shifted is measured again before the click arrives.
+            if (PointInAnyTaskbar(pt)) {
+                const ULONGLONG now = GetTickCount64();
+                if (now - g_lastAnchorRequestTick > 600 && now - g_startCacheTick.load() > 600) {
+                    g_lastAnchorRequestTick = now;
+                    if (HWND h = g_menuHwnd.load()) PostMessageW(h, WM_APP_REFRESH_ANCHOR, 0, 0);
                 }
             }
-        } else if (g_swallowMouseUp) {
+        } else if (wParam == WM_LBUTTONDOWN) {
+            HWND taskbar = nullptr;
+            if (FindStartButtonAt(pt, taskbar)) {
+                // Only when a taskbar is really under the cursor: a fullscreen app
+                // covering that corner must keep receiving its clicks.
+                HWND root = GetAncestor(WindowFromPoint(pt), GA_ROOT);
+                if (root && (root == taskbar || IsTaskbarWindow(root))) {
+                    g_swallowMouseUp = true;
+                    Wh_Log(L"[Mouse] click on Start button at (%ld,%ld)", pt.x, pt.y);
+                    RequestToggle(L"Start click", taskbar);
+                    return 1; // keeps the native menu from opening
+                }
+            }
+            HWND menu = g_menuHwnd.load();
+            if (menu && IsWindowVisible(menu)) {
+                RECT rcMenu{};
+                if (GetWindowRect(menu, &rcMenu) && !PtInRect(&rcMenu, pt)) {
+                    PostMessageW(menu, WM_APP_HIDE, 0, 0); // light dismiss
+                }
+            }
+        } else if (wParam == WM_LBUTTONUP && g_swallowMouseUp) {
             g_swallowMouseUp = false;
             return 1;
         }
@@ -5826,25 +5976,48 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
-// Eseguito sul thread di Progman / Shell_TrayWnd: SOLO PostMessage qui dentro.
+// Runs on the Progman / Shell_TrayWnd thread: PostMessage only in here.
 static LRESULT CALLBACK ShellThreadGetMsgProc(int code, WPARAM wParam, LPARAM lParam) {
     if (code == HC_ACTION && wParam == PM_REMOVE) {
         MSG* msg = reinterpret_cast<MSG*>(lParam);
         if (msg->message == WM_SYSCOMMAND && (msg->wParam & 0xFFF0) == SC_TASKLIST) {
-            msg->message = WM_NULL; // sopprime l'apertura nativa
+            msg->message = WM_NULL; // suppress the native activation
             RequestToggle(L"SC_TASKLIST");
         }
     }
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
-static void InstallHooks() {
-    HINSTANCE hMod = GetModuleHandleW(nullptr);
+// Dedicated thread for the low-level hooks: it only pumps messages, so the
+// hook procedures are never delayed by catalog scans or UI Automation.
+static DWORD WINAPI HookThreadProc(LPVOID) {
+    MSG queueInit{};
+    PeekMessageW(&queueInit, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    g_hookThreadId = GetCurrentThreadId();
+
+    const HINSTANCE hMod = GetModInstance();
     g_hKbdHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, hMod, 0);
     Wh_Log(L"[Hooks] WH_KEYBOARD_LL: %s (err=%u)", g_hKbdHook ? L"ok" : L"FAILED", g_hKbdHook ? 0 : GetLastError());
     g_hMouseHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, hMod, 0);
     Wh_Log(L"[Hooks] WH_MOUSE_LL: %s (err=%u)", g_hMouseHook ? L"ok" : L"FAILED", g_hMouseHook ? 0 : GetLastError());
+    if (g_hookReadyEvent) SetEvent(g_hookReadyEvent.get());
 
+    if (g_hKbdHook || g_hMouseHook) {
+        MSG msg;
+        while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+
+    if (g_hKbdHook) { UnhookWindowsHookEx(g_hKbdHook); g_hKbdHook = nullptr; }
+    if (g_hMouseHook) { UnhookWindowsHookEx(g_hMouseHook); g_hMouseHook = nullptr; }
+    g_hookThreadId = 0;
+    Wh_Log(L"[Hooks] hook thread finished");
+    return 0;
+}
+
+static void InstallShellMessageHooks() {
     HWND prog = FindWindowW(L"Progman", nullptr);
     HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
     DWORD tp = prog ? GetWindowThreadProcessId(prog, nullptr) : 0;
@@ -5859,11 +6032,86 @@ static void InstallHooks() {
     }
 }
 
-static void RemoveHooks() {
-    if (g_hKbdHook) { UnhookWindowsHookEx(g_hKbdHook); g_hKbdHook = nullptr; }
-    if (g_hMouseHook) { UnhookWindowsHookEx(g_hMouseHook); g_hMouseHook = nullptr; }
+static void RemoveShellMessageHooks() {
     if (g_hProgHook) { UnhookWindowsHookEx(g_hProgHook); g_hProgHook = nullptr; }
     if (g_hTrayHook) { UnhookWindowsHookEx(g_hTrayHook); g_hTrayHook = nullptr; }
+}
+
+static bool StartHookThread() {
+    g_hookReadyEvent.reset(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+    g_hHookThread.reset(CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, nullptr));
+    if (!g_hHookThread) {
+        Wh_Log(L"[Hooks] CreateThread failed: %u", GetLastError());
+        return false;
+    }
+    if (g_hookReadyEvent) WaitForSingleObject(g_hookReadyEvent.get(), 5000);
+    return g_hKbdHook != nullptr && g_hMouseHook != nullptr;
+}
+
+static void StopHookThread() {
+    const DWORD tid = g_hookThreadId.load();
+    if (tid) PostThreadMessageW(tid, WM_QUIT, 0, 0);
+    if (g_hHookThread) {
+        WaitForSingleObject(g_hHookThread.get(), INFINITE);
+        g_hHookThread.reset();
+    }
+    g_hookReadyEvent.reset();
+}
+
+// Watches the user and common Programs folders; a change (install/uninstall of
+// a Win32 app) asks the UI thread to rescan after a short quiet period.
+static DWORD WINAPI ProgramsWatcherProc(LPVOID) {
+    std::vector<HANDLE> waitHandles;
+    waitHandles.push_back(g_watcherStopEvent.get());
+    const KNOWNFOLDERID folders[] = { FOLDERID_Programs, FOLDERID_CommonPrograms };
+    std::vector<HANDLE> notifications;
+    for (const auto& id : folders) {
+        std::wstring path;
+        if (!GetKnownFolderPathString(id, path)) continue;
+        HANDLE h = FindFirstChangeNotificationW(path.c_str(), TRUE,
+            FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE);
+        if (h != INVALID_HANDLE_VALUE) { notifications.push_back(h); waitHandles.push_back(h); }
+    }
+    struct Cleanup { std::vector<HANDLE>& h; ~Cleanup() { for (HANDLE x : h) FindCloseChangeNotification(x); } } cleanup{notifications};
+    if (notifications.empty()) {
+        Wh_Log(L"[Watcher] no Programs folder could be watched");
+        return 0;
+    }
+
+    bool pending = false;
+    while (true) {
+        const DWORD wait = WaitForMultipleObjects(static_cast<DWORD>(waitHandles.size()), waitHandles.data(),
+                                                  FALSE, pending ? 2000 : INFINITE);
+        if (wait == WAIT_OBJECT_0) break; // stop
+        if (wait == WAIT_TIMEOUT) {
+            pending = false;
+            if (HWND h = g_menuHwnd.load()) PostMessageW(h, WM_APP_REFRESH, 0, 0);
+            continue;
+        }
+        const DWORD index = wait - WAIT_OBJECT_0;
+        if (index >= 1 && index < waitHandles.size()) {
+            pending = true; // debounce: wait for 2 s of quiet before refreshing
+            if (!FindNextChangeNotification(waitHandles[index])) break;
+        } else {
+            break; // WAIT_FAILED / abandoned
+        }
+    }
+    return 0;
+}
+
+static void StartProgramsWatcher() {
+    g_watcherStopEvent.reset(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+    if (!g_watcherStopEvent) return;
+    g_hWatcherThread.reset(CreateThread(nullptr, 0, ProgramsWatcherProc, nullptr, 0, nullptr));
+}
+
+static void StopProgramsWatcher() {
+    if (g_watcherStopEvent) SetEvent(g_watcherStopEvent.get());
+    if (g_hWatcherThread) {
+        WaitForSingleObject(g_hWatcherThread.get(), INFINITE);
+        g_hWatcherThread.reset();
+    }
+    g_watcherStopEvent.reset();
 }
 
 static bool WaitForMainExplorerReady();
@@ -5895,20 +6143,19 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     bool ok = false;
     GUARDED(L"UiInit", {
         g_menu = std::make_unique<StartMenuWindow>();
-        if (g_menu->Create(GetModuleHandleW(nullptr))) {
+        if (g_menu->Create(GetModInstance())) {
             g_menu->ApplySettings(g_settings);
             g_menuHwnd = g_menu->GetHwnd();
             g_profilePhotoStop = false;
             g_profilePhotoThread.reset(CreateThread(nullptr, 0, ProfilePhotoWorker, nullptr, 0, nullptr));
-            InstallHooks();
-            ok = (g_hKbdHook != nullptr && g_hMouseHook != nullptr);
+            RefreshStartRects(true);
+            InstallShellMessageHooks();
+            ok = StartHookThread();
+            if (ok) StartProgramsWatcher();
         }
     })
 
     if (ok) {
-        g_anchorTimer = SetTimer(nullptr, 0, 1500, AnchorTimerProc);
-        GUARDED(L"AnchorInit", { RefreshStartRect(true); })
-
         MSG msg;
         while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
             if (!msg.hwnd && msg.message == WM_APP_SETTINGS_CHANGED) {
@@ -5923,34 +6170,51 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
+    } else {
+        Wh_Log(L"[UI] initialization failed; the native Start menu stays active");
     }
 
-    if (g_anchorTimer) { KillTimer(nullptr, g_anchorTimer); g_anchorTimer = 0; }
-    RemoveHooks();
+    // Teardown, in dependency order, on the thread that owns the objects.
+    // Each step is logged so a failure during unload can be located.
+    Wh_Log(L"[UI] teardown: stopping hook thread");
+    StopHookThread();
+    Wh_Log(L"[UI] teardown: stopping Programs watcher");
+    StopProgramsWatcher();
+    Wh_Log(L"[UI] teardown: removing shell message hooks");
+    RemoveShellMessageHooks();
     g_profilePhotoStop = true;
     if (g_profilePhotoThread) {
         WaitForSingleObject(g_profilePhotoThread.get(), INFINITE);
         g_profilePhotoThread.reset();
     }
     g_menuHwnd = nullptr;
-    g_menu.reset(); // distrugge la finestra sul thread che l'ha creata
-    g_iconBitmapCache.clear(); // Bitmap GDI+ distrutte prima di GdiplusShutdown
+    Wh_Log(L"[UI] teardown: destroying the Start window");
+    GUARDED(L"Teardown", {
+        g_menu.reset(); // destroys the window on the thread that created it
+    })
+    Wh_Log(L"[UI] teardown: releasing icon bitmap cache (%u entries)",
+           g_iconBitmapCache ? (unsigned)g_iconBitmapCache->size() : 0u);
+    g_iconBitmapCache.reset(); // GDI+ bitmaps destroyed before GdiplusShutdown
+    Wh_Log(L"[UI] teardown: releasing stock icons");
     if (g_stockFolderIcon) { DestroyIcon(g_stockFolderIcon); g_stockFolderIcon=nullptr; }
     if (g_stockAppIcon) { DestroyIcon(g_stockAppIcon); g_stockAppIcon=nullptr; }
+    Wh_Log(L"[UI] teardown: releasing profile photo");
     g_profilePhoto.reset();
     g_profilePhotoStream.Reset();
+    Wh_Log(L"[UI] teardown: releasing default avatar");
     g_defaultProfileAvatar.reset();
     g_defaultProfileAvatarStream.Reset();
     { std::lock_guard<std::mutex> lock(g_profilePhotoMutex); g_profilePhotoPending.clear(); }
-    UnregisterMetroPopupClass();
+    Wh_Log(L"[UI] teardown: GdiplusShutdown");
     if (g_gdiplusToken) { GdiplusShutdown(g_gdiplusToken); g_gdiplusToken=0; }
+    Wh_Log(L"[UI] teardown: GDI+ shut down");
     g_uiThreadId = 0;
     Wh_Log(L"[UI] thread finished");
     return 0;
 }
 
-// Il test viene eseguito sul worker dopo che Explorer ha iniziato a creare la shell.
-// In Wh_ModInit le finestre Shell_TrayWnd/GetShellWindow possono ancora non esistere.
+// Evaluated on the worker after Explorer started creating the shell. In
+// Wh_ModInit the Shell_TrayWnd / GetShellWindow windows may not exist yet.
 static bool IsMainExplorerProcess() {
     HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (!tray) return false;
@@ -5998,7 +6262,7 @@ static bool WaitForMainExplorerReady() {
     return false;
 }
 
-// ===================== ENTRY POINT WINDHAWK =====================
+// ===================== WINDHAWK ENTRY POINTS =====================
 BOOL Wh_ModInit() {
     // Do not block Explorer's startup while its shell windows are being created.
     // The worker waits asynchronously for the process that owns Shell_TrayWnd.
@@ -6023,6 +6287,7 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
+    Wh_Log(L"[Uninit] unloading");
     g_stopRequested = true;
     DWORD tid = g_uiThreadId.load();
     if (tid && !PostThreadMessageW(tid, WM_QUIT, 0, 0))
@@ -6031,6 +6296,7 @@ void Wh_ModUninit() {
         // The module must not unload while its worker is still executing code in it.
         WaitForSingleObject(g_hUiThread.get(), INFINITE);
         g_hUiThread.reset();
+        Wh_Log(L"[Uninit] UI thread joined");
     }
     g_uiThreadId = 0;
     Wh_Log(L"[Uninit] Mod successfully uninitialized.");
