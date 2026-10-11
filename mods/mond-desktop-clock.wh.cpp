@@ -240,31 +240,22 @@ Fonts must be installed in Windows. Missing fonts are silently substituted by Wi
             - "20": 20 DIPs
         - shadow1: ""
           $name: Weekday letter 1 shadow
-          #! $format: colorRgb
         - shadow2: ""
           $name: Weekday letter 2 shadow
-          #! $format: colorRgb
         - shadow3: ""
           $name: Weekday letter 3 shadow
-          #! $format: colorRgb
         - shadow4: ""
           $name: Weekday letter 4 shadow
-          #! $format: colorRgb
         - shadow5: ""
           $name: Weekday letter 5 shadow
-          #! $format: colorRgb
         - shadow6: ""
           $name: Weekday letter 6 shadow
-          #! $format: colorRgb
         - shadow7: ""
           $name: Weekday letter 7 shadow
-          #! $format: colorRgb
         - shadow8: ""
           $name: Weekday letter 8 shadow
-          #! $format: colorRgb
         - shadow9: ""
           $name: Weekday letter 9 shadow
-          #! $format: colorRgb
       $name: Weekday letter shadows
     - date:
         - shadowOffset: "2"
@@ -282,106 +273,72 @@ Fonts must be installed in Windows. Missing fonts are silently substituted by Wi
             - "20": 20 DIPs
         - color1: ""
           $name: Date letter 1 colour
-          #! $format: colorRgb
         - shadow1: ""
           $name: Date letter 1 shadow
-          #! $format: colorRgb
         - color2: ""
           $name: Date letter 2 colour
-          #! $format: colorRgb
         - shadow2: ""
           $name: Date letter 2 shadow
-          #! $format: colorRgb
         - color3: ""
           $name: Date letter 3 colour
-          #! $format: colorRgb
         - shadow3: ""
           $name: Date letter 3 shadow
-          #! $format: colorRgb
         - color4: ""
           $name: Date letter 4 colour
-          #! $format: colorRgb
         - shadow4: ""
           $name: Date letter 4 shadow
-          #! $format: colorRgb
         - color5: ""
           $name: Date letter 5 colour
-          #! $format: colorRgb
         - shadow5: ""
           $name: Date letter 5 shadow
-          #! $format: colorRgb
         - color6: ""
           $name: Date letter 6 colour
-          #! $format: colorRgb
         - shadow6: ""
           $name: Date letter 6 shadow
-          #! $format: colorRgb
         - color7: ""
           $name: Date letter 7 colour
-          #! $format: colorRgb
         - shadow7: ""
           $name: Date letter 7 shadow
-          #! $format: colorRgb
         - color8: ""
           $name: Date letter 8 colour
-          #! $format: colorRgb
         - shadow8: ""
           $name: Date letter 8 shadow
-          #! $format: colorRgb
         - color9: ""
           $name: Date letter 9 colour
-          #! $format: colorRgb
         - shadow9: ""
           $name: Date letter 9 shadow
-          #! $format: colorRgb
         - color10: ""
           $name: Date letter 10 colour
-          #! $format: colorRgb
         - shadow10: ""
           $name: Date letter 10 shadow
-          #! $format: colorRgb
         - color11: ""
           $name: Date letter 11 colour
-          #! $format: colorRgb
         - shadow11: ""
           $name: Date letter 11 shadow
-          #! $format: colorRgb
         - color12: ""
           $name: Date letter 12 colour
-          #! $format: colorRgb
         - shadow12: ""
           $name: Date letter 12 shadow
-          #! $format: colorRgb
         - color13: ""
           $name: Date letter 13 colour
-          #! $format: colorRgb
         - shadow13: ""
           $name: Date letter 13 shadow
-          #! $format: colorRgb
         - color14: ""
           $name: Date letter 14 colour
-          #! $format: colorRgb
         - shadow14: ""
           $name: Date letter 14 shadow
-          #! $format: colorRgb
         - color15: ""
           $name: Date letter 15 colour
-          #! $format: colorRgb
         - shadow15: ""
           $name: Date letter 15 shadow
-          #! $format: colorRgb
         - color16: ""
           $name: Date letter 16 colour
-          #! $format: colorRgb
         - shadow16: ""
           $name: Date letter 16 shadow
-          #! $format: colorRgb
         - color17: ""
           $name: Date letter 17 colour
-          #! $format: colorRgb
         - shadow17: ""
           $name: Date letter 17 shadow
-          #! $format: colorRgb
       $name: Date letter colours and shadows
     - time:
         - shadowOffset: "2"
@@ -399,52 +356,36 @@ Fonts must be installed in Windows. Missing fonts are silently substituted by Wi
             - "20": 20 DIPs
         - color1: ""
           $name: Time letter 1 colour
-          #! $format: colorRgb
         - shadow1: ""
           $name: Time letter 1 shadow
-          #! $format: colorRgb
         - color2: ""
           $name: Time letter 2 colour
-          #! $format: colorRgb
         - shadow2: ""
           $name: Time letter 2 shadow
-          #! $format: colorRgb
         - color3: ""
           $name: Time letter 3 colour
-          #! $format: colorRgb
         - shadow3: ""
           $name: Time letter 3 shadow
-          #! $format: colorRgb
         - color4: ""
           $name: Time letter 4 colour
-          #! $format: colorRgb
         - shadow4: ""
           $name: Time letter 4 shadow
-          #! $format: colorRgb
         - color5: ""
           $name: Time letter 5 colour
-          #! $format: colorRgb
         - shadow5: ""
           $name: Time letter 5 shadow
-          #! $format: colorRgb
         - color6: ""
           $name: Time letter 6 colour
-          #! $format: colorRgb
         - shadow6: ""
           $name: Time letter 6 shadow
-          #! $format: colorRgb
         - color7: ""
           $name: Time letter 7 colour
-          #! $format: colorRgb
         - shadow7: ""
           $name: Time letter 7 shadow
-          #! $format: colorRgb
         - color8: ""
           $name: Time letter 8 colour
-          #! $format: colorRgb
         - shadow8: ""
           $name: Time letter 8 shadow
-          #! $format: colorRgb
       $name: Time letter colours and shadows
   $name: Custom colours per letter
 */
