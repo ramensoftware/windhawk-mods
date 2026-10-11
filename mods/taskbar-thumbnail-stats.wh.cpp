@@ -2,13 +2,13 @@
 // @id              taskbar-thumbnail-stats
 // @name            Taskbar Thumbnail Stats
 // @description     Shows RAM, CPU and version of the program on the Windows 11 taskbar thumbnails
-// @version         1.2
+// @version         1.4
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -lshlwapi
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -lshlwapi -lshell32
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -45,6 +45,11 @@ at all, and the font size and text color can be customized.
 Works with the new XAML thumbnails of Windows 11 (tested on 25H2). It does
 not work with taskbar replacements such as StartAllBack or ExplorerPatcher.
 
+Clicking the line opens a process manager on the program: Process Explorer
+(Sysinternals) with the process already selected, if it's installed, or
+Task Manager otherwise. Task Manager has no way to be opened on a specific
+process, so there you have to find it yourself.
+
 The statistics are collected on a background thread, so the taskbar is never
 slowed down, and only while a thumbnail is actually visible.
 */
@@ -63,6 +68,10 @@ slowed down, and only while a thumbnail is actually visible.
   $description: >-
     Sum RAM and CPU of all the processes started by the program (useful for
     browsers, which use one process per tab)
+- showProcessCount: true
+  $name: Show process count
+  $description: >-
+    Show how many processes are included, when there's more than one
 - position: overlay
   $name: Position
   $options:
@@ -92,6 +101,18 @@ slowed down, and only while a thumbnail is actually visible.
 - textCustomColor: "#FFFFFF"
   $name: Custom text color
   $description: Format #RRGGBB, used with "Custom"
+- clickAction: auto
+  $name: Click on the line
+  $options:
+  - auto: Process Explorer if installed, otherwise Task Manager
+  - processExplorer: Process Explorer (process selected)
+  - taskManager: Task Manager
+  - none: Nothing (clicks go to the thumbnail)
+- processExplorerPath: ""
+  $name: Process Explorer path
+  $description: >-
+    Optional, e.g. C:\Tools\procexp64.exe. If empty, it's searched in the
+    PATH and in the registered applications
 - updateInterval: 1000
   $name: Update interval (ms)
   $description: Minimum 250
@@ -126,6 +147,7 @@ slowed down, and only while a thumbnail is actually visible.
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.h>
@@ -139,6 +161,7 @@ using winrt::Windows::UI::ColorHelper;
 // ===========================================================================
 
 enum class Position { overlay, below };
+enum class ClickAction { automatic, processExplorer, taskManager, none };
 enum class BackgroundMode { none, accent, custom };
 enum class TextColorMode { automatic, white, black, custom };
 
@@ -146,6 +169,7 @@ struct Settings {
     bool showRam = true;
     bool showCpu = true;
     bool showVersion = true;
+    bool showProcessCount = true;
     bool includeChildren = true;
     Position position = Position::overlay;
     double fontSize = 10;
@@ -155,6 +179,8 @@ struct Settings {
     TextColorMode textColor = TextColorMode::automatic;
     Color textCustomColor{255, 255, 255, 255};
     int updateInterval = 1000;
+    ClickAction clickAction = ClickAction::automatic;
+    std::wstring processExplorerPath;
 };
 
 // Settings are replaced as a whole (never modified in place), so readers on
@@ -401,7 +427,20 @@ struct CpuSample {
     ULONGLONG creationTime;  // Tells apart processes with a reused PID.
     ULONGLONG cpuTime;       // 100ns units (kernel + user).
     ULONGLONG wallTime;      // 100ns units.
+    double lastPercent;      // Usage over the last measured interval.
+    bool hasPercent;
 };
+
+// Shortest interval to measure the CPU usage over. Several windows of the same
+// process are computed one after the other in the same pass: they must reuse
+// the last measurement instead of measuring over a near-zero interval.
+constexpr ULONGLONG kMinCpuIntervalWallTime = 200ULL * 10000ULL;  // 200 ms
+
+// Returns the CPU usage of the process in percent, if known yet.
+std::optional<double> SampleCpuUsage(DWORD pid,
+                                     ULONGLONG creationTime,
+                                     ULONGLONG cpuTime,
+                                     ULONGLONG now);
 
 // Only accessed by the worker thread.
 std::unordered_map<DWORD, CpuSample> g_cpuSamples;
@@ -627,6 +666,37 @@ std::wstring FormatPercent(double value) {
     return result + L"%";
 }
 
+std::optional<double> SampleCpuUsage(DWORD pid,
+                                     ULONGLONG creationTime,
+                                     ULONGLONG cpuTime,
+                                     ULONGLONG now) {
+    auto it = g_cpuSamples.find(pid);
+    if (it == g_cpuSamples.end() || it->second.creationTime != creationTime ||
+        cpuTime < it->second.cpuTime || now < it->second.wallTime) {
+        // New process (or reused PID): first sample.
+        g_cpuSamples[pid] = {creationTime, cpuTime, now, 0, false};
+        return std::nullopt;
+    }
+
+    CpuSample& sample = it->second;
+    if (now - sample.wallTime < kMinCpuIntervalWallTime) {
+        // Measured very recently (e.g. for another window of the same
+        // process): reuse that value.
+        if (sample.hasPercent) {
+            return sample.lastPercent;
+        }
+        return std::nullopt;
+    }
+
+    double wallDelta = (double)(now - sample.wallTime);
+    double cpuDelta = (double)(cpuTime - sample.cpuTime);
+    sample.lastPercent = cpuDelta * 100.0 / (wallDelta * GetProcessorCount());
+    sample.hasPercent = true;
+    sample.cpuTime = cpuTime;
+    sample.wallTime = now;
+    return sample.lastPercent;
+}
+
 std::wstring BuildStatsText(HWND hWnd, const Settings& settings) {
     if (!hWnd || !IsWindow(hWnd)) {
         return {};
@@ -684,18 +754,11 @@ std::wstring BuildStatsText(HWND hWnd, const Settings& settings) {
                 ULONGLONG cpuTime =
                     FileTimeToULL(kernel) + FileTimeToULL(user);
 
-                auto it = g_cpuSamples.find(pid);
-                if (it != g_cpuSamples.end() &&
-                    it->second.creationTime == creationTime &&
-                    now > it->second.wallTime &&
-                    cpuTime >= it->second.cpuTime) {
-                    double wallDelta = (double)(now - it->second.wallTime);
-                    double cpuDelta = (double)(cpuTime - it->second.cpuTime);
-                    cpuPercent +=
-                        cpuDelta * 100.0 / (wallDelta * GetProcessorCount());
+                if (auto percent =
+                        SampleCpuUsage(pid, creationTime, cpuTime, now)) {
+                    cpuPercent += *percent;
                     cpuReady = true;
                 }
-                g_cpuSamples[pid] = {creationTime, cpuTime, now};
             }
         }
 
@@ -742,7 +805,8 @@ std::wstring BuildStatsText(HWND hWnd, const Settings& settings) {
         }
     }
 
-    if (openedCount > 1 && (settings.showRam || settings.showCpu)) {
+    if (settings.showProcessCount && openedCount > 1 &&
+        (settings.showRam || settings.showCpu)) {
         append(std::to_wstring(openedCount) + L" processes");
     }
 
@@ -766,6 +830,7 @@ std::condition_variable g_statsCondition;
 std::unordered_map<HWND, StatsEntry> g_statsEntries;
 bool g_statsStop = false;
 bool g_statsNewRequest = false;
+std::vector<HWND> g_launchRequests;  // Windows whose line was clicked.
 [[clang::no_destroy]] std::optional<std::thread> g_statsThread;
 
 // Number of thumbnail timers currently running (diagnostics).
@@ -805,7 +870,88 @@ std::optional<std::wstring> RequestStats(HWND hWnd) {
     return result;
 }
 
+// ===========================================================================
+// Click on the line: open a process manager (worker thread)
+// ===========================================================================
+
+std::wstring FindProcessExplorer(const Settings& settings) {
+    if (!settings.processExplorerPath.empty()) {
+        WCHAR expanded[MAX_PATH * 2];
+        if (ExpandEnvironmentStringsW(settings.processExplorerPath.c_str(),
+                                      expanded, ARRAYSIZE(expanded)) &&
+            GetFileAttributesW(expanded) != INVALID_FILE_ATTRIBUTES) {
+            return expanded;
+        }
+        Wh_Log(L"Process Explorer not found at the configured path");
+    }
+
+    for (PCWSTR fileName : {L"procexp64.exe", L"procexp.exe"}) {
+        // PATH (includes the WindowsApps alias of the Microsoft Store
+        // version).
+        WCHAR path[MAX_PATH * 2];
+        if (SearchPathW(nullptr, fileName, nullptr, ARRAYSIZE(path), path,
+                        nullptr)) {
+            return path;
+        }
+
+        // Registered applications.
+        std::wstring key =
+            std::wstring(L"Software\\Microsoft\\Windows\\CurrentVersion\\App "
+                         L"Paths\\") +
+            fileName;
+        for (HKEY root : {HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE}) {
+            DWORD size = sizeof(path);
+            if (RegGetValueW(root, key.c_str(), nullptr, RRF_RT_REG_SZ,
+                             nullptr, path, &size) == ERROR_SUCCESS &&
+                GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES) {
+                return path;
+            }
+        }
+    }
+
+    return {};
+}
+
+bool LaunchProgram(const std::wstring& file, const std::wstring& parameters) {
+    SHELLEXECUTEINFOW info{sizeof(info)};
+    info.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+    info.lpFile = file.c_str();
+    info.lpParameters = parameters.empty() ? nullptr : parameters.c_str();
+    info.nShow = SW_SHOWNORMAL;
+    if (!ShellExecuteExW(&info)) {
+        Wh_Log(L"Couldn't start %s: %u", file.c_str(), GetLastError());
+        return false;
+    }
+    return true;
+}
+
+void OpenProcessManager(HWND hWnd, const Settings& settings) {
+    if (settings.clickAction == ClickAction::none || !IsWindow(hWnd)) {
+        return;
+    }
+
+    DWORD pid = GetRealProcessId(hWnd);
+
+    if (settings.clickAction != ClickAction::taskManager && pid) {
+        std::wstring processExplorer = FindProcessExplorer(settings);
+        if (!processExplorer.empty()) {
+            if (LaunchProgram(processExplorer,
+                              L"/s:" + std::to_wstring(pid))) {
+                return;
+            }
+        } else if (settings.clickAction == ClickAction::processExplorer) {
+            Wh_Log(L"Process Explorer not found, opening Task Manager");
+        }
+    }
+
+    LaunchProgram(L"taskmgr.exe", L"");
+}
+
 void StatsThreadProc() {
+    // ShellExecuteEx (click on the line) needs COM.
+    HRESULT hrCoInit = CoInitializeEx(
+        nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+
     ULONGLONG lastDiagnosticsTick = 0;
 
     std::unique_lock<std::mutex> lock(g_statsMutex);
@@ -825,9 +971,19 @@ void StatsThreadProc() {
         }
         g_statsNewRequest = false;
 
+        std::vector<HWND> launchRequests;
+        launchRequests.swap(g_launchRequests);
+
         auto settings = GetSettings();
 
         lock.unlock();
+
+        for (HWND hWnd : launchRequests) {
+            try {
+                OpenProcessManager(hWnd, *settings);
+            } catch (...) {
+            }
+        }
 
         std::vector<std::pair<HWND, std::wstring>> results;
         for (HWND hWnd : windows) {
@@ -864,6 +1020,22 @@ void StatsThreadProc() {
         g_statsCondition.wait_for(lock, std::chrono::milliseconds(interval),
                                   [] { return g_statsStop || g_statsNewRequest; });
     }
+
+    lock.unlock();
+
+    if (SUCCEEDED(hrCoInit)) {
+        CoUninitialize();
+    }
+}
+
+// Called from the UI thread.
+void RequestLaunch(HWND hWnd) {
+    {
+        std::lock_guard<std::mutex> lock(g_statsMutex);
+        g_launchRequests.push_back(hWnd);
+        g_statsNewRequest = true;
+    }
+    g_statsCondition.notify_one();
 }
 
 void StartStatsThread() {
@@ -951,6 +1123,9 @@ struct ViewState {
     winrt::event_token loadedToken{};
     winrt::event_token unloadedToken{};
     winrt::event_token tickToken{};
+    winrt::event_token tappedToken{};
+    winrt::event_token pointerPressedToken{};
+    winrt::event_token pointerReleasedToken{};
 };
 
 std::mutex g_viewStatesMutex;
@@ -1032,9 +1207,16 @@ void ApplyStyle(ViewState& state, const Settings& settings) {
     } else if (settings.background == BackgroundMode::custom) {
         background = settings.backgroundColor;
     }
+    bool clickable = settings.clickAction != ClickAction::none;
+    border.IsHitTestVisible(clickable);
+
     if (background) {
         background->A = (uint8_t)(255 * settings.backgroundOpacity / 100);
         border.Background(Media::SolidColorBrush(*background));
+    } else if (clickable) {
+        // Without a background only the text would receive clicks.
+        border.Background(
+            Media::SolidColorBrush(ColorHelper::FromArgb(0, 0, 0, 0)));
     }
 
     // Text color.
@@ -1070,6 +1252,24 @@ void ApplyStyle(ViewState& state, const Settings& settings) {
 
 // Removes exactly what was injected (the line and our own row definitions).
 void RemoveInjected(ViewState& state) {
+    if (state.border) {
+        try {
+            if (state.tappedToken) {
+                state.border.Tapped(state.tappedToken);
+            }
+            if (state.pointerPressedToken) {
+                state.border.PointerPressed(state.pointerPressedToken);
+            }
+            if (state.pointerReleasedToken) {
+                state.border.PointerReleased(state.pointerReleasedToken);
+            }
+        } catch (...) {
+        }
+    }
+    state.tappedToken = {};
+    state.pointerPressedToken = {};
+    state.pointerReleasedToken = {};
+
     if (auto grid = state.grid.get()) {
         try {
             if (state.border) {
@@ -1140,7 +1340,8 @@ bool InjectStats(ViewState& state) {
     Controls::Border border;
     border.Name(kStatsBorderName);
     border.Child(textBlock);
-    border.IsHitTestVisible(false);
+    border.IsHitTestVisible(false);  // Set by ApplyStyle.
+
     border.Padding(ThicknessHelper::FromLengths(6, 2, 6, 3));
     border.CornerRadius(CornerRadiusHelper::FromUniformRadius(4));
     border.HorizontalAlignment(HorizontalAlignment::Stretch);
@@ -1184,6 +1385,36 @@ bool InjectStats(ViewState& state) {
     state.textBlock = textBlock;
     state.addedRows = std::move(addedRows);
     state.injectedPosition = position;
+
+    // Clicks on the line open a process manager instead of switching to the
+    // window: the pointer events are marked as handled so that the thumbnail
+    // ignores them. The work is done on the worker thread.
+    winrt::weak_ref<FrameworkElement> weakElement = winrt::make_weak(element);
+    state.pointerPressedToken =
+        border.PointerPressed([](auto&&, Input::PointerRoutedEventArgs const& args) {
+            args.Handled(true);
+        });
+    state.pointerReleasedToken =
+        border.PointerReleased([](auto&&, Input::PointerRoutedEventArgs const& args) {
+            args.Handled(true);
+        });
+    state.tappedToken = border.Tapped(
+        [weakElement](auto&&, Input::TappedRoutedEventArgs const& args) {
+            args.Handled(true);
+            if (g_unloading) {
+                return;
+            }
+            try {
+                if (auto element = weakElement.get()) {
+                    if (HWND hWnd = GetWindowFromThumbnailView(element)) {
+                        RequestLaunch(hWnd);
+                    }
+                }
+            } catch (...) {
+                HRESULT hr = winrt::to_hresult();
+                Wh_Log(L"Click error %08X", hr);
+            }
+        });
 
     ApplyStyle(state, *GetSettings());
     state.styleGeneration = g_styleGeneration;
@@ -1696,6 +1927,7 @@ void LoadSettings() {
     settings->showRam = Wh_GetIntSetting(L"showRam");
     settings->showCpu = Wh_GetIntSetting(L"showCpu");
     settings->showVersion = Wh_GetIntSetting(L"showVersion");
+    settings->showProcessCount = Wh_GetIntSetting(L"showProcessCount");
     settings->includeChildren = Wh_GetIntSetting(L"includeChildren");
 
     PCWSTR position = Wh_GetStringSetting(L"position");
@@ -1745,6 +1977,18 @@ void LoadSettings() {
                textCustomColor);
     }
     Wh_FreeStringSetting(textCustomColor);
+
+    PCWSTR clickAction = Wh_GetStringSetting(L"clickAction");
+    settings->clickAction =
+        wcscmp(clickAction, L"processExplorer") == 0 ? ClickAction::processExplorer
+        : wcscmp(clickAction, L"taskManager") == 0   ? ClickAction::taskManager
+        : wcscmp(clickAction, L"none") == 0          ? ClickAction::none
+                                                     : ClickAction::automatic;
+    Wh_FreeStringSetting(clickAction);
+
+    PCWSTR processExplorerPath = Wh_GetStringSetting(L"processExplorerPath");
+    settings->processExplorerPath = processExplorerPath;
+    Wh_FreeStringSetting(processExplorerPath);
 
     int interval = Wh_GetIntSetting(L"updateInterval");
     settings->updateInterval = std::max(interval > 0 ? interval : 1000, 250);
