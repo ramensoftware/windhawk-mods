@@ -2,12 +2,82 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-11T12:02:10.000Z</updated>
+    <updated>2026-10-11T12:47:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 8/8.1 Search Charm Recreation 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win8-search-charm-recreation#5856725330cebb5fa14367843998168ecaa39683</id>
+        <link href="https://windhawk.net/mods/win8-search-charm-recreation"/>
+        <updated>2026-10-11T12:47:56.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows881searchcharmrecreation">Windows 8/8.1 Search Charm Recreation</h1>
+<p>This mod recreates the Windows 8/8.1 search panel with local-only results, inspired by
+the Metro UI design language. This mod is a best-effort recreation of the Windows 8/8.1 Search Charm on
+Windows 10 and Windows 11. It does <strong>not</strong> replace system files, modify the
+registry, alter Windows Search, or modify native search binaries.
+This modification has been tested on Windows 11 24H2.</p>
+<h2 id="screenshot">Screenshot</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8search.png" alt="Windows 8/8.1 Search Charm screenshot" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Search panel</strong> on the right side of the screen, with Windows 8.1 green color scheme.</li>
+<li><strong>Local search</strong> across:</li>
+<li><strong>Classic Win32 apps</strong> from Start menu <code>.lnk</code> shortcuts</li>
+<li><strong>Modern UWP/Store apps</strong> via <code>FOLDERID_AppsFolder</code> (the virtual shell namespace
+that lists every installed app, including those without a physical <code>.lnk</code> file)</li>
+<li><strong>User files</strong> from Desktop, Documents, Downloads, Pictures, Music, Videos</li>
+<li><strong>System entries</strong> (Control Panel, Settings, Command Prompt, Task Manager, etc.)</li>
+<li><strong>All/Apps/Settings/Files</strong> filter, mimicking the Windows 8.1 search scope selector.</li>
+<li><strong>Vertical scrollbar</strong> in the results list (Windows 8 style): draggable thumb and
+track paging, shown only when the results overflow the visible area.</li>
+<li><strong>Keyboard shortcuts</strong>: <code>Win+S</code> or <code>Win+Q</code> to open, <code>Ctrl+A</code> to select all,
+<code>Ctrl+V</code> to paste, arrow keys to navigate, <code>Menu</code> key or <code>Shift+F10</code> to open the
+context menu of the selected result.</li>
+<li><strong>Click outside</strong> to close (light dismiss), <code>Esc</code> to dismiss. Works even when
+Windows refuses to activate the panel or the click lands on a window that never
+takes activation (taskbar, overlays, other z-bands): a low-level mouse hook,
+active only while the panel is visible, and a foreground-change WinEvent hook
+detect the outside interaction.</li>
+<li><strong>Per-monitor DPI</strong> aware, with IME support for CJK input.</li>
+<li><strong>Metro-style context menu</strong> (right-click) with <strong>Open</strong>, Open file location,
+Run as administrator, Copy path, and sort options (by name, by date installed,
+by most used, by category). Only the commands that can work for the selected
+result are shown (for example, Store apps and <code>ms-settings:</code> pages have no file
+location). The menu supports keyboard navigation (arrows, Home/End, Enter, Esc),
+stays on the monitor where it was opened, and is created in the same z-band as
+the panel so it is never drawn behind it. The menu is drawn with the Metro design
+language: white background, no 3D borders, Segoe UI text, and the hover highlight
+uses the system accent color, so it adapts to the user's personalization settings.</li>
+<li><strong>Dedicated keyboard-hook thread</strong>: the low-level <code>Win+S</code> / <code>Win+Q</code> hook has its
+own message loop, so slow icon extraction, clipboard work, Shell execution, or
+a UAC prompt on the panel thread cannot make Windows remove the keyboard hook.</li>
+<li><strong>Main-shell only</strong>: the mod loads only in the Explorer process that owns the
+shell window, avoiding duplicate panels, hooks, and index scans when folder
+windows run in separate Explorer processes.</li>
+<li><strong>Z-band overlay</strong>: uses <code>CreateWindowInBand</code> (when available) so the panel stays
+above the taskbar, Start menu, and fullscreen UWP apps.</li>
+<li><strong>UI translations</strong>: English, Italian, Spanish, French, Portuguese, German,
+Russian, Chinese (Simplified), Japanese, Korean.</li>
+</ul>
+<h2 id="nativesearchbehavior">Native-search behavior</h2>
+<p>When enabled in the settings, the dedicated keyboard hook utilizes <code>Win+S</code> and/or
+<code>Win+Q</code> before Windows receives those shortcuts and posts a request to open this
+panel. This is the only interception required for those keys.</p>
+<h2 id="credits">Credits</h2>
+<ul>
+<li><strong>AdministratoX</strong> — for the Metro UI interface template that inspired the
+visual layout and design language of this search panel.</li>
+<li><strong>Meteoni</strong> — for the <code>IsMainExplorerProcess</code> pattern used to avoid loading the
+mod in separate folder-window Explorer processes.</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows Animations 1.3.7]]></title>
         <id>https://windhawk.net/mods/windows-animations#b54d0b4fdde083aa1d4e4e708a17153288a2e114</id>
@@ -794,79 +864,6 @@ not respond to these settings.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Pointer Afterimage Motion Blur 1.0]]></title>
-        <id>https://windhawk.net/mods/pointer-afterimage-motion-blur#fb5e852a66d521f2f6496b2dfb3d0d8de33e4268</id>
-        <link href="https://windhawk.net/mods/pointer-afterimage-motion-blur"/>
-        <updated>2026-10-09T11:00:31.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="pointerafterimagemotionblur">Pointer Afterimage Motion Blur</h1>
-<p>A live motion blur for the mouse pointer, everywhere in Windows. While the
-mouse moves, fading copies of your actual cursor are drawn along its recent
-path, so it looks like a camera motion blur rather than a trail. Unlike the
-smear ribbon of <a href="https://windhawk.net/mods/cursor-motion-blur">Cursor Motion Blur</a>
-or the particles of <a href="https://windhawk.net/mods/mouse-trail">Mouse Trail</a>, the
-blur is made of your own cursor picture.</p>
-<p><img src="https://raw.githubusercontent.com/sidlikesgrapess/CursorMotionBlur/main/assets/demo.gif" alt="Demo" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Uses your real cursor: your scheme, size and colour, and whatever shape it
-has right now (arrow, text, hand…).</li>
-<li>Right size on every monitor, including monitors with different scaling.</li>
-<li>Optionally hides the real pointer during very fast movement so only the blur
-shows; it comes back about 25 ms after you slow down.</li>
-<li>Pauses itself while a fullscreen app or game is in front.</li>
-<li>Runs in its own small Windhawk process: nothing is injected into other
-programs.</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Trail opacity</strong>: how solid the blur is right behind the pointer. It always
-fades to nothing at the end of the trail.</li>
-<li><strong>Trail length</strong>: how far back in time the blur reaches, in ms. Longer means
-a longer streak.</li>
-<li><strong>Hide the real cursor when moving very fast</strong> (off by default): while you
-move fast, the system cursors are swapped for an invisible one, and your own
-cursors are put back as soon as you slow down and when the mod is disabled.</li>
-<li><strong>Hide above speed</strong>: the pointer speed that hides the real cursor, in cm/s
-as measured on your main monitor. It is the same hand speed on every
-monitor.</li>
-<li><strong>Pause in fullscreen apps and games</strong>: no blur while a fullscreen app is in
-front.</li>
-</ul>
-<h2 id="resourceuse">Resource use</h2>
-<ul>
-<li>No CPU while the mouse is still; typically well under 1% while it moves, and
-about 1.5 MB of memory at the default settings.</li>
-<li>While an administrator window (Task Manager, Windhawk…) is in front,
-Windows gives the mod no mouse input, so it checks the cursor on a timer.</li>
-</ul>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<ul>
-<li><strong>The cursor stays invisible</strong> (only possible with hiding on, e.g. if the
-process was killed mid-flick). Disable and re-enable the mod, or open
-Settings &gt; Bluetooth &amp; devices &gt; Mouse &gt; Additional mouse settings &gt; Pointers
-and click OK.</li>
-<li><strong>Another tool's custom cursors get reset.</strong> Restoring after hiding reloads
-the Windows cursor scheme, so turn hiding off if you use a tool that swaps
-the system cursors, such as the Shake to Find Cursor or macOS magnifying
-cursor mods.</li>
-<li><strong>No blur over the Start menu, Search or Task View.</strong> Windows keeps those
-above every app's windows, including the blur.</li>
-<li><strong>No blur in a game or video.</strong> That is the fullscreen pause; turn off
-"Pause in fullscreen apps and games" if you want it there.</li>
-<li><strong>The cursor hides too often or not at all.</strong> Raise or lower "Hide above
-speed", or turn hiding off.</li>
-<li><strong>The blur seems slightly behind the pointer at high speed.</strong> Windows draws
-the real pointer more directly than any window can be drawn, so every
-overlay is 1-2 frames behind. Hiding the real cursor when fast hides this.</li>
-<li>A standalone app version (no Windhawk needed) is on the
-<a href="https://github.com/sidlikesgrapess/CursorMotionBlur">homepage</a>.</li>
-</ul>]]></content>
-        <author>
-            <name>sidlikesgrapess</name>
-            <uri>https://github.com/sidlikesgrapess</uri>
         </author>
     </entry>
 </feed>

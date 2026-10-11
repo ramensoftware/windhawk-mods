@@ -2,12 +2,82 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-10T20:02:23.000Z</updated>
+    <updated>2026-10-11T12:47:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 8/8.1 Search Charm Recreation 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win8-search-charm-recreation#5856725330cebb5fa14367843998168ecaa39683</id>
+        <link href="https://windhawk.net/mods/win8-search-charm-recreation"/>
+        <updated>2026-10-11T12:47:56.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows881searchcharmrecreation">Windows 8/8.1 Search Charm Recreation</h1>
+<p>This mod recreates the Windows 8/8.1 search panel with local-only results, inspired by
+the Metro UI design language. This mod is a best-effort recreation of the Windows 8/8.1 Search Charm on
+Windows 10 and Windows 11. It does <strong>not</strong> replace system files, modify the
+registry, alter Windows Search, or modify native search binaries.
+This modification has been tested on Windows 11 24H2.</p>
+<h2 id="screenshot">Screenshot</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8search.png" alt="Windows 8/8.1 Search Charm screenshot" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Search panel</strong> on the right side of the screen, with Windows 8.1 green color scheme.</li>
+<li><strong>Local search</strong> across:</li>
+<li><strong>Classic Win32 apps</strong> from Start menu <code>.lnk</code> shortcuts</li>
+<li><strong>Modern UWP/Store apps</strong> via <code>FOLDERID_AppsFolder</code> (the virtual shell namespace
+that lists every installed app, including those without a physical <code>.lnk</code> file)</li>
+<li><strong>User files</strong> from Desktop, Documents, Downloads, Pictures, Music, Videos</li>
+<li><strong>System entries</strong> (Control Panel, Settings, Command Prompt, Task Manager, etc.)</li>
+<li><strong>All/Apps/Settings/Files</strong> filter, mimicking the Windows 8.1 search scope selector.</li>
+<li><strong>Vertical scrollbar</strong> in the results list (Windows 8 style): draggable thumb and
+track paging, shown only when the results overflow the visible area.</li>
+<li><strong>Keyboard shortcuts</strong>: <code>Win+S</code> or <code>Win+Q</code> to open, <code>Ctrl+A</code> to select all,
+<code>Ctrl+V</code> to paste, arrow keys to navigate, <code>Menu</code> key or <code>Shift+F10</code> to open the
+context menu of the selected result.</li>
+<li><strong>Click outside</strong> to close (light dismiss), <code>Esc</code> to dismiss. Works even when
+Windows refuses to activate the panel or the click lands on a window that never
+takes activation (taskbar, overlays, other z-bands): a low-level mouse hook,
+active only while the panel is visible, and a foreground-change WinEvent hook
+detect the outside interaction.</li>
+<li><strong>Per-monitor DPI</strong> aware, with IME support for CJK input.</li>
+<li><strong>Metro-style context menu</strong> (right-click) with <strong>Open</strong>, Open file location,
+Run as administrator, Copy path, and sort options (by name, by date installed,
+by most used, by category). Only the commands that can work for the selected
+result are shown (for example, Store apps and <code>ms-settings:</code> pages have no file
+location). The menu supports keyboard navigation (arrows, Home/End, Enter, Esc),
+stays on the monitor where it was opened, and is created in the same z-band as
+the panel so it is never drawn behind it. The menu is drawn with the Metro design
+language: white background, no 3D borders, Segoe UI text, and the hover highlight
+uses the system accent color, so it adapts to the user's personalization settings.</li>
+<li><strong>Dedicated keyboard-hook thread</strong>: the low-level <code>Win+S</code> / <code>Win+Q</code> hook has its
+own message loop, so slow icon extraction, clipboard work, Shell execution, or
+a UAC prompt on the panel thread cannot make Windows remove the keyboard hook.</li>
+<li><strong>Main-shell only</strong>: the mod loads only in the Explorer process that owns the
+shell window, avoiding duplicate panels, hooks, and index scans when folder
+windows run in separate Explorer processes.</li>
+<li><strong>Z-band overlay</strong>: uses <code>CreateWindowInBand</code> (when available) so the panel stays
+above the taskbar, Start menu, and fullscreen UWP apps.</li>
+<li><strong>UI translations</strong>: English, Italian, Spanish, French, Portuguese, German,
+Russian, Chinese (Simplified), Japanese, Korean.</li>
+</ul>
+<h2 id="nativesearchbehavior">Native-search behavior</h2>
+<p>When enabled in the settings, the dedicated keyboard hook utilizes <code>Win+S</code> and/or
+<code>Win+Q</code> before Windows receives those shortcuts and posts a request to open this
+panel. This is the only interception required for those keys.</p>
+<h2 id="credits">Credits</h2>
+<ul>
+<li><strong>AdministratoX</strong> — for the Metro UI interface template that inspired the
+visual layout and design language of this search panel.</li>
+<li><strong>Meteoni</strong> — for the <code>IsMainExplorerProcess</code> pattern used to avoid loading the
+mod in separate folder-window Explorer processes.</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Simple Cursor Trail 1.2]]></title>
         <id>https://windhawk.net/mods/cursor-trail#11fb8bda590c23f2db86e393c419992247a817eb</id>
@@ -1957,72 +2027,6 @@ untouched.</p>]]></content>
         <author>
             <name>osmanonurkoc</name>
             <uri>https://github.com/osmanonurkoc</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fluid Wallpaper 1.0.0]]></title>
-        <id>https://windhawk.net/mods/fluid-wallpaper#8a03fd64b8f1f3bdf6d962520d4739cf783b531e</id>
-        <link href="https://windhawk.net/mods/fluid-wallpaper"/>
-        <updated>2026-10-08T22:01:22.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fluidwallpaper">Fluid Wallpaper</h1>
-<p><img src="https://i.imgur.com/rIzdlWv.jpeg" alt="Screenshot" />
-<a href="https://i.imgur.com/yXW45Vs.mp4">Watch the overview video in full quality</a></p>
-<p>An animated, interactive fluid simulation rendered on the GPU behind your
-desktop icons. The shaders are a Direct3D port of
-<a href="https://github.com/PavelDoGreat/WebGL-Fluid-Simulation">WebGL Fluid Simulation</a>
-by Pavel Dobryakov (MIT license).</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>One independent simulation per monitor, drawn behind the desktop icons.</li>
-<li>Autonomous color trails and periodic color bursts keep the fluid moving.</li>
-<li>Moving the mouse over the desktop stirs the fluid. No clicks are needed and
-no mouse hooks are installed; clicks always reach the desktop.</li>
-<li>Bloom, sun rays and shading effects, all configurable.</li>
-<li>Pauses automatically when the desktop can't be seen: when a monitor's
-desktop is fully covered by windows (maximized, full-screen or several
-windows side by side), when the session is locked or switched away, and when
-the display is turned off.</li>
-<li>Optional lower frame rate or pause on battery power and Energy Saver.</li>
-</ul>
-<p>To see the wallpaper, minimize your windows. Settings are applied live;
-changing a setting restarts the simulation.</p>
-<h2 id="howitworks">How it works</h2>
-<p>Each monitor gets a child window of Explorer's wallpaper host, without a
-redirection surface. The simulation runs in Direct3D 11 and its final pass is
-drawn straight into a DirectComposition swap chain attached to that window.
-Frames never leave the GPU. The same path is used on the classic desktop
-layout and on the Windows 11 24H2+ layout.</p>
-<p>The mod doesn't change your wallpaper settings, the registry or the order of
-Explorer's own windows. Disabling it removes its windows and reveals your
-normal wallpaper.</p>
-<h2 id="performancetips">Performance tips</h2>
-<ul>
-<li>Lighter: Maximum FPS 30, Dye resolution 512, Trails 2, Bloom off.</li>
-<li>Swirlier: Vorticity 50, Dye dissipation 60, Trail force 4500.</li>
-</ul>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p>If the wallpaper doesn't appear, open the mod log in Windhawk: the lines
-starting with "Desktop layout", "Direct3D" and "Monitor" describe what was
-found and created. Please include them when reporting a problem, together with
-your Windows build number.</p>
-<p>If the animation stays frozen while the desktop is visible, a window that
-looks hidden is probably reported as visible and covering it. Disable <strong>Pause
-when the desktop is covered</strong> in that case.</p>
-<h2 id="requirementsandlimitations">Requirements and limitations</h2>
-<ul>
-<li>Windows 10 or 11 and a GPU with Direct3D feature level 10.0 or later.</li>
-<li>Relies on the undocumented WorkerW desktop layout of Windows, which differs
-between Windows 10, Windows 11 and Windows 11 24H2 and later. Future Windows
-builds may change it.</li>
-<li>Below 30 FPS (including the battery option) the motion also slows down,
-because each simulation step is limited in length to stay stable.</li>
-<li>The transparent background and screenshot features of the web demo are not
-included.</li>
-<li>Some settings use integer scales; for example, 80 means 0.8.</li>
-</ul>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
         </author>
     </entry>
 </feed>
