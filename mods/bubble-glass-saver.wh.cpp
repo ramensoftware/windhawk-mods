@@ -6,7 +6,7 @@
 // @author          SilverAmd
 // @github          https://github.com/SilverAmd
 // @include         explorer.exe
-// @compilerOptions -std=c++20 -lgdiplus -lgdi32 -lwinmm
+// @compilerOptions -lgdiplus -lgdi32 -lwinmm
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
