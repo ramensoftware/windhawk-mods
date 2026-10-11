@@ -2,7 +2,7 @@
 // @id              start-button-control
 // @name            Windows 11 Start Button Launcher
 // @description     Built-in icons, custom Start launcher and position among app icons
-// @version         1.3.2
+// @version         1.3.3
 // @author          Stheno
 // @github          https://github.com/sth3no
 // @license         GPL-3.0
@@ -241,6 +241,7 @@ HHOOK g_lowLevelKeyboardHook;
 struct WindowsKeyState { bool down = false; bool injected = false; };
 WindowsKeyState g_windowsKeys[2];
 bool g_blockedEscape = false;
+bool g_escapeDown = false;
 
 HANDLE g_keyboardThread = nullptr;
 HANDLE g_keyboardReadyEvent = nullptr;
@@ -1170,8 +1171,22 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode,
             (GetAsyncKeyState(VK_RCONTROL) & 0x8000);
 
         if (keyInfo->vkCode == VK_ESCAPE) {
-            if (keyDown && ctrlDown) { g_blockedEscape = true; return 1; }
-            if (keyUp && g_blockedEscape) { g_blockedEscape = false; return 1; }
+            if (keyDown) {
+                if (!g_escapeDown) {
+                    g_escapeDown = true;
+                    const bool shiftDown = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+                    const bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+                    g_blockedEscape = ctrlDown && !shiftDown && !altDown &&
+                        !g_windowsKeys[0].down && !g_windowsKeys[1].down;
+                }
+                // Preserve the decision across repeats and modifier changes.
+                if (g_blockedEscape) return 1;
+            }
+            if (keyUp) {
+                const bool blocked = g_blockedEscape;
+                g_escapeDown = g_blockedEscape = false;
+                if (blocked) return 1;
+            }
         }
 
         if (isWindowsKey) {
@@ -1245,7 +1260,7 @@ bool InstallWindowsKeyHook() {
         return false;
     }
 
-    g_windowsKeys[0] = {}; g_windowsKeys[1] = {}; g_blockedEscape = false;
+    g_windowsKeys[0] = {}; g_windowsKeys[1] = {}; g_escapeDown = g_blockedEscape = false;
     g_lowLevelKeyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL,
                                               LowLevelKeyboardProc,
                                               currentModule,
@@ -1274,7 +1289,7 @@ void UninstallWindowsKeyHook() {
         }
         g_windowsKeys[i] = {};
     }
-    g_blockedEscape = false;
+    g_escapeDown = g_blockedEscape = false;
 }
 
 DWORD WINAPI WindowsKeyThreadProc(void*) {
