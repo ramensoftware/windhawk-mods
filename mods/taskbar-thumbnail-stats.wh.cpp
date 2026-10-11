@@ -9,7 +9,7 @@
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -lshlwapi -lshell32
-// ==/WindhawkMod==
+// ==/WindhawkMod== 
 
 // Source code is published under The GNU General Public License v3.0.
 //
