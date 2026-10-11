@@ -2,12 +2,54 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-11T18:04:52.000Z</updated>
+    <updated>2026-10-11T19:00:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Control Center Buttons 1.0.0]]></title>
+        <id>https://windhawk.net/mods/windows-11-control-center-buttons#4a5ac03d9dd76ed8af9db1980382c5ff182b6755</id>
+        <link href="https://windhawk.net/mods/windows-11-control-center-buttons"/>
+        <updated>2026-10-11T19:00:50.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows11controlcenterbuttons">Windows 11 Control Center Buttons</h1>
+<p>• <strong><a href="https://github.com/Salyts/Windows-11-Control-Center-Buttons/issues">Report a bug or suggest a feature</a></strong> · <strong><a href="https://discord.com/channels/923944342991818753/1558419938820227123">Discussion on Discord</a></strong> · <strong><a href="https://ko-fi.com/salyts">Support</a></strong></p>
+<p>Removes the stock <strong>Settings (gear)</strong> button from the bottom bar of the Windows 11 Control Center panel and puts your own buttons there instead.</p>
+<p>Actions are run by a dedicated Windhawk tool-mod process (<code>windhawk.exe -tool-mod</code>), the panel host sends the click to a tiny hidden window inside that process, which runs the command.</p>
+<p>| Before | After |
+|--------|---------|
+| <img src="https://i.imgur.com/ILoCB2R.png" alt="before" /> | <img src="https://i.imgur.com/R7ET89k.png" alt="after" /> |</p>
+<h2 id="buttonfields">Button fields</h2>
+<p>| Field | Description |
+|---|---|
+| <strong>Preset</strong> | Ready-made button. Set <code>Custom</code> to define your own. |
+| <strong>Name</strong> | Tooltip. Empty on presets = default name. |
+| <strong>Icon</strong> | Segoe Fluent glyph (<code>E713</code> or <code>\uE713</code>), image path (PNG/ICO/JPG/BMP/WEBP) or <code>.exe</code>/<code>.dll</code> path to take the icon from. |
+| <strong>Action</strong> | Used for <code>Custom</code>. One or several commands, run in order. |
+| <strong>Left-click submenu</strong> | Menu opened on left click (replaces Action). |
+| <strong>Right-click submenu</strong> | Menu opened on right click. |</p>
+<h2 id="actionformats">Action formats</h2>
+<p>| Prefix | Example | Description |
+|--------|---------|-------------|
+| <code>" "</code> | <code>"C:\Program Files\Windhawk\windhawk.exe"</code> | Opens a file or folder by absolute path. |
+| <code>~</code> | <code>~Downloads</code> or <code>~windhawk.exe</code> | Opens a folder or file by name. |
+| <code>cmd:</code> | <code>cmd:control</code> | Runs a command through <code>cmd.exe</code>. |
+| <code>ps:</code> or <code>powershell:</code> | <code>ps:shutdown /r /f /t 0</code> | Runs through <code>powershell.exe</code> |
+| <code>press:</code> | <code>press:Win+E</code> or <code>press:0x5B;0x45</code> | Keyboard key press using <a href="https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes">Win32 key code</a>. |
+| <code>web:</code> | <code>web:https://windhawk.net/</code> | Opens a URL in the default browser. |
+| <code>ms-settings:</code> | <code>ms-settings:bluetooth</code> | Opens a Windows Settings page. |</p>
+<h3 id="modifiersignsprependtoanyaction">Modifier signs (prepend to any action)</h3>
+<p>| Sign | Example | Description |
+|------|---------|-------------|
+| <code>-</code> | <code>-"C:\Program Files\app.exe"</code> or <code>-ps:shutdown /r /f /t 0</code> | Runs as administrator. |
+| <code>*</code> | <code>*cmd:tasklist</code> or <code>*ps:Get-Process</code> | Execution with a terminal window. (only for <code>cmd:</code> and <code>ps:</code> prefixes). |</p>
+<p>Signs can be combined: <code>-*cmd:tasklist</code> runs cmd in a visible window as admin.</p>]]></content>
+        <author>
+            <name>Salyts</name>
+            <uri>https://github.com/Salyts</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hide Taskbar Tooltips 1.1.0]]></title>
         <id>https://windhawk.net/mods/hide-taskbar-tooltips#5fa85c1fab7a650c68755b5859adde091b44d9b4</id>
@@ -998,32 +1040,6 @@ masking with smart dark-mode dialog sampling.</p>
         <author>
             <name>iMAboud</name>
             <uri>https://github.com/iMAboud</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Animated Cross-Desktop Activation 0.6.0]]></title>
-        <id>https://windhawk.net/mods/animated-cross-desktop-window-animation#e52aa5b390cbd99ba2af1961bf2905efde59dd01</id>
-        <link href="https://windhawk.net/mods/animated-cross-desktop-window-animation"/>
-        <updated>2026-10-09T21:03:48.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="animatedcrossdesktopactivation">Animated Cross-Desktop Activation</h1>
-<p>Windows can jump to another virtual desktop without the normal desktop-switch
-animation when an application activates an existing window on that desktop.
-This mod intercepts only those activation-driven switches and replays them
-asynchronously through Windows' native virtual-desktop animation path.</p>
-<p>Intentional desktop navigation is left alone, including Win+Ctrl+Left/Right,
-Task View, touchpad gestures, and other normal virtual-desktop switch routes.</p>
-<p>Some applications briefly activate an old window on another desktop while they
-create the window that was actually requested on the current desktop. For apps
-listed in Settings, the mod holds the pending animated switch for a short grace
-period. If a new same-process window is added and becomes foreground on the
-current desktop during that period, the stale cross-desktop switch is discarded.
-No windows are moved between desktops.</p>
-<p>Windows Terminal is enabled for transient replacement suppression by default.</p>
-<p>Designed for Windows 11 24H2 and newer. Private shell interfaces and symbols can
-change in future Windows builds.</p>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteoni</uri>
         </author>
     </entry>
 </feed>

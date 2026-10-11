@@ -2,12 +2,54 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-11T13:03:13.000Z</updated>
+    <updated>2026-10-11T19:00:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Control Center Buttons 1.0.0]]></title>
+        <id>https://windhawk.net/mods/windows-11-control-center-buttons#4a5ac03d9dd76ed8af9db1980382c5ff182b6755</id>
+        <link href="https://windhawk.net/mods/windows-11-control-center-buttons"/>
+        <updated>2026-10-11T19:00:50.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows11controlcenterbuttons">Windows 11 Control Center Buttons</h1>
+<p>• <strong><a href="https://github.com/Salyts/Windows-11-Control-Center-Buttons/issues">Report a bug or suggest a feature</a></strong> · <strong><a href="https://discord.com/channels/923944342991818753/1558419938820227123">Discussion on Discord</a></strong> · <strong><a href="https://ko-fi.com/salyts">Support</a></strong></p>
+<p>Removes the stock <strong>Settings (gear)</strong> button from the bottom bar of the Windows 11 Control Center panel and puts your own buttons there instead.</p>
+<p>Actions are run by a dedicated Windhawk tool-mod process (<code>windhawk.exe -tool-mod</code>), the panel host sends the click to a tiny hidden window inside that process, which runs the command.</p>
+<p>| Before | After |
+|--------|---------|
+| <img src="https://i.imgur.com/ILoCB2R.png" alt="before" /> | <img src="https://i.imgur.com/R7ET89k.png" alt="after" /> |</p>
+<h2 id="buttonfields">Button fields</h2>
+<p>| Field | Description |
+|---|---|
+| <strong>Preset</strong> | Ready-made button. Set <code>Custom</code> to define your own. |
+| <strong>Name</strong> | Tooltip. Empty on presets = default name. |
+| <strong>Icon</strong> | Segoe Fluent glyph (<code>E713</code> or <code>\uE713</code>), image path (PNG/ICO/JPG/BMP/WEBP) or <code>.exe</code>/<code>.dll</code> path to take the icon from. |
+| <strong>Action</strong> | Used for <code>Custom</code>. One or several commands, run in order. |
+| <strong>Left-click submenu</strong> | Menu opened on left click (replaces Action). |
+| <strong>Right-click submenu</strong> | Menu opened on right click. |</p>
+<h2 id="actionformats">Action formats</h2>
+<p>| Prefix | Example | Description |
+|--------|---------|-------------|
+| <code>" "</code> | <code>"C:\Program Files\Windhawk\windhawk.exe"</code> | Opens a file or folder by absolute path. |
+| <code>~</code> | <code>~Downloads</code> or <code>~windhawk.exe</code> | Opens a folder or file by name. |
+| <code>cmd:</code> | <code>cmd:control</code> | Runs a command through <code>cmd.exe</code>. |
+| <code>ps:</code> or <code>powershell:</code> | <code>ps:shutdown /r /f /t 0</code> | Runs through <code>powershell.exe</code> |
+| <code>press:</code> | <code>press:Win+E</code> or <code>press:0x5B;0x45</code> | Keyboard key press using <a href="https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes">Win32 key code</a>. |
+| <code>web:</code> | <code>web:https://windhawk.net/</code> | Opens a URL in the default browser. |
+| <code>ms-settings:</code> | <code>ms-settings:bluetooth</code> | Opens a Windows Settings page. |</p>
+<h3 id="modifiersignsprependtoanyaction">Modifier signs (prepend to any action)</h3>
+<p>| Sign | Example | Description |
+|------|---------|-------------|
+| <code>-</code> | <code>-"C:\Program Files\app.exe"</code> or <code>-ps:shutdown /r /f /t 0</code> | Runs as administrator. |
+| <code>*</code> | <code>*cmd:tasklist</code> or <code>*ps:Get-Process</code> | Execution with a terminal window. (only for <code>cmd:</code> and <code>ps:</code> prefixes). |</p>
+<p>Signs can be combined: <code>-*cmd:tasklist</code> runs cmd in a visible window as admin.</p>]]></content>
+        <author>
+            <name>Salyts</name>
+            <uri>https://github.com/Salyts</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Chinese Holiday Calendar 0.21]]></title>
         <id>https://windhawk.net/mods/chinese-holiday-calendar#c3f657ac9b83f60e2cb7561b9ab66c5c517ae2bb</id>
@@ -2058,141 +2100,6 @@ mod is rotating, Windows' indicator stays exactly as Windows draws it. Turn the 
 temporarily when comparing against Windows' native tray glyphs during testing.
 Everything the mod changes on a native icon is restored to its exact prior
 value when the mod unloads.</p>]]></content>
-        <author>
-            <name>sb4ssman</name>
-            <uri>https://github.com/sb4ssman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock Spacer 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-spacer#cadc656d0e615a315d285713c49600f2709d2412</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-spacer"/>
-        <updated>2026-10-08T23:02:34.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarclockspacer">Taskbar Clock Spacer</h1>
-<p>Adds a <code>%s%</code> elastic spacer token to the Windows 11 taskbar clock, so clock items
-can be pushed apart to fill a fixed width instead of bunching together.</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-clock-spacer/assets/clock-spacer-working.png" alt="Clock Spacer distributing a custom clock across multiple rows" />
-<em>User-confirmed working configuration, September 9, 2026, with system stats,
-time, date, and weather arranged across a fixed-width clock.</em></p>
-<h2 id="tworequirementspleasereadbeforeinstalling">Two requirements — please read before installing</h2>
-<p><strong>1. This mod does nothing on its own.</strong> It is a companion for
-<a href="https://windhawk.net/mods/taskbar-clock-customization">Taskbar Clock Customization</a>.
-That mod produces the clock text; this mod only rearranges it. Install and
-configure that mod first.</p>
-<p><strong>2. The clock needs a fixed width.</strong> An elastic spacer distributes <em>leftover</em>
-width. If the clock sizes itself to its own text there is no leftover width,
-every gap computes to zero, and the result looks exactly as if the mod were not
-installed. Set a fixed width using either:</p>
-<ul>
-<li><strong>Max width</strong> in Taskbar Clock Customization's settings, or</li>
-<li><strong>Max clock width</strong> in this mod's settings.</li>
-</ul>
-<p>Either one works. 120 px is a reasonable starting point.</p>
-<p>Windows 11 only. This mod does not work on Windows 10.</p>
-<h2 id="trythebuiltinoptionfirst">Try the built-in option first</h2>
-<p>Taskbar Clock Customization 1.8 and later can spread a line across a fixed
-width on its own: set its <strong>Text alignment</strong> to <strong>Justified</strong>, use ordinary
-spaces where you want the gaps, and use a non-breaking space inside items you
-want kept together. If that looks right for your clock, you don't need this mod.</p>
-<p>What <code>%s%</code> does that <strong>Justified</strong> does not:</p>
-<ul>
-<li><strong>Gaps only where you put them.</strong> Justified stretches every space in the
-line, and can widen the spacing between characters — its author noted large
-gaps opening inside <code>MB/s</code>. With <code>%s%</code>, ordinary spaces and the characters
-inside each item are left exactly as they are.</li>
-<li><strong>Weighted gaps.</strong> <code>%s%%s%</code> takes twice the share of a single <code>%s%</code>.</li>
-<li><strong>A minimum gap.</strong> <strong>Minimum spacer width</strong> keeps every gap visible even when
-the text nearly fills the clock.</li>
-<li><strong>Gaps inside the weather.</strong> <code>{spacer}</code> works inside the Weather format, where
-the weather text arrives as one pre-formatted string.</li>
-</ul>
-<h2 id="whatitdoes">What it does</h2>
-<p>Put <code>%s%</code> between items in the clock's Top Line or Bottom Line format. Each <code>%s%</code>
-becomes a gap, and all leftover width is shared out evenly between the gaps.</p>
-<p>| Format | Result |
-| --- | --- |
-| <code>%time%%s%%date%</code> | time hugs the left edge, date hugs the right, gap fills the middle |
-| <code>%time%%s%%date%%s%%weekday%</code> | three items, two equal gaps |
-| <code>%time%%s%%date%%s%%s%%weekday%</code> | Double-spacer: more space is weighted between date and weekday |</p>
-<p>The first item always hugs the left edge and the last always hugs the right edge,
-so the line stays anchored as the text changes width.</p>
-<h3 id="spacersinsidetheweather">Spacers inside the weather</h3>
-<p>The weather service substitutes <code>%s</code> as its sunset token, so <code>%s%</code> cannot be
-written inside Taskbar Clock Customization's <strong>Weather format</strong>. Write
-<code>{spacer}</code> there instead, for example:</p>
-<pre><code>%c{spacer}🌡️%t{spacer}🌬️%w
-</code></pre>
-<p><code>{spacer}</code> passes through the weather service verbatim, arrives in the clock
-line, and becomes the same elastic gap as <code>%s%</code> — so weather items justify
-with the rest of the clock.</p>
-<h2 id="setup">Setup</h2>
-<ol>
-<li>Install <strong>Taskbar Clock Customization</strong> and set up your clock format.</li>
-<li>Set a <strong>Max width</strong> in its settings, for example <code>120</code>.</li>
-<li>Install this mod.</li>
-<li>Edit the clock mod's <strong>Top line</strong> or <strong>Bottom line</strong> to put <code>%s%</code> between
-items, for example <code>%time%%s%%date%</code>.</li>
-</ol>
-<p>The <code>%s%</code> token passes through Taskbar Clock Customization untouched and is
-interpreted here at display time.</p>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p><strong><code>%s%</code> disappears and nothing moves.</strong> This is the fixed-width problem in
-requirement 2 above. Set a <strong>Max width</strong> in Taskbar Clock Customization, or a
-<strong>Max clock width</strong> here. The mod also writes a one-line explanation to the
-Windhawk log the first time it detects this.</p>
-<p><strong>Nothing happens at all.</strong> Confirm Taskbar Clock Customization is installed and
-enabled, and that <code>%s%</code> is in its <strong>Top line</strong> or <strong>Bottom line</strong> setting — not in
-the tooltip, the middle line, or the weather format.</p>
-<p><strong>The spacer works but the clock is the wrong width.</strong> Adjust either the clock
-mod's <strong>Max width</strong> or this mod's <strong>Max clock width</strong>. The latter applies only
-to generated spacer rows, so leave it at <code>0</code> when you want the clock mod to
-own the whole clock width.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Max clock width</strong> — fixed width for generated spacer rows. When it is <code>0</code>,
-the mod uses a finite <strong>Max width</strong> already set on the shared clock panel by
-Taskbar Clock Customization. It does not constrain an unspaced native line.</li>
-<li><strong>Minimum spacer width</strong> — a floor, in pixels, for every gap. <code>0</code> (the default)
-leaves gaps fully elastic. A small value such as <code>8</code> guarantees a visible gap
-even before a fixed clock width is configured.</li>
-</ul>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li><code>%s%</code> is interpreted after Taskbar Clock Customization expands its format
-tokens, so it works in the top and bottom line formats. Inside the composite
-weather segment use <code>{spacer}</code> instead — the weather service would consume
-<code>%s%</code> as its sunset token.</li>
-<li>Lines without <code>%s%</code> are left completely alone — the mod is a no-op for them.</li>
-<li>A line hidden in Taskbar Clock Customization before this mod spaces it stays
-hidden, even when its format contains <code>%s%</code>. If you hide a line that is
-already spaced, turn this mod off and on to apply the hidden state. Do the
-same if a hidden line appears after Explorer starts. Both mods collapse the
-same source text block, so this mod cannot detect a second collapse of an
-already collapsed block. Unhiding takes effect on the next clock tick.</li>
-<li>Font, size, and color of the spaced segments follow the original clock text's
-current style, so the clock mod's style settings continue to apply.</li>
-</ul>
-<h2 id="howitworks">How it works</h2>
-<p>The mod hooks two system-tray symbols and watches the clock's time and date text
-blocks. <code>DateTimeIconContent::OnApplyTemplate</code> catches every clock that is
-templated from then on, including after Explorer rebuilds the taskbar;
-<code>BadgeIconContent::get_ViewModel</code> catches the clocks that were already on screen
-when the mod was enabled, on every monitor's taskbar. Between the two there is no
-clock left to search for, so the mod needs no visual-tree scan.</p>
-<p>When a line contains <code>%s%</code>, the source text block is collapsed and a generated
-panel is inserted in its place: each line becomes a Grid whose text segments sit
-in <code>Auto</code> columns separated by <code>Star</code> columns, and the star columns absorb the
-leftover width. When only the text changes — which happens every second — the
-existing segments are rewritten in place rather than rebuilt, so the visual tree
-stays stable.</p>
-<h2 id="relationshiptotaskbarclockcustomization">Relationship to Taskbar Clock Customization</h2>
-<p>The spacer was first offered as a patch to Taskbar Clock Customization itself
-(<a href="https://github.com/m417z/my-windhawk-mods/pull/68">m417z/my-windhawk-mods#68</a>).
-Its maintainer preferred an approach without generated layout elements and
-added the <strong>Justified</strong> text alignment described above, then judged creating
-extra text elements to be out of scope for that mod. This companion carries the
-explicit-gap approach separately and leaves Taskbar Clock Customization
-untouched.</p>]]></content>
         <author>
             <name>sb4ssman</name>
             <uri>https://github.com/sb4ssman</uri>

@@ -18274,6 +18274,34 @@
         "version": "1.0.0"
       }
     },
+    "windows-11-control-center-buttons": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791745250000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791745250000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Salyts",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshlwapi -lshell32 -luuid -luser32 -lwtsapi32 -lpowrprof -lgdi32 -lgdiplus -lshcore",
+        "description": "Replaces the gear button in the Windows 11 Control Center footer with fully customizable buttons.",
+        "donateUrl": "https://ko-fi.com/salyts",
+        "github": "https://github.com/Salyts",
+        "homepage": "https://github.com/Salyts/Windows-11-Control-Center-Buttons",
+        "include": [
+          "ShellHost.exe",
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Windows 11 Control Center Buttons",
+        "version": "1.0.0"
+      }
+    },
     "windows-11-file-explorer-styler": {
       "details": {
         "defaultSorting": 2796057,
