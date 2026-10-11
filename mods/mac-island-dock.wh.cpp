@@ -10,7 +10,7 @@
 // @homepage        https://caliberda.com.br
 // @include         windhawk.exe
 // @include         explorer.exe
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -lcomctl32 -lgdi32 -lmsimg32 -ld2d1 -ldwrite -lwlanapi -luuid -lversion -lbthprops -ldxva2 -lshlwapi -lwinhttp -lwinmm -liphlpapi -lshcore -lcomdlg32 -limm32 -lsetupapi -lcfgmgr32
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -lcomctl32 -lgdi32 -lmsimg32 -ld2d1 -ldwrite -lwlanapi -luuid -lversion -lbthprops -ldxva2 -lshlwapi -lwinhttp -lwinmm -liphlpapi -lshcore -lcomdlg32 -limm32 -lsetupapi -lcfgmgr32 -luserenv
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -66,7 +66,9 @@ the taskbar.
   WhatsApp's count the messages they say they hold, or on the taskbar
   button; a dot without a number), even while the taskbar is
   hidden, and the bell gets a red dot until the list is
-  opened. Clicking an app (or its notification in the pill) opens it at its
+  opened. Notifications that came while the island wasn't running (the
+  computer off, the island turned off) and are still in Windows' list show
+  the same way when it starts. Clicking an app (or its notification in the pill) opens it at its
   latest notification (an app hidden in the tray, like many chat apps, by
   its tray icon); a
   notification with nothing to open (like a script's) shows the list
@@ -112,6 +114,15 @@ the taskbar.
     it, and the others are listed below to add), with shortcuts like dark
     mode, screenshot, lock, emoji, clipboard history, Task Manager,
     Calculator and File Explorer.
+  * **komorebi** (the tiling window manager, if installed; a control center
+    section and an optional button on the pill, whose click opens a small
+    panel): start, stop and reload buttons, with its version under them,
+    like yasb's control. Each runs komorebi's own `komorebic start`, `stop`
+    or both, only when clicked, without a window like yasb does; when it
+    fails, it runs again in a terminal on the screen that shows why.
+    Options choose whether whkd and masir start and stop with it. Nothing
+    is installed or accepted for you, and the mod never ends komorebi by
+    itself.
   * The calendar keeps events, with reminders that show in the pill, and,
     if chosen, the public holidays of the country set in Windows.
   * **Power** (an optional button on the pill): sleep, restart, shut down,
@@ -173,10 +184,10 @@ the taskbar.
   hard to read on the background), or the colors of the app in front (its
   title bar's or its icon's, blending in as you switch apps); how opaque
   the island and its panels are; and frosted glass on the bar and on the Fixed style's strip
-  (not with the notches, the screen shows between them; Windows' blur: turning it on turns on Windows' transparency effects too,
-  and back off when it's turned off or the mod is, if the mod turned them
-  on; turning them off in Windows turns the glass off too; Windows blurs
-  only rectangles, so the loose pill stays as it is).
+  (not with the notches, the screen shows between them; Windows' blur: it
+  shows while Windows' transparency effects are on, in Settings >
+  Personalization > Colors, which the mod never changes; Windows blurs only
+  rectangles, so the loose pill stays as it is).
 * **The other apps' tray icons** on the island: the pinned ones always, the
   others opening sideways from the "⋯" button, or, if chosen, in a list
   under the pill, as a grid like Windows' or with their names (it stays
@@ -253,12 +264,12 @@ search, and Esc (or a click outside) closes them.
 | Section | What it sets |
 | :--- | :--- |
 | Profiles | Up to 10 profiles with the island's settings below (for work, for games, one with everything on): "+" beside the title saves the current ones, a click applies one, the one in use keeps every change made to the settings by itself, and a pencil renames one, saves the current settings in it or deletes it. A button on the pill switches them (off by default): a click lists them, and Shift and the mouse wheel on it go to the next one (shown under it, applied once Shift is let go). Notifications, notes, tasks and pinned tray icons aren't part of them. |
-| Backup | "Export…" saves a file with the notes, tasks, keyboard shortcuts, calendar events, pinned folders, the wallpapers' folder, profiles and the island's settings; "Import…" puts one back (the island starts again with it). They're kept by Windhawk on this computer only, so export them before formatting it. |
+| Backup | "Export…" saves a file with the notes, tasks, keyboard shortcuts, calendar events, pinned folders, the wallpapers' folder, profiles and the island's settings; "Import…" puts one back (the island starts again with it). They're kept by Windhawk on this computer only, so export them before formatting it; Windhawk keeps them for the whole computer, so every Windows account on it sees the same ones. |
 | Look | The style (the pill; the pill keeping its room at its edge, so maximized windows stop beside it; or the bar), the colors (and your own: a click on "Fill", "Text" or "Icons" opens Windows' color dialog), the opacity, the frosted glass (the bar and the Fixed style's strip, without notches), colors following the app in front (its title bar's color when it has one, or its icon's main color, blending in as you switch apps; never read from the screen), the size, and panels as wide as the island. |
-| Notches (Fixed style) | None, one in the middle, one at each top corner, or three; how big their curves are (100% the usual, up to 200% for wide, sweeping curves); and hiding each one on its own (otherwise one line, on the bell's notch, opens them all). |
+| Notches (Fixed style) | None, one in the middle, one at each top corner, or three; how big their curves are (75% by default, up to 200% for wide, sweeping curves); and hiding each one on its own (otherwise one line, on the bell's notch, opens them all). |
 | Animations | On or off, how many (all, partial, none), their speed, and the frames a second, for the island (the dock's are in Windhawk's settings; the island's start as those were). |
 | On the pill | The order of its items (drag them in the little pill; with notches, from one notch to another), the clock kept in the middle (the other items spread on both sides, keeping their order), and which items it shows: the control center, volume and battery (each with its percentage beside it, off by default), the bell, and (off by default) the power button, light and dark mode, the microphone, notes, tasks, keyboard shortcuts, the weather, updates, the profiles, the screen's brightness, the keyboard's language, the microphone, camera and location in use, USB drives (their icon and the notice when one is plugged in, both on by default), the virtual desktops, folders and places, wallpapers (and their transition), and the processor, memory and video memory use. A pill longer than its screen stops short of the edges, and the mouse wheel slides along it (Shift+wheel over what's playing). |
-| Control center buttons on the pill | Night light, Wi-Fi, Bluetooth, the mobile hotspot, airplane mode, project, cast, captions, accessibility, screenshot, lock, emoji, the clipboard, Task Manager, Calculator and File Explorer, each on its own, with its own place in the pill's order (the control center keeps its own order). |
+| Control center buttons on the pill | Night light, Wi-Fi, Bluetooth, the mobile hotspot, airplane mode, project, cast, captions, accessibility, screenshot, lock, emoji, the clipboard, Task Manager, Calculator, File Explorer and komorebi, each on its own, with its own place in the pill's order (the control center keeps its own order). |
 | Tray icons and media | The other apps' tray icons: the ones not pinned open sideways in the pill (keeping their list open, and how many it shows before it scrolls), or in a list under it, as a grid of icons (like Windows') or with their names; what's playing (its note), and its buttons and its cover with the title on the pill, each on its own. |
 | Place | Where it sits (kept for each monitor); "Place and icons per app" (only for the Island style, the pill: the Fixed style and the bar keep one place and the same items for every app; for some apps, added from the open apps: a place, icons and their order, what's playing's parts, a clock (and whether it's kept in the middle), a distance from the edges and a size of their own); moving the pill by dragging it; standing upright on the left and right edges; hiding as its line until the mouse reaches it (at an edge), after the time chosen; its distance from the screen's edges; on every monitor (an island on each, with each monitor's own place; the chosen monitor's is the main one, and each other one shows the main island's settings or a profile of its own, chosen in the profiles of its own island's settings, or on the main island, a line for each monitor), on the monitor with the mouse, or on the monitor chosen. |
 | Clock | The time's format (Windows', 24 hours, or 12 hours with a small AM/PM after it, also in the calendar and the notifications), seconds, the day of the week, the day and month, the year, the date's order, the month as a number ("9/10"), and the holidays in the calendar (off by default). The date follows the Windows regional format ("Fri Oct 9", "sex 9 out"; in Chinese, Japanese and Korean from the year to the day, 2026年10月9日), or the order chosen (day, month, year; month, day, year; or year, month, day). |
@@ -352,8 +363,9 @@ usable), or as it is (all of it, or only its apps).
 * **Apps coming and going**: an app opening grows into the dock, and the
   icons next to it slide over to make room (and back when one closes).
 * **Dots under open apps**, instead of the Windows line.
-* **Hidden until you need it**: the taskbar auto-hides, and springs in when
-  the mouse reaches the bottom edge of the screen.
+* **Hidden until you need it** (optional, off by default): the taskbar
+  auto-hides, and springs in when the mouse reaches the bottom edge of the
+  screen.
 * **Out of the way in full screen**: games and apps in full screen (exclusive
   or borderless) don't bring it up when the mouse hits the bottom edge.
 
@@ -370,14 +382,13 @@ usable), or as it is (all of it, or only its apps).
   taskbar on any edge, and follow it when it moves. The dock comes back
   when the taskbar is at the bottom again.
 * **The island without the dock**: the "Taskbar" setting keeps the Windows
-  taskbar as it is (optionally without its clock and tray, which the island
-  shows), or with only its apps (the island shows the clock, tray and
+  taskbar as it is (optionally without its clock and tray while the island
+  is on and shows them), or with only its apps (the island shows the clock, tray and
   notifications), to combine the island with other taskbar mods.
-* The mod turns on the taskbar's auto-hide (the Windows setting) while it's
-  enabled, and turns it back off when the mod is disabled (if it was off
-  before), also after a crash, at the next start. This can be changed in
-  the settings ("Hide the taskbar until the mouse reaches the bottom
-  edge"). If Explorer isn't running when
+* With "Hide the taskbar until the mouse reaches the bottom edge" on (off
+  by default), the mod turns on the taskbar's auto-hide (the Windows
+  setting) while it's enabled, and turns it back off when the mod is
+  disabled (if it was off before), also after a crash, at the next start. If Explorer isn't running when
   the mod is disabled, turn it off in Windows' taskbar settings.
 * **Windows' own settings**: the control center's switches and buttons
   change Windows' settings themselves, as Windows' quick settings do: dark
@@ -603,7 +614,9 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
   do WhatsApp contam as mensagens que dizem ter, ou no botão da barra; um
   pontinho quando não há número), mesmo com a barra escondida,
   e o sino ganha um pontinho vermelho até a
-  lista ser aberta. Clicar num app (ou na notificação dele na pílula) abre a
+  lista ser aberta. As notificações que chegaram com a ilha parada (o
+  computador desligado, a ilha desligada) e ainda estão na lista do Windows
+  aparecem do mesmo jeito quando ela inicia. Clicar num app (ou na notificação dele na pílula) abre a
   última notificação dele (um app escondido na bandeja, como muitos apps de
   conversa, pelo ícone dele na bandeja); uma
   notificação sem nada para abrir (como a de um script) mostra a lista, já
@@ -651,6 +664,15 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
     atalhos como modo escuro, captura de tela, bloquear, emojis, histórico da
     área de transferência, Gerenciador de Tarefas, Calculadora e Explorador de
     Arquivos.
+  * **komorebi** (o gerenciador de janelas lado a lado, se instalado; uma
+    seção da central e um botão opcional na pílula, cujo clique abre um
+    painelzinho): botões de iniciar, parar e recarregar, com a versão
+    embaixo, como o controle do yasb. Cada um roda o próprio `komorebic
+    start`, `stop` ou os dois, só no clique, sem janela como o yasb faz;
+    quando falha, roda de novo num terminal na tela que mostra o motivo.
+    Opções escolhem se o whkd e o masir iniciam e param junto. Nada é
+    instalado nem aceito por você, e o mod nunca encerra o komorebi
+    sozinho.
   * O calendário guarda eventos, com lembretes que aparecem na pílula, e,
     se escolhido, os feriados do país configurado no Windows.
   * **Energia** (um botão opcional na pílula): suspender, reiniciar,
@@ -713,11 +735,10 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
   (a da barra de título ou a do ícone dele, mudando suave ao trocar de app);
   o quanto a ilha e os painéis são opacos; e vidro fosco na barra e na faixa do estilo Fixa
   (não com os entalhes, a tela aparece entre eles; o desfoque do
-  Windows: ligar o vidro liga também os efeitos de transparência do
-  Windows, e eles voltam a desligar quando o vidro ou o mod é desligado, se
-  foi o mod que ligou; desligá-los no Windows desliga o vidro também; o
-  Windows só desfoca retângulos, então a pílula
-  solta fica como está).
+  Windows: aparece enquanto os efeitos de transparência do Windows estão
+  ligados, em Configurações > Personalização > Cores, que o mod nunca
+  muda; o Windows só desfoca retângulos, então a pílula solta fica como
+  está).
 * **Os ícones dos outros apps na bandeja**, na ilha: os fixados sempre, os
   outros abrindo para o lado pelo botão "⋯", ou, se escolhido, numa lista
   embaixo da pílula, em grade como a do Windows ou com os nomes (ela fica
@@ -794,12 +815,12 @@ limpa a busca, e o Esc (ou um clique fora) fecha.
 | Seção | O que ela ajusta |
 | :--- | :--- |
 | Perfis | Até 10 perfis com as configurações da ilha abaixo (para trabalhar, para jogar, um com tudo ligado): o "+" ao lado do título salva as atuais, um clique aplica um, o perfil em uso guarda sozinho toda mudança feita nas configurações, e o lápis renomeia um perfil, salva nele as configurações atuais ou exclui. Um botão na pílula troca de perfil (desligado por padrão): um clique lista os perfis, e Shift e a roda do mouse em cima dele vão para o próximo (mostrado embaixo dele, aplicado quando o Shift é solto). As notificações, anotações, tarefas e ícones fixados da bandeja não fazem parte deles. |
-| Backup | "Exportar…" salva um arquivo com as anotações, tarefas, atalhos do teclado, eventos do calendário, pastas fixadas, a pasta dos papéis de parede, perfis e as configurações da ilha; "Importar…" coloca um de volta (a ilha recomeça com ele). Eles ficam guardados pelo Windhawk só neste computador, então exporte antes de formatar. |
+| Backup | "Exportar…" salva um arquivo com as anotações, tarefas, atalhos do teclado, eventos do calendário, pastas fixadas, a pasta dos papéis de parede, perfis e as configurações da ilha; "Importar…" coloca um de volta (a ilha recomeça com ele). Eles ficam guardados pelo Windhawk só neste computador, então exporte antes de formatar; o Windhawk guarda para o computador todo, então todas as contas do Windows nele veem os mesmos. |
 | Aparência | O estilo (a pílula; a pílula fixa, guardando o espaço dela na borda para as janelas maximizadas pararem ao lado; ou a barra), as cores (e as próprias: um clique em "Fundo", "Texto" ou "Ícones" abre a janela de cores do Windows), a opacidade, o vidro fosco (a barra e a faixa do estilo Fixa, sem entalhes), cores seguindo o app da frente (a cor da barra de título dele, quando tem, ou a cor principal do ícone, mudando suave ao trocar de app; nunca lida da tela), o tamanho, e painéis na largura da ilha. |
-| Entalhes (estilo Fixa) | Nenhum, um no meio, um em cada canto de cima, ou três; o tamanho das curvas (100% o normal, até 200% para curvas largas e abertas); e esconder cada um sozinho (senão, uma linha só, no entalhe do sino, abre todos). |
+| Entalhes (estilo Fixa) | Nenhum, um no meio, um em cada canto de cima, ou três; o tamanho das curvas (75% por padrão, até 200% para curvas largas e abertas); e esconder cada um sozinho (senão, uma linha só, no entalhe do sino, abre todos). |
 | Animações | Ligadas ou não, quantas (todas, parciais, nenhuma), a velocidade e os quadros por segundo, da ilha (as da dock ficam nas configurações do Windhawk; as da ilha começam como aquelas estavam). |
 | Na pílula | A ordem dos itens (arraste-os na pilulinha; com entalhes, de um entalhe para outro), o relógio no meio (os outros itens se dividem dos dois lados, mantendo a ordem), e quais itens ela mostra: a central de controle, volume e bateria (cada um com a porcentagem ao lado, desligada por padrão), o sino, e (desligados por padrão) o botão de desligar, o modo claro e escuro, o microfone, anotações, tarefas, atalhos do teclado, o clima, atualizações, os perfis, o brilho da tela, o idioma do teclado, o microfone, a câmera e a localização em uso, os pendrives (o ícone e o aviso ao conectar, os dois ligados por padrão), as áreas de trabalho virtuais, pastas e locais, papéis de parede (e a transição deles), e o uso do processador, da memória e da memória de vídeo. Uma pílula maior que a tela para antes das bordas, e a roda do mouse desliza por ela (Shift+roda em cima do que está tocando). |
-| Botões da central na pílula | Luz noturna, Wi-Fi, Bluetooth, hotspot móvel, modo avião, projetar, transmitir, legendas, acessibilidade, captura de tela, bloquear, emojis, área de transferência, Gerenciador de Tarefas, Calculadora e Explorador de Arquivos, cada um por si, com o seu próprio lugar na ordem da pílula (a central mantém a ordem dela). |
+| Botões da central na pílula | Luz noturna, Wi-Fi, Bluetooth, hotspot móvel, modo avião, projetar, transmitir, legendas, acessibilidade, captura de tela, bloquear, emojis, área de transferência, Gerenciador de Tarefas, Calculadora, Explorador de Arquivos e komorebi, cada um por si, com o seu próprio lugar na ordem da pílula (a central mantém a ordem dela). |
 | Bandeja e mídia | Os ícones dos outros apps: os não fixados abrem para o lado na pílula (manter a lista deles aberta, e quantos ela mostra antes de rolar), ou numa lista embaixo dela, em grade de ícones (como a do Windows) ou com os nomes; o que está tocando (a nota), e os botões e a capa com o título na pílula, cada um por si. |
 | Posição | Onde ela fica (guardado para cada monitor); "Posição e ícones por app" (só no estilo Ilha, a pílula: o estilo Fixa e a barra ficam num lugar só e com os mesmos itens para todos os apps; para alguns apps, escolhidos entre os apps abertos: uma posição, ícones e a ordem deles, as partes do que está tocando, um relógio (e se ele fica no meio), a distância das bordas e o tamanho só deles); mover a pílula arrastando; ficar em pé nas laterais; esconder na linha até o mouse chegar nela (numa borda), depois do tempo escolhido; a distância dela até as bordas da tela; em todos os monitores (uma ilha em cada, com a posição de cada monitor; a do monitor escolhido é a principal, e cada uma das outras mostra as configurações da principal ou um perfil só dela, escolhido nos perfis das configurações dela, ou na ilha principal, uma linha para cada monitor), no monitor onde está o mouse, ou no monitor escolhido. |
 | Relógio | O formato da hora (o do Windows, 24 horas, ou 12 horas com um AM/PM pequeno depois, também no calendário e nas notificações), segundos, o dia da semana, o dia e o mês, o ano, a ordem da data, o mês em número ("9/10"), e os feriados no calendário (desligado por padrão). A data segue o formato regional do Windows ("Fri Oct 9", "sex 9 out"; em chinês, japonês e coreano do ano ao dia, 2026年10月9日), ou a ordem escolhida (dia, mês, ano; mês, dia, ano; ou ano, mês, dia). |
@@ -893,8 +914,9 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
 * **Apps chegando e saindo**: um app abrindo cresce na dock, e os ícones do
   lado deslizam para abrir espaço (e voltam quando um fecha).
 * **Pontinhos embaixo dos apps abertos**, no lugar do traço do Windows.
-* **Escondida até você precisar**: a barra se oculta sozinha e entra com efeito
-  de mola quando o mouse chega na borda de baixo da tela.
+* **Escondida até você precisar** (opcional, desligado por padrão): a barra
+  se oculta sozinha e entra com efeito de mola quando o mouse chega na borda
+  de baixo da tela.
 * **Fora do caminho em tela cheia**: jogos e apps em tela cheia (exclusiva ou
   sem bordas) não fazem ela aparecer quando o mouse encosta embaixo.
 
@@ -911,14 +933,14 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
   cima da barra de tarefas em nenhuma borda, e acompanham quando ela muda de
   lugar. A dock volta quando a barra volta para baixo.
 * **A ilha sem a dock**: a configuração "Barra de tarefas" mantém a barra do
-  Windows como ela é (se quiser, sem o relógio e a bandeja, que a ilha
-  mostra), ou só com os apps (a ilha mostra o relógio, a bandeja e as
+  Windows como ela é (se quiser, sem o relógio e a bandeja enquanto a ilha
+  está ligada e os mostra), ou só com os apps (a ilha mostra o relógio, a bandeja e as
   notificações), para combinar a ilha com outros mods de barra.
-* O mod liga o ocultar automaticamente da barra (a configuração do Windows)
-  enquanto está ativo, e desliga de novo quando o mod é desativado (se estava
-  desligado antes), também depois de um travamento, no próximo início. Dá
-  para mudar isso nas configurações ("Esconder a barra até o mouse chegar na
-  borda de baixo"). Se o Explorer não estiver rodando quando o mod for
+* Com "Esconder a barra até o mouse chegar na borda de baixo" ligado
+  (desligado por padrão), o mod liga o ocultar automaticamente da barra (a
+  configuração do Windows) enquanto está ativo, e desliga de novo quando o
+  mod é desativado (se estava desligado antes), também depois de um
+  travamento, no próximo início. Se o Explorer não estiver rodando quando o mod for
   desativado, desligue nas configurações da barra de tarefas do Windows.
 * **As configurações do próprio Windows**: as chaves e os botões da central
   de controle mudam as configurações do próprio Windows, como as
@@ -1147,13 +1169,13 @@ escrever em português.
   $description:pt-BR: O relógio, a central de controle, as notificações, o que está tocando e os ícones dos outros apps, no topo da tela. As opções dela (estilo, cores, o que ela mostra) ficam nela mesma (clique com o botão direito na ilha e depois na engrenagem que sai embaixo dela)
   $description:zh-CN: 时钟、控制中心、通知、正在播放的内容和其他应用的托盘图标，显示在屏幕顶部。它自己的选项（样式、颜色、显示内容）在它里面（右键点击灵动岛，再点击下方出现的齿轮）
 - hiding:
-  - autoHide: true
+  - autoHide: false
     $name: Hide the taskbar until the mouse reaches the bottom edge
     $name:pt-BR: Esconder a barra até o mouse chegar na borda de baixo
     $name:zh-CN: 隐藏任务栏，直到鼠标移到底部边缘
-    $description: Turns on the Windows auto-hide while the mod is on, and back off when it's turned off (if it was off before), with every choice of "Taskbar". The other options of this group need it
-    $description:pt-BR: Liga o ocultar automaticamente do Windows enquanto o mod está ativo, e desliga de novo quando ele é desativado (se estava desligado antes), com qualquer opção de "Barra de tarefas". As outras opções deste grupo precisam dela
-    $description:zh-CN: mod 启用时打开 Windows 的自动隐藏，mod 关闭时再关掉（如果之前是关闭的），适用于"任务栏"的所有选项。本组的其他选项需要它
+    $description: Turns on the Windows auto-hide while the mod is on, and back off when it's turned off (if it was off before), with every choice of "Taskbar" (off by default). The other options of this group need it
+    $description:pt-BR: Liga o ocultar automaticamente do Windows enquanto o mod está ativo, e desliga de novo quando ele é desativado (se estava desligado antes), com qualquer opção de "Barra de tarefas" (desligado por padrão). As outras opções deste grupo precisam dela
+    $description:zh-CN: mod 启用时打开 Windows 的自动隐藏，mod 关闭时再关掉（如果之前是关闭的），适用于"任务栏"的所有选项（默认关闭）。本组的其他选项需要它
   - showDelay: 0
     $name: Wait before showing (ms)
     $name:pt-BR: Espera para aparecer (ms)
@@ -1405,11 +1427,13 @@ escrever em português.
 #include <wlanapi.h>
 #include <setupapi.h>
 #include <shellapi.h>
+#include <sddl.h>
 #include <shellscalingapi.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <shobjidl.h>
 #include <tlhelp32.h>
+#include <userenv.h>
 #include <uiautomation.h>
 #include <wuapi.h>
 
@@ -1417,6 +1441,7 @@ escrever em português.
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <climits>
 #include <cmath>
 #include <cstdio>
 #include <cwctype>
@@ -1533,6 +1558,10 @@ struct {
     // control center's buttons put on it (a bit each, see kPillActions).
     bool islandDesktops;
     unsigned pillActions;
+    // What komorebi's start, stop and reload buttons take along (see
+    // KomorebiCommands).
+    bool komorebiWhkd;
+    bool komorebiMasir;
     // The island's background taking the color of the app in front (see
     // WindowColor).
     bool islandWindowColor;
@@ -2146,6 +2175,53 @@ std::atomic<double> g_backdropLight{0.5};
 
 std::atomic<bool> g_unloading;
 
+// The mod's storage is the computer's, shared by its accounts: what one
+// account's session changed in Windows (its auto-hide, its Do not disturb)
+// and its explorer.exe part are kept under a name with the account's SID, so
+// another account never undoes them. Values kept before under the plain name
+// are read once and moved.
+std::wstring UserValueName(PCWSTR name) {
+    static const std::wstring suffix = [] {
+        std::wstring sid;
+        HANDLE token = nullptr;
+        if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+            BYTE buffer[256];
+            DWORD size = 0;
+            LPWSTR text = nullptr;
+            if (GetTokenInformation(token, TokenUser, buffer, sizeof(buffer),
+                                    &size) &&
+                ConvertSidToStringSid(((TOKEN_USER*)buffer)->User.Sid,
+                                      &text)) {
+                sid = text;
+                LocalFree(text);
+            }
+            CloseHandle(token);
+        }
+        return sid.empty() ? std::wstring() : L"_" + sid;
+    }();
+    return name + suffix;
+}
+
+int GetUserIntValue(PCWSTR name, int defaultValue) {
+    const std::wstring userName = UserValueName(name);
+    constexpr int kMissing = INT_MIN;
+    const int value = Wh_GetIntValue(userName.c_str(), kMissing);
+    if (value != kMissing) {
+        return value;
+    }
+    const int legacy = Wh_GetIntValue(name, kMissing);
+    if (legacy == kMissing || userName == name) {
+        return defaultValue;
+    }
+    Wh_SetIntValue(userName.c_str(), legacy);
+    Wh_DeleteValue(name);
+    return legacy;
+}
+
+void SetUserIntValue(PCWSTR name, int value) {
+    Wh_SetIntValue(UserValueName(name).c_str(), value);
+}
+
 // The mod's own module (set in Wh_ModInit), for its window classes.
 HMODULE g_module;
 
@@ -2301,6 +2377,10 @@ enum IpcKind : ULONG_PTR {
 };
 constexpr UINT kIpcTimeoutMs = 400;
 
+// In explorer (the taskbar's thread), messages sent to it from other threads
+// wait meanwhile (SMTO_BLOCK): the mod's own unloading sends it some (see
+// ExplorerModBeforeUninit), and they must not run while this code is still
+// on its stack.
 bool SendIpc(HWND to, HWND from, IpcKind kind, const void* data, DWORD size) {
     if (!to) {
         return false;
@@ -2308,7 +2388,8 @@ bool SendIpc(HWND to, HWND from, IpcKind kind, const void* data, DWORD size) {
     COPYDATASTRUCT copyData{kind, size, (PVOID)data};
     DWORD_PTR result = 0;
     return SendMessageTimeout(to, WM_COPYDATA, (WPARAM)from, (LPARAM)&copyData,
-                              SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT,
+                              SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT |
+                                  (g_isExplorer ? SMTO_BLOCK : 0),
                               kIpcTimeoutMs, &result) != 0;
 }
 
@@ -2523,8 +2604,7 @@ struct IpcReader {
     }
     bool GetString(std::wstring* text) {
         UINT32 length = 0;
-        if (!Get(&length) ||
-            (size_t)(end - at) < (size_t)length * sizeof(WCHAR)) {
+        if (!Get(&length) || length > (size_t)(end - at) / sizeof(WCHAR)) {
             return false;
         }
         text->assign((const WCHAR*)at, length);
@@ -4231,7 +4311,8 @@ bool ApplyStyle(XamlRoot xamlRoot, HWND hWnd, bool mainTaskbar) {
             g_settings.taskbarMode ==
                 decltype(g_settings.taskbarMode)::WindowsApps ||
             IsTransparentTaskbar();
-        if (onlyApps || g_settings.windowsHideTray) {
+        if (onlyApps ||
+            (g_settings.windowsHideTray && g_settings.showIsland)) {
             if (auto tray =
                     FindByClassName(content, L"SystemTray.SystemTrayFrame")) {
                 SetStyled(tray, UIElement::VisibilityProperty(),
@@ -5233,9 +5314,8 @@ void OnTrayNotify(const COPYDATASTRUCT* copyData) {
 // (icons can be used from any process of the session; the island makes its
 // own copy while handling the message, while this one is kept alive).
 //
-// Nothing is locked while sending: waiting for the island, this thread still
-// handles messages sent to it, like another app's tray icon (OnTrayNotify),
-// which takes the lock.
+// Nothing is locked while sending: an app's tray icon (OnTrayNotify, sent to
+// this thread) takes the lock, and may be handled right after.
 void SendTrayIcons() {
     HWND island = FindIslandWnd();
     if (!island) {
@@ -6500,7 +6580,9 @@ DWORD WINAPI ToastThreadProc(LPVOID) {
                 stopping = true;
                 break;
             }
-            if (ReadNewToasts(sqlite, path, lastId, apps, toasts) &&
+            // (Pictures only for an island to show them.)
+            if (ReadNewToasts(sqlite, path, lastId, apps, toasts, 0,
+                              g_islandWnd != nullptr) &&
                 !apps.empty()) {
                 break;
             }
@@ -6515,17 +6597,21 @@ DWORD WINAPI ToastThreadProc(LPVOID) {
         if (apps.empty()) {
             continue;
         }
-        // The island shows the latest one, and keeps them all as unread.
-        if (!toasts.empty()) {
-            // Added: ones the island hasn't taken yet stay.
+        // The island shows the latest one, and keeps them all as unread
+        // (only while it runs: without it, nothing is kept; the latest few
+        // while it's starting or busy).
+        if (HWND island = g_islandWnd; island && !toasts.empty()) {
+            constexpr size_t kMaxQueuedToasts = 50;
             AcquireSRWLockExclusive(&g_islandToastsLock);
             g_islandToasts.insert(g_islandToasts.end(),
                                   std::make_move_iterator(toasts.begin()),
                                   std::make_move_iterator(toasts.end()));
-            ReleaseSRWLockExclusive(&g_islandToastsLock);
-            if (HWND island = g_islandWnd) {
-                PostMessage(island, WM_APP_TOAST, 0, 0);
+            if (g_islandToasts.size() > kMaxQueuedToasts) {
+                g_islandToasts.erase(g_islandToasts.begin(),
+                                     g_islandToasts.end() - kMaxQueuedToasts);
             }
+            ReleaseSRWLockExclusive(&g_islandToastsLock);
+            PostMessage(island, WM_APP_TOAST, 0, 0);
         }
         // Explorer makes their icons bounce.
         SendLines(FindTaskbarWnd(), notifier, kIpcNotifiedApps, apps);
@@ -7502,6 +7588,9 @@ constexpr WCHAR kGlyphPin = 0xE718;
 constexpr WCHAR kGlyphMusic = 0xE8D6;
 constexpr WCHAR kGlyphCalendar = 0xE787;
 constexpr WCHAR kGlyphPlay = 0xE768;
+constexpr WCHAR kGlyphStop = 0xE71A;
+constexpr WCHAR kGlyphReload = 0xE72C;
+constexpr WCHAR kGlyphKomorebi = 0xE80A;
 constexpr WCHAR kGlyphPause = 0xE769;
 constexpr WCHAR kGlyphPreviousTrack = 0xE892;
 constexpr WCHAR kGlyphNextTrack = 0xE893;
@@ -7877,6 +7966,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Installed apps", L"已安装的应用"},
     {L"Island backup (*.txt)", L"灵动岛备份 (*.txt)"},
     {L"Island settings", L"灵动岛设置"},
+    {L"It failed (see the terminal)", L"失败了（请查看终端）"},
     {L"Keep their list open", L"保持列表展开"},
     {L"Keyboard language", L"键盘语言"},
     {L"Keyboard language (like Windows' input indicator)", L"键盘语言（类似 Windows 的输入指示器）"},
@@ -7915,6 +8005,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Music", L"音乐"},
     {L"Muted", L"已静音"},
     {L"Narrator", L"讲述人"},
+    {L"Needs Windows' transparency effects: click to open Personalization > Colors", L"需要 Windows 的透明效果：点击打开 个性化 > 颜色"},
     {L"Needs more than one monitor", L"需要多台显示器"},
     {L"Needs the date or the year on the clock", L"需要时钟显示日期或年份"},
     {L"Needs the notches (Fixed style)", L"需要刘海（固定样式）"},
@@ -8063,6 +8154,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Space", L"空格"},
     {L"Speed", L"速度"},
     {L"Sticky keys", L"粘滞键"},
+    {L"Stopped", L"已停止"},
     {L"Style", L"样式"},
     {L"System sounds (notifications)", L"系统声音（通知）"},
     {L"Task", L"任务"},
@@ -8139,6 +8231,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Windows places", L"Windows 位置"},
     {L"Windows' own: no notification sounds", L"Windows 自己的：没有通知声音"},
     {L"With names", L"带名称"},
+    {L"Working…", L"正在执行…"},
     {L"Write", L"输入"},
     {L"Y M D", L"年 月 日"},
     {L"Year", L"年份"},
@@ -8147,6 +8240,11 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Zoom", L"缩放"},
     {L"checking", L"正在检查"},
     {L"en", L"zh"},
+    {L"komorebi", L"komorebi"},
+    {L"komorebi (start, stop, reload)", L"komorebi（启动、停止、重新加载）"},
+    {L"komorebi isn't installed", L"未安装 komorebi"},
+    {L"komorebi: with masir (focus follows the mouse)", L"komorebi：同时运行 masir（焦点跟随鼠标）"},
+    {L"komorebi: with whkd (its shortcuts)", L"komorebi：同时运行 whkd（它的快捷键）"},
     {L"not connected", L"未连接"},
     {L"notification", L"条通知"},
     {L"notifications", L"条通知"},
@@ -8579,7 +8677,7 @@ void UpdateWindowsQuiet(bool islandRunning) {
         } else if (!g_turnedDndOn || NowSeconds() - g_turnedDndOnAt > 5) {
             if (g_turnedDndOn) {
                 g_turnedDndOn = false;
-                Wh_SetIntValue(L"turnedDndOn", 0);
+                SetUserIntValue(L"turnedDndOn", 0);
             }
             g_dndSeenOn = false;
             g_dndSwitchFailed = true;
@@ -8599,14 +8697,14 @@ void UpdateWindowsQuiet(bool islandRunning) {
         if (SetDoNotDisturb(true)) {
             g_turnedDndOn = true;
             g_turnedDndOnAt = NowSeconds();
-            Wh_SetIntValue(L"turnedDndOn", 1);
+            SetUserIntValue(L"turnedDndOn", 1);
         } else {
             g_dndSwitchFailed = true;
         }
     } else if (!wanted && g_turnedDndOn) {
         if (SetDoNotDisturb(false)) {
             g_turnedDndOn = false;
-            Wh_SetIntValue(L"turnedDndOn", 0);
+            SetUserIntValue(L"turnedDndOn", 0);
         }
     }
 }
@@ -8636,6 +8734,25 @@ bool SetIslandQuiet(bool on) {
     return SetDoNotDisturb(on);
 }
 
+// Turned on by an island that ended without turning it back off (the
+// computer turned off meanwhile), and no island takes it over now: back off
+// (as the island's process starts).
+void RestoreLeftoverDnd() {
+    if (!g_turnedDndOn ||
+        (g_settings.showIsland && g_settings.islandOwnsNotifications)) {
+        return;
+    }
+    const HRESULT init = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (SetDoNotDisturb(false)) {
+        g_turnedDndOn = false;
+        SetUserIntValue(L"turnedDndOn", 0);
+        Wh_Log(L"\"Do not disturb\" left on by the island: turned back off");
+    }
+    if (SUCCEEDED(init)) {
+        CoUninitialize();
+    }
+}
+
 // Explorer keeps an eye on the island's process (told by its hello): if it
 // ends while the island's own notifications have Windows' "Do not disturb"
 // on (it crashed), explorer turns it back off.
@@ -8645,12 +8762,12 @@ DWORD g_islandProcessId;
 SRWLOCK g_islandWatchLock = SRWLOCK_INIT;
 
 VOID CALLBACK IslandProcessEndedCallback(PVOID, BOOLEAN) {
-    if (g_unloading || !Wh_GetIntValue(L"turnedDndOn", 0)) {
+    if (g_unloading || !GetUserIntValue(L"turnedDndOn", 0)) {
         return;
     }
     const HRESULT init = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (SetDoNotDisturb(false)) {
-        Wh_SetIntValue(L"turnedDndOn", 0);
+        SetUserIntValue(L"turnedDndOn", 0);
         Wh_Log(L"The island stopped: \"Do not disturb\" turned back off");
     }
     if (SUCCEEDED(init)) {
@@ -11256,6 +11373,8 @@ class CalendarPanel : public Panel {
     void OnDestroy() override;
     HANDLE m_holidayThread = nullptr;
     std::vector<int> m_holidaysAsked;
+    // A download failed (offline): not asked again before then.
+    ULONGLONG m_holidaysRetryAt = 0;
     // The chosen day's holidays' rows, over its events.
     std::vector<D2D1_RECT_F> m_holidayRows;
     // The next holidays, under it all.
@@ -11486,7 +11605,7 @@ void CalendarPanel::RequestHolidays() {
     const bool known = std::find(g_holidayYears.begin(), g_holidayYears.end(),
                                  m_year) != g_holidayYears.end();
     ReleaseSRWLockShared(&g_holidaysLock);
-    if (country.empty() || known ||
+    if (country.empty() || known || GetTickCount64() < m_holidaysRetryAt ||
         std::find(m_holidaysAsked.begin(), m_holidaysAsked.end(), m_year) !=
             m_holidaysAsked.end()) {
         return;
@@ -11512,9 +11631,11 @@ bool CalendarPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg != WM_APP_HOLIDAYS) {
         return false;
     }
-    // Not downloaded (offline): asked again the next time it's shown.
+    // Not downloaded (offline): asked again when it's shown, after 10
+    // minutes.
     if (lParam) {
         std::erase(m_holidaysAsked, (int)wParam);
+        m_holidaysRetryAt = GetTickCount64() + 10 * 60 * 1000;
         return true;
     }
     SaveHolidays();
@@ -12660,6 +12781,7 @@ enum class ControlId {
     Shortcuts,
     Weather,
     Updates,
+    Komorebi,
 };
 
 enum class ControlKind { Tile, Button, Section };
@@ -12732,7 +12854,273 @@ const ControlInfo kControls[] = {
      L"Bateria", L"battery", true},
     {ControlId::PowerMode, ControlKind::Section, 0xEC48, L"Power",
      L"Energia", L"powermode", true},
+    {ControlId::Komorebi, ControlKind::Section, kGlyphKomorebi, L"komorebi",
+     L"komorebi", L"komorebi", false},
 };
+
+// komorebi (a tiling window manager, when installed): its control center
+// section and its button on the pill start, stop or reload it, like yasb's
+// control, with its own command line tool, only on a click: without a
+// window (like yasb and the Windows 11 Start Menu Buttons mod), and again
+// in a terminal on the screen when it fails, to show why. Nothing is
+// installed or accepted for the user, and the mod never ends komorebi by
+// itself.
+// The user's environment as Windows has it now, not this process's (from
+// when it started: its PATH lacks what was installed since, like komorebi
+// and whkd installed with Windhawk running). Freed with
+// DestroyEnvironmentBlock; null if it can't be made.
+void* FreshEnvironment() {
+    HANDLE token = nullptr;
+    void* block = nullptr;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE,
+                         &token)) {
+        if (!CreateEnvironmentBlock(&block, token, FALSE)) {
+            block = nullptr;
+        }
+        CloseHandle(token);
+    }
+    return block;
+}
+
+// That environment's PATH (empty if it can't be read).
+std::wstring FreshPath() {
+    std::wstring path;
+    if (void* block = FreshEnvironment()) {
+        for (auto entry = (PCWSTR)block; *entry; entry += wcslen(entry) + 1) {
+            if (_wcsnicmp(entry, L"Path=", 5) == 0) {
+                path = entry + 5;
+                break;
+            }
+        }
+        DestroyEnvironmentBlock(block);
+    }
+    return path;
+}
+
+// Its tool, on PATH or where its installer or scoop put it; empty if it
+// isn't installed.
+std::wstring FindKomorebic() {
+    WCHAR path[MAX_PATH];
+    const std::wstring fresh = FreshPath();
+    const DWORD found =
+        SearchPath(fresh.empty() ? nullptr : fresh.c_str(), L"komorebic.exe",
+                   nullptr, MAX_PATH, path, nullptr);
+    if (found > 0 && found < MAX_PATH) {
+        return path;
+    }
+    // (%ProgramW6432%: the island's process is 32-bit.)
+    for (PCWSTR place : {L"%ProgramW6432%\\komorebi\\bin\\komorebic.exe",
+                         L"%USERPROFILE%\\scoop\\shims\\komorebic.exe"}) {
+        if (ExpandEnvironmentStrings(place, path, MAX_PATH) &&
+            GetFileAttributes(path) != INVALID_FILE_ATTRIBUTES) {
+            return path;
+        }
+    }
+    return {};
+}
+
+// Whether komorebi runs, in this session.
+bool KomorebiRunning() {
+    DWORD session = 0;
+    ProcessIdToSessionId(GetCurrentProcessId(), &session);
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    bool running = false;
+    PROCESSENTRY32 entry{};
+    entry.dwSize = sizeof(entry);
+    for (BOOL more = Process32First(snapshot, &entry); more && !running;
+         more = Process32Next(snapshot, &entry)) {
+        DWORD its = 0;
+        running = _wcsicmp(entry.szExeFile, L"komorebi.exe") == 0 &&
+                  ProcessIdToSessionId(entry.th32ProcessID, &its) &&
+                  its == session;
+    }
+    CloseHandle(snapshot);
+    return running;
+}
+
+// Its version: from komorebi.exe beside its tool (scoop's shim says where
+// that is), or from its installer's entry in Windows' apps; empty if
+// neither says.
+std::wstring KomorebiVersion(std::wstring komorebic) {
+    if (komorebic.ends_with(L"\\shims\\komorebic.exe")) {
+        const std::wstring shim =
+            komorebic.substr(0, komorebic.size() - 3) + L"shim";
+        if (FILE* file = _wfopen(shim.c_str(), L"rt, ccs=UTF-8")) {
+            WCHAR line[MAX_PATH + 16];
+            while (fgetws(line, ARRAYSIZE(line), file)) {
+                std::wstring text = line;
+                if (text.starts_with(L"path = ")) {
+                    text = text.substr(7);
+                    std::erase(text, L'"');
+                    std::erase(text, L'\n');
+                    komorebic = text;
+                    break;
+                }
+            }
+            fclose(file);
+        }
+    }
+    const std::wstring exe =
+        komorebic.substr(0, komorebic.find_last_of(L'\\') + 1) +
+        L"komorebi.exe";
+    DWORD handle = 0;
+    if (const DWORD size = GetFileVersionInfoSize(exe.c_str(), &handle)) {
+        std::vector<BYTE> data(size);
+        VS_FIXEDFILEINFO* info = nullptr;
+        UINT length = 0;
+        if (GetFileVersionInfo(exe.c_str(), 0, size, data.data()) &&
+            VerQueryValue(data.data(), L"\\", (void**)&info, &length) &&
+            info && length >= sizeof(*info) && info->dwFileVersionMS) {
+            return std::to_wstring(HIWORD(info->dwFileVersionMS)) + L"." +
+                   std::to_wstring(LOWORD(info->dwFileVersionMS)) + L"." +
+                   std::to_wstring(HIWORD(info->dwFileVersionLS));
+        }
+    }
+    for (HKEY root : {HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER}) {
+        HKEY apps = nullptr;
+        if (RegOpenKeyEx(root,
+                         L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\"
+                         L"Uninstall",
+                         0, KEY_READ | KEY_WOW64_64KEY,
+                         &apps) != ERROR_SUCCESS) {
+            continue;
+        }
+        std::wstring version;
+        WCHAR name[256];
+        for (DWORD i = 0; version.empty(); i++) {
+            DWORD nameLength = ARRAYSIZE(name);
+            if (RegEnumKeyEx(apps, i, name, &nameLength, nullptr, nullptr,
+                             nullptr, nullptr) != ERROR_SUCCESS) {
+                break;
+            }
+            WCHAR display[64] = L"";
+            DWORD displaySize = sizeof(display);
+            if (RegGetValue(apps, name, L"DisplayName", RRF_RT_REG_SZ, nullptr,
+                            display, &displaySize) != ERROR_SUCCESS ||
+                _wcsicmp(display, L"komorebi") != 0) {
+                continue;
+            }
+            WCHAR value[64] = L"";
+            DWORD valueSize = sizeof(value);
+            if (RegGetValue(apps, name, L"DisplayVersion", RRF_RT_REG_SZ,
+                            nullptr, value, &valueSize) == ERROR_SUCCESS) {
+                version = value;
+            }
+        }
+        RegCloseKey(apps);
+        if (!version.empty()) {
+            return version;
+        }
+    }
+    return {};
+}
+
+// The commands for a button (0 start, 1 stop, 2 reload), with what it
+// takes along (whkd, masir).
+std::wstring KomorebiCommands(const std::wstring& komorebic, int button) {
+    std::wstring flags;
+    if (g_settings.komorebiWhkd) {
+        flags += L" --whkd";
+    }
+    if (g_settings.komorebiMasir) {
+        flags += L" --masir";
+    }
+    const std::wstring tool = L"\"" + komorebic + L"\"";
+    const std::wstring start = tool + L" start" + flags;
+    const std::wstring stop = tool + L" stop" + flags;
+    return button == 0 ? start : button == 1 ? stop : stop + L" && " + start;
+}
+
+// Runs commands with cmd, with the user's current environment (komorebic
+// looks for whkd and masir on PATH): without a window, or in its own
+// console window on the screen (where it waits for a key when they fail).
+// It inherits nothing. `process` (if given) gets its handles.
+bool StartKomorebiCommand(const std::wstring& commands,
+                          bool onScreen,
+                          PROCESS_INFORMATION* process) {
+    WCHAR cmd[MAX_PATH];
+    const UINT length = GetSystemDirectory(cmd, MAX_PATH);
+    if (!length || length + 9 > MAX_PATH) {
+        return false;
+    }
+    wcscat_s(cmd, L"\\cmd.exe");
+    std::wstring command = L"cmd.exe /c \"" + commands +
+                           (onScreen ? L" || pause\"" : L"\"");
+    void* environment = FreshEnvironment();
+    STARTUPINFO startup{};
+    startup.cb = sizeof(startup);
+    startup.dwFlags = STARTF_USESHOWWINDOW;
+    startup.wShowWindow = onScreen ? SW_SHOWNORMAL : SW_HIDE;
+    PROCESS_INFORMATION started{};
+    const bool ok =
+        CreateProcess(cmd, command.data(), nullptr, nullptr, FALSE,
+                      (onScreen ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW) |
+                          (environment ? CREATE_UNICODE_ENVIRONMENT : 0),
+                      environment, nullptr, &startup, &started);
+    if (environment) {
+        DestroyEnvironmentBlock(environment);
+    }
+    if (!ok) {
+        Wh_Log(L"komorebi's command didn't start: %u", GetLastError());
+        return false;
+    }
+    if (process) {
+        *process = started;
+    } else {
+        CloseHandle(started.hThread);
+        CloseHandle(started.hProcess);
+    }
+    return true;
+}
+
+// A button's commands, on a thread of their own (which owns this, and its
+// own copy of the stop event).
+struct KomorebiJob {
+    std::wstring commands;
+    int button;
+    HWND notify;
+    HANDLE stop;
+};
+
+// Tells the panel how it went (wParam the button, lParam 1 if it failed).
+constexpr UINT WM_APP_KOMOREBI_DONE = WM_APP + 85;
+
+// How long a command may take (komorebi starting takes a few seconds).
+constexpr DWORD kKomorebiCommandMs = 60000;
+
+DWORD WINAPI KomorebiThreadProc(LPVOID parameter) {
+    std::unique_ptr<KomorebiJob> job((KomorebiJob*)parameter);
+    PROCESS_INFORMATION process{};
+    bool ended = false;
+    DWORD exitCode = 0;
+    if (StartKomorebiCommand(job->commands, false, &process)) {
+        const HANDLE waits[] = {process.hProcess, job->stop};
+        ended = WaitForMultipleObjects(ARRAYSIZE(waits), waits, FALSE,
+                                       kKomorebiCommandMs) == WAIT_OBJECT_0 &&
+                GetExitCodeProcess(process.hProcess, &exitCode);
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+    } else {
+        // (Not started: shown on the screen instead.)
+        ended = true;
+        exitCode = 1;
+    }
+    const bool stopping = WaitForSingleObject(job->stop, 0) == WAIT_OBJECT_0;
+    // It failed: again in a terminal on the screen, which shows why (one
+    // still running after the wait isn't run a second time).
+    const bool failed = !ended || exitCode != 0;
+    if (ended && exitCode != 0 && !stopping) {
+        StartKomorebiCommand(job->commands, true, nullptr);
+    }
+    if (!stopping && job->notify) {
+        PostMessage(job->notify, WM_APP_KOMOREBI_DONE, job->button, failed);
+    }
+    CloseHandle(job->stop);
+    return 0;
+}
 
 // The controls that are a shortcut (from the control center or the pill).
 void RunControlShortcut(ControlId id) {
@@ -12869,6 +13257,11 @@ enum class IslandPref {
     Notches,
     NotchEach,
     GroupApps,
+    // komorebi's button on the pill (see kPillActions) and what its buttons
+    // take along.
+    ActionKomorebi,
+    KomorebiWhkd,
+    KomorebiMasir,
 };
 
 struct IslandPrefInfo {
@@ -13048,6 +13441,15 @@ const IslandPrefInfo kIslandPrefs[] = {
     {IslandPref::GroupApps, L"islandGroupApps", 0xE71D,
      L"One icon per app (Phone Link's phone apps together)",
      L"Um ícone por app (os apps do celular do Vincular ao Celular juntos)"},
+    {IslandPref::ActionKomorebi, L"pillKomorebi", kGlyphKomorebi,
+     L"komorebi (start, stop, reload)",
+     L"komorebi (iniciar, parar, recarregar)"},
+    {IslandPref::KomorebiWhkd, L"komorebiWhkd", kGlyphKomorebi,
+     L"komorebi: with whkd (its shortcuts)",
+     L"komorebi: com o whkd (os atalhos dele)"},
+    {IslandPref::KomorebiMasir, L"komorebiMasir", kGlyphKomorebi,
+     L"komorebi: with masir (focus follows the mouse)",
+     L"komorebi: com o masir (o foco segue o mouse)"},
 };
 
 // The groups of items on the pill, which can be put in another order in the
@@ -13096,6 +13498,7 @@ enum class PillGroup {
     ActionTaskManager,
     ActionCalculator,
     ActionExplorer,
+    ActionKomorebi,
     Count
 };
 constexpr int kPillGroups = (int)PillGroup::Count;
@@ -13149,6 +13552,7 @@ const PillGroupInfo kPillGroupInfo[kPillGroups] = {
     {0xE9D9, L"Task Manager", L"Gerenciador de Tarefas"},
     {0xE8EF, L"Calculator", L"Calculadora"},
     {0xEC50, L"File Explorer", L"Explorador de Arquivos"},
+    {kGlyphKomorebi, L"komorebi", L"komorebi"},
 };
 
 // Whether any of the processor, memory and video memory use is shown (the
@@ -13195,6 +13599,7 @@ constexpr PillAction kPillActions[] = {
     {IslandPref::ActionTaskManager, ControlId::TaskManager, PillGroup::ActionTaskManager},
     {IslandPref::ActionCalculator, ControlId::Calculator, PillGroup::ActionCalculator},
     {IslandPref::ActionExplorer, ControlId::Explorer, PillGroup::ActionExplorer},
+    {IslandPref::ActionKomorebi, ControlId::Komorebi, PillGroup::ActionKomorebi},
 };
 
 // The button a group is (its index in kPillActions), or -1.
@@ -13467,21 +13872,27 @@ int NotchOfGroup(PillGroup group, int count) {
 
 void SetPillOrder(const std::vector<PillGroup>& order);
 
-// How big the notches' curves are, in percent of the usual: the round
-// corners under them (a quarter of their height at 100%, half at 200%), and
-// the curves beside them, growing faster (up to their whole height, wide
-// and sweeping, at 200%).
+// How big the notches' curves are, in percent: the round corners under them
+// (a quarter of their height times the strength, at 100%), and the curves
+// beside them, growing faster (wide and sweeping at 200%). The strength
+// makes 100% half again as big as a quarter of their height (the default,
+// 75%, a little more than that quarter).
 constexpr int kNotchCurveMin = 0;
 constexpr int kNotchCurveMax = 200;
-constexpr int kNotchCurveDefault = 100;
+constexpr int kNotchCurveDefault = 75;
 constexpr int kNotchCurveStep = 5;
+constexpr float kNotchCurveStrength = 1.5f;
+
+float NotchCurveAmount() {
+    return g_settings.islandNotchCurve / 100.0f * kNotchCurveStrength;
+}
 
 float NotchRadius(float height) {
-    return std::round(height / 4 * g_settings.islandNotchCurve / 100.0f);
+    return std::round(height / 4 * NotchCurveAmount());
 }
 
 float NotchShoulder(float height) {
-    const float amount = g_settings.islandNotchCurve / 100.0f;
+    const float amount = NotchCurveAmount();
     return std::round(height / 4 * amount * amount);
 }
 
@@ -14076,8 +14487,10 @@ void SetDarkMode(bool dark) {
 }
 
 // Windows' transparency effects (Personalization > Colors): without them,
-// its blur is a flat color, so the frosted glass turns them on (see
-// Island::UpdateTransparencyEffects).
+// its blur is a flat color, so the frosted glass shows only while they're on
+// (the mod never changes them). Read again when Windows' colors change.
+bool g_transparencyEffects = true;
+
 bool TransparencyEffectsOn() {
     DWORD on = 1;
     DWORD size = sizeof(on);
@@ -14086,14 +14499,6 @@ bool TransparencyEffectsOn() {
                 L"Personalize",
                 L"EnableTransparency", RRF_RT_REG_DWORD, nullptr, &on, &size);
     return on != 0;
-}
-
-void SetTransparencyEffects(bool on) {
-    const DWORD value = on ? 1 : 0;
-    RegSetKeyValue(HKEY_CURRENT_USER,
-                   L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\"
-                   L"Personalize",
-                   L"EnableTransparency", REG_DWORD, &value, sizeof(value));
 }
 
 // Tells the windows the colors changed (dark mode, transparency effects).
@@ -14684,6 +15089,7 @@ class ControlPanel : public Panel {
         ClearApps();
         StopWifi();
         WaitForWorkers();
+        StopKomorebiJob();
     }
 
     // The controls chosen were changed elsewhere (a profile applied).
@@ -14699,11 +15105,6 @@ class ControlPanel : public Panel {
         SetDarkMode(dark);
         StartWorker(DarkModeThreadProc, nullptr);
     }
-    // The same for Windows' transparency effects (the frosted glass).
-    void SwitchTransparency(bool on) {
-        SetTransparencyEffects(on);
-        StartWorker(DarkModeThreadProc, nullptr);
-    }
     // Called while open, to show changes made elsewhere.
     void Refresh() {
         if (IsOpen() && !m_dragging && m_dragId < 0) {
@@ -14717,7 +15118,7 @@ class ControlPanel : public Panel {
     // brightness (from its item), or all of it. Returns whether that changed;
     // while open, it shows the other one.
     // (View: one control's own view alone, from its button on the pill.)
-    enum class Only { All, Sound, Battery, Display, View };
+    enum class Only { All, Sound, Battery, Display, View, Komorebi };
     // The island's settings (from the island's settings bubble): shown now
     // if it's open, or when it opens next.
     void ShowSettings() {
@@ -14854,6 +15255,7 @@ class ControlPanel : public Panel {
         AirplaneToggle,
         DndToggle,
         ProjectRow,        // A display mode (index).
+        KomorebiButton,    // komorebi's start, stop or reload (index).
         AccessibilityRow,  // An accessibility feature (index).
         EditButton,        // "Edit" at the bottom.
         SettingsButton,    // The island's settings, beside it.
@@ -15041,6 +15443,7 @@ class ControlPanel : public Panel {
                  pref == IslandPref::VerticalSides ||
                  pref == IslandPref::Frosted) &&
                 notches) ||
+               (pref == IslandPref::Frosted && !g_transparencyEffects) ||
                (pref == IslandPref::NotchEach && !notches) ||
                (pref == IslandPref::VolumePercent &&
                 !GetIslandPref(IslandPref::Volume)) ||
@@ -15131,6 +15534,29 @@ class ControlPanel : public Panel {
     int m_microphoneMuted = -1;
     D2D1_RECT_F m_powerModeRect{};
     D2D1_RECT_F m_powerModeChoices[3]{};
+    // komorebi's section (see FindKomorebic): its tool (empty: not
+    // installed; looked for again at each opening), its version, whether it
+    // runs, its three buttons, and the button whose command is running
+    // (without a window, see KomorebiThreadProc; -1 none) and since when.
+    std::wstring m_komorebic;
+    std::wstring m_komorebiVersion;
+    bool m_komorebiLooked = false;
+    bool m_komorebiRunning = false;
+    int m_komorebiBusy = -1;
+    double m_komorebiBusySince = 0;
+    // The last command failed (shown in a terminal); until the next one.
+    bool m_komorebiFailed = false;
+    // The thread running a button's commands, and its stop event (see
+    // KomorebiThreadProc).
+    HANDLE m_komorebiThread = nullptr;
+    HANDLE m_komorebiStop = nullptr;
+    void RunKomorebi(int button);
+    void StopKomorebiJob();
+    D2D1_RECT_F m_komorebiButtons[3]{};
+    winrt::com_ptr<IDWriteTextFormat> m_komorebiIconFormat;
+    bool KomorebiShown() const;
+    bool KomorebiEnabled(int button) const;
+    void UpdateKomorebi();
     // The power plans, the active one, and its row in the section (which
     // opens their list).
     std::vector<PowerPlan> m_powerPlans;
@@ -15161,6 +15587,9 @@ class ControlPanel : public Panel {
     // The thread reading the networks, and whether to read them (and scan)
     // again when it's done.
     HANDLE m_wifiListThread = nullptr;
+    // Its number (in the answer's wParam: an older answer still queued is
+    // dropped, not taken for the current thread's).
+    UINT m_wifiListId = 0;
     bool m_wifiListAgain = false;
     bool m_wifiScanAgain = false;
     // The saved network whose "Forget" was clicked once (a second click
@@ -15284,7 +15713,12 @@ class ControlPanel : public Panel {
     // lit one sliding to the chosen one.
     D2D1_RECT_F m_choiceRow[kChoiceCount]{};
     std::vector<D2D1_RECT_F> m_choiceSegments[kChoiceCount];
-    double m_choiceKnob[kChoiceCount]{-1, -1, -1, -1, -1, -1};
+    // (-1: not drawn yet, it starts where the choice is.)
+    std::array<double, kChoiceCount> m_choiceKnob = [] {
+        std::array<double, kChoiceCount> knobs;
+        knobs.fill(-1);
+        return knobs;
+    }();
     double m_choiceKnobVelocity[kChoiceCount]{};
     // Exporting or importing a backup: the file dialog's thread, and how the
     // last one went (shown on its row).
@@ -15567,6 +16001,11 @@ class NotificationPanel : public Panel {
     // How many notifications each app has there now (none if it can't be
     // read).
     std::vector<std::pair<std::wstring, int>> CountsInCenter();
+    // The latest notification of each app that came after `seenId` (up to
+    // a few apps, oldest first), not cleared here; `newestId` gets the
+    // newest ID read.
+    std::vector<IslandToast> MissedToasts(long long seenId,
+                                          long long* newestId);
     // Its switches unfolded under the gear (the bell's right click): now if
     // open, otherwise when it opens.
     void ShowSettings() {
@@ -15704,6 +16143,11 @@ class NotificationPanel : public Panel {
     // dismissed. Not for notifications without a tag: the same text can
     // come again as news (like "3 unread messages").
     std::vector<std::wstring> m_dismissedTexts;
+    // Only the latest ones dismissed one by one are worth keeping (and
+    // their stored text is read back with room for all of them).
+    static constexpr size_t kMaxDismissed = 200;
+    static constexpr size_t kMaxDismissedTexts = 60;
+    static constexpr size_t kDismissKeyMax = 300;
     static std::wstring DismissKey(const Notification& n) {
         if (n.tag.empty()) {
             return {};
@@ -15711,7 +16155,7 @@ class NotificationPanel : public Panel {
         std::wstring key = n.appId + L"\t" + n.tag + L"\t" + n.group + L"\t" +
                            n.title + L"\t" + n.text;
         std::replace(key.begin(), key.end(), L'\n', L' ');
-        return key.substr(0, 300);
+        return key.substr(0, kDismissKeyMax);
     }
     bool m_clearedLoaded = false;
     bool m_doNotDisturb = false;
@@ -15899,6 +16343,17 @@ HANDLE g_mediaThread;
 HANDLE g_mediaStopEvent;
 HANDLE g_mediaChangedEvent;
 HANDLE g_mediaCommandEvent;
+// Held to close the events: a media app's late call (on a thread of its own)
+// can come after its handler was revoked.
+SRWLOCK g_mediaEventsLock = SRWLOCK_INIT;
+
+void TellMediaChanged() {
+    AcquireSRWLockShared(&g_mediaEventsLock);
+    if (g_mediaChangedEvent) {
+        SetEvent(g_mediaChangedEvent);
+    }
+    ReleaseSRWLockShared(&g_mediaEventsLock);
+}
 // Tells the island it changed.
 constexpr UINT WM_APP_MEDIA = WM_APP + 54;
 
@@ -15919,9 +16374,7 @@ void ChooseMediaSource(const MediaState& state, int index) {
         }
     }
     ReleaseSRWLockExclusive(&g_mediaLock);
-    if (g_mediaChangedEvent) {
-        SetEvent(g_mediaChangedEvent);
-    }
+    TellMediaChanged();
 }
 
 void SendMediaCommand(MediaCommand command, double position = 0) {
@@ -15946,7 +16399,7 @@ DWORD WINAPI MediaThreadProc(LPVOID) {
             Wh_Log(L"Media controls: %08X", (unsigned)e.code());
         }
         if (manager) {
-            auto changed = [](auto&&...) { SetEvent(g_mediaChangedEvent); };
+            auto changed = [](auto&&...) { TellMediaChanged(); };
             auto sessionRevoker =
                 manager.CurrentSessionChanged(winrt::auto_revoke, changed);
             auto sessionsRevoker =
@@ -16049,7 +16502,7 @@ DWORD WINAPI MediaThreadProc(LPVOID) {
                                 winrt::auto_revoke,
                                 [stale = entry.titleStale](auto&&...) {
                                     *stale = true;
-                                    SetEvent(g_mediaChangedEvent);
+                                    TellMediaChanged();
                                 });
                             entry.playback = each.PlaybackInfoChanged(
                                 winrt::auto_revoke, changed);
@@ -16265,6 +16718,7 @@ void StopMediaWatch() {
         CloseHandle(g_mediaThread);
         g_mediaThread = nullptr;
     }
+    AcquireSRWLockExclusive(&g_mediaEventsLock);
     for (HANDLE* event :
          {&g_mediaStopEvent, &g_mediaChangedEvent, &g_mediaCommandEvent}) {
         if (*event) {
@@ -16272,6 +16726,7 @@ void StopMediaWatch() {
             *event = nullptr;
         }
     }
+    ReleaseSRWLockExclusive(&g_mediaEventsLock);
     AcquireSRWLockExclusive(&g_mediaLock);
     g_media = {};
     g_mediaCommands.clear();
@@ -19829,12 +20284,17 @@ BOOL CALLBACK CloseFileDialog(HWND hwnd, LPARAM) {
 }
 
 // Waits for a file dialog's thread to end, closing its dialog (again until
-// it ends, in case it was only about to show).
+// it ends, in case it was only about to show). One still busy after a few
+// seconds (a folder read on a sleeping network drive) is let go: each of
+// these threads owns its job, and frees it when the window it posts to is
+// gone.
 void EndFileDialogThread(HANDLE* thread) {
     if (!*thread) {
         return;
     }
-    while (WaitForSingleObject(*thread, 100) == WAIT_TIMEOUT) {
+    for (int tries = 0;
+         tries < 50 && WaitForSingleObject(*thread, 100) == WAIT_TIMEOUT;
+         tries++) {
         EnumThreadWindows(GetThreadId(*thread), CloseFileDialog, 0);
     }
     CloseHandle(*thread);
@@ -22342,8 +22802,13 @@ std::vector<AppUpdate> ParseWingetUpgrades(const std::wstring& output) {
             }
             AppUpdate app{column(line, 0), column(line, 1), column(line, 2),
                           column(line, 3)};
-            if (app.available.empty() || !IsPackageId(app.id)) {
+            if (app.available.empty()) {
                 break;
+            }
+            // (An ID winget cut short, "Some.Long.Id…", can't be updated by
+            // it: only that row is skipped.)
+            if (!IsPackageId(app.id)) {
+                continue;
             }
             apps.push_back(std::move(app));
         }
@@ -23251,11 +23716,24 @@ class PrivacyAudioEvents final : public IAudioSessionNotification,
         return S_OK;
     }
 
+    // Told nothing more (its event is about to be closed; a call already
+    // on its way can still come).
+    void Forget() {
+        AcquireSRWLockExclusive(&m_lock);
+        m_changed = nullptr;
+        ReleaseSRWLockExclusive(&m_lock);
+    }
+
    private:
     HRESULT Changed() {
-        SetEvent(m_changed);
+        AcquireSRWLockShared(&m_lock);
+        if (m_changed) {
+            SetEvent(m_changed);
+        }
+        ReleaseSRWLockShared(&m_lock);
         return S_OK;
     }
+    SRWLOCK m_lock = SRWLOCK_INIT;
     HANDLE m_changed;
     LONG m_refs = 1;
 };
@@ -23555,6 +24033,7 @@ DWORD WINAPI PrivacyThreadProc(LPVOID parameter) {
         devices->UnregisterEndpointNotificationCallback(events);
         devices = nullptr;
     }
+    events->Forget();
     events->Release();
     if (store) {
         RegCloseKey(store);
@@ -23598,6 +24077,15 @@ void StopPrivacyWatch() {
 // when it comes from InputMethodThreadProc).
 constexpr UINT WM_APP_INPUT_METHOD = WM_APP + 74;
 constexpr LPARAM kInputMethodAsked = 0x10000;
+// Above it, the question's number (an older answer still queued isn't taken
+// for the current thread's).
+constexpr int kInputMethodIdShift = 17;
+constexpr UINT kInputMethodIdMask = 0x7FFF;
+
+struct InputMethodJob {
+    HWND island;
+    UINT id;
+};
 constexpr UINT_PTR kInputMethodTimerId = 25;
 constexpr UINT kInputMethodWaitMs = 100;
 constexpr DWORD kEventObjectImeShow = 0x8027;
@@ -23621,7 +24109,7 @@ bool HasInputModes(LANGID language) {
 
 // The input method's mode, asked to the app in front's input method window.
 DWORD WINAPI InputMethodThreadProc(LPVOID parameter) {
-    const HWND island = (HWND)parameter;
+    std::unique_ptr<InputMethodJob> job((InputMethodJob*)parameter);
     const HWND foreground = GetForegroundWindow();
     const LANGID language = ForegroundLanguage(foreground);
     WORD mode = 0;
@@ -23640,8 +24128,11 @@ DWORD WINAPI InputMethodThreadProc(LPVOID parameter) {
             mode = 1;
         }
     }
-    PostMessage(island, WM_APP_INPUT_METHOD, MAKEWPARAM(language, mode),
-                GetKeyboardLayoutList(0, nullptr) | kInputMethodAsked);
+    PostMessage(job->island, WM_APP_INPUT_METHOD, MAKEWPARAM(language, mode),
+                (GetKeyboardLayoutList(0, nullptr) & 0xFFFF) |
+                    kInputMethodAsked |
+                    ((LPARAM)(job->id & kInputMethodIdMask)
+                     << kInputMethodIdShift));
     return 0;
 }
 
@@ -23661,6 +24152,8 @@ SRWLOCK g_drivesLock = SRWLOCK_INIT;
 std::vector<RemovableDrive> g_drives;
 // Tells the island the drives changed (see g_drives).
 constexpr UINT WM_APP_DRIVES = WM_APP + 76;
+// WM_APP_DRIVES's wParam when it comes from DrivesThreadProc (it's ending).
+constexpr WPARAM kDrivesListed = 1;
 // Tells the drives' list an eject is done (wParam: the letter; lParam: 1 if
 // it can be removed, 0 if something still uses it).
 constexpr UINT WM_APP_EJECTED = WM_APP + 77;
@@ -23670,6 +24163,9 @@ constexpr UINT WM_APP_EJECTED = WM_APP + 77;
 struct DriveJob {
     HWND notify;
     DWORD arrived;
+    // In the answer's lParam (an older answer still queued isn't taken for
+    // the current thread's).
+    UINT id;
 };
 
 // A drive on the USB bus (an external disk shows as a fixed one).
@@ -23736,7 +24232,7 @@ DWORD WINAPI DrivesThreadProc(LPVOID parameter) {
     AcquireSRWLockExclusive(&g_drivesLock);
     g_drives = std::move(drives);
     ReleaseSRWLockExclusive(&g_drivesLock);
-    PostMessage(job->notify, WM_APP_DRIVES, 0, 0);
+    PostMessage(job->notify, WM_APP_DRIVES, kDrivesListed, job->id);
     if (!toasts.empty()) {
         AcquireSRWLockExclusive(&g_islandToastsLock);
         g_islandToasts.insert(g_islandToasts.end(),
@@ -24238,6 +24734,9 @@ class TrayListPanel : public Panel {
         m_icons = std::move(icons);
         m_names = names;
         if (m_icons.empty() && IsOpen()) {
+            // (It still takes the mouse while it closes: no cells left.)
+            m_cells.clear();
+            m_hover = -1;
             Close();
             return;
         }
@@ -24455,7 +24954,7 @@ class TrayListPanel : public Panel {
     }
 
     int HitTest(POINT pt, bool* pin) const {
-        for (size_t i = 0; i < m_cells.size(); i++) {
+        for (size_t i = 0; i < std::min(m_cells.size(), m_icons.size()); i++) {
             if (PointInRect(pt, m_cells[i])) {
                 *pin = !m_pinKey.empty() && m_icons[i].icon.key == m_pinKey &&
                        PointInRect(pt, PinRect(m_cells[i]));
@@ -24920,21 +25419,7 @@ struct DesktopsJob {
 
 DWORD WINAPI DesktopsThreadProc(LPVOID parameter) {
     std::unique_ptr<DesktopsJob> job((DesktopsJob*)parameter);
-    HANDLE changed = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-    HKEY key = nullptr;
-    if (!changed ||
-        RegOpenKeyEx(HKEY_CURRENT_USER, kVirtualDesktopsKey, 0,
-                     KEY_READ | KEY_NOTIFY, &key) != ERROR_SUCCESS) {
-        if (changed) {
-            CloseHandle(changed);
-        }
-        return 0;
-    }
-    for (;;) {
-        // (Asked before reading, so no change is missed.)
-        RegNotifyChangeKeyValue(
-            key, TRUE, REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET,
-            changed, TRUE);
+    auto tell = [&] {
         VirtualDesktops desktops = ReadVirtualDesktops();
         AcquireSRWLockExclusive(&g_desktopsLock);
         const bool different = !(desktops == g_desktops);
@@ -24943,6 +25428,29 @@ DWORD WINAPI DesktopsThreadProc(LPVOID parameter) {
         if (different) {
             PostMessage(job->notify, WM_APP_DESKTOPS, 0, 0);
         }
+    };
+    HANDLE changed = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    if (!changed) {
+        return 0;
+    }
+    // Windows makes its key once a desktop is added: until then it's looked
+    // for again every few seconds (the one desktop shown meanwhile).
+    HKEY key = nullptr;
+    while (RegOpenKeyEx(HKEY_CURRENT_USER, kVirtualDesktopsKey, 0,
+                        KEY_READ | KEY_NOTIFY, &key) != ERROR_SUCCESS) {
+        key = nullptr;
+        tell();
+        if (WaitForSingleObject(job->stop, 5000) != WAIT_TIMEOUT) {
+            CloseHandle(changed);
+            return 0;
+        }
+    }
+    for (;;) {
+        // (Asked before reading, so no change is missed.)
+        RegNotifyChangeKeyValue(
+            key, TRUE, REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET,
+            changed, TRUE);
+        tell();
         const HANDLE events[] = {job->stop, changed};
         if (WaitForMultipleObjects(ARRAYSIZE(events), events, FALSE,
                                    INFINITE) != WAIT_OBJECT_0 + 1) {
@@ -25025,7 +25533,7 @@ class DesktopsPanel : public Panel {
     bool OnMouseMove(POINT pt) override {
         const int hover = HitTest(pt);
         const bool remove = hover >= 0 && hover < (int)m_desktops.names.size() &&
-                            m_desktops.names.size() > 1 &&
+                            CanRemove() &&
                             PointInRect(pt, RemoveRect(m_rows[hover]));
         if (hover == m_hover && remove == m_removeHover) {
             return false;
@@ -25049,7 +25557,7 @@ class DesktopsPanel : public Panel {
         // Its "x": that desktop closed (Windows moves its windows to the
         // one beside it), going to it first; then, once Windows has closed
         // it, back to the one the user was on (see WM_APP_DESKTOPS).
-        const bool remove = hit < count && count > 1 &&
+        const bool remove = hit < count && CanRemove() &&
                             PointInRect(pt, RemoveRect(m_rows[hit]));
         Close();
         if (remove) {
@@ -25124,6 +25632,12 @@ class DesktopsPanel : public Panel {
     int m_hover = -1;
     bool m_removeHover = false;
 
+    // Not the last one; not while the current one isn't known (Windows'
+    // shortcut closes the current one, after going to the one clicked).
+    bool CanRemove() const {
+        return m_desktops.names.size() > 1 && m_desktops.current >= 0;
+    }
+
     D2D1_RECT_F RemoveRect(const D2D1_RECT_F& row) const {
         return {row.right - std::round(30 * m_scale), row.top, row.right,
                 row.bottom};
@@ -25167,7 +25681,7 @@ void DesktopsPanel::Draw(ID2D1RenderTarget* target,
                           row.right - std::round(32 * s), row.bottom},
                          brush);
         // Under the mouse, an "x" to close it (not the last one).
-        if (m_hover == i && i < count && count > 1) {
+        if (m_hover == i && i < count && CanRemove()) {
             const WCHAR close = 0xE711;
             brush->SetColor(m_removeHover ? D2D1::ColorF(1, 0.36f, 0.3f, 1)
                                           : Fg(0.55f));
@@ -25565,11 +26079,21 @@ class FoldersPanel : public Panel {
     bool OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) override;
 
     void OnDestroy() override {
-        // (A folder dialog still open is closed.)
+        // (A folder dialog still open is closed.) What the threads posted to
+        // this window, about to go, is freed here.
         for (HANDLE& thread : m_threads) {
             EndFileDialogThread(&thread);
         }
         m_threads.clear();
+        MSG msg;
+        while (m_hwnd && PeekMessage(&msg, m_hwnd, WM_APP_FOLDER_LIST,
+                                     WM_APP_FOLDER_PICKED, PM_REMOVE)) {
+            if (msg.message == WM_APP_FOLDER_LIST) {
+                delete (FolderListJob*)msg.lParam;
+            } else {
+                delete (FolderPickJob*)msg.lParam;
+            }
+        }
     }
 
    private:
@@ -26149,6 +26673,8 @@ constexpr size_t kWallpaperMax = 300;
 // The thumbnails read (lParam: a WallpaperJob), and a transition done.
 constexpr UINT WM_APP_THUMBNAILS = WM_APP + 81;
 constexpr UINT WM_APP_WALLPAPER_DONE = WM_APP + 82;
+// The folder's pictures listed for the wheel (lParam: a WallpaperListJob).
+constexpr UINT WM_APP_WALLPAPER_LIST = WM_APP + 84;
 // The transitions (see islandWallpaperTransition).
 enum class WallpaperTransition { Fade, Circle, Slide, Zoom, Count };
 
@@ -26200,6 +26726,16 @@ struct WallpaperJob {
     std::vector<HBITMAP> thumbnails;
 };
 
+// (Not taken by its window.)
+void FreeWallpaperJob(WallpaperJob* job) {
+    for (HBITMAP thumbnail : job->thumbnails) {
+        if (thumbnail) {
+            DeleteObject(thumbnail);
+        }
+    }
+    delete job;
+}
+
 DWORD WINAPI WallpaperThumbnailsProc(LPVOID parameter) {
     auto* job = (WallpaperJob*)parameter;
     const HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -26221,11 +26757,24 @@ DWORD WINAPI WallpaperThumbnailsProc(LPVOID parameter) {
         CoUninitialize();
     }
     if (!PostMessage(job->panel, WM_APP_THUMBNAILS, 0, (LPARAM)job)) {
-        for (HBITMAP thumbnail : job->thumbnails) {
-            if (thumbnail) {
-                DeleteObject(thumbnail);
-            }
-        }
+        FreeWallpaperJob(job);
+    }
+    return 0;
+}
+
+// The folder's pictures for the wheel on the pill, listed on a thread (a
+// sleeping network drive can take long to answer); the step taken then.
+struct WallpaperListJob {
+    HWND island;
+    std::wstring folder;
+    int step;
+    std::vector<std::wstring> paths;
+};
+
+DWORD WINAPI WallpaperListThreadProc(LPVOID parameter) {
+    auto* job = (WallpaperListJob*)parameter;
+    job->paths = ListWallpapers(job->folder);
+    if (!PostMessage(job->island, WM_APP_WALLPAPER_LIST, 0, (LPARAM)job)) {
         delete job;
     }
     return 0;
@@ -26357,7 +26906,11 @@ void SetMonitorWallpaper(const RECT& monitor, PCWSTR path) {
         }
         CoTaskMemFree(id);
     }
-    wallpaper->SetWallpaper(nullptr, path);
+    // (Not matched: only with a single monitor, it's that one; otherwise
+    // the others' wallpapers stay as they are.)
+    if (count == 1) {
+        wallpaper->SetWallpaper(nullptr, path);
+    }
 }
 
 DWORD WINAPI WallpaperChangeThreadProc(LPVOID parameter) {
@@ -26600,11 +27153,21 @@ class WallpaperPanel : public Panel {
     bool OnAppMessage(UINT msg, WPARAM, LPARAM lParam) override;
 
     void OnDestroy() override {
-        // (A folder dialog still open is closed.)
+        // (A folder dialog still open is closed.) What the threads posted to
+        // this window, about to go, is freed here.
         for (HANDLE& thread : m_threads) {
             EndFileDialogThread(&thread);
         }
         m_threads.clear();
+        MSG msg;
+        while (m_hwnd && PeekMessage(&msg, m_hwnd, WM_APP_FOLDER_PICKED,
+                                     WM_APP_THUMBNAILS, PM_REMOVE)) {
+            if (msg.message == WM_APP_THUMBNAILS) {
+                FreeWallpaperJob((WallpaperJob*)msg.lParam);
+            } else {
+                delete (FolderPickJob*)msg.lParam;
+            }
+        }
     }
 
    private:
@@ -27078,6 +27641,7 @@ class Island {
     void ClearAppsFromList(const std::vector<std::wstring>& apps, bool all);
     // The notification list was opened: the bell's dot goes.
     void OnNotificationsSeen();
+    void CatchUpToasts();
     // "Snooze" (Windows' own button, pressed on the island): the
     // notification shows again a few minutes later.
     void SnoozeToast(IslandToast toast);
@@ -27292,23 +27856,17 @@ class Island {
     HWND m_bubbleWnd = nullptr;
     LayeredCanvas m_bubbleCanvas;
     void RenderBarBubble();
-    // The frosted glass (islandFrosted, see UpdateGlass): whether Windows'
-    // transparency effects are on, whether the bar is drawn over the glass,
-    // and the glass strip under the bar or the Fixed style's pill (a window
-    // of its own under the island) with its place and color.
-    bool m_transparency = true;
+    // The frosted glass (islandFrosted, see UpdateGlass, with Windows'
+    // transparency effects on: g_transparencyEffects): whether the bar is
+    // drawn over the glass, and the glass strip under the bar or the Fixed
+    // style's pill (a window of its own under the island) with its place and
+    // color.
     bool m_barBlurred = false;
     HWND m_glassStrip = nullptr;
     RECT m_glassRect{};
     D2D1_COLOR_F m_glassColor{};
     BYTE m_glassOpacity = 255;
     void UpdateGlass();
-   public:
-    // The frosted glass needs Windows' transparency effects (see
-    // UpdateGlass): the main island turns them on with it.
-    void UpdateTransparencyEffects(bool frosted);
-
-   private:
     // What's copied, in the bubble (islandClipboard): listened to while it's
     // on, and read again a moment later while the clipboard is busy; the
     // last one shown, so the same copy isn't shown twice in a row.
@@ -27325,6 +27883,7 @@ class Island {
     void OnInputMethod(WPARAM state, LPARAM layouts);
     HWINEVENTHOOK m_inputMethodHooks[2] = {};
     HANDLE m_inputMethodThread = nullptr;
+    UINT m_inputMethodId = 0;
     bool m_inputMethodAgain = false;
     std::wstring m_inputMethodText;
     // Apps using the microphone, the camera or the location (the main
@@ -27340,7 +27899,13 @@ class Island {
     void OnDeviceChange(WPARAM event, LPARAM data);
     void ListDrives(DWORD arrived);
     void UpdateDrivesWatch();
-    std::vector<HANDLE> m_driveThreads;
+    // One listing at a time (a slow one can't bring back a drive gone
+    // meanwhile); one asked meanwhile runs after it, with the drives that
+    // arrived.
+    HANDLE m_driveThread = nullptr;
+    UINT m_drivesId = 0;
+    bool m_drivesAgain = false;
+    DWORD m_drivesArrived = 0;
     std::vector<RemovableDrive> m_drives;
     bool m_drivesListed = false;
 
@@ -27466,6 +28031,7 @@ class Island {
     // A wallpaper coming in (see WallpaperChangeThreadProc), and the folder's
     // pictures for the wheel (with the one last chosen).
     HANDLE m_wallpaperThread = nullptr;
+    HANDLE m_wallpaperListThread = nullptr;
     std::vector<std::wstring> m_wallpapers;
     int m_wallpaperIndex = -1;
     void StepWallpaper(int step);
@@ -27625,6 +28191,8 @@ class Island {
     void ShowWeather(const WeatherData& weather);
     void UpdateWeatherWatch();
     bool WeatherWanted() const;
+    // Some island's (see AnyIslandLook): the main island measures it then.
+    bool AnyWeatherWanted() const;
     // Failed tries in a row (each waits longer for the next).
     int m_weatherRetries = 0;
     // A city typed while a request was running: looked for once it ends.
@@ -27948,6 +28516,8 @@ class Island {
     // An app's window opened from its tray icon, moved under the island.
     HWINEVENTHOOK m_trayAppHooks[2]{};
     POINT m_trayAppAnchor{-1, -1};
+    // The app whose window is waited for (its process).
+    DWORD m_trayAppProcess = 0;
     // The Windows banner, moved away while the pill shows it.
     HWINEVENTHOOK m_bannerHook = nullptr;
     HWINEVENTHOOK m_bannerMoveHook = nullptr;
@@ -28329,6 +28899,15 @@ Island* MainIsland() {
     return g_islands.empty() ? g_island : g_islands.front();
 }
 
+// Whether some island wants it, each as itself (a monitor can show a profile
+// of its own): the main island runs what they share then, for all of them.
+template <typename Wanted>
+bool AnyIslandLook(Wanted wanted) {
+    bool any = false;
+    ForEachIsland([&](Island& island) { any = any || wanted(island); });
+    return any;
+}
+
 // The other monitors' islands (their profiles are chosen from the main
 // island's settings too).
 std::vector<Island*> OtherIslands() {
@@ -28409,6 +28988,95 @@ void ControlPanel::Prepare(float scale) {
                                9 * scale);
     m_smallIconFormat = MakeFormat(L"Segoe Fluent Icons",
                                    DWRITE_FONT_WEIGHT_NORMAL, 13 * scale);
+    m_komorebiIconFormat = MakeFormat(L"Segoe Fluent Icons",
+                                      DWRITE_FONT_WEIGHT_NORMAL, 20 * scale);
+}
+
+bool ControlPanel::KomorebiShown() const {
+    return m_only == Only::Komorebi ||
+           (m_only == Only::All &&
+            std::find(m_controls.begin(), m_controls.end(),
+                      ControlId::Komorebi) != m_controls.end());
+}
+
+// Start while it's stopped, stop and reload while it runs; none while a
+// command is running.
+bool ControlPanel::KomorebiEnabled(int button) const {
+    return !m_komorebic.empty() && m_komorebiBusy < 0 &&
+           (button == 0 ? !m_komorebiRunning : m_komorebiRunning);
+}
+
+// A button's commands on a thread (not while another one runs).
+void ControlPanel::RunKomorebi(int button) {
+    if (m_komorebiThread) {
+        if (WaitForSingleObject(m_komorebiThread, 0) == WAIT_TIMEOUT) {
+            return;
+        }
+        StopKomorebiJob();
+    }
+    HANDLE stop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    HANDLE copy = nullptr;
+    if (!stop || !DuplicateHandle(GetCurrentProcess(), stop,
+                                  GetCurrentProcess(), &copy, 0, FALSE,
+                                  DUPLICATE_SAME_ACCESS)) {
+        if (stop) {
+            CloseHandle(stop);
+        }
+        return;
+    }
+    auto* job = new KomorebiJob{KomorebiCommands(m_komorebic, button), button,
+                                m_hwnd, copy};
+    m_komorebiThread =
+        CreateThread(nullptr, 0, KomorebiThreadProc, job, 0, nullptr);
+    if (!m_komorebiThread) {
+        CloseHandle(copy);
+        CloseHandle(stop);
+        delete job;
+        return;
+    }
+    m_komorebiStop = stop;
+    m_komorebiBusy = button;
+    m_komorebiBusySince = NowSeconds();
+    m_komorebiFailed = false;
+}
+
+// Its thread told to stop and waited for (a while: it owns its job, so it
+// can be left to end by itself). The command itself goes on.
+void ControlPanel::StopKomorebiJob() {
+    if (m_komorebiStop) {
+        SetEvent(m_komorebiStop);
+    }
+    if (m_komorebiThread) {
+        WaitForSingleObject(m_komorebiThread, 5000);
+        CloseHandle(m_komorebiThread);
+        m_komorebiThread = nullptr;
+    }
+    if (m_komorebiStop) {
+        CloseHandle(m_komorebiStop);
+        m_komorebiStop = nullptr;
+    }
+}
+
+// Read while its section is shown (with the rest, every couple of seconds
+// while open).
+void ControlPanel::UpdateKomorebi() {
+    if (!m_komorebiLooked) {
+        m_komorebiLooked = true;
+        m_komorebic = FindKomorebic();
+        m_komorebiVersion =
+            m_komorebic.empty() ? L"" : KomorebiVersion(m_komorebic);
+    }
+    m_komorebiRunning = !m_komorebic.empty() && KomorebiRunning();
+    // Its command done (it runs or stopped as asked; reloaded: running
+    // again a moment later), or given up on.
+    const double since = NowSeconds() - m_komorebiBusySince;
+    if (m_komorebiBusy >= 0 &&
+        ((m_komorebiBusy == 0 && m_komorebiRunning) ||
+         (m_komorebiBusy == 1 && !m_komorebiRunning) ||
+         (m_komorebiBusy == 2 && m_komorebiRunning && since > 3) ||
+         since > 15)) {
+        m_komorebiBusy = -1;
+    }
 }
 
 void ControlPanel::OnOpen() {
@@ -28437,20 +29105,26 @@ void ControlPanel::OnOpen() {
     m_styleKnob = -1;
     m_viewIn = 1;
     m_viewInVelocity = 0;
+    // (Installed or removed meanwhile: looked for again.)
+    m_komorebiLooked = false;
+    if (KomorebiShown()) {
+        UpdateKomorebi();
+    }
     Layout();
     if (m_view == View::Settings) {
         SettleSettings();
     }
+    m_wifiStatus.clear();
+    m_marqueeStart = NowSeconds();
+    m_darkMode = IsDarkMode();
+    // (Before a view is opened: Wi-Fi's looks for the networks.)
+    StartWifi();
     if (openOnControl >= 0) {
         OpenControlView((ControlId)openOnControl);
         // (Opening already: no slide in.)
         m_viewIn = 1;
         m_viewInVelocity = 0;
     }
-    m_wifiStatus.clear();
-    m_marqueeStart = NowSeconds();
-    m_darkMode = IsDarkMode();
-    StartWifi();
     // The radios' and the brightness's state come a moment later.
     SwitchRadio(-1, false);
     // The monitor is asked once, and again only after a while: asking over
@@ -28661,8 +29335,8 @@ void ControlPanel::StopWifi() {
         CloseHandle(m_wifiListThread);
         m_wifiListThread = nullptr;
         MSG msg;
-        if (m_hwnd && PeekMessage(&msg, m_hwnd, WM_APP_WIFI_LIST,
-                                  WM_APP_WIFI_LIST, PM_REMOVE)) {
+        while (m_hwnd && PeekMessage(&msg, m_hwnd, WM_APP_WIFI_LIST,
+                                     WM_APP_WIFI_LIST, PM_REMOVE)) {
             delete (std::vector<WifiNetwork>*)msg.lParam;
         }
     }
@@ -28682,6 +29356,7 @@ struct WifiListJob {
     HANDLE wlan;
     GUID wifiInterface;
     bool scan;
+    UINT id;
 };
 
 void ControlPanel::UpdateWifi(bool scan) {
@@ -28699,7 +29374,8 @@ void ControlPanel::UpdateWifi(bool scan) {
         CloseHandle(m_wifiListThread);
         m_wifiListThread = nullptr;
     }
-    auto* job = new WifiListJob{m_hwnd, m_wlan, m_wifiInterface, scan};
+    auto* job =
+        new WifiListJob{m_hwnd, m_wlan, m_wifiInterface, scan, ++m_wifiListId};
     m_wifiListThread =
         CreateThread(nullptr, 0, WifiListThreadProc, job, 0, nullptr);
     if (!m_wifiListThread) {
@@ -28717,6 +29393,8 @@ DWORD WINAPI ControlPanel::WifiListThreadProc(LPVOID parameter) {
     PWLAN_AVAILABLE_NETWORK_LIST list = nullptr;
     if (WlanGetAvailableNetworkList(job->wlan, &job->wifiInterface, 0, nullptr,
                                     &list) != ERROR_SUCCESS) {
+        // (Told anyway: the panel waits for this thread's answer.)
+        PostMessage(job->notify, WM_APP_WIFI_LIST, job->id, 0);
         return 0;
     }
     auto* found = new std::vector<WifiNetwork>;
@@ -28768,7 +29446,7 @@ DWORD WINAPI ControlPanel::WifiListThreadProc(LPVOID parameter) {
     if (networks.size() > kMaxNetworks) {
         networks.resize(kMaxNetworks);
     }
-    if (!PostMessage(job->notify, WM_APP_WIFI_LIST, 0, (LPARAM)found)) {
+    if (!PostMessage(job->notify, WM_APP_WIFI_LIST, job->id, (LPARAM)found)) {
         delete found;
     }
     return 0;
@@ -28883,14 +29561,8 @@ bool ControlPanel::ConnectWifi(const WifiNetwork& network,
             hex += byte;
         }
         const std::wstring name = EscapeXml(network.name);
-        std::wstring xml =
-            L"<?xml version=\"1.0\"?>"
-            L"<WLANProfile "
-            L"xmlns=\"http://www.microsoft.com/networking/WLAN/profile/v1\">"
-            L"<name>" +
-            name +
-            L"</name><SSIDConfig><SSID><hex>" + hex +
-            L"</hex><name>" + name +
+        std::wstring body =
+            L"<SSIDConfig><SSID><hex>" + hex + L"</hex><name>" + name +
             L"</name></SSID></SSIDConfig>"
             L"<connectionType>ESS</connectionType>"
             L"<connectionMode>auto</connectionMode>"
@@ -28898,21 +29570,58 @@ bool ControlPanel::ConnectWifi(const WifiNetwork& network,
             authentication + L"</authentication><encryption>" + encryption +
             L"</encryption><useOneX>false</useOneX></authEncryption>";
         if (!open) {
-            xml += L"<sharedKey><keyType>passPhrase</keyType>"
-                   L"<protected>false</protected><keyMaterial>" +
-                   EscapeXml(*key) + L"</keyMaterial></sharedKey>";
+            body += L"<sharedKey><keyType>passPhrase</keyType>"
+                    L"<protected>false</protected><keyMaterial>" +
+                    EscapeXml(*key) + L"</keyMaterial></sharedKey>";
         }
-        xml += L"</security></MSM></WLANProfile>";
-        DWORD reason = 0;
-        const DWORD result =
-            WlanSetProfile(m_wlan, &m_wifiInterface, 0, xml.c_str(), nullptr,
-                           TRUE, nullptr, &reason);
+        body += L"</security></MSM></WLANProfile>";
+        // A saved network's own profile takes the new password; a new one is
+        // saved under the network's name, or "Name (2)" when a profile
+        // already has that name (it isn't replaced, nor deleted if joining
+        // fails).
+        const bool update = !network.profile.empty();
+        // Updated as the kind it is (all users', or only this user's: then
+        // an all users' one of that name can't replace it).
+        DWORD flags = 0;
+        if (update) {
+            LPWSTR saved = nullptr;
+            if (WlanGetProfile(m_wlan, &m_wifiInterface,
+                               network.profile.c_str(), nullptr, &saved,
+                               &flags, nullptr) == ERROR_SUCCESS) {
+                WlanFreeMemory(saved);
+            }
+            flags &= WLAN_PROFILE_USER;
+        }
+        DWORD result = ERROR_ALREADY_EXISTS;
+        for (int copy = 1; copy <= 9 && result == ERROR_ALREADY_EXISTS;
+             copy++) {
+            profile = update      ? network.profile
+                      : copy == 1 ? network.name
+                                  : network.name + L" (" +
+                                        std::to_wstring(copy) + L")";
+            const std::wstring xml =
+                L"<?xml version=\"1.0\"?>"
+                L"<WLANProfile "
+                L"xmlns=\"http://www.microsoft.com/networking/WLAN/profile/"
+                L"v1\"><name>" +
+                EscapeXml(profile) + L"</name>" + body;
+            DWORD reason = 0;
+            result = WlanSetProfile(m_wlan, &m_wifiInterface, flags,
+                                    xml.c_str(), nullptr, update, nullptr,
+                                    &reason);
+            if (result != ERROR_SUCCESS &&
+                (update || result != ERROR_ALREADY_EXISTS)) {
+                Wh_Log(L"WlanSetProfile failed: %u, reason %u", result,
+                       reason);
+            }
+            if (update) {
+                break;
+            }
+        }
         if (result != ERROR_SUCCESS) {
-            Wh_Log(L"WlanSetProfile failed: %u, reason %u", result, reason);
             return false;
         }
-        profile = network.name;
-        if (network.profile.empty()) {
+        if (!update) {
             m_createdProfile = profile;
         }
     }
@@ -29116,14 +29825,40 @@ bool MagnifierRunning() {
     if (snapshot == INVALID_HANDLE_VALUE) {
         return false;
     }
+    // (In this session: another signed-in user's doesn't count.)
+    DWORD session = 0;
+    ProcessIdToSessionId(GetCurrentProcessId(), &session);
     PROCESSENTRY32 entry{sizeof(entry)};
     bool running = false;
     for (BOOL more = Process32First(snapshot, &entry); more && !running;
          more = Process32Next(snapshot, &entry)) {
-        running = _wcsicmp(entry.szExeFile, L"Magnify.exe") == 0;
+        DWORD processSession = 0;
+        running = _wcsicmp(entry.szExeFile, L"Magnify.exe") == 0 &&
+                  ProcessIdToSessionId(entry.th32ProcessID, &processSession) &&
+                  processSession == session;
     }
     CloseHandle(snapshot);
     return running;
+}
+
+// Windows' Magnifier started itself (its Win+Plus shortcut can be turned off
+// in Windows' settings), through Explorer: the 32-bit Windhawk process sees
+// SysWOW64 as System32, which has no Magnify.exe, and Windows can't start
+// it from the Sysnative path (it runs with UI access, started by a 64-bit
+// service).
+void StartMagnifier() {
+    WCHAR windows[MAX_PATH];
+    if (GetWindowsDirectory(windows, ARRAYSIZE(windows))) {
+        const std::wstring explorer = std::wstring(windows) + L"\\explorer.exe";
+        const std::wstring magnifier =
+            std::wstring(windows) + L"\\System32\\Magnify.exe";
+        if ((INT_PTR)ShellExecute(nullptr, L"open", explorer.c_str(),
+                                  magnifier.c_str(), nullptr,
+                                  SW_SHOWNORMAL) > 32) {
+            return;
+        }
+    }
+    PressKeys({VK_LWIN, VK_ADD});
 }
 
 void ControlPanel::UpdateAccessibility() {
@@ -29162,9 +29897,13 @@ void ControlPanel::ToggleAccessibility(int index) {
     AccessibilityItem& item = m_accessibility[index];
     switch (item.feature) {
         case Feature::Magnifier:
-            // Windows' own shortcuts: Win+Plus starts it, Win+Esc ends it.
-            PressKeys(item.on ? std::initializer_list<WORD>{VK_LWIN, VK_ESCAPE}
-                              : std::initializer_list<WORD>{VK_LWIN, VK_ADD});
+            // Ended with its own Win+Esc (its window takes no messages from
+            // other apps).
+            if (!item.on) {
+                StartMagnifier();
+            } else {
+                PressKeys({VK_LWIN, VK_ESCAPE});
+            }
             break;
         case Feature::Narrator:
             PressKeys({VK_LWIN, VK_CONTROL, VK_RETURN});
@@ -29263,6 +30002,9 @@ void ControlPanel::Update() {
         m_muted = muted;
     }
     m_doNotDisturb = IsIslandQuiet();
+    if (KomorebiShown()) {
+        UpdateKomorebi();
+    }
     if (m_nightLightChecking &&
         GetTickCount64() - m_nightLightCheckSince > 5000) {
         m_nightLightChecking = false;
@@ -29873,10 +30615,13 @@ void ControlPanel::Layout() {
     static const std::vector<ControlId> kBatteryOnly{ControlId::Battery,
                                                      ControlId::PowerMode};
     static const std::vector<ControlId> kDisplayOnly{ControlId::Display};
-    for (ControlId id : m_only == Only::Sound     ? kSoundOnly
-                        : m_only == Only::Battery ? kBatteryOnly
-                        : m_only == Only::Display ? kDisplayOnly
-                                                  : m_controls) {
+    // (komorebi's button on the pill: only its section.)
+    static const std::vector<ControlId> kKomorebiOnly{ControlId::Komorebi};
+    for (ControlId id : m_only == Only::Sound      ? kSoundOnly
+                        : m_only == Only::Battery  ? kBatteryOnly
+                        : m_only == Only::Display  ? kDisplayOnly
+                        : m_only == Only::Komorebi ? kKomorebiOnly
+                                                   : m_controls) {
         const ControlInfo& info = GetControlInfo(id);
         if (info.kind != rowKind) {
             endRow();
@@ -29984,6 +30729,23 @@ void ControlPanel::Layout() {
                                                  top + std::round(30 * s)};
                     }
                 }
+            }
+            y += height + gap;
+        } else if (id == ControlId::Komorebi) {
+            // Its three buttons side by side (start, stop, reload), its
+            // version under them (like yasb's).
+            const float inner = std::round(10 * s);
+            const float between = std::round(8 * s);
+            const float button = std::round(50 * s);
+            const float height = inner + button + std::round(26 * s);
+            rect = {padding, y, width - padding, y + height};
+            const float each =
+                (width - padding * 2 - inner * 2 - between * 2) / 3;
+            for (int i = 0; i < 3; i++) {
+                const float left = padding + inner + (each + between) * i;
+                m_komorebiButtons[i] = {std::round(left), y + inner,
+                                        std::round(left + each),
+                                        y + inner + button};
             }
             y += height + gap;
         }
@@ -30518,6 +31280,12 @@ void ControlPanel::LayoutSettings() {
             {(int)SettingKind::Pref, (int)IslandPref::ActionCalculator,
              kSectionActions},
             {(int)SettingKind::Pref, (int)IslandPref::ActionExplorer,
+             kSectionActions},
+            {(int)SettingKind::Pref, (int)IslandPref::ActionKomorebi,
+             kSectionActions},
+            {(int)SettingKind::Pref, (int)IslandPref::KomorebiWhkd,
+             kSectionActions},
+            {(int)SettingKind::Pref, (int)IslandPref::KomorebiMasir,
              kSectionActions},
             {(int)SettingKind::Label, 0, kSectionTrayMedia},
             {(int)SettingKind::Pref, (int)IslandPref::Tray, kSectionTrayMedia},
@@ -31386,6 +32154,15 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
                     return {Part::PowerPlan};
                 }
                 return {};
+            case ControlId::Komorebi:
+                for (int i = 0; i < 3; i++) {
+                    if (PointInRect(pt, m_komorebiButtons[i])) {
+                        return {KomorebiEnabled(i) ? Part::KomorebiButton
+                                                   : Part::None,
+                                i};
+                    }
+                }
+                return {};
             default:
                 return {Part::Shortcut, (int)id};
         }
@@ -31864,10 +32641,9 @@ void ControlPanel::DrawWifi(ID2D1RenderTarget* target,
             brush->SetColor(armed ? D2D1::ColorF(1, 1, 1, 1)
                             : button.part == Part::WifiConnect ? AccentInk(1)
                                                                : Fg(0.9f));
-            m_smallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            // (m_smallFormat is centered.)
             target->DrawText(label, (UINT32)wcslen(label), m_smallFormat.get(),
                              button.rect, brush);
-            m_smallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
         }
         brush->SetColor(Fg(0.95f));
         target->DrawText(network.name.c_str(), (UINT32)network.name.size(),
@@ -32957,7 +33733,12 @@ std::wstring ControlPanel::DisabledReason(int index) {
                        ? Tr(L"Only for the bar and the Fixed style",
                             L"Só na barra e no estilo Fixa")
                    : NotchCountWanted() > 0 ? notches
-                                            : offWhile(IslandPref::AutoHide);
+                   : !g_transparencyEffects
+                       ? Tr(L"Needs Windows' transparency effects: click to "
+                            L"open Personalization > Colors",
+                            L"Precisa dos efeitos de transparência do Windows: "
+                            L"clique para abrir Personalização > Cores")
+                       : offWhile(IslandPref::AutoHide);
         case IslandPref::MonthNumber:
             return needs(IslandPref::ClockDate);
         case IslandPref::HideWindowsBanners:
@@ -33900,6 +34681,7 @@ void ControlPanel::DrawControl(ID2D1RenderTarget* target,
         case ControlId::Sound:
         case ControlId::Battery:
         case ControlId::PowerMode:
+        case ControlId::Komorebi:
             // Below.
             break;
         case ControlId::Microphone:
@@ -34067,6 +34849,55 @@ void ControlPanel::DrawControl(ID2D1RenderTarget* target,
             target->DrawText(name, (UINT32)wcslen(name), m_linkFormat.get(),
                              choice, brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
         }
+    }
+
+    // komorebi: its three buttons (dimmed when they can't be used), and its
+    // version or why they can't.
+    if (id == ControlId::Komorebi) {
+        const float sectionRadius = std::round(14 * s);
+        brush->SetColor(Fg(0.08f));
+        target->FillRoundedRectangle({rect, sectionRadius, sectionRadius},
+                                     brush);
+        static const WCHAR kGlyphs[3] = {kGlyphPlay, kGlyphStop, kGlyphReload};
+        const float radius = std::round(10 * s);
+        for (int i = 0; i < 3; i++) {
+            const D2D1_RECT_F& button = m_komorebiButtons[i];
+            const bool enabled = KomorebiEnabled(i);
+            const float lit =
+                enabled ? Hover(button, m_hover.part == Part::KomorebiButton &&
+                                            m_hover.index == i)
+                        : 0;
+            brush->SetColor(Fg(0.06f + 0.1f * lit));
+            target->FillRoundedRectangle({button, radius, radius}, brush);
+            brush->SetColor(Fg(enabled ? 0.95f : 0.3f));
+            target->DrawText(&kGlyphs[i], 1, m_komorebiIconFormat.get(), button,
+                             brush);
+        }
+        std::wstring text;
+        if (m_komorebic.empty()) {
+            text = Tr(L"komorebi isn't installed",
+                      L"O komorebi não está instalado");
+        } else {
+            text = L"komorebi";
+            if (!m_komorebiVersion.empty()) {
+                text += L" v" + m_komorebiVersion;
+            }
+            if (m_komorebiBusy >= 0) {
+                text += std::wstring(L"  ·  ") + Tr(L"Working…", L"Executando…");
+            } else if (m_komorebiFailed) {
+                text += std::wstring(L"  ·  ") +
+                        Tr(L"It failed (see the terminal)",
+                           L"Falhou (veja o terminal)");
+            } else if (!m_komorebiRunning) {
+                text += std::wstring(L"  ·  ") + Tr(L"Stopped", L"Parado");
+            }
+        }
+        brush->SetColor(Fg(0.6f));
+        target->DrawText(text.c_str(), (UINT32)text.size(),
+                         m_smallFormat.get(),
+                         {rect.left, m_komorebiButtons[0].bottom, rect.right,
+                          rect.bottom},
+                         brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
     }
 
     if (id == ControlId::Battery &&
@@ -35099,6 +35930,14 @@ bool ControlPanel::OnMouseUp(POINT pt) {
             StartIslandAnimation();
             return true;
         }
+        case Part::DisabledSetting:
+            // The glass without Windows' transparency effects: where to turn
+            // them on.
+            if (hit.index == (int)IslandPref::Frosted && !g_transparencyEffects) {
+                ShellExecute(nullptr, L"open", L"ms-settings:colors", nullptr,
+                             nullptr, SW_SHOWNORMAL);
+            }
+            return true;
         case Part::SettingToggle: {
             const IslandPref pref = (IslandPref)hit.index;
             SetIslandPref(pref, GetIslandPref(pref) ? 0 : 1);
@@ -35364,6 +36203,12 @@ bool ControlPanel::OnMouseUp(POINT pt) {
         case Part::AccessibilityRow:
             ToggleAccessibility(hit.index);
             return true;
+        case Part::KomorebiButton:
+            if (hit.index >= 0 && hit.index < 3 &&
+                KomorebiEnabled(hit.index)) {
+                RunKomorebi(hit.index);
+            }
+            return true;
         case Part::VolumeIcon:
             if (auto volume = g_island ? g_island->GetVolume(nullptr) : nullptr) {
                 volume->SetMute(!m_muted, nullptr);
@@ -35607,6 +36452,16 @@ bool ControlPanel::OnChar(WCHAR c) {
 }
 
 bool ControlPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
+    // komorebi's command ended: failed (shown in a terminal) or done (its
+    // state read again).
+    if (msg == WM_APP_KOMOREBI_DONE) {
+        if (lParam) {
+            m_komorebiFailed = true;
+            m_komorebiBusy = -1;
+        }
+        Refresh();
+        return true;
+    }
     // (Only from their threads: the job is theirs.)
     if (msg == WM_APP_COLOR_DONE) {
         if (!m_colorThread) {
@@ -35705,12 +36560,13 @@ bool ControlPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_APP_WIFI_LIST) {
         std::unique_ptr<std::vector<WifiNetwork>> found(
             (std::vector<WifiNetwork>*)lParam);
-        if (m_wifiListThread) {
-            WaitForSingleObject(m_wifiListThread, INFINITE);
-            CloseHandle(m_wifiListThread);
-            m_wifiListThread = nullptr;
+        if ((UINT)wParam != m_wifiListId || !m_wifiListThread) {
+            return false;
         }
-        if (m_wlan && m_hasWifi && m_wifiRadio != 0) {
+        WaitForSingleObject(m_wifiListThread, INFINITE);
+        CloseHandle(m_wifiListThread);
+        m_wifiListThread = nullptr;
+        if (found && m_wlan && m_hasWifi && m_wifiRadio != 0) {
             m_networks = std::move(*found);
         }
         if (m_wifiListAgain) {
@@ -36923,6 +37779,42 @@ std::vector<std::pair<std::wstring, int>> NotificationPanel::CountsInCenter() {
     return counts;
 }
 
+std::vector<IslandToast> NotificationPanel::MissedToasts(long long seenId,
+                                                         long long* newestId) {
+    constexpr size_t kMaxMissedApps = 12;
+    LoadCleared();
+    // Newest first: the first one of each app.
+    std::vector<std::pair<long long, std::wstring>> latest;
+    const std::string query =
+        "SELECT n.Id, h.PrimaryId, n.ArrivalTime FROM Notification n JOIN "
+        "NotificationHandler h ON h.RecordId = n.HandlerId WHERE n.Type = "
+        "'toast' AND n.Id > " +
+        std::to_string(seenId) + " ORDER BY n.Id DESC LIMIT 200";
+    ReadCenter(query.c_str(), [&](void* statement) {
+        const long long id = m_sqlite.column_int64(statement, 0);
+        *newestId = std::max(*newestId, id);
+        auto app = (PCWSTR)m_sqlite.column_text16(statement, 1);
+        if (!app || latest.size() >= kMaxMissedApps ||
+            m_sqlite.column_int64(statement, 2) <= m_clearedUntil ||
+            std::find(m_dismissed.begin(), m_dismissed.end(), id) !=
+                m_dismissed.end() ||
+            std::any_of(latest.begin(), latest.end(), [&](const auto& entry) {
+                return SameNotificationApp(entry.second, app);
+            })) {
+            return;
+        }
+        latest.push_back({id, app});
+    });
+    std::vector<IslandToast> toasts;
+    const std::string path = GetNotificationDatabasePath();
+    for (auto it = latest.rbegin(); it != latest.rend(); ++it) {
+        long long lastId = it->first - 1;
+        std::vector<std::wstring> apps;
+        ReadNewToasts(m_sqlite, path, lastId, apps, toasts, it->first, false);
+    }
+    return toasts;
+}
+
 // How long a card glows (see FocusApp).
 constexpr double kCardGlowSeconds = 1.6;
 
@@ -36987,9 +37879,10 @@ void NotificationPanel::LoadCleared() {
     WCHAR value[4096] = L"";
     Wh_GetStringValue(L"notificationsClearedUntil", value, ARRAYSIZE(value));
     m_clearedUntil = _wcstoi64(value, nullptr, 10);
-    value[0] = L'\0';
-    Wh_GetStringValue(L"notificationsDismissed", value, ARRAYSIZE(value));
-    for (PCWSTR p = value; *p;) {
+    // (An id is at most 19 digits, and a comma.)
+    std::vector<WCHAR> ids(kMaxDismissed * 20 + 1);
+    Wh_GetStringValue(L"notificationsDismissed", ids.data(), ids.size());
+    for (PCWSTR p = ids.data(); *p;) {
         PWSTR end = nullptr;
         const long long id = _wcstoi64(p, &end, 10);
         if (end == p) {
@@ -36998,7 +37891,7 @@ void NotificationPanel::LoadCleared() {
         m_dismissed.push_back(id);
         p = *end == L',' ? end + 1 : end;
     }
-    std::vector<WCHAR> texts(16 * 1024);
+    std::vector<WCHAR> texts(kMaxDismissedTexts * (kDismissKeyMax + 1) + 1);
     Wh_GetStringValue(L"notificationsDismissedTags", texts.data(),
                       texts.size());
     for (PCWSTR line = texts.data(); *line;) {
@@ -37013,8 +37906,6 @@ void NotificationPanel::LoadCleared() {
 }
 
 void NotificationPanel::SaveCleared() {
-    // Only the latest ones dismissed one by one are worth keeping.
-    constexpr size_t kMaxDismissed = 200;
     if (m_dismissed.size() > kMaxDismissed) {
         m_dismissed.erase(m_dismissed.begin(),
                           m_dismissed.end() - kMaxDismissed);
@@ -37026,7 +37917,6 @@ void NotificationPanel::SaveCleared() {
         dismissed += (dismissed.empty() ? L"" : L",") + std::to_wstring(id);
     }
     Wh_SetStringValue(L"notificationsDismissed", dismissed.c_str());
-    constexpr size_t kMaxDismissedTexts = 60;
     if (m_dismissedTexts.size() > kMaxDismissedTexts) {
         m_dismissedTexts.erase(m_dismissedTexts.begin(),
                                m_dismissedTexts.end() - kMaxDismissedTexts);
@@ -38512,17 +39402,20 @@ bool NotificationPanel::OnMouseUp(POINT pt) {
             Wh_SetIntValue(L"notificationContent", g_showNotificationContent);
             StartIslandAnimation();
             return true;
+        // (As in the settings: on a monitor showing a profile of its own,
+        // changed on the main island, see SettingsLocked.)
         case Part::BannerToggle:
-            g_bannerEnabled = !g_bannerEnabled;
-            StoreProfileInt(L"bannerEnabled", g_bannerEnabled);
+            if (SettingsLocked()) {
+                return false;
+            }
+            SetIslandPref(IslandPref::Banner, !g_bannerEnabled);
             StartIslandAnimation();
             return true;
         case Part::MinimizedToggle:
-            if (!g_bannerEnabled) {
+            if (!g_bannerEnabled || SettingsLocked()) {
                 return false;
             }
-            g_bannerWhenMinimized = !g_bannerWhenMinimized;
-            StoreProfileInt(L"bannerMinimized", g_bannerWhenMinimized);
+            SetIslandPref(IslandPref::BannerMinimized, !g_bannerWhenMinimized);
             StartIslandAnimation();
             return true;
         case Part::None:
@@ -38646,6 +39539,8 @@ void MediaPanel::OnOpen() {
     m_titleKnob = -1;
     m_timelineHover = m_volumeHover = m_appVolumeHover = 0;
     ReadVolume();
+    // (Laid out before by Prepare, with the apps' volumes of the last time.)
+    Layout();
 }
 
 bool MediaPanel::AnimateContents(double dt) {
@@ -39587,7 +40482,12 @@ int GetIslandPref(IslandPref pref) {
         case IslandPref::ActionTaskManager:
         case IslandPref::ActionCalculator:
         case IslandPref::ActionExplorer:
+        case IslandPref::ActionKomorebi:
             return (g_settings.pillActions >> PillActionIndex(pref)) & 1;
+        case IslandPref::KomorebiWhkd:
+            return g_settings.komorebiWhkd;
+        case IslandPref::KomorebiMasir:
+            return g_settings.komorebiMasir;
         case IslandPref::ShortcutNotifications:
             return g_settings.islandWinN;
         case IslandPref::ShortcutControl:
@@ -39900,9 +40800,6 @@ void SetIslandPref(IslandPref pref, int value) {
             break;
         case IslandPref::Frosted:
             g_settings.islandFrosted = on;
-            if (Island* main = MainIsland()) {
-                main->UpdateTransparencyEffects(on);
-            }
             break;
         case IslandPref::DateOrder:
             g_settings.clockDateOrder = std::clamp(value, 0, 3);
@@ -39949,7 +40846,14 @@ void SetIslandPref(IslandPref pref, int value) {
         case IslandPref::ActionTaskManager:
         case IslandPref::ActionCalculator:
         case IslandPref::ActionExplorer:
+        case IslandPref::ActionKomorebi:
             SetPillActionBit(pref, on);
+            break;
+        case IslandPref::KomorebiWhkd:
+            g_settings.komorebiWhkd = on;
+            break;
+        case IslandPref::KomorebiMasir:
+            g_settings.komorebiMasir = on;
             break;
         case IslandPref::ShortcutNotifications:
             g_settings.islandWinN = on;
@@ -40200,10 +41104,13 @@ int AddProfile(const std::wstring& name) {
         return -1;
     }
     SaveActiveProfile();
-    int id = 1;
+    // (Never one used before: a monitor unplugged when its profile was
+    // deleted mustn't find another one under its id later.)
+    int id = std::max(1, Wh_GetIntValue(L"profileNextId", 1));
     for (const auto& profile : g_profiles) {
         id = std::max(id, profile.id + 1);
     }
+    Wh_SetIntValue(L"profileNextId", id + 1);
     Wh_SetStringValue(ProfileValueName(id).c_str(), CaptureProfile().c_str());
     g_profiles.push_back({id, name});
     g_activeProfile = id;
@@ -40516,15 +41423,18 @@ bool RestoreBackup(const std::wstring& text) {
             Wh_SetStringValue(value.name, it->second.c_str());
         }
     }
-    // The profiles here go; the backup's come.
-    for (const auto& profile : g_profiles) {
-        Wh_DeleteValue(ProfileValueName(profile.id).c_str());
-    }
-    LoadProfiles();
-    for (const auto& profile : g_profiles) {
-        const std::wstring name = ProfileValueName(profile.id);
-        if (const auto it = texts.find(name); it != texts.end()) {
-            Wh_SetStringValue(name.c_str(), it->second.c_str());
+    // The profiles here go; the backup's come (a backup without its list
+    // of profiles keeps these).
+    if (texts.contains(L"profiles")) {
+        for (const auto& profile : g_profiles) {
+            Wh_DeleteValue(ProfileValueName(profile.id).c_str());
+        }
+        LoadProfiles();
+        for (const auto& profile : g_profiles) {
+            const std::wstring name = ProfileValueName(profile.id);
+            if (const auto it = texts.find(name); it != texts.end()) {
+                Wh_SetStringValue(name.c_str(), it->second.c_str());
+            }
         }
     }
     // Notes, tasks, the calendar's events: read again as the island starts
@@ -40744,7 +41654,14 @@ void SetIslandPrefValue(IslandPref pref, int value) {
         case IslandPref::ActionTaskManager:
         case IslandPref::ActionCalculator:
         case IslandPref::ActionExplorer:
+        case IslandPref::ActionKomorebi:
             SetPillActionBit(pref, on);
+            break;
+        case IslandPref::KomorebiWhkd:
+            g_settings.komorebiWhkd = on;
+            break;
+        case IslandPref::KomorebiMasir:
+            g_settings.komorebiMasir = on;
             break;
         case IslandPref::ShortcutNotifications:
             g_settings.islandWinN = on;
@@ -41786,20 +42703,43 @@ bool Island::GroupWanted(PillGroup group) const {
 // The usage thread runs while some of it is shown (for all apps, or for the
 // app in front).
 void Island::UpdateUsageWatch() {
-    const bool wanted =
-        m_hwnd && (AnyUsageShown() || PlaceShows(PillGroup::Usage));
-    // The GPU too when its video memory is shown (or all of it, shown for
-    // an app), or its panel is open; every second with the panel open.
-    const bool panel = m_usagePanel.IsOpen();
-    g_usageGpuWanted =
-        g_settings.usageVram || !AnyUsageShown() ||
-        (panel && m_usagePanel.GetKind() == UsagePanel::Kind::Gpu);
-    g_usageFast = panel;
-    if (!wanted) {
+    // (Measured by the main island for all of them: while one of them shows
+    // some, a monitor with a profile of its own too.)
+    if (!m_main) {
+        if (Island* main = MainIsland(); main && main != this) {
+            IslandScope scope(main);
+            main->UpdateUsageWatch();
+        }
+        return;
+    }
+    bool wanted = false;
+    bool gpu = false;
+    bool fast = false;
+    ForEachIsland([&](Island& island) {
+        if (!island.m_hwnd) {
+            return;
+        }
+        // The GPU too when its video memory is shown (or all of it, shown
+        // for an app), or its panel is open; every second with the panel
+        // open.
+        const bool shown = AnyUsageShown();
+        if (shown || island.PlaceShows(PillGroup::Usage)) {
+            wanted = true;
+            gpu = gpu || g_settings.usageVram || !shown;
+        }
+        if (island.m_usagePanel.IsOpen()) {
+            fast = true;
+            gpu = gpu ||
+                  island.m_usagePanel.GetKind() == UsagePanel::Kind::Gpu;
+        }
+    });
+    g_usageGpuWanted = gpu;
+    g_usageFast = fast;
+    if (!wanted || !m_hwnd) {
         StopUsageWatch();
         return;
     }
-    if (m_usageThread || !m_main) {
+    if (m_usageThread) {
         return;
     }
     if (!m_usageStop) {
@@ -41844,8 +42784,11 @@ void Island::OnUsage() {
     const int ram = usage.ram;
     const long long vram = usage.vramUsed;
     m_usagePanel.Refresh();
-    // Back to every 2 seconds once its panel is closed.
-    g_usageFast = m_usagePanel.IsOpen();
+    // Back to every 2 seconds once the panels are closed.
+    if (m_main) {
+        g_usageFast = AnyIslandLook(
+            [](Island& island) { return island.m_usagePanel.IsOpen(); });
+    }
     // The video memory in megabytes.
     const double values[3] = {(double)cpu, (double)ram,
                               vram < 0 ? -1.0 : vram / (1024.0 * 1024)};
@@ -41959,8 +42902,16 @@ void Island::UpdateUpdatesWatch() {
     if (!m_hwnd) {
         return;
     }
-    // (Looked for by the main island, which tells the others.)
-    if (!g_settings.islandUpdates || !m_main) {
+    // (Looked for by the main island, which tells the others: while one of
+    // them shows them, a monitor with a profile of its own too.)
+    if (!m_main) {
+        if (Island* main = MainIsland(); main && main != this) {
+            IslandScope scope(main);
+            main->UpdateUpdatesWatch();
+        }
+        return;
+    }
+    if (!AnyIslandLook([](Island&) { return g_settings.islandUpdates; })) {
         KillTimer(m_hwnd, kUpdatesTimerId);
         m_updatesWatched = false;
         return;
@@ -42040,21 +42991,33 @@ bool Island::WeatherWanted() const {
     return g_settings.islandWeather;
 }
 
+bool Island::AnyWeatherWanted() const {
+    return AnyIslandLook(
+        [](Island& island) { return island.WeatherWanted(); });
+}
+
 // The weather is measured while it's on the pill: now (if it's old), and
 // every 30 minutes.
 void Island::UpdateWeatherWatch() {
     if (!m_hwnd) {
         return;
     }
-    if (!WeatherWanted()) {
-        KillTimer(m_hwnd, kWeatherTimerId);
-        KillTimer(m_hwnd, kWeatherRetryTimerId);
+    const WeatherData weather = GetWeather();
+    if (WeatherWanted()) {
+        ShowWeather(weather);
+    }
+    // (Measured by the main island, which tells the others: while one of
+    // them shows it, a monitor with a profile of its own too.)
+    if (!m_main) {
+        if (Island* main = MainIsland(); main && main != this) {
+            IslandScope scope(main);
+            main->UpdateWeatherWatch();
+        }
         return;
     }
-    const WeatherData weather = GetWeather();
-    ShowWeather(weather);
-    // (Measured by the main island, which tells the others.)
-    if (!m_main) {
+    if (!AnyWeatherWanted()) {
+        KillTimer(m_hwnd, kWeatherTimerId);
+        KillTimer(m_hwnd, kWeatherRetryTimerId);
         return;
     }
     if (!weather.valid ||
@@ -42117,7 +43080,7 @@ void Island::OnWeather(int problem) {
     // The service didn't answer (no internet yet, at startup): asked again
     // in 15 s, then waiting longer each time (up to 5 minutes), and as soon
     // as the internet comes (see OnInternetBack).
-    if (problem == 2 && WeatherWanted() && m_main) {
+    if (problem == 2 && m_main && AnyWeatherWanted()) {
         static constexpr UINT kRetrySeconds[] = {15, 30, 60, 120, 300};
         const UINT seconds =
             kRetrySeconds[std::min(m_weatherRetries,
@@ -42172,19 +43135,6 @@ bool Island::Create() {
         m_minimized = m_notchBase->m_minimized;
     }
     m_expand = m_minimized ? 0 : 1;
-
-    WNDCLASS windowClass{};
-    windowClass.hInstance = g_module;
-    windowClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    windowClass.lpfnWndProc = IslandWndProc;
-    windowClass.lpszClassName = kIslandClassName;
-    // Double clicks are passed on to the tray icons.
-    windowClass.style = CS_DBLCLKS;
-    RegisterClass(&windowClass);
-    windowClass.style = 0;
-    windowClass.lpfnWndProc = PanelWndProc;
-    windowClass.lpszClassName = kPanelClassName;
-    RegisterClass(&windowClass);
 
     m_hwnd = CreateWindowEx(
         WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
@@ -42247,8 +43197,7 @@ bool Island::Create() {
     UpdateStatus();
     m_darkMode = IsDarkMode();
     m_themeTurn = m_darkMode ? 1 : 0;
-    UpdateTransparencyEffects(g_settings.islandFrosted);
-    m_transparency = TransparencyEffectsOn();
+    g_transparencyEffects = TransparencyEffectsOn();
     Layout();
     StartStatusWatch();
     UpdateUsageWatch();
@@ -42464,16 +43413,21 @@ void Island::Destroy() {
         m_inputMethodThread = nullptr;
     }
     StopDesktopsWatch();
-    if (m_wallpaperThread) {
-        WaitForSingleObject(m_wallpaperThread, INFINITE);
-        CloseHandle(m_wallpaperThread);
-        m_wallpaperThread = nullptr;
+    // (They own their jobs: one still busy, on a sleeping network drive or
+    // a drive slow to answer, is let go.)
+    for (HANDLE* thread :
+         {&m_wallpaperThread, &m_wallpaperListThread, &m_driveThread}) {
+        if (*thread) {
+            WaitForSingleObject(*thread, 5000);
+            CloseHandle(*thread);
+            *thread = nullptr;
+        }
     }
-    for (HANDLE thread : m_driveThreads) {
-        WaitForSingleObject(thread, INFINITE);
-        CloseHandle(thread);
+    MSG listed;
+    while (m_hwnd && PeekMessage(&listed, m_hwnd, WM_APP_WALLPAPER_LIST,
+                                 WM_APP_WALLPAPER_LIST, PM_REMOVE)) {
+        delete (WallpaperListJob*)listed.lParam;
     }
-    m_driveThreads.clear();
     if (m_main) {
         StopPrivacyWatch();
     }
@@ -42499,8 +43453,6 @@ void Island::Destroy() {
         WlanCloseHandle(m_wlan, nullptr);
         m_wlan = nullptr;
     }
-    UnregisterClass(kIslandClassName, g_module);
-    UnregisterClass(kPanelClassName, g_module);
 }
 
 // The bar's strip; for the pill keeping its room, a strip along the edge its
@@ -42887,27 +43839,17 @@ int Island::MicrophoneMuted() {
     return muted ? 1 : 0;
 }
 
-// Muted or not, as the default one is: every microphone plugged in (an app
-// may record from another one than the default, like a webcam's while a
-// headset is the default).
-void Island::ToggleMicrophone() {
-    const int muted = MicrophoneMuted();
-    if (muted < 0 || !m_devices) {
-        return;
-    }
-    winrt::com_ptr<IMMDeviceCollection> devices;
-    UINT count = 0;
-    if (FAILED(m_devices->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE,
-                                             devices.put())) ||
-        FAILED(devices->GetCount(&count))) {
-        return;
-    }
-    // Some apps record a muted microphone anyway (they take its sound
-    // before Windows mutes it): muted, its level goes to 0 too, and back to
-    // what it was (kept for each microphone) when it's unmuted.
-    std::vector<std::pair<std::wstring, int>> levels;
-    {
-        WCHAR value[2048] = L"";
+// The microphones the island muted (see ToggleMicrophone), each with the
+// level it had (-1: not known, only its sound comes back): a passing state,
+// not in the backup, kept as "level\tid" lines in "microphoneLevels". Read
+// once; the island's thread or, once it's stopped, the unloading one.
+std::vector<std::pair<std::wstring, int>> g_microphoneLevels;
+bool g_microphoneLevelsRead = false;
+
+std::vector<std::pair<std::wstring, int>>& MicrophoneLevels() {
+    if (!g_microphoneLevelsRead) {
+        g_microphoneLevelsRead = true;
+        WCHAR value[4096] = L"";
         Wh_GetStringValue(L"microphoneLevels", value, ARRAYSIZE(value));
         for (PCWSTR line = value; *line;) {
             PCWSTR end = wcschr(line, L'\n');
@@ -42915,7 +43857,8 @@ void Island::ToggleMicrophone() {
                 end ? std::wstring(line, end) : std::wstring(line);
             if (const size_t tab = text.find(L'\t');
                 tab != std::wstring::npos) {
-                levels.push_back({text.substr(tab + 1), _wtoi(text.c_str())});
+                g_microphoneLevels.push_back(
+                    {text.substr(tab + 1), _wtoi(text.c_str())});
             }
             if (!end) {
                 break;
@@ -42923,7 +43866,32 @@ void Island::ToggleMicrophone() {
             line = end + 1;
         }
     }
-    std::wstring kept;
+    return g_microphoneLevels;
+}
+
+void SaveMicrophoneLevels() {
+    std::wstring value;
+    for (const auto& [id, level] : g_microphoneLevels) {
+        value += std::to_wstring(level) + L"\t" + id + L"\n";
+    }
+    Wh_SetStringValue(L"microphoneLevels", value.c_str());
+}
+
+// The microphones the island muted get their level back, and their sound:
+// all of them (`all`: the island's button, or the island stopping), or only
+// the ones unmuted elsewhere meanwhile (Windows, another app, a key), whose
+// level would stay at 0. Unplugged ones are kept for when they come back.
+void RestoreMicrophoneLevels(IMMDeviceEnumerator* enumerator, bool all) {
+    auto& levels = MicrophoneLevels();
+    winrt::com_ptr<IMMDeviceCollection> devices;
+    UINT count = 0;
+    if (levels.empty() || !enumerator ||
+        FAILED(enumerator->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE,
+                                              devices.put())) ||
+        FAILED(devices->GetCount(&count))) {
+        return;
+    }
+    bool changed = false;
     for (UINT i = 0; i < count; i++) {
         winrt::com_ptr<IMMDevice> device;
         winrt::com_ptr<IAudioEndpointVolume> volume;
@@ -42936,35 +43904,144 @@ void Island::ToggleMicrophone() {
         }
         const std::wstring deviceId = id;
         CoTaskMemFree(id);
-        if (!muted) {
-            float level = 0;
-            if (SUCCEEDED(volume->GetMasterVolumeLevelScalar(&level)) &&
-                kept.size() < 1800) {
-                kept += std::to_wstring((int)std::lround(level * 1000)) +
-                        L"\t" + deviceId + L"\n";
-            }
-            volume->SetMute(TRUE, nullptr);
-            volume->SetMasterVolumeLevelScalar(0, nullptr);
-        } else {
-            for (const auto& [savedId, savedLevel] : levels) {
-                if (savedId == deviceId) {
-                    volume->SetMasterVolumeLevelScalar(
-                        std::clamp(savedLevel, 0, 1000) / 1000.0f, nullptr);
-                }
-            }
+        auto it = std::find_if(levels.begin(), levels.end(),
+                               [&](const auto& entry) {
+                                   return entry.first == deviceId;
+                               });
+        BOOL muted = FALSE;
+        if (it == levels.end() ||
+            (!all && (FAILED(volume->GetMute(&muted)) || muted))) {
+            continue;
+        }
+        float level = 0;
+        if (it->second >= 0 &&
+            (all || (SUCCEEDED(volume->GetMasterVolumeLevelScalar(&level)) &&
+                     level < 0.0005f))) {
+            volume->SetMasterVolumeLevelScalar(
+                std::clamp(it->second, 0, 1000) / 1000.0f, nullptr);
+        }
+        if (all) {
             volume->SetMute(FALSE, nullptr);
         }
+        levels.erase(it);
+        changed = true;
     }
-    // (A passing state, not part of the backup.)
-    Wh_SetStringValue(L"microphoneLevels", kept.c_str());
+    if (changed) {
+        SaveMicrophoneLevels();
+    }
+}
+
+DWORD WINAPI RestoreMicrophonesThreadProc(LPVOID) {
+    const HRESULT result = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    winrt::com_ptr<IMMDeviceEnumerator> enumerator;
+    if (SUCCEEDED(CoCreateInstance(kCLSID_MMDeviceEnumerator, nullptr,
+                                   CLSCTX_ALL, kIID_IMMDeviceEnumerator,
+                                   enumerator.put_void()))) {
+        RestoreMicrophoneLevels(enumerator.get(), true);
+    }
+    enumerator = nullptr;
+    if (SUCCEEDED(result)) {
+        CoUninitialize();
+    }
+    return 0;
+}
+
+// The island stopping (the mod turned off, or the island alone): the
+// microphones it muted come back as they were (on a thread with COM of its
+// own: the caller's may have none).
+void RestoreMicrophonesNow() {
+    if (MicrophoneLevels().empty()) {
+        return;
+    }
+    if (HANDLE thread = CreateThread(nullptr, 0, RestoreMicrophonesThreadProc,
+                                     nullptr, 0, nullptr)) {
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+    }
+}
+
+// Muted or not, as the default one is: every microphone plugged in (an app
+// may record from another one than the default, like a webcam's while a
+// headset is the default). Some apps record a muted microphone anyway (they
+// take its sound before Windows mutes it): muted, its level goes to 0 too,
+// and back to what it was when it's unmuted. One muted on purpose before is
+// left alone (and stays muted).
+void Island::ToggleMicrophone() {
+    const int muted = MicrophoneMuted();
+    if (muted < 0 || !m_devices) {
+        return;
+    }
+    if (muted) {
+        RestoreMicrophoneLevels(m_devices.get(), true);
+        // (The default ones too, if they were muted elsewhere.)
+        for (const auto& microphone : GetMicrophones()) {
+            microphone->SetMute(FALSE, nullptr);
+        }
+        OnVolumeChanged();
+        return;
+    }
+    winrt::com_ptr<IMMDeviceCollection> devices;
+    UINT count = 0;
+    if (FAILED(m_devices->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE,
+                                             devices.put())) ||
+        FAILED(devices->GetCount(&count))) {
+        return;
+    }
+    auto& levels = MicrophoneLevels();
+    for (UINT i = 0; i < count; i++) {
+        winrt::com_ptr<IMMDevice> device;
+        winrt::com_ptr<IAudioEndpointVolume> volume;
+        LPWSTR id = nullptr;
+        if (FAILED(devices->Item(i, device.put())) ||
+            FAILED(device->Activate(kIID_IAudioEndpointVolume, CLSCTX_ALL,
+                                    nullptr, volume.put_void())) ||
+            FAILED(device->GetId(&id))) {
+            continue;
+        }
+        const std::wstring deviceId = id;
+        CoTaskMemFree(id);
+        BOOL wasMuted = FALSE;
+        if (FAILED(volume->GetMute(&wasMuted)) || wasMuted) {
+            continue;
+        }
+        // Its level (never a 0 over one kept from before).
+        float level = 0;
+        volume->GetMasterVolumeLevelScalar(&level);
+        auto it = std::find_if(levels.begin(), levels.end(),
+                               [&](const auto& entry) {
+                                   return entry.first == deviceId;
+                               });
+        const int kept = level >= 0.0005f ? (int)std::lround(level * 1000)
+                         : it != levels.end() ? it->second
+                                              : -1;
+        if (it == levels.end()) {
+            if (levels.size() >= 32) {
+                levels.erase(levels.begin());
+            }
+            levels.push_back({deviceId, kept});
+        } else {
+            it->second = kept;
+        }
+        volume->SetMute(TRUE, nullptr);
+        volume->SetMasterVolumeLevelScalar(0, nullptr);
+    }
+    SaveMicrophoneLevels();
     OnVolumeChanged();
 }
 
 // From the microphone already watched (the default one), not looked up
 // again on every change.
 std::wstring Island::MicrophoneGlyph() {
+    winrt::com_ptr<IAudioEndpointVolume> microphone = m_watchedMicrophone;
+    // (A notch without the bell watches none: the default one, read now.)
+    if (!microphone && !m_statusEvents) {
+        const auto microphones = GetMicrophones();
+        if (!microphones.empty()) {
+            microphone = microphones.front();
+        }
+    }
     BOOL muted = FALSE;
-    if (!m_watchedMicrophone || FAILED(m_watchedMicrophone->GetMute(&muted))) {
+    if (!microphone || FAILED(microphone->GetMute(&muted))) {
         return {};
     }
     return {muted ? (WCHAR)0xF781 : (WCHAR)0xE720};
@@ -43152,7 +44229,7 @@ void Island::SetNetworkGlyph(std::wstring glyph) {
 // The internet came (after the island started, or back after it went):
 // the weather, if it's old or failed.
 void Island::OnInternetBack() {
-    if (!m_hwnd || !WeatherWanted() || !m_main) {
+    if (!m_hwnd || !m_main || !AnyWeatherWanted()) {
         return;
     }
     const WeatherData weather = GetWeather();
@@ -43257,51 +44334,42 @@ std::atomic<int> g_shortcutKeys;
 HANDLE g_shortcutThread;
 DWORD g_shortcutThreadId;
 
+// N or A taken by the hook, until let go (the hook's thread only).
+bool g_shortcutTaken[2];
+
 LRESULT CALLBACK ShortcutKeyProc(int code, WPARAM wParam, LPARAM lParam) {
     if (code != HC_ACTION) {
         return CallNextHookEx(nullptr, code, wParam, lParam);
     }
     const auto* key = (const KBDLLHOOKSTRUCT*)lParam;
-    const bool down = wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
-    // The modifiers held (followed here: the hook sees every key first).
-    static bool win[2], others[6];
-    static bool taken[2];
-    constexpr DWORD kOthers[6] = {VK_LCONTROL, VK_RCONTROL, VK_LMENU,
-                                  VK_RMENU,    VK_LSHIFT,   VK_RSHIFT};
-    if (key->vkCode == VK_LWIN || key->vkCode == VK_RWIN) {
-        win[key->vkCode == VK_RWIN] = down;
-    }
-    for (int i = 0; i < 6; i++) {
-        if (key->vkCode == kOthers[i]) {
-            others[i] = down;
-        }
-    }
     const int which = key->vkCode == 'N' ? 0 : key->vkCode == 'A' ? 1 : -1;
     if (which < 0 || (key->flags & LLKHF_INJECTED)) {
         return CallNextHookEx(nullptr, code, wParam, lParam);
     }
-    if (!down) {
-        if (taken[which]) {
-            taken[which] = false;
-            return 1;
+    const bool down = wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
+    // A letter taken: its repeats and its release too, until it's let go
+    // (the app in front never sees it held).
+    if (g_shortcutTaken[which]) {
+        if (!down) {
+            g_shortcutTaken[which] = false;
         }
-        return CallNextHookEx(nullptr, code, wParam, lParam);
+        return 1;
     }
-    if ((win[0] || win[1]) &&
-        std::none_of(std::begin(others), std::end(others),
-                     [](bool held) { return held; }) &&
+    // The modifiers as they are now (every key before this one counted;
+    // nothing remembered here, so a Win let go where the hook doesn't see it,
+    // like on the lock screen, can't stay "held").
+    auto held = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
+    if (down && (held(VK_LWIN) || held(VK_RWIN)) && !held(VK_CONTROL) &&
+        !held(VK_MENU) && !held(VK_SHIFT) &&
         (g_shortcutKeys.load() & (1 << which))) {
-        // (Held down, it repeats: once.)
-        if (!taken[which]) {
-            taken[which] = true;
-            INPUT dummy[2]{};
-            dummy[0].type = dummy[1].type = INPUT_KEYBOARD;
-            dummy[0].ki.wVk = dummy[1].ki.wVk = 0xFF;
-            dummy[1].ki.dwFlags = KEYEVENTF_KEYUP;
-            SendInput(2, dummy, sizeof(INPUT));
-            if (HWND island = g_islandWnd) {
-                PostMessage(island, WM_APP_SHORTCUT, which, 0);
-            }
+        g_shortcutTaken[which] = true;
+        INPUT dummy[2]{};
+        dummy[0].type = dummy[1].type = INPUT_KEYBOARD;
+        dummy[0].ki.wVk = dummy[1].ki.wVk = 0xFF;
+        dummy[1].ki.dwFlags = KEYEVENTF_KEYUP;
+        SendInput(2, dummy, sizeof(INPUT));
+        if (HWND island = g_islandWnd) {
+            PostMessage(island, WM_APP_SHORTCUT, which, 0);
         }
         return 1;
     }
@@ -43309,6 +44377,7 @@ LRESULT CALLBACK ShortcutKeyProc(int code, WPARAM wParam, LPARAM lParam) {
 }
 
 DWORD WINAPI ShortcutThreadProc(LPVOID parameter) {
+    g_shortcutTaken[0] = g_shortcutTaken[1] = false;
     // (Its queue made before it says it's ready, for its WM_QUIT.)
     MSG msg;
     PeekMessage(&msg, nullptr, 0, 0, PM_NOREMOVE);
@@ -43360,7 +44429,10 @@ void Island::UpdateShortcutKeys() {
 }
 
 void Island::OpenFromShortcut(bool control) {
+    // Hidden (a full-screen app): Windows' own panel, as without the island
+    // (sent as a new shortcut, which the hook lets through).
     if (!m_visible) {
+        PressKeys({VK_LWIN, (WORD)(control ? 'A' : 'N')});
         return;
     }
     if (m_minimized) {
@@ -43387,6 +44459,10 @@ void Island::OnNetworkChanged() {
 }
 
 void Island::OnVolumeChanged() {
+    // A microphone the island muted, unmuted elsewhere: its level back.
+    if (m_main && m_devices && !MicrophoneLevels().empty()) {
+        RestoreMicrophoneLevels(m_devices.get(), false);
+    }
     m_volumeGlyph = VolumeGlyph();
     m_microphoneGlyph = MicrophoneGlyph();
     UpdateVolumePercent();
@@ -44986,6 +46062,7 @@ bool Island::OnBannerChar(WCHAR c) {
 // Defined further down.
 bool AppShowsBanners(const std::wstring& appId);
 bool WindowsShowsBanners();
+void NoteToastsSeen(const std::vector<IslandToast>& toasts);
 
 // Takes the latest new notification and shows it: in the pill, or peeking out
 // of the line when minimized. Not with "Do not disturb", in the bar, or over
@@ -44998,6 +46075,7 @@ void Island::ShowBanner() {
     // Each island shows them (the main one plays their sounds and handles
     // the Windows banners).
     if (m_main) {
+        NoteToastsSeen(toasts);
         for (Island* other : g_islands) {
             if (other != this) {
                 IslandScope scope(other);
@@ -47009,7 +48087,8 @@ void Island::RenderBarBubble() {
 // full-screen app): it fades with the bar, or as the pill closes into its
 // dot, going away and coming back.
 void Island::UpdateGlass() {
-    const bool wanted = g_settings.islandFrosted && m_transparency && !m_away &&
+    const bool wanted = g_settings.islandFrosted && g_transparencyEffects &&
+                        !m_away &&
                         m_notch < 0;
     m_barBlurred = wanted && m_bar;
     RECT strip{};
@@ -47063,26 +48142,6 @@ void Island::UpdateGlass() {
         // Right under the island.
         SetWindowPos(m_glassStrip, m_hwnd, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    }
-}
-
-// A Windows setting: turned on with the glass, remembered (also across a
-// crash), and back off when the glass goes off or the mod does, only when
-// the mod turned it on.
-void Island::UpdateTransparencyEffects(bool frosted) {
-    if (!m_main) {
-        return;
-    }
-    if (frosted) {
-        if (!TransparencyEffectsOn()) {
-            m_control.SwitchTransparency(true);
-            Wh_SetIntValue(L"turnedTransparencyOn", 1);
-        }
-    } else if (Wh_GetIntValue(L"turnedTransparencyOn", 0)) {
-        if (TransparencyEffectsOn()) {
-            m_control.SwitchTransparency(false);
-        }
-        Wh_SetIntValue(L"turnedTransparencyOn", 0);
     }
 }
 
@@ -47154,8 +48213,12 @@ void Island::StartInputMethodQuery() {
         CloseHandle(m_inputMethodThread);
         m_inputMethodThread = nullptr;
     }
-    m_inputMethodThread = CreateThread(nullptr, 0, InputMethodThreadProc,
-                                       m_hwnd, 0, nullptr);
+    auto* job = new InputMethodJob{m_hwnd, ++m_inputMethodId};
+    m_inputMethodThread =
+        CreateThread(nullptr, 0, InputMethodThreadProc, job, 0, nullptr);
+    if (!m_inputMethodThread) {
+        delete job;
+    }
 }
 
 // Its short text: the input method's letters ("中" or "英", "あ" or "A",
@@ -47466,14 +48529,20 @@ void Island::ChangeWallpaper(const std::vector<std::wstring>& paths,
 // The wheel on the item: the next picture (the folder read again the first
 // time, and when it ran out).
 void Island::StepWallpaper(int step) {
+    // (Listed on a thread: the step is taken when the list comes, see
+    // WM_APP_WALLPAPER_LIST.)
     if (m_wallpapers.empty()) {
+        if (m_wallpaperListThread) {
+            return;
+        }
         WCHAR folder[MAX_PATH] = L"";
         Wh_GetStringValue(L"wallpaperFolder", folder, ARRAYSIZE(folder));
-        m_wallpapers = ListWallpapers(folder);
-        m_wallpaperIndex = -1;
-    }
-    if (m_wallpapers.empty()) {
-        TogglePanel(m_wallpaperPanel, IslandItem::Wallpaper);
+        auto* job = new WallpaperListJob{m_hwnd, folder, step, {}};
+        m_wallpaperListThread =
+            CreateThread(nullptr, 0, WallpaperListThreadProc, job, 0, nullptr);
+        if (!m_wallpaperListThread) {
+            delete job;
+        }
         return;
     }
     const int count = (int)m_wallpapers.size();
@@ -47533,6 +48602,15 @@ void Island::RunPillAction(int action) {
             break;
         case ControlId::Screenshot:
             PressKeys({VK_LWIN, VK_SHIFT, 'S'});
+            break;
+        case ControlId::Komorebi:
+            // Its own small panel: the control center with only its
+            // buttons (clicked again: closed).
+            HideGearBubble();
+            if (!m_control.SetOnly(ControlPanel::Only::Komorebi) ||
+                !m_control.IsOpen()) {
+                TogglePanel(m_control, IslandItem::QuickAction, key);
+            }
             break;
         case ControlId::Network:
         case ControlId::Bluetooth:
@@ -47658,18 +48736,18 @@ void Island::UpdateDrivesWatch() {
 }
 
 void Island::ListDrives(DWORD arrived) {
-    std::erase_if(m_driveThreads, [](HANDLE thread) {
-        if (WaitForSingleObject(thread, 0) == WAIT_OBJECT_0) {
-            CloseHandle(thread);
-            return true;
+    if (m_driveThread) {
+        if (WaitForSingleObject(m_driveThread, 0) != WAIT_OBJECT_0) {
+            m_drivesAgain = true;
+            m_drivesArrived |= arrived;
+            return;
         }
-        return false;
-    });
-    auto* job = new DriveJob{m_hwnd, arrived};
-    if (HANDLE thread =
-            CreateThread(nullptr, 0, DrivesThreadProc, job, 0, nullptr)) {
-        m_driveThreads.push_back(thread);
-    } else {
+        CloseHandle(m_driveThread);
+        m_driveThread = nullptr;
+    }
+    auto* job = new DriveJob{m_hwnd, arrived, ++m_drivesId};
+    m_driveThread = CreateThread(nullptr, 0, DrivesThreadProc, job, 0, nullptr);
+    if (!m_driveThread) {
         delete job;
     }
 }
@@ -48936,6 +50014,43 @@ void Island::OnNotificationsSeen() {
     }
 }
 
+// The newest notification the island has taken (by its ID in the database,
+// for each user), so the ones that come while it isn't running are found
+// when it starts (see CatchUpToasts).
+void NoteToastsSeen(const std::vector<IslandToast>& toasts) {
+    long long newest = 0;
+    for (const auto& toast : toasts) {
+        newest = std::max(newest, toast.id);
+    }
+    if (newest > GetUserIntValue(L"notificationsSeenId", 0)) {
+        SetUserIntValue(L"notificationsSeenId", (int)newest);
+    }
+}
+
+// The notifications that came while the island wasn't running (the computer
+// off, the island turned off or starting again) and are still in Windows'
+// list: their apps show on every island with the red dot, like new ones,
+// without a banner or a sound. Once, as it starts (main island).
+void Island::CatchUpToasts() {
+    const long long seen = GetUserIntValue(L"notificationsSeenId", 0);
+    long long newest = seen;
+    const std::vector<IslandToast> toasts =
+        m_notifications.MissedToasts(seen, &newest);
+    if (newest > seen) {
+        SetUserIntValue(L"notificationsSeenId", (int)newest);
+    }
+    if (toasts.empty()) {
+        return;
+    }
+    Wh_Log(L"%zu apps with notifications from while the island wasn't running",
+           toasts.size());
+    ForEachIsland([&](Island& island) {
+        for (const auto& toast : toasts) {
+            island.AddUnread(toast);
+        }
+    });
+}
+
 // The counts read again (for the apps on the island only), drawn again if
 // they changed.
 void Island::UpdateAppCounts() {
@@ -49857,9 +50972,13 @@ void Island::WatchTrayAppWindows(const TrayIcon& icon) {
                 m_position.y + (LONG)(m_pill.bottom + kPanelGap * m_scale)};
         }
     }
-    if (m_trayAppAnchor.x < 0) {
+    // (Not without the app's process: the hooks would see every app's
+    // windows.)
+    if (m_trayAppAnchor.x < 0 || !icon.processId) {
+        m_trayAppAnchor = {-1, -1};
         return;
     }
+    m_trayAppProcess = icon.processId;
     // Shown or brought to the front within a moment.
     m_trayAppHooks[0] = SetWinEventHook(
         EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, nullptr, TrayAppWinEventProc,
@@ -49883,8 +51002,11 @@ void Island::StopWatchingTrayAppWindows() {
 }
 
 void Island::OnTrayAppWindow(HWND hWnd) {
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hWnd, &processId);
     if (GetAncestor(hWnd, GA_ROOT) != hWnd || !IsWindowVisible(hWnd) ||
-        IsZoomed(hWnd) || m_trayAppAnchor.x < 0) {
+        IsZoomed(hWnd) || m_trayAppAnchor.x < 0 ||
+        processId != m_trayAppProcess) {
         return;
     }
     RECT rect;
@@ -51204,26 +52326,17 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
                 }
                 FollowWindowsMode();
                 // Windows' transparency effects (the frosted glass needs
-                // them) may have been switched. Turned off by the user while
-                // the glass is on: the glass goes off with them (or the next
-                // start would turn them on again), and they're left as the
-                // user chose (not turned off again when the mod is).
-                const bool hadTransparency = m_transparency;
-                m_transparency = TransparencyEffectsOn();
-                if (m_main && hadTransparency && !m_transparency &&
-                    g_settings.islandFrosted && !SettingsLocked()) {
-                    SetIslandPref(IslandPref::Frosted, 0);
-                } else if (m_main && !m_transparency &&
-                           Wh_GetIntValue(L"turnedTransparencyOn", 0)) {
-                    Wh_SetIntValue(L"turnedTransparencyOn", 0);
-                }
+                // them) may have been switched.
+                g_transparencyEffects = TransparencyEffectsOn();
                 Render(true);
             }
             break;
         case WM_APP_INPUT_METHOD:
             // The thread's answer (it's ending): asked again if something
             // changed meanwhile.
-            if (m_main && (lParam & kInputMethodAsked) && m_inputMethodThread) {
+            if (m_main && (lParam & kInputMethodAsked) && m_inputMethodThread &&
+                (((UINT)lParam >> kInputMethodIdShift) & kInputMethodIdMask) ==
+                    (m_inputMethodId & kInputMethodIdMask)) {
                 WaitForSingleObject(m_inputMethodThread, INFINITE);
                 CloseHandle(m_inputMethodThread);
                 m_inputMethodThread = nullptr;
@@ -51233,12 +52346,30 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
                 }
             }
             if (g_settings.islandInputMethod) {
-                OnInputMethod(wParam, lParam & ~kInputMethodAsked);
+                OnInputMethod(wParam, lParam & 0xFFFF);
             }
             return 0;
         case WM_APP_PRIVACY:
             OnPrivacy();
             return 0;
+        case WM_APP_WALLPAPER_LIST: {
+            std::unique_ptr<WallpaperListJob> job((WallpaperListJob*)lParam);
+            if (m_wallpaperListThread) {
+                WaitForSingleObject(m_wallpaperListThread, INFINITE);
+                CloseHandle(m_wallpaperListThread);
+                m_wallpaperListThread = nullptr;
+            }
+            // No pictures there (or no folder chosen yet): its panel, to
+            // choose one.
+            if (job->paths.empty()) {
+                TogglePanel(m_wallpaperPanel, IslandItem::Wallpaper);
+                return 0;
+            }
+            m_wallpapers = std::move(job->paths);
+            m_wallpaperIndex = -1;
+            StepWallpaper(job->step);
+            return 0;
+        }
         case WM_APP_WALLPAPER_DONE:
             if (m_wallpaperThread) {
                 WaitForSingleObject(m_wallpaperThread, INFINITE);
@@ -51273,6 +52404,19 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             return 0;
         }
         case WM_APP_DRIVES: {
+            // The listing's end: the one asked meanwhile runs now.
+            if (m_main && wParam == kDrivesListed && m_driveThread &&
+                (UINT)lParam == m_drivesId) {
+                WaitForSingleObject(m_driveThread, INFINITE);
+                CloseHandle(m_driveThread);
+                m_driveThread = nullptr;
+                if (m_drivesAgain && UsbDrivesWatched()) {
+                    const DWORD arrived = m_drivesArrived;
+                    m_drivesAgain = false;
+                    m_drivesArrived = 0;
+                    ListDrives(arrived);
+                }
+            }
             AcquireSRWLockShared(&g_drivesLock);
             std::vector<RemovableDrive> drives = g_drives;
             ReleaseSRWLockShared(&g_drivesLock);
@@ -51329,7 +52473,7 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             }
             if (wParam == kWeatherRetryTimerId) {
                 KillTimer(m_hwnd, kWeatherRetryTimerId);
-                if (WeatherWanted()) {
+                if (AnyWeatherWanted()) {
                     StartWeather({});
                 }
                 return 0;
@@ -51919,6 +53063,36 @@ bool PumpMessages() {
     return true;
 }
 
+// The islands' and their panels' window classes, registered once for all of
+// them by the island's thread (and unregistered after the last one is gone).
+bool RegisterIslandClasses() {
+    WNDCLASS windowClass{};
+    windowClass.hInstance = g_module;
+    windowClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    windowClass.lpfnWndProc = IslandWndProc;
+    windowClass.lpszClassName = kIslandClassName;
+    // Double clicks are passed on to the tray icons.
+    windowClass.style = CS_DBLCLKS;
+    if (!RegisterClass(&windowClass)) {
+        Wh_Log(L"RegisterClass failed: %u", GetLastError());
+        return false;
+    }
+    windowClass.style = 0;
+    windowClass.lpfnWndProc = PanelWndProc;
+    windowClass.lpszClassName = kPanelClassName;
+    if (!RegisterClass(&windowClass)) {
+        Wh_Log(L"RegisterClass failed: %u", GetLastError());
+        UnregisterClass(kIslandClassName, g_module);
+        return false;
+    }
+    return true;
+}
+
+void UnregisterIslandClasses() {
+    UnregisterClass(kIslandClassName, g_module);
+    UnregisterClass(kPanelClassName, g_module);
+}
+
 DWORD WINAPI IslandThreadProc(LPVOID parameter) {
     MSG msg;
     PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
@@ -51928,7 +53102,8 @@ DWORD WINAPI IslandThreadProc(LPVOID parameter) {
     const HRESULT comResult =
         CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-    {
+    const bool classes = RegisterIslandClasses();
+    if (classes) {
         FrameTimer frames;
         // The main island, then (if chosen) one on each other monitor.
         std::vector<std::unique_ptr<Island>> islands;
@@ -51999,6 +53174,10 @@ DWORD WINAPI IslandThreadProc(LPVOID parameter) {
                     }
                 }
             }
+            {
+                IslandScope scope(&main);
+                main.CatchUpToasts();
+            }
             ForEachIsland([](Island& island) { island.Tick(); });
             // While one is animating, a frame per display refresh (or fewer,
             // see WaitForAnimationFrame); otherwise, only when there's
@@ -52037,6 +53216,7 @@ DWORD WINAPI IslandThreadProc(LPVOID parameter) {
         main.Destroy();
         g_islands.clear();
         g_island = nullptr;
+        UnregisterIslandClasses();
     }
 
     if (SUCCEEDED(comResult)) {
@@ -52098,17 +53278,17 @@ void UpdateAutoHide() {
     }
     if (g_settings.autoHide && !g_unloading) {
         // This process looks after it now (see WhTool_ModUninit).
-        Wh_SetIntValue(L"explorerPartPid", (int)GetCurrentProcessId());
+        SetUserIntValue(L"explorerPartPid", (int)GetCurrentProcessId());
         APPBARDATA data{sizeof(data)};
         if (!(SHAppBarMessage(ABM_GETSTATE, &data) & ABS_AUTOHIDE)) {
             SetAutoHide(true);
             g_turnedAutoHideOn = true;
-            Wh_SetIntValue(L"turnedAutoHideOn", 1);
+            SetUserIntValue(L"turnedAutoHideOn", 1);
         }
     } else if (g_turnedAutoHideOn) {
         SetAutoHide(false);
         g_turnedAutoHideOn = false;
-        Wh_SetIntValue(L"turnedAutoHideOn", 0);
+        SetUserIntValue(L"turnedAutoHideOn", 0);
     }
 }
 
@@ -52284,6 +53464,8 @@ void LoadSettings() {
     g_settings.wallpaperTransition =
         std::clamp(Wh_GetIntValue(L"islandWallpaperTransition", 1), 0,
                    (int)WallpaperTransition::Count - 1);
+    g_settings.komorebiWhkd = Wh_GetIntValue(L"komorebiWhkd", 0) != 0;
+    g_settings.komorebiMasir = Wh_GetIntValue(L"komorebiMasir", 0) != 0;
     g_settings.pillActions = 0;
     for (const auto& action : kPillActions) {
         for (const auto& info : kIslandPrefs) {
@@ -52377,7 +53559,7 @@ BOOL ExplorerModInit() {
 
     LoadSettings();
     // Turned on by the mod before Explorer last stopped (maybe a crash).
-    g_turnedAutoHideOn = Wh_GetIntValue(L"turnedAutoHideOn", 0) != 0;
+    g_turnedAutoHideOn = GetUserIntValue(L"turnedAutoHideOn", 0) != 0;
 
     if (!HookTaskbarDllSymbols()) {
         return FALSE;
@@ -52411,12 +53593,14 @@ void ExplorerModBeforeUninit() {
     StopAttentionThread();
     ApplySettings();
     UnsubclassTaskbars();
+    // (One may have started in the subclass meanwhile.)
+    StopWatchingTaskbarPlace();
     KeepTrayIcons();
     StopWatchingIslandProcess();
     FreeIslandAppIcons();
     UpdateAutoHide();
-    if (Wh_GetIntValue(L"explorerPartPid", 0) == (int)GetCurrentProcessId()) {
-        Wh_SetIntValue(L"explorerPartPid", 0);
+    if (GetUserIntValue(L"explorerPartPid", 0) == (int)GetCurrentProcessId()) {
+        SetUserIntValue(L"explorerPartPid", 0);
     }
 }
 
@@ -52425,6 +53609,8 @@ void ExplorerModBeforeUninit() {
 // of its own, since applying them waits for the taskbar's thread.
 HANDLE g_taskbarPlaceThread;
 HANDLE g_taskbarPlaceStop;
+// (Started on the taskbar's thread, stopped by the unloading one.)
+SRWLOCK g_taskbarPlaceLock = SRWLOCK_INIT;
 
 void ExplorerModSettingsChanged();
 
@@ -52436,7 +53622,7 @@ DWORD WINAPI TaskbarPlaceThreadProc(LPVOID) {
     return 0;
 }
 
-void StopWatchingTaskbarPlace() {
+void StopWatchingTaskbarPlaceLocked() {
     if (g_taskbarPlaceThread) {
         SetEvent(g_taskbarPlaceStop);
         WaitForSingleObject(g_taskbarPlaceThread, INFINITE);
@@ -52449,20 +53635,27 @@ void StopWatchingTaskbarPlace() {
     }
 }
 
-// On the taskbar's thread.
+void StopWatchingTaskbarPlace() {
+    AcquireSRWLockExclusive(&g_taskbarPlaceLock);
+    StopWatchingTaskbarPlaceLocked();
+    ReleaseSRWLockExclusive(&g_taskbarPlaceLock);
+}
+
+// On the taskbar's thread (not once unloading has begun).
 void WatchTaskbarPlace() {
-    if (g_taskbarPlaceThread) {
-        if (WaitForSingleObject(g_taskbarPlaceThread, 0) != WAIT_OBJECT_0) {
-            return;
+    AcquireSRWLockExclusive(&g_taskbarPlaceLock);
+    if (g_taskbarPlaceThread &&
+        WaitForSingleObject(g_taskbarPlaceThread, 0) == WAIT_OBJECT_0) {
+        StopWatchingTaskbarPlaceLocked();
+    }
+    if (!g_unloading && !g_taskbarPlaceThread) {
+        g_taskbarPlaceStop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+        if (g_taskbarPlaceStop) {
+            g_taskbarPlaceThread = CreateThread(
+                nullptr, 0, TaskbarPlaceThreadProc, nullptr, 0, nullptr);
         }
-        StopWatchingTaskbarPlace();
     }
-    g_taskbarPlaceStop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-    if (!g_taskbarPlaceStop) {
-        return;
-    }
-    g_taskbarPlaceThread = CreateThread(nullptr, 0, TaskbarPlaceThreadProc,
-                                        nullptr, 0, nullptr);
+    ReleaseSRWLockExclusive(&g_taskbarPlaceLock);
 }
 
 // Windhawk's settings change and the taskbar moving to another edge (see
@@ -52514,7 +53707,8 @@ BOOL WhTool_ModInit() {
         g_mtaUsage = nullptr;
     }
     LoadSettings();
-    g_turnedDndOn = Wh_GetIntValue(L"turnedDndOn", 0) != 0;
+    g_turnedDndOn = GetUserIntValue(L"turnedDndOn", 0) != 0;
+    RestoreLeftoverDnd();
     StartToastWatch();
     StartIslandThread();
     return TRUE;
@@ -52529,17 +53723,8 @@ void WhTool_ModUninit() {
     AcquireSRWLockExclusive(&g_islandLifeLock);
     StopIslandThread();
     ReleaseSRWLockExclusive(&g_islandLifeLock);
+    RestoreMicrophonesNow();
     StopToastWatch();
-    // Windows' transparency effects turned on for the frosted glass go back
-    // off (see Island::UpdateTransparencyEffects).
-    if (Wh_GetIntValue(L"turnedTransparencyOn", 0)) {
-        if (TransparencyEffectsOn()) {
-            SetTransparencyEffects(false);
-            // (Busy windows get less time: the mod is unloading.)
-            DarkModeThreadProc((LPVOID)(UINT_PTR)100);
-        }
-        Wh_SetIntValue(L"turnedTransparencyOn", 0);
-    }
     // Auto-hide turned on by the explorer.exe part is turned back off by
     // that part when it unloads; from here too, but only when no explorer.exe
     // part looks after it now (Explorer was restarted without the mod). Not
@@ -52549,10 +53734,10 @@ void WhTool_ModUninit() {
     if (HWND tray = FindWindow(L"Shell_TrayWnd", nullptr)) {
         GetWindowThreadProcessId(tray, &trayProcessId);
     }
-    if (Wh_GetIntValue(L"turnedAutoHideOn", 0) && trayProcessId &&
-        (DWORD)Wh_GetIntValue(L"explorerPartPid", 0) != trayProcessId) {
+    if (GetUserIntValue(L"turnedAutoHideOn", 0) && trayProcessId &&
+        (DWORD)GetUserIntValue(L"explorerPartPid", 0) != trayProcessId) {
         SetAutoHide(false);
-        Wh_SetIntValue(L"turnedAutoHideOn", 0);
+        SetUserIntValue(L"turnedAutoHideOn", 0);
     }
     winrt::clear_factory_cache();
     using CoDecrementMTAUsage_t = HRESULT(WINAPI*)(CO_MTA_USAGE_COOKIE);
@@ -52579,6 +53764,10 @@ void WhTool_ModSettingsChanged() {
     } else {
         StopIslandThread();
         LoadSettings();
+        // (The island turned off: the microphones it muted come back.)
+        if (!g_settings.showIsland) {
+            RestoreMicrophonesNow();
+        }
         StartIslandThread();
     }
     ReleaseSRWLockExclusive(&g_islandLifeLock);
