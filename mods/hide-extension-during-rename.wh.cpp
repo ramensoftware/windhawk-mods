@@ -11,9 +11,8 @@
 
 // ==WindhawkModReadme==
 /*
-Ever wanted to get rid of a file extension when trying to save a file on your computer or rename something on your PC while keeping the file type intact?
-well your days of suffering are over because I give you the solution ma dudes and dudettes.
-This mod hides file extensions during inline file renaming in File Explorer, Desktop and "Save As" operations.
+Ever wanted to get rid of a file extension when trying to save a file on your computer or rename something on your PC while keeping the file type intact?.
+This mod dynamically hides file extensions during inline file renaming in File Explorer, Desktop and "Save As" operations and restores it when you're done renaming.
 
 ### Key Features
 * **Save As Dialogs:**      Automatically hides file extensions from the default filename text box when saving files.
@@ -25,6 +24,10 @@ This mod hides file extensions during inline file renaming in File Explorer, Des
 1. This mod targets native Windows File Explorer, Desktop, and standard file dialogs. It does not handle inline renaming inside third-party apps (e.g., WinRAR, 7-Zip).
 2. If you want to change a file's extension, you can do so inside the file's properties.
 3. If you type a dot at the end of a file name followed by any Windows registered extension (e.g., changing `document.txt` to `document.pdf`), it will trigger the Windows extension change warning prompt, however non-registered extensions won't change the file type.
+
+### Known Limitations
+* **Folders Ending in Registered Extensions:** Folders whose names explicitly end in a registered file extension (e.g., a folder named `Backup.zip` or `github.com`) will have its trailing extension hidden during inline renaming.
+  * **Why this happens:** Windows reuses the exact same generic Win32 `Edit` control for both files and directories (folders). When an inline rename is triggered, the mod interacts with `SetWindowTextW` and receives only a window handle and a string. There is no native API or context provided by the shell at that moment to distinguish whether the text box belongs to a file or a folder. While the full folder name is safely preserved and restored upon commit, inline editing will temporarily treat the extension-like suffix as hidable.
 
 ![Mod Demo](https://i.imgur.com/iy9dyzq.gif)
 */
@@ -47,6 +50,10 @@ struct HiddenExt {
 
 std::mutex g_editsMutex;
 std::unordered_map<HWND, HiddenExt> g_hiddenExt;
+
+// Declare hook variables at the top so they are visible everywhere
+using SetWindowTextW_t = decltype(&SetWindowTextW);
+SetWindowTextW_t SetWindowTextW_Original = nullptr;
 
 // Verify if an extension is a registered file type in the system registry
 bool IsRegisteredExtension(LPCWSTR ext) {
@@ -76,13 +83,10 @@ bool ShouldAppendExt(const std::wstring& text, const HiddenExt& h) {
         return false; // Already ends with the hidden extension
     }
 
-    // If the user typed a dotted suffix (like v1.2 or .1) that is NOT a registered file type,
-    // treat it as part of the filename and STILL append the hidden extension without warnings.
     if (*typedExt && !IsRegisteredExtension(typedExt)) {
         return true; 
     }
 
-    // Otherwise, append unless the user explicitly typed their own registered extension
     return !*typedExt || _wcsicmp(typedExt, h.shownDotExt.c_str()) == 0;
 }
 
@@ -249,9 +253,6 @@ bool IsRenameEditControl(HWND hWnd) {
 }
 
 // SetWindowTextW Hook
-using SetWindowTextW_t = decltype(&SetWindowTextW);
-SetWindowTextW_t SetWindowTextW_Original = nullptr;
-
 BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
     if (lpString && (IsSaveDialogEditControl(hWnd) || IsRenameEditControl(hWnd))) {
         PCWSTR ext = PathFindExtensionW(lpString);
@@ -261,6 +262,7 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
                 std::lock_guard<std::mutex> lock(g_editsMutex);
                 auto it = g_hiddenExt.find(hWnd);
                 if (it != g_hiddenExt.end()) {
+                    // Keep the entry so Wh_ModUninit still removes the subclass.
                     it->second = {}; 
                 }
             }
@@ -277,15 +279,24 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
         h.ext = extension;
         h.shownDotExt = baseExt;
 
+        bool isNew = false;
         {
             std::lock_guard<std::mutex> lock(g_editsMutex);
-            g_hiddenExt[hWnd] = h;
+            auto [it, inserted] = g_hiddenExt.insert_or_assign(hWnd, h);
+            isNew = inserted;
         }
 
         if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, RenameEditSubclassProc, 0)) {
             {
                 std::lock_guard<std::mutex> lock(g_editsMutex);
-                g_hiddenExt.erase(hWnd);
+                auto it = g_hiddenExt.find(hWnd);
+                if (it != g_hiddenExt.end()) {
+                    if (isNew) {
+                        g_hiddenExt.erase(it);
+                    } else {
+                        it->second = {};
+                    }
+                }
             }
             return SetWindowTextW_Original(hWnd, lpString);
         }
