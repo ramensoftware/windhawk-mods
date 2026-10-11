@@ -2,7 +2,7 @@
 // @id              start-button-control
 // @name            Windows 11 Start Button Launcher
 // @description     Built-in icons, custom Start launcher and position among app icons
-// @version         1.3.1
+// @version         1.3.2
 // @author          Stheno
 // @github          https://github.com/sth3no
 // @license         GPL-3.0
@@ -63,6 +63,8 @@ The custom launch action applies to pointer clicks; it does not remap the Window
 Designed for the native Windows 11 x64 taskbar. Local release testing uses Windows
 11 25H2, build 26200.9457, Windhawk 1.7.3, and Taskbar Styler 1.10 with FrostyGlass.
 Other Windows builds and themes have not been exhaustively tested.
+ARM64 taskbar offsets are decoded using the upstream instruction pattern; ARM64
+hardware has not been tested locally.
 
 Taskbar Styler can continue to control backgrounds, corners and taskbar dimensions.
 Normal mode leaves Start visibility and margins alone. A Styler rule that hides
@@ -75,9 +77,29 @@ Do not combine position modes with another Start-position mod. The middle positi
 is a slot based on app count, not exact screen center with variable-width labels.
 Start itself cannot be dragged like a pinned app. Position selection applies only
 in Normal mode. The overlay does not implement a replacement right-click menu.
+Moving the button does not move the native Start menu popup.
+
+Use only one mod to replace the Start icon or intercept its click. In particular,
+disable this mod's icon replacement when using Start Button Replacer or a native
+Start icon colorizer. Use only one mod to block the Windows key / Ctrl+Esc.
 
 This mod does not add glass styling; configure that in
 [Windows 11 Taskbar Styler](https://windhawk.net/mods/windows-11-taskbar-styler).
+
+## Relationship to other mods
+
+This mod combines a custom click launcher, eight bundled vector icons and an
+adjustable slot among app buttons. These are its main additions.
+
+For a single existing feature, consider
+[Hide Start Button](https://windhawk.net/mods/hide-start-button),
+[Start button always on the left](https://windhawk.net/mods/taskbar-start-button-position),
+[Start Button Replacer](https://windhawk.net/mods/start-button-replacer),
+[Start button colorizer](https://windhawk.net/mods/taskbar-start-button-colorizer), or
+[Disable Windows Shortcuts](https://windhawk.net/mods/disable-windows-shortcuts).
+The optional Hide/Left modes, custom PNG and Start-blocking option overlap with
+these focused mods. They are off by default. Built-in icon color changes this mod's
+vector artwork, rather than recoloring the original Windows glyph.
 
 ## Credits
 
@@ -219,6 +241,11 @@ HHOOK g_lowLevelKeyboardHook;
 struct WindowsKeyState { bool down = false; bool injected = false; };
 WindowsKeyState g_windowsKeys[2];
 bool g_blockedEscape = false;
+
+HANDLE g_keyboardThread = nullptr;
+HANDLE g_keyboardReadyEvent = nullptr;
+HANDLE g_keyboardStopEvent = nullptr;
+std::atomic<bool> g_keyboardInitialized = false;
 
 void* g_ctaskBandTaskListWndSiteVftable;
 void* g_csecondaryTaskBandTaskListWndSiteVftable;
@@ -648,10 +675,13 @@ void ApplyLauncher(FrameworkElement startButton, ButtonState& state) {
         Automation::AutomationProperties::SetName(button, L"Open custom launcher");
         state.clickToken = button.Click([](auto const&, RoutedEventArgs const&) {
             if (g_unloading || g_launchTarget.empty()) return;
-            auto result = ShellExecuteW(nullptr, L"open", g_launchTarget.c_str(),
-                g_launchArguments.empty() ? nullptr : g_launchArguments.c_str(), nullptr, SW_SHOWNORMAL);
-            if (reinterpret_cast<INT_PTR>(result) <= 32)
-                Wh_Log(L"Launcher failed: %lld", static_cast<long long>(reinterpret_cast<INT_PTR>(result)));
+            SHELLEXECUTEINFOW info{sizeof(info)};
+            info.fMask = SEE_MASK_ASYNCOK;
+            info.lpVerb = L"open";
+            info.lpFile = g_launchTarget.c_str();
+            info.lpParameters = g_launchArguments.empty() ? nullptr : g_launchArguments.c_str();
+            info.nShow = SW_SHOWNORMAL;
+            if (!ShellExecuteExW(&info)) Wh_Log(L"Launcher failed: %lu", GetLastError());
         });
         overlay = button;
     } else if (icon) {
@@ -725,32 +755,48 @@ bool ApplyModeToTaskbarXamlRoot(XamlRoot xamlRoot) {
     return true;
 }
 
-XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
-    if (!taskbarHostSharedPtr[0]) {
-        if (taskbarHostSharedPtr[1]) g_refCountBaseDecref(taskbarHostSharedPtr[1]);
-        return nullptr;
-    }
-
-    size_t taskbarElementIUnknownOffset = 0x48;
-
+bool TryGetTaskbarElementOffset(size_t& offset) {
+    if (!g_taskbarHostFrameHeight) return false;
 #if defined(_M_X64)
     {
         const BYTE* bytes = static_cast<const BYTE*>(g_taskbarHostFrameHeight);
         if (bytes[0] == 0x48 && bytes[1] == 0x83 && bytes[2] == 0xEC &&
             bytes[4] == 0x48 && bytes[5] == 0x83 && bytes[6] == 0xC1 &&
             bytes[7] <= 0x7F) {
-            taskbarElementIUnknownOffset = bytes[7];
+            offset = bytes[7];
         } else {
-            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
-            if (taskbarHostSharedPtr[1]) g_refCountBaseDecref(taskbarHostSharedPtr[1]);
-            return nullptr;
+            return false;
         }
     }
 #elif defined(_M_ARM64)
-    // Use the offset that the reference mod uses by default.
+    {
+        // Match the reference mod's ARM64 prologue: pacibsp, stp, mov, ldr.
+        const DWORD* p = static_cast<const DWORD*>(g_taskbarHostFrameHeight);
+        if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+            p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+            offset = (p[3] >> 12) & 0xFF;
+        } else {
+            return false;
+        }
+    }
 #else
 #error "Unsupported architecture"
 #endif
+    return true;
+}
+
+XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
+    if (!taskbarHostSharedPtr[0]) {
+        if (taskbarHostSharedPtr[1]) g_refCountBaseDecref(taskbarHostSharedPtr[1]);
+        return nullptr;
+    }
+
+    size_t taskbarElementIUnknownOffset = 0;
+    if (!TryGetTaskbarElementOffset(taskbarElementIUnknownOffset)) {
+        Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        if (taskbarHostSharedPtr[1]) g_refCountBaseDecref(taskbarHostSharedPtr[1]);
+        return nullptr;
+    }
 
     auto* taskbarElementIUnknown = *reinterpret_cast<IUnknown**>(
         static_cast<BYTE*>(taskbarHostSharedPtr[0]) +
@@ -980,10 +1026,6 @@ void Uninit() {
     }
 }
 
-void SettingsChanged() {
-    HideStartMenu();
-}
-
 HRESULT WINAPI RoGetActivationFactory_Hook(HSTRING activatableClassId,
                                            REFIID iid,
                                            void** factory) {
@@ -1085,17 +1127,7 @@ void RemoveTaskbarSubclasses() {
     g_subclassedTaskbars.clear(); g_pendingUpdates.clear();
 }
 
-bool InstallWindowsKeyHook();
-void UninstallWindowsKeyHook();
-
 void ApplySettingsToTaskbars() {
-    // A low-level keyboard hook needs the installing thread's message loop.
-    // Windhawk's initialization thread is not the taskbar UI thread.
-    HWND primary = FindCurrentProcessTaskbarWnd();
-    if (primary) RunFromWindowThread(primary, [](void*) {
-        if (g_unloading) UninstallWindowsKeyHook();
-        else if (!InstallWindowsKeyHook()) Wh_Log(L"Cannot install optional Windows-key hook");
-    }, nullptr);
     std::vector<DWORD> threads;
     EnumWindows([](HWND window, LPARAM param) -> BOOL {
         DWORD pid = 0;
@@ -1243,6 +1275,70 @@ void UninstallWindowsKeyHook() {
         g_windowsKeys[i] = {};
     }
     g_blockedEscape = false;
+}
+
+DWORD WINAPI WindowsKeyThreadProc(void*) {
+    MSG message{};
+    // Create the queue before announcing readiness. The stop event also works
+    // before any messages arrive, so unload never depends on a PostThreadMessage race.
+    PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
+    const bool installed = InstallWindowsKeyHook();
+    g_keyboardInitialized.store(installed);
+    SetEvent(g_keyboardReadyEvent);
+    if (installed) {
+        while (WaitForSingleObject(g_keyboardStopEvent, 0) == WAIT_TIMEOUT) {
+            DWORD result = MsgWaitForMultipleObjects(1, &g_keyboardStopEvent,
+                FALSE, INFINITE, QS_ALLINPUT);
+            if (result != WAIT_OBJECT_0 + 1) break;
+            while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+                if (message.message == WM_QUIT) {
+                    SetEvent(g_keyboardStopEvent);
+                    break;
+                }
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
+                if (WaitForSingleObject(g_keyboardStopEvent, 0) != WAIT_TIMEOUT) break;
+            }
+        }
+    }
+    UninstallWindowsKeyHook();
+    return installed ? 0 : 1;
+}
+
+void StopWindowsKeyThread() {
+    if (g_keyboardThread) {
+        SetEvent(g_keyboardStopEvent);
+        WaitForSingleObject(g_keyboardThread, INFINITE);
+        CloseHandle(g_keyboardThread);
+        g_keyboardThread = nullptr;
+    }
+    if (g_keyboardReadyEvent) CloseHandle(g_keyboardReadyEvent);
+    if (g_keyboardStopEvent) CloseHandle(g_keyboardStopEvent);
+    g_keyboardReadyEvent = g_keyboardStopEvent = nullptr;
+    g_keyboardInitialized = false;
+}
+
+bool StartWindowsKeyThread() {
+    if (!IsWindowsKeyStartMenuDisabled()) return true;
+    if (g_keyboardThread) return true;
+    g_keyboardReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_keyboardStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_keyboardReadyEvent || !g_keyboardStopEvent) {
+        StopWindowsKeyThread();
+        return false;
+    }
+    g_keyboardThread = CreateThread(nullptr, 0, WindowsKeyThreadProc, nullptr, 0, nullptr);
+    if (!g_keyboardThread) {
+        StopWindowsKeyThread();
+        return false;
+    }
+    HANDLE handles[]{g_keyboardReadyEvent, g_keyboardThread};
+    if (WaitForMultipleObjects(ARRAYSIZE(handles), handles, FALSE, INFINITE) != WAIT_OBJECT_0 ||
+        !g_keyboardInitialized.load()) {
+        StopWindowsKeyThread();
+        return false;
+    }
+    return true;
 }
 
 void BuildStartOrderPlan() {
@@ -1532,6 +1628,7 @@ BOOL Wh_ModInit() {
     }
 
     if (g_target == Target::StartMenuExperienceHost) {
+        if (!IsWindowsKeyStartMenuDisabled()) return FALSE;
         HMODULE winrtModule =
             GetModuleHandle(L"api-ms-win-core-winrt-l1-1-0.dll");
         if (!winrtModule) {
@@ -1553,21 +1650,18 @@ BOOL Wh_ModInit() {
     }
 
     if (!HookTaskbarDllSymbols()) {
-        UninstallWindowsKeyHook();
         return FALSE;
     }
 
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
         g_taskbarViewDllLoaded = true;
         if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
-            UninstallWindowsKeyHook();
             return FALSE;
         }
     } else {
         HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
         if (!kernelBaseModule) {
             Wh_Log(L"Failed to get kernelbase.dll");
-            UninstallWindowsKeyHook();
             return FALSE;
         }
 
@@ -1575,7 +1669,6 @@ BOOL Wh_ModInit() {
             GetProcAddress(kernelBaseModule, "LoadLibraryExW"));
         if (!loadLibraryExW) {
             Wh_Log(L"Failed to resolve LoadLibraryExW");
-            UninstallWindowsKeyHook();
             return FALSE;
         }
 
@@ -1583,6 +1676,10 @@ BOOL Wh_ModInit() {
                                        &g_loadLibraryExWOriginal);
     }
 
+    if (!StartWindowsKeyThread()) {
+        Wh_Log(L"Cannot start optional Windows-key hook thread");
+        return FALSE;
+    }
     return TRUE;
 }
 
@@ -1621,6 +1718,10 @@ void Wh_ModBeforeUninit() {
 
     g_unloading.store(true, std::memory_order_relaxed);
     ApplySettingsToTaskbars();
+}
+
+void Wh_ModUninit() {
+    StopWindowsKeyThread();
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
