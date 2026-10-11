@@ -27,6 +27,10 @@ Changes the Windows 11 notification-area overflow popup into a vertical list.
 
 The implementation targets Windows 11 Explorer and uses undocumented
 SystemTray/XAML implementation details.
+
+## Screenshots
+
+See [my Twitter post](https://x.com/zty012x/status/2109292804828753993)
 */
 // ==/WindhawkModReadme==
 
