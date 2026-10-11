@@ -492,6 +492,11 @@ static std::mutex g_profilePhotoMutex;
 static std::mutex g_profilePhotoPathMutex;
 static std::wstring g_profilePhotoPath;
 static std::vector<BYTE> g_profilePhotoPending;
+// Account display name resolved by the worker (GetUserNameExW may contact a
+// domain controller, so it never runs on the UI thread). Guarded by
+// g_profilePhotoMutex; g_accountNamePendingValid marks a fresh value.
+static std::wstring g_accountNamePending;
+static bool g_accountNamePendingValid = false;
 static ComPtr<IStream> g_profilePhotoStream;
 // Released explicitly by the UI thread before GdiplusShutdown; never at process exit.
 [[clang::no_destroy]] static std::unique_ptr<Gdiplus::Bitmap> g_profilePhoto;
@@ -3147,6 +3152,7 @@ private:
     std::wstring pendingAppName_;
     std::wstring pendingAppPath_;
     std::wstring pendingAppAumid_;
+    std::wstring accountDisplayName_; // cached; resolved off the UI thread
 
     bool visible_ = false;
     bool programmaticResize_ = false;
@@ -3425,7 +3431,15 @@ private:
             }
             case WM_APP_PROFILE_PHOTO_READY: {
                 std::vector<BYTE> bytes;
-                { std::lock_guard<std::mutex> lock(g_profilePhotoMutex); bytes.swap(g_profilePhotoPending); }
+                {
+                    std::lock_guard<std::mutex> lock(g_profilePhotoMutex);
+                    bytes.swap(g_profilePhotoPending);
+                    if (g_accountNamePendingValid) {
+                        accountDisplayName_ = g_accountNamePending;
+                        g_accountNamePendingValid = false;
+                        InvalidateRect(hwnd, nullptr, FALSE);
+                    }
+                }
                 if (!bytes.empty() && bytes.size() <= 32u * 1024u * 1024u) {
                     ComPtr<IStream> stream;
                     stream.Attach(SHCreateMemStream(bytes.data(), static_cast<UINT>(bytes.size())));
@@ -4360,20 +4374,12 @@ private:
             // than substitute the old hand-drawn approximation.
         }
 
-        // User name: privacy mode avoids even reading the real name. Like the
-        // native menu, prefer the display name over the logon name.
-        wchar_t actualUserName[256] = {};
+        // User name: resolved once by ProfilePhotoWorker (a domain lookup must
+        // never run inside WM_PAINT); only the cached string is drawn here.
+        // Privacy mode avoids even reading the real name.
         const wchar_t* userNameToDisplay = Ui(UiText::DefaultUser);
-        if (headerNeedsPaint && !settings_.privacyMode) {
-            ULONG displayLen = ARRAYSIZE(actualUserName);
-            if (GetUserNameExW(NameDisplay, actualUserName, &displayLen) && actualUserName[0]) {
-                userNameToDisplay = actualUserName;
-            } else {
-                DWORD nameLen = ARRAYSIZE(actualUserName);
-                actualUserName[0] = 0;
-                if (GetUserNameW(actualUserName, &nameLen)) userNameToDisplay = actualUserName;
-            }
-        }
+        if (!settings_.privacyMode && !accountDisplayName_.empty())
+            userNameToDisplay = accountDisplayName_.c_str();
 
         RECT rcName = { avX + avSize + metrics_.Scale(12), 0, leftW - metrics_.Scale(8), userH };
         bool drewUserName = false;
@@ -5759,8 +5765,33 @@ static bool InitializeDefaultProfileAvatar() {
     return true;
 }
 
+// Like the native menu, prefer the display name over the logon name.
+static std::wstring ResolveAccountDisplayName() {
+    wchar_t name[256] = {};
+    ULONG displayLen = ARRAYSIZE(name);
+    if (GetUserNameExW(NameDisplay, name, &displayLen) && name[0]) return name;
+    DWORD nameLen = ARRAYSIZE(name);
+    name[0] = 0;
+    if (GetUserNameW(name, &nameLen) && name[0]) return name;
+    return {};
+}
+
 static DWORD WINAPI ProfilePhotoWorker(void*) {
     try {
+    // Account name first: it is cheap locally but may wait for a domain
+    // controller, which is exactly why it runs here and not on the UI thread.
+    if (!g_settings.privacyMode) {
+        std::wstring name = ResolveAccountDisplayName();
+        if (!g_profilePhotoStop.load()) {
+            {
+                std::lock_guard<std::mutex> lock(g_profilePhotoMutex);
+                g_accountNamePending = std::move(name);
+                g_accountNamePendingValid = true;
+            }
+            if (HWND hwnd = g_menuHwnd.load()) PostMessageW(hwnd, WM_APP_PROFILE_PHOTO_READY, 0, 0);
+        }
+    }
+
     std::vector<BYTE> bytes;
     std::wstring explicitPath;
     { std::lock_guard<std::mutex> lock(g_profilePhotoPathMutex); explicitPath = g_profilePhotoPath; }
@@ -5801,7 +5832,7 @@ static void RestartProfilePhotoWorker() {
     }
     g_profilePhoto.reset();
     g_profilePhotoStream.Reset();
-    { std::lock_guard<std::mutex> lock(g_profilePhotoMutex); g_profilePhotoPending.clear(); }
+    { std::lock_guard<std::mutex> lock(g_profilePhotoMutex); g_profilePhotoPending.clear(); g_accountNamePending.clear(); g_accountNamePendingValid = false; }
     g_profilePhotoStop = false;
     g_profilePhotoThread.reset(CreateThread(nullptr, 0, ProfilePhotoWorker, nullptr, 0, nullptr));
     HWND hwnd = g_menuHwnd.load();
@@ -6204,7 +6235,7 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     Wh_Log(L"[UI] teardown: releasing default avatar");
     g_defaultProfileAvatar.reset();
     g_defaultProfileAvatarStream.Reset();
-    { std::lock_guard<std::mutex> lock(g_profilePhotoMutex); g_profilePhotoPending.clear(); }
+    { std::lock_guard<std::mutex> lock(g_profilePhotoMutex); g_profilePhotoPending.clear(); g_accountNamePending.clear(); g_accountNamePendingValid = false; }
     Wh_Log(L"[UI] teardown: GdiplusShutdown");
     if (g_gdiplusToken) { GdiplusShutdown(g_gdiplusToken); g_gdiplusToken=0; }
     Wh_Log(L"[UI] teardown: GDI+ shut down");
