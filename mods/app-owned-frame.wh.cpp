@@ -2,7 +2,7 @@
 // @id              app-owned-frame
 // @name            App Owned Frame
 // @description     Restores DWM clipping for selected custom-frame applications without changing their window styles or resizing.
-// @version         1.43
+// @version         1.44
 // @author          appEW
 // @github          https://github.com/appEW
 // @license         MIT
@@ -44,6 +44,10 @@ buttons, change the client layout or run its own resize loop.
 
 These profiles were tested on the submitter's setup. App updates, Windows
 versions and other frame/DPI mods can affect the result.
+
+The dedicated helper and the in-process application hooks share one mod source.
+Windhawk 1.7.3 is the runtime tested on this setup; Windhawk 2.0 alpha has not
+yet been runtime-tested with this combined configuration.
 
 ## Adding or excluding an application
 
@@ -402,7 +406,7 @@ std::atomic<bool> workerReady{false};
 HANDLE workerThread = nullptr;
 HANDLE inputThread = nullptr;
 std::atomic<DWORD> inputThreadId{0};
-std::array<HWINEVENTHOOK,5> objectHooks{};
+std::array<HWINEVENTHOOK,4> objectHooks{};
 HWINEVENTHOOK foregroundHook = nullptr;
 HWINEVENTHOOK sizingHook = nullptr;
 std::unordered_set<HWND> sizingWindows;
@@ -410,6 +414,13 @@ std::unordered_map<HWND, bool> pendingWindows;
 ULONGLONG pendingDue = 0;
 bool foregroundChanged = false;
 bool sizingChanged = false;
+struct LocationHookState {
+    HWINEVENTHOOK hook;
+    FILETIME created;
+};
+std::unordered_map<DWORD,LocationHookState> locationHooks;
+bool locationHooksDirty = true;
+ULONGLONG locationHooksRetryAfter = 0;
 uintptr_t nextIdentity = 0;
 bool updatingWindow = false;
 bool toolContext = false;
@@ -1568,6 +1579,7 @@ bool CaptureWindow(HWND window,const ProcessInfo& process,BOOL enabled) {
         return false;
     }
     Wh_Log(L"Tracking custom frame hwnd=%p pid=%lu originalNC=%d", window, process.pid, initial.originalNcRendering);
+    locationHooksDirty = true;
     return true;
 }
 // CAPTURE_WINDOW_END
@@ -1582,6 +1594,7 @@ void Apply(HWND window, bool forceBorder = false) {
     if (found != windows.end() && !SameWindow(window, found->second)) {
         ClearResizeTarget(window);
         windows.erase(found);
+        locationHooksDirty = true;
         found = windows.end();
     }
     if (found == windows.end() && PacketValue(window,0) == 1) {
@@ -1595,7 +1608,10 @@ void Apply(HWND window, bool forceBorder = false) {
         found->second.retiring = !process.eligible;
     }
     if (found != windows.end() && found->second.retiring) {
-        if (Restore(window,found->second)) windows.erase(found);
+        if (Restore(window,found->second)) {
+            windows.erase(found);
+            locationHooksDirty = true;
+        }
         return;
     }
     // Iconic and temporarily hidden windows retain their record for rollback.
@@ -1606,7 +1622,10 @@ void Apply(HWND window, bool forceBorder = false) {
     if (!CustomMainWindow(window, FrameGeometry::ResizeGutter) ||
         (found != windows.end() && !CustomMainWindow(window, found->second.process.geometry))) {
         if (found != windows.end()) {
-            if (Restore(window,found->second)) windows.erase(found);
+            if (Restore(window,found->second)) {
+                windows.erase(found);
+                locationHooksDirty = true;
+            }
         }
         return;
     }
@@ -1705,6 +1724,49 @@ void CALLBACK WindowEvent(HWINEVENTHOOK, DWORD event, HWND window, LONG object,
         event == EVENT_SYSTEM_FOREGROUND || event == EVENT_SYSTEM_MOVESIZEEND;
 }
 
+// LOCATION_HOOKS_BEGIN
+void SyncLocationHooks() {
+    const ULONGLONG now = GetTickCount64();
+    if (!locationHooksDirty && now < locationHooksRetryAfter) return;
+    locationHooksDirty = false;
+    bool retry = false;
+    std::unordered_map<DWORD,FILETIME> wanted;
+    for (const auto& [window,state] : windows) {
+        if (!state.process.pid) continue; // Zero would subscribe globally.
+        auto [found,inserted] = wanted.emplace(state.process.pid,state.process.created);
+        if (!inserted && CompareFileTime(&state.process.created,&found->second) > 0)
+            found->second = state.process.created;
+    }
+    // Runs only on the controller's message-pump thread, never in a WinEvent
+    // callback. Two windows in one process share a hook. A reused PID must
+    // retire the old generation before the new process gets a subscription.
+    for (auto it=locationHooks.begin();it!=locationHooks.end();) {
+        const auto current = wanted.find(it->first);
+        if (current == wanted.end() ||
+            CompareFileTime(&current->second,&it->second.created) != 0) {
+            if (UnhookWinEvent(it->second.hook)) it=locationHooks.erase(it);
+            else { retry = true; ++it; }
+        } else ++it;
+    }
+    for (const auto& [pid,created] : wanted) {
+        if (locationHooks.contains(pid)) continue;
+        const HWINEVENTHOOK hook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE,
+            EVENT_OBJECT_LOCATIONCHANGE,nullptr,WindowEvent,pid,0,
+            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+        if (hook) locationHooks.emplace(pid,LocationHookState{hook,created});
+        else retry = true; // Tracked polling remains a safe fallback.
+    }
+    // Failed registrations/removals are retried without spinning on each
+    // unrelated event. A later track/untrack transition bypasses this delay.
+    locationHooksRetryAfter = retry ? now + 1000 : ULLONG_MAX;
+}
+
+void ClearLocationHooks() {
+    for (const auto& [pid,state] : locationHooks) UnhookWinEvent(state.hook);
+    locationHooks.clear();
+}
+// LOCATION_HOOKS_END
+
 void ReconcileEvents() {
     UpdateScope update;
     // Snapshot handles before calling Win32: out-of-context delivery can
@@ -1740,7 +1802,10 @@ void Reconfigure() {
         ProcessInfo process{};
         if (!SameWindow(it->first, it->second) ||
             !InspectProcess(it->second.process.pid, &process) || !process.eligible) {
-            if (Restore(it->first,it->second)) it=windows.erase(it);
+            if (Restore(it->first,it->second)) {
+                it=windows.erase(it);
+                locationHooksDirty = true;
+            }
             else ++it;
         } else {
             if (!process.removeBackdrop && it->second.backdropChanged && it->second.backdropReadable) {
@@ -1759,8 +1824,9 @@ void Reconfigure() {
 
 // CONTROLLER_WAIT_BEGIN
 DWORD ControllerWait(ULONGLONG now, ULONGLONG discovery, ULONGLONG poll,
-                     ULONGLONG pending, bool tracked, bool queued) {
-    ULONGLONG next = discovery;
+                     ULONGLONG pending, bool tracked, bool queued,
+                     ULONGLONG hookRetry = ULLONG_MAX) {
+    ULONGLONG next = std::min(discovery,hookRetry);
     if (tracked) next = std::min(next,poll);
     if (queued) next = std::min(next,pending);
     return next <= now ? 0 : static_cast<DWORD>(std::min<ULONGLONG>(next-now,15000));
@@ -1791,8 +1857,8 @@ DWORD WINAPI Worker(void*) {
     // queries in the controller must never hold up the global LL callback.
     inputThread = CreateThread(nullptr, 0, InputWorker, nullptr, 0, nullptr);
     if (!inputThread) Wh_Log(L"Input thread creation failed: %lu", GetLastError());
-    constexpr std::array<DWORD,5> events{EVENT_OBJECT_CREATE,EVENT_OBJECT_DESTROY,
-        EVENT_OBJECT_SHOW,EVENT_OBJECT_HIDE,EVENT_OBJECT_LOCATIONCHANGE};
+    constexpr std::array<DWORD,4> events{EVENT_OBJECT_CREATE,EVENT_OBJECT_DESTROY,
+        EVENT_OBJECT_SHOW,EVENT_OBJECT_HIDE};
     for (size_t i=0;i<events.size();++i)
         objectHooks[i] = SetWinEventHook(events[i],events[i],nullptr,WindowEvent,
             0,0,WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
@@ -1816,11 +1882,12 @@ DWORD WINAPI Worker(void*) {
     workerReady = true;
     SetEvent(readyEvent);
     EnumWindows(Enumerate, 0);
+    SyncLocationHooks();
     ULONGLONG nextDiscovery = GetTickCount64() + 15000;
     ULONGLONG nextPoll = GetTickCount64() + 1000;
     while (!stopping) {
         const DWORD timeout = ControllerWait(GetTickCount64(),nextDiscovery,nextPoll,
-            pendingDue,!windows.empty(),!pendingWindows.empty());
+            pendingDue,!windows.empty(),!pendingWindows.empty(),locationHooksRetryAfter);
         const DWORD wait = MsgWaitForMultipleObjects(1,&stopEvent,FALSE,timeout,QS_ALLINPUT);
         if (wait == WAIT_OBJECT_0 || wait == WAIT_FAILED) break;
         unsigned drained = 0;
@@ -1856,7 +1923,9 @@ DWORD WINAPI Worker(void*) {
             for (HWND window : tracked) Apply(window);
             nextPoll = now + 1000;
         }
+        SyncLocationHooks();
     }
+    ClearLocationHooks();
     for (HWINEVENTHOOK hook : objectHooks) UnhookWinEvent(hook);
     UnhookWinEvent(foregroundHook);
     UnhookWinEvent(sizingHook);
@@ -1920,6 +1989,8 @@ void WhTool_ModUninit() {
 }
 
 // Official 1.7.3 compatibility implementation, scoped to retain app hooks.
+// Intentional body difference: fail closed if entry-point hooking fails,
+// shutting down the already-started controller before the host can proceed.
 // Global WhTool_* names let Windhawk 2.0 recognize the legacy tool host.
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 namespace ToolHost {
