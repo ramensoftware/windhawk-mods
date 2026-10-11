@@ -819,9 +819,7 @@ std::wstring BuildParameters(std::wstring parameters,
         ReplacePlaceholder(parameters, L"%sel%", formatted);
     }
 
-    if (!ReplacePlaceholder(parameters, L"%path%", context.folderPath)) {
-        return std::wstring();
-    }
+    ReplacePlaceholder(parameters, L"%path%", context.folderPath);
 
     if (parameters.find(L"%p") != std::wstring::npos) {
         std::wstring parent = context.folderPath;
@@ -840,15 +838,7 @@ std::wstring BuildParameters(std::wstring parameters,
             }
         }
 
-        if (!p.empty()) {
-            ReplacePlaceholder(parameters, L"%p", p);
-        } else {
-            size_t pos = parameters.find(L"%p");
-            while (pos != std::wstring::npos) {
-                parameters.replace(pos, 2, L"");
-                pos = parameters.find(L"%p", pos);
-            }
-        }
+        ReplacePlaceholder(parameters, L"%p", p);
     }
 
     return parameters;
@@ -2760,8 +2750,8 @@ void LoadSettings() {
     g_settings.disabledInsteadOfHidden =
         Wh_GetIntSetting(L"disabledInsteadOfHidden") != 0;
     g_settings.openMenuOnHover =
-        Wh_GetIntSetting(L"menuHover[0].openOnHover") != 0;
-    int menuHoverDelay = Wh_GetIntSetting(L"menuHover[1].delay");
+        Wh_GetIntSetting(L"menuHover.openOnHover") != 0;
+    int menuHoverDelay = Wh_GetIntSetting(L"menuHover.delay");
     g_settings.menuHoverDelay = menuHoverDelay >= 0 ? menuHoverDelay : 0;
 
     g_settings.items.clear();
