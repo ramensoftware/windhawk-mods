@@ -9,7 +9,7 @@
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -lshlwapi -lshell32
-// ==/WindhawkMod== 
+// ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
 //
@@ -45,9 +45,9 @@ at all, and the font size and text color can be customized.
 Works with the new XAML thumbnails of Windows 11 (tested on 25H2). It does
 not work with taskbar replacements such as StartAllBack or ExplorerPatcher.
 
-Clicking the line opens a process manager on the program: Process Explorer
-(Sysinternals) with the process already selected, if it's installed, or
-Task Manager otherwise. Task Manager has no way to be opened on a specific
+If enabled in the settings, clicking the line opens a process manager on the
+program: Process Explorer (Sysinternals) with the process already selected, if
+it's installed, or Task Manager otherwise. Task Manager has no way to be opened on a specific
 process, so there you have to find it yourself.
 
 The statistics are collected on a background thread, so the taskbar is never
@@ -101,13 +101,16 @@ slowed down, and only while a thumbnail is actually visible.
 - textCustomColor: "#FFFFFF"
   $name: Custom text color
   $description: Format #RRGGBB, used with "Custom"
-- clickAction: auto
+- clickAction: none
   $name: Click on the line
+  $description: >-
+    Off by default: clicks on the line switch to the window, like the rest of
+    the thumbnail
   $options:
+  - none: Nothing (clicks go to the thumbnail)
   - auto: Process Explorer if installed, otherwise Task Manager
   - processExplorer: Process Explorer (process selected)
   - taskManager: Task Manager
-  - none: Nothing (clicks go to the thumbnail)
 - processExplorerPath: ""
   $name: Process Explorer path
   $description: >-
@@ -179,7 +182,7 @@ struct Settings {
     TextColorMode textColor = TextColorMode::automatic;
     Color textCustomColor{255, 255, 255, 255};
     int updateInterval = 1000;
-    ClickAction clickAction = ClickAction::automatic;
+    ClickAction clickAction = ClickAction::none;
     std::wstring processExplorerPath;
 };
 
@@ -1980,10 +1983,10 @@ void LoadSettings() {
 
     PCWSTR clickAction = Wh_GetStringSetting(L"clickAction");
     settings->clickAction =
-        wcscmp(clickAction, L"processExplorer") == 0 ? ClickAction::processExplorer
-        : wcscmp(clickAction, L"taskManager") == 0   ? ClickAction::taskManager
-        : wcscmp(clickAction, L"none") == 0          ? ClickAction::none
-                                                     : ClickAction::automatic;
+        wcscmp(clickAction, L"auto") == 0              ? ClickAction::automatic
+        : wcscmp(clickAction, L"processExplorer") == 0 ? ClickAction::processExplorer
+        : wcscmp(clickAction, L"taskManager") == 0     ? ClickAction::taskManager
+                                                       : ClickAction::none;
     Wh_FreeStringSetting(clickAction);
 
     PCWSTR processExplorerPath = Wh_GetStringSetting(L"processExplorerPath");
