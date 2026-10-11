@@ -241,10 +241,15 @@ Instead of an executable path, you can set **Command** to one of these built-in 
 - disabledInsteadOfHidden: false
   $name: Disable buttons instead of hiding them
   $description: Gray out inactive buttons instead of removing them from the toolbar.
-- openMenuOnHover: false
-  $name: Open menus on hover
-- menuHoverDelay: 400
-  $name: Hover delay (milliseconds)
+- menuHover:
+  - openOnHover: false
+    $name: Open menus on hover
+    $description: Open dropdown flyout menus automatically when hovering over toolbar buttons.
+  - delay: 400
+    $name: Hover delay (milliseconds)
+    $description: Time in milliseconds to hover before opening the menu flyout.
+  $name: Menu hover behavior
+  $description: Configure automatic flyout expansion when hovering over dropdown buttons.
 */
 // ==/WindhawkModSettings==
 
@@ -550,8 +555,15 @@ winrt::com_ptr<IShellBrowser> GetActiveShellBrowser(
             }
         }
         if (!hActiveTabWnd) {
-            hActiveTabWnd = FindWindowExW(hExplorerWnd, nullptr,
-                                          L"ShellTabWindowClass", nullptr);
+            HWND hTab = nullptr;
+            while ((hTab = FindWindowExW(hExplorerWnd, hTab,
+                                         L"ShellTabWindowClass", nullptr)) !=
+                   nullptr) {
+                if (IsWindowVisible(hTab)) {
+                    hActiveTabWnd = hTab;
+                    break;
+                }
+            }
         }
     }
 
@@ -713,12 +725,10 @@ bool ReplacePlaceholder(std::wstring& parameters,
     size_t pos = parameters.find(placeholder);
     if (pos == std::wstring::npos)
         return true;
-    if (value.empty())
-        return false;
 
     while (pos != std::wstring::npos) {
         std::wstring replacement = value;
-        if (replacement.back() == L'\\' &&
+        if (!replacement.empty() && replacement.back() == L'\\' &&
             pos + placeholder.size() < parameters.size() &&
             parameters[pos + placeholder.size()] == L'"') {
             replacement += L'\\';
@@ -2173,8 +2183,22 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
                     hWnd, nullptr, L"ShellTabWindowClass", nullptr);
                 if (hActiveTab != currentEntry->cachedTabWnd ||
                     !currentEntry->cachedBrowser) {
+                    auto browser = GetActiveShellBrowser(hWnd);
+
+                    // Re-lookup entry in case g_entries reallocated during COM
+                    // calls
+                    currentEntry = nullptr;
+                    for (auto& ent : g_entries) {
+                        if (ent.commandBar.get() == cb) {
+                            currentEntry = &ent;
+                            break;
+                        }
+                    }
+                    if (!currentEntry)
+                        return;
+
                     currentEntry->cachedTabWnd = hActiveTab;
-                    currentEntry->cachedBrowser = GetActiveShellBrowser(hWnd);
+                    currentEntry->cachedBrowser = std::move(browser);
                     currentEntry->cachedShellView = nullptr;
                 }
 
@@ -2218,13 +2242,14 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
 
         TrackRevoker(commandBar,
                      commandBar.Unloaded(
-                         winrt::auto_revoke, [selectionTimer, timerToken](
-                                                 wf::IInspectable const&,
-                                                 mux::RoutedEventArgs const&) {
-                             try {
-                                 selectionTimer.Stop();
-                                 selectionTimer.Tick(timerToken);
-                             } catch (...) {
+                         winrt::auto_revoke, [](wf::IInspectable const& sender,
+                                                mux::RoutedEventArgs const&) {
+                             auto cb = sender.try_as<muxc::CommandBar>();
+                             for (auto& entry : g_entries) {
+                                 if (entry.commandBar.get() == cb) {
+                                     StopSelectionTimer(entry);
+                                     break;
+                                 }
                              }
                          }));
     }
@@ -2734,8 +2759,9 @@ void LoadSettings() {
         Wh_GetIntSetting(L"placeOnSecondaryBar") != 0;
     g_settings.disabledInsteadOfHidden =
         Wh_GetIntSetting(L"disabledInsteadOfHidden") != 0;
-    g_settings.openMenuOnHover = Wh_GetIntSetting(L"openMenuOnHover") != 0;
-    int menuHoverDelay = Wh_GetIntSetting(L"menuHoverDelay");
+    g_settings.openMenuOnHover =
+        Wh_GetIntSetting(L"menuHover[0].openOnHover") != 0;
+    int menuHoverDelay = Wh_GetIntSetting(L"menuHover[1].delay");
     g_settings.menuHoverDelay = menuHoverDelay >= 0 ? menuHoverDelay : 0;
 
     g_settings.items.clear();
