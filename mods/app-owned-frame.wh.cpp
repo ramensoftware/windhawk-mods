@@ -2,16 +2,15 @@
 // @id              app-owned-frame
 // @name            App Owned Frame
 // @description     Restores DWM clipping for selected custom-frame applications without changing their window styles or resizing.
-// @version         1.42
+// @version         1.43
 // @author          appEW
 // @github          https://github.com/appEW
 // @license         MIT
-// @include         explorer.exe
+// @include         windhawk.exe
 // @include         Discord.exe
 // @include         Photoshop.exe
 // @include         Resolve.exe
-// @architecture    x86-64
-// @compilerOptions -ldwmapi -ladvapi32 -lshlwapi -lgdi32 -lshcore
+// @compilerOptions -ldwmapi -ladvapi32 -lshlwapi -lgdi32 -lshcore -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -28,7 +27,7 @@ buttons, change the client layout or run its own resize loop.
 
 ## Requirements
 
-- Windows 11, build 22000 or later, with Explorer running.
+- Windows 11, build 22000 or later, and Windhawk 1.7.3 or later.
 - An already enabled classic theme, for example
   [Classic Theme](https://windhawk.net/mods/classic-theme-enable) or
   [Classic Theme Enable with extended compatibility](https://windhawk.net/mods/classic-theme-enable-with-extended-compatibility).
@@ -86,10 +85,11 @@ reduce the size or disable wider grips if this makes an app control hard to clic
   **Delegate caption painting to DWM** option.
 - **Remove system backdrop from the frame** is for a remaining bright material
   edge and requires Windows 11 build 22621 or later.
-- Explorer supplies the external frame correction. A clean mod disable restores
-  the captured state, but border/caption colours which Windows cannot read back
-  return to the system default. After an Explorer crash, original values held
-  only by that process cannot be recovered.
+- The external correction runs in a dedicated Windhawk process, not Explorer.
+  A clean disable restores captured values. Scalar rollback data stays on each
+  window if that helper crashes; reloading the mod recovers it after validating
+  the application and former helper process identities. Unreadable original
+  border/caption colours return to the system default.
 - This does not fix unrelated application rendering bugs, DPI-projection bugs
   or conflicts with another mod which keeps rewriting the same frame state.
   No application/system light or dark setting is changed.
@@ -209,6 +209,7 @@ Before: without the mod. After: with the mod. Provided by the submitter.
 #include <dwmapi.h>
 #include <shlwapi.h>
 #include <shellscalingapi.h>
+#include <shellapi.h>
 #include <windhawk_api.h>
 #include <algorithm>
 #include <array>
@@ -293,11 +294,15 @@ struct WindowState {
     HANDLE identity = nullptr;
     bool compositionChanged = false;
     bool borderChanged = false;
+    COLORREF originalBorder = kDefaultBorder;
+    bool borderReadable = false;
     DWORD originalBackdrop = 0;
     bool backdropReadable = false;
     bool backdropChanged = false;
     uintptr_t resizeRequests = 0;
     CaptionFillState captionFill;
+    ULONGLONG nextUnreadableColorCheck = 0;
+    bool retiring = false;
 };
 struct ResizeTarget {
     HWND target;
@@ -318,6 +323,7 @@ PendingResize pendingResize{};
 UINT_PTR resizeTimer = 0;
 std::mutex resizeMutex;
 std::atomic<int> activeGripSize{0};
+std::atomic<bool> externalResizeNeeded{false};
 HHOOK mouseHook = nullptr;
 HMODULE modModule = nullptr;
 int configuredGripSize = 0;
@@ -346,16 +352,6 @@ bool legacyProcess = false;
 // Hook availability is fixed at init; runtime feature flags may change later.
 bool legacyHooksInstalled = false;
 std::atomic<bool> dwmCaptionEnabled{false};
-constexpr wchar_t kDwmCaptionIdentity[] = L"Windhawk.AppOwnedFrame.DwmCaption.1.Identity";
-constexpr wchar_t kDwmCaptionPrefix[] = L"Windhawk.AppOwnedFrame.DwmCaption.1.";
-struct DwmCaptionState {
-    HANDLE identity = nullptr;
-    uintptr_t paintCalls = 0, paintHandled = 0, activationCalls = 0, activationHandled = 0;
-    LRESULT lastResult = 0;
-};
-std::mutex dwmCaptionMutex;
-std::unordered_map<HWND, DwmCaptionState> dwmCaptionWindows;
-uintptr_t nextDwmCaptionIdentity = 0;
 thread_local bool inDwmCaptionPaint = false;
 std::atomic<bool> earlyDwmEnabled{false};
 SetComposition earlyCompositionOriginal = nullptr;
@@ -382,8 +378,8 @@ DefaultProc nativeWindowProc = nullptr;
 DefaultProc nativeRendererProc = nullptr;
 void* nativeWindowTarget = nullptr;
 void* nativeRendererTarget = nullptr;
-using RegisterClass = ATOM(WINAPI*)(const WNDCLASSEXW*);
-RegisterClass registerClass = nullptr;
+using RegisterClassExW_t = ATOM(WINAPI*)(const WNDCLASSEXW*);
+RegisterClassExW_t registerClass = nullptr;
 std::mutex nativeHookMutex;
 std::atomic<bool> nativeClassHooked{false};
 std::atomic<bool> nativeRendererHooked{false};
@@ -402,19 +398,21 @@ std::atomic<DWORD> workerId{0};
 std::atomic<bool> stopping{false};
 HANDLE stopEvent = nullptr;
 HANDLE readyEvent = nullptr;
+std::atomic<bool> workerReady{false};
 HANDLE workerThread = nullptr;
 HANDLE inputThread = nullptr;
 std::atomic<DWORD> inputThreadId{0};
-HANDLE instanceMutex = nullptr;
-HWINEVENTHOOK objectHook = nullptr;
+std::array<HWINEVENTHOOK,5> objectHooks{};
 HWINEVENTHOOK foregroundHook = nullptr;
 HWINEVENTHOOK sizingHook = nullptr;
 std::unordered_set<HWND> sizingWindows;
 std::unordered_map<HWND, bool> pendingWindows;
+ULONGLONG pendingDue = 0;
 bool foregroundChanged = false;
 bool sizingChanged = false;
 uintptr_t nextIdentity = 0;
 bool updatingWindow = false;
+bool toolContext = false;
 struct UpdateScope {
     bool prior = updatingWindow;
     UpdateScope() { updatingWindow = true; }
@@ -575,11 +573,44 @@ FrameGeometry MatchGeometry(const wchar_t* path, const std::vector<ProgramGeomet
     return FrameGeometry::Automatic;
 }
 
+// PROCESS_CACHE_BEGIN
+struct CachedProcess {
+    HANDLE handle = nullptr;
+    ProcessInfo info{};
+    bool sameUser = false;
+};
+std::unordered_map<DWORD,CachedProcess> processCache;
+
+void ClearProcessCache() {
+    for (const auto& [pid,entry] : processCache) CloseHandle(entry.handle);
+    processCache.clear();
+}
+
+void PruneProcessCache() {
+    for (auto it=processCache.begin();it!=processCache.end();) {
+        if (WaitForSingleObject(it->second.handle,0) != WAIT_TIMEOUT) {
+            CloseHandle(it->second.handle);
+            it=processCache.erase(it);
+        } else ++it;
+    }
+}
+
 bool InspectProcess(DWORD pid, ProcessInfo* info) {
-    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    auto cached = processCache.find(pid);
+    if (cached != processCache.end()) {
+        // The retained process handle identifies the old process even after
+        // its PID is reused. No image/path/token query on the ordinary poll.
+        if (WaitForSingleObject(cached->second.handle,0) == WAIT_TIMEOUT) {
+            *info = cached->second.info;
+            return cached->second.sameUser;
+        }
+        CloseHandle(cached->second.handle);
+        processCache.erase(cached);
+    }
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, pid);
     if (!process) return false;
     FILETIME created{}, exited{}, kernel{}, user{};
-    wchar_t path[32768]{};
+    wchar_t path[32768];
     DWORD chars = ARRAYSIZE(path);
     std::vector<BYTE> owner;
     const bool success = GetProcessTimes(process, &created, &exited, &kernel, &user) &&
@@ -588,14 +619,22 @@ bool InspectProcess(DWORD pid, ProcessInfo* info) {
     const bool sameUser = success && EqualSid(
         reinterpret_cast<TOKEN_USER*>(owner.data())->User.Sid,
         reinterpret_cast<TOKEN_USER*>(userSid.data())->User.Sid);
-    CloseHandle(process);
-    if (!sameUser) return false;
+    if (!sameUser) {
+        if (success && processCache.size() < 512)
+            processCache.emplace(pid,CachedProcess{process,{},false});
+        else CloseHandle(process);
+        return false;
+    }
     const FrameGeometry geometry = MatchGeometry(path, geometries);
     *info = {pid, created, MatchProgram(path) && geometry != FrameGeometry::Disabled,
         MatchList(path, backdropPrograms), geometry,
         MatchList(path,legacyPrograms) ? MatchGutter(path,gutterPrograms) : kNoBorder};
+    if (processCache.size() < 512)
+        processCache.emplace(pid,CachedProcess{process,*info,true});
+    else CloseHandle(process);
     return true;
 }
+// PROCESS_CACHE_END
 
 bool SameWindow(HWND window, const WindowState& state) {
     DWORD pid = 0;
@@ -954,7 +993,13 @@ void BeginPendingResize() {
 
 void ClearResizeTarget(HWND target) {
     std::lock_guard lock(resizeMutex);
-    if (!target || resizeTarget.target == target) resizeTarget = {};
+    if (!target || resizeTarget.target == target) {
+        resizeTarget = {};
+        if (externalResizeNeeded.exchange(false)) {
+            const DWORD thread = inputThreadId.load();
+            if (thread) PostThreadMessageW(thread,kReconfigure,0,0);
+        }
+    }
 }
 
 void RefreshResizeTarget(HWND target, WindowState& state) {
@@ -977,18 +1022,22 @@ void RefreshResizeTarget(HWND target, WindowState& state) {
     if (GetWindowInfo(target, &info)) {
         std::lock_guard lock(resizeMutex);
         resizeTarget = {target, state.identity, info.rcWindow, frame, cornerSize, edgeSize};
+        const bool needed = GetPropW(target,kNativeResizeProperty) != state.identity;
+        if (externalResizeNeeded.exchange(needed) != needed) {
+            const DWORD thread = inputThreadId.load();
+            if (thread) PostThreadMessageW(thread,kReconfigure,0,0);
+        }
     }
 }
 
 void UpdateMouseHook() {
-    if (activeGripSize && !mouseHook) {
+    if (activeGripSize && externalResizeNeeded && !mouseHook) {
         mouseHook = SetWindowsHookExW(WH_MOUSE_LL, ResizeMouse, modModule, 0);
         if (!mouseHook) Wh_Log(L"Resize mouse hook registration failed: %lu", GetLastError());
-    } else if (!activeGripSize && mouseHook) {
+    } else if ((!activeGripSize || !externalResizeNeeded) && mouseHook) {
         UnhookWindowsHookEx(mouseHook);
         mouseHook = nullptr;
         CancelPendingResize();
-        ClearResizeTarget(nullptr);
     }
 }
 
@@ -1024,22 +1073,6 @@ void ConfigureInput() {
     if (!gripSize) ClearResizeTarget(nullptr);
     const DWORD thread = inputThreadId.load();
     if (thread) PostThreadMessageW(thread, kReconfigure, 0, 0);
-}
-
-void ClearDwmCaptionState(HWND window = nullptr) {
-    std::lock_guard lock(dwmCaptionMutex);
-    for (auto it = dwmCaptionWindows.begin(); it != dwmCaptionWindows.end();) {
-        if (!window || it->first == window) {
-            if (GetPropW(it->first, kDwmCaptionIdentity) == it->second.identity) {
-                for (const PCWSTR name : {L"Identity", L"PaintCalls", L"PaintHandled",
-                     L"ActivationCalls", L"ActivationHandled", L"LastResult"}) {
-                    const std::wstring property = std::wstring(kDwmCaptionPrefix) + name;
-                    RemovePropW(it->first, property.c_str());
-                }
-            }
-            it = dwmCaptionWindows.erase(it);
-        } else ++it;
-    }
 }
 
 bool EarlyDwmCandidate(HWND window) {
@@ -1227,34 +1260,6 @@ bool DelegateDwmCaption(HWND window, UINT message, WPARAM wp, LPARAM lp, LRESULT
     // Public DWM message handler only. Never run GDI default paint to make
     // glyphs appear; when DWM declines, the normal legacy filter remains.
     const BOOL handled = DwmDefWindowProc(window, message, wp, lp, &result);
-    // Diagnostic scalar markers; no window pointers/callbacks survive unload.
-    std::lock_guard lock(dwmCaptionMutex);
-    if (stopping || !dwmCaptionEnabled) return handled != FALSE;
-    auto found = dwmCaptionWindows.find(window);
-    if (found == dwmCaptionWindows.end()) {
-        if (dwmCaptionWindows.size() >= 256 || GetPropW(window, kDwmCaptionIdentity))
-            return handled != FALSE;
-        if (!nextDwmCaptionIdentity)
-            nextDwmCaptionIdentity = static_cast<uintptr_t>(GetTickCount64()) << 16;
-        const HANDLE token = reinterpret_cast<HANDLE>(++nextDwmCaptionIdentity);
-        if (!SetPropW(window, kDwmCaptionIdentity, token)) return handled != FALSE;
-        found = dwmCaptionWindows.emplace(window, DwmCaptionState{}).first;
-        found->second.identity = token;
-    }
-    auto& state = found->second;
-    if (GetPropW(window, kDwmCaptionIdentity) != state.identity) return handled != FALSE;
-    if (message == WM_NCPAINT) { ++state.paintCalls; state.paintHandled += handled != FALSE; }
-    if (message == WM_NCACTIVATE) { ++state.activationCalls; state.activationHandled += handled != FALSE; }
-    state.lastResult = result;
-    const std::array<std::pair<PCWSTR, uintptr_t>, 5> values{{
-        {L"PaintCalls", state.paintCalls}, {L"PaintHandled", state.paintHandled},
-        {L"ActivationCalls", state.activationCalls}, {L"ActivationHandled", state.activationHandled},
-        {L"LastResult", static_cast<uintptr_t>(state.lastResult)}
-    }};
-    for (const auto& [name, value] : values) {
-        const std::wstring property = std::wstring(kDwmCaptionPrefix) + name;
-        SetPropW(window, property.c_str(), reinterpret_cast<HANDLE>(value));
-    }
     return handled != FALSE;
 }
 
@@ -1300,7 +1305,6 @@ LRESULT HandleLegacyPaint(DefaultProc original, HWND window, UINT message,
                           WPARAM wp, LPARAM lp) {
     if (message == WM_NCDESTROY) {
         if (GetPropW(window,kEarlyDwmIdentity)) ClearEarlyDwm(window,false);
-        if (GetPropW(window, kDwmCaptionIdentity)) ClearDwmCaptionState(window);
         return original(window, message, wp, lp);
     }
     switch (message) {
@@ -1379,7 +1383,6 @@ void RefreshLegacySettings() {
             MatchList(currentPath.c_str(), configuredNativeResizePrograms)
             ? configuredGripSize : 0;
     }
-    if (!dwmCaptionEnabled || earlyDwmEnabled) ClearDwmCaptionState();
     if (!earlyDwmEnabled) ClearEarlyDwm();
     { std::lock_guard lock(nativeFrameMutex); nativeFrame = {}; }
     EnumWindows(ClearNativeAck, 0);
@@ -1391,24 +1394,183 @@ bool WriteExile(HWND window, BOOL exile) {
     return setComposition(window, &data);
 }
 
-void Restore(HWND window, WindowState& state) {
+// ROLLBACK_PACKET_BEGIN
+constexpr std::array<PCWSTR,13> kRollbackProperties{
+    L"Windhawk.AppOwnedFrame.Rollback.1.Valid",
+    L"Windhawk.AppOwnedFrame.Rollback.1.Pid",
+    L"Windhawk.AppOwnedFrame.Rollback.1.CreatedLow",
+    L"Windhawk.AppOwnedFrame.Rollback.1.CreatedHigh",
+    L"Windhawk.AppOwnedFrame.Rollback.1.HostPid",
+    L"Windhawk.AppOwnedFrame.Rollback.1.HostLow",
+    L"Windhawk.AppOwnedFrame.Rollback.1.HostHigh",
+    L"Windhawk.AppOwnedFrame.Rollback.1.Nc",
+    L"Windhawk.AppOwnedFrame.Rollback.1.Border",
+    L"Windhawk.AppOwnedFrame.Rollback.1.Backdrop",
+    L"Windhawk.AppOwnedFrame.Rollback.1.Caption",
+    L"Windhawk.AppOwnedFrame.Rollback.1.Readable",
+    L"Windhawk.AppOwnedFrame.Rollback.1.Changed"
+};
+FILETIME controllerCreated{};
+
+DWORD PacketValue(HWND window,size_t field) {
+    return static_cast<DWORD>(reinterpret_cast<uintptr_t>(GetPropW(window,kRollbackProperties[field])));
+}
+
+bool SetPacketValue(HWND window,size_t field,DWORD value) {
+    return SetPropW(window,kRollbackProperties[field],reinterpret_cast<HANDLE>(uintptr_t(value)));
+}
+
+void ClearRollbackPacket(HWND window) {
+    RemovePropW(window,kRollbackProperties[0]);
+    for (size_t i=1; i<kRollbackProperties.size(); ++i)
+        RemovePropW(window,kRollbackProperties[i]);
+}
+
+enum class PacketRecovery { None, Recovered, OtherController };
+PacketRecovery RecoverRollbackPacket(HWND window,WindowState& state) {
+    if (PacketValue(window,0) != 1)
+        return GetPropW(window,kIdentityProperty) ? PacketRecovery::OtherController : PacketRecovery::None;
+    if (PacketValue(window,1) != state.process.pid ||
+        PacketValue(window,2) != state.process.created.dwLowDateTime ||
+        PacketValue(window,3) != state.process.created.dwHighDateTime)
+        return PacketRecovery::OtherController;
+    const HANDLE host = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE,
+                                    FALSE,PacketValue(window,4));
+    if (host) {
+        FILETIME created{},exited{},kernel{},user{};
+        const DWORD wait = WaitForSingleObject(host,0);
+        const bool times = GetProcessTimes(host,&created,&exited,&kernel,&user);
+        const bool alive = wait != WAIT_OBJECT_0 &&
+            (!times || (created.dwLowDateTime == PacketValue(window,5) &&
+                        created.dwHighDateTime == PacketValue(window,6)));
+        CloseHandle(host);
+        if (alive) return PacketRecovery::OtherController;
+    } else if (GetLastError() != ERROR_INVALID_PARAMETER)
+        return PacketRecovery::OtherController; // Access denied isn't proof of death.
+    state.originalNcRendering = PacketValue(window,7) != 0;
+    state.originalBorder = PacketValue(window,8);
+    state.originalBackdrop = PacketValue(window,9);
+    state.captionFill.original = PacketValue(window,10);
+    const DWORD readable = PacketValue(window,11), changed = PacketValue(window,12);
+    state.borderReadable = (readable & 1) != 0;
+    state.backdropReadable = (readable & 2) != 0;
+    state.captionFill.readable = (readable & 4) != 0;
+    state.captionFill.captured = true;
+    state.compositionChanged = (changed & 1) != 0;
+    state.borderChanged = (changed & 2) != 0;
+    state.backdropChanged = (changed & 4) != 0;
+    state.captionFill.changed = (changed & 8) != 0;
+    return PacketRecovery::Recovered;
+}
+
+bool SaveRollbackPacket(HWND window,const WindowState& state,
+                        PacketRecovery recovery = PacketRecovery::None) {
+    if (recovery == PacketRecovery::Recovered) {
+        // The original attributes and valid marker remain intact throughout
+        // adoption. Commit the new host PID after its creation time. A failed
+        // claim still leaves the old rollback values available for a retry.
+        return SetPacketValue(window,5,controllerCreated.dwLowDateTime) &&
+            SetPacketValue(window,6,controllerCreated.dwHighDateTime) &&
+            SetPacketValue(window,4,GetCurrentProcessId());
+    }
+    // Commit the marker last. A partial property packet is never adopted.
+    RemovePropW(window,kRollbackProperties[0]);
+    const std::array<DWORD,12> values{
+        state.process.pid,state.process.created.dwLowDateTime,state.process.created.dwHighDateTime,
+        GetCurrentProcessId(),controllerCreated.dwLowDateTime,controllerCreated.dwHighDateTime,
+        DWORD(state.originalNcRendering),state.originalBorder,state.originalBackdrop,
+        state.captionFill.original,
+        DWORD(state.borderReadable) | (DWORD(state.backdropReadable)<<1) |
+            (DWORD(state.captionFill.readable)<<2),
+        DWORD(state.compositionChanged) | (DWORD(state.borderChanged)<<1) |
+            (DWORD(state.backdropChanged)<<2) | (DWORD(state.captionFill.changed)<<3)
+    };
+    for (size_t i=0;i<values.size();++i)
+        if (!SetPacketValue(window,i+1,values[i])) {
+            ClearRollbackPacket(window);
+            return false;
+        }
+    if (SetPacketValue(window,0,1)) return true;
+    ClearRollbackPacket(window);
+    return false;
+}
+
+bool RecordRollbackIntent(HWND window,const WindowState& state,DWORD attribute) {
+    if (PacketValue(window,0) != 1 || PacketValue(window,4) != GetCurrentProcessId() ||
+        PacketValue(window,5) != controllerCreated.dwLowDateTime ||
+        PacketValue(window,6) != controllerCreated.dwHighDateTime ||
+        GetPropW(window,kIdentityProperty) != state.identity) return false;
+    const DWORD changed = PacketValue(window,12);
+    return (changed & attribute) == attribute || SetPacketValue(window,12,changed | attribute);
+}
+// ROLLBACK_PACKET_END
+
+bool Restore(HWND window, WindowState& state) {
     UpdateScope update;
     ClearResizeTarget(window);
-    if (!SameWindow(window, state)) return;
-    if (state.borderChanged) {
-        const COLORREF color = kDefaultBorder;
-        DwmSetWindowAttribute(window, kBorderColor, &color, sizeof(color));
+    if (!SameWindow(window, state)) return true;
+    state.retiring = true;
+    // An intent is written before the compositor call. Even if the helper
+    // dies before recording success, recovery still restores that attribute.
+    const DWORD changed = PacketValue(window,12);
+    bool restored = true;
+    if (state.borderChanged || (changed & 2)) {
+        const COLORREF color = state.borderReadable ? state.originalBorder : kDefaultBorder;
+        restored &= SUCCEEDED(DwmSetWindowAttribute(window,kBorderColor,&color,sizeof(color)));
     }
-    if (state.backdropChanged && state.backdropReadable)
-        DwmSetWindowAttribute(window, kSystemBackdrop,
-            &state.originalBackdrop, sizeof(state.originalBackdrop));
-    ReconcileCaptionFill(window,state.captionFill,kNoBorder);
-    if (state.compositionChanged) WriteExile(window, !state.originalNcRendering);
+    if ((state.backdropChanged || (changed & 4)) && state.backdropReadable)
+        restored &= SUCCEEDED(DwmSetWindowAttribute(window,kSystemBackdrop,
+            &state.originalBackdrop,sizeof(state.originalBackdrop)));
+    if (changed & 8) {
+        state.captionFill.readable = (PacketValue(window,11) & 4) != 0;
+        state.captionFill.original = state.captionFill.readable
+            ? PacketValue(window,10) : kDefaultBorder;
+        state.captionFill.captured = state.captionFill.changed = true;
+    }
+    restored &= ReconcileCaptionFill(window,state.captionFill,kNoBorder);
+    if (state.compositionChanged || (changed & 1))
+        restored &= WriteExile(window,!state.originalNcRendering);
+    if (!restored) return false; // Retain the packet for the next recovery/retry.
+    ClearRollbackPacket(window);
     RemovePropW(window, kIdentityProperty);
     RemovePropW(window, kResizeProperty);
     RemovePropW(window, kNativeResizeProperty);
     RemovePropW(window, kNativePressProperty);
+    return true;
 }
+
+// CAPTURE_WINDOW_BEGIN
+bool CaptureWindow(HWND window,const ProcessInfo& process,BOOL enabled) {
+    WindowState initial{process, enabled != FALSE};
+    const PacketRecovery recovered = RecoverRollbackPacket(window,initial);
+    if (recovered == PacketRecovery::OtherController) return false;
+    if (recovered == PacketRecovery::None) {
+        initial.borderReadable = SUCCEEDED(DwmGetWindowAttribute(
+            window,kBorderColor,&initial.originalBorder,sizeof(COLORREF)));
+        initial.backdropReadable = SUCCEEDED(DwmGetWindowAttribute(
+            window,kSystemBackdrop,&initial.originalBackdrop,sizeof(DWORD)));
+        initial.captionFill.readable = SUCCEEDED(DwmGetWindowAttribute(
+            window,DWMWA_CAPTION_COLOR,&initial.captionFill.original,sizeof(COLORREF)));
+            if (!initial.captionFill.readable) initial.captionFill.original = kDefaultBorder;
+        initial.captionFill.captured = true;
+    }
+    // The same scalar token is seen from x86 tool and x64 app processes.
+    const auto token = static_cast<uintptr_t>(
+        (uint64_t(GetCurrentProcessId()) << 32) | static_cast<DWORD>(++nextIdentity));
+    const HANDLE identity = reinterpret_cast<HANDLE>(token ? token : ++nextIdentity);
+    initial.identity = identity;
+    auto found = windows.emplace(window,initial).first;
+    if (!SetPropW(window,kIdentityProperty,identity) ||
+        !SaveRollbackPacket(window,initial,recovered)) {
+        if (GetPropW(window,kIdentityProperty) == identity)
+            RemovePropW(window,kIdentityProperty);
+        windows.erase(found);
+        return false;
+    }
+    Wh_Log(L"Tracking custom frame hwnd=%p pid=%lu originalNC=%d", window, process.pid, initial.originalNcRendering);
+    return true;
+}
+// CAPTURE_WINDOW_END
 
 void Apply(HWND window, bool forceBorder = false) {
     // Out-of-context callbacks may reenter while a compositor call is being
@@ -1422,6 +1584,20 @@ void Apply(HWND window, bool forceBorder = false) {
         windows.erase(found);
         found = windows.end();
     }
+    if (found == windows.end() && PacketValue(window,0) == 1) {
+        // Recover orphaned rollback data even when this app was excluded
+        // while the previous helper was down. Hidden/iconic windows count too.
+        DWORD pid = 0;
+        GetWindowThreadProcessId(window,&pid);
+        ProcessInfo process{};
+        if (!InspectProcess(pid,&process) || !CaptureWindow(window,process,FALSE)) return;
+        found = windows.find(window);
+        found->second.retiring = !process.eligible;
+    }
+    if (found != windows.end() && found->second.retiring) {
+        if (Restore(window,found->second)) windows.erase(found);
+        return;
+    }
     // Iconic and temporarily hidden windows retain their record for rollback.
     if (!IsWindowVisible(window) || IsIconic(window)) {
         if (found != windows.end()) ClearResizeTarget(window);
@@ -1430,8 +1606,7 @@ void Apply(HWND window, bool forceBorder = false) {
     if (!CustomMainWindow(window, FrameGeometry::ResizeGutter) ||
         (found != windows.end() && !CustomMainWindow(window, found->second.process.geometry))) {
         if (found != windows.end()) {
-            Restore(window, found->second);
-            windows.erase(found);
+            if (Restore(window,found->second)) windows.erase(found);
         }
         return;
     }
@@ -1444,14 +1619,9 @@ void Apply(HWND window, bool forceBorder = false) {
         BOOL enabled = FALSE;
         if (FAILED(DwmGetWindowAttribute(window, DWMWA_NCRENDERING_ENABLED,
                                          &enabled, sizeof(enabled)))) return;
-        const HANDLE identity = reinterpret_cast<HANDLE>(
-            (static_cast<uintptr_t>(GetCurrentProcessId()) << 32) | ++nextIdentity);
-        if (!SetPropW(window, kIdentityProperty, identity)) return;
-        found = windows.emplace(window, WindowState{process, enabled != FALSE, identity}).first;
-        found->second.backdropReadable = SUCCEEDED(DwmGetWindowAttribute(
-            window, kSystemBackdrop, &found->second.originalBackdrop, sizeof(DWORD)));
+        if (!CaptureWindow(window,process,enabled)) return;
+        found = windows.find(window);
         forceBorder = true;
-        Wh_Log(L"Tracking custom frame hwnd=%p pid=%lu originalNC=%d", window, pid, enabled);
     }
     auto& state = found->second;
     if (state.process.removeBackdrop && state.backdropReadable) {
@@ -1459,31 +1629,51 @@ void Apply(HWND window, bool forceBorder = false) {
         if (SUCCEEDED(DwmGetWindowAttribute(window, kSystemBackdrop, &backdrop, sizeof(backdrop))) &&
             backdrop != 1) {
             const DWORD none = 1; // DWMSBT_NONE: no system material behind NC.
-            if (SUCCEEDED(DwmSetWindowAttribute(window, kSystemBackdrop, &none, sizeof(none))))
+            if (RecordRollbackIntent(window,state,4) &&
+                SUCCEEDED(DwmSetWindowAttribute(window, kSystemBackdrop, &none, sizeof(none))))
                 state.backdropChanged = true;
         }
     }
     BOOL enabled = FALSE;
     if (SUCCEEDED(DwmGetWindowAttribute(window, DWMWA_NCRENDERING_ENABLED,
                                         &enabled, sizeof(enabled))) && !enabled) {
-        if (WriteExile(window, FALSE)) {
+        if (RecordRollbackIntent(window,state,1) && WriteExile(window, FALSE)) {
             state.compositionChanged = true;
             forceBorder = true;
             Wh_Log(L"Restored compositor clipping hwnd=%p pid=%lu", window, state.process.pid);
         }
     }
-    if (forceBorder || !state.borderChanged) {
+    const ULONGLONG now = GetTickCount64();
+    COLORREF currentBorder = 0;
+    const bool borderReadable = SUCCEEDED(DwmGetWindowAttribute(
+        window,kBorderColor,&currentBorder,sizeof(currentBorder)));
+    // Some Windows builds don't expose these colors to Get. Retain a limited
+    // foreground-only reconciliation for them; never force every discovery.
+    const bool unreadableCheck = now >= state.nextUnreadableColorCheck &&
+        GetForegroundWindow() == window;
+    if (forceBorder || !state.borderChanged ||
+        (borderReadable ? currentBorder != kNoBorder : unreadableCheck)) {
         const COLORREF color = kNoBorder;
-        if (SUCCEEDED(DwmSetWindowAttribute(window, kBorderColor, &color, sizeof(color))))
+        if (RecordRollbackIntent(window,state,2) &&
+            SUCCEEDED(DwmSetWindowAttribute(window, kBorderColor, &color, sizeof(color))))
             state.borderChanged = true;
     }
     // Only the opt-in color of a validated custom-frame root. Never from
     // hit testing, the LL input callback, or an active native resize loop.
-    ReconcileCaptionFill(window,state.captionFill,state.process.gutterColor,forceBorder);
+    bool forceCaption = forceBorder;
+    if (state.process.gutterColor != kNoBorder) {
+        COLORREF current = 0;
+        const bool readable = SUCCEEDED(DwmGetWindowAttribute(
+            window,DWMWA_CAPTION_COLOR,&current,sizeof(current)));
+        forceCaption |= readable ? current != state.process.gutterColor : unreadableCheck;
+    }
+    if (state.process.gutterColor == kNoBorder || RecordRollbackIntent(window,state,8))
+        ReconcileCaptionFill(window,state.captionFill,state.process.gutterColor,forceCaption);
+    if (unreadableCheck || forceBorder) state.nextUnreadableColorCheck = now + 2000;
     RefreshResizeTarget(window, state);
 }
 
-BOOL CALLBACK Enumerate(HWND window, LPARAM) { Apply(window, true); return TRUE; }
+BOOL CALLBACK Enumerate(HWND window, LPARAM) { Apply(window); return TRUE; }
 
 void CALLBACK WindowEvent(HWINEVENTHOOK, DWORD event, HWND window, LONG object,
                           LONG child, DWORD, DWORD) {
@@ -1492,26 +1682,27 @@ void CALLBACK WindowEvent(HWINEVENTHOOK, DWORD event, HWND window, LONG object,
     // callback. Location events arrive for every drag step and can reenter.
     // Coalesce them; most importantly, don't touch the app during its native
     // move/size loop. The compositor state established before it stays valid.
-    if (event == EVENT_SYSTEM_MOVESIZESTART) {
+    const bool tracked = windows.contains(window);
+    if (event == EVENT_SYSTEM_MOVESIZESTART && tracked) {
         sizingWindows.insert(window);
         ClearResizeTarget(window);
         sizingChanged = true;
         return;
     }
-    if (event == EVENT_SYSTEM_MOVESIZEEND) {
+    if (event == EVENT_SYSTEM_MOVESIZEEND && tracked) {
         sizingWindows.erase(window);
-        pendingWindows[window] = true;
-        return;
-    }
-    if (event == EVENT_SYSTEM_FOREGROUND) {
+    } else if (event == EVENT_SYSTEM_FOREGROUND) {
         ClearResizeTarget(nullptr);
         foregroundChanged = true;
-        pendingWindows[window] = true;
     } else if (object == OBJID_WINDOW && child == CHILDID_SELF) {
         if (event == EVENT_OBJECT_DESTROY) sizingWindows.erase(window);
-        if (pendingWindows.size() < 4096)
-            pendingWindows[window] = pendingWindows[window] || event == EVENT_OBJECT_SHOW;
-    }
+        if (!tracked && event != EVENT_OBJECT_CREATE && event != EVENT_OBJECT_SHOW) return;
+        if (!tracked && GetAncestor(window,GA_ROOT) != window) return;
+    } else return;
+    if (pendingWindows.size() >= 4096 && !pendingWindows.contains(window)) return;
+    if (pendingWindows.empty()) pendingDue = GetTickCount64() + 100;
+    pendingWindows[window] = pendingWindows[window] || event == EVENT_OBJECT_SHOW ||
+        event == EVENT_SYSTEM_FOREGROUND || event == EVENT_SYSTEM_MOVESIZEEND;
 }
 
 void ReconcileEvents() {
@@ -1532,6 +1723,7 @@ void ReconcileEvents() {
 }
 
 void Reconfigure() {
+    ClearProcessCache(); // Paths/settings/eligibility are one cache generation.
     {
         std::lock_guard lock(settingsMutex);
         programs = configuredPrograms;
@@ -1548,13 +1740,13 @@ void Reconfigure() {
         ProcessInfo process{};
         if (!SameWindow(it->first, it->second) ||
             !InspectProcess(it->second.process.pid, &process) || !process.eligible) {
-            Restore(it->first, it->second);
-            it = windows.erase(it);
+            if (Restore(it->first,it->second)) it=windows.erase(it);
+            else ++it;
         } else {
             if (!process.removeBackdrop && it->second.backdropChanged && it->second.backdropReadable) {
-                DwmSetWindowAttribute(it->first, kSystemBackdrop,
-                    &it->second.originalBackdrop, sizeof(DWORD));
-                it->second.backdropChanged = false;
+                if (SUCCEEDED(DwmSetWindowAttribute(it->first,kSystemBackdrop,
+                    &it->second.originalBackdrop,sizeof(DWORD))))
+                    it->second.backdropChanged = false;
             }
             it->second.process.removeBackdrop = process.removeBackdrop;
             it->second.process.geometry = process.geometry;
@@ -1565,52 +1757,19 @@ void Reconfigure() {
     EnumWindows(Enumerate, 0);
 }
 
-// CONTROLLER_LEASE_BEGIN: exact code tested with real Windows synchronization.
-enum class ControllerAcquire { Owned, Stopped, Failed };
-
-class ControllerLease {
-    HANDLE mutex_;
-    bool owned_ = false;
-public:
-    explicit ControllerLease(HANDLE mutex) : mutex_(mutex) {}
-    ControllerLease(const ControllerLease&) = delete;
-    ControllerLease& operator=(const ControllerLease&) = delete;
-    ~ControllerLease() { if (owned_) ReleaseMutex(mutex_); }
-
-    ControllerAcquire Acquire(HANDLE stop) {
-        if (owned_) return ControllerAcquire::Owned;
-        const HANDLE handles[]{stop, mutex_};
-        const DWORD result = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
-        if (result == WAIT_OBJECT_0) return ControllerAcquire::Stopped;
-        if (result != WAIT_OBJECT_0 + 1 && result != WAIT_ABANDONED_0 + 1)
-            return ControllerAcquire::Failed;
-        owned_ = true;
-        // Stop wins even if it arrives just after the mutex was acquired.
-        const DWORD cancelled = WaitForSingleObject(stop, 0);
-        if (cancelled != WAIT_TIMEOUT) {
-            ReleaseMutex(mutex_);
-            owned_ = false;
-            return cancelled == WAIT_OBJECT_0 ? ControllerAcquire::Stopped
-                                              : ControllerAcquire::Failed;
-        }
-        return ControllerAcquire::Owned;
-    }
-};
-// CONTROLLER_LEASE_END
+// CONTROLLER_WAIT_BEGIN
+DWORD ControllerWait(ULONGLONG now, ULONGLONG discovery, ULONGLONG poll,
+                     ULONGLONG pending, bool tracked, bool queued) {
+    ULONGLONG next = discovery;
+    if (tracked) next = std::min(next,poll);
+    if (queued) next = std::min(next,pending);
+    return next <= now ? 0 : static_cast<DWORD>(std::min<ULONGLONG>(next-now,15000));
+}
+// CONTROLLER_WAIT_END
 
 DWORD WINAPI Worker(void*) {
-    // Init must succeed even while the preceding Explorer still has its
-    // controller. Only this worker owns/releases the lease; no hooks, state
-    // writes, input pump or DPI change are installed while it is waiting.
-    SetEvent(readyEvent);
-    ControllerLease lease(instanceMutex);
-    const ControllerAcquire acquired = lease.Acquire(stopEvent);
-    if (acquired != ControllerAcquire::Owned) {
-        if (acquired == ControllerAcquire::Failed)
-            Wh_Log(L"Controller lease wait failed: %lu", GetLastError());
-        return acquired == ControllerAcquire::Stopped ? 0 : 1;
-    }
-    Wh_Log(L"Controller lease acquired by pid=%lu", GetCurrentProcessId());
+    // The official tool host's process mutex isolates this controller from
+    // Explorer and excludes a second active controller in the same session.
     const auto priorDpi = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     MSG message{};
     PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
@@ -1632,29 +1791,37 @@ DWORD WINAPI Worker(void*) {
     // queries in the controller must never hold up the global LL callback.
     inputThread = CreateThread(nullptr, 0, InputWorker, nullptr, 0, nullptr);
     if (!inputThread) Wh_Log(L"Input thread creation failed: %lu", GetLastError());
-    objectHook = SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_LOCATIONCHANGE,
-        nullptr, WindowEvent, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    constexpr std::array<DWORD,5> events{EVENT_OBJECT_CREATE,EVENT_OBJECT_DESTROY,
+        EVENT_OBJECT_SHOW,EVENT_OBJECT_HIDE,EVENT_OBJECT_LOCATIONCHANGE};
+    for (size_t i=0;i<events.size();++i)
+        objectHooks[i] = SetWinEventHook(events[i],events[i],nullptr,WindowEvent,
+            0,0,WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
     foregroundHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
         nullptr, WindowEvent, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
     sizingHook = SetWinEventHook(EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MOVESIZEEND,
         nullptr, WindowEvent, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-    if (!objectHook || !foregroundHook || !sizingHook) {
+    if (!inputThread || !foregroundHook || !sizingHook ||
+        std::any_of(objectHooks.begin(),objectHooks.end(),[](HWINEVENTHOOK hook) {return !hook;})) {
         Wh_Log(L"WinEvent registration failed: %lu", GetLastError());
         SetEvent(stopEvent);
         if (inputThread) WaitForSingleObject(inputThread, INFINITE);
-        if (objectHook) UnhookWinEvent(objectHook);
+        for (HWINEVENTHOOK hook : objectHooks) if (hook) UnhookWinEvent(hook);
         if (foregroundHook) UnhookWinEvent(foregroundHook);
         if (sizingHook) UnhookWinEvent(sizingHook);
         workerId = 0;
+        SetEvent(readyEvent);
         if (priorDpi) SetThreadDpiAwarenessContext(priorDpi);
         return 1;
     }
+    workerReady = true;
+    SetEvent(readyEvent);
     EnumWindows(Enumerate, 0);
-    ULONGLONG nextDiscovery = GetTickCount64() + 2000;
-    ULONGLONG nextEvents = GetTickCount64() + 100;
-    ULONGLONG nextPoll = GetTickCount64() + 500;
+    ULONGLONG nextDiscovery = GetTickCount64() + 15000;
+    ULONGLONG nextPoll = GetTickCount64() + 1000;
     while (!stopping) {
-        const DWORD wait = MsgWaitForMultipleObjects(1, &stopEvent, FALSE, 100, QS_ALLINPUT);
+        const DWORD timeout = ControllerWait(GetTickCount64(),nextDiscovery,nextPoll,
+            pendingDue,!windows.empty(),!pendingWindows.empty());
+        const DWORD wait = MsgWaitForMultipleObjects(1,&stopEvent,FALSE,timeout,QS_ALLINPUT);
         if (wait == WAIT_OBJECT_0 || wait == WAIT_FAILED) break;
         unsigned drained = 0;
         while (drained++ < 128 && PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
@@ -1672,30 +1839,31 @@ DWORD WINAPI Worker(void*) {
         }
         const ULONGLONG now = GetTickCount64();
         ReconcileEvents();
-        if (now >= nextEvents) {
+        if (!pendingWindows.empty() && now >= pendingDue) {
             // Detach the batch: callbacks can safely queue the next batch.
             auto pending = std::move(pendingWindows);
             pendingWindows.clear();
             for (const auto& [window, forceBorder] : pending) Apply(window, forceBorder);
-            nextEvents = now + 100;
         }
         if (now >= nextDiscovery) {
+            PruneProcessCache();
             EnumWindows(Enumerate, 0);
-            nextDiscovery = now + 2000;
+            nextDiscovery = now + 15000;
+            nextPoll = now + 1000;
         } else if (now >= nextPoll) {
             std::vector<HWND> tracked;
             for (const auto& [window, state] : windows) tracked.push_back(window);
             for (HWND window : tracked) Apply(window);
-            nextPoll = now + 500;
+            nextPoll = now + 1000;
         }
     }
-    UnhookWinEvent(objectHook);
+    for (HWINEVENTHOOK hook : objectHooks) UnhookWinEvent(hook);
     UnhookWinEvent(foregroundHook);
     UnhookWinEvent(sizingHook);
     for (auto& [window, state] : windows) Restore(window, state);
     windows.clear();
-    // The old input hook must be drained before a waiting controller can
-    // acquire the lease. Uninit closes these handles only after both joins.
+    ClearProcessCache();
+    // Both threads are drained before the host exits or unloads its DLL.
     SetEvent(stopEvent);
     if (inputThread) WaitForSingleObject(inputThread, INFINITE);
     workerId = 0;
@@ -1703,6 +1871,223 @@ DWORD WINAPI Worker(void*) {
     return 0;
 }
 } // namespace
+
+BOOL WhTool_ModInit() {
+    DWORD session = 0;
+    FILETIME exited{},kernel{},user{};
+    if (!ProcessIdToSessionId(GetCurrentProcessId(),&session) || !session ||
+        !ReadUserSid(GetCurrentProcess(),userSid) ||
+        !GetProcessTimes(GetCurrentProcess(),&controllerCreated,&exited,&kernel,&user))
+        return FALSE;
+    setComposition = reinterpret_cast<SetComposition>(
+        GetProcAddress(GetModuleHandleW(L"user32.dll"),"SetWindowCompositionAttribute"));
+    if (!setComposition) return FALSE;
+    nextIdentity = static_cast<DWORD>(GetTickCount64()) ^ controllerCreated.dwLowDateTime;
+    LoadSettings();
+    stopEvent = CreateEventW(nullptr,TRUE,FALSE,nullptr);
+    readyEvent = CreateEventW(nullptr,TRUE,FALSE,nullptr);
+    if (!stopEvent || !readyEvent) return FALSE;
+    workerThread = CreateThread(nullptr,0,Worker,nullptr,0,nullptr);
+    if (!workerThread) return FALSE;
+    if (WaitForSingleObject(readyEvent,5000) != WAIT_OBJECT_0 || !workerReady) {
+        SetEvent(stopEvent);
+        WaitForSingleObject(workerThread,INFINITE);
+        return FALSE;
+    }
+    Wh_Log(L"Dedicated frame controller ready: pid=%lu thread=%lu",
+        GetCurrentProcessId(),workerId.load());
+    return TRUE;
+}
+
+void WhTool_ModSettingsChanged() {
+    LoadSettings();
+    const DWORD thread = workerId.load();
+    if (thread) PostThreadMessageW(thread,kReconfigure,0,0);
+}
+
+void StopController() {
+    stopping = true;
+    if (stopEvent) SetEvent(stopEvent);
+    if (workerThread) WaitForSingleObject(workerThread,INFINITE);
+    if (inputThread) WaitForSingleObject(inputThread,INFINITE);
+}
+
+void WhTool_ModUninit() {
+    StopController();
+    for (HANDLE handle : {workerThread,inputThread,readyEvent,stopEvent})
+        if (handle) CloseHandle(handle);
+    workerThread = inputThread = readyEvent = stopEvent = nullptr;
+}
+
+// Official 1.7.3 compatibility implementation, scoped to retain app hooks.
+// Global WhTool_* names let Windhawk 2.0 recognize the legacy tool host.
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+namespace ToolHost {
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        if (!Wh_SetFunctionHook(entryPoint,(void*)EntryPoint_Hook,nullptr)) {
+            WhTool_ModUninit();
+            ExitProcess(1);
+        }
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+    WhTool_ModUninit();
+    ExitProcess(0);
+}
+} // namespace ToolHost
+
 
 BOOL Wh_ModInit() {
     using RtlVersion = LONG(WINAPI*)(OSVERSIONINFOW*);
@@ -1715,8 +2100,13 @@ BOOL Wh_ModInit() {
     const DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
     if (!length || length == ARRAYSIZE(path)) return FALSE;
     currentPath = path;
+    const wchar_t* basename = PathFindFileNameW(path);
+    toolContext = _wcsicmp(basename,L"windhawk.exe") == 0 ||
+        _wcsicmp(basename,L"windhawk-mod.exe") == 0;
+    if (toolContext) return ToolHost::Wh_ModInit();
+    if (_wcsicmp(basename,L"explorer.exe") == 0) return FALSE;
     LoadSettings();
-    if (_wcsicmp(PathFindFileNameW(path), L"explorer.exe") != 0) {
+    {
         legacyProcess = true;
         {
             std::lock_guard lock(settingsMutex);
@@ -1758,37 +2148,16 @@ BOOL Wh_ModInit() {
         }
         return TRUE;
     }
-    DWORD session = 0;
-    if (!ProcessIdToSessionId(GetCurrentProcessId(), &session) || !session ||
-        !ReadUserSid(GetCurrentProcess(), userSid)) return FALSE;
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    setComposition = reinterpret_cast<SetComposition>(
-        GetProcAddress(user32, "SetWindowCompositionAttribute"));
-    if (!setComposition) return FALSE;
-    instanceMutex = CreateMutexW(nullptr, FALSE, L"Local\\Windhawk.AppOwnedFrame.Controller.1");
-    if (!instanceMutex) return FALSE;
-    stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!stopEvent || !readyEvent) {
-        if (stopEvent) CloseHandle(stopEvent);
-        if (readyEvent) CloseHandle(readyEvent);
-        CloseHandle(instanceMutex);
-        stopEvent = readyEvent = instanceMutex = nullptr;
-        return FALSE;
-    }
-    return TRUE;
 }
 
 void Wh_ModAfterInit() {
+    if (toolContext) { ToolHost::Wh_ModAfterInit(); return; }
     if (legacyProcess) { RefreshLegacySettings(); return; }
-    workerThread = CreateThread(nullptr, 0, Worker, nullptr, 0, nullptr);
-    if (!workerThread) { Wh_Log(L"Controller creation failed: %lu", GetLastError()); return; }
-    WaitForSingleObject(readyEvent, 5000);
-    Wh_Log(L"Controller candidate ready: thread=%lu", workerId.load());
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     *bReload = FALSE;
+    if (toolContext) { ToolHost::Wh_ModSettingsChanged(); return TRUE; }
     LoadSettings();
     if (legacyProcess) {
         bool legacyRequested, nativeRequested;
@@ -1813,12 +2182,15 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
 }
 
 void Wh_ModBeforeUninit() {
+    if (toolContext) {
+        if (!ToolHost::g_isToolModProcessLauncher) StopController();
+        return;
+    }
     stopping = true;
     if (legacyProcess) {
         earlyDwmEnabled = false;
         ClearEarlyDwm();
         dwmCaptionEnabled = false;
-        ClearDwmCaptionState();
         legacyPaintEnabled = false;
         legacyGutterColor = kNoBorder;
         nativeGripSize = 0;
@@ -1828,21 +2200,12 @@ void Wh_ModBeforeUninit() {
         EnumWindows(ClearNativeAck, 0);
         return;
     }
-    if (stopEvent) SetEvent(stopEvent);
-    // The worker is the sole owner of events/state. Drain it before unloading
-    // the DLL, so no callbacks or thread instructions can reference freed code.
-    if (workerThread) WaitForSingleObject(workerThread, INFINITE);
-    if (inputThread) WaitForSingleObject(inputThread, INFINITE);
 }
 
 void Wh_ModUninit() {
+    if (toolContext) { ToolHost::Wh_ModUninit(); return; }
     if (legacyProcess) {
         if (defaultProcW) EnumWindows(RefreshLegacyWindow, 0);
         return;
     }
-    if (workerThread) CloseHandle(workerThread);
-    if (inputThread) CloseHandle(inputThread);
-    if (readyEvent) CloseHandle(readyEvent);
-    if (stopEvent) CloseHandle(stopEvent);
-    if (instanceMutex) CloseHandle(instanceMutex);
 }
