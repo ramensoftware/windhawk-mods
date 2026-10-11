@@ -1,4 +1,4 @@
-// ==WindhawkMod==
+// ==WindhawkMod== 
 // @id              winstant
 // @name            Winstant
 // @description     Any window, instantly – right where you need it. Switch, arrange and launch from the minimize button or a hotkey
