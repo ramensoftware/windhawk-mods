@@ -2,7 +2,7 @@
 // @id              this-pc-custom-folders
 // @name            This PC Custom Folders
 // @description     Add folders and native application, website or protocol shortcuts to This PC
-// @version         1.6.8
+// @version         1.6.9
 // @author          Casket Pizza
 // @github          https://github.com/CasketPizza
 // @include         windhawk.exe
@@ -33,7 +33,7 @@ Add your favourite folders, programs, websites and app links directly to **This 
 | Application | `C:\Program Files\Example\app.exe` | Network locations |
 | Website | `https://example.com` | Network locations |
 | App protocol | `steam://open/main` | Network locations |
-| Existing shortcut | `C:\\Path\\Example.lnk` or `.url` | Network locations |
+| Existing shortcut | `C:\Path\Example.lnk` or `.url` | Network locations |
 
 Folders use Windows shell registrations. Applications, websites and protocols use native `.lnk` launchers in **Network locations**. Website/protocol launchers call Windows' registered URL handler, so they follow the user's default browser or protocol association. Existing `.lnk` and `.url` files can also be used directly as the Path and are copied into Network locations as managed shortcuts. App and link entries always appear in **Network locations**, regardless of the Group setting.
 
@@ -54,6 +54,7 @@ Enable **Shortcut capture hotkey**, select a `.lnk` or `.url` shortcut in Explor
 - To provide native This PC and Network locations integration, the mod writes per-user shell registrations under `HKCU\Software\Classes\CLSID` and `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\NameSpace`, and creates managed `.lnk` / `.url` files in the user's **Network Shortcuts** folder.
 - These registrations and shortcut files are normally removed on a clean disable while the tool process is running. Because they're persistent Windows shell state, an abrupt process termination, crash, shutdown, or removal while the tool process isn't running can leave managed entries behind. Re-enabling the mod and then disabling it cleanly will remove entries that are still recorded in Windhawk's mod storage.
 - The ownership ledger itself is stored in Windhawk's mod storage and is scoped by Windows user SID; the mod no longer creates its own registry key for bookkeeping.
+- Environment variables in folder paths and icons are preserved for Explorer to expand in its native bitness. Paths that the tool process must inspect or use for launchers are expanded using the native 64-bit Program Files view on 64-bit Windows.
 - If Explorer displays stale names or icons, close and reopen **This PC**. The mod does not fix file-list refresh issues inside destination folders.
 */
 // ==/WindhawkModReadme==
@@ -169,15 +170,62 @@ std::wstring GetSetting(PCWSTR key, int i) {
     return result;
 }
 
-std::wstring Expand(std::wstring s) {
+bool IsWow64Host() {
+    BOOL wow64 = FALSE;
+    return IsWow64Process(GetCurrentProcess(), &wow64) && wow64;
+}
+
+void ReplaceInsensitive(std::wstring& text, const std::wstring& from,
+                        const std::wstring& to) {
+    if (from.empty()) return;
+    size_t pos = 0;
+    while (pos + from.size() <= text.size()) {
+        if (_wcsnicmp(text.c_str() + pos, from.c_str(), from.size()) == 0) {
+            text.replace(pos, from.size(), to);
+            pos += to.size();
+        } else {
+            ++pos;
+        }
+    }
+}
+
+std::wstring ExpandForHost(std::wstring s) {
     if (s.empty()) return s;
+
+    // Tool mods run in a 32-bit host on Windhawk 1.x. Resolve variables that
+    // otherwise point at the x86 program directories to their native x64
+    // equivalents. In Windhawk 2.0's 64-bit tool host this is a no-op.
+    if (IsWow64Host()) {
+        ReplaceInsensitive(s, L"%ProgramFiles%", L"%ProgramW6432%");
+        ReplaceInsensitive(s, L"%CommonProgramFiles%",
+                           L"%CommonProgramW6432%");
+    }
+
     DWORD required = ExpandEnvironmentStringsW(s.c_str(), nullptr, 0);
     if (!required || required > 32768) return s;
+
     std::wstring out(required, L'\0');
-    DWORD written = ExpandEnvironmentStringsW(s.c_str(), out.data(), required);
+    DWORD written =
+        ExpandEnvironmentStringsW(s.c_str(), out.data(), required);
     if (!written || written > required) return s;
+
     out.resize(written - 1);
     return out;
+}
+
+DWORD GetAttributesNative(const std::wstring& path) {
+    PVOID oldValue = nullptr;
+    const bool disabled =
+        IsWow64Host() &&
+        Wow64DisableWow64FsRedirection(&oldValue) != FALSE;
+
+    DWORD attributes = GetFileAttributesW(path.c_str());
+
+    if (disabled) {
+        Wow64RevertWow64FsRedirection(oldValue);
+    }
+
+    return attributes;
 }
 
 // A small strict JSON reader for shortcut records. No third-party dependency.
@@ -292,17 +340,13 @@ bool Load(std::vector<Folder>& folders) {
                 Wh_Log(L"Invalid import JSON at folder %d: existing registry configuration preserved", i + 1);
                 return false;
             }
-            f.group = GetSetting(L"folders[%d].group", i);
-            f.path = Expand(f.path);
-            f.icon = Expand(f.icon);
-            f.workingDir = Expand(f.workingDir);
         } else {
             f.name = GetSetting(L"folders[%d].name", i);
-            f.path = Expand(GetSetting(L"folders[%d].path", i));
-            f.icon = Expand(GetSetting(L"folders[%d].icon", i));
+            f.path = GetSetting(L"folders[%d].path", i);
+            f.icon = GetSetting(L"folders[%d].icon", i);
             f.iconRef = GetSetting(L"folders[%d].iconRef", i);
             f.args = GetSetting(L"folders[%d].args", i);
-            f.workingDir = Expand(GetSetting(L"folders[%d].workingDir", i));
+            f.workingDir = GetSetting(L"folders[%d].workingDir", i);
         }
         if (f.path.empty()) continue;
         // The Windhawk UI can store an empty group for new or migrated rows.
@@ -359,19 +403,23 @@ bool StartsWith(const std::wstring& s, const wchar_t* prefix) {
 bool IsUri(const std::wstring& s) {
     size_t colon = s.find(L':');
     if (colon == std::wstring::npos || colon < 2 || colon > 32 || !iswalpha(s[0])) return false;
-    if (colon == 1) return false;
     for (size_t i=1; i<colon; ++i)
         if (!iswalnum(s[i]) && s[i]!=L'+' && s[i]!=L'-' && s[i]!=L'.') return false;
     // No unquoted spaces/control characters in protocol or web URI.
     return s.find_first_of(L" \t\r\n\"", colon) == std::wstring::npos;
 }
 bool DirectoryExists(const std::wstring& s) {
-    DWORD a = GetFileAttributesW(s.c_str());
-    return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
+    const std::wstring path = ExpandForHost(s);
+    DWORD a = GetAttributesNative(path);
+    return a != INVALID_FILE_ATTRIBUTES &&
+           (a & FILE_ATTRIBUTE_DIRECTORY);
 }
+
 bool FileExists(const std::wstring& s) {
-    DWORD a = GetFileAttributesW(s.c_str());
-    return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
+    const std::wstring path = ExpandForHost(s);
+    DWORD a = GetAttributesNative(path);
+    return a != INVALID_FILE_ATTRIBUTES &&
+           !(a & FILE_ATTRIBUTE_DIRECTORY);
 }
 bool IsExe(const std::wstring& path) {
     auto dot = path.find_last_of(L'.');
@@ -821,7 +869,8 @@ bool CreateLauncher(int i, const Folder& f, EntryKind kind) {
     if (sourceShortcut && outputUrl) {
         // Preserve an existing Internet Shortcut, but add our ownership marker
         // to the staged copy so cleanup never deletes an unrelated file.
-        ok = CopyFileW(f.path.c_str(), staging.c_str(), TRUE) != FALSE;
+        const std::wstring sourcePath = ExpandForHost(f.path);
+        ok = CopyFileW(sourcePath.c_str(), staging.c_str(), TRUE) != FALSE;
         if (ok) {
             ok = WritePrivateProfileStringW(
                      L"InternetShortcut",
@@ -847,12 +896,15 @@ bool CreateLauncher(int i, const Folder& f, EntryKind kind) {
         if (sourceShortcut) {
             // Load an existing .lnk and republish it as a managed copy.
             if (SUCCEEDED(link->QueryInterface(IID_PPV_ARGS(&persistence)))) {
-                hr = persistence->Load(f.path.c_str(), STGM_READ);
+                const std::wstring sourcePath = ExpandForHost(f.path);
+                hr = persistence->Load(sourcePath.c_str(), STGM_READ);
                 if (SUCCEEDED(hr)) {
                     link->SetDescription(kMarker);
                     if (!f.icon.empty()) {
+                        const std::wstring iconPath =
+                            ExpandForHost(f.icon);
                         link->SetIconLocation(
-                            f.icon.c_str(), _wtoi(f.iconRef.c_str()));
+                            iconPath.c_str(), _wtoi(f.iconRef.c_str()));
                     }
                     hr = persistence->Save(staging.c_str(), TRUE);
                 }
@@ -863,25 +915,33 @@ bool CreateLauncher(int i, const Folder& f, EntryKind kind) {
                 // FileProtocolHandler asks Windows to invoke the registered
                 // handler for http(s), steam:, mailto:, and other protocols.
                 const std::wstring handler =
-                    Expand(L"%SystemRoot%\\System32\\rundll32.exe");
+                    ExpandForHost(L"%SystemRoot%\\System32\\rundll32.exe");
                 const std::wstring arguments =
                     L"url.dll,FileProtocolHandler \"" + f.path + L"\"";
 
                 link->SetPath(handler.c_str());
                 link->SetArguments(arguments.c_str());
             } else {
-                link->SetPath(f.path.c_str());
+                const std::wstring targetPath =
+                    ExpandForHost(f.path);
+                link->SetPath(targetPath.c_str());
                 if (!f.args.empty())
                     link->SetArguments(f.args.c_str());
-                if (!f.workingDir.empty())
-                    link->SetWorkingDirectory(f.workingDir.c_str());
+                if (!f.workingDir.empty()) {
+                    const std::wstring workingDirectory =
+                        ExpandForHost(f.workingDir);
+                    link->SetWorkingDirectory(
+                        workingDirectory.c_str());
+                }
             }
 
             link->SetDescription(kMarker);
 
             if (!f.icon.empty()) {
+                const std::wstring iconPath =
+                    ExpandForHost(f.icon);
                 link->SetIconLocation(
-                    f.icon.c_str(), _wtoi(f.iconRef.c_str()));
+                    iconPath.c_str(), _wtoi(f.iconRef.c_str()));
             }
 
             if (SUCCEEDED(link->QueryInterface(IID_PPV_ARGS(&persistence)))) {
@@ -1048,7 +1108,8 @@ void Apply() {
         regString(cls + L"\\InProcServer32", L"ThreadingModel", L"Both");
         regString(cls + L"\\Instance", L"CLSID", kFolderHandler);
         regDword(cls + L"\\Instance\\InitPropertyBag", L"Attributes", 0x11);
-        regString(cls + L"\\Instance\\InitPropertyBag", L"TargetFolderPath", f.path);
+        regString(cls + L"\\Instance\\InitPropertyBag",
+                  L"TargetFolderPath", f.path, REG_EXPAND_SZ);
         regDword(cls + L"\\ShellFolder", L"Attributes", 0xF080004D);
         regDword(cls + L"\\ShellFolder", L"FolderValueFlags", 0x28);
         const std::wstring icon = IconLocation(f);
