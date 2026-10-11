@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-11T13:03:22.000Z</updated>
+    <updated>2026-10-11T18:04:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hide Taskbar Tooltips 1.1.0]]></title>
+        <id>https://windhawk.net/mods/hide-taskbar-tooltips#5fa85c1fab7a650c68755b5859adde091b44d9b4</id>
+        <link href="https://windhawk.net/mods/hide-taskbar-tooltips"/>
+        <updated>2026-10-11T18:04:52.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add independent settings for taskbar applications and system tray tooltips</li>
+<li>Fix empty tooltip text bug by removing destructive AddToolTipContent hook</li>
+</ul>]]></content>
+        <author>
+            <name>gilnett</name>
+            <uri>https://github.com/gilnett</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Custom Shortcuts 1.6.0]]></title>
         <id>https://windhawk.net/mods/explorer-custom-shortcuts#b60ad5890be359ed15f9b610f1649afba7bb4e05</id>
@@ -1010,42 +1024,6 @@ change in future Windows builds.</p>]]></content>
         <author>
             <name>meteoni</name>
             <uri>https://github.com/Meteoni</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Per-App Titlebar Buttons 1.0]]></title>
-        <id>https://windhawk.net/mods/per-app-titlebar-buttons#6a59d24ea77bc63bfb4e5e97fe3f41a2b1e81993</id>
-        <link href="https://windhawk.net/mods/per-app-titlebar-buttons"/>
-        <updated>2026-10-09T16:01:26.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="perapptitlebarbuttons">Per-app Titlebar Buttons</h1>
-<p>Hide or disable selected native Windows titlebar buttons on a per-application
-basis.</p>
-<p>Add one or more process names in the mod settings and choose whether to affect
-the Minimize, Maximize/Restore, and Close buttons for each application.</p>
-<p>Process names can be entered with or without the <code>.exe</code> extension. For example,
-both <code>taskmgr</code> and <code>taskmgr.exe</code> match Task Manager. Matching is
-case-insensitive, and a full executable path is also accepted.</p>
-<h2 id="nativetitlebarbehavior">Native titlebar behavior</h2>
-<p>Windows treats the Minimize and Maximize/Restore buttons as a pair. If only one
-of those style flags is removed, Windows may keep both buttons visible and show
-the affected button as disabled. Removing both flags removes the pair.</p>
-<p>These are native window style flags, so disabling Maximize also disables native
-maximize actions such as titlebar double-click and the Maximize system-menu
-command while the setting is active.</p>
-<p>Windows doesn't provide an independent window style flag for the Close button.
-If Close is selected while Minimize or Maximize/Restore is still available,
-the Close command is disabled.</p>
-<p>If Close is selected and the resulting window has neither Minimize nor
-Maximize/Restore available, the mod removes <code>WS_SYSMENU</code>. This removes the
-native caption button cluster, and also removes the titlebar icon and the
-Alt+Space system menu for that window while the setting is active.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>The mod targets standard native Win32 titlebars. Applications that draw their
-own titlebars, including some Chromium, Electron, and WinUI applications, may
-not respond to these settings.</p>]]></content>
-        <author>
-            <name>Casket Pizza</name>
-            <uri>https://github.com/CasketPizza</uri>
         </author>
     </entry>
 </feed>

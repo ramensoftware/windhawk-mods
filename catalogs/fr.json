@@ -7484,7 +7484,7 @@
         "ratingUsers": 4,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1790852465000,
+        "updated": 1791741892000,
         "users": 77
       },
       "metadata": {
@@ -7493,14 +7493,15 @@
         ],
         "author": "gilnett",
         "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
-        "description": "Suppresses native Windows 11 XAML hover tooltips in Explorer (taskbar buttons, system tray icons, and shell controls).",
+        "description": "Suppresses native Windows 11 XAML hover tooltips in Explorer, with selective area filtering for taskbar apps and system tray icons.",
+        "donateUrl": "https://ko-fi.com/gilnet",
         "github": "https://github.com/gilnett",
         "include": [
           "explorer.exe"
         ],
         "license": "GPL-3.0",
         "name": "Hide Taskbar Tooltips",
-        "version": "1.0.8"
+        "version": "1.1.0"
       }
     },
     "hide-titlebar-elements": {
@@ -8574,7 +8575,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 0, 0, 5, 19],
         "ratingUsers": 24,
-        "reviews": 3,
+        "reviews": 4,
         "trendingSorting": 44,
         "updated": 1791540273000,
         "users": 440
