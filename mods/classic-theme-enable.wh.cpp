@@ -197,11 +197,6 @@ it will require the UAC authorization). Alternatively you can use the
 #include <winternl.h>
 #include <aclapi.h>
 
-#include <iostream>
-#include <sddl.h>
-#include <winternl.h>
-#include <aclapi.h>
-
 extern "C" NTSTATUS NTAPI NtOpenSection(
     OUT PHANDLE SectionHandle,
     IN ACCESS_MASK DesiredAccess,
