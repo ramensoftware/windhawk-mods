@@ -2,12 +2,197 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-12T16:04:02.000Z</updated>
+    <updated>2026-10-12T18:00:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Winstant 1.5]]></title>
+        <id>https://windhawk.net/mods/winstant#83d9b317497843f42cc0dbc229e0aab85b412a2a</id>
+        <link href="https://windhawk.net/mods/winstant"/>
+        <updated>2026-10-12T18:00:51.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="winstant">Winstant</h1>
+<p><img src="https://i.imgur.com/4u7KigX.png" alt="Winstant_1" /></p>
+<p><em>Any window, instantly – right where you need it.</em></p>
+<p>Working with several windows of the same app – Excel workbooks, Windows
+Terminal sessions, Explorer folders, browser windows – usually means
+juggling them from the taskbar and then dragging the one you want back into
+place.</p>
+<p>This mod adds a small switcher to the <strong>minimize button</strong> of every window.
+Rest the mouse on it for a moment and a panel lists the <strong>other windows of
+the same app</strong>. Pick one and it opens <strong>exactly where the current window
+is</strong> – same position, same size, same state – even if it was maximized or
+minimized somewhere else.</p>
+<blockquote>
+  <p>Example: Edge on the left half of the screen, Excel on the right half.
+  Hover Excel's minimize button, pick another workbook (which was maximized
+  behind everything): it takes the right half of the screen.</p>
+</blockquote>
+<p>The same panel is also a small <strong>window manager</strong>: it can list every open
+window, arrange windows in layouts, move them between monitors, and save
+and restore whole desktop arrangements.</p>
+<h2 id="quickstart">Quick start</h2>
+<p><img src="https://i.imgur.com/CRkqAsu.png" alt="Winstant_2" /></p>
+<ol>
+<li>Open two or more windows of the same app.</li>
+<li>Rest the mouse on the <strong>minimize</strong> button of one of them (about half a
+second).</li>
+<li>Click a window in the panel, or move the mouse into the panel and then
+press its number.</li>
+</ol>
+<p>Move the mouse away and the panel closes by itself.</p>
+<p>Or press <strong>Ctrl+Alt+Space</strong> anywhere (optionally also a quick double tap of
+Ctrl, Shift or Alt, see the settings) to open the panel in the middle of the
+screen with every open window, most recently used first: press <code>Enter</code> to
+jump back to the previous window, or type a few letters to find another.</p>
+<h2 id="launcherappsandfiles">Launcher: apps and files</h2>
+<p><img src="https://i.imgur.com/ZjowdlC.png" alt="Winstant_launcher" /></p>
+<p>In the hotkey panel, type to search: besides the open windows, the panel
+suggests <strong>installed apps</strong> (everything in the Start menu, Store apps
+included) and – if <a href="https://www.voidtools.com/">Everything</a> is running –
+<strong>files and folders</strong> from its index (most recently used first, or another
+order of your choice; a last row opens the full result list in Everything).
+How many apps and files to show is configurable. Press <code>Enter</code> to open the
+first result,
+<code>Ctrl+Enter</code> on a file to open its folder, or right-click a file to open its
+location or copy its path. Both sources can be turned off, and app
+suggestions can be enabled in the hover panel too.</p>
+<h2 id="tellingidenticalwindowsapart">Telling identical windows apart</h2>
+<p>Apps like Windows Terminal often show the same title in every window. The
+mod gives each window a <strong>number and a color</strong> that stay the same for as
+long as that window is open:</p>
+<ul>
+<li><strong>Live preview</strong> – in list view, hovering an entry shows a live thumbnail
+of that window, framed in its color. Grid view shows live thumbnails of
+all windows at once.</li>
+<li><strong>Window tags</strong> (off by default) – a small colored pill with the number
+(and custom name) is drawn in the title bar of every app that has two or
+more windows open, next to the caption buttons. It doesn't block clicks,
+and it's left out where the app draws tabs or buttons at that spot
+(browsers, Windows Terminal, File Explorer with tabs).</li>
+<li><strong>Custom names</strong> – press <code>F2</code> or use the right-click menu to give a window
+a name such as "Server", "Logs" or "Build". The name shows up in the
+panel, in the preview and in the window tag.</li>
+</ul>
+<h2 id="onlythisapporeverywindow">Only this app, or every window</h2>
+<p>By default the panel lists the windows of the current app. Set <strong>Show</strong> to
+<em>All windows</em> to list every open window instead: the current app comes
+first, then the other apps, each in its own section with its icon, ordered
+by how recently you used them. Click a section header to collapse it.
+Holding <code>Shift</code> while the panel appears switches to the other mode for that
+time.</p>
+<h2 id="arrangingwindows">Arranging windows</h2>
+<p><img src="https://i.imgur.com/qnOL6ii.png" alt="Winstant_3" /></p>
+<p>The bar at the bottom of the panel arranges windows on the current monitor:</p>
+<p>| Button | Layout |
+|---|---|
+| Tile all | Every window in a grid (2 → side by side, 4 → 2×2, …) |
+| Two / three columns | Side-by-side columns |
+| 2 × 2 grid | Four quarters |
+| Main + side | The current window on the left, the others stacked on the right |</p>
+<p>The current window always takes the first place. The other places go to
+the windows you <strong>selected</strong> (<code>Ctrl</code>+click or <code>Space</code>), or – if none is
+selected – to the other windows of the same app.</p>
+<p>Next to the layouts there are three group actions: <strong>minimize the others</strong>,
+<strong>bring the windows to this monitor</strong>, <strong>close the others</strong>. They work on
+the selected windows, or on the other windows of the same app.</p>
+<p>Each entry also has a <strong>place beside</strong> button (two panes, the filled one is
+where the window will go): the picked window gets the same size as the
+current one, next to it, and the pair is centered on the monitor. A
+maximized or very wide window splits the screen in two halves instead.</p>
+<h2 id="rightclickmenu">Right-click menu</h2>
+<p>Right-click an entry for: open here / switch to, place beside, <strong>move to
+another monitor</strong>, <strong>always on top</strong>, <strong>opacity</strong>, select, rename,
+minimize, close.</p>
+<h2 id="savedlayouts">Saved layouts</h2>
+<p>The bookmark button at the right of the bottom bar saves the current
+arrangement of all your windows (position, size, maximized/minimized state)
+under a name, and restores it later with one click. Windows are matched by
+program, kind of window and title. Programs that aren't running are
+skipped – the mod never starts programs by itself.</p>
+<h2 id="keyboardandmousereference">Keyboard and mouse reference</h2>
+<p>| Action | Mouse | Keyboard |
+|---|---|---|
+| Open the window here / switch to it | Click | <code>1</code>–<code>9</code>, or arrows + <code>Enter</code> (hover panel: move the mouse into it first) |
+| Most recently used windows | – | <code>Tab</code> / <code>Shift+Tab</code> |
+| Place it beside the current window | Two-panes button | <code>Ctrl+Enter</code> |
+| Select windows for layouts and actions | <code>Ctrl</code>+click | <code>Space</code> |
+| Close that window | <code>×</code> button | <code>Delete</code> |
+| Rename it | Right-click menu | <code>F2</code> |
+| More actions | Right-click | – |
+| Search by title or name | – | Just type |
+| Scroll a long list | Wheel / drag the scrollbar | <code>PgUp</code>/<code>PgDn</code>, <code>Home</code>/<code>End</code> |
+| Close the panel | Move away / click elsewhere | <code>Esc</code> (first clears the search) |</p>
+<p>The panel opened by hovering gets the keyboard only once the mouse moves into
+it (or you click it), so keys typed in the app you're working in never reach
+it. The panel opened with the hotkey takes the keyboard right away.</p>
+<h2 id="mousewheelontheminimizebutton">Mouse wheel on the minimize button</h2>
+<p>Scroll the wheel while the cursor is on a minimize button to cycle through
+the app's windows in place, without opening the panel. A small badge near
+the cursor shows which window you landed on.</p>
+<h2 id="appearance">Appearance</h2>
+<p>The <strong>Appearance</strong> settings change the look of the panel:</p>
+<ul>
+<li><strong>Theme</strong> – follow Windows, or force light or dark.</li>
+<li><strong>Background material</strong> – solid, <strong>Acrylic</strong> (blurred, see-through),
+<strong>Mica</strong> or <strong>Mica Alt</strong> (tinted by the wallpaper). Needs Windows 11
+22H2 or later; elsewhere the panel stays solid. An optional tint makes the
+material more or less opaque.</li>
+<li><strong>Colors</strong> – a custom background color and accent color (hex, e.g.
+<code>1E1E2E</code>), and the palette of the window numbers: default, pastel, vivid,
+or shades of the accent color.</li>
+<li><strong>Shape and size</strong> – rounded, slightly rounded or square corners; border
+following the theme, in the accent color, or none; round or square number
+badges; compact, normal or comfortable rows; font and text size.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<p>Settings are grouped in <strong>Panel</strong>, <strong>Switching</strong>, <strong>Arranging</strong>, <strong>Window
+tags</strong> and <strong>Appearance</strong>. Every feature can be turned on or off on its own. The hotkey is
+written like <code>Ctrl+Alt+Space</code> or <code>Win+Shift+W</code> (leave it empty to disable
+it). The panel texts follow the Windows display language (English, Italian,
+German, French, Spanish) or can be forced; the settings, too, are translated
+into these languages.</p>
+<h2 id="notesandlimitations">Notes and limitations</h2>
+<ul>
+<li>Works with apps whose minimize button Windows can recognize: classic
+Win32 apps, Office, Chrome/Edge, File Explorer, Windows Terminal,
+Notepad++ and most others. Apps that draw a fully custom title bar
+without reporting the button to Windows are not detected.</li>
+<li>Windows on other virtual desktops are not listed, and the mod doesn't
+move windows between virtual desktops (Windows has no supported way to do
+it).</li>
+<li>Window numbers, colors and custom names are kept in memory only and are
+lost when the window closes. The only thing stored is <strong>saved layouts</strong>, and
+only when you save one: for each window the program path, window class,
+title, position, size and state, in the mod's local storage provided by
+Windhawk. That storage is shared by the whole computer, so the layouts are
+kept per Windows user (keyed by the user's SID): other users of the same
+PC don't see yours. Nothing is written elsewhere or sent anywhere. Delete
+them from the bookmark menu; uninstalling the mod removes them.</li>
+<li>Opacity changes are undone when the mod is disabled (the window's own
+transparency settings are put back). Windows that draw their own
+transparency can't be changed, so the Opacity menu is greyed out for them.</li>
+<li>Windows of programs running as administrator can't be moved, resized or
+changed by a mod that doesn't run as administrator (Windows blocks it).
+They are still listed: picking one switches to it where it is, and the
+actions that would change it are greyed out or skipped. The same goes for
+windows that are not responding.</li>
+<li>"Close the others" asks for confirmation when no windows are selected.</li>
+<li>The mod runs in its own background <code>windhawk.exe</code> process instead of
+being injected into <code>explorer.exe</code>, so it can never destabilize the shell.</li>
+<li>Tested on Windows 11 (100% and higher display scaling). It's designed to
+work on Windows 10 version 1607 or later too, but hasn't been tested there
+yet; on Windows 10 the panel has square corners and no colored borders.</li>
+<li>Apps that keep everything as tabs in a single window (e.g. Notepad++ by
+default) have nothing to switch to unless you open separate windows.</li>
+</ul>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[SameFolderOnly 4.1.5]]></title>
         <id>https://windhawk.net/mods/xandriw-explorer-select-interceptor#fa750447213d3d2c91aadac412826eaec6343cc2</id>
@@ -1384,28 +1569,6 @@ masking with smart dark-mode dialog sampling.</p>
         <author>
             <name>awnaise</name>
             <uri>https://github.com/awnaise</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix Explorer Row Right-Click 1.0.0]]></title>
-        <id>https://windhawk.net/mods/fix-explorer-row-right-click#e2969bc12095d903c8e3fbf6da8c860e3b79d570</id>
-        <link href="https://windhawk.net/mods/fix-explorer-row-right-click"/>
-        <updated>2026-10-09T21:03:53.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fixexplorerrowrightclick">Fix Explorer Row Right-Click</h1>
-<p>Right-click anywhere on a file's row or item area to open its context menu, rather than having to click directly on the file name.</p>
-<h3 id="comparison">Comparison</h3>
-<p>| Before | After |
-| :---: | :---: |
-| <img src="https://i.imgur.com/ly9exsa.png" alt="Before" /> | <img src="https://i.imgur.com/PPW2Xtk.png" alt="After" /> |</p>
-<h3 id="features">Features</h3>
-<ul>
-<li><strong>Full row support:</strong> Right-clicking empty space across a row opens the selected file's context menu.</li>
-<li><strong>Selection safe:</strong> Preserves existing multi-item selections.</li>
-<li><strong>Folder background intact:</strong> Right-clicking below all files still opens the folder background menu.</li>
-</ul>]]></content>
-        <author>
-            <name>iMAboud</name>
-            <uri>https://github.com/iMAboud</uri>
         </author>
     </entry>
 </feed>
