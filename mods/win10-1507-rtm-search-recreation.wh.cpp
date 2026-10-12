@@ -1596,7 +1596,7 @@ private:
     }
 
     void SyncTaskbarBox(bool forceTreeScan = false, HMONITOR targetMonitor = nullptr) {
-        if (!taskbarBoxHwnd_ || g_stopping.load()) return;
+        if (!taskbarBoxHwnd_) return;
 
         // Skip completely if overTaskbar is disabled
         if (!g_overTaskbar.load()) {
@@ -3352,7 +3352,6 @@ private:
         return DefWindowProcW(hwnd,message,wParam,lParam);
     }
 };
-
 
 
 bool IsTaskbarSearchButtonAt(POINT pt) {
