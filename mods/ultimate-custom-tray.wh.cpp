@@ -1,8 +1,9 @@
 // ==WindhawkMod==
 // @id              ultimate-custom-tray
 // @name            Ultimate Custom Tray
-// @description     Custom tray icons with actions, context menus and image icon support.
-// @version         2.0
+// @description     This mod adds customizable system tray icons in Windows with configurable actions and context menus, support for image files and application icons, and automatic adaptation to the system theme.
+// @description:ru-RU   Этот мод добавляет настраиваемые иконки в системный трей Windows с возможностью назначения действий и контекстных меню, поддержкой файлов изображений и иконок приложений, а также автоматической адаптацией под тему системы.
+// @version         2.1
 // @author          Salyts
 // @license         MIT
 // @github          https://github.com/Salyts
@@ -12,10 +13,11 @@
 
 // ==WindhawkModReadme==
 /*
-# Ultimate Custom Tray 2.0
+# Ultimate Custom Tray 2.1
 
-Adds your own icons to the system tray. Each icon can run an
-action on left-click and/or show a context menu on right-click.
+This mod adds customizable system tray icons in Windows with configurable actions and context menus, support for image files and application icons, and automatic adaptation to the system theme.
+
+### [> Russian documentation <](https://github.com/Salyts/Ultimate-Custom-Tray/blob/main/README_RU.md)
 
 ---
 
@@ -32,7 +34,7 @@ action on left-click and/or show a context menu on right-click.
 
 | Prefix | Example | Description |
 |--------|---------|-------------|
-| `" "` | `"C:\Program Files\Windhawk\windhawk.exe"` | Opens a file or folder by absolute path. |
+| `" "` | `"C:\Program Files\Windhawk\windhawk.exe"` | Opens a file or folder by path. |
 | `~` | `~Downloads` and `~windhawk.exe` | Opens a folder or file by name. |
 | `cmd:` | `cmd:control` | Runs a command through `cmd.exe`. |
 | `shell:` | `shell:shutdown /r /f /t 0` | Runs through `powershell.exe`. |
@@ -61,7 +63,7 @@ Signs can be combined: `-*cmd:tasklist` runs cmd in a visible window as admin.
 
 ---
 
-## Style options
+## Style Settings
 
 ### Icon color
 
@@ -103,25 +105,52 @@ Controls how the menu is aligned relative to the icon:
 ### Menu offset
 
 Distance in pixels between the tray icon and the menu (0-200). Default is 10px.
+
+---
+
+## Tray Items
+
+Each item in the **Tray Items** list becomes a separate icon in the system tray. You can add multiple items to create a collection of custom tray icons.
+
+### Item Settings
+
+- **Label** - Tooltip text shown when hovering over the tray icon.
+- **Icon** - The icon to display. Can be a glyph code (e.g., "EC50"), image file path, or executable path.
+- **Action** - Command or action to execute when the icon is left-clicked (or right-clicked if buttons are swapped).
+- **Swap mouse buttons** - When enabled, left-click opens the context menu and right-click runs the action.
+- **Context menu** - List of menu items shown on right-click (or left-click if buttons are swapped).
+
+### Context Menu Items
+
+Each context menu item has the following settings:
+
+- **State** - Controls visibility and interaction (Enabled/Disabled/Hidden).
+- **Name** - Text displayed in the menu.
+- **Description** - Optional text shown on the right side of the menu item (e.g., keyboard shortcut like "Win+E" or a hint).
+- **Icon** - Icon shown next to the menu item (glyph code, image, or executable path).
+- **Action** - Command to execute when the menu item is clicked.
+- **Separator** - Add a separator line above or below this item.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- icon_color: auto
-  $name: Icon color
-  $description: "Auto detects the Windows theme on every click. White for dark taskbar, Black for light taskbar."
-  $options:
-  - auto: Auto
-  - white: White
-  - black: Black
-- menu_color: auto
-  $name: Context menu color
-  $description: "Background and icon color inside the right-click context menu. Auto follows the Windows theme."
-  $options:
-  - auto: Auto
-  - light: Light
-  - dark: Dark
+- StyleSettings:
+  - icon_color: auto
+    $name: Icons color
+    $description: "Auto detects the Windows theme on every click. White for dark taskbar, Black for light taskbar."
+    $options:
+    - auto: Auto
+    - white: White
+    - black: Black
+  - menu_color: auto
+    $name: Context menu color
+    $description: "Background and icon color inside the right-click context menu. Auto follows the Windows theme."
+    $options:
+    - auto: Auto
+    - light: Light
+    - dark: Dark
+  $name: Style Settings
 - MenuSettings:
   - menu_near_icon: false
     $name: Open menu near tray icon
@@ -130,10 +159,10 @@ Distance in pixels between the tray icon and the menu (0-200). Default is 10px.
     $name: Menu direction
     $description: "Direction from the tray icon where menu appears (only when 'Open menu near tray icon' is enabled)."
     $options:
-    - top: Above icon
-    - bottom: Below icon
-    - left: Left of icon
-    - right: Right of icon
+    - top: Above icon ↑
+    - left: Left of icon ←
+    - right: Right of icon →
+    - bottom: Below icon ↓
   - menu_alignment: center
     $name: Menu alignment
     $description: "How the menu is aligned relative to the icon (only when 'Open menu near tray icon' is enabled)."
@@ -144,9 +173,9 @@ Distance in pixels between the tray icon and the menu (0-200). Default is 10px.
   - menu_offset: 10
     $name: Menu offset
     $description: "Distance in pixels between the tray icon and menu (0-200, only when 'Open menu near tray icon' is enabled)."
-  $name: Context Menu Settings
+  $name: Context menu settings
 - items:
-    - - label: "Explorer"
+    - - label: "File Explorer"
         $name: Label
         $description: "Tooltip shown when hovering over the tray icon."
       - icon: "EC50"
@@ -157,21 +186,69 @@ Distance in pixels between the tray icon and the menu (0-200). Default is 10px.
         $name: Swap mouse buttons
         $description: "When enabled, left-click opens context menu and right-click runs action."
       - context_menu:
+          - - state: "enabled"
+              $name: State
+              $options:
+              - enabled: Enabled (works normally)
+              - disabled: Disabled (visible but cannot be clicked)
+              - hidden: Hidden (not visible in menu)
+            - name: "Open File Explorer"
+              $name: Name
+            - description: "Win+E"
+              $name: Description
+            - icon: "C:\\Windows\\explorer.exe"
+              $name: Icon
+            - action: "cmd:explorer"
+              $name: Action
+            - separator: "below"
+              $name: Separator
+              $description: "Add a separator line in the menu."
+              $options:
+              - none: None
+              - above: Above this item ↑
+              - below: Below this item ↓
           - - name: "Downloads"
-            - icon: "EC4F"
-            - action: "~Downloads"
+            - description: ""
+            - icon: "E896"
+            - action: "~downloads"
+            - separator: "none"
+            - state: "enabled"
           - - name: "Documents"
+            - description: ""
             - icon: "E8A5"
-            - action: "~Documents"
+            - action: "~documents"
+            - separator: "none"
+            - state: "enabled"
           - - name: "Pictures"
+            - description: ""
             - icon: "E91B"
             - action: "~Pictures"
+            - separator: "none"
+            - state: "enabled"
           - - name: "Videos"
+            - description: ""
             - icon: "E714"
-            - action: "~Videos"
+            - action: "~videos"
+            - separator: "none"
+            - state: "enabled"
           - - name: "Music"
-            - icon: "E8D6"
-            - action: "~Music"
+            - description: ""
+            - icon: "EC4F"
+            - action: "~music"
+            - separator: "none"
+            - state: "enabled"
+          - - name: "Network"
+            - description: ""
+            - icon: "EC27"
+            - action: "~network"
+            - separator: "above"
+            - state: "enabled"
+          - - name: "Personal Folder"
+            - description: ""
+            - icon: "EC25"
+            - action: "~profile"
+            - separator: "none"
+            - state: "enabled"
         $name: Context menu
   $name: Tray Items
   $description: "Each item becomes a tray icon. Left-click runs Action, right-click opens Context menu."
@@ -196,6 +273,9 @@ struct ContextMenuItem {
     std::wstring name;
     std::wstring icon;
     std::wstring action;
+    std::wstring separator;
+    std::wstring state;
+    std::wstring description;
 };
 
 struct TrayItem {
@@ -495,12 +575,13 @@ static bool GetKnownFolderPath(const wchar_t* name, std::wstring& out) {
     KNOWNFOLDERID fid{};
     std::wstring n = ToLower(name);
     if      (n == L"downloads")                     fid = FOLDERID_Downloads;
-    else if (n == L"documents" || n == L"personal") fid = FOLDERID_Documents;
-    else if (n == L"music")                         fid = FOLDERID_Music;
+    else if (n == L"documents")                     fid = FOLDERID_Documents;
+    else if (n == L"music" || n == L"sounds")       fid = FOLDERID_Music;
     else if (n == L"pictures")                      fid = FOLDERID_Pictures;
     else if (n == L"videos")                        fid = FOLDERID_Videos;
     else if (n == L"desktop")                       fid = FOLDERID_Desktop;
-    else if (n == L"profile" || n == L"home")       fid = FOLDERID_Profile;
+    else if (n == L"network" || n == L"networks")   fid = FOLDERID_NetworkFolder;
+    else if (n == L"profile" || n == L"home" || n == L"personal" || n == L"personal folder") fid = FOLDERID_Profile;
     else return false;
 
     PWSTR raw = nullptr;
@@ -999,16 +1080,42 @@ static void ShowContextMenu(HWND hWnd, UINT itemId,
     std::vector<HBITMAP> bitmaps;
     bitmaps.reserve(items.size());
 
+    UINT menuPosition = 0;
+
     for (size_t i = 0; i < items.size(); ++i) {
         const auto& mi = items[i];
+
+        if (mi.state == L"hidden") {
+            continue;
+        }
+
+        if (mi.separator == L"above") {
+            MENUITEMINFOW sepAbove = {};
+            sepAbove.cbSize = sizeof(sepAbove);
+            sepAbove.fMask = MIIM_FTYPE;
+            sepAbove.fType = MFT_SEPARATOR;
+            InsertMenuItemW(hMenu, menuPosition, TRUE, &sepAbove);
+            menuPosition++;
+        }
+
         std::wstring txt = mi.name.empty() ? L"(unnamed)" : mi.name;
+
+        if (!mi.description.empty()) {
+            txt += L"\t" + mi.description;
+        }
 
         MENUITEMINFOW mii = {};
         mii.cbSize     = sizeof(mii);
-        mii.fMask      = MIIM_ID | MIIM_STRING;
+        mii.fMask      = MIIM_ID | MIIM_STRING | MIIM_STATE;
         mii.wID        = (UINT)(1000 + i);
         mii.dwTypeData = txt.data();
         mii.cch        = (UINT)txt.size();
+
+        if (mi.state == L"disabled") {
+            mii.fState = MFS_DISABLED;
+        } else {
+            mii.fState = MFS_ENABLED;
+        }
 
         HBITMAP hBmp = MakeMenuBitmap(mi.icon, dark);
         if (hBmp) {
@@ -1016,7 +1123,17 @@ static void ShowContextMenu(HWND hWnd, UINT itemId,
             mii.hbmpItem  = hBmp;
             bitmaps.push_back(hBmp);
         }
-        InsertMenuItemW(hMenu, (UINT)i, TRUE, &mii);
+        InsertMenuItemW(hMenu, menuPosition, TRUE, &mii);
+        menuPosition++;
+
+        if (mi.separator == L"below") {
+            MENUITEMINFOW sepBelow = {};
+            sepBelow.cbSize = sizeof(sepBelow);
+            sepBelow.fMask = MIIM_FTYPE;
+            sepBelow.fType = MFT_SEPARATOR;
+            InsertMenuItemW(hMenu, menuPosition, TRUE, &sepBelow);
+            menuPosition++;
+        }
     }
 
     MenuPosition menuPos = GetMenuPositionNearIcon(itemId);
@@ -1108,7 +1225,7 @@ static void DestroyAllIcons() {
 
 static void LoadAllSettings() {
 
-    PCWSTR pColor = Wh_GetStringSetting(L"icon_color");
+    PCWSTR pColor = Wh_GetStringSetting(L"StyleSettings.icon_color");
     g_iconColorMode = L"auto";
     if (pColor) {
         if (wcscmp(pColor, L"white") == 0) g_iconColorMode = L"white";
@@ -1116,7 +1233,7 @@ static void LoadAllSettings() {
         Wh_FreeStringSetting(pColor);
     }
 
-    PCWSTR pMenu = Wh_GetStringSetting(L"menu_color");
+    PCWSTR pMenu = Wh_GetStringSetting(L"StyleSettings.menu_color");
     g_menuColorMode = L"auto";
     if (pMenu) {
         if (wcscmp(pMenu, L"dark")  == 0) g_menuColorMode = L"dark";
@@ -1204,12 +1321,27 @@ static void LoadAllSettings() {
             swprintf_s(key, L"items[%d].context_menu[%d].action", i, j);
             PCWSTR pCA = Wh_GetStringSetting(key);
 
+            swprintf_s(key, L"items[%d].context_menu[%d].separator", i, j);
+            PCWSTR pSep = Wh_GetStringSetting(key);
+
+            swprintf_s(key, L"items[%d].context_menu[%d].state", i, j);
+            PCWSTR pState = Wh_GetStringSetting(key);
+
+            swprintf_s(key, L"items[%d].context_menu[%d].description", i, j);
+            PCWSTR pDesc = Wh_GetStringSetting(key);
+
             ContextMenuItem cmi;
             cmi.name   = cName;
             cmi.icon   = pCI ? pCI : L"";
             cmi.action = pCA ? pCA : L"";
+            cmi.separator = pSep ? pSep : L"none";
+            cmi.state = pState ? pState : L"enabled";
+            cmi.description = pDesc ? pDesc : L"";
             if (pCI) Wh_FreeStringSetting(pCI);
             if (pCA) Wh_FreeStringSetting(pCA);
+            if (pSep) Wh_FreeStringSetting(pSep);
+            if (pState) Wh_FreeStringSetting(pState);
+            if (pDesc) Wh_FreeStringSetting(pDesc);
 
             item.contextMenu.push_back(std::move(cmi));
         }

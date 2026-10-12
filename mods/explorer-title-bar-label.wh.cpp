@@ -1,0 +1,2395 @@
+// ==WindhawkMod==
+// @id              explorer-title-bar-label
+// @name            Explorer Title Bar Label
+// @description     Add custom text, date and time to the Windows 11 File Explorer title bar.
+// @version         1.0.0
+// @author          digART
+// @github          https://github.com/digart11
+// @license         GPL-3.0
+// @include         explorer.exe
+// @architecture    x86-64
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -ldwmapi -lcomctl32
+// ==/WindhawkMod==
+
+// Source code is published under the GNU General Public License v3.0.
+// Portions of the File Explorer hook and XAML discovery code are adapted
+// from Explorer Command Bar by DanRotaru, licensed under the MIT License.
+//
+// Copyright (c) DanRotaru
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE.
+
+// ==WindhawkModReadme==
+/*
+# Explorer Title Bar Label
+
+Add custom text, date and time to the right side of the Windows 11 File Explorer title bar.
+
+![Explorer Title Bar Label](https://raw.githubusercontent.com/digart11/explorer-title-bar-label/main/images/screenshot.png)
+
+## Features
+
+- Custom text, date and time
+- Flexible date display
+- 12-hour or 24-hour time with optional seconds
+- Font, size, weight and color
+- Opacity and spacing
+- Live updates
+
+## Date and time
+
+Choose the date parts and order you prefer:
+
+- **Weekday:** None, Mon, Monday
+- **Day number:** 1, 01
+- **Month:** 8, 08, Aug, August
+- **Year:** None, 26, 2026
+- **Date order:** Month-Day-Year, Day-Month-Year, Year-Month-Day
+- **Numeric separator:** `/`, `-`, `.`
+
+Time can use **12-hour or 24-hour format**, with optional seconds.
+
+## Compatibility
+
+This mod does not use XAML Diagnostics, so it can be used together with **Windows 11 File Explorer Styler** and other tools/mods that consume File Explorer XAML diagnostics.
+
+If the mod is enabled while File Explorer windows are already open, the label may only appear in newly opened windows or after Explorer rebuilds the relevant tab UI (for example, after tab activity). This is a limitation of avoiding XAML Diagnostics.
+
+## Credits
+
+Parts of the File Explorer hook and XAML discovery plumbing are adapted from **Explorer Command Bar** by **DanRotaru**, licensed under the MIT License.
+
+*/
+// ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- customText: ""
+  $name: Custom text
+  $description: "Optional text displayed before the date and time."
+
+- showDate: true
+  $name: Show date
+
+- dateWeekday: short
+  $name: Weekday
+  $options:
+  - none: None
+  - short: Mon
+  - long: Monday
+
+- dateDay: number
+  $name: Day number
+  $options:
+  - number: "1"
+  - twoDigit: "01"
+
+- dateMonth: short
+  $name: Month
+  $options:
+  - number: "8"
+  - twoDigit: "08"
+  - short: Aug
+  - long: August
+
+- dateYear: none
+  $name: Year
+  $options:
+  - none: None
+  - short: "26"
+  - long: "2026"
+
+- dateOrder: mdy
+  $name: Date order
+  $options:
+  - mdy: Month - Day - Year
+  - dmy: Day - Month - Year
+  - ymd: Year - Month - Day
+
+- numericDateSeparator: slash
+  $name: Numeric date separator
+  $options:
+  - slash: "/"
+  - dash: "-"
+  - dot: "."
+
+- showTime: true
+  $name: Show time
+
+- use24Hour: false
+  $name: 24-hour time
+
+- showSeconds: false
+  $name: Show seconds
+
+- separator: "   |   "
+  $name: Label separator
+
+- fontPreset: segoeVariable
+  $name: Font family
+  $options:
+  - segoeVariable: Segoe UI Variable Text
+  - segoe: Segoe UI
+  - arial: Arial
+  - calibri: Calibri
+  - consolas: Consolas
+  - tahoma: Tahoma
+  - verdana: Verdana
+  - custom: Custom
+
+- customFontFamily: ""
+  $name: Custom font family
+  $description: "Used only when Font family is set to Custom."
+
+- fontSize: 12
+  $name: Font size
+
+- fontWeight: normal
+  $name: Font weight
+  $options:
+  - normal: Normal
+  - semibold: Semibold
+  - bold: Bold
+
+- italic: false
+  $name: Italic
+
+- textColor: ""
+  $name: Text color
+  $description: "Hex color such as #FFFFFF or #A0A0A0. Leave empty to follow the system theme."
+
+- opacity: 100
+  $name: Opacity
+  $description: "0 to 100."
+
+- leftMargin: 12
+  $name: Left offset
+  $description: "Positive values move the label to the left."
+
+- rightMargin: 12
+  $name: Right spacing
+
+- verticalOffset: 0
+  $name: Vertical offset
+  $description: "Positive values move the label down. Negative values move it up."
+*/
+// ==/WindhawkModSettings==
+
+#include <windows.h>
+#include <commctrl.h>
+#include <dwmapi.h>
+
+#undef GetCurrentTime
+
+#include <Unknwn.h>
+
+#include <winrt/base.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.UI.h>
+#include <winrt/Windows.UI.Text.h>
+
+#include <winrt/Microsoft.UI.h>
+#include <winrt/Microsoft.UI.Content.h>
+#include <winrt/Microsoft.UI.Xaml.Input.h>
+#include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Microsoft.UI.Xaml.Controls.h>
+#include <winrt/Microsoft.UI.Xaml.Media.h>
+
+#include <atomic>
+#include <chrono>
+#include <cwctype>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <utility>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
+#include <windhawk_utils.h>
+
+namespace wf = winrt::Windows::Foundation;
+namespace mux = winrt::Microsoft::UI::Xaml;
+namespace muxc = winrt::Microsoft::UI::Xaml::Controls;
+namespace muxm = winrt::Microsoft::UI::Xaml::Media;
+
+// ============================================================================
+// Settings
+// ============================================================================
+
+enum class WeekdayStyle
+{
+    None,
+    Short,
+    Long,
+};
+
+enum class DayStyle
+{
+    Number,
+    TwoDigit,
+};
+
+enum class MonthStyle
+{
+    Number,
+    TwoDigit,
+    Short,
+    Long,
+};
+
+enum class YearStyle
+{
+    None,
+    Short,
+    Long,
+};
+
+enum class DateOrder
+{
+    MDY,
+    DMY,
+    YMD,
+};
+
+enum class NumericDateSeparator
+{
+    Slash,
+    Dash,
+    Dot,
+};
+
+enum class FontPreset
+{
+    SegoeVariable,
+    Segoe,
+    Arial,
+    Calibri,
+    Consolas,
+    Tahoma,
+    Verdana,
+    Custom,
+};
+
+enum class FontWeightSetting
+{
+    Normal,
+    Semibold,
+    Bold,
+};
+
+struct Settings
+{
+    std::wstring customText;
+    bool showDate = true;
+    WeekdayStyle dateWeekday = WeekdayStyle::Short;
+    DayStyle dateDay = DayStyle::Number;
+    MonthStyle dateMonth = MonthStyle::Short;
+    YearStyle dateYear = YearStyle::None;
+    DateOrder dateOrder = DateOrder::MDY;
+    NumericDateSeparator numericDateSeparator = NumericDateSeparator::Slash;
+
+    bool showTime = true;
+    bool use24Hour = false;
+    bool showSeconds = false;
+
+    std::wstring separator = L"   |   ";
+
+    FontPreset fontPreset = FontPreset::SegoeVariable;
+    std::wstring customFontFamily;
+    int fontSize = 12;
+    FontWeightSetting fontWeight = FontWeightSetting::Normal;
+    bool italic = false;
+    std::wstring textColor;
+    int opacity = 100;
+
+    int leftMargin = 12;
+    int rightMargin = 12;
+    int verticalOffset = 0;
+};
+
+static Settings g_settings;
+static std::mutex g_settingsMutex;
+
+static std::atomic<bool> g_unloading{false};
+
+static std::mutex g_subclassedWindowsMutex;
+static std::unordered_set<HWND> g_subclassedWindows;
+
+// ============================================================================
+// Settings helpers
+// ============================================================================
+
+static std::wstring ReadStringSetting(PCWSTR name, PCWSTR fallback)
+{
+    PCWSTR value = Wh_GetStringSetting(name);
+    if (!value)
+    {
+        return fallback;
+    }
+
+    std::wstring result = value;
+    Wh_FreeStringSetting(value);
+    return result;
+}
+
+static Settings ReadSettingsFromWindhawk()
+{
+    Settings settings;
+
+    settings.customText = ReadStringSetting(L"customText", L"");
+    settings.showDate = Wh_GetIntSetting(L"showDate") != 0;
+
+    {
+        std::wstring value = ReadStringSetting(L"dateWeekday", L"short");
+        if (value == L"none")
+        {
+            settings.dateWeekday = WeekdayStyle::None;
+        }
+        else if (value == L"long")
+        {
+            settings.dateWeekday = WeekdayStyle::Long;
+        }
+        else
+        {
+            settings.dateWeekday = WeekdayStyle::Short;
+        }
+    }
+
+    {
+        std::wstring value = ReadStringSetting(L"dateDay", L"number");
+        settings.dateDay = value == L"twoDigit" ? DayStyle::TwoDigit
+                                                : DayStyle::Number;
+    }
+
+    {
+        std::wstring value = ReadStringSetting(L"dateMonth", L"short");
+        if (value == L"number")
+        {
+            settings.dateMonth = MonthStyle::Number;
+        }
+        else if (value == L"twoDigit")
+        {
+            settings.dateMonth = MonthStyle::TwoDigit;
+        }
+        else if (value == L"long")
+        {
+            settings.dateMonth = MonthStyle::Long;
+        }
+        else
+        {
+            settings.dateMonth = MonthStyle::Short;
+        }
+    }
+
+    {
+        std::wstring value = ReadStringSetting(L"dateYear", L"none");
+        if (value == L"short")
+        {
+            settings.dateYear = YearStyle::Short;
+        }
+        else if (value == L"long")
+        {
+            settings.dateYear = YearStyle::Long;
+        }
+        else
+        {
+            settings.dateYear = YearStyle::None;
+        }
+    }
+
+    {
+        std::wstring value = ReadStringSetting(L"dateOrder", L"mdy");
+        if (value == L"dmy")
+        {
+            settings.dateOrder = DateOrder::DMY;
+        }
+        else if (value == L"ymd")
+        {
+            settings.dateOrder = DateOrder::YMD;
+        }
+        else
+        {
+            settings.dateOrder = DateOrder::MDY;
+        }
+    }
+
+    {
+        std::wstring value =
+            ReadStringSetting(L"numericDateSeparator", L"slash");
+        if (value == L"dash")
+        {
+            settings.numericDateSeparator = NumericDateSeparator::Dash;
+        }
+        else if (value == L"dot")
+        {
+            settings.numericDateSeparator = NumericDateSeparator::Dot;
+        }
+        else
+        {
+            settings.numericDateSeparator = NumericDateSeparator::Slash;
+        }
+    }
+
+    settings.showTime = Wh_GetIntSetting(L"showTime") != 0;
+    settings.use24Hour = Wh_GetIntSetting(L"use24Hour") != 0;
+    settings.showSeconds = Wh_GetIntSetting(L"showSeconds") != 0;
+    settings.separator = ReadStringSetting(L"separator", L"   |   ");
+
+    {
+        std::wstring value = ReadStringSetting(L"fontPreset", L"segoeVariable");
+        if (value == L"segoe")
+        {
+            settings.fontPreset = FontPreset::Segoe;
+        }
+        else if (value == L"arial")
+        {
+            settings.fontPreset = FontPreset::Arial;
+        }
+        else if (value == L"calibri")
+        {
+            settings.fontPreset = FontPreset::Calibri;
+        }
+        else if (value == L"consolas")
+        {
+            settings.fontPreset = FontPreset::Consolas;
+        }
+        else if (value == L"tahoma")
+        {
+            settings.fontPreset = FontPreset::Tahoma;
+        }
+        else if (value == L"verdana")
+        {
+            settings.fontPreset = FontPreset::Verdana;
+        }
+        else if (value == L"custom")
+        {
+            settings.fontPreset = FontPreset::Custom;
+        }
+        else
+        {
+            settings.fontPreset = FontPreset::SegoeVariable;
+        }
+    }
+
+    settings.customFontFamily = ReadStringSetting(L"customFontFamily", L"");
+    settings.fontSize = Wh_GetIntSetting(L"fontSize");
+
+    {
+        std::wstring value = ReadStringSetting(L"fontWeight", L"normal");
+        if (value == L"bold")
+        {
+            settings.fontWeight = FontWeightSetting::Bold;
+        }
+        else if (value == L"semibold")
+        {
+            settings.fontWeight = FontWeightSetting::Semibold;
+        }
+        else
+        {
+            settings.fontWeight = FontWeightSetting::Normal;
+        }
+    }
+
+    settings.italic = Wh_GetIntSetting(L"italic") != 0;
+    settings.textColor = ReadStringSetting(L"textColor", L"");
+    settings.opacity = Wh_GetIntSetting(L"opacity");
+    settings.leftMargin = Wh_GetIntSetting(L"leftMargin");
+    settings.rightMargin = Wh_GetIntSetting(L"rightMargin");
+    settings.verticalOffset = Wh_GetIntSetting(L"verticalOffset");
+
+    if (settings.fontSize < 6)
+    {
+        settings.fontSize = 6;
+    }
+    else if (settings.fontSize > 72)
+    {
+        settings.fontSize = 72;
+    }
+
+    if (settings.opacity < 0)
+    {
+        settings.opacity = 0;
+    }
+    else if (settings.opacity > 100)
+    {
+        settings.opacity = 100;
+    }
+
+    if (settings.leftMargin < 0)
+    {
+        settings.leftMargin = 0;
+    }
+    else if (settings.leftMargin > 500)
+    {
+        settings.leftMargin = 500;
+    }
+
+    if (settings.rightMargin < 0)
+    {
+        settings.rightMargin = 0;
+    }
+    else if (settings.rightMargin > 500)
+    {
+        settings.rightMargin = 500;
+    }
+
+    if (settings.verticalOffset < -50)
+    {
+        settings.verticalOffset = -50;
+    }
+    else if (settings.verticalOffset > 50)
+    {
+        settings.verticalOffset = 50;
+    }
+
+    return settings;
+}
+
+static void LoadSettings()
+{
+    Settings settings = ReadSettingsFromWindhawk();
+
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    g_settings = std::move(settings);
+}
+
+static Settings GetSettings()
+{
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    return g_settings;
+}
+
+static std::wstring GetSelectedFontFamily(const Settings &settings)
+{
+    switch (settings.fontPreset)
+    {
+    case FontPreset::Segoe:
+        return L"Segoe UI";
+    case FontPreset::Arial:
+        return L"Arial";
+    case FontPreset::Calibri:
+        return L"Calibri";
+    case FontPreset::Consolas:
+        return L"Consolas";
+    case FontPreset::Tahoma:
+        return L"Tahoma";
+    case FontPreset::Verdana:
+        return L"Verdana";
+    case FontPreset::Custom:
+        return settings.customFontFamily.empty()
+                   ? L"Segoe UI Variable Text"
+                   : settings.customFontFamily;
+    case FontPreset::SegoeVariable:
+    default:
+        return L"Segoe UI Variable Text";
+    }
+}
+
+// ============================================================================
+// Color parsing
+// ============================================================================
+
+static int HexDigit(wchar_t c)
+{
+    if (c >= L'0' && c <= L'9')
+    {
+        return c - L'0';
+    }
+
+    c = towupper(c);
+    if (c >= L'A' && c <= L'F')
+    {
+        return 10 + c - L'A';
+    }
+
+    return -1;
+}
+
+static bool ParseHexByte(wchar_t a, wchar_t b, uint8_t *result)
+{
+    int hi = HexDigit(a);
+    int lo = HexDigit(b);
+    if (hi < 0 || lo < 0)
+    {
+        return false;
+    }
+
+    *result = static_cast<uint8_t>((hi << 4) | lo);
+    return true;
+}
+
+static winrt::Windows::UI::Color ParseColor(const std::wstring &input)
+{
+    winrt::Windows::UI::Color color{255, 255, 255, 255};
+    std::wstring text = input;
+
+    if (!text.empty() && text.front() == L'#')
+    {
+        text.erase(text.begin());
+    }
+
+    if (text.length() == 6)
+    {
+        uint8_t r{};
+        uint8_t g{};
+        uint8_t b{};
+
+        if (ParseHexByte(text[0], text[1], &r) &&
+            ParseHexByte(text[2], text[3], &g) &&
+            ParseHexByte(text[4], text[5], &b))
+        {
+            color.A = 255;
+            color.R = r;
+            color.G = g;
+            color.B = b;
+        }
+    }
+    else if (text.length() == 8)
+    {
+        uint8_t a{};
+        uint8_t r{};
+        uint8_t g{};
+        uint8_t b{};
+
+        if (ParseHexByte(text[0], text[1], &a) &&
+            ParseHexByte(text[2], text[3], &r) &&
+            ParseHexByte(text[4], text[5], &g) &&
+            ParseHexByte(text[6], text[7], &b))
+        {
+            color.A = a;
+            color.R = r;
+            color.G = g;
+            color.B = b;
+        }
+    }
+
+    return color;
+}
+
+// ============================================================================
+// Date and time formatting
+// ============================================================================
+
+static std::wstring FormatLocaleDatePart(const SYSTEMTIME &st, PCWSTR format)
+{
+    wchar_t buffer[128]{};
+
+    if (!GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &st, format, buffer,
+                         ARRAYSIZE(buffer), nullptr))
+    {
+        return L"";
+    }
+
+    return buffer;
+}
+
+static std::wstring BuildWeekdayText(const SYSTEMTIME &st,
+                                     const Settings &settings)
+{
+    switch (settings.dateWeekday)
+    {
+    case WeekdayStyle::Short:
+        return FormatLocaleDatePart(st, L"ddd");
+    case WeekdayStyle::Long:
+        return FormatLocaleDatePart(st, L"dddd");
+    case WeekdayStyle::None:
+    default:
+        return L"";
+    }
+}
+
+static std::wstring BuildDayText(const SYSTEMTIME &st,
+                                 const Settings &settings)
+{
+    wchar_t buffer[16]{};
+    if (settings.dateDay == DayStyle::TwoDigit)
+    {
+        swprintf_s(buffer, L"%02u", st.wDay);
+    }
+    else
+    {
+        swprintf_s(buffer, L"%u", st.wDay);
+    }
+    return buffer;
+}
+
+static std::wstring BuildMonthText(const SYSTEMTIME &st,
+                                   const Settings &settings)
+{
+    wchar_t buffer[32]{};
+
+    switch (settings.dateMonth)
+    {
+    case MonthStyle::Number:
+        swprintf_s(buffer, L"%u", st.wMonth);
+        return buffer;
+    case MonthStyle::TwoDigit:
+        swprintf_s(buffer, L"%02u", st.wMonth);
+        return buffer;
+    case MonthStyle::Long:
+        return FormatLocaleDatePart(st, L"MMMM");
+    case MonthStyle::Short:
+    default:
+        return FormatLocaleDatePart(st, L"MMM");
+    }
+}
+
+static std::wstring BuildYearText(const SYSTEMTIME &st,
+                                  const Settings &settings)
+{
+    wchar_t buffer[16]{};
+
+    switch (settings.dateYear)
+    {
+    case YearStyle::Short:
+        swprintf_s(buffer, L"%02u", st.wYear % 100);
+        return buffer;
+    case YearStyle::Long:
+        swprintf_s(buffer, L"%04u", st.wYear);
+        return buffer;
+    case YearStyle::None:
+    default:
+        return L"";
+    }
+}
+
+static bool IsNumericMonth(const Settings &settings)
+{
+    return settings.dateMonth == MonthStyle::Number ||
+           settings.dateMonth == MonthStyle::TwoDigit;
+}
+
+static wchar_t GetNumericDateSeparator(const Settings &settings)
+{
+    switch (settings.numericDateSeparator)
+    {
+    case NumericDateSeparator::Dash:
+        return L'-';
+    case NumericDateSeparator::Dot:
+        return L'.';
+    case NumericDateSeparator::Slash:
+    default:
+        return L'/';
+    }
+}
+
+static std::wstring BuildDateText(const SYSTEMTIME &st,
+                                  const Settings &settings)
+{
+    std::wstring weekday = BuildWeekdayText(st, settings);
+    std::wstring day = BuildDayText(st, settings);
+    std::wstring month = BuildMonthText(st, settings);
+    std::wstring year = BuildYearText(st, settings);
+    std::wstring date;
+
+    if (IsNumericMonth(settings))
+    {
+        wchar_t separator = GetNumericDateSeparator(settings);
+
+        auto appendPart = [&date, separator](const std::wstring &part)
+        {
+            if (part.empty())
+            {
+                return;
+            }
+            if (!date.empty())
+            {
+                date += separator;
+            }
+            date += part;
+        };
+
+        switch (settings.dateOrder)
+        {
+        case DateOrder::DMY:
+            appendPart(day);
+            appendPart(month);
+            appendPart(year);
+            break;
+        case DateOrder::YMD:
+            appendPart(year);
+            appendPart(month);
+            appendPart(day);
+            break;
+        case DateOrder::MDY:
+        default:
+            appendPart(month);
+            appendPart(day);
+            appendPart(year);
+            break;
+        }
+    }
+    else
+    {
+        switch (settings.dateOrder)
+        {
+        case DateOrder::DMY:
+            date = day + L" " + month;
+            if (!year.empty())
+            {
+                date += L" " + year;
+            }
+            break;
+
+        case DateOrder::YMD:
+            if (!year.empty())
+            {
+                date = year + L" ";
+            }
+            date += month + L" " + day;
+            break;
+
+        case DateOrder::MDY:
+        default:
+            date = month + L" " + day;
+            if (!year.empty())
+            {
+                date += L", " + year;
+            }
+            break;
+        }
+    }
+
+    if (!weekday.empty())
+    {
+        date = weekday + L", " + date;
+    }
+
+    return date;
+}
+
+static std::wstring BuildTimeText(const SYSTEMTIME &st,
+                                  const Settings &settings)
+{
+    wchar_t buffer[128]{};
+
+    if (settings.use24Hour)
+    {
+        if (settings.showSeconds)
+        {
+            swprintf_s(buffer, L"%02u:%02u:%02u", st.wHour, st.wMinute,
+                       st.wSecond);
+        }
+        else
+        {
+            swprintf_s(buffer, L"%02u:%02u", st.wHour, st.wMinute);
+        }
+    }
+    else
+    {
+        unsigned hour = st.wHour % 12;
+        if (hour == 0)
+        {
+            hour = 12;
+        }
+
+        if (settings.showSeconds)
+        {
+            swprintf_s(buffer, L"%u:%02u:%02u %s", hour, st.wMinute,
+                       st.wSecond, st.wHour >= 12 ? L"PM" : L"AM");
+        }
+        else
+        {
+            swprintf_s(buffer, L"%u:%02u %s", hour, st.wMinute,
+                       st.wHour >= 12 ? L"PM" : L"AM");
+        }
+    }
+
+    return buffer;
+}
+
+static std::wstring BuildDisplayText(const Settings &settings)
+{
+    SYSTEMTIME st{};
+    GetLocalTime(&st);
+
+    std::vector<std::wstring> parts;
+
+    if (!settings.customText.empty())
+    {
+        parts.emplace_back(settings.customText);
+    }
+
+    if (settings.showDate)
+    {
+        std::wstring date = BuildDateText(st, settings);
+        if (!date.empty())
+        {
+            parts.emplace_back(std::move(date));
+        }
+    }
+
+    if (settings.showTime)
+    {
+        std::wstring time = BuildTimeText(st, settings);
+        if (!time.empty())
+        {
+            parts.emplace_back(std::move(time));
+        }
+    }
+
+    std::wstring result;
+    for (size_t i = 0; i < parts.size(); ++i)
+    {
+        if (i != 0)
+        {
+            result += settings.separator;
+        }
+        result += parts[i];
+    }
+
+    return result;
+}
+
+// ============================================================================
+// Explorer HWND
+// ============================================================================
+
+static HWND GetExplorerWindowForElement(mux::FrameworkElement const &element)
+{
+    try
+    {
+        if (auto xamlRoot = element.XamlRoot())
+        {
+            if (auto environment = xamlRoot.ContentIslandEnvironment())
+            {
+                return reinterpret_cast<HWND>(
+                    static_cast<uintptr_t>(environment.AppWindowId().Value));
+            }
+        }
+    }
+    catch (...)
+    {
+        Wh_Log(L"Failed to get Explorer window from XamlRoot hr=0x%08X",
+               winrt::to_hresult());
+    }
+
+    return nullptr;
+}
+
+// ============================================================================
+// Vertical positioning
+// ============================================================================
+
+static double GetCaptionButtonsWidthDip(HWND hwnd)
+{
+    if (!hwnd)
+    {
+        return 0.0;
+    }
+
+    RECT captionBounds{};
+    HRESULT hr = DwmGetWindowAttribute(
+        hwnd, DWMWA_CAPTION_BUTTON_BOUNDS,
+        &captionBounds, sizeof(captionBounds));
+    if (FAILED(hr))
+    {
+        return 0.0;
+    }
+
+    LONG widthPx = captionBounds.right - captionBounds.left;
+    if (widthPx <= 0)
+    {
+        return 0.0;
+    }
+
+    UINT dpi = GetDpiForWindow(hwnd);
+    if (!dpi)
+    {
+        dpi = 96;
+    }
+
+    return static_cast<double>(widthPx) * 96.0 /
+           static_cast<double>(dpi);
+}
+
+static void UpdateLabelPosition(muxc::TextBlock const &text,
+                                muxc::Grid const &grid,
+                                int leftOffset,
+                                int verticalOffset)
+{
+    double automaticHorizontalCorrection = 0.0;
+    double automaticVerticalCorrection = 0.0;
+
+    try
+    {
+        auto currentTransform =
+            text.RenderTransform().try_as<muxm::TranslateTransform>();
+
+        muxm::TranslateTransform translate{nullptr};
+        if (currentTransform)
+        {
+            translate = currentTransform;
+        }
+        else
+        {
+            translate = muxm::TranslateTransform();
+            text.RenderTransform(translate);
+        }
+
+        // Always measure from the native XAML position.
+        translate.X(0.0);
+
+        HWND hwnd = GetExplorerWindowForElement(grid);
+
+        if (hwnd && text.ActualWidth() > 0.0)
+        {
+            auto xamlRoot = text.XamlRoot();
+            if (xamlRoot)
+            {
+                double captionButtonsWidth =
+                    GetCaptionButtonsWidthDip(hwnd);
+
+                if (captionButtonsWidth > 0.0)
+                {
+                    wf::Point origin{0.0f, 0.0f};
+                    auto textTransform = text.TransformToVisual(nullptr);
+                    wf::Point textPosition =
+                        textTransform.TransformPoint(origin);
+
+                    double textRight =
+                        static_cast<double>(textPosition.X) +
+                        text.ActualWidth();
+
+                    double safeRight =
+                        static_cast<double>(xamlRoot.Size().Width) -
+                        captionButtonsWidth;
+
+                    // Explorer builds differ in whether this XAML region
+                    // already excludes the native caption buttons. Only shift
+                    // when the label actually enters the DWM-reported button
+                    // bounds.
+                    if (textRight > safeRight)
+                    {
+                        automaticHorizontalCorrection =
+                            safeRight - textRight;
+                    }
+                }
+            }
+        }
+
+        if (hwnd && IsZoomed(hwnd))
+        {
+            auto transform = grid.TransformToVisual(nullptr);
+            wf::Point origin{0.0f, 0.0f};
+            wf::Point position = transform.TransformPoint(origin);
+
+            if (position.Y < 0.0f)
+            {
+                automaticVerticalCorrection =
+                    -static_cast<double>(position.Y) + 0.0;
+            }
+        }
+
+        translate.X(automaticHorizontalCorrection - static_cast<double>(leftOffset));
+        translate.Y(static_cast<double>(verticalOffset) +
+                    automaticVerticalCorrection);
+    }
+    catch (...)
+    {
+        Wh_Log(L"UpdateLabelPosition exception hr=0x%08X",
+               winrt::to_hresult());
+    }
+}
+
+// ============================================================================
+// Appearance
+// ============================================================================
+
+static void ApplyTextSettings(muxc::TextBlock const &text,
+                              const Settings &settings)
+{
+    text.Text(BuildDisplayText(settings));
+
+    try
+    {
+        muxm::FontFamily family(GetSelectedFontFamily(settings));
+        text.FontFamily(family);
+    }
+    catch (...)
+    {
+        Wh_Log(L"Invalid font family, using Segoe UI Variable Text");
+        try
+        {
+            text.FontFamily(muxm::FontFamily(L"Segoe UI Variable Text"));
+        }
+        catch (...)
+        {
+        }
+    }
+
+    text.FontSize(static_cast<double>(settings.fontSize));
+
+    winrt::Windows::UI::Text::FontWeight weight{};
+    switch (settings.fontWeight)
+    {
+    case FontWeightSetting::Bold:
+        weight.Weight = 700;
+        break;
+    case FontWeightSetting::Semibold:
+        weight.Weight = 600;
+        break;
+    case FontWeightSetting::Normal:
+    default:
+        weight.Weight = 400;
+        break;
+    }
+    text.FontWeight(weight);
+
+    text.FontStyle(settings.italic
+                       ? winrt::Windows::UI::Text::FontStyle::Italic
+                       : winrt::Windows::UI::Text::FontStyle::Normal);
+
+    if (settings.textColor.empty())
+    {
+        // Follow Explorer's theme foreground when no custom color is set.
+        text.ClearValue(muxc::TextBlock::ForegroundProperty());
+        text.Opacity(static_cast<double>(settings.opacity) / 100.0);
+    }
+    else
+    {
+        // Apply opacity through the custom foreground brush instead of
+        // compositing the entire TextBlock.
+        auto color = ParseColor(settings.textColor);
+        color.A = static_cast<uint8_t>(
+            (static_cast<unsigned>(color.A) *
+                 static_cast<unsigned>(settings.opacity) +
+             50u) /
+            100u);
+
+        muxm::SolidColorBrush brush;
+        brush.Color(color);
+        text.Foreground(brush);
+        text.Opacity(1.0);
+    }
+    text.HorizontalAlignment(mux::HorizontalAlignment::Right);
+    text.VerticalAlignment(mux::VerticalAlignment::Center);
+    text.Margin(mux::Thickness{0.0, 0.0,
+                               static_cast<double>(settings.rightMargin), 0.0});
+    text.IsHitTestVisible(false);
+}
+
+// ============================================================================
+// Module helper
+// ============================================================================
+
+static HMODULE GetCurrentModuleHandle()
+{
+    HMODULE module = nullptr;
+
+    if (!GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&GetCurrentModuleHandle), &module))
+    {
+        return nullptr;
+    }
+
+    return module;
+}
+
+// DispatcherTimer is rooted by the dispatcher queue while running, and its Tick
+// handler lives in this DLL. Keep each timer and every XAML event token in
+// thread-local state so teardown can stop and revoke them on the owning UI
+// thread before the mod is unloaded.
+struct LabelEntry
+{
+    winrt::weak_ref<muxc::TextBlock> text;
+    winrt::weak_ref<muxc::Grid> grid;
+    mux::DispatcherTimer timer{nullptr};
+    HWND hwnd = nullptr;
+    winrt::event_token tickToken{};
+    winrt::event_token sizeChangedToken{};
+    bool tickRegistered = false;
+    bool sizeChangedRegistered = false;
+    bool cleaned = false;
+
+    Settings currentSettings;
+    std::wstring lastText;
+};
+
+thread_local std::vector<std::shared_ptr<LabelEntry>> g_labelEntries;
+thread_local bool g_threadScanned = false;
+thread_local std::unordered_map<HWND, winrt::weak_ref<mux::UIElement>>
+    g_pendingScanElements;
+
+static void ScanXamlRootForTitleBars(mux::UIElement const &element);
+static LRESULT CALLBACK ExplorerWindowSubclassProc(
+    HWND hwnd,
+    UINT message,
+    WPARAM wParam,
+    LPARAM lParam,
+    DWORD_PTR refData);
+
+static UINT GetScanMessage()
+{
+    static const UINT message =
+        RegisterWindowMessageW(L"Windhawk_ExplorerTitleBarLabel_Scan_" WH_MOD_ID);
+    return message;
+}
+
+static bool EnsureExplorerWindowSubclassed(HWND hwnd)
+{
+    if (!hwnd || g_unloading.load())
+    {
+        return false;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_subclassedWindowsMutex);
+        if (g_subclassedWindows.find(hwnd) != g_subclassedWindows.end())
+        {
+            return true;
+        }
+    }
+
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+            hwnd, ExplorerWindowSubclassProc, 1))
+    {
+        return false;
+    }
+
+    bool keepSubclass = false;
+    {
+        std::lock_guard<std::mutex> lock(g_subclassedWindowsMutex);
+        if (!g_unloading.load())
+        {
+            g_subclassedWindows.insert(hwnd);
+            keepSubclass = true;
+        }
+    }
+
+    if (!keepSubclass)
+    {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hwnd, ExplorerWindowSubclassProc);
+    }
+
+    return keepSubclass;
+}
+
+static void ReleaseLabelEntry(const std::shared_ptr<LabelEntry> &entry,
+                              bool removeElement)
+{
+    if (!entry || entry->cleaned)
+    {
+        return;
+    }
+
+    entry->cleaned = true;
+
+    if (entry->timer)
+    {
+        try
+        {
+            entry->timer.Stop();
+        }
+        catch (...)
+        {
+            Wh_Log(L"Failed to stop title-bar timer hr=0x%08X",
+                   winrt::to_hresult());
+        }
+
+        if (entry->tickRegistered)
+        {
+            try
+            {
+                entry->timer.Tick(entry->tickToken);
+                entry->tickRegistered = false;
+            }
+            catch (...)
+            {
+                Wh_Log(L"Failed to revoke title-bar timer hr=0x%08X",
+                       winrt::to_hresult());
+            }
+        }
+
+        // Drop the final strong XAML reference while still on the owning UI
+        // thread. The thread_local container can then safely outlive the XAML
+        // object itself.
+        entry->timer = nullptr;
+    }
+
+    auto grid = entry->grid.get();
+    if (grid && entry->sizeChangedRegistered)
+    {
+        try
+        {
+            grid.SizeChanged(entry->sizeChangedToken);
+            entry->sizeChangedRegistered = false;
+        }
+        catch (...)
+        {
+            Wh_Log(L"Failed to revoke SizeChanged hr=0x%08X",
+                   winrt::to_hresult());
+        }
+    }
+
+    if (removeElement)
+    {
+        auto text = entry->text.get();
+        if (grid && text)
+        {
+            try
+            {
+                auto children = grid.Children();
+                uint32_t index{};
+                if (children.IndexOf(text, index))
+                {
+                    children.RemoveAt(index);
+                }
+            }
+            catch (...)
+            {
+                Wh_Log(L"Failed to remove title-bar label hr=0x%08X",
+                       winrt::to_hresult());
+            }
+        }
+    }
+}
+
+static void PruneReleasedLabelEntries()
+{
+    for (auto it = g_labelEntries.begin(); it != g_labelEntries.end();)
+    {
+        auto &entry = *it;
+
+        if (!entry->cleaned && !entry->text.get())
+        {
+            // The XAML element is already gone, so there's nothing left to
+            // remove from the tree. Just release delegates/timer state.
+            ReleaseLabelEntry(entry, false);
+        }
+
+        if (entry->cleaned)
+        {
+            it = g_labelEntries.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+}
+
+static bool HasLiveLabelForCurrentThread()
+{
+    PruneReleasedLabelEntries();
+
+    for (auto const &entry : g_labelEntries)
+    {
+        if (!entry || entry->cleaned)
+        {
+            continue;
+        }
+
+        if (entry->text.get() && entry->grid.get())
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void RemoveLabelsForCurrentThread()
+{
+    g_threadScanned = false;
+
+    std::vector<std::shared_ptr<LabelEntry>> taken;
+    taken.swap(g_labelEntries);
+
+    for (auto &entry : taken)
+    {
+        ReleaseLabelEntry(entry, true);
+    }
+}
+
+static void RemoveLabelsForWindowOnCurrentThread(HWND hwnd, bool removeElement)
+{
+    g_pendingScanElements.erase(hwnd);
+
+    for (auto it = g_labelEntries.begin(); it != g_labelEntries.end();)
+    {
+        auto entry = *it;
+
+        if (entry && entry->hwnd == hwnd)
+        {
+            // WM_NCDESTROY passes false because the native window is already
+            // going away. Explicit mod unload passes true so the visible XAML
+            // element is removed from a still-live Explorer window.
+            ReleaseLabelEntry(entry, removeElement);
+            it = g_labelEntries.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+
+    if (g_labelEntries.empty())
+    {
+        g_threadScanned = false;
+    }
+}
+
+static LRESULT CALLBACK ExplorerWindowSubclassProc(
+    HWND hwnd,
+    UINT message,
+    WPARAM wParam,
+    LPARAM lParam,
+    DWORD_PTR)
+{
+    if (message == GetScanMessage())
+    {
+        auto it = g_pendingScanElements.find(hwnd);
+        if (it != g_pendingScanElements.end())
+        {
+            auto weakElement = it->second;
+            g_pendingScanElements.erase(it);
+
+            if (!g_unloading.load())
+            {
+                if (auto element = weakElement.get())
+                {
+                    ScanXamlRootForTitleBars(element);
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    if (message == WM_NCDESTROY)
+    {
+        RemoveLabelsForWindowOnCurrentThread(hwnd, false);
+
+        {
+            std::lock_guard<std::mutex> lock(g_subclassedWindowsMutex);
+            g_subclassedWindows.erase(hwnd);
+        }
+
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hwnd, ExplorerWindowSubclassProc);
+    }
+
+    return DefSubclassProc(hwnd, message, wParam, lParam);
+}
+
+static bool IsFileExplorerWindow(HWND hwnd)
+{
+    if (!hwnd)
+    {
+        return false;
+    }
+
+    DWORD processId = 0;
+    if (!GetWindowThreadProcessId(hwnd, &processId) ||
+        processId != GetCurrentProcessId())
+    {
+        return false;
+    }
+
+    wchar_t className[64]{};
+    return GetClassNameW(hwnd, className, ARRAYSIZE(className)) &&
+           _wcsicmp(className, L"CabinetWClass") == 0;
+}
+
+static std::vector<HWND> GetFileExplorerWindows()
+{
+    std::vector<HWND> windows;
+
+    EnumWindows(
+        [](HWND hwnd, LPARAM lParam) -> BOOL
+        {
+            auto &windows =
+                *reinterpret_cast<std::vector<HWND> *>(lParam);
+            if (IsFileExplorerWindow(hwnd))
+            {
+                windows.push_back(hwnd);
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&windows));
+
+    return windows;
+}
+
+using RunFromWindowThreadProc_t = void(WINAPI *)(PVOID parameter);
+
+static bool RunFromWindowThread(HWND hwnd,
+                                RunFromWindowThreadProc_t proc,
+                                PVOID procParam)
+{
+    static const UINT message =
+        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    struct RunParam
+    {
+        RunFromWindowThreadProc_t proc;
+        PVOID procParam;
+    };
+
+    DWORD threadId = GetWindowThreadProcessId(hwnd, nullptr);
+    if (!threadId)
+    {
+        return false;
+    }
+
+    if (threadId == GetCurrentThreadId())
+    {
+        proc(procParam);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT
+        {
+            if (code == HC_ACTION)
+            {
+                const auto *cwp = reinterpret_cast<const CWPSTRUCT *>(lParam);
+                if (cwp->message == message)
+                {
+                    auto *param =
+                        reinterpret_cast<RunParam *>(cwp->lParam);
+                    param->proc(param->procParam);
+                }
+            }
+
+            return CallNextHookEx(nullptr, code, wParam, lParam);
+        },
+        nullptr, threadId);
+    if (!hook)
+    {
+        return false;
+    }
+
+    RunParam param{proc, procParam};
+    SendMessageW(hwnd, message, 0, reinterpret_cast<LPARAM>(&param));
+    UnhookWindowsHookEx(hook);
+
+    return true;
+}
+
+// ============================================================================
+// Title-bar discovery without XAML Diagnostics
+// ============================================================================
+
+static std::chrono::milliseconds GetLabelTimerInterval(
+    const Settings &settings)
+{
+    if (settings.showTime && settings.showSeconds)
+    {
+        return std::chrono::seconds(1);
+    }
+
+    SYSTEMTIME st{};
+    GetLocalTime(&st);
+    DWORD elapsedMs =
+        static_cast<DWORD>(st.wSecond) * 1000u + st.wMilliseconds;
+    DWORD untilNextMinuteMs = 60000u - elapsedMs;
+    if (untilNextMinuteMs == 0)
+    {
+        untilNextMinuteMs = 60000u;
+    }
+
+    return std::chrono::milliseconds(untilNextMinuteMs);
+}
+
+static void ConfigureLabelTimer(const std::shared_ptr<LabelEntry> &entry)
+{
+    if (!entry || entry->cleaned || !entry->timer)
+    {
+        return;
+    }
+
+    entry->timer.Stop();
+
+    if (!entry->currentSettings.showDate &&
+        !entry->currentSettings.showTime)
+    {
+        return;
+    }
+
+    entry->timer.Interval(GetLabelTimerInterval(entry->currentSettings));
+    entry->timer.Start();
+}
+
+static void RefreshLabelEntry(const std::shared_ptr<LabelEntry> &entry,
+                              const Settings &settings)
+{
+    if (!entry || entry->cleaned)
+    {
+        return;
+    }
+
+    auto text = entry->text.get();
+    if (!text)
+    {
+        ReleaseLabelEntry(entry, false);
+        return;
+    }
+
+    entry->currentSettings = settings;
+    ApplyTextSettings(text, entry->currentSettings);
+    entry->lastText = BuildDisplayText(entry->currentSettings);
+
+    if (auto grid = entry->grid.get())
+    {
+        UpdateLabelPosition(text, grid, entry->currentSettings.leftMargin,
+                            entry->currentSettings.verticalOffset);
+    }
+
+    ConfigureLabelTimer(entry);
+}
+
+static void RefreshLabelsForCurrentThread()
+{
+    PruneReleasedLabelEntries();
+    Settings settings = GetSettings();
+
+    for (auto const &entry : g_labelEntries)
+    {
+        try
+        {
+            RefreshLabelEntry(entry, settings);
+        }
+        catch (...)
+        {
+            Wh_Log(L"RefreshLabelEntry failed hr=0x%08X",
+                   winrt::to_hresult());
+        }
+    }
+
+    PruneReleasedLabelEntries();
+}
+
+static void TryInsertTitleText(muxc::Grid const &grid)
+{
+    if (!grid || g_unloading.load())
+        return;
+
+    auto children = grid.Children();
+    mux::FrameworkElement rightAnchor{nullptr};
+    mux::FrameworkElement existingLabel{nullptr};
+    uint32_t existingLabelIndex = 0;
+
+    for (uint32_t i = 0; i < children.Size(); ++i)
+    {
+        auto child = children.GetAt(i).try_as<mux::FrameworkElement>();
+        if (!child)
+        {
+            continue;
+        }
+
+        if (child.Name() == L"WindhawkExplorerTitleBarLabel")
+        {
+            existingLabel = child;
+            existingLabelIndex = i;
+        }
+        else if (child.Name() == L"RightContentPresenter")
+        {
+            rightAnchor = child;
+        }
+    }
+
+    if (!rightAnchor)
+    {
+        return;
+    }
+
+    PruneReleasedLabelEntries();
+
+    if (existingLabel)
+    {
+        for (auto const &entry : g_labelEntries)
+        {
+            if (!entry || entry->cleaned)
+            {
+                continue;
+            }
+
+            auto entryGrid = entry->grid.get();
+            auto entryText = entry->text.get();
+
+            if (entryGrid == grid && entryText == existingLabel)
+            {
+                try
+                {
+                    RefreshLabelEntry(entry, GetSettings());
+                }
+                catch (...)
+                {
+                    Wh_Log(L"Refresh existing label failed hr=0x%08X",
+                           winrt::to_hresult());
+                }
+
+                return;
+            }
+        }
+
+        // The XAML element exists but no live LabelEntry owns it. This can
+        // happen if a previous mod instance couldn't remove its element during
+        // teardown. Remove only that orphaned child, then recreate it below.
+        children.RemoveAt(existingLabelIndex);
+    }
+
+    HWND hwnd = GetExplorerWindowForElement(grid);
+    if (!hwnd)
+    {
+        return;
+    }
+
+    // The scan path normally installs this before insertion. Keep this check
+    // here as a safety net for any synchronous discovery path.
+    if (!EnsureExplorerWindowSubclassed(hwnd))
+    {
+        Wh_Log(L"Failed to subclass Explorer window %08X",
+               static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hwnd)));
+        return;
+    }
+
+    Settings initialSettings = GetSettings();
+
+    muxc::TextBlock text;
+    text.Name(L"WindhawkExplorerTitleBarLabel");
+    ApplyTextSettings(text, initialSettings);
+    muxc::Grid::SetColumn(text, muxc::Grid::GetColumn(rightAnchor));
+    muxc::Grid::SetRow(text, muxc::Grid::GetRow(rightAnchor));
+    muxc::Canvas::SetZIndex(text, 100);
+    children.Append(text);
+
+    try
+    {
+        grid.UpdateLayout();
+    }
+    catch (...)
+    {
+    }
+    UpdateLabelPosition(text, grid, initialSettings.leftMargin,
+                        initialSettings.verticalOffset);
+
+    auto entry = std::make_shared<LabelEntry>();
+    entry->text = winrt::make_weak(text);
+    entry->grid = winrt::make_weak(grid);
+    entry->hwnd = hwnd;
+    entry->currentSettings = initialSettings;
+    entry->lastText = BuildDisplayText(initialSettings);
+    g_labelEntries.push_back(entry);
+    std::weak_ptr<LabelEntry> weakEntry = entry;
+
+    try
+    {
+        entry->sizeChangedToken = grid.SizeChanged(
+            [weakEntry](auto const &, mux::SizeChangedEventArgs const &)
+            {
+                auto entry = weakEntry.lock();
+                if (!entry || entry->cleaned || g_unloading.load())
+                    return;
+                auto text = entry->text.get();
+                auto grid = entry->grid.get();
+                if (!text || !grid)
+                    return;
+                UpdateLabelPosition(text, grid,
+                                    entry->currentSettings.leftMargin,
+                                    entry->currentSettings.verticalOffset);
+            });
+        entry->sizeChangedRegistered = true;
+
+        mux::DispatcherTimer timer;
+        entry->timer = timer;
+        entry->tickToken = timer.Tick([weakEntry](auto const &, auto const &)
+                                      {
+            auto entry = weakEntry.lock();
+            if (!entry || entry->cleaned) return;
+            auto text = entry->text.get();
+            if (!text) { ReleaseLabelEntry(entry, false); return; }
+            if (g_unloading.load()) { ReleaseLabelEntry(entry, true); return; }
+
+            std::wstring current = BuildDisplayText(entry->currentSettings);
+            if (current != entry->lastText) {
+                text.Text(current);
+                entry->lastText = std::move(current);
+                if (auto grid = entry->grid.get()) {
+                    UpdateLabelPosition(text, grid,
+                                        entry->currentSettings.leftMargin,
+                                        entry->currentSettings.verticalOffset);
+                }
+            }
+
+            // Re-align minute-based updates after each tick. Seconds mode
+            // remains a regular one-second timer.
+            if (!(entry->currentSettings.showTime &&
+                  entry->currentSettings.showSeconds)) {
+                ConfigureLabelTimer(entry);
+            } });
+        entry->tickRegistered = true;
+        ConfigureLabelTimer(entry);
+        Wh_Log(L"Title-bar label attached");
+    }
+    catch (...)
+    {
+        ReleaseLabelEntry(entry, true);
+        PruneReleasedLabelEntries();
+        throw;
+    }
+}
+
+static void CollectTitleBarGrids(mux::DependencyObject const &root, int depth,
+                                 std::vector<muxc::Grid> *grids)
+{
+    if (!root || depth > 64 || !grids || !grids->empty())
+        return;
+
+    int count = muxm::VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < count && grids->empty(); ++i)
+    {
+        auto child = muxm::VisualTreeHelper::GetChild(root, i);
+        if (auto element = child.try_as<mux::FrameworkElement>();
+            element && element.Name() == L"TabContainerGrid")
+        {
+            if (auto grid = child.try_as<muxc::Grid>())
+            {
+                grids->push_back(std::move(grid));
+                return;
+            }
+        }
+
+        CollectTitleBarGrids(child, depth + 1, grids);
+    }
+}
+
+static void ScanXamlRootForTitleBars(mux::UIElement const &element)
+try
+{
+    if (g_unloading.load() || !element)
+        return;
+    auto xamlRoot = element.XamlRoot();
+    if (!xamlRoot)
+        return;
+    auto content = xamlRoot.Content();
+    if (!content)
+        return;
+    std::vector<muxc::Grid> grids;
+    CollectTitleBarGrids(content, 0, &grids);
+    for (auto const &grid : grids)
+    {
+        TryInsertTitleText(grid);
+    }
+
+    if (!grids.empty())
+    {
+        g_threadScanned = true;
+    }
+}
+catch (...)
+{
+    Wh_Log(L"ScanXamlRootForTitleBars exception hr=0x%08X", winrt::to_hresult());
+}
+
+static void ScheduleXamlRootScan(mux::UIElement const &element)
+{
+    if (g_unloading.load() || !element)
+    {
+        return;
+    }
+
+    try
+    {
+        auto frameworkElement = element.try_as<mux::FrameworkElement>();
+        HWND hwnd = frameworkElement
+                        ? GetExplorerWindowForElement(frameworkElement)
+                        : nullptr;
+
+        if (!hwnd)
+        {
+            // No native host to post to. Scan synchronously so no callback can
+            // outlive the mod.
+            ScanXamlRootForTitleBars(element);
+            return;
+        }
+
+        // Install the subclass on first discovery, before posting any message.
+        if (!EnsureExplorerWindowSubclassed(hwnd))
+        {
+            Wh_Log(L"Failed to subclass Explorer window %08X for scan",
+                   static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hwnd)));
+            return;
+        }
+
+        // Keep only a weak XAML reference in thread-local state. Multiple
+        // requests for the same window coalesce naturally to the newest root.
+        g_pendingScanElements[hwnd] = winrt::make_weak(element);
+
+        if (!PostMessageW(hwnd, GetScanMessage(), 0, 0))
+        {
+            g_pendingScanElements.erase(hwnd);
+
+            // Posting failed, so run synchronously rather than leaving work
+            // outstanding.
+            ScanXamlRootForTitleBars(element);
+        }
+    }
+    catch (...)
+    {
+        Wh_Log(L"Failed to schedule XAML scan hr=0x%08X",
+               winrt::to_hresult());
+    }
+}
+
+static void ScanCurrentThreadForTitleBars()
+try
+{
+    if (g_unloading.load())
+        return;
+    for (auto const &entry : g_labelEntries)
+    {
+        if (entry && !entry->cleaned)
+        {
+            if (auto grid = entry->grid.get())
+            {
+                ScanXamlRootForTitleBars(grid);
+                return;
+            }
+        }
+    }
+    auto focused = mux::Input::FocusManager::GetFocusedElement();
+    if (auto element = focused ? focused.try_as<mux::UIElement>() : nullptr)
+        ScanXamlRootForTitleBars(element);
+}
+catch (...)
+{
+}
+
+static void DiscoverFromElement(mux::UIElement const &element)
+{
+    if (!g_unloading.load() && element)
+    {
+        ScheduleXamlRootScan(element);
+    }
+}
+
+static void DiscoverFromInspectableParameter(void *parameter)
+{
+    if (g_unloading.load() || !parameter)
+    {
+        return;
+    }
+
+    try
+    {
+        auto const &inspectable =
+            *reinterpret_cast<wf::IInspectable const *>(parameter);
+
+        if (auto element =
+                inspectable ? inspectable.try_as<mux::UIElement>() : nullptr)
+        {
+            DiscoverFromElement(element);
+        }
+    }
+    catch (...)
+    {
+        Wh_Log(L"XAML discovery failed hr=0x%08X",
+               winrt::to_hresult());
+    }
+}
+
+using CommandBarManager_CommandBar_t =
+    void(WINAPI *)(void *pThis, void *commandBar);
+static CommandBarManager_CommandBar_t CommandBarManager_CommandBar_Original;
+
+static void WINAPI CommandBarManager_CommandBar_Hook(void *pThis,
+                                                     void *commandBar)
+{
+    CommandBarManager_CommandBar_Original(pThis, commandBar);
+
+    if (g_unloading.load() || !commandBar)
+    {
+        return;
+    }
+
+    try
+    {
+        auto const &element =
+            *reinterpret_cast<muxc::CommandBar const *>(commandBar);
+
+        if (element)
+        {
+            DiscoverFromElement(element);
+        }
+    }
+    catch (...)
+    {
+        Wh_Log(L"CommandBar discovery failed hr=0x%08X",
+               winrt::to_hresult());
+    }
+}
+
+using CommandBarControl_GotFocusHandler_t =
+    void(WINAPI *)(void *pThis, void *sender, void *args);
+static CommandBarControl_GotFocusHandler_t
+    CommandBarControl_GotFocusHandler_Original;
+
+static void WINAPI CommandBarControl_GotFocusHandler_Hook(
+    void *pThis, void *sender, void *args)
+{
+    CommandBarControl_GotFocusHandler_Original(pThis, sender, args);
+
+    if (g_unloading.load() || !sender)
+    {
+        return;
+    }
+
+    if (g_threadScanned && HasLiveLabelForCurrentThread())
+    {
+        return;
+    }
+
+    try
+    {
+        auto const &inspectable =
+            *reinterpret_cast<wf::IInspectable const *>(sender);
+
+        if (auto element =
+                inspectable ? inspectable.try_as<mux::UIElement>() : nullptr)
+        {
+            Wh_Log(L"GotFocus fired, thread=%u",
+                   GetCurrentThreadId());
+            ScheduleXamlRootScan(element);
+        }
+    }
+    catch (...)
+    {
+        Wh_Log(L"GotFocus access failed hr=0x%08X",
+               winrt::to_hresult());
+    }
+}
+
+using ThreeParameterEvent_t =
+    void(WINAPI *)(void *pThis, void *sender, void *args);
+
+static ThreeParameterEvent_t
+    FileExplorerTabControl_TabView_Loaded_Original;
+static ThreeParameterEvent_t
+    FileExplorerTabControl_TabView_GotFocus_Original;
+static ThreeParameterEvent_t
+    FileExplorerTabControl_TabView_SelectionChanged_Original;
+static ThreeParameterEvent_t
+    FileExplorerTabControl_TabView_TabItemsChanged_Original;
+
+static void WINAPI FileExplorerTabControl_TabView_Loaded_Hook(
+    void *pThis, void *sender, void *args)
+{
+    FileExplorerTabControl_TabView_Loaded_Original(pThis, sender, args);
+    DiscoverFromInspectableParameter(sender);
+}
+
+static void WINAPI FileExplorerTabControl_TabView_GotFocus_Hook(
+    void *pThis, void *sender, void *args)
+{
+    FileExplorerTabControl_TabView_GotFocus_Original(pThis, sender, args);
+
+    if (g_threadScanned && HasLiveLabelForCurrentThread())
+    {
+        return;
+    }
+
+    DiscoverFromInspectableParameter(sender);
+}
+
+static void WINAPI FileExplorerTabControl_TabView_SelectionChanged_Hook(
+    void *pThis, void *sender, void *args)
+{
+    FileExplorerTabControl_TabView_SelectionChanged_Original(
+        pThis, sender, args);
+    DiscoverFromInspectableParameter(sender);
+}
+
+static void WINAPI FileExplorerTabControl_TabView_TabItemsChanged_Hook(
+    void *pThis, void *tabView, void *args)
+{
+    FileExplorerTabControl_TabView_TabItemsChanged_Original(
+        pThis, tabView, args);
+
+    if (g_unloading.load() || !tabView)
+    {
+        return;
+    }
+
+    try
+    {
+        auto const &typedTabView =
+            *reinterpret_cast<muxc::TabView const *>(tabView);
+
+        if (typedTabView)
+        {
+            DiscoverFromElement(typedTabView);
+        }
+    }
+    catch (...)
+    {
+        Wh_Log(L"TabView items discovery failed hr=0x%08X",
+               winrt::to_hresult());
+    }
+}
+
+static std::atomic<bool> g_symbolsHooked{false};
+enum class SymbolHookResult
+{
+    Success,
+    ResolutionFailed,
+    NoSymbolFound
+};
+
+static SymbolHookResult HookFileExplorerExtensionsSymbols(HMODULE module)
+{
+    WindhawkUtils::SYMBOL_HOOK fileExplorerExtensionsDllHooks[] = {
+    {
+        {
+            LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarManager::CommandBar(struct winrt::Microsoft::UI::Xaml::Controls::CommandBar const &))",
+        },
+        &CommandBarManager_CommandBar_Original,
+        CommandBarManager_CommandBar_Hook,
+        true,
+    },
+    {
+        {
+            LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_Loaded(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const &))",
+        },
+        &FileExplorerTabControl_TabView_Loaded_Original,
+        FileExplorerTabControl_TabView_Loaded_Hook,
+        true,
+    },
+    {
+        {
+            LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_GotFocus(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const &))",
+        },
+        &FileExplorerTabControl_TabView_GotFocus_Original,
+        FileExplorerTabControl_TabView_GotFocus_Hook,
+        true,
+    },
+    {
+        {
+            LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_SelectionChanged(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const &))",
+        },
+        &FileExplorerTabControl_TabView_SelectionChanged_Original,
+        FileExplorerTabControl_TabView_SelectionChanged_Hook,
+        true,
+    },
+    {
+        {
+            LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_TabItemsChanged(struct winrt::Microsoft::UI::Xaml::Controls::TabView const &,struct winrt::Windows::Foundation::Collections::IVectorChangedEventArgs const &))",
+        },
+        &FileExplorerTabControl_TabView_TabItemsChanged_Original,
+        FileExplorerTabControl_TabView_TabItemsChanged_Hook,
+        true,
+    },
+    {
+        {
+            LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl::CommandBarControlGotFocusHandler(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const &))",
+        },
+        &CommandBarControl_GotFocusHandler_Original,
+        CommandBarControl_GotFocusHandler_Hook,
+        true,
+    },
+};
+
+    Wh_Log(L"Resolving FileExplorerExtensions hooks");
+
+    if (!WindhawkUtils::HookSymbols(module, fileExplorerExtensionsDllHooks,
+                                    ARRAYSIZE(fileExplorerExtensionsDllHooks)))
+    {
+        Wh_Log(L"HookSymbols(FileExplorerExtensions.dll) failed");
+        return SymbolHookResult::ResolutionFailed;
+    }
+
+    if (!CommandBarManager_CommandBar_Original &&
+        !FileExplorerTabControl_TabView_Loaded_Original &&
+        !FileExplorerTabControl_TabView_GotFocus_Original &&
+        !FileExplorerTabControl_TabView_SelectionChanged_Original &&
+        !FileExplorerTabControl_TabView_TabItemsChanged_Original)
+    {
+        Wh_Log(L"No typed File Explorer discovery hook was found");
+        return SymbolHookResult::NoSymbolFound;
+    }
+
+    Wh_Log(L"FileExplorerExtensions hooks registered");
+    return SymbolHookResult::Success;
+}
+
+static HMODULE GetFileExplorerExtensionsModuleHandle() { return GetModuleHandleW(L"FileExplorerExtensions.dll"); }
+
+static bool HookFileExplorerExtensionsIfLoaded(bool applyHooks)
+{
+    if (g_symbolsHooked.load())
+        return true;
+    HMODULE module = GetFileExplorerExtensionsModuleHandle();
+    if (!module)
+        return true;
+    if (g_symbolsHooked.exchange(true))
+        return true;
+    Wh_Log(L"Hooking FileExplorerExtensions.dll");
+    switch (HookFileExplorerExtensionsSymbols(module))
+    {
+    case SymbolHookResult::Success:
+        break;
+    case SymbolHookResult::ResolutionFailed:
+        g_symbolsHooked.store(false);
+        return false;
+    case SymbolHookResult::NoSymbolFound:
+        return false;
+    }
+    if (applyHooks)
+        Wh_ApplyHookOperations();
+    return true;
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+static LoadLibraryExW_t LoadLibraryExW_Original;
+
+static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags)
+{
+    HMODULE module = LoadLibraryExW_Original(fileName, file, flags);
+    if (!module || g_unloading.load() || !fileName)
+        return module;
+    PCWSTR baseName = fileName;
+    for (PCWSTR p = fileName; *p; ++p)
+        if (*p == L'\\' || *p == L'/')
+            baseName = p + 1;
+    if (_wcsicmp(baseName, L"FileExplorerExtensions.dll") == 0 ||
+        _wcsicmp(baseName, L"FileExplorerExtensions") == 0)
+        HookFileExplorerExtensionsIfLoaded(true);
+    return module;
+}
+
+// ============================================================================
+// Windhawk
+// ============================================================================
+
+BOOL Wh_ModInit()
+{
+    Wh_Log(L"Explorer Title Bar Label 1.0.0 init");
+    g_unloading.store(false);
+    g_symbolsHooked.store(false);
+    LoadSettings();
+
+    if (GetFileExplorerExtensionsModuleHandle())
+    {
+        if (!HookFileExplorerExtensionsIfLoaded(false))
+            return FALSE;
+    }
+    else
+    {
+        Wh_Log(L"FileExplorerExtensions.dll isn't loaded yet");
+        HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+        auto loadLibraryExW = reinterpret_cast<decltype(&LoadLibraryExW)>(
+            GetProcAddress(kernelBase, "LoadLibraryExW"));
+        if (!loadLibraryExW)
+            return FALSE;
+        if (!WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook,
+                                            &LoadLibraryExW_Original))
+            return FALSE;
+    }
+    return TRUE;
+}
+
+void Wh_ModAfterInit()
+{
+    HookFileExplorerExtensionsIfLoaded(true);
+    for (HWND hwnd : GetFileExplorerWindows())
+    {
+        RunFromWindowThread(hwnd, [](PVOID)
+                            { ScanCurrentThreadForTitleBars(); }, nullptr);
+    }
+}
+
+void Wh_ModSettingsChanged()
+{
+    LoadSettings();
+
+    for (HWND hwnd : GetFileExplorerWindows())
+    {
+        RunFromWindowThread(
+            hwnd,
+            [](PVOID)
+            { RefreshLabelsForCurrentThread(); },
+            nullptr);
+    }
+}
+
+void Wh_ModBeforeUninit() { g_unloading.store(true); }
+
+void Wh_ModUninit()
+{
+    Wh_Log(L"Explorer Title Bar Label 1.0.0 uninit");
+    g_unloading.store(true);
+
+    // Tear down only windows that this mod actually subclassed. Copy and clear
+    // under the lock, then release it before any cross-thread SendMessage-based
+    // helper calls.
+    std::vector<HWND> subclassedWindows;
+    {
+        std::lock_guard<std::mutex> lock(g_subclassedWindowsMutex);
+        subclassedWindows.assign(g_subclassedWindows.begin(),
+                                 g_subclassedWindows.end());
+        g_subclassedWindows.clear();
+    }
+
+    for (HWND hwnd : subclassedWindows)
+    {
+        if (!IsWindow(hwnd))
+        {
+            continue;
+        }
+
+        bool cleaned = false;
+
+        // Release this window's XAML objects on its owning UI thread.
+        for (int attempt = 0; attempt < 3 && IsWindow(hwnd); ++attempt)
+        {
+            if (RunFromWindowThread(
+                    hwnd,
+                    [](PVOID parameter)
+                    {
+                        RemoveLabelsForWindowOnCurrentThread(
+                            reinterpret_cast<HWND>(parameter), true);
+                    },
+                    hwnd))
+            {
+                cleaned = true;
+                break;
+            }
+
+            Sleep(10);
+        }
+
+        if (!cleaned && IsWindow(hwnd))
+        {
+            Wh_Log(L"Couldn't reach Explorer UI thread for window %08X",
+                   static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hwnd)));
+        }
+
+        // Remove synchronously. Any already-posted scan message then becomes a
+        // normal unhandled window message and can no longer call into this DLL.
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hwnd, ExplorerWindowSubclassProc);
+    }
+}

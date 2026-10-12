@@ -36,7 +36,18 @@ jobs:
         run: python -m pip install -r .github/requirements.txt
       - name: Clone last deployed content
         run: |
-          git clone --branch pages --depth 1 https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git "${{ runner.temp }}/last_deploy"
+          # The deployed content has image paths that are derived from URLs,
+          # which are case-sensitive, but CI runs on Windows, which is
+          # case-insensitive by default. Enable case-sensitive paths for the
+          # target folder before checking out into it, as subdirectories inherit
+          # the setting.
+          mkdir -p "${{ runner.temp }}/last_deploy"
+          fsutil.exe file setCaseSensitiveInfo "${{ runner.temp }}/last_deploy" enable
+          # Also tell git itself to treat paths case-sensitively, so it doesn't
+          # collapse image paths that differ only by case during checkout or,
+          # later, when staging the updated content for deployment. The setting
+          # persists in the clone's config and is reused by the deploy step.
+          git clone -c core.ignorecase=false --branch pages --depth 1 https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git "${{ runner.temp }}/last_deploy"
       - name: Cache Windhawk
         id: cache-windhawk
         uses: actions/cache@v5
@@ -54,8 +65,31 @@ jobs:
           extract_path="${{ runner.temp }}\windhawk"
           echo "Extracting $installer_path to $extract_path"
           MSYS_NO_PATHCONV=1 "$installer_path" /S /PORTABLE "/D=$extract_path"
+      - name: Cache image tools
+        id: cache-image-tools
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/image_tools
+          key: v1-${{ runner.os }}-gifsicle-1.95-libwebp-1.5.0
+      - name: Download image tools
+        if: steps.cache-image-tools.outputs.cache-hit != 'true'
+        run: |
+          cd "${{ runner.temp }}"
+          curl -fsSL https://eternallybored.org/misc/gifsicle/releases/gifsicle-1.95-win64.zip -o gifsicle.zip
+          curl -fsSL https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.5.0-windows-x64.zip -o libwebp.zip
+          sha256sum -c <<'EOF'
+          7e47dd0bfd5ee47f911464c57faeed89a8709a7625dd1c449b16579889539ee8  gifsicle.zip
+          e8fe3bc7eb09774e69261a42bf9fa8a37ab5f3eecaab199f6420e6f9e822090c  libwebp.zip
+          EOF
+          python -m zipfile -e gifsicle.zip gifsicle
+          python -m zipfile -e libwebp.zip libwebp
+          mkdir -p image_tools
+          mv gifsicle/gifsicle.exe libwebp/libwebp-1.5.0-windows-x64/bin/gif2webp.exe image_tools
       - name: Install dependencies
-        run: npm install
+        # The dev dependencies are type declarations, used by editors and by
+        # type checking. Nothing here consumes them, as tsx strips types without
+        # checking them.
+        run: npm install --omit=dev
       - name: Prepare static content
         run: npx tsx deploy.ts
         env:
@@ -64,9 +98,16 @@ jobs:
           WINDHAWK_PATH: ${{ runner.temp }}\windhawk
       - name: Archive mod images
         run: |
+          # Image paths are derived from URLs, which are case-sensitive, but CI
+          # runs on Windows, which is case-insensitive by default. Enable
+          # case-sensitive paths for the images folder before creating anything
+          # inside it, as subdirectories inherit the setting.
+          mkdir -p images
+          fsutil.exe file setCaseSensitiveInfo images enable
           # Copy last deployed images.
-          cp -R "${{ runner.temp }}/last_deploy/images" images
-          # Archive new images.
+          cp -R "${{ runner.temp }}/last_deploy/images/." images
+          # Archive new images, compressing GIFs with the image tools.
+          export PATH="$(cygpath -u '${{ runner.temp }}/image_tools'):$PATH"
           python scripts/archive_mod_images.py
       - name: Deploy
         run: |
@@ -83,6 +124,6 @@ jobs:
           touch "$deploy_dir/.nojekyll"
           git -C "$deploy_dir" add .nojekyll
           echo Committing changes
-          git -C "$deploy_dir" diff-index --cached --quiet HEAD || git -C "$deploy_dir" commit -m "deploy: ${{ github.sha }}"
+          git -C "$deploy_dir" diff-index --cached --quiet HEAD || git --git-dir="$deploy_dir/.git" --work-tree="$src_dir" commit -m "deploy: ${{ github.sha }}"
           echo Pushing to GitHub
           git -C "$deploy_dir" push origin $deploy_branch

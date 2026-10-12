@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              explorer-details-better-file-sizes
 // @name            Better file sizes in Explorer details
-// @description     Optional improvements: show folder sizes, use MB/GB for large files (by default, all sizes are shown in KBs), use IEC terms (such as KiB instead of KB)
-// @version         1.5
+// @description     Enhances file size display in Explorer details with folder sizes, human-readable units (MB/GB), and optional IEC notation (KiB/MiB)
+// @version         1.6
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -15,6 +15,10 @@
 // @exclude         SearchHost.exe
 // @exclude         ShellExperienceHost.exe
 // @exclude         StartMenuExperienceHost.exe
+// @exclude         msedgewebview2.exe
+// @exclude         windhawk.exe
+// @exclude         windhawk-ui.exe
+// @exclude         *\UI\VSCodium.exe
 // @compilerOptions -lole32 -loleaut32 -lpropsys
 // ==/WindhawkMod==
 
@@ -65,7 +69,7 @@ To show folder sizes via "Everything" integration:
 
 * "Everything" must be running for the integration to work.
 * Both "Everything" 1.4 and [1.5
-  Alpha](https://www.voidtools.com/forum/viewtopic.php?t=9787) are supported.
+  Beta](https://www.voidtools.com/forum/viewtopic.php?t=9787) are supported.
   With version 1.5.0.1384a or newer, the mod uses the new [Everything
   SDK3](https://www.voidtools.com/forum/viewtopic.php?t=15853), which results in
   a much faster folder size query (can be around 20x faster).
@@ -84,10 +88,12 @@ another. That's the default Explorer behavior, which also applies when sorting
 by other columns. This option changes sorting by size to disable this
 separation.
 
-## Use MB/GB for large files
+## File size units
 
-Explorer always shows file sizes in KBs in details, make it use MB/GB when
-appropriate.
+Explorer shows file sizes in KBs in details. Starting with update KB5101684,
+Windows 11 is gradually switching to MB/GB for large files. The mod can use
+MB/GB for large files regardless of the Windows version, or keep the sizes in
+KBs.
 
 ## Use IEC terms
 
@@ -123,10 +129,15 @@ KiB?](https://devblogs.microsoft.com/oldnewthing/20090611-00/?p=17933).
   $name: Mix files and folders when sorting by size
   $description: >-
     By default, folders are kept separately from files when sorting
-- disableKbOnlySizes: true
-  $name: Use MB/GB for large files
+- disableKbOnlySizes: "1"
+  $name: File size units
   $description: >-
-    By default, sizes are shown in KBs
+    Older Windows versions always show sizes in KBs, newer Windows 11 versions
+    use MB/GB for large files
+  $options:
+  - 0: Windows default
+  - 1: MB/GB for large files
+  - alwaysKb: Always KB
 - useIecTerms: false
   $name: Use IEC terms
   $description: >-
@@ -165,10 +176,16 @@ enum class CalculateFolderSizes {
     always,
 };
 
+enum class FileSizeUnits {
+    windowsDefault,
+    mbGbForLargeFiles,
+    alwaysKb,
+};
+
 struct {
     CalculateFolderSizes calculateFolderSizes;
     bool sortSizesMixFolders;
-    bool disableKbOnlySizes;
+    FileSizeUnits fileSizeUnits;
     bool useIecTerms;
 } g_settings;
 
@@ -178,6 +195,7 @@ std::atomic<int> g_hookRefCount;
 
 thread_local bool g_inCRecursiveFolderOperation_Prepare;
 thread_local bool g_inCRecursiveFolderOperation_Do;
+thread_local bool g_inCDefCollection_Item_GetValue_Size;
 
 auto hookRefCountScope() {
     g_hookRefCount++;
@@ -1201,8 +1219,24 @@ std::mutex g_everything4Wh_ThreadMutex;
 std::atomic<HANDLE> g_everything4Wh_Thread;
 HANDLE g_everything4Wh_ThreadReadyEvent;
 
-bool IsUncPath(PCWSTR folderPath) {
-    return folderPath[0] == L'\\' && folderPath[1] == L'\\';
+bool IsNetworkPath(PCWSTR folderPath) {
+    // UNC path, e.g. \\server\share.
+    if (folderPath[0] == L'\\' && folderPath[1] == L'\\') {
+        return true;
+    }
+
+    // Mapped network drive, e.g. Z:\. GetDriveType reads the drive type from
+    // the local mount table without hitting the network, so it's cheap.
+    if (((folderPath[0] >= L'A' && folderPath[0] <= L'Z') ||
+         (folderPath[0] >= L'a' && folderPath[0] <= L'z')) &&
+        folderPath[1] == L':' && folderPath[2] == L'\\') {
+        WCHAR root[] = {folderPath[0], L':', L'\\', L'\0'};
+        if (GetDriveType(root) == DRIVE_REMOTE) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool IsReparse(PCWSTR folderPath) {
@@ -1770,11 +1804,12 @@ HRESULT WINAPI CFSFolder__GetSize_Hook(void* pCFSFolder,
                 // the link itself. Subfolders of reparse points aren't indexed,
                 // so ES_QUERY_NO_INDEX is returned in this case.
                 //
-                // Avoid resolving UNC folders which are not indexed as it can
-                // be slow, and will be done for all folders if the UNC host
-                // isn't indexed.
+                // Avoid resolving network folders (UNC paths and mapped network
+                // drives) which are not indexed as it can be slow, and will be
+                // done for all folders if the network host isn't indexed.
                 if (result == ES_QUERY_ZERO_SIZE_REPARSE_POINT ||
-                    (result == ES_QUERY_NO_INDEX && !IsUncPath(path.c_str()))) {
+                    (result == ES_QUERY_NO_INDEX &&
+                     !IsNetworkPath(path.c_str()))) {
                     Wh_Log(L"Resolving path due to status: %s",
                            g_gsQueryStatus[result]);
 
@@ -1854,6 +1889,82 @@ HRESULT __thiscall CRecursiveFolderOperation_Do_Hook(void* pThis) {
     return ret;
 }
 
+using CDefCollection_Item_GetValue_t =
+    HRESULT(WINAPI*)(void* pThis,
+                     const void* itemKey,
+                     int valueAccessMode,
+                     const PROPERTYKEY* key,
+                     PROPVARIANT* propVariant,
+                     int* valueState);
+CDefCollection_Item_GetValue_t CDefCollection_Item_GetValue_Original;
+HRESULT WINAPI CDefCollection_Item_GetValue_Hook(void* pThis,
+                                                 const void* itemKey,
+                                                 int valueAccessMode,
+                                                 const PROPERTYKEY* key,
+                                                 PROPVARIANT* propVariant,
+                                                 int* valueState) {
+    auto hookScope = hookRefCountScope();
+
+    bool prevInItemGetValueSize = g_inCDefCollection_Item_GetValue_Size;
+    g_inCDefCollection_Item_GetValue_Size =
+        IsEqualPropertyKey(*key, kPKEY_Size);
+
+    HRESULT ret = CDefCollection_Item_GetValue_Original(
+        pThis, itemKey, valueAccessMode, key, propVariant, valueState);
+
+    g_inCDefCollection_Item_GetValue_Size = prevInItemGetValueSize;
+
+    return ret;
+}
+
+// The GIPTYPE value which makes _GetItemProperty extract the value if it isn't
+// cached or the cached value is dirty.
+constexpr int kGipTypeExtract = 0;
+
+using CDefCollection__GetItemProperty_t =
+    HRESULT(__thiscall*)(void* pThis,
+                         void* itemStore,
+                         const void* itemKey,
+                         int gipType,
+                         const PROPERTYKEY* key,
+                         int* dirty,
+                         PROPVARIANT* propVariant);
+CDefCollection__GetItemProperty_t CDefCollection__GetItemProperty_Original;
+HRESULT __thiscall CDefCollection__GetItemProperty_Hook(
+    void* pThis,
+    void* itemStore,
+    const void* itemKey,
+    int gipType,
+    const PROPERTYKEY* key,
+    int* dirty,
+    PROPVARIANT* propVariant) {
+    auto hookScope = hookRefCountScope();
+
+    HRESULT ret = CDefCollection__GetItemProperty_Original(
+        pThis, itemStore, itemKey, gipType, key, dirty, propVariant);
+
+    // When Item_GetValue only looks up the cached size, on a cache miss it
+    // takes the size from the item's WIN32_FIND_DATA, which has no size for
+    // folders. Extract the size instead, which goes through
+    // CFSFolder::_GetSize.
+    if (!g_inCDefCollection_Item_GetValue_Size || gipType == kGipTypeExtract ||
+        (SUCCEEDED(ret) && !(dirty && *dirty)) ||
+        !IsEqualPropertyKey(*key, kPKEY_Size)) {
+        return ret;
+    }
+
+    Wh_Log(L">");
+
+    PropVariantClear(propVariant);
+    ret = CDefCollection__GetItemProperty_Original(
+        pThis, itemStore, itemKey, kGipTypeExtract, key, nullptr, propVariant);
+    if (SUCCEEDED(ret) && dirty) {
+        *dirty = 0;
+    }
+
+    return ret;
+}
+
 using CFSFolder_MapColumnToSCID_t = HRESULT(WINAPI*)(void* pCFSFolder,
                                                      int column,
                                                      PROPERTYKEY* scid);
@@ -1917,6 +2028,29 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
     } else {
         return 0;
     }
+}
+
+using CFSFolder_GetFormatForDisplayFlags_t = HRESULT(
+    WINAPI*)(void* pThis, const PROPERTYKEY* key, PROPDESC_FORMAT_FLAGS* pdff);
+CFSFolder_GetFormatForDisplayFlags_t
+    CFSFolder_GetFormatForDisplayFlags_Original;
+HRESULT WINAPI
+CFSFolder_GetFormatForDisplayFlags_Hook(void* pThis,
+                                        const PROPERTYKEY* key,
+                                        PROPDESC_FORMAT_FLAGS* pdff) {
+    auto hookScope = hookRefCountScope();
+
+    HRESULT ret = CFSFolder_GetFormatForDisplayFlags_Original(pThis, key, pdff);
+    if (FAILED(ret) || !IsEqualPropertyKey(*key, kPKEY_Size)) {
+        return ret;
+    }
+
+    Wh_Log(L">");
+
+    // Without flags from the folder, the view uses its default flags, which
+    // are KB-only in details.
+    *pdff = PDFF_DEFAULT;
+    return E_NOTIMPL;
 }
 
 bool StartsWithCaseInsensitive(std::wstring_view str,
@@ -2328,6 +2462,97 @@ HRESULT WINAPI SHOpenFolderAndSelectItems_Hook(LPCITEMIDLIST pidlFolder,
     return S_OK;
 }
 
+HMODULE GetModuleFromAddress(void* address) {
+    HMODULE module;
+    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (PCWSTR)address, &module)) {
+        return nullptr;
+    }
+
+    return module;
+}
+
+std::wstring GetModulePath(HMODULE module) {
+    if (!module) {
+        return L"<unknown>";
+    }
+
+    std::wstring path(MAX_PATH, L'\0');
+    while (true) {
+        DWORD len = GetModuleFileName(module, path.data(), path.size());
+        if (len == 0) {
+            return L"<unknown>";
+        }
+
+        // A result equal to the buffer size means the path was truncated.
+        if (len == path.size()) {
+            path.resize(len * 2);
+            continue;
+        }
+
+        path.resize(len);
+        return path;
+    }
+}
+
+// Whether the path is under the Windows directory.
+bool IsSystemModulePath(PCWSTR path) {
+    WCHAR windowsDir[MAX_PATH];
+    UINT len = GetSystemWindowsDirectory(windowsDir, ARRAYSIZE(windowsDir));
+    if (len == 0 || len >= ARRAYSIZE(windowsDir)) {
+        return false;
+    }
+
+    return _wcsnicmp(path, windowsDir, len) == 0 && path[len] == L'\\';
+}
+
+// Another hook on top of ours makes its hook function the direct caller, so a
+// few frames further up the stack are checked as well. A hook isn't in a system
+// module, so the search stops at the first frame in one.
+[[clang::noinline]] bool IsHookCallerFromModule(void* retAddress,
+                                                PCWSTR moduleName) {
+    HMODULE expectedModule = GetModuleHandle(moduleName);
+    if (!expectedModule) {
+        return false;
+    }
+
+    HMODULE callerModule = GetModuleFromAddress(retAddress);
+    if (callerModule == expectedModule) {
+        return true;
+    }
+
+    std::wstring callerPath = GetModulePath(callerModule);
+    if (IsSystemModulePath(callerPath.c_str())) {
+        Wh_Log(L"Skipping caller %p in module %s, expected %s", retAddress,
+               callerPath.c_str(), moduleName);
+        return false;
+    }
+
+    Wh_Log(L"Tracing caller %p in module %s, expected %s", retAddress,
+           callerPath.c_str(), moduleName);
+
+    // The backtrace skips the frames of this function, the hook, and the
+    // caller.
+    void* frames[4];
+    WORD count = CaptureStackBackTrace(3, ARRAYSIZE(frames), frames, nullptr);
+    for (WORD i = 0; i < count; i++) {
+        HMODULE module = GetModuleFromAddress(frames[i]);
+        std::wstring modulePath = GetModulePath(module);
+        Wh_Log(L"Frame %u: %p in module %s", i + 1, frames[i],
+               modulePath.c_str());
+        if (module == expectedModule) {
+            return true;
+        }
+
+        if (IsSystemModulePath(modulePath.c_str())) {
+            return false;
+        }
+    }
+
+    return false;
+}
+
 using PSFormatForDisplayAlloc_t = decltype(&PSFormatForDisplayAlloc);
 PSFormatForDisplayAlloc_t PSFormatForDisplayAlloc_Original;
 HRESULT WINAPI PSFormatForDisplayAlloc_Hook(const PROPERTYKEY& key,
@@ -2344,18 +2569,8 @@ HRESULT WINAPI PSFormatForDisplayAlloc_Hook(const PROPERTYKEY& key,
         return original();
     }
 
-    void* retAddress = __builtin_return_address(0);
-
-    HMODULE explorerFrame = GetModuleHandle(L"explorerframe.dll");
-    if (!explorerFrame) {
-        return original();
-    }
-
-    HMODULE module;
-    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           (PCWSTR)retAddress, &module) ||
-        module != explorerFrame) {
+    if (!IsHookCallerFromModule(__builtin_return_address(0),
+                                L"explorerframe.dll")) {
         return original();
     }
 
@@ -2381,18 +2596,7 @@ HRESULT WINAPI PSFormatForDisplay_Hook(const PROPERTYKEY& propkey,
         return original();
     }
 
-    void* retAddress = __builtin_return_address(0);
-
-    HMODULE shell32 = GetModuleHandle(L"shell32.dll");
-    if (!shell32) {
-        return original();
-    }
-
-    HMODULE module;
-    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           (PCWSTR)retAddress, &module) ||
-        module != shell32) {
+    if (!IsHookCallerFromModule(__builtin_return_address(0), L"shell32.dll")) {
         return original();
     }
 
@@ -2400,6 +2604,45 @@ HRESULT WINAPI PSFormatForDisplay_Hook(const PROPERTYKEY& propkey,
 
     return PSFormatForDisplay_Original(propkey, propvar, pdfFlagsNew, pwszText,
                                        cchText);
+}
+
+using PSStrFormatByteSizeW_t = void*(WINAPI*)(ULONGLONG size,
+                                              LPWSTR pwszText,
+                                              DWORD cchText);
+PSStrFormatByteSizeW_t PSStrFormatByteSizeW_Original;
+void* WINAPI PSStrFormatByteSizeW_Hook(ULONGLONG size,
+                                       LPWSTR pwszText,
+                                       DWORD cchText) {
+    Wh_Log(L">");
+
+    void* ret = PSStrFormatByteSizeW_Original(size, pwszText, cchText);
+
+    if (!pwszText || cchText == 0) {
+        return ret;
+    }
+
+    int len = wcslen(pwszText);
+    if (len < 2 || pwszText[len - 1] != 'B') {
+        return ret;
+    }
+
+    WCHAR sizeUnit = pwszText[len - 2];
+    if (sizeUnit != 'K' && sizeUnit != 'M' && sizeUnit != 'G' &&
+        sizeUnit != 'T' && sizeUnit != 'P' && sizeUnit != 'E') {
+        return ret;
+    }
+
+    if (cchText >= (size_t)len + 2) {
+        pwszText[len - 1] = 'i';
+        pwszText[len] = 'B';
+        pwszText[len + 1] = '\0';
+
+        Wh_Log(L"Appended 'i' to size unit, new string: %s", pwszText);
+    } else {
+        Wh_Log(L"Not enough space to append 'i'");
+    }
+
+    return ret;
 }
 
 using PSStrFormatKBSizeW_t = void*(WINAPI*)(ULONGLONG size,
@@ -2418,14 +2661,19 @@ void* WINAPI PSStrFormatKBSizeW_Hook(ULONGLONG size,
     }
 
     int len = wcslen(pwszText);
-    if (len < 2 || (size_t)len + 1 > cchText - 1 || pwszText[len - 2] != 'K' ||
-        pwszText[len - 1] != 'B') {
+    if (len < 2 || pwszText[len - 2] != 'K' || pwszText[len - 1] != 'B') {
         return ret;
     }
 
-    pwszText[len - 1] = 'i';
-    pwszText[len] = 'B';
-    pwszText[len + 1] = '\0';
+    if (cchText >= (size_t)len + 2) {
+        pwszText[len - 1] = 'i';
+        pwszText[len] = 'B';
+        pwszText[len + 1] = '\0';
+
+        Wh_Log(L"Appended 'i' to size unit, new string: %s", pwszText);
+    } else {
+        Wh_Log(L"Not enough space to append 'i'");
+    }
 
     return ret;
 }
@@ -2464,17 +2712,20 @@ int WINAPI LoadStringW_Hook(HINSTANCE hInstance,
 
     Wh_Log(L"> Overriding string %u: %s", uID, lpBuffer);
 
-    size_t originalStringLen = p - lpBuffer;
+    size_t stringLen = p - lpBuffer;
 
-    // Override "B" to "iB".
-    p[-1] = 'i';
-
-    if ((size_t)cchBufferMax >= originalStringLen + 2) {
+    if ((size_t)cchBufferMax >= stringLen + 2) {
+        p[-1] = 'i';
         p[0] = 'B';
         p[1] = '\0';
+        stringLen++;
+
+        Wh_Log(L"Appended 'i' to size unit, new string: %s", lpBuffer);
+    } else {
+        Wh_Log(L"Not enough space to append 'i'");
     }
 
-    return wcslen(lpBuffer);
+    return stringLen;
 }
 
 bool HookWindowsStorageSymbols() {
@@ -2486,7 +2737,7 @@ bool HookWindowsStorageSymbols() {
     }
 
     // windows.storage.dll
-    WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK folderSizesHooks[] = {
         {
             {
 #ifdef _WIN64
@@ -2523,6 +2774,30 @@ bool HookWindowsStorageSymbols() {
         {
             {
 #ifdef _WIN64
+                LR"(public: virtual long __cdecl CDefCollection::Item_GetValue(struct tagITEMKEY const *,enum VALUE_ACCESS_MODE,struct _tagpropertykey const &,struct tagPROPVARIANT *,enum VALUE_STATE *))",
+#else
+                LR"(public: virtual long __stdcall CDefCollection::Item_GetValue(struct tagITEMKEY const *,enum VALUE_ACCESS_MODE,struct _tagpropertykey const &,struct tagPROPVARIANT *,enum VALUE_STATE *))",
+#endif
+            },
+            &CDefCollection_Item_GetValue_Original,
+            CDefCollection_Item_GetValue_Hook,
+            true,
+        },
+        {
+            {
+#ifdef _WIN64
+                LR"(private: long __cdecl CDefCollection::_GetItemProperty(struct IItemStore *,struct tagITEMKEY const *,enum GIPTYPE,struct _tagpropertykey const &,int *,struct tagPROPVARIANT *))",
+#else
+                LR"(private: long __thiscall CDefCollection::_GetItemProperty(struct IItemStore *,struct tagITEMKEY const *,enum GIPTYPE,struct _tagpropertykey const &,int *,struct tagPROPVARIANT *))",
+#endif
+            },
+            &CDefCollection__GetItemProperty_Original,
+            CDefCollection__GetItemProperty_Hook,
+            true,
+        },
+        {
+            {
+#ifdef _WIN64
                 LR"(public: virtual long __cdecl CFSFolder::MapColumnToSCID(unsigned int,struct _tagpropertykey *))",
 #else
                 LR"(public: virtual long __stdcall CFSFolder::MapColumnToSCID(unsigned int,struct _tagpropertykey *))",
@@ -2553,8 +2828,41 @@ bool HookWindowsStorageSymbols() {
         },
     };
 
-    return HookSymbols(windowsStorageModule, windowsStorageHooks,
-                       ARRAYSIZE(windowsStorageHooks));
+    // windows.storage.dll
+    WindhawkUtils::SYMBOL_HOOK alwaysKbHooks[] = {
+        {
+            {
+#ifdef _WIN64
+                LR"(public: virtual long __cdecl CFSFolder::GetFormatForDisplayFlags(struct _tagpropertykey const &,enum PROPDESC_FORMAT_FLAGS *))",
+#else
+                LR"(public: virtual long __stdcall CFSFolder::GetFormatForDisplayFlags(struct _tagpropertykey const &,enum PROPDESC_FORMAT_FLAGS *))",
+#endif
+            },
+            &CFSFolder_GetFormatForDisplayFlags_Original,
+            CFSFolder_GetFormatForDisplayFlags_Hook,
+            true,
+        },
+    };
+
+    // Alias for the extract_mod_symbols.py script.
+    using COMBINED_SH = WindhawkUtils::SYMBOL_HOOK;
+    COMBINED_SH allHooks[  //
+        ARRAYSIZE(folderSizesHooks) + ARRAYSIZE(alwaysKbHooks)];
+    int index = 0;
+
+    if (g_settings.calculateFolderSizes != CalculateFolderSizes::disabled) {
+        for (auto& hook : folderSizesHooks) {
+            allHooks[index++] = std::move(hook);
+        }
+    }
+
+    if (g_settings.fileSizeUnits == FileSizeUnits::alwaysKb) {
+        for (auto& hook : alwaysKbHooks) {
+            allHooks[index++] = std::move(hook);
+        }
+    }
+
+    return HookSymbols(windowsStorageModule, allHooks, index);
 }
 
 // A workaround for https://github.com/mstorsjo/llvm-mingw/issues/459.
@@ -2590,8 +2898,9 @@ void** FindImportPtr(HMODULE hFindInModule,
     pDosHeader = (IMAGE_DOS_HEADER*)hFindInModule;
     pNtHeader = (IMAGE_NT_HEADERS*)((char*)pDosHeader + pDosHeader->e_lfanew);
 
-    if (!pNtHeader->OptionalHeader.DataDirectory[1].VirtualAddress)
+    if (!pNtHeader->OptionalHeader.DataDirectory[1].VirtualAddress) {
         return nullptr;
+    }
 
     ImageBase = (ULONG_PTR)hFindInModule;
     pImportDescriptor =
@@ -2616,14 +2925,17 @@ void** FindImportPtr(HMODULE hFindInModule,
                         ImageImportByName += sizeof(WORD);
 
                         if (lstrcmpA((char*)(ImageBase + ImageImportByName),
-                                     pImportName) == 0)
+                                     pImportName) == 0) {
                             return (void**)pFirstThunk;
+                        }
                     }
                 } else {
-                    if (((ULONG_PTR)pImportName & ~0xFFFF) == 0)
+                    if (((ULONG_PTR)pImportName & ~0xFFFF) == 0) {
                         if ((ImageImportByName & 0xFFFF) ==
-                            (ULONG_PTR)pImportName)
+                            (ULONG_PTR)pImportName) {
                             return (void**)pFirstThunk;
+                        }
+                    }
                 }
 
                 pOriginalFirstThunk++;
@@ -2668,7 +2980,6 @@ bool Init(HMODULE module) {
 
     void** ppCxaThrow = FindImportPtr(module, "libc++.dll", "__cxa_throw");
     if (!ppCxaThrow) {
-        wsprintf(errorMsg, L"No __cxa_throw");
         return false;
     }
 
@@ -2792,7 +3103,16 @@ void LoadSettings() {
     Wh_FreeStringSetting(calculateFolderSizes);
 
     g_settings.sortSizesMixFolders = Wh_GetIntSetting(L"sortSizesMixFolders");
-    g_settings.disableKbOnlySizes = Wh_GetIntSetting(L"disableKbOnlySizes");
+
+    PCWSTR fileSizeUnits = Wh_GetStringSetting(L"disableKbOnlySizes");
+    g_settings.fileSizeUnits = FileSizeUnits::windowsDefault;
+    if (wcscmp(fileSizeUnits, L"1") == 0) {
+        g_settings.fileSizeUnits = FileSizeUnits::mbGbForLargeFiles;
+    } else if (wcscmp(fileSizeUnits, L"alwaysKb") == 0) {
+        g_settings.fileSizeUnits = FileSizeUnits::alwaysKb;
+    }
+    Wh_FreeStringSetting(fileSizeUnits);
+
     g_settings.useIecTerms = Wh_GetIntSetting(L"useIecTerms");
 }
 
@@ -2803,20 +3123,23 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    if (g_settings.calculateFolderSizes != CalculateFolderSizes::disabled) {
+    if (g_settings.calculateFolderSizes != CalculateFolderSizes::disabled ||
+        g_settings.fileSizeUnits == FileSizeUnits::alwaysKb) {
         if (!HookWindowsStorageSymbols()) {
             Wh_Log(L"Failed hooking Windows Storage symbols");
             return false;
         }
+    }
 
+    if (g_settings.calculateFolderSizes != CalculateFolderSizes::disabled) {
         HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
         if (kernelBaseModule) {
             auto pRegQueryValueExW = (RegQueryValueExW_t)GetProcAddress(
                 kernelBaseModule, "RegQueryValueExW");
             if (pRegQueryValueExW) {
-                WindhawkUtils::Wh_SetFunctionHookT(pRegQueryValueExW,
-                                                   RegQueryValueExW_Hook,
-                                                   &RegQueryValueExW_Original);
+                WindhawkUtils::SetFunctionHook(pRegQueryValueExW,
+                                               RegQueryValueExW_Hook,
+                                               &RegQueryValueExW_Original);
             }
         }
     }
@@ -2847,21 +3170,21 @@ BOOL Wh_ModInit() {
         if (isEverything) {
             g_isEverything = true;
 
-            WindhawkUtils::Wh_SetFunctionHookT(
+            WindhawkUtils::SetFunctionHook(
                 SHOpenFolderAndSelectItems, SHOpenFolderAndSelectItems_Hook,
                 &SHOpenFolderAndSelectItems_Original);
         }
     }
 
-    if (g_settings.disableKbOnlySizes) {
-        WindhawkUtils::Wh_SetFunctionHookT(PSFormatForDisplayAlloc,
-                                           PSFormatForDisplayAlloc_Hook,
-                                           &PSFormatForDisplayAlloc_Original);
+    if (g_settings.fileSizeUnits == FileSizeUnits::mbGbForLargeFiles) {
+        WindhawkUtils::SetFunctionHook(PSFormatForDisplayAlloc,
+                                       PSFormatForDisplayAlloc_Hook,
+                                       &PSFormatForDisplayAlloc_Original);
 
         // Used by older file dialogs, for example Regedit's export dialog.
-        WindhawkUtils::Wh_SetFunctionHookT(PSFormatForDisplay,
-                                           PSFormatForDisplay_Hook,
-                                           &PSFormatForDisplay_Original);
+        WindhawkUtils::SetFunctionHook(PSFormatForDisplay,
+                                       PSFormatForDisplay_Hook,
+                                       &PSFormatForDisplay_Original);
     }
 
     if (g_settings.useIecTerms) {
@@ -2873,13 +3196,17 @@ BOOL Wh_ModInit() {
 
         g_propsysModule = propsysModule;
 
-        if (!g_settings.disableKbOnlySizes) {
-            auto pPSStrFormatKBSizeW =
-                (PSStrFormatKBSizeW_t)GetProcAddress(propsysModule, (PCSTR)422);
-            WindhawkUtils::Wh_SetFunctionHookT(pPSStrFormatKBSizeW,
-                                               PSStrFormatKBSizeW_Hook,
-                                               &PSStrFormatKBSizeW_Original);
-        }
+        auto pPSStrFormatByteSizeW =
+            (PSStrFormatByteSizeW_t)GetProcAddress(propsysModule, (PCSTR)421);
+        WindhawkUtils::SetFunctionHook(pPSStrFormatByteSizeW,
+                                       PSStrFormatByteSizeW_Hook,
+                                       &PSStrFormatByteSizeW_Original);
+
+        auto pPSStrFormatKBSizeW =
+            (PSStrFormatKBSizeW_t)GetProcAddress(propsysModule, (PCSTR)422);
+        WindhawkUtils::SetFunctionHook(pPSStrFormatKBSizeW,
+                                       PSStrFormatKBSizeW_Hook,
+                                       &PSStrFormatKBSizeW_Original);
 
         HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
         HMODULE kernel32Module = GetModuleHandle(L"kernel32.dll");

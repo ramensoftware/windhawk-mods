@@ -2,7 +2,7 @@
 // @id              taskbar-button-scroll
 // @name            Taskbar minimize/restore on scroll
 // @description     Minimize/restore by scrolling the mouse wheel over taskbar buttons and thumbnail previews
-// @version         1.1.3
+// @version         1.1.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -29,9 +29,6 @@ previews.
 
 Only Windows 10 64-bit and Windows 11 are supported. For older Windows versions
 check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
-
-**Note:** To customize the old taskbar on Windows 11 (if using ExplorerPatcher
-or a similar tool), enable the relevant option in the mod's settings.
 
 ![Demonstration](https://i.imgur.com/rnnwOss.gif)
 */
@@ -1085,13 +1082,13 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         FlyoutFrame_OnPointerWheelChanged_Original !=
             TaskListButton_OnPointerWheelChanged_Original;
 
-    WindhawkUtils::Wh_SetFunctionHookT(
+    WindhawkUtils::SetFunctionHook(
         TaskListButton_OnPointerWheelChanged_Original,
         TaskListButton_OnPointerWheelChanged_Hook,
         &TaskListButton_OnPointerWheelChanged_Original);
 
     if (hookFlyoutFrame_OnPointerWheelChanged_Original) {
-        WindhawkUtils::Wh_SetFunctionHookT(
+        WindhawkUtils::SetFunctionHook(
             FlyoutFrame_OnPointerWheelChanged_Original,
             FlyoutFrame_OnPointerWheelChanged_Hook,
             &FlyoutFrame_OnPointerWheelChanged_Original);
@@ -1217,11 +1214,13 @@ bool HookTaskbarSymbols() {
             {LR"(public: virtual long __cdecl CTaskListWnd::DismissHoverUI(int))"},
             &CTaskListWnd_DismissHoverUI_Original,
             CTaskListWnd_DismissHoverUI_Hook,
+            true,  // Classic thumbs, removed in or near 10.0.26100.8544.
         },
         {
             {LR"(public: virtual int __cdecl CTaskListThumbnailWnd::ThumbIndexFromPoint(struct tagPOINT const &)const )"},
             &CTaskListThumbnailWnd_ThumbIndexFromPoint_Original,
             CTaskListThumbnailWnd_ThumbIndexFromPoint_Hook,
+            true,  // Classic thumbs, removed in or near 10.0.26100.8544.
         },
         {
             {LR"(protected: virtual __int64 __cdecl CTaskListWnd::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
@@ -1231,15 +1230,20 @@ bool HookTaskbarSymbols() {
         {
             {LR"(private: void __cdecl CTaskListThumbnailWnd::_HandleContextMenu(struct tagPOINT,int))"},
             &CTaskListThumbnailWnd__HandleContextMenu_Original,
+            nullptr,
+            true,  // Classic thumbs, removed in or near 10.0.26100.8544.
         },
         {
             {LR"(private: void __cdecl CTaskListThumbnailWnd::_RefreshThumbnail(int))"},
             &CTaskListThumbnailWnd__RefreshThumbnail_Original,
+            nullptr,
+            true,  // Classic thumbs, removed in or near 10.0.26100.8544.
         },
         {
             {LR"(private: virtual __int64 __cdecl CTaskListThumbnailWnd::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
             &CTaskListThumbnailWnd_v_WndProc_Original,
             CTaskListThumbnailWnd_v_WndProc_Hook,
+            true,  // Classic thumbs, removed in or near 10.0.26100.8544.
         },
         // For offsets:
         {
@@ -1269,6 +1273,30 @@ bool HookTaskbarSymbols() {
 
     if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
         Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    bool hasAllClassicThumbnailsHooks =
+        CTaskListWnd_DismissHoverUI_Original &&
+        CTaskListThumbnailWnd_ThumbIndexFromPoint_Original &&
+        CTaskListThumbnailWnd__HandleContextMenu_Original &&
+        CTaskListThumbnailWnd__RefreshThumbnail_Original &&
+        CTaskListThumbnailWnd_v_WndProc_Original;
+
+    bool hasNoClassicThumbnailsHooks =
+        !CTaskListWnd_DismissHoverUI_Original &&
+        !CTaskListThumbnailWnd_ThumbIndexFromPoint_Original &&
+        !CTaskListThumbnailWnd__HandleContextMenu_Original &&
+        !CTaskListThumbnailWnd__RefreshThumbnail_Original &&
+        !CTaskListThumbnailWnd_v_WndProc_Original;
+
+    if (!hasAllClassicThumbnailsHooks && !hasNoClassicThumbnailsHooks) {
+        Wh_Log(L"Some classic thumbnail hooks are missing (%p, %p, %p, %p, %p)",
+               CTaskListWnd_DismissHoverUI_Original,
+               CTaskListThumbnailWnd_ThumbIndexFromPoint_Original,
+               CTaskListThumbnailWnd__HandleContextMenu_Original,
+               CTaskListThumbnailWnd__RefreshThumbnail_Original,
+               CTaskListThumbnailWnd_v_WndProc_Original);
         return false;
     }
 
@@ -1553,9 +1581,9 @@ BOOL Wh_ModInit() {
     HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
     auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
         kernelBaseModule, "LoadLibraryExW");
-    WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
-                                       LoadLibraryExW_Hook,
-                                       &LoadLibraryExW_Original);
+    WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                   LoadLibraryExW_Hook,
+                                   &LoadLibraryExW_Original);
 
     HMODULE dwmapiModule =
         LoadLibraryEx(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);

@@ -2,7 +2,7 @@
 // @id              taskbar-classic-menu
 // @name            Taskbar classic context menu
 // @description     Show the classic context menu when right-clicking on taskbar items
-// @version         1.0.3
+// @version         1.0.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -68,7 +68,7 @@ std::atomic<bool> g_initialized;
 std::atomic<bool> g_explorerPatcherInitialized;
 
 std::atomic<DWORD> g_CTaskListWnd__HandleContextMenuThreadId;
-std::atomic<DWORD> g_TaskbarResources_OnTaskListButtonContextRequestedThreadId;
+std::atomic<DWORD> g_contextRequestedThreadId;
 DWORD g_lastContextRequestedTickCount;
 
 void* CTaskListWnd_vftable_CImpWndProc;
@@ -141,8 +141,7 @@ HRESULT WINAPI CTaskListWnd_HandleClick_Hook(void* pThis,
                                              void* launcherOptions) {
     Wh_Log(L">");
 
-    if (g_TaskbarResources_OnTaskListButtonContextRequestedThreadId ==
-            GetCurrentThreadId() ||
+    if (g_contextRequestedThreadId == GetCurrentThreadId() ||
         GetTickCount() - g_lastContextRequestedTickCount <= 200) {
         g_lastContextRequestedTickCount = 0;
         Wh_Log(L"Showing classic context menu");
@@ -220,13 +219,29 @@ TaskbarResources_OnTaskListButtonContextRequested_Hook(void* pThis,
     // show the context menu in that case as well.
     g_lastContextRequestedTickCount = GetTickCount();
 
-    g_TaskbarResources_OnTaskListButtonContextRequestedThreadId =
-        GetCurrentThreadId();
+    g_contextRequestedThreadId = GetCurrentThreadId();
 
     TaskbarResources_OnTaskListButtonContextRequested_Original(pThis, param1,
                                                                param2);
 
-    g_TaskbarResources_OnTaskListButtonContextRequestedThreadId = 0;
+    g_contextRequestedThreadId = 0;
+}
+
+using TaskListButtonHandlers_HandleContextRequested_t =
+    void(WINAPI*)(void* param1, void* param2);
+TaskListButtonHandlers_HandleContextRequested_t
+    TaskListButtonHandlers_HandleContextRequested_Original;
+void WINAPI TaskListButtonHandlers_HandleContextRequested_Hook(void* param1,
+                                                               void* param2) {
+    Wh_Log(L">");
+
+    g_lastContextRequestedTickCount = GetTickCount();
+
+    g_contextRequestedThreadId = GetCurrentThreadId();
+
+    TaskListButtonHandlers_HandleContextRequested_Original(param1, param2);
+
+    g_contextRequestedThreadId = 0;
 }
 
 using GetKeyState_t = decltype(&GetKeyState);
@@ -237,8 +252,7 @@ SHORT WINAPI GetKeyState_Hook(int nVirtKey) {
     if (nVirtKey == VK_SHIFT) {
         DWORD currentThreadId = GetCurrentThreadId();
         if (g_CTaskListWnd__HandleContextMenuThreadId == currentThreadId ||
-            g_TaskbarResources_OnTaskListButtonContextRequestedThreadId ==
-                currentThreadId) {
+            g_contextRequestedThreadId == currentThreadId) {
             ret ^= 0x8000;
         }
     }
@@ -489,6 +503,15 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             {LR"(public: void __cdecl winrt::Taskbar::implementation::TaskbarResources::OnTaskListButtonContextRequested(struct winrt::Windows::UI::Xaml::UIElement const &,struct winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const &))"},
             &TaskbarResources_OnTaskListButtonContextRequested_Original,
             TaskbarResources_OnTaskListButtonContextRequested_Hook,
+            true,  // In case it's removed in the future,
+        },
+        // Called directly by the TaskListButtonResources XAML handlers,
+        // bypassing TaskbarResources::OnTaskListButtonContextRequested.
+        {
+            {LR"(public: static void __cdecl winrt::Taskbar::implementation::TaskListButtonHandlers::HandleContextRequested(struct winrt::Windows::UI::Xaml::UIElement const &,struct winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const &))"},
+            &TaskListButtonHandlers_HandleContextRequested_Original,
+            TaskListButtonHandlers_HandleContextRequested_Hook,
+            true,  // Missing in older versions.
         },
     };
 
@@ -579,12 +602,12 @@ BOOL Wh_ModInit() {
     HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
     auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
         kernelBaseModule, "LoadLibraryExW");
-    WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
-                                       LoadLibraryExW_Hook,
-                                       &LoadLibraryExW_Original);
+    WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                   LoadLibraryExW_Hook,
+                                   &LoadLibraryExW_Original);
 
-    WindhawkUtils::Wh_SetFunctionHookT(GetKeyState, GetKeyState_Hook,
-                                       &GetKeyState_Original);
+    WindhawkUtils::SetFunctionHook(GetKeyState, GetKeyState_Hook,
+                                   &GetKeyState_Original);
 
     g_initialized = true;
 

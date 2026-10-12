@@ -6,7 +6,7 @@
 // @description     Enables browser-style middle-mouse autoscroll in Win32 applications. Compatible with Smooth Scroll Win32.
 // @description:pt  Ativa rolagem automatica com o botao do meio (estilo navegador) em aplicativos Win32. Compativel com Smooth Scroll Win32.
 // @description:es  Activa el desplazamiento automatico con el boton central del raton (estilo navegador) en aplicaciones Win32. Compatible con Smooth Scroll Win32.
-// @version         1.0.0
+// @version         1.0.2
 // @author          crazyboyybs
 // @github          https://github.com/crazyboyybs
 // @include         explorer.exe
@@ -24,6 +24,10 @@
 
 Simulates browser-style autoscroll (middle mouse button) in Win32 applications
 such as File Explorer, with a WinUI-style visual indicator at the scroll origin.
+
+## Changelog - 1.0.2
+1. Fixed possible explorer.exe crash on startup.
+2. Fixed inverted horizontal scrolling.
 
 ### How to use
 
@@ -138,6 +142,20 @@ de la configuracion del mod en Windhawk bajo "Include processes".
   $description: Shows the autoscroll indicator circle at the scroll origin.
   $description:pt: Mostra o circulo de indicador de rolagem na origem da rolagem.
   $description:es: Muestra el circulo indicador de desplazamiento en el origen del gesto.
+- toggleMode: false
+  $name: Toggle Mode
+  $name:pt: Modo Alternado
+  $name:es: Modo Alternado
+  $description: Click to start scrolling, click again to stop. Default is hold mode (release to stop).
+  $description:pt: Clique para iniciar a rolagem, clique novamente para parar. Padrao e modo de segurar (soltar para parar).
+  $description:es: Clic para iniciar el desplazamiento, clic de nuevo para detener. Predeterminado es modo de mantener presionado.
+- blockMiddleRelease: false
+  $name: Block Middle Button Release
+  $name:pt: Bloquear Soltura do Botao do Meio
+  $name:es: Bloquear Liberacion del Boton Central
+  $description: Swallow the middle button release to prevent apps from acting on mouse3 release (e.g. Direct Folders).
+  $description:pt: Consome a soltura do botao do meio para evitar que apps acionem acoes vinculadas ao mouse3 (ex. Direct Folders).
+  $description:es: Consume la liberacion del boton central para evitar que las apps actuen sobre el boton 3 del raton (ej. Direct Folders).
 */
 // ==/WindhawkModSettings==
 
@@ -158,6 +176,12 @@ static std::atomic<int>  g_speedPx{150};
 static std::atomic<bool> g_horzEnabled{true};
 static std::atomic<int>  g_speedMult{30};
 static std::atomic<bool> g_showIndicator{true};
+static std::atomic<bool> g_toggleMode{false};
+static std::atomic<bool> g_blockMiddleRelease{false};
+
+// Used in toggle mode: suppress the WM_MBUTTONUP paired with the
+// stop-click WM_MBUTTONDOWN (which is swallowed to prevent apps seeing it).
+static std::atomic<bool> g_suppressNextMBUp{false};
 
 // ===========================================================================
 // Autoscroll state
@@ -173,16 +197,29 @@ static const UINT WM_IND_HIDE   = WM_USER + 2;
 static const UINT WM_IND_UPDATE = WM_USER + 3;
 
 // Scroll thread
+// Raw pointer (not a value std::thread): a value std::thread has a
+// non-trivial destructor that calls std::terminate() if still joinable.
+// Windhawk does not call Wh_ModUninit when the host process exits -- the
+// DLL is simply detached -- so a global value std::thread would abort
+// explorer.exe on every shutdown. A raw pointer has a trivial destructor,
+// so nothing runs at CRT shutdown; the (already OS-terminated) thread is
+// harmlessly leaked instead.
 static std::atomic<bool> g_threadRunning{false};
-static std::thread       g_scrollThread;
+static std::thread*      g_scrollThread = nullptr;
 
-// Indicator thread
+// Indicator thread (same rationale as g_scrollThread above)
 static std::atomic<HWND> g_indicatorHwnd{nullptr};
-static std::thread       g_indicatorThread;
+static std::thread*      g_indicatorThread = nullptr;
 
 // Event signaled by StartAutoscroll to wake the scroll thread from idle.
 // Auto-reset: consumed by WaitForSingleObject automatically.
 static HANDLE g_scrollEvent = nullptr;
+
+// Set by the scroll thread when it actually posts a scroll event.
+// Cleared in StartAutoscroll. Read at WM_MBUTTONUP to decide whether
+// the UP should be swallowed (scroll happened) or passed through (quick
+// click -- e.g. open folder in new tab on Explorer nav pane).
+static std::atomic<bool> g_scrolledSinceStart{false};
 
 // Set before posting WM_IND_UPDATE; cleared by the handler.
 // Prevents the scroll thread from flooding the indicator queue, which would
@@ -235,9 +272,12 @@ static void ScrollThreadProc() {
                 int absDy = std::abs(dy);
                 if (absDy > deadzone) {
                     float t     = std::min(1.0f, (float)(absDy - deadzone) / speedRange);
-                    int   delta = (int)(t * t * t * maxNotches * WHEEL_DELTA);
+                    int   delta = std::min(
+                        (int)(t * t * t * maxNotches * WHEEL_DELTA),
+                        (int)WHEEL_DELTA);  // 1 notch max: prevents queue buildup
                     if (delta > 0) {
                         if (dy > 0) delta = -delta;
+                        g_scrolledSinceStart.store(true, std::memory_order_relaxed);
                         PostMessageW(hwnd, WM_MOUSEWHEEL,
                             MAKEWPARAM(0, (SHORT)delta),
                             MAKELPARAM(cursor.x, cursor.y));
@@ -250,9 +290,17 @@ static void ScrollThreadProc() {
                 int absDx = std::abs(dx);
                 if (absDx > deadzone) {
                     float t     = std::min(1.0f, (float)(absDx - deadzone) / speedRange);
-                    int   delta = (int)(t * t * t * maxNotches * WHEEL_DELTA);
+                    int   delta = std::min(
+                        (int)(t * t * t * maxNotches * WHEEL_DELTA),
+                        (int)WHEEL_DELTA);  // 1 notch max: prevents queue buildup
                     if (delta > 0) {
-                        if (dx > 0) delta = -delta;
+                        // WM_MOUSEHWHEEL is the opposite convention of WM_MOUSEWHEEL:
+                        // positive delta = wheel tilted right = content scrolls right
+                        // (MSDN: "a positive value indicates the wheel was rotated to
+                        // the right"). So a rightward drag (dx > 0) must KEEP delta
+                        // positive; only a leftward drag (dx < 0) negates it.
+                        if (dx < 0) delta = -delta;
+                        g_scrolledSinceStart.store(true, std::memory_order_relaxed);
                         PostMessageW(hwnd, WM_MOUSEHWHEEL,
                             MAKEWPARAM(0, (SHORT)delta),
                             MAKELPARAM(cursor.x, cursor.y));
@@ -296,6 +344,7 @@ static void StartAutoscroll(HWND hwnd, POINT screenOrigin) {
     g_frameMs.store(CalcFrameMs(hwnd), std::memory_order_relaxed);
     g_originX.store(screenOrigin.x, std::memory_order_relaxed);
     g_originY.store(screenOrigin.y, std::memory_order_relaxed);
+    g_scrolledSinceStart.store(false, std::memory_order_relaxed);
     g_targetHwnd.store(hwnd, std::memory_order_release);
     if (g_scrollEvent) SetEvent(g_scrollEvent);  // wake scroll thread
     HWND ind = g_indicatorHwnd.load(std::memory_order_acquire);
@@ -323,19 +372,69 @@ static bool HandleMsg(const MSG* pMsg) {
 
     switch (pMsg->message) {
 
-    // Middle button DOWN: always start; swallow so the app does not see it.
+    // Middle button DOWN:
+    //   Hold mode   -- start, pass DOWN through (preserves open-in-new-tab).
+    //   Toggle mode -- swallow ALL DOWNs. Passing through causes Explorer's
+    //                  WndProc to call SetCapture and run an inner PeekMessage
+    //                  loop that consumes WM_MBUTTONUP before our
+    //                  DispatchMessage hook sees it, breaking toggle state.
     case WM_MBUTTONDOWN: {
         POINT pt = { GET_X_LPARAM(pMsg->lParam),
                      GET_Y_LPARAM(pMsg->lParam) };
         ClientToScreen(pMsg->hwnd, &pt);
+        if (g_toggleMode.load(std::memory_order_relaxed)) {
+            if (isActive) {
+                StopAutoscroll();
+                g_suppressNextMBUp.store(true, std::memory_order_relaxed);
+            } else {
+                StartAutoscroll(pMsg->hwnd, pt);
+            }
+            return true;  // always swallow DOWN in toggle mode
+        }
         StartAutoscroll(pMsg->hwnd, pt);
-        return true;
+        break;  // hold mode: pass through
     }
 
-    // Middle button UP: stop; swallow to match the DOWN we consumed.
-    case WM_MBUTTONUP:
-        if (isActive) StopAutoscroll();
-        return true;
+    // Middle button UP:
+    //   Toggle mode      -- DOWN was always swallowed (no SetCapture).
+    //                       Suppress the orphaned UP from the start-click;
+    //                       suppress the UP from the stop-click via
+    //                       g_suppressNextMBUp.
+    //   Hold mode        -- stop on UP. Swallow if scrolling occurred or if
+    //                       blockMiddleRelease is set; send WM_CANCELMODE and
+    //                       ReleaseCapture to clean up Explorer's SetCapture
+    //                       state before swallowing.
+    //   Quick click      -- pass UP through so apps receive the full DOWN+UP
+    //                       pair (e.g. open-in-new-tab in Explorer).
+    case WM_MBUTTONUP: {
+        if (g_suppressNextMBUp.exchange(false, std::memory_order_relaxed))
+            return true;  // UP from toggle stop-click (DOWN was swallowed)
+
+        bool toggleMode = g_toggleMode.load(std::memory_order_relaxed);
+
+        if (!toggleMode && isActive)
+            StopAutoscroll();  // hold mode: stop on release
+
+        // Toggle start-click UP: DOWN was swallowed so no SetCapture was set;
+        // no WM_CANCELMODE or ReleaseCapture needed.
+        if (toggleMode && isActive)
+            return true;
+
+        // Determine if this UP should be swallowed.
+        bool swallow = g_blockMiddleRelease.load(std::memory_order_relaxed)
+                    || g_scrolledSinceStart.load(std::memory_order_relaxed);
+        if (swallow) {
+            // Hold mode only: DOWN was passed through so Explorer called
+            // SetCapture. WM_CANCELMODE cleans up its internal modal state
+            // (drag detection, scroll tracking) without firing click actions.
+            if (!toggleMode) {
+                SendMessageW(pMsg->hwnd, WM_CANCELMODE, 0, 0);
+                ReleaseCapture();
+            }
+            return true;
+        }
+        break;  // quick click: pass UP through (Explorer releases capture)
+    }
 
     // Other buttons while active: cancel but let the click through.
     case WM_LBUTTONDOWN:
@@ -762,9 +861,9 @@ static bool PresentIndicator(HWND hwnd, IndicatorResources& res) {
 // ---------------------------------------------------------------------------
 struct IndicatorState {
     IndicatorResources res;
-    UINT               currentDpi   = 0;
-    bool               darkMode     = false;
-    int                lastDirs     = -1;  // last rendered activeDirs; -1 forces first render
+    UINT               currentDpi      = 0;
+    bool               darkMode        = false;
+    int                lastDirs        = -1;  // last rendered activeDirs; -1 forces first render
 };
 
 static LRESULT CALLBACK IndicatorWndProc(
@@ -960,17 +1059,21 @@ static void LoadSettings() {
     int speed         = Wh_GetIntSetting(L"speed");
     int horz          = Wh_GetIntSetting(L"horizontal");
     int speedMult     = Wh_GetIntSetting(L"speedMult");
-    int showIndicator = Wh_GetIntSetting(L"showIndicator");
+    int showIndicator    = Wh_GetIntSetting(L"showIndicator");
+    int toggleMode       = Wh_GetIntSetting(L"toggleMode");
+    int blockMidRelease  = Wh_GetIntSetting(L"blockMiddleRelease");
 
-    deadzone  = std::max(0,  std::min(64,  deadzone));
-    speed     = std::max(deadzone + 1, std::min(500, speed));
-    speedMult = std::max(1,  std::min(100, speedMult));
+    deadzone      = std::max(0,  std::min(64,  deadzone));
+    speed         = std::max(deadzone + 1, std::min(500, speed));
+    speedMult     = std::max(1,  std::min(100, speedMult));
 
-    g_deadzonePx   .store(deadzone,          std::memory_order_relaxed);
-    g_speedPx      .store(speed,             std::memory_order_relaxed);
-    g_horzEnabled  .store(horz != 0,          std::memory_order_relaxed);
-    g_speedMult    .store(speedMult,         std::memory_order_relaxed);
-    g_showIndicator.store(showIndicator != 0, std::memory_order_relaxed);
+    g_deadzonePx        .store(deadzone,             std::memory_order_relaxed);
+    g_speedPx           .store(speed,                std::memory_order_relaxed);
+    g_horzEnabled       .store(horz != 0,            std::memory_order_relaxed);
+    g_speedMult         .store(speedMult,            std::memory_order_relaxed);
+    g_showIndicator     .store(showIndicator != 0,   std::memory_order_relaxed);
+    g_toggleMode        .store(toggleMode != 0,      std::memory_order_relaxed);
+    g_blockMiddleRelease.store(blockMidRelease != 0, std::memory_order_relaxed);
 }
 
 // ===========================================================================
@@ -1014,9 +1117,18 @@ void Wh_ModAfterInit() {
         return;
     }
     g_threadRunning.store(true, std::memory_order_relaxed);
-    g_scrollThread = std::thread(ScrollThreadProc);
+    g_scrollThread = new std::thread(ScrollThreadProc);
     if (g_showIndicator.load(std::memory_order_relaxed))
-        g_indicatorThread = std::thread(IndicatorThreadProc);
+        g_indicatorThread = new std::thread(IndicatorThreadProc);
+}
+
+// Joins (if still joinable) and deletes a heap-allocated thread, then nulls
+// the pointer. Safe to call with p == nullptr.
+static void JoinAndDeleteThread(std::thread*& p) {
+    if (!p) return;
+    if (p->joinable()) p->join();
+    delete p;
+    p = nullptr;
 }
 
 void Wh_ModSettingsChanged() {
@@ -1030,14 +1142,12 @@ void Wh_ModSettingsChanged() {
         // Indicator is running but should be off: close and join the thread.
         // WM_CLOSE → DestroyWindow → PostQuitMessage exits GetMessage quickly.
         PostMessageW(ind, WM_CLOSE, 0, 0);
-        if (g_indicatorThread.joinable())
-            g_indicatorThread.join();
+        JoinAndDeleteThread(g_indicatorThread);
     } else if (show && !ind) {
         // Indicator should be on but thread is not running: start it.
         // Join the previous (already-exited) thread handle before replacing.
-        if (g_indicatorThread.joinable())
-            g_indicatorThread.join();
-        g_indicatorThread = std::thread(IndicatorThreadProc);
+        JoinAndDeleteThread(g_indicatorThread);
+        g_indicatorThread = new std::thread(IndicatorThreadProc);
     }
 }
 
@@ -1051,9 +1161,9 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {
     g_threadRunning.store(false, std::memory_order_relaxed);
     if (g_scrollEvent) SetEvent(g_scrollEvent);  // unblock idle scroll thread
-    if (g_scrollThread.joinable())    g_scrollThread.join();
+    JoinAndDeleteThread(g_scrollThread);
     if (g_scrollEvent) { CloseHandle(g_scrollEvent); g_scrollEvent = nullptr; }
-    if (g_indicatorThread.joinable()) g_indicatorThread.join();
+    JoinAndDeleteThread(g_indicatorThread);
 
     g_origPeekMessageW     = nullptr;
     g_origPeekMessageA     = nullptr;

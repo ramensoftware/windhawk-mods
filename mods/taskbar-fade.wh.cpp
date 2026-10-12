@@ -2,7 +2,7 @@
 // @id              taskbar-fade
 // @name            Taskbar Fade
 // @description     Reduces visual clutter by automatically dimming or hiding the taskbar when idle. Ideal for focused workflows and preventing OLED burn-in.
-// @version         2.1.2
+// @version         2.2.0
 // @author          Lukvbp
 // @github          https://github.com/lukvbp
 // @include         windhawk.exe
@@ -20,17 +20,20 @@ This mod is designed to prevent OLED burn-in and reduce visual distractions by l
 * **Idle Dimming:** The taskbar fades to a lower transparency level (configurable) when the mouse is away.
 * **Idle Hiding:** Optionally hides the taskbar completely after a set timeout.
 * **Instant Wake:** Moving the mouse to the taskbar or the bottom of the screen restores full opacity immediately.
+* **Hover Fade Delay:** (Optional) Waits a configurable amount of time after the cursor leaves the taskbar before starting the dim fade, so brief accidental exits don't trigger it.
 * **Smart Idle:** (Optional) Only hide the taskbar if the desktop is focused. If windows are open, keep the taskbar dimmed instead.
 * **Clean Desktop:** (Optional) Hide desktop icons when the taskbar hides for a completely black screen.
 * **Customization:** Settings available for fade speed, transparency levels, and timeout duration.
 
 ### Configuration
 * **Default Transparency:** The opacity level when the taskbar is dimmed (0-100%).
+* **Hover Fade Delay:** Milliseconds to wait after the cursor leaves the taskbar before the dim fade begins.
 * **Enable Idle Hiding:** Check this to make the taskbar vanish completely after a timeout.
 * **Smart Idle:** If checked, idle hiding is disabled when any window is open/focused.
 * **Hide Desktop Icons:** If checked, desktop icons will also vanish when idle.
 * **Idle Timeout:** Seconds of inactivity before the taskbar hides.
 * **Fade Speed:** Duration of the fade animation in milliseconds.
+
 */
 // ==/WindhawkModReadme==
 
@@ -39,6 +42,9 @@ This mod is designed to prevent OLED burn-in and reduce visual distractions by l
 - DimTransparency: 50
   $name: Default Transparency (%)
   $description: How see-through the bar is when active. (0=Solid, 100=Invisible).
+- HoverFadeDelay: 0
+  $name: Hover Fade Delay
+  $description: Time (milliseconds) to wait after leaving the taskbar before beginning the dim fade.
 - EnableIdleFade: true
   $name: Enable Idle Hiding
   $description: If checked, the taskbar will vanish completely when you are away.
@@ -95,6 +101,7 @@ struct {
     int idleFadeDuration;
     int frameTimeMs;
     double targetDimAlpha;
+    int hoverFadeDelayMs;
 } g_cache;
 
 // Window Tracking
@@ -120,6 +127,8 @@ void LoadSettings() {
     int rawIdleFade = Wh_GetIntSetting(L"IdleFadeDuration");
     int rawFPS = Wh_GetIntSetting(L"TargetFPS");
 
+    int rawHoverDelay = Wh_GetIntSetting(L"HoverFadeDelay");
+
     if (rawTimeout < 1) {
         rawTimeout = 1;
     }
@@ -136,6 +145,12 @@ void LoadSettings() {
     }
     if (rawFPS > 120) {
         rawFPS = 120;
+    }
+    if (rawHoverDelay < 0) {
+        rawHoverDelay = 0;
+    }
+    if (rawHoverDelay > 10000) {
+        rawHoverDelay = 10000;
     }
 
     int calculatedFrameTime = 1000 / rawFPS;
@@ -162,6 +177,8 @@ void LoadSettings() {
 
     double opacityPercent = (100.0 - (double)rawTransp);
     g_cache.targetDimAlpha = (opacityPercent * 255.0) / 100.0;
+    
+    g_cache.hoverFadeDelayMs = rawHoverDelay;
 }
 
 void WhTool_ModSettingsChanged() {
@@ -283,6 +300,10 @@ void WorkerLoop() {
     int idleFadeDuration;
     int frameTimeMs;
     double targetDimAlpha;
+    int hoverFadeDelayMs;
+
+    // Hover delay tracking (persists across iterations)
+    ULONGLONG lastHoverTime = 0;
 
     while (!g_stopThread) {
         // 0. Settings Snapshot
@@ -296,6 +317,7 @@ void WorkerLoop() {
             idleFadeDuration = g_cache.idleFadeDuration;
             frameTimeMs = g_cache.frameTimeMs;
             targetDimAlpha = g_cache.targetDimAlpha;
+            hoverFadeDelayMs = g_cache.hoverFadeDelayMs;
         }
 
         ULONGLONG now = GetTickCount64();
@@ -401,13 +423,23 @@ void WorkerLoop() {
                 break; 
             }
         }
+        
+        // Track the most recent time the cursor was over any taskbar
+        if (isHovering) {
+            lastHoverTime = now;
+        }
 
         FadeState targetState = FadeState::Dimmed;
 
         // Condition: Enabled AND Timeout reached AND (Smart Idle check passed)
+        // Idle ALWAYS takes priority and is never delayed
         if (enableIdleFade && idleTime > idleTimeoutMs && isDesktopFocused) {
             targetState = FadeState::Idle;
         } else if (isHovering) {
+            targetState = FadeState::Active;
+        } else if ((now - lastHoverTime) < (ULONGLONG)hoverFadeDelayMs) {
+            // cursor recently left the taskbar - hold at active until the 
+            // hover-fade state delay elapses, then fall through to Dimmed below.
             targetState = FadeState::Active;
         }
 
