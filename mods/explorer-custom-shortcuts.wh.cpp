@@ -96,7 +96,7 @@ You can assign any hotkey directly to built-in commands by setting the path to o
 
 ### Available Tokens for Arguments & Examples
 
-* **`%%`** — Literal percent sign (`%`). Useful for passing environment variables (e.g. `%%PATH%%`) or URLs without triggering token expansion.
+* **`%%`** — Literal percent sign (`%`). Useful for passing environment variables or script arguments directly to shells like `cmd.exe /c` (e.g. `%%PATH%%`), or URL-encoded percent signs without triggering token expansion.
 * **`%f`** — All selected items as space-separated quoted paths (`"C:\a.txt" "C:\b.png"`).
 * **`%files`** — Selected regular files only (skips selected folders).
 * **`%folders`** — Selected folders only (skips selected regular files).
@@ -425,19 +425,18 @@ std::wstring ResolveCommandPath(const std::wstring& command) {
     return expanded;
 }
 
+// Trims leading/trailing whitespace and quote characters in place.
+void TrimWhitespaceAndQuotes(std::wstring& s) {
+    auto keep = [](wchar_t ch) {
+        return !(iswspace(ch) || ch == L'"' || ch == L'\'');
+    };
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), keep));
+    s.erase(std::find_if(s.rbegin(), s.rend(), keep).base(), s.end());
+}
+
 int ParseKey(std::wstring keyStr) {
     // Trim leading whitespace and quotes
-    auto isTrimChar = [](wchar_t ch) {
-        return iswspace(ch) || ch == L'"' || ch == L'\'';
-    };
-    keyStr.erase(keyStr.begin(),
-                 std::find_if(keyStr.begin(), keyStr.end(),
-                              [&](wchar_t ch) { return !isTrimChar(ch); }));
-    // Trim trailing whitespace and quotes
-    keyStr.erase(std::find_if(keyStr.rbegin(), keyStr.rend(),
-                              [&](wchar_t ch) { return !isTrimChar(ch); })
-                     .base(),
-                 keyStr.end());
+    TrimWhitespaceAndQuotes(keyStr);
     // Convert to uppercase
     std::transform(keyStr.begin(), keyStr.end(), keyStr.begin(), ::towupper);
     if (keyStr.empty())
@@ -2440,19 +2439,7 @@ void DispatchShortcutExecution(CustomShortcut sc,
 
         if (isInternal) {
             // Trim leading and trailing whitespace / quotes
-            auto isTrimChar = [](wchar_t ch) {
-                return iswspace(ch) || ch == L'"' || ch == L'\'';
-            };
-            actionName.erase(
-                actionName.begin(),
-                std::find_if(actionName.begin(), actionName.end(),
-                             [&](wchar_t ch) { return !isTrimChar(ch); }));
-            actionName.erase(
-                std::find_if(actionName.rbegin(), actionName.rend(),
-                             [&](wchar_t ch) { return !isTrimChar(ch); })
-                    .base(),
-                actionName.end());
-
+            TrimWhitespaceAndQuotes(actionName);
             ExecuteInternalCommand(actionName, rootHwnd, capturedFocus);
             return;
         }
