@@ -109,6 +109,11 @@ Fonts must be installed in Windows. Missing fonts are silently substituted by Wi
     - Times New Roman: Times New Roman
     - Trebuchet MS: Trebuchet MS
     - Verdana: Verdana
+    - custom: Custom...
+
+- dayCustomFontFamily: ""
+  $name: Custom weekday font family
+  $description: Enter the exact name of any font installed on your system.
 
 - dayItalic: false
   $name: Weekday italics
@@ -138,6 +143,11 @@ Fonts must be installed in Windows. Missing fonts are silently substituted by Wi
     - Times New Roman: Times New Roman
     - Trebuchet MS: Trebuchet MS
     - Verdana: Verdana
+    - custom: Custom...
+
+- dateCustomFontFamily: ""
+  $name: Custom date font family
+  $description: Enter the exact name of any font installed on your system.
 
 - dateItalic: false
   $name: Date italics
@@ -167,6 +177,11 @@ Fonts must be installed in Windows. Missing fonts are silently substituted by Wi
     - Times New Roman: Times New Roman
     - Trebuchet MS: Trebuchet MS
     - Verdana: Verdana
+    - custom: Custom...
+
+- timeCustomFontFamily: ""
+  $name: Custom time font family
+  $description: Enter the exact name of any font installed on your system.
 
 - timeItalic: false
   $name: Time italics
@@ -1043,9 +1058,26 @@ static void RebuildOverlays() {
 }
 
 static void LoadSettings() {
-  g_settings.dayFontFamily = LoadStringSetting(L"dayFontFamily", L"Anurati");
-  g_settings.timeFontFamily = LoadStringSetting(L"timeFontFamily", L"Quicksand");
-  g_settings.dateFontFamily = LoadStringSetting(L"dateFontFamily", L"Quicksand");
+  std::wstring dayFontSetting = LoadStringSetting(L"dayFontFamily", L"Anurati");
+  if (dayFontSetting == L"custom") {
+    g_settings.dayFontFamily = LoadStringSetting(L"dayCustomFontFamily", L"Segoe UI");
+  } else {
+    g_settings.dayFontFamily = dayFontSetting;
+  }
+
+  std::wstring timeFontSetting = LoadStringSetting(L"timeFontFamily", L"Quicksand");
+  if (timeFontSetting == L"custom") {
+    g_settings.timeFontFamily = LoadStringSetting(L"timeCustomFontFamily", L"Segoe UI");
+  } else {
+    g_settings.timeFontFamily = timeFontSetting;
+  }
+
+  std::wstring dateFontSetting = LoadStringSetting(L"dateFontFamily", L"Quicksand");
+  if (dateFontSetting == L"custom") {
+    g_settings.dateFontFamily = LoadStringSetting(L"dateCustomFontFamily", L"Segoe UI");
+  } else {
+    g_settings.dateFontFamily = dateFontSetting;
+  }
   g_settings.mainHeading = LoadStringSetting(L"mainHeading", L"day");
   if (g_settings.mainHeading != L"day" &&
       g_settings.mainHeading != L"date" &&
