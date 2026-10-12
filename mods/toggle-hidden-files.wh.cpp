@@ -91,7 +91,8 @@ enum WindowContext {
 LRESULT CALLBACK KeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam);
 DWORD WINAPI HookThreadProc(LPVOID lpParameter);
 bool ToggleHiddenFilesInShellState(bool systemFilesOnly);
-bool IsShortcutPressed(WPARAM wParam, LPARAM lParam, bool shiftRequired);
+bool IsShortcutPressed(WPARAM wParam, LPARAM lParam, bool shiftRequired,
+                       bool altRequired);
 void LoadSettings();
 WindowContext GetCurrentWindowContext();
 
@@ -133,6 +134,8 @@ bool ToggleHiddenFilesInShellState(bool systemFilesOnly) {
         writeMask |= SSF_SHOWSUPERHIDDEN;
     }
 
+    // Persist the last selected state in Explorer's saved user settings. This
+    // intentionally remains active after unloading the mod and across reboots.
     if (writeMask != 0) {
         SHGetSetSettings(&shellState, writeMask, TRUE);
     }
