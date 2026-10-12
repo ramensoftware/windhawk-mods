@@ -13,10 +13,11 @@
 - toggleProtectedFiles: true
   $name: Also toggle protected OS files
   $description: When enabled, Ctrl+H will also toggle the visibility of protected operating system files
-- systemFilesShortcutModifier: shift
+- systemFilesShortcutModifier: none
   $name: Modifier for system files shortcut
   $description: Choose which modifier is added to Ctrl+H to toggle protected operating system files
   $options:
+  - none: Disabled
   - shift: Shift (Ctrl+Shift+H)
   - alt: Alt (Ctrl+Alt+H)
   - shift-alt: Shift+Alt (Ctrl+Shift+Alt+H)
@@ -35,7 +36,7 @@ This mod allows you to toggle the visibility of hidden files in Windows Explorer
 - Ctrl+H hotkey that works only when Explorer windows are focused
 - Toggles the "Show hidden files" setting
 - Optional: Also toggle protected OS files
-- Optional: Ctrl+Shift+H shortcut to toggle protected OS files independently
+- Optional: Ctrl+<modifier>+H shortcut to toggle protected OS files independently
 - Applies changes immediately to Explorer windows
 - Works with all Windows Explorer windows
 
@@ -47,6 +48,8 @@ This mod allows you to toggle the visibility of hidden files in Windows Explorer
 ## Settings
 - **Also toggle protected OS files**: When enabled, Ctrl+H will also show/hide protected operating system files
 - **Modifier for system files shortcut**: Selects Shift, Alt, or Shift+Alt for the separate system-files shortcut
+
+The shortcuts update Explorer's own hidden-items settings. The last state remains active after the mod is disabled and survives reboot.
 
 ## Technical Details
 - Only activates when Windows Explorer windows are in focus
@@ -61,8 +64,10 @@ This mod allows you to toggle the visibility of hidden files in Windows Explorer
 #include <shlobj.h>
 #include <shellapi.h>
 #include <stdio.h>
+#include <exdisp.h>
+#include <servprov.h>
 
-enum class SystemFilesModifier { Shift, Alt, ShiftAlt };
+enum class SystemFilesModifier { None, Shift, Alt, ShiftAlt };
 
 // Settings structure
 struct {
@@ -75,6 +80,11 @@ HHOOK g_hKeyboardHook = nullptr;
 HANDLE g_hookThread = nullptr;
 DWORD g_hookThreadId = 0;
 HANDLE g_hookThreadReadyEvent = nullptr;
+HANDLE g_toggleThread = nullptr;
+HANDLE g_toggleEvent = nullptr;
+HANDLE g_toggleSystemEvent = nullptr;
+HANDLE g_stopToggleEvent = nullptr;
+bool g_hKeyDown = false;
 bool g_hookInstallSucceeded = false;
 
 constexpr UINT WM_APP_TOGGLE_HIDDEN_FILES = WM_APP + 1;
@@ -90,11 +100,43 @@ enum WindowContext {
 // Function declarations
 LRESULT CALLBACK KeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam);
 DWORD WINAPI HookThreadProc(LPVOID lpParameter);
+DWORD WINAPI ToggleThreadProc(LPVOID);
 bool ToggleHiddenFilesInShellState(bool systemFilesOnly);
 bool IsShortcutPressed(WPARAM wParam, LPARAM lParam, bool shiftRequired,
                        bool altRequired);
 void LoadSettings();
 WindowContext GetCurrentWindowContext();
+void WhTool_ModUninit();
+
+void RefreshExplorerViews() {
+    IShellWindows* windows = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_LOCAL_SERVER,
+                                IID_PPV_ARGS(&windows)))) return;
+    long count = 0;
+    if (SUCCEEDED(windows->get_Count(&count))) {
+        for (long i = 0; i < count; ++i) {
+            VARIANT index{}; index.vt = VT_I4; index.lVal = i;
+            IDispatch* dispatch = nullptr;
+            if (FAILED(windows->Item(index, &dispatch)) || !dispatch) continue;
+            IServiceProvider* provider = nullptr;
+            if (SUCCEEDED(dispatch->QueryInterface(IID_PPV_ARGS(&provider)))) {
+                IShellBrowser* browser = nullptr;
+                if (SUCCEEDED(provider->QueryService(SID_STopLevelBrowser,
+                                                      IID_PPV_ARGS(&browser)))) {
+                    IShellView* view = nullptr;
+                    if (SUCCEEDED(browser->QueryActiveShellView(&view))) {
+                        view->Refresh();
+                        view->Release();
+                    }
+                    browser->Release();
+                }
+                provider->Release();
+            }
+            dispatch->Release();
+        }
+    }
+    windows->Release();
+}
 
 // Get current window context based on focused window
 WindowContext GetCurrentWindowContext() {
@@ -139,8 +181,21 @@ bool ToggleHiddenFilesInShellState(bool systemFilesOnly) {
     if (writeMask != 0) {
         SHGetSetSettings(&shellState, writeMask, TRUE);
     }
-    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     return true;
+}
+
+DWORD WINAPI ToggleThreadProc(LPVOID) {
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    HANDLE events[] = {g_stopToggleEvent, g_toggleEvent, g_toggleSystemEvent};
+    for (;;) {
+        DWORD result = WaitForMultipleObjects(ARRAYSIZE(events), events, FALSE, INFINITE);
+        if (result == WAIT_OBJECT_0) break;
+        if (result != WAIT_OBJECT_0 + 1 && result != WAIT_OBJECT_0 + 2) continue;
+        ToggleHiddenFilesInShellState(result == WAIT_OBJECT_0 + 2);
+        if (SUCCEEDED(hr)) RefreshExplorerViews();
+    }
+    if (SUCCEEDED(hr)) CoUninitialize();
+    return 0;
 }
 
 // Load settings from Windhawk configuration
@@ -148,9 +203,11 @@ void LoadSettings() {
     g_settings.toggleProtectedFiles =
         Wh_GetIntSetting(L"toggleProtectedFiles") != 0;
     PCWSTR modifier = Wh_GetStringSetting(L"systemFilesShortcutModifier");
-    g_settings.systemFilesModifier = SystemFilesModifier::Shift;
+    g_settings.systemFilesModifier = SystemFilesModifier::None;
     if (modifier) {
-        if (wcscmp(modifier, L"alt") == 0) {
+        if (wcscmp(modifier, L"shift") == 0) {
+            g_settings.systemFilesModifier = SystemFilesModifier::Shift;
+        } else if (wcscmp(modifier, L"alt") == 0) {
             g_settings.systemFilesModifier = SystemFilesModifier::Alt;
         } else if (wcscmp(modifier, L"shift-alt") == 0) {
             g_settings.systemFilesModifier = SystemFilesModifier::ShiftAlt;
@@ -218,6 +275,15 @@ DWORD WINAPI HookThreadProc(LPVOID) {
 // Keyboard hook procedure
 LRESULT CALLBACK KeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode >= 0) {
+        KBDLLHOOKSTRUCT* keyboard = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
+        if (keyboard->vkCode != 'H')
+            return CallNextHookEx(g_hKeyboardHook, nCode, wParam, lParam);
+        if (wParam == WM_KEYUP || wParam == WM_SYSKEYUP) {
+            g_hKeyDown = false;
+            return CallNextHookEx(g_hKeyboardHook, nCode, wParam, lParam);
+        }
+        const bool repeated = g_hKeyDown;
+        g_hKeyDown = true;
         WindowContext context = GetCurrentWindowContext();
         
         // Only process if we're in Explorer windows
@@ -228,20 +294,15 @@ LRESULT CALLBACK KeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
             g_settings.systemFilesModifier == SystemFilesModifier::Alt ||
             g_settings.systemFilesModifier == SystemFilesModifier::ShiftAlt;
         if (context == CONTEXT_EXPLORER &&
+            g_settings.systemFilesModifier != SystemFilesModifier::None &&
             IsShortcutPressed(wParam, lParam, systemShift, systemAlt)) {
-            if (g_hookThreadId != 0) {
-                PostThreadMessageW(g_hookThreadId, WM_APP_TOGGLE_SYSTEM_FILES,
-                                   0, 0);
-            }
+            if (!repeated) SetEvent(g_toggleSystemEvent);
             return 1;
         }
 
         if (context == CONTEXT_EXPLORER &&
             IsShortcutPressed(wParam, lParam, false, false)) {
-            if (g_hookThreadId != 0) {
-                PostThreadMessageW(g_hookThreadId, WM_APP_TOGGLE_HIDDEN_FILES,
-                                   0, 0);
-            }
+            if (!repeated) SetEvent(g_toggleEvent);
             
             // Consume the key press
             return 1;
@@ -255,6 +316,19 @@ LRESULT CALLBACK KeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
 BOOL WhTool_ModInit() {
     // Load settings
     LoadSettings();
+
+    g_toggleEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_toggleSystemEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_stopToggleEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_toggleEvent || !g_toggleSystemEvent || !g_stopToggleEvent) {
+        WhTool_ModUninit();
+        return FALSE;
+    }
+    g_toggleThread = CreateThread(nullptr, 0, ToggleThreadProc, nullptr, 0, nullptr);
+    if (!g_toggleThread) {
+        WhTool_ModUninit();
+        return FALSE;
+    }
 
     g_hookThreadReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_hookThreadReadyEvent) {
@@ -309,6 +383,16 @@ void WhTool_ModUninit() {
     }
 
     g_hookThreadId = 0;
+
+    if (g_stopToggleEvent) SetEvent(g_stopToggleEvent);
+    if (g_toggleThread) {
+        WaitForSingleObject(g_toggleThread, INFINITE);
+        CloseHandle(g_toggleThread);
+        g_toggleThread = nullptr;
+    }
+    if (g_toggleEvent) { CloseHandle(g_toggleEvent); g_toggleEvent = nullptr; }
+    if (g_toggleSystemEvent) { CloseHandle(g_toggleSystemEvent); g_toggleSystemEvent = nullptr; }
+    if (g_stopToggleEvent) { CloseHandle(g_stopToggleEvent); g_stopToggleEvent = nullptr; }
 
     if (g_hookThreadReadyEvent) {
         CloseHandle(g_hookThreadReadyEvent);
