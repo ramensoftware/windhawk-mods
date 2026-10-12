@@ -2,7 +2,7 @@
 // @id           toggle-hidden-files
 // @name         Toggle Hidden Files
 // @description  Toggle the visibility of hidden files in Windows Explorer using Ctrl+H
-// @version      1.1.0
+// @version      1.0.1
 // @author       Asteski
 // @github       https://github.com/Asteski
 // @include      windhawk.exe
