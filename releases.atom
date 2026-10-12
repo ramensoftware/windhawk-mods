@@ -2,12 +2,87 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-12T22:04:59.000Z</updated>
+    <updated>2026-10-12T23:01:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Cursor Idle Fade 1.0.0]]></title>
+        <id>https://windhawk.net/mods/cursor-idle-fade#8d60b4c4113a7f0a18b4b48a5443a199acf54805</id>
+        <link href="https://windhawk.net/mods/cursor-idle-fade"/>
+        <updated>2026-10-12T23:01:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="cursoridlefade">Cursor Idle Fade</h1>
+<p>When the mouse hasn't moved (or been clicked / scrolled) for the configured
+number of seconds, the system cursors are smoothly faded out. The moment any
+mouse activity happens, the cursors are restored immediately.</p>
+<p><img src="https://i.imgur.com/g5EWkMU.gif" alt="Cursor Idle Fade Demo" /></p>
+<h2 id="howitworks">How it works</h2>
+<p>Windows has no "cursor opacity" setting, so the mod captures the current
+system cursors, then swaps them for progressively more transparent copies
+using <code>SetSystemCursor</code>. Mouse activity (movement, clicks and scrolling) is
+detected with raw input, so nothing is polled while the cursor is visible.
+While the cursor is faded, a slow watchdog (every 250 ms, or every 50 ms
+while an elevated app has focus, see Limitations) also checks the mouse and
+the input desktop.
+On activity the original cursors are put back with <code>SetSystemCursor</code> (which
+updates the cursor on screen immediately), followed by a reload of the saved
+cursor scheme with <code>SPI_SETCURSORS</code>, so the scheme's own cursors are in place
+again.</p>
+<p>The mod runs in its own dedicated <code>windhawk.exe</code> process (a Windhawk "tool
+mod").</p>
+<h2 id="howthisdiffersfromsimilarmods">How this differs from similar mods</h2>
+<ul>
+<li><p><a href="https://windhawk.net/mods/cursor-auto-hide">Cursor auto-hide on idle</a>
+hides the cursor outright once the idle delay has passed and shows it again
+on the first movement or click. This mod fades the cursor out gradually
+instead of making it vanish abruptly:</p></li>
+<li><p>The fade is smooth (eased) and its length is a setting. A fade duration of
+0 hides the cursor instantly, like a plain auto-hide.</p></li>
+<li><p>The final opacity is a setting too, so the cursor can fade to, say, 20%
+and stay findable instead of disappearing completely.</p>
+<p>If you just want the cursor gone after a delay, that mod is the simpler
+choice. This one is for people who prefer a soft fade, or want the cursor
+dimmed rather than hidden.</p>
+<p>Both mods swap the same system cursors and reload the cursor scheme when
+they restore, so they aren't meant to be enabled together. Pick one.</p></li>
+</ul>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>Only the standard system cursors are faded (arrow, I-beam, hand, resize,
+cross, help, etc.). Apps that draw their own cursor (some games, some
+browsers/design tools) are not affected.</li>
+<li>The animated busy/working cursors are left alone on purpose.</li>
+<li>Monochrome cursors can't be made partially transparent. With the default
+Windows cursor scheme this includes the text (I-beam) and precision
+(crosshair) cursors. They stay unchanged until the fade passes 50% and then
+disappear; if <em>Final opacity</em> is 50 or more, they stay visible.</li>
+<li>The faded copies are single-size bitmaps. With mixed-DPI monitors or a
+larger pointer size, the cursor may change size while it fades and snap
+back when restored.</li>
+<li>Restoring reloads your saved cursor scheme, so cursors changed temporarily
+by another tool via <code>SetSystemCursor</code> revert to the saved scheme.</li>
+<li>Windows doesn't deliver raw mouse input to a normal (non-elevated) process
+while an app running as administrator has focus (Task Manager, for
+example). In that case the mod falls back to checking the cursor position
+and mouse buttons (about 5 times a second): the cursor still reappears
+when you move or click, but scrolling alone isn't noticed. The mod notices
+which app has focus and switches back to raw input by itself.</li>
+<li>If the cursor is faded while a secure screen (UAC prompt, lock screen)
+takes the input, it is restored automatically.</li>
+</ul>
+<h2 id="recovery">Recovery</h2>
+<p>If the mod's process crashes while the cursor is faded, it tries to restore
+the cursors before it exits. If the process is killed instead, the mod
+restores the cursors the next time it starts. You can also re-apply your cursor scheme
+in <em>Settings > Bluetooth & devices > Mouse > Additional mouse settings >
+Pointers</em>.</p>]]></content>
+        <author>
+            <name>Nuzza</name>
+            <uri>https://github.com/Nuzza</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Spatial Order 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-spatial-order#ada6e8fcff1875621a78829001fd10753caf23cd</id>
@@ -1562,28 +1637,6 @@ folder this mod shares, and whose tray-module loading it follows</li>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cursor auto-hide on idle 1.0]]></title>
-        <id>https://windhawk.net/mods/cursor-auto-hide#38431c1d52c473768fa80bae5ea0ba720aa74324</id>
-        <link href="https://windhawk.net/mods/cursor-auto-hide"/>
-        <updated>2026-10-10T12:00:29.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="cursorautohideonidle">Cursor auto-hide on idle</h1>
-<p>The mouse cursor usually stays on screen even when you are not using the
-mouse, covering videos, text and presentations.</p>
-<p>This mod hides the cursor after it has not moved for a configurable
-number of seconds (5 by default). The cursor reappears immediately on
-the first movement or click.</p>
-<p>Cursor changes happen at runtime only: your cursor scheme is never
-written to the registry, and any mouse activity restores it right away.</p>
-<p>Only the system cursors are replaced. Applications that draw their own
-cursor, such as games or drawing tools, keep showing it.</p>
-<p>The mod runs in a dedicated Windhawk process (as a tool mod) and does
-not inject into other applications.</p>]]></content>
-        <author>
-            <name>nikitor32</name>
-            <uri>https://github.com/nikitor32</uri>
         </author>
     </entry>
 </feed>
