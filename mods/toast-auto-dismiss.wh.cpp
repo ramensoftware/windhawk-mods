@@ -6,7 +6,7 @@
 // @author          nikitor32
 // @github          https://github.com/nikitor32
 // @include         windhawk.exe
-// @compilerOptions -lole32 -loleaut32
+// @compilerOptions -lole32 -loleaut32 -ldwmapi -DWINVER=0x0A00
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -28,6 +28,12 @@ While the mouse pointer is over a banner, the countdown is paused, so
 the banner's own buttons (reply, dismiss, and similar) remain clickable
 for as long as needed.
 
+Windows has its own "Dismiss notifications after this amount of
+time" option (Settings > Accessibility > Visual effects, 5 seconds by
+default), but many toasts ignore it and stay on the screen until
+dismissed. The mod closes banners that ignore the system setting, and
+its timeout can also be shorter than the system's five seconds.
+
 The mod runs in a dedicated Windhawk process (as a tool mod) and does
 not inject into other applications.
 
@@ -44,10 +50,21 @@ not inject into other applications.
 ## How it works
 
 The banner is a regular window owned by the Windows shell. The mod
-finds it by size and position in the bottom right corner of the screen
+finds it by size and position in the bottom right corner of a monitor
 and closes it through UI Automation - the same interface screen readers
 use to press buttons. No hooks are installed, and no system files or
 registry keys are modified.
+
+## Limitations
+
+* Banners are detected by their position in the bottom right corner
+  of a monitor, so banners shown elsewhere are not closed. This
+  includes banners moved to another corner or monitor (for example by
+  the Notifications placement mod) and right-to-left languages, where
+  banners appear in the bottom left corner.
+* Toasts that are meant to stay on the screen until handled, such as
+  incoming call or alarm notifications, are closed by the timeout as
+  well. Point at a banner to pause the countdown while it matters.
 */
 // ==/WindhawkModReadme==
 
@@ -63,12 +80,12 @@ registry keys are modified.
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <dwmapi.h>
 #include <uiautomation.h>
 
 #include <string.h>
 
 #include <atomic>
-#include <utility>
 #include <vector>
 
 // The settings can be updated from another thread while the polling
@@ -99,28 +116,37 @@ struct ToastState {
     int attempts = 0;
 };
 
-// The name lookup below is only touched by the polling thread.
-std::vector<std::pair<DWORD, bool>> g_pidCache;
-
-void LoadSettings() {
-    int timeoutSeconds = Wh_GetIntSetting(L"timeoutSeconds");
-    if (timeoutSeconds < 0) {
-        timeoutSeconds = 0;
-    }
-    if (timeoutSeconds > 3600) {
-        timeoutSeconds = 3600;
-    }
-    g_timeoutSeconds.store(timeoutSeconds);
-    g_pauseWhileHovered.store(Wh_GetIntSetting(L"pauseWhileHovered") != 0);
-}
+// The name lookup below is only touched by the polling thread. The
+// cache is keyed by window: a window never changes process, and unlike
+// a process id, a window handle value of a live window cannot be
+// reused by an unrelated process.
+struct PidCacheEntry {
+    HWND hwnd;
+    DWORD pid;
+    bool isShellExperienceHost;
+};
+std::vector<PidCacheEntry> g_pidCache;
 
 // Toast banners are hosted by ShellExperienceHost.exe. The process name
-// is checked once per window process and then cached.
-bool PidIsShellExperienceHost(DWORD pid) {
-    for (const auto& entry : g_pidCache) {
-        if (entry.first == pid) {
-            return entry.second;
+// is checked once per window and then cached.
+bool PidIsShellExperienceHost(HWND hwnd) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (!pid) {
+        return false;
+    }
+
+    for (auto it = g_pidCache.begin(); it != g_pidCache.end(); ++it) {
+        if (it->hwnd != hwnd) {
+            continue;
         }
+        if (it->pid == pid) {
+            return it->isShellExperienceHost;
+        }
+        // The handle value was reused by a window of another process:
+        // drop the stale entry and check the new window.
+        g_pidCache.erase(it);
+        break;
     }
 
     bool result = false;
@@ -143,8 +169,20 @@ bool PidIsShellExperienceHost(DWORD pid) {
     if (g_pidCache.size() > 128) {
         g_pidCache.clear();
     }
-    g_pidCache.push_back({pid, result});
+    g_pidCache.push_back({hwnd, pid, result});
     return result;
+}
+
+void LoadSettings() {
+    int timeoutSeconds = Wh_GetIntSetting(L"timeoutSeconds");
+    if (timeoutSeconds < 0) {
+        timeoutSeconds = 0;
+    }
+    if (timeoutSeconds > 3600) {
+        timeoutSeconds = 3600;
+    }
+    g_timeoutSeconds.store(timeoutSeconds);
+    g_pauseWhileHovered.store(Wh_GetIntSetting(L"pauseWhileHovered") != 0);
 }
 
 // Decides whether a window is a toast banner currently shown on screen.
@@ -153,10 +191,10 @@ bool PidIsShellExperienceHost(DWORD pid) {
 // window for banners and resizes it: at rest only a ~22px sliver is
 // left along the bottom of the screen, while a real banner is a few
 // hundred pixels tall and sits in the bottom right corner. The same
-// class is also used by other always-present shell windows - for
-// example a full-height strip along the right edge of the screen - so
-// the window is additionally required to be reasonably short (no more
-// than half the screen height) and narrow.
+// class is also used by other shell windows - for example a
+// full-height strip along the right edge of the screen - so the window
+// is additionally required to be reasonably short (no more than half
+// of its monitor's height) and narrow.
 //
 // Note: on this Windows build the banner window is not returned by
 // EnumWindows or EnumThreadWindows, but FindWindowEx over the desktop's
@@ -172,9 +210,16 @@ bool GetToastRectIfBanner(HWND hwnd, RECT* out) {
         return false;
     }
 
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    if (!pid || !PidIsShellExperienceHost(pid)) {
+    // A cloaked window is kept by the shell but is not shown, for
+    // example on another virtual desktop.
+    DWORD cloaked = 0;
+    if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked,
+                                        sizeof(cloaked))) &&
+        cloaked) {
+        return false;
+    }
+
+    if (!PidIsShellExperienceHost(hwnd)) {
         return false;
     }
 
@@ -183,40 +228,55 @@ bool GetToastRectIfBanner(HWND hwnd, RECT* out) {
         return false;
     }
 
+    // The limits below are written in effective (100%-scaled) pixels
+    // and are converted to physical pixels using the DPI of the
+    // monitor the window is on, so the detection keeps working at any
+    // display scaling: window rectangles and cursor position are in
+    // physical pixels because the tool process is per-monitor DPI
+    // aware, while a toast's size in effective pixels stays the same.
+    UINT dpi = GetDpiForWindow(hwnd);
+    if (!dpi) {
+        dpi = USER_DEFAULT_SCREEN_DPI;
+    }
+    auto px = [dpi](int value) {
+        return MulDiv(value, dpi, USER_DEFAULT_SCREEN_DPI);
+    };
+
+    HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO monitorInfo{};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    if (!GetMonitorInfo(monitor, &monitorInfo)) {
+        return false;
+    }
+
     int width = rc.right - rc.left;
     int height = rc.bottom - rc.top;
 
-    int maxHeight = GetSystemMetrics(SM_CYSCREEN) / 2;
-    if (maxHeight > 700) {
-        maxHeight = 700;
+    // The banner is short (at most half of its monitor's height, and
+    // no taller than a large notification) and about as wide as a
+    // notification.
+    int maxHeight = px(700);
+    int halfMonitorHeight =
+        (monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top) / 2;
+    if (maxHeight > halfMonitorHeight) {
+        maxHeight = halfMonitorHeight;
     }
-    if (height < 80 || height > maxHeight) {
+    if (height < px(80) || height > maxHeight) {
         return false;
     }
-    if (width < 150 || width > 600) {
-        return false;
-    }
-
-    // The banner touches the right edge of the primary monitor (banners
-    // always appear on the primary monitor). The virtual screen edge is
-    // checked as well for setups where the primary monitor is not the
-    // rightmost one.
-    int primaryRight = GetSystemMetrics(SM_CXSCREEN);
-    int virtualRight =
-        GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    bool nearRight = (rc.right >= primaryRight - 8 && rc.right <= primaryRight + 8) ||
-                     (rc.right >= virtualRight - 8 && rc.right <= virtualRight + 8);
-    if (!nearRight) {
+    if (width < px(150) || width > px(600)) {
         return false;
     }
 
-    // ...and its bottom is close to the bottom of that monitor.
-    int primaryBottom = GetSystemMetrics(SM_CYSCREEN);
-    int virtualBottom =
-        GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN);
-    bool nearBottom = (rc.bottom >= primaryBottom - 500 && rc.bottom <= primaryBottom + 8) ||
-                      (rc.bottom >= virtualBottom - 500 && rc.bottom <= virtualBottom + 8);
-    if (!nearBottom) {
+    // The banner touches the right edge of its monitor...
+    int overhang = rc.right - monitorInfo.rcMonitor.right;
+    if (overhang < -px(8) || overhang > px(8)) {
+        return false;
+    }
+
+    // ...and sits at the bottom, above the taskbar.
+    if (rc.bottom < monitorInfo.rcWork.bottom - px(500) ||
+        rc.bottom > monitorInfo.rcMonitor.bottom + px(8)) {
         return false;
     }
 
@@ -242,83 +302,86 @@ bool IsPointerOver(const RECT& rc) {
     return PtInRect(&rc, pt) != 0;
 }
 
+// A minimal RAII holder for COM interfaces: releases the interface in
+// its destructor.
+template <typename T>
+class ComPtr {
+   public:
+    ComPtr() = default;
+    ComPtr(const ComPtr&) = delete;
+    ComPtr& operator=(const ComPtr&) = delete;
+    ~ComPtr() {
+        if (ptr_) {
+            ptr_->Release();
+        }
+    }
+
+    T** Put() {
+        return &ptr_;
+    }
+    T* Get() const {
+        return ptr_;
+    }
+    T* operator->() const {
+        return ptr_;
+    }
+    explicit operator bool() const {
+        return ptr_ != nullptr;
+    }
+
+   private:
+    T* ptr_ = nullptr;
+};
+
 // Dismisses the banner through UI Automation by invoking its close
 // button - the same button the user presses with the pointer. This is
 // deliberately not WM_CLOSE or SC_CLOSE: the shell ignores those for
 // this window.
-bool TryDismissUia(HWND hwnd) {
-    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    bool comInitialized = SUCCEEDED(hrCo);
-    if (FAILED(hrCo) && hrCo != RPC_E_CHANGED_MODE) {
+bool TryDismissUia(IUIAutomation* uia, HWND hwnd) {
+    if (!uia) {
         return false;
     }
 
-    bool invoked = false;
-    IUIAutomation* uia = nullptr;
-    HRESULT hr = CoCreateInstance(__uuidof(CUIAutomation), nullptr,
-                                  CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation),
-                                  reinterpret_cast<void**>(&uia));
-    if (SUCCEEDED(hr) && uia) {
-        IUIAutomationElement* element = nullptr;
-        hr = uia->ElementFromHandle(hwnd, &element);
-        if (SUCCEEDED(hr) && element) {
-            IUIAutomationCondition* condition = nullptr;
-            hr = uia->CreateTrueCondition(&condition);
-            if (SUCCEEDED(hr) && condition) {
-                IUIAutomationElementArray* children = nullptr;
-                hr = element->FindAll(TreeScope_Descendants, condition, &children);
-                if (SUCCEEDED(hr) && children) {
-                    int count = 0;
-                    children->get_Length(&count);
-                    for (int i = 0; i < count; i++) {
-                        IUIAutomationElement* child = nullptr;
-                        if (FAILED(children->GetElement(i, &child)) || !child) {
-                            continue;
-                        }
-                        BSTR automationId = nullptr;
-                        if (SUCCEEDED(child->get_CurrentAutomationId(&automationId)) &&
-                            automationId) {
-                            if (wcscmp(automationId, L"DismissButton") == 0) {
-                                IUnknown* pattern = nullptr;
-                                if (SUCCEEDED(child->GetCurrentPattern(UIA_InvokePatternId,
-                                                                      &pattern)) &&
-                                    pattern) {
-                                    IUIAutomationInvokePattern* invoke = nullptr;
-                                    if (SUCCEEDED(pattern->QueryInterface(
-                                            __uuidof(IUIAutomationInvokePattern),
-                                            reinterpret_cast<void**>(&invoke))) &&
-                                        invoke) {
-                                        if (SUCCEEDED(invoke->Invoke())) {
-                                            invoked = true;
-                                        }
-                                        invoke->Release();
-                                    }
-                                    pattern->Release();
-                                }
-                            }
-                            SysFreeString(automationId);
-                        }
-                        child->Release();
-                        if (invoked) {
-                            break;
-                        }
-                    }
-                    children->Release();
-                }
-                condition->Release();
-            }
-            element->Release();
-        }
-        uia->Release();
+    ComPtr<IUIAutomationElement> element;
+    if (FAILED(uia->ElementFromHandle(hwnd, element.Put())) || !element) {
+        return false;
     }
 
-    if (comInitialized) {
-        CoUninitialize();
+    // The close button is looked up by its automation id in a single
+    // cross-process query instead of walking the whole element tree.
+    VARIANT id{};
+    id.vt = VT_BSTR;
+    id.bstrVal = SysAllocString(L"DismissButton");
+    if (!id.bstrVal) {
+        return false;
     }
-    return invoked;
+    ComPtr<IUIAutomationCondition> condition;
+    HRESULT hr = uia->CreatePropertyCondition(UIA_AutomationIdPropertyId, id,
+                                              condition.Put());
+    VariantClear(&id);
+    if (FAILED(hr) || !condition) {
+        return false;
+    }
+
+    ComPtr<IUIAutomationElement> button;
+    if (FAILED(element->FindFirst(TreeScope_Descendants, condition.Get(),
+                                  button.Put())) ||
+        !button) {
+        return false;
+    }
+
+    ComPtr<IUIAutomationInvokePattern> invoke;
+    if (FAILED(button->GetCurrentPatternAs(
+            UIA_InvokePatternId, __uuidof(IUIAutomationInvokePattern),
+            reinterpret_cast<void**>(invoke.Put()))) ||
+        !invoke) {
+        return false;
+    }
+
+    return SUCCEEDED(invoke->Invoke());
 }
 
-void PollOnce(ToastState* state) {
+void PollOnce(IUIAutomation* uia, ToastState* state) {
     // The mod is disabled.
     if (g_timeoutSeconds.load() <= 0) {
         return;
@@ -346,6 +409,13 @@ void PollOnce(ToastState* state) {
         return;
     }
 
+    // The banner grew: another toast was stacked on top of the visible
+    // one. The new toast gets a full countdown of its own instead of
+    // sharing the time of the toast below it.
+    if (rc.bottom - rc.top > state->rect.bottom - state->rect.top) {
+        state->appearedAt = now;
+        state->attempts = 0;
+    }
     state->rect = rc;
 
     // The pointer is over the banner: the user wants to interact with
@@ -365,9 +435,13 @@ void PollOnce(ToastState* state) {
 
     state->lastAttemptAt = now;
     state->attempts++;
-    if (TryDismissUia(hwnd)) {
+    if (TryDismissUia(uia, hwnd)) {
         Wh_Log(L"Banner dismissed (%08X, attempt %d)", (DWORD)(ULONG_PTR)hwnd,
                state->attempts);
+        // If another toast is stacked behind the dismissed one, the
+        // window stays up and the new toast gets its own countdown.
+        state->appearedAt = now;
+        state->attempts = 0;
     } else if (state->attempts <= kMaxLoggedFailures) {
         Wh_Log(L"Dismiss failed (%08X, attempt %d)", (DWORD)(ULONG_PTR)hwnd,
                state->attempts);
@@ -375,14 +449,35 @@ void PollOnce(ToastState* state) {
 }
 
 DWORD WINAPI PollThread(LPVOID /*param*/) {
-    // The state is local: only this thread touches it.
-    ToastState state;
-
-    // Waiting on the stop event doubles as the polling interval, so the
-    // thread exits promptly once the mod is unloaded.
-    while (WaitForSingleObject(g_stopEvent, kPollIntervalMs) == WAIT_TIMEOUT) {
-        PollOnce(&state);
+    // COM is initialized once for the whole thread: the polling loop is
+    // this thread's only user of COM and UI Automation.
+    if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {
+        Wh_Log(L"CoInitializeEx failed");
+        return 0;
     }
+
+    {
+        ComPtr<IUIAutomation> uia;
+        HRESULT hr = CoCreateInstance(__uuidof(CUIAutomation), nullptr,
+                                      CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation),
+                                      reinterpret_cast<void**>(uia.Put()));
+        if (FAILED(hr) || !uia) {
+            Wh_Log(L"Creating the UI Automation object failed");
+        } else {
+            // The state is local: only this thread touches it.
+            ToastState state;
+
+            // Waiting on the stop event doubles as the polling
+            // interval, so the thread exits promptly once the mod is
+            // unloaded.
+            while (WaitForSingleObject(g_stopEvent, kPollIntervalMs) ==
+                   WAIT_TIMEOUT) {
+                PollOnce(uia.Get(), &state);
+            }
+        }
+    }  // The UI Automation object is released before CoUninitialize.
+
+    CoUninitialize();
     return 0;
 }
 
