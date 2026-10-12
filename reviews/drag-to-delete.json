@@ -1,0 +1,14 @@
+{
+  "modId": "drag-to-delete",
+  "reviews": [
+    {
+      "authorName": "alkidnn",
+      "content": "That’s pretty good. It would be great if the trash bin appeared above the mouse when you grabbed a file.\n\nWhat’s shown in the demonstration looks nice, but the files that need to be deleted aren’t always in the center of the window, and reaching for the Recycle Bin in the center is inconvenient.",
+      "id": 55,
+      "modVersion": "1.0.0",
+      "parentId": null,
+      "timestamp": 1791764524,
+      "votes": 0
+    }
+  ]
+}
