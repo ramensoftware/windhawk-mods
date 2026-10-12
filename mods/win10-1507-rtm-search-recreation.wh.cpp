@@ -3,35 +3,36 @@
 // @name            Windows 10 1507 Search Pane Recreation
 // @description     This mod recreates the Windows 10 RTM (1507) Search on Windows 10 and Windows 11
 // @version         1.0.0
-// @include         explorer.exe
-// @architecture    x86-64
+// @author          babamohammed2022
+// @github          https://github.com/babamohammed2022
+// @include         windhawk.exe
 // @compilerOptions -lole32 -loleaut32 -luuid -lshell32 -luser32 -lgdi32 -lshlwapi -lshcore -lcomctl32 -lgdiplus -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Windows 10 1507 Search Pane
-This mod is a best-effort recreation of the Windows 10 1507 search-pane experience in a standalone, DPI-aware window. It is informed by the supplied decompiled Explorer material, but that material does not expose the native SearchUI renderer or prove pixel-perfect fidelity.
+This mod provides a recreation of the Windows 10 1507 search pane experience in a standalone, DPI-aware window running in a dedicated tool process.
 
 ## Screenshot 
 
 ![Windows 10 Search](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/refs/heads/main/win10search.png)
 
 ## What this mod does
-- This mod provides a Home surface, a local Start-menu shortcut catalog, a searchable Settings category browser, and an optional Web search action.
-- This mod is search-only: it does not replace, hook, or draw the Start menu, and it does not modify Cortana or the native Windows Search index.
-- The Home, AllApps, and Settings icons use Microsoft-documented Segoe MDL2 Assets glyphs (Home U+E80F, AllApps U+E71D, Settings U+E713), rendered with GDI+. App shortcut icons use documented Shell extraction and `DrawIconEx`.
-- With `overTaskbar` off, this mod clips the animated window to the monitor work area so it does not paint over the taskbar. The 120 ms smoothstep animation is local behavior, not a recovered native SearchUI transition.
+- Provides a Home surface, a local Start-menu shortcut catalog, a searchable Settings category browser, and an optional Web search action.
+- Search-only: it does not replace or draw the Start menu, and does not alter Cortana or the native search index.
+- The Home, AllApps, and Settings icons use Segoe MDL2 Assets glyphs (Home U+E80F, AllApps U+E71D, Settings U+E713) rendered with GDI+. Application shortcut icons use Shell icon extraction.
+- With `overTaskbar` enabled, a dedicated overlay window sits seamlessly over the taskbar search box while the search pane rests above the work area, matching the Windows 10 look and feel.
 
 ## Settings
-- `searchHotkey`: This setting enables or disables the fallback Ctrl+Alt+S shortcut. It is enabled by default; turn it off if another application uses the same shortcut.
-- `webSearch`: This setting shows or hides the Web footer action. When disabled, My stuff uses the available footer width.
-- `interceptSearch`: When enabled, clicking the taskbar search button or pressing Win+S / Win+Q opens this pane instead of Windows Search.
-- `overTaskbar`: When enabled and the taskbar is at the bottom, the pane extends over the taskbar row of the search box, so its text field replaces the box like in Windows 10 (the Start button stays visible). When disabled, the pane stays above the taskbar.
+- `searchHotkey`: Enables the fallback Ctrl+Alt+S shortcut (disabled by default because Ctrl+Alt conflicts with AltGr on international layouts like Polish AltGr+S and with application shortcuts such as JetBrains Settings).
+- `webSearch`: Shows or hides the Web footer action. When disabled, My stuff uses the full footer width.
+- `interceptSearch`: When enabled, clicking the taskbar search button/box or pressing Win+S / Win+Q opens this pane instead of Windows Search.
+- `overTaskbar`: Places a themed search bar overlay over the native taskbar search box while keeping the main search pane above the taskbar work area.
 
 ## Scope and limitations
-- This mod is not a full Windows Search index: the app catalog comes from Start-menu `.lnk` shortcuts; UWP enumeration, files/documents indexing, native ranking, and taskbar-magnifier interception are not implemented.
-- This mod targets a Windows 10 1507-inspired interface.
+- The app catalog indexes Start-menu shortcuts; full file content indexing and UWP package enumeration are not included.
+- Targets the Windows 10 1507 search interface design.
 
 ## Credits 
 AdmnistratoX - Technical inspiration.
@@ -42,18 +43,18 @@ Microsoft - Documentation
 
 // ==WindhawkModSettings==
 /*
-- searchHotkey: true
+- searchHotkey: false
   $name: Fallback search shortcut
-  $description: This setting enables Ctrl+Alt+S to open or close this standalone search pane. Turn it off if another application uses this shortcut.
+  $description: Enables Ctrl+Alt+S to open or close the search pane. Disabled by default because Ctrl+Alt conflicts with AltGr on international keyboard layouts (such as AltGr+S for 'ś') and applications like JetBrains IDEs. Win+S and Win+Q are intercepted by default.
 - webSearch: true
   $name: Web search footer action
-  $description: This setting shows or hides the Web footer action and allows submitting typed queries to Bing.
+  $description: Shows or hides the Web footer action to allow submitting queries to Bing.
 - interceptSearch: true
   $name: Replace Windows Search
-  $description: This setting makes Windows open this pane instead of Windows Search when the taskbar search button, Win+S or Win+Q is used.
+  $description: Makes Windows open this pane instead of Windows Search when clicking the taskbar search button/box or pressing Win+S / Win+Q.
 - overTaskbar: true
   $name: Search bar over the taskbar
-  $description: This setting makes the mod extend the pane over the taskbar row of the search box, so its text field takes the place of the box as in Windows 10 (the Start button stays visible). Only applies when the taskbar is at the bottom of the screen.
+  $description: Places a themed search bar overlay directly over the native taskbar search box while keeping the search pane above the work area. Only applies when the taskbar is at the bottom of the screen.
 */
 // ==/WindhawkModSettings==
 
@@ -84,13 +85,13 @@ Microsoft - Documentation
 #include <string>
 #include <vector>
 #include <utility>
+#include <mutex>
 
 using Microsoft::WRL::ComPtr;
 
 namespace {
 
 constexpr wchar_t kWindowClass[] = L"Win10_1507_SearchOnlyPane";
-constexpr wchar_t kLegacyTaskbarBoxClass[] = L"Win10_1507_TaskbarSearchBox";
 constexpr wchar_t kTaskbarBoxClass[] = L"Win10_1507_TaskbarSearchBox_V2";
 constexpr int kHotkeyId = 0x1507;
 constexpr UINT_PTR kCaretTimer = 0xCA47;
@@ -103,6 +104,7 @@ constexpr UINT kRefreshHotkeyMessage = WM_APP + 0x57;
 constexpr UINT kCatalogReadyMessage = WM_APP + 0x58;
 constexpr UINT kToggleMessage = WM_APP + 0x59;
 constexpr UINT kTaskbarBoxClickMessage = WM_APP + 0x5A;
+const UINT kTaskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
 constexpr int kPaneWidthBox96 = 392;
 constexpr int kPaneWidthIcon96 = 346;
 constexpr int kRailWidth96 = 48;
@@ -142,7 +144,7 @@ struct SearchEntry {
     int settingsIndex = -1;
 };
 
-std::atomic<bool> g_searchHotkeyEnabled{true};
+std::atomic<bool> g_searchHotkeyEnabled{false};
 std::atomic<bool> g_webSearchEnabled{true};
 std::atomic<DWORD> g_uiThreadId{0};
 std::atomic<bool> g_stopping{false};
@@ -150,10 +152,24 @@ std::atomic<bool> g_interceptEnabled{true};
 std::atomic<bool> g_overTaskbar{true};
 std::atomic<HWND> g_paneWindow{nullptr};
 std::atomic<HWND> g_taskbarBoxWindow{nullptr};
+
+HMODULE g_modModule = nullptr;
+
+// Cached search button/box bounding rect for low-level hook hit-testing
+std::mutex g_searchButtonLock;
+RECT g_cachedSearchButtonRect{};
+bool g_cachedSearchButtonValid = false;
+
+// Hook management on dedicated thread
 HHOOK g_mouseHook = nullptr;
 HHOOK g_keyboardHook = nullptr;
-bool g_swallowMouseUp = false;
-ComPtr<IUIAutomation> g_uia;
+std::atomic<bool> g_swallowMouseUp{false};
+HANDLE g_hookThread = nullptr;
+std::atomic<DWORD> g_hookThreadId{0};
+HANDLE g_hookReadyEvent = nullptr;
+
+// Released with `g_uia.Reset();` on the UI thread before it exits.
+[[clang::no_destroy]] ComPtr<IUIAutomation> g_uia;
 HANDLE g_uiThread = nullptr;
 HANDLE g_uiReadyEvent = nullptr;
 
@@ -471,7 +487,8 @@ static constexpr char kEmbeddedWin10LogoBase64[] =
     ;
 
 IStream* g_embeddedLogoStream=nullptr;
-std::unique_ptr<Gdiplus::Bitmap> g_embeddedWin10Logo;
+// Released with `ShutdownEmbeddedWin10Logo();` on the UI thread before it exits.
+[[clang::no_destroy]] std::unique_ptr<Gdiplus::Bitmap> g_embeddedWin10Logo;
 
 bool DecodeBase64(const char* input,std::vector<BYTE>& output){
     unsigned accumulator=0;int bits=0;
@@ -607,8 +624,8 @@ void DrawVectorIconGdiPlus(HDC dc, int kind, int x, int y, int size, COLORREF co
             g.DrawRectangle(&pen,xx,yy,a,a);
         }
     } else {
-        // Gear geometry copied from DrawPlaceGlyph(Settings) in the separate Start mod;
-        // this rendition uses the search UI's blue accent on its light surface.
+        // Gear geometry for Settings category icon;
+        // rendered using blue accent on a light surface.
         Gdiplus::PointF teeth[16];
         const float cx=ox+s*.5f, cy=oy+s*.5f;
         for(int i=0;i<16;++i){
@@ -719,12 +736,8 @@ UINT EffectiveDpiForWindow(HWND hwnd, HMONITOR monitor) {
     UINT dpiX = 96, dpiY = 96;
     if (monitor && SUCCEEDED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)) && dpiX)
         return dpiX;
-    using GetDpiForWindowFn = UINT (WINAPI*)(HWND);
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    auto getDpiForWindow = user32 ? reinterpret_cast<GetDpiForWindowFn>(
-        GetProcAddress(user32, "GetDpiForWindow")) : nullptr;
-    if (hwnd && getDpiForWindow) {
-        const UINT dpi = getDpiForWindow(hwnd);
+    if (hwnd) {
+        const UINT dpi = GetDpiForWindow(hwnd);
         if (dpi) return dpi;
     }
     WindowDc dc(hwnd);
@@ -735,22 +748,17 @@ UINT EffectiveDpiForWindow(HWND hwnd, HMONITOR monitor) {
     return 96;
 }
 
-// The click/hotkey that opens the pane is swallowed by a low-level hook, so Windows may not
-// grant this process the right to take the foreground. Sharing input state with the current
-// foreground thread (documented AttachThreadInput) makes activation reliable, so typed keys
-// reach this pane instead of the taskbar or Windows Search.
+// The pane is opened from input intercepted by the mod's hooks.
+// Synthesizing an empty input event grants permission to take foreground focus
+// without attaching thread input queues.
 bool ForceForeground(HWND hwnd) {
     if (!hwnd) return false;
-    const HWND foreground = GetForegroundWindow();
-    const DWORD foregroundThread = foreground ? GetWindowThreadProcessId(foreground, nullptr) : 0;
-    const DWORD thisThread = GetCurrentThreadId();
-    const bool attached = foregroundThread && foregroundThread != thisThread &&
-                          AttachThreadInput(thisThread, foregroundThread, TRUE);
+    INPUT input{};
+    SendInput(1, &input, sizeof(INPUT));
     BringWindowToTop(hwnd);
     SetForegroundWindow(hwnd);
     SetActiveWindow(hwnd);
     SetFocus(hwnd);
-    if (attached) AttachThreadInput(thisThread, foregroundThread, FALSE);
     return GetForegroundWindow() == hwnd;
 }
 
@@ -774,82 +782,125 @@ COLORREF BlendColor(COLORREF a, COLORREF b, int weightA, int weightB) {
     return RGB(r, g, bl);
 }
 
-// Queries documented Windows theme / system color APIs (SystemParametersInfoW for High Contrast,
-// UxTheme OpenThemeData/GetThemeColor, Personalize Light/Dark registry settings, and GetSysColor).
-SearchBarTheme QuerySearchBarTheme(HWND hwnd, bool active, bool hovered) {
-    SearchBarTheme theme{};
-    try {
-        theme.selectionBg = GetSysColor(COLOR_HIGHLIGHT);
-        theme.selectionText = GetSysColor(COLOR_HIGHLIGHTTEXT);
+struct BaseSearchBarTheme {
+    bool isHighContrast = false;
+    bool isDarkMode = false;
+    COLORREF selectionBg = RGB(0, 120, 215);
+    COLORREF selectionText = RGB(255, 255, 255);
+    COLORREF hcBg = RGB(255, 255, 255);
+    COLORREF hcBorderActive = RGB(0, 120, 215);
+    COLORREF hcBorderNormal = RGB(0, 0, 0);
+    COLORREF hcText = RGB(0, 0, 0);
+    COLORREF hcGrayText = RGB(128, 128, 128);
+    COLORREF darkHighlight = RGB(0, 120, 215);
+    COLORREF winBg = RGB(255, 255, 255);
+    COLORREF normalBorder = RGB(202, 202, 202);
+    COLORREF activeOrHoverBorder = RGB(184, 184, 184);
+    COLORREF iconColor = RGB(33, 33, 33);
+    COLORREF placeholderColor = RGB(36, 36, 36);
+    COLORREF textColor = RGB(0, 0, 0);
+};
 
-        HIGHCONTRASTW hc{};
-        hc.cbSize = sizeof(hc);
-        if (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) &&
-            (hc.dwFlags & HCF_HIGHCONTRASTON)) {
-            theme.bgColor = GetSysColor(COLOR_WINDOW);
-            theme.borderColor = GetSysColor((active || hovered) ? COLOR_HIGHLIGHT : COLOR_WINDOWFRAME);
-            theme.iconColor = GetSysColor(COLOR_WINDOWTEXT);
-            theme.placeholderColor = GetSysColor(COLOR_GRAYTEXT);
-            theme.textColor = GetSysColor(COLOR_WINDOWTEXT);
-            theme.caretColor = GetSysColor(COLOR_WINDOWTEXT);
-            return theme;
-        }
+BaseSearchBarTheme g_baseThemeCache{};
+bool g_baseThemeCacheValid = false;
 
-        DWORD appsLight = 1, systemLight = 1, size = sizeof(DWORD);
-        RegGetValueW(HKEY_CURRENT_USER,
-                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                     L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &appsLight, &size);
-        size = sizeof(DWORD);
-        RegGetValueW(HKEY_CURRENT_USER,
-                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                     L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &systemLight, &size);
+void RefreshSearchBarThemeCache(HWND hwnd) {
+    BaseSearchBarTheme base{};
+    base.selectionBg = GetSysColor(COLOR_HIGHLIGHT);
+    base.selectionText = GetSysColor(COLOR_HIGHLIGHTTEXT);
 
-        const bool darkMode = (appsLight == 0 && systemLight == 0);
-        if (darkMode) {
-            const COLORREF sysHighlight = GetSysColor(COLOR_HIGHLIGHT);
-            theme.bgColor = active ? RGB(32, 32, 32) : (hovered ? RGB(68, 68, 68) : RGB(51, 51, 51));
-            theme.borderColor = active ? sysHighlight : (hovered ? RGB(145, 145, 145) : RGB(110, 110, 110));
-            theme.iconColor = RGB(240, 240, 240);
-            theme.placeholderColor = RGB(205, 205, 205);
-            theme.textColor = RGB(255, 255, 255);
-            theme.caretColor = RGB(255, 255, 255);
-            return theme;
-        }
-
-        COLORREF winBg = GetSysColor(COLOR_WINDOW);
-        COLORREF winText = GetSysColor(COLOR_WINDOWTEXT);
-        COLORREF grayText = GetSysColor(COLOR_GRAYTEXT);
-        COLORREF shadow3d = GetSysColor(COLOR_3DSHADOW);
-        COLORREF light3d = GetSysColor(COLOR_3DLIGHT);
-
-        if (HTHEME hTheme = OpenThemeData(hwnd, L"Edit")) {
-            COLORREF themedFill = 0, themedText = 0, themedBorder = 0;
-            if (SUCCEEDED(GetThemeColor(hTheme, 0, 0, TMT_FILLCOLOR, &themedFill)))
-                winBg = themedFill;
-            if (SUCCEEDED(GetThemeColor(hTheme, 0, 0, TMT_TEXTCOLOR, &themedText)))
-                winText = themedText;
-            if (SUCCEEDED(GetThemeColor(hTheme, 0, 0, TMT_BORDERCOLOR, &themedBorder)))
-                light3d = themedBorder;
-            CloseThemeData(hTheme);
-        }
-
-        theme.bgColor = winBg;
-        // On Windows 10, COLOR_3DSHADOW is RGB(160,160,160). Blending winBg (255) and shadow3d (160)
-        // with weights (4, 5) produces ~RGB(202,202,202) for the idle border, and (1, 3) produces
-        // ~RGB(184,184,184) when active or hovered so the top border stays clearly visible.
-        const COLORREF normalBorder = BlendColor(winBg, shadow3d, 4, 5);
-        const COLORREF activeOrHoverBorder = BlendColor(winBg, shadow3d, 1, 3);
-        theme.borderColor = (active || hovered) ? activeOrHoverBorder : normalBorder;
-        theme.iconColor = BlendColor(winText, winBg, 7, 1);           // ~RGB(33,33,33) on white
-        theme.placeholderColor = BlendColor(winText, grayText, 2, 1); // ~RGB(36,36,36) on white
-        theme.textColor = winText;
-        theme.caretColor = winText;
-        (void)light3d;
-    } catch (const std::exception&) {
-        Wh_Log(L"[SearchOnly] exception in QuerySearchBarTheme");
-    } catch (...) {
-        Wh_Log(L"[SearchOnly] unknown exception in QuerySearchBarTheme");
+    HIGHCONTRASTW hc{};
+    hc.cbSize = sizeof(hc);
+    if (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) &&
+        (hc.dwFlags & HCF_HIGHCONTRASTON)) {
+        base.isHighContrast = true;
+        base.hcBg = GetSysColor(COLOR_WINDOW);
+        base.hcBorderActive = GetSysColor(COLOR_HIGHLIGHT);
+        base.hcBorderNormal = GetSysColor(COLOR_WINDOWFRAME);
+        base.hcText = GetSysColor(COLOR_WINDOWTEXT);
+        base.hcGrayText = GetSysColor(COLOR_GRAYTEXT);
+        g_baseThemeCache = base;
+        g_baseThemeCacheValid = true;
+        return;
     }
+
+    DWORD appsLight = 1, systemLight = 1, size = sizeof(DWORD);
+    RegGetValueW(HKEY_CURRENT_USER,
+                 L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                 L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &appsLight, &size);
+    size = sizeof(DWORD);
+    RegGetValueW(HKEY_CURRENT_USER,
+                 L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                 L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &systemLight, &size);
+
+    base.isDarkMode = (appsLight == 0 && systemLight == 0);
+    if (base.isDarkMode) {
+        base.darkHighlight = GetSysColor(COLOR_HIGHLIGHT);
+        g_baseThemeCache = base;
+        g_baseThemeCacheValid = true;
+        return;
+    }
+
+    COLORREF winBg = GetSysColor(COLOR_WINDOW);
+    COLORREF winText = GetSysColor(COLOR_WINDOWTEXT);
+    COLORREF grayText = GetSysColor(COLOR_GRAYTEXT);
+    COLORREF shadow3d = GetSysColor(COLOR_3DSHADOW);
+
+    if (HTHEME hTheme = OpenThemeData(hwnd, L"Edit")) {
+        COLORREF themedFill = 0, themedText = 0;
+        if (SUCCEEDED(GetThemeColor(hTheme, 0, 0, TMT_FILLCOLOR, &themedFill)))
+            winBg = themedFill;
+        if (SUCCEEDED(GetThemeColor(hTheme, 0, 0, TMT_TEXTCOLOR, &themedText)))
+            winText = themedText;
+        CloseThemeData(hTheme);
+    }
+
+    base.winBg = winBg;
+    base.normalBorder = BlendColor(winBg, shadow3d, 4, 5);
+    base.activeOrHoverBorder = BlendColor(winBg, shadow3d, 1, 3);
+    base.iconColor = BlendColor(winText, winBg, 7, 1);
+    base.placeholderColor = BlendColor(winText, grayText, 2, 1);
+    base.textColor = winText;
+
+    g_baseThemeCache = base;
+    g_baseThemeCacheValid = true;
+}
+
+SearchBarTheme QuerySearchBarTheme(HWND hwnd, bool active, bool hovered) {
+    if (!g_baseThemeCacheValid) {
+        RefreshSearchBarThemeCache(hwnd);
+    }
+    const BaseSearchBarTheme& base = g_baseThemeCache;
+    SearchBarTheme theme{};
+    theme.selectionBg = base.selectionBg;
+    theme.selectionText = base.selectionText;
+
+    if (base.isHighContrast) {
+        theme.bgColor = base.hcBg;
+        theme.borderColor = (active || hovered) ? base.hcBorderActive : base.hcBorderNormal;
+        theme.iconColor = base.hcText;
+        theme.placeholderColor = base.hcGrayText;
+        theme.textColor = base.hcText;
+        theme.caretColor = base.hcText;
+        return theme;
+    }
+
+    if (base.isDarkMode) {
+        theme.bgColor = active ? RGB(32, 32, 32) : (hovered ? RGB(68, 68, 68) : RGB(51, 51, 51));
+        theme.borderColor = active ? base.darkHighlight : (hovered ? RGB(145, 145, 145) : RGB(110, 110, 110));
+        theme.iconColor = RGB(240, 240, 240);
+        theme.placeholderColor = RGB(205, 205, 205);
+        theme.textColor = RGB(255, 255, 255);
+        theme.caretColor = RGB(255, 255, 255);
+        return theme;
+    }
+
+    theme.bgColor = base.winBg;
+    theme.borderColor = (active || hovered) ? base.activeOrHoverBorder : base.normalBorder;
+    theme.iconColor = base.iconColor;
+    theme.placeholderColor = base.placeholderColor;
+    theme.textColor = base.textColor;
+    theme.caretColor = base.textColor;
     return theme;
 }
 
@@ -861,25 +912,21 @@ bool HasVisibleChars(const std::wstring& s) {
 }
 
 std::wstring ReadWindowTextSafe(HWND hwnd) {
-    try {
-        if (!hwnd || !IsWindow(hwnd)) return {};
-        wchar_t buf[256]{};
-        int len = InternalGetWindowText(hwnd, buf, ARRAYSIZE(buf));
-        if (len <= 0) {
-            DWORD_PTR res = 0;
-            if (SendMessageTimeoutW(hwnd, WM_GETTEXT, ARRAYSIZE(buf),
-                                    reinterpret_cast<LPARAM>(buf),
-                                    SMTO_ABORTIFHUNG, 40, &res) && res > 0) {
-                len = static_cast<int>(res);
-            }
+    if (!hwnd || !IsWindow(hwnd)) return {};
+    wchar_t buf[256]{};
+    int len = InternalGetWindowText(hwnd, buf, ARRAYSIZE(buf));
+    if (len <= 0) {
+        DWORD_PTR res = 0;
+        if (SendMessageTimeoutW(hwnd, WM_GETTEXT, ARRAYSIZE(buf),
+                                reinterpret_cast<LPARAM>(buf),
+                                SMTO_ABORTIFHUNG, 40, &res) && res > 0) {
+            len = static_cast<int>(res);
         }
-        if (len <= 0) return {};
-        buf[ARRAYSIZE(buf) - 1] = L'\0';
-        std::wstring result(buf);
-        return HasVisibleChars(result) ? result : std::wstring{};
-    } catch (...) {
-        return {};
     }
+    if (len <= 0) return {};
+    buf[ARRAYSIZE(buf) - 1] = L'\0';
+    std::wstring result(buf);
+    return HasVisibleChars(result) ? result : std::wstring{};
 }
 
 struct TaskbarSearchScan {
@@ -891,30 +938,28 @@ struct TaskbarSearchScan {
 };
 
 BOOL CALLBACK ScanTrayChildrenProc(HWND hwnd, LPARAM lParam) {
-    try {
-        auto* scan = reinterpret_cast<TaskbarSearchScan*>(lParam);
-        if (!scan) return FALSE;
-        wchar_t cls[64]{};
-        GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
-        const int id = GetDlgCtrlID(hwnd);
-        if (_wcsicmp(cls, L"TrayDummySearchControl") == 0 || id == 4100) {
-            scan->dummyHwnd = hwnd;
-            if (scan->childPlaceholder.empty()) {
-                std::wstring text = ReadWindowTextSafe(hwnd);
-                if (!text.empty()) scan->childPlaceholder = std::move(text);
-            }
-        } else if (id == 4101) {
-            scan->button4101Hwnd = hwnd;
-            std::wstring text = ReadWindowTextSafe(hwnd);
-            if (!text.empty()) scan->childPlaceholder = std::move(text);
-        } else if (id == 4103) {
-            scan->button4103Hwnd = hwnd;
-        } else if (scan->dummyHwnd && IsChild(scan->dummyHwnd, hwnd) && scan->childPlaceholder.empty()) {
+    auto* scan = reinterpret_cast<TaskbarSearchScan*>(lParam);
+    if (!scan) return FALSE;
+    wchar_t cls[64]{};
+    GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+    const int id = GetDlgCtrlID(hwnd);
+    if (_wcsicmp(cls, L"TrayDummySearchControl") == 0 || id == 4100) {
+        scan->dummyHwnd = hwnd;
+        if (scan->childPlaceholder.empty()) {
             std::wstring text = ReadWindowTextSafe(hwnd);
             if (!text.empty()) scan->childPlaceholder = std::move(text);
         }
-    } catch (...) {
-        Wh_Log(L"[SearchOnly] exception in ScanTrayChildrenProc");
+    } else if (id == 4101) {
+        scan->button4101Hwnd = hwnd;
+        if (scan->childPlaceholder.empty()) {
+            std::wstring text = ReadWindowTextSafe(hwnd);
+            if (!text.empty()) scan->childPlaceholder = std::move(text);
+        }
+    } else if (id == 4103) {
+        scan->button4103Hwnd = hwnd;
+    } else if (scan->dummyHwnd && IsChild(scan->dummyHwnd, hwnd) && scan->childPlaceholder.empty()) {
+        std::wstring text = ReadWindowTextSafe(hwnd);
+        if (!text.empty()) scan->childPlaceholder = std::move(text);
     }
     return TRUE;
 }
@@ -934,81 +979,50 @@ HWND FindTrayForMonitor(HMONITOR targetMonitor) {
 }
 
 std::wstring QueryNativeSearchPlaceholderFromSystem(const TaskbarSearchScan& scan) {
-    try {
-        if (!scan.childPlaceholder.empty()) return scan.childPlaceholder;
+    if (!scan.childPlaceholder.empty()) return scan.childPlaceholder;
 
-        // Query UI Automation on the taskbar's 4101/4100 search box control.
-        if (g_uia || SUCCEEDED(CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER,
-                                                IID_PPV_ARGS(g_uia.GetAddressOf())))) {
-            HWND targetHwnd = scan.button4101Hwnd ? scan.button4101Hwnd : scan.dummyHwnd;
-            if (targetHwnd) {
-                ComPtr<IUIAutomationElement> el;
-                if (SUCCEEDED(g_uia->ElementFromHandle(targetHwnd, el.GetAddressOf())) && el) {
-                    BSTR name = nullptr;
-                    if (SUCCEEDED(el->get_CurrentName(&name)) && name && *name) {
-                        std::wstring result(name);
-                        SysFreeString(name);
-                        return result;
-                    }
-                    if (name) SysFreeString(name);
+    // Query UI Automation on the taskbar's 4101/4100 search box control.
+    if (g_uia || SUCCEEDED(CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER,
+                                            IID_PPV_ARGS(g_uia.GetAddressOf())))) {
+        HWND targetHwnd = scan.button4101Hwnd ? scan.button4101Hwnd : scan.dummyHwnd;
+        if (targetHwnd) {
+            ComPtr<IUIAutomationElement> el;
+            if (SUCCEEDED(g_uia->ElementFromHandle(targetHwnd, el.GetAddressOf())) && el) {
+                BSTR name = nullptr;
+                if (SUCCEEDED(el->get_CurrentName(&name)) && name && *name) {
+                    std::wstring result(name);
+                    SysFreeString(name);
+                    return result;
                 }
+                if (name) SysFreeString(name);
             }
-            if (scan.trayHwnd) {
-                ComPtr<IUIAutomationElement> root;
-                if (SUCCEEDED(g_uia->ElementFromHandle(scan.trayHwnd, root.GetAddressOf())) && root) {
-                    VARIANT val;
-                    VariantInit(&val);
-                    val.vt = VT_BSTR;
-                    val.bstrVal = SysAllocString(L"4101");
-                    ComPtr<IUIAutomationCondition> cond;
-                    if (SUCCEEDED(g_uia->CreatePropertyCondition(UIA_AutomationIdPropertyId, val, cond.GetAddressOf())) && cond) {
-                        ComPtr<IUIAutomationElement> el4101;
-                        if (SUCCEEDED(root->FindFirst(TreeScope_Descendants, cond.Get(), el4101.GetAddressOf())) && el4101) {
-                            BSTR name = nullptr;
-                            if (SUCCEEDED(el4101->get_CurrentName(&name)) && name && *name) {
-                                std::wstring result(name);
-                                SysFreeString(name);
-                                VariantClear(&val);
-                                return result;
-                            }
-                            if (name) SysFreeString(name);
+        }
+        if (scan.trayHwnd) {
+            ComPtr<IUIAutomationElement> root;
+            if (SUCCEEDED(g_uia->ElementFromHandle(scan.trayHwnd, root.GetAddressOf())) && root) {
+                VARIANT val;
+                VariantInit(&val);
+                val.vt = VT_BSTR;
+                val.bstrVal = SysAllocString(L"4101");
+                ComPtr<IUIAutomationCondition> cond;
+                if (SUCCEEDED(g_uia->CreatePropertyCondition(UIA_AutomationIdPropertyId, val, cond.GetAddressOf())) && cond) {
+                    ComPtr<IUIAutomationElement> el4101;
+                    if (SUCCEEDED(root->FindFirst(TreeScope_Descendants, cond.Get(), el4101.GetAddressOf())) && el4101) {
+                        BSTR name = nullptr;
+                        if (SUCCEEDED(el4101->get_CurrentName(&name)) && name && *name) {
+                            std::wstring result(name);
+                            SysFreeString(name);
+                            VariantClear(&val);
+                            return result;
                         }
+                        if (name) SysFreeString(name);
                     }
-                    VariantClear(&val);
                 }
+                VariantClear(&val);
             }
         }
-
-        // Check Windows Search registry hint values if present.
-        static const wchar_t* const kSubKeys[] = {
-            L"Software\\Microsoft\\Windows\\CurrentVersion\\Search\\Flighting\\0\\SearchBoxText",
-            L"Software\\Microsoft\\Windows\\CurrentVersion\\Search\\Flighting\\1\\SearchBoxText",
-            L"Software\\Microsoft\\Windows\\CurrentVersion\\Search"
-        };
-        static const wchar_t* const kValNames[] = { L"Value", L"Value", L"SearchboxText" };
-        for (size_t i = 0; i < ARRAYSIZE(kSubKeys); ++i) {
-            wchar_t buf[256]{};
-            DWORD bytes = sizeof(buf);
-            if (RegGetValueW(HKEY_CURRENT_USER, kSubKeys[i], kValNames[i],
-                             RRF_RT_REG_SZ, nullptr, buf, &bytes) == ERROR_SUCCESS && buf[0]) {
-                return std::wstring(buf);
-            }
-        }
-
-        // Check explorer.exe's own localized string resources via documented LoadStringW.
-        HMODULE hExplorer = GetModuleHandleW(nullptr);
-        static const UINT kCandidateIds[] = { 11330, 11331, 11329, 11231, 11232, 11220, 5131 };
-        for (UINT id : kCandidateIds) {
-            wchar_t buf[256]{};
-            if (LoadStringW(hExplorer, id, buf, ARRAYSIZE(buf)) > 0 && buf[0]) {
-                return std::wstring(buf);
-            }
-        }
-    } catch (const std::bad_alloc&) {
-        Wh_Log(L"[SearchOnly] allocation failure in QueryNativeSearchPlaceholderFromSystem");
-    } catch (...) {
-        Wh_Log(L"[SearchOnly] exception in QueryNativeSearchPlaceholderFromSystem");
     }
+
     return {};
 }
 
@@ -1024,47 +1038,44 @@ struct TaskbarSearchState {
 // check whether any context menu or shell flyout is active so we never alter topmost
 // Z-order while a menu is open on screen.
 bool IsAnyPopupMenuOrFlyoutActive(HWND trayHwnd) {
-    try {
-        if (g_stopping.load()) return true;
-        if ((GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0) return true;
-        GUITHREADINFO gti{};
-        gti.cbSize = sizeof(gti);
-        if (GetGUIThreadInfo(0, &gti)) {
-            if ((gti.flags & (GUI_INMENUMODE | GUI_POPUPMENUMODE | GUI_SYSTEMMENUMODE)) != 0 ||
-                gti.hwndMenuOwner != nullptr) {
+    if (g_stopping.load()) return true;
+    if ((GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0) return true;
+    GUITHREADINFO gti{};
+    gti.cbSize = sizeof(gti);
+    if (GetGUIThreadInfo(0, &gti)) {
+        if ((gti.flags & (GUI_INMENUMODE | GUI_POPUPMENUMODE | GUI_SYSTEMMENUMODE)) != 0 ||
+            gti.hwndMenuOwner != nullptr) {
+            return true;
+        }
+    }
+    if (trayHwnd && IsWindow(trayHwnd)) {
+        const DWORD trayTid = GetWindowThreadProcessId(trayHwnd, nullptr);
+        GUITHREADINFO trayGti{};
+        trayGti.cbSize = sizeof(trayGti);
+        if (trayTid && GetGUIThreadInfo(trayTid, &trayGti)) {
+            if ((trayGti.flags & (GUI_INMENUMODE | GUI_POPUPMENUMODE | GUI_SYSTEMMENUMODE)) != 0 ||
+                trayGti.hwndMenuOwner != nullptr) {
                 return true;
             }
         }
-        if (trayHwnd && IsWindow(trayHwnd)) {
-            const DWORD trayTid = GetWindowThreadProcessId(trayHwnd, nullptr);
-            GUITHREADINFO trayGti{};
-            trayGti.cbSize = sizeof(trayGti);
-            if (trayTid && GetGUIThreadInfo(trayTid, &trayGti)) {
-                if ((trayGti.flags & (GUI_INMENUMODE | GUI_POPUPMENUMODE | GUI_SYSTEMMENUMODE)) != 0 ||
-                    trayGti.hwndMenuOwner != nullptr) {
-                    return true;
-                }
+    }
+    HWND menuHwnd = nullptr;
+    while ((menuHwnd = FindWindowExW(nullptr, menuHwnd, L"#32768", nullptr)) != nullptr) {
+        if (IsWindowVisible(menuHwnd)) return true;
+    }
+    if (HWND fg = GetForegroundWindow()) {
+        wchar_t cls[64]{};
+        if (GetClassNameW(fg, cls, ARRAYSIZE(cls)) > 0) {
+            if (wcscmp(cls, L"#32768") == 0 ||
+                wcscmp(cls, L"Xaml_WindowedPopupClass") == 0 ||
+                wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0 ||
+                wcscmp(cls, L"LauncherTipWnd") == 0 ||
+                wcscmp(cls, L"NotifyIconOverflowWindow") == 0 ||
+                wcscmp(cls, L"TaskListThumbnailWnd") == 0 ||
+                wcscmp(cls, L"MultitaskingViewFrame") == 0) {
+                return true;
             }
         }
-        HWND menuHwnd = nullptr;
-        while ((menuHwnd = FindWindowExW(nullptr, menuHwnd, L"#32768", nullptr)) != nullptr) {
-            if (IsWindowVisible(menuHwnd)) return true;
-        }
-        if (HWND fg = GetForegroundWindow()) {
-            wchar_t cls[64]{};
-            if (GetClassNameW(fg, cls, ARRAYSIZE(cls)) > 0) {
-                if (wcscmp(cls, L"#32768") == 0 ||
-                    wcscmp(cls, L"Xaml_WindowedPopupClass") == 0 ||
-                    wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0 ||
-                    wcscmp(cls, L"LauncherTipWnd") == 0 ||
-                    wcscmp(cls, L"NotifyIconOverflowWindow") == 0 ||
-                    wcscmp(cls, L"TaskListThumbnailWnd") == 0 ||
-                    wcscmp(cls, L"MultitaskingViewFrame") == 0) {
-                    return true;
-                }
-            }
-        }
-    } catch (...) {
     }
     return false;
 }
@@ -1184,9 +1195,9 @@ TaskbarSearchState InspectTaskbarSearch(HMONITOR targetMonitor, bool needPlaceho
             }
         }
     } catch (const std::bad_alloc&) {
-        Wh_Log(L"[SearchOnly] allocation failure in InspectTaskbarSearch");
+        Wh_Log(L"allocation failure in InspectTaskbarSearch");
     } catch (...) {
-        Wh_Log(L"[SearchOnly] exception in InspectTaskbarSearch");
+        Wh_Log(L"exception in InspectTaskbarSearch");
     }
     return state;
 }
@@ -1232,102 +1243,92 @@ void DrawThemedSearchBoxBar(HDC dc, HWND hwnd, const RECT& boxRc, int dpi,
                             bool active, bool hovered, bool caretVisible,
                             size_t caretPos, bool hasSelection,
                             size_t selectionAnchor, size_t selectionEnd) {
-    try {
-        if (dpi <= 0) {
-            dpi = static_cast<int>(EffectiveDpiForWindow(hwnd, nullptr));
+    if (dpi <= 0) {
+        dpi = static_cast<int>(EffectiveDpiForWindow(hwnd, nullptr));
+    }
+    const auto scale = [dpi](int v) { return MulDiv(v, dpi, 96); };
+    const SearchBarTheme theme = QuerySearchBarTheme(hwnd, active, hovered);
+
+    GdiObject bgBrush(reinterpret_cast<HGDIOBJ>(CreateSolidBrush(theme.bgColor)));
+    GdiObject borderBrush(reinterpret_cast<HGDIOBJ>(CreateSolidBrush(theme.borderColor)));
+    if (bgBrush.value) FillRect(dc, &boxRc, reinterpret_cast<HBRUSH>(bgBrush.value));
+    if (borderBrush.value) FrameRect(dc, &boxRc, reinterpret_cast<HBRUSH>(borderBrush.value));
+
+    // Ensure the top border separating the footer from the search box is always clearly visible.
+    if (active) {
+        const COLORREF topLineColor = BlendColor(theme.borderColor, GetSysColor(COLOR_3DSHADOW), 1, 1);
+        GdiObject topPen(reinterpret_cast<HGDIOBJ>(CreatePen(PS_SOLID, 1, topLineColor)));
+        SelectedGdiObject selTopPen(dc, topPen.value);
+        if (topPen.value) {
+            MoveToEx(dc, boxRc.left, boxRc.top, nullptr);
+            LineTo(dc, boxRc.right, boxRc.top);
         }
-        const int boxH = boxRc.bottom - boxRc.top;
-        if (boxH >= 46 && boxH <= 52 && dpi < 120) dpi = 120;
-        else if (boxH >= 56 && boxH <= 64 && dpi < 144) dpi = 144;
-        else if (boxH >= 76 && dpi < 192) dpi = 192;
-        const auto scale = [dpi](int v) { return MulDiv(v, dpi, 96); };
-        const SearchBarTheme theme = QuerySearchBarTheme(hwnd, active, hovered);
+    }
 
-        GdiObject bgBrush(reinterpret_cast<HGDIOBJ>(CreateSolidBrush(theme.bgColor)));
-        GdiObject borderBrush(reinterpret_cast<HGDIOBJ>(CreateSolidBrush(theme.borderColor)));
-        if (bgBrush.value) FillRect(dc, &boxRc, reinterpret_cast<HBRUSH>(bgBrush.value));
-        if (borderBrush.value) FrameRect(dc, &boxRc, reinterpret_cast<HBRUSH>(borderBrush.value));
+    // Windows 10 taskbar search box icon metrics: 16epx icon at left + 12epx.
+    const int iconSize = scale(16);
+    const int iconX = boxRc.left + scale(12);
+    const int iconY = boxRc.top + ((boxRc.bottom - boxRc.top) - iconSize) / 2;
+    if (!DrawSearchBoxMagnifierIcon(dc, iconX, iconY, iconSize, theme.iconColor))
+        DrawVectorIconGdiPlus(dc, 9, iconX, iconY, iconSize, theme.iconColor);
 
-        // Ensure the top border separating the footer from the search box is always clearly visible.
-        if (active) {
-            const COLORREF topLineColor = BlendColor(theme.borderColor, GetSysColor(COLOR_3DSHADOW), 1, 1);
-            GdiObject topPen(reinterpret_cast<HGDIOBJ>(CreatePen(PS_SOLID, 1, topLineColor)));
-            SelectedGdiObject selTopPen(dc, topPen.value);
-            if (topPen.value) {
-                MoveToEx(dc, boxRc.left, boxRc.top, nullptr);
-                LineTo(dc, boxRc.right, boxRc.top);
+    // Windows 10 Body / SearchBox font size: 15epx Segoe UI Regular.
+    GdiObject font(reinterpret_cast<HGDIOBJ>(CreateFontW(
+        -scale(15), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+        DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI")));
+    SelectedGdiObject selectedFont(dc, font.value);
+    SetBkMode(dc, TRANSPARENT);
+
+    RECT queryText{boxRc.left + scale(40), boxRc.top + 1,
+                   boxRc.right - scale(8), boxRc.bottom};
+    if (query.empty()) {
+        SetTextColor(dc, theme.placeholderColor);
+        DrawTextW(dc, placeholder.c_str(), -1, &queryText,
+                  DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+        if (active && caretVisible) {
+            GdiObject caret(reinterpret_cast<HGDIOBJ>(CreatePen(PS_SOLID, 1, theme.caretColor)));
+            SelectedGdiObject selectedCaret(dc, caret.value);
+            if (caret.value) {
+                MoveToEx(dc, queryText.left, queryText.top + scale(8), nullptr);
+                LineTo(dc, queryText.left, queryText.bottom - scale(8));
             }
         }
-
-        // Documented Windows 10 taskbar search box icon metrics: 16epx icon at left + 12epx.
-        const int iconSize = scale(16);
-        const int iconX = boxRc.left + scale(12);
-        const int iconY = boxRc.top + ((boxRc.bottom - boxRc.top) - iconSize) / 2;
-        if (!DrawSearchBoxMagnifierIcon(dc, iconX, iconY, iconSize, theme.iconColor))
-            DrawVectorIconGdiPlus(dc, 9, iconX, iconY, iconSize, theme.iconColor);
-
-        // Documented Windows 10 Body / SearchBox font size: 15epx Segoe UI Regular.
-        GdiObject font(reinterpret_cast<HGDIOBJ>(CreateFontW(
-            -scale(15), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-            OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-            DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI")));
-        SelectedGdiObject selectedFont(dc, font.value);
-        SetBkMode(dc, TRANSPARENT);
-
-        RECT queryText{boxRc.left + scale(40), boxRc.top + 1,
-                       boxRc.right - scale(8), boxRc.bottom};
-        if (query.empty()) {
-            SetTextColor(dc, theme.placeholderColor);
-            DrawTextW(dc, placeholder.c_str(), -1, &queryText,
-                      DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
-            if (active && caretVisible) {
-                GdiObject caret(reinterpret_cast<HGDIOBJ>(CreatePen(PS_SOLID, 1, theme.caretColor)));
-                SelectedGdiObject selectedCaret(dc, caret.value);
-                if (caret.value) {
-                    MoveToEx(dc, queryText.left, queryText.top + scale(8), nullptr);
-                    LineTo(dc, queryText.left, queryText.bottom - scale(8));
-                }
-            }
-        } else {
+    } else {
+        SetTextColor(dc, theme.textColor);
+        DrawTextW(dc, query.c_str(), -1, &queryText,
+                  DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+        SIZE before{};
+        GetTextExtentPoint32W(dc, query.c_str(),
+                              static_cast<int>((std::min)(caretPos, query.size())), &before);
+        if (active && hasSelection) {
+            const size_t a = (std::min)(selectionAnchor, selectionEnd);
+            const size_t b = (std::max)(selectionAnchor, selectionEnd);
+            SIZE sa{}, sb{};
+            GetTextExtentPoint32W(dc, query.c_str(), static_cast<int>(a), &sa);
+            GetTextExtentPoint32W(dc, query.c_str(), static_cast<int>(b), &sb);
+            RECT selection{queryText.left + sa.cx, queryText.top + scale(4),
+                           queryText.left + sb.cx, queryText.bottom - scale(4)};
+            GdiObject selectionBrush(reinterpret_cast<HGDIOBJ>(CreateSolidBrush(theme.selectionBg)));
+            if (selectionBrush.value)
+                FillRect(dc, &selection, reinterpret_cast<HBRUSH>(selectionBrush.value));
+            RECT selectedText{selection.left, queryText.top, selection.right, queryText.bottom};
+            SetTextColor(dc, theme.selectionText);
+            DrawTextW(dc, query.substr(a, b - a).c_str(), static_cast<int>(b - a),
+                      &selectedText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
             SetTextColor(dc, theme.textColor);
-            DrawTextW(dc, query.c_str(), -1, &queryText,
-                      DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
-            SIZE before{};
-            GetTextExtentPoint32W(dc, query.c_str(),
-                                  static_cast<int>((std::min)(caretPos, query.size())), &before);
-            if (active && hasSelection) {
-                const size_t a = (std::min)(selectionAnchor, selectionEnd);
-                const size_t b = (std::max)(selectionAnchor, selectionEnd);
-                SIZE sa{}, sb{};
-                GetTextExtentPoint32W(dc, query.c_str(), static_cast<int>(a), &sa);
-                GetTextExtentPoint32W(dc, query.c_str(), static_cast<int>(b), &sb);
-                RECT selection{queryText.left + sa.cx, queryText.top + scale(4),
-                               queryText.left + sb.cx, queryText.bottom - scale(4)};
-                GdiObject selectionBrush(reinterpret_cast<HGDIOBJ>(CreateSolidBrush(theme.selectionBg)));
-                if (selectionBrush.value)
-                    FillRect(dc, &selection, reinterpret_cast<HBRUSH>(selectionBrush.value));
-                RECT selectedText{selection.left, queryText.top, selection.right, queryText.bottom};
-                SetTextColor(dc, theme.selectionText);
-                DrawTextW(dc, query.substr(a, b - a).c_str(), static_cast<int>(b - a),
-                          &selectedText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-                SetTextColor(dc, theme.textColor);
-            }
-            if (active && caretVisible && !hasSelection) {
-                const int caretX = (std::min)(
-                    static_cast<int>(queryText.right) - scale(1),
-                    static_cast<int>(queryText.left) + static_cast<int>(before.cx));
-                GdiObject caret(reinterpret_cast<HGDIOBJ>(CreatePen(PS_SOLID, 1, theme.caretColor)));
-                SelectedGdiObject selectedCaret(dc, caret.value);
-                if (caret.value) {
-                    MoveToEx(dc, caretX, queryText.top + scale(8), nullptr);
-                    LineTo(dc, caretX, queryText.bottom - scale(8));
-                }
+        }
+        if (active && caretVisible && !hasSelection) {
+            const int caretX = (std::min)(
+                static_cast<int>(queryText.right) - scale(1),
+                static_cast<int>(queryText.left) + static_cast<int>(before.cx));
+            GdiObject caret(reinterpret_cast<HGDIOBJ>(CreatePen(PS_SOLID, 1, theme.caretColor)));
+            SelectedGdiObject selectedCaret(dc, caret.value);
+            if (caret.value) {
+                MoveToEx(dc, caretX, queryText.top + scale(8), nullptr);
+                LineTo(dc, caretX, queryText.bottom - scale(8));
             }
         }
-    } catch (const std::bad_alloc&) {
-        Wh_Log(L"[SearchOnly] allocation failure in DrawThemedSearchBoxBar");
-    } catch (...) {
-        Wh_Log(L"[SearchOnly] exception in DrawThemedSearchBoxBar");
     }
 }
 
@@ -1337,32 +1338,38 @@ public:
 
     bool Create(HINSTANCE instance) {
         instance_ = instance;
-        UnregisterClassW(kWindowClass, instance_);
-        UnregisterClassW(kLegacyTaskbarBoxClass, instance_);
-        UnregisterClassW(kTaskbarBoxClass, instance_);
 
         WNDCLASSW wc{};
         wc.lpfnWndProc = WindowProc;
         wc.hInstance = instance_;
         wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
         wc.lpszClassName = kWindowClass;
-        if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return false;
+        if (!RegisterClassW(&wc)) {
+            Wh_Log(L"search pane class registration failed: %u", GetLastError());
+            return false;
+        }
 
         WNDCLASSW boxWc{};
         boxWc.lpfnWndProc = TaskbarBoxWndProc;
         boxWc.hInstance = instance_;
         boxWc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
         boxWc.lpszClassName = kTaskbarBoxClass;
-        if (!RegisterClassW(&boxWc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
-            Wh_Log(L"[SearchOnly] taskbar box class registration failed: %u", GetLastError());
+        if (!RegisterClassW(&boxWc)) {
+            Wh_Log(L"taskbar box class registration failed: %u", GetLastError());
+            UnregisterClassW(kWindowClass, instance_);
+            return false;
         }
 
         hwnd_ = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
             kWindowClass, L"Search", WS_POPUP | WS_CLIPCHILDREN,
             0, 0, 1, 1, nullptr, nullptr, instance_, this);
-        if (!hwnd_) return false;
-        catalogWindow_=hwnd_;
-        g_paneWindow=hwnd_;
+        if (!hwnd_) {
+            UnregisterClassW(kTaskbarBoxClass, instance_);
+            UnregisterClassW(kWindowClass, instance_);
+            return false;
+        }
+        catalogWindow_ = hwnd_;
+        g_paneWindow = hwnd_;
 
         taskbarBoxHwnd_ = CreateWindowExW(
             WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
@@ -1375,9 +1382,12 @@ public:
         UpdateHotkey();
         SetTimer(hwnd_, kTaskbarSyncTimer, kTaskbarSyncIntervalMs, nullptr);
         SyncTaskbarBox();
-        catalogThread_=CreateThread(nullptr,0,CatalogThreadProc,this,0,nullptr);
-        if(!catalogThread_){catalogReady_=true;Wh_Log(L"[SearchOnly] background catalog thread failed: %u",GetLastError());}
-        Wh_Log(L"[SearchOnly] ready; application catalog is loading asynchronously");
+        catalogThread_ = CreateThread(nullptr, 0, CatalogThreadProc, this, 0, nullptr);
+        if (!catalogThread_) {
+            catalogReady_ = true;
+            Wh_Log(L"background catalog thread failed: %u", GetLastError());
+        }
+        Wh_Log(L"ready; application catalog is loading asynchronously");
         return true;
     }
 
@@ -1399,7 +1409,7 @@ public:
             HWND target=self->catalogWindow_.load();
             if(!self->catalogStopping_.load()&&!g_stopping.load()&&target)
                 PostMessageW(target,kCatalogReadyMessage,1,0);
-            Wh_Log(L"[SearchOnly] application catalog scan failed");
+            Wh_Log(L"application catalog scan failed");
         }
         return 0;
     }
@@ -1413,9 +1423,9 @@ public:
         if (!g_searchHotkeyEnabled.load()) return;
         if (RegisterHotKey(hwnd_, kHotkeyId, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 'S')) {
             hotkeyRegistered_ = true;
-            Wh_Log(L"[SearchOnly] Ctrl+Alt+S registered");
+            Wh_Log(L"Ctrl+Alt+S registered");
         } else {
-            Wh_Log(L"[SearchOnly] Ctrl+Alt+S unavailable (error %u)", GetLastError());
+            Wh_Log(L"Ctrl+Alt+S unavailable (error %u)", GetLastError());
         }
     }
 
@@ -1511,8 +1521,6 @@ private:
     UINT dpi_ = 96;
     UINT taskbarBoxDpi_ = 96;
     RECT workArea_{};
-    int bottomInset_ = 0;   // taskbar thickness covered by the pane (0 when not covering)
-    RECT startHole_{};      // screen rect (Start button column) that must stay uncovered
     HWND taskbarBoxHwnd_ = nullptr;
     HWND taskbarBoxOwner_ = nullptr;
     RECT taskbarBoxRect_{};
@@ -1520,6 +1528,9 @@ private:
     bool wideBoxMode_ = false;
     bool taskbarBoxHovered_ = false;
     std::wstring nativeSearchPlaceholder_;
+    RECT cachedTrayRect_{};
+    HMONITOR lastInspectedMonitor_ = nullptr;
+    bool boxRectCacheValid_ = false;
     int paneX_ = 0;
     int paneWidth_ = 0;
     int panelHeight_ = 0;
@@ -1579,97 +1590,128 @@ private:
 
     void RefreshTaskbarSearchState(HMONITOR monitor) {
         if (g_stopping.load()) return;
-        try {
-            const TaskbarSearchState state = InspectTaskbarSearch(monitor, nativeSearchPlaceholder_.empty());
-            if (!state.nativePlaceholder.empty() && nativeSearchPlaceholder_ != state.nativePlaceholder) {
-                nativeSearchPlaceholder_ = state.nativePlaceholder;
-                Wh_Log(L"[SearchOnly] resolved native Windows search string: '%s'",
-                       nativeSearchPlaceholder_.c_str());
-            }
-            wideBoxMode_ = state.isWideBox && g_overTaskbar.load();
-            hasBoxRect_ = state.hasBoxRect;
-            if (state.hasBoxRect) taskbarBoxRect_ = state.boxRect;
-        } catch (...) {
-            Wh_Log(L"[SearchOnly] exception in RefreshTaskbarSearchState");
-        }
+        lastInspectedMonitor_ = monitor;
+        boxRectCacheValid_ = false;
+        SyncTaskbarBox(true, monitor);
     }
 
-    void SyncTaskbarBox() {
+    void SyncTaskbarBox(bool forceTreeScan = false, HMONITOR targetMonitor = nullptr) {
         if (!taskbarBoxHwnd_ || g_stopping.load()) return;
-        try {
-            const TaskbarSearchState state = InspectTaskbarSearch(nullptr, nativeSearchPlaceholder_.empty());
+
+        // Skip completely if overTaskbar is disabled
+        if (!g_overTaskbar.load()) {
+            if (IsWindowVisible(taskbarBoxHwnd_)) {
+                ShowWindow(taskbarBoxHwnd_, SW_HIDE);
+                taskbarBoxHovered_ = false;
+            }
+            wideBoxMode_ = false;
+            hasBoxRect_ = false;
+            {
+                std::lock_guard<std::mutex> lock(g_searchButtonLock);
+                g_cachedSearchButtonValid = false;
+            }
+            return;
+        }
+
+        if (!targetMonitor) {
+            targetMonitor = lastInspectedMonitor_;
+        }
+
+        HWND tray = FindTrayForMonitor(targetMonitor);
+        if (!tray || !IsWindow(tray)) {
+            if (IsWindowVisible(taskbarBoxHwnd_)) {
+                ShowWindow(taskbarBoxHwnd_, SW_HIDE);
+                taskbarBoxHovered_ = false;
+            }
+            {
+                std::lock_guard<std::mutex> lock(g_searchButtonLock);
+                g_cachedSearchButtonValid = false;
+            }
+            return;
+        }
+
+        RECT currentTrayRect{};
+        GetWindowRect(tray, &currentTrayRect);
+
+        bool needsRescan = forceTreeScan || !boxRectCacheValid_ ||
+                           !EqualRect(&currentTrayRect, &cachedTrayRect_);
+
+        if (needsRescan) {
+            cachedTrayRect_ = currentTrayRect;
+            const TaskbarSearchState state = InspectTaskbarSearch(targetMonitor, nativeSearchPlaceholder_.empty());
             if (!state.nativePlaceholder.empty() && nativeSearchPlaceholder_ != state.nativePlaceholder) {
                 nativeSearchPlaceholder_ = state.nativePlaceholder;
-                Wh_Log(L"[SearchOnly] resolved native Windows search string: '%s'",
-                       nativeSearchPlaceholder_.c_str());
                 InvalidateRect(taskbarBoxHwnd_, nullptr, FALSE);
             }
 
-            // Keep taskbarBoxHwnd_ LOCKED in place on the taskbar at all times in wideBoxMode_
-            // (both when the pane is closed and when the pane is open/animating).
-            const bool shouldShow = g_overTaskbar.load() &&
-                                    state.isWideBox && state.hasBoxRect &&
-                                    state.trayHwnd && IsWindowVisible(state.trayHwnd);
-            if (!shouldShow) {
-                if (IsWindowVisible(taskbarBoxHwnd_)) {
-                    ShowWindow(taskbarBoxHwnd_, SW_HIDE);
-                    taskbarBoxHovered_ = false;
-                }
-                return;
+            wideBoxMode_ = state.isWideBox && g_overTaskbar.load();
+            hasBoxRect_ = state.hasBoxRect;
+            if (state.hasBoxRect) {
+                taskbarBoxRect_ = state.boxRect;
             }
-
-            wideBoxMode_ = true;
-            hasBoxRect_ = true;
-            taskbarBoxRect_ = state.boxRect;
             taskbarBoxOwner_ = state.trayHwnd;
+            boxRectCacheValid_ = true;
 
-            HMONITOR mon = MonitorFromRect(&state.boxRect, MONITOR_DEFAULTTONEAREST);
-            if (!mon) mon = MonitorFromWindow(state.trayHwnd, MONITOR_DEFAULTTONEAREST);
-            UINT newDpi = EffectiveDpiForWindow(taskbarBoxHwnd_, mon);
-            const int boxH = state.boxRect.bottom - state.boxRect.top;
-            if (boxH >= 46 && boxH <= 52 && newDpi < 120) newDpi = 120;
-            else if (boxH >= 56 && boxH <= 64 && newDpi < 144) newDpi = 144;
-            else if (boxH >= 76 && newDpi < 192) newDpi = 192;
-            if (newDpi && newDpi != taskbarBoxDpi_) {
-                taskbarBoxDpi_ = newDpi;
-                InvalidateRect(taskbarBoxHwnd_, nullptr, FALSE);
+            // Cache the button/box rectangle for the hook thread
+            {
+                std::lock_guard<std::mutex> lock(g_searchButtonLock);
+                if (hasBoxRect_) {
+                    g_cachedSearchButtonRect = taskbarBoxRect_;
+                    g_cachedSearchButtonValid = true;
+                } else {
+                    g_cachedSearchButtonValid = false;
+                }
             }
+        }
 
-            POINT pt{};
-            const bool hov = GetCursorPos(&pt) && PtInRect(&state.boxRect, pt);
-            if (hov != taskbarBoxHovered_) {
-                taskbarBoxHovered_ = hov;
-                InvalidateRect(taskbarBoxHwnd_, nullptr, FALSE);
+        // Only show overlay when interceptSearch is on and overTaskbar is on
+        const bool shouldShow = g_interceptEnabled.load() && g_overTaskbar.load() &&
+                                wideBoxMode_ && hasBoxRect_ &&
+                                taskbarBoxOwner_ && IsWindowVisible(taskbarBoxOwner_);
+        if (!shouldShow) {
+            if (IsWindowVisible(taskbarBoxHwnd_)) {
+                ShowWindow(taskbarBoxHwnd_, SW_HIDE);
+                taskbarBoxHovered_ = false;
             }
+            return;
+        }
 
-            RECT cur{};
-            const bool vis = IsWindowVisible(taskbarBoxHwnd_) != FALSE;
-            GetWindowRect(taskbarBoxHwnd_, &cur);
-            if (!vis || !EqualRect(&cur, &state.boxRect)) {
-                HWND prevAboveTray = GetWindow(state.trayHwnd, GW_HWNDPREV);
-                HWND insertAfter = (prevAboveTray && prevAboveTray != taskbarBoxHwnd_)
-                    ? prevAboveTray : HWND_TOPMOST;
-                SetWindowPos(taskbarBoxHwnd_, insertAfter,
-                             state.boxRect.left, state.boxRect.top,
-                             state.boxRect.right - state.boxRect.left,
-                             state.boxRect.bottom - state.boxRect.top,
-                             SWP_NOACTIVATE | SWP_SHOWWINDOW);
-                InvalidateRect(taskbarBoxHwnd_, nullptr, FALSE);
-                UpdateWindow(taskbarBoxHwnd_);
-            } else if (!IsAnyPopupMenuOrFlyoutActive(state.trayHwnd) &&
-                       !IsWindowAboveInZOrder(taskbarBoxHwnd_, state.trayHwnd)) {
-                // Place taskbarBoxHwnd_ immediately above Shell_TrayWnd (below prevAboveTray)
-                // so it never jumps above any other topmost popup or context menu.
-                HWND prevAboveTray = GetWindow(state.trayHwnd, GW_HWNDPREV);
-                HWND insertAfter = (prevAboveTray && prevAboveTray != taskbarBoxHwnd_)
-                    ? prevAboveTray : HWND_TOPMOST;
-                SetWindowPos(taskbarBoxHwnd_, insertAfter, 0, 0, 0, 0,
-                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            }
-        } catch (const std::bad_alloc&) {
-            Wh_Log(L"[SearchOnly] allocation failure in SyncTaskbarBox");
-        } catch (...) {
-            Wh_Log(L"[SearchOnly] exception in SyncTaskbarBox");
+        HMONITOR mon = MonitorFromRect(&taskbarBoxRect_, MONITOR_DEFAULTTONEAREST);
+        if (!mon && taskbarBoxOwner_) mon = MonitorFromWindow(taskbarBoxOwner_, MONITOR_DEFAULTTONEAREST);
+        UINT newDpi = EffectiveDpiForWindow(taskbarBoxHwnd_, mon);
+        if (newDpi && newDpi != taskbarBoxDpi_) {
+            taskbarBoxDpi_ = newDpi;
+            InvalidateRect(taskbarBoxHwnd_, nullptr, FALSE);
+        }
+
+        POINT pt{};
+        const bool hov = GetCursorPos(&pt) && PtInRect(&taskbarBoxRect_, pt);
+        if (hov != taskbarBoxHovered_) {
+            taskbarBoxHovered_ = hov;
+            InvalidateRect(taskbarBoxHwnd_, nullptr, FALSE);
+        }
+
+        RECT cur{};
+        const bool vis = IsWindowVisible(taskbarBoxHwnd_) != FALSE;
+        GetWindowRect(taskbarBoxHwnd_, &cur);
+        if (!vis || !EqualRect(&cur, &taskbarBoxRect_)) {
+            HWND prevAboveTray = GetWindow(taskbarBoxOwner_, GW_HWNDPREV);
+            HWND insertAfter = (prevAboveTray && prevAboveTray != taskbarBoxHwnd_)
+                ? prevAboveTray : HWND_TOPMOST;
+            SetWindowPos(taskbarBoxHwnd_, insertAfter,
+                         taskbarBoxRect_.left, taskbarBoxRect_.top,
+                         taskbarBoxRect_.right - taskbarBoxRect_.left,
+                         taskbarBoxRect_.bottom - taskbarBoxRect_.top,
+                         SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            InvalidateRect(taskbarBoxHwnd_, nullptr, FALSE);
+            UpdateWindow(taskbarBoxHwnd_);
+        } else if (!IsAnyPopupMenuOrFlyoutActive(taskbarBoxOwner_) &&
+                   !IsWindowAboveInZOrder(taskbarBoxHwnd_, taskbarBoxOwner_)) {
+            HWND prevAboveTray = GetWindow(taskbarBoxOwner_, GW_HWNDPREV);
+            HWND insertAfter = (prevAboveTray && prevAboveTray != taskbarBoxHwnd_)
+                ? prevAboveTray : HWND_TOPMOST;
+            SetWindowPos(taskbarBoxHwnd_, insertAfter, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         }
     }
 
@@ -1726,15 +1768,8 @@ private:
         return (std::max)(1, (std::min)(chrome + listHeight, maxHeight));
     }
 
-    // Chooses the area the pane may occupy. When the taskbar has the wide search box
-    // (wideBoxMode_) and "over the taskbar" is enabled, the pane reaches the monitor bottom
-    // so its themed search bar sits on the taskbar's search-box row while the Start-button
-    // column (startHole_) stays uncovered. When the taskbar shows only the search icon
-    // without text (!wideBoxMode_), the pane stays above the taskbar like the previous version.
     void ApplyMonitorInfo(const MONITORINFO& info) {
         workArea_ = info.rcWork;
-        bottomInset_ = 0;
-        startHole_ = RECT{};
         if (wideBoxMode_ && hasBoxRect_ &&
             taskbarBoxRect_.top >= info.rcWork.bottom - Scale(4) &&
             taskbarBoxRect_.top <= info.rcMonitor.bottom) {
@@ -1826,90 +1861,91 @@ private:
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
         }
         if (!self) return DefWindowProcW(hwnd, message, wParam, lParam);
-        try {
-            switch (message) {
-            case WM_MOUSEACTIVATE:
-                return MA_NOACTIVATE;
-            case WM_SETCURSOR: {
-                if (LOWORD(lParam) == HTCLIENT) {
-                    POINT pt{};
-                    GetCursorPos(&pt);
-                    ScreenToClient(hwnd, &pt);
-                    const int dpi = static_cast<int>(self->taskbarBoxDpi_ ? self->taskbarBoxDpi_ : self->dpi_);
-                    const bool inText = self->visible_ && pt.x >= MulDiv(40, dpi, 96);
-                    SetCursor(LoadCursorW(nullptr, inText ? IDC_IBEAM : IDC_ARROW));
-                    return TRUE;
-                }
-                break;
+        switch (message) {
+        case WM_MOUSEACTIVATE:
+            return MA_NOACTIVATE;
+        case WM_LBUTTONDOWN: {
+            if (self->hwnd_) {
+                const int clickX = GET_X_LPARAM(lParam);
+                const int clickY = GET_Y_LPARAM(lParam);
+                PostMessageW(self->hwnd_, kTaskbarBoxClickMessage,
+                             static_cast<WPARAM>(clickX), static_cast<LPARAM>(clickY));
             }
-            case WM_MOUSEMOVE: {
-                TRACKMOUSEEVENT tme{};
-                tme.cbSize = sizeof(tme);
-                tme.dwFlags = TME_LEAVE;
-                tme.hwndTrack = hwnd;
-                TrackMouseEvent(&tme);
-                if (!self->taskbarBoxHovered_) {
-                    self->taskbarBoxHovered_ = true;
-                    InvalidateRect(hwnd, nullptr, FALSE);
-                }
-                return 0;
-            }
-            case WM_MOUSELEAVE:
-                if (self->taskbarBoxHovered_) {
-                    self->taskbarBoxHovered_ = false;
-                    InvalidateRect(hwnd, nullptr, FALSE);
-                }
-                return 0;
-            case WM_ERASEBKGND:
-                return 1;
-            case WM_PAINT: {
-                PAINTSTRUCT ps{};
-                HDC dc = BeginPaint(hwnd, &ps);
-                if (dc) {
-                    RECT client{};
-                    GetClientRect(hwnd, &client);
-                    const int w = client.right - client.left;
-                    const int h = client.bottom - client.top;
-                    if (w > 0 && h > 0) {
-                        MemoryDc buffer(CreateCompatibleDC(dc));
-                        GdiObject bmp(reinterpret_cast<HGDIOBJ>(CreateCompatibleBitmap(dc, w, h)));
-                        const int dpi = static_cast<int>(self->taskbarBoxDpi_ ? self->taskbarBoxDpi_ : self->dpi_);
-                        const std::wstring placeholder = self->EffectiveSearchPlaceholder();
-                        const bool active = self->visible_;
-                        const std::wstring emptyQuery;
-                        const std::wstring& q = active ? self->query_ : emptyQuery;
-                        const bool caretVis = active && self->caretVisible_;
-                        const bool hasSel = active && self->hasSelection_;
-                        if (buffer.value && bmp.value) {
-                            SelectedGdiObject sel(buffer.value, bmp.value);
-                            DrawThemedSearchBoxBar(buffer.value, hwnd, client, dpi, q, placeholder,
-                                                   active, self->taskbarBoxHovered_, caretVis,
-                                                   self->caretPos_, hasSel,
-                                                   self->selectionAnchor_, self->selectionEnd_);
-                            BitBlt(dc, 0, 0, w, h, buffer.value, 0, 0, SRCCOPY);
-                        } else {
-                            DrawThemedSearchBoxBar(dc, hwnd, client, dpi, q, placeholder,
-                                                   active, self->taskbarBoxHovered_, caretVis,
-                                                   self->caretPos_, hasSel,
-                                                   self->selectionAnchor_, self->selectionEnd_);
-                        }
-                    }
-                }
-                EndPaint(hwnd, &ps);
-                return 0;
-            }
-            case WM_NCDESTROY:
-                SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
-                return DefWindowProcW(hwnd, message, wParam, lParam);
-            }
-            return DefWindowProcW(hwnd, message, wParam, lParam);
-        } catch (const std::bad_alloc&) {
-            Wh_Log(L"[SearchOnly] allocation failed in TaskbarBoxWndProc (msg=%u)", message);
-            return 0;
-        } catch (...) {
-            Wh_Log(L"[SearchOnly] unexpected exception in TaskbarBoxWndProc (msg=%u)", message);
             return 0;
         }
+        case WM_SETCURSOR: {
+            if (LOWORD(lParam) == HTCLIENT) {
+                POINT pt{};
+                GetCursorPos(&pt);
+                ScreenToClient(hwnd, &pt);
+                const int dpi = static_cast<int>(self->taskbarBoxDpi_ ? self->taskbarBoxDpi_ : self->dpi_);
+                const bool inText = self->visible_ && pt.x >= MulDiv(40, dpi, 96);
+                SetCursor(LoadCursorW(nullptr, inText ? IDC_IBEAM : IDC_ARROW));
+                return TRUE;
+            }
+            break;
+        }
+        case WM_MOUSEMOVE: {
+            TRACKMOUSEEVENT tme{};
+            tme.cbSize = sizeof(tme);
+            tme.dwFlags = TME_LEAVE;
+            tme.hwndTrack = hwnd;
+            TrackMouseEvent(&tme);
+            if (!self->taskbarBoxHovered_) {
+                self->taskbarBoxHovered_ = true;
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
+            return 0;
+        }
+        case WM_MOUSELEAVE:
+            if (self->taskbarBoxHovered_) {
+                self->taskbarBoxHovered_ = false;
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
+            return 0;
+        case WM_ERASEBKGND:
+            return 1;
+        case WM_PAINT: {
+            PAINTSTRUCT ps{};
+            HDC dc = BeginPaint(hwnd, &ps);
+            if (dc) {
+                RECT client{};
+                GetClientRect(hwnd, &client);
+                const int w = client.right - client.left;
+                const int h = client.bottom - client.top;
+                if (w > 0 && h > 0) {
+                    MemoryDc buffer(CreateCompatibleDC(dc));
+                    GdiObject bmp(reinterpret_cast<HGDIOBJ>(CreateCompatibleBitmap(dc, w, h)));
+                    const int dpi = static_cast<int>(self->taskbarBoxDpi_ ? self->taskbarBoxDpi_ : self->dpi_);
+                    const std::wstring placeholder = self->EffectiveSearchPlaceholder();
+                    const bool active = self->visible_;
+                    const std::wstring emptyQuery;
+                    const std::wstring& q = active ? self->query_ : emptyQuery;
+                    const bool caretVis = active && self->caretVisible_;
+                    const bool hasSel = active && self->hasSelection_;
+                    if (buffer.value && bmp.value) {
+                        SelectedGdiObject sel(buffer.value, bmp.value);
+                        DrawThemedSearchBoxBar(buffer.value, hwnd, client, dpi, q, placeholder,
+                                               active, self->taskbarBoxHovered_, caretVis,
+                                               self->caretPos_, hasSel,
+                                               self->selectionAnchor_, self->selectionEnd_);
+                        BitBlt(dc, 0, 0, w, h, buffer.value, 0, 0, SRCCOPY);
+                    } else {
+                        DrawThemedSearchBoxBar(dc, hwnd, client, dpi, q, placeholder,
+                                               active, self->taskbarBoxHovered_, caretVis,
+                                               self->caretPos_, hasSel,
+                                               self->selectionAnchor_, self->selectionEnd_);
+                    }
+                }
+            }
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+        case WM_NCDESTROY:
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+            return DefWindowProcW(hwnd, message, wParam, lParam);
+        }
+        return DefWindowProcW(hwnd, message, wParam, lParam);
     }
 
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -1923,10 +1959,10 @@ private:
         try {
             return self->HandleMessage(hwnd, message, wParam, lParam);
         } catch (const std::bad_alloc&) {
-            Wh_Log(L"[SearchOnly] allocation failed while processing window message %u", message);
+            Wh_Log(L"allocation failed while processing window message %u", message);
             return 0;
         } catch (...) {
-            Wh_Log(L"[SearchOnly] unexpected exception while processing window message %u", message);
+            Wh_Log(L"unexpected exception while processing window message %u", message);
             return 0;
         }
     }
@@ -1947,9 +1983,8 @@ private:
         RECT reopenFromRect{};
         const bool reversingClose = slideActive_ && IsWindowVisible(hwnd_);
         if (reversingClose) GetWindowRect(hwnd_, &reopenFromRect);
-        // RTM CDesktopHost chooses a popup monitor from a runtime anchor/rectangle.
-        // This standalone search-only window uses the cursor monitor and documented
-        // monitor/work-area APIs; it never calls the private ViewPositionController.
+        // Position search window relative to the monitor where the cursor currently is,
+        // respecting monitor work-area bounds.
         query_.clear();caretPos_=0;ClearSelection();caretVisible_=true;pendingHighSurrogate_=false;
         results_.clear();
         rowHeights_.clear();
@@ -2009,8 +2044,8 @@ private:
         const bool gotForeground = ForceForeground(hwnd_);
         SyncTaskbarBox();
         InvalidatePane();
-        Wh_Log(L"[SearchOnly] pane %s the foreground", gotForeground ? L"has" : L"did NOT get");
-        Wh_Log(L"[SearchOnly] monitor work area=%ldx%ld dpi=%u pane=%dx%d at (%d,%d)",
+        Wh_Log(L"pane %s the foreground", gotForeground ? L"has" : L"did NOT get");
+        Wh_Log(L"monitor work area=%ldx%ld dpi=%u pane=%dx%d at (%d,%d)",
             workWidth, workHeight, dpiX, paneWidth_, panelHeight_, paneX_, y);
     }
 
@@ -2044,7 +2079,7 @@ private:
         if (SetWindowRgn(hwnd_, nullptr, TRUE)) {
             workAreaClipActive_ = false;
         } else {
-            Wh_Log(L"[SearchOnly] clearing work-area clip failed: %u", GetLastError());
+            Wh_Log(L"clearing work-area clip failed: %u", GetLastError());
         }
     }
 
@@ -2060,14 +2095,12 @@ private:
             GdiObject emptyRegion(reinterpret_cast<HGDIOBJ>(CreateRectRgn(0,0,0,0)));
             if (!emptyRegion.value) return;
             if (SetWindowRgn(hwnd_, reinterpret_cast<HRGN>(emptyRegion.value), TRUE)) {
-                emptyRegion.value = nullptr; // ownership transfers to USER32 on success
+                emptyRegion.value = nullptr;
                 workAreaClipActive_ = true;
             }
             return;
         }
-        RECT holeRect{};
-        const bool hasHole = bottomInset_ > 0 && IntersectRect(&holeRect, &startHole_, &windowRect);
-        if (EqualRect(&visibleRect, &windowRect) && !hasHole) {
+        if (EqualRect(&visibleRect, &windowRect)) {
             ClearWorkAreaClip();
             return;
         }
@@ -2075,20 +2108,11 @@ private:
             visibleRect.left-windowRect.left, visibleRect.top-windowRect.top,
             visibleRect.right-windowRect.left, visibleRect.bottom-windowRect.top)));
         if (!visibleRegion.value) return;
-        if (hasHole) {
-            GdiObject holeRegion(reinterpret_cast<HGDIOBJ>(CreateRectRgn(
-                holeRect.left-windowRect.left, holeRect.top-windowRect.top,
-                holeRect.right-windowRect.left, holeRect.bottom-windowRect.top)));
-            if (holeRegion.value)
-                CombineRgn(reinterpret_cast<HRGN>(visibleRegion.value),
-                           reinterpret_cast<HRGN>(visibleRegion.value),
-                           reinterpret_cast<HRGN>(holeRegion.value), RGN_DIFF);
-        }
         if (SetWindowRgn(hwnd_, reinterpret_cast<HRGN>(visibleRegion.value), TRUE)) {
-            visibleRegion.value = nullptr; // ownership transfers to USER32 on success
+            visibleRegion.value = nullptr;
             workAreaClipActive_ = true;
         } else {
-            Wh_Log(L"[SearchOnly] setting work-area clip failed: %u", GetLastError());
+            Wh_Log(L"setting work-area clip failed: %u", GetLastError());
         }
     }
 
@@ -2123,7 +2147,7 @@ private:
         slideStartTick_ = GetTickCount64();
         slideActive_ = true;
         if (!SetTimer(hwnd_, kSlideTimer, kSlideTimerIntervalMs, nullptr)) {
-            Wh_Log(L"[SearchOnly] slide timer unavailable; completing transition immediately");
+            Wh_Log(L"slide timer unavailable; completing transition immediately");
             CompleteSlideAnimation();
         }
     }
@@ -2157,19 +2181,19 @@ private:
     static const wchar_t* Text(UiLabel label) {
         static const wchar_t* const strings[][11] = {
             {L"Tutti",L"All",L"Todo",L"Tout",L"همه",L"الكل",L"Tudo",L"全部",L"すべて",L"Wszystko",L"Все"},
-            {L"App",L"Apps",L"Aplicaciones",L"Applications",L"برنامه‌ها",L"التطبيقات",L"Aplicações",L"应用",L"アプリ",L"Aplikacje",L"Приложения"},
+            {L"App",L"Apps",L"Aplicaciones",L"Applications",L"برنامه ها",L"التطبيقات",L"Aplicações",L"应用",L"アプリ",L"Aplikacje",L"Приложения"},
             {L"Impostazioni",L"Settings",L"Configuración",L"Paramètres",L"تنظیمات",L"الإعدادات",L"Definições",L"设置",L"設定",L"Ustawienia",L"Параметры"},
             {L"I miei elementi",L"My stuff",L"Mis cosas",L"Mes éléments",L"موارد من",L"محتوياتي",L"Os meus itens",L"我的内容",L"自分の項目",L"Moje elementy",L"Мои данные"},
             {L"Web",L"Web",L"Web",L"Web",L"وب",L"الويب",L"Web",L"Web",L"Web",L"Sieć",L"Интернет"},
-            {L"Cerca app e impostazioni",L"Search apps and settings",L"Busca aplicaciones y configuración",L"Rechercher des applications et des paramètres",L"جستجوی برنامه‌ها و تنظیمات",L"ابحث عن التطبيقات والإعدادات",L"Pesquise aplicações e definições",L"搜索应用和设置",L"アプリと設定を検索",L"Wyszukuj aplikacje i ustawienia",L"Поиск приложений и параметров"},
+            {L"Cerca app e impostazioni",L"Search apps and settings",L"Busca aplicaciones y configuración",L"Rechercher des applications et des paramètres",L"جستجوی برنامه ها و تنظیمات",L"ابحث عن التطبيقات والإعدادات",L"Pesquise aplicações e definições",L"搜索应用和设置",L"アプリと設定を検索",L"Wyszukuj aplikacje i ustawienia",L"Поиск приложений и параметров"},
             {L"Digita oppure scegli una sezione",L"Type or choose a section",L"Escribe o elige una sección",L"Saisissez un texte ou choisissez une section",L"تایپ کنید یا بخشی را انتخاب کنید",L"اكتب أو اختر قسماً",L"Escreva ou escolha uma secção",L"输入内容或选择一个类别",L"入力するかセクションを選択",L"Wpisz lub wybierz sekcję",L"Введите текст или выберите раздел"},
-            {L"Sfoglia le app installate",L"Browse installed apps",L"Explorar las aplicaciones instaladas",L"Parcourir les applications installées",L"مرور برنامه‌های نصب‌شده",L"استعراض التطبيقات المثبتة",L"Ver aplicações instaladas",L"浏览已安装的应用",L"インストール済みアプリを表示",L"Przeglądaj zainstalowane aplikacje",L"Просмотр установленных приложений"},
+            {L"Sfoglia le app installate",L"Browse installed apps",L"Explorar las aplicaciones instaladas",L"Parcourir les applications installées",L"مرور برنامه های نصب شده",L"استعراض التطبيقات المثبتة",L"Ver aplicações instaladas",L"浏览已安装的应用",L"インストール済みアプリを表示",L"Przeglądaj zainstalowane aplikacje",L"Просмотр установленных приложений"},
             {L"Sfoglia le impostazioni di Windows",L"Browse Windows settings",L"Explorar la configuración de Windows",L"Parcourir les paramètres Windows",L"مرور تنظیمات ویندوز",L"استعراض إعدادات Windows",L"Ver definições do Windows",L"浏览 Windows 设置",L"Windows の設定を表示",L"Przeglądaj ustawienia systemu Windows",L"Просмотр параметров Windows"},
             {L"Digita per cercare",L"Type to search",L"Escribe para buscar",L"Saisissez votre recherche",L"برای جستجو تایپ کنید",L"اكتب للبحث",L"Escreva para pesquisar",L"输入内容进行搜索",L"入力して検索",L"Wpisz, aby wyszukać",L"Введите запрос для поиска"},
-            {L"Nessun risultato",L"No results",L"No hay resultados",L"Aucun résultat",L"نتیجه‌ای نیست",L"لا توجد نتائج",L"Sem resultados",L"没有结果",L"結果がありません",L"Brak wyników",L"Нет результатов"},
+            {L"Nessun risultato",L"No results",L"No hay resultados",L"Aucun résultat",L"نتیجه ای نیست",L"لا توجد نتائج",L"Sem resultados",L"没有结果",L"結果がありません",L"Brak wyników",L"Нет результатов"},
             {L"Apri",L"Open",L"Abrir",L"Ouvrir",L"باز کردن",L"فتح",L"Abrir",L"打开",L"開く",L"Otwórz",L"Открыть"},
             {L"Apri percorso file",L"Open file location",L"Abrir ubicación del archivo",L"Ouvrir l’emplacement du fichier",L"باز کردن محل فایل",L"فتح موقع الملف",L"Abrir localização do ficheiro",L"打开文件所在位置",L"ファイルの場所を開く",L"Otwórz lokalizację pliku",L"Открыть расположение файла"},
-            {L"Indicizzazione...",L"Indexing...",L"Indexando...",L"Indexation...",L"در حال فهرست‌سازی...",L"جارٍ الفهرسة...",L"A indexar...",L"正在索引...",L"インデックス作成中...",L"Indeksowanie...",L"Индексирование..."},
+            {L"Indicizzazione...",L"Indexing...",L"Indexando...",L"Indexation...",L"در حال فهرست سازی...",L"جارٍ الفهرسة...",L"A indexar...",L"正在索引...",L"インデックス作成中...",L"Indeksowanie...",L"Индексирование..."},
             {L"Copia percorso",L"Copy path",L"Copiar ruta",L"Copier le chemin",L"کپی مسیر",L"نسخ المسار",L"Copiar caminho",L"复制路径",L"パスをコピー",L"Kopiuj ścieżkę",L"Копировать путь"},
             {L"Windows",L"Windows",L"Windows",L"Windows",L"Windows",L"Windows",L"Windows",L"Windows",L"Windows",L"Windows",L"Windows"}
         };
@@ -2194,15 +2218,15 @@ private:
 
     static const wchar_t* SettingsLabel(int item) {
         static const wchar_t* const labels[kSettingsCount][11] = {
-            {L"Schermo",L"Display",L"Pantalla",L"Affichage",L"صفحه‌نمایش",L"الشاشة",L"Ecrã",L"显示",L"ディスプレイ",L"Ekran",L"Дисплей"},
+            {L"Schermo",L"Display",L"Pantalla",L"Affichage",L"صفحه نمایش",L"الشاشة",L"Ecrã",L"显示",L"ディスプレイ",L"Ekran",L"Дисплей"},
             {L"Bluetooth",L"Bluetooth",L"Bluetooth",L"Bluetooth",L"بلوتوث",L"Bluetooth",L"Bluetooth",L"蓝牙",L"Bluetooth",L"Bluetooth",L"Bluetooth"},
             {L"Rete e Internet",L"Network & Internet",L"Red e Internet",L"Réseau et Internet",L"شبکه و اینترنت",L"الشبكة والإنترنت",L"Rede e Internet",L"网络和 Internet",L"ネットワークとインターネット",L"Sieć i Internet",L"Сеть и Интернет"},
-            {L"Personalizzazione",L"Personalization",L"Personalización",L"Personnalisation",L"شخصی‌سازی",L"تخصيص",L"Personalização",L"个性化",L"個人用設定",L"Personalizacja",L"Персонализация"},
-            {L"App e funzionalità",L"Apps & features",L"Aplicaciones",L"Applications",L"برنامه‌ها",L"التطبيقات",L"Aplicações",L"应用",L"アプリ",L"Aplikacje",L"Приложения"},
+            {L"Personalizzazione",L"Personalization",L"Personalización",L"Personnalisation",L"شخصی سازی",L"تخصيص",L"Personalização",L"个性化",L"個人用設定",L"Personalizacja",L"Персонализация"},
+            {L"App e funzionalità",L"Apps & features",L"Aplicaciones",L"Applications",L"برنامه ها",L"التطبيقات",L"Aplicações",L"应用",L"アプリ",L"Aplikacje",L"Приложения"},
             {L"Data e ora",L"Date & time",L"Fecha y hora",L"Date et heure",L"تاریخ و زمان",L"التاريخ والوقت",L"Data e hora",L"日期和时间",L"日付と時刻",L"Data i godzina",L"Дата и время"},
-            {L"Accessibilità dello schermo",L"Accessibility display",L"Accesibilidad de pantalla",L"Affichage - accessibilité",L"دسترسی‌پذیری نمایشگر",L"إمكانية وصول العرض",L"Acessibilidade do ecrã",L"辅助功能显示",L"アクセシビリティ表示",L"Ułatwienia dostępu — ekran",L"Специальные возможности: экран"},
+            {L"Accessibilità dello schermo",L"Accessibility display",L"Accesibilidad de pantalla",L"Affichage - accessibilité",L"دسترسی پذیری نمایشگر",L"إمكانية وصول العرض",L"Acessibilidade do ecrã",L"辅助功能显示",L"アクセシビリティ表示",L"Ułatwienia dostępu — ekran",L"Специальные возможности: экран"},
             {L"Privacy",L"Privacy",L"Privacidad",L"Confidentialité",L"حریم خصوصی",L"الخصوصية",L"Privacidade",L"隐私",L"プライバシー",L"Prywatność",L"Конфиденциальность"},
-            {L"Windows Update",L"Windows Update",L"Windows Update",L"Windows Update",L"به‌روزرسانی ویندوز",L"Windows Update",L"Windows Update",L"Windows 更新",L"Windows Update",L"Windows Update",L"Центр обновления Windows"}
+            {L"Windows Update",L"Windows Update",L"Windows Update",L"Windows Update",L"به روزرسانی ویندوز",L"Windows Update",L"Windows Update",L"Windows 更新",L"Windows Update",L"Windows Update",L"Центр обновления Windows"}
         };
         return labels[item][LanguageColumn()];
     }
@@ -2445,7 +2469,7 @@ private:
             const HRESULT hr=CoCreateInstance(CLSID_Shell,nullptr,CLSCTX_INPROC_SERVER,
                 IID_IShellDispatch,reinterpret_cast<void**>(shell.GetAddressOf()));
             if(SUCCEEDED(hr)&&shell) shell->FileRun();
-            else Wh_Log(L"[SearchOnly] IShellDispatch::FileRun failed: 0x%08X",static_cast<unsigned>(hr));
+            else Wh_Log(L"IShellDispatch::FileRun failed: 0x%08X",static_cast<unsigned>(hr));
         } else if (item.kind == ResultKind::ControlPanel) {
             ShellExecuteW(nullptr, L"open", L"control.exe", nullptr, nullptr, SW_SHOWNORMAL);
         } else if (!item.shortcutPath.empty()) {
@@ -2635,7 +2659,7 @@ private:
             PCUITEMID_CHILD child = ILFindLastID(itemPidl);
             PCUITEMID_CHILD children[] = {child};
             const HRESULT hr = SHOpenFolderAndSelectItems(parentPidl, 1, children, 0);
-            if (FAILED(hr)) Wh_Log(L"[SearchOnly] SHOpenFolderAndSelectItems failed: 0x%08X", static_cast<unsigned>(hr));
+            if (FAILED(hr)) Wh_Log(L"SHOpenFolderAndSelectItems failed: 0x%08X", static_cast<unsigned>(hr));
         }
         if (parentPidl) ILFree(parentPidl);
         if (itemPidl) ILFree(itemPidl);
@@ -2784,7 +2808,7 @@ private:
                                    (scope_ == SearchScope::Apps ? 96 : 144);
         RECT homeSelected{0,Scale(selectedNavTop),rail,Scale(selectedNavTop+48)};
         FillRect(dc,&homeSelected,reinterpret_cast<HBRUSH>(navSelectedBrush.value));
-        const int railBottomRef = client.bottom - bottomInset_;
+        const int railBottomRef = client.bottom;
         if(hoveredNav_==3||hoveredNav_==4){
             RECT hover=hoveredNav_==3?RECT{0,0,rail,Scale(48)}:
                 RECT{0,railBottomRef-Scale(40),rail,railBottomRef};
@@ -2975,8 +2999,6 @@ private:
         case WM_HOTKEY:
             if (wParam == kHotkeyId) { Toggle(); return 0; }
             break;
-        case kRefreshHotkeyMessage:
-            UpdateHotkey(); UpdateWebVisibility(); SyncTaskbarBox(); return 0;
         case kToggleMessage:
             Toggle(); return 0;
         case kTaskbarBoxClickMessage:
@@ -2991,10 +3013,17 @@ private:
                 InvalidatePane();
             }
             return 0;
+        case WM_DISPLAYCHANGE:
+            boxRectCacheValid_ = false;
+            SyncTaskbarBox(true);
+            InvalidatePane();
+            break;
         case WM_SETTINGCHANGE:
         case WM_SYSCOLORCHANGE:
         case WM_THEMECHANGED:
-            SyncTaskbarBox();
+            g_baseThemeCacheValid = false;
+            boxRectCacheValid_ = false;
+            SyncTaskbarBox(true);
             InvalidatePane();
             break;
         case kCatalogReadyMessage: {
@@ -3005,14 +3034,6 @@ private:
         }
         case WM_ACTIVATE:
             if (LOWORD(wParam) == WA_INACTIVE && visible_) {
-                const HWND foreground = GetForegroundWindow();
-                if (foreground && foreground == taskbarBoxHwnd_) {
-                    ForceForeground(hwnd_);
-                    return 0;
-                }
-                wchar_t foregroundClass[64]{};
-                if (foreground) GetClassNameW(foreground, foregroundClass, ARRAYSIZE(foregroundClass));
-                Wh_Log(L"[SearchOnly] pane deactivated; foreground window class='%s'", foregroundClass);
                 Hide();
             }
             return 0;
@@ -3123,7 +3144,7 @@ private:
             const int footerTop=queryTop-FooterHeight();
             int newNav=-1,newFooter=-1,newHome=-1,newSettings=-1,newResult=-1;
             if(x<rail){
-                if(y>=client.bottom-bottomInset_-Scale(40)&&y<client.bottom-bottomInset_)newNav=4;
+                if(y>=client.bottom-Scale(40)&&y<client.bottom)newNav=4;
                 else if(y<Scale(48))newNav=3;
                 else if(y<Scale(96))newNav=0;
                 else if(y<Scale(144))newNav=1;
@@ -3172,7 +3193,7 @@ private:
             GetClientRect(hwnd_, &client);
             const int rail = Scale(kRailWidth96);
             if (x < rail) {
-                if (y >= client.bottom-bottomInset_-Scale(40) && y < client.bottom-bottomInset_) {
+                if (y >= client.bottom-Scale(40) && y < client.bottom) {
                     // Route through documented WM_CLOSE; this pane animates closed
                     // instead of destroying its Explorer-owned window immediately.
                     if (!PostMessageW(hwnd_,WM_CLOSE,0,0)) Hide();
@@ -3320,188 +3341,196 @@ private:
         case WM_NCDESTROY:
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
             return DefWindowProcW(hwnd,message,wParam,lParam);
+        default:
+            if (message == kTaskbarCreatedMsg && kTaskbarCreatedMsg != 0) {
+                boxRectCacheValid_ = false;
+                SyncTaskbarBox(true);
+                return 0;
+            }
+            break;
         }
         return DefWindowProcW(hwnd,message,wParam,lParam);
     }
 };
 
-bool MatchesSearchId(const wchar_t* text) {
-    if (!text || !*text) return false;
-    // Verified from real logs:
-    // - "4103": Win10 taskbar search icon button (TrayButton)
-    // - "4100" / "4101" / "4102": Win10 taskbar wide search box (TrayDummySearchControl and inner controls)
-    if (wcscmp(text, L"4100") == 0 ||
-        wcscmp(text, L"4101") == 0 ||
-        wcscmp(text, L"4102") == 0 ||
-        wcscmp(text, L"4103") == 0) {
-        return true;
-    }
-    std::wstring s = Lower(text);
-    return s.find(L"searchbutton") != std::wstring::npos ||
-           s.find(L"searchbox") != std::wstring::npos ||
-           s.find(L"searchicon") != std::wstring::npos ||
-           s.find(L"traydummysearchcontrol") != std::wstring::npos ||
-           s.find(L"cortana") != std::wstring::npos;
-}
+
 
 bool IsTaskbarSearchButtonAt(POINT pt) {
-    try {
-        HWND h = WindowFromPoint(pt);
-        if (h && h == g_taskbarBoxWindow.load()) return true;
-        HWND root = h ? GetAncestor(h, GA_ROOT) : nullptr;
-        if (!root) return false;
-        if (root == g_taskbarBoxWindow.load()) return true;
-        wchar_t cls[64]{};
-        GetClassNameW(root, cls, ARRAYSIZE(cls));
-        if (wcscmp(cls, L"Shell_TrayWnd") != 0 && wcscmp(cls, L"Shell_SecondaryTrayWnd") != 0)
-            return false;
-
-        if (HWND box = g_taskbarBoxWindow.load(); box && IsWindowVisible(box)) {
-            RECT boxRect{};
-            if (GetWindowRect(box, &boxRect) && PtInRect(&boxRect, pt))
-                return true;
-        }
-
-        if (g_uia ||
-            SUCCEEDED(CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER,
-                                       IID_PPV_ARGS(g_uia.GetAddressOf())))) {
-            ComPtr<IUIAutomationElement> element;
-            if (SUCCEEDED(g_uia->ElementFromPoint(pt, element.GetAddressOf())) && element) {
-                ComPtr<IUIAutomationTreeWalker> walker;
-                g_uia->get_ControlViewWalker(walker.GetAddressOf());
-
-                // In box mode the click lands on a child (e.g. id="4101") inside the search
-                // box container (id="4100", class="TrayDummySearchControl"), so check the
-                // clicked element and up to 4 ancestors by both AutomationId and ClassName.
-                for (int depth = 0; depth < 5 && element; ++depth) {
-                    BSTR id = nullptr;
-                    element->get_CurrentAutomationId(&id);
-                    BSTR uiaCls = nullptr;
-                    element->get_CurrentClassName(&uiaCls);
-                    Wh_Log(L"[SearchOnly] click chain depth=%d id='%s' class='%s'",
-                           depth, id ? id : L"", uiaCls ? uiaCls : L"");
-                    const bool match = MatchesSearchId(id) || MatchesSearchId(uiaCls);
-                    SysFreeString(id);
-                    SysFreeString(uiaCls);
-                    if (match) return true;
-                    if (!walker) break;
-                    ComPtr<IUIAutomationElement> parent;
-                    if (FAILED(walker->GetParentElement(element.Get(), parent.GetAddressOf()))) break;
-                    element = parent;
-                }
-            }
-        }
-
-        // Fallback: inspect the Win32 HWND chain up to the tray root for the wide search box
-        // (TrayDummySearchControl) or search control IDs (4100..4103).
-        for (HWND cur = h; cur && cur != root; cur = GetParent(cur)) {
-            wchar_t childCls[64]{};
-            GetClassNameW(cur, childCls, ARRAYSIZE(childCls));
-            const int ctrlId = GetDlgCtrlID(cur);
-            if (MatchesSearchId(childCls) || (ctrlId >= 4100 && ctrlId <= 4103)) {
-                Wh_Log(L"[SearchOnly] click matched HWND class='%s' ctrlId=%d", childCls, ctrlId);
-                return true;
-            }
-        }
-    } catch (const std::bad_alloc&) {
-        Wh_Log(L"[SearchOnly] allocation failure in IsTaskbarSearchButtonAt");
-    } catch (...) {
-        Wh_Log(L"[SearchOnly] exception in IsTaskbarSearchButtonAt");
+    if (HWND box = g_taskbarBoxWindow.load(); box && IsWindowVisible(box)) {
+        RECT boxRect{};
+        if (GetWindowRect(box, &boxRect) && PtInRect(&boxRect, pt))
+            return true;
+    }
+    std::lock_guard<std::mutex> lock(g_searchButtonLock);
+    if (g_cachedSearchButtonValid && PtInRect(&g_cachedSearchButtonRect, pt)) {
+        return true;
     }
     return false;
 }
 
 LRESULT CALLBACK MouseHookProc(int code, WPARAM wParam, LPARAM lParam) {
-    try {
-        if (code == HC_ACTION && g_interceptEnabled.load() && !g_stopping.load()) {
-            const auto* ms = reinterpret_cast<MSLLHOOKSTRUCT*>(lParam);
-            if (ms && !(ms->flags & LLMHF_INJECTED)) {
-                if (wParam == WM_LBUTTONDOWN && g_paneWindow.load() && IsTaskbarSearchButtonAt(ms->pt)) {
-                    g_swallowMouseUp = true;
-                    if (HWND box = g_taskbarBoxWindow.load(); box && IsWindowVisible(box)) {
-                        RECT boxRect{};
-                        if (GetWindowRect(box, &boxRect) && PtInRect(&boxRect, ms->pt)) {
-                            PostMessageW(g_paneWindow.load(), kTaskbarBoxClickMessage,
-                                         static_cast<WPARAM>(ms->pt.x - boxRect.left),
-                                         static_cast<LPARAM>(ms->pt.y - boxRect.top));
-                            return 1;
-                        }
+    if (code == HC_ACTION && g_interceptEnabled.load() && !g_stopping.load()) {
+        const auto* ms = reinterpret_cast<MSLLHOOKSTRUCT*>(lParam);
+        if (ms && !(ms->flags & LLMHF_INJECTED)) {
+            if (wParam == WM_LBUTTONDOWN && g_paneWindow.load() && IsTaskbarSearchButtonAt(ms->pt)) {
+                g_swallowMouseUp = true;
+                if (HWND box = g_taskbarBoxWindow.load(); box && IsWindowVisible(box)) {
+                    RECT boxRect{};
+                    if (GetWindowRect(box, &boxRect) && PtInRect(&boxRect, ms->pt)) {
+                        PostMessageW(g_paneWindow.load(), kTaskbarBoxClickMessage,
+                                     static_cast<WPARAM>(ms->pt.x - boxRect.left),
+                                     static_cast<LPARAM>(ms->pt.y - boxRect.top));
+                        return 1;
                     }
-                    PostMessageW(g_paneWindow.load(), kToggleMessage, 0, 0);
-                    return 1;
                 }
-                if (wParam == WM_LBUTTONUP && g_swallowMouseUp) {
-                    g_swallowMouseUp = false;
-                    return 1;
-                }
+                PostMessageW(g_paneWindow.load(), kToggleMessage, 0, 0);
+                return 1;
+            }
+            if (wParam == WM_LBUTTONUP && g_swallowMouseUp.load()) {
+                g_swallowMouseUp = false;
+                return 1;
             }
         }
-    } catch (...) {
-        Wh_Log(L"[SearchOnly] exception in MouseHookProc");
     }
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
 LRESULT CALLBACK KeyboardHookProc(int code, WPARAM wParam, LPARAM lParam) {
-    try {
-        if (code == HC_ACTION && g_interceptEnabled.load() && !g_stopping.load() &&
-            wParam == WM_KEYDOWN && g_paneWindow.load()) {
-            const auto* kb = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
-            const bool win = ((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) != 0;
-            const bool other = ((GetAsyncKeyState(VK_CONTROL) | GetAsyncKeyState(VK_MENU) |
-                                 GetAsyncKeyState(VK_SHIFT)) & 0x8000) != 0;
-            if (kb && !(kb->flags & LLKHF_INJECTED) && win && !other && (kb->vkCode == 'S' || kb->vkCode == 'Q')) {
-                PostMessageW(g_paneWindow.load(), kToggleMessage, 0, 0);
-                // Dummy key so that releasing Win does not open the Start menu.
-                INPUT in[2]{};
-                in[0].type = in[1].type = INPUT_KEYBOARD;
-                in[0].ki.wVk = in[1].ki.wVk = 0xE8;
-                in[1].ki.dwFlags = KEYEVENTF_KEYUP;
-                SendInput(2, in, sizeof(INPUT));
-                return 1;
-            }
+    if (code == HC_ACTION && g_interceptEnabled.load() && !g_stopping.load() &&
+        wParam == WM_KEYDOWN && g_paneWindow.load()) {
+        const auto* kb = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
+        const bool win = ((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) != 0;
+        const bool other = ((GetAsyncKeyState(VK_CONTROL) | GetAsyncKeyState(VK_MENU) |
+                             GetAsyncKeyState(VK_SHIFT)) & 0x8000) != 0;
+        if (kb && !(kb->flags & LLKHF_INJECTED) && win && !other && (kb->vkCode == 'S' || kb->vkCode == 'Q')) {
+            PostMessageW(g_paneWindow.load(), kToggleMessage, 0, 0);
+            // Dummy key so that releasing Win does not open the Start menu.
+            INPUT in[2]{};
+            in[0].type = in[1].type = INPUT_KEYBOARD;
+            in[0].ki.wVk = in[1].ki.wVk = 0xE8;
+            in[1].ki.dwFlags = KEYEVENTF_KEYUP;
+            SendInput(2, in, sizeof(INPUT));
+            return 1;
         }
-    } catch (...) {
-        Wh_Log(L"[SearchOnly] exception in KeyboardHookProc");
     }
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
+constexpr UINT kHookInstallMsg = WM_APP + 0x60;
+constexpr UINT kHookUninstallMsg = WM_APP + 0x61;
+
+DWORD WINAPI HookThreadProc(void*) {
+    MSG queue{};
+    PeekMessageW(&queue, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    g_hookThreadId = GetCurrentThreadId();
+    if (g_hookReadyEvent) SetEvent(g_hookReadyEvent);
+
+    if (g_interceptEnabled.load() && !g_stopping.load()) {
+        g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseHookProc, g_modModule, 0);
+        g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHookProc, g_modModule, 0);
+    }
+
+    MSG msg{};
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (msg.message == kHookInstallMsg) {
+            if (!g_mouseHook) {
+                g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseHookProc, g_modModule, 0);
+            }
+            if (!g_keyboardHook) {
+                g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHookProc, g_modModule, 0);
+            }
+        } else if (msg.message == kHookUninstallMsg) {
+            if (g_mouseHook) {
+                UnhookWindowsHookEx(g_mouseHook);
+                g_mouseHook = nullptr;
+            }
+            if (g_keyboardHook) {
+                UnhookWindowsHookEx(g_keyboardHook);
+                g_keyboardHook = nullptr;
+            }
+        } else if (msg.message == WM_QUIT) {
+            break;
+        }
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    if (g_mouseHook) {
+        UnhookWindowsHookEx(g_mouseHook);
+        g_mouseHook = nullptr;
+    }
+    if (g_keyboardHook) {
+        UnhookWindowsHookEx(g_keyboardHook);
+        g_keyboardHook = nullptr;
+    }
+    g_hookThreadId = 0;
+    return 0;
+}
+
+void StartHookThread() {
+    if (g_hookThread) return;
+    g_hookReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hookReadyEvent) return;
+    g_hookThread = CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, nullptr);
+    if (g_hookThread) {
+        WaitForSingleObject(g_hookReadyEvent, 5000);
+    }
+    CloseHandle(g_hookReadyEvent);
+    g_hookReadyEvent = nullptr;
+}
+
+void StopHookThread() {
+    if (!g_hookThread) return;
+    const DWORD tid = g_hookThreadId.load();
+    if (tid) PostThreadMessageW(tid, WM_QUIT, 0, 0);
+    WaitForSingleObject(g_hookThread, INFINITE);
+    CloseHandle(g_hookThread);
+    g_hookThread = nullptr;
+    g_hookThreadId = 0;
+}
+
+void UpdateHooksState() {
+    const DWORD tid = g_hookThreadId.load();
+    if (!tid) return;
+    if (g_interceptEnabled.load() && !g_stopping.load()) {
+        PostThreadMessageW(tid, kHookInstallMsg, 0, 0);
+    } else {
+        PostThreadMessageW(tid, kHookUninstallMsg, 0, 0);
+    }
+}
+
 DWORD WINAPI UiThreadProc(void*) {
     MSG queue{};
-    PeekMessageW(&queue,nullptr,WM_USER,WM_USER,PM_NOREMOVE);
+    PeekMessageW(&queue, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
     g_uiThreadId = GetCurrentThreadId();
-    if(g_uiReadyEvent)SetEvent(g_uiReadyEvent);
-    HMODULE user32=GetModuleHandleW(L"user32.dll");
-    using SetDpiContextFn=DPI_AWARENESS_CONTEXT (WINAPI*)(DPI_AWARENESS_CONTEXT);
-    auto setDpiContext=user32?reinterpret_cast<SetDpiContextFn>(GetProcAddress(user32,"SetThreadDpiAwarenessContext")):nullptr;
-    if(setDpiContext)setDpiContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    ULONG_PTR gdiplusToken=0;
+    if (g_uiReadyEvent) SetEvent(g_uiReadyEvent);
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    ULONG_PTR gdiplusToken = 0;
     Gdiplus::GdiplusStartupInput gdiplusInput;
     try {
-        const Gdiplus::Status gdiplusStatus=Gdiplus::GdiplusStartup(&gdiplusToken,&gdiplusInput,nullptr);
-        if(gdiplusStatus!=Gdiplus::Ok) Wh_Log(L"[SearchOnly] GDI+ startup failed: %d",static_cast<int>(gdiplusStatus));
-        else if(!InitializeEmbeddedWin10Logo()) Wh_Log(L"[SearchOnly] embedded Windows 10 logo could not be decoded");
+        const Gdiplus::Status gdiplusStatus = Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusInput, nullptr);
+        if (gdiplusStatus != Gdiplus::Ok) Wh_Log(L"GDI+ startup failed: %d", static_cast<int>(gdiplusStatus));
+        else if (!InitializeEmbeddedWin10Logo()) Wh_Log(L"embedded Windows 10 logo could not be decoded");
         CoInitScope com;
-        if (FAILED(com.hr)) Wh_Log(L"[SearchOnly] COM init failed: 0x%08X", static_cast<unsigned>(com.hr));
+        if (FAILED(com.hr)) Wh_Log(L"COM init failed: 0x%08X", static_cast<unsigned>(com.hr));
         SearchPane pane;
-        if (!pane.Create(GetModuleHandleW(nullptr))) {
-            Wh_Log(L"[SearchOnly] search window creation failed: %u", GetLastError());
+        if (!pane.Create(g_modModule)) {
+            Wh_Log(L"search window creation failed: %u", GetLastError());
             pane.Destroy();
             g_uia.Reset();
-            UnregisterClassW(kTaskbarBoxClass, GetModuleHandleW(nullptr));
-            UnregisterClassW(kLegacyTaskbarBoxClass, GetModuleHandleW(nullptr));
-            UnregisterClassW(kWindowClass, GetModuleHandleW(nullptr));
+            UnregisterClassW(kTaskbarBoxClass, g_modModule);
+            UnregisterClassW(kWindowClass, g_modModule);
             ShutdownEmbeddedWin10Logo();
-            if(gdiplusToken) Gdiplus::GdiplusShutdown(gdiplusToken);
+            if (gdiplusToken) Gdiplus::GdiplusShutdown(gdiplusToken);
             g_uiThreadId = 0;
             return 1;
         }
-        g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseHookProc, GetModuleHandleW(nullptr), 0);
-        g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHookProc, GetModuleHandleW(nullptr), 0);
+
+        StartHookThread();
+
         MSG message{};
         while (!g_stopping.load()) {
-            const BOOL result = GetMessageW(&message,nullptr,0,0);
+            const BOOL result = GetMessageW(&message, nullptr, 0, 0);
             if (result <= 0) break;
             if (message.hwnd == nullptr && message.message == kRefreshHotkeyMessage) {
                 pane.UpdateHotkey();
@@ -3511,110 +3540,270 @@ DWORD WINAPI UiThreadProc(void*) {
             TranslateMessage(&message);
             DispatchMessageW(&message);
         }
-        if (g_mouseHook) { UnhookWindowsHookEx(g_mouseHook); g_mouseHook = nullptr; }
-        if (g_keyboardHook) { UnhookWindowsHookEx(g_keyboardHook); g_keyboardHook = nullptr; }
+
+        StopHookThread();
+
         pane.Destroy();
         g_uia.Reset();
-        UnregisterClassW(kTaskbarBoxClass, GetModuleHandleW(nullptr));
-        UnregisterClassW(kLegacyTaskbarBoxClass, GetModuleHandleW(nullptr));
-        UnregisterClassW(kWindowClass, GetModuleHandleW(nullptr));
+        UnregisterClassW(kTaskbarBoxClass, g_modModule);
+        UnregisterClassW(kWindowClass, g_modModule);
         ShutdownEmbeddedWin10Logo();
-        if(gdiplusToken) Gdiplus::GdiplusShutdown(gdiplusToken);
+        if (gdiplusToken) Gdiplus::GdiplusShutdown(gdiplusToken);
         g_uiThreadId = 0;
         return 0;
     } catch (const std::bad_alloc&) {
-        Wh_Log(L"[SearchOnly] allocation failure on UI thread");
-    } catch (...) {
-        Wh_Log(L"[SearchOnly] unexpected exception on UI thread");
+        Wh_Log(L"allocation failure on UI thread");
     }
-    if (g_mouseHook) { UnhookWindowsHookEx(g_mouseHook); g_mouseHook = nullptr; }
-    if (g_keyboardHook) { UnhookWindowsHookEx(g_keyboardHook); g_keyboardHook = nullptr; }
+
+    StopHookThread();
     g_uia.Reset();
-    UnregisterClassW(kTaskbarBoxClass, GetModuleHandleW(nullptr));
-    UnregisterClassW(kLegacyTaskbarBoxClass, GetModuleHandleW(nullptr));
-    UnregisterClassW(kWindowClass, GetModuleHandleW(nullptr));
+    UnregisterClassW(kTaskbarBoxClass, g_modModule);
+    UnregisterClassW(kWindowClass, g_modModule);
     ShutdownEmbeddedWin10Logo();
-    if(gdiplusToken) Gdiplus::GdiplusShutdown(gdiplusToken);
+    if (gdiplusToken) Gdiplus::GdiplusShutdown(gdiplusToken);
     g_uiThreadId = 0;
     return 1;
 }
 
 } // namespace
 
-bool IsMainExplorerProcess() {
-    HWND shell=GetShellWindow();
-    if(shell){
-        DWORD shellPid=0;GetWindowThreadProcessId(shell,&shellPid);
-        return shellPid==GetCurrentProcessId();
-    }
-    std::wstring command=GetCommandLineW();
-    std::transform(command.begin(),command.end(),command.begin(),[](wchar_t c){return static_cast<wchar_t>(std::towlower(c));});
-    return command.find(L" /factory")==std::wstring::npos&&
-           command.find(L" /separate")==std::wstring::npos&&
-           command.find(L" -embedding")==std::wstring::npos;
+void WhTool_ModSettingsChanged() {
+    g_searchHotkeyEnabled = Wh_GetIntSetting(L"searchHotkey") != 0;
+    g_webSearchEnabled = Wh_GetIntSetting(L"webSearch") != 0;
+    g_interceptEnabled = Wh_GetIntSetting(L"interceptSearch") != 0;
+    g_overTaskbar = Wh_GetIntSetting(L"overTaskbar") != 0;
+
+    UpdateHooksState();
+
+    const DWORD threadId = g_uiThreadId.load();
+    if (threadId) PostThreadMessageW(threadId, kRefreshHotkeyMessage, 0, 0);
 }
 
-void Wh_ModUninit();
+void WhTool_ModUninit() {
+    g_stopping = true;
+    if (g_uiThread) {
+        while (WaitForSingleObject(g_uiThread, 0) == WAIT_TIMEOUT) {
+            const DWORD threadId = g_uiThreadId.load();
+            if (threadId && PostThreadMessageW(threadId, WM_QUIT, 0, 0)) break;
+            Sleep(10);
+        }
+        WaitForSingleObject(g_uiThread, INFINITE);
+        CloseHandle(g_uiThread);
+        g_uiThread = nullptr;
+    }
+    if (g_uiReadyEvent) {
+        CloseHandle(g_uiReadyEvent);
+        g_uiReadyEvent = nullptr;
+    }
+    g_uiThreadId = 0;
+}
 
-BOOL Wh_ModInit() {
-    try {
-        if(!IsMainExplorerProcess()){
-            Wh_Log(L"[SearchOnly] not the Explorer shell process; skipping this instance");
-            return FALSE;
-        }
-        g_stopping = false;
-        g_searchHotkeyEnabled = Wh_GetIntSetting(L"searchHotkey") != 0;
-        g_webSearchEnabled = Wh_GetIntSetting(L"webSearch") != 0;
-        g_interceptEnabled = Wh_GetIntSetting(L"interceptSearch") != 0;
-        g_overTaskbar = Wh_GetIntSetting(L"overTaskbar") != 0;
-        g_uiReadyEvent=CreateEventW(nullptr,TRUE,FALSE,nullptr);
-        if(!g_uiReadyEvent){Wh_Log(L"[SearchOnly] ready-event creation failed: %u",GetLastError());return FALSE;}
-        g_uiThread = CreateThread(nullptr,0,UiThreadProc,nullptr,0,nullptr);
-        if (!g_uiThread) {
-            Wh_Log(L"[SearchOnly] UI thread creation failed: %u", GetLastError());
-            CloseHandle(g_uiReadyEvent);g_uiReadyEvent=nullptr;
-            return FALSE;
-        }
-        if(WaitForSingleObject(g_uiReadyEvent,5000)!=WAIT_OBJECT_0){
-            Wh_Log(L"[SearchOnly] UI thread did not create its message queue in time");
-            Wh_ModUninit();
-            return FALSE;
-        }
-        return TRUE;
-    } catch (...) {
-        Wh_Log(L"[SearchOnly] unexpected exception in Wh_ModInit");
+BOOL WhTool_ModInit() {
+    GetModuleHandleExW(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        reinterpret_cast<LPCWSTR>(&WhTool_ModInit),
+        &g_modModule);
+
+    g_stopping = false;
+    g_searchHotkeyEnabled = Wh_GetIntSetting(L"searchHotkey") != 0;
+    g_webSearchEnabled = Wh_GetIntSetting(L"webSearch") != 0;
+    g_interceptEnabled = Wh_GetIntSetting(L"interceptSearch") != 0;
+    g_overTaskbar = Wh_GetIntSetting(L"overTaskbar") != 0;
+    g_uiReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_uiReadyEvent) {
+        Wh_Log(L"ready-event creation failed: %u", GetLastError());
         return FALSE;
     }
+    g_uiThread = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, nullptr);
+    if (!g_uiThread) {
+        Wh_Log(L"UI thread creation failed: %u", GetLastError());
+        CloseHandle(g_uiReadyEvent);
+        g_uiReadyEvent = nullptr;
+        return FALSE;
+    }
+    if (WaitForSingleObject(g_uiReadyEvent, 5000) != WAIT_OBJECT_0) {
+        Wh_Log(L"UI thread did not create its message queue in time");
+        WhTool_ModUninit();
+        return FALSE;
+    }
+    return TRUE;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +\
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    try {
-        g_searchHotkeyEnabled = Wh_GetIntSetting(L"searchHotkey") != 0;
-        g_webSearchEnabled = Wh_GetIntSetting(L"webSearch") != 0;
-        g_interceptEnabled = Wh_GetIntSetting(L"interceptSearch") != 0;
-        g_overTaskbar = Wh_GetIntSetting(L"overTaskbar") != 0;
-        const DWORD threadId = g_uiThreadId.load();
-        if (threadId) PostThreadMessageW(threadId,kRefreshHotkeyMessage,0,0);
-    } catch (...) {
-        Wh_Log(L"[SearchOnly] unexpected exception in Wh_ModSettingsChanged");
+    if (g_isToolModProcessLauncher) {
+        return;
     }
+
+    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    try {
-        g_stopping = true;
-        if(g_uiThread){
-            while(WaitForSingleObject(g_uiThread,0)==WAIT_TIMEOUT){
-                const DWORD threadId=g_uiThreadId.load();
-                if(threadId&&PostThreadMessageW(threadId,WM_QUIT,0,0))break;
-                Sleep(10);
-            }
-            WaitForSingleObject(g_uiThread,INFINITE);
-            CloseHandle(g_uiThread);g_uiThread=nullptr;
-        }
-        if(g_uiReadyEvent){CloseHandle(g_uiReadyEvent);g_uiReadyEvent=nullptr;}
-        g_uiThreadId=0;
-    } catch (...) {
-        Wh_Log(L"[SearchOnly] unexpected exception in Wh_ModUninit");
+    if (g_isToolModProcessLauncher) {
+        return;
     }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
