@@ -128,14 +128,14 @@ live content per frame is far more expensive than one `PrintWindow`.
 - dragThreshold: 4
   $name: Drag threshold (px)
   $description: How far the pointer must move before the wobble takes over. Below this a title-bar click behaves normally.
-- bypassKey: 16
+- bypassKey: shift
   $name: Bypass key
   $description: Hold this while grabbing a title bar to move the window normally.
   $options:
-  - 16: Shift
-  - 17: Ctrl
-  - 18: Alt
-  - 0: Disabled
+  - shift: Shift
+  - ctrl: Ctrl
+  - alt: Alt
+  - none: Disabled
 */
 // ==/WindhawkModSettings==
 
@@ -247,6 +247,19 @@ static void FileLog(PCWSTR fmt, ...) {
 // drag, which is the moment logging is likely to be off.
 
 
+// Windhawk 2.0 rejects integer-keyed $options, so the bypass key is stored as
+// a name and mapped here. An unknown value falls back to Shift rather than to
+// "disabled", so a typo cannot silently remove the escape hatch.
+static int ReadBypassVk() {
+    PCWSTR name = Wh_GetStringSetting(L"bypassKey");
+    int vk = VK_SHIFT;
+    if (!wcscmp(name, L"ctrl"))      vk = VK_CONTROL;
+    else if (!wcscmp(name, L"alt"))  vk = VK_MENU;
+    else if (!wcscmp(name, L"none")) vk = 0;
+    Wh_FreeStringSetting(name);
+    return vk;
+}
+
 static void LoadSettings() {
     g_cfg.springK     = (float)Wh_GetIntSetting(L"stiffness");
     g_cfg.bottomRatio = Wh_GetIntSetting(L"bottomSoftness") / 100.0f;
@@ -254,7 +267,7 @@ static void LoadSettings() {
     g_cfg.damping     = Wh_GetIntSetting(L"damping") / 10.0f;
     g_cfg.impulse     = Wh_GetIntSetting(L"impulse") / 100.0f;
     g_cfg.mesh        = Wh_GetIntSetting(L"meshSize");
-    g_cfg.bypassVk    = Wh_GetIntSetting(L"bypassKey");
+    g_cfg.bypassVk    = ReadBypassVk();
     g_cfg.debugLog    = Wh_GetIntSetting(L"diagnosticLog");
     g_cfg.revealHoldMs = Wh_GetIntSetting(L"revealHoldMs");
     if (g_cfg.revealHoldMs < 0 || g_cfg.revealHoldMs > 1000) g_cfg.revealHoldMs = 90;
