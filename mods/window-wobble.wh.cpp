@@ -389,7 +389,6 @@ static RECT VisibleRectSettled(HWND hwnd) {
 struct Bitmap32 {
     int w = 0, h = 0;
     std::vector<uint32_t> px;   // BGRA, premultiplied on upload
-    bool valid() const { return w > 0 && h > 0 && !px.empty(); }
 };
 
 // PrintWindow's alpha is unreliable: GDI paint calls leave the alpha byte at
@@ -419,6 +418,28 @@ static void RoundCorners(Bitmap32& bmp, float radius) {
             }
         }
     }
+}
+
+// Windows 10 draws square window corners, so carving rounded ones into the
+// snapshot would make the corners visibly change at the handoff. The corner
+// preference attribute is not a reliable probe for this - it is documented
+// write-only and the read fails on some Windows 11 builds too - so ask the
+// OS version directly. RtlGetVersion is used because GetVersionEx lies to
+// unmanifested callers.
+static bool SystemRoundsCorners() {
+    static const bool rounded = [] {
+        struct VerInfo {
+            ULONG size, major, minor, build, platform;
+            WCHAR csd[128];
+        } vi{};
+        vi.size = sizeof(vi);
+        HMODULE nt = GetModuleHandleW(L"ntdll.dll");
+        if (!nt) return true;
+        auto get = (LONG(WINAPI*)(VerInfo*))GetProcAddress(nt, "RtlGetVersion");
+        if (!get || get(&vi) != 0) return true;   // unknown: keep rounding
+        return vi.build >= 22000;                 // Windows 11
+    }();
+    return rounded;
 }
 
 static bool CaptureWindow(HWND hwnd, Bitmap32& out) {
@@ -468,7 +489,7 @@ static bool CaptureWindow(HWND hwnd, Bitmap32& out) {
     }
     DeleteObject(hbm);
 
-    if (!IsZoomed(hwnd)) {
+    if (!IsZoomed(hwnd) && SystemRoundsCorners()) {
         UINT dpi = GetDpiForWindow(hwnd);
         if (!dpi) dpi = 96;
         RoundCorners(out, 8.0f * dpi / 96.0f);
@@ -647,19 +668,52 @@ struct D3DApi {
         if (!ok) Wh_Log(L"d3d11/dcomp entry points missing");
         return ok;
     }
+
+    // Without this each enable/disable cycle leaks a reference and the DLLs
+    // stay mapped after the mod is gone. Only safe once the worker has been
+    // joined, so every device built from them is already released.
+    void Free() {
+        if (d3d11) FreeLibrary(d3d11);
+        if (dcomp) FreeLibrary(dcomp);
+        d3d11 = dcomp = nullptr;
+        CreateDevice = nullptr;
+        CreateCompDevice = nullptr;
+        tried = ok = false;
+    }
 };
 static D3DApi g_api;
 
 struct Vertex { float x, y, u, v; };
 
-// Compiled offline with fxc (/T vs_4_0 /E VS and /T ps_4_0 /E PS, /O3) from
-// the HLSL kept in the repository. Embedding the bytecode means d3dcompiler
-// is neither linked nor loaded, and no shader is compiled at run time.
+// Embedding the compiled bytecode means d3dcompiler is neither linked nor
+// loaded, and no shader is compiled at run time. The source is reproduced
+// here in full so the arrays below can be rebuilt and compared byte for
+// byte; save it as wobble.hlsl and run:
 //
-// Vertex shader: surface pixels -> NDC, where origin is the swapchain's
-// top-left in screen coordinates and mesh vertices are in screen
-// coordinates. Pixel shader: sample and premultiply, because the swapchain
-// is DXGI_ALPHA_MODE_PREMULTIPLIED.
+//   fxc /nologo /T vs_4_0 /E VS /O3 /Fo vs.cso wobble.hlsl
+//   fxc /nologo /T ps_4_0 /E PS /O3 /Fo ps.cso wobble.hlsl
+//
+// ---------------------------------------------------------------------------
+// cbuffer CB : register(b0) { float2 origin; float2 size; };
+// struct VSIn  { float2 pos : POSITION; float2 uv : TEXCOORD; };
+// struct VSOut { float4 pos : SV_POSITION; float2 uv : TEXCOORD; };
+// Texture2D    tex : register(t0);
+// SamplerState smp : register(s0);
+//
+// VSOut VS(VSIn i) {
+//     VSOut o;
+//     // Surface pixels -> NDC. origin is the surface's top-left in screen
+//     // coordinates; mesh vertices are in screen coordinates.
+//     float2 n = (i.pos - origin) / size * 2.0 - 1.0;
+//     o.pos = float4(n.x, -n.y, 0, 1);
+//     o.uv  = i.uv;
+//     return o;
+// }
+// float4 PS(VSOut i) : SV_TARGET {
+//     float4 c = tex.Sample(smp, i.uv);
+//     return float4(c.rgb * c.a, c.a);   // swapchain is premultiplied alpha
+// }
+// ---------------------------------------------------------------------------
 
 static const BYTE kVS[] = {
     0x44, 0x58, 0x42, 0x43, 0xD1, 0x8F, 0x64, 0x25, 0xE8, 0x85, 0x89, 0x72,
@@ -904,6 +958,7 @@ struct Overlay {
 
     int vx = 0, vy = 0, vw = 0, vh = 0;     // virtual desktop, = surface bounds
     int vertCount = 0;
+    bool presentWarmed = false;             // per surface, not per press
     std::vector<Vertex> verts;
 
     ~Overlay() { Destroy(); }
@@ -935,12 +990,15 @@ static bool EnsureClass() {
     wc.lpfnWndProc   = DefWindowProcW;
     wc.hInstance     = MOD_HINSTANCE;
     wc.lpszClassName = kOverlayClass;
+    // ERROR_CLASS_ALREADY_EXISTS is not treated as success. Registration is
+    // under this module and Wh_ModUninit unregisters, so the only way the
+    // class can already exist is that a previous instance left it behind -
+    // and reusing that one is the dangling lpfnWndProc case, harmless only
+    // for as long as the procedure stays DefWindowProcW. Failing here just
+    // hands the drag back to Windows.
     if (!RegisterClassExW(&wc)) {
-        const DWORD err = GetLastError();
-        if (err != ERROR_CLASS_ALREADY_EXISTS) {
-            Wh_Log(L"overlay: RegisterClassEx failed err=%u", err);
-            return false;
-        }
+        Wh_Log(L"overlay: RegisterClassEx failed err=%u", GetLastError());
+        return false;
     }
     g_classRegistered.store(true);
     return true;
@@ -987,6 +1045,7 @@ bool Overlay::EnsureSurface() {
     if (!d || !d->Init()) { Wh_Log(L"overlay: D3D device init failed"); return false; }
     if (!EnsureWindow()) return false;      // rebuilds if the desktop changed
     if (swap.p) return true;
+    presentWarmed = false;                  // a new surface needs warming
 
     const bool built = [&] {
         Com<IDXGIDevice> dxgiDev;
@@ -1141,7 +1200,8 @@ void Overlay::WarmPipeline() {
 }
 
 void Overlay::WarmPresent() {
-    if (!swap.p || !hwnd || !d) return;
+    if (!swap.p || !hwnd || !d || presentWarmed) return;
+    presentWarmed = true;
     ShowWindow(hwnd, SW_SHOWNOACTIVATE);
     const float clear[4] = { 0, 0, 0, 0 };          // fully transparent
     ID3D11RenderTargetView* rts[] = { rtv.p };
@@ -1206,6 +1266,7 @@ void Overlay::Destroy() {
     srv.reset(); tex.reset(); vb.reset(); rtv.reset();
     visual.reset(); target.reset(); dcomp.reset(); swap.reset();
     if (hwnd) { DestroyWindow(hwnd); hwnd = nullptr; }
+    presentWarmed = false;
     vertCount = 0;
     verts.clear();
 }
@@ -1378,11 +1439,6 @@ static bool BypassHeld() {
 static bool Eligible(HWND hwnd) {
     if (!IsWindowVisible(hwnd) || IsIconic(hwnd)) return false;
 
-    // A hung window cannot answer PrintWindow, SetWindowPos or ShowWindow,
-    // and every one of those is a cross-thread call the worker would block
-    // in - for as long as the app stays hung, which an unload cannot wait out.
-    if (IsHungAppWindow(hwnd)) return false;
-
     // Top-level only. A child window's SetWindowPos coordinates are relative
     // to its parent while GetWindowRect reports screen coordinates, so moving
     // one by screen position lands it at parent + offset - the drop was
@@ -1455,10 +1511,21 @@ static bool DoWobbleDrag(Device& dev, Overlay& ov, HWND hwnd) {
         ++spins;
     }
     if (!moved) {
-        // A plain click, not a drag. The press was already swallowed, so the
-        // window would never have been focused or raised without this.
+        // A plain click, not a drag. Activation has already happened during
+        // input processing, before DispatchMessage, so nothing is owed here -
+        // but an app that acts on the caption press itself will not see it.
         Wh_Log(L"skip: no movement after %d ms (%d polls)",
                (int)((NowSeconds() - waitStart) * 1000.0), spins);
+        return false;
+    }
+
+    // Checking this in the hook was pointless: that runs on the window's own
+    // thread, which is by definition answering at that moment. Here it is
+    // worth something, because everything below is a cross-thread call that
+    // blocks for as long as the app stays hung - which an unload cannot wait
+    // out.
+    if (IsHungAppWindow(hwnd)) {
+        Wh_Log(L"skip: window stopped responding");
         return false;
     }
 
@@ -1898,6 +1965,8 @@ void Wh_ModUninit() {
     // next load silently reuse it.
     if (g_classRegistered.exchange(false))
         UnregisterClassW(kOverlayClass, MOD_HINSTANCE);
+
+    g_api.Free();
 
     Wh_Log(L"uninit: done");
 }
