@@ -1,12 +1,12 @@
 // ==WindhawkMod==
 // @id              custom-shortcuts
 // @name            Custom Shortcuts
-// @description     Customizable keyboard shortcuts inspired by Linux, including same-app window switching with Alt+`, custom application launchers, and virtual desktop navigation
+// @description     Lightweight custom productivity shortcuts combining same-app window switching with Alt+`, custom application launchers, and virtual desktop navigation
 // @version         1.0.0
 // @author          Gustavo Rudiger
 // @github          https://github.com/gustavotr
-// @include         explorer.exe
-// @compilerOptions -luxtheme -lgdi32 -ldwmapi -lshlwapi -lole32 -loleaut32 -luuid -lcomctl32
+// @include         windhawk.exe
+// @compilerOptions -lgdi32 -ldwmapi -lshlwapi -lole32 -luuid
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -14,17 +14,31 @@
 /*
 # Custom Shortcuts
 
-A Windhawk mod that brings productive keyboard shortcuts to Windows, with **fully customizable key combinations** for every action.
+A lightweight, personal productivity mod for Windhawk that combines three focused features into a single, clean tool mod:
+
+1. **Same-App Window Switcher**: Cycle through open windows of the currently active application with a clean, responsive HUD preview without altering or replacing your global Alt+Tab.
+2. **Custom Application Launchers**: Launch configured terminal apps or commands (e.g. `cmd.exe`, `powershell -NoExit -Command "Set-Location $HOME"`, `wsl.exe`) directly via custom hotkeys (default `Win + Enter`).
+3. **Virtual Desktop Navigation**: Direct switching to virtual desktops 1 through 9 using modifier + number keys.
+
+This mod is tailored for users who want these specific daily conveniences combined in a single lightweight mod without needing the extensive configuration, overhead, or full feature sets of separate heavier mods.
+
+## Acknowledgements & Base Projects
+
+This mod was built for a custom workflow inspired by and referencing the following excellent Windhawk mods:
+
+- **[Virtual Desktop Helper](https://windhawk.net/mods/virtual-desktop-helper)** by **u2x1**: Base implementation for undocumented Windows Virtual Desktop Manager COM interfaces (`IVirtualDesktopManagerInternal`) and per-build vtable structures.
+- **[Simple Window Switcher](https://windhawk.net/mods/simple-window-switcher)** by **m417z**: Inspiration for standalone same-app window cycling with `` Alt + ` ``.
+- **[Keyboard Shortcut Actions](https://windhawk.net/mods/keyboard-shortcut-actions)** by **m417z**: Concept for hotkey-based process launching.
 
 ## Configurable Keybindings
 
-You can customize the key combination for every single action in the mod settings according to your personal preference:
+You can customize the key combination for every action in the mod settings according to your personal preference:
 
 | Action | Default Combination | Description |
 | :--- | :--- | :--- |
-| **Same-App Window Switcher** | `Alt + \`` | Cycle through open windows of the currently active application with a clean HUD preview. |
-| **Custom App Launchers** | `Win + Enter` | Launch any configured application or command (e.g. `cmd.exe`, `wsl --cd ~`). |
-| **Virtual Desktop Navigation** | `Win + 1 ... 9` | Direct switching to virtual desktop 1 through 9. |
+| **Same-App Window Switcher** | `` Alt + ` `` | Cycle through open windows of the currently active application with a clean HUD preview. |
+| **Custom App Launchers** | `Win + Enter` | Launch any configured application or command (e.g. `cmd.exe`, `powershell -NoExit -Command "Set-Location $HOME"`, `wsl.exe`). |
+| **Virtual Desktop Navigation** | `Alt + 1 ... 9` | Direct switching to virtual desktop 1 through 9 (disabled by default to avoid hotkey conflicts). |
 
 *To disable any shortcut, simply clear its setting field.*
 
@@ -33,11 +47,11 @@ You can customize the key combination for every single action in the mod setting
 Key combinations are specified in the format `Modifier+Key` or `Modifier+Modifier+Key`.
 - **Modifiers**: `Alt`, `Ctrl`, `Shift`, `Win`
 - **Keys**: Letters (`A-Z`), Numbers (`0-9`), Function keys (`F1-F24`), Backtick (`` ` ``), `Tab`, `Space`, `Enter`, `Esc`, `Home`, `End`, `Delete`, Arrows, etc.
-- **Examples**: `Alt+` `, `Win+T`, `Ctrl+Alt+T`, `Win+Q`, `Alt+Q`, `Win+W`, `Win+Enter`, `F11`.
+- **Examples**: `` Alt+` ``, `Win+T`, `Ctrl+Alt+T`, `Win+Q`, `Alt+Q`, `Win+W`, `Win+Enter`, `F11`.
 
 ## How the Same-App Switcher Works
 
-1. Press your configured hotkey (default `Alt + \``) to focus and list only windows of the active application.
+1. Press your configured hotkey (default `` Alt + ` ``) to focus and list only windows of the active application.
 2. A native Alt+Tab-style preview displays all matching windows with live DWM thumbnails, icons, and titles.
 3. Keep the modifier (e.g. `Alt`) held down and tap the key (or `Shift + key`) to cycle forward and backward.
 4. Use arrow keys (`Up`/`Down`/`Left`/`Right`) to browse. Press `Esc` to cancel.
@@ -67,10 +81,12 @@ Key combinations are specified in the format `Modifier+Key` or `Modifier+Modifie
 - customAppOptions:
     - customAppPath1: "cmd.exe"
       $name: Custom App 1 Command
-      $description: Application executable and optional arguments to launch (e.g. cmd.exe, wsl --cd ~).
+      $description: >-
+        Application executable and optional arguments to launch (e.g. cmd.exe, powershell -NoExit -Command "Set-Location $HOME", wsl.exe).
     - customAppPath2: ""
       $name: Custom App 2 Command
-      $description: Application executable and optional arguments to launch (e.g. wsl --cd ~, powershell.exe).
+      $description: >-
+        Application executable and optional arguments to launch (e.g. powershell -NoExit -Command "Set-Location $HOME", wsl --cd ~).
     - customAppPath3: ""
       $name: Custom App 3 Command
       $description: Application executable and optional arguments to launch.
@@ -78,20 +94,21 @@ Key combinations are specified in the format `Modifier+Key` or `Modifier+Modifie
     - showHud: true
       $name: Show HUD preview
       $description: Show visual switcher preview popup when switching same-app windows.
-    - hudTheme: dark
+    - hudTheme: system
       $name: HUD Color Theme
       $description: Visual theme for the switcher HUD.
       $options:
+        - system: System
         - dark: Dark
         - light: Light
 - virtualDesktops:
-    - enableDirectSwitching: true
+    - enableDirectSwitching: false
       $name: Enable Direct Switching
-      $description: Switch directly to virtual desktop 1 through 9 using number keys.
-    - desktopModifier: "win"
+      $description: Switch directly to virtual desktop 1 through 9 using number keys. Disabled by default to avoid conflicts with Windows taskbar shortcuts (Win+1..9).
+    - desktopModifier: "alt"
       $name: Virtual Desktop Modifier
       $description: >-
-        Modifier key combination combined with number keys 1-9 (e.g. win, alt, ctrl+win). Defaults to win.
+        Modifier key combination combined with number keys 1-9 (e.g. alt, win, ctrl+win). Defaults to alt.
     - windowsVersion: "auto"
       $name: Windows Version Compatibility
       $description: >-
@@ -110,14 +127,14 @@ Key combinations are specified in the format `Modifier+Key` or `Modifier+Modifie
 #include <shellapi.h>
 #include <shlwapi.h>
 #include <dwmapi.h>
-#include <uxtheme.h>
-#include <initguid.h>
 #include <objbase.h>
 #include <objectarray.h>
 #include <shobjidl.h>
+#include <windhawk_utils.h>
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <atomic>
 #include <cwctype>
 
 // Hotkey binding representation
@@ -144,17 +161,13 @@ struct CustomAppShortcut {
 // Mod settings structure
 struct ModSettings {
     HotkeyBinding bindingSameApp;
-
     std::vector<CustomAppShortcut> customApps;
-
     bool showHud = true;
-    std::wstring hudTheme = L"dark";
-    bool enableDirectSwitching = true;
-    UINT desktopModifier = MOD_WIN;
+    std::wstring hudTheme = L"system";
+    bool enableDirectSwitching = false;
+    UINT desktopModifier = MOD_ALT;
     std::wstring windowsVersion = L"auto";
 };
-
-static ModSettings g_settings;
 
 // Window Entry for same-app switcher
 struct AppWindowEntry {
@@ -166,7 +179,7 @@ struct AppWindowEntry {
     RECT rcThumb = {0};
 };
 
-// Layout metrics computed dynamically based on monitor work area
+// Layout metrics computed dynamically based on monitor work area and DPI
 struct HudLayoutMetrics {
     int winCornerRadius = 16;
     int cardCornerRadius = 12;
@@ -174,26 +187,43 @@ struct HudLayoutMetrics {
     int fontSize = 12;
     int thumbMargin = 8;
 };
+
+// Synchronization and globals
+static SRWLOCK g_settingsLock = SRWLOCK_INIT;
+static ModSettings g_settings;
 static HudLayoutMetrics g_hudLayout;
 
-// Global state
-#define TIMER_ALT_POLL 101
+static std::atomic<bool> g_hudVisible{false};
+static std::atomic<UINT> g_hudTriggerModifier{MOD_ALT};
+static std::atomic<UINT> g_desktopCount{0};
 
-typedef VOID (WINAPI *SwitchToThisWindow_t)(HWND, BOOL);
-static SwitchToThisWindow_t pfnSwitchToThisWindow = nullptr;
-
+static HANDLE g_hWorkerReady = NULL;
+static HANDLE g_hHookReady = NULL;
+static HANDLE g_hWorkerThread = NULL;
+static DWORD g_dwWorkerThreadId = 0;
 static HANDLE g_hHookThread = NULL;
 static DWORD g_dwHookThreadId = 0;
 static HWND g_hHudWnd = NULL;
 static HHOOK g_hKeyboardHook = NULL;
+
+typedef VOID (WINAPI *SwitchToThisWindow_t)(HWND, BOOL);
+static SwitchToThisWindow_t pfnSwitchToThisWindow = nullptr;
+
 static WCHAR g_targetAppKey[MAX_PATH] = {0};
 static WCHAR g_targetExeName[MAX_PATH] = {0};
 static std::vector<AppWindowEntry> g_appWindows;
 static int g_selectedIndex = 0;
-static bool g_hudVisible = false;
-static UINT g_hudTriggerModifier = MOD_ALT;
 
-#define WM_USER_SWITCH_DESKTOP (WM_USER + 201)
+// Internal custom window messages handled by Worker thread
+#define TIMER_ALT_POLL             101
+#define WM_USER_HUD_SHOW            (WM_USER + 201)
+#define WM_USER_HUD_CYCLE           (WM_USER + 202)
+#define WM_USER_HUD_COMMIT          (WM_USER + 203)
+#define WM_USER_HUD_CANCEL          (WM_USER + 204)
+#define WM_USER_LAUNCH_APP          (WM_USER + 205)
+#define WM_USER_SWITCH_DESKTOP      (WM_USER + 206)
+#define WM_USER_SETTINGS_CHANGED    (WM_USER + 207)
+
 #define SAFE_RELEASE(p) do { if (p) { (p)->Release(); (p) = nullptr; } } while (0)
 
 // Forward declarations
@@ -205,13 +235,16 @@ static void HideHud(bool commitSwitch);
 static void CycleSelection(int direction);
 static void RefreshAppWindows();
 static void SwitchToAppWindow(HWND hTarget);
+static void LaunchApplication(const std::wstring& commandLine);
 static bool SwitchToDesktopNumber(int desktopNum);
+static UINT UpdateVirtualDesktopCount();
 static void CleanupVirtualDesktopAPI();
+static DWORD WINAPI WorkerThreadProc(LPVOID lpParam);
 static DWORD WINAPI HookThreadProc(LPVOID lpParam);
 static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam);
 
-// Parse hotkey strings like "Alt+`", "Win+T", "ctrl+alt+84", "Win+Q", "F11"
+// Parse hotkey strings like "Alt+`", "Win+Enter", "Win+T", "ctrl+alt+84", "F11"
 static bool ParseHotkeyString(const std::wstring& str, HotkeyBinding& out) {
     out = HotkeyBinding();
     out.originalStr = str;
@@ -336,7 +369,7 @@ static bool ParseHotkeyString(const std::wstring& str, HotkeyBinding& out) {
 
 // Parse a modifier string like "win", "alt", "ctrl+win", "alt+shift"
 static UINT ParseModifierOnlyString(const std::wstring& str) {
-    if (str.empty()) return MOD_WIN;
+    if (str.empty()) return MOD_ALT;
     UINT mods = 0;
     size_t start = 0;
     while (start < str.length()) {
@@ -352,13 +385,13 @@ static UINT ParseModifierOnlyString(const std::wstring& str) {
         if (plusPos == std::wstring::npos) break;
         start = plusPos + 1;
     }
-    return mods ? mods : MOD_WIN;
+    return mods ? mods : MOD_ALT;
 }
 
 // Helper: check if a window is validly visible on screen
 static bool IsReallyVisible(HWND hWnd) {
     if (!IsWindow(hWnd)) return false;
-    if (IsIconic(hWnd)) return true; // Minimized windows are valid switch targets!
+    if (IsIconic(hWnd)) return true; // Minimized windows are valid switch targets
     if (!IsWindowVisible(hWnd)) return false;
     RECT r;
     GetWindowRect(hWnd, &r);
@@ -384,8 +417,6 @@ static bool IsSwitchableAppWindow(HWND hWnd) {
     if (ex & WS_EX_TOOLWINDOW) return false;
     if ((ex & WS_EX_NOACTIVATE) && !(ex & WS_EX_APPWINDOW)) return false;
 
-    // Standard Alt+Tab owner check: if it has an owner and does not have WS_EX_APPWINDOW,
-    // only list if owner is not tool window and owner is not listable
     HWND own = GetWindow(hWnd, GW_OWNER);
     if (!(ex & WS_EX_APPWINDOW) && IsWindow(own) && IsReallyVisible(own) &&
         !(GetWindowLongPtrW(own, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) &&
@@ -395,13 +426,11 @@ static bool IsSwitchableAppWindow(HWND hWnd) {
 
     if (IsOwnerToolWindow(hWnd)) return false;
 
-    // Check cloaked state (e.g. windows on other virtual desktops or hidden UWP apps)
     int cloaked = 0;
     if (SUCCEEDED(DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked) {
         return false;
     }
 
-    // Exclude Shell and system surfaces
     WCHAR className[64] = {0};
     GetClassNameW(hWnd, className, ARRAYSIZE(className));
     if (_wcsicmp(className, L"Shell_TrayWnd") == 0 ||
@@ -415,7 +444,7 @@ static bool IsSwitchableAppWindow(HWND hWnd) {
     return true;
 }
 
-// Extract small/clean window icon safely without blocking the hook thread
+// Extract window icon safely with timeout
 static HICON GetWindowAppIcon(HWND hWnd) {
     HICON hIcon = NULL;
     SendMessageTimeoutW(hWnd, WM_GETICON, ICON_SMALL2, 0, SMTO_ABORTIFHUNG, 25, (DWORD_PTR*)&hIcon);
@@ -448,7 +477,7 @@ static BOOL CALLBACK FindCoreWindowProc(HWND hChild, LPARAM lp) {
     return TRUE;
 }
 
-// Identity key used to group windows of the same application across instances and PIDs
+// Identity key used to group windows of the same application
 static bool GetWindowAppKey(HWND hWnd, WCHAR* outKey, size_t keyCch, WCHAR* outExeName, size_t exeCch) {
     if (outKey) outKey[0] = 0;
     if (outExeName) outExeName[0] = 0;
@@ -458,7 +487,6 @@ static bool GetWindowAppKey(HWND hWnd, WCHAR* outKey, size_t keyCch, WCHAR* outE
     WCHAR className[256] = {0};
     GetClassNameW(hWnd, className, ARRAYSIZE(className));
 
-    // For modern / UWP apps, find the hosted core window to identify the actual application process
     if (_wcsicmp(className, L"ApplicationFrameWindow") == 0) {
         HWND hCore = NULL;
         EnumChildWindows(hWnd, FindCoreWindowProc, (LPARAM)&hCore);
@@ -472,7 +500,7 @@ static bool GetWindowAppKey(HWND hWnd, WCHAR* outKey, size_t keyCch, WCHAR* outE
     }
     if (!pid) return false;
 
-    // Special case for File Explorer: group folder windows specifically
+    // File Explorer special grouping for cabinet windows
     if (_wcsicmp(className, L"CabinetWClass") == 0 || _wcsicmp(className, L"ExploreWClass") == 0) {
         if (outKey) wcsncpy_s(outKey, keyCch, L"explorer.exe:cabinetwclass", _TRUNCATE);
         if (outExeName) wcsncpy_s(outExeName, exeCch, L"explorer.exe", _TRUNCATE);
@@ -503,14 +531,13 @@ static bool GetWindowAppKey(HWND hWnd, WCHAR* outKey, size_t keyCch, WCHAR* outE
     return true;
 }
 
-// Bring target window to foreground reliably, bypassing Windows foreground lock timeout
+// Bring target window to foreground reliably
 static void SwitchToAppWindow(HWND hTarget) {
     if (!IsWindow(hTarget)) return;
 
     HWND hForeground = GetForegroundWindow();
     if (hForeground == hTarget) return;
 
-    // If target has an active modal or popup window, activate that instead
     HWND hPopup = GetLastActivePopup(hTarget);
     HWND hWndToActivate = (IsWindow(hPopup) && IsWindowVisible(hPopup)) ? hPopup : hTarget;
 
@@ -524,17 +551,12 @@ static void SwitchToAppWindow(HWND hTarget) {
     DWORD foreThreadId = hForeground ? GetWindowThreadProcessId(hForeground, NULL) : 0;
     DWORD targetThreadId = GetWindowThreadProcessId(hWndToActivate, NULL);
 
-    // Attach input queues to inherit foreground activation rights
     if (foreThreadId && foreThreadId != curThreadId) {
         AttachThreadInput(curThreadId, foreThreadId, TRUE);
     }
     if (targetThreadId && targetThreadId != curThreadId) {
         AttachThreadInput(curThreadId, targetThreadId, TRUE);
     }
-
-    // Simulate Alt key tap to unlock foreground lock timeout
-    keybd_event(VK_MENU, 0, 0, 0);
-    keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0);
 
     BringWindowToTop(hWndToActivate);
     BOOL ok = SetForegroundWindow(hWndToActivate);
@@ -564,7 +586,6 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
         return TRUE;
     }
 
-    // Match either full process path or executable name
     bool matches = (_wcsicmp(key, g_targetAppKey) == 0) ||
                    (g_targetExeName[0] && exeName[0] && _wcsicmp(exeName, g_targetExeName) == 0);
 
@@ -597,7 +618,7 @@ static void RefreshAppWindows() {
 
     EnumWindows(EnumWindowsProc, 0);
 
-    // Make sure the active window is placed first (MRU index 0)
+    // Ensure the currently active window is placed first
     for (size_t i = 0; i < g_appWindows.size(); ++i) {
         if (g_appWindows[i].hWnd == hForeground) {
             if (i != 0) {
@@ -614,7 +635,7 @@ static void CycleSelection(int direction) {
     if (g_appWindows.empty()) return;
     int count = static_cast<int>(g_appWindows.size());
     g_selectedIndex = (g_selectedIndex + direction + count) % count;
-    Wh_Log(L"[CustomShortcuts] Cycling selection: %d of %d", g_selectedIndex + 1, count);
+    Wh_Log(L"Cycling selection: %d of %d", g_selectedIndex + 1, count);
     if (g_hHudWnd) {
         InvalidateRect(g_hHudWnd, NULL, TRUE);
     }
@@ -622,9 +643,14 @@ static void CycleSelection(int direction) {
 
 // Helper: query system dark mode preference
 static bool IsSystemDarkMode() {
-    if (g_settings.hudTheme == L"light") return false;
-    if (g_settings.hudTheme == L"dark") return true;
+    AcquireSRWLockShared(&g_settingsLock);
+    std::wstring theme = g_settings.hudTheme;
+    ReleaseSRWLockShared(&g_settingsLock);
 
+    if (theme == L"light") return false;
+    if (theme == L"dark") return true;
+
+    // "system" setting or default: query registry
     DWORD lightTheme = 1;
     DWORD sz = sizeof(lightTheme);
     HKEY hKey;
@@ -657,29 +683,52 @@ static COLORREF GetSystemAccentColor(bool isDark) {
     return isDark ? RGB(0, 120, 215) : RGB(0, 102, 204);
 }
 
+// Helper: query monitor DPI for accurate display scaling
+static UINT GetMonitorDpi(HMONITOR hMon) {
+    UINT dpiX = 96, dpiY = 96;
+    HMODULE hShcore = GetModuleHandleW(L"shcore.dll");
+    if (!hShcore) hShcore = LoadLibraryW(L"shcore.dll");
+    if (hShcore) {
+        typedef HRESULT(WINAPI *GetDpiForMonitor_t)(HMONITOR, int, UINT*, UINT*);
+        GetDpiForMonitor_t pfnGetDpiForMonitor = (GetDpiForMonitor_t)GetProcAddress(hShcore, "GetDpiForMonitor");
+        if (pfnGetDpiForMonitor) {
+            if (SUCCEEDED(pfnGetDpiForMonitor(hMon, 0 /* MDT_EFFECTIVE_DPI */, &dpiX, &dpiY))) {
+                return dpiY ? dpiY : 96;
+            }
+        }
+    }
+    return 96;
+}
+
+static inline int ScaleDpi(int val, UINT dpi) {
+    return MulDiv(val, dpi, 96);
+}
+
 static void ShowHud() {
     RefreshAppWindows();
-    Wh_Log(L"[CustomShortcuts] Found %d window(s) for app key '%s' (%s)",
+    Wh_Log(L"Found %d window(s) for app key '%s' (%s)",
            (int)g_appWindows.size(), g_targetAppKey, g_targetExeName);
 
     if (g_appWindows.size() <= 1) {
-        Wh_Log(L"[CustomShortcuts] Only 1 window found for this app, nothing to cycle.");
+        Wh_Log(L"Only 1 window found for this app, nothing to cycle.");
         return;
     }
 
     g_selectedIndex = 1; // Default to the other / next window of the app
-    g_hudVisible = true;
+    g_hudVisible.store(true);
 
-    // Start timer to poll for modifier release (ensures switch executes even on quick tap or lost keyup)
     if (g_hHudWnd) {
         SetTimer(g_hHudWnd, TIMER_ALT_POLL, 25, NULL);
     }
 
-    if (!g_settings.showHud) {
+    bool showHudSetting = true;
+    AcquireSRWLockShared(&g_settingsLock);
+    showHudSetting = g_settings.showHud;
+    ReleaseSRWLockShared(&g_settingsLock);
+
+    if (!showHudSetting || !g_hHudWnd) {
         return;
     }
-
-    if (!g_hHudWnd) return;
 
     int itemCount = static_cast<int>(g_appWindows.size());
     if (itemCount <= 0) return;
@@ -689,57 +738,50 @@ static void ShowHud() {
     MONITORINFO mi = { sizeof(mi) };
     GetMonitorInfoW(hMon, &mi);
 
+    UINT dpi = GetMonitorDpi(hMon);
+
     int screenW = mi.rcWork.right - mi.rcWork.left;
     int screenH = mi.rcWork.bottom - mi.rcWork.top;
     if (screenW <= 0) screenW = 1920;
     if (screenH <= 0) screenH = 1080;
 
-    // Responsive sizing relative to active screen resolution:
-    // Card height is approx 70% of work area height
     int cardHeight = MulDiv(screenH, 70, 100);
-    cardHeight = std::max(160, std::min(MulDiv(screenH, 85, 100), cardHeight));
+    cardHeight = std::max(ScaleDpi(160, dpi), std::min(MulDiv(screenH, 85, 100), cardHeight));
 
-    // Footer containing app icon and title
     int footerHeight = MulDiv(cardHeight, 18, 100);
-    footerHeight = std::max(28, std::min(54, footerHeight));
+    footerHeight = std::max(ScaleDpi(28, dpi), std::min(ScaleDpi(54, dpi), footerHeight));
 
-    // Inner margin inside card around the thumbnail
     int thumbMargin = MulDiv(cardHeight, 4, 100);
-    thumbMargin = std::max(12, std::min(28, thumbMargin));
+    thumbMargin = std::max(ScaleDpi(12, dpi), std::min(ScaleDpi(28, dpi), thumbMargin));
 
-    // Thumbnail height and aspect ratio matching active monitor work area
     int thumbH = cardHeight - footerHeight - (thumbMargin * 2);
-    if (thumbH < 60) thumbH = 60;
+    if (thumbH < ScaleDpi(60, dpi)) thumbH = ScaleDpi(60, dpi);
     int thumbW = MulDiv(thumbH, screenW, screenH);
-    if (thumbW < 80) thumbW = 80;
+    if (thumbW < ScaleDpi(80, dpi)) thumbW = ScaleDpi(80, dpi);
 
-    // Card width accommodates thumbnail plus side margins
     int cardWidth = thumbW + (thumbMargin * 2);
 
-    // Spacing between cards (generous gap between thumbnails)
     int cardGap = MulDiv(screenW, 2, 100);
-    cardGap = std::max(24, std::min(52, cardGap));
+    cardGap = std::max(ScaleDpi(24, dpi), std::min(ScaleDpi(52, dpi), cardGap));
 
-    // Spacing from the outer window border
     int padX = MulDiv(screenW, 22, 1000);
-    padX = std::max(28, std::min(60, padX));
+    padX = std::max(ScaleDpi(28, dpi), std::min(ScaleDpi(60, dpi), padX));
 
     int padY = MulDiv(screenH, 25, 1000);
-    padY = std::max(24, std::min(54, padY));
+    padY = std::max(ScaleDpi(24, dpi), std::min(ScaleDpi(54, dpi), padY));
 
-    // Constrain total switcher width to 92% of screen width so cards fit cleanly on screen
     int maxW = MulDiv(screenW, 92, 100);
     int totalWidth = padX * 2 + (itemCount * cardWidth) + ((itemCount - 1) * cardGap);
 
     if (totalWidth > maxW) {
         int availableForCards = maxW - (padX * 2) - ((itemCount - 1) * cardGap);
-        int maxCardW = std::max(120, availableForCards / itemCount);
+        int maxCardW = std::max(ScaleDpi(120, dpi), availableForCards / itemCount);
         if (maxCardW < cardWidth) {
             double scale = static_cast<double>(maxCardW) / static_cast<double>(cardWidth);
             cardWidth = maxCardW;
-            cardHeight = std::max(130, static_cast<int>(cardHeight * scale));
-            footerHeight = std::max(24, std::min(54, MulDiv(cardHeight, 18, 100)));
-            thumbMargin = std::max(8, std::min(24, MulDiv(cardHeight, 4, 100)));
+            cardHeight = std::max(ScaleDpi(130, dpi), static_cast<int>(cardHeight * scale));
+            footerHeight = std::max(ScaleDpi(24, dpi), std::min(ScaleDpi(54, dpi), MulDiv(cardHeight, 18, 100)));
+            thumbMargin = std::max(ScaleDpi(8, dpi), std::min(ScaleDpi(24, dpi), MulDiv(cardHeight, 4, 100)));
         }
         totalWidth = padX * 2 + (itemCount * cardWidth) + ((itemCount - 1) * cardGap);
     }
@@ -747,11 +789,11 @@ static void ShowHud() {
     int hudWidth = totalWidth;
     int hudHeight = padY * 2 + cardHeight;
 
-    // Update layout metrics for WM_PAINT
-    g_hudLayout.winCornerRadius = std::max(16, std::min(30, MulDiv(cardHeight, 8, 100)));
-    g_hudLayout.cardCornerRadius = std::max(12, std::min(22, MulDiv(cardHeight, 6, 100)));
-    g_hudLayout.iconSize = std::max(16, std::min(28, MulDiv(footerHeight, 55, 100)));
-    g_hudLayout.fontSize = std::max(11, std::min(18, MulDiv(footerHeight, 38, 100)));
+    // Update DPI-scaled metrics for WM_PAINT
+    g_hudLayout.winCornerRadius = std::max(ScaleDpi(16, dpi), std::min(ScaleDpi(30, dpi), MulDiv(cardHeight, 8, 100)));
+    g_hudLayout.cardCornerRadius = std::max(ScaleDpi(12, dpi), std::min(ScaleDpi(22, dpi), MulDiv(cardHeight, 6, 100)));
+    g_hudLayout.iconSize = std::max(ScaleDpi(16, dpi), std::min(ScaleDpi(32, dpi), MulDiv(footerHeight, 55, 100)));
+    g_hudLayout.fontSize = std::max(ScaleDpi(11, dpi), std::min(ScaleDpi(18, dpi), MulDiv(footerHeight, 38, 100)));
     g_hudLayout.thumbMargin = thumbMargin;
 
     int posX = mi.rcWork.left + (screenW - hudWidth) / 2;
@@ -760,19 +802,16 @@ static void ShowHud() {
     SetWindowPos(g_hHudWnd, HWND_TOPMOST, posX, posY, hudWidth, hudHeight,
                  SWP_SHOWWINDOW | SWP_NOACTIVATE);
 
-    // Rounded window region matching scaled corner radius
     HRGN hRgn = CreateRoundRectRgn(0, 0, hudWidth + 1, hudHeight + 1,
                                    g_hudLayout.winCornerRadius, g_hudLayout.winCornerRadius);
     SetWindowRgn(g_hHudWnd, hRgn, TRUE);
     DeleteObject(hRgn);
 
-    // Apply Windows 11 DWM attributes if supported
     BOOL darkMode = IsSystemDarkMode();
     DwmSetWindowAttribute(g_hHudWnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &darkMode, sizeof(darkMode));
     DWORD cornerPref = 2; // DWMWCP_ROUND
     DwmSetWindowAttribute(g_hHudWnd, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, &cornerPref, sizeof(cornerPref));
 
-    // Register / update live DWM thumbnails for each card
     for (int i = 0; i < itemCount; ++i) {
         int left = padX + i * (cardWidth + cardGap);
         int top = padY;
@@ -808,15 +847,14 @@ static void ShowHud() {
 }
 
 static void HideHud(bool commitSwitch) {
-    if (!g_hudVisible) return;
+    if (!g_hudVisible.load()) return;
 
-    g_hudVisible = false;
+    g_hudVisible.store(false);
     if (g_hHudWnd) {
         KillTimer(g_hHudWnd, TIMER_ALT_POLL);
         ShowWindow(g_hHudWnd, SW_HIDE);
     }
 
-    // Unregister all DWM thumbnails
     for (auto& entry : g_appWindows) {
         if (entry.hThumbnail) {
             DwmUnregisterThumbnail(entry.hThumbnail);
@@ -827,11 +865,11 @@ static void HideHud(bool commitSwitch) {
     if (commitSwitch && !g_appWindows.empty() && g_selectedIndex >= 0 &&
         g_selectedIndex < static_cast<int>(g_appWindows.size())) {
         HWND target = g_appWindows[g_selectedIndex].hWnd;
-        Wh_Log(L"[CustomShortcuts] Switching to window: %p (\"%s\")",
+        Wh_Log(L"Switching to window: %p (\"%s\")",
                target, g_appWindows[g_selectedIndex].title.c_str());
         SwitchToAppWindow(target);
     } else {
-        Wh_Log(L"[CustomShortcuts] Switch cancelled.");
+        Wh_Log(L"Switch cancelled.");
     }
     g_appWindows.clear();
 }
@@ -852,7 +890,6 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
         bool isDark = IsSystemDarkMode();
         COLORREF accentColor = GetSystemAccentColor(isDark);
 
-        // System-matching colors
         COLORREF bgColor = isDark ? RGB(26, 26, 28) : RGB(242, 242, 245);
         COLORREF cardBgColor = isDark ? RGB(36, 36, 40) : RGB(255, 255, 255);
         COLORREF cardBorderColor = isDark ? RGB(52, 52, 56) : RGB(220, 220, 225);
@@ -863,12 +900,10 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
         COLORREF textColor = isDark ? RGB(235, 235, 235) : RGB(25, 25, 25);
         COLORREF thumbPlaceholderColor = isDark ? RGB(20, 20, 22) : RGB(230, 230, 234);
 
-        // Fill window background
         HBRUSH bgBrush = CreateSolidBrush(bgColor);
         FillRect(memDC, &clientRect, bgBrush);
         DeleteObject(bgBrush);
 
-        // Subtle window outline border
         HPEN winBorderPen = CreatePen(PS_SOLID, 1, isDark ? RGB(55, 55, 60) : RGB(205, 205, 210));
         HPEN oldWinPen = (HPEN)SelectObject(memDC, winBorderPen);
         SelectObject(memDC, GetStockObject(NULL_BRUSH));
@@ -877,7 +912,6 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
         SelectObject(memDC, oldWinPen);
         DeleteObject(winBorderPen);
 
-        // Proportional font for window titles
         HFONT hFontItem = CreateFontW(-g_hudLayout.fontSize, 0, 0, 0, FW_MEDIUM, FALSE, FALSE, FALSE,
                                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                       CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
@@ -887,7 +921,6 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
             const auto& entry = g_appWindows[i];
             bool isSelected = (i == g_selectedIndex);
 
-            // Card background and rounded border
             COLORREF cBg = isSelected ? selCardBgColor : cardBgColor;
             COLORREF cBorder = isSelected ? selCardBorderColor : cardBorderColor;
             int borderWidth = isSelected ? 2 : 1;
@@ -906,12 +939,10 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
             DeleteObject(cardBrush);
             DeleteObject(cardPen);
 
-            // Placeholder background for thumbnail area
             HBRUSH thumbPlaceholderBrush = CreateSolidBrush(thumbPlaceholderColor);
             FillRect(memDC, &entry.rcThumb, thumbPlaceholderBrush);
             DeleteObject(thumbPlaceholderBrush);
 
-            // Bottom section: App Icon + Window Title
             int iconSize = g_hudLayout.iconSize;
             int footerTop = entry.rcThumb.bottom;
             int footerH = entry.rcCard.bottom - footerTop;
@@ -948,19 +979,20 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
     }
     case WM_TIMER:
         if (wParam == TIMER_ALT_POLL) {
-            if (g_hudVisible) {
+            if (g_hudVisible.load()) {
+                UINT triggerMod = g_hudTriggerModifier.load();
                 bool modifierStillDown = false;
-                if ((g_hudTriggerModifier & MOD_ALT) && ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0)) {
+                if ((triggerMod & MOD_ALT) && ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0)) {
                     modifierStillDown = true;
-                } else if ((g_hudTriggerModifier & MOD_CONTROL) && ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0)) {
+                } else if ((triggerMod & MOD_CONTROL) && ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0)) {
                     modifierStillDown = true;
-                } else if ((g_hudTriggerModifier & MOD_WIN) && (((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0) || ((GetAsyncKeyState(VK_RWIN) & 0x8000) != 0))) {
+                } else if ((triggerMod & MOD_WIN) && (((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0) || ((GetAsyncKeyState(VK_RWIN) & 0x8000) != 0))) {
                     modifierStillDown = true;
                 }
 
                 if (!modifierStillDown) {
                     KillTimer(hWnd, TIMER_ALT_POLL);
-                    Wh_Log(L"[CustomShortcuts] Modifier physically released (timer poll), committing switch!");
+                    Wh_Log(L"Modifier physically released (timer poll), committing switch!");
                     HideHud(true);
                 }
             } else {
@@ -980,9 +1012,41 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
         }
         return 0;
     }
+    case WM_USER_HUD_SHOW:
+        ShowHud();
+        return 0;
+    case WM_USER_HUD_CYCLE:
+        CycleSelection((int)wParam);
+        return 0;
+    case WM_USER_HUD_COMMIT:
+        HideHud(true);
+        return 0;
+    case WM_USER_HUD_CANCEL:
+        HideHud(false);
+        return 0;
+    case WM_USER_LAUNCH_APP: {
+        size_t appIdx = (size_t)wParam;
+        std::wstring cmd;
+        AcquireSRWLockShared(&g_settingsLock);
+        if (appIdx < g_settings.customApps.size()) {
+            cmd = g_settings.customApps[appIdx].command;
+        }
+        ReleaseSRWLockShared(&g_settingsLock);
+        if (!cmd.empty()) {
+            LaunchApplication(cmd);
+        }
+        return 0;
+    }
     case WM_USER_SWITCH_DESKTOP: {
         int desktopNum = static_cast<int>(wParam);
         SwitchToDesktopNumber(desktopNum);
+        return 0;
+    }
+    case WM_USER_SETTINGS_CHANGED: {
+        CleanupVirtualDesktopAPI();
+        LoadModSettings();
+        UpdateVirtualDesktopCount();
+        InvalidateRect(hWnd, NULL, TRUE);
         return 0;
     }
     case WM_ERASEBKGND:
@@ -992,19 +1056,37 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
     }
 }
 
-// Helper: launch application or command line cleanly
+// Check WOW64 execution environment (Windhawk 1.7.x runs 32-bit windhawk.exe)
+static bool IsCurrentProcessWow64() {
+    BOOL isWow64 = FALSE;
+    typedef BOOL(WINAPI *LPFN_ISWOW64PROCESS)(HANDLE, PBOOL);
+    LPFN_ISWOW64PROCESS fnIsWow64Process = (LPFN_ISWOW64PROCESS)GetProcAddress(
+        GetModuleHandleW(L"kernel32.dll"), "IsWow64Process");
+    if (fnIsWow64Process) {
+        fnIsWow64Process(GetCurrentProcess(), &isWow64);
+    }
+    return isWow64 != FALSE;
+}
+
+// Retrieve user home directory for terminal launch working directory
+static std::wstring GetUserHomeDirectory() {
+    WCHAR userProfile[MAX_PATH] = {0};
+    if (GetEnvironmentVariableW(L"USERPROFILE", userProfile, ARRAYSIZE(userProfile))) {
+        return userProfile;
+    }
+    return L"";
+}
+
+// Launch application or command line cleanly
 static void LaunchApplication(const std::wstring& commandLine) {
     if (commandLine.empty()) return;
 
     std::wstring execPath = commandLine;
     std::wstring execArgs;
 
-    // Trim whitespace
     while (!execPath.empty() && (execPath.front() == L' ' || execPath.front() == L'\t')) execPath.erase(0, 1);
     while (!execPath.empty() && (execPath.back() == L' ' || execPath.back() == L'\t')) execPath.pop_back();
 
-    // If command line contains spaces, check if arguments are embedded
-    // (e.g. user typed "wsl --cd ~" or "\"C:\Tools\app.exe\" --arg" directly)
     if (execPath.find(L' ') != std::wstring::npos) {
         if (GetFileAttributesW(execPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
             if (execPath.front() == L'\"') {
@@ -1029,24 +1111,45 @@ static void LaunchApplication(const std::wstring& commandLine) {
         }
     }
 
-    Wh_Log(L"[CustomShortcuts] Launching: '%s', args: '%s'", execPath.c_str(), execArgs.c_str());
+    // Resolve system executables under WOW64 (32-bit windhawk.exe in Windhawk 1.7.x)
+    bool isWow64 = IsCurrentProcessWow64();
+    if (isWow64) {
+        WCHAR winDir[MAX_PATH] = {0};
+        if (GetWindowsDirectoryW(winDir, ARRAYSIZE(winDir))) {
+            std::wstring sysnative = std::wstring(winDir) + L"\\Sysnative\\";
+            std::wstring candidate = sysnative + execPath;
+            if (GetFileAttributesW(candidate.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                execPath = candidate;
+            } else if (candidate.length() < 4 || _wcsicmp(candidate.substr(candidate.length() - 4).c_str(), L".exe") != 0) {
+                std::wstring candidateExe = candidate + L".exe";
+                if (GetFileAttributesW(candidateExe.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                    execPath = candidateExe;
+                }
+            }
+        }
+    }
 
-    LPCWSTR pArgs = execArgs.empty() ? NULL : execArgs.c_str();
-    HINSTANCE hRes = ShellExecuteW(NULL, L"open", execPath.c_str(), pArgs, NULL, SW_SHOWNORMAL);
+    std::wstring workingDir = GetUserHomeDirectory();
+    LPCWSTR pDir = workingDir.empty() ? nullptr : workingDir.c_str();
+    LPCWSTR pArgs = execArgs.empty() ? nullptr : execArgs.c_str();
 
-    // If ShellExecute failed, try fallback paths for wt.exe or wsl.exe
+    Wh_Log(L"Launching: '%s', args: '%s', dir: '%s'",
+           execPath.c_str(), execArgs.c_str(), workingDir.c_str());
+
+    HINSTANCE hRes = ShellExecuteW(NULL, L"open", execPath.c_str(), pArgs, pDir, SW_SHOWNORMAL);
+
     if ((INT_PTR)hRes <= 32) {
         if (_wcsicmp(execPath.c_str(), L"wt.exe") == 0 || _wcsicmp(execPath.c_str(), L"wt") == 0) {
             WCHAR localAppData[MAX_PATH] = {0};
             if (GetEnvironmentVariableW(L"LOCALAPPDATA", localAppData, ARRAYSIZE(localAppData))) {
                 std::wstring fullWt = std::wstring(localAppData) + L"\\Microsoft\\WindowsApps\\wt.exe";
-                ShellExecuteW(NULL, L"open", fullWt.c_str(), pArgs, NULL, SW_SHOWNORMAL);
+                ShellExecuteW(NULL, L"open", fullWt.c_str(), pArgs, pDir, SW_SHOWNORMAL);
             }
         } else if (_wcsicmp(execPath.c_str(), L"wsl.exe") == 0 || _wcsicmp(execPath.c_str(), L"wsl") == 0) {
-            WCHAR sysDir[MAX_PATH] = {0};
-            if (GetSystemDirectoryW(sysDir, ARRAYSIZE(sysDir))) {
-                std::wstring fullWsl = std::wstring(sysDir) + L"\\wsl.exe";
-                ShellExecuteW(NULL, L"open", fullWsl.c_str(), pArgs, NULL, SW_SHOWNORMAL);
+            WCHAR winDir[MAX_PATH] = {0};
+            if (GetWindowsDirectoryW(winDir, ARRAYSIZE(winDir))) {
+                std::wstring fullWsl = std::wstring(winDir) + (isWow64 ? L"\\Sysnative\\wsl.exe" : L"\\System32\\wsl.exe");
+                ShellExecuteW(NULL, L"open", fullWsl.c_str(), pArgs, pDir, SW_SHOWNORMAL);
             }
         }
     }
@@ -1054,6 +1157,7 @@ static void LaunchApplication(const std::wstring& commandLine) {
 
 //=============================================================================
 // Virtual Desktop API Implementation (Windows 10 & 11)
+// Derived from Virtual Desktop Helper by u2x1
 //=============================================================================
 
 static const CLSID CLSID_ImmersiveShell_Val = {
@@ -1135,21 +1239,51 @@ static void CleanupVirtualDesktopAPI() {
     g_bVDInitialized = false;
 }
 
+static bool TryQueryDesktopManager(int versionIndex) {
+    if (!g_pServiceProvider) return false;
+    SAFE_RELEASE(g_pDesktopManagerInternal);
+
+    HRESULT hr = g_pServiceProvider->QueryService(
+        CLSID_VirtualDesktopManagerInternal_Val,
+        g_versionIIDs[versionIndex].managerInternal,
+        (void**)&g_pDesktopManagerInternal);
+    return SUCCEEDED(hr) && g_pDesktopManagerInternal;
+}
+
 static bool InitializeVirtualDesktopAPI() {
     if (g_bVDInitialized && g_pDesktopManagerInternal) return true;
 
     HRESULT hr = CoCreateInstance(CLSID_ImmersiveShell_Val, nullptr, CLSCTX_LOCAL_SERVER, IID_IServiceProvider,
                                   (void**)&g_pServiceProvider);
     if (FAILED(hr) || !g_pServiceProvider) {
-        Wh_Log(L"[CustomShortcuts] Failed to create ImmersiveShell: 0x%08X", hr);
+        Wh_Log(L"Failed to create ImmersiveShell: 0x%08X", hr);
         return false;
     }
 
-    hr = g_pServiceProvider->QueryService(CLSID_VirtualDesktopManagerInternal_Val,
-                                          g_versionIIDs[g_windowsVersionIndex].managerInternal,
-                                          (void**)&g_pDesktopManagerInternal);
-    if (FAILED(hr) || !g_pDesktopManagerInternal) {
-        Wh_Log(L"[CustomShortcuts] Failed to get VirtualDesktopManagerInternal: 0x%08X", hr);
+    bool matched = false;
+    AcquireSRWLockShared(&g_settingsLock);
+    std::wstring verPref = g_settings.windowsVersion;
+    ReleaseSRWLockShared(&g_settingsLock);
+
+    if (verPref == L"auto") {
+        if (TryQueryDesktopManager(g_windowsVersionIndex)) {
+            matched = true;
+        } else {
+            for (int i = 4; i >= 0; --i) {
+                if (i != g_windowsVersionIndex && TryQueryDesktopManager(i)) {
+                    g_windowsVersionIndex = i;
+                    matched = true;
+                    Wh_Log(L"Auto-detected working VirtualDesktopManagerInternal interface at index %d", i);
+                    break;
+                }
+            }
+        }
+    } else {
+        matched = TryQueryDesktopManager(g_windowsVersionIndex);
+    }
+
+    if (!matched || !g_pDesktopManagerInternal) {
+        Wh_Log(L"Failed to get VirtualDesktopManagerInternal");
         CleanupVirtualDesktopAPI();
         return false;
     }
@@ -1157,11 +1291,11 @@ static bool InitializeVirtualDesktopAPI() {
     hr = CoCreateInstance(CLSID_VirtualDesktopManager_Val, nullptr, CLSCTX_INPROC_SERVER, IID_IVirtualDesktopManager_Val,
                           (void**)&g_pDesktopManager);
     if (FAILED(hr)) {
-        Wh_Log(L"[CustomShortcuts] Failed to create VirtualDesktopManager: 0x%08X", hr);
+        Wh_Log(L"Failed to create VirtualDesktopManager: 0x%08X", hr);
     }
 
     g_bVDInitialized = true;
-    Wh_Log(L"[CustomShortcuts] Virtual Desktop API initialized successfully (Version index: %d)", g_windowsVersionIndex);
+    Wh_Log(L"Virtual Desktop API initialized successfully (Version index: %d)", g_windowsVersionIndex);
     return true;
 }
 
@@ -1227,7 +1361,7 @@ static IObjectArray* GetDesktops() {
     IObjectArray* desktops = nullptr;
     HRESULT hr = CallManagerInternal(VTABLE_GET_DESKTOPS, &desktops);
     if (FAILED(hr)) {
-        Wh_Log(L"[CustomShortcuts] GetDesktops failed: 0x%08X", hr);
+        Wh_Log(L"GetDesktops failed: 0x%08X", hr);
         return nullptr;
     }
     return desktops;
@@ -1238,7 +1372,7 @@ static bool GetCurrentDesktopId(GUID* outGuid) {
     IVirtualDesktop* desktop = nullptr;
     HRESULT hr = CallManagerInternal(VTABLE_GET_CURRENT_DESKTOP, &desktop);
     if (FAILED(hr) || !desktop) {
-        Wh_Log(L"[CustomShortcuts] GetCurrentDesktop failed: 0x%08X", hr);
+        Wh_Log(L"GetCurrentDesktop failed: 0x%08X", hr);
         return false;
     }
     hr = desktop->GetId(outGuid);
@@ -1274,7 +1408,7 @@ static bool SwitchToDesktop(IVirtualDesktop* desktop) {
     if (!g_pDesktopManagerInternal || !desktop) return false;
     HRESULT hr = CallManagerInternalWithArg(VTABLE_SWITCH_DESKTOP, desktop);
     if (FAILED(hr)) {
-        Wh_Log(L"[CustomShortcuts] SwitchToDesktop COM call failed: 0x%08X", hr);
+        Wh_Log(L"SwitchToDesktop COM call failed: 0x%08X", hr);
         return false;
     }
     return true;
@@ -1328,7 +1462,7 @@ static int DetectWindowsVersionIndex() {
             RTL_OSVERSIONINFOW rovi = { sizeof(rovi) };
             if (pRtlGetVersion(&rovi) == 0) {
                 DWORD build = rovi.dwBuildNumber;
-                Wh_Log(L"[CustomShortcuts] Windows Build detected: %lu", build);
+                Wh_Log(L"Windows Build detected: %lu", build);
                 if (build >= 26100) return 4;
                 if (build >= 22621) return 3;
                 if (build >= 22000) return 2;
@@ -1340,23 +1474,55 @@ static int DetectWindowsVersionIndex() {
     return 4;
 }
 
+static UINT UpdateVirtualDesktopCount() {
+    bool enabled = false;
+    AcquireSRWLockShared(&g_settingsLock);
+    enabled = g_settings.enableDirectSwitching;
+    ReleaseSRWLockShared(&g_settingsLock);
+
+    if (!enabled) {
+        g_desktopCount.store(0);
+        return 0;
+    }
+
+    if (!InitializeVirtualDesktopAPI()) {
+        g_desktopCount.store(0);
+        return 0;
+    }
+
+    IObjectArray* desktops = GetDesktops();
+    if (!desktops) {
+        g_desktopCount.store(0);
+        return 0;
+    }
+
+    UINT count = 0;
+    desktops->GetCount(&count);
+    desktops->Release();
+    g_desktopCount.store(count);
+    Wh_Log(L"Virtual desktop count updated: %u", count);
+    return count;
+}
+
 static bool SwitchToDesktopNumber(int desktopNum) {
     if (desktopNum < 1 || desktopNum > 9) return false;
     if (!InitializeVirtualDesktopAPI()) {
-        Wh_Log(L"[CustomShortcuts] SwitchToDesktopNumber: Failed to initialize Virtual Desktop API");
+        Wh_Log(L"SwitchToDesktopNumber: Failed to initialize Virtual Desktop API");
         return false;
     }
 
     IObjectArray* desktops = GetDesktops();
     if (!desktops) {
-        Wh_Log(L"[CustomShortcuts] SwitchToDesktopNumber: Failed to get virtual desktops");
+        Wh_Log(L"SwitchToDesktopNumber: Failed to get virtual desktops");
         return false;
     }
 
     UINT count = 0;
     desktops->GetCount(&count);
+    g_desktopCount.store(count);
+
     if ((UINT)(desktopNum - 1) >= count) {
-        Wh_Log(L"[CustomShortcuts] Desktop %d requested, but only %u virtual desktops exist", desktopNum, count);
+        Wh_Log(L"Desktop %d requested, but only %u virtual desktops exist", desktopNum, count);
         desktops->Release();
         return false;
     }
@@ -1366,7 +1532,7 @@ static bool SwitchToDesktopNumber(int desktopNum) {
     desktops->Release();
 
     if (FAILED(hr) || !targetDesktop) {
-        Wh_Log(L"[CustomShortcuts] Failed to get desktop %d: 0x%08X", desktopNum, hr);
+        Wh_Log(L"Failed to get desktop %d: 0x%08X", desktopNum, hr);
         return false;
     }
 
@@ -1374,7 +1540,7 @@ static bool SwitchToDesktopNumber(int desktopNum) {
     GUID targetId = {};
     if (GetCurrentDesktopId(&currentId) && SUCCEEDED(targetDesktop->GetId(&targetId))) {
         if (IsEqualGUID(currentId, targetId)) {
-            Wh_Log(L"[CustomShortcuts] Already on Desktop %d", desktopNum);
+            Wh_Log(L"Already on Desktop %d", desktopNum);
             targetDesktop->Release();
             return true;
         }
@@ -1389,12 +1555,12 @@ static bool SwitchToDesktopNumber(int desktopNum) {
     targetDesktop->Release();
 
     if (success) {
-        Wh_Log(L"[CustomShortcuts] Successfully switched to Virtual Desktop %d", desktopNum);
+        Wh_Log(L"Successfully switched to Virtual Desktop %d", desktopNum);
         if (windowToFocus) {
             FocusWindow(windowToFocus);
         }
     } else {
-        Wh_Log(L"[CustomShortcuts] SwitchToDesktop failed for Desktop %d, trying keyboard fallback...", desktopNum);
+        Wh_Log(L"SwitchToDesktop failed for Desktop %d, trying keyboard fallback...", desktopNum);
         int curIdx = GetCurrentDesktopIndex();
         if (curIdx >= 0) {
             int targetIdx = desktopNum - 1;
@@ -1402,7 +1568,7 @@ static bool SwitchToDesktopNumber(int desktopNum) {
             if (diff != 0) {
                 WORD vkDir = (diff > 0) ? VK_RIGHT : VK_LEFT;
                 int steps = abs(diff);
-                Wh_Log(L"[CustomShortcuts] Keyboard fallback: %d steps (%s)",
+                Wh_Log(L"Keyboard fallback: %d steps (%s)",
                        steps, (vkDir == VK_RIGHT) ? L"RIGHT" : L"LEFT");
                 for (int i = 0; i < steps; ++i) {
                     keybd_event(VK_CONTROL, 0, 0, 0);
@@ -1421,7 +1587,7 @@ static bool SwitchToDesktopNumber(int desktopNum) {
     return success;
 }
 
-// Low-level keyboard hook callback
+// Low-level keyboard hook callback: minimal, non-blocking input interception
 static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode != HC_ACTION) {
         return CallNextHookEx(g_hKeyboardHook, nCode, wParam, lParam);
@@ -1431,67 +1597,61 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
     bool isKeyDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
     bool isKeyUp = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
 
-    // Compute active modifiers
     UINT activeModifiers = 0;
     if ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0) activeModifiers |= MOD_ALT;
     if ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0) activeModifiers |= MOD_CONTROL;
     if ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0) activeModifiers |= MOD_SHIFT;
     if (((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0) || ((GetAsyncKeyState(VK_RWIN) & 0x8000) != 0)) activeModifiers |= MOD_WIN;
 
-    // Log key press if any modifier is active or if it matches special keys
-    if (isKeyDown && activeModifiers != 0) {
-        Wh_Log(L"[CustomShortcuts] Key pressed: vk=0x%02X (%u), active mods: [Win=%d, Alt=%d, Ctrl=%d, Shift=%d]",
-               pKey->vkCode, pKey->vkCode,
-               (activeModifiers & MOD_WIN) != 0,
-               (activeModifiers & MOD_ALT) != 0,
-               (activeModifiers & MOD_CONTROL) != 0,
-               (activeModifiers & MOD_SHIFT) != 0);
-    }
-
-    // Track modifier release to commit HUD selection
-    if (isKeyUp && g_hudVisible) {
+    // Track modifier release to commit HUD selection without swallowing key-up
+    if (isKeyUp && g_hudVisible.load()) {
+        UINT triggerMod = g_hudTriggerModifier.load();
         bool modifierReleased = false;
-        if ((g_hudTriggerModifier & MOD_ALT) && (pKey->vkCode == VK_LMENU || pKey->vkCode == VK_RMENU || pKey->vkCode == VK_MENU)) {
+        if ((triggerMod & MOD_ALT) && (pKey->vkCode == VK_LMENU || pKey->vkCode == VK_RMENU || pKey->vkCode == VK_MENU)) {
             modifierReleased = true;
-        } else if ((g_hudTriggerModifier & MOD_CONTROL) && (pKey->vkCode == VK_LCONTROL || pKey->vkCode == VK_RCONTROL || pKey->vkCode == VK_CONTROL)) {
+        } else if ((triggerMod & MOD_CONTROL) && (pKey->vkCode == VK_LCONTROL || pKey->vkCode == VK_RCONTROL || pKey->vkCode == VK_CONTROL)) {
             modifierReleased = true;
-        } else if ((g_hudTriggerModifier & MOD_WIN) && (pKey->vkCode == VK_LWIN || pKey->vkCode == VK_RWIN)) {
+        } else if ((triggerMod & MOD_WIN) && (pKey->vkCode == VK_LWIN || pKey->vkCode == VK_RWIN)) {
             modifierReleased = true;
         }
 
         if (modifierReleased) {
-            Wh_Log(L"[CustomShortcuts] Modifier released, committing switch.");
-            HideHud(true);
-            return 1;
+            Wh_Log(L"Modifier released, posting commit switch.");
+            if (g_hHudWnd) {
+                PostMessageW(g_hHudWnd, WM_USER_HUD_COMMIT, 0, 0);
+            }
+            return CallNextHookEx(g_hKeyboardHook, nCode, wParam, lParam);
         }
     }
 
     // While HUD is visible, handle navigation and cancellation
-    if (g_hudVisible && isKeyDown) {
+    if (g_hudVisible.load() && isKeyDown) {
         if (pKey->vkCode == VK_ESCAPE) {
-            Wh_Log(L"[CustomShortcuts] ESC pressed, cancelling switch.");
-            HideHud(false);
+            Wh_Log(L"ESC pressed, cancelling switch.");
+            if (g_hHudWnd) PostMessageW(g_hHudWnd, WM_USER_HUD_CANCEL, 0, 0);
             return 1;
         }
         if (pKey->vkCode == VK_RETURN || pKey->vkCode == VK_SPACE) {
-            Wh_Log(L"[CustomShortcuts] Enter/Space pressed, committing switch.");
-            HideHud(true);
+            Wh_Log(L"Enter/Space pressed, committing switch.");
+            if (g_hHudWnd) PostMessageW(g_hHudWnd, WM_USER_HUD_COMMIT, 0, 0);
             return 1;
         }
         if (pKey->vkCode == VK_UP || pKey->vkCode == VK_LEFT) {
-            CycleSelection(-1);
+            if (g_hHudWnd) PostMessageW(g_hHudWnd, WM_USER_HUD_CYCLE, (WPARAM)-1, 0);
             return 1;
         }
         if (pKey->vkCode == VK_DOWN || pKey->vkCode == VK_RIGHT) {
-            CycleSelection(1);
+            if (g_hHudWnd) PostMessageW(g_hHudWnd, WM_USER_HUD_CYCLE, (WPARAM)1, 0);
             return 1;
         }
         if (pKey->vkCode == VK_TAB) {
             bool isShift = (activeModifiers & MOD_SHIFT) != 0;
-            CycleSelection(isShift ? -1 : 1);
+            if (g_hHudWnd) PostMessageW(g_hHudWnd, WM_USER_HUD_CYCLE, (WPARAM)(isShift ? -1 : 1), 0);
             return 1;
         }
     }
+
+    AcquireSRWLockShared(&g_settingsLock);
 
     // 1. Same-App Window Switcher
     if (isKeyDown && g_settings.bindingSameApp.valid) {
@@ -1499,29 +1659,37 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
         UINT targetModsWithoutShift = g_settings.bindingSameApp.modifiers & ~MOD_SHIFT;
 
         if (pKey->vkCode == g_settings.bindingSameApp.vk && modsWithoutShift == targetModsWithoutShift) {
-            Wh_Log(L"[CustomShortcuts] >>> TRIGGERED Same-App Window Switcher! (%s)",
-                   g_settings.bindingSameApp.originalStr.c_str());
-            g_hudTriggerModifier = g_settings.bindingSameApp.modifiers ? g_settings.bindingSameApp.modifiers : MOD_ALT;
-            if (!g_hudVisible) {
-                ShowHud();
+            Wh_Log(L"Triggered Same-App Switcher! (%s)", g_settings.bindingSameApp.originalStr.c_str());
+            keybd_event(0xFF, 0, KEYEVENTF_KEYUP, 0); // Mask held modifier to avoid menu focus
+
+            UINT triggerMod = g_settings.bindingSameApp.modifiers ? g_settings.bindingSameApp.modifiers : MOD_ALT;
+            g_hudTriggerModifier.store(triggerMod);
+
+            if (!g_hudVisible.load()) {
+                if (g_hHudWnd) PostMessageW(g_hHudWnd, WM_USER_HUD_SHOW, 0, 0);
             } else {
                 bool isShift = (activeModifiers & MOD_SHIFT) != 0;
-                CycleSelection(isShift ? -1 : 1);
+                if (g_hHudWnd) PostMessageW(g_hHudWnd, WM_USER_HUD_CYCLE, (WPARAM)(isShift ? -1 : 1), 0);
             }
+            ReleaseSRWLockShared(&g_settingsLock);
             return 1;
         }
     }
 
-    // 2. Custom Application Launchers (e.g. Win+Enter -> cmd.exe)
+    // 2. Custom Application Launchers
     if (isKeyDown) {
-        for (const auto& app : g_settings.customApps) {
-            if (app.binding.Matches(activeModifiers, pKey->vkCode)) {
-                Wh_Log(L"[CustomShortcuts] >>> TRIGGERED Custom App Launcher! '%s' -> '%s'",
-                       app.binding.originalStr.c_str(), app.command.c_str());
+        for (size_t i = 0; i < g_settings.customApps.size(); ++i) {
+            if (g_settings.customApps[i].binding.Matches(activeModifiers, pKey->vkCode)) {
+                Wh_Log(L"Triggered Custom App Launcher! '%s' -> '%s'",
+                       g_settings.customApps[i].binding.originalStr.c_str(),
+                       g_settings.customApps[i].command.c_str());
                 if (activeModifiers & MOD_WIN) {
-                    keybd_event(0xFF, 0, KEYEVENTF_KEYUP, 0); // suppress Start Menu
+                    keybd_event(0xFF, 0, KEYEVENTF_KEYUP, 0); // Suppress Start Menu
                 }
-                LaunchApplication(app.command);
+                if (g_hHudWnd) {
+                    PostMessageW(g_hHudWnd, WM_USER_LAUNCH_APP, (WPARAM)i, 0);
+                }
+                ReleaseSRWLockShared(&g_settingsLock);
                 return 1;
             }
         }
@@ -1531,53 +1699,36 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
     if (g_settings.enableDirectSwitching && (pKey->vkCode >= '1' && pKey->vkCode <= '9')) {
         UINT cleanMods = activeModifiers & (MOD_ALT | MOD_CONTROL | MOD_SHIFT | MOD_WIN);
         if (cleanMods == g_settings.desktopModifier) {
-            if (isKeyDown) {
-                int targetDesktop = pKey->vkCode - '0';
-                Wh_Log(L"[CustomShortcuts] >>> TRIGGERED Virtual Desktop switch: Desktop %d", targetDesktop);
-                if (activeModifiers & MOD_WIN) {
-                    keybd_event(0xFF, 0, KEYEVENTF_KEYUP, 0); // suppress Start Menu
+            int targetDesktop = pKey->vkCode - '0';
+            UINT maxDesktops = g_desktopCount.load();
+
+            // Only swallow if desktop exists or if desktop count is uninitialized
+            if (maxDesktops == 0 || (UINT)targetDesktop <= maxDesktops) {
+                if (isKeyDown) {
+                    Wh_Log(L"Triggered Virtual Desktop switch: Desktop %d", targetDesktop);
+                    if (activeModifiers & MOD_WIN) {
+                        keybd_event(0xFF, 0, KEYEVENTF_KEYUP, 0); // Suppress Start Menu
+                    }
+                    if (g_hHudWnd) {
+                        PostMessageW(g_hHudWnd, WM_USER_SWITCH_DESKTOP, (WPARAM)targetDesktop, 0);
+                    }
                 }
-                if (g_hHudWnd) {
-                    PostMessageW(g_hHudWnd, WM_USER_SWITCH_DESKTOP, (WPARAM)targetDesktop, 0);
-                } else {
-                    SwitchToDesktopNumber(targetDesktop);
-                }
+                ReleaseSRWLockShared(&g_settingsLock);
+                return 1;
             }
-            return 1; // Intercept and swallow so Windows taskbar does not activate pinned apps
         }
     }
 
+    ReleaseSRWLockShared(&g_settingsLock);
     return CallNextHookEx(g_hKeyboardHook, nCode, wParam, lParam);
 }
 
-// Dedicated background thread running message loop for WH_KEYBOARD_LL
+// Dedicated background hook thread running WH_KEYBOARD_LL message pump
 static DWORD WINAPI HookThreadProc(LPVOID lpParam) {
-    Wh_Log(L"[CustomShortcuts] Hook thread started (ID: %lu)", GetCurrentThreadId());
+    Wh_Log(L"Hook thread started (ID: %lu)", GetCurrentThreadId());
 
-    HRESULT hrCo = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-    if (FAILED(hrCo)) {
-        Wh_Log(L"[CustomShortcuts] CoInitializeEx returned: 0x%08X", hrCo);
-    }
-
-    WNDCLASSEXW wc = { sizeof(wc) };
-    wc.lpfnWndProc = HudWndProc;
-    wc.hInstance = GetModuleHandle(NULL);
-    wc.lpszClassName = L"WindhawkCustomShortcutsHud";
-    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    RegisterClassExW(&wc);
-
-    g_hHudWnd = CreateWindowExW(
-        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED,
-        wc.lpszClassName,
-        L"CustomShortcutsHUD",
-        WS_POPUP,
-        0, 0, 460, 200,
-        NULL, NULL, wc.hInstance, NULL
-    );
-
-    if (g_hHudWnd) {
-        SetLayeredWindowAttributes(g_hHudWnd, 0, 246, LWA_ALPHA);
-    }
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
     g_hKeyboardHook = SetWindowsHookExW(
         WH_KEYBOARD_LL,
@@ -1596,26 +1747,81 @@ static DWORD WINAPI HookThreadProc(LPVOID lpParam) {
     }
 
     if (!g_hKeyboardHook) {
-        Wh_Log(L"[CustomShortcuts] ERROR: Failed to install WH_KEYBOARD_LL hook (Error %lu)", GetLastError());
-        CleanupVirtualDesktopAPI();
-        CoUninitialize();
+        Wh_Log(L"ERROR: Failed to install WH_KEYBOARD_LL hook (Error %lu)", GetLastError());
         return 1;
     }
 
-    Wh_Log(L"[CustomShortcuts] SUCCESS: WH_KEYBOARD_LL hook installed and listening to keyboard events!");
+    Wh_Log(L"SUCCESS: WH_KEYBOARD_LL hook installed and listening to keyboard events!");
+    SetEvent(g_hHookReady);
 
-    MSG msg;
     while (GetMessageW(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
 
-    Wh_Log(L"[CustomShortcuts] Hook thread message loop terminating...");
+    Wh_Log(L"Hook thread message loop terminating...");
 
     if (g_hKeyboardHook) {
         UnhookWindowsHookEx(g_hKeyboardHook);
         g_hKeyboardHook = NULL;
     }
+
+    return 0;
+}
+
+// Dedicated worker thread owning HUD window, COM objects, ShellExecute
+static DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
+    Wh_Log(L"Worker thread started (ID: %lu)", GetCurrentThreadId());
+
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+
+    HRESULT hrCo = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    if (FAILED(hrCo)) {
+        Wh_Log(L"CoInitializeEx returned: 0x%08X", hrCo);
+    }
+
+    WNDCLASSEXW wc = { sizeof(wc) };
+    wc.lpfnWndProc = HudWndProc;
+    wc.hInstance = GetModuleHandle(NULL);
+    wc.lpszClassName = L"WindhawkCustomShortcutsHud";
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+
+    if (!RegisterClassExW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+        Wh_Log(L"ERROR: RegisterClassExW failed (Error %lu)", GetLastError());
+        CoUninitialize();
+        return 1;
+    }
+
+    g_hHudWnd = CreateWindowExW(
+        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED,
+        wc.lpszClassName,
+        L"CustomShortcutsHUD",
+        WS_POPUP,
+        0, 0, 460, 200,
+        NULL, NULL, wc.hInstance, NULL
+    );
+
+    if (!g_hHudWnd) {
+        Wh_Log(L"ERROR: CreateWindowExW failed (Error %lu)", GetLastError());
+        UnregisterClassW(wc.lpszClassName, wc.hInstance);
+        CoUninitialize();
+        return 1;
+    }
+
+    SetLayeredWindowAttributes(g_hHudWnd, 0, 246, LWA_ALPHA);
+
+    LoadModSettings();
+    UpdateVirtualDesktopCount();
+
+    SetEvent(g_hWorkerReady);
+
+    while (GetMessageW(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    Wh_Log(L"Worker thread message loop terminating...");
 
     if (g_hHudWnd) {
         DestroyWindow(g_hHudWnd);
@@ -1623,33 +1829,38 @@ static DWORD WINAPI HookThreadProc(LPVOID lpParam) {
     }
 
     UnregisterClassW(L"WindhawkCustomShortcutsHud", GetModuleHandle(NULL));
-
     CleanupVirtualDesktopAPI();
     CoUninitialize();
     return 0;
 }
 
-// Load and parse all mod settings
+// Load and parse mod settings cleanly without memory leaks
 static void LoadModSettings() {
-    LPCWSTR sameAppStr = Wh_GetStringSetting(L"shortcuts.hotkeySameApp");
-    ParseHotkeyString((sameAppStr && *sameAppStr) ? sameAppStr : L"Alt+`", g_settings.bindingSameApp);
+    AcquireSRWLockExclusive(&g_settingsLock);
+
+    WindhawkUtils::StringSetting sameAppStr =
+        WindhawkUtils::StringSetting::make(L"shortcuts.hotkeySameApp");
+    ParseHotkeyString(sameAppStr.get(), g_settings.bindingSameApp);
 
     g_settings.showHud = Wh_GetIntSetting(L"hudOptions.showHud") != 0;
 
-    LPCWSTR theme = Wh_GetStringSetting(L"hudOptions.hudTheme");
-    g_settings.hudTheme = (theme && *theme) ? theme : L"dark";
+    WindhawkUtils::StringSetting theme =
+        WindhawkUtils::StringSetting::make(L"hudOptions.hudTheme");
+    g_settings.hudTheme = *theme.get() ? theme.get() : L"system";
 
     g_settings.enableDirectSwitching = Wh_GetIntSetting(L"virtualDesktops.enableDirectSwitching") != 0;
 
-    LPCWSTR modStr = Wh_GetStringSetting(L"virtualDesktops.desktopModifier");
-    if (modStr && *modStr) {
-        g_settings.desktopModifier = ParseModifierOnlyString(modStr);
+    WindhawkUtils::StringSetting modStr =
+        WindhawkUtils::StringSetting::make(L"virtualDesktops.desktopModifier");
+    if (*modStr.get()) {
+        g_settings.desktopModifier = ParseModifierOnlyString(modStr.get());
     } else {
-        g_settings.desktopModifier = MOD_WIN;
+        g_settings.desktopModifier = MOD_ALT;
     }
 
-    LPCWSTR verStr = Wh_GetStringSetting(L"virtualDesktops.windowsVersion");
-    g_settings.windowsVersion = (verStr && *verStr) ? verStr : L"auto";
+    WindhawkUtils::StringSetting verStr =
+        WindhawkUtils::StringSetting::make(L"virtualDesktops.windowsVersion");
+    g_settings.windowsVersion = *verStr.get() ? verStr.get() : L"auto";
     if (g_settings.windowsVersion == L"win10_old") {
         g_windowsVersionIndex = 0;
     } else if (g_settings.windowsVersion == L"win10_20348") {
@@ -1667,89 +1878,311 @@ static void LoadModSettings() {
     // Load custom application shortcuts
     g_settings.customApps.clear();
     for (int i = 1; i <= 3; ++i) {
-        WCHAR keyHotkey[64];
-        WCHAR keyPath[64];
-        wsprintfW(keyHotkey, L"shortcuts.hotkeyCustomApp%d", i);
-        wsprintfW(keyPath, L"customAppOptions.customAppPath%d", i);
+        auto hotkeyStr = WindhawkUtils::StringSetting::make(L"shortcuts.hotkeyCustomApp%d", i);
+        auto pathStr = WindhawkUtils::StringSetting::make(L"customAppOptions.customAppPath%d", i);
 
-        LPCWSTR hotkeyStr = Wh_GetStringSetting(keyHotkey);
-        if ((!hotkeyStr || !*hotkeyStr) && i == 1) {
-            hotkeyStr = L"Win+Enter";
-        }
-
-        LPCWSTR pathStr = Wh_GetStringSetting(keyPath);
-        if ((!pathStr || !*pathStr) && i == 1) {
-            pathStr = L"cmd.exe";
-        }
-
-        if (hotkeyStr && *hotkeyStr && pathStr && *pathStr) {
+        if (*hotkeyStr.get() && *pathStr.get()) {
             CustomAppShortcut app;
-            ParseHotkeyString(hotkeyStr, app.binding);
-            app.command = pathStr;
+            ParseHotkeyString(hotkeyStr.get(), app.binding);
+            app.command = pathStr.get();
 
             if (app.binding.valid && !app.command.empty()) {
                 g_settings.customApps.push_back(app);
-                Wh_Log(L"[CustomShortcuts]   Custom App %d: '%s' -> '%s'",
+                Wh_Log(L"Custom App %d: '%s' -> '%s'",
                        i, app.binding.originalStr.c_str(), app.command.c_str());
             }
         }
     }
 
-    Wh_Log(L"[CustomShortcuts] Settings loaded:");
-    Wh_Log(L"[CustomShortcuts]   Same-App: '%s' (valid=%d, vk=0x%02X, mods=0x%X)",
+    ReleaseSRWLockExclusive(&g_settingsLock);
+
+    Wh_Log(L"Settings loaded:");
+    Wh_Log(L"  Same-App: '%s' (valid=%d, vk=0x%02X, mods=0x%X)",
            g_settings.bindingSameApp.originalStr.c_str(), g_settings.bindingSameApp.valid,
            g_settings.bindingSameApp.vk, g_settings.bindingSameApp.modifiers);
-    Wh_Log(L"[CustomShortcuts]   Virtual Desktops: enabled=%d, mod=0x%X, versionIndex=%d",
+    Wh_Log(L"  Virtual Desktops: enabled=%d, mod=0x%X, versionIndex=%d",
            g_settings.enableDirectSwitching, g_settings.desktopModifier, g_windowsVersionIndex);
 }
 
-// Windhawk mod initialization
-BOOL Wh_ModInit() {
-    Wh_Log(L"[CustomShortcuts] Wh_ModInit called");
+// Tool mod initialization (runs in dedicated windhawk.exe tool process)
+BOOL WhTool_ModInit() {
+    Wh_Log(L"WhTool_ModInit called");
 
     HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
     if (hUser32) {
         pfnSwitchToThisWindow = (SwitchToThisWindow_t)GetProcAddress(hUser32, "SwitchToThisWindow");
     }
 
-    LoadModSettings();
-
-    // Spawn dedicated thread with message loop for the WH_KEYBOARD_LL hook
-    g_hHookThread = CreateThread(NULL, 0, HookThreadProc, NULL, 0, &g_dwHookThreadId);
-    if (!g_hHookThread) {
-        Wh_Log(L"[CustomShortcuts] ERROR: CreateThread failed (Error %lu)", GetLastError());
+    g_hWorkerReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hWorkerReady) {
+        Wh_Log(L"ERROR: CreateEvent for worker failed (%lu)", GetLastError());
         return FALSE;
     }
 
-    Wh_Log(L"[CustomShortcuts] Hook thread created (Thread ID %lu)", g_dwHookThreadId);
+    g_hHookReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hHookReady) {
+        Wh_Log(L"ERROR: CreateEvent for hook failed (%lu)", GetLastError());
+        CloseHandle(g_hWorkerReady);
+        g_hWorkerReady = NULL;
+        return FALSE;
+    }
+
+    g_hWorkerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, &g_dwWorkerThreadId);
+    if (!g_hWorkerThread) {
+        Wh_Log(L"ERROR: CreateThread for worker failed (%lu)", GetLastError());
+        CloseHandle(g_hWorkerReady);
+        CloseHandle(g_hHookReady);
+        g_hWorkerReady = NULL;
+        g_hHookReady = NULL;
+        return FALSE;
+    }
+
+    HANDLE workerInitHandles[] = {g_hWorkerReady, g_hWorkerThread};
+    DWORD workerWaitRes = WaitForMultipleObjects(2, workerInitHandles, FALSE, INFINITE);
+    if (workerWaitRes != WAIT_OBJECT_0) {
+        Wh_Log(L"ERROR: Worker thread exited before readiness");
+        return FALSE;
+    }
+
+    g_hHookThread = CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, &g_dwHookThreadId);
+    if (!g_hHookThread) {
+        Wh_Log(L"ERROR: CreateThread for hook failed (%lu)", GetLastError());
+        return FALSE;
+    }
+
+    HANDLE hookInitHandles[] = {g_hHookReady, g_hHookThread};
+    DWORD hookWaitRes = WaitForMultipleObjects(2, hookInitHandles, FALSE, INFINITE);
+    if (hookWaitRes != WAIT_OBJECT_0) {
+        Wh_Log(L"ERROR: Hook thread exited before readiness");
+        return FALSE;
+    }
+
+    Wh_Log(L"Custom Shortcuts tool mod initialized successfully.");
     return TRUE;
 }
 
-// Windhawk mod cleanup
-void Wh_ModUninit() {
-    Wh_Log(L"[CustomShortcuts] Wh_ModUninit called");
-
-    CleanupVirtualDesktopAPI();
+// Tool mod termination
+void WhTool_ModUninit() {
+    Wh_Log(L"WhTool_ModUninit called");
 
     if (g_dwHookThreadId) {
+        if (g_hHookReady && g_hHookThread) {
+            HANDLE handles[] = {g_hHookReady, g_hHookThread};
+            WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+        }
         PostThreadMessageW(g_dwHookThreadId, WM_QUIT, 0, 0);
         if (g_hHookThread) {
-            WaitForSingleObject(g_hHookThread, 2000);
+            WaitForSingleObject(g_hHookThread, INFINITE);
             CloseHandle(g_hHookThread);
             g_hHookThread = NULL;
         }
         g_dwHookThreadId = 0;
     }
 
-    Wh_Log(L"[CustomShortcuts] Cleanup complete.");
+    if (g_dwWorkerThreadId) {
+        if (g_hWorkerReady && g_hWorkerThread) {
+            HANDLE handles[] = {g_hWorkerReady, g_hWorkerThread};
+            WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+        }
+        if (g_hHudWnd) {
+            PostMessageW(g_hHudWnd, WM_QUIT, 0, 0);
+        } else {
+            PostThreadMessageW(g_dwWorkerThreadId, WM_QUIT, 0, 0);
+        }
+        if (g_hWorkerThread) {
+            WaitForSingleObject(g_hWorkerThread, INFINITE);
+            CloseHandle(g_hWorkerThread);
+            g_hWorkerThread = NULL;
+        }
+        g_dwWorkerThreadId = 0;
+    }
+
+    if (g_hHookReady) {
+        CloseHandle(g_hHookReady);
+        g_hHookReady = NULL;
+    }
+    if (g_hWorkerReady) {
+        CloseHandle(g_hWorkerReady);
+        g_hWorkerReady = NULL;
+    }
+
+    Wh_Log(L"Cleanup complete.");
 }
 
-// Settings updated callback
-void Wh_ModSettingsChanged() {
-    Wh_Log(L"[CustomShortcuts] Wh_ModSettingsChanged called");
-    CleanupVirtualDesktopAPI();
-    LoadModSettings();
+// Tool mod settings changed notification
+void WhTool_ModSettingsChanged() {
+    Wh_Log(L"WhTool_ModSettingsChanged called");
     if (g_hHudWnd) {
-        InvalidateRect(g_hHudWnd, NULL, TRUE);
+        PostMessageW(g_hHudWnd, WM_USER_SETTINGS_CHANGED, 0, 0);
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR *argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER *dosHeader = (IMAGE_DOS_HEADER *)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS *ntHeaders =
+            (IMAGE_NT_HEADERS *)((BYTE *)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void *entryPoint = (BYTE *)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void *)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+    case 0:
+    case ARRAYSIZE(currentProcessPath):
+        Wh_Log(L"GetModuleFileName failed");
+        return;
+    }
+
+    WCHAR commandLine[MAX_PATH + 2 +
+                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI *)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
