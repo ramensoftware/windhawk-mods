@@ -1,3 +1,7 @@
+## 1.5.1 ([Oct 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/740fa0ebe790bae23b87a1ee223302715e0ce0db/mods/better-volume-mixer.wh.cpp))
+
+* Fixed the tray icon sometimes appearing twice
+
 ## 1.5.0 ([Oct 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/51d6eb53674112a53b9d2d880d983944a39b140b/mods/better-volume-mixer.wh.cpp))
 
 * Apps playing on several devices now show as one row (fixes duplicates).

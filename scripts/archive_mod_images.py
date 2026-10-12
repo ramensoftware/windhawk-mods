@@ -4,11 +4,15 @@ from typing import List
 from urllib.parse import unquote
 
 import requests
+from compress_gif import compress_gif, is_gif
 
 URL_PATTERN = r"!\[[^\[\]]*\]\(\s*((?:https://i\.imgur\.com/|https://raw\.githubusercontent\.com)[^)]+?)\s*\)"
 SCRIPT_DIR = Path(__file__).parent
 CODE_FOLDER_PATH = SCRIPT_DIR.parent / "mods"
 IMAGES_FOLDER_PATH = SCRIPT_DIR.parent / "images"
+
+# Smaller GIFs are only compressed losslessly.
+LOSSY_GIF_MIN_SIZE = 20 * 1024 * 1024
 
 EXCLUDED_IMAGE_URLS = {
     # No longer available.
@@ -90,6 +94,11 @@ def process_code_files(code_folder: Path, images_folder: Path):
 
         if not image_path.exists():
             download_image(url, image_path)
+            if is_gif(image_path):
+                compress_gif(
+                    image_path,
+                    allow_lossy=image_path.stat().st_size >= LOSSY_GIF_MIN_SIZE,
+                )
 
         if image_path in stale_images:
             stale_images.remove(image_path)

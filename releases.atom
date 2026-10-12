@@ -2,12 +2,196 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-12T12:02:42.000Z</updated>
+    <updated>2026-10-12T16:04:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[SameFolderOnly 4.1.5]]></title>
+        <id>https://windhawk.net/mods/xandriw-explorer-select-interceptor#fa750447213d3d2c91aadac412826eaec6343cc2</id>
+        <link href="https://windhawk.net/mods/xandriw-explorer-select-interceptor"/>
+        <updated>2026-10-12T16:04:02.000Z</updated>
+        <content type="html"><![CDATA[<p>Purpose</p>
+<ul>
+<li>Source-level fix for "Show in folder", "Open downloads folder", and plain
+explorer.exe folder opens.</li>
+<li>Runs inside the new explorer.exe process before the duplicate window appears.</li>
+</ul>
+<p>What it intercepts</p>
+<ul>
+<li>explorer.exe /select,"C:\Folder\File.ext"</li>
+<li>explorer.exe "C:\Folder"</li>
+<li>explorer.exe C:\Folder</li>
+<li>explorer.exe shell:Downloads</li>
+<li>explorer.exe /e,C:\Folder or /root,C:\Folder style commands when possible</li>
+</ul>
+<p>Behavior</p>
+<ol>
+<li>If a matching folder is already open:</li>
+</ol>
+<ul>
+<li>Select the requested file if /select was used.</li>
+<li>Activate that existing Explorer window if enabled.</li>
+<li>Exit this helper explorer.exe before it creates a duplicate window.</li>
+</ul>
+<ol>
+<li>If no matching folder is visible through ShellWindows:</li>
+</ol>
+<ul>
+<li>By default, do NOT steal a random Explorer window.</li>
+<li>Optional fallback can reuse another Explorer window if you explicitly enable it.</li>
+</ul>
+<ol>
+<li>If no usable Explorer window is found:</li>
+</ol>
+<ul>
+<li>Let Explorer continue normally.</li>
+</ul>
+<p>Windows 11 tabs</p>
+<ul>
+<li>ShellWindows can enumerate inactive tabs, which share the window handle of
+their parent Explorer window. This mod checks each tab's Shell view visibility
+and only reuses an active tab, so a request is not swallowed by a hidden tab.</li>
+<li>If the target folder is only in a background tab, SameFolderOnly lets Explorer
+handle the request normally (it does not automatically switch to that tab).</li>
+<li>The optional ReuseAnyExplorerWindow fallback also skips inactive tabs.</li>
+</ul>
+<p>Hold Shift (or your configured bypass key) to allow Explorer's normal behavior.
+Requests not launched through a supported explorer.exe command line are unaffected.</p>]]></content>
+        <author>
+            <name>XandriW</name>
+            <uri>https://github.com/xandri19wang</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Tray Agenda 1.0.0]]></title>
+        <id>https://windhawk.net/mods/tray-agenda#79d3e45e63490531703180aff5fc9f5bbebb5f73</id>
+        <link href="https://windhawk.net/mods/tray-agenda"/>
+        <updated>2026-10-12T13:04:29.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="trayagenda">Tray Agenda</h1>
+<p><img src="https://raw.githubusercontent.com/chambber/tray-agenda/55ec9a66eb459d45779657b0640f303dd7fff4c9/docs/widget.png" alt="Tray widget" /></p>
+<p><img src="https://raw.githubusercontent.com/chambber/tray-agenda/55ec9a66eb459d45779657b0640f303dd7fff4c9/docs/popup.png" alt="Popup agenda" /></p>
+<p>A compact agenda widget for the Windows 11 system tray, with a Notion-Calendar-style
+popup and native Windows reminders. It reads <strong>Google Calendar</strong> (up to 4 accounts) and
+<strong>ICS feeds</strong> directly. There is no helper program: the mod signs in with your own Google
+OAuth client and keeps only read-only refresh tokens, encrypted with Windows DPAPI in
+Windhawk's mod storage.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Tray widget showing the current or next meeting. An event starting within the
+reminder lead time takes over from the one in progress. Out-of-office events never
+win over an overlapping regular event.</li>
+<li>Popup agenda grouped by day, with a dotted bar for events you have not answered or
+accepted tentatively.</li>
+<li>Join buttons for Google Meet, Zoom and Microsoft Teams links.</li>
+<li>Native Windows toast reminders for <strong>accepted</strong> events, once before the start
+(10 minutes by default) and again at the start time. Out-of-office events are never
+announced. The toast has a <strong>Join</strong> button when the event has a meeting link.</li>
+<li>Several sources at once: up to 4 Google accounts plus ICS feed URLs (Google secret
+address, Outlook/Microsoft 365 published calendar, Apple, Nextcloud, …). The same
+meeting appearing in two sources is shown once.</li>
+</ul>
+<h2 id="setup">Setup</h2>
+<p>You need a Google Cloud OAuth client of type <em>Desktop app</em>. It is free and takes a few
+minutes. Every user creates their own, so nothing is shared with anyone else.</p>
+<ol>
+<li>Open <a href="https://console.cloud.google.com/">https://console.cloud.google.com/</a> and create a project (or pick one).</li>
+<li>Go to <strong>APIs & Services > Library</strong>, search for <strong>Google Calendar API</strong> and click
+<strong>Enable</strong>.</li>
+<li>Go to <strong>APIs & Services > OAuth consent screen</strong> (called <em>Google Auth Platform</em> in
+newer consoles). Choose <strong>External</strong>, fill in an app name and your email, and save.</li>
+<li>Under <strong>Audience</strong> (or <em>Test users</em>), add your own Google account as a test user.
+To avoid Google expiring the sign-in every 7 days, set the publishing status to
+<strong>In production</strong>. For personal use Google shows an "unverified app" warning that
+you can accept.</li>
+<li>Go to <strong>Credentials > Create credentials > OAuth client ID</strong>, choose <strong>Desktop app</strong>
+and create it. Copy the <strong>Client ID</strong> and <strong>Client secret</strong>.</li>
+<li>In this mod's settings paste the client ID and secret.</li>
+<li>Click the widget in the tray and choose <strong>Sign in with Google</strong>. Approve the
+read-only calendar access in your browser.</li>
+</ol>
+<p>By default the mod reads the calendars ticked in Google Calendar. To pick specific
+calendars, add their IDs (shown in each calendar's settings) to <em>Calendar IDs</em>.</p>
+<p>To connect another Google account (for example a work account), open the popup and choose
+<strong>Add Google account</strong>; sign in with the other account in the browser. The same OAuth client
+works for every account. If your organisation restricts third-party apps, a Workspace admin
+may need to allow the client. <strong>Sign out …</strong> entries remove one account at a time.</p>
+<h2 id="icsfeeds">ICS feeds</h2>
+<p>Add secret calendar URLs under <em>ICS feed URLs</em>, one per item, as <code>https://...</code> or
+<code>Label|https://...</code> (<code>webcal://</code> also works). ICS carries no accept/decline status, so by
+default every timed feed event gets reminders; turn that off with <em>Remind for ICS feed
+events</em>. Recurring events, exceptions, RECURRENCE-ID overrides and IANA or Windows time
+zones are supported. Feed URLs are stored as plain text in Windhawk's settings, like any
+other setting, so treat them as secrets.</p>
+<h2 id="privacyandsecurity">Privacy and security</h2>
+<ul>
+<li>The mod requests only <code>calendar.events.readonly</code> and <code>calendar.calendarlist.readonly</code>.</li>
+<li>Sign-in uses the system browser, a loopback redirect on <code>127.0.0.1</code> and PKCE. The
+refresh token is encrypted with DPAPI for your Windows account.</li>
+<li>The client secret you paste is stored in Windhawk's settings, like any other mod
+setting. For a Desktop-app client it is not a confidential secret.</li>
+<li>Network traffic goes to Google over HTTPS and to the ICS feed URLs you configure (HTTPS
+only, no credentials in the URL; up to 4 redirects are followed, which may lead to other
+HTTPS hosts). Nothing is sent until you configure an OAuth client and sign in, or add an
+ICS URL. Meeting links are shown only if they match a strict allowlist: Google Meet,
+<code>zoom.us</code> and Microsoft Teams join URLs.</li>
+<li>Reminders use their own notification identity, so they appear as "Tray Agenda". The first time a
+reminder is about to be shown, the mod writes <code>HKCU\Software\Classes\AppUserModelId\TrayAgenda</code>
+(display name only), and Windows adds
+<code>HKCU\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\TrayAgenda</code>. Nothing is
+written if no reminder is ever shown (for example with <em>Reminder notifications</em> off). Both keys are
+deleted when the mod is disabled or unloaded. Explorer exiting (sign-out, shutdown, restart, crash)
+does not run that path, so after a session with a reminder the keys stay until the mod next loads
+into Explorer (and for good if the mod or Windhawk is removed while the mod is not loaded). For the
+same reason, per-app notification choices made in Windows Settings are reset at every sign-in or
+Explorer restart; use the mod's own <em>Reminder notifications</em> setting instead.</li>
+<li><em>Sign out …</em> in the popup removes that account's stored token and revokes it at Google.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Windows 11 only. Reminders follow your Windows notification and Focus settings. The widget
+is shown on the primary taskbar only.</li>
+<li>Taskbar XAML-root and tray insertion strategy is adapted from Salyts' MIT-licensed
+Taskbar Fluent Media Player Windhawk mod.</li>
+</ul>]]></content>
+        <author>
+            <name>Rubens Nascimento</name>
+            <uri>https://github.com/chambber</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Hide Extension during renaming 1.0]]></title>
+        <id>https://windhawk.net/mods/hide-extension-during-rename#6563d37ad83286401c72981375d9e138df07be49</id>
+        <link href="https://windhawk.net/mods/hide-extension-during-rename"/>
+        <updated>2026-10-12T13:04:25.000Z</updated>
+        <content type="html"><![CDATA[<p>Ever wanted to get rid of a file extension when trying to save a file on your computer or rename something on your PC while keeping the file type intact?.
+This mod dynamically hides file extensions during inline file renaming in File Explorer, Desktop and "Save As" operations and restores it when you're done renaming.</p>
+<h3 id="keyfeatures">Key Features</h3>
+<ul>
+<li><strong>Save As Dialogs:</strong>      Automatically hides file extensions from the default filename text box when saving files.</li>
+<li><strong>Inline File Renaming:</strong> Hides file extensions while editing item names on the Desktop or inside File Explorer (<code>SHELLDLL_DefView</code>, <code>SysListView32</code>, <code>DirectUIHWND</code>).</li>
+<li><strong>Warning Prevention:</strong>   Intercepts window messages (<code>WM_GETTEXT</code>) upon committing a rename to silently re-attach the original extension,
+                        avoiding the native Windows "If you change a file name extension, the file might become unusable" warning prompt.</li>
+</ul>
+<p><strong>Things to Note:</strong></p>
+<ol>
+<li>This mod targets native Windows File Explorer, Desktop, and standard file dialogs. It does not handle inline renaming inside third-party apps (e.g., WinRAR, 7-Zip).</li>
+<li>If you want to change a file's extension, you can do so inside the file's properties.</li>
+<li>If you type a dot at the end of a file name followed by any Windows registered extension (e.g., changing <code>document.txt</code> to <code>document.pdf</code>), it will trigger the Windows extension change warning prompt, however non-registered extensions won't change the file type.</li>
+</ol>
+<h3 id="knownlimitations">Known Limitations</h3>
+<ul>
+<li><strong>Folders Ending in Registered Extensions:</strong> Folders whose names explicitly end in a registered file extension (e.g., a folder named <code>Backup.zip</code> or <code>github.com</code>) will have its trailing extension hidden during inline renaming.</li>
+<li><strong>Why this happens:</strong> Windows reuses the exact same generic Win32 <code>Edit</code> control for both files and directories (folders). When an inline rename is triggered, the mod interacts with <code>SetWindowTextW</code> and receives only a window handle and a string. There is no native API or context provided by the shell at that moment to distinguish whether the text box belongs to a file or a folder. While the full folder name is safely preserved and restored upon commit, inline editing will temporarily treat the extension-like suffix as hidable.</li>
+</ul>
+<p><img src="https://i.imgur.com/iy9dyzq.gif" alt="Mod Demo" /></p>]]></content>
+        <author>
+            <name>AuralSX</name>
+            <uri>https://github.com/AuralSX</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 10 1507 Start Menu Recreation 1.0.0]]></title>
         <id>https://windhawk.net/mods/win10-1507-start-menu-recreation#2b9300548f60dd4ebb43e9aa5d77230f0c37f6bd</id>
@@ -1222,141 +1406,6 @@ masking with smart dark-mode dialog sampling.</p>
         <author>
             <name>iMAboud</name>
             <uri>https://github.com/iMAboud</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Animated Cross-Desktop Activation 0.6.0]]></title>
-        <id>https://windhawk.net/mods/animated-cross-desktop-window-animation#e52aa5b390cbd99ba2af1961bf2905efde59dd01</id>
-        <link href="https://windhawk.net/mods/animated-cross-desktop-window-animation"/>
-        <updated>2026-10-09T21:03:48.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="animatedcrossdesktopactivation">Animated Cross-Desktop Activation</h1>
-<p>Windows can jump to another virtual desktop without the normal desktop-switch
-animation when an application activates an existing window on that desktop.
-This mod intercepts only those activation-driven switches and replays them
-asynchronously through Windows' native virtual-desktop animation path.</p>
-<p>Intentional desktop navigation is left alone, including Win+Ctrl+Left/Right,
-Task View, touchpad gestures, and other normal virtual-desktop switch routes.</p>
-<p>Some applications briefly activate an old window on another desktop while they
-create the window that was actually requested on the current desktop. For apps
-listed in Settings, the mod holds the pending animated switch for a short grace
-period. If a new same-process window is added and becomes foreground on the
-current desktop during that period, the stale cross-desktop switch is discarded.
-No windows are moved between desktops.</p>
-<p>Windows Terminal is enabled for transient replacement suppression by default.</p>
-<p>Designed for Windows 11 24H2 and newer. Private shell interfaces and symbols can
-change in future Windows builds.</p>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteoni</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Per-App Titlebar Buttons 1.0]]></title>
-        <id>https://windhawk.net/mods/per-app-titlebar-buttons#6a59d24ea77bc63bfb4e5e97fe3f41a2b1e81993</id>
-        <link href="https://windhawk.net/mods/per-app-titlebar-buttons"/>
-        <updated>2026-10-09T16:01:26.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="perapptitlebarbuttons">Per-app Titlebar Buttons</h1>
-<p>Hide or disable selected native Windows titlebar buttons on a per-application
-basis.</p>
-<p>Add one or more process names in the mod settings and choose whether to affect
-the Minimize, Maximize/Restore, and Close buttons for each application.</p>
-<p>Process names can be entered with or without the <code>.exe</code> extension. For example,
-both <code>taskmgr</code> and <code>taskmgr.exe</code> match Task Manager. Matching is
-case-insensitive, and a full executable path is also accepted.</p>
-<h2 id="nativetitlebarbehavior">Native titlebar behavior</h2>
-<p>Windows treats the Minimize and Maximize/Restore buttons as a pair. If only one
-of those style flags is removed, Windows may keep both buttons visible and show
-the affected button as disabled. Removing both flags removes the pair.</p>
-<p>These are native window style flags, so disabling Maximize also disables native
-maximize actions such as titlebar double-click and the Maximize system-menu
-command while the setting is active.</p>
-<p>Windows doesn't provide an independent window style flag for the Close button.
-If Close is selected while Minimize or Maximize/Restore is still available,
-the Close command is disabled.</p>
-<p>If Close is selected and the resulting window has neither Minimize nor
-Maximize/Restore available, the mod removes <code>WS_SYSMENU</code>. This removes the
-native caption button cluster, and also removes the titlebar icon and the
-Alt+Space system menu for that window while the setting is active.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>The mod targets standard native Win32 titlebars. Applications that draw their
-own titlebars, including some Chromium, Electron, and WinUI applications, may
-not respond to these settings.</p>]]></content>
-        <author>
-            <name>Casket Pizza</name>
-            <uri>https://github.com/CasketPizza</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Pointer Afterimage Motion Blur 1.0]]></title>
-        <id>https://windhawk.net/mods/pointer-afterimage-motion-blur#fb5e852a66d521f2f6496b2dfb3d0d8de33e4268</id>
-        <link href="https://windhawk.net/mods/pointer-afterimage-motion-blur"/>
-        <updated>2026-10-09T11:00:31.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="pointerafterimagemotionblur">Pointer Afterimage Motion Blur</h1>
-<p>A live motion blur for the mouse pointer, everywhere in Windows. While the
-mouse moves, fading copies of your actual cursor are drawn along its recent
-path, so it looks like a camera motion blur rather than a trail. Unlike the
-smear ribbon of <a href="https://windhawk.net/mods/cursor-motion-blur">Cursor Motion Blur</a>
-or the particles of <a href="https://windhawk.net/mods/mouse-trail">Mouse Trail</a>, the
-blur is made of your own cursor picture.</p>
-<p><img src="https://raw.githubusercontent.com/sidlikesgrapess/CursorMotionBlur/main/assets/demo.gif" alt="Demo" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Uses your real cursor: your scheme, size and colour, and whatever shape it
-has right now (arrow, text, hand…).</li>
-<li>Right size on every monitor, including monitors with different scaling.</li>
-<li>Optionally hides the real pointer during very fast movement so only the blur
-shows; it comes back about 25 ms after you slow down.</li>
-<li>Pauses itself while a fullscreen app or game is in front.</li>
-<li>Runs in its own small Windhawk process: nothing is injected into other
-programs.</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Trail opacity</strong>: how solid the blur is right behind the pointer. It always
-fades to nothing at the end of the trail.</li>
-<li><strong>Trail length</strong>: how far back in time the blur reaches, in ms. Longer means
-a longer streak.</li>
-<li><strong>Hide the real cursor when moving very fast</strong> (off by default): while you
-move fast, the system cursors are swapped for an invisible one, and your own
-cursors are put back as soon as you slow down and when the mod is disabled.</li>
-<li><strong>Hide above speed</strong>: the pointer speed that hides the real cursor, in cm/s
-as measured on your main monitor. It is the same hand speed on every
-monitor.</li>
-<li><strong>Pause in fullscreen apps and games</strong>: no blur while a fullscreen app is in
-front.</li>
-</ul>
-<h2 id="resourceuse">Resource use</h2>
-<ul>
-<li>No CPU while the mouse is still; typically well under 1% while it moves, and
-about 1.5 MB of memory at the default settings.</li>
-<li>While an administrator window (Task Manager, Windhawk…) is in front,
-Windows gives the mod no mouse input, so it checks the cursor on a timer.</li>
-</ul>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<ul>
-<li><strong>The cursor stays invisible</strong> (only possible with hiding on, e.g. if the
-process was killed mid-flick). Disable and re-enable the mod, or open
-Settings &gt; Bluetooth &amp; devices &gt; Mouse &gt; Additional mouse settings &gt; Pointers
-and click OK.</li>
-<li><strong>Another tool's custom cursors get reset.</strong> Restoring after hiding reloads
-the Windows cursor scheme, so turn hiding off if you use a tool that swaps
-the system cursors, such as the Shake to Find Cursor or macOS magnifying
-cursor mods.</li>
-<li><strong>No blur over the Start menu, Search or Task View.</strong> Windows keeps those
-above every app's windows, including the blur.</li>
-<li><strong>No blur in a game or video.</strong> That is the fullscreen pause; turn off
-"Pause in fullscreen apps and games" if you want it there.</li>
-<li><strong>The cursor hides too often or not at all.</strong> Raise or lower "Hide above
-speed", or turn hiding off.</li>
-<li><strong>The blur seems slightly behind the pointer at high speed.</strong> Windows draws
-the real pointer more directly than any window can be drawn, so every
-overlay is 1-2 frames behind. Hiding the real cursor when fast hides this.</li>
-<li>A standalone app version (no Windhawk needed) is on the
-<a href="https://github.com/sidlikesgrapess/CursorMotionBlur">homepage</a>.</li>
-</ul>]]></content>
-        <author>
-            <name>sidlikesgrapess</name>
-            <uri>https://github.com/sidlikesgrapess</uri>
         </author>
     </entry>
 </feed>

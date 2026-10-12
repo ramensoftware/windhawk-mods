@@ -947,7 +947,7 @@
         "ratingUsers": 48,
         "reviews": 0,
         "trendingSorting": 16.293353529618187,
-        "updated": 1791630214000,
+        "updated": 1791817359000,
         "users": 1979
       },
       "metadata": {
@@ -962,7 +962,7 @@
         ],
         "license": "MIT",
         "name": "Better Volume Mixer",
-        "version": "1.5.0"
+        "version": "1.5.1"
       }
     },
     "block-smb-quick-access": {
@@ -7402,6 +7402,30 @@
         "license": "MIT",
         "name": "Hide Empty Optical Drives",
         "version": "1.0.0"
+      }
+    },
+    "hide-extension-during-rename": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791810265000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791810265000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "AuralSX",
+        "compilerOptions": "-luser32 -lshlwapi -lcomctl32",
+        "description": "Hides file extensions in \"Save As\" dialogs and during File Explorer/Desktop renaming.",
+        "github": "https://github.com/AuralSX",
+        "include": [
+          "*"
+        ],
+        "name": "Hide Extension during renaming",
+        "version": "1.0"
       }
     },
     "hide-home-gallery-explorer": {
@@ -16194,6 +16218,35 @@
         "version": "1.0.0"
       }
     },
+    "tray-agenda": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791810269000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791810269000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Rubens Nascimento",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lruntimeobject -luuid -luser32 -lwindowsapp -lshell32 -lwinhttp -lbcrypt -lcrypt32 -lws2_32 -ladvapi32 -lole32",
+        "description": "Calendar agenda widget in the Windows 11 tray (Google Calendar accounts and ICS feeds) with native reminder notifications.",
+        "github": "https://github.com/chambber",
+        "homepage": "https://github.com/chambber/tray-agenda",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Tray Agenda",
+        "version": "1.0.0"
+      }
+    },
     "tray-hover-expand": {
       "details": {
         "defaultSorting": 8190,
@@ -19050,6 +19103,29 @@
         ],
         "name": "Word PDF Lossless Export",
         "version": "1.2.0"
+      }
+    },
+    "xandriw-explorer-select-interceptor": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791821042000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791821042000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "XandriW",
+        "description": "When an app opens a folder or uses Show in folder, reuse an existing Explorer window for that folder and select the requested file instead of opening a duplicate window.",
+        "github": "https://github.com/xandri19wang",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "SameFolderOnly",
+        "version": "4.1.5"
       }
     },
     "xp-timedate-cpl-fix": {

@@ -2,12 +2,209 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-12T12:02:42.000Z</updated>
+    <updated>2026-10-12T16:04:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[SameFolderOnly 4.1.5]]></title>
+        <id>https://windhawk.net/mods/xandriw-explorer-select-interceptor#fa750447213d3d2c91aadac412826eaec6343cc2</id>
+        <link href="https://windhawk.net/mods/xandriw-explorer-select-interceptor"/>
+        <updated>2026-10-12T16:04:02.000Z</updated>
+        <content type="html"><![CDATA[<p>Purpose</p>
+<ul>
+<li>Source-level fix for "Show in folder", "Open downloads folder", and plain
+explorer.exe folder opens.</li>
+<li>Runs inside the new explorer.exe process before the duplicate window appears.</li>
+</ul>
+<p>What it intercepts</p>
+<ul>
+<li>explorer.exe /select,"C:\Folder\File.ext"</li>
+<li>explorer.exe "C:\Folder"</li>
+<li>explorer.exe C:\Folder</li>
+<li>explorer.exe shell:Downloads</li>
+<li>explorer.exe /e,C:\Folder or /root,C:\Folder style commands when possible</li>
+</ul>
+<p>Behavior</p>
+<ol>
+<li>If a matching folder is already open:</li>
+</ol>
+<ul>
+<li>Select the requested file if /select was used.</li>
+<li>Activate that existing Explorer window if enabled.</li>
+<li>Exit this helper explorer.exe before it creates a duplicate window.</li>
+</ul>
+<ol>
+<li>If no matching folder is visible through ShellWindows:</li>
+</ol>
+<ul>
+<li>By default, do NOT steal a random Explorer window.</li>
+<li>Optional fallback can reuse another Explorer window if you explicitly enable it.</li>
+</ul>
+<ol>
+<li>If no usable Explorer window is found:</li>
+</ol>
+<ul>
+<li>Let Explorer continue normally.</li>
+</ul>
+<p>Windows 11 tabs</p>
+<ul>
+<li>ShellWindows can enumerate inactive tabs, which share the window handle of
+their parent Explorer window. This mod checks each tab's Shell view visibility
+and only reuses an active tab, so a request is not swallowed by a hidden tab.</li>
+<li>If the target folder is only in a background tab, SameFolderOnly lets Explorer
+handle the request normally (it does not automatically switch to that tab).</li>
+<li>The optional ReuseAnyExplorerWindow fallback also skips inactive tabs.</li>
+</ul>
+<p>Hold Shift (or your configured bypass key) to allow Explorer's normal behavior.
+Requests not launched through a supported explorer.exe command line are unaffected.</p>]]></content>
+        <author>
+            <name>XandriW</name>
+            <uri>https://github.com/xandri19wang</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Better Volume Mixer 1.5.1]]></title>
+        <id>https://windhawk.net/mods/better-volume-mixer#740fa0ebe790bae23b87a1ee223302715e0ce0db</id>
+        <link href="https://windhawk.net/mods/better-volume-mixer"/>
+        <updated>2026-10-12T15:02:39.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the tray icon sometimes appearing twice</li>
+</ul>]]></content>
+        <author>
+            <name>0Allu</name>
+            <uri>https://github.com/0Allu</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Tray Agenda 1.0.0]]></title>
+        <id>https://windhawk.net/mods/tray-agenda#79d3e45e63490531703180aff5fc9f5bbebb5f73</id>
+        <link href="https://windhawk.net/mods/tray-agenda"/>
+        <updated>2026-10-12T13:04:29.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="trayagenda">Tray Agenda</h1>
+<p><img src="https://raw.githubusercontent.com/chambber/tray-agenda/55ec9a66eb459d45779657b0640f303dd7fff4c9/docs/widget.png" alt="Tray widget" /></p>
+<p><img src="https://raw.githubusercontent.com/chambber/tray-agenda/55ec9a66eb459d45779657b0640f303dd7fff4c9/docs/popup.png" alt="Popup agenda" /></p>
+<p>A compact agenda widget for the Windows 11 system tray, with a Notion-Calendar-style
+popup and native Windows reminders. It reads <strong>Google Calendar</strong> (up to 4 accounts) and
+<strong>ICS feeds</strong> directly. There is no helper program: the mod signs in with your own Google
+OAuth client and keeps only read-only refresh tokens, encrypted with Windows DPAPI in
+Windhawk's mod storage.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Tray widget showing the current or next meeting. An event starting within the
+reminder lead time takes over from the one in progress. Out-of-office events never
+win over an overlapping regular event.</li>
+<li>Popup agenda grouped by day, with a dotted bar for events you have not answered or
+accepted tentatively.</li>
+<li>Join buttons for Google Meet, Zoom and Microsoft Teams links.</li>
+<li>Native Windows toast reminders for <strong>accepted</strong> events, once before the start
+(10 minutes by default) and again at the start time. Out-of-office events are never
+announced. The toast has a <strong>Join</strong> button when the event has a meeting link.</li>
+<li>Several sources at once: up to 4 Google accounts plus ICS feed URLs (Google secret
+address, Outlook/Microsoft 365 published calendar, Apple, Nextcloud, …). The same
+meeting appearing in two sources is shown once.</li>
+</ul>
+<h2 id="setup">Setup</h2>
+<p>You need a Google Cloud OAuth client of type <em>Desktop app</em>. It is free and takes a few
+minutes. Every user creates their own, so nothing is shared with anyone else.</p>
+<ol>
+<li>Open <a href="https://console.cloud.google.com/">https://console.cloud.google.com/</a> and create a project (or pick one).</li>
+<li>Go to <strong>APIs & Services > Library</strong>, search for <strong>Google Calendar API</strong> and click
+<strong>Enable</strong>.</li>
+<li>Go to <strong>APIs & Services > OAuth consent screen</strong> (called <em>Google Auth Platform</em> in
+newer consoles). Choose <strong>External</strong>, fill in an app name and your email, and save.</li>
+<li>Under <strong>Audience</strong> (or <em>Test users</em>), add your own Google account as a test user.
+To avoid Google expiring the sign-in every 7 days, set the publishing status to
+<strong>In production</strong>. For personal use Google shows an "unverified app" warning that
+you can accept.</li>
+<li>Go to <strong>Credentials > Create credentials > OAuth client ID</strong>, choose <strong>Desktop app</strong>
+and create it. Copy the <strong>Client ID</strong> and <strong>Client secret</strong>.</li>
+<li>In this mod's settings paste the client ID and secret.</li>
+<li>Click the widget in the tray and choose <strong>Sign in with Google</strong>. Approve the
+read-only calendar access in your browser.</li>
+</ol>
+<p>By default the mod reads the calendars ticked in Google Calendar. To pick specific
+calendars, add their IDs (shown in each calendar's settings) to <em>Calendar IDs</em>.</p>
+<p>To connect another Google account (for example a work account), open the popup and choose
+<strong>Add Google account</strong>; sign in with the other account in the browser. The same OAuth client
+works for every account. If your organisation restricts third-party apps, a Workspace admin
+may need to allow the client. <strong>Sign out …</strong> entries remove one account at a time.</p>
+<h2 id="icsfeeds">ICS feeds</h2>
+<p>Add secret calendar URLs under <em>ICS feed URLs</em>, one per item, as <code>https://...</code> or
+<code>Label|https://...</code> (<code>webcal://</code> also works). ICS carries no accept/decline status, so by
+default every timed feed event gets reminders; turn that off with <em>Remind for ICS feed
+events</em>. Recurring events, exceptions, RECURRENCE-ID overrides and IANA or Windows time
+zones are supported. Feed URLs are stored as plain text in Windhawk's settings, like any
+other setting, so treat them as secrets.</p>
+<h2 id="privacyandsecurity">Privacy and security</h2>
+<ul>
+<li>The mod requests only <code>calendar.events.readonly</code> and <code>calendar.calendarlist.readonly</code>.</li>
+<li>Sign-in uses the system browser, a loopback redirect on <code>127.0.0.1</code> and PKCE. The
+refresh token is encrypted with DPAPI for your Windows account.</li>
+<li>The client secret you paste is stored in Windhawk's settings, like any other mod
+setting. For a Desktop-app client it is not a confidential secret.</li>
+<li>Network traffic goes to Google over HTTPS and to the ICS feed URLs you configure (HTTPS
+only, no credentials in the URL; up to 4 redirects are followed, which may lead to other
+HTTPS hosts). Nothing is sent until you configure an OAuth client and sign in, or add an
+ICS URL. Meeting links are shown only if they match a strict allowlist: Google Meet,
+<code>zoom.us</code> and Microsoft Teams join URLs.</li>
+<li>Reminders use their own notification identity, so they appear as "Tray Agenda". The first time a
+reminder is about to be shown, the mod writes <code>HKCU\Software\Classes\AppUserModelId\TrayAgenda</code>
+(display name only), and Windows adds
+<code>HKCU\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\TrayAgenda</code>. Nothing is
+written if no reminder is ever shown (for example with <em>Reminder notifications</em> off). Both keys are
+deleted when the mod is disabled or unloaded. Explorer exiting (sign-out, shutdown, restart, crash)
+does not run that path, so after a session with a reminder the keys stay until the mod next loads
+into Explorer (and for good if the mod or Windhawk is removed while the mod is not loaded). For the
+same reason, per-app notification choices made in Windows Settings are reset at every sign-in or
+Explorer restart; use the mod's own <em>Reminder notifications</em> setting instead.</li>
+<li><em>Sign out …</em> in the popup removes that account's stored token and revokes it at Google.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Windows 11 only. Reminders follow your Windows notification and Focus settings. The widget
+is shown on the primary taskbar only.</li>
+<li>Taskbar XAML-root and tray insertion strategy is adapted from Salyts' MIT-licensed
+Taskbar Fluent Media Player Windhawk mod.</li>
+</ul>]]></content>
+        <author>
+            <name>Rubens Nascimento</name>
+            <uri>https://github.com/chambber</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Hide Extension during renaming 1.0]]></title>
+        <id>https://windhawk.net/mods/hide-extension-during-rename#6563d37ad83286401c72981375d9e138df07be49</id>
+        <link href="https://windhawk.net/mods/hide-extension-during-rename"/>
+        <updated>2026-10-12T13:04:25.000Z</updated>
+        <content type="html"><![CDATA[<p>Ever wanted to get rid of a file extension when trying to save a file on your computer or rename something on your PC while keeping the file type intact?.
+This mod dynamically hides file extensions during inline file renaming in File Explorer, Desktop and "Save As" operations and restores it when you're done renaming.</p>
+<h3 id="keyfeatures">Key Features</h3>
+<ul>
+<li><strong>Save As Dialogs:</strong>      Automatically hides file extensions from the default filename text box when saving files.</li>
+<li><strong>Inline File Renaming:</strong> Hides file extensions while editing item names on the Desktop or inside File Explorer (<code>SHELLDLL_DefView</code>, <code>SysListView32</code>, <code>DirectUIHWND</code>).</li>
+<li><strong>Warning Prevention:</strong>   Intercepts window messages (<code>WM_GETTEXT</code>) upon committing a rename to silently re-attach the original extension,
+                        avoiding the native Windows "If you change a file name extension, the file might become unusable" warning prompt.</li>
+</ul>
+<p><strong>Things to Note:</strong></p>
+<ol>
+<li>This mod targets native Windows File Explorer, Desktop, and standard file dialogs. It does not handle inline renaming inside third-party apps (e.g., WinRAR, 7-Zip).</li>
+<li>If you want to change a file's extension, you can do so inside the file's properties.</li>
+<li>If you type a dot at the end of a file name followed by any Windows registered extension (e.g., changing <code>document.txt</code> to <code>document.pdf</code>), it will trigger the Windows extension change warning prompt, however non-registered extensions won't change the file type.</li>
+</ol>
+<h3 id="knownlimitations">Known Limitations</h3>
+<ul>
+<li><strong>Folders Ending in Registered Extensions:</strong> Folders whose names explicitly end in a registered file extension (e.g., a folder named <code>Backup.zip</code> or <code>github.com</code>) will have its trailing extension hidden during inline renaming.</li>
+<li><strong>Why this happens:</strong> Windows reuses the exact same generic Win32 <code>Edit</code> control for both files and directories (folders). When an inline rename is triggered, the mod interacts with <code>SetWindowTextW</code> and receives only a window handle and a string. There is no native API or context provided by the shell at that moment to distinguish whether the text box belongs to a file or a folder. While the full folder name is safely preserved and restored upon commit, inline editing will temporarily treat the extension-like suffix as hidable.</li>
+</ul>
+<p><img src="https://i.imgur.com/iy9dyzq.gif" alt="Mod Demo" /></p>]]></content>
+        <author>
+            <name>AuralSX</name>
+            <uri>https://github.com/AuralSX</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 10 1507 Start Menu Recreation 1.0.0]]></title>
         <id>https://windhawk.net/mods/win10-1507-start-menu-recreation#2b9300548f60dd4ebb43e9aa5d77230f0c37f6bd</id>
@@ -1005,168 +1202,6 @@ parts of the render loop.</p>]]></content>
         <author>
             <name>Ulrizza</name>
             <uri>https://github.com/Ulrizza</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Steam Games in Explorer 1.1]]></title>
-        <id>https://windhawk.net/mods/explorer-steam-games#e86ece4b39234ad53c9e32916d196c1c932e3836</id>
-        <link href="https://windhawk.net/mods/explorer-steam-games"/>
-        <updated>2026-10-10T19:00:55.000Z</updated>
-        <content type="html"><![CDATA[<p>Added a “Position in the navigation pane” option. The entries can go above This PC (the default, same as before), at the top above Home, or at the bottom below Network. It only sets SortOrderIndex in the private hive, so still no writes to the real registry.</p>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar auto-hide after a delay 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-auto-hide-delay#20e2a0f534b32ec29c4cef9c98e878997a6fddc1</id>
-        <link href="https://windhawk.net/mods/taskbar-auto-hide-delay"/>
-        <updated>2026-10-10T18:04:05.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarautohideafteradelay">Taskbar auto-hide after a delay</h1>
-<p>Windows 11 (24H2) hides the auto-hide taskbar only when the pointer leaves
-the taskbar. If the taskbar becomes visible for another reason — for
-example, when a new window or dialog appears — no "pointer left" event ever
-fires, and the taskbar stays on screen indefinitely.</p>
-<p>The mod runs as a small background tool and watches the taskbars. As soon as
-a taskbar becomes visible while the mouse pointer is <strong>not</strong> over it, a
-countdown starts. When the countdown expires, the mod sends the taskbar its
-own hide message, so it slides away with the standard animation.</p>
-<p>If you move the pointer over the taskbar, the countdown is cancelled so the
-taskbar stays available while you interact with it.</p>
-<p>The mod does nothing if auto-hide is disabled in the Windows settings.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Hide delay (seconds)</strong> — how long the taskbar stays visible before it
-is hidden. Default: 3.</li>
-</ul>
-<h2 id="comparedtobettertaskbarautohide">Compared to Better Taskbar Autohide</h2>
-<p><a href="https://windhawk.net/mods/taskbar-autohide-better">Better Taskbar Autohide</a>
-covers a narrower case: it hooks the taskbar internals and only helps when
-Windows forces the taskbar to stay shown because an inactive window is
-notifying. This mod reacts to any reason the taskbar becomes visible —
-new windows, dialogs, notifications — and uses no hooks; the only internal
-detail it relies on is the taskbar's auto-hide timer ID, which has been
-stable for a long time and is also used by other taskbar mods.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>The mod doesn't use hooks, so it's designed to work together with other
-taskbar mods such as
-<a href="https://windhawk.net/mods/taskbar-auto-hide-when-maximized">Taskbar auto-hide when maximized</a>
-and
-<a href="https://windhawk.net/mods/taskbar-auto-hide-keyboard-only">Taskbar auto-hide keyboard only</a>.</p>]]></content>
-        <author>
-            <name>nikitor32</name>
-            <uri>https://github.com/nikitor32</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Split Tray 1.3.3]]></title>
-        <id>https://windhawk.net/mods/split-tray#d73e9f74f445a07dd765cf6479498d20c421d2ff</id>
-        <link href="https://windhawk.net/mods/split-tray"/>
-        <updated>2026-10-10T15:04:40.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="splittray">Split Tray</h1>
-<p>Windows 11 shows the notification area - the system tray - on the main
-display only. Split Tray puts one on the taskbar of <strong>every other display</strong>,
-and lets you choose which tray each application's icon lives in.</p>
-<p><img src="https://raw.githubusercontent.com/st0nebridge/SplitTray/v1.3.1/docs/images/tray-2.png" alt="Tray 2 in the second display's taskbar: the chevron, five icons, and the clock" /></p>
-<h2 id="whatyouget">What you get</h2>
-<ul>
-<li>A tray inside each extra display's taskbar, beside the clock, where the
-native one would be. Icons work as in the real tray: left, right, double and
-middle clicks, context menus, tooltips, the popups some applications draw
-instead, the keyboard, and screen readers.</li>
-<li>Balloon notifications from icons in Split Tray's trays, shown by Windows as
-for any other icon.</li>
-<li>Per-application rules - "this program's icon goes to tray 3" - and a
-default for everything else.</li>
-<li>Move any icon by hand: <strong>Shift+right-click</strong> an icon in one of Split Tray's
-trays for its menu, or open <strong>Arrange icons</strong> to drag icons between every
-tray. Where you put an icon is remembered, until it has not been seen for a
-year.</li>
-<li>An overflow chevron for the icons you would rather not see all the time.</li>
-<li>Unplug a display and its icons go back to the main tray; plug it back in
-and they return. Every tray keeps its number meanwhile.</li>
-<li>Extra floating trays anywhere you like - for a display without a taskbar, or
-to try the mod out with one display. Screen readers reach them too.</li>
-</ul>
-<h2 id="traysarenumbered">Trays are numbered</h2>
-<p>Tray 1 is Windows' own tray on the main display. Split Tray's trays are 2 and
-up: one for each other display, left to right as the mod first sees them, then
-any extra trays in the order they are listed in the settings. Rules and the
-menus use these numbers.</p>
-<p>A display keeps its number while it is unplugged. A display seen for the first
-time takes the number of one that is not connected, so a laptop's external
-display is tray 2 whichever display it is.</p>
-<h2 id="howitworks">How it works</h2>
-<p>An application puts an icon in the tray by calling <code>Shell_NotifyIcon</code>, which
-sends a <code>WM_COPYDATA</code> message to Explorer's <code>Shell_TrayWnd</code>. Split Tray
-subclasses that window, so it sees every icon from every process and can pass
-each one on to the real tray, keep it for one of its own, or both. An icon sent
-to another tray is really gone from the main one - it is not an overlay.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Icons that already existed when the mod loaded are collected by asking
-applications to re-register (the standard <code>TaskbarCreated</code> broadcast). A few
-ignore it; their icons appear the next time they update.</li>
-<li>Windows shows balloon notifications only for icons Explorer holds. For an
-icon in one of Split Tray's trays, Explorer is given a hidden copy of it the
-first time it has one to show; the copy goes when the icon does.</li>
-<li>More displays connected at once than ever before move the extra trays'
-numbers up by one, to make room.</li>
-<li>A floating tray has the keyboard when an application gives the focus back to
-its icon, or a screen reader moves to it. No key of its own reaches one.</li>
-</ul>]]></content>
-        <author>
-            <name>Brandon Stonebridge</name>
-            <uri>https://github.com/st0nebridge</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 On Screen Keyboard Restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-on-screen-keyboard-restorer#1b0eb213c65d27a65ec3d9f8263d252bce4b1b7f</id>
-        <link href="https://windhawk.net/mods/win7-on-screen-keyboard-restorer"/>
-        <updated>2026-10-10T15:04:36.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows7onscreenkeyboardrestorer">Windows 7 On Screen Keyboard Restorer</h1>
-<p>This modification tries to restore the original Windows 7 On-Screen Keyboard on Windows 10 and
-Windows 11: whenever the system <code>osk.exe</code> is about to start, the Windows 7
-<code>osk.exe</code> is started instead. This is a best effort restoration. The Windows 7
-files are downloaded from Microsoft's public symbol server and verified against
-pinned SHA-256 digests before they are used, and nothing is written to
-<code>System32</code>, to <code>Common Files</code>, or to Image File Execution Options. The files are
-kept in the mod's own storage folder (or in the folder of the <code>installFolder</code>
-setting), which Windhawk removes together with the mod, and no registry key is
-left behind.</p>
-<p>This modification has been tested on Windows 10 21H2 and Windows 11 24H2.</p>
-<h2 id="screenshotbefore">Screenshot (Before)</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/beforekeyboard.PNG" alt="Before" /></p>
-<h2 id="screenshotafter">Screenshot (After)</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/afterkeyboard.PNG" alt="After" /></p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod catches the keyboard before it opens and swaps it for
-the Windows 7 one. It does this in two ways: first, it watches the programs
-that usually launch the keyboard (Explorer, Start/Search, <code>control.exe</code> and a
-few others) and redirects the launch so the Windows 7 keyboard starts instead.
-Second, if the system keyboard still manages to open through some path that
-cannot be watched, the mod lets it open, then quietly closes it and starts the
-Windows 7 one in its place.</p>
-<p>Once the Windows 7 keyboard is running, the mod gives it the files it expects
-but cannot find on Windows 10/11: <code>TabSKB.dll</code> and <code>DUI70.dll</code> are pointed to
-local copies, the English texts and dialogs are supplied from inside the mod
-when the <code>.mui</code> file is missing, and the seven special key faces (Windows,
-menu, Enter and the four arrows) are drawn by the mod itself, because the
-modern <code>TipResX.dll</code> on this system has no pictures for them.</p>
-<h2 id="preparation">Preparation</h2>
-<p>Before the Windows 7 keyboard can run outside <code>System32</code>, two small edits are
-needed. First, <code>uiAccess="true"</code> is changed to <code>false</code> in its manifest: Windows
-only honors that flag for signed programs in protected folders, and otherwise
-refuses to start the program with error 740. Second, <code>DUI70.dll</code> is renamed to
-<code>DUI71.dll</code> so it does not collide with the system's own DirectUI, which has
-the same name but is incompatible. The trade-off is that, since the UIAccess
-flag is gone, the Windows 7 keyboard cannot type into elevated (administrator)
-windows.</p>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
