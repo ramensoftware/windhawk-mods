@@ -3,7 +3,7 @@
 // @name            Window Wobble
 // @description     KDE-style spring-physics window dragging, without injecting into dwm.exe
 // @version         1.0.0
-// @author          heyjeay
+// @author          HeyJeay
 // @github          https://github.com/heyjeay
 // @homepage        https://github.com/heyjeay/window-wobble
 // @license         GPL-3.0-or-later
