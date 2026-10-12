@@ -385,7 +385,8 @@ struct InfoRow {
 
 struct AppDetails {
     bool packaged = false;   // Store app (MSIX)
-    bool canFile = false;    // there is a real program file (allows location, admin, ...)
+    bool canFile = false;    // a real program file exists (open location, copy path)
+    bool canShell = false;   // this 32-bit process can reach the path (elevate, properties)
     bool isExe = false;
     std::wstring target;     // program path (desktop apps)
     std::wstring args;       // shortcut arguments (kept for elevation)
@@ -2042,9 +2043,9 @@ static std::wstring UsageKey(const std::wstring& id) {
         h ^= (uint64_t)c;
         h *= 1099511628211ULL;
     }
-    wchar_t buf[80];
-    swprintf_s(buf, L"u%s_%016llx", CurrentUserSid().c_str(), (unsigned long long)h);
-    return buf;
+    wchar_t hex[17];
+    swprintf_s(hex, L"%016llx", (unsigned long long)h);
+    return L"u" + CurrentUserSid() + L"_" + hex;
 }
 
 static void UpdateTargets(bool snap, bool followSelection);
@@ -2890,6 +2891,12 @@ static AppDetails ComputeDetails(const AppEntry& a) {
             !(fad.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
             d.canFile = true;
             d.isExe = EndsWith(FoldString(d.target), L".exe");
+            // Elevation and the Properties dialog are handled by this 32-bit process, so they
+            // see the path with WOW64 redirection. Offer them only when that path exists, or a
+            // 64-bit-only tool (mdsched.exe, ...) would fail with "file not found".
+            WIN32_FILE_ATTRIBUTE_DATA sad = {};
+            d.canShell = GetFileAttributesExW(d.target.c_str(), GetFileExInfoStandard, &sad) &&
+                         !(sad.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
             ReadVersionInfo(real, version, company);
             sizeText = FormatSize(((ULONGLONG)fad.nFileSizeHigh << 32) | fad.nFileSizeLow);
             modified = FormatFileTime(fad.ftLastWriteTime);
@@ -2950,11 +2957,12 @@ static bool ActionAvailable(int id, const AppEntry& a, const AppDetails& d) {
         case ACT_OPEN:
             return true;
         case ACT_ADMIN:
-            return d.canFile && d.isExe;
+            return d.canShell && d.isExe;
         case ACT_LOCATION:
         case ACT_COPYPATH:
-        case ACT_PROPS:
             return d.canFile;
+        case ACT_PROPS:
+            return d.canShell;
         case ACT_FORGET:
             return a.uses > 0;
     }
@@ -3834,17 +3842,27 @@ static void LaunchApp(int appIdx) {
     }
 
     if (!file.empty()) {
-        // A Windows-directory target needs WOW64 redirection off, or a 64-bit-only tool
-        // (mdsched.exe, osk.exe, ...) is resolved to SysWOW64 and not found. The path must stay
-        // the real System32 one: the 64-bit shell does not understand the Sysnative alias.
-        PVOID old = nullptr;
-        const BOOL off = IsUnderWindowsDir(file) ? Wow64DisableWow64FsRedirection(&old) : FALSE;
-        // Start the app in its own folder, not in Windhawk's directory (portable apps and some
-        // games read files relative to the working directory).
-        std::wstring dir = file.substr(0, file.find_last_of(L'\\'));
-        ShellExecuteW(nullptr, L"open", file.c_str(), args.empty() ? nullptr : args.c_str(),
-                      dir.empty() ? nullptr : dir.c_str(), SW_SHOWNORMAL);
-        if (off) Wow64RevertWow64FsRedirection(old);
+        if (IsUnderWindowsDir(file)) {
+            // A System32 target must not be resolved by this 32-bit process: it would be
+            // redirected to SysWOW64 and the tool (or a delay-loaded DLL) would not be found.
+            // Disabling the redirection around the call is not safe, because a failed
+            // delay-load stays failed for the rest of the process. Let the 64-bit shell resolve
+            // the AppsFolder ID instead (explorer.exe is not redirected); it also keeps the
+            // shortcut's arguments, working folder and elevation.
+            wchar_t win[MAX_PATH];
+            UINT n = GetWindowsDirectoryW(win, MAX_PATH);
+            if (n && n < MAX_PATH) {
+                const std::wstring explorer = std::wstring(win) + L"\\explorer.exe";
+                const std::wstring arg = L"shell:AppsFolder\\" + a.id;
+                ShellExecuteW(nullptr, L"open", explorer.c_str(), arg.c_str(), nullptr, SW_SHOWNORMAL);
+            }
+        } else {
+            // Start the app in its own folder, not in Windhawk's directory (portable apps and
+            // some games read files relative to the working directory).
+            std::wstring dir = file.substr(0, file.find_last_of(L'\\'));
+            ShellExecuteW(nullptr, L"open", file.c_str(), args.empty() ? nullptr : args.c_str(),
+                          dir.empty() ? nullptr : dir.c_str(), SW_SHOWNORMAL);
+        }
     } else {
         std::wstring url = L"shell:AppsFolder\\" + a.id;
         ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
