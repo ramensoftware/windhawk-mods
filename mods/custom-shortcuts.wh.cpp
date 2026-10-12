@@ -194,6 +194,7 @@ static ModSettings g_settings;
 static HudLayoutMetrics g_hudLayout;
 
 static std::atomic<bool> g_hudVisible{false};
+static std::atomic<bool> g_switchPending{false};
 static std::atomic<UINT> g_hudTriggerModifier{MOD_ALT};
 static std::atomic<UINT> g_desktopCount{0};
 
@@ -205,9 +206,6 @@ static HANDLE g_hHookThread = NULL;
 static DWORD g_dwHookThreadId = 0;
 static HWND g_hHudWnd = NULL;
 static HHOOK g_hKeyboardHook = NULL;
-
-typedef VOID (WINAPI *SwitchToThisWindow_t)(HWND, BOOL);
-static SwitchToThisWindow_t pfnSwitchToThisWindow = nullptr;
 
 static WCHAR g_targetAppKey[MAX_PATH] = {0};
 static WCHAR g_targetExeName[MAX_PATH] = {0};
@@ -531,45 +529,18 @@ static bool GetWindowAppKey(HWND hWnd, WCHAR* outKey, size_t keyCch, WCHAR* outE
     return true;
 }
 
-// Bring target window to foreground reliably
+// Bring target window to foreground reliably without cross-thread attachment
 static void SwitchToAppWindow(HWND hTarget) {
-    if (!IsWindow(hTarget)) return;
-
-    HWND hForeground = GetForegroundWindow();
-    if (hForeground == hTarget) return;
+    if (!IsWindow(hTarget) || GetForegroundWindow() == hTarget) return;
 
     HWND hPopup = GetLastActivePopup(hTarget);
-    HWND hWndToActivate = (IsWindow(hPopup) && IsWindowVisible(hPopup)) ? hPopup : hTarget;
+    HWND hWnd = (IsWindow(hPopup) && IsWindowVisible(hPopup)) ? hPopup : hTarget;
+    if (IsIconic(hWnd)) ShowWindowAsync(hWnd, SW_RESTORE);
 
-    if (IsIconic(hWndToActivate)) {
-        ShowWindow(hWndToActivate, SW_RESTORE);
-    } else {
-        ShowWindow(hWndToActivate, SW_SHOW);
-    }
-
-    DWORD curThreadId = GetCurrentThreadId();
-    DWORD foreThreadId = hForeground ? GetWindowThreadProcessId(hForeground, NULL) : 0;
-    DWORD targetThreadId = GetWindowThreadProcessId(hWndToActivate, NULL);
-
-    if (foreThreadId && foreThreadId != curThreadId) {
-        AttachThreadInput(curThreadId, foreThreadId, TRUE);
-    }
-    if (targetThreadId && targetThreadId != curThreadId) {
-        AttachThreadInput(curThreadId, targetThreadId, TRUE);
-    }
-
-    BringWindowToTop(hWndToActivate);
-    BOOL ok = SetForegroundWindow(hWndToActivate);
-    if (!ok && pfnSwitchToThisWindow) {
-        pfnSwitchToThisWindow(hWndToActivate, TRUE);
-    }
-
-    if (foreThreadId && foreThreadId != curThreadId) {
-        AttachThreadInput(curThreadId, foreThreadId, FALSE);
-    }
-    if (targetThreadId && targetThreadId != curThreadId) {
-        AttachThreadInput(curThreadId, targetThreadId, FALSE);
-    }
+    // Allows to steal focus
+    INPUT input{};
+    SendInput(1, &input, sizeof(INPUT));
+    SetForegroundWindow(hWnd);
 }
 
 // Window enumeration callback for matching current application
@@ -606,7 +577,17 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
     return TRUE;
 }
 
+static void UnregisterThumbnails() {
+    for (auto& entry : g_appWindows) {
+        if (entry.hThumbnail) {
+            DwmUnregisterThumbnail(entry.hThumbnail);
+            entry.hThumbnail = NULL;
+        }
+    }
+}
+
 static void RefreshAppWindows() {
+    UnregisterThumbnails();
     g_appWindows.clear();
     HWND hForeground = GetForegroundWindow();
     if (!hForeground || hForeground == g_hHudWnd) return;
@@ -711,6 +692,7 @@ static void ShowHud() {
 
     if (g_appWindows.size() <= 1) {
         Wh_Log(L"Only 1 window found for this app, nothing to cycle.");
+        g_switchPending.store(false);
         return;
     }
 
@@ -847,6 +829,7 @@ static void ShowHud() {
 }
 
 static void HideHud(bool commitSwitch) {
+    g_switchPending.store(false);
     if (!g_hudVisible.load()) return;
 
     g_hudVisible.store(false);
@@ -855,12 +838,7 @@ static void HideHud(bool commitSwitch) {
         ShowWindow(g_hHudWnd, SW_HIDE);
     }
 
-    for (auto& entry : g_appWindows) {
-        if (entry.hThumbnail) {
-            DwmUnregisterThumbnail(entry.hThumbnail);
-            entry.hThumbnail = NULL;
-        }
-    }
+    UnregisterThumbnails();
 
     if (commitSwitch && !g_appWindows.empty() && g_selectedIndex >= 0 &&
         g_selectedIndex < static_cast<int>(g_appWindows.size())) {
@@ -1061,12 +1039,7 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
 // Check WOW64 execution environment (Windhawk 1.7.x runs 32-bit windhawk.exe)
 static bool IsCurrentProcessWow64() {
     BOOL isWow64 = FALSE;
-    typedef BOOL(WINAPI *LPFN_ISWOW64PROCESS)(HANDLE, PBOOL);
-    LPFN_ISWOW64PROCESS fnIsWow64Process = (LPFN_ISWOW64PROCESS)GetProcAddress(
-        GetModuleHandleW(L"kernel32.dll"), "IsWow64Process");
-    if (fnIsWow64Process) {
-        fnIsWow64Process(GetCurrentProcess(), &isWow64);
-    }
+    IsWow64Process(GetCurrentProcess(), &isWow64);
     return isWow64 != FALSE;
 }
 
@@ -1450,7 +1423,10 @@ static HWND FindTopWindowOnDesktop(const GUID& desktopId) {
 
 static void FocusWindow(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return;
-    if (IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
+    if (IsIconic(hwnd)) ShowWindowAsync(hwnd, SW_RESTORE);
+
+    INPUT input{};
+    SendInput(1, &input, sizeof(INPUT));
     SetForegroundWindow(hwnd);
 }
 
@@ -1667,7 +1643,8 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
             UINT triggerMod = g_settings.bindingSameApp.modifiers ? g_settings.bindingSameApp.modifiers : MOD_ALT;
             g_hudTriggerModifier.store(triggerMod);
 
-            if (!g_hudVisible.load()) {
+            if (!g_hudVisible.load() && !g_switchPending.load()) {
+                g_switchPending.store(true);
                 if (g_hHudWnd) PostMessageW(g_hHudWnd, WM_USER_HUD_SHOW, 0, 0);
             } else {
                 bool isShift = (activeModifiers & MOD_SHIFT) != 0;
@@ -1685,8 +1662,8 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
                 Wh_Log(L"Triggered Custom App Launcher! '%s' -> '%s'",
                        g_settings.customApps[i].binding.originalStr.c_str(),
                        g_settings.customApps[i].command.c_str());
-                if (activeModifiers & MOD_WIN) {
-                    keybd_event(0xFF, 0, KEYEVENTF_KEYUP, 0); // Suppress Start Menu
+                if (activeModifiers & (MOD_ALT | MOD_WIN)) {
+                    keybd_event(0xFF, 0, KEYEVENTF_KEYUP, 0); // Suppress menu bar / Start menu
                 }
                 if (g_hHudWnd) {
                     PostMessageW(g_hHudWnd, WM_USER_LAUNCH_APP, (WPARAM)i, 0);
@@ -1708,8 +1685,8 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
             if (maxDesktops == 0 || (UINT)targetDesktop <= maxDesktops) {
                 if (isKeyDown) {
                     Wh_Log(L"Triggered Virtual Desktop switch: Desktop %d", targetDesktop);
-                    if (activeModifiers & MOD_WIN) {
-                        keybd_event(0xFF, 0, KEYEVENTF_KEYUP, 0); // Suppress Start Menu
+                    if (activeModifiers & (MOD_ALT | MOD_WIN)) {
+                        keybd_event(0xFF, 0, KEYEVENTF_KEYUP, 0); // Suppress menu bar / Start menu
                     }
                     if (g_hHudWnd) {
                         PostMessageW(g_hHudWnd, WM_USER_SWITCH_DESKTOP, (WPARAM)targetDesktop, 0);
@@ -1717,6 +1694,10 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
                 }
                 ReleaseSRWLockShared(&g_settingsLock);
                 return 1;
+            } else {
+                if (g_hHudWnd) {
+                    PostMessageW(g_hHudWnd, WM_USER_SETTINGS_CHANGED, 0, 0);
+                }
             }
         }
     }
@@ -1910,11 +1891,6 @@ static void LoadModSettings() {
 BOOL WhTool_ModInit() {
     Wh_Log(L"WhTool_ModInit called");
 
-    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-    if (hUser32) {
-        pfnSwitchToThisWindow = (SwitchToThisWindow_t)GetProcAddress(hUser32, "SwitchToThisWindow");
-    }
-
     g_hWorkerReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_hWorkerReady) {
         Wh_Log(L"ERROR: CreateEvent for worker failed (%lu)", GetLastError());
@@ -1986,11 +1962,7 @@ void WhTool_ModUninit() {
             HANDLE handles[] = {g_hWorkerReady, g_hWorkerThread};
             WaitForMultipleObjects(2, handles, FALSE, INFINITE);
         }
-        if (g_hHudWnd) {
-            PostMessageW(g_hHudWnd, WM_QUIT, 0, 0);
-        } else {
-            PostThreadMessageW(g_dwWorkerThreadId, WM_QUIT, 0, 0);
-        }
+        PostThreadMessageW(g_dwWorkerThreadId, WM_QUIT, 0, 0);
         if (g_hWorkerThread) {
             WaitForSingleObject(g_hWorkerThread, INFINITE);
             CloseHandle(g_hWorkerThread);
@@ -2042,11 +2014,17 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
-    LPWSTR *argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
@@ -2094,14 +2072,15 @@ BOOL Wh_ModInit() {
             ExitProcess(1);
         }
 
-        IMAGE_DOS_HEADER *dosHeader = (IMAGE_DOS_HEADER *)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS *ntHeaders =
-            (IMAGE_NT_HEADERS *)((BYTE *)dosHeader + dosHeader->e_lfanew);
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        void *entryPoint = (BYTE *)dosHeader + entryPointRVA;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
 
-        Wh_SetFunctionHook(entryPoint, (void *)EntryPoint_Hook, nullptr);
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
@@ -2121,14 +2100,15 @@ void Wh_ModAfterInit() {
     WCHAR currentProcessPath[MAX_PATH];
     switch (GetModuleFileName(nullptr, currentProcessPath,
                               ARRAYSIZE(currentProcessPath))) {
-    case 0:
-    case ARRAYSIZE(currentProcessPath):
-        Wh_Log(L"GetModuleFileName failed");
-        return;
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
     }
 
-    WCHAR commandLine[MAX_PATH + 2 +
-                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
@@ -2141,12 +2121,13 @@ void Wh_ModAfterInit() {
         }
     }
 
-    using CreateProcessInternalW_t = BOOL(WINAPI *)(
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
         HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
         LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
         DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-        LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
     CreateProcessInternalW_t pCreateProcessInternalW =
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
