@@ -20,11 +20,6 @@ LOSSY_GIF_MIN_SIZE = 20 * 1024 * 1024
 # SHA-256 of their originals.
 ORIGINAL_HASHES_FILE_NAME = "original_hashes.json"
 
-# Compressed before the original hashes were recorded.
-INITIAL_ORIGINAL_HASHES = {
-    "i.imgur.com/iy9dyzq.gif": "a91728e281c6f6baefe106a1be3a2920fcd72f0ecf4bd5382a66d901e2bbea3c",
-}
-
 EXCLUDED_IMAGE_URLS = {
     # No longer available.
     "https://raw.githubusercontent.com/u3l6/force-chinese-ime/refs/heads/main/Before.png",
@@ -89,9 +84,9 @@ def download_image(url: str, save_path: Path):
 
 def process_code_files(code_folder: Path, images_folder: Path):
     original_hashes_path = images_folder / ORIGINAL_HASHES_FILE_NAME
-    previous_original_hashes: dict[str, str] = dict(INITIAL_ORIGINAL_HASHES)
+    previous_original_hashes: dict[str, str] = {}
     if original_hashes_path.exists():
-        previous_original_hashes |= json.loads(
+        previous_original_hashes = json.loads(
             original_hashes_path.read_text(encoding="utf-8")
         )
     original_hashes: dict[str, str] = {}
