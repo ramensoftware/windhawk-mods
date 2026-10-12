@@ -13,7 +13,7 @@
 // ==WindhawkModReadme==
 /*
 # Explorer List Zebra Stripes
-![image](https://github.com/user-attachments/assets/6a54d574-f822-4773-8ce1-a95179616dad)
+![image](https://raw.githubusercontent.com/DarkionAvey/windhawk-explorer-zebra-stripes/refs/heads/main/screenshot.png)
 
 Adds alternating stripes to compact file-list items in Explorer, including Details and List views.
 
