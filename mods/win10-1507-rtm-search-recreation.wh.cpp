@@ -3,7 +3,7 @@
 // @name            Windows 10 1507 Search Pane Recreation
 // @description     This mod recreates the Windows 10 RTM (1507) Search on Windows 10 and Windows 11
 // @version         1.0.0
-// @author          babamohammed2022
+// @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         windhawk.exe
 // @compilerOptions -lole32 -loleaut32 -luuid -lshell32 -luser32 -lgdi32 -lshlwapi -lshcore -lcomctl32 -lgdiplus -luxtheme
