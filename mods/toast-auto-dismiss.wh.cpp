@@ -336,10 +336,11 @@ class ComPtr {
     T* ptr_ = nullptr;
 };
 
-// Dismisses the banner through UI Automation by invoking its close
-// button - the same button the user presses with the pointer. This is
+// Dismisses the toasts through UI Automation by invoking their close
+// buttons - the same buttons the user presses with the pointer. This is
 // deliberately not WM_CLOSE or SC_CLOSE: the shell ignores those for
-// this window.
+// this window. Stacked toasts each have their own close button, and
+// every one of them is invoked so the whole stack clears at once.
 bool TryDismissUia(IUIAutomation* uia, HWND hwnd) {
     if (!uia) {
         return false;
@@ -350,8 +351,9 @@ bool TryDismissUia(IUIAutomation* uia, HWND hwnd) {
         return false;
     }
 
-    // The close button is looked up by its automation id in a single
-    // cross-process query instead of walking the whole element tree.
+    // The close buttons are looked up by their automation id in a
+    // single cross-process query instead of walking the whole element
+    // tree.
     VARIANT id{};
     id.vt = VT_BSTR;
     id.bstrVal = SysAllocString(L"DismissButton");
@@ -366,22 +368,34 @@ bool TryDismissUia(IUIAutomation* uia, HWND hwnd) {
         return false;
     }
 
-    ComPtr<IUIAutomationElement> button;
-    if (FAILED(element->FindFirst(TreeScope_Descendants, condition.Get(),
-                                  button.Put())) ||
-        !button) {
+    ComPtr<IUIAutomationElementArray> buttons;
+    if (FAILED(element->FindAll(TreeScope_Descendants, condition.Get(),
+                                buttons.Put())) ||
+        !buttons) {
         return false;
     }
 
-    ComPtr<IUIAutomationInvokePattern> invoke;
-    if (FAILED(button->GetCurrentPatternAs(
-            UIA_InvokePatternId, __uuidof(IUIAutomationInvokePattern),
-            reinterpret_cast<void**>(invoke.Put()))) ||
-        !invoke) {
-        return false;
-    }
+    int count = 0;
+    buttons->get_Length(&count);
 
-    return SUCCEEDED(invoke->Invoke());
+    bool invoked = false;
+    for (int i = 0; i < count; i++) {
+        ComPtr<IUIAutomationElement> button;
+        if (FAILED(buttons->GetElement(i, button.Put())) || !button) {
+            continue;
+        }
+        ComPtr<IUIAutomationInvokePattern> invoke;
+        if (FAILED(button->GetCurrentPatternAs(
+                UIA_InvokePatternId, __uuidof(IUIAutomationInvokePattern),
+                reinterpret_cast<void**>(invoke.Put()))) ||
+            !invoke) {
+            continue;
+        }
+        if (SUCCEEDED(invoke->Invoke())) {
+            invoked = true;
+        }
+    }
+    return invoked;
 }
 
 void PollOnce(IUIAutomation* uia, ToastState* state) {
@@ -441,8 +455,8 @@ void PollOnce(IUIAutomation* uia, ToastState* state) {
     if (TryDismissUia(uia, hwnd)) {
         Wh_Log(L"Banner dismissed (%08X, attempt %d)", (DWORD)(ULONG_PTR)hwnd,
                state->attempts);
-        // If another toast is stacked behind the dismissed one, the
-        // window stays up and the new toast gets its own countdown.
+        // A toast that arrived while the stack was being dismissed
+        // keeps the window up and gets a countdown of its own.
         state->appearedAt = now;
         state->attempts = 0;
     } else if (state->attempts <= kMaxLoggedFailures) {
