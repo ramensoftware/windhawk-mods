@@ -762,12 +762,15 @@ muxc::AppBarButton CreatePropertiesButton() {
         button.LabelPosition(muxc::CommandBarLabelPosition::Collapsed);
     }
 
-    wchar_t glyphChar = (wchar_t)wcstoul(glyph.c_str(), nullptr, 16);
-    if (!glyphChar) {
-        // A glyph which doesn't parse (e.g. a typo) would otherwise leave an
-        // icon-only button blank.
-        glyphChar = kDefaultIconGlyph;
-    }
+    // A partial parse (a typo like "E94G" parses as 0xE94) or a value above
+    // the BMP (a single wchar_t can't hold it; casting would silently
+    // truncate) shows a wrong glyph, so both fall back to the default.
+    wchar_t* end = nullptr;
+    unsigned long code = wcstoul(glyph.c_str(), &end, 16);
+    wchar_t glyphChar = (end != glyph.c_str() && *end == L'\0' && code > 0 &&
+                         code <= 0xFFFF)
+                            ? (wchar_t)code
+                            : kDefaultIconGlyph;
 
     muxc::FontIcon icon;
     icon.FontFamily(muxm::FontFamily(L"Segoe Fluent Icons"));
@@ -1080,7 +1083,11 @@ void RemoveButtonsForCurrentThread() {
         }
     }
 
-    g_pendingUpdates.clear();
+    // Swap rather than clear: clear keeps the bucket array, and this is
+    // thread_local on Explorer UI threads which outlive the mod, so the
+    // buckets would leak on every load/unload cycle. Same treatment as
+    // g_entries and g_revokers above.
+    std::unordered_set<void*>().swap(g_pendingUpdates);
     g_threadScanned = false;
 }
 
@@ -1089,7 +1096,8 @@ void RemoveButtonsForCurrentThread() {
 // every Normal-priority item queued before it - all our deferred work is
 // Normal - which proves the queue holds no callback of ours anymore once the
 // event is set. Runs on a window's UI thread via RunFromWindowThread; the
-// unload path waits on the event before the DLL is unmapped.
+// unload path waits on the event (or the thread's exit) before the DLL is
+// unmapped.
 void WINAPI RemoveButtonsAndDrainCurrentThread(PVOID parameter) {
     // The sentinel has to be enqueued after this, so that nothing of ours
     // can be queued behind it anymore.
@@ -1681,10 +1689,18 @@ void Wh_ModUninit() {
 
     g_unloading = true;
 
-    std::vector<HANDLE> drainEvents;
+    struct DrainWait {
+        HANDLE event;
+        HANDLE thread;
+        DWORD threadId;
+    };
+    std::vector<DrainWait> drains;
 
     for (HWND hWnd : GetFileExplorerWnds()) {
         Wh_Log(L"Removing the button for window %08X", (DWORD)(ULONG_PTR)hWnd);
+        DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
+        HANDLE thread =
+            threadId ? OpenThread(SYNCHRONIZE, FALSE, threadId) : nullptr;
         HANDLE drainEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
         if (!RunFromWindowThread(hWnd, RemoveButtonsAndDrainCurrentThread,
                                  drainEvent)) {
@@ -1693,20 +1709,52 @@ void Wh_ModUninit() {
             if (drainEvent) {
                 CloseHandle(drainEvent);
             }
+            if (thread) {
+                CloseHandle(thread);
+            }
         } else if (drainEvent) {
-            drainEvents.push_back(drainEvent);
+            drains.push_back({drainEvent, thread, threadId});
+        } else if (thread) {
+            // CreateEvent failed; RemoveButtonsAndDrainCurrentThread had
+            // nothing to wait on, and neither do we.
+            CloseHandle(thread);
         }
     }
 
-    // The timeout covers a UI thread which stopped pumping messages; the
-    // event is then deliberately not closed, since the sentinel may still
-    // signal it after we're gone and a reused handle value would be set
-    // instead.
-    for (HANDLE drainEvent : drainEvents) {
-        if (WaitForSingleObject(drainEvent, 5000) != WAIT_OBJECT_0) {
-            continue;
+    // The wait ends when the sentinel ran, or when the window's thread - and
+    // its dispatcher queue with it - is gone (window closed while
+    // unloading), in which case the sentinel can never run and the event can
+    // be closed right away.
+    //
+    // The timeout is a last resort which can't be made safe: the sentinel
+    // delegate is implemented in this DLL, so running or merely releasing it
+    // after the DLL is unmapped goes through a vtable into freed memory and
+    // crashes Explorer before SetEvent is reached. Windhawk's own wait after
+    // Wh_ModUninit only covers threads that are executing mod code, which
+    // doesn't see delegates parked in a dispatcher queue. A UI thread stuck
+    // in a modal pump still dispatches our sent messages but no dispatcher
+    // items, so the timeout is reachable; 30 s makes it rare.
+    //
+    // On timeout the event is deliberately left open: nothing can signal it
+    // anymore without crashing first, but if this DLL is mapped again at the
+    // same base address (mod re-enabled), a late sentinel would set a dead
+    // event instead of whatever object recycled the handle value.
+    for (DrainWait const& drain : drains) {
+        HANDLE handles[] = {drain.event, drain.thread};
+        DWORD result = WaitForMultipleObjects(
+            drain.thread ? 2 : 1, handles, FALSE, 30000);
+        if (result == WAIT_OBJECT_0 || result == WAIT_OBJECT_0 + 1) {
+            CloseHandle(drain.event);
+        } else {
+            Wh_Log(L"Dispatcher queue of window thread %u not drained; "
+                   L"Explorer may crash if it dispatches mod callbacks "
+                   L"after unload",
+                   drain.threadId);
         }
-        CloseHandle(drainEvent);
+
+        if (drain.thread) {
+            CloseHandle(drain.thread);
+        }
     }
 
     // The DLL can't be unmapped while a worker thread is still running our
