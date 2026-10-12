@@ -2,12 +2,64 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-12T18:00:51.000Z</updated>
+    <updated>2026-10-12T20:03:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Thumbnail Stats 1.4]]></title>
+        <id>https://windhawk.net/mods/taskbar-thumbnail-stats#629e90b0437a456728437b6c3b0a82950302311b</id>
+        <link href="https://windhawk.net/mods/taskbar-thumbnail-stats"/>
+        <updated>2026-10-12T20:03:09.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>option to hide the process count; </li>
+<li>fix CPU usage shown on only one thumbnail when several windows of the same app are open;</li>
+<li>optional: click the line to open Process Explorer (process selected) or Task Manager</li>
+</ul>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[OverhauldedWin Alt+Tab 1.3.0]]></title>
+        <id>https://windhawk.net/mods/overhaulded-alt-tab#190eebae832796ad8fc34dbe0930dfb398ccf5b8</id>
+        <link href="https://windhawk.net/mods/overhaulded-alt-tab"/>
+        <updated>2026-10-12T20:03:03.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a new DWM transparent background system with configurable color and opacity.</li>
+<li>Added experimental <strong>Pattern Waves</strong> background with cursor interaction.</li>
+<li>Added experimental *<em>Window Expand</em> animation on selected window.</li>
+<li>Added UI scaling from 50% to 125%.</li>
+<li>Added customizable card colors.</li>
+<li>Improved Alt+Tab and AltGr input handling.</li>
+<li>Improved animation smoothness using hardware-accelerated Direct2D rendering.</li>
+</ul>
+<h3 id="changed">Changed</h3>
+<ul>
+<li>Replaced the old CPU-based desktop blur with the new DWM background system.</li>
+<li>Improved DWM thumbnail management and rendering efficiency.</li>
+<li>Refined opening, closing, and carousel animations.</li>
+<li>Reorganized settings into clearer categories.</li>
+<li>Improved background rendering performance on older hardware.</li>
+</ul>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li>Fixed unnecessary DWM thumbnail updates.</li>
+<li>Fixed animation and clipping inconsistencies.</li>
+<li>Improved hook initialization and input reliability.</li>
+</ul>
+<h3 id="note">Note</h3>
+<ul>
+<li>Pattern Waves is experimental and may require additional system resources.</li>
+</ul>]]></content>
+        <author>
+            <name>IMiloDev</name>
+            <uri>https://github.com/IMiloDev</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Winstant 1.5]]></title>
         <id>https://windhawk.net/mods/winstant#83d9b317497843f42cc0dbc229e0aab85b412a2a</id>
@@ -1099,53 +1151,6 @@ mod in separate folder-window Explorer processes.</li>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Animations 1.3.7]]></title>
-        <id>https://windhawk.net/mods/windows-animations#b54d0b4fdde083aa1d4e4e708a17153288a2e114</id>
-        <link href="https://windhawk.net/mods/windows-animations"/>
-        <updated>2026-10-11T12:02:10.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix <code>Windows 10 Task View (Win+Tab) getting stuck</code> and blocking desktop input by preserving Win32 last-error state.</li>
-<li>Add support for confirmed selections in compatible <code>Simple Window Switcher</code> builds, including touchpad gestures. Minimized selections use the restore animation.</li>
-<li>Change <code>Optimize Show Desktop</code> to use <strong>Windows’ native batch animations</strong>, including touchpad gestures.</li>
-<li>Avoid blank launch animations for provisional packaged-app window frames.</li>
-<li>Improve <code>Excel</code> close compatibility with safe screen-only capture and reduced blocking while other workbook windows remain open.</li>
-<li>Improve Explorer backdrop and acrylic restoration, including F11 and Translucent Windows compatibility.</li>
-<li>Simplify animation lifecycle handling, improve GPU resource cleanup, and refresh the documentation.</li>
-</ul>]]></content>
-        <author>
-            <name>ReDrag</name>
-            <uri>https://github.com/redrag2105</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Folder Bookmarks Bar 0.8.35]]></title>
-        <id>https://windhawk.net/mods/explorer-folder-bookmarks-bar#c6bcbda4c69d98e2ad36b0ae913b6228579b3c04</id>
-        <link href="https://windhawk.net/mods/explorer-folder-bookmarks-bar"/>
-        <updated>2026-10-11T12:02:04.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>New: <strong>Ctrl+B</strong> shortcut (off by default) bookmarks the current folder or removes its bookmark. With folders selected in the file list, it bookmarks them all, or removes them if all are already bookmarked.</li>
-<li>New: drag folders onto the bar to bookmark them where you drop them, up to 20 at a time.</li>
-<li>New: right-click a bookmark to open it in a new window.</li>
-<li>New: a short notice when the bar is full or a folder is already bookmarked.</li>
-<li>New: optional recent folders (off by default): buttons at the right end of the bar and an <strong>RC</strong> menu with the other folders you opened in File Explorer. The list stays in File Explorer's memory only and starts empty after File Explorer restarts.</li>
-<li>New: optional parent labels for bookmarks with the same folder name, for example <code>projA\src</code> and <code>projB\src</code>.</li>
-<li>Each Windows account has its own bookmarks. After the update, the existing list moves to the first account that opens File Explorer.</li>
-<li>Settings, bookmark and recent-folder changes now apply to all open windows right away.</li>
-<li>Hovering a bookmark refreshes its icon and missing-folder mark without redrawing the bar.</li>
-<li>Desktop, Documents and Downloads in the FX menu are hidden only when missing from a local disk or when their drive is unplugged.</li>
-<li>Fixed: a new window could stall when Desktop, Documents or Downloads pointed to an unreachable network share.</li>
-<li>Fixed: backups saved with a UTF-8 byte order mark now load, and a backup path with a hidden NUL character is rejected.</li>
-<li>Fixed: paths that differ only in the case of non-Latin letters count as the same folder.</li>
-<li>Errors in the bar's click, menu and drag handlers are caught and logged.</li>
-<li>Opening a missing bookmark in a new tab or window does nothing, like a plain click, instead of showing Windows' error box.</li>
-<li>Disabling or updating the mod waits for a bar click that is still being handled, or for a new window's bar that is still being built.</li>
-</ul>]]></content>
-        <author>
-            <name>Maxim Fomin</name>
-            <uri>https://github.com/MaxITService</uri>
         </author>
     </entry>
 </feed>
