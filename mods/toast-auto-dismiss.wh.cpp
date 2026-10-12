@@ -6,7 +6,7 @@
 // @author          nikitor32
 // @github          https://github.com/nikitor32
 // @include         windhawk.exe
-// @compilerOptions -lole32 -loleaut32 -ldwmapi -DWINVER=0x0A00
+// @compilerOptions -lole32 -loleaut32 -ldwmapi
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -87,6 +87,9 @@ registry keys are modified.
 
 #include <atomic>
 #include <vector>
+
+// Only available in Windows 10, version 1607 and later.
+WINUSERAPI UINT WINAPI GetDpiForWindow(HWND);
 
 // The settings can be updated from another thread while the polling
 // thread reads them, so atomic types are used to avoid data races.
