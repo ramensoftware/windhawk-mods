@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-12T10:04:54.000Z</updated>
+    <updated>2026-10-12T11:01:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows Vista/7 "Open with" Dialog Restorer 1.1.0]]></title>
+        <id>https://windhawk.net/mods/win7-open-with-dialog#9ddd428ab7a309d44c665addda817eddc656eef1</id>
+        <link href="https://windhawk.net/mods/win7-open-with-dialog"/>
+        <updated>2026-10-12T11:01:15.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a problem that did not allow to save a program as default option when choosing “Always use” (credits to Budgeto for the report)</li>
+<li>Fixed a graphic anomaly (credits to Susie Deltarune for reporting)</li>
+<li>Improved the logging</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Magic Pointer 1.0.1]]></title>
         <id>https://windhawk.net/mods/magic-pointer#bc7a9d84ea4986925be09f770a2cee39ebbe2eb8</id>
@@ -1175,52 +1190,6 @@ flyout opened in that process will not be held open. Use an x64 Windows if you n
 folder this mod shares, and whose tray-module loading it follows</li>
 <li>ExplorerPatcher (by valinet) - research for the Windows 10 flyouts running on Windows 11</li>
 </ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 Alt+Tab Restorer on Windows 11 1.0.0]]></title>
-        <id>https://windhawk.net/mods/windows-10-alt-tab-restorer#27544c27d9f89ef5ed88d77d4178f8c7aab6050c</id>
-        <link href="https://windhawk.net/mods/windows-10-alt-tab-restorer"/>
-        <updated>2026-10-10T15:04:26.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows10alttabrestorer">Windows 10 Alt+Tab Restorer</h1>
-<p>This mod restores the classic Windows 10 Alt+Tab switcher on Windows 11. This mod has been tested on Windows 11 24H2 and may function on other versions. If not, please open an issue to inform the author about it so that the mod can be enhanced.</p>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/alttab.png" alt="Screenshot" /></p>
-<h2 id="whatitdoes">What it does</h2>
-<ul>
-<li>It restores the native Windows 10 Alt+Tab switcher when you press Alt+Tab.</li>
-<li>It uses the built-in Windows components, so no custom window or panel is drawn.</li>
-<li>It does not install a global keyboard hook.</li>
-<li>It does not write to the Windows registry. The only thing it stores is a small crash-guard value in Windhawk's own mod storage (see below).</li>
-</ul>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li>Windows 11</li>
-<li>64-bit <code>explorer.exe</code>.</li>
-<li>Windhawk installed.</li>
-</ul>
-<h2 id="howtouse">How to use</h2>
-<ol>
-<li>Install the mod in Windhawk and enable it.</li>
-<li>Press Alt+Tab. The Windows 10 style switcher should appear.</li>
-<li>To remove it, disable or uninstall the mod in Windhawk.</li>
-</ol>
-<h2 id="crashguard">Crash guard</h2>
-<p>Before the mod asks the shell to create the Windows 10 switcher, it records a marker in Windhawk's mod storage and clears it right after the call. If <code>explorer.exe</code> crashes while the switcher is being created, the marker is still set at the next start. The mod then stays disabled for that exact build of <code>twinui.pcshell.dll</code> and leaves the stock Alt+Tab alone, so that a bad build can never put the shell in a crash loop. A Windows update that replaces <code>twinui.pcshell.dll</code> re-enables the mod automatically. To re-enable it by hand, turn on <strong>Reset crash guard</strong> in the settings, restart the mod, then turn the option off again.</p>
-<h2 id="windows10explorerexe">Windows 10 explorer.exe</h2>
-<p>When the mod runs inside a Windows 10 <code>explorer.exe</code> that was placed in the Windhawk <code>LegacyStore</code> folder (for example by the <em>Win10 taskbar on Win11 24H2 or 25H2</em> mod), it is detected automatically and the call-site fallback is always used, whatever the setting below says.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Do not use this mod together with another Alt+Tab replacement mod.</li>
-<li>The mod only targets <code>explorer.exe</code> and only affects the Alt+Tab switcher.</li>
-<li>While the mod is active it answers reads of <code>HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\AltTabSettings</code> with 0, so the mod takes precedence over that setting. For the same reason it conflicts with the <strong>Legacy Alt+Tab dialog</strong> mod: enable one or the other.</li>
-<li>At start-up the mod logs the Windows build and the identity of <code>twinui.pcshell.dll</code>. Please include these lines when you report a problem.</li>
-<li>If Alt+Tab does not change, check the Windhawk log for the entries of this mod and open an issue to notify the author of the modification about the problem.</li>
-</ul>
-<p>The gate hook and the XAML to DirectComposition host redirect are the approach used by <a href="https://github.com/valinet/ExplorerPatcher">ExplorerPatcher</a> by valinet.</p>]]></content>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>

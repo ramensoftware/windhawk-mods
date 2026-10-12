@@ -17945,7 +17945,7 @@
         "ratingUsers": 6,
         "reviews": 0,
         "trendingSorting": 0.12657546150533716,
-        "updated": 1787411839000,
+        "updated": 1791802875000,
         "users": 369
       },
       "metadata": {
@@ -17962,8 +17962,8 @@
           "rundll32.exe"
         ],
         "license": "MIT",
-        "name": "Windows Vista/7 Open With Dialog Restorer",
-        "version": "1.0.0"
+        "name": "Windows Vista/7 \"Open with\" Dialog Restorer",
+        "version": "1.1.0"
       }
     },
     "win7-please-wait-restorer": {
