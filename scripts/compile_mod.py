@@ -636,6 +636,7 @@ def compile_mod(
             f'-std=c++{cpp_version}',
             '-O2',
             '-shared',
+            '-s',
             '-DUNICODE',
             '-D_UNICODE',
             *version_definitions,
