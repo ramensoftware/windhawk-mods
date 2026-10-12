@@ -2,12 +2,62 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-12T11:01:15.000Z</updated>
+    <updated>2026-10-12T12:02:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 1507 Start Menu Recreation 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win10-1507-start-menu-recreation#2b9300548f60dd4ebb43e9aa5d77230f0c37f6bd</id>
+        <link href="https://windhawk.net/mods/win10-1507-start-menu-recreation"/>
+        <updated>2026-10-12T12:02:42.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows101507rtmstartmenurecreation">Windows 10 1507 (RTM) Start Menu Recreation</h1>
+<p>This mod is a best-effort recreation of the Windows 10 RTM (1507) Start menu. The mod does not
+theme or modify the native Start menu: it builds its own menu window inside
+Explorer and opens it instead of the native one.</p>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win10startmenu.png" alt="Screenshot" /></p>
+<p>This modification has been tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>App lists</strong>: Most used, Recently added, All apps (A–Z with folders) and
+type-to-search. The list is refreshed automatically when shortcuts are added or
+removed from the Start menu folders, and periodically for Store apps.</li>
+<li><strong>Tiles</strong>: default groups built from the apps actually installed, drag and drop
+with live preview and collision-free reflow, pin/unpin, four tile sizes, and a
+purely cosmetic simulated "live tile" flip (no network, no real data).</li>
+<li><strong>Account and power menus</strong>, Explorer pinned places, lock, sign out, sleep,
+hibernate (only when available), shut down and restart.</li>
+<li><strong>Resizable</strong> window with a reversible slide animation, 95% opacity and
+per-monitor DPI awareness.</li>
+<li><strong>Keyboard</strong>: Win key opens/closes the menu; typing searches; Enter launches the
+first result; Esc closes. There is no arrow-key navigation yet.</li>
+<li>Layout, window size and launch counts are stored in Windhawk's mod storage.
+Nothing is written outside of it.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Default tile groups include only apps found on the system. A missing legacy app
+makes a group smaller or absent; that is expected, not a defect.</li>
+<li>The menu is opened by intercepting the Win key and clicks on the Start button
+with low-level hooks that run on a dedicated thread. Clicks are only intercepted
+when a taskbar window is actually under the cursor, so fullscreen apps covering
+the taskbar keep receiving their clicks.</li>
+<li>At sign-in, Windhawk must be running with this mod enabled. Portable installs
+need a Startup-folder shortcut to <code>windhawk.exe -tray-only</code>.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>AdmnistratoX - Testing on Windows 11 25H2 and providing technical references</li>
+<li>m417z - Windows 11 Start Menu Styler (technical reference)</li>
+<li>bbmaster123 - Windows 10 theme for Windows 11 Start Menu Styler (technical reference)</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows Vista/7 "Open with" Dialog Restorer 1.1.0]]></title>
         <id>https://windhawk.net/mods/win7-open-with-dialog#9ddd428ab7a309d44c665addda817eddc656eef1</id>
@@ -1114,82 +1164,6 @@ refuses to start the program with error 740. Second, <code>DUI70.dll</code> is r
 the same name but is incompatible. The trade-off is that, since the UIAccess
 flag is gone, the Windows 7 keyboard cannot type into elevated (administrator)
 windows.</p>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 legacy flyouts on Win11 24H2 restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/windows-10-legacy-flyouts-restorer#93f81f58254c7479e876d08cd3a6c639437d86c7</id>
-        <link href="https://windhawk.net/mods/windows-10-legacy-flyouts-restorer"/>
-        <updated>2026-10-10T15:04:31.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows10legacyflyoutsonwin1124h2restorer">Windows 10 legacy flyouts on Win11 24H2 restorer</h1>
-<p>This mod restores the Windows 10 network and battery flyouts (network icon with its menu, battery
-icon with the flyout, volume icon) on Windows 11 24H2. It does not patch the Windows 11 shell: it
-runs inside the <em>private</em> Windows 10 shell, so it <strong>requires</strong>
-<a href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2">Windows 10 taskbar on Win11 24H2</a> (by
-Anixx) to be installed and running. In that mod's terminology this mod is the tray half of the
-setup: it uses the same verified copy of the Windows 10 files, the same data folder, and it does
-not start anything by itself. Outside the private shell the mod loads and does nothing: no hook is
-installed, nothing is written, so the Windows 11 shell is never touched.</p>
-<p>What it does, inside the private shell:</p>
-<ul>
-<li>The Windows 10 tray modules (<code>pnidui.dll</code> for the network icon, <code>stobject.dll</code> for battery and
-volume) are downloaded from the Microsoft symbol server, verified by pinned SHA-256 and, by
-default, by Authenticode signature, then loaded. The strings those two modules ask their <code>.mui</code>
-for are served in memory, because this build ships no MUI for them.</li>
-<li>A left click on the network or the battery icon is consumed at the icon and turned into the
-authentic Windows 10 flyout request (<code>CLSID_ImmersiveShell</code> -&gt; <code>ShellExperienceManagerFactory</code>
--&gt; the flyout experience of that icon). Right click, middle click and every other message pass
-through unchanged. The right-click menu of the network icon is built from the two entries
-<code>pnidui</code> itself expects, because its menu resource is gone in this build.</li>
-<li>The flyout window drawn by <code>ShellExperienceHost.exe</code> is made to use the Windows 10 template set,
-otherwise that host tears the flyout down a moment after it has built it.</li>
-</ul>
-<p>Not included on purpose: the three quick-action tiles (Wi-Fi, airplane mode, hotspot) keep the
-stock Windows 11 template, styling and behaviour; the Action Center button and its animation are
-left to dedicated mods.</p>
-<h2 id="behaviourworthknowing">Behaviour worth knowing</h2>
-<ul>
-<li><strong>Network pages are answered by the flyout.</strong> Inside the private shell, every launch of
-<code>ms-settings:network*</code>, <code>ms-settings:wifi</code>, <code>vpn</code>, <code>airplanemode</code>, <code>mobilehotspot</code>,
-<code>ms-availablenetworks:</code> or the network control-panel items is turned into a request for the
-Windows 10 flyout and reported as started, for <em>any</em> caller in that process - not only the
-tray icon. So Win+R with <code>ms-settings:wifi</code> in the Windows 10 shell opens the flyout instead of
-the Settings page. This is the point of the mod (that page does not exist in the Windows 10
-shell any more), but it is a global rewrite in that process.</li>
-<li><strong>The download stays.</strong> Files are fetched at run time from <code>msdl.microsoft.com</code> into the shared
-store; nothing else is fetched. A failed download is retried with a backoff (1 minute, doubling
-up to 15), never on every tick.</li>
-<li><strong>What is written and where it persists.</strong> The verified files go to the data folder. The tray
-state backup and one-time marker normally go to this mod's Windhawk storage; if that path is
-unavailable, the code falls back to the shared data folder. Windhawk removes its mod storage on
-uninstall, so copy the backup elsewhere first if you may need it later. The "Peek at desktop"
-toggle is process-local: this mod does not write <code>DisablePreviewDesktop</code> or <code>EnableAeroPeek</code>.
-While active, its registry-query hook supplies the toggled values to the private shell; on normal
-unload those virtual values are dropped and the shell is notified to reread the real settings. A
-crash cannot leave registry values changed by this menu. The optional tray reset
-(<code>ForceNetworkTrayResetTraySettings</code>) is a separate, deliberate, one-time deletion of shared
-shell state after a complete backup; it is not undone automatically - see its setting.</li>
-<li><strong>In <code>ShellExperienceHost.exe</code>.</strong> The template-set change is reverted when the mod is disabled.
-The module that was patched is also <em>pinned</em> (<code>GET_MODULE_HANDLE_EX_FLAG_PIN</code>), and there is no
-documented way to un-pin a module: <code>Windows.UI.QuickActions.dll</code> therefore stays loaded until
-<code>ShellExperienceHost.exe</code> ends. Nothing is written to disk and no other process is touched.</li>
-<li><strong>Architecture.</strong> <code>@architecture x86-64</code>: everything this mod does - the byte patterns of the
-tray modules, the QuickActions pattern, the import-table entry of <code>pnidui</code> - is written for x64.
-Note that on ARM64 Windhawk still loads an <code>x86-64</code> mod into <code>ShellExperienceHost.exe</code>
-natively; there the pattern does not match, so the mod logs that and writes nothing, but a
-flyout opened in that process will not be held open. Use an x64 Windows if you need this mod.</li>
-</ul>
-<h2 id="examplescreenshotbatteryflyout">Example Screenshot (Battery Flyout)</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/batteryflyoutexample.png" alt="Battery flyout example" /></p>
-<h2 id="credits">Credits</h2>
-<ul>
-<li><a href="https://github.com/Anixx">Anixx</a> - the Windows 10 taskbar mod whose verified files and data
-folder this mod shares, and whose tray-module loading it follows</li>
-<li>ExplorerPatcher (by valinet) - research for the Windows 10 flyouts running on Windows 11</li>
-</ul>]]></content>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>

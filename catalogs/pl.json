@@ -17069,6 +17069,31 @@
         "version": "1.0.0"
       }
     },
+    "win10-1507-start-menu-recreation": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791806562000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791806562000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "babamohammed",
+        "compilerOptions": "-lole32 -luser32 -lgdi32 -ldwmapi -lshell32 -loleaut32 -luuid -lshcore -lcomctl32 -lshlwapi -ladvapi32 -lgdiplus -lpowrprof -lsecur32",
+        "description": "This mod recreates the Windows 10 RTM (1507) Start menu on Windows 10 and Windows 11",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Windows 10 1507 Start Menu Recreation",
+        "version": "1.0.0"
+      }
+    },
     "win10-colored-borders": {
       "details": {
         "defaultSorting": 10728,
