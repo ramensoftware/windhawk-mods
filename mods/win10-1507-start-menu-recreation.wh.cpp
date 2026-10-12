@@ -2,59 +2,115 @@
 // @id              win10-1507-start-menu-recreation
 // @name            Windows 10 1507 Start Menu Recreation
 // @description     This mod recreates the Windows 10 RTM (1507) Start menu on Windows 10 and Windows 11
-// @version         1.0.0
+// @version         1.1.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @license         GPL-3.0
 // @include         explorer.exe
-// @compilerOptions -lole32 -luser32 -lgdi32 -ldwmapi -lshell32 -loleaut32 -luuid -lshcore -lcomctl32 -lshlwapi -ladvapi32 -lgdiplus -lpowrprof -lsecur32
+// @compilerOptions -lole32 -luser32 -lgdi32 -ldwmapi -lshell32 -loleaut32 -luuid -lshcore -lcomctl32 -lshlwapi -ladvapi32 -lgdiplus -lpowrprof -lsecur32 -lmsimg32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Windows 10 1507 (RTM) Start Menu Recreation
 
-This mod is a best-effort recreation of the Windows 10 RTM (1507) Start menu. The mod does not
-theme or modify the native Start menu: it builds its own menu window inside
-Explorer and opens it instead of the native one.
+This mod is a  best-effort recreation of the Windows 10 RTM (1507) Start menu for Windows 10
+and Windows 11. The native Start menu is neither themed nor patched: this mod
+builds its own window inside Explorer and opens it in place of the system one.
 
 ![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win10startmenu.png)
 
 This modification has been tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.
 
-## Features
+## Getting started
 
-* **App lists**: Most used, Recently added, All apps (A–Z with folders) and
-  type-to-search. The list is refreshed automatically when shortcuts are added or
+* Enable the mod in Windhawk. The new menu becomes active immediately, with no
+  need to restart Explorer or sign out.
+* The menu opens with the Win key or with a click on the Start button, exactly
+  like the system one.
+* The window can be resized by dragging its top or right edge, and the chosen
+  size is remembered.
+* Accent colour, menu width, animations, profile picture and privacy options are
+  available in the mod settings.
+
+## What the menu provides
+
+* **App lists** - Most used, Recently added, All apps (A-Z, with folders) and
+  type-to-search. The lists refresh automatically when shortcuts are added to or
   removed from the Start menu folders, and periodically for Store apps.
-* **Tiles**: default groups built from the apps actually installed, drag and drop
-  with live preview and collision-free reflow, pin/unpin, four tile sizes, and a
-  purely cosmetic simulated "live tile" flip (no network, no real data).
-* **Account and power menus**, Explorer pinned places, lock, sign out, sleep,
-  hibernate (only when available), shut down and restart.
-* **Resizable** window with a reversible slide animation, 95% opacity and
-  per-monitor DPI awareness.
-* **Keyboard**: Win key opens/closes the menu; typing searches; Enter launches the
-  first result; Esc closes. There is no arrow-key navigation yet.
-* Layout, window size and launch counts are stored in Windhawk's mod storage.
-  Nothing is written outside of it.
+* **Tiles** - default groups are built from the applications actually installed.
+  A tile lifts under the pointer while it is dragged, stays inside the tile area
+  and the tiles it pushes aside glide to their new cell, with a collision-free
+  reflow; on release the tile settles into the chosen cell. An application can
+  be pinned only once: pinning it again keeps the existing tile. Tiles can also
+  be unpinned and set to four sizes, and an optional live-tile flip is
+  available, off by default.
+* **Account and power commands** - account picture and name, lock, sign out,
+  sleep, hibernate (when available), shut down, restart, plus the pinned places
+  of File Explorer.
+* **Presentation** - resizable window, reversible slide animation, 95% opacity
+  and per-monitor DPI awareness.
+* **Storage** - tile layout, window size and launch counts are kept in Windhawk's
+  mod storage. Nothing is written outside it.
+
+## Keyboard
+
+* **Win** - opens or closes the menu.
+* **Any character** - starts a search straight away; the best match is selected
+  automatically.
+* **Up / Down** - move the selection through the app list, then on to the account
+  tile above it or the bottom bar (File Explorer, Settings, Power, All apps)
+  below it.
+* **Right / Left** - enter the tile grid and return to the left column. Inside
+  the grid, the arrow keys move between neighbouring tiles and across groups.
+* **Tab / Shift+Tab** - cycle through the four areas of the menu.
+* **Page Up / Page Down** - scroll the list one screen at a time.
+* **Home / End** - jump to the first or last entry of the list, or of the focused
+  tile group.
+* **Enter** - opens the selected item; on a folder of All apps it expands or
+  collapses it, and on the account tile, Power or All apps it performs the same
+  action as a click.
+* **Menu key or Shift+F10** - opens the context menu of the selected item (pin,
+  unpin, resize, run as administrator, open file location).
+* **Esc** - clears an active search, otherwise closes the menu.
+* **Ctrl+A** - selects the whole search text so that it can be replaced.
+
+Keyboard focus and mouse hover share a single highlight: moving the pointer hands
+the highlight back to the mouse, and the next arrow key takes it over again.
 
 ## Notes
 
-* Default tile groups include only apps found on the system. A missing legacy app
-  makes a group smaller or absent; that is expected, not a defect.
+* Default tile groups only contain applications found on the system. A missing
+  legacy app makes a group smaller, or leaves it out entirely; this is expected
+  behaviour rather than a defect.
 * The menu is opened by intercepting the Win key and clicks on the Start button
-  with low-level hooks that run on a dedicated thread. Clicks are only intercepted
-  when a taskbar window is actually under the cursor, so fullscreen apps covering
-  the taskbar keep receiving their clicks.
-* At sign-in, Windhawk must be running with this mod enabled. Portable installs
-  need a Startup-folder shortcut to `windhawk.exe -tray-only`.
+  through low-level hooks that run on a dedicated thread. Clicks are intercepted
+  only when a taskbar window is actually under the pointer, so full-screen
+  applications covering the taskbar keep receiving them.
+* Tile movements are animated by a 60 Hz timer that only runs while something
+  is actually moving. When the timer cannot be created, the tiles are placed
+  directly in their cell and everything else keeps working.
+* Windhawk must already be running with this mod enabled at sign-in. Portable
+  installations need a Startup-folder shortcut to `windhawk.exe -tray-only`.
+
+## Known limitations
+
+* Live tiles are limited: Windows does not provide a documented API that lets a
+  third-party Start menu read another app's live tile content. Only the Calendar
+  tile is animated, showing today's weekday and date computed locally; all other
+  tiles stay static. Should Microsoft document such an API in the future, the mod
+  can be updated to support it.
+* The open and close animation approximates the original motion with a standard
+  Win32 slide. It is not the private DWM transition used by Windows, so timing
+  and easing may differ slightly.
 
 ## Credits
 
 * AdmnistratoX - Testing on Windows 11 25H2 and providing technical references
 * m417z - Windows 11 Start Menu Styler (technical reference)
 * bbmaster123 - Windows 10 theme for Windows 11 Start Menu Styler (technical reference)
+* Carl Fredricksen [dwm] - Bug Report
+* ac - Bug Report
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -65,9 +121,9 @@ This modification has been tested on Windows 10 21H2, Windows 11 24H2 and Window
   $options:
   - auto: System accent
   - classic: Windows 10 1507 default
-- liveTileAnimation: true
-  $name: Simulated live tile animation
-  $description: This setting enables a simulated live tile flip animation on Start menu tiles, mimicking the periodic content rotation seen on the original Windows 10 Start screen. It is purely cosmetic and does not fetch any real live content; the tiles simply cycle through visual states on a timer.
+- liveTileAnimation: false
+  $name: Calendar tile flip animation
+  $description: This setting enables the periodic flip animation on the Calendar tile only, which then alternates between its icon and today's weekday and date, computed locally. It is disabled by default. Microsoft documents tile notifications as a write-only API for an app's own tile (TileUpdateManager.CreateTileUpdaterForApplication), so there is no supported way for a third-party Start menu to read the live content of Mail, Photos, Weather or other apps; those tiles therefore stay static instead of showing made-up content.
 - menuAnimation: true
   $name: Menu open/close slide animation
   $description: This setting enables a nonblocking, reversible 120 ms eased Win32 slide when the Start menu opens or closes. It is intended to approximate the original Start menu motion but is not the original private DWM transition, so timing and easing may differ slightly from the genuine Windows 10 1507 behaviour.
@@ -76,7 +132,7 @@ This modification has been tested on Windows 10 21H2, Windows 11 24H2 and Window
   $description: This setting makes each Start menu tile use a color sampled directly from the corresponding application icon instead of the global accent color. This produces a more colorful and varied tile grid reminiscent of the original Windows 10 Start screen, at the cost of a slightly longer tile rendering pass when the menu is first shown.
 - liveTileIntervalMs: 4000
   $name: Live tile flip interval (ms)
-  $description: This setting defines how many milliseconds elapse between each simulated live tile flip when live tile animation is enabled. Lower values make the tiles cycle more rapidly and feel busier, while higher values produce a calmer, more subdued effect. The default of 4000 ms matches the pacing used by the original Windows 10 live tiles.
+  $description: This setting defines how many milliseconds elapse between each Calendar tile flip when the flip animation is enabled. Lower values make the tiles cycle more rapidly and feel busier, while higher values produce a calmer, more subdued effect. The default of 4000 ms matches the pacing used by the original Windows 10 live tiles.
 - menuWidthOverride: 0
   $name: Menu width override in px (0 = default)
   $description: This setting overrides the width of the Start menu in pixels (measured at 100% scaling). A value of 0 keeps the default width, or the width the menu was last resized to. Any positive value forces the menu to that width, even if the menu was resized by dragging its edge. This is useful for replicating the narrower Start menu proportions seen in early Windows 10 builds.
@@ -110,9 +166,17 @@ This modification has been tested on Windows 10 21H2, Windows 11 24H2 and Window
    taskbar threads drop WM_SYSCOMMAND/SC_TASKLIST. The cached Start rectangles are
    recomputed on the UI thread when the mouse enters a taskbar, when the menu
    opens, and on display/work-area changes; there is no periodic UIA polling.
- * Tiles: front face = icon + name; back face = app name + today's date (no
-   fabricated content). The flip is a cosine deformation drawn into a GDI double
-   buffer.
+ * Keyboard: the menu window takes the focus when it opens, so arrow keys,
+   Tab, Home/End, Page Up/Down, Enter and the context-menu key are handled by
+   its own window procedure. The keyboard highlight reuses the hover state, so
+   only one element is ever highlighted; moving the mouse hands the highlight
+   back to the pointer.
+ * Tiles: front face = icon + name. Only the Calendar tile has a back face
+   (weekday + date from GetDateFormatEx), because that is the only live content
+   that can be computed locally: the documented tile APIs (TileUpdateManager /
+   TileUpdater) are write-only and scoped to the calling app, so the real
+   content of other apps' live tiles cannot be read. The flip is off by default
+   and is a cosine deformation drawn into a GDI double buffer.
  * Lifetime: the menu window, catalog, GDI+ objects and hooks are created and
    destroyed on the mod's own threads. Globals with non-trivial teardown are
    marked [[clang::no_destroy]] and released explicitly when the UI thread exits,
@@ -143,6 +207,7 @@ This modification has been tested on Windows 10 21H2, Windows 11 24H2 and Window
 #include <wrl/client.h>
 
 #include <algorithm>
+#include <cwctype>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -182,7 +247,22 @@ constexpr UINT_PTR TIMER_LIVE_FLIP = 2001;
 constexpr UINT_PTR TIMER_LIVE_TICK = 2002;
 constexpr UINT_PTR TIMER_MENU_ANIMATION = 2003;
 constexpr UINT_PTR TIMER_ALL_APPS_SCROLL_REPEAT = 2004;
+constexpr UINT_PTR TIMER_TILE_ANIM = 2005;
 constexpr int TILE_PRESSED_SCALE_PERCENT = 94; // subtle press feedback; inspired by the 8045 reference mod.
+
+// Tile movement animations, ported from the Windows 8 (8045) Start screen mod:
+// a tile keeps an animated offset from its slot and eases into it exponentially
+// instead of jumping, the pressed tile shrinks a little and the dragged one is
+// lifted above the grid, slightly enlarged and semi-transparent. Only painting
+// is animated: hit testing and the saved layout keep using the slot rectangles.
+constexpr UINT TILE_ANIM_INTERVAL_MS = 16;      // ~60 frames per second
+constexpr float TILE_ANIM_GLIDE_RATE = 16.0f;   // k = 1 - exp(-dt * rate)
+constexpr float TILE_ANIM_SCALE_RATE = 22.0f;   // press/lift scale easing
+constexpr float TILE_ANIM_SETTLE_PX = 0.3f;     // below this the glide is over
+constexpr float TILE_ANIM_SETTLE_SCALE = 0.001f;
+constexpr float TILE_PRESSED_SCALE = TILE_PRESSED_SCALE_PERCENT / 100.0f;
+constexpr float TILE_DRAG_SCALE = 1.05f;        // the lifted tile grows by 5%
+constexpr BYTE TILE_DRAG_ALPHA = 235;           // ~92% opacity, as in the reference
 constexpr BYTE kMenuOpacity95Percent = 242; // 242/255 ~= 95% opacity
 // The original 1507 Showing/Hiding paths pass 0x50 to private DWM calls.
 // Use a nonblocking, documented Win32 geometry update with a slightly eased 120 ms slide.
@@ -1003,7 +1083,7 @@ static std::wstring ReadStorageString(const wchar_t* name) {
 
 struct Settings {
     bool classicAccent = false;
-    bool liveTiles = true;
+    bool liveTiles = false;
     bool menuAnimation = true;
     bool appTileColors = false;
     int  liveTileIntervalMs = 4000;
@@ -1162,9 +1242,10 @@ struct Tile {
     COLORREF appColor = RGB(0, 120, 215); // sampled from the icon once, outside the paint loop
     bool available = true; // runtime state, not serialized: persisted tiles are kept even when stale
 
-    // Simulated live tile. The back face shows neutral local information only
-    // (app name, today's date, time); the live* strings are kept for layout
-    // (de)serialization compatibility and are no longer displayed.
+    // Live tile flag. Only tiles for which HasLocalLiveContent() is true get a
+    // back face (the Calendar tile: weekday + date computed locally); the live*
+    // strings are kept for layout (de)serialization compatibility and are not
+    // displayed.
     bool isLive = false;
     std::wstring liveTitle;
     std::wstring liveSubtitle;
@@ -1172,7 +1253,30 @@ struct Tile {
     float flipProgress = 0.0f; // 0.0f (fronte) a 1.0f (retro)
     bool flipping = false;
     bool showBack = false;
+
+    // Animation state, never serialized: offset between the position the tile
+    // is painted at and its slot, and the eased press/lift scale. Both are
+    // driven by TIMER_TILE_ANIM and reset whenever the menu closes.
+    float animOffsetX = 0.0f;
+    float animOffsetY = 0.0f;
+    float animScale = 1.0f;
 };
+
+// The only live content a third-party Start menu can legitimately produce is
+// the Calendar tile's weekday and date. Microsoft's tile APIs only let an app
+// update its own tile, so other apps' live content is not readable and those
+// tiles are never flipped.
+static bool CanHaveLocalLiveContent(const Tile& tile) {
+    std::wstring aumid = tile.aumid;
+    for (auto& ch : aumid) ch = static_cast<wchar_t>(towlower(ch));
+    return aumid.find(L"windowslive.calendar") != std::wstring::npos ||
+           _wcsicmp(tile.name.c_str(), L"Calendario") == 0 ||
+           _wcsicmp(tile.name.c_str(), L"Calendar") == 0;
+}
+
+static bool HasLocalLiveContent(const Tile& tile) {
+    return tile.isLive && CanHaveLocalLiveContent(tile);
+}
 
 struct TileGroup {
     std::wstring title;
@@ -1691,7 +1795,6 @@ public:
         tMail.name = L"Posta";
         tMail.size = TileSize::Medium;
         tMail.col = 0; tMail.row = 0;
-        tMail.isLive = true;
 
         Tile tCal;
         tCal.name = L"Calendario";
@@ -1708,13 +1811,11 @@ public:
         tPhotos.name = L"Foto";
         tPhotos.size = TileSize::Medium;
         tPhotos.col = 1; tPhotos.row = 1;
-        tPhotos.isLive = true;
 
         Tile tWeather;
         tWeather.name = L"Meteo";
         tWeather.size = TileSize::Wide;
         tWeather.col = 1; tWeather.row = 2;
-        tWeather.isLive = true;
 
         // A default tile is added only when the app exists in the installed
         // catalog (AppsFolder or Start shortcuts): no fake or unlaunchable tiles.
@@ -2667,6 +2768,8 @@ public:
             KillTimer(hwnd_.get(), TIMER_LIVE_FLIP);
             KillTimer(hwnd_.get(), TIMER_LIVE_TICK);
             KillTimer(hwnd_.get(), TIMER_MENU_ANIMATION);
+            KillTimer(hwnd_.get(), TIMER_TILE_ANIM);
+            tileAnimActive_ = false;
             menuAnimationActive_ = false;
             HWND h = hwnd_.release();
             if (h && IsWindow(h)) {
@@ -2754,6 +2857,8 @@ public:
             allAppsScrollY_ = 0;
             hoverArea_ = -1;
             hoverIndex_ = -1;
+            hoverGroup_ = -1;
+            ResetKeyboardNavigation();
 
             if (settings_.liveTiles) {
                 SetTimer(hwnd_.get(), TIMER_LIVE_FLIP, settings_.liveTileIntervalMs, nullptr);
@@ -2772,7 +2877,10 @@ public:
             StopAllAppsArrowRepeat(true);
             KillTimer(hwnd_.get(), TIMER_LIVE_FLIP);
             KillTimer(hwnd_.get(), TIMER_LIVE_TICK);
+            // A closed menu reopens with the tiles already in place.
+            SettleTileAnimations();
             visible_ = false;
+            ResetKeyboardNavigation();
             if (settings_.menuAnimation && IsWindowVisible(hwnd_.get())) {
                 RECT fromRect{};
                 GetWindowRect(hwnd_.get(), &fromRect);
@@ -2846,7 +2954,7 @@ public:
         size_t liveCount = 0;
         for (const auto& group : layout_.groups)
             for (const auto& tile : group.tiles)
-                if (tile.isLive && !tile.flipping) ++liveCount;
+                if (HasLocalLiveContent(tile) && !tile.flipping) ++liveCount;
         if (!liveCount) return;
 
         static size_t nextLiveIndex = 0;
@@ -2855,7 +2963,7 @@ public:
             auto& group = layout_.groups[gi];
             for (size_t ti = 0; ti < group.tiles.size(); ++ti) {
                 auto& tile = group.tiles[ti];
-                if (!tile.isLive || tile.flipping) continue;
+                if (!HasLocalLiveContent(tile) || tile.flipping) continue;
                 if (selected-- == 0) {
                     tile.flipping = true;
                     tile.flipProgress = 0.0f;
@@ -2906,6 +3014,11 @@ public:
         layout_.RefreshInstalledApps(catalog_);
         searchResults_.clear();
         if (!searchQuery_.empty()) FilterSearch();
+        // Row and tile indices held by the keyboard focus refer to the catalog
+        // that has just been replaced.
+        ClearKeyboardFocus();
+        keyboardTileGroup_ = -1;
+        keyboardTileIndex_ = -1;
         if (hwnd_) InvalidateRect(hwnd_.get(), nullptr, FALSE);
     }
 
@@ -3031,8 +3144,221 @@ public:
         return true;
     }
 
+    // ---- Tile movement animations -----------------------------------------
+
+    static int TileAnimOffset(float value) {
+        return static_cast<int>(value >= 0.0f ? value + 0.5f : value - 0.5f);
+    }
+
+    bool IsTileLifted(int groupIndex, int tileIndex) const {
+        return tileDragging_ && groupIndex >= 0 && tileIndex >= 0 &&
+               groupIndex == dragGroup_ && tileIndex == dragTile_;
+    }
+
+    // Rectangle the tile is painted at: its slot shifted by the running glide,
+    // or the position under the pointer while the tile is being dragged.
+    bool GetTileDrawRect(int groupIndex, int tileIndex, RECT& out) const {
+        if (!GetTileClientRect(groupIndex, tileIndex, out)) return false;
+        if (IsTileLifted(groupIndex, tileIndex)) {
+            const LONG width = out.right - out.left;
+            const LONG height = out.bottom - out.top;
+            out.left = dragPointer_.x - dragTileGrabOffset_.x;
+            out.top = dragPointer_.y - dragTileGrabOffset_.y;
+            out.right = out.left + width;
+            out.bottom = out.top + height;
+            ClampTileToGrid(out);
+            return true;
+        }
+        const Tile& tile = layout_.groups[groupIndex].tiles[tileIndex];
+        OffsetRect(&out, TileAnimOffset(tile.animOffsetX), TileAnimOffset(tile.animOffsetY));
+        return true;
+    }
+
+    // Keeps the dragged tile inside the tile area, whatever the pointer does:
+    // it can never cover the app list or the group titles, and it cannot leave
+    // the menu when the pointer is dragged outside the window.
+    void ClampTileToGrid(RECT& rect) const {
+        RECT client{};
+        if (!hwnd_ || !GetClientRect(hwnd_.get(), &client)) return;
+        const int width = static_cast<int>(rect.right - rect.left);
+        const int height = static_cast<int>(rect.bottom - rect.top);
+        if (width <= 0 || height <= 0) return;
+        // The lifted tile is painted slightly larger than its slot, so that
+        // growth is kept inside the grid as well.
+        const int grow = static_cast<int>((TILE_DRAG_SCALE - 1.0f) * std::max(width, height) / 2.0f) + 1;
+        const int minLeft = metrics_.Scale(Metrics::BASE_LEFT_COL_W) +
+                            metrics_.Scale(Metrics::BASE_GROUP_PAD_X) + grow;
+        const int minTop = metrics_.Scale(Metrics::BASE_GROUP_PAD_Y) +
+                           metrics_.Scale(Metrics::BASE_GROUP_HEADER_H) + metrics_.Scale(4) + grow;
+        const int maxLeft = std::max(minLeft, static_cast<int>(client.right) -
+                                     metrics_.Scale(Metrics::BASE_GROUP_PAD_X) - grow - width);
+        const int maxTop = std::max(minTop, static_cast<int>(client.bottom) -
+                                    metrics_.Scale(Metrics::BASE_GROUP_PAD_Y) - grow - height);
+        const int left = std::max(minLeft, std::min(maxLeft, static_cast<int>(rect.left)));
+        const int top = std::max(minTop, std::min(maxTop, static_cast<int>(rect.top)));
+        rect.left = left;
+        rect.top = top;
+        rect.right = left + width;
+        rect.bottom = top + height;
+    }
+
+    // Where a group's tiles are painted right now. The result is handed to
+    // StartTileGlide once the layout has changed.
+    std::vector<POINT> CaptureTileRenderPositions(int groupIndex) const {
+        std::vector<POINT> positions;
+        if (groupIndex < 0 || groupIndex >= static_cast<int>(layout_.groups.size())) return positions;
+        const auto& tiles = layout_.groups[groupIndex].tiles;
+        positions.reserve(tiles.size());
+        for (int i = 0; i < static_cast<int>(tiles.size()); ++i) {
+            RECT rect{};
+            if (!GetTileDrawRect(groupIndex, i, rect)) rect = RECT{};
+            positions.push_back(POINT{rect.left, rect.top});
+        }
+        return positions;
+    }
+
+    // Turns a layout change into a movement: every tile keeps the position it
+    // was painted at and eases from there into its new slot.
+    void StartTileGlide(int groupIndex, const std::vector<POINT>& before) {
+        if (groupIndex < 0 || groupIndex >= static_cast<int>(layout_.groups.size())) return;
+        auto& tiles = layout_.groups[groupIndex].tiles;
+        if (before.size() != tiles.size()) return;
+        bool moved = false;
+        for (size_t i = 0; i < tiles.size(); ++i) {
+            // A lifted tile follows the pointer, so it is never glided.
+            if (IsTileLifted(groupIndex, static_cast<int>(i))) {
+                tiles[i].animOffsetX = 0.0f;
+                tiles[i].animOffsetY = 0.0f;
+                continue;
+            }
+            RECT slot{};
+            if (!GetTileClientRect(groupIndex, static_cast<int>(i), slot)) continue;
+            const float dx = static_cast<float>(before[i].x - slot.left);
+            const float dy = static_cast<float>(before[i].y - slot.top);
+            if (fabsf(dx) < TILE_ANIM_SETTLE_PX && fabsf(dy) < TILE_ANIM_SETTLE_PX) continue;
+            tiles[i].animOffsetX = dx;
+            tiles[i].animOffsetY = dy;
+            moved = true;
+        }
+        if (moved) EnsureTileAnimationTimer();
+    }
+
+    void EnsureTileAnimationTimer() {
+        if (!hwnd_ || tileAnimActive_) return;
+        tileAnimLastTick_ = GetTickCount64();
+        if (!SetTimer(hwnd_.get(), TIMER_TILE_ANIM, TILE_ANIM_INTERVAL_MS, nullptr)) {
+            Wh_Log(L"[TileAnim] timer unavailable (%u): tiles move without animation", GetLastError());
+            SettleTileAnimations();
+            InvalidateRect(hwnd_.get(), nullptr, FALSE);
+            return;
+        }
+        tileAnimActive_ = true;
+    }
+
+    void StopTileAnimationTimer() {
+        if (hwnd_ && tileAnimActive_) KillTimer(hwnd_.get(), TIMER_TILE_ANIM);
+        tileAnimActive_ = false;
+    }
+
+    // Drops every animation to its final state: used when the menu closes and
+    // whenever the timer cannot be created.
+    void SettleTileAnimations() {
+        for (auto& group : layout_.groups) {
+            for (auto& tile : group.tiles) {
+                tile.animOffsetX = 0.0f;
+                tile.animOffsetY = 0.0f;
+                tile.animScale = 1.0f;
+            }
+        }
+        StopTileAnimationTimer();
+    }
+
+    // Scale the tile is easing towards: reduced while pressed, enlarged while
+    // lifted by a drag, otherwise its natural size.
+    float WantedTileScale(int groupIndex, int tileIndex) const {
+        if (IsTileLifted(groupIndex, tileIndex)) return TILE_DRAG_SCALE;
+        if (tileDragCandidate_ && !tileDragging_ &&
+            groupIndex == dragGroup_ && tileIndex == dragTile_) return TILE_PRESSED_SCALE;
+        return 1.0f;
+    }
+
+    // One animation frame: advances offsets and scales, then repaints only the
+    // rectangles that actually changed.
+    void OnTileAnimationTick() {
+        const ULONGLONG now = GetTickCount64();
+        const ULONGLONG elapsed = now > tileAnimLastTick_ ? now - tileAnimLastTick_ : 0;
+        tileAnimLastTick_ = now;
+        // The step is clamped so that a stalled UI thread cannot make the tiles
+        // jump across the grid in a single frame.
+        const float dt = std::min(0.05f, std::max(0.001f, static_cast<float>(elapsed) / 1000.0f));
+        const float glide = 1.0f - expf(-dt * TILE_ANIM_GLIDE_RATE);
+        const float scaleStep = std::min(1.0f, dt * TILE_ANIM_SCALE_RATE);
+
+        bool animating = false;
+        bool dirty = false;
+        RECT dirtyRect{};
+        const auto addDirty = [&dirty, &dirtyRect](const RECT& rect) {
+            if (!dirty) {
+                dirtyRect = rect;
+                dirty = true;
+                return;
+            }
+            RECT merged{};
+            if (UnionRect(&merged, &dirtyRect, &rect)) dirtyRect = merged;
+        };
+
+        for (int gi = 0; gi < static_cast<int>(layout_.groups.size()); ++gi) {
+            auto& tiles = layout_.groups[gi].tiles;
+            for (int ti = 0; ti < static_cast<int>(tiles.size()); ++ti) {
+                Tile& tile = tiles[ti];
+                const bool lifted = IsTileLifted(gi, ti);
+                const float wantedScale = WantedTileScale(gi, ti);
+                const bool glidePending = !lifted &&
+                    (tile.animOffsetX != 0.0f || tile.animOffsetY != 0.0f);
+                const bool scalePending = fabsf(tile.animScale - wantedScale) > TILE_ANIM_SETTLE_SCALE;
+                if (!glidePending && !scalePending) continue;
+
+                RECT before{};
+                const bool hadBefore = GetTileDrawRect(gi, ti, before);
+                if (glidePending) {
+                    if (fabsf(tile.animOffsetX) < TILE_ANIM_SETTLE_PX &&
+                        fabsf(tile.animOffsetY) < TILE_ANIM_SETTLE_PX) {
+                        tile.animOffsetX = 0.0f;
+                        tile.animOffsetY = 0.0f;
+                    } else {
+                        tile.animOffsetX -= tile.animOffsetX * glide;
+                        tile.animOffsetY -= tile.animOffsetY * glide;
+                        animating = true;
+                    }
+                }
+                if (scalePending) {
+                    tile.animScale += (wantedScale - tile.animScale) * scaleStep;
+                    if (fabsf(tile.animScale - wantedScale) <= TILE_ANIM_SETTLE_SCALE)
+                        tile.animScale = wantedScale;
+                    else
+                        animating = true;
+                }
+                if (hadBefore) addDirty(before);
+                RECT after{};
+                if (GetTileDrawRect(gi, ti, after)) addDirty(after);
+            }
+        }
+
+        if (dirty && hwnd_) {
+            // The scale makes a tile slightly larger than its slot.
+            InflateRect(&dirtyRect, metrics_.Scale(8), metrics_.Scale(8));
+            InvalidateRect(hwnd_.get(), &dirtyRect, FALSE);
+        }
+        // While a tile is lifted the timer stays alive: the pointer can start a
+        // new glide at any moment. Otherwise it stops as soon as everything has
+        // settled and is restarted on demand.
+        if (!animating && !tileDragging_) StopTileAnimationTimer();
+    }
+
     void NormalizeTileLayout() {
-        bool changed = false;
+        // Indices must stay stable while a tile is being dragged, so the
+        // duplicate cleanup is skipped until the drag is over.
+        bool changed = !tileDragCandidate_ && RemoveDuplicateTiles();
         for (size_t gi = 0; gi < layout_.groups.size(); ++gi) {
             auto& tiles = layout_.groups[gi].tiles;
             for (size_t ti = 0; ti < tiles.size(); ++ti) {
@@ -3059,9 +3385,67 @@ public:
         if (changed) PersistTileLayout();
     }
 
+    // Two tiles are the same application when they start the same target: the
+    // AUMID is compared first, the shortcut path when either side has none.
+    static bool SameTileTarget(const std::wstring& pathA, const std::wstring& aumidA,
+                               const std::wstring& pathB, const std::wstring& aumidB) {
+        if (!aumidA.empty() && !aumidB.empty())
+            return _wcsicmp(aumidA.c_str(), aumidB.c_str()) == 0;
+        if (!pathA.empty() && !pathB.empty())
+            return _wcsicmp(pathA.c_str(), pathB.c_str()) == 0;
+        return false;
+    }
+
+    bool FindPinnedTile(const std::wstring& path, const std::wstring& aumid,
+                        int& groupOut, int& tileOut) const {
+        for (size_t gi = 0; gi < layout_.groups.size(); ++gi) {
+            const auto& tiles = layout_.groups[gi].tiles;
+            for (size_t ti = 0; ti < tiles.size(); ++ti) {
+                if (SameTileTarget(path, aumid, tiles[ti].path, tiles[ti].aumid)) {
+                    groupOut = static_cast<int>(gi);
+                    tileOut = static_cast<int>(ti);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // A layout saved by an earlier build can hold the same application twice;
+    // only the first tile of each application is kept.
+    bool RemoveDuplicateTiles() {
+        bool removed = false;
+        for (size_t gi = 0; gi < layout_.groups.size(); ++gi) {
+            auto& tiles = layout_.groups[gi].tiles;
+            for (size_t ti = 0; ti < tiles.size();) {
+                int firstGroup = -1, firstTile = -1;
+                if (FindPinnedTile(tiles[ti].path, tiles[ti].aumid, firstGroup, firstTile) &&
+                    (firstGroup != static_cast<int>(gi) || firstTile != static_cast<int>(ti))) {
+                    Wh_Log(L"[TileLayout] duplicate tile '%s' removed (already pinned in group %d)",
+                           tiles[ti].name.c_str(), firstGroup);
+                    tiles.erase(tiles.begin() + ti);
+                    removed = true;
+                    continue;
+                }
+                ++ti;
+            }
+        }
+        return removed;
+    }
+
     bool PinAppInGroup(const AppEntry& app, int groupIndex, int wantedCol, int wantedRow) {
         if (!IsUsableCatalogApp(app) || groupIndex < 0 ||
             groupIndex >= static_cast<int>(layout_.groups.size())) return false;
+
+        // An application is pinned only once: a second pin would create two
+        // tiles starting the same target, so the existing one is kept.
+        int pinnedGroup = -1, pinnedTile = -1;
+        if (FindPinnedTile(app.path, app.aumid, pinnedGroup, pinnedTile)) {
+            Wh_Log(L"[TileLayout] '%s' is already pinned (group %d, tile %d); no duplicate added",
+                   app.name.c_str(), pinnedGroup, pinnedTile);
+            InvalidateTileRect(pinnedGroup, pinnedTile);
+            return true;
+        }
         auto& tiles = layout_.groups[groupIndex].tiles;
         wantedCol = std::max(0, std::min(Metrics::BASE_COLUMNS_PER_GROUP - 1, wantedCol));
         wantedRow = std::max(0, std::min(100000, wantedRow));
@@ -3205,6 +3589,14 @@ private:
     int hoverArea_ = -1;  // 0=User, 1=Places, 2=AppList, 3=Tile, 4=GroupHeader
     int hoverIndex_ = -1;
     int hoverGroup_ = -1;
+
+    // Keyboard navigation. The focused element is stored in the hover fields
+    // above, so a pointer hover and a keyboard focus can never be displayed at
+    // the same time; keyboardNav_ only records which of the two owns the
+    // highlight and whether the focus ring has to be drawn.
+    bool keyboardNav_ = false;
+    int keyboardTileGroup_ = -1; // tile the keyboard left the grid from
+    int keyboardTileIndex_ = -1;
     bool tileDragCandidate_ = false;
     bool tileDragging_ = false;
     bool appDragCandidate_ = false;
@@ -3214,6 +3606,9 @@ private:
     std::vector<POINT> dragOriginalTilePositions_;
     POINT dragStart_{};
     POINT dragTileGrabOffset_{}; // pointer position within tile, retained while snapping to grid.
+    POINT dragPointer_{};        // last pointer position while a tile is lifted.
+    bool tileAnimActive_ = false;      // TIMER_TILE_ANIM currently running
+    ULONGLONG tileAnimLastTick_ = 0;   // tick of the previous animation frame
 
     UniqueFont fontNormal_;
     UniqueFont fontBold_;
@@ -3491,6 +3886,15 @@ private:
                 OnKeyDown((UINT)wParam);
                 return 0;
 
+            case WM_SYSKEYDOWN:
+                // F10 and Shift+F10 arrive as system keys; every other system
+                // key combination keeps its default handling.
+                if (wParam == VK_F10) {
+                    OnKeyDown((UINT)wParam);
+                    return 0;
+                }
+                break;
+
             case WM_CHAR:
                 OnChar((wchar_t)wParam);
                 return 0;
@@ -3537,6 +3941,9 @@ private:
                         metrics_.Scale(Metrics::BASE_GROUP_HEADER_H) + metrics_.Scale(4);
                     const RECT grabbedTile = ComputeTileRect(groupX, tileY, layout_.groups[grp].tiles[idx]);
                     dragTileGrabOffset_ = {x - grabbedTile.left, y - grabbedTile.top};
+                    dragPointer_ = POINT{x, y};
+                    // Eases the press-in effect of the tile under the pointer.
+                    EnsureTileAnimationTimer();
                     SetCapture(hwnd);
                 } else if (area == 2) {
                     const AppEntry* app = GetListAppByIndex(idx);
@@ -3589,7 +3996,15 @@ private:
                 }
                 if (tileDragCandidate_) {
                     bool dragged=tileDragging_; int grp=dragGroup_, idx=dragTile_;
+                    // Captured while the tile is still lifted: once the drag
+                    // state is cleared it glides from the pointer into its slot
+                    // instead of snapping there.
+                    const std::vector<POINT> droppedFrom =
+                        dragged ? CaptureTileRenderPositions(grp) : std::vector<POINT>();
                     tileDragCandidate_=tileDragging_=false; dragGroup_=dragTile_=-1;
+                    if (dragged) StartTileGlide(grp, droppedFrom);
+                    // Also lets the press-in effect ease back out.
+                    EnsureTileAnimationTimer();
                     ClearDragPreview();
                     dragOriginalTilePositions_.clear();
                     if (GetCapture()==hwnd) ReleaseCapture();
@@ -3630,6 +4045,8 @@ private:
                     draggedApp_ = AppEntry{};
                 }
                 if (tileDragCandidate_) {
+                    const int cancelledGroup = dragGroup_;
+                    const std::vector<POINT> cancelledFrom = CaptureTileRenderPositions(cancelledGroup);
                     if (dragGroup_ >= 0 && dragGroup_ < static_cast<int>(layout_.groups.size()) &&
                         dragOriginalTilePositions_.size() == layout_.groups[dragGroup_].tiles.size()) {
                         auto& tiles = layout_.groups[dragGroup_].tiles;
@@ -3641,6 +4058,9 @@ private:
                     dragOriginalTilePositions_.clear();
                     tileDragCandidate_ = tileDragging_ = false;
                     dragGroup_ = dragTile_ = -1;
+                    // A cancelled drag puts the tiles back by gliding them.
+                    StartTileGlide(cancelledGroup, cancelledFrom);
+                    EnsureTileAnimationTimer();
                     InvalidateRect(hwnd, nullptr, FALSE);
                 }
                 if (allAppsScrollDragging_ || mainListScrollDragging_) {
@@ -3655,6 +4075,7 @@ private:
                 else if (wParam == TIMER_MENU_ANIMATION) UpdateMenuAnimation();
                 else if (wParam == TIMER_LIVE_FLIP) OnLiveTimer();
                 else if (wParam == TIMER_LIVE_TICK) OnTick();
+                else if (wParam == TIMER_TILE_ANIM) OnTileAnimationTick();
                 return 0;
 
             case WM_DPICHANGED: {
@@ -3752,6 +4173,29 @@ private:
         return (viewMode_ == ViewMode::AllApps || viewMode_ == ViewMode::AllAppsAlphabet) ? 1 : 4;
     }
 
+    // Maps an All-apps section index to its cell in the alphabet grid
+    // (layout: #, 0-9, A-Z, globe; 5 columns), in client coordinates.
+    bool AlphabetCellRectForSection(int section, int leftW, int userH, RECT& out) const {
+        if (section < 0) return false;
+        const int pad = metrics_.Scale(10);
+        const int cellW = std::max(1, (leftW - 2 * pad) / 5);
+        const int cellH = metrics_.Scale(48);
+        const int top = userH + metrics_.Scale(10);
+        for (int n = 0; n < 29; ++n) {
+            wchar_t key = 0;
+            if (n == 0) key = L'#';
+            else if (n == 1) key = L'0';
+            else if (n < 28) key = static_cast<wchar_t>(L'A' + n - 2);
+            else key = L'~';
+            if (FindAllAppsSection(key) != section) continue;
+            const int col = n % 5, row = n / 5;
+            out = RECT{pad + col * cellW, top + row * cellH,
+                       pad + (col + 1) * cellW, top + (row + 1) * cellH};
+            return true;
+        }
+        return false;
+    }
+
     void InvalidateHoverTarget(int area, int index, int groupIndex) {
         if (!hwnd_) return;
         RECT client{};
@@ -3773,20 +4217,18 @@ private:
                 }
                 break;
             case 2: dirty = RECT{0, userH, leftW, bottomY}; break;
-            case 3: {
-                if (groupIndex < 0 || groupIndex >= static_cast<int>(layout_.groups.size())) return;
-                const int startX = leftW + metrics_.Scale(Metrics::BASE_GROUP_PAD_X);
-                const int groupW = Metrics::BASE_COLUMNS_PER_GROUP * metrics_.Scale(Metrics::BASE_TILE_MEDIUM) +
-                    (Metrics::BASE_COLUMNS_PER_GROUP - 1) * metrics_.Scale(Metrics::BASE_TILE_GAP);
-                const int groupX = startX + groupIndex * (groupW + metrics_.Scale(Metrics::BASE_GROUP_GAP));
-                const int tileY = metrics_.Scale(Metrics::BASE_GROUP_PAD_Y) +
-                    metrics_.Scale(Metrics::BASE_GROUP_HEADER_H) + metrics_.Scale(4);
-                const auto& tiles = layout_.groups[groupIndex].tiles;
-                if (index < 0 || index >= static_cast<int>(tiles.size())) return;
-                dirty = ComputeTileRect(groupX, tileY, tiles[index]);
+            case 3:
+                if (!GetTileClientRect(groupIndex, index, dirty)) return;
+                break;
+            case 5: dirty = RECT{0, userH, leftW, bottomY}; break;
+            case 6: {
+                // Alphabet grid: repaint only the hovered cell instead of the
+                // whole left column (or nothing at all, which left the highlight stale).
+                if (!AlphabetCellRectForSection(groupIndex, leftW, userH, dirty)) {
+                    dirty = RECT{0, userH, leftW, bottomY};
+                }
                 break;
             }
-            case 5: dirty = RECT{0, userH, leftW, bottomY}; break;
             case 4: {
                 if (groupIndex < 0 || groupIndex >= static_cast<int>(layout_.groups.size())) return;
                 const int startX = leftW + metrics_.Scale(Metrics::BASE_GROUP_PAD_X);
@@ -3831,7 +4273,21 @@ private:
                 (std::abs(x - dragStart_.x) > dragThreshold || std::abs(y - dragStart_.y) > dragThreshold))
                 tileDragging_ = true;
             if (tileDragging_) {
-                UpdateDragPreview(x, y);
+                // The lifted tile follows the pointer: repaint the area it is
+                // leaving and the one it now covers, not the whole grid.
+                RECT liftedBefore{};
+                const bool hadLifted = GetTileDrawRect(dragGroup_, dragTile_, liftedBefore);
+                dragPointer_ = POINT{x, y};
+                EnsureTileAnimationTimer();
+                RECT liftedNow{};
+                const bool haveLifted = GetTileDrawRect(dragGroup_, dragTile_, liftedNow);
+                if (hadLifted && haveLifted && hwnd_) {
+                    RECT dirty{};
+                    if (UnionRect(&dirty, &liftedBefore, &liftedNow)) {
+                        InflateRect(&dirty, metrics_.Scale(10), metrics_.Scale(10));
+                        InvalidateRect(hwnd_.get(), &dirty, FALSE);
+                    }
+                }
                 const int leftW = metrics_.Scale(Metrics::BASE_LEFT_COL_W);
                 const int groupW = Metrics::BASE_COLUMNS_PER_GROUP * metrics_.Scale(Metrics::BASE_TILE_MEDIUM) +
                     (Metrics::BASE_COLUMNS_PER_GROUP - 1) * metrics_.Scale(Metrics::BASE_TILE_GAP);
@@ -3841,8 +4297,12 @@ private:
                     dragGroup_ * (groupW + metrics_.Scale(Metrics::BASE_GROUP_GAP));
                 const int tilesTop = metrics_.Scale(Metrics::BASE_GROUP_PAD_Y) +
                     metrics_.Scale(Metrics::BASE_GROUP_HEADER_H) + metrics_.Scale(4);
-                const int wantedLeft = x - dragTileGrabOffset_.x;
-                const int wantedTop = y - dragTileGrabOffset_.y;
+                // The target cell follows the tile as it is drawn, which the
+                // clamp keeps inside the grid, rather than the bare pointer.
+                const int wantedLeft = haveLifted ? static_cast<int>(liftedNow.left)
+                                                  : x - dragTileGrabOffset_.x;
+                const int wantedTop = haveLifted ? static_cast<int>(liftedNow.top)
+                                                 : y - dragTileGrabOffset_.y;
                 int movingW = 1, movingH = 1;
                 GetTileFootprint(layout_.groups[dragGroup_].tiles[dragTile_].size, movingW, movingH);
                 const int lastCol = Metrics::BASE_COLUMNS_PER_GROUP - movingW;
@@ -3857,7 +4317,12 @@ private:
                     const int wantedRow = std::max(0, (wantedTop - tilesTop + cell / 2) / cell);
                     const Tile& moving = layout_.groups[dragGroup_].tiles[dragTile_];
                     if (moving.col != wantedCol || moving.row != wantedRow) {
-                        ApplyDraggedTilePlacement(dragGroup_, dragTile_, wantedCol, wantedRow);
+                        // Remember where the tiles are painted so that the
+                        // neighbours pushed aside by the drop glide to their new
+                        // slot instead of appearing there.
+                        const std::vector<POINT> beforeReflow = CaptureTileRenderPositions(dragGroup_);
+                        if (ApplyDraggedTilePlacement(dragGroup_, dragTile_, wantedCol, wantedRow))
+                            StartTileGlide(dragGroup_, beforeReflow);
                         RECT client{};
                         if (GetClientRect(hwnd_.get(), &client)) {
                             RECT tileViewport{leftW, 0, client.right, client.bottom};
@@ -3868,6 +4333,13 @@ private:
                 return;
             }
         }
+        if (keyboardNav_) {
+            // The pointer wins over the keyboard: drop the focus ring even when
+            // the pointer lands on the element that was focused.
+            keyboardNav_ = false;
+            InvalidateHoverTarget(hoverArea_, hoverIndex_, hoverGroup_);
+        }
+
         int oldArea = hoverArea_;
         int oldIdx = hoverIndex_;
         int oldGrp = hoverGroup_;
@@ -3888,13 +4360,22 @@ private:
         POINT pt{ x, y };
         int area = -1, idx = -1, grp = -1;
         HitTest(pt, area, idx, grp);
+        const int leftW = metrics_.Scale(Metrics::BASE_LEFT_COL_W);
+        // Only the far-right chevron of the Explorer row opens its pinned places.
+        const bool explorerChevron = (area == 1 && idx == 0 &&
+                                      x >= leftW - metrics_.Scale(38));
+        ActivateItem(area, idx, grp, pt, explorerChevron);
+    }
 
-        if (area == 0) { // Click on the user header -> account menu
+    // Runs an element of the menu. Shared by the pointer (click) and by the
+    // keyboard (Enter): `pt` only positions the flyouts, and `explorerChevron`
+    // selects the Explorer jump list instead of an Explorer window.
+    void ActivateItem(int area, int idx, int grp, POINT pt, bool explorerChevron) {
+        if (area == 0) { // user header -> account menu
             ShowUserMenu(pt);
         } else if (area == 1) { // File Explorer, Settings, Power, All apps
-            if (idx == 0) { // File Explorer; the far-right chevron opens its pinned places
-                const int leftW = metrics_.Scale(Metrics::BASE_LEFT_COL_W);
-                if (x >= leftW - metrics_.Scale(38)) {
+            if (idx == 0) { // File Explorer, or its pinned places
+                if (explorerChevron) {
                     ShowExplorerJumpList();
                 } else {
                     Hide();
@@ -3909,6 +4390,9 @@ private:
                 if (viewMode_ == ViewMode::Normal) viewMode_ = ViewMode::AllApps;
                 else if (viewMode_ == ViewMode::AllAppsAlphabet) viewMode_ = ViewMode::AllApps;
                 else viewMode_ = ViewMode::Normal;
+                // The list below changed: keep the focus on the row just used,
+                // whose index is valid in both views.
+                if (keyboardNav_) SetKeyboardFocus(1, 3, -1);
                 InvalidateRect(hwnd_.get(), nullptr, FALSE);
             }
         } else if (area == 2) { // App list / folders
@@ -3929,10 +4413,18 @@ private:
             }
         } else if (area == 5 && viewMode_ == ViewMode::AllApps) {
             viewMode_ = ViewMode::AllAppsAlphabet;
+            ClearKeyboardFocus();
             InvalidateRect(hwnd_.get(), nullptr, FALSE);
         } else if (area == 6 && viewMode_ == ViewMode::AllAppsAlphabet && grp >= 0) {
+            const bool fromKeyboard = keyboardNav_;
             viewMode_ = ViewMode::AllApps;
             ScrollToAllAppsSection(grp);
+            // Keyboard jumps continue on the first entry of the chosen letter.
+            if (fromKeyboard) {
+                const int row = FirstRowOfSection(grp);
+                if (row >= 0) SetKeyboardFocus(2, row, -1);
+                else ClearKeyboardFocus();
+            }
         } else if (area == 3) { // Click on a tile
             if (grp >= 0 && grp < (int)layout_.groups.size()) {
                 auto& group = layout_.groups[grp];
@@ -4200,48 +4692,738 @@ private:
             mainListScrollY_ = 0;
             viewMode_ = ViewMode::Search;
             FilterSearch();
+            // As in the original menu, the best match is preselected so that
+            // Enter launches it and the arrow keys walk the other results.
+            FocusFirstSearchResult();
             InvalidateRect(hwnd_.get(), nullptr, FALSE);
         }
     }
 
     void OnKeyDown(UINT vk) {
-        if (vk == 'A' && (GetKeyState(VK_CONTROL) & 0x8000) && !searchQuery_.empty()) {
+        const bool control = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+        const bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+
+        if (vk == 'A' && control && !searchQuery_.empty()) {
             viewMode_ = ViewMode::Search;
             searchAllSelected_ = true;
             InvalidateRect(hwnd_.get(), nullptr, FALSE);
-        } else if (vk == VK_ESCAPE) {
-            searchAllSelected_ = false;
-            if (viewMode_ == ViewMode::Search) {
-                searchQuery_.clear();
-                viewMode_ = ViewMode::Normal;
-                InvalidateRect(hwnd_.get(), nullptr, FALSE);
-            } else {
-                Hide();
-            }
-        } else if (vk == VK_BACK) {
-            if (viewMode_ == ViewMode::Search && !searchQuery_.empty()) {
-                if (searchAllSelected_) {
+            return;
+        }
+
+        switch (vk) {
+            case VK_ESCAPE:
+                searchAllSelected_ = false;
+                ClearKeyboardFocus();
+                if (viewMode_ == ViewMode::Search) {
                     searchQuery_.clear();
                     searchResults_.clear();
-                    searchAllSelected_ = false;
                     viewMode_ = ViewMode::Normal;
+                    mainListScrollY_ = 0;
                     InvalidateRect(hwnd_.get(), nullptr, FALSE);
-                    return;
-                }
-                searchQuery_.pop_back();
-                searchAllSelected_ = false;
-                if (searchQuery_.empty()) {
-                    viewMode_ = ViewMode::Normal;
                 } else {
-                    FilterSearch();
+                    Hide();
                 }
-                InvalidateRect(hwnd_.get(), nullptr, FALSE);
+                return;
+
+            case VK_BACK:
+                if (viewMode_ == ViewMode::Search && !searchQuery_.empty()) {
+                    if (searchAllSelected_) {
+                        searchQuery_.clear();
+                        searchResults_.clear();
+                        searchAllSelected_ = false;
+                        viewMode_ = ViewMode::Normal;
+                        ClearKeyboardFocus();
+                        InvalidateRect(hwnd_.get(), nullptr, FALSE);
+                        return;
+                    }
+                    searchQuery_.pop_back();
+                    searchAllSelected_ = false;
+                    if (searchQuery_.empty()) {
+                        viewMode_ = ViewMode::Normal;
+                        ClearKeyboardFocus();
+                    } else {
+                        FilterSearch();
+                        FocusFirstSearchResult();
+                    }
+                    InvalidateRect(hwnd_.get(), nullptr, FALSE);
+                }
+                return;
+
+            case VK_UP:    MoveFocusVertical(-1); return;
+            case VK_DOWN:  MoveFocusVertical(1); return;
+            case VK_LEFT:  MoveFocusHorizontal(-1); return;
+            case VK_RIGHT: MoveFocusHorizontal(1); return;
+            case VK_PRIOR: MoveFocusPage(-1); return;
+            case VK_NEXT:  MoveFocusPage(1); return;
+            case VK_HOME:  MoveFocusToEdge(false); return;
+            case VK_END:   MoveFocusToEdge(true); return;
+            case VK_TAB:   MoveFocusToNextArea(shift ? -1 : 1); return;
+
+            case VK_RETURN:
+                ActivateKeyboardFocus();
+                return;
+
+            case VK_APPS:
+                ShowKeyboardContextMenu();
+                return;
+
+            case VK_F10:
+                if (shift) ShowKeyboardContextMenu();
+                return;
+
+            default:
+                return;
+        }
+    }
+
+    // ===================== KEYBOARD NAVIGATION =====================
+    // Arrow keys, Tab, Home/End and Page Up/Down move a single highlight over
+    // the account header (area 0), the bottom bar (area 1), the app list
+    // (area 2), the tile grid (area 3) and the A-Z grid of All apps (area 6).
+    // The highlight is stored in the hover fields, so the existing painting
+    // code highlights a focused element exactly like a hovered one; only the
+    // focus ring is added on top of it.
+
+    int ListItemHeight() const { return metrics_.Scale(Metrics::BASE_APP_ITEM_H); }
+
+    // Walks the rows of the left column that the keyboard can reach. The
+    // callback receives (index, top), where `top` is measured from the top of
+    // the scrollable area before the scroll offset is applied, and returns
+    // false to stop the walk. One extra call is made past the last row, so the
+    // same walk also yields the row count and the total content height.
+    template <typename Callback>
+    void ForEachListRow(Callback callback) const {
+        const int itemH = ListItemHeight();
+        int index = 0;
+        int top = 0;
+        if (viewMode_ == ViewMode::Normal) {
+            top = metrics_.Scale(8) + metrics_.Scale(24);
+            for (size_t i = 0; i < catalog_.MostUsed().size(); ++i) {
+                if (!callback(index++, top)) return;
+                top += itemH;
             }
-        } else if (vk == VK_RETURN) {
-            if (viewMode_ == ViewMode::Search && !searchResults_.empty()) {
-                LaunchCatalogEntry(searchResults_[0]);
+            if (!catalog_.RecentlyAdded().empty()) {
+                top += metrics_.Scale(8) + metrics_.Scale(24);
+                for (size_t i = 0; i < catalog_.RecentlyAdded().size(); ++i) {
+                    if (!callback(index++, top)) return;
+                    top += itemH;
+                }
+            }
+        } else if (viewMode_ == ViewMode::Search) {
+            top = metrics_.Scale(8) + metrics_.Scale(26);
+            for (size_t i = 0; i < searchResults_.size(); ++i) {
+                if (!callback(index++, top)) return;
+                top += itemH;
+            }
+        } else if (viewMode_ == ViewMode::AllApps) {
+            const int headH = metrics_.Scale(Metrics::BASE_SECTION_HEADER_H);
+            for (const auto& section : catalog_.Sections()) {
+                top += headH;
+                for (size_t a = 0; a < section.apps.size(); ++a) {
+                    if (!callback(index++, top)) return;
+                    top += itemH;
+                }
+                for (const auto& folder : section.folders) {
+                    if (!callback(index++, top)) return; // the folder row itself
+                    top += itemH;
+                    if (!folder.expanded) continue;
+                    for (size_t sub = 0; sub < folder.apps.size(); ++sub) {
+                        if (!callback(index++, top)) return;
+                        top += itemH;
+                    }
+                }
             }
         }
+        callback(index, top); // one past the last row
+    }
+
+    int ListItemCount() const {
+        int count = 0;
+        ForEachListRow([&](int index, int) { count = index; return true; });
+        return count;
+    }
+
+    int ListContentHeight() const {
+        int height = 0;
+        ForEachListRow([&](int, int top) { height = top; return true; });
+        return height;
+    }
+
+    int ListItemOffset(int index) const {
+        int offset = 0;
+        ForEachListRow([&](int current, int top) {
+            if (current != index) return true;
+            offset = top;
+            return false;
+        });
+        return offset;
+    }
+
+    // Row closest to a position expressed in content coordinates.
+    int ListIndexAtOffset(int contentY) const {
+        const int itemH = ListItemHeight();
+        const int count = ListItemCount();
+        int best = -1;
+        int bestDistance = INT_MAX;
+        ForEachListRow([&](int index, int top) {
+            const int distance = std::abs(top + itemH / 2 - contentY);
+            if (distance < bestDistance) { bestDistance = distance; best = index; }
+            return true;
+        });
+        if (best >= count) best = count - 1; // the past-the-end call
+        return best;
+    }
+
+    // Index of the first row of an All apps section, or -1 when it is empty.
+    int FirstRowOfSection(int sectionIndex) const {
+        if (sectionIndex < 0) return -1;
+        int index = 0;
+        int current = 0;
+        for (const auto& section : catalog_.Sections()) {
+            if (current++ == sectionIndex)
+                return (section.apps.empty() && section.folders.empty()) ? -1 : index;
+            index += static_cast<int>(section.apps.size());
+            for (const auto& folder : section.folders) {
+                ++index;
+                if (folder.expanded) index += static_cast<int>(folder.apps.size());
+            }
+        }
+        return -1;
+    }
+
+    bool ListViewportRect(RECT& out) const {
+        RECT client{};
+        if (!hwnd_ || !GetClientRect(hwnd_.get(), &client)) return false;
+        const int leftW = std::min(static_cast<int>(client.right),
+                                   metrics_.Scale(Metrics::BASE_LEFT_COL_W));
+        const int userH = metrics_.Scale(Metrics::BASE_USER_HEADER_H);
+        const int bottomY = static_cast<int>(client.bottom) -
+                            BottomPlaceItemCount() * metrics_.Scale(Metrics::BASE_PLACE_ITEM_H);
+        if (leftW <= 0 || bottomY <= userH) return false;
+        out = RECT{0, userH, leftW, bottomY};
+        return true;
+    }
+
+    int CurrentListScroll() const {
+        return viewMode_ == ViewMode::AllApps ? allAppsScrollY_ : mainListScrollY_;
+    }
+
+    void SetCurrentListScroll(int value) {
+        if (viewMode_ == ViewMode::AllApps) allAppsScrollY_ = value;
+        else mainListScrollY_ = value;
+    }
+
+    bool ListItemRect(int index, RECT& out) const {
+        RECT viewport{};
+        if (index < 0 || index >= ListItemCount() || !ListViewportRect(viewport)) return false;
+        const int top = static_cast<int>(viewport.top) + ListItemOffset(index) - CurrentListScroll();
+        out = RECT{viewport.left, top, viewport.right, top + ListItemHeight()};
+        return true;
+    }
+
+    // Scrolls by the smallest amount that brings a row fully into view.
+    void EnsureListItemVisible(int index) {
+        RECT viewport{};
+        if (index < 0 || !ListViewportRect(viewport)) return;
+        const int visibleH = static_cast<int>(viewport.bottom - viewport.top);
+        const int maxScroll = std::max(0, ListContentHeight() - visibleH);
+        const int top = ListItemOffset(index);
+        const int bottom = top + ListItemHeight();
+        const int current = CurrentListScroll();
+        int scroll = current;
+        if (top < scroll) {
+            // Scrolling upwards also reveals the heading that sits above the
+            // row ("Most used", "Recently added", or the A-Z letter).
+            scroll = index > 0 ? ListItemOffset(index - 1) + ListItemHeight() : 0;
+        } else if (bottom > scroll + visibleH) {
+            scroll = bottom - visibleH;
+        }
+        scroll = std::max(0, std::min(scroll, maxScroll));
+        if (scroll != current) {
+            SetCurrentListScroll(scroll);
+            if (hwnd_) InvalidateRect(hwnd_.get(), nullptr, FALSE);
+        }
+    }
+
+    bool PlaceItemRect(int index, RECT& out) const {
+        RECT client{};
+        if (index < 0 || index > 3 || !hwnd_ || !GetClientRect(hwnd_.get(), &client)) return false;
+        const int leftW = std::min(static_cast<int>(client.right),
+                                   metrics_.Scale(Metrics::BASE_LEFT_COL_W));
+        const int placeH = metrics_.Scale(Metrics::BASE_PLACE_ITEM_H);
+        const int bottomY = static_cast<int>(client.bottom) - BottomPlaceItemCount() * placeH;
+        if (BottomPlaceItemCount() == 1) {
+            if (index != 3) return false; // only "Back" is visible in All apps
+            out = RECT{0, bottomY, leftW, bottomY + placeH};
+            return true;
+        }
+        out = RECT{0, bottomY + index * placeH, leftW, bottomY + (index + 1) * placeH};
+        return true;
+    }
+
+    // Client rectangle of a tile, shared by hit testing, repainting and
+    // keyboard navigation so that all three always agree.
+    bool GetTileClientRect(int groupIndex, int tileIndex, RECT& out) const {
+        if (groupIndex < 0 || groupIndex >= static_cast<int>(layout_.groups.size())) return false;
+        const auto& tiles = layout_.groups[groupIndex].tiles;
+        if (tileIndex < 0 || tileIndex >= static_cast<int>(tiles.size())) return false;
+        const int leftW = metrics_.Scale(Metrics::BASE_LEFT_COL_W);
+        const int groupW = Metrics::BASE_COLUMNS_PER_GROUP * metrics_.Scale(Metrics::BASE_TILE_MEDIUM) +
+            (Metrics::BASE_COLUMNS_PER_GROUP - 1) * metrics_.Scale(Metrics::BASE_TILE_GAP);
+        const int groupX = leftW + metrics_.Scale(Metrics::BASE_GROUP_PAD_X) +
+            groupIndex * (groupW + metrics_.Scale(Metrics::BASE_GROUP_GAP));
+        const int tilesY = metrics_.Scale(Metrics::BASE_GROUP_PAD_Y) +
+            metrics_.Scale(Metrics::BASE_GROUP_HEADER_H) + metrics_.Scale(4);
+        out = ComputeTileRect(groupX, tilesY, tiles[tileIndex]);
+        return true;
+    }
+
+    // A tile scrolled out of the grid viewport must not receive the focus.
+    bool IsTileRectReachable(const RECT& tile) const {
+        RECT client{};
+        if (!hwnd_ || !GetClientRect(hwnd_.get(), &client)) return false;
+        RECT viewport{metrics_.Scale(Metrics::BASE_LEFT_COL_W), 0, client.right, client.bottom};
+        RECT intersection{};
+        return IntersectRect(&intersection, &tile, &viewport) != FALSE;
+    }
+
+    bool FocusTargetRect(int area, int index, int group, RECT& out) const {
+        RECT client{};
+        switch (area) {
+            case 0:
+                if (!hwnd_ || !GetClientRect(hwnd_.get(), &client)) return false;
+                out = RECT{0, 0,
+                           std::min(static_cast<int>(client.right),
+                                    metrics_.Scale(Metrics::BASE_LEFT_COL_W)),
+                           metrics_.Scale(Metrics::BASE_USER_HEADER_H)};
+                return true;
+            case 1: return PlaceItemRect(index, out);
+            case 2: return ListItemRect(index, out);
+            case 3: return GetTileClientRect(group, index, out);
+            case 6: return AlphabetCellRectForSection(group,
+                        metrics_.Scale(Metrics::BASE_LEFT_COL_W),
+                        metrics_.Scale(Metrics::BASE_USER_HEADER_H), out);
+            default: return false;
+        }
+    }
+
+    void SetKeyboardFocus(int area, int index, int group) {
+        const int oldArea = hoverArea_, oldIndex = hoverIndex_, oldGroup = hoverGroup_;
+        hoverArea_ = area;
+        hoverIndex_ = index;
+        hoverGroup_ = group;
+        keyboardNav_ = area >= 0;
+        if (area == 3) {
+            keyboardTileGroup_ = group;
+            keyboardTileIndex_ = index;
+        }
+        if (area == 2) EnsureListItemVisible(index);
+        InvalidateHoverTarget(oldArea, oldIndex, oldGroup);
+        InvalidateHoverTarget(area, index, group);
+    }
+
+    void ClearKeyboardFocus() {
+        if (!keyboardNav_) return;
+        const int oldArea = hoverArea_, oldIndex = hoverIndex_, oldGroup = hoverGroup_;
+        keyboardNav_ = false;
+        hoverArea_ = hoverIndex_ = hoverGroup_ = -1;
+        InvalidateHoverTarget(oldArea, oldIndex, oldGroup);
+    }
+
+    void ResetKeyboardNavigation() {
+        keyboardNav_ = false;
+        keyboardTileGroup_ = -1;
+        keyboardTileIndex_ = -1;
+    }
+
+    void FocusFirstSearchResult() {
+        if (!searchResults_.empty()) SetKeyboardFocus(2, 0, -1);
+        else ClearKeyboardFocus();
+    }
+
+    int FirstPlaceIndex() const { return BottomPlaceItemCount() == 1 ? 3 : 0; }
+
+    bool FocusPlace(int index) {
+        if (BottomPlaceItemCount() == 1) index = 3; // All apps view: only "Back"
+        if (index < 0 || index > 3) return false;
+        SetKeyboardFocus(1, index, -1);
+        return true;
+    }
+
+    bool FocusListRow(int index) {
+        const int count = ListItemCount();
+        if (count <= 0) return false;
+        SetKeyboardFocus(2, std::max(0, std::min(index, count - 1)), -1);
+        return true;
+    }
+
+    // ---- A-Z grid of All apps (5 columns: #, 0-9, A to Z, globe) ----
+    static constexpr int kAlphabetColumns = 5;
+    static constexpr int kAlphabetCells = 29;
+
+    static wchar_t AlphabetCellKey(int cell) {
+        if (cell == 0) return L'#';
+        if (cell == 1) return L'0';
+        if (cell >= 2 && cell < 28) return static_cast<wchar_t>(L'A' + cell - 2);
+        if (cell == 28) return L'~';
+        return 0;
+    }
+
+    int AlphabetCellSection(int cell) const {
+        const wchar_t key = AlphabetCellKey(cell);
+        return key ? FindAllAppsSection(key) : -1;
+    }
+
+    int AlphabetCellForSection(int section) const {
+        if (section < 0) return -1;
+        for (int cell = 0; cell < kAlphabetCells; ++cell)
+            if (AlphabetCellSection(cell) == section) return cell;
+        return -1;
+    }
+
+    bool FocusAlphabetCell(int cell) {
+        const int section = AlphabetCellSection(cell);
+        if (section < 0) return false; // letters without apps stay unreachable
+        SetKeyboardFocus(6, -1, section);
+        return true;
+    }
+
+    bool FocusFirstAlphabetCell(bool fromEnd = false) {
+        for (int i = 0; i < kAlphabetCells; ++i) {
+            const int cell = fromEnd ? kAlphabetCells - 1 - i : i;
+            if (FocusAlphabetCell(cell)) return true;
+        }
+        return false;
+    }
+
+    bool MoveAlphabetFocus(int dx, int dy) {
+        const int step = dx != 0 ? dx : dy * kAlphabetColumns;
+        if (step == 0) return false;
+        const int current = (hoverArea_ == 6) ? AlphabetCellForSection(hoverGroup_) : -1;
+        if (current < 0) return FocusFirstAlphabetCell(step < 0);
+        for (int cell = current + step; cell >= 0 && cell < kAlphabetCells; cell += step) {
+            // A horizontal move stays on its row.
+            if (dx != 0 && cell / kAlphabetColumns != current / kAlphabetColumns) break;
+            if (FocusAlphabetCell(cell)) return true;
+        }
+        return false;
+    }
+
+    // ---- tile grid ----
+    // Picks the reachable tile that best continues the requested direction:
+    // the closest one along the axis of travel, with lateral drift penalised.
+    bool MoveTileFocus(int dx, int dy) {
+        RECT currentRect{};
+        if (hoverArea_ != 3 || !GetTileClientRect(hoverGroup_, hoverIndex_, currentRect))
+            return FocusTileFromColumn();
+        const int fromX = static_cast<int>(currentRect.left + currentRect.right) / 2;
+        const int fromY = static_cast<int>(currentRect.top + currentRect.bottom) / 2;
+        int bestGroup = -1, bestTile = -1;
+        long long bestScore = 0;
+        for (size_t gi = 0; gi < layout_.groups.size(); ++gi) {
+            const auto& tiles = layout_.groups[gi].tiles;
+            for (size_t ti = 0; ti < tiles.size(); ++ti) {
+                if (static_cast<int>(gi) == hoverGroup_ && static_cast<int>(ti) == hoverIndex_) continue;
+                RECT rect{};
+                if (!GetTileClientRect(static_cast<int>(gi), static_cast<int>(ti), rect)) continue;
+                if (!IsTileRectReachable(rect)) continue;
+                const int centerX = static_cast<int>(rect.left + rect.right) / 2;
+                const int centerY = static_cast<int>(rect.top + rect.bottom) / 2;
+                const long long along = dx != 0 ? static_cast<long long>(centerX - fromX) * dx
+                                                : static_cast<long long>(centerY - fromY) * dy;
+                if (along <= 0) continue; // not in the requested direction
+                const long long across = dx != 0 ? std::abs(centerY - fromY) : std::abs(centerX - fromX);
+                const long long score = along + across * 3;
+                if (bestTile < 0 || score < bestScore) {
+                    bestScore = score;
+                    bestGroup = static_cast<int>(gi);
+                    bestTile = static_cast<int>(ti);
+                }
+            }
+        }
+        if (bestTile >= 0) {
+            SetKeyboardFocus(3, bestTile, bestGroup);
+            return true;
+        }
+        if (dx < 0) return FocusLeftColumnFromTile(); // leaving the grid on its left
+        return false;
+    }
+
+    // Enters the tile grid from the left column, keeping the vertical position
+    // or, when available, the tile the grid was last left from.
+    bool FocusTileFromColumn() {
+        RECT remembered{};
+        if (GetTileClientRect(keyboardTileGroup_, keyboardTileIndex_, remembered) &&
+            IsTileRectReachable(remembered)) {
+            SetKeyboardFocus(3, keyboardTileIndex_, keyboardTileGroup_);
+            return true;
+        }
+        RECT origin{};
+        const int wantedY = FocusTargetRect(hoverArea_, hoverIndex_, hoverGroup_, origin)
+            ? static_cast<int>(origin.top + origin.bottom) / 2 : 0;
+        int bestGroup = -1, bestTile = -1;
+        long long bestScore = 0;
+        for (size_t gi = 0; gi < layout_.groups.size(); ++gi) {
+            const auto& tiles = layout_.groups[gi].tiles;
+            for (size_t ti = 0; ti < tiles.size(); ++ti) {
+                RECT rect{};
+                if (!GetTileClientRect(static_cast<int>(gi), static_cast<int>(ti), rect)) continue;
+                if (!IsTileRectReachable(rect)) continue;
+                const int centerY = static_cast<int>(rect.top + rect.bottom) / 2;
+                const long long score =
+                    static_cast<long long>(std::abs(centerY - wantedY)) * 4 + rect.left;
+                if (bestTile < 0 || score < bestScore) {
+                    bestScore = score;
+                    bestGroup = static_cast<int>(gi);
+                    bestTile = static_cast<int>(ti);
+                }
+            }
+        }
+        if (bestTile < 0) return false;
+        SetKeyboardFocus(3, bestTile, bestGroup);
+        return true;
+    }
+
+    // Returns from the tile grid to the row of the left column at the same height.
+    bool FocusLeftColumnFromTile() {
+        if (viewMode_ == ViewMode::AllAppsAlphabet) return FocusFirstAlphabetCell();
+        RECT tileRect{};
+        int wantedY = -1;
+        if (GetTileClientRect(hoverGroup_, hoverIndex_, tileRect))
+            wantedY = static_cast<int>(tileRect.top + tileRect.bottom) / 2;
+        RECT viewport{};
+        if (ListItemCount() > 0 && ListViewportRect(viewport)) {
+            int index = 0;
+            if (wantedY >= 0) {
+                const int clampedY = std::max(static_cast<int>(viewport.top),
+                    std::min(wantedY, static_cast<int>(viewport.bottom) - 1));
+                index = std::max(0, ListIndexAtOffset(clampedY - static_cast<int>(viewport.top) +
+                                                      CurrentListScroll()));
+            }
+            return FocusListRow(index);
+        }
+        return FocusPlace(FirstPlaceIndex());
+    }
+
+    // ---- movement ----
+    // First target when navigation starts without a highlight.
+    void FocusFirstTarget(int direction) {
+        if (viewMode_ == ViewMode::AllAppsAlphabet) {
+            if (FocusFirstAlphabetCell(direction < 0)) return;
+        }
+        const int count = ListItemCount();
+        if (count > 0) {
+            SetKeyboardFocus(2, direction < 0 ? count - 1 : 0, -1);
+            return;
+        }
+        if (!FocusPlace(direction < 0 ? 3 : FirstPlaceIndex())) FocusTileFromColumn();
+    }
+
+    void MoveFocusVertical(int delta) {
+        if (!keyboardNav_ || hoverArea_ < 0) {
+            FocusFirstTarget(delta);
+            return;
+        }
+        switch (hoverArea_) {
+            case 0: // account header: only downwards
+                if (delta > 0 && !FocusListRow(0)) FocusPlace(FirstPlaceIndex());
+                return;
+            case 1: {
+                const int next = hoverIndex_ + delta;
+                if (BottomPlaceItemCount() > 1 && next >= 0 && next <= 3) {
+                    SetKeyboardFocus(1, next, -1);
+                    return;
+                }
+                if (delta < 0) {
+                    const int count = ListItemCount();
+                    if (count > 0) FocusListRow(count - 1);
+                    else SetKeyboardFocus(0, -1, -1);
+                }
+                return;
+            }
+            case 2: {
+                const int count = ListItemCount();
+                const int next = hoverIndex_ + delta;
+                if (next >= 0 && next < count) {
+                    SetKeyboardFocus(2, next, -1);
+                    return;
+                }
+                if (delta < 0) SetKeyboardFocus(0, -1, -1); // above the list: account header
+                else FocusPlace(FirstPlaceIndex());         // below the list: bottom bar
+                return;
+            }
+            case 3: MoveTileFocus(0, delta); return;
+            case 6: MoveAlphabetFocus(0, delta); return;
+            default: FocusFirstTarget(delta); return;
+        }
+    }
+
+    void MoveFocusHorizontal(int delta) {
+        if (!keyboardNav_ || hoverArea_ < 0) {
+            if (delta > 0 && FocusTileFromColumn()) return;
+            FocusFirstTarget(1);
+            return;
+        }
+        switch (hoverArea_) {
+            case 0:
+            case 1:
+            case 2:
+                if (delta > 0) FocusTileFromColumn(); // step into the tile grid
+                return;
+            case 3: MoveTileFocus(delta, 0); return;
+            case 6: MoveAlphabetFocus(delta, 0); return;
+            default: return;
+        }
+    }
+
+    void MoveFocusPage(int delta) {
+        if (keyboardNav_ && hoverArea_ == 3) { // in the grid a page is one row
+            MoveTileFocus(0, delta);
+            return;
+        }
+        RECT viewport{};
+        const int count = ListItemCount();
+        if (count <= 0 || !ListViewportRect(viewport)) {
+            MoveFocusVertical(delta);
+            return;
+        }
+        const int rows = std::max(1, static_cast<int>(viewport.bottom - viewport.top) /
+                                         std::max(1, ListItemHeight()) - 1);
+        const int current = (keyboardNav_ && hoverArea_ == 2) ? hoverIndex_
+                                                              : (delta > 0 ? -1 : count);
+        const int next = std::max(0, std::min(current + delta * rows, count - 1));
+        SetKeyboardFocus(2, next, -1);
+    }
+
+    void MoveFocusToEdge(bool last) {
+        if (keyboardNav_ && hoverArea_ == 3 && hoverGroup_ >= 0 &&
+            hoverGroup_ < static_cast<int>(layout_.groups.size())) {
+            const auto& tiles = layout_.groups[hoverGroup_].tiles;
+            int best = -1;
+            for (size_t ti = 0; ti < tiles.size(); ++ti) {
+                if (best < 0) { best = static_cast<int>(ti); continue; }
+                const Tile& candidate = tiles[ti];
+                const Tile& current = tiles[best];
+                const bool better = last
+                    ? (candidate.row > current.row ||
+                       (candidate.row == current.row && candidate.col > current.col))
+                    : (candidate.row < current.row ||
+                       (candidate.row == current.row && candidate.col < current.col));
+                if (better) best = static_cast<int>(ti);
+            }
+            if (best >= 0) {
+                SetKeyboardFocus(3, best, hoverGroup_);
+                return;
+            }
+        }
+        const int count = ListItemCount();
+        if (count > 0) {
+            SetKeyboardFocus(2, last ? count - 1 : 0, -1);
+            return;
+        }
+        FocusPlace(last ? 3 : FirstPlaceIndex());
+    }
+
+    // Tab and Shift+Tab walk the areas of the menu in a fixed order.
+    void MoveFocusToNextArea(int delta) {
+        constexpr int kStops = 4; // account header, list, bottom bar, tiles
+        int current;
+        switch (keyboardNav_ ? hoverArea_ : -1) {
+            case 0: current = 0; break;
+            case 2:
+            case 6: current = 1; break;
+            case 1: current = 2; break;
+            case 3: current = 3; break;
+            default: current = delta > 0 ? 0 : kStops; break;
+        }
+        for (int step = 1; step <= kStops; ++step) {
+            const int stop = ((current + delta * step) % kStops + kStops) % kStops;
+            switch (stop) {
+                case 0:
+                    SetKeyboardFocus(0, -1, -1);
+                    return;
+                case 1:
+                    if (viewMode_ == ViewMode::AllAppsAlphabet) {
+                        if (FocusFirstAlphabetCell()) return;
+                    } else if (FocusListRow(0)) {
+                        return;
+                    }
+                    break;
+                case 2:
+                    if (FocusPlace(FirstPlaceIndex())) return;
+                    break;
+                default:
+                    if (FocusTileFromColumn()) return;
+                    break;
+            }
+        }
+    }
+
+    // ---- activation ----
+    // Flyouts opened from the keyboard are anchored to the focused element.
+    POINT FocusAnchorPoint() const {
+        RECT rect{};
+        if (!FocusTargetRect(hoverArea_, hoverIndex_, hoverGroup_, rect)) return POINT{0, 0};
+        return POINT{rect.left + (rect.right - rect.left) / 2,
+                     rect.top + (rect.bottom - rect.top) / 2};
+    }
+
+    void ActivateKeyboardFocus() {
+        if (!keyboardNav_ || hoverArea_ < 0) {
+            // No highlight: Enter keeps launching the best search match.
+            if (viewMode_ == ViewMode::Search && !searchResults_.empty())
+                LaunchCatalogEntry(searchResults_[0]);
+            return;
+        }
+        ActivateItem(hoverArea_, hoverIndex_, hoverGroup_, FocusAnchorPoint(), false);
+    }
+
+    void ShowKeyboardContextMenu() {
+        if (!keyboardNav_ || hoverArea_ < 0) return;
+        const POINT anchor = FocusAnchorPoint();
+        switch (hoverArea_) {
+            case 0: ShowUserMenu(anchor); return;
+            case 1:
+                if (hoverIndex_ == 0) ShowExplorerJumpList();
+                else if (hoverIndex_ == 2) ShowPowerMenu(anchor);
+                return;
+            case 2:
+                if (hoverIndex_ >= 0) ShowAppContextMenu(anchor, hoverIndex_);
+                return;
+            case 3:
+                if (hoverGroup_ >= 0 && hoverIndex_ >= 0)
+                    ShowTileContextMenu(anchor, hoverGroup_, hoverIndex_);
+                return;
+            default: return;
+        }
+    }
+
+    // ---- focus ring ----
+    // Tiles already get the white border of the hover state, which is also the
+    // focus look of the original menu; the other areas receive a thin outline
+    // on top of their highlight.
+    void DrawKeyboardFocusRing(HDC hdc) {
+        if (!keyboardNav_ || hoverArea_ < 0 || hoverArea_ == 3) return;
+        RECT focus{};
+        if (!FocusTargetRect(hoverArea_, hoverIndex_, hoverGroup_, focus)) return;
+        if (hoverArea_ == 2 || hoverArea_ == 6) {
+            // Rows and A-Z cells scroll: clip the outline to the visible area.
+            RECT viewport{}, visible{};
+            if (!ListViewportRect(viewport)) return;
+            if (!IntersectRect(&visible, &focus, &viewport)) return;
+            focus = visible;
+        }
+        const int thickness = std::max(1, metrics_.Scale(1));
+        if (focus.right - focus.left <= 2 * thickness ||
+            focus.bottom - focus.top <= 2 * thickness) return;
+        UniquePen pen(CreatePen(PS_SOLID, thickness, RGB(255, 255, 255)));
+        if (!pen) return;
+        HBRUSH hollow = static_cast<HBRUSH>(GetStockObject(NULL_BRUSH));
+        ScopedSelectObject selectPen(hdc, pen.get());
+        ScopedSelectObject selectBrush(hdc, hollow);
+        const int inset = thickness; // keep the outline inside the element
+        Rectangle(hdc, focus.left + inset, focus.top + inset,
+                  focus.right - inset, focus.bottom - inset);
     }
 
     void FilterSearch() {
@@ -4296,6 +5478,7 @@ private:
 
         RECT rcRight = { leftW, 0, rcClient.right, rcClient.bottom };
         DrawTiles(renderDc_.get(), rcRight);
+        DrawKeyboardFocusRing(renderDc_.get());
         DrawDragPreview(renderDc_.get());
         if (!savedDc) SelectClipRgn(renderDc_.get(), nullptr);
 
@@ -4619,6 +5802,7 @@ private:
         auto drawCell = [&](int n, const wchar_t* label, int target, bool globe = false) {
             const int col = n % 5, row = n / 5;
             RECT r{pad + col * cellW, top + row * cellH, pad + (col + 1) * cellW, top + (row + 1) * cellH};
+            if (!RectVisible(hdc, &r)) return;
             const bool active = target >= 0;
             if (hoverArea_ == 6 && hoverGroup_ == target && active) {
                 UniqueBrush b(CreateSolidBrush(RGB(52,52,52))); FillRect(hdc, &r, b.get());
@@ -4791,8 +5975,10 @@ private:
     }
 
     void DrawDragPreview(HDC hdc) {
+        // Only an app dragged out of the list still needs the floating card: a
+        // tile drag now lifts the tile itself.
         if (dragPreviewRect_.right <= dragPreviewRect_.left || dragPreviewRect_.bottom <= dragPreviewRect_.top ||
-            (!appDragging_ && !tileDragging_)) return;
+            !appDragging_) return;
         const int radius = metrics_.Scale(8);
         UniqueBrush fill(CreateSolidBrush(RGB(38, 43, 50)));
         UniquePen outline(CreatePen(PS_SOLID, std::max(1, metrics_.Scale(1)), RGB(100, 165, 220)));
@@ -4800,15 +5986,8 @@ private:
         ScopedSelectObject sPen(hdc, outline.get());
         RoundRect(hdc, dragPreviewRect_.left, dragPreviewRect_.top, dragPreviewRect_.right,
             dragPreviewRect_.bottom, radius, radius);
-        HICON icon = nullptr;
-        const std::wstring* label = nullptr;
-        if (appDragging_) { icon = draggedApp_.hIcon; label = &draggedApp_.name; }
-        else if (dragGroup_ >= 0 && dragGroup_ < static_cast<int>(layout_.groups.size()) &&
-                 dragTile_ >= 0 && dragTile_ < static_cast<int>(layout_.groups[dragGroup_].tiles.size())) {
-            const auto& tile = layout_.groups[dragGroup_].tiles[dragTile_];
-            icon = tile.hIcon;
-            label = &tile.name;
-        }
+        HICON icon = draggedApp_.hIcon;
+        const std::wstring* label = &draggedApp_.name;
         const int iconSize = metrics_.Scale(36);
         const int pad = metrics_.Scale(10);
         if (icon) DrawIconEx(hdc, dragPreviewRect_.left + pad,
@@ -4816,7 +5995,7 @@ private:
             icon, iconSize, iconSize, 0, nullptr, DI_NORMAL);
         RECT textRect{dragPreviewRect_.left + pad + iconSize + metrics_.Scale(8), dragPreviewRect_.top,
             dragPreviewRect_.right - pad, dragPreviewRect_.bottom};
-        if (label) DrawTextW(hdc, appDragging_ ? label->c_str() : TranslateTileCaption(*label), -1, &textRect,
+        DrawTextW(hdc, label->c_str(), -1, &textRect,
             DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     }
 
@@ -4917,20 +6096,69 @@ private:
 
             const int tilesStartY = gy + headerH + tileGap;
             for (size_t ti = 0; ti < g.tiles.size(); ++ti) {
+                // The dragged tile is painted after every group, so that it
+                // stays above the whole grid while it follows the pointer.
+                if (IsTileLifted(static_cast<int>(gi), static_cast<int>(ti))) continue;
                 auto& tile = g.tiles[ti];
                 RECT rcTile = ComputeTileRect(gx, tilesStartY, tile);
+                OffsetRect(&rcTile, TileAnimOffset(tile.animOffsetX), TileAnimOffset(tile.animOffsetY));
                 RECT visibleTile{};
                 if (!IntersectRect(&visibleTile, &rcTile, &rcRight)) continue;
                 const bool isHovered = hoverArea_ == 3 && hoverGroup_ == static_cast<int>(gi) &&
                                        hoverIndex_ == static_cast<int>(ti);
-                const bool isPressed = tileDragCandidate_ && !tileDragging_ &&
-                    dragGroup_ == static_cast<int>(gi) && dragTile_ == static_cast<int>(ti);
                 const COLORREF fill = tile.available
                     ? (settings_.appTileColors ? tile.appColor : systemAccent)
                     : RGB(72, 72, 72);
-                DrawSingleTile(hdc, tile, rcTile, isHovered, fill, isPressed);
+                DrawSingleTile(hdc, tile, rcTile, isHovered, fill, tile.animScale);
             }
         }
+
+        DrawLiftedTile(hdc, rcRight, systemAccent);
+    }
+
+    // The dragged tile floats above the grid: enlarged, slightly transparent
+    // and painted last, the way the 8045 reference mod lifts its tiles.
+    void DrawLiftedTile(HDC hdc, const RECT& rcRight, COLORREF systemAccent) {
+        if (!tileDragging_ || dragGroup_ < 0 ||
+            dragGroup_ >= static_cast<int>(layout_.groups.size())) return;
+        auto& tiles = layout_.groups[dragGroup_].tiles;
+        if (dragTile_ < 0 || dragTile_ >= static_cast<int>(tiles.size())) return;
+        RECT rcTile{};
+        if (!GetTileDrawRect(dragGroup_, dragTile_, rcTile)) return;
+        RECT visibleTile{};
+        if (!IntersectRect(&visibleTile, &rcTile, &rcRight)) return;
+
+        Tile& tile = tiles[dragTile_];
+        const COLORREF fill = tile.available
+            ? (settings_.appTileColors ? tile.appColor : systemAccent)
+            : RGB(72, 72, 72);
+        const int width = rcTile.right - rcTile.left;
+        const int height = rcTile.bottom - rcTile.top;
+        if (width <= 0 || height <= 0) return;
+
+        // GDI has no per-primitive alpha: the tile is painted once on a scratch
+        // surface seeded with the background and blended back over it. The
+        // margin leaves room for the 5% the lifted tile grows by.
+        const int margin = metrics_.Scale(8);
+        const int surfaceW = width + margin * 2;
+        const int surfaceH = height + margin * 2;
+        UniqueMemDC scratchDc(CreateCompatibleDC(hdc));
+        UniqueBitmap scratchBitmap(scratchDc ? CreateCompatibleBitmap(hdc, surfaceW, surfaceH) : nullptr);
+        if (scratchDc && scratchBitmap) {
+            ScopedSelectObject selectScratch(scratchDc.get(), scratchBitmap.get());
+            ScopedBkMode scratchBkMode(scratchDc.get(), TRANSPARENT);
+            if (BitBlt(scratchDc.get(), 0, 0, surfaceW, surfaceH, hdc,
+                       rcTile.left - margin, rcTile.top - margin, SRCCOPY)) {
+                RECT rcScratchTile{margin, margin, margin + width, margin + height};
+                DrawSingleTile(scratchDc.get(), tile, rcScratchTile, true, fill, tile.animScale);
+                BLENDFUNCTION blend{AC_SRC_OVER, 0, TILE_DRAG_ALPHA, 0};
+                if (AlphaBlend(hdc, rcTile.left - margin, rcTile.top - margin, surfaceW, surfaceH,
+                               scratchDc.get(), 0, 0, surfaceW, surfaceH, blend))
+                    return;
+            }
+        }
+        // Without the scratch surface the lifted tile is simply drawn opaque.
+        DrawSingleTile(hdc, tile, rcTile, true, fill, tile.animScale);
     }
 
     RECT ComputeTileRect(int groupOriginX, int groupOriginY, const Tile& t) const {
@@ -4953,8 +6181,11 @@ private:
         return RECT{ x, y, x + w, y + h };
     }
 
+    // `scale` is the animated press/lift factor: the tile is painted around
+    // the centre of its rectangle, which itself never changes, so hit testing
+    // and the layout are unaffected.
     void DrawSingleTile(HDC hdc, Tile& tile, const RECT& rcTile, bool hovered,
-                        COLORREF accent, bool pressed) {
+                        COLORREF accent, float scale) {
 
         RECT drawRc = rcTile;
         bool drawBack = tile.showBack;
@@ -4978,16 +6209,16 @@ private:
             drawRc.bottom = midY + squeezedH / 2;
         }
 
-        // Apply a restrained, centered press-in effect without changing the
-        // tile's hit-test/layout rectangle; inspired by AdmnistratoX's 8045 mod.
-        if (pressed) {
+        // Centered press-in and lift effects, inspired by AdmnistratoX's 8045
+        // mod: only the painted rectangle changes, never the layout one.
+        if (scale > 0.0f && fabsf(scale - 1.0f) > TILE_ANIM_SETTLE_SCALE) {
             const int width = drawRc.right - drawRc.left;
             const int height = drawRc.bottom - drawRc.top;
-            const int scaledW = (std::max)(1, MulDiv(width, TILE_PRESSED_SCALE_PERCENT, 100));
-            const int scaledH = (std::max)(1, MulDiv(height, TILE_PRESSED_SCALE_PERCENT, 100));
-            drawRc.left += (width - scaledW) / 2;
+            const int scaledW = (std::max)(1, static_cast<int>(width * scale + 0.5f));
+            const int scaledH = (std::max)(1, static_cast<int>(height * scale + 0.5f));
+            drawRc.left -= (scaledW - width) / 2;
             drawRc.right = drawRc.left + scaledW;
-            drawRc.top += (height - scaledH) / 2;
+            drawRc.top -= (scaledH - height) / 2;
             drawRc.bottom = drawRc.top + scaledH;
         }
 
@@ -5006,25 +6237,26 @@ private:
             }
         }
 
-        if (drawBack && tile.isLive) {
-            // Back face: neutral local information only (app name, today's date
-            // and the current time). Nothing is fabricated.
+        if (drawBack && HasLocalLiveContent(tile)) {
+            // Back face of the Calendar tile: weekday and date computed locally
+            // with GetDateFormatEx (day number large, as in Windows 10).
             ScopedTextColor sCol(hdc, RGB(255, 255, 255));
-            wchar_t dateText[128]{}, timeText[64]{};
-            GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, DATE_LONGDATE, nullptr, nullptr, dateText, ARRAYSIZE(dateText), nullptr);
-            GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, nullptr, nullptr, timeText, ARRAYSIZE(timeText));
+            wchar_t dayText[16]{}, weekdayText[64]{}, monthText[64]{};
+            GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, nullptr, L"d", dayText, ARRAYSIZE(dayText), nullptr);
+            GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, nullptr, L"dddd", weekdayText, ARRAYSIZE(weekdayText), nullptr);
+            GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, nullptr, L"MMMM yyyy", monthText, ARRAYSIZE(monthText), nullptr);
 
-            RECT rcLiveTitle = { drawRc.left + metrics_.Scale(8), drawRc.top + metrics_.Scale(8), drawRc.right - metrics_.Scale(8), drawRc.top + metrics_.Scale(24) };
-            ScopedSelectObject sFB(hdc, fontBold_.get());
-            DrawTextW(hdc, TranslateTileCaption(tile.name), -1, &rcLiveTitle, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
-
-            RECT rcLiveSub = { drawRc.left + metrics_.Scale(8), drawRc.top + metrics_.Scale(26), drawRc.right - metrics_.Scale(8), drawRc.top + metrics_.Scale(50) };
+            RECT rcDay = { drawRc.left + metrics_.Scale(8), drawRc.top + metrics_.Scale(6), drawRc.right - metrics_.Scale(8), drawRc.top + metrics_.Scale(40) };
             ScopedSelectObject sFT(hdc, fontTitle_.get());
-            DrawTextW(hdc, dateText, -1, &rcLiveSub, DT_LEFT | DT_WORDBREAK | DT_END_ELLIPSIS);
+            DrawTextW(hdc, dayText, -1, &rcDay, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
 
-            RECT rcLiveDet = { drawRc.left + metrics_.Scale(8), drawRc.bottom - metrics_.Scale(22), drawRc.right - metrics_.Scale(8), drawRc.bottom - metrics_.Scale(4) };
+            RECT rcWeekday = { drawRc.left + metrics_.Scale(8), drawRc.top + metrics_.Scale(40), drawRc.right - metrics_.Scale(8), drawRc.top + metrics_.Scale(58) };
+            ScopedSelectObject sFB(hdc, fontBold_.get());
+            DrawTextW(hdc, weekdayText, -1, &rcWeekday, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+            RECT rcMonth = { drawRc.left + metrics_.Scale(8), drawRc.bottom - metrics_.Scale(22), drawRc.right - metrics_.Scale(8), drawRc.bottom - metrics_.Scale(4) };
             ScopedSelectObject sFS(hdc, fontSmall_.get());
-            DrawTextW(hdc, timeText, -1, &rcLiveDet, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+            DrawTextW(hdc, monthText, -1, &rcMonth, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
         } else {
             // Standard front face (centered/left icon, name at the bottom left)
             int icSz = metrics_.Scale(tile.size == TileSize::Small ? 20 : 32);
@@ -5321,8 +6553,11 @@ private:
             if(AppendMenuW(menu.get(),MF_POPUP|MF_STRING,
                 reinterpret_cast<UINT_PTR>(resize.get()),Ui(UiText::Resize))) resize.release();
         }
-        AppendMenuW(menu.get(),MF_STRING,IDM_TOGGLE_LIVE,
-            tile.isLive?Ui(UiText::DisableLive):Ui(UiText::EnableLive));
+        // Offered only for tiles that have real local content (Calendar);
+        // no other app's live tile can be read through documented APIs.
+        if (CanHaveLocalLiveContent(tile))
+            AppendMenuW(menu.get(),MF_STRING,IDM_TOGGLE_LIVE,
+                tile.isLive?Ui(UiText::DisableLive):Ui(UiText::EnableLive));
         if (IsFileBackedEntry(tile.path)) {
             AppendMenuW(menu.get(),MF_SEPARATOR,0,nullptr);
             AppendMenuW(menu.get(),MF_STRING,IDM_RUNAS_ADMIN,Ui(UiText::RunAsAdmin));
@@ -5464,12 +6699,15 @@ private:
                     Wh_Log(L"[TileLayout] resize rejected because no collision-free cell is available");
                     return;
                 }
+                const std::vector<POINT> beforeResize = CaptureTileRenderPositions(groupIndex);
                 tile.size = requestedSize;
                 tile.col = placedCol;
                 tile.row = placedRow;
+                // The resized tile reaches its new cell with a short glide.
+                StartTileGlide(groupIndex, beforeResize);
                 PersistTileLayout();
                 InvalidateRect(hwnd_.get(), nullptr, FALSE);
-            } else if (command == IDM_TOGGLE_LIVE) {
+            } else if (command == IDM_TOGGLE_LIVE && CanHaveLocalLiveContent(tile)) {
                 tile.isLive = !tile.isLive; tile.flipping = false; tile.showBack = false;
                 PersistTileLayout();
                 InvalidateRect(hwnd_.get(), nullptr, FALSE);
