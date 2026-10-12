@@ -64,12 +64,48 @@ trade you prefer:
 
 ## How it works
 
+### In plain terms
+
+1. You press on a title bar, and the mod quietly takes a photograph of the
+   whole window.
+2. The real window is made invisible. Not minimised, not moved - just not
+   drawn. Its taskbar button stays exactly where it was.
+3. The photograph is pinned to an invisible grid, like a sheet of rubber, and
+   shown in the window's place. The top edge of the sheet is stiff and keeps
+   up with your cursor; further down it gets floppier. That is the whole
+   trick - the body lags behind the title bar because the bottom of the sheet
+   is softer than the top.
+4. All the while you are dragging, the mod is just moving that rubber sheet
+   around and letting the springs do what springs do.
+5. When you let go, the real window is moved to where you dropped it while it
+   is still invisible, then made visible again *underneath* the photograph.
+   Only once it is safely back does the photograph disappear, so you never
+   catch the swap happening.
+
+Two things follow from this, and they are the reason for the bypass key. The
+window content is a photograph for as long as you hold it, so a playing video
+looks frozen. And because the mod is doing the dragging instead of Windows,
+Windows' own dragging features do not happen - see the section above.
+
+### Under the hood
+
 A title-bar press is caught at `DispatchMessage`, with `DefWindowProc` as a
 backup and `WM_SYSCOMMAND`/`SC_MOVE` alongside for apps that draw their own
 title bars. The mod then runs its own move loop in place of the one Windows
-would start: the window is snapshotted, cloaked so it leaves composition
-entirely, and a spring mesh of the snapshot is drawn on a Direct3D 11 +
-DirectComposition overlay until you let go.
+would start: the window is captured with `PrintWindow(PW_RENDERFULLCONTENT)`,
+cloaked so it leaves composition entirely, and a spring mesh of that capture
+is drawn on a Direct3D 11 + DirectComposition overlay until you let go.
+
+The mesh is two layers of springs: a control spring pulling each vertex back
+to its rest position, with the stiffness falling off down the rows, and
+springs between neighbouring vertices so the grid holds together instead of
+turning to taffy. On release the control springs are switched to a stiff,
+overdamped pair so it snaps back rather than ringing.
+
+The drag runs on one persistent worker thread per process, never in the
+message pump: `PrintWindow(PW_RENDERFULLCONTENT)` renders through DWM and
+needs the window's own thread pumping, so doing it inline deadlocks against
+the very loop that invoked it.
 
 Only top-level windows are touched, and only ones DWM will cloak. Anything
 else is handed back to Windows, which then runs its own move loop as usual.
