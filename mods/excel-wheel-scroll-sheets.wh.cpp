@@ -82,7 +82,7 @@ Tested on one installation of 64-bit Microsoft 365 Excel; other Office versions 
 - horizontalGestureMs: 200
   $name: Horizontal gesture quiet period (milliseconds)
   $name:zh-CN: 左右拨动防重复（毫秒）
-  $description: Group repeated same-direction input until this quiet period elapses. Reversal switches immediately. Valid range: 150–2000 ms (values outside are clamped); default 200.
+  $description: "Group repeated same-direction input until this quiet period elapses. Reversal switches immediately. Valid range: 150–2000 ms (values outside are clamped); default 200."
   $description:zh-CN: 同方向连续信号视为一次拨动，停顿达到此时长后可再次切换；反向拨动立即切换。有效范围 150–2000 毫秒（超出会被限制）；默认 200。
 - horizontalSwitching: true
   $name: Switch sheets with the horizontal wheel
