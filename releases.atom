@@ -2,12 +2,106 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-11T21:03:17.000Z</updated>
+    <updated>2026-10-12T07:02:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Custom Cached Context Menu 1.0.0]]></title>
+        <id>https://windhawk.net/mods/custom-cached-context-menu#d150b4e7044c23221be5dbc2bfb581789fe36dce</id>
+        <link href="https://windhawk.net/mods/custom-cached-context-menu"/>
+        <updated>2026-10-12T07:02:15.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="customcachedcontextmenu">Custom Cached Context Menu</h1>
+<p>Replaces the Windows Explorer context menu with a self-rendered menu that opens
+instantly and can be customized extensively with fun effects.</p>
+<p><img src="https://raw.githubusercontent.com/Bolt-Scripts/custom-cached-context-menu/master/assets/theme-collage.png" alt="The bundled themes" /></p>
+<p>The native menu is slow because every registered shell extension is loaded
+synchronously before it can be shown. This mod shows a cached menu right away
+and discovers extension items in the background, so repeated opens are instant.</p>
+<h2 id="highlights">Highlights</h2>
+<ul>
+<li><strong>Instant, cached menus</strong> — the first open of a context discovers and caches
+the shell's items; later opens render from the cache, and common contexts are
+pre-built in the background at startup.</li>
+<li><strong>Custom rendering</strong> — the menu is drawn with Direct2D: rounded corners,
+blur, shadows, per-item icons, hover feedback, and animations, instead of the
+classic owner-drawn menu.</li>
+<li><strong>Themes</strong> — bundled themes (Windows 11/10 dark and light, Nord, Dracula,
+Solarized, Gruvbox, One Dark, Cyberpunk, Synthwave, Terminal Green, Amber
+CRT, Tokyo Night, AMOLED Black, High Contrast) plus full <code>menu.ini</code> control.
+Each theme is a self-contained file you can edit or copy.</li>
+<li><strong>Animations</strong> — combinable open/close effects (<code>fade</code>, <code>slide</code>, <code>scale</code>,
+<code>dissolve</code>, <code>crt</code>, <code>unfold</code>) with easing, timing, direction, and optional
+submenu animation.</li>
+<li><strong>Overlays</strong> — combinable effects drawn over the menu content (<code>noise</code>,
+<code>plasma</code>, <code>hue</code>, <code>glow</code>, <code>scanlines</code>, <code>vignette</code>) with intensity, animation
+speed, size, and frame interval.
+<code>overlayAnimate</code> keeps them moving while the menu stays open (off by
+default); otherwise they animate only during the open/close. The Terminal
+Green and Amber CRT themes ship with scanlines.</li>
+<li><strong>Settings menu</strong> — in the advanced ("More options") submenu, or via the
+optional global hotkey. Appearance is edited live (sliders with typed values,
+a color picker, a font-face field with installed-font validation, instant
+preview) and written back to the active theme file or <code>menu.ini</code>.</li>
+<li><strong>No code needed</strong> — <code>menu.ini</code> supports rules (<code>hide</code>/<code>keep</code>/<code>move</code>),
+custom commands, custom submenus, per-item overrides, and an icon library.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<p>| Setting | Default | Description |
+|---|---|---|
+| Bypass keys | on | Hold Shift while right-clicking to bypass the mod and get the stock classic menu, or Ctrl for the untouched native menu. |
+| Menu mode | Custom (recommended) | Custom draws the self-rendered menu and falls back to the classic menu after repeated failures; Classic always uses the owner-drawn menu. |
+| Theme | Custom (menu.ini) | Loads the appearance from <code>&lt;mod storage&gt;\themes\&lt;name&gt;.ini</code> (created from the bundled preset on first use). <code>menu.ini</code> is never modified by theme selection. |
+| Show classic menu item | on | Adds a "Show classic menu" entry at the bottom of the menu. |
+| Warm-up extensions | common list | Comma-separated file types pre-built at Explorer startup. |
+| Warm-up delay | 5 s | Delay before background warm-up starts. |
+| Clear cache | off | Turn on to delete cached models; they rebuild on next use. |
+| Debug logging | off | Logs timings and diagnostics. |
+| Instant menu open | on | Shows native fallback menus without the system open animation. |
+| Submenu open delay | 150 ms | Hover delay before a submenu opens; 0 = instant, -1 = keep the Windows setting. |
+| Move Windows extras | on | Moves the configured Windows extras into the More options submenu. |
+| Move third-party handlers | on | Moves third-party shell extension entries into the More options submenu. |
+| Keep in the main menu | empty | Comma-separated labels or verbs that stay in the main menu. |
+| More options submenu label | <code>More options</code> | Label of that submenu. |
+| Windows items to move | common list | Comma-separated labels or verbs of Windows items to move into the submenu. |
+| Settings hotkey | empty | Optional global hotkey that opens the settings menu (for example <code>Ctrl+Alt+M</code>). |</p>
+<h2 id="configuration">Configuration</h2>
+<p><code>menu.ini</code> lives in the mod's storage directory (Windhawk → the mod's details →
+Storage). It is created on first run as a fully commented settings list, with
+the range and meaning of every key next to it. Invalid values never stop the
+file from loading: they are clamped or fall back to defaults, logged as
+<code>menu.ini:&lt;line&gt;: warning: &lt;message&gt;</code>, and the corrected file is rewritten.</p>
+<p>Themes are complete <code>[appearance]</code> blocks under <code>themes\&lt;name&gt;.ini</code>; they never
+inherit from <code>menu.ini</code>, so a theme is always self-contained. Edit one directly,
+or use the in-menu settings browser.</p>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>Targets <code>explorer.exe</code>; other file managers and file dialogs are untouched.</li>
+<li>Menus that contain owner-drawn items, and non-filesystem namespaces, fall
+back to the native menu.</li>
+<li>The custom menu is not exposed to UI Automation; use the classic menu mode
+with a screen reader.</li>
+<li>Tall menus do not scroll; they are capped to the work area.</li>
+<li>Nav-pane menus are cached per tree node for the session and refresh after
+use, so the first open of each node pays the shell's population cost.</li>
+<li>Core menu labels are English; cached extension labels come from the shell
+and are localized.</li>
+<li>Native fallback menus apply the configured submenu delay through the system
+<code>MenuShowDelay</code> value while the menu is open (restored on close); Windows
+has no per-menu delay API.</li>
+</ul>
+<h2 id="feedback">Feedback</h2>
+<p>Source code, issues, and the full configuration guide:
+<a href="https://github.com/Bolt-Scripts/custom-cached-context-menu">https://github.com/Bolt-Scripts/custom-cached-context-menu</a></p>
+<h2 id="license">License</h2>
+<p>MIT</p>]]></content>
+        <author>
+            <name>BOLT</name>
+            <uri>https://github.com/Bolt-Scripts</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Smooth Virtual Desktop Switching 1.0.0]]></title>
         <id>https://windhawk.net/mods/smooth-virtual-desktop-switching#8035645f39be10bf078771b6a744135284f4c9ce</id>
@@ -1835,82 +1929,6 @@ auto-hide (show on hover)</strong>, do m417z (GPL-3.0).</li>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 Style Volume & Brightness OSD 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win10-volume-brightness-osd#f4f41b1454168308bd15b4b57136b6a3dbec59fd</id>
-        <link href="https://windhawk.net/mods/win10-volume-brightness-osd"/>
-        <updated>2026-10-09T09:03:28.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows10stylevolumebrightnessosd">Windows 10 Style Volume &amp; Brightness OSD</h1>
-<p>Shows the classic vertical Windows 10 flyout (dark panel, grey track, white
-thumb, accent fill) for <strong>volume</strong> and <strong>brightness</strong>.</p>
-<h2 id="screenshots">Screenshots</h2>
-<h3 id="volumedesktop">Volume (desktop)</h3>
-<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/volosd8desk.png" alt="volumedesk" /></p>
-<h3 id="brightnessdesktop">Brightness (desktop)</h3>
-<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/bgtosd8desk.png" alt="brightnessdesk" /></p>
-<h3 id="volume">Volume</h3>
-<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/volosd8.png" alt="volume" /></p>
-<h3 id="brightness">Brightness</h3>
-<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/bgtosd8.png" alt="brightness" /></p>
-<h2 id="volume-1">Volume</h2>
-<ul>
-<li>The volume keys (up / down / mute) are captured with <code>RegisterHotKey</code>, so the
-flyout also appears when the volume is already 0 or 100.</li>
-<li>A low-level keyboard hook is used as a fallback signal. It makes the flyout
-appear (and the native OSD be suppressed) when a key does not reach the
-hotkey.</li>
-<li>Volume changes from any other source (WASAPI) also show the flyout.</li>
-<li>When muted, or at volume 0, a cross icon replaces the number.</li>
-</ul>
-<h2 id="brightness-1">Brightness</h2>
-<ul>
-<li><strong>Laptops:</strong> the mod listens to the system brightness notification. The
-Fn brightness keys keep working normally.</li>
-<li><strong>Desktop PCs / external monitors:</strong> enable "External monitor hotkeys". The
-mod then uses DDC/CI to change the brightness of the monitor under the mouse
-cursor with <strong>Ctrl+Alt+Up / Ctrl+Alt+Down</strong>.</li>
-<li>The hotkeys are registered system-wide while the option is on. Ctrl+Alt+Up /
-Down is also used by some applications (for example "add cursor above/below"
-in VS Code) and by the screen rotation hotkey of some Intel graphics drivers,
-so leave the option off if it conflicts. The flyout is shown on the monitor
-that is being adjusted.</li>
-<li>Brightness flyout trigger:</li>
-<li><em>On every brightness change</em> - shows the flyout whenever the system reports
-a new brightness (this includes automatic changes such as the ambient light
-sensor or an AC/battery switch). When the brightness is already at its
-minimum or maximum no change is reported, so the native OSD is used as a
-trigger instead; this needs "Suppress the native OSD" to be on.</li>
-<li><em>Only when the native OSD appears</em> - shows the flyout only when Windows
-would have shown its own OSD. Works at the minimum/maximum and ignores
-automatic changes. Depends on the native OSD detection described below.</li>
-</ul>
-<h2 id="mouse">Mouse</h2>
-<p>The flyout can be dragged with the mouse to change the volume, or the
-brightness of an external monitor (DDC/CI).</p>
-<h2 id="nativeosdsuppression">Native OSD suppression</h2>
-<p>The native OSD is hidden with ShowWindow/SetWindowPos hooks in explorer.exe.
-Every small <code>XamlExplorerHostIslandWindow</code> is treated as the native OSD, with
-one exception: the virtual desktop switcher shown when hovering the Task View
-button is recognised (band 7 and the thread description <code>MultitaskingView</code>, as
-in the taskbar-thumbnails mod) and left alone.</p>
-<p>Other small popups of that class, and hardware indicators that share the native
-flyout (for example airplane mode), can still be hidden as well. On a PC that
-reports a brightness value, the brightness flyout then appears in their place,
-because a native OSD without a recent volume event is assumed to be a
-brightness change.</p>
-<p>Enable logging in Windhawk to see the class, title, thread description, band
-and size of the windows that are treated as the OSD.</p>
-<h2 id="knownissues">Known issues</h2>
-<ul>
-<li>The OSD cannot appear over fullscreen UWP apps.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>Special thanks to babamohammed2022 for the base version of the mod.</p>]]></content>
-        <author>
-            <name>AdmXP8</name>
-            <uri>https://github.com/AdmXP8</uri>
         </author>
     </entry>
 </feed>
