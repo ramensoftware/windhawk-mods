@@ -83,7 +83,6 @@ navegadores); este mod reabre qualquer programa, pelo caminho do executável.
 #include <ntsecapi.h>
 #include <sddl.h>
 #include <shellapi.h>
-#include <tlhelp32.h>
 
 #ifndef DWM_CLOAKED_SHELL
 #define DWM_CLOAKED_SHELL 0x2  // may be missing in Windhawk's headers
@@ -209,16 +208,21 @@ bool IsAppWindow(HWND hwnd) {
     return !GetWindow(hwnd, GW_OWNER);  // owned = dialog/popup
 }
 
-// Windhawk's own programs (its tray app and its editor) are never relaunched:
-// the exe sits in, or one folder below, the folder that holds windhawk.exe.
+// Windhawk's own programs with a window are never relaunched: the tray app and
+// the editor (<Windhawk folder>\UI\VSCodium.exe). Matched by name, so other
+// programs that share a folder with a portable Windhawk are not affected, and
+// the disk is only probed for a VSCodium.exe.
 bool IsWindhawkProgram(const std::wstring& exePath) {
-    size_t slash = exePath.rfind(L'\\');
+    std::wstring lower = ToLower(exePath);
+    size_t slash = lower.rfind(L'\\');
     if (slash == std::wstring::npos || slash == 0) return false;
-    if (GetFileAttributesW((exePath.substr(0, slash + 1) + L"windhawk.exe").c_str()) !=
-        INVALID_FILE_ATTRIBUTES)
-        return true;
-    size_t parent = exePath.rfind(L'\\', slash - 1);
+    std::wstring name = lower.substr(slash + 1);
+    if (name == L"windhawk.exe") return true;  // tray app
+    if (name != L"vscodium.exe") return false;
+    // The editor: <Windhawk folder>\UI\VSCodium.exe.
+    size_t parent = lower.rfind(L'\\', slash - 1);
     return parent != std::wstring::npos &&
+           lower.compare(parent, slash - parent + 1, L"\\ui\\") == 0 &&
            GetFileAttributesW((exePath.substr(0, parent + 1) + L"windhawk.exe").c_str()) !=
                INVALID_FILE_ATTRIBUTES;
 }
@@ -357,7 +361,8 @@ void BuildRestoreQueue() {
     EnumWindows(CollectAppWindow, reinterpret_cast<LPARAM>(&open));
 
     std::wstring saved = ReadStringValue(L"lastSession");
-    for (size_t start = 0, end; (end = saved.find(kListSeparator, start)) != saved.npos;
+    // Also accepts '\n', the separator 2.0.0 used on regular installs.
+    for (size_t start = 0, end; (end = saved.find_first_of(L"?\n", start)) != saved.npos;
          start = end + 1) {
         std::wstring key = saved.substr(start, end - start);
         if (key.size() <= 2) continue;
@@ -451,6 +456,16 @@ LRESULT CALLBACK SessionWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 BuildRestoreQueue();
                 SetTimer(hwnd, kTimerRestoreStep, kRestoreStepMs, nullptr);
             } else if (wParam == kTimerRestoreStep) {
+                // A Startup program may have opened its window since the queue
+                // was built: skip it instead of starting a second copy.
+                Snapshot open;
+                EnumWindows(CollectAppWindow, reinterpret_cast<LPARAM>(&open));
+                while (!g_restoreQueue.empty() &&
+                       std::find(open.apps.begin(), open.apps.end(),
+                                 g_restoreQueue.front()) != open.apps.end()) {
+                    Wh_Log(L"Already open, skipped: %s", g_restoreQueue.front().c_str());
+                    g_restoreQueue.erase(g_restoreQueue.begin());
+                }
                 if (g_restoreQueue.empty()) {
                     KillTimer(hwnd, wParam);
                     g_restoring = false;  // snapshots resume
