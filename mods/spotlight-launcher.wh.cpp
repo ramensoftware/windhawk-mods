@@ -2,11 +2,11 @@
 // @id              spotlight-launcher
 // @name            Spotlight Launcher
 // @description     Application launcher. Alt+Space opens a floating search bar that finds your programs instantly.
-// @version         0.5.10
+// @version         0.5.11
 // @author          David Ravelo
 // @github          https://github.com/DavidRaveloU
 // @include         windhawk.exe
-// @compilerOptions -lole32 -lshell32 -lshlwapi -luser32 -lgdi32 -ld2d1 -ldwrite -luuid -ladvapi32 -lwindowscodecs -lpropsys -lversion
+// @compilerOptions -lole32 -lshell32 -luser32 -lgdi32 -ld2d1 -ldwrite -luuid -ladvapi32 -lwindowscodecs -lpropsys -lversion
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -82,6 +82,8 @@ Everything is reachable without touching the mouse.
 | **Ctrl + R** | Reindex the app list |
 | Mouse wheel | Scroll the list without changing the selection |
 | Mouse hover | Highlight the row under the cursor |
+
+**Alt + Space** is also the system shortcut for a window's title-bar menu (Move, Size, Close…). While the mod is enabled with the default shortcut, that menu is not reachable by keyboard, so pick another combination in the settings if you use it. Apps like PowerToys Run make the same trade-off.
 
 ### Details panel
 
@@ -173,8 +175,8 @@ Copyright (c) 2026-present David Ravelo.
   $name: Vertical position (percentage of screen height)
   $description: Where the search bar sits. 0 puts it against the top edge of the screen, 50 in the exact middle and 100 against the bottom edge (above the taskbar). Please note that this only applies to the search box in Compact mode. If you want it centered even in Expanded mode, adjust it to your preference.
 - MaxResults: 8
-  $name: Visible results
-  $description: Maximum number of results the search returns. It does not change the height of the bar (which is fixed). it only caps how many results exist. The rest of the visible rows are reached by scrolling the list.
+  $name: Maximum results
+  $description: Maximum number of results the search returns. It does not change the height of the bar (which is fixed). It only caps how many results exist. The rest of the visible rows are reached by scrolling the list.
 - Opacity: 90
   $name: Panel opacity (percentage)
   $description: Between 70 and 100. It is the opacity of the color tint over the blurred background. 70 lets a lot of the background through and 100 makes the tint nearly opaque (Glass stays see-through). Ignored with "Solid", which is always fully opaque.
@@ -249,6 +251,7 @@ Copyright (c) 2026-present David Ravelo.
 #include <propsys.h>
 #include <wincodec.h>
 #include <commoncontrols.h>
+#include <sddl.h>
 
 // windows.h defines DrawText as a macro (DrawTextW); it must be removed BEFORE d2d1.h
 // so that ID2D1RenderTarget::DrawText keeps its name.
@@ -262,7 +265,6 @@ Copyright (c) 2026-present David Ravelo.
 
 #include <algorithm>
 #include <cmath>
-#include <cstdarg>
 #include <cstdint>
 #include <cwctype>
 #include <memory>
@@ -344,14 +346,14 @@ struct LauncherSettings {
     double reindexIntervalSec = 0;  // only with ReindexMode::Interval
     UINT hotkeyMods = MOD_ALT;
     UINT hotkeyVk = VK_SPACE;
-    int verticalPct = 50;
+    int verticalPct = 30;
     int maxRows = 8;                 // cap on how many results the search returns
     int opacityPct = 90;
     BgEffect effect = BgEffect::Acrylic;
     int blurPct = 50;     // 0..100 -> multiplies the effect's base blur (50 = x1)
     int colorIdx = 0;     // index in kColors
     bool hideUtility = true;
-    bool disableFullscreen = false;  // ignore the shortcut while a fullscreen window is focused
+    bool disableFullscreen = true;  // ignore the shortcut while a fullscreen window is focused
 };
 
 struct AppEntry {
@@ -386,6 +388,7 @@ struct AppDetails {
     bool canFile = false;    // there is a real program file (allows location, admin, ...)
     bool isExe = false;
     std::wstring target;     // program path (desktop apps)
+    std::wstring args;       // shortcut arguments (kept for elevation)
     std::vector<InfoRow> rows;
 };
 
@@ -1359,11 +1362,12 @@ static uint64_t HashPixels(const std::vector<uint32_t>& px, int w, int h) {
     return hsh;
 }
 
-// `classic` disables the WOW64 file-system redirection for the call: without it the shell
-// resolves resources that live in the real System32 against SysWOW64, so 64-bit-only tools
-// (pmcsnap.dll, mdsched.exe, ...) all fall back to the same generic icon. Packaged (Store)
-// apps take their logo from the package and are left untouched.
-static bool GetShellItemPixels(IShellItem* item, SIIGBF flags, int size, Pix& out, bool classic) {
+// Shell icon of an IShellItem. WOW64 redirection stays enabled: icon resolution can load shell
+// handlers and system DLLs, and switching redirection off around that could leave a failed DLL
+// load behind for the whole session. 64-bit-only System32 tools are covered by
+// GetClassicIconFallback (below), which reads their icons from Sysnative paths with plain file
+// APIs. Packaged (Store) apps take their logo from the package and are left untouched.
+static bool GetShellItemPixels(IShellItem* item, SIIGBF flags, int size, Pix& out) {
     IShellItemImageFactory* fac = nullptr;
     if (FAILED(item->QueryInterface(IID_PPV_ARGS(&fac))) || !fac) {
         return false;
@@ -1371,10 +1375,7 @@ static bool GetShellItemPixels(IShellItem* item, SIIGBF flags, int size, Pix& ou
     SIZE sz = {size, size};
     HBITMAP hbm = nullptr;
     bool ok = false;
-    PVOID old = nullptr;
-    const BOOL off = classic ? Wow64DisableWow64FsRedirection(&old) : FALSE;
     const HRESULT hr = fac->GetImage(sz, flags, &hbm);
-    if (off) Wow64RevertWow64FsRedirection(old);
     if (SUCCEEDED(hr) && hbm) {
         ok = HBitmapToPixels(hbm, out.px, out.w, out.h);
         DeleteObject(hbm);
@@ -1584,8 +1585,8 @@ static bool GetClassicIconFallback(IShellItem* item, const std::wstring& target,
     }
     const std::wstring realTarget = NativeSystemPath(target);
     if (!realTarget.empty() && good(GetSystemImageListIcon(realTarget.c_str(), false, out))) return true;
-    if (good(GetShellItemPixels(item, (SIIGBF)(SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK), 64, out, true))) return true;
-    if (good(GetShellItemPixels(item, SIIGBF_RESIZETOFIT, 64, out, true))) return true;
+    if (good(GetShellItemPixels(item, (SIIGBF)(SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK), 64, out))) return true;
+    if (good(GetShellItemPixels(item, SIIGBF_RESIZETOFIT, 64, out))) return true;
     return false;
 }
 
@@ -1757,15 +1758,15 @@ static DWORD WINAPI IndexThreadProc(LPVOID param) {
             continue;
         }
         if (!IsPackagedId(tmp[i].app.id)) {
-            if (GetShellItemPixels(tmp[i].item, SIIGBF_ICONONLY, 64, shots[i].a, true)) {
+            if (GetShellItemPixels(tmp[i].item, SIIGBF_ICONONLY, 64, shots[i].a)) {
                 ++countC[shots[i].a.hash];
             }
             continue;
         }
-        if (GetShellItemPixels(tmp[i].item, SIIGBF_ICONONLY, 64, shots[i].a, false)) {
+        if (GetShellItemPixels(tmp[i].item, SIIGBF_ICONONLY, 64, shots[i].a)) {
             ++countA[shots[i].a.hash];
         }
-        if (GetShellItemPixels(tmp[i].item, SIIGBF_RESIZETOFIT, 64, shots[i].b, false)) {
+        if (GetShellItemPixels(tmp[i].item, SIIGBF_RESIZETOFIT, 64, shots[i].b)) {
             ++countB[shots[i].b.hash];
         }
     }
@@ -2008,14 +2009,41 @@ static void MaybeReindexInBackground() {
     }
 }
 
+// SID of the current user. Windhawk's Wh_Get/SetIntValue storage is machine-wide in a regular
+// install, and each signed-in user runs their own tool process, so put the SID in the value
+// names; otherwise "Recent" and "Suggestions" would be shared by every account on the PC.
+static std::wstring CurrentUserSid() {
+    static std::wstring sid;
+    if (!sid.empty()) return sid;
+    HANDLE token = nullptr;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token) && token) {
+        DWORD size = 0;
+        GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+        if (size > 0) {
+            std::vector<BYTE> buf(size);
+            TOKEN_USER* user = reinterpret_cast<TOKEN_USER*>(buf.data());
+            if (GetTokenInformation(token, TokenUser, user, size, &size) && user->User.Sid) {
+                LPWSTR str = nullptr;
+                if (ConvertSidToStringSidW(user->User.Sid, &str) && str) {
+                    sid = str;
+                    LocalFree(str);
+                }
+            }
+        }
+        CloseHandle(token);
+    }
+    if (sid.empty()) sid = L"shared";  // fallback: degrade to machine-wide if the SID fails
+    return sid;
+}
+
 static std::wstring UsageKey(const std::wstring& id) {
     uint64_t h = 1469598103934665603ULL;
     for (wchar_t c : id) {
         h ^= (uint64_t)c;
         h *= 1099511628211ULL;
     }
-    wchar_t buf[40];
-    swprintf_s(buf, L"u%016llx", (unsigned long long)h);
+    wchar_t buf[80];
+    swprintf_s(buf, L"u%s_%016llx", CurrentUserSid().c_str(), (unsigned long long)h);
     return buf;
 }
 
@@ -2838,6 +2866,7 @@ static AppDetails ComputeDetails(const AppEntry& a) {
     std::wstring parse = L"shell:AppsFolder\\" + a.id;
     if (SUCCEEDED(SHCreateItemFromParsingName(parse.c_str(), nullptr, IID_PPV_ARGS(&item))) && item) {
         d.target = ItemString(item, L"System.Link.TargetParsingPath");
+        d.args = ItemString(item, L"System.Link.Arguments");
         if (d.packaged) {
             fullName = ItemString(item, L"System.AppUserModel.PackageFullName");
             installPath = ItemString(item, L"System.AppUserModel.PackageInstallPath");
@@ -2853,12 +2882,15 @@ static AppDetails ComputeDetails(const AppEntry& a) {
     std::wstring version, company, arch, sizeText, modified;
 
     if (!d.target.empty()) {
+        // This 32-bit process has System32 redirected to SysWOW64: a 64-bit-only tool would
+        // look missing and a dual-arch one would report the 32-bit copy's size and version.
+        const std::wstring real = NativeSystemPath(d.target);
         WIN32_FILE_ATTRIBUTE_DATA fad = {};
-        if (GetFileAttributesExW(d.target.c_str(), GetFileExInfoStandard, &fad) &&
+        if (GetFileAttributesExW(real.c_str(), GetFileExInfoStandard, &fad) &&
             !(fad.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
             d.canFile = true;
             d.isExe = EndsWith(FoldString(d.target), L".exe");
-            ReadVersionInfo(d.target, version, company);
+            ReadVersionInfo(real, version, company);
             sizeText = FormatSize(((ULONGLONG)fad.nFileSizeHigh << 32) | fad.nFileSizeLow);
             modified = FormatFileTime(fad.ftLastWriteTime);
         } else {
@@ -3546,19 +3578,15 @@ static void Present() {
 // ===== Show / hide / per-frame animation =====
 
 static void ForceForeground(HWND h) {
-    HWND fg = GetForegroundWindow();
-    DWORD fgThread = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
-    DWORD me = GetCurrentThreadId();
-    bool attached = false;
-    if (fgThread && fgThread != me) {
-        attached = AttachThreadInput(me, fgThread, TRUE) != 0;
-    }
+    // The hotkey (a global input event) already grants foreground rights; the empty SendInput
+    // covers the case where SetForegroundWindow would still be denied. No AttachThreadInput:
+    // while sharing an input queue with the foreground app, a hung app would stall the launcher.
+    INPUT input{};
+    input.type = INPUT_MOUSE;
+    SendInput(1, &input, sizeof(INPUT));
     SetForegroundWindow(h);
     BringWindowToTop(h);
     SetFocus(h);
-    if (attached) {
-        AttachThreadInput(me, fgThread, FALSE);
-    }
 }
 
 // True when the foreground window covers its monitor and is not the desktop or taskbar (the
@@ -3567,6 +3595,12 @@ static void ForceForeground(HWND h) {
 static bool IsForegroundFullscreen() {
     HWND fg = GetForegroundWindow();
     if (!fg || fg == g_hwnd) {
+        return false;
+    }
+    // A maximized window's rect includes the invisible resize border, so on a monitor whose
+    // taskbar auto-hides it would pass the "covers the monitor" test below. A maximized window
+    // is not fullscreen (F11 browsers and fullscreen games are not zoomed), so it is ruled out.
+    if (IsZoomed(fg)) {
         return false;
     }
     // The shell windows (desktop, taskbar, Start menu) are never treated as fullscreen.
@@ -3805,8 +3839,11 @@ static void LaunchApp(int appIdx) {
         // the real System32 one: the 64-bit shell does not understand the Sysnative alias.
         PVOID old = nullptr;
         const BOOL off = IsUnderWindowsDir(file) ? Wow64DisableWow64FsRedirection(&old) : FALSE;
+        // Start the app in its own folder, not in Windhawk's directory (portable apps and some
+        // games read files relative to the working directory).
+        std::wstring dir = file.substr(0, file.find_last_of(L'\\'));
         ShellExecuteW(nullptr, L"open", file.c_str(), args.empty() ? nullptr : args.c_str(),
-                      nullptr, SW_SHOWNORMAL);
+                      dir.empty() ? nullptr : dir.c_str(), SW_SHOWNORMAL);
         if (off) Wow64RevertWow64FsRedirection(old);
     } else {
         std::wstring url = L"shell:AppsFolder\\" + a.id;
@@ -3858,7 +3895,9 @@ static void RunAction(int actionId, int appIdx) {
         case ACT_ADMIN: {
             AllowSetForegroundWindow(ASFW_ANY);
             std::wstring dir = target.substr(0, target.find_last_of(L'\\'));
-            HINSTANCE r = ShellExecuteW(nullptr, L"runas", target.c_str(), nullptr,
+            // Keep the shortcut's arguments, or a profile shortcut would open the default one.
+            HINSTANCE r = ShellExecuteW(nullptr, L"runas", target.c_str(),
+                                        d.args.empty() ? nullptr : d.args.c_str(),
                                         dir.empty() ? nullptr : dir.c_str(), SW_SHOWNORMAL);
             if ((INT_PTR)r > 32) {
                 RecordUse(a);
@@ -4160,6 +4199,8 @@ static bool RegisterLauncherHotkey() {
     return true;
 }
 
+static volatile LONG g_hotkeyWarnUp = 0;
+
 static DWORD WINAPI HotkeyWarningThread(LPVOID) {
     MessageBoxW(nullptr,
                 L"Spotlight Launcher could not register the keyboard shortcut because another "
@@ -4167,6 +4208,7 @@ static DWORD WINAPI HotkeyWarningThread(LPVOID) {
                 L"Change the shortcut in the mod settings or free that shortcut in the other "
                 L"application.",
                 L"Spotlight Launcher", MB_OK | MB_ICONWARNING | MB_TOPMOST | MB_SETFOREGROUND);
+    InterlockedExchange(&g_hotkeyWarnUp, 0);
     return 0;
 }
 
@@ -4174,8 +4216,12 @@ static void RegisterHotkeyOrWarn() {
     if (!RegisterLauncherHotkey()) {
         Sleep(300);
         if (RegisterLauncherHotkey()) return;
-        HANDLE th = CreateThread(nullptr, 0, HotkeyWarningThread, nullptr, 0, nullptr);
-        if (th) CloseHandle(th);
+        // User-triggered settings changes can call this repeatedly: keep a single warning visible
+        // instead of stacking one box per change.
+        if (InterlockedCompareExchange(&g_hotkeyWarnUp, 1, 0) == 0) {
+            HANDLE th = CreateThread(nullptr, 0, HotkeyWarningThread, nullptr, 0, nullptr);
+            if (th) CloseHandle(th);
+        }
     }
 }
 
@@ -4347,12 +4393,17 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             MaybeReindexInBackground();
             return 0;
 
-        case WM_APP_SETTINGS:
+        case WM_APP_SETTINGS: {
+            const bool oldHideUtility = g_cfg.hideUtility;
             LoadSettings();
+            if (g_cfg.hideUtility != oldHideUtility) {
+                g_menuDirty = true;  // the index must be rebuilt to apply this
+            }
             RegisterHotkeyOrWarn();
             if (g_vis != Vis::Hidden) FinishHide();
             MaybeReindexInBackground();  // e.g. if switched to "Automatic" with pending changes
             return 0;
+        }
 
         case WM_DESTROY:
             UnregisterHotKey(hwnd, HOTKEY_ID);
@@ -4455,14 +4506,24 @@ void WhTool_ModUninit() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod boilerplate: the mod runs in a dedicated windhawk.exe process and uses the
-// WhTool_ModInit / WhTool_ModSettingsChanged / WhTool_ModUninit callbacks.
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
     ExitThread(0);
 }
 
@@ -4479,6 +4540,7 @@ BOOL Wh_ModInit() {
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
 
@@ -4511,10 +4573,12 @@ BOOL Wh_ModInit() {
         g_toolModProcessMutex =
             CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
 
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
 
@@ -4552,6 +4616,7 @@ void Wh_ModAfterInit() {
                               ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
             return;
     }
 
@@ -4565,6 +4630,7 @@ void Wh_ModAfterInit() {
     if (!kernelModule) {
         kernelModule = GetModuleHandle(L"kernel32.dll");
         if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
             return;
         }
     }
@@ -4581,16 +4647,19 @@ void Wh_ModAfterInit() {
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
                                                  "CreateProcessInternalW");
     if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
-    STARTUPINFO si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
     PROCESS_INFORMATION pi;
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
                                  nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
         return;
     }
 
