@@ -96,6 +96,7 @@ You can assign any hotkey directly to built-in commands by setting the path to o
 
 ### Available Tokens for Arguments & Examples
 
+* **`%%`** — Literal percent sign (`%`). Useful for passing environment variables (e.g. `%%PATH%%`) or URLs without triggering token expansion.
 * **`%f`** — All selected items as space-separated quoted paths (`"C:\a.txt" "C:\b.png"`).
 * **`%files`** — Selected regular files only (skips selected folders).
 * **`%folders`** — Selected folders only (skips selected regular files).
@@ -121,6 +122,7 @@ You can assign any hotkey directly to built-in commands by setting the path to o
   * *Use Case:* Single-file image editors, batch converters, or per-file processing scripts.
 * **`loop_folders`**: Executes the application once per selected folder.
   * *Use Case:* Batch archiving folders individually or folder-specific terminal operations.
+  * *Note:* Directory tokens (`%d`, `%dir`, `%d_smart`, `%d_name`, and `%p`/`%parent`) resolve relative to each individual iterated folder rather than the active Explorer tab.
 
 ---
 
@@ -183,7 +185,7 @@ You can add your own shortcuts using these templates in the settings:
       $description: "Executable path, alias, or internal command (supports 'internal:' or shorthand 'int:'). See the Details tab for the full list of built-in commands. (Note: toggle commands modify persistent Explorer settings)."
     - args: ""
       $name: "Arguments / Tokens"
-      $description: "Supported tokens: %f, %files, %folders, %1, %n / %name, %c / %count, %ext, %s, %d / %dir, %d_smart, %d_name, %p / %parent."
+      $description: "Supported tokens: %%, %f, %files, %folders, %1, %n / %name, %c / %count, %ext, %s, %d / %dir, %d_smart, %d_name, %p / %parent."
     - mode: "batch"
       $name: "Launch Mode"
       $options:
@@ -329,6 +331,7 @@ You can add your own shortcuts using these templates in the settings:
 #include <shared_mutex>
 #include <string>
 #include <vector>
+#include <string_view>
 
 #include <windhawk_utils.h>
 
@@ -840,103 +843,74 @@ std::wstring ExpandTokens(const std::wstring& pattern,
             continue;
         }
 
+        // Helper lambda to match token at index i and advance past it
+        auto consume = [&](std::wstring_view token) {
+            if (pattern.compare(i, token.size(), token) != 0)
+                return false;
+            i += token.size();
+            return true;
+        };
+
+        // --- Escaped Literal Percent ---
+        if (consume(L"%%")) {
+            result.push_back(L'%');
+        }
         // --- Files & Folders Collections ---
-        if (pattern.compare(i, 6, L"%files") == 0) {
+        else if (consume(L"%files")) {
             result += JoinPaths(filesOnly, true);
-            i += 6;
-        } else if (pattern.compare(i, 8, L"%folders") == 0) {
+        } else if (consume(L"%folders")) {
             result += JoinPaths(foldersOnly, true);
-            i += 8;
         }
         // --- Directory Tokens (longest to shortest) ---
-        else if (pattern.compare(i, 8, L"%d_smart") == 0) {
+        else if (consume(L"%d_smart")) {
             std::wstring smartDir =
                 !foldersOnly.empty() ? foldersOnly[0] : activeDir;
             if (!smartDir.empty() && smartDir.back() == L'\\')
                 smartDir += L'\\';
             result += smartDir;
-            i += 8;
-        } else if (pattern.compare(i, 7, L"%d_name") == 0) {
+        } else if (consume(L"%d_name")) {
             std::wstring dir = activeDir;
             while (!dir.empty() && dir.back() == L'\\')
                 dir.pop_back();
             PCWSTR namePtr = PathFindFileNameW(dir.c_str());
             result += (namePtr ? namePtr : L"");
-            i += 7;
-        } else if (pattern.compare(i, 4, L"%dir") == 0) {
+        } else if (consume(L"%dir") || consume(L"%d")) {
             std::wstring activeWithTrailing = activeDir;
             if (!activeWithTrailing.empty() &&
                 activeWithTrailing.back() == L'\\')
                 activeWithTrailing += L'\\';
             result += activeWithTrailing;
-            i += 4;
-        } else if (pattern.compare(i, 2, L"%d") == 0) {
-            std::wstring activeWithTrailing = activeDir;
-            if (!activeWithTrailing.empty() &&
-                activeWithTrailing.back() == L'\\')
-                activeWithTrailing += L'\\';
-            result += activeWithTrailing;
-            i += 2;
         }
-        // --- Parent Directory (%parent before %p) ---
-        else if (pattern.compare(i, 7, L"%parent") == 0) {
+        // --- Parent Directory ---
+        else if (consume(L"%parent") || consume(L"%p")) {
             std::wstring parent = activeDir;
             while (!parent.empty() && parent.back() == L'\\')
                 parent.pop_back();
             size_t slash = parent.find_last_of(L'\\');
-            if (slash == std::wstring::npos) {
-                result += std::wstring();
-            } else {
+            if (slash != std::wstring::npos) {
                 std::wstring p = parent.substr(0, slash);
                 if (p.length() == 2 && p[1] == L':')
                     p += L'\\';
                 result += p;
             }
-            i += 7;
-        } else if (pattern.compare(i, 2, L"%p") == 0) {
-            std::wstring parent = activeDir;
-            while (!parent.empty() && parent.back() == L'\\')
-                parent.pop_back();
-            size_t slash = parent.find_last_of(L'\\');
-            if (slash == std::wstring::npos) {
-                result += std::wstring();
-            } else {
-                std::wstring p = parent.substr(0, slash);
-                if (p.length() == 2 && p[1] == L':')
-                    p += L'\\';
-                result += p;
-            }
-            i += 2;
         }
-        // --- Names & Extension (%name before %n) ---
-        else if (pattern.compare(i, 5, L"%name") == 0) {
+        // --- Names & Extension ---
+        else if (consume(L"%name") || consume(L"%n")) {
             result += GetFileNamesOnly(allItems, true);
-            i += 5;
-        } else if (pattern.compare(i, 2, L"%n") == 0) {
-            result += GetFileNamesOnly(allItems, true);
-            i += 2;
-        } else if (pattern.compare(i, 4, L"%ext") == 0) {
+        } else if (consume(L"%ext")) {
             result += GetFileExtension(allItems);
-            i += 4;
         }
-        // --- Selection Counts (%count before %c) ---
-        else if (pattern.compare(i, 6, L"%count") == 0) {
+        // --- Selection Counts ---
+        else if (consume(L"%count") || consume(L"%c")) {
             result += std::to_wstring(allItems.size());
-            i += 6;
-        } else if (pattern.compare(i, 2, L"%c") == 0) {
-            result += std::to_wstring(allItems.size());
-            i += 2;
         }
         // --- Path Selections & Single Item ---
-        else if (pattern.compare(i, 2, L"%f") == 0) {
+        else if (consume(L"%f")) {
             result += JoinPaths(allItems, true);
-            i += 2;
-        } else if (pattern.compare(i, 2, L"%1") == 0) {
+        } else if (consume(L"%1")) {
             result += allItems.empty() ? L"" : SafeQuote(allItems[0]);
-            i += 2;
-        } else if (pattern.compare(i, 2, L"%s") == 0) {
+        } else if (consume(L"%s")) {
             result += JoinPaths(allItems, false);
-            i += 2;
         } else {
             result.push_back(pattern[i++]);
         }
@@ -2441,6 +2415,8 @@ void ExecuteInternalCommand(const std::wstring& action,
     }
 
     Wh_Log(L"Unknown internal command: %s", action.c_str());
+    std::wstring errorMsg = L"Unknown command: " + action;
+    ShowActionToast(rootHwnd, errorMsg.c_str(), ToastType::Error);
 }
 
 void DispatchShortcutExecution(CustomShortcut sc,
@@ -2463,6 +2439,20 @@ void DispatchShortcutExecution(CustomShortcut sc,
         }
 
         if (isInternal) {
+            // Trim leading and trailing whitespace / quotes
+            auto isTrimChar = [](wchar_t ch) {
+                return iswspace(ch) || ch == L'"' || ch == L'\'';
+            };
+            actionName.erase(
+                actionName.begin(),
+                std::find_if(actionName.begin(), actionName.end(),
+                             [&](wchar_t ch) { return !isTrimChar(ch); }));
+            actionName.erase(
+                std::find_if(actionName.rbegin(), actionName.rend(),
+                             [&](wchar_t ch) { return !isTrimChar(ch); })
+                    .base(),
+                actionName.end());
+
             ExecuteInternalCommand(actionName, rootHwnd, capturedFocus);
             return;
         }
