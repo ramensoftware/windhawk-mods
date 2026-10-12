@@ -208,8 +208,9 @@ bool IsAppWindow(HWND hwnd) {
     return !GetWindow(hwnd, GW_OWNER);  // owned = dialog/popup
 }
 
-// Windhawk's own programs with a window are never relaunched: the tray app and
-// the editor (<Windhawk folder>\UI\VSCodium.exe). Matched by name, so other
+// Windhawk's own programs with a window are never relaunched: the tray app, the
+// Windhawk 2.0 tool-mod hosts (windhawk-mod*.exe) and the editor
+// (<Windhawk folder>\UI\VSCodium.exe). Matched by name, so other
 // programs that share a folder with a portable Windhawk are not affected, and
 // the disk is only probed for a VSCodium.exe.
 bool IsWindhawkProgram(const std::wstring& exePath) {
@@ -217,7 +218,7 @@ bool IsWindhawkProgram(const std::wstring& exePath) {
     size_t slash = lower.rfind(L'\\');
     if (slash == std::wstring::npos || slash == 0) return false;
     std::wstring name = lower.substr(slash + 1);
-    if (name == L"windhawk.exe") return true;  // tray app
+    if (name == L"windhawk.exe" || name.starts_with(L"windhawk-mod")) return true;
     if (name != L"vscodium.exe") return false;
     // The editor: <Windhawk folder>\UI\VSCodium.exe.
     size_t parent = lower.rfind(L'\\', slash - 1);
