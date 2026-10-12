@@ -1000,7 +1000,7 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
             }
             return 0;
         }
-        break;
+        return DefWindowProcW(hWnd, uMsg, wParam, lParam);
     case WM_LBUTTONDOWN: {
         POINT pt = { (LONG)LOWORD(lParam), (LONG)HIWORD(lParam) };
         for (size_t i = 0; i < g_appWindows.size(); ++i) {
@@ -1054,6 +1054,8 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
     default:
         return DefWindowProcW(hWnd, uMsg, wParam, lParam);
     }
+
+    return 0;
 }
 
 // Check WOW64 execution environment (Windhawk 1.7.x runs 32-bit windhawk.exe)
