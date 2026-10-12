@@ -22,30 +22,18 @@ Details and List views.
 
 ## Colors
 
-Supports #RRGGBB and dynamic system color names: accent, background,
-foreground, highlight, highlighttext, window, windowtext, buttonface,
-buttontext, hotlight, graytext.
+Supports #RRGGBB and dynamic system color names: `accent`, `background`,
+`foreground`, `highlight`, `highlighttext`, `window`, `windowtext`, `buttonface`,
+`buttontext`, `hotlight`, `graytext`.
 
 `accent` uses the Windows DWM colorization color. `background` and
 `foreground` are theme-aware neutral colors (high-contrast aware); other
 system names use Win32 system colors.
 
-Opacity is a percentage: 0 = invisible, 100 = fully opaque. Partial opacity
-uses GDI alpha blending against the actual row contents, rather than an
-assumed light/dark background; fully opaque stripes use the fast GDI path.
+Opacity is a percentage: 0 = invisible, 100 = fully opaque. 
 
-The optional same-settings toggle uses lightColor/lightAlphaPercent for both
-modes. Choose odd or even item indexes in the stripe parity setting. Disable
-the mod in Windhawk to stop drawing and remove its hooks.
 
-Light/dark changes to the Windows Personalize registry key are detected on
-the next paint. Accent/high-contrast changes also have a periodic check
-(up to three seconds); a later repaint may be needed. Custom themes can
-still affect named background/foreground colors, which use approximate
-neutral values outside high-contrast mode.
-
-The original mod was tested on Windows 11 24H2 & 26H2. Changes in this
-revision need to be tested in Windhawk before publication.
+Mod was tested on Windows 11 24H2 & 26H2. 
 */
 
 // ==/WindhawkModReadme==
