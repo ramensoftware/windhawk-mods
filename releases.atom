@@ -2,12 +2,52 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-12T18:00:51.000Z</updated>
+    <updated>2026-10-12T22:04:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Spatial Order 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-spatial-order#ada6e8fcff1875621a78829001fd10753caf23cd</id>
+        <link href="https://windhawk.net/mods/taskbar-spatial-order"/>
+        <updated>2026-10-12T22:04:59.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarspatialorder">Taskbar Spatial Order</h1>
+<p>Keeps each app's windows on the taskbar in the order they sit on your screens,
+left to right, then top to bottom, rather than roughly the order they were
+opened. Hover over an app's taskbar button and its leftmost window is the
+leftmost thumbnail; uncombined buttons follow the same order.</p>
+<p>Without the mod, the previews follow the order the windows were opened:</p>
+<p><img src="https://raw.githubusercontent.com/SixFive7/taskbar-spatial-order/main/images/without.gif" alt="without" /></p>
+<p>With it, they follow the windows on screen:</p>
+<p><img src="https://raw.githubusercontent.com/SixFive7/taskbar-spatial-order/main/images/with.gif" alt="with" /></p>
+<p>The order follows as windows move, are minimised or restored, open or close.
+The mod waits until things have been still for a moment, and while a window
+is dragged or the Start menu, search, notifications or a jump list is open.</p>
+<p>By default, minimised windows go last and a group whose windows are all
+minimised is left alone. The settings can change both and exclude apps.</p>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>Windows 11 24H2 and later, with its own taskbar, tested on build 26300;
+older versions are untested. The mod relies on internal taskbar functions
+found through Windows debug symbols, which an update can change; if one is
+missing or looks unexpected, the mod logs it and does nothing.</li>
+<li>A button that moves is taken off the taskbar and put back, which can show
+as a brief animation. Only buttons that are out of place move, and they keep
+their progress bar, overlay badge and thumbnail toolbar buttons.</li>
+<li>The mod's order wins: a window moved to another place in its group, by hand
+or by another mod, goes back at the next sort.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<p>The move-and-refresh technique and the code that finds the taskbar's lists
+are adapted from <a href="https://windhawk.net/mods/taskbar-thumbnail-reorder">Taskbar Thumbnail Reorder</a> by <a href="https://github.com/m417z">m417z</a>, with
+a smaller part from his <a href="https://windhawk.net/mods/taskbar-wheel-cycle">Cycle taskbar buttons with mouse wheel</a> mod.</p>]]></content>
+        <author>
+            <name>Jori Huisman</name>
+            <uri>https://github.com/SixFive7</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Winstant 1.5]]></title>
         <id>https://windhawk.net/mods/winstant#83d9b317497843f42cc0dbc229e0aab85b412a2a</id>
@@ -1544,31 +1584,6 @@ not inject into other applications.</p>]]></content>
         <author>
             <name>nikitor32</name>
             <uri>https://github.com/nikitor32</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove Legacy Clock Square Cutout 3.1.0]]></title>
-        <id>https://windhawk.net/mods/remove-clock-cutout-background#4e183d31eb36e9e1eb2dc144291f6e94d5981daa</id>
-        <link href="https://windhawk.net/mods/remove-clock-cutout-background"/>
-        <updated>2026-10-10T11:03:39.000Z</updated>
-        <content type="html"><![CDATA[<p>Removes the light square background behind the analog clock in StartAllBack
-and classic Windows Date/Time flyouts (timedate.cpl) using OS-level 
-double buffering (WS<em>EX</em>COMPOSITED) and GDI+ sub-pixel anti-aliased corner 
-masking with smart dark-mode dialog sampling.</p>
-<h3 id="screenshots">Screenshots</h3>
-<h4 id="startallbackclockflyout">StartAllBack Clock Flyout</h4>
-<p><strong>Before:</strong>
-<img src="https://i.imgur.com/f4Ku2hE.png" alt="Before Flyout" /></p>
-<p><strong>After:</strong>
-<img src="https://i.imgur.com/IYWKYWx.png" alt="After Flyout" /></p>
-<h4 id="datetimedialogtimedatecpl">Date &amp; Time Dialog (timedate.cpl)</h4>
-<p><strong>Before:</strong>
-<img src="https://i.imgur.com/xzkz1NF.png" alt="Before Date and Time" /></p>
-<p><strong>After:</strong>
-<img src="https://i.imgur.com/ug6TxAf.png" alt="After Date and Time" /></p>]]></content>
-        <author>
-            <name>awnaise</name>
-            <uri>https://github.com/awnaise</uri>
         </author>
     </entry>
 </feed>

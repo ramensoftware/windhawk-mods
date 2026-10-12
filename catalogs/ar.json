@@ -15090,6 +15090,35 @@
         "version": "1.0.2"
       }
     },
+    "taskbar-spatial-order": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791842699000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791842699000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Jori Huisman",
+        "compilerOptions": "-ldwmapi",
+        "description": "Keeps each app's windows on the taskbar in the order they sit on screen, left to right, in thumbnail previews and uncombined buttons",
+        "github": "https://github.com/SixFive7",
+        "homepage": "https://github.com/SixFive7/taskbar-spatial-order",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Taskbar Spatial Order",
+        "version": "1.0"
+      }
+    },
     "taskbar-split": {
       "details": {
         "defaultSorting": 520,
