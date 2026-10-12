@@ -2,12 +2,139 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-12T07:02:15.000Z</updated>
+    <updated>2026-10-12T10:04:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Magic Pointer 1.0.1]]></title>
+        <id>https://windhawk.net/mods/magic-pointer#bc7a9d84ea4986925be09f770a2cee39ebbe2eb8</id>
+        <link href="https://windhawk.net/mods/magic-pointer"/>
+        <updated>2026-10-12T10:04:54.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="magicpointer">Magic Pointer</h1>
+<p>The Magic Pointer from Google's Googlebooks, on Windows: an AI mouse cursor.
+Wiggle the mouse, then point at anything on screen, select it, and ask Gemini
+about it, search it with Google Lens, copy its text or translate it.</p>
+<p><img src="https://raw.githubusercontent.com/rono-zeroseven/windhawk-mods/0a3b052e38da866ce5312754be9bec0e5364caea/assets/magic-pointer/preview.png" alt="Magic Pointer with a sample selection and question" /></p>
+<p><em>Native preview with a sample selection; browser actions work without an API key.</em></p>
+<h2 id="howtouse">How to use</h2>
+<ol>
+<li><strong>Shake the mouse</strong>, or swipe back and forth on the touchpad. The keyboard
+shortcut (<strong>Win+Shift+G</strong> by default) works too.</li>
+<li><strong>Point and select.</strong> Hover over a button, image, link or paragraph to
+outline it, then click to select it. Or click and drag to select any area.</li>
+<li><strong>Ask.</strong> A card opens next to your selection. Type a question and press
+Enter, or pick a suggestion. With a Gemini API key, the <strong>Translate</strong> button
+on the card translates the text in your selection into your Windows
+language, or into the language you pick in the settings.</li>
+</ol>
+<p>Press <strong>Esc</strong> or <strong>right-click</strong> to put the Magic Pointer away. It also leaves
+on its own when the mouse stays still for a while.</p>
+<h2 id="gemini">Gemini</h2>
+<p>Add a free Gemini API key (https://aistudio.google.com/apikey) in the
+settings and answers stream right into the card. You can ask follow-up
+questions. Enable <strong>Smart suggestions</strong> to have Gemini suggest up to three
+things to do with each selection; this is off by default.
+Drag over an answer to select text, then press Ctrl+C or right-click to copy.
+The <strong>Copy</strong> button copies the whole answer, including while it is streaming.</p>
+<p>It also works without a key: <strong>Send</strong> (or <strong>Ask in Gemini</strong>) opens
+Gemini in your browser, types your question into its message box and pastes
+your selections there as PNG files. It waits for the new Gemini page to finish
+loading, never uses a Gemini tab that was already open, and never presses
+Enter: review the draft and send it when ready. If something couldn't be
+added, the card comes back and says what to do, usually to click Gemini's
+message box and press Ctrl+V. You can also search with Google Lens or copy the
+image and its recognized text.</p>
+<p>With a key, the <strong>Ask in Gemini</strong> button in the card's top row (the arrow
+leaving a window) carries on in Gemini's own app instead of in the card: it
+types the question you have started to write, or else the last one you asked
+here, and attaches every selection.</p>
+<p>Gemini and Google Lens open in your Windows default browser, or in the one you
+pick with the <strong>Browser</strong> setting: Chrome, Edge, Firefox, Brave, Zen, Opera,
+Vivaldi, LibreWolf, Waterfox, Floorp, or any other browser through the path of
+its program. The draft is only typed into a window of that browser, and only
+once the browser itself reports that the page is Gemini's chat. Chrome, Edge,
+Firefox and Zen have been tried; the others share their engines. Like
+Chromium-based browsers, Firefox-based ones turn on their accessibility support
+when it's used.</p>
+<h2 id="textrecognition">Text recognition</h2>
+<p>Every selection is read with the OCR built into Windows 10 and 11, entirely
+on your PC. Copy the text with the <strong>Aa</strong> button, and Gemini gets it as extra
+context. OCR uses the languages installed in Windows.</p>
+<h2 id="privacyandtemporaryfiles">Privacy and temporary files</h2>
+<p>Summoning the pointer, selecting an area and copying its image or text stay
+on your PC with the default settings. The mod contacts Google's services
+when you use these features:</p>
+<ul>
+<li>With an API key, <strong>Send</strong>, a suggestion chip or <strong>Translate</strong> sends your
+selected regions as JPEG images (up to 1536 pixels on the longest side),
+their UI Automation names and recognized text, your question and the card's
+conversation to <code>generativelanguage.googleapis.com</code> over HTTPS. Follow-up
+questions include the selections and conversation again.</li>
+<li><strong>Smart suggestions</strong> is off by default. If you enable it with an API key,
+every selection is uploaded as soon as you make or add it, even if you only
+intend to copy its text or search it with Lens. The suggestion request sends
+the selection images and text, without the card's conversation.</li>
+<li><strong>Ask in Gemini</strong> (also <strong>Send</strong> without an API key) opens
+<code>gemini.google.com/app</code> and puts your question and selection PNG files into
+a new draft. Attaching files can upload them before you send the draft; the
+mod leaves sending the message to you.</li>
+<li><strong>Search with Google Lens</strong> opens a temporary local HTML page containing
+your selection as a PNG (up to 1000 pixels on the longest side). That page
+immediately uploads the image to <code>lens.google.com/v3/upload</code> when it opens.</li>
+</ul>
+<p>Under Google's <a href="https://ai.google.dev/gemini-api/terms">Gemini API terms</a>,
+free-tier submissions and responses, including images, may be used to improve
+Google's products and machine learning, and may be read by human reviewers in
+most regions. The terms describe regional exceptions and different treatment
+for paid services. Avoid sending sensitive, confidential or personal content
+through the free tier.</p>
+<p>Browser handoff PNGs (<code>gemini-selection-*.png</code>) and Lens HTML pages are written
+temporarily to the mod's Windhawk storage folder, normally under
+<code>%ProgramData%\Windhawk</code>. This folder is shared across Windows accounts.
+PNGs are scheduled for deletion after 30 minutes and Lens pages after 10
+minutes; both are also deleted when the mod is disabled. Files left by an
+interrupted process are cleaned up on the next start once they expire. A file held open by another program may delay
+deletion. <strong>Copy image</strong> and browser handoff also put the selection on the
+Windows clipboard; clipboard history follows your Windows settings.</p>
+<h2 id="lookandfeel">Look and feel</h2>
+<ul>
+<li>The card and the hint sit on Windows' live frosted glass (acrylic) with
+rounded corners, so they follow whatever is behind them, even as it changes.
+Turning off <em>Transparency effects</em> in Windows, or <em>Glass effect</em> here,
+switches them to solid colors, as does a Windows older than 10 version 1803.</li>
+<li>Pick any <strong>glow color</strong>: <code>#4285F4</code>, <code>66,133,244</code>, a name like <code>purple</code>,
+<code>accent</code> for your Windows accent color, or <code>rainbow</code> for Google's colors.</li>
+<li><strong>Dim outside the selection</strong> darkens the surrounding screen only while you
+drag a rectangle. The area inside stays clear.</li>
+</ul>
+<h2 id="gamesandotherapps">Games and other apps</h2>
+<p>Shaking is ignored while a game, video or presentation fills the screen, and
+in any app on the <em>Excluded apps</em> list (for example <code>RobloxPlayerBeta.exe</code>,
+<code>C:\Games\*</code> or a window title).</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Runs as a <em>tool mod</em> in its own background process. It doesn't inject into
+other programs and never changes your system cursors.</li>
+<li>Uses Windhawk's standard host without requesting UIAccess. Highlighting
+controls and browser handoff are subject to Windows' restrictions on
+interacting with elevated apps.</li>
+<li>Works on every Windows version Windhawk runs on, on x64, ARM64 and 32-bit
+systems, and supports multiple monitors with per-monitor display scaling.</li>
+<li>Shakes are detected from raw mouse input, so nothing runs while the mouse is
+idle and the mouse itself is never slowed down.</li>
+<li><em>Highlight what you point at</em> reads the layout of the app under the pointer
+through UI Automation, the accessibility API. Chromium-based browsers turn
+on their accessibility support when it's used, which costs a little memory.
+Turn it off if you prefer: click and drag always works.</li>
+</ul>]]></content>
+        <author>
+            <name>Rono</name>
+            <uri>https://github.com/rono-zeroseven</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Custom Cached Context Menu 1.0.0]]></title>
         <id>https://windhawk.net/mods/custom-cached-context-menu#d150b4e7044c23221be5dbc2bfb581789fe36dce</id>
@@ -1097,28 +1224,6 @@ folder this mod shares, and whose tray-module loading it follows</li>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cursor auto-hide on idle 1.0]]></title>
-        <id>https://windhawk.net/mods/cursor-auto-hide#38431c1d52c473768fa80bae5ea0ba720aa74324</id>
-        <link href="https://windhawk.net/mods/cursor-auto-hide"/>
-        <updated>2026-10-10T12:00:29.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="cursorautohideonidle">Cursor auto-hide on idle</h1>
-<p>The mouse cursor usually stays on screen even when you are not using the
-mouse, covering videos, text and presentations.</p>
-<p>This mod hides the cursor after it has not moved for a configurable
-number of seconds (5 by default). The cursor reappears immediately on
-the first movement or click.</p>
-<p>Cursor changes happen at runtime only: your cursor scheme is never
-written to the registry, and any mouse activity restores it right away.</p>
-<p>Only the system cursors are replaced. Applications that draw their own
-cursor, such as games or drawing tools, keep showing it.</p>
-<p>The mod runs in a dedicated Windhawk process (as a tool mod) and does
-not inject into other applications.</p>]]></content>
-        <author>
-            <name>nikitor32</name>
-            <uri>https://github.com/nikitor32</uri>
         </author>
     </entry>
 </feed>
