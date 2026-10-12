@@ -144,7 +144,7 @@ the highlight back to the mouse, and the next arrow key takes it over again.
   $description: This setting hides the Windows account name in the Start menu and replaces it with a generic placeholder label, which is useful when taking screenshots, recording videos, or streaming without exposing personal information. When enabled, the account name is replaced with a localized generic label (for example "User" on English Windows).
 - tileLayout: ""
   $name: Import tile layout (one-time, empty = none)
-  $description: Paste a serialized tile layout here (a "WHSM2#..." string) to import it. The layout is applied once, the first time the value changes; after that, your own tile drags, resizes and pins take precedence again. The current layout is otherwise saved automatically in Windhawk's mod storage, so most users can leave this empty.
+  $description: This setting allows to paste a serialized tile layout here (a "WHSM2#..." string) to import it. The layout is applied once, the first time the value changes; after that, your own tile drags, resizes and pins take precedence again. The current layout is otherwise saved automatically in Windhawk's mod storage, so most users can leave this empty.
 */
 // ==/WindhawkModSettings==
 /*
@@ -2921,9 +2921,18 @@ public:
         layoutApplied_ = true;
         NormalizeTileLayout();
         PersistTileLayout();
+        if (!settings_.liveTiles) {
+            for (auto& group : layout_.groups) {
+                for (auto& tile : group.tiles) {
+                    tile.flipping = false;
+                    tile.flipProgress = 0.0f;
+                    tile.showBack = false;
+                }
+            }
+        }
         if (hwnd_) ApplyWindowOpacity();
-        if (hwnd_ && visible_) {
-            if (settings_.liveTiles) {
+        if (hwnd_) {
+            if (visible_ && settings_.liveTiles) {
                 SetTimer(hwnd_.get(), TIMER_LIVE_FLIP, settings_.liveTileIntervalMs, nullptr);
             } else {
                 KillTimer(hwnd_.get(), TIMER_LIVE_FLIP);
@@ -3268,6 +3277,8 @@ public:
                 tile.animOffsetX = 0.0f;
                 tile.animOffsetY = 0.0f;
                 tile.animScale = 1.0f;
+                tile.flipping = false;
+                tile.flipProgress = 0.0f;
             }
         }
         StopTileAnimationTimer();
@@ -3894,6 +3905,11 @@ private:
                     return 0;
                 }
                 break;
+
+            case WM_CLOSE:
+                // Alt+F4 / SC_CLOSE only dismisses the menu; the window lives until unload.
+                Hide();
+                return 0;
 
             case WM_CHAR:
                 OnChar((wchar_t)wParam);
