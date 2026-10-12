@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id           xandriw-explorer-select-interceptor
 // @name         SameFolderOnly
-// @description  When an app opens a folder or uses Show in folder, reuse an existing Explorer window for that folder and select the requested file instead of opening a duplicate window.
-// @version      4.1.5
+// @description  Stop File Explorer from opening duplicate windows. If a folder is already open, reuse that window instead. "Show in folder" also selects the requested file.
+// @version      4.1.6
 // @author       XandriW
 // @github       https://github.com/xandri19wang
 // @include      explorer.exe
@@ -10,39 +10,26 @@
 
 // ==WindhawkModReadme==
 /*
-Purpose
-- Source-level fix for "Show in folder", "Open downloads folder", and plain
-  explorer.exe folder opens.
-- Runs inside the new explorer.exe process before the duplicate window appears.
+## Tired of duplicate File Explorer windows?
 
-What it intercepts
-- explorer.exe /select,"C:\Folder\File.ext"
-- explorer.exe "C:\Folder"
-- explorer.exe C:\Folder
-- explorer.exe shell:Downloads
-- explorer.exe /e,C:\Folder or /root,C:\Folder style commands when possible
+Ever opened a folder that's already open, only for Windows to create another window?
 
-Behavior
-1. If a matching folder is already open:
-   - Select the requested file if /select was used.
-   - Activate that existing Explorer window if enabled.
-   - Exit this helper explorer.exe before it creates a duplicate window.
-2. If no matching folder is visible through ShellWindows:
-   - By default, do NOT steal a random Explorer window.
-   - Optional fallback can reuse another Explorer window if you explicitly enable it.
-3. If no usable Explorer window is found:
-   - Let Explorer continue normally.
+Inspired by macOS Finder, **SameFolderOnly** brings the existing folder window to the front instead of opening a duplicate. If you're using "Show in folder," it also highlights the file you're looking for.
 
-Windows 11 tabs
-- ShellWindows can enumerate inactive tabs, which share the window handle of
-  their parent Explorer window. This mod checks each tab's Shell view visibility
-  and only reuses an active tab, so a request is not swallowed by a hidden tab.
-- If the target folder is only in a background tab, SameFolderOnly lets Explorer
-  handle the request normally (it does not automatically switch to that tab).
-- The optional ReuseAnyExplorerWindow fallback also skips inactive tabs.
+### How it works
 
-Hold Shift (or your configured bypass key) to allow Explorer's normal behavior.
-Requests not launched through a supported explorer.exe command line are unaffected.
+- **Same folder, same window.** No more opening the same folder over and over.
+- **Find your files.** "Show in folder" selects the file in the existing window.
+- **Nothing open?** Explorer opens the folder normally.
+- **Want a separate window?** Hold Shift to bypass the mod.
+
+By default, the mod only reuses a window already showing the requested folder. You can also enable an option to reuse any open Explorer window.
+
+### Good to know
+
+Some apps open folders in ways this mod can't intercept. It also won't switch to an inactive Explorer tab, so those requests are left to Windows to handle normally.
+
+Made for Windows 11 File Explorer.
 */
 // ==/WindhawkModReadme==
 
