@@ -1,3 +1,5 @@
+import hashlib
+import json
 import re
 from pathlib import Path
 from typing import List
@@ -13,6 +15,15 @@ IMAGES_FOLDER_PATH = SCRIPT_DIR.parent / "images"
 
 # Smaller GIFs are only compressed losslessly.
 LOSSY_GIF_MIN_SIZE = 20 * 1024 * 1024
+
+# Maps the paths of compressed images, relative to the images folder, to the
+# SHA-256 of their originals.
+ORIGINAL_HASHES_FILE_NAME = "original_hashes.json"
+
+# Compressed before the original hashes were recorded.
+INITIAL_ORIGINAL_HASHES = {
+    "i.imgur.com/iy9dyzq.gif": "a91728e281c6f6baefe106a1be3a2920fcd72f0ecf4bd5382a66d901e2bbea3c",
+}
 
 EXCLUDED_IMAGE_URLS = {
     # No longer available.
@@ -77,7 +88,17 @@ def download_image(url: str, save_path: Path):
 
 
 def process_code_files(code_folder: Path, images_folder: Path):
-    stale_images = [p for p in images_folder.rglob("*") if p.is_file()]
+    original_hashes_path = images_folder / ORIGINAL_HASHES_FILE_NAME
+    previous_original_hashes: dict[str, str] = dict(INITIAL_ORIGINAL_HASHES)
+    if original_hashes_path.exists():
+        previous_original_hashes |= json.loads(
+            original_hashes_path.read_text(encoding="utf-8")
+        )
+    original_hashes: dict[str, str] = {}
+
+    stale_images = [
+        p for p in images_folder.rglob("*") if p.is_file() and p != original_hashes_path
+    ]
 
     image_urls: set[str] = set()
     for file_path in code_folder.rglob("*.wh.cpp"):
@@ -86,7 +107,8 @@ def process_code_files(code_folder: Path, images_folder: Path):
     image_urls -= EXCLUDED_IMAGE_URLS
 
     for url in image_urls:
-        image_path = images_folder / image_url_to_path(url)
+        relative_path = image_url_to_path(url)
+        image_path = images_folder / relative_path
         if not image_path.resolve().is_relative_to(images_folder.resolve()):
             raise RuntimeError(
                 f"Image path {image_path} is outside of images folder {images_folder}"
@@ -95,10 +117,15 @@ def process_code_files(code_folder: Path, images_folder: Path):
         if not image_path.exists():
             download_image(url, image_path)
             if is_gif(image_path):
-                compress_gif(
+                with image_path.open("rb") as file:
+                    original_hash = hashlib.file_digest(file, "sha256").hexdigest()
+                if compress_gif(
                     image_path,
                     allow_lossy=image_path.stat().st_size >= LOSSY_GIF_MIN_SIZE,
-                )
+                ):
+                    original_hashes[relative_path] = original_hash
+        elif relative_path in previous_original_hashes:
+            original_hashes[relative_path] = previous_original_hashes[relative_path]
 
         if image_path in stale_images:
             stale_images.remove(image_path)
@@ -108,6 +135,11 @@ def process_code_files(code_folder: Path, images_folder: Path):
         for image_path in stale_images:
             print(f"- {image_path.name}")
             image_path.unlink()
+
+    original_hashes_path.write_text(
+        json.dumps(original_hashes, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 if __name__ == "__main__":

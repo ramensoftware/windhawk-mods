@@ -55,10 +55,11 @@ def run(command: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
-def compress_gif(path: Path, allow_lossy: bool = False):
+def compress_gif(path: Path, allow_lossy: bool = False) -> bool:
+    """Return whether the file was replaced with a compressed version."""
     if not is_gif(path):
         print(f"{path}: not a GIF, skipped")
-        return
+        return False
 
     original_size = path.stat().st_size
 
@@ -92,13 +93,14 @@ def compress_gif(path: Path, allow_lossy: bool = False):
         best = min(sizes, key=sizes.__getitem__, default=None)
         if best is None or sizes[best] >= original_size:
             print(f"{path}: {original_size:,} bytes, kept original")
-            return
+            return False
 
         shutil.copyfile(output_paths[best], path)
         print(
             f"{path}: {original_size:,} -> {sizes[best]:,} bytes"
             f" ({100 * sizes[best] / original_size:.1f}%, {best})"
         )
+        return True
 
 
 def main():

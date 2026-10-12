@@ -5,6 +5,7 @@ PURPOSE:     Verifies the mod information in the modified mods.
 COPYRIGHT:   Copyright 2023 Mark Jansen <mark.jansen@reactos.org>
 '''
 
+import hashlib
 import http.client
 import json
 import math
@@ -1058,6 +1059,9 @@ ARCHIVED_IMAGE_MAX_PATH_LENGTH = 200
 # are compressed lossily when archived.
 LARGE_GIF_MIN_SIZE = 20 * 1024 * 1024
 
+# Must match ORIGINAL_HASHES_FILE_NAME in scripts/archive_mod_images.py.
+ARCHIVED_ORIGINAL_HASHES_PATH = 'original_hashes.json'
+
 WINDOWS_RESERVED_FILE_NAMES = {
     'CON', 'PRN', 'AUX', 'NUL',
     *(f'COM{i}' for i in range(1, 10)),
@@ -1098,6 +1102,14 @@ def get_archived_image(path: str) -> Optional[bytes]:
         if e.code == 404:
             return None
         raise
+
+
+@cache
+def get_archived_original_hashes() -> dict[str, str]:
+    """Return the SHA-256 of the original of each compressed archived image, by
+    its path relative to the images folder."""
+    data = get_archived_image(ARCHIVED_ORIGINAL_HASHES_PATH)
+    return json.loads(data) if data is not None else {}
 
 
 def validate_readme_images(path: Path, mod_source: str) -> int:
@@ -1168,9 +1180,18 @@ def validate_readme_images(path: Path, mod_source: str) -> int:
         if url.startswith(DIRECTLY_SERVED_IMAGE_URL_PREFIX):
             continue
 
-        archived_image = get_archived_image(image_path)
+        original_hash = get_archived_original_hashes().get(image_path)
+        if original_hash is not None:
+            # The archived copy is compressed, so the original's hash is compared.
+            archived = True
+            changed = hashlib.sha256(image).hexdigest() != original_hash
+        else:
+            archived_image = get_archived_image(image_path)
+            archived = archived_image is not None
+            changed = archived and archived_image != image
+
         if (
-            archived_image is None
+            not archived
             and image.startswith((b'GIF87a', b'GIF89a'))
             and len(image) >= LARGE_GIF_MIN_SIZE
         ):
@@ -1183,7 +1204,7 @@ def validate_readme_images(path: Path, mod_source: str) -> int:
                 f' lower resolution or frame rate, or a shorter clip: "{url}"',
             )
 
-        if archived_image is not None and archived_image != image:
+        if changed:
             warnings += add_warning(
                 path,
                 line,
