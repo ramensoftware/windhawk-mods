@@ -2,7 +2,7 @@
 // @id              virtual-desktop-swipe-taskbar-fix
 // @name            Virtual Desktop Swipe Taskbar Fix
 // @description     Restores taskbar presence in virtual desktop swipe previews.
-// @version         1.0.4
+// @version         1.0.5
 // @author          meteoni
 // @github          https://github.com/Meteoni
 // @license         MIT
@@ -41,6 +41,8 @@ stops if the required symbols or layout cannot be recognized.
 #include <windhawk_utils.h>
 #include <unknwn.h>
 #include <cstddef>
+#include <array>
+#include <map>
 #include <cstdio>
 #include <cwchar>
 #include <optional>
@@ -77,27 +79,380 @@ struct GestureLayout {
     unsigned int firstCollectionSelector;
 } g_gestureLayout;
 
-bool DiscoverGestureLayout(void* bitmapResult, void* initialize, void* addThumbnail,
-                           GestureLayout& layout) {
-    std::string code[3];
-    void* functions[]{bitmapResult, initialize, addThumbnail};
-    const wchar_t* methodNames[]{L"GetTrayBitmapResult", L"Initialize", L"AddThumbnailToThumbnailCollection"};
-    const int limits[]{220, 64, 180};
-    for (size_t index = 0; index < ARRAYSIZE(functions); ++index) {
-        auto* instruction = static_cast<std::byte*>(functions[index]);
-        for (int count = 0; count < limits[index]; ++count) {
-            WH_DISASM_RESULT decoded{};
-            if (!Wh_Disasm(instruction, &decoded) || !decoded.length || decoded.length > 15) {
-                Wh_Log(L"Failed to disassemble %s at %p", methodNames[index], instruction);
+struct NativeInstruction {
+    uintptr_t address;
+    size_t length;
+    std::string text;
+    std::vector<uintptr_t> successors;
+};
+
+bool ReadFunctionControlFlow(void* function, size_t instructionLimit,
+                             std::vector<NativeInstruction>& instructions,
+                             const void* nativeImage = nullptr) {
+    DWORD64 imageBase = 0;
+    auto* entry = RtlLookupFunctionEntry(reinterpret_cast<DWORD64>(function), &imageBase, nullptr);
+    IMAGE_DOS_HEADER dos{};
+    IMAGE_NT_HEADERS64 nt{};
+    if (!entry || !ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<void*>(imageBase),
+            &dos, sizeof(dos), nullptr) || dos.e_magic != IMAGE_DOS_SIGNATURE ||
+        dos.e_lfanew < 0 || dos.e_lfanew > 0x100000 ||
+        !ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<void*>(imageBase + dos.e_lfanew),
+            &nt, sizeof(nt), nullptr) || nt.Signature != IMAGE_NT_SIGNATURE ||
+        nt.FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64 ||
+        nt.OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC ||
+        nt.OptionalHeader.SizeOfImage < sizeof(nt)) {
+        Wh_Log(L"Function unwind metadata unavailable for %p", function);
+        return false;
+    }
+    uintptr_t codeBase = nativeImage ? reinterpret_cast<uintptr_t>(nativeImage) : imageBase;
+    if (nativeImage) {
+        IMAGE_DOS_HEADER copyDos{};
+        IMAGE_NT_HEADERS64 copyNt{};
+        if (!ReadProcessMemory(GetCurrentProcess(), nativeImage, &copyDos, sizeof(copyDos), nullptr) ||
+            copyDos.e_magic != dos.e_magic || copyDos.e_lfanew != dos.e_lfanew ||
+            !ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<void*>(codeBase + dos.e_lfanew),
+                &copyNt, sizeof(copyNt), nullptr) || copyNt.Signature != nt.Signature ||
+            copyNt.FileHeader.Machine != nt.FileHeader.Machine ||
+            copyNt.FileHeader.TimeDateStamp != nt.FileHeader.TimeDateStamp ||
+            copyNt.OptionalHeader.SizeOfImage != nt.OptionalHeader.SizeOfImage ||
+            copyNt.OptionalHeader.CheckSum != nt.OptionalHeader.CheckSum) {
+            Wh_Log(L"Native image differs from the loaded shell module");
+            return false;
+        }
+    }
+
+    // Chained unwind entries identify separated regions of the same function.
+    // Do not infer ownership from proximity or follow an arbitrary external jump.
+    auto primaryEntry = [&](RUNTIME_FUNCTION region) -> std::optional<RUNTIME_FUNCTION> {
+        for (int depth = 0; depth < 8; ++depth) {
+            BYTE header[4]{};
+            if (region.BeginAddress >= region.EndAddress || region.EndAddress > nt.OptionalHeader.SizeOfImage ||
+                region.UnwindData > nt.OptionalHeader.SizeOfImage - sizeof(header) ||
+                !ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<void*>(imageBase + region.UnwindData),
+                    header, sizeof(header), nullptr) || ((header[0] & 7) != 1 && (header[0] & 7) != 2)) return std::nullopt;
+            if (!(header[0] & (UNW_FLAG_CHAININFO << 3))) return region;
+            size_t chainOffset = region.UnwindData + 4 + ((header[2] + 1) & ~1u) * 2;
+            if (chainOffset > nt.OptionalHeader.SizeOfImage - sizeof(region) ||
+                !ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<void*>(imageBase + chainOffset),
+                    &region, sizeof(region), nullptr)) return std::nullopt;
+        }
+        return std::nullopt;
+    };
+    auto primary = primaryEntry(*entry);
+    if (!primary) {
+        Wh_Log(L"Invalid function unwind chain for %p", function);
+        return false;
+    }
+    std::vector<std::pair<uintptr_t, uintptr_t>> regions{
+        {imageBase + entry->BeginAddress, imageBase + entry->EndAddress}};
+    std::map<uintptr_t, size_t> decodedAddresses;
+    const std::regex directBranch(R"(0x[0-9a-f]+)");
+    std::vector<uintptr_t> pending{reinterpret_cast<uintptr_t>(function)};
+    while (!pending.empty()) {
+        uintptr_t address = pending.back();
+        pending.pop_back();
+        while (!decodedAddresses.contains(address)) {
+            uintptr_t regionEnd = 0;
+            for (const auto& [begin, end] : regions) {
+                if (address >= begin && address < end) { regionEnd = end; break; }
+            }
+            if (!regionEnd) {
+                DWORD64 targetImage = 0;
+                auto* target = RtlLookupFunctionEntry(address, &targetImage, nullptr);
+                auto owner = target && targetImage == imageBase ? primaryEntry(*target) : std::nullopt;
+                if (!owner || owner->BeginAddress != primary->BeginAddress ||
+                    owner->EndAddress != primary->EndAddress || owner->UnwindData != primary->UnwindData) {
+                    Wh_Log(L"Branch outside verified function regions: %p", reinterpret_cast<void*>(address));
+                    return false;
+                }
+                regions.emplace_back(imageBase + target->BeginAddress, imageBase + target->EndAddress);
+                regionEnd = regions.back().second;
+            }
+            if (instructions.size() >= instructionLimit) {
+                Wh_Log(L"Function instruction budget exceeded for %p", function);
                 return false;
             }
-            std::string text(decoded.text);
-            for (char& character : text) {
+            WH_DISASM_RESULT result{};
+            if (!Wh_Disasm(reinterpret_cast<void*>(codeBase + address - imageBase), &result) || !result.length ||
+                result.length > 15 || result.length > regionEnd - address) {
+                Wh_Log(L"Failed to disassemble instruction at %p", reinterpret_cast<void*>(address));
+                return false;
+            }
+            // Reject branches into an instruction, including instructions decoded earlier.
+            auto following = decodedAddresses.upper_bound(address);
+            bool overlapsPrevious = false;
+            if (following != decodedAddresses.begin()) {
+                const auto& previous = instructions[std::prev(following)->second];
+                overlapsPrevious = previous.address + previous.length > address;
+            }
+            if ((following != decodedAddresses.end() && following->first < address + result.length) ||
+                overlapsPrevious) {
+                Wh_Log(L"Overlapping instruction boundaries at %p", reinterpret_cast<void*>(address));
+                return false;
+            }
+            NativeInstruction instruction{address, result.length, result.text, {}};
+            for (char& character : instruction.text) {
                 if (character >= 'A' && character <= 'Z') character += 'a' - 'A';
             }
-            code[index] += text + ';';
-            instruction += decoded.length;
-            if (text == "ret") break;
+            bool terminates = instruction.text.starts_with("ret") || instruction.text == "int3" || instruction.text == "ud2";
+            bool jump = instruction.text.starts_with('j') || instruction.text.starts_with("loop");
+            if (jump) {
+                auto operand = instruction.text.substr(instruction.text.find(' ') + 1);
+                if (!std::regex_match(operand, directBranch)) {
+                    Wh_Log(L"Indirect branch not supported at %p", reinterpret_cast<void*>(address));
+                    return false;
+                }
+                uintptr_t target = std::stoull(operand, nullptr, 0);
+                if (target < codeBase || target - codeBase >= nt.OptionalHeader.SizeOfImage) {
+                    Wh_Log(L"Branch outside native image at %p", reinterpret_cast<void*>(address));
+                    return false;
+                }
+                target = imageBase + target - codeBase;
+                instruction.successors.push_back(target);
+                if (!instruction.text.starts_with("jmp ")) {
+                    instruction.successors.push_back(address + result.length);
+                    pending.push_back(target);
+                }
+            } else if (!terminates) {
+                instruction.successors.push_back(address + result.length);
+            }
+            decodedAddresses.emplace(address, instructions.size());
+            instructions.push_back(std::move(instruction));
+            if (instructions.back().successors.empty()) break;
+            // Conditional fallthrough first; ret only terminates its own path.
+            address = instructions.back().successors.back();
+        }
+    }
+    return true;
+}
+
+bool FindCreationMembers(const std::vector<NativeInstruction>& instructions,
+                         size_t& factoryOffset, size_t& parentOffset, const std::string& owner) {
+    enum class Kind { Unknown, Object, Member, Vtable, CreationMethod, Ambiguous };
+    struct Value {
+        Kind kind = Kind::Unknown;
+        intptr_t offset = 0;
+        bool mayCreate = false;
+        bool operator==(const Value&) const = default;
+    };
+    using Registers = std::array<Value, 16>;
+    const char* registerNames[16][5]{
+        {"rax", "eax", "ax", "al", "ah"}, {"rcx", "ecx", "cx", "cl", "ch"},
+        {"rdx", "edx", "dx", "dl", "dh"}, {"rbx", "ebx", "bx", "bl", "bh"},
+        {"rsp", "esp", "sp", "spl", nullptr}, {"rbp", "ebp", "bp", "bpl", nullptr},
+        {"rsi", "esi", "si", "sil", nullptr}, {"rdi", "edi", "di", "dil", nullptr},
+        {"r8", "r8d", "r8w", "r8b", nullptr}, {"r9", "r9d", "r9w", "r9b", nullptr},
+        {"r10", "r10d", "r10w", "r10b", nullptr}, {"r11", "r11d", "r11w", "r11b", nullptr},
+        {"r12", "r12d", "r12w", "r12b", nullptr}, {"r13", "r13d", "r13w", "r13b", nullptr},
+        {"r14", "r14d", "r14w", "r14b", nullptr}, {"r15", "r15d", "r15w", "r15b", nullptr},
+    };
+    auto registerIndex = [&](const std::string& operand) {
+        for (int index = 0; index < 16; ++index) {
+            for (const char* name : registerNames[index]) if (name && operand == name) return index;
+        }
+        return -1;
+    };
+    auto merge = [](Value left, Value right) {
+        if (left == right) return left;
+        return Value{Kind::Ambiguous, 0, left.mayCreate || right.mayCreate};
+    };
+    std::regex memoryLoad(R"((?:qword ptr )?\[(r\w+)(?:([+-])(0x[0-9a-f]+))?\])");
+    std::map<size_t, bool> creationSlots;
+    auto isCreationSlot = [&](size_t offset) {
+        if (offset >= 0x10000 || offset % alignof(void*)) return false;
+        auto [slot, inserted] = creationSlots.try_emplace(offset, false);
+        if (inserted) {
+            void* method = nullptr;
+            slot->second = ReadProcessMemory(GetCurrentProcess(),
+                static_cast<const std::byte*>(g_switchThumbnailFactoryVftable) + offset,
+                &method, sizeof(method), nullptr) && method == g_createCustomPaintThumbnail;
+        }
+        return slot->second;
+    };
+    std::map<uintptr_t, size_t> addresses;
+    for (size_t index = 0; index < instructions.size(); ++index) addresses.emplace(instructions[index].address, index);
+    // Identify the owner-parent call sites. The special context passes the
+    // adjacent-desktop argument instead; its stack spill is not a member offset.
+    std::map<uintptr_t, size_t> ends;
+    for (size_t index = 0; index < instructions.size(); ++index) ends.emplace(instructions[index].address + instructions[index].length, index);
+    std::vector<std::optional<size_t>> callParents(instructions.size());
+    std::regex parentLoad(R"(mov rdx, (?:qword ptr )?\[)" + owner + R"(\+(0x[0-9a-f]+)\])");
+    std::regex thisArgument(R"(mov rcx, r\w+)");
+    for (size_t index = 0; index < instructions.size(); ++index) {
+        if (!instructions[index].text.starts_with("call ")) continue;
+        auto method = ends.find(instructions[index].address);
+        if (method == ends.end() || !instructions[method->second].text.starts_with("mov rax, ")) continue;
+        auto self = ends.find(instructions[method->second].address);
+        if (self == ends.end() || !std::regex_match(instructions[self->second].text, thisArgument)) continue;
+        auto parent = ends.find(instructions[self->second].address);
+        std::smatch load;
+        if (parent != ends.end() && std::regex_match(instructions[parent->second].text, load, parentLoad)) callParents[index] = std::stoull(load[1], nullptr, 0);
+    }
+    std::vector<std::optional<Registers>> incoming(instructions.size());
+    Registers entry{};
+    entry[1].kind = Kind::Object; // rcx is the gesture object at entry.
+    incoming[0] = entry;
+    std::vector<size_t> pending{0};
+    size_t transfers = 0;
+    while (!pending.empty()) {
+        if (++transfers > instructions.size() * 64) {
+            Wh_Log(L"Factory register analysis budget exceeded");
+            return false;
+        }
+        size_t index = pending.back();
+        pending.pop_back();
+        Registers state = *incoming[index];
+        const std::string& text = instructions[index].text;
+        size_t separator = text.find(' ');
+        std::string opcode = text.substr(0, separator);
+        std::string operands = separator == std::string::npos ? "" : text.substr(separator + 1);
+        size_t comma = operands.find(", ");
+        std::string destination = operands.substr(0, comma);
+        std::string source = comma == std::string::npos ? "" : operands.substr(comma + 2);
+        int targetRegister = registerIndex(destination);
+        int sourceRegister = registerIndex(source);
+        if (opcode == "call") {
+            // Windows x64 calls preserve nonvolatile registers, not their arguments.
+            for (int reg : {0, 1, 2, 8, 9, 10, 11}) state[reg] = {};
+        } else if (opcode == "mov" && targetRegister >= 0) {
+            Value value;
+            std::smatch load;
+            if (destination == registerNames[targetRegister][0]) {
+                if (sourceRegister >= 0 && source == registerNames[sourceRegister][0]) {
+                    value = state[sourceRegister];
+                } else if (std::regex_match(source, load, memoryLoad)) {
+                    int base = registerIndex(load[1]);
+                    intptr_t offset = load[3].matched ? std::stoll(load[3], nullptr, 0) : 0;
+                    if (load[2] == "-") offset = -offset;
+                    if (base >= 0 && offset > -0x10000 && offset < 0x10000) {
+                        Value pointer = state[base];
+                        if (pointer.kind == Kind::Object && offset >= 0) value = {Kind::Member, offset, false};
+                        else if (pointer.kind == Kind::Member && !offset) value = {Kind::Vtable, pointer.offset, false};
+                        else if (pointer.kind == Kind::Vtable && offset >= 0 && isCreationSlot(offset)) value = {Kind::CreationMethod, pointer.offset, true};
+                        else if (pointer.kind == Kind::Ambiguous) {
+                            value = pointer;
+                            value.mayCreate |= offset >= 0 && isCreationSlot(offset);
+                        } else if (pointer.kind == Kind::Unknown && offset >= 0 && isCreationSlot(offset)) value.mayCreate = true;
+                    }
+                }
+            }
+            state[targetRegister] = value;
+        } else if (opcode.starts_with("cmov") && targetRegister >= 0) {
+            Value alternative = sourceRegister >= 0 && source == registerNames[sourceRegister][0] ? state[sourceRegister] : Value{};
+            state[targetRegister] = destination == registerNames[targetRegister][0] ?
+                merge(state[targetRegister], alternative) : Value{};
+        } else if (opcode.starts_with("loop")) {
+            state[1] = {}; // LOOP decrements rcx, unlike an ordinary conditional jump.
+        } else if (opcode == "cmp" || opcode == "test" || opcode == "push" || opcode == "nop" ||
+                   opcode.starts_with('j') || opcode.starts_with("ret") || opcode == "int3" || opcode == "ud2") {
+            // These instructions do not write a tracked pointer register.
+        } else if (opcode == "mul" || opcode == "imul" || opcode == "div" || opcode == "idiv" || opcode == "cpuid" ||
+                   opcode == "xchg" || opcode == "xadd" || opcode.starts_with("cmpxchg")) {
+            state = {}; // Implicit or multiple outputs are outside this narrow analysis.
+        } else if (targetRegister >= 0) {
+            state[targetRegister] = {}; // Includes partial-register writes and arithmetic.
+        } else if (opcode == "mov" || opcode == "movaps" || opcode == "movups" ||
+                   opcode == "movdqa" || opcode == "movdqu" || opcode == "xorps" ||
+                   opcode == "and" || opcode == "or" || opcode == "xor" || opcode == "add" ||
+                   opcode == "sub" || opcode == "inc" || opcode == "dec" || opcode == "lea") {
+            // Memory and SIMD destinations do not replace the pointer registers.
+        } else {
+            state = {}; // Unknown side effects must not preserve a guessed definition.
+        }
+        for (uintptr_t successor : instructions[index].successors) {
+            size_t next = addresses.at(successor);
+            if (!incoming[next]) {
+                incoming[next] = state;
+                pending.push_back(next);
+            } else {
+                bool changed = false;
+                for (size_t reg = 0; reg < state.size(); ++reg) {
+                    Value combined = merge((*incoming[next])[reg], state[reg]);
+                    if (combined != (*incoming[next])[reg]) { (*incoming[next])[reg] = combined; changed = true; }
+                }
+                if (changed) pending.push_back(next);
+            }
+        }
+    }
+    std::optional<intptr_t> factory;
+    std::optional<intptr_t> parent;
+    for (size_t index = 0; index < instructions.size(); ++index) {
+        if (!callParents[index]) continue;
+        const Registers& arguments = *incoming[index];
+        const Value& method = arguments[0];
+        if (!method.mayCreate) continue;
+        if (method.kind == Kind::Ambiguous || arguments[1].kind == Kind::Ambiguous || arguments[2].kind == Kind::Ambiguous) {
+            Wh_Log(L"Ambiguous thumbnail creation arguments at %p", reinterpret_cast<void*>(instructions[index].address));
+            return false;
+        }
+        if (method.kind != Kind::CreationMethod || arguments[1].kind != Kind::Member || arguments[2].kind != Kind::Member) {
+            Wh_Log(L"Unverified thumbnail creation arguments at %p", reinterpret_cast<void*>(instructions[index].address));
+            return false;
+        }
+        if (arguments[1].offset != method.offset || arguments[2].offset != static_cast<intptr_t>(*callParents[index]) ||
+            (factory && *factory != method.offset) || (parent && *parent != arguments[2].offset)) {
+            Wh_Log(L"Conflicting factory or parent definitions at thumbnail creation");
+            return false;
+        }
+        factory = method.offset;
+        parent = arguments[2].offset;
+    }
+    if (!factory || !parent) {
+        Wh_Log(L"Thumbnail creation arguments not recognized");
+        return false;
+    }
+    factoryOffset = static_cast<size_t>(*factory);
+    parentOffset = static_cast<size_t>(*parent);
+    return true;
+}
+
+bool DiscoverGestureLayout(void* bitmapResult, void* initialize, void* addThumbnail,
+                           GestureLayout& layout) {
+    // Windhawk can retain its entry-point redirection after a hook is removed.
+    // Decode the matching on-disk image, without running its code or following hooks.
+    // Unwind boundaries and discovered member offsets still refer to the loaded DLL.
+    DWORD64 imageBase = 0;
+    if (!RtlLookupFunctionEntry(reinterpret_cast<DWORD64>(bitmapResult), &imageBase, nullptr)) return false;
+    wchar_t modulePath[MAX_PATH]{};
+    DWORD pathLength = GetModuleFileNameW(reinterpret_cast<HMODULE>(imageBase), modulePath, ARRAYSIZE(modulePath));
+    if (!pathLength || pathLength >= ARRAYSIZE(modulePath)) return false;
+    struct NativeImage {
+        HANDLE file = INVALID_HANDLE_VALUE;
+        HANDLE mapping = nullptr;
+        void* view = nullptr;
+        ~NativeImage() {
+            if (view) UnmapViewOfFile(view);
+            if (mapping) CloseHandle(mapping);
+            if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
+        }
+    } native;
+    native.file = CreateFileW(modulePath, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                              nullptr, OPEN_EXISTING, 0, nullptr);
+    if (native.file != INVALID_HANDLE_VALUE) {
+        native.mapping = CreateFileMappingW(native.file, nullptr, PAGE_READONLY | SEC_IMAGE_NO_EXECUTE, 0, 0, nullptr);
+        if (native.mapping) native.view = MapViewOfFile(native.mapping, FILE_MAP_READ, 0, 0, 0);
+    }
+    if (!native.view) {
+        Wh_Log(L"Unable to map native shell code: %lu", GetLastError());
+        return false;
+    }
+    std::string code[3];
+    std::vector<NativeInstruction> graphs[3];
+    void* functions[]{bitmapResult, initialize, addThumbnail};
+    const wchar_t* methodNames[]{L"GetTrayBitmapResult", L"Initialize", L"AddThumbnailToThumbnailCollection"};
+    const size_t limits[]{1024, 2048, 512};
+    for (size_t index = 0; index < ARRAYSIZE(functions); ++index) {
+        if (!ReadFunctionControlFlow(functions[index], limits[index], graphs[index], native.view)) {
+            Wh_Log(L"Control-flow discovery failed for %s", methodNames[index]);
+            return false;
+        }
+        uintptr_t previousEnd = 0;
+        for (const auto& instruction : graphs[index]) {
+            // Keep disjoint paths from forming an artificial multi-instruction match.
+            if (previousEnd != instruction.address) code[index] += "#;";
+            code[index] += instruction.text + ';';
+            previousEnd = instruction.address + instruction.length;
+            if (instruction.text.starts_with("jmp ") || instruction.text.starts_with("ret")) previousEnd = 0;
         }
     }
     auto offsetFrom = [](const std::string& instructions, const std::string& pattern,
@@ -139,66 +494,11 @@ bool DiscoverGestureLayout(void* bitmapResult, void* initialize, void* addThumbn
         return false;
     }
 
-    // Example: mov rdx, [rsi+0xA0]; mov rcx, rdi; mov rax, [rbx+0x48]; call ...
-    // These are the parent, factory, and method used to create the bitmap layer.
-    // Verify the method against its symbol before accepting the member offsets.
-    std::optional<size_t> factory;
-    std::optional<size_t> parent;
-    std::regex creationCall(R"(mov rdx, (?:qword ptr )?)" + ownerMember +
-        R"(;mov rcx, (r\w+);mov rax, ([^;]+);call (?:0x[0-9a-f]+|\[0x[0-9a-f]+\]);)");
-    for (auto call = std::sregex_iterator(code[0].begin(), code[0].end(), creationCall);
-         call != std::sregex_iterator(); ++call) {
-        std::string beforeCall = code[0].substr(0, call->position());
-        std::string targetOperand = (*call)[3];
-        std::smatch slotLoad;
-        if (!std::regex_match(targetOperand, slotLoad,
-                std::regex(R"((?:qword ptr )?\[(r\w+)\+(0x[0-9a-f]+)\])"))) {
-            if (!std::regex_match(targetOperand, std::regex(R"(r\w+)"))) continue;
-            // Older builds load the method earlier, then use mov rax, rbx here.
-            std::regex savedMethodLoad("mov " + targetOperand + R"(, ((?:qword ptr )?\[r\w+\+0x[0-9a-f]+\]);)");
-            std::optional<size_t> methodPosition;
-            for (auto load = std::sregex_iterator(beforeCall.begin(), beforeCall.end(), savedMethodLoad);
-                 load != std::sregex_iterator(); ++load) {
-                methodPosition = load->position();
-                targetOperand = (*load)[1];
-            }
-            if (!methodPosition || !std::regex_match(targetOperand, slotLoad,
-                    std::regex(R"((?:qword ptr )?\[(r\w+)\+(0x[0-9a-f]+)\])"))) continue;
-            beforeCall.resize(*methodPosition);
-        }
-        size_t slotOffset = std::stoull(slotLoad[2], nullptr, 0);
-        void* slotMethod = nullptr;
-        if (slotOffset >= 0x10000 || slotOffset % alignof(void*) ||
-            !ReadProcessMemory(GetCurrentProcess(),
-                static_cast<const std::byte*>(g_switchThumbnailFactoryVftable) + slotOffset,
-                &slotMethod, sizeof(slotMethod), nullptr) ||
-            slotMethod != g_createCustomPaintThumbnail) continue;
-
-        // Example: mov rdi, [rsi+0x38]; mov rbx, [rdi].
-        // Trace the call's vtable back to the factory member.
-        std::regex vtableLoad("mov " + slotLoad[1].str() + R"(, (?:qword ptr )?\[)" + (*call)[2].str() + R"(\];)");
-        std::optional<size_t> vtablePosition;
-        for (auto load = std::sregex_iterator(beforeCall.begin(), beforeCall.end(), vtableLoad);
-             load != std::sregex_iterator(); ++load) vtablePosition = load->position();
-        if (!vtablePosition) continue;
-        const std::string beforeVtable = beforeCall.substr(0, *vtablePosition);
-        std::regex factoryLoad("mov " + (*call)[2].str() + R"(, (?:qword ptr )?)" + ownerMember + ';');
-        std::optional<size_t> factoryOffset;
-        for (auto load = std::sregex_iterator(beforeVtable.begin(), beforeVtable.end(), factoryLoad);
-             load != std::sregex_iterator(); ++load) factoryOffset = std::stoull((*load)[1], nullptr, 0);
-        if (!factoryOffset) continue;
-        size_t parentOffset = std::stoull((*call)[1], nullptr, 0);
-        if ((factory && *factory != *factoryOffset) || (parent && *parent != parentOffset)) {
-            Wh_Log(L"Conflicting factory or parent offsets in thumbnail creation calls");
-            return false;
-        }
-        factory = factoryOffset;
-        parent = parentOffset;
-    }
-    if (!factory || !parent) {
-        Wh_Log(L"Thumbnail creation call or factory member load not recognized");
-        return false;
-    }
+    size_t factoryOffset = 0;
+    size_t parentOffset = 0;
+    if (!FindCreationMembers(graphs[0], factoryOffset, parentOffset, owner)) return false;
+    std::optional<size_t> factory = factoryOffset;
+    std::optional<size_t> parent = parentOffset;
     size_t customPaint = SIZE_MAX;
     std::smatch flag;
     // Example: lea r13, [rsi+0xE0]; ...; cmp [r13], bl.
