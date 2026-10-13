@@ -2,12 +2,104 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-12T23:01:19.000Z</updated>
+    <updated>2026-10-13T06:00:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[App Owned Frame 1.44]]></title>
+        <id>https://windhawk.net/mods/app-owned-frame#6f0a3b091c1e1f00b0fed647227a52a9f9af5313</id>
+        <link href="https://windhawk.net/mods/app-owned-frame"/>
+        <updated>2026-10-13T06:00:16.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="appownedframe">App Owned Frame</h1>
+<p>Some applications draw their own title bar. With the Windows classic theme,
+they can show an extra white border or a second system title bar. When maximized,
+their hidden frame edges can also become visible on the neighbouring monitor.</p>
+<p>This mod keeps the application's own frame and restores normal maximized-window
+clipping. It does not remove resizable-window styles, replace the application's
+buttons, change the client layout or run its own resize loop.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Windows 11, build 22000 or later, and Windhawk 1.7.3 or later.</li>
+<li>An already enabled classic theme, for example
+<a href="https://windhawk.net/mods/classic-theme-enable">Classic Theme</a> or
+<a href="https://windhawk.net/mods/classic-theme-enable-with-extended-compatibility">Classic Theme Enable with extended compatibility</a>.
+This mod is a compatibility fix, not a classic-theme enabler.</li>
+</ul>
+<h2 id="defaultapplicationprofiles">Default application profiles</h2>
+<p>| Application | Default treatment |
+| --- | --- |
+| Discord | Remove the extra white frame; use the normal resize cursor with wider grips. |
+| ChatGPT and Claude | Fix the outer frame and maximized clipping without loading this mod into the app. |
+| Photoshop | Keep its own title bar and prepare it during startup. |
+| DaVinci Resolve | Keep its own title bar and colour a remaining resize gutter to match the dark UI. |</p>
+<p>These profiles were tested on the submitter's setup. App updates, Windows
+versions and other frame/DPI mods can affect the result.</p>
+<p>The dedicated helper and the in-process application hooks share one mod source.
+Windhawk 1.7.3 is the runtime tested on this setup; Windhawk 2.0 alpha has not
+yet been runtime-tested with this combined configuration.</p>
+<h2 id="addingorexcludinganapplication">Adding or excluding an application</h2>
+<ol>
+<li>Open this mod's <strong>Settings</strong> tab and add the executable filename or full path
+under <strong>Applications with their own frame</strong>. Wildcards <code>*</code> and <code>?</code> are supported.</li>
+<li>Leave <strong>Frame geometry</strong> on <strong>Automatic</strong> initially. Use <strong>Off</strong> to exclude an
+entry without deleting it. Only main resizable windows with an app-drawn title
+bar are handled; ordinary Windows captions, dialogs and tool windows are skipped.</li>
+<li>For an extra classic title bar like Photoshop or Resolve, enable
+<strong>Use the application's own title bar</strong>. Open this mod's <strong>Advanced</strong> tab,
+add the executable to the <strong>Custom process inclusion list</strong>, and save.</li>
+<li>For Chromium/Electron apps, <strong>Native resize hit testing</strong> is optional and also
+requires that Advanced inclusion entry. Enable it only after testing the app.
+Discord is included by default. Do not add Claude or ChatGPT to that list
+merely to fix their border; their default profiles intentionally stay external.</li>
+</ol>
+<p>The application list chooses which windows to treat. The Advanced inclusion
+list is needed only for features which load code into the application.
+When an enabled feature needs different hooks, saving settings reloads this
+mod in that process. Changing the grip size or colour does not require an app restart.</p>
+<h2 id="easierresizing">Easier resizing</h2>
+<p><strong>Easier resizing from all corners and edges</strong> widens the grab areas without
+drawing a frame. All four corners use the same size; edges use half that size.
+The size is in pixels at 100% scale and is adjusted for the window's monitor.</p>
+<p>Discord's native mode provides the usual hover resize cursor. For external-only
+apps the cursor changes when the drag starts, not while hovering. Larger grips
+extend into the window and can overlap the edge of a scrollbar or caption button;
+reduce the size or disable wider grips if this makes an app control hard to click.</p>
+<h2 id="otheroptionsandlimitations">Other options and limitations</h2>
+<ul>
+<li><strong>Residual resize gutter color</strong> paints only the remaining frame gutter, not
+client content. Resolve defaults to <code>#17181a</code>; leave it empty to disable.</li>
+<li><strong>Prepare the custom title bar at startup</strong> is enabled for Photoshop. Other
+apps must opt in after testing. It takes priority over the experimental
+<strong>Delegate caption painting to DWM</strong> option.</li>
+<li><strong>Remove system backdrop from the frame</strong> is for a remaining bright material
+edge and requires Windows 11 build 22621 or later.</li>
+<li>The external correction runs in a dedicated Windhawk process, not Explorer.
+A clean disable restores captured values. Scalar rollback data stays on each
+window if that helper crashes; reloading the mod recovers it after validating
+the application and former helper process identities. Unreadable original
+border/caption colours return to the system default.</li>
+<li>This does not fix unrelated application rendering bugs, DPI-projection bugs
+or conflicts with another mod which keeps rewriting the same frame state.
+No application/system light or dark setting is changed.</li>
+</ul>
+<h2 id="screenshots">Screenshots</h2>
+<p>Before: without the mod. After: with the mod. Provided by the submitter.</p>
+<h3 id="discord">Discord</h3>
+<p>| Before | After |
+| --- | --- |
+| <img src="https://raw.githubusercontent.com/appEW/windhawk-mods/1e9ac8a344e1c10d659226d0cb77f9eca7134042/beforeDS.png" alt="Discord without the mod" /> | <img src="https://raw.githubusercontent.com/appEW/windhawk-mods/1e9ac8a344e1c10d659226d0cb77f9eca7134042/afterDS.png" alt="Discord with the mod" /> |</p>
+<h3 id="photoshop">Photoshop</h3>
+<p>| Before | After |
+| --- | --- |
+| <img src="https://raw.githubusercontent.com/appEW/windhawk-mods/1e9ac8a344e1c10d659226d0cb77f9eca7134042/beforePH.png" alt="Photoshop without the mod" /> | <img src="https://raw.githubusercontent.com/appEW/windhawk-mods/1e9ac8a344e1c10d659226d0cb77f9eca7134042/afterPH.png" alt="Photoshop with the mod" /> |</p>]]></content>
+        <author>
+            <name>appEW</name>
+            <uri>https://github.com/appEW</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cursor Idle Fade 1.0.0]]></title>
         <id>https://windhawk.net/mods/cursor-idle-fade#8d60b4c4113a7f0a18b4b48a5443a199acf54805</id>
@@ -985,22 +1077,6 @@ Windhawk debug logging and check for initialization or compatibility errors.</p>
         <author>
             <name>ArvindSaini978</name>
             <uri>https://github.com/ArvindSaini978</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Picker 1.5.7]]></title>
-        <id>https://windhawk.net/mods/explorer-picker#75cac23324554c3245b5e197a2daa204ebcbb939</id>
-        <link href="https://windhawk.net/mods/explorer-picker"/>
-        <updated>2026-10-11T13:03:18.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Grant foreground permission to the process that owns the completed Explorer picker, and back to the application before confirmation, control changes or cancellation and after overwrite/warning prompts; assign initial focus before delivering application callbacks.</li>
-<li>Retain IFileDialogEvents and Unicode Win32 initialization/completion hooks with the risky option enabled, so applications which open/save inside OnFileOk or CDN_FILEOK still perform their operation.</li>
-<li>Keep fully supported controls and native panels. Clarify that incompatible optional features can omit the whole extra application UI, while completion events, acceptance vetoes and retained values remain available.</li>
-<li>Retain native fallback for ANSI hooks/templates and Unicode callback contracts which cannot be represented. Remove unreachable plain-dialog hook/template allowances. Update the English/Russian option description and readme.</li>
-</ul>]]></content>
-        <author>
-            <name>appEW</name>
-            <uri>https://github.com/appEW</uri>
         </author>
     </entry>
 </feed>

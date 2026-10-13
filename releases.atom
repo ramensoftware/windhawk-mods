@@ -2,12 +2,104 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-12T23:01:19.000Z</updated>
+    <updated>2026-10-13T06:00:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[App Owned Frame 1.44]]></title>
+        <id>https://windhawk.net/mods/app-owned-frame#6f0a3b091c1e1f00b0fed647227a52a9f9af5313</id>
+        <link href="https://windhawk.net/mods/app-owned-frame"/>
+        <updated>2026-10-13T06:00:16.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="appownedframe">App Owned Frame</h1>
+<p>Some applications draw their own title bar. With the Windows classic theme,
+they can show an extra white border or a second system title bar. When maximized,
+their hidden frame edges can also become visible on the neighbouring monitor.</p>
+<p>This mod keeps the application's own frame and restores normal maximized-window
+clipping. It does not remove resizable-window styles, replace the application's
+buttons, change the client layout or run its own resize loop.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Windows 11, build 22000 or later, and Windhawk 1.7.3 or later.</li>
+<li>An already enabled classic theme, for example
+<a href="https://windhawk.net/mods/classic-theme-enable">Classic Theme</a> or
+<a href="https://windhawk.net/mods/classic-theme-enable-with-extended-compatibility">Classic Theme Enable with extended compatibility</a>.
+This mod is a compatibility fix, not a classic-theme enabler.</li>
+</ul>
+<h2 id="defaultapplicationprofiles">Default application profiles</h2>
+<p>| Application | Default treatment |
+| --- | --- |
+| Discord | Remove the extra white frame; use the normal resize cursor with wider grips. |
+| ChatGPT and Claude | Fix the outer frame and maximized clipping without loading this mod into the app. |
+| Photoshop | Keep its own title bar and prepare it during startup. |
+| DaVinci Resolve | Keep its own title bar and colour a remaining resize gutter to match the dark UI. |</p>
+<p>These profiles were tested on the submitter's setup. App updates, Windows
+versions and other frame/DPI mods can affect the result.</p>
+<p>The dedicated helper and the in-process application hooks share one mod source.
+Windhawk 1.7.3 is the runtime tested on this setup; Windhawk 2.0 alpha has not
+yet been runtime-tested with this combined configuration.</p>
+<h2 id="addingorexcludinganapplication">Adding or excluding an application</h2>
+<ol>
+<li>Open this mod's <strong>Settings</strong> tab and add the executable filename or full path
+under <strong>Applications with their own frame</strong>. Wildcards <code>*</code> and <code>?</code> are supported.</li>
+<li>Leave <strong>Frame geometry</strong> on <strong>Automatic</strong> initially. Use <strong>Off</strong> to exclude an
+entry without deleting it. Only main resizable windows with an app-drawn title
+bar are handled; ordinary Windows captions, dialogs and tool windows are skipped.</li>
+<li>For an extra classic title bar like Photoshop or Resolve, enable
+<strong>Use the application's own title bar</strong>. Open this mod's <strong>Advanced</strong> tab,
+add the executable to the <strong>Custom process inclusion list</strong>, and save.</li>
+<li>For Chromium/Electron apps, <strong>Native resize hit testing</strong> is optional and also
+requires that Advanced inclusion entry. Enable it only after testing the app.
+Discord is included by default. Do not add Claude or ChatGPT to that list
+merely to fix their border; their default profiles intentionally stay external.</li>
+</ol>
+<p>The application list chooses which windows to treat. The Advanced inclusion
+list is needed only for features which load code into the application.
+When an enabled feature needs different hooks, saving settings reloads this
+mod in that process. Changing the grip size or colour does not require an app restart.</p>
+<h2 id="easierresizing">Easier resizing</h2>
+<p><strong>Easier resizing from all corners and edges</strong> widens the grab areas without
+drawing a frame. All four corners use the same size; edges use half that size.
+The size is in pixels at 100% scale and is adjusted for the window's monitor.</p>
+<p>Discord's native mode provides the usual hover resize cursor. For external-only
+apps the cursor changes when the drag starts, not while hovering. Larger grips
+extend into the window and can overlap the edge of a scrollbar or caption button;
+reduce the size or disable wider grips if this makes an app control hard to click.</p>
+<h2 id="otheroptionsandlimitations">Other options and limitations</h2>
+<ul>
+<li><strong>Residual resize gutter color</strong> paints only the remaining frame gutter, not
+client content. Resolve defaults to <code>#17181a</code>; leave it empty to disable.</li>
+<li><strong>Prepare the custom title bar at startup</strong> is enabled for Photoshop. Other
+apps must opt in after testing. It takes priority over the experimental
+<strong>Delegate caption painting to DWM</strong> option.</li>
+<li><strong>Remove system backdrop from the frame</strong> is for a remaining bright material
+edge and requires Windows 11 build 22621 or later.</li>
+<li>The external correction runs in a dedicated Windhawk process, not Explorer.
+A clean disable restores captured values. Scalar rollback data stays on each
+window if that helper crashes; reloading the mod recovers it after validating
+the application and former helper process identities. Unreadable original
+border/caption colours return to the system default.</li>
+<li>This does not fix unrelated application rendering bugs, DPI-projection bugs
+or conflicts with another mod which keeps rewriting the same frame state.
+No application/system light or dark setting is changed.</li>
+</ul>
+<h2 id="screenshots">Screenshots</h2>
+<p>Before: without the mod. After: with the mod. Provided by the submitter.</p>
+<h3 id="discord">Discord</h3>
+<p>| Before | After |
+| --- | --- |
+| <img src="https://raw.githubusercontent.com/appEW/windhawk-mods/1e9ac8a344e1c10d659226d0cb77f9eca7134042/beforeDS.png" alt="Discord without the mod" /> | <img src="https://raw.githubusercontent.com/appEW/windhawk-mods/1e9ac8a344e1c10d659226d0cb77f9eca7134042/afterDS.png" alt="Discord with the mod" /> |</p>
+<h3 id="photoshop">Photoshop</h3>
+<p>| Before | After |
+| --- | --- |
+| <img src="https://raw.githubusercontent.com/appEW/windhawk-mods/1e9ac8a344e1c10d659226d0cb77f9eca7134042/beforePH.png" alt="Photoshop without the mod" /> | <img src="https://raw.githubusercontent.com/appEW/windhawk-mods/1e9ac8a344e1c10d659226d0cb77f9eca7134042/afterPH.png" alt="Photoshop with the mod" /> |</p>]]></content>
+        <author>
+            <name>appEW</name>
+            <uri>https://github.com/appEW</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cursor Idle Fade 1.0.0]]></title>
         <id>https://windhawk.net/mods/cursor-idle-fade#8d60b4c4113a7f0a18b4b48a5443a199acf54805</id>
@@ -1588,52 +1680,6 @@ flyout opened in that process will not be held open. Use an x64 Windows if you n
 folder this mod shares, and whose tray-module loading it follows</li>
 <li>ExplorerPatcher (by valinet) - research for the Windows 10 flyouts running on Windows 11</li>
 </ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 Alt+Tab Restorer on Windows 11 1.0.0]]></title>
-        <id>https://windhawk.net/mods/windows-10-alt-tab-restorer#27544c27d9f89ef5ed88d77d4178f8c7aab6050c</id>
-        <link href="https://windhawk.net/mods/windows-10-alt-tab-restorer"/>
-        <updated>2026-10-10T15:04:26.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows10alttabrestorer">Windows 10 Alt+Tab Restorer</h1>
-<p>This mod restores the classic Windows 10 Alt+Tab switcher on Windows 11. This mod has been tested on Windows 11 24H2 and may function on other versions. If not, please open an issue to inform the author about it so that the mod can be enhanced.</p>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/alttab.png" alt="Screenshot" /></p>
-<h2 id="whatitdoes">What it does</h2>
-<ul>
-<li>It restores the native Windows 10 Alt+Tab switcher when you press Alt+Tab.</li>
-<li>It uses the built-in Windows components, so no custom window or panel is drawn.</li>
-<li>It does not install a global keyboard hook.</li>
-<li>It does not write to the Windows registry. The only thing it stores is a small crash-guard value in Windhawk's own mod storage (see below).</li>
-</ul>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li>Windows 11</li>
-<li>64-bit <code>explorer.exe</code>.</li>
-<li>Windhawk installed.</li>
-</ul>
-<h2 id="howtouse">How to use</h2>
-<ol>
-<li>Install the mod in Windhawk and enable it.</li>
-<li>Press Alt+Tab. The Windows 10 style switcher should appear.</li>
-<li>To remove it, disable or uninstall the mod in Windhawk.</li>
-</ol>
-<h2 id="crashguard">Crash guard</h2>
-<p>Before the mod asks the shell to create the Windows 10 switcher, it records a marker in Windhawk's mod storage and clears it right after the call. If <code>explorer.exe</code> crashes while the switcher is being created, the marker is still set at the next start. The mod then stays disabled for that exact build of <code>twinui.pcshell.dll</code> and leaves the stock Alt+Tab alone, so that a bad build can never put the shell in a crash loop. A Windows update that replaces <code>twinui.pcshell.dll</code> re-enables the mod automatically. To re-enable it by hand, turn on <strong>Reset crash guard</strong> in the settings, restart the mod, then turn the option off again.</p>
-<h2 id="windows10explorerexe">Windows 10 explorer.exe</h2>
-<p>When the mod runs inside a Windows 10 <code>explorer.exe</code> that was placed in the Windhawk <code>LegacyStore</code> folder (for example by the <em>Win10 taskbar on Win11 24H2 or 25H2</em> mod), it is detected automatically and the call-site fallback is always used, whatever the setting below says.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Do not use this mod together with another Alt+Tab replacement mod.</li>
-<li>The mod only targets <code>explorer.exe</code> and only affects the Alt+Tab switcher.</li>
-<li>While the mod is active it answers reads of <code>HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\AltTabSettings</code> with 0, so the mod takes precedence over that setting. For the same reason it conflicts with the <strong>Legacy Alt+Tab dialog</strong> mod: enable one or the other.</li>
-<li>At start-up the mod logs the Windows build and the identity of <code>twinui.pcshell.dll</code>. Please include these lines when you report a problem.</li>
-<li>If Alt+Tab does not change, check the Windhawk log for the entries of this mod and open an issue to notify the author of the modification about the problem.</li>
-</ul>
-<p>The gate hook and the XAML to DirectComposition host redirect are the approach used by <a href="https://github.com/valinet/ExplorerPatcher">ExplorerPatcher</a> by valinet.</p>]]></content>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
