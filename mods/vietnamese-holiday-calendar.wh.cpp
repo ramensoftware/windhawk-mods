@@ -4,7 +4,7 @@
 // @name:vi-VN          Lịch nghỉ lễ Việt Nam
 // @description         Vietnamese lunar dates and configurable holidays in the Windows 11 calendar
 // @description:vi-VN   Hiển thị ngày âm Việt Nam và ngày nghỉ tùy chỉnh trong lịch Windows 11
-// @version             0.28
+// @version             0.29
 // @author              Van Truong
 // @github              https://github.com/vantruong-dev
 // @include             ShellExperienceHost.exe
@@ -17,10 +17,12 @@
 // ==WindhawkModReadme==
 /*
 # Lịch âm và ngày nghỉ Việt Nam
+![Vietnamese Holiday Calendar View](https://ibb.co/vvPCH4rG)
+
 
 Mod hiển thị ngày âm Việt Nam (UTC+7) trong lịch Windows 11 và lấy ngày nghỉ từ URL iCalendar (`.ics`) bạn cấu hình. Bạn có thể tô màu ngày nghỉ, hiện tên sự kiện khi rê chuột và tùy chọn thay dòng ngày âm bằng tên hoặc nội dung riêng.
 
-- **Mọi sự kiện có `DTSTART` hợp lệ trong ICS đều được coi là ngày nghỉ.** Không cần dấu `(nghỉ)`, `(làm)` hay bất kỳ từ khóa nào trong tiêu đề.
+- **Mọi sự kiện có `DTSTART` hợp lệ trong ICS đều được coi là ngày nghỉ.**
 - `SUMMARY` chỉ dùng làm tên hiển thị và nội dung tooltip; nó không quyết định sự kiện có phải ngày nghỉ hay không. Nếu thiếu `SUMMARY`, tooltip và dòng thay thế dùng nội dung “Ngày nghỉ”.
 - Bật **Show additional calendars in the taskbar** trong Windows để hiện ngày âm dưới ngày dương.
 - Rê chuột lên ngày nghỉ để xem tên sự kiện; có thể tắt tooltip trong cài đặt mod.
@@ -106,9 +108,9 @@ The calendar window lookup follows lonfro's [Agenda in Calendar View](https://gi
   $description:vi-VN: >-
     Nội dung hiện trên ngày có sự kiện ICS khi thay dòng ngày âm. Để trống để dùng tiêu đề sự kiện;
     dùng {name} để chèn tiêu đề vào nội dung riêng, ví dụ "Nghỉ lễ: {name}".
-- offDayColor: "4EA1FF"
-  $name: Day-off colour (RRGGBB or AARRGGBB)
-  $name:vi-VN: Màu số ngày dương của ngày nghỉ (RRGGBB hoặc AARRGGBB)
+- offDayColor: "#4EA1FF"
+  $name: Day-off colour (#RRGGBB or #AARRGGBB)
+  $name:vi-VN: Màu số ngày dương của ngày nghỉ (#RRGGBB hoặc #AARRGGBB)
   $description: Colour used for the Gregorian day number on ICS holidays.
   $description:vi-VN: Màu áp dụng cho số ngày dương có sự kiện ICS.
   #! $format: colorRgb
