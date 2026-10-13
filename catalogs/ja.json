@@ -6354,6 +6354,34 @@
         "version": "1.0.1"
       }
     },
+    "explorer-zebra-stripes": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791918179000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791918179000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "DarkionAvey",
+        "compilerOptions": "-luser32 -lgdi32 -ladvapi32 -ldwmapi",
+        "description": "Add stripes for Details and List items in File Explorer",
+        "github": "https://github.com/DarkionAvey",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "WTFPL",
+        "name": "Explorer List Zebra Stripes",
+        "version": "0.13.0"
+      }
+    },
     "explorerframe-fixes-for-win11-22h2plus": {
       "details": {
         "defaultSorting": 15849,
