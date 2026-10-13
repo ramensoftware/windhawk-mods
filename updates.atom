@@ -2,12 +2,51 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-13T07:01:11.000Z</updated>
+    <updated>2026-10-13T10:03:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Mond Desktop Clock 3.5]]></title>
+        <id>https://windhawk.net/mods/mond-desktop-clock#d546070d720a18714a4dba2eb05c936b2227ea51</id>
+        <link href="https://windhawk.net/mods/mond-desktop-clock"/>
+        <updated>2026-10-13T10:03:45.000Z</updated>
+        <content type="html"><![CDATA[<p>A universal desktop clock widget inspired by the <a href="https://www.deviantart.com/hiphopium">Mond Rainmeter skin by HipHopium</a>. It runs in a dedicated tool process, not in Explorer.</p>
+<hr />
+<p><strong>Differentiating Feature Set</strong>
+While many desk clock widgets offer customizable styles, Mond provides unparalleled granular control over every character. Unlike standard overlays, we allow for <strong>per-letter customization</strong>, letting you set unique colors and shadows for individual characters within the day, date, or time (e.g., coloring only the 'S' in September). This level of detail, combined with multi-row support and precise offset controls, makes Mond a highly flexible styling tool.</p>
+<hr />
+<p>The clock shows the weekday, date, and time in three independently styled rows. Drag it to position it; enable position locking to prevent accidental movement.</p>
+<p><img src="https://i.imgur.com/dj71eKl.png" alt="Mond Desktop Clock on the desktop" /></p>
+<p><img src="https://i.imgur.com/ux3bwti.png" alt="Mond Desktop Clock alternate layout" /></p>
+<p><strong>Key Features & Advanced Customization:</strong></p>
+<ul>
+<li><strong>Three Independent Rows:</strong> Display Weekday, Date, and Time in separate, independently configurable rows.</li>
+<li><strong>Granular Letter Control:</strong> Set individual colors and shadow offsets for every single character in the day, date, or time.</li>
+<li><strong>Advanced Typography:</strong> Full control over font families (Quicksand, Anurati, etc.), size, bold/italic styling, letter spacing, and per-row horizontal offsets.</li>
+<li><strong>Layout Flexibility:</strong> Select a "Main Heading" row to automatically reorder the display (e.g., Date on top, Weekday below).</li>
+<li><strong>Position Management:</strong> Drag-and-drop placement with saved positions shared across all monitors connected to your PC.</li>
+</ul>
+<p><strong>Styling & Fonts:</strong>
+Fonts must be installed in Windows. Missing fonts are silently substituted by Windows. We support advanced typography using:</p>
+<ul>
+<li><a href="https://fonts.google.com/specimen/Quicksand">Quicksand</a></li>
+<li><a href="https://www.dafont.com/anurati.font">Anurati</a></li>
+</ul>
+<p><strong>Coloring & Formatting:</strong></p>
+<ul>
+<li>Separate text and shadow colors are available for the overall row, but individual letter overrides take precedence.</li>
+<li>Per-letter styles are indexed by 1-based character position from left to right (including spaces).</li>
+<li>The date displays without a comma.</li>
+<li>Colours accept <code>#RRGGBB</code> or <code>#AARRGGBB</code>; the alpha component in the latter form is ignored.</li>
+</ul>]]></content>
+        <author>
+            <name>Elmidin Mahmud</name>
+            <uri>https://github.com/elmidin</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Window Wobble 1.0.0]]></title>
         <id>https://windhawk.net/mods/window-wobble#9674ac4e7339530fdd264f1ee8424e8afabc249f</id>
@@ -1158,48 +1197,6 @@ Windhawk debug logging and check for initialization or compatibility errors.</p>
         <author>
             <name>iMAboud</name>
             <uri>https://github.com/iMAboud</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Control Center Buttons 1.0.0]]></title>
-        <id>https://windhawk.net/mods/windows-11-control-center-buttons#4a5ac03d9dd76ed8af9db1980382c5ff182b6755</id>
-        <link href="https://windhawk.net/mods/windows-11-control-center-buttons"/>
-        <updated>2026-10-11T19:00:50.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows11controlcenterbuttons">Windows 11 Control Center Buttons</h1>
-<p>• <strong><a href="https://github.com/Salyts/Windows-11-Control-Center-Buttons/issues">Report a bug or suggest a feature</a></strong> · <strong><a href="https://discord.com/channels/923944342991818753/1558419938820227123">Discussion on Discord</a></strong> · <strong><a href="https://ko-fi.com/salyts">Support</a></strong></p>
-<p>Removes the stock <strong>Settings (gear)</strong> button from the bottom bar of the Windows 11 Control Center panel and puts your own buttons there instead.</p>
-<p>Actions are run by a dedicated Windhawk tool-mod process (<code>windhawk.exe -tool-mod</code>), the panel host sends the click to a tiny hidden window inside that process, which runs the command.</p>
-<p>| Before | After |
-|--------|---------|
-| <img src="https://i.imgur.com/ILoCB2R.png" alt="before" /> | <img src="https://i.imgur.com/R7ET89k.png" alt="after" /> |</p>
-<h2 id="buttonfields">Button fields</h2>
-<p>| Field | Description |
-|---|---|
-| <strong>Preset</strong> | Ready-made button. Set <code>Custom</code> to define your own. |
-| <strong>Name</strong> | Tooltip. Empty on presets = default name. |
-| <strong>Icon</strong> | Segoe Fluent glyph (<code>E713</code> or <code>\uE713</code>), image path (PNG/ICO/JPG/BMP/WEBP) or <code>.exe</code>/<code>.dll</code> path to take the icon from. |
-| <strong>Action</strong> | Used for <code>Custom</code>. One or several commands, run in order. |
-| <strong>Left-click submenu</strong> | Menu opened on left click (replaces Action). |
-| <strong>Right-click submenu</strong> | Menu opened on right click. |</p>
-<h2 id="actionformats">Action formats</h2>
-<p>| Prefix | Example | Description |
-|--------|---------|-------------|
-| <code>" "</code> | <code>"C:\Program Files\Windhawk\windhawk.exe"</code> | Opens a file or folder by absolute path. |
-| <code>~</code> | <code>~Downloads</code> or <code>~windhawk.exe</code> | Opens a folder or file by name. |
-| <code>cmd:</code> | <code>cmd:control</code> | Runs a command through <code>cmd.exe</code>. |
-| <code>ps:</code> or <code>powershell:</code> | <code>ps:shutdown /r /f /t 0</code> | Runs through <code>powershell.exe</code> |
-| <code>press:</code> | <code>press:Win+E</code> or <code>press:0x5B;0x45</code> | Keyboard key press using <a href="https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes">Win32 key code</a>. |
-| <code>web:</code> | <code>web:https://windhawk.net/</code> | Opens a URL in the default browser. |
-| <code>ms-settings:</code> | <code>ms-settings:bluetooth</code> | Opens a Windows Settings page. |</p>
-<h3 id="modifiersignsprependtoanyaction">Modifier signs (prepend to any action)</h3>
-<p>| Sign | Example | Description |
-|------|---------|-------------|
-| <code>-</code> | <code>-"C:\Program Files\app.exe"</code> or <code>-ps:shutdown /r /f /t 0</code> | Runs as administrator. |
-| <code>*</code> | <code>*cmd:tasklist</code> or <code>*ps:Get-Process</code> | Execution with a terminal window. (only for <code>cmd:</code> and <code>ps:</code> prefixes). |</p>
-<p>Signs can be combined: <code>-*cmd:tasklist</code> runs cmd in a visible window as admin.</p>]]></content>
-        <author>
-            <name>Salyts</name>
-            <uri>https://github.com/Salyts</uri>
         </author>
     </entry>
 </feed>
