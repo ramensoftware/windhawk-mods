@@ -89,6 +89,8 @@ You can assign any hotkey directly to built-in commands by setting the path to o
 | `internal:openTerminalAdmin` | `Ctrl + Shift + Alt + T` | Opens Terminal/PowerShell as Administrator. |
 | `internal:openCmd` | — | Opens the classic Command Prompt in the folder. |
 | `internal:openCmdAdmin` | — | Opens the classic Command Prompt as Administrator. |
+| `internal:openDirInCode` | — | Opens the active directory in VS Code as a workspace project, ignoring selections. |
+| `internal:openWithCode` | — | Opens selected items in VS Code (Max 10 folder windows, Max 50 files in one window). |
 
 > **Persistent Settings Notice:** Toggles for hidden files, extensions, and checkboxes flip the native Windows Explorer shell settings directly (`SHGetSetSettings`). These changes affect all File Explorer surfaces globally and persist even if this mod is disabled.
 
@@ -139,6 +141,8 @@ You can add your own shortcuts using these templates in the settings:
   * Path: `C:\Program Files\PowerToys\WinUI3Apps\PowerToys.PowerRename.exe` | Args: `%f` | Mode: `batch`
 * **Search with Everything** (Search current active directory)
   * Path: `C:\Program Files\Everything\Everything.exe` | Args: `"%d"` | Mode: `batch`
+* **Open in VS Code (Built-in)**
+  * Path: `internal:openDirInCode` | Mode: `batch`
 * **Open in VS Code**
   * Path: `code` | Args: `"%d_smart"` | Mode: `batch`
 * **Queue in VLC Media Player**
@@ -2440,6 +2444,121 @@ void ExecuteInternalCommand(const std::wstring& action,
         } else {
             Wh_Log(L"internal:openCmd: Active directory is empty, aborting.");
         }
+        return;
+    }
+
+    // --- Open Current Directory in VS Code ---
+    if (_wcsicmp(action.c_str(), L"openDirInCode") == 0) {
+        Wh_Log(L"internal:openDirInCode: Invoked.");
+        std::wstring codePath = ResolveCommandPath(L"code.exe");
+        if (codePath.find(L'\\') == std::wstring::npos) {
+            codePath = ResolveCommandPath(L"Code.cmd");
+        }
+
+        if (codePath.find(L'\\') == std::wstring::npos &&
+            GetFileAttributesW(codePath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            Wh_Log(L"internal:openDirInCode: VS Code not found");
+            ShowActionToast(rootHwnd, L"VS Code not found", ToastType::Error);
+            return;
+        }
+
+        IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
+        std::wstring activeDir = GetActiveFolderPath(psv);
+        if (psv)
+            psv->Release();
+
+        if (!activeDir.empty()) {
+            ExecuteApp(codePath, SafeQuote(activeDir), activeDir);
+        } else {
+            ShowActionToast(rootHwnd, L"Active folder unavailable",
+                            ToastType::Error);
+        }
+        return;
+    }
+
+    // --- Open Selected Items in VS Code ---
+    if (_wcsicmp(action.c_str(), L"openWithCode") == 0) {
+        Wh_Log(L"internal:openWithCode: Invoked.");
+        std::wstring codePath = ResolveCommandPath(L"code.exe");
+        if (codePath.find(L'\\') == std::wstring::npos) {
+            codePath = ResolveCommandPath(L"Code.cmd");
+        }
+
+        if (codePath.find(L'\\') == std::wstring::npos &&
+            GetFileAttributesW(codePath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            Wh_Log(L"internal:openWithCode: VS Code not found");
+            ShowActionToast(rootHwnd, L"VS Code not found", ToastType::Error);
+            return;
+        }
+
+        IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
+        std::vector<std::wstring> allSelected = GetSelectedPaths(psv);
+        std::wstring activeDir = GetActiveFolderPath(psv);
+        if (psv)
+            psv->Release();
+
+        if (allSelected.empty()) {
+            Wh_Log(L"internal:openWithCode: No items selected.");
+            ShowActionToast(rootHwnd, L"No items selected", ToastType::Error);
+            return;
+        }
+
+        std::vector<std::wstring> files;
+        std::vector<std::wstring> folders;
+        for (const auto& path : allSelected) {
+            DWORD attr = GetFileAttributesW(path.c_str());
+            if (attr != INVALID_FILE_ATTRIBUTES &&
+                (attr & FILE_ATTRIBUTE_DIRECTORY)) {
+                folders.push_back(path);
+            } else {
+                files.push_back(path);
+            }
+        }
+
+        // 1. Open folders: capped at 10 windows
+        const size_t MAX_FOLDER_WINDOWS = 10;
+        bool folderCapHit = folders.size() > MAX_FOLDER_WINDOWS;
+        size_t foldersToOpen =
+            folderCapHit ? MAX_FOLDER_WINDOWS : folders.size();
+
+        for (size_t i = 0; i < foldersToOpen; ++i) {
+            ExecuteApp(codePath, L"-n " + SafeQuote(folders[i]), folders[i]);
+        }
+
+        // 2. Open files: capped at 50, all in a single window
+        bool fileCapHit = false;
+        if (!files.empty()) {
+            const size_t MAX_FILES = 50;
+            fileCapHit = files.size() > MAX_FILES;
+            std::vector<std::wstring> filesToOpen = files;
+            if (fileCapHit) {
+                filesToOpen.resize(MAX_FILES);
+            }
+
+            std::wstring fileArgs = JoinPaths(filesToOpen, true);
+            if (!folders.empty()) {
+                fileArgs = L"-n " + fileArgs;
+            }
+            ExecuteApp(codePath, fileArgs, activeDir);
+        }
+
+        // 3. Consolidated feedback toast (single notification)
+        if (folderCapHit && fileCapHit) {
+            ShowActionToast(rootHwnd,
+                            L"Opened 10 folders & 50 files (limits reached)",
+                            ToastType::Info);
+        } else if (folderCapHit) {
+            std::wstring toastMsg = L"Opened 10 of " +
+                                    std::to_wstring(folders.size()) +
+                                    L" folders (max 10)";
+            ShowActionToast(rootHwnd, toastMsg.c_str(), ToastType::Info);
+        } else if (fileCapHit) {
+            std::wstring toastMsg = L"Opened 50 of " +
+                                    std::to_wstring(files.size()) +
+                                    L" files (max 50)";
+            ShowActionToast(rootHwnd, toastMsg.c_str(), ToastType::Info);
+        }
+
         return;
     }
 
