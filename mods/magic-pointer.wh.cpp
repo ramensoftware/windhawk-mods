@@ -40,10 +40,11 @@ on its own when the mouse stays still for a while.
 ## Gemini
 
 Add an API key from [Google AI Studio](https://aistudio.google.com/apikey) in the
-mod's Windhawk settings to receive answers directly in the card.
-**Smart suggestions** are optional and disabled by default.
-You can ask follow-up questions. When enabled, Smart suggestions have Gemini
-suggest up to three things to do with each selection.
+mod's Windhawk settings to receive answers directly in the card. You can ask
+follow-up questions.
+
+**Smart suggestions** are optional and disabled by default. When enabled,
+Gemini suggests up to three things to do with each selection.
 Drag over an answer to select text, then press Ctrl+C or right-click to copy.
 The **Copy** button copies the whole answer, including while it is streaming.
 
@@ -143,8 +144,7 @@ in any app on the *Excluded apps* list (for example `RobloxPlayerBeta.exe`,
   interacting with elevated apps.
 * Works on every Windows version Windhawk runs on, on x64, ARM64 and 32-bit
   systems, and supports multiple monitors with per-monitor display scaling.
-* Shake activation also works while Windhawk is focused. The mod never blocks
-  or rewrites your normal mouse input.
+* The mod never blocks or rewrites your normal mouse input.
 * *Highlight what you point at* reads the layout of the app under the pointer
   through UI Automation, the accessibility API. Chromium-based browsers turn
   on their accessibility support when it's used, which costs a little memory.
@@ -6016,14 +6016,8 @@ BOOL CALLBACK CollectBrowserWindow(HWND hwnd, LPARAM param) {
 
 void BringToFront(HWND window) {
     if (IsIconic(window)) ShowWindow(window, SW_RESTORE);
-    const HWND foreground = GetForegroundWindow();
-    const DWORD foregroundThread = foreground ? GetWindowThreadProcessId(foreground, nullptr) : 0;
-    const DWORD thisThread = GetCurrentThreadId();
-    const bool joined = foregroundThread && foregroundThread != thisThread &&
-                        AttachThreadInput(thisThread, foregroundThread, TRUE);
     BringWindowToTop(window);
     SetForegroundWindow(window);
-    if (joined) AttachThreadInput(thisThread, foregroundThread, FALSE);
 }
 
 std::vector<std::wstring> OpenGeminiComposerKeys(IUIAutomation* automation,
@@ -10672,9 +10666,9 @@ void RefreshShakePolling() {
     g_shake.Clear();
     g_lastRawPoint = {LONG_MIN, LONG_MIN};
     if (target && g_messageWindow) {
-        // Windhawk's UI can interrupt background raw mouse input. Sample only
-        // while that UI is foreground; the normal shake handler deduplicates
-        // raw and sampled positions and keeps all activation safety checks.
+        // Sample only while Windhawk's UI is foreground, providing a fallback
+        // if background raw mouse input is unavailable. The normal handler
+        // deduplicates raw and sampled positions and keeps all safety checks.
         if (SetTimer(g_messageWindow, kShakePollingTimer, 16, nullptr)) {
             g_shakePollingWindow = target;
         } else {
@@ -11263,9 +11257,10 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    STARTUPINFO si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
     PROCESS_INFORMATION pi;
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
