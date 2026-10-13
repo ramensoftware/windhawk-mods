@@ -2,12 +2,66 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-13T19:02:59.000Z</updated>
+    <updated>2026-10-13T21:02:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Win10 Taskbar Search State Refresh on Win11 24H2+ 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win10-taskbar-search-state-refresh-on-win11-24h2#6eb45d5c4c3d686d4943f8e3f2affb9570b2e41a</id>
+        <link href="https://windhawk.net/mods/win10-taskbar-search-state-refresh-on-win11-24h2"/>
+        <updated>2026-10-13T21:02:48.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="win10taskbarsearchstaterefresh">Win10 Taskbar Search State Refresh</h1>
+<p>This mod addresses an issue where the legacy Windows 10 taskbar, running inside a Windows 11
+system, does not always redraw when the taskbar Search setting (hidden / icon / box) is changed.
+It monitors the setting and triggers the taskbar to apply it immediately. This modification has
+been tested on Windows 11 24H2.</p>
+<p>Note: for a complete Windows 10 taskbar experience on Windows 11 24H2 / 25H2, install the
+<a href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2">Windows 10 taskbar on Windows 11 24H2</a>
+mod first. That mod downloads and runs the Windows 10 explorer.exe (10.0.19039) as the shell;
+this mod only works on top of that shell and does nothing on the stock Windows 11 taskbar.</p>
+<h2 id="howitworks">How it works</h2>
+<ul>
+<li>It monitors <code>HKCU\Software\Microsoft\Windows\CurrentVersion\Search\SearchboxTaskbarMode</code>
+(0 = hidden, 1 = icon, 2 = box, 3 = icon and label) via a registry notification, with a
+one-second poll as a fallback in case a notification is missed.</li>
+<li>When the value changes, it sends <code>WM_SETTINGCHANGE</code> with <code>"TraySettings"</code> to <code>Shell_TrayWnd</code>
+and <code>Shell_SecondaryTrayWnd</code> of this process. This is the single method that reliably makes
+the Windows 10 taskbar reload its settings, including the search mode, on shell build
+10.0.19039. The message is sent twice with a short gap so a momentarily busy explorer still
+catches it.</li>
+<li>The message is never broadcast system-wide: only the taskbar windows of this process are
+targeted. No fake <code>SPI_SETWORKAREA</code> and no UI Automation are used.</li>
+<li>The startup refresh is skipped on a normal explorer start (the taskbar reads the value itself
+when it is created) and only runs when the mod is enabled while the taskbar is already running.</li>
+<li>Every refresh is written to the Windhawk log.</li>
+</ul>
+<h2 id="searchiconandlabelapproximation">"Search icon and label" (approximation)</h2>
+<p>The Windows 10 taskbar only supports three states: hidden, icon, and box. "Search icon and label"
+(value 3) is a Windows 11 option that the Windows 10 taskbar does not implement, so by default
+selecting it changes nothing there. As the closest equivalent, this mod makes the taskbar interpret
+value 3 as 2 (search box). This applies only to reads performed inside explorer.exe: the registry
+value itself is never modified, and the Windows 11 Settings page continues to show the user's
+choice. It is an approximation, not a true "icon and label" layout. It can be disabled with
+<code>labelAsBox</code>.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><code>labelAsBox</code>: treat "Search icon and label" as the search box (see above).</li>
+</ul>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>This mod never restarts explorer and never writes to the registry. The "icon and label" mapping is
+performed by adjusting the value as returned to explorer.exe (RegQueryValueExW / RegGetValueW);
+if the taskbar reads the value by other means, the mapping will not take effect.</li>
+<li>The mod does nothing on the stock Windows 11 shell (build 22000+); it exits at load time.</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer List Zebra Stripes 0.13.0]]></title>
         <id>https://windhawk.net/mods/explorer-zebra-stripes#a1c3167ae48bdb1ef697094a1375fd07a0b0fb54</id>
@@ -1418,76 +1472,6 @@ use it themselves.</p>]]></content>
         <author>
             <name>dcsmf</name>
             <uri>https://github.com/dcsmf</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 8/8.1 Search Charm Recreation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win8-search-charm-recreation#5856725330cebb5fa14367843998168ecaa39683</id>
-        <link href="https://windhawk.net/mods/win8-search-charm-recreation"/>
-        <updated>2026-10-11T12:47:56.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows881searchcharmrecreation">Windows 8/8.1 Search Charm Recreation</h1>
-<p>This mod recreates the Windows 8/8.1 search panel with local-only results, inspired by
-the Metro UI design language. This mod is a best-effort recreation of the Windows 8/8.1 Search Charm on
-Windows 10 and Windows 11. It does <strong>not</strong> replace system files, modify the
-registry, alter Windows Search, or modify native search binaries.
-This modification has been tested on Windows 11 24H2.</p>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8search.png" alt="Windows 8/8.1 Search Charm screenshot" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Search panel</strong> on the right side of the screen, with Windows 8.1 green color scheme.</li>
-<li><strong>Local search</strong> across:</li>
-<li><strong>Classic Win32 apps</strong> from Start menu <code>.lnk</code> shortcuts</li>
-<li><strong>Modern UWP/Store apps</strong> via <code>FOLDERID_AppsFolder</code> (the virtual shell namespace
-that lists every installed app, including those without a physical <code>.lnk</code> file)</li>
-<li><strong>User files</strong> from Desktop, Documents, Downloads, Pictures, Music, Videos</li>
-<li><strong>System entries</strong> (Control Panel, Settings, Command Prompt, Task Manager, etc.)</li>
-<li><strong>All/Apps/Settings/Files</strong> filter, mimicking the Windows 8.1 search scope selector.</li>
-<li><strong>Vertical scrollbar</strong> in the results list (Windows 8 style): draggable thumb and
-track paging, shown only when the results overflow the visible area.</li>
-<li><strong>Keyboard shortcuts</strong>: <code>Win+S</code> or <code>Win+Q</code> to open, <code>Ctrl+A</code> to select all,
-<code>Ctrl+V</code> to paste, arrow keys to navigate, <code>Menu</code> key or <code>Shift+F10</code> to open the
-context menu of the selected result.</li>
-<li><strong>Click outside</strong> to close (light dismiss), <code>Esc</code> to dismiss. Works even when
-Windows refuses to activate the panel or the click lands on a window that never
-takes activation (taskbar, overlays, other z-bands): a low-level mouse hook,
-active only while the panel is visible, and a foreground-change WinEvent hook
-detect the outside interaction.</li>
-<li><strong>Per-monitor DPI</strong> aware, with IME support for CJK input.</li>
-<li><strong>Metro-style context menu</strong> (right-click) with <strong>Open</strong>, Open file location,
-Run as administrator, Copy path, and sort options (by name, by date installed,
-by most used, by category). Only the commands that can work for the selected
-result are shown (for example, Store apps and <code>ms-settings:</code> pages have no file
-location). The menu supports keyboard navigation (arrows, Home/End, Enter, Esc),
-stays on the monitor where it was opened, and is created in the same z-band as
-the panel so it is never drawn behind it. The menu is drawn with the Metro design
-language: white background, no 3D borders, Segoe UI text, and the hover highlight
-uses the system accent color, so it adapts to the user's personalization settings.</li>
-<li><strong>Dedicated keyboard-hook thread</strong>: the low-level <code>Win+S</code> / <code>Win+Q</code> hook has its
-own message loop, so slow icon extraction, clipboard work, Shell execution, or
-a UAC prompt on the panel thread cannot make Windows remove the keyboard hook.</li>
-<li><strong>Main-shell only</strong>: the mod loads only in the Explorer process that owns the
-shell window, avoiding duplicate panels, hooks, and index scans when folder
-windows run in separate Explorer processes.</li>
-<li><strong>Z-band overlay</strong>: uses <code>CreateWindowInBand</code> (when available) so the panel stays
-above the taskbar, Start menu, and fullscreen UWP apps.</li>
-<li><strong>UI translations</strong>: English, Italian, Spanish, French, Portuguese, German,
-Russian, Chinese (Simplified), Japanese, Korean.</li>
-</ul>
-<h2 id="nativesearchbehavior">Native-search behavior</h2>
-<p>When enabled in the settings, the dedicated keyboard hook utilizes <code>Win+S</code> and/or
-<code>Win+Q</code> before Windows receives those shortcuts and posts a request to open this
-panel. This is the only interception required for those keys.</p>
-<h2 id="credits">Credits</h2>
-<ul>
-<li><strong>AdministratoX</strong> — for the Metro UI interface template that inspired the
-visual layout and design language of this search panel.</li>
-<li><strong>Meteoni</strong> — for the <code>IsMainExplorerProcess</code> pattern used to avoid loading the
-mod in separate folder-window Explorer processes.</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

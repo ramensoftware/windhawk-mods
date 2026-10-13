@@ -17475,6 +17475,33 @@
         "version": "1.0.1"
       }
     },
+    "win10-taskbar-search-state-refresh-on-win11-24h2": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791925368000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791925368000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "babamohammed",
+        "compilerOptions": "-lversion",
+        "description": "This mod makes the Windows 10 taskbar search box/icon running on Windows 11 24H2+ follow the Search setting immediately, retrying and verifying until it is applied",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Win10 Taskbar Search State Refresh on Win11 24H2+",
+        "version": "1.0.0"
+      }
+    },
     "win10-volume-brightness-osd": {
       "details": {
         "defaultSorting": 610,
