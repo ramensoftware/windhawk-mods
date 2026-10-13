@@ -27,13 +27,14 @@ Designed for Windows 11 with the WinAppSDK (WinUI 3) File Explorer.
 
 ## Key Features
 
-* **Custom Buttons & Dropdown Menus** — Add single-click toolbar buttons or nested dropdown menus (up to three levels deep) running commands, scripts, or internal shell actions.
+* **Custom Buttons & Dropdown Menus** — Add single-click toolbar buttons or nested dropdown menus (with unlimited hierarchy via parent referencing) running commands, scripts, or internal shell actions.
 * **Context-Aware Dynamic Visibility** — Automatically show or hide individual buttons depending on the file extensions or item types highlighted in Explorer.
+* **Dynamic UI Labels & Clamping** — Embed live tokens (`%base%`, `%name%`, `%c%`, `%ext%`, `%d_name%`) directly in button and dropdown labels that update in real time. Labels truncate cleanly with an ellipsis (`...`) past 24 characters on toolbar buttons and 48 characters in menus, with the complete label preserved in the hover tooltip.
 * **Flexible Inactive State** — Choose between completely hiding (`Collapsed`) or graying out (`Disabled`) buttons when selection conditions are not met.
 * **Advanced Command Tokens** — Pass active folder paths, file names, counts, extensions, parent directories, or selected file lists straight into your apps.
 * **Batch Spawning (`%sel_each%`)** — Automatically launch an application instance for each highlighted item with built-in safety throttling.
 * **Secondary Command Bar Placement** — Dock custom actions on the right side of the command bar (next to the Details/Preview pane toggles) for a clean dual-toolbar layout.
-* **Theme-Aware Icons** — Support fluent Segoe glyphs, local `.exe` / `.dll` / `.ico` paths, Store apps (`shell:AppsFolder\...`), and dual Light/Dark icons via `LightPath | DarkPath` syntax.
+* **Theme-Aware Icons** — Support fluent Segoe glyphs (browse codes on [Segoe Fluent Icons](https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-fluent-icons-font)), local `.exe` / `.dll` / `.ico` paths, Store apps (`shell:AppsFolder\...`), and dual Light/Dark icons via `LightPath | DarkPath` syntax.
 * **Open on Hover** — Open dropdown menus smoothly on cursor hover.
 
 ---
@@ -42,20 +43,28 @@ Designed for Windows 11 with the WinAppSDK (WinUI 3) File Explorer.
 
 The mod supports rich parameter expansions that dynamically resolve the state of the active File Explorer tab:
 
+> All tokens work with or without closing `%` (e.g. `%base%` or `%base`).
+
 | Token | Description | Example Output |
 | :--- | :--- | :--- |
-| `%path%` | Full path of the currently active folder | `C:\Projects\App` |
-| `%sel%` | All selected items as space-separated quoted paths | `"C:\a.txt" "C:\b.png"` |
+| `%base%` / `%basename%` | Selected item base names without extension | `Archive` |
+| `%file_name%` | First item base name (for extract/output folders) | `Archive` |
+| `%path%` / `%dir%` | Full path of the currently active folder | `C:\Projects\App` |
+| `%sel%` / `%f` | All selected items as space-separated quoted paths | `"C:\a.txt" "C:\b.png"` |
+| `%1` / `%1%` | Full path of the first selected item | `"C:\Projects\App\Notes.txt"` |
 | `%sel_each%` | Executes a distinct process instance per selected item (capped at 20) | `"C:\Item.txt"` |
 | `%files` | Space-separated quoted paths of selected regular files only | `"C:\doc.txt"` |
 | `%folders` | Space-separated quoted paths of selected directories only | `"C:\FolderA"` |
-| `%n` | Selected file names only (without absolute directory path) | `"Notes.txt"` |
+| `%n` / `%name%` | Selected file names only (without directory path) | `"Notes.txt"` |
 | `%ext` | File extension of the first selected item | `.png` |
-| `%c` | Total number of selected items | `3` |
+| `%c` / `%count` | Total number of selected items | `3` |
+| `%d_smart` | Selected directory if one is chosen, otherwise falls back to active folder | `C:\Projects\App\Sub` |
 | `%d_name` | Name of the active folder only | `App` |
-| `%p` | Parent folder path of the active tab (falls back cleanly at drive root) | `C:\Projects` |
+| `%p` / `%parent` | Parent folder path of the active tab | `C:\Projects` |
+| `%%` | Literal percent sign escape | `%` |
 
 Wrap placeholders in double quotes when necessary (e.g., `-d "%path%"` or `code.exe "%sel%"`).
+> **Note on UI Labels:** To prevent toolbar buttons from overflowing, multi-item tokens like `%base%`, `%name%`, and `%1%` automatically evaluate to the **first highlighted item's name** rather than full multi-line absolute paths.
 
 ---
 
@@ -64,10 +73,13 @@ Wrap placeholders in double quotes when necessary (e.g., `-d "%path%"` or `code.
 The **File extension filter** (`matchExtensions`) field lets you display toolbar actions contextually:
 
 * **Leave blank or `*`** — Always show the button regardless of selection.
+* **Target any selection** — e.g. `selected` or `any` (Button appears whenever at least one item is highlighted, whether files, folders, or both).
+* **Target files only** — e.g. `files` (or `file`) (Hides button whenever a folder is selected).
+* **Target folders only** — e.g. `folders` (or `folder`, `dir`) (Button appears exclusively when directories are selected).
+* **Target both files & folders** — e.g. `files, folders` or `selected`.
 * **Whitelist specific extensions** — e.g. `txt, js, cpp` (Button only appears when selected items match these formats).
-* **Exclude specific extensions** — e.g. `*,-exe,-zip` (Shows for all files except executables and archives).
-* **Target files only** — e.g. `files` or `*,-folder` (Hides button whenever a folder is selected).
-* **Target folders only** — e.g. `folder` or `dir` (Button appears exclusively when directories are selected).
+* **Exclude specific extensions** — e.g. `*,-exe,-zip` (Shows for all items except executables and archives).
+* **Combine rules** — e.g. `files,-zip` (Shows for regular files, excluding zip archives).
 
 ---
 
@@ -78,6 +90,15 @@ Instead of an executable path, you can set **Command** to one of these built-in 
 * `internal:FolderOptions` — Opens Classic Folder Options dialog.
 * `internal:TogglePreview` — Toggles the File Explorer Preview pane.
 * `internal:ToggleDetails` — Toggles the File Explorer Details pane.
+
+---
+
+## Creating Dropdown Menus & Hierarchies
+
+To place buttons inside a dropdown menu:
+1. Create a menu container item with **Item Type** set to `menu`, and assign it a unique **Item ID** (e.g. `tools_menu`).
+2. For any button or submenu you want nested inside it, set its **Parent Menu ID** to that menu's ID (`tools_menu`).
+3. Leave **Parent Menu ID** blank for items that should appear directly on the top toolbar.
 
 ---
 
@@ -105,13 +126,16 @@ Instead of an executable path, you can set **Command** to one of these built-in 
 /*
 - items:
   - - type: button
-      $name: Main Item Type
+      $name: Item Type
       $options:
       - button: Single button
-      - menu: Dropdown menu
-    - name: Folder Options
-      $name: Name
-      $description: Shown as the button tooltip.
+      - menu: Dropdown menu container
+    - id: "folder_options"
+      $name: Item ID
+      $description: Unique identifier. Sub-items reference this in their Parent ID field.
+    - parent: ""
+      $name: Parent Menu ID
+      $description: Leave blank for the top toolbar. Set to a Menu ID to place this item inside that menu.
     - command: internal:FolderOptions
       $name: Command
       $description: >-
@@ -119,13 +143,15 @@ Instead of an executable path, you can set **Command** to one of these built-in 
     - parameters: ""
       $name: Parameters
       $description: >-
-        Command line arguments. Supports tokens: %path% (current folder), %sel% (selected items), %sel_each% (run app per item), %files (files only), %folders (folders only), %n (file names only), %ext (extension), %c (count), %d_name (folder name), and %p (parent path).
+        Command line arguments. Supports tokens: %base% / %basename% / %file_name% (base name), %name% / %n% / %1% (full name), %path% / %dir% (folder path), %sel% / %f% (selected items), %sel_each% (run per item), %files% (files only), %folders% (folders only), %ext% (extension), %count% / %c% (item count), %d_name% (folder name), %parent% / %p% (parent folder). Use %% for literal %. All work with or without trailing %.
     - matchExtensions: ""
       $name: "File extension filter"
       $description: >-
-        Comma-separated list of extensions (e.g. txt, js, cpp). 
-        Prefix with '-' to exclude (e.g. -exe, -zip). 
-        Prefix with '*' or leave blank to show for all files.
+        Comma-separated list of extensions (e.g. txt, js, cpp).
+        Use 'selected' or 'any' to show whenever anything is selected (files, folders, or both).
+        Use 'files' for files only, 'folders' (or 'dir') for directories only.
+        Prefix with '-' to exclude (e.g. -exe, -folders).
+        Prefix with '*' or leave blank to show always.
     - iconGlyph: E713
       $name: Icon glyph or icon path
       $description: >-
@@ -139,98 +165,86 @@ Instead of an executable path, you can set **Command** to one of these built-in 
       $description: Show text label next to the icon.
     - labelText: ""
       $name: Custom Label Text
-      $description: Text displayed next to the icon. If empty, the Name field is used.
+      $description: >-
+        Text displayed next to the icon. Supports live tokens: %base% / %basename% / %file_name%, %name% / %n% / %1%, %ext%, %count% / %c%, %d_name%, %dir% / %path%. Use %% for literal %. All work with or without trailing %. If empty, Item ID is used.
+    - separatorBefore: false
+      $name: Vertical separator before
+      $description: Show a vertical separator line before this button.
     - separatorAfter: true
       $name: Vertical separator after
       $description: Show a vertical separator line after this button.
-    - subItems:
-      - - type: button
-          $name: Sub-item Type
-          $options:
-          - button: Single button
-          - menu: Submenu
-        - name: ""
-          $name: Name
-        - command: ""
-          $name: Command
-        - parameters: ""
-          $name: Parameters
-        - iconGlyph: ""
-          $name: Icon glyph or icon path
-        - hideIcon: false
-          $name: Hide icon
-        - separatorAfter: false
-          $name: Vertical separator after
-        - subItems:
-          - - name: ""
-              $name: Name
-            - command: ""
-              $name: Command
-            - parameters: ""
-              $name: Parameters
-            - iconGlyph: ""
-              $name: Icon glyph or icon path
-            - hideIcon: false
-              $name: Hide icon
-            - separatorAfter: false
-              $name: Vertical separator after
-          $name: Nested items
-          $description: Items inside this nested submenu.
-      $name: Menu items
-      $description: Items shown in the dropdown menu.
   - - type: button
-    - name: Open Terminal Here
+    - id: "open_terminal"
+    - parent: ""
     - command: wt.exe
     - parameters: -d "%path%"
     - matchExtensions: ""
     - iconGlyph: ""
     - hideIcon: false
     - showLabel: false
-    - labelText: ""
+    - labelText: "Open Terminal Here"
+    - separatorBefore: false
     - separatorAfter: false
   - - type: button
-    - name: Open With
+    - id: "open_with"
+    - parent: ""
     - command: internal:OpenWith
-    - parameters: ''
+    - parameters: ""
     - matchExtensions: "files"
-    - iconGlyph: 'E7AC'
+    - iconGlyph: "E7AC"
     - hideIcon: true
     - showLabel: true
     - labelText: "Open With"
+    - separatorBefore: false
     - separatorAfter: false
   - - type: button
-    - name: Open in Notepad
+    - id: "open_notepad"
+    - parent: ""
     - command: notepad.exe
-    - parameters: '%sel_each%'
+    - parameters: "%sel_each%"
     - matchExtensions: "files"
-    - iconGlyph: 'shell:AppsFolder\Microsoft.WindowsNotepad_8wekyb3d8bbwe!App'
+    - iconGlyph: "shell:AppsFolder\\Microsoft.WindowsNotepad_8wekyb3d8bbwe!App"
     - hideIcon: true
     - showLabel: true
     - labelText: "Notepad"
+    - separatorBefore: false
     - separatorAfter: false
   - - type: menu
-    - name: Additional
+    - id: "additional_menu"
+    - parent: ""
     - command: ""
     - parameters: ""
     - matchExtensions: ""
-    - iconGlyph: E81E
+    - iconGlyph: "E81E"
     - hideIcon: false
     - showLabel: false
-    - labelText: ""
+    - labelText: "Additional"
+    - separatorBefore: false
     - separatorAfter: false
-    - subItems:
-      - - type: button
-        - name: Open Paint
-        - command: mspaint.exe
-        - parameters: ""
-        - iconGlyph: ""
-        - separatorAfter: false
-      - - type: button
-        - name: Open Calculator
-        - command: calc.exe
-        - parameters: ""
-        - iconGlyph: 'shell:AppsFolder\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App'
-        - separatorAfter: true
+  - - type: button
+    - id: "open_paint"
+    - parent: "additional_menu"
+    - command: mspaint.exe
+    - parameters: ""
+    - matchExtensions: ""
+    - iconGlyph: ""
+    - hideIcon: false
+    - showLabel: false
+    - labelText: "Open Paint"
+    - separatorBefore: false
+    - separatorAfter: false
+  - - type: button
+    - id: "open_calc"
+    - parent: "additional_menu"
+    - command: calc.exe
+    - parameters: ""
+    - matchExtensions: ""
+    - iconGlyph: "shell:AppsFolder\\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"
+    - hideIcon: false
+    - showLabel: false
+    - labelText: "Open Calculator"
+    - separatorBefore: false
+    - separatorAfter: true
   $name: Toolbar items
   $description: Custom buttons and dropdown menus added to the command bar.
 - placeOnSecondaryBar: true
@@ -307,7 +321,8 @@ static constexpr GUID kSID_STopLevelBrowser = {
     {0x99, 0xd3, 0x00, 0xaa, 0x00, 0x4a, 0xe8, 0x37}};
 
 struct ActionItem {
-    std::wstring name;
+    std::wstring id;
+    std::wstring parent;
     std::wstring labelText;
     std::wstring command;
     std::wstring parameters;
@@ -316,8 +331,14 @@ struct ActionItem {
     bool hideIcon = false;
     bool showLabel = false;
     bool isMenu = false;
+    bool separatorBefore = false;
     bool separatorAfter = false;
-    std::vector<ActionItem> subItems;
+    std::vector<ActionItem> subItems;  // Populated hierarchically at runtime
+
+    // Helper: Returns labelText if specified, otherwise falls back to id
+    std::wstring GetDisplayLabel() const {
+        return labelText.empty() ? id : labelText;
+    }
 };
 
 struct {
@@ -665,24 +686,54 @@ ExplorerContext GetExplorerContext(HWND hExplorerWnd) {
     if (!result.shellView)
         return result;
 
-    result.allSelectedPaths = GetSelectedPathsHDROP(result.shellView.get());
+    // 1. Primary & reliable method: query IShellItemArray directly from shell
+    // view
+    winrt::com_ptr<IShellItemArray> items;
+    if (SUCCEEDED(result.shellView->GetItemObject(SVGIO_SELECTION,
+                                                  IID_PPV_ARGS(items.put()))) &&
+        items) {
+        DWORD count = 0;
+        if (SUCCEEDED(items->GetCount(&count))) {
+            for (DWORD i = 0; i < count; i++) {
+                winrt::com_ptr<IShellItem> item;
+                if (SUCCEEDED(items->GetItemAt(i, item.put())) && item) {
+                    PWSTR path = nullptr;
+                    if (SUCCEEDED(
+                            item->GetDisplayName(SIGDN_FILESYSPATH, &path)) &&
+                        path) {
+                        result.allSelectedPaths.push_back(path);
+                        CoTaskMemFree(path);
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Fallback to HDROP if IShellItemArray gave no items
+    if (result.allSelectedPaths.empty()) {
+        result.allSelectedPaths = GetSelectedPathsHDROP(result.shellView.get());
+    }
+
     if (!result.allSelectedPaths.empty()) {
         result.selectedPath = result.allSelectedPaths[0];
     }
 
+    // 3. Active folder path
     if (auto folderView = result.shellView.try_as<IFolderView>()) {
         winrt::com_ptr<IPersistFolder2> persistFolder;
-        LPITEMIDLIST pidl = nullptr;
         if (SUCCEEDED(
                 folderView->GetFolder(IID_PPV_ARGS(persistFolder.put()))) &&
-            persistFolder && SUCCEEDED(persistFolder->GetCurFolder(&pidl)) &&
-            pidl) {
-            WCHAR path[MAX_PATH];
-            if (SHGetPathFromIDListEx(pidl, path, ARRAYSIZE(path),
-                                      GPFIDL_DEFAULT)) {
-                result.folderPath = path;
+            persistFolder) {
+            LPITEMIDLIST pidl = nullptr;
+            if (SUCCEEDED(persistFolder->GetCurFolder(&pidl)) && pidl) {
+                WCHAR path[MAX_PATH];
+                if (SHGetPathFromIDListEx(pidl, path, ARRAYSIZE(path),
+                                          GPFIDL_DEFAULT)) {
+                    result.folderPath = path;
+                }
+                CoTaskMemFree(pidl);
+                pidl = nullptr;
             }
-            CoTaskMemFree(pidl);
         }
     }
 
@@ -752,10 +803,30 @@ std::wstring FormatSelectedItemsQuoted(std::vector<std::wstring> const& paths) {
     return formatted;
 }
 
+std::wstring ExtractBaseName(std::wstring_view itemPath) {
+    if (itemPath.empty())
+        return L"";
+
+    PCWSTR fileName = PathFindFileNameW(itemPath.data());
+    if (!fileName || !*fileName)
+        return L"";
+
+    WCHAR buffer[MAX_PATH];
+    wcsncpy_s(buffer, fileName, _TRUNCATE);
+    PathRemoveExtensionW(buffer);
+    return buffer;
+}
+
 std::wstring BuildParameters(std::wstring parameters,
                              ExplorerContext const& context) {
-    if (parameters.empty())
+    if (parameters.empty() || parameters.find(L'%') == std::wstring::npos)
         return parameters;
+
+    // 1. Mask escaped '%%' using a non-printable sentinel character
+    bool hasEscapedPercent = (parameters.find(L"%%") != std::wstring::npos);
+    if (hasEscapedPercent) {
+        ReplacePlaceholder(parameters, L"%%", L"\x01");
+    }
 
     std::vector<std::wstring> filesOnly;
     std::vector<std::wstring> foldersOnly;
@@ -769,25 +840,83 @@ std::wstring BuildParameters(std::wstring parameters,
         }
     }
 
+    // --- %files (Regular files only) ---
     std::wstring formattedFiles = FormatSelectedItemsQuoted(filesOnly);
+    ReplacePlaceholder(parameters, L"\"%files%\"", formattedFiles);
+    ReplacePlaceholder(parameters, L"%files%", formattedFiles);
     ReplacePlaceholder(parameters, L"\"%files\"", formattedFiles);
     ReplacePlaceholder(parameters, L"%files", formattedFiles);
 
+    // --- %folders (Directories only) ---
     std::wstring formattedFolders = FormatSelectedItemsQuoted(foldersOnly);
+    ReplacePlaceholder(parameters, L"\"%folders%\"", formattedFolders);
+    ReplacePlaceholder(parameters, L"%folders%", formattedFolders);
     ReplacePlaceholder(parameters, L"\"%folders\"", formattedFolders);
     ReplacePlaceholder(parameters, L"%folders", formattedFolders);
 
-    if (parameters.find(L"%n") != std::wstring::npos) {
+    // --- %base / %basename / %file_name% (Base name without extension) ---
+    if (parameters.find(L"%base") != std::wstring::npos ||
+        parameters.find(L"%file_name") != std::wstring::npos) {
+        std::vector<std::wstring> baseNames;
+        for (const auto& p : context.allSelectedPaths) {
+            baseNames.push_back(ExtractBaseName(p));
+        }
+        std::wstring quotedBases = FormatSelectedItemsQuoted(baseNames);
+        std::wstring firstBase =
+            context.allSelectedPaths.empty()
+                ? L""
+                : ExtractBaseName(context.allSelectedPaths[0]);
+
+        ReplacePlaceholder(parameters, L"\"%basename%\"", quotedBases);
+        ReplacePlaceholder(parameters, L"%basename%", quotedBases);
+        ReplacePlaceholder(parameters, L"\"%basename\"", quotedBases);
+        ReplacePlaceholder(parameters, L"%basename", quotedBases);
+
+        ReplacePlaceholder(parameters, L"\"%base%\"", quotedBases);
+        ReplacePlaceholder(parameters, L"%base%", quotedBases);
+        ReplacePlaceholder(parameters, L"\"%base\"", quotedBases);
+        ReplacePlaceholder(parameters, L"%base", quotedBases);
+
+        std::wstring quotedFirstBase =
+            firstBase.empty() ? L"" : (L"\"" + firstBase + L"\"");
+        ReplacePlaceholder(parameters, L"\"%file_name%\"", quotedFirstBase);
+        ReplacePlaceholder(parameters, L"%file_name%", firstBase);
+        ReplacePlaceholder(parameters, L"\"%file_name\"", quotedFirstBase);
+        ReplacePlaceholder(parameters, L"%file_name", firstBase);
+    }
+
+    // --- %n / %name (File or folder names only, with extension) ---
+    if (parameters.find(L"%n") != std::wstring::npos ||
+        parameters.find(L"%name") != std::wstring::npos) {
         std::vector<std::wstring> names;
         for (const auto& p : context.allSelectedPaths) {
             PCWSTR name = PathFindFileNameW(p.c_str());
             names.push_back(name ? name : L"");
         }
         std::wstring quotedNames = FormatSelectedItemsQuoted(names);
+        ReplacePlaceholder(parameters, L"\"%name%\"", quotedNames);
+        ReplacePlaceholder(parameters, L"%name%", quotedNames);
+        ReplacePlaceholder(parameters, L"\"%name\"", quotedNames);
+        ReplacePlaceholder(parameters, L"%name", quotedNames);
+        ReplacePlaceholder(parameters, L"\"%n%\"", quotedNames);
+        ReplacePlaceholder(parameters, L"%n%", quotedNames);
         ReplacePlaceholder(parameters, L"\"%n\"", quotedNames);
         ReplacePlaceholder(parameters, L"%n", quotedNames);
     }
 
+    // --- %1 (First selected item full path) ---
+    if (parameters.find(L"%1") != std::wstring::npos) {
+        std::wstring firstItem =
+            context.allSelectedPaths.empty()
+                ? L""
+                : (L"\"" + context.allSelectedPaths[0] + L"\"");
+        ReplacePlaceholder(parameters, L"\"%1%\"", firstItem);
+        ReplacePlaceholder(parameters, L"%1%", firstItem);
+        ReplacePlaceholder(parameters, L"\"%1\"", firstItem);
+        ReplacePlaceholder(parameters, L"%1", firstItem);
+    }
+
+    // --- %ext (Extension of first item) ---
     if (parameters.find(L"%ext") != std::wstring::npos) {
         std::wstring ext = L"";
         if (!context.allSelectedPaths.empty()) {
@@ -796,32 +925,87 @@ std::wstring BuildParameters(std::wstring parameters,
             if (extPtr)
                 ext = extPtr;
         }
+        ReplacePlaceholder(parameters, L"%ext%", ext);
         ReplacePlaceholder(parameters, L"%ext", ext);
     }
 
-    ReplacePlaceholder(parameters, L"%c",
-                       std::to_wstring(context.allSelectedPaths.size()));
+    // --- %c / %count (Count of selected items) ---
+    std::wstring countStr = std::to_wstring(context.allSelectedPaths.size());
+    ReplacePlaceholder(parameters, L"%count%", countStr);
+    ReplacePlaceholder(parameters, L"%count", countStr);
+    ReplacePlaceholder(parameters, L"%c%", countStr);
+    ReplacePlaceholder(parameters, L"%c", countStr);
 
+    // --- %d_smart (Selected folder if one is chosen, otherwise active folder)
+    // ---
+    if (parameters.find(L"%d_smart") != std::wstring::npos) {
+        std::wstring smartDir =
+            !foldersOnly.empty() ? foldersOnly[0] : context.folderPath;
+        if (!smartDir.empty() && smartDir.back() == L'\\')
+            smartDir += L'\\';
+        ReplacePlaceholder(parameters, L"\"%d_smart%\"",
+                           L"\"" + smartDir + L"\"");
+        ReplacePlaceholder(parameters, L"%d_smart%", smartDir);
+        ReplacePlaceholder(parameters, L"\"%d_smart\"",
+                           L"\"" + smartDir + L"\"");
+        ReplacePlaceholder(parameters, L"%d_smart", smartDir);
+    }
+
+    // --- %d_name (Folder name of active directory) ---
     if (parameters.find(L"%d_name") != std::wstring::npos) {
         std::wstring dir = context.folderPath;
         while (!dir.empty() && (dir.back() == L'\\' || dir.back() == L'/'))
             dir.pop_back();
         PCWSTR namePtr = PathFindFileNameW(dir.c_str());
-        ReplacePlaceholder(parameters, L"%d_name", namePtr ? namePtr : L"");
+        std::wstring dName = namePtr ? namePtr : L"";
+        ReplacePlaceholder(parameters, L"\"%d_name%\"", L"\"" + dName + L"\"");
+        ReplacePlaceholder(parameters, L"%d_name%", dName);
+        ReplacePlaceholder(parameters, L"\"%d_name\"", L"\"" + dName + L"\"");
+        ReplacePlaceholder(parameters, L"%d_name", dName);
     }
 
-    if (parameters.find(L"%sel%") != std::wstring::npos) {
+    // --- %sel% / %f (All selected items) ---
+    if (parameters.find(L"%sel") != std::wstring::npos ||
+        parameters.find(L"%f") != std::wstring::npos) {
         if (context.allSelectedPaths.empty())
             return std::wstring();
         std::wstring formatted =
             FormatSelectedItemsQuoted(context.allSelectedPaths);
         ReplacePlaceholder(parameters, L"\"%sel%\"", formatted);
         ReplacePlaceholder(parameters, L"%sel%", formatted);
+        ReplacePlaceholder(parameters, L"\"%sel\"", formatted);
+        ReplacePlaceholder(parameters, L"%sel", formatted);
+        ReplacePlaceholder(parameters, L"\"%f%\"", formatted);
+        ReplacePlaceholder(parameters, L"%f%", formatted);
+        ReplacePlaceholder(parameters, L"\"%f\"", formatted);
+        ReplacePlaceholder(parameters, L"%f", formatted);
     }
 
+    // --- %path% / %dir / %d (Active folder path) ---
+    ReplacePlaceholder(parameters, L"\"%path%\"",
+                       L"\"" + context.folderPath + L"\"");
     ReplacePlaceholder(parameters, L"%path%", context.folderPath);
+    ReplacePlaceholder(parameters, L"\"%path\"",
+                       L"\"" + context.folderPath + L"\"");
+    ReplacePlaceholder(parameters, L"%path", context.folderPath);
 
-    if (parameters.find(L"%p") != std::wstring::npos) {
+    ReplacePlaceholder(parameters, L"\"%dir%\"",
+                       L"\"" + context.folderPath + L"\"");
+    ReplacePlaceholder(parameters, L"%dir%", context.folderPath);
+    ReplacePlaceholder(parameters, L"\"%dir\"",
+                       L"\"" + context.folderPath + L"\"");
+    ReplacePlaceholder(parameters, L"%dir", context.folderPath);
+
+    ReplacePlaceholder(parameters, L"\"%d%\"",
+                       L"\"" + context.folderPath + L"\"");
+    ReplacePlaceholder(parameters, L"%d%", context.folderPath);
+    ReplacePlaceholder(parameters, L"\"%d\"",
+                       L"\"" + context.folderPath + L"\"");
+    ReplacePlaceholder(parameters, L"%d", context.folderPath);
+
+    // --- %p / %parent (Parent directory of active tab) ---
+    if (parameters.find(L"%p") != std::wstring::npos ||
+        parameters.find(L"%parent") != std::wstring::npos) {
         std::wstring parent = context.folderPath;
         while (!parent.empty() &&
                (parent.back() == L'\\' || parent.back() == L'/'))
@@ -838,7 +1022,20 @@ std::wstring BuildParameters(std::wstring parameters,
             }
         }
 
+        ReplacePlaceholder(parameters, L"\"%parent%\"", L"\"" + p + L"\"");
+        ReplacePlaceholder(parameters, L"%parent%", p);
+        ReplacePlaceholder(parameters, L"\"%parent\"", L"\"" + p + L"\"");
+        ReplacePlaceholder(parameters, L"%parent", p);
+
+        ReplacePlaceholder(parameters, L"\"%p%\"", L"\"" + p + L"\"");
+        ReplacePlaceholder(parameters, L"%p%", p);
+        ReplacePlaceholder(parameters, L"\"%p\"", L"\"" + p + L"\"");
         ReplacePlaceholder(parameters, L"%p", p);
+    }
+
+    // 2. Restore masked '%%' back to literal '%'
+    if (hasEscapedPercent) {
+        ReplacePlaceholder(parameters, L"\x01", L"%");
     }
 
     return parameters;
@@ -903,12 +1100,20 @@ void LaunchItemForWindow(HWND hExplorerWnd,
 
             PCWSTR namePtr = PathFindFileNameW(safePath.c_str());
             PCWSTR extPtr = PathFindExtensionW(safePath.c_str());
+            std::wstring baseName = ExtractBaseName(safePath);
 
             std::wstring nameStr = namePtr ? namePtr : L"";
             if (!nameStr.empty() && nameStr.find(L' ') != std::wstring::npos) {
                 nameStr = L"\"" + nameStr + L"\"";
             }
             ReplacePlaceholder(param, L"%n", nameStr);
+            ReplacePlaceholder(param, L"%name", nameStr);
+            ReplacePlaceholder(param, L"%base%", baseName);
+            ReplacePlaceholder(param, L"%base", baseName);
+            ReplacePlaceholder(param, L"%basename%", baseName);
+            ReplacePlaceholder(param, L"%basename", baseName);
+            ReplacePlaceholder(param, L"%file_name%", baseName);
+            ReplacePlaceholder(param, L"%file_name", baseName);
             ReplacePlaceholder(param, L"%ext", extPtr ? extPtr : L"");
 
             param = BuildParameters(param, capturedContext);
@@ -1558,17 +1763,23 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
                                 const SelectionSummary& summary) {
     std::wstring filter = TrimWhitespaceAndQuotes(filterPattern);
 
+    // Empty or '*' means always visible, even when nothing is selected.
     if (filter.empty() || filter == L"*") {
         return true;
     }
 
+    // Every other filter requires at least one item to be selected.
     if (summary.count == 0) {
         return false;
     }
 
+    bool allowAnySelection = false;
+    bool explicitFilesRule = false;
+    bool explicitFoldersRule = false;
+    bool matchAllExtensions = false;
+
     std::vector<std::wstring> positiveExts;
     std::vector<std::wstring> negativeExts;
-    bool matchAllExceptNegatives = false;
 
     size_t start = 0;
     while (start < filter.size()) {
@@ -1600,10 +1811,20 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
         }
 
         bool isFileKeyword = (token == L"file" || token == L"files");
+        bool isFolderKeyword = (token == L"folder");
+        bool isAnyKeyword = (token == L"selected" || token == L"any");
+
+        if (isAnyKeyword) {
+            if (!isNegative) {
+                allowAnySelection = true;
+            }
+            continue;
+        }
 
         if (token == L"*") {
-            if (!isNegative)
-                matchAllExceptNegatives = true;
+            if (!isNegative) {
+                matchAllExtensions = true;
+            }
             continue;
         }
 
@@ -1611,8 +1832,16 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
             if (isNegative) {
                 negativeExts.push_back(L"file");
             } else {
-                matchAllExceptNegatives = true;
+                explicitFilesRule = true;
+            }
+            continue;
+        }
+
+        if (isFolderKeyword) {
+            if (isNegative) {
                 negativeExts.push_back(L"folder");
+            } else {
+                explicitFoldersRule = true;
             }
             continue;
         }
@@ -1624,16 +1853,45 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
         }
     }
 
+    // Determine mutual exclusivity when 'selected' / 'any' is NOT present:
+    // - Writing just 'files' excludes folders.
+    // - Writing just 'folders' excludes files.
+    // - Writing 'selected' or both 'files, folders' allows both.
+    if (!allowAnySelection) {
+        if (explicitFilesRule && !explicitFoldersRule) {
+            negativeExts.push_back(L"folder");
+        } else if (explicitFoldersRule && !explicitFilesRule) {
+            negativeExts.push_back(L"file");
+        }
+    }
+
+    // If 'files' or 'selected' was given without specific extension lists,
+    // match all regular files.
+    if (explicitFilesRule || allowAnySelection) {
+        matchAllExtensions = true;
+    }
+
+    // Validate every item in the current selection
     for (const auto& ext : summary.extensions) {
         bool isDir = (ext == L"folder");
 
+        // 1. Check exclusions
         for (const auto& neg : negativeExts) {
-            if (ext == neg || (neg == L"file" && !isDir)) {
+            if (isDir && neg == L"folder") {
+                return false;
+            }
+            if (!isDir && (neg == L"file" || ext == neg)) {
                 return false;
             }
         }
 
-        if (!matchAllExceptNegatives && !positiveExts.empty()) {
+        // Folders don't carry file extensions; if not excluded, they pass
+        if (isDir) {
+            continue;
+        }
+
+        // 2. Check extensions for regular files
+        if (!matchAllExtensions && !positiveExts.empty()) {
             bool matched = false;
             for (const auto& pos : positiveExts) {
                 if (ext == pos) {
@@ -1648,6 +1906,110 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
     }
 
     return true;
+}
+
+constexpr size_t kMaxToolbarLabelLength = 24;
+constexpr size_t kMaxMenuItemLabelLength = 48;
+
+std::wstring TruncateWithEllipsis(std::wstring text,
+                                  size_t maxLen = kMaxToolbarLabelLength) {
+    if (text.length() > maxLen && maxLen > 3) {
+        return text.substr(0, maxLen - 3) + L"...";
+    }
+    return text;
+}
+
+std::wstring ResolveLabelTokens(std::wstring label,
+                                const ExplorerContext& context) {
+    if (label.find(L'%') == std::wstring::npos)
+        return label;
+
+    // 1. Mask escaped '%%' so literal percents can be printed
+    bool hasEscapedPercent = (label.find(L"%%") != std::wstring::npos);
+    if (hasEscapedPercent) {
+        ReplacePlaceholder(label, L"%%", L"\x01");
+    }
+
+    // %count% / %c% (Selection count)
+    std::wstring countStr = std::to_wstring(context.allSelectedPaths.size());
+    ReplacePlaceholder(label, L"%count%", countStr);
+    ReplacePlaceholder(label, L"%count", countStr);
+    ReplacePlaceholder(label, L"%c%", countStr);
+    ReplacePlaceholder(label, L"%c", countStr);
+
+    // %file_name% / %base% / %basename%
+    std::wstring baseName = L"";
+    if (!context.allSelectedPaths.empty()) {
+        baseName = ExtractBaseName(context.allSelectedPaths[0]);
+    } else if (context.shellView) {
+        winrt::com_ptr<IShellItemArray> items;
+        if (SUCCEEDED(context.shellView->GetItemObject(
+                SVGIO_SELECTION, IID_PPV_ARGS(items.put()))) &&
+            items) {
+            winrt::com_ptr<IShellItem> item;
+            if (SUCCEEDED(items->GetItemAt(0, item.put())) && item) {
+                PWSTR name = nullptr;
+                if (SUCCEEDED(
+                        item->GetDisplayName(SIGDN_NORMALDISPLAY, &name)) &&
+                    name) {
+                    baseName = ExtractBaseName(name);
+                    CoTaskMemFree(name);
+                }
+            }
+        }
+    }
+    ReplacePlaceholder(label, L"%basename%", baseName);
+    ReplacePlaceholder(label, L"%basename", baseName);
+    ReplacePlaceholder(label, L"%file_name%", baseName);
+    ReplacePlaceholder(label, L"%file_name", baseName);
+    ReplacePlaceholder(label, L"%base%", baseName);
+    ReplacePlaceholder(label, L"%base", baseName);
+
+    // %name% / %n% / %1 (First selected item with extension)
+    std::wstring fileName = L"";
+    if (!context.allSelectedPaths.empty()) {
+        PCWSTR n = PathFindFileNameW(context.allSelectedPaths[0].c_str());
+        if (n)
+            fileName = n;
+    }
+    ReplacePlaceholder(label, L"%name%", fileName);
+    ReplacePlaceholder(label, L"%name", fileName);
+    ReplacePlaceholder(label, L"%n%", fileName);
+    ReplacePlaceholder(label, L"%n", fileName);
+    ReplacePlaceholder(label, L"%1%", fileName);
+    ReplacePlaceholder(label, L"%1", fileName);
+
+    // %ext% (Extension of first item)
+    std::wstring ext = L"";
+    if (!context.allSelectedPaths.empty()) {
+        PCWSTR e = PathFindExtensionW(context.allSelectedPaths[0].c_str());
+        if (e)
+            ext = e;
+    }
+    ReplacePlaceholder(label, L"%ext%", ext);
+    ReplacePlaceholder(label, L"%ext", ext);
+
+    // %d_name% (Current active folder name, e.g. "Downloads")
+    std::wstring dir = context.folderPath;
+    while (!dir.empty() && (dir.back() == L'\\' || dir.back() == L'/'))
+        dir.pop_back();
+    PCWSTR dirName = PathFindFileNameW(dir.c_str());
+    std::wstring dName = dirName ? dirName : L"";
+    ReplacePlaceholder(label, L"%d_name%", dName);
+    ReplacePlaceholder(label, L"%d_name", dName);
+
+    // %path% / %dir (Full folder path)
+    ReplacePlaceholder(label, L"%path%", context.folderPath);
+    ReplacePlaceholder(label, L"%path", context.folderPath);
+    ReplacePlaceholder(label, L"%dir%", context.folderPath);
+    ReplacePlaceholder(label, L"%dir", context.folderPath);
+
+    // 2. Restore masked '%%' back to literal '%'
+    if (hasEscapedPercent) {
+        ReplacePlaceholder(label, L"\x01", L"%");
+    }
+
+    return label;
 }
 
 void UpdateDynamicButtonStates(muxc::CommandBar const& commandBar,
@@ -1699,13 +2061,38 @@ void UpdateDynamicButtonStates(muxc::CommandBar const& commandBar,
             continue;
 
         int itemIndex = _wtoi(name.c_str() + underscore + 1);
-        if (itemIndex < 0 || itemIndex >= (int)currentItems.size())
+        if (itemIndex < 0 || (size_t)itemIndex >= currentItems.size())
             continue;
 
-        const auto& item = currentItems[itemIndex];
+        const auto& item = currentItems[(size_t)itemIndex];
 
         bool isVisible =
             ItemMatchesExtensionFilter(item.matchExtensions, summary);
+
+        // --- Label Resolution & Length Clamping ---
+        std::wstring rawLabel = item.GetDisplayLabel();
+        std::wstring fullResolved = (rawLabel.find(L'%') != std::wstring::npos)
+                                        ? ResolveLabelTokens(rawLabel, context)
+                                        : rawLabel;
+        std::wstring displayResolved =
+            TruncateWithEllipsis(fullResolved, kMaxToolbarLabelLength);
+
+        if (item.isMenu) {
+            if (item.showLabel && !displayResolved.empty()) {
+                displayResolved += L" \u25BE";
+            } else {
+                displayResolved = L"\u25BE";
+            }
+            button.Label(displayResolved.c_str());
+            button.LabelPosition(muxc::CommandBarLabelPosition::Default);
+        } else {
+            button.Label(displayResolved.c_str());
+            button.LabelPosition(
+                item.showLabel ? muxc::CommandBarLabelPosition::Default
+                               : muxc::CommandBarLabelPosition::Collapsed);
+        }
+        muxc::ToolTipService::SetToolTip(
+            button, winrt::box_value(winrt::hstring{fullResolved}));
 
         if (disabledInsteadOfHidden) {
             button.Visibility(mux::Visibility::Visible);
@@ -1718,12 +2105,14 @@ void UpdateDynamicButtonStates(muxc::CommandBar const& commandBar,
 
             std::wstring sepName =
                 kButtonNamePrefix + L"_Sep_" + std::to_wstring(itemIndex);
+            std::wstring sepPreName =
+                kButtonNamePrefix + L"_SepPre_" + std::to_wstring(itemIndex);
+
             for (uint32_t j = 0; j < count; j++) {
                 if (auto sepEl =
                         commands.GetAt(j).try_as<mux::FrameworkElement>()) {
-                    if (sepEl.Name() == sepName) {
+                    if (sepEl.Name() == sepName || sepEl.Name() == sepPreName) {
                         sepEl.Visibility(targetVis);
-                        break;
                     }
                 }
             }
@@ -1764,8 +2153,20 @@ muxc::AppBarButton CreateBareButton(int index,
 }
 
 muxc::AppBarButton CreateActionButton(ActionItem const& item, int index) {
+    std::wstring displayLabel = item.GetDisplayLabel();
+    HWND hWnd = GetActiveWindow();
+    if (!IsExplorerFrame(hWnd)) {
+        hWnd = FindWindowW(L"CabinetWClass", nullptr);
+    }
+    ExplorerContext ctx = GetExplorerContext(hWnd);
+    std::wstring fullResolved = (displayLabel.find(L'%') != std::wstring::npos)
+                                    ? ResolveLabelTokens(displayLabel, ctx)
+                                    : displayLabel;
+    std::wstring displayResolved =
+        TruncateWithEllipsis(fullResolved, kMaxToolbarLabelLength);
+
     muxc::AppBarButton button =
-        CreateBareButton(index, item.name, item.labelText,
+        CreateBareButton(index, fullResolved, displayResolved,
                          MakeCommandButtonIcon(item), item.showLabel);
 
     TrackRevoker(
@@ -1787,9 +2188,11 @@ void AppendMenuEntries(std::vector<ActionItem> const& items,
 muxc::MenuFlyoutItemBase CreateMenuEntry(
     ActionItem const& item,
     winrt::weak_ref<muxc::AppBarButton> const& weakButton) {
+    std::wstring displayLabel = item.GetDisplayLabel();
+
     if (item.isMenu && !item.subItems.empty()) {
         muxc::MenuFlyoutSubItem subMenu;
-        subMenu.Text(item.name.c_str());
+        subMenu.Text(displayLabel.c_str());
         if (!item.hideIcon) {
             if (auto icon = TryCreateIconElement(item.icon, item.command))
                 subMenu.Icon(icon);
@@ -1799,7 +2202,7 @@ muxc::MenuFlyoutItemBase CreateMenuEntry(
     }
 
     muxc::MenuFlyoutItem menuItem;
-    menuItem.Text(item.name.c_str());
+    menuItem.Text(displayLabel.c_str());
     if (!item.hideIcon) {
         if (auto icon = TryCreateIconElement(item.icon, item.command))
             menuItem.Icon(icon);
@@ -1820,6 +2223,8 @@ void AppendMenuEntries(std::vector<ActionItem> const& items,
                        wfc::IVector<muxc::MenuFlyoutItemBase> const& target,
                        winrt::weak_ref<muxc::AppBarButton> const& weakButton) {
     for (auto const& item : items) {
+        if (item.separatorBefore)
+            target.Append(muxc::MenuFlyoutSeparator());
         target.Append(CreateMenuEntry(item, weakButton));
         if (item.separatorAfter)
             target.Append(muxc::MenuFlyoutSeparator());
@@ -1920,9 +2325,33 @@ muxc::AppBarButton CreateMenuButton(ActionItem const& item,
                                     int index,
                                     bool openOnHover,
                                     int hoverDelayMs) {
-    muxc::AppBarButton button =
-        CreateBareButton(index, item.name, item.labelText,
-                         MakeCommandButtonIcon(item), item.showLabel);
+    static constexpr const WCHAR* kMenuArrow = L"\u25BE";
+
+    std::wstring displayLabel = item.GetDisplayLabel();
+    HWND hWnd = GetActiveWindow();
+    if (!IsExplorerFrame(hWnd)) {
+        hWnd = FindWindowW(L"CabinetWClass", nullptr);
+    }
+    ExplorerContext ctx = GetExplorerContext(hWnd);
+    std::wstring fullResolved = (displayLabel.find(L'%') != std::wstring::npos)
+                                    ? ResolveLabelTokens(displayLabel, ctx)
+                                    : displayLabel;
+
+    std::wstring truncatedDisplay =
+        TruncateWithEllipsis(fullResolved, kMaxToolbarLabelLength);
+
+    std::wstring finalLabel;
+    if (item.showLabel && !truncatedDisplay.empty()) {
+        finalLabel = truncatedDisplay + L" " + kMenuArrow;
+    } else {
+        // When showLabel is false, display ONLY the arrow
+        finalLabel = kMenuArrow;
+    }
+
+    // Always pass true so the arrow remains visible next to the icon
+    muxc::AppBarButton button = CreateBareButton(
+        index, fullResolved, finalLabel, MakeCommandButtonIcon(item), true);
+
     auto weakButton = winrt::make_weak(button);
 
     muxc::MenuFlyout menu;
@@ -1931,10 +2360,30 @@ muxc::AppBarButton CreateMenuButton(ActionItem const& item,
 
     auto ensureMenuEntries = [subItems = item.subItems,
                               weakButton](muxc::MenuFlyout const& menu) {
-        if (!menu || menu.Items().Size() > 0)
+        if (!menu)
             return;
         try {
-            AppendMenuEntries(subItems, menu.Items(), weakButton);
+            HWND hWnd = nullptr;
+            if (auto btn = weakButton.get()) {
+                hWnd = GetExplorerWindowForElement(btn);
+            }
+            ExplorerContext ctx = GetExplorerContext(hWnd);
+
+            // Clear old items and repopulate with fresh tokens
+            menu.Items().Clear();
+
+            // Resolve tokens only for direct Level-1 children
+            std::vector<ActionItem> resolvedList = subItems;
+            for (auto& entry : resolvedList) {
+                std::wstring label = entry.GetDisplayLabel();
+                std::wstring resolved = (label.find(L'%') != std::wstring::npos)
+                                            ? ResolveLabelTokens(label, ctx)
+                                            : label;
+                entry.labelText =
+                    TruncateWithEllipsis(resolved, kMaxMenuItemLabelLength);
+            }
+
+            AppendMenuEntries(resolvedList, menu.Items(), weakButton);
         } catch (...) {
             Wh_Log(L"Error %08X", winrt::to_hresult().value);
         }
@@ -1990,10 +2439,45 @@ void EnsureActionButtons(muxc::CommandBar const& commandBar) {
     Wh_Log(L"Adding %zu items to command bar", items.size());
     auto commands = commandBar.PrimaryCommands();
 
+    // Helper: Safely insert a separator without duplicating an existing one
+    auto insertSeparatorSafe = [&](uint32_t& index, const std::wstring& name) {
+        if (index > 0) {
+            if (commands.GetAt(index - 1).try_as<muxc::AppBarSeparator>())
+                return;
+        }
+        if (index < commands.Size()) {
+            if (commands.GetAt(index).try_as<muxc::AppBarSeparator>())
+                return;
+        }
+        muxc::AppBarSeparator separator;
+        separator.Name(name.c_str());
+        commands.InsertAt(index++, separator);
+    };
+
+    // Helper: Safely append a separator to the end without duplicating an
+    // existing one
+    auto appendSeparatorSafe = [&](const std::wstring& name) {
+        uint32_t count = commands.Size();
+        if (count == 0)
+            return;
+        if (commands.GetAt(count - 1).try_as<muxc::AppBarSeparator>())
+            return;
+        muxc::AppBarSeparator separator;
+        separator.Name(name.c_str());
+        commands.Append(separator);
+    };
+
     if (commandBar.Name() == L"FileExplorerSecondaryCommandBar") {
         uint32_t insertIndex = 0;
         for (size_t i = 0; i < items.size(); i++) {
             auto const& item = items[i];
+
+            if (item.separatorBefore) {
+                std::wstring name =
+                    kButtonNamePrefix + L"_SepPre_" + std::to_wstring(i);
+                insertSeparatorSafe(insertIndex, name);
+            }
+
             if (item.isMenu && !item.subItems.empty()) {
                 commands.InsertAt(
                     insertIndex++,
@@ -2005,19 +2489,24 @@ void EnsureActionButtons(muxc::CommandBar const& commandBar) {
             }
 
             if (item.separatorAfter) {
-                muxc::AppBarSeparator separator;
-                std::wstring name = kButtonNamePrefix;
-                name += L"_Sep_";
-                name += std::to_wstring(i);
-                separator.Name(name.c_str());
-                commands.InsertAt(insertIndex++, separator);
+                std::wstring name =
+                    kButtonNamePrefix + L"_Sep_" + std::to_wstring(i);
+                insertSeparatorSafe(insertIndex, name);
             }
         }
         return;
     }
 
+    // Primary Command Bar
     for (size_t i = 0; i < items.size(); i++) {
         auto const& item = items[i];
+
+        if (item.separatorBefore) {
+            std::wstring name =
+                kButtonNamePrefix + L"_SepPre_" + std::to_wstring(i);
+            appendSeparatorSafe(name);
+        }
+
         if (item.isMenu && !item.subItems.empty()) {
             commands.Append(CreateMenuButton(item, (int)i, openMenuOnHover,
                                              menuHoverDelay));
@@ -2026,12 +2515,9 @@ void EnsureActionButtons(muxc::CommandBar const& commandBar) {
         }
 
         if (item.separatorAfter) {
-            muxc::AppBarSeparator separator;
-            std::wstring name = kButtonNamePrefix;
-            name += L"_Sep_";
-            name += std::to_wstring(i);
-            separator.Name(name.c_str());
-            commands.Append(separator);
+            std::wstring name =
+                kButtonNamePrefix + L"_Sep_" + std::to_wstring(i);
+            appendSeparatorSafe(name);
         }
     }
 }
@@ -2128,7 +2614,8 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
         std::lock_guard<std::mutex> lock(g_settings.mutex);
         placeOnSecondary = g_settings.placeOnSecondaryBar;
         for (const auto& itm : g_settings.items) {
-            if (!TrimWhitespaceAndQuotes(itm.matchExtensions).empty()) {
+            if (!TrimWhitespaceAndQuotes(itm.matchExtensions).empty() ||
+                itm.labelText.find(L'%') != std::wstring::npos) {
                 hasFilters = true;
                 break;
             }
@@ -2221,7 +2708,7 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
                 currentEntry->lastSelectionCount = count;
                 currentEntry->lastFocusedItem = focused;
 
-                ExplorerContext ctx;
+                ExplorerContext ctx = GetExplorerContext(hWnd);
                 ctx.shellView = view;
                 UpdateDynamicButtonStates(cb, hWnd, &ctx);
             });
@@ -2692,51 +3179,6 @@ std::vector<HWND> GetFileExplorerWnds() {
     return hWnds;
 }
 
-constexpr int kMaxMenuDepth = 2;
-
-ActionItem LoadActionItem(PCWSTR prefix, int depth, bool* isEmpty) {
-    auto name = WindhawkUtils::StringSetting::make(L"%s.name", prefix);
-    auto command = WindhawkUtils::StringSetting::make(L"%s.command", prefix);
-    auto parameters =
-        WindhawkUtils::StringSetting::make(L"%s.parameters", prefix);
-    auto matchExt =
-        WindhawkUtils::StringSetting::make(L"%s.matchExtensions", prefix);
-    auto iconGlyph =
-        WindhawkUtils::StringSetting::make(L"%s.iconGlyph", prefix);
-
-    ActionItem item;
-    item.name = name.get();
-    item.command = command.get();
-    item.parameters = parameters.get();
-    item.matchExtensions = matchExt.get();
-    item.icon = iconGlyph.get();
-    item.hideIcon = Wh_GetIntSetting(L"%s.hideIcon", prefix) != 0;
-    item.showLabel = Wh_GetIntSetting(L"%s.showLabel", prefix) != 0;
-    item.labelText =
-        WindhawkUtils::StringSetting::make(L"%s.labelText", prefix).get();
-    item.separatorAfter = Wh_GetIntSetting(L"%s.separatorAfter", prefix) != 0;
-
-    if (depth < kMaxMenuDepth) {
-        auto type = WindhawkUtils::StringSetting::make(L"%s.type", prefix);
-        item.isMenu = wcscmp(type.get(), L"menu") == 0;
-        for (int i = 0; i < 100; i++) {
-            WCHAR subPrefix[256];
-            swprintf(subPrefix, ARRAYSIZE(subPrefix), L"%s.subItems[%d]",
-                     prefix, i);
-            bool subEmpty = false;
-            ActionItem subItem =
-                LoadActionItem(subPrefix, depth + 1, &subEmpty);
-            if (subEmpty)
-                break;
-            item.subItems.push_back(std::move(subItem));
-        }
-    }
-
-    *isEmpty =
-        item.name.empty() && item.command.empty() && item.subItems.empty();
-    return item;
-}
-
 void LoadSettings() {
     {
         std::lock_guard<std::mutex> lock(g_iconCacheMutex);
@@ -2754,16 +3196,82 @@ void LoadSettings() {
     int menuHoverDelay = Wh_GetIntSetting(L"menuHover.delay");
     g_settings.menuHoverDelay = menuHoverDelay >= 0 ? menuHoverDelay : 0;
 
-    g_settings.items.clear();
-    for (int i = 0; i < 100; i++) {
+    std::vector<ActionItem> flatItems;
+
+    for (int i = 0; i < 200; i++) {
         WCHAR prefix[64];
         swprintf(prefix, ARRAYSIZE(prefix), L"items[%d]", i);
-        bool isEmpty = false;
-        ActionItem item = LoadActionItem(prefix, 0, &isEmpty);
-        if (isEmpty)
+
+        auto idSetting = WindhawkUtils::StringSetting::make(L"%s.id", prefix);
+        auto cmdSetting =
+            WindhawkUtils::StringSetting::make(L"%s.command", prefix);
+        auto labelSetting =
+            WindhawkUtils::StringSetting::make(L"%s.labelText", prefix);
+
+        // Stop if all core fields are blank
+        if (!*idSetting.get() && !*cmdSetting.get() && !*labelSetting.get()) {
             break;
-        g_settings.items.push_back(std::move(item));
+        }
+
+        ActionItem item;
+        item.id = TrimWhitespaceAndQuotes(idSetting.get());
+
+        if (item.id.empty()) {
+            item.id = L"item_" + std::to_wstring(i);
+        }
+
+        auto typeStr = WindhawkUtils::StringSetting::make(L"%s.type", prefix);
+        item.isMenu = (wcscmp(typeStr.get(), L"menu") == 0);
+
+        item.parent = TrimWhitespaceAndQuotes(
+            WindhawkUtils::StringSetting::make(L"%s.parent", prefix).get());
+        item.labelText = labelSetting.get();
+        item.command = cmdSetting.get();
+        item.parameters =
+            WindhawkUtils::StringSetting::make(L"%s.parameters", prefix).get();
+        item.matchExtensions =
+            WindhawkUtils::StringSetting::make(L"%s.matchExtensions", prefix)
+                .get();
+        item.icon =
+            WindhawkUtils::StringSetting::make(L"%s.iconGlyph", prefix).get();
+        item.hideIcon = Wh_GetIntSetting(L"%s.hideIcon", prefix) != 0;
+        item.showLabel = Wh_GetIntSetting(L"%s.showLabel", prefix) != 0;
+        item.separatorBefore =
+            Wh_GetIntSetting(L"%s.separatorBefore", prefix) != 0;
+        item.separatorAfter =
+            Wh_GetIntSetting(L"%s.separatorAfter", prefix) != 0;
+
+        flatItems.push_back(std::move(item));
     }
+
+    // 1. Separate top-level toolbar items (parent is blank)
+    std::vector<ActionItem> rootItems;
+    for (const auto& item : flatItems) {
+        if (item.parent.empty()) {
+            rootItems.push_back(item);
+        }
+    }
+
+    // 2. Recursively populate subItems by matching candidate.parent == node.id
+    std::function<void(ActionItem&)> attachChildren = [&](ActionItem& node) {
+        if (!node.isMenu)
+            return;
+
+        for (const auto& candidate : flatItems) {
+            if (!candidate.parent.empty() &&
+                _wcsicmp(candidate.parent.c_str(), node.id.c_str()) == 0) {
+                ActionItem child = candidate;
+                attachChildren(child);
+                node.subItems.push_back(std::move(child));
+            }
+        }
+    };
+
+    for (auto& root : rootItems) {
+        attachChildren(root);
+    }
+
+    g_settings.items = std::move(rootItems);
 }
 
 // ============================================================================
