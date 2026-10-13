@@ -28,7 +28,7 @@ API, which works without an API key for both stocks (`AAPL`, `VNM.VN`) and crypt
 This mod sends HTTPS requests from `explorer.exe` to the URL set in **Price API URL**.
 By default that is `query1.finance.yahoo.com`. It sends one request per symbol (up to
 4) at startup, then once every **Refresh interval** (default 60 seconds). Each request
-uses the User-Agent `CoinStockMonitor/1.1 (Windhawk mod)`. No other data is sent. To
+identifies the mod by name in its User-Agent header. No other data is sent. To
 stop all requests, disable the mod.
 
 ## Settings
@@ -155,7 +155,7 @@ using WindhawkUtils::StringSetting;
 namespace {
 
 constexpr wchar_t kOverlayClassName[] = L"WhTaskbarPriceMonitorOverlay";
-constexpr wchar_t kUserAgent[] = L"CoinStockMonitor/1.1 (Windhawk mod)";
+constexpr wchar_t kUserAgent[] = L"CoinStockMonitor/" WH_MOD_VERSION L" (Windhawk mod)";
 constexpr wchar_t kSymbolPlaceholder[] = L"{symbol}";
 constexpr wchar_t kSeparator[] = L"  |  ";
 constexpr wchar_t kHexDigits[] = L"0123456789ABCDEF";
@@ -359,9 +359,16 @@ std::wstring FormatChange(double percent) {
 std::mutex g_requestMutex;
 HINTERNET g_activeRequest = nullptr;
 
-void SetActiveRequest(HINTERNET request) {
+// Returns false if the mod is unloading, in which case the caller closes the request.
+// Checking the stop event under the same lock as CancelActiveRequest closes the gap
+// where a request could start after the cancel.
+bool SetActiveRequest(HINTERNET request) {
     std::lock_guard<std::mutex> lock(g_requestMutex);
+    if (StopRequested()) {
+        return false;
+    }
     g_activeRequest = request;
+    return true;
 }
 
 // Closes the request unless CancelActiveRequest has already closed it.
@@ -411,7 +418,11 @@ bool HttpGet(HINTERNET session, const std::wstring& url, std::string& body) {
     HINTERNET request = WinHttpOpenRequest(
         connection, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER,
         WINHTTP_DEFAULT_ACCEPT_TYPES, secure ? WINHTTP_FLAG_SECURE : 0);
-    SetActiveRequest(request);
+    if (request && !SetActiveRequest(request)) {
+        WinHttpCloseHandle(request);
+        WinHttpCloseHandle(connection);
+        return false;
+    }
 
     bool ok = false;
     if (request &&
@@ -746,8 +757,8 @@ void WINAPI CreateOverlayOnTaskbarThread(PVOID parameter) {
     windowClass.lpfnWndProc = OverlayWndProc;
     windowClass.hInstance = module;
     windowClass.lpszClassName = kOverlayClassName;
-    if (!RegisterClassExW(&windowClass) &&
-        GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+    if (!RegisterClassExW(&windowClass)) {
+        Wh_Log(L"RegisterClassExW failed: %u", GetLastError());
         return;
     }
 
@@ -779,11 +790,6 @@ void WINAPI DestroyOverlayOnTaskbarThread(PVOID parameter) {
     HWND overlay = static_cast<HWND>(parameter);
     KillTimer(overlay, kPlacementTimerId);
     DestroyWindow(overlay);
-    UnregisterClassW(kOverlayClassName, GetThisModule());
-    if (g_font) {
-        DeleteObject(g_font);
-        g_font = nullptr;
-    }
 }
 
 // Waits for this process's taskbar, then fetches prices until the mod unloads.
@@ -895,6 +901,14 @@ void Wh_ModUninit() {
     if (overlay && IsWindow(overlay)) {
         RunFromWindowThread(GetParent(overlay), DestroyOverlayOnTaskbarThread,
                             overlay);
+    }
+
+    // Always release the class and font, even if the overlay was already gone.
+    // A class left registered would point into this DLL after it unloads.
+    UnregisterClassW(kOverlayClassName, GetThisModule());
+    if (g_font) {
+        DeleteObject(g_font);
+        g_font = nullptr;
     }
     CloseHandle(g_stopEvent);
 }
