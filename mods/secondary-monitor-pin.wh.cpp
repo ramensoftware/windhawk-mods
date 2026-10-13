@@ -305,7 +305,8 @@ static void StopTimersAndHooks();
 
 static void ReinitializeCom() {
     ReleaseCom();
-    g_wePinned.clear();
+    // The windows, and possibly their pins, outlive the COM objects; only the
+    // cached monitor state needs to be rebuilt.
     g_cache.clear();
 
     if (!InitCom() && g_started) {
@@ -372,7 +373,8 @@ static bool VdSyncWindow(HWND hwnd, bool onPrimary) {
         if (!pinned) {
             if (!VdPin(hwnd))
                 return false;
-            g_wePinned.push_back(hwnd);
+            if (!ContainsPinned(hwnd))
+                g_wePinned.push_back(hwnd);
             Wh_Log(L"Pinned window %p", (void*)hwnd);
         }
         return true;
@@ -508,21 +510,27 @@ static bool InitCom() {
 
     if (!g_sp) {
         if (FAILED(CoCreateInstance(kCLSID_ImmersiveShell, nullptr, CLSCTX_LOCAL_SERVER,
-                                    IID_IServiceProvider, (void**)&g_sp)))
+                                    IID_IServiceProvider, (void**)&g_sp))) {
+            ReleaseCom();
             return false;
+        }
     }
 
     if (!g_pinnedApps && FAILED(g_sp->QueryService(kCLSID_VirtualDesktopPinnedApps,
                                                    kIID_IVirtualDesktopPinnedApps,
-                                                   (void**)&g_pinnedApps)))
+                                                   (void**)&g_pinnedApps))) {
+        ReleaseCom();
         return false;
+    }
 
     if (!g_views &&
         FAILED(g_sp->QueryService(kIID_IApplicationViewCollection,
                                   kIID_IApplicationViewCollection, (void**)&g_views)) &&
         FAILED(g_sp->QueryService(kIID_IApplicationViewCollectionWin10,
-                                  kIID_IApplicationViewCollectionWin10, (void**)&g_views)))
+                                  kIID_IApplicationViewCollectionWin10, (void**)&g_views))) {
+        ReleaseCom();
         return false;
+    }
 
     g_shellPid = GetShellPid();
     return true;
