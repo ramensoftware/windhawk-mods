@@ -123,6 +123,7 @@ VOID NTAPI TpSet_Hook(PVOID timer, PLARGE_INTEGER due, ULONG period, ULONG windo
 static bool TryHookFlyout(HMODULE mod) {
     if (!mod || g_flyoutHookAttempted.exchange(true)) return false;
 
+    // twinui.pcshell.dll
     WindhawkUtils::SYMBOL_HOOK twinui_pcshell_dll_hooks[] = {
         {
             {L"public: static void __cdecl SnapFlyoutTelemetry::SnapFlyout_StartInvokeTimer(void)"},
