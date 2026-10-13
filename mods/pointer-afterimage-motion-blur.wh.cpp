@@ -2,7 +2,7 @@
 // @id              pointer-afterimage-motion-blur
 // @name            Pointer Afterimage Motion Blur
 // @description     A real motion blur for the mouse pointer, made of fading afterimages of your own cursor
-// @version         1.0
+// @version         1.1
 // @author          sidlikesgrapess
 // @github          https://github.com/sidlikesgrapess
 // @homepage        https://github.com/sidlikesgrapess/CursorMotionBlur
@@ -25,45 +25,35 @@ blur is made of your own cursor picture.
 
 ## Features
 - Uses your real cursor: your scheme, size and colour, and whatever shape it
-  has right now (arrow, text, hand...).
-- Right size on every monitor, including monitors with different scaling.
+  has right now. Works with any pointer size and monitor scaling.
 - Optionally hides the real pointer during very fast movement so only the blur
-  shows; it comes back about 25 ms after you slow down.
+  shows.
 - Pauses itself while a fullscreen app or game is in front.
-- Runs in its own small Windhawk process: nothing is injected into other
-  programs.
+- Runs in its own small Windhawk process.
 
-## Settings
-- **Trail opacity**: how solid the blur is right behind the pointer. It always
-  fades to nothing at the end of the trail.
-- **Trail length**: how far back in time the blur reaches, in ms. Longer means
-  a longer streak.
-- **Hide the real cursor when moving very fast** (off by default): while you
-  move fast, the system cursors are swapped for an invisible one, and your own
-  cursors are put back as soon as you slow down and when the mod is disabled.
-- **Hide above speed**: the pointer speed that hides the real cursor, in cm/s
-  as measured on your main monitor. It is the same hand speed on every
-  monitor.
-- **Pause in fullscreen apps and games**: no blur while a fullscreen app is in
-  front.
+## Limitations
+- No blur over the Start menu, Search, Task View or the notification centre:
+  Windows keeps those above every app's windows.
+- In a few apps (Paint, Photos, File Explorer's address and search bars) the
+  pointer can briefly flicker to the arrow while it moves.
 
 ## Resource use
-- No CPU while the mouse is still; typically well under 1% while it moves, and
-  about 1.5 MB of memory at the default settings.
-- While an administrator window (Task Manager, Windhawk...) is in front,
-  Windows gives the mod no mouse input, so it checks the cursor on a timer.
+- About 1.5 MB of memory. It draws with plain GDI and its own blending; a GPU
+  (Direct3D) version needed about 24 MB just to load.
+- Practically no CPU while the mouse is still (a quick look at the front window
+  twice a second); about 1-2.5% while it moves, more on high-DPI screens.
 
 ## Troubleshooting
 - **The cursor stays invisible** (only possible with hiding on, e.g. if the
   process was killed mid-flick). Disable and re-enable the mod, or open
   Settings > Bluetooth & devices > Mouse > Additional mouse settings > Pointers
   and click OK.
+- **The blur is stuck at the wrong size or shape** after changing the pointer
+  size or scheme. Disable and re-enable the mod.
 - **Another tool's custom cursors get reset.** Restoring after hiding reloads
   the Windows cursor scheme, so turn hiding off if you use a tool that swaps
   the system cursors, such as the Shake to Find Cursor or macOS magnifying
   cursor mods.
-- **No blur over the Start menu, Search or Task View.** Windows keeps those
-  above every app's windows, including the blur.
 - **No blur in a game or video.** That is the fullscreen pause; turn off
   "Pause in fullscreen apps and games" if you want it there.
 - **The cursor hides too often or not at all.** Raise or lower "Hide above
@@ -143,10 +133,8 @@ static std::atomic<int> g_monGap{7};     // ms between frames: half a refresh of
 static std::atomic<bool> g_blankActive;  // the system cursors are currently swapped for an invisible one
 static std::atomic<bool> g_drawFailed;   // the overlay could not draw: then never hide the real cursor
 static std::atomic<bool> g_monStale, g_spritesStale;   // display or cursor settings changed
-static std::atomic<bool> g_recheck;      // settings or the foreground window changed: check for fullscreen apps now
+static std::atomic<bool> g_recheck;      // settings changed: look at the window in front now
 static std::atomic<bool> g_paused;       // a fullscreen app is in front
-// the window in front runs with more rights: Windows sends us no raw input then
-static std::atomic<bool> g_adminFront;
 static std::atomic<bool> g_stop;
 static std::atomic<HWND> g_wnd;          // the overlay window (owned by the render thread)
 
@@ -207,17 +195,14 @@ static bool FullscreenAppRunning() {
            (s == QUNS_BUSY || s == QUNS_RUNNING_D3D_FULL_SCREEN || s == QUNS_PRESENTATION_MODE);
 }
 
-// Width of the arrow as Windows loaded it: at the system DPI, and with the Accessibility pointer size applied.
-static int ArrowSize() {
-    int size = 0;
-    ICONINFO ii;
-    if (GetIconInfo(LoadCursorW(nullptr, IDC_ARROW), &ii)) {
-        BITMAP bm;
-        if (GetObjectW(ii.hbmColor ? ii.hbmColor : ii.hbmMask, sizeof(bm), &bm)) size = bm.bmWidth;
-        if (ii.hbmColor) DeleteObject(ii.hbmColor);
-        DeleteObject(ii.hbmMask);
-    }
-    return size > 0 ? size : GetSystemMetrics(SM_CXCURSOR);
+// The pointer size from Settings > Accessibility > Mouse pointer and touch, at 100% scaling: 32 px at size 1 and 16 px
+// more per step. (The cursor pictures Windows hands out can stay at size 1 when this is larger.)
+static int PointerSize() {
+    DWORD size = 0, len = sizeof(size);
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Control Panel\\Cursors", L"CursorBaseSize", RRF_RT_REG_DWORD, nullptr, &size,
+                     &len) == ERROR_SUCCESS && size >= 32 && size <= 256)
+        return (int)size;
+    return 32;
 }
 
 static void ReloadCursors() { SystemParametersInfoW(SPI_SETCURSORS, 0, nullptr, 0); }
@@ -233,26 +218,73 @@ static void SetBlank(bool on) {
     Wh_SetIntValue(g_hiddenKey, on);
 }
 
+// A process's integrity level (medium for normal apps, high for administrator ones), or -1 if its token can't be read.
+static int Integrity(HANDLE process) {
+    int level = -1;
+    HANDLE token;
+    if (OpenProcessToken(process, TOKEN_QUERY, &token)) {
+        alignas(TOKEN_MANDATORY_LABEL) BYTE buf[SECURITY_MAX_SID_SIZE + sizeof(TOKEN_MANDATORY_LABEL)];
+        DWORD len;
+        if (GetTokenInformation(token, TokenIntegrityLevel, buf, sizeof(buf), &len)) {
+            PSID sid = ((TOKEN_MANDATORY_LABEL*)buf)->Label.Sid;
+            level = (int)*GetSidSubAuthority(sid, *GetSidSubAuthorityCount(sid) - 1);
+        }
+        CloseHandle(token);
+    }
+    return level;
+}
+
+// Whether a window belongs to a process with a higher integrity level than this one (an administrator app such as
+// Task Manager, an admin terminal or Windhawk itself): Windows sends this process no raw mouse input meanwhile.
+static int g_ownIntegrity;   // set at start
+
+static bool HigherRights(HWND w) {
+    DWORD pid = 0;
+    if (!w || !GetWindowThreadProcessId(w, &pid)) return false;
+    HANDLE p = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!p) return true;
+    int level = Integrity(p);
+    CloseHandle(p);
+    return level < 0 || level > g_ownIntegrity;
+}
+
 // ---- sampler ----
 
 static DWORD WINAPI SampleThread(void*) {
-    HMONITOR lastMon = nullptr;
-    int arrow = 32;
-    double hidePxPerCm = 38;   // turns the hide speed (cm/s on the main monitor) into px/s on the monitor in use
-    LONGLONG lastMove = 0, lastFast = 0, lastFullscreenCheck = -1000;
-    bool paused = false, timerHigh = false;
+    RECT monRect = {};          // the monitor the cursor is on
+    HWND lastFront = nullptr;
+    int pointerSize = 0;        // the pointer size set in Windows, at 100% scaling (0: not read yet)
+    UINT mainDpi = 96;
+    double mainPxPerCm = 0;     // pixel density of the main monitor (0: not measured yet)
+    double hidePxPerCm = 38;    // turns the hide speed (cm/s on the main monitor) into px/s on the monitor in use
+    LONGLONG lastMove = 0, lastFast = 0, lastLook = -1000;
+    bool paused = false, timerHigh = false, adminFront = false;
     while (!g_stop) {
-        if (g_recheck.exchange(false)) lastFullscreenCheck = -1000;
-        LONGLONG checkedAt = Now();
-        if (checkedAt - lastFullscreenCheck >= 500) {
-            lastFullscreenCheck = checkedAt;
-            bool was = paused;
-            paused = g_pauseInFullscreen && FullscreenAppRunning();
-            g_paused = paused;
-            if (paused != was) {
-                Wh_Log(L"Paused for a fullscreen app: %d", paused);
-                // stop listening to the mouse during the game
-                if (g_wnd) PostMessageW(g_wnd, WM_APP_PAUSED, paused, 0);
+        // Every half second, the window in front. Windows doesn't tell this process when a window with more rights
+        // comes to the front (and then sends it no mouse input), so it has to look.
+        bool forced = g_recheck.exchange(false);
+        LONGLONG t = Now();
+        if (forced || t - lastLook >= 500) {
+            lastLook = t;
+            HWND front = GetForegroundWindow();
+            bool frontChanged = front != lastFront;
+            if (frontChanged) {
+                lastFront = front;
+                bool admin = HigherRights(front);
+                if (admin != adminFront) Wh_Log(L"Administrator window in front: %d", admin);
+                adminFront = admin;
+            }
+            // A fullscreen app: looked for when the front window changes, and while the mouse moves or the mod is
+            // paused, as an app can also go fullscreen (or leave it) in place.
+            if (forced || frontChanged || paused || t - lastMove < 1000) {
+                bool was = paused;
+                paused = g_pauseInFullscreen && FullscreenAppRunning();
+                g_paused = paused;
+                if (paused != was) {
+                    Wh_Log(L"Paused for a fullscreen app: %d", paused);
+                    // stop listening to the mouse during the game
+                    if (g_wnd) PostMessageW(g_wnd, WM_APP_PAUSED, paused, 0);
+                }
             }
         }
         if (paused) {
@@ -262,36 +294,38 @@ static DWORD WINAPI SampleThread(void*) {
             if (g_hideWanted) { g_hideWanted = false; SetEvent(g_hideChanged); }
             LeaveCriticalSection(&g_gate);
             if (timerHigh) { timeEndPeriod(1); timerHigh = false; }
-            // woken when the foreground window changes; the timeout catches an app leaving fullscreen in place
-            WaitForSingleObject(g_mouseWake, 1000);
+            WaitForSingleObject(g_mouseWake, 500);
             continue;
         }
 
         CURSORINFO ci;
         ci.cbSize = sizeof(ci);
         bool showing = GetCursorInfo(&ci) && (ci.flags & CURSOR_SHOWING);
-        // Crossing to another monitor: measure it here, outside the lock, as some of these calls are slow.
-        HMONITOR mon = showing ? MonitorFromPoint(ci.ptScreenPos, MONITOR_DEFAULTTONEAREST) : lastMon;
+        // Crossing to another monitor (or display or cursor settings changed): measure it here, outside the lock, as
+        // some of these calls are slow.
         bool stale = showing && g_monStale.exchange(false);
-        bool newMon = showing && (mon != lastMon || stale);
+        bool newMon = showing && (stale || !PtInRect(&monRect, ci.ptScreenPos));
         int monCursor = 32;
         if (newMon) {
-            lastMon = mon;
-            UINT dpi = 96, mainDpi = 96, dy;
+            HMONITOR mon = MonitorFromPoint(ci.ptScreenPos, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi;
+            mi.cbSize = sizeof(mi);
+            if (GetMonitorInfoW(mon, &mi)) monRect = mi.rcMonitor;
+            UINT dpi = 96, dy;
             GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dpi, &dy);
-            // While hiding, the arrow is our invisible one: keep a size only if it was measured with hiding off.
-            bool blankBefore = g_blankActive;
-            int measured = blankBefore ? 0 : ArrowSize();
-            if (!blankBefore && !g_blankActive) arrow = measured;
-            monCursor = MulDiv(arrow, dpi, GetDpiForSystem());
+            if (stale || !pointerSize) pointerSize = PointerSize();
+            monCursor = MulDiv(pointerSize, dpi, 96);
             int hz = RefreshRate(mon);
             // The hide speed is set in cm/s as measured on the main monitor. Windows moves the pointer further on a
             // monitor with more scaling (twice the pixels at 200%), so scale it by the DPI to hide at the same hand
             // speed on every monitor.
-            POINT origin = {0, 0};
-            HMONITOR mainMon = MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
-            GetDpiForMonitor(mainMon, MDT_EFFECTIVE_DPI, &mainDpi, &dy);
-            hidePxPerCm = PixelsPerCm(mainMon, mainDpi) * dpi / mainDpi;
+            if (stale || !mainPxPerCm) {
+                POINT origin = {0, 0};
+                HMONITOR mainMon = MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
+                GetDpiForMonitor(mainMon, MDT_EFFECTIVE_DPI, &mainDpi, &dy);
+                mainPxPerCm = PixelsPerCm(mainMon, mainDpi);
+            }
+            hidePxPerCm = mainPxPerCm * dpi / mainDpi;
             // Half a refresh: frames are not timed to the screen's refreshes, so a whole one would leave the blur
             // fresh on some refreshes and almost a refresh old on others, and it would jitter against the pointer.
             g_monGap = 500 / hz > 3 ? 500 / hz : 3;
@@ -372,11 +406,11 @@ static DWORD WINAPI SampleThread(void*) {
             WaitForSingleObject(g_mouseWake, hidden ? 2 : 10);
         } else {
             if (timerHigh) { timeEndPeriod(1); timerHigh = false; }
-            // Sleep until the mouse moves; while an app hides the cursor, just look once per report. While a window with more
-            // rights is in front no mouse reports arrive, so look every 10 ms instead, and every 100 ms once the mouse has
-            // been still for a second.
-            DWORD poll = INFINITE;
-            if (g_adminFront) poll = Now() - lastMove < 1000 ? 10 : 100;
+            // Sleep until the mouse moves (or the next look at the window in front); while an app hides the cursor, just
+            // look once per report. While a window with more rights is in front no mouse reports arrive, so look at the
+            // cursor every 10 ms instead, and every 100 ms once the mouse has been still for a second.
+            DWORD poll = 500;
+            if (adminFront) poll = Now() - lastMove < 1000 ? 10 : 100;
             if (WaitForSingleObject(g_mouseWake, poll) == WAIT_OBJECT_0 && visible) lastMove = Now();
         }
     }
@@ -418,7 +452,7 @@ static DWORD WINAPI HideThread(void*) {
 
 // ---- cursor pictures (render thread only) ----
 
-static struct { HCURSOR h; Sprite* sp; } g_sprites[MAX_SPRITES];
+static struct { HCURSOR h; int size; Sprite* sp; } g_sprites[MAX_SPRITES];   // keyed by cursor and drawn size
 static int g_nSprites, g_nextId;
 // Cursors an app made invisible on purpose: no blur for them. Checked again after a while, because another tool that
 // hides the cursor the way this mod does (swapping the system cursors) would otherwise switch the blur off for good.
@@ -426,18 +460,60 @@ static struct { HCURSOR h; LONGLONG t; } g_empties[MAX_SPRITES];
 static int g_nEmpties;
 static Sprite* g_lastSprite;             // the last real picture, drawn while the real cursor is hidden
 
-// Takes the cursor's picture by drawing it on black and on white: what shows through gives the opacity.
-static Sprite* Grab(HCURSOR h, bool* empty) {
-    *empty = false;
+// The standard cursors, with their names in the cursor scheme (HKCU\Control Panel\Cursors).
+static const struct { WORD id; PCWSTR name; } kStandardCursors[] = {
+    {32512, L"Arrow"},    {32513, L"IBeam"},    {32514, L"Wait"},     {32515, L"Crosshair"}, {32516, L"UpArrow"},
+    {32631, L"NWPen"},    {32642, L"SizeNWSE"}, {32643, L"SizeNESW"}, {32644, L"SizeWE"},    {32645, L"SizeNS"},
+    {32646, L"SizeAll"},  {32648, L"No"},       {32649, L"Hand"},     {32650, L"AppStarting"}, {32651, L"Help"},
+    {32671, L"Pin"},      {32672, L"Person"},
+};
+
+// The cursor at size x size, for the caller to destroy: a standard cursor is loaded again from its scheme file (or from
+// Windows' own cursors) at that size, so a large pointer stays sharp; any other is copied, enlarged if need be.
+static HCURSOR AtSize(HCURSOR h, int size) {
+    for (const auto& c : kStandardCursors) {
+        if (LoadCursorW(nullptr, MAKEINTRESOURCEW(c.id)) != h) continue;
+        WCHAR path[MAX_PATH];
+        DWORD len = sizeof(path);
+        HANDLE loaded = nullptr;
+        if (RegGetValueW(HKEY_CURRENT_USER, L"Control Panel\\Cursors", c.name, RRF_RT_REG_SZ, nullptr, path, &len) ==
+                ERROR_SUCCESS && path[0])
+            loaded = LoadImageW(nullptr, path, IMAGE_CURSOR, size, size, LR_LOADFROMFILE);
+        if (!loaded) loaded = LoadImageW(nullptr, MAKEINTRESOURCEW(c.id), IMAGE_CURSOR, size, size, 0);
+        if (loaded) return (HCURSOR)loaded;
+        break;
+    }
+    return (HCURSOR)CopyImage(h, IMAGE_CURSOR, size, size, 0);
+}
+
+// A cursor's picture size and hotspot.
+static bool CursorInfo(HCURSOR h, int* w, int* ht, POINT* hot) {
     ICONINFO ii;
-    if (!GetIconInfo(h, &ii)) return nullptr;
+    if (!GetIconInfo(h, &ii)) return false;
     BITMAP bm = {};
     GetObjectW(ii.hbmColor ? ii.hbmColor : ii.hbmMask, sizeof(bm), &bm);
-    // a monochrome mask holds AND and XOR halves
-    int w = bm.bmWidth, ht = ii.hbmColor ? bm.bmHeight : bm.bmHeight / 2;
+    *w = bm.bmWidth;
+    *ht = ii.hbmColor ? bm.bmHeight : bm.bmHeight / 2;   // a monochrome mask holds AND and XOR halves
+    *hot = {(LONG)ii.xHotspot, (LONG)ii.yHotspot};
     if (ii.hbmColor) DeleteObject(ii.hbmColor);
     if (ii.hbmMask) DeleteObject(ii.hbmMask);
-    if (w <= 0 || ht <= 0 || w > 256 || ht > 256) return nullptr;
+    return true;
+}
+
+// Takes the cursor's picture by drawing it on black and on white: what shows through gives the opacity. It is taken at
+// the size it will be drawn (up to 256 px): the cursor as it is when that is its size, else a copy at that size.
+static Sprite* Grab(HCURSOR h, int size, bool* empty) {
+    *empty = false;
+    if (size > 256) size = 256;
+    int w, ht;
+    POINT hot;
+    if (!CursorInfo(h, &w, &ht, &hot)) return nullptr;
+    HCURSOR sized = w != size ? AtSize(h, size) : nullptr;
+    if (sized && CursorInfo(sized, &w, &ht, &hot)) h = sized;
+    if (w <= 0 || ht <= 0 || w > 256 || ht > 256) {
+        if (sized) DestroyCursor(sized);
+        return nullptr;
+    }
 
     int n = w * ht;
     BITMAPINFO bi = {};
@@ -468,11 +544,12 @@ static Sprite* Grab(HCURSOR h, bool* empty) {
             any |= a != 0;
         }
         SelectObject(dc, old);
-        *sp = {w, ht, (int)ii.xHotspot, (int)ii.yHotspot, ++g_nextId, px};
+        *sp = {w, ht, (int)hot.x, (int)hot.y, ++g_nextId, px};
         if (!any) { free(sp); sp = nullptr; *empty = true; }
     }
     if (dib) DeleteObject(dib);
     if (dc) DeleteDC(dc);
+    if (sized) DestroyCursor(sized);
     return sp;
 }
 
@@ -492,17 +569,17 @@ static bool IsEmpty(HCURSOR h) {
     return false;
 }
 
-static Sprite* GetSprite(HCURSOR h) {
+static Sprite* GetSprite(HCURSOR h, int size) {
     for (int i = 0; i < g_nSprites; i++)
-        if (g_sprites[i].h == h) return g_sprites[i].sp;
+        if (g_sprites[i].h == h && g_sprites[i].size == size) return g_sprites[i].sp;
     if (IsEmpty(h)) return nullptr;
     bool hiddenBefore = g_blankActive, empty;
-    Sprite* sp = Grab(h, &empty);
+    Sprite* sp = Grab(h, size, &empty);
     // Only keep a picture taken while the real cursor is showing: blanking replaces the content under the same handle.
     if (sp && g_blankActive) { free(sp); sp = nullptr; }
     if (sp) {
         if (g_nSprites == MAX_SPRITES) FreeSprites();
-        g_sprites[g_nSprites++] = {h, sp};
+        g_sprites[g_nSprites++] = {h, size, sp};
     }
     // Empty while our own blanking was off the whole time: the app itself shows an invisible cursor.
     if (empty && !hiddenBefore && !g_blankActive) {
@@ -633,8 +710,10 @@ static bool Draw(const Sprite* sp, int sw, int sh, const Copy* c, int n, int x, 
     SIZE size = {w, h};
     BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
     UpdateLayeredWindow(g_wnd, nullptr, &dst, &size, g_memDc, &src, 0, &bf, ULW_ALPHA);
-    if (!IsWindowVisible(g_wnd))
+    if (!g_shown) {
         SetWindowPos(g_wnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        g_shown = true;
+    }
     return true;
 }
 
@@ -671,7 +750,7 @@ static bool Render() {
         sp = g_lastSprite;   // the real cursor is hidden: keep drawing the picture taken before
     } else {
         if (IsEmpty(handle)) return Hide();   // the app hid its cursor: don't blur the previous one
-        sp = GetSprite(handle);
+        sp = GetSprite(handle, size);
         if (sp) g_lastSprite = sp;
         else sp = g_lastSprite;
     }
@@ -719,7 +798,6 @@ static bool Render() {
     if (!n) return Hide();
     g_drawFailed = !Draw(sp, sw, sh, copies, n, minX, minY, maxX - minX, maxY - minY);
     if (g_drawFailed) return Hide();
-    g_shown = true;
     return true;
 }
 
@@ -731,28 +809,6 @@ static bool ListenToMouse(bool on) {
     if (RegisterRawInputDevices(&mouse, 1, sizeof(mouse))) return true;
     Wh_Log(L"RegisterRawInputDevices(%d) failed: %lu", on, GetLastError());
     return false;
-}
-
-// Whether a window belongs to a process with more rights than this one (an administrator app such as Task Manager or
-// Windhawk itself): this process may not open its token, and Windows does not send it raw mouse input meanwhile.
-static bool HigherRights(HWND w) {
-    DWORD pid = 0;
-    if (!w || !GetWindowThreadProcessId(w, &pid)) return false;
-    HANDLE p = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!p) return true;
-    HANDLE token = nullptr;
-    bool denied = !OpenProcessToken(p, TOKEN_QUERY, &token);
-    if (token) CloseHandle(token);
-    CloseHandle(p);
-    return denied;
-}
-
-static void CALLBACK ForegroundChanged(HWINEVENTHOOK, DWORD, HWND w, LONG, LONG, DWORD, DWORD) {
-    bool admin = HigherRights(w);
-    if (admin != g_adminFront) Wh_Log(L"Administrator window in front: %d", admin);
-    g_adminFront = admin;
-    g_recheck = true;   // a fullscreen app may also have come to the front or left it
-    SetEvent(g_mouseWake);
 }
 
 static LRESULT CALLBACK OverlayProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
@@ -790,15 +846,10 @@ static DWORD WINAPI RenderThread(void*) {
     g_wnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
                             wc.lpszClassName, L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, inst, nullptr);
     g_memDc = CreateCompatibleDC(nullptr);
-    HWINEVENTHOOK hook = nullptr;
     if (!g_wnd || !g_memDc || !ListenToMouse(true)) {
         Wh_Log(L"Could not set up the overlay window");
         if (g_wnd) DestroyWindow(g_wnd);
         g_wnd = nullptr;
-    } else {
-        hook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, ForegroundChanged, 0, 0,
-                               WINEVENT_OUTOFCONTEXT);
-        g_adminFront = HigherRights(GetForegroundWindow());
     }
     SetEvent(g_ready);
 
@@ -830,7 +881,6 @@ static DWORD WINAPI RenderThread(void*) {
         }
     }
 
-    if (hook) UnhookWinEvent(hook);
     if (g_wnd) {
         ListenToMouse(false);
         DestroyWindow(g_wnd);
@@ -880,6 +930,7 @@ BOOL WhTool_ModInit() {
     QueryPerformanceFrequency(&g_freq);
     QueryPerformanceCounter(&g_start);
     InitializeCriticalSection(&g_gate);
+    g_ownIntegrity = Integrity(GetCurrentProcess());
     HANDLE token;
     if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
         alignas(TOKEN_USER) BYTE buf[SECURITY_MAX_SID_SIZE + sizeof(TOKEN_USER)];
