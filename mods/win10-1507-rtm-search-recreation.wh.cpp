@@ -104,7 +104,10 @@ constexpr UINT kRefreshHotkeyMessage = WM_APP + 0x57;
 constexpr UINT kCatalogReadyMessage = WM_APP + 0x58;
 constexpr UINT kToggleMessage = WM_APP + 0x59;
 constexpr UINT kTaskbarBoxClickMessage = WM_APP + 0x5A;
-const UINT kTaskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
+// Registered at the start of UiThreadProc instead of by a global initializer, so
+// RegisterWindowMessageW is not called during DLL load (under the loader lock) in
+// every windhawk.exe process the mod is loaded into, including the launcher.
+UINT g_taskbarCreatedMsg = 0;
 constexpr int kPaneWidthBox96 = 392;
 constexpr int kPaneWidthIcon96 = 346;
 constexpr int kRailWidth96 = 48;
@@ -155,10 +158,12 @@ std::atomic<HWND> g_taskbarBoxWindow{nullptr};
 
 HMODULE g_modModule = nullptr;
 
-// Cached search button/box bounding rect for low-level hook hit-testing
+// Cached search button/box bounding rects, one per taskbar, for low-level hook
+// hit-testing. They are refreshed by the UI thread on every taskbar sync tick and
+// only read by the hook thread, so they stay current independently of the
+// overTaskbar setting and of which taskbar the pane was last opened on.
 std::mutex g_searchButtonLock;
-RECT g_cachedSearchButtonRect{};
-bool g_cachedSearchButtonValid = false;
+std::vector<RECT> g_cachedSearchButtonRects;
 
 // Hook management on dedicated thread
 HHOOK g_mouseHook = nullptr;
@@ -297,6 +302,101 @@ bool IsExplorerShortcut(const std::wstring& shortcutPath) {
     return SUCCEEDED(hr) && _wcsicmp(PathFindFileNameW(target), L"explorer.exe") == 0;
 }
 
+bool IsRunningUnderWow64() {
+    BOOL wow64 = FALSE;
+    if (!IsWow64Process(GetCurrentProcess(), &wow64)) return false;
+    return wow64 != FALSE;
+}
+
+std::wstring WindowsDirectoryWithSlash() {
+    wchar_t windowsDir[MAX_PATH]{};
+    const UINT length = GetWindowsDirectoryW(windowsDir, ARRAYSIZE(windowsDir));
+    if (length == 0 || length >= ARRAYSIZE(windowsDir)) return {};
+    std::wstring result(windowsDir);
+    if (result.back() != L'\\') result.push_back(L'\\');
+    return result;
+}
+
+// Windhawk 1.7.x runs tool mods inside the 32-bit windhawk.exe under WOW64, where
+// the file-system redirector maps %windir%\System32 targets to SysWOW64. Rewriting
+// the target to %windir%\Sysnative starts the 64-bit version, and lets tools that
+// only exist in System32 start at all. Windhawk 2.0 runs the mod as a 64-bit
+// process, so no rewrite happens there.
+std::wstring RedirectSystem32ToSysnative(const std::wstring& target) {
+    if (target.empty() || !IsRunningUnderWow64()) return {};
+    const std::wstring windowsDir = WindowsDirectoryWithSlash();
+    if (windowsDir.empty()) return {};
+    const std::wstring system32 = windowsDir + L"System32\\";
+    if (target.size() <= system32.size() ||
+        _wcsnicmp(target.c_str(), system32.c_str(), system32.size()) != 0) {
+        return {};
+    }
+    return windowsDir + L"Sysnative\\" + target.substr(system32.size());
+}
+
+// Launches a Start-menu shortcut the way the real Start menu does: the .lnk is
+// resolved with IShellLink and its target is started with the shortcut's arguments,
+// working directory and show command, so a System32 target is not silently
+// redirected to SysWOW64 by the 32-bit tool process.
+void LaunchShortcut(const std::wstring& shortcutPath) {
+    const auto launchShortcutFile = [&shortcutPath]() {
+        ShellExecuteW(nullptr, L"open", shortcutPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    };
+    if (shortcutPath.empty() || !IsShortcut(shortcutPath.c_str())) {
+        launchShortcutFile();
+        return;
+    }
+
+    ComPtr<IShellLinkW> shellLink;
+    HRESULT hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(shellLink.GetAddressOf()));
+    if (FAILED(hr) || !shellLink) { launchShortcutFile(); return; }
+    ComPtr<IPersistFile> persistFile;
+    hr = shellLink.As(&persistFile);
+    if (FAILED(hr) || !persistFile) { launchShortcutFile(); return; }
+    hr = persistFile->Load(shortcutPath.c_str(), STGM_READ);
+    if (FAILED(hr)) { launchShortcutFile(); return; }
+
+    wchar_t rawTarget[MAX_PATH]{};
+    WIN32_FIND_DATAW findData{};
+    if (FAILED(shellLink->GetPath(rawTarget, ARRAYSIZE(rawTarget), &findData, SLGP_RAWPATH)) ||
+        !rawTarget[0]) {
+        // UWP and other shell-backed shortcuts have no file target; the shell
+        // launches them from the .lnk itself.
+        launchShortcutFile();
+        return;
+    }
+    wchar_t target[MAX_PATH]{};
+    const bool expanded = ExpandEnvironmentStringsW(rawTarget, target, ARRAYSIZE(target)) != 0;
+    const wchar_t* effectiveTarget = expanded ? target : rawTarget;
+
+    std::wstring launchPath = RedirectSystem32ToSysnative(effectiveTarget);
+    if (launchPath.empty()) launchPath = effectiveTarget;
+
+    wchar_t arguments[1024]{};
+    shellLink->GetArguments(arguments, ARRAYSIZE(arguments));
+    wchar_t workingDirectory[MAX_PATH]{};
+    shellLink->GetWorkingDirectory(workingDirectory, ARRAYSIZE(workingDirectory));
+    int showCmd = SW_SHOWNORMAL;
+    if (FAILED(shellLink->GetShowCmd(&showCmd)) || showCmd <= 0) showCmd = SW_SHOWNORMAL;
+
+    ShellExecuteW(nullptr, L"open", launchPath.c_str(),
+                  arguments[0] ? arguments : nullptr,
+                  workingDirectory[0] ? workingDirectory : nullptr, showCmd);
+}
+
+// Launches a System32 tool by name (for example control.exe) through Sysnative when
+// running under WOW64, so the 64-bit tool starts.
+void LaunchSystemTool(const wchar_t* name) {
+    std::wstring path;
+    if (IsRunningUnderWow64()) {
+        const std::wstring windowsDir = WindowsDirectoryWithSlash();
+        if (!windowsDir.empty()) path = windowsDir + L"Sysnative\\" + name;
+    }
+    if (path.empty()) path = name;
+    ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+
 void AddDirectoryShortcuts(const std::wstring& directory, int depth,
                            std::vector<SearchEntry>& catalog) {
     if (g_stopping.load() || depth > 5 || directory.empty()) return;
@@ -374,6 +474,33 @@ void BuildAppCatalog(std::vector<SearchEntry>& catalog) {
     std::stable_sort(catalog.begin(), catalog.end(), [](const SearchEntry& a, const SearchEntry& b) {
         return _wcsicmp(a.name.c_str(), b.name.c_str()) < 0;
     });
+}
+
+// Last-write timestamps of the Start Menu Programs folders, used to detect
+// shortcuts that were added or removed since the catalog was last built.
+bool ReadProgramsFoldersStamp(ULONGLONG& stamp) {
+    stamp = 0;
+    bool any = false;
+    const KNOWNFOLDERID folders[] = { FOLDERID_Programs, FOLDERID_CommonPrograms };
+    for (KNOWNFOLDERID folder : folders) {
+        PWSTR rawPath = nullptr;
+        if (FAILED(SHGetKnownFolderPath(folder, KF_FLAG_DEFAULT, nullptr, &rawPath)) || !rawPath)
+            continue;
+        HANDLE handle = CreateFileW(rawPath, FILE_READ_ATTRIBUTES,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+        CoTaskMemFree(rawPath);
+        if (handle == INVALID_HANDLE_VALUE) continue;
+        FILETIME writeTime{};
+        if (GetFileTime(handle, nullptr, nullptr, &writeTime)) {
+            const ULONGLONG value = (static_cast<ULONGLONG>(writeTime.dwHighDateTime) << 32) |
+                                    writeTime.dwLowDateTime;
+            stamp = (std::max)(stamp, value);
+            any = true;
+        }
+        CloseHandle(handle);
+    }
+    return any;
 }
 
 int MatchRank(const std::wstring& name, const std::wstring& query) {
@@ -715,7 +842,7 @@ void DrawSettingsCategoryIcon(HDC dc,int item,int centerX,int centerY,int size,C
           Gdiplus::PointF b[]={{x+s*.88f,y+s*.76f},{x+s*.66f,y+s*.80f},{x+s*.78f,y+s*.61f}};
           g.FillPolygon(&brush,a,3); g.FillPolygon(&brush,b,3); }
         break;
-    default: { // Search-pane Settings gear, same silhouette as the separate Start mod.
+    default: { // Search-pane Settings gear.
         Gdiplus::PointF teeth[16];
         for(int i=0;i<16;++i){
             const float angle=static_cast<float>(i)*3.14159265f/8.0f-1.5707963f;
@@ -1026,14 +1153,6 @@ std::wstring QueryNativeSearchPlaceholderFromSystem(const TaskbarSearchScan& sca
     return {};
 }
 
-struct TaskbarSearchState {
-    HWND trayHwnd = nullptr;
-    bool isWideBox = false;
-    bool hasBoxRect = false;
-    RECT boxRect{};
-    std::wstring nativePlaceholder;
-};
-
 // Per Microsoft Win32 documentation (GetGUIThreadInfo / FindWindowExW / #32768),
 // check whether any context menu or shell flyout is active so we never alter topmost
 // Z-order while a menu is open on screen.
@@ -1092,114 +1211,199 @@ bool IsWindowAboveInZOrder(HWND testHwnd, HWND targetHwnd) {
     return false;
 }
 
-TaskbarSearchState InspectTaskbarSearch(HMONITOR targetMonitor, bool needPlaceholder = true) {
-    TaskbarSearchState state{};
-    if (g_stopping.load()) return state;
+struct TaskbarSearchState {
+    HWND trayHwnd = nullptr;
+    bool isWideBox = false;        // wide search box: hosts the search bar overlay
+    bool hasBoxRect = false;       // the wide box rect is usable
+    RECT boxRect{};
+    bool hasButtonRect = false;    // search button/box rect in any mode, icon included
+    RECT buttonRect{};
+    HWND buttonHwnd = nullptr;     // tray child window backing the rect, when there is one
+    ComPtr<IUIAutomationElement> element;  // UI Automation element backing the rect
+    std::wstring nativePlaceholder;
+};
+
+// One taskbar's search button/box, owned by the UI thread. The rect is refreshed
+// from the cached window or UI Automation element on every sync tick, so a box that
+// moves without the tray window changing size (a centered Windows 11 taskbar
+// gaining or losing a button) is followed without walking the UIA tree again.
+struct TaskbarSearchEntry {
+    HWND trayHwnd = nullptr;
+    TaskbarSearchState state;
+    bool needsTreeScan = true;     // no usable cached window/element yet
+};
+
+// Released with `g_taskbarSearchEntries.clear();` on the UI thread before it exits.
+[[clang::no_destroy]] std::vector<TaskbarSearchEntry> g_taskbarSearchEntries;  // UI thread only
+
+void ScanTaskbarChildren(HWND tray, TaskbarSearchScan& scan) {
+    scan = TaskbarSearchScan{};
+    scan.trayHwnd = tray;
+    if (tray && IsWindow(tray)) {
+        EnumChildWindows(tray, ScanTrayChildrenProc, reinterpret_cast<LPARAM>(&scan));
+    }
+}
+
+// Full discovery for one taskbar: the tray's own search control (the Windows 10 box
+// or icon button), and when there is none the UI Automation search element (Windows
+// 11) regardless of SearchboxTaskbarMode. The element is kept so later ticks can
+// re-read its bounding rectangle with a single call, with no tree walk.
+void InspectTaskbarTarget(HWND tray, bool needPlaceholder, TaskbarSearchState& state) {
+    state = TaskbarSearchState{};
+    if (g_stopping.load()) return;
     try {
-        HWND tray = FindTrayForMonitor(targetMonitor);
         state.trayHwnd = tray;
+        if (!tray || !IsWindow(tray)) return;
 
         TaskbarSearchScan scan{};
-        scan.trayHwnd = tray;
-        if (tray && IsWindow(tray)) {
-            EnumChildWindows(tray, ScanTrayChildrenProc, reinterpret_cast<LPARAM>(&scan));
-        }
+        ScanTaskbarChildren(tray, scan);
         if (needPlaceholder) {
             state.nativePlaceholder = QueryNativeSearchPlaceholderFromSystem(scan);
         } else if (!scan.childPlaceholder.empty()) {
             state.nativePlaceholder = scan.childPlaceholder;
         }
 
-        int regMode = -1;
-        DWORD modeVal = 0, modeSize = sizeof(modeVal);
-        if (RegGetValueW(HKEY_CURRENT_USER,
-                         L"Software\\Microsoft\\Windows\\CurrentVersion\\Search",
-                         L"SearchboxTaskbarMode", RRF_RT_REG_DWORD, nullptr,
-                         &modeVal, &modeSize) == ERROR_SUCCESS) {
-            regMode = static_cast<int>(modeVal);
+        RECT trayRect{};
+        if (!GetWindowRect(tray, &trayRect)) return;
+        const int trayW = trayRect.right - trayRect.left;
+        const int trayH = trayRect.bottom - trayRect.top;
+        if (trayW <= 0 || trayH <= 0 || trayW < trayH) return;  // vertical/unknown: no box
+
+        // Windows 10: the search box/icon is a tray child window, recorded in every
+        // mode (box and icon-only alike).
+        HWND searchHwnd = nullptr;
+        if (scan.dummyHwnd && IsWindowVisible(scan.dummyHwnd)) searchHwnd = scan.dummyHwnd;
+        else if (scan.button4101Hwnd && IsWindowVisible(scan.button4101Hwnd)) searchHwnd = scan.button4101Hwnd;
+        else if (scan.button4103Hwnd && IsWindowVisible(scan.button4103Hwnd)) searchHwnd = scan.button4103Hwnd;
+        if (searchHwnd) {
+            RECT r{};
+            if (GetWindowRect(searchHwnd, &r)) {
+                state.buttonHwnd = searchHwnd;
+                state.hasButtonRect = true;
+                state.buttonRect = r;
+                state.isWideBox = (r.right - r.left) > trayH * 2;
+                state.hasBoxRect = state.isWideBox;
+                state.boxRect = r;
+                return;
+            }
         }
 
-        if (tray && IsWindow(tray)) {
-            RECT trayRect{};
-            if (GetWindowRect(tray, &trayRect)) {
-                const int trayW = trayRect.right - trayRect.left;
-                const int trayH = trayRect.bottom - trayRect.top;
-                if (trayW > 0 && trayH > 0 && trayW >= trayH) {
-                    auto checkWideHwnd = [&](HWND h) -> bool {
-                        if (!h || !IsWindowVisible(h)) return false;
-                        RECT r{};
-                        if (!GetWindowRect(h, &r)) return false;
-                        const int w = r.right - r.left;
-                        const int hgt = r.bottom - r.top;
-                        if (w > trayH * 2 && hgt > 0) {
-                            state.isWideBox = true;
-                            state.hasBoxRect = true;
-                            state.boxRect = r;
-                            return true;
-                        }
-                        return false;
-                    };
-
-                    if (!checkWideHwnd(scan.dummyHwnd) && !checkWideHwnd(scan.button4101Hwnd)) {
-                        if (scan.button4103Hwnd && IsWindowVisible(scan.button4103Hwnd)) {
-                            RECT r{};
-                            if (GetWindowRect(scan.button4103Hwnd, &r)) {
-                                const int w = r.right - r.left;
-                                if (w > trayH * 2) {
-                                    state.isWideBox = true;
-                                    state.hasBoxRect = true;
-                                    state.boxRect = r;
-                                } else if (w > 0) {
-                                    state.isWideBox = false;
-                                }
-                            }
-                        } else if (regMode == 2 || regMode == 3) {
-                            // Registry indicates wide search box mode on horizontal taskbar.
-                            if (g_uia || SUCCEEDED(CoCreateInstance(CLSID_CUIAutomation, nullptr,
-                                                                    CLSCTX_INPROC_SERVER,
-                                                                    IID_PPV_ARGS(g_uia.GetAddressOf())))) {
-                                ComPtr<IUIAutomationElement> root;
-                                if (SUCCEEDED(g_uia->ElementFromHandle(tray, root.GetAddressOf())) && root) {
-                                    static const wchar_t* const kIds[] = { L"4100", L"4101", L"4103" };
-                                    for (const wchar_t* idStr : kIds) {
-                                        VARIANT val;
-                                        VariantInit(&val);
-                                        val.vt = VT_BSTR;
-                                        val.bstrVal = SysAllocString(idStr);
-                                        ComPtr<IUIAutomationCondition> cond;
-                                        if (SUCCEEDED(g_uia->CreatePropertyCondition(
-                                                UIA_AutomationIdPropertyId, val, cond.GetAddressOf())) && cond) {
-                                            ComPtr<IUIAutomationElement> found;
-                                            if (SUCCEEDED(root->FindFirst(TreeScope_Descendants, cond.Get(),
-                                                                          found.GetAddressOf())) && found) {
-                                                BOOL off = FALSE;
-                                                RECT r{};
-                                                found->get_CurrentIsOffscreen(&off);
-                                                found->get_CurrentBoundingRectangle(&r);
-                                                if (!off && (r.right - r.left) > trayH * 2) {
-                                                    state.isWideBox = true;
-                                                    state.hasBoxRect = true;
-                                                    state.boxRect = r;
-                                                    VariantClear(&val);
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                        VariantClear(&val);
-                                    }
-                                }
-                            }
-                        }
+        // Windows 11: the search button/box is not a tray child window.
+        if (!g_uia && FAILED(CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER,
+                                              IID_PPV_ARGS(g_uia.GetAddressOf())))) {
+            return;
+        }
+        ComPtr<IUIAutomationElement> root;
+        if (FAILED(g_uia->ElementFromHandle(tray, root.GetAddressOf())) || !root) return;
+        static const wchar_t* const kIds[] = { L"4100", L"4101", L"4103" };
+        for (const wchar_t* idStr : kIds) {
+            VARIANT val;
+            VariantInit(&val);
+            val.vt = VT_BSTR;
+            val.bstrVal = SysAllocString(idStr);
+            ComPtr<IUIAutomationCondition> cond;
+            if (SUCCEEDED(g_uia->CreatePropertyCondition(UIA_AutomationIdPropertyId, val, cond.GetAddressOf())) && cond) {
+                ComPtr<IUIAutomationElement> found;
+                if (SUCCEEDED(root->FindFirst(TreeScope_Descendants, cond.Get(), found.GetAddressOf())) && found) {
+                    BOOL off = FALSE;
+                    RECT r{};
+                    if (SUCCEEDED(found->get_CurrentIsOffscreen(&off)) &&
+                        SUCCEEDED(found->get_CurrentBoundingRectangle(&r)) && !off) {
+                        state.element = found;
+                        state.hasButtonRect = true;
+                        state.buttonRect = r;
+                        state.isWideBox = (r.right - r.left) > trayH * 2;
+                        state.hasBoxRect = state.isWideBox;
+                        state.boxRect = r;
+                        VariantClear(&val);
+                        return;
                     }
                 }
             }
+            VariantClear(&val);
         }
     } catch (const std::bad_alloc&) {
-        Wh_Log(L"allocation failure in InspectTaskbarSearch");
+        Wh_Log(L"allocation failure in InspectTaskbarTarget");
     } catch (...) {
-        Wh_Log(L"exception in InspectTaskbarSearch");
+        Wh_Log(L"exception in InspectTaskbarTarget");
     }
-    return state;
+}
+
+// Cheap per-tick refresh: re-reads the cached rect from the tray child window or
+// from the cached UI Automation element (a single call, no tree walk). Returns
+// false when the cached target stopped answering, so the caller can fall back to
+// the full tree search.
+bool RefreshTaskbarSearchStateRects(TaskbarSearchState& state) {
+    if (!state.hasButtonRect) return false;
+    RECT r{};
+    if (state.buttonHwnd) {
+        if (!IsWindow(state.buttonHwnd)) return false;
+        if (!GetWindowRect(state.buttonHwnd, &r)) return false;
+    } else if (state.element) {
+        if (FAILED(state.element->get_CurrentBoundingRectangle(&r))) return false;
+    } else {
+        return false;
+    }
+    RECT trayRect{};
+    if (!state.trayHwnd || !GetWindowRect(state.trayHwnd, &trayRect)) return false;
+    const int trayW = trayRect.right - trayRect.left;
+    const int trayH = trayRect.bottom - trayRect.top;
+    state.buttonRect = r;
+    state.isWideBox = trayW > 0 && trayH > 0 && trayW >= trayH && (r.right - r.left) > trayH * 2;
+    state.hasBoxRect = state.isWideBox;
+    state.boxRect = r;
+    return true;
+}
+
+// Keeps the hook's click target up to date for every taskbar (primary and
+// secondary) and in every search mode, independently of the overTaskbar setting.
+void UpdateSearchButtonCache(bool forceTreeScan) {
+    std::vector<HWND> trays;
+    if (HWND primary = FindWindowW(L"Shell_TrayWnd", nullptr)) trays.push_back(primary);
+    for (HWND secondary = nullptr;
+         (secondary = FindWindowExW(nullptr, secondary, L"Shell_SecondaryTrayWnd", nullptr)) != nullptr;) {
+        trays.push_back(secondary);
+    }
+
+    bool traySetChanged = trays.size() != g_taskbarSearchEntries.size();
+    if (!traySetChanged) {
+        for (size_t i = 0; i < trays.size(); ++i) {
+            if (g_taskbarSearchEntries[i].trayHwnd != trays[i]) { traySetChanged = true; break; }
+        }
+    }
+    if (traySetChanged) {
+        g_taskbarSearchEntries.clear();
+        for (HWND tray : trays) {
+            TaskbarSearchEntry entry;
+            entry.trayHwnd = tray;
+            entry.needsTreeScan = true;
+            g_taskbarSearchEntries.push_back(std::move(entry));
+        }
+    }
+
+    std::vector<RECT> rects;
+    for (TaskbarSearchEntry& entry : g_taskbarSearchEntries) {
+        if (forceTreeScan || entry.needsTreeScan) {
+            InspectTaskbarTarget(entry.trayHwnd, false, entry.state);
+            entry.needsTreeScan = false;
+        } else if (!RefreshTaskbarSearchStateRects(entry.state)) {
+            // The cached window or element is gone (Explorer restart, taskbar
+            // re-creation): fall back to the full tree search.
+            InspectTaskbarTarget(entry.trayHwnd, false, entry.state);
+        }
+        if (entry.state.hasButtonRect) rects.push_back(entry.state.buttonRect);
+    }
+
+    std::lock_guard<std::mutex> lock(g_searchButtonLock);
+    g_cachedSearchButtonRects = std::move(rects);
+}
+
+const TaskbarSearchState* FindTaskbarSearchState(HWND tray) {
+    if (!tray) return nullptr;
+    for (const TaskbarSearchEntry& entry : g_taskbarSearchEntries) {
+        if (entry.trayHwnd == tray) return &entry.state;
+    }
+    return nullptr;
 }
 
 // Draws the documented Windows 10 Search glyph (U+E721 in Segoe MDL2 Assets) at full
@@ -1332,6 +1536,11 @@ void DrawThemedSearchBoxBar(HDC dc, HWND hwnd, const RECT& boxRc, int dpi,
     }
 }
 
+// Declared here (and defined earlier in this file) so that the SearchPane member
+// functions below can call them regardless of where the definitions are placed.
+bool IsAnyPopupMenuOrFlyoutActive(HWND trayHwnd);
+bool IsWindowAboveInZOrder(HWND testHwnd, HWND targetHwnd);
+
 class SearchPane {
 public:
     ~SearchPane() { Destroy(); }
@@ -1382,13 +1591,37 @@ public:
         UpdateHotkey();
         SetTimer(hwnd_, kTaskbarSyncTimer, kTaskbarSyncIntervalMs, nullptr);
         SyncTaskbarBox();
+        StartCatalogThread();
+        Wh_Log(L"ready; application catalog is loading asynchronously");
+        return true;
+    }
+
+    void StartCatalogThread() {
+        if (catalogBuildInFlight_) return;
+        if (catalogThread_) {
+            // The previous build already reported back through kCatalogReadyMessage.
+            CloseHandle(catalogThread_);
+            catalogThread_ = nullptr;
+        }
+        ReadProgramsFoldersStamp(catalogStamp_);
+        catalogBuildInFlight_ = true;
+        catalogReady_ = false;
         catalogThread_ = CreateThread(nullptr, 0, CatalogThreadProc, this, 0, nullptr);
         if (!catalogThread_) {
+            catalogBuildInFlight_ = false;
             catalogReady_ = true;
             Wh_Log(L"background catalog thread failed: %u", GetLastError());
         }
-        Wh_Log(L"ready; application catalog is loading asynchronously");
-        return true;
+    }
+
+    // Rebuilds the catalog when Start-menu shortcuts changed since the last build,
+    // so apps installed or removed while the mod runs show up without a reload.
+    void CheckAppCatalogFreshness() {
+        if (g_stopping.load() || !catalogReady_) return;  // a build is still in flight
+        ULONGLONG stamp = 0;
+        if (!ReadProgramsFoldersStamp(stamp) || stamp == catalogStamp_) return;
+        Wh_Log(L"start-menu shortcuts changed; rebuilding the application catalog");
+        StartCatalogThread();
     }
 
     static void DestroyCatalog(std::vector<SearchEntry>& catalog){for(auto& entry:catalog)if(entry.icon){DestroyIcon(entry.icon);entry.icon=nullptr;}catalog.clear();}
@@ -1496,6 +1729,8 @@ private:
     RECT slideToRect_{};
     bool workAreaClipActive_ = false;
     bool catalogReady_ = false;
+    bool catalogBuildInFlight_ = false;
+    ULONGLONG catalogStamp_ = 0;
     std::atomic<bool> catalogStopping_{false};
     std::atomic<HWND> catalogWindow_{nullptr};
     HANDLE catalogThread_ = nullptr;
@@ -1598,7 +1833,11 @@ private:
     void SyncTaskbarBox(bool forceTreeScan = false, HMONITOR targetMonitor = nullptr) {
         if (!taskbarBoxHwnd_) return;
 
-        // Skip completely if overTaskbar is disabled
+        // The click-interception cache is maintained for every taskbar and in every
+        // search mode, independently of the overTaskbar setting.
+        UpdateSearchButtonCache(forceTreeScan);
+
+        // Skip the overlay work if overTaskbar is disabled
         if (!g_overTaskbar.load()) {
             if (IsWindowVisible(taskbarBoxHwnd_)) {
                 ShowWindow(taskbarBoxHwnd_, SW_HIDE);
@@ -1606,10 +1845,6 @@ private:
             }
             wideBoxMode_ = false;
             hasBoxRect_ = false;
-            {
-                std::lock_guard<std::mutex> lock(g_searchButtonLock);
-                g_cachedSearchButtonValid = false;
-            }
             return;
         }
 
@@ -1623,51 +1858,50 @@ private:
                 ShowWindow(taskbarBoxHwnd_, SW_HIDE);
                 taskbarBoxHovered_ = false;
             }
-            {
-                std::lock_guard<std::mutex> lock(g_searchButtonLock);
-                g_cachedSearchButtonValid = false;
-            }
             return;
         }
 
+        // The cached rects are refreshed on every tick, so the overlay and the hook
+        // follow the box even when the tray window itself keeps its size.
         RECT currentTrayRect{};
         GetWindowRect(tray, &currentTrayRect);
+        const bool trayChanged = !EqualRect(&currentTrayRect, &cachedTrayRect_);
+        cachedTrayRect_ = currentTrayRect;
 
-        bool needsRescan = forceTreeScan || !boxRectCacheValid_ ||
-                           !EqualRect(&currentTrayRect, &cachedTrayRect_);
+        const TaskbarSearchState* state = FindTaskbarSearchState(tray);
+        if (state) {
+            wideBoxMode_ = state->isWideBox && g_overTaskbar.load();
+            hasBoxRect_ = state->hasBoxRect;
+            if (state->hasBoxRect) {
+                taskbarBoxRect_ = state->boxRect;
+            }
+            taskbarBoxOwner_ = state->trayHwnd;
+        } else {
+            wideBoxMode_ = false;
+            hasBoxRect_ = false;
+        }
 
-        if (needsRescan) {
-            cachedTrayRect_ = currentTrayRect;
-            const TaskbarSearchState state = InspectTaskbarSearch(targetMonitor, nativeSearchPlaceholder_.empty());
-            if (!state.nativePlaceholder.empty() && nativeSearchPlaceholder_ != state.nativePlaceholder) {
-                nativeSearchPlaceholder_ = state.nativePlaceholder;
+        const bool needPlaceholderCheck = trayChanged || forceTreeScan || !boxRectCacheValid_;
+        boxRectCacheValid_ = true;
+        if (needPlaceholderCheck) {
+            TaskbarSearchScan scan{};
+            ScanTaskbarChildren(tray, scan);
+            const std::wstring placeholder = nativeSearchPlaceholder_.empty()
+                ? QueryNativeSearchPlaceholderFromSystem(scan)
+                : scan.childPlaceholder;
+            if (!placeholder.empty() && nativeSearchPlaceholder_ != placeholder) {
+                nativeSearchPlaceholder_ = placeholder;
                 InvalidateRect(taskbarBoxHwnd_, nullptr, FALSE);
-            }
-
-            wideBoxMode_ = state.isWideBox && g_overTaskbar.load();
-            hasBoxRect_ = state.hasBoxRect;
-            if (state.hasBoxRect) {
-                taskbarBoxRect_ = state.boxRect;
-            }
-            taskbarBoxOwner_ = state.trayHwnd;
-            boxRectCacheValid_ = true;
-
-            // Cache the button/box rectangle for the hook thread
-            {
-                std::lock_guard<std::mutex> lock(g_searchButtonLock);
-                if (hasBoxRect_) {
-                    g_cachedSearchButtonRect = taskbarBoxRect_;
-                    g_cachedSearchButtonValid = true;
-                } else {
-                    g_cachedSearchButtonValid = false;
-                }
             }
         }
 
-        // Only show overlay when interceptSearch is on and overTaskbar is on
-        const bool shouldShow = g_interceptEnabled.load() && g_overTaskbar.load() &&
-                                wideBoxMode_ && hasBoxRect_ &&
-                                taskbarBoxOwner_ && IsWindowVisible(taskbarBoxOwner_);
+        // The overlay is the pane's search field in wide-box mode, so it is shown
+        // whenever the taskbar search box is intercepted, and also while the pane is
+        // open, so Ctrl+Alt+S keeps a visible search field with interceptSearch off.
+        // The search bar keeps the same shape in both cases.
+        const bool shouldShow = g_overTaskbar.load() && wideBoxMode_ && hasBoxRect_ &&
+                                taskbarBoxOwner_ && IsWindowVisible(taskbarBoxOwner_) &&
+                                (g_interceptEnabled.load() || visible_);
         if (!shouldShow) {
             if (IsWindowVisible(taskbarBoxHwnd_)) {
                 ShowWindow(taskbarBoxHwnd_, SW_HIDE);
@@ -2001,6 +2235,8 @@ private:
 
         RefreshTaskbarSearchState(monitor);
         SyncTaskbarBox();
+        // Apps installed or removed after startup are picked up on the next open.
+        CheckAppCatalogFreshness();
 
         ApplyMonitorInfo(info);
         const LONG workWidth = workArea_.right - workArea_.left;
@@ -2008,7 +2244,7 @@ private:
         paneX_ = static_cast<int>(workArea_.left);
 
         // Move the hidden window onto the chosen monitor before asking USER32 for
-        // that window's effective DPI. This respects Explorer's DPI-awareness context.
+        // that window's effective DPI.
         const int provisionalWidth = static_cast<int>((std::min)(
             static_cast<LONG>(wideBoxMode_ ? kPaneWidthBox96 : kPaneWidthIcon96), workWidth));
         if (!SetWindowPos(hwnd_, nullptr, paneX_, static_cast<int>(workArea_.top), provisionalWidth,
@@ -2083,7 +2319,7 @@ private:
         }
     }
 
-    // Like the separate Start mod, clip each animation frame so the window never
+    // Clip each animation frame so the window never
     // paints over the taskbar. rcWork comes from documented GetMonitorInfoW and
     // excludes the taskbar/appbar area; the region is local to the current window.
     void UpdateWorkAreaClip() {
@@ -2156,7 +2392,7 @@ private:
         if (!slideActive_) return;
         const ULONGLONG elapsed = GetTickCount64() - slideStartTick_;
         const double t = (std::min)(1.0, static_cast<double>(elapsed) / kSlideDurationMs);
-        const double eased = t*t*(3.0-2.0*t); // Same smoothstep interpolation as the separate Start mod.
+        const double eased = t*t*(3.0-2.0*t); // Smoothstep interpolation.
         auto lerp = [eased](LONG a, LONG b) {
             return static_cast<LONG>(std::lround(a + (b-a)*eased));
         };
@@ -2471,9 +2707,9 @@ private:
             if(SUCCEEDED(hr)&&shell) shell->FileRun();
             else Wh_Log(L"IShellDispatch::FileRun failed: 0x%08X",static_cast<unsigned>(hr));
         } else if (item.kind == ResultKind::ControlPanel) {
-            ShellExecuteW(nullptr, L"open", L"control.exe", nullptr, nullptr, SW_SHOWNORMAL);
+            LaunchSystemTool(L"control.exe");
         } else if (!item.shortcutPath.empty()) {
-            ShellExecuteW(nullptr, L"open", item.shortcutPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            LaunchShortcut(item.shortcutPath);
         }
     }
 
@@ -3028,8 +3264,12 @@ private:
             break;
         case kCatalogReadyMessage: {
             std::unique_ptr<std::vector<SearchEntry>> catalog(reinterpret_cast<std::vector<SearchEntry>*>(lParam));
-            if(catalog)apps_=std::move(*catalog);
-            catalogReady_=true;Filter();InvalidatePane();
+            if(catalog){
+                for(auto& entry:apps_)if(entry.icon){DestroyIcon(entry.icon);entry.icon=nullptr;}
+                apps_=std::move(*catalog);
+            }
+            catalogReady_=true;catalogBuildInFlight_=false;
+            Filter();InvalidatePane();
             return 0;
         }
         case WM_ACTIVATE:
@@ -3195,7 +3435,7 @@ private:
             if (x < rail) {
                 if (y >= client.bottom-Scale(40) && y < client.bottom) {
                     // Route through documented WM_CLOSE; this pane animates closed
-                    // instead of destroying its Explorer-owned window immediately.
+                    // instead of destroying its window immediately.
                     if (!PostMessageW(hwnd_,WM_CLOSE,0,0)) Hide();
                 } else if (y < Scale(48)) {
                     ShowScopeMenu(POINT{x,y});
@@ -3342,7 +3582,7 @@ private:
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
             return DefWindowProcW(hwnd,message,wParam,lParam);
         default:
-            if (message == kTaskbarCreatedMsg && kTaskbarCreatedMsg != 0) {
+            if (message == g_taskbarCreatedMsg && g_taskbarCreatedMsg != 0) {
                 boxRectCacheValid_ = false;
                 SyncTaskbarBox(true);
                 return 0;
@@ -3361,8 +3601,8 @@ bool IsTaskbarSearchButtonAt(POINT pt) {
             return true;
     }
     std::lock_guard<std::mutex> lock(g_searchButtonLock);
-    if (g_cachedSearchButtonValid && PtInRect(&g_cachedSearchButtonRect, pt)) {
-        return true;
+    for (const RECT& rect : g_cachedSearchButtonRects) {
+        if (PtInRect(&rect, pt)) return true;
     }
     return false;
 }
@@ -3503,7 +3743,11 @@ DWORD WINAPI UiThreadProc(void*) {
     PeekMessageW(&queue, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
     g_uiThreadId = GetCurrentThreadId();
     if (g_uiReadyEvent) SetEvent(g_uiReadyEvent);
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    // RegisterWindowMessageW runs here, not in a global initializer, to keep it out
+    // of DLL initialization. No SetThreadDpiAwarenessContext call is needed: the
+    // tool process is already per-monitor v2 aware through windhawk.exe's manifest,
+    // and the WM_DPICHANGED handling below still applies DPI changes.
+    g_taskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
     ULONG_PTR gdiplusToken = 0;
     Gdiplus::GdiplusStartupInput gdiplusInput;
     try {
@@ -3543,6 +3787,7 @@ DWORD WINAPI UiThreadProc(void*) {
         StopHookThread();
 
         pane.Destroy();
+        g_taskbarSearchEntries.clear();
         g_uia.Reset();
         UnregisterClassW(kTaskbarBoxClass, g_modModule);
         UnregisterClassW(kWindowClass, g_modModule);
@@ -3744,7 +3989,7 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR
-    commandLine[MAX_PATH + 2 +\
+    commandLine[MAX_PATH + 2 +
                 (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
