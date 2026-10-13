@@ -65,6 +65,26 @@ jobs:
           extract_path="${{ runner.temp }}\windhawk"
           echo "Extracting $installer_path to $extract_path"
           MSYS_NO_PATHCONV=1 "$installer_path" /S /PORTABLE "/D=$extract_path"
+      - name: Cache image tools
+        id: cache-image-tools
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/image_tools
+          key: v1-${{ runner.os }}-gifsicle-1.95-libwebp-1.5.0
+      - name: Download image tools
+        if: steps.cache-image-tools.outputs.cache-hit != 'true'
+        run: |
+          cd "${{ runner.temp }}"
+          curl -fsSL https://eternallybored.org/misc/gifsicle/releases/gifsicle-1.95-win64.zip -o gifsicle.zip
+          curl -fsSL https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.5.0-windows-x64.zip -o libwebp.zip
+          sha256sum -c <<'EOF'
+          7e47dd0bfd5ee47f911464c57faeed89a8709a7625dd1c449b16579889539ee8  gifsicle.zip
+          e8fe3bc7eb09774e69261a42bf9fa8a37ab5f3eecaab199f6420e6f9e822090c  libwebp.zip
+          EOF
+          python -m zipfile -e gifsicle.zip gifsicle
+          python -m zipfile -e libwebp.zip libwebp
+          mkdir -p image_tools
+          mv gifsicle/gifsicle.exe libwebp/libwebp-1.5.0-windows-x64/bin/gif2webp.exe image_tools
       - name: Install dependencies
         # The dev dependencies are type declarations, used by editors and by
         # type checking. Nothing here consumes them, as tsx strips types without
@@ -86,7 +106,8 @@ jobs:
           fsutil.exe file setCaseSensitiveInfo images enable
           # Copy last deployed images.
           cp -R "${{ runner.temp }}/last_deploy/images/." images
-          # Archive new images.
+          # Archive new images, compressing GIFs with the image tools.
+          export PATH="$(cygpath -u '${{ runner.temp }}/image_tools'):$PATH"
           python scripts/archive_mod_images.py
       - name: Deploy
         run: |
@@ -103,6 +124,6 @@ jobs:
           touch "$deploy_dir/.nojekyll"
           git -C "$deploy_dir" add .nojekyll
           echo Committing changes
-          git -C "$deploy_dir" diff-index --cached --quiet HEAD || git -C "$deploy_dir" commit -m "deploy: ${{ github.sha }}"
+          git -C "$deploy_dir" diff-index --cached --quiet HEAD || git --git-dir="$deploy_dir/.git" --work-tree="$src_dir" commit -m "deploy: ${{ github.sha }}"
           echo Pushing to GitHub
           git -C "$deploy_dir" push origin $deploy_branch

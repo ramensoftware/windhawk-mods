@@ -2,7 +2,7 @@
 // @id              taskbar-multi-tray
 // @name            Taskbar multi-tray
 // @description     Windows 11 taskbar tray/control-center visibility controls for all or selected monitors
-// @version         1.2.2
+// @version         1.3.0
 // @author          EDM115
 // @github          https://github.com/EDM115
 // @twitter         https://twitter.com/_edm115
@@ -19,15 +19,15 @@
 /*
 # Taskbar multi-tray
 Windows 11 Windhawk mod for controlling taskbar tray and control-center visibility across multi-monitor setups.  
-The mod hooks Explorer's taskbar XAML host, selected taskbar.dll taskbar/tray entry points, ShellHost flyout monitor helpers, and a small set of monitor/window-placement APIs. It can apply tray/control-center visibility rules to every taskbar or only to selected monitor numbers, and the component filter can target every taskbar or only copied/non-primary taskbars.
+The mod hooks Explorer's taskbar XAML host, selected taskbar.dll taskbar/tray entry points, the SystemTray.dll coordinate conversions behind tray icon clicks and drag/drop, ShellHost flyout monitor helpers, and a small set of monitor/window-placement APIs. It can apply tray/control-center visibility rules to every taskbar or only to selected monitor numbers, and the component filter can target every taskbar or only copied/non-primary taskbars.
 
 ## What it controls
-**Tray** means the Windows 11 taskbar notification area : promoted tray icons, the hidden-icons entry point, and the XAML containers Windows creates for them.  
+**Tray** means the Windows 11 taskbar notification area : promoted tray icons, the hidden-icons entry point, the system icons Windows shows next to them (language/IME, touch keyboard, pen, touchpad, emoji, and the microphone/camera/location privacy indicators), and the XAML containers Windows creates for them.  
 **Control center** means the Windows 11 control-center button (connection status, volume, battery level, ...) *without* the notification/date-time button which Windows can already hide and display on all monitors (we don't handle that one). Together they form what Windows calls the "Action center" surface. We also don't target (yet) the aero peek button.  
 The `components` setting chooses which surfaces the mod keeps visible :
-- `all` : tray icons, hidden icons, and control center
-- `tray` : tray icons and hidden icons, the notification/date-time button stays visible because Windows treats it as part of the date/time surface, while the control-center button is hidden
-- `controlCenter` : control center and notification/date-time only, promoted tray icons and the hidden-icons entry point are hidden
+- `all` : tray icons, hidden icons, system icons, and control center
+- `tray` : tray icons, hidden icons and system icons, the notification/date-time button stays visible because Windows treats it as part of the date/time surface, while the control-center button is hidden
+- `controlCenter` : control center and notification/date-time only, promoted tray icons, copied system icons and the hidden-icons entry point are hidden
 
 `componentsScope` controls whether that choice affects every taskbar or only copied/non-primary taskbars. In copied-taskbars-only mode, the primary taskbar keeps the native tray and control center visible.
 
@@ -55,8 +55,8 @@ Windhawk controls whether log entries are emitted. The mod logs settings, taskba
 
 ### Known issues
 *Those are problems that are identified and will be fixed in future updates*
-- [ ] Moving icons from the hidden-icons flyout back to the visible tray on a copied taskbar doesn't work. Either do it from the primary taskbar or if you have already a copied flyout open, move the icon to the area of the primary taskbar's tray strip and release it there.
-- [ ] Extra items injected into the tray strip (language selector, emoji/keyboard/stylus icon, other shortcuts, or other mods) won't be duplicated
+- [ ] Items that other mods inject into the tray strip aren't duplicated
+- [ ] System-icon duplication is incomplete. Version 1.3.0 shares the `MainStack` and `NonActivatableStack` models, but language/IME, touch keyboard, pen, touchpad, emoji and privacy indicators can still be missing or nonfunctional on copies. Further work from https://github.com/saratna/taskbar-multi-tray-ime remains to be integrated.
 
 ---
 
@@ -64,39 +64,47 @@ Windhawk controls whether log entries are emitted. The mod logs settings, taskba
 This section is the technical map of the mod, following the architecture from injection to pixels.
 
 ### Process and hook layout
-The mod is injected into `explorer.exe` (owner of every taskbar window and its XAML island) and `ShellHost.exe` (host of the `Win+A` control center and several flyouts on Windows 11 24H2+), `GetTargetProcess` picks the role at init. Explorer gets the `taskbar.dll` symbol hooks (`TrayUI::StartTaskbar`, `TrayUI::_SetStuckMonitor`, `CSecondaryTray::InitModelAndHost`, plus the `CTaskBand`/`CSecondaryTaskBand` accessors used to reach the XAML), resolved in a single `HookSymbols` pass so one drifted symbol fails the whole load instead of half-loading. Both processes get the user32 hooks (`MonitorFromPoint/Rect/Window`, `SetWindowPos`, `MoveWindow`, `SetWindowPlacement`, `DeferWindowPos`, `EnumDisplayDevicesW`, `DispatchMessageW`). ShellHost additionally hooks `twinui.pcshell.dll`'s `ImmersiveMonitorHelper` (optional, placement degrades gracefully without it).  
+The mod is injected into `explorer.exe` (owner of every taskbar window and its XAML island) and `ShellHost.exe` (host of the `Win+A` control center and several flyouts on Windows 11 24H2+), `GetTargetProcess` picks the role at init. Explorer gets the `taskbar.dll` symbol hooks (`TrayUI::StartTaskbar`, `TrayUI::_SetStuckMonitor`, `CSecondaryTray::InitModelAndHost`, plus the `CTaskBand`/`CSecondaryTaskBand` accessors used to reach the XAML), resolved in a single `HookSymbols` pass so one drifted symbol fails the whole load instead of half-loading. Both processes get the user32 hooks (`MonitorFromPoint/Rect/Window`, `SetWindowPos`, `MoveWindow`, `SetWindowPlacement`, `DeferWindowPos`, `EnumDisplayDevicesW`, `DispatchMessageW`). ShellHost additionally hooks `twinui.pcshell.dll`'s `ImmersiveMonitorHelper` (optional, placement degrades gracefully without it). Explorer also hooks a few `SystemTray.dll` functions (`Taskbar.View.dll` before 2604.x) : the tray icon click/bounds conversions, `GetScreenRectFromXamlElement`, and the geometry helpers of the tray drag/drop manager. They are optional and resolved once the module loads (through a `LoadLibraryExW` hook when the mod loads before the taskbar), so a drifted symbol only loses that one fix.  
 The two processes coordinate through a `.shared` PE section (`SharedProxyState`) guarded by a seqlock : writers flip a generation counter odd before touching the data and even after, readers retry until a stable even generation brackets their copy. The hooks are hot (every monitor query and window placement in two processes), so the no-context case is settled by a cheap shared-monitor read before any seqlock snapshot is taken, and each active-context hook works from one coherent stack copy instead of a mutable process-local mirror. Settings are immutable snapshots swapped atomically (`GetSettings`/`PublishSettings`), so hooks on any thread read coherent values without locks. Monitor numbers are one-based `EnumDisplayMonitors` positions for the current session, cached behind a short-TTL reader/writer snapshot that display changes invalidate eagerly.
 
 ### Reaching the taskbar XAML
-Each taskbar window (`Shell_TrayWnd`, `Shell_SecondaryTrayWnd`) hosts a XAML island, and no public API maps an HWND to its `XamlRoot`. The mod follows Explorer's own objects instead : the window's `CTaskBand`/`CSecondaryTaskBand` is located by matching the `ITaskListWndSite` vtable pointer across the window-long slots, its `GetTaskbarHost()` returns a `std::shared_ptr<TaskbarHost>` by value, the offset of the hosted XAML element inside `TaskbarHost` is read out of the compiled prologue of `TaskbarHost::FrameHeight` (x64 `add rcx, imm8`/ARM64 `ldr x8, [x0, #imm]` encodings, so no hardcoded struct layout can silently rot), and the temporary `shared_ptr` is released through `std::_Ref_count_base::_Decref`. From the hosted element, `XamlRoot.Content -> SystemTray.SystemTrayFrame -> SystemTrayFrameGrid` is the container under which every tray surface the mod touches lives.
+Each taskbar window (`Shell_TrayWnd`, `Shell_SecondaryTrayWnd`) hosts a XAML island, and no public API maps an HWND to its `XamlRoot`. The mod follows Explorer's own objects instead : the window's `CTaskBand`/`CSecondaryTaskBand` is located by matching the `ITaskListWndSite` vtable pointer across the window-long slots, its `GetTaskbarHost()` returns a `std::shared_ptr<TaskbarHost>` by value, the offset of the hosted XAML element inside `TaskbarHost` is read out of the compiled prologue of `TaskbarHost::FrameHeight` (x64 `add rcx, imm8`/ARM64 `ldr x8, [x0, #imm]` encodings, so no hardcoded struct layout can silently rot), and the temporary `shared_ptr` is released through `std::_Ref_count_base::_Decref`. From the hosted element, `XamlRoot.Content -> SystemTray.SystemTrayFrame -> SystemTrayFrameGrid` is the container under which every tray surface the mod touches lives. Its children are, in template order, `NotifyIconStack` (chevron), `NotificationAreaIcons`, `MainStack` (system icons), `NonActivatableStack` (privacy indicators), `SecondaryClockStack`, `ControlCenterButton`, `NotificationCenterButton` and `ShowDesktopStack`, in a `Grid` with one `Auto` column each on the classic template and a horizontal `StackPanel` on the newer one.
 
 ### The apply pass
-`ApplyStyle` runs per taskbar, always on the taskbar thread : at startup from the `TrayUI::StartTaskbar` hook, on demand through `RunFromWindowThread` (a `WH_CALLWNDPROC` hook plus `SendMessageTimeout(SMTO_ABORTIFHUNG)`, so a hung Explorer cannot deadlock the caller), for hot-plugged taskbars from `CSecondaryTray::InitModelAndHost`, and through a bounded retry schedule on a mod-unique timer id for Explorer startups or secondary-taskbar creation where the XAML tree appears late. The secondary init hook installs the taskbar subclass immediately, then schedules that full retry pass if the XAML root or `SystemTrayFrameGrid` is not ready yet. The pass collects every tray element in a single child walk (`CollectTrayElements`), forces the configured surfaces (`NotifyIconStack`, `NotificationAreaIcons`, `ControlCenterButton`, `NotificationCenterButton`) visible and hit-testable, resets non-selected taskbars to the default secondary look, lets the control center keep its natural content width, and measures both the control-center width and promoted-icon-area width that click hit-testing uses later. Every property write is read-compare-write and one batched layout update runs per taskbar only when something actually changed, so a steady-state pass dirties nothing, and the width measurements happen after that layout so the hit-test always sees this pass's geometry. The whole pass sits inside an exception boundary : XAML structure drift degrades to a logged skip instead of letting an exception escape into Explorer's window procedure. The real-tray owner is processed first so its bindings are cached before any copy consumes them.
+`ApplyStyle` runs per taskbar, always on the taskbar thread : at startup from the `TrayUI::StartTaskbar` hook, on demand through `RunFromWindowThread` (a `WH_CALLWNDPROC` hook plus synchronous `SendMessage`, so the caller waits until the callback has finished), for hot-plugged taskbars from `CSecondaryTray::InitModelAndHost`, and through a bounded retry schedule on a mod-unique timer id for Explorer startups or secondary-taskbar creation where the XAML tree appears late. The secondary init hook installs the taskbar subclass immediately, then schedules that full retry pass if the XAML root or `SystemTrayFrameGrid` is not ready yet. The pass collects every tray element in a single child walk (`CollectTrayElements`), forces the configured surfaces (`NotifyIconStack`, `NotificationAreaIcons`, `ControlCenterButton`) visible and hit-testable, shares the system icon stacks, resets non-selected taskbars to the default secondary look, lets every surface keep its natural content width, and then measures the live rectangle of every tray surface for click hit-testing and the menu-ownership pre-arm. `NotificationCenterButton` and the frame width stay native : up to 1.2.2 the mod forced them, which produced an empty 78 px button and an empty strip at the right edge on builds whose secondary taskbars draw their clock through `SecondaryClockStack`, and the pins older versions left behind are released on the next pass. Every property write is read-compare-write and one batched layout update runs per taskbar only when something actually changed, so a steady-state pass dirties nothing, and the measurements happen after that layout so the hit-test always sees this pass's geometry. The whole pass sits inside an exception boundary : XAML structure drift degrades to a logged skip instead of letting an exception escape into Explorer's window procedure. The real-tray owner is processed first so its bindings are cached before any copy consumes them.
 
 ### Content : sharing the singleton bindings
-Windows keeps exactly one real notification-area model, and the mod never duplicates the native icon manager or its `std::shared_ptr` ownership. Instead, the real-tray owner's elements act as a binding source : their `DataContext`/`ItemsSource`/(non-UIElement) `Content` are cached in heap-backed holders and applied to the matching elements of every other taskbar, which then render the singleton content through ordinary XAML data binding. `UIElement` content is never shared, a XAML element cannot live in two trees. In selected-monitor mode, the first configured monitor additionally becomes the preferred owner of the real tray surface : the `TrayUI::_SetStuckMonitor` hook retargets Explorer's own primary-taskbar placement logic there, re-triggered through Explorer's display-change message (`0x5B8`). Tray icon drag/drop state follows the island that most recently attached the singleton tray `ItemsSource`, so drag hover/down/up over a managed tray strip re-attaches the tray icon sources to the taskbar under the pointer before native XAML handles the move or drop. When a drag leaves the hidden-icons overflow popup, the message stream can still be captured by the popup window, so the dispatch hook resolves the taskbar from the live screen point and forces a fresh re-attach after each hidden-overflow open.
+Windows keeps exactly one real notification-area model, and the mod never duplicates the native icon manager or its `std::shared_ptr` ownership. Instead, the real-tray owner's elements act as a binding source : their `DataContext`/`ItemsSource`/(non-UIElement) `Content` are cached in heap-backed holders and applied to the matching elements of every other taskbar, which then render the singleton content through ordinary XAML data binding. `UIElement` content is never shared, a XAML element cannot live in two trees. The system icon stacks follow the same pattern (stack `DataContext` plus the inner `IconStack` list `ItemsSource`), and each copy's stack `Visibility` is bound one-way to the owner's element, so an indicator appearing on the primary appears everywhere without an apply pass. On builds that show the secondary-taskbar clock through `SecondaryClockStack`, that stack sits right before `ControlCenterButton` in the template, so copies swap the two (Grid columns or panel order, only from the exact template order) to read like the primary. In selected-monitor mode, the first configured monitor additionally becomes the preferred owner of the real tray surface : the `TrayUI::_SetStuckMonitor` hook retargets Explorer's own primary-taskbar placement logic there, re-triggered through Explorer's display-change message (`0x5B8`).
+
+### Coordinates : mapping copies to their own island
+`SystemTray.dll` converts island coordinates to screen coordinates through one fixed window, the host of the primary taskbar model (or the overflow popup), scaled by the single per-thread display scale, so every copy maps to the same relative spot on the primary monitor. The `DispatchMessageW` hook publishes which taskbar island is dispatching the current input message (XAML raises clicks, drags and hovers synchronously inside that dispatch), and the SystemTray hooks redo the conversions with the right island :
+- `GetInvocationPointRelativeToScreen`/`GetIconBoundsRelativeToScreen` : the anchor and icon rectangle sent to a tray icon's app (`NOTIFYICON_VERSION_4` callbacks), so app menus and popups open next to the clicked copy
+- `GetScreenRectFromXamlElement` : the answer to `Shell_NotifyIconGetRect`, now the icon (or chevron) on the taskbar under the cursor or last clicked, found by `DataContext` among that island's elements
+- `DragDropManager::ScreenRectForElement`/`ElementPointToScreenPoint` : tray icons are dragged through a pointer-based manager (not OLE or XAML drag/drop) whose drop targets are every loaded icon view, copies included. Measuring each one on its own island, with that island's scale, makes drops over a copied tray land there, hidden-to-visible moves included
+- `DragDropManager::HitTestChevron` : only the chevron constructed last is registered as the chevron drop target, so any styled taskbar's chevron counts too
 
 ### Left clicks on copied surfaces : clicked-monitor contexts
-A window subclass on every managed taskbar hit-tests left clicks against DPI-scaled right-edge metrics ([show desktop][notification/clock][measured control center][measured promoted icons][chevron]). A click on a copied control-center or hidden-icons surface arms a short-lived **flyout context** : monitor, flyout kind, tick deadline, chevron anchor point, taskbar rectangle and target DPI, published through the shared seqlock so ShellHost redirects too. While a context is armed :
-- `MonitorFrom*` queries resolve to the clicked monitor, gated by target-side filters so only ambiguous geometry, the clicked taskbar itself, known flyout popups (`ControlCenterWindow`, `TopLevelWindowForOverflowXamlIsland`, the control-center windowed popup), and the hidden-tray drag visual while a tray drag/drop context is active are redirected
+A window subclass on every managed taskbar hit-tests left clicks against the live element rectangles measured above (the exact element wins, then a small DPI-scaled slop). A click on a copied control-center, system-icon or hidden-icons surface arms a short-lived **flyout context** : monitor, flyout kind, tick deadline, chevron anchor point, taskbar rectangle and target DPI, published through the shared seqlock so ShellHost redirects too. While a context is armed :
+- `MonitorFrom*` queries resolve to the clicked monitor, gated by target-side filters so only ambiguous geometry, the clicked taskbar itself and known flyout popups (`ControlCenterWindow`, `TopLevelWindowForOverflowXamlIsland`, the control-center windowed popup) are redirected
 - `EnumDisplayDevicesW` reports the clicked display as the primary device
 - `ImmersiveMonitorHelper` is connected to the clicked monitor's center
 - placement calls for the known popups are rewritten : DPI-rescaled between source and target monitors, anchored to the captured chevron point for the overflow flyout, pinned to the armed taskbar's edge with a small gap, and clamped into the target work area
 
 Contexts expire lazily through their tick deadline (no timers ever run on Explorer's taskbar windows for this), are shortened right after popup placement so they cannot linger, and are dropped by right-click input or left clicks outside the copied surfaces. Every context read validates the armed monitor handle against the live topology first, so a hot-plugged display drops the context instead of redirecting to a dead handle.  
-When an open arrives with **no armed context** at all (the hit-test depends on measured icon widths that tray-icon changes can shift, and pen/touch input bypasses the subclass left-click path), the placement hooks arm a last-chance cursor-derived context : a known flyout popup placed while not yet visible, with the cursor on a managed taskbar whose monitor differs from the requested placement, is treated as a click on that taskbar (cursor point as the overflow anchor) and translated through the same path. The rescue never touches re-placements of an already-visible flyout, so a delayed popup cannot chase the cursor across monitors.
+The overflow popup keeps a **sticky placement** : once an anchored open was translated, every later re-position while the popup stays visible replays the same translation. Windows re-runs its placement from the anchor it stored for the primary taskbar whenever the popup content resizes, for example when an icon leaves and the row count changes, which used to teleport the popup back to the primary monitor once the context had expired. Hiding or reopening the popup drops the sticky placement.  
+When an open arrives with **no armed context** at all (pen/touch input bypasses the subclass left-click path, or the layout changed between measurement and click), the placement hooks arm a last-chance cursor-derived context : a known flyout popup placed while not yet visible, with the cursor on a managed taskbar whose monitor differs from the requested placement, is treated as a click on that taskbar (cursor point as the overflow anchor) and translated through the same path. The rescue never touches re-placements of an already-visible flyout, so a delayed popup cannot chase the cursor across monitors.
 
-### Right clicks on control-center icons : the three-layer fix
-The per-glyph network/volume/battery menus were the 1.0.7 crash saga, and each of the three layers below is load-bearing :
-1. **Menu ownership follows the pointer**. The per-item context-menu state binds to whichever `ControlCenterButton` attached the shared `ItemsSource` most recently, and a right press over any other island kills Explorer inside the island's input processing, before the taskbar window receives a single message. The mod therefore re-attaches the hovered taskbar's items source while no button is down (mouse-move/pointer-update seen in the `DispatchMessageW` hook, `WM_SETCURSOR` forwarded to the subclassed taskbar), with the right-press dispatch itself as a last resort. Mid-press input never re-attaches, that would eat the active click.
-2. **`ShowAt` is intercepted through regular function hooks**. The menus are flyouts created lazily on first open and cached inside Windows' view-model, reachable through no tree walk and no public API (`Popup.AssociatedFlyout` is WinUI-only, system XAML tops out at `IPopup4`). Throwaway `MenuFlyout`/`Flyout` instances expose the class vtables shared by every instance, and their `IFlyoutBase::ShowAt` (slot 14) and `IFlyoutBase5::ShowAt` (slot 12) entries are read to find the concrete implementation functions. Windhawk regular function hooks are installed on those functions; the ABI vtables are never patched. The hook is a pure pass-through unless the placement target sits inside a `ControlCenterButton` subtree.
-3. **Per-island proxies beat the XamlRoot lock**. A flyout's `XamlRoot` is settable only before its first show, afterwards it is locked to its first island forever, and showing it anchored to another island is the exact crashing call. The mod keeps one proxy `MenuFlyout` per island, created with its `XamlRoot` set before first use. When a locked cached menu is asked to open on a foreign island, its items, which carry the native command handlers, are moved into that island's proxy, the proxy is shown at the original target, and the crashy native `ShowAt` is suppressed (`S_OK` without showing). Borrowed items are handed back to their home menu at the start of the next control-center interaction and on unload, with a guard against duplicating a menu Windows rebuilt in the meantime.
+### Right clicks on shared icons : the three-layer fix
+The per-glyph network/volume/battery menus were the 1.0.7 crash saga, and each of the three layers below is load-bearing. Since 1.3.0 they also cover the copied system icon stacks (`MainStack`, `NonActivatableStack`), whose per-item menus follow the same model :
+1. **Menu ownership follows the pointer**. The per-item context-menu state binds to whichever copy of a shared surface attached its `ItemsSource` most recently, and a right press over any other island kills Explorer inside the island's input processing, before the taskbar window receives a single message. The mod therefore re-attaches the hovered surface's items source while no button is down (mouse-move/pointer-update seen in the `DispatchMessageW` hook, `WM_SETCURSOR` forwarded to the subclassed taskbar), with the right-press dispatch itself as a last resort. Mid-press input never re-attaches, that would eat the active click.
+2. **`ShowAt` is intercepted through regular function hooks**. The menus are flyouts created lazily on first open and cached inside Windows' view-model, reachable through no tree walk and no public API (`Popup.AssociatedFlyout` is WinUI-only, system XAML tops out at `IPopup4`). Throwaway `MenuFlyout`/`Flyout` instances expose the class vtables shared by every instance, and their `IFlyoutBase::ShowAt` (slot 14) and `IFlyoutBase5::ShowAt` (slot 12) entries are read to find the concrete implementation functions. Windhawk regular function hooks are installed on those functions; the ABI vtables are never patched. The hook is a pure pass-through unless the placement target sits inside a `ControlCenterButton`, `MainStack` or `NonActivatableStack` subtree.
+3. **Per-island proxies beat the XamlRoot lock**. A flyout's `XamlRoot` is settable only before its first show, afterwards it is locked to its first island forever, and showing it anchored to another island is the exact crashing call. The mod keeps one proxy `MenuFlyout` per island, created with its `XamlRoot` set before first use. When a locked cached menu is asked to open on a foreign island, its items, which carry the native command handlers, are moved into that island's proxy, the proxy is shown at the original target, and the crashy native `ShowAt` is suppressed (`S_OK` without showing). Borrowed items are handed back to their home menu at the start of the next shared-menu interaction and on unload, with a guard against duplicating a menu Windows rebuilt in the meantime.
 
 ### What stays native
-The notification/date-time button is untouched : Windows gives every taskbar its own items for it and already opens that flyout on the clicked monitor. Tray icon right clicks travel the notify-icon message pipeline to the owning apps, which is island-safe. ShellHost surfaces outside an armed flyout context, including Windows Search, keep their native placement.
+The notification/date-time button and the secondary-taskbar clock are untouched, apart from placing the control center before that clock : Windows gives every taskbar its own items for them and already opens that flyout on the clicked monitor. Tray icon right clicks travel the notify-icon message pipeline to the owning apps, which is island-safe, with the anchor mapped from the clicked island. ShellHost surfaces outside an armed flyout context, including Windows Search, keep their native placement.
 
 ### Lifecycle and safety
-Unload is strictly ordered : the unloading flag flips every hook to pass-through, pending retries are cancelled, contexts and caches cleared, and then, on the taskbar's own thread, subclasses are removed, native styles and control-center menu ownership are restored, and borrowed proxy items returned before the mod's code can vanish. No low timer ids are ever used on Explorer's windows (small ids collide with native taskbar timers, a confirmed past crash source). WinRT references live in heap-backed holders cleared only on normal reload/settings paths, never during process detach, so COM releases cannot run at an unsafe time.
+Unload first stops redirection, then waits synchronously for the taskbar thread to cancel retries, return borrowed proxy items, remove subclasses, restore the properties and bindings changed by the mod, restore child order and native menu ownership, and finally release cached XAML references. Properties whose current value or binding differs from the mod's last write are left alone; originally unset properties are cleared instead of pinned to guessed defaults. Ordinary bindings are restored as bindings; internal template expressions that cannot be reapplied through SetValue are restored as their resolved base values, without animation overrides. Explorer's own monitor choice passes through during the final display refresh. Cleanup has no timeout, so a busy or hung taskbar can delay disable/update. If the taskbar thread is unavailable, taskbar windows in this process are enumerated and their subclasses are removed through Windhawk's synchronous per-window helper, available in 1.6.1 and 1.7.3. Heap-backed XAML references are retained instead of released on the wrong thread. No low timer ids are used on Explorer's windows. Startup retries only reapply XAML state; they do not send display-change notifications that can dismiss an app menu. WinRT references are never released during process detach. The SystemTray hooks replace an answer only when they can compute it from a known taskbar island, and otherwise use the native computation. The free-function rectangle hook returns RECT by value so the compiler selects the correct x64 or ARM64 ABI.
 
 ---
 
@@ -147,15 +155,20 @@ Unload is strictly ordered : the unloading flag flips every hook to pass-through
 
 #undef GetCurrentTime
 
+#include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Windows.UI.Xaml.Data.h>
+#include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/base.h>
 
+#include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cwctype>
 #include <functional>
 #include <limits>
@@ -245,8 +258,15 @@ constexpr WPARAM kNativeHiddenTray = 4;
 constexpr DWORD kNativeFlyoutMonitorContextMs = 5000;
 constexpr DWORD kNativeControlCenterMonitorContextMs = 1800;
 constexpr DWORD kNativeFlyoutMonitorContextAfterPlacementMs = 650;
-constexpr DWORD kTrayDragDropMonitorContextMs = 5000;
 constexpr DWORD kDeferredApplyRetryDelaysMs[] = {750, 1500, 3000, 6000, 12000, 24000};
+// Live tray layout freshness : clicks re-measure almost always, hover pre-arm (every cursor move) at most a few times per second
+constexpr DWORD kTrayLayoutClickMaxAgeMs = 150;
+constexpr DWORD kTrayLayoutHoverMaxAgeMs = 400;
+// How long a tray icon interaction on one taskbar keeps winning Shell_NotifyIconGetRect answers once the cursor left the taskbars
+constexpr DWORD kTrayInteractionPreferenceMs = 10000;
+// Apps query an icon rectangle dozens of times within a few hundred milliseconds of a click : one answer serves the burst, and an unchanged answer is logged again only after a quiet second
+constexpr DWORD kTrayElementRectReuseMs = 100;
+constexpr DWORD kTrayElementRectLogRepeatMs = 1000;
 
 asm(".section .shared,\"dws\"\n");
 #define SHARED_SECTION __attribute__((section(".shared")))
@@ -406,8 +426,6 @@ EnumDisplayDevicesW_t EnumDisplayDevicesW_Original;
 using DispatchMessageW_t = decltype(&DispatchMessageW);
 DispatchMessageW_t DispatchMessageW_Original;
 
-bool g_restoringNativeTaskbars = false;
-HMONITOR g_nativePrimaryRestoreMonitor = nullptr;
 std::atomic<LONG> g_deferredApplyGeneration{0};
 std::atomic<LONG> g_modUnloading{0};
 std::atomic<LONG> g_activeFlyoutRedirectionSuppressionDepth{0};
@@ -466,14 +484,59 @@ CachedXamlBinding& g_primaryNotifyIconStackBinding = *new CachedXamlBinding();
 CachedXamlBinding& g_primaryNotifyIconStackChildBinding = *new CachedXamlBinding();
 CachedXamlBinding& g_primaryNotifyIconStackListViewBinding = *new CachedXamlBinding();
 CachedXamlBinding& g_primaryControlCenterButtonBinding = *new CachedXamlBinding();
-/// Taskbar window whose tray icon ItemsSources were attached last. Drag/drop state follows the active XAML island, so re-attaching on drag hover/drop makes copied tray surfaces behave as local targets.
-HWND g_trayItemsOwnerTaskbarWnd = nullptr;
-/// Hidden-overflow opens can touch the popup island after the taskbar island was marked owner. Force one fresh re-attach when dragging out of that popup.
-bool g_trayItemsOwnerMayBeStale = false;
-/// Taskbar window whose ControlCenterButton items were attached last. The per-glyph context-menu state follows the most recent ItemsSource attach, so only this island can open the native menus safely.
-HWND g_controlCenterItemsOwnerTaskbarWnd = nullptr;
+CachedXamlBinding& g_primaryMainStackBinding = *new CachedXamlBinding();
+CachedXamlBinding& g_primaryMainStackListViewBinding = *new CachedXamlBinding();
+CachedXamlBinding& g_primaryNonActivatableStackBinding = *new CachedXamlBinding();
+CachedXamlBinding& g_primaryNonActivatableStackListViewBinding = *new CachedXamlBinding();
 
-/// Set once the FlyoutBase ShowAt implementation functions have been hooked on the taskbar thread (see EnsureFlyoutShowAtFunctionHooks).
+/// The real tray owner's system icon stacks. Copies bind their Visibility to these elements, so an indicator appearing or disappearing on the primary (language, microphone in use, ...) follows on every copy without an apply pass.
+struct PrimarySystemIconStacks {
+    FrameworkElement mainStack{nullptr};
+    FrameworkElement nonActivatableStack{nullptr};
+};
+
+PrimarySystemIconStacks& g_primarySystemIconStacks = *new PrimarySystemIconStacks();
+
+/// Shared surfaces whose items carry per-item context-menu state : the control-center glyphs, plus the system icon stacks (language/IME, touch keyboard, pen, privacy indicators) copied since 1.3.0. That state follows the island that attached the shared ItemsSource most recently, so only that island can open the native menus safely.
+enum class SharedMenuSurface {
+    ControlCenter,
+    MainStack,
+    NonActivatableStack,
+    Count,
+};
+
+constexpr size_t kSharedMenuSurfaceCount = static_cast<size_t>(SharedMenuSurface::Count);
+
+/// Taskbar window whose copy of each shared menu surface attached its ItemsSource last
+HWND g_sharedMenuSurfaceOwners[kSharedMenuSurfaceCount] = {};
+
+HWND& SharedMenuSurfaceOwner(SharedMenuSurface surface) {
+    return g_sharedMenuSurfaceOwners[static_cast<size_t>(surface)];
+}
+
+/// Log-formatting helper for SharedMenuSurface
+PCWSTR SharedMenuSurfaceToString(SharedMenuSurface surface) {
+    switch (surface) {
+        case SharedMenuSurface::MainStack:
+            return L"MainStack";
+        case SharedMenuSurface::NonActivatableStack:
+            return L"NonActivatableStack";
+        case SharedMenuSurface::ControlCenter:
+        default:
+            return L"ControlCenterButton";
+    }
+}
+
+/// Drops every ownership record pointing at a taskbar window, or all of them when hWnd is null
+void ClearSharedMenuSurfaceOwners(HWND hWnd) {
+    for (HWND& owner : g_sharedMenuSurfaceOwners) {
+        if (!hWnd || owner == hWnd) {
+            owner = nullptr;
+        }
+    }
+}
+
+/// Set once the FlyoutBase ShowAt implementation functions have been hooked on the taskbar thread (see EnsureFlyoutShowAtFunctionHooks)
 std::atomic<bool> g_flyoutShowAtHooksInstalled{false};
 
 /// A flyout's XamlRoot locks permanently to the island of its first show (confirmed by logs : re-rooted on first show, locked=3 ever after). The cached per-glyph menus can therefore never be shown on another island. Instead, one proxy MenuFlyout is created per island, rooted there before its first show, and the cached menu's items are moved into the island's proxy for the duration of the interaction. The items keep their original handlers, and they are lazily returned to the cached flyout at the start of the next control-center menu interaction, so no Closed event subscription (and no unload hazard from mod-owned handlers) is needed.
@@ -489,14 +552,72 @@ struct ControlCenterProxyFlyouts {
 
 ControlCenterProxyFlyouts& g_controlCenterProxyFlyouts = *new ControlCenterProxyFlyouts();
 
-struct TaskbarTrayMetrics {
-    HWND hWnd = nullptr;
-    double notificationAreaIconsWidth = 0.0;
-    double controlCenterButtonWidth = 0.0;
+/// Client-space rectangles (physical pixels) of the tray surfaces of one taskbar, measured from the live XAML tree. An empty rectangle means the surface is collapsed or missing. Click hit-testing, the menu-ownership hover pre-arm, and the hidden-tray anchor all read these instead of assuming a fixed right-edge layout, which differs between builds (secondary clock stack, notification bell, show desktop button) and themes.
+struct TrayLayoutRects {
+    RECT chevron = {};
+    RECT promotedIcons = {};
+    RECT mainStack = {};
+    RECT nonActivatableStack = {};
+    RECT secondaryClock = {};
+    RECT controlCenter = {};
+    RECT notificationCenter = {};
 };
 
-std::vector<TaskbarTrayMetrics> g_taskbarTrayMetrics;
-SRWLOCK g_taskbarTrayMetricsLock = SRWLOCK_INIT;
+struct TaskbarTrayLayout {
+    HWND hWnd = nullptr;
+    DWORD measuredTick = 0;
+    bool valid = false;
+    TrayLayoutRects rects;
+};
+
+std::vector<TaskbarTrayLayout> g_taskbarTrayLayouts;
+SRWLOCK g_taskbarTrayLayoutsLock = SRWLOCK_INIT;
+
+/// The XamlRoot of every taskbar island seen by an apply or layout pass, so SystemTray.dll hooks can map an element back to the taskbar window that hosts it without re-walking Explorer's objects on every call. Only touched on the taskbar thread, heap-backed and cleared there like the binding caches.
+struct TaskbarIslandEntry {
+    HWND hWnd = nullptr;
+    XamlRoot xamlRoot{nullptr};
+};
+
+struct TaskbarIslands {
+    std::vector<TaskbarIslandEntry> entries;
+    /// Islands already confirmed not to belong to a taskbar (the overflow popup, drag visuals), so drag hit-tests over their icons skip the taskbar re-scan
+    std::vector<XamlRoot> otherRoots;
+};
+
+TaskbarIslands& g_taskbarIslands = *new TaskbarIslands();
+
+/// Taskbar whose island is dispatching the current input message on this thread. XAML raises tray clicks, drags and hover callbacks synchronously inside that dispatch, which lets the SystemTray.dll coordinate hooks know which copy the user is interacting with.
+thread_local HWND g_inputDispatchTaskbarWnd = nullptr;
+
+/// Last taskbar whose tray icons converted a click or hover to screen coordinates, used to answer Shell_NotifyIconGetRect for the copy the user interacted with
+struct TrayIconInteraction {
+    HWND taskbarWnd = nullptr;
+    DWORD tick = 0;
+};
+
+TrayIconInteraction g_lastTrayIconInteraction;
+
+/// Last Shell_NotifyIconGetRect answer on this thread. The element pointer only identifies the query and is never dereferenced.
+struct TrayElementRectAnswer {
+    const void* element = nullptr;
+    HWND nativeHwnd = nullptr;
+    HWND preferredTaskbarWnd = nullptr;
+    DWORD tick = 0;
+    bool corrected = false;
+    RECT rect = {};
+};
+
+thread_local TrayElementRectAnswer g_lastTrayElementRectAnswer;
+
+/// Placement the hidden-icons overflow popup was translated to, re-applied to every later re-position while that popup stays visible. Windows re-runs its placement with the anchor it stored for the primary taskbar whenever the popup content resizes (for example when its row count changes), long after the clicked-monitor context expired.
+struct StickyOverflowPlacement {
+    HWND popupWnd = nullptr;
+    ProxyFlyoutContext context;
+};
+
+StickyOverflowPlacement g_stickyOverflowPlacement;
+SRWLOCK g_stickyOverflowPlacementLock = SRWLOCK_INIT;
 
 /// True once Wh_ModBeforeUninit has started. Every hook checks it to fall back to fully native behavior during teardown.
 bool IsModUnloading() {
@@ -518,11 +639,7 @@ struct ActiveFlyoutRedirectionSuppressor {
     }
 };
 
-double GetCachedNotificationAreaIconsWidth(HWND hWnd);
-void SetCachedNotificationAreaIconsWidth(HWND hWnd, double width);
-double GetCachedControlCenterButtonWidth(HWND hWnd);
-void SetCachedControlCenterButtonWidth(HWND hWnd, double width);
-void RemoveCachedTaskbarTrayMetrics(HWND hWnd);
+void RemoveCachedTaskbarTrayLayout(HWND hWnd);
 bool IsSecondaryTaskbarWindow(HWND hWnd);
 bool IsPrimaryTaskbarWindow(HWND hWnd);
 bool IsRightClickOrContextMenuMessage(UINT uMsg, WPARAM wParam);
@@ -921,12 +1038,8 @@ HMONITOR GetSingleSelectedMonitorForPrimaryTray() {
     return monitor;
 }
 
-/// Monitor the real (singleton) tray surface should live on right now : the pre-unload monitor while restoring, otherwise the first selected monitor (null in all-monitors mode, where the surface is never moved)
+/// Monitor the real (singleton) tray surface should live on while the mod is active (null in all-monitors mode, where the surface is never moved)
 HMONITOR GetRealPrimaryTrayTargetMonitor() {
-    if (g_restoringNativeTaskbars) {
-        return g_nativePrimaryRestoreMonitor;
-    }
-
     return GetSingleSelectedMonitorForPrimaryTray();
 }
 
@@ -1261,7 +1374,7 @@ HMONITOR WINAPI MonitorFromRect_Hook(LPCRECT rect, DWORD flags) {
     return MonitorFromRect_Original(rect, flags);
 }
 
-/// user32 hook : while a flyout context is active, window-to-monitor queries resolve to the clicked monitor, but only for the clicked taskbar itself, known flyout popup windows, and the hidden-tray drag visual during tray drag/drop. Control-center popup placement also shortens the context so it cannot linger.
+/// user32 hook : while a flyout context is active, window-to-monitor queries resolve to the clicked monitor, but only for the clicked taskbar itself and known flyout popup windows. Control-center popup placement also shortens the context so it cannot linger.
 HMONITOR WINAPI MonitorFromWindow_Hook(HWND hWnd, DWORD flags) {
     if (!IsActiveFlyoutRedirectionSuppressed()) {
         ProxyFlyoutContext context;
@@ -1278,18 +1391,16 @@ HMONITOR WINAPI MonitorFromWindow_Hook(HWND hWnd, DWORD flags) {
             bool isNativeFlyoutPopup = wcscmp(className, L"TopLevelWindowForOverflowXamlIsland") == 0
                 || wcscmp(className, L"ControlCenterWindow") == 0
                 || (wcscmp(className, L"Xaml_WindowedPopupClass") == 0 && nativeControlCenterOrContextMenu);
-            bool isHiddenTrayDragVisual = context.kind == kNativeHiddenTray
-                && wcscmp(className, L"DragVisualWnd") == 0;
             HWND activeTaskbarWnd = context.taskbarWnd;
             bool isClickedTaskbar = activeTaskbarWnd && hWnd == activeTaskbarWnd;
 
-            if (!isNativeFlyoutPopup && !isHiddenTrayDragVisual && !isClickedTaskbar) {
+            if (!isNativeFlyoutPopup && !isClickedTaskbar) {
                 HMONITOR actualMonitor = MonitorFromWindow_Original(hWnd, flags);
                 Wh_Log(
                     L"%s not forcing "
                     L"MonitorFromWindow hwnd=0x%p class=%s because it "
-                    L"is not the clicked taskbar, a known flyout popup, "
-                    L"or a tray drag window actual=%d active=%d clicked=0x%p",
+                    L"is not the clicked taskbar or a known flyout popup "
+                    L"actual=%d active=%d clicked=0x%p",
                     TargetProcessToString(g_targetProcess), hWnd,
                     className[0] ? className : L"<null>",
                     GetMonitorIndex(actualMonitor),
@@ -1457,7 +1568,67 @@ bool TryArmCursorRescueFlyoutContext(HWND hWnd, const RECT& requestedRect) {
     );
 }
 
-/// Translates a flyout popup rectangle onto the active context's monitor : rescales for source/target DPI, anchors hidden-tray popups to the captured chevron point, pins popups to the armed taskbar's edge with a small gap, preserves relative offsets otherwise, and clamps into the target work area.
+/// True for the hidden-icons overflow popup window
+bool IsOverflowPopupWindowClass(PCWSTR className) {
+    return wcscmp(className, L"TopLevelWindowForOverflowXamlIsland") == 0;
+}
+
+/// Remembers where the overflow popup was translated to, for the re-positions Windows issues while it stays open
+void StoreStickyOverflowPlacement(HWND popupWnd, const ProxyFlyoutContext& context) {
+    AcquireSRWLockExclusive(&g_stickyOverflowPlacementLock);
+    g_stickyOverflowPlacement.popupWnd = popupWnd;
+    g_stickyOverflowPlacement.context = context;
+    ReleaseSRWLockExclusive(&g_stickyOverflowPlacementLock);
+}
+
+/// Forgets the sticky placement of a popup (or any popup when popupWnd is null), when it hides or reopens
+void ClearStickyOverflowPlacement(HWND popupWnd) {
+    AcquireSRWLockExclusive(&g_stickyOverflowPlacementLock);
+
+    if (!popupWnd || g_stickyOverflowPlacement.popupWnd == popupWnd) {
+        g_stickyOverflowPlacement = {};
+    }
+
+    ReleaseSRWLockExclusive(&g_stickyOverflowPlacementLock);
+}
+
+/// Cheap pre-filter for the placement hooks : whether this window carries a sticky overflow placement
+bool HasStickyOverflowPlacement(HWND popupWnd) {
+    AcquireSRWLockShared(&g_stickyOverflowPlacementLock);
+    bool result = popupWnd && g_stickyOverflowPlacement.popupWnd == popupWnd;
+    ReleaseSRWLockShared(&g_stickyOverflowPlacementLock);
+
+    return result;
+}
+
+/// Copies the sticky placement of a visible overflow popup, dropping it when its monitor died meanwhile
+bool TryGetStickyOverflowPlacement(HWND popupWnd, ProxyFlyoutContext* context) {
+    AcquireSRWLockShared(&g_stickyOverflowPlacementLock);
+    bool found = popupWnd && g_stickyOverflowPlacement.popupWnd == popupWnd;
+
+    if (found) {
+        *context = g_stickyOverflowPlacement.context;
+    }
+
+    ReleaseSRWLockShared(&g_stickyOverflowPlacementLock);
+
+    if (!found) {
+        return false;
+    }
+
+    MONITORINFO monitorInfo = {};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+
+    if (!GetMonitorInfoW(context -> monitor, &monitorInfo)) {
+        ClearStickyOverflowPlacement(popupWnd);
+
+        return false;
+    }
+
+    return true;
+}
+
+/// Translates a flyout popup rectangle onto the active context's monitor : rescales for source/target DPI, anchors hidden-tray popups to the captured chevron point, pins popups to the armed taskbar's edge with a small gap, preserves relative offsets otherwise, and clamps into the target work area. A visible overflow popup with a sticky placement keeps that placement instead of the active context.
 /// @return true when translatedRect differs from the request and should be applied instead
 bool TranslateNativeFlyoutRectToActiveMonitor(HWND hWnd, const RECT& requestedRect, RECT* translatedRect, PCWSTR apiName) {
     if (IsActiveFlyoutRedirectionSuppressed()) {
@@ -1465,8 +1636,25 @@ bool TranslateNativeFlyoutRectToActiveMonitor(HWND hWnd, const RECT& requestedRe
     }
 
     ProxyFlyoutContext context;
+    wchar_t popupClassName[64] = {};
 
-    if (!TryGetActiveProxyFlyoutContext(&context)) {
+    if (hWnd) {
+        GetClassNameW(hWnd, popupClassName, ARRAYSIZE(popupClassName));
+    }
+
+    bool isOverflowPopup = IsOverflowPopupWindowClass(popupClassName);
+    bool usedStickyPlacement = false;
+
+    if (isOverflowPopup) {
+        // A visible overflow popup is being re-positioned by Windows itself (content resize, DPI change) : it must stay where the click opened it, whatever context is armed now. A hidden one is a fresh open that resolves its monitor again.
+        if (IsWindowVisible(hWnd)) {
+            usedStickyPlacement = TryGetStickyOverflowPlacement(hWnd, &context);
+        } else {
+            ClearStickyOverflowPlacement(hWnd);
+        }
+    }
+
+    if (!usedStickyPlacement && !TryGetActiveProxyFlyoutContext(&context)) {
         // No armed context : a click the hit-test missed, pen/touch input, or a context dropped after a display change. Try the cursor rescue before letting the open land on the wrong monitor.
         if (!TryArmCursorRescueFlyoutContext(hWnd, requestedRect)) {
             return false;
@@ -1597,7 +1785,7 @@ bool TranslateNativeFlyoutRectToActiveMonitor(HWND hWnd, const RECT& requestedRe
         L"moving %s via %s from "
         L"(%ld,%ld,%ld,%ld) to (%ld,%ld,%ld,%ld) on monitor %d "
         L"kind=%d anchor=%d (%ld,%ld) taskbar=(%ld,%ld,%ld,%ld) "
-        L"dpi=%u -> %u",
+        L"dpi=%u -> %u sticky=%d",
         className, apiName, requestedRect.left,
         requestedRect.top, requestedRect.right, requestedRect.bottom,
         translatedRect -> left, translatedRect -> top,
@@ -1605,11 +1793,16 @@ bool TranslateNativeFlyoutRectToActiveMonitor(HWND hWnd, const RECT& requestedRe
         GetMonitorIndex(targetMonitor), activeFlyoutKind,
         usedAnchor, anchorPoint.x, anchorPoint.y, taskbarRect.left,
         taskbarRect.top, taskbarRect.right, taskbarRect.bottom,
-        sourceDpi, targetDpi
+        sourceDpi, targetDpi, usedStickyPlacement
     );
 
-    if (wcscmp(className, L"TopLevelWindowForOverflowXamlIsland") == 0 && activeFlyoutKind == kNativeHiddenTray) {
-        g_trayItemsOwnerMayBeStale = true;
+    if (usedStickyPlacement) {
+        return true;
+    }
+
+    // Only anchored placements are replayed : an anchor-less translation preserves work-area offsets, which is fine for one open but drifts once the popup starts resizing
+    if (isOverflowPopup && activeFlyoutKind == kNativeHiddenTray && usedAnchor) {
+        StoreStickyOverflowPlacement(hWnd, context);
     }
 
     ShortenActiveFlyoutMonitorContext(kNativeFlyoutMonitorContextAfterPlacementMs, apiName);
@@ -1636,20 +1829,25 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int
         return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
     }
 
+    if (uFlags & SWP_HIDEWINDOW) {
+        ClearStickyOverflowPlacement(hWnd);
+    }
+
     if (!ShouldTranslateNativeFlyoutWindowPosition(uFlags) ||
         IsActiveFlyoutRedirectionSuppressed()) {
 
         return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
     }
 
-    // With an armed context every known popup placement is translated. With none, only a cursor-rescue candidate (a fresh, not yet visible open) is worth the GetWindowRect below : the translation then arms the rescue context or bails.
+    // With an armed context every known popup placement is translated. With none, only a cursor-rescue candidate (a fresh, not yet visible open) or an overflow popup with a sticky placement is worth the GetWindowRect below : the translation then arms the rescue context, replays the sticky placement, or bails.
     ProxyFlyoutContext context;
     bool hasActiveContext = TryGetActiveProxyFlyoutContext(&context);
 
     if (
-        hasActiveContext
+        (hasActiveContext
             ? !IsNativeFlyoutPopupWindow(hWnd, context.kind, nullptr, 0)
-            : !IsCursorRescueCandidateWindow(hWnd, nullptr)
+            : !IsCursorRescueCandidateWindow(hWnd, nullptr))
+        && !HasStickyOverflowPlacement(hWnd)
     ) {
         return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
     }
@@ -1726,20 +1924,25 @@ HDWP WINAPI DeferWindowPos_Hook(HDWP hWinPosInfo, HWND hWnd, HWND hWndInsertAfte
         return DeferWindowPos_Original(hWinPosInfo, hWnd, hWndInsertAfter, x, y, cx, cy, uFlags);
     }
 
+    if (uFlags & SWP_HIDEWINDOW) {
+        ClearStickyOverflowPlacement(hWnd);
+    }
+
     if (!ShouldTranslateNativeFlyoutWindowPosition(uFlags) ||
         IsActiveFlyoutRedirectionSuppressed()) {
 
         return DeferWindowPos_Original(hWinPosInfo, hWnd, hWndInsertAfter, x, y, cx, cy, uFlags);
     }
 
-    // Same two-stage gate as SetWindowPos : armed contexts translate known popups, unarmed placements only proceed for cursor-rescue candidates
+    // Same gate as SetWindowPos : armed contexts translate known popups, unarmed placements only proceed for cursor-rescue candidates and sticky overflow placements
     ProxyFlyoutContext context;
     bool hasActiveContext = TryGetActiveProxyFlyoutContext(&context);
 
     if (
-        hasActiveContext
+        (hasActiveContext
             ? !IsNativeFlyoutPopupWindow(hWnd, context.kind, nullptr, 0)
-            : !IsCursorRescueCandidateWindow(hWnd, nullptr)
+            : !IsCursorRescueCandidateWindow(hWnd, nullptr))
+        && !HasStickyOverflowPlacement(hWnd)
     ) {
         return DeferWindowPos_Original(hWinPosInfo, hWnd, hWndInsertAfter, x, y, cx, cy, uFlags);
     }
@@ -1932,6 +2135,135 @@ bool HasAnyBinding(const CachedXamlBinding& binding) {
     return binding.dataContext || binding.itemsSource || binding.content;
 }
 
+/// Remember only properties this mod actually writes. Weak element references let rebuilt templates go away, the saved local values/bindings are released on the taskbar thread.
+struct TrayPropertyChange {
+    winrt::weak_ref<DependencyObject> element;
+    DependencyProperty property{nullptr};
+    winrt::Windows::Foundation::IInspectable originalValue{nullptr};
+    Data::Binding originalBinding{nullptr};
+    winrt::Windows::Foundation::IInspectable appliedValue{nullptr};
+    Data::Binding appliedBinding{nullptr};
+};
+
+std::vector<TrayPropertyChange>& g_trayPropertyChanges = *new std::vector<TrayPropertyChange>();
+
+Data::Binding GetTrayPropertyBinding(DependencyObject const& element, DependencyProperty const& property) {
+    auto frameworkElement = element.try_as<FrameworkElement>();
+    auto expression = frameworkElement ? frameworkElement.GetBindingExpression(property) : nullptr;
+
+    return expression ? expression.ParentBinding() : nullptr;
+}
+
+/// Captures the value before its first write, retaining the latest write for an ownership check at restore time
+template <typename Writer>
+void WriteTrayProperty(DependencyObject const& element, DependencyProperty const& property, Writer writer) {
+    auto& changes = g_trayPropertyChanges;
+    std::erase_if(changes, [](TrayPropertyChange const& change) { return !change.element.get(); });
+
+    auto findChange = [&] {
+        return std::find_if(changes.begin(), changes.end(), [&](TrayPropertyChange const& change) {
+            return change.element.get() == element && change.property == property;
+        });
+    };
+
+    if (findChange() == changes.end()) {
+        auto originalValue = element.ReadLocalValue(property);
+
+        // ReadLocalValue can return an internal TemplateBinding expression that SetValue cannot accept as a property value. Keep the unset marker, otherwise save the resolved value without animation overrides; ordinary bindings are restored separately.
+        if (originalValue != DependencyProperty::UnsetValue()) {
+            originalValue = element.GetAnimationBaseValue(property);
+        }
+
+        changes.push_back({winrt::make_weak(element), property, originalValue, GetTrayPropertyBinding(element, property)});
+    }
+
+    writer();
+    auto appliedValue = element.ReadLocalValue(property);
+    auto appliedBinding = GetTrayPropertyBinding(element, property);
+    // XAML callbacks can append or prune records during the write. Re-find this entry instead of retaining an index or iterator across it.
+    if (auto it = findChange(); it != changes.end()) {
+        it->appliedValue = std::move(appliedValue);
+        it->appliedBinding = std::move(appliedBinding);
+    }
+}
+
+template <typename Value>
+void SetTrayProperty(DependencyObject const& element, DependencyProperty const& property, Value const& value) {
+    WriteTrayProperty(element, property, [&] { element.SetValue(property, winrt::box_value(value)); });
+}
+
+/// XAML can box a scalar afresh on each read. Compare values for the scalar properties we write, and identity for bindings and shared objects.
+bool SameTrayPropertyValue(winrt::Windows::Foundation::IInspectable const& left, winrt::Windows::Foundation::IInspectable const& right) {
+    if (left == right) {
+        return true;
+    }
+
+    if (!left || !right) {
+        return false;
+    }
+
+    auto leftVisibility = left.try_as<winrt::Windows::Foundation::IReference<Visibility>>();
+    auto rightVisibility = right.try_as<winrt::Windows::Foundation::IReference<Visibility>>();
+
+    if (leftVisibility && rightVisibility) {
+        return leftVisibility.Value() == rightVisibility.Value();
+    }
+
+    auto leftValue = left.try_as<winrt::Windows::Foundation::IPropertyValue>();
+    auto rightValue = right.try_as<winrt::Windows::Foundation::IPropertyValue>();
+
+    if (!leftValue || !rightValue || leftValue.Type() != rightValue.Type()) {
+        return false;
+    }
+
+    using winrt::Windows::Foundation::PropertyType;
+    switch (leftValue.Type()) {
+        case PropertyType::Boolean:
+            return leftValue.GetBoolean() == rightValue.GetBoolean();
+        case PropertyType::Int32:
+            return leftValue.GetInt32() == rightValue.GetInt32();
+        case PropertyType::Double: {
+            double a = leftValue.GetDouble();
+            double b = rightValue.GetDouble();
+            return a == b || (std::isnan(a) && std::isnan(b));
+        }
+        default:
+            return false;
+    }
+}
+
+/// Restores bindings/local values instead of pinning guessed native defaults. A property changed subsequently by Windows or another mod is left alone.
+void RestoreTrayProperties() {
+    auto changes = std::move(g_trayPropertyChanges);
+    g_trayPropertyChanges.clear();
+
+    for (auto it = changes.rbegin(); it != changes.rend(); ++it) {
+        try {
+            auto element = it->element.get();
+
+            if (!element) {
+                continue;
+            }
+
+            auto binding = GetTrayPropertyBinding(element, it->property);
+
+            if (binding != it->appliedBinding || (!binding && !SameTrayPropertyValue(element.ReadLocalValue(it->property), it->appliedValue))) {
+                continue;
+            }
+
+            if (it->originalBinding) {
+                element.as<FrameworkElement>().SetBinding(it->property, it->originalBinding);
+            } else if (it->originalValue == DependencyProperty::UnsetValue()) {
+                element.ClearValue(it->property);
+            } else {
+                element.SetValue(it->property, it->originalValue);
+            }
+        } catch (...) {
+            Wh_Log(L"failed to restore a modified tray property");
+        }
+    }
+}
+
 /// Caches the element's DataContext/ItemsSource/Content when present and different from what is already cached
 /// @return true when the cache changed
 bool CaptureBindingIfPresent(FrameworkElement element, CachedXamlBinding& binding, bool includeItemsSource, bool includeContent) {
@@ -2013,17 +2345,17 @@ bool SharePrimaryElementBindingIfUseful(FrameworkElement element, HWND taskbarWn
         bool changed = false;
 
         if (binding.dataContext && InspectableAbi(dataContext) != InspectableAbi(binding.dataContext)) {
-            element.DataContext(binding.dataContext);
+            SetTrayProperty(element, FrameworkElement::DataContextProperty(), binding.dataContext);
             changed = true;
         }
 
         if (includeItemsSource && itemsControl && binding.itemsSource && InspectableAbi(itemsSource) != InspectableAbi(binding.itemsSource)) {
-            itemsControl.ItemsSource(binding.itemsSource);
+            SetTrayProperty(itemsControl, Controls::ItemsControl::ItemsSourceProperty(), binding.itemsSource);
             changed = true;
         }
 
         if (includeContent && contentControl && binding.content && !IsXamlUiElement(binding.content) && InspectableAbi(content) != InspectableAbi(binding.content)) {
-            contentControl.Content(binding.content);
+            SetTrayProperty(contentControl, Controls::ContentControl::ContentProperty(), binding.content);
             changed = true;
         }
 
@@ -2137,17 +2469,17 @@ bool ForceVisibleDescendants(FrameworkElement element, const std::wstring& label
             );
 
             if (child.Visibility() != Visibility::Visible) {
-                child.Visibility(Visibility::Visible);
+                SetTrayProperty(child, UIElement::VisibilityProperty(), Visibility::Visible);
                 changed = true;
             }
 
             if (child.Opacity() != 1.0) {
-                child.Opacity(1.0);
+                SetTrayProperty(child, UIElement::OpacityProperty(), 1.0);
                 changed = true;
             }
 
             if (!child.IsHitTestVisible()) {
-                child.IsHitTestVisible(true);
+                SetTrayProperty(child, UIElement::IsHitTestVisibleProperty(), true);
                 changed = true;
             }
 
@@ -2244,11 +2576,15 @@ FrameworkElement FindDescendantByClassName(FrameworkElement element, PCWSTR clas
     return nullptr;
 }
 
+/// The SystemTrayFrameGrid children, in template order : NotifyIconStack, NotificationAreaIcons, MainStack, NonActivatableStack, SecondaryClockStack, ControlCenterButton, NotificationCenterButton, ShowDesktopStack. The container is a Grid with one Auto column per child in the classic template and a horizontal StackPanel in the newer one.
 struct TrayElementsView {
     FrameworkElement systemTrayFrame = nullptr;
     FrameworkElement systemTrayFrameGrid = nullptr;
     FrameworkElement notifyIconStack = nullptr;
     FrameworkElement notificationAreaIcons = nullptr;
+    FrameworkElement mainStack = nullptr;
+    FrameworkElement nonActivatableStack = nullptr;
+    FrameworkElement secondaryClockStack = nullptr;
     FrameworkElement controlCenterButton = nullptr;
     FrameworkElement notificationCenterButton = nullptr;
 };
@@ -2286,6 +2622,12 @@ bool CollectTrayElements(XamlRoot xamlRoot, HWND taskbarWnd, TrayElementsView* v
             view -> notifyIconStack = child;
         } else if (name == L"NotificationAreaIcons") {
             view -> notificationAreaIcons = child;
+        } else if (name == L"MainStack") {
+            view -> mainStack = child;
+        } else if (name == L"NonActivatableStack") {
+            view -> nonActivatableStack = child;
+        } else if (name == L"SecondaryClockStack") {
+            view -> secondaryClockStack = child;
         } else if (name == L"ControlCenterButton") {
             view -> controlCenterButton = child;
         } else if (name == L"NotificationCenterButton") {
@@ -2304,7 +2646,7 @@ bool ResetExplicitWidth(FrameworkElement element) {
     double width = element.Width();
 
     if (width == width) {
-        element.Width(std::numeric_limits<double>::quiet_NaN());
+        SetTrayProperty(element, FrameworkElement::WidthProperty(), std::numeric_limits<double>::quiet_NaN());
 
         return true;
     }
@@ -2327,17 +2669,17 @@ bool ForceVisible(FrameworkElement element, PCWSTR debugName, bool resetExplicit
         bool changed = false;
 
         if (element.Visibility() != Visibility::Visible) {
-            element.Visibility(Visibility::Visible);
+            SetTrayProperty(element, UIElement::VisibilityProperty(), Visibility::Visible);
             changed = true;
         }
 
         if (element.Opacity() != 1.0) {
-            element.Opacity(1.0);
+            SetTrayProperty(element, UIElement::OpacityProperty(), 1.0);
             changed = true;
         }
 
         if (!element.IsHitTestVisible()) {
-            element.IsHitTestVisible(true);
+            SetTrayProperty(element, UIElement::IsHitTestVisibleProperty(), true);
             changed = true;
         }
 
@@ -2374,17 +2716,17 @@ bool SetElementVisibility(FrameworkElement element, PCWSTR debugName, bool visib
         Visibility targetVisibility = visible ? Visibility::Visible : Visibility::Collapsed;
 
         if (element.Visibility() != targetVisibility) {
-            element.Visibility(targetVisibility);
+            SetTrayProperty(element, UIElement::VisibilityProperty(), targetVisibility);
             changed = true;
         }
 
         if (element.Opacity() != 1.0) {
-            element.Opacity(1.0);
+            SetTrayProperty(element, UIElement::OpacityProperty(), 1.0);
             changed = true;
         }
 
         if (element.IsHitTestVisible() != visible) {
-            element.IsHitTestVisible(visible);
+            SetTrayProperty(element, UIElement::IsHitTestVisibleProperty(), visible);
             changed = true;
         }
 
@@ -2392,14 +2734,14 @@ bool SetElementVisibility(FrameworkElement element, PCWSTR debugName, bool visib
             changed |= ResetExplicitWidth(element);
         } else {
             if (element.MinWidth() != 0.0) {
-                element.MinWidth(0.0);
+                SetTrayProperty(element, FrameworkElement::MinWidthProperty(), 0.0);
                 changed = true;
             }
 
             double width = element.Width();
 
             if (!(width == 0.0)) {
-                element.Width(0.0);
+                SetTrayProperty(element, FrameworkElement::WidthProperty(), 0.0);
                 changed = true;
             }
         }
@@ -2416,9 +2758,9 @@ bool SetElementVisibility(FrameworkElement element, PCWSTR debugName, bool visib
     }
 }
 
-/// ForceVisible plus a minimum width. With setExactWidthWhenCollapsed, an element that layout collapsed gets the width pinned exactly while collapsed and released back to auto once layout produced real content, otherwise any explicit width is released. Matches the old reset-every-pass behavior without dirtying layout on no-op passes.
+/// ForceVisible plus a minimum width, releasing any explicit width so the element auto-sizes to its content. Read-compare-write like ForceVisible, so steady-state passes dirty nothing.
 /// @return true when any property actually changed
-bool ForceVisibleWithMinWidth(FrameworkElement element, PCWSTR debugName, double minWidth, bool setExactWidthWhenCollapsed = false) {
+bool ForceVisibleWithMinWidth(FrameworkElement element, PCWSTR debugName, double minWidth) {
     if (!element) {
         return ForceVisible(element, debugName, false);
     }
@@ -2427,37 +2769,14 @@ bool ForceVisibleWithMinWidth(FrameworkElement element, PCWSTR debugName, double
 
     try {
         if (element.MinWidth() != minWidth) {
-            element.MinWidth(minWidth);
+            SetTrayProperty(element, FrameworkElement::MinWidthProperty(), minWidth);
             changed = true;
         }
 
-        double width = element.Width();
-        double actualWidth = element.ActualWidth();
-        bool hasExplicitWidth = width == width;
-
-        if (setExactWidthWhenCollapsed) {
-            if (actualWidth < minWidth) {
-                // Layout collapsed this element, pin the width exactly so it regains room
-                if (!hasExplicitWidth || width != minWidth) {
-                    element.Width(minWidth);
-                    changed = true;
-                }
-            } else if (hasExplicitWidth) {
-                // Content laid out fine, release the pin so the element can auto-size again
-                element.Width(std::numeric_limits<double>::quiet_NaN());
-                changed = true;
-            }
-        } else if (hasExplicitWidth) {
-            element.Width(std::numeric_limits<double>::quiet_NaN());
-            changed = true;
-        }
+        changed |= ResetExplicitWidth(element);
 
         if (changed) {
-            Wh_Log(
-                L"forced %s minWidth=%.1f "
-                L"exactWidth=%d",
-                debugName, minWidth, setExactWidthWhenCollapsed
-            );
+            Wh_Log(L"forced %s minWidth=%.1f", debugName, minWidth);
             LogElementState(element, debugName);
         }
 
@@ -2478,38 +2797,165 @@ bool ForceVisibleWithMinWidth(FrameworkElement element, PCWSTR debugName, double
     }
 }
 
-/// Sets MinWidth on a tray frame container so a collapsed frame regains enough room for the forced children. The caller batches the layout update.
-/// @return true when any property actually changed
-bool ApplyFrameMinWidth(FrameworkElement element, PCWSTR debugName, double minWidth) {
+/// True when the element carries a local value for the property equal to one of the given numbers. Recognizes the exact pins older versions of the mod wrote, so the cleanup never clears a value Windows or another mod set.
+bool HasLocalDoubleValue(FrameworkElement const& element, DependencyProperty const& property, std::initializer_list<double> values) {
+    winrt::Windows::Foundation::IInspectable localValue = element.ReadLocalValue(property);
+
+    if (!localValue || localValue == DependencyProperty::UnsetValue()) {
+        return false;
+    }
+
+    auto boxedValue = localValue.try_as<winrt::Windows::Foundation::IReference<double>>();
+
+    if (!boxedValue) {
+        return false;
+    }
+
+    double value = boxedValue.Value();
+
+    for (double candidate : values) {
+        if (value == candidate) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+constexpr double kLegacyNotificationCenterPinWidth = 78.0;
+
+/// Clears the frame minimum widths versions up to 1.2.2 pinned on SystemTrayFrame/SystemTrayFrameGrid (78 on skipped taskbars, 32 per tray + 96 per control center + 78 on styled ones). The frame auto-sizes to its surfaces, and a minimum wider than the content left an empty strip at the right edge, since the right-aligned panel keeps the extra width after its last child.
+/// @return true when a pin was released
+bool ReleaseLegacyFrameMinWidth(FrameworkElement element, PCWSTR debugName) {
     if (!element) {
         return false;
     }
 
     try {
-        bool changed = false;
-
-        if (minWidth <= 0) {
-            if (element.MinWidth() != 0.0) {
-                element.MinWidth(0.0);
-                changed = true;
-            }
-
-            changed |= ResetExplicitWidth(element);
-
-            return changed;
+        if (!HasLocalDoubleValue(element, FrameworkElement::MinWidthProperty(), {78.0, 110.0, 174.0, 206.0})) {
+            return false;
         }
 
-        if (element.MinWidth() != minWidth) {
-            element.MinWidth(minWidth);
-            changed = true;
+        element.ClearValue(FrameworkElement::MinWidthProperty());
+        Wh_Log(L"released legacy %s minWidth pin", debugName);
 
-                Wh_Log(L"forced %s minWidth=%.1f", debugName, minWidth);
-                LogElementState(element, debugName);
+        return true;
+    } catch (...) {
+        Wh_Log(L"failed to release legacy %s minWidth pin", debugName);
+
+        return false;
+    }
+}
+
+/// Releases what versions up to 1.2.2 forced on NotificationCenterButton. The mod no longer touches that button : Windows shows it natively wherever it has content, and some builds render the secondary-taskbar clock through SecondaryClockStack instead, leaving this button empty there, so forcing it visible with a 78 px pin produced an empty hoverable box at the right edge.
+/// @return true when a pin was released
+bool ReleaseLegacyNotificationCenterPins(FrameworkElement element) {
+    if (!element) {
+        return false;
+    }
+
+    try {
+        bool pinned = false;
+
+        if (HasLocalDoubleValue(element, FrameworkElement::MinWidthProperty(), {kLegacyNotificationCenterPinWidth})) {
+            element.ClearValue(FrameworkElement::MinWidthProperty());
+            pinned = true;
+        }
+
+        if (HasLocalDoubleValue(element, FrameworkElement::WidthProperty(), {kLegacyNotificationCenterPinWidth})) {
+            element.ClearValue(FrameworkElement::WidthProperty());
+            pinned = true;
+        }
+
+        if (!pinned) {
+            return false;
+        }
+
+        // An empty button was only on screen because an older version forced it visible
+        auto itemsControl = element.try_as<Controls::ItemsControl>();
+        uint32_t itemCount = itemsControl ? itemsControl.Items().Size() : 1;
+
+        if (itemCount == 0 && element.Visibility() == Visibility::Visible) {
+            element.Visibility(Visibility::Collapsed);
+        }
+
+        Wh_Log(L"released legacy NotificationCenterButton pins items=%u", itemCount);
+
+        return true;
+    } catch (...) {
+        Wh_Log(L"failed to release legacy NotificationCenterButton pins");
+
+        return false;
+    }
+}
+
+/// Taskbars whose SecondaryClockStack and ControlCenterButton order the mod swapped, so restore passes only undo their own swap. Taskbar thread only.
+std::vector<HWND> g_secondaryClockSwappedTaskbars;
+
+/// On builds that draw the secondary-taskbar clock through SecondaryClockStack, that stack sits right before ControlCenterButton in the template, so a copied control center landed on the right of the clock. Swaps the two so copies read like the primary (control center, then clock), and swaps back when the control center stops being managed or the mod unloads. Only the exact template order is touched, so themes that rearrange the tray keep their layout.
+/// @return true when the order changed
+bool UpdateSecondaryClockOrder(HWND taskbarWnd, TrayElementsView const& view, bool controlCenterFirst) {
+    if (!view.systemTrayFrameGrid || !view.secondaryClockStack || !view.controlCenterButton) {
+        return false;
+    }
+
+    auto swapped = std::find(g_secondaryClockSwappedTaskbars.begin(), g_secondaryClockSwappedTaskbars.end(), taskbarWnd);
+    bool swappedByMod = swapped != g_secondaryClockSwappedTaskbars.end();
+
+    if (controlCenterFirst == swappedByMod) {
+        return false;
+    }
+
+    try {
+        // Only reorder around a clock that is actually on screen : a collapsed SecondaryClockStack occupies no room, so there is nothing to fix
+        if (controlCenterFirst && (view.secondaryClockStack.Visibility() != Visibility::Visible || view.secondaryClockStack.ActualWidth() < 1.0)) {
+            return false;
+        }
+
+        bool changed = false;
+
+        if (auto grid = view.systemTrayFrameGrid.try_as<Controls::Grid>()) {
+            int clockColumn = Controls::Grid::GetColumn(view.secondaryClockStack);
+            int controlCenterColumn = Controls::Grid::GetColumn(view.controlCenterButton);
+
+            if (controlCenterFirst ? clockColumn + 1 == controlCenterColumn : controlCenterColumn + 1 == clockColumn) {
+                Controls::Grid::SetColumn(view.controlCenterButton, clockColumn);
+                Controls::Grid::SetColumn(view.secondaryClockStack, controlCenterColumn);
+                changed = true;
+            }
+        } else if (auto panel = view.systemTrayFrameGrid.try_as<Controls::Panel>()) {
+            auto children = panel.Children();
+            uint32_t clockIndex = 0;
+            uint32_t controlCenterIndex = 0;
+
+            if (children.IndexOf(view.secondaryClockStack, clockIndex) && children.IndexOf(view.controlCenterButton, controlCenterIndex)) {
+                if (controlCenterFirst && clockIndex + 1 == controlCenterIndex) {
+                    children.Move(clockIndex, controlCenterIndex);
+                    changed = true;
+                } else if (!controlCenterFirst && controlCenterIndex + 1 == clockIndex) {
+                    children.Move(controlCenterIndex, clockIndex);
+                    changed = true;
+                }
+            }
+        }
+
+        if (controlCenterFirst && changed) {
+            g_secondaryClockSwappedTaskbars.push_back(taskbarWnd);
+        } else if (!controlCenterFirst) {
+            g_secondaryClockSwappedTaskbars.erase(swapped);
+        }
+
+        if (changed) {
+            Wh_Log(
+                L"%s control center and secondary clock monitor=%d",
+                controlCenterFirst ? L"placed control center before" : L"restored order of",
+                GetMonitorIndexForWindow(taskbarWnd)
+            );
         }
 
         return changed;
     } catch (...) {
-        Wh_Log(L"failed to size %s", debugName);
+        Wh_Log(L"failed to reorder the secondary clock");
 
         return false;
     }
@@ -2565,8 +3011,25 @@ bool ReattachItemsControlItemsSource(FrameworkElement element, PCWSTR debugName,
             return false;
         }
 
+        auto property = Controls::ItemsControl::ItemsSourceProperty();
+        auto binding = GetTrayPropertyBinding(itemsControl, property);
+        auto localValue = itemsControl.ReadLocalValue(property);
         itemsControl.ItemsSource(nullptr);
-        itemsControl.ItemsSource(itemsSource);
+
+        // Preserve ordinary bindings and style values when possible. A TemplateBinding can expose an internal expression through ReadLocalValue, so use the resolved collection for the remaining local-value case.
+        if (binding) {
+            itemsControl.SetBinding(property, binding);
+        } else if (localValue == DependencyProperty::UnsetValue()) {
+            itemsControl.ClearValue(property);
+        } else {
+            itemsControl.ItemsSource(itemsSource);
+        }
+
+        // Keep the previous collection if restoring an unbound native value left this previously populated control empty. Ordinary bindings may resolve to null legitimately and are left intact.
+        if (!binding && !itemsControl.ItemsSource()) {
+            itemsControl.ItemsSource(itemsSource);
+            Wh_Log(L"restored %s items source after native value reattachment left it empty (%s)", debugName, reason);
+        }
 
         return true;
     } catch (...) {
@@ -2576,15 +3039,140 @@ bool ReattachItemsControlItemsSource(FrameworkElement element, PCWSTR debugName,
     }
 }
 
-/// Re-attaches the button's current ItemsSource in place. The per-glyph context-menu state follows the most recent attach, so this moves the single menu ownership to this button's island without changing the rendered content.
-bool ReattachControlCenterItemsSource(FrameworkElement controlCenterButton, PCWSTR reason) {
-    if (ReattachItemsControlItemsSource(controlCenterButton, L"ControlCenterButton", reason)) {
-        UpdateLayoutBestEffort(controlCenterButton, reason);
+/// Raw ABI pointer of an ItemsControl's current ItemsSource, nullptr for anything else
+void* ItemsSourceAbi(FrameworkElement const& element) {
+    try {
+        auto itemsControl = element ? element.try_as<Controls::ItemsControl>() : nullptr;
+
+        return itemsControl ? InspectableAbi(itemsControl.ItemsSource()) : nullptr;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+/// The element whose ItemsSource carries a shared menu surface's items : the ControlCenterButton itself, or the IconStack list view inside a system icon stack
+FrameworkElement GetSharedMenuSurfaceItemsHost(TrayElementsView const& view, SharedMenuSurface surface) {
+    switch (surface) {
+        case SharedMenuSurface::MainStack:
+            return FindDescendantByClassName(view.mainStack, L"SystemTray.StackListView");
+        case SharedMenuSurface::NonActivatableStack:
+            return FindDescendantByClassName(view.nonActivatableStack, L"SystemTray.StackListView");
+        case SharedMenuSurface::ControlCenter:
+        default:
+            return view.controlCenterButton;
+    }
+}
+
+/// Re-attaches a shared menu surface's current ItemsSource in place. The per-item context-menu state follows the most recent attach, so this moves the single menu ownership to this island without changing the rendered content.
+bool ReattachSharedMenuSurfaceItems(TrayElementsView const& view, SharedMenuSurface surface, PCWSTR reason) {
+    FrameworkElement itemsHost = GetSharedMenuSurfaceItemsHost(view, surface);
+
+    if (ReattachItemsControlItemsSource(itemsHost, SharedMenuSurfaceToString(surface), reason)) {
+        UpdateLayoutBestEffort(itemsHost, reason);
 
         return true;
     }
 
     return false;
+}
+
+/// True when two WinRT references point at the same object (IUnknown identity)
+bool IsSameObject(winrt::Windows::Foundation::IInspectable const& left, winrt::Windows::Foundation::IInspectable const& right) {
+    if (!left || !right) {
+        return !left && !right;
+    }
+
+    return winrt::get_abi(left.as<winrt::Windows::Foundation::IUnknown>()) == winrt::get_abi(right.as<winrt::Windows::Foundation::IUnknown>());
+}
+
+/// Binds a copied surface's Visibility one-way to the real tray owner's element, so it appears and disappears with the native one
+/// @return true when the binding was (re)created
+bool MirrorSourceVisibility(FrameworkElement element, FrameworkElement source, PCWSTR debugName) {
+    if (!element || !source) {
+        return false;
+    }
+
+    try {
+        if (auto expression = element.GetBindingExpression(UIElement::VisibilityProperty())) {
+            auto currentBinding = expression.ParentBinding();
+
+            if (currentBinding && IsSameObject(currentBinding.Source(), source)) {
+                return false;
+            }
+        }
+
+        Data::Binding binding;
+        binding.Source(source);
+        binding.Path(PropertyPath(L"Visibility"));
+        binding.Mode(Data::BindingMode::OneWay);
+        WriteTrayProperty(element, UIElement::VisibilityProperty(), [&] { element.SetBinding(UIElement::VisibilityProperty(), binding); });
+        Wh_Log(L"mirrored %s visibility from the real tray owner", debugName);
+
+        return true;
+    } catch (...) {
+        Wh_Log(L"failed to mirror %s visibility", debugName);
+
+        return false;
+    }
+}
+
+/// True when the element's Visibility is bound by MirrorSourceVisibility : a binding whose source is a same-named element of another island
+bool HasMirroredVisibility(FrameworkElement const& element) {
+    try {
+        auto expression = element ? element.GetBindingExpression(UIElement::VisibilityProperty()) : nullptr;
+        auto binding = expression ? expression.ParentBinding() : nullptr;
+        auto source = binding ? binding.Source().try_as<FrameworkElement>() : nullptr;
+
+        return source && !IsSameObject(source, element) && source.Name() == element.Name();
+    } catch (...) {
+        return false;
+    }
+}
+
+/// Shares one system icon stack from the real tray owner into a copied taskbar, the same way the hidden-icons stack is shared : Stack DataContext plus the IconStack list view ItemsSource. MainStack carries the language/IME, touch keyboard, pen, touchpad and emoji icons, NonActivatableStack the microphone/camera/location indicators. The owner only gets its bindings (and element) cached, copies mirror its Visibility.
+/// @return true when a property actually changed on a copy
+bool ApplySharedSystemIconStack(FrameworkElement stack, HWND taskbarWnd, PCWSTR debugName, CachedXamlBinding& stackBinding, CachedXamlBinding& listViewBinding, FrameworkElement& primaryStack, bool isBindingSource, SharedMenuSurface surface) {
+    if (!stack) {
+        return false;
+    }
+
+    FrameworkElement listView = FindDescendantByClassName(stack, L"SystemTray.StackListView");
+    std::wstring listViewName = std::wstring(debugName) + L"ListView";
+
+    if (isBindingSource) {
+        SharePrimaryElementBindingIfUseful(stack, taskbarWnd, debugName, stackBinding, true, true, true);
+        SharePrimaryElementBindingIfUseful(listView, taskbarWnd, listViewName.c_str(), listViewBinding, true, true, false);
+        primaryStack = stack;
+
+        return false;
+    }
+
+    bool changed = false;
+    void* itemsSourceBefore = ItemsSourceAbi(listView);
+
+    changed |= SharePrimaryElementBindingIfUseful(stack, taskbarWnd, debugName, stackBinding, false, true, true);
+    changed |= SharePrimaryElementBindingIfUseful(listView, taskbarWnd, listViewName.c_str(), listViewBinding, false, true, false);
+
+    void* itemsSourceAfter = ItemsSourceAbi(listView);
+
+    // Same ownership rule as the control center : attaching the shared items moves their context-menu state to this island
+    if (itemsSourceAfter && itemsSourceAfter != itemsSourceBefore) {
+        SharedMenuSurfaceOwner(surface) = taskbarWnd;
+    }
+
+    changed |= MirrorSourceVisibility(stack, primaryStack, debugName);
+    UpdateSharedSurfaceContextGestures(stack, taskbarWnd, debugName);
+
+    return changed;
+}
+
+/// Hides a copied system icon stack again (skipped monitor, components change, unload). Stacks the mod never mirrored are left native.
+bool CollapseMirroredSystemIconStack(FrameworkElement stack, PCWSTR debugName) {
+    if (!stack || !HasMirroredVisibility(stack)) {
+        return false;
+    }
+
+    return SetElementVisibility(stack, debugName, false);
 }
 
 /// Resets a non-selected taskbar to the default secondary look : tray and control-center surfaces hidden, the clock kept, context gestures re-enabled. Property writes are batched into a single layout update.
@@ -2605,8 +3193,8 @@ bool ApplyNonTargetStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
 
         bool changed = false;
 
-        changed |= ApplyFrameMinWidth(view.systemTrayFrame, L"SystemTrayFrame", 78.0);
-        changed |= ApplyFrameMinWidth(view.systemTrayFrameGrid, L"SystemTrayFrameGrid", 78.0);
+        changed |= ReleaseLegacyFrameMinWidth(view.systemTrayFrame, L"SystemTrayFrame");
+        changed |= ReleaseLegacyFrameMinWidth(view.systemTrayFrameGrid, L"SystemTrayFrameGrid");
 
         UpdateSharedSurfaceContextGestures(view.notifyIconStack, taskbarWnd, L"NotifyIconStack");
         UpdateSharedSurfaceContextGestures(view.notificationAreaIcons, taskbarWnd, L"NotificationAreaIcons");
@@ -2614,8 +3202,11 @@ bool ApplyNonTargetStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
 
         changed |= SetElementVisibility(view.notifyIconStack, L"NotifyIconStack", false);
         changed |= SetElementVisibility(view.notificationAreaIcons, L"NotificationAreaIcons", false);
+        changed |= CollapseMirroredSystemIconStack(view.mainStack, L"MainStack");
+        changed |= CollapseMirroredSystemIconStack(view.nonActivatableStack, L"NonActivatableStack");
+        changed |= UpdateSecondaryClockOrder(taskbarWnd, view, false);
         changed |= SetElementVisibility(view.controlCenterButton, L"ControlCenterButton", false);
-        changed |= ForceVisibleWithMinWidth(view.notificationCenterButton, L"NotificationCenterButton", 78.0, true);
+        changed |= ReleaseLegacyNotificationCenterPins(view.notificationCenterButton);
 
         if (changed) {
             UpdateLayoutBestEffort(view.systemTrayFrameGrid, L"SystemTrayFrameGrid");
@@ -2633,7 +3224,7 @@ bool ApplyNonTargetStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
     }
 }
 
-/// Restores one taskbar to its native primary state during unload : every surface visible, forced min-widths cleared, gestures enabled, and control-center menu ownership handed back to this taskbar. Property writes are batched into a single layout update.
+/// Finishes primary-taskbar restoration after the tracked properties are restored : releases legacy pins, restores child order, and hands tray/menu ownership back to the native island
 /// @return true when the tray structure was found and processed
 bool ApplyNativePrimaryStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
     Wh_Log(
@@ -2651,24 +3242,18 @@ bool ApplyNativePrimaryStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
 
         bool changed = false;
 
-        changed |= ApplyFrameMinWidth(view.systemTrayFrame, L"SystemTrayFrame", 0.0);
-        changed |= ApplyFrameMinWidth(view.systemTrayFrameGrid, L"SystemTrayFrameGrid", 0.0);
+        changed |= ReleaseLegacyFrameMinWidth(view.systemTrayFrame, L"SystemTrayFrame");
+        changed |= ReleaseLegacyFrameMinWidth(view.systemTrayFrameGrid, L"SystemTrayFrameGrid");
 
-        UpdateSharedSurfaceContextGestures(view.notifyIconStack, taskbarWnd, L"NotifyIconStack");
-        UpdateSharedSurfaceContextGestures(view.notificationAreaIcons, taskbarWnd, L"NotificationAreaIcons");
-        UpdateSharedSurfaceContextGestures(view.controlCenterButton, taskbarWnd, L"ControlCenterButton");
-
-        changed |= ForceVisible(view.notifyIconStack, L"NotifyIconStack");
-        changed |= ForceVisible(FirstChildElement(view.notifyIconStack), L"NotifyIconStackChild");
-        changed |= ForceVisible(FindDescendantByClassName(view.notifyIconStack, L"SystemTray.StackListView"), L"NotifyIconStackListView");
-        changed |= ForceVisible(view.notificationAreaIcons, L"NotificationAreaIcons");
-        changed |= ForceVisible(view.controlCenterButton, L"ControlCenterButton");
-        changed |= ForceVisible(view.notificationCenterButton, L"NotificationCenterButton");
+        // RestoreTrayProperties already returned the native values/bindings. Do not write new Visibility/Width/MinWidth pins during unload.
+        changed |= UpdateSecondaryClockOrder(taskbarWnd, view, false);
+        changed |= ReleaseLegacyNotificationCenterPins(view.notificationCenterButton);
 
         if (changed) {
             UpdateLayoutBestEffort(view.systemTrayFrameGrid, L"SystemTrayFrameGrid");
         }
 
+        // Recreating the native containers last also makes this island's chevron the tray drag/drop manager's registered drop target again
         bool trayReattached = false;
         trayReattached |= ReattachItemsControlItemsSource(view.notificationAreaIcons, L"NotificationAreaIcons", L"restore native tray ownership");
         trayReattached |= ReattachItemsControlItemsSource(view.notifyIconStack, L"NotifyIconStack", L"restore native tray ownership");
@@ -2676,13 +3261,16 @@ bool ApplyNativePrimaryStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
         trayReattached |= ReattachItemsControlItemsSource(FindDescendantByClassName(view.notifyIconStack, L"SystemTray.StackListView"), L"NotifyIconStackListView", L"restore native tray ownership");
 
         if (trayReattached) {
-            g_trayItemsOwnerTaskbarWnd = taskbarWnd;
             UpdateLayoutBestEffort(view.systemTrayFrameGrid, L"restore native tray ownership");
         }
 
-        // Hand the control-center context-menu ownership back to the native primary, otherwise a copied button bound later would keep it after the mod unloads and native right-clicks would keep crashing
-        if (ReattachControlCenterItemsSource(view.controlCenterButton, L"restore native control center ownership")) {
-            g_controlCenterItemsOwnerTaskbarWnd = taskbarWnd;
+        // Hand the context-menu ownership of every shared menu surface back to the native primary, otherwise a copy bound later would keep it after the mod unloads and native right-clicks would keep crashing
+        for (size_t i = 0; i < kSharedMenuSurfaceCount; i++) {
+            SharedMenuSurface surface = static_cast<SharedMenuSurface>(i);
+
+            if (ReattachSharedMenuSurfaceItems(view, surface, L"restore native menu ownership")) {
+                SharedMenuSurfaceOwner(surface) = taskbarWnd;
+            }
         }
 
         return true;
@@ -2712,11 +3300,11 @@ ContextGestureCounts SetContextGesturesRecursive(DependencyObject element, bool 
     try {
         if (UIElement uiElement = element.try_as<UIElement>()) {
             if (uiElement.IsRightTapEnabled() != enable) {
-                uiElement.IsRightTapEnabled(enable);
+                SetTrayProperty(uiElement, UIElement::IsRightTapEnabledProperty(), enable);
             }
 
             if (uiElement.IsHoldingEnabled() != enable) {
-                uiElement.IsHoldingEnabled(enable);
+                SetTrayProperty(uiElement, UIElement::IsHoldingEnabledProperty(), enable);
             }
 
             counts.elements++;
@@ -2769,19 +3357,301 @@ void UpdateSharedSurfaceContextGestures(FrameworkElement element, HWND taskbarWn
     UpdateContextGesturesForElement(element, taskbarWnd, debugName, true);
 }
 
-constexpr int kShowDesktopWidth = 12;
-constexpr int kNotificationCenterWidth = 78;
-constexpr int kControlCenterFallbackWidth = 96;
+XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd);
+XamlRoot GetSecondaryTaskbarXamlRoot(HWND secondaryTaskbarWnd);
+
+/// XamlRoot of any taskbar window, primary or secondary
+XamlRoot GetAnyTaskbarXamlRoot(HWND taskbarWnd) {
+    return IsSecondaryTaskbarWindow(taskbarWnd) ? GetSecondaryTaskbarXamlRoot(taskbarWnd) : GetTaskbarXamlRoot(taskbarWnd);
+}
+
+/// Records which taskbar window hosts an island (taskbar thread only)
+void RememberTaskbarIsland(HWND taskbarWnd, XamlRoot const& xamlRoot) {
+    if (!taskbarWnd || !xamlRoot) {
+        return;
+    }
+
+    for (auto& entry : g_taskbarIslands.entries) {
+        if (entry.hWnd == taskbarWnd) {
+            entry.xamlRoot = xamlRoot;
+
+            return;
+        }
+    }
+
+    g_taskbarIslands.entries.push_back({taskbarWnd, xamlRoot});
+}
+
+/// Drops the island record of a destroyed taskbar window (taskbar thread only)
+void ForgetTaskbarIsland(HWND taskbarWnd) {
+    auto& entries = g_taskbarIslands.entries;
+
+    entries.erase(
+        std::remove_if(entries.begin(), entries.end(), [taskbarWnd](TaskbarIslandEntry const& entry) {
+            return entry.hWnd == taskbarWnd;
+        }),
+        entries.end()
+    );
+}
+
+/// Taskbar window hosting an island, nullptr for every other island (the overflow popup, flyouts, drag visuals). A miss re-reads this thread's taskbars once, since islands are recreated together with their taskbar windows.
+HWND FindTaskbarWindowForXamlRoot(XamlRoot const& xamlRoot) {
+    if (!xamlRoot) {
+        return nullptr;
+    }
+
+    for (auto const& entry : g_taskbarIslands.entries) {
+        if (entry.xamlRoot == xamlRoot) {
+            return entry.hWnd;
+        }
+    }
+
+    for (auto const& otherRoot : g_taskbarIslands.otherRoots) {
+        if (otherRoot == xamlRoot) {
+            return nullptr;
+        }
+    }
+
+    // Unknown island : re-read this thread's taskbars (an island can be recreated under a live taskbar window), then remember a genuine miss
+    struct RefreshContext {
+        XamlRoot const* xamlRoot;
+        HWND found;
+    } context{&xamlRoot, nullptr};
+
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            auto* context = reinterpret_cast<RefreshContext*>(lParam);
+
+            if (!IsTaskbarWindow(hWnd)) {
+                return TRUE;
+            }
+
+            XamlRoot root = GetAnyTaskbarXamlRoot(hWnd);
+            RememberTaskbarIsland(hWnd, root);
+
+            if (root && root == *context -> xamlRoot) {
+                context -> found = hWnd;
+            }
+
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&context)
+    );
+
+    if (!context.found) {
+        auto& otherRoots = g_taskbarIslands.otherRoots;
+
+        if (otherRoots.size() >= 16) {
+            otherRoots.erase(otherRoots.begin());
+        }
+
+        otherRoots.push_back(xamlRoot);
+    }
+
+    return context.found;
+}
+
+/// Client-space rectangle (physical pixels) of a visible, laid-out element of a taskbar island, empty otherwise
+RECT MeasureTrayElementClientRect(FrameworkElement const& element, double scale) {
+    RECT rect = {};
+
+    if (!element) {
+        return rect;
+    }
+
+    try {
+        double width = element.ActualWidth();
+        double height = element.ActualHeight();
+
+        if (element.Visibility() != Visibility::Visible || !(width >= 1.0) || !(height >= 1.0)) {
+            return rect;
+        }
+
+        auto bounds = element.TransformToVisual(nullptr).TransformBounds({0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)});
+        rect.left = std::lround(bounds.X * scale);
+        rect.top = std::lround(bounds.Y * scale);
+        rect.right = std::lround((bounds.X + bounds.Width) * scale);
+        rect.bottom = std::lround((bounds.Y + bounds.Height) * scale);
+    } catch (...) {
+        rect = {};
+    }
+
+    return rect;
+}
+
+/// Stores the measured rectangles of a taskbar
+void StoreTaskbarTrayLayout(HWND taskbarWnd, TrayLayoutRects const& rects) {
+    AcquireSRWLockExclusive(&g_taskbarTrayLayoutsLock);
+
+    TaskbarTrayLayout* layout = nullptr;
+
+    for (auto& entry : g_taskbarTrayLayouts) {
+        if (entry.hWnd == taskbarWnd) {
+            layout = &entry;
+
+            break;
+        }
+    }
+
+    if (!layout) {
+        g_taskbarTrayLayouts.push_back({});
+        layout = &g_taskbarTrayLayouts.back();
+        layout -> hWnd = taskbarWnd;
+    }
+
+    layout -> rects = rects;
+    layout -> measuredTick = GetTickCount();
+    layout -> valid = true;
+    ReleaseSRWLockExclusive(&g_taskbarTrayLayoutsLock);
+}
+
+/// Copies the cached layout of a taskbar
+bool TryGetTaskbarTrayLayout(HWND taskbarWnd, TaskbarTrayLayout* layout) {
+    AcquireSRWLockShared(&g_taskbarTrayLayoutsLock);
+
+    for (const auto& entry : g_taskbarTrayLayouts) {
+        if (entry.hWnd == taskbarWnd) {
+            *layout = entry;
+            ReleaseSRWLockShared(&g_taskbarTrayLayoutsLock);
+
+            return layout -> valid;
+        }
+    }
+
+    ReleaseSRWLockShared(&g_taskbarTrayLayoutsLock);
+
+    return false;
+}
+
+/// Marks a taskbar's layout stale (moved, resized, DPI or display change) so the next hit-test re-measures it
+void InvalidateTaskbarTrayLayout(HWND taskbarWnd) {
+    AcquireSRWLockExclusive(&g_taskbarTrayLayoutsLock);
+
+    for (auto& entry : g_taskbarTrayLayouts) {
+        if (entry.hWnd == taskbarWnd) {
+            entry.measuredTick = 0;
+        }
+    }
+
+    ReleaseSRWLockExclusive(&g_taskbarTrayLayoutsLock);
+}
+
+/// Drops the cached layout of a destroyed taskbar window
+void RemoveCachedTaskbarTrayLayout(HWND taskbarWnd) {
+    AcquireSRWLockExclusive(&g_taskbarTrayLayoutsLock);
+
+    for (auto it = g_taskbarTrayLayouts.begin(); it != g_taskbarTrayLayouts.end(); ++it) {
+        if (it -> hWnd == taskbarWnd) {
+            g_taskbarTrayLayouts.erase(it);
+
+            break;
+        }
+    }
+
+    ReleaseSRWLockExclusive(&g_taskbarTrayLayoutsLock);
+}
+
+/// Measures every tray surface of a taskbar after layout and caches the rectangles for hit-testing
+void MeasureTaskbarTrayLayout(HWND taskbarWnd, XamlRoot const& xamlRoot, TrayElementsView const& view) {
+    double scale = 0.0;
+
+    try {
+        scale = xamlRoot ? xamlRoot.RasterizationScale() : 0.0;
+    } catch (...) {
+        scale = 0.0;
+    }
+
+    if (!(scale > 0.0)) {
+        scale = GetWindowDpiOrDefault(taskbarWnd) / static_cast<double>(USER_DEFAULT_SCREEN_DPI);
+    }
+
+    TrayLayoutRects rects;
+    rects.chevron = MeasureTrayElementClientRect(view.notifyIconStack, scale);
+    rects.promotedIcons = MeasureTrayElementClientRect(view.notificationAreaIcons, scale);
+    rects.mainStack = MeasureTrayElementClientRect(view.mainStack, scale);
+    rects.nonActivatableStack = MeasureTrayElementClientRect(view.nonActivatableStack, scale);
+    rects.secondaryClock = MeasureTrayElementClientRect(view.secondaryClockStack, scale);
+    rects.controlCenter = MeasureTrayElementClientRect(view.controlCenterButton, scale);
+    rects.notificationCenter = MeasureTrayElementClientRect(view.notificationCenterButton, scale);
+    StoreTaskbarTrayLayout(taskbarWnd, rects);
+}
+
+/// Verbose log line with the measured tray layout of a taskbar
+void LogTaskbarTrayLayout(HWND taskbarWnd) {
+    TaskbarTrayLayout layout;
+
+    if (!TryGetTaskbarTrayLayout(taskbarWnd, &layout)) {
+        return;
+    }
+
+    auto const& r = layout.rects;
+
+    Wh_Log(
+        L"tray layout monitor=%d chevron=%ld-%ld icons=%ld-%ld system=%ld-%ld indicators=%ld-%ld "
+        L"clock=%ld-%ld controlCenter=%ld-%ld notificationCenter=%ld-%ld",
+        GetMonitorIndexForWindow(taskbarWnd),
+        r.chevron.left, r.chevron.right, r.promotedIcons.left, r.promotedIcons.right,
+        r.mainStack.left, r.mainStack.right, r.nonActivatableStack.left, r.nonActivatableStack.right,
+        r.secondaryClock.left, r.secondaryClock.right, r.controlCenter.left, r.controlCenter.right,
+        r.notificationCenter.left, r.notificationCenter.right
+    );
+}
+
+/// Re-measures a taskbar's tray layout from its live XAML tree. XAML can only be touched from the island's own thread, so other threads keep the cached layout.
+bool RefreshTaskbarTrayLayout(HWND taskbarWnd) {
+    if (!taskbarWnd || GetWindowThreadProcessId(taskbarWnd, nullptr) != GetCurrentThreadId()) {
+        return false;
+    }
+
+    try {
+        XamlRoot xamlRoot = GetAnyTaskbarXamlRoot(taskbarWnd);
+
+        if (!xamlRoot) {
+            return false;
+        }
+
+        RememberTaskbarIsland(taskbarWnd, xamlRoot);
+
+        TrayElementsView view;
+
+        if (!CollectTrayElements(xamlRoot, taskbarWnd, &view, L"layout refresh")) {
+            return false;
+        }
+
+        MeasureTaskbarTrayLayout(taskbarWnd, xamlRoot, view);
+
+        return true;
+    } catch (...) {
+        Wh_Log(L"failed to refresh tray layout");
+
+        return false;
+    }
+}
+
+/// Cached layout of a taskbar, re-measured first when older than maxAgeMs
+bool GetFreshTaskbarTrayLayout(HWND taskbarWnd, DWORD maxAgeMs, TaskbarTrayLayout* layout) {
+    bool hasLayout = TryGetTaskbarTrayLayout(taskbarWnd, layout);
+
+    if (!hasLayout || GetTickCount() - layout -> measuredTick > maxAgeMs) {
+        if (RefreshTaskbarTrayLayout(taskbarWnd)) {
+            hasLayout = TryGetTaskbarTrayLayout(taskbarWnd, layout);
+        }
+    }
+
+    return hasLayout;
+}
+
 constexpr double kControlCenterMinWidth = 48.0;
-constexpr int kNotifyIconStackWidth = 32;
 constexpr int kNativeFlyoutHitSlop = 8;
 // Use a mod-unique timer id. Small ids like 2-5 can collide with Explorer's own Shell_TrayWnd/Shell_SecondaryTrayWnd timers : SetTimer would silently replace the native timer and the subclass would swallow and kill it.
 constexpr UINT_PTR kDeferredApplySettingsTimerId = 0x54424D54; // "TBMT"
 
-/// The per-taskbar apply pass. Forces the configured tray/control-center surfaces visible with usable widths, shares the real tray owner's bindings into copies, tracks control-center menu ownership, keeps gestures native, and caches the icon-area width used by click hit-testing. Skipped taskbars are reset to the default secondary look instead. All element lookups happen in one child walk (CollectTrayElements), every property write is read-compare-write, and a single layout update runs at the end only when something actually changed, so steady-state passes are no-ops.
+/// The per-taskbar apply pass. Forces the configured tray/control-center surfaces visible with usable widths, shares the real tray owner's bindings into copies, tracks shared menu ownership, keeps gestures native, and measures the live tray layout used by click hit-testing. Skipped taskbars are reset to the default secondary look instead. All element lookups happen in one child walk (CollectTrayElements), every property write is read-compare-write, and a single layout update runs at the end only when something actually changed, so steady-state passes are no-ops.
 /// @return true when the tray structure was found and processed
 bool ApplyStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
     LogTaskbarWindow(taskbarWnd, L"ApplyStyle");
+    RememberTaskbarIsland(taskbarWnd, xamlRoot);
 
     if (!ShouldApplyToTaskbar(taskbarWnd)) {
         return ApplyNonTargetStyle(xamlRoot, taskbarWnd);
@@ -2802,30 +3672,17 @@ bool ApplyStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
 
         changed |= ForceVisible(view.systemTrayFrame, L"SystemTrayFrame");
         changed |= ForceVisible(view.systemTrayFrameGrid, L"SystemTrayFrameGrid");
-
-        double frameMinWidth = 0.0;
-
-        if (WantsTray(taskbarWnd)) {
-            frameMinWidth += 32.0;
-        }
-
-        if (WantsControlCenter(taskbarWnd)) {
-            frameMinWidth += kControlCenterFallbackWidth;
-        }
-
-        frameMinWidth += 78.0;
-
-        changed |= ApplyFrameMinWidth(view.systemTrayFrame, L"SystemTrayFrame", frameMinWidth);
-        changed |= ApplyFrameMinWidth(view.systemTrayFrameGrid, L"SystemTrayFrameGrid", frameMinWidth);
+        changed |= ReleaseLegacyFrameMinWidth(view.systemTrayFrame, L"SystemTrayFrame");
+        changed |= ReleaseLegacyFrameMinWidth(view.systemTrayFrameGrid, L"SystemTrayFrameGrid");
 
         bool useThisTaskbarAsPrimaryTrayBindingSource = IsRealPrimaryTrayTargetWindow(taskbarWnd);
 
         if (WantsTray(taskbarWnd)) {
-            changed |= ForceVisibleWithMinWidth(view.notifyIconStack, L"NotifyIconStack", 32.0, false);
+            changed |= ForceVisibleWithMinWidth(view.notifyIconStack, L"NotifyIconStack", 32.0);
             FrameworkElement notifyIconStackChild = FirstChildElement(view.notifyIconStack);
-            changed |= ForceVisibleWithMinWidth(notifyIconStackChild, L"NotifyIconStackChild", 32.0, false);
+            changed |= ForceVisibleWithMinWidth(notifyIconStackChild, L"NotifyIconStackChild", 32.0);
             FrameworkElement notifyIconStackListView = FindDescendantByClassName(view.notifyIconStack, L"SystemTray.StackListView");
-            changed |= ForceVisibleWithMinWidth(notifyIconStackListView, L"NotifyIconStackListView", 32.0, false);
+            changed |= ForceVisibleWithMinWidth(notifyIconStackListView, L"NotifyIconStackListView", 32.0);
             changed |= ForceVisibleDescendants(view.notifyIconStack, L"NotifyIconStack", 0, 6);
 
             // Flush layout after uncollapsing the source surfaces so binding capture sees the current XAML tree on this pass.
@@ -2841,84 +3698,51 @@ bool ApplyStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
             changed |= SharePrimaryElementBindingIfUseful(notifyIconStackChild, taskbarWnd, L"NotifyIconStackChild", g_primaryNotifyIconStackChildBinding, useThisTaskbarAsPrimaryTrayBindingSource, true, true);
             changed |= SharePrimaryElementBindingIfUseful(notifyIconStackListView, taskbarWnd, L"NotifyIconStackListView", g_primaryNotifyIconStackListViewBinding, useThisTaskbarAsPrimaryTrayBindingSource, true, false);
 
+            changed |= ApplySharedSystemIconStack(view.mainStack, taskbarWnd, L"MainStack", g_primaryMainStackBinding, g_primaryMainStackListViewBinding, g_primarySystemIconStacks.mainStack, useThisTaskbarAsPrimaryTrayBindingSource, SharedMenuSurface::MainStack);
+            changed |= ApplySharedSystemIconStack(view.nonActivatableStack, taskbarWnd, L"NonActivatableStack", g_primaryNonActivatableStackBinding, g_primaryNonActivatableStackListViewBinding, g_primarySystemIconStacks.nonActivatableStack, useThisTaskbarAsPrimaryTrayBindingSource, SharedMenuSurface::NonActivatableStack);
+
             UpdateSharedSurfaceContextGestures(view.notificationAreaIcons, taskbarWnd, L"NotificationAreaIcons");
             UpdateSharedSurfaceContextGestures(view.notifyIconStack, taskbarWnd, L"NotifyIconStack");
         } else {
-            SetCachedNotificationAreaIconsWidth(taskbarWnd, 0.0);
             changed |= SetElementVisibility(view.notifyIconStack, L"NotifyIconStack", false);
             changed |= SetElementVisibility(view.notificationAreaIcons, L"NotificationAreaIcons", false);
+            changed |= CollapseMirroredSystemIconStack(view.mainStack, L"MainStack");
+            changed |= CollapseMirroredSystemIconStack(view.nonActivatableStack, L"NonActivatableStack");
         }
 
         if (WantsControlCenter(taskbarWnd)) {
-            changed |= ForceVisibleWithMinWidth(view.controlCenterButton, L"ControlCenterButton", kControlCenterMinWidth, false);
+            changed |= ForceVisibleWithMinWidth(view.controlCenterButton, L"ControlCenterButton", kControlCenterMinWidth);
 
-            void* ccItemsSourceBefore = nullptr;
-            void* ccItemsSourceAfter = nullptr;
-
-            try {
-                auto ccItemsControl = view.controlCenterButton ? view.controlCenterButton.try_as<Controls::ItemsControl>() : nullptr;
-                ccItemsSourceBefore = ccItemsControl ? InspectableAbi(ccItemsControl.ItemsSource()) : nullptr;
-            } catch (...) { }
-
+            void* ccItemsSourceBefore = ItemsSourceAbi(view.controlCenterButton);
             changed |= SharePrimaryElementBindingIfUseful(view.controlCenterButton, taskbarWnd, L"ControlCenterButton", g_primaryControlCenterButtonBinding, useThisTaskbarAsPrimaryTrayBindingSource, true, true);
+            void* ccItemsSourceAfter = ItemsSourceAbi(view.controlCenterButton);
 
-            try {
-                auto ccItemsControl = view.controlCenterButton ? view.controlCenterButton.try_as<Controls::ItemsControl>() : nullptr;
-                ccItemsSourceAfter = ccItemsControl ? InspectableAbi(ccItemsControl.ItemsSource()) : nullptr;
-            } catch (...) {  }
-
-            // Attaching the shared ItemsSource moves the single per-glyph context-menu ownership to this island, so track who attached last. Right-clicks re-attach on the clicked taskbar just in time (PrepareControlCenterContextOwnership) and the tracking keeps that re-attach skippable when the clicked taskbar already owns the menus.
+            // Attaching the shared ItemsSource moves the single per-glyph context-menu ownership to this island, so track who attached last. Right-clicks re-attach on the clicked taskbar just in time (PrepareSharedMenuSurfaceOwnership) and the tracking keeps that re-attach skippable when the clicked taskbar already owns the menus.
             if (ccItemsSourceAfter && ccItemsSourceAfter != ccItemsSourceBefore) {
-                g_controlCenterItemsOwnerTaskbarWnd = taskbarWnd;
+                SharedMenuSurfaceOwner(SharedMenuSurface::ControlCenter) = taskbarWnd;
             }
 
             // Context gestures stay fully native everywhere. The per-glyph menus open through a context-request path that ignores IsRightTapEnabled (proven by 1.0.7 logs : menus kept opening on the owner island with right-tap disabled), so toggling gestures neither blocks the menus nor prevents the cross-island crash. The crash is prevented by moving the menu ownership to the clicked island instead.
             UpdateSharedSurfaceContextGestures(view.controlCenterButton, taskbarWnd, L"ControlCenterButton");
         } else {
-            SetCachedControlCenterButtonWidth(taskbarWnd, 0.0);
             changed |= SetElementVisibility(view.controlCenterButton, L"ControlCenterButton", false);
         }
 
-        changed |= ForceVisibleWithMinWidth(view.notificationCenterButton, L"NotificationCenterButton", 78.0, true);
+        // NotificationCenterButton stays native : Windows shows it wherever it has content (see ReleaseLegacyNotificationCenterPins)
+        changed |= ReleaseLegacyNotificationCenterPins(view.notificationCenterButton);
 
         if (changed) {
             UpdateLayoutBestEffort(view.systemTrayFrameGrid, L"SystemTrayFrameGrid");
         }
 
-        if (WantsControlCenter(taskbarWnd)) {
-            try {
-                double controlCenterButtonWidth = view.controlCenterButton ? view.controlCenterButton.ActualWidth() : 0.0;
-                SetCachedControlCenterButtonWidth(
-                    taskbarWnd,
-                    controlCenterButtonWidth >= 4.0 ? controlCenterButtonWidth : kControlCenterFallbackWidth
-                );
-
-                Wh_Log(
-                    L"cached control center width monitor=%d width=%.1f",
-                    GetMonitorIndexForWindow(taskbarWnd),
-                    controlCenterButtonWidth
-                );
-            } catch (...) {
-                SetCachedControlCenterButtonWidth(taskbarWnd, kControlCenterFallbackWidth);
-            }
+        // After layout, so the secondary clock is judged by its real width
+        if (UpdateSecondaryClockOrder(taskbarWnd, view, IsSecondaryTaskbarWindow(taskbarWnd) && WantsControlCenter(taskbarWnd))) {
+            UpdateLayoutBestEffort(view.systemTrayFrameGrid, L"SystemTrayFrameGrid");
         }
 
-        if (WantsTray(taskbarWnd)) {
-            // Measure after the single batched layout pass so the cached width feeding the click hit-test reflects this pass, not the previous one (stale widths were the main wrong-monitor flyout cause fixed in 1.0.9)
-            try {
-                double notificationAreaIconsWidth = view.notificationAreaIcons ? view.notificationAreaIcons.ActualWidth() : 0.0;
-                SetCachedNotificationAreaIconsWidth(taskbarWnd, notificationAreaIconsWidth);
-
-                    Wh_Log(
-                        L"cached promoted icon width "
-                        L"monitor=%d width=%.1f",
-                        GetMonitorIndexForWindow(taskbarWnd),
-                        notificationAreaIconsWidth
-                    );
-            } catch (...) {
-                SetCachedNotificationAreaIconsWidth(taskbarWnd, 0.0);
-            }
-        }
+        // Measure after the batched layout so the hit-test sees this pass's geometry, not the previous one (stale geometry was the main wrong-monitor flyout cause fixed in 1.0.9)
+        MeasureTaskbarTrayLayout(taskbarWnd, xamlRoot, view);
+        LogTaskbarTrayLayout(taskbarWnd);
 
         return true;
     } catch (const winrt::hresult_error& e) {
@@ -2934,69 +3758,10 @@ bool ApplyStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
 
 void ApplySettingsFromTaskbarThread(void*);
 void BeginNativeFlyoutMonitorContext(HWND taskbarWnd, PCWSTR reason, WPARAM flyoutKind, const POINT* anchorPoint);
-XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd);
-XamlRoot GetSecondaryTaskbarXamlRoot(HWND secondaryTaskbarWnd);
 
-/// Moves tray icon drag/drop ownership to the taskbar island under the pointer by re-attaching the singleton tray ItemsSources locally before native XAML handles the drag/drop message.
-bool PrepareTrayIconDragDropOwnership(HWND taskbarWnd, PCWSTR reason, bool forceRefresh = false) {
-    if (!WantsTray(taskbarWnd) || !ShouldApplyToTaskbar(taskbarWnd)) {
-        return false;
-    }
-
-    bool sameOwner = g_trayItemsOwnerTaskbarWnd == taskbarWnd;
-
-    if (sameOwner && !forceRefresh && !g_trayItemsOwnerMayBeStale) {
-        return false;
-    }
-
-    XamlRoot xamlRoot = IsPrimaryTaskbarWindow(taskbarWnd)
-        ? GetTaskbarXamlRoot(taskbarWnd)
-        : GetSecondaryTaskbarXamlRoot(taskbarWnd);
-
-    if (!xamlRoot) {
-        return false;
-    }
-
-    TrayElementsView view;
-
-    if (!CollectTrayElements(xamlRoot, taskbarWnd, &view, L"tray drag/drop ownership")) {
-        return false;
-    }
-
-    FrameworkElement notifyIconStackChild = FirstChildElement(view.notifyIconStack);
-    FrameworkElement notifyIconStackListView = FindDescendantByClassName(view.notifyIconStack, L"SystemTray.StackListView");
-    bool reattached = false;
-
-    reattached |= ReattachItemsControlItemsSource(view.notificationAreaIcons, L"NotificationAreaIcons", reason);
-    reattached |= ReattachItemsControlItemsSource(view.notifyIconStack, L"NotifyIconStack", reason);
-    reattached |= ReattachItemsControlItemsSource(notifyIconStackChild, L"NotifyIconStackChild", reason);
-    reattached |= ReattachItemsControlItemsSource(notifyIconStackListView, L"NotifyIconStackListView", reason);
-
-    if (!reattached) {
-        return false;
-    }
-
-    g_trayItemsOwnerTaskbarWnd = taskbarWnd;
-    g_trayItemsOwnerMayBeStale = false;
-    UpdateLayoutBestEffort(view.systemTrayFrameGrid, reason);
-    Wh_Log(
-        L"%s tray drag/drop ownership monitor=%d reason=%s",
-        sameOwner ? L"refreshed" : L"moved",
-        GetMonitorIndexForWindow(taskbarWnd),
-        reason
-    );
-
-    return true;
-}
-
-/// Scales a 96-DPI design metric to the given DPI. Callers fetch the window DPI once per pass instead of once per metric.
+/// Scales a 96-DPI design metric to the given DPI
 int ScaleTaskbarMetricForDpi(UINT dpi, int value) {
     return MulDiv(value, static_cast<int>(dpi), USER_DEFAULT_SCREEN_DPI);
-}
-
-/// Scales a 96-DPI design metric (fractional) to the given DPI
-int ScaleTaskbarMetricForDpi(UINT dpi, double value) {
-    return MulDiv(static_cast<int>(value + 0.5), static_cast<int>(dpi), USER_DEFAULT_SCREEN_DPI);
 }
 
 /// True for the secondary taskbar window class (Shell_SecondaryTrayWnd)
@@ -3006,159 +3771,111 @@ bool IsSecondaryTaskbarWindow(HWND hWnd) {
     return GetClassNameW(hWnd, className, ARRAYSIZE(className)) && _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0;
 }
 
-/// Maps a click on a copied secondary-taskbar surface to what was hit (control center/hidden tray/nothing), using DPI-scaled fixed widths measured from the right edge : [show desktop][notification+clock][control center][promoted icons][chevron]. The promoted-icon width comes from the cached ApplyStyle measurement, the layout assumption is a horizontal bottom taskbar, vertical taskbars bail out.
+/// True when a point lies in a non-empty rectangle grown by a slop on every side
+bool IsPointInTrayRect(RECT const& rect, POINT point, int slop) {
+    if (IsRectEmpty(&rect)) {
+        return false;
+    }
+
+    RECT grownRect = rect;
+    InflateRect(&grownRect, slop, slop);
+
+    return PtInRect(&grownRect, point) != FALSE;
+}
+
+/// Maps a click on a copied secondary-taskbar surface to what was hit, from the live tray layout. The control center and the hidden-icons chevron arm a clicked-monitor context, and so do the system icon stacks, because the pen, touchpad and emoji views they open are placed by ShellHost exactly like the control center. The clock/notification surfaces and the app icons stay native. Exact element rectangles win over the neighbouring hit slop.
 WPARAM HitTestProxyFlyout(HWND hWnd, LPARAM lParam) {
     if (!IsSecondaryTaskbarWindow(hWnd) || !ShouldApplyToTaskbar(hWnd)) {
         return 0;
     }
 
-    RECT clientRect = {};
+    TaskbarTrayLayout layout;
 
-    if (!GetClientRect(hWnd, &clientRect)) {
+    if (!GetFreshTaskbarTrayLayout(hWnd, kTrayLayoutClickMaxAgeMs, &layout)) {
         return 0;
     }
 
-    int width = clientRect.right - clientRect.left;
-    int height = clientRect.bottom - clientRect.top;
-
-    if (width <= height) {
-        return 0;
-    }
-
-    int x = GET_X_LPARAM(lParam);
-    int y = GET_Y_LPARAM(lParam);
-
-    if (x < clientRect.left || x >= clientRect.right || y < clientRect.top || y >= clientRect.bottom) {
-        return 0;
-    }
-
-    UINT dpi = GetWindowDpiOrDefault(hWnd);
-    int xFromRight = clientRect.right - x;
-    int hitSlop = ScaleTaskbarMetricForDpi(dpi, kNativeFlyoutHitSlop);
-    int notificationStart = ScaleTaskbarMetricForDpi(dpi, kShowDesktopWidth);
-    int notificationEnd = notificationStart + ScaleTaskbarMetricForDpi(dpi, kNotificationCenterWidth);
-    int controlStart = notificationEnd;
-    double cachedControlCenterWidth = GetCachedControlCenterButtonWidth(hWnd);
-    int controlCenterWidth = ScaleTaskbarMetricForDpi(dpi, cachedControlCenterWidth >= 4.0 ? cachedControlCenterWidth : kControlCenterFallbackWidth);
-    int controlEnd = controlStart + controlCenterWidth;
-    int notificationAreaIconsWidth = ScaleTaskbarMetricForDpi(dpi, GetCachedNotificationAreaIconsWidth(hWnd));
-    int hiddenTrayStart = controlEnd + notificationAreaIconsWidth;
-    int hiddenTrayEnd = hiddenTrayStart + ScaleTaskbarMetricForDpi(dpi, kNotifyIconStackWidth);
+    POINT point = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+    int hitSlop = ScaleTaskbarMetricForDpi(GetWindowDpiOrDefault(hWnd), kNativeFlyoutHitSlop);
+    auto const& rects = layout.rects;
+    bool wantsControlCenter = WantsControlCenter(hWnd);
+    bool wantsTray = WantsTray(hWnd);
     WPARAM result = 0;
-    bool inNotificationCenterRange = false;
+    PCWSTR hit = nullptr;
 
-    if (xFromRight >= notificationStart && xFromRight < notificationEnd) {
+    if (IsPointInTrayRect(rects.notificationCenter, point, 0) || IsPointInTrayRect(rects.secondaryClock, point, 0)) {
         // Leave the notification/date-time surface fully native. Windows already opens this flyout on the clicked monitor, and the removed Win+N proxy used to move the real tray around, refreshing every taskbar (most visibly on mixed-DPI monitors).
-        inNotificationCenterRange = true;
-    } else if (WantsControlCenter(hWnd) && xFromRight >= controlStart - hitSlop && xFromRight < controlEnd + hitSlop) {
+        hit = L"notification center native";
+    } else if (wantsControlCenter && IsPointInTrayRect(rects.controlCenter, point, 0)) {
         result = kNativeControlCenter;
-    } else if (WantsTray(hWnd) && xFromRight >= hiddenTrayStart - hitSlop && xFromRight < hiddenTrayEnd + hitSlop) {
+        hit = L"control center native";
+    } else if (wantsTray && IsPointInTrayRect(rects.chevron, point, 0)) {
         result = kNativeHiddenTray;
+        hit = L"hidden tray native";
+    } else if (wantsTray && (IsPointInTrayRect(rects.mainStack, point, 0) || IsPointInTrayRect(rects.nonActivatableStack, point, 0))) {
+        result = kNativeControlCenter;
+        hit = L"system icons native";
+    } else if (IsPointInTrayRect(rects.promotedIcons, point, 0)) {
+        hit = L"tray icon native";
+    } else if (wantsControlCenter && IsPointInTrayRect(rects.controlCenter, point, hitSlop)) {
+        result = kNativeControlCenter;
+        hit = L"control center native (slop)";
+    } else if (wantsTray && IsPointInTrayRect(rects.chevron, point, hitSlop)) {
+        result = kNativeHiddenTray;
+        hit = L"hidden tray native (slop)";
     }
 
-    if (xFromRight >= notificationStart - hitSlop && xFromRight < hiddenTrayEnd + ScaleTaskbarMetricForDpi(dpi, 32)) {
+    if (hit) {
         Wh_Log(
-            L"secondary click monitor=%d x=%d y=%d "
-            L"xFromRight=%d iconWidth=%d hit=%s",
-            GetMonitorIndexForWindow(hWnd), x, y, xFromRight,
-            notificationAreaIconsWidth,
-            result == kNativeHiddenTray
-                ? L"hidden tray native"
-                : result == kNativeControlCenter
-                    ? L"control center native"
-                    : inNotificationCenterRange
-                        ? L"notification center native"
-                        : L"none"
+            L"secondary click monitor=%d x=%ld y=%ld hit=%s",
+            GetMonitorIndexForWindow(hWnd), point.x, point.y, hit
         );
     }
 
     return result;
 }
 
-/// True when a taskbar client point lies in the control-center strip (same right-edge metrics as HitTestProxyFlyout, valid for any styled taskbar including the primary). Gate order is cheapest-first because the hover pre-arm calls this on cursor movement.
-bool IsControlCenterClientPoint(HWND hWnd, POINT point) {
-    if (!WantsControlCenter(hWnd) || !IsTaskbarWindow(hWnd) || !ShouldApplyToTaskbar(hWnd)) {
+/// Which shared menu surface (control center, system icon stacks) contains a taskbar client point, from the live layout. Valid for any styled taskbar including the primary. The hover pre-arm calls this on cursor movement, so the layout is only re-measured when stale.
+bool HitTestSharedMenuSurface(HWND hWnd, POINT point, SharedMenuSurface* surface) {
+    if (!IsTaskbarWindow(hWnd) || !ShouldApplyToTaskbar(hWnd)) {
         return false;
     }
 
-    RECT clientRect = {};
+    bool wantsControlCenter = WantsControlCenter(hWnd);
+    bool wantsTray = WantsTray(hWnd);
 
-    if (!GetClientRect(hWnd, &clientRect)) {
+    if (!wantsControlCenter && !wantsTray) {
         return false;
     }
 
-    int width = clientRect.right - clientRect.left;
-    int height = clientRect.bottom - clientRect.top;
+    TaskbarTrayLayout layout;
 
-    if (width <= height || point.x < clientRect.left || point.x >= clientRect.right || point.y < clientRect.top || point.y >= clientRect.bottom) {
+    if (!GetFreshTaskbarTrayLayout(hWnd, kTrayLayoutHoverMaxAgeMs, &layout)) {
         return false;
     }
 
-    UINT dpi = GetWindowDpiOrDefault(hWnd);
-    int xFromRight = clientRect.right - point.x;
-    int hitSlop = ScaleTaskbarMetricForDpi(dpi, kNativeFlyoutHitSlop);
-    int controlStart = ScaleTaskbarMetricForDpi(dpi, kShowDesktopWidth) + ScaleTaskbarMetricForDpi(dpi, kNotificationCenterWidth);
-    double cachedControlCenterWidth = GetCachedControlCenterButtonWidth(hWnd);
-    int controlCenterWidth = ScaleTaskbarMetricForDpi(dpi, cachedControlCenterWidth >= 4.0 ? cachedControlCenterWidth : kControlCenterFallbackWidth);
-    int controlEnd = controlStart + controlCenterWidth;
+    int hitSlop = ScaleTaskbarMetricForDpi(GetWindowDpiOrDefault(hWnd), kNativeFlyoutHitSlop);
+    auto const& rects = layout.rects;
 
-    return xFromRight >= controlStart - hitSlop && xFromRight < controlEnd + hitSlop;
-}
+    if (wantsControlCenter && IsPointInTrayRect(rects.controlCenter, point, hitSlop)) {
+        *surface = SharedMenuSurface::ControlCenter;
 
-/// True when a taskbar client point lies in the managed tray-icon strip (promoted icons plus hidden-icons chevron), valid for primary and secondary taskbars. Used only to refresh drag/drop ownership before native XAML handles the interaction.
-bool IsTrayClientPoint(HWND hWnd, POINT point) {
-    if (!WantsTray(hWnd) || !IsTaskbarWindow(hWnd) || !ShouldApplyToTaskbar(hWnd)) {
-        return false;
+        return true;
     }
 
-    RECT clientRect = {};
+    if (wantsTray && IsPointInTrayRect(rects.mainStack, point, hitSlop)) {
+        *surface = SharedMenuSurface::MainStack;
 
-    if (!GetClientRect(hWnd, &clientRect)) {
-        return false;
+        return true;
     }
 
-    int width = clientRect.right - clientRect.left;
-    int height = clientRect.bottom - clientRect.top;
+    if (wantsTray && IsPointInTrayRect(rects.nonActivatableStack, point, hitSlop)) {
+        *surface = SharedMenuSurface::NonActivatableStack;
 
-    if (width <= height || point.x < clientRect.left || point.x >= clientRect.right || point.y < clientRect.top || point.y >= clientRect.bottom) {
-        return false;
+        return true;
     }
 
-    UINT dpi = GetWindowDpiOrDefault(hWnd);
-    int xFromRight = clientRect.right - point.x;
-    int hitSlop = ScaleTaskbarMetricForDpi(dpi, kNativeFlyoutHitSlop);
-    int trayStart = ScaleTaskbarMetricForDpi(dpi, kShowDesktopWidth) + ScaleTaskbarMetricForDpi(dpi, kNotificationCenterWidth);
-
-    if (WantsControlCenter(hWnd)) {
-        double cachedControlCenterWidth = GetCachedControlCenterButtonWidth(hWnd);
-        trayStart += ScaleTaskbarMetricForDpi(dpi, cachedControlCenterWidth >= 4.0 ? cachedControlCenterWidth : kControlCenterFallbackWidth);
-    }
-
-    int notificationAreaIconsWidth = ScaleTaskbarMetricForDpi(dpi, GetCachedNotificationAreaIconsWidth(hWnd));
-    int trayEnd = trayStart + notificationAreaIconsWidth + ScaleTaskbarMetricForDpi(dpi, kNotifyIconStackWidth);
-
-    return xFromRight >= trayStart - hitSlop && xFromRight < trayEnd + hitSlop;
-}
-
-/// Extracts a taskbar-client-space point from mouse and parent-notify mouse messages.
-bool TryGetTaskbarMouseClientPoint(HWND, UINT uMsg, WPARAM wParam, LPARAM lParam, POINT* point) {
-    if (!point) {
-        return false;
-    }
-
-    if (uMsg == WM_PARENTNOTIFY) {
-        UINT childMessage = LOWORD(wParam);
-
-        if (childMessage != WM_LBUTTONDOWN && childMessage != WM_LBUTTONUP && childMessage != WM_MOUSEMOVE) {
-            return false;
-        }
-    } else if (uMsg != WM_LBUTTONDOWN && uMsg != WM_LBUTTONUP && uMsg != WM_MOUSEMOVE) {
-        return false;
-    }
-
-    *point = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-
-    return true;
+    return false;
 }
 
 /// Extracts a taskbar-client-space point from a right-click/context message. Screen-coordinate messages (WM_CONTEXTMENU, non-client) are converted, keyboard-sourced WM_CONTEXTMENU (lParam -1) yields false.
@@ -3189,12 +3906,14 @@ bool TryGetTaskbarContextClientPoint(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 
 FrameworkElement FindSystemTrayFrameGridForTaskbar(HWND taskbarWnd);
 
-/// Walks up the visual tree (bounded) looking for an ancestor named ControlCenterButton. Used to scope the ShowAt hook to control-center menus only.
-bool IsElementInsideControlCenterButton(DependencyObject element) {
+/// Walks up the visual tree (bounded) looking for an ancestor that is a shared menu surface (ControlCenterButton, MainStack, NonActivatableStack). Used to scope the ShowAt hook to the cached menus of the surfaces shared between islands.
+bool IsElementInsideSharedMenuSurface(DependencyObject element) {
     for (int i = 0; element && i < 16; i++) {
         try {
             if (FrameworkElement frameworkElement = element.try_as<FrameworkElement>()) {
-                if (frameworkElement.Name() == L"ControlCenterButton") {
+                auto name = frameworkElement.Name();
+
+                if (name == L"ControlCenterButton" || name == L"MainStack" || name == L"NonActivatableStack") {
                     return true;
                 }
             }
@@ -3418,7 +4137,7 @@ bool PrepareControlCenterFlyoutShowAt(void* flyoutAbi, void* targetAbi, PCWSTR s
         winrt::copy_from_abi(targetInspectable, targetAbi);
         DependencyObject targetElement = targetInspectable.try_as<DependencyObject>();
 
-        if (!targetElement || !IsElementInsideControlCenterButton(targetElement)) {
+        if (!targetElement || !IsElementInsideSharedMenuSurface(targetElement)) {
             return false;
         }
 
@@ -3461,6 +4180,10 @@ bool PrepareControlCenterFlyoutShowAt(void* flyoutAbi, void* targetAbi, PCWSTR s
         // Locked to another island : show the menu through this island's proxy instead. The native ShowAt is suppressed either way so it can never crash.
         FrameworkElement targetElementFe = targetElement.try_as<FrameworkElement>();
         bool shownViaProxy = ShowControlCenterMenuViaProxy(flyout, targetElementFe, targetRoot);
+
+        if (!shownViaProxy) {
+            Wh_Log(L"suppressed cross-island flyout class=%s target=%s: no compatible MenuFlyout proxy; native ShowAt would be unsafe", winrt::get_class_name(flyout).c_str(), targetElementFe ? targetElementFe.Name().c_str() : L"<unknown>");
+        }
 
         Wh_Log(
             L"control center flyout %s "
@@ -3692,37 +4415,50 @@ void RemoveFlyoutShowAtFunctionHooks() {
     g_flyoutShowAtHooksInstalled.store(false, std::memory_order_release);
 }
 
-// The per-glyph control-center context menus (network, volume, battery) resolve their target through per-item state that follows the most recent ItemsSource attach. One shared items source feeds every taskbar's ControlCenterButton, so only the island bound last can open those menus safely : pressing the right button on any other taskbar touches that per-item state from a foreign island and Explorer dies inside native XAML, before the taskbar window receives any parent-level message. Re-attaching the items source moves the ownership to a taskbar's island, the same way the per-taskbar notification/date-time button works natively because Windows gives each island its own items.
-/// Moves the singleton control-center per-glyph menu ownership to a taskbar island by re-attaching its shared ItemsSource.
-void MoveControlCenterContextOwnershipToTaskbar(HWND taskbarWnd, PCWSTR source) {
-    if (g_controlCenterItemsOwnerTaskbarWnd == taskbarWnd) {
+// The per-glyph control-center context menus (network, volume, battery) and the system icon menus (language, IME, pen) resolve their target through per-item state that follows the most recent ItemsSource attach. One shared items source feeds every taskbar's copy of the surface, so only the island bound last can open those menus safely : pressing the right button on any other taskbar touches that per-item state from a foreign island and Explorer dies inside native XAML, before the taskbar window receives any parent-level message. Re-attaching the items source moves the ownership to a taskbar's island, the same way the per-taskbar notification/date-time button works natively because Windows gives each island its own items.
+/// Moves one shared menu surface's ownership to a taskbar island by re-attaching its shared ItemsSource
+void MoveSharedMenuSurfaceOwnershipToTaskbar(HWND taskbarWnd, SharedMenuSurface surface, PCWSTR source) {
+    if (SharedMenuSurfaceOwner(surface) == taskbarWnd) {
         return;
     }
 
     try {
-        FrameworkElement systemTrayFrameGrid = FindSystemTrayFrameGridForTaskbar(taskbarWnd);
-        FrameworkElement controlCenterButton = systemTrayFrameGrid ? FindChildByName(systemTrayFrameGrid, L"ControlCenterButton") : nullptr;
+        XamlRoot xamlRoot = GetAnyTaskbarXamlRoot(taskbarWnd);
+        TrayElementsView view;
 
-        if (!ReattachControlCenterItemsSource(controlCenterButton, L"control center context ownership")) {
+        if (!xamlRoot || !CollectTrayElements(xamlRoot, taskbarWnd, &view, L"menu ownership")) {
             return;
         }
 
-        g_controlCenterItemsOwnerTaskbarWnd = taskbarWnd;
+        if (!ReattachSharedMenuSurfaceItems(view, surface, L"context ownership")) {
+            return;
+        }
+
+        SharedMenuSurfaceOwner(surface) = taskbarWnd;
 
         Wh_Log(
-            L"moved control center context "
-            L"ownership to monitor %d via %s",
-            GetMonitorIndexForWindow(taskbarWnd), source
+            L"moved %s context ownership to monitor %d via %s",
+            SharedMenuSurfaceToString(surface), GetMonitorIndexForWindow(taskbarWnd), source
         );
     } catch (...) {
-        Wh_Log(L"failed to move control center context ownership via %s", source);
+        Wh_Log(L"failed to move %s context ownership via %s", SharedMenuSurfaceToString(surface), source);
     }
 }
 
-// Pre-arms the menu ownership as soon as the pointer reaches a non-owner control-center region. Click-time transfer is too late : crash logs showed the lethal press dying inside the island's input processing before the taskbar window received any message, so the transfer must already be done when the hover or press input reaches the island.
-/// Pre-arms control-center menu ownership for a taskbar when the pointer is inside its control-center strip and no mouse button is currently held.
-void PreArmControlCenterContextOwnershipForTaskbar(HWND taskbarRootWnd, POINT screenPoint, PCWSTR source) {
-    if (!taskbarRootWnd || taskbarRootWnd == g_controlCenterItemsOwnerTaskbarWnd || !IsTaskbarWindow(taskbarRootWnd)) {
+// Pre-arms the menu ownership as soon as the pointer reaches a non-owner shared surface. Click-time transfer is too late : crash logs showed the lethal press dying inside the island's input processing before the taskbar window received any message, so the transfer must already be done when the hover or press input reaches the island.
+/// Pre-arms menu ownership for a taskbar when the pointer is inside one of its shared menu surfaces and no mouse button is currently held
+void PreArmSharedMenuSurfaceOwnershipForTaskbar(HWND taskbarRootWnd, POINT screenPoint, PCWSTR source) {
+    if (!taskbarRootWnd || !IsTaskbarWindow(taskbarRootWnd)) {
+        return;
+    }
+
+    bool ownsEverySurface = true;
+
+    for (HWND owner : g_sharedMenuSurfaceOwners) {
+        ownsEverySurface &= owner == taskbarRootWnd;
+    }
+
+    if (ownsEverySurface) {
         return;
     }
 
@@ -3732,32 +4468,35 @@ void PreArmControlCenterContextOwnershipForTaskbar(HWND taskbarRootWnd, POINT sc
     }
 
     POINT clientPoint = screenPoint;
+    SharedMenuSurface surface = SharedMenuSurface::ControlCenter;
 
-    if (!ScreenToClient(taskbarRootWnd, &clientPoint) || !IsControlCenterClientPoint(taskbarRootWnd, clientPoint)) {
+    if (!ScreenToClient(taskbarRootWnd, &clientPoint) || !HitTestSharedMenuSurface(taskbarRootWnd, clientPoint, &surface)) {
         return;
     }
 
-    MoveControlCenterContextOwnershipToTaskbar(taskbarRootWnd, source);
+    MoveSharedMenuSurfaceOwnershipToTaskbar(taskbarRootWnd, surface, source);
 }
 
 /// Right-click/context handler on the taskbar window itself : logs the click breadcrumb and performs the last-resort ownership transfer when the hover/dispatch pre-arm did not already run
-void PrepareControlCenterContextOwnership(HWND taskbarWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+void PrepareSharedMenuSurfaceOwnership(HWND taskbarWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     POINT clientPoint = {};
+    SharedMenuSurface surface = SharedMenuSurface::ControlCenter;
 
-    if (!TryGetTaskbarContextClientPoint(taskbarWnd, uMsg, wParam, lParam, &clientPoint) || !IsControlCenterClientPoint(taskbarWnd, clientPoint)) {
+    if (!TryGetTaskbarContextClientPoint(taskbarWnd, uMsg, wParam, lParam, &clientPoint) || !HitTestSharedMenuSurface(taskbarWnd, clientPoint, &surface)) {
         return;
     }
 
     Wh_Log(
-        L"control center right-click/context "
+        L"%s right-click/context "
         L"fall-through monitor=%d contextOwner=%d message=0x%04X "
         L"point=(%ld,%ld)",
+        SharedMenuSurfaceToString(surface),
         GetMonitorIndexForWindow(taskbarWnd),
-        g_controlCenterItemsOwnerTaskbarWnd == taskbarWnd,
+        SharedMenuSurfaceOwner(surface) == taskbarWnd,
         uMsg, clientPoint.x, clientPoint.y
     );
 
-    MoveControlCenterContextOwnershipToTaskbar(taskbarWnd, L"right-click notification");
+    MoveSharedMenuSurfaceOwnershipToTaskbar(taskbarWnd, surface, L"right-click notification");
 }
 
 /// Every window message treated as right-click/context input, including the parent-level notification generated when a child (XAML island input window) receives the press
@@ -3782,31 +4521,15 @@ bool IsSecondButtonPointerMessage(UINT uMsg, WPARAM wParam) {
     return IsPointerCoordinateMessage(uMsg) && IS_POINTER_SECONDBUTTON_WPARAM(wParam);
 }
 
-/// Computes the screen anchor stored in a flyout context : the click point, or for hidden-tray clicks the chevron midpoint computed from the cached metrics, so the overflow flyout opens at the chevron even when the click landed in the hit slop
+/// Computes the screen anchor stored in a flyout context : the click point, or for hidden-tray clicks the center of the measured chevron, so the overflow flyout opens at the chevron even when the click landed in the hit slop
 bool GetNativeFlyoutAnchorPoint(HWND hWnd, LPARAM lParam, WPARAM flyoutKind, POINT* anchorPoint) {
-    RECT clientRect = {};
+    POINT point = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+    TaskbarTrayLayout layout;
 
-    if (!GetClientRect(hWnd, &clientRect)) {
-        return false;
+    if (flyoutKind == kNativeHiddenTray && TryGetTaskbarTrayLayout(hWnd, &layout) && !IsRectEmpty(&layout.rects.chevron)) {
+        point.x = layout.rects.chevron.left + (layout.rects.chevron.right - layout.rects.chevron.left) / 2;
+        point.y = layout.rects.chevron.top + (layout.rects.chevron.bottom - layout.rects.chevron.top) / 2;
     }
-
-    LONG clientX = GET_X_LPARAM(lParam);
-
-    if (flyoutKind == kNativeHiddenTray) {
-        UINT dpi = GetWindowDpiOrDefault(hWnd);
-        int notificationAreaIconsWidth = ScaleTaskbarMetricForDpi(dpi, GetCachedNotificationAreaIconsWidth(hWnd));
-        double cachedControlCenterWidth = GetCachedControlCenterButtonWidth(hWnd);
-        int controlCenterWidth = ScaleTaskbarMetricForDpi(dpi, cachedControlCenterWidth >= 4.0 ? cachedControlCenterWidth : kControlCenterFallbackWidth);
-        int hiddenTrayStart = ScaleTaskbarMetricForDpi(dpi, kShowDesktopWidth) + ScaleTaskbarMetricForDpi(dpi, kNotificationCenterWidth) + controlCenterWidth + notificationAreaIconsWidth;
-        int hiddenTrayWidth = ScaleTaskbarMetricForDpi(dpi, kNotifyIconStackWidth);
-        clientX = clientRect.right - (hiddenTrayStart + hiddenTrayWidth / 2);
-        clientX = ClampLong(clientX, clientRect.left, clientRect.right - 1);
-    }
-
-    POINT point = {
-        clientX,
-        clientRect.top + (clientRect.bottom - clientRect.top) / 2,
-    };
 
     if (!ClientToScreen(hWnd, &point)) {
         return false;
@@ -3896,10 +4619,10 @@ void InspectRetrievedMessageForFlyoutCancel(const MSG* msg, PCWSTR source) {
     ClearFlyoutMonitorContextForContextMenu(msg -> message, msg -> wParam, source);
 }
 
-/// Runs in the dispatch path before the target window procedure sees the message. This is the last safe moment to move the control-center menu ownership for hover and right-press input headed into a taskbar island.
-void PreArmControlCenterContextOwnershipForMessage(const MSG* msg) {
-    // The ownership transfer only matters for the control-center per-glyph menus, skip the per-mouse-message work entirely when that surface is not managed
-    if (!msg -> hwnd || !IsExplorerTarget() || !WantsControlCenter()) {
+/// Runs in the dispatch path before the target window procedure sees the message. This is the last safe moment to move the shared menu ownership for hover and right-press input headed into a taskbar island.
+void PreArmSharedMenuSurfaceOwnershipForMessage(const MSG* msg) {
+    // The ownership transfer only matters for the shared menu surfaces, skip the per-mouse-message work entirely when none is managed
+    if (!msg -> hwnd || !IsExplorerTarget() || (!WantsControlCenter() && !WantsTray())) {
         return;
     }
 
@@ -3940,217 +4663,88 @@ void PreArmControlCenterContextOwnershipForMessage(const MSG* msg) {
 
     HWND rootWnd = GetAncestor(msg -> hwnd, GA_ROOT);
 
-    if (!rootWnd || rootWnd == g_controlCenterItemsOwnerTaskbarWnd) {
-        return;
-    }
-
-    POINT screenPoint = {GET_X_LPARAM(msg -> lParam), GET_Y_LPARAM(msg -> lParam)};
-
-    if (clientCoordinates && !ClientToScreen(msg -> hwnd, &screenPoint)) {
-        return;
-    }
-
-    PreArmControlCenterContextOwnershipForTaskbar(rootWnd, screenPoint, L"input dispatch");
-}
-
-/// Runs in the dispatch path before the target child island sees the message. This catches tray drags that do not surface as parent notifications early enough for the taskbar subclass.
-void PreArmTrayIconDragDropOwnershipForMessage(const MSG* msg) {
-    if (!msg -> hwnd || !IsExplorerTarget() || !WantsTray()) {
-        return;
-    }
-
-    bool clientCoordinates;
-    PCWSTR reason = L"tray input dispatch";
-
-    switch (msg -> message) {
-        case WM_LBUTTONDOWN:
-            clientCoordinates = true;
-            reason = L"tray input down";
-
-            break;
-        case WM_LBUTTONUP:
-            clientCoordinates = true;
-            reason = L"tray input up";
-
-            break;
-        case WM_MOUSEMOVE:
-            if (!(msg -> wParam & MK_LBUTTON)) {
-                return;
-            }
-
-            clientCoordinates = true;
-
-            break;
-        case WM_POINTERUPDATE:
-            if (!IS_POINTER_FLAG_SET_WPARAM(msg -> wParam, POINTER_MESSAGE_FLAG_FIRSTBUTTON)) {
-                return;
-            }
-
-            clientCoordinates = false;
-
-            break;
-        case WM_POINTERUP:
-            clientCoordinates = false;
-            reason = L"tray pointer up";
- 
-            break;
-        default:
-            return;
-    }
-
-    POINT screenPoint = {GET_X_LPARAM(msg -> lParam), GET_Y_LPARAM(msg -> lParam)};
-
-    if (clientCoordinates && !ClientToScreen(msg -> hwnd, &screenPoint)) {
-        return;
-    }
-
-    HWND messageRootWnd = GetAncestor(msg -> hwnd, GA_ROOT);
-    HWND rootWnd = FindTaskbarWindowFromScreenPoint(screenPoint);
-
-    if (!rootWnd && IsTaskbarWindow(messageRootWnd)) {
-        rootWnd = messageRootWnd;
-    }
-
     if (!rootWnd) {
         return;
     }
 
-    POINT clientPoint = screenPoint;
+    POINT screenPoint = {GET_X_LPARAM(msg -> lParam), GET_Y_LPARAM(msg -> lParam)};
 
-    if (!ScreenToClient(rootWnd, &clientPoint) || !IsTrayClientPoint(rootWnd, clientPoint)) {
+    if (clientCoordinates && !ClientToScreen(msg -> hwnd, &screenPoint)) {
         return;
     }
 
-    bool ownershipChanged = PrepareTrayIconDragDropOwnership(rootWnd, reason);
-    bool isDragMoveMessage = msg -> message == WM_MOUSEMOVE || msg -> message == WM_POINTERUPDATE;
-    bool isDropMessage = msg -> message == WM_LBUTTONUP || msg -> message == WM_POINTERUP;
-
-    if (ownershipChanged && (isDropMessage || isDragMoveMessage)) {
-        SetFlyoutMonitorContext(
-            rootWnd,
-            kTrayDragDropMonitorContextMs,
-            L"tray drag/drop",
-            kNativeHiddenTray,
-            nullptr
-        );
-    }
+    PreArmSharedMenuSurfaceOwnershipForTaskbar(rootWnd, screenPoint, L"input dispatch");
 }
 
-/// user32 hook on the message dispatch loop : clears flyout contexts on right-click input and pre-arms shared-surface ownership before the target window procedure runs
-LRESULT WINAPI DispatchMessageW_Hook(const MSG* lpMsg) {
-    if (!IsModUnloading() && lpMsg) {
-        InspectRetrievedMessageForFlyoutCancel(lpMsg, L"DispatchMessageW");
-        PreArmTrayIconDragDropOwnershipForMessage(lpMsg);
-        PreArmControlCenterContextOwnershipForMessage(lpMsg);
+/// Input messages whose dispatch can make XAML raise tray clicks, drags, hover or keyboard invocations : keyboard, mouse, pointer/touch, and the timers XAML uses for press-and-hold
+bool IsTrayInputMessage(UINT message) {
+    return (message >= WM_KEYFIRST && message <= WM_KEYLAST)
+        || (message >= WM_MOUSEFIRST && message <= WM_MOUSELAST)
+        || (message >= 0x0238 && message <= 0x0257)
+        || message == WM_TIMER
+        || message == WM_CONTEXTMENU;
+}
+
+/// Publishes the taskbar whose island is dispatching the current input message for the duration of the dispatch (see g_inputDispatchTaskbarWnd). Nested dispatches restore the outer value.
+struct InputDispatchTaskbarScope {
+    HWND previousTaskbarWnd;
+
+    explicit InputDispatchTaskbarScope(HWND taskbarWnd) : previousTaskbarWnd(g_inputDispatchTaskbarWnd) {
+        g_inputDispatchTaskbarWnd = taskbarWnd;
     }
+
+    ~InputDispatchTaskbarScope() {
+        g_inputDispatchTaskbarWnd = previousTaskbarWnd;
+    }
+};
+
+/// user32 hook on the message dispatch loop : clears flyout contexts on right-click input, pre-arms shared-surface ownership before the target window procedure runs, and publishes which taskbar island the input belongs to
+LRESULT WINAPI DispatchMessageW_Hook(const MSG* lpMsg) {
+    if (IsModUnloading() || !lpMsg) {
+        return DispatchMessageW_Original(lpMsg);
+    }
+
+    InspectRetrievedMessageForFlyoutCancel(lpMsg, L"DispatchMessageW");
+    PreArmSharedMenuSurfaceOwnershipForMessage(lpMsg);
+
+    HWND dispatchTaskbarWnd = nullptr;
+
+    if (lpMsg -> hwnd && IsExplorerTarget() && IsTrayInputMessage(lpMsg -> message)) {
+        HWND rootWnd = GetAncestor(lpMsg -> hwnd, GA_ROOT);
+
+        if (IsTaskbarWindow(rootWnd)) {
+            dispatchTaskbarWnd = rootWnd;
+        }
+    }
+
+    InputDispatchTaskbarScope dispatchScope(dispatchTaskbarWnd);
 
     return DispatchMessageW_Original(lpMsg);
 }
 
-/// Resets per-session interaction state : the armed flyout context and shared-surface ownership tracking
+/// Resets per-session interaction state : the armed flyout context, the sticky overflow placement, the last tray icon interaction, and shared-surface ownership tracking
 void ClearProxyRuntimeState() {
     ClearSharedProxyFlyoutMonitorState();
-    g_trayItemsOwnerTaskbarWnd = nullptr;
-    g_trayItemsOwnerMayBeStale = false;
-    g_controlCenterItemsOwnerTaskbarWnd = nullptr;
+    ClearStickyOverflowPlacement(nullptr);
+    g_lastTrayIconInteraction = {};
+    ClearSharedMenuSurfaceOwners(nullptr);
 }
 
-/// Empties the heap-backed primary binding caches. Called on reload/settings paths only, never during process detach, so COM releases cannot run at an unsafe time.
+/// Empties the heap-backed primary binding caches and island records. Called on reload/settings paths only, never during process detach, so COM releases cannot run at an unsafe time.
 void ClearCachedXamlBindings() {
     g_primaryNotificationAreaIconsBinding = {};
     g_primaryNotifyIconStackBinding = {};
     g_primaryNotifyIconStackChildBinding = {};
     g_primaryNotifyIconStackListViewBinding = {};
     g_primaryControlCenterButtonBinding = {};
-    g_trayItemsOwnerTaskbarWnd = nullptr;
-    g_trayItemsOwnerMayBeStale = false;
-    g_controlCenterItemsOwnerTaskbarWnd = nullptr;
-}
-
-/// Cached promoted-icon-area width (DIPs) for a taskbar, 0 when unknown
-double GetCachedNotificationAreaIconsWidth(HWND hWnd) {
-    AcquireSRWLockShared(&g_taskbarTrayMetricsLock);
-
-    for (const auto& metrics : g_taskbarTrayMetrics) {
-        if (metrics.hWnd == hWnd) {
-            double width = metrics.notificationAreaIconsWidth;
-            ReleaseSRWLockShared(&g_taskbarTrayMetricsLock);
-
-            return width;
-        }
-    }
-
-    ReleaseSRWLockShared(&g_taskbarTrayMetricsLock);
-
-    return 0.0;
-}
-
-/// Stores the promoted-icon-area width measured during ApplyStyle, used by the click hit-testing
-void SetCachedNotificationAreaIconsWidth(HWND hWnd, double width) {
-    AcquireSRWLockExclusive(&g_taskbarTrayMetricsLock);
-
-    for (auto& metrics : g_taskbarTrayMetrics) {
-        if (metrics.hWnd == hWnd) {
-            metrics.notificationAreaIconsWidth = width;
-            ReleaseSRWLockExclusive(&g_taskbarTrayMetricsLock);
-
-            return;
-        }
-    }
-
-    g_taskbarTrayMetrics.push_back({hWnd, width, 0.0});
-    ReleaseSRWLockExclusive(&g_taskbarTrayMetricsLock);
-}
-
-/// Cached control-center button width (DIPs) for a taskbar, 0 when unknown
-double GetCachedControlCenterButtonWidth(HWND hWnd) {
-    AcquireSRWLockShared(&g_taskbarTrayMetricsLock);
-
-    for (const auto& metrics : g_taskbarTrayMetrics) {
-        if (metrics.hWnd == hWnd) {
-            double width = metrics.controlCenterButtonWidth;
-            ReleaseSRWLockShared(&g_taskbarTrayMetricsLock);
-
-            return width;
-        }
-    }
-
-    ReleaseSRWLockShared(&g_taskbarTrayMetricsLock);
-
-    return 0.0;
-}
-
-/// Stores the control-center width measured during ApplyStyle, used by right-edge hit testing
-void SetCachedControlCenterButtonWidth(HWND hWnd, double width) {
-    AcquireSRWLockExclusive(&g_taskbarTrayMetricsLock);
-
-    for (auto& metrics : g_taskbarTrayMetrics) {
-        if (metrics.hWnd == hWnd) {
-            metrics.controlCenterButtonWidth = width;
-            ReleaseSRWLockExclusive(&g_taskbarTrayMetricsLock);
-
-            return;
-        }
-    }
-
-    g_taskbarTrayMetrics.push_back({hWnd, 0.0, width});
-    ReleaseSRWLockExclusive(&g_taskbarTrayMetricsLock);
-}
-
-/// Drops the cached metrics of a destroyed taskbar window
-void RemoveCachedTaskbarTrayMetrics(HWND hWnd) {
-    AcquireSRWLockExclusive(&g_taskbarTrayMetricsLock);
-
-    for (auto it = g_taskbarTrayMetrics.begin(); it != g_taskbarTrayMetrics.end(); ++it) {
-        if (it -> hWnd == hWnd) {
-            g_taskbarTrayMetrics.erase(it);
-            ReleaseSRWLockExclusive(&g_taskbarTrayMetricsLock);
-
-            return;
-        }
-    }
-
-    ReleaseSRWLockExclusive(&g_taskbarTrayMetricsLock);
+    g_primaryMainStackBinding = {};
+    g_primaryMainStackListViewBinding = {};
+    g_primaryNonActivatableStackBinding = {};
+    g_primaryNonActivatableStackListViewBinding = {};
+    g_primarySystemIconStacks = {};
+    g_taskbarIslands.entries.clear();
+    g_taskbarIslands.otherRoots.clear();
+    ClearSharedMenuSurfaceOwners(nullptr);
 }
 
 /// Invalidates all pending deferred-apply retries by bumping the generation, and kills the active retry timer if any
@@ -4241,7 +4835,7 @@ void HandleDeferredApplySettingsTimer(HWND taskbarWnd) {
         delayMs, g_deferredApplyTimerGeneration, taskbarWnd
     );
 
-    NotifyTaskbarDisplayChange(taskbarWnd);
+    // Startup retries wait for XAML content, a synthetic display change on every retry can dismiss an app's open menu even when the layout already matches
     ApplySettingsFromTaskbarThread(nullptr);
 
     g_deferredApplyRetryIndex++;
@@ -4333,7 +4927,27 @@ void BeginNativeFlyoutMonitorContext(HWND taskbarWnd, PCWSTR reason, WPARAM flyo
     SetFlyoutMonitorContext(taskbarWnd, durationMs, reason, flyoutKind, anchorPoint);
 }
 
-/// Subclass installed on every managed taskbar window. Handles the deferred-apply timer, the WM_SETCURSOR hover pre-arm, right-click breadcrumbs plus last-resort ownership transfer, left-click flyout-context arming on the copied surfaces, stale-context clearing, and cleanup on WM_NCDESTROY. During unload everything passes through except timer/cleanup handling.
+LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR);
+
+/// Drops every per-taskbar record when a taskbar window is destroyed (hot-unplug, Explorer taskbar recreation), and removes the subclass
+void ForgetDestroyedTaskbar(HWND hWnd) {
+    ClearSharedMenuSurfaceOwners(hWnd);
+    RemoveCachedTaskbarTrayLayout(hWnd);
+    ForgetTaskbarIsland(hWnd);
+    g_secondaryClockSwappedTaskbars.erase(
+        std::remove(g_secondaryClockSwappedTaskbars.begin(), g_secondaryClockSwappedTaskbars.end(), hWnd),
+        g_secondaryClockSwappedTaskbars.end()
+    );
+
+    if (g_lastTrayIconInteraction.taskbarWnd == hWnd) {
+        g_lastTrayIconInteraction = {};
+    }
+
+    CancelTaskbarTimers(hWnd);
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TaskbarSubclassProc);
+}
+
+/// Subclass installed on every managed taskbar window. Handles the deferred-apply timer, layout invalidation, the WM_SETCURSOR hover pre-arm, right-click breadcrumbs plus last-resort ownership transfer, left-click flyout-context arming on the copied surfaces, stale-context clearing, and cleanup on WM_NCDESTROY. During unload everything passes through except timer/cleanup handling.
 LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR) {
     if (IsModUnloading()) {
         if (uMsg == WM_TIMER && wParam == kDeferredApplySettingsTimerId) {
@@ -4343,18 +4957,7 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         }
 
         if (uMsg == WM_NCDESTROY) {
-            if (g_trayItemsOwnerTaskbarWnd == hWnd) {
-                g_trayItemsOwnerTaskbarWnd = nullptr;
-                g_trayItemsOwnerMayBeStale = false;
-            }
-
-            if (g_controlCenterItemsOwnerTaskbarWnd == hWnd) {
-                g_controlCenterItemsOwnerTaskbarWnd = nullptr;
-            }
-
-            RemoveCachedTaskbarTrayMetrics(hWnd);
-            CancelTaskbarTimers(hWnd);
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TaskbarSubclassProc);
+            ForgetDestroyedTaskbar(hWnd);
         }
 
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -4369,34 +4972,31 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
     if (uMsg == WM_DISPLAYCHANGE) {
         // Monitor topology changed : drop the cached monitor list so settings targeting and flyout contexts resolve against the new layout immediately instead of after the TTL
         InvalidateMonitorCache();
+        InvalidateTaskbarTrayLayout(hWnd);
 
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
-    // Hover pre-arm : the island child forwards WM_SETCURSOR up the parent chain on every cursor move, which is the earliest taskbar-window signal that the pointer is approaching a shared surface. Tray drag/drop ownership is refreshed while dragging over the tray strip; control-center menu ownership is refreshed only while no button is down, before the later right press reaches the island.
+    if (uMsg == WM_DPICHANGED || uMsg == WM_WINDOWPOSCHANGED) {
+        InvalidateTaskbarTrayLayout(hWnd);
+
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
+    // Hover pre-arm : the island child forwards WM_SETCURSOR up the parent chain on every cursor move, which is the earliest taskbar-window signal that the pointer is approaching a shared surface. Menu ownership is refreshed only while no button is down, before the later right press reaches the island.
     if (uMsg == WM_SETCURSOR) {
         POINT screenPoint = {};
 
-        if (GetCursorPos(&screenPoint)) {
-            POINT clientPoint = screenPoint;
-
-            if (ScreenToClient(hWnd, &clientPoint) && GetKeyState(VK_LBUTTON) < 0 && IsTrayClientPoint(hWnd, clientPoint)) {
-                PrepareTrayIconDragDropOwnership(hWnd, L"tray drag hover");
-            }
-
-            if (hWnd != g_controlCenterItemsOwnerTaskbarWnd && WantsControlCenter(hWnd) && GetKeyState(VK_LBUTTON) >= 0 && GetKeyState(VK_RBUTTON) >= 0) {
-                PreArmControlCenterContextOwnershipForTaskbar(hWnd, screenPoint, L"hover");
-            }
+        if (GetKeyState(VK_LBUTTON) >= 0 && GetKeyState(VK_RBUTTON) >= 0 && GetCursorPos(&screenPoint)) {
+            PreArmSharedMenuSurfaceOwnershipForTaskbar(hWnd, screenPoint, L"hover");
         }
 
-        if (hWnd != g_controlCenterItemsOwnerTaskbarWnd && WantsControlCenter(hWnd)) {
-            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-        }
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
     if (IsRightClickOrContextMenuMessage(uMsg, wParam)) {
         // Last-resort transfer plus breadcrumb logging. When the hover/dispatch pre-arm worked, the clicked taskbar already owns the menus and this only logs contextOwner=1.
-        PrepareControlCenterContextOwnership(hWnd, uMsg, wParam, lParam);
+        PrepareSharedMenuSurfaceOwnership(hWnd, uMsg, wParam, lParam);
         ClearFlyoutMonitorContextForContextMenu(uMsg, wParam, L"taskbar");
 
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -4404,26 +5004,6 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 
     bool leftButtonDown = uMsg == WM_LBUTTONDOWN || (uMsg == WM_PARENTNOTIFY && LOWORD(wParam) == WM_LBUTTONDOWN);
     bool leftButtonUp = uMsg == WM_LBUTTONUP || (uMsg == WM_PARENTNOTIFY && LOWORD(wParam) == WM_LBUTTONUP);
-
-    bool trayDragOwnershipMessage =
-        leftButtonDown ||
-        leftButtonUp ||
-        (GetKeyState(VK_LBUTTON) < 0 && (uMsg == WM_MOUSEMOVE || (uMsg == WM_PARENTNOTIFY && LOWORD(wParam) == WM_MOUSEMOVE)));
-    
-    if (trayDragOwnershipMessage) {
-        POINT clientPoint = {};
-
-        if (TryGetTaskbarMouseClientPoint(hWnd, uMsg, wParam, lParam, &clientPoint) && IsTrayClientPoint(hWnd, clientPoint)) {
-            PrepareTrayIconDragDropOwnership(
-                hWnd,
-                leftButtonDown
-                    ? L"tray left down"
-                    : leftButtonUp
-                        ? L"tray left up"
-                        : L"tray drag move"
-            );
-        }
-    }
 
     if (leftButtonDown || leftButtonUp) {
         WPARAM proxyFlyout = HitTestProxyFlyout(hWnd, lParam);
@@ -4452,18 +5032,7 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
             ClearStaleFlyoutContextBeforeTaskbarClick(hWnd);
         }
     } else if (uMsg == WM_NCDESTROY) {
-        if (g_trayItemsOwnerTaskbarWnd == hWnd) {
-            g_trayItemsOwnerTaskbarWnd = nullptr;
-            g_trayItemsOwnerMayBeStale = false;
-        }
-
-        if (g_controlCenterItemsOwnerTaskbarWnd == hWnd) {
-            g_controlCenterItemsOwnerTaskbarWnd = nullptr;
-        }
-
-        RemoveCachedTaskbarTrayMetrics(hWnd);
-        CancelTaskbarTimers(hWnd);
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TaskbarSubclassProc);
+        ForgetDestroyedTaskbar(hWnd);
     }
 
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -4622,6 +5191,402 @@ FrameworkElement FindSystemTrayFrameGridForTaskbar(HWND taskbarWnd) {
     return FindChildByName(child, L"SystemTrayFrameGrid");
 }
 
+// SystemTray.dll (Taskbar.View.dll before the SystemTray types moved out of it) converts island coordinates to screen coordinates through one fixed window : the host of the primary taskbar model (or the overflow popup), scaled by the single per-thread display scale. Copied surfaces live on other islands, so every such conversion lands at the same relative spot on the primary monitor. The hooks below redo the conversions with the island that actually hosts the element or dispatches the input, for the anchor passed to a tray icon's app, the icon rectangle returned by Shell_NotifyIconGetRect, and the tray icon drag/drop hit-tests.
+
+using NotificationAreaIconsDataModel_GetInvocationPointRelativeToScreen_t = winrt::Windows::Foundation::Point*(WINAPI*)(void* pThis, winrt::Windows::Foundation::Point* result, const winrt::Windows::Foundation::Point* point);
+NotificationAreaIconsDataModel_GetInvocationPointRelativeToScreen_t NotificationAreaIconsDataModel_GetInvocationPointRelativeToScreen_Original;
+
+using NotificationAreaIconsDataModel_GetIconBoundsRelativeToScreen_t = winrt::Windows::Foundation::Rect*(WINAPI*)(void* pThis, winrt::Windows::Foundation::Rect* result, const winrt::Windows::Foundation::Rect* rect);
+NotificationAreaIconsDataModel_GetIconBoundsRelativeToScreen_t NotificationAreaIconsDataModel_GetIconBoundsRelativeToScreen_Original;
+
+// The FrameworkElement is passed by value : a pointer to a caller temporary that the callee destroys. A free function returns RECT through a hidden first parameter on x64, but in x0:x1 on ARM64. Let the compiler choose the return ABI.
+using GetScreenRectFromXamlElement_t = RECT(WINAPI*)(void** element, HWND hWnd);
+GetScreenRectFromXamlElement_t GetScreenRectFromXamlElement_Original;
+
+using DragDropManager_ScreenRectForElement_t = RECT*(WINAPI*)(void* pThis, RECT* result, void* const* element, HWND hWnd);
+DragDropManager_ScreenRectForElement_t DragDropManager_ScreenRectForElement_Original;
+
+using DragDropManager_ElementPointToScreenPoint_t = POINT*(WINAPI*)(void* pThis, POINT* result, void* notifyIconView, HWND hWnd, void* const* args);
+DragDropManager_ElementPointToScreenPoint_t DragDropManager_ElementPointToScreenPoint_Original;
+
+using DragDropManager_HitTestChevron_t = bool(WINAPI*)(void* pThis, POINT point);
+DragDropManager_HitTestChevron_t DragDropManager_HitTestChevron_Original;
+
+/// Copied taskbar whose island is dispatching the current tray input, recording the interaction for Shell_NotifyIconGetRect. Null for the real tray owner (Shell_TrayWnd, the host the native conversion already uses) and for input not dispatched through a taskbar island, such as the overflow popup's own icons.
+HWND GetCopiedTaskbarForCurrentTrayInput() {
+    HWND taskbarWnd = g_inputDispatchTaskbarWnd;
+
+    if (!taskbarWnd || IsModUnloading()) {
+        return nullptr;
+    }
+
+    g_lastTrayIconInteraction = {taskbarWnd, GetTickCount()};
+
+    return IsSecondaryTaskbarWindow(taskbarWnd) ? taskbarWnd : nullptr;
+}
+
+/// Island scale (DIPs to physical pixels) of a taskbar window
+double GetTaskbarIslandScale(HWND taskbarWnd) {
+    return GetWindowDpiOrDefault(taskbarWnd) / static_cast<double>(USER_DEFAULT_SCREEN_DPI);
+}
+
+/// Screen point of an island-relative position on a taskbar island
+POINT TaskbarIslandPointToScreen(HWND taskbarWnd, double x, double y) {
+    double scale = GetTaskbarIslandScale(taskbarWnd);
+    POINT point = {std::lround(x * scale), std::lround(y * scale)};
+    MapWindowPoints(taskbarWnd, nullptr, &point, 1);
+
+    return point;
+}
+
+/// Rate limit for the hover-driven conversion logs, which would otherwise print on every pointer move over a copied icon
+bool ShouldLogTrayCoordinateMapping() {
+    static DWORD lastLogTick = 0;
+    DWORD now = GetTickCount();
+
+    if (now - lastLogTick < 250) {
+        return false;
+    }
+
+    lastLogTick = now;
+
+    return true;
+}
+
+/// SystemTray.dll hook : the anchor point sent to a tray icon's app with its click (NOTIFYICON_VERSION_4) and pointer callbacks, mapped from the island that dispatched the input instead of the primary taskbar
+winrt::Windows::Foundation::Point* WINAPI NotificationAreaIconsDataModel_GetInvocationPointRelativeToScreen_Hook(void* pThis, winrt::Windows::Foundation::Point* result, const winrt::Windows::Foundation::Point* point) {
+    winrt::Windows::Foundation::Point* returned = NotificationAreaIconsDataModel_GetInvocationPointRelativeToScreen_Original(pThis, result, point);
+    HWND taskbarWnd = point && returned ? GetCopiedTaskbarForCurrentTrayInput() : nullptr;
+
+    if (!taskbarWnd) {
+        return returned;
+    }
+
+    POINT screenPoint = TaskbarIslandPointToScreen(taskbarWnd, point -> X, point -> Y);
+
+    if (ShouldLogTrayCoordinateMapping()) {
+        Wh_Log(
+            L"mapped tray icon invocation point from monitor %d to (%ld,%ld) instead of (%.0f,%.0f)",
+            GetMonitorIndexForWindow(taskbarWnd), screenPoint.x, screenPoint.y, returned -> X, returned -> Y
+        );
+    }
+
+    returned -> X = static_cast<float>(screenPoint.x);
+    returned -> Y = static_cast<float>(screenPoint.y);
+
+    return returned;
+}
+
+/// SystemTray.dll hook : the icon rectangle stored with a click (keyboard anchors, later rectangle queries), mapped from the island that dispatched the input
+winrt::Windows::Foundation::Rect* WINAPI NotificationAreaIconsDataModel_GetIconBoundsRelativeToScreen_Hook(void* pThis, winrt::Windows::Foundation::Rect* result, const winrt::Windows::Foundation::Rect* rect) {
+    winrt::Windows::Foundation::Rect* returned = NotificationAreaIconsDataModel_GetIconBoundsRelativeToScreen_Original(pThis, result, rect);
+    HWND taskbarWnd = rect && returned ? GetCopiedTaskbarForCurrentTrayInput() : nullptr;
+
+    if (!taskbarWnd) {
+        return returned;
+    }
+
+    POINT topLeft = TaskbarIslandPointToScreen(taskbarWnd, rect -> X, rect -> Y);
+    POINT bottomRight = TaskbarIslandPointToScreen(taskbarWnd, rect -> X + rect -> Width, rect -> Y + rect -> Height);
+
+    returned -> X = static_cast<float>(topLeft.x);
+    returned -> Y = static_cast<float>(topLeft.y);
+    returned -> Width = static_cast<float>(bottomRight.x - topLeft.x);
+    returned -> Height = static_cast<float>(bottomRight.y - topLeft.y);
+
+    return returned;
+}
+
+/// Styled taskbar window whose rectangle contains a screen point. Geometry only, unlike WindowFromPoint, so the tray drag visual that follows the pointer never hides the taskbar below it.
+HWND FindStyledTaskbarWindowContainingScreenPoint(POINT screenPoint) {
+    std::vector<HWND> taskbarWindows;
+
+    AcquireSRWLockShared(&g_taskbarTrayLayoutsLock);
+
+    for (const auto& entry : g_taskbarTrayLayouts) {
+        taskbarWindows.push_back(entry.hWnd);
+    }
+
+    ReleaseSRWLockShared(&g_taskbarTrayLayoutsLock);
+
+    for (HWND taskbarWnd : taskbarWindows) {
+        RECT windowRect = {};
+
+        if (IsWindowVisible(taskbarWnd) && GetWindowRect(taskbarWnd, &windowRect) && PtInRect(&windowRect, screenPoint)) {
+            return taskbarWnd;
+        }
+    }
+
+    return nullptr;
+}
+
+/// Taskbar whose tray the user is interacting with : the one under the cursor, else the one whose tray icons converted a click or hover recently
+HWND GetPreferredTrayInteractionTaskbar() {
+    POINT cursorPoint = {};
+
+    if (GetCursorPos(&cursorPoint)) {
+        if (HWND cursorTaskbarWnd = FindStyledTaskbarWindowContainingScreenPoint(cursorPoint)) {
+            return cursorTaskbarWnd;
+        }
+    }
+
+    TrayIconInteraction interaction = g_lastTrayIconInteraction;
+
+    if (interaction.taskbarWnd && GetTickCount() - interaction.tick < kTrayInteractionPreferenceMs && IsWindow(interaction.taskbarWnd)) {
+        return interaction.taskbarWnd;
+    }
+
+    return nullptr;
+}
+
+/// Depth-first search for an element of the given runtime class bound to the given DataContext
+FrameworkElement FindDescendantWithDataContext(DependencyObject const& parent, winrt::hstring const& className, winrt::Windows::Foundation::IInspectable const& dataContext, int maxDepth) {
+    if (!parent || maxDepth < 0) {
+        return nullptr;
+    }
+
+    int childCount = Media::VisualTreeHelper::GetChildrenCount(parent);
+
+    for (int i = 0; i < childCount; i++) {
+        DependencyObject child = Media::VisualTreeHelper::GetChild(parent, i);
+
+        if (auto childElement = child.try_as<FrameworkElement>()) {
+            if (winrt::get_class_name(childElement) == className && IsSameObject(childElement.DataContext(), dataContext)) {
+                return childElement;
+            }
+        }
+
+        if (FrameworkElement descendant = FindDescendantWithDataContext(child, className, dataContext, maxDepth - 1)) {
+            return descendant;
+        }
+    }
+
+    return nullptr;
+}
+
+/// The element of another taskbar island that shows the same shared item (same runtime class and DataContext) : the copy of a tray icon or of the chevron
+FrameworkElement FindTrayElementTwin(HWND taskbarWnd, FrameworkElement const& element) {
+    auto dataContext = element.DataContext();
+
+    if (!dataContext) {
+        return nullptr;
+    }
+
+    FrameworkElement systemTrayFrameGrid = FindSystemTrayFrameGridForTaskbar(taskbarWnd);
+
+    return systemTrayFrameGrid ? FindDescendantWithDataContext(systemTrayFrameGrid, winrt::get_class_name(element), dataContext, 12) : nullptr;
+}
+
+/// Screen rectangle for a Shell_NotifyIconGetRect answer : the icon (or chevron) as shown on the taskbar the user is interacting with, mapped from that island. False when the native answer is already right or the element lives outside the taskbar islands (the overflow popup, mapped natively from its relocated window).
+bool TryGetPreferredTrayElementScreenRect(FrameworkElement const& element, HWND nativeHwnd, HWND preferredTaskbarWnd, RECT* rect) {
+    try {
+        HWND ownTaskbarWnd = FindTaskbarWindowForXamlRoot(element.XamlRoot());
+
+        if (!ownTaskbarWnd) {
+            return false;
+        }
+
+        FrameworkElement target = element;
+        HWND targetTaskbarWnd = ownTaskbarWnd;
+
+        if (preferredTaskbarWnd && preferredTaskbarWnd != ownTaskbarWnd) {
+            if (FrameworkElement twin = FindTrayElementTwin(preferredTaskbarWnd, element)) {
+                target = twin;
+                targetTaskbarWnd = preferredTaskbarWnd;
+            }
+        }
+
+        if (targetTaskbarWnd == nativeHwnd && IsSameObject(target, element)) {
+            return false;
+        }
+
+        RECT screenRect = MeasureTrayElementClientRect(target, GetTaskbarIslandScale(targetTaskbarWnd));
+
+        if (IsRectEmpty(&screenRect)) {
+            return false;
+        }
+
+        MapWindowPoints(targetTaskbarWnd, nullptr, reinterpret_cast<POINT*>(&screenRect), 2);
+        *rect = screenRect;
+
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+/// SystemTray.dll hook behind Shell_NotifyIconGetRect (and the chevron fallback for icons hidden in overflow) : returns the rectangle of the icon on the taskbar the user is interacting with instead of mapping whichever copy registered last through the primary taskbar
+RECT WINAPI GetScreenRectFromXamlElement_Hook(void** element, HWND hWnd) {
+    FrameworkElement frameworkElement{nullptr};
+
+    if (!IsModUnloading() && element && *element) {
+        winrt::copy_from_abi(frameworkElement, *element);
+    }
+
+    // The original destroys its by-value element argument, so it always runs, and the answer is corrected afterwards
+    RECT rect = GetScreenRectFromXamlElement_Original(element, hWnd);
+
+    if (!frameworkElement) {
+        return rect;
+    }
+
+    const void* elementIdentity = winrt::get_abi(frameworkElement);
+    HWND preferredTaskbarWnd = GetPreferredTrayInteractionTaskbar();
+    DWORD now = GetTickCount();
+    TrayElementRectAnswer& answer = g_lastTrayElementRectAnswer;
+
+    if (
+        answer.element != elementIdentity || answer.nativeHwnd != hWnd ||
+        answer.preferredTaskbarWnd != preferredTaskbarWnd || now - answer.tick >= kTrayElementRectReuseMs
+    ) {
+        TrayElementRectAnswer previous = answer;
+        RECT correctedRect = {};
+        bool corrected = TryGetPreferredTrayElementScreenRect(frameworkElement, hWnd, preferredTaskbarWnd, &correctedRect);
+
+        answer = {elementIdentity, hWnd, preferredTaskbarWnd, now, corrected, correctedRect};
+
+        if (
+            corrected &&
+            !(previous.corrected && EqualRect(&previous.rect, &correctedRect) && now - previous.tick < kTrayElementRectLogRepeatMs)
+        ) {
+            Wh_Log(
+                L"answered tray icon rectangle (%ld,%ld,%ld,%ld) instead of (%ld,%ld,%ld,%ld) on monitor %d",
+                correctedRect.left, correctedRect.top, correctedRect.right, correctedRect.bottom,
+                rect.left, rect.top, rect.right, rect.bottom,
+                GetMonitorIndexForWindow(preferredTaskbarWnd)
+            );
+        }
+    }
+
+    if (answer.corrected) {
+        rect = answer.rect;
+    }
+
+    return rect;
+}
+
+/// Screen rectangle of an element from its own island : the taskbar window hosting it (the native window for other islands, the overflow popup), scaled by that island's rasterization scale instead of the single per-thread display scale
+bool TryGetIslandScreenRect(FrameworkElement const& element, HWND nativeHwnd, RECT* rect) {
+    XamlRoot xamlRoot = element.XamlRoot();
+
+    if (!xamlRoot) {
+        return false;
+    }
+
+    HWND hostWnd = FindTaskbarWindowForXamlRoot(xamlRoot);
+
+    if (!hostWnd) {
+        hostWnd = nativeHwnd;
+    }
+
+    double scale = xamlRoot.RasterizationScale();
+
+    if (!hostWnd || !(scale > 0.0)) {
+        return false;
+    }
+
+    auto bounds = element.TransformToVisual(xamlRoot.Content()).TransformBounds({
+        0.0f,
+        0.0f,
+        static_cast<float>(element.ActualWidth()),
+        static_cast<float>(element.ActualHeight()),
+    });
+    RECT screenRect = {
+        std::lround(bounds.X * scale),
+        std::lround(bounds.Y * scale),
+        std::lround((bounds.X + bounds.Width) * scale),
+        std::lround((bounds.Y + bounds.Height) * scale),
+    };
+
+    MapWindowPoints(hostWnd, nullptr, reinterpret_cast<POINT*>(&screenRect), 2);
+    *rect = screenRect;
+
+    return true;
+}
+
+/// Screen position of a pointer event from the island that received it, with that island's scale
+bool TryGetIslandPointerScreenPoint(Input::PointerRoutedEventArgs const& args, HWND nativeHwnd, POINT* point) {
+    auto source = args.OriginalSource().try_as<UIElement>();
+    XamlRoot xamlRoot = source ? source.XamlRoot() : nullptr;
+
+    if (!xamlRoot) {
+        return false;
+    }
+
+    HWND hostWnd = FindTaskbarWindowForXamlRoot(xamlRoot);
+
+    if (!hostWnd) {
+        hostWnd = nativeHwnd;
+    }
+
+    double scale = xamlRoot.RasterizationScale();
+
+    if (!hostWnd || !(scale > 0.0)) {
+        return false;
+    }
+
+    auto position = args.GetCurrentPoint(xamlRoot.Content()).Position();
+    POINT screenPoint = {std::lround(position.X * scale), std::lround(position.Y * scale)};
+    MapWindowPoints(hostWnd, nullptr, &screenPoint, 1);
+    *point = screenPoint;
+
+    return true;
+}
+
+/// SystemTray.dll hook for the tray icon drag/drop manager : every registered drop target (the icons of every island, copies included) is measured on its own island, so a drop over a copied tray hits the copy instead of an offset ghost of it on the primary monitor
+RECT* WINAPI DragDropManager_ScreenRectForElement_Hook(void* pThis, RECT* result, void* const* element, HWND hWnd) {
+    if (!IsModUnloading() && element && *element && result) {
+        try {
+            FrameworkElement frameworkElement{nullptr};
+            winrt::copy_from_abi(frameworkElement, *element);
+
+            if (TryGetIslandScreenRect(frameworkElement, hWnd, result)) {
+                return result;
+            }
+        } catch (...) { }
+    }
+
+    return DragDropManager_ScreenRectForElement_Original(pThis, result, element, hWnd);
+}
+
+/// SystemTray.dll hook for the tray icon drag/drop manager : the pointer of a drag started on a copied tray is mapped from that copy's island
+POINT* WINAPI DragDropManager_ElementPointToScreenPoint_Hook(void* pThis, POINT* result, void* notifyIconView, HWND hWnd, void* const* args) {
+    if (!IsModUnloading() && args && *args && result) {
+        try {
+            Input::PointerRoutedEventArgs pointerArgs{nullptr};
+            winrt::copy_from_abi(pointerArgs, *args);
+
+            if (TryGetIslandPointerScreenPoint(pointerArgs, hWnd, result)) {
+                return result;
+            }
+        } catch (...) { }
+    }
+
+    return DragDropManager_ElementPointToScreenPoint_Original(pThis, result, notifyIconView, hWnd, args);
+}
+
+/// SystemTray.dll hook for the tray icon drag/drop manager : only the chevron constructed last is registered as the chevron drop target, so dropping on any other styled taskbar's chevron counts too
+bool WINAPI DragDropManager_HitTestChevron_Hook(void* pThis, POINT point) {
+    bool hit = DragDropManager_HitTestChevron_Original(pThis, point);
+
+    if (hit || IsModUnloading()) {
+        return hit;
+    }
+
+    HWND taskbarWnd = FindStyledTaskbarWindowContainingScreenPoint(point);
+
+    if (!taskbarWnd || !ShouldApplyToTaskbar(taskbarWnd) || !WantsTray(taskbarWnd)) {
+        return false;
+    }
+
+    TaskbarTrayLayout layout;
+    POINT clientPoint = point;
+
+    return GetFreshTaskbarTrayLayout(taskbarWnd, kTrayLayoutHoverMaxAgeMs, &layout)
+        && ScreenToClient(taskbarWnd, &clientPoint)
+        && IsPointInTrayRect(layout.rects.chevron, clientPoint, 0);
+}
+
 /// The full apply pass, always on the taskbar thread : installs the flyout ShowAt function hooks, enumerates this thread's taskbar windows, styles the real-tray owner first (so its bindings are cached before any copy consumes them), then styles the rest and installs subclasses
 void ApplySettingsFromTaskbarThread(void*) {
     if (IsModUnloading()) {
@@ -4724,6 +5689,7 @@ void RestoreNativeTaskbarsFromTaskbarThread(void*) {
     ActiveFlyoutRedirectionSuppressor suppressActiveFlyoutRedirection;
 
     Wh_Log(L"restoring native taskbar XAML state from " L"thread %lu", GetCurrentThreadId());
+    RestoreTrayProperties();
 
     EnumThreadWindows(
         GetCurrentThreadId(),
@@ -4758,7 +5724,14 @@ void RestoreNativeTaskbarsFromTaskbarThread(void*) {
             if (primaryTaskbar) {
                 ApplyNativePrimaryStyle(xamlRoot, hWnd);
             } else {
-                ApplyNonTargetStyle(xamlRoot, hWnd);
+                try {
+                    TrayElementsView view;
+                    if (CollectTrayElements(xamlRoot, hWnd, &view, L"native secondary restore") && UpdateSecondaryClockOrder(hWnd, view, false)) {
+                        UpdateLayoutBestEffort(view.systemTrayFrameGrid, L"native secondary restore");
+                    }
+                } catch (...) {
+                    Wh_Log(L"native secondary restore failed with a XAML exception");
+                }
             }
 
             return TRUE;
@@ -4769,13 +5742,15 @@ void RestoreNativeTaskbarsFromTaskbarThread(void*) {
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
 
-/// Runs a callback synchronously on a window's owning thread : a WH_CALLWNDPROC hook intercepts a registered message sent with SendMessageTimeout(SMTO_ABORTIFHUNG), so a hung Explorer can never deadlock the unload path. Runs inline when already on the right thread.
+/// Runs a callback synchronously on a window's owning thread. The sender must wait until the callback finishes : a timeout can outlive the stack parameter and, on unload, leave callbacks pointing into the unloaded DLL. Runs inline when already on the right thread.
 bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procParam) {
     static const UINT runFromWindowThreadRegisteredMsg = RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
     struct RunFromWindowThreadParam {
         RunFromWindowThreadProc_t proc;
         void* procParam;
+        bool started = false;
+        bool completed = false;
     };
 
     DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
@@ -4801,7 +5776,12 @@ bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procPa
 
                 if (cwp->message == runFromWindowThreadRegisteredMsg) {
                     auto* param = reinterpret_cast<RunFromWindowThreadParam*>(cwp->lParam);
-                    param->proc(param->procParam);
+                    // Concurrent callers can install the same hook more than once. Only one callback may consume this request, including during reentrant sends.
+                    if (!param->started) {
+                        param->started = true;
+                        param->proc(param->procParam);
+                        param->completed = true;
+                    }
                 }
             }
 
@@ -4824,21 +5804,18 @@ bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procPa
     Wh_Log(L"dispatching to taskbar thread %lu", threadId);
 
     RunFromWindowThreadParam param{proc, procParam};
-    LRESULT messageResult = SendMessageTimeout(
+    SendMessageW(
         hWnd,
         runFromWindowThreadRegisteredMsg,
         0,
-        reinterpret_cast<LPARAM>(&param),
-        SMTO_ABORTIFHUNG,
-        2000,
-        nullptr
+        reinterpret_cast<LPARAM>(&param)
     );
 
     UnhookWindowsHookEx(hook);
 
-    if (!messageResult) {
+    if (!param.completed) {
         Wh_Log(
-            L"SendMessageTimeout failed for taskbar thread %lu hwnd=0x%p error=%lu",
+            L"taskbar callback did not complete for thread %lu hwnd=0x%p error=%lu",
             threadId,
             hWnd,
             GetLastError()
@@ -4850,23 +5827,23 @@ bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procPa
     return true;
 }
 
-/// Taskbar-thread trampoline for ClearCachedXamlBindings.
+/// Cancels retries and clears interaction/binding state on the taskbar thread before a settings reapply
 void ClearCachedXamlBindingsFromTaskbarThread(void*) {
+    CancelDeferredApplySettings();
+    ClearProxyRuntimeState();
     ClearCachedXamlBindings();
 }
 
 /// Releases cached XAML/view-model references on the taskbar thread when Explorer is active, so UI-thread-affine COM objects are not released from Windhawk's arbitrary settings/unload callback thread.
 void ClearCachedXamlBindingsSafely() {
     if (!IsExplorerTarget()) {
-        ClearCachedXamlBindings();
-
         return;
     }
 
     HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
 
     if (!taskbarWnd || !RunFromWindowThread(taskbarWnd, ClearCachedXamlBindingsFromTaskbarThread, nullptr)) {
-        ClearCachedXamlBindings();
+        Wh_Log(L"keeping XAML references because the taskbar thread is unavailable");
     }
 }
 
@@ -4902,11 +5879,20 @@ void QueueDeferredApplySettings() {
         return;
     }
 
-    CancelDeferredApplySettings();
-    g_deferredApplyTimerWnd = taskbarWnd;
-    g_deferredApplyTimerGeneration = g_deferredApplyGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
-    g_deferredApplyRetryIndex = 0;
-    ScheduleNextDeferredApplySettingsTimer(taskbarWnd);
+    if (!RunFromWindowThread(taskbarWnd, [](void* parameter) {
+        if (IsModUnloading()) {
+            return;
+        }
+
+        HWND taskbarWnd = static_cast<HWND>(parameter);
+        CancelDeferredApplySettings();
+        g_deferredApplyTimerWnd = taskbarWnd;
+        g_deferredApplyTimerGeneration = g_deferredApplyGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
+        g_deferredApplyRetryIndex = 0;
+        ScheduleNextDeferredApplySettingsTimer(taskbarWnd);
+    }, taskbarWnd)) {
+        Wh_Log(L"failed to queue deferred apply on the taskbar thread");
+    }
 }
 
 using TrayUI_StartTaskbar_t = void(WINAPI*)(void* pThis);
@@ -4972,7 +5958,7 @@ void WINAPI CSecondaryTray_InitModelAndHost_Hook(void* pThis, void* taskbarModel
 
 /// taskbar.dll hook : whenever Explorer re-evaluates where the primary taskbar lives, selected mode retargets the singleton real-tray surface to the preferred monitor (and the restore path sends it back)
 HRESULT WINAPI TrayUI__SetStuckMonitor_Hook(void* pThis, HMONITOR monitor) {
-    if (IsModUnloading() && !g_restoringNativeTaskbars) {
+    if (IsModUnloading()) {
         return TrayUI__SetStuckMonitor_Original(pThis, monitor);
     }
 
@@ -4980,8 +5966,7 @@ HRESULT WINAPI TrayUI__SetStuckMonitor_Hook(void* pThis, HMONITOR monitor) {
 
     if (targetMonitor) {
         Wh_Log(
-            L"%s real primary tray to monitor %d",
-            g_restoringNativeTaskbars ? L"restoring" : L"moving",
+            L"moving real primary tray to monitor %d",
             GetMonitorIndex(targetMonitor)
         );
 
@@ -4991,6 +5976,131 @@ HRESULT WINAPI TrayUI__SetStuckMonitor_Hook(void* pThis, HMONITOR monitor) {
     }
 
     return TrayUI__SetStuckMonitor_Original(pThis, monitor);
+}
+
+/// Major file version of a loaded module (the first FileVersion number), 0 when unknown
+WORD GetModuleFileMajorVersion(HMODULE module) {
+    HRSRC resource = FindResourceW(module, MAKEINTRESOURCEW(VS_VERSION_INFO), RT_VERSION);
+    HGLOBAL resourceData = resource ? LoadResource(module, resource) : nullptr;
+    const BYTE* bytes = resourceData ? static_cast<const BYTE*>(LockResource(resourceData)) : nullptr;
+    DWORD size = resource ? SizeofResource(module, resource) : 0;
+
+    if (!bytes) {
+        return 0;
+    }
+
+    // VS_FIXEDFILEINFO follows the variable-length VS_VERSIONINFO header on a 32-bit boundary
+    for (DWORD offset = 0; offset + sizeof(VS_FIXEDFILEINFO) <= size; offset += sizeof(DWORD)) {
+        auto* fixedInfo = reinterpret_cast<const VS_FIXEDFILEINFO*>(bytes + offset);
+
+        if (fixedInfo -> dwSignature == 0xFEEF04BD) {
+            return HIWORD(fixedInfo -> dwFileVersionMS);
+        }
+    }
+
+    return 0;
+}
+
+/// Module holding the SystemTray XAML implementation : SystemTray.dll on current builds, Taskbar.View.dll before 2604.x moved the SystemTray types out of it. Null until the right one is loaded.
+HMODULE GetSystemTrayViewModule() {
+    if (HMODULE module = GetModuleHandleW(L"SystemTray.dll")) {
+        return module;
+    }
+
+    HMODULE taskbarViewModule = GetModuleHandleW(L"Taskbar.View.dll");
+    WORD majorVersion = taskbarViewModule ? GetModuleFileMajorVersion(taskbarViewModule) : 0;
+
+    return majorVersion && majorVersion < 2604 ? taskbarViewModule : nullptr;
+}
+
+std::atomic<bool> g_systemTrayViewSymbolsHooked{false};
+
+/// Hooks the SystemTray coordinate conversions, once. Every symbol is optional : where one drifted in a Windows update, that part keeps the native behavior and the rest of the mod works as before.
+/// @return true when the hook requests were queued (Wh_ApplyHookOperations is needed after Wh_ModInit)
+bool HookSystemTrayViewSymbols(HMODULE module) {
+    bool expected = false;
+
+    if (!module || !g_systemTrayViewSymbolsHooked.compare_exchange_strong(expected, true)) {
+        return false;
+    }
+
+    // SystemTray.dll, Taskbar.View.dll
+    WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {
+        {
+            {LR"(private: struct winrt::Windows::Foundation::Point __cdecl winrt::SystemTray::implementation::NotificationAreaIconsDataModel::GetInvocationPointRelativeToScreen(struct winrt::Windows::Foundation::Point const &))"},
+            &NotificationAreaIconsDataModel_GetInvocationPointRelativeToScreen_Original,
+            NotificationAreaIconsDataModel_GetInvocationPointRelativeToScreen_Hook,
+            true,
+        },
+        {
+            {LR"(private: struct winrt::Windows::Foundation::Rect __cdecl winrt::SystemTray::implementation::NotificationAreaIconsDataModel::GetIconBoundsRelativeToScreen(struct winrt::Windows::Foundation::Rect const &))"},
+            &NotificationAreaIconsDataModel_GetIconBoundsRelativeToScreen_Original,
+            NotificationAreaIconsDataModel_GetIconBoundsRelativeToScreen_Hook,
+            true,
+        },
+        {
+            {LR"(struct tagRECT __cdecl GetScreenRectFromXamlElement(struct winrt::Windows::UI::Xaml::FrameworkElement,struct HWND__ *))"},
+            &GetScreenRectFromXamlElement_Original,
+            GetScreenRectFromXamlElement_Hook,
+            true,
+        },
+        {
+            {LR"(private: struct tagRECT __cdecl winrt::SystemTray::implementation::DragDropManager::ScreenRectForElement(struct winrt::Windows::UI::Xaml::FrameworkElement const &,struct HWND__ *))"},
+            &DragDropManager_ScreenRectForElement_Original,
+            DragDropManager_ScreenRectForElement_Hook,
+            true,
+        },
+        {
+            {LR"(private: struct tagPOINT __cdecl winrt::SystemTray::implementation::DragDropManager::ElementPointToScreenPoint(struct winrt::SystemTray::implementation::NotifyIconView const &,struct HWND__ *,struct winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const &))"},
+            &DragDropManager_ElementPointToScreenPoint_Original,
+            DragDropManager_ElementPointToScreenPoint_Hook,
+            true,
+        },
+        {
+            {LR"(private: bool __cdecl winrt::SystemTray::implementation::DragDropManager::HitTestChevron(struct tagPOINT))"},
+            &DragDropManager_HitTestChevron_Original,
+            DragDropManager_HitTestChevron_Hook,
+            true,
+        },
+    };
+
+    if (!HookSymbols(module, systemTrayHooks, ARRAYSIZE(systemTrayHooks))) {
+        Wh_Log(L"failed to hook SystemTray symbols");
+
+        return false;
+    }
+
+    Wh_Log(
+        L"hooked SystemTray symbols invocationPoint=%d iconBounds=%d iconRect=%d "
+        L"dragRect=%d dragPoint=%d dragChevron=%d",
+        NotificationAreaIconsDataModel_GetInvocationPointRelativeToScreen_Original != nullptr,
+        NotificationAreaIconsDataModel_GetIconBoundsRelativeToScreen_Original != nullptr,
+        GetScreenRectFromXamlElement_Original != nullptr,
+        DragDropManager_ScreenRectForElement_Original != nullptr,
+        DragDropManager_ElementPointToScreenPoint_Original != nullptr,
+        DragDropManager_HitTestChevron_Original != nullptr
+    );
+
+    return true;
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+
+/// kernelbase hook, Explorer only, installed when the SystemTray module was not loaded yet at init (Explorer starting) : hooks its symbols as soon as the taskbar loads it
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR libFileName, HANDLE file, DWORD flags) {
+    HMODULE module = LoadLibraryExW_Original(libFileName, file, flags);
+
+    if (
+        module && !IsModUnloading() && !g_systemTrayViewSymbolsHooked.load(std::memory_order_acquire)
+        && !(flags & (LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE | LOAD_LIBRARY_AS_IMAGE_RESOURCE))
+        && module == GetSystemTrayViewModule()
+        && HookSystemTrayViewSymbols(module)
+    ) {
+        Wh_ApplyHookOperations();
+    }
+
+    return module;
 }
 
 /// Resolves and hooks every required taskbar.dll symbol in a single HookSymbols pass : if any symbol drifted in a Windows update the mod refuses to load instead of half-loading
@@ -5111,6 +6221,19 @@ BOOL Wh_ModInit() {
         Wh_Log(L"immersive flyout monitor hook not installed");
     }
 
+    if (IsExplorerTarget()) {
+        if (HMODULE systemTrayModule = GetSystemTrayViewModule()) {
+            HookSystemTrayViewSymbols(systemTrayModule);
+        } else {
+            // Explorer is still starting : catch the SystemTray module when the taskbar loads it
+            auto loadLibraryExW = reinterpret_cast<LoadLibraryExW_t>(GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "LoadLibraryExW"));
+
+            if (loadLibraryExW) {
+                WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook, &LoadLibraryExW_Original);
+            }
+        }
+    }
+
     WindhawkUtils::SetFunctionHook(MonitorFromPoint, MonitorFromPoint_Hook, &MonitorFromPoint_Original);
     WindhawkUtils::SetFunctionHook(MonitorFromRect, MonitorFromRect_Hook, &MonitorFromRect_Original);
     WindhawkUtils::SetFunctionHook(MonitorFromWindow, MonitorFromWindow_Hook, &MonitorFromWindow_Original);
@@ -5129,55 +6252,77 @@ void Wh_ModAfterInit() {
     Wh_Log(L"after init");
 
     if (IsExplorerTarget()) {
+        // The SystemTray module can load between the init check and the LoadLibraryExW hook going live
+        if (!g_systemTrayViewSymbolsHooked.load(std::memory_order_acquire)) {
+            if (HMODULE systemTrayModule = GetSystemTrayViewModule(); systemTrayModule && HookSystemTrayViewSymbols(systemTrayModule)) {
+                Wh_ApplyHookOperations();
+            }
+        }
+
         ApplySettings();
         QueueDeferredApplySettings();
     }
 }
 
-/// Ordered teardown : flags unloading so every hook goes pass-through, cancels retries, clears state, then removes subclasses and restores native taskbar state from the taskbar's own thread
+/// Complete UI cleanup as one synchronous operation, before clearing the caches it needs. No taskbar-affine state is released by the Windhawk thread.
+void UninitFromTaskbarThread(void* parameter) {
+    HWND taskbarWnd = static_cast<HWND>(parameter);
+    CancelDeferredApplySettings();
+    ClearProxyRuntimeState();
+    RemoveTaskbarSubclassesFromTaskbarThread(nullptr);
+    RestoreNativeTaskbarsFromTaskbarThread(nullptr);
+    // The unloading hook passes Explorer's chosen monitor through, undoing selected-monitor retargeting.
+    SendMessageW(taskbarWnd, 0x5B8, 0, 0);
+    RemoveTaskbarSubclassesFromTaskbarThread(nullptr);
+    ClearCachedXamlBindings();
+}
+
+/// Fallback when the taskbar thread couldn't run UninitFromTaskbarThread. Only use the per-window helper available in Windhawk 1.6.1 and 1.7.3, and leave XAML state on its owning thread.
+void RemoveTaskbarSubclassesFromAnyThread() {
+    EnumWindows(
+        [](HWND hWnd, LPARAM) -> BOOL {
+            DWORD processId = 0;
+
+            if (GetWindowThreadProcessId(hWnd, &processId) && processId == GetCurrentProcessId() && IsTaskbarWindow(hWnd)) {
+                KillTimer(hWnd, kDeferredApplySettingsTimerId);
+                WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TaskbarSubclassProc);
+            }
+
+            return TRUE;
+        },
+        0
+    );
+}
+
+/// Ordered teardown : stop redirection, then wait for all taskbar-thread cleanup before the DLL can unload
 void Wh_ModBeforeUninit() {
     Wh_Log(L"before uninit");
     g_modUnloading.store(1, std::memory_order_release);
-    CancelDeferredApplySettings();
+    ClearSharedProxyFlyoutMonitorState();
 
     if (!IsExplorerTarget()) {
-        ClearProxyRuntimeState();
-        ClearCachedXamlBindingsSafely();
-
         return;
     }
 
     HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
 
     if (!taskbarWnd) {
-        ClearProxyRuntimeState();
-        ClearCachedXamlBindingsSafely();
-
+        // No taskbar thread is available to release UI objects. Keep the heap-backed references alive rather than releasing them from this thread.
+        RemoveTaskbarSubclassesFromAnyThread();
         return;
     }
 
-    ClearProxyRuntimeState();
-    ClearCachedXamlBindingsSafely();
-
-    g_restoringNativeTaskbars = true;
-    g_nativePrimaryRestoreMonitor = GetActualMonitorFromWindow(taskbarWnd, MONITOR_DEFAULTTONEAREST);
-
-    Wh_Log(L"native restore target monitor=%d", GetMonitorIndex(g_nativePrimaryRestoreMonitor));
-    RunFromWindowThread(taskbarWnd, RemoveTaskbarSubclassesFromTaskbarThread, nullptr);
-    NotifyTaskbarDisplayChange(taskbarWnd);
-    RunFromWindowThread(taskbarWnd, RestoreNativeTaskbarsFromTaskbarThread, nullptr);
-    RunFromWindowThread(taskbarWnd, RemoveTaskbarSubclassesFromTaskbarThread, nullptr);
-
-    g_restoringNativeTaskbars = false;
-    g_nativePrimaryRestoreMonitor = nullptr;
+    if (!RunFromWindowThread(taskbarWnd, UninitFromTaskbarThread, taskbarWnd)) {
+        Wh_Log(L"taskbar cleanup could not run; removing subclasses synchronously and retaining XAML references");
+        RemoveTaskbarSubclassesFromAnyThread();
+    }
 }
 
 /// Settings change : reload, reset caches and interaction state, then re-apply
 void Wh_ModSettingsChanged() {
     Wh_Log(L"settings changed");
     LoadSettings();
-    CancelDeferredApplySettings();
-    ClearProxyRuntimeState();
+    ClearSharedProxyFlyoutMonitorState();
     ClearCachedXamlBindingsSafely();
 
     if (IsExplorerTarget()) {
