@@ -29,6 +29,10 @@ the number of shell calls low and keeps switching virtual desktops smooth. A
 timer polls for monitor changes that the window event hooks do not report, such
 as `Win`+`Shift`+arrow, programmatic moves and display changes.
 
+Windows that are on another virtual desktop are pinned too, so the
+secondary-monitor windows of every desktop end up shown together on all
+desktops.
+
 ## Notes
 
 - Uses undocumented Windows virtual desktop interfaces, which may change with
@@ -122,7 +126,8 @@ static HWINEVENTHOOK g_hookMoveSize = nullptr;
 static std::vector<HWND> g_wePinned;
 static HWND g_movingHwnd = nullptr;
 static bool g_started = false;
-static volatile LONG g_inSync = 0;
+static bool g_reconnectPending = false;
+static DWORD g_shellPid = 0;
 
 struct CachedWindow {
     HWND hwnd;
@@ -260,9 +265,23 @@ static bool IsCandidate(HWND hwnd) {
     return (rc.right - rc.left) >= 32 && (rc.bottom - rc.top) >= 32;
 }
 
+// HRESULT_FROM_WIN32(RPC_S_SERVER_UNAVAILABLE) and (RPC_S_CALL_FAILED), which a
+// call returns when the shell process crashed or was killed.
+static constexpr HRESULT kRpcServerUnavailable = (HRESULT)0x800706BAL;
+static constexpr HRESULT kRpcCallFailed = (HRESULT)0x800706BEL;
+
 static bool IsConnectionLost(HRESULT hr) {
     return hr == RPC_E_DISCONNECTED || hr == RPC_E_SERVER_DIED ||
-           hr == RPC_E_SERVER_DIED_DNE || hr == CO_E_OBJNOTCONNECTED;
+           hr == RPC_E_SERVER_DIED_DNE || hr == CO_E_OBJNOTCONNECTED ||
+           hr == kRpcServerUnavailable || hr == kRpcCallFailed;
+}
+
+static DWORD GetShellPid() {
+    DWORD pid = 0;
+    HWND shell = GetShellWindow();
+    if (shell)
+        GetWindowThreadProcessId(shell, &pid);
+    return pid;
 }
 
 static void ReleaseCom() {
@@ -305,7 +324,7 @@ static bool VdGetView(HWND hwnd, IUnknown** view) {
     HRESULT hr = g_views->GetViewForHwnd(hwnd, view);
     if (FAILED(hr)) {
         if (IsConnectionLost(hr))
-            ReinitializeCom();
+            g_reconnectPending = true;
         return false;
     }
     return *view != nullptr;
@@ -318,7 +337,7 @@ static bool VdIsPinned(HWND hwnd, BOOL* pinned) {
     HRESULT hr = g_pinnedApps->IsViewPinned(view, pinned);
     view->Release();
     if (FAILED(hr) && IsConnectionLost(hr))
-        ReinitializeCom();
+        g_reconnectPending = true;
     return SUCCEEDED(hr);
 }
 
@@ -329,7 +348,7 @@ static bool VdPin(HWND hwnd) {
     HRESULT hr = g_pinnedApps->PinView(view);
     view->Release();
     if (FAILED(hr) && IsConnectionLost(hr))
-        ReinitializeCom();
+        g_reconnectPending = true;
     return SUCCEEDED(hr);
 }
 
@@ -340,7 +359,7 @@ static bool VdUnpin(HWND hwnd) {
     HRESULT hr = g_pinnedApps->UnpinView(view);
     view->Release();
     if (FAILED(hr) && IsConnectionLost(hr))
-        ReinitializeCom();
+        g_reconnectPending = true;
     return SUCCEEDED(hr);
 }
 
@@ -397,9 +416,6 @@ static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
 }
 
 static void VdSyncAll() {
-    if (InterlockedCompareExchange(&g_inSync, 1, 0) != 0)
-        return;
-
     std::vector<HWND> seen;
     EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&seen));
 
@@ -428,8 +444,6 @@ static void VdSyncAll() {
         if (!present || !IsWindow(hwnd))
             g_cache.erase(g_cache.begin() + i);
     }
-
-    InterlockedExchange(&g_inSync, 0);
 }
 
 static void VdRequestSync() {
@@ -510,6 +524,7 @@ static bool InitCom() {
                                   kIID_IApplicationViewCollectionWin10, (void**)&g_views)))
         return false;
 
+    g_shellPid = GetShellPid();
     return true;
 }
 
@@ -581,11 +596,15 @@ static void UnpinAll() {
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_TIMER:
-        if (wParam == TIMER_POLL) {
-            VdSyncAll();
-        } else if (wParam == TIMER_DEBOUNCE) {
-            KillTimer(hwnd, TIMER_DEBOUNCE);
-            VdSyncAll();
+        if (wParam == TIMER_POLL || wParam == TIMER_DEBOUNCE) {
+            if (wParam == TIMER_DEBOUNCE)
+                KillTimer(hwnd, TIMER_DEBOUNCE);
+            if (g_reconnectPending || GetShellPid() != g_shellPid) {
+                g_reconnectPending = false;
+                ReinitializeCom();
+            }
+            if (g_started)
+                VdSyncAll();
         } else if (wParam == TIMER_COM_RETRY) {
             KillTimer(hwnd, TIMER_COM_RETRY);
             if (InitCom()) {
@@ -670,15 +689,15 @@ static DWORD WINAPI ThreadProc(LPVOID) {
     }
     g_hwnd = hwnd;
 
+    g_initOk = true;
+    SetEvent(g_readyEvent);
+
     LoadSettings();
 
     if (InitCom())
         Start();
     else
         SetTimer(hwnd, TIMER_COM_RETRY, kComRetryMs, nullptr);
-
-    g_initOk = true;
-    SetEvent(g_readyEvent);
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
