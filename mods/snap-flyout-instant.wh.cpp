@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              snap-flyout-instant
 // @name            Snap Flyout Instant
-// @description     Removes the delay before the snap layouts flyout appears when hovering the maximize button
-// @version         1.0
+// @description     Controls the delay before the snap layouts flyout appears and hides
+// @version         1.1
 // @author          pajs
 // @github          https://github.com/pajs
 // @include         explorer.exe
@@ -11,34 +11,18 @@
 
 // ==WindhawkModReadme==
 /*
-# Snap Flyout Instant
-
-Removes the delay before the snap layouts flyout appears when you hover the
-maximize button of a window in Windows 11.
-
-By default Windows waits 600 ms before showing the flyout. This mod shortens
-that wait to a value you choose (1 ms by default).
-
-## Settings
-
-- **Delay in milliseconds**: time before the flyout is shown. Lower is faster.
-
-## Notes
-
-- The mod only shortens the timer that the shell creates right after the
-  flyout's invoke timer starts, and only when it is created by the WinRT
-  thread pool timer. Other timers in the shell are left alone.
-- The mod looks up an internal symbol of `twinui.pcshell.dll`. A future Windows
-  update may rename it, in which case the mod will simply have no effect.
-- Tested on Windows 11 build 26300.9457.
+Removes the delay before the snap layouts flyout appears when hovering the maximize button, and optionally changes the delay before it hides.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - delayMs: 1
-  $name: Delay in milliseconds
-  $description: Time before the flyout is shown. The Windows default is 600.
+  $name: Show delay (ms)
+  $description: Delay before the snap layouts flyout appears. Minimum 1.
+- hideDelayMs: 0
+  $name: Hide delay (ms)
+  $description: Delay before the flyout hides after the pointer leaves it. 0 keeps the system default.
 */
 // ==/WindhawkModSettings==
 
@@ -48,9 +32,15 @@ that wait to a value you choose (1 ms by default).
 #include <atomic>
 
 static std::atomic<int> g_delayMs{1};
+static std::atomic<int> g_hideDelayMs{0};
 static std::atomic<DWORD> g_invokeTid{0};
 static std::atomic<ULONGLONG> g_invokeTick{0};
+static std::atomic<DWORD> g_flyoutTid{0};
+static std::atomic<PVOID> g_hideTimer{nullptr};
+static std::atomic<ULONGLONG> g_flyoutTick{0};
 static std::atomic<bool> g_flyoutHookAttempted{false};
+
+static constexpr ULONGLONG kHideWindowMs = 60000;
 
 using Void_t = void(__cdecl*)();
 static Void_t StartInvoke_Original;
@@ -77,13 +67,18 @@ using TpSet_t = VOID(NTAPI*)(PVOID, PLARGE_INTEGER, ULONG, ULONG);
 static TpSet_t TpSet_Original;
 
 VOID NTAPI TpSet_Hook(PVOID timer, PLARGE_INTEGER due, ULONG period, ULONG window) {
-    if (g_invokeTid == GetCurrentThreadId()) {
-        if (GetTickCount64() - g_invokeTick >= 50) {
+    DWORD tid = GetCurrentThreadId();
+    ULONGLONG now = GetTickCount64();
+
+    if (g_invokeTid == tid) {
+        if (now - g_invokeTick >= 50) {
             g_invokeTid = 0;
         } else if (due && due->QuadPart < 0) {
             long long ms = -due->QuadPart / 10000;
             if (ms >= 300 && ms <= 2000 && CallerIsWinrtTimer(__builtin_return_address(0))) {
                 g_invokeTid = 0;
+                g_flyoutTid = tid;
+                g_flyoutTick = now;
                 LARGE_INTEGER fast;
                 fast.QuadPart = -(long long)g_delayMs * 10000;
                 TpSet_Original(timer, &fast, period, window);
@@ -91,13 +86,38 @@ VOID NTAPI TpSet_Hook(PVOID timer, PLARGE_INTEGER due, ULONG period, ULONG windo
             }
         }
     }
+
+    int hideMs = g_hideDelayMs;
+    if (hideMs > 0 && due && due->QuadPart < 0) {
+        bool replace = false;
+        if (timer == g_hideTimer.load()) {
+            replace = true;
+        } else if (g_flyoutTid == tid) {
+            if (now - g_flyoutTick >= kHideWindowMs) {
+                g_flyoutTid = 0;
+            } else {
+                long long ms = -due->QuadPart / 10000;
+                if (ms >= 100 && ms <= 3000 &&
+                    CallerIsWinrtTimer(__builtin_return_address(0))) {
+                    g_hideTimer = timer;
+                    replace = true;
+                }
+            }
+        }
+        if (replace) {
+            LARGE_INTEGER custom;
+            custom.QuadPart = -(long long)hideMs * 10000;
+            TpSet_Original(timer, &custom, period, window);
+            return;
+        }
+    }
+
     TpSet_Original(timer, due, period, window);
 }
 
 static bool TryHookFlyout(HMODULE mod) {
     if (!mod || g_flyoutHookAttempted.exchange(true)) return false;
 
-    // twinui.pcshell.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {L"public: static void __cdecl SnapFlyoutTelemetry::SnapFlyout_StartInvokeTimer(void)"},
@@ -124,8 +144,14 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
 }
 
 void LoadSettings() {
-    g_delayMs = Wh_GetIntSetting(L"delayMs");
-    if (g_delayMs < 1) g_delayMs = 1;
+    int show = Wh_GetIntSetting(L"delayMs");
+    if (show < 1) show = 1;
+    g_delayMs = show;
+
+    int hide = Wh_GetIntSetting(L"hideDelayMs");
+    if (hide < 0) hide = 0;
+    g_hideDelayMs = hide;
+    g_hideTimer = nullptr;
 }
 
 BOOL Wh_ModInit() {
