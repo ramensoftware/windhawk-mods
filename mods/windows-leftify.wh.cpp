@@ -96,13 +96,9 @@ The preview images in this README use the macOS style. With the default Windows 
 5. Images are scaled down to fit the button slot (about 12 px at 100% DPI) and keep their own shape. They are not cut into a circle, so square images stay square. Use transparent PNGs and simple designs.
 6. A button without an image keeps its circle.
 
-`dwm.exe` runs under its own account and usually cannot read your profile folders. To get around that, the mod copies your images to `C:\Users\Public\Windows Leftify Cache` (done by the part of the mod running inside `explorer.exe`, which can read your folders). The folder is only created when you use custom images, contains nothing but copies of those images, is removed when the custom style is not used or the mod is unloaded, and is safe to delete at any time. Because this folder is shared between all users of the PC, `dwm.exe` only decodes files from it that really are png, jpg or bmp images.
+`dwm.exe` runs under its own account and usually cannot read your profile folders. To get around that, the part of the mod running inside `explorer.exe` (which can read your folders) decodes your images, shrinks them to at most 64 px, and hands the pixels to `dwm.exe` through the mod's own storage in Windhawk. No image files are copied anywhere, and `dwm.exe` never opens or decodes an image file.
 
 If a changed image doesn't show up right away, move the mouse over a title bar button.
-
-If the buttons stay as circles and the debug log shows `CreateFile failed, error=5` for a cache file, your PC restricts the Public folder. Run this in an administrator Command Prompt:
-
-`icacls "C:\Users\Public\Windows Leftify Cache" /grant *S-1-1-0:(OI)(CI)R /T`
 
 ### File Explorer
 The tab bar of File Explorer covers the left part of the title bar and blocks the buttons. The mod (running inside `explorer.exe`) makes the buttons clickable again, but the tabs themselves must be shifted with a separate mod.
@@ -123,8 +119,7 @@ By default *Excluded apps* contains `notepad.exe`, `taskmgr.exe` and `WindowsTer
 
 ## Files created by the mod
 
-- **Image cache:** `C:\Users\Public\Windows Leftify Cache` (only with custom images, see above).
-- **Debug logs:** none. With *Write debug log* on (off by default), the mod writes detailed messages to the Windhawk log output instead of files. Logs can contain folder paths (including your Windows user name), so check them before sharing.
+None. Custom images are passed to `dwm.exe` through Windhawk's mod storage, and with *Write debug log* on (off by default) the mod writes detailed messages to the Windhawk log output instead of files. Logs can contain folder paths (including your Windows user name), so check them before sharing.
 
 ## Important notes
 
@@ -1386,7 +1381,7 @@ static void TL_LoadSettings() {
         else memcpy(g_base[r], kDef[r], sizeof(c));
         Wh_FreeStringSetting(str);
     }
-    LoadIcons();   // decodes the images to memory (also runs on the DWM thread when explorer.exe syncs new images)
+    LoadIcons();   // reads the images from the mod storage (also runs on the DWM thread when explorer.exe syncs new images)
 }
 
 // ---------------- painter logging (only when debugLog is on) ----------------
@@ -1665,7 +1660,7 @@ static int Pow2AtLeast(int v) {
     return p;
 }
 
-// ---------------- custom images (png/jpg/bmp), decoded once in LoadIcons ----------------
+// ---------------- custom images (png/jpg/bmp), decoded in explorer.exe ----------------
 struct IconImg { int w, h; BYTE* px; };
 static IconImg g_icons[4][4];   // [kind][state]; kind: 0 minimize, 1 restore, 2 maximize, 3 close
 static SRWLOCK g_iconLock = SRWLOCK_INIT;
@@ -1686,6 +1681,8 @@ static bool FileExistsW(const wchar_t* path) {
     DWORD a = GetFileAttributesW(path);
     return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
 }
+
+static const int kMaxIconPx = 64;   // images are shrunk to this size before they are stored
 
 static bool DecodeImage(IWICImagingFactory* fac, const wchar_t* path, IconImg* out) {
     out->w = 0; out->h = 0; out->px = nullptr;
@@ -1715,7 +1712,7 @@ static bool DecodeImage(IWICImagingFactory* fac, const wchar_t* path, IconImg* o
         return false;
     }
 
-    // Only hand png / jpeg / bmp data to the decoder: this keeps the other WIC codecs out of dwm.exe
+    // Only hand png / jpeg / bmp data to the decoder: this keeps the other WIC codecs out of this process
     bool known = (fileSize >= 8 && memcmp(data, "\x89PNG\r\n\x1a\n", 8) == 0) ||
                  (fileSize >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF) ||
                  (fileSize >= 2 && data[0] == 'B' && data[1] == 'M');
@@ -1769,8 +1766,8 @@ static bool DecodeImage(IWICImagingFactory* fac, const wchar_t* path, IconImg* o
     }
     if (SUCCEEDED(hr) && conv) {
         IWICBitmapSource* src = conv;
-        if (w > 256 || h > 256) {
-            double k = 256.0 / (w > h ? w : h);
+        if (w > kMaxIconPx || h > kMaxIconPx) {
+            double k = (double)kMaxIconPx / (w > h ? w : h);
             UINT nw = (UINT)(w * k + 0.5), nh = (UINT)(h * k + 0.5);
             if (nw < 1) nw = 1;
             if (nh < 1) nh = 1;
@@ -1812,13 +1809,13 @@ static void FreeIcons() {
     ReleaseSRWLockExclusive(&g_iconLock);
 }
 
-// ---------------- icon cache (shared between explorer.exe and dwm.exe) ----------------
-// explorer.exe runs as the user and can read any folder the user can. It copies the
-// images into this folder; dwm.exe reads them from here when it cannot read the original.
-static const wchar_t kCacheDir[] = L"C:\\Users\\Public\\Windows Leftify Cache";
-
-static void CachePath(int kind, int st, wchar_t* out, size_t cap) {
-    _snwprintf(out, cap - 1, L"%s\\k%d_s%d.img", kCacheDir, kind, st);
+// ---------------- icon storage (shared between explorer.exe and dwm.exe) ----------------
+// explorer.exe runs as the user and can read any folder the user can. It decodes the
+// images, shrinks them to at most kMaxIconPx and stores the raw pixels in the mod's own
+// storage; dwm.exe only reads those pixels back and never opens or decodes an image file.
+// Stored value layout: int width, int height, then width * height * 4 bytes (premultiplied BGRA).
+static void IconValueName(int kind, int st, wchar_t* out, size_t cap) {
+    _snwprintf(out, cap - 1, L"icon_k%d_s%d", kind, st);
     out[cap - 1] = 0;
 }
 
@@ -1887,50 +1884,35 @@ static bool FindIconFile(const IconSettings& s, int kind, int st, wchar_t* cand)
 }
 
 static void LoadIcons() {
-    IconSettings s;
-    ReadIconSettings(&s);
     // Read the version BEFORE loading: if explorer bumps it meanwhile, we reload once more.
     g_iconVerSeen = Wh_GetIntValue(L"iconCacheVersion", 0);
 
-    LogCat(3, 40, L"[Icon] folder='%s' min='%s' restore='%s' max='%s' close='%s' any=%d",
-        s.folder, s.files[0], s.files[1], s.files[2], s.files[3], (int)s.any);
-
     IconImg tmp[4][4] = {};
-    if (s.any) {
-        HRESULT hrInit = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-        IWICImagingFactory* fac = nullptr;
-        HRESULT hr = CoCreateInstance(kCLSID_WICFactory, nullptr, CLSCTX_INPROC_SERVER, kIID_WICFactory, (void**)&fac);
-        if (SUCCEEDED(hr) && fac) {
-            for (int kind = 0; kind < 4; kind++) {
-                for (int st = 0; st < 4; st++) {
-                    wchar_t cand[MAX_PATH + 32];
-                    bool ok = false;
-                    // 1) the original path (works when dwm.exe can read it)
-                    if (FindIconFile(s, kind, st, cand)) {
-                        ok = DecodeImage(fac, cand, &tmp[kind][st]);
-                        LogCat(3, 40, L"[Icon] kind=%d state=%d %s -> %s (%dx%d)", kind, st, cand,
-                               ok ? L"OK" : L"decode FAILED", tmp[kind][st].w, tmp[kind][st].h);
-                    }
-                    // 2) the copy made by explorer.exe
-                    if (!ok) {
-                        wchar_t cp[MAX_PATH];
-                        CachePath(kind, st, cp, MAX_PATH);
-                        if (FileExistsW(cp)) {
-                            ok = DecodeImage(fac, cp, &tmp[kind][st]);
-                            LogCat(3, 40, L"[Icon] kind=%d state=%d from cache -> %s (%dx%d)", kind, st,
-                                   ok ? L"OK" : L"decode FAILED", tmp[kind][st].w, tmp[kind][st].h);
-                        } else if (st == 0) {
-                            LogCat(3, 40, L"[Icon] kind=%d: no readable image and no cache copy (yet)", kind);
-                        }
-                    }
-                }
-            }
-            fac->Release();
-        } else {
-            LogCat(3, 40, L"[Icon] CoCreateInstance WIC failed hr=0x%lx", (unsigned long)hr);
+    const size_t maxBlob = 8 + (size_t)kMaxIconPx * kMaxIconPx * 4;
+    BYTE* blob = (BYTE*)malloc(maxBlob);
+    int loaded = 0;
+    for (int kind = 0; kind < 4 && blob; kind++) {
+        for (int st = 0; st < 4; st++) {
+            wchar_t name[32];
+            IconValueName(kind, st, name, 32);
+            size_t size = Wh_GetBinaryValue(name, blob, maxBlob);
+            if (size < 8) continue;   // not stored, or unreadable
+            int w = 0, h = 0;
+            memcpy(&w, blob, 4);
+            memcpy(&h, blob + 4, 4);
+            if (w < 1 || h < 1 || w > kMaxIconPx || h > kMaxIconPx) continue;
+            if (size != 8 + (size_t)w * h * 4) continue;
+            BYTE* px = (BYTE*)malloc((size_t)w * h * 4);
+            if (!px) continue;
+            memcpy(px, blob + 8, (size_t)w * h * 4);
+            tmp[kind][st].w = w;
+            tmp[kind][st].h = h;
+            tmp[kind][st].px = px;
+            loaded++;
         }
-        if (SUCCEEDED(hrInit)) CoUninitialize();
     }
+    free(blob);
+    LogCat(3, 40, L"[Icon] loaded %d image(s) from the mod storage", loaded);
 
     AcquireSRWLockExclusive(&g_iconLock);
     for (int k = 0; k < 4; k++)
@@ -2081,7 +2063,7 @@ static void PaintAtlas() {
 // Settings changes arrive on a Windhawk thread, not the DWM thread. Writing to DWM's bitmap
 // objects from there races with DWM, so settings only set a flag; the work runs in the hooks below.
 static void ProcessPending() {
-    // explorer.exe bumps this value after it copies new images into the cache folder
+    // explorer.exe bumps this value after it stores new images in the mod storage
     ULONGLONG now = GetTickCount64();
     if (now - g_iconVerCheck >= 500) {
         g_iconVerCheck = now;
@@ -2702,86 +2684,72 @@ static void ExplorerUninit() {
     }
 }
 
-// ---------------- icon cache writer (explorer.exe) ----------------
-static bool ReadWholeFile(const wchar_t* path, BYTE** data, DWORD* size) {
-    *data = nullptr; *size = 0;
-    HANDLE hf = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (hf == INVALID_HANDLE_VALUE) {
-        ExLog(L"[IconCache] cannot read, error=%lu (%s)", (unsigned long)GetLastError(), path);
-        return false;
-    }
-    LARGE_INTEGER fsz = {};
-    if (!GetFileSizeEx(hf, &fsz) || fsz.QuadPart <= 0 || fsz.QuadPart > 16 * 1024 * 1024) {
-        CloseHandle(hf);
-        return false;
-    }
-    DWORD n = (DWORD)fsz.QuadPart, got = 0;
-    BYTE* buf = (BYTE*)malloc(n);
-    bool ok = buf && ReadFile(hf, buf, n, &got, nullptr) && got == n;
-    CloseHandle(hf);
-    if (!ok) { free(buf); return false; }
-    *data = buf; *size = n;
-    return true;
-}
-
-// Delete first, then create: a NEW file inherits the permissions of the cache folder,
-// so dwm.exe can read it (this is what failed with files moved from other folders).
-static bool WriteNewFile(const wchar_t* path, const BYTE* data, DWORD size) {
-    DeleteFileW(path);
-    HANDLE hf = CreateFileW(path, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_DELETE,
-                            nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (hf == INVALID_HANDLE_VALUE) {
-        ExLog(L"[IconCache] cannot write, error=%lu (%s)", (unsigned long)GetLastError(), path);
-        return false;
-    }
-    DWORD wr = 0;
-    bool ok = WriteFile(hf, data, size, &wr, nullptr) && wr == size;
-    CloseHandle(hf);
-    return ok;
-}
-
+// ---------------- icon storage writer (explorer.exe) ----------------
+// explorer.exe can read the user's folders, dwm.exe usually cannot. So the images are
+// decoded and shrunk here, and the raw pixels are handed to dwm.exe through the mod's
+// storage (see IconValueName). dwm.exe never opens or decodes an image file.
 static void SyncIconCache() {
+    g_debug = g_settings.debugLog ? 1 : 0;   // DecodeImage reports through LogCat
+
     IconSettings s;
     ReadIconSettings(&s);   // s.any is false unless the Custom images style is selected
-    if (s.any) CreateDirectoryW(kCacheDir, nullptr);
 
-    int copied = 0;
-    for (int kind = 0; kind < 4; kind++) {
-        for (int st = 0; st < 4; st++) {
-            wchar_t cp[MAX_PATH];
-            CachePath(kind, st, cp, MAX_PATH);
-            wchar_t cand[MAX_PATH + 32];
-            bool have = false;
-            if (s.any && FindIconFile(s, kind, st, cand)) {
-                BYTE* data = nullptr;
-                DWORD size = 0;
-                if (ReadWholeFile(cand, &data, &size)) {
-                    have = WriteNewFile(cp, data, size);
-                    if (have) copied++;
-                    free(data);
+    IconImg img[4][4] = {};
+    if (s.any) {
+        HRESULT hrInit = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        IWICImagingFactory* fac = nullptr;
+        HRESULT hr = CoCreateInstance(kCLSID_WICFactory, nullptr, CLSCTX_INPROC_SERVER, kIID_WICFactory, (void**)&fac);
+        if (SUCCEEDED(hr) && fac) {
+            for (int kind = 0; kind < 4; kind++) {
+                for (int st = 0; st < 4; st++) {
+                    wchar_t cand[MAX_PATH + 32];
+                    if (FindIconFile(s, kind, st, cand)) DecodeImage(fac, cand, &img[kind][st]);
                 }
             }
-            if (!have) DeleteFileW(cp);   // setting removed or file gone: no stale image
+            fac->Release();
+        } else {
+            ExLog(L"[IconCache] CoCreateInstance WIC failed hr=0x%lx", (unsigned long)hr);
+        }
+        if (SUCCEEDED(hrInit)) CoUninitialize();
+    }
+
+    int stored = 0;
+    for (int kind = 0; kind < 4; kind++) {
+        for (int st = 0; st < 4; st++) {
+            wchar_t name[32];
+            IconValueName(kind, st, name, 32);
+            IconImg& im = img[kind][st];
+            bool ok = false;
+            if (im.px) {
+                size_t bytes = (size_t)im.w * im.h * 4;
+                BYTE* blob = (BYTE*)malloc(8 + bytes);
+                if (blob) {
+                    memcpy(blob, &im.w, 4);
+                    memcpy(blob + 4, &im.h, 4);
+                    memcpy(blob + 8, im.px, bytes);
+                    ok = Wh_SetBinaryValue(name, blob, 8 + bytes) != FALSE;
+                    free(blob);
+                }
+                free(im.px);
+            }
+            if (ok) stored++;
+            else Wh_DeleteValue(name);   // setting removed, file gone or store failed: no stale image
         }
     }
-    if (copied == 0) RemoveDirectoryW(kCacheDir);   // nothing cached: remove the empty folder
     // Tell dwm.exe to reload
     Wh_SetIntValue(L"iconCacheVersion", Wh_GetIntValue(L"iconCacheVersion", 0) + 1);
-    ExLog(L"[IconCache] synced, %d file(s) copied", copied);
+    ExLog(L"[IconCache] synced, %d image(s) stored", stored);
 }
 
-// Remove the cache copies and the folder (called when the mod is unloaded).
-// The cache is rebuilt by SyncIconCache the next time the mod loads.
+// Removes the stored images (called when the mod is unloaded).
 static void CleanIconCache() {
     for (int kind = 0; kind < 4; kind++) {
         for (int st = 0; st < 4; st++) {
-            wchar_t cp[MAX_PATH];
-            CachePath(kind, st, cp, MAX_PATH);
-            DeleteFileW(cp);
+            wchar_t name[32];
+            IconValueName(kind, st, name, 32);
+            Wh_DeleteValue(name);
         }
     }
-    RemoveDirectoryW(kCacheDir);
 }
 
 static void LoadUser32Procs() {
