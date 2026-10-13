@@ -5229,10 +5229,10 @@ void ApplyTaskbarPlacement(const ModSettings& settings) {
     auto geometry = MeasureTaskbarGeometry(g_rootGrid, g_taskItemsRepeater,
                                            ownMargin ? g_reservedMargin : 0.0,
                                            CurrentGeometryCache());
-    if (!ownMargin || g_reservedMargin <= 0) {
+    double dockAvailableWidth = AutoSizedDockAvailableWidth();
+    if (!ownMargin || g_reservedMargin <= 0 || dockAvailableWidth <= 0) {
         g_dockReservationActive = false;
     }
-    double dockAvailableWidth = AutoSizedDockAvailableWidth();
     auto savedFraction = SavedTaskbarFraction(g_taskbarWindow.load());
     ReservationInputs reservationInputs{settings.width, settings.leftOffset,
         settings.fontSize, settings.reserveGap, settings.reserveSpace,
@@ -5292,7 +5292,8 @@ void ApplyTaskbarPlacement(const ModSettings& settings) {
             g_reservationRevision = g_layoutRevision;
             return;
         }
-        g_dockReservationActive = true;
+        // The theme can stop being a dock while a trial awaits arrangement.
+        g_dockReservationActive = dockAvailableWidth > 0;
     }
     // Validate the arranged result against its unshifted measurement. A styler
     // or layout manager need not move every button by the requested margin.
@@ -5389,7 +5390,9 @@ void ApplyTaskbarPlacement(const ModSettings& settings) {
             g_taskItemsRepeater.Margin(margin);
         }
         g_reservedMargin = g_taskItemsRepeater.Margin().Left - base;
-        if (g_reservedMargin <= 0) g_dockReservationActive = false;
+        // A theme can become a dock while the visible widget still supplies
+        // enough width for the normal solver to reserve without a cold trial.
+        g_dockReservationActive = g_reservedMargin > 0 && dockAvailableWidth > 0;
         g_lastAppliedRepeaterMarginLeft =
             g_reservedMargin != 0
                 ? std::optional<double>{g_taskItemsRepeater.Margin().Left}
