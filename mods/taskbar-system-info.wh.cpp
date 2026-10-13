@@ -4655,6 +4655,7 @@ struct TaskbarPlacement {
     double reserved = 0.0;
 };
 std::optional<TaskbarPlacement> g_dockReservationTrial;
+bool g_dockReservationActive = false;
 constexpr double kPlacementTolerance = 0.25;
 
 bool Intersects(double left, double right, const OccupiedInterval& item) {
@@ -5128,7 +5129,7 @@ double g_lastDockAvailableWidth = 0.0;
 struct PlacementInputs {
     TaskbarGeometry geometry;
     int width, leftOffset, fontSize, reserveGap;
-    bool reserveSpace, reservationRejected;
+    bool reserveSpace, reservationRejected, dockReservationActive;
     std::wstring fontFamily;
     std::optional<double> savedFraction;
     double baselineMargin;
@@ -5154,7 +5155,9 @@ double AutoSizedDockAvailableWidth() {
     auto frame = VisualTreeHelper::GetParent(g_rootGrid).try_as<FrameworkElement>();
     auto xaml = g_rootGrid.XamlRoot();
     if (!frame || !xaml || !g_taskItemsRepeater ||
-        !std::isnan(g_rootGrid.Width()) || !std::isnan(frame.Width())) {
+        !std::isnan(g_rootGrid.Width()) || !std::isnan(frame.Width()) ||
+        (g_rootGrid.HorizontalAlignment() == HorizontalAlignment::Stretch &&
+         frame.HorizontalAlignment() == HorizontalAlignment::Stretch)) {
         return 0;
     }
     auto rootMargin = g_rootGrid.Margin();
@@ -5226,6 +5229,9 @@ void ApplyTaskbarPlacement(const ModSettings& settings) {
     auto geometry = MeasureTaskbarGeometry(g_rootGrid, g_taskItemsRepeater,
                                            ownMargin ? g_reservedMargin : 0.0,
                                            CurrentGeometryCache());
+    if (!ownMargin || g_reservedMargin <= 0) {
+        g_dockReservationActive = false;
+    }
     double dockAvailableWidth = AutoSizedDockAvailableWidth();
     auto savedFraction = SavedTaskbarFraction(g_taskbarWindow.load());
     ReservationInputs reservationInputs{settings.width, settings.leftOffset,
@@ -5276,6 +5282,7 @@ void ApplyTaskbarPlacement(const ModSettings& settings) {
                 g_taskItemsRepeater.Margin(margin);
             }
             g_reservedMargin = 0;
+            g_dockReservationActive = false;
             g_lastAppliedRepeaterMarginLeft.reset();
             g_lastPlacementInputs.reset();
             // An external override already removed our margin. Writing that
@@ -5285,6 +5292,7 @@ void ApplyTaskbarPlacement(const ModSettings& settings) {
             g_reservationRevision = g_layoutRevision;
             return;
         }
+        g_dockReservationActive = true;
     }
     // Validate the arranged result against its unshifted measurement. A styler
     // or layout manager need not move every button by the requested margin.
@@ -5301,6 +5309,7 @@ void ApplyTaskbarPlacement(const ModSettings& settings) {
             // cannot reconstruct it when a centered/styled group moved less.
             g_taskItemsRepeater.Margin(margin);
             g_reservedMargin = 0;
+            g_dockReservationActive = false;
             g_lastAppliedRepeaterMarginLeft.reset();
             g_widgetHost.Visibility(Visibility::Collapsed);
             g_reservationAwaitingLayout = true;
@@ -5315,6 +5324,7 @@ void ApplyTaskbarPlacement(const ModSettings& settings) {
                            settings.reserveGap,
                            settings.reserveSpace,
                            g_reservationRejected,
+                           g_dockReservationActive,
                            settings.fontFamily,
                            savedFraction,
                            margin.Left,
@@ -5331,7 +5341,8 @@ void ApplyTaskbarPlacement(const ModSettings& settings) {
                                 g_previousPlacementLeft.load(), savedFraction};
     auto resolved = ResolveWidgetPlacement(settings, geometry, preferred,
                                            MeasureWidgetFont(settings),
-                                           !g_reservationRejected);
+                                           !g_reservationRejected,
+                                           g_dockReservationActive);
     if (resolved.placement.width == 0 && settings.reserveSpace &&
         !g_reservationRejected && g_reservedMargin == 0) {
         if (auto trial = AutoSizedDockReservation(settings, geometry, preferred, dockAvailableWidth)) {
@@ -5378,6 +5389,7 @@ void ApplyTaskbarPlacement(const ModSettings& settings) {
             g_taskItemsRepeater.Margin(margin);
         }
         g_reservedMargin = g_taskItemsRepeater.Margin().Left - base;
+        if (g_reservedMargin <= 0) g_dockReservationActive = false;
         g_lastAppliedRepeaterMarginLeft =
             g_reservedMargin != 0
                 ? std::optional<double>{g_taskItemsRepeater.Margin().Left}
@@ -5927,6 +5939,7 @@ bool RemoveWidget() {
     g_reservationAwaitingLayout = false;
     g_reservationRejected = false;
     g_dockReservationTrial.reset();
+    g_dockReservationActive = false;
     g_rejectionNeedsBaseline = false;
     g_lastBaselineObstacles.clear();
     g_lastPlacementInputs.reset();
@@ -7412,6 +7425,7 @@ struct TaskbarProjection {
     RECT panel{};
     double scale = 1.0;
     std::wstring key;
+    bool reservationOnly = false;
 };
 struct ScopedPhysicalDpi {
     DPI_AWARENESS_CONTEXT previous = SetThreadDpiAwarenessContext(
@@ -7428,6 +7442,7 @@ double ScreenPointToTaskbarX(const TaskbarProjection& projection, POINT point) {
 void ProbeTaskbarFrameGeometry(TaskbarProjection& probe,
                                FrameworkElement frame) {
     probe.geometry.ready = false;
+    probe.reservationOnly = false;
     if (!frame) {
         return;
     }
@@ -7437,8 +7452,14 @@ void ProbeTaskbarFrameGeometry(TaskbarProjection& probe,
     }
     auto repeater = FindDirectChildByName(root, L"TaskbarFrameRepeater");
     bool current = probe.window == g_taskbarWindow.load();
+    // Capture this on the taskbar's UI thread along with the geometry. The
+    // editor thread must not read XAML or mutable reservation state directly.
+    bool ownMargin = current && repeater && g_lastAppliedRepeaterMarginLeft &&
+        std::abs(repeater.Margin().Left - *g_lastAppliedRepeaterMarginLeft) < .01;
+    probe.reservationOnly = ownMargin && g_reservedMargin > 0 &&
+                           g_dockReservationActive;
     probe.geometry =
-        MeasureTaskbarGeometry(root, repeater, current ? g_reservedMargin : 0,
+        MeasureTaskbarGeometry(root, repeater, ownMargin ? g_reservedMargin : 0,
                                current ? CurrentGeometryCache() : nullptr);
     auto xaml = root.XamlRoot();
     if (!xaml || !probe.geometry.ready) {
@@ -8049,7 +8070,8 @@ void UpdateMoveCandidate(
         target.key.empty()
             ? WidgetPlacement{}
             : ResolveWidgetPlacement(*settings, target.geometry, preferred,
-                                     g_moveEditor->visual.fontMetrics);
+                                     g_moveEditor->visual.fontMetrics, true,
+                                     target.reservationOnly);
     auto candidate = resolved.placement;
     if (pointer && candidate.width > 0) {
         left = PreferredLeftForWidget(preferred, target.geometry,
@@ -8487,7 +8509,7 @@ void BeginMoveEditor() {
         *settings, projection.geometry,
         {g_moveEditor->preferredLeft, g_previousPlacementLeft.load(),
          SavedTaskbarFraction(target)},
-        g_moveEditor->visual.fontMetrics);
+        g_moveEditor->visual.fontMetrics, true, projection.reservationOnly);
     g_moveEditor->candidate = initial.placement;
     if (initial.placement.width > 0) {
         g_moveEditor->preferredLeft = initial.placement.left;
