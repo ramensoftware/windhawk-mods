@@ -292,7 +292,7 @@ search, and Esc (or a click outside) closes them.
 | Section | What it sets |
 | :--- | :--- |
 | Profiles | Up to 10 profiles with the island's settings below (for work, for games, one with everything on): "+" beside the title saves the current ones, a click applies one, the one in use keeps every change made to the settings by itself, and a pencil renames one, saves the current settings in it or deletes it. A button on the pill switches them (off by default): a click lists them, and Shift and the mouse wheel on it go to the next one (shown under it, applied once Shift is let go). Notifications, notes and tasks aren't part of them (the pinned tray icons and their places are). |
-| Backup | "Export…" saves a file with the notes, tasks, keyboard shortcuts, calendar events, pinned folders, the wallpapers' folder, profiles and the island's settings; "Import…" puts one back (the island starts again with it). They're kept by Windhawk on this computer only, so export them before formatting it; Windhawk keeps them for the whole computer, so every Windows account on it sees the same ones. |
+| Backup | "Export…" saves a file with the notes, tasks, keyboard shortcuts, calendar events, the agendas' links (a Google Calendar "secret address" too: keep the file private), pinned folders, the wallpapers' folder, profiles and the island's settings; "Import…" puts one back (the island starts again with it). They're kept by Windhawk on this computer only, so export them before formatting it; Windhawk keeps them for the whole computer, so every Windows account on it sees the same ones. |
 | Place | Where it sits (kept for each monitor); "Place and icons per app" (only for the Island style, the pill: the Fixed style and the bar keep one place and the same items for every app; for some apps, added from the open apps: a place, icons and their order, what's playing's parts, a clock (and whether it's kept in the middle), a distance from the edges and a size of their own); moving the pill by dragging it; standing upright on the left and right edges; hiding as its line until the mouse reaches it (at an edge), after the time chosen; its distance from the screen's edges. |
 | Look | The style (the pill; the pill keeping its room at its edge, so maximized windows stop beside it; or the bar), the colors (and your own: a click on "Fill", "Text" or "Icons" opens Windows' color dialog), the opacity, the frosted glass (the bar and the Fixed style's strip, without notches), colors following the app in front (its title bar's color when it has one, or its icon's main color, blending in as you switch apps; never read from the screen), the size, and panels as wide as the island. |
 | Notches (Fixed style) | None, one in the middle, one at each top corner, or three; how big their curves are (75% by default, up to 200% for wide, sweeping curves); and hiding each one on its own (otherwise one line, on the bell's notch, opens them all). |
@@ -301,7 +301,7 @@ search, and Esc (or a click outside) closes them.
 | Control center buttons on the pill | Night light, Wi-Fi, Bluetooth, the mobile hotspot, airplane mode, project, cast, captions, accessibility, screenshot, lock, emoji, the clipboard, Task Manager, Calculator, File Explorer and komorebi, each on its own, with its own place in the pill's order (the control center keeps its own order). |
 | Tray icons and media | The other apps' tray icons: the ones not pinned open sideways in the pill (keeping their list open, and how many it shows before it scrolls), or in a list under it, as a grid of icons (like Windows') or with their names; what's playing (its note), and its buttons and its cover with the title on the pill, each on its own, and the wheel on it changing the song instead of the volume and a long title kept scrolling while it plays (both off by default). |
 | Clock | The time's format (Windows', 24 hours, or 12 hours with a small AM/PM after it, also in the calendar and the notifications), seconds, the day of the week, the day and month, the year, the date's order, the month as a number ("9/10"), and the holidays in the calendar (off by default). The date follows the Windows regional format ("Fri Oct 9", "sex 9 out"; in Chinese, Japanese and Korean from the year to the day, 2026年10月9日), or the order chosen (day, month, year; month, day, year; or year, month, day). |
-| Notifications | "The island handles notifications and their sounds" (off by default, see the notes), new notifications in the pill (also while it's minimized), hiding the Windows banners, downloading pictures from the web (off by default), one icon per app (Phone Link's phone apps together), and showing what's copied in a bubble under the pill (off by default: the start of a text, a file's name or a picture, but not the Snipping Tool's, which has its own banner; nothing is kept, password managers' copies aren't shown, and it only says "Copied" while the notifications' contents are hidden), Win+N and Win+A opening the island's notifications and control center instead of Windows' own (both off by default), and a click on the Snipping Tool's notifications showing the newest screenshot in Explorer instead of opening the Snipping Tool (off by default). |
+| Notifications | "The island handles notifications and their sounds" (off by default, see the notes), new notifications in the pill (also while it's minimized), hiding the Windows banners, downloading pictures from the web (off by default), one icon per app (Phone Link's phone apps together), and showing what's copied in a bubble under the pill (off by default: the start of a text, a file's name or a picture, but not the Snipping Tool's, which has its own banner; nothing is kept, password managers' copies aren't shown, and it only says "Copied" while the notifications' contents are hidden), Win+N and Win+A opening the island's notifications and control center instead of Windows' own (both off by default), and a click on the Snipping Tool's notification of a screenshot it just saved (in the Screenshots folder) showing it in Explorer instead of opening the Snipping Tool (off by default). |
 | Monitors (2+ screens) | Choose one monitor, all monitors, or follow the mouse. The map follows the real screen layout and uses the display device numbers; click a screen to choose the main island (alerts and tray). Notches on the main island disable following the mouse. In all-monitor mode, each other screen uses "Same as the main one" (live mirror) or a profile; each island's own settings open from its gear. Edits update every monitor using that profile, including the main island; "+" on another island copies its current look into a new profile used there. Items' order and distribution between notches belong to the profile. Notification options are the main island's (dimmed on the others); animation options stay shared. Unplugging a monitor hides this tab when only one remains; existing profile assignments are preserved. |
 
 ### Screenshots
@@ -874,7 +874,7 @@ limpa a busca, e o Esc (ou um clique fora) fecha.
 | Seção | O que ela ajusta |
 | :--- | :--- |
 | Perfis | Até 10 perfis com as configurações da ilha abaixo (para trabalhar, para jogar, um com tudo ligado): o "+" ao lado do título salva as atuais, um clique aplica um, o perfil em uso guarda sozinho toda mudança feita nas configurações, e o lápis renomeia um perfil, salva nele as configurações atuais ou exclui. Um botão na pílula troca de perfil (desligado por padrão): um clique lista os perfis, e Shift e a roda do mouse em cima dele vão para o próximo (mostrado embaixo dele, aplicado quando o Shift é solto). As notificações, anotações e tarefas não fazem parte deles (os ícones fixados da bandeja e os lugares deles fazem). |
-| Backup | "Exportar…" salva um arquivo com as anotações, tarefas, atalhos do teclado, eventos do calendário, pastas fixadas, a pasta dos papéis de parede, perfis e as configurações da ilha; "Importar…" coloca um de volta (a ilha recomeça com ele). Eles ficam guardados pelo Windhawk só neste computador, então exporte antes de formatar; o Windhawk guarda para o computador todo, então todas as contas do Windows nele veem os mesmos. |
+| Backup | "Exportar…" salva um arquivo com as anotações, tarefas, atalhos do teclado, eventos do calendário, os links das agendas (o "endereço secreto" do Google Agenda também: guarde o arquivo só para você), pastas fixadas, a pasta dos papéis de parede, perfis e as configurações da ilha; "Importar…" coloca um de volta (a ilha recomeça com ele). Eles ficam guardados pelo Windhawk só neste computador, então exporte antes de formatar; o Windhawk guarda para o computador todo, então todas as contas do Windows nele veem os mesmos. |
 | Posição | Onde ela fica (guardado para cada monitor); "Posição e ícones por app" (só no estilo Ilha, a pílula: o estilo Fixa e a barra ficam num lugar só e com os mesmos itens para todos os apps; para alguns apps, escolhidos entre os apps abertos: uma posição, ícones e a ordem deles, as partes do que está tocando, um relógio (e se ele fica no meio), a distância das bordas e o tamanho só deles); mover a pílula arrastando; ficar em pé nas laterais; esconder na linha até o mouse chegar nela (numa borda), depois do tempo escolhido; a distância dela até as bordas da tela. |
 | Aparência | O estilo (a pílula; a pílula fixa, guardando o espaço dela na borda para as janelas maximizadas pararem ao lado; ou a barra), as cores (e as próprias: um clique em "Fundo", "Texto" ou "Ícones" abre a janela de cores do Windows), a opacidade, o vidro fosco (a barra e a faixa do estilo Fixa, sem entalhes), cores seguindo o app da frente (a cor da barra de título dele, quando tem, ou a cor principal do ícone, mudando suave ao trocar de app; nunca lida da tela), o tamanho, e painéis na largura da ilha. |
 | Entalhes (estilo Fixa) | Nenhum, um no meio, um em cada canto de cima, ou três; o tamanho das curvas (75% por padrão, até 200% para curvas largas e abertas); e esconder cada um sozinho (senão, uma linha só, no entalhe do sino, abre todos). |
@@ -883,7 +883,7 @@ limpa a busca, e o Esc (ou um clique fora) fecha.
 | Botões da central na pílula | Luz noturna, Wi-Fi, Bluetooth, hotspot móvel, modo avião, projetar, transmitir, legendas, acessibilidade, captura de tela, bloquear, emojis, área de transferência, Gerenciador de Tarefas, Calculadora, Explorador de Arquivos e komorebi, cada um por si, com o seu próprio lugar na ordem da pílula (a central mantém a ordem dela). |
 | Bandeja e mídia | Os ícones dos outros apps: os não fixados abrem para o lado na pílula (manter a lista deles aberta, e quantos ela mostra antes de rolar), ou numa lista embaixo dela, em grade de ícones (como a do Windows) ou com os nomes; o que está tocando (a nota), e os botões e a capa com o título na pílula, cada um por si, a roda em cima dele trocando a música em vez do volume e um título longo rolando enquanto toca (os dois desligados por padrão). |
 | Relógio | O formato da hora (o do Windows, 24 horas, ou 12 horas com um AM/PM pequeno depois, também no calendário e nas notificações), segundos, o dia da semana, o dia e o mês, o ano, a ordem da data, o mês em número ("9/10"), e os feriados no calendário (desligado por padrão). A data segue o formato regional do Windows ("Fri Oct 9", "sex 9 out"; em chinês, japonês e coreano do ano ao dia, 2026年10月9日), ou a ordem escolhida (dia, mês, ano; mês, dia, ano; ou ano, mês, dia). |
-| Notificações | "A ilha cuida das notificações e dos sons" (desligada por padrão, veja as observações), os avisos na pílula (também com ela minimizada), esconder os avisos do Windows, baixar fotos da internet (desligado por padrão), um ícone por app (os apps do celular do Vincular ao Celular juntos), e mostrar o que foi copiado num balão sob a pílula (desligado por padrão: o começo de um texto, o nome de um arquivo ou uma imagem, menos as da Ferramenta de Captura, que já mostra o aviso dela; nada é guardado, o que os gerenciadores de senhas copiam não aparece, e só diz "Copiado" enquanto o conteúdo das notificações está escondido), Win+N e Win+A abrindo as notificações e a central de controle da ilha no lugar das do Windows (os dois desligados por padrão), e um clique nos avisos da Ferramenta de Captura mostrando a captura mais recente no Explorador em vez de abrir a Ferramenta de Captura (desligado por padrão). |
+| Notificações | "A ilha cuida das notificações e dos sons" (desligada por padrão, veja as observações), os avisos na pílula (também com ela minimizada), esconder os avisos do Windows, baixar fotos da internet (desligado por padrão), um ícone por app (os apps do celular do Vincular ao Celular juntos), e mostrar o que foi copiado num balão sob a pílula (desligado por padrão: o começo de um texto, o nome de um arquivo ou uma imagem, menos as da Ferramenta de Captura, que já mostra o aviso dela; nada é guardado, o que os gerenciadores de senhas copiam não aparece, e só diz "Copiado" enquanto o conteúdo das notificações está escondido), Win+N e Win+A abrindo as notificações e a central de controle da ilha no lugar das do Windows (os dois desligados por padrão), e um clique no aviso da Ferramenta de Captura de uma captura que ela acabou de salvar (na pasta Capturas de Tela) mostrando-a no Explorador em vez de abrir a Ferramenta de Captura (desligado por padrão). |
 | Monitores (2+ telas) | Escolha um monitor, todos os monitores ou seguir o mouse. O mapa acompanha a disposição real das telas e usa os números dos dispositivos; clique numa tela para escolher a ilha principal (avisos e bandeja). Entalhes na principal desabilitam seguir o mouse. No modo em todos, cada outra tela usa "Igual à principal" (espelho ao vivo) ou um perfil; as configurações de cada ilha abrem pela engrenagem dela. Uma edição atualiza todo monitor que usa o perfil, inclusive a principal; o "+" em outra ilha copia sua aparência atual para um perfil novo, usado nela. A ordem dos itens e sua distribuição entre entalhes pertencem ao perfil. As opções de notificação são da ilha principal (apagadas nas outras); as de animação continuam compartilhadas. A guia desaparece se restar um monitor; os perfis já atribuídos ficam guardados. |
 
 #### Imagens
@@ -2327,18 +2327,30 @@ void SetUserIntValue(PCWSTR name, int value) {
     Wh_SetIntValue(UserValueName(name).c_str(), value);
 }
 
-size_t GetUserStringValue(PCWSTR name, PWSTR value, size_t size) {
-    const std::wstring userName = UserValueName(name);
-    size_t length = Wh_GetStringValue(userName.c_str(), value, size);
-    if (length || userName == name) {
-        return length;
+// A stored text, whole: Wh_GetStringValue reads a value larger than the
+// buffer as empty, so a larger one is tried (`room`: the usual size).
+std::wstring GetWholeStringValue(PCWSTR name, size_t room) {
+    for (size_t size = room; size <= 1024 * 1024; size *= 2) {
+        std::vector<WCHAR> value(size);
+        if (Wh_GetStringValue(name, value.data(), value.size())) {
+            return value.data();
+        }
     }
-    length = Wh_GetStringValue(name, value, size);
-    if (length) {
-        Wh_SetStringValue(userName.c_str(), value);
+    return L"";
+}
+
+std::wstring GetUserStringValue(PCWSTR name, size_t room) {
+    const std::wstring userName = UserValueName(name);
+    std::wstring value = GetWholeStringValue(userName.c_str(), room);
+    if (!value.empty() || userName == name) {
+        return value;
+    }
+    value = GetWholeStringValue(name, room);
+    if (!value.empty()) {
+        Wh_SetStringValue(userName.c_str(), value.c_str());
         Wh_DeleteValue(name);
     }
-    return length;
+    return value;
 }
 
 void SetUserStringValue(PCWSTR name, PCWSTR value) {
@@ -2657,6 +2669,18 @@ std::atomic<UINT> g_seenTaskbarEdge{UINT_MAX};
 UINT KnownTaskbarEdge() {
     const UINT seen = g_seenTaskbarEdge.load(std::memory_order_relaxed);
     return seen != UINT_MAX ? seen : StoredTaskbarEdge();
+}
+
+// The edge of `monitor` a taskbar at `rect` is on, also while it's hidden
+// (mostly past that edge): from its shape and which half its middle is in.
+UINT RectSide(const RECT& rect, const RECT& monitor) {
+    if (rect.right - rect.left < rect.bottom - rect.top) {
+        return rect.left + rect.right < monitor.left + monitor.right
+                   ? ABE_LEFT
+                   : ABE_RIGHT;
+    }
+    return rect.top + rect.bottom < monitor.top + monitor.bottom ? ABE_TOP
+                                                                 : ABE_BOTTOM;
 }
 
 // The edge a taskbar at `rect` is on, if it's all on a monitor (shown).
@@ -4425,9 +4449,15 @@ void OnRendering(winrt::Windows::Foundation::IInspectable const&,
     bool busy = false;
     Safely(L"Drawing the icons", [&] {
         busy = OnRenderingUnsafe(now, dt);
-        // (Taskbars gone with their monitor are let go.)
+        // (Taskbars gone with their monitor are let go, with their apps
+        // area and their clip.)
         std::erase_if(g_otherDocks, [](const auto& state) {
-            return !IsWindow(state->wnd);
+            if (IsWindow(state->wnd)) {
+                return false;
+            }
+            SetAppsArea(state->appsAreaMonitor, 0, 0);
+            std::erase(g_ownClips, state->wnd);
+            return true;
         });
         for (auto& state : g_otherDocks) {
             DockScope scope(state->wnd);
@@ -5161,6 +5191,11 @@ void ApplySettingsFromTaskbarThread() {
     ClearStyles();
     g_mainTaskbarStyled = false;
     if (g_unloading) {
+        // (Its timer is this thread's: stopped here, not by the unloading
+        // thread.)
+        if (HWND taskbar = FindCurrentProcessTaskbarWnd()) {
+            KillTimer(taskbar, kDisplayRestyleTimerId);
+        }
         FreeXamlGlobals();
         return;
     }
@@ -5704,6 +5739,24 @@ bool IsFullscreenAppOnMonitor(HWND hTaskbarWnd) {
     return IsFullscreenAppOn(TaskbarMonitor(hTaskbarWnd));
 }
 
+// A full-screen app on the taskbar's monitor, whichever app is in front
+// (a video full screen on one monitor while the user works on another):
+// the one in front, or the window covering the monitor's middle.
+bool FullscreenWindowOnMonitor(HWND hTaskbarWnd) {
+    const HMONITOR monitor = TaskbarMonitor(hTaskbarWnd);
+    if (IsFullscreenAppOn(monitor)) {
+        return true;
+    }
+    MONITORINFO info{sizeof(info)};
+    if (!GetMonitorInfo(monitor, &info)) {
+        return false;
+    }
+    const POINT middle{(info.rcMonitor.left + info.rcMonitor.right) / 2,
+                       (info.rcMonitor.top + info.rcMonitor.bottom) / 2};
+    return CoversMonitor(GetAncestor(WindowFromPoint(middle), GA_ROOT), monitor,
+                         info.rcMonitor);
+}
+
 bool IsFullscreenAppOn(HMONITOR monitor) {
     // Exclusive full screen (Direct3D) and presentations, as reported by
     // Windows.
@@ -6160,8 +6213,8 @@ LRESULT OnTrayIconRectRequest(const COPYDATASTRUCT* copyData) {
 // explorer part unloads, and taken back when it loads: the icons whose
 // window is still there, in the same process. Their picture is the
 // program's own icon until the app changes it.
-// The kept list's room (characters), read back into a buffer of that size:
-// short tooltips, and the icons that don't fit are left out.
+// The kept list's room (characters): short tooltips, and the icons that
+// don't fit are left out.
 constexpr size_t kTrayIconsKeptRoom = 16384;
 constexpr size_t kTrayIconsKeptTip = 64;
 
@@ -6200,15 +6253,14 @@ void TakeBackTrayIcons() {
     if (!OwnsTaskbar()) {
         return;
     }
-    WCHAR buffer[kTrayIconsKeptRoom];
-    const size_t length =
-        GetUserStringValue(L"trayIconsKept", buffer, ARRAYSIZE(buffer));
-    if (!length) {
+    const std::wstring kept =
+        GetUserStringValue(L"trayIconsKept", kTrayIconsKeptRoom);
+    if (kept.empty()) {
         return;
     }
     Wh_DeleteValue(UserValueName(L"trayIconsKept").c_str());
     std::vector<TrayIcon> icons;
-    std::wstring_view rest = buffer;
+    std::wstring_view rest = kept;
     while (!rest.empty()) {
         const size_t end = rest.find(L'\n');
         std::wstring_view line = rest.substr(0, end);
@@ -6475,8 +6527,11 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
                 next.right = next.left + pos->cx;
                 next.bottom = next.top + pos->cy;
             }
-            UINT edge;
-            if (RectEdge(next, &edge) && edge != KnownTaskbarEdge()) {
+            // (Hidden too: on its own monitor's halves.)
+            MONITORINFO info{sizeof(info)};
+            if (GetMonitorInfo(TaskbarMonitor(hWnd), &info) &&
+                RectSide(next, info.rcMonitor) !=
+                    RectSide(now, info.rcMonitor)) {
                 KillTimer(hWnd, kAnimatorTimerId);
                 Safely(L"Resuming the taskbar's animator",
                        [] { ResumeRepeaterAnimations(); });
@@ -6497,8 +6552,10 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
     // and keeps the taskbar under it, even while it's shown: its own handler
     // turns a request to be on top into one to go under. Kept on top while
     // it's shown (or asked to be) and no app on its monitor is in full
-    // screen (see IsFullscreenAppOn).
-    if (uMsg == WM_WINDOWPOSCHANGING && lParam && !g_unloading) {
+    // screen (see FullscreenWindowOnMonitor). Only in the modes where the
+    // mod shows and hides it (the unchanged taskbar is left as it is).
+    if (uMsg == WM_WINDOWPOSCHANGING && lParam && !g_unloading &&
+        SlidesItself()) {
         auto* pos = (WINDOWPOS*)lParam;
         const bool askedTop = !(pos->flags & SWP_NOZORDER) &&
                               pos->hwndInsertAfter == HWND_TOPMOST;
@@ -6515,7 +6572,7 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
         if (goesUnder &&
             (askedTop || (GetMonitorInfo(TaskbarMonitor(hWnd), &info) &&
                           !IsTaskbarHidden(hWnd, info.rcMonitor))) &&
-            !IsFullscreenAppOnMonitor(hWnd)) {
+            !FullscreenWindowOnMonitor(hWnd)) {
             pos->hwndInsertAfter = HWND_TOPMOST;
             pos->flags &= ~SWP_NOZORDER;
         }
@@ -6523,18 +6580,26 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
     }
     // Brought up while under a window (Windows shows it where it was, behind
     // the one in front): on top as it shows, kept there by the above.
-    if (uMsg == WM_WINDOWPOSCHANGED && !g_unloading &&
+    if (uMsg == WM_WINDOWPOSCHANGED && !g_unloading && SlidesItself() &&
         !(GetWindowLongPtr(hWnd, GWL_EXSTYLE) & WS_EX_TOPMOST)) {
         static bool raising;
         MONITORINFO info{sizeof(info)};
         if (!raising && GetMonitorInfo(TaskbarMonitor(hWnd), &info) &&
             !IsTaskbarHidden(hWnd, info.rcMonitor) &&
-            !IsFullscreenAppOnMonitor(hWnd)) {
+            !FullscreenWindowOnMonitor(hWnd)) {
             raising = true;
             SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0,
                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             raising = false;
         }
+    }
+    // Moved to another edge of the screen (or back to the bottom): before
+    // the dock's own handling below, which ends here.
+    if (uMsg == WM_WINDOWPOSCHANGED && lParam && !g_unloading &&
+        (((const WINDOWPOS*)lParam)->flags & (SWP_NOMOVE | SWP_NOSIZE)) !=
+            (SWP_NOMOVE | SWP_NOSIZE) &&
+        IsTaskbarAtBottom() != g_taskbarAtBottom) {
+        WatchTaskbarPlace();
     }
     // The dock: never shown past its monitor (see ClipToOwnMonitor), whoever
     // moved it.
@@ -6580,13 +6645,6 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
         SendBadgeApps();
         SendTrayIcons();
         return 0;
-    }
-    // Moved to another edge of the screen (or back to the bottom).
-    if (uMsg == WM_WINDOWPOSCHANGED && lParam && !g_unloading &&
-        (((const WINDOWPOS*)lParam)->flags & (SWP_NOMOVE | SWP_NOSIZE)) !=
-            (SWP_NOMOVE | SWP_NOSIZE) &&
-        IsTaskbarAtBottom() != g_taskbarAtBottom) {
-        WatchTaskbarPlace();
     }
     if (uMsg == WM_COPYDATA && lParam &&
         (IsIpcSender((HWND)wParam, kIslandClassName) ||
@@ -6736,7 +6794,6 @@ void UnsubclassTaskbars() {
     ReleaseSRWLockExclusive(&g_subclassedLock);
     for (HWND hWnd : taskbars) {
         if (IsWindow(hWnd)) {
-            KillTimer(hWnd, kDisplayRestyleTimerId);
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(
                 hWnd, TaskbarSubclassProc);
         }
@@ -7124,6 +7181,8 @@ std::atomic<bool> g_bannerWhenMinimized{false};
 // box with the button that sends it (like messaging apps' notifications).
 struct ToastReply {
     std::wstring launch;
+    // How it opens ("protocol": `launch` is a link to open).
+    std::wstring launchType;
     std::wstring inputId;
     std::wstring placeholder;
     // The button that sends the reply.
@@ -8637,7 +8696,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L".ics link or file path", L".ics 链接或文件路径"},
     {L"12 h AM/PM", L"12 小时 AM/PM"},
     {L"24 h", L"24 小时"},
-    {L"A file with all of it", L"包含全部内容的文件"},
+    {L"A file with all of it (agenda links too)", L"包含全部内容的文件（包括日程订阅链接）"},
     {L"A long title keeps scrolling while it plays", L"播放时长标题保持滚动"},
     {L"Accent color", L"强调色"},
     {L"Accessibility", L"辅助功能"},
@@ -8761,6 +8820,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Edge", L"边距"},
     {L"Edge distance", L"与边缘的距离"},
     {L"Edit", L"编辑"},
+    {L"Edit task", L"编辑任务"},
     {L"Efficiency", L"节能"},
     {L"Eject", L"弹出"},
     {L"Ejecting…", L"正在弹出…"},
@@ -11867,8 +11927,7 @@ void LoadEvents() {
     g_eventsLoaded = true;
     // (Read again after a backup is imported: what was there goes.)
     g_events.clear();
-    std::vector<WCHAR> value(64 * 1024);
-    Wh_GetStringValue(L"events", value.data(), (size_t)value.size());
+    const std::wstring value = GetWholeStringValue(L"events", 64 * 1024);
     // One event per line: id, year, month, day, minute, remind, fired, title
     // (tab-separated).
     for (PCWSTR line = value.data(); *line;) {
@@ -11962,8 +12021,7 @@ void LoadHolidays() {
         return;
     }
     g_holidaysLoaded = true;
-    std::vector<WCHAR> value(32 * 1024);
-    Wh_GetStringValue(L"holidays", value.data(), (size_t)value.size());
+    const std::wstring value = GetWholeStringValue(L"holidays", 32 * 1024);
     std::vector<std::wstring> lines;
     for (PCWSTR line = value.data(); *line;) {
         PCWSTR end = wcschr(line, L'\n');
@@ -12176,7 +12234,7 @@ struct AgendaEvent {
 };
 
 struct Agenda {
-    // An https link (webcal:// read as https://) or a file's path.
+    // An https link (webcal:// read as https://) or a file's path on a drive.
     std::wstring source;
     // 0xRRGGBB.
     int color = 0;
@@ -12330,7 +12388,8 @@ std::wstring GooglePublicIcs(const std::wstring& link) {
 
 // A link or a path as typed or pasted (quotes and spaces around it gone,
 // webcal:// read as https://, a Google Calendar page's link as its iCal
-// address); nothing when it's neither an https link nor a file's path.
+// address); nothing when it's neither an https link nor a file's path on a
+// drive.
 std::wstring AgendaSource(std::wstring text) {
     const size_t start = text.find_first_not_of(L" \t\"'");
     if (start == std::wstring::npos) {
@@ -12349,10 +12408,10 @@ std::wstring AgendaSource(std::wstring text) {
             text = google;
         }
     }
-    const bool path =
-        (text.size() > 3 && iswalpha(text[0]) && text[1] == L':' &&
-         (text[2] == L'\\' || text[2] == L'/')) ||
-        text.starts_with(L"\\\\");
+    // (A drive's path: not a network share's, which would connect to the
+    // computer named with the user's sign-in, nor a device's.)
+    const bool path = text.size() > 3 && iswalpha(text[0]) && text[1] == L':' &&
+                      (text[2] == L'\\' || text[2] == L'/');
     return (link || path) && text.size() <= kMaxAgendaSource ? text
                                                              : std::wstring();
 }
@@ -12397,8 +12456,7 @@ void IndexAgendaDays() {
 // ones (whose colors "s" lines keep). Read as the calendar opens: what's
 // already read stays.
 void LoadAgendas() {
-    std::vector<WCHAR> value(32 * 1024);
-    Wh_GetStringValue(L"agendas", value.data(), value.size());
+    const std::wstring value = GetWholeStringValue(L"agendas", 32 * 1024);
     std::vector<Agenda> wanted;
     std::vector<std::pair<std::wstring, int>> settingsColors;
     auto known = [&](const std::wstring& source) {
@@ -12593,9 +12651,29 @@ int NumberWeekday(int number) {
     return (number + 1) % 7;
 }
 
+// A day number and a minute in UTC as local ones.
+void UtcToLocal(int* number, int* minute) {
+    int year;
+    int month;
+    int day;
+    DayFromNumber(*number, &year, &month, &day);
+    SYSTEMTIME utc{(WORD)year, (WORD)month,          0,
+                   (WORD)day,  (WORD)(*minute / 60), (WORD)(*minute % 60)};
+    SYSTEMTIME local;
+    if (SystemTimeToTzSpecificLocalTime(nullptr, &utc, &local)) {
+        *number = DayNumber(local.wYear, local.wMonth, local.wDay);
+        *minute = local.wHour * 60 + local.wMinute;
+    }
+}
+
 // An iCalendar date ("20261012") or time ("20261012T143000", in UTC with a
-// "Z" at its end), as a local day number and minute (-1 for a date).
-bool ParseIcsTime(const std::wstring& value, int* number, int* minute) {
+// "Z" at its end), as a day number and minute (-1 for a date): a time in
+// UTC turned into a local one, or kept in UTC when `utc` is given (and set:
+// a rule's days are counted in UTC then).
+bool ParseIcsTime(const std::wstring& value,
+                  int* number,
+                  int* minute,
+                  bool* utc = nullptr) {
     int year = 0;
     int month = 0;
     int day = 0;
@@ -12608,25 +12686,23 @@ bool ParseIcsTime(const std::wstring& value, int* number, int* minute) {
         int hour = 0;
         int minutes = 0;
         if (swscanf_s(value.c_str() + 9, L"%2d%2d", &hour, &minutes) != 2 ||
-            hour > 23 || minutes > 59) {
+            hour < 0 || hour > 23 || minutes < 0 || minutes > 59) {
             return false;
-        }
-        if (value.size() >= 16 && towupper(value[15]) == L'Z') {
-            SYSTEMTIME utc{(WORD)year, (WORD)month, 0,
-                           (WORD)day,  (WORD)hour,  (WORD)minutes};
-            SYSTEMTIME local;
-            if (SystemTimeToTzSpecificLocalTime(nullptr, &utc, &local)) {
-                year = local.wYear;
-                month = local.wMonth;
-                day = local.wDay;
-                hour = local.wHour;
-                minutes = local.wMinute;
-            }
         }
         *minute = hour * 60 + minutes;
     }
     *number = DayNumber(year, month, day);
-    return *number != 0;
+    if (!*number) {
+        return false;
+    }
+    if (*minute >= 0 && value.size() >= 16 && towupper(value[15]) == L'Z') {
+        if (utc) {
+            *utc = true;
+        } else {
+            UtcToLocal(number, minute);
+        }
+    }
+    return true;
 }
 
 // A text with its escapes ("\," "\;" "\n"), on one line.
@@ -12659,7 +12735,9 @@ struct IcsRule {
     int position = 0;
 };
 
-bool ParseIcsRule(const std::wstring& text, IcsRule* rule) {
+// (`utc`: the event's days are UTC ones, see ParseIcsTime. Its lists are
+// bounded and without repeats: a file from the web can say anything.)
+bool ParseIcsRule(const std::wstring& text, IcsRule* rule, bool utc = false) {
     for (size_t at = 0; at < text.size();) {
         size_t end = text.find(L';', at);
         if (end == std::wstring::npos) {
@@ -12677,7 +12755,9 @@ bool ParseIcsRule(const std::wstring& text, IcsRule* rule) {
         }
         const std::wstring value = part.substr(equals + 1);
         std::vector<std::wstring> items;
-        for (size_t from = 0; from <= value.size();) {
+        constexpr size_t kMaxRuleItems = 400;
+        for (size_t from = 0;
+             from <= value.size() && items.size() < kMaxRuleItems;) {
             size_t comma = value.find(L',', from);
             if (comma == std::wstring::npos) {
                 comma = value.size();
@@ -12699,7 +12779,9 @@ bool ParseIcsRule(const std::wstring& text, IcsRule* rule) {
             rule->count = std::clamp(_wtoi(value.c_str()), 0, 100000);
         } else if (key == L"UNTIL") {
             int minute;
-            if (!ParseIcsTime(value, &rule->until, &minute)) {
+            bool inUtc = false;
+            if (!ParseIcsTime(value, &rule->until, &minute,
+                              utc ? &inUtc : nullptr)) {
                 rule->until = 0;
             }
         } else if (key == L"BYDAY") {
@@ -12710,33 +12792,44 @@ bool ParseIcsRule(const std::wstring& text, IcsRule* rule) {
                     continue;
                 }
                 const std::wstring name = item.substr(item.size() - 2);
+                // (Which one in a month or a year: at most the 53rd.)
+                const int nth =
+                    item.size() > 2
+                        ? _wtoi(item.substr(0, item.size() - 2).c_str())
+                        : 0;
+                if (nth < -53 || nth > 53) {
+                    continue;
+                }
                 for (int weekday = 0; weekday < 7; weekday++) {
-                    if (_wcsicmp(name.c_str(), kWeekdays[weekday]) == 0) {
-                        rule->days.push_back(
-                            {item.size() > 2
-                                 ? _wtoi(
-                                       item.substr(0, item.size() - 2).c_str())
-                                 : 0,
-                             weekday});
+                    const std::pair<int, int> entry{nth, weekday};
+                    if (_wcsicmp(name.c_str(), kWeekdays[weekday]) == 0 &&
+                        rule->days.size() < 35 &&
+                        std::find(rule->days.begin(), rule->days.end(),
+                                  entry) == rule->days.end()) {
+                        rule->days.push_back(entry);
                     }
                 }
             }
         } else if (key == L"BYMONTHDAY") {
             for (const auto& item : items) {
                 const int day = _wtoi(item.c_str());
-                if (day && day >= -31 && day <= 31) {
+                if (day && day >= -31 && day <= 31 &&
+                    std::find(rule->monthDays.begin(), rule->monthDays.end(),
+                              day) == rule->monthDays.end()) {
                     rule->monthDays.push_back(day);
                 }
             }
         } else if (key == L"BYMONTH") {
             for (const auto& item : items) {
                 const int month = _wtoi(item.c_str());
-                if (month >= 1 && month <= 12) {
+                if (month >= 1 && month <= 12 &&
+                    std::find(rule->months.begin(), rule->months.end(),
+                              month) == rule->months.end()) {
                     rule->months.push_back(month);
                 }
             }
         } else if (key == L"BYSETPOS") {
-            rule->position = _wtoi(value.c_str());
+            rule->position = std::clamp(_wtoi(value.c_str()), -366, 366);
         }
     }
     return rule->frequency != 0;
@@ -12814,6 +12907,15 @@ struct IcsEvent {
     // was on.
     int moved = 0;
     bool cancelled = false;
+    // Its start is in UTC: its days are UTC ones (its rule's days fall on
+    // them), turned into local ones only as they're shown.
+    bool utc = false;
+    // Its times as written, read once the whole event is (its start says
+    // whether the others stay in UTC).
+    std::wstring startText;
+    std::wstring endText;
+    std::wstring movedText;
+    std::vector<std::wstring> excludedTexts;
 };
 
 // The days an event starts on (day numbers), up to `last` (from `first`,
@@ -12823,7 +12925,8 @@ std::vector<int> IcsEventDays(const IcsEvent& event, int first, int last) {
     std::vector<int> days;
     const int from = first - event.span + 1;
     IcsRule rule;
-    if (event.moved || event.rule.empty() || !ParseIcsRule(event.rule, &rule)) {
+    if (event.moved || event.rule.empty() ||
+        !ParseIcsRule(event.rule, &rule, event.utc)) {
         if (event.start >= from && event.start <= last) {
             days.push_back(event.start);
         }
@@ -12973,36 +13076,49 @@ std::vector<int> IcsEventDays(const IcsEvent& event, int first, int last) {
 }
 
 // The events of an .ics file's text between `first` and `last` (day
-// numbers; up to kMaxAgendaEvents), and the calendar's name.
+// numbers; up to kMaxAgendaEvents, the nearest to today), and the
+// calendar's name. Nothing once g_agendaStop is set (the calendar going
+// away). Its lines, lists and occurrences are bounded: a file from the web
+// can say anything.
 std::vector<AgendaEvent> ParseIcs(const std::wstring& text,
                                   int first,
                                   int last,
                                   std::wstring* name) {
-    // A long line goes on in the next ones, after a space or a tab.
+    // A long line goes on in the next ones, after a space or a tab (up to a
+    // length no calendar needs).
+    constexpr size_t kMaxIcsLine = 16 * 1024;
     std::vector<std::wstring> lines;
     for (size_t at = 0; at < text.size();) {
         size_t end = text.find(L'\n', at);
         if (end == std::wstring::npos) {
             end = text.size();
         }
-        std::wstring line = text.substr(at, end - at);
+        std::wstring line = text.substr(at, std::min(end - at, kMaxIcsLine));
         at = end + 1;
         if (!line.empty() && line.back() == L'\r') {
             line.pop_back();
         }
         if (!line.empty() && (line[0] == L' ' || line[0] == L'\t') &&
             !lines.empty()) {
-            lines.back() += line.substr(1);
+            if (lines.back().size() < kMaxIcsLine) {
+                lines.back() +=
+                    line.substr(1, kMaxIcsLine - lines.back().size());
+            }
         } else {
             lines.push_back(std::move(line));
         }
     }
+    constexpr size_t kMaxIcsExcluded = 366;
     std::vector<IcsEvent> events;
     IcsEvent event;
     bool inEvent = false;
     // Inside an event's own parts (its alarms).
     int nested = 0;
+    size_t read = 0;
     for (const auto& line : lines) {
+        if (++read % 4096 == 0 && g_agendaStop) {
+            return {};
+        }
         // "NAME;PARAMETERS:VALUE" (a colon in quotes is a parameter's).
         size_t colon = std::wstring::npos;
         bool quoted = false;
@@ -13036,6 +13152,31 @@ std::vector<AgendaEvent> ParseIcs(const std::wstring& text,
                 nested--;
             } else if (inEvent && _wcsicmp(value.c_str(), L"VEVENT") == 0) {
                 inEvent = false;
+                // Its times: in UTC when its start is, otherwise local.
+                bool utc = false;
+                if (!ParseIcsTime(event.startText, &event.start, &event.minute,
+                                  &utc)) {
+                    event.start = 0;
+                }
+                event.utc = utc;
+                bool other = false;
+                bool* keep = utc ? &other : nullptr;
+                if (!ParseIcsTime(event.endText, &event.end, &event.endMinute,
+                                  keep)) {
+                    event.end = 0;
+                }
+                int minute;
+                if (!ParseIcsTime(event.movedText, &event.moved, &minute,
+                                  keep)) {
+                    event.moved = 0;
+                }
+                for (const auto& one : event.excludedTexts) {
+                    int day;
+                    if (ParseIcsTime(one, &day, &minute, keep)) {
+                        event.excluded.push_back(day);
+                    }
+                }
+                event.excludedTexts.clear();
                 if (event.minute < 0) {
                     event.span = event.end > event.start
                                      ? event.end - event.start
@@ -13070,13 +13211,9 @@ std::vector<AgendaEvent> ParseIcs(const std::wstring& text,
         } else if (key == L"UID") {
             event.uid = value;
         } else if (key == L"DTSTART") {
-            if (!ParseIcsTime(value, &event.start, &event.minute)) {
-                event.start = 0;
-            }
+            event.startText = value;
         } else if (key == L"DTEND") {
-            if (!ParseIcsTime(value, &event.end, &event.endMinute)) {
-                event.end = 0;
-            }
+            event.endText = value;
         } else if (key == L"DURATION") {
             // "P2D" or "P1W" (whole days).
             const size_t p = value.find(L'P');
@@ -13091,24 +13228,18 @@ std::vector<AgendaEvent> ParseIcs(const std::wstring& text,
         } else if (key == L"RRULE") {
             event.rule = value;
         } else if (key == L"EXDATE") {
-            for (size_t from = 0; from < value.size();) {
+            for (size_t from = 0;
+                 from < value.size() &&
+                 event.excludedTexts.size() < kMaxIcsExcluded;) {
                 size_t comma = value.find(L',', from);
                 if (comma == std::wstring::npos) {
                     comma = value.size();
                 }
-                int day;
-                int minute;
-                if (ParseIcsTime(value.substr(from, comma - from), &day,
-                                 &minute)) {
-                    event.excluded.push_back(day);
-                }
+                event.excludedTexts.push_back(value.substr(from, comma - from));
                 from = comma + 1;
             }
         } else if (key == L"RECURRENCE-ID") {
-            int minute;
-            if (!ParseIcsTime(value, &event.moved, &minute)) {
-                event.moved = 0;
-            }
+            event.movedText = value;
         } else if (key == L"STATUS") {
             event.cancelled = _wcsicmp(value.c_str(), L"CANCELLED") == 0;
         }
@@ -13131,26 +13262,59 @@ std::vector<AgendaEvent> ParseIcs(const std::wstring& text,
             }
         }
     }
-    std::vector<AgendaEvent> found;
-    for (const auto& one : events) {
+    // Every occurrence (up to many more than are kept), on its local day,
+    // then the ones nearest to today kept.
+    struct Occurrence {
+        int day;
+        int minute;
+        size_t event;
+    };
+    constexpr size_t kMaxOccurrences = 10 * kMaxAgendaEvents;
+    std::vector<Occurrence> occurrences;
+    for (size_t e = 0;
+         e < events.size() && occurrences.size() < kMaxOccurrences; e++) {
+        if (g_agendaStop) {
+            return {};
+        }
+        const IcsEvent& one = events[e];
         if (one.cancelled) {
             continue;
         }
-        for (const int start : IcsEventDays(one, first, last)) {
-            for (int i = 0; i < one.span; i++) {
-                if (start + i < first || start + i > last) {
-                    continue;
-                }
-                AgendaEvent item;
-                DayFromNumber(start + i, &item.year, &item.month, &item.day);
-                item.minute = i == 0 ? one.minute : -1;
-                item.title = one.title;
-                found.push_back(std::move(item));
-                if (found.size() >= kMaxAgendaEvents) {
-                    return found;
+        // (In UTC: a day more on each side, its local days may be those.)
+        for (const int start : IcsEventDays(one, one.utc ? first - 1 : first,
+                                            one.utc ? last + 1 : last)) {
+            int day = start;
+            int minute = one.minute;
+            if (one.utc) {
+                UtcToLocal(&day, &minute);
+            }
+            for (int i = 0;
+                 i < one.span && occurrences.size() < kMaxOccurrences; i++) {
+                if (day + i >= first && day + i <= last) {
+                    occurrences.push_back({day + i, i == 0 ? minute : -1, e});
                 }
             }
         }
+    }
+    if (occurrences.size() > kMaxAgendaEvents) {
+        SYSTEMTIME now;
+        GetLocalTime(&now);
+        const int today = DayNumber(now.wYear, now.wMonth, now.wDay);
+        std::nth_element(
+            occurrences.begin(), occurrences.begin() + kMaxAgendaEvents,
+            occurrences.end(), [&](const Occurrence& a, const Occurrence& b) {
+                return std::abs(a.day - today) < std::abs(b.day - today);
+            });
+        occurrences.resize(kMaxAgendaEvents);
+    }
+    std::vector<AgendaEvent> found;
+    found.reserve(occurrences.size());
+    for (const auto& one : occurrences) {
+        AgendaEvent item;
+        DayFromNumber(one.day, &item.year, &item.month, &item.day);
+        item.minute = one.minute;
+        item.title = events[one.event].title;
+        found.push_back(std::move(item));
     }
     return found;
 }
@@ -15784,9 +15948,11 @@ bool StartKomorebiCommand(const std::wstring& line,
 }
 
 // A button's commands, on a thread of their own (which owns this, and its
-// own copy of the stop event). What they print goes to a temporary file,
-// shown in a terminal only if they fail (they're never run a second time:
-// a reload would stop komorebi again), and deleted.
+// own copy of the stop event). What they print goes to a file in the mod's
+// storage folder (not a pipe: komorebi, started by them, may keep their
+// output open, and a pipe closed on it could fail its writes), shown in a
+// terminal only if they fail (they're never run a second time: a reload
+// would stop komorebi again), and deleted, or at the next run if still open.
 struct KomorebiJob {
     std::wstring commands;
     int button;
@@ -15804,10 +15970,21 @@ DWORD WINAPI KomorebiThreadProc(LPVOID parameter) {
     std::unique_ptr<KomorebiJob> job((KomorebiJob*)parameter);
     WCHAR folder[MAX_PATH];
     WCHAR output[MAX_PATH] = L"";
-    const DWORD folderLength = GetTempPath(ARRAYSIZE(folder), folder);
-    if (!folderLength || folderLength >= ARRAYSIZE(folder) ||
-        !GetTempFileName(folder, L"kmb", 0, output)) {
-        output[0] = L'\0';
+    if (Wh_GetModStoragePath(folder, ARRAYSIZE(folder))) {
+        CreateDirectory(folder, nullptr);
+        // (Ones left by a command still running at an earlier wait's end.)
+        WIN32_FIND_DATA data;
+        const std::wstring base = std::wstring(folder) + L"\\";
+        HANDLE find = FindFirstFile((base + L"kmb*.tmp").c_str(), &data);
+        if (find != INVALID_HANDLE_VALUE) {
+            do {
+                DeleteFile((base + data.cFileName).c_str());
+            } while (FindNextFile(find, &data));
+            FindClose(find);
+        }
+        if (!GetTempFileName(folder, L"kmb", 0, output)) {
+            output[0] = L'\0';
+        }
     }
     PROCESS_INFORMATION process{};
     bool started = false;
@@ -16522,9 +16699,8 @@ std::vector<PillGroup> DecodePillOrder(std::wstring_view text) {
 }
 
 void LoadPillOrder() {
-    WCHAR value[kPillGroups + 1] = L"";
-    Wh_GetStringValue(L"islandOrder", value, ARRAYSIZE(value));
-    g_pillOrder = DecodePillOrder(value);
+    g_pillOrder =
+        DecodePillOrder(GetWholeStringValue(L"islandOrder", kPillGroups + 1));
 }
 
 void SavePillOrder() {
@@ -16611,15 +16787,10 @@ std::wstring EncodeTrayAnchors(
 }
 
 void LoadTrayArrangement() {
-    std::vector<WCHAR> value(8192);
-    auto read = [&](PCWSTR name) {
-        value[0] = 0;
-        Wh_GetStringValue(name, value.data(), value.size());
-        return std::wstring_view(value.data());
-    };
-    g_trayPinned = DecodeTrayKeys(read(L"trayPinned"));
-    g_trayOrder = DecodeTrayKeys(read(L"trayOrder"));
-    g_trayAnchors = DecodeTrayAnchors(read(L"trayAnchors"));
+    g_trayPinned = DecodeTrayKeys(GetWholeStringValue(L"trayPinned", 8192));
+    g_trayOrder = DecodeTrayKeys(GetWholeStringValue(L"trayOrder", 8192));
+    g_trayAnchors =
+        DecodeTrayAnchors(GetWholeStringValue(L"trayAnchors", 8192));
 }
 
 void SaveTrayArrangement() {
@@ -16688,9 +16859,9 @@ uint8_t DefaultNotchSide(PillGroup group) {
 }
 
 void LoadNotchSides() {
-    WCHAR value[kPillGroups + 1] = L"";
-    Wh_GetStringValue(L"islandNotchSides", value, ARRAYSIZE(value));
-    const size_t length = wcslen(value);
+    const std::wstring value =
+        GetWholeStringValue(L"islandNotchSides", kPillGroups + 1);
+    const size_t length = value.size();
     for (int i = 0; i < kPillGroups; i++) {
         const WCHAR c = (size_t)i < length ? value[i] : 0;
         g_notchSides[i] = c >= L'0' && c <= L'2'
@@ -17158,9 +17329,9 @@ void LoadPlaces() {
     // Per monitor: x, y (thousandths) and the device, one per line.
     g_monitorPlaces.clear();
     {
-        WCHAR monitors[2048] = L"";
-        Wh_GetStringValue(L"monitorPlaces", monitors, ARRAYSIZE(monitors));
-        for (PCWSTR line = monitors; *line;) {
+        const std::wstring monitors =
+            GetWholeStringValue(L"monitorPlaces", 2048);
+        for (PCWSTR line = monitors.c_str(); *line;) {
             PCWSTR end = wcschr(line, L'\n');
             const std::wstring text =
                 end ? std::wstring(line, end) : std::wstring(line);
@@ -17190,8 +17361,7 @@ void LoadPlaces() {
         }
     }
     g_appPlaces.clear();
-    std::vector<WCHAR> value(16 * 1024);
-    Wh_GetStringValue(L"appPlaces", value.data(), (size_t)value.size());
+    const std::wstring value = GetWholeStringValue(L"appPlaces", 16 * 1024);
     // One per line: x, y (thousandths), optionally "h" and the hidden
     // groups, then the app's ID (tab-separated).
     for (PCWSTR line = value.data(); *line;) {
@@ -17581,6 +17751,8 @@ constexpr UINT WM_APP_SCREENSHOT = WM_APP + 64;
 constexpr UINT_PTR kScreenshotTimerId = kPanelScreenshotTimerId;
 // Checks night light after a change (see ControlPanel::SwitchNightLight).
 constexpr UINT_PTR kNightLightTimerId = 31;
+// A Wi-Fi join given up on time (see ControlPanel::CheckConnecting).
+constexpr UINT_PTR kConnectingTimerId = 32;
 constexpr UINT kNightLightCheckMs = 800;
 
 // A radio's state for the control center.
@@ -19724,6 +19896,11 @@ DWORD WINAPI MediaThreadProc(LPVOID parameter) {
                         }
                         state.thumbnailSerial = thumbnailSerial;
                     }
+                    // (Given up on meanwhile, see StopMediaWatch: a newer
+                    // thread may own it now.)
+                    if (WaitForSingleObject(events[0], 0) == WAIT_OBJECT_0) {
+                        break;
+                    }
                     AcquireSRWLockExclusive(&g_mediaLock);
                     g_media = std::move(state);
                     ReleaseSRWLockExclusive(&g_mediaLock);
@@ -21536,10 +21713,9 @@ std::wstring UnescapeField(const std::wstring& text) {
 std::vector<std::vector<std::wstring>> LoadRecords(
     PCWSTR name,
     size_t fields,
-    size_t maxChars = 256 * 1024) {
+    size_t room = 256 * 1024) {
     std::vector<std::vector<std::wstring>> records;
-    std::vector<WCHAR> value(maxChars);
-    Wh_GetStringValue(name, value.data(), value.size());
+    const std::wstring value = GetWholeStringValue(name, room);
     for (PCWSTR line = value.data(); *line;) {
         PCWSTR end = wcschr(line, L'\n');
         const std::wstring text =
@@ -22978,8 +23154,9 @@ void TasksPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
         return;
     }
     const float s = m_scale;
-    // "+ New task".
+    // "+ New task" ("Edit task" while one is changed).
     {
+        const bool editing = m_typing && m_editingId;
         const float lit = Hover(m_new, m_hover.part == Part::New);
         const float radius = std::round(9 * s);
         if (lit > 0.01f) {
@@ -22987,11 +23164,13 @@ void TasksPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
             target->FillRoundedRectangle({m_new, radius, radius}, brush);
         }
         brush->SetColor(Fg(0.95f));
-        target->DrawText(&kGlyphAdd, 1, m_bigIconFormat.get(),
+        target->DrawText(editing ? &kGlyphPencil : &kGlyphAdd, 1,
+                         m_bigIconFormat.get(),
                          {m_new.left, m_new.top,
                           m_new.left + std::round(28 * s), m_new.bottom},
                          brush);
-        PCWSTR text = Tr(L"New task", L"Nova tarefa");
+        PCWSTR text = editing ? Tr(L"Edit task", L"Editar tarefa")
+                              : Tr(L"New task", L"Nova tarefa");
         target->DrawText(text, (UINT32)wcslen(text), m_boldFormat.get(),
                          {m_new.left + std::round(28 * s), m_new.top,
                           m_new.right, m_new.bottom},
@@ -23101,7 +23280,9 @@ void TasksPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
         const bool hover = m_hover.id == row.id && !RowLeaving(row.id);
         const float lit = Hover(HoverKey(7100, row.id), hover);
         const float radius = std::round(10 * s);
-        brush->SetColor(Fg(0.05f + 0.05f * lit));
+        // (The one being edited lit too.)
+        const bool editing = m_typing && m_editingId == row.id;
+        brush->SetColor(Fg(editing ? 0.12f : 0.05f + 0.05f * lit));
         target->FillRoundedRectangle({rect, radius, radius}, brush);
         brush->SetColor(Fg(0.09f));
         target->DrawRoundedRectangle(
@@ -25674,10 +25855,9 @@ UpdatesData GetUpdates() {
 }
 
 void LoadIgnoredUpdates() {
-    WCHAR value[4096] = L"";
-    Wh_GetStringValue(L"updatesIgnored", value, ARRAYSIZE(value));
+    const std::wstring value = GetWholeStringValue(L"updatesIgnored", 4096);
     std::vector<std::wstring> ids;
-    for (PCWSTR line = value; *line;) {
+    for (PCWSTR line = value.c_str(); *line;) {
         PCWSTR end = wcschr(line, L'\n');
         std::wstring id = end ? std::wstring(line, end) : std::wstring(line);
         if (!id.empty() && ids.size() < 64) {
@@ -27415,6 +27595,34 @@ bool EjectMedia(PCWSTR volume) {
     return ejected;
 }
 
+// A device's property as text (its first string, for a list).
+std::wstring DevNodeText(DEVINST node, ULONG property) {
+    WCHAR value[512] = L"";
+    ULONG size = sizeof(value) - sizeof(WCHAR);
+    if (CM_Get_DevNode_Registry_Property(node, property, nullptr, value, &size,
+                                         0) != CR_SUCCESS) {
+        return {};
+    }
+    return value;
+}
+
+// A USB hub (everything plugged into it would go with it): its compatible
+// IDs name the hub class.
+bool IsUsbHub(DEVINST node) {
+    WCHAR ids[1024] = L"";
+    ULONG size = sizeof(ids) - 2 * sizeof(WCHAR);
+    if (CM_Get_DevNode_Registry_Property(node, CM_DRP_COMPATIBLEIDS, nullptr,
+                                         ids, &size, 0) != CR_SUCCESS) {
+        return false;
+    }
+    for (PCWSTR id = ids; *id; id += wcslen(id) + 1) {
+        if (_wcsnicmp(id, L"USB\\Class_09", 12) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // The drive's disk is found among the disks (by its number), and the device
 // it's on asked to be ejected (a program with a file open on it says no).
 DWORD WINAPI EjectThreadProc(LPVOID parameter) {
@@ -27457,11 +27665,12 @@ DWORD WINAPI EjectThreadProc(LPVOID parameter) {
         SetupDiDestroyDeviceInfoList(disks);
     }
     // The device Windows' "Safely remove" ejects: the first one up from the
-    // disk that is removable (a USB drive). A card in a built-in reader has
-    // none (the reader stays): only its card is ejected, like Explorer's
-    // "Eject" does.
+    // disk that is removable (a USB drive), never as far as a hub. A card
+    // in a reader has none (the reader stays): only its card is ejected,
+    // like Explorer's "Eject" does. A USB disk with fixed media on a port
+    // Windows doesn't call removable: its USB device, as before.
     DEVINST device = 0;
-    for (DEVINST node = disk; node && !device;) {
+    for (DEVINST node = disk; node && !device && !IsUsbHub(node);) {
         ULONG capabilities = 0;
         ULONG size = sizeof(capabilities);
         if (CM_Get_DevNode_Registry_Property(node, CM_DRP_CAPABILITIES,
@@ -27472,6 +27681,14 @@ DWORD WINAPI EjectThreadProc(LPVOID parameter) {
         } else if (CM_Get_Parent(&node, node, 0) != CR_SUCCESS) {
             node = 0;
         }
+    }
+    const WCHAR root[] = {job->letter, L':', L'\\', L'\0'};
+    DEVINST parent = 0;
+    if (!device && disk && GetDriveType(root) == DRIVE_FIXED &&
+        CM_Get_Parent(&parent, disk, 0) == CR_SUCCESS && !IsUsbHub(parent) &&
+        _wcsicmp(DevNodeText(parent, CM_DRP_ENUMERATOR_NAME).c_str(), L"USB") ==
+            0) {
+        device = parent;
     }
     // (Windows can say no for a moment while it lets go of the drive.)
     for (int attempt = 0; attempt < 3 && !ejected && (device || disk);
@@ -29085,6 +29302,29 @@ struct FolderListJob {
     std::vector<FolderEntry> items;
 };
 
+// A file or a folder opened as the user would. Under System32 through
+// explorer.exe: the 32-bit Windhawk process would open SysWOW64's copy (a
+// 32-bit cmd.exe, or nothing for what only the 64-bit one has).
+void OpenPath(const std::wstring& path) {
+    BOOL wow64 = FALSE;
+    WCHAR windows[MAX_PATH];
+    if (IsWow64Process(GetCurrentProcess(), &wow64) && wow64 &&
+        GetWindowsDirectory(windows, ARRAYSIZE(windows))) {
+        const std::wstring system = std::wstring(windows) + L"\\System32";
+        if (_wcsnicmp(path.c_str(), system.c_str(), system.size()) == 0 &&
+            (path.size() == system.size() || path[system.size()] == L'\\')) {
+            const std::wstring explorer =
+                std::wstring(windows) + L"\\explorer.exe";
+            const std::wstring quoted = L"\"" + path + L"\"";
+            ShellExecute(nullptr, L"open", explorer.c_str(), quoted.c_str(),
+                         nullptr, SW_SHOWNORMAL);
+            return;
+        }
+    }
+    ShellExecute(nullptr, L"open", path.c_str(), nullptr, nullptr,
+                 SW_SHOWNORMAL);
+}
+
 // A folder's contents (folders first, then files, sorted as Explorer
 // sorts), or the drives for This PC.
 DWORD WINAPI FolderListThreadProc(LPVOID parameter) {
@@ -29229,10 +29469,8 @@ DWORD WINAPI FolderPickThreadProc(LPVOID parameter) {
 // The pins, kept as lines ("place:documents" or a folder's path); the first
 // time, a few of Windows' places.
 std::vector<std::wstring> LoadFolderPins() {
-    std::vector<WCHAR> value(16 * 1024);
-    Wh_GetStringValue(L"folderPins", value.data(), value.size());
     std::vector<std::wstring> pins;
-    std::wstring text = value.data();
+    const std::wstring text = GetWholeStringValue(L"folderPins", 16 * 1024);
     if (text.empty()) {
         return {std::wstring(kPlacePrefix) + L"desktop",
                 std::wstring(kPlacePrefix) + L"documents",
@@ -29706,10 +29944,8 @@ bool FoldersPanel::OnMouseUp(POINT pt) {
     if (spot.row == -2) {
         const std::wstring path = m_columns[spot.column].path;
         Close();
-        ShellExecute(nullptr, L"open",
-                     path.starts_with(kPlacePrefix) ? L"shell:MyComputerFolder"
-                                                    : path.c_str(),
-                     nullptr, nullptr, SW_SHOWNORMAL);
+        OpenPath(path.starts_with(kPlacePrefix) ? L"shell:MyComputerFolder"
+                                                : path);
         return false;
     }
     const FolderEntry* item = ItemAt(spot);
@@ -29781,10 +30017,7 @@ bool FoldersPanel::OnMouseUp(POINT pt) {
         return false;
     }
     Close();
-    ShellExecute(nullptr, L"open",
-                 path.starts_with(kPlacePrefix) ? L"shell:MyComputerFolder"
-                                                : path.c_str(),
-                 nullptr, nullptr, SW_SHOWNORMAL);
+    OpenPath(path.starts_with(kPlacePrefix) ? L"shell:MyComputerFolder" : path);
     return false;
 }
 
@@ -30382,8 +30615,8 @@ class WallpaperPanel : public Panel {
 
     void OnOpen() override {
         m_hover = -1;
-        WCHAR folder[MAX_PATH] = L"";
-        Wh_GetStringValue(L"wallpaperFolder", folder, ARRAYSIZE(folder));
+        const std::wstring folder =
+            GetWholeStringValue(L"wallpaperFolder", MAX_PATH);
         if (folder != m_folder || m_paths.empty()) {
             m_folder = folder;
             m_paths.clear();
@@ -30829,6 +31062,9 @@ class Island {
    public:
     bool Create();
     void Destroy();
+    // A Windows banner it moved off screen back, and its banner hooks gone
+    // (first thing as it goes; the main island's before the others go).
+    void ReleaseWindowsBanner();
     void Tick();
     bool Animating() const { return m_animating; }
     void AnimationFrame();
@@ -31456,6 +31692,8 @@ class Island {
     float m_mediaTitleFullWidth = 0;
     double m_mediaMarqueeStart = 0;
     bool m_mediaMarquee = false;
+    // How far it scrolls (as last drawn): its place goes in the render key.
+    float m_mediaMarqueeDistance = 0;
     bool MediaTitleScrolls() const {
         return g_settings.islandMediaMarquee && m_mediaShown.playing &&
                !m_away && AnimationLevel() == 0 &&
@@ -32806,6 +33044,38 @@ void ControlPanel::StopWifi() {
     if (!m_wlan) {
         return;
     }
+    // Joins that ended meanwhile, then the ones still pending (the island
+    // going away): a profile made for one stays only if it's the network
+    // joined now.
+    MSG ended;
+    while (m_hwnd && PeekMessage(&ended, m_hwnd, WM_APP_WLAN_CONNECTION,
+                                 WM_APP_WLAN_CONNECTION, PM_REMOVE)) {
+        const std::unique_ptr<WlanConnectionEvent> event(
+            (WlanConnectionEvent*)ended.lParam);
+        OnWifiJoinEnded(*event);
+    }
+    if (!m_createdProfiles.empty()) {
+        std::wstring joined;
+        DWORD size = 0;
+        WLAN_CONNECTION_ATTRIBUTES* connection = nullptr;
+        if (WlanQueryInterface(m_wlan, &m_wifiInterface,
+                               wlan_intf_opcode_current_connection, nullptr,
+                               &size, (void**)&connection,
+                               nullptr) == ERROR_SUCCESS &&
+            connection) {
+            if (connection->isState == wlan_interface_state_connected) {
+                joined = connection->strProfileName;
+            }
+            WlanFreeMemory(connection);
+        }
+        for (const auto& profile : m_createdProfiles) {
+            if (profile != joined) {
+                WlanDeleteProfile(m_wlan, &m_wifiInterface, profile.c_str(),
+                                  nullptr);
+            }
+        }
+        m_createdProfiles.clear();
+    }
     WlanRegisterNotification(m_wlan, WLAN_NOTIFICATION_SOURCE_NONE, TRUE,
                              nullptr, nullptr, nullptr, nullptr);
     WlanCloseHandle(m_wlan, nullptr);
@@ -33101,11 +33371,21 @@ bool ControlPanel::ConnectWifi(const WifiNetwork& network,
         WlanConnect(m_wlan, &m_wifiInterface, &parameters, nullptr);
     if (result != ERROR_SUCCESS) {
         Wh_Log(L"WlanConnect failed: %u", result);
+        // (A profile made for it goes: nothing joins with it.)
+        if (auto it = std::find(m_createdProfiles.begin(),
+                                m_createdProfiles.end(), profile);
+            it != m_createdProfiles.end()) {
+            WlanDeleteProfile(m_wlan, &m_wifiInterface, profile.c_str(),
+                              nullptr);
+            m_createdProfiles.erase(it);
+        }
         return false;
     }
     m_connecting = true;
     m_connectingProfile = profile;
     m_connectingSince = GetTickCount64();
+    // (Given up on time even if nothing draws the panel meanwhile.)
+    SetTimer(m_hwnd, kConnectingTimerId, (UINT)kConnectingMs + 100, nullptr);
     m_wifiStatus = Tr(L"Connecting...", L"Conectando...");
     return true;
 }
@@ -33244,6 +33524,11 @@ void ControlPanel::SwitchNightLight() {
 }
 
 bool ControlPanel::OnTimer(UINT_PTR id) {
+    if (id == kConnectingTimerId) {
+        CheckConnecting();
+        Layout();
+        return true;
+    }
     if (id != kNightLightTimerId || !m_nightLightChecking) {
         return false;
     }
@@ -34484,9 +34769,11 @@ std::wstring ControlPanel::SettingName(const SettingEntry& entry) const {
                 : id == kChoiceFrameRate
                     ? Tr(L"Frames a second", L"Quadros por segundo")
                 : id == kChoiceBackup
-                    ? (m_backupStatus.empty() ? Tr(L"A file with all of it",
-                                                   L"Um arquivo com tudo")
-                                              : m_backupStatus.c_str())
+                    ? (m_backupStatus.empty()
+                           ? Tr(L"A file with all of it (agenda links too)",
+                                L"Um arquivo com tudo (os links das agendas "
+                                L"também)")
+                           : m_backupStatus.c_str())
                 : id == kChoiceColors && CustomColorsHardToRead()
                     ? Tr(L"Hard to read: too alike",
                          L"Difícil de ler: cores parecidas")
@@ -35517,9 +35804,8 @@ void ControlPanel::LoadControls() {
     }
     m_controlsLoaded = true;
     m_controls.clear();
-    WCHAR value[1024] = L"";
-    Wh_GetStringValue(L"controls", value, ARRAYSIZE(value));
-    if (!value[0]) {
+    const std::wstring value = GetWholeStringValue(L"controls", 1024);
+    if (value.empty()) {
         for (const auto& info : kControls) {
             if (info.shownByDefault) {
                 m_controls.push_back(info.id);
@@ -35527,7 +35813,7 @@ void ControlPanel::LoadControls() {
         }
         return;
     }
-    for (PCWSTR p = value; *p;) {
+    for (PCWSTR p = value.c_str(); *p;) {
         PCWSTR end = wcschr(p, L',');
         const std::wstring key = end ? std::wstring(p, end) : std::wstring(p);
         for (const auto& info : kControls) {
@@ -39204,9 +39490,6 @@ void ControlPanel::DragNotchChip(float middle) {
     if (moved) {
         g_notchSides[(int)dragged] = (uint8_t)place;
         SaveNotchSides();
-        if (OwnLookShown()) {
-            g_island->SaveOwnProfile();
-        }
     }
     // After the last of that notch's items whose middle it has passed, or
     // before its first one (alone there: where it was).
@@ -40926,6 +41209,7 @@ ToastReply ParseToastReply(const std::wstring& appId,
         };
         if (is("toast")) {
             reply.launch = XmlAttribute(tag, "launch");
+            reply.launchType = XmlAttribute(tag, "activationType");
         } else if (is("input") && reply.inputId.empty() &&
                    XmlAttribute(tag, "type") == L"text") {
             reply.inputId = XmlAttribute(tag, "id");
@@ -41294,8 +41578,10 @@ bool IsSnippingToolApp(const std::wstring& appId) {
            StrStrI(appId.c_str(), L"SnippingTool");
 }
 
-// The newest picture of the Screenshots folder, selected in Explorer (the
-// folder itself when it has none); false without the folder.
+// The picture the Snipping Tool just saved in the Screenshots folder (the
+// newest, from the last two minutes), selected in Explorer; false without
+// one (saving off, or another folder chosen in it: its notification opens
+// it as usual, like other ones of it, such as a recording's).
 bool ShowNewestScreenshot() {
     // FOLDERID_Screenshots.
     constexpr GUID kScreenshots = {
@@ -41315,7 +41601,16 @@ bool ShowNewestScreenshot() {
                                   &data, FindExSearchNameMatch, nullptr, 0);
     if (find != INVALID_HANDLE_VALUE) {
         do {
-            if (!(data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+            // (Pictures only: not desktop.ini, Thumbs.db or folders.)
+            PCWSTR extension = PathFindExtension(data.cFileName);
+            const bool picture = _wcsicmp(extension, L".png") == 0 ||
+                                 _wcsicmp(extension, L".jpg") == 0 ||
+                                 _wcsicmp(extension, L".jpeg") == 0 ||
+                                 _wcsicmp(extension, L".gif") == 0;
+            if (picture &&
+                !(data.dwFileAttributes &
+                  (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_HIDDEN |
+                   FILE_ATTRIBUTE_SYSTEM)) &&
                 CompareFileTime(&data.ftLastWriteTime, &newestTime) > 0) {
                 newest = data.cFileName;
                 newestTime = data.ftLastWriteTime;
@@ -41323,10 +41618,19 @@ bool ShowNewestScreenshot() {
         } while (FindNextFile(find, &data));
         FindClose(find);
     }
+    FILETIME nowTime;
+    GetSystemTimeAsFileTime(&nowTime);
+    const ULONGLONG now =
+        ((ULONGLONG)nowTime.dwHighDateTime << 32) | nowTime.dwLowDateTime;
+    const ULONGLONG saved =
+        ((ULONGLONG)newestTime.dwHighDateTime << 32) | newestTime.dwLowDateTime;
+    constexpr ULONGLONG kJustSaved = 120ULL * 10000000;
+    if (newest.empty() || now < saved || now - saved > kJustSaved) {
+        return false;
+    }
     const std::wstring explorer = std::wstring(windows) + L"\\explorer.exe";
     const std::wstring arguments =
-        newest.empty() ? L"\"" + folder + L"\""
-                       : L"/select,\"" + folder + L"\\" + newest + L"\"";
+        L"/select,\"" + folder + L"\\" + newest + L"\"";
     return (INT_PTR)ShellExecute(nullptr, L"open", explorer.c_str(),
                                  arguments.c_str(), nullptr,
                                  SW_SHOWNORMAL) > 32;
@@ -41347,7 +41651,9 @@ bool OpenNotification(const std::wstring& appId, const ToastReply& reply) {
         return true;
     }
     if (!reply.launch.empty() &&
-        ActivateToast(appId, reply.launch, L"foreground")) {
+        ActivateToast(
+            appId, reply.launch,
+            reply.launchType.empty() ? L"foreground" : reply.launchType)) {
         return true;
     }
     AppWindowSearch context{&appId, nullptr};
@@ -41787,13 +42093,13 @@ void NotificationPanel::LoadCleared() {
         return;
     }
     m_clearedLoaded = true;
-    WCHAR value[4096] = L"";
-    GetUserStringValue(L"notificationsClearedUntil", value, ARRAYSIZE(value));
-    m_clearedUntil = _wcstoi64(value, nullptr, 10);
+    m_clearedUntil =
+        _wcstoi64(GetUserStringValue(L"notificationsClearedUntil", 64).c_str(),
+                  nullptr, 10);
     // (An id is at most 19 digits, and a comma.)
-    std::vector<WCHAR> ids(kMaxDismissed * 20 + 1);
-    GetUserStringValue(L"notificationsDismissed", ids.data(), ids.size());
-    for (PCWSTR p = ids.data(); *p;) {
+    const std::wstring ids =
+        GetUserStringValue(L"notificationsDismissed", kMaxDismissed * 20 + 1);
+    for (PCWSTR p = ids.c_str(); *p;) {
         PWSTR end = nullptr;
         const long long id = _wcstoi64(p, &end, 10);
         if (end == p) {
@@ -41802,10 +42108,10 @@ void NotificationPanel::LoadCleared() {
         m_dismissed.push_back(id);
         p = *end == L',' ? end + 1 : end;
     }
-    std::vector<WCHAR> texts(kMaxDismissedTexts * (kDismissKeyMax + 1) + 1);
-    GetUserStringValue(L"notificationsDismissedTags", texts.data(),
-                       texts.size());
-    for (PCWSTR line = texts.data(); *line;) {
+    const std::wstring texts =
+        GetUserStringValue(L"notificationsDismissedTags",
+                           kMaxDismissedTexts * (kDismissKeyMax + 1) + 1);
+    for (PCWSTR line = texts.c_str(); *line;) {
         PCWSTR end = wcschr(line, L'\n');
         m_dismissedTexts.push_back(end ? std::wstring(line, end)
                                        : std::wstring(line));
@@ -44978,16 +45284,14 @@ void SetIslandPref(IslandPref pref, int value) {
 }
 
 // Another order of the pill's items, chosen in its settings: the items slide
-// to their new places (kept with SavePillOrder once chosen).
+// to their new places (kept with SavePillOrder: an own look a moment after
+// the last step of a drag, not at every step).
 void SetPillOrder(const std::vector<PillGroup>& order) {
     if (order == g_pillOrder) {
         return;
     }
     g_pillOrder = order;
     SavePillOrder();
-    if (OwnLookShown()) {
-        g_island->SaveOwnProfile();
-    }
     if (g_island) {
         ForEachIsland([&](Island& island) { island.OnOrderChanged(); });
     }
@@ -45003,9 +45307,9 @@ std::wstring ProfileValueName(int id) {
 // "profiles": an id and a name per line (tab-separated).
 void LoadProfiles() {
     g_profiles.clear();
-    WCHAR value[1024] = L"";
-    Wh_GetStringValue(L"profiles", value, ARRAYSIZE(value));
-    for (PCWSTR line = value; *line && g_profiles.size() < kMaxProfiles;) {
+    const std::wstring value = GetWholeStringValue(L"profiles", 1024);
+    for (PCWSTR line = value.c_str();
+         *line && g_profiles.size() < kMaxProfiles;) {
         PCWSTR end = wcschr(line, L'\n');
         const std::wstring text =
             end ? std::wstring(line, end) : std::wstring(line);
@@ -45084,7 +45388,7 @@ struct ProfileText {
 constexpr ProfileText kProfileTexts[] = {
     {L"islandOrder", 64},    {L"monitorPlaces", 2048}, {L"appPlaces", 16384},
     {L"controls", 1024},     {L"islandMonitor", 64},   {L"islandNotchSides", 64},
-    {L"trayPinned", 4096},   {L"trayOrder", 8192},     {L"trayAnchors", 4096},
+    {L"trayPinned", 8192},   {L"trayOrder", 8192},     {L"trayAnchors", 8192},
 };
 
 // Everything the island's settings choose, the tray icons pinned and their
@@ -45116,9 +45420,7 @@ std::wstring CaptureProfile(
     number(L"placeX", (int)std::lround(g_islandPlace.x * 1000));
     number(L"placeY", (int)std::lround(g_islandPlace.y * 1000));
     for (const auto& text : kProfileTexts) {
-        std::vector<WCHAR> value(text.room);
-        Wh_GetStringValue(text.name, value.data(), value.size());
-        std::wstring kept = value.data();
+        std::wstring kept = GetWholeStringValue(text.name, text.room);
         if (texts) {
             if (const auto it = texts->find(text.name); it != texts->end()) {
                 kept = it->second;
@@ -45134,12 +45436,16 @@ void ParseProfileLines(PCWSTR data,
                        std::unordered_map<std::wstring, int>* numbers,
                        std::unordered_map<std::wstring, std::wstring>* texts);
 
+// A profile's text, whole (it grows with the tray icons' places).
+std::wstring ReadProfileText(int id) {
+    return GetWholeStringValue(ProfileValueName(id).c_str(), 64 * 1024);
+}
+
 // What the current island shows (another monitor's look, or the main
 // settings), as profile `id`'s new text: its own texts kept (they're the
 // main island's on the others), with the pill's order it shows.
 std::wstring CaptureShownProfile(int id) {
-    std::vector<WCHAR> value(64 * 1024);
-    Wh_GetStringValue(ProfileValueName(id).c_str(), value.data(), value.size());
+    const std::wstring value = ReadProfileText(id);
     std::unordered_map<std::wstring, int> numbers;
     std::unordered_map<std::wstring, std::wstring> texts;
     ParseProfileLines(value.data(), &numbers, &texts);
@@ -45339,8 +45645,7 @@ bool ProfileChanged(int id) {
                      })) {
         return false;
     }
-    std::vector<WCHAR> value(64 * 1024);
-    Wh_GetStringValue(ProfileValueName(id).c_str(), value.data(), value.size());
+    const std::wstring value = ReadProfileText(id);
     std::unordered_map<std::wstring, int> savedNumbers, numbers;
     std::unordered_map<std::wstring, std::wstring> savedTexts, texts;
     ParseProfileLines(value.data(), &savedNumbers, &savedTexts);
@@ -45436,8 +45741,7 @@ bool ApplyProfileSettings(
 
 // Profile `id`'s values put in the main settings.
 bool LoadProfileSettings(int id) {
-    std::vector<WCHAR> value(64 * 1024);
-    Wh_GetStringValue(ProfileValueName(id).c_str(), value.data(), value.size());
+    const std::wstring value = ReadProfileText(id);
     std::unordered_map<std::wstring, int> numbers;
     std::unordered_map<std::wstring, std::wstring> texts;
     ParseProfileLines(value.data(), &numbers, &texts);
@@ -45472,15 +45776,16 @@ bool ApplyProfile(int id) {
 // shows it again, the main island's settings too if it's the one in use
 // there.
 void ShowSavedProfile(int id, Island* from) {
+    // (Not the ones already gone, as the islands stop.)
     for (Island* island : std::vector<Island*>(g_islands)) {
-        if (island != from && !island->IsMainIsland() &&
+        if (island != from && island->Window() && !island->IsMainIsland() &&
             island->MonitorProfile() == id) {
             IslandScope scope(island);
             island->ReloadLook();
         }
     }
     Island* main = MainIsland();
-    if (main && from != main && g_activeProfile == id) {
+    if (main && main->Window() && from != main && g_activeProfile == id) {
         IslandScope scope(main);
         main->CancelProfileSave();
         if (LoadProfileSettings(id)) {
@@ -45504,11 +45809,11 @@ struct BackupValue {
 constexpr BackupValue kBackupValues[] = {
     {L"notes", 512 * 1024},     {L"tasks", 256 * 1024},
     {L"shortcuts", 256 * 1024}, {L"events", 64 * 1024},
-    {L"weatherPlace", 1024},    {L"trayPinned", 4096},
+    {L"weatherPlace", 1024},    {L"trayPinned", 8192},
     {L"updatesIgnored", 4096},  {L"profiles", 1024},
     {L"monitorProfiles", 2048}, {L"folderPins", 16 * 1024},
     {L"wallpaperFolder", 1024}, {L"agendas", 32 * 1024},
-    {L"trayOrder", 8192},       {L"trayAnchors", 4096},
+    {L"trayOrder", 8192},       {L"trayAnchors", 8192},
     {L"profileActive", 0, -1},  {L"islandMinimized", 0, 0},
     {L"islandMinimizedNotch0", 0, 0}, {L"islandMinimizedNotch1", 0, 0},
     {L"islandMinimizedNotch2", 0, 0},
@@ -45526,17 +45831,13 @@ std::wstring CaptureBackup() {
                     L"\n";
             continue;
         }
-        std::vector<WCHAR> text(value.room);
-        Wh_GetStringValue(value.name, text.data(), text.size());
         data += L"s" + std::wstring(value.name) + L"=" +
-                EscapeProfileText(text.data()) + L"\n";
+                EscapeProfileText(GetWholeStringValue(value.name, value.room)) +
+                L"\n";
     }
     for (const auto& profile : g_profiles) {
-        std::vector<WCHAR> text(64 * 1024);
-        Wh_GetStringValue(ProfileValueName(profile.id).c_str(), text.data(),
-                          text.size());
         data += L"s" + ProfileValueName(profile.id) + L"=" +
-                EscapeProfileText(text.data()) + L"\n";
+                EscapeProfileText(ReadProfileText(profile.id).c_str()) + L"\n";
     }
     return data;
 }
@@ -45888,8 +46189,7 @@ void SetIslandPrefValue(IslandPref pref, int value) {
 // (the main settings are back in memory after).
 IslandLook LookFromProfile(int id) {
     const IslandLook main = CaptureLook();
-    std::vector<WCHAR> value(64 * 1024);
-    Wh_GetStringValue(ProfileValueName(id).c_str(), value.data(), value.size());
+    const std::wstring value = ReadProfileText(id);
     std::unordered_map<std::wstring, int> numbers;
     std::unordered_map<std::wstring, std::wstring> texts;
     ParseProfileLines(value.data(), &numbers, &texts);
@@ -45964,9 +46264,8 @@ IslandLook LookFromProfile(int id) {
 
 // Each monitor's own profile: "id\tdevice" lines.
 int LoadMonitorProfile(const std::wstring& device) {
-    WCHAR value[2048] = L"";
-    Wh_GetStringValue(L"monitorProfiles", value, ARRAYSIZE(value));
-    for (PCWSTR line = value; *line;) {
+    const std::wstring value = GetWholeStringValue(L"monitorProfiles", 2048);
+    for (PCWSTR line = value.c_str(); *line;) {
         PCWSTR end = wcschr(line, L'\n');
         const std::wstring text =
             end ? std::wstring(line, end) : std::wstring(line);
@@ -45989,10 +46288,9 @@ int LoadMonitorProfile(const std::wstring& device) {
 }
 
 void SaveMonitorProfile(const std::wstring& device, int id) {
-    WCHAR value[2048] = L"";
-    Wh_GetStringValue(L"monitorProfiles", value, ARRAYSIZE(value));
+    const std::wstring value = GetWholeStringValue(L"monitorProfiles", 2048);
     std::wstring kept;
-    for (PCWSTR line = value; *line;) {
+    for (PCWSTR line = value.c_str(); *line;) {
         PCWSTR end = wcschr(line, L'\n');
         const std::wstring text =
             end ? std::wstring(line, end) : std::wstring(line);
@@ -46022,9 +46320,16 @@ void Island::SetMonitorProfile(int id) {
     if (m_main) {
         return;
     }
-    // (Its own changes still waiting go in the profile it had.)
+    // (Its own changes still waiting go in the profile it had, its notches'
+    // too.)
     if (m_profileSavePending) {
         SaveOwnProfile();
+    }
+    for (Island* notch : m_notchSiblings) {
+        if (notch->m_profileSavePending) {
+            IslandScope scope(notch);
+            notch->SaveOwnProfile();
+        }
     }
     SaveMonitorProfile(m_ownDevice, id);
     m_profileId = id;
@@ -47581,14 +47886,7 @@ void Island::ScheduleTick() {
 // (See UpdateShortcutKeys.)
 void StopShortcutKeys();
 
-void Island::Destroy() {
-    // A tray icon held on it or over it: let go (its window, about to go,
-    // loses the mouse with nothing held).
-    if (g_trayDrag.owner == this || g_trayDrag.drop.island == this) {
-        g_trayDrag = {};
-    }
-    // A Windows banner moved off screen (one could be ringing) comes back
-    // first, before the waits below. Only the main island takes it over.
+void Island::ReleaseWindowsBanner() {
     m_stackTakeover = false;
     if (m_stackHidden) {
         RestoreWindowsBanner();
@@ -47600,6 +47898,17 @@ void Island::Destroy() {
             *hook = nullptr;
         }
     }
+}
+
+void Island::Destroy() {
+    // A tray icon held on it or over it: let go (its window, about to go,
+    // loses the mouse with nothing held).
+    if (g_trayDrag.owner == this || g_trayDrag.drop.island == this) {
+        g_trayDrag = {};
+    }
+    // A Windows banner moved off screen (one could be ringing) comes back
+    // first, before the waits below. Only the main island takes it over.
+    ReleaseWindowsBanner();
     if (m_main) {
         g_windowsBanner = nullptr;
         if (m_profileSavePending) {
@@ -48134,9 +48443,9 @@ bool g_microphoneLevelsRead = false;
 std::vector<std::pair<std::wstring, int>>& MicrophoneLevels() {
     if (!g_microphoneLevelsRead) {
         g_microphoneLevelsRead = true;
-        WCHAR value[4096] = L"";
-        Wh_GetStringValue(L"microphoneLevels", value, ARRAYSIZE(value));
-        for (PCWSTR line = value; *line;) {
+        const std::wstring value =
+            GetWholeStringValue(L"microphoneLevels", 4096);
+        for (PCWSTR line = value.c_str(); *line;) {
             PCWSTR end = wcschr(line, L'\n');
             const std::wstring text =
                 end ? std::wstring(line, end) : std::wstring(line);
@@ -48162,15 +48471,16 @@ void SaveMicrophoneLevels() {
     Wh_SetStringValue(L"microphoneLevels", value.c_str());
 }
 
-// The microphones the island muted get their level back: all of them
-// (`all`: the island's button, the island stopping, or a level left at 0 by
-// a process that ended without stopping it), or only the ones unmuted
-// elsewhere meanwhile (Windows, another app, a key), whose level would stay
-// at 0. Only the island's own button (`unmute`) unmutes them too: stopping
-// leaves the user's mute as it is (a plain Windows mute from then on) and
-// keeps them listed, so that button still unmutes them all later (one
-// unmuted elsewhere meanwhile leaves the list then). Unplugged ones are kept
-// for when they come back.
+// The microphones the island muted get their level back, when it's still
+// at 0 (the user may have chosen another since, the island running or
+// not): all of them (`all`: the island's button, the island stopping, or a
+// level left at 0 by a process that ended without stopping it), or only the
+// ones unmuted elsewhere meanwhile (Windows, another app, a key). Only the
+// island's own button (`unmute`) unmutes them too: stopping leaves the
+// user's mute as it is (a plain Windows mute from then on) and keeps the
+// ones still muted listed, so that button still unmutes them later; one
+// unmuted elsewhere leaves the list. Unplugged ones are kept for when they
+// come back.
 void RestoreMicrophoneLevels(IMMDeviceEnumerator* enumerator,
                              bool all,
                              bool unmute) {
@@ -48201,21 +48511,22 @@ void RestoreMicrophoneLevels(IMMDeviceEnumerator* enumerator,
                                    return entry.first == deviceId;
                                });
         BOOL muted = FALSE;
-        if (it == levels.end() ||
-            (!all && (FAILED(volume->GetMute(&muted)) || muted))) {
+        const bool mutedNow =
+            it != levels.end() && SUCCEEDED(volume->GetMute(&muted)) && muted;
+        if (it == levels.end() || (!all && mutedNow)) {
             continue;
         }
         float level = 0;
         if (it->second >= 0 &&
-            (all || (SUCCEEDED(volume->GetMasterVolumeLevelScalar(&level)) &&
-                     level < 0.0005f))) {
+            SUCCEEDED(volume->GetMasterVolumeLevelScalar(&level)) &&
+            level < 0.0005f) {
             volume->SetMasterVolumeLevelScalar(
                 std::clamp(it->second, 0, 1000) / 1000.0f, nullptr);
         }
         if (unmute) {
             volume->SetMute(FALSE, nullptr);
         }
-        if (unmute || !all) {
+        if (unmute || !mutedNow) {
             levels.erase(it);
             changed = true;
         }
@@ -50679,7 +50990,9 @@ void Island::ShowToasts(std::vector<IslandToast> toasts) {
     } else {
         KillTimer(m_hwnd, kBannerTimerId);
     }
-    if (m_stackShowing && WantsTakeover()) {
+    // Windows' stack may have it too (a call's, or a priority app's with the
+    // island's own notifications).
+    if (m_stackShowing && (WantsTakeover() || WindowsQuietForIsland())) {
         m_bannerReadRetries = 0;
         ReadWindowsBanners(200);
     }
@@ -50868,11 +51181,13 @@ void Island::Render(bool force) {
     key += std::to_wstring((int)(m_updatesDot * 1000)) + L"|" +
            std::to_wstring((int)(m_unseenDot * 1000)) + L"|" +
            std::to_wstring((int)(m_weatherSwap * 1000)) + L"|";
-    // A title too long scrolling (see m_mediaMarquee): drawn again at each
-    // frame.
+    // A title too long scrolling (see m_mediaMarquee): drawn again as it
+    // moves (not while it pauses at its ends).
     if (MediaTitleScrolls()) {
-        key +=
-            std::to_wstring((int)((NowSeconds() - m_mediaMarqueeStart) * 240));
+        key += std::to_wstring(
+            (int)(MarqueeShift(NowSeconds() - m_mediaMarqueeStart,
+                               m_mediaMarqueeDistance, m_scale) *
+                  4));
     }
     if (!force && key == m_drawnKey) {
         return;
@@ -50881,6 +51196,9 @@ void Island::Render(bool force) {
         return;
     }
     m_drawnKey = key;
+    // (A title scrolling says so as it's drawn; kept while nothing's drawn,
+    // in its pauses.)
+    m_mediaMarquee = false;
     auto* target = m_canvas.target.get();
     const float scale = m_scale;
 
@@ -51692,10 +52010,11 @@ void Island::Render(bool force) {
                         m_mediaMarquee = true;
                         scrolling->SetTextAlignment(
                             DWRITE_TEXT_ALIGNMENT_LEADING);
+                        m_mediaMarqueeDistance =
+                            m_mediaTitleFullWidth - (textRight - textLeft);
                         const float shift = (float)MarqueeShift(
                             NowSeconds() - m_mediaMarqueeStart,
-                            m_mediaTitleFullWidth - (textRight - textLeft),
-                            scale);
+                            m_mediaMarqueeDistance, scale);
                         target->PushAxisAlignedClip(
                             {textLeft, slot.rect.top, textRight,
                              slot.rect.bottom},
@@ -52967,8 +53286,8 @@ void Island::StepWallpaper(int step) {
         if (m_wallpaperListThread) {
             return;
         }
-        WCHAR folder[MAX_PATH] = L"";
-        Wh_GetStringValue(L"wallpaperFolder", folder, ARRAYSIZE(folder));
+        const std::wstring folder =
+            GetWholeStringValue(L"wallpaperFolder", MAX_PATH);
         auto* job = new WallpaperListJob{m_hwnd, folder, step, {}};
         m_wallpaperListThread =
             CreateThread(nullptr, 0, WallpaperListThreadProc, job, 0, nullptr);
@@ -53882,8 +54201,6 @@ void Island::AnimationFrame() {
             apps = true;
         }
     }
-    // (A title scrolling under the mouse says so while drawn.)
-    m_mediaMarquee = false;
     Render();
     // Started while drawing (another title measured, another cover decoded,
     // a title scrolling).
@@ -54200,8 +54517,7 @@ Island::UnreadApp* Island::FindUnread(const std::wstring& appId) {
 
 void Island::LoadUnread() {
     m_unreadApps.clear();
-    std::vector<WCHAR> value(8192);
-    Wh_GetStringValue(L"unreadApps", value.data(), value.size());
+    const std::wstring value = GetWholeStringValue(L"unreadApps", 8192);
     for (PCWSTR line = value.data(); *line;) {
         PCWSTR end = wcschr(line, L'\n');
         std::wstring id = NotificationAppKey(
@@ -54457,8 +54773,7 @@ void Island::SaveSnoozed() {
 // Read again from the notification database: the ones gone from it (cleared
 // in Windows meanwhile) are dropped.
 void Island::LoadSnoozed() {
-    std::vector<WCHAR> value(4096);
-    Wh_GetStringValue(L"snoozedToasts", value.data(), value.size());
+    const std::wstring value = GetWholeStringValue(L"snoozedToasts", 4096);
     const double now = NowSeconds();
     const double wall = WallClockSeconds();
     bool dropped = false;
@@ -55162,7 +55477,8 @@ void Island::OnWindowsBanner(HWND banner, bool appeared) {
         rect.bottom - rect.top != m_stackHeight) {
         m_stackHeight = rect.bottom - rect.top;
         m_stackChangedAt = now;
-        if (WantsTakeover() || m_stackTakeover || m_stackWaiting) {
+        if (WantsTakeover() || m_stackTakeover || m_stackWaiting ||
+            (m_stackHidden && WindowsQuietForIsland())) {
             m_bannerReadRetries = 0;
             ReadWindowsBanners(150);
         }
@@ -55248,7 +55564,7 @@ void Island::StartWindowsBannerThread(DWORD delayMs,
 // if asked meanwhile).
 void Island::ReadWindowsBanners(DWORD delayMs) {
     if (!WantsTakeover() && !m_stackTakeover &&
-        !(m_stackWaiting && WindowsQuietForIsland())) {
+        !(m_stackShowing && WindowsQuietForIsland())) {
         return;
     }
     if (m_bannerReadsBusy > 0) {
@@ -55334,6 +55650,25 @@ void Island::OnWindowsBannersRead() {
                         return view.priority && !view.title.empty() &&
                                islands(view.title);
                     });
+    // With the island's own notifications, an app Windows lets through "Do
+    // not disturb" (a priority one, like the Snipping Tool): a stack of
+    // notifications the pill shows (or will) stays hidden, like any other
+    // one the island shows (the pill's own buttons kept).
+    auto pillShows = [&](const std::wstring& viewTitle) {
+        return (m_bannerWanted && viewTitle == title) ||
+               std::any_of(m_waitingToasts.begin(), m_waitingToasts.end(),
+                           [&](const IslandToast& toast) {
+                               return BannerText(toast.title) == viewTitle;
+                           });
+    };
+    const bool pills =
+        !ours && !m_stackTakeover && m_stackShowing &&
+        WindowsQuietForIsland() && g_settings.islandHideWindowsBanners &&
+        m_visible && !views.empty() &&
+        std::all_of(views.begin(), views.end(),
+                    [&](const WindowsBannerView& view) {
+                        return !view.title.empty() && pillShows(view.title);
+                    });
     // Calls, alarms and reminders only, one of them not read by the island
     // yet, the stack having just changed: it waits for it, hidden.
     const bool waitForIsland =
@@ -55365,6 +55700,15 @@ void Island::OnWindowsBannersRead() {
         }
         StartAnimating();
         Render(true);
+    } else if (pills) {
+        KillTimer(m_hwnd, kBannerRestoreTimerId);
+        m_stackWaiting = false;
+        if (!m_stackHidden) {
+            m_stackHidden = true;
+            if (g_windowsBanner) {
+                OnWindowsBanner(g_windowsBanner, false);
+            }
+        }
     } else if (waitForIsland) {
         if (!m_stackHidden) {
             m_stackHidden = true;
@@ -55380,8 +55724,10 @@ void Island::OnWindowsBannersRead() {
                  nullptr);
     } else if (m_stackTakeover) {
         EndTakeover();
-    } else if (m_stackWaiting && WindowsQuietForIsland() && !views.empty()) {
-        // Not the island's (a priority app's notification, say): back now.
+    } else if ((m_stackWaiting || m_stackHidden) && WindowsQuietForIsland() &&
+               !views.empty()) {
+        // Not the island's (a priority app's notification the pill doesn't
+        // show, say): back now.
         RestoreWindowsBanner();
     } else if (m_stackShowing && (WantsTakeover() || m_stackWaiting) &&
                views.empty() && m_bannerReadRetries < 3) {
@@ -58162,7 +58508,13 @@ DWORD WINAPI IslandThreadProc(LPVOID parameter) {
                 DispatchMessage(&msg);
             }
         }
-        // The others first, then the main one.
+        // The main one's hidden Windows banner back first (a ringing one
+        // shouldn't wait for the others' ends), then the others, then the
+        // main one.
+        {
+            IslandScope scope(&main);
+            main.ReleaseWindowsBanner();
+        }
         for (size_t i = islands.size(); i-- > 1;) {
             IslandScope scope(islands[i].get());
             islands[i]->Destroy();
@@ -58497,9 +58849,7 @@ void LoadSettings() {
     g_settings.islandFollowMouse =
         Wh_GetIntValue(L"islandFollowMouse", 0) != 0;
     {
-        WCHAR device[64] = L"";
-        Wh_GetStringValue(L"islandMonitor", device, ARRAYSIZE(device));
-        g_islandMonitor = device;
+        g_islandMonitor = GetWholeStringValue(L"islandMonitor", 64);
     }
     g_settings.magnification =
         std::clamp(Wh_GetIntSetting(L"icons.magnification"), 100, 200) / 100.0;
