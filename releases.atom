@@ -2,12 +2,168 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-13T06:00:16.000Z</updated>
+    <updated>2026-10-13T07:01:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Window Wobble 1.0.0]]></title>
+        <id>https://windhawk.net/mods/window-wobble#9674ac4e7339530fdd264f1ee8424e8afabc249f</id>
+        <link href="https://windhawk.net/mods/window-wobble"/>
+        <updated>2026-10-13T07:01:11.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windowwobble">Window Wobble</h1>
+<p>KDE-style spring-physics window dragging. Grab a title bar and the window
+follows your cursor like jelly - the title bar keeps up, the body trails
+behind, and it settles with a wobble when you let go.</p>
+<p><img src="https://raw.githubusercontent.com/heyjeay/window-wobble/main/docs/preview.gif" alt="Window Wobble in action" /></p>
+<p>Hold <strong>Shift</strong> (configurable) while grabbing to move a window normally.</p>
+<p>Licensed GPL-3.0-or-later: you are free to use, study, modify and share it,
+and any version you distribute must stay open under the same terms.</p>
+<h2 id="howthisdiffersfromthewobblywindowsmod">How this differs from the Wobbly Windows mod</h2>
+<p><a href="https://windhawk.net/mods/wobbly-windows">Wobbly Windows</a> does the same
+effect from inside <code>dwm.exe</code>, using private uDWM symbols. That is the better
+place to do it: the content stays live, and it can wobble on snapping and
+resizing too, not just dragging.</p>
+<p>This mod does <strong>not</strong> touch <code>dwm.exe</code>. It runs in the application's own
+process and draws the effect on its own Direct3D overlay. Pick whichever
+trade you prefer:</p>
+<p><strong>Reasons to use this one</strong></p>
+<ul>
+<li>No changes to Windhawk's process inclusion list - it works once enabled</li>
+<li>Nothing is injected into the compositor, so a fault here cannot take the
+desktop down with it; at worst one application is affected</li>
+<li>No dependency on private, undocumented DWM symbols, so a Windows update
+changing uDWM internals cannot break it</li>
+</ul>
+<p><strong>Reasons to use the other one</strong></p>
+<ul>
+<li>Window content stays live; here it is a snapshot, so a playing video
+appears frozen for the length of the drag</li>
+<li>It wobbles on snap and resize as well as drag</li>
+<li>One copy in the compositor, rather than a small overlay per application</li>
+</ul>
+<p><strong>Questions, problems or ideas?</strong> Join the Discord
+(https://discord.gg/8wwfPxfMWA) or open an issue
+(https://github.com/heyjeay/window-wobble/issues).</p>
+<h2 id="howitworks">How it works</h2>
+<h3 id="inplainterms">In plain terms</h3>
+<ol>
+<li>You press on a title bar, and the mod quietly takes a photograph of the
+whole window.</li>
+<li>The real window is made invisible. Not minimised, not moved - just not
+drawn. Its taskbar button stays exactly where it was.</li>
+<li>The photograph is pinned to an invisible grid, like a sheet of rubber, and
+shown in the window's place. The top edge of the sheet is stiff and keeps
+up with your cursor; further down it gets floppier. That is the whole
+trick - the body lags behind the title bar because the bottom of the sheet
+is softer than the top.</li>
+<li>All the while you are dragging, the mod is just moving that rubber sheet
+around and letting the springs do what springs do.</li>
+<li>When you let go, the real window is moved to where you dropped it while it
+is still invisible, then made visible again <em>underneath</em> the photograph.
+Only once it is safely back does the photograph disappear, so you never
+catch the swap happening.</li>
+</ol>
+<p>Two things follow from this, and they are the reason for the bypass key. The
+window content is a photograph for as long as you hold it, so a playing video
+looks frozen. And because the mod is doing the dragging instead of Windows,
+Windows' own dragging features do not happen - see the section above.</p>
+<h3 id="underthehood">Under the hood</h3>
+<p>A title-bar press is caught at <code>DispatchMessage</code>, with <code>DefWindowProc</code> as a
+backup and <code>WM_SYSCOMMAND</code>/<code>SC_MOVE</code> alongside for apps that draw their own
+title bars. The mod then runs its own move loop in place of the one Windows
+would start: the window is captured with <code>PrintWindow(PW_RENDERFULLCONTENT)</code>,
+cloaked so it leaves composition entirely, and a spring mesh of that capture
+is drawn on a Direct3D 11 + DirectComposition overlay until you let go.</p>
+<p>The mesh is two layers of springs: a control spring pulling each vertex back
+to its rest position, with the stiffness falling off down the rows, and
+springs between neighbouring vertices so the grid holds together instead of
+turning to taffy. On release the control springs are switched to a stiff,
+overdamped pair so it snaps back rather than ringing.</p>
+<p>The drag runs on one persistent worker thread per process, never in the
+message pump: <code>PrintWindow(PW_RENDERFULLCONTENT)</code> renders through DWM and
+needs the window's own thread pumping, so doing it inline deadlocks against
+the very loop that invoked it.</p>
+<p>Only top-level windows are touched, and only ones DWM will cloak. Anything
+else is handed back to Windows, which then runs its own move loop as usual.</p>
+<h2 id="whatyougiveupduringawobbledrag">What you give up during a wobble drag</h2>
+<p>The mod replaces Windows' move loop, so for the windows it animates these do
+not happen:</p>
+<ul>
+<li>Aero Snap (dragging to a screen edge or the top)</li>
+<li>the Snap Layouts bar at the top of the screen</li>
+<li>restoring a snapped window's previous size when you drag it out</li>
+<li>shake to minimize</li>
+<li><code>WM_ENTERSIZEMOVE</code> / <code>WM_MOVING</code> / <code>WM_EXITSIZEMOVE</code>, which docking UIs
+such as Visual Studio's tool windows use to show drop targets</li>
+</ul>
+<p>Hold the bypass key (<strong>Shift</strong> by default) while grabbing to get all of that
+back for a drag.</p>
+<h2 id="excludedprocesses">Excluded processes</h2>
+<p>Shell and UI-host processes are excluded, since none of them own a window you
+would drag: <code>sihost.exe</code>, <code>RuntimeBroker.exe</code>, <code>StartMenuExperienceHost.exe</code>,
+<code>ShellExperienceHost.exe</code>, <code>SearchHost.exe</code>, <code>TextInputHost.exe</code>,
+<code>ApplicationFrameHost.exe</code> and <code>NVDisplay.Container.exe</code>.</p>
+<p>Windhawk never injects into the critical system processes (<code>csrss.exe</code>,
+<code>dwm.exe</code>, <code>lsass.exe</code> and the rest), so those need no entry here.</p>
+<h2 id="notes">Notes</h2>
+<p>Window content is a snapshot for the duration of the drag, so a playing video
+appears frozen while you hold it. This is inherent to the approach - capturing
+live content per frame is far more expensive than one <code>PrintWindow</code>.</p>
+<p>The Direct3D device and the overlay are released after a few seconds without
+a drag, so an application you dragged once does not hold them for the rest of
+its life. They are rebuilt on the next drag, which costs a few milliseconds.</p>]]></content>
+        <author>
+            <name>HeyJeay</name>
+            <uri>https://github.com/heyjeay</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Excel Wheel Sheet Navigation 0.5.4]]></title>
+        <id>https://windhawk.net/mods/excel-wheel-scroll-sheets#40692524644502ed1427ca9a9c6a15a941d53aab</id>
+        <link href="https://windhawk.net/mods/excel-wheel-scroll-sheets"/>
+        <updated>2026-10-13T07:01:06.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="excelwheelsheetnavigation">Excel Wheel Sheet Navigation</h1>
+<p>For 64-bit desktop Excel on Windows:</p>
+<ul>
+<li>Vertical wheel over the bottom sheet tabs scrolls the tab strip without changing the active sheet.</li>
+<li>Horizontal wheel over the worksheet or sheet tabs activates the adjacent visible sheet.</li>
+<li>The tab strip uses Excel's native navigation arrows and animation. If the arrows cannot be used, it falls back to <code>ScrollWorkbookTabs</code>.</li>
+<li>Repeated same-direction horizontal wheel messages are grouped with a 200 ms quiet period by default; the first switch is immediate.</li>
+<li>Hidden sheets are skipped. Modified wheel input and ordinary vertical worksheet scrolling keep Excel's behavior.</li>
+</ul>
+<p>Settings allow direct sheet activation instead of tab scrolling, reversing direction, disabling horizontal switching, and optional wraparound.
+No macros are required. Activating a sheet can trigger existing workbook activation events, just like clicking a tab.
+Tested on one installation of 64-bit Microsoft 365 Excel; other Office versions and 32-bit Excel have not been tested.</p>
+<hr />
+<h1 id="excel">Excel 滚轮切换工作表</h1>
+<p>默认操作：标签栏上下滚轮平滑滚动标签；点击标签切换工作表。
+单元格区域左右滚轮切换到相邻的可见工作表。</p>
+<p>标签栏滚动使用左下角左右箭头的原生操作路径和动画，
+不再使用图像覆盖或淡入淡出。滚动不改变当前工作表。
+左右拨动产生的连续同方向信号会合并，一次拨动只切换一张。</p>
+<p>将鼠标放到 Excel 底部的工作表标签上，根据“滚轮行为”选择：</p>
+<ul>
+<li>直接切换工作表：向下切换到下一张可见工作表，向上切换到上一张。
+隐藏的工作表会跳过。</li>
+<li>只滚动标签栏：向下显示右侧标签，向上显示左侧标签；当前工作表保持不变，
+找到目标标签后点击进入。</li>
+</ul>
+<p>单元格区域的上下滚轮仍然滚动表格内容。左右滚轮切换可以单独关闭，
+关闭后恢复 Excel 原来的横向滚动。水平滚动条、状态栏或功能区保留原有行为。
+单元格编辑、查找对话框或其他窗口占用焦点时不进行切换。</p>
+<p>只适用于 Windows 桌面版 64 位 Excel。通过 Excel 自身的工作表对象切换，
+不需要启用宏，也不会更改工作簿中的数据。切换工作表会触发工作簿自身已有
+的工作表激活事件，与手动点击标签一样。</p>
+<p>左右拨动防重复默认 200 毫秒：同方向连续信号合并为一次拨动，
+停顿后再次切换，反方向立即切换。标签栏直接切换模式的间隔仍为 150 毫秒。</p>]]></content>
+        <author>
+            <name>youareanimal</name>
+            <uri>https://github.com/youareanimal</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[App Owned Frame 1.44]]></title>
         <id>https://windhawk.net/mods/app-owned-frame#6f0a3b091c1e1f00b0fed647227a52a9f9af5313</id>
@@ -1559,130 +1715,6 @@ its icon, or a screen reader moves to it. No key of its own reaches one.</li>
         <author>
             <name>Brandon Stonebridge</name>
             <uri>https://github.com/st0nebridge</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 On Screen Keyboard Restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-on-screen-keyboard-restorer#1b0eb213c65d27a65ec3d9f8263d252bce4b1b7f</id>
-        <link href="https://windhawk.net/mods/win7-on-screen-keyboard-restorer"/>
-        <updated>2026-10-10T15:04:36.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows7onscreenkeyboardrestorer">Windows 7 On Screen Keyboard Restorer</h1>
-<p>This modification tries to restore the original Windows 7 On-Screen Keyboard on Windows 10 and
-Windows 11: whenever the system <code>osk.exe</code> is about to start, the Windows 7
-<code>osk.exe</code> is started instead. This is a best effort restoration. The Windows 7
-files are downloaded from Microsoft's public symbol server and verified against
-pinned SHA-256 digests before they are used, and nothing is written to
-<code>System32</code>, to <code>Common Files</code>, or to Image File Execution Options. The files are
-kept in the mod's own storage folder (or in the folder of the <code>installFolder</code>
-setting), which Windhawk removes together with the mod, and no registry key is
-left behind.</p>
-<p>This modification has been tested on Windows 10 21H2 and Windows 11 24H2.</p>
-<h2 id="screenshotbefore">Screenshot (Before)</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/beforekeyboard.PNG" alt="Before" /></p>
-<h2 id="screenshotafter">Screenshot (After)</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/afterkeyboard.PNG" alt="After" /></p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod catches the keyboard before it opens and swaps it for
-the Windows 7 one. It does this in two ways: first, it watches the programs
-that usually launch the keyboard (Explorer, Start/Search, <code>control.exe</code> and a
-few others) and redirects the launch so the Windows 7 keyboard starts instead.
-Second, if the system keyboard still manages to open through some path that
-cannot be watched, the mod lets it open, then quietly closes it and starts the
-Windows 7 one in its place.</p>
-<p>Once the Windows 7 keyboard is running, the mod gives it the files it expects
-but cannot find on Windows 10/11: <code>TabSKB.dll</code> and <code>DUI70.dll</code> are pointed to
-local copies, the English texts and dialogs are supplied from inside the mod
-when the <code>.mui</code> file is missing, and the seven special key faces (Windows,
-menu, Enter and the four arrows) are drawn by the mod itself, because the
-modern <code>TipResX.dll</code> on this system has no pictures for them.</p>
-<h2 id="preparation">Preparation</h2>
-<p>Before the Windows 7 keyboard can run outside <code>System32</code>, two small edits are
-needed. First, <code>uiAccess="true"</code> is changed to <code>false</code> in its manifest: Windows
-only honors that flag for signed programs in protected folders, and otherwise
-refuses to start the program with error 740. Second, <code>DUI70.dll</code> is renamed to
-<code>DUI71.dll</code> so it does not collide with the system's own DirectUI, which has
-the same name but is incompatible. The trade-off is that, since the UIAccess
-flag is gone, the Windows 7 keyboard cannot type into elevated (administrator)
-windows.</p>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 legacy flyouts on Win11 24H2 restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/windows-10-legacy-flyouts-restorer#93f81f58254c7479e876d08cd3a6c639437d86c7</id>
-        <link href="https://windhawk.net/mods/windows-10-legacy-flyouts-restorer"/>
-        <updated>2026-10-10T15:04:31.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows10legacyflyoutsonwin1124h2restorer">Windows 10 legacy flyouts on Win11 24H2 restorer</h1>
-<p>This mod restores the Windows 10 network and battery flyouts (network icon with its menu, battery
-icon with the flyout, volume icon) on Windows 11 24H2. It does not patch the Windows 11 shell: it
-runs inside the <em>private</em> Windows 10 shell, so it <strong>requires</strong>
-<a href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2">Windows 10 taskbar on Win11 24H2</a> (by
-Anixx) to be installed and running. In that mod's terminology this mod is the tray half of the
-setup: it uses the same verified copy of the Windows 10 files, the same data folder, and it does
-not start anything by itself. Outside the private shell the mod loads and does nothing: no hook is
-installed, nothing is written, so the Windows 11 shell is never touched.</p>
-<p>What it does, inside the private shell:</p>
-<ul>
-<li>The Windows 10 tray modules (<code>pnidui.dll</code> for the network icon, <code>stobject.dll</code> for battery and
-volume) are downloaded from the Microsoft symbol server, verified by pinned SHA-256 and, by
-default, by Authenticode signature, then loaded. The strings those two modules ask their <code>.mui</code>
-for are served in memory, because this build ships no MUI for them.</li>
-<li>A left click on the network or the battery icon is consumed at the icon and turned into the
-authentic Windows 10 flyout request (<code>CLSID_ImmersiveShell</code> -&gt; <code>ShellExperienceManagerFactory</code>
--&gt; the flyout experience of that icon). Right click, middle click and every other message pass
-through unchanged. The right-click menu of the network icon is built from the two entries
-<code>pnidui</code> itself expects, because its menu resource is gone in this build.</li>
-<li>The flyout window drawn by <code>ShellExperienceHost.exe</code> is made to use the Windows 10 template set,
-otherwise that host tears the flyout down a moment after it has built it.</li>
-</ul>
-<p>Not included on purpose: the three quick-action tiles (Wi-Fi, airplane mode, hotspot) keep the
-stock Windows 11 template, styling and behaviour; the Action Center button and its animation are
-left to dedicated mods.</p>
-<h2 id="behaviourworthknowing">Behaviour worth knowing</h2>
-<ul>
-<li><strong>Network pages are answered by the flyout.</strong> Inside the private shell, every launch of
-<code>ms-settings:network*</code>, <code>ms-settings:wifi</code>, <code>vpn</code>, <code>airplanemode</code>, <code>mobilehotspot</code>,
-<code>ms-availablenetworks:</code> or the network control-panel items is turned into a request for the
-Windows 10 flyout and reported as started, for <em>any</em> caller in that process - not only the
-tray icon. So Win+R with <code>ms-settings:wifi</code> in the Windows 10 shell opens the flyout instead of
-the Settings page. This is the point of the mod (that page does not exist in the Windows 10
-shell any more), but it is a global rewrite in that process.</li>
-<li><strong>The download stays.</strong> Files are fetched at run time from <code>msdl.microsoft.com</code> into the shared
-store; nothing else is fetched. A failed download is retried with a backoff (1 minute, doubling
-up to 15), never on every tick.</li>
-<li><strong>What is written and where it persists.</strong> The verified files go to the data folder. The tray
-state backup and one-time marker normally go to this mod's Windhawk storage; if that path is
-unavailable, the code falls back to the shared data folder. Windhawk removes its mod storage on
-uninstall, so copy the backup elsewhere first if you may need it later. The "Peek at desktop"
-toggle is process-local: this mod does not write <code>DisablePreviewDesktop</code> or <code>EnableAeroPeek</code>.
-While active, its registry-query hook supplies the toggled values to the private shell; on normal
-unload those virtual values are dropped and the shell is notified to reread the real settings. A
-crash cannot leave registry values changed by this menu. The optional tray reset
-(<code>ForceNetworkTrayResetTraySettings</code>) is a separate, deliberate, one-time deletion of shared
-shell state after a complete backup; it is not undone automatically - see its setting.</li>
-<li><strong>In <code>ShellExperienceHost.exe</code>.</strong> The template-set change is reverted when the mod is disabled.
-The module that was patched is also <em>pinned</em> (<code>GET_MODULE_HANDLE_EX_FLAG_PIN</code>), and there is no
-documented way to un-pin a module: <code>Windows.UI.QuickActions.dll</code> therefore stays loaded until
-<code>ShellExperienceHost.exe</code> ends. Nothing is written to disk and no other process is touched.</li>
-<li><strong>Architecture.</strong> <code>@architecture x86-64</code>: everything this mod does - the byte patterns of the
-tray modules, the QuickActions pattern, the import-table entry of <code>pnidui</code> - is written for x64.
-Note that on ARM64 Windhawk still loads an <code>x86-64</code> mod into <code>ShellExperienceHost.exe</code>
-natively; there the pattern does not match, so the mod logs that and writes nothing, but a
-flyout opened in that process will not be held open. Use an x64 Windows if you need this mod.</li>
-</ul>
-<h2 id="examplescreenshotbatteryflyout">Example Screenshot (Battery Flyout)</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/batteryflyoutexample.png" alt="Battery flyout example" /></p>
-<h2 id="credits">Credits</h2>
-<ul>
-<li><a href="https://github.com/Anixx">Anixx</a> - the Windows 10 taskbar mod whose verified files and data
-folder this mod shares, and whose tray-module loading it follows</li>
-<li>ExplorerPatcher (by valinet) - research for the Windows 10 flyouts running on Windows 11</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

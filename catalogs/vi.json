@@ -5074,6 +5074,35 @@
         "version": "1.1.0"
       }
     },
+    "excel-wheel-scroll-sheets": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791874866000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791874866000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "youareanimal",
+        "compilerOptions": "-loleacc -lole32 -loleaut32 -luuid",
+        "description": "Scroll the sheet tab strip with the vertical wheel and switch sheets with the horizontal wheel",
+        "github": "https://github.com/youareanimal",
+        "homepage": "https://github.com/youareanimal/excel-wheel-scroll-sheets",
+        "include": [
+          "EXCEL.EXE"
+        ],
+        "license": "GPL-3.0-or-later",
+        "name": "Excel Wheel Sheet Navigation",
+        "version": "0.5.4"
+      }
+    },
     "expanded-clipboard": {
       "details": {
         "defaultSorting": 17109,
@@ -18392,6 +18421,42 @@
         "license": "MIT",
         "name": "Window Opacity",
         "version": "0.1.0"
+      }
+    },
+    "window-wobble": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791874871000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791874871000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "HeyJeay",
+        "compilerOptions": "-ldwmapi -lgdi32",
+        "description": "KDE-style spring-physics window dragging, without injecting into dwm.exe",
+        "exclude": [
+          "sihost.exe",
+          "RuntimeBroker.exe",
+          "StartMenuExperienceHost.exe",
+          "ShellExperienceHost.exe",
+          "SearchHost.exe",
+          "TextInputHost.exe",
+          "ApplicationFrameHost.exe",
+          "NVDisplay.Container.exe"
+        ],
+        "github": "https://github.com/heyjeay",
+        "homepage": "https://github.com/heyjeay/window-wobble",
+        "include": [
+          "*"
+        ],
+        "license": "GPL-3.0-or-later",
+        "name": "Window Wobble",
+        "version": "1.0.0"
       }
     },
     "windows-10-action-center-restorer": {
