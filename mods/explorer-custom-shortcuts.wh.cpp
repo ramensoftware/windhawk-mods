@@ -102,6 +102,7 @@ You can assign any hotkey directly to built-in commands by setting the path to o
 * **`%folders`** — Selected folders only (skips selected regular files).
 * **`%1`** — Quoted path of the first selected file or directory (`"C:\a.txt"`).
 * **`%n`** / **`%name`** — File or folder names only without absolute directory paths (`"a.txt"`).
+* **`%base`** / **`%basename`** — File or folder names without extension (`"document"` from `"document.pdf"`, or `"LICENSE"` for extensionless files).
 * **`%c`** / **`%count`** — Total number of selected items as an integer (`3`). In loop modes, this resolves to `1`.
 * **`%ext`** — File extension of the first selected item (`.png`).
 * **`%s`** — Space-separated paths with **smart-quoting** (automatically adds double-quotes only to paths containing spaces).
@@ -185,7 +186,7 @@ You can add your own shortcuts using these templates in the settings:
       $description: "Executable path, alias, or internal command (supports 'internal:' or shorthand 'int:'). See the Details tab for the full list of built-in commands. (Note: toggle commands modify persistent Explorer settings)."
     - args: ""
       $name: "Arguments / Tokens"
-      $description: "Supported tokens: %%, %f, %files, %folders, %1, %n / %name, %c / %count, %ext, %s, %d / %dir, %d_smart, %d_name, %p / %parent."
+      $description: "Supported tokens: %%, %f, %files, %folders, %1, %n / %name, %base / %basename, %c / %count, %ext, %s, %d / %dir, %d_smart, %d_name, %p / %parent."
     - mode: "batch"
       $name: "Launch Mode"
       $options:
@@ -668,6 +669,33 @@ std::wstring GetFileNamesOnly(const std::vector<std::wstring>& paths,
     return res;
 }
 
+std::wstring GetFileBaseNamesOnly(const std::vector<std::wstring>& paths,
+                                  bool forceQuotes = true) {
+    std::wstring res;
+    for (const auto& p : paths) {
+        if (!res.empty())
+            res += L" ";
+        PCWSTR namePtr = PathFindFileNameW(p.c_str());
+        std::wstring name = namePtr ? namePtr : L"";
+
+        // Find the last dot to strip extension
+        size_t dot = name.find_last_of(L'.');
+        // Only strip if dot exists and is NOT the first character
+        // (preserves dotfiles like .gitignore, and extensionless files like
+        // LICENSE)
+        if (dot != std::wstring::npos && dot > 0) {
+            name = name.substr(0, dot);
+        }
+
+        if (forceQuotes || name.find(L' ') != std::wstring::npos) {
+            res += SafeQuote(name);
+        } else {
+            res += name;
+        }
+    }
+    return res;
+}
+
 std::wstring GetFileExtension(const std::vector<std::wstring>& paths) {
     if (paths.empty())
         return L"";
@@ -893,8 +921,10 @@ std::wstring ExpandTokens(const std::wstring& pattern,
                 result += p;
             }
         }
-        // --- Names & Extension ---
-        else if (consume(L"%name") || consume(L"%n")) {
+        // --- Names, Base Names & Extension ---
+        else if (consume(L"%basename") || consume(L"%base")) {
+            result += GetFileBaseNamesOnly(allItems, true);
+        } else if (consume(L"%name") || consume(L"%n")) {
             result += GetFileNamesOnly(allItems, true);
         } else if (consume(L"%ext")) {
             result += GetFileExtension(allItems);
