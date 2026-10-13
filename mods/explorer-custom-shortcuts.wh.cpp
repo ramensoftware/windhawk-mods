@@ -1434,7 +1434,6 @@ std::wstring FindVsCode() {
     }
 
     // 3. Resolve sibling <install>\Code.exe from <install>\bin\code.cmd
-    std::error_code ec;
     std::filesystem::path binCmdPath(cmd);
     std::filesystem::path siblingExe =
         binCmdPath.parent_path().parent_path() / L"Code.exe";
