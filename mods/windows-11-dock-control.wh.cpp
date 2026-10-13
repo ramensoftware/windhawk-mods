@@ -2,13 +2,13 @@
 // @id              windows-11-dock-control
 // @name            Windows 11 Taskbar Dock
 // @description     Dock auto-hide policies and smooth native slide animations, alongside Taskbar Styler
-// @version         1.2.3
+// @version         1.2.4
 // @author          Stheno
 // @github          https://github.com/sth3no
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -lversion -lcomctl32 -lshell32
+// @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -lversion -lcomctl32
 // ==/WindhawkMod==
 // Derived from m417z's taskbar-auto-hide-when-maximized and taskbar-auto-hide-speed.
 // Motion research: Bo0ii (Instant Show), jinSeong-P (Auto-Hide Motion).
@@ -43,9 +43,12 @@ and slides back when you reach the bottom edge of the screen.
 
 ## Quick start
 
-First enable **Automatically hide the taskbar** in Windows Settings →
-Personalization → Taskbar → Taskbar behaviors. The mod requires that setting at
-load time; it does not write it or prevent you from changing it.
+Enable **Automatically hide the taskbar** in Windows Settings → Personalization →
+Taskbar → Taskbar behaviors to use the dock policies. The mod can load before the
+taskbar exists, including at sign-in or Explorer restart. It reads auto-hide after
+that window is ready and keeps the taskbar visible while auto-hide is off. You can
+enable it later without reloading the mod. The mod does not write or lock this
+Windows setting.
 
 Start with **Dock visibility → Hide when a window is maximized** and **Smooth slide**.
 The defaults are 280 ms to reveal, 220 ms to hide, and a reveal zone covering the
@@ -204,7 +207,6 @@ Distributed under GPL-3.0.
 #include <unordered_set>
 #include <winrt/Windows.UI.Composition.h>
 #include <commctrl.h>
-#include <shellapi.h>
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -253,7 +255,8 @@ std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_initialized;
 std::atomic<bool> g_explorerPatcherInitialized;
 
-std::atomic<bool> g_autoHideAvailable = true;
+std::atomic<bool> g_autoHideAvailable = false;
+bool g_autoHideStateRead = false;  // Primary taskbar thread only.
 std::mutex g_winEventHookThreadMutex;
 std::atomic<HANDLE> g_winEventHookThread;
 std::unordered_map<void*, HWND> g_taskbarsKeptShown;
@@ -985,6 +988,8 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
         Wh_Log(L"WM_NCCREATE: %08X", (DWORD)(ULONG_PTR)hWnd);
         AdjustTaskbar(hWnd);
     } else if (Msg == WM_NCDESTROY) {
+        g_autoHideStateRead = false;
+        g_autoHideAvailable = false;
         Wh_Log(L"WM_NCDESTROY: %08X", (DWORD)(ULONG_PTR)hWnd);
         g_taskbarsKeptShown.erase(
             QueryViaVtableBackwards(pThis, TrayUI_vftable_IInspectable));
@@ -1002,6 +1007,16 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
             SetRectEmpty(rect);
         }
     } else if (Msg == g_updateTaskbarStateRegisteredMsg) {
+        // Windhawk can initialize before Explorer creates any taskbar window.
+        // Query only after the primary window is ready, on its owning thread.
+        if (!g_autoHideStateRead) {
+            g_autoHideStateRead = true;
+            g_autoHideAvailable = SendMessage(
+                hWnd, kHandleTrayPrivateSettingMessage,
+                kTrayPrivateSettingAutoHideGet, 0) != 0;
+            // A secondary taskbar may have processed its update first.
+            AdjustAllTaskbars();
+        }
         HMONITOR monitor = TrayUI_GetStuckMonitor_Original(pThis);
         bool keepShown = ShouldKeepTaskbarShown(hWnd, monitor);
 
@@ -2749,11 +2764,6 @@ void BeforeUninit() {
 bool IsCustomDockMotion() { return DockWindowMotion::g_animation != DockWindowMotion::Animation::Native; }
 
 BOOL Wh_ModInit() {
-    APPBARDATA appbar{sizeof(appbar)};
-    if (!(SHAppBarMessage(ABM_GETSTATE, &appbar) & ABS_AUTOHIDE)) {
-        Wh_Log(L"Enable Automatically hide the taskbar in Windows Settings before enabling this mod");
-        return FALSE;
-    }
     if (!DockWindowMotion::Init()) return FALSE;
     if (!DockPolicy::Wh_ModInit()) return FALSE;
     if (!DockMotion::Wh_ModInit()) {
