@@ -17,8 +17,6 @@
 // ==WindhawkModReadme==
 /*
 # Lịch âm và ngày nghỉ Việt Nam
-![Vietnamese Holiday Calendar View](https://ibb.co/vvPCH4rG)
-
 
 Mod hiển thị ngày âm Việt Nam (UTC+7) trong lịch Windows 11 và lấy ngày nghỉ từ URL iCalendar (`.ics`) bạn cấu hình. Bạn có thể tô màu ngày nghỉ, hiện tên sự kiện khi rê chuột và tùy chọn thay dòng ngày âm bằng tên hoặc nội dung riêng.
 
