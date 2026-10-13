@@ -45,7 +45,13 @@ Tip: Win+Alt+S, then Win+Alt+C, puts all windows exactly behind the active one.
 
 Fullscreen windows (games, videos), minimized windows, windows on other virtual
 desktops, dialogs, tool windows and the taskbar are never moved. Win+Alt+S also
-leaves maximized windows alone.
+leaves maximized windows alone, and Win+Alt+C leaves always-on-top windows
+alone. Windows of apps running as administrator can't be moved (a Windows
+security rule).
+
+When Win+Alt+C brings a window from a monitor with a different scaling (DPI),
+the app resizes itself for the new monitor after the move, so it may end up
+slightly off-center.
 
 ## Shortcuts
 
@@ -108,6 +114,8 @@ the title bar, or Alt+Space).
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
+
 #include <dwmapi.h>
 #include <shellscalingapi.h>
 
@@ -122,7 +130,9 @@ extern "C" IMAGE_DOS_HEADER __ImageBase;
 
 namespace {
 
-// Found by the Resize From Center mod, which forwards its title bar commands.
+// Found by the Resize From Center mod (resize-from-center.wh.cpp), which
+// forwards its title bar commands. Shared with that mod: keep both sides in
+// sync.
 constexpr wchar_t kWndClass[] = L"WindhawkWindowSync";
 constexpr wchar_t kMsgSyncName[] = L"WindhawkWindowSync_Sync";
 constexpr wchar_t kMsgStackName[] = L"WindhawkWindowSync_Stack";
@@ -160,7 +170,7 @@ Settings GetSettings() {
 }
 
 HANDLE g_windowThread = nullptr;
-HWND g_wnd = nullptr;
+std::atomic<HWND> g_wnd{nullptr};
 UINT g_msgSync = 0;
 UINT g_msgStack = 0;
 
@@ -220,10 +230,9 @@ Hotkey LoadHotkey(PCWSTR prefix) {
             hotkey.text += m.text;
         }
     }
-    PCWSTR key = Wh_GetStringSetting(L"%s.key", prefix);
+    auto key = WindhawkUtils::StringSetting::make(L"%s.key", prefix);
     std::wstring keyDisplay;
-    hotkey.vk = ParseKey(key, &keyDisplay);
-    Wh_FreeStringSetting(key);
+    hotkey.vk = ParseKey(key.get(), &keyDisplay);
     hotkey.text += keyDisplay;
     if (!hotkey.vk || !hotkey.mods) {
         // A key without modifier would swallow normal typing.
@@ -240,9 +249,8 @@ void LoadSettings() {
     settings.stackHotkey = LoadHotkey(L"stackHotkey");
     settings.overrideTakenShortcuts = Wh_GetIntSetting(L"overrideTakenShortcuts");
 
-    PCWSTR source = Wh_GetStringSetting(L"sizeSource");
+    auto source = WindhawkUtils::StringSetting::make(L"sizeSource");
     settings.sizeFromActive = wcscmp(source, L"fixed") != 0;
-    Wh_FreeStringSetting(source);
 
     auto clampPercent = [](int v) { return std::clamp(v, 10, 100); };
     settings.widthPercent = clampPercent(Wh_GetIntSetting(L"widthPercent"));
@@ -431,31 +439,24 @@ void SyncAllWindows(HWND reference) {
     Wh_Log(L"Synced %d window(s)", count);
 }
 
-// Restores a maximized window to its normal size, centered on (cx, cy).
-// Normal positions are in workspace coordinates: screen coordinates minus
-// the offset of the primary monitor's work area (taskbar on top or left).
+// Restores a maximized window to its normal size, centered on (cx, cy),
+// without waiting for the window's thread: both requests are posted to it
+// and processed in order.
 bool RestoreCenteredOn(HWND hWnd, int cx, int cy, const RECT& work) {
     WINDOWPLACEMENT wp{sizeof(wp)};
     if (!GetWindowPlacement(hWnd, &wp))
         return false;
 
-    MONITORINFO primary{sizeof(primary)};
-    GetMonitorInfoW(MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY),
-                    &primary);
-    int offsetX = primary.rcWork.left - primary.rcMonitor.left;
-    int offsetY = primary.rcWork.top - primary.rcMonitor.top;
-
     int w = wp.rcNormalPosition.right - wp.rcNormalPosition.left;
     int h = wp.rcNormalPosition.bottom - wp.rcNormalPosition.top;
     int x = cx - w / 2;
     int y = std::max<int>(cy - h / 2, work.top);
-    wp.rcNormalPosition = {x - offsetX, y - offsetY, x - offsetX + w,
-                           y - offsetY + h};
-    wp.showCmd = SW_SHOWNOACTIVATE;
-    wp.flags = 0;
-    return SetWindowPlacement(hWnd, &wp);
-}
 
+    ShowWindowAsync(hWnd, SW_SHOWNOACTIVATE);
+    return SetWindowPos(hWnd, nullptr, x, y, w, h,
+                        SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE |
+                            SWP_ASYNCWINDOWPOS);
+}
 // The window others stack behind: any visible app window, even maximized or
 // fullscreen, but not the desktop or the taskbar.
 bool IsStackReference(HWND hWnd) {
@@ -489,6 +490,9 @@ void StackBehindWindow(HWND reference) {
     bool restoredAny = false;
     for (HWND hWnd : windows) {
         if (hWnd == reference)
+            continue;
+        // Always-on-top windows would end up in front of it, not behind.
+        if (GetWindowLongW(hWnd, GWL_EXSTYLE) & WS_EX_TOPMOST)
             continue;
 
         if (IsZoomed(hWnd)) {
@@ -704,27 +708,26 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 }
 
 DWORD WINAPI WindowThread(LPVOID readyEvent) {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-
     WNDCLASSW wc{};
     wc.lpfnWndProc = WndProc;
     wc.hInstance = (HINSTANCE)&__ImageBase;
     wc.lpszClassName = kWndClass;
     RegisterClassW(&wc);
 
-    g_wnd = CreateWindowExW(0, kWndClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE,
-                            nullptr, wc.hInstance, nullptr);
-    if (g_wnd) {
-        // Windhawk may run elevated: let the title bar commands of
-        // Resize From Center, from regular apps, reach this window.
-        ChangeWindowMessageFilterEx(g_wnd, g_msgSync, MSGFLT_ALLOW, nullptr);
-        ChangeWindowMessageFilterEx(g_wnd, g_msgStack, MSGFLT_ALLOW, nullptr);
-        ApplyShortcuts(g_wnd);
+    HWND wnd = CreateWindowExW(0, kWndClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE,
+                               nullptr, wc.hInstance, nullptr);
+    g_wnd = wnd;
+    if (wnd) {
+        // If Windhawk runs elevated (portable, started as administrator), let
+        // the title bar commands of Resize From Center reach this window.
+        ChangeWindowMessageFilterEx(wnd, g_msgSync, MSGFLT_ALLOW, nullptr);
+        ChangeWindowMessageFilterEx(wnd, g_msgStack, MSGFLT_ALLOW, nullptr);
+        ApplyShortcuts(wnd);
     }
     SetEvent((HANDLE)readyEvent);
 
     MSG msg;
-    while (g_wnd && GetMessageW(&msg, nullptr, 0, 0) > 0) {
+    while (wnd && GetMessageW(&msg, nullptr, 0, 0) > 0) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
