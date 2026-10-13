@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              taskbar-countdown-timer
-// @name            Taskbar Countdown Timer
+// @id              tray-arrow-countdown-timer
+// @name            Tray Arrow Countdown Timer
 // @description     A countdown timer on the Windows 11 taskbar, next to the "Show hidden icons" arrow, with a sound alert
 // @version         1.0
 // @author          paran01d-qq
@@ -11,7 +11,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Countdown Timer
+# Tray Arrow Countdown Timer
 
 Adds a countdown timer (HH:MM:SS) to the Windows 11 taskbar, right to the left
 of the "Show hidden icons" arrow (^). When the time is up, the timer flashes red
