@@ -11,7 +11,21 @@
 
 // ==WindhawkModReadme==
 /*
-Removes the delay before the snap layouts flyout appears when hovering the maximize button, and optionally changes the delay before it hides.
+# Snap Flyout Instant
+
+Windows 11 shows the snap layouts flyout only after you hover the maximize button for a moment (the Windows default is 600 ms). This mod lets you shorten or remove that delay, and optionally change how long the flyout stays visible after the pointer leaves it.
+
+## Show delay
+
+The mod finds the timer that Windows starts when the pointer enters the maximize button and replaces its duration with the value from the settings. Other timers in the shell are left alone.
+
+## Hide delay
+
+When "Hide delay" is above 0, the mod also replaces the timer that Windows arms shortly after the flyout is shown, which controls when the flyout hides after the pointer leaves it. The hide timer is identified by its duration (100-3000 ms) and by the thread it is armed on, within a few seconds of the flyout being shown. With the default value of 0 this part is disabled and the behavior is the same as in version 1.0.
+
+## Notes
+
+The mod relies on a symbol in twinui.pcshell.dll that a Windows update may rename, which would stop the show delay from being applied.
 */
 // ==/WindhawkModReadme==
 
@@ -19,7 +33,7 @@ Removes the delay before the snap layouts flyout appears when hovering the maxim
 /*
 - delayMs: 1
   $name: Show delay (ms)
-  $description: Delay before the snap layouts flyout appears. Minimum 1.
+  $description: Delay before the snap layouts flyout appears. Minimum 1. The Windows default is 600.
 - hideDelayMs: 0
   $name: Hide delay (ms)
   $description: Delay before the flyout hides after the pointer leaves it. 0 keeps the system default.
@@ -36,11 +50,10 @@ static std::atomic<int> g_hideDelayMs{0};
 static std::atomic<DWORD> g_invokeTid{0};
 static std::atomic<ULONGLONG> g_invokeTick{0};
 static std::atomic<DWORD> g_flyoutTid{0};
-static std::atomic<PVOID> g_hideTimer{nullptr};
 static std::atomic<ULONGLONG> g_flyoutTick{0};
 static std::atomic<bool> g_flyoutHookAttempted{false};
 
-static constexpr ULONGLONG kHideWindowMs = 60000;
+static constexpr ULONGLONG kHideWindowMs = 10000;
 
 using Void_t = void(__cdecl*)();
 static Void_t StartInvoke_Original;
@@ -88,27 +101,19 @@ VOID NTAPI TpSet_Hook(PVOID timer, PLARGE_INTEGER due, ULONG period, ULONG windo
     }
 
     int hideMs = g_hideDelayMs;
-    if (hideMs > 0 && due && due->QuadPart < 0) {
-        bool replace = false;
-        if (timer == g_hideTimer.load()) {
-            replace = true;
-        } else if (g_flyoutTid == tid) {
-            if (now - g_flyoutTick >= kHideWindowMs) {
-                g_flyoutTid = 0;
-            } else {
-                long long ms = -due->QuadPart / 10000;
-                if (ms >= 100 && ms <= 3000 &&
-                    CallerIsWinrtTimer(__builtin_return_address(0))) {
-                    g_hideTimer = timer;
-                    replace = true;
-                }
+    if (hideMs > 0 && g_flyoutTid == tid && due && due->QuadPart < 0) {
+        if (now - g_flyoutTick >= kHideWindowMs) {
+            g_flyoutTid = 0;
+        } else {
+            long long ms = -due->QuadPart / 10000;
+            if (ms >= 100 && ms <= 3000 &&
+                CallerIsWinrtTimer(__builtin_return_address(0))) {
+                g_flyoutTick = now;
+                LARGE_INTEGER custom;
+                custom.QuadPart = -(long long)hideMs * 10000;
+                TpSet_Original(timer, &custom, period, window);
+                return;
             }
-        }
-        if (replace) {
-            LARGE_INTEGER custom;
-            custom.QuadPart = -(long long)hideMs * 10000;
-            TpSet_Original(timer, &custom, period, window);
-            return;
         }
     }
 
@@ -152,7 +157,6 @@ void LoadSettings() {
     int hide = Wh_GetIntSetting(L"hideDelayMs");
     if (hide < 0) hide = 0;
     g_hideDelayMs = hide;
-    g_hideTimer = nullptr;
 }
 
 BOOL Wh_ModInit() {
@@ -160,10 +164,13 @@ BOOL Wh_ModInit() {
     HMODULE nt = GetModuleHandleW(L"ntdll.dll");
     void* tp = nt ? (void*)GetProcAddress(nt, "TpSetTimer") : nullptr;
     if (!tp) return FALSE;
-    Wh_SetFunctionHook(tp, (void*)TpSet_Hook, (void**)&TpSet_Original);
+    WindhawkUtils::SetFunctionHook((TpSet_t)tp, TpSet_Hook, &TpSet_Original);
     HMODULE kb = GetModuleHandleW(L"kernelbase.dll");
     void* ll = kb ? (void*)GetProcAddress(kb, "LoadLibraryExW") : nullptr;
-    if (ll) Wh_SetFunctionHook(ll, (void*)LoadLibraryExW_Hook, (void**)&LoadLibraryExW_Original);
+    if (ll) {
+        WindhawkUtils::SetFunctionHook((LoadLibraryExW_t)ll, LoadLibraryExW_Hook,
+                                       &LoadLibraryExW_Original);
+    }
     TryHookFlyout(GetModuleHandleW(L"twinui.pcshell.dll"));
     return TRUE;
 }
