@@ -138,6 +138,7 @@ Alt, or change the key of either mod.
 #include <cmath>
 #include <cwctype>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 extern "C" IMAGE_DOS_HEADER __ImageBase;
@@ -267,7 +268,8 @@ Hotkey LoadHotkey(PCWSTR prefix) {
     std::wstring keyDisplay;
     hotkey.vk = ParseKey(key, &keyDisplay);
     Wh_FreeStringSetting(key);
-    if (hotkey.vk)
+    // No text for a shortcut that PublishHotkeys() disables.
+    if (hotkey.vk && hotkey.mods)
         hotkey.text = text + keyDisplay;
     return hotkey;
 }
@@ -401,6 +403,16 @@ void BeginSizeMove(HWND hWnd) {
     g_resize.maxTrack = mmi.ptMaxTrackSize;
 }
 
+void SendMaskKey() {
+    // An unassigned key between the modifiers' press and release stops
+    // Start (Win) or the menu bar (Alt) from opening.
+    INPUT in[2]{};
+    in[0].type = in[1].type = INPUT_KEYBOARD;
+    in[0].ki.wVk = in[1].ki.wVk = 0xE8;
+    in[0].ki.dwExtraInfo = in[1].ki.dwExtraInfo = kOwnInputMarker;
+    in[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(2, in, sizeof(INPUT));
+}
 void EndSizeMove(HWND hWnd) {
     if (g_resize.hwnd != hWnd)
         return;
@@ -408,12 +420,7 @@ void EndSizeMove(HWND hWnd) {
     // Releasing Alt after the drag would open the app's menu bar: slip an
     // unassigned key in between, like AutoHotkey's "menu mask key".
     if (g_resize.altUsed && (GetAsyncKeyState(VK_MENU) & 0x8000)) {
-        INPUT in[2]{};
-        in[0].type = in[1].type = INPUT_KEYBOARD;
-        in[0].ki.wVk = in[1].ki.wVk = 0xE8;
-        in[0].ki.dwExtraInfo = in[1].ki.dwExtraInfo = kOwnInputMarker;
-        in[1].ki.dwFlags = KEYEVENTF_KEYUP;
-        SendInput(2, in, sizeof(INPUT));
+        SendMaskKey();
     }
     g_resize = {};
 }
@@ -500,6 +507,19 @@ void PostToSyncWindow(UINT msg, HWND reference) {
 
 // --------------------------------------------------------------- subclass
 
+// Every window subclassed by the mod, so that unloading can find them all,
+// including the ones re-parented since (EnumWindows only sees top-level
+// windows).
+SRWLOCK g_subclassedLock = SRWLOCK_INIT;
+std::unordered_set<HWND> g_subclassed;
+
+void ForgetSubclassedWindow(HWND hWnd) {
+    AcquireSRWLockExclusive(&g_subclassedLock);
+    g_subclassed.erase(hWnd);
+    ReleaseSRWLockExclusive(&g_subclassedLock);
+}
+
+
 LRESULT CALLBACK
 SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR) {
     switch (uMsg) {
@@ -527,6 +547,12 @@ SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR) {
             }
             break;
 
+        case WM_NCDESTROY:
+            // The subclass itself is removed by Windhawk's wrapper.
+            RemovePropW(hWnd, kMenuProp);
+            ForgetSubclassedWindow(hWnd);
+            break;
+
         case WM_SYSCOMMAND:
             if ((wParam & 0xFFF0) == kSysMenuSyncId) {
                 PostToSyncWindow(kMsgSync, hWnd);
@@ -550,8 +576,11 @@ bool IsSubclassCandidate(HWND hWnd) {
 }
 
 void SubclassIfCandidate(HWND hWnd) {
-    if (IsSubclassCandidate(hWnd)) {
-        WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 0);
+    if (IsSubclassCandidate(hWnd) &&
+        WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 0)) {
+        AcquireSRWLockExclusive(&g_subclassedLock);
+        g_subclassed.insert(hWnd);
+        ReleaseSRWLockExclusive(&g_subclassedLock);
     }
 }
 
@@ -937,16 +966,6 @@ UINT CurrentModifiers() {
     return mods;
 }
 
-void SendMaskKey() {
-    // An unassigned key between the modifiers' press and release stops
-    // Start (Win) or the menu bar (Alt) from opening.
-    INPUT in[2]{};
-    in[0].type = in[1].type = INPUT_KEYBOARD;
-    in[0].ki.wVk = in[1].ki.wVk = 0xE8;
-    in[0].ki.dwExtraInfo = in[1].ki.dwExtraInfo = kOwnInputMarker;
-    in[1].ki.dwFlags = KEYEVENTF_KEYUP;
-    SendInput(2, in, sizeof(INPUT));
-}
 
 LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
@@ -1035,12 +1054,6 @@ DWORD WINAPI SyncThread(LPVOID readyEvent) {
 
     g_syncWnd = CreateWindowExW(0, kSyncWndClass, L"", 0, 0, 0, 0, 0,
                                 HWND_MESSAGE, nullptr, wc.hInstance, nullptr);
-    if (g_syncWnd) {
-        // Apps running at a different integrity level can still ask for a sync.
-        ChangeWindowMessageFilterEx(g_syncWnd, kMsgSync, MSGFLT_ALLOW, nullptr);
-        ChangeWindowMessageFilterEx(g_syncWnd, kMsgGather, MSGFLT_ALLOW,
-                                    nullptr);
-    }
     SetEvent((HANDLE)readyEvent);
 
     MSG msg;
@@ -1066,7 +1079,8 @@ HANDLE StartThread(LPTHREAD_START_ROUTINE proc, DWORD* threadId) {
 void StopThread(HANDLE* thread) {
     if (!*thread)
         return;
-    WaitForSingleObject(*thread, 5000);
+    // The mod is unloaded right after Wh_ModUninit: the thread must be gone.
+    WaitForSingleObject(*thread, INFINITE);
     CloseHandle(*thread);
     *thread = nullptr;
 }
@@ -1087,10 +1101,10 @@ BOOL Wh_ModInit() {
     LoadSettings();
     g_isExplorer = IsExplorerProcess();
 
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
-                       (void**)&CreateWindowExW_Original);
-    Wh_SetFunctionHook((void*)CreateWindowExA, (void*)CreateWindowExA_Hook,
-                       (void**)&CreateWindowExA_Original);
+    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
+                                   &CreateWindowExW_Original);
+    WindhawkUtils::SetFunctionHook(CreateWindowExA, CreateWindowExA_Hook,
+                                   &CreateWindowExA_Original);
     return TRUE;
 }
 
@@ -1124,8 +1138,18 @@ void Wh_ModUninit() {
         StopThread(&g_syncThread);
     }
 
-    ForEachProcessWindow([](HWND hWnd) {
+    // Every subclass must be gone before the mod is unloaded, so busy windows
+    // are waited for instead of skipped.
+    std::vector<HWND> windows;
+    EnumWindows(CollectProcessWindow, (LPARAM)&windows);
+    AcquireSRWLockShared(&g_subclassedLock);
+    windows.insert(windows.end(), g_subclassed.begin(), g_subclassed.end());
+    ReleaseSRWLockShared(&g_subclassedLock);
+    std::sort(windows.begin(), windows.end());
+    windows.erase(std::unique(windows.begin(), windows.end()), windows.end());
+
+    for (HWND hWnd : windows) {
         RemoveSysMenuItem(hWnd);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
-    });
+    }
 }
