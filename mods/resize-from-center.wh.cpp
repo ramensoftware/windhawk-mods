@@ -454,15 +454,16 @@ void Wh_ModSettingsChanged() {
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    for (HWND hWnd : TrackedCopy(g_menuWindows)) {
-        if (HMENU menu = GetSystemMenu(hWnd, FALSE))
-            RemoveMenuItems(menu);
-    }
-
     // Only windows that carry the subclass get the (blocking) removal; busy
     // ones among them are waited for, the subclass must be gone before the
     // mod is unloaded.
     for (HWND hWnd : TrackedCopy(g_subclassed)) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
+    }
+
+    // No subclass is left to add the items back.
+    for (HWND hWnd : TrackedCopy(g_menuWindows)) {
+        if (HMENU menu = GetSystemMenu(hWnd, FALSE))
+            RemoveMenuItems(menu);
     }
 }
