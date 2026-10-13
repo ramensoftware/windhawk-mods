@@ -16159,6 +16159,30 @@
         "version": "0.5"
       }
     },
+    "toast-auto-dismiss": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791889493000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791889493000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "nikitor32",
+        "compilerOptions": "-lole32 -loleaut32 -ldwmapi",
+        "description": "Closes toast notification banners after a configurable number of seconds, unless the mouse pointer is over them",
+        "github": "https://github.com/nikitor32",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Toast auto-dismiss",
+        "version": "1.0"
+      }
+    },
     "toggle-hidden-files": {
       "details": {
         "defaultSorting": 7340,

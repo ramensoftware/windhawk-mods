@@ -2,12 +2,67 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-13T10:03:45.000Z</updated>
+    <updated>2026-10-13T11:04:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Toast auto-dismiss 1.0]]></title>
+        <id>https://windhawk.net/mods/toast-auto-dismiss#e30d7bd42160864d3934284b08907fc9997b0d92</id>
+        <link href="https://windhawk.net/mods/toast-auto-dismiss"/>
+        <updated>2026-10-13T11:04:53.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="toastautodismiss">Toast auto-dismiss</h1>
+<p>Windows 11 toast banners usually disappear on their own in about five
+seconds, but reminders and notifications from some apps can stay on the
+screen until you deal with them.</p>
+<p>The mod watches for toast banners and closes them after a configurable
+timeout (5 seconds by default). Closing works exactly like pressing the
+banner's own close (X) button: the notification is not lost, it stays in
+the notification center, and no app notification settings are changed.</p>
+<p>While the mouse pointer is over a banner, the countdown is paused, so
+the banner's own buttons (reply, dismiss, and similar) remain clickable
+for as long as needed.</p>
+<p>Windows has its own "Dismiss notifications after this amount of
+time" option (Settings &gt; Accessibility &gt; Visual effects, 5 seconds by
+default), but many toasts ignore it and stay on the screen until
+dismissed. The mod closes banners that ignore the system setting, and
+its timeout can also be shorter than the system's five seconds.</p>
+<p>The mod runs in a dedicated Windhawk process (as a tool mod) and does
+not inject into other applications.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Timeout (seconds)</strong> - the maximum time a banner stays on screen.
+Default: 5, set to 0 to disable the mod. Use a smaller value to make
+banners disappear faster, or a larger value as a safety net for
+notifications that get stuck on the screen. The value is limited to
+3600 seconds.</li>
+<li><strong>Pause while hovered</strong> - keep the banner while the pointer is over
+it. Default: on.</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<p>The banner is a regular window owned by the Windows shell. The mod
+finds it by size and position in the bottom right corner of a monitor
+and closes it through UI Automation - the same interface screen readers
+use to press buttons. No hooks are installed, and no system files or
+registry keys are modified.</p>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>Banners are detected by their position in the bottom right corner
+of a monitor, so banners shown elsewhere are not closed. This
+includes banners moved to another corner or monitor (for example by
+the Notifications placement mod) and right-to-left languages, where
+banners appear in the bottom left corner.</li>
+<li>Toasts that are meant to stay on the screen until handled, such as
+incoming call or alarm notifications, are closed by the timeout as
+well. Point at a banner to pause the countdown while it matters.</li>
+</ul>]]></content>
+        <author>
+            <name>nikitor32</name>
+            <uri>https://github.com/nikitor32</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mond Desktop Clock 3.5]]></title>
         <id>https://windhawk.net/mods/mond-desktop-clock#d546070d720a18714a4dba2eb05c936b2227ea51</id>
@@ -1651,47 +1706,6 @@ parts of the render loop.</p>]]></content>
         <author>
             <name>Ulrizza</name>
             <uri>https://github.com/Ulrizza</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar auto-hide after a delay 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-auto-hide-delay#20e2a0f534b32ec29c4cef9c98e878997a6fddc1</id>
-        <link href="https://windhawk.net/mods/taskbar-auto-hide-delay"/>
-        <updated>2026-10-10T18:04:05.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarautohideafteradelay">Taskbar auto-hide after a delay</h1>
-<p>Windows 11 (24H2) hides the auto-hide taskbar only when the pointer leaves
-the taskbar. If the taskbar becomes visible for another reason — for
-example, when a new window or dialog appears — no "pointer left" event ever
-fires, and the taskbar stays on screen indefinitely.</p>
-<p>The mod runs as a small background tool and watches the taskbars. As soon as
-a taskbar becomes visible while the mouse pointer is <strong>not</strong> over it, a
-countdown starts. When the countdown expires, the mod sends the taskbar its
-own hide message, so it slides away with the standard animation.</p>
-<p>If you move the pointer over the taskbar, the countdown is cancelled so the
-taskbar stays available while you interact with it.</p>
-<p>The mod does nothing if auto-hide is disabled in the Windows settings.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Hide delay (seconds)</strong> — how long the taskbar stays visible before it
-is hidden. Default: 3.</li>
-</ul>
-<h2 id="comparedtobettertaskbarautohide">Compared to Better Taskbar Autohide</h2>
-<p><a href="https://windhawk.net/mods/taskbar-autohide-better">Better Taskbar Autohide</a>
-covers a narrower case: it hooks the taskbar internals and only helps when
-Windows forces the taskbar to stay shown because an inactive window is
-notifying. This mod reacts to any reason the taskbar becomes visible —
-new windows, dialogs, notifications — and uses no hooks; the only internal
-detail it relies on is the taskbar's auto-hide timer ID, which has been
-stable for a long time and is also used by other taskbar mods.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>The mod doesn't use hooks, so it's designed to work together with other
-taskbar mods such as
-<a href="https://windhawk.net/mods/taskbar-auto-hide-when-maximized">Taskbar auto-hide when maximized</a>
-and
-<a href="https://windhawk.net/mods/taskbar-auto-hide-keyboard-only">Taskbar auto-hide keyboard only</a>.</p>]]></content>
-        <author>
-            <name>nikitor32</name>
-            <uri>https://github.com/nikitor32</uri>
         </author>
     </entry>
 </feed>

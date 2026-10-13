@@ -2,12 +2,67 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-13T10:03:45.000Z</updated>
+    <updated>2026-10-13T11:04:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Toast auto-dismiss 1.0]]></title>
+        <id>https://windhawk.net/mods/toast-auto-dismiss#e30d7bd42160864d3934284b08907fc9997b0d92</id>
+        <link href="https://windhawk.net/mods/toast-auto-dismiss"/>
+        <updated>2026-10-13T11:04:53.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="toastautodismiss">Toast auto-dismiss</h1>
+<p>Windows 11 toast banners usually disappear on their own in about five
+seconds, but reminders and notifications from some apps can stay on the
+screen until you deal with them.</p>
+<p>The mod watches for toast banners and closes them after a configurable
+timeout (5 seconds by default). Closing works exactly like pressing the
+banner's own close (X) button: the notification is not lost, it stays in
+the notification center, and no app notification settings are changed.</p>
+<p>While the mouse pointer is over a banner, the countdown is paused, so
+the banner's own buttons (reply, dismiss, and similar) remain clickable
+for as long as needed.</p>
+<p>Windows has its own "Dismiss notifications after this amount of
+time" option (Settings &gt; Accessibility &gt; Visual effects, 5 seconds by
+default), but many toasts ignore it and stay on the screen until
+dismissed. The mod closes banners that ignore the system setting, and
+its timeout can also be shorter than the system's five seconds.</p>
+<p>The mod runs in a dedicated Windhawk process (as a tool mod) and does
+not inject into other applications.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Timeout (seconds)</strong> - the maximum time a banner stays on screen.
+Default: 5, set to 0 to disable the mod. Use a smaller value to make
+banners disappear faster, or a larger value as a safety net for
+notifications that get stuck on the screen. The value is limited to
+3600 seconds.</li>
+<li><strong>Pause while hovered</strong> - keep the banner while the pointer is over
+it. Default: on.</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<p>The banner is a regular window owned by the Windows shell. The mod
+finds it by size and position in the bottom right corner of a monitor
+and closes it through UI Automation - the same interface screen readers
+use to press buttons. No hooks are installed, and no system files or
+registry keys are modified.</p>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>Banners are detected by their position in the bottom right corner
+of a monitor, so banners shown elsewhere are not closed. This
+includes banners moved to another corner or monitor (for example by
+the Notifications placement mod) and right-to-left languages, where
+banners appear in the bottom left corner.</li>
+<li>Toasts that are meant to stay on the screen until handled, such as
+incoming call or alarm notifications, are closed by the timeout as
+well. Point at a banner to pause the countdown while it matters.</li>
+</ul>]]></content>
+        <author>
+            <name>nikitor32</name>
+            <uri>https://github.com/nikitor32</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mond Desktop Clock 3.5]]></title>
         <id>https://windhawk.net/mods/mond-desktop-clock#d546070d720a18714a4dba2eb05c936b2227ea51</id>
@@ -1184,19 +1239,6 @@ Windhawk debug logging and check for initialization or compatibility errors.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Drag to Delete 1.0.0]]></title>
-        <id>https://windhawk.net/mods/drag-to-delete#e0fb78e5479452c6e429b883817632946f47a367</id>
-        <link href="https://windhawk.net/mods/drag-to-delete"/>
-        <updated>2026-10-11T20:01:52.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="dragtodelete">Drag to Delete</h1>
-<p>Drag files onto a floating target to move them to the Recycle Bin.</p>
-<p><img src="https://i.imgur.com/bKMRf5A.gif" alt="Demonstration" /></p>]]></content>
-        <author>
-            <name>iMAboud</name>
-            <uri>https://github.com/iMAboud</uri>
         </author>
     </entry>
 </feed>
