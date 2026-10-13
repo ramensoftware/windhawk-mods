@@ -844,6 +844,7 @@ available to select or cancel.
 
 #include <initguid.h>
 #include <windows.h>
+#include <sddl.h>
 #include <dwmapi.h>
 #include <uxtheme.h>
 #include <shellapi.h>
@@ -1989,6 +1990,15 @@ static bool g_customCornerRadiusModActive = false;
 static HANDLE g_hDwmCornerWatchThread = NULL;
 static HANDLE g_hDwmCornerWatchStopEvent = NULL;
 
+static bool ReadRegistryDword(HKEY hKey, PCWSTR valueName, DWORD* value) {
+    if (!hKey || !value) return false;
+    DWORD type = 0;
+    DWORD size = sizeof(*value);
+    return RegQueryValueExW(hKey, valueName, NULL, &type, (LPBYTE)value,
+                            &size) == ERROR_SUCCESS &&
+           type == REG_DWORD && size == sizeof(*value);
+}
+
 static bool DetectSystemDwmCornerRadiusValues(int* outRadius, int* outSmallRadius) {
     const WCHAR* modKeys[] = {
         L"SOFTWARE\\Windhawk\\Engine\\Mods\\custom-corner-radius",
@@ -1997,14 +2007,15 @@ static bool DetectSystemDwmCornerRadiusValues(int* outRadius, int* outSmallRadiu
 
     for (const auto* modKeyPath : modKeys) {
         HKEY hKey = NULL;
-        LONG lRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE, modKeyPath, 0, KEY_READ | KEY_WOW64_64KEY, &hKey);
+        LONG lRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE, modKeyPath, 0,
+                                  KEY_READ | KEY_WOW64_64KEY, &hKey);
         if (lRes != ERROR_SUCCESS) {
             continue;
         }
 
-        DWORD disabled = 0, sz = sizeof(disabled);
+        DWORD disabled = 0;
         bool modActive = true;
-        if (RegQueryValueExW(hKey, L"Disabled", NULL, NULL, (LPBYTE)&disabled, &sz) == ERROR_SUCCESS) {
+        if (ReadRegistryDword(hKey, L"Disabled", &disabled)) {
             modActive = (disabled == 0);
         }
         RegCloseKey(hKey);
@@ -2013,18 +2024,18 @@ static bool DetectSystemDwmCornerRadiusValues(int* outRadius, int* outSmallRadiu
             WCHAR settingsPath[MAX_PATH];
             swprintf_s(settingsPath, L"%s\\Settings", modKeyPath);
             HKEY hSetKey = NULL;
-            lRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE, settingsPath, 0, KEY_READ | KEY_WOW64_64KEY, &hSetKey);
+            lRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE, settingsPath, 0,
+                                 KEY_READ | KEY_WOW64_64KEY, &hSetKey);
             if (lRes == ERROR_SUCCESS) {
-                DWORD rVal = (DWORD)-1, szVal = sizeof(rVal);
-                LONG rRes = RegQueryValueExW(hSetKey, L"radius", NULL, NULL, (LPBYTE)&rVal, &szVal);
-
+                DWORD rVal = (DWORD)-1;
+                bool hasRadius = ReadRegistryDword(hSetKey, L"radius", &rVal);
                 DWORD sVal = (DWORD)-1;
-                szVal = sizeof(sVal);
-                LONG sRes = RegQueryValueExW(hSetKey, L"smallRadius", NULL, NULL, (LPBYTE)&sVal, &szVal);
+                bool hasSmallRadius =
+                    ReadRegistryDword(hSetKey, L"smallRadius", &sVal);
                 RegCloseKey(hSetKey);
 
                 int finalRadius = 8;
-                if (rRes == ERROR_SUCCESS) {
+                if (hasRadius) {
                     if (rVal == (DWORD)-1) {
                         finalRadius = IsWin11OrGreater() ? 8 : 0;
                     } else {
@@ -2035,22 +2046,27 @@ static bool DetectSystemDwmCornerRadiusValues(int* outRadius, int* outSmallRadiu
                 }
 
                 int finalSmallRadius = 4;
-                if (sRes == ERROR_SUCCESS) {
+                if (hasSmallRadius) {
                     if (sVal == (DWORD)-1) {
                         finalSmallRadius = IsWin11OrGreater() ? 4 : 0;
                     } else {
                         finalSmallRadius = (int)sVal;
                     }
                 } else {
-                    if (rRes == ERROR_SUCCESS && rVal != (DWORD)-1) {
+                    if (hasRadius && rVal != (DWORD)-1) {
                         finalSmallRadius = (int)roundf((float)rVal * 0.5f);
                     } else {
                         finalSmallRadius = 6; // custom-corner-radius mod default is 6
                     }
                 }
 
+                if (finalRadius < 0) finalRadius = 0;
+                if (finalSmallRadius < 0) finalSmallRadius = 0;
+
                 if (outRadius) *outRadius = finalRadius;
                 if (outSmallRadius) *outSmallRadius = finalSmallRadius;
+                Wh_Log(L"SWS: custom corner registry active=%d radius=%d small=%d",
+                       modActive, finalRadius, finalSmallRadius);
                 return true;
             }
         }
@@ -2059,6 +2075,8 @@ static bool DetectSystemDwmCornerRadiusValues(int* outRadius, int* outSmallRadiu
     // Native OS Fallback
     if (outRadius) *outRadius = IsWin11OrGreater() ? 8 : 0;
     if (outSmallRadius) *outSmallRadius = IsWin11OrGreater() ? 4 : 0;
+    Wh_Log(L"SWS: custom corner registry unavailable; native radius=%d small=%d",
+           IsWin11OrGreater() ? 8 : 0, IsWin11OrGreater() ? 4 : 0);
     return false;
 }
 
@@ -2075,8 +2093,8 @@ static DWORD WINAPI DwmCornerWatchThread(LPVOID lpParam) {
     DetectSystemDwmCornerRadiusValues(&lastRadius, &lastSmallRadius);
     HKEY hKey = NULL;
     LONG lRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-                              L"SOFTWARE\\Windhawk\\Engine\\Mods",
-                              0, KEY_NOTIFY | KEY_READ | KEY_WOW64_64KEY, &hKey);
+                              L"SOFTWARE\\Windhawk\\Engine\\Mods", 0,
+                              KEY_NOTIFY | KEY_READ | KEY_WOW64_64KEY, &hKey);
     if (lRes != ERROR_SUCCESS) {
         return 0;
     }
@@ -2090,19 +2108,17 @@ static DWORD WINAPI DwmCornerWatchThread(LPVOID lpParam) {
     HANDLE waitHandles[2] = { g_hDwmCornerWatchStopEvent, hChangeEvt };
 
     while (true) {
-        lRes = RegNotifyChangeKeyValue(hKey, TRUE,
-                                       REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET,
-                                       hChangeEvt, TRUE);
+        lRes = RegNotifyChangeKeyValue(
+            hKey, TRUE, REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET,
+            hChangeEvt, TRUE);
         if (lRes != ERROR_SUCCESS) {
             break;
         }
 
         DWORD dwWait = WaitForMultipleObjects(2, waitHandles, FALSE, INFINITE);
         if (dwWait == WAIT_OBJECT_0) {
-            // Stop event signaled
             break;
         } else if (dwWait == WAIT_OBJECT_0 + 1) {
-            // Registry change detected: debounce 50ms for batch multi-value writes
             Sleep(50);
 
             int newR = 8, newS = 4;
@@ -2152,6 +2168,9 @@ static void ReleaseDwmThumbnailRegistration(DwmThumbnailRegistration* record) {
             }
         }
         g_thumbSourceRects.erase(handle);
+    } else {
+        Wh_Log(L"SWS: DwmUnregisterThumbnail failed handle=%p hr=0x%08X",
+               handle, (unsigned)result);
     }
 }
 
@@ -2184,6 +2203,9 @@ static inline HRESULT SafeDwmUnregisterThumbnail(HTHUMBNAIL h) {
             g_dwmThumbnailRegistrations.erase(it);
         }
         g_thumbSourceRects.erase(h);
+    } else {
+        Wh_Log(L"SWS: DwmUnregisterThumbnail failed handle=%p hr=0x%08X",
+               h, (unsigned)result);
     }
     return result;
 }
@@ -2194,7 +2216,7 @@ static void SWS_RegisterHotkeys();
 static void SWS_UnregisterHotkeys();
 static void ApplySwitcherRegion();
 static void ApplyThemeToWindow(HWND hWnd);
-static void ApplyAcrylicWindowRegion(HWND hWnd);
+static void ApplyPresentationWindowRegion(HWND hWnd);
 static void CreateMirrorSwitchers();
 static void ShowMirrorSwitchers();
 static void HideSwitcher();
@@ -2643,6 +2665,13 @@ struct PresentationWindowState {
     UINT dpiY;
 };
 static std::map<HWND, PresentationWindowState> g_presentationWindows;
+struct PresentationRegionState {
+    int width = 0;
+    int height = 0;
+    int radius = 0;
+    bool applied = false;
+};
+static std::map<HWND, PresentationRegionState> g_presentationRegions;
 static void SetSwitcherLayoutBounds(int x, int y, int w, int h,
                                     UINT flags = SWP_NOACTIVATE);
 
@@ -2734,11 +2763,6 @@ static void PositionPresentationWindow(HWND hWnd,
         !(flags & (SWP_FRAMECHANGED | SWP_SHOWWINDOW))) return;
     SetWindowPos(hWnd, HWND_TOPMOST, target.left, target.top,
                  target.right - target.left, target.bottom - target.top, flags);
-    if (hWnd != g_hCloseBtnWnd &&
-        (actual.right - actual.left != target.right - target.left ||
-         actual.bottom - actual.top != target.bottom - target.top)) {
-        ApplyAcrylicWindowRegion(hWnd);
-    }
 }
 
 static void SetPresentationWindowLayout(HWND hWnd, int x, int y, int w, int h,
@@ -2747,6 +2771,7 @@ static void SetPresentationWindowLayout(HWND hWnd, int x, int y, int w, int h,
     RECT rect = { x, y, x + w, y + h };
     g_presentationWindows[hWnd] = { rect, GetPresentationDpiY(hWnd, rect) };
     PositionPresentationWindow(hWnd, flags);
+    ApplyPresentationWindowRegion(hWnd);
 }
 
 static void AnchorPresentationOverlay() {
@@ -5154,6 +5179,65 @@ static int GetWindowCornerRadiusPx() {
     return MulDiv(stdDIP, g_dpiX, 96);
 }
 
+static void ClearPresentationWindowRegion(HWND hWnd) {
+    auto it = g_presentationRegions.find(hWnd);
+    if (it == g_presentationRegions.end()) return;
+    if (it->second.applied && IsWindow(hWnd)) {
+        SetWindowRgn(hWnd, NULL, FALSE);
+    }
+    g_presentationRegions.erase(it);
+}
+
+static void ApplyPresentationWindowRegion(HWND hWnd) {
+    if (!hWnd || hWnd == g_hCloseBtnWnd || !IsWindow(hWnd)) return;
+
+    // Apply clipping only at layout boundaries. HideSwitcher leaves the region
+    // untouched, avoiding a DWM shape transition while thumbnails are retired.
+    const bool useRegion = ThemeIs(L"mica") || ThemeIs(L"backdrop");
+    if (!useRegion || (GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_LAYERED)) {
+        ClearPresentationWindowRegion(hWnd);
+        return;
+    }
+
+    RECT layout = {};
+    if (!GetPresentationLayoutRect(hWnd, &layout)) return;
+    int width = layout.right - layout.left;
+    int height = layout.bottom - layout.top;
+    int radiusDIP = 0;
+    GetResolvedCornerRadiiDIP(&radiusDIP, nullptr);
+    UINT dpi = QueryWindowDpi(hWnd);
+    if (!dpi) dpi = g_dpiX;
+    int radius = radiusDIP > 0 ? MulDiv(radiusDIP, dpi, 96) : 0;
+    if (width <= 0 || height <= 0 || radius <= 0) {
+        ClearPresentationWindowRegion(hWnd);
+        return;
+    }
+
+    radius = (std::min)(radius, (std::min)(width, height) / 2);
+    if (radius <= 0) {
+        ClearPresentationWindowRegion(hWnd);
+        return;
+    }
+
+    auto& state = g_presentationRegions[hWnd];
+    if (state.applied && state.width == width && state.height == height &&
+        state.radius == radius) {
+        return;
+    }
+
+    HRGN region = CreateRoundRectRgn(0, 0, width + 1, height + 1,
+                                     radius * 2, radius * 2);
+    if (!region) return;
+    if (!SetWindowRgn(hWnd, region, FALSE)) {
+        DeleteObject(region);
+        return;
+    }
+    state.width = width;
+    state.height = height;
+    state.radius = radius;
+    state.applied = true;
+}
+
 static bool UseTaskRoundedCorners() {
     return g_settings.taskRoundedCorners;
 }
@@ -6210,7 +6294,6 @@ static std::atomic<ULONGLONG> g_touchpadRawThreeFingerLastTick{0};
 // can then suppress the promoted right-click before it cancels/focuses an app
 // under the cursor. High 32 bits identify the stroke; low 32 bits are expiry.
 static std::atomic<bool> g_touchpadTwoFingerCloseActive{false};
-static std::atomic<bool> g_touchpadTwoFingerTapSuppressed{false};
 static std::atomic<DWORD> g_touchpadRawTwoFingerNextSerial{0};
 static std::atomic<ULONGLONG> g_touchpadRawTwoFingerTapMouseState{0};
 // Settings callbacks run outside the switcher thread. These atomics are the
@@ -6421,6 +6504,16 @@ static HWND s_rawShieldRestoreForeground = NULL;
 static HWND s_touchpadActivationRetryTarget = NULL;
 static ULONGLONG s_touchpadActivationRetryDeadline = 0;
 static bool s_touchpadCommitActivation = false;
+
+// A normal Alt session and a normal three-finger session are separate owners.
+// The switcher commits only after both owners have released.
+static bool s_altSessionOwner = false;
+static bool s_altHeld = false;
+static ULONGLONG s_altRawBaselineSerial = 0;
+static ULONGLONG s_combinedRawSerial = 0;
+static bool s_combinedRawSeen = false;
+static bool s_combinedRawLiftHandled = false;
+static bool s_commitStarted = false;
 static HWND s_switchAnimationSource = nullptr;
 static HWND s_switchAnimationTarget = nullptr;
 static DWORD s_switchAnimationProcess = 0;
@@ -6516,15 +6609,6 @@ static void PublishSwsSwitchAnimationSelection(HWND target,
     s_switchAnimationRestoring = restoring;
 }
 
-// A normal Alt session and a normal three-finger session are separate owners.
-// The switcher commits only after both owners have released.
-static bool s_altSessionOwner = false;
-static bool s_altHeld = false;
-static ULONGLONG s_altRawBaselineSerial = 0;
-static ULONGLONG s_combinedRawSerial = 0;
-static bool s_combinedRawSeen = false;
-static bool s_combinedRawLiftHandled = false;
-static bool s_commitStarted = false;
 struct NativeTouchpadInvocation {
     DWORD token = 0;
     DWORD epoch = 0;
@@ -8563,13 +8647,19 @@ static void RegisterThumbnails() {
     }
 }
 static void UnregisterThumbnails() {
+    size_t count = 0;
     for (auto& w : g_windows) {
+        count += w.hThumbs.size();
         for (const auto& kv : w.hThumbs) {
             if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
         }
         w.hThumbs.clear();
     }
     g_lastThumbState.clear();
+    if (count) {
+        Wh_Log(L"SWS: DWM thumbnails released count=%llu",
+               (unsigned long long)count);
+    }
 }
 
 static void ReleaseSavedAppListThumbnails() {
@@ -11245,16 +11335,7 @@ static void CancelPendingShow() {
     if (g_hSwitcher) {
         KillTimer(g_hSwitcher, SWS_SHOW_DELAY_TIMER_ID);
         KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
-        DWMNCRENDERINGPOLICY enabled = DWMNCRP_ENABLED;
-        DwmSetWindowAttribute(g_hSwitcher, DWMWA_NCRENDERING_POLICY, &enabled, sizeof(enabled));
-        if (IsWin11OrGreater()) {
-            COLORREF colorNone = 0xFFFFFFFE; // DWMWA_COLOR_NONE
-            DwmSetWindowAttribute(g_hSwitcher, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
-        }
     }
-    // The WinEvent hook stays installed for the switcher thread's lifetime: the raw-HID
-    // path needs it while the switcher is hidden, to hide a Task View the OS shows for its
-    // own 3-finger up gesture. It is unhooked when the switcher window is destroyed.
     g_isPendingShow = false;
     g_pendingSwitcherRect = { 0, 0, 0, 0 };
 }
@@ -11307,12 +11388,6 @@ static_assert(sizeof(SwsTouchpadParametersV1) == 44);
 static constexpr UINT SWS_SPI_GETTOUCHPADPARAMETERS = 0x00AE;
 static constexpr UINT SWS_SPI_SETTOUCHPADPARAMETERS = 0x00AF;
 
-// Switcher-thread only. We own a restore only after changing an enabled tap
-// action. If Windows already had it disabled, leave that preference disabled.
-static bool s_twoFingerTapRestoreOwned = false;
-static bool s_twoFingerTapParametersUnavailable = false;
-static DWORD s_twoFingerTapParameterError = ERROR_SUCCESS;
-
 // Write-ahead recovery for a live-only Windows setting. AuthenticationId alone
 // is unique only until reboot; the logon time also prevents a stale record from
 // enabling a preference in a later logon. Store no snapshot of other settings.
@@ -11323,10 +11398,42 @@ struct TwoFingerTapRecovery {
     LONGLONG logonTime;
 };
 static_assert(sizeof(TwoFingerTapRecovery) == 24);
-static constexpr PCWSTR SWS_TWO_FINGER_TAP_RECOVERY_VALUE = L"twoFingerTapRecovery";
+static constexpr PCWSTR SWS_TWO_FINGER_TAP_RECOVERY_PREFIX = L"twoFingerTapRecovery_";
+static std::wstring s_twoFingerTapRecoveryValueName;
+static bool s_twoFingerTapRecoveryValueNameChecked = false;
 static TwoFingerTapRecovery s_twoFingerTapRecoverySession{};
 static bool s_twoFingerTapRecoveryChecked = false;
 static bool s_twoFingerTapRecoveryPending = false;
+
+static PCWSTR TwoFingerTapRecoveryValueName() {
+    if (s_twoFingerTapRecoveryValueNameChecked) {
+        return s_twoFingerTapRecoveryValueName.empty()
+                   ? nullptr
+                   : s_twoFingerTapRecoveryValueName.c_str();
+    }
+    s_twoFingerTapRecoveryValueNameChecked = true;
+
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return nullptr;
+    DWORD bytes = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &bytes);
+    if (!bytes) {
+        CloseHandle(token);
+        return nullptr;
+    }
+    std::vector<BYTE> buffer(bytes);
+    bool valid = GetTokenInformation(token, TokenUser, buffer.data(), bytes, &bytes);
+    CloseHandle(token);
+    if (!valid) return nullptr;
+
+    PSID sid = reinterpret_cast<TOKEN_USER*>(buffer.data())->User.Sid;
+    LPWSTR sidString = nullptr;
+    if (!IsValidSid(sid) || !ConvertSidToStringSidW(sid, &sidString)) return nullptr;
+    s_twoFingerTapRecoveryValueName = SWS_TWO_FINGER_TAP_RECOVERY_PREFIX;
+    s_twoFingerTapRecoveryValueName += sidString;
+    LocalFree(sidString);
+    return s_twoFingerTapRecoveryValueName.c_str();
+}
 
 static bool ReadTwoFingerTapRecoverySession() {
     if (s_twoFingerTapRecoverySession.version) return true;
@@ -11352,8 +11459,10 @@ static bool ReadTwoFingerTapRecoverySession() {
 
 static bool PrepareTwoFingerTapRecovery() {
     if (s_twoFingerTapRecoveryChecked) return true;
+    PCWSTR valueName = TwoFingerTapRecoveryValueName();
+    if (!valueName) return false;
     TwoFingerTapRecovery recovery{};
-    size_t bytes = Wh_GetBinaryValue(SWS_TWO_FINGER_TAP_RECOVERY_VALUE,
+    size_t bytes = Wh_GetBinaryValue(valueName,
                                      &recovery, sizeof(recovery));
     if (!bytes) {
         s_twoFingerTapRecoveryChecked = true;
@@ -11377,10 +11486,10 @@ static bool PrepareTwoFingerTapRecovery() {
     if (!sameLogon) {
         // Windows reloads saved preferences for a new logon. Never replay a
         // previous logon's temporary override against those preferences.
-        if (!Wh_DeleteValue(SWS_TWO_FINGER_TAP_RECOVERY_VALUE)) return false;
+        if (!Wh_DeleteValue(valueName)) return false;
         Wh_Log(L"SWS: discarded two-finger tap recovery from a previous logon");
     } else {
-        s_twoFingerTapRestoreOwned = true;
+        s_twoFingerTapRecoverySession.restoreOwed = 1;
         Wh_Log(L"SWS: recovering an outstanding two-finger tap override");
     }
     s_twoFingerTapRecoveryPending = false;
@@ -11388,44 +11497,36 @@ static bool PrepareTwoFingerTapRecovery() {
     return true;
 }
 
-static bool SaveTwoFingerTapRecovery() {
-    if (!ReadTwoFingerTapRecoverySession()) return false;
-    auto recovery = s_twoFingerTapRecoverySession;
-    recovery.restoreOwed = 1;
-    return Wh_SetBinaryValue(SWS_TWO_FINGER_TAP_RECOVERY_VALUE,
-                              &recovery, sizeof(recovery));
-}
-
 static bool ClearTwoFingerTapRecovery() {
+    PCWSTR valueName = TwoFingerTapRecoveryValueName();
+    if (!valueName) return false;
     // A failed deletion must not leave an active record after a successful
     // restore. A cleared record is safe to keep even if deletion then fails.
     auto recovery = s_twoFingerTapRecoverySession;
     recovery.restoreOwed = 0;
-    if (Wh_SetBinaryValue(SWS_TWO_FINGER_TAP_RECOVERY_VALUE,
+    if (Wh_SetBinaryValue(valueName,
                           &recovery, sizeof(recovery))) {
-        Wh_DeleteValue(SWS_TWO_FINGER_TAP_RECOVERY_VALUE);
+        Wh_DeleteValue(valueName);
         return true;
     }
-    return Wh_DeleteValue(SWS_TWO_FINGER_TAP_RECOVERY_VALUE);
+    return Wh_DeleteValue(valueName);
 }
 
-static void UpdateTwoFingerTapOverride(bool want, bool allowRetryTimer = true) {
+static void RecoverLegacyTwoFingerTapOverride(bool allowRetryTimer = true) {
+    if (g_isVisible || g_isPendingShow || g_animExitActive || g_isHidingSwitcher ||
+        s_rawTouchpadShieldActive || s_rawSessionOwned) {
+        return;
+    }
     if (!PrepareTwoFingerTapRecovery()) {
-        if (!want && allowRetryTimer && s_twoFingerTapRecoveryPending && g_hSwitcher) {
+        if (allowRetryTimer && s_twoFingerTapRecoveryPending && g_hSwitcher) {
             SetTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID, 100, nullptr);
         }
         return;
     }
-    if (want && g_touchpadTwoFingerTapSuppressed.load()) {
+    if (!s_twoFingerTapRecoverySession.restoreOwed) {
         if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID);
         return;
     }
-    if (!want && !s_twoFingerTapRestoreOwned) {
-        g_touchpadTwoFingerTapSuppressed.store(false);
-        if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID);
-        return;
-    }
-    if (want && s_twoFingerTapParametersUnavailable) return;
 
     SwsTouchpadParametersV1 parameters{};
     parameters.versionNumber = 1;
@@ -11433,73 +11534,48 @@ static void UpdateTwoFingerTapOverride(bool want, bool allowRetryTimer = true) {
     BOOL read = SystemParametersInfoW(SWS_SPI_GETTOUCHPADPARAMETERS,
                                      sizeof(parameters), &parameters, 0);
     DWORD error = read ? ERROR_SUCCESS : GetLastError();
-    if (read && want && !parameters.touchpadPresent) return;
-    if (read && ((want && parameters.twoFingerTapEnabled) ||
-                 (!want && !parameters.twoFingerTapEnabled))) {
-        if (want) {
-            if (!SaveTwoFingerTapRecovery()) {
-                Wh_Log(L"SWS: cannot record two-finger tap recovery; keeping Windows' tap setting");
-                return;
-            }
-            // Retain recovery even if a failed SPI call leaves its effect
-            // uncertain. Release verifies the live bit before clearing it.
-            s_twoFingerTapRestoreOwned = true;
-        }
-        // Read afresh on release, and change only our bit. Never restore a
-        // snapshot of unrelated settings the user may have changed meanwhile.
-        parameters.twoFingerTapEnabled = want ? FALSE : TRUE;
+    if (read && !parameters.twoFingerTapEnabled) {
+        // BOOL bit-fields are signed one-bit fields with this SDK layout.
+        parameters.twoFingerTapEnabled = -1;
         SetLastError(ERROR_SUCCESS);
         BOOL set = SystemParametersInfoW(SWS_SPI_SETTOUCHPADPARAMETERS,
                                         sizeof(parameters), &parameters, 0);
         error = set ? ERROR_SUCCESS : GetLastError();
         read = set;
     }
-    if (read && !want) {
-        g_touchpadTwoFingerTapSuppressed.store(false);
-        if (ClearTwoFingerTapRecovery()) {
-            s_twoFingerTapRestoreOwned = false;
-        } else {
-            read = FALSE;
-            error = ERROR_WRITE_FAULT;
-        }
-    }
     if (read) {
-        s_twoFingerTapParameterError = ERROR_SUCCESS;
-        g_touchpadTwoFingerTapSuppressed.store(want);
-        if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID);
-        if (want) {
-            // There is no promoted tap pair to intercept on this path. Retire
-            // fallback evidence so a physical mouse click cannot claim it.
-            g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
+        if (ClearTwoFingerTapRecovery()) {
+            s_twoFingerTapRecoverySession.restoreOwed = 0;
+            s_twoFingerTapRecoveryPending = false;
+            if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID);
+            Wh_Log(L"SWS: recovered two-finger Windows tap setting");
+            return;
         }
-        Wh_Log(L"SWS: two-finger Windows tap override active=%d restoreOwned=%d (live only)",
-               want, s_twoFingerTapRestoreOwned);
-        return;
+        error = ERROR_WRITE_FAULT;
     }
-    if (want && (error == ERROR_INVALID_PARAMETER || error == ERROR_INVALID_SPI_VALUE)) {
-        s_twoFingerTapParametersUnavailable = true;
+    if (s_twoFingerTapRecoveryPending || s_twoFingerTapRecoverySession.restoreOwed) {
+        if (allowRetryTimer && g_hSwitcher) {
+            SetTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID, 100, nullptr);
+        }
     }
-    if (s_twoFingerTapParameterError != error) {
-        s_twoFingerTapParameterError = error;
-        Wh_Log(L"SWS: two-finger Windows tap %s failed (error=%u)",
-               want ? L"override" : L"restore", error);
-    }
-    // A failed restore must retain ownership and retry, including while hidden.
-    if (!want && allowRetryTimer && g_hSwitcher) {
-        SetTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID, 100, nullptr);
+    if (error != ERROR_SUCCESS) {
+        Wh_Log(L"SWS: two-finger Windows tap recovery failed (error=%u)", error);
     }
 }
 
 static void RestoreTwoFingerTapOverrideBeforeExit() {
-    // No message pump is available after WM_QUIT. Bound the synchronous retry
-    // and leave the recovery record intact if Windows/storage still rejects it.
     if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID);
     for (int attempt = 0; attempt < 5; ++attempt) {
-        UpdateTwoFingerTapOverride(false, false);
-        if (!s_twoFingerTapRestoreOwned && !s_twoFingerTapRecoveryPending) return;
+        RecoverLegacyTwoFingerTapOverride(false);
+        if (!s_twoFingerTapRecoverySession.restoreOwed &&
+            !s_twoFingerTapRecoveryPending) {
+            return;
+        }
         if (attempt < 4) Sleep(25);
     }
-    Wh_Log(L"SWS: two-finger tap restoration remains pending for the next start");
+    if (s_twoFingerTapRecoverySession.restoreOwed) {
+        Wh_Log(L"SWS: two-finger tap restoration remains pending for the next start");
+    }
 }
 
 static ULONGLONG EncodeRawTwoFingerTapMouseState(DWORD serial,
@@ -11644,8 +11720,7 @@ static bool SuppressTwoFingerTapMouse(WPARAM message) {
                    state, 0, std::memory_order_acq_rel)) {}
         return true;
     }
-    if (!TouchpadHandlingEnabled() || !g_touchpadReaderAvailable.load() ||
-        g_touchpadTwoFingerTapSuppressed.load()) return false;
+    if (!TouchpadHandlingEnabled() || !g_touchpadReaderAvailable.load()) return false;
     ULONGLONG state = g_touchpadRawTwoFingerTapMouseState.load(
         std::memory_order_acquire);
     if (!RawTwoFingerTapMouseRemainingMs(state, now)) return false;
@@ -11785,8 +11860,14 @@ static DWORD WINAPI MouseHookThread(LPVOID) {
             DispatchMessageW(&msg);
         }
         HANDLE events[2] = { s_mouseHookStopEvent, s_mousePolicyChanged };
+        DWORD timeout = INFINITE;
+        if (g_hMouseHook &&
+            !(MousePolicyFlags(s_mousePolicy.load(std::memory_order_acquire)) &
+              SWS_MOUSE_VISIBLE)) {
+            timeout = 50;
+        }
         DWORD wake = MsgWaitForMultipleObjectsEx(
-            ARRAYSIZE(events), events, 50, QS_ALLINPUT,
+            ARRAYSIZE(events), events, timeout, QS_ALLINPUT,
             MWMO_INPUTAVAILABLE);
         if (wake == WAIT_OBJECT_0) break;
         if (wake == WAIT_OBJECT_0 + 1) ResetEvent(s_mousePolicyChanged);
@@ -11998,6 +12079,9 @@ static void RevealPendingSwitcher() {
 }
 
 static void ApplyThemeToWindow(HWND hWnd) {
+    if (!ThemeIs(L"mica") && !ThemeIs(L"backdrop")) {
+        ClearPresentationWindowRegion(hWnd);
+    }
     if (ThemeIs(L"none")) {
         // 1. Explicitly clear all DWM system backdrops on Windows 11
         if (IsWin11OrGreater()) {
@@ -12039,7 +12123,6 @@ static void ApplyThemeToWindow(HWND hWnd) {
         }
 
         // 7. Flush style and DWM non-client state
-        ApplyAcrylicWindowRegion(hWnd);
         SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
         return;
     }
@@ -12120,7 +12203,6 @@ static void ApplyThemeToWindow(HWND hWnd) {
         DwmSetWindowAttribute(hWnd, 34 /* DWMWA_BORDER_COLOR */, &none, sizeof(none));
     }
 
-    ApplyAcrylicWindowRegion(hWnd);
     SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 }
 
@@ -12147,11 +12229,8 @@ static BOOL WINAPI MirrorEnumProc(HMONITOR hM, HDC, LPRECT, LPARAM) {
 static void DestroyMirrorSwitchers() {
     for (HWND hMirror : g_hMirrorSwitchers) {
         g_presentationWindows.erase(hMirror);
+        g_presentationRegions.erase(hMirror);
         if (IsWindow(hMirror)) {
-            if (IsWin11OrGreater()) {
-                COLORREF colorNone = 0xFFFFFFFE;
-                DwmSetWindowAttribute(hMirror, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
-            }
             ShowWindow(hMirror, SW_HIDE);
             DestroyWindow(hMirror);
         }
@@ -12200,44 +12279,9 @@ static void ShowMirrorSwitchers() {
 }
 
 
-static void ApplyAcrylicWindowRegion(HWND hWnd) {
-    if (!hWnd || !IsWindow(hWnd)) return;
-
-    // The legacy Acrylic accent can bypass DWM's corner-preference hint, even
-    // on Windows 11. Clip it to the same resolved system/custom radius as the
-    // border. Mica retains DWM clipping; None uses its final per-pixel mask.
-    int radiusDIP = 0;
-    GetResolvedCornerRadiiDIP(&radiusDIP, nullptr);
-    UINT dpi = QueryWindowDpi(hWnd);
-    int radius = ThemeIs(L"backdrop") ? MulDiv(radiusDIP, dpi ? dpi : g_dpiX, 96) : 0;
-    RECT wr = {};
-    if (!GetWindowRect(hWnd, &wr)) return;
-    int w = wr.right - wr.left;
-    int h = wr.bottom - wr.top;
-    if (radius > 0 && w > 0 && h > 0) {
-        HRGN region = CreateRoundRectRgn(0, 0, w + 1, h + 1,
-                                         radius * 2, radius * 2);
-        if (region && !SetWindowRgn(hWnd, region, TRUE)) {
-            DeleteObject(region);
-        }
-    } else {
-        // Avoid a needless frame change on every None/Mica resize.
-        HRGN existing = CreateRectRgn(0, 0, 0, 0);
-        if (existing) {
-            if (GetWindowRgn(hWnd, existing) != ERROR) SetWindowRgn(hWnd, NULL, TRUE);
-            DeleteObject(existing);
-        }
-    }
-}
-
 static void ApplySwitcherRegion() {
     if (!g_hSwitcher) return;
-
-    ApplyAcrylicWindowRegion(g_hSwitcher);
-    if (IsWin11OrGreater()) {
-        COLORREF colorNone = 0xFFFFFFFE; // DWMWA_COLOR_NONE
-        DwmSetWindowAttribute(g_hSwitcher, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
-    }
+    ApplyPresentationWindowRegion(g_hSwitcher);
 }
 
 static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSource = nullptr) {
@@ -12263,7 +12307,8 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
     int oldDwmRadius = g_systemDwmRadius;
     int oldDwmSmallRadius = g_systemDwmSmallRadius;
     DetectSystemDwmCornerRadius();
-    if (g_systemDwmRadius != oldDwmRadius || g_systemDwmSmallRadius != oldDwmSmallRadius) {
+    if (g_systemDwmRadius != oldDwmRadius ||
+        g_systemDwmSmallRadius != oldDwmSmallRadius) {
         LoadSettings();
         if (g_hSwitcher) {
             ApplyThemeToWindow(g_hSwitcher);
@@ -12273,6 +12318,8 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
     }
 
     RefreshClientAreaAnimCache();
+    UnregisterThumbnails();
+    ReleaseSavedAppListThumbnails();
     DestroyMirrorSwitchers();
 
     POINT pt; GetCursorPos(&pt);
@@ -12282,7 +12329,7 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
 
     g_hCurrentMonitor = hMon;
     UpdateRefreshRateTiming();
-    UnregisterThumbnails(); BuildWindowList();
+    BuildWindowList();
     
     if (g_windows.empty()) {
         HideSwitcher();
@@ -12293,7 +12340,6 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
 
     g_layoutStartIndex = 0; // Always start from the first window on initial show
     g_drilledIn = false;
-    ReleaseSavedAppListThumbnails();
     g_consumeEscUp = false;
     g_drillInAfterReveal = false;
     g_selectedIndex = 0;
@@ -12499,39 +12545,33 @@ static void HideSwitcher() {
     if (g_hSwitcher) {
         KillTimer(g_hSwitcher, SWS_DYNAMIC_RESIZE_TIMER_ID);
     }
-    // Hide every switcher window FIRST, before any teardown or WS_EX_LAYERED /
-    // DWM attribute juggling below, so DWM can never compose an intermediate
-    // (white border / unpainted / half-torn-down) frame on exit.
+    // Hide every switcher window before retiring animations or DWM registrations.
     HideSwitcherPresentationWindows();
-    DestroyMirrorSwitchers();
-    HideBackdropBlur();
     StopAnimationTicker();
     FinishAnimations();
+    Wh_Log(L"SWS: DWM teardown phase=thumbnails");
+    UnregisterThumbnails();
+    ReleaseSavedAppListThumbnails();
+    Wh_Log(L"SWS: DWM teardown phase=mirrors");
+    DestroyMirrorSwitchers();
+    HideBackdropBlur();
     FreeCachedBuffers();
 
     g_showAllMonitors = false;
     CancelPendingShow();
     g_switcherBaseInitialized = false;
 
-    UnregisterThumbnails();
     if (g_hCloseBtnWnd) {
-        BLENDFUNCTION bf = { AC_SRC_OVER, 0, 0, AC_SRC_ALPHA };
-        UpdateLayeredWindow(g_hCloseBtnWnd, NULL, NULL, NULL, NULL, NULL, 0, &bf, ULW_ALPHA);
         ShowWindow(g_hCloseBtnWnd, SW_HIDE);
+        LONG_PTR exStyle = GetWindowLongPtrW(g_hCloseBtnWnd, GWL_EXSTYLE);
+        if (exStyle & WS_EX_TRANSPARENT) {
+            SetWindowLongPtrW(g_hCloseBtnWnd, GWL_EXSTYLE,
+                              exStyle & ~WS_EX_TRANSPARENT);
+        }
     }
     if (g_hSwitcher) {
-        if (IsWin11OrGreater()) {
-            COLORREF colorNone = 0xFFFFFFFE; // DWMWA_COLOR_NONE
-            DwmSetWindowAttribute(g_hSwitcher, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
-        }
-        LONG_PTR exStyle = GetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE);
-        if (!(exStyle & WS_EX_LAYERED)) {
-            SetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
-        }
-        SetLayeredWindowAttributes(g_hSwitcher, 0, 0, LWA_ALPHA);
-        BLENDFUNCTION bf = { AC_SRC_OVER, 0, 0, AC_SRC_ALPHA };
-        UpdateLayeredWindow(g_hSwitcher, NULL, NULL, NULL, NULL, NULL, 0, &bf, ULW_ALPHA);
         ShowWindow(g_hSwitcher, SW_HIDE);
+        LONG_PTR exStyle = GetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE);
         if (exStyle & WS_EX_TRANSPARENT) {
             SetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE, exStyle & ~WS_EX_TRANSPARENT);
         }
@@ -12584,7 +12624,6 @@ static void HideSwitcher() {
     g_sameAppSessionKey[0] = L'\0';
     RefreshTouchpadGestureKinds();
     g_drilledIn = false;
-    ReleaseSavedAppListThumbnails();
     g_consumeEscUp = false;
     g_drillInAfterReveal = false;
     g_isPaginatedView = false;
@@ -12766,7 +12805,6 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
 static void StartExitAnimation(bool activateSelectedWindow) {
     if ((!g_isVisible && !g_isPendingShow) || g_animExitActive) return;
     g_touchpadTwoFingerCloseActive.store(false);
-    UpdateTwoFingerTapOverride(false);
     if (!activateSelectedWindow) {
         s_touchpadCommitActivation = false;
         ClearSwsSwitchAnimationSelection();
@@ -12961,17 +12999,6 @@ static void RecomputeAndReposition() {
     CommitLayoutTransition(hMon, scrollReflow);
     if (g_isPendingShow) return;
     g_pendingSwitcherRect = { 0, 0, 0, 0 };
-    if (IsWin11OrGreater()) {
-        COLORREF colorNone = 0xFFFFFFFE;
-        DwmSetWindowAttribute(g_hSwitcher, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
-    }
-    for (HWND hMirror : g_hMirrorSwitchers) {
-        if (!IsWindow(hMirror)) continue;
-        if (IsWin11OrGreater()) {
-            COLORREF colorNone = 0xFFFFFFFE;
-            DwmSetWindowAttribute(hMirror, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
-        }
-    }
     ApplySwitcherRegion();
     if (g_hoverThumbIndex >= 0 && g_hoverThumbIndex < (int)g_windows.size() && !IsWindowTruncated(g_hoverThumbIndex)) {
         SnapHoverTo(ToRectF(g_windows[g_hoverThumbIndex].rcThumbActual));
@@ -15023,6 +15050,12 @@ static bool ActivateRawTouchpadWindow() {
     return active;
 }
 
+static void ScheduleRawTouchpadForegroundRetry() {
+    if (!g_hSwitcher) return;
+    s_rawTouchpadShieldFocusStartTick = GetTickCount64();
+    SetTimer(g_hSwitcher, SWS_TOUCHPAD_SHIELD_FOCUS_RETRY_TIMER_ID, 8, NULL);
+}
+
 static void PromoteRawTouchpadShieldToSession() {
     if (!s_rawTouchpadShieldActive) return;
     s_rawTouchpadShieldActive = false;
@@ -15099,6 +15132,8 @@ static void BeginTouchpadGesture(int step, bool sticky = false) {
         TapUnassignedKeyForForeground();
         if (ActivateRawTouchpadWindow()) {
             TapUnassignedKeyForForeground();
+        } else {
+            ScheduleRawTouchpadForegroundRetry();
         }
         SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
     }
@@ -15419,9 +15454,13 @@ static void HandleNativeTouchpadBoundary(DWORD packet, DWORD token) {
         }
         PromoteRawTouchpadShieldToSession();
         PublishRawSwipe();
+        if (!s_nativeTouchpadInvocation.rawAdopted && event != 2) {
+            int step = event == 3 ? 1 : -1;
+            if (g_settings.reverseScrollDirection) step = -step;
+            NavigateRawTouchpad(true, step, 0);
+        }
         // The native boundary opens the switcher; it must not also apply a
-        // synthetic first navigation step. The touchpad starts at entry 0,
-        // and subsequent raw reports provide the actual drag movement.
+        // second step after raw HID has already adopted the stroke.
         KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
         SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, SWS_RAW_SESSION_LOST_TIMEOUT_MS, nullptr);
         Wh_Log(L"SWS: native PTP invoked (direction=%u token=%u epoch=%u rawAdopted=%d rawReady=%d)",
@@ -16041,7 +16080,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
 
         if (wParam == SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID) {
-            UpdateTwoFingerTapOverride(g_touchpadTwoFingerCloseActive.load());
+            RecoverLegacyTwoFingerTapOverride();
             return 0;
         }
         if (wParam == SWS_NATIVE_TOUCHPAD_COMPLETION_TIMER_ID) {
@@ -16087,7 +16126,6 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     Wh_Log(L"SWS: selected-window activation retry ended");
                 }
                 KillTimer(hWnd, SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID);
-                ClearSwsSwitchAnimationSelection();
                 s_touchpadActivationRetryTarget = NULL;
                 s_touchpadActivationRetryDeadline = 0;
                 s_touchpadCommitActivation = false;
@@ -16129,7 +16167,8 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 
         if (wParam == SWS_TOUCHPAD_SHIELD_FOCUS_RETRY_TIMER_ID) {
             KillTimer(hWnd, SWS_TOUCHPAD_SHIELD_FOCUS_RETRY_TIMER_ID);
-            if (!s_rawTouchpadShieldActive || s_rawGestureTips == 0) {
+            if ((!s_rawTouchpadShieldActive && !g_isTouchpadGestureActive) ||
+                s_rawGestureTips == 0) {
                 return 0;
             }
             if (ActivateRawTouchpadWindow()) {
@@ -17170,6 +17209,7 @@ static int LoadIntSetting(LPCWSTR settingName, int defaultVal) {
 
 static void LoadSettings() {
     LPCWSTR v;
+    DetectSystemDwmCornerRadius();
     LoadStringSetting(L"Style.theme", g_settings.theme, L"auto");
     if (wcscmp(g_settings.theme, L"auto") == 0) {
         wcsncpy_s(g_settings.theme, IsWin11OrGreater() ? L"mica" : L"backdrop", _TRUNCATE);
@@ -17177,7 +17217,6 @@ static void LoadSettings() {
     if (wcscmp(g_settings.theme, L"mica") == 0 && !IsWin11OrGreater()) {
         wcsncpy_s(g_settings.theme, L"backdrop", _TRUNCATE);
     }
-    DetectSystemDwmCornerRadius();
     LoadStringSetting(L"Style.colorScheme", g_settings.colorScheme, L"system");
     LoadStringSetting(L"Style.backdropBlurEffect", g_settings.backdropBlurEffect, L"off");
     if (wcscmp(g_settings.backdropBlurEffect, L"off") != 0 &&
@@ -18269,6 +18308,17 @@ static bool TryHookExplorerTouchpadActions() {
 using RaiseDesktop_t = void(__cdecl*)(void* pThis, int flags);
 static RaiseDesktop_t RaiseDesktop_Original = nullptr;
 
+static void GrantRawSwipeForeground(HWND hSwitcher) {
+    if (!hSwitcher) return;
+    DWORD pid = 0;
+    if (!GetWindowThreadProcessId(hSwitcher, &pid) || !pid) return;
+    SetLastError(ERROR_SUCCESS);
+    BOOL granted = AllowSetForegroundWindow(pid);
+    Wh_Log(L"SWS: raw swipe foreground grant callerPid=%u targetPid=%u granted=%d error=%u",
+           GetCurrentProcessId(), pid, granted,
+           granted ? ERROR_SUCCESS : GetLastError());
+}
+
 static void __cdecl RaiseDesktop_Hook(void* pThis, int flags) {
     // flags 2 and 3 are the touchpad swipe paths (as documented by the win-d-per-monitor
     // mod, which hooks this function for the same gesture); the Win+D hotkey and the
@@ -18292,6 +18342,12 @@ static void __cdecl RaiseDesktop_Hook(void* pThis, int flags) {
         // after commit/close. The reader clears it at the next outside stroke;
         // a launch-only candidate must not acquire that release ownership.
         bool sessionMarker = session && sessionRemaining != 0;
+        if (ready && !sourceGate && hSwitcher &&
+            (sessionMarker || (remaining != 0 && !liftGrace))) {
+            // Raw HID starts in the tool process, so Explorer must grant its
+            // foreground handoff before the bounded retry can succeed.
+            GrantRawSwipeForeground(hSwitcher);
+        }
         bool owns = ready && !sourceGate &&
                     (sessionMarker || (remaining != 0 && !liftGrace && upward));
         // This hook can run for every touchpad report. Log at most once per
@@ -18458,7 +18514,8 @@ static UINT TouchpadGestureKinds() {
 
 static void ReleaseTouchpadGestureTakeover() {
     if (!g_touchpadGestureController) return;
-    g_touchpadGestureController->put_Enabled(false);
+    HRESULT hr = g_touchpadGestureController->put_Enabled(false);
+    Wh_Log(L"SWS: gesture takeover enabled=0 hr=0x%08X", (unsigned)hr);
     g_touchpadGestureController->Release();
     g_touchpadGestureController = nullptr;
     Wh_Log(L"SWS: released the 3-finger gesture takeover");
@@ -18467,20 +18524,31 @@ static void ReleaseTouchpadGestureTakeover() {
 // Creates the controller on first use, or toggles the one that exists. False means the
 // take-over is not possible and Windows keeps handling the swipes.
 static bool UpdateTouchpadGestureTakeover(bool want) {
-    if (!want) {
-        ReleaseTouchpadGestureTakeover();
-        return true;
-    }
+    // HideSwitcher owns final controller release after DWM/window teardown.
+    // Re-entrant cleanup must not release it halfway through that transition.
+    if (g_isHidingSwitcher) return true;
     auto markUnavailable = []() {
         g_touchpadGestureTakeoverAvailable.store(false);
         return false;
     };
+    if (!want) {
+        if (!g_touchpadGestureController) return true;
+        HRESULT hr = g_touchpadGestureController->put_SupportedGestures(0);
+        Wh_Log(L"SWS: gesture takeover supported=0 hr=0x%08X", (unsigned)hr);
+        if (FAILED(hr)) return markUnavailable();
+        return true;
+    }
     if (g_touchpadGestureController) {
-        HRESULT hr = g_touchpadGestureController->put_SupportedGestures(TouchpadGestureKinds());
-        if (SUCCEEDED(hr)) hr = g_touchpadGestureController->put_Enabled(true);
+        HRESULT hr = g_touchpadGestureController->put_SupportedGestures(
+            TouchpadGestureKinds());
+        Wh_Log(L"SWS: gesture takeover supported=0x%X hr=0x%08X",
+               TouchpadGestureKinds(), (unsigned)hr);
+        if (SUCCEEDED(hr)) {
+            hr = g_touchpadGestureController->put_Enabled(true);
+            Wh_Log(L"SWS: gesture takeover enabled=1 hr=0x%08X", (unsigned)hr);
+        }
         if (SUCCEEDED(hr)) return true;
         Wh_Log(L"SWS: could not update gesture takeover (0x%08X)", hr);
-        ReleaseTouchpadGestureTakeover();
         return markUnavailable();
     }
 
@@ -18539,9 +18607,17 @@ static bool UpdateTouchpadGestureTakeover(bool want) {
     // matter, the events stay unsubscribed.
     auto candidate = (SwsTouchpadGestureController*)controller;
     HRESULT hrGestures = candidate->put_SupportedGestures(TouchpadGestureKinds());
-    HRESULT hrEnabled = SUCCEEDED(hrGestures) ? candidate->put_Enabled(true) : hrGestures;
+    Wh_Log(L"SWS: gesture takeover supported=0x%X hr=0x%08X",
+           TouchpadGestureKinds(), (unsigned)hrGestures);
+    HRESULT hrEnabled = hrGestures;
+    if (SUCCEEDED(hrGestures)) {
+        hrEnabled = candidate->put_Enabled(true);
+        Wh_Log(L"SWS: gesture takeover enabled=1 hr=0x%08X", (unsigned)hrEnabled);
+    }
     if (FAILED(hrEnabled)) {
-        candidate->put_Enabled(false);
+        HRESULT hrRollback = candidate->put_Enabled(false);
+        Wh_Log(L"SWS: gesture takeover enabled=0 rollback hr=0x%08X",
+               (unsigned)hrRollback);
         candidate->Release();
         Wh_Log(L"SWS: gesture takeover configuration failed (0x%08X)", hrEnabled);
         return markUnavailable();
@@ -18557,7 +18633,6 @@ static bool RefreshTouchpadGestureKinds() {
         TouchpadHandlingEnabled() && g_touchpadReaderAvailable.load() &&
         g_isVisible && !g_animExitActive && !g_isHidingSwitcher;
     g_touchpadTwoFingerCloseActive.store(twoFingerActive);
-    UpdateTwoFingerTapOverride(twoFingerActive);
     return UpdateTouchpadGestureTakeover(TouchpadGestureTakeoverWanted());
 }
 
@@ -18565,7 +18640,7 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     Wh_Log(L"SwitcherThread starting");
     // Recover before UI/runtime initialization can fail. Once the HWND exists,
     // another attempt below supplies timer-based retries for transient failures.
-    UpdateTwoFingerTapOverride(false, false);
+    RecoverLegacyTwoFingerTapOverride(false);
     // The switcher owns top-level windows whose coordinates are physical
     // monitor pixels. Keep this UI thread in PMv2 before creating any HWND so
     // Windows does not virtualize mixed-DPI monitor coordinates.
@@ -18617,24 +18692,22 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     g_hSwitcher = CreateSWSWindow(exStyle, SWS_CLASSNAME, SWS_MAIN_WINDOW_TITLE,
         dwStyle, 0, 0, 0, 0, NULL, NULL, GetModuleHandleW(NULL), NULL);
     if (!g_hSwitcher) { Wh_Log(L"Failed to create switcher window"); return 1; }
+    SetPropW(g_hSwitcher, SwsSelectionProtocol::VersionProp,
+             reinterpret_cast<HANDLE>(SwsSelectionProtocol::Version));
     if (!StartMouseHookThread(g_hSwitcher)) {
         Wh_Log(L"SWS: mouse hook thread startup failed; mouse containment disabled");
     }
-    SetPropW(g_hSwitcher, SwsSelectionProtocol::VersionProp,
-             reinterpret_cast<HANDLE>(SwsSelectionProtocol::Version));
-    UpdateTwoFingerTapOverride(false);
+    RecoverLegacyTwoFingerTapOverride();
     PublishNativeSwipePolicy();
     StartWindowIconWorker();
 
-    // Installed for the thread's lifetime (see CancelPendingShow): the raw-HID path needs it
-    // while the switcher is hidden, to hide a Task View the OS shows for its own 3-finger
-    // up gesture.
-    s_hWinEventHook = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, NULL,
-                                      WinEventShowHideProc, 0, 0, WINEVENT_OUTOFCONTEXT);
     s_hForegroundEventHook = SetWinEventHook(
         EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, NULL,
         WinEventShowHideProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-    if (!s_hWinEventHook || !s_hForegroundEventHook) {
+    s_hWinEventHook = SetWinEventHook(
+        EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, NULL,
+        WinEventShowHideProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!s_hForegroundEventHook || !s_hWinEventHook) {
         Wh_Log(L"SWS: SetWinEventHook failed (object=%p foreground=%p error=%u)",
                s_hWinEventHook, s_hForegroundEventHook, GetLastError());
     }
@@ -18643,6 +18716,12 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
         WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT,
         SWS_CLASSNAME, L"",
         WS_POPUP, 0, 0, 0, 0, g_hSwitcher, NULL, GetModuleHandleW(NULL), NULL);
+
+    g_hDwmCornerWatchStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (g_hDwmCornerWatchStopEvent) {
+        g_hDwmCornerWatchThread = CreateThread(
+            NULL, 0, DwmCornerWatchThread, g_hSwitcher, 0, NULL);
+    }
 
     BOOL bExclude = TRUE;
     DwmSetWindowAttribute(g_hSwitcher, DWMWA_EXCLUDED_FROM_PEEK, &bExclude, sizeof(bExclude));
@@ -18668,11 +18747,6 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     HANDLE hAnimTimer = CreateWaitableTimerExW(NULL, NULL, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_MODIFY_STATE | SYNCHRONIZE);
     if (!hAnimTimer) {
         hAnimTimer = CreateWaitableTimerExW(NULL, NULL, 0, TIMER_MODIFY_STATE | SYNCHRONIZE);
-    }
-
-    g_hDwmCornerWatchStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (g_hDwmCornerWatchStopEvent) {
-        g_hDwmCornerWatchThread = CreateThread(NULL, 0, DwmCornerWatchThread, g_hSwitcher, 0, NULL);
     }
 
     // Own the 3-finger swipes while the mod is set up to handle them: from here on the
@@ -18760,24 +18834,13 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
 thread_exit:
     StopMouseHookThread();
     g_touchpadTwoFingerCloseActive.store(false);
-    UpdateTwoFingerTapOverride(false, false);
+    RecoverLegacyTwoFingerTapOverride(false);
     StopWindowIconWorker();
     if (hAnimTimer) {
         CloseHandle(hAnimTimer);
         hAnimTimer = NULL;
     }
     SWS_UnregisterHotkeys();
-    // The watcher only posts; join it before destroying its fixed HWND target.
-    if (g_hDwmCornerWatchStopEvent) SetEvent(g_hDwmCornerWatchStopEvent);
-    if (g_hDwmCornerWatchThread) {
-        WaitForSingleObject(g_hDwmCornerWatchThread, INFINITE);
-        CloseHandle(g_hDwmCornerWatchThread);
-        g_hDwmCornerWatchThread = NULL;
-    }
-    if (g_hDwmCornerWatchStopEvent) {
-        CloseHandle(g_hDwmCornerWatchStopEvent);
-        g_hDwmCornerWatchStopEvent = NULL;
-    }
     g_touchpadGesturesEnabled.store(false);
     PublishNativeSwipePolicy();
     if (g_isVisible || g_isPendingShow) HideSwitcher();
@@ -18788,14 +18851,26 @@ thread_exit:
     s_rawTwoFingerMouseButtonDeadline = 0;
     if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_RAW_TWO_TAP_MOUSE_TIMER_ID);
     FinishRawTouchpadShield();
-    ReleaseTouchpadGestureTakeover();
     UnregisterThumbnails();
     g_windows.clear();
     g_mruWindows.clear();
     DestroyBackdropWindow();
     if (g_hCloseBtnWnd) { DestroyWindow(g_hCloseBtnWnd); g_hCloseBtnWnd = NULL; }
     RemoveNativeSwipePolicy();
+    if (g_hDwmCornerWatchStopEvent) SetEvent(g_hDwmCornerWatchStopEvent);
+    if (g_hDwmCornerWatchThread) {
+        WaitForSingleObject(g_hDwmCornerWatchThread, INFINITE);
+        CloseHandle(g_hDwmCornerWatchThread);
+        g_hDwmCornerWatchThread = NULL;
+    }
+    if (g_hDwmCornerWatchStopEvent) {
+        CloseHandle(g_hDwmCornerWatchStopEvent);
+        g_hDwmCornerWatchStopEvent = NULL;
+    }
     if (g_hSwitcher) { DeregisterShellHookWindow(g_hSwitcher); DestroyWindow(g_hSwitcher); g_hSwitcher = NULL; }
+    ReleaseTouchpadGestureTakeover();
+    g_presentationRegions.clear();
+    g_presentationWindows.clear();
     UnregisterClassW(SWS_CLASSNAME, GetModuleHandleW(NULL));
     if (g_hFont) { DeleteObject(g_hFont); g_hFont = NULL; }
     if (g_hTheme) { CloseThemeData(g_hTheme); g_hTheme = NULL; }
@@ -18950,11 +19025,6 @@ static TouchpadDevice* TouchpadDeviceFor(HANDLE hDevice) {
 static void UpdateRawTwoFingerTapMouseEvidence(TouchpadReaderStroke& stroke,
                                                ULONG tips, ULONG previousTips,
                                                ULONG packedPos, ULONGLONG now) {
-    if (g_touchpadTwoFingerTapSuppressed.load()) {
-        stroke.twoFingerTapMouseSerial = 0;
-        g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
-        return;
-    }
     int x = (int)(packedPos & 0xFFFF);
     int y = (int)((packedPos >> 16) & 0xFFFF);
     if (tips > 0 && previousTips == 0) {
@@ -19684,18 +19754,6 @@ void WhTool_ModUninit() {
         CloseHandle(g_hSwitcherThread);
         g_hSwitcherThread = NULL;
         g_dwSwitcherThreadId = 0;
-    }
-    if (g_hDwmCornerWatchStopEvent) {
-        SetEvent(g_hDwmCornerWatchStopEvent);
-    }
-    if (g_hDwmCornerWatchThread) {
-        WaitForSingleObject(g_hDwmCornerWatchThread, 1000);
-        CloseHandle(g_hDwmCornerWatchThread);
-        g_hDwmCornerWatchThread = NULL;
-    }
-    if (g_hDwmCornerWatchStopEvent) {
-        CloseHandle(g_hDwmCornerWatchStopEvent);
-        g_hDwmCornerWatchStopEvent = NULL;
     }
     for (auto& pair : g_uwpIconCache) {
         if (pair.second) DestroyIcon(pair.second);
