@@ -118,7 +118,7 @@ VOID NTAPI TpSet_Hook(PVOID timer, PLARGE_INTEGER due, ULONG period, ULONG windo
 static bool TryHookFlyout(HMODULE mod) {
     if (!mod || g_flyoutHookAttempted.exchange(true)) return false;
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK twinui_pcshell_dll_hooks[] = {
         {
             {L"public: static void __cdecl SnapFlyoutTelemetry::SnapFlyout_StartInvokeTimer(void)"},
             &StartInvoke_Original,
@@ -126,7 +126,8 @@ static bool TryHookFlyout(HMODULE mod) {
         },
     };
 
-    return WindhawkUtils::HookSymbols(mod, hooks, ARRAYSIZE(hooks));
+    return WindhawkUtils::HookSymbols(mod, twinui_pcshell_dll_hooks,
+                                      ARRAYSIZE(twinui_pcshell_dll_hooks));
 }
 
 using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
