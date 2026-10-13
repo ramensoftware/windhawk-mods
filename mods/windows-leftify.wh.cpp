@@ -2905,7 +2905,7 @@ BOOL Wh_ModInit() {
           (void**)&UpdatePos_Orig, (void*)UpdatePos_Hook, true },
   
         // Address only (no hook): called by PaintAtlas
-        { { LR"(public: long __cdecl CBitmapSource::Update(struct IWICBitmap *))" },
+        { { LR"(private: long __cdecl CBitmapSource::Update(struct IWICBitmap *))" },
           (void**)&g_updateBmp, nullptr, true },
     };
 
