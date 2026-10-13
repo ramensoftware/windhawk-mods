@@ -3,7 +3,7 @@
 // @name            System-Wide Rounded Corners
 // @description     Blacks out the corners of every monitor so the screen looks like it has rounded corners, like a Mac
 // @version         1.0
-// @author          Meowl
+// @author          Darius Varnelis
 // @github          https://github.com/Darius-Varnelis
 // @include         explorer.exe
 // @compilerOptions -luser32 -lgdi32 -lshcore -ldwmapi
