@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-13T11:04:53.000Z</updated>
+    <updated>2026-10-13T18:33:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 1507 Start Menu Recreation 1.1.0]]></title>
+        <id>https://windhawk.net/mods/win10-1507-start-menu-recreation#62cf2a1111a1704ba3af634b8f75b6b19afd6577</id>
+        <link href="https://windhawk.net/mods/win10-1507-start-menu-recreation"/>
+        <updated>2026-10-13T18:33:57.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added keyboard navigation</li>
+<li>Added tile drag animations</li>
+<li>Limited the dragged tile to the tile area</li>
+<li>Mitigated a live tile data anomaly (Credits to Carl Fredricksen [dwm] and ac for reporting)</li>
+<li>Prevented the same app from being pinned twice</li>
+<li>Improved the documentation</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Toast auto-dismiss 1.0]]></title>
         <id>https://windhawk.net/mods/toast-auto-dismiss#e30d7bd42160864d3934284b08907fc9997b0d92</id>
@@ -1225,20 +1243,6 @@ Windhawk debug logging and check for initialization or compatibility errors.</p>
         <author>
             <name>enesky</name>
             <uri>https://github.com/enesky</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Theme 1.2.8]]></title>
-        <id>https://windhawk.net/mods/classic-theme-enable#dbea5d2e6a76c803eb7b33b5dbe77a0e37adc78c</id>
-        <link href="https://windhawk.net/mods/classic-theme-enable"/>
-        <updated>2026-10-11T20:01:56.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add a new fix for 24H2, 25H2, 26H2 build 9444+ to readme</li>
-<li>Improve stability</li>
-</ul>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
