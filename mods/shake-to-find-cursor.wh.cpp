@@ -2,8 +2,8 @@
 // @id              shake-to-find-cursor
 // @name            Shake to Find Cursor
 // @description     Temporarily enlarges the mouse cursor when you shake the mouse, like macOS "Shake to locate"
-// @version         1.5
-// @author          Meowl
+// @version         1.4
+// @author          Darius Varnelis
 // @github          https://github.com/Darius-Varnelis
 // @include         windhawk.exe
 // @compilerOptions -luser32 -lgdi32 -lshell32 -ladvapi32 -lshcore
