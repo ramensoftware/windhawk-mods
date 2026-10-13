@@ -67,14 +67,14 @@ settings.
 
 #include <windhawk_utils.h>
 
-#include <algorithm>
 #include <atomic>
 #include <unordered_set>
 #include <vector>
 
 namespace {
 
-// Message-only window of the Window Sync mod, and its two commands.
+// Message-only window of the Window Sync mod (window-sync.wh.cpp), and its
+// two commands. Shared with that mod: keep both sides in sync.
 constexpr wchar_t kWindowSyncWndClass[] = L"WindhawkWindowSync";
 constexpr wchar_t kWindowSyncMsgSync[] = L"WindhawkWindowSync_Sync";
 constexpr wchar_t kWindowSyncMsgStack[] = L"WindhawkWindowSync_Stack";
@@ -102,7 +102,7 @@ struct ResizeState {
 } g_resize;
 
 void LoadSettings() {
-    PCWSTR mod = Wh_GetStringSetting(L"resizeModifier");
+    auto mod = WindhawkUtils::StringSetting::make(L"resizeModifier");
     if (wcscmp(mod, L"ctrl") == 0) {
         g_resizeModifier = ResizeModifier::Ctrl;
     } else if (wcscmp(mod, L"shift") == 0) {
@@ -112,7 +112,6 @@ void LoadSettings() {
     } else {
         g_resizeModifier = ResizeModifier::Alt;
     }
-    Wh_FreeStringSetting(mod);
 
     g_windowSyncMenuItems = Wh_GetIntSetting(L"windowSyncMenuItems");
 }
@@ -232,6 +231,29 @@ void EndSizeMove(HWND hWnd) {
     g_resize = {};
 }
 
+// Windows subclassed by the mod, so that unloading reaches exactly them,
+// including the ones re-parented since. Windows whose system menu got the
+// Window Sync items are tracked too, so unloading only touches those menus.
+SRWLOCK g_trackedLock = SRWLOCK_INIT;
+std::unordered_set<HWND> g_subclassed;
+std::unordered_set<HWND> g_menuWindows;
+
+void Track(std::unordered_set<HWND>& set, HWND hWnd, bool add) {
+    AcquireSRWLockExclusive(&g_trackedLock);
+    if (add)
+        set.insert(hWnd);
+    else
+        set.erase(hWnd);
+    ReleaseSRWLockExclusive(&g_trackedLock);
+}
+
+std::vector<HWND> TrackedCopy(const std::unordered_set<HWND>& set) {
+    AcquireSRWLockShared(&g_trackedLock);
+    std::vector<HWND> copy(set.begin(), set.end());
+    ReleaseSRWLockShared(&g_trackedLock);
+    return copy;
+}
+
 // ----------------------------------------- Window Sync title bar commands
 
 HWND FindWindowSync() {
@@ -260,13 +282,15 @@ void RemoveMenuItems(HMENU menu) {
     }
 }
 
-void UpdateMenuItems(HMENU menu) {
+void UpdateMenuItems(HWND hWnd, HMENU menu) {
     if (!g_windowSyncMenuItems || !FindWindowSync()) {
         RemoveMenuItems(menu);
+        Track(g_menuWindows, hWnd, false);
         return;
     }
     if (FindMenuItem(menu, kSysMenuSyncId) >= 0)
         return;
+    Track(g_menuWindows, hWnd, true);
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kSysMenuSyncId, L"Give all windows this size");
     AppendMenuW(menu, MF_STRING, kSysMenuStackId,
@@ -282,18 +306,6 @@ void SendWindowSyncCommand(PCWSTR messageName, HWND hWnd) {
 }
 
 // --------------------------------------------------------------- subclass
-
-// Every window subclassed by the mod, so that unloading can find them all,
-// including the ones re-parented since (EnumWindows only sees top-level
-// windows).
-SRWLOCK g_subclassedLock = SRWLOCK_INIT;
-std::unordered_set<HWND> g_subclassed;
-
-void ForgetSubclassedWindow(HWND hWnd) {
-    AcquireSRWLockExclusive(&g_subclassedLock);
-    g_subclassed.erase(hWnd);
-    ReleaseSRWLockExclusive(&g_subclassedLock);
-}
 
 LRESULT CALLBACK
 SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR) {
@@ -318,7 +330,7 @@ SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR) {
 
         case WM_INITMENUPOPUP:
             if (HIWORD(lParam) && (HMENU)wParam == GetSystemMenu(hWnd, FALSE)) {
-                UpdateMenuItems((HMENU)wParam);
+                UpdateMenuItems(hWnd, (HMENU)wParam);
             }
             break;
 
@@ -335,7 +347,8 @@ SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR) {
 
         case WM_NCDESTROY:
             // The subclass itself is removed by Windhawk's wrapper.
-            ForgetSubclassedWindow(hWnd);
+            Track(g_subclassed, hWnd, false);
+            Track(g_menuWindows, hWnd, false);
             break;
     }
 
@@ -352,9 +365,7 @@ bool IsSubclassCandidate(HWND hWnd) {
 void SubclassIfCandidate(HWND hWnd) {
     if (IsSubclassCandidate(hWnd) &&
         WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 0)) {
-        AcquireSRWLockExclusive(&g_subclassedLock);
-        g_subclassed.insert(hWnd);
-        ReleaseSRWLockExclusive(&g_subclassedLock);
+        Track(g_subclassed, hWnd, true);
     }
 }
 
@@ -443,21 +454,15 @@ void Wh_ModSettingsChanged() {
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    // Every subclass must be gone before the mod is unloaded, so busy windows
-    // are waited for instead of skipped.
-    std::vector<HWND> windows;
-    EnumWindows(CollectProcessWindow, (LPARAM)&windows);
-    AcquireSRWLockShared(&g_subclassedLock);
-    windows.insert(windows.end(), g_subclassed.begin(), g_subclassed.end());
-    ReleaseSRWLockShared(&g_subclassedLock);
-    std::sort(windows.begin(), windows.end());
-    windows.erase(std::unique(windows.begin(), windows.end()), windows.end());
+    for (HWND hWnd : TrackedCopy(g_menuWindows)) {
+        if (HMENU menu = GetSystemMenu(hWnd, FALSE))
+            RemoveMenuItems(menu);
+    }
 
-    for (HWND hWnd : windows) {
-        if (HMENU menu = GetSystemMenu(hWnd, FALSE)) {
-            if (FindMenuItem(menu, kSysMenuSyncId) >= 0)
-                RemoveMenuItems(menu);
-        }
+    // Only windows that carry the subclass get the (blocking) removal; busy
+    // ones among them are waited for, the subclass must be gone before the
+    // mod is unloaded.
+    for (HWND hWnd : TrackedCopy(g_subclassed)) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
     }
 }
